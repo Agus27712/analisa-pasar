@@ -180,11 +180,17 @@ class LearningTradingEngine(
         val structureBlocksBuy = marketStructure.dataEnough && marketStructure.trend == "Bearish structure"
         val structureBlocksSell = marketStructure.dataEnough && marketStructure.trend == "Bullish structure"
         val dominant = max(buy, sell)
+        val minority = min(buy, sell)
         val conflict = abs(buy - sell) < 20.0
         val volatilityTooHigh = price > 0.0 && atr / price >= 0.08
         val minimumScore = if (regime == "HIGH VOLATILITY") 70.0 else 60.0
-        val dominanceRatio = if (min(buy, sell) > 0.0) dominant / min(buy, sell) else Double.POSITIVE_INFINITY
-        val weakDominance = dominanceRatio < 1.40
+        // Keep dominance finite and bounded. A zero opposing score is a valid
+        // one-sided setup, but must not create Infinity in the displayed metric.
+        val dominanceRatio = if (dominant <= 0.0) 0.0 else dominant / max(minority, 1.0)
+        val dominanceStrength = if (dominant + minority > 0.0) {
+            (dominant - minority) / (dominant + minority)
+        } else 0.0
+        val weakDominance = dominanceStrength < (0.40 / 2.40)
         val noTrade = regime == "SIDEWAYS / NO TRADE" || conflict || weakDominance || dominant < minimumScore || volatilityTooHigh
 
         val action = when {
@@ -194,8 +200,8 @@ class LearningTradingEngine(
             else -> SignalAction.HOLD
         }
 
-        // Seven factors can contribute up to 115 raw points. Normalize only for the
-        // user-facing confidence so 100 means a fully loaded score, not an arbitrary clamp.
+        // The seven factors have a fixed theoretical maximum of 115 raw points.
+        // Confidence is a setup-strength score, never a probability of profit.
         val maxRawScore = 115.0
         val score = ((dominant / maxRawScore) * 100.0).toInt().coerceIn(0, 100)
         when {
@@ -205,7 +211,7 @@ class LearningTradingEngine(
             structureBlocksSell && sell >= minimumScore -> reasons += "NO TRADE: sinyal bearish bertentangan dengan market structure bullish."
             else -> reasons += "NO TRADE ZONE: faktor belum cukup selaras."
         }
-        if (action != SignalAction.HOLD) reasons[reasons.lastIndex] = "Score ${score}/100 = kekuatan setup, bukan peluang profit."
+        if (action != SignalAction.HOLD) reasons[reasons.lastIndex] = "Score ${score}/100 = kekuatan setup, bukan peluang profit. Dominance ${format(dominanceRatio)}x."
 
         val rawStopDistance = atr * 1.5
         val rawTp1Distance = atr * 2.0
@@ -232,6 +238,11 @@ class LearningTradingEngine(
                 if (marketStructure.dataEnough && resistance > price) {
                     tp1 = min(tp1, resistance)
                 }
+
+                val nextResistance = marketStructure.nextResistance ?: 0.0
+                if (marketStructure.dataEnough && nextResistance > tp1 && nextResistance <= price + rawTp2Distance) {
+                    tp2 = nextResistance
+                }
             }
             SignalAction.SELL -> {
                 sl = price + rawStopDistance
@@ -246,6 +257,11 @@ class LearningTradingEngine(
                 val support = marketStructure.support ?: 0.0
                 if (marketStructure.dataEnough && support > 0.0 && support < price) {
                     tp1 = max(tp1, support)
+                }
+
+                val nextSupport = marketStructure.nextSupport ?: 0.0
+                if (marketStructure.dataEnough && nextSupport > 0.0 && nextSupport < tp1 && nextSupport >= price - rawTp2Distance) {
+                    tp2 = nextSupport
                 }
             }
             SignalAction.HOLD -> Unit
