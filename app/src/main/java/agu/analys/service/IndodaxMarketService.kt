@@ -30,9 +30,9 @@ object IndodaxMarketService {
 
     private val timeFormat = SimpleDateFormat("HH:mm:ss", Locale("id", "ID"))
 
-    // 24h movement is based on an actual INDODAX historical candle, not the
-    // previous app poll. A short cache avoids refetching the same reference
-    // price every 3 seconds while keeping the live ticker uncached.
+    // 24h movement is based on an actual INDODAX historical candle
+    // at or before exactly 24 hours ago. A short cache avoids refetching
+    // the same reference price every 3 seconds while keeping the live ticker uncached.
     private data class ChangeReference(val close: Double, val fetchedAt: Long)
     private val changeReferenceCache = mutableMapOf<String, ChangeReference>()
     private const val CHANGE_REFERENCE_CACHE_MS = 60_000L
@@ -161,9 +161,10 @@ object IndodaxMarketService {
     }
 
     /**
-     * Real OHLC history from INDODAX. This replaces the old synthetic WebView
-     * candle stream so technical analysis and TP/SL are calculated from the
-     * same exchange and quote currency as the live ticker.
+     * Real OHLC history from INDODAX. Only completed candles are returned so
+     * RSI, MACD, Bollinger, ATR, patterns and market structure cannot repaint
+     * from the currently forming candle. The live ticker remains available
+     * separately for current-price monitoring and entry calculation.
      */
     suspend fun fetchCandles(symbol: String, timeframe: Timeframe, limit: Int = 120): List<CandleBar> = withContext(Dispatchers.IO) {
         try {
@@ -177,8 +178,13 @@ object IndodaxMarketService {
                 "D" -> 1440L
                 else -> 1L
             }
+            val candleSeconds = minutesPerCandle * 60L
             val nowSec = System.currentTimeMillis() / 1000L
-            val fromSec = nowSec - (minutesPerCandle * 60L * limit.coerceAtLeast(40))
+            val currentCandleStart = nowSec - (nowSec % candleSeconds)
+            // Request one extra candle because the currently forming candle is
+            // deliberately removed below before the final limit is applied.
+            val requestCount = limit.coerceAtLeast(40) + 1
+            val fromSec = nowSec - (candleSeconds * requestCount)
             val apiTf = if (tf == "D") "1D" else tf
             val pair = toDepthPairId(symbol).uppercase()
             val url = "https://indodax.com/tradingview/history_v2?from=$fromSec&symbol=$pair&tf=$apiTf&to=$nowSec"
@@ -193,7 +199,7 @@ object IndodaxMarketService {
                 val close = row.optDouble("Close", 0.0)
                 if (open <= 0 || high <= 0 || low <= 0 || close <= 0) continue
                 val timeSec = row.optLong("Time", 0L)
-                if (timeSec <= 0) continue
+                if (timeSec <= 0 || timeSec >= currentCandleStart) continue
                 result += CandleBar(
                     timestamp = timeSec * 1000L,
                     open = open,
