@@ -17,10 +17,14 @@ data class MarketStructureSnapshot(
     val supportDistancePct: Double?,
     val resistanceDistancePct: Double?,
     val structureExplanation: String,
-    val dataEnough: Boolean
+    val dataEnough: Boolean,
+    val nextSupport: Double? = null,
+    val nextResistance: Double? = null
 )
 
 object MarketStructureAnalyzer {
+    private const val LEVEL_CLUSTER_PCT = 0.0075
+
     fun analyze(candles: List<CandleBar>): MarketStructureSnapshot {
         if (candles.size < 12) {
             return MarketStructureSnapshot(
@@ -57,17 +61,21 @@ object MarketStructureAnalyzer {
             else -> "Range / transition"
         }
 
-        val support = swingLows.filter { it <= last }.maxOrNull() ?: swingLows.minOrNull()
-        val resistance = swingHighs.filter { it >= last }.minOrNull() ?: swingHighs.maxOrNull()
+        val supportLevels = clusterLevels(swingLows.filter { it <= last }.sortedDescending())
+        val resistanceLevels = clusterLevels(swingHighs.filter { it >= last }.sorted())
+        val support = supportLevels.firstOrNull() ?: clusterLevels(swingLows.sortedDescending()).firstOrNull()
+        val resistance = resistanceLevels.firstOrNull() ?: clusterLevels(swingHighs.sorted()).firstOrNull()
+        val nextSupport = supportLevels.drop(1).firstOrNull()
+        val nextResistance = resistanceLevels.drop(1).firstOrNull()
         val supportDistance = support?.let { abs(last - it) / last * 100.0 }
-        val resistanceDistance = resistance?.let { abs(resistance - last) / last * 100.0 }
+        val resistanceDistance = resistance?.let { abs(it - last) / last * 100.0 }
 
         val trendExplanation = when (trend) {
             "Bullish structure" -> "Higher High + Higher Low: pembeli sedang mempertahankan struktur naik. Ini bukan sinyal BUY otomatis."
             "Bearish structure" -> "Lower High + Lower Low: penjual sedang mempertahankan struktur turun. Ini bukan sinyal SELL otomatis."
             else -> "Swing belum membentuk rangkaian HH/HL atau LH/LL yang konsisten. Anggap sebagai area transisi/range."
         }
-        val structureExplanation = "Support/resistance diambil dari swing candle terbaru. Level adalah area observasi, bukan garis harga yang pasti."
+        val structureExplanation = "Support/resistance berasal dari swing terbaru yang dikelompokkan ke area harga berdekatan. Level adalah zona observasi, bukan garis harga pasti."
 
         return MarketStructureSnapshot(
             trend = trend,
@@ -79,7 +87,22 @@ object MarketStructureAnalyzer {
             supportDistancePct = supportDistance,
             resistanceDistancePct = resistanceDistance,
             structureExplanation = structureExplanation,
-            dataEnough = true
+            dataEnough = swingHighs.size >= 2 && swingLows.size >= 2,
+            nextSupport = nextSupport,
+            nextResistance = nextResistance
         )
+    }
+
+    private fun clusterLevels(levels: List<Double>): List<Double> {
+        if (levels.isEmpty()) return emptyList()
+        val clusters = mutableListOf<MutableList<Double>>()
+        for (level in levels) {
+            val cluster = clusters.firstOrNull { existing ->
+                val center = existing.average()
+                center > 0.0 && abs(level - center) / center <= LEVEL_CLUSTER_PCT
+            }
+            if (cluster != null) cluster += level else clusters += mutableListOf(level)
+        }
+        return clusters.map { it.average() }
     }
 }
