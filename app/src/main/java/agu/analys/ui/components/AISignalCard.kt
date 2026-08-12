@@ -58,6 +58,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import agu.analys.model.AISignalState
 import agu.analys.model.SignalAction
+import agu.analys.trading.SpotPositionState
+import agu.analys.trading.SpotPositionStore
 import agu.analys.ui.theme.TvAmber
 import agu.analys.ui.theme.TvCardBackground
 import agu.analys.ui.theme.TvGreen
@@ -71,6 +73,7 @@ fun AISignalCard(
     signal: AISignalState,
     onDeepAuditClick: () -> Unit,
     modifier: Modifier = Modifier,
+    marketSymbol: String = "",
     onOpenIndodaxClick: (() -> Unit)? = null,
     auditText: String? = null,
     isAuditLoading: Boolean = false,
@@ -82,6 +85,8 @@ fun AISignalCard(
 ) {
     val context = LocalContext.current
     var detailsExpanded by remember { mutableStateOf(false) }
+    val positionStore = remember(marketSymbol) { SpotPositionStore(context) }
+    var position by remember(marketSymbol) { mutableStateOf(positionStore.get(marketSymbol)) }
     val actionColor by animateColorAsState(targetValue = when (signal.action) { SignalAction.BUY -> TvGreen; SignalAction.SELL -> TvRed; SignalAction.HOLD -> TvAmber }, label = "actionColorAnimation")
     val actionNameIndo = when (signal.action) { SignalAction.BUY -> "BELI"; SignalAction.SELL -> "JUAL"; SignalAction.HOLD -> "TAHAN" }
     val scoreLabel = if (signal.action == SignalAction.HOLD) "SETUP BELUM KUAT • ${signal.confidence}/100" else "SETUP ${signal.confidence}/100"
@@ -89,6 +94,36 @@ fun AISignalCard(
     val holdReason = signal.reasoning.firstOrNull {
         it.contains("dibatalkan", ignoreCase = true) || it.contains("tidak ada", ignoreCase = true) || it.contains("belum", ignoreCase = true) || it.contains("kurang", ignoreCase = true)
     } ?: signal.reasoning.firstOrNull()
+
+    val spotAction = when {
+        position.state == SpotPositionState.NO_POSITION && signal.action == SignalAction.BUY -> "READY_BUY"
+        position.state == SpotPositionState.NO_POSITION && signal.action == SignalAction.SELL -> "IGNORE_SELL"
+        position.state == SpotPositionState.NO_POSITION && signal.action == SignalAction.HOLD -> "WAIT_BUY"
+        position.state == SpotPositionState.HOLDING && signal.action == SignalAction.SELL -> "READY_SELL"
+        position.state == SpotPositionState.HOLDING -> "HOLDING"
+        else -> "WAIT_BUY"
+    }
+    val spotTitle = when (spotAction) {
+        "READY_BUY" -> "SIAP BELI"
+        "READY_SELL" -> "SIAP JUAL"
+        "HOLDING" -> "SUDAH PUNYA COIN"
+        "IGNORE_SELL" -> "TIDAK ADA POSISI"
+        else -> "TUNGGU BUY"
+    }
+    val spotSubtitle = when (spotAction) {
+        "READY_BUY" -> "Sinyal BUY valid dan kamu belum memiliki coin."
+        "READY_SELL" -> "Sinyal SELL muncul saat posisi sedang dimiliki."
+        "HOLDING" -> if (signal.action == SignalAction.BUY) "Sudah punya coin. Jangan beli ulang hanya karena sinyal BUY." else "Tetap pegang sampai ada alasan keluar yang valid."
+        "IGNORE_SELL" -> "SELL diabaikan karena belum ada coin yang bisa dijual."
+        else -> "Belum ada setup BUY yang cukup kuat. Jangan masuk posisi dulu."
+    }
+    val spotColor = when (spotAction) {
+        "READY_BUY" -> TvGreen
+        "READY_SELL" -> TvRed
+        "HOLDING" -> TvGreen
+        "IGNORE_SELL" -> TvTextSecondary
+        else -> TvAmber
+    }
 
     Card(modifier = modifier.fillMaxWidth().border(1.dp, TvGreen.copy(alpha = 0.25f), RoundedCornerShape(20.dp)).testTag("ai_signal_card"), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = TvCardBackground), elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)) {
         Column(modifier = Modifier.padding(16.dp).fillMaxWidth()) {
@@ -112,7 +147,62 @@ fun AISignalCard(
             }
             Spacer(Modifier.height(10.dp))
             LinearProgressIndicator(progress = { (signal.confidence / 100.0f).coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(3.dp)), color = actionColor, trackColor = Color(0x1AFFFFFF))
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(12.dp))
+
+            // Spot decision is separate from the raw technical signal.
+            Column(
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(spotColor.copy(alpha = 0.09f)).border(1.dp, spotColor.copy(alpha = 0.28f), RoundedCornerShape(12.dp)).padding(11.dp)
+            ) {
+                Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("STATUS SPOT", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = spotColor, letterSpacing = 0.8.sp)
+                        Text(spotTitle, fontSize = 15.sp, fontWeight = FontWeight.Black, color = spotColor)
+                    }
+                    Text(
+                        if (position.state == SpotPositionState.HOLDING) "HOLDING" else "NO POSITION",
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TvTextSecondary
+                    )
+                }
+                Spacer(Modifier.height(3.dp))
+                Text(spotSubtitle, fontSize = 10.sp, color = TvTextPrimary, lineHeight = 14.sp)
+                if (position.state == SpotPositionState.HOLDING && position.entryPrice > 0.0) {
+                    Spacer(Modifier.height(4.dp))
+                    Text("Entry acuan: ${PriceFormatter.formatPriceFull(position.entryPrice)}", fontSize = 9.sp, color = TvTextSecondary)
+                }
+                when (spotAction) {
+                    "READY_BUY" -> {
+                        Spacer(Modifier.height(8.dp))
+                        Button(
+                            onClick = {
+                                positionStore.markBought(marketSymbol, signal.entryPrice)
+                                position = positionStore.get(marketSymbol)
+                            },
+                            modifier = Modifier.fillMaxWidth().height(38.dp).testTag("mark_position_bought"),
+                            colors = ButtonDefaults.buttonColors(containerColor = TvGreen),
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp)
+                        ) { Text("SAYA SUDAH BELI DI INDODAX", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.Black) }
+                    }
+                    "READY_SELL" -> {
+                        Spacer(Modifier.height(8.dp))
+                        Button(
+                            onClick = {
+                                positionStore.markSold(marketSymbol)
+                                position = positionStore.get(marketSymbol)
+                            },
+                            modifier = Modifier.fillMaxWidth().height(38.dp).testTag("mark_position_sold"),
+                            colors = ButtonDefaults.buttonColors(containerColor = TvRed),
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp)
+                        ) { Text("SAYA SUDAH JUAL DI INDODAX", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White) }
+                    }
+                    else -> Unit
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
             Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 LevelRow("ENTRY / MASUK", formatLevel(signal.entryPrice), TvTextPrimary)
                 LevelRow("TP1 • 2× ATR", formatLevel(signal.targetPrice1), TvGreen)
@@ -126,7 +216,7 @@ fun AISignalCard(
                     Column {
                         Text("KENAPA TAHAN?", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = TvAmber, letterSpacing = 0.7.sp)
                         Text(holdReason ?: "Belum ada alasan spesifik dari data candle saat ini.", fontSize = 10.sp, color = TvTextPrimary, lineHeight = 14.sp)
-                        Text("TAHAN bukan posisi terbuka. Tidak ada TP/SL yang aktif.", fontSize = 9.sp, color = TvTextSecondary, lineHeight = 13.sp)
+                        Text(if (position.state == SpotPositionState.HOLDING) "Kamu sudah punya coin: TAHAN berarti tetap pegang sampai ada sinyal keluar." else "Kamu belum punya coin: TAHAN berarti tunggu sinyal BUY valid." , fontSize = 9.sp, color = TvTextSecondary, lineHeight = 13.sp)
                     }
                 }
             }
