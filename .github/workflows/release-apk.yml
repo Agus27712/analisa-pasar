@@ -28,11 +28,6 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Setup Gradle 9.3.1
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: "9.3.1"
-
       - name: Write .env for secrets plugin
         run: |
           # Always write quoted values so BuildConfig gets valid Java ("" not blank)
@@ -45,7 +40,7 @@ jobs:
           sed 's/=.*/=***/' .env
 
       - name: Assemble Release APK
-        run: gradle :app:assembleRelease --no-daemon --stacktrace
+        run: ./gradlew :app:assembleRelease --no-daemon --stacktrace
 
       - name: Locate APK
         run: |
