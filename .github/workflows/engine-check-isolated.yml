@@ -1,0 +1,40 @@
+name: Engine Check Isolated
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'fix/**'
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  compile-engine:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - run: chmod +x ./gradlew
+      - name: Compile production Kotlin
+        run: ./gradlew :app:compileDebugKotlin --no-daemon
+
+      - name: Check engine sources are present
+        run: |
+          test -n "$(find app/src/main/java/agu/analys/engine -name '*.kt' -print -quit)"
+
+  unit-tests:
+    runs-on: ubuntu-latest
+    needs: compile-engine
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - run: chmod +x ./gradlew
+      - name: Run configured unit tests
+        run: ./gradlew :app:testDebugUnitTest --no-daemon
