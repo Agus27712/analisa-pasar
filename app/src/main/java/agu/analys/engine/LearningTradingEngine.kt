@@ -30,17 +30,8 @@ class LearningTradingEngine(
     fun onTickUpdate(tick: MarketTick) {
         if (tick.price <= 0.0) return
         currentTick = tick
-        // A live tick must never recalculate the technical signal. Indicators and the
-        // signal are evaluated from the latest completed candle snapshot only.
     }
 
-    /**
-     * Accept one completed candle and evaluate once.
-     *
-     * Closed candles are immutable for the signal engine. If an upstream source sends
-     * the same timestamp again with different OHLC values, the replacement is ignored
-     * rather than allowing historical signal repainting.
-     */
     fun onCandleUpdate(candle: CandleBar) {
         if (!isValidCandle(candle)) return
         synchronized(candles) {
@@ -53,11 +44,6 @@ class LearningTradingEngine(
         evaluate()
     }
 
-    /**
-     * Replace the complete completed-candle snapshot and evaluate only once.
-     * This is used after a historical refresh so intermediate historical candles
-     * cannot briefly emit stale BUY/SELL states to the UI/history collector.
-     */
     fun replaceCompletedCandles(completedCandles: List<CandleBar>) {
         val normalized = completedCandles
             .filter(::isValidCandle)
@@ -66,7 +52,6 @@ class LearningTradingEngine(
             .map { it.first() }
             .sortedBy { it.timestamp }
             .takeLast(250)
-
         synchronized(candles) {
             candles.clear()
             candles.addAll(normalized)
@@ -94,10 +79,8 @@ class LearningTradingEngine(
     }
 
     private fun isValidCandle(candle: CandleBar): Boolean =
-        candle.timestamp > 0L &&
-            candle.open > 0.0 && candle.high > 0.0 && candle.low > 0.0 && candle.close > 0.0 &&
-            candle.high >= max(candle.open, candle.close) &&
-            candle.low <= min(candle.open, candle.close)
+        candle.timestamp > 0L && candle.open > 0.0 && candle.high > 0.0 && candle.low > 0.0 && candle.close > 0.0 &&
+            candle.high >= max(candle.open, candle.close) && candle.low <= min(candle.open, candle.close)
 
     private fun evaluate() {
         val tick = currentTick ?: return
@@ -138,54 +121,36 @@ class LearningTradingEngine(
         val momentumBase = closes[closes.lastIndex - momentumLookback]
         val momentum = if (momentumBase > 0.0) (price - momentumBase) / momentumBase else 0.0
 
-        _indicators.value = TechnicalIndicators(
-            rsi14 = rsi,
-            macd = macd,
-            macdSignal = macdSignal,
-            macdHist = macdHist,
-            ema20 = ema20,
-            ema50 = ema50,
-            ema200 = calculateEma(closes, 200),
-            bbUpper = bb.second,
-            bbLower = bb.first,
-            atr = atr,
-            momentum = momentum
-        )
+        _indicators.value = TechnicalIndicators(rsi14 = rsi, macd = macd, macdSignal = macdSignal, macdHist = macdHist, ema20 = ema20, ema50 = ema50, ema200 = calculateEma(closes, 200), bbUpper = bb.second, bbLower = bb.first, atr = atr, momentum = momentum)
 
         var buy = 0.0
         var sell = 0.0
         val reasons = mutableListOf<String>()
         reasons += "Market regime: $regime."
-
         when {
             rsi < 30.0 -> { buy += 20.0; reasons += "RSI ${format(rsi)}: jenuh jual; pantulan perlu konfirmasi." }
             rsi > 70.0 -> { sell += 20.0; reasons += "RSI ${format(rsi)}: jenuh beli; risiko koreksi meningkat." }
             else -> reasons += "RSI ${format(rsi)}: netral, belum memberi sinyal ekstrem."
         }
-
         when {
             price > ema20 && ema20 > ema50 -> { buy += 25.0; reasons += "EMA20 > EMA50 dan harga di atas keduanya: struktur bullish." }
             price < ema20 && ema20 < ema50 -> { sell += 25.0; reasons += "EMA20 < EMA50 dan harga di bawah keduanya: struktur bearish." }
             else -> reasons += "EMA20/EMA50 belum searah: tren belum terkonfirmasi."
         }
-
         when {
             macdHist > 0 && macd > macdSignal -> { buy += 20.0; reasons += "MACD histogram positif: momentum naik lebih dominan." }
             macdHist < 0 && macd < macdSignal -> { sell += 20.0; reasons += "MACD histogram negatif: momentum turun lebih dominan." }
             else -> reasons += "MACD belum memberi konfirmasi momentum yang tegas."
         }
-
         when {
             price <= bb.first -> { buy += 10.0; reasons += "Harga dekat/di bawah Bollinger Band bawah: area pantulan yang perlu diamati." }
             price >= bb.second -> { sell += 10.0; reasons += "Harga dekat/di atas Bollinger Band atas: area koreksi yang perlu diamati." }
             else -> reasons += "Harga masih berada di dalam Bollinger Band."
         }
-
         pattern?.let {
             if (it.contains("Bullish", true) || it.contains("Hammer", true)) { buy += 15.0; reasons += "Candlestick $it: konfirmasi bullish tambahan, bukan jaminan." }
             else if (it.contains("Bearish", true) || it.contains("Shooting", true)) { sell += 15.0; reasons += "Candlestick $it: konfirmasi bearish tambahan, bukan jaminan." }
         }
-
         val avgVolume = history.takeLast(5).map { it.volume }.average()
         val lastVolume = history.last().volume
         if (avgVolume > 0.0 && lastVolume >= avgVolume * 1.8) {
@@ -193,7 +158,6 @@ class LearningTradingEngine(
             if (history.last().close >= history.last().open) { buy += 10.0; reasons += "Volume ${format(ratio)}× rata-rata 5 candle: aktivitas naik meningkat." }
             else { sell += 10.0; reasons += "Volume ${format(ratio)}× rata-rata 5 candle: aktivitas jual meningkat." }
         } else reasons += "Volume belum memberi lonjakan konfirmasi."
-
         if (marketStructure.dataEnough) {
             when (marketStructure.trend) {
                 "Bullish structure" -> { buy += 15.0; reasons += "Market structure bullish: Higher High + Higher Low." }
@@ -211,7 +175,6 @@ class LearningTradingEngine(
         val dominanceRatio = if (min(buy, sell) > 0.0) dominant / min(buy, sell) else Double.POSITIVE_INFINITY
         val weakDominance = dominanceRatio < 1.40
         val noTrade = regime == "SIDEWAYS / NO TRADE" || conflict || weakDominance || dominant < minimumScore || volatilityTooHigh
-
         val action = when {
             noTrade -> SignalAction.HOLD
             buy >= minimumScore && buy > sell * 1.40 && !structureBlocksBuy -> SignalAction.BUY
@@ -248,7 +211,11 @@ class LearningTradingEngine(
                 val swingLow = marketStructure.lastSwingLow ?: 0.0
                 if (marketStructure.dataEnough && swingLow > 0.0 && swingLow < price) sl = min(sl, swingLow - atr * 0.25)
                 val resistance = marketStructure.resistance ?: 0.0
-                if (marketStructure.dataEnough && resistance > price) tp1 = min(tp1, resistance)
+                val nextResistance = marketStructure.nextResistance ?: 0.0
+                if (marketStructure.dataEnough && resistance > price) {
+                    tp1 = min(tp1, resistance)
+                    if (nextResistance > tp1) tp2 = min(tp2, nextResistance)
+                }
             }
             SignalAction.SELL -> {
                 sl = price + rawStopDistance
@@ -257,7 +224,11 @@ class LearningTradingEngine(
                 val swingHigh = marketStructure.lastSwingHigh ?: 0.0
                 if (marketStructure.dataEnough && swingHigh > price) sl = max(sl, swingHigh + atr * 0.25)
                 val support = marketStructure.support ?: 0.0
-                if (marketStructure.dataEnough && support > 0.0 && support < price) tp1 = max(tp1, support)
+                val nextSupport = marketStructure.nextSupport ?: 0.0
+                if (marketStructure.dataEnough && support > 0.0 && support < price) {
+                    tp1 = max(tp1, support)
+                    if (nextSupport > 0.0 && nextSupport < tp1) tp2 = max(tp2, nextSupport)
+                }
             }
             SignalAction.HOLD -> Unit
         }
@@ -270,10 +241,9 @@ class LearningTradingEngine(
 
         val levelsValid = when (action) {
             SignalAction.BUY -> stopDistance > 0.0 && stopDistance < price * 0.08 && tp1 > price && tp2 > tp1 && tp1Distance >= stopDistance && tp2Distance >= stopDistance * 1.5 && sl > 0.0
-            SignalAction.SELL -> stopDistance > 0.0 && stopDistance < price * 0.08 && tp1 < price && tp2 < tp1 && tp1Distance >= stopDistance && tp2Distance >= stopDistance * 1.5
+            SignalAction.SELL -> stopDistance > 0.0 && stopDistance < price * 0.08 && tp1 < price && tp2 < tp1 && tp1Distance >= stopDistance && tp2Distance >= stopDistance * 1.5 && sl > price
             SignalAction.HOLD -> false
         }
-
         val finalAction = if (action != SignalAction.HOLD && levelsValid) action else SignalAction.HOLD
         val finalScore = if (finalAction == SignalAction.HOLD) min(59, score) else score
         if (action != SignalAction.HOLD && finalAction == SignalAction.HOLD) reasons += "Setup dibatalkan: TP/SL tidak memiliki RR minimum atau level risiko terlalu lebar."
@@ -281,13 +251,11 @@ class LearningTradingEngine(
         val rr = if (finalAction == SignalAction.HOLD || stopDistance <= 0.0) "Tidak ada posisi" else "TP1 1:${format(tp1Distance / stopDistance)} | TP2 1:${format(tp2Distance / stopDistance)}"
         val finalReasoning = reasons.take(6).toMutableList()
         if (finalReasoning.size > 6) finalReasoning.removeAt(5)
-
         val sentiment = when (finalAction) {
             SignalAction.BUY -> if (pattern?.contains("Engulfing", true) == true) TrendSentiment.BULLISH_REVERSAL else TrendSentiment.STRONG_BULLISH_CONTINUATION
             SignalAction.SELL -> if (pattern?.contains("Engulfing", true) == true) TrendSentiment.BEARISH_BREAKDOWN else TrendSentiment.BEARISH_DISTRIBUTION
             SignalAction.HOLD -> TrendSentiment.NEUTRAL_CONSOLIDATION
         }
-
         _signalState.value = AISignalState(
             action = finalAction,
             confidence = finalScore,
@@ -321,19 +289,10 @@ class LearningTradingEngine(
         if (history.size <= period) return 50.0
         var gain = 0.0
         var loss = 0.0
-        for (i in 1..period) {
-            val change = history[i].close - history[i - 1].close
-            if (change >= 0.0) gain += change else loss += -change
-        }
+        for (i in 1..period) { val change = history[i].close - history[i - 1].close; if (change >= 0.0) gain += change else loss += -change }
         var averageGain = gain / period
         var averageLoss = loss / period
-        for (i in period + 1 until history.size) {
-            val change = history[i].close - history[i - 1].close
-            val currentGain = max(change, 0.0)
-            val currentLoss = max(-change, 0.0)
-            averageGain = ((averageGain * (period - 1)) + currentGain) / period
-            averageLoss = ((averageLoss * (period - 1)) + currentLoss) / period
-        }
+        for (i in period + 1 until history.size) { val change = history[i].close - history[i - 1].close; val currentGain = max(change, 0.0); val currentLoss = max(-change, 0.0); averageGain = ((averageGain * (period - 1)) + currentGain) / period; averageLoss = ((averageLoss * (period - 1)) + currentLoss) / period }
         if (averageLoss == 0.0) return if (averageGain == 0.0) 50.0 else 100.0
         val rs = averageGain / averageLoss
         return 100.0 - 100.0 / (1.0 + rs)
@@ -373,9 +332,7 @@ class LearningTradingEngine(
 
     private fun calculateAtr(history: List<CandleBar>, period: Int): Double {
         val start = max(1, history.size - period)
-        val trs = (start until history.size).map { i ->
-            max(history[i].high - history[i].low, max(abs(history[i].high - history[i - 1].close), abs(history[i].low - history[i - 1].close)))
-        }
+        val trs = (start until history.size).map { i -> max(history[i].high - history[i].low, max(abs(history[i].high - history[i - 1].close), abs(history[i].low - history[i - 1].close))) }
         return trs.average()
     }
 
