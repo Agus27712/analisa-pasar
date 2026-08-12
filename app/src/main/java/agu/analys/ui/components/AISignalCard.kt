@@ -51,7 +51,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -85,9 +85,11 @@ fun AISignalCard(
     val actionColor by animateColorAsState(targetValue = when (signal.action) { SignalAction.BUY -> TvGreen; SignalAction.SELL -> TvRed; SignalAction.HOLD -> TvAmber }, label = "actionColorAnimation")
     val actionNameIndo = when (signal.action) { SignalAction.BUY -> "BELI"; SignalAction.SELL -> "JUAL"; SignalAction.HOLD -> "TAHAN" }
     val scoreLabel = if (signal.action == SignalAction.HOLD) "SETUP BELUM KUAT • ${signal.confidence}/100" else "SETUP ${signal.confidence}/100"
-    val structureBlocked = signal.reasoning.any {
-        it.contains("bertentangan dengan market structure", ignoreCase = true)
-    }
+    val structureBlocked = signal.reasoning.any { it.contains("bertentangan dengan market structure", ignoreCase = true) }
+    val holdReason = signal.reasoning.firstOrNull {
+        it.contains("dibatalkan", ignoreCase = true) || it.contains("tidak ada", ignoreCase = true) || it.contains("belum", ignoreCase = true) || it.contains("kurang", ignoreCase = true)
+    } ?: signal.reasoning.firstOrNull()
+
     Card(modifier = modifier.fillMaxWidth().border(1.dp, TvGreen.copy(alpha = 0.25f), RoundedCornerShape(20.dp)).testTag("ai_signal_card"), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = TvCardBackground), elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)) {
         Column(modifier = Modifier.padding(16.dp).fillMaxWidth()) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -96,21 +98,8 @@ fun AISignalCard(
             }
             if (structureBlocked) {
                 Spacer(Modifier.height(8.dp))
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(TvRed.copy(alpha = 0.12f))
-                        .border(1.dp, TvRed.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
-                        .padding(horizontal = 10.dp, vertical = 7.dp)
-                ) {
-                    Text(
-                        "STRUCTURE BLOCK — sinyal dibatalkan karena bertentangan dengan struktur pasar",
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TvRed,
-                        maxLines = 2
-                    )
+                Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(TvRed.copy(alpha = 0.12f)).border(1.dp, TvRed.copy(alpha = 0.35f), RoundedCornerShape(10.dp)).padding(horizontal = 10.dp, vertical = 7.dp)) {
+                    Text("STRUCTURE BLOCK — sinyal dibatalkan karena bertentangan dengan struktur pasar", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TvRed, maxLines = 2)
                 }
             }
             Spacer(Modifier.height(12.dp))
@@ -130,6 +119,16 @@ fun AISignalCard(
                 LevelRow("TP2 • 3,5× ATR", formatLevel(signal.targetPrice2), TvGreen)
                 LevelRow("STOP LOSS • 1,5× ATR", formatLevel(signal.stopLoss), TvRed)
                 LevelRow("R:R MATEMATIS", signal.riskRewardRatio, TvTextPrimary)
+            }
+            if (signal.action == SignalAction.HOLD) {
+                Spacer(Modifier.height(9.dp))
+                Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(TvAmber.copy(alpha = 0.10f)).border(1.dp, TvAmber.copy(alpha = 0.28f), RoundedCornerShape(10.dp)).padding(horizontal = 10.dp, vertical = 8.dp)) {
+                    Column {
+                        Text("KENAPA TAHAN?", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = TvAmber, letterSpacing = 0.7.sp)
+                        Text(holdReason ?: "Belum ada alasan spesifik dari data candle saat ini.", fontSize = 10.sp, color = TvTextPrimary, lineHeight = 14.sp)
+                        Text("TAHAN bukan posisi terbuka. Tidak ada TP/SL yang aktif.", fontSize = 9.sp, color = TvTextSecondary, lineHeight = 13.sp)
+                    }
+                }
             }
             Spacer(Modifier.height(10.dp))
             Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Color(0x0AFFFFFF)).padding(horizontal = 10.dp, vertical = 8.dp), verticalAlignment = Alignment.Top) { Icon(Icons.Default.Info, contentDescription = null, tint = TvTextSecondary, modifier = Modifier.size(16.dp)); Spacer(Modifier.width(7.dp)); Text("TP/SL adalah level latihan berbasis ATR, bukan prediksi harga pasti atau support/resistance.", fontSize = 10.sp, color = TvTextSecondary, lineHeight = 14.sp) }
@@ -163,7 +162,7 @@ fun AISignalCard(
             }
             if (onRequestGemini != null) {
                 Spacer(Modifier.height(8.dp))
-                OutlinedButton(onClick = onRequestGemini, enabled = !isGeminiLoading, modifier = Modifier.fillMaxWidth().height(42.dp).testTag("gemini_summary_button"), colors = ButtonDefaults.outlinedButtonColors(contentColor = TvTextPrimary), border = BorderStroke(1.dp, Color(0x3324A8FF)), shape = RoundedCornerShape(12.dp), contentPadding = PaddingValues(horizontal = 6.dp)) {
+                OutlinedButton(onClick = onRequestGemini, enabled = !isGeminiLoading, modifier = Modifier.fillMaxWidth().height(42.dp).testTag("gemini_summary_button"), colors = ButtonDefaults.outlinedButtonColors(contentColor = TvTextPrimary), border = BorderStroke(1.dp, Color(0x3324A8FF)), shape = RoundedCornerShape(12.dp), contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)) {
                     if (isGeminiLoading) CircularProgressIndicator(modifier = Modifier.size(15.dp), strokeWidth = 2.dp, color = TvGreen) else Icon(Icons.Default.AutoAwesome, null, tint = Color(0xFF6FB8FF), modifier = Modifier.size(15.dp))
                     Spacer(Modifier.width(4.dp)); Text("Gemini 24J", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
                 }
@@ -200,20 +199,8 @@ private fun formatLevel(value: Double): String = if (value > 0.0 && value.isFini
 
 @Composable
 private fun LevelRow(label: String, value: String, color: Color) {
-    Row(
-        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Color(0x0AFFFFFF)).border(1.dp, Color(0x14FFFFFF), RoundedCornerShape(10.dp)).padding(horizontal = 12.dp, vertical = 9.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
+    Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Color(0x0AFFFFFF)).border(1.dp, Color(0x14FFFFFF), RoundedCornerShape(10.dp)).padding(horizontal = 12.dp, vertical = 9.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
         Text(label, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = color, letterSpacing = 0.3.sp)
-        Text(
-            value,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Medium,
-            fontFamily = FontFamily.SansSerif,
-            color = color,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
+        Text(value, fontSize = 13.sp, fontWeight = FontWeight.Medium, fontFamily = FontFamily.SansSerif, color = color, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
