@@ -12,15 +12,32 @@ android {
     applicationId = "agu.analys"
     minSdk = 24
     targetSdk = 35
-    versionCode = 4
+    versionCode = providers.gradleProperty("VERSION_CODE").map(String::toInt).getOrElse(4)
     versionName = "1.1.2"
+  }
+
+  signingConfigs {
+    create("release") {
+      val keystorePath = System.getenv("RELEASE_KEYSTORE_PATH")
+      val storePassword = System.getenv("RELEASE_STORE_PASSWORD")
+      val keyAlias = System.getenv("RELEASE_KEY_ALIAS")
+      val keyPassword = System.getenv("RELEASE_KEY_PASSWORD")
+
+      if (!keystorePath.isNullOrBlank() && !storePassword.isNullOrBlank() &&
+        !keyAlias.isNullOrBlank() && !keyPassword.isNullOrBlank()) {
+        storeFile = file(keystorePath)
+        this.storePassword = storePassword
+        this.keyAlias = keyAlias
+        this.keyPassword = keyPassword
+      }
+    }
   }
 
   buildTypes {
     release {
       isMinifyEnabled = false
       isShrinkResources = false
-      signingConfig = signingConfigs.getByName("debug")
+      signingConfig = signingConfigs.getByName("release")
       proguardFiles(
         getDefaultProguardFile("proguard-android-optimize.txt"),
         "proguard-rules.pro"
