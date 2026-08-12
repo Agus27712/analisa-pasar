@@ -38,6 +38,8 @@ jobs:
             "${{ secrets.DEEPSEEK_API_KEY }}" > .env
           echo "--- .env (keys redacted) ---"
           sed 's/=.*/=***/' .env
+      - name: Make Gradle Wrapper executable
+        run: chmod +x gradlew
 
       - name: Assemble Release APK
         run: ./gradlew :app:assembleRelease --no-daemon --stacktrace
