@@ -38,22 +38,45 @@ jobs:
             "${{ secrets.DEEPSEEK_API_KEY }}" > .env
           echo "--- .env (keys redacted) ---"
           sed 's/=.*/=***/' .env
+
+      - name: Restore release keystore
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          test -n "$RELEASE_KEYSTORE_BASE64"
+          test -n "$RELEASE_STORE_PASSWORD"
+          test -n "$RELEASE_KEY_ALIAS"
+          test -n "$RELEASE_KEY_PASSWORD"
+          echo "$RELEASE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/analisa-pasar-release.jks"
+          test -s "$RUNNER_TEMP/analisa-pasar-release.jks"
+          echo "Release keystore restored in runner temp directory."
+
       - name: Make Gradle Wrapper executable
         run: chmod +x gradlew
 
       - name: Assemble Release APK
-        run: ./gradlew :app:assembleRelease --no-daemon --stacktrace
+        env:
+          RELEASE_KEYSTORE_PATH: ${{ runner.temp }}/analisa-pasar-release.jks
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: ./gradlew :app:assembleRelease --no-daemon --stacktrace -PVERSION_CODE=${{ github.run_number }}
 
-      - name: Locate APK
+      - name: Verify APK metadata
         run: |
-          find app/build/outputs/apk -name "*.apk" -ls
-          test -n "$(find app/build/outputs/apk -name '*.apk' | head -1)"
+          APK="app/build/outputs/apk/release/app-release.apk"
+          test -s "$APK"
+          echo "APK: $APK"
+          ls -lh "$APK"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: app-release
-          path: app/build/outputs/apk/**/*.apk
+          path: app/build/outputs/apk/release/*.apk
           if-no-files-found: error
 
       - name: Create GitHub Release
@@ -63,7 +86,8 @@ jobs:
           name: Release v${{ github.run_number }}
           body: |
             Automated installable APK from main.
-            Signed with debug keystore for sideload.
+            Signed with the persistent release keystore from GitHub Actions Secrets.
+            Android versionCode: ${{ github.run_number }}
           files: app/build/outputs/apk/release/*.apk
           draft: false
           prerelease: false
