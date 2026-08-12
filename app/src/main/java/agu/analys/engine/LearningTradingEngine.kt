@@ -207,31 +207,94 @@ class LearningTradingEngine(
         }
         if (action != SignalAction.HOLD) reasons[reasons.lastIndex] = "Score ${score}/100 = kekuatan setup, bukan peluang profit."
 
-        val stopDistance = atr * 1.5
-        val tp1Distance = atr * 2.0
-        val tp2Distance = atr * 3.5
-        val levelsValid = stopDistance > 0.0 && stopDistance < price * 0.08 &&
-            if (action == SignalAction.BUY) price + tp2Distance > price && price - stopDistance > 0.0
-            else if (action == SignalAction.SELL) price - tp2Distance > 0.0
-            else false
+        val rawStopDistance = atr * 1.5
+        val rawTp1Distance = atr * 2.0
+        val rawTp2Distance = atr * 3.5
+        var sl = 0.0
+        var tp1 = 0.0
+        var tp2 = 0.0
+        var stopDistance = 0.0
+        var tp1Distance = 0.0
+        var tp2Distance = 0.0
+
+        when (action) {
+            SignalAction.BUY -> {
+                sl = price - rawStopDistance
+                tp1 = price + rawTp1Distance
+                tp2 = price + rawTp2Distance
+
+                // Keep the stop on the safe side of the latest confirmed swing low
+                // when structure data is available. This can widen risk, so the
+                // validation below is allowed to cancel the trade if it becomes too wide.
+                val swingLow = marketStructure.lastSwingLow
+                if (marketStructure.dataEnough && swingLow > 0.0 && swingLow < price) {
+                    sl = min(sl, swingLow - atr * 0.25)
+                }
+
+                // If confirmed resistance sits before the ATR-based TP1, take profit
+                // just at that structural target instead of pretending the path is clear.
+                val resistance = marketStructure.resistance
+                if (marketStructure.dataEnough && resistance > price) {
+                    tp1 = min(tp1, resistance)
+                }
+            }
+            SignalAction.SELL -> {
+                sl = price + rawStopDistance
+                tp1 = price - rawTp1Distance
+                tp2 = price - rawTp2Distance
+
+                val swingHigh = marketStructure.lastSwingHigh
+                if (marketStructure.dataEnough && swingHigh > price) {
+                    sl = max(sl, swingHigh + atr * 0.25)
+                }
+
+                val support = marketStructure.support
+                if (marketStructure.dataEnough && support > 0.0 && support < price) {
+                    tp1 = max(tp1, support)
+                }
+            }
+            SignalAction.HOLD -> Unit
+        }
+
+        if (action != SignalAction.HOLD) {
+            stopDistance = abs(price - sl)
+            tp1Distance = abs(tp1 - price)
+            tp2Distance = abs(tp2 - price)
+        }
+
+        val levelsValid = when (action) {
+            SignalAction.BUY ->
+                stopDistance > 0.0 &&
+                    stopDistance < price * 0.08 &&
+                    tp1 > price &&
+                    tp2 > tp1 &&
+                    tp1Distance >= stopDistance &&
+                    tp2Distance >= stopDistance * 1.5 &&
+                    sl > 0.0
+            SignalAction.SELL ->
+                stopDistance > 0.0 &&
+                    stopDistance < price * 0.08 &&
+                    tp1 < price &&
+                    tp2 < tp1 &&
+                    tp1Distance >= stopDistance &&
+                    tp2Distance >= stopDistance * 1.5
+            SignalAction.HOLD -> false
+        }
 
         val finalAction = if (action != SignalAction.HOLD && levelsValid) action else SignalAction.HOLD
         val finalScore = if (finalAction == SignalAction.HOLD) min(59, score) else score
 
-        val sl: Double
-        val tp1: Double
-        val tp2: Double
-        val rr: String
-        when (finalAction) {
-            SignalAction.BUY -> { sl = price - stopDistance; tp1 = price + tp1Distance; tp2 = price + tp2Distance; rr = "TP1 1:1.33 | TP2 1:2.33" }
-            SignalAction.SELL -> { sl = price + stopDistance; tp1 = price - tp1Distance; tp2 = price - tp2Distance; rr = "TP1 1:1.33 | TP2 1:2.33" }
-            SignalAction.HOLD -> { sl = 0.0; tp1 = 0.0; tp2 = 0.0; rr = "Tidak ada posisi" }
+        if (action != SignalAction.HOLD && finalAction == SignalAction.HOLD) {
+            reasons += "Setup dibatalkan: TP/SL tidak memiliki RR minimum atau level risiko terlalu lebar."
+        }
+
+        val rr = if (finalAction == SignalAction.HOLD || stopDistance <= 0.0) {
+            "Tidak ada posisi"
+        } else {
+            "TP1 1:${format(tp1Distance / stopDistance)} | TP2 1:${format(tp2Distance / stopDistance)}"
         }
 
         val finalReasoning = reasons.take(6).toMutableList()
-        if (action != SignalAction.HOLD && finalAction == SignalAction.HOLD) {
-            finalReasoning.add("Setup dibatalkan: level risiko terlalu lebar atau tidak valid.")
-        }
         if (finalReasoning.size > 6) finalReasoning.removeAt(5)
 
         val sentiment = when (finalAction) {
@@ -245,9 +308,9 @@ class LearningTradingEngine(
             confidence = finalScore,
             sentiment = sentiment,
             entryPrice = price,
-            targetPrice1 = tp1,
-            targetPrice2 = tp2,
-            stopLoss = sl,
+            targetPrice1 = if (finalAction == SignalAction.HOLD) 0.0 else tp1,
+            targetPrice2 = if (finalAction == SignalAction.HOLD) 0.0 else tp2,
+            stopLoss = if (finalAction == SignalAction.HOLD) 0.0 else sl,
             riskRewardRatio = rr,
             probabilityScore = 0.0,
             patternDetected = pattern,
