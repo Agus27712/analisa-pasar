@@ -23,7 +23,7 @@ object GeminiAiService {
     private const val BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models/$MODEL:generateContent"
 
     suspend fun generateChartSummary24h(apiKey: String, tick: MarketTick, indicators: TechnicalIndicators, signal: AISignalState): String = withContext(Dispatchers.IO) {
-        val effectiveKey = if (apiKey.isBlank()) BuildConfig.GEMINI_API_KEY else apiKey
+        val effectiveKey = if (apiKey.isBlank()) "" else apiKey
         val cpi = if (safeContextReady) BpsMacroService(AppContextProvider.context).getLatest() else null
         if (effectiveKey.isBlank()) return@withContext buildFallback(tick, indicators, signal, cpi) + "\n\n⚠️ Gemini API Key belum di-set. Buka Settings → masukkan Gemini API key Anda untuk analisis AI penuh."
         val macro = cpi?.let {

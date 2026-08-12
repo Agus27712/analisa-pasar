@@ -59,6 +59,8 @@ secrets {
   // (empty values become illegal Java: public static final String X = ;)
   ignoreList.add("FIREBASE_APPCHECK_DEBUG_TOKEN")
   ignoreList.add("GROQ_API_KEY")
+  ignoreList.add("GEMINI_API_KEY")
+  ignoreList.add("DEEPSEEK_API_KEY")
 }
 
 dependencies {
