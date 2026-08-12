@@ -116,9 +116,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
 
     fun navigateTo(screen: AppScreen) {
         if (_currentScreen.value != screen) {
-            if (_currentScreen.value != AppScreen.DASHBOARD) {
-                navigationStack.add(_currentScreen.value)
-            }
+            if (_currentScreen.value != AppScreen.DASHBOARD) navigationStack.add(_currentScreen.value)
             _currentScreen.value = screen
         }
     }
@@ -127,12 +125,8 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     fun closeLandscapeChart() { goBack() }
     fun openSettings() { navigateTo(AppScreen.SETTINGS) }
     fun goBack() {
-        if (navigationStack.isNotEmpty()) {
-            val prev = navigationStack.removeAt(navigationStack.size - 1)
-            _currentScreen.value = prev
-        } else if (_currentScreen.value != AppScreen.DASHBOARD) {
-            _currentScreen.value = AppScreen.DASHBOARD
-        }
+        if (navigationStack.isNotEmpty()) _currentScreen.value = navigationStack.removeAt(navigationStack.lastIndex)
+        else if (_currentScreen.value != AppScreen.DASHBOARD) _currentScreen.value = AppScreen.DASHBOARD
     }
     fun getGroqApiKey(): String = prefs.groqApiKey
     fun saveGroqApiKey(key: String) { prefs.groqApiKey = key }
@@ -146,9 +140,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         if (rawSymbol.isBlank()) return
         val pair = TradingPair.fromCustomSymbol(rawSymbol)
         selectPair(pair)
-        if (addToWatchlist && !prefs.isInWatchlist(pair.symbol)) {
-            toggleWatchlist(pair.symbol)
-        }
+        if (addToWatchlist && !prefs.isInWatchlist(pair.symbol)) toggleWatchlist(pair.symbol)
     }
 
     private fun startDashboardPolling() {
@@ -160,17 +152,13 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
 
     fun refreshWorthCoinsFromMarket() {
         viewModelScope.launch {
-            val pairs = (TradingPair.POPULAR_PAIRS + _watchlist.value.map { TradingPair.fromCustomSymbol(it) })
-                .distinctBy { it.symbol }
+            val pairs = (TradingPair.POPULAR_PAIRS + _watchlist.value.map { TradingPair.fromCustomSymbol(it) }).distinctBy { it.symbol }
             val ticks = IndodaxMarketService.fetchTickers(pairs.map { it.effectiveIndodaxPair() })
             if (ticks.isEmpty()) {
-                if (_dashboardTicks.value.isEmpty()) {
-                    markMarketOffline("Tidak ada respons market dari Indodax.")
-                } else {
+                if (_dashboardTicks.value.isEmpty()) markMarketOffline("Tidak ada respons market dari Indodax.")
+                else {
                     _isShowingCachedData.value = true
-                    _connectionState.value = MarketConnectionState.ConnectionLost(
-                        reason = "Koneksi terputus. Menampilkan data cache terakhir."
-                    )
+                    _connectionState.value = MarketConnectionState.ConnectionLost("Koneksi terputus. Menampilkan data cache terakhir.")
                 }
                 return@launch
             }
@@ -221,21 +209,17 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
                 _recentCandles.value = cachedCandles
                 engine.resetForOffline()
                 cachedTick?.let { engine.onTickUpdate(it) }
-                cachedCandles.forEach { engine.onCandleUpdate(it) }
+                engine.replaceCompletedCandles(cachedCandles)
             }
             _isShowingCachedData.value = true
-        } else {
-            clearLiveData()
-        }
+        } else clearLiveData()
         startMarketPolling(pair)
     }
 
     private fun startMarketPolling(pair: TradingPair) {
         marketPollJob?.cancel()
         marketPollJob = viewModelScope.launch {
-            if (_currentTick.value == null) {
-                _connectionState.value = MarketConnectionState.Loading
-            }
+            if (_currentTick.value == null) _connectionState.value = MarketConnectionState.Loading
             var failCount = 0
             lastCandleRefresh = 0L
             lastDepthRefresh = 0L
@@ -256,9 +240,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
                     _recentPrices.value = hist
 
                     val currentMap = _dashboardTicks.value
-                    if (currentMap[pair.symbol] != normalizedTick) {
-                        _dashboardTicks.value = currentMap.toMutableMap().apply { put(pair.symbol, normalizedTick) }
-                    }
+                    if (currentMap[pair.symbol] != normalizedTick) _dashboardTicks.value = currentMap.toMutableMap().apply { put(pair.symbol, normalizedTick) }
 
                     val now = System.currentTimeMillis()
                     if (now - lastCandleRefresh >= 15_000L) {
@@ -267,15 +249,13 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
                             _recentCandles.value = candles
                             engine.resetForOffline()
                             engine.onTickUpdate(normalizedTick)
-                            candles.forEach { engine.onCandleUpdate(it) }
+                            engine.replaceCompletedCandles(candles)
                             lastCandleRefresh = now
                             marketCache.savePairSnapshot(pair.symbol, normalizedTick, candles)
                         } else {
                             marketCache.savePairSnapshot(pair.symbol, normalizedTick, _recentCandles.value)
                         }
-                    } else {
-                        marketCache.savePairSnapshot(pair.symbol, normalizedTick, _recentCandles.value)
-                    }
+                    } else marketCache.savePairSnapshot(pair.symbol, normalizedTick, _recentCandles.value)
 
                     if (now - lastDepthRefresh >= 5_000L) {
                         val depth = async { IndodaxMarketService.fetchOrderBook(pairId) }
@@ -291,9 +271,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
                     failCount++
                     if (failCount >= 2) {
                         _isShowingCachedData.value = true
-                        _connectionState.value = MarketConnectionState.ConnectionLost(
-                            reason = "Koneksi internet/market terputus. Menampilkan data cache terakhir."
-                        )
+                        _connectionState.value = MarketConnectionState.ConnectionLost("Koneksi internet/market terputus. Menampilkan data cache terakhir.")
                         break
                     }
                 }
@@ -314,11 +292,9 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
 
     private fun markMarketOffline(reason: String) {
         marketPollJob?.cancel()
-        if (_dashboardTicks.value.isEmpty() && _worthCoins.value.isEmpty()) {
-            clearLiveData()
-        }
+        if (_dashboardTicks.value.isEmpty() && _worthCoins.value.isEmpty()) clearLiveData()
         _isShowingCachedData.value = _dashboardTicks.value.isNotEmpty() || _currentTick.value != null
-        _connectionState.value = MarketConnectionState.ConnectionLost(reason = reason)
+        _connectionState.value = MarketConnectionState.ConnectionLost(reason)
     }
 
     fun toggleSimpleChart() { _useSimpleChart.value = !_useSimpleChart.value }
@@ -363,7 +339,5 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         startMarketPolling(_selectedPair.value)
         refreshWorthCoinsFromMarket()
     }
-    fun simulateDisconnect() {
-        markMarketOffline("Mode offline: koneksi pasar dihentikan. Data cache terakhir tetap ditampilkan.")
-    }
+    fun simulateDisconnect() { markMarketOffline("Mode offline: koneksi pasar dihentikan. Data cache terakhir tetap ditampilkan.") }
 }
