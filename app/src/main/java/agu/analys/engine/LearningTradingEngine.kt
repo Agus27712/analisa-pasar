@@ -223,17 +223,12 @@ class LearningTradingEngine(
                 tp1 = price + rawTp1Distance
                 tp2 = price + rawTp2Distance
 
-                // Keep the stop on the safe side of the latest confirmed swing low
-                // when structure data is available. This can widen risk, so the
-                // validation below is allowed to cancel the trade if it becomes too wide.
-                val swingLow = marketStructure.lastSwingLow
+                val swingLow = marketStructure.lastSwingLow ?: 0.0
                 if (marketStructure.dataEnough && swingLow > 0.0 && swingLow < price) {
                     sl = min(sl, swingLow - atr * 0.25)
                 }
 
-                // If confirmed resistance sits before the ATR-based TP1, take profit
-                // just at that structural target instead of pretending the path is clear.
-                val resistance = marketStructure.resistance
+                val resistance = marketStructure.resistance ?: 0.0
                 if (marketStructure.dataEnough && resistance > price) {
                     tp1 = min(tp1, resistance)
                 }
@@ -243,12 +238,12 @@ class LearningTradingEngine(
                 tp1 = price - rawTp1Distance
                 tp2 = price - rawTp2Distance
 
-                val swingHigh = marketStructure.lastSwingHigh
+                val swingHigh = marketStructure.lastSwingHigh ?: 0.0
                 if (marketStructure.dataEnough && swingHigh > price) {
                     sl = max(sl, swingHigh + atr * 0.25)
                 }
 
-                val support = marketStructure.support
+                val support = marketStructure.support ?: 0.0
                 if (marketStructure.dataEnough && support > 0.0 && support < price) {
                     tp1 = max(tp1, support)
                 }
