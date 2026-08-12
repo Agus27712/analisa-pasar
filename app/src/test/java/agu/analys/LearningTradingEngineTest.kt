@@ -33,6 +33,7 @@ class LearningTradingEngineTest {
         assertSame("A closed candle timestamp must be immutable to the signal engine", before, engine.signalState.value)
     }
 
+    // Regression coverage for the P1 candle-close synchronization workflow.
     private fun sampleCandles(): List<CandleBar> = (0 until 40).map { i ->
         val base = 100.0 + i * 0.5
         CandleBar(
