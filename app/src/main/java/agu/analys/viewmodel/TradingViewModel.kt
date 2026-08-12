@@ -199,6 +199,16 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    /** Feed the engine the price at the close of the last completed candle.
+     * The live ticker remains separate for UI/market monitoring, while signal entry,
+     * TP and SL are anchored to the same completed-candle price used by the analysis.
+     */
+    private fun updateEngineFromCompletedCandles(liveTick: MarketTick, candles: List<CandleBar>) {
+        val lastClosed = candles.maxByOrNull { it.timestamp } ?: return
+        engine.onTickUpdate(liveTick.copy(price = lastClosed.close, timestamp = lastClosed.timestamp))
+        engine.replaceCompletedCandles(candles)
+    }
+
     fun selectPair(pair: TradingPair) {
         _selectedPair.value = pair
         lastSavedSignalTimestamp = 0L
@@ -208,8 +218,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
             if (cachedCandles.isNotEmpty()) {
                 _recentCandles.value = cachedCandles
                 engine.resetForOffline()
-                cachedTick?.let { engine.onTickUpdate(it) }
-                engine.replaceCompletedCandles(cachedCandles)
+                cachedTick?.let { updateEngineFromCompletedCandles(it, cachedCandles) }
             }
             _isShowingCachedData.value = true
         } else clearLiveData()
@@ -248,8 +257,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
                         if (candles.size >= 35) {
                             _recentCandles.value = candles
                             engine.resetForOffline()
-                            engine.onTickUpdate(normalizedTick)
-                            engine.replaceCompletedCandles(candles)
+                            updateEngineFromCompletedCandles(normalizedTick, candles)
                             lastCandleRefresh = now
                             marketCache.savePairSnapshot(pair.symbol, normalizedTick, candles)
                         } else {
