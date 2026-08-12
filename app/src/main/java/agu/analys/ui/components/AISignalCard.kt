@@ -200,5 +200,20 @@ private fun formatLevel(value: Double): String = if (value > 0.0 && value.isFini
 
 @Composable
 private fun LevelRow(label: String, value: String, color: Color) {
-    Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Color(0x0AFFFFFF)).border(1.dp, Color(0x14FFFFFF), RoundedCornerShape(10.dp)).padding(horizontal = 12.dp, vertical = 9.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { Text(label, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = color, letterSpacing = 0.3.sp); Text(value, fontSize = 13.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = color, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+    Row(
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Color(0x0AFFFFFF)).border(1.dp, Color(0x14FFFFFF), RoundedCornerShape(10.dp)).padding(horizontal = 12.dp, vertical = 9.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = color, letterSpacing = 0.3.sp)
+        Text(
+            value,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+            fontFamily = FontFamily.SansSerif,
+            color = color,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
 }
