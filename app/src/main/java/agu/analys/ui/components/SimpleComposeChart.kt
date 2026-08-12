@@ -15,7 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.pointerInput
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
@@ -55,9 +55,7 @@ fun SimpleComposeChart(
     candles: List<CandleBar> = emptyList(),
     modifier: Modifier = Modifier
 ) {
-    val validCandles = remember(candles) {
-        candles.filter { it.open > 0 && it.high > 0 && it.low > 0 && it.close > 0 }
-    }
+    val validCandles = remember(candles) { candles.filter { it.open > 0 && it.high > 0 && it.low > 0 && it.close > 0 } }
     val closes = remember(validCandles) { validCandles.map { it.close } }
     val sourceLabel = if (validCandles.size >= 2) "INDODAX · ${validCandles.size} CANDLE" else "MENUNGGU CANDLE INDODAX"
     val themeColor = if (isPositiveTrend) TvGreen else TvRed
@@ -88,12 +86,7 @@ fun SimpleComposeChart(
     val ema20 = remember(closes) { emaSeries(20) }
     val ema50 = remember(closes) { emaSeries(50) }
     val ema200 = remember(closes) { emaSeries(200) }
-
-    val bbMid = remember(closes) {
-        List<Double?>(closes.size) { index ->
-            if (index < 19) null else closes.subList(index - 19, index + 1).average()
-        }
-    }
+    val bbMid = remember(closes) { List<Double?>(closes.size) { index -> if (index < 19) null else closes.subList(index - 19, index + 1).average() } }
     val bbUpper = remember(closes, bbMid) {
         List<Double?>(closes.size) { index ->
             val mid = bbMid[index] ?: return@List null
@@ -127,20 +120,12 @@ fun SimpleComposeChart(
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("PINCH / GESER", fontSize = 8.sp, color = TvTextSecondary)
-                    livePrice?.let {
-                        Spacer(Modifier.width(8.dp))
-                        Text("LIVE ${PriceFormatter.formatPrice(it)}", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = TvTextPrimary)
-                    }
+                    livePrice?.let { Spacer(Modifier.width(8.dp)); Text("LIVE ${PriceFormatter.formatPrice(it)}", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = TvTextPrimary) }
                 }
             }
             Spacer(Modifier.height(6.dp))
-
             Box(
-                Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFF121212))
+                Modifier.fillMaxWidth().weight(1f).clip(RoundedCornerShape(8.dp)).background(Color(0xFF121212))
                     .pointerInput(validCandles.size) {
                         detectTransformGestures { centroid, pan, zoom, _ ->
                             if (validCandles.size < 2) return@detectTransformGestures
@@ -172,7 +157,6 @@ fun SimpleComposeChart(
                 val from = safeStart.toInt().coerceIn(0, (validCandles.size - 1).coerceAtLeast(0))
                 val to = (safeStart + safeVisible).toInt().coerceIn(from + 1, validCandles.size)
                 val visible = validCandles.subList(from, to)
-
                 val visibleIndicatorValues = buildList {
                     for (index in from until to) {
                         ema20.getOrNull(index)?.let(::add)
@@ -199,21 +183,16 @@ fun SimpleComposeChart(
                     fun y(price: Double): Float = top + ((maxPrice - price) / range).toFloat() * chartHeight
                     val step = chartWidth / visible.size
                     val bodyWidth = (step * 0.58f).coerceIn(2f, 14f)
-
                     fun drawSeries(series: List<Double?>, color: Color, alpha: Float, strokeWidth: Float = 1.5f) {
                         var previous: Offset? = null
                         for (localIndex in visible.indices) {
                             val value = series.getOrNull(from + localIndex)
-                            if (value == null) {
-                                previous = null
-                                continue
-                            }
+                            if (value == null) { previous = null; continue }
                             val point = Offset(left + step * localIndex + step / 2f, y(value))
                             previous?.let { drawLine(color.copy(alpha = alpha), it, point, strokeWidth = strokeWidth) }
                             previous = point
                         }
                     }
-
                     visible.forEachIndexed { index, candle ->
                         val x = left + step * index + step / 2f
                         val openY = y(candle.open)
@@ -224,14 +203,12 @@ fun SimpleComposeChart(
                         val bodyBottom = max(openY, closeY).coerceAtLeast(bodyTop + 2f)
                         drawRect(candleColor, topLeft = Offset(x - bodyWidth / 2f, bodyTop), size = androidx.compose.ui.geometry.Size(bodyWidth, bodyBottom - bodyTop))
                     }
-
                     drawSeries(bbUpper, Color.LightGray, 0.45f)
                     drawSeries(bbMid, Color.LightGray, 0.30f)
                     drawSeries(bbLower, Color.LightGray, 0.45f)
                     drawSeries(ema20, Color.Yellow, 0.95f)
                     drawSeries(ema50, Color(0xFF42A5F5), 0.95f)
                     drawSeries(ema200, Color(0xFFAB47BC), 0.95f)
-
                     livePrice?.let { price ->
                         if (price in minPrice..maxPrice) {
                             val liveY = y(price)
@@ -239,7 +216,6 @@ fun SimpleComposeChart(
                         }
                     }
                 }
-
                 Column(Modifier.align(Alignment.CenterEnd).padding(end = 4.dp), verticalArrangement = Arrangement.SpaceBetween) {
                     Text(PriceFormatter.formatPrice(maxPrice), fontSize = 8.sp, color = TvGreen, maxLines = 1)
                     Spacer(Modifier.weight(1f))
