@@ -46,6 +46,7 @@ fun SignalHistoryPanel(
     val visibleHistory = history.filter { it.marketSymbol.equals(currentSymbol, ignoreCase = true) }
     val buyCount = visibleHistory.count { it.action == SignalAction.BUY }
     val sellCount = visibleHistory.count { it.action == SignalAction.SELL }
+    val openCount = visibleHistory.count { it.action != SignalAction.HOLD && hasPositionLevels(it) }
     val timeFormat = SimpleDateFormat("dd/MM HH:mm:ss", Locale.US)
 
     Card(
@@ -61,45 +62,23 @@ fun SignalHistoryPanel(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "RIWAYAT & LOG SINYAL",
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = TvTextSecondary,
-                    letterSpacing = 1.2.sp
-                )
-                Text(
-                    text = "${visibleHistory.size} sinyal",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = TvGreen
-                )
+                Text("RIWAYAT & LOG SINYAL", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TvTextSecondary, letterSpacing = 1.2.sp)
+                Text("${visibleHistory.size} sinyal", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = TvGreen)
             }
 
             if (visibleHistory.isNotEmpty()) {
                 Spacer(Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(7.dp)
-                ) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                     HistorySummary("BUY", buyCount, TvGreen, Modifier.weight(1f))
                     HistorySummary("SELL", sellCount, TvRed, Modifier.weight(1f))
-                    HistorySummary("OPEN", visibleHistory.size, TvAmber, Modifier.weight(1f))
+                    HistorySummary("OPEN", openCount, TvAmber, Modifier.weight(1f))
                 }
             }
 
             Spacer(modifier = Modifier.height(14.dp))
-
             if (visibleHistory.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "Belum ada sinyal untuk koin ini.",
-                        fontSize = 12.sp,
-                        color = TvTextSecondary
-                    )
+                Box(modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
+                    Text("Belum ada sinyal untuk koin ini.", fontSize = 12.sp, color = TvTextSecondary)
                 }
             } else {
                 visibleHistory.forEach { signal ->
@@ -114,6 +93,11 @@ fun SignalHistoryPanel(
                         SignalAction.HOLD -> "TAHAN"
                     }
                     val timeStr = timeFormat.format(Date(signal.timestamp))
+                    val lifecycle = lifecycleLabel(signal)
+                    val lifecycleColor = when (lifecycle) {
+                        "NO POSITION" -> TvTextSecondary
+                        else -> TvAmber
+                    }
 
                     Box(
                         modifier = Modifier
@@ -125,62 +109,53 @@ fun SignalHistoryPanel(
                             .padding(horizontal = 14.dp, vertical = 10.dp)
                     ) {
                         Column(modifier = Modifier.fillMaxWidth()) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .background(color.copy(alpha = 0.2f))
-                                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                                    ) {
+                                    Box(modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(color.copy(alpha = 0.2f)).padding(horizontal = 8.dp, vertical = 4.dp)) {
                                         Text(actionLabel, fontSize = 11.sp, fontWeight = FontWeight.Black, color = color)
                                     }
                                     Spacer(modifier = Modifier.width(10.dp))
                                     Column {
                                         Text(currentSymbol, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = color)
-                                        Text(
-                                            "Entry ${PriceFormatter.formatPrice(signal.entryPrice)}",
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            fontFamily = FontFamily.Monospace,
-                                            color = TvTextPrimary
-                                        )
+                                        Text("Entry ${PriceFormatter.formatPrice(signal.entryPrice)}", fontSize = 12.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = TvTextPrimary)
                                     }
                                 }
                                 Column(horizontalAlignment = Alignment.End) {
-                                    Text(
-                                        "Score ${signal.confidence}/100",
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        fontFamily = FontFamily.Monospace,
-                                        color = color
-                                    )
+                                    Text("Score ${signal.confidence}/100", fontSize = 12.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = color)
                                     Text(timeStr, fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = TvTextSecondary)
                                 }
                             }
 
                             Spacer(Modifier.height(8.dp))
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 PriceBox("TP1", signal.targetPrice1, TvGreen, Modifier.weight(1f))
                                 PriceBox("TP2", signal.targetPrice2, TvGreen, Modifier.weight(1f))
                                 PriceBox("SL", signal.stopLoss, TvRed, Modifier.weight(1f))
                             }
 
-                            Spacer(Modifier.height(6.dp))
+                            Spacer(Modifier.height(7.dp))
                             Row(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(lifecycleColor.copy(alpha = 0.09f)).padding(horizontal = 8.dp, vertical = 6.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("LIFECYCLE", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = lifecycleColor)
+                                    Text(
+                                        if (lifecycle == "OPEN") "OPEN · menunggu candle berikutnya untuk evaluasi TP/SL"
+                                        else "Tidak ada posisi karena level entry/TP/SL tidak valid",
+                                        fontSize = 9.sp,
+                                        color = TvTextSecondary,
+                                        maxLines = 2
+                                    )
+                                }
+                                Text(lifecycle, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = lifecycleColor)
+                            }
+
+                            Spacer(Modifier.height(6.dp))
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                 Text(signal.sentiment.displayName, fontSize = 9.sp, color = TvTextSecondary)
-                                Text("STATUS: OPEN", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = TvAmber)
+                                Text("${if (lifecycle == "OPEN") "STATUS: OPEN" else "STATUS: NO POSITION"}", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = lifecycleColor)
                             }
                         }
                     }
@@ -190,14 +165,19 @@ fun SignalHistoryPanel(
     }
 }
 
+private fun hasPositionLevels(signal: AISignalState): Boolean =
+    signal.action != SignalAction.HOLD &&
+        signal.entryPrice > 0.0 &&
+        signal.targetPrice1 > 0.0 &&
+        signal.targetPrice2 > 0.0 &&
+        signal.stopLoss > 0.0
+
+private fun lifecycleLabel(signal: AISignalState): String =
+    if (hasPositionLevels(signal)) "OPEN" else "NO POSITION"
+
 @Composable
 private fun HistorySummary(label: String, count: Int, color: Color, modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(color.copy(alpha = 0.10f))
-            .padding(horizontal = 8.dp, vertical = 6.dp)
-    ) {
+    Box(modifier = modifier.clip(RoundedCornerShape(8.dp)).background(color.copy(alpha = 0.10f)).padding(horizontal = 8.dp, vertical = 6.dp)) {
         Column {
             Text(label, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = color)
             Text(count.toString(), fontSize = 12.sp, fontWeight = FontWeight.Black, color = TvTextPrimary)
@@ -207,19 +187,8 @@ private fun HistorySummary(label: String, count: Int, color: Color, modifier: Mo
 
 @Composable
 private fun PriceBox(label: String, value: Double, color: Color, modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(7.dp))
-            .background(color.copy(alpha = 0.08f))
-            .padding(horizontal = 6.dp, vertical = 5.dp)
-    ) {
+    Column(modifier = modifier.clip(RoundedCornerShape(7.dp)).background(color.copy(alpha = 0.08f)).padding(horizontal = 6.dp, vertical = 5.dp)) {
         Text(label, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = color)
-        Text(
-            if (value > 0) PriceFormatter.formatPrice(value) else "-",
-            fontSize = 9.sp,
-            fontFamily = FontFamily.Monospace,
-            color = TvTextPrimary,
-            maxLines = 1
-        )
+        Text(if (value > 0) PriceFormatter.formatPrice(value) else "-", fontSize = 9.sp, fontFamily = FontFamily.Monospace, color = TvTextPrimary, maxLines = 1)
     }
 }
