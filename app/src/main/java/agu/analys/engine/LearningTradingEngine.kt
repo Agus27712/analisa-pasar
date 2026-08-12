@@ -30,17 +30,46 @@ class LearningTradingEngine(
     fun onTickUpdate(tick: MarketTick) {
         if (tick.price <= 0.0) return
         currentTick = tick
-        // Tick updates only refresh the latest price. Indicator calculations are candle-based,
-        // so avoid recalculating the full analysis for every market tick.
+        // A live tick must never recalculate the technical signal. Indicators and the
+        // signal are evaluated from the latest completed candle snapshot only.
     }
 
+    /**
+     * Accept one completed candle and evaluate once.
+     *
+     * Closed candles are immutable for the signal engine. If an upstream source sends
+     * the same timestamp again with different OHLC values, the replacement is ignored
+     * rather than allowing historical signal repainting.
+     */
     fun onCandleUpdate(candle: CandleBar) {
-        if (candle.open <= 0.0 || candle.high <= 0.0 || candle.low <= 0.0 || candle.close <= 0.0) return
+        if (!isValidCandle(candle)) return
         synchronized(candles) {
             val existing = candles.indexOfFirst { it.timestamp == candle.timestamp }
-            if (existing >= 0) candles[existing] = candle else candles.add(candle)
+            if (existing >= 0) return
+            candles.add(candle)
             candles.sortBy { it.timestamp }
             while (candles.size > 250) candles.removeAt(0)
+        }
+        evaluate()
+    }
+
+    /**
+     * Replace the complete completed-candle snapshot and evaluate only once.
+     * This is used after a historical refresh so intermediate historical candles
+     * cannot briefly emit stale BUY/SELL states to the UI/history collector.
+     */
+    fun replaceCompletedCandles(completedCandles: List<CandleBar>) {
+        val normalized = completedCandles
+            .filter(::isValidCandle)
+            .groupBy { it.timestamp }
+            .values
+            .map { it.first() }
+            .sortedBy { it.timestamp }
+            .takeLast(250)
+
+        synchronized(candles) {
+            candles.clear()
+            candles.addAll(normalized)
         }
         evaluate()
     }
@@ -63,6 +92,12 @@ class LearningTradingEngine(
             timestamp = System.currentTimeMillis()
         )
     }
+
+    private fun isValidCandle(candle: CandleBar): Boolean =
+        candle.timestamp > 0L &&
+            candle.open > 0.0 && candle.high > 0.0 && candle.low > 0.0 && candle.close > 0.0 &&
+            candle.high >= max(candle.open, candle.close) &&
+            candle.low <= min(candle.open, candle.close)
 
     private fun evaluate() {
         val tick = currentTick ?: return
@@ -99,8 +134,6 @@ class LearningTradingEngine(
         val pattern = detectPattern(history)
         val regime = detectMarketRegime(price, ema20, ema50, macdHist, rsi, atr, bb)
         val marketStructure = MarketStructureAnalyzer.analyze(history)
-        // Momentum is intentionally short-horizon: 10 completed candles, not the oldest
-        // candle in the retained 250-candle buffer.
         val momentumLookback = min(10, closes.size - 1)
         val momentumBase = closes[closes.lastIndex - momentumLookback]
         val momentum = if (momentumBase > 0.0) (price - momentumBase) / momentumBase else 0.0
@@ -163,19 +196,11 @@ class LearningTradingEngine(
 
         if (marketStructure.dataEnough) {
             when (marketStructure.trend) {
-                "Bullish structure" -> {
-                    buy += 15.0
-                    reasons += "Market structure bullish: Higher High + Higher Low."
-                }
-                "Bearish structure" -> {
-                    sell += 15.0
-                    reasons += "Market structure bearish: Lower High + Lower Low."
-                }
+                "Bullish structure" -> { buy += 15.0; reasons += "Market structure bullish: Higher High + Higher Low." }
+                "Bearish structure" -> { sell += 15.0; reasons += "Market structure bearish: Lower High + Lower Low." }
                 else -> reasons += "Market structure range/transisi: belum ada HH/HL atau LH/LL yang konsisten."
             }
-        } else {
-            reasons += "Market structure belum tersedia: candle swing belum cukup."
-        }
+        } else reasons += "Market structure belum tersedia: candle swing belum cukup."
 
         val structureBlocksBuy = marketStructure.dataEnough && marketStructure.trend == "Bearish structure"
         val structureBlocksSell = marketStructure.dataEnough && marketStructure.trend == "Bullish structure"
@@ -194,8 +219,6 @@ class LearningTradingEngine(
             else -> SignalAction.HOLD
         }
 
-        // Seven factors can contribute up to 115 raw points. Normalize only for the
-        // user-facing confidence so 100 means a fully loaded score, not an arbitrary clamp.
         val maxRawScore = 115.0
         val score = ((dominant / maxRawScore) * 100.0).toInt().coerceIn(0, 100)
         when {
@@ -222,31 +245,19 @@ class LearningTradingEngine(
                 sl = price - rawStopDistance
                 tp1 = price + rawTp1Distance
                 tp2 = price + rawTp2Distance
-
                 val swingLow = marketStructure.lastSwingLow ?: 0.0
-                if (marketStructure.dataEnough && swingLow > 0.0 && swingLow < price) {
-                    sl = min(sl, swingLow - atr * 0.25)
-                }
-
+                if (marketStructure.dataEnough && swingLow > 0.0 && swingLow < price) sl = min(sl, swingLow - atr * 0.25)
                 val resistance = marketStructure.resistance ?: 0.0
-                if (marketStructure.dataEnough && resistance > price) {
-                    tp1 = min(tp1, resistance)
-                }
+                if (marketStructure.dataEnough && resistance > price) tp1 = min(tp1, resistance)
             }
             SignalAction.SELL -> {
                 sl = price + rawStopDistance
                 tp1 = price - rawTp1Distance
                 tp2 = price - rawTp2Distance
-
                 val swingHigh = marketStructure.lastSwingHigh ?: 0.0
-                if (marketStructure.dataEnough && swingHigh > price) {
-                    sl = max(sl, swingHigh + atr * 0.25)
-                }
-
+                if (marketStructure.dataEnough && swingHigh > price) sl = max(sl, swingHigh + atr * 0.25)
                 val support = marketStructure.support ?: 0.0
-                if (marketStructure.dataEnough && support > 0.0 && support < price) {
-                    tp1 = max(tp1, support)
-                }
+                if (marketStructure.dataEnough && support > 0.0 && support < price) tp1 = max(tp1, support)
             }
             SignalAction.HOLD -> Unit
         }
@@ -258,37 +269,16 @@ class LearningTradingEngine(
         }
 
         val levelsValid = when (action) {
-            SignalAction.BUY ->
-                stopDistance > 0.0 &&
-                    stopDistance < price * 0.08 &&
-                    tp1 > price &&
-                    tp2 > tp1 &&
-                    tp1Distance >= stopDistance &&
-                    tp2Distance >= stopDistance * 1.5 &&
-                    sl > 0.0
-            SignalAction.SELL ->
-                stopDistance > 0.0 &&
-                    stopDistance < price * 0.08 &&
-                    tp1 < price &&
-                    tp2 < tp1 &&
-                    tp1Distance >= stopDistance &&
-                    tp2Distance >= stopDistance * 1.5
+            SignalAction.BUY -> stopDistance > 0.0 && stopDistance < price * 0.08 && tp1 > price && tp2 > tp1 && tp1Distance >= stopDistance && tp2Distance >= stopDistance * 1.5 && sl > 0.0
+            SignalAction.SELL -> stopDistance > 0.0 && stopDistance < price * 0.08 && tp1 < price && tp2 < tp1 && tp1Distance >= stopDistance && tp2Distance >= stopDistance * 1.5
             SignalAction.HOLD -> false
         }
 
         val finalAction = if (action != SignalAction.HOLD && levelsValid) action else SignalAction.HOLD
         val finalScore = if (finalAction == SignalAction.HOLD) min(59, score) else score
+        if (action != SignalAction.HOLD && finalAction == SignalAction.HOLD) reasons += "Setup dibatalkan: TP/SL tidak memiliki RR minimum atau level risiko terlalu lebar."
 
-        if (action != SignalAction.HOLD && finalAction == SignalAction.HOLD) {
-            reasons += "Setup dibatalkan: TP/SL tidak memiliki RR minimum atau level risiko terlalu lebar."
-        }
-
-        val rr = if (finalAction == SignalAction.HOLD || stopDistance <= 0.0) {
-            "Tidak ada posisi"
-        } else {
-            "TP1 1:${format(tp1Distance / stopDistance)} | TP2 1:${format(tp2Distance / stopDistance)}"
-        }
-
+        val rr = if (finalAction == SignalAction.HOLD || stopDistance <= 0.0) "Tidak ada posisi" else "TP1 1:${format(tp1Distance / stopDistance)} | TP2 1:${format(tp2Distance / stopDistance)}"
         val finalReasoning = reasons.take(6).toMutableList()
         if (finalReasoning.size > 6) finalReasoning.removeAt(5)
 
@@ -327,7 +317,6 @@ class LearningTradingEngine(
         }
     }
 
-    /** RSI using Wilder smoothing, matching the conventional 14-period RSI calculation. */
     private fun calculateRsi(history: List<CandleBar>, period: Int): Double {
         if (history.size <= period) return 50.0
         var gain = 0.0
@@ -338,7 +327,6 @@ class LearningTradingEngine(
         }
         var averageGain = gain / period
         var averageLoss = loss / period
-
         for (i in period + 1 until history.size) {
             val change = history[i].close - history[i - 1].close
             val currentGain = max(change, 0.0)
@@ -346,7 +334,6 @@ class LearningTradingEngine(
             averageGain = ((averageGain * (period - 1)) + currentGain) / period
             averageLoss = ((averageLoss * (period - 1)) + currentLoss) / period
         }
-
         if (averageLoss == 0.0) return if (averageGain == 0.0) 50.0 else 100.0
         val rs = averageGain / averageLoss
         return 100.0 - 100.0 / (1.0 + rs)
