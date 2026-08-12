@@ -59,8 +59,6 @@ fun SimpleComposeChart(
     val themeColor = if (isPositiveTrend) TvGreen else TvRed
     val livePrice = currentPrice.takeIf { it > 0 }
 
-    // The chart starts near the latest candles, like a trading terminal. The viewport
-    // survives normal recompositions and can be changed with pinch/drag gestures.
     val initialVisible = min(60, max(20, validCandles.size)).toFloat()
     var visibleCount by remember { mutableFloatStateOf(initialVisible) }
     var startIndex by remember { mutableFloatStateOf(max(0, validCandles.size - initialVisible.toInt()).toFloat()) }
@@ -152,8 +150,8 @@ fun SimpleComposeChart(
                     val step = chartWidth / visible.size
                     val bodyWidth = (step * 0.58f).coerceIn(2f, 14f)
 
-                    visible.forEach { candle ->
-                        val x = left + step * visible.indexOf(candle) + step / 2f
+                    visible.forEachIndexed { index, candle ->
+                        val x = left + step * index + step / 2f
                         val openY = y(candle.open)
                         val closeY = y(candle.close)
                         val highY = y(candle.high)
