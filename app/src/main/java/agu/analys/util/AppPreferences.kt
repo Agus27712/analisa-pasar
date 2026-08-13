@@ -30,23 +30,6 @@ class AppPreferences(context: Context) {
 
     fun isInWatchlist(symbol: String): Boolean = getWatchlist().contains(symbol.uppercase())
 
-    /**
-     * Manual ownership state for the currently held asset on Indodax.
-     * Default is false because the app cannot read the user's private balance.
-     */
-    fun getOwnedSymbols(): Set<String> =
-        prefs.getStringSet(KEY_OWNED_SYMBOLS, emptySet())?.toSet() ?: emptySet()
-
-    fun isAssetOwned(symbol: String): Boolean =
-        getOwnedSymbols().contains(symbol.uppercase())
-
-    fun setAssetOwned(symbol: String, owned: Boolean) {
-        val upper = symbol.uppercase()
-        val set = getOwnedSymbols().toMutableSet()
-        if (owned) set.add(upper) else set.remove(upper)
-        prefs.edit().putStringSet(KEY_OWNED_SYMBOLS, set).apply()
-    }
-
     fun getCompletedLearningLessons(): Set<Int> =
         prefs.getStringSet(KEY_LEARNING_COMPLETED, emptySet())
             ?.mapNotNull(String::toIntOrNull)
@@ -64,7 +47,6 @@ class AppPreferences(context: Context) {
         private const val KEY_GROQ = "groq_api_key"
         private const val KEY_GEMINI = "gemini_api_key"
         private const val KEY_WATCHLIST = "watchlist_symbols"
-        private const val KEY_OWNED_SYMBOLS = "owned_asset_symbols"
         private const val KEY_LEARNING_COMPLETED = "learning_completed_lessons"
     }
 }

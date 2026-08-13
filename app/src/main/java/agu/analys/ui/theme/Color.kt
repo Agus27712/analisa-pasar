@@ -2,9 +2,7 @@ package agu.analys.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Single app canvas color. Keep system bars on the same tone to avoid the
-// visible color seam between Android system UI and the Compose surface.
-val TvBackground = Color(0xFF070A0F)
+val TvBackground = Color(0xFF121212)
 val TvSurface = Color(0xFF1E1E1E)
 val TvSurfaceVariant = Color(0xFF262626)
 val TvCardBackground = Color(0xFF1E1E1E)
