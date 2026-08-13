@@ -3,6 +3,7 @@ package agu.analys.ui.components
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,13 +21,18 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -37,6 +43,8 @@ import agu.analys.ui.theme.TvRed
 import agu.analys.ui.theme.TvTextPrimary
 import agu.analys.ui.theme.TvTextSecondary
 import agu.analys.util.PriceFormatter
+import kotlin.math.roundToInt
+import kotlin.math.sqrt
 
 @Composable
 fun SimpleComposeChart(
@@ -47,14 +55,38 @@ fun SimpleComposeChart(
     modifier: Modifier = Modifier
 ) {
     val validCandles = candles.filter { it.open > 0 && it.high > 0 && it.low > 0 && it.close > 0 }
-    val sourceLabel = if (validCandles.size >= 2) "INDODAX · ${validCandles.size} CANDLE" else "MENUNGGU CANDLE INDODAX"
-    val minPrice = validCandles.minOfOrNull { it.low } ?: currentPrice
-    val maxPrice = validCandles.maxOfOrNull { it.high } ?: currentPrice
+    val candleCount = validCandles.size
+    val defaultVisible = minOf(80, candleCount.coerceAtLeast(2))
+    var visibleCount by remember { mutableIntStateOf(defaultVisible) }
+    var startIndex by remember { mutableIntStateOf((candleCount - defaultVisible).coerceAtLeast(0)) }
+    var gestureZoom by remember { mutableFloatStateOf(1f) }
+
+    LaunchedEffect(candleCount) {
+        if (candleCount <= 0) {
+            startIndex = 0
+            visibleCount = 0
+        } else {
+            val target = visibleCount.coerceIn(20.coerceAtMost(candleCount), candleCount)
+            visibleCount = target
+            startIndex = (candleCount - target).coerceAtLeast(0)
+        }
+    }
+
+    val endIndex = (startIndex + visibleCount).coerceIn(0, candleCount)
+    val visible = if (startIndex < endIndex) validCandles.subList(startIndex, endIndex) else emptyList()
+
+    val ema20 = emaSeries(validCandles.map { it.close }, 20)
+    val ema50 = emaSeries(validCandles.map { it.close }, 50)
+    val ema200 = emaSeries(validCandles.map { it.close }, 200)
+    val bb = bollingerSeries(validCandles.map { it.close }, 20)
+
+    val minPrice = visible.minOfOrNull { minOf(it.low, bb.first.getOrNull(startIndex) ?: it.low) } ?: currentPrice
+    val maxPrice = visible.maxOfOrNull { maxOf(it.high, bb.second.getOrNull(startIndex) ?: it.high) } ?: currentPrice
     val themeColor = if (isPositiveTrend) TvGreen else TvRed
     val livePrice = currentPrice.takeIf { it > 0 }
 
     Card(
-        modifier = modifier.fillMaxWidth().border(1.dp, Color(0x1AFFFFFF), RoundedCornerShape(16.dp)).testTag("simple_compose_chart"),
+        modifier = modifier.fillMaxWidth().border(1.dp, Color(0x1AFFFFFF), RoundedCornerShape(16.dp)),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = TvCardBackground)
     ) {
@@ -63,16 +95,32 @@ fun SimpleComposeChart(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(modifier = Modifier.size(7.dp).background(themeColor, CircleShape))
                     Spacer(modifier = Modifier.width(5.dp))
-                    Text("CANDLE · $sourceLabel", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = TvTextSecondary)
+                    Text("GRAFIK HARGA · INDODAX", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = TvTextSecondary)
                 }
-                if (livePrice != null) {
-                    Text("LIVE ${PriceFormatter.formatPrice(livePrice)}", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = TvTextPrimary)
-                }
+                if (livePrice != null) Text("LIVE ${PriceFormatter.formatPrice(livePrice)}", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = TvTextPrimary)
             }
             Spacer(modifier = Modifier.height(6.dp))
-            Box(modifier = Modifier.fillMaxWidth().weight(1f).clip(RoundedCornerShape(8.dp)).background(Color(0xFF121212))) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFF121212))
+                    .pointerInput(candleCount) {
+                        detectTransformGestures { _, pan, zoom, _ ->
+                            if (candleCount < 2) return@detectTransformGestures
+                            val nextCount = (visibleCount / zoom.coerceIn(0.65f, 1.45f)).roundToInt().coerceIn(20.coerceAtMost(candleCount), candleCount)
+                            val indexShift = (-pan.x / 14f).roundToInt()
+                            val maxStart = (candleCount - nextCount).coerceAtLeast(0)
+                            val nextStart = (startIndex + indexShift).coerceIn(0, maxStart)
+                            visibleCount = nextCount
+                            startIndex = nextStart
+                            gestureZoom = (gestureZoom * zoom).coerceIn(0.5f, 4f)
+                        }
+                    }
+            ) {
                 Canvas(modifier = Modifier.fillMaxSize()) {
-                    if (validCandles.size < 2 || maxPrice <= minPrice) return@Canvas
+                    if (visible.size < 2 || maxPrice <= minPrice) return@Canvas
                     val left = 10f
                     val right = 70f
                     val top = 10f
@@ -81,10 +129,22 @@ fun SimpleComposeChart(
                     val chartHeight = (size.height - top - bottom).coerceAtLeast(1f)
                     val range = maxPrice - minPrice
                     fun y(price: Double): Float = top + ((maxPrice - price) / range).toFloat() * chartHeight
-                    val step = chartWidth / validCandles.size
+                    val step = chartWidth / visible.size
                     val bodyWidth = (step * 0.58f).coerceIn(2f, 14f)
+                    fun linePoint(value: Double, index: Int): Offset = Offset(left + step * index + step / 2f, y(value))
+                    fun drawSeries(values: List<Double>, color: Color) {
+                        var previous: Offset? = null
+                        visible.indices.forEach { localIndex ->
+                            val sourceIndex = startIndex + localIndex
+                            val value = values.getOrNull(sourceIndex) ?: return@forEach
+                            if (!value.isFinite() || value <= 0.0) return@forEach
+                            val point = linePoint(value, localIndex)
+                            previous?.let { drawLine(color, it, point, strokeWidth = 2f) }
+                            previous = point
+                        }
+                    }
 
-                    validCandles.forEachIndexed { index, candle ->
+                    visible.forEachIndexed { index, candle ->
                         val x = left + step * index + step / 2f
                         val openY = y(candle.open)
                         val closeY = y(candle.close)
@@ -96,6 +156,13 @@ fun SimpleComposeChart(
                         val bodyBottom = maxOf(openY, closeY).coerceAtLeast(bodyTop + 2f)
                         drawRect(candleColor, topLeft = Offset(x - bodyWidth / 2f, bodyTop), size = androidx.compose.ui.geometry.Size(bodyWidth, bodyBottom - bodyTop))
                     }
+
+                    drawSeries(ema20, Color(0xFFFFD54F))
+                    drawSeries(ema50, Color(0xFF42A5F5))
+                    drawSeries(ema200, Color(0xFFAB47BC))
+                    drawSeries(bb.first, Color.White.copy(alpha = 0.35f))
+                    drawSeries(bb.second, Color.White.copy(alpha = 0.35f))
+                    drawSeries(bb.third, Color.White.copy(alpha = 0.25f))
 
                     livePrice?.let { price ->
                         if (price in minPrice..maxPrice) {
@@ -113,12 +180,38 @@ fun SimpleComposeChart(
                 }
             }
             Spacer(modifier = Modifier.height(5.dp))
-            Text(
-                "OHLC dan indikator memakai candle INDODAX. LIVE adalah ticker terakhir; candle terakhir dapat berbeda karena candle berjalan/tertutup memiliki waktu sendiri.",
-                fontSize = 8.sp,
-                color = TvTextSecondary,
-                lineHeight = 11.sp
-            )
+            Text("Geser untuk melihat candle lain • Cubit untuk zoom • EMA20 kuning • EMA50 biru • EMA200 ungu • BB putih", fontSize = 8.sp, color = TvTextSecondary, lineHeight = 11.sp)
         }
     }
+}
+
+private fun emaSeries(values: List<Double>, period: Int): List<Double> {
+    if (values.isEmpty()) return emptyList()
+    val result = MutableList(values.size) { Double.NaN }
+    if (values.size < period) return result
+    var ema = values.take(period).average()
+    result[period - 1] = ema
+    val multiplier = 2.0 / (period + 1)
+    for (i in period until values.size) {
+        ema = (values[i] - ema) * multiplier + ema
+        result[i] = ema
+    }
+    return result
+}
+
+private fun bollingerSeries(values: List<Double>, period: Int): Triple<List<Double>, List<Double>, List<Double>> {
+    val upper = MutableList(values.size) { Double.NaN }
+    val middle = MutableList(values.size) { Double.NaN }
+    val lower = MutableList(values.size) { Double.NaN }
+    if (values.size < period) return Triple(upper, middle, lower)
+    for (i in period - 1 until values.size) {
+        val window = values.subList(i - period + 1, i + 1)
+        val mean = window.average()
+        val variance = window.sumOf { (it - mean) * (it - mean) } / period
+        val deviation = sqrt(variance)
+        middle[i] = mean
+        upper[i] = mean + 2.0 * deviation
+        lower[i] = mean - 2.0 * deviation
+    }
+    return Triple(upper, middle, lower)
 }
