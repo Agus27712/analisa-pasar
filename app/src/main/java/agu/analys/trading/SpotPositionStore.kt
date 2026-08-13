@@ -4,28 +4,27 @@ import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 
+/**
+ * Local spot-position state. A signal never means an order was executed.
+ * The user explicitly confirms ownership after trading on Indodax via the
+ * manual position form. Default is NO_POSITION because the app cannot read balances.
+ *
+ * Ownership changes are timestamped so signal history can reconstruct
+ * the position state that existed when each signal was emitted.
+ */
 enum class SpotPositionState {
     NO_POSITION,
     HOLDING
 }
-
-data class PurchaseLot(
-    val investedAmount: Double,
-    val entryPrice: Double,
-    val quantity: Double,
-    val boughtAt: Long
-)
 
 data class SpotPosition(
     val state: SpotPositionState = SpotPositionState.NO_POSITION,
     val investedAmount: Double = 0.0,
     val entryPrice: Double = 0.0,
     val quantity: Double = 0.0,
-    val openedAt: Long = 0L,
-    val purchases: List<PurchaseLot> = emptyList()
+    val openedAt: Long = 0L
 ) {
     val isHolding: Boolean get() = state == SpotPositionState.HOLDING
-    val purchaseCount: Int get() = purchases.size
 }
 
 class SpotPositionStore(context: Context) {
@@ -33,9 +32,6 @@ class SpotPositionStore(context: Context) {
 
     fun get(symbol: String): SpotPosition {
         val key = normalize(symbol)
-        val purchases = readPurchases(key)
-        if (purchases.isNotEmpty()) return aggregate(purchases)
-
         val state = prefs.getString("${key}_state", SpotPositionState.NO_POSITION.name)
             ?.let { runCatching { SpotPositionState.valueOf(it) }.getOrDefault(SpotPositionState.NO_POSITION) }
             ?: SpotPositionState.NO_POSITION
@@ -48,10 +44,15 @@ class SpotPositionStore(context: Context) {
         )
     }
 
+    /** Reconstruct the position state at a historical timestamp. */
     fun getAt(symbol: String, timestamp: Long): SpotPosition {
         val key = normalize(symbol)
         val history = readHistory(key)
-        if (history.length() == 0) return historicalFallback(symbol, timestamp)
+        if (history.length() == 0) {
+            val current = get(symbol)
+            if (current.isHolding && current.openedAt > 0L && current.openedAt <= timestamp) return current
+            return SpotPosition()
+        }
 
         var best: JSONObject? = null
         for (i in 0 until history.length()) {
@@ -60,53 +61,60 @@ class SpotPositionStore(context: Context) {
             if (eventTime <= 0L || eventTime > timestamp) continue
             if (best == null || eventTime > best!!.optLong("timestamp", 0L)) best = event
         }
-        if (best == null) return SpotPosition()
 
-        val state = runCatching {
-            SpotPositionState.valueOf(best.optString("state", SpotPositionState.NO_POSITION.name))
-        }.getOrDefault(SpotPositionState.NO_POSITION)
+        if (best == null) return SpotPosition()
+        val state = best.optString("state", SpotPositionState.NO_POSITION.name)
+            .let { runCatching { SpotPositionState.valueOf(it) }.getOrDefault(SpotPositionState.NO_POSITION) }
         return SpotPosition(
             state = state,
             investedAmount = best.optDouble("investedAmount", 0.0),
             entryPrice = best.optDouble("entryPrice", 0.0),
             quantity = best.optDouble("quantity", 0.0),
-            openedAt = best.optLong("openedAt", 0L),
-            purchases = purchasesFromJson(best.optJSONArray("purchases"))
+            openedAt = best.optLong("openedAt", 0L)
         )
     }
 
     fun isHolding(symbol: String): Boolean = get(symbol).isHolding
 
-    /** Adds a new buy to the existing position. It never overwrites previous buys. */
-    fun markBought(symbol: String, investedAmount: Double, entryPrice: Double) {
-        val key = normalize(symbol)
-        val safeInvested = investedAmount.coerceAtLeast(0.0)
-        val safeEntry = entryPrice.coerceAtLeast(0.0)
-        if (safeInvested <= 0.0 || safeEntry <= 0.0) return
-
-        val boughtAt = System.currentTimeMillis()
-        val lot = PurchaseLot(
-            investedAmount = safeInvested,
-            entryPrice = safeEntry,
-            quantity = safeInvested / safeEntry,
-            boughtAt = boughtAt
-        )
-        val purchases = readPurchases(key).toMutableList().apply { add(lot) }
-        val position = aggregate(purchases)
-        savePosition(key, position, purchases)
-    }
-
-    /** Keeps compatibility with existing callers that only know the entry price. */
     fun markBought(symbol: String, referenceEntryPrice: Double) {
         val current = get(symbol)
-        if (current.isHolding && referenceEntryPrice <= 0.0) return
-        markBought(symbol, current.investedAmount.takeIf { it > 0.0 } ?: 0.0, referenceEntryPrice)
+        if (current.isHolding && current.entryPrice == referenceEntryPrice) return
+        markBought(symbol, current.investedAmount, referenceEntryPrice)
+    }
+
+    fun markBought(symbol: String, investedAmount: Double, entryPrice: Double) {
+        val key = normalize(symbol)
+        val openedAt = System.currentTimeMillis()
+        val safeInvested = investedAmount.coerceAtLeast(0.0)
+        val safeEntry = entryPrice.coerceAtLeast(0.0)
+        val quantity = if (safeInvested > 0.0 && safeEntry > 0.0) safeInvested / safeEntry else 0.0
+        val current = get(symbol)
+        if (current.isHolding &&
+            current.investedAmount == safeInvested &&
+            current.entryPrice == safeEntry &&
+            current.quantity == quantity
+        ) return
+        val position = SpotPosition(
+            state = SpotPositionState.HOLDING,
+            investedAmount = safeInvested,
+            entryPrice = safeEntry,
+            quantity = quantity,
+            openedAt = openedAt
+        )
+        prefs.edit()
+            .putString("${key}_state", SpotPositionState.HOLDING.name)
+            .putString("${key}_invested", safeInvested.toString())
+            .putString("${key}_entry", safeEntry.toString())
+            .putString("${key}_quantity", quantity.toString())
+            .putLong("${key}_opened_at", openedAt)
+            .putString("${key}_history", appendHistoryEvent(key, position))
+            .apply()
     }
 
     fun markSold(symbol: String) {
         val key = normalize(symbol)
         val current = get(symbol)
-        if (!current.isHolding) return
+        if (!current.isHolding && current.entryPrice == 0.0 && current.investedAmount == 0.0 && current.quantity == 0.0) return
         val changedAt = System.currentTimeMillis()
         val position = SpotPosition(state = SpotPositionState.NO_POSITION, openedAt = changedAt)
         prefs.edit()
@@ -115,70 +123,8 @@ class SpotPositionStore(context: Context) {
             .remove("${key}_entry")
             .remove("${key}_quantity")
             .remove("${key}_opened_at")
-            .remove("${key}_purchases")
             .putString("${key}_history", appendHistoryEvent(key, position))
             .apply()
-    }
-
-    private fun aggregate(purchases: List<PurchaseLot>): SpotPosition {
-        if (purchases.isEmpty()) return SpotPosition()
-        val invested = purchases.sumOf { it.investedAmount }
-        val quantity = purchases.sumOf { it.quantity }
-        val averageEntry = if (quantity > 0.0) invested / quantity else 0.0
-        return SpotPosition(
-            state = SpotPositionState.HOLDING,
-            investedAmount = invested,
-            entryPrice = averageEntry,
-            quantity = quantity,
-            openedAt = purchases.minOf { it.boughtAt },
-            purchases = purchases
-        )
-    }
-
-    private fun savePosition(key: String, position: SpotPosition, purchases: List<PurchaseLot>) {
-        prefs.edit()
-            .putString("${key}_state", position.state.name)
-            .putString("${key}_invested", position.investedAmount.toString())
-            .putString("${key}_entry", position.entryPrice.toString())
-            .putString("${key}_quantity", position.quantity.toString())
-            .putLong("${key}_opened_at", position.openedAt)
-            .putString("${key}_purchases", purchasesToJson(purchases).toString())
-            .putString("${key}_history", appendHistoryEvent(key, position))
-            .apply()
-    }
-
-    private fun historicalFallback(symbol: String, timestamp: Long): SpotPosition {
-        val current = get(symbol)
-        return if (current.isHolding && current.openedAt > 0L && current.openedAt <= timestamp) current else SpotPosition()
-    }
-
-    private fun readPurchases(key: String): List<PurchaseLot> {
-        val raw = prefs.getString("${key}_purchases", null).orEmpty()
-        if (raw.isBlank()) return emptyList()
-        return runCatching { purchasesFromJson(JSONArray(raw)) }.getOrElse { emptyList() }
-    }
-
-    private fun purchasesToJson(purchases: List<PurchaseLot>): JSONArray = JSONArray().apply {
-        purchases.forEach { lot ->
-            put(JSONObject()
-                .put("investedAmount", lot.investedAmount)
-                .put("entryPrice", lot.entryPrice)
-                .put("quantity", lot.quantity)
-                .put("boughtAt", lot.boughtAt))
-        }
-    }
-
-    private fun purchasesFromJson(array: JSONArray?): List<PurchaseLot> {
-        if (array == null) return emptyList()
-        return buildList {
-            for (i in 0 until array.length()) {
-                val item = array.optJSONObject(i) ?: continue
-                val invested = item.optDouble("investedAmount", 0.0)
-                val entry = item.optDouble("entryPrice", 0.0)
-                if (invested <= 0.0 || entry <= 0.0) continue
-                add(PurchaseLot(invested, entry, item.optDouble("quantity", invested / entry), item.optLong("boughtAt", 0L)))
-            }
-        }
     }
 
     private fun readHistory(key: String): JSONArray {
@@ -195,13 +141,13 @@ class SpotPositionStore(context: Context) {
             .put("entryPrice", position.entryPrice)
             .put("quantity", position.quantity)
             .put("openedAt", position.openedAt)
-            .put("purchases", purchasesToJson(position.purchases))
         history.put(event)
         while (history.length() > MAX_HISTORY_EVENTS) history.remove(0)
         return history.toString()
     }
 
-    private fun normalize(symbol: String): String = symbol.uppercase().replace(Regex("[^A-Z0-9_]"), "_")
+    private fun normalize(symbol: String): String =
+        symbol.uppercase().replace(Regex("[^A-Z0-9_]"), "_")
 
     companion object {
         private const val PREFS_NAME = "analysis_ui_spot_positions"
