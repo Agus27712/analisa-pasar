@@ -76,6 +76,15 @@ class SpotPositionStore(context: Context) {
 
     fun isHolding(symbol: String): Boolean = get(symbol).isHolding
 
+    fun markBought(symbol: String, referenceEntryPrice: Double) {
+        val current = get(symbol)
+        markBought(
+            symbol = symbol,
+            investedAmount = current.investedAmount,
+            entryPrice = referenceEntryPrice
+        )
+    }
+
     fun markBought(symbol: String, investedAmount: Double, entryPrice: Double) {
         val key = normalize(symbol)
         val openedAt = System.currentTimeMillis()
