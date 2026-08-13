@@ -67,38 +67,15 @@ fun SignalHistoryPanel(
                 Text("RIWAYAT & LOG SINYAL", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TvTextSecondary, letterSpacing = 1.2.sp)
                 Text("${visibleHistory.size} sinyal", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = TvGreen)
             }
-
             Spacer(Modifier.height(10.dp))
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(ownershipColor.copy(alpha = 0.10f))
-                    .border(1.dp, ownershipColor.copy(alpha = 0.28f), RoundedCornerShape(10.dp))
-                    .padding(horizontal = 10.dp, vertical = 8.dp),
-                Arrangement.SpaceBetween,
-                Alignment.CenterVertically
-            ) {
+            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(ownershipColor.copy(alpha = 0.10f)).border(1.dp, ownershipColor.copy(alpha = 0.28f), RoundedCornerShape(10.dp)).padding(horizontal = 10.dp, vertical = 8.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("OWNERSHIP SAAT INI", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = ownershipColor, letterSpacing = 0.6.sp)
-                    Text(
-                        if (position.isHolding) "Punya $currentSymbol di Indodax (switch ON)"
-                        else "Belum punya $currentSymbol (switch OFF)",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TvTextPrimary
-                    )
-                    if (position.isHolding && position.entryPrice > 0.0) {
-                        Text(
-                            "Entry acuan: ${PriceFormatter.formatPrice(position.entryPrice)}",
-                            fontSize = 9.sp,
-                            color = TvTextSecondary
-                        )
-                    }
+                    Text(if (position.isHolding) "Punya $currentSymbol di Indodax (switch ON)" else "Belum punya $currentSymbol (switch OFF)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TvTextPrimary)
+                    if (position.isHolding && position.entryPrice > 0.0) Text("Entry acuan: ${PriceFormatter.formatPrice(position.entryPrice)}", fontSize = 9.sp, color = TvTextSecondary)
                 }
                 Text(ownershipLabel, fontSize = 10.sp, fontWeight = FontWeight.Black, color = ownershipColor)
             }
-
             if (visibleHistory.isNotEmpty()) {
                 Spacer(Modifier.height(8.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
@@ -124,27 +101,17 @@ fun SignalHistoryPanel(
                         SignalAction.SELL -> "JUAL"
                         SignalAction.HOLD -> "TAHAN"
                     }
-                    val historicalPosition = positionStore.getAt(currentSymbol, signal.timestamp) ?: SpotPosition()
+                    val historicalPosition = positionStore.getAt(currentSymbol, signal.timestamp)
                     val historicalHolding = historicalPosition.isHolding
                     val historicalOwnershipLabel = if (historicalHolding) "HOLDING" else "NO POSITION"
                     val historicalOwnershipColor = if (historicalHolding) TvGreen else TvTextSecondary
                     val levelLifecycle = if (hasPositionLevels(signal)) "LEVEL VALID" else "LEVEL TIDAK LENGKAP"
                     val advice = ownershipAdvice(signal.action, historicalHolding)
-                    Box(
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Color(0xFF121212))
-                            .border(1.dp, Color(0x1AFFFFFF), RoundedCornerShape(12.dp))
-                            .padding(horizontal = 14.dp, vertical = 10.dp)
-                    ) {
+                    Box(Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(12.dp)).background(Color(0xFF121212)).border(1.dp, Color(0x1AFFFFFF), RoundedCornerShape(12.dp)).padding(horizontal = 14.dp, vertical = 10.dp)) {
                         Column(Modifier.fillMaxWidth()) {
                             Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(Modifier.clip(RoundedCornerShape(8.dp)).background(color.copy(alpha = 0.2f)).padding(horizontal = 8.dp, vertical = 4.dp)) {
-                                        Text(actionLabel, fontSize = 11.sp, fontWeight = FontWeight.Black, color = color)
-                                    }
+                                    Box(Modifier.clip(RoundedCornerShape(8.dp)).background(color.copy(alpha = 0.2f)).padding(horizontal = 8.dp, vertical = 4.dp)) { Text(actionLabel, fontSize = 11.sp, fontWeight = FontWeight.Black, color = color) }
                                     Spacer(Modifier.width(10.dp))
                                     Column {
                                         Text(currentSymbol, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = color)
@@ -163,15 +130,7 @@ fun SignalHistoryPanel(
                                 PriceBox("SL", signal.stopLoss, TvRed, Modifier.weight(1f))
                             }
                             Spacer(Modifier.height(7.dp))
-                            Row(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(historicalOwnershipColor.copy(alpha = 0.09f))
-                                    .padding(horizontal = 8.dp, vertical = 6.dp),
-                                Arrangement.SpaceBetween,
-                                Alignment.CenterVertically
-                            ) {
+                            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(historicalOwnershipColor.copy(alpha = 0.09f)).padding(horizontal = 8.dp, vertical = 6.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) {
                                 Column(Modifier.weight(1f)) {
                                     Text("KONTEKS OWNERSHIP • SAAT SINYAL", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = historicalOwnershipColor)
                                     Text(advice, fontSize = 9.sp, color = TvTextSecondary, maxLines = 2)
@@ -194,12 +153,7 @@ fun SignalHistoryPanel(
     }
 }
 
-private fun hasPositionLevels(signal: AISignalState): Boolean =
-    signal.action != SignalAction.HOLD &&
-        signal.entryPrice > 0.0 &&
-        signal.targetPrice1 > 0.0 &&
-        signal.targetPrice2 > 0.0 &&
-        signal.stopLoss > 0.0
+private fun hasPositionLevels(signal: AISignalState): Boolean = signal.action != SignalAction.HOLD && signal.entryPrice > 0.0 && signal.targetPrice1 > 0.0 && signal.targetPrice2 > 0.0 && signal.stopLoss > 0.0
 
 private fun ownershipAdvice(action: SignalAction, isHolding: Boolean): String = when {
     !isHolding && action == SignalAction.BUY -> "Belum punya coin → sinyal BUY relevan untuk masuk."
@@ -227,3 +181,4 @@ private fun PriceBox(label: String, value: Double, color: Color, modifier: Modif
         Text(label, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = color)
         Text(if (value > 0) PriceFormatter.formatPrice(value) else "-", fontSize = 9.sp, fontFamily = FontFamily.Monospace, color = TvTextPrimary, maxLines = 1)
     }
+}
