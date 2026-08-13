@@ -210,14 +210,17 @@ private fun AiAssistantCard(auditText: String?, auditLoading: Boolean, geminiTex
         Spacer(Modifier.height(5.dp))
         Text("Minta AI menjelaskan kondisi market dengan bahasa sederhana. Angka Entry/TP/SL tetap berasal dari engine aplikasi.", fontSize = 13.sp, color = TvTextSecondary, lineHeight = 18.sp)
         Spacer(Modifier.height(10.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = onGroq, enabled = !auditLoading, modifier = Modifier.weight(1f).height(46.dp).testTag("detail_groq_button"), colors = ButtonDefaults.buttonColors(containerColor = TvGreen), shape = RoundedCornerShape(12.dp), contentPadding = PaddingValues(horizontal = 8.dp)) {
-                if (auditLoading) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = Color.Black) else Icon(Icons.Default.AutoAwesome, null, Modifier.size(18.dp), tint = Color.Black)
-                Spacer(Modifier.width(5.dp)); Text("Groq", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+    Row(modifier = Modifier.fillMaxWidth(),horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Button( onClick = onGroq, enabled = !auditLoading && !geminiLoading, modifier = Modifier.weight(1f)) {
+            Text(
+                if (auditLoading) "Groq..." else "Groq"
+                )
             }
-            OutlinedButton(onClick = onGemini, enabled = !geminiLoading, modifier = Modifier.weight(1f).height(46.dp).testTag("detail_gemini_button"), colors = ButtonDefaults.outlinedButtonColors(contentColor = TvTextPrimary), border = BorderStroke(1.dp, Color(0xFF4C9FFF)), shape = RoundedCornerShape(12.dp), contentPadding = PaddingValues(horizontal = 8.dp)) {
-                if (geminiLoading) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = Color(0xFF6FB8FF)) else Icon(Icons.Default.AutoAwesome, null, Modifier.size(18.dp), tint = Color(0xFF6FB8FF))
-                Spacer(Modifier.width(5.dp)); Text("Gemini", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            Button( onClick = onGemini, enabled = !auditLoading && !geminiLoading, modifier = Modifier.weight(1f)) {
+            Text(
+                if (geminiLoading) "Gemini..." else "Gemini"
+                )
             }
         }
         Spacer(Modifier.height(9.dp))
