@@ -50,6 +50,7 @@ fun SpotPositionCard(
     symbol: String,
     signal: AISignalState,
     position: SpotPosition,
+    currentPrice: Double = 0.0,
     onPositionChanged: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -163,6 +164,18 @@ fun SpotPositionCard(
                 PositionValue("Aset", formatPositionQuantity(position.quantity) + " $symbol", Modifier.weight(1f))
                 PositionValue("Rata-rata beli", PriceFormatter.formatPrice(position.entryPrice), Modifier.weight(1f))
             }
+            if (currentPrice > 0.0 && position.quantity > 0.0) {
+                val currentValue = position.quantity * currentPrice
+                val profitLoss = currentValue - position.investedAmount
+                val profitPercent = if (position.investedAmount > 0.0) (profitLoss / position.investedAmount) * 100.0 else 0.0
+                val profitColor = if (profitLoss >= 0.0) TvGreen else TvRed
+                Spacer(Modifier.height(10.dp))
+                Row(Modifier.fillMaxWidth()) {
+                    PositionValue("Nilai sekarang", PriceFormatter.formatPrice(currentValue), Modifier.weight(1f))
+                    PositionValue("Untung / rugi", PriceFormatter.formatPrice(kotlin.math.abs(profitLoss)), Modifier.weight(1f))
+                    PositionValue("Perubahan", PriceFormatter.formatPercentage(profitPercent), Modifier.weight(1f), profitColor)
+                }
+            }
             Spacer(Modifier.height(8.dp))
             Text(
                 text = if (position.purchaseCount == 1) "1 kali beli" else "${position.purchaseCount} kali beli · harga rata-rata dihitung dari total modal dan total aset",
@@ -185,10 +198,10 @@ fun SpotPositionCard(
 }
 
 @Composable
-private fun PositionValue(label: String, value: String, modifier: Modifier = Modifier) {
+private fun PositionValue(label: String, value: String, modifier: Modifier = Modifier, valueColor: Color = TvTextPrimary) {
     Column(modifier) {
         Text(label, fontSize = 8.sp, color = TvTextSecondary)
-        Text(value, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TvTextPrimary)
+        Text(value, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = valueColor)
     }
 }
 
