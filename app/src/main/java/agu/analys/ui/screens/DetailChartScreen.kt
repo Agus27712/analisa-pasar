@@ -275,11 +275,6 @@ fun DetailChartScreen(
                 Spacer(Modifier.height(8.dp))
                 AISignalCard(
                     signal = aiSignalState,
-                    marketSymbol = selectedPair.symbol,
-                    position = spotPosition,
-                    onOwnershipChange = { owned, referenceEntry ->
-                        viewModel.setOwnership(owned, referenceEntry)
-                    },
                     onDeepAuditClick = { viewModel.requestDeepAiAudit() },
                     auditText = auditReportText,
                     isAuditLoading = isAuditLoading,

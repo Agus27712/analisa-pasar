@@ -227,4 +227,3 @@ private fun PriceBox(label: String, value: Double, color: Color, modifier: Modif
         Text(label, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = color)
         Text(if (value > 0) PriceFormatter.formatPrice(value) else "-", fontSize = 9.sp, fontFamily = FontFamily.Monospace, color = TvTextPrimary, maxLines = 1)
     }
-}
