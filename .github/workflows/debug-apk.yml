@@ -6,7 +6,7 @@ on:
       ref:
         description: 'Branch atau tag yang ingin dibuild'
         required: true
-        default: 'feature/position-input'
+        default: 'feature-position-input'
         type: string
 
 permissions:
