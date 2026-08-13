@@ -8,10 +8,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
-@RunWith(RobolectricTestRunner::class)
-@Config(sdk = [36])
 class ExampleRobolectricTest {
-
   @Test
   fun `read string from context`() {
     val context: Context = RuntimeEnvironment.getApplication()
