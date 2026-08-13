@@ -62,25 +62,15 @@ fun SpotPositionCard(
     var entryInput by remember { mutableStateOf("") }
 
     val recommendation = when {
-        !position.isHolding && signal.action == SignalAction.BUY -> "WAKTUNYA BELI"
-        !position.isHolding && signal.action == SignalAction.SELL -> "BELUM PUNYA COIN"
-        !position.isHolding -> "TUNGGU"
-        signal.action == SignalAction.SELL -> "PERTIMBANGKAN JUAL"
-        signal.action == SignalAction.BUY -> "SUDAH PUNYA COIN"
-        else -> "TAHAN"
+        !position.isHolding && signal.action == SignalAction.BUY -> "BISA PERTIMBANGKAN BELI"
+        position.isHolding && signal.action == SignalAction.SELL -> "PERTIMBANGKAN JUAL"
+        position.isHolding -> "TAHAN"
+        else -> "TUNGGU"
     }
     val recommendationColor = when {
-        !position.isHolding && signal.action == SignalAction.BUY -> TvGreen
-        position.isHolding && signal.action == SignalAction.SELL -> TvRed
+        signal.action == SignalAction.BUY -> TvGreen
+        signal.action == SignalAction.SELL -> TvRed
         else -> TvAmber
-    }
-    val subtitle = when {
-        !position.isHolding && signal.action == SignalAction.BUY -> "Sinyal naik muncul dan kamu belum punya $symbol."
-        !position.isHolding && signal.action == SignalAction.SELL -> "Tidak ada $symbol yang perlu dijual."
-        !position.isHolding -> "Belum ada sinyal beli yang cukup kuat."
-        signal.action == SignalAction.SELL -> "Kamu punya $symbol dan sinyal turun muncul."
-        signal.action == SignalAction.BUY -> "Kamu sudah punya $symbol. BUY tidak berarti wajib beli lagi."
-        else -> "Kamu sudah punya $symbol. Tunggu sinyal yang lebih jelas untuk keluar."
     }
 
     val currentValue = if (position.isHolding && currentPrice > 0.0) position.quantity * currentPrice else 0.0
@@ -95,83 +85,156 @@ fun SpotPositionCard(
     if (showDialog) {
         AlertDialog(
             onDismissRequest = { showDialog = false },
-            title = { Text(if (position.isHolding) "Ubah posisi $symbol" else "Saya punya $symbol") },
+            title = { Text("ATUR POSISI SAYA") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Isi berdasarkan transaksi yang kamu lakukan di Indodax. Aplikasi tidak membaca saldo akunmu.", fontSize = 12.sp, color = TvTextSecondary)
-                    OutlinedTextField(value = investedInput, onValueChange = { investedInput = it.filter(Char::isDigit) }, modifier = Modifier.fillMaxWidth().testTag("position_invested_input"), label = { Text("Uang yang dibelikan (Rp)") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
-                    OutlinedTextField(value = entryInput, onValueChange = { entryInput = it.filter(Char::isDigit) }, modifier = Modifier.fillMaxWidth().testTag("position_entry_input"), label = { Text("Harga beli $symbol") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+                    Text(
+                        "Masukkan data pembelian $symbol. Aplikasi akan menghitung jumlah koin dan untung/rugi secara otomatis.",
+                        fontSize = 12.sp,
+                        color = TvTextSecondary
+                    )
+                    OutlinedTextField(
+                        value = investedInput,
+                        onValueChange = { investedInput = it.filter(Char::isDigit) },
+                        modifier = Modifier.fillMaxWidth().testTag("position_invested_input"),
+                        label = { Text("Nilai Pembelian (IDR)") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                    )
+                    OutlinedTextField(
+                        value = entryInput,
+                        onValueChange = { entryInput = it.filter(Char::isDigit) },
+                        modifier = Modifier.fillMaxWidth().testTag("position_entry_input"),
+                        label = { Text("Harga Beli per $symbol (IDR)") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                    )
                     val amount = investedInput.toDoubleOrNull() ?: 0.0
                     val price = entryInput.toDoubleOrNull() ?: 0.0
-                    if (amount > 0.0 && price > 0.0) Text("Jumlah $symbol: ${formatPositionQuantity(amount / price)}", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TvGreen)
+                    if (amount > 0.0 && price > 0.0) {
+                        val quantity = amount / price
+                        Text(
+                            "Jumlah $symbol: ${formatPositionQuantity(quantity)} $symbol",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TvGreen
+                        )
+                        if (currentPrice > 0.0) {
+                            val valueNow = quantity * currentPrice
+                            val pnl = valueNow - amount
+                            val pct = pnl / amount * 100.0
+                            Text(
+                                "Nilai sekarang: ${PriceFormatter.formatPrice(valueNow)}  •  P/L ${formatSignedMoney(pnl)} (${formatSignedPct(pct)})",
+                                fontSize = 10.sp,
+                                color = if (pnl >= 0) TvGreen else TvRed
+                            )
+                        }
+                    }
                 }
             },
             confirmButton = {
-                TextButton(enabled = investedInput.toDoubleOrNull()?.let { it > 0.0 } == true && entryInput.toDoubleOrNull()?.let { it > 0.0 } == true, onClick = {
-                    store.markBought(symbol, investedInput.toDouble(), entryInput.toDouble())
-                    showDialog = false
-                    onPositionChanged()
-                }) { Text("Simpan") }
+                TextButton(
+                    enabled = investedInput.toDoubleOrNull()?.let { it > 0.0 } == true && entryInput.toDoubleOrNull()?.let { it > 0.0 } == true,
+                    onClick = {
+                        store.markBought(symbol, investedInput.toDouble(), entryInput.toDouble())
+                        showDialog = false
+                        onPositionChanged()
+                    }
+                ) { Text("Simpan") }
             },
             dismissButton = { TextButton(onClick = { showDialog = false }) { Text("Batal") } }
         )
     }
 
-    Column(modifier = modifier.fillMaxWidth().background(TvCardBackground, RoundedCornerShape(16.dp)).border(1.dp, recommendationColor.copy(alpha = 0.28f), RoundedCornerShape(16.dp)).padding(14.dp)) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(TvCardBackground, RoundedCornerShape(16.dp))
+            .border(1.dp, Color(0xFF183247), RoundedCornerShape(16.dp))
+            .padding(14.dp)
+    ) {
         Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("POSISI SAYA", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = recommendationColor, letterSpacing = 1.sp)
-                Text(recommendation, fontSize = 17.sp, fontWeight = FontWeight.Black, color = recommendationColor)
-                Text(subtitle, fontSize = 10.sp, color = TvTextSecondary)
+                Text("POSISI SAYA", fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, color = TvTextPrimary, letterSpacing = 0.7.sp)
+                Text(recommendation, fontSize = 18.sp, fontWeight = FontWeight.Black, color = recommendationColor)
             }
-            Switch(checked = position.state == SpotPositionState.HOLDING, onCheckedChange = { checked ->
-                if (checked) {
-                    investedInput = if (position.investedAmount > 0) position.investedAmount.toLong().toString() else ""
-                    entryInput = if (position.entryPrice > 0) position.entryPrice.toLong().toString() else ""
-                    showDialog = true
-                } else {
-                    store.markSold(symbol)
-                    onPositionChanged()
-                }
-            }, modifier = Modifier.testTag("asset_ownership_switch"))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(if (position.isHolding) "Punya $symbol" else "Punya $symbol", fontSize = 10.sp, color = TvTextSecondary)
+                Spacer(Modifier.padding(horizontal = 2.dp))
+                Switch(
+                    checked = position.state == SpotPositionState.HOLDING,
+                    onCheckedChange = { checked ->
+                        if (checked) {
+                            investedInput = if (position.investedAmount > 0) position.investedAmount.toLong().toString() else ""
+                            entryInput = if (position.entryPrice > 0) position.entryPrice.toLong().toString() else ""
+                            showDialog = true
+                        } else {
+                            store.markSold(symbol)
+                            onPositionChanged()
+                        }
+                    },
+                    modifier = Modifier.testTag("asset_ownership_switch")
+                )
+            }
         }
+
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "Masukkan data pembelian Anda. Jumlah koin dan P/L dihitung dari harga market Indodax yang sedang tampil.",
+            fontSize = 10.sp,
+            color = TvTextSecondary
+        )
 
         if (position.isHolding) {
             Spacer(Modifier.height(12.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                PositionValue("Uang masuk", PriceFormatter.formatPrice(position.investedAmount), Modifier.weight(1f))
-                PositionValue("Jumlah $symbol", formatPositionQuantity(position.quantity), Modifier.weight(1f))
+                PositionValue("Modal Investasi", PriceFormatter.formatPrice(position.investedAmount), Modifier.weight(1f))
+                PositionValue("Harga Sekarang", PriceFormatter.formatPrice(currentPrice), Modifier.weight(1f))
             }
             Spacer(Modifier.height(8.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                PositionValue("Harga beli", PriceFormatter.formatPrice(position.entryPrice), Modifier.weight(1f))
-                PositionValue("Harga sekarang", PriceFormatter.formatPrice(currentPrice), Modifier.weight(1f))
-            }
-            if (currentPrice > 0.0 && position.quantity > 0.0) {
-                Spacer(Modifier.height(10.dp))
-                Column(Modifier.fillMaxWidth().background(profitColor.copy(alpha = 0.10f), RoundedCornerShape(10.dp)).padding(10.dp)) {
-                    Text("UNTUNG / RUGI SAAT INI", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = profitColor)
-                    Text("${if (profitLoss >= 0) "+" else "-"}${PriceFormatter.formatPrice(abs(profitLoss))}  (${if (profitPercent >= 0) "+" else "-"}${PriceFormatter.formatPercentage(abs(profitPercent), includePlusSign = false)})", fontSize = 14.sp, fontWeight = FontWeight.Black, color = profitColor)
-                    Text("Nilai sekarang: ${PriceFormatter.formatPrice(currentValue)}", fontSize = 9.sp, color = TvTextSecondary)
-                }
+                PositionValue("Harga Beli", PriceFormatter.formatPrice(position.entryPrice), Modifier.weight(1f))
+                PositionValue("Nilai Sekarang", PriceFormatter.formatPrice(currentValue), Modifier.weight(1f))
             }
             Spacer(Modifier.height(8.dp))
-            Button(onClick = {
-                investedInput = position.investedAmount.toLong().toString()
-                entryInput = position.entryPrice.toLong().toString()
-                showDialog = true
-            }, modifier = Modifier.fillMaxWidth().height(36.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0x1AFFFFFF)), shape = RoundedCornerShape(9.dp)) {
-                Text("Ubah data posisi", fontSize = 10.sp, color = TvTextPrimary)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                PositionValue("Jumlah $symbol", formatPositionQuantity(position.quantity), Modifier.weight(1f))
+                PositionValue("P/L", "${formatSignedMoney(profitLoss)} (${formatSignedPct(profitPercent)})", Modifier.weight(1f), profitColor)
             }
+            Spacer(Modifier.height(10.dp))
+            Column(Modifier.fillMaxWidth().background(profitColor.copy(alpha = 0.10f), RoundedCornerShape(10.dp)).padding(10.dp)) {
+                Text("ESTIMASI P/L", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = profitColor)
+                Text(formatSignedMoney(profitLoss), fontSize = 17.sp, fontWeight = FontWeight.Black, color = profitColor)
+                Text("Nilai sekarang: ${PriceFormatter.formatPrice(currentValue)}", fontSize = 9.sp, color = TvTextSecondary)
+            }
+            Spacer(Modifier.height(8.dp))
+            Button(
+                onClick = {
+                    investedInput = position.investedAmount.toLong().toString()
+                    entryInput = position.entryPrice.toLong().toString()
+                    showDialog = true
+                },
+                modifier = Modifier.fillMaxWidth().height(36.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0x1AFFFFFF)),
+                shape = RoundedCornerShape(9.dp)
+            ) { Text("Ubah Data Pembelian", fontSize = 10.sp, color = TvTextPrimary) }
+        } else {
+            Spacer(Modifier.height(10.dp))
+            Button(
+                onClick = { showDialog = true },
+                modifier = Modifier.fillMaxWidth().height(38.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF087FF5)),
+                shape = RoundedCornerShape(10.dp)
+            ) { Text("ATUR POSISI", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = Color.White) }
         }
     }
 }
 
 @Composable
-private fun PositionValue(label: String, value: String, modifier: Modifier = Modifier) {
+private fun PositionValue(label: String, value: String, modifier: Modifier = Modifier, valueColor: Color = TvTextPrimary) {
     Column(modifier) {
         Text(label, fontSize = 8.sp, color = TvTextSecondary)
-        Text(value, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TvTextPrimary)
+        Text(value, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = valueColor, maxLines = 2)
     }
 }
 
@@ -180,3 +243,9 @@ private fun formatPositionQuantity(value: Double): String = when {
     value >= 1.0 -> String.format("%.6f", value).trimEnd('0').trimEnd('.')
     else -> String.format("%.10f", value).trimEnd('0').trimEnd('.')
 }
+
+private fun formatSignedMoney(value: Double): String =
+    (if (value >= 0) "+" else "-") + PriceFormatter.formatPrice(abs(value))
+
+private fun formatSignedPct(value: Double): String =
+    (if (value >= 0) "+" else "-") + PriceFormatter.formatPercentage(abs(value), includePlusSign = false)
