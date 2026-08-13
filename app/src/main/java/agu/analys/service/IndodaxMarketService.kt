@@ -165,6 +165,7 @@ object IndodaxMarketService {
      */
     suspend fun fetchCandles(symbol: String, timeframe: Timeframe, limit: Int = 300): List<CandleBar> = withContext(Dispatchers.IO) {
         try {
+            val workingLimit = limit.coerceAtLeast(300)
             val tf = timeframe.code
             val minutesPerCandle = when (tf) {
                 "1" -> 1L
@@ -179,8 +180,8 @@ object IndodaxMarketService {
             val nowSec = System.currentTimeMillis() / 1000L
             val currentCandleStart = nowSec - (nowSec % candleSeconds)
             // Request one extra candle so filtering the currently forming candle
-            // still leaves up to `limit` completed candles.
-            val requestCount = limit.coerceAtLeast(40) + 1
+            // still leaves up to `workingLimit` completed candles.
+            val requestCount = workingLimit + 1
             val fromSec = nowSec - (candleSeconds * requestCount)
             val apiTf = if (tf == "D") "1D" else tf
             val pair = toDepthPairId(symbol).uppercase()
@@ -206,7 +207,7 @@ object IndodaxMarketService {
                     volume = row.optString("Volume", "0").toDoubleOrNull() ?: 0.0
                 )
             }
-            result.sortedBy { it.timestamp }.takeLast(limit)
+            result.sortedBy { it.timestamp }.takeLast(workingLimit)
         } catch (_: Exception) {
             emptyList()
         }
