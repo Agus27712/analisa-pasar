@@ -59,11 +59,7 @@ data class AISignalState(
     val patternDetected: String? = null,
     val reasoning: List<String> = emptyList(),
     val timestamp: Long = System.currentTimeMillis(),
-    val marketSymbol: String = "",
-    /** Ownership snapshot captured when this signal enters history. */
-    val ownedAtSignal: Boolean = false,
-    /** Entry reference snapshot captured alongside [ownedAtSignal]. */
-    val ownershipEntryAtSignal: Double = 0.0
+    val marketSymbol: String = ""
 )
 
 data class TradingPair(
