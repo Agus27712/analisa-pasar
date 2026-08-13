@@ -7,20 +7,21 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 
 /**
- * Compatibility wrapper for AISignalCard's Icon usage.
- * Keeps the component package API explicit without changing the existing card code.
+ * Compatibility wrapper for AISignalCard's existing Icon call sites.
+ * The parameter order matches Material3 Icon usage so positional modifier
+ * arguments and named tint arguments compile consistently.
  */
 @Composable
 fun Icon(
     imageVector: ImageVector,
     contentDescription: String?,
-    tint: Color,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    tint: Color = Color.Unspecified
 ) {
     Material3Icon(
         imageVector = imageVector,
         contentDescription = contentDescription,
-        tint = tint,
-        modifier = modifier
+        modifier = modifier,
+        tint = tint
     )
 }
