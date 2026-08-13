@@ -30,6 +30,9 @@ object IndodaxMarketService {
 
     private val timeFormat = SimpleDateFormat("HH:mm:ss", Locale("id", "ID"))
 
+    // 24h movement is based on an actual INDODAX historical candle
+    // at or before exactly 24 hours ago. A short cache avoids refetching
+    // the same reference price every 3 seconds while keeping the live ticker uncached.
     private data class ChangeReference(val close: Double, val fetchedAt: Long)
     private val changeReferenceCache = mutableMapOf<String, ChangeReference>()
     private const val CHANGE_REFERENCE_CACHE_MS = 60_000L
@@ -66,6 +69,11 @@ object IndodaxMarketService {
         }
     }
 
+    /**
+     * Returns the percentage move from the closest completed INDODAX 1h candle
+     * at or before exactly 24 hours ago to the current INDODAX ticker price.
+     * Null means the exchange did not provide enough historical data.
+     */
     private fun fetch24hChange(pair: String, last: Double): Double? {
         val cached = changeReferenceCache[pair]
         val now = System.currentTimeMillis()
@@ -157,15 +165,9 @@ object IndodaxMarketService {
      * RSI, MACD, Bollinger, ATR, patterns and market structure cannot repaint
      * from the currently forming candle. The live ticker remains available
      * separately for current-price monitoring and entry calculation.
-     *
-     * Keep a 300-candle working set so EMA200 has enough warm-up history and
-     * remains stable when incomplete candles are filtered out. The chart/viewport
-     * may show fewer candles at once, but older candles remain available for
-     * indicator calculation and interactive navigation.
      */
-    suspend fun fetchCandles(symbol: String, timeframe: Timeframe, limit: Int = 300): List<CandleBar> = withContext(Dispatchers.IO) {
+    suspend fun fetchCandles(symbol: String, timeframe: Timeframe, limit: Int = 120): List<CandleBar> = withContext(Dispatchers.IO) {
         try {
-            val workingLimit = limit.coerceAtLeast(300)
             val tf = timeframe.code
             val minutesPerCandle = when (tf) {
                 "1" -> 1L
@@ -179,9 +181,9 @@ object IndodaxMarketService {
             val candleSeconds = minutesPerCandle * 60L
             val nowSec = System.currentTimeMillis() / 1000L
             val currentCandleStart = nowSec - (nowSec % candleSeconds)
-            // Request one extra candle so filtering the currently forming candle
-            // still leaves up to `workingLimit` completed candles.
-            val requestCount = workingLimit + 1
+            // Request one extra candle because the currently forming candle is
+            // deliberately removed below before the final limit is applied.
+            val requestCount = limit.coerceAtLeast(40) + 1
             val fromSec = nowSec - (candleSeconds * requestCount)
             val apiTf = if (tf == "D") "1D" else tf
             val pair = toDepthPairId(symbol).uppercase()
@@ -207,7 +209,7 @@ object IndodaxMarketService {
                     volume = row.optString("Volume", "0").toDoubleOrNull() ?: 0.0
                 )
             }
-            result.sortedBy { it.timestamp }.takeLast(workingLimit)
+            result.sortedBy { it.timestamp }.takeLast(limit)
         } catch (_: Exception) {
             emptyList()
         }
