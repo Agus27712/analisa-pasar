@@ -55,38 +55,45 @@ fun SpotPositionCard(
 ) {
     val context = LocalContext.current
     val store = remember(context) { SpotPositionStore(context) }
-    var showDialog by remember { mutableStateOf(false) }
+    var showBuyDialog by remember { mutableStateOf(false) }
     var investedInput by remember { mutableStateOf("") }
     var entryInput by remember { mutableStateOf("") }
 
     val recommendation = when {
         !position.isHolding && signal.action == SignalAction.BUY -> "SIAP BELI" to TvGreen
-        !position.isHolding && signal.action == SignalAction.SELL -> "TIDAK ADA POSISI" to TvTextSecondary
+        !position.isHolding && signal.action == SignalAction.SELL -> "BELUM PUNYA COIN" to TvTextSecondary
         !position.isHolding -> "TUNGGU BUY" to TvAmber
         signal.action == SignalAction.SELL -> "SIAP JUAL" to TvRed
+        signal.action == SignalAction.BUY -> "SUDAH PUNYA COIN" to TvGreen
         else -> "TAHAN" to TvGreen
     }
+
     val subtitle = when {
-        !position.isHolding && signal.action == SignalAction.BUY -> "Sinyal BUY muncul dan kamu belum memiliki coin."
-        !position.isHolding && signal.action == SignalAction.SELL -> "SELL tidak dieksekusi karena belum ada coin yang dimiliki."
-        !position.isHolding -> "Belum ada setup BUY yang cukup kuat."
-        signal.action == SignalAction.SELL -> "Kamu memiliki posisi dan sinyal SELL muncul."
-        signal.action == SignalAction.BUY -> "Kamu sudah punya coin. Jangan beli ulang hanya karena BUY."
-        else -> "Kamu sudah punya coin. Tahan sampai ada alasan keluar."
+        !position.isHolding && signal.action == SignalAction.BUY -> "Sinyal BUY muncul. Kamu belum punya $symbol."
+        !position.isHolding && signal.action == SignalAction.SELL -> "Tidak ada coin yang perlu dijual."
+        !position.isHolding -> "Belum punya $symbol. Tunggu sinyal BUY."
+        signal.action == SignalAction.SELL -> "Kamu punya $symbol dan sinyal SELL muncul."
+        signal.action == SignalAction.BUY -> "Sudah punya $symbol. BUY berarti bisa tambah posisi, bukan wajib beli."
+        else -> "Sudah punya $symbol. Tahan sampai ada alasan untuk keluar."
     }
 
-    if (showDialog) {
+    if (showBuyDialog) {
         AlertDialog(
-            onDismissRequest = { showDialog = false },
-            title = { Text("Posisi $symbol") },
+            onDismissRequest = { showBuyDialog = false },
+            title = { Text(if (position.isHolding) "Tambah pembelian $symbol" else "Catat pembelian $symbol") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Masukkan nilai pembelian dan harga beli. Jumlah coin dihitung otomatis.", fontSize = 12.sp, color = TvTextSecondary)
+                    Text(
+                        if (position.isHolding) "Masukkan pembelian baru. Pembelian sebelumnya tetap disimpan dan harga rata-rata dihitung otomatis."
+                        else "Masukkan uang yang kamu keluarkan dan harga beli. Jumlah coin dihitung otomatis.",
+                        fontSize = 12.sp,
+                        color = TvTextSecondary
+                    )
                     OutlinedTextField(
                         value = investedInput,
                         onValueChange = { investedInput = it.filter(Char::isDigit) },
                         modifier = Modifier.fillMaxWidth().testTag("position_invested_input"),
-                        label = { Text("Nilai pembelian (Rp)") },
+                        label = { Text("Uang yang dibelikan (Rp)") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                     )
@@ -94,10 +101,15 @@ fun SpotPositionCard(
                         value = entryInput,
                         onValueChange = { entryInput = it.filter(Char::isDigit) },
                         modifier = Modifier.fillMaxWidth().testTag("position_entry_input"),
-                        label = { Text("Harga beli per $symbol") },
+                        label = { Text("Harga beli 1 $symbol") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                     )
+                    if (investedInput.toDoubleOrNull()?.let { it > 0.0 } == true && entryInput.toDoubleOrNull()?.let { it > 0.0 } == true) {
+                        val amount = investedInput.toDouble()
+                        val price = entryInput.toDouble()
+                        Text("Kamu mendapat sekitar ${formatPositionQuantity(amount / price)} $symbol", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TvGreen)
+                    }
                 }
             },
             confirmButton = {
@@ -105,17 +117,22 @@ fun SpotPositionCard(
                     enabled = investedInput.toDoubleOrNull()?.let { it > 0.0 } == true && entryInput.toDoubleOrNull()?.let { it > 0.0 } == true,
                     onClick = {
                         store.markBought(symbol, investedInput.toDouble(), entryInput.toDouble())
-                        showDialog = false
+                        showBuyDialog = false
+                        investedInput = ""
+                        entryInput = ""
                         onPositionChanged()
                     }
-                ) { Text("Simpan") }
+                ) { Text(if (position.isHolding) "Tambah" else "Simpan") }
             },
-            dismissButton = { TextButton(onClick = { showDialog = false }) { Text("Batal") } }
+            dismissButton = { TextButton(onClick = { showBuyDialog = false }) { Text("Batal") } }
         )
     }
 
     Column(
-        modifier = modifier.fillMaxWidth().background(TvCardBackground, RoundedCornerShape(16.dp)).border(1.dp, recommendation.second.copy(alpha = 0.28f), RoundedCornerShape(16.dp)).padding(14.dp)
+        modifier = modifier.fillMaxWidth()
+            .background(TvCardBackground, RoundedCornerShape(16.dp))
+            .border(1.dp, recommendation.second.copy(alpha = 0.28f), RoundedCornerShape(16.dp))
+            .padding(14.dp)
     ) {
         Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -127,9 +144,9 @@ fun SpotPositionCard(
                 checked = position.state == SpotPositionState.HOLDING,
                 onCheckedChange = { checked ->
                     if (checked) {
-                        investedInput = if (position.investedAmount > 0) position.investedAmount.toLong().toString() else ""
-                        entryInput = if (position.entryPrice > 0) position.entryPrice.toLong().toString() else ""
-                        showDialog = true
+                        investedInput = ""
+                        entryInput = ""
+                        showBuyDialog = true
                     } else {
                         store.markSold(symbol)
                         onPositionChanged()
@@ -138,31 +155,38 @@ fun SpotPositionCard(
                 modifier = Modifier.testTag("asset_ownership_switch")
             )
         }
+
         if (position.isHolding) {
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(12.dp))
             Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
-                PositionValue("Modal", PriceFormatter.formatPrice(position.investedAmount))
-                PositionValue("Harga beli", PriceFormatter.formatPrice(position.entryPrice))
-                PositionValue("Jumlah", formatPositionQuantity(position.quantity))
+                PositionValue("Total modal", PriceFormatter.formatPrice(position.investedAmount))
+                PositionValue("Aset", formatPositionQuantity(position.quantity) + " $symbol")
+                PositionValue("Rata-rata beli", PriceFormatter.formatPrice(position.entryPrice))
             }
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = if (position.purchaseCount == 1) "1 kali beli" else "${position.purchaseCount} kali beli · harga rata-rata dihitung dari total modal dan total aset",
+                fontSize = 9.sp,
+                color = TvTextSecondary
+            )
             Spacer(Modifier.height(8.dp))
             Button(
                 onClick = {
-                    investedInput = position.investedAmount.toLong().toString()
-                    entryInput = position.entryPrice.toLong().toString()
-                    showDialog = true
+                    investedInput = ""
+                    entryInput = ""
+                    showBuyDialog = true
                 },
-                modifier = Modifier.fillMaxWidth().height(36.dp),
+                modifier = Modifier.fillMaxWidth().height(38.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0x1AFFFFFF)),
                 shape = RoundedCornerShape(9.dp)
-            ) { Text("Ubah posisi", fontSize = 10.sp, color = TvTextPrimary) }
+            ) { Text("+ Tambah pembelian", fontSize = 11.sp, color = TvTextPrimary) }
         }
     }
 }
 
 @Composable
 private fun PositionValue(label: String, value: String) {
-    Column {
+    Column(Modifier.weight(1f)) {
         Text(label, fontSize = 8.sp, color = TvTextSecondary)
         Text(value, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TvTextPrimary)
     }
