@@ -147,7 +147,7 @@ fun DetailChartScreen(
                     ) {
                         Icon(
                             if (selectedPair.symbol in watchlist) Icons.Default.Star else Icons.Default.StarBorder,
-                            if (selectedPair.symbol in watchlist) TvGold else TvTextSecondary,
+                            if (selectedPair.symbol in watchlist) "Hapus dari watchlist" else "Tambah ke watchlist",
                             tint = if (selectedPair.symbol in watchlist) TvGold else TvTextSecondary,
                             modifier = Modifier.size(22.dp)
                         )
