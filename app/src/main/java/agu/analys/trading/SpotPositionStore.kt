@@ -4,7 +4,8 @@ import android.content.Context
 
 /**
  * Local spot-position state. A signal never means an order was executed.
- * The user explicitly confirms execution after trading on Indodax.
+ * The user explicitly confirms ownership after trading on Indodax via the
+ * manual switch. Default is NO_POSITION because the app cannot read balances.
  */
 enum class SpotPositionState {
     NO_POSITION,
@@ -15,7 +16,9 @@ data class SpotPosition(
     val state: SpotPositionState = SpotPositionState.NO_POSITION,
     val entryPrice: Double = 0.0,
     val openedAt: Long = 0L
-)
+) {
+    val isHolding: Boolean get() = state == SpotPositionState.HOLDING
+}
 
 class SpotPositionStore(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -31,6 +34,8 @@ class SpotPositionStore(context: Context) {
             openedAt = prefs.getLong("${key}_opened_at", 0L)
         )
     }
+
+    fun isHolding(symbol: String): Boolean = get(symbol).isHolding
 
     fun markBought(symbol: String, referenceEntryPrice: Double) {
         val key = normalize(symbol)
@@ -50,7 +55,8 @@ class SpotPositionStore(context: Context) {
             .apply()
     }
 
-    private fun normalize(symbol: String): String = symbol.uppercase().replace(Regex("[^A-Z0-9_]"), "_")
+    private fun normalize(symbol: String): String =
+        symbol.uppercase().replace(Regex("[^A-Z0-9_]"), "_")
 
     companion object {
         private const val PREFS_NAME = "analysis_ui_spot_positions"

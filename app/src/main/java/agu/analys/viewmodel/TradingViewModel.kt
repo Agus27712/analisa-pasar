@@ -21,6 +21,8 @@ import agu.analys.model.WorthCoinInfo
 import agu.analys.service.GeminiAiService
 import agu.analys.service.GroqAiService
 import agu.analys.service.IndodaxMarketService
+import agu.analys.trading.SpotPosition
+import agu.analys.trading.SpotPositionStore
 import agu.analys.util.AppPreferences
 import agu.analys.util.MarketDataCache
 import agu.analys.util.PriceFormatter
@@ -40,6 +42,8 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     private val engine = LearningTradingEngine(viewModelScope)
     private val prefs = AppPreferences(application)
     private val marketCache = MarketDataCache(application)
+    private val positionStore = SpotPositionStore(application)
+
     private val _currentScreen = MutableStateFlow(AppScreen.DASHBOARD)
     val currentScreen: StateFlow<AppScreen> = _currentScreen.asStateFlow()
     private val _selectedPair = MutableStateFlow(TradingPair.POPULAR_PAIRS.first())
@@ -86,6 +90,11 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     val watchlist: StateFlow<Set<String>> = _watchlist.asStateFlow()
     private val _isShowingCachedData = MutableStateFlow(false)
     val isShowingCachedData: StateFlow<Boolean> = _isShowingCachedData.asStateFlow()
+
+    /** Manual ownership for the currently selected pair (single source of truth). */
+    private val _spotPosition = MutableStateFlow(SpotPosition())
+    val spotPosition: StateFlow<SpotPosition> = _spotPosition.asStateFlow()
+
     private var lastSavedSignalTimestamp = 0L
     private var lastCandleRefresh = 0L
     private var lastDepthRefresh = 0L
@@ -151,6 +160,30 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    /** Reload ownership for the selected pair from [SpotPositionStore]. */
+    fun refreshSpotPosition() {
+        _spotPosition.value = positionStore.get(_selectedPair.value.symbol)
+    }
+
+    /**
+     * Manual ownership toggle (per coin).
+     * ON  = user holds the asset on Indodax → analysis leans toward sell / hold.
+     * OFF = user does not hold the asset → analysis leans toward buy / wait.
+     * Engine signals stay pure technical; only UI interpretation changes.
+     */
+    fun setOwnership(owned: Boolean, referenceEntryPrice: Double = 0.0) {
+        val symbol = _selectedPair.value.symbol
+        if (owned) {
+            val entry = referenceEntryPrice.takeIf { it > 0.0 }
+                ?: _spotPosition.value.entryPrice.takeIf { it > 0.0 }
+                ?: 0.0
+            positionStore.markBought(symbol, entry)
+        } else {
+            positionStore.markSold(symbol)
+        }
+        refreshSpotPosition()
+    }
+
     private fun startDashboardPolling() {
         dashboardPollJob?.cancel()
         dashboardPollJob = viewModelScope.launch {
@@ -214,6 +247,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     fun selectPair(pair: TradingPair) {
         _selectedPair.value = pair
         lastSavedSignalTimestamp = 0L
+        refreshSpotPosition()
         val (cachedTick, cachedCandles) = marketCache.loadPairSnapshot(pair.symbol)
         if (cachedTick != null || cachedCandles.isNotEmpty()) {
             if (cachedTick != null) _currentTick.value = cachedTick
