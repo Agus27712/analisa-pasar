@@ -158,10 +158,10 @@ fun SpotPositionCard(
 
         if (position.isHolding) {
             Spacer(Modifier.height(12.dp))
-            Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
-                PositionValue("Total modal", PriceFormatter.formatPrice(position.investedAmount))
-                PositionValue("Aset", formatPositionQuantity(position.quantity) + " $symbol")
-                PositionValue("Rata-rata beli", PriceFormatter.formatPrice(position.entryPrice))
+            Row(Modifier.fillMaxWidth()) {
+                PositionValue("Total modal", PriceFormatter.formatPrice(position.investedAmount), Modifier.weight(1f))
+                PositionValue("Aset", formatPositionQuantity(position.quantity) + " $symbol", Modifier.weight(1f))
+                PositionValue("Rata-rata beli", PriceFormatter.formatPrice(position.entryPrice), Modifier.weight(1f))
             }
             Spacer(Modifier.height(8.dp))
             Text(
@@ -185,8 +185,8 @@ fun SpotPositionCard(
 }
 
 @Composable
-private fun PositionValue(label: String, value: String) {
-    Column(Modifier.weight(1f)) {
+private fun PositionValue(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(modifier) {
         Text(label, fontSize = 8.sp, color = TvTextSecondary)
         Text(value, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TvTextPrimary)
     }
