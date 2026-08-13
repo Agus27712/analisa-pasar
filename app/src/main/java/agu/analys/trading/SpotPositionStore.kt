@@ -76,6 +76,15 @@ class SpotPositionStore(context: Context) {
 
     fun isHolding(symbol: String): Boolean = get(symbol).isHolding
 
+    /**
+     * Backward-compatible ownership update used by existing ViewModel call sites.
+     * If a detailed position already exists, preserve its invested amount.
+     */
+    fun markBought(symbol: String, referenceEntryPrice: Double) {
+        val current = get(symbol)
+        markBought(symbol, current.investedAmount, referenceEntryPrice)
+    }
+
     fun markBought(symbol: String, investedAmount: Double, entryPrice: Double) {
         val key = normalize(symbol)
         val openedAt = System.currentTimeMillis()
