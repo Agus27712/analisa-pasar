@@ -16,6 +16,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -27,6 +28,7 @@ import androidx.compose.ui.unit.sp
 import agu.analys.model.AISignalState
 import agu.analys.model.SignalAction
 import agu.analys.trading.SpotPosition
+import agu.analys.trading.SpotPositionStore
 import agu.analys.ui.theme.TvAmber
 import agu.analys.ui.theme.TvCardBackground
 import agu.analys.ui.theme.TvGreen
@@ -52,6 +54,8 @@ fun SignalHistoryPanel(
     val timeFormat = SimpleDateFormat("dd/MM HH:mm:ss", Locale.US)
     val ownershipLabel = if (position.isHolding) "HOLDING" else "NO POSITION"
     val ownershipColor = if (position.isHolding) TvGreen else TvTextSecondary
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val positionStore = remember(context) { SpotPositionStore(context) }
 
     Card(
         modifier = modifier.fillMaxWidth().border(1.dp, Color(0x1AFFFFFF), RoundedCornerShape(20.dp)),
@@ -120,8 +124,12 @@ fun SignalHistoryPanel(
                         SignalAction.SELL -> "JUAL"
                         SignalAction.HOLD -> "TAHAN"
                     }
+                    val historicalPosition = positionStore.getAt(currentSymbol, signal.timestamp) ?: SpotPosition()
+                    val historicalHolding = historicalPosition.isHolding
+                    val historicalOwnershipLabel = if (historicalHolding) "HOLDING" else "NO POSITION"
+                    val historicalOwnershipColor = if (historicalHolding) TvGreen else TvTextSecondary
                     val levelLifecycle = if (hasPositionLevels(signal)) "LEVEL VALID" else "LEVEL TIDAK LENGKAP"
-                    val advice = ownershipAdvice(signal.action, position.isHolding)
+                    val advice = ownershipAdvice(signal.action, historicalHolding)
                     Box(
                         Modifier
                             .fillMaxWidth()
@@ -159,24 +167,24 @@ fun SignalHistoryPanel(
                                 Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(8.dp))
-                                    .background(ownershipColor.copy(alpha = 0.09f))
+                                    .background(historicalOwnershipColor.copy(alpha = 0.09f))
                                     .padding(horizontal = 8.dp, vertical = 6.dp),
                                 Arrangement.SpaceBetween,
                                 Alignment.CenterVertically
                             ) {
                                 Column(Modifier.weight(1f)) {
-                                    Text("KONTEKS OWNERSHIP", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = ownershipColor)
+                                    Text("KONTEKS OWNERSHIP • SAAT SINYAL", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = historicalOwnershipColor)
                                     Text(advice, fontSize = 9.sp, color = TvTextSecondary, maxLines = 2)
                                 }
                                 Column(horizontalAlignment = Alignment.End) {
-                                    Text(ownershipLabel, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = ownershipColor)
+                                    Text(historicalOwnershipLabel, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = historicalOwnershipColor)
                                     Text(levelLifecycle, fontSize = 8.sp, color = TvTextSecondary)
                                 }
                             }
                             Spacer(Modifier.height(6.dp))
                             Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
                                 Text(signal.sentiment.displayName, fontSize = 9.sp, color = TvTextSecondary)
-                                Text("STATUS: $ownershipLabel", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = ownershipColor)
+                                Text("STATUS SAAT SINYAL: $historicalOwnershipLabel", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = historicalOwnershipColor)
                             }
                         }
                     }
