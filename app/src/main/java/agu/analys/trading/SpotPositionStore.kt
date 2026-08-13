@@ -78,10 +78,12 @@ class SpotPositionStore(context: Context) {
 
     /**
      * Backward-compatible ownership update used by existing ViewModel call sites.
-     * If a detailed position already exists, preserve its invested amount.
+     * If the detailed position was just saved by the UI, do not append a duplicate
+     * ownership-history event.
      */
     fun markBought(symbol: String, referenceEntryPrice: Double) {
         val current = get(symbol)
+        if (current.isHolding && current.entryPrice == referenceEntryPrice) return
         markBought(symbol, current.investedAmount, referenceEntryPrice)
     }
 
@@ -91,6 +93,12 @@ class SpotPositionStore(context: Context) {
         val safeInvested = investedAmount.coerceAtLeast(0.0)
         val safeEntry = entryPrice.coerceAtLeast(0.0)
         val quantity = if (safeInvested > 0.0 && safeEntry > 0.0) safeInvested / safeEntry else 0.0
+        val current = get(symbol)
+        if (current.isHolding &&
+            current.investedAmount == safeInvested &&
+            current.entryPrice == safeEntry &&
+            current.quantity == quantity
+        ) return
         val position = SpotPosition(
             state = SpotPositionState.HOLDING,
             investedAmount = safeInvested,
@@ -110,6 +118,8 @@ class SpotPositionStore(context: Context) {
 
     fun markSold(symbol: String) {
         val key = normalize(symbol)
+        val current = get(symbol)
+        if (!current.isHolding && current.entryPrice == 0.0 && current.investedAmount == 0.0 && current.quantity == 0.0) return
         val changedAt = System.currentTimeMillis()
         val position = SpotPosition(state = SpotPositionState.NO_POSITION, openedAt = changedAt)
         prefs.edit()
