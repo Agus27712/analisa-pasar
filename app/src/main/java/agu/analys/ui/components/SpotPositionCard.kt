@@ -62,7 +62,7 @@ fun SpotPositionCard(
     var entryInput by remember { mutableStateOf("") }
 
     val recommendation = when {
-        !position.isHolding && signal.action == SignalAction.BUY -> "BISA PERTIMBANGKAN BELI"
+        !position.isHolding && signal.action == SignalAction.BUY -> "PERTIMBANGKAN BELI"
         position.isHolding && signal.action == SignalAction.SELL -> "PERTIMBANGKAN JUAL"
         position.isHolding -> "TAHAN"
         else -> "TUNGGU"
@@ -85,7 +85,7 @@ fun SpotPositionCard(
     if (showDialog) {
         AlertDialog(
             onDismissRequest = { showDialog = false },
-            title = { Text("ATUR POSISI SAYA") },
+            title = { Text("ATUR POSISI") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
@@ -95,19 +95,19 @@ fun SpotPositionCard(
                     )
                     OutlinedTextField(
                         value = investedInput,
-                        onValueChange = { investedInput = it.filter(Char::isDigit) },
+                        onValueChange = { investedInput = normalizeDecimalInput(it) },
                         modifier = Modifier.fillMaxWidth().testTag("position_invested_input"),
                         label = { Text("Nilai Pembelian (IDR)") },
                         singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
                     )
                     OutlinedTextField(
                         value = entryInput,
-                        onValueChange = { entryInput = it.filter(Char::isDigit) },
+                        onValueChange = { entryInput = normalizeDecimalInput(it) },
                         modifier = Modifier.fillMaxWidth().testTag("position_entry_input"),
                         label = { Text("Harga Beli per $symbol (IDR)") },
                         singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
                     )
                     val amount = investedInput.toDoubleOrNull() ?: 0.0
                     val price = entryInput.toDoubleOrNull() ?: 0.0
@@ -136,7 +136,7 @@ fun SpotPositionCard(
                 TextButton(
                     enabled = investedInput.toDoubleOrNull()?.let { it > 0.0 } == true && entryInput.toDoubleOrNull()?.let { it > 0.0 } == true,
                     onClick = {
-                        store.markBought(symbol, investedInput.toDouble(), entryInput.toDouble())
+                        store.markBought(symbol, parseDecimal(entryInput)!!, entryInput.toDouble())
                         showDialog = false
                         onPositionChanged()
                     }
@@ -162,7 +162,7 @@ fun SpotPositionCard(
                 Text(if (position.isHolding) "Punya $symbol" else "Punya $symbol", fontSize = 10.sp, color = TvTextSecondary)
                 Spacer(Modifier.padding(horizontal = 2.dp))
                 Switch(
-                    checked = position.state == SpotPositionState.HOLDING,
+                    checked = position.isHolding || showDialog,
                     onCheckedChange = { checked ->
                         if (checked) {
                             investedInput = if (position.investedAmount > 0) position.investedAmount.toLong().toString() else ""
@@ -240,8 +240,8 @@ private fun PositionValue(label: String, value: String, modifier: Modifier = Mod
 
 private fun formatPositionQuantity(value: Double): String = when {
     value <= 0.0 -> "-"
-    value >= 1.0 -> String.format("%.6f", value).trimEnd('0').trimEnd('.')
-    else -> String.format("%.10f", value).trimEnd('0').trimEnd('.')
+    value >= 1.0 -> String.format("%.10f", value).trimEnd('0').trimEnd('.')
+    else -> String.format("%.16f", value).trimEnd('0').trimEnd('.')
 }
 
 private fun formatSignedMoney(value: Double): String =
@@ -249,3 +249,14 @@ private fun formatSignedMoney(value: Double): String =
 
 private fun formatSignedPct(value: Double): String =
     (if (value >= 0) "+" else "-") + PriceFormatter.formatPercentage(abs(value), includePlusSign = false)
+
+private fun normalizeDecimalInput(value: String): String {
+    val normalized = value.replace(',', '.')
+    if (normalized.count { it == '.' } > 1) {
+        return normalized.dropLast(1)
+    }
+    return normalized.filter { it.isDigit() || it == '.' }
+}
+
+private fun parseDecimal(value: String): Double? =
+    value.replace(',', '.').toDoubleOrNull()
