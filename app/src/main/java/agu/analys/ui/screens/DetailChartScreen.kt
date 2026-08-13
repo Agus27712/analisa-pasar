@@ -7,6 +7,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -163,53 +164,23 @@ fun DetailChartScreen(
     ) { innerPadding ->
         if (isChartExpanded) {
             Box(Modifier.fillMaxSize().padding(innerPadding).background(Color(0xFF0D0E12))) {
-                SimpleComposeChart(
-                    prices = emptyList(),
-                    candles = recentCandles,
-                    currentPrice = currentTick?.price ?: 0.0,
-                    isPositiveTrend = (currentTick?.change24h ?: 0.0) >= 0,
-                    modifier = Modifier.fillMaxSize()
-                )
-                IconButton(
-                    onClick = { viewModel.toggleChartExpanded() },
-                    modifier = Modifier.align(Alignment.TopEnd).padding(12.dp).clip(CircleShape).background(Color(0xCC121212))
-                ) { Icon(Icons.Default.FullscreenExit, "Tutup", tint = TvTextPrimary) }
+                SimpleComposeChart(prices = emptyList(), candles = recentCandles, currentPrice = currentTick?.price ?: 0.0, isPositiveTrend = (currentTick?.change24h ?: 0.0) >= 0, modifier = Modifier.fillMaxSize())
+                IconButton(onClick = { viewModel.toggleChartExpanded() }, modifier = Modifier.align(Alignment.TopEnd).padding(12.dp).clip(CircleShape).background(Color(0xCC121212))) { Icon(Icons.Default.FullscreenExit, "Tutup", tint = TvTextPrimary) }
             }
         } else {
-            Column(
-                Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 14.dp, vertical = 6.dp)
-            ) {
-                if (isShowingCached) {
-                    Text("Data terakhir tersimpan, belum live.", fontSize = 10.sp, color = WarningAmber, modifier = Modifier.padding(bottom = 5.dp))
-                }
-
+            Column(Modifier.fillMaxSize().padding(innerPadding).verticalScroll(rememberScrollState()).padding(horizontal = 14.dp, vertical = 6.dp)) {
+                if (isShowingCached) Text("Data terakhir tersimpan, belum live.", fontSize = 10.sp, color = WarningAmber, modifier = Modifier.padding(bottom = 5.dp))
                 currentTick?.let { tick -> PriceHeader(tick.price, tick.change24h) }
                 Spacer(Modifier.height(8.dp))
-                SimpleComposeChart(
-                    prices = emptyList(),
-                    candles = recentCandles,
-                    currentPrice = currentTick?.price ?: 0.0,
-                    isPositiveTrend = (currentTick?.change24h ?: 0.0) >= 0,
-                    modifier = Modifier.fillMaxWidth().height(300.dp)
-                )
+                SimpleComposeChart(prices = emptyList(), candles = recentCandles, currentPrice = currentTick?.price ?: 0.0, isPositiveTrend = (currentTick?.change24h ?: 0.0) >= 0, modifier = Modifier.fillMaxWidth().height(300.dp))
                 Spacer(Modifier.height(8.dp))
                 TimeframeSelector(selectedTimeframe, viewModel::selectTimeframe)
-
                 if (connectionState is MarketConnectionState.ConnectionLost) {
                     Spacer(Modifier.height(6.dp))
                     AnalysisCard {
-                        Text(
-                            if (isShowingCached) "Koneksi terputus. Harga di layar adalah data terakhir yang tersimpan." else "Data market sedang tidak tersedia.",
-                            fontSize = 10.sp,
-                            color = TvRed
-                        )
+                        Text(if (isShowingCached) "Koneksi terputus. Harga di layar adalah data terakhir yang tersimpan." else "Data market sedang tidak tersedia.", fontSize = 10.sp, color = TvRed)
                     }
                 }
-
                 Spacer(Modifier.height(8.dp))
                 MarketConditionCard(aiSignalState, marketStructure, currentIndicators)
                 Spacer(Modifier.height(8.dp))
@@ -217,13 +188,7 @@ fun DetailChartScreen(
                 Spacer(Modifier.height(8.dp))
                 WhyCard(aiSignalState, currentIndicators, marketStructure)
                 Spacer(Modifier.height(8.dp))
-                SpotPositionCard(
-                    symbol = selectedPair.symbol.removeSuffix("IDR"),
-                    signal = aiSignalState,
-                    position = spotPosition,
-                    currentPrice = currentTick?.price ?: 0.0,
-                    onPositionChanged = viewModel::refreshSpotPosition
-                )
+                SpotPositionCard(symbol = selectedPair.symbol.removeSuffix("IDR"), signal = aiSignalState, position = spotPosition, currentPrice = currentTick?.price ?: 0.0, onPositionChanged = viewModel::refreshSpotPosition)
                 Spacer(Modifier.height(8.dp))
                 ImportantLevelsCard(aiSignalState, marketStructure, currentTick?.price ?: 0.0)
                 Spacer(Modifier.height(8.dp))
@@ -238,15 +203,7 @@ fun DetailChartScreen(
     }
 
     if (showSymbolPickerSheet) {
-        SymbolPickerSheet(
-            popularPairs = TradingPair.POPULAR_PAIRS,
-            watchlist = watchlist,
-            currentSymbol = selectedPair.symbol,
-            onDismiss = { showSymbolPickerSheet = false },
-            onSelect = { pair -> viewModel.selectPair(pair); showSymbolPickerSheet = false },
-            onSelectAndWatch = { raw -> viewModel.selectAndWatch(raw, addToWatchlist = true); showSymbolPickerSheet = false },
-            onToggleWatch = { symbol -> viewModel.toggleWatchlist(symbol) }
-        )
+        SymbolPickerSheet(popularPairs = TradingPair.POPULAR_PAIRS, watchlist = watchlist, currentSymbol = selectedPair.symbol, onDismiss = { showSymbolPickerSheet = false }, onSelect = { pair -> viewModel.selectPair(pair); showSymbolPickerSheet = false }, onSelectAndWatch = { raw -> viewModel.selectAndWatch(raw, addToWatchlist = true); showSymbolPickerSheet = false }, onToggleWatch = { symbol -> viewModel.toggleWatchlist(symbol) })
     }
 }
 
@@ -268,14 +225,9 @@ private fun TimeframeSelector(selected: Timeframe, onSelect: (Timeframe) -> Unit
     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         listOf(Timeframe.M15, Timeframe.H1, Timeframe.H4, Timeframe.D1).forEach { tf ->
             val active = selected == tf
-            Box(
-                Modifier
-                    .clip(RoundedCornerShape(9.dp))
-                    .background(if (active) Color(0xFF087FF5) else Color(0xFF162536))
-                    .clickable { onSelect(tf) }
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
-                    .testTag("timeframe_${tf.code}")
-            ) { Text(tf.label.uppercase(), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = if (active) Color.White else TvTextSecondary) }
+            Box(Modifier.clip(RoundedCornerShape(9.dp)).background(if (active) Color(0xFF087FF5) else Color(0xFF162536)).clickable { onSelect(tf) }.padding(horizontal = 16.dp, vertical = 8.dp).testTag("timeframe_${tf.code}")) {
+                Text(tf.label.uppercase(), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = if (active) Color.White else TvTextSecondary)
+            }
         }
     }
 }
@@ -284,57 +236,25 @@ private fun TimeframeSelector(selected: Timeframe, onSelect: (Timeframe) -> Unit
 private fun MarketConditionCard(signal: AISignalState, structure: MarketStructureSnapshot, indicators: TechnicalIndicators) {
     val bullish = signal.action == SignalAction.BUY || structure.trend == "Bullish structure"
     val bearish = signal.action == SignalAction.SELL || structure.trend == "Bearish structure"
-    val title = when {
-        bullish && !bearish -> "CENDERUNG NAIK"
-        bearish && !bullish -> "CENDERUNG TURUN"
-        else -> "MASIH CAMPURAN"
-    }
-    val color = when {
-        bullish && !bearish -> TvGreen
-        bearish && !bullish -> TvRed
-        else -> WarningAmber
-    }
-    val detail = when {
-        bullish && !bearish -> "Harga dan beberapa indikator masih mendukung kenaikan."
-        bearish && !bullish -> "Harga dan beberapa indikator masih menunjukkan tekanan turun."
-        else -> "Sinyal belum cukup searah. Lebih aman menunggu konfirmasi."
-    }
+    val title = when { bullish && !bearish -> "CENDERUNG NAIK"; bearish && !bullish -> "CENDERUNG TURUN"; else -> "MASIH CAMPURAN" }
+    val color = when { bullish && !bearish -> TvGreen; bearish && !bullish -> TvRed; else -> WarningAmber }
+    val detail = when { bullish && !bearish -> "Harga dan beberapa indikator masih mendukung kenaikan."; bearish && !bullish -> "Harga dan beberapa indikator masih menunjukkan tekanan turun."; else -> "Sinyal belum cukup searah. Lebih aman menunggu konfirmasi." }
     AnalysisCard {
         SectionTitle("KONDISI PASAR")
         Spacer(Modifier.height(6.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(10.dp).background(color, CircleShape))
-            Spacer(Modifier.width(8.dp))
-            Text(title, color = color, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
-        }
+        Row(verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(10.dp).background(color, CircleShape)); Spacer(Modifier.width(8.dp)); Text(title, color = color, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold) }
         Spacer(Modifier.height(5.dp))
         Text(detail, color = TvTextPrimary, fontSize = 11.sp)
         Spacer(Modifier.height(8.dp))
-        Text(
-            "RSI ${formatIndicator(indicators.rsi14)}  •  EMA20/50 ${emaRelation(indicators)}",
-            color = TvTextSecondary,
-            fontSize = 9.sp
-        )
+        Text("RSI ${formatIndicator(indicators.rsi14)}  •  EMA20/50 ${emaRelation(indicators)}", color = TvTextSecondary, fontSize = 9.sp)
     }
 }
 
 @Composable
 private fun RecommendationCard(signal: AISignalState) {
-    val color = when (signal.action) {
-        SignalAction.BUY -> TvGreen
-        SignalAction.SELL -> TvRed
-        SignalAction.HOLD -> WarningAmber
-    }
-    val title = when (signal.action) {
-        SignalAction.BUY -> "BISA PERTIMBANGKAN BELI"
-        SignalAction.SELL -> "PERTIMBANGKAN JUAL"
-        SignalAction.HOLD -> "TAHAN / TUNGGU"
-    }
-    val description = when (signal.action) {
-        SignalAction.BUY -> "Tren cukup mendukung, tetapi tetap gunakan area entry dan batas risiko."
-        SignalAction.SELL -> "Tekanan turun lebih dominan. Jangan buru-buru masuk sebelum struktur membaik."
-        SignalAction.HOLD -> "Belum ada alasan yang cukup kuat untuk masuk atau keluar sekarang."
-    }
+    val color = when (signal.action) { SignalAction.BUY -> TvGreen; SignalAction.SELL -> TvRed; SignalAction.HOLD -> WarningAmber }
+    val title = when (signal.action) { SignalAction.BUY -> "BISA PERTIMBANGKAN BELI"; SignalAction.SELL -> "PERTIMBANGKAN JUAL"; SignalAction.HOLD -> "TAHAN / TUNGGU" }
+    val description = when (signal.action) { SignalAction.BUY -> "Tren cukup mendukung, tetapi tetap gunakan area masuk dan batas risiko."; SignalAction.SELL -> "Tekanan turun lebih dominan. Jangan buru-buru masuk sebelum struktur membaik."; SignalAction.HOLD -> "Belum ada alasan yang cukup kuat untuk masuk atau keluar sekarang." }
     AnalysisCard {
         SectionTitle("REKOMENDASI")
         Spacer(Modifier.height(7.dp))
@@ -354,7 +274,7 @@ private fun WhyCard(signal: AISignalState, indicators: TechnicalIndicators, stru
         Spacer(Modifier.height(6.dp))
         reasons.forEach { reason ->
             Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.Top) {
-                Box(Modifier.size(8.dp).padding(top = 3.dp).background(TvGreen, CircleShape))
+                Box(Modifier.size(8.dp).background(TvGreen, CircleShape))
                 Spacer(Modifier.width(8.dp))
                 Text(reason, fontSize = 10.sp, color = TvTextPrimary, lineHeight = 15.sp)
             }
@@ -378,9 +298,7 @@ private fun ImportantLevelsCard(signal: AISignalState, structure: MarketStructur
             LevelRow("Batas rugi", signal.stopLoss, TvRed)
         } else {
             LevelRow("Area masuk", null, InfoBlue, "Belum ada setup yang cukup kuat")
-            if (price > 0 && structure.support != null && structure.resistance != null) {
-                Text("Pantau reaksi harga di antara support dan resistance sebelum menentukan entry.", fontSize = 9.sp, color = TvTextSecondary, modifier = Modifier.padding(top = 5.dp))
-            }
+            if (price > 0 && structure.support != null && structure.resistance != null) Text("Pantau reaksi harga di antara support dan resistance sebelum menentukan entry.", fontSize = 9.sp, color = TvTextSecondary, modifier = Modifier.padding(top = 5.dp))
         }
     }
 }
@@ -452,14 +370,7 @@ private fun DisclaimerCard() {
 
 @Composable
 private fun AnalysisCard(content: @Composable ColumnScope.() -> Unit) {
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .background(AnalysisCard, RoundedCornerShape(16.dp))
-            .border(1.dp, AnalysisBorder, RoundedCornerShape(16.dp))
-            .padding(14.dp),
-        content = content
-    )
+    Column(Modifier.fillMaxWidth().background(AnalysisCard, RoundedCornerShape(16.dp)).border(1.dp, AnalysisBorder, RoundedCornerShape(16.dp)).padding(14.dp), content = content)
 }
 
 @Composable
@@ -469,102 +380,28 @@ private fun SectionTitle(text: String) {
 
 private fun buildSimpleReasons(signal: AISignalState, indicators: TechnicalIndicators, structure: MarketStructureSnapshot): List<String> {
     val result = mutableListOf<String>()
-    if (indicators.ema20.isFinite() && indicators.ema50.isFinite()) {
-        result += if (indicators.ema20 > indicators.ema50) "Harga rata-rata jangka pendek masih di atas rata-rata menengah." else "Rata-rata harga jangka pendek masih di bawah rata-rata menengah."
-    }
+    if (indicators.ema20.isFinite() && indicators.ema50.isFinite()) result += if (indicators.ema20 > indicators.ema50) "Harga rata-rata jangka pendek masih di atas rata-rata menengah." else "Rata-rata harga jangka pendek masih di bawah rata-rata menengah."
     if (indicators.macdHist.isFinite()) result += if (indicators.macdHist >= 0) "Momentum naik masih lebih dominan." else "Momentum turun masih lebih dominan."
     if (structure.trend == "Bullish structure") result += "Struktur pasar membentuk Higher High dan Higher Low."
     else if (structure.trend == "Bearish structure") result += "Struktur pasar membentuk Lower High dan Lower Low."
-    if (indicators.rsi14.isFinite()) {
-        result += when {
-            indicators.rsi14 > 70 -> "RSI sudah tinggi, jadi risiko koreksi perlu diperhatikan."
-            indicators.rsi14 < 30 -> "RSI sudah rendah, jadi potensi pantulan perlu dikonfirmasi."
-            else -> "RSI masih di area tengah, belum menunjukkan kondisi ekstrem."
-        }
-    }
+    if (indicators.rsi14.isFinite()) result += when { indicators.rsi14 > 70 -> "RSI sudah tinggi, jadi risiko koreksi perlu diperhatikan."; indicators.rsi14 < 30 -> "RSI sudah rendah, jadi potensi pantulan perlu dikonfirmasi."; else -> "RSI masih di area tengah, belum menunjukkan kondisi ekstrem." }
     if (result.isEmpty()) result += signal.reasoning.firstOrNull() ?: "Data teknikal belum cukup untuk menjelaskan arah pasar."
     return result.take(3)
 }
 
 private fun formatIndicator(value: Double): String = if (value.isFinite()) String.format("%.2f", value) else "—"
-
-private fun emaRelation(i: TechnicalIndicators): String = when {
-    !i.ema20.isFinite() || !i.ema50.isFinite() -> "belum cukup data"
-    i.ema20 > i.ema50 -> "20 > 50"
-    i.ema20 < i.ema50 -> "20 < 50"
-    else -> "20 ≈ 50"
-}
-
-private fun emaLabel(i: TechnicalIndicators): String = when {
-    !i.ema20.isFinite() -> "Belum cukup data"
-    i.ema20 > i.ema50 && i.ema50 > i.ema200 -> "20 > 50 > 200 • cenderung naik"
-    i.ema20 < i.ema50 && i.ema50 < i.ema200 -> "20 < 50 < 200 • cenderung turun"
-    else -> "Belum searah"
-}
-
-private fun macdLabel(hist: Double): String = when {
-    !hist.isFinite() -> "Belum cukup data"
-    hist > 0 -> "Momentum naik"
-    hist < 0 -> "Momentum turun"
-    else -> "Netral"
-}
-
-private fun rsiLabel(rsi: Double): String = when {
-    !rsi.isFinite() -> "Belum cukup data"
-    rsi > 70 -> "Jenuh beli"
-    rsi < 30 -> "Jenuh jual"
-    else -> "Normal"
-}
-
-private fun bollingerLabel(i: TechnicalIndicators): String = when {
-    !i.bbUpper.isFinite() || !i.bbLower.isFinite() -> "Belum cukup data"
-    else -> "Harga di antara batas atas & bawah"
-}
-
-private fun volatilityLabel(atr: Double, ema20: Double): String {
-    if (!atr.isFinite() || !ema20.isFinite() || ema20 <= 0) return "Belum cukup data"
-    val pct = atr / ema20 * 100.0
-    return when {
-        pct >= 8 -> "Tinggi"
-        pct >= 4 -> "Sedang"
-        else -> "Rendah"
-    }
-}
-
-private fun rsiLabel(value: Double): String = when {
-    !value.isFinite() -> "Belum tersedia"
-    value >= 70 -> "Jenuh beli"
-    value <= 30 -> "Jenuh jual"
-    else -> "Bullish/normal"
-}
-
-private fun simpleStructure(snapshot: MarketStructureSnapshot): String = when (snapshot.trend) {
-    "Bullish structure" -> "HH + HL (naik)"
-    "Bearish structure" -> "LH + LL (turun)"
-    else -> "Range / transisi"
-}
-
-private fun simpleTrend(indicators: TechnicalIndicators, structure: MarketStructureSnapshot): String = when {
-    structure.trend == "Bullish structure" -> "Naik"
-    structure.trend == "Bearish structure" -> "Turun"
-    indicators.ema20.isFinite() && indicators.ema50.isFinite() && indicators.ema20 > indicators.ema50 -> "Cenderung naik"
-    indicators.ema20.isFinite() && indicators.ema50.isFinite() -> "Cenderung turun"
-    else -> "Belum jelas"
-}
-
-private fun priceDistancePct(price: Double, level: Double): String = if (price > 0 && level > 0) String.format("%.1f%%", abs(price - level) / price * 100.0) else ""
+private fun emaRelation(i: TechnicalIndicators): String = when { !i.ema20.isFinite() || !i.ema50.isFinite() -> "belum cukup data"; i.ema20 > i.ema50 -> "20 > 50"; i.ema20 < i.ema50 -> "20 < 50"; else -> "20 ≈ 50" }
+private fun emaLabel(i: TechnicalIndicators): String = when { !i.ema20.isFinite() -> "Belum cukup data"; i.ema20 > i.ema50 && i.ema50 > i.ema200 -> "20 > 50 > 200 • cenderung naik"; i.ema20 < i.ema50 && i.ema50 < i.ema200 -> "20 < 50 < 200 • cenderung turun"; else -> "Belum searah" }
+private fun macdLabel(hist: Double): String = when { !hist.isFinite() -> "Belum cukup data"; hist > 0 -> "Momentum naik"; hist < 0 -> "Momentum turun"; else -> "Netral" }
+private fun rsiLabel(rsi: Double): String = when { !rsi.isFinite() -> "Belum cukup data"; rsi > 70 -> "Jenuh beli"; rsi < 30 -> "Jenuh jual"; else -> "Normal" }
+private fun bollingerLabel(i: TechnicalIndicators): String = when { !i.bbUpper.isFinite() || !i.bbLower.isFinite() -> "Belum cukup data"; else -> "Harga di antara batas atas & bawah" }
+private fun volatilityLabel(atr: Double, ema20: Double): String { if (!atr.isFinite() || !ema20.isFinite() || ema20 <= 0) return "Belum cukup data"; val pct = atr / ema20 * 100.0; return when { pct >= 8 -> "Tinggi"; pct >= 4 -> "Sedang"; else -> "Rendah" } }
+private fun simpleStructure(snapshot: MarketStructureSnapshot): String = when (snapshot.trend) { "Bullish structure" -> "HH + HL (naik)"; "Bearish structure" -> "LH + LL (turun)"; else -> "Range / transisi" }
+private fun simpleTrend(indicators: TechnicalIndicators, structure: MarketStructureSnapshot): String = when { structure.trend == "Bullish structure" -> "Naik"; structure.trend == "Bearish structure" -> "Turun"; indicators.ema20.isFinite() && indicators.ema50.isFinite() && indicators.ema20 > indicators.ema50 -> "Cenderung naik"; indicators.ema20.isFinite() && indicators.ema50.isFinite() -> "Cenderung turun"; else -> "Belum jelas" }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SymbolPickerSheet(
-    popularPairs: List<TradingPair>,
-    watchlist: Set<String>,
-    currentSymbol: String,
-    onDismiss: () -> Unit,
-    onSelect: (TradingPair) -> Unit,
-    onSelectAndWatch: (String) -> Unit,
-    onToggleWatch: (String) -> Unit
-) {
+private fun SymbolPickerSheet(popularPairs: List<TradingPair>, watchlist: Set<String>, currentSymbol: String, onDismiss: () -> Unit, onSelect: (TradingPair) -> Unit, onSelectAndWatch: (String) -> Unit, onToggleWatch: (String) -> Unit) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var customInput by remember { mutableStateOf("") }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = Color(0xFF101720), contentColor = TvTextPrimary) {
@@ -573,34 +410,11 @@ private fun SymbolPickerSheet(
             Spacer(Modifier.height(4.dp))
             Text("Ketik simbol Indodax, misalnya ADA, AVAX, atau SHIB.", fontSize = 11.sp, color = TvTextSecondary)
             Spacer(Modifier.height(12.dp))
-            OutlinedTextField(
-                value = customInput,
-                onValueChange = { customInput = it.uppercase().filter { c -> c.isLetterOrDigit() } },
-                modifier = Modifier.fillMaxWidth().testTag("custom_symbol_input"),
-                singleLine = true,
-                placeholder = { Text("Contoh: ADA atau ADAIDR", color = TvTextSecondary, fontSize = 13.sp) },
-                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters, imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = { if (customInput.isNotBlank()) onSelectAndWatch(customInput) }),
-                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = TvGreen, unfocusedBorderColor = Color(0xFF2A3540), focusedTextColor = TvTextPrimary, unfocusedTextColor = TvTextPrimary, cursorColor = TvGreen),
-                shape = RoundedCornerShape(12.dp)
-            )
+            OutlinedTextField(value = customInput, onValueChange = { customInput = it.uppercase().filter { c -> c.isLetterOrDigit() } }, modifier = Modifier.fillMaxWidth().testTag("custom_symbol_input"), singleLine = true, placeholder = { Text("Contoh: ADA atau ADAIDR", color = TvTextSecondary, fontSize = 13.sp) }, keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters, imeAction = ImeAction.Done), keyboardActions = KeyboardActions(onDone = { if (customInput.isNotBlank()) onSelectAndWatch(customInput) }), colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = TvGreen, unfocusedBorderColor = Color(0xFF2A3540), focusedTextColor = TvTextPrimary, unfocusedTextColor = TvTextPrimary, cursorColor = TvGreen), shape = RoundedCornerShape(12.dp))
             Spacer(Modifier.height(10.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    onClick = { if (customInput.isNotBlank()) onSelectAndWatch(customInput) },
-                    enabled = customInput.isNotBlank(),
-                    modifier = Modifier.weight(1f).testTag("add_pair_and_watch_button"),
-                    colors = ButtonDefaults.buttonColors(containerColor = TvGreen),
-                    shape = RoundedCornerShape(12.dp)
-                ) { Icon(Icons.Default.Add, null, Modifier.size(16.dp), tint = Color.Black); Spacer(Modifier.width(6.dp)); Text("Buka + Simpan", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.Black) }
-                OutlinedButton(
-                    onClick = { if (customInput.isNotBlank()) onSelect(TradingPair.fromCustomSymbol(customInput)) },
-                    enabled = customInput.isNotBlank(),
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp),
-                    border = BorderStroke(1.dp, TvGreen),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = TvGreen)
-                ) { Text("Hanya Buka", fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                Button(onClick = { if (customInput.isNotBlank()) onSelectAndWatch(customInput) }, enabled = customInput.isNotBlank(), modifier = Modifier.weight(1f).testTag("add_pair_and_watch_button"), colors = ButtonDefaults.buttonColors(containerColor = TvGreen), shape = RoundedCornerShape(12.dp)) { Icon(Icons.Default.Add, null, Modifier.size(16.dp), tint = Color.Black); Spacer(Modifier.width(6.dp)); Text("Buka + Simpan", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.Black) }
+                OutlinedButton(onClick = { if (customInput.isNotBlank()) onSelect(TradingPair.fromCustomSymbol(customInput)) }, enabled = customInput.isNotBlank(), modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, TvGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = TvGreen)) { Text("Hanya Buka", fontSize = 12.sp, fontWeight = FontWeight.Bold) }
             }
             Spacer(Modifier.height(16.dp))
             Text("KOIN POPULER", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TvGreen, letterSpacing = 0.6.sp)
@@ -609,17 +423,9 @@ private fun SymbolPickerSheet(
                 popularPairs.forEach { pair ->
                     val watched = pair.symbol in watchlist
                     val selected = pair.symbol == currentSymbol
-                    Row(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(if (selected) TvGreen.copy(alpha = 0.12f) else Color(0x14FFFFFF)).clickable { onSelect(pair) }.padding(horizontal = 12.dp, vertical = 10.dp).testTag("pair_item_${pair.symbol}"),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(Modifier.weight(1f)) {
-                            Text(pair.displayName, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TvTextPrimary)
-                            Text(pair.symbol, fontSize = 10.sp, color = TvTextSecondary)
-                        }
-                        IconButton(onClick = { onToggleWatch(pair.symbol) }, modifier = Modifier.size(36.dp).testTag("watch_toggle_${pair.symbol}")) {
-                            Icon(if (watched) Icons.Default.Star else Icons.Default.StarBorder, if (watched) "Hapus watchlist" else "Tambah watchlist", tint = if (watched) TvGold else TvTextSecondary, modifier = Modifier.size(20.dp))
-                        }
+                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(if (selected) TvGreen.copy(alpha = 0.12f) else Color(0x14FFFFFF)).clickable { onSelect(pair) }.padding(horizontal = 12.dp, vertical = 10.dp).testTag("pair_item_${pair.symbol}"), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) { Text(pair.displayName, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TvTextPrimary); Text(pair.symbol, fontSize = 10.sp, color = TvTextSecondary) }
+                        IconButton(onClick = { onToggleWatch(pair.symbol) }, modifier = Modifier.size(36.dp).testTag("watch_toggle_${pair.symbol}")) { Icon(if (watched) Icons.Default.Star else Icons.Default.StarBorder, if (watched) "Hapus watchlist" else "Tambah watchlist", tint = if (watched) TvGold else TvTextSecondary, modifier = Modifier.size(20.dp)) }
                     }
                 }
             }
