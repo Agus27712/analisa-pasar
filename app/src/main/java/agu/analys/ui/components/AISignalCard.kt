@@ -22,7 +22,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ExpandLess
@@ -32,18 +31,16 @@ import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.TrendingDown
 import androidx.compose.material.icons.filled.TrendingUp
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -56,18 +53,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import agu.analys.model.AISignalState
 import agu.analys.model.SignalAction
-<<<<<<< HEAD
-import agu.analys.trading.SpotPosition
-import agu.analys.trading.SpotPositionState
-import agu.analys.trading.SpotPositionStore
-=======
->>>>>>> main
 import agu.analys.ui.theme.TvAmber
 import agu.analys.ui.theme.TvCardBackground
 import agu.analys.ui.theme.TvGreen
@@ -81,12 +71,6 @@ fun AISignalCard(
     signal: AISignalState,
     onDeepAuditClick: () -> Unit,
     modifier: Modifier = Modifier,
-<<<<<<< HEAD
-    marketSymbol: String = "",
-    position: SpotPosition = SpotPosition(),
-    onOwnershipChange: ((owned: Boolean, referenceEntry: Double) -> Unit)? = null,
-=======
->>>>>>> main
     onOpenIndodaxClick: (() -> Unit)? = null,
     auditText: String? = null,
     isAuditLoading: Boolean = false,
@@ -97,127 +81,7 @@ fun AISignalCard(
     onClearGemini: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
-    val positionStore = remember(context) { SpotPositionStore(context) }
-    var positionDetails by remember(marketSymbol) { mutableStateOf(SpotPosition()) }
     var detailsExpanded by remember { mutableStateOf(false) }
-<<<<<<< HEAD
-    var showPositionDialog by remember { mutableStateOf(false) }
-    var investedInput by remember { mutableStateOf("") }
-    var entryInput by remember { mutableStateOf("") }
-
-    LaunchedEffect(marketSymbol) {
-        positionDetails = positionStore.get(marketSymbol)
-    }
-
-    val actionColor by animateColorAsState(
-        targetValue = when (signal.action) {
-            SignalAction.BUY -> TvGreen
-            SignalAction.SELL -> TvRed
-            SignalAction.HOLD -> TvAmber
-        },
-        label = "actionColorAnimation"
-    )
-    val actionNameIndo = when (signal.action) {
-        SignalAction.BUY -> "BELI"
-        SignalAction.SELL -> "JUAL"
-        SignalAction.HOLD -> "TAHAN"
-    }
-    val scoreLabel = if (signal.action == SignalAction.HOLD) "SETUP BELUM KUAT • ${signal.confidence}/100" else "SETUP ${signal.confidence}/100"
-    val structureBlocked = signal.reasoning.any { it.contains("bertentangan dengan market structure", ignoreCase = true) }
-    val holdReason = signal.reasoning.firstOrNull {
-        it.contains("dibatalkan", true) || it.contains("tidak ada", true) || it.contains("belum", true) || it.contains("kurang", true)
-    } ?: signal.reasoning.firstOrNull()
-
-    val spotAction = when {
-        position.state == SpotPositionState.NO_POSITION && signal.action == SignalAction.BUY -> "READY_BUY"
-        position.state == SpotPositionState.NO_POSITION && signal.action == SignalAction.SELL -> "IGNORE_SELL"
-        position.state == SpotPositionState.NO_POSITION && signal.action == SignalAction.HOLD -> "WAIT_BUY"
-        position.state == SpotPositionState.HOLDING && signal.action == SignalAction.SELL -> "READY_SELL"
-        position.state == SpotPositionState.HOLDING -> "HOLDING"
-        else -> "WAIT_BUY"
-    }
-    val spotTitle = when (spotAction) {
-        "READY_BUY" -> "SIAP BELI"
-        "READY_SELL" -> "SIAP JUAL"
-        "HOLDING" -> "SUDAH PUNYA COIN"
-        "IGNORE_SELL" -> "TIDAK ADA POSISI"
-        else -> "TUNGGU BUY"
-    }
-    val spotSubtitle = when (spotAction) {
-        "READY_BUY" -> "Sinyal BUY valid dan kamu belum memiliki coin."
-        "READY_SELL" -> "Sinyal SELL muncul saat posisi sedang dimiliki."
-        "HOLDING" -> if (signal.action == SignalAction.BUY) "Sudah punya coin. Jangan beli ulang hanya karena sinyal BUY." else "Tetap pegang sampai ada alasan keluar yang valid."
-        "IGNORE_SELL" -> "SELL diabaikan karena belum ada coin yang bisa dijual."
-        else -> "Belum ada setup BUY yang cukup kuat. Jangan masuk posisi dulu."
-    }
-    val spotColor = when (spotAction) {
-        "READY_BUY" -> TvGreen
-        "READY_SELL" -> TvRed
-        "HOLDING" -> TvGreen
-        "IGNORE_SELL" -> TvTextSecondary
-        else -> TvAmber
-    }
-
-    if (showPositionDialog) {
-        AlertDialog(
-            onDismissRequest = { showPositionDialog = false },
-            title = { Text("Posisi $marketSymbol") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Masukkan posisi yang kamu miliki. Aplikasi tidak membaca saldo Indodax.", fontSize = 12.sp, color = TvTextSecondary)
-                    OutlinedTextField(
-                        value = investedInput,
-                        onValueChange = { investedInput = it },
-                        modifier = Modifier.fillMaxWidth().testTag("position_invested_input"),
-                        label = { Text("Nilai pembelian (Rp)") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                    )
-                    OutlinedTextField(
-                        value = entryInput,
-                        onValueChange = { entryInput = it },
-                        modifier = Modifier.fillMaxWidth().testTag("position_entry_input"),
-                        label = { Text("Harga beli per $marketSymbol") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                    )
-                    Text("Jumlah koin dihitung otomatis dari nilai pembelian ÷ harga beli.", fontSize = 10.sp, color = TvTextSecondary)
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    enabled = parseRupiah(investedInput) > 0.0 && parseRupiah(entryInput) > 0.0,
-                    onClick = {
-                        val invested = parseRupiah(investedInput)
-                        val entry = parseRupiah(entryInput)
-                        positionStore.markBought(marketSymbol, invested, entry)
-                        positionDetails = positionStore.get(marketSymbol)
-                        onOwnershipChange?.invoke(true, entry)
-                        showPositionDialog = false
-                    }
-                ) { Text("Simpan") }
-            },
-            dismissButton = { TextButton(onClick = { showPositionDialog = false }) { Text("Batal") } }
-        )
-    }
-
-    Card(
-        modifier = modifier.fillMaxWidth().border(1.dp, TvGreen.copy(alpha = 0.25f), RoundedCornerShape(20.dp)).testTag("ai_signal_card"),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = TvCardBackground),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-    ) {
-        Column(Modifier.padding(16.dp).fillMaxWidth()) {
-            Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(8.dp).background(TvGreen, CircleShape))
-                    Spacer(Modifier.width(8.dp))
-                    Text("ANALISIS TEKNIKAL", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TvGreen, letterSpacing = 1.2.sp)
-                }
-                Box(Modifier.clip(RoundedCornerShape(20.dp)).background(actionColor).padding(horizontal = 10.dp, vertical = 4.dp)) {
-                    Text(if (signal.confidence == 0) "DATA BELUM CUKUP" else scoreLabel, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                }
-=======
     val actionColor by animateColorAsState(targetValue = when (signal.action) { SignalAction.BUY -> TvGreen; SignalAction.SELL -> TvRed; SignalAction.HOLD -> TvAmber }, label = "actionColorAnimation")
     val actionNameIndo = when (signal.action) { SignalAction.BUY -> "BELI"; SignalAction.SELL -> "JUAL"; SignalAction.HOLD -> "TAHAN" }
     val scoreLabel = if (signal.action == SignalAction.HOLD) "SETUP BELUM KUAT • ${signal.confidence}/100" else "SETUP ${signal.confidence}/100"
@@ -229,25 +93,11 @@ fun AISignalCard(
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Row(verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(8.dp).background(TvGreen, CircleShape)); Spacer(Modifier.width(8.dp)); Text("ANALISIS TEKNIKAL", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TvGreen, letterSpacing = 1.2.sp) }
                 Box(Modifier.clip(RoundedCornerShape(20.dp)).background(actionColor).padding(horizontal = 10.dp, vertical = 4.dp)) { Text(if (signal.confidence == 0) "DATA BELUM CUKUP" else scoreLabel, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White) }
->>>>>>> main
             }
             if (structureBlocked) {
                 Spacer(Modifier.height(8.dp))
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(TvRed.copy(alpha = 0.12f))
-                        .border(1.dp, TvRed.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
-                        .padding(horizontal = 10.dp, vertical = 7.dp)
-                ) {
-                    Text(
-                        "STRUCTURE BLOCK — sinyal dibatalkan karena bertentangan dengan struktur pasar",
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TvRed,
-                        maxLines = 2
-                    )
+                Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(TvRed.copy(alpha = 0.12f)).border(1.dp, TvRed.copy(alpha = 0.35f), RoundedCornerShape(10.dp)).padding(horizontal = 10.dp, vertical = 7.dp)) {
+                    Text("STRUCTURE BLOCK — sinyal dibatalkan karena bertentangan dengan struktur pasar", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TvRed, maxLines = 2)
                 }
             }
             Spacer(Modifier.height(12.dp))
@@ -260,90 +110,14 @@ fun AISignalCard(
             }
             Spacer(Modifier.height(10.dp))
             LinearProgressIndicator(progress = { (signal.confidence / 100.0f).coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(3.dp)), color = actionColor, trackColor = Color(0x1AFFFFFF))
-<<<<<<< HEAD
-            Spacer(Modifier.height(12.dp))
-
-            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(spotColor.copy(alpha = 0.09f)).border(1.dp, spotColor.copy(alpha = 0.28f), RoundedCornerShape(12.dp)).padding(11.dp)) {
-                Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text("STATUS SPOT", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = spotColor, letterSpacing = 0.8.sp)
-                        Text(spotTitle, fontSize = 15.sp, fontWeight = FontWeight.Black, color = spotColor)
-                    }
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text(if (position.isHolding) "HOLDING" else "NO POSITION", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = TvTextSecondary)
-                        Spacer(Modifier.height(3.dp))
-                        Switch(
-                            checked = position.isHolding,
-                            onCheckedChange = { checked ->
-                                if (checked) {
-                                    investedInput = if (positionDetails.investedAmount > 0.0) positionDetails.investedAmount.toString() else ""
-                                    entryInput = if (positionDetails.entryPrice > 0.0) positionDetails.entryPrice.toString() else formatInputPrice(signal.entryPrice)
-                                    showPositionDialog = true
-                                } else {
-                                    positionStore.markSold(marketSymbol)
-                                    positionDetails = SpotPosition()
-                                    onOwnershipChange?.invoke(false, 0.0)
-                                }
-                            },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color.Black,
-                                checkedTrackColor = TvGreen,
-                                uncheckedThumbColor = TvTextSecondary,
-                                uncheckedTrackColor = Color(0xFF26313B),
-                                uncheckedBorderColor = Color(0xFF3A4652)
-                            ),
-                            modifier = Modifier.testTag("asset_ownership_switch")
-                        )
-                    }
-                }
-                Spacer(Modifier.height(3.dp))
-                Text(spotSubtitle, fontSize = 10.sp, color = TvTextPrimary, lineHeight = 14.sp)
-                Spacer(Modifier.height(5.dp))
-                if (position.isHolding && positionDetails.investedAmount > 0.0 && positionDetails.entryPrice > 0.0) {
-                    Text("Modal: ${PriceFormatter.formatPrice(positionDetails.investedAmount)}", fontSize = 9.sp, color = TvTextSecondary)
-                    Text("Harga beli: ${PriceFormatter.formatPriceFull(positionDetails.entryPrice)}", fontSize = 9.sp, color = TvTextSecondary)
-                    Text("Jumlah: ${formatQuantity(positionDetails.quantity)} $marketSymbol", fontSize = 9.sp, color = TvTextSecondary)
-                    Spacer(Modifier.height(5.dp))
-                    OutlinedButton(onClick = {
-                        investedInput = positionDetails.investedAmount.toString()
-                        entryInput = positionDetails.entryPrice.toString()
-                        showPositionDialog = true
-                    }, modifier = Modifier.fillMaxWidth().height(36.dp), contentPadding = PaddingValues(horizontal = 8.dp), shape = RoundedCornerShape(9.dp)) {
-                        Text("Ubah posisi", fontSize = 10.sp)
-                    }
-                } else {
-                    Text("Belum ada detail aset. Aktifkan switch untuk memasukkan posisi.", fontSize = 9.sp, color = TvTextSecondary)
-                }
-                Text("Konfirmasi manual • tersimpan per koin", fontSize = 9.sp, color = TvTextSecondary)
-            }
-
-            Spacer(Modifier.height(12.dp))
-            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-=======
             Spacer(Modifier.height(14.dp))
             Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
->>>>>>> main
                 LevelRow("ENTRY / MASUK", formatLevel(signal.entryPrice), TvTextPrimary)
                 LevelRow("TP1 • 2× ATR", formatLevel(signal.targetPrice1), TvGreen)
                 LevelRow("TP2 • 3,5× ATR", formatLevel(signal.targetPrice2), TvGreen)
                 LevelRow("STOP LOSS • 1,5× ATR", formatLevel(signal.stopLoss), TvRed)
                 LevelRow("R:R MATEMATIS", signal.riskRewardRatio, TvTextPrimary)
             }
-<<<<<<< HEAD
-
-            if (signal.action == SignalAction.HOLD) {
-                Spacer(Modifier.height(9.dp))
-                Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(TvAmber.copy(alpha = 0.10f)).border(1.dp, TvAmber.copy(alpha = 0.28f), RoundedCornerShape(10.dp)).padding(horizontal = 10.dp, vertical = 8.dp)) {
-                    Column {
-                        Text("KENAPA TAHAN?", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = TvAmber, letterSpacing = 0.7.sp)
-                        Text(holdReason ?: "Belum ada alasan spesifik dari data candle saat ini.", fontSize = 10.sp, color = TvTextPrimary, lineHeight = 14.sp)
-                        Text(if (position.isHolding) "Kamu sudah punya coin: TAHAN berarti tetap pegang sampai ada sinyal keluar." else "Kamu belum punya coin: TAHAN berarti tunggu sinyal BUY valid.", fontSize = 9.sp, color = TvTextSecondary, lineHeight = 13.sp)
-                    }
-                }
-            }
-
-=======
->>>>>>> main
             Spacer(Modifier.height(10.dp))
             Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Color(0x0AFFFFFF)).padding(horizontal = 10.dp, vertical = 8.dp), verticalAlignment = Alignment.Top) { Icon(Icons.Default.Info, contentDescription = null, tint = TvTextSecondary, modifier = Modifier.size(16.dp)); Spacer(Modifier.width(7.dp)); Text("TP/SL adalah level latihan berbasis ATR, bukan prediksi harga pasti atau support/resistance.", fontSize = 10.sp, color = TvTextSecondary, lineHeight = 14.sp) }
             Spacer(Modifier.height(10.dp))
@@ -367,25 +141,8 @@ fun AISignalCard(
                 }
             }
             Spacer(Modifier.height(12.dp))
-<<<<<<< HEAD
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = {
-                    if (onOpenIndodaxClick != null) onOpenIndodaxClick() else {
-                        val launchIntent = context.packageManager.getLaunchIntentForPackage("id.co.bitcoin")
-                        if (launchIntent != null) {
-                            launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            context.startActivity(launchIntent)
-                        } else Toast.makeText(context, "Aplikasi Indodax belum terpasang di HP ini.", Toast.LENGTH_SHORT).show()
-                    }
-                }, modifier = Modifier.weight(1f).height(44.dp).testTag("execute_signal_button"), colors = ButtonDefaults.buttonColors(containerColor = TvGreen), shape = RoundedCornerShape(12.dp), contentPadding = PaddingValues(horizontal = 8.dp)) {
-                    Icon(Icons.Default.OpenInNew, null, Modifier.size(16.dp), tint = Color.Black)
-                    Spacer(Modifier.width(4.dp))
-                    Text("Buka Indodax", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.Black, maxLines = 1)
-                }
-=======
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = { val launchIntent = context.packageManager.getLaunchIntentForPackage("id.co.bitcoin"); if (launchIntent != null) { launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); context.startActivity(launchIntent) } else Toast.makeText(context, "Aplikasi Indodax belum terpasang di HP ini.", Toast.LENGTH_SHORT).show() }, modifier = Modifier.weight(1f).height(44.dp).testTag("execute_signal_button"), colors = ButtonDefaults.buttonColors(containerColor = TvGreen), shape = RoundedCornerShape(12.dp), contentPadding = PaddingValues(horizontal = 8.dp)) { Icon(Icons.Default.OpenInNew, null, Modifier.size(16.dp), tint = Color.Black); Spacer(Modifier.width(4.dp)); Text("Buka Indodax", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.Black, maxLines = 1) }
->>>>>>> main
                 OutlinedButton(onClick = onDeepAuditClick, enabled = !isAuditLoading, modifier = Modifier.weight(1f).height(44.dp).testTag("ai_audit_button"), colors = ButtonDefaults.outlinedButtonColors(contentColor = TvTextPrimary), border = BorderStroke(1.dp, Color(0x33FFFFFF)), shape = RoundedCornerShape(12.dp), contentPadding = PaddingValues(horizontal = 8.dp)) {
                     if (isAuditLoading) CircularProgressIndicator(modifier = Modifier.size(15.dp), strokeWidth = 2.dp, color = TvGreen) else Icon(Icons.Default.AutoAwesome, null, tint = Color(0xFF8E8CD8), modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp)); Text("Groq Audit", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
@@ -417,16 +174,6 @@ fun AISignalCard(
 }
 
 private fun findReason(signal: AISignalState, prefix: String): String = signal.reasoning.firstOrNull { it.startsWith(prefix, ignoreCase = true) } ?: "Belum ada penjelasan dari data candle saat ini."
-<<<<<<< HEAD
-private fun parseRupiah(value: String): Double = value.replace(".", "").replace(",", ".").filter { it.isDigit() || it == '.' }.toDoubleOrNull() ?: 0.0
-private fun formatInputPrice(value: Double): String = if (value > 0.0 && value.isFinite()) value.toLong().toString() else ""
-private fun formatQuantity(value: Double): String = when {
-    value <= 0.0 -> "-"
-    value >= 1.0 -> String.format("%.6f", value).trimEnd('0').trimEnd('.')
-    else -> String.format("%.10f", value).trimEnd('0').trimEnd('.')
-}
-=======
->>>>>>> main
 
 @Composable
 private fun LearningFactorRow(title: String, value: String, lesson: String) {
@@ -440,20 +187,8 @@ private fun formatLevel(value: Double): String = if (value > 0.0 && value.isFini
 
 @Composable
 private fun LevelRow(label: String, value: String, color: Color) {
-    Row(
-        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Color(0x0AFFFFFF)).border(1.dp, Color(0x14FFFFFF), RoundedCornerShape(10.dp)).padding(horizontal = 12.dp, vertical = 9.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
+    Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Color(0x0AFFFFFF)).border(1.dp, Color(0x14FFFFFF), RoundedCornerShape(10.dp)).padding(horizontal = 12.dp, vertical = 9.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
         Text(label, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = color, letterSpacing = 0.3.sp)
-        Text(
-            value,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Medium,
-            fontFamily = FontFamily.SansSerif,
-            color = color,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
+        Text(value, fontSize = 13.sp, fontWeight = FontWeight.Medium, fontFamily = FontFamily.SansSerif, color = color, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
