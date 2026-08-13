@@ -158,11 +158,12 @@ object IndodaxMarketService {
      * from the currently forming candle. The live ticker remains available
      * separately for current-price monitoring and entry calculation.
      *
-     * The chart/viewport may show fewer candles at once, but the app keeps a
-     * larger 200-candle working set so zoom-out and horizontal panning can
-     * reveal older INDODAX candles without refetching immediately.
+     * Keep a 300-candle working set so EMA200 has enough warm-up history and
+     * remains stable when incomplete candles are filtered out. The chart/viewport
+     * may show fewer candles at once, but older candles remain available for
+     * indicator calculation and interactive navigation.
      */
-    suspend fun fetchCandles(symbol: String, timeframe: Timeframe, limit: Int = 200): List<CandleBar> = withContext(Dispatchers.IO) {
+    suspend fun fetchCandles(symbol: String, timeframe: Timeframe, limit: Int = 300): List<CandleBar> = withContext(Dispatchers.IO) {
         try {
             val tf = timeframe.code
             val minutesPerCandle = when (tf) {
@@ -177,6 +178,8 @@ object IndodaxMarketService {
             val candleSeconds = minutesPerCandle * 60L
             val nowSec = System.currentTimeMillis() / 1000L
             val currentCandleStart = nowSec - (nowSec % candleSeconds)
+            // Request one extra candle so filtering the currently forming candle
+            // still leaves up to `limit` completed candles.
             val requestCount = limit.coerceAtLeast(40) + 1
             val fromSec = nowSec - (candleSeconds * requestCount)
             val apiTf = if (tf == "D") "1D" else tf
