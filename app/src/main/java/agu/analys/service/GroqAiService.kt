@@ -5,6 +5,7 @@ import agu.analys.model.AISignalState
 import agu.analys.model.IndonesiaCpiData
 import agu.analys.model.MarketTick
 import agu.analys.model.TechnicalIndicators
+import agu.analys.trading.SpotPosition
 import agu.analys.util.PriceFormatter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -16,112 +17,135 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
-/** AI market audit via Groq. The model is OpenAI GPT-OSS hosted by Groq. */
+/** AI market audit via Groq. */
 object GroqAiService {
     private val client = OkHttpClient.Builder().connectTimeout(20, TimeUnit.SECONDS).readTimeout(45, TimeUnit.SECONDS).build()
     private const val BASE_URL = "https://api.groq.com/openai/v1/chat/completions"
     private const val MODEL = "openai/gpt-oss-20b"
 
-    suspend fun generateDeepMarketAudit(apiKey: String, tick: MarketTick, indicators: TechnicalIndicators, signal: AISignalState): String = withContext(Dispatchers.IO) {
+    suspend fun generateDeepMarketAudit(
+        apiKey: String,
+        tick: MarketTick,
+        indicators: TechnicalIndicators,
+        signal: AISignalState,
+        position: SpotPosition = SpotPosition()
+    ): String = withContext(Dispatchers.IO) {
         val cpi = if (safeContextReady) BpsMacroService(AppContextProvider.context).getLatest() else null
-        if (apiKey.isBlank()) return@withContext buildFallback(tick, indicators, signal, cpi) + "\n\n⚠️ Groq API key belum di-set. Buka Settings dan isi Groq API key."
-        val macroBlock = macroText(cpi)
-        val prompt = """
-Kamu adalah tutor analisis teknikal kripto untuk trader Indonesia yang menggunakan INDODAX IDR.
+        if (apiKey.isBlank()) return@withContext buildFallback(tick, indicators, signal, cpi, position) +
+            "\n\n⚠️ Groq API key belum di-set. Buka Settings dan isi Groq API key."
 
-ATURAN DATA:
-- Gunakan hanya data market dan makro yang diberikan.
-- Bedakan fakta dari interpretasi.
-- CPI Indonesia hanya konteks makro, BUKAN pemicu BUY/SELL otomatis dan tidak menambah skor engine.
-- Jangan mengarang funding rate, open interest, liquidation, berita, geopolitik, data AS, atau data lain yang tidak tersedia.
-- Jangan menjanjikan profit.
-
-DATA MARKET INDODAX/IDR:
-Pair: ${tick.symbol}
-Harga: ${PriceFormatter.formatPrice(tick.price)}
-Perubahan 24 jam: ${PriceFormatter.formatPercentage(tick.change24h)}
-High 24 jam: ${PriceFormatter.formatPrice(tick.high24h)}
-Low 24 jam: ${PriceFormatter.formatPrice(tick.low24h)}
-Volume 24 jam: ${PriceFormatter.formatVolume(tick.volume24h)}
-
-INDIKATOR:
-RSI14: ${PriceFormatter.formatRsi(indicators.rsi14)}
-MACD Histogram: ${PriceFormatter.formatIndicatorVal(indicators.macdHist, 4)}
-EMA20: ${PriceFormatter.formatPrice(indicators.ema20)}
-EMA50: ${PriceFormatter.formatPrice(indicators.ema50)}
-EMA200: ${PriceFormatter.formatPrice(indicators.ema200)}
-ATR: ${PriceFormatter.formatIndicatorVal(indicators.atr, 4)}
-Momentum: ${PriceFormatter.formatIndicatorVal(indicators.momentum, 4)}
-
-SINYAL ENGINE:
-Aksi: ${signal.action.name}
-Confidence: ${signal.confidence}/100, bukan probabilitas profit
-Entry: ${PriceFormatter.formatPrice(signal.entryPrice)}
-TP1: ${PriceFormatter.formatPrice(signal.targetPrice1)}
-TP2: ${PriceFormatter.formatPrice(signal.targetPrice2)}
-SL: ${PriceFormatter.formatPrice(signal.stopLoss)}
-RR: ${signal.riskRewardRatio}
-Alasan: ${signal.reasoning.joinToString("; ")}
-
-$macroBlock
-
-FORMAT JAWABAN:
-1. KONDISI MARKET
-2. MAKRO INDONESIA
-3. SKENARIO BULLISH/BEARISH/SIDEWAYS + pemicu dan invalidasi
-4. RISK MANAGEMENT dari level engine
-5. KESIMPULAN: apakah makro memperkuat, netral, atau menambah risiko terhadap setup teknikal
-6. DATA YANG TIDAK TERSEDIA
-
-Bahasa Indonesia, ringkas, edukatif, tanpa jargon yang tidak dijelaskan.
-        """.trimIndent()
+        val prompt = buildPrompt(tick, indicators, signal, cpi, position)
 
         try {
             val payload = JSONObject().apply {
                 put("model", MODEL)
-                put("temperature", 0.2)
+                put("temperature", 0.25)
                 put("messages", JSONArray().apply {
-                    put(JSONObject().apply { put("role", "system"); put("content", "Kamu analis teknikal yang jujur dan data-grounded. Jangan mengarang data.") })
+                    put(JSONObject().apply {
+                        put("role", "system")
+                        put("content", SYSTEM_PROMPT)
+                    })
                     put(JSONObject().apply { put("role", "user"); put("content", prompt) })
                 })
             }
-            val request = Request.Builder().url(BASE_URL).addHeader("Authorization", "Bearer $apiKey").addHeader("Content-Type", "application/json").post(payload.toString().toRequestBody("application/json".toMediaType())).build()
+            val request = Request.Builder().url(BASE_URL).addHeader("Authorization", "Bearer $apiKey")
+                .addHeader("Content-Type", "application/json")
+                .post(payload.toString().toRequestBody("application/json".toMediaType())).build()
             client.newCall(request).execute().use { resp ->
                 val responseBody = resp.body?.string().orEmpty()
-                if (!resp.isSuccessful) return@withContext buildFallback(tick, indicators, signal, cpi) + "\n\n⚠️ Groq API error HTTP ${resp.code}: ${responseBody.take(180)}"
-                val text = JSONObject(responseBody).optJSONArray("choices")?.takeIf { it.length() > 0 }?.getJSONObject(0)?.optJSONObject("message")?.optString("content").orEmpty()
-                if (text.isNotBlank()) text else buildFallback(tick, indicators, signal, cpi)
+                if (!resp.isSuccessful) return@withContext buildFallback(tick, indicators, signal, cpi, position) +
+                    "\n\n⚠️ Groq API error HTTP ${resp.code}: ${responseBody.take(180)}"
+                val text = JSONObject(responseBody).optJSONArray("choices")?.takeIf { it.length() > 0 }
+                    ?.getJSONObject(0)?.optJSONObject("message")?.optString("content").orEmpty()
+                if (text.isNotBlank()) text else buildFallback(tick, indicators, signal, cpi, position)
             }
         } catch (e: Exception) {
-            buildFallback(tick, indicators, signal, cpi) + "\n\n⚠️ Gagal memanggil Groq: ${e.message}"
+            buildFallback(tick, indicators, signal, cpi, position) + "\n\n⚠️ Gagal memanggil Groq: ${e.message}"
         }
     }
 
-    private fun macroText(cpi: IndonesiaCpiData?): String = cpi?.let {
-        """DATA MAKRO INDONESIA TERVALIDASI — SUMBER BPS
-Periode: ${it.period}
-CPI/IHK Index: ${it.cpiIndex?.toString() ?: "tidak tersedia"}
-Inflasi IHK YoY: ${if (it.yoyPercent.isFinite()) "${it.yoyPercent}%" else "tidak tersedia"}
-Target inflasi: ${it.inflationTargetCenterPercent}% ± ${it.inflationTargetBandPercent}%
-Sumber: ${it.source}
-Status cache: ${if (System.currentTimeMillis() - it.fetchedAt <= 24L * 60L * 60L * 1000L) "fresh" else "cached/stale"}
-JANGAN mengisi nilai yang tidak tersedia.""".trimIndent()
-    } ?: "DATA MAKRO INDONESIA: tidak tersedia. Jangan menebak CPI/IHK."
+    private const val SYSTEM_PROMPT = """
+Kamu tutor trading santai untuk pengguna Indodax Indonesia.
+Bahasa sehari-hari, jujur, singkat (maks sekitar 12 baris).
+Mulai dari kesimpulan praktis, baru alasan singkat.
+Jangan menumpuk istilah teknis. Kalau sebut RSI/EMA/MACD, langsung artikan praktis dalam 1 kalimat.
+Jangan mengarang data. Jangan janjikan profit.
+Skor setup bukan peluang profit.
+""".trimIndent()
 
-    private fun buildFallback(tick: MarketTick, indicators: TechnicalIndicators, signal: AISignalState, cpi: IndonesiaCpiData?): String {
-        val rsiText = when { indicators.rsi14 < 30 -> "oversold (${PriceFormatter.formatRsi(indicators.rsi14)})"; indicators.rsi14 > 70 -> "overbought (${PriceFormatter.formatRsi(indicators.rsi14)})"; else -> "netral (${PriceFormatter.formatRsi(indicators.rsi14)})" }
-        val action = when (signal.action.name) { "BUY" -> "BELI"; "SELL" -> "JUAL"; else -> "TAHAN" }
-        val macro = cpi?.let { "• BPS CPI/IHK: ${it.cpiIndex?.toString() ?: "-"} | inflasi YoY: ${if (it.yoyPercent.isFinite()) "${it.yoyPercent}%" else "-"} | ${it.period}" } ?: "• BPS CPI/IHK: tidak tersedia."
+    private fun buildPrompt(
+        tick: MarketTick,
+        indicators: TechnicalIndicators,
+        signal: AISignalState,
+        cpi: IndonesiaCpiData?,
+        position: SpotPosition
+    ): String {
+        val actionIndo = when (signal.action.name) {
+            "BUY" -> "BELI"
+            "SELL" -> "JUAL"
+            else -> "TAHAN"
+        }
+        val pnlPct = position.pnlPercent(tick.price)
+        val pnlIdr = position.pnlIdr(tick.price)
+        val posBlock = if (position.isHolding) {
+            buildString {
+                appendLine("POSISI USER: SUDAH PUNYA COIN (HOLDING)")
+                if (position.entryPrice > 0) appendLine("Harga beli: ${PriceFormatter.formatPrice(position.entryPrice)}")
+                if (position.costIdr > 0) appendLine("Modal: ${PriceFormatter.formatPrice(position.costIdr)}")
+                if (pnlPct != null) appendLine("PnL sekarang: ${PriceFormatter.formatPercentage(pnlPct)}")
+                if (pnlIdr != null) appendLine("Untung/rugi kira-kira: ${PriceFormatter.formatPrice(pnlIdr)}")
+                appendLine("Jelaskan dari sudut orang yang SUDAH pegang: tahan, partial, atau siap keluar. Jangan dorong beli ulang hanya karena sinyal BELI.")
+            }
+        } else {
+            "POSISI USER: BELUM PUNYA COIN\nJelaskan dari sudut orang yang belum masuk: boleh menunggu atau mempertimbangkan masuk. Sinyal JUAL diabaikan karena tidak ada yang dijual."
+        }
+        val macroLine = cpi?.let {
+            val yoy = if (it.yoyPercent.isFinite()) "${it.yoyPercent}%" else "-"
+            "Makro RI (BPS ${it.period}): inflasi YoY $yoy — hanya konteks, bukan sinyal beli/jual."
+        } ?: "Makro RI: data tidak tersedia."
+
         return """
-📊 LAPORAN AUDIT PASAR (${tick.symbol}) — Fallback
+Data market Indodax ${tick.symbol}:
+Harga ${PriceFormatter.formatPrice(tick.price)} (${PriceFormatter.formatPercentage(tick.change24h)} 24j)
+Volume ${PriceFormatter.formatVolume(tick.volume24h)}
 
-• Harga: ${PriceFormatter.formatPrice(tick.price)} (${PriceFormatter.formatPercentage(tick.change24h)} 24j)
-• RSI: $rsiText | MACD hist: ${PriceFormatter.formatIndicatorVal(indicators.macdHist, 4)}
-• Sinyal engine: $action (${signal.confidence}/100)
-$macro
-• Entry ${PriceFormatter.formatPrice(signal.entryPrice)} | TP1 ${PriceFormatter.formatPrice(signal.targetPrice1)} | SL ${PriceFormatter.formatPrice(signal.stopLoss)} | RR ${signal.riskRewardRatio}
+Sinyal engine: $actionIndo · kekuatan setup ${signal.confidence}/100 (bukan % profit)
+Entry engine ${PriceFormatter.formatPrice(signal.entryPrice)} | TP1 ${PriceFormatter.formatPrice(signal.targetPrice1)} | SL ${PriceFormatter.formatPrice(signal.stopLoss)}
+Alasan engine: ${signal.reasoning.take(4).joinToString("; ")}
 
-Data funding, liquidation, open interest, berita, dan data makro lain tidak tersedia.
+Indikator ringkas: RSI ${PriceFormatter.formatRsi(indicators.rsi14)}, MACD hist ${PriceFormatter.formatIndicatorVal(indicators.macdHist, 4)}
+
+$posBlock
+
+$macroLine
+
+FORMAT JAWABAN:
+1) INTI — 1–2 kalimat: apa yang masuk akal sekarang (tahan / siap beli / siap jual / diam)
+2) KENAPA — 3 poin pendek bahasa sehari-hari
+3) BATAS — kapan setup ini kurang relevan + ingat ini bukan jaminan
+4) MAKRO — 1 kalimat saja (atau bilang netral)
+
+Jangan ulang semua angka yang sudah di kartu. Fokus arti praktis untuk posisi user.
+        """.trimIndent()
+    }
+
+    private fun buildFallback(
+        tick: MarketTick,
+        indicators: TechnicalIndicators,
+        signal: AISignalState,
+        cpi: IndonesiaCpiData?,
+        position: SpotPosition
+    ): String {
+        val action = when (signal.action.name) { "BUY" -> "BELI"; "SELL" -> "JUAL"; else -> "TAHAN" }
+        val pos = if (position.isHolding) {
+            val pnl = position.pnlPercent(tick.price)?.let { PriceFormatter.formatPercentage(it) } ?: "-"
+            "Posisi: HOLDING · PnL $pnl"
+        } else "Posisi: belum punya coin"
+        return """
+Inti: sinyal engine $action (${signal.confidence}/100). $pos
+Harga ${PriceFormatter.formatPrice(tick.price)} (${PriceFormatter.formatPercentage(tick.change24h)} 24j).
+RSI ${PriceFormatter.formatRsi(indicators.rsi14)}. Level engine: entry ${PriceFormatter.formatPrice(signal.entryPrice)}, TP1 ${PriceFormatter.formatPrice(signal.targetPrice1)}, SL ${PriceFormatter.formatPrice(signal.stopLoss)}.
+Ini ringkasan lokal — isi Groq API key di Settings untuk penjelasan penuh.
         """.trimIndent()
     }
 

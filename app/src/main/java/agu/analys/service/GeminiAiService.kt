@@ -1,11 +1,11 @@
 package agu.analys.service
 
 import agu.analys.AppContextProvider
-import agu.analys.BuildConfig
 import agu.analys.model.AISignalState
 import agu.analys.model.IndonesiaCpiData
 import agu.analys.model.MarketTick
 import agu.analys.model.TechnicalIndicators
+import agu.analys.trading.SpotPosition
 import agu.analys.util.PriceFormatter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -22,100 +22,110 @@ object GeminiAiService {
     private const val MODEL = "gemini-3.5-flash"
     private const val BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models/$MODEL:generateContent"
 
-    suspend fun generateChartSummary24h(apiKey: String, tick: MarketTick, indicators: TechnicalIndicators, signal: AISignalState): String = withContext(Dispatchers.IO) {
+    suspend fun generateChartSummary24h(
+        apiKey: String,
+        tick: MarketTick,
+        indicators: TechnicalIndicators,
+        signal: AISignalState,
+        position: SpotPosition = SpotPosition()
+    ): String = withContext(Dispatchers.IO) {
         val effectiveKey = if (apiKey.isBlank()) "" else apiKey
         val cpi = if (safeContextReady) BpsMacroService(AppContextProvider.context).getLatest() else null
-        if (effectiveKey.isBlank()) return@withContext buildFallback(tick, indicators, signal, cpi) + "\n\n⚠️ Gemini API Key belum di-set. Buka Settings → masukkan Gemini API key Anda untuk analisis AI penuh."
+        if (effectiveKey.isBlank()) return@withContext buildFallback(tick, indicators, signal, cpi, position) +
+            "\n\n⚠️ Gemini API Key belum di-set. Buka Settings → masukkan Gemini API key."
+
+        val prompt = buildPrompt(tick, indicators, signal, cpi, position)
+        try {
+            val payload = JSONObject().apply {
+                put("contents", JSONArray().apply {
+                    put(JSONObject().apply {
+                        put("parts", JSONArray().apply {
+                            put(JSONObject().apply { put("text", prompt) })
+                        })
+                    })
+                })
+                put("generationConfig", JSONObject().apply { put("temperature", 0.25) })
+            }
+            val request = Request.Builder().url("$BASE_URL?key=$effectiveKey")
+                .addHeader("Content-Type", "application/json")
+                .post(payload.toString().toRequestBody("application/json".toMediaType())).build()
+            client.newCall(request).execute().use { resp ->
+                val responseBody = resp.body?.string().orEmpty()
+                if (!resp.isSuccessful) return@withContext buildFallback(tick, indicators, signal, cpi, position) +
+                    "\n\n⚠️ Gemini API Error HTTP ${resp.code}: ${responseBody.take(180)}"
+                val parts = JSONObject(responseBody).optJSONArray("candidates")?.takeIf { it.length() > 0 }
+                    ?.getJSONObject(0)?.optJSONObject("content")?.optJSONArray("parts")
+                val text = parts?.let { arr ->
+                    (0 until arr.length()).joinToString("\n") { i -> arr.getJSONObject(i).optString("text").orEmpty() }
+                }.orEmpty()
+                if (text.isNotBlank()) text else buildFallback(tick, indicators, signal, cpi, position)
+            }
+        } catch (e: Exception) {
+            buildFallback(tick, indicators, signal, cpi, position) + "\n\n⚠️ Gagal memanggil Gemini: ${e.message}"
+        }
+    }
+
+    private fun buildPrompt(
+        tick: MarketTick,
+        indicators: TechnicalIndicators,
+        signal: AISignalState,
+        cpi: IndonesiaCpiData?,
+        position: SpotPosition
+    ): String {
+        val actionIndo = when (signal.action.name) {
+            "BUY" -> "BELI"
+            "SELL" -> "JUAL"
+            else -> "TAHAN"
+        }
+        val pnlPct = position.pnlPercent(tick.price)
+        val posBlock = if (position.isHolding) {
+            buildString {
+                appendLine("User SUDAH PUNYA ${tick.symbol}.")
+                if (position.entryPrice > 0) appendLine("Harga beli: ${PriceFormatter.formatPrice(position.entryPrice)}")
+                if (position.costIdr > 0) appendLine("Modal: ${PriceFormatter.formatPrice(position.costIdr)}")
+                if (pnlPct != null) appendLine("PnL: ${PriceFormatter.formatPercentage(pnlPct)}")
+                appendLine("Ceritakan dari sudut orang yang sudah pegang (tahan / keluar), jangan dorong beli ulang.")
+            }
+        } else {
+            "User BELUM punya coin. Fokus: tunggu atau pertimbangkan masuk. Sinyal jual tidak relevan."
+        }
         val macro = cpi?.let {
-            """DATA MAKRO INDONESIA TERVALIDASI — BPS
-Periode: ${it.period}
-CPI/IHK Index: ${it.cpiIndex?.toString() ?: "tidak tersedia"}
-Inflasi IHK YoY: ${if (it.yoyPercent.isFinite()) "${it.yoyPercent}%" else "tidak tersedia"}
-Target inflasi: ${it.inflationTargetCenterPercent}% ± ${it.inflationTargetBandPercent}%
-Sumber: ${it.source}
-Jangan mengarang field yang tidak tersedia.""".trimIndent()
-        } ?: "DATA MAKRO INDONESIA: tidak tersedia. Jangan mengarang CPI/IHK."
-        val prompt = """
-Bertindak sebagai Senior Crypto Quant & Technical Analyst untuk trader Indonesia.
-SUMBER MARKET: seluruh data market berasal dari INDODAX IDR.
+            val yoy = if (it.yoyPercent.isFinite()) "${it.yoyPercent}%" else "-"
+            "Makro RI BPS ${it.period}: YoY $yoy (konteks saja)."
+        } ?: "Makro RI tidak tersedia."
 
-ATURAN KERAS:
-- Gunakan hanya data yang diberikan.
-- Bedakan fakta dan interpretasi.
-- CPI Indonesia adalah konteks makro saja, BUKAN pemicu BUY/SELL otomatis dan bukan tambahan skor engine.
-- Jangan mengarang funding rate, open interest, liquidation, berita, geopolitik, minyak, USD, atau data lain yang tidak tersedia.
-- Jangan menjanjikan profit.
+        return """
+Kamu tutor trading santai untuk Indodax. Bahasa sehari-hari, singkat (maks ~12 baris).
+Mulai dari kesimpulan praktis. Minim jargon. Jangan mengarang data. Jangan janjikan profit.
 
-MARKET 24 JAM:
-Pair: ${tick.symbol}
-Harga: ${PriceFormatter.formatPrice(tick.price)}
-Perubahan 24j: ${PriceFormatter.formatPercentage(tick.change24h)}
-High 24j: ${PriceFormatter.formatPrice(tick.high24h)}
-Low 24j: ${PriceFormatter.formatPrice(tick.low24h)}
-Volume 24j: ${PriceFormatter.formatVolume(tick.volume24h)}
+24 jam ${tick.symbol}: harga ${PriceFormatter.formatPrice(tick.price)} (${PriceFormatter.formatPercentage(tick.change24h)}), range ${PriceFormatter.formatPrice(tick.low24h)}–${PriceFormatter.formatPrice(tick.high24h)}, vol ${PriceFormatter.formatVolume(tick.volume24h)}.
+Sinyal engine: $actionIndo · setup ${signal.confidence}/100.
+RSI ${PriceFormatter.formatRsi(indicators.rsi14)}, MACD hist ${PriceFormatter.formatIndicatorVal(indicators.macdHist, 4)}.
 
-INDIKATOR:
-RSI14: ${PriceFormatter.formatRsi(indicators.rsi14)}
-MACD Histogram: ${PriceFormatter.formatIndicatorVal(indicators.macdHist, 4)}
-EMA20: ${PriceFormatter.formatPrice(indicators.ema20)}
-EMA50: ${PriceFormatter.formatPrice(indicators.ema50)}
-EMA200: ${PriceFormatter.formatPrice(indicators.ema200)}
-ATR: ${PriceFormatter.formatIndicatorVal(indicators.atr, 4)}
-
-SINYAL ENGINE:
-Aksi: ${signal.action.name}
-Kekuatan setup: ${signal.confidence}/100, bukan probabilitas profit
-Sentimen: ${signal.sentiment.displayName}
-Entry: ${PriceFormatter.formatPrice(signal.entryPrice)}
-TP1: ${PriceFormatter.formatPrice(signal.targetPrice1)}
-TP2: ${PriceFormatter.formatPrice(signal.targetPrice2)}
-SL: ${PriceFormatter.formatPrice(signal.stopLoss)}
-RR: ${signal.riskRewardRatio}
-Alasan Engine: ${signal.reasoning.joinToString("; ")}
-
+$posBlock
 $macro
 
 FORMAT:
-1. PENJELASAN CHART: fakta harga, volume, RSI, MACD, EMA.
-2. MAKRO INDONESIA: jelaskan CPI/IHK hanya dari data BPS yang tersedia; bandingkan dengan koridor target jika YoY tersedia.
-3. SKENARIO: bullish/bearish/sideways, dengan pemicu dan invalidasi.
-4. RISK MANAGEMENT: audit level engine, jangan membuat level baru tanpa dasar.
-5. VERDIK: apakah makro memperkuat, netral, atau menambah risiko terhadap setup teknikal, dan kenapa.
-6. DATA YANG TIDAK TERSEDIA: singkat.
-
-Bahasa Indonesia, profesional, tegas, edukatif. Jangan menyebut harga USD/USDT.
+1) INTI — kondisi 24 jam + apa yang masuk akal untuk posisi user
+2) KENAPA — 3 poin pendek
+3) BATAS — 1–2 kalimat
+4) MAKRO — 1 kalimat
         """.trimIndent()
-        try {
-            val payload = JSONObject().apply {
-                put("contents", JSONArray().apply { put(JSONObject().apply { put("parts", JSONArray().apply { put(JSONObject().apply { put("text", prompt) }) }) }) })
-                put("generationConfig", JSONObject().apply { put("temperature", 0.2) })
-            }
-            val request = Request.Builder().url("$BASE_URL?key=$effectiveKey").addHeader("Content-Type", "application/json").post(payload.toString().toRequestBody("application/json".toMediaType())).build()
-            client.newCall(request).execute().use { resp ->
-                val responseBody = resp.body?.string().orEmpty()
-                if (!resp.isSuccessful) return@withContext buildFallback(tick, indicators, signal, cpi) + "\n\n⚠️ Gemini API Error HTTP ${resp.code}: ${responseBody.take(180)}"
-                val parts = JSONObject(responseBody).optJSONArray("candidates")?.takeIf { it.length() > 0 }?.getJSONObject(0)?.optJSONObject("content")?.optJSONArray("parts")
-                val text = parts?.let { arr -> (0 until arr.length()).joinToString("\n") { i -> arr.getJSONObject(i).optString("text").orEmpty() } }.orEmpty()
-                if (text.isNotBlank()) text else buildFallback(tick, indicators, signal, cpi)
-            }
-        } catch (e: Exception) { buildFallback(tick, indicators, signal, cpi) + "\n\n⚠️ Gagal memanggil Gemini: ${e.message}" }
     }
 
-    private fun buildFallback(tick: MarketTick, indicators: TechnicalIndicators, signal: AISignalState, cpi: IndonesiaCpiData?): String {
-        val rsi = when { indicators.rsi14 < 30 -> "Oversold"; indicators.rsi14 > 70 -> "Overbought"; else -> "Netral" }
-        val action = when (signal.action.name) { "BUY" -> "LAYAK BELI (BUY)"; "SELL" -> "LAYAK JUAL (SELL)"; else -> "TAHAN (HOLD) / WAIT & SEE" }
-        val macro = cpi?.let { "• BPS CPI/IHK: ${it.cpiIndex?.toString() ?: "-"} | inflasi YoY: ${if (it.yoyPercent.isFinite()) "${it.yoyPercent}%" else "-"} | ${it.period}" } ?: "• BPS CPI/IHK: tidak tersedia."
+    private fun buildFallback(
+        tick: MarketTick,
+        indicators: TechnicalIndicators,
+        signal: AISignalState,
+        cpi: IndonesiaCpiData?,
+        position: SpotPosition
+    ): String {
+        val action = when (signal.action.name) { "BUY" -> "BELI"; "SELL" -> "JUAL"; else -> "TAHAN" }
+        val pos = if (position.isHolding) "HOLDING" else "belum punya coin"
         return """
-✨ GEMINI 24H CHART SUMMARY (${tick.symbol}) — Fallback
-• Harga: ${PriceFormatter.formatPrice(tick.price)} (${PriceFormatter.formatPercentage(tick.change24h)} 24j)
-• Range: ${PriceFormatter.formatPrice(tick.low24h)} - ${PriceFormatter.formatPrice(tick.high24h)}
-• Volume: ${PriceFormatter.formatVolume(tick.volume24h)}
-• RSI: $rsi (${PriceFormatter.formatRsi(indicators.rsi14)}) | MACD Hist: ${PriceFormatter.formatIndicatorVal(indicators.macdHist, 4)}
-• Sinyal: $action (${signal.confidence}/100)
-$macro
-• Entry: ${PriceFormatter.formatPrice(signal.entryPrice)} | TP1: ${PriceFormatter.formatPrice(signal.targetPrice1)} | TP2: ${PriceFormatter.formatPrice(signal.targetPrice2)} | SL: ${PriceFormatter.formatPrice(signal.stopLoss)} | RR: ${signal.riskRewardRatio}
-
-Funding, liquidation, open interest, berita, dan data makro lain tidak tersedia.
+Ringkasan lokal ${tick.symbol}: ${PriceFormatter.formatPrice(tick.price)} (${PriceFormatter.formatPercentage(tick.change24h)} 24j).
+Sinyal $action (${signal.confidence}/100). Posisi: $pos.
+RSI ${PriceFormatter.formatRsi(indicators.rsi14)}. Isi Gemini API key di Settings untuk penjelasan penuh.
         """.trimIndent()
     }
 

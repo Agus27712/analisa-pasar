@@ -91,7 +91,6 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     private val _isShowingCachedData = MutableStateFlow(false)
     val isShowingCachedData: StateFlow<Boolean> = _isShowingCachedData.asStateFlow()
 
-    /** Manual ownership for the currently selected pair (single source of truth). */
     private val _spotPosition = MutableStateFlow(SpotPosition())
     val spotPosition: StateFlow<SpotPosition> = _spotPosition.asStateFlow()
 
@@ -160,27 +159,43 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    /** Reload ownership for the selected pair from [SpotPositionStore]. */
     fun refreshSpotPosition() {
         _spotPosition.value = positionStore.get(_selectedPair.value.symbol)
     }
 
     /**
-     * Manual ownership toggle (per coin).
-     * ON  = user holds the asset on Indodax → analysis leans toward sell / hold.
-     * OFF = user does not hold the asset → analysis leans toward buy / wait.
-     * Engine signals stay pure technical; only UI interpretation changes.
+     * Manual ownership.
+     * @param owned true = HOLDING
+     * @param referenceEntryPrice harga beli user (atau fallback signal)
+     * @param costIdr modal dalam Rupiah (opsional)
      */
-    fun setOwnership(owned: Boolean, referenceEntryPrice: Double = 0.0) {
+    fun setOwnership(
+        owned: Boolean,
+        referenceEntryPrice: Double = 0.0,
+        costIdr: Double = 0.0
+    ) {
         val symbol = _selectedPair.value.symbol
         if (owned) {
             val entry = referenceEntryPrice.takeIf { it > 0.0 }
                 ?: _spotPosition.value.entryPrice.takeIf { it > 0.0 }
                 ?: 0.0
-            positionStore.markBought(symbol, entry)
+            val cost = costIdr.takeIf { it > 0.0 } ?: _spotPosition.value.costIdr
+            positionStore.markBought(symbol, entry, cost)
         } else {
             positionStore.markSold(symbol)
         }
+        refreshSpotPosition()
+    }
+
+    /** Update harga beli / modal tanpa mengubah status HOLDING. */
+    fun updatePositionDetails(entryPrice: Double, costIdr: Double) {
+        val current = _spotPosition.value
+        if (!current.isHolding) return
+        positionStore.markBought(
+            _selectedPair.value.symbol,
+            entryPrice.takeIf { it > 0.0 } ?: current.entryPrice,
+            costIdr.takeIf { it >= 0.0 } ?: current.costIdr
+        )
         refreshSpotPosition()
     }
 
@@ -369,10 +384,13 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         if (_connectionState.value !is MarketConnectionState.Connected) return
         val indicators = currentIndicators.value
         val signal = aiSignalState.value
+        val position = _spotPosition.value
         viewModelScope.launch {
             _isAuditLoading.value = true
             _auditReportText.value = null
-            _auditReportText.value = GroqAiService.generateDeepMarketAudit(prefs.groqApiKey, tick, indicators, signal)
+            _auditReportText.value = GroqAiService.generateDeepMarketAudit(
+                prefs.groqApiKey, tick, indicators, signal, position
+            )
             _isAuditLoading.value = false
         }
     }
@@ -383,10 +401,13 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         if (_connectionState.value !is MarketConnectionState.Connected) return
         val indicators = currentIndicators.value
         val signal = aiSignalState.value
+        val position = _spotPosition.value
         viewModelScope.launch {
             _isGeminiLoading.value = true
             _geminiSummaryText.value = null
-            _geminiSummaryText.value = GeminiAiService.generateChartSummary24h(prefs.geminiApiKey, tick, indicators, signal)
+            _geminiSummaryText.value = GeminiAiService.generateChartSummary24h(
+                prefs.geminiApiKey, tick, indicators, signal, position
+            )
             _isGeminiLoading.value = false
         }
     }
