@@ -136,7 +136,11 @@ fun SpotPositionCard(
                 TextButton(
                     enabled = investedInput.toDoubleOrNull()?.let { it > 0.0 } == true && entryInput.toDoubleOrNull()?.let { it > 0.0 } == true,
                     onClick = {
-                        store.markBought(symbol, parseDecimal(entryInput)!!, entryInput.toDouble())
+                        store.markBought(
+    symbol,
+    investedInput.toDouble(),
+    parseDecimal(entryInput)!!
+)
                         showDialog = false
                         onPositionChanged()
                     }
