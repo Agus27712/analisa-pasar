@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ExpandLess
@@ -39,10 +40,13 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -55,6 +59,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -77,7 +82,9 @@ fun AISignalCard(
     modifier: Modifier = Modifier,
     marketSymbol: String = "",
     position: SpotPosition = SpotPosition(),
-    onOwnershipChange: ((owned: Boolean, referenceEntry: Double) -> Unit)? = null,
+    currentPrice: Double = 0.0,
+    onOwnershipChange: ((owned: Boolean, referenceEntry: Double, costIdr: Double) -> Unit)? = null,
+    onPositionDetailsSave: ((entryPrice: Double, costIdr: Double) -> Unit)? = null,
     onOpenIndodaxClick: (() -> Unit)? = null,
     auditText: String? = null,
     isAuditLoading: Boolean = false,
@@ -89,6 +96,20 @@ fun AISignalCard(
 ) {
     val context = LocalContext.current
     var detailsExpanded by remember { mutableStateOf(false) }
+    var entryInput by remember(marketSymbol, position.entryPrice) {
+        mutableStateOf(if (position.entryPrice > 0) position.entryPrice.toLong().toString() else "")
+    }
+    var costInput by remember(marketSymbol, position.costIdr) {
+        mutableStateOf(if (position.costIdr > 0) position.costIdr.toLong().toString() else "")
+    }
+    LaunchedEffect(position.entryPrice, position.costIdr, marketSymbol) {
+        if (position.entryPrice > 0) entryInput = position.entryPrice.toLong().toString()
+        if (position.costIdr > 0) costInput = position.costIdr.toLong().toString()
+        if (!position.isHolding) {
+            // keep fields if user toggles off then on again with same symbol session
+        }
+    }
+
     val actionColor by animateColorAsState(
         targetValue = when (signal.action) {
             SignalAction.BUY -> TvGreen
@@ -148,6 +169,17 @@ fun AISignalCard(
         else -> TvAmber
     }
 
+    val pnlPct = position.pnlPercent(currentPrice)
+    val pnlIdr = position.pnlIdr(currentPrice)
+    val pnlColor = when {
+        pnlPct == null -> TvTextSecondary
+        pnlPct >= 0 -> TvGreen
+        else -> TvRed
+    }
+
+    fun parseIdr(raw: String): Double =
+        raw.filter { it.isDigit() }.toDoubleOrNull() ?: 0.0
+
     Card(
         modifier = modifier
             .fillMaxWidth()
@@ -193,7 +225,7 @@ fun AISignalCard(
             LinearProgressIndicator(progress = { (signal.confidence / 100.0f).coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(3.dp)), color = actionColor, trackColor = Color(0x1AFFFFFF))
             Spacer(Modifier.height(12.dp))
 
-            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(spotColor.copy(alpha = 0.09f)).border(1.dp, spotColor.copy(alpha = 0.28f), RoundedCornerShape(12.dp)).padding(11.dp)) {
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(spotColor.copy(alpha = 0.09f)).border(1.dp, spotColor.copy(alpha = 0.28f), RoundedCornerShape(12.dp)).padding(11.dp).animateContentSize()) {
                 Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("STATUS SPOT", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = spotColor, letterSpacing = 0.8.sp)
@@ -205,8 +237,11 @@ fun AISignalCard(
                         Switch(
                             checked = position.isHolding,
                             onCheckedChange = { checked ->
-                                val referenceEntry = signal.entryPrice.takeIf { it > 0.0 } ?: position.entryPrice
-                                onOwnershipChange?.invoke(checked, referenceEntry)
+                                val entry = parseIdr(entryInput).takeIf { it > 0 }
+                                    ?: signal.entryPrice.takeIf { it > 0.0 }
+                                    ?: position.entryPrice
+                                val cost = parseIdr(costInput)
+                                onOwnershipChange?.invoke(checked, entry, cost)
                             },
                             colors = SwitchDefaults.colors(
                                 checkedThumbColor = Color.Black,
@@ -223,10 +258,82 @@ fun AISignalCard(
                 Text(spotSubtitle, fontSize = 10.sp, color = TvTextPrimary, lineHeight = 14.sp)
                 Spacer(Modifier.height(5.dp))
                 Text(if (position.isHolding) "Punya $marketSymbol di Indodax" else "Belum punya $marketSymbol di Indodax", fontSize = 9.sp, color = TvTextSecondary)
-                Text("Switch manual • default OFF • tersimpan per koin", fontSize = 9.sp, color = TvTextSecondary)
-                if (position.isHolding && position.entryPrice > 0.0) {
-                    Spacer(Modifier.height(4.dp))
-                    Text("Entry acuan: ${PriceFormatter.formatPriceFull(position.entryPrice)}", fontSize = 9.sp, color = TvTextSecondary)
+                Text("Switch ON = sudah punya · isi harga beli & modal (opsional)", fontSize = 9.sp, color = TvTextSecondary)
+
+                if (position.isHolding) {
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = entryInput,
+                        onValueChange = { entryInput = it.filter { c -> c.isDigit() } },
+                        modifier = Modifier.fillMaxWidth().testTag("position_entry_input"),
+                        singleLine = true,
+                        label = { Text("Harga beli (Rp)", fontSize = 11.sp) },
+                        placeholder = { Text("Contoh: 1450000000", fontSize = 11.sp) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = TvGreen,
+                            unfocusedBorderColor = Color(0xFF2A3540),
+                            focusedTextColor = TvTextPrimary,
+                            unfocusedTextColor = TvTextPrimary,
+                            focusedLabelColor = TvGreen,
+                            unfocusedLabelColor = TvTextSecondary,
+                            cursorColor = TvGreen
+                        ),
+                        shape = RoundedCornerShape(10.dp)
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = costInput,
+                        onValueChange = { costInput = it.filter { c -> c.isDigit() } },
+                        modifier = Modifier.fillMaxWidth().testTag("position_cost_input"),
+                        singleLine = true,
+                        label = { Text("Modal beli (Rp)", fontSize = 11.sp) },
+                        placeholder = { Text("Contoh: 100000", fontSize = 11.sp) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = TvGreen,
+                            unfocusedBorderColor = Color(0xFF2A3540),
+                            focusedTextColor = TvTextPrimary,
+                            unfocusedTextColor = TvTextPrimary,
+                            focusedLabelColor = TvGreen,
+                            unfocusedLabelColor = TvTextSecondary,
+                            cursorColor = TvGreen
+                        ),
+                        shape = RoundedCornerShape(10.dp)
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = {
+                            val entry = parseIdr(entryInput)
+                            val cost = parseIdr(costInput)
+                            onPositionDetailsSave?.invoke(entry, cost)
+                        },
+                        modifier = Modifier.fillMaxWidth().height(40.dp).testTag("save_position_details_button"),
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.dp, TvGreen),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = TvGreen)
+                    ) {
+                        Text("Simpan harga beli & modal", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    if (position.entryPrice > 0.0) {
+                        Spacer(Modifier.height(8.dp))
+                        Text("Harga beli tersimpan: ${PriceFormatter.formatPriceFull(position.entryPrice)}", fontSize = 9.sp, color = TvTextSecondary)
+                    }
+                    if (position.costIdr > 0.0) {
+                        Text("Modal tersimpan: ${PriceFormatter.formatPriceFull(position.costIdr)}", fontSize = 9.sp, color = TvTextSecondary)
+                    }
+                    if (pnlPct != null) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            "PnL sekarang: ${PriceFormatter.formatPercentage(pnlPct)}" +
+                                if (pnlIdr != null) " · ${PriceFormatter.formatPrice(pnlIdr)}" else "",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = pnlColor
+                        )
+                        Text("Dihitung dari harga live vs harga beli kamu", fontSize = 9.sp, color = TvTextSecondary)
+                    }
                 }
             }
 
@@ -254,7 +361,7 @@ fun AISignalCard(
             Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Color(0x0AFFFFFF)).padding(horizontal = 10.dp, vertical = 8.dp), verticalAlignment = Alignment.Top) {
                 Icon(Icons.Default.Info, null, tint = TvTextSecondary, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(7.dp))
-                Text("TP/SL adalah level latihan berbasis ATR, bukan prediksi harga pasti atau support/resistance.", fontSize = 10.sp, color = TvTextSecondary, lineHeight = 14.sp)
+                Text("TP/SL adalah level latihan berbasis ATR, bukan prediksi harga pasti. Posisi & PnL diisi manual oleh kamu.", fontSize = 10.sp, color = TvTextSecondary, lineHeight = 14.sp)
             }
 
             Spacer(Modifier.height(10.dp))
@@ -262,20 +369,20 @@ fun AISignalCard(
                 Row(Modifier.fillMaxWidth().clickable { detailsExpanded = !detailsExpanded }.padding(horizontal = 12.dp, vertical = 11.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("KENAPA HASILNYA BEGINI?", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TvGreen, letterSpacing = 0.8.sp)
-                        Text(if (detailsExpanded) "Ringkasan lengkap faktor analisis" else "Ketuk untuk belajar Market Regime, RSI, EMA, MACD, ATR, dan lainnya", fontSize = 11.sp, color = TvTextSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        Text(if (detailsExpanded) "Ringkasan lengkap faktor analisis" else "Ketuk untuk belajar indikator", fontSize = 11.sp, color = TvTextSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     }
                     Icon(if (detailsExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, null, tint = TvGreen, modifier = Modifier.size(22.dp))
                 }
                 if (detailsExpanded) {
                     Column(Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                         LearningFactorRow("Market Regime", findReason(signal, "Market regime"), "Kondisi umum pasar: trending, sideways, transisi, atau volatilitas tinggi.")
-                        LearningFactorRow("RSI (14)", findReason(signal, "RSI"), "RSI mengukur momentum. Di bawah 30 disebut jenuh jual, di atas 70 jenuh beli. Nilai tengah bukan sinyal otomatis.")
-                        LearningFactorRow("EMA 20 / EMA 50", findReason(signal, "EMA20"), "EMA membantu membaca tren. Harga dan EMA20 di atas EMA50 mendukung bullish, sebaliknya mendukung bearish.")
-                        LearningFactorRow("MACD", findReason(signal, "MACD"), "MACD membantu membaca momentum. Histogram positif mendukung momentum naik, negatif mendukung turun.")
-                        LearningFactorRow("Bollinger Band", findReason(signal, "Bollinger"), "Band memberi konteks volatilitas dan posisi harga, bukan support/resistance pasti.")
-                        LearningFactorRow("ATR", "ATR dipakai untuk mengukur jarak volatilitas", "ATR makin besar berarti pergerakan candle cenderung lebih lebar. Di aplikasi ini ATR dipakai untuk level latihan TP/SL.")
-                        LearningFactorRow("Volume", findReason(signal, "Volume"), "Lonjakan volume dibanding 5 candle terakhir adalah konfirmasi tambahan, bukan penentu tunggal.")
-                        signal.patternDetected?.let { LearningFactorRow("Candlestick", "Pola: $it", "Pola candle hanya konfirmasi tambahan dan tidak menjamin arah berikutnya.") }
+                        LearningFactorRow("RSI (14)", findReason(signal, "RSI"), "RSI mengukur momentum. Di bawah 30 jenuh jual, di atas 70 jenuh beli.")
+                        LearningFactorRow("EMA 20 / EMA 50", findReason(signal, "EMA20"), "Harga dan EMA20 di atas EMA50 mendukung naik, sebaliknya mendukung turun.")
+                        LearningFactorRow("MACD", findReason(signal, "MACD"), "Histogram positif mendukung momentum naik, negatif mendukung turun.")
+                        LearningFactorRow("Bollinger Band", findReason(signal, "Bollinger"), "Konteks volatilitas dan posisi harga, bukan support/resistance pasti.")
+                        LearningFactorRow("ATR", "ATR mengukur lebar pergerakan", "Dipakai untuk level latihan TP/SL.")
+                        LearningFactorRow("Volume", findReason(signal, "Volume"), "Lonjakan volume adalah konfirmasi tambahan.")
+                        signal.patternDetected?.let { LearningFactorRow("Candlestick", "Pola: $it", "Konfirmasi tambahan, bukan jaminan arah.") }
                         Spacer(Modifier.height(2.dp))
                         Text("${if (signal.action == SignalAction.HOLD) "SETUP BELUM CUKUP KUAT" else "SCORE ${signal.confidence}/100"}. Ini kekuatan setup, BUKAN ${signal.confidence}% kemungkinan profit.", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TvAmber, lineHeight = 14.sp)
                     }
