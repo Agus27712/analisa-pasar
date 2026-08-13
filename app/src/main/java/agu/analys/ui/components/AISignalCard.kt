@@ -60,8 +60,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import agu.analys.model.AISignalState
 import agu.analys.model.SignalAction
+import agu.analys.trading.SpotPosition
 import agu.analys.trading.SpotPositionState
-import agu.analys.trading.SpotPositionStore
 import agu.analys.ui.theme.TvAmber
 import agu.analys.ui.theme.TvCardBackground
 import agu.analys.ui.theme.TvGreen
@@ -76,6 +76,8 @@ fun AISignalCard(
     onDeepAuditClick: () -> Unit,
     modifier: Modifier = Modifier,
     marketSymbol: String = "",
+    position: SpotPosition = SpotPosition(),
+    onOwnershipChange: ((owned: Boolean, referenceEntry: Double) -> Unit)? = null,
     onOpenIndodaxClick: (() -> Unit)? = null,
     auditText: String? = null,
     isAuditLoading: Boolean = false,
@@ -87,8 +89,6 @@ fun AISignalCard(
 ) {
     val context = LocalContext.current
     var detailsExpanded by remember { mutableStateOf(false) }
-    val positionStore = remember(marketSymbol) { SpotPositionStore(context) }
-    var position by remember(marketSymbol) { mutableStateOf(positionStore.get(marketSymbol)) }
     val actionColor by animateColorAsState(
         targetValue = when (signal.action) {
             SignalAction.BUY -> TvGreen
@@ -200,18 +200,13 @@ fun AISignalCard(
                         Text(spotTitle, fontSize = 15.sp, fontWeight = FontWeight.Black, color = spotColor)
                     }
                     Column(horizontalAlignment = Alignment.End) {
-                        Text(if (position.state == SpotPositionState.HOLDING) "HOLDING" else "NO POSITION", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = TvTextSecondary)
+                        Text(if (position.isHolding) "HOLDING" else "NO POSITION", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = TvTextSecondary)
                         Spacer(Modifier.height(3.dp))
                         Switch(
-                            checked = position.state == SpotPositionState.HOLDING,
+                            checked = position.isHolding,
                             onCheckedChange = { checked ->
-                                if (checked) {
-                                    val referenceEntry = signal.entryPrice.takeIf { it > 0.0 } ?: position.entryPrice
-                                    positionStore.markBought(marketSymbol, referenceEntry)
-                                } else {
-                                    positionStore.markSold(marketSymbol)
-                                }
-                                position = positionStore.get(marketSymbol)
+                                val referenceEntry = signal.entryPrice.takeIf { it > 0.0 } ?: position.entryPrice
+                                onOwnershipChange?.invoke(checked, referenceEntry)
                             },
                             colors = SwitchDefaults.colors(
                                 checkedThumbColor = Color.Black,
@@ -227,9 +222,9 @@ fun AISignalCard(
                 Spacer(Modifier.height(3.dp))
                 Text(spotSubtitle, fontSize = 10.sp, color = TvTextPrimary, lineHeight = 14.sp)
                 Spacer(Modifier.height(5.dp))
-                Text(if (position.state == SpotPositionState.HOLDING) "Punya $marketSymbol di Indodax" else "Belum punya $marketSymbol di Indodax", fontSize = 9.sp, color = TvTextSecondary)
+                Text(if (position.isHolding) "Punya $marketSymbol di Indodax" else "Belum punya $marketSymbol di Indodax", fontSize = 9.sp, color = TvTextSecondary)
                 Text("Switch manual • default OFF • tersimpan per koin", fontSize = 9.sp, color = TvTextSecondary)
-                if (position.state == SpotPositionState.HOLDING && position.entryPrice > 0.0) {
+                if (position.isHolding && position.entryPrice > 0.0) {
                     Spacer(Modifier.height(4.dp))
                     Text("Entry acuan: ${PriceFormatter.formatPriceFull(position.entryPrice)}", fontSize = 9.sp, color = TvTextSecondary)
                 }
@@ -250,7 +245,7 @@ fun AISignalCard(
                     Column {
                         Text("KENAPA TAHAN?", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = TvAmber, letterSpacing = 0.7.sp)
                         Text(holdReason ?: "Belum ada alasan spesifik dari data candle saat ini.", fontSize = 10.sp, color = TvTextPrimary, lineHeight = 14.sp)
-                        Text(if (position.state == SpotPositionState.HOLDING) "Kamu sudah punya coin: TAHAN berarti tetap pegang sampai ada sinyal keluar." else "Kamu belum punya coin: TAHAN berarti tunggu sinyal BUY valid.", fontSize = 9.sp, color = TvTextSecondary, lineHeight = 13.sp)
+                        Text(if (position.isHolding) "Kamu sudah punya coin: TAHAN berarti tetap pegang sampai ada sinyal keluar." else "Kamu belum punya coin: TAHAN berarti tunggu sinyal BUY valid.", fontSize = 9.sp, color = TvTextSecondary, lineHeight = 13.sp)
                     }
                 }
             }
@@ -290,12 +285,16 @@ fun AISignalCard(
             Spacer(Modifier.height(12.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = {
-                    val launchIntent = context.packageManager.getLaunchIntentForPackage("id.co.bitcoin")
-                    if (launchIntent != null) {
-                        launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        context.startActivity(launchIntent)
+                    if (onOpenIndodaxClick != null) {
+                        onOpenIndodaxClick()
                     } else {
-                        Toast.makeText(context, "Aplikasi Indodax belum terpasang di HP ini.", Toast.LENGTH_SHORT).show()
+                        val launchIntent = context.packageManager.getLaunchIntentForPackage("id.co.bitcoin")
+                        if (launchIntent != null) {
+                            launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            context.startActivity(launchIntent)
+                        } else {
+                            Toast.makeText(context, "Aplikasi Indodax belum terpasang di HP ini.", Toast.LENGTH_SHORT).show()
+                        }
                     }
                 }, modifier = Modifier.weight(1f).height(44.dp).testTag("execute_signal_button"), colors = ButtonDefaults.buttonColors(containerColor = TvGreen), shape = RoundedCornerShape(12.dp), contentPadding = PaddingValues(horizontal = 8.dp)) {
                     Icon(Icons.Default.OpenInNew, null, Modifier.size(16.dp), tint = Color.Black)
