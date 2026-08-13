@@ -65,10 +65,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import agu.analys.model.AISignalState
 import agu.analys.model.SignalAction
-import agu.analys.trading.PositionDetails
-import agu.analys.trading.PositionDetailsStore
 import agu.analys.trading.SpotPosition
 import agu.analys.trading.SpotPositionState
+import agu.analys.trading.SpotPositionStore
 import agu.analys.ui.theme.TvAmber
 import agu.analys.ui.theme.TvCardBackground
 import agu.analys.ui.theme.TvGreen
@@ -95,15 +94,15 @@ fun AISignalCard(
     onClearGemini: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
-    val positionDetailsStore = remember(context) { PositionDetailsStore(context) }
-    var positionDetails by remember(marketSymbol) { mutableStateOf(PositionDetails()) }
+    val positionStore = remember(context) { SpotPositionStore(context) }
+    var positionDetails by remember(marketSymbol) { mutableStateOf(SpotPosition()) }
     var detailsExpanded by remember { mutableStateOf(false) }
     var showPositionDialog by remember { mutableStateOf(false) }
     var investedInput by remember { mutableStateOf("") }
     var entryInput by remember { mutableStateOf("") }
 
     LaunchedEffect(marketSymbol) {
-        positionDetails = positionDetailsStore.get(marketSymbol)
+        positionDetails = positionStore.get(marketSymbol)
     }
 
     val actionColor by animateColorAsState(
@@ -122,10 +121,7 @@ fun AISignalCard(
     val scoreLabel = if (signal.action == SignalAction.HOLD) "SETUP BELUM KUAT • ${signal.confidence}/100" else "SETUP ${signal.confidence}/100"
     val structureBlocked = signal.reasoning.any { it.contains("bertentangan dengan market structure", ignoreCase = true) }
     val holdReason = signal.reasoning.firstOrNull {
-        it.contains("dibatalkan", true) ||
-            it.contains("tidak ada", true) ||
-            it.contains("belum", true) ||
-            it.contains("kurang", true)
+        it.contains("dibatalkan", true) || it.contains("tidak ada", true) || it.contains("belum", true) || it.contains("kurang", true)
     } ?: signal.reasoning.firstOrNull()
 
     val spotAction = when {
@@ -136,7 +132,6 @@ fun AISignalCard(
         position.state == SpotPositionState.HOLDING -> "HOLDING"
         else -> "WAIT_BUY"
     }
-
     val spotTitle = when (spotAction) {
         "READY_BUY" -> "SIAP BELI"
         "READY_SELL" -> "SIAP JUAL"
@@ -144,19 +139,13 @@ fun AISignalCard(
         "IGNORE_SELL" -> "TIDAK ADA POSISI"
         else -> "TUNGGU BUY"
     }
-
     val spotSubtitle = when (spotAction) {
         "READY_BUY" -> "Sinyal BUY valid dan kamu belum memiliki coin."
         "READY_SELL" -> "Sinyal SELL muncul saat posisi sedang dimiliki."
-        "HOLDING" -> if (signal.action == SignalAction.BUY) {
-            "Sudah punya coin. Jangan beli ulang hanya karena sinyal BUY."
-        } else {
-            "Tetap pegang sampai ada alasan keluar yang valid."
-        }
+        "HOLDING" -> if (signal.action == SignalAction.BUY) "Sudah punya coin. Jangan beli ulang hanya karena sinyal BUY." else "Tetap pegang sampai ada alasan keluar yang valid."
         "IGNORE_SELL" -> "SELL diabaikan karena belum ada coin yang bisa dijual."
         else -> "Belum ada setup BUY yang cukup kuat. Jangan masuk posisi dulu."
     }
-
     val spotColor = when (spotAction) {
         "READY_BUY" -> TvGreen
         "READY_SELL" -> TvRed
@@ -197,8 +186,8 @@ fun AISignalCard(
                     onClick = {
                         val invested = parseRupiah(investedInput)
                         val entry = parseRupiah(entryInput)
-                        positionDetailsStore.save(marketSymbol, invested, entry)
-                        positionDetails = positionDetailsStore.get(marketSymbol)
+                        positionStore.markBought(marketSymbol, invested, entry)
+                        positionDetails = positionStore.get(marketSymbol)
                         onOwnershipChange?.invoke(true, entry)
                         showPositionDialog = false
                     }
@@ -209,10 +198,7 @@ fun AISignalCard(
     }
 
     Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .border(1.dp, TvGreen.copy(alpha = 0.25f), RoundedCornerShape(20.dp))
-            .testTag("ai_signal_card"),
+        modifier = modifier.fillMaxWidth().border(1.dp, TvGreen.copy(alpha = 0.25f), RoundedCornerShape(20.dp)).testTag("ai_signal_card"),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = TvCardBackground),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
@@ -270,8 +256,8 @@ fun AISignalCard(
                                     entryInput = if (positionDetails.entryPrice > 0.0) positionDetails.entryPrice.toString() else formatInputPrice(signal.entryPrice)
                                     showPositionDialog = true
                                 } else {
-                                    positionDetailsStore.clear(marketSymbol)
-                                    positionDetails = PositionDetails()
+                                    positionStore.markSold(marketSymbol)
+                                    positionDetails = SpotPosition()
                                     onOwnershipChange?.invoke(false, 0.0)
                                 }
                             },
@@ -362,16 +348,12 @@ fun AISignalCard(
             Spacer(Modifier.height(12.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = {
-                    if (onOpenIndodaxClick != null) {
-                        onOpenIndodaxClick()
-                    } else {
+                    if (onOpenIndodaxClick != null) onOpenIndodaxClick() else {
                         val launchIntent = context.packageManager.getLaunchIntentForPackage("id.co.bitcoin")
                         if (launchIntent != null) {
                             launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                             context.startActivity(launchIntent)
-                        } else {
-                            Toast.makeText(context, "Aplikasi Indodax belum terpasang di HP ini.", Toast.LENGTH_SHORT).show()
-                        }
+                        } else Toast.makeText(context, "Aplikasi Indodax belum terpasang di HP ini.", Toast.LENGTH_SHORT).show()
                     }
                 }, modifier = Modifier.weight(1f).height(44.dp).testTag("execute_signal_button"), colors = ButtonDefaults.buttonColors(containerColor = TvGreen), shape = RoundedCornerShape(12.dp), contentPadding = PaddingValues(horizontal = 8.dp)) {
                     Icon(Icons.Default.OpenInNew, null, Modifier.size(16.dp), tint = Color.Black)
@@ -420,16 +402,9 @@ fun AISignalCard(
     }
 }
 
-private fun findReason(signal: AISignalState, prefix: String): String =
-    signal.reasoning.firstOrNull { it.startsWith(prefix, ignoreCase = true) }
-        ?: "Belum ada penjelasan dari data candle saat ini."
-
-private fun parseRupiah(value: String): Double =
-    value.replace(".", "").replace(",", ".").filter { it.isDigit() || it == '.' }.toDoubleOrNull() ?: 0.0
-
-private fun formatInputPrice(value: Double): String =
-    if (value > 0.0 && value.isFinite()) value.toLong().toString() else ""
-
+private fun findReason(signal: AISignalState, prefix: String): String = signal.reasoning.firstOrNull { it.startsWith(prefix, ignoreCase = true) } ?: "Belum ada penjelasan dari data candle saat ini."
+private fun parseRupiah(value: String): Double = value.replace(".", "").replace(",", ".").filter { it.isDigit() || it == '.' }.toDoubleOrNull() ?: 0.0
+private fun formatInputPrice(value: Double): String = if (value > 0.0 && value.isFinite()) value.toLong().toString() else ""
 private fun formatQuantity(value: Double): String = when {
     value <= 0.0 -> "-"
     value >= 1.0 -> String.format("%.6f", value).trimEnd('0').trimEnd('.')
