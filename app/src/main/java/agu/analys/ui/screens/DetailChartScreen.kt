@@ -147,7 +147,7 @@ fun DetailChartScreen(
                     ) {
                         Icon(
                             if (selectedPair.symbol in watchlist) Icons.Default.Star else Icons.Default.StarBorder,
-                            if (selectedPair.symbol in watchlist) "Hapus dari watchlist" else "Tambah ke watchlist",
+                            if (selectedPair.symbol in watchlist) TvGold else TvTextSecondary,
                             tint = if (selectedPair.symbol in watchlist) TvGold else TvTextSecondary,
                             modifier = Modifier.size(22.dp)
                         )
@@ -277,8 +277,12 @@ fun DetailChartScreen(
                     signal = aiSignalState,
                     marketSymbol = selectedPair.symbol,
                     position = spotPosition,
-                    onOwnershipChange = { owned, referenceEntry ->
-                        viewModel.setOwnership(owned, referenceEntry)
+                    currentPrice = currentTick?.price ?: 0.0,
+                    onOwnershipChange = { owned, referenceEntry, costIdr ->
+                        viewModel.setOwnership(owned, referenceEntry, costIdr)
+                    },
+                    onPositionDetailsSave = { entry, cost ->
+                        viewModel.updatePositionDetails(entry, cost)
                     },
                     onDeepAuditClick = { viewModel.requestDeepAiAudit() },
                     auditText = auditReportText,
