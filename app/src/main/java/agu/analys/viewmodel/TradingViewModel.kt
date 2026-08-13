@@ -188,9 +188,47 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     fun selectTimeframe(tf: Timeframe) { if (_selectedTimeframe.value == tf) return; _selectedTimeframe.value = tf; selectPair(_selectedPair.value) }
     fun selectChartStyle(style: ChartStyle) { _selectedChartStyle.value = style }
     fun toggleChartExpanded() { _isChartExpanded.value = !_isChartExpanded.value }
-    fun requestDeepAiAudit() { val tick = _currentTick.value ?: return; if (_connectionState.value !is MarketConnectionState.Connected) return; val indicators = currentIndicators.value; val signal = aiSignalState.value; viewModelScope.launch { _isAuditLoading.value = true; _auditReportText.value = null; _auditReportText.value = GroqAiService.generateDeepMarketAudit(prefs.groqApiKey, tick, indicators, signal); _isAuditLoading.value = false } }
+
+    fun requestDeepAiAudit() {
+        val tick = _currentTick.value ?: return
+        if (_connectionState.value !is MarketConnectionState.Connected) return
+        if (_isAuditLoading.value || _isGeminiLoading.value) return
+        val indicators = currentIndicators.value
+        val signal = aiSignalState.value
+        viewModelScope.launch {
+            _isAuditLoading.value = true
+            _isGeminiLoading.value = true
+            _auditReportText.value = null
+            try {
+                _auditReportText.value = GroqAiService.generateDeepMarketAudit(prefs.groqApiKey, tick, indicators, signal)
+            } finally {
+                _isAuditLoading.value = false
+                _isGeminiLoading.value = false
+            }
+        }
+    }
+
     fun clearAuditReport() { _auditReportText.value = null }
-    fun requestGeminiChartSummary() { val tick = _currentTick.value ?: return; if (_connectionState.value !is MarketConnectionState.Connected) return; val indicators = currentIndicators.value; val signal = aiSignalState.value; viewModelScope.launch { _isGeminiLoading.value = true; _geminiSummaryText.value = null; _geminiSummaryText.value = GeminiAiService.generateChartSummary24h(prefs.geminiApiKey, tick, indicators, signal); _isGeminiLoading.value = false } }
+
+    fun requestGeminiChartSummary() {
+        val tick = _currentTick.value ?: return
+        if (_connectionState.value !is MarketConnectionState.Connected) return
+        if (_isAuditLoading.value || _isGeminiLoading.value) return
+        val indicators = currentIndicators.value
+        val signal = aiSignalState.value
+        viewModelScope.launch {
+            _isAuditLoading.value = true
+            _isGeminiLoading.value = true
+            _geminiSummaryText.value = null
+            try {
+                _geminiSummaryText.value = GeminiAiService.generateChartSummary24h(prefs.geminiApiKey, tick, indicators, signal)
+            } finally {
+                _isAuditLoading.value = false
+                _isGeminiLoading.value = false
+            }
+        }
+    }
+
     fun clearGeminiSummary() { _geminiSummaryText.value = null }
     fun retryConnection() { _connectionState.value = MarketConnectionState.Loading; startMarketPolling(_selectedPair.value); refreshWorthCoinsFromMarket() }
     fun simulateDisconnect() { markMarketOffline("Mode offline: koneksi pasar dihentikan. Data cache terakhir tetap ditampilkan.") }
