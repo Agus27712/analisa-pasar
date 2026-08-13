@@ -7,10 +7,7 @@ import org.json.JSONObject
 /**
  * Local spot-position state. A signal never means an order was executed.
  * The user explicitly confirms ownership after trading on Indodax via the
- * manual switch. Default is NO_POSITION because the app cannot read balances.
- *
- * Ownership changes are also timestamped so signal history can reconstruct
- * the ownership state that existed when each signal was emitted.
+ * manual switch / form. Default is NO_POSITION because the app cannot read balances.
  */
 enum class SpotPositionState {
     NO_POSITION,
@@ -20,9 +17,30 @@ enum class SpotPositionState {
 data class SpotPosition(
     val state: SpotPositionState = SpotPositionState.NO_POSITION,
     val entryPrice: Double = 0.0,
+    val costIdr: Double = 0.0,
     val openedAt: Long = 0L
 ) {
     val isHolding: Boolean get() = state == SpotPositionState.HOLDING
+
+    /** Qty derived from modal / harga beli when both are set. */
+    val qty: Double
+        get() = if (entryPrice > 0.0 && costIdr > 0.0) costIdr / entryPrice else 0.0
+
+    fun pnlPercent(currentPrice: Double): Double? {
+        if (!isHolding || entryPrice <= 0.0 || currentPrice <= 0.0) return null
+        return ((currentPrice - entryPrice) / entryPrice) * 100.0
+    }
+
+    fun pnlIdr(currentPrice: Double): Double? {
+        if (!isHolding || costIdr <= 0.0 || entryPrice <= 0.0 || currentPrice <= 0.0) return null
+        val currentValue = qty * currentPrice
+        return currentValue - costIdr
+    }
+
+    fun currentValueIdr(currentPrice: Double): Double? {
+        if (!isHolding || qty <= 0.0 || currentPrice <= 0.0) return null
+        return qty * currentPrice
+    }
 }
 
 class SpotPositionStore(context: Context) {
@@ -36,15 +54,11 @@ class SpotPositionStore(context: Context) {
         return SpotPosition(
             state = state,
             entryPrice = prefs.getString("${key}_entry", null)?.toDoubleOrNull() ?: 0.0,
+            costIdr = prefs.getString("${key}_cost", null)?.toDoubleOrNull() ?: 0.0,
             openedAt = prefs.getLong("${key}_opened_at", 0L)
         )
     }
 
-    /**
-     * Reconstruct the ownership state at a historical timestamp.
-     * Returns null only when the app has an old HOLDING state without any
-     * ownership-history event yet. In normal use the default is NO_POSITION.
-     */
     fun getAt(symbol: String, timestamp: Long): SpotPosition? {
         val key = normalize(symbol)
         val history = readHistory(key)
@@ -72,48 +86,53 @@ class SpotPositionStore(context: Context) {
         return SpotPosition(
             state = state,
             entryPrice = best.optDouble("entryPrice", 0.0),
+            costIdr = best.optDouble("costIdr", 0.0),
             openedAt = best.optLong("openedAt", 0L)
         )
     }
 
     fun isHolding(symbol: String): Boolean = get(symbol).isHolding
 
-    fun markBought(symbol: String, referenceEntryPrice: Double) {
+    fun markBought(
+        symbol: String,
+        referenceEntryPrice: Double,
+        costIdr: Double = 0.0
+    ) {
         val key = normalize(symbol)
-        val openedAt = System.currentTimeMillis()
+        val existing = get(symbol)
+        val openedAt = if (existing.isHolding && existing.openedAt > 0L) existing.openedAt else System.currentTimeMillis()
+        val entry = referenceEntryPrice.takeIf { it > 0.0 } ?: existing.entryPrice
+        val cost = costIdr.takeIf { it > 0.0 } ?: existing.costIdr
+        val position = SpotPosition(
+            state = SpotPositionState.HOLDING,
+            entryPrice = entry,
+            costIdr = cost,
+            openedAt = openedAt
+        )
         prefs.edit()
             .putString("${key}_state", SpotPositionState.HOLDING.name)
-            .putString("${key}_entry", referenceEntryPrice.toString())
+            .putString("${key}_entry", entry.toString())
+            .putString("${key}_cost", cost.toString())
             .putLong("${key}_opened_at", openedAt)
-            .putString("${key}_history", appendHistoryEvent(
-                key,
-                SpotPosition(
-                    state = SpotPositionState.HOLDING,
-                    entryPrice = referenceEntryPrice,
-                    openedAt = openedAt
-                )
-            ))
+            .putString("${key}_history", appendHistoryEvent(key, position))
             .apply()
     }
 
     fun markSold(symbol: String) {
         val key = normalize(symbol)
         val changedAt = System.currentTimeMillis()
+        val position = SpotPosition(
+            state = SpotPositionState.NO_POSITION,
+            entryPrice = 0.0,
+            costIdr = 0.0,
+            openedAt = changedAt
+        )
         prefs.edit()
             .putString("${key}_state", SpotPositionState.NO_POSITION.name)
             .remove("${key}_entry")
+            .remove("${key}_cost")
             .remove("${key}_opened_at")
-            .putString(
-                "${key}_history",
-                appendHistoryEvent(
-                    key,
-                    SpotPosition(
-                        state = SpotPositionState.NO_POSITION,
-                        entryPrice = 0.0,
-                        openedAt = changedAt
-                    )
-                )
-            )
+            .putString("${key}_history", appendHistoryEvent(key, position))
             .apply()
     }
 
@@ -128,6 +147,7 @@ class SpotPositionStore(context: Context) {
             .put("timestamp", System.currentTimeMillis())
             .put("state", position.state.name)
             .put("entryPrice", position.entryPrice)
+            .put("costIdr", position.costIdr)
             .put("openedAt", position.openedAt)
         history.put(event)
         while (history.length() > MAX_HISTORY_EVENTS) {
