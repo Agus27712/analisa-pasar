@@ -9,8 +9,8 @@ import org.json.JSONObject
  * The user explicitly confirms ownership after trading on Indodax via the
  * manual position form. Default is NO_POSITION because the app cannot read balances.
  *
- * Ownership changes are timestamped so signal history can reconstruct the
- * position state that existed when each signal was emitted.
+ * Ownership changes are timestamped so signal history can reconstruct
+ * the position state that existed when each signal was emitted.
  */
 enum class SpotPositionState {
     NO_POSITION,
@@ -48,7 +48,7 @@ class SpotPositionStore(context: Context) {
     fun getAt(symbol: String, timestamp: Long): SpotPosition {
         val key = normalize(symbol)
         val history = readHistory(key)
-        if (history.length == 0) {
+        if (history.length() == 0) {
             val current = get(symbol)
             if (current.isHolding && current.openedAt > 0L && current.openedAt <= timestamp) return current
             return SpotPosition()
@@ -75,15 +75,6 @@ class SpotPositionStore(context: Context) {
     }
 
     fun isHolding(symbol: String): Boolean = get(symbol).isHolding
-
-    fun markBought(symbol: String, referenceEntryPrice: Double) {
-        val current = get(symbol)
-        markBought(
-            symbol = symbol,
-            investedAmount = current.investedAmount,
-            entryPrice = referenceEntryPrice
-        )
-    }
 
     fun markBought(symbol: String, investedAmount: Double, entryPrice: Double) {
         val key = normalize(symbol)
