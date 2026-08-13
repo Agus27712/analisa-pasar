@@ -109,6 +109,7 @@ fun DetailChartScreen(
     val geminiSummaryText by viewModel.geminiSummaryText.collectAsStateWithLifecycle()
     val isGeminiLoading by viewModel.isGeminiLoading.collectAsStateWithLifecycle()
     val isShowingCached by viewModel.isShowingCachedData.collectAsStateWithLifecycle()
+    val spotPosition by viewModel.spotPosition.collectAsStateWithLifecycle()
     val marketStructure = remember(recentCandles) { MarketStructureAnalyzer.analyze(recentCandles) }
     var showSymbolPickerSheet by remember { mutableStateOf(false) }
 
@@ -275,6 +276,10 @@ fun DetailChartScreen(
                 AISignalCard(
                     signal = aiSignalState,
                     marketSymbol = selectedPair.symbol,
+                    position = spotPosition,
+                    onOwnershipChange = { owned, referenceEntry ->
+                        viewModel.setOwnership(owned, referenceEntry)
+                    },
                     onDeepAuditClick = { viewModel.requestDeepAiAudit() },
                     auditText = auditReportText,
                     isAuditLoading = isAuditLoading,
@@ -287,7 +292,11 @@ fun DetailChartScreen(
                 Spacer(Modifier.height(8.dp))
                 OrderBookAndTradesPanel(bids = orderBookBids, asks = orderBookAsks, tradeStream = tradeStream)
                 Spacer(Modifier.height(8.dp))
-                SignalHistoryPanel(history = signalHistory, currentSymbol = selectedPair.symbol)
+                SignalHistoryPanel(
+                    history = signalHistory,
+                    currentSymbol = selectedPair.symbol,
+                    position = spotPosition
+                )
                 Spacer(Modifier.height(18.dp))
             }
         }
