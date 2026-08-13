@@ -274,6 +274,7 @@ fun DetailChartScreen(
                 Spacer(Modifier.height(8.dp))
                 AISignalCard(
                     signal = aiSignalState,
+                    marketSymbol = selectedPair.symbol,
                     onDeepAuditClick = { viewModel.requestDeepAiAudit() },
                     auditText = auditReportText,
                     isAuditLoading = isAuditLoading,
