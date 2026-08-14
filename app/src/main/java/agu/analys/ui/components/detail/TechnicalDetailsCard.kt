@@ -40,7 +40,7 @@ fun TechnicalDetailsCard(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("DETAIL TEKNIKAL", fontSize = 15.sp, fontWeight = FontWeight.ExtraBold, color = InfoBlue, letterSpacing = 0.8.sp)
+            SectionTitle("DETAIL TEKNIKAL", Icons.Default.Info)
             Icon(
                 Icons.Default.KeyboardArrowDown,
                 if (expanded) "Collapse" else "Expand",
@@ -140,10 +140,10 @@ private fun DetailedTechRow(
     subtext: String? = null,
     showDivider: Boolean = true
 ) {
-    Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 5.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                Icon(icon, null, tint = iconTint, modifier = Modifier.size(19.dp))
+                Icon(icon, null, tint = iconTint, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(10.dp))
                 Text(label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TvTextPrimary, maxLines = 1)
             }
@@ -155,13 +155,13 @@ private fun DetailedTechRow(
         if (!subtext.isNullOrBlank()) {
             Spacer(Modifier.height(2.dp))
             Row(Modifier.fillMaxWidth()) {
-                Spacer(Modifier.width(29.dp))
+                Spacer(Modifier.width(28.dp))
                 Text(subtext, fontSize = 11.sp, color = TvTextSecondary, maxLines = 1)
             }
         }
         if (showDivider) {
             Spacer(Modifier.height(6.dp))
-            Box(Modifier.fillMaxWidth().height(0.5.dp).background(Color(0x14FFFFFF)))
+            AnalysisDivider()
         }
     }
 }
