@@ -101,11 +101,13 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     val isShowingCachedData: StateFlow<Boolean> = _isShowingCachedData.asStateFlow()
     private val _spotPosition = MutableStateFlow(SpotPosition())
     val spotPosition: StateFlow<SpotPosition> = _spotPosition.asStateFlow()
-    private val _isScalpingMode = MutableStateFlow(false)
+    private val _isScalpingMode = MutableStateFlow(prefs.isScalpingMode)
     val isScalpingMode: StateFlow<Boolean> = _isScalpingMode.asStateFlow()
 
     fun setScalpingMode(enabled: Boolean) {
+        if (_isScalpingMode.value == enabled) return
         _isScalpingMode.value = enabled
+        prefs.isScalpingMode = enabled
         engine.isScalpingMode = enabled
         val tick = _currentTick.value
         val candles = _recentCandles.value
@@ -122,10 +124,17 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     private var marketPollJob: Job? = null
     private var dashboardPollJob: Job? = null
 
-    init { restoreFromCache(); selectPair(TradingPair.POPULAR_PAIRS.first()); startDashboardPolling(); listenToEngineSignals() }
+    init {
+        engine.isScalpingMode = _isScalpingMode.value
+        restoreFromCache()
+        selectPair(TradingPair.POPULAR_PAIRS.first())
+        startDashboardPolling()
+        listenToEngineSignals()
+    }
 
     private fun restoreFromCache() {
-        val ticks = marketCache.loadDashboardTicks(); val worth = marketCache.loadWorthCoins()
+        val ticks = marketCache.loadDashboardTicks()
+        val worth = marketCache.loadWorthCoins()
         if (ticks.isNotEmpty()) { _dashboardTicks.value = ticks; _isShowingCachedData.value = true }
         if (worth.isNotEmpty()) { _worthCoins.value = worth; _isShowingCachedData.value = true }
     }
@@ -177,7 +186,16 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     fun selectPair(pair: TradingPair) {
         _selectedPair.value = pair; lastSavedSignalTimestamp = 0L; refreshSpotPosition()
         val (cachedTick, cachedCandles) = marketCache.loadPairSnapshot(pair.symbol, _selectedTimeframe.value)
-        if (cachedTick != null || cachedCandles.isNotEmpty()) { if (cachedTick != null) _currentTick.value = cachedTick; if (cachedCandles.isNotEmpty()) { _recentCandles.value = cachedCandles; engine.resetForOffline(); cachedTick?.let { engine.onTickUpdate(it) }; cachedCandles.forEach { engine.onCandleUpdate(it) } }; _isShowingCachedData.value = true } else clearLiveData()
+        if (cachedTick != null || cachedCandles.isNotEmpty()) {
+            if (cachedTick != null) _currentTick.value = cachedTick
+            if (cachedCandles.isNotEmpty()) {
+                _recentCandles.value = cachedCandles
+                engine.resetForOffline()
+                engine.onTickUpdate(cachedTick ?: return@let)
+                cachedCandles.forEach { engine.onCandleUpdate(it) }
+            }
+            _isShowingCachedData.value = true
+        } else clearLiveData()
         startMarketPolling(pair)
     }
 
@@ -196,10 +214,28 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
                     val selectedTf = _selectedTimeframe.value
                     if (now - lastCandleRefresh >= 15_000L) {
                         val candles = IndodaxMarketService.fetchCandles(pairId, selectedTf, 300)
-                        if (candles.size >= 35) { _recentCandles.value = candles; engine.resetForOffline(); engine.onTickUpdate(normalizedTick); candles.forEach { engine.onCandleUpdate(it) }; lastCandleRefresh = now; marketCache.savePairSnapshot(pair.symbol, selectedTf, normalizedTick, candles) } else if (_recentCandles.value.isNotEmpty()) marketCache.savePairSnapshot(pair.symbol, selectedTf, normalizedTick, _recentCandles.value)
+                        if (candles.size >= 35) {
+                            _recentCandles.value = candles
+                            engine.resetForOffline()
+                            engine.onTickUpdate(normalizedTick)
+                            candles.forEach { engine.onCandleUpdate(it) }
+                            lastCandleRefresh = now
+                            marketCache.savePairSnapshot(pair.symbol, selectedTf, normalizedTick, candles)
+                        } else if (_recentCandles.value.isNotEmpty()) marketCache.savePairSnapshot(pair.symbol, selectedTf, normalizedTick, _recentCandles.value)
                     } else if (_recentCandles.value.isNotEmpty()) marketCache.savePairSnapshot(pair.symbol, selectedTf, normalizedTick, _recentCandles.value)
-                    if (now - lastDepthRefresh >= 5_000L) { val depth = async { IndodaxMarketService.fetchOrderBook(pairId) }; val trades = async { IndodaxMarketService.fetchRecentTrades(pairId) }; val (bids, asks) = depth.await(); val newTrades = trades.await(); if (bids.isNotEmpty() && bids != _orderBookBids.value) _orderBookBids.value = bids; if (asks.isNotEmpty() && asks != _orderBookAsks.value) _orderBookAsks.value = asks; if (newTrades.isNotEmpty() && newTrades != _tradeStream.value) _tradeStream.value = newTrades; lastDepthRefresh = now }
-                } else { failCount++; if (failCount >= 2) { _isShowingCachedData.value = true; _connectionState.value = MarketConnectionState.ConnectionLost("Koneksi internet/market terputus. Menampilkan data cache terakhir."); break } }
+                    if (now - lastDepthRefresh >= 5_000L) {
+                        val depth = async { IndodaxMarketService.fetchOrderBook(pairId) }
+                        val trades = async { IndodaxMarketService.fetchRecentTrades(pairId) }
+                        val (bids, asks) = depth.await(); val newTrades = trades.await()
+                        if (bids.isNotEmpty() && bids != _orderBookBids.value) _orderBookBids.value = bids
+                        if (asks.isNotEmpty() && asks != _orderBookAsks.value) _orderBookAsks.value = asks
+                        if (newTrades.isNotEmpty() && newTrades != _tradeStream.value) _tradeStream.value = newTrades
+                        lastDepthRefresh = now
+                    }
+                } else {
+                    failCount++
+                    if (failCount >= 2) { _isShowingCachedData.value = true; _connectionState.value = MarketConnectionState.ConnectionLost("Koneksi internet/market terputus. Menampilkan data cache terakhir."); break }
+                }
                 delay(3000L)
             }
         }
@@ -220,13 +256,11 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         val signal = aiSignalState.value
         viewModelScope.launch {
             _isAuditLoading.value = true
-            _isGeminiLoading.value = true
             _auditReportText.value = null
             try {
                 _auditReportText.value = GroqAiService.generateDeepMarketAudit(prefs.groqApiKey, tick, indicators, signal)
             } finally {
                 _isAuditLoading.value = false
-                _isGeminiLoading.value = false
             }
         }
     }
@@ -240,13 +274,11 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         val indicators = currentIndicators.value
         val signal = aiSignalState.value
         viewModelScope.launch {
-            _isAuditLoading.value = true
             _isGeminiLoading.value = true
             _geminiSummaryText.value = null
             try {
                 _geminiSummaryText.value = GeminiAiService.generateChartSummary24h(prefs.geminiApiKey, tick, indicators, signal)
             } finally {
-                _isAuditLoading.value = false
                 _isGeminiLoading.value = false
             }
         }
@@ -258,10 +290,8 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
 
     private val _githubReleaseInfo = MutableStateFlow<GitHubReleaseInfo?>(null)
     val githubReleaseInfo: StateFlow<GitHubReleaseInfo?> = _githubReleaseInfo.asStateFlow()
-
     private val _isCheckingUpdate = MutableStateFlow(false)
     val isCheckingUpdate: StateFlow<Boolean> = _isCheckingUpdate.asStateFlow()
-
     private val _updateDownloadProgress = MutableStateFlow<Int?>(null)
     val updateDownloadProgress: StateFlow<Int?> = _updateDownloadProgress.asStateFlow()
 
@@ -269,9 +299,9 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch {
             _isCheckingUpdate.value = true
             _githubReleaseInfo.value = null
+            _updateDownloadProgress.value = null
             try {
-                val release = GitHubUpdater.fetchLatestRelease(repo)
-                _githubReleaseInfo.value = release
+                _githubReleaseInfo.value = GitHubUpdater.fetchLatestRelease(repo)
             } finally {
                 _isCheckingUpdate.value = false
             }
@@ -280,6 +310,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
 
     fun downloadAndInstallUpdate(context: android.content.Context, repo: String) {
         val release = _githubReleaseInfo.value ?: return
+        if (release.apkUrl.isBlank()) return
         viewModelScope.launch {
             _updateDownloadProgress.value = 0
             GitHubUpdater.downloadAndInstallApk(context, release.apkUrl, release.apkName) { progress ->
