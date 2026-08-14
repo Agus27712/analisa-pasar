@@ -3,7 +3,9 @@ package agu.analys.ui.components
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,6 +17,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
@@ -25,6 +28,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -60,6 +64,11 @@ fun SimpleComposeChart(
     var visibleCount by remember { mutableIntStateOf(defaultVisible) }
     var startIndex by remember { mutableIntStateOf((candleCount - defaultVisible).coerceAtLeast(0)) }
     var gestureZoom by remember { mutableFloatStateOf(1f) }
+
+    var showEma20 by remember { mutableStateOf(true) }
+    var showEma50 by remember { mutableStateOf(true) }
+    var showEma200 by remember { mutableStateOf(false) }
+    var showBb by remember { mutableStateOf(true) }
 
     LaunchedEffect(candleCount) {
         if (candleCount <= 0) {
@@ -99,6 +108,18 @@ fun SimpleComposeChart(
                 }
                 if (livePrice != null) Text("LIVE ${PriceFormatter.formatPrice(livePrice)}", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = TvTextPrimary)
             }
+
+            Spacer(modifier = Modifier.height(6.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                IndicatorChip("EMA 20", Color(0xFFFFD54F), showEma20) { showEma20 = !showEma20 }
+                IndicatorChip("EMA 50", Color(0xFF42A5F5), showEma50) { showEma50 = !showEma50 }
+                IndicatorChip("EMA 200", Color(0xFFAB47BC), showEma200) { showEma200 = !showEma200 }
+                IndicatorChip("BB", Color.White.copy(alpha = 0.7f), showBb) { showBb = !showBb }
+            }
+
             Spacer(modifier = Modifier.height(6.dp))
             Box(
                 modifier = Modifier
@@ -157,12 +178,14 @@ fun SimpleComposeChart(
                         drawRect(candleColor, topLeft = Offset(x - bodyWidth / 2f, bodyTop), size = androidx.compose.ui.geometry.Size(bodyWidth, bodyBottom - bodyTop))
                     }
 
-                    drawSeries(ema20, Color(0xFFFFD54F))
-                    drawSeries(ema50, Color(0xFF42A5F5))
-                    drawSeries(ema200, Color(0xFFAB47BC))
-                    drawSeries(bb.first, Color.White.copy(alpha = 0.35f))
-                    drawSeries(bb.second, Color.White.copy(alpha = 0.35f))
-                    drawSeries(bb.third, Color.White.copy(alpha = 0.25f))
+                    if (showEma20) drawSeries(ema20, Color(0xFFFFD54F))
+                    if (showEma50) drawSeries(ema50, Color(0xFF42A5F5))
+                    if (showEma200) drawSeries(ema200, Color(0xFFAB47BC))
+                    if (showBb) {
+                        drawSeries(bb.first, Color.White.copy(alpha = 0.35f))
+                        drawSeries(bb.second, Color.White.copy(alpha = 0.35f))
+                        drawSeries(bb.third, Color.White.copy(alpha = 0.25f))
+                    }
 
                     livePrice?.let { price ->
                         if (price in minPrice..maxPrice) {
@@ -180,8 +203,25 @@ fun SimpleComposeChart(
                 }
             }
             Spacer(modifier = Modifier.height(5.dp))
-            Text("Geser untuk melihat candle lain • Cubit untuk zoom • EMA20 kuning • EMA50 biru • EMA200 ungu • BB putih", fontSize = 8.sp, color = TvTextSecondary, lineHeight = 11.sp)
+            Text("Geser untuk lihat candle • Cubit zoom • Tap chip untuk on/off indikator", fontSize = 8.sp, color = TvTextSecondary, lineHeight = 11.sp)
         }
+    }
+}
+
+@Composable
+private fun IndicatorChip(label: String, color: Color, active: Boolean, onClick: () -> Unit) {
+    val bg = if (active) color.copy(alpha = 0.18f) else Color(0xFF1A1A1A)
+    val border = if (active) color.copy(alpha = 0.7f) else Color(0x33FFFFFF)
+    val textColor = if (active) color else TvTextSecondary
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(bg)
+            .border(1.dp, border, RoundedCornerShape(20.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 5.dp)
+    ) {
+        Text(label, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = textColor)
     }
 }
 
