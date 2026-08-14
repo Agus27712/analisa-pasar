@@ -2,6 +2,14 @@ package agu.analys.model
 
 enum class SignalAction { BUY, SELL, HOLD }
 
+enum class ScalpingStage(val displayName: String) {
+    HOLD("TAHAN"),
+    WATCH("WATCH"),
+    WAIT_PULLBACK("TUNGGU PULLBACK"),
+    ENTRY("ENTRY"),
+    STRONG_ENTRY("ENTRY KUAT")
+}
+
 enum class TrendSentiment(val displayName: String) {
     STRONG_BULLISH_CONTINUATION("Kelanjutan Bullish Kuat"),
     BULLISH_REVERSAL("Pembalikan Arah Bullish"),
@@ -59,7 +67,8 @@ data class AISignalState(
     val patternDetected: String? = null,
     val reasoning: List<String> = emptyList(),
     val timestamp: Long = System.currentTimeMillis(),
-    val marketSymbol: String = ""
+    val marketSymbol: String = "",
+    val scalpingStage: ScalpingStage = ScalpingStage.HOLD
 )
 
 data class TradingPair(
