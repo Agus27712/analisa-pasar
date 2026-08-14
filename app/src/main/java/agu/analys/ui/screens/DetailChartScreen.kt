@@ -155,7 +155,7 @@ fun DetailChartScreen(viewModel: TradingViewModel, onNavigateToDashboard: () -> 
                 Spacer(Modifier.height(10.dp)); RecommendationCard(aiSignalState)
                 Spacer(Modifier.height(10.dp)); WhyCard(aiSignalState, currentIndicators, marketStructure)
                 Spacer(Modifier.height(10.dp)); AiAssistantCard(auditReportText, isAuditLoading, geminiSummaryText, isGeminiLoading, viewModel::requestDeepAiAudit, viewModel::requestGeminiChartSummary, viewModel::clearAuditReport, viewModel::clearGeminiSummary)
-                Spacer(Modifier.height(10.dp)); SpotPositionCard(symbol = selectedPair.symbol.removeSuffix("IDR"), signal = aiSignalState, position = spotPosition, currentPrice = currentTick?.price ?: 0.0, onPositionChanged = viewModel::refreshSpotPosition)
+                Spacer(Modifier.height(10.dp)); SpotPositionCard(symbol = selectedPair.symbol, signal = aiSignalState, position = spotPosition, currentPrice = currentTick?.price ?: 0.0, onPositionChanged = viewModel::refreshSpotPosition)
                 Spacer(Modifier.height(10.dp)); ImportantLevelsCard(aiSignalState, marketStructure, currentTick?.price ?: 0.0)
                 Spacer(Modifier.height(10.dp)); TechnicalDetailsCard(currentIndicators, marketStructure, currentTick?.volume24h ?: 0.0)
                 Spacer(Modifier.height(10.dp)); MonitorCard(aiSignalState, marketStructure, currentTick?.price ?: 0.0, isShowingCached)
@@ -175,7 +175,7 @@ private fun PriceHeader(price: Double, change: Double) {
 
 @Composable
 private fun TimeframeSelector(selected: Timeframe, onSelect: (Timeframe) -> Unit) {
-    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(7.dp)) { listOf(Timeframe.M15, Timeframe.H1, Timeframe.H4, Timeframe.D1).forEach { tf -> val active = selected == tf; Box(Modifier.clip(RoundedCornerShape(10.dp)).background(if (active) Color(0xFF087FF5) else Color(0xFF162536)).clickable { onSelect(tf) }.padding(horizontal = 17.dp, vertical = 10.dp).testTag("timeframe_${tf.code}")) { Text(tf.label.uppercase(), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = if (active) Color.White else TvTextSecondary) } } }
+    Row(modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(7.dp)) { listOf(Timeframe.M15, Timeframe.H1, Timeframe.H4, Timeframe.D1).forEach { tf -> val active = selected == tf; Box(modifier.clip(RoundedCornerShape(10.dp)).background(if (active) Color(0xFF087FF5) else Color(0xFF162536)).clickable { onSelect(tf) }.padding(horizontal = 17.dp, vertical = 10.dp).testTag("timeframe_${tf.code}")) { Text(tf.label.uppercase(), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = if (active) Color.White else TvTextSecondary) } } }
 }
 
 @Composable
@@ -199,7 +199,7 @@ private fun RecommendationCard(signal: AISignalState) {
 @Composable
 private fun WhyCard(signal: AISignalState, indicators: TechnicalIndicators, structure: MarketStructureSnapshot) {
     val reasons = buildSimpleReasons(signal, indicators, structure)
-    AnalysisCard { SectionTitle("KENAPA?", Icons.Default.CheckCircle); Spacer(Modifier.height(7.dp)); reasons.forEach { reason -> Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.Top) { Icon(Icons.Default.CheckCircle, null, tint = TvGreen, modifier = Modifier.size(19.dp)); Spacer(Modifier.width(9.dp)); Text(reason, fontSize = 14.sp, color = TvTextPrimary, lineHeight = 20.sp) } }; Spacer(Modifier.height(6.dp)); Text("Skor adalah kekuatan setup, bukan jaminan profit.", fontSize = 12.sp, color = TvTextSecondary) }
+    AnalysisCard { SectionTitle("KENAPA?", Icons.Default.CheckCircle); Spacer(Modifier.height(7.dp)); reasons.forEach { reason -> Row(modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.Top) { Icon(Icons.Default.CheckCircle, null, tint = TvGreen, modifier = Modifier.size(19.dp)); Spacer(Modifier.width(9.dp)); Text(reason, fontSize = 14.sp, color = TvTextPrimary, lineHeight = 20.sp) } }; Spacer(Modifier.height(6.dp)); Text("Skor adalah kekuatan setup, bukan jaminan profit.", fontSize = 12.sp, color = TvTextSecondary) }
 }
 
 @Composable
@@ -302,16 +302,16 @@ private fun SymbolPickerSheet(popularPairs: List<TradingPair>, watchlist: Set<St
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 28.dp)) {
             Text("Pilih Koin", fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, color = TvTextPrimary); Spacer(Modifier.height(5.dp)); Text("Ketik simbol Indodax, misalnya ADA, AVAX, atau SHIB.", fontSize = 13.sp, color = TvTextSecondary); Spacer(Modifier.height(12.dp))
             OutlinedTextField(value = customInput, onValueChange = { customInput = it.uppercase().filter { c -> c.isLetterOrDigit() } }, modifier = Modifier.fillMaxWidth().testTag("custom_symbol_input"), singleLine = true, placeholder = { Text("Contoh: ADA atau ADAIDR", color = TvTextSecondary, fontSize = 14.sp) }, keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters, imeAction = ImeAction.Done), keyboardActions = KeyboardActions(onDone = { if (customInput.isNotBlank()) onSelectAndWatch(customInput) }), colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = TvGreen, unfocusedBorderColor = Color(0xFF2A3540), focusedTextColor = TvTextPrimary, unfocusedTextColor = TvTextPrimary, cursorColor = TvGreen), shape = RoundedCornerShape(12.dp))
-            Spacer(Modifier.height(10.dp)); Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Spacer(Modifier.height(10.dp)); Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = { if (customInput.isNotBlank()) onSelectAndWatch(customInput) }, enabled = customInput.isNotBlank(), modifier = Modifier.weight(1f).testTag("add_pair_and_watch_button"), colors = ButtonDefaults.buttonColors(containerColor = TvGreen), shape = RoundedCornerShape(12.dp)) { Icon(Icons.Default.Add, null, Modifier.size(18.dp), tint = Color.Black); Spacer(Modifier.width(6.dp)); Text("Buka + Simpan", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.Black) }
                 OutlinedButton(onClick = { if (customInput.isNotBlank()) onSelect(TradingPair.fromCustomSymbol(customInput)) }, enabled = customInput.isNotBlank(), modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, TvGreen), colors = ButtonDefaults.outlinedButtonColors(contentColor = TvGreen)) { Text("Hanya Buka", fontSize = 13.sp, fontWeight = FontWeight.Bold) }
             }
             Spacer(Modifier.height(16.dp)); Text("KOIN POPULER", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TvGreen, letterSpacing = 0.6.sp); Spacer(Modifier.height(8.dp))
-            Column(Modifier.fillMaxWidth().heightIn(max = 320.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Column(modifier.fillMaxWidth().heightIn(max = 320.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 popularPairs.forEach { pair ->
                     val watched = pair.symbol in watchlist; val selected = pair.symbol == currentSymbol
-                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(if (selected) TvGreen.copy(alpha = 0.12f) else Color(0x14FFFFFF)).clickable { onSelect(pair) }.padding(horizontal = 12.dp, vertical = 10.dp).testTag("pair_item_${pair.symbol}"), verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) { Text(pair.displayName, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TvTextPrimary); Text(pair.symbol, fontSize = 12.sp, color = TvTextSecondary) }
+                    Row(modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(if (selected) TvGreen.copy(alpha = 0.12f) else Color(0x14FFFFFF)).clickable { onSelect(pair) }.padding(horizontal = 12.dp, vertical = 10.dp).testTag("pair_item_${pair.symbol}"), verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier.weight(1f)) { Text(pair.displayName, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TvTextPrimary); Text(pair.symbol, fontSize = 12.sp, color = TvTextSecondary) }
                         IconButton(onClick = { onToggleWatch(pair.symbol) }, modifier = Modifier.size(38.dp).testTag("watch_toggle_${pair.symbol}")) { Icon(if (watched) Icons.Default.Star else Icons.Default.StarBorder, if (watched) "Hapus watchlist" else "Tambah watchlist", tint = if (watched) TvGold else TvTextSecondary, modifier = Modifier.size(22.dp)) }
                     }
                 }
