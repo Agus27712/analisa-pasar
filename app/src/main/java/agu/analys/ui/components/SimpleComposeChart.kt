@@ -58,7 +58,9 @@ fun SimpleComposeChart(
     candles: List<CandleBar> = emptyList(),
     modifier: Modifier = Modifier
 ) {
-    val validCandles = candles.filter { it.open > 0 && it.high > 0 && it.low > 0 && it.close > 0 }
+    val validCandles = remember(candles) {
+        candles.filter { it.open > 0 && it.high > 0 && it.low > 0 && it.close > 0 }
+    }
     val candleCount = validCandles.size
     val defaultVisible = minOf(80, candleCount.coerceAtLeast(2))
     var visibleCount by remember { mutableIntStateOf(defaultVisible) }
@@ -84,10 +86,11 @@ fun SimpleComposeChart(
     val endIndex = (startIndex + visibleCount).coerceIn(0, candleCount)
     val visible = if (startIndex < endIndex) validCandles.subList(startIndex, endIndex) else emptyList()
 
-    val ema20 = emaSeries(validCandles.map { it.close }, 20)
-    val ema50 = emaSeries(validCandles.map { it.close }, 50)
-    val ema200 = emaSeries(validCandles.map { it.close }, 200)
-    val bb = bollingerSeries(validCandles.map { it.close }, 20)
+    val closePrices = remember(validCandles) { validCandles.map { it.close } }
+    val ema20 = remember(closePrices) { emaSeries(closePrices, 20) }
+    val ema50 = remember(closePrices) { emaSeries(closePrices, 50) }
+    val ema200 = remember(closePrices) { emaSeries(closePrices, 200) }
+    val bb = remember(closePrices) { bollingerSeries(closePrices, 20) }
 
     val minPrice = visible.minOfOrNull { minOf(it.low, bb.first.getOrNull(startIndex) ?: it.low) } ?: currentPrice
     val maxPrice = visible.maxOfOrNull { maxOf(it.high, bb.second.getOrNull(startIndex) ?: it.high) } ?: currentPrice
