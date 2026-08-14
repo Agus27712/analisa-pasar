@@ -161,7 +161,7 @@ fun DetailChartScreen(
                     candles = recentCandles,
                     currentPrice = currentTick?.price ?: 0.0,
                     isPositiveTrend = (currentTick?.change24h ?: 0.0) >= 0,
-                    modifier = Modifier.fillMaxWidth().height(300.dp)
+                    modifier = Modifier.fillMaxWidth().height(360.dp)
                 )
                 Spacer(Modifier.height(10.dp))
                 TimeframeSelector(selectedTimeframe, viewModel::selectTimeframe)
@@ -319,59 +319,26 @@ private fun SymbolPickerSheet(
                 keyboardActions = KeyboardActions(onDone = { if (customInput.isNotBlank()) onSelectAndWatch(customInput) }),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = TvGreen, unfocusedBorderColor = Color(0xFF2A3540),
-                    focusedTextColor = TvTextPrimary, unfocusedTextColor = TvTextPrimary, cursorColor = TvGreen
-                ),
-                shape = RoundedCornerShape(12.dp)
+                    focusedTextColor = TvTextPrimary, unfocusedTextColor = TvTextPrimary
+                )
             )
-            Spacer(Modifier.height(10.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    onClick = { if (customInput.isNotBlank()) onSelectAndWatch(customInput) },
-                    enabled = customInput.isNotBlank(),
-                    modifier = Modifier.weight(1f).testTag("add_pair_and_watch_button"),
-                    colors = ButtonDefaults.buttonColors(containerColor = TvGreen),
-                    shape = RoundedCornerShape(12.dp)
+            Spacer(Modifier.height(12.dp))
+            Text("POPULAR", fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, color = TvTextSecondary)
+            Spacer(Modifier.height(7.dp))
+            popularPairs.forEach { pair ->
+                val active = pair.symbol == currentSymbol
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable { onSelect(pair) }
+                        .background(if (active) Color(0xFF162536) else Color.Transparent)
+                        .padding(horizontal = 11.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Default.Add, null, Modifier.size(18.dp), tint = Color.Black)
-                    Spacer(Modifier.width(6.dp))
-                    Text("Buka + Simpan", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.Black)
-                }
-                OutlinedButton(
-                    onClick = { if (customInput.isNotBlank()) onSelect(TradingPair.fromCustomSymbol(customInput)) },
-                    enabled = customInput.isNotBlank(),
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp),
-                    border = BorderStroke(1.dp, TvGreen),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = TvGreen)
-                ) { Text("Hanya Buka", fontSize = 13.sp, fontWeight = FontWeight.Bold) }
-            }
-            Spacer(Modifier.height(16.dp))
-            Text("KOIN POPULER", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TvGreen, letterSpacing = 0.6.sp)
-            Spacer(Modifier.height(8.dp))
-            Column(Modifier.fillMaxWidth().heightIn(max = 320.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                popularPairs.forEach { pair ->
-                    val watched = pair.symbol in watchlist
-                    val selected = pair.symbol == currentSymbol
-                    Row(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
-                            .background(if (selected) TvGreen.copy(alpha = 0.12f) else Color(0x14FFFFFF))
-                            .clickable { onSelect(pair) }
-                            .padding(horizontal = 12.dp, vertical = 10.dp)
-                            .testTag("pair_item_${pair.symbol}"),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(Modifier.weight(1f)) {
-                            Text(pair.displayName, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TvTextPrimary)
-                            Text(pair.symbol, fontSize = 12.sp, color = TvTextSecondary)
-                        }
-                        IconButton(onClick = { onToggleWatch(pair.symbol) }, modifier = Modifier.size(38.dp).testTag("watch_toggle_${pair.symbol}")) {
-                            Icon(
-                                if (watched) Icons.Default.Star else Icons.Default.StarBorder,
-                                null,
-                                tint = if (watched) TvGold else TvTextSecondary,
-                                modifier = Modifier.size(22.dp)
-                            )
-                        }
+                    Column(Modifier.weight(1f)) {
+                        Text("${pair.baseAsset}/${pair.quoteAsset}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TvTextPrimary)
+                        Text(pair.symbol, fontSize = 10.sp, color = TvTextSecondary)
+                    }
+                    IconButton(onClick = { onToggleWatch(pair.symbol) }) {
+                        Icon(if (pair.symbol in watchlist) Icons.Default.Star else Icons.Default.StarBorder, null, tint = if (pair.symbol in watchlist) TvGold else TvTextSecondary)
                     }
                 }
             }
