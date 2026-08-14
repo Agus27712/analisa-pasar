@@ -1,53 +1,56 @@
 # Architecture — Package Partition
 
-Target structure for `agu.analys`. Large monoliths are split by responsibility.
-
 ```
 agu/analys/
-├── engine/                         # Trading logic (no UI)
+├── engine/
 │   ├── indicators/
-│   │   ├── IndicatorMath.kt        # RSI, EMA, MACD, BB, ATR
+│   │   ├── IndicatorMath.kt
 │   │   └── CandlePatternDetector.kt
 │   ├── regime/
 │   │   └── MarketRegimeDetector.kt
-│   ├── scalping/                   # (next) MTF 1H/15M/1M evaluator
-│   ├── swing/                      # (next) swing/long evaluate
+│   ├── scalping/
+│   │   ├── FrameSignal.kt
+│   │   ├── FrameAnalyzer.kt
+│   │   └── ScalpingMtfEvaluator.kt
+│   ├── swing/
+│   │   └── SwingEvaluator.kt
 │   ├── MarketStructureAnalyzer.kt
-│   └── LearningTradingEngine.kt    # Orchestrator only (thin)
+│   └── LearningTradingEngine.kt    # thin orchestrator (~5 KB)
 │
 ├── ui/
 │   ├── animation/
-│   │   └── AppAnimations.kt        # FadeSlideIn, live pulse, durations
+│   │   └── AppAnimations.kt
 │   ├── components/
-│   │   ├── dashboard/              # Watchlist, volume leaders, overview
-│   │   ├── detail/                 # Market condition, levels, scalping status…
-│   │   ├── chart/                  # (next) SimpleComposeChart etc.
-│   │   └── common/                 # Shared cards, empty states
-│   ├── screens/                    # Thin screens — compose components only
+│   │   ├── dashboard/
+│   │   │   ├── DashboardColors.kt
+│   │   │   ├── ModeSwitchToggle.kt
+│   │   │   ├── VolumeLeaderChip.kt
+│   │   │   └── WatchlistCoinCard.kt
+│   │   ├── detail/
+│   │   └── …
+│   ├── screens/
 │   └── theme/
 │
-├── service/                        # Network / AI APIs
-├── util/                           # Prefs, cache, formatters, updater
-├── model/                          # Data classes & enums
-├── viewmodel/                      # State holders (keep thin)
-├── trading/                        # Spot position store
-└── bridge/                         # TradingView JS bridge
+├── service/
+├── util/
+├── model/
+├── viewmodel/
+├── trading/
+└── bridge/
 ```
 
-## Split priority (large files)
+## Engine flow
 
-| File | Size | Target partition |
-|------|------|------------------|
-| `LearningTradingEngine.kt` | ~33 KB | `indicators/` + `regime/` + `scalping/` + `swing/` |
-| `DetailChartScreen.kt` | ~46 KB | `ui/components/detail/*` (scaffold exists) |
-| `DashboardScreen.kt` | ~33 KB | `ui/components/dashboard/*` |
-| `TradingViewModel.kt` | ~21 KB | keep, extract helpers to `util/` if needed |
-| `AISignalCard.kt` / `SpotPositionCard.kt` | ~17–18 KB | already under `ui/components/` |
+```
+LearningTradingEngine
+  ├─ isScalpingMode → ScalpingMtfEvaluator (1H / 15M / 1M)
+  └─ else           → SwingEvaluator
+         └─ IndicatorMath + CandlePatternDetector + MarketRegimeDetector + MarketStructureAnalyzer
+```
 
 ## Rules
 
-1. **engine** never imports `ui.*`
-2. **ui** never contains indicator math or network calls
-3. **animation** only Compose animation helpers
-4. Screens should be composition roots (< ~150 lines ideal)
-5. New feature = new file in the matching package, not growth of monoliths
+1. `engine` never imports `ui.*`
+2. `ui` never contains indicator math or network calls
+3. Screens stay composition roots
+4. New feature = new file in matching package
