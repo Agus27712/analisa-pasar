@@ -3,14 +3,17 @@ package agu.analys.ui.screens
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ShowChart
@@ -23,6 +26,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -36,15 +40,14 @@ import agu.analys.ui.theme.TvTextPrimary
 import agu.analys.ui.theme.TvTextSecondary
 import agu.analys.util.PriceFormatter
 import agu.analys.viewmodel.TradingViewModel
-import kotlin.math.abs
-import kotlin.math.min
 
 private val DashboardBackground = Color(0xFF070A0F)
-private val DashboardSurface = Color(0xFF0D1219)
-private val DashboardCard = Color(0xFF101720)
-private val DashboardBorder = Color(0xFF1F3540)
+private val DashboardSurface = Color(0xFF0D1722)
+private val DashboardCard = Color(0xFF0D1722)
+private val DashboardBorder = Color(0xFF1A3347)
 private val TvGold = Color(0xFFFFD54A)
 private val TvAmber = Color(0xFFFFB300)
+private val HotOrange = Color(0xFFFF6D00)
 
 @Composable
 fun DashboardScreen(
@@ -54,7 +57,7 @@ fun DashboardScreen(
     modifier: Modifier = Modifier
 ) {
     val worthCoins by viewModel.worthCoins.collectAsState()
-    val selectedPair by viewModel.selectedPair.collectAsState()
+    val hotCoins by viewModel.hotCoins.collectAsState()
     val connectionState by viewModel.connectionState.collectAsState()
     val dashboardTicks by viewModel.dashboardTicks.collectAsState()
     val watchlist by viewModel.watchlist.collectAsState()
@@ -97,8 +100,67 @@ fun DashboardScreen(
         LazyColumn(
             Modifier.fillMaxSize(),
             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            // ── Koin Rame Hari Ini ──
+            if (hotCoins.isNotEmpty()) {
+                item {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(top = 4.dp, bottom = 2.dp)
+                    ) {
+                        Icon(Icons.Default.LocalFireDepartment, null, tint = HotOrange, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            "KOIN RAME HARI INI",
+                            color = HotOrange,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            letterSpacing = 0.8.sp
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "· update tiap 15 detik",
+                            color = TvTextSecondary,
+                            fontSize = 10.sp
+                        )
+                    }
+                }
+                item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        hotCoins.forEachIndexed { index, tick ->
+                            HotCoinChip(
+                                rank = index + 1,
+                                tick = tick,
+                                isWatched = tick.symbol in watchlist,
+                                onOpen = {
+                                    val pair = TradingPair.fromCustomSymbol(tick.symbol)
+                                    viewModel.selectPair(pair)
+                                    onNavigateToDetail(pair)
+                                },
+                                onToggleWatch = { viewModel.toggleWatchlist(tick.symbol) }
+                            )
+                        }
+                    }
+                }
+                item {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "WATCHLIST",
+                        color = TvTextSecondary,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = 0.7.sp
+                    )
+                }
+            }
+
+            // ── Watchlist ──
             if (watchlistPairs.isEmpty()) {
                 item { EmptyWatchlistState { showAddDialog = true } }
             } else {
@@ -116,6 +178,7 @@ fun DashboardScreen(
                     )
                 }
             }
+            item { Spacer(Modifier.height(16.dp)) }
         }
     }
 
@@ -130,6 +193,99 @@ fun DashboardScreen(
                 showAddDialog = false
             }
         )
+    }
+}
+
+@Composable
+private fun HotCoinChip(
+    rank: Int,
+    tick: MarketTick,
+    isWatched: Boolean,
+    onOpen: () -> Unit,
+    onToggleWatch: () -> Unit
+) {
+    val base = tick.symbol.removeSuffix("IDR").ifBlank { tick.symbol }
+    val rangePct = if (tick.low24h > 0) ((tick.high24h - tick.low24h) / tick.low24h) * 100.0 else 0.0
+
+    Card(
+        modifier = Modifier
+            .width(168.dp)
+            .clickable { onOpen() }
+            .testTag("hot_coin_${tick.symbol}"),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = DashboardCard),
+        border = BorderStroke(1.dp, if (rank <= 3) HotOrange.copy(alpha = 0.35f) else DashboardBorder)
+    ) {
+        Column(Modifier.padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier
+                        .size(28.dp)
+                        .clip(CircleShape)
+                        .background(HotOrange.copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("#" + rank, color = HotOrange, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold)
+                }
+                Spacer(Modifier.width(8.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(base, color = TvTextPrimary, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1)
+                    Text(tick.symbol, color = TvTextSecondary, fontSize = 9.sp, maxLines = 1)
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Text(
+                PriceFormatter.formatPrice(tick.price),
+                color = TvTextPrimary,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                "Vol " + PriceFormatter.formatPrice(tick.volume24h),
+                color = TvTextSecondary,
+                fontSize = 10.sp,
+                maxLines = 1
+            )
+            if (rangePct > 0) {
+                Text(
+                    "Range " + String.format("%.1f", rangePct) + "%",
+                    color = TvTextSecondary,
+                    fontSize = 10.sp,
+                    maxLines = 1
+                )
+            }
+            Spacer(Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Button(
+                    onClick = onOpen,
+                    modifier = Modifier.weight(1f).height(32.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = TvGreen),
+                    shape = RoundedCornerShape(9.dp),
+                    contentPadding = PaddingValues(0.dp)
+                ) {
+                    Text("Chart", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                }
+                OutlinedButton(
+                    onClick = onToggleWatch,
+                    modifier = Modifier.height(32.dp),
+                    shape = RoundedCornerShape(9.dp),
+                    border = BorderStroke(1.dp, if (isWatched) TvGold.copy(alpha = 0.5f) else DashboardBorder),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = if (isWatched) TvGold else TvTextSecondary
+                    ),
+                    contentPadding = PaddingValues(horizontal = 8.dp)
+                ) {
+                    Icon(
+                        if (isWatched) Icons.Default.Star else Icons.Default.Add,
+                        null,
+                        Modifier.size(14.dp)
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -183,7 +339,7 @@ private fun DashboardHeader(
 @Composable
 private fun CompactMarketOverview(ticks: Map<String, MarketTick>, worthCoins: List<WorthCoinInfo>, isLive: Boolean) {
     val totalVolume = ticks.values.sumOf { it.volume24h }
-    val avgChange = if (ticks.isEmpty()) 0.0 else ticks.values.map { it.change24h }.average()
+    val avgChange = if (ticks.isEmpty()) 0.0 else ticks.values.map { it.change24h }.filter { !it.isNaN() }.let { if (it.isEmpty()) 0.0 else it.average() }
     val score = worthCoins.maxOfOrNull { it.worthScore } ?: 0
     val scoreColor = scoreColor(score)
 
@@ -245,7 +401,12 @@ private fun WatchlistCoinCard(
     onClick: () -> Unit
 ) {
     val change = tick?.change24h ?: 0.0
-    val changeColor = when { change > 0 -> TvGreen; change < 0 -> TvRed; else -> TvTextSecondary }
+    val changeColor = when {
+        change.isNaN() -> TvTextSecondary
+        change > 0 -> TvGreen
+        change < 0 -> TvRed
+        else -> TvTextSecondary
+    }
     val score = worth?.worthScore
     val aiColor = score?.let(::scoreColor) ?: TvGreen
     val rangePct = tick?.let { if (it.low24h > 0) ((it.high24h - it.low24h) / it.low24h) * 100.0 else 0.0 } ?: 0.0
@@ -268,7 +429,7 @@ private fun WatchlistCoinCard(
                                     .background(TvGreen.copy(alpha = 0.15f))
                                     .padding(horizontal = 6.dp, vertical = 2.dp)
                             ) {
-                                Text("#${rank}", color = TvGreen, fontSize = 8.sp, fontWeight = FontWeight.ExtraBold)
+                                Text("#" + rank, color = TvGreen, fontSize = 8.sp, fontWeight = FontWeight.ExtraBold)
                             }
                             Spacer(Modifier.width(6.dp))
                         }
@@ -381,7 +542,7 @@ private fun EmptyWatchlistState(onAddClick: () -> Unit) {
             Spacer(Modifier.height(8.dp))
             Text("Watchlist masih kosong", color = TvTextPrimary, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
             Spacer(Modifier.height(4.dp))
-            Text("Tambahkan koin favorit Anda untuk memantau tren secara real-time.", color = TvTextSecondary, fontSize = 11.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            Text("Tambahkan koin favorit atau pilih dari Koin Rame di atas.", color = TvTextSecondary, fontSize = 11.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
             Spacer(Modifier.height(14.dp))
             Button(
                 onClick = onAddClick,
@@ -425,7 +586,6 @@ private fun AddAssetDialog(
                 }
                 Spacer(Modifier.height(10.dp))
 
-                // Manual Input Section
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -434,7 +594,7 @@ private fun AddAssetDialog(
                     OutlinedTextField(
                         value = manualInput,
                         onValueChange = { manualInput = it },
-                        placeholder = { Text("cth: USDTIDR, DOGEIDR", color = TvTextSecondary, fontSize = 12.sp) },
+                        placeholder = { Text("cth: DOGEIDR, SOLIDR", color = TvTextSecondary, fontSize = 12.sp) },
                         singleLine = true,
                         modifier = Modifier.weight(1f).testTag("manual_asset_input"),
                         colors = OutlinedTextFieldDefaults.colors(
@@ -450,8 +610,7 @@ private fun AddAssetDialog(
                         onClick = {
                             val trimmed = manualInput.trim().uppercase()
                             if (trimmed.isNotEmpty()) {
-                                val pair = TradingPair.fromCustomSymbol(trimmed)
-                                onAddPair(pair)
+                                onAddPair(TradingPair.fromCustomSymbol(trimmed))
                                 manualInput = ""
                             }
                         },
