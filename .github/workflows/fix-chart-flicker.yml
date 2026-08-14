@@ -1,0 +1,51 @@
+name: Fix Chart Flicker
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/hot-coins-live]
+permissions:
+  contents: write
+jobs:
+  fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/hot-coins-live
+          fetch-depth: 1
+      - name: Cache chart calculations
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          p=Path('app/src/main/java/agu/analys/ui/components/SimpleComposeChart.kt')
+          s=p.read_text()
+          old='''    val validCandles = candles.filter { it.open > 0 && it.high > 0 && it.low > 0 && it.close > 0 }\n    val candleCount = validCandles.size'''
+          new='''    val validCandles = remember(candles) {\n        candles.filter { it.open > 0 && it.high > 0 && it.low > 0 && it.close > 0 }\n    }\n    val candleCount = validCandles.size'''
+          if old not in s: raise SystemExit('validCandles pattern not found')
+          s=s.replace(old,new,1)
+          old='''    val ema20 = emaSeries(validCandles.map { it.close }, 20)\n    val ema50 = emaSeries(validCandles.map { it.close }, 50)\n    val ema200 = emaSeries(validCandles.map { it.close }, 200)\n    val bb = bollingerSeries(validCandles.map { it.close }, 20)'''
+          new='''    val closePrices = remember(validCandles) { validCandles.map { it.close } }\n    val ema20 = remember(closePrices) { emaSeries(closePrices, 20) }\n    val ema50 = remember(closePrices) { emaSeries(closePrices, 50) }\n    val ema200 = remember(closePrices) { emaSeries(closePrices, 200) }\n    val bb = remember(closePrices) { bollingerSeries(closePrices, 20) }'''
+          if old not in s: raise SystemExit('indicator pattern not found')
+          s=s.replace(old,new,1)
+          p.write_text(s)
+          PY
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app/src/main/java/agu/analys/ui/components/SimpleComposeChart.kt
+          git commit -m 'fix: reduce chart recomposition flicker'
+          git push origin HEAD:feature/hot-coins-live
+      - name: Build debug
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug
+      - name: Remove temporary workflow
+        if: always()
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          rm -f .github/workflows/fix-chart-flicker.yml
+          git add .github/workflows/fix-chart-flicker.yml
+          git commit -m 'chore: remove temporary chart fix workflow' || true
+          git push origin HEAD:feature/hot-coins-live || true
