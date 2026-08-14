@@ -67,7 +67,7 @@ class LearningTradingEngine(
         val tick = currentTick ?: return
         val price = tick.price
         val history = synchronized(candles) { candles.toList() }
-        val minCandles = if (isScalpingMode) 35 else 35
+        val minCandles = if (isScalpingMode) 28 else 35
         if (history.size < minCandles) {
             _indicators.value = TechnicalIndicators()
             _signalState.value = AISignalState(
@@ -89,26 +89,26 @@ class LearningTradingEngine(
         val closes = history.map { it.close }
         val rsiPeriod = if (isScalpingMode) 7 else 14
         val rsi = calculateRsi(history, rsiPeriod)
-        val fastEmaPeriod = if (isScalpingMode) 7 else 20
-        val slowEmaPeriod = if (isScalpingMode) 21 else 50
+        val fastEmaPeriod = if (isScalpingMode) 5 else 20
+        val slowEmaPeriod = if (isScalpingMode) 13 else 50
         val emaFast = calculateEma(closes, fastEmaPeriod)
         val emaSlow = calculateEma(closes, slowEmaPeriod)
-        val macdFast = if (isScalpingMode) 6 else 12
-        val macdSlow = if (isScalpingMode) 13 else 26
-        val macdSignalPeriod = if (isScalpingMode) 5 else 9
+        val macdFast = if (isScalpingMode) 5 else 12
+        val macdSlow = if (isScalpingMode) 12 else 26
+        val macdSignalPeriod = if (isScalpingMode) 4 else 9
         val macdSeries = calculateMacdSeries(closes, macdFast, macdSlow, macdSignalPeriod)
         val macd = macdSeries.last().first
         val macdSignal = macdSeries.last().second
         val macdHist = macd - macdSignal
-        val bbPeriod = if (isScalpingMode) 14 else 20
+        val bbPeriod = if (isScalpingMode) 12 else 20
         val bb = calculateBollinger(closes, bbPeriod)
-        val atrPeriod = if (isScalpingMode) 10 else 14
+        val atrPeriod = if (isScalpingMode) 7 else 14
         val atr = calculateAtr(history, atrPeriod)
         val pattern = detectPattern(history)
         val regime = detectMarketRegime(price, emaFast, emaSlow, macdHist, rsi, atr, bb)
-        val structureWindow = if (isScalpingMode) min(60, history.size) else history.size
+        val structureWindow = if (isScalpingMode) min(40, history.size) else history.size
         val marketStructure = MarketStructureAnalyzer.analyze(history.takeLast(structureWindow))
-        val momentumLookback = min(if (isScalpingMode) 5 else 10, closes.size - 1)
+        val momentumLookback = min(if (isScalpingMode) 4 else 10, closes.size - 1)
         val momentumBase = closes[closes.lastIndex - momentumLookback]
         val momentum = if (momentumBase > 0.0) (price - momentumBase) / momentumBase else 0.0
         val ema200 = if (closes.size >= 200) calculateEma(closes, 200) else Double.NaN
@@ -130,12 +130,12 @@ class LearningTradingEngine(
         var buy = 0.0
         var sell = 0.0
         val reasons = mutableListOf<String>()
-        if (isScalpingMode) reasons += "[MODE SCALPING CEPAT] RSI/EMA/MACD/BB/ATR memakai parameter responsif dan structure 60 candle terakhir."
+        if (isScalpingMode) reasons += "[MODE SCALPING CEPAT] RSI/EMA/MACD/BB/ATR parameter responsif + structure 40 candle."
         reasons += "Market regime: $regime."
 
         when {
-            rsi < (if (isScalpingMode) 32.0 else 30.0) -> { buy += 20.0; reasons += "RSI ${format(rsi)}: jenuh jual; pantulan cepat diamati." }
-            rsi > (if (isScalpingMode) 68.0 else 70.0) -> { sell += 20.0; reasons += "RSI ${format(rsi)}: jenuh beli; risiko koreksi cepat." }
+            rsi < (if (isScalpingMode) 30.0 else 30.0) -> { buy += 20.0; reasons += "RSI ${format(rsi)}: jenuh jual; pantulan cepat diamati." }
+            rsi > (if (isScalpingMode) 70.0 else 70.0) -> { sell += 20.0; reasons += "RSI ${format(rsi)}: jenuh beli; risiko koreksi cepat." }
             else -> reasons += "RSI ${format(rsi)}: netral."
         }
 
@@ -164,7 +164,8 @@ class LearningTradingEngine(
 
         val avgVolume = history.takeLast(5).map { it.volume }.average()
         val lastVolume = history.last().volume
-        if (avgVolume > 0.0 && lastVolume >= avgVolume * 1.6) {
+        val volumeMultiplier = if (isScalpingMode) 1.4 else 1.6
+        if (avgVolume > 0.0 && lastVolume >= avgVolume * volumeMultiplier) {
             val ratio = lastVolume / avgVolume
             if (history.last().close >= history.last().open) { buy += 10.0; reasons += "Volume ${format(ratio)}× rata-rata: lonjakan beli." }
             else { sell += 10.0; reasons += "Volume ${format(ratio)}× rata-rata: lonjakan jual." }
@@ -181,17 +182,17 @@ class LearningTradingEngine(
         val structureBlocksBuy = marketStructure.dataEnough && marketStructure.trend == "Bearish structure"
         val structureBlocksSell = marketStructure.dataEnough && marketStructure.trend == "Bullish structure"
         val dominant = max(buy, sell)
-        val conflict = abs(buy - sell) < (if (isScalpingMode) 15.0 else 20.0)
-        val volatilityTooHigh = price > 0.0 && atr / price >= (if (isScalpingMode) 0.04 else 0.08)
-        val minimumScore = if (isScalpingMode) { if (regime == "HIGH VOLATILITY") 60.0 else 52.0 } else { if (regime == "HIGH VOLATILITY") 70.0 else 60.0 }
+        val conflict = abs(buy - sell) < (if (isScalpingMode) 12.0 else 20.0)
+        val volatilityTooHigh = price > 0.0 && atr / price >= (if (isScalpingMode) 0.055 else 0.08)
+        val minimumScore = if (isScalpingMode) { if (regime == "HIGH VOLATILITY") 55.0 else 45.0 } else { if (regime == "HIGH VOLATILITY") 70.0 else 60.0 }
         val dominanceRatio = if (min(buy, sell) > 0.0) dominant / min(buy, sell) else Double.POSITIVE_INFINITY
-        val weakDominance = dominanceRatio < (if (isScalpingMode) 1.30 else 1.40)
+        val weakDominance = dominanceRatio < (if (isScalpingMode) 1.22 else 1.40)
         val noTrade = regime == "SIDEWAYS / NO TRADE" || conflict || weakDominance || dominant < minimumScore || volatilityTooHigh
 
         val action = when {
             noTrade -> SignalAction.HOLD
-            buy >= minimumScore && buy > sell * (if (isScalpingMode) 1.30 else 1.40) && !structureBlocksBuy -> SignalAction.BUY
-            sell >= minimumScore && sell > buy * (if (isScalpingMode) 1.30 else 1.40) && !structureBlocksSell -> SignalAction.SELL
+            buy >= minimumScore && buy > sell * (if (isScalpingMode) 1.22 else 1.40) && !structureBlocksBuy -> SignalAction.BUY
+            sell >= minimumScore && sell > buy * (if (isScalpingMode) 1.22 else 1.40) && !structureBlocksSell -> SignalAction.SELL
             else -> SignalAction.HOLD
         }
 
@@ -206,9 +207,9 @@ class LearningTradingEngine(
         }
         if (action != SignalAction.HOLD) reasons[reasons.lastIndex] = "Score ${score}/100 = kekuatan setup."
 
-        val rawStopDistance = if (isScalpingMode) atr * 1.0 else atr * 1.5
-        val rawTp1Distance = if (isScalpingMode) atr * 1.5 else atr * 2.0
-        val rawTp2Distance = if (isScalpingMode) atr * 2.5 else atr * 3.5
+        val rawStopDistance = if (isScalpingMode) atr * 0.9 else atr * 1.5
+        val rawTp1Distance = if (isScalpingMode) atr * 1.4 else atr * 2.0
+        val rawTp2Distance = if (isScalpingMode) atr * 2.2 else atr * 3.5
         var sl = 0.0
         var tp1 = 0.0
         var tp2 = 0.0
@@ -244,9 +245,10 @@ class LearningTradingEngine(
             tp2Distance = abs(tp2 - price)
         }
 
+        val maxSlPct = if (isScalpingMode) 0.10 else 0.08
         val levelsValid = when (action) {
-            SignalAction.BUY -> stopDistance > 0.0 && stopDistance < price * 0.08 && tp1 > price && tp2 > tp1 && tp1Distance >= stopDistance && tp2Distance >= stopDistance * 1.5 && sl > 0.0
-            SignalAction.SELL -> stopDistance > 0.0 && stopDistance < price * 0.08 && tp1 < price && tp2 < tp1 && tp1Distance >= stopDistance && tp2Distance >= stopDistance * 1.5
+            SignalAction.BUY -> stopDistance > 0.0 && stopDistance < price * maxSlPct && tp1 > price && tp2 > tp1 && tp1Distance >= stopDistance && tp2Distance >= stopDistance * 1.5 && sl > 0.0
+            SignalAction.SELL -> stopDistance > 0.0 && stopDistance < price * maxSlPct && tp1 < price && tp2 < tp1 && tp1Distance >= stopDistance && tp2Distance >= stopDistance * 1.5
             SignalAction.HOLD -> false
         }
 
