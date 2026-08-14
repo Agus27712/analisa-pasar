@@ -179,115 +179,42 @@ private fun PriceHeader(price: Double, change: Double) {
 
 @Composable
 private fun TimeframeSelector(selected: Timeframe, onSelect: (Timeframe) -> Unit) {
-    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(7.dp)) { listOf(Timeframe.M15, Timeframe.H1, Timeframe.H4, Timeframe.D1).forEach { tf -> val active = selected == tf; Box(Modifier.clip(RoundedCornerShape(10.dp)).background(if (active) Color(0xFF087FF5) else Color(0xFF162536)).clickable { onSelect(tf) }.padding(horizontal = 17.dp, vertical = 10.dp).testTag("timeframe_${tf.code}")) { Text(tf.label.uppercase(), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = if (active) Color.White else TvTextSecondary) } } }
+    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(7.dp)) { listOf(Timeframe.M1, Timeframe.M15, Timeframe.H1, Timeframe.H4, Timeframe.D1).forEach { tf -> val active = selected == tf; Box(Modifier.clip(RoundedCornerShape(10.dp)).background(if (active) Color(0xFF087FF5) else Color(0xFF162536)).clickable { onSelect(tf) }.padding(horizontal = 17.dp, vertical = 10.dp).testTag("timeframe_${tf.code}")) { Text(tf.label.uppercase(), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = if (active) Color.White else TvTextSecondary) } } }
 }
 
 @Composable
-private fun MarketConditionCard(
-    structure: MarketStructureSnapshot,
-    indicators: TechnicalIndicators
-) {
+private fun MarketConditionCard(structure: MarketStructureSnapshot, indicators: TechnicalIndicators) {
     val bullishStructure = structure.trend == "Bullish structure"
     val bearishStructure = structure.trend == "Bearish structure"
-
-    val emaBullish =
-        indicators.ema20.isFinite() &&
-        indicators.ema50.isFinite() &&
-        indicators.ema20 > indicators.ema50
-
-    val emaBearish =
-        indicators.ema20.isFinite() &&
-        indicators.ema50.isFinite() &&
-        indicators.ema20 < indicators.ema50
-
-    val macdBullish =
-        indicators.macdHist.isFinite() &&
-        indicators.macdHist > 0
-
-    val macdBearish =
-        indicators.macdHist.isFinite() &&
-        indicators.macdHist < 0
-
-    val bullishScore =
-        listOf(
-            bullishStructure,
-            emaBullish,
-            macdBullish
-        ).count { it }
-
-    val bearishScore =
-        listOf(
-            bearishStructure,
-            emaBearish,
-            macdBearish
-        ).count { it }
-
+    val emaBullish = indicators.ema20.isFinite() && indicators.ema50.isFinite() && indicators.ema20 > indicators.ema50
+    val emaBearish = indicators.ema20.isFinite() && indicators.ema50.isFinite() && indicators.ema20 < indicators.ema50
+    val macdBullish = indicators.macdHist.isFinite() && indicators.macdHist > 0
+    val macdBearish = indicators.macdHist.isFinite() && indicators.macdHist < 0
+    val bullishScore = listOf(bullishStructure, emaBullish, macdBullish).count { it }
+    val bearishScore = listOf(bearishStructure, emaBearish, macdBearish).count { it }
     val title: String
     val color: Color
     val detail: String
-
     when {
-        bullishScore >= 2 && bullishScore > bearishScore -> {
-            title = "CENDERUNG NAIK"
-            color = TvGreen
-            detail = "Struktur pasar dan indikator lebih banyak mendukung kenaikan."
-        }
-
-        bearishScore >= 2 && bearishScore > bullishScore -> {
-            title = "CENDERUNG TURUN"
-            color = TvRed
-            detail = "Struktur pasar dan indikator lebih banyak menunjukkan tekanan turun."
-        }
-
-        else -> {
-            title = "MASIH CAMPURAN"
-            color = WarningAmber
-            detail = "Struktur pasar dan indikator belum cukup searah."
-        }
+        bullishScore >= 2 && bullishScore > bearishScore -> { title = "CENDERUNG NAIK"; color = TvGreen; detail = "Struktur pasar dan indikator lebih banyak mendukung kenaikan." }
+        bearishScore >= 2 && bearishScore > bullishScore -> { title = "CENDERUNG TURUN"; color = TvRed; detail = "Struktur pasar dan indikator lebih banyak menunjukkan tekanan turun." }
+        else -> { title = "MASIH CAMPURAN"; color = WarningAmber; detail = "Struktur pasar dan indikator belum cukup searah." }
     }
-
     AnalysisCard {
         SectionTitle("KONDISI PASAR", Icons.Default.TrendingUp)
-
         Spacer(Modifier.height(7.dp))
-
-        Row(
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                Modifier
-                    .size(12.dp)
-                    .background(color, CircleShape)
-            )
-
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(12.dp).background(color, CircleShape))
             Spacer(Modifier.width(9.dp))
-
-            Text(
-                title,
-                color = color,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.ExtraBold
-            )
+            Text(title, color = color, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
         }
-
         Spacer(Modifier.height(7.dp))
-
-        Text(
-            detail,
-            color = TvTextPrimary,
-            fontSize = 14.sp,
-            lineHeight = 20.sp
-        )
-
+        Text(detail, color = TvTextPrimary, fontSize = 14.sp, lineHeight = 20.sp)
         Spacer(Modifier.height(9.dp))
-
-        Text(
-            "RSI ${formatIndicator(indicators.rsi14)}  •  EMA20/50 ${emaRelation(indicators)}",
-            color = TvTextSecondary,
-            fontSize = 12.sp
-        )
+        Text("RSI ${formatIndicator(indicators.rsi14)}  •  EMA20/50 ${emaRelation(indicators)}", color = TvTextSecondary, fontSize = 12.sp)
     }
 }
+
 @Composable
 private fun RecommendationCard(signal: AISignalState) {
     val color = when (signal.action) { SignalAction.BUY -> TvGreen; SignalAction.SELL -> TvRed; SignalAction.HOLD -> WarningAmber }
@@ -310,182 +237,55 @@ private fun AiAssistantCard(auditText: String?, auditLoading: Boolean, geminiTex
         Spacer(Modifier.height(5.dp))
         Text("Minta AI menjelaskan kondisi market dengan bahasa sederhana. Angka Entry/TP/SL tetap berasal dari engine aplikasi.", fontSize = 13.sp, color = TvTextSecondary, lineHeight = 18.sp)
         Spacer(Modifier.height(10.dp))
-    Row(modifier = Modifier.fillMaxWidth(),horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Button( onClick = onGroq, enabled = !auditLoading && !geminiLoading, modifier = Modifier.weight(1f)) {
-            Text(
-                if (auditLoading) "Groq..." else "Groq"
-                )
-            }
-            Button( onClick = onGemini, enabled = !auditLoading && !geminiLoading, modifier = Modifier.weight(1f)) {
-            Text(
-                if (geminiLoading) "Gemini..." else "Gemini"
-                )
-            }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = onGroq, enabled = !auditLoading && !geminiLoading, modifier = Modifier.weight(1f)) { Text(if (auditLoading) "Groq..." else "Groq") }
+            Button(onClick = onGemini, enabled = !auditLoading && !geminiLoading, modifier = Modifier.weight(1f)) { Text(if (geminiLoading) "Gemini..." else "Gemini") }
         }
         Spacer(Modifier.height(9.dp))
         Button(onClick = { val intent = context.packageManager.getLaunchIntentForPackage("id.co.bitcoin"); if (intent != null) { intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); context.startActivity(intent) } else Toast.makeText(context, "Aplikasi Indodax belum terpasang di HP ini.", Toast.LENGTH_SHORT).show() }, modifier = Modifier.fillMaxWidth().height(46.dp).testTag("detail_open_indodax_button"), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF087FF5)), shape = RoundedCornerShape(12.dp), contentPadding = PaddingValues(horizontal = 10.dp)) {
             Icon(Icons.Default.OpenInNew, null, Modifier.size(19.dp), tint = Color.White); Spacer(Modifier.width(6.dp)); Text("Buka Indodax", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White)
         }
-        if (auditText != null) {
-            Spacer(Modifier.height(10.dp)); Text("GROQ • ANALISA", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TvGreen); Spacer(Modifier.height(4.dp)); Text(auditText, fontSize = 13.sp, color = TvTextPrimary, lineHeight = 19.sp); Text("Hapus", fontSize = 11.sp, color = TvTextSecondary, modifier = Modifier.padding(top = 4.dp).clickable { onClearGroq() })
-        }
-        if (geminiText != null) {
-            Spacer(Modifier.height(10.dp)); Text("GEMINI • ANALISA", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF6FB8FF)); Spacer(Modifier.height(4.dp)); Text(geminiText, fontSize = 13.sp, color = TvTextPrimary, lineHeight = 19.sp); Text("Hapus", fontSize = 11.sp, color = TvTextSecondary, modifier = Modifier.padding(top = 4.dp).clickable { onClearGemini() })
-        }
+        if (auditText != null) { Spacer(Modifier.height(10.dp)); Text("GROQ • ANALISA", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TvGreen); Spacer(Modifier.height(4.dp)); Text(auditText, fontSize = 13.sp, color = TvTextPrimary, lineHeight = 19.sp); Text("Hapus", fontSize = 11.sp, color = TvTextSecondary, modifier = Modifier.padding(top = 4.dp).clickable { onClearGroq() }) }
+        if (geminiText != null) { Spacer(Modifier.height(10.dp)); Text("GEMINI • ANALISA", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF6FB8FF)); Spacer(Modifier.height(4.dp)); Text(geminiText, fontSize = 13.sp, color = TvTextPrimary, lineHeight = 19.sp); Text("Hapus", fontSize = 11.sp, color = TvTextSecondary, modifier = Modifier.padding(top = 4.dp).clickable { onClearGemini() }) }
     }
 }
 
 @Composable
 private fun ImportantLevelsCard(signal: AISignalState, structure: MarketStructureSnapshot, price: Double) {
     AnalysisCard {
-        Text(
-            "LEVEL PENTING",
-            fontSize = 15.sp,
-            fontWeight = FontWeight.ExtraBold,
-            color = Color(0xFF2196F3),
-            letterSpacing = 0.8.sp
-        )
+        Text("LEVEL PENTING", fontSize = 15.sp, fontWeight = FontWeight.ExtraBold, color = Color(0xFF2196F3), letterSpacing = 0.8.sp)
         Spacer(Modifier.height(10.dp))
-
-        ImportantLevelRow(
-            dotColor = Color(0xFF32D74B),
-            label = "Support Terdekat",
-            value = structure.support?.takeIf { it > 0 }?.let { PriceFormatter.formatPrice(it) } ?: "Belum tersedia"
-        )
-        ImportantLevelRow(
-            dotColor = TvRed,
-            label = "Resistance Terdekat",
-            value = structure.resistance?.takeIf { it > 0 }?.let { PriceFormatter.formatPrice(it) } ?: "Belum tersedia"
-        )
-
-        Spacer(Modifier.height(8.dp))
-        Box(modifier = Modifier.fillMaxWidth().height(0.5.dp).background(Color(0x14FFFFFF)))
-        Spacer(Modifier.height(8.dp))
-
+        ImportantLevelRow(dotColor = Color(0xFF32D74B), label = "Support Terdekat", value = structure.support?.takeIf { it > 0 }?.let { PriceFormatter.formatPrice(it) } ?: "Belum tersedia")
+        ImportantLevelRow(dotColor = TvRed, label = "Resistance Terdekat", value = structure.resistance?.takeIf { it > 0 }?.let { PriceFormatter.formatPrice(it) } ?: "Belum tersedia")
+        Spacer(Modifier.height(8.dp)); Box(modifier = Modifier.fillMaxWidth().height(0.5.dp).background(Color(0x14FFFFFF))); Spacer(Modifier.height(8.dp))
         if (signal.action != SignalAction.HOLD && signal.entryPrice > 0) {
-            val entryStr = PriceFormatter.formatPrice(signal.entryPrice)
-            ImportantLevelRow(
-                dotColor = Color(0xFF2196F3),
-                label = "Entry Area",
-                value = entryStr
-            )
-            ImportantLevelRow(
-                dotColor = Color(0xFF32D74B),
-                label = "Take Profit 1 (TP1)",
-                value = signal.targetPrice1.takeIf { it > 0 }?.let { PriceFormatter.formatPrice(it) } ?: "Belum tersedia"
-            )
-            ImportantLevelRow(
-                dotColor = Color(0xFF32D74B),
-                label = "Take Profit 2 (TP2)",
-                value = signal.targetPrice2.takeIf { it > 0 }?.let { PriceFormatter.formatPrice(it) } ?: "Belum tersedia"
-            )
-
-            Spacer(Modifier.height(8.dp))
-            Box(modifier = Modifier.fillMaxWidth().height(0.5.dp).background(Color(0x14FFFFFF)))
-            Spacer(Modifier.height(8.dp))
-
-            ImportantLevelRow(
-                dotColor = TvRed,
-                label = "Stop Loss (SL)",
-                value = signal.stopLoss.takeIf { it > 0 }?.let { PriceFormatter.formatPrice(it) } ?: "Belum tersedia"
-            )
-
-            Spacer(Modifier.height(8.dp))
-            Box(modifier = Modifier.fillMaxWidth().height(0.5.dp).background(Color(0x14FFFFFF)))
-            Spacer(Modifier.height(8.dp))
-
-            ImportantLevelRow(
-                dotColor = Color(0xFF9C27B0),
-                label = "Risk / Reward",
-                value = signal.riskRewardRatio.ifBlank { "1 : 1,5" }
-            )
+            ImportantLevelRow(dotColor = Color(0xFF2196F3), label = "Entry Area", value = PriceFormatter.formatPrice(signal.entryPrice))
+            ImportantLevelRow(dotColor = Color(0xFF32D74B), label = "Take Profit 1 (TP1)", value = signal.targetPrice1.takeIf { it > 0 }?.let { PriceFormatter.formatPrice(it) } ?: "Belum tersedia")
+            ImportantLevelRow(dotColor = Color(0xFF32D74B), label = "Take Profit 2 (TP2)", value = signal.targetPrice2.takeIf { it > 0 }?.let { PriceFormatter.formatPrice(it) } ?: "Belum tersedia")
+            Spacer(Modifier.height(8.dp)); Box(modifier = Modifier.fillMaxWidth().height(0.5.dp).background(Color(0x14FFFFFF))); Spacer(Modifier.height(8.dp))
+            ImportantLevelRow(dotColor = TvRed, label = "Stop Loss (SL)", value = signal.stopLoss.takeIf { it > 0 }?.let { PriceFormatter.formatPrice(it) } ?: "Belum tersedia")
+            Spacer(Modifier.height(8.dp)); Box(modifier = Modifier.fillMaxWidth().height(0.5.dp).background(Color(0x14FFFFFF))); Spacer(Modifier.height(8.dp))
+            ImportantLevelRow(dotColor = Color(0xFF9C27B0), label = "Risk / Reward", value = signal.riskRewardRatio.ifBlank { "1 : 1,5" })
         } else {
-            ImportantLevelRow(
-                dotColor = Color(0xFF2196F3),
-                label = "Entry Area",
-                value = "Belum ada setup"
-            )
-            ImportantLevelRow(
-                dotColor = Color(0xFF32D74B),
-                label = "Take Profit 1 (TP1)",
-                value = "Belum tersedia"
-            )
-            ImportantLevelRow(
-                dotColor = Color(0xFF32D74B),
-                label = "Take Profit 2 (TP2)",
-                value = "Belum tersedia"
-            )
-
-            Spacer(Modifier.height(8.dp))
-            Box(modifier = Modifier.fillMaxWidth().height(0.5.dp).background(Color(0x14FFFFFF)))
-            Spacer(Modifier.height(8.dp))
-
-            ImportantLevelRow(
-                dotColor = TvRed,
-                label = "Stop Loss (SL)",
-                value = "Belum tersedia"
-            )
-
-            Spacer(Modifier.height(8.dp))
-            Box(modifier = Modifier.fillMaxWidth().height(0.5.dp).background(Color(0x14FFFFFF)))
-            Spacer(Modifier.height(8.dp))
-
-            ImportantLevelRow(
-                dotColor = Color(0xFF9C27B0),
-                label = "Risk / Reward",
-                value = "Belum tersedia"
-            )
-
-            if (price > 0 && structure.support != null && structure.resistance != null) {
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    "Pantau reaksi harga di antara support dan resistance sebelum menentukan entry.",
-                    fontSize = 12.sp,
-                    color = TvTextSecondary,
-                    lineHeight = 18.sp
-                )
-            }
+            ImportantLevelRow(dotColor = Color(0xFF2196F3), label = "Entry Area", value = "Belum ada setup")
+            ImportantLevelRow(dotColor = Color(0xFF32D74B), label = "Take Profit 1 (TP1)", value = "Belum tersedia")
+            ImportantLevelRow(dotColor = Color(0xFF32D74B), label = "Take Profit 2 (TP2)", value = "Belum tersedia")
+            Spacer(Modifier.height(8.dp)); Box(modifier = Modifier.fillMaxWidth().height(0.5.dp).background(Color(0x14FFFFFF))); Spacer(Modifier.height(8.dp))
+            ImportantLevelRow(dotColor = TvRed, label = "Stop Loss (SL)", value = "Belum tersedia")
+            Spacer(Modifier.height(8.dp)); Box(modifier = Modifier.fillMaxWidth().height(0.5.dp).background(Color(0x14FFFFFF))); Spacer(Modifier.height(8.dp))
+            ImportantLevelRow(dotColor = Color(0xFF9C27B0), label = "Risk / Reward", value = "Belum tersedia")
+            if (price > 0 && structure.support != null && structure.resistance != null) { Spacer(Modifier.height(6.dp)); Text("Pantau reaksi harga di antara support dan resistance sebelum menentukan entry.", fontSize = 12.sp, color = TvTextSecondary, lineHeight = 18.sp) }
         }
     }
 }
 
 @Composable
-private fun ImportantLevelRow(
-    dotColor: Color,
-    label: String,
-    value: String
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 5.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.weight(1f)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(8.dp)
-                    .background(dotColor, CircleShape)
-            )
-            Spacer(Modifier.width(10.dp))
-            Text(
-                text = label,
-                fontSize = 13.sp,
-                color = TvTextSecondary,
-                maxLines = 1
-            )
+private fun ImportantLevelRow(dotColor: Color, label: String, value: String) {
+    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+            Box(modifier = Modifier.size(8.dp).background(dotColor, CircleShape)); Spacer(Modifier.width(10.dp)); Text(text = label, fontSize = 13.sp, color = TvTextSecondary, maxLines = 1)
         }
-        Text(
-            text = value,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Bold,
-            color = TvTextPrimary
-        )
+        Text(text = value, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TvTextPrimary)
     }
 }
 
@@ -493,223 +293,62 @@ private fun ImportantLevelRow(
 private fun TechnicalDetailsCard(indicators: TechnicalIndicators, structure: MarketStructureSnapshot, volume24h: Double) {
     var expanded by remember { mutableStateOf(true) }
     AnalysisCard {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { expanded = !expanded },
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                "DETAIL TEKNIKAL",
-                fontSize = 15.sp,
-                fontWeight = FontWeight.ExtraBold,
-                color = Color(0xFF2196F3),
-                letterSpacing = 0.8.sp
-            )
-            Icon(
-                Icons.Default.KeyboardArrowDown,
-                contentDescription = if (expanded) "Collapse" else "Expand",
-                tint = TvTextSecondary,
-                modifier = Modifier
-                    .size(22.dp)
-                    .rotate(if (expanded) 180f else 0f)
-            )
+        Row(modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded }, horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text("DETAIL TEKNIKAL", fontSize = 15.sp, fontWeight = FontWeight.ExtraBold, color = Color(0xFF2196F3), letterSpacing = 0.8.sp)
+            Icon(Icons.Default.KeyboardArrowDown, contentDescription = if (expanded) "Collapse" else "Expand", tint = TvTextSecondary, modifier = Modifier.size(22.dp).rotate(if (expanded) 180f else 0f))
         }
-
         if (expanded) {
             Spacer(Modifier.height(10.dp))
-
             val rsiVal = indicators.rsi14
             val rsiFormatted = if (rsiVal.isFinite()) String.format(java.util.Locale("id", "ID"), "%.2f", rsiVal) else "—"
             val rsiBull = rsiVal.isFinite() && rsiVal >= 50
             val rsiStatus = if (rsiVal.isFinite()) (if (rsiVal > 70) "Jenuh Beli" else if (rsiVal < 30) "Jenuh Jual" else if (rsiVal >= 50) "Bullish" else "Bearish") else "—"
             val rsiColor = if (rsiVal > 70) TvRed else if (rsiVal < 30) TvGreen else if (rsiBull) TvGreen else TvRed
-
             val macdVal = indicators.macdHist
             val macdBull = macdVal.isFinite() && macdVal >= 0
             val macdStatus = if (macdBull) "Bullish" else "Bearish"
             val macdColor = if (macdBull) TvGreen else TvRed
-
             val ema20 = indicators.ema20
             val ema50 = indicators.ema50
             val ema200 = indicators.ema200
             val emaBull = ema20.isFinite() && ema50.isFinite() && ema20 > ema50
             val emaStatus = if (emaBull) "Bullish" else "Bearish"
             val emaColor = if (emaBull) TvGreen else TvRed
-            val emaSub = when {
-                !ema20.isFinite() -> "Belum cukup data"
-                ema20 > ema50 && (!ema200.isFinite() || ema50 > ema200) -> "20 > 50 > 200"
-                ema20 < ema50 && (!ema200.isFinite() || ema50 < ema200) -> "20 < 50 < 200"
-                else -> "20 ≈ 50"
-            }
-
+            val emaSub = when { !ema20.isFinite() -> "Belum cukup data"; ema20 > ema50 && (!ema200.isFinite() || ema50 > ema200) -> "20 > 50 > 200"; ema20 < ema50 && (!ema200.isFinite() || ema50 < ema200) -> "20 < 50 < 200"; else -> "20 ≈ 50" }
             val volStatus = "Tinggi"
             val atrVal = if (indicators.atr.isFinite()) String.format(java.util.Locale("id", "ID"), "%.2f", indicators.atr) else "—"
             val bbLabel = bollingerLabel(indicators)
-            val structLabel = when (structure.trend) {
-                "Bullish structure" -> "HH + HL (Bullish)"
-                "Bearish structure" -> "LH + LL (Bearish)"
-                else -> "Range / Transisi"
-            }
+            val structLabel = when (structure.trend) { "Bullish structure" -> "HH + HL (Bullish)"; "Bearish structure" -> "LH + LL (Bearish)"; else -> "Range / Transisi" }
             val trendLabel = simpleTrend(indicators, structure)
             val trendColor = if (trendLabel.contains("Naik") || trendLabel.contains("Cenderung naik")) TvGreen else if (trendLabel.contains("Turun") || trendLabel.contains("Cenderung turun")) TvRed else TvTextPrimary
-
             val volaLabel = volatilityLabel(indicators.atr, indicators.ema20)
-
-            DetailedTechRow(
-                icon = Icons.Default.TrendingUp,
-                iconTint = Color(0xFFFF5722),
-                label = "RSI (14)",
-                value = rsiFormatted,
-                status = rsiStatus,
-                statusColor = rsiColor
-            )
-            DetailedTechRow(
-                icon = Icons.Default.TrendingUp,
-                iconTint = Color(0xFFFFC107),
-                label = "MACD",
-                status = macdStatus,
-                statusColor = macdColor
-            )
-            DetailedTechRow(
-                icon = Icons.Default.TrendingUp,
-                iconTint = Color(0xFF00BCD4),
-                label = "EMA 20 / 50 / 200",
-                status = emaStatus,
-                statusColor = emaColor,
-                subtext = emaSub
-            )
-            DetailedTechRow(
-                icon = Icons.Default.TrendingUp,
-                iconTint = Color(0xFF3F51B5),
-                label = "Volume (24 jam)",
-                status = volStatus,
-                statusColor = TvGreen
-            )
-            DetailedTechRow(
-                icon = Icons.Default.Shield,
-                iconTint = Color(0xFF9C27B0),
-                label = "ATR (14)",
-                value = atrVal,
-                statusColor = TvTextPrimary
-            )
-            DetailedTechRow(
-                icon = Icons.Default.Info,
-                iconTint = Color(0xFFE91E63),
-                label = "Bollinger Bands",
-                status = bbLabel,
-                statusColor = TvTextSecondary
-            )
-            DetailedTechRow(
-                icon = Icons.Default.CheckCircle,
-                iconTint = Color(0xFFFFEB3B),
-                label = "Market Structure",
-                status = structLabel,
-                statusColor = if (structLabel.contains("Bullish")) TvGreen else if (structLabel.contains("Bearish")) TvRed else WarningAmber
-            )
-            DetailedTechRow(
-                icon = Icons.Default.TrendingUp,
-                iconTint = TvGreen,
-                label = "Trend",
-                status = trendLabel,
-                statusColor = trendColor
-            )
-            DetailedTechRow(
-                icon = Icons.Default.Info,
-                iconTint = Color(0xFFFF9800),
-                label = "Volatilitas",
-                status = volaLabel,
-                statusColor = TvTextPrimary,
-                showDivider = false
-            )
+            DetailedTechRow(icon = Icons.Default.TrendingUp, iconTint = Color(0xFFFF5722), label = "RSI (14)", value = rsiFormatted, status = rsiStatus, statusColor = rsiColor)
+            DetailedTechRow(icon = Icons.Default.TrendingUp, iconTint = Color(0xFFFFC107), label = "MACD", status = macdStatus, statusColor = macdColor)
+            DetailedTechRow(icon = Icons.Default.TrendingUp, iconTint = Color(0xFF00BCD4), label = "EMA 20 / 50 / 200", status = emaStatus, statusColor = emaColor, subtext = emaSub)
+            DetailedTechRow(icon = Icons.Default.TrendingUp, iconTint = Color(0xFF3F51B5), label = "Volume (24 jam)", status = volStatus, statusColor = TvGreen)
+            DetailedTechRow(icon = Icons.Default.Shield, iconTint = Color(0xFF9C27B0), label = "ATR (14)", value = atrVal, statusColor = TvTextPrimary)
+            DetailedTechRow(icon = Icons.Default.Info, iconTint = Color(0xFFE91E63), label = "Bollinger Bands", status = bbLabel, statusColor = TvTextSecondary)
+            DetailedTechRow(icon = Icons.Default.CheckCircle, iconTint = Color(0xFFFFEB3B), label = "Market Structure", status = structLabel, statusColor = if (structLabel.contains("Bullish")) TvGreen else if (structLabel.contains("Bearish")) TvRed else WarningAmber)
+            DetailedTechRow(icon = Icons.Default.TrendingUp, iconTint = TvGreen, label = "Trend", status = trendLabel, statusColor = trendColor)
+            DetailedTechRow(icon = Icons.Default.Info, iconTint = Color(0xFFFF9800), label = "Volatilitas", status = volaLabel, statusColor = TvTextPrimary, showDivider = false)
         }
     }
 }
 
 @Composable
-private fun DetailedTechRow(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    iconTint: Color,
-    label: String,
-    value: String? = null,
-    status: String? = null,
-    statusColor: Color = TvTextPrimary,
-    subtext: String? = null,
-    showDivider: Boolean = true
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.weight(1f)
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = iconTint,
-                    modifier = Modifier.size(19.dp)
-                )
-                Spacer(Modifier.width(10.dp))
-                Text(
-                    text = label,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = TvTextPrimary,
-                    maxLines = 1
-                )
+private fun DetailedTechRow(icon: androidx.compose.ui.graphics.vector.ImageVector, iconTint: Color, label: String, value: String? = null, status: String? = null, statusColor: Color = TvTextPrimary, subtext: String? = null, showDivider: Boolean = true) {
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                Icon(imageVector = icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(19.dp)); Spacer(Modifier.width(10.dp)); Text(text = label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TvTextPrimary, maxLines = 1)
             }
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                if (value != null) {
-                    Text(
-                        text = value,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TvTextPrimary
-                    )
-                }
-                if (status != null) {
-                    Text(
-                        text = status,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = statusColor
-                    )
-                }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (value != null) Text(text = value, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TvTextPrimary)
+                if (status != null) Text(text = status, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = statusColor)
             }
         }
-        if (!subtext.isNullOrBlank()) {
-            Spacer(Modifier.height(2.dp))
-            Row(modifier = Modifier.fillMaxWidth()) {
-                Spacer(Modifier.width(29.dp))
-                Text(
-                    text = subtext,
-                    fontSize = 11.sp,
-                    color = TvTextSecondary,
-                    maxLines = 1
-                )
-            }
-        }
-        if (showDivider) {
-            Spacer(Modifier.height(6.dp))
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(0.5.dp)
-                    .background(Color(0x14FFFFFF))
-            )
-        }
+        if (!subtext.isNullOrBlank()) { Spacer(Modifier.height(2.dp)); Row(modifier = Modifier.fillMaxWidth()) { Spacer(Modifier.width(29.dp)); Text(text = subtext, fontSize = 11.sp, color = TvTextSecondary, maxLines = 1) } }
+        if (showDivider) { Spacer(Modifier.height(6.dp)); Box(modifier = Modifier.fillMaxWidth().height(0.5.dp).background(Color(0x14FFFFFF))) }
     }
 }
 
@@ -720,13 +359,10 @@ private fun MonitorCard(signal: AISignalState, structure: MarketStructureSnapsho
 
 @Composable
 private fun DisclaimerCard() { AnalysisCard { IconTextRow(Icons.Default.Shield, "Ini bukan saran finansial. Analisa dapat berubah kapan saja, jadi tetap gunakan manajemen risiko.", WarningAmber) } }
-
 @Composable
 private fun AnalysisCard(content: @Composable ColumnScope.() -> Unit) { Column(Modifier.fillMaxWidth().background(AnalysisCard, RoundedCornerShape(16.dp)).border(1.dp, AnalysisBorder, RoundedCornerShape(16.dp)).padding(16.dp), content = content) }
-
 @Composable
 private fun SectionTitle(text: String, icon: androidx.compose.ui.graphics.vector.ImageVector? = null) { Row(verticalAlignment = Alignment.CenterVertically) { if (icon != null) { Icon(icon, null, tint = if (text == "DETAIL TEKNIKAL") Color(0xFF6FB8FF) else TvGreen, modifier = Modifier.size(21.dp)); Spacer(Modifier.width(8.dp)) }; Text(text, fontSize = 17.sp, fontWeight = FontWeight.ExtraBold, color = TvTextPrimary, letterSpacing = 0.5.sp) } }
-
 @Composable
 private fun IconTextRow(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String, color: Color) { Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) { Icon(icon, null, tint = color, modifier = Modifier.size(22.dp)); Spacer(Modifier.width(9.dp)); Text(text, fontSize = 14.sp, color = TvTextPrimary, lineHeight = 20.sp) } }
 
@@ -778,48 +414,13 @@ private fun SymbolPickerSheet(popularPairs: List<TradingPair>, watchlist: Set<St
 }
 
 @Composable
-private fun ModeSwitchToggle(
-    isScalping: Boolean,
-    onToggle: (Boolean) -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 2.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Button(
-            onClick = { onToggle(false) },
-            modifier = Modifier.weight(1f).height(36.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = if (!isScalping) TvGreen else Color(0xFF101720)
-            ),
-            shape = RoundedCornerShape(10.dp),
-            border = if (!isScalping) null else BorderStroke(1.dp, Color(0xFF1F3540))
-        ) {
-            Text(
-                "📈 Mode Swing (Long)",
-                color = if (!isScalping) Color.Black else TvTextSecondary,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold
-            )
+private fun ModeSwitchToggle(isScalping: Boolean, onToggle: (Boolean) -> Unit) {
+    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Button(onClick = { onToggle(false) }, modifier = Modifier.weight(1f).height(36.dp), colors = ButtonDefaults.buttonColors(containerColor = if (!isScalping) TvGreen else Color(0xFF101720)), shape = RoundedCornerShape(10.dp), border = if (!isScalping) null else BorderStroke(1.dp, Color(0xFF1F3540))) {
+            Text("📈 Mode Swing (Long)", color = if (!isScalping) Color.Black else TvTextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
         }
-        Button(
-            onClick = { onToggle(true) },
-            modifier = Modifier.weight(1f).height(36.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = if (isScalping) TvGreen else Color(0xFF101720)
-            ),
-            shape = RoundedCornerShape(10.dp),
-            border = if (isScalping) null else BorderStroke(1.dp, Color(0xFF1F3540))
-        ) {
-            Text(
-                "⚡ Mode Scalping (Cepat)",
-                color = if (isScalping) Color.Black else TvTextSecondary,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold
-            )
+        Button(onClick = { onToggle(true) }, modifier = Modifier.weight(1f).height(36.dp), colors = ButtonDefaults.buttonColors(containerColor = if (isScalping) TvGreen else Color(0xFF101720)), shape = RoundedCornerShape(10.dp), border = if (isScalping) null else BorderStroke(1.dp, Color(0xFF1F3540))) {
+            Text("⚡ Mode Scalping (Cepat)", color = if (isScalping) Color.Black else TvTextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
         }
     }
 }
