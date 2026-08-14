@@ -84,6 +84,9 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     val isGeminiLoading: StateFlow<Boolean> = _isGeminiLoading.asStateFlow()
     private val _worthCoins = MutableStateFlow<List<WorthCoinInfo>>(emptyList())
     val worthCoins: StateFlow<List<WorthCoinInfo>> = _worthCoins.asStateFlow()
+    /** Top volume coins from entire Indodax market — auto-updated every 15s */
+    private val _hotCoins = MutableStateFlow<List<MarketTick>>(emptyList())
+    val hotCoins: StateFlow<List<MarketTick>> = _hotCoins.asStateFlow()
     private val _dashboardTicks = MutableStateFlow<Map<String, MarketTick>>(emptyMap())
     val dashboardTicks: StateFlow<Map<String, MarketTick>> = _dashboardTicks.asStateFlow()
     private val _connectionState = MutableStateFlow<MarketConnectionState>(MarketConnectionState.Loading)
@@ -161,10 +164,26 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
 
     fun refreshWorthCoinsFromMarket() {
         viewModelScope.launch {
+            // 1) Hot coins = ranking volume seluruh market Indodax (real-time)
+            val topVolumeJob = async { IndodaxMarketService.fetchTopVolumeTicks(limit = 12, excludeStable = true) }
+
+            // 2) Watchlist + popular ticks
             val pairs = (TradingPair.POPULAR_PAIRS + _watchlist.value.map { TradingPair.fromCustomSymbol(it) }).distinctBy { it.symbol }
             val ticks = IndodaxMarketService.fetchTickers(pairs.map { it.effectiveIndodaxPair() })
-            if (ticks.isEmpty()) { if (_dashboardTicks.value.isEmpty()) markMarketOffline("Tidak ada respons market dari Indodax.") else { _isShowingCachedData.value = true; _connectionState.value = MarketConnectionState.ConnectionLost("Koneksi terputus. Menampilkan data cache terakhir.") }; return@launch }
-            _dashboardTicks.value = ticks.associateBy { it.symbol }; _connectionState.value = MarketConnectionState.Connected; _isShowingCachedData.value = false; marketCache.saveDashboardTicks(_dashboardTicks.value)
+
+            val hot = topVolumeJob.await()
+            if (hot.isNotEmpty()) _hotCoins.value = hot
+
+            if (ticks.isEmpty()) {
+                if (_dashboardTicks.value.isEmpty() && _hotCoins.value.isEmpty()) markMarketOffline("Tidak ada respons market dari Indodax.")
+                else { _isShowingCachedData.value = true; _connectionState.value = MarketConnectionState.ConnectionLost("Koneksi terputus. Menampilkan data cache terakhir.") }
+                return@launch
+            }
+            _dashboardTicks.value = ticks.associateBy { it.symbol }
+            _connectionState.value = MarketConnectionState.Connected
+            _isShowingCachedData.value = false
+            marketCache.saveDashboardTicks(_dashboardTicks.value)
+
             val tickMap = ticks.associateBy { it.symbol }
             val worth = pairs.mapNotNull { pair ->
                 val tick = tickMap[pair.symbol] ?: return@mapNotNull null
