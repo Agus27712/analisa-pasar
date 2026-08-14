@@ -13,7 +13,7 @@ android {
     minSdk = 24
     targetSdk = 35
     versionCode = providers.gradleProperty("VERSION_CODE").map(String::toInt).getOrElse(4)
-    versionName = "1.1.4"
+    versionName = "1.1.5"
   }
 
   signingConfigs {
