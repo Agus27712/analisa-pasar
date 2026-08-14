@@ -13,7 +13,7 @@ enum class ScalpingStage(val displayName: String) {
 enum class TrendSentiment(val displayName: String) {
     STRONG_BULLISH_CONTINUATION("Kelanjutan Bullish Kuat"),
     BULLISH_REVERSAL("Pembalikan Arah Bullish"),
-    ACCUMULATION_SQUEEZE("Akumulasi & Squeeze Harga"),
+    ACCUMULATION_SQUEEZE("Tunggu Pullback"),
     NEUTRAL_CONSOLIDATION("Konsolidasi Netral"),
     BEARISH_DISTRIBUTION("Distribusi Bearish"),
     BEARISH_BREAKDOWN("Breakdown Bearish"),
