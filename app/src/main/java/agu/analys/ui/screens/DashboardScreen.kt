@@ -13,11 +13,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ShowChart
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -47,7 +47,9 @@ private val DashboardCard = Color(0xFF0D1722)
 private val DashboardBorder = Color(0xFF1A3347)
 private val TvGold = Color(0xFFFFD54A)
 private val TvAmber = Color(0xFFFFB300)
-private val HotOrange = Color(0xFFFF6D00)
+/** Accent biru senada section title di Detail */
+private val AccentBlue = Color(0xFF2196F3)
+private val AccentBlueSoft = Color(0xFF6FB8FF)
 
 @Composable
 fun DashboardScreen(
@@ -102,25 +104,25 @@ fun DashboardScreen(
             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // ── Koin Rame Hari Ini ──
+            // ── Volume Tertinggi (live Indodax) ──
             if (hotCoins.isNotEmpty()) {
                 item {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.padding(top = 4.dp, bottom = 2.dp)
                     ) {
-                        Icon(Icons.Default.LocalFireDepartment, null, tint = HotOrange, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Default.TrendingUp, null, tint = AccentBlue, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
                         Text(
-                            "KOIN RAME HARI INI",
-                            color = HotOrange,
+                            "VOLUME TERTINGGI",
+                            color = AccentBlue,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.ExtraBold,
                             letterSpacing = 0.8.sp
                         )
                         Spacer(Modifier.width(8.dp))
                         Text(
-                            "· update tiap 15 detik",
+                            "· 24 jam · live",
                             color = TvTextSecondary,
                             fontSize = 10.sp
                         )
@@ -134,7 +136,7 @@ fun DashboardScreen(
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         hotCoins.forEachIndexed { index, tick ->
-                            HotCoinChip(
+                            VolumeLeaderChip(
                                 rank = index + 1,
                                 tick = tick,
                                 isWatched = tick.symbol in watchlist,
@@ -197,7 +199,7 @@ fun DashboardScreen(
 }
 
 @Composable
-private fun HotCoinChip(
+private fun VolumeLeaderChip(
     rank: Int,
     tick: MarketTick,
     isWatched: Boolean,
@@ -206,15 +208,16 @@ private fun HotCoinChip(
 ) {
     val base = tick.symbol.removeSuffix("IDR").ifBlank { tick.symbol }
     val rangePct = if (tick.low24h > 0) ((tick.high24h - tick.low24h) / tick.low24h) * 100.0 else 0.0
+    val highlight = rank <= 3
 
     Card(
         modifier = Modifier
             .width(168.dp)
             .clickable { onOpen() }
-            .testTag("hot_coin_${tick.symbol}"),
+            .testTag("volume_leader_${tick.symbol}"),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = DashboardCard),
-        border = BorderStroke(1.dp, if (rank <= 3) HotOrange.copy(alpha = 0.35f) else DashboardBorder)
+        border = BorderStroke(1.dp, if (highlight) AccentBlue.copy(alpha = 0.4f) else DashboardBorder)
     ) {
         Column(Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -222,10 +225,10 @@ private fun HotCoinChip(
                     Modifier
                         .size(28.dp)
                         .clip(CircleShape)
-                        .background(HotOrange.copy(alpha = 0.15f)),
+                        .background(AccentBlue.copy(alpha = 0.15f)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("#" + rank, color = HotOrange, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold)
+                    Text("#" + rank, color = AccentBlueSoft, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold)
                 }
                 Spacer(Modifier.width(8.dp))
                 Column(Modifier.weight(1f)) {
@@ -245,8 +248,9 @@ private fun HotCoinChip(
             Spacer(Modifier.height(2.dp))
             Text(
                 "Vol " + PriceFormatter.formatPrice(tick.volume24h),
-                color = TvTextSecondary,
+                color = AccentBlueSoft,
                 fontSize = 10.sp,
+                fontWeight = FontWeight.SemiBold,
                 maxLines = 1
             )
             if (rangePct > 0) {
@@ -262,11 +266,11 @@ private fun HotCoinChip(
                 Button(
                     onClick = onOpen,
                     modifier = Modifier.weight(1f).height(32.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = TvGreen),
+                    colors = ButtonDefaults.buttonColors(containerColor = AccentBlue),
                     shape = RoundedCornerShape(9.dp),
                     contentPadding = PaddingValues(0.dp)
                 ) {
-                    Text("Chart", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                    Text("Chart", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
                 }
                 OutlinedButton(
                     onClick = onToggleWatch,
@@ -542,7 +546,7 @@ private fun EmptyWatchlistState(onAddClick: () -> Unit) {
             Spacer(Modifier.height(8.dp))
             Text("Watchlist masih kosong", color = TvTextPrimary, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
             Spacer(Modifier.height(4.dp))
-            Text("Tambahkan koin favorit atau pilih dari Koin Rame di atas.", color = TvTextSecondary, fontSize = 11.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            Text("Tambahkan koin favorit atau pilih dari Volume Tertinggi di atas.", color = TvTextSecondary, fontSize = 11.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
             Spacer(Modifier.height(14.dp))
             Button(
                 onClick = onAddClick,
