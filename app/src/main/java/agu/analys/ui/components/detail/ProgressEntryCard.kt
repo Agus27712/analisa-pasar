@@ -84,7 +84,6 @@ fun ProgressEntryCard(signal: AISignalState, scalping: Boolean) {
         SectionTitle("PROGRESS MENUJU ENTRY", Icons.Default.Timeline)
         Spacer(Modifier.height(10.dp))
 
-        // Status utama
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(12.dp).background(statusColor, CircleShape))
             Spacer(Modifier.width(9.dp))
@@ -97,7 +96,6 @@ fun ProgressEntryCard(signal: AISignalState, scalping: Boolean) {
         Box(Modifier.fillMaxWidth().height(0.5.dp).background(Color(0x14FFFFFF)))
         Spacer(Modifier.height(12.dp))
 
-        // Checklist MTF
         Text("CHECKLIST MTF", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = TvTextSecondary, letterSpacing = 0.6.sp)
         Spacer(Modifier.height(8.dp))
         MtfRow("1H  Bias", parsed.bias, parsed.biasDetail)
@@ -132,7 +130,7 @@ private fun MtfRow(label: String, state: MtfState, detail: String) {
         MtfState.PARTIAL -> "⚠️" to WarningAmber
         MtfState.WAITING -> "⏳" to WarningAmber
         MtfState.FAIL -> "❌" to TvRed
-        MtfState.UNKNOWN -> "—” to TvTextSecondary
+        MtfState.UNKNOWN -> "—" to TvTextSecondary
     }
     Row(
         Modifier
@@ -170,7 +168,7 @@ private enum class MtfState { OK, PARTIAL, WAITING, FAIL, UNKNOWN }
 private data class ParsedMtf(
     val bias: MtfState,
     val biasDetail: String,
-    val biasDirection: String, // bullish / bearish / mixed
+    val biasDirection: String,
     val setup: MtfState,
     val setupDetail: String,
     val trigger: MtfState,
