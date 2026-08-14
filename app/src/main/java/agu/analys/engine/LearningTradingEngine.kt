@@ -3,6 +3,7 @@ package agu.analys.engine
 import agu.analys.engine.indicators.CandlePatternDetector
 import agu.analys.engine.indicators.IndicatorMath
 import agu.analys.engine.regime.MarketRegimeDetector
+import agu.analys.engine.scalping.ScalpingMtfEvaluator
 import agu.analys.model.AISignalState
 import agu.analys.model.CandleBar
 import agu.analys.model.MarketTick
@@ -25,9 +26,11 @@ import kotlin.math.max
 import kotlin.math.min
 
 /**
- * Orchestrator for real-data technical analysis.
- * Indicator math lives in [IndicatorMath], patterns in [CandlePatternDetector],
- * regime in [MarketRegimeDetector]. This class only wires state + scoring.
+ * Thin orchestrator: candle/tick state + mode routing.
+ * - Indicators → [IndicatorMath]
+ * - Patterns → [CandlePatternDetector]
+ * - Regime → [MarketRegimeDetector]
+ * - Scalping MTF → [ScalpingMtfEvaluator]
  */
 class LearningTradingEngine(
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default)
@@ -60,7 +63,7 @@ class LearningTradingEngine(
             candles.sortBy { it.timestamp }
             while (candles.size > 250) candles.removeAt(0)
         }
-        if (!isScalpingMode) evaluate()
+        if (!isScalpingMode) evaluateSwing()
     }
 
     fun resetForOffline(preserveState: Boolean = false) {
@@ -113,271 +116,21 @@ class LearningTradingEngine(
                 h1Candles = h1
                 m15Candles = m15
                 m1Candles = m1
-                evaluateScalpingMtf()
+                runScalping()
             }
         }
     }
 
-    private data class FrameSignal(
-        val candles: List<CandleBar>,
-        val price: Double,
-        val rsi: Double,
-        val emaFast: Double,
-        val emaSlow: Double,
-        val macdHist: Double,
-        val atr: Double,
-        val structureTrend: String,
-        val structureEnough: Boolean,
-        val volumeRatio: Double,
-        val bullishEma: Boolean,
-        val bearishEma: Boolean,
-        val bullishMomentum: Boolean,
-        val bearishMomentum: Boolean,
-        val breakoutUp: Boolean,
-        val breakoutDown: Boolean,
-        val retestUp: Boolean,
-        val retestDown: Boolean
-    )
-
-    private fun analyzeFrame(
-        history: List<CandleBar>,
-        rsiPeriod: Int = 7,
-        fastPeriod: Int = 5,
-        slowPeriod: Int = 13,
-        macdFast: Int = 5,
-        macdSlow: Int = 12,
-        macdSignal: Int = 4
-    ): FrameSignal? {
-        if (history.size < maxOf(30, slowPeriod + 5)) return null
-        val closes = history.map { it.close }
-        val price = closes.last()
-        val rsi = IndicatorMath.rsi(history, rsiPeriod)
-        val emaFast = IndicatorMath.ema(closes, fastPeriod)
-        val emaSlow = IndicatorMath.ema(closes, slowPeriod)
-        val macdSeries = IndicatorMath.macdSeries(closes, macdFast, macdSlow, macdSignal)
-        val macdHist = macdSeries.last().first - macdSeries.last().second
-        val atr = IndicatorMath.atr(history, 7)
-        val structureWindow = min(40, history.size)
-        val structure = MarketStructureAnalyzer.analyze(history.takeLast(structureWindow))
-        val avgVolume = history.takeLast(5).dropLast(1).map { it.volume }.average()
-        val lastVolume = history.last().volume
-        val volumeRatio = if (avgVolume > 0.0) lastVolume / avgVolume else 0.0
-        val previous = history[history.lastIndex - 1]
-        val last = history.last()
-        val breakoutUp = last.close > previous.high && last.high >= previous.high
-        val breakoutDown = last.close < previous.low && last.low <= previous.low
-        val retestUp = last.low <= emaFast && last.close > emaFast && previous.close >= emaFast
-        val retestDown = last.high >= emaFast && last.close < emaFast && previous.close <= emaFast
-        return FrameSignal(
-            candles = history,
-            price = price,
-            rsi = rsi,
-            emaFast = emaFast,
-            emaSlow = emaSlow,
-            macdHist = macdHist,
-            atr = atr,
-            structureTrend = structure.trend,
-            structureEnough = structure.dataEnough,
-            volumeRatio = volumeRatio,
-            bullishEma = price > emaFast && emaFast > emaSlow,
-            bearishEma = price < emaFast && emaFast < emaSlow,
-            bullishMomentum = macdHist > 0.0,
-            bearishMomentum = macdHist < 0.0,
-            breakoutUp = breakoutUp,
-            breakoutDown = breakoutDown,
-            retestUp = retestUp,
-            retestDown = retestDown
-        )
-    }
-
-    private fun evaluateScalpingMtf() {
+    private fun runScalping() {
         val tick = currentTick ?: return
-        val h1 = analyzeFrame(h1Candles, rsiPeriod = 14, fastPeriod = 9, slowPeriod = 21, macdFast = 12, macdSlow = 26, macdSignal = 9) ?: return
-        val m15 = analyzeFrame(m15Candles) ?: return
-        val m1 = analyzeFrame(m1Candles) ?: return
-        val price = tick.price
-        val atr = m1.atr
-        if (atr <= 0.0 || price <= 0.0) return
-
-        val biasLong = h1.bullishEma && h1.structureEnough && h1.structureTrend == "Bullish structure" && h1.bullishMomentum
-        val biasShort = h1.bearishEma && h1.structureEnough && h1.structureTrend == "Bearish structure" && h1.bearishMomentum
-        val setupLong = m15.bullishEma && m15.structureEnough && m15.structureTrend == "Bullish structure"
-        val setupShort = m15.bearishEma && m15.structureEnough && m15.structureTrend == "Bearish structure"
-        val triggerLong = m1.bullishEma && m1.bullishMomentum && m1.rsi in 50.0..75.0 && (m1.volumeRatio >= 1.20 || m1.breakoutUp || m1.retestUp)
-        val triggerShort = m1.bearishEma && m1.bearishMomentum && m1.rsi in 25.0..50.0 && (m1.volumeRatio >= 1.20 || m1.breakoutDown || m1.retestDown)
-        val extendedLong = h1.rsi > 75.0 || m15.rsi > 75.0
-        val extendedShort = h1.rsi < 25.0 || m15.rsi < 25.0
-        val extremeVolatility = atr / price > 0.04
-
-        var longScore = 0
-        var shortScore = 0
-        val reasons = mutableListOf<String>()
-        reasons += "[SCALPING MTF] 1H = bias, 15M = setup, 1M = trigger."
-        reasons += "1H: ${if (biasLong) "bullish" else if (biasShort) "bearish" else "mixed"}, RSI ${format(h1.rsi)}."
-        reasons += "15M: ${if (setupLong) "bullish setup" else if (setupShort) "bearish setup" else "pullback/mixed"}, RSI ${format(m15.rsi)}."
-        reasons += "1M: ${if (triggerLong) "long trigger" else if (triggerShort) "short trigger" else "belum trigger"}, RSI ${format(m1.rsi)}, volume ${format(m1.volumeRatio)}×."
-
-        if (biasLong) longScore += 25
-        if (biasShort) shortScore += 25
-        if (setupLong) longScore += 25
-        if (setupShort) shortScore += 25
-        if (triggerLong) longScore += 30
-        if (triggerShort) shortScore += 30
-        if (m1.volumeRatio >= 1.20 && m1.bullishMomentum) longScore += 10
-        if (m1.volumeRatio >= 1.20 && m1.bearishMomentum) shortScore += 10
-        if (m1.rsi in 50.0..70.0) longScore += 10
-        if (m1.rsi in 30.0..50.0) shortScore += 10
-        if (m1.breakoutUp || m1.retestUp) longScore += 10
-        if (m1.breakoutDown || m1.retestDown) shortScore += 10
-
-        val dominantScore = max(longScore, shortScore).coerceIn(0, 100)
-        val directionalBias = when {
-            biasLong -> SignalAction.BUY
-            biasShort -> SignalAction.SELL
-            else -> SignalAction.HOLD
-        }
-        val entryAction = when {
-            biasLong && setupLong && triggerLong && !extremeVolatility -> SignalAction.BUY
-            biasShort && setupShort && triggerShort && !extremeVolatility -> SignalAction.SELL
-            else -> SignalAction.HOLD
-        }
-
-        val stage = when {
-            entryAction == SignalAction.BUY && longScore >= 70 -> ScalpingStage.STRONG_ENTRY
-            entryAction == SignalAction.SELL && shortScore >= 70 -> ScalpingStage.STRONG_ENTRY
-            entryAction == SignalAction.BUY || entryAction == SignalAction.SELL -> ScalpingStage.ENTRY
-            biasLong && (extendedLong || setupLong && !triggerLong || !setupLong && m1.bearishMomentum) -> ScalpingStage.WAIT_PULLBACK
-            biasShort && (extendedShort || setupShort && !triggerShort || !setupShort && m1.bullishMomentum) -> ScalpingStage.WAIT_PULLBACK
-            directionalBias != SignalAction.HOLD -> ScalpingStage.WATCH
-            dominantScore >= 45 -> ScalpingStage.WATCH
-            else -> ScalpingStage.HOLD
-        }
-
-        if (extendedLong) reasons += "RSI 1H/15M sudah panas: tunggu pullback."
-        if (extendedShort) reasons += "RSI 1H/15M sangat rendah: tunggu pullback."
-        if (extremeVolatility) reasons += "ATR 1M > 4%: volatilitas ekstrem, entry ditahan."
-
-        var sl = 0.0
-        var tp1 = 0.0
-        var tp2 = 0.0
-        var stopDistance = 0.0
-        var tp1Distance = 0.0
-        var tp2Distance = 0.0
-        var rr = "Belum ada posisi"
-
-        if (entryAction != SignalAction.HOLD) {
-            val rawStopDistance = atr * 0.9
-            val rawTp1Distance = atr * 1.4
-            val rawTp2Distance = atr * 2.2
-            if (entryAction == SignalAction.BUY) {
-                sl = price - rawStopDistance
-                tp1 = price + rawTp1Distance
-                tp2 = price + rawTp2Distance
-                val structure = MarketStructureAnalyzer.analyze(m1Candles.takeLast(min(40, m1Candles.size)))
-                val swingLow = structure.lastSwingLow ?: 0.0
-                if (structure.dataEnough && swingLow > 0.0 && swingLow < price) sl = min(sl, swingLow - atr * 0.20)
-                val resistance = structure.resistance ?: 0.0
-                if (structure.dataEnough && resistance > price) tp1 = min(tp1, resistance)
-            } else {
-                sl = price + rawStopDistance
-                tp1 = price - rawTp1Distance
-                tp2 = price - rawTp2Distance
-                val structure = MarketStructureAnalyzer.analyze(m1Candles.takeLast(min(40, m1Candles.size)))
-                val swingHigh = structure.lastSwingHigh ?: 0.0
-                if (structure.dataEnough && swingHigh > price) sl = max(sl, swingHigh + atr * 0.20)
-                val support = structure.support ?: 0.0
-                if (structure.dataEnough && support > 0.0 && support < price) tp1 = max(tp1, support)
-            }
-            stopDistance = abs(price - sl)
-            tp1Distance = abs(tp1 - price)
-            tp2Distance = abs(tp2 - price)
-            val valid = stopDistance > 0.0 && stopDistance < price * 0.10 &&
-                tp1Distance >= stopDistance && tp2Distance >= stopDistance * 1.5 &&
-                if (entryAction == SignalAction.BUY) tp1 > price && tp2 > tp1 else tp1 < price && tp2 < tp1
-            if (!valid) {
-                reasons += "Entry dibatalkan: TP/SL tidak memenuhi RR minimum."
-                _signalState.value = buildScalpingState(ScalpingStage.WATCH, SignalAction.HOLD, dominantScore, price, 0.0, 0.0, 0.0, "Risk/reward tidak layak", reasons)
-                return
-            }
-            rr = "TP1 1:${format(tp1Distance / stopDistance)} | TP2 1:${format(tp2Distance / stopDistance)}"
-        }
-
-        val finalAction = if (stage == ScalpingStage.ENTRY || stage == ScalpingStage.STRONG_ENTRY) entryAction else SignalAction.HOLD
-        val sentiment = when {
-            finalAction == SignalAction.BUY -> TrendSentiment.STRONG_BULLISH_CONTINUATION
-            finalAction == SignalAction.SELL -> TrendSentiment.BEARISH_DISTRIBUTION
-            biasLong -> TrendSentiment.ACCUMULATION_SQUEEZE
-            biasShort -> TrendSentiment.BEARISH_DISTRIBUTION
-            else -> TrendSentiment.NEUTRAL_CONSOLIDATION
-        }
-        val actionScore = when {
-            finalAction == SignalAction.BUY -> longScore
-            finalAction == SignalAction.SELL -> shortScore
-            else -> dominantScore
-        }.coerceIn(0, 100)
-        reasons += "STATUS: ${stage.displayName}."
-
-        _indicators.value = TechnicalIndicators(
-            rsi14 = m1.rsi,
-            macd = m1.macdHist,
-            macdSignal = 0.0,
-            macdHist = m1.macdHist,
-            ema20 = m1.emaFast,
-            ema50 = m1.emaSlow,
-            ema200 = Double.NaN,
-            bbUpper = Double.NaN,
-            bbLower = Double.NaN,
-            atr = m1.atr,
-            momentum = if (m1.candles.size > 4) {
-                val base = m1.candles[m1.candles.lastIndex - 4].close
-                if (base > 0) (m1.price - base) / base else 0.0
-            } else 0.0
-        )
-        _signalState.value = AISignalState(
-            action = finalAction,
-            confidence = actionScore,
-            sentiment = sentiment,
-            entryPrice = price,
-            targetPrice1 = if (finalAction == SignalAction.HOLD) 0.0 else tp1,
-            targetPrice2 = if (finalAction == SignalAction.HOLD) 0.0 else tp2,
-            stopLoss = if (finalAction == SignalAction.HOLD) 0.0 else sl,
-            riskRewardRatio = rr,
-            probabilityScore = 0.0,
-            patternDetected = null,
-            reasoning = reasons.take(9),
-            timestamp = System.currentTimeMillis(),
-            scalpingStage = stage
-        )
+        val result = ScalpingMtfEvaluator.evaluate(tick.price, h1Candles, m15Candles, m1Candles) ?: return
+        _indicators.value = result.indicators
+        _signalState.value = result.signal
     }
 
-    private fun buildScalpingState(
-        stage: ScalpingStage,
-        action: SignalAction,
-        score: Int,
-        price: Double,
-        tp1: Double,
-        tp2: Double,
-        sl: Double,
-        rr: String,
-        reasons: List<String>
-    ): AISignalState = AISignalState(
-        action = action,
-        confidence = score.coerceIn(0, 100),
-        sentiment = if (stage == ScalpingStage.WAIT_PULLBACK) TrendSentiment.ACCUMULATION_SQUEEZE else TrendSentiment.NEUTRAL_CONSOLIDATION,
-        entryPrice = price,
-        targetPrice1 = tp1,
-        targetPrice2 = tp2,
-        stopLoss = sl,
-        riskRewardRatio = rr,
-        probabilityScore = 0.0,
-        reasoning = (reasons + "STATUS: ${stage.displayName}.").take(9),
-        timestamp = System.currentTimeMillis(),
-        scalpingStage = stage
-    )
-
-    private fun evaluate() {
+    private fun evaluateSwing() {
         if (isScalpingMode) {
-            if (h1Candles.isNotEmpty() && m15Candles.isNotEmpty() && m1Candles.isNotEmpty()) evaluateScalpingMtf()
+            if (h1Candles.isNotEmpty() && m15Candles.isNotEmpty() && m1Candles.isNotEmpty()) runScalping()
             return
         }
         val tick = currentTick ?: return
@@ -436,9 +189,9 @@ class LearningTradingEngine(
         val reasons = mutableListOf<String>()
         reasons += "Market regime: $regime."
         when {
-            rsi < 30.0 -> { buy += 20.0; reasons += "RSI ${format(rsi)}: jenuh jual." }
-            rsi > 70.0 -> { sell += 20.0; reasons += "RSI ${format(rsi)}: jenuh beli." }
-            else -> reasons += "RSI ${format(rsi)}: netral."
+            rsi < 30.0 -> { buy += 20.0; reasons += "RSI ${fmt(rsi)}: jenuh jual." }
+            rsi > 70.0 -> { sell += 20.0; reasons += "RSI ${fmt(rsi)}: jenuh beli." }
+            else -> reasons += "RSI ${fmt(rsi)}: netral."
         }
         when {
             price > emaFast && emaFast > emaSlow -> { buy += 25.0; reasons += "EMA20 > EMA50: struktur bullish." }
@@ -463,8 +216,8 @@ class LearningTradingEngine(
         val lastVolume = history.last().volume
         if (avgVolume > 0.0 && lastVolume >= avgVolume * 1.6) {
             val ratio = lastVolume / avgVolume
-            if (history.last().close >= history.last().open) { buy += 10.0; reasons += "Volume ${format(ratio)}×: lonjakan beli." }
-            else { sell += 10.0; reasons += "Volume ${format(ratio)}×: lonjakan jual." }
+            if (history.last().close >= history.last().open) { buy += 10.0; reasons += "Volume ${fmt(ratio)}×: lonjakan beli." }
+            else { sell += 10.0; reasons += "Volume ${fmt(ratio)}×: lonjakan jual." }
         } else reasons += "Volume stabil."
 
         if (marketStructure.dataEnough) {
@@ -531,7 +284,7 @@ class LearningTradingEngine(
         val finalScore = if (finalAction == SignalAction.HOLD) min(59, score) else score
         if (action != SignalAction.HOLD && finalAction == SignalAction.HOLD) reasons += "Setup dibatalkan: RR tidak layak."
         val rr = if (finalAction == SignalAction.HOLD || stopDistance <= 0.0) "Tidak ada posisi"
-        else "TP1 1:${format(tp1Distance / stopDistance)} | TP2 1:${format(tp2Distance / stopDistance)}"
+        else "TP1 1:${fmt(tp1Distance / stopDistance)} | TP2 1:${fmt(tp2Distance / stopDistance)}"
         val sentiment = when (finalAction) {
             SignalAction.BUY -> if (pattern?.contains("Engulfing", true) == true) TrendSentiment.BULLISH_REVERSAL else TrendSentiment.STRONG_BULLISH_CONTINUATION
             SignalAction.SELL -> if (pattern?.contains("Engulfing", true) == true) TrendSentiment.BEARISH_BREAKDOWN else TrendSentiment.BEARISH_DISTRIBUTION
@@ -554,5 +307,5 @@ class LearningTradingEngine(
         )
     }
 
-    private fun format(value: Double): String = String.format(java.util.Locale.US, "%.2f", value)
+    private fun fmt(value: Double): String = String.format(java.util.Locale.US, "%.2f", value)
 }
