@@ -12,8 +12,8 @@ android {
     applicationId = "agu.analys"
     minSdk = 24
     targetSdk = 35
-    versionCode = providers.gradleProperty("VERSION_CODE").map(String::toInt).getOrElse(4)
-    versionName = "1.1.5"
+    versionCode = providers.gradleProperty("VERSION_CODE").map(String::toInt).getOrElse(5)
+    versionName = "1.1.6"
   }
 
   signingConfigs {
@@ -72,8 +72,6 @@ kotlin {
 secrets {
   propertiesFileName = ".env"
   defaultPropertiesFileName = ".env.example"
-  // Keys used only via SharedPreferences / runtime — do not emit into BuildConfig
-  // (empty values become illegal Java: public static final String X = ;)
   ignoreList.add("FIREBASE_APPCHECK_DEBUG_TOKEN")
   ignoreList.add("GROQ_API_KEY")
   ignoreList.add("GEMINI_API_KEY")
