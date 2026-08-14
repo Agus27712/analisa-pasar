@@ -41,6 +41,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import agu.analys.model.CandleBar
+import agu.analys.ui.animation.rememberSmoothPrice
 import agu.analys.ui.theme.TvCardBackground
 import agu.analys.ui.theme.TvGreen
 import agu.analys.ui.theme.TvRed
@@ -95,7 +96,9 @@ fun SimpleComposeChart(
     val minPrice = visible.minOfOrNull { minOf(it.low, bb.first.getOrNull(startIndex) ?: it.low) } ?: currentPrice
     val maxPrice = visible.maxOfOrNull { maxOf(it.high, bb.second.getOrNull(startIndex) ?: it.high) } ?: currentPrice
     val themeColor = if (isPositiveTrend) TvGreen else TvRed
-    val livePrice = currentPrice.takeIf { it > 0 }
+    // Smooth live price for line + header label inside chart — visual only
+    val smoothLive = rememberSmoothPrice(currentPrice)
+    val livePrice = smoothLive.takeIf { it > 0 }
 
     Card(
         modifier = modifier.fillMaxWidth().border(1.dp, Color(0x1AFFFFFF), RoundedCornerShape(16.dp)),

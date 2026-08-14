@@ -41,6 +41,7 @@ import agu.analys.model.MarketConnectionState
 import agu.analys.model.TechnicalIndicators
 import agu.analys.model.Timeframe
 import agu.analys.model.TradingPair
+import agu.analys.ui.animation.SmoothPriceText
 import agu.analys.ui.components.SimpleComposeChart
 import agu.analys.ui.components.SpotPositionCard
 import agu.analys.ui.components.dashboard.ModeSwitchToggle
@@ -226,7 +227,13 @@ fun DetailChartScreen(
 private fun PriceHeader(price: Double, change: Double) {
     val changeColor = if (change >= 0) TvGreen else TvRed
     Column(Modifier.fillMaxWidth()) {
-        Text(PriceFormatter.formatPrice(price), fontSize = 29.sp, fontWeight = FontWeight.Black, color = TvTextPrimary, modifier = Modifier.testTag("live_price_header"))
+        SmoothPriceText(
+            price = price,
+            color = TvTextPrimary,
+            fontSize = 29.sp,
+            fontWeight = FontWeight.Black,
+            modifier = Modifier.testTag("live_price_header")
+        )
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(PriceFormatter.formatPercentage(change), fontSize = 16.sp, fontWeight = FontWeight.Bold, color = changeColor)
             Spacer(Modifier.width(7.dp))
