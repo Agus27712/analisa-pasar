@@ -1,10 +1,12 @@
 name: Fix Analysis Card Flicker
 on:
-  workflow_dispatch:
+  push:
+    branches: [feature/hot-coins-live]
 permissions:
   contents: write
 jobs:
   fix:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -18,7 +20,7 @@ jobs:
           p = Path('app/src/main/java/agu/analys/engine/LearningTradingEngine.kt')
           s = p.read_text()
           old = '''    fun resetForOffline() {\n        currentTick = null\n        mtfRefreshJob?.cancel()\n        mtfRefreshJob = null\n        lastMtfRefresh = 0L\n        mtfSymbol = ""\n        h1Candles = emptyList()\n        m15Candles = emptyList()\n        m1Candles = emptyList()\n        synchronized(candles) { candles.clear() }\n        _indicators.value = TechnicalIndicators()\n        _signalState.value = AISignalState('''
-          new = '''    fun resetForOffline(preserveState: Boolean = false) {\n        currentTick = null\n        mtfRefreshJob?.cancel()\n        mtfRefreshJob = null\n        lastMtfRefresh = 0L\n        mtfSymbol = ""\n        h1Candles = emptyList()\n        m15Candles = emptyList()\n        m1Candles = emptyList()\n        synchronized(candles) { candles.clear() }\n        // Live candle refresh must not briefly publish an empty/neutral state.\n        // The UI observes these flows directly, so clearing them here causes the\n        // analysis cards to flash every refresh cycle. Keep the last valid state\n        // while the replacement candle set is being calculated.\n        if (preserveState) return\n        _indicators.value = TechnicalIndicators()\n        _signalState.value = AISignalState('''
+          new = '''    fun resetForOffline(preserveState: Boolean = false) {\n        currentTick = null\n        mtfRefreshJob?.cancel()\n        mtfRefreshJob = null\n        lastMtfRefresh = 0L\n        mtfSymbol = ""\n        h1Candles = emptyList()\n        m15Candles = emptyList()\n        m1Candles = emptyList()\n        synchronized(candles) { candles.clear() }\n        // Do not publish an empty state during a live refresh. The UI observes\n        // these flows directly, so clearing them creates a visible card flash.\n        if (preserveState) return\n        _indicators.value = TechnicalIndicators()\n        _signalState.value = AISignalState('''
           if old not in s: raise SystemExit('reset block not found')
           s = s.replace(old, new, 1)
           p.write_text(s)
@@ -26,7 +28,7 @@ jobs:
           p = Path('app/src/main/java/agu/analys/viewmodel/TradingViewModel.kt')
           s = p.read_text()
           old = '''                            _recentCandles.value = candles\n                            engine.resetForOffline()\n                            engine.onTickUpdate(normalizedTick)\n                            candles.forEach { engine.onCandleUpdate(it) }'''
-          new = '''                            _recentCandles.value = candles\n                            // Keep the last valid signal/indicator snapshot visible while\n                            // the refreshed candle set is being processed. This prevents\n                            // the analysis cards from flashing HOLD/empty between refreshes.\n                            engine.resetForOffline(preserveState = true)\n                            engine.onTickUpdate(normalizedTick)\n                            candles.forEach { engine.onCandleUpdate(it) }'''
+          new = '''                            _recentCandles.value = candles\n                            // Preserve the last valid analysis snapshot while the new\n                            // candle set is being processed, avoiding card flicker.\n                            engine.resetForOffline(preserveState = true)\n                            engine.onTickUpdate(normalizedTick)\n                            candles.forEach { engine.onCandleUpdate(it) }'''
           if old not in s: raise SystemExit('live refresh block not found')
           s = s.replace(old, new, 1)
           p.write_text(s)
