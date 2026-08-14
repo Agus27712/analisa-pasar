@@ -86,7 +86,14 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     val dashboardTicks: StateFlow<Map<String, MarketTick>> = _dashboardTicks.asStateFlow()
     private val _connectionState = MutableStateFlow<MarketConnectionState>(MarketConnectionState.Loading)
     val connectionState: StateFlow<MarketConnectionState> = _connectionState.asStateFlow()
-    private val _watchlist = MutableStateFlow(prefs.getWatchlist())
+    private val _watchlist = MutableStateFlow(
+        prefs.getWatchlist().let { set ->
+            if (set.isEmpty()) {
+                prefs.toggleWatchlist("BTCIDR")
+                setOf("BTCIDR")
+            } else set
+        }
+    )
     val watchlist: StateFlow<Set<String>> = _watchlist.asStateFlow()
     private val _isShowingCachedData = MutableStateFlow(false)
     val isShowingCachedData: StateFlow<Boolean> = _isShowingCachedData.asStateFlow()
