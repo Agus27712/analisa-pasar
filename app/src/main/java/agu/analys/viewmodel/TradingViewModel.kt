@@ -235,7 +235,9 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
                         val candles = IndodaxMarketService.fetchCandles(pairId, selectedTf, 300)
                         if (candles.size >= 35) {
                             _recentCandles.value = candles
-                            engine.resetForOffline()
+                            // Preserve the last valid analysis snapshot while the new
+                            // candle set is being processed, avoiding card flicker.
+                            engine.resetForOffline(preserveState = true)
                             engine.onTickUpdate(normalizedTick)
                             candles.forEach { engine.onCandleUpdate(it) }
                             lastCandleRefresh = now

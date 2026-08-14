@@ -57,7 +57,7 @@ class LearningTradingEngine(
         if (!isScalpingMode) evaluate()
     }
 
-    fun resetForOffline() {
+    fun resetForOffline(preserveState: Boolean = false) {
         currentTick = null
         mtfRefreshJob?.cancel()
         mtfRefreshJob = null
@@ -67,6 +67,9 @@ class LearningTradingEngine(
         m15Candles = emptyList()
         m1Candles = emptyList()
         synchronized(candles) { candles.clear() }
+        // Do not publish an empty state during a live refresh. The UI observes
+        // these flows directly, so clearing them creates a visible card flash.
+        if (preserveState) return
         _indicators.value = TechnicalIndicators()
         _signalState.value = AISignalState(
             action = SignalAction.HOLD,
