@@ -1,6 +1,7 @@
 package agu.analys.ui.components.detail
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -15,122 +16,128 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import agu.analys.model.AISignalState
+import agu.analys.model.MtfLegStatus
+import agu.analys.model.ScalpingPath
 import agu.analys.model.ScalpingStage
-import agu.analys.model.SignalAction
 import agu.analys.ui.theme.TvGreen
 import agu.analys.ui.theme.TvRed
 import agu.analys.ui.theme.TvTextPrimary
 import agu.analys.ui.theme.TvTextSecondary
 
 /**
- * Progress menuju Entry — penerjemah status engine.
- * Tidak mengubah threshold / scoring; hanya menjelaskan kondisi MTF.
+ * Progress menuju Entry — 100% dari ScalpingMtfSnapshot engine.
+ * Tidak parse reasoning string. Tidak hitung ulang threshold.
  */
 @Composable
 fun ProgressEntryCard(signal: AISignalState, scalping: Boolean) {
-    if (!scalping) return
+    if (!scalping) {
+        AnalysisCard {
+            SectionTitle("PROGRESS MENUJU ENTRY", Icons.Default.Timeline)
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Aktifkan Mode Scalping di atas untuk melihat checklist 1H → 15M → 1M.",
+                fontSize = 13.sp, color = TvTextSecondary, lineHeight = 18.sp
+            )
+        }
+        return
+    }
 
-    val parsed = parseMtfFromReasoning(signal.reasoning)
+    val mtf = signal.mtf
     val stage = signal.scalpingStage
-
-    val statusTitle: String
-    val statusColor: Color
-    val pathLabel: String
-    val waitingFor: String
-    val entryCondition: String
-
-    when (stage) {
-        ScalpingStage.STRONG_ENTRY, ScalpingStage.ENTRY -> {
-            statusTitle = if (signal.action == SignalAction.SELL) "SHORT ENTRY" else "ENTRY"
-            statusColor = if (signal.action == SignalAction.SELL) TvRed else TvGreen
-            pathLabel = "Jalur: breakout / trigger terkonsolidasi"
-            waitingFor = "Tidak ada yang ditunggu — kondisi entry terpenuhi."
-            entryCondition = "Bias 1H + setup 15M + trigger 1M sudah searah."
-        }
-        ScalpingStage.WAIT_PULLBACK -> {
-            val biasOk = parsed.bias == MtfState.OK
-            val setupPartial = parsed.setup == MtfState.PARTIAL || parsed.setup == MtfState.OK
-            if (biasOk && setupPartial) {
-                statusTitle = if (parsed.biasDirection == "bearish") "BEARISH MOMENTUM" else "BULLISH MOMENTUM"
-                statusColor = WarningAmber
-                pathLabel = "Jalur: momentum continuation ATAU pullback"
-                waitingFor = "Menunggu konfirmasi 1M (volume / breakout / retest) atau pullback yang bersih."
-                entryCondition = "Trigger 1M harus valid (volume ≥1.2× atau breakout/retest + RSI di zona)."
-            } else {
-                statusTitle = "MENUNGGU PULLBACK"
-                statusColor = WarningAmber
-                pathLabel = "Jalur utama: pullback"
-                waitingFor = "Harga extended / setup 15M belum rapi — tunggu koreksi ke area setup."
-                entryCondition = "Setelah pullback: setup 15M + trigger 1M harus kembali searah bias 1H."
-            }
-        }
-        ScalpingStage.WATCH -> {
-            statusTitle = "MENUNGGU KONFIRMASI"
-            statusColor = WarningAmber
-            pathLabel = "Setup mulai terbentuk"
-            waitingFor = "Bias atau setup ada, trigger 1M belum cukup kuat."
-            entryCondition = "Butuh trigger 1M yang valid agar status naik ke ENTRY."
-        }
-        ScalpingStage.HOLD -> {
-            statusTitle = "BELUM TERSEDIA"
-            statusColor = TvTextSecondary
-            pathLabel = "Belum ada bias/setup jelas"
-            waitingFor = "Menunggu struktur 1H dan setup 15M terbentuk."
-            entryCondition = "Minimal bias 1H + setup 15M harus ada sebelum trigger relevan."
-        }
+    val statusColor = when (stage) {
+        ScalpingStage.ENTRY, ScalpingStage.STRONG_ENTRY -> TvGreen
+        ScalpingStage.WAIT_PULLBACK, ScalpingStage.WATCH -> WarningAmber
+        ScalpingStage.HOLD -> TvTextSecondary
+    }
+    val pathLabel = when (mtf.path) {
+        ScalpingPath.ENTRY_READY -> "Jalur: breakout / trigger terkonsolidasi"
+        ScalpingPath.BOTH -> "Jalur: pullback ATAU momentum continuation"
+        ScalpingPath.PULLBACK -> "Jalur utama: pullback"
+        ScalpingPath.MOMENTUM_CONTINUATION -> "Jalur: tunggu konfirmasi momentum"
+        ScalpingPath.NONE -> "Jalur: belum terbentuk"
     }
 
     AnalysisCard {
-        SectionTitle("PROGRESS MENUJU ENTRY", Icons.Default.Timeline)
-        Spacer(Modifier.height(10.dp))
-
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(12.dp).background(statusColor, CircleShape))
-            Spacer(Modifier.width(9.dp))
-            Text(statusTitle, color = statusColor, fontSize = 17.sp, fontWeight = FontWeight.ExtraBold)
+        // Header badge biar langsung keliatan beda dari card lama
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .background(statusColor.copy(alpha = 0.12f), RoundedCornerShape(10.dp))
+                .border(1.dp, statusColor.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(Modifier.size(10.dp).background(statusColor, CircleShape))
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text("PROGRESS ENTRY", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TvTextSecondary, letterSpacing = 0.8.sp)
+                Text(
+                    mtf.statusTitle.ifBlank { stage.displayName },
+                    color = statusColor,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    maxLines = 2
+                )
+            }
         }
-        Spacer(Modifier.height(4.dp))
+
+        Spacer(Modifier.height(8.dp))
         Text(pathLabel, fontSize = 12.sp, color = TvTextSecondary)
 
         Spacer(Modifier.height(12.dp))
-        Box(Modifier.fillMaxWidth().height(0.5.dp).background(Color(0x14FFFFFF)))
+        AnalysisDivider()
         Spacer(Modifier.height(12.dp))
 
         Text("CHECKLIST MTF", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = TvTextSecondary, letterSpacing = 0.6.sp)
         Spacer(Modifier.height(8.dp))
-        MtfRow("1H  Bias", parsed.bias, parsed.biasDetail)
-        MtfRow("15M Setup", parsed.setup, parsed.setupDetail)
-        MtfRow("1M  Trigger", parsed.trigger, parsed.triggerDetail)
+        MtfRow("1H  Bias", mtf.biasStatus, mtf.biasDetail.ifBlank { "Menunggu data 1H" })
+        MtfRow("15M Setup", mtf.setupStatus, mtf.setupDetail.ifBlank { "Menunggu data 15M" })
+        MtfRow("1M  Trigger", mtf.triggerStatus, mtf.triggerDetail.ifBlank { "Menunggu data 1M" })
 
         Spacer(Modifier.height(12.dp))
-        Box(Modifier.fillMaxWidth().height(0.5.dp).background(Color(0x14FFFFFF)))
+        AnalysisDivider()
         Spacer(Modifier.height(10.dp))
 
         Text("APA YANG DITUNGGU?", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = TvTextSecondary, letterSpacing = 0.6.sp)
         Spacer(Modifier.height(4.dp))
-        Text(waitingFor, fontSize = 13.sp, color = TvTextPrimary, lineHeight = 18.sp)
+        Text(
+            mtf.waitingFor.ifBlank { "Menunggu kondisi market lebih jelas." },
+            fontSize = 13.sp, color = TvTextPrimary, lineHeight = 18.sp
+        )
 
         Spacer(Modifier.height(8.dp))
         Text("SYARAT ENTRY VALID", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = TvTextSecondary, letterSpacing = 0.6.sp)
         Spacer(Modifier.height(4.dp))
-        Text(entryCondition, fontSize = 13.sp, color = TvTextPrimary, lineHeight = 18.sp)
+        Text(
+            mtf.entryCondition.ifBlank { "Bias + setup + trigger harus searah." },
+            fontSize = 13.sp, color = TvTextPrimary, lineHeight = 18.sp
+        )
+
+        if (mtf.extended || mtf.extremeVolatility) {
+            Spacer(Modifier.height(8.dp))
+            val note = buildString {
+                if (mtf.extended) append("RSI extended. ")
+                if (mtf.extremeVolatility) append("Volatilitas ATR tinggi.")
+            }
+            Text(note.trim(), fontSize = 12.sp, color = WarningAmber, lineHeight = 16.sp)
+        }
 
         Spacer(Modifier.height(10.dp))
         Text(
-            "Skor setup: ${signal.confidence}/100  ·  Status engine: ${stage.displayName}",
+            "Skor setup: ${signal.confidence}/100  ·  Engine: ${stage.displayName}",
             fontSize = 11.sp, color = TvTextSecondary
         )
     }
 }
 
 @Composable
-private fun MtfRow(label: String, state: MtfState, detail: String) {
-    val (mark, markColor) = when (state) {
-        MtfState.OK -> "✅" to TvGreen
-        MtfState.PARTIAL -> "⚠️" to WarningAmber
-        MtfState.WAITING -> "⏳" to WarningAmber
-        MtfState.FAIL -> "❌" to TvRed
-        MtfState.UNKNOWN -> "—" to TvTextSecondary
+private fun MtfRow(label: String, status: MtfLegStatus, detail: String) {
+    val (mark, markColor, tag) = when (status) {
+        MtfLegStatus.OK -> Triple("✅", TvGreen, "OK")
+        MtfLegStatus.PARTIAL -> Triple("⚠️", WarningAmber, "PARTIAL")
+        MtfLegStatus.WAITING -> Triple("⏳", WarningAmber, "WAIT")
+        MtfLegStatus.FAIL -> Triple("❌", TvRed, "NO")
+        MtfLegStatus.UNKNOWN -> Triple("—", TvTextSecondary, "—")
     }
     Row(
         Modifier
@@ -144,74 +151,8 @@ private fun MtfRow(label: String, state: MtfState, detail: String) {
         Spacer(Modifier.width(8.dp))
         Column(Modifier.weight(1f)) {
             Text(label, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TvTextPrimary)
-            if (detail.isNotBlank()) {
-                Text(detail, fontSize = 11.sp, color = TvTextSecondary, maxLines = 2)
-            }
+            Text(detail, fontSize = 11.sp, color = TvTextSecondary, maxLines = 2)
         }
-        Text(
-            when (state) {
-                MtfState.OK -> "OK"
-                MtfState.PARTIAL -> "PARTIAL"
-                MtfState.WAITING -> "WAIT"
-                MtfState.FAIL -> "NO"
-                MtfState.UNKNOWN -> "—"
-            },
-            fontSize = 11.sp,
-            fontWeight = FontWeight.ExtraBold,
-            color = markColor
-        )
+        Text(tag, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = markColor)
     }
-}
-
-private enum class MtfState { OK, PARTIAL, WAITING, FAIL, UNKNOWN }
-
-private data class ParsedMtf(
-    val bias: MtfState,
-    val biasDetail: String,
-    val biasDirection: String,
-    val setup: MtfState,
-    val setupDetail: String,
-    val trigger: MtfState,
-    val triggerDetail: String
-)
-
-/** Parse baris reasoning engine: "1H: ...", "15M: ...", "1M: ..." — tanpa ubah engine. */
-private fun parseMtfFromReasoning(reasoning: List<String>): ParsedMtf {
-    val h1 = reasoning.firstOrNull { it.startsWith("1H:") }.orEmpty()
-    val m15 = reasoning.firstOrNull { it.startsWith("15M:") }.orEmpty()
-    val m1 = reasoning.firstOrNull { it.startsWith("1M:") }.orEmpty()
-
-    val biasDir = when {
-        h1.contains("bullish", ignoreCase = true) -> "bullish"
-        h1.contains("bearish", ignoreCase = true) -> "bearish"
-        else -> "mixed"
-    }
-    val bias = when (biasDir) {
-        "bullish", "bearish" -> MtfState.OK
-        else -> MtfState.FAIL
-    }
-
-    val setup = when {
-        m15.contains("bullish setup", ignoreCase = true) || m15.contains("bearish setup", ignoreCase = true) -> MtfState.OK
-        m15.contains("pullback", ignoreCase = true) || m15.contains("mixed", ignoreCase = true) -> MtfState.PARTIAL
-        m15.isBlank() -> MtfState.UNKNOWN
-        else -> MtfState.FAIL
-    }
-
-    val trigger = when {
-        m1.contains("long trigger", ignoreCase = true) || m1.contains("short trigger", ignoreCase = true) -> MtfState.OK
-        m1.contains("belum trigger", ignoreCase = true) -> MtfState.WAITING
-        m1.isBlank() -> MtfState.UNKNOWN
-        else -> MtfState.WAITING
-    }
-
-    return ParsedMtf(
-        bias = bias,
-        biasDetail = h1.removePrefix("1H:").trim().ifBlank { "Data 1H belum lengkap" },
-        biasDirection = biasDir,
-        setup = setup,
-        setupDetail = m15.removePrefix("15M:").trim().ifBlank { "Data 15M belum lengkap" },
-        trigger = trigger,
-        triggerDetail = m1.removePrefix("1M:").trim().ifBlank { "Data 1M belum lengkap" }
-    )
 }

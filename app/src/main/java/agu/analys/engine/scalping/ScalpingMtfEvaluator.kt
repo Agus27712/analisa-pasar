@@ -3,6 +3,9 @@ package agu.analys.engine.scalping
 import agu.analys.engine.MarketStructureAnalyzer
 import agu.analys.model.AISignalState
 import agu.analys.model.CandleBar
+import agu.analys.model.MtfLegStatus
+import agu.analys.model.ScalpingMtfSnapshot
+import agu.analys.model.ScalpingPath
 import agu.analys.model.ScalpingStage
 import agu.analys.model.SignalAction
 import agu.analys.model.TechnicalIndicators
@@ -20,6 +23,7 @@ data class ScalpingMtfResult(
 /**
  * 1H = bias, 15M = setup, 1M = trigger.
  * Pure scoring — no network, no StateFlow.
+ * Thresholds TIDAK diubah; hanya expose structured snapshot untuk UI.
  */
 object ScalpingMtfEvaluator {
 
@@ -99,6 +103,93 @@ object ScalpingMtfEvaluator {
         if (extendedShort) reasons += "RSI 1H/15M sangat rendah: tunggu pullback."
         if (extremeVolatility) reasons += "ATR 1M > 4%: entry ditahan."
 
+        // —— Structured snapshot (expose existing booleans, no new thresholds) ——
+        val biasDir = when {
+            biasLong -> "bullish"
+            biasShort -> "bearish"
+            else -> "mixed"
+        }
+        val biasStatus = when {
+            biasLong || biasShort -> MtfLegStatus.OK
+            else -> MtfLegStatus.FAIL
+        }
+        val setupStatus = when {
+            setupLong || setupShort -> MtfLegStatus.OK
+            biasLong || biasShort -> MtfLegStatus.PARTIAL // bias ada, setup belum penuh = pullback/mixed
+            else -> MtfLegStatus.FAIL
+        }
+        val triggerStatus = when {
+            triggerLong || triggerShort -> MtfLegStatus.OK
+            biasLong || biasShort || setupLong || setupShort -> MtfLegStatus.WAITING
+            else -> MtfLegStatus.FAIL
+        }
+
+        val path = when (stage) {
+            ScalpingStage.ENTRY, ScalpingStage.STRONG_ENTRY -> ScalpingPath.ENTRY_READY
+            ScalpingStage.WAIT_PULLBACK -> when {
+                (biasLong || biasShort) && (setupLong || setupShort) && !triggerLong && !triggerShort ->
+                    ScalpingPath.BOTH // bias+setup OK, tinggal trigger → pullback ATAU continuation
+                extendedLong || extendedShort -> ScalpingPath.PULLBACK
+                else -> ScalpingPath.PULLBACK
+            }
+            ScalpingStage.WATCH -> ScalpingPath.MOMENTUM_CONTINUATION
+            ScalpingStage.HOLD -> ScalpingPath.NONE
+        }
+
+        val statusTitle = when (stage) {
+            ScalpingStage.STRONG_ENTRY -> if (entryAction == SignalAction.SELL) "SHORT ENTRY KUAT" else "ENTRY KUAT"
+            ScalpingStage.ENTRY -> if (entryAction == SignalAction.SELL) "SHORT ENTRY" else "ENTRY"
+            ScalpingStage.WAIT_PULLBACK -> when {
+                path == ScalpingPath.BOTH && biasLong -> "BULLISH MOMENTUM · MENUNGGU KONFIRMASI"
+                path == ScalpingPath.BOTH && biasShort -> "BEARISH MOMENTUM · MENUNGGU KONFIRMASI"
+                else -> "MENUNGGU PULLBACK"
+            }
+            ScalpingStage.WATCH -> "MENUNGGU KONFIRMASI"
+            ScalpingStage.HOLD -> "BELUM TERSEDIA"
+        }
+
+        val waitingFor = when (stage) {
+            ScalpingStage.ENTRY, ScalpingStage.STRONG_ENTRY ->
+                "Tidak ada yang ditunggu — kondisi entry terpenuhi."
+            ScalpingStage.WAIT_PULLBACK -> when (path) {
+                ScalpingPath.BOTH ->
+                    "Dua jalur terbuka: pullback bersih ke area setup, atau trigger momentum 1M (volume/breakout/retest)."
+                else ->
+                    "Harga extended / setup belum rapi — tunggu koreksi ke area setup 15M."
+            }
+            ScalpingStage.WATCH ->
+                "Bias atau setup mulai terbentuk. Trigger 1M belum cukup kuat."
+            ScalpingStage.HOLD ->
+                "Menunggu struktur 1H (bias) dan setup 15M terbentuk."
+        }
+
+        val entryCondition = when {
+            extremeVolatility -> "ATR 1M terlalu tinggi (>4%). Tunggu volatilitas mereda."
+            stage == ScalpingStage.ENTRY || stage == ScalpingStage.STRONG_ENTRY ->
+                "Bias 1H + setup 15M + trigger 1M sudah searah."
+            else ->
+                "Butuh bias 1H + setup 15M + trigger 1M searah, volume/breakout valid, ATR tidak ekstrem."
+        }
+
+        val mtf = ScalpingMtfSnapshot(
+            biasOk = biasLong || biasShort,
+            biasDirection = biasDir,
+            biasStatus = biasStatus,
+            biasDetail = "RSI ${fmt(h1.rsi)} · ${if (biasLong) "bullish" else if (biasShort) "bearish" else "mixed"}",
+            setupOk = setupLong || setupShort,
+            setupStatus = setupStatus,
+            setupDetail = "RSI ${fmt(m15.rsi)} · ${if (setupLong) "bullish setup" else if (setupShort) "bearish setup" else "pullback/mixed"}",
+            triggerOk = triggerLong || triggerShort,
+            triggerStatus = triggerStatus,
+            triggerDetail = "RSI ${fmt(m1.rsi)} · vol ${fmt(m1.volumeRatio)}× · ${if (triggerLong) "long trigger" else if (triggerShort) "short trigger" else "belum trigger"}",
+            path = path,
+            statusTitle = statusTitle,
+            waitingFor = waitingFor,
+            entryCondition = entryCondition,
+            extended = extendedLong || extendedShort,
+            extremeVolatility = extremeVolatility
+        )
+
         var sl = 0.0
         var tp1 = 0.0
         var tp2 = 0.0
@@ -137,8 +228,18 @@ object ScalpingMtfEvaluator {
                 if (entryAction == SignalAction.BUY) tp1 > price && tp2 > tp1 else tp1 < price && tp2 < tp1
             if (!valid) {
                 reasons += "Entry dibatalkan: RR tidak layak."
+                val watchMtf = mtf.copy(
+                    statusTitle = "MENUNGGU KONFIRMASI",
+                    path = ScalpingPath.MOMENTUM_CONTINUATION,
+                    waitingFor = "Risk/reward belum layak. Tunggu setup dengan RR lebih baik.",
+                    entryCondition = "Entry dibatalkan engine karena RR tidak valid."
+                )
                 return ScalpingMtfResult(
-                    signal = holdState(ScalpingStage.WATCH, dominantScore, price, reasons + "STATUS: ${ScalpingStage.WATCH.displayName}.", "Risk/reward tidak layak"),
+                    signal = holdState(
+                        ScalpingStage.WATCH, dominantScore, price,
+                        reasons + "STATUS: ${ScalpingStage.WATCH.displayName}.",
+                        "Risk/reward tidak layak", watchMtf
+                    ),
                     indicators = m1Indicators(m1)
                 )
             }
@@ -173,7 +274,8 @@ object ScalpingMtfEvaluator {
             patternDetected = null,
             reasoning = reasons.take(9),
             timestamp = System.currentTimeMillis(),
-            scalpingStage = stage
+            scalpingStage = stage,
+            mtf = mtf
         )
         return ScalpingMtfResult(signal = signal, indicators = m1Indicators(m1))
     }
@@ -203,7 +305,8 @@ object ScalpingMtfEvaluator {
         score: Int,
         price: Double,
         reasons: List<String>,
-        rr: String
+        rr: String,
+        mtf: ScalpingMtfSnapshot = ScalpingMtfSnapshot()
     ) = AISignalState(
         action = SignalAction.HOLD,
         confidence = score.coerceIn(0, 100),
@@ -216,7 +319,8 @@ object ScalpingMtfEvaluator {
         probabilityScore = 0.0,
         reasoning = reasons.take(9),
         timestamp = System.currentTimeMillis(),
-        scalpingStage = stage
+        scalpingStage = stage,
+        mtf = mtf
     )
 
     private fun fmt(v: Double): String = String.format(java.util.Locale.US, "%.2f", v)
