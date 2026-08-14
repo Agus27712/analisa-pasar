@@ -2,12 +2,6 @@ name: Debug APK
 
 on:
   workflow_dispatch:
-    inputs:
-      ref:
-        description: 'Branch atau tag yang ingin dibuild'
-        required: true
-        default: 'feature-position-input'
-        type: string
 
 permissions:
   contents: read
@@ -18,10 +12,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout selected ref
+      - name: Checkout main
         uses: actions/checkout@v5
         with:
-          ref: ${{ inputs.ref }}
+          ref: main
 
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
