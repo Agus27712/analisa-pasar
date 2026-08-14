@@ -40,7 +40,7 @@ fun MarketConditionCard(
         val title = when (stage) {
             ScalpingStage.ENTRY -> if (signal.action == SignalAction.SELL) "SHORT ENTRY" else "LONG ENTRY"
             ScalpingStage.STRONG_ENTRY -> if (signal.action == SignalAction.SELL) "SHORT ENTRY KUAT" else "LONG ENTRY KUAT"
-            ScalpingStage.WAIT_PULLBACK -> "TUNGGU PULLBACK"
+            ScalpingStage.WAIT_PULLBACK -> "MOMENTUM / PULLBACK"
             ScalpingStage.WATCH -> "WATCH"
             ScalpingStage.HOLD -> "TAHAN / TUNGGU"
         }
@@ -56,10 +56,14 @@ fun MarketConditionCard(
             Spacer(Modifier.height(7.dp))
             Text(
                 when (stage) {
-                    ScalpingStage.ENTRY, ScalpingStage.STRONG_ENTRY -> "Bias 1H, setup 15M, dan trigger 1M sudah searah."
-                    ScalpingStage.WAIT_PULLBACK -> "Bias masih mendukung, tetapi entry sekarang berisiko mengejar harga."
-                    ScalpingStage.WATCH -> "Setup mulai terbentuk, tetapi trigger entry belum cukup kuat."
-                    ScalpingStage.HOLD -> "Belum ada setup scalping yang cukup jelas."
+                    ScalpingStage.ENTRY, ScalpingStage.STRONG_ENTRY ->
+                        "Bias 1H, setup 15M, dan trigger 1M sudah searah."
+                    ScalpingStage.WAIT_PULLBACK ->
+                        "Bias masih mendukung. Ada dua jalur: tunggu pullback bersih, atau konfirmasi momentum continuation di 1M."
+                    ScalpingStage.WATCH ->
+                        "Setup mulai terbentuk, tetapi trigger entry belum cukup kuat."
+                    ScalpingStage.HOLD ->
+                        "Belum ada setup scalping yang cukup jelas."
                 },
                 color = TvTextPrimary, fontSize = 14.sp, lineHeight = 20.sp
             )

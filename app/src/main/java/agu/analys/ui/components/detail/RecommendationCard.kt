@@ -32,7 +32,7 @@ fun RecommendationCard(signal: AISignalState, scalping: Boolean) {
         val title = when (stage) {
             ScalpingStage.ENTRY -> if (signal.action == SignalAction.SELL) "SHORT ENTRY" else "LONG ENTRY"
             ScalpingStage.STRONG_ENTRY -> if (signal.action == SignalAction.SELL) "SHORT ENTRY KUAT" else "LONG ENTRY KUAT"
-            ScalpingStage.WAIT_PULLBACK -> "TUNGGU PULLBACK"
+            ScalpingStage.WAIT_PULLBACK -> "TUNGGU KONFIRMASI"
             ScalpingStage.WATCH -> "WATCH"
             ScalpingStage.HOLD -> "TAHAN / TUNGGU"
         }
@@ -40,7 +40,7 @@ fun RecommendationCard(signal: AISignalState, scalping: Boolean) {
             ScalpingStage.ENTRY, ScalpingStage.STRONG_ENTRY ->
                 "Trigger 1M sudah searah dengan bias 1H dan setup 15M."
             ScalpingStage.WAIT_PULLBACK ->
-                "Trend masih mendukung. Tunggu pullback selesai dan trigger 1M kembali searah."
+                "Trend masih mendukung. Bukan berarti dilarang beli — entry sekarang berisiko mengejar. Pilih jalur pullback bersih atau tunggu trigger momentum 1M."
             ScalpingStage.WATCH ->
                 "Bias atau setup mulai terbentuk. Tunggu konfirmasi 1M sebelum masuk."
             ScalpingStage.HOLD ->

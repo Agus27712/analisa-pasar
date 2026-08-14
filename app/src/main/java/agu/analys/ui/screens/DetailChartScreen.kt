@@ -180,6 +180,8 @@ fun DetailChartScreen(
                 Spacer(Modifier.height(10.dp))
                 MarketConditionCard(marketStructure, currentIndicators, aiSignalState, isScalpingMode)
                 Spacer(Modifier.height(10.dp))
+                ProgressEntryCard(aiSignalState, isScalpingMode)
+                if (isScalpingMode) Spacer(Modifier.height(10.dp))
                 RecommendationCard(aiSignalState, isScalpingMode)
                 Spacer(Modifier.height(10.dp))
                 WhyCard(aiSignalState, currentIndicators, marketStructure)
