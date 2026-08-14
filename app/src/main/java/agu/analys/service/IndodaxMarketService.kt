@@ -91,6 +91,42 @@ object IndodaxMarketService {
         } catch (_: Exception) { emptyList() }
     }
 
+    /**
+     * Ambil top pair berdasarkan volume IDR 24 jam dari seluruh market Indodax.
+     * Data real-time dari /api/summaries — 100% sesuai market Indodax.
+     */
+    suspend fun fetchTopVolumeTicks(limit: Int = 15, excludeStable: Boolean = true): List<MarketTick> = withContext(Dispatchers.IO) {
+        try {
+            val body = get("https://indodax.com/api/summaries") ?: return@withContext emptyList()
+            val tickers = JSONObject(body).optJSONObject("tickers") ?: return@withContext emptyList()
+            val stableBases = setOf("usdt", "usdc", "dai", "busd", "tusd", "idrt")
+            val list = mutableListOf<MarketTick>()
+            val keys = tickers.keys()
+            while (keys.hasNext()) {
+                val pair = keys.next()
+                if (!pair.endsWith("_idr")) continue
+                val base = pair.removeSuffix("_idr")
+                if (excludeStable && base in stableBases) continue
+                val t = tickers.optJSONObject(pair) ?: continue
+                val last = t.optString("last", "0").toDoubleOrNull() ?: 0.0
+                val volIdr = t.optString("vol_idr", "0").toDoubleOrNull() ?: 0.0
+                if (last <= 0 || volIdr <= 0) continue
+                val symbol = pair.uppercase().replace("_", "")
+                // Skip heavy 24h change calc for ranking — use mid-range estimate later if needed
+                list += MarketTick(
+                    symbol = symbol,
+                    price = last,
+                    high24h = t.optString("high", "0").toDoubleOrNull() ?: last,
+                    low24h = t.optString("low", "0").toDoubleOrNull() ?: last,
+                    volume24h = volIdr,
+                    change24h = Double.NaN,
+                    timestamp = System.currentTimeMillis()
+                )
+            }
+            list.sortedByDescending { it.volume24h }.take(limit)
+        } catch (_: Exception) { emptyList() }
+    }
+
     suspend fun fetchCandles(symbol: String, timeframe: Timeframe, limit: Int = 300): List<CandleBar> = withContext(Dispatchers.IO) {
         try {
             val tf = timeframe.code
