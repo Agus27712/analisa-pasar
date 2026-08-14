@@ -20,6 +20,7 @@ import kotlin.math.sqrt
 class LearningTradingEngine(
     @Suppress("UNUSED_PARAMETER") private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default)
 ) {
+    var isScalpingMode: Boolean = false
     private val candles = mutableListOf<CandleBar>()
     private var currentTick: MarketTick? = null
     private val _signalState = MutableStateFlow(AISignalState())
@@ -68,7 +69,8 @@ class LearningTradingEngine(
         val tick = currentTick ?: return
         val price = tick.price
         val history = synchronized(candles) { candles.toList() }
-        if (history.size < 35) {
+        val minCandles = if (isScalpingMode) 20 else 35
+        if (history.size < minCandles) {
             _indicators.value = TechnicalIndicators()
             _signalState.value = AISignalState(
                 action = SignalAction.HOLD,
@@ -80,28 +82,28 @@ class LearningTradingEngine(
                 stopLoss = 0.0,
                 riskRewardRatio = "Belum tersedia",
                 probabilityScore = 0.0,
-                reasoning = listOf("Data candle INDODAX nyata belum cukup untuk analisis penuh.", "Dibutuhkan minimal 35 candle untuk indikator dasar.", "Tidak ada data contoh yang digunakan sebagai pengganti data pasar."),
+                reasoning = listOf("Data candle INDODAX nyata belum cukup untuk ${if (isScalpingMode) "mode scalping cepat" else "analisis penuh"}.", "Dibutuhkan minimal $minCandles candle real.", "Tidak ada data contoh/mock yang digunakan."),
                 timestamp = System.currentTimeMillis()
             )
             return
         }
 
         val closes = history.map { it.close }
-        val rsi = calculateRsi(history, 14)
-        val ema20 = calculateEma(closes, 20)
-        val ema50 = calculateEma(closes, 50)
+        val rsi = calculateRsi(history, if (isScalpingMode) 7 else 14)
+        val fastEmaPeriod = if (isScalpingMode) 7 else 20
+        val slowEmaPeriod = if (isScalpingMode) 21 else 50
+        val emaFast = calculateEma(closes, fastEmaPeriod)
+        val emaSlow = calculateEma(closes, slowEmaPeriod)
         val macdSeries = calculateMacdSeries(closes)
         val macd = macdSeries.last().first
         val macdSignal = macdSeries.last().second
         val macdHist = macd - macdSignal
-        val bb = calculateBollinger(closes, 20)
-        val atr = calculateAtr(history, 14)
+        val bb = calculateBollinger(closes, if (isScalpingMode) 14 else 20)
+        val atr = calculateAtr(history, if (isScalpingMode) 10 else 14)
         val pattern = detectPattern(history)
-        val regime = detectMarketRegime(price, ema20, ema50, macdHist, rsi, atr, bb)
+        val regime = detectMarketRegime(price, emaFast, emaSlow, macdHist, rsi, atr, bb)
         val marketStructure = MarketStructureAnalyzer.analyze(history)
-        // Momentum is intentionally short-horizon: 10 completed candles, not the oldest
-        // candle in the retained 250-candle buffer.
-        val momentumLookback = min(10, closes.size - 1)
+        val momentumLookback = min(if (isScalpingMode) 5 else 10, closes.size - 1)
         val momentumBase = closes[closes.lastIndex - momentumLookback]
         val momentum = if (momentumBase > 0.0) (price - momentumBase) / momentumBase else 0.0
 
@@ -110,8 +112,8 @@ class LearningTradingEngine(
             macd = macd,
             macdSignal = macdSignal,
             macdHist = macdHist,
-            ema20 = ema20,
-            ema50 = ema50,
+            ema20 = emaFast,
+            ema50 = emaSlow,
             ema200 = calculateEma(closes, 200),
             bbUpper = bb.second,
             bbLower = bb.first,
@@ -122,94 +124,89 @@ class LearningTradingEngine(
         var buy = 0.0
         var sell = 0.0
         val reasons = mutableListOf<String>()
+        if (isScalpingMode) {
+            reasons += "[MODE SCALPING CEPAT] Fokus momentum jangka pendek & data real Indodax."
+        }
         reasons += "Market regime: $regime."
 
         when {
-            rsi < 30.0 -> { buy += 20.0; reasons += "RSI ${format(rsi)}: jenuh jual; pantulan perlu konfirmasi." }
-            rsi > 70.0 -> { sell += 20.0; reasons += "RSI ${format(rsi)}: jenuh beli; risiko koreksi meningkat." }
-            else -> reasons += "RSI ${format(rsi)}: netral, belum memberi sinyal ekstrem."
+            rsi < (if (isScalpingMode) 32.0 else 30.0) -> { buy += 20.0; reasons += "RSI ${format(rsi)}: jenuh jual; pantulan kilat diamati." }
+            rsi > (if (isScalpingMode) 68.0 else 70.0) -> { sell += 20.0; reasons += "RSI ${format(rsi)}: jenuh beli; risiko koreksi cepat." }
+            else -> reasons += "RSI ${format(rsi)}: netral."
         }
 
         when {
-            price > ema20 && ema20 > ema50 -> { buy += 25.0; reasons += "EMA20 > EMA50 dan harga di atas keduanya: struktur bullish." }
-            price < ema20 && ema20 < ema50 -> { sell += 25.0; reasons += "EMA20 < EMA50 dan harga di bawah keduanya: struktur bearish." }
-            else -> reasons += "EMA20/EMA50 belum searah: tren belum terkonfirmasi."
+            price > emaFast && emaFast > emaSlow -> { buy += 25.0; reasons += "EMA${fastEmaPeriod} > EMA${slowEmaPeriod} & harga di atas keduanya: struktur bullish." }
+            price < emaFast && emaFast < emaSlow -> { sell += 25.0; reasons += "EMA${fastEmaPeriod} < EMA${slowEmaPeriod} & harga di bawah keduanya: struktur bearish." }
+            else -> reasons += "EMA belum searah tegas."
         }
 
         when {
-            macdHist > 0 && macd > macdSignal -> { buy += 20.0; reasons += "MACD histogram positif: momentum naik lebih dominan." }
-            macdHist < 0 && macd < macdSignal -> { sell += 20.0; reasons += "MACD histogram negatif: momentum turun lebih dominan." }
-            else -> reasons += "MACD belum memberi konfirmasi momentum yang tegas."
+            macdHist > 0 && macd > macdSignal -> { buy += 20.0; reasons += "MACD histogram positif: momentum naik." }
+            macdHist < 0 && macd < macdSignal -> { sell += 20.0; reasons += "MACD histogram negatif: momentum turun." }
+            else -> reasons += "MACD netral."
         }
 
         when {
-            price <= bb.first -> { buy += 10.0; reasons += "Harga dekat/di bawah Bollinger Band bawah: area pantulan yang perlu diamati." }
-            price >= bb.second -> { sell += 10.0; reasons += "Harga dekat/di atas Bollinger Band atas: area koreksi yang perlu diamati." }
-            else -> reasons += "Harga masih berada di dalam Bollinger Band."
+            price <= bb.first -> { buy += 10.0; reasons += "Harga di Bollinger Band bawah: area pantulan." }
+            price >= bb.second -> { sell += 10.0; reasons += "Harga di Bollinger Band atas: area koreksi." }
+            else -> reasons += "Harga di dalam Bollinger Band."
         }
 
         pattern?.let {
-            if (it.contains("Bullish", true) || it.contains("Hammer", true)) { buy += 15.0; reasons += "Candlestick $it: konfirmasi bullish tambahan, bukan jaminan." }
-            else if (it.contains("Bearish", true) || it.contains("Shooting", true)) { sell += 15.0; reasons += "Candlestick $it: konfirmasi bearish tambahan, bukan jaminan." }
+            if (it.contains("Bullish", true) || it.contains("Hammer", true)) { buy += 15.0; reasons += "Candlestick $it: sinyal bullish." }
+            else if (it.contains("Bearish", true) || it.contains("Shooting", true)) { sell += 15.0; reasons += "Candlestick $it: sinyal bearish." }
         }
 
         val avgVolume = history.takeLast(5).map { it.volume }.average()
         val lastVolume = history.last().volume
-        if (avgVolume > 0.0 && lastVolume >= avgVolume * 1.8) {
+        if (avgVolume > 0.0 && lastVolume >= avgVolume * 1.6) {
             val ratio = lastVolume / avgVolume
-            if (history.last().close >= history.last().open) { buy += 10.0; reasons += "Volume ${format(ratio)}× rata-rata 5 candle: aktivitas naik meningkat." }
-            else { sell += 10.0; reasons += "Volume ${format(ratio)}× rata-rata 5 candle: aktivitas jual meningkat." }
-        } else reasons += "Volume belum memberi lonjakan konfirmasi."
+            if (history.last().close >= history.last().open) { buy += 10.0; reasons += "Volume ${format(ratio)}× rata-rata: lonjakan beli." }
+            else { sell += 10.0; reasons += "Volume ${format(ratio)}× rata-rata: lonjakan jual." }
+        } else reasons += "Volume stabil."
 
         if (marketStructure.dataEnough) {
             when (marketStructure.trend) {
-                "Bullish structure" -> {
-                    buy += 15.0
-                    reasons += "Market structure bullish: Higher High + Higher Low."
-                }
-                "Bearish structure" -> {
-                    sell += 15.0
-                    reasons += "Market structure bearish: Lower High + Lower Low."
-                }
-                else -> reasons += "Market structure range/transisi: belum ada HH/HL atau LH/LL yang konsisten."
+                "Bullish structure" -> { buy += 15.0; reasons += "Market structure bullish." }
+                "Bearish structure" -> { sell += 15.0; reasons += "Market structure bearish." }
+                else -> reasons += "Market structure konsolidasi."
             }
         } else {
-            reasons += "Market structure belum tersedia: candle swing belum cukup."
+            reasons += "Market structure belum cukup."
         }
 
         val structureBlocksBuy = marketStructure.dataEnough && marketStructure.trend == "Bearish structure"
         val structureBlocksSell = marketStructure.dataEnough && marketStructure.trend == "Bullish structure"
         val dominant = max(buy, sell)
-        val conflict = abs(buy - sell) < 20.0
-        val volatilityTooHigh = price > 0.0 && atr / price >= 0.08
-        val minimumScore = if (regime == "HIGH VOLATILITY") 70.0 else 60.0
+        val conflict = abs(buy - sell) < (if (isScalpingMode) 15.0 else 20.0)
+        val volatilityTooHigh = price > 0.0 && atr / price >= (if (isScalpingMode) 0.09 else 0.08)
+        val minimumScore = if (isScalpingMode) { if (regime == "HIGH VOLATILITY") 60.0 else 52.0 } else { if (regime == "HIGH VOLATILITY") 70.0 else 60.0 }
         val dominanceRatio = if (min(buy, sell) > 0.0) dominant / min(buy, sell) else Double.POSITIVE_INFINITY
-        val weakDominance = dominanceRatio < 1.40
+        val weakDominance = dominanceRatio < (if (isScalpingMode) 1.30 else 1.40)
         val noTrade = regime == "SIDEWAYS / NO TRADE" || conflict || weakDominance || dominant < minimumScore || volatilityTooHigh
 
         val action = when {
             noTrade -> SignalAction.HOLD
-            buy >= minimumScore && buy > sell * 1.40 && !structureBlocksBuy -> SignalAction.BUY
-            sell >= minimumScore && sell > buy * 1.40 && !structureBlocksSell -> SignalAction.SELL
+            buy >= minimumScore && buy > sell * (if (isScalpingMode) 1.30 else 1.40) && !structureBlocksBuy -> SignalAction.BUY
+            sell >= minimumScore && sell > buy * (if (isScalpingMode) 1.30 else 1.40) && !structureBlocksSell -> SignalAction.SELL
             else -> SignalAction.HOLD
         }
 
-        // Seven factors can contribute up to 115 raw points. Normalize only for the
-        // user-facing confidence so 100 means a fully loaded score, not an arbitrary clamp.
         val maxRawScore = 115.0
         val score = ((dominant / maxRawScore) * 100.0).toInt().coerceIn(0, 100)
         when {
-            volatilityTooHigh -> reasons += "NO TRADE: ATR sangat besar terhadap harga; level risiko tidak aman untuk dipaksakan."
-            regime == "HIGH VOLATILITY" -> reasons += "NO TRADE ZONE: volatilitas tinggi, butuh setup yang lebih kuat."
-            structureBlocksBuy && buy >= minimumScore -> reasons += "NO TRADE: sinyal bullish bertentangan dengan market structure bearish."
-            structureBlocksSell && sell >= minimumScore -> reasons += "NO TRADE: sinyal bearish bertentangan dengan market structure bullish."
-            else -> reasons += "NO TRADE ZONE: faktor belum cukup selaras."
+            volatilityTooHigh -> reasons += "NO TRADE: Volatilitas ATR terlalu tinggi untuk scalping aman."
+            regime == "HIGH VOLATILITY" -> reasons += "NO TRADE ZONE: Pasar sangat volatil."
+            structureBlocksBuy && buy >= minimumScore -> reasons += "NO TRADE: Bertentangan dengan market structure."
+            structureBlocksSell && sell >= minimumScore -> reasons += "NO TRADE: Bertentangan dengan market structure."
+            else -> reasons += "NO TRADE ZONE: Konvergensi belum cukup."
         }
-        if (action != SignalAction.HOLD) reasons[reasons.lastIndex] = "Score ${score}/100 = kekuatan setup, bukan peluang profit."
+        if (action != SignalAction.HOLD) reasons[reasons.lastIndex] = "Score ${score}/100 = kekuatan setup."
 
-        val rawStopDistance = atr * 1.5
-        val rawTp1Distance = atr * 2.0
-        val rawTp2Distance = atr * 3.5
+        val rawStopDistance = if (isScalpingMode) atr * 1.0 else atr * 1.5
+        val rawTp1Distance = if (isScalpingMode) atr * 1.5 else atr * 2.0
+        val rawTp2Distance = if (isScalpingMode) atr * 2.5 else atr * 3.5
         var sl = 0.0
         var tp1 = 0.0
         var tp2 = 0.0

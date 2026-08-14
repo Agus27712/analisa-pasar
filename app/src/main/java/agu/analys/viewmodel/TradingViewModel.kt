@@ -99,6 +99,20 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     val isShowingCachedData: StateFlow<Boolean> = _isShowingCachedData.asStateFlow()
     private val _spotPosition = MutableStateFlow(SpotPosition())
     val spotPosition: StateFlow<SpotPosition> = _spotPosition.asStateFlow()
+    private val _isScalpingMode = MutableStateFlow(false)
+    val isScalpingMode: StateFlow<Boolean> = _isScalpingMode.asStateFlow()
+
+    fun setScalpingMode(enabled: Boolean) {
+        _isScalpingMode.value = enabled
+        engine.isScalpingMode = enabled
+        val tick = _currentTick.value
+        val candles = _recentCandles.value
+        if (tick != null && candles.isNotEmpty()) {
+            engine.resetForOffline()
+            engine.onTickUpdate(tick)
+            candles.forEach { engine.onCandleUpdate(it) }
+        }
+    }
 
     private var lastSavedSignalTimestamp = 0L
     private var lastCandleRefresh = 0L

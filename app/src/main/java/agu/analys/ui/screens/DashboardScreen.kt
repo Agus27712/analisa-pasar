@@ -58,6 +58,7 @@ fun DashboardScreen(
     val connectionState by viewModel.connectionState.collectAsState()
     val dashboardTicks by viewModel.dashboardTicks.collectAsState()
     val watchlist by viewModel.watchlist.collectAsState()
+    val isScalpingMode by viewModel.isScalpingMode.collectAsState()
     var showAddDialog by remember { mutableStateOf(false) }
 
     val worthBySymbol = remember(worthCoins) { worthCoins.associateBy { it.pair.symbol } }
@@ -90,6 +91,7 @@ fun DashboardScreen(
             OfflineBanner(lost.reason) { viewModel.retryConnection() }
         }
 
+        ModeSwitchToggle(isScalping = isScalpingMode, onToggle = { viewModel.setScalpingMode(it) })
         CompactMarketOverview(dashboardTicks, worthCoins, connectionState is MarketConnectionState.Connected)
 
         LazyColumn(
@@ -538,4 +540,51 @@ private fun marketScoreLabel(score: Int): String = when {
     score >= 75 -> "BULLISH"
     score >= 50 -> "NETRAL"
     else -> "LEMAH"
+}
+
+@Composable
+private fun ModeSwitchToggle(
+    isScalping: Boolean,
+    onToggle: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 14.dp, vertical = 2.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Button(
+            onClick = { onToggle(false) },
+            modifier = Modifier.weight(1f).height(36.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = if (!isScalping) TvGreen else DashboardCard
+            ),
+            shape = RoundedCornerShape(10.dp),
+            border = if (!isScalping) null else BorderStroke(1.dp, DashboardBorder)
+        ) {
+            Text(
+                "📈 Mode Swing (Long)",
+                color = if (!isScalping) Color.Black else TvTextSecondary,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        Button(
+            onClick = { onToggle(true) },
+            modifier = Modifier.weight(1f).height(36.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = if (isScalping) TvGreen else DashboardCard
+            ),
+            shape = RoundedCornerShape(10.dp),
+            border = if (isScalping) null else BorderStroke(1.dp, DashboardBorder)
+        ) {
+            Text(
+                "⚡ Mode Scalping (Cepat)",
+                color = if (isScalping) Color.Black else TvTextSecondary,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
 }

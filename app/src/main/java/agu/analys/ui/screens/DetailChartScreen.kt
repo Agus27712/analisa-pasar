@@ -111,6 +111,7 @@ fun DetailChartScreen(viewModel: TradingViewModel, onNavigateToDashboard: () -> 
     val currentTick by viewModel.currentTick.collectAsStateWithLifecycle()
     val currentIndicators by viewModel.currentIndicators.collectAsStateWithLifecycle()
     val aiSignalState by viewModel.aiSignalState.collectAsStateWithLifecycle()
+    val isScalpingMode by viewModel.isScalpingMode.collectAsStateWithLifecycle()
     val isShowingCached by viewModel.isShowingCachedData.collectAsStateWithLifecycle()
     val spotPosition by viewModel.spotPosition.collectAsStateWithLifecycle()
     val auditReportText by viewModel.auditReportText.collectAsStateWithLifecycle()
@@ -148,6 +149,8 @@ fun DetailChartScreen(viewModel: TradingViewModel, onNavigateToDashboard: () -> 
             Column(Modifier.fillMaxSize().padding(innerPadding).verticalScroll(rememberScrollState()).padding(horizontal = 14.dp, vertical = 6.dp)) {
                 if (isShowingCached) Text("Data terakhir tersimpan, belum live.", fontSize = 12.sp, color = WarningAmber, modifier = Modifier.padding(bottom = 5.dp))
                 currentTick?.let { tick -> PriceHeader(tick.price, tick.change24h) }
+                Spacer(Modifier.height(8.dp))
+                ModeSwitchToggle(isScalping = isScalpingMode, onToggle = { viewModel.setScalpingMode(it) })
                 Spacer(Modifier.height(10.dp))
                 SimpleComposeChart(prices = emptyList(), candles = recentCandles, currentPrice = currentTick?.price ?: 0.0, isPositiveTrend = (currentTick?.change24h ?: 0.0) >= 0, modifier = Modifier.fillMaxWidth().height(300.dp))
                 Spacer(Modifier.height(10.dp)); TimeframeSelector(selectedTimeframe, viewModel::selectTimeframe)
@@ -770,6 +773,53 @@ private fun SymbolPickerSheet(popularPairs: List<TradingPair>, watchlist: Set<St
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun ModeSwitchToggle(
+    isScalping: Boolean,
+    onToggle: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Button(
+            onClick = { onToggle(false) },
+            modifier = Modifier.weight(1f).height(36.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = if (!isScalping) TvGreen else Color(0xFF101720)
+            ),
+            shape = RoundedCornerShape(10.dp),
+            border = if (!isScalping) null else BorderStroke(1.dp, Color(0xFF1F3540))
+        ) {
+            Text(
+                "📈 Mode Swing (Long)",
+                color = if (!isScalping) Color.Black else TvTextSecondary,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        Button(
+            onClick = { onToggle(true) },
+            modifier = Modifier.weight(1f).height(36.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = if (isScalping) TvGreen else Color(0xFF101720)
+            ),
+            shape = RoundedCornerShape(10.dp),
+            border = if (isScalping) null else BorderStroke(1.dp, Color(0xFF1F3540))
+        ) {
+            Text(
+                "⚡ Mode Scalping (Cepat)",
+                color = if (isScalping) Color.Black else TvTextSecondary,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold
+            )
         }
     }
 }
