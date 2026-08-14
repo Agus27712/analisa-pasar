@@ -191,7 +191,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
             if (cachedCandles.isNotEmpty()) {
                 _recentCandles.value = cachedCandles
                 engine.resetForOffline()
-                engine.onTickUpdate(cachedTick ?: return@let)
+                cachedTick?.let { engine.onTickUpdate(it) }
                 cachedCandles.forEach { engine.onCandleUpdate(it) }
             }
             _isShowingCachedData.value = true
