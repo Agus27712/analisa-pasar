@@ -3,6 +3,7 @@ package agu.analys.util
 import android.content.Context
 import agu.analys.model.CandleBar
 import agu.analys.model.MarketTick
+import agu.analys.model.Timeframe
 import agu.analys.model.TradingPair
 import agu.analys.model.WorthCoinInfo
 import org.json.JSONArray
@@ -50,51 +51,80 @@ class MarketDataCache(context: Context) {
         } catch (_: Exception) { emptyList() }
     }
 
-    fun savePairSnapshot(symbol: String, tick: MarketTick?, candles: List<CandleBar>) {
+    /** Save a pair snapshot under the exact timeframe that produced the candles. */
+    fun savePairSnapshot(symbol: String, timeframe: Timeframe, tick: MarketTick?, candles: List<CandleBar>) {
         if (tick == null && candles.isEmpty()) return
-        val normalized = symbol.uppercase(); val timeframe = inferTimeframe(candles); val key = KEY_PAIR_PREFIX + normalized + "_" + timeframe; val now = System.currentTimeMillis()
+        val normalized = symbol.uppercase(); val timeframeKey = timeframeCacheKey(timeframe); val key = KEY_PAIR_PREFIX + normalized + "_" + timeframeKey; val now = System.currentTimeMillis()
         if (now - (lastPairWriteAt[key] ?: 0L) < PAIR_WRITE_INTERVAL_MS) return
         val root = JSONObject(); if (tick != null) root.put("tick", tickToJson(tick))
         val cArr = JSONArray(); candles.takeLast(250).forEach { c -> cArr.put(JSONObject().put("t", c.timestamp).put("o", c.open).put("h", c.high).put("l", c.low).put("c", c.close).put("v", c.volume)) }
-        root.put("candles", cArr).put("savedAt", now).put("timeframe", timeframe)
+        root.put("candles", cArr).put("savedAt", now).put("timeframe", timeframeKey)
         prefs.edit().putString(key, root.toString()).apply(); lastPairWriteAt[key] = now
     }
 
-    /** Loads the newest snapshot that is still fresh enough for its inferred timeframe. */
+    /**
+     * Backward-compatible overload for callers that only have candles. New code should pass
+     * the selected timeframe explicitly so switching 15M/1H/4H/1D can never reuse another timeframe's cache.
+     */
+    fun savePairSnapshot(symbol: String, tick: MarketTick?, candles: List<CandleBar>) {
+        if (candles.isEmpty()) return
+        savePairSnapshot(symbol, inferTimeframe(candles), tick, candles)
+    }
+
+    /** Load only the snapshot belonging to the requested timeframe. */
+    fun loadPairSnapshot(symbol: String, timeframe: Timeframe): Pair<MarketTick?, List<CandleBar>> {
+        val key = KEY_PAIR_PREFIX + symbol.uppercase() + "_" + timeframeCacheKey(timeframe)
+        val raw = prefs.getString(key, null) ?: return null to emptyList()
+        val snapshot = parseSnapshot(raw) ?: return null to emptyList()
+        if (!isFreshEnough(snapshot, timeframe)) return null to emptyList()
+        return snapshot.tick to snapshot.candles
+    }
+
+    /** Legacy loader retained for compatibility; prefers the newest valid snapshot. */
     fun loadPairSnapshot(symbol: String): Pair<MarketTick?, List<CandleBar>> {
         val prefix = KEY_PAIR_PREFIX + symbol.uppercase() + "_"
         val candidates = prefs.all.keys.filter { it.startsWith(prefix) }.mapNotNull { key ->
             prefs.getString(key, null)?.let { parseSnapshot(it) }
         }.sortedByDescending { it.savedAt }
-        val chosen = candidates.firstOrNull { isFreshEnough(it) } ?: return null to emptyList()
+        val chosen = candidates.firstOrNull { snapshot -> isFreshEnough(snapshot, null) } ?: return null to emptyList()
         return chosen.tick to chosen.candles
     }
 
     fun dashboardCacheAgeMs(): Long { val at = prefs.getLong(KEY_DASHBOARD_SAVED_AT, 0L); return if (at <= 0) -1L else System.currentTimeMillis() - at }
     fun worthCacheAgeMs(): Long { val at = prefs.getLong(KEY_WORTH_SAVED_AT, 0L); return if (at <= 0) -1L else System.currentTimeMillis() - at }
 
-    private data class Snapshot(val tick: MarketTick?, val candles: List<CandleBar>, val savedAt: Long)
+    private data class Snapshot(val tick: MarketTick?, val candles: List<CandleBar>, val savedAt: Long, val timeframeKey: String = "")
 
     private fun parseSnapshot(raw: String): Snapshot? = try {
         val root = JSONObject(raw); val tick = root.optJSONObject("tick")?.let { jsonToTick(it) }; val cArr = root.optJSONArray("candles") ?: JSONArray()
         val candles = buildList { for (i in 0 until cArr.length()) { val o = cArr.getJSONObject(i); val close = o.optDouble("c", 0.0); if (close > 0) add(CandleBar(o.optLong("t", 0L), o.optDouble("o", close), o.optDouble("h", close), o.optDouble("l", close), close, o.optDouble("v", 0.0))) } }
-        Snapshot(tick, candles, root.optLong("savedAt", 0L))
+        Snapshot(tick, candles, root.optLong("savedAt", 0L), root.optString("timeframe", ""))
     } catch (_: Exception) { null }
 
-    private fun isFreshEnough(snapshot: Snapshot): Boolean {
+    private fun isFreshEnough(snapshot: Snapshot, requested: Timeframe?): Boolean {
         if (snapshot.savedAt <= 0L || (snapshot.tick == null && snapshot.candles.isEmpty())) return false
-        val age = System.currentTimeMillis() - snapshot.savedAt; val interval = candleIntervalMs(snapshot.candles)
+        if (requested != null && snapshot.timeframeKey.isNotBlank() && snapshot.timeframeKey != timeframeCacheKey(requested)) return false
+        val age = System.currentTimeMillis() - snapshot.savedAt
+        val interval = candleIntervalMs(snapshot.candles)
         val maxAge = if (interval >= DAY_MS) 8L * DAY_MS else (interval * 6L).coerceIn(6L * 60L * 60L * 1000L, 48L * 60L * 60L * 1000L)
         return age <= maxAge
     }
 
-    private fun inferTimeframe(candles: List<CandleBar>): String = when (val interval = candleIntervalMs(candles)) {
-        in Long.MIN_VALUE..90_000L -> "1m"
-        in 90_001L..420_000L -> "5m"
-        in 420_001L..1_200_000L -> "15m"
-        in 1_200_001L..5_400_000L -> "1h"
-        in 5_400_001L..18_000_000L -> "4h"
-        else -> "1d"
+    private fun timeframeCacheKey(timeframe: Timeframe): String = when (timeframe) {
+        Timeframe.M15 -> "15m"
+        Timeframe.H1 -> "1h"
+        Timeframe.H4 -> "4h"
+        Timeframe.D1 -> "1d"
+        else -> timeframe.code.lowercase()
+    }
+
+    private fun inferTimeframe(candles: List<CandleBar>): Timeframe = when (val interval = candleIntervalMs(candles)) {
+        in Long.MIN_VALUE..90_000L -> Timeframe.M1
+        in 90_001L..420_000L -> Timeframe.M5
+        in 420_001L..1_200_000L -> Timeframe.M15
+        in 1_200_001L..5_400_000L -> Timeframe.H1
+        in 5_400_001L..18_000_000L -> Timeframe.H4
+        else -> Timeframe.D1
     }
 
     private fun candleIntervalMs(candles: List<CandleBar>): Long {

@@ -153,7 +153,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
 
     fun selectPair(pair: TradingPair) {
         _selectedPair.value = pair; lastSavedSignalTimestamp = 0L; refreshSpotPosition()
-        val (cachedTick, cachedCandles) = marketCache.loadPairSnapshot(pair.symbol)
+        val (cachedTick, cachedCandles) = marketCache.loadPairSnapshot(pair.symbol, _selectedTimeframe.value)
         if (cachedTick != null || cachedCandles.isNotEmpty()) { if (cachedTick != null) _currentTick.value = cachedTick; if (cachedCandles.isNotEmpty()) { _recentCandles.value = cachedCandles; engine.resetForOffline(); cachedTick?.let { engine.onTickUpdate(it) }; cachedCandles.forEach { engine.onCandleUpdate(it) } }; _isShowingCachedData.value = true } else clearLiveData()
         startMarketPolling(pair)
     }
@@ -170,10 +170,11 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
                     val hist = _recentPrices.value.toMutableList(); hist.add(tick.price); if (hist.size > 50) hist.removeAt(0); _recentPrices.value = hist
                     val currentMap = _dashboardTicks.value; if (currentMap[pair.symbol] != normalizedTick) _dashboardTicks.value = currentMap.toMutableMap().apply { put(pair.symbol, normalizedTick) }
                     val now = System.currentTimeMillis()
+                    val selectedTf = _selectedTimeframe.value
                     if (now - lastCandleRefresh >= 15_000L) {
-                        val candles = IndodaxMarketService.fetchCandles(pairId, _selectedTimeframe.value, 300)
-                        if (candles.size >= 35) { _recentCandles.value = candles; engine.resetForOffline(); engine.onTickUpdate(normalizedTick); candles.forEach { engine.onCandleUpdate(it) }; lastCandleRefresh = now; marketCache.savePairSnapshot(pair.symbol, normalizedTick, candles) } else marketCache.savePairSnapshot(pair.symbol, normalizedTick, _recentCandles.value)
-                    } else marketCache.savePairSnapshot(pair.symbol, normalizedTick, _recentCandles.value)
+                        val candles = IndodaxMarketService.fetchCandles(pairId, selectedTf, 300)
+                        if (candles.size >= 35) { _recentCandles.value = candles; engine.resetForOffline(); engine.onTickUpdate(normalizedTick); candles.forEach { engine.onCandleUpdate(it) }; lastCandleRefresh = now; marketCache.savePairSnapshot(pair.symbol, selectedTf, normalizedTick, candles) } else if (_recentCandles.value.isNotEmpty()) marketCache.savePairSnapshot(pair.symbol, selectedTf, normalizedTick, _recentCandles.value)
+                    } else if (_recentCandles.value.isNotEmpty()) marketCache.savePairSnapshot(pair.symbol, selectedTf, normalizedTick, _recentCandles.value)
                     if (now - lastDepthRefresh >= 5_000L) { val depth = async { IndodaxMarketService.fetchOrderBook(pairId) }; val trades = async { IndodaxMarketService.fetchRecentTrades(pairId) }; val (bids, asks) = depth.await(); val newTrades = trades.await(); if (bids.isNotEmpty() && bids != _orderBookBids.value) _orderBookBids.value = bids; if (asks.isNotEmpty() && asks != _orderBookAsks.value) _orderBookAsks.value = asks; if (newTrades.isNotEmpty() && newTrades != _tradeStream.value) _tradeStream.value = newTrades; lastDepthRefresh = now }
                 } else { failCount++; if (failCount >= 2) { _isShowingCachedData.value = true; _connectionState.value = MarketConnectionState.ConnectionLost("Koneksi internet/market terputus. Menampilkan data cache terakhir."); break } }
                 delay(3000L)
@@ -187,9 +188,47 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     fun selectTimeframe(tf: Timeframe) { if (_selectedTimeframe.value == tf) return; _selectedTimeframe.value = tf; selectPair(_selectedPair.value) }
     fun selectChartStyle(style: ChartStyle) { _selectedChartStyle.value = style }
     fun toggleChartExpanded() { _isChartExpanded.value = !_isChartExpanded.value }
-    fun requestDeepAiAudit() { val tick = _currentTick.value ?: return; if (_connectionState.value !is MarketConnectionState.Connected) return; val indicators = currentIndicators.value; val signal = aiSignalState.value; viewModelScope.launch { _isAuditLoading.value = true; _auditReportText.value = null; _auditReportText.value = GroqAiService.generateDeepMarketAudit(prefs.groqApiKey, tick, indicators, signal); _isAuditLoading.value = false } }
+
+    fun requestDeepAiAudit() {
+        val tick = _currentTick.value ?: return
+        if (_connectionState.value !is MarketConnectionState.Connected) return
+        if (_isAuditLoading.value || _isGeminiLoading.value) return
+        val indicators = currentIndicators.value
+        val signal = aiSignalState.value
+        viewModelScope.launch {
+            _isAuditLoading.value = true
+            _isGeminiLoading.value = true
+            _auditReportText.value = null
+            try {
+                _auditReportText.value = GroqAiService.generateDeepMarketAudit(prefs.groqApiKey, tick, indicators, signal)
+            } finally {
+                _isAuditLoading.value = false
+                _isGeminiLoading.value = false
+            }
+        }
+    }
+
     fun clearAuditReport() { _auditReportText.value = null }
-    fun requestGeminiChartSummary() { val tick = _currentTick.value ?: return; if (_connectionState.value !is MarketConnectionState.Connected) return; val indicators = currentIndicators.value; val signal = aiSignalState.value; viewModelScope.launch { _isGeminiLoading.value = true; _geminiSummaryText.value = null; _geminiSummaryText.value = GeminiAiService.generateChartSummary24h(prefs.geminiApiKey, tick, indicators, signal); _isGeminiLoading.value = false } }
+
+    fun requestGeminiChartSummary() {
+        val tick = _currentTick.value ?: return
+        if (_connectionState.value !is MarketConnectionState.Connected) return
+        if (_isAuditLoading.value || _isGeminiLoading.value) return
+        val indicators = currentIndicators.value
+        val signal = aiSignalState.value
+        viewModelScope.launch {
+            _isAuditLoading.value = true
+            _isGeminiLoading.value = true
+            _geminiSummaryText.value = null
+            try {
+                _geminiSummaryText.value = GeminiAiService.generateChartSummary24h(prefs.geminiApiKey, tick, indicators, signal)
+            } finally {
+                _isAuditLoading.value = false
+                _isGeminiLoading.value = false
+            }
+        }
+    }
+
     fun clearGeminiSummary() { _geminiSummaryText.value = null }
     fun retryConnection() { _connectionState.value = MarketConnectionState.Loading; startMarketPolling(_selectedPair.value); refreshWorthCoinsFromMarket() }
     fun simulateDisconnect() { markMarketOffline("Mode offline: koneksi pasar dihentikan. Data cache terakhir tetap ditampilkan.") }

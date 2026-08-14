@@ -76,11 +76,6 @@ class SpotPositionStore(context: Context) {
 
     fun isHolding(symbol: String): Boolean = get(symbol).isHolding
 
-    /**
-     * Backward-compatible ownership update used by existing ViewModel call sites.
-     * If the detailed position was just saved by the UI, do not append a duplicate
-     * ownership-history event.
-     */
     fun markBought(symbol: String, referenceEntryPrice: Double) {
         val current = get(symbol)
         if (current.isHolding && current.entryPrice == referenceEntryPrice) return
