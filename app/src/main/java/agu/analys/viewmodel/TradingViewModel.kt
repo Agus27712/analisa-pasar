@@ -24,6 +24,8 @@ import agu.analys.service.IndodaxMarketService
 import agu.analys.trading.SpotPosition
 import agu.analys.trading.SpotPositionStore
 import agu.analys.util.AppPreferences
+import agu.analys.util.GitHubReleaseInfo
+import agu.analys.util.GitHubUpdater
 import agu.analys.util.MarketDataCache
 import agu.analys.util.PriceFormatter
 import kotlinx.coroutines.Job
@@ -253,4 +255,36 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     fun clearGeminiSummary() { _geminiSummaryText.value = null }
     fun retryConnection() { _connectionState.value = MarketConnectionState.Loading; startMarketPolling(_selectedPair.value); refreshWorthCoinsFromMarket() }
     fun simulateDisconnect() { markMarketOffline("Mode offline: koneksi pasar dihentikan. Data cache terakhir tetap ditampilkan.") }
+
+    private val _githubReleaseInfo = MutableStateFlow<GitHubReleaseInfo?>(null)
+    val githubReleaseInfo: StateFlow<GitHubReleaseInfo?> = _githubReleaseInfo.asStateFlow()
+
+    private val _isCheckingUpdate = MutableStateFlow(false)
+    val isCheckingUpdate: StateFlow<Boolean> = _isCheckingUpdate.asStateFlow()
+
+    private val _updateDownloadProgress = MutableStateFlow<Int?>(null)
+    val updateDownloadProgress: StateFlow<Int?> = _updateDownloadProgress.asStateFlow()
+
+    fun checkGitHubUpdate(repo: String) {
+        viewModelScope.launch {
+            _isCheckingUpdate.value = true
+            _githubReleaseInfo.value = null
+            try {
+                val release = GitHubUpdater.fetchLatestRelease(repo)
+                _githubReleaseInfo.value = release
+            } finally {
+                _isCheckingUpdate.value = false
+            }
+        }
+    }
+
+    fun downloadAndInstallUpdate(context: android.content.Context, repo: String) {
+        val release = _githubReleaseInfo.value ?: return
+        viewModelScope.launch {
+            _updateDownloadProgress.value = 0
+            GitHubUpdater.downloadAndInstallApk(context, release.apkUrl, release.apkName) { progress ->
+                _updateDownloadProgress.value = progress
+            }
+        }
+    }
 }
