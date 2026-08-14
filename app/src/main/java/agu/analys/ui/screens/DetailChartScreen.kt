@@ -80,6 +80,7 @@ import agu.analys.engine.MarketStructureSnapshot
 import agu.analys.model.AISignalState
 import agu.analys.model.MarketConnectionState
 import agu.analys.model.SignalAction
+import agu.analys.model.ScalpingStage
 import agu.analys.model.TechnicalIndicators
 import agu.analys.model.Timeframe
 import agu.analys.model.TradingPair
@@ -155,8 +156,8 @@ fun DetailChartScreen(viewModel: TradingViewModel, onNavigateToDashboard: () -> 
                 SimpleComposeChart(prices = emptyList(), candles = recentCandles, currentPrice = currentTick?.price ?: 0.0, isPositiveTrend = (currentTick?.change24h ?: 0.0) >= 0, modifier = Modifier.fillMaxWidth().height(300.dp))
                 Spacer(Modifier.height(10.dp)); TimeframeSelector(selectedTimeframe, viewModel::selectTimeframe)
                 if (connectionState is MarketConnectionState.ConnectionLost) { Spacer(Modifier.height(8.dp)); AnalysisCard { IconTextRow(Icons.Default.Info, if (isShowingCached) "Koneksi terputus. Harga di layar adalah data terakhir yang tersimpan." else "Data market sedang tidak tersedia.", TvRed) } }
-                Spacer(Modifier.height(10.dp)); MarketConditionCard(structure = marketStructure,indicators = currentIndicators)
-                Spacer(Modifier.height(10.dp)); RecommendationCard(aiSignalState)
+                Spacer(Modifier.height(10.dp)); MarketConditionCard(structure = marketStructure, indicators = currentIndicators, signal = aiSignalState, scalping = isScalpingMode)
+                Spacer(Modifier.height(10.dp)); RecommendationCard(aiSignalState, isScalpingMode)
                 Spacer(Modifier.height(10.dp)); WhyCard(aiSignalState, currentIndicators, marketStructure)
                 Spacer(Modifier.height(10.dp)); AiAssistantCard(auditReportText, isAuditLoading, geminiSummaryText, isGeminiLoading, viewModel::requestDeepAiAudit, viewModel::requestGeminiChartSummary, viewModel::clearAuditReport, viewModel::clearGeminiSummary)
                 Spacer(Modifier.height(10.dp)); SpotPositionCard(symbol = selectedPair.symbol, signal = aiSignalState, position = spotPosition, currentPrice = currentTick?.price ?: 0.0, onPositionChanged = viewModel::refreshSpotPosition)
@@ -183,44 +184,69 @@ private fun TimeframeSelector(selected: Timeframe, onSelect: (Timeframe) -> Unit
 }
 
 @Composable
-private fun MarketConditionCard(structure: MarketStructureSnapshot, indicators: TechnicalIndicators) {
-    val bullishStructure = structure.trend == "Bullish structure"
-    val bearishStructure = structure.trend == "Bearish structure"
-    val emaBullish = indicators.ema20.isFinite() && indicators.ema50.isFinite() && indicators.ema20 > indicators.ema50
-    val emaBearish = indicators.ema20.isFinite() && indicators.ema50.isFinite() && indicators.ema20 < indicators.ema50
-    val macdBullish = indicators.macdHist.isFinite() && indicators.macdHist > 0
-    val macdBearish = indicators.macdHist.isFinite() && indicators.macdHist < 0
-    val bullishScore = listOf(bullishStructure, emaBullish, macdBullish).count { it }
-    val bearishScore = listOf(bearishStructure, emaBearish, macdBearish).count { it }
-    val title: String
-    val color: Color
-    val detail: String
-    when {
-        bullishScore >= 2 && bullishScore > bearishScore -> { title = "CENDERUNG NAIK"; color = TvGreen; detail = "Struktur pasar dan indikator lebih banyak mendukung kenaikan." }
-        bearishScore >= 2 && bearishScore > bullishScore -> { title = "CENDERUNG TURUN"; color = TvRed; detail = "Struktur pasar dan indikator lebih banyak menunjukkan tekanan turun." }
-        else -> { title = "MASIH CAMPURAN"; color = WarningAmber; detail = "Struktur pasar dan indikator belum cukup searah." }
-    }
-    AnalysisCard {
-        SectionTitle("KONDISI PASAR", Icons.Default.TrendingUp)
-        Spacer(Modifier.height(7.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(12.dp).background(color, CircleShape))
-            Spacer(Modifier.width(9.dp))
-            Text(title, color = color, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+private fun MarketConditionCard(structure: MarketStructureSnapshot, indicators: TechnicalIndicators, signal: AISignalState, scalping: Boolean) {
+    if (scalping) {
+        val stage = signal.scalpingStage
+        val color = when (stage) {
+            ScalpingStage.ENTRY, ScalpingStage.STRONG_ENTRY -> if (signal.action == SignalAction.SELL) TvRed else TvGreen
+            ScalpingStage.WAIT_PULLBACK, ScalpingStage.WATCH -> WarningAmber
+            ScalpingStage.HOLD -> TvTextSecondary
         }
-        Spacer(Modifier.height(7.dp))
-        Text(detail, color = TvTextPrimary, fontSize = 14.sp, lineHeight = 20.sp)
-        Spacer(Modifier.height(9.dp))
-        Text("RSI ${formatIndicator(indicators.rsi14)}  •  EMA20/50 ${emaRelation(indicators)}", color = TvTextSecondary, fontSize = 12.sp)
+        val title = when (stage) {
+            ScalpingStage.ENTRY -> if (signal.action == SignalAction.SELL) "SHORT ENTRY" else "LONG ENTRY"
+            ScalpingStage.STRONG_ENTRY -> if (signal.action == SignalAction.SELL) "SHORT ENTRY KUAT" else "LONG ENTRY KUAT"
+            ScalpingStage.WAIT_PULLBACK -> "TUNGGU PULLBACK"
+            ScalpingStage.WATCH -> "WATCH"
+            ScalpingStage.HOLD -> "TAHAN / TUNGGU"
+        }
+        val mtf = signal.reasoning.filter { it.startsWith("1H:") || it.startsWith("15M:") || it.startsWith("1M:") }
+        AnalysisCard {
+            SectionTitle("KONDISI SCALPING", Icons.Default.TrendingUp)
+            Spacer(Modifier.height(7.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(12.dp).background(color, CircleShape)); Spacer(Modifier.width(9.dp)); Text(title, color=color, fontSize=18.sp, fontWeight=FontWeight.ExtraBold) }
+            Spacer(Modifier.height(7.dp))
+            Text(when(stage) {
+                ScalpingStage.ENTRY, ScalpingStage.STRONG_ENTRY -> "Bias 1H, setup 15M, dan trigger 1M sudah searah."
+                ScalpingStage.WAIT_PULLBACK -> "Bias masih mendukung, tetapi entry sekarang berisiko mengejar harga."
+                ScalpingStage.WATCH -> "Setup mulai terbentuk, tetapi trigger entry belum cukup kuat."
+                ScalpingStage.HOLD -> "Belum ada setup scalping yang cukup jelas."
+            }, color=TvTextPrimary, fontSize=14.sp, lineHeight=20.sp)
+            Spacer(Modifier.height(9.dp))
+            mtf.forEach { Text(it, color=TvTextSecondary, fontSize=12.sp, modifier=Modifier.padding(vertical=2.dp)) }
+            if (mtf.isEmpty()) Text("Data MTF belum lengkap.", color=TvTextSecondary, fontSize=12.sp)
+        }
+    } else {
+        val bullishStructure = structure.trend == "Bullish structure"
+        val bearishStructure = structure.trend == "Bearish structure"
+        val emaBullish = indicators.ema20.isFinite() && indicators.ema50.isFinite() && indicators.ema20 > indicators.ema50
+        val emaBearish = indicators.ema20.isFinite() && indicators.ema50.isFinite() && indicators.ema20 < indicators.ema50
+        val macdBullish = indicators.macdHist.isFinite() && indicators.macdHist > 0
+        val macdBearish = indicators.macdHist.isFinite() && indicators.macdHist < 0
+        val bullishScore = listOf(bullishStructure, emaBullish, macdBullish).count { it }
+        val bearishScore = listOf(bearishStructure, emaBearish, macdBearish).count { it }
+        val title: String
+        val color: Color
+        val detail: String
+        when {
+            bullishScore >= 2 && bullishScore > bearishScore -> { title="CENDERUNG NAIK"; color=TvGreen; detail="Struktur pasar dan indikator lebih banyak mendukung kenaikan." }
+            bearishScore >= 2 && bearishScore > bullishScore -> { title="CENDERUNG TURUN"; color=TvRed; detail="Struktur pasar dan indikator lebih banyak menunjukkan tekanan turun." }
+            else -> { title="MASIH CAMPURAN"; color=WarningAmber; detail="Struktur pasar dan indikator belum cukup searah." }
+        }
+        AnalysisCard { SectionTitle("KONDISI PASAR", Icons.Default.TrendingUp); Spacer(Modifier.height(7.dp)); Row(verticalAlignment=Alignment.CenterVertically) { Box(Modifier.size(12.dp).background(color,CircleShape)); Spacer(Modifier.width(9.dp)); Text(title,color=color,fontSize=18.sp,fontWeight=FontWeight.ExtraBold) }; Spacer(Modifier.height(7.dp)); Text(detail,color=TvTextPrimary,fontSize=14.sp,lineHeight=20.sp); Spacer(Modifier.height(9.dp)); Text("RSI ${formatIndicator(indicators.rsi14)}  •  EMA20/50 ${emaRelation(indicators)}",color=TvTextSecondary,fontSize=12.sp) }
     }
 }
 
 @Composable
-private fun RecommendationCard(signal: AISignalState) {
-    val color = when (signal.action) { SignalAction.BUY -> TvGreen; SignalAction.SELL -> TvRed; SignalAction.HOLD -> WarningAmber }
-    val title = when (signal.action) { SignalAction.BUY -> "BISA PERTIMBANGKAN BELI"; SignalAction.SELL -> "PERTIMBANGKAN JUAL"; SignalAction.HOLD -> "TAHAN / TUNGGU" }
-    val description = when (signal.action) { SignalAction.BUY -> "Tren cukup mendukung, tetapi tetap gunakan area masuk dan batas risiko."; SignalAction.SELL -> "Tekanan turun lebih dominan. Jangan buru-buru masuk sebelum struktur membaik."; SignalAction.HOLD -> "Belum ada alasan yang cukup kuat untuk masuk atau keluar sekarang." }
-    AnalysisCard { SectionTitle("REKOMENDASI", if (signal.action == SignalAction.BUY) Icons.Default.TrendingUp else if (signal.action == SignalAction.SELL) Icons.Default.TrendingDown else Icons.Default.Shield); Spacer(Modifier.height(8.dp)); Text(title, fontSize = 23.sp, fontWeight = FontWeight.Black, color = color); Spacer(Modifier.height(5.dp)); Text(description, fontSize = 14.sp, color = TvTextPrimary, lineHeight = 20.sp); Spacer(Modifier.height(9.dp)); Text("Kekuatan sinyal: ${signal.confidence}/100", fontSize = 13.sp, color = TvTextSecondary) }
+private fun RecommendationCard(signal: AISignalState, scalping: Boolean) {
+    if (scalping) {
+        val stage=signal.scalpingStage
+        val color=when(stage) { ScalpingStage.ENTRY, ScalpingStage.STRONG_ENTRY -> if(signal.action==SignalAction.SELL) TvRed else TvGreen; ScalpingStage.WAIT_PULLBACK, ScalpingStage.WATCH, ScalpingStage.HOLD -> WarningAmber }
+        val title=when(stage) { ScalpingStage.ENTRY -> if(signal.action==SignalAction.SELL) "SHORT ENTRY" else "LONG ENTRY"; ScalpingStage.STRONG_ENTRY -> if(signal.action==SignalAction.SELL) "SHORT ENTRY KUAT" else "LONG ENTRY KUAT"; ScalpingStage.WAIT_PULLBACK -> "TUNGGU PULLBACK"; ScalpingStage.WATCH -> "WATCH"; ScalpingStage.HOLD -> "TAHAN / TUNGGU" }
+        val description=when(stage) { ScalpingStage.ENTRY, ScalpingStage.STRONG_ENTRY -> "Trigger 1M sudah searah dengan bias 1H dan setup 15M."; ScalpingStage.WAIT_PULLBACK -> "Trend masih mendukung. Tunggu pullback selesai dan trigger 1M kembali searah."; ScalpingStage.WATCH -> "Bias atau setup mulai terbentuk. Tunggu konfirmasi 1M sebelum masuk."; ScalpingStage.HOLD -> "Belum ada setup scalping yang cukup kuat untuk entry." }
+        AnalysisCard { SectionTitle("REKOMENDASI", if(signal.action==SignalAction.SELL) Icons.Default.TrendingDown else if(stage==ScalpingStage.ENTRY || stage==ScalpingStage.STRONG_ENTRY) Icons.Default.TrendingUp else Icons.Default.Shield); Spacer(Modifier.height(8.dp)); Text(title,fontSize=23.sp,fontWeight=FontWeight.Black,color=color); Spacer(Modifier.height(5.dp)); Text(description,fontSize=14.sp,color=TvTextPrimary,lineHeight=20.sp); if(stage==ScalpingStage.ENTRY || stage==ScalpingStage.STRONG_ENTRY) { Spacer(Modifier.height(10.dp)); Text("Entry  ${PriceFormatter.formatPrice(signal.entryPrice)}",fontSize=13.sp,color=TvTextPrimary); Text("SL     ${PriceFormatter.formatPrice(signal.stopLoss)}",fontSize=13.sp,color=TvTextPrimary); Text("TP1    ${PriceFormatter.formatPrice(signal.targetPrice1)}",fontSize=13.sp,color=TvTextPrimary); Text("TP2    ${PriceFormatter.formatPrice(signal.targetPrice2)}",fontSize=13.sp,color=TvTextPrimary); Text(signal.riskRewardRatio,fontSize=12.sp,color=TvTextSecondary,modifier=Modifier.padding(top=4.dp)) }; Spacer(Modifier.height(9.dp)); Text("Kekuatan setup: ${signal.confidence}/100",fontSize=13.sp,color=TvTextSecondary) }
+    } else {
+        val color=when(signal.action) { SignalAction.BUY -> TvGreen; SignalAction.SELL -> TvRed; SignalAction.HOLD -> WarningAmber }; val title=when(signal.action) { SignalAction.BUY -> "BISA PERTIMBANGKAN BELI"; SignalAction.SELL -> "PERTIMBANGKAN JUAL"; SignalAction.HOLD -> "TAHAN / TUNGGU" }; val description=when(signal.action) { SignalAction.BUY -> "Tren cukup mendukung, tetapi tetap gunakan area masuk dan batas risiko."; SignalAction.SELL -> "Tekanan turun lebih dominan. Jangan buru-buru masuk sebelum struktur membaik."; SignalAction.HOLD -> "Belum ada alasan yang cukup kuat untuk masuk atau keluar sekarang." }; AnalysisCard { SectionTitle("REKOMENDASI",if(signal.action==SignalAction.BUY) Icons.Default.TrendingUp else if(signal.action==SignalAction.SELL) Icons.Default.TrendingDown else Icons.Default.Shield); Spacer(Modifier.height(8.dp)); Text(title,fontSize=23.sp,fontWeight=FontWeight.Black,color=color); Spacer(Modifier.height(5.dp)); Text(description,fontSize=14.sp,color=TvTextPrimary,lineHeight=20.sp); Spacer(Modifier.height(9.dp)); Text("Kekuatan sinyal: ${signal.confidence}/100",fontSize=13.sp,color=TvTextSecondary) }
+    }
 }
 
 @Composable
