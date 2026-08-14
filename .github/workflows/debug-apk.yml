@@ -1,6 +1,9 @@
 name: Debug APK
 
 on:
+  push:
+    branches:
+      - fix/scalping-1m-updater
   workflow_dispatch:
     inputs:
       ref:
@@ -21,7 +24,7 @@ jobs:
       - name: Checkout selected ref
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.ref }}
+          ref: ${{ github.event_name == 'push' && github.ref_name || inputs.ref }}
 
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
@@ -41,6 +44,6 @@ jobs:
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: analisa-pasar-debug-${{ inputs.ref }}
+          name: analisa-pasar-debug-${{ github.ref_name }}
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
