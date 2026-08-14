@@ -14,6 +14,10 @@ class AppPreferences(context: Context) {
         get() = prefs.getString(KEY_GEMINI, "").orEmpty()
         set(value) = prefs.edit().putString(KEY_GEMINI, value.trim()).apply()
 
+    var isScalpingMode: Boolean
+        get() = prefs.getBoolean(KEY_SCALPING_MODE, false)
+        set(value) = prefs.edit().putBoolean(KEY_SCALPING_MODE, value).apply()
+
     fun getWatchlist(): Set<String> =
         prefs.getStringSet(KEY_WATCHLIST, emptySet())?.toSet() ?: emptySet()
 
@@ -46,6 +50,7 @@ class AppPreferences(context: Context) {
         private const val PREFS_NAME = "krypto_analysis_prefs"
         private const val KEY_GROQ = "groq_api_key"
         private const val KEY_GEMINI = "gemini_api_key"
+        private const val KEY_SCALPING_MODE = "scalping_mode"
         private const val KEY_WATCHLIST = "watchlist_symbols"
         private const val KEY_LEARNING_COMPLETED = "learning_completed_lessons"
     }
