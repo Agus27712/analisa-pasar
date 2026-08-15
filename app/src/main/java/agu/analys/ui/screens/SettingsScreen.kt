@@ -55,8 +55,8 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
             Text("Pilih mode di awal. Setelah disimpan, engine menghitung ulang watchlist dan analisis.", fontSize = 12.sp, color = TvTextSecondary)
             Spacer(Modifier.height(9.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                ModeChoice("SCALPING", scalping, Color(0xFF123D2A), TvGreen) { scalping = true; saved = false }
-                ModeChoice("SWING", !scalping, Color(0xFF15304B), Color(0xFF72B7FF)) { scalping = false; saved = false }
+                ModeChoice("SCALPING", scalping, Color(0xFF123D2A), TvGreen, Modifier.weight(1f)) { scalping = true; saved = false }
+                ModeChoice("SWING", !scalping, Color(0xFF15304B), Color(0xFF72B7FF), Modifier.weight(1f)) { scalping = false; saved = false }
             }
         }
         Spacer(Modifier.height(10.dp))
@@ -72,8 +72,8 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
             Text("Pilih satu provider aktif. API key provider lain tetap aman tersimpan jika pernah digunakan.", fontSize = 12.sp, color = TvTextSecondary)
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                ModeChoice("GROQ", provider == AiProvider.GROQ, Color(0xFF123D2A), TvGreen) { provider = AiProvider.GROQ; saved = false }
-                ModeChoice("GEMINI", provider == AiProvider.GEMINI, Color(0xFF15304B), Color(0xFF72B7FF)) { provider = AiProvider.GEMINI; saved = false }
+                ModeChoice("GROQ", provider == AiProvider.GROQ, Color(0xFF123D2A), TvGreen, Modifier.weight(1f)) { provider = AiProvider.GROQ; saved = false }
+                ModeChoice("GEMINI", provider == AiProvider.GEMINI, Color(0xFF15304B), Color(0xFF72B7FF), Modifier.weight(1f)) { provider = AiProvider.GEMINI; saved = false }
             }
             Spacer(Modifier.height(8.dp))
             if (provider == AiProvider.GROQ) OutlinedTextField(groq, { groq = it; saved = false }, modifier = Modifier.fillMaxWidth(), singleLine = true, label = { Text("Groq API Key") }, visualTransformation = PasswordVisualTransformation(), leadingIcon = { Icon(Icons.Default.Key, null) })
@@ -114,7 +114,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
 private fun SettingCard(title: String, content: @Composable ColumnScope.() -> Unit) { Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = TvCardBackground)) { Column(Modifier.padding(14.dp)) { Text(title, color = TvGreen, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 0.7.sp); Spacer(Modifier.height(8.dp)); content() } }
 
 @Composable
-private fun RowScope.ModeChoice(label: String, selected: Boolean, bg: Color, fg: Color, onClick: () -> Unit) { Button(onClick = onClick, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = if (selected) bg else Color(0xFF1A2028)), shape = RoundedCornerShape(10.dp)) { Text(label, color = if (selected) fg else TvTextSecondary, fontWeight = FontWeight.ExtraBold, fontSize = 11.sp) } }
+private fun ModeChoice(label: String, selected: Boolean, bg: Color, fg: Color, modifier: Modifier = Modifier, onClick: () -> Unit) { Button(onClick = onClick, modifier = modifier, colors = ButtonDefaults.buttonColors(containerColor = if (selected) bg else Color(0xFF1A2028)), shape = RoundedCornerShape(10.dp)) { Text(label, color = if (selected) fg else TvTextSecondary, fontWeight = FontWeight.ExtraBold, fontSize = 11.sp) } }
 
 @Composable
 private fun FeeField(label: String, value: Double, onValue: (Double) -> Unit) { OutlinedTextField(value = String.format("%.2f", value), onValueChange = { it.replace(',', '.').toDoubleOrNull()?.let(onValue) }, modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp), singleLine = true, label = { Text(label) }, suffix = { Text("%") }) }
