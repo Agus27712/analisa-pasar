@@ -17,25 +17,28 @@ import agu.analys.ui.theme.TvTextSecondary
 @Composable
 fun OfflineBanner(reason: String, onRetry: () -> Unit) {
     Card(
-        Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp),
-        shape = RoundedCornerShape(11.dp),
-        colors = CardDefaults.cardColors(containerColor = TvRed.copy(alpha = 0.09f)),
-        border = BorderStroke(1.dp, TvRed.copy(alpha = 0.25f))
+        Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = TvRed.copy(alpha = 0.10f)),
+        border = BorderStroke(1.dp, TvRed.copy(alpha = 0.28f))
     ) {
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 11.dp, vertical = 8.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(Modifier.weight(1f)) {
-                Text("Koneksi market terputus", color = TvRed, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                Text(reason, color = TvTextSecondary, fontSize = 8.sp, maxLines = 2)
+                Text("Koneksi market terputus", color = TvRed, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(2.dp))
+                Text(reason, color = TvTextSecondary, fontSize = 11.sp, maxLines = 2, lineHeight = 15.sp)
             }
+            Spacer(Modifier.width(8.dp))
             Button(
                 onClick = onRetry,
                 colors = ButtonDefaults.buttonColors(containerColor = TvRed),
-                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                shape = RoundedCornerShape(10.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
             ) {
-                Text("RETRY", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                Text("RETRY", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
             }
         }
     }

@@ -4,23 +4,24 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /**
- * Layout boundary for the detail-screen chart.
- *
- * Keep chart sizing/layout decisions here so DetailChartScreen does not need
- * to know the visual dimensions of the chart. Chart rendering and market logic
- * stay in SimpleComposeChart and the trading engine respectively.
- *
- * The first UI pass intentionally keeps this component small. Future chart
- * polish (larger area, smooth price movement, and subtle micro-animation)
- * should be implemented here without touching the Scalping/MTF engine.
+ * Single source of truth untuk tinggi chart portrait.
+ * Lebih lega dari baseline awal (~300→360), tapi proporsional HP
+ * agar card Kondisi/Progress tidak terdorong jauh ke bawah.
+ * Fullscreen/landscape tetap fillMaxSize di screen masing-masing.
  */
+object ChartLayoutDefaults {
+    /** Portrait detail — lega tapi tidak mendominasi scroll. */
+    val PortraitHeight: Dp = 280.dp
+}
+
 @Composable
 fun ChartLayout(
     modifier: Modifier = Modifier,
-    height: androidx.compose.ui.unit.Dp = 340.dp,
+    height: Dp = ChartLayoutDefaults.PortraitHeight,
     content: @Composable (Modifier) -> Unit
 ) {
     content(

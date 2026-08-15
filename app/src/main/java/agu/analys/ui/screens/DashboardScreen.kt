@@ -70,7 +70,11 @@ fun DashboardScreen(
             OfflineBanner(lost.reason) { viewModel.retryConnection() }
         }
 
-        ModeSwitchToggle(isScalping = isScalpingMode, onToggle = { viewModel.setScalpingMode(it) })
+        ModeSwitchToggle(
+            isScalping = isScalpingMode,
+            onToggle = { viewModel.setScalpingMode(it) },
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp)
+        )
         CompactMarketOverview(dashboardTicks, worthCoins, connectionState is MarketConnectionState.Connected)
 
         LazyColumn(

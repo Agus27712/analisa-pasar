@@ -57,17 +57,31 @@ object MarketStructureAnalyzer {
             else -> "Range / transition"
         }
 
-        val support = swingLows.filter { it <= last }.maxOrNull() ?: swingLows.minOrNull()
-        val resistance = swingHighs.filter { it >= last }.minOrNull() ?: swingHighs.maxOrNull()
+        // Prefer genuine 5-candle swings. If one side has no swing yet, use the
+        // nearest observed extreme from the same real candle window as an area
+        // of observation. This avoids a useless "level unavailable" card while
+        // never inventing a price.
+        val support = swingLows.filter { it <= last }.maxOrNull()
+            ?: swingLows.minOrNull()
+            ?: recent.dropLast(1).minOfOrNull { it.low }
+        val resistance = swingHighs.filter { it >= last }.minOrNull()
+            ?: swingHighs.maxOrNull()
+            ?: recent.dropLast(1).maxOfOrNull { it.high }
+
         val supportDistance = support?.let { abs(last - it) / last * 100.0 }
-        val resistanceDistance = resistance?.let { abs(resistance - last) / last * 100.0 }
+        val resistanceDistance = resistance?.let { abs(it - last) / last * 100.0 }
 
         val trendExplanation = when (trend) {
             "Bullish structure" -> "Higher High + Higher Low: pembeli sedang mempertahankan struktur naik. Ini bukan sinyal BUY otomatis."
             "Bearish structure" -> "Lower High + Lower Low: penjual sedang mempertahankan struktur turun. Ini bukan sinyal SELL otomatis."
             else -> "Swing belum membentuk rangkaian HH/HL atau LH/LL yang konsisten. Anggap sebagai area transisi/range."
         }
-        val structureExplanation = "Support/resistance diambil dari swing candle terbaru. Level adalah area observasi, bukan garis harga yang pasti."
+        val usedFallback = swingLows.isEmpty() || swingHighs.isEmpty()
+        val structureExplanation = if (usedFallback) {
+            "Swing lengkap belum terbentuk di semua sisi; level memakai ekstrem candle terbaru sebagai area observasi."
+        } else {
+            "Support/resistance diambil dari swing candle terbaru. Level adalah area observasi, bukan garis harga yang pasti."
+        }
 
         return MarketStructureSnapshot(
             trend = trend,

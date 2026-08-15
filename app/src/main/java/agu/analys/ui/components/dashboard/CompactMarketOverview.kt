@@ -39,12 +39,12 @@ fun CompactMarketOverview(
     Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp)) {
         Card(
             Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(14.dp),
             colors = CardDefaults.cardColors(containerColor = DashboardColors.Surface),
             border = BorderStroke(1.dp, DashboardColors.Border)
         ) {
             Row(
-                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 OverviewValue("PAIR", "${ticks.size}", if (isLive) "LIVE" else "OFFLINE", TvGreen, Modifier.weight(0.7f))
@@ -60,19 +60,19 @@ fun CompactMarketOverview(
                 )
             }
         }
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 2.dp)) {
-            Text("MARKET SCORE", color = TvTextSecondary, fontSize = 9.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 0.6.sp)
+            Text("MARKET SCORE", color = TvTextSecondary, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 0.5.sp)
             Spacer(Modifier.width(6.dp))
-            Text("$score/100", color = scoreCol, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
+            Text("$score/100", color = scoreCol, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
             Spacer(Modifier.width(8.dp))
-            Box(Modifier.weight(1f).height(5.dp).clip(RoundedCornerShape(4.dp)).background(Color(0xFF252D36))) {
+            Box(Modifier.weight(1f).height(6.dp).clip(RoundedCornerShape(4.dp)).background(Color(0xFF252D36))) {
                 Box(
                     Modifier.fillMaxWidth(score.coerceIn(0, 100) / 100f).fillMaxSize()
                         .clip(RoundedCornerShape(4.dp)).background(scoreCol)
                 )
             }
-            Spacer(Modifier.width(7.dp))
+            Spacer(Modifier.width(8.dp))
             Text(
                 when {
                     score >= 75 -> "BULLISH"
@@ -80,7 +80,7 @@ fun CompactMarketOverview(
                     else -> "LEMAH"
                 },
                 color = scoreCol,
-                fontSize = 8.sp,
+                fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1
             )
@@ -91,14 +91,14 @@ fun CompactMarketOverview(
 @Composable
 private fun OverviewValue(label: String, value: String, detail: String, color: Color, modifier: Modifier) {
     Column(modifier) {
-        Text(label, color = TvTextSecondary, fontSize = 7.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-        Spacer(Modifier.height(2.dp))
-        Text(value, color = TvTextPrimary, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1)
-        Text(detail, color = color, fontSize = 7.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+        Text(label, color = TvTextSecondary, fontSize = 9.sp, fontWeight = FontWeight.Bold, maxLines = 1, letterSpacing = 0.4.sp)
+        Spacer(Modifier.height(3.dp))
+        Text(value, color = TvTextPrimary, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1)
+        Text(detail, color = color, fontSize = 9.sp, fontWeight = FontWeight.Bold, maxLines = 1)
     }
 }
 
 @Composable
 private fun OverviewDivider() {
-    Box(Modifier.width(1.dp).height(30.dp).background(DashboardColors.Border))
+    Box(Modifier.width(1.dp).height(34.dp).background(DashboardColors.Border))
 }

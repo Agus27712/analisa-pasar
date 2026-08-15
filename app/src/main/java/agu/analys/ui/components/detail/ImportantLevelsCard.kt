@@ -1,8 +1,9 @@
 package agu.analys.ui.components.detail
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -13,69 +14,187 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import agu.analys.engine.MarketStructureSnapshot
 import agu.analys.model.AISignalState
-import agu.analys.model.SignalAction
+import agu.analys.ui.theme.TvGreen
 import agu.analys.ui.theme.TvRed
 import agu.analys.ui.theme.TvTextPrimary
 import agu.analys.ui.theme.TvTextSecondary
 import agu.analys.util.PriceFormatter
+import kotlin.math.abs
 
+/**
+ * Selalu bernilai informasi: posisi harga, support/resistance relevan, jarak.
+ * Tanpa placeholder "Belum ada setup". Fallback = AREA OBSERVASI (bukan angka fiktif).
+ */
 @Composable
-fun ImportantLevelsCard(signal: AISignalState, structure: MarketStructureSnapshot, price: Double) {
+fun ImportantLevelsCard(
+    @Suppress("UNUSED_PARAMETER") signal: AISignalState,
+    structure: MarketStructureSnapshot,
+    price: Double
+) {
     AnalysisCard {
-        Text("LEVEL PENTING", fontSize = 15.sp, fontWeight = FontWeight.ExtraBold, color = InfoBlue, letterSpacing = 0.8.sp)
+        Text(
+            "LEVEL PENTING",
+            fontSize = 15.sp,
+            fontWeight = FontWeight.ExtraBold,
+            color = InfoBlue,
+            letterSpacing = 0.8.sp
+        )
         Spacer(Modifier.height(10.dp))
-        ImportantLevelRow(Color(0xFF32D74B), "Support Terdekat", structure.support?.takeIf { it > 0 }?.let { PriceFormatter.formatPrice(it) } ?: "Belum tersedia")
-        ImportantLevelRow(TvRed, "Resistance Terdekat", structure.resistance?.takeIf { it > 0 }?.let { PriceFormatter.formatPrice(it) } ?: "Belum tersedia")
-        Spacer(Modifier.height(8.dp))
-        Box(Modifier.fillMaxWidth().height(0.5.dp).background(Color(0x14FFFFFF)))
-        Spacer(Modifier.height(8.dp))
-        if (signal.action != SignalAction.HOLD && signal.entryPrice > 0) {
-            ImportantLevelRow(InfoBlue, "Entry Area", PriceFormatter.formatPrice(signal.entryPrice))
-            ImportantLevelRow(Color(0xFF32D74B), "Take Profit 1 (TP1)", signal.targetPrice1.takeIf { it > 0 }?.let { PriceFormatter.formatPrice(it) } ?: "Belum tersedia")
-            ImportantLevelRow(Color(0xFF32D74B), "Take Profit 2 (TP2)", signal.targetPrice2.takeIf { it > 0 }?.let { PriceFormatter.formatPrice(it) } ?: "Belum tersedia")
-            Spacer(Modifier.height(8.dp))
-            Box(Modifier.fillMaxWidth().height(0.5.dp).background(Color(0x14FFFFFF)))
-            Spacer(Modifier.height(8.dp))
-            ImportantLevelRow(TvRed, "Stop Loss (SL)", signal.stopLoss.takeIf { it > 0 }?.let { PriceFormatter.formatPrice(it) } ?: "Belum tersedia")
-            Spacer(Modifier.height(8.dp))
-            Box(Modifier.fillMaxWidth().height(0.5.dp).background(Color(0x14FFFFFF)))
-            Spacer(Modifier.height(8.dp))
-            ImportantLevelRow(Color(0xFF9C27B0), "Risk / Reward", signal.riskRewardRatio.ifBlank { "1 : 1,5" })
-        } else {
-            ImportantLevelRow(InfoBlue, "Entry Area", "Belum ada setup")
-            ImportantLevelRow(Color(0xFF32D74B), "Take Profit 1 (TP1)", "Belum tersedia")
-            ImportantLevelRow(Color(0xFF32D74B), "Take Profit 2 (TP2)", "Belum tersedia")
-            Spacer(Modifier.height(8.dp))
-            Box(Modifier.fillMaxWidth().height(0.5.dp).background(Color(0x14FFFFFF)))
-            Spacer(Modifier.height(8.dp))
-            ImportantLevelRow(TvRed, "Stop Loss (SL)", "Belum tersedia")
-            Spacer(Modifier.height(8.dp))
-            Box(Modifier.fillMaxWidth().height(0.5.dp).background(Color(0x14FFFFFF)))
-            Spacer(Modifier.height(8.dp))
-            ImportantLevelRow(Color(0xFF9C27B0), "Risk / Reward", "Belum tersedia")
-            if (price > 0 && structure.support != null && structure.resistance != null) {
+
+        val support = structure.support?.takeIf { it > 0.0 && it.isFinite() }
+        val resistance = structure.resistance?.takeIf { it > 0.0 && it.isFinite() }
+        val validPrice = price > 0.0 && price.isFinite()
+
+        // POSISI HARGA — selalu tampil jika harga valid
+        if (validPrice) {
+            Text("POSISI HARGA", fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, color = TvTextSecondary, letterSpacing = 0.5.sp)
+            Spacer(Modifier.height(4.dp))
+            Text(PriceFormatter.formatPrice(price), fontSize = 20.sp, fontWeight = FontWeight.Black, color = TvTextPrimary)
+
+            if (support != null && resistance != null && resistance > support) {
                 Spacer(Modifier.height(6.dp))
-                Text(
-                    "Pantau reaksi harga di antara support dan resistance sebelum menentukan entry.",
-                    fontSize = 12.sp, color = TvTextSecondary, lineHeight = 18.sp
-                )
+                val range = resistance - support
+                val position = ((price - support) / range).coerceIn(0.0, 1.0)
+                val nearLabel = when {
+                    position < 0.25 -> "Dekat Support"
+                    position > 0.75 -> "Dekat Resistance"
+                    else -> "Di tengah range"
+                }
+                val nearColor = when {
+                    position < 0.25 -> TvGreen
+                    position > 0.75 -> TvRed
+                    else -> InfoBlue
+                }
+                Text(nearLabel, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = nearColor)
+                Spacer(Modifier.height(6.dp))
+                Box(Modifier.fillMaxWidth().height(5.dp).background(Color(0x22FFFFFF), RoundedCornerShape(8.dp))) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth(position.toFloat())
+                            .fillMaxHeight()
+                            .background(nearColor, RoundedCornerShape(8.dp))
+                    )
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            AnalysisDivider()
+            Spacer(Modifier.height(10.dp))
+        }
+
+        // SUPPORT / RESISTANCE atau AREA OBSERVASI
+        when {
+            support != null || resistance != null -> {
+                if (support != null && validPrice) {
+                    LevelLine(
+                        title = "Support relevan",
+                        level = support,
+                        price = price,
+                        accent = TvGreen,
+                        isResistance = false
+                    )
+                    Spacer(Modifier.height(8.dp))
+                } else if (support == null) {
+                    ObservasiLine(
+                        title = "Support",
+                        reason = if (!structure.dataEnough)
+                            "Data candle belum cukup untuk swing support."
+                        else
+                            "Swing low relevan belum teridentifikasi — pantau ekstrem candle terbaru."
+                    )
+                    Spacer(Modifier.height(8.dp))
+                }
+
+                if (resistance != null && validPrice) {
+                    LevelLine(
+                        title = "Resistance relevan",
+                        level = resistance,
+                        price = price,
+                        accent = TvRed,
+                        isResistance = true
+                    )
+                } else if (resistance == null) {
+                    ObservasiLine(
+                        title = "Resistance",
+                        reason = if (!structure.dataEnough)
+                            "Data candle belum cukup untuk swing resistance."
+                        else
+                            "Swing high relevan belum teridentifikasi — pantau ekstrem candle terbaru."
+                    )
+                }
+            }
+            else -> {
+                // Tidak memaksakan Support/Resistance fiktif
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(InfoBlue.copy(alpha = 0.08f), RoundedCornerShape(10.dp))
+                        .border(1.dp, InfoBlue.copy(alpha = 0.25f), RoundedCornerShape(10.dp))
+                        .padding(12.dp)
+                ) {
+                    Text("AREA OBSERVASI", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = InfoBlue, letterSpacing = 0.6.sp)
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        if (!structure.dataEnough)
+                            "Level berasal dari swing candle. Minimal data belum cukup — pantau ekstrem high/low candle terbaru sebagai area observasi, bukan support/resistance pasti."
+                        else
+                            "Swing support/resistance belum teridentifikasi. Gunakan ekstrem candle terbaru sebagai area observasi sampai struktur lebih jelas.",
+                        fontSize = 13.sp,
+                        color = TvTextPrimary,
+                        lineHeight = 18.sp
+                    )
+                }
             }
         }
+
+        if (structure.structureExplanation.isNotBlank()) {
+            Spacer(Modifier.height(10.dp))
+            Text(structure.structureExplanation, fontSize = 11.sp, color = TvTextSecondary, lineHeight = 15.sp)
+        }
     }
 }
 
 @Composable
-private fun ImportantLevelRow(dotColor: Color, label: String, value: String) {
-    Row(
-        Modifier.fillMaxWidth().padding(vertical = 5.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+private fun LevelLine(
+    title: String,
+    level: Double,
+    price: Double,
+    accent: Color,
+    isResistance: Boolean
+) {
+    val dist = abs(price - level) / price.coerceAtLeast(1e-9) * 100.0
+    val relation = when {
+        !isResistance && price > level -> "${fmtPct(dist)} di bawah harga"
+        !isResistance -> "${fmtPct(dist)} di atas harga"
+        price < level -> "${fmtPct(dist)} di atas harga"
+        else -> "${fmtPct(dist)} di bawah harga (terlewati)"
+    }
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(accent.copy(alpha = 0.07f), RoundedCornerShape(10.dp))
+            .border(1.dp, accent.copy(alpha = 0.22f), RoundedCornerShape(10.dp))
+            .padding(horizontal = 12.dp, vertical = 10.dp)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-            Box(Modifier.size(8.dp).background(dotColor, CircleShape))
-            Spacer(Modifier.width(10.dp))
-            Text(label, fontSize = 13.sp, color = TvTextSecondary, maxLines = 1)
-        }
-        Text(value, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TvTextPrimary)
+        Text(title.uppercase(), fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, color = accent, letterSpacing = 0.5.sp)
+        Spacer(Modifier.height(4.dp))
+        Text(PriceFormatter.formatPrice(level), fontSize = 17.sp, fontWeight = FontWeight.Black, color = TvTextPrimary)
+        Spacer(Modifier.height(2.dp))
+        Text(relation, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = accent)
     }
 }
+
+@Composable
+private fun ObservasiLine(title: String, reason: String) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(Color(0x0AFFFFFF), RoundedCornerShape(10.dp))
+            .padding(horizontal = 12.dp, vertical = 10.dp)
+    ) {
+        Text("AREA OBSERVASI · $title", fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, color = TvTextSecondary, letterSpacing = 0.4.sp)
+        Spacer(Modifier.height(4.dp))
+        Text(reason, fontSize = 12.sp, color = TvTextPrimary, lineHeight = 16.sp)
+    }
+}
+
+private fun fmtPct(value: Double): String = String.format("%.2f%%", value)

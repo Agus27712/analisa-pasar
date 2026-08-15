@@ -10,6 +10,46 @@ enum class ScalpingStage(val displayName: String) {
     STRONG_ENTRY("ENTRY KUAT")
 }
 
+/** Status satu leg MTF untuk UI — diisi engine, bukan dihitung ulang di Compose. */
+enum class MtfLegStatus {
+    OK,
+    PARTIAL,
+    WAITING,
+    FAIL,
+    UNKNOWN
+}
+
+enum class ScalpingPath {
+    NONE,
+    PULLBACK,
+    MOMENTUM_CONTINUATION,
+    BOTH,
+    ENTRY_READY
+}
+
+/**
+ * Structured MTF snapshot dari ScalpingMtfEvaluator.
+ * UI hanya menampilkan — tidak menghitung ulang threshold.
+ */
+data class ScalpingMtfSnapshot(
+    val biasOk: Boolean = false,
+    val biasDirection: String = "mixed", // bullish | bearish | mixed
+    val biasStatus: MtfLegStatus = MtfLegStatus.UNKNOWN,
+    val biasDetail: String = "",
+    val setupOk: Boolean = false,
+    val setupStatus: MtfLegStatus = MtfLegStatus.UNKNOWN,
+    val setupDetail: String = "",
+    val triggerOk: Boolean = false,
+    val triggerStatus: MtfLegStatus = MtfLegStatus.UNKNOWN,
+    val triggerDetail: String = "",
+    val path: ScalpingPath = ScalpingPath.NONE,
+    val statusTitle: String = "BELUM TERSEDIA",
+    val waitingFor: String = "",
+    val entryCondition: String = "",
+    val extended: Boolean = false,
+    val extremeVolatility: Boolean = false
+)
+
 enum class TrendSentiment(val displayName: String) {
     STRONG_BULLISH_CONTINUATION("Kelanjutan Bullish Kuat"),
     BULLISH_REVERSAL("Pembalikan Arah Bullish"),
@@ -68,7 +108,9 @@ data class AISignalState(
     val reasoning: List<String> = emptyList(),
     val timestamp: Long = System.currentTimeMillis(),
     val marketSymbol: String = "",
-    val scalpingStage: ScalpingStage = ScalpingStage.HOLD
+    val scalpingStage: ScalpingStage = ScalpingStage.HOLD,
+    /** Structured MTF — diisi evaluator scalping. Default kosong untuk swing/offline. */
+    val mtf: ScalpingMtfSnapshot = ScalpingMtfSnapshot()
 )
 
 data class TradingPair(

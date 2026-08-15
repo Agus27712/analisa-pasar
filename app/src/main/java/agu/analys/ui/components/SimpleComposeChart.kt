@@ -1,5 +1,6 @@
 package agu.analys.ui.components
 
+import android.content.res.Configuration
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -37,10 +38,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import agu.analys.model.CandleBar
+import agu.analys.ui.animation.rememberSmoothPrice
 import agu.analys.ui.theme.TvCardBackground
 import agu.analys.ui.theme.TvGreen
 import agu.analys.ui.theme.TvRed
@@ -95,10 +98,15 @@ fun SimpleComposeChart(
     val minPrice = visible.minOfOrNull { minOf(it.low, bb.first.getOrNull(startIndex) ?: it.low) } ?: currentPrice
     val maxPrice = visible.maxOfOrNull { maxOf(it.high, bb.second.getOrNull(startIndex) ?: it.high) } ?: currentPrice
     val themeColor = if (isPositiveTrend) TvGreen else TvRed
-    val livePrice = currentPrice.takeIf { it > 0 }
+    val smoothLive = rememberSmoothPrice(currentPrice)
+    val livePrice = smoothLive.takeIf { it > 0 }
+    val portrait = LocalConfiguration.current.orientation == Configuration.ORIENTATION_PORTRAIT
 
     Card(
-        modifier = modifier.fillMaxWidth().border(1.dp, Color(0x1AFFFFFF), RoundedCornerShape(16.dp)),
+        modifier = modifier
+            .fillMaxWidth()
+            .then(if (portrait) Modifier.height(290.dp) else Modifier)
+            .border(1.dp, Color(0x1AFFFFFF), RoundedCornerShape(16.dp)),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = TvCardBackground)
     ) {

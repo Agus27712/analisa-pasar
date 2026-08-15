@@ -13,7 +13,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CropRotate
 import androidx.compose.material.icons.filled.FullscreenExit
@@ -41,6 +40,7 @@ import agu.analys.model.MarketConnectionState
 import agu.analys.model.TechnicalIndicators
 import agu.analys.model.Timeframe
 import agu.analys.model.TradingPair
+import agu.analys.ui.animation.SmoothPriceText
 import agu.analys.ui.components.SimpleComposeChart
 import agu.analys.ui.components.SpotPositionCard
 import agu.analys.ui.components.dashboard.ModeSwitchToggle
@@ -131,6 +131,7 @@ fun DetailChartScreen(
         }
     ) { innerPadding ->
         if (isChartExpanded) {
+            // Landscape/fullscreen: tetap besar
             Box(Modifier.fillMaxSize().padding(innerPadding).background(Color(0xFF0D0E12))) {
                 SimpleComposeChart(
                     prices = emptyList(),
@@ -155,15 +156,18 @@ fun DetailChartScreen(
                 currentTick?.let { PriceHeader(it.price, it.change24h) }
                 Spacer(Modifier.height(8.dp))
                 ModeSwitchToggle(isScalping = isScalpingMode, onToggle = { viewModel.setScalpingMode(it) })
-                Spacer(Modifier.height(10.dp))
-                SimpleComposeChart(
-                    prices = emptyList(),
-                    candles = recentCandles,
-                    currentPrice = currentTick?.price ?: 0.0,
-                    isPositiveTrend = (currentTick?.change24h ?: 0.0) >= 0,
-                    modifier = Modifier.fillMaxWidth().height(360.dp)
-                )
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(8.dp))
+                // ⑤ Single source of truth — ChartLayoutDefaults.PortraitHeight
+                ChartLayout { chartModifier ->
+                    SimpleComposeChart(
+                        prices = emptyList(),
+                        candles = recentCandles,
+                        currentPrice = currentTick?.price ?: 0.0,
+                        isPositiveTrend = (currentTick?.change24h ?: 0.0) >= 0,
+                        modifier = chartModifier
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
                 TimeframeSelector(selectedTimeframe, viewModel::selectTimeframe)
                 if (connectionState is MarketConnectionState.ConnectionLost) {
                     Spacer(Modifier.height(8.dp))
@@ -178,6 +182,8 @@ fun DetailChartScreen(
                 }
                 Spacer(Modifier.height(10.dp))
                 MarketConditionCard(marketStructure, currentIndicators, aiSignalState, isScalpingMode)
+                Spacer(Modifier.height(10.dp))
+                ProgressEntryCard(aiSignalState, isScalpingMode)
                 Spacer(Modifier.height(10.dp))
                 RecommendationCard(aiSignalState, isScalpingMode)
                 Spacer(Modifier.height(10.dp))
@@ -199,7 +205,12 @@ fun DetailChartScreen(
                 Spacer(Modifier.height(10.dp))
                 ImportantLevelsCard(aiSignalState, marketStructure, currentTick?.price ?: 0.0)
                 Spacer(Modifier.height(10.dp))
-                TechnicalDetailsCard(currentIndicators, marketStructure, currentTick?.volume24h ?: 0.0)
+                TechnicalDetailsCard(
+                    currentIndicators,
+                    marketStructure,
+                    currentTick?.volume24h ?: 0.0,
+                    scalping = isScalpingMode
+                )
                 Spacer(Modifier.height(10.dp))
                 MonitorCard(aiSignalState, marketStructure, currentTick?.price ?: 0.0, isShowingCached)
                 Spacer(Modifier.height(10.dp))
@@ -226,7 +237,13 @@ fun DetailChartScreen(
 private fun PriceHeader(price: Double, change: Double) {
     val changeColor = if (change >= 0) TvGreen else TvRed
     Column(Modifier.fillMaxWidth()) {
-        Text(PriceFormatter.formatPrice(price), fontSize = 29.sp, fontWeight = FontWeight.Black, color = TvTextPrimary, modifier = Modifier.testTag("live_price_header"))
+        SmoothPriceText(
+            price = price,
+            color = TvTextPrimary,
+            fontSize = 29.sp,
+            fontWeight = FontWeight.Black,
+            modifier = Modifier.testTag("live_price_header")
+        )
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(PriceFormatter.formatPercentage(change), fontSize = 16.sp, fontWeight = FontWeight.Bold, color = changeColor)
             Spacer(Modifier.width(7.dp))
@@ -274,19 +291,19 @@ private fun WhyCard(signal: AISignalState, indicators: TechnicalIndicators, stru
 private fun buildSimpleReasons(signal: AISignalState, indicators: TechnicalIndicators, structure: MarketStructureSnapshot): List<String> {
     val result = mutableListOf<String>()
     if (indicators.ema20.isFinite() && indicators.ema50.isFinite())
-        result += if (indicators.ema20 > indicators.ema50) "Harga rata-rata jangka pendek masih di atas rata-rata menengah." else "Rata-rata harga jangka pendek masih di bawah rata-rata menengah."
+        result += if (indicators.ema20 > indicators.ema50) "EMA fast masih di atas EMA slow." else "EMA fast masih di bawah EMA slow."
     if (indicators.macdHist.isFinite())
-        result += if (indicators.macdHist >= 0) "Momentum naik masih lebih dominan." else "Momentum turun masih lebih dominan."
+        result += if (indicators.macdHist >= 0) "Momentum MACD masih naik." else "Momentum MACD masih turun."
     when (structure.trend) {
         "Bullish structure" -> result += "Struktur pasar membentuk Higher High dan Higher Low."
         "Bearish structure" -> result += "Struktur pasar membentuk Lower High dan Lower Low."
     }
     if (indicators.rsi14.isFinite()) result += when {
-        indicators.rsi14 > 70 -> "RSI sudah tinggi, jadi risiko koreksi perlu diperhatikan."
-        indicators.rsi14 < 30 -> "RSI sudah rendah, jadi potensi pantulan perlu dikonfirmasi."
-        else -> "RSI masih di area tengah, belum menunjukkan kondisi ekstrem."
+        indicators.rsi14 > 70 -> "RSI sudah tinggi, risiko koreksi perlu diperhatikan."
+        indicators.rsi14 < 30 -> "RSI sudah rendah, potensi pantulan perlu dikonfirmasi."
+        else -> "RSI masih di area tengah, belum ekstrem."
     }
-    if (result.isEmpty()) result += signal.reasoning.firstOrNull() ?: "Data teknikal belum cukup untuk menjelaskan arah pasar."
+    if (result.isEmpty()) result += signal.reasoning.firstOrNull() ?: "Data teknikal belum cukup."
     return result.take(3)
 }
 

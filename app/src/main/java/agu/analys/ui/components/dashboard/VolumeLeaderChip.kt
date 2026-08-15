@@ -21,6 +21,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import agu.analys.model.MarketTick
+import agu.analys.ui.animation.SmoothPriceText
 import agu.analys.ui.theme.TvTextPrimary
 import agu.analys.ui.theme.TvTextSecondary
 import agu.analys.util.PriceFormatter
@@ -70,13 +71,11 @@ fun VolumeLeaderChip(
                 }
             }
             Spacer(Modifier.height(8.dp))
-            Text(
-                PriceFormatter.formatPrice(tick.price),
+            SmoothPriceText(
+                price = tick.price,
                 color = TvTextPrimary,
                 fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                fontWeight = FontWeight.Bold
             )
             Spacer(Modifier.height(2.dp))
             Text(

@@ -12,10 +12,28 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout main
+      # KUNCI: selalu checkout branch tempat workflow di-run.
+      # Tidak ada hardcode main. Tidak ada input yang bisa salah pilih.
+      # Run dari backup → build backup. Run dari main → build main.
+      - name: Checkout workflow branch
         uses: actions/checkout@v5
         with:
-          ref: main
+          ref: ${{ github.ref }}
+
+      - name: Verify build source
+        run: |
+          BRANCH="${GITHUB_REF_NAME}"
+          SHA="$(git rev-parse --short HEAD)"
+          MSG="$(git log -1 --pretty=%s)"
+          echo "========================================"
+          echo " BUILD SOURCE (locked to workflow ref)"
+          echo " Branch : $BRANCH"
+          echo " Commit : $SHA"
+          echo " Message: $MSG"
+          echo " Ref    : $GITHUB_REF"
+          echo "========================================"
+          test -n "$BRANCH"
+          test -n "$SHA"
 
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
@@ -35,6 +53,6 @@ jobs:
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: analisa-pasar-debug
+          name: analisa-pasar-debug-${{ github.ref_name }}-${{ github.sha }}
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error

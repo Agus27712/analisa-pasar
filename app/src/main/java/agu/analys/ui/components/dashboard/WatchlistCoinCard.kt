@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.sp
 import agu.analys.model.MarketTick
 import agu.analys.model.TradingPair
 import agu.analys.model.WorthCoinInfo
+import agu.analys.ui.animation.SmoothPriceText
 import agu.analys.ui.theme.TvGreen
 import agu.analys.ui.theme.TvRed
 import agu.analys.ui.theme.TvTextPrimary
@@ -74,13 +75,16 @@ fun WatchlistCoinCard(
                     Text(pair.symbol, color = TvTextSecondary, fontSize = 9.sp, fontWeight = FontWeight.Medium)
                 }
                 Column(horizontalAlignment = Alignment.End) {
-                    Text(
-                        tick?.let { PriceFormatter.formatPrice(it.price) } ?: "—",
-                        color = TvTextPrimary,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        maxLines = 1
-                    )
+                    if (tick != null) {
+                        SmoothPriceText(
+                            price = tick.price,
+                            color = TvTextPrimary,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                    } else {
+                        Text("—", color = TvTextPrimary, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1)
+                    }
                     Spacer(Modifier.height(2.dp))
                     Text(
                         tick?.let { PriceFormatter.formatPercentage(it.change24h) } ?: "—",
