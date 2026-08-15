@@ -105,7 +105,7 @@ fun SimpleComposeChart(
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .then(if (portrait) Modifier.height(320.dp) else Modifier)
+            .then(if (portrait) Modifier.height(290.dp) else Modifier)
             .border(1.dp, Color(0x1AFFFFFF), RoundedCornerShape(16.dp)),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = TvCardBackground)
