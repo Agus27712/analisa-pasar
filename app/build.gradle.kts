@@ -7,67 +7,34 @@ plugins {
 android {
   namespace = "agu.analys"
   compileSdk = 36
-
   defaultConfig {
     applicationId = "agu.analys"
     minSdk = 24
     targetSdk = 35
-    versionCode = providers.gradleProperty("VERSION_CODE").map(String::toInt).getOrElse(6)
-    versionName = "1.1.8"
+    versionCode = providers.gradleProperty("VERSION_CODE").map(String::toInt).getOrElse(7)
+    versionName = "1.1.9"
   }
-
   signingConfigs {
     create("release") {
       val keystorePath = System.getenv("RELEASE_KEYSTORE_PATH")
       val storePassword = System.getenv("RELEASE_STORE_PASSWORD")
       val keyAlias = System.getenv("RELEASE_KEY_ALIAS")
       val keyPassword = System.getenv("RELEASE_KEY_PASSWORD")
-
-      if (!keystorePath.isNullOrBlank() && !storePassword.isNullOrBlank() &&
-        !keyAlias.isNullOrBlank() && !keyPassword.isNullOrBlank()) {
-        storeFile = file(keystorePath)
-        this.storePassword = storePassword
-        this.keyAlias = keyAlias
-        this.keyPassword = keyPassword
+      if (!keystorePath.isNullOrBlank() && !storePassword.isNullOrBlank() && !keyAlias.isNullOrBlank() && !keyPassword.isNullOrBlank()) {
+        storeFile = file(keystorePath); this.storePassword = storePassword; this.keyAlias = keyAlias; this.keyPassword = keyPassword
       }
     }
   }
-
   buildTypes {
-    release {
-      isMinifyEnabled = false
-      isShrinkResources = false
-      signingConfig = signingConfigs.getByName("release")
-      proguardFiles(
-        getDefaultProguardFile("proguard-android-optimize.txt"),
-        "proguard-rules.pro"
-      )
-    }
-    debug {
-      isMinifyEnabled = false
-    }
+    release { isMinifyEnabled = false; isShrinkResources = false; signingConfig = signingConfigs.getByName("release"); proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro") }
+    debug { isMinifyEnabled = false }
   }
-
-  compileOptions {
-    sourceCompatibility = JavaVersion.VERSION_17
-    targetCompatibility = JavaVersion.VERSION_17
-  }
-
-  buildFeatures {
-    compose = true
-    buildConfig = true
-  }
-
-  packaging {
-    resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
-  }
+  compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
+  buildFeatures { compose = true; buildConfig = true }
+  packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
 }
 
-kotlin {
-  compilerOptions {
-    jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
-  }
-}
+kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }
 
 secrets {
   propertiesFileName = ".env"
@@ -95,7 +62,6 @@ dependencies {
   implementation(libs.okhttp)
   implementation(libs.kotlinx.serialization.json)
   implementation(libs.androidx.datastore.preferences)
-
   testImplementation(libs.junit)
   testImplementation(libs.robolectric)
   testImplementation(libs.androidx.core)
@@ -103,6 +69,5 @@ dependencies {
   testImplementation(libs.roborazzi)
   testImplementation(libs.roborazzi.compose)
   testImplementation(libs.roborazzi.junit.rule)
-
   debugImplementation(libs.androidx.compose.ui.tooling)
 }
