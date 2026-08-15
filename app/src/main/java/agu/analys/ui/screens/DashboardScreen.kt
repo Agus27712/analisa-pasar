@@ -75,7 +75,7 @@ fun DashboardScreen(
             onToggle = { viewModel.setScalpingMode(it) },
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp)
         )
-        CompactMarketOverview(dashboardTicks, worthCoins, connectionState is MarketConnectionState.Connected)
+        CompactMarketOverview(dashboardTicks, connectionState is MarketConnectionState.Connected)
 
         LazyColumn(
             Modifier.fillMaxSize(),
