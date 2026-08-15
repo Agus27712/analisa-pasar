@@ -117,43 +117,24 @@ fun SettingsScreen(
         }
 
         val context = LocalContext.current
-        var repoInput by remember { mutableStateOf("user/nama-repo") }
         val releaseInfo by viewModel.githubReleaseInfo.collectAsState()
         val isChecking by viewModel.isCheckingUpdate.collectAsState()
         val downloadProgress by viewModel.updateDownloadProgress.collectAsState()
 
         Spacer(modifier = Modifier.height(16.dp))
         Column(modifier = Modifier.fillMaxWidth().background(TvCardBackground, RoundedCornerShape(14.dp)).padding(16.dp)) {
-            Text("PEMBARUAN APLIKASI (GITHUB RELEASE)", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TvGreen, letterSpacing = 1.sp)
+            Text("PEMBARUAN APLIKASI", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TvGreen, letterSpacing = 1.sp)
             Spacer(modifier = Modifier.height(8.dp))
-            Text("Masukkan repositori GitHub (owner/repo) untuk mengunduh update APK terbaru langsung dari aplikasi.", fontSize = 12.sp, color = TvTextSecondary, lineHeight = 16.sp)
+            Text("Update APK otomatis dari release resmi Analisa Pasar.", fontSize = 12.sp, color = TvTextSecondary, lineHeight = 16.sp)
             Spacer(modifier = Modifier.height(10.dp))
-            OutlinedTextField(
-                value = repoInput,
-                onValueChange = { repoInput = it },
-                modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("username/repository", color = TvTextSecondary) },
-                singleLine = true,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = TvGreen,
-                    unfocusedBorderColor = Color(0x33FFFFFF),
-                    focusedTextColor = TvTextPrimary,
-                    unfocusedTextColor = TvTextPrimary,
-                    cursorColor = TvGreen,
-                    focusedContainerColor = Color(0xFF1A1D24),
-                    unfocusedContainerColor = Color(0xFF1A1D24)
-                ),
-                shape = RoundedCornerShape(12.dp)
-            )
-            Spacer(modifier = Modifier.height(8.dp))
             Button(
-                onClick = { viewModel.checkGitHubUpdate(repoInput.trim()) },
+                onClick = { viewModel.checkGitHubUpdate(agu.analys.util.GitHubUpdater.DEFAULT_REPO) },
                 enabled = !isChecking,
                 colors = ButtonDefaults.buttonColors(containerColor = TvGreen),
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(if (isChecking) "Memeriksa Update..." else "Cek Update dari GitHub", fontWeight = FontWeight.Bold, color = Color.Black)
+                Text(if (isChecking) "Memeriksa Update..." else "Cek Update", fontWeight = FontWeight.Bold, color = Color.Black)
             }
 
             releaseInfo?.let { release ->
@@ -175,7 +156,7 @@ fun SettingsScreen(
                         }
                     } else {
                         Button(
-                            onClick = { viewModel.downloadAndInstallUpdate(context, repoInput.trim()) },
+                            onClick = { viewModel.downloadAndInstallUpdate(context, agu.analys.util.GitHubUpdater.DEFAULT_REPO) },
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2)),
                             shape = RoundedCornerShape(10.dp),
                             modifier = Modifier.fillMaxWidth()
