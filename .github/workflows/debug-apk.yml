@@ -1,38 +1,45 @@
-name: Debug APK
+name: Debug Code
 
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - backup
 
 permissions:
   contents: read
 
+# Jangan antrekan banyak debug untuk commit lama.
+# Jika ada push baru saat debug berjalan, yang lama dibatalkan.
+concurrency:
+  group: debug-code-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  build-debug:
-    name: Build Debug APK
+  debug-code:
+    name: Compile Debug Code
     runs-on: ubuntu-latest
 
     steps:
-      # KUNCI: selalu checkout branch tempat workflow di-run.
-      # Tidak ada hardcode main. Tidak ada input yang bisa salah pilih.
-      # Run dari backup → build backup. Run dari main → build main.
+      # KUNCI: selalu checkout branch tempat workflow dijalankan.
+      # Push ke backup -> validasi kode backup.
       - name: Checkout workflow branch
         uses: actions/checkout@v5
         with:
           ref: ${{ github.ref }}
 
-      - name: Verify build source
+      - name: Verify source
         run: |
           BRANCH="${GITHUB_REF_NAME}"
           SHA="$(git rev-parse --short HEAD)"
           MSG="$(git log -1 --pretty=%s)"
           echo "========================================"
-          echo " BUILD SOURCE (locked to workflow ref)"
+          echo " DEBUG SOURCE (locked to workflow ref)"
           echo " Branch : $BRANCH"
           echo " Commit : $SHA"
           echo " Message: $MSG"
           echo " Ref    : $GITHUB_REF"
           echo "========================================"
-          test -n "$BRANCH"
+          test "$BRANCH" = "backup"
           test -n "$SHA"
 
       - name: Make Gradle wrapper executable
@@ -47,12 +54,7 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Build debug APK
-        run: ./gradlew assembleDebug --stacktrace
-
-      - name: Upload debug APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: analisa-pasar-debug-${{ github.ref_name }}-${{ github.sha }}
-          path: app/build/outputs/apk/debug/*.apk
-          if-no-files-found: error
+      # Fokus hanya validasi kode Kotlin/Compose.
+      # Tidak membuat APK dan tidak upload artifact.
+      - name: Compile debug code
+        run: ./gradlew :app:compileDebugKotlin --stacktrace
