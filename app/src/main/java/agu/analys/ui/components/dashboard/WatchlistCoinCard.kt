@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.sp
 import agu.analys.model.MarketTick
 import agu.analys.model.TradingPair
 import agu.analys.model.WorthCoinInfo
+import agu.analys.ui.animation.AnimatedMetricText
 import agu.analys.ui.animation.SmoothPriceText
 import agu.analys.ui.theme.TvGreen
 import agu.analys.ui.theme.TvRed
@@ -44,7 +45,9 @@ fun WatchlistCoinCard(
         else -> TvTextSecondary
     }
     val score = worth?.worthScore
-    val aiColor = score?.let(::scoreColor) ?: TvGreen
+    // Skor rendah bukan otomatis berarti "sell". Merah hanya dipakai untuk
+    // pergerakan harga yang memang negatif, supaya watchlist tidak terasa menghukum.
+    val aiColor = score?.let(::scoreColor) ?: TvTextSecondary
     val rangePct = tick?.let { if (it.low24h > 0) ((it.high24h - it.low24h) / it.low24h) * 100.0 else 0.0 } ?: 0.0
 
     Card(
@@ -86,8 +89,8 @@ fun WatchlistCoinCard(
                         Text("—", color = TvTextPrimary, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1)
                     }
                     Spacer(Modifier.height(2.dp))
-                    Text(
-                        tick?.let { PriceFormatter.formatPercentage(it.change24h) } ?: "—",
+                    AnimatedMetricText(
+                        value = tick?.let { PriceFormatter.formatPercentage(it.change24h) } ?: "—",
                         color = changeColor,
                         fontSize = 9.sp,
                         fontWeight = FontWeight.Bold
@@ -98,13 +101,18 @@ fun WatchlistCoinCard(
             Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (score != null) {
-                    Text("SKOR $score/100", color = aiColor, fontSize = 9.sp, fontWeight = FontWeight.ExtraBold)
+                    AnimatedMetricText(
+                        value = "SKOR $score/100",
+                        color = aiColor,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.ExtraBold
+                    )
                     Spacer(Modifier.width(7.dp))
                     Text("•", color = TvTextSecondary, fontSize = 8.sp)
                     Spacer(Modifier.width(7.dp))
                 }
-                Text(
-                    "Vol ${tick?.let { PriceFormatter.formatPrice(it.volume24h) } ?: "—"}  ·  Range ${String.format("%.2f", rangePct)}%",
+                AnimatedMetricText(
+                    value = "Vol ${tick?.let { PriceFormatter.formatPrice(it.volume24h) } ?: "—"}  ·  Range ${String.format("%.2f", rangePct)}%",
                     color = TvTextSecondary,
                     fontSize = 9.sp,
                     fontWeight = FontWeight.Medium,
@@ -114,7 +122,13 @@ fun WatchlistCoinCard(
 
             worth?.recommendation?.takeIf { it.isNotBlank() }?.let { rec ->
                 Spacer(Modifier.height(4.dp))
-                Text(rec, color = aiColor, fontSize = 9.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                AnimatedMetricText(
+                    value = rec,
+                    color = aiColor,
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1
+                )
             }
 
             Spacer(Modifier.height(10.dp))
@@ -162,5 +176,5 @@ fun AssetBadge(asset: String, color: Color) {
 fun scoreColor(score: Int): Color = when {
     score >= 75 -> TvGreen
     score >= 50 -> DashboardColors.Amber
-    else -> TvRed
+    else -> TvTextSecondary
 }
