@@ -1,188 +1,121 @@
 package agu.analys.ui.screens
 
+import android.os.Build
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.MenuBook
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.SystemUpdate
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import agu.analys.BuildConfig
+import agu.analys.config.AiProvider
+import agu.analys.config.MarketDataConfiguration
+import agu.analys.config.TradingFeeConfig
 import agu.analys.ui.theme.TvCardBackground
 import agu.analys.ui.theme.TvGreen
 import agu.analys.ui.theme.TvTextPrimary
 import agu.analys.ui.theme.TvTextSecondary
+import agu.analys.util.AppPreferences
+import agu.analys.util.MarketDataCache
 import agu.analys.viewmodel.TradingViewModel
 
 @Composable
-fun SettingsScreen(
-    viewModel: TradingViewModel,
-    onBack: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    var groqInput by remember { mutableStateOf(viewModel.getGroqApiKey()) }
-    var geminiInput by remember { mutableStateOf(viewModel.getGeminiApiKey()) }
-    var showKey by remember { mutableStateOf(false) }
+fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val prefs = remember { AppPreferences(context) }
+    var scalping by remember { mutableStateOf(prefs.isScalpingMode) }
+    var provider by remember { mutableStateOf(prefs.aiProvider) }
+    var groq by remember { mutableStateOf(prefs.groqApiKey) }
+    var gemini by remember { mutableStateOf(prefs.geminiApiKey) }
+    var fees by remember { mutableStateOf(prefs.tradingFees) }
     var saved by remember { mutableStateOf(false) }
-    var geminiSaved by remember { mutableStateOf(false) }
+    var cacheCleared by remember { mutableStateOf(false) }
     var showLearning by remember { mutableStateOf(false) }
+    if (showLearning) { LearningScreen(viewModel, { showLearning = false }, modifier); return }
 
-    if (showLearning) {
-        LearningScreen(viewModel = viewModel, onBack = { showLearning = false }, modifier = modifier)
-        return
-    }
-
-    Column(
-        modifier = modifier.fillMaxSize().background(Color(0xFF0F1115)).verticalScroll(rememberScrollState()).padding(16.dp)
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Kembali", tint = TvTextPrimary) }
-            Text("Settings & Tutorial", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = TvTextPrimary)
+    Column(modifier.fillMaxSize().background(Color(0xFF0F1115)).verticalScroll(rememberScrollState()).padding(14.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Kembali", tint = TvTextPrimary) }; Text("Settings", fontSize = 19.sp, fontWeight = FontWeight.ExtraBold, color = TvTextPrimary) }
+        Spacer(Modifier.height(10.dp))
+        SettingCard("MODE ANALISIS") {
+            Text("Pilih mode di awal. Setelah disimpan, engine menghitung ulang watchlist dan analisis.", fontSize = 12.sp, color = TvTextSecondary)
+            Spacer(Modifier.height(9.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                ModeChoice("SCALPING", scalping, Color(0xFF123D2A), TvGreen) { scalping = true; saved = false }
+                ModeChoice("SWING", !scalping, Color(0xFF15304B), Color(0xFF72B7FF)) { scalping = false; saved = false }
+            }
         }
-
-        Button(onClick = { showLearning = true }, colors = ButtonDefaults.buttonColors(containerColor = TvGreen), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth().padding(top = 10.dp)) {
-            Icon(Icons.Default.MenuBook, null, tint = Color.Black, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(7.dp))
-            Text("Mode Belajar Trading", color = Color.Black, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(10.dp))
+        SettingCard("FEE INDODAX · ALL-IN") {
+            FeeField("BUY MAKER", fees.buyMakerPct) { fees = fees.copy(buyMakerPct = it) }
+            FeeField("BUY TAKER", fees.buyTakerPct) { fees = fees.copy(buyTakerPct = it) }
+            FeeField("SELL MAKER", fees.sellMakerPct) { fees = fees.copy(sellMakerPct = it) }
+            FeeField("SELL TAKER", fees.sellTakerPct) { fees = fees.copy(sellTakerPct = it) }
+            Text("Fee masuk ke kalkulasi net profit dan net R:R. Perubahan fee tidak membutuhkan update APK.", fontSize = 10.sp, color = TvTextSecondary)
         }
-
-        Spacer(modifier = Modifier.height(20.dp))
-        Text("GROQ API KEY (AUDIT AI)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TvTextSecondary, letterSpacing = 1.sp)
-        Spacer(modifier = Modifier.height(6.dp))
-        Text("Audit AI menggunakan OpenAI GPT-OSS 20B yang di-host oleh Groq.", fontSize = 12.sp, color = TvTextSecondary, lineHeight = 16.sp)
-        Spacer(modifier = Modifier.height(8.dp))
-        OutlinedTextField(value = groqInput, onValueChange = { groqInput = it; saved = false }, modifier = Modifier.fillMaxWidth(), placeholder = { Text("gsk_... paste key Groq", color = TvTextSecondary) }, leadingIcon = { Icon(Icons.Default.Key, null, tint = TvTextSecondary) }, trailingIcon = { IconButton(onClick = { showKey = !showKey }) { Icon(if (showKey) Icons.Default.VisibilityOff else Icons.Default.Visibility, null, tint = TvTextSecondary) } }, visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(), singleLine = true, colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = TvGreen, unfocusedBorderColor = Color(0x33FFFFFF), focusedTextColor = TvTextPrimary, unfocusedTextColor = TvTextPrimary, cursorColor = TvGreen, focusedContainerColor = Color(0xFF1A1D24), unfocusedContainerColor = Color(0xFF1A1D24)), shape = RoundedCornerShape(12.dp))
-        Spacer(modifier = Modifier.height(10.dp))
-        Button(onClick = { viewModel.saveGroqApiKey(groqInput); saved = true }, colors = ButtonDefaults.buttonColors(containerColor = TvGreen), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
-            if (saved) { Icon(Icons.Default.CheckCircle, null, tint = Color.Black, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)) }
-            Text(if (saved) "Tersimpan" else "Simpan Groq API Key", fontWeight = FontWeight.Bold, color = Color.Black)
-        }
-
-        Spacer(modifier = Modifier.height(20.dp))
-        Text("GEMINI API KEY (RINGKASAN CHART 24J)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TvTextSecondary, letterSpacing = 1.sp)
-        Spacer(modifier = Modifier.height(6.dp))
-        Text("Summary pergerakan chart & verdik 24 jam.", fontSize = 12.sp, color = TvTextSecondary, lineHeight = 16.sp)
-        Spacer(modifier = Modifier.height(8.dp))
-        OutlinedTextField(value = geminiInput, onValueChange = { geminiInput = it; geminiSaved = false }, modifier = Modifier.fillMaxWidth(), placeholder = { Text("AIzaSy... paste Gemini API key", color = TvTextSecondary) }, leadingIcon = { Icon(Icons.Default.Key, null, tint = TvTextSecondary) }, trailingIcon = { IconButton(onClick = { showKey = !showKey }) { Icon(if (showKey) Icons.Default.VisibilityOff else Icons.Default.Visibility, null, tint = TvTextSecondary) } }, visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(), singleLine = true, colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color(0xFF8E8CD8), unfocusedBorderColor = Color(0x33FFFFFF), focusedTextColor = TvTextPrimary, unfocusedTextColor = TvTextPrimary, cursorColor = Color(0xFF8E8CD8), focusedContainerColor = Color(0xFF1A1D24), unfocusedContainerColor = Color(0xFF1A1D24)), shape = RoundedCornerShape(12.dp))
-        Spacer(modifier = Modifier.height(10.dp))
-        Button(onClick = { viewModel.saveGeminiApiKey(geminiInput); geminiSaved = true }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8E8CD8)), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
-            if (geminiSaved) { Icon(Icons.Default.CheckCircle, null, tint = Color.Black, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)) }
-            Text(if (geminiSaved) "Tersimpan" else "Simpan Gemini API Key", fontWeight = FontWeight.Bold, color = Color.Black)
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-        Column(modifier = Modifier.fillMaxWidth().background(TvCardBackground, RoundedCornerShape(14.dp)).padding(16.dp)) {
-            Text("SUMBER & AI", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TvGreen, letterSpacing = 1.sp)
-            Spacer(modifier = Modifier.height(10.dp))
-            TutorialStep("1", "BPS → scraping BRS publik untuk CPI/IHK nasional")
-            TutorialStep("2", "Groq → OpenAI GPT-OSS 20B untuk audit AI")
-            TutorialStep("3", "Gemini → ringkasan chart 24 jam")
-            TutorialStep("4", "Snapshot BPS divalidasi dan di-cache sebelum dikirim ke AI")
+        Spacer(Modifier.height(10.dp))
+        SettingCard("AI API") {
+            Text("Pilih satu provider aktif. API key provider lain tetap aman tersimpan jika pernah digunakan.", fontSize = 12.sp, color = TvTextSecondary)
             Spacer(Modifier.height(8.dp))
-            Text("Market: INDODAX IDR. CPI/IHK: website resmi BPS. CPI hanya konteks AI, bukan perubahan skor trading.", fontSize = 12.sp, color = TvTextSecondary, lineHeight = 17.sp)
-        }
-
-        val context = LocalContext.current
-        val releaseInfo by viewModel.githubReleaseInfo.collectAsState()
-        val isChecking by viewModel.isCheckingUpdate.collectAsState()
-        val downloadProgress by viewModel.updateDownloadProgress.collectAsState()
-
-        Spacer(modifier = Modifier.height(16.dp))
-        Column(modifier = Modifier.fillMaxWidth().background(TvCardBackground, RoundedCornerShape(14.dp)).padding(16.dp)) {
-            Text("PEMBARUAN APLIKASI", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TvGreen, letterSpacing = 1.sp)
-            Spacer(modifier = Modifier.height(8.dp))
-            Text("Update APK otomatis dari release resmi Analisa Pasar.", fontSize = 12.sp, color = TvTextSecondary, lineHeight = 16.sp)
-            Spacer(modifier = Modifier.height(10.dp))
-            Button(
-                onClick = { viewModel.checkGitHubUpdate(agu.analys.util.GitHubUpdater.DEFAULT_REPO) },
-                enabled = !isChecking,
-                colors = ButtonDefaults.buttonColors(containerColor = TvGreen),
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(if (isChecking) "Memeriksa Update..." else "Cek Update", fontWeight = FontWeight.Bold, color = Color.Black)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                ModeChoice("GROQ", provider == AiProvider.GROQ, Color(0xFF123D2A), TvGreen) { provider = AiProvider.GROQ; saved = false }
+                ModeChoice("GEMINI", provider == AiProvider.GEMINI, Color(0xFF15304B), Color(0xFF72B7FF)) { provider = AiProvider.GEMINI; saved = false }
             }
-
-            releaseInfo?.let { release ->
-                Spacer(modifier = Modifier.height(12.dp))
-                Column(modifier = Modifier.fillMaxWidth().background(Color(0xFF101720), RoundedCornerShape(12.dp)).padding(12.dp)) {
-                    Text("Versi Terbaru: ${release.tagName}", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TvGreen)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(release.releaseNotes, fontSize = 11.sp, color = TvTextPrimary)
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    val progress = downloadProgress
-                    if (progress != null) {
-                        if (progress in 0..99) {
-                            Text("Mengunduh APK... $progress%", fontSize = 12.sp, color = TvGreen, fontWeight = FontWeight.Bold)
-                        } else if (progress == 100) {
-                            Text("Unduhan selesai. Membuka installer...", fontSize = 12.sp, color = TvGreen, fontWeight = FontWeight.Bold)
-                        } else {
-                            Text("Gagal mengunduh APK.", fontSize = 12.sp, color = Color.Red, fontWeight = FontWeight.Bold)
-                        }
-                    } else {
-                        Button(
-                            onClick = { viewModel.downloadAndInstallUpdate(context, agu.analys.util.GitHubUpdater.DEFAULT_REPO) },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2)),
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("Download & Install APK", fontWeight = FontWeight.Bold, color = Color.White)
-                        }
-                    }
-                }
-            }
+            Spacer(Modifier.height(8.dp))
+            if (provider == AiProvider.GROQ) OutlinedTextField(groq, { groq = it; saved = false }, modifier = Modifier.fillMaxWidth(), singleLine = true, label = { Text("Groq API Key") }, visualTransformation = PasswordVisualTransformation(), leadingIcon = { Icon(Icons.Default.Key, null) })
+            else OutlinedTextField(gemini, { gemini = it; saved = false }, modifier = Modifier.fillMaxWidth(), singleLine = true, label = { Text("Gemini API Key") }, visualTransformation = PasswordVisualTransformation(), leadingIcon = { Icon(Icons.Default.Key, null) })
         }
-
-        Spacer(modifier = Modifier.height(16.dp))
-        Column(modifier = Modifier.fillMaxWidth().background(TvCardBackground, RoundedCornerShape(14.dp)).padding(16.dp)) {
-            Text("CATATAN", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TvTextSecondary, letterSpacing = 1.sp)
-            Spacer(modifier = Modifier.height(8.dp))
-            Text("• Tidak ada data mock — sinyal menunggu candle nyata", fontSize = 12.sp, color = TvTextPrimary)
-            Text("• Sinyal engine rule-based technical analysis, bukan jaminan profit", fontSize = 12.sp, color = TvTextPrimary)
-            Text("• Jangan commit API key ke GitHub", fontSize = 12.sp, color = TvTextPrimary)
+        Spacer(Modifier.height(10.dp))
+        SettingCard("LEARNING") {
+            Text("Learning hanya membantu memahami alasan engine dan tidak mengubah sinyal.", fontSize = 12.sp, color = TvTextSecondary)
+            Spacer(Modifier.height(7.dp)); Button(onClick = { showLearning = true }, colors = ButtonDefaults.buttonColors(containerColor = TvCardBackground), modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.MenuBook, null); Spacer(Modifier.width(6.dp)); Text("Mode Belajar Trading") }
         }
+        Spacer(Modifier.height(10.dp))
+        SettingCard("SUMBER DATA") {
+            Text("Sumber aktif: ${MarketDataConfiguration.activeSource.label}", color = TvTextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            Text("Tipe data: REST + WebSocket", color = TvTextSecondary, fontSize = 11.sp)
+            Text("Provider lain hanya placeholder kode untuk pengembangan berikutnya. UI tidak menyediakan pilihan sumber.", color = TvTextSecondary, fontSize = 10.sp)
+        }
+        Spacer(Modifier.height(10.dp))
+        SettingCard("PEMBARUAN APK") {
+            Text("Versi aplikasi: ${BuildConfig.VERSION_NAME}", color = TvTextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            val releaseInfo by viewModel.githubReleaseInfo.collectAsState()
+            val checking by viewModel.isCheckingUpdate.collectAsState()
+            val progress by viewModel.updateDownloadProgress.collectAsState()
+            Spacer(Modifier.height(7.dp)); Button(onClick = { viewModel.checkGitHubUpdate(agu.analys.util.GitHubUpdater.DEFAULT_REPO) }, enabled = !checking, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = TvGreen)) { Icon(Icons.Default.SystemUpdate, null, tint = Color.Black); Spacer(Modifier.width(6.dp)); Text(if (checking) "Memeriksa..." else "Cek Update", color = Color.Black, fontWeight = FontWeight.Bold) }
+            releaseInfo?.let { release -> Spacer(Modifier.height(7.dp)); Text("Tersedia: ${release.tagName}", color = TvGreen, fontSize = 12.sp, fontWeight = FontWeight.Bold); if (progress == null) Button(onClick = { viewModel.downloadAndInstallUpdate(context, agu.analys.util.GitHubUpdater.DEFAULT_REPO) }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF087FF5))) { Text("Download & Install", color = Color.White, fontWeight = FontWeight.Bold) } else Text(if (progress == 100) "Unduhan selesai, installer dibuka." else "Mengunduh... $progress%", color = TvGreen, fontSize = 11.sp) }
+        }
+        Spacer(Modifier.height(10.dp))
+        SettingCard("CACHE APLIKASI") {
+            Text("Hanya membersihkan cache market aplikasi. Mode, fee, API key, dan watchlist tetap tersimpan.", color = TvTextSecondary, fontSize = 11.sp)
+            Spacer(Modifier.height(7.dp)); Button(onClick = { MarketDataCache(context).clearAll(); cacheCleared = true }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2A3540))) { Icon(Icons.Default.DeleteSweep, null); Spacer(Modifier.width(6.dp)); Text(if (cacheCleared) "Cache dibersihkan" else "Bersihkan Cache") }
+        }
+        Spacer(Modifier.height(12.dp))
+        Button(onClick = { prefs.isScalpingMode = scalping; prefs.aiProvider = provider; prefs.groqApiKey = groq; prefs.geminiApiKey = gemini; prefs.tradingFees = fees; viewModel.setScalpingMode(scalping); saved = true }, modifier = Modifier.fillMaxWidth().height(48.dp), colors = ButtonDefaults.buttonColors(containerColor = TvGreen), shape = RoundedCornerShape(12.dp)) { if (saved) Icon(Icons.Default.CheckCircle, null, tint = Color.Black); Spacer(Modifier.width(5.dp)); Text(if (saved) "Tersimpan" else "Simpan", color = Color.Black, fontWeight = FontWeight.Black) }
+        Spacer(Modifier.height(20.dp))
     }
 }
 
 @Composable
-private fun TutorialStep(num: String, text: String) {
-    Row(modifier = Modifier.padding(vertical = 4.dp)) {
-        Text("$num.", fontWeight = FontWeight.Bold, color = TvGreen, fontSize = 13.sp, modifier = Modifier.width(20.dp))
-        Text(text, fontSize = 13.sp, color = TvTextPrimary, lineHeight = 18.sp)
-    }
-}
+private fun SettingCard(title: String, content: @Composable ColumnScope.() -> Unit) { Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = TvCardBackground)) { Column(Modifier.padding(14.dp)) { Text(title, color = TvGreen, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 0.7.sp); Spacer(Modifier.height(8.dp)); content() } } }
+
+@Composable
+private fun ModeChoice(label: String, selected: Boolean, bg: Color, fg: Color, onClick: () -> Unit) { Button(onClick = onClick, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = if (selected) bg else Color(0xFF1A2028)), shape = RoundedCornerShape(10.dp)) { Text(label, color = if (selected) fg else TvTextSecondary, fontWeight = FontWeight.ExtraBold, fontSize = 11.sp) } }
+
+@Composable
+private fun FeeField(label: String, value: Double, onValue: (Double) -> Unit) { OutlinedTextField(value = String.format("%.2f", value), onValueChange = { it.replace(',', '.').toDoubleOrNull()?.let(onValue) }, modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp), singleLine = true, label = { Text(label) }, suffix = { Text("%") }) }

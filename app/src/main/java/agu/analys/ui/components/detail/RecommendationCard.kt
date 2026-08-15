@@ -1,16 +1,23 @@
 package agu.analys.ui.components.detail
 
+import android.content.ClipboardManager
+import android.content.Context
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.TrendingDown
 import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import agu.analys.config.FeeCalculator
 import agu.analys.model.AISignalState
 import agu.analys.model.ScalpingStage
 import agu.analys.model.SignalAction
@@ -18,89 +25,58 @@ import agu.analys.ui.theme.TvGreen
 import agu.analys.ui.theme.TvRed
 import agu.analys.ui.theme.TvTextPrimary
 import agu.analys.ui.theme.TvTextSecondary
+import agu.analys.util.AppPreferences
 import agu.analys.util.PriceFormatter
 
 @Composable
 fun RecommendationCard(signal: AISignalState, scalping: Boolean) {
-    if (scalping) {
-        val stage = signal.scalpingStage
-        val color = when (stage) {
-            ScalpingStage.ENTRY, ScalpingStage.STRONG_ENTRY ->
-                if (signal.action == SignalAction.SELL) TvRed else TvGreen
-            else -> WarningAmber
-        }
-        val title = when (stage) {
-            ScalpingStage.ENTRY -> if (signal.action == SignalAction.SELL) "SHORT ENTRY" else "LONG ENTRY"
-            ScalpingStage.STRONG_ENTRY -> if (signal.action == SignalAction.SELL) "SHORT ENTRY KUAT" else "LONG ENTRY KUAT"
-            ScalpingStage.WAIT_PULLBACK -> "TUNGGU KONFIRMASI"
-            ScalpingStage.WATCH -> "WATCH"
-            ScalpingStage.HOLD -> "TAHAN / TUNGGU"
-        }
-        val description = when (stage) {
-            ScalpingStage.ENTRY, ScalpingStage.STRONG_ENTRY ->
-                "Trigger 1M sudah searah dengan bias 1H dan setup 15M."
-            ScalpingStage.WAIT_PULLBACK ->
-                "Trend masih mendukung. Bukan berarti dilarang beli — entry sekarang berisiko mengejar. Pilih jalur pullback bersih atau tunggu trigger momentum 1M."
-            ScalpingStage.WATCH ->
-                "Bias atau setup mulai terbentuk. Tunggu konfirmasi 1M sebelum masuk."
-            ScalpingStage.HOLD ->
-                "Belum ada setup scalping yang cukup kuat untuk entry."
-        }
-        AnalysisCard {
-            SectionTitle(
-                "REKOMENDASI",
-                when {
-                    signal.action == SignalAction.SELL -> Icons.Default.TrendingDown
-                    stage == ScalpingStage.ENTRY || stage == ScalpingStage.STRONG_ENTRY -> Icons.Default.TrendingUp
-                    else -> Icons.Default.Shield
-                }
-            )
-            Spacer(Modifier.height(8.dp))
-            Text(title, fontSize = 23.sp, fontWeight = FontWeight.Black, color = color)
-            Spacer(Modifier.height(5.dp))
-            Text(description, fontSize = 14.sp, color = TvTextPrimary, lineHeight = 20.sp)
-            if (stage == ScalpingStage.ENTRY || stage == ScalpingStage.STRONG_ENTRY) {
-                Spacer(Modifier.height(10.dp))
-                Text("Entry  ${PriceFormatter.formatPrice(signal.entryPrice)}", fontSize = 13.sp, color = TvTextPrimary)
-                Text("SL     ${PriceFormatter.formatPrice(signal.stopLoss)}", fontSize = 13.sp, color = TvTextPrimary)
-                Text("TP1    ${PriceFormatter.formatPrice(signal.targetPrice1)}", fontSize = 13.sp, color = TvTextPrimary)
-                Text("TP2    ${PriceFormatter.formatPrice(signal.targetPrice2)}", fontSize = 13.sp, color = TvTextPrimary)
-                Text(signal.riskRewardRatio, fontSize = 12.sp, color = TvTextSecondary, modifier = Modifier.padding(top = 4.dp))
-            }
-            Spacer(Modifier.height(9.dp))
-            Text("Kekuatan setup: ${signal.confidence}/100", fontSize = 13.sp, color = TvTextSecondary)
-        }
-    } else {
-        val color = when (signal.action) {
-            SignalAction.BUY -> TvGreen
-            SignalAction.SELL -> TvRed
-            SignalAction.HOLD -> WarningAmber
-        }
-        val title = when (signal.action) {
-            SignalAction.BUY -> "BISA PERTIMBANGKAN BELI"
-            SignalAction.SELL -> "PERTIMBANGKAN JUAL"
-            SignalAction.HOLD -> "TAHAN / TUNGGU"
-        }
-        val description = when (signal.action) {
-            SignalAction.BUY -> "Tren cukup mendukung, tetapi tetap gunakan area masuk dan batas risiko."
-            SignalAction.SELL -> "Tekanan turun lebih dominan. Jangan buru-buru masuk sebelum struktur membaik."
-            SignalAction.HOLD -> "Belum ada alasan yang cukup kuat untuk masuk atau keluar sekarang."
-        }
-        AnalysisCard {
-            SectionTitle(
-                "REKOMENDASI",
-                when (signal.action) {
-                    SignalAction.BUY -> Icons.Default.TrendingUp
-                    SignalAction.SELL -> Icons.Default.TrendingDown
-                    SignalAction.HOLD -> Icons.Default.Shield
-                }
-            )
-            Spacer(Modifier.height(8.dp))
-            Text(title, fontSize = 23.sp, fontWeight = FontWeight.Black, color = color)
-            Spacer(Modifier.height(5.dp))
-            Text(description, fontSize = 14.sp, color = TvTextPrimary, lineHeight = 20.sp)
-            Spacer(Modifier.height(9.dp))
-            Text("Kekuatan sinyal: ${signal.confidence}/100", fontSize = 13.sp, color = TvTextSecondary)
-        }
+    val context = LocalContext.current
+    val fees = AppPreferences(context).tradingFees
+    val stage = signal.scalpingStage
+    val buyReady = signal.action == SignalAction.BUY && signal.entryPrice > 0.0
+    val feeResult = FeeCalculator.roundTrip(signal.entryPrice, signal.stopLoss, signal.targetPrice1, fees)
+    val title = when {
+        buyReady -> "BUY READY"
+        scalping && stage == ScalpingStage.WAIT_PULLBACK -> "TUNGGU KONFIRMASI"
+        scalping && stage == ScalpingStage.WATCH -> "WATCH"
+        scalping -> "TAHAN / TUNGGU"
+        signal.action == SignalAction.SELL -> "PERTIMBANGKAN JUAL"
+        else -> "TAHAN / TUNGGU"
     }
+    val color = if (buyReady) TvGreen else if (signal.action == SignalAction.SELL) TvRed else WarningAmber
+    AnalysisCard {
+        SectionTitle("REKOMENDASI EKSEKUSI", if (signal.action == SignalAction.SELL) Icons.Default.TrendingDown else if (buyReady) Icons.Default.TrendingUp else Icons.Default.Shield)
+        Spacer(Modifier.height(7.dp))
+        Text(title, fontSize = 22.sp, fontWeight = FontWeight.Black, color = color)
+        Spacer(Modifier.height(5.dp))
+        Text(if (buyReady) "Peluang entry BUY terdeteksi. Level tetap dipasang manual di Indodax." else "Belum ada setup BUY yang cukup valid untuk dieksekusi.", fontSize = 13.sp, color = TvTextPrimary, lineHeight = 19.sp)
+        if (buyReady) {
+            Spacer(Modifier.height(9.dp))
+            CopyableLevel("Entry", signal.entryPrice, context)
+            CopyableLevel("SL", signal.stopLoss, context)
+            CopyableLevel("TP1", signal.targetPrice1, context)
+            CopyableLevel("TP2", signal.targetPrice2, context)
+            Spacer(Modifier.height(6.dp))
+            Text("Gross R:R  ${signal.riskRewardRatio}", fontSize = 11.sp, color = TvTextSecondary)
+            Text("Fee simulasi taker→taker  ${String.format("%.2f", feeResult.feePct)}%", fontSize = 11.sp, color = TvTextSecondary)
+            Text("Net R:R setelah fee  ${if (feeResult.netRr > 0) String.format("1 : %.2f", feeResult.netRr) else "tidak layak"}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = if (feeResult.netRr >= 1.5) TvGreen else TvRed)
+        }
+        Spacer(Modifier.height(7.dp))
+        Text("Kekuatan setup: ${signal.confidence}/100", fontSize = 11.sp, color = TvTextSecondary)
+    }
+}
+
+@Composable
+private fun CopyableLevel(label: String, price: Double, context: Context) {
+    Row(Modifier.fillMaxWidth().clickable { copy(context, price) }.padding(vertical = 4.dp)) {
+        Text(label, fontSize = 13.sp, color = TvTextSecondary, modifier = Modifier.width(55.dp))
+        Text(PriceFormatter.formatPrice(price), fontSize = 13.sp, color = TvTextPrimary, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.weight(1f))
+        Icon(Icons.Default.ContentCopy, "Salin", tint = TvTextSecondary, modifier = Modifier.size(15.dp))
+    }
+}
+
+private fun copy(context: Context, price: Double) {
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Harga", PriceFormatter.formatPrice(price)))
 }
