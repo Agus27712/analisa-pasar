@@ -1,6 +1,5 @@
 package agu.analys.ui.screens
 
-import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -46,10 +45,19 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
     var saved by remember { mutableStateOf(false) }
     var cacheCleared by remember { mutableStateOf(false) }
     var showLearning by remember { mutableStateOf(false) }
-    if (showLearning) { LearningScreen(viewModel, { showLearning = false }, modifier); return }
 
-    Column(modifier.fillMaxSize().background(Color(0xFF0F1115)).verticalScroll(rememberScrollState()).padding(14.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Kembali", tint = TvTextPrimary) }; Text("Settings", fontSize = 19.sp, fontWeight = FontWeight.ExtraBold, color = TvTextPrimary) }
+    if (showLearning) {
+        LearningScreen(viewModel = viewModel, onBack = { showLearning = false }, modifier = modifier)
+        return
+    }
+
+    Column(
+        modifier = modifier.fillMaxSize().background(Color(0xFF0F1115)).verticalScroll(rememberScrollState()).padding(14.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Kembali", tint = TvTextPrimary) }
+            Text("Settings", fontSize = 19.sp, fontWeight = FontWeight.ExtraBold, color = TvTextPrimary)
+        }
         Spacer(Modifier.height(10.dp))
         SettingCard("MODE ANALISIS") {
             Text("Pilih mode di awal. Setelah disimpan, engine menghitung ulang watchlist dan analisis.", fontSize = 12.sp, color = TvTextSecondary)
@@ -76,13 +84,14 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                 ModeChoice("GEMINI", provider == AiProvider.GEMINI, Color(0xFF15304B), Color(0xFF72B7FF), Modifier.weight(1f)) { provider = AiProvider.GEMINI; saved = false }
             }
             Spacer(Modifier.height(8.dp))
-            if (provider == AiProvider.GROQ) OutlinedTextField(groq, { groq = it; saved = false }, modifier = Modifier.fillMaxWidth(), singleLine = true, label = { Text("Groq API Key") }, visualTransformation = PasswordVisualTransformation(), leadingIcon = { Icon(Icons.Default.Key, null) })
-            else OutlinedTextField(gemini, { gemini = it; saved = false }, modifier = Modifier.fillMaxWidth(), singleLine = true, label = { Text("Gemini API Key") }, visualTransformation = PasswordVisualTransformation(), leadingIcon = { Icon(Icons.Default.Key, null) })
+            if (provider == AiProvider.GROQ) OutlinedTextField(value = groq, onValueChange = { groq = it; saved = false }, modifier = Modifier.fillMaxWidth(), singleLine = true, label = { Text("Groq API Key") }, visualTransformation = PasswordVisualTransformation(), leadingIcon = { Icon(Icons.Default.Key, null) })
+            else OutlinedTextField(value = gemini, onValueChange = { gemini = it; saved = false }, modifier = Modifier.fillMaxWidth(), singleLine = true, label = { Text("Gemini API Key") }, visualTransformation = PasswordVisualTransformation(), leadingIcon = { Icon(Icons.Default.Key, null) })
         }
         Spacer(Modifier.height(10.dp))
         SettingCard("LEARNING") {
             Text("Learning hanya membantu memahami alasan engine dan tidak mengubah sinyal.", fontSize = 12.sp, color = TvTextSecondary)
-            Spacer(Modifier.height(7.dp)); Button(onClick = { showLearning = true }, colors = ButtonDefaults.buttonColors(containerColor = TvCardBackground), modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.MenuBook, null); Spacer(Modifier.width(6.dp)); Text("Mode Belajar Trading") }
+            Spacer(Modifier.height(7.dp))
+            Button(onClick = { showLearning = true }, colors = ButtonDefaults.buttonColors(containerColor = TvCardBackground), modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.MenuBook, null); Spacer(Modifier.width(6.dp)); Text("Mode Belajar Trading") }
         }
         Spacer(Modifier.height(10.dp))
         SettingCard("SUMBER DATA") {
@@ -96,25 +105,50 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
             val releaseInfo by viewModel.githubReleaseInfo.collectAsState()
             val checking by viewModel.isCheckingUpdate.collectAsState()
             val progress by viewModel.updateDownloadProgress.collectAsState()
-            Spacer(Modifier.height(7.dp)); Button(onClick = { viewModel.checkGitHubUpdate(agu.analys.util.GitHubUpdater.DEFAULT_REPO) }, enabled = !checking, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = TvGreen)) { Icon(Icons.Default.SystemUpdate, null, tint = Color.Black); Spacer(Modifier.width(6.dp)); Text(if (checking) "Memeriksa..." else "Cek Update", color = Color.Black, fontWeight = FontWeight.Bold) }
-            releaseInfo?.let { release -> Spacer(Modifier.height(7.dp)); Text("Tersedia: ${release.tagName}", color = TvGreen, fontSize = 12.sp, fontWeight = FontWeight.Bold); if (progress == null) Button(onClick = { viewModel.downloadAndInstallUpdate(context, agu.analys.util.GitHubUpdater.DEFAULT_REPO) }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF087FF5))) { Text("Download & Install", color = Color.White, fontWeight = FontWeight.Bold) } else Text(if (progress == 100) "Unduhan selesai, installer dibuka." else "Mengunduh... $progress%", color = TvGreen, fontSize = 11.sp) }
+            Spacer(Modifier.height(7.dp))
+            Button(onClick = { viewModel.checkGitHubUpdate(agu.analys.util.GitHubUpdater.DEFAULT_REPO) }, enabled = !checking, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = TvGreen)) { Icon(Icons.Default.SystemUpdate, null, tint = Color.Black); Spacer(Modifier.width(6.dp)); Text(if (checking) "Memeriksa..." else "Cek Update", color = Color.Black, fontWeight = FontWeight.Bold) }
+            releaseInfo?.let { release ->
+                Spacer(Modifier.height(7.dp))
+                Text("Tersedia: ${release.tagName}", color = TvGreen, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                if (progress == null) Button(onClick = { viewModel.downloadAndInstallUpdate(context, agu.analys.util.GitHubUpdater.DEFAULT_REPO) }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF087FF5))) { Text("Download & Install", color = Color.White, fontWeight = FontWeight.Bold) }
+                else Text(if (progress == 100) "Unduhan selesai, installer dibuka." else "Mengunduh... $progress%", color = TvGreen, fontSize = 11.sp)
+            }
         }
         Spacer(Modifier.height(10.dp))
         SettingCard("CACHE APLIKASI") {
             Text("Hanya membersihkan cache market aplikasi. Mode, fee, API key, dan watchlist tetap tersimpan.", color = TvTextSecondary, fontSize = 11.sp)
-            Spacer(Modifier.height(7.dp)); Button(onClick = { MarketDataCache(context).clearAll(); cacheCleared = true }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2A3540))) { Icon(Icons.Default.DeleteSweep, null); Spacer(Modifier.width(6.dp)); Text(if (cacheCleared) "Cache dibersihkan" else "Bersihkan Cache") }
+            Spacer(Modifier.height(7.dp))
+            Button(onClick = { MarketDataCache(context).clearAll(); cacheCleared = true }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2A3540))) { Icon(Icons.Default.DeleteSweep, null); Spacer(Modifier.width(6.dp)); Text(if (cacheCleared) "Cache dibersihkan" else "Bersihkan Cache") }
         }
         Spacer(Modifier.height(12.dp))
-        Button(onClick = { prefs.isScalpingMode = scalping; prefs.aiProvider = provider; prefs.groqApiKey = groq; prefs.geminiApiKey = gemini; prefs.tradingFees = fees; viewModel.setScalpingMode(scalping); saved = true }, modifier = Modifier.fillMaxWidth().height(48.dp), colors = ButtonDefaults.buttonColors(containerColor = TvGreen), shape = RoundedCornerShape(12.dp)) { if (saved) Icon(Icons.Default.CheckCircle, null, tint = Color.Black); Spacer(Modifier.width(5.dp)); Text(if (saved) "Tersimpan" else "Simpan", color = Color.Black, fontWeight = FontWeight.Black) }
+        Button(onClick = { prefs.isScalpingMode = scalping; prefs.aiProvider = provider; prefs.groqApiKey = groq; prefs.geminiApiKey = gemini; prefs.tradingFees = fees; viewModel.setScalpingMode(scalping); saved = true }, modifier = Modifier.fillMaxWidth().height(48.dp), colors = ButtonDefaults.buttonColors(containerColor = TvGreen), shape = RoundedCornerShape(12.dp)) {
+            if (saved) Icon(Icons.Default.CheckCircle, null, tint = Color.Black)
+            Spacer(Modifier.width(5.dp))
+            Text(if (saved) "Tersimpan" else "Simpan", color = Color.Black, fontWeight = FontWeight.Black)
+        }
         Spacer(Modifier.height(20.dp))
     }
 }
 
 @Composable
-private fun SettingCard(title: String, content: @Composable ColumnScope.() -> Unit) { Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = TvCardBackground)) { Column(Modifier.padding(14.dp)) { Text(title, color = TvGreen, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 0.7.sp); Spacer(Modifier.height(8.dp)); content() } }
+private fun SettingCard(title: String, content: @Composable ColumnScope.() -> Unit) {
+    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = TvCardBackground)) {
+        Column(Modifier.padding(14.dp)) {
+            Text(title, color = TvGreen, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 0.7.sp)
+            Spacer(Modifier.height(8.dp))
+            content()
+        }
+    }
+}
 
 @Composable
-private fun ModeChoice(label: String, selected: Boolean, bg: Color, fg: Color, modifier: Modifier = Modifier, onClick: () -> Unit) { Button(onClick = onClick, modifier = modifier, colors = ButtonDefaults.buttonColors(containerColor = if (selected) bg else Color(0xFF1A2028)), shape = RoundedCornerShape(10.dp)) { Text(label, color = if (selected) fg else TvTextSecondary, fontWeight = FontWeight.ExtraBold, fontSize = 11.sp) } }
+private fun ModeChoice(label: String, selected: Boolean, bg: Color, fg: Color, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Button(onClick = onClick, modifier = modifier, colors = ButtonDefaults.buttonColors(containerColor = if (selected) bg else Color(0xFF1A2028)), shape = RoundedCornerShape(10.dp)) {
+        Text(label, color = if (selected) fg else TvTextSecondary, fontWeight = FontWeight.ExtraBold, fontSize = 11.sp)
+    }
+}
 
 @Composable
-private fun FeeField(label: String, value: Double, onValue: (Double) -> Unit) { OutlinedTextField(value = String.format("%.2f", value), onValueChange = { it.replace(',', '.').toDoubleOrNull()?.let(onValue) }, modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp), singleLine = true, label = { Text(label) }, suffix = { Text("%") }) }
+private fun FeeField(label: String, value: Double, onValue: (Double) -> Unit) {
+    OutlinedTextField(value = String.format("%.2f", value), onValueChange = { text -> text.replace(',', '.').toDoubleOrNull()?.let { parsed -> onValue(parsed) } }, modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp), singleLine = true, label = { Text(label) }, suffix = { Text("%") })
+}
