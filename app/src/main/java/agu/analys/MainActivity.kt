@@ -44,7 +44,7 @@ class MainActivity : ComponentActivity() {
                     AppScreen.DETAIL -> DetailChartScreenV2(tradingViewModel, { tradingViewModel.goBack() }, { tradingViewModel.openLandscapeChart() })
                     AppScreen.LANDSCAPE_CHART -> LandscapeChartScreen(tradingViewModel, onBackToDetail = { tradingViewModel.closeLandscapeChart() })
                     AppScreen.SETTINGS -> SettingsScreen(tradingViewModel, onBack = { tradingViewModel.goBack() })
-                    AppScreen.LEARNING -> LearningPathScreen { tradingViewModel.goBack() }
+                    AppScreen.LEARNING -> LearningPathScreen(onBack = { tradingViewModel.goBack() })
                 }
             }
         } }
