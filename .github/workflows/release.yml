@@ -3,7 +3,7 @@ name: Release APK
 on:
   push:
     branches:
-      - backup
+      - main
   workflow_dispatch:
 
 permissions:
@@ -13,22 +13,18 @@ jobs:
   release:
     name: Build signed APK and publish release
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout source
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
-
       - name: Set up JDK 17
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
-
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
-
       - name: Restore release keystore
         env:
           RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
@@ -36,7 +32,6 @@ jobs:
           test -n "$RELEASE_KEYSTORE_BASE64"
           echo "$RELEASE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.keystore"
           test -s "$RUNNER_TEMP/release.keystore"
-
       - name: Build signed release APK
         env:
           RELEASE_KEYSTORE_PATH: ${{ runner.temp }}/release.keystore
@@ -46,51 +41,15 @@ jobs:
         run: |
           chmod +x ./gradlew
           ./gradlew :app:assembleRelease
-
       - name: Read version
         id: version
         shell: bash
         run: |
           VERSION_NAME=$(sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' app/build.gradle.kts | head -1)
-          VERSION_CODE=$(sed -n 's/.*getOrElse(\([0-9]*\)).*/\1/p' app/build.gradle.kts | head -1)
+          VERSION_CODE=$(grep -o 'getOrElse([0-9]*)' app/build.gradle.kts | grep -o '[0-9]*' | head -1)
           test -n "$VERSION_NAME"
           echo "name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
           echo "code=${VERSION_CODE:-0}" >> "$GITHUB_OUTPUT"
-
-      - name: Build release tag
-        id: tag
-        shell: bash
-        run: |
-          TAG="v${{ steps.version.outputs.name }}"
-          echo "name=$TAG" >> "$GITHUB_OUTPUT"
-
-      - name: Prepare release notes
-        shell: bash
-        run: |
-          VERSION="${{ steps.version.outputs.name }}"
-          TAG="v$VERSION"
-          PREVIOUS_TAG=$(git tag --sort=-version:refname | grep -v "^$TAG$" | head -1 || true)
-          if [ -n "$PREVIOUS_TAG" ]; then RANGE="$PREVIOUS_TAG..HEAD"; else RANGE="HEAD"; fi
-          FEATS=$(git log $RANGE --pretty=format:'- %s' --grep='^feat' -i || true)
-          FIXES=$(git log $RANGE --pretty=format:'- %s' --grep='^fix' -i || true)
-          OTHERS=$(git log $RANGE --pretty=format:'- %s' --grep='^\(feat\|fix\)' -i --invert-grep || true)
-          [ -n "$FEATS" ] || FEATS="- Tidak ada perubahan utama yang dicatat."
-          [ -n "$FIXES" ] || FIXES="- Tidak ada bug fix yang dicatat."
-          [ -n "$OTHERS" ] || OTHERS="- Tidak ada peningkatan lain yang dicatat."
-          cat > "$RUNNER_TEMP/release-notes.md" <<EOF
-          ## Versi
-          **v$VERSION** (versionCode ${{ steps.version.outputs.code }})
-
-          ## Perubahan utama
-          $FEATS
-
-          ## Bug fix
-          $FIXES
-
-          ## Peningkatan fitur
-          $OTHERS
-          EOF
-
       - name: Create or update GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -101,7 +60,7 @@ jobs:
           test -f "$APK"
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "$APK" --clobber
-            gh release edit "$TAG" --title "Analysis Pasar v$VERSION" --notes-file "$RUNNER_TEMP/release-notes.md"
+            gh release edit "$TAG" --title "Analysis Pasar v$VERSION" --notes ""
           else
-            gh release create "$TAG" "$APK" --title "Analysis Pasar v$VERSION" --notes-file "$RUNNER_TEMP/release-notes.md" --target "${GITHUB_SHA}"
+            gh release create "$TAG" "$APK" --title "Analysis Pasar v$VERSION" --notes "" --target "${GITHUB_SHA}"
           fi
