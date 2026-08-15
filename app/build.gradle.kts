@@ -11,8 +11,8 @@ android {
     applicationId = "agu.analys"
     minSdk = 24
     targetSdk = 35
-    versionCode = providers.gradleProperty("VERSION_CODE").map(String::toInt).getOrElse(7)
-    versionName = "1.1.9"
+    versionCode = providers.gradleProperty("VERSION_CODE").map(String::toInt).getOrElse(8)
+    versionName = "1.2.0"
   }
   signingConfigs {
     create("release") {
