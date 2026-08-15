@@ -28,7 +28,9 @@ fun DashboardHeader(
     onSettings: () -> Unit,
     onAddAsset: () -> Unit
 ) {
-    Column(Modifier.fillMaxWidth().padding(start = 18.dp, end = 12.dp, top = 10.dp, bottom = 6.dp)) {
+    Column(
+        Modifier.fillMaxWidth().padding(start = 18.dp, end = 12.dp, top = 10.dp, bottom = 8.dp)
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             Box(Modifier.size(9.dp).background(connectionColor, CircleShape))
             Spacer(Modifier.width(7.dp))
@@ -41,25 +43,25 @@ fun DashboardHeader(
                 modifier = Modifier.weight(1f),
                 maxLines = 1
             )
-            IconButton(onClick = onRefresh, modifier = Modifier.size(40.dp)) {
-                Icon(Icons.Default.Refresh, "Refresh", tint = TvTextPrimary, modifier = Modifier.size(24.dp))
+            IconButton(onClick = onRefresh, modifier = Modifier.size(42.dp)) {
+                Icon(Icons.Default.Refresh, "Refresh", tint = TvTextPrimary, modifier = Modifier.size(25.dp))
             }
-            IconButton(onClick = onSettings, modifier = Modifier.size(40.dp)) {
-                Icon(Icons.Default.Settings, "Settings", tint = TvTextPrimary, modifier = Modifier.size(24.dp))
+            IconButton(onClick = onSettings, modifier = Modifier.size(42.dp)) {
+                Icon(Icons.Default.Settings, "Settings", tint = TvTextPrimary, modifier = Modifier.size(25.dp))
             }
             Button(
                 onClick = onAddAsset,
-                colors = ButtonDefaults.buttonColors(containerColor = TvGreen),
-                shape = RoundedCornerShape(12.dp),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = DashboardColors.AccentBlue),
+                shape = RoundedCornerShape(13.dp),
+                contentPadding = PaddingValues(horizontal = 13.dp, vertical = 9.dp),
                 modifier = Modifier.testTag("add_asset_button")
             ) {
-                Icon(Icons.Default.Add, null, Modifier.size(16.dp), tint = Color.Black)
-                Spacer(Modifier.width(4.dp))
-                Text("Tambah Koin", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                Icon(Icons.Default.Add, null, Modifier.size(18.dp), tint = Color.White)
+                Spacer(Modifier.width(5.dp))
+                Text("Tambah Koin", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
             }
         }
-        Spacer(Modifier.height(4.dp))
-        Text("Watchlist Koin", color = TvTextPrimary, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold)
+        Spacer(Modifier.height(7.dp))
+        Text("Watchlist Koin", color = TvTextPrimary, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
     }
 }
