@@ -1,5 +1,6 @@
 package agu.analys.ui.animation
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -36,6 +37,8 @@ object AppAnimations {
     const val SLOW_MS = 420
     /** Tick price: terasa bergerak, tetap cepat untuk scalper (~200–280ms). */
     const val PRICE_MS = 240
+    /** Dashboard metrics: ringan agar live data terasa hidup tanpa mengganggu pembacaan. */
+    const val METRIC_MS = 220
 }
 
 @Composable
@@ -166,4 +169,36 @@ fun SmoothPriceText(
         },
         maxLines = maxLines
     )
+}
+
+/**
+ * Lightweight live metric animation for counters/percentages/aggregates.
+ * Uses Compose AnimatedContent, so no React or extra animation library is needed.
+ */
+@Composable
+fun AnimatedMetricText(
+    value: String,
+    color: Color,
+    fontSize: TextUnit,
+    fontWeight: FontWeight = FontWeight.Bold,
+    modifier: Modifier = Modifier,
+    maxLines: Int = 1
+) {
+    AnimatedContent(
+        targetState = value,
+        modifier = modifier,
+        transitionSpec = {
+            fadeIn(tween(AppAnimations.METRIC_MS)) togetherWith
+                fadeOut(tween(AppAnimations.FAST_MS))
+        },
+        label = "live_metric"
+    ) { animatedValue ->
+        Text(
+            text = animatedValue,
+            color = color,
+            fontSize = fontSize,
+            fontWeight = fontWeight,
+            maxLines = maxLines
+        )
+    }
 }
