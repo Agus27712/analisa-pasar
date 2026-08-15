@@ -1,5 +1,6 @@
 package agu.analys.engine
 
+import agu.analys.config.TradingFeeConfig
 import agu.analys.engine.scalping.ScalpingMtfEvaluator
 import agu.analys.engine.swing.SwingEvaluator
 import agu.analys.model.AISignalState
@@ -20,18 +21,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-/**
- * Thin orchestrator only:
- * - candle/tick buffers
- * - mode routing (swing vs scalping)
- * - MTF candle refresh for scalping
- *
- * Scoring lives in [SwingEvaluator] and [ScalpingMtfEvaluator].
- */
-class LearningTradingEngine(
-    private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default)
-) {
-    var isScalpingMode: Boolean = false
+/** Thin orchestrator: realtime buffers + mode routing. Scoring stays in dedicated evaluators. */
+class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default)) {
+    var isScalpingMode = false
+    var tradingFees = TradingFeeConfig()
+
     private val candles = mutableListOf<CandleBar>()
     private var currentTick: MarketTick? = null
     private var mtfRefreshJob: Job? = null
@@ -54,12 +48,16 @@ class LearningTradingEngine(
     fun onCandleUpdate(candle: CandleBar) {
         if (candle.open <= 0.0 || candle.high <= 0.0 || candle.low <= 0.0 || candle.close <= 0.0) return
         synchronized(candles) {
-            val existing = candles.indexOfFirst { it.timestamp == candle.timestamp }
-            if (existing >= 0) candles[existing] = candle else candles.add(candle)
+            val index = candles.indexOfFirst { it.timestamp == candle.timestamp }
+            if (index >= 0) candles[index] = candle else candles.add(candle)
             candles.sortBy { it.timestamp }
             while (candles.size > 250) candles.removeAt(0)
         }
-        if (!isScalpingMode) runSwing()
+        if (isScalpingMode && candle.timestamp >= (m1Candles.lastOrNull()?.timestamp ?: 0L)) {
+            val updated = (m1Candles + candle).distinctBy { it.timestamp }.sortedBy { it.timestamp }.takeLast(180)
+            m1Candles = updated
+            runScalping()
+        } else if (!isScalpingMode) runSwing()
     }
 
     fun resetForOffline(preserveState: Boolean = false) {
@@ -68,9 +66,7 @@ class LearningTradingEngine(
         mtfRefreshJob = null
         lastMtfRefresh = 0L
         mtfSymbol = ""
-        h1Candles = emptyList()
-        m15Candles = emptyList()
-        m1Candles = emptyList()
+        h1Candles = emptyList(); m15Candles = emptyList(); m1Candles = emptyList()
         synchronized(candles) { candles.clear() }
         if (preserveState) return
         _indicators.value = TechnicalIndicators()
@@ -78,17 +74,7 @@ class LearningTradingEngine(
             action = SignalAction.HOLD,
             confidence = 0,
             sentiment = TrendSentiment.NEUTRAL_CONSOLIDATION,
-            entryPrice = 0.0,
-            targetPrice1 = 0.0,
-            targetPrice2 = 0.0,
-            stopLoss = 0.0,
-            riskRewardRatio = "Tidak tersedia",
-            probabilityScore = 0.0,
-            reasoning = listOf(
-                "OFFLINE: analisis dihentikan.",
-                "Tidak ada harga/candle live yang dapat dipercaya.",
-                "Sambungkan internet untuk menerima data market baru."
-            ),
+            reasoning = listOf("OFFLINE: analisis dihentikan.", "Tidak ada harga/candle live yang dapat dipercaya."),
             timestamp = System.currentTimeMillis(),
             scalpingStage = ScalpingStage.HOLD
         )
@@ -97,20 +83,17 @@ class LearningTradingEngine(
     private fun refreshScalpingTimeframesIfDue(symbol: String) {
         if (symbol.isBlank()) return
         val now = System.currentTimeMillis()
-        if (now - lastMtfRefresh < 15_000L && mtfSymbol == symbol) return
+        if (now - lastMtfRefresh < 30_000L && mtfSymbol == symbol) return
         if (mtfRefreshJob?.isActive == true) return
-        lastMtfRefresh = now
-        mtfSymbol = symbol
+        lastMtfRefresh = now; mtfSymbol = symbol
         mtfRefreshJob = scope.launch {
             val h1Job = async { IndodaxMarketService.fetchCandles(symbol, Timeframe.H1, 120) }
             val m15Job = async { IndodaxMarketService.fetchCandles(symbol, Timeframe.M15, 160) }
             val m1Job = async { IndodaxMarketService.fetchCandles(symbol, Timeframe.M1, 180) }
-            val h1 = h1Job.await()
-            val m15 = m15Job.await()
-            val m1 = m1Job.await()
-            if (h1.size >= 30 && m15.size >= 30 && m1.size >= 30 && currentTick?.symbol == symbol) {
-                h1Candles = h1
-                m15Candles = m15
+            val h1 = h1Job.await(); val m15 = m15Job.await(); val m1 = m1Job.await()
+            if (h1.size >= 55 && m15.size >= 55 && m1.size >= 55 && currentTick?.symbol == symbol) {
+                h1Candles = h1; m15Candles = m15
+                // REST is bootstrap; realtime WebSocket candles replace/update the latest 1M candle.
                 m1Candles = m1
                 runScalping()
             }
@@ -119,19 +102,17 @@ class LearningTradingEngine(
 
     private fun runScalping() {
         val tick = currentTick ?: return
-        val result = ScalpingMtfEvaluator.evaluate(tick.price, h1Candles, m15Candles, m1Candles) ?: return
+        if (h1Candles.size < 55 || m15Candles.size < 55 || m1Candles.size < 55) return
+        val result = ScalpingMtfEvaluator.evaluate(tick.price, h1Candles, m15Candles, m1Candles, tradingFees) ?: return
         _indicators.value = result.indicators
         _signalState.value = result.signal
     }
 
     private fun runSwing() {
-        if (isScalpingMode) {
-            if (h1Candles.isNotEmpty() && m15Candles.isNotEmpty() && m1Candles.isNotEmpty()) runScalping()
-            return
-        }
+        if (isScalpingMode) return
         val tick = currentTick ?: return
         val history = synchronized(candles) { candles.toList() }
-        val result = SwingEvaluator.evaluate(tick.price, history)
+        val result = SwingEvaluator.evaluate(tick.price, history, tradingFees)
         _indicators.value = result.indicators
         _signalState.value = result.signal
     }
