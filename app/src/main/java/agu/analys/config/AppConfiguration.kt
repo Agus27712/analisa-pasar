@@ -1,5 +1,7 @@
 package agu.analys.config
 
+import kotlin.math.abs
+
 enum class AiProvider(val label: String) { GROQ("Groq"), GEMINI("Gemini") }
 
 data class TradingFeeConfig(
@@ -9,18 +11,13 @@ data class TradingFeeConfig(
     val sellTakerPct: Double = 0.42
 )
 
-/** Market-source seam for future providers. UI currently exposes Indodax only. */
 enum class MarketDataSource(val label: String) { INDODAX("Indodax") }
-
-enum class MarketDataTransport(val label: String) {
-    REST("REST"),
-    WEBSOCKET("WebSocket")
-}
+enum class MarketDataTransport(val label: String) { REST("REST"), WEBSOCKET("WebSocket") }
 
 object MarketDataConfiguration {
-    // Future: add Pintu/Pluang/etc. without changing the analysis engine contract.
     val activeSource = MarketDataSource.INDODAX
     val transports = listOf(MarketDataTransport.REST, MarketDataTransport.WEBSOCKET)
+    // Future providers such as Pintu/Pluang belong behind this seam. UI remains Indodax-only for now.
 }
 
 object FeeCalculator {
@@ -31,11 +28,20 @@ object FeeCalculator {
         val netRr: Double
     )
 
-    fun roundTrip(entry: Double, stopLoss: Double, takeProfit: Double, fees: TradingFeeConfig): Result {
+    /** Round-trip fee is buy + sell. Uses absolute price distances so it also works for short setups. */
+    fun roundTrip(
+        entry: Double,
+        stopLoss: Double,
+        takeProfit: Double,
+        fees: TradingFeeConfig,
+        useMaker: Boolean = false
+    ): Result {
         if (entry <= 0.0 || stopLoss <= 0.0 || takeProfit <= 0.0) return Result(0.0, 0.0, 0.0, 0.0)
-        val feePct = (fees.buyTakerPct + fees.sellTakerPct)
-        val reward = ((takeProfit - entry) / entry) * 100.0 - feePct
-        val risk = ((entry - stopLoss) / entry) * 100.0 + feePct
+        val buyFee = if (useMaker) fees.buyMakerPct else fees.buyTakerPct
+        val sellFee = if (useMaker) fees.sellMakerPct else fees.sellTakerPct
+        val feePct = buyFee + sellFee
+        val reward = abs(takeProfit - entry) / entry * 100.0 - feePct
+        val risk = abs(entry - stopLoss) / entry * 100.0 + feePct
         val rr = if (risk > 0.0) reward / risk else 0.0
         return Result(feePct, reward, risk, rr)
     }
