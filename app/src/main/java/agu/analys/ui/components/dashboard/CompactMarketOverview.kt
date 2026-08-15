@@ -16,25 +16,29 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import agu.analys.model.MarketTick
-import agu.analys.model.WorthCoinInfo
 import agu.analys.ui.animation.AnimatedMetricText
 import agu.analys.ui.theme.TvGreen
 import agu.analys.ui.theme.TvRed
 import agu.analys.ui.theme.TvTextPrimary
 import agu.analys.ui.theme.TvTextSecondary
 import agu.analys.util.PriceFormatter
+import kotlin.math.roundToInt
 
 @Composable
 fun CompactMarketOverview(
     ticks: Map<String, MarketTick>,
-    worthCoins: List<WorthCoinInfo>,
     isLive: Boolean
 ) {
+    val validChanges = ticks.values.map { it.change24h }.filter { it.isFinite() }
     val totalVolume = ticks.values.sumOf { it.volume24h }
-    val avgChange = if (ticks.isEmpty()) 0.0 else ticks.values.map { it.change24h }.filter { !it.isNaN() }.let {
-        if (it.isEmpty()) 0.0 else it.average()
-    }
-    val score = worthCoins.maxOfOrNull { it.worthScore } ?: 0
+    val avgChange = if (validChanges.isEmpty()) 0.0 else validChanges.average()
+    val positiveRatio = if (validChanges.isEmpty()) 0.5 else validChanges.count { it > 0.0 }.toDouble() / validChanges.size
+
+    // Market score harus menggambarkan kondisi kumpulan pair yang sedang dipantau,
+    // bukan mengambil skor tertinggi dari satu koin.
+    val breadthScore = positiveRatio * 40.0
+    val momentumScore = ((avgChange.coerceIn(-5.0, 5.0) + 5.0) / 10.0) * 60.0
+    val score = (breadthScore + momentumScore).roundToInt().coerceIn(1, 99)
     val scoreCol = scoreColor(score)
 
     Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp)) {
@@ -60,7 +64,7 @@ fun CompactMarketOverview(
                 OverviewValue(
                     label = "24H VOL",
                     value = PriceFormatter.formatPrice(totalVolume),
-                    detail = "market",
+                    detail = "tracked",
                     color = TvGreen,
                     modifier = Modifier.weight(1.72f)
                 )
