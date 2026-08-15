@@ -34,8 +34,8 @@ object AppAnimations {
     const val FAST_MS = 180
     const val NORMAL_MS = 280
     const val SLOW_MS = 420
-    /** Deliberately visible live-price transition without making the UI feel slow. */
-    const val PRICE_MS = 300
+    /** Visible enough for a live price tick, but still fast for scalping. */
+    const val PRICE_MS = 360
 }
 
 @Composable
@@ -74,9 +74,8 @@ fun Modifier.livePulse(alpha: Float): Modifier =
 
 /**
  * Smooth live price interpolation while retaining Double precision.
- * The animation state is a normalized Float, while the displayed price is
- * calculated as Double. A new target continues from the value currently
- * visible on screen, so frequent live ticks do not snap the number.
+ * A new tick starts from the value currently visible on screen, not from the
+ * previous target, so frequent live updates do not create a visible jump.
  */
 @Composable
 fun rememberSmoothPrice(target: Double, durationMs: Int = AppAnimations.PRICE_MS): Double {
@@ -119,7 +118,7 @@ fun rememberSmoothPrice(target: Double, durationMs: Int = AppAnimations.PRICE_MS
         progress.animateTo(
             targetValue = 1f,
             animationSpec = tween(
-                durationMillis = durationMs.coerceIn(220, 420),
+                durationMillis = durationMs.coerceIn(280, 480),
                 easing = FastOutSlowInEasing
             )
         )
@@ -143,15 +142,20 @@ fun SmoothPriceText(
     val smooth = rememberSmoothPrice(price)
     var pulse by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(
-        targetValue = if (pulse) 1.018f else 1f,
-        animationSpec = tween(180, easing = FastOutSlowInEasing),
+        targetValue = if (pulse) 1.025f else 1f,
+        animationSpec = tween(220, easing = FastOutSlowInEasing),
         label = "price_change_scale"
+    )
+    val lift by animateFloatAsState(
+        targetValue = if (pulse) -2.5f else 0f,
+        animationSpec = tween(220, easing = FastOutSlowInEasing),
+        label = "price_change_lift"
     )
 
     LaunchedEffect(price) {
         if (!price.isFinite() || price <= 0.0) return@LaunchedEffect
         pulse = true
-        delay(180)
+        delay(220)
         pulse = false
     }
 
@@ -163,6 +167,7 @@ fun SmoothPriceText(
         modifier = modifier.graphicsLayer {
             scaleX = scale
             scaleY = scale
+            translationY = lift
         },
         maxLines = maxLines
     )
