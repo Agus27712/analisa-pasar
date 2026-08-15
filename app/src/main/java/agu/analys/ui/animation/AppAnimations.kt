@@ -1,7 +1,6 @@
 package agu.analys.ui.animation
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -16,13 +15,16 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.TextUnit
 import agu.analys.util.PriceFormatter
+import kotlin.math.abs
 
 /** Shared Compose animation helpers — keep screens free of animation boilerplate. */
 object AppAnimations {
@@ -46,12 +48,9 @@ fun FadeSlideIn(
             slideInVertically(tween(AppAnimations.NORMAL_MS)) { it / 8 },
         exit = fadeOut(tween(AppAnimations.FAST_MS)) +
             slideOutVertically(tween(AppAnimations.FAST_MS)) { it / 10 }
-    ) {
-        content()
-    }
+    ) { content() }
 }
 
-/** Soft pulse for live/connection indicators. */
 @Composable
 fun rememberLivePulseAlpha(min: Float = 0.45f, max: Float = 1f): Float {
     val transition = rememberInfiniteTransition(label = "live_pulse")
@@ -71,34 +70,43 @@ fun Modifier.livePulse(alpha: Float): Modifier =
     this.graphicsLayer { this.alpha = alpha }
 
 /**
- * Smooth live price value. Interpolates toward the real target only.
- * Duration ~160ms, FastOutSlowIn — no bounce / flash / restart flicker.
- * Returns the animated Double to feed into formatters or Canvas Y calc.
+ * Smooth live price interpolation without converting the actual price to Float.
+ * Only the visual value is animated. Market data remains the real Double value.
+ * The animation is keyed only by target, so ordinary recomposition does not restart it.
  */
 @Composable
 fun rememberSmoothPrice(target: Double, durationMs: Int = AppAnimations.PRICE_MS): Double {
-    val anim = remember { Animatable(target.toFloat()) }
+    var displayed by remember { mutableStateOf(target) }
+
     LaunchedEffect(target) {
-        if (target <= 0.0 || target.isNaN() || target.isInfinite()) {
-            anim.snapTo(0f)
+        if (target <= 0.0 || target.isNaN() || target.isInfinite()) return@LaunchedEffect
+
+        val start = displayed
+        if (start <= 0.0 || !start.isFinite()) {
+            displayed = target
             return@LaunchedEffect
         }
-        // Skip huge jumps (pair switch) — snap instead of long tween
-        val current = anim.value.toDouble()
-        val rel = if (current > 0) kotlin.math.abs(target - current) / current else 1.0
-        if (rel > 0.25) {
-            anim.snapTo(target.toFloat())
-        } else {
-            anim.animateTo(
-                targetValue = target.toFloat(),
-                animationSpec = tween(durationMs, easing = FastOutSlowInEasing)
-            )
+
+        val relativeDelta = abs(target - start) / start
+        if (relativeDelta > 0.25) {
+            displayed = target
+            return@LaunchedEffect
         }
+
+        val steps = 8
+        val stepDelay = (durationMs.toLong() / steps).coerceAtLeast(1L)
+        repeat(steps) { index ->
+            val t = (index + 1).toDouble() / steps.toDouble()
+            val eased = t * t * (3.0 - 2.0 * t)
+            displayed = start + (target - start) * eased
+            kotlinx.coroutines.delay(stepDelay)
+        }
+        displayed = target
     }
-    return anim.value.toDouble()
+
+    return displayed
 }
 
-/** Convenience Text that shows a smoothly animated formatted price. */
 @Composable
 fun SmoothPriceText(
     price: Double,
