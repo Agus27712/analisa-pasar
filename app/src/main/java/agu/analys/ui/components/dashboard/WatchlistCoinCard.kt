@@ -25,13 +25,11 @@ import agu.analys.ui.theme.TvGreen
 import agu.analys.ui.theme.TvRed
 import agu.analys.ui.theme.TvTextPrimary
 import agu.analys.ui.theme.TvTextSecondary
-import agu.analys.util.PriceFormatter
 import kotlin.math.abs
 
 /**
- * Card watchlist — layout mockup:
- * rank · pair · harga · change · badge aktivitas · volume/momentum bars · Buka Chart
- * Warna aktivitas: hijau tinggi · kuning sedang · abu rendah (bukan selalu merah).
+ * Watchlist card mockup: rank · ikon · pair · harga · aktivitas · bars · sparkline · Buka Chart.
+ * Navbar tidak diubah di sini.
  */
 @Composable
 fun WatchlistCoinCard(
@@ -57,11 +55,9 @@ fun WatchlistCoinCard(
         ((abs(change).coerceAtMost(10.0) / 10.0) * 10.0).toInt().coerceIn(0, 10)
     } else 0
 
-    // Legenda mockup: tinggi / sedang / rendah
     val activityLevel = when {
         volumeScore >= 8 && momentumScore >= 6 -> ActivityLevel.HIGH
         volumeScore >= 6 || momentumScore >= 5 -> ActivityLevel.MEDIUM
-        volumeScore > 0 || momentumScore > 0 -> ActivityLevel.LOW
         else -> ActivityLevel.LOW
     }
     val statusLabel = when (activityLevel) {
@@ -85,6 +81,7 @@ fun WatchlistCoinCard(
         change < 0 -> TvRed
         else -> TvTextSecondary
     }
+    val sparkColor = changeColor
     val rankText = rank?.let { String.format("%02d", it) } ?: "··"
 
     Card(
@@ -100,8 +97,10 @@ fun WatchlistCoinCard(
                     color = DashboardColors.AccentBlue,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Black,
-                    modifier = Modifier.width(28.dp)
+                    modifier = Modifier.width(26.dp)
                 )
+                AssetAvatar(baseAsset = pair.baseAsset, iconUrl = pair.iconUrl, size = 34.dp)
+                Spacer(Modifier.width(8.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
                         "${pair.baseAsset}/${pair.quoteAsset}",
@@ -127,7 +126,7 @@ fun WatchlistCoinCard(
                     }
                     if (change.isFinite()) {
                         AnimatedMetricText(
-                            PriceFormatter.formatPercentage(change),
+                            agu.analys.util.PriceFormatter.formatPercentage(change),
                             changeColor,
                             12.sp,
                             FontWeight.Bold
@@ -138,23 +137,34 @@ fun WatchlistCoinCard(
 
             Spacer(Modifier.height(10.dp))
 
-            if (isScalping) {
-                ScoreLine("Volume", volumeScore, barColor)
-                Spacer(Modifier.height(4.dp))
-                ScoreLine("Momentum", momentumScore, barColor)
-            } else {
-                val trend = when {
-                    change >= 5 -> 9
-                    change >= 1 -> 7
-                    change >= 0 -> 6
-                    change >= -3 -> 4
-                    change.isFinite() -> 2
-                    else -> 0
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    if (isScalping) {
+                        ScoreLine("Volume", volumeScore, barColor)
+                        Spacer(Modifier.height(4.dp))
+                        ScoreLine("Momentum", momentumScore, barColor)
+                    } else {
+                        val trend = when {
+                            change >= 5 -> 9
+                            change >= 1 -> 7
+                            change >= 0 -> 6
+                            change >= -3 -> 4
+                            change.isFinite() -> 2
+                            else -> 0
+                        }
+                        val structure = ((worth?.worthScore ?: 0) / 10).coerceIn(0, 10)
+                        ScoreLine("Trend", trend, barColor)
+                        Spacer(Modifier.height(4.dp))
+                        ScoreLine("Structure", structure, barColor)
+                    }
                 }
-                val structure = ((worth?.worthScore ?: 0) / 10).coerceIn(0, 10)
-                ScoreLine("Trend", trend, barColor)
-                Spacer(Modifier.height(4.dp))
-                ScoreLine("Structure", structure, barColor)
+                Spacer(Modifier.width(10.dp))
+                // Mini sparkline 24H dari tick real
+                MiniSparkline(
+                    tick = tick,
+                    modifier = Modifier.width(72.dp).height(36.dp),
+                    lineColor = sparkColor
+                )
             }
 
             Spacer(Modifier.height(10.dp))

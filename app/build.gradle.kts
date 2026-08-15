@@ -62,6 +62,7 @@ dependencies {
   implementation(libs.okhttp)
   implementation(libs.kotlinx.serialization.json)
   implementation(libs.androidx.datastore.preferences)
+  implementation(libs.coil.compose)
   testImplementation(libs.junit)
   testImplementation(libs.robolectric)
   testImplementation(libs.androidx.core)
