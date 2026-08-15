@@ -2,10 +2,10 @@ package agu.analys
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
-import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -42,8 +42,8 @@ class MainActivity : ComponentActivity() {
                 when (screen) {
                     AppScreen.DASHBOARD -> DashboardScreen(tradingViewModel, { tradingViewModel.openCoinDetail(it) }, { tradingViewModel.openSettings() })
                     AppScreen.DETAIL -> DetailChartScreenV2(tradingViewModel, { tradingViewModel.goBack() }, { tradingViewModel.openLandscapeChart() })
-                    AppScreen.LANDSCAPE_CHART -> LandscapeChartScreen(tradingViewModel) { tradingViewModel.closeLandscapeChart() }
-                    AppScreen.SETTINGS -> SettingsScreen(tradingViewModel) { tradingViewModel.goBack() }
+                    AppScreen.LANDSCAPE_CHART -> LandscapeChartScreen(tradingViewModel, onBackToDetail = { tradingViewModel.closeLandscapeChart() })
+                    AppScreen.SETTINGS -> SettingsScreen(tradingViewModel, onBack = { tradingViewModel.goBack() })
                     AppScreen.LEARNING -> LearningPathScreen { tradingViewModel.goBack() }
                 }
             }
