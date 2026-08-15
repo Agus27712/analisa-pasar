@@ -5,6 +5,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
@@ -25,6 +26,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.TextUnit
 import agu.analys.util.PriceFormatter
+import kotlinx.coroutines.delay
 import kotlin.math.abs
 
 /** Shared Compose animation helpers. Keep animation behavior consistent and lightweight. */
@@ -139,12 +141,29 @@ fun SmoothPriceText(
     maxLines: Int = 1
 ) {
     val smooth = rememberSmoothPrice(price)
+    var pulse by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(
+        targetValue = if (pulse) 1.018f else 1f,
+        animationSpec = tween(180, easing = FastOutSlowInEasing),
+        label = "price_change_scale"
+    )
+
+    LaunchedEffect(price) {
+        if (!price.isFinite() || price <= 0.0) return@LaunchedEffect
+        pulse = true
+        delay(180)
+        pulse = false
+    }
+
     Text(
         text = PriceFormatter.formatPrice(smooth, showSymbol = showSymbol),
         color = color,
         fontSize = fontSize,
         fontWeight = fontWeight,
-        modifier = modifier,
+        modifier = modifier.graphicsLayer {
+            scaleX = scale
+            scaleY = scale
+        },
         maxLines = maxLines
     )
 }
