@@ -13,7 +13,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CropRotate
 import androidx.compose.material.icons.filled.FullscreenExit
@@ -181,7 +180,7 @@ fun DetailChartScreen(
                 MarketConditionCard(marketStructure, currentIndicators, aiSignalState, isScalpingMode)
                 Spacer(Modifier.height(10.dp))
                 ProgressEntryCard(aiSignalState, isScalpingMode)
-                if (isScalpingMode) Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(10.dp))
                 RecommendationCard(aiSignalState, isScalpingMode)
                 Spacer(Modifier.height(10.dp))
                 WhyCard(aiSignalState, currentIndicators, marketStructure)
@@ -202,7 +201,12 @@ fun DetailChartScreen(
                 Spacer(Modifier.height(10.dp))
                 ImportantLevelsCard(aiSignalState, marketStructure, currentTick?.price ?: 0.0)
                 Spacer(Modifier.height(10.dp))
-                TechnicalDetailsCard(currentIndicators, marketStructure, currentTick?.volume24h ?: 0.0)
+                TechnicalDetailsCard(
+                    currentIndicators,
+                    marketStructure,
+                    currentTick?.volume24h ?: 0.0,
+                    scalping = isScalpingMode
+                )
                 Spacer(Modifier.height(10.dp))
                 MonitorCard(aiSignalState, marketStructure, currentTick?.price ?: 0.0, isShowingCached)
                 Spacer(Modifier.height(10.dp))
@@ -283,19 +287,19 @@ private fun WhyCard(signal: AISignalState, indicators: TechnicalIndicators, stru
 private fun buildSimpleReasons(signal: AISignalState, indicators: TechnicalIndicators, structure: MarketStructureSnapshot): List<String> {
     val result = mutableListOf<String>()
     if (indicators.ema20.isFinite() && indicators.ema50.isFinite())
-        result += if (indicators.ema20 > indicators.ema50) "Harga rata-rata jangka pendek masih di atas rata-rata menengah." else "Rata-rata harga jangka pendek masih di bawah rata-rata menengah."
+        result += if (indicators.ema20 > indicators.ema50) "EMA fast masih di atas EMA slow." else "EMA fast masih di bawah EMA slow."
     if (indicators.macdHist.isFinite())
-        result += if (indicators.macdHist >= 0) "Momentum naik masih lebih dominan." else "Momentum turun masih lebih dominan."
+        result += if (indicators.macdHist >= 0) "Momentum MACD masih naik." else "Momentum MACD masih turun."
     when (structure.trend) {
         "Bullish structure" -> result += "Struktur pasar membentuk Higher High dan Higher Low."
         "Bearish structure" -> result += "Struktur pasar membentuk Lower High dan Lower Low."
     }
     if (indicators.rsi14.isFinite()) result += when {
-        indicators.rsi14 > 70 -> "RSI sudah tinggi, jadi risiko koreksi perlu diperhatikan."
-        indicators.rsi14 < 30 -> "RSI sudah rendah, jadi potensi pantulan perlu dikonfirmasi."
-        else -> "RSI masih di area tengah, belum menunjukkan kondisi ekstrem."
+        indicators.rsi14 > 70 -> "RSI sudah tinggi, risiko koreksi perlu diperhatikan."
+        indicators.rsi14 < 30 -> "RSI sudah rendah, potensi pantulan perlu dikonfirmasi."
+        else -> "RSI masih di area tengah, belum ekstrem."
     }
-    if (result.isEmpty()) result += signal.reasoning.firstOrNull() ?: "Data teknikal belum cukup untuk menjelaskan arah pasar."
+    if (result.isEmpty()) result += signal.reasoning.firstOrNull() ?: "Data teknikal belum cukup."
     return result.take(3)
 }
 

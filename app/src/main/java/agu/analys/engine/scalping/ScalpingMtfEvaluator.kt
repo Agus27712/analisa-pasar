@@ -23,7 +23,10 @@ data class ScalpingMtfResult(
 /**
  * 1H = bias, 15M = setup, 1M = trigger.
  * Pure scoring — no network, no StateFlow.
- * Thresholds TIDAK diubah; hanya expose structured snapshot untuk UI.
+ *
+ * Audit fixes:
+ * - Setup hanya OK jika searah bias (bukan bull+bear silang)
+ * - RSI extended memblok entry → WAIT_PULLBACK
  */
 object ScalpingMtfEvaluator {
 
@@ -55,18 +58,31 @@ object ScalpingMtfEvaluator {
         val extendedShort = h1.rsi < 25.0 || m15.rsi < 25.0
         val extremeVolatility = atr / price > 0.04
 
+        // Setup harus searah bias — 1H bull + 15M bear ≠ setup valid
+        val setupAlignedLong = biasLong && setupLong
+        val setupAlignedShort = biasShort && setupShort
+        val setupOpposite = (biasLong && setupShort) || (biasShort && setupLong)
+
         var longScore = 0
         var shortScore = 0
         val reasons = mutableListOf<String>()
         reasons += "[SCALPING MTF] 1H = bias, 15M = setup, 1M = trigger."
         reasons += "1H: ${if (biasLong) "bullish" else if (biasShort) "bearish" else "mixed"}, RSI ${fmt(h1.rsi)}."
-        reasons += "15M: ${if (setupLong) "bullish setup" else if (setupShort) "bearish setup" else "pullback/mixed"}, RSI ${fmt(m15.rsi)}."
+        reasons += "15M: ${when {
+            setupAlignedLong -> "bullish setup (searah)"
+            setupAlignedShort -> "bearish setup (searah)"
+            setupOpposite -> "berlawanan bias"
+            setupLong -> "bullish setup"
+            setupShort -> "bearish setup"
+            else -> "pullback/mixed"
+        }}, RSI ${fmt(m15.rsi)}."
         reasons += "1M: ${if (triggerLong) "long trigger" else if (triggerShort) "short trigger" else "belum trigger"}, RSI ${fmt(m1.rsi)}, vol ${fmt(m1.volumeRatio)}×."
 
         if (biasLong) longScore += 25
         if (biasShort) shortScore += 25
-        if (setupLong) longScore += 25
-        if (setupShort) shortScore += 25
+        // Hanya skor setup yang searah bias
+        if (setupAlignedLong) longScore += 25
+        if (setupAlignedShort) shortScore += 25
         if (triggerLong) longScore += 30
         if (triggerShort) shortScore += 30
         if (m1.volumeRatio >= 1.20 && m1.bullishMomentum) longScore += 10
@@ -82,28 +98,33 @@ object ScalpingMtfEvaluator {
             biasShort -> SignalAction.SELL
             else -> SignalAction.HOLD
         }
+
+        // Extended RSI memblok entry — prioritas di atas trigger
         val entryAction = when {
-            biasLong && setupLong && triggerLong && !extremeVolatility -> SignalAction.BUY
-            biasShort && setupShort && triggerShort && !extremeVolatility -> SignalAction.SELL
+            biasLong && setupAlignedLong && triggerLong && !extremeVolatility && !extendedLong -> SignalAction.BUY
+            biasShort && setupAlignedShort && triggerShort && !extremeVolatility && !extendedShort -> SignalAction.SELL
             else -> SignalAction.HOLD
         }
 
+        // Stage: extended dicek SEBELUM ENTRY
         val stage = when {
+            biasLong && extendedLong -> ScalpingStage.WAIT_PULLBACK
+            biasShort && extendedShort -> ScalpingStage.WAIT_PULLBACK
             entryAction == SignalAction.BUY && longScore >= 70 -> ScalpingStage.STRONG_ENTRY
             entryAction == SignalAction.SELL && shortScore >= 70 -> ScalpingStage.STRONG_ENTRY
             entryAction == SignalAction.BUY || entryAction == SignalAction.SELL -> ScalpingStage.ENTRY
-            biasLong && (extendedLong || setupLong && !triggerLong || !setupLong && m1.bearishMomentum) -> ScalpingStage.WAIT_PULLBACK
-            biasShort && (extendedShort || setupShort && !triggerShort || !setupShort && m1.bullishMomentum) -> ScalpingStage.WAIT_PULLBACK
+            biasLong && (setupAlignedLong && !triggerLong || !setupAlignedLong) -> ScalpingStage.WAIT_PULLBACK
+            biasShort && (setupAlignedShort && !triggerShort || !setupAlignedShort) -> ScalpingStage.WAIT_PULLBACK
             directionalBias != SignalAction.HOLD -> ScalpingStage.WATCH
             dominantScore >= 45 -> ScalpingStage.WATCH
             else -> ScalpingStage.HOLD
         }
 
-        if (extendedLong) reasons += "RSI 1H/15M panas: tunggu pullback."
-        if (extendedShort) reasons += "RSI 1H/15M sangat rendah: tunggu pullback."
+        if (extendedLong) reasons += "RSI 1H/15M panas: entry diblok, tunggu pullback."
+        if (extendedShort) reasons += "RSI 1H/15M sangat rendah: entry diblok, tunggu pullback."
+        if (setupOpposite) reasons += "Setup 15M berlawanan arah bias 1H — tidak dihitung OK."
         if (extremeVolatility) reasons += "ATR 1M > 4%: entry ditahan."
 
-        // —— Structured snapshot (expose existing booleans, no new thresholds) ——
         val biasDir = when {
             biasLong -> "bullish"
             biasShort -> "bearish"
@@ -114,22 +135,24 @@ object ScalpingMtfEvaluator {
             else -> MtfLegStatus.FAIL
         }
         val setupStatus = when {
-            setupLong || setupShort -> MtfLegStatus.OK
-            biasLong || biasShort -> MtfLegStatus.PARTIAL // bias ada, setup belum penuh = pullback/mixed
+            setupAlignedLong || setupAlignedShort -> MtfLegStatus.OK
+            setupOpposite -> MtfLegStatus.FAIL
+            biasLong || biasShort -> MtfLegStatus.PARTIAL
             else -> MtfLegStatus.FAIL
         }
+        val triggerAligned = (biasLong && triggerLong) || (biasShort && triggerShort)
         val triggerStatus = when {
-            triggerLong || triggerShort -> MtfLegStatus.OK
-            biasLong || biasShort || setupLong || setupShort -> MtfLegStatus.WAITING
+            triggerAligned -> MtfLegStatus.OK
+            (triggerLong || triggerShort) && !triggerAligned -> MtfLegStatus.FAIL // trigger lawan arah
+            biasLong || biasShort || setupAlignedLong || setupAlignedShort -> MtfLegStatus.WAITING
             else -> MtfLegStatus.FAIL
         }
 
         val path = when (stage) {
             ScalpingStage.ENTRY, ScalpingStage.STRONG_ENTRY -> ScalpingPath.ENTRY_READY
             ScalpingStage.WAIT_PULLBACK -> when {
-                (biasLong || biasShort) && (setupLong || setupShort) && !triggerLong && !triggerShort ->
-                    ScalpingPath.BOTH // bias+setup OK, tinggal trigger → pullback ATAU continuation
                 extendedLong || extendedShort -> ScalpingPath.PULLBACK
+                (setupAlignedLong || setupAlignedShort) && !triggerAligned -> ScalpingPath.BOTH
                 else -> ScalpingPath.PULLBACK
             }
             ScalpingStage.WATCH -> ScalpingPath.MOMENTUM_CONTINUATION
@@ -142,6 +165,7 @@ object ScalpingMtfEvaluator {
             ScalpingStage.WAIT_PULLBACK -> when {
                 path == ScalpingPath.BOTH && biasLong -> "BULLISH MOMENTUM · MENUNGGU KONFIRMASI"
                 path == ScalpingPath.BOTH && biasShort -> "BEARISH MOMENTUM · MENUNGGU KONFIRMASI"
+                extendedLong || extendedShort -> "MENUNGGU PULLBACK"
                 else -> "MENUNGGU PULLBACK"
             }
             ScalpingStage.WATCH -> "MENUNGGU KONFIRMASI"
@@ -151,11 +175,15 @@ object ScalpingMtfEvaluator {
         val waitingFor = when (stage) {
             ScalpingStage.ENTRY, ScalpingStage.STRONG_ENTRY ->
                 "Tidak ada yang ditunggu — kondisi entry terpenuhi."
-            ScalpingStage.WAIT_PULLBACK -> when (path) {
-                ScalpingPath.BOTH ->
-                    "Dua jalur terbuka: pullback bersih ke area setup, atau trigger momentum 1M (volume/breakout/retest)."
+            ScalpingStage.WAIT_PULLBACK -> when {
+                extendedLong || extendedShort ->
+                    "RSI extended — tunggu pullback agar entry tidak mengejar harga."
+                path == ScalpingPath.BOTH ->
+                    "Dua jalur: pullback bersih ke area setup, atau trigger momentum 1M (volume/breakout/retest)."
+                setupOpposite ->
+                    "Setup 15M berlawanan bias 1H — tunggu setup searah."
                 else ->
-                    "Harga extended / setup belum rapi — tunggu koreksi ke area setup 15M."
+                    "Setup belum rapi — tunggu koreksi ke area setup 15M."
             }
             ScalpingStage.WATCH ->
                 "Bias atau setup mulai terbentuk. Trigger 1M belum cukup kuat."
@@ -165,10 +193,11 @@ object ScalpingMtfEvaluator {
 
         val entryCondition = when {
             extremeVolatility -> "ATR 1M terlalu tinggi (>4%). Tunggu volatilitas mereda."
+            extendedLong || extendedShort -> "RSI harus keluar zona extended dulu, lalu bias+setup+trigger searah."
             stage == ScalpingStage.ENTRY || stage == ScalpingStage.STRONG_ENTRY ->
                 "Bias 1H + setup 15M + trigger 1M sudah searah."
             else ->
-                "Butuh bias 1H + setup 15M + trigger 1M searah, volume/breakout valid, ATR tidak ekstrem."
+                "Butuh bias 1H + setup 15M searah + trigger 1M, volume/breakout valid, RSI tidak extended, ATR tidak ekstrem."
         }
 
         val mtf = ScalpingMtfSnapshot(
@@ -176,12 +205,22 @@ object ScalpingMtfEvaluator {
             biasDirection = biasDir,
             biasStatus = biasStatus,
             biasDetail = "RSI ${fmt(h1.rsi)} · ${if (biasLong) "bullish" else if (biasShort) "bearish" else "mixed"}",
-            setupOk = setupLong || setupShort,
+            setupOk = setupAlignedLong || setupAlignedShort,
             setupStatus = setupStatus,
-            setupDetail = "RSI ${fmt(m15.rsi)} · ${if (setupLong) "bullish setup" else if (setupShort) "bearish setup" else "pullback/mixed"}",
-            triggerOk = triggerLong || triggerShort,
+            setupDetail = when {
+                setupAlignedLong -> "RSI ${fmt(m15.rsi)} · bullish setup (searah bias)"
+                setupAlignedShort -> "RSI ${fmt(m15.rsi)} · bearish setup (searah bias)"
+                setupOpposite -> "RSI ${fmt(m15.rsi)} · berlawanan bias"
+                else -> "RSI ${fmt(m15.rsi)} · pullback/mixed"
+            },
+            triggerOk = triggerAligned,
             triggerStatus = triggerStatus,
-            triggerDetail = "RSI ${fmt(m1.rsi)} · vol ${fmt(m1.volumeRatio)}× · ${if (triggerLong) "long trigger" else if (triggerShort) "short trigger" else "belum trigger"}",
+            triggerDetail = "RSI ${fmt(m1.rsi)} · vol ${fmt(m1.volumeRatio)}× · ${when {
+                biasLong && triggerLong -> "long trigger"
+                biasShort && triggerShort -> "short trigger"
+                triggerLong || triggerShort -> "trigger lawan arah"
+                else -> "belum trigger"
+            }}",
             path = path,
             statusTitle = statusTitle,
             waitingFor = waitingFor,
@@ -290,6 +329,7 @@ object ScalpingMtfEvaluator {
             macd = m1.macdHist,
             macdSignal = 0.0,
             macdHist = m1.macdHist,
+            // Field reuse: ema20 = fast, ema50 = slow (periode frame 1M default 5/13)
             ema20 = m1.emaFast,
             ema50 = m1.emaSlow,
             ema200 = Double.NaN,
