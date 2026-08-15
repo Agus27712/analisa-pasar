@@ -1,7 +1,10 @@
 package agu.analys.ui.components.detail
 
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -69,6 +72,20 @@ fun ProgressEntryCard(signal: AISignalState, scalping: Boolean) {
         animationSpec = tween(durationMillis = 420, easing = FastOutSlowInEasing),
         label = "entry_progress"
     )
+
+    // Saat 0/3, target progress tidak berubah sehingga animateFloatAsState
+    // tidak punya transisi untuk dimainkan. Gunakan indikator monitoring yang
+    // sangat halus agar card tetap terasa aktif tanpa membuat progress palsu.
+    val idleTransition = rememberInfiniteTransition(label = "entry_monitoring")
+    val idlePulse by idleTransition.animateFloat(
+        initialValue = 0.72f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "entry_monitoring_pulse"
+    )
     val stagePulse by animateFloatAsState(
         targetValue = if (completed in 1..2) 1.035f else 1f,
         animationSpec = tween(durationMillis = 360, easing = FastOutSlowInEasing),
@@ -85,7 +102,12 @@ fun ProgressEntryCard(signal: AISignalState, scalping: Boolean) {
                 .scale(stagePulse),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(Modifier.size(10.dp).background(statusColor, CircleShape))
+            Box(
+                Modifier
+                    .size(10.dp)
+                    .scale(if (completed == 0) idlePulse else 1f)
+                    .background(statusColor, CircleShape)
+            )
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Text("PROGRESS ENTRY", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TvTextSecondary, letterSpacing = 0.8.sp)
@@ -108,16 +130,28 @@ fun ProgressEntryCard(signal: AISignalState, scalping: Boolean) {
                 .height(6.dp)
                 .background(Color(0x22FFFFFF), RoundedCornerShape(8.dp))
         ) {
-            Box(
-                Modifier
-                    .fillMaxWidth(progress)
-                    .fillMaxHeight()
-                    .background(statusColor, RoundedCornerShape(8.dp))
-            )
+            if (completed == 0) {
+                // Bukan progress palsu: hanya pulse pada track untuk menunjukkan
+                // engine sedang memantau dan menunggu kondisi pertama terpenuhi.
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .fillMaxHeight()
+                        .background(statusColor.copy(alpha = 0.18f * idlePulse), RoundedCornerShape(8.dp))
+                )
+            } else {
+                Box(
+                    Modifier
+                        .fillMaxWidth(progress)
+                        .fillMaxHeight()
+                        .background(statusColor, RoundedCornerShape(8.dp))
+                )
+            }
         }
         Spacer(Modifier.height(4.dp))
         Text(
-            "$completed dari 3 tahap terpenuhi",
+            if (completed == 0) "Engine sedang memantau 3 tahap MTF"
+            else "$completed dari 3 tahap terpenuhi",
             fontSize = 10.sp,
             color = TvTextSecondary
         )
