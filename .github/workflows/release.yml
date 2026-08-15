@@ -1,13 +1,9 @@
 name: Release APK
 
 on:
-  workflow_dispatch:
-    inputs:
-      release_notes:
-        description: "Catatan release tambahan"
-        required: false
-        default: ""
-        type: string
+  push:
+    tags:
+      - 'v*'
 
 permissions:
   contents: write
@@ -18,10 +14,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout tagged source
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
+          ref: ${{ github.ref }}
 
       - name: Set up JDK 17
         uses: actions/setup-java@v5
@@ -60,11 +57,17 @@ jobs:
           echo "name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
           echo "code=${VERSION_CODE:-0}" >> "$GITHUB_OUTPUT"
 
+      - name: Verify tag matches app version
+        shell: bash
+        run: |
+          EXPECTED_TAG="v${{ steps.version.outputs.name }}"
+          test "$GITHUB_REF_NAME" = "$EXPECTED_TAG"
+
       - name: Prepare release notes
         shell: bash
         run: |
           VERSION="${{ steps.version.outputs.name }}"
-          PREVIOUS_TAG=$(git describe --tags --abbrev=0 2>/dev/null || true)
+          PREVIOUS_TAG=$(git tag --sort=-version:refname | grep -v "^$GITHUB_REF_NAME$" | head -1 || true)
           if [ -n "$PREVIOUS_TAG" ]; then RANGE="$PREVIOUS_TAG..HEAD"; else RANGE="HEAD"; fi
           FEATS=$(git log $RANGE --pretty=format:'- %s' --grep='^feat' -i || true)
           FIXES=$(git log $RANGE --pretty=format:'- %s' --grep='^fix' -i || true)
@@ -84,8 +87,6 @@ jobs:
 
           ## Peningkatan fitur
           $OTHERS
-
-          ${{ inputs.release_notes }}
           EOF
 
       - name: Create GitHub release and upload APK
