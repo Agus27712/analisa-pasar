@@ -21,6 +21,7 @@ import agu.analys.model.WorthCoinInfo
 import agu.analys.service.GeminiAiService
 import agu.analys.service.GroqAiService
 import agu.analys.service.IndodaxMarketService
+import agu.analys.service.IndodaxMarketWebSocket
 import agu.analys.trading.SpotPosition
 import agu.analys.trading.SpotPositionStore
 import agu.analys.util.AppPreferences
@@ -45,6 +46,42 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     private val prefs = AppPreferences(application)
     private val marketCache = MarketDataCache(application)
     private val positionStore = SpotPositionStore(application)
+    private val marketWebSocket = IndodaxMarketWebSocket(
+        scope = viewModelScope,
+        onTick = { tick ->
+            if (!_isScalpingMode.value || tick.symbol != _selectedPair.value.symbol) return@IndodaxMarketWebSocket
+            val previous = _currentTick.value
+            val normalized = tick.copy(
+                symbol = _selectedPair.value.symbol,
+                high24h = previous?.high24h ?: tick.price,
+                low24h = previous?.low24h ?: tick.price,
+                volume24h = previous?.volume24h ?: 0.0,
+                change24h = previous?.change24h ?: Double.NaN
+            )
+            _currentTick.value = normalized
+            engine.onTickUpdate(normalized)
+            val prices = _recentPrices.value.toMutableList().apply { add(tick.price) }
+            if (prices.size > 50) prices.removeAt(0)
+            _recentPrices.value = prices
+        },
+        onCandle = { candle ->
+            if (!_isScalpingMode.value || candle.timestamp < (_recentCandles.value.firstOrNull()?.timestamp ?: 0L)) return@IndodaxMarketWebSocket
+            val updated = (_recentCandles.value + candle).distinctBy { it.timestamp }.sortedBy { it.timestamp }.takeLast(300)
+            _recentCandles.value = updated
+            engine.onCandleUpdate(candle)
+        },
+        onConnected = {
+            if (_isScalpingMode.value) {
+                _connectionState.value = MarketConnectionState.Connected
+                _isShowingCachedData.value = false
+            }
+        },
+        onDisconnected = {
+            if (_isScalpingMode.value) {
+                _connectionState.value = MarketConnectionState.ConnectionLost("WebSocket realtime Indodax terputus. Menunggu koneksi realtime kembali.")
+            }
+        }
+    )
 
     private val _currentScreen = MutableStateFlow(AppScreen.DASHBOARD)
     val currentScreen: StateFlow<AppScreen> = _currentScreen.asStateFlow()
@@ -84,21 +121,13 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     val isGeminiLoading: StateFlow<Boolean> = _isGeminiLoading.asStateFlow()
     private val _worthCoins = MutableStateFlow<List<WorthCoinInfo>>(emptyList())
     val worthCoins: StateFlow<List<WorthCoinInfo>> = _worthCoins.asStateFlow()
-    /** Top volume coins from entire Indodax market — auto-updated every 15s */
     private val _hotCoins = MutableStateFlow<List<MarketTick>>(emptyList())
     val hotCoins: StateFlow<List<MarketTick>> = _hotCoins.asStateFlow()
     private val _dashboardTicks = MutableStateFlow<Map<String, MarketTick>>(emptyMap())
     val dashboardTicks: StateFlow<Map<String, MarketTick>> = _dashboardTicks.asStateFlow()
     private val _connectionState = MutableStateFlow<MarketConnectionState>(MarketConnectionState.Loading)
     val connectionState: StateFlow<MarketConnectionState> = _connectionState.asStateFlow()
-    private val _watchlist = MutableStateFlow(
-        prefs.getWatchlist().let { set ->
-            if (set.isEmpty()) {
-                prefs.toggleWatchlist("BTCIDR")
-                setOf("BTCIDR")
-            } else set
-        }
-    )
+    private val _watchlist = MutableStateFlow(prefs.getWatchlist().let { set -> if (set.isEmpty()) { prefs.toggleWatchlist("BTCIDR"); setOf("BTCIDR") } else set })
     val watchlist: StateFlow<Set<String>> = _watchlist.asStateFlow()
     private val _isShowingCachedData = MutableStateFlow(false)
     val isShowingCachedData: StateFlow<Boolean> = _isShowingCachedData.asStateFlow()
@@ -112,13 +141,10 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         _isScalpingMode.value = enabled
         prefs.isScalpingMode = enabled
         engine.isScalpingMode = enabled
-        val tick = _currentTick.value
-        val candles = _recentCandles.value
-        if (tick != null && candles.isNotEmpty()) {
-            engine.resetForOffline()
-            engine.onTickUpdate(tick)
-            candles.forEach { engine.onCandleUpdate(it) }
-        }
+        engine.tradingFees = prefs.tradingFees
+        if (enabled) marketWebSocket.start(_selectedPair.value.symbol) else marketWebSocket.stop()
+        val tick = _currentTick.value; val candles = _recentCandles.value
+        if (tick != null && candles.isNotEmpty()) { engine.resetForOffline(); engine.onTickUpdate(tick); candles.forEach { engine.onCandleUpdate(it) } }
     }
 
     private var lastSavedSignalTimestamp = 0L
@@ -129,6 +155,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
 
     init {
         engine.isScalpingMode = _isScalpingMode.value
+        engine.tradingFees = prefs.tradingFees
         restoreFromCache()
         selectPair(TradingPair.POPULAR_PAIRS.first())
         startDashboardPolling()
@@ -136,8 +163,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     }
 
     private fun restoreFromCache() {
-        val ticks = marketCache.loadDashboardTicks()
-        val worth = marketCache.loadWorthCoins()
+        val ticks = marketCache.loadDashboardTicks(); val worth = marketCache.loadWorthCoins()
         if (ticks.isNotEmpty()) { _dashboardTicks.value = ticks; _isShowingCachedData.value = true }
         if (worth.isNotEmpty()) { _worthCoins.value = worth; _isShowingCachedData.value = true }
     }
@@ -149,12 +175,12 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     fun closeLandscapeChart() { goBack() }
     fun openSettings() { navigateTo(AppScreen.SETTINGS) }
     fun goBack() { if (navigationStack.isNotEmpty()) _currentScreen.value = navigationStack.removeAt(navigationStack.size - 1) else if (_currentScreen.value != AppScreen.DASHBOARD) _currentScreen.value = AppScreen.DASHBOARD }
-    fun getGroqApiKey(): String = prefs.groqApiKey
+    fun getGroqApiKey() = prefs.groqApiKey
     fun saveGroqApiKey(key: String) { prefs.groqApiKey = key }
-    fun getGeminiApiKey(): String = prefs.geminiApiKey
+    fun getGeminiApiKey() = prefs.geminiApiKey
     fun saveGeminiApiKey(key: String) { prefs.geminiApiKey = key }
     fun toggleWatchlist(symbol: String) { prefs.toggleWatchlist(symbol); _watchlist.value = prefs.getWatchlist() }
-    fun isWatched(symbol: String): Boolean = prefs.isInWatchlist(symbol)
+    fun isWatched(symbol: String) = prefs.isInWatchlist(symbol)
     fun selectCustomSymbol(rawSymbol: String) { if (rawSymbol.isNotBlank()) selectPair(TradingPair.fromCustomSymbol(rawSymbol)) }
     fun selectAndWatch(rawSymbol: String, addToWatchlist: Boolean = true) { if (rawSymbol.isBlank()) return; val pair = TradingPair.fromCustomSymbol(rawSymbol); selectPair(pair); if (addToWatchlist && !prefs.isInWatchlist(pair.symbol)) toggleWatchlist(pair.symbol) }
     fun refreshSpotPosition() { _spotPosition.value = positionStore.get(_selectedPair.value.symbol) }
@@ -164,56 +190,23 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
 
     fun refreshWorthCoinsFromMarket() {
         viewModelScope.launch {
-            // 1) Hot coins = ranking volume seluruh market Indodax (real-time)
             val topVolumeJob = async { IndodaxMarketService.fetchTopVolumeTicks(limit = 12, excludeStable = true) }
-
-            // 2) Watchlist + popular ticks
             val pairs = (TradingPair.POPULAR_PAIRS + _watchlist.value.map { TradingPair.fromCustomSymbol(it) }).distinctBy { it.symbol }
             val ticks = IndodaxMarketService.fetchTickers(pairs.map { it.effectiveIndodaxPair() })
-
-            val hot = topVolumeJob.await()
-            if (hot.isNotEmpty()) _hotCoins.value = hot
-
-            if (ticks.isEmpty()) {
-                if (_dashboardTicks.value.isEmpty() && _hotCoins.value.isEmpty()) markMarketOffline("Tidak ada respons market dari Indodax.")
-                else { _isShowingCachedData.value = true; _connectionState.value = MarketConnectionState.ConnectionLost("Koneksi terputus. Menampilkan data cache terakhir.") }
-                return@launch
-            }
-            _dashboardTicks.value = ticks.associateBy { it.symbol }
-            _connectionState.value = MarketConnectionState.Connected
-            _isShowingCachedData.value = false
-            marketCache.saveDashboardTicks(_dashboardTicks.value)
-
+            val hot = topVolumeJob.await(); if (hot.isNotEmpty()) _hotCoins.value = hot
+            if (ticks.isEmpty()) { if (_dashboardTicks.value.isEmpty() && _hotCoins.value.isEmpty()) markMarketOffline("Tidak ada respons market dari Indodax.") else { _isShowingCachedData.value = true; _connectionState.value = MarketConnectionState.ConnectionLost("Koneksi terputus. Menampilkan data cache terakhir.") }; return@launch }
+            _dashboardTicks.value = ticks.associateBy { it.symbol }; if (!_isScalpingMode.value || _connectionState.value !is MarketConnectionState.Connected) _connectionState.value = MarketConnectionState.Connected; _isShowingCachedData.value = false; marketCache.saveDashboardTicks(_dashboardTicks.value)
             val tickMap = ticks.associateBy { it.symbol }
             val worth = pairs.mapNotNull { pair ->
                 val tick = tickMap[pair.symbol] ?: return@mapNotNull null
                 val rangePct = if (tick.low24h > 0) ((tick.high24h - tick.low24h) / tick.low24h) * 100.0 else 0.0
                 val volScore = when { tick.volume24h >= 100_000_000_000 -> 30; tick.volume24h >= 10_000_000_000 -> 22; tick.volume24h >= 1_000_000_000 -> 14; else -> 6 }
                 val change24h = tick.change24h.takeIf { it.isFinite() } ?: 0.0
-                val momentumScore = when {
-                    change24h >= 8.0 -> 35
-                    change24h >= 3.0 -> 30
-                    change24h >= 0.0 -> 23
-                    change24h >= -3.0 -> 15
-                    change24h >= -8.0 -> 8
-                    else -> 4
-                }
+                val momentumScore = when { change24h >= 8 -> 35; change24h >= 3 -> 30; change24h >= 0 -> 23; change24h >= -3 -> 15; change24h >= -8 -> 8; else -> 4 }
                 val volaScore = min(20, (rangePct * 1.5).toInt())
                 val score = (volScore + momentumScore + volaScore).coerceIn(1, 99)
-                val rec = when {
-                    score >= 75 && change24h > 0 -> "MOMENTUM KUAT"
-                    score >= 58 && change24h > -2 -> "LAYAK DIPANTAU"
-                    change24h <= -8 -> "TEKANAN JUAL"
-                    else -> "NETRAL / VOLATIL"
-                }
-                WorthCoinInfo(
-                    pair,
-                    score,
-                    score >= 58 && change24h > -2,
-                    rec,
-                    abs(change24h),
-                    "${PriceFormatter.formatPrice(tick.price)} · Vol ${PriceFormatter.formatVolume(tick.volume24h)} · Range ${PriceFormatter.formatPercentage(rangePct, false)}"
-                )
+                val rec = when { score >= 75 && change24h > 0 -> "MOMENTUM KUAT"; score >= 58 && change24h > -2 -> "LAYAK DIPANTAU"; change24h <= -8 -> "TEKANAN JUAL"; else -> "NETRAL / VOLATIL" }
+                WorthCoinInfo(pair, score, score >= 58 && change24h > -2, rec, abs(change24h), "${PriceFormatter.formatPrice(tick.price)} · Vol ${PriceFormatter.formatVolume(tick.volume24h)} · Range ${PriceFormatter.formatPercentage(rangePct, false)}")
             }.sortedByDescending { it.worthScore }
             _worthCoins.value = worth; marketCache.saveWorthCoins(worth)
         }
@@ -224,17 +217,9 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     fun selectPair(pair: TradingPair) {
         _selectedPair.value = pair; lastSavedSignalTimestamp = 0L; refreshSpotPosition()
         val (cachedTick, cachedCandles) = marketCache.loadPairSnapshot(pair.symbol, _selectedTimeframe.value)
-        if (cachedTick != null || cachedCandles.isNotEmpty()) {
-            if (cachedTick != null) _currentTick.value = cachedTick
-            if (cachedCandles.isNotEmpty()) {
-                _recentCandles.value = cachedCandles
-                engine.resetForOffline()
-                cachedTick?.let { engine.onTickUpdate(it) }
-                cachedCandles.forEach { engine.onCandleUpdate(it) }
-            }
-            _isShowingCachedData.value = true
-        } else clearLiveData()
+        if (cachedTick != null || cachedCandles.isNotEmpty()) { if (cachedTick != null) _currentTick.value = cachedTick; if (cachedCandles.isNotEmpty()) { _recentCandles.value = cachedCandles; engine.resetForOffline(); cachedTick?.let { engine.onTickUpdate(it) }; cachedCandles.forEach { engine.onCandleUpdate(it) } }; _isShowingCachedData.value = true } else clearLiveData()
         startMarketPolling(pair)
+        if (_isScalpingMode.value) marketWebSocket.start(pair.symbol) else marketWebSocket.stop(false)
     }
 
     private fun startMarketPolling(pair: TradingPair) {
@@ -244,38 +229,21 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
             while (isActive) {
                 val prev = _currentTick.value?.price ?: 0.0; val tick = IndodaxMarketService.fetchTicker(pairId, prevPrice = prev)
                 if (tick != null && tick.price > 0) {
-                    failCount = 0; _connectionState.value = MarketConnectionState.Connected; _isShowingCachedData.value = false
+                    failCount = 0
+                    if (!_isScalpingMode.value) { _connectionState.value = MarketConnectionState.Connected; _isShowingCachedData.value = false }
                     val normalizedTick = tick.copy(symbol = pair.symbol); _currentTick.value = normalizedTick; engine.onTickUpdate(normalizedTick)
-                    val hist = _recentPrices.value.toMutableList(); hist.add(tick.price); if (hist.size > 50) hist.removeAt(0); _recentPrices.value = hist
-                    val currentMap = _dashboardTicks.value; if (currentMap[pair.symbol] != normalizedTick) _dashboardTicks.value = currentMap.toMutableMap().apply { put(pair.symbol, normalizedTick) }
-                    val now = System.currentTimeMillis()
-                    val selectedTf = _selectedTimeframe.value
+                    val hist = _recentPrices.value.toMutableList().apply { add(tick.price) }; if (hist.size > 50) hist.removeAt(0); _recentPrices.value = hist
+                    _dashboardTicks.value = _dashboardTicks.value.toMutableMap().apply { put(pair.symbol, normalizedTick) }
+                    val now = System.currentTimeMillis(); val selectedTf = _selectedTimeframe.value
                     if (now - lastCandleRefresh >= 15_000L) {
                         val candles = IndodaxMarketService.fetchCandles(pairId, selectedTf, 300)
-                        if (candles.size >= 35) {
-                            _recentCandles.value = candles
-                            // Preserve the last valid analysis snapshot while the new
-                            // candle set is being processed, avoiding card flicker.
-                            engine.resetForOffline(preserveState = true)
-                            engine.onTickUpdate(normalizedTick)
-                            candles.forEach { engine.onCandleUpdate(it) }
-                            lastCandleRefresh = now
-                            marketCache.savePairSnapshot(pair.symbol, selectedTf, normalizedTick, candles)
-                        } else if (_recentCandles.value.isNotEmpty()) marketCache.savePairSnapshot(pair.symbol, selectedTf, normalizedTick, _recentCandles.value)
-                    } else if (_recentCandles.value.isNotEmpty()) marketCache.savePairSnapshot(pair.symbol, selectedTf, normalizedTick, _recentCandles.value)
-                    if (now - lastDepthRefresh >= 5_000L) {
-                        val depth = async { IndodaxMarketService.fetchOrderBook(pairId) }
-                        val trades = async { IndodaxMarketService.fetchRecentTrades(pairId) }
-                        val (bids, asks) = depth.await(); val newTrades = trades.await()
-                        if (bids.isNotEmpty() && bids != _orderBookBids.value) _orderBookBids.value = bids
-                        if (asks.isNotEmpty() && asks != _orderBookAsks.value) _orderBookAsks.value = asks
-                        if (newTrades.isNotEmpty() && newTrades != _tradeStream.value) _tradeStream.value = newTrades
-                        lastDepthRefresh = now
+                        if (candles.size >= 35) { _recentCandles.value = candles; engine.resetForOffline(preserveState = true); engine.onTickUpdate(normalizedTick); candles.forEach { engine.onCandleUpdate(it) }; lastCandleRefresh = now; marketCache.savePairSnapshot(pair.symbol, selectedTf, normalizedTick, candles) } else if (_recentCandles.value.isNotEmpty()) marketCache.savePairSnapshot(pair.symbol, selectedTf, normalizedTick, _recentCandles.value)
                     }
-                } else {
-                    failCount++
-                    if (failCount >= 2) { _isShowingCachedData.value = true; _connectionState.value = MarketConnectionState.ConnectionLost("Koneksi internet/market terputus. Menampilkan data cache terakhir."); break }
-                }
+                    if (now - lastDepthRefresh >= 5_000L) {
+                        val depth = async { IndodaxMarketService.fetchOrderBook(pairId) }; val trades = async { IndodaxMarketService.fetchRecentTrades(pairId) }; val (bids, asks) = depth.await(); val newTrades = trades.await()
+                        if (bids.isNotEmpty()) _orderBookBids.value = bids; if (asks.isNotEmpty()) _orderBookAsks.value = asks; if (newTrades.isNotEmpty()) _tradeStream.value = newTrades; lastDepthRefresh = now
+                    }
+                } else if (++failCount >= 2 && !_isScalpingMode.value) { _isShowingCachedData.value = true; _connectionState.value = MarketConnectionState.ConnectionLost("Koneksi internet/market terputus. Menampilkan data cache terakhir."); break }
                 delay(3000L)
             }
         }
@@ -289,44 +257,19 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     fun toggleChartExpanded() { _isChartExpanded.value = !_isChartExpanded.value }
 
     fun requestDeepAiAudit() {
-        val tick = _currentTick.value ?: return
-        if (_connectionState.value !is MarketConnectionState.Connected) return
-        if (_isAuditLoading.value || _isGeminiLoading.value) return
-        val indicators = currentIndicators.value
-        val signal = aiSignalState.value
-        viewModelScope.launch {
-            _isAuditLoading.value = true
-            _auditReportText.value = null
-            try {
-                _auditReportText.value = GroqAiService.generateDeepMarketAudit(prefs.groqApiKey, tick, indicators, signal)
-            } finally {
-                _isAuditLoading.value = false
-            }
-        }
+        val tick = _currentTick.value ?: return; if (_connectionState.value !is MarketConnectionState.Connected || _isAuditLoading.value || _isGeminiLoading.value) return
+        val indicators = currentIndicators.value; val signal = aiSignalState.value
+        viewModelScope.launch { _isAuditLoading.value = true; _auditReportText.value = null; try { _auditReportText.value = GroqAiService.generateDeepMarketAudit(prefs.groqApiKey, tick, indicators, signal) } finally { _isAuditLoading.value = false } }
     }
-
     fun clearAuditReport() { _auditReportText.value = null }
-
     fun requestGeminiChartSummary() {
-        val tick = _currentTick.value ?: return
-        if (_connectionState.value !is MarketConnectionState.Connected) return
-        if (_isAuditLoading.value || _isGeminiLoading.value) return
-        val indicators = currentIndicators.value
-        val signal = aiSignalState.value
-        viewModelScope.launch {
-            _isGeminiLoading.value = true
-            _geminiSummaryText.value = null
-            try {
-                _geminiSummaryText.value = GeminiAiService.generateChartSummary24h(prefs.geminiApiKey, tick, indicators, signal)
-            } finally {
-                _isGeminiLoading.value = false
-            }
-        }
+        val tick = _currentTick.value ?: return; if (_connectionState.value !is MarketConnectionState.Connected || _isAuditLoading.value || _isGeminiLoading.value) return
+        val indicators = currentIndicators.value; val signal = aiSignalState.value
+        viewModelScope.launch { _isGeminiLoading.value = true; _geminiSummaryText.value = null; try { _geminiSummaryText.value = GeminiAiService.generateChartSummary24h(prefs.geminiApiKey, tick, indicators, signal) } finally { _isGeminiLoading.value = false } }
     }
-
     fun clearGeminiSummary() { _geminiSummaryText.value = null }
-    fun retryConnection() { _connectionState.value = MarketConnectionState.Loading; startMarketPolling(_selectedPair.value); refreshWorthCoinsFromMarket() }
-    fun simulateDisconnect() { markMarketOffline("Mode offline: koneksi pasar dihentikan. Data cache terakhir tetap ditampilkan.") }
+    fun retryConnection() { _connectionState.value = MarketConnectionState.Loading; startMarketPolling(_selectedPair.value); if (_isScalpingMode.value) marketWebSocket.start(_selectedPair.value.symbol); refreshWorthCoinsFromMarket() }
+    fun simulateDisconnect() { marketWebSocket.stop(); markMarketOffline("Mode offline: koneksi pasar dihentikan. Data cache terakhir tetap ditampilkan.") }
 
     private val _githubReleaseInfo = MutableStateFlow<GitHubReleaseInfo?>(null)
     val githubReleaseInfo: StateFlow<GitHubReleaseInfo?> = _githubReleaseInfo.asStateFlow()
@@ -334,28 +277,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     val isCheckingUpdate: StateFlow<Boolean> = _isCheckingUpdate.asStateFlow()
     private val _updateDownloadProgress = MutableStateFlow<Int?>(null)
     val updateDownloadProgress: StateFlow<Int?> = _updateDownloadProgress.asStateFlow()
-
-    fun checkGitHubUpdate(repo: String) {
-        viewModelScope.launch {
-            _isCheckingUpdate.value = true
-            _githubReleaseInfo.value = null
-            _updateDownloadProgress.value = null
-            try {
-                _githubReleaseInfo.value = GitHubUpdater.fetchLatestRelease(repo)
-            } finally {
-                _isCheckingUpdate.value = false
-            }
-        }
-    }
-
-    fun downloadAndInstallUpdate(context: android.content.Context, repo: String) {
-        val release = _githubReleaseInfo.value ?: return
-        if (release.apkUrl.isBlank()) return
-        viewModelScope.launch {
-            _updateDownloadProgress.value = 0
-            GitHubUpdater.downloadAndInstallApk(context, release.apkUrl, release.apkName) { progress ->
-                _updateDownloadProgress.value = progress
-            }
-        }
-    }
+    fun checkGitHubUpdate(repo: String) { viewModelScope.launch { _isCheckingUpdate.value = true; _githubReleaseInfo.value = null; _updateDownloadProgress.value = null; try { _githubReleaseInfo.value = GitHubUpdater.fetchLatestRelease(repo) } finally { _isCheckingUpdate.value = false } } }
+    fun downloadAndInstallUpdate(context: android.content.Context, repo: String) { val release = _githubReleaseInfo.value ?: return; if (release.apkUrl.isBlank()) return; viewModelScope.launch { _updateDownloadProgress.value = 0; GitHubUpdater.downloadAndInstallApk(context, release.apkUrl, release.apkName) { progress -> _updateDownloadProgress.value = progress } } }
+    override fun onCleared() { marketWebSocket.close(); marketPollJob?.cancel(); dashboardPollJob?.cancel(); super.onCleared() }
 }
