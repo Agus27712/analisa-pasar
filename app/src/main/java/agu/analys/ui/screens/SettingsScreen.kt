@@ -26,7 +26,6 @@ import androidx.compose.ui.unit.sp
 import agu.analys.BuildConfig
 import agu.analys.config.AiProvider
 import agu.analys.config.MarketDataConfiguration
-import agu.analys.config.TradingFeeConfig
 import agu.analys.ui.theme.TvCardBackground
 import agu.analys.ui.theme.TvGreen
 import agu.analys.ui.theme.TvTextPrimary
@@ -112,10 +111,10 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
 }
 
 @Composable
-private fun SettingCard(title: String, content: @Composable ColumnScope.() -> Unit) { Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = TvCardBackground)) { Column(Modifier.padding(14.dp)) { Text(title, color = TvGreen, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 0.7.sp); Spacer(Modifier.height(8.dp)); content() } } }
+private fun SettingCard(title: String, content: @Composable ColumnScope.() -> Unit) { Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = TvCardBackground)) { Column(Modifier.padding(14.dp)) { Text(title, color = TvGreen, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 0.7.sp); Spacer(Modifier.height(8.dp)); content() } }
 
 @Composable
-private fun ModeChoice(label: String, selected: Boolean, bg: Color, fg: Color, onClick: () -> Unit) { Button(onClick = onClick, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = if (selected) bg else Color(0xFF1A2028)), shape = RoundedCornerShape(10.dp)) { Text(label, color = if (selected) fg else TvTextSecondary, fontWeight = FontWeight.ExtraBold, fontSize = 11.sp) } }
+private fun RowScope.ModeChoice(label: String, selected: Boolean, bg: Color, fg: Color, onClick: () -> Unit) { Button(onClick = onClick, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = if (selected) bg else Color(0xFF1A2028)), shape = RoundedCornerShape(10.dp)) { Text(label, color = if (selected) fg else TvTextSecondary, fontWeight = FontWeight.ExtraBold, fontSize = 11.sp) } }
 
 @Composable
 private fun FeeField(label: String, value: Double, onValue: (Double) -> Unit) { OutlinedTextField(value = String.format("%.2f", value), onValueChange = { it.replace(',', '.').toDoubleOrNull()?.let(onValue) }, modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp), singleLine = true, label = { Text(label) }, suffix = { Text("%") }) }
