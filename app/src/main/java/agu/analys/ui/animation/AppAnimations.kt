@@ -31,15 +31,17 @@ import agu.analys.util.PriceFormatter
 import kotlinx.coroutines.delay
 import kotlin.math.abs
 
-/** Shared Compose animation helpers — feedback visual saja, bukan data palsu. */
+/**
+ * Animasi UI — handover: perubahan kecil ~160ms, ekstrem >25% snap.
+ * Tidak mengubah nilai data Indodax.
+ */
 object AppAnimations {
-    const val FAST_MS = 180
-    const val NORMAL_MS = 280
-    const val SLOW_MS = 420
-    /** Tick price: terasa bergerak, tetap cepat untuk scalper (~200–280ms). */
-    const val PRICE_MS = 240
-    /** Dashboard metrics: ringan agar live data terasa hidup tanpa mengganggu pembacaan. */
-    const val METRIC_MS = 220
+    const val FAST_MS = 140
+    const val NORMAL_MS = 220
+    const val SLOW_MS = 360
+    /** Handover: smooth ~160ms untuk tick harga. */
+    const val PRICE_MS = 160
+    const val METRIC_MS = 160
 }
 
 @Composable
@@ -77,8 +79,8 @@ fun Modifier.livePulse(alpha: Float): Modifier =
     this.graphicsLayer { this.alpha = alpha }
 
 /**
- * Smooth live price: interpolasi dari nilai yang sedang tampil → target baru.
- * Tick baru saat animasi jalan: lanjut dari posisi visual saat itu (no teleport).
+ * Smooth live price: dari nilai tampil → target.
+ * Tick baru saat animasi jalan: lanjut dari posisi visual (no teleport).
  * Jump relatif > 25% → snap.
  */
 @Composable
@@ -122,7 +124,7 @@ fun rememberSmoothPrice(target: Double, durationMs: Int = AppAnimations.PRICE_MS
         progress.animateTo(
             targetValue = 1f,
             animationSpec = tween(
-                durationMillis = durationMs.coerceIn(180, 320),
+                durationMillis = durationMs.coerceIn(140, 200),
                 easing = FastOutSlowInEasing
             )
         )
@@ -145,17 +147,16 @@ fun SmoothPriceText(
 ) {
     val smooth = rememberSmoothPrice(price)
     var pulse by remember { mutableStateOf(false) }
-    // Pulse sangat subtle — terminal trading, bukan arcade
     val scale by animateFloatAsState(
-        targetValue = if (pulse) 1.012f else 1f,
-        animationSpec = tween(160, easing = FastOutSlowInEasing),
+        targetValue = if (pulse) 1.01f else 1f,
+        animationSpec = tween(140, easing = FastOutSlowInEasing),
         label = "price_change_scale"
     )
 
     LaunchedEffect(price) {
         if (!price.isFinite() || price <= 0.0) return@LaunchedEffect
         pulse = true
-        delay(160)
+        delay(140)
         pulse = false
     }
 
@@ -172,10 +173,6 @@ fun SmoothPriceText(
     )
 }
 
-/**
- * Lightweight live metric animation for counters/percentages/aggregates.
- * Uses Compose AnimatedContent, so no React or extra animation library is needed.
- */
 @Composable
 fun AnimatedMetricText(
     value: String,

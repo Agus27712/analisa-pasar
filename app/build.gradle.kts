@@ -11,8 +11,8 @@ android {
     applicationId = "agu.analys"
     minSdk = 24
     targetSdk = 35
-    versionCode = providers.gradleProperty("VERSION_CODE").map(String::toInt).getOrElse(7)
-    versionName = "1.1.9"
+    versionCode = providers.gradleProperty("VERSION_CODE").map(String::toInt).getOrElse(8)
+    versionName = "1.2.0"
   }
   signingConfigs {
     create("release") {
@@ -62,6 +62,7 @@ dependencies {
   implementation(libs.okhttp)
   implementation(libs.kotlinx.serialization.json)
   implementation(libs.androidx.datastore.preferences)
+  implementation(libs.coil.compose)
   testImplementation(libs.junit)
   testImplementation(libs.robolectric)
   testImplementation(libs.androidx.core)
