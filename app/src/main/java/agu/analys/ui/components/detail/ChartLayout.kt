@@ -8,14 +8,14 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /**
- * Layout boundary for the detail-screen chart.
- * Height aligned with chart layout pass (~360dp).
+ * Compact portrait chart boundary so the market-condition and entry cards remain
+ * visible without sacrificing the larger chart introduced by the UI refactor.
  * Rendering stays in SimpleComposeChart; engine stays untouched.
  */
 @Composable
 fun ChartLayout(
     modifier: Modifier = Modifier,
-    height: Dp = 360.dp,
+    height: Dp = 300.dp,
     content: @Composable (Modifier) -> Unit
 ) {
     content(
