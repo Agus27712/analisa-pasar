@@ -1,6 +1,7 @@
 package agu.analys.ui.animation
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -26,13 +27,13 @@ import androidx.compose.ui.unit.TextUnit
 import agu.analys.util.PriceFormatter
 import kotlin.math.abs
 
-/** Shared Compose animation helpers — keep screens free of animation boilerplate. */
+/** Shared Compose animation helpers. Keep animation behavior consistent and lightweight. */
 object AppAnimations {
     const val FAST_MS = 180
     const val NORMAL_MS = 280
     const val SLOW_MS = 420
-    /** Live price transition: short, soft, no bounce. */
-    const val PRICE_MS = 160
+    /** Deliberately visible live-price transition without making the UI feel slow. */
+    const val PRICE_MS = 300
 }
 
 @Composable
@@ -70,36 +71,50 @@ fun Modifier.livePulse(alpha: Float): Modifier =
     this.graphicsLayer { this.alpha = alpha }
 
 /**
- * Smooth live price interpolation without converting the actual price to Float.
- * Only the visual value is animated. Market data remains the real Double value.
- * The animation is keyed only by target, so ordinary recomposition does not restart it.
+ * Smooth live price interpolation while retaining Double precision.
+ * The animation uses a normalized Float progress only. The actual market value
+ * is always calculated as Double, avoiding price precision loss.
+ * A new target cancels the old animation and continues from the currently
+ * displayed value, so frequent live refreshes do not make the number jump.
  */
 @Composable
 fun rememberSmoothPrice(target: Double, durationMs: Int = AppAnimations.PRICE_MS): Double {
     var displayed by remember { mutableStateOf(target) }
+    val progress = remember { Animatable(1f) }
 
     LaunchedEffect(target) {
-        if (target <= 0.0 || target.isNaN() || target.isInfinite()) return@LaunchedEffect
+        if (!target.isFinite() || target <= 0.0) return@LaunchedEffect
 
         val start = displayed
-        if (start <= 0.0 || !start.isFinite()) {
+        if (!start.isFinite() || start <= 0.0) {
             displayed = target
+            progress.snapTo(1f)
+            return@LaunchedEffect
+        }
+
+        if (start == target) {
+            displayed = target
+            progress.snapTo(1f)
             return@LaunchedEffect
         }
 
         val relativeDelta = abs(target - start) / start
         if (relativeDelta > 0.25) {
             displayed = target
+            progress.snapTo(1f)
             return@LaunchedEffect
         }
 
-        val steps = 8
-        val stepDelay = (durationMs.toLong() / steps).coerceAtLeast(1L)
-        repeat(steps) { index ->
-            val t = (index + 1).toDouble() / steps.toDouble()
-            val eased = t * t * (3.0 - 2.0 * t)
-            displayed = start + (target - start) * eased
-            kotlinx.coroutines.delay(stepDelay)
+        progress.snapTo(0f)
+        progress.animateTo(
+            targetValue = 1f,
+            animationSpec = tween(
+                durationMillis = durationMs.coerceIn(220, 420),
+                easing = FastOutSlowInEasing
+            )
+        ) {
+            val t = value.toDouble()
+            displayed = start + (target - start) * t
         }
         displayed = target
     }
