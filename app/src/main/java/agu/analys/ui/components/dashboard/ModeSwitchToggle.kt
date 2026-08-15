@@ -1,10 +1,7 @@
 package agu.analys.ui.components.dashboard
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -16,7 +13,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import agu.analys.ui.theme.TvGreen
 import agu.analys.ui.theme.TvTextSecondary
 
 @Composable
@@ -26,42 +22,42 @@ fun ModeSwitchToggle(
     modifier: Modifier = Modifier
 ) {
     Row(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth().height(48.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Button(
             onClick = { onToggle(false) },
-            modifier = Modifier.weight(1f).height(38.dp),
+            modifier = Modifier.weight(1f).fillMaxHeight(),
             colors = ButtonDefaults.buttonColors(
-                containerColor = if (!isScalping) TvGreen else DashboardColors.Card
+                containerColor = if (!isScalping) DashboardColors.AccentBlue else DashboardColors.Card
             ),
-            shape = RoundedCornerShape(11.dp),
-            border = if (!isScalping) null else BorderStroke(1.dp, DashboardColors.Border),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+            shape = RoundedCornerShape(14.dp),
+            border = if (isScalping) BorderStroke(1.dp, DashboardColors.Border) else null,
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
         ) {
             Text(
                 "Mode Swing",
-                color = if (!isScalping) Color.Black else TvTextSecondary,
-                fontSize = 12.sp,
+                color = if (!isScalping) Color.White else TvTextSecondary,
+                fontSize = 13.sp,
                 fontWeight = FontWeight.ExtraBold,
                 maxLines = 1
             )
         }
         Button(
             onClick = { onToggle(true) },
-            modifier = Modifier.weight(1f).height(38.dp),
+            modifier = Modifier.weight(1f).fillMaxHeight(),
             colors = ButtonDefaults.buttonColors(
-                containerColor = if (isScalping) TvGreen else DashboardColors.Card
+                containerColor = if (isScalping) DashboardColors.AccentBlue else DashboardColors.Card
             ),
-            shape = RoundedCornerShape(11.dp),
-            border = if (isScalping) null else BorderStroke(1.dp, DashboardColors.Border),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+            shape = RoundedCornerShape(14.dp),
+            border = if (!isScalping) BorderStroke(1.dp, DashboardColors.Border) else null,
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
         ) {
             Text(
                 "Mode Scalping",
-                color = if (isScalping) Color.Black else TvTextSecondary,
-                fontSize = 12.sp,
+                color = if (isScalping) Color.White else TvTextSecondary,
+                fontSize = 13.sp,
                 fontWeight = FontWeight.ExtraBold,
                 maxLines = 1
             )
