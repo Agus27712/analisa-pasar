@@ -29,13 +29,13 @@ import agu.analys.util.PriceFormatter
 import kotlinx.coroutines.delay
 import kotlin.math.abs
 
-/** Shared Compose animation helpers. Keep animation behavior consistent and lightweight. */
+/** Shared Compose animation helpers — feedback visual saja, bukan data palsu. */
 object AppAnimations {
     const val FAST_MS = 180
     const val NORMAL_MS = 280
     const val SLOW_MS = 420
-    /** Visible enough for a live price tick, but still fast for scalping. */
-    const val PRICE_MS = 360
+    /** Tick price: terasa bergerak, tetap cepat untuk scalper (~200–280ms). */
+    const val PRICE_MS = 240
 }
 
 @Composable
@@ -55,13 +55,13 @@ fun FadeSlideIn(
 }
 
 @Composable
-fun rememberLivePulseAlpha(min: Float = 0.45f, max: Float = 1f): Float {
+fun rememberLivePulseAlpha(min: Float = 0.55f, max: Float = 1f): Float {
     val transition = rememberInfiniteTransition(label = "live_pulse")
     val alpha by transition.animateFloat(
         initialValue = min,
         targetValue = max,
         animationSpec = infiniteRepeatable(
-            animation = tween(900, easing = FastOutSlowInEasing),
+            animation = tween(1100, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "live_pulse_alpha"
@@ -73,9 +73,9 @@ fun Modifier.livePulse(alpha: Float): Modifier =
     this.graphicsLayer { this.alpha = alpha }
 
 /**
- * Smooth live price interpolation while retaining Double precision.
- * A new tick starts from the value currently visible on screen, not from the
- * previous target, so frequent live updates do not create a visible jump.
+ * Smooth live price: interpolasi dari nilai yang sedang tampil → target baru.
+ * Tick baru saat animasi jalan: lanjut dari posisi visual saat itu (no teleport).
+ * Jump relatif > 25% → snap.
  */
 @Composable
 fun rememberSmoothPrice(target: Double, durationMs: Int = AppAnimations.PRICE_MS): Double {
@@ -118,7 +118,7 @@ fun rememberSmoothPrice(target: Double, durationMs: Int = AppAnimations.PRICE_MS
         progress.animateTo(
             targetValue = 1f,
             animationSpec = tween(
-                durationMillis = durationMs.coerceIn(280, 480),
+                durationMillis = durationMs.coerceIn(180, 320),
                 easing = FastOutSlowInEasing
             )
         )
@@ -141,21 +141,17 @@ fun SmoothPriceText(
 ) {
     val smooth = rememberSmoothPrice(price)
     var pulse by remember { mutableStateOf(false) }
+    // Pulse sangat subtle — terminal trading, bukan arcade
     val scale by animateFloatAsState(
-        targetValue = if (pulse) 1.025f else 1f,
-        animationSpec = tween(220, easing = FastOutSlowInEasing),
+        targetValue = if (pulse) 1.012f else 1f,
+        animationSpec = tween(160, easing = FastOutSlowInEasing),
         label = "price_change_scale"
-    )
-    val lift by animateFloatAsState(
-        targetValue = if (pulse) -2.5f else 0f,
-        animationSpec = tween(220, easing = FastOutSlowInEasing),
-        label = "price_change_lift"
     )
 
     LaunchedEffect(price) {
         if (!price.isFinite() || price <= 0.0) return@LaunchedEffect
         pulse = true
-        delay(220)
+        delay(160)
         pulse = false
     }
 
@@ -167,7 +163,6 @@ fun SmoothPriceText(
         modifier = modifier.graphicsLayer {
             scaleX = scale
             scaleY = scale
-            translationY = lift
         },
         maxLines = maxLines
     )

@@ -34,8 +34,8 @@ import agu.analys.ui.theme.TvTextPrimary
 import agu.analys.ui.theme.TvTextSecondary
 
 /**
- * Progress menuju Entry — 100% dari ScalpingMtfSnapshot engine.
- * Tidak parse reasoning string. Tidak hitung ulang threshold.
+ * Progress menuju Entry — dari ScalpingMtfSnapshot engine saja.
+ * Menjawab: seberapa dekat ke entry? (0/3 … 3/3)
  */
 @Composable
 fun ProgressEntryCard(signal: AISignalState, scalping: Boolean) {
@@ -44,7 +44,7 @@ fun ProgressEntryCard(signal: AISignalState, scalping: Boolean) {
             SectionTitle("PROGRESS MENUJU ENTRY", Icons.Default.Timeline)
             Spacer(Modifier.height(8.dp))
             Text(
-                "Aktifkan Mode Scalping di atas untuk melihat checklist 1H → 15M → 1M.",
+                "Aktifkan Mode Scalping untuk checklist 1H Bias → 15M Setup → 1M Trigger.",
                 fontSize = 13.sp, color = TvTextSecondary, lineHeight = 18.sp
             )
         }
@@ -53,11 +53,28 @@ fun ProgressEntryCard(signal: AISignalState, scalping: Boolean) {
 
     val mtf = signal.mtf
     val stage = signal.scalpingStage
-    val statusColor = when (stage) {
-        ScalpingStage.ENTRY, ScalpingStage.STRONG_ENTRY -> TvGreen
-        ScalpingStage.WAIT_PULLBACK, ScalpingStage.WATCH -> WarningAmber
-        ScalpingStage.HOLD -> TvTextSecondary
+
+    val completed = listOf(mtf.biasStatus, mtf.setupStatus, mtf.triggerStatus)
+        .count { it == MtfLegStatus.OK }
+
+    // Semantic status (bukan BUY/SELL/HOLD generik)
+    val semanticStatus = when {
+        completed == 3 || stage == ScalpingStage.ENTRY || stage == ScalpingStage.STRONG_ENTRY -> "ENTRY"
+        completed == 2 -> "SETUP TERBENTUK"
+        completed == 1 && mtf.biasStatus == MtfLegStatus.OK -> "MENUNGGU SETUP"
+        completed == 1 -> "MENUNGGU KONFIRMASI"
+        stage == ScalpingStage.WAIT_PULLBACK -> "MENUNGGU KONFIRMASI"
+        stage == ScalpingStage.WATCH -> "MENUNGGU KONFIRMASI"
+        else -> "BELUM TERSEDIA"
     }
+
+    val displayTitle = mtf.statusTitle.ifBlank { semanticStatus }
+    val statusColor = when {
+        completed == 3 || stage == ScalpingStage.ENTRY || stage == ScalpingStage.STRONG_ENTRY -> TvGreen
+        completed >= 1 || stage == ScalpingStage.WAIT_PULLBACK || stage == ScalpingStage.WATCH -> WarningAmber
+        else -> TvTextSecondary
+    }
+
     val pathLabel = when (mtf.path) {
         ScalpingPath.ENTRY_READY -> "Jalur: breakout / trigger terkonsolidasi"
         ScalpingPath.BOTH -> "Jalur: pullback ATAU momentum continuation"
@@ -66,31 +83,22 @@ fun ProgressEntryCard(signal: AISignalState, scalping: Boolean) {
         ScalpingPath.NONE -> "Jalur: belum terbentuk"
     }
 
-    val completed = listOf(mtf.biasStatus, mtf.setupStatus, mtf.triggerStatus).count { it == MtfLegStatus.OK }
     val progressTarget = completed / 3f
     val progress by animateFloatAsState(
         targetValue = progressTarget,
-        animationSpec = tween(durationMillis = 420, easing = FastOutSlowInEasing),
+        animationSpec = tween(durationMillis = 400, easing = FastOutSlowInEasing),
         label = "entry_progress"
     )
 
-    // Saat 0/3, target progress tidak berubah sehingga animateFloatAsState
-    // tidak punya transisi untuk dimainkan. Gunakan indikator monitoring yang
-    // sangat halus agar card tetap terasa aktif tanpa membuat progress palsu.
     val idleTransition = rememberInfiniteTransition(label = "entry_monitoring")
     val idlePulse by idleTransition.animateFloat(
-        initialValue = 0.72f,
+        initialValue = 0.75f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(1200, easing = FastOutSlowInEasing),
+            animation = tween(1300, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "entry_monitoring_pulse"
-    )
-    val stagePulse by animateFloatAsState(
-        targetValue = if (completed in 1..2) 1.035f else 1f,
-        animationSpec = tween(durationMillis = 360, easing = FastOutSlowInEasing),
-        label = "entry_stage_pulse"
     )
 
     AnalysisCard {
@@ -99,8 +107,7 @@ fun ProgressEntryCard(signal: AISignalState, scalping: Boolean) {
                 .fillMaxWidth()
                 .background(statusColor.copy(alpha = 0.12f), RoundedCornerShape(10.dp))
                 .border(1.dp, statusColor.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
-                .padding(horizontal = 12.dp, vertical = 10.dp)
-                .scale(stagePulse),
+                .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
@@ -112,14 +119,15 @@ fun ProgressEntryCard(signal: AISignalState, scalping: Boolean) {
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Text("PROGRESS ENTRY", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TvTextSecondary, letterSpacing = 0.8.sp)
-                Text(
-                    mtf.statusTitle.ifBlank { stage.displayName },
-                    color = statusColor,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    maxLines = 2
-                )
+                Text(displayTitle, color = statusColor, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold, maxLines = 2)
+                Text(semanticStatus, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TvTextSecondary)
             }
+            Text(
+                "$completed/3",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Black,
+                color = statusColor
+            )
         }
 
         Spacer(Modifier.height(10.dp))
@@ -132,18 +140,16 @@ fun ProgressEntryCard(signal: AISignalState, scalping: Boolean) {
                 .background(Color(0x22FFFFFF), RoundedCornerShape(8.dp))
         ) {
             if (completed == 0) {
-                // Bukan progress palsu: hanya pulse pada track untuk menunjukkan
-                // engine sedang memantau dan menunggu kondisi pertama terpenuhi.
                 Box(
                     Modifier
                         .fillMaxWidth()
                         .fillMaxHeight()
-                        .background(statusColor.copy(alpha = 0.18f * idlePulse), RoundedCornerShape(8.dp))
+                        .background(statusColor.copy(alpha = 0.16f * idlePulse), RoundedCornerShape(8.dp))
                 )
             } else {
                 Box(
                     Modifier
-                        .fillMaxWidth(progress)
+                        .fillMaxWidth(progress.coerceIn(0.02f, 1f))
                         .fillMaxHeight()
                         .background(statusColor, RoundedCornerShape(8.dp))
                 )
@@ -151,9 +157,13 @@ fun ProgressEntryCard(signal: AISignalState, scalping: Boolean) {
         }
         Spacer(Modifier.height(4.dp))
         Text(
-            if (completed == 0) "Engine sedang memantau 3 tahap MTF"
-            else "$completed dari 3 tahap terpenuhi",
-            fontSize = 10.sp,
+            when (completed) {
+                0 -> "0/3 — engine memantau, belum ada tahap terpenuhi"
+                1 -> "1/3 tahap terpenuhi"
+                2 -> "2/3 tahap terpenuhi"
+                else -> "3/3 — kondisi entry terpenuhi"
+            },
+            fontSize = 11.sp,
             color = TvTextSecondary
         )
 

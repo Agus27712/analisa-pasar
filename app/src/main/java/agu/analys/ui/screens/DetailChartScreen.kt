@@ -131,6 +131,7 @@ fun DetailChartScreen(
         }
     ) { innerPadding ->
         if (isChartExpanded) {
+            // Landscape/fullscreen: tetap besar
             Box(Modifier.fillMaxSize().padding(innerPadding).background(Color(0xFF0D0E12))) {
                 SimpleComposeChart(
                     prices = emptyList(),
@@ -155,15 +156,18 @@ fun DetailChartScreen(
                 currentTick?.let { PriceHeader(it.price, it.change24h) }
                 Spacer(Modifier.height(8.dp))
                 ModeSwitchToggle(isScalping = isScalpingMode, onToggle = { viewModel.setScalpingMode(it) })
-                Spacer(Modifier.height(10.dp))
-                SimpleComposeChart(
-                    prices = emptyList(),
-                    candles = recentCandles,
-                    currentPrice = currentTick?.price ?: 0.0,
-                    isPositiveTrend = (currentTick?.change24h ?: 0.0) >= 0,
-                    modifier = Modifier.fillMaxWidth().height(360.dp)
-                )
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(8.dp))
+                // ⑤ Single source of truth — ChartLayoutDefaults.PortraitHeight
+                ChartLayout { chartModifier ->
+                    SimpleComposeChart(
+                        prices = emptyList(),
+                        candles = recentCandles,
+                        currentPrice = currentTick?.price ?: 0.0,
+                        isPositiveTrend = (currentTick?.change24h ?: 0.0) >= 0,
+                        modifier = chartModifier
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
                 TimeframeSelector(selectedTimeframe, viewModel::selectTimeframe)
                 if (connectionState is MarketConnectionState.ConnectionLost) {
                     Spacer(Modifier.height(8.dp))

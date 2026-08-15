@@ -8,14 +8,20 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /**
- * Compact portrait chart boundary so the market-condition and entry cards remain
- * visible without sacrificing the larger chart introduced by the UI refactor.
- * Rendering stays in SimpleComposeChart; engine stays untouched.
+ * Single source of truth untuk tinggi chart portrait.
+ * Lebih lega dari baseline awal (~300→360), tapi proporsional HP
+ * agar card Kondisi/Progress tidak terdorong jauh ke bawah.
+ * Fullscreen/landscape tetap fillMaxSize di screen masing-masing.
  */
+object ChartLayoutDefaults {
+    /** Portrait detail — lega tapi tidak mendominasi scroll. */
+    val PortraitHeight: Dp = 280.dp
+}
+
 @Composable
 fun ChartLayout(
     modifier: Modifier = Modifier,
-    height: Dp = 300.dp,
+    height: Dp = ChartLayoutDefaults.PortraitHeight,
     content: @Composable (Modifier) -> Unit
 ) {
     content(
