@@ -72,39 +72,47 @@ fun Modifier.livePulse(alpha: Float): Modifier =
 
 /**
  * Smooth live price interpolation while retaining Double precision.
- * The animation uses a normalized Float progress only. The actual market value
- * is always calculated as Double, avoiding price precision loss.
- * A new target cancels the old animation and continues from the currently
- * displayed value, so frequent live refreshes do not make the number jump.
+ * The animation state is a normalized Float, while the displayed price is
+ * calculated as Double. A new target continues from the value currently
+ * visible on screen, so frequent live ticks do not snap the number.
  */
 @Composable
 fun rememberSmoothPrice(target: Double, durationMs: Int = AppAnimations.PRICE_MS): Double {
-    var displayed by remember { mutableStateOf(target) }
     val progress = remember { Animatable(1f) }
+    var startPrice by remember { mutableStateOf(target) }
+
+    val progressValue = progress.value.coerceIn(0f, 1f)
+    val displayed = startPrice + (target - startPrice) * progressValue.toDouble()
 
     LaunchedEffect(target) {
         if (!target.isFinite() || target <= 0.0) return@LaunchedEffect
 
-        val start = displayed
-        if (!start.isFinite() || start <= 0.0) {
-            displayed = target
+        val current = if (startPrice.isFinite() && startPrice > 0.0) {
+            startPrice + (target - startPrice) * progress.value.toDouble()
+        } else {
+            target
+        }
+
+        if (!current.isFinite() || current <= 0.0) {
+            startPrice = target
             progress.snapTo(1f)
             return@LaunchedEffect
         }
 
-        if (start == target) {
-            displayed = target
+        if (current == target) {
+            startPrice = target
             progress.snapTo(1f)
             return@LaunchedEffect
         }
 
-        val relativeDelta = abs(target - start) / start
+        val relativeDelta = abs(target - current) / current
         if (relativeDelta > 0.25) {
-            displayed = target
+            startPrice = target
             progress.snapTo(1f)
             return@LaunchedEffect
         }
 
+        startPrice = current
         progress.snapTo(0f)
         progress.animateTo(
             targetValue = 1f,
@@ -112,11 +120,9 @@ fun rememberSmoothPrice(target: Double, durationMs: Int = AppAnimations.PRICE_MS
                 durationMillis = durationMs.coerceIn(220, 420),
                 easing = FastOutSlowInEasing
             )
-        ) {
-            val t = value.toDouble()
-            displayed = start + (target - start) * t
-        }
-        displayed = target
+        )
+        startPrice = target
+        progress.snapTo(1f)
     }
 
     return displayed
