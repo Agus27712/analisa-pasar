@@ -1,5 +1,8 @@
 package agu.analys.ui.components.detail
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -9,8 +12,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -57,14 +62,27 @@ fun ProgressEntryCard(signal: AISignalState, scalping: Boolean) {
         ScalpingPath.NONE -> "Jalur: belum terbentuk"
     }
 
+    val completed = listOf(mtf.biasStatus, mtf.setupStatus, mtf.triggerStatus).count { it == MtfLegStatus.OK }
+    val progressTarget = completed / 3f
+    val progress by animateFloatAsState(
+        targetValue = progressTarget,
+        animationSpec = tween(durationMillis = 420, easing = FastOutSlowInEasing),
+        label = "entry_progress"
+    )
+    val stagePulse by animateFloatAsState(
+        targetValue = if (completed in 1..2) 1.035f else 1f,
+        animationSpec = tween(durationMillis = 360, easing = FastOutSlowInEasing),
+        label = "entry_stage_pulse"
+    )
+
     AnalysisCard {
-        // Header badge biar langsung keliatan beda dari card lama
         Row(
             Modifier
                 .fillMaxWidth()
                 .background(statusColor.copy(alpha = 0.12f), RoundedCornerShape(10.dp))
                 .border(1.dp, statusColor.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
-                .padding(horizontal = 12.dp, vertical = 10.dp),
+                .padding(horizontal = 12.dp, vertical = 10.dp)
+                .scale(stagePulse),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(Modifier.size(10.dp).background(statusColor, CircleShape))
@@ -80,6 +98,29 @@ fun ProgressEntryCard(signal: AISignalState, scalping: Boolean) {
                 )
             }
         }
+
+        Spacer(Modifier.height(10.dp))
+        Text("Kedekatan menuju entry", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = TvTextSecondary)
+        Spacer(Modifier.height(5.dp))
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(6.dp)
+                .background(Color(0x22FFFFFF), RoundedCornerShape(8.dp))
+        ) {
+            Box(
+                Modifier
+                    .fillMaxWidth(progress)
+                    .fillMaxHeight()
+                    .background(statusColor, RoundedCornerShape(8.dp))
+            )
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "$completed dari 3 tahap terpenuhi",
+            fontSize = 10.sp,
+            color = TvTextSecondary
+        )
 
         Spacer(Modifier.height(8.dp))
         Text(pathLabel, fontSize = 12.sp, color = TvTextSecondary)
