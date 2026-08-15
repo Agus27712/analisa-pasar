@@ -188,15 +188,44 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
             val worth = pairs.mapNotNull { pair ->
                 val tick = tickMap[pair.symbol] ?: return@mapNotNull null
                 val rangePct = if (tick.low24h > 0) ((tick.high24h - tick.low24h) / tick.low24h) * 100.0 else 0.0
-                val volScore = when { tick.volume24h >= 100_000_000_000 -> 30; tick.volume24h >= 10_000_000_000 -> 22; tick.volume24h >= 1_000_000_000 -> 14; else -> 6 }
-                val mid = (tick.high24h + tick.low24h) / 2.0
-                val changeEst = if (mid > 0) ((tick.price - mid) / mid) * 100.0 else 0.0
-                val momentumScore = when { changeEst >= 3 -> 35; changeEst >= 0 -> 20; changeEst >= -3 -> 12; else -> 5 }
-                val volaScore = min(20, (rangePct * 1.5).toInt()); val score = (volScore + momentumScore + volaScore).coerceIn(1, 99)
-                val rec = when { score >= 80 && changeEst > 0 -> "MOMENTUM KUAT"; score >= 65 -> "LAYAK DIPANTAU"; changeEst <= -3 -> "TEKANAN JUAL"; else -> "NETRAL / KONSOLIDASI" }
-                WorthCoinInfo(pair, score, score >= 65 && changeEst >= 0, rec, abs(changeEst), "${PriceFormatter.formatPrice(tick.price)} · Vol ${PriceFormatter.formatVolume(tick.volume24h)} · Range ${PriceFormatter.formatPercentage(rangePct, false)}")
+                val volScore = when {
+                    tick.volume24h >= 100_000_000_000 -> 30
+                    tick.volume24h >= 10_000_000_000 -> 22
+                    tick.volume24h >= 1_000_000_000 -> 14
+                    else -> 6
+                }
+
+                // Use the real 24h change instead of price-vs-mid estimation.
+                // This makes watchlist ranking react to actual market movement
+                // and avoids treating every below-mid coin as a sell candidate.
+                val change24h = tick.change24h.takeIf { it.isFinite() } ?: 0.0
+                val momentumScore = when {
+                    change24h >= 8.0 -> 35
+                    change24h >= 3.0 -> 30
+                    change24h >= 0.0 -> 23
+                    change24h >= -3.0 -> 15
+                    change24h >= -8.0 -> 8
+                    else -> 4
+                }
+                val volaScore = min(20, (rangePct * 1.5).toInt())
+                val score = (volScore + momentumScore + volaScore).coerceIn(1, 99)
+                val rec = when {
+                    score >= 75 && change24h > 0 -> "MOMENTUM KUAT"
+                    score >= 58 && change24h > -2 -> "LAYAK DIPANTAU"
+                    change24h <= -8 -> "TEKANAN JUAL"
+                    else -> "NETRAL / VOLATIL"
+                }
+                WorthCoinInfo(
+                    pair,
+                    score,
+                    score >= 58 && change24h > -2,
+                    rec,
+                    abs(change24h),
+                    "${PriceFormatter.formatPrice(tick.price)} · Vol ${PriceFormatter.formatPrice(tick.volume24h)} · Range ${PriceFormatter.formatPercentage(rangePct, false)}"
+                )
             }.sortedByDescending { it.worthScore }
-            _worthCoins.value = worth; marketCache.saveWorthCoins(worth)
+            _worthCoins.value = worth
+            marketCache.saveWorthCoins(worth)
         }
     }
 
@@ -261,82 +290,3 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
             }
         }
     }
-
-    private fun clearLiveData() { _currentTick.value = null; _recentPrices.value = emptyList(); _recentCandles.value = emptyList(); _orderBookBids.value = emptyList(); _orderBookAsks.value = emptyList(); _tradeStream.value = emptyList(); engine.resetForOffline() }
-    private fun markMarketOffline(reason: String) { marketPollJob?.cancel(); if (_dashboardTicks.value.isEmpty() && _worthCoins.value.isEmpty()) clearLiveData(); _isShowingCachedData.value = _dashboardTicks.value.isNotEmpty() || _currentTick.value != null; _connectionState.value = MarketConnectionState.ConnectionLost(reason) }
-    fun toggleSimpleChart() { _useSimpleChart.value = !_useSimpleChart.value }
-    fun selectTimeframe(tf: Timeframe) { if (_selectedTimeframe.value == tf) return; _selectedTimeframe.value = tf; selectPair(_selectedPair.value) }
-    fun selectChartStyle(style: ChartStyle) { _selectedChartStyle.value = style }
-    fun toggleChartExpanded() { _isChartExpanded.value = !_isChartExpanded.value }
-
-    fun requestDeepAiAudit() {
-        val tick = _currentTick.value ?: return
-        if (_connectionState.value !is MarketConnectionState.Connected) return
-        if (_isAuditLoading.value || _isGeminiLoading.value) return
-        val indicators = currentIndicators.value
-        val signal = aiSignalState.value
-        viewModelScope.launch {
-            _isAuditLoading.value = true
-            _auditReportText.value = null
-            try {
-                _auditReportText.value = GroqAiService.generateDeepMarketAudit(prefs.groqApiKey, tick, indicators, signal)
-            } finally {
-                _isAuditLoading.value = false
-            }
-        }
-    }
-
-    fun clearAuditReport() { _auditReportText.value = null }
-
-    fun requestGeminiChartSummary() {
-        val tick = _currentTick.value ?: return
-        if (_connectionState.value !is MarketConnectionState.Connected) return
-        if (_isAuditLoading.value || _isGeminiLoading.value) return
-        val indicators = currentIndicators.value
-        val signal = aiSignalState.value
-        viewModelScope.launch {
-            _isGeminiLoading.value = true
-            _geminiSummaryText.value = null
-            try {
-                _geminiSummaryText.value = GeminiAiService.generateChartSummary24h(prefs.geminiApiKey, tick, indicators, signal)
-            } finally {
-                _isGeminiLoading.value = false
-            }
-        }
-    }
-
-    fun clearGeminiSummary() { _geminiSummaryText.value = null }
-    fun retryConnection() { _connectionState.value = MarketConnectionState.Loading; startMarketPolling(_selectedPair.value); refreshWorthCoinsFromMarket() }
-    fun simulateDisconnect() { markMarketOffline("Mode offline: koneksi pasar dihentikan. Data cache terakhir tetap ditampilkan.") }
-
-    private val _githubReleaseInfo = MutableStateFlow<GitHubReleaseInfo?>(null)
-    val githubReleaseInfo: StateFlow<GitHubReleaseInfo?> = _githubReleaseInfo.asStateFlow()
-    private val _isCheckingUpdate = MutableStateFlow(false)
-    val isCheckingUpdate: StateFlow<Boolean> = _isCheckingUpdate.asStateFlow()
-    private val _updateDownloadProgress = MutableStateFlow<Int?>(null)
-    val updateDownloadProgress: StateFlow<Int?> = _updateDownloadProgress.asStateFlow()
-
-    fun checkGitHubUpdate(repo: String) {
-        viewModelScope.launch {
-            _isCheckingUpdate.value = true
-            _githubReleaseInfo.value = null
-            _updateDownloadProgress.value = null
-            try {
-                _githubReleaseInfo.value = GitHubUpdater.fetchLatestRelease(repo)
-            } finally {
-                _isCheckingUpdate.value = false
-            }
-        }
-    }
-
-    fun downloadAndInstallUpdate(context: android.content.Context, repo: String) {
-        val release = _githubReleaseInfo.value ?: return
-        if (release.apkUrl.isBlank()) return
-        viewModelScope.launch {
-            _updateDownloadProgress.value = 0
-            GitHubUpdater.downloadAndInstallApk(context, release.apkUrl, release.apkName) { progress ->
-                _updateDownloadProgress.value = progress
-            }
-        }
-    }
-}
