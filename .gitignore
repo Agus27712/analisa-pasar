@@ -18,3 +18,4 @@ local.properties
 debug.keystore
 *.jks
 *.keystore
+.build-outputs/
