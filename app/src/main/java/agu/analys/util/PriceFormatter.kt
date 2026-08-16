@@ -97,4 +97,27 @@ object PriceFormatter {
             String.format(Locale.US, "%.6f", quantity).trimEnd('0').trimEnd('.')
         }
     }
+
+    /** Format desimal koin kripto presisi tinggi (cth: 0,00002774 BTC) */
+    fun formatCryptoExact(amount: Double, maxDecimals: Int = 8): String {
+        if (amount.isNaN() || amount.isInfinite() || amount <= 0.0) return "0"
+        val symbols = DecimalFormatSymbols(Locale("id", "ID")).apply {
+            groupingSeparator = '.'
+            decimalSeparator = ','
+        }
+        val pattern = "0." + "#".repeat(maxDecimals.coerceIn(2, 10))
+        return DecimalFormat(pattern, symbols).format(amount)
+    }
+
+    /** Format nominal integer IDR tanpa desimal (cth: 38.028 IDR atau - 40 IDR) */
+    fun formatIdrNumber(amount: Double): String {
+        if (amount.isNaN() || amount.isInfinite()) return "0"
+        val symbols = DecimalFormatSymbols(Locale("id", "ID")).apply {
+            groupingSeparator = '.'
+            decimalSeparator = ','
+        }
+        val rounded = kotlin.math.round(abs(amount)).toLong()
+        val formatted = DecimalFormat("#,# #0", symbols).format(rounded).replace(" ", "")
+        return if (amount < 0) "- $formatted" else formatted
+    }
 }
