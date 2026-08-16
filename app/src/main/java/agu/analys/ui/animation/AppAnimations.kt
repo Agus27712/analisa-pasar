@@ -40,12 +40,12 @@ import kotlin.math.abs
  * Tidak mengubah nilai data Indodax.
  */
 object AppAnimations {
-    const val FAST_MS = 140
-    const val NORMAL_MS = 220
-    const val SLOW_MS = 360
+    const val FAST_MS = 160
+    const val NORMAL_MS = 230
+    const val SLOW_MS = 365
     /** Handover: smooth ~160ms untuk tick harga. */
-    const val PRICE_MS = 160
-    const val METRIC_MS = 160
+    const val PRICE_MS = 180
+    const val METRIC_MS = 180
 }
 
 @Composable
