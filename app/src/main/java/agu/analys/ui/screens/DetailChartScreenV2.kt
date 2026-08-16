@@ -68,6 +68,7 @@ fun DetailChartScreenV2(
     val signal by viewModel.aiSignalState.collectAsStateWithLifecycle()
     val connection by viewModel.connectionState.collectAsStateWithLifecycle()
     val isScalping by viewModel.isScalpingMode.collectAsStateWithLifecycle()
+    val tradingFees by viewModel.tradingFees.collectAsStateWithLifecycle()
     val watchlist by viewModel.watchlist.collectAsStateWithLifecycle()
     val spotPosition by viewModel.spotPosition.collectAsStateWithLifecycle()
     val selectedTimeframe by viewModel.selectedTimeframe.collectAsStateWithLifecycle()
@@ -359,7 +360,11 @@ fun DetailChartScreenV2(
         // 2. RADAR & PROGRES MENUNGGU ENTRY (Status Live Scanning, MTF Steps, Micro-Tips Edukasi Interaktif)
         WaitingEntryRadarCard(
             signal = signal,
-            scalping = isScalping
+            scalping = isScalping,
+            fees = tradingFees,
+            currentPrice = tick?.price ?: 0.0,
+            baseAsset = pair.baseAsset,
+            quoteAsset = pair.quoteAsset
         )
 
         Spacer(Modifier.height(10.dp))
