@@ -1,9 +1,9 @@
-# HANDOVER — analisa-pasar v1.2.1
+# HANDOVER — analisa-pasar v1.2.2
 
 **Tanggal:** 2026-08-16  
 **Repo:** Agus27712/analisa-pasar  
-**Branch stabil:** `main` (= `backup`)  
-**Versi:** **1.2.1** · versionCode **8**
+**Branch stabil:** `backup` (candidate; `main` tetap tidak disentuh)  
+**Versi:** **1.2.2** · versionCode **9**
 
 ---
 
@@ -32,9 +32,10 @@ Android app analisis crypto Indodax/IDR:
 | 1.1.8 | 6 | Baseline sebelumnya |
 | 1.1.9 | 7 | Websocket + buy-only fee blueprint |
 | 1.2.0 | 8 | Release sebelumnya |
-| **1.2.1** | **8** | **Baseline polishing saat ini** |
+| 1.2.1 | 8 | Baseline polishing sebelumnya |
+| **1.2.2** | **9** | **Baseline polishing UI saat ini** |
 
-> Catatan: versionName 1.2.1 dipertahankan sesuai edit manual `build.gradle.kts`. versionCode tetap 8 pada baseline ini; release berikutnya wajib menaikkan versionCode.
+> versionCode dinaikkan dari 8 menjadi 9 untuk release berikutnya. Jangan reuse versionCode 8.
 
 ---
 
@@ -54,7 +55,10 @@ Android app analisis crypto Indodax/IDR:
 
 ### UI
 - Watchlist dengan rank, ikon, aktivitas, sparkline
+- Market Overview dengan hierarchy lebih jelas
+- Watchlist card lebih compact
 - Progress entry 0/3
+- Checklist MTF 1H → 15M → 1M
 - Level + AREA OBSERVASI
 - BUY READY card
 - Settings mode cards
@@ -78,6 +82,7 @@ Android app analisis crypto Indodax/IDR:
 6. versionCode selalu naik untuk release berikutnya
 7. Jangan mengubah engine hanya untuk mengejar tampilan mockup
 8. Dashboard dan Settings dipoles berdasarkan mockup yang disepakati
+9. `main` tidak disentuh selama validasi candidate di `backup`
 
 ---
 
@@ -100,7 +105,7 @@ Android app analisis crypto Indodax/IDR:
 ## 6. Build
 
 ```bash
-git checkout main && git pull
+git checkout backup && git pull
 ./gradlew assembleDebug
 ```
 
@@ -110,13 +115,14 @@ Release: workflow Release manual / tag sesuai version release.
 
 ## 7. Status polishing
 
-Baseline source `main` dan `backup` sudah diselaraskan pada v1.2.1.
+`backup` adalah candidate **v1.2.2 / versionCode 9**.
 
-Target polishing berikutnya:
-- Dashboard/Watchlist dibuat lebih faithful terhadap mockup
-- Settings dibuat lebih faithful terhadap mockup
+Target validasi:
+- Dashboard/Watchlist faithful terhadap mockup
+- Detail Scalping faithful terhadap mockup
+- Settings faithful terhadap mockup
 - Presentation layer saja; engine dan sumber data real tetap
-- Validasi build Debug sebelum merge
+- Validasi build Debug sebelum merge ke `main`
 
 ---
 
