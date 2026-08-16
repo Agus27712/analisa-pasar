@@ -33,48 +33,36 @@ import agu.analys.ui.theme.TvRed
 import agu.analys.ui.theme.TvTextPrimary
 import agu.analys.ui.theme.TvTextSecondary
 
-/**
- * Progress menuju Entry — dari ScalpingMtfSnapshot engine saja.
- * Menjawab: seberapa dekat ke entry? (0/3 … 3/3)
- */
+/** Progress menuju Entry. Presentation only, seluruh status berasal dari engine. */
 @Composable
 fun ProgressEntryCard(signal: AISignalState, scalping: Boolean) {
     if (!scalping) {
         AnalysisCard {
             SectionTitle("PROGRESS MENUJU ENTRY", Icons.Default.Timeline)
-            Spacer(Modifier.height(8.dp))
-            Text(
-                "Aktifkan Mode Scalping untuk checklist 1H Bias → 15M Setup → 1M Trigger.",
-                fontSize = 13.sp, color = TvTextSecondary, lineHeight = 18.sp
-            )
+            Spacer(Modifier.height(6.dp))
+            Text("Aktifkan Mode Scalping untuk checklist 1H Bias → 15M Setup → 1M Trigger.", fontSize = 13.sp, color = TvTextSecondary, lineHeight = 18.sp)
         }
         return
     }
 
     val mtf = signal.mtf
     val stage = signal.scalpingStage
+    val completed = listOf(mtf.biasStatus, mtf.setupStatus, mtf.triggerStatus).count { it == MtfLegStatus.OK }
 
-    val completed = listOf(mtf.biasStatus, mtf.setupStatus, mtf.triggerStatus)
-        .count { it == MtfLegStatus.OK }
-
-    // Semantic status (bukan BUY/SELL/HOLD generik)
     val semanticStatus = when {
         completed == 3 || stage == ScalpingStage.ENTRY || stage == ScalpingStage.STRONG_ENTRY -> "ENTRY"
         completed == 2 -> "SETUP TERBENTUK"
         completed == 1 && mtf.biasStatus == MtfLegStatus.OK -> "MENUNGGU SETUP"
         completed == 1 -> "MENUNGGU KONFIRMASI"
-        stage == ScalpingStage.WAIT_PULLBACK -> "MENUNGGU KONFIRMASI"
-        stage == ScalpingStage.WATCH -> "MENUNGGU KONFIRMASI"
+        stage == ScalpingStage.WAIT_PULLBACK || stage == ScalpingStage.WATCH -> "MENUNGGU KONFIRMASI"
         else -> "BELUM TERSEDIA"
     }
-
     val displayTitle = mtf.statusTitle.ifBlank { semanticStatus }
     val statusColor = when {
         completed == 3 || stage == ScalpingStage.ENTRY || stage == ScalpingStage.STRONG_ENTRY -> TvGreen
         completed >= 1 || stage == ScalpingStage.WAIT_PULLBACK || stage == ScalpingStage.WATCH -> WarningAmber
         else -> TvTextSecondary
     }
-
     val pathLabel = when (mtf.path) {
         ScalpingPath.ENTRY_READY -> "Jalur: breakout / trigger terkonsolidasi"
         ScalpingPath.BOTH -> "Jalur: pullback ATAU momentum continuation"
@@ -83,162 +71,108 @@ fun ProgressEntryCard(signal: AISignalState, scalping: Boolean) {
         ScalpingPath.NONE -> "Jalur: belum terbentuk"
     }
 
-    val progressTarget = completed / 3f
-    val progress by animateFloatAsState(
-        targetValue = progressTarget,
-        animationSpec = tween(durationMillis = 400, easing = FastOutSlowInEasing),
-        label = "entry_progress"
-    )
-
+    val progress by animateFloatAsState(completed / 3f, tween(400, easing = FastOutSlowInEasing), label = "entry_progress")
     val idleTransition = rememberInfiniteTransition(label = "entry_monitoring")
-    val idlePulse by idleTransition.animateFloat(
-        initialValue = 0.75f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1300, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "entry_monitoring_pulse"
-    )
+    val idlePulse by idleTransition.animateFloat(0.75f, 1f, infiniteRepeatable(tween(1300, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "entry_monitoring_pulse")
 
     AnalysisCard {
         Row(
-            Modifier
-                .fillMaxWidth()
-                .background(statusColor.copy(alpha = 0.12f), RoundedCornerShape(10.dp))
-                .border(1.dp, statusColor.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
-                .padding(horizontal = 12.dp, vertical = 10.dp),
+            Modifier.fillMaxWidth()
+                .background(statusColor.copy(alpha = 0.10f), RoundedCornerShape(9.dp))
+                .border(1.dp, statusColor.copy(alpha = 0.30f), RoundedCornerShape(9.dp))
+                .padding(horizontal = 11.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                Modifier
-                    .size(10.dp)
-                    .scale(if (completed == 0) idlePulse else 1f)
-                    .background(statusColor, CircleShape)
-            )
-            Spacer(Modifier.width(10.dp))
+            Box(Modifier.size(9.dp).scale(if (completed == 0) idlePulse else 1f).background(statusColor, CircleShape))
+            Spacer(Modifier.width(9.dp))
             Column(Modifier.weight(1f)) {
-                Text("PROGRESS ENTRY", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TvTextSecondary, letterSpacing = 0.8.sp)
-                Text(displayTitle, color = statusColor, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold, maxLines = 2)
-                Text(semanticStatus, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TvTextSecondary)
+                Text("PROGRESS ENTRY", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TvTextSecondary, letterSpacing = 0.7.sp)
+                Text(displayTitle, color = statusColor, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1)
+                Text(semanticStatus, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TvTextSecondary)
             }
-            Text(
-                "$completed/3",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Black,
-                color = statusColor
-            )
+            Text("$completed/3", fontSize = 18.sp, fontWeight = FontWeight.Black, color = statusColor)
         }
 
-        Spacer(Modifier.height(10.dp))
-        Text("Kedekatan menuju entry", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = TvTextSecondary)
-        Spacer(Modifier.height(5.dp))
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .height(6.dp)
-                .background(Color(0x22FFFFFF), RoundedCornerShape(8.dp))
-        ) {
-            if (completed == 0) {
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .fillMaxHeight()
-                        .background(statusColor.copy(alpha = 0.16f * idlePulse), RoundedCornerShape(8.dp))
-                )
-            } else {
-                Box(
-                    Modifier
-                        .fillMaxWidth(progress.coerceIn(0.02f, 1f))
-                        .fillMaxHeight()
-                        .background(statusColor, RoundedCornerShape(8.dp))
-                )
-            }
+        Spacer(Modifier.height(8.dp))
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("Kedekatan menuju entry", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = TvTextSecondary)
+            Spacer(Modifier.weight(1f))
+            Text("$completed/3", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TvTextSecondary)
         }
         Spacer(Modifier.height(4.dp))
+        Box(Modifier.fillMaxWidth().height(5.dp).background(Color(0x22FFFFFF), RoundedCornerShape(8.dp))) {
+            if (completed == 0) {
+                Box(Modifier.fillMaxSize().background(statusColor.copy(alpha = 0.14f * idlePulse), RoundedCornerShape(8.dp)))
+            } else {
+                Box(Modifier.fillMaxWidth(progress.coerceIn(0.02f, 1f)).fillMaxHeight().background(statusColor, RoundedCornerShape(8.dp)))
+            }
+        }
+        Spacer(Modifier.height(5.dp))
         Text(
             when (completed) {
-                0 -> "0/3 — engine memantau, belum ada tahap terpenuhi"
-                1 -> "1/3 tahap terpenuhi"
-                2 -> "2/3 tahap terpenuhi"
-                else -> "3/3 — kondisi entry terpenuhi"
-            },
-            fontSize = 11.sp,
-            color = TvTextSecondary
+                0 -> "Engine memantau, belum ada tahap terpenuhi"
+                1 -> "1 tahap terpenuhi"
+                2 -> "2 tahap terpenuhi"
+                else -> "Kondisi entry terpenuhi"
+            }, fontSize = 11.sp, color = TvTextSecondary
         )
+        Spacer(Modifier.height(6.dp))
+        Text(pathLabel, fontSize = 11.sp, color = TvTextSecondary)
 
-        Spacer(Modifier.height(8.dp))
-        Text(pathLabel, fontSize = 12.sp, color = TvTextSecondary)
-
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(9.dp))
         AnalysisDivider()
-        Spacer(Modifier.height(12.dp))
-
+        Spacer(Modifier.height(9.dp))
         Text("CHECKLIST MTF", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = TvTextSecondary, letterSpacing = 0.6.sp)
-        Spacer(Modifier.height(8.dp))
-        MtfRow("1H  Bias", mtf.biasStatus, mtf.biasDetail.ifBlank { "Menunggu data 1H" })
+        Spacer(Modifier.height(5.dp))
+        MtfRow("1H Bias", mtf.biasStatus, mtf.biasDetail.ifBlank { "Menunggu data 1H" })
         MtfRow("15M Setup", mtf.setupStatus, mtf.setupDetail.ifBlank { "Menunggu data 15M" })
-        MtfRow("1M  Trigger", mtf.triggerStatus, mtf.triggerDetail.ifBlank { "Menunggu data 1M" })
+        MtfRow("1M Trigger", mtf.triggerStatus, mtf.triggerDetail.ifBlank { "Menunggu data 1M" })
 
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(9.dp))
         AnalysisDivider()
-        Spacer(Modifier.height(10.dp))
-
-        Text("APA YANG DITUNGGU?", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = TvTextSecondary, letterSpacing = 0.6.sp)
-        Spacer(Modifier.height(4.dp))
-        Text(
-            mtf.waitingFor.ifBlank { "Menunggu kondisi market lebih jelas." },
-            fontSize = 13.sp, color = TvTextPrimary, lineHeight = 18.sp
-        )
-
         Spacer(Modifier.height(8.dp))
+        Text("APA YANG DITUNGGU?", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = TvTextSecondary, letterSpacing = 0.6.sp)
+        Spacer(Modifier.height(3.dp))
+        Text(mtf.waitingFor.ifBlank { "Menunggu kondisi market lebih jelas." }, fontSize = 13.sp, color = TvTextPrimary, lineHeight = 18.sp)
+        Spacer(Modifier.height(7.dp))
         Text("SYARAT ENTRY VALID", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = TvTextSecondary, letterSpacing = 0.6.sp)
-        Spacer(Modifier.height(4.dp))
-        Text(
-            mtf.entryCondition.ifBlank { "Bias + setup + trigger harus searah." },
-            fontSize = 13.sp, color = TvTextPrimary, lineHeight = 18.sp
-        )
+        Spacer(Modifier.height(3.dp))
+        Text(mtf.entryCondition.ifBlank { "Bias + setup + trigger harus searah." }, fontSize = 13.sp, color = TvTextPrimary, lineHeight = 18.sp)
 
         if (mtf.extended || mtf.extremeVolatility) {
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(6.dp))
             val note = buildString {
                 if (mtf.extended) append("RSI extended. ")
                 if (mtf.extremeVolatility) append("Volatilitas ATR tinggi.")
             }
-            Text(note.trim(), fontSize = 12.sp, color = WarningAmber, lineHeight = 16.sp)
+            Text(note.trim(), fontSize = 11.sp, color = WarningAmber, lineHeight = 15.sp)
         }
-
-        Spacer(Modifier.height(10.dp))
-        Text(
-            "Skor setup: ${signal.confidence}/100  ·  Engine: ${stage.displayName}",
-            fontSize = 11.sp, color = TvTextSecondary
-        )
+        Spacer(Modifier.height(7.dp))
+        Text("Skor setup: ${signal.confidence}  ·  Engine: ${stage.displayName}", fontSize = 10.sp, color = TvTextSecondary)
     }
 }
 
 @Composable
 private fun MtfRow(label: String, status: MtfLegStatus, detail: String) {
     val (mark, markColor, tag) = when (status) {
-        MtfLegStatus.OK -> Triple("✅", TvGreen, "OK")
-        MtfLegStatus.PARTIAL -> Triple("⚠️", WarningAmber, "PARTIAL")
-        MtfLegStatus.WAITING -> Triple("⏳", WarningAmber, "WAIT")
-        MtfLegStatus.FAIL -> Triple("❌", TvRed, "NO")
-        MtfLegStatus.UNKNOWN -> Triple("—", TvTextSecondary, "—")
+        MtfLegStatus.OK -> Triple("✓", TvGreen, "OK")
+        MtfLegStatus.PARTIAL -> Triple("!", WarningAmber, "PARTIAL")
+        MtfLegStatus.WAITING -> Triple("•", WarningAmber, "WAIT")
+        MtfLegStatus.FAIL -> Triple("×", TvRed, "NO")
+        MtfLegStatus.UNKNOWN -> Triple("·", TvTextSecondary, "—")
     }
     Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp)
-            .background(Color(0x0AFFFFFF), RoundedCornerShape(8.dp))
-            .padding(horizontal = 10.dp, vertical = 8.dp),
+        Modifier.fillMaxWidth().padding(vertical = 3.dp).background(Color(0x0AFFFFFF), RoundedCornerShape(7.dp)).padding(horizontal = 9.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(mark, fontSize = 14.sp)
+        Box(Modifier.size(22.dp).background(markColor.copy(alpha = 0.12f), CircleShape), contentAlignment = Alignment.Center) {
+            Text(mark, fontSize = 13.sp, fontWeight = FontWeight.Black, color = markColor)
+        }
         Spacer(Modifier.width(8.dp))
         Column(Modifier.weight(1f)) {
             Text(label, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TvTextPrimary)
-            Text(detail, fontSize = 11.sp, color = TvTextSecondary, maxLines = 2)
+            Text(detail, fontSize = 10.sp, color = TvTextSecondary, maxLines = 1)
         }
-        Text(tag, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = markColor)
+        Text(tag, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, color = markColor)
     }
 }
