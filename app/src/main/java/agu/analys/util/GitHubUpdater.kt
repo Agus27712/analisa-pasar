@@ -1,0 +1,276 @@
+package agu.analys.util
+
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
+import android.widget.Toast
+import androidx.core.content.FileProvider
+import agu.analys.BuildConfig
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.File
+import java.io.FileOutputStream
+import java.net.HttpURLConnection
+import java.net.URL
+
+data class GitHubReleaseInfo(
+    val tagName: String,
+    val versionName: String,
+    val releaseNotes: String,
+    val apkUrl: String,
+    val apkName: String,
+    val htmlUrl: String
+)
+
+sealed class UpdateCheckResult {
+    data class UpdateAvailable(val info: GitHubReleaseInfo) : UpdateCheckResult()
+    data class AlreadyLatest(val version: String) : UpdateCheckResult()
+    data class Error(val message: String) : UpdateCheckResult()
+}
+
+object GitHubUpdater {
+    const val DEFAULT_REPO = "agus27712/analisa-pasar"
+
+    suspend fun checkUpdate(context: Context, repo: String): UpdateCheckResult = withContext(Dispatchers.IO) {
+        val normalizedRepo = normalizeRepo(repo)
+        try {
+            val apiUrl = "https://api.github.com/repos/$normalizedRepo/releases/latest"
+            val connection = (URL(apiUrl).openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                setRequestProperty("Accept", "application/vnd.github.v3+json")
+                setRequestProperty("User-Agent", "AnalisaPasarApp/${BuildConfig.VERSION_NAME}")
+                connectTimeout = 12000
+                readTimeout = 12000
+            }
+
+            val responseCode = connection.responseCode
+            if (responseCode == 404) {
+                return@withContext UpdateCheckResult.Error("Repository / rilis belum ditemukan di GitHub ($normalizedRepo). Pastikan rilis sudah di-publish.")
+            }
+            if (responseCode == 403) {
+                return@withContext UpdateCheckResult.Error("Batas request GitHub terlampaui (rate limit). Coba lagi nanti atau buka via browser.")
+            }
+            if (responseCode !in 200..299) {
+                return@withContext UpdateCheckResult.Error("Koneksi GitHub gagal (HTTP $responseCode)")
+            }
+
+            val responseString = connection.inputStream.bufferedReader().use { it.readText() }
+            val json = JSONObject(responseString)
+            val tagName = json.optString("tag_name", "").trim()
+            val latestVersion = normalizeVersion(tagName)
+            val currentVersion = normalizeVersion(BuildConfig.VERSION_NAME)
+            val htmlUrl = json.optString("html_url", "https://github.com/$normalizedRepo/releases")
+            val releaseNotes = json.optString("body", "Pembaruan rilis baru tersedia.")
+
+            val assets = json.optJSONArray("assets") ?: JSONArray()
+            var apkUrl = ""
+            var apkName = "analisa-pasar-update.apk"
+            for (i in 0 until assets.length()) {
+                val asset = assets.getJSONObject(i)
+                val name = asset.optString("name", "")
+                val browserUrl = asset.optString("browser_download_url", "")
+                if (name.endsWith(".apk", ignoreCase = true) && browserUrl.isNotBlank()) {
+                    apkName = name
+                    apkUrl = browserUrl
+                    break
+                }
+            }
+
+            if (latestVersion.isNotEmpty() && compareVersions(latestVersion, currentVersion) > 0) {
+                if (apkUrl.isBlank()) {
+                    // Ada tag versi baru tapi tanpa file APK langsung
+                    apkUrl = htmlUrl
+                }
+                UpdateCheckResult.UpdateAvailable(
+                    GitHubReleaseInfo(
+                        tagName = tagName.ifBlank { "v$latestVersion" },
+                        versionName = latestVersion,
+                        releaseNotes = releaseNotes,
+                        apkUrl = apkUrl,
+                        apkName = apkName,
+                        htmlUrl = htmlUrl
+                    )
+                )
+            } else {
+                UpdateCheckResult.AlreadyLatest(BuildConfig.VERSION_NAME)
+            }
+        } catch (e: Exception) {
+            UpdateCheckResult.Error("Gagal memeriksa update: ${e.localizedMessage ?: "Koneksi terputus"}")
+        }
+    }
+
+    suspend fun downloadAndInstallApk(
+        context: Context,
+        apkUrl: String,
+        apkName: String,
+        onProgress: (Int) -> Unit
+    ): Boolean = withContext(Dispatchers.IO) {
+        try {
+            if (!apkUrl.startsWith("https://", ignoreCase = true) && !apkUrl.startsWith("http://", ignoreCase = true)) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "URL download tidak valid", Toast.LENGTH_SHORT).show()
+                }
+                return@withContext false
+            }
+
+            // Jika URL adalah halaman web GitHub (bukan file APK mentah), arahkan langsung ke browser
+            if (!apkUrl.endsWith(".apk", ignoreCase = true)) {
+                withContext(Dispatchers.Main) {
+                    val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(apkUrl)).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    context.startActivity(browserIntent)
+                    Toast.makeText(context, "Membuka halaman rilis di browser...", Toast.LENGTH_SHORT).show()
+                }
+                return@withContext true
+            }
+
+            withContext(Dispatchers.Main) {
+                Toast.makeText(context, "Memulai unduhan APK...", Toast.LENGTH_SHORT).show()
+            }
+
+            var currentUrl = apkUrl
+            var connection: HttpURLConnection
+            var redirects = 0
+            while (true) {
+                val url = URL(currentUrl)
+                connection = (url.openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 15000
+                    readTimeout = 30000
+                    instanceFollowRedirects = false
+                    requestMethod = "GET"
+                    setRequestProperty("User-Agent", "AnalisaPasarApp/${BuildConfig.VERSION_NAME}")
+                }
+                val code = connection.responseCode
+                if (code in listOf(HttpURLConnection.HTTP_MOVED_PERM, HttpURLConnection.HTTP_MOVED_TEMP, HttpURLConnection.HTTP_SEE_OTHER, 307, 308)) {
+                    val newUrl = connection.getHeaderField("Location") ?: break
+                    currentUrl = if (newUrl.startsWith("http")) newUrl else URL(URL(currentUrl), newUrl).toString()
+                    redirects++
+                    if (redirects > 5) throw IllegalStateException("Terlalu banyak redirect")
+                    continue
+                }
+                break
+            }
+
+            if (connection.responseCode !in 200..299) {
+                throw IllegalStateException("Server mengembalikan kode: HTTP ${connection.responseCode}")
+            }
+
+            val fileLength = connection.contentLengthLong
+            val downloadDir = context.getExternalFilesDir(null) ?: context.cacheDir
+            if (!downloadDir.exists() && !downloadDir.mkdirs()) {
+                throw IllegalStateException("Gagal membuat folder penyimpanan update")
+            }
+            val safeName = apkName.substringAfterLast('/').ifBlank { "analisa-pasar-update.apk" }
+            val apkFile = File(downloadDir, safeName)
+            if (apkFile.exists()) apkFile.delete()
+
+            connection.inputStream.use { input ->
+                FileOutputStream(apkFile).use { output ->
+                    val data = ByteArray(32 * 1024)
+                    var total = 0L
+                    var lastProgress = -1
+                    while (true) {
+                        val count = input.read(data)
+                        if (count < 0) break
+                        total += count
+                        output.write(data, 0, count)
+                        if (fileLength > 0) {
+                            val progress = ((total * 100) / fileLength).toInt().coerceIn(0, 100)
+                            if (progress != lastProgress) {
+                                lastProgress = progress
+                                withContext(Dispatchers.Main) { onProgress(progress) }
+                            }
+                        }
+                    }
+                    output.flush()
+                    if (total <= 0L) throw IllegalStateException("File APK unduhan kosong")
+                }
+            }
+
+            withContext(Dispatchers.Main) {
+                onProgress(100)
+                Toast.makeText(context, "Unduhan selesai. Membuka penginstal...", Toast.LENGTH_SHORT).show()
+                installApk(context, apkFile)
+            }
+            true
+        } catch (error: Exception) {
+            withContext(Dispatchers.Main) {
+                onProgress(-1)
+                Toast.makeText(context, "Gagal update: ${error.localizedMessage ?: "Kesalahan tidak diketahui"}", Toast.LENGTH_LONG).show()
+            }
+            false
+        }
+    }
+
+    fun installApk(context: Context, file: File): Boolean {
+        if (!file.exists() || file.length() <= 0L) {
+            Toast.makeText(context, "File APK update tidak ditemukan atau kosong", Toast.LENGTH_LONG).show()
+            return false
+        }
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !context.packageManager.canRequestPackageInstalls()) {
+                val settingsIntent = Intent(
+                    Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                    Uri.parse("package:${context.packageName}")
+                ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(settingsIntent)
+                Toast.makeText(context, "Aktifkan izin instalasi aplikasi tidak dikenal, lalu ulangi.", Toast.LENGTH_LONG).show()
+                return false
+            }
+
+            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+            true
+        } catch (error: Exception) {
+            Toast.makeText(context, "Tidak bisa membuka penginstal APK: ${error.localizedMessage ?: "error"}", Toast.LENGTH_LONG).show()
+            false
+        }
+    }
+
+    fun openGitHubReleasesPage(context: Context, repo: String) {
+        val normalizedRepo = normalizeRepo(repo)
+        val url = "https://github.com/$normalizedRepo/releases"
+        try {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            Toast.makeText(context, "Tidak dapat membuka browser: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun normalizeRepo(repo: String): String {
+        val value = repo.trim()
+            .removePrefix("https://github.com/")
+            .removePrefix("http://github.com/")
+            .removeSuffix(".git")
+            .trim('/')
+        if (value.isBlank() || value == "user/nama-repo") return DEFAULT_REPO
+        return if (value.matches(Regex("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"))) value else DEFAULT_REPO
+    }
+
+    private fun normalizeVersion(raw: String): String =
+        raw.trim().removePrefix("v").takeWhile { it.isDigit() || it == '.' }
+
+    private fun compareVersions(left: String, right: String): Int {
+        val a = left.split('.').map { it.toIntOrNull() ?: 0 }
+        val b = right.split('.').map { it.toIntOrNull() ?: 0 }
+        for (i in 0 until maxOf(a.size, b.size)) {
+            val av = a.getOrElse(i) { 0 }
+            val bv = b.getOrElse(i) { 0 }
+            if (av != bv) return av.compareTo(bv)
+        }
+        return 0
+    }
+}

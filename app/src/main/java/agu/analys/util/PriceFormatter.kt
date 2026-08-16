@@ -1,0 +1,76 @@
+package agu.analys.util
+
+import java.text.DecimalFormat
+import java.text.DecimalFormatSymbols
+import java.util.Locale
+import kotlin.math.abs
+
+object PriceFormatter {
+
+    /** Format harga Rupiah lengkap: Rp 1.542.728.000 */
+    fun formatPrice(price: Double, showSymbol: Boolean = true): String {
+        if (price.isNaN() || price.isInfinite() || price <= 0) {
+            return if (showSymbol) "Rp 0" else "0"
+        }
+        val prefix = if (showSymbol) "Rp " else ""
+        val rounded = kotlin.math.round(price).toLong()
+        val symbols = DecimalFormatSymbols(Locale("id", "ID")).apply {
+            groupingSeparator = '.'
+            decimalSeparator = ','
+        }
+        // Harga kecil (meme) boleh desimal
+        return if (price < 1.0) {
+            prefix + DecimalFormat("0.########", symbols).format(price)
+        } else {
+            prefix + DecimalFormat("#,##0", symbols).format(rounded)
+        }
+    }
+
+    /** Alias — selalu full IDR (bukan compact) untuk level AI */
+    fun formatPriceFull(price: Double): String = formatPrice(price, showSymbol = true)
+
+    fun formatVolume(volume: Double): String {
+        if (volume.isNaN() || volume.isInfinite() || volume == 0.0) return "Rp 0"
+        val absVol = abs(volume)
+        val symbols = DecimalFormatSymbols(Locale("id", "ID")).apply {
+            groupingSeparator = '.'
+            decimalSeparator = ','
+        }
+        return when {
+            absVol >= 1_000_000_000_000.0 ->
+                "Rp " + DecimalFormat("#.##", symbols).format(volume / 1_000_000_000_000.0) + " T"
+            absVol >= 1_000_000_000.0 ->
+                "Rp " + DecimalFormat("#.##", symbols).format(volume / 1_000_000_000.0) + " M"
+            absVol >= 1_000_000.0 ->
+                "Rp " + DecimalFormat("#.##", symbols).format(volume / 1_000_000.0) + " jt"
+            absVol >= 1_000.0 ->
+                "Rp " + DecimalFormat("#.##", symbols).format(volume / 1_000.0) + " rb"
+            else -> formatPrice(volume)
+        }
+    }
+
+    fun formatPercentage(change: Double, includePlusSign: Boolean = true): String {
+        if (change.isNaN() || change.isInfinite()) return "0.00%"
+        val symbols = DecimalFormatSymbols(Locale.US)
+        val formatted = DecimalFormat("0.00", symbols).format(abs(change))
+        return when {
+            change > 0 -> if (includePlusSign) "+$formatted%" else "$formatted%"
+            change < 0 -> "-$formatted%"
+            else -> "0.00%"
+        }
+    }
+
+    fun formatRsi(rsi: Double): String {
+        if (rsi.isNaN() || rsi.isInfinite()) return "50.0"
+        return DecimalFormat("0.0", DecimalFormatSymbols(Locale.US)).format(rsi)
+    }
+
+    fun formatIndicatorVal(value: Double, decimals: Int = 2): String {
+        if (value.isNaN() || value.isInfinite()) return "0.0"
+        val pattern = buildString {
+            append("0.")
+            repeat(decimals) { append("0") }
+        }
+        return DecimalFormat(pattern, DecimalFormatSymbols(Locale.US)).format(value)
+    }
+}
