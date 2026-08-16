@@ -25,11 +25,11 @@ import agu.analys.ui.theme.TvGreen
 import agu.analys.ui.theme.TvRed
 import agu.analys.ui.theme.TvTextPrimary
 import agu.analys.ui.theme.TvTextSecondary
-import kotlin.math.abs
+import agu.analys.util.PriceFormatter
 
 /**
- * Watchlist card mockup: rank · ikon · pair · harga · aktivitas · bars · sparkline · Buka Chart.
- * Navbar tidak diubah di sini.
+ * Watchlist card presentation layer.
+ * Semua angka berasal dari MarketTick/WorthCoinInfo; mockup tidak menjadi sumber data.
  */
 @Composable
 fun WatchlistCoinCard(
@@ -44,89 +44,58 @@ fun WatchlistCoinCard(
 ) {
     val change = tick?.change24h ?: Double.NaN
     val volume = tick?.volume24h ?: 0.0
-    val volumeScore = when {
-        volume >= 100_000_000_000 -> 10
-        volume >= 10_000_000_000 -> 8
-        volume >= 1_000_000_000 -> 6
-        volume > 0 -> 4
-        else -> 0
-    }
-    val momentumScore = if (change.isFinite()) {
-        ((abs(change).coerceAtMost(10.0) / 10.0) * 10.0).toInt().coerceIn(0, 10)
-    } else 0
-
-    val activityLevel = when {
-        volumeScore >= 8 && momentumScore >= 6 -> ActivityLevel.HIGH
-        volumeScore >= 6 || momentumScore >= 5 -> ActivityLevel.MEDIUM
-        else -> ActivityLevel.LOW
-    }
-    val statusLabel = when (activityLevel) {
-        ActivityLevel.HIGH -> "Aktivitas tinggi"
-        ActivityLevel.MEDIUM -> "Aktivitas sedang"
-        ActivityLevel.LOW -> "Aktivitas rendah"
-    }
-    val statusBg = when (activityLevel) {
-        ActivityLevel.HIGH -> Color(0xFF123D2A)
-        ActivityLevel.MEDIUM -> Color(0xFF3D3212)
-        ActivityLevel.LOW -> Color(0xFF2A3038)
-    }
-    val statusFg = when (activityLevel) {
-        ActivityLevel.HIGH -> TvGreen
-        ActivityLevel.MEDIUM -> Color(0xFFFFC107)
-        ActivityLevel.LOW -> TvTextSecondary
-    }
-    val barColor = statusFg
     val changeColor = when {
         change > 0 -> TvGreen
         change < 0 -> TvRed
         else -> TvTextSecondary
     }
-    val sparkColor = changeColor
+    val activity = when {
+        volume >= 100_000_000_000 -> ActivityLevel.HIGH
+        volume >= 1_000_000_000 -> ActivityLevel.MEDIUM
+        volume > 0 -> ActivityLevel.LOW
+        else -> ActivityLevel.UNKNOWN
+    }
     val rankText = rank?.let { String.format("%02d", it) } ?: "··"
+    val scoreText = worth?.worthScore?.let { "$it/100" } ?: "—"
 
     Card(
         Modifier.fillMaxWidth().clickable { onClick() },
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = DashboardColors.Card),
         border = BorderStroke(1.dp, DashboardColors.Border)
     ) {
-        Column(Modifier.padding(horizontal = 12.dp, vertical = 11.dp)) {
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 13.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     rankText,
                     color = DashboardColors.AccentBlue,
-                    fontSize = 12.sp,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.Black,
-                    modifier = Modifier.width(26.dp)
+                    modifier = Modifier.width(32.dp)
                 )
-                AssetAvatar(baseAsset = pair.baseAsset, iconUrl = pair.iconUrl, size = 34.dp)
-                Spacer(Modifier.width(8.dp))
+                AssetAvatar(baseAsset = pair.baseAsset, iconUrl = pair.iconUrl, size = 40.dp)
+                Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
                         "${pair.baseAsset}/${pair.quoteAsset}",
                         color = TvTextPrimary,
-                        fontSize = 15.sp,
+                        fontSize = 18.sp,
                         fontWeight = FontWeight.ExtraBold,
                         maxLines = 1
                     )
-                    Spacer(Modifier.height(3.dp))
-                    Box(
-                        Modifier
-                            .background(statusBg, RoundedCornerShape(6.dp))
-                            .padding(horizontal = 7.dp, vertical = 3.dp)
-                    ) {
-                        Text(statusLabel, color = statusFg, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                    }
+                    Spacer(Modifier.height(5.dp))
+                    ActivityChip(activity)
                 }
+                Spacer(Modifier.width(8.dp))
                 Column(horizontalAlignment = Alignment.End) {
                     if (tick != null) {
-                        SmoothPriceText(tick.price, TvTextPrimary, 15.sp, FontWeight.ExtraBold)
+                        SmoothPriceText(tick.price, TvTextPrimary, 17.sp, FontWeight.ExtraBold)
                     } else {
-                        Text("—", color = TvTextSecondary, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                        Text("—", color = TvTextSecondary, fontSize = 17.sp, fontWeight = FontWeight.Bold)
                     }
                     if (change.isFinite()) {
                         AnimatedMetricText(
-                            agu.analys.util.PriceFormatter.formatPercentage(change),
+                            PriceFormatter.formatPercentage(change),
                             changeColor,
                             12.sp,
                             FontWeight.Bold
@@ -135,58 +104,50 @@ fun WatchlistCoinCard(
                 }
             }
 
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(12.dp))
 
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Column(Modifier.weight(1f)) {
-                    if (isScalping) {
-                        ScoreLine("Volume", volumeScore, barColor)
-                        Spacer(Modifier.height(4.dp))
-                        ScoreLine("Momentum", momentumScore, barColor)
-                    } else {
-                        val trend = when {
-                            change >= 5 -> 9
-                            change >= 1 -> 7
-                            change >= 0 -> 6
-                            change >= -3 -> 4
-                            change.isFinite() -> 2
-                            else -> 0
-                        }
-                        val structure = ((worth?.worthScore ?: 0) / 10).coerceIn(0, 10)
-                        ScoreLine("Trend", trend, barColor)
-                        Spacer(Modifier.height(4.dp))
-                        ScoreLine("Structure", structure, barColor)
+                    MetricLine("Volume", if (volume > 0) PriceFormatter.formatPrice(volume) else "—")
+                    Spacer(Modifier.height(7.dp))
+                    MetricLine("Score", scoreText)
+                    if (tick != null && tick.high24h > 0 && tick.low24h > 0) {
+                        Spacer(Modifier.height(7.dp))
+                        MetricLine(
+                            "Range 24H",
+                            "${PriceFormatter.formatPrice(tick.low24h)} – ${PriceFormatter.formatPrice(tick.high24h)}"
+                        )
                     }
                 }
-                Spacer(Modifier.width(10.dp))
-                // Mini sparkline 24H dari tick real
+                Spacer(Modifier.width(12.dp))
                 MiniSparkline(
                     tick = tick,
-                    modifier = Modifier.width(72.dp).height(36.dp),
-                    lineColor = sparkColor
+                    modifier = Modifier.width(86.dp).height(44.dp),
+                    lineColor = changeColor
                 )
             }
 
-            Spacer(Modifier.height(10.dp))
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
-            ) {
+            Spacer(Modifier.height(12.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 OutlinedButton(
                     onClick = onClick,
-                    modifier = Modifier.weight(1f).height(34.dp),
-                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.weight(1f).height(40.dp),
+                    shape = RoundedCornerShape(11.dp),
                     border = BorderStroke(1.dp, DashboardColors.Border),
                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = TvTextPrimary)
                 ) {
-                    Text("Buka Chart", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.width(4.dp))
-                    Icon(Icons.Default.ShowChart, null, Modifier.size(16.dp))
+                    Text("Buka Chart", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.width(5.dp))
+                    Icon(Icons.Default.ShowChart, null, Modifier.size(17.dp))
                 }
                 if (!isAuto) {
-                    IconButton(onClick = onRemove, modifier = Modifier.size(34.dp)) {
-                        Icon(Icons.Default.DeleteOutline, "Hapus", tint = TvRed, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(4.dp))
+                    IconButton(onClick = onRemove, modifier = Modifier.size(40.dp)) {
+                        Icon(Icons.Default.DeleteOutline, "Hapus", tint = TvRed, modifier = Modifier.size(19.dp))
                     }
                 }
             }
@@ -194,28 +155,27 @@ fun WatchlistCoinCard(
     }
 }
 
-private enum class ActivityLevel { HIGH, MEDIUM, LOW }
+private enum class ActivityLevel { HIGH, MEDIUM, LOW, UNKNOWN }
 
 @Composable
-private fun ScoreLine(label: String, score: Int, filled: Color) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(label, color = TvTextSecondary, fontSize = 11.sp, modifier = Modifier.width(72.dp))
-        Text("$score/10", color = TvTextPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(34.dp))
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
-            modifier = Modifier.weight(1f)
-        ) {
-            repeat(10) {
-                Box(
-                    Modifier
-                        .weight(1f)
-                        .height(5.dp)
-                        .background(
-                            if (it < score) filled else Color(0xFF26313D),
-                            RoundedCornerShape(2.dp)
-                        )
-                )
-            }
-        }
+private fun ActivityChip(activity: ActivityLevel) {
+    val (label, background, foreground) = when (activity) {
+        ActivityLevel.HIGH -> Triple("Aktivitas tinggi", Color(0xFF123D2A), TvGreen)
+        ActivityLevel.MEDIUM -> Triple("Aktivitas sedang", Color(0xFF3D3212), Color(0xFFFFC107))
+        ActivityLevel.LOW -> Triple("Aktivitas rendah", Color(0xFF2A3038), TvTextSecondary)
+        ActivityLevel.UNKNOWN -> Triple("Aktivitas —", Color(0xFF2A3038), TvTextSecondary)
+    }
+    Box(
+        Modifier.background(background, RoundedCornerShape(7.dp)).padding(horizontal = 8.dp, vertical = 4.dp)
+    ) {
+        Text(label, color = foreground, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+private fun MetricLine(label: String, value: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        Text(label, color = TvTextSecondary, fontSize = 12.sp, modifier = Modifier.width(68.dp))
+        Text(value, color = TvTextPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
     }
 }
