@@ -33,6 +33,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import agu.analys.config.TradingFeeConfig
 import agu.analys.model.AISignalState
 import agu.analys.model.ScalpingPath
 import agu.analys.model.ScalpingStage
@@ -46,7 +47,7 @@ import agu.analys.ui.theme.TvTextSecondary
  * Radar & Progres Menunggu Entry yang interaktif dan edukatif.
  * Menghilangkan kejenuhan user saat menunggu sinyal dengan:
  * 1. Visual Status Pulse & Radar Scan Indicator
- * 2. Edukasi aksi real-time (apa yang sedang ditunggu sistem)
+ * 2. Estimasi Biaya Transaksi (Limit vs Instant) sesuai setting
  * 3. Progres Multi-Timeframe (1H Trend -> 15M Struktur -> 1M Trigger)
  * 4. Micro-tips trading spot & scalping disiplin yang berganti
  */
@@ -54,48 +55,66 @@ import agu.analys.ui.theme.TvTextSecondary
 fun WaitingEntryRadarCard(
     signal: AISignalState,
     scalping: Boolean,
+    fees: TradingFeeConfig = TradingFeeConfig(),
+    currentPrice: Double = 0.0,
+    baseAsset: String = "BTC",
+    quoteAsset: String = "IDR",
     modifier: Modifier = Modifier
 ) {
     val buyReady = signal.action == SignalAction.BUY && signal.entryPrice > 0.0
     val stage = signal.scalpingStage
     val mtf = signal.mtf
     val completed = listOf(mtf.biasStatus, mtf.setupStatus, mtf.triggerStatus).count { it.name == "OK" }
+    val effectivePrice = if (currentPrice > 0.0) currentPrice else if (signal.entryPrice > 0.0) signal.entryPrice else 0.0
 
-    // Jika sinyal BUY sudah siap, tampilkan banner konfirmasi hijau ringkas
+    // Jika sinyal BUY sudah siap, tampilkan banner konfirmasi hijau ringkas plus rincian biaya
     if (buyReady) {
-        Row(
-            modifier = modifier
-                .fillMaxWidth()
-                .background(
-                    Brush.horizontalGradient(
-                        colors = listOf(Color(0xFF0F3822), Color(0xFF132B1E))
-                    ),
-                    RoundedCornerShape(12.dp)
-                )
-                .border(1.dp, TvGreen.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
-                .padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            modifier = modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Box(
+            Row(
                 modifier = Modifier
-                    .size(10.dp)
-                    .background(TvGreen, CircleShape)
-            )
-            Spacer(Modifier.width(10.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "SETUP BUY SIAP DIEKSEKUSI",
-                    color = TvGreen,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    letterSpacing = 0.5.sp
+                    .fillMaxWidth()
+                    .background(
+                        Brush.horizontalGradient(
+                            colors = listOf(Color(0xFF0F3822), Color(0xFF132B1E))
+                        ),
+                        RoundedCornerShape(12.dp)
+                    )
+                    .border(1.dp, TvGreen.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(10.dp)
+                        .background(TvGreen, CircleShape)
                 )
-                Text(
-                    text = "Konfirmasi Multi-Timeframe 3/3 terpenuhi. Silakan cek Rekomendasi di bawah.",
-                    color = TvTextPrimary,
-                    fontSize = 11.sp
-                )
+                Spacer(Modifier.width(10.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "SETUP BUY SIAP DIEKSEKUSI",
+                        color = TvGreen,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = 0.5.sp
+                    )
+                    Text(
+                        text = "Konfirmasi Multi-Timeframe 3/3 terpenuhi. Silakan cek Rekomendasi di atas/bawah.",
+                        color = TvTextPrimary,
+                        fontSize = 11.sp
+                    )
+                }
             }
+
+            // Tampilkan estimasi biaya transaksi berdasarkan setting
+            RadarTransactionFeeSection(
+                fees = fees,
+                currentPrice = effectivePrice,
+                baseAsset = baseAsset,
+                quoteAsset = quoteAsset
+            )
         }
         return
     }
@@ -220,6 +239,16 @@ fun WaitingEntryRadarCard(
                 StepProgressChip("3. Trigger 1M", mtf.triggerStatus.name == "OK", Modifier.weight(1f))
             }
         }
+
+        Spacer(Modifier.height(10.dp))
+
+        // Estimasi Biaya Transaksi Live berdasarkan Setting Fee Pengguna
+        RadarTransactionFeeSection(
+            fees = fees,
+            currentPrice = effectivePrice,
+            baseAsset = baseAsset,
+            quoteAsset = quoteAsset
+        )
 
         Spacer(Modifier.height(10.dp))
 

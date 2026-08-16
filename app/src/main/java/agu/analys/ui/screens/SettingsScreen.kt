@@ -113,7 +113,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                     )
                 }
                 Spacer(Modifier.width(12.dp))
-                Column(modifier.weight(1f)) {
+                Column(Modifier.weight(1f)) {
                     Text(
                         "MODE BELAJAR ANALISIS PASAR",
                         color = Color(0xFF72B7FF),
@@ -294,7 +294,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
             colors = CardDefaults.cardColors(containerColor = Color(0xFF101720)),
             border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E2836))
         ) {
-            Column(modifier.padding(14.dp)) {
+            Column(Modifier.padding(14.dp)) {
                 Text(
                     "Digunakan untuk menghitung estimasi biaya transaksi di Card Radar Live dan Net Risk-to-Reward riil.",
                     color = TvTextSecondary,
@@ -303,7 +303,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                 )
                 Spacer(Modifier.height(8.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Column(modifier.weight(1f)) {
+                    Column(Modifier.weight(1f)) {
                         Text("Beli Maker (%) - Limit", color = TvTextSecondary, fontSize = 10.sp)
                         Spacer(Modifier.height(3.dp))
                         OutlinedTextField(
@@ -318,7 +318,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                             )
                         )
                     }
-                    Column(modifier.weight(1f)) {
+                    Column(Modifier.weight(1f)) {
                         Text("Beli Taker (%) - Instant", color = TvTextSecondary, fontSize = 10.sp)
                         Spacer(Modifier.height(3.dp))
                         OutlinedTextField(
@@ -336,7 +336,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                 }
                 Spacer(Modifier.height(8.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Column(modifier.weight(1f)) {
+                    Column(Modifier.weight(1f)) {
                         Text("Jual Maker (%) - Limit", color = TvTextSecondary, fontSize = 10.sp)
                         Spacer(Modifier.height(3.dp))
                         OutlinedTextField(
@@ -351,7 +351,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                             )
                         )
                     }
-                    Column(modifier.weight(1f)) {
+                    Column(Modifier.weight(1f)) {
                         Text("Jual Taker (%) - Instant", color = TvTextSecondary, fontSize = 10.sp)
                         Spacer(Modifier.height(3.dp))
                         OutlinedTextField(
@@ -380,7 +380,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
             colors = CardDefaults.cardColors(containerColor = Color(0xFF101720)),
             border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E2836))
         ) {
-            Column(modifier.padding(14.dp)) {
+            Column(Modifier.padding(14.dp)) {
                 // Bersihkan Cache
                 Row(
                     modifier = Modifier
@@ -408,7 +408,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
 
                 Spacer(Modifier.height(10.dp))
                 Divider(color = Color(0xFF1E2836), thickness = 0.5.dp)
-                Spacer(modifier.height(10.dp))
+                Spacer(Modifier.height(10.dp))
 
                 // Pembaruan Aplikasi (GitHub Updater)
                 Text(

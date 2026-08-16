@@ -74,6 +74,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
             if (prices.size > 50) prices.removeAt(0)
             _recentPrices.value = prices
 
+            // Trigger Realtime Simulation Matching Engine
             val filled = simulationStore.processPriceTick(normalized.symbol, normalized.price, normalized.high24h, normalized.low24h)
             if (filled.isNotEmpty()) {
                 refreshSimulationState()
@@ -350,6 +351,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
                 WorthCoinInfo(pair, score, score >= 50 && change24h > 0, rec, abs(change24h), "${PriceFormatter.formatPrice(tick.price)} · Vol ${PriceFormatter.formatVolume(tick.volume24h)} · +${PriceFormatter.formatPercentage(change24h, false)}")
             }.sortedWith(
                 if (scalpingMode) {
+                    // Untuk mode scalping: Utamakan koin dengan persentase kenaikan terbesar (Gainers)
                     compareByDescending<WorthCoinInfo> { info ->
                         val tick = combinedTicks[info.pair.symbol]
                         tick?.change24h?.takeIf { it.isFinite() } ?: -999.0
@@ -385,6 +387,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
                     val hist = _recentPrices.value.toMutableList().apply { add(tick.price) }; if (hist.size > 50) hist.removeAt(0); _recentPrices.value = hist
                     _dashboardTicks.value = _dashboardTicks.value.toMutableMap().apply { put(pair.symbol, normalizedTick) }
                     
+                    // Trigger Realtime Simulation Matching Engine
                     val filled = simulationStore.processPriceTick(normalizedTick.symbol, normalizedTick.price, normalizedTick.high24h, normalizedTick.low24h)
                     if (filled.isNotEmpty()) {
                         refreshSimulationState()

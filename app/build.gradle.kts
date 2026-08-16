@@ -13,7 +13,7 @@ android {
     applicationId = "agu.analys"
     minSdk = 24
     targetSdk = 35
-    versionCode = providers.gradleProperty("VERSION_CODE").map(String::toInt).getOrElse(9)
+    versionCode = providers.gradleProperty("VERSION_CODE").map(String::toInt).getOrElse(10)
     versionName = "1.2.5"
 
     val envFile = rootProject.file(".env")
