@@ -33,36 +33,28 @@ fun CompactMarketOverview(ticks: Map<String, MarketTick>, isLive: Boolean, isSca
     }
 
     Card(
-        Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp),
-        shape = RoundedCornerShape(16.dp),
+        Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 5.dp),
+        shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = DashboardColors.Surface)
     ) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 15.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            OverviewValue("PAIR", "${ticks.size}", if (isLive) "LIVE" else "OFFLINE", DashboardColors.AccentBlue, Modifier.weight(0.8f))
-            OverviewDivider()
-            OverviewValue(
-                "24H VOL",
-                if (totalVolume > 0) PriceFormatter.formatPrice(totalVolume) else "—",
-                "IDR",
-                DashboardColors.AccentBlue,
-                Modifier.weight(1.45f)
-            )
-            OverviewDivider()
-            OverviewValue(
-                "AVG 24H",
-                if (avgChange.isFinite()) PriceFormatter.formatPercentage(avgChange) else "—",
-                "change",
-                avgColor,
-                Modifier.weight(1.1f)
-            )
-            Spacer(Modifier.width(9.dp))
-            Box(
-                Modifier.background(modeBg, RoundedCornerShape(10.dp)).padding(horizontal = 11.dp, vertical = 9.dp)
-            ) {
-                Text(if (isScalping) "SCALPING" else "SWING", color = modeText, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold)
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 11.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("MARKET OVERVIEW", color = TvTextSecondary, fontSize = 9.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 0.7.sp)
+                    Spacer(Modifier.height(2.dp))
+                    Text(if (isLive) "Indodax · IDR" else "Data belum tersambung", color = TvTextPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+                Box(Modifier.background(modeBg, RoundedCornerShape(8.dp)).padding(horizontal = 9.dp, vertical = 6.dp)) {
+                    Text(if (isScalping) "SCALPING" else "SWING", color = modeText, fontSize = 9.sp, fontWeight = FontWeight.ExtraBold)
+                }
+            }
+            Spacer(Modifier.height(9.dp))
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                OverviewValue("PAIR", "${ticks.size}", "LIVE", DashboardColors.AccentBlue, Modifier.weight(0.75f))
+                OverviewDivider()
+                OverviewValue("24H VOL", if (totalVolume > 0) PriceFormatter.formatPrice(totalVolume) else "—", "IDR", DashboardColors.AccentBlue, Modifier.weight(1.25f))
+                OverviewDivider()
+                OverviewValue("AVG 24H", if (avgChange.isFinite()) PriceFormatter.formatPercentage(avgChange) else "—", "change", avgColor, Modifier.weight(1f))
             }
         }
     }
@@ -70,15 +62,15 @@ fun CompactMarketOverview(ticks: Map<String, MarketTick>, isLive: Boolean, isSca
 
 @Composable
 private fun OverviewValue(label: String, value: String, detail: String, color: Color, modifier: Modifier) {
-    Column(modifier.padding(horizontal = 5.dp)) {
-        Text(label, color = TvTextSecondary, fontSize = 9.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-        Spacer(Modifier.height(4.dp))
-        AnimatedMetricText(value, color = TvTextPrimary, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1)
-        AnimatedMetricText(detail, color = color, fontSize = 9.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+    Column(modifier.padding(horizontal = 4.dp)) {
+        Text(label, color = TvTextSecondary, fontSize = 8.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+        Spacer(Modifier.height(3.dp))
+        AnimatedMetricText(value, color = TvTextPrimary, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1)
+        AnimatedMetricText(detail, color = color, fontSize = 8.sp, fontWeight = FontWeight.Bold, maxLines = 1)
     }
 }
 
 @Composable
 private fun OverviewDivider() {
-    Box(Modifier.width(1.dp).height(42.dp).background(DashboardColors.Border))
+    Box(Modifier.width(1.dp).height(35.dp).background(DashboardColors.Border))
 }

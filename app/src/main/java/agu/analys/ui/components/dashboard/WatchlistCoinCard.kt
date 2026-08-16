@@ -27,10 +27,7 @@ import agu.analys.ui.theme.TvTextPrimary
 import agu.analys.ui.theme.TvTextSecondary
 import agu.analys.util.PriceFormatter
 
-/**
- * Watchlist card presentation layer.
- * Semua angka berasal dari MarketTick/WorthCoinInfo; mockup tidak menjadi sumber data.
- */
+/** Watchlist presentation only. Market values always come from live model data. */
 @Composable
 fun WatchlistCoinCard(
     pair: TradingPair,
@@ -60,94 +57,53 @@ fun WatchlistCoinCard(
 
     Card(
         Modifier.fillMaxWidth().clickable { onClick() },
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = DashboardColors.Card),
         border = BorderStroke(1.dp, DashboardColors.Border)
     ) {
-        Column(Modifier.padding(horizontal = 14.dp, vertical = 13.dp)) {
+        Column(Modifier.padding(horizontal = 13.dp, vertical = 12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    rankText,
-                    color = DashboardColors.AccentBlue,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Black,
-                    modifier = Modifier.width(32.dp)
-                )
-                AssetAvatar(baseAsset = pair.baseAsset, iconUrl = pair.iconUrl, size = 40.dp)
-                Spacer(Modifier.width(10.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        "${pair.baseAsset}/${pair.quoteAsset}",
-                        color = TvTextPrimary,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        maxLines = 1
-                    )
-                    Spacer(Modifier.height(5.dp))
+                Text(rankText, color = DashboardColors.AccentBlue, fontSize = 12.sp, fontWeight = FontWeight.Black, modifier = Modifier.width(30.dp))
+                AssetAvatar(baseAsset = pair.baseAsset, iconUrl = pair.iconUrl, size = 38.dp)
+                Spacer(Modifier.width(9.dp))
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
+                    Text("${pair.baseAsset}/${pair.quoteAsset}", color = TvTextPrimary, fontSize = 17.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1)
+                    Spacer(Modifier.height(3.dp))
                     ActivityChip(activity)
                 }
                 Spacer(Modifier.width(8.dp))
                 Column(horizontalAlignment = Alignment.End) {
-                    if (tick != null) {
-                        SmoothPriceText(tick.price, TvTextPrimary, 17.sp, FontWeight.ExtraBold)
-                    } else {
-                        Text("—", color = TvTextSecondary, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-                    }
-                    if (change.isFinite()) {
-                        AnimatedMetricText(
-                            PriceFormatter.formatPercentage(change),
-                            changeColor,
-                            12.sp,
-                            FontWeight.Bold
-                        )
-                    }
+                    if (tick != null) SmoothPriceText(tick.price, TvTextPrimary, 16.sp, FontWeight.ExtraBold)
+                    else Text("—", color = TvTextSecondary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    if (change.isFinite()) AnimatedMetricText(PriceFormatter.formatPercentage(change), changeColor, 11.sp, FontWeight.Bold)
                 }
             }
 
-            Spacer(Modifier.height(12.dp))
-
-            Row(
-                Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            Spacer(Modifier.height(10.dp))
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    MetricLine("Volume", if (volume > 0) PriceFormatter.formatPrice(volume) else "—")
-                    Spacer(Modifier.height(7.dp))
                     MetricLine("Score", scoreText)
+                    Spacer(Modifier.height(5.dp))
+                    MetricLine("Volume 24H", if (volume > 0) PriceFormatter.formatPrice(volume) else "—")
                     if (tick != null && tick.high24h > 0 && tick.low24h > 0) {
-                        Spacer(Modifier.height(7.dp))
-                        MetricLine(
-                            "Range 24H",
-                            "${PriceFormatter.formatPrice(tick.low24h)} – ${PriceFormatter.formatPrice(tick.high24h)}"
-                        )
+                        Spacer(Modifier.height(5.dp))
+                        MetricLine("Range 24H", "${PriceFormatter.formatPrice(tick.low24h)} – ${PriceFormatter.formatPrice(tick.high24h)}")
                     }
                 }
-                Spacer(Modifier.width(12.dp))
-                MiniSparkline(
-                    tick = tick,
-                    modifier = Modifier.width(86.dp).height(44.dp),
-                    lineColor = changeColor
-                )
+                Spacer(Modifier.width(10.dp))
+                MiniSparkline(tick = tick, modifier = Modifier.width(88.dp).height(42.dp), lineColor = changeColor)
             }
 
-            Spacer(Modifier.height(12.dp))
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                OutlinedButton(
-                    onClick = onClick,
-                    modifier = Modifier.weight(1f).height(40.dp),
-                    shape = RoundedCornerShape(11.dp),
-                    border = BorderStroke(1.dp, DashboardColors.Border),
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = TvTextPrimary)
-                ) {
-                    Text("Buka Chart", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.width(5.dp))
-                    Icon(Icons.Default.ShowChart, null, Modifier.size(17.dp))
-                }
+            Spacer(Modifier.height(9.dp))
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(if (isScalping) "SCALPING" else "SWING", color = if (isScalping) TvGreen else DashboardColors.AccentBlue, fontSize = 9.sp, fontWeight = FontWeight.ExtraBold)
+                Spacer(Modifier.weight(1f))
+                Text("Lihat detail", color = TvTextSecondary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                Icon(Icons.Default.ShowChart, null, Modifier.size(15.dp), tint = TvTextSecondary)
                 if (!isAuto) {
                     Spacer(Modifier.width(4.dp))
-                    IconButton(onClick = onRemove, modifier = Modifier.size(40.dp)) {
-                        Icon(Icons.Default.DeleteOutline, "Hapus", tint = TvRed, modifier = Modifier.size(19.dp))
+                    IconButton(onClick = onRemove, modifier = Modifier.size(28.dp)) {
+                        Icon(Icons.Default.DeleteOutline, "Hapus", tint = TvRed, modifier = Modifier.size(17.dp))
                     }
                 }
             }
@@ -165,17 +121,15 @@ private fun ActivityChip(activity: ActivityLevel) {
         ActivityLevel.LOW -> Triple("Aktivitas rendah", Color(0xFF2A3038), TvTextSecondary)
         ActivityLevel.UNKNOWN -> Triple("Aktivitas —", Color(0xFF2A3038), TvTextSecondary)
     }
-    Box(
-        Modifier.background(background, RoundedCornerShape(7.dp)).padding(horizontal = 8.dp, vertical = 4.dp)
-    ) {
-        Text(label, color = foreground, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+    Box(Modifier.background(background, RoundedCornerShape(6.dp)).padding(horizontal = 7.dp, vertical = 3.dp)) {
+        Text(label, color = foreground, fontSize = 9.sp, fontWeight = FontWeight.Bold)
     }
 }
 
 @Composable
 private fun MetricLine(label: String, value: String) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-        Text(label, color = TvTextSecondary, fontSize = 12.sp, modifier = Modifier.width(68.dp))
-        Text(value, color = TvTextPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+        Text(label, color = TvTextSecondary, fontSize = 11.sp, modifier = Modifier.width(72.dp))
+        Text(value, color = TvTextPrimary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
     }
 }

@@ -56,338 +56,139 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
     }
 
     Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(Color(0xFF0F1115))
-            .verticalScroll(rememberScrollState())
-            .padding(14.dp)
+        modifier = modifier.fillMaxSize().background(Color(0xFF0F1115)).verticalScroll(rememberScrollState()).padding(horizontal = 14.dp, vertical = 10.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) {
+            IconButton(onClick = onBack, modifier = Modifier.size(40.dp)) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, "Kembali", tint = TvTextPrimary)
             }
-            Text("Pengaturan", fontSize = 19.sp, fontWeight = FontWeight.ExtraBold, color = TvTextPrimary)
+            Spacer(Modifier.width(2.dp))
+            Column {
+                Text("Pengaturan", fontSize = 19.sp, fontWeight = FontWeight.ExtraBold, color = TvTextPrimary)
+                Text("Konfigurasi analisis dan data", fontSize = 10.sp, color = TvTextSecondary)
+            }
         }
-        Spacer(Modifier.height(12.dp))
-
-        // MODE — mockup: kartu SCALPING BUY MODE + SWING
-        Text("MODE ANALISIS", color = Color(0xFF72B7FF), fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 0.6.sp)
-        Spacer(Modifier.height(4.dp))
-        Text("Pilih mode analisis utama aplikasi.", fontSize = 12.sp, color = TvTextSecondary)
-        Spacer(Modifier.height(10.dp))
-
-        ModeCard(
-            title = "SCALPING",
-            badge = "BUY MODE",
-            selected = scalping,
-            accent = TvGreen,
-            bullets = listOf(
-                "Bias: 1H (Bullish)",
-                "Setup: 15M",
-                "Trigger: 1M",
-                "Fokus: Entry BUY jangka pendek"
-            ),
-            description = "Mencari peluang BUY jangka pendek (1M–15M) dengan eksekusi cepat."
-        ) { scalping = true; saved = false }
-
-        Spacer(Modifier.height(10.dp))
-
-        ModeCard(
-            title = "SWING",
-            badge = "ANALISIS TREND",
-            selected = !scalping,
-            accent = Color(0xFF72B7FF),
-            bullets = listOf(
-                "Timeframe lebih besar",
-                "Analisis struktur trend",
-                "Fokus: Posisi swing"
-            ),
-            description = "Menganalisis trend jangka menengah untuk peluang swing trading."
-        ) { scalping = false; saved = false }
-
         Spacer(Modifier.height(14.dp))
 
+        SectionLabel("MODE ANALISIS")
+        Text("Pilih mode utama. Mode tidak mengubah sumber data market.", fontSize = 11.sp, color = TvTextSecondary)
+        Spacer(Modifier.height(8.dp))
+
+        ModeCard("SCALPING", "BUY MODE", scalping, TvGreen, listOf("Bias 1H", "Setup 15M", "Trigger 1M"), "BUY-only · entry jangka pendek") { scalping = true; saved = false }
+        Spacer(Modifier.height(8.dp))
+        ModeCard("SWING", "ANALISIS TREND", !scalping, Color(0xFF72B7FF), listOf("Timeframe lebih besar", "Struktur trend", "Posisi swing"), "Trend jangka menengah · bukan BUY-only") { scalping = false; saved = false }
+
+        Spacer(Modifier.height(12.dp))
         SettingCard("FEE INDODAX · ALL-IN") {
-            FeeField("BUY MAKER", fees.buyMakerPct) { fees = fees.copy(buyMakerPct = it); saved = false }
-            FeeField("BUY TAKER", fees.buyTakerPct) { fees = fees.copy(buyTakerPct = it); saved = false }
-            FeeField("SELL MAKER", fees.sellMakerPct) { fees = fees.copy(sellMakerPct = it); saved = false }
-            FeeField("SELL TAKER", fees.sellTakerPct) { fees = fees.copy(sellTakerPct = it); saved = false }
-            Text(
-                "Fee masuk ke kalkulasi net profit dan net R:R. Perubahan fee tidak membutuhkan update APK.",
-                fontSize = 10.sp,
-                color = TvTextSecondary
-            )
-        }
-
-        Spacer(Modifier.height(10.dp))
-
-        SettingCard("AI API") {
-            Text(
-                "Pilih satu provider aktif. API key provider lain tetap aman tersimpan.",
-                fontSize = 12.sp,
-                color = TvTextSecondary
-            )
-            Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                ModeChoice("GROQ", provider == AiProvider.GROQ, Color(0xFF123D2A), TvGreen, Modifier.weight(1f)) {
-                    provider = AiProvider.GROQ; saved = false
-                }
-                ModeChoice("GEMINI", provider == AiProvider.GEMINI, Color(0xFF15304B), Color(0xFF72B7FF), Modifier.weight(1f)) {
-                    provider = AiProvider.GEMINI; saved = false
-                }
-            }
-            Spacer(Modifier.height(8.dp))
-            if (provider == AiProvider.GROQ) {
-                OutlinedTextField(
-                    value = groq,
-                    onValueChange = { groq = it; saved = false },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    label = { Text("Groq API Key") },
-                    visualTransformation = PasswordVisualTransformation(),
-                    leadingIcon = { Icon(Icons.Default.Key, null) }
-                )
-            } else {
-                OutlinedTextField(
-                    value = gemini,
-                    onValueChange = { gemini = it; saved = false },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    label = { Text("Gemini API Key") },
-                    visualTransformation = PasswordVisualTransformation(),
-                    leadingIcon = { Icon(Icons.Default.Key, null) }
-                )
-            }
-        }
-
-        Spacer(Modifier.height(10.dp))
-
-        SettingCard("LEARNING") {
-            Text(
-                "Learning membantu memahami alasan engine dan tidak mengubah sinyal.",
-                fontSize = 12.sp,
-                color = TvTextSecondary
-            )
+            Text("Dipakai untuk menghitung net profit dan net R:R.", fontSize = 10.sp, color = TvTextSecondary)
             Spacer(Modifier.height(7.dp))
-            Button(
-                onClick = { showLearning = true },
-                colors = ButtonDefaults.buttonColors(containerColor = TvCardBackground),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(Icons.Default.MenuBook, null)
-                Spacer(Modifier.width(6.dp))
-                Text("Mode Belajar Trading")
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FeeField("BUY MAKER", fees.buyMakerPct, Modifier.weight(1f)) { fees = fees.copy(buyMakerPct = it); saved = false }
+                FeeField("BUY TAKER", fees.buyTakerPct, Modifier.weight(1f)) { fees = fees.copy(buyTakerPct = it); saved = false }
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FeeField("SELL MAKER", fees.sellMakerPct, Modifier.weight(1f)) { fees = fees.copy(sellMakerPct = it); saved = false }
+                FeeField("SELL TAKER", fees.sellTakerPct, Modifier.weight(1f)) { fees = fees.copy(sellTakerPct = it); saved = false }
             }
         }
 
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(9.dp))
+        SettingCard("AI API") {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ModeChoice("GROQ", provider == AiProvider.GROQ, Color(0xFF123D2A), TvGreen, Modifier.weight(1f)) { provider = AiProvider.GROQ; saved = false }
+                ModeChoice("GEMINI", provider == AiProvider.GEMINI, Color(0xFF15304B), Color(0xFF72B7FF), Modifier.weight(1f)) { provider = AiProvider.GEMINI; saved = false }
+            }
+            Spacer(Modifier.height(7.dp))
+            Text("Provider AI hanya pendukung analisis, bukan penentu market condition.", fontSize = 10.sp, color = TvTextSecondary)
+            Spacer(Modifier.height(6.dp))
+            if (provider == AiProvider.GROQ) {
+                OutlinedTextField(value = groq, onValueChange = { groq = it; saved = false }, modifier = Modifier.fillMaxWidth(), singleLine = true, label = { Text("Groq API Key") }, visualTransformation = PasswordVisualTransformation(), leadingIcon = { Icon(Icons.Default.Key, null) })
+            } else {
+                OutlinedTextField(value = gemini, onValueChange = { gemini = it; saved = false }, modifier = Modifier.fillMaxWidth(), singleLine = true, label = { Text("Gemini API Key") }, visualTransformation = PasswordVisualTransformation(), leadingIcon = { Icon(Icons.Default.Key, null) })
+            }
+        }
 
+        Spacer(Modifier.height(9.dp))
+        SettingCard("LEARNING") {
+            Text("Pelajari alasan engine tanpa mengubah sinyal.", fontSize = 11.sp, color = TvTextSecondary)
+            Spacer(Modifier.height(6.dp))
+            Button(onClick = { showLearning = true }, colors = ButtonDefaults.buttonColors(containerColor = TvCardBackground), modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(vertical = 10.dp)) {
+                Icon(Icons.Default.MenuBook, null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Mode Belajar Trading", fontSize = 12.sp)
+            }
+        }
+
+        Spacer(Modifier.height(9.dp))
         SettingCard("DATA") {
             DataRow("Sumber Data", MarketDataConfiguration.activeSource.label)
-            DataRow("Tipe Data", "Realtime (WebSocket)")
-            Text(
-                "Provider lain hanya placeholder. UI tidak menyediakan pilihan sumber.",
-                color = TvTextSecondary,
-                fontSize = 10.sp
-            )
+            DataRow("Tipe Data", "Realtime · WebSocket")
+            Text("Produksi hanya memakai data market Indodax real.", color = TvTextSecondary, fontSize = 9.sp)
         }
 
-        Spacer(Modifier.height(10.dp))
-
+        Spacer(Modifier.height(9.dp))
         SettingCard("PEMBARUAN APK") {
-            Text("Versi aplikasi: ${BuildConfig.VERSION_NAME}", color = TvTextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            Text("Versi ${BuildConfig.VERSION_NAME}", color = TvTextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
             val releaseInfo by viewModel.githubReleaseInfo.collectAsState()
             val checking by viewModel.isCheckingUpdate.collectAsState()
             val progress by viewModel.updateDownloadProgress.collectAsState()
-            Spacer(Modifier.height(7.dp))
-            Button(
-                onClick = { viewModel.checkGitHubUpdate(agu.analys.util.GitHubUpdater.DEFAULT_REPO) },
-                enabled = !checking,
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = TvGreen)
-            ) {
-                Icon(Icons.Default.SystemUpdate, null, tint = Color.Black)
-                Spacer(Modifier.width(6.dp))
-                Text(if (checking) "Memeriksa..." else "Cek Update", color = Color.Black, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(6.dp))
+            Button(onClick = { viewModel.checkGitHubUpdate(agu.analys.util.GitHubUpdater.DEFAULT_REPO) }, enabled = !checking, modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(vertical = 10.dp), colors = ButtonDefaults.buttonColors(containerColor = TvGreen)) {
+                Icon(Icons.Default.SystemUpdate, null, modifier = Modifier.size(18.dp), tint = Color.Black); Spacer(Modifier.width(6.dp)); Text(if (checking) "Memeriksa..." else "Cek Update", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
             }
             releaseInfo?.let { release ->
-                Spacer(Modifier.height(7.dp))
-                Text("Tersedia: ${release.tagName}", color = TvGreen, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                if (progress == null) {
-                    Button(
-                        onClick = { viewModel.downloadAndInstallUpdate(context, agu.analys.util.GitHubUpdater.DEFAULT_REPO) },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF087FF5))
-                    ) {
-                        Text("Download & Install", color = Color.White, fontWeight = FontWeight.Bold)
-                    }
-                } else {
-                    Text(
-                        if (progress == 100) "Unduhan selesai, installer dibuka." else "Mengunduh... $progress%",
-                        color = TvGreen,
-                        fontSize = 11.sp
-                    )
-                }
-            }
-        }
-
-        Spacer(Modifier.height(10.dp))
-
-        SettingCard("CACHE APLIKASI") {
-            Text(
-                "Hanya membersihkan cache market. Mode, fee, API key, dan watchlist tetap tersimpan.",
-                color = TvTextSecondary,
-                fontSize = 11.sp
-            )
-            Spacer(Modifier.height(7.dp))
-            Button(
-                onClick = { MarketDataCache(context).clearAll(); cacheCleared = true },
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2A3540))
-            ) {
-                Icon(Icons.Default.DeleteSweep, null)
-                Spacer(Modifier.width(6.dp))
-                Text(if (cacheCleared) "Cache dibersihkan" else "Bersihkan Cache")
-            }
-        }
-
-        Spacer(Modifier.height(14.dp))
-
-        Button(
-            onClick = {
-                prefs.isScalpingMode = scalping
-                prefs.aiProvider = provider
-                prefs.groqApiKey = groq
-                prefs.geminiApiKey = gemini
-                prefs.tradingFees = fees
-                viewModel.setScalpingMode(scalping)
-                saved = true
-            },
-            modifier = Modifier.fillMaxWidth().height(50.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = TvGreen),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            if (saved) Icon(Icons.Default.CheckCircle, null, tint = Color.Black)
-            Spacer(Modifier.width(5.dp))
-            Text(
-                if (saved) "Tersimpan" else "Simpan Perubahan",
-                color = Color.Black,
-                fontWeight = FontWeight.Black
-            )
-        }
-        Spacer(Modifier.height(20.dp))
-    }
-}
-
-@Composable
-private fun ModeCard(
-    title: String,
-    badge: String,
-    selected: Boolean,
-    accent: Color,
-    bullets: List<String>,
-    description: String,
-    onClick: () -> Unit
-) {
-    val border = if (selected) accent.copy(alpha = 0.55f) else Color(0xFF2A3540)
-    val bg = if (selected) accent.copy(alpha = 0.10f) else Color(0xFF121820)
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .background(bg, RoundedCornerShape(14.dp))
-            .border(BorderStroke(1.5.dp, border), RoundedCornerShape(14.dp))
-            .clickable(onClick = onClick)
-            .padding(14.dp)
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(title, color = TvTextPrimary, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
-                    Spacer(Modifier.width(8.dp))
-                    Box(
-                        Modifier
-                            .background(accent.copy(alpha = 0.18f), RoundedCornerShape(6.dp))
-                            .padding(horizontal = 7.dp, vertical = 2.dp)
-                    ) {
-                        Text(badge, color = accent, fontSize = 9.sp, fontWeight = FontWeight.ExtraBold)
-                    }
-                }
                 Spacer(Modifier.height(6.dp))
-                Text(description, color = TvTextSecondary, fontSize = 12.sp, lineHeight = 16.sp)
+                Text("Update tersedia · ${release.tagName}", color = TvGreen, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                if (progress == null) {
+                    Button(onClick = { viewModel.downloadAndInstallUpdate(context, agu.analys.util.GitHubUpdater.DEFAULT_REPO) }, modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(vertical = 10.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF087FF5))) { Text("Download & Install", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp) }
+                } else {
+                    Text(if (progress == 100) "Unduhan selesai, installer dibuka." else "Mengunduh... $progress%", color = TvGreen, fontSize = 10.sp)
+                }
             }
-            Box(
-                Modifier
-                    .size(22.dp)
-                    .border(2.dp, if (selected) accent else Color(0xFF3A4550), CircleShape)
-                    .padding(4.dp)
-                    .then(
-                        if (selected) Modifier.background(accent, CircleShape)
-                        else Modifier
-                    )
-            )
         }
-        Spacer(Modifier.height(10.dp))
-        bullets.forEach { line ->
-            Text("•  $line", color = TvTextSecondary, fontSize = 12.sp, lineHeight = 18.sp)
+
+        Spacer(Modifier.height(9.dp))
+        SettingCard("CACHE APLIKASI") {
+            Text("Membersihkan cache market. Mode, fee, API key, dan watchlist tetap tersimpan.", color = TvTextSecondary, fontSize = 10.sp)
+            Spacer(Modifier.height(6.dp))
+            Button(onClick = { MarketDataCache(context).clearAll(); cacheCleared = true }, modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(vertical = 10.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2A3540))) {
+                Icon(Icons.Default.DeleteSweep, null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(if (cacheCleared) "Cache dibersihkan" else "Bersihkan Cache", fontSize = 12.sp)
+            }
         }
-    }
-}
 
-@Composable
-private fun DataRow(label: String, value: String) {
-    Row(
-        Modifier.fillMaxWidth().padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(label, color = TvTextSecondary, fontSize = 13.sp)
-        Text(value, color = TvTextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-    }
-}
-
-@Composable
-private fun SettingCard(title: String, content: @Composable ColumnScope.() -> Unit) {
-    Card(
-        Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = TvCardBackground)
-    ) {
-        Column(Modifier.padding(14.dp)) {
-            Text(title, color = TvGreen, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 0.7.sp)
-            Spacer(Modifier.height(8.dp))
-            content()
+        Spacer(Modifier.height(12.dp))
+        Button(onClick = { prefs.isScalpingMode = scalping; prefs.aiProvider = provider; prefs.groqApiKey = groq; prefs.geminiApiKey = gemini; prefs.tradingFees = fees; viewModel.setScalpingMode(scalping); saved = true }, modifier = Modifier.fillMaxWidth().height(48.dp), colors = ButtonDefaults.buttonColors(containerColor = TvGreen), shape = RoundedCornerShape(11.dp)) {
+            if (saved) Icon(Icons.Default.CheckCircle, null, modifier = Modifier.size(18.dp), tint = Color.Black)
+            Spacer(Modifier.width(5.dp)); Text(if (saved) "Tersimpan" else "Simpan Perubahan", color = Color.Black, fontWeight = FontWeight.Black, fontSize = 13.sp)
         }
+        Spacer(Modifier.height(18.dp))
     }
 }
 
-@Composable
-private fun ModeChoice(
-    label: String,
-    selected: Boolean,
-    bg: Color,
-    fg: Color,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    Button(
-        onClick = onClick,
-        modifier = modifier,
-        colors = ButtonDefaults.buttonColors(containerColor = if (selected) bg else Color(0xFF1A2028)),
-        shape = RoundedCornerShape(10.dp)
-    ) {
-        Text(label, color = if (selected) fg else TvTextSecondary, fontWeight = FontWeight.ExtraBold, fontSize = 11.sp)
+@Composable private fun SectionLabel(text: String) { Text(text, color = Color(0xFF72B7FF), fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 0.8.sp) }
+
+@Composable private fun ModeCard(title: String, badge: String, selected: Boolean, accent: Color, bullets: List<String>, description: String, onClick: () -> Unit) {
+    val border = if (selected) accent.copy(alpha = 0.55f) else Color(0xFF2A3540)
+    val bg = if (selected) accent.copy(alpha = 0.09f) else Color(0xFF121820)
+    Row(Modifier.fillMaxWidth().background(bg, RoundedCornerShape(13.dp)).border(BorderStroke(1.3.dp, border), RoundedCornerShape(13.dp)).clickable(onClick = onClick).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(title, color = TvTextPrimary, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)
+                Spacer(Modifier.width(7.dp))
+                Box(Modifier.background(accent.copy(alpha = 0.16f), RoundedCornerShape(5.dp)).padding(horizontal = 6.dp, vertical = 2.dp)) { Text(badge, color = accent, fontSize = 8.sp, fontWeight = FontWeight.ExtraBold) }
+            }
+            Spacer(Modifier.height(4.dp))
+            Text(description, color = TvTextSecondary, fontSize = 10.sp)
+            Spacer(Modifier.height(5.dp))
+            Text(bullets.joinToString("  ·  "), color = TvTextSecondary, fontSize = 10.sp, maxLines = 1)
+        }
+        Spacer(Modifier.width(10.dp))
+        Box(Modifier.size(20.dp).border(2.dp, if (selected) accent else Color(0xFF3A4550), CircleShape).padding(4.dp).then(if (selected) Modifier.background(accent, CircleShape) else Modifier))
     }
 }
 
-@Composable
-private fun FeeField(label: String, value: Double, onValue: (Double) -> Unit) {
-    OutlinedTextField(
-        value = String.format("%.2f", value),
-        onValueChange = { text ->
-            text.replace(',', '.').toDoubleOrNull()?.let { parsed -> onValue(parsed) }
-        },
-        modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
-        singleLine = true,
-        label = { Text(label) },
-        suffix = { Text("%") }
-    )
-}
+@Composable private fun DataRow(label: String, value: String) { Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), horizontalArrangement = Arrangement.SpaceBetween) { Text(label, color = TvTextSecondary, fontSize = 11.sp); Text(value, color = TvTextPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold) } }
+
+@Composable private fun SettingCard(title: String, content: @Composable ColumnScope.() -> Unit) { Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(13.dp), colors = CardDefaults.cardColors(containerColor = TvCardBackground)) { Column(Modifier.padding(12.dp)) { Text(title, color = TvGreen, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 0.7.sp); Spacer(Modifier.height(7.dp)); content() } } }
+
+@Composable private fun ModeChoice(label: String, selected: Boolean, bg: Color, fg: Color, modifier: Modifier = Modifier, onClick: () -> Unit) { Button(onClick = onClick, modifier = modifier, colors = ButtonDefaults.buttonColors(containerColor = if (selected) bg else Color(0xFF1A2028)), shape = RoundedCornerShape(9.dp), contentPadding = PaddingValues(vertical = 9.dp)) { Text(label, color = if (selected) fg else TvTextSecondary, fontWeight = FontWeight.ExtraBold, fontSize = 10.sp) } }
+
+@Composable private fun FeeField(label: String, value: Double, modifier: Modifier = Modifier, onValue: (Double) -> Unit) { OutlinedTextField(value = String.format("%.2f", value), onValueChange = { it.replace(',', '.').toDoubleOrNull()?.let(onValue) }, modifier = modifier.padding(bottom = 5.dp), singleLine = true, label = { Text(label, fontSize = 10.sp) }, suffix = { Text("%", fontSize = 10.sp) }) }
