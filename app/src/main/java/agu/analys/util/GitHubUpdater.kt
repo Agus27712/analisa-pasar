@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import android.widget.Toast
 import androidx.core.content.FileProvider
 import agu.analys.BuildConfig
 import kotlinx.coroutines.Dispatchers
@@ -76,7 +77,9 @@ object GitHubUpdater {
         onProgress: (Int) -> Unit
     ): Boolean = withContext(Dispatchers.IO) {
         try {
-            require(apkUrl.startsWith("https://", ignoreCase = true))
+            require(apkUrl.startsWith("https://", ignoreCase = true)) {
+                "URL update tidak aman"
+            }
             val url = URL(apkUrl)
             val connection = (url.openConnection() as HttpURLConnection).apply {
                 connectTimeout = 15000
@@ -86,11 +89,15 @@ object GitHubUpdater {
                 setRequestProperty("User-Agent", "AnalisaPasar/${BuildConfig.VERSION_NAME}")
                 connect()
             }
-            if (connection.responseCode !in 200..299) throw IllegalStateException("Download APK gagal: HTTP ${connection.responseCode}")
+            if (connection.responseCode !in 200..299) {
+                throw IllegalStateException("Download APK gagal: HTTP ${connection.responseCode}")
+            }
 
             val fileLength = connection.contentLengthLong
             val downloadDir = context.getExternalFilesDir(null) ?: context.cacheDir
-            if (!downloadDir.exists()) downloadDir.mkdirs()
+            if (!downloadDir.exists() && !downloadDir.mkdirs()) {
+                throw IllegalStateException("Folder penyimpanan update tidak dapat dibuat")
+            }
             val safeName = apkName.substringAfterLast('/').ifBlank { "analisa-pasar-update.apk" }
             val apkFile = File(downloadDir, safeName)
 
@@ -114,30 +121,42 @@ object GitHubUpdater {
                     }
                     output.flush()
                     if (total <= 0L) throw IllegalStateException("APK kosong")
+                    if (fileLength > 0L && total != fileLength) {
+                        throw IllegalStateException("Download APK tidak lengkap (${total}/${fileLength} byte)")
+                    }
                 }
             }
 
             withContext(Dispatchers.Main) {
                 onProgress(100)
-                installApk(context, apkFile)
+                if (!installApk(context, apkFile)) {
+                    throw IllegalStateException("Installer APK gagal dibuka")
+                }
             }
             true
-        } catch (_: Exception) {
-            withContext(Dispatchers.Main) { onProgress(-1) }
+        } catch (error: Exception) {
+            withContext(Dispatchers.Main) {
+                onProgress(-1)
+                showUpdateToast(context, error.message ?: "Update APK gagal")
+            }
             false
         }
     }
 
-    fun installApk(context: Context, file: File) {
-        if (!file.exists() || file.length() <= 0L) return
-        try {
+    fun installApk(context: Context, file: File): Boolean {
+        if (!file.exists() || file.length() <= 0L) {
+            showUpdateToast(context, "File APK update tidak ditemukan atau kosong")
+            return false
+        }
+        return try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !context.packageManager.canRequestPackageInstalls()) {
                 val settingsIntent = Intent(
                     Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
                     Uri.parse("package:${context.packageName}")
                 ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 context.startActivity(settingsIntent)
-                return
+                showUpdateToast(context, "Izinkan instalasi aplikasi dari sumber ini, lalu buka update lagi.")
+                return false
             }
 
             val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
@@ -147,9 +166,15 @@ object GitHubUpdater {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             context.startActivity(intent)
-        } catch (_: Exception) {
-            // Installer failure is surfaced through the existing download progress state.
+            true
+        } catch (error: Exception) {
+            showUpdateToast(context, "Tidak bisa membuka installer APK: ${error.message ?: "kesalahan tidak diketahui"}")
+            false
         }
+    }
+
+    private fun showUpdateToast(context: Context, message: String) {
+        Toast.makeText(context.applicationContext, message, Toast.LENGTH_LONG).show()
     }
 
     private fun normalizeRepo(repo: String): String {
