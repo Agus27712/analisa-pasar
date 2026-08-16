@@ -136,10 +136,14 @@ object IndodaxMarketService {
     suspend fun fetchTopVolumeTicks(limit: Int = 15, excludeStable: Boolean = true): List<MarketTick> = withContext(Dispatchers.IO) {
         try {
             val body = get("https://indodax.com/api/summaries") ?: return@withContext emptyList()
-            val tickers = JSONObject(body).optJSONObject("tickers") ?: return@withContext emptyList()
+            val root = JSONObject(body)
+            val tickers = root.optJSONObject("tickers") ?: return@withContext emptyList()
             val stableBases = setOf("usdt", "usdc", "dai", "busd", "tusd", "idrt")
             val list = mutableListOf<MarketTick>()
             val keys = tickers.keys()
+            val prices24h = root.optJSONObject("prices_24h")
+            val now = System.currentTimeMillis()
+
             while (keys.hasNext()) {
                 val pair = keys.next()
                 if (!pair.endsWith("_idr")) continue
@@ -150,18 +154,92 @@ object IndodaxMarketService {
                 val volIdr = t.optString("vol_idr", "0").toDoubleOrNull() ?: 0.0
                 if (last <= 0 || volIdr <= 0) continue
                 val symbol = pair.uppercase().replace("_", "")
-                // Skip heavy 24h change calc for ranking — use mid-range estimate later if needed
+
+                // Rumus: Persentase = ((P_akhir - P_awal) / P_awal) * 100%
+                var change: Double? = null
+                val p24 = prices24h?.optString(pair, "0")?.toDoubleOrNull() ?: 0.0
+                if (p24 > 0) {
+                    change = ((last - p24) / p24) * 100.0
+                    changeReferenceCache[pair] = ChangeReference(p24, now)
+                } else {
+                    val cached = changeReferenceCache[pair]
+                    if (cached != null && cached.close > 0) {
+                        change = ((last - cached.close) / cached.close) * 100.0
+                    }
+                }
+
                 list += MarketTick(
                     symbol = symbol,
                     price = last,
                     high24h = t.optString("high", "0").toDoubleOrNull() ?: last,
                     low24h = t.optString("low", "0").toDoubleOrNull() ?: last,
                     volume24h = volIdr,
-                    change24h = Double.NaN,
-                    timestamp = System.currentTimeMillis()
+                    change24h = change ?: Double.NaN,
+                    timestamp = now
                 )
             }
             list.sortedByDescending { it.volume24h }.take(limit)
+        } catch (_: Exception) { emptyList() }
+    }
+
+    /**
+     * Scanner khusus koin yang SEDANG NAIK (Gainers / Momentum Positif) untuk Scalping.
+     * Menggunakan rumus: Persentase = ((P_akhir - P_awal) / P_awal) * 100% > 0%
+     * Diurutkan dari persentase kenaikan tertinggi ke terendah dengan volume likuid.
+     */
+    suspend fun fetchScalpingGainersTicks(limit: Int = 15, excludeStable: Boolean = true): List<MarketTick> = withContext(Dispatchers.IO) {
+        try {
+            val body = get("https://indodax.com/api/summaries") ?: return@withContext emptyList()
+            val root = JSONObject(body)
+            val tickers = root.optJSONObject("tickers") ?: return@withContext emptyList()
+            val prices24h = root.optJSONObject("prices_24h")
+            val stableBases = setOf("usdt", "usdc", "dai", "busd", "tusd", "idrt")
+            val now = System.currentTimeMillis()
+            val list = mutableListOf<MarketTick>()
+            val keys = tickers.keys()
+
+            while (keys.hasNext()) {
+                val pair = keys.next()
+                if (!pair.endsWith("_idr")) continue
+                val base = pair.removeSuffix("_idr")
+                if (excludeStable && base in stableBases) continue
+                val t = tickers.optJSONObject(pair) ?: continue
+                val last = t.optString("last", "0").toDoubleOrNull() ?: 0.0
+                val volIdr = t.optString("vol_idr", "0").toDoubleOrNull() ?: 0.0
+                // Minimal volume IDR agar koin likuid untuk scalping
+                if (last <= 0 || volIdr < 50_000_000.0) continue
+                val symbol = pair.uppercase().replace("_", "")
+
+                // Rumus: ((P_akhir - P_awal) / P_awal) * 100%
+                var change: Double? = null
+                val p24 = prices24h?.optString(pair, "0")?.toDoubleOrNull() ?: 0.0
+                if (p24 > 0) {
+                    change = ((last - p24) / p24) * 100.0
+                    changeReferenceCache[pair] = ChangeReference(p24, now)
+                } else {
+                    val cached = changeReferenceCache[pair]
+                    if (cached != null && cached.close > 0) {
+                        change = ((last - cached.close) / cached.close) * 100.0
+                    }
+                }
+
+                val finalChange = change ?: Double.NaN
+                // Hanya ambil koin yang bergerak NAIK / Positif (Persentase > 0)
+                if (finalChange.isFinite() && finalChange > 0.0) {
+                    list += MarketTick(
+                        symbol = symbol,
+                        price = last,
+                        high24h = t.optString("high", "0").toDoubleOrNull() ?: last,
+                        low24h = t.optString("low", "0").toDoubleOrNull() ?: last,
+                        volume24h = volIdr,
+                        change24h = finalChange,
+                        timestamp = now
+                    )
+                }
+            }
+
+            // Urutkan dari persentase kenaikan tertinggi (Top Gainers)
+            list.sortedByDescending { it.change24h }.take(limit)
         } catch (_: Exception) { emptyList() }
     }
 

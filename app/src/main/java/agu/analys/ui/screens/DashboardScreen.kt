@@ -36,9 +36,13 @@ fun DashboardScreen(
         watchlist.map(TradingPair::fromCustomSymbol).distinctBy { it.symbol }
     }
     val autoPairs = remember(hotCoins, worthCoins, isScalpingMode) {
-        val source = if (isScalpingMode) hotCoins.map { it.symbol } else worthCoins.map { it.pair.symbol }
+        val source = if (isScalpingMode) {
+            if (hotCoins.isNotEmpty()) hotCoins.map { it.symbol } else worthCoins.map { it.pair.symbol }
+        } else {
+            worthCoins.map { it.pair.symbol }
+        }
         val list = source.map(TradingPair::fromCustomSymbol).distinctBy { it.symbol }
-        if (list.isNotEmpty()) list.take(6) else TradingPair.POPULAR_PAIRS.take(6)
+        if (list.isNotEmpty()) list.take(10) else TradingPair.POPULAR_PAIRS.take(6)
     }
 
     val displayPairs = if (isManualTab) manualPairs else autoPairs

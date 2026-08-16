@@ -200,7 +200,7 @@ fun DashboardMockupHeader(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "AUTO WATCHLIST",
+                    text = if (isScalpingMode) "TOP MOMENTUM (NAIK)" else "AUTO WATCHLIST",
                     color = if (!isManualTab) TvGreen else TvTextSecondary,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold

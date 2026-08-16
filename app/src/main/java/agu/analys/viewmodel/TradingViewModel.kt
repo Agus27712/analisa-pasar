@@ -210,24 +210,66 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
 
     fun refreshWorthCoinsFromMarket() {
         viewModelScope.launch {
-            val topVolumeJob = async { IndodaxMarketService.fetchTopVolumeTicks(limit = 12, excludeStable = true) }
+            val scalpingMode = _isScalpingMode.value
+            val scannerJob = async {
+                if (scalpingMode) {
+                    val gainers = IndodaxMarketService.fetchScalpingGainersTicks(limit = 15, excludeStable = true)
+                    if (gainers.isNotEmpty()) gainers else IndodaxMarketService.fetchTopVolumeTicks(limit = 15, excludeStable = true)
+                } else {
+                    IndodaxMarketService.fetchTopVolumeTicks(limit = 15, excludeStable = true)
+                }
+            }
             val pairs = (TradingPair.POPULAR_PAIRS + _watchlist.value.map { TradingPair.fromCustomSymbol(it) }).distinctBy { it.symbol }
             val ticks = IndodaxMarketService.fetchTickers(pairs.map { it.effectiveIndodaxPair() })
-            val hot = topVolumeJob.await(); if (hot.isNotEmpty()) _hotCoins.value = hot
-            if (ticks.isEmpty()) { if (_dashboardTicks.value.isEmpty() && _hotCoins.value.isEmpty()) markMarketOffline("Tidak ada respons market dari Indodax.") else { _isShowingCachedData.value = true; _connectionState.value = MarketConnectionState.ConnectionLost("Koneksi terputus. Menampilkan data cache terakhir.") }; return@launch }
-            _dashboardTicks.value = ticks.associateBy { it.symbol }; if (!_isScalpingMode.value || _connectionState.value !is MarketConnectionState.Connected) _connectionState.value = MarketConnectionState.Connected; _isShowingCachedData.value = false; marketCache.saveDashboardTicks(_dashboardTicks.value)
-            val tickMap = ticks.associateBy { it.symbol }
-            val worth = pairs.mapNotNull { pair ->
-                val tick = tickMap[pair.symbol] ?: return@mapNotNull null
+            val hot = scannerJob.await(); if (hot.isNotEmpty()) _hotCoins.value = hot
+            if (ticks.isEmpty() && hot.isEmpty()) {
+                if (_dashboardTicks.value.isEmpty() && _hotCoins.value.isEmpty()) markMarketOffline("Tidak ada respons market dari Indodax.")
+                else {
+                    _isShowingCachedData.value = true
+                    _connectionState.value = MarketConnectionState.ConnectionLost("Koneksi terputus. Menampilkan data cache terakhir.")
+                }
+                return@launch
+            }
+            val hotMap = hot.associateBy { it.symbol }
+            val combinedTicks = (ticks.associateBy { it.symbol } + hotMap)
+            _dashboardTicks.value = combinedTicks
+            if (!_isScalpingMode.value || _connectionState.value !is MarketConnectionState.Connected) _connectionState.value = MarketConnectionState.Connected
+            _isShowingCachedData.value = false
+            marketCache.saveDashboardTicks(_dashboardTicks.value)
+
+            val evaluatedPairs = if (scalpingMode && hot.isNotEmpty()) {
+                (hot.map { TradingPair.fromCustomSymbol(it.symbol) } + pairs).distinctBy { it.symbol }
+            } else {
+                pairs
+            }
+
+            val worth = evaluatedPairs.mapNotNull { pair ->
+                val tick = combinedTicks[pair.symbol] ?: return@mapNotNull null
                 val rangePct = if (tick.low24h > 0) ((tick.high24h - tick.low24h) / tick.low24h) * 100.0 else 0.0
                 val volScore = when { tick.volume24h >= 100_000_000_000 -> 30; tick.volume24h >= 10_000_000_000 -> 22; tick.volume24h >= 1_000_000_000 -> 14; else -> 6 }
                 val change24h = tick.change24h.takeIf { it.isFinite() } ?: 0.0
-                val momentumScore = when { change24h >= 8 -> 35; change24h >= 3 -> 30; change24h >= 0 -> 23; change24h >= -3 -> 15; change24h >= -8 -> 8; else -> 4 }
+                val momentumScore = when { change24h >= 8 -> 40; change24h >= 3 -> 32; change24h > 0 -> 25; change24h >= -3 -> 12; change24h >= -8 -> 6; else -> 2 }
                 val volaScore = min(20, (rangePct * 1.5).toInt())
                 val score = (volScore + momentumScore + volaScore).coerceIn(1, 99)
-                val rec = when { score >= 75 && change24h > 0 -> "MOMENTUM KUAT"; score >= 58 && change24h > -2 -> "LAYAK DIPANTAU"; change24h <= -8 -> "TEKANAN JUAL"; else -> "NETRAL / VOLATIL" }
-                WorthCoinInfo(pair, score, score >= 58 && change24h > -2, rec, abs(change24h), "${PriceFormatter.formatPrice(tick.price)} · Vol ${PriceFormatter.formatVolume(tick.volume24h)} · Range ${PriceFormatter.formatPercentage(rangePct, false)}")
-            }.sortedByDescending { it.worthScore }
+                val rec = when {
+                    change24h >= 5.0 -> "PUMP / MOMENTUM NAIK"
+                    change24h > 0.0 -> "BERGERAK NAIK"
+                    change24h >= -2.0 -> "LAYAK DIPANTAU"
+                    change24h <= -8.0 -> "TEKANAN JUAL"
+                    else -> "NETRAL / VOLATIL"
+                }
+                WorthCoinInfo(pair, score, score >= 50 && change24h > 0, rec, abs(change24h), "${PriceFormatter.formatPrice(tick.price)} · Vol ${PriceFormatter.formatVolume(tick.volume24h)} · +${PriceFormatter.formatPercentage(change24h, false)}")
+            }.sortedWith(
+                if (scalpingMode) {
+                    // Untuk mode scalping: Utamakan koin dengan persentase kenaikan terbesar (Gainers)
+                    compareByDescending<WorthCoinInfo> { info ->
+                        val tick = combinedTicks[info.pair.symbol]
+                        tick?.change24h?.takeIf { it.isFinite() } ?: -999.0
+                    }.thenByDescending { it.worthScore }
+                } else {
+                    compareByDescending { it.worthScore }
+                }
+            )
             _worthCoins.value = worth; marketCache.saveWorthCoins(worth)
         }
     }
