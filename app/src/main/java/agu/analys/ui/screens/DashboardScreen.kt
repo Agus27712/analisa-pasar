@@ -113,11 +113,9 @@ fun DashboardScreen(
                 currentTab = tab
                 when (tab) {
                     NavTab.WATCHLIST -> { /* Sudah di Watchlist */ }
-                    NavTab.CHART -> {
-                        // Buka Detail / Full Chart koin terpilih
+                    NavTab.SIMULASI -> {
                         val firstPair = displayPairs.firstOrNull() ?: TradingPair.POPULAR_PAIRS.first()
-                        viewModel.selectPair(firstPair)
-                        onNavigateToDetail(firstPair)
+                        viewModel.openSimulation(firstPair)
                     }
                     NavTab.BELAJAR -> {
                         viewModel.openLearning()

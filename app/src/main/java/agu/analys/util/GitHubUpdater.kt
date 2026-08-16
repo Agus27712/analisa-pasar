@@ -37,69 +37,115 @@ object GitHubUpdater {
 
     suspend fun checkUpdate(context: Context, repo: String): UpdateCheckResult = withContext(Dispatchers.IO) {
         val normalizedRepo = normalizeRepo(repo)
+        val currentVersion = normalizeVersion(BuildConfig.VERSION_NAME)
         try {
-            val apiUrl = "https://api.github.com/repos/$normalizedRepo/releases/latest"
-            val connection = (URL(apiUrl).openConnection() as HttpURLConnection).apply {
-                requestMethod = "GET"
-                setRequestProperty("Accept", "application/vnd.github.v3+json")
-                setRequestProperty("User-Agent", "AnalisaPasarApp/${BuildConfig.VERSION_NAME}")
-                connectTimeout = 12000
-                readTimeout = 12000
-            }
+            // 1. Coba fetch rilis terbaru (releases/latest)
+            var releaseObj: JSONObject? = null
+            val latestUrl = "https://api.github.com/repos/$normalizedRepo/releases/latest"
+            val latestConn = openGitHubConnection(latestUrl)
+            val latestCode = latestConn.responseCode
 
-            val responseCode = connection.responseCode
-            if (responseCode == 404) {
-                return@withContext UpdateCheckResult.Error("Repository / rilis belum ditemukan di GitHub ($normalizedRepo). Pastikan rilis sudah di-publish.")
-            }
-            if (responseCode == 403) {
-                return@withContext UpdateCheckResult.Error("Batas request GitHub terlampaui (rate limit). Coba lagi nanti atau buka via browser.")
-            }
-            if (responseCode !in 200..299) {
-                return@withContext UpdateCheckResult.Error("Koneksi GitHub gagal (HTTP $responseCode)")
-            }
-
-            val responseString = connection.inputStream.bufferedReader().use { it.readText() }
-            val json = JSONObject(responseString)
-            val tagName = json.optString("tag_name", "").trim()
-            val latestVersion = normalizeVersion(tagName)
-            val currentVersion = normalizeVersion(BuildConfig.VERSION_NAME)
-            val htmlUrl = json.optString("html_url", "https://github.com/$normalizedRepo/releases")
-            val releaseNotes = json.optString("body", "Pembaruan rilis baru tersedia.")
-
-            val assets = json.optJSONArray("assets") ?: JSONArray()
-            var apkUrl = ""
-            var apkName = "analisa-pasar-update.apk"
-            for (i in 0 until assets.length()) {
-                val asset = assets.getJSONObject(i)
-                val name = asset.optString("name", "")
-                val browserUrl = asset.optString("browser_download_url", "")
-                if (name.endsWith(".apk", ignoreCase = true) && browserUrl.isNotBlank()) {
-                    apkName = name
-                    apkUrl = browserUrl
-                    break
-                }
-            }
-
-            if (latestVersion.isNotEmpty() && compareVersions(latestVersion, currentVersion) > 0) {
-                if (apkUrl.isBlank()) {
-                    // Ada tag versi baru tapi tanpa file APK langsung
-                    apkUrl = htmlUrl
-                }
-                UpdateCheckResult.UpdateAvailable(
-                    GitHubReleaseInfo(
-                        tagName = tagName.ifBlank { "v$latestVersion" },
-                        versionName = latestVersion,
-                        releaseNotes = releaseNotes,
-                        apkUrl = apkUrl,
-                        apkName = apkName,
-                        htmlUrl = htmlUrl
-                    )
-                )
+            if (latestCode in 200..299) {
+                val body = latestConn.inputStream.bufferedReader().use { it.readText() }
+                releaseObj = JSONObject(body)
+            } else if (latestCode == 403) {
+                return@withContext UpdateCheckResult.Error("Batas request GitHub terlampaui (rate limit). Coba lagi beberapa saat atau buka lewat browser.")
             } else {
-                UpdateCheckResult.AlreadyLatest(BuildConfig.VERSION_NAME)
+                // 2. Fallback: Cek daftar semua rilis (releases)
+                val allReleasesUrl = "https://api.github.com/repos/$normalizedRepo/releases"
+                val allConn = openGitHubConnection(allReleasesUrl)
+                if (allConn.responseCode in 200..299) {
+                    val body = allConn.inputStream.bufferedReader().use { it.readText() }
+                    val array = JSONArray(body)
+                    if (array.length() > 0) {
+                        releaseObj = array.getJSONObject(0)
+                    }
+                }
             }
+
+            // Jika ada objek Release dari GitHub Releases API
+            if (releaseObj != null) {
+                val tagName = releaseObj.optString("tag_name", "").trim()
+                val latestVersion = normalizeVersion(tagName)
+                val htmlUrl = releaseObj.optString("html_url", "https://github.com/$normalizedRepo/releases")
+                val releaseNotes = releaseObj.optString("body", "Pembaruan versi $tagName tersedia.")
+
+                val assets = releaseObj.optJSONArray("assets") ?: JSONArray()
+                var apkUrl = ""
+                var apkName = "analisa-pasar-update.apk"
+                for (i in 0 until assets.length()) {
+                    val asset = assets.getJSONObject(i)
+                    val name = asset.optString("name", "")
+                    val browserUrl = asset.optString("browser_download_url", "")
+                    if (name.endsWith(".apk", ignoreCase = true) && browserUrl.isNotBlank()) {
+                        apkName = name
+                        apkUrl = browserUrl
+                        break
+                    }
+                }
+
+                if (latestVersion.isNotEmpty() && compareVersions(latestVersion, currentVersion) > 0) {
+                    if (apkUrl.isBlank()) {
+                        // Tag versi baru tersedia, download via release web page
+                        apkUrl = htmlUrl
+                    }
+                    return@withContext UpdateCheckResult.UpdateAvailable(
+                        GitHubReleaseInfo(
+                            tagName = tagName.ifBlank { "v$latestVersion" },
+                            versionName = latestVersion,
+                            releaseNotes = releaseNotes,
+                            apkUrl = apkUrl,
+                            apkName = apkName,
+                            htmlUrl = htmlUrl
+                        )
+                    )
+                } else {
+                    return@withContext UpdateCheckResult.AlreadyLatest(BuildConfig.VERSION_NAME)
+                }
+            }
+
+            // 3. Fallback: Cek Git Tags jika rilis belum diformalkan di GitHub Releases UI
+            val tagsUrl = "https://api.github.com/repos/$normalizedRepo/tags"
+            val tagsConn = openGitHubConnection(tagsUrl)
+            if (tagsConn.responseCode in 200..299) {
+                val body = tagsConn.inputStream.bufferedReader().use { it.readText() }
+                val tagsArray = JSONArray(body)
+                if (tagsArray.length() > 0) {
+                    val latestTagObj = tagsArray.getJSONObject(0)
+                    val tagName = latestTagObj.optString("name", "").trim()
+                    val latestVersion = normalizeVersion(tagName)
+                    val tagHtmlUrl = "https://github.com/$normalizedRepo/releases/tag/$tagName"
+
+                    if (latestVersion.isNotEmpty() && compareVersions(latestVersion, currentVersion) > 0) {
+                        return@withContext UpdateCheckResult.UpdateAvailable(
+                            GitHubReleaseInfo(
+                                tagName = tagName,
+                                versionName = latestVersion,
+                                releaseNotes = "Versi tag $tagName terdeteksi di GitHub ($normalizedRepo).",
+                                apkUrl = "https://github.com/$normalizedRepo/releases/download/$tagName/app-release.apk",
+                                apkName = "analisa-pasar-$latestVersion.apk",
+                                htmlUrl = tagHtmlUrl
+                            )
+                        )
+                    } else {
+                        return@withContext UpdateCheckResult.AlreadyLatest(BuildConfig.VERSION_NAME)
+                    }
+                }
+            }
+
+            UpdateCheckResult.Error("Repository atau tag rilis belum ditemukan di GitHub ($normalizedRepo). Buka halaman rilis di browser untuk mengecek rilis.")
         } catch (e: Exception) {
             UpdateCheckResult.Error("Gagal memeriksa update: ${e.localizedMessage ?: "Koneksi terputus"}")
+        }
+    }
+
+    private fun openGitHubConnection(urlStr: String): HttpURLConnection {
+        return (URL(urlStr).openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            setRequestProperty("Accept", "application/vnd.github.v3+json")
+            setRequestProperty("User-Agent", "AnalisaPasarApp/${BuildConfig.VERSION_NAME}")
+            connectTimeout = 12000
+            readTimeout = 12000
         }
     }
 
@@ -260,8 +306,24 @@ object GitHubUpdater {
         return if (value.matches(Regex("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"))) value else DEFAULT_REPO
     }
 
-    private fun normalizeVersion(raw: String): String =
-        raw.trim().removePrefix("v").takeWhile { it.isDigit() || it == '.' }
+    private fun normalizeVersion(raw: String): String {
+        val cleaned = raw.trim()
+            .removePrefix("v").removePrefix("V")
+            .trimStart('.', ' ', '-', '_')
+        val digitsAndDots = buildString {
+            var lastWasDot = false
+            for (ch in cleaned) {
+                if (ch.isDigit()) {
+                    append(ch)
+                    lastWasDot = false
+                } else if (ch == '.' && !lastWasDot && isNotEmpty()) {
+                    append(ch)
+                    lastWasDot = true
+                }
+            }
+        }.trimEnd('.')
+        return digitsAndDots.ifBlank { "0" }
+    }
 
     private fun compareVersions(left: String, right: String): Int {
         val a = left.split('.').map { it.toIntOrNull() ?: 0 }

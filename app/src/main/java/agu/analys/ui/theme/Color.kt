@@ -13,6 +13,7 @@ val TvRed = Color(0xFFF23645)
 val TvRedLight = Color(0xFFEF5350)
 val TvBlue = Color(0xFF2962FF)
 val TvAmber = Color(0xFFF5A623)
+val TvOrange = Color(0xFFFF9800)
 
 val TvTextPrimary = Color(0xFFFFFFFF)
 val TvTextSecondary = Color(0xFFA0A0A0)

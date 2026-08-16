@@ -17,6 +17,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.CompareArrows
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CropRotate
 import androidx.compose.material.icons.filled.MenuBook
@@ -133,6 +135,15 @@ fun DetailChartScreenV2(
                     text = getCoinFullName(pair.baseAsset),
                     color = TvTextSecondary,
                     fontSize = 12.sp
+                )
+            }
+
+            IconButton(onClick = { viewModel.openSimulation(pair) }) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.CompareArrows,
+                    contentDescription = "Simulasi Trade",
+                    tint = TvGreen,
+                    modifier = Modifier.size(22.dp)
                 )
             }
 
@@ -422,11 +433,24 @@ fun DetailChartScreenV2(
 
         Spacer(Modifier.height(14.dp))
 
-        // Action Buttons: Buka Indodax & AI Analisis
+        // Action Buttons: Simulasi Trade + Buka Indodax + AI Analisis
+        Button(
+            onClick = { viewModel.openSimulation(pair) },
+            modifier = Modifier.fillMaxWidth().height(46.dp),
+            shape = RoundedCornerShape(10.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = TvGreen)
+        ) {
+            Icon(Icons.AutoMirrored.Filled.TrendingUp, null, tint = Color.Black, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(6.dp))
+            Text("Simulasi Trade Spot ${pair.baseAsset}", color = Color.Black, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp)
+        }
+
+        Spacer(Modifier.height(8.dp))
+
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(
                 onClick = { openIndodax(context) },
-                modifier = Modifier.weight(1f).height(46.dp),
+                modifier = Modifier.weight(1f).height(44.dp),
                 shape = RoundedCornerShape(10.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF087FF5))
             ) {
@@ -438,7 +462,7 @@ fun DetailChartScreenV2(
                     else viewModel.requestGeminiChartSummary()
                 },
                 enabled = !aiLoadingGroq && !aiLoadingGemini && live,
-                modifier = Modifier.weight(1f).height(46.dp),
+                modifier = Modifier.weight(1f).height(44.dp),
                 shape = RoundedCornerShape(10.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E2836))
             ) {

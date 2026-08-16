@@ -24,6 +24,13 @@ import agu.analys.service.GeminiAiService
 import agu.analys.service.GroqAiService
 import agu.analys.service.IndodaxMarketService
 import agu.analys.service.IndodaxMarketWebSocket
+import agu.analys.trading.SimulationOrder
+import agu.analys.trading.SimulationOrderResult
+import agu.analys.trading.SimulationOrderSide
+import agu.analys.trading.SimulationOrderType
+import agu.analys.trading.SimulationTradeHistoryItem
+import agu.analys.trading.SimulationTradeStore
+import agu.analys.trading.SimulationWallet
 import agu.analys.trading.SpotPosition
 import agu.analys.trading.SpotPositionStore
 import agu.analys.util.AppPreferences
@@ -48,6 +55,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     private val prefs = AppPreferences(application)
     private val marketCache = MarketDataCache(application)
     private val positionStore = SpotPositionStore(application)
+    private val simulationStore = SimulationTradeStore(application)
     private val marketWebSocket = IndodaxMarketWebSocket(
         scope = viewModelScope,
         onTick = { tick ->
@@ -65,6 +73,13 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
             val prices = _recentPrices.value.toMutableList().apply { add(tick.price) }
             if (prices.size > 50) prices.removeAt(0)
             _recentPrices.value = prices
+
+            // Trigger Realtime Simulation Matching Engine
+            val filled = simulationStore.processPriceTick(normalized.symbol, normalized.price, normalized.high24h, normalized.low24h)
+            if (filled.isNotEmpty()) {
+                refreshSimulationState()
+                _lastFilledSimulationOrder.value = filled.first()
+            }
         },
         onCandle = { candle ->
             if (!_isScalpingMode.value || candle.timestamp < (_recentCandles.value.firstOrNull()?.timestamp ?: 0L)) return@IndodaxMarketWebSocket
@@ -140,6 +155,68 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     private val _scalpingSensitivity = MutableStateFlow(prefs.scalpingSensitivity)
     val scalpingSensitivity: StateFlow<ScalpingSensitivity> = _scalpingSensitivity.asStateFlow()
 
+    // Simulation Trading StateFlows
+    private val _simulationWallet = MutableStateFlow(simulationStore.getWallet())
+    val simulationWallet: StateFlow<SimulationWallet> = _simulationWallet.asStateFlow()
+    private val _simulationOpenOrders = MutableStateFlow(simulationStore.getOpenOrders())
+    val simulationOpenOrders: StateFlow<List<SimulationOrder>> = _simulationOpenOrders.asStateFlow()
+    private val _simulationHistory = MutableStateFlow(simulationStore.getTradeHistory())
+    val simulationHistory: StateFlow<List<SimulationTradeHistoryItem>> = _simulationHistory.asStateFlow()
+    private val _lastFilledSimulationOrder = MutableStateFlow<SimulationOrder?>(null)
+    val lastFilledSimulationOrder: StateFlow<SimulationOrder?> = _lastFilledSimulationOrder.asStateFlow()
+
+    fun refreshSimulationState() {
+        _simulationWallet.value = simulationStore.getWallet()
+        _simulationOpenOrders.value = simulationStore.getOpenOrders()
+        _simulationHistory.value = simulationStore.getTradeHistory()
+    }
+
+    fun submitSimulationOrder(
+        side: SimulationOrderSide,
+        type: SimulationOrderType,
+        price: Double,
+        stopPrice: Double = 0.0,
+        quantity: Double
+    ): SimulationOrderResult {
+        val currentPrice = _currentTick.value?.price ?: price
+        val pair = _selectedPair.value
+        val result = simulationStore.placeOrder(
+            symbol = pair.symbol,
+            baseAsset = pair.baseAsset,
+            quoteAsset = pair.quoteAsset,
+            side = side,
+            type = type,
+            price = price,
+            stopPrice = stopPrice,
+            quantity = quantity,
+            currentMarketPrice = currentPrice
+        )
+        refreshSimulationState()
+        return result
+    }
+
+    fun cancelSimulationOrder(orderId: String): Boolean {
+        val ok = simulationStore.cancelOrder(orderId)
+        if (ok) refreshSimulationState()
+        return ok
+    }
+
+    fun cancelAllSimulationOrders(symbol: String? = null): Int {
+        val count = simulationStore.cancelAllOrders(symbol)
+        if (count > 0) refreshSimulationState()
+        return count
+    }
+
+    fun topUpSimulationBalance(amount: Double) {
+        simulationStore.topUpIdr(amount)
+        refreshSimulationState()
+    }
+
+    fun resetSimulationAccount() {
+        simulationStore.resetWallet()
+        refreshSimulationState()
+    }
+
     fun setScalpingMode(enabled: Boolean) {
         if (_isScalpingMode.value == enabled) return
         _isScalpingMode.value = enabled
@@ -191,6 +268,10 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     private val navigationStack = mutableListOf<AppScreen>()
     fun navigateTo(screen: AppScreen) { if (_currentScreen.value != screen) { if (_currentScreen.value != AppScreen.DASHBOARD) navigationStack.add(_currentScreen.value); _currentScreen.value = screen } }
     fun openCoinDetail(pair: TradingPair) { selectPair(pair); navigateTo(AppScreen.DETAIL) }
+    fun openSimulation(pair: TradingPair? = null) {
+        if (pair != null) selectPair(pair)
+        navigateTo(AppScreen.SIMULATION_TRADE)
+    }
     fun openLandscapeChart() { navigateTo(AppScreen.LANDSCAPE_CHART) }
     fun closeLandscapeChart() { goBack() }
     fun openSettings() { navigateTo(AppScreen.SETTINGS) }
@@ -297,6 +378,13 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
                     val normalizedTick = tick.copy(symbol = pair.symbol); _currentTick.value = normalizedTick; engine.onTickUpdate(normalizedTick)
                     val hist = _recentPrices.value.toMutableList().apply { add(tick.price) }; if (hist.size > 50) hist.removeAt(0); _recentPrices.value = hist
                     _dashboardTicks.value = _dashboardTicks.value.toMutableMap().apply { put(pair.symbol, normalizedTick) }
+                    
+                    // Trigger Realtime Simulation Matching Engine
+                    val filled = simulationStore.processPriceTick(normalizedTick.symbol, normalizedTick.price, normalizedTick.high24h, normalizedTick.low24h)
+                    if (filled.isNotEmpty()) {
+                        refreshSimulationState()
+                        _lastFilledSimulationOrder.value = filled.first()
+                    }
                     val now = System.currentTimeMillis(); val selectedTf = _selectedTimeframe.value
                     if (now - lastCandleRefresh >= 15_000L) {
                         val candles = IndodaxMarketService.fetchCandles(pairId, selectedTf, 300)

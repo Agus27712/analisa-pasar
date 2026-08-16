@@ -44,6 +44,8 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
     var gemini by remember { mutableStateOf(prefs.geminiApiKey) }
     var buyMakerFee by remember { mutableStateOf(prefs.tradingFees.buyMakerPct.toString()) }
     var buyTakerFee by remember { mutableStateOf(prefs.tradingFees.buyTakerPct.toString()) }
+    var sellMakerFee by remember { mutableStateOf(prefs.tradingFees.sellMakerPct.toString()) }
+    var sellTakerFee by remember { mutableStateOf(prefs.tradingFees.sellTakerPct.toString()) }
     var saved by remember { mutableStateOf(false) }
     var cacheCleared by remember { mutableStateOf(false) }
 
@@ -111,7 +113,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                     )
                 }
                 Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
+                Column(modifier.weight(1f)) {
                     Text(
                         "MODE BELAJAR ANALISIS PASAR",
                         color = Color(0xFF72B7FF),
@@ -285,24 +287,24 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
         Spacer(Modifier.height(16.dp))
 
         // SECTION 3: PENGATURAN BIAYA TRADING (FEE INDODAX)
-        SectionHeader("BIAYA TRADING (NET R:R)")
+        SectionHeader("BIAYA TRADING (NET R:R & RADAR STATUS)")
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(10.dp),
             colors = CardDefaults.cardColors(containerColor = Color(0xFF101720)),
             border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E2836))
         ) {
-            Column(Modifier.padding(14.dp)) {
+            Column(modifier.padding(14.dp)) {
                 Text(
-                    "Digunakan untuk menghitung Net Risk-to-Reward riil setelah fee transaksi Indodax.",
+                    "Digunakan untuk menghitung estimasi biaya transaksi di Card Radar Live dan Net Risk-to-Reward riil.",
                     color = TvTextSecondary,
                     fontSize = 11.sp,
                     lineHeight = 15.sp
                 )
                 Spacer(Modifier.height(8.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Column(Modifier.weight(1f)) {
-                        Text("Maker Fee (%)", color = TvTextSecondary, fontSize = 10.sp)
+                    Column(modifier.weight(1f)) {
+                        Text("Beli Maker (%) - Limit", color = TvTextSecondary, fontSize = 10.sp)
                         Spacer(Modifier.height(3.dp))
                         OutlinedTextField(
                             value = buyMakerFee,
@@ -316,12 +318,45 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                             )
                         )
                     }
-                    Column(Modifier.weight(1f)) {
-                        Text("Taker Fee (%)", color = TvTextSecondary, fontSize = 10.sp)
+                    Column(modifier.weight(1f)) {
+                        Text("Beli Taker (%) - Instant", color = TvTextSecondary, fontSize = 10.sp)
                         Spacer(Modifier.height(3.dp))
                         OutlinedTextField(
                             value = buyTakerFee,
                             onValueChange = { buyTakerFee = it; saved = false },
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = TvGreen,
+                                unfocusedBorderColor = Color(0xFF2A3540),
+                                focusedTextColor = TvTextPrimary,
+                                unfocusedTextColor = TvTextPrimary
+                            )
+                        )
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(modifier.weight(1f)) {
+                        Text("Jual Maker (%) - Limit", color = TvTextSecondary, fontSize = 10.sp)
+                        Spacer(Modifier.height(3.dp))
+                        OutlinedTextField(
+                            value = sellMakerFee,
+                            onValueChange = { sellMakerFee = it; saved = false },
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = TvGreen,
+                                unfocusedBorderColor = Color(0xFF2A3540),
+                                focusedTextColor = TvTextPrimary,
+                                unfocusedTextColor = TvTextPrimary
+                            )
+                        )
+                    }
+                    Column(modifier.weight(1f)) {
+                        Text("Jual Taker (%) - Instant", color = TvTextSecondary, fontSize = 10.sp)
+                        Spacer(Modifier.height(3.dp))
+                        OutlinedTextField(
+                            value = sellTakerFee,
+                            onValueChange = { sellTakerFee = it; saved = false },
                             singleLine = true,
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = TvGreen,
@@ -345,7 +380,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
             colors = CardDefaults.cardColors(containerColor = Color(0xFF101720)),
             border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E2836))
         ) {
-            Column(Modifier.padding(14.dp)) {
+            Column(modifier.padding(14.dp)) {
                 // Bersihkan Cache
                 Row(
                     modifier = Modifier
@@ -373,7 +408,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
 
                 Spacer(Modifier.height(10.dp))
                 Divider(color = Color(0xFF1E2836), thickness = 0.5.dp)
-                Spacer(Modifier.height(10.dp))
+                Spacer(modifier.height(10.dp))
 
                 // Pembaruan Aplikasi (GitHub Updater)
                 Text(
@@ -384,7 +419,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    "Versi saat ini: v${BuildConfig.VERSION_NAME}",
+                    "Versi terpasang: v${BuildConfig.VERSION_NAME}",
                     color = TvTextSecondary,
                     fontSize = 11.sp
                 )
@@ -443,6 +478,16 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                                 fontSize = 12.sp
                             )
                         }
+                    } else {
+                        OutlinedButton(
+                            onClick = { GitHubUpdater.openGitHubReleasesPage(context, GitHubUpdater.DEFAULT_REPO) },
+                            modifier = Modifier.weight(1f).height(42.dp),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF72B7FF)),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E2836))
+                        ) {
+                            Text("Buka GitHub", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }
@@ -459,10 +504,14 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                 prefs.groqApiKey = groq
                 prefs.geminiApiKey = gemini
                 val currentFees = prefs.tradingFees
-                prefs.tradingFees = currentFees.copy(
+                val updatedFees = currentFees.copy(
                     buyMakerPct = buyMakerFee.toDoubleOrNull() ?: currentFees.buyMakerPct,
-                    buyTakerPct = buyTakerFee.toDoubleOrNull() ?: currentFees.buyTakerPct
+                    buyTakerPct = buyTakerFee.toDoubleOrNull() ?: currentFees.buyTakerPct,
+                    sellMakerPct = sellMakerFee.toDoubleOrNull() ?: currentFees.sellMakerPct,
+                    sellTakerPct = sellTakerFee.toDoubleOrNull() ?: currentFees.sellTakerPct
                 )
+                prefs.tradingFees = updatedFees
+                viewModel.updateTradingFees(updatedFees)
                 viewModel.setScalpingMode(scalping)
                 viewModel.setScalpingSensitivity(sensitivity)
                 saved = true

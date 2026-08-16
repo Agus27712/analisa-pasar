@@ -1,0 +1,241 @@
+package agu.analys.ui.components.simulation
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import agu.analys.model.OrderBookItem
+import agu.analys.ui.theme.TvGreen
+import agu.analys.ui.theme.TvRed
+import agu.analys.ui.theme.TvTextSecondary
+import agu.analys.util.PriceFormatter
+
+@Composable
+fun SimulationOrderBook(
+    bids: List<OrderBookItem>,
+    asks: List<OrderBookItem>,
+    currentPrice: Double,
+    isPriceUp: Boolean,
+    onSelectPrice: (Double) -> Unit,
+    onViewMore: () -> Unit = {},
+    modifier: Modifier = Modifier
+) {
+    val displayAsks = asks.take(5).reversed() // Display 5 asks above current price (lowest ask closest to mid price)
+    val displayBids = bids.take(5) // Display 5 bids below current price (highest bid closest to mid price)
+
+    val maxAskVol = (displayAsks.maxOfOrNull { it.amount } ?: 1.0).coerceAtLeast(0.001)
+    val maxBidVol = (displayBids.maxOfOrNull { it.amount } ?: 1.0).coerceAtLeast(0.001)
+    val maxVol = maxOf(maxAskVol, maxBidVol)
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(start = 4.dp)
+    ) {
+        // Header Kolom
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 6.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Harga (IDR)",
+                color = TvTextSecondary,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                text = "Jumlah (IDR)",
+                color = TvTextSecondary,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium
+            )
+        }
+
+        // Asks (Sell Orders - Merah)
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            if (displayAsks.isEmpty()) {
+                repeat(5) {
+                    EmptyOrderBookRow(color = TvRed)
+                }
+            } else {
+                displayAsks.forEach { item ->
+                    OrderBookRow(
+                        price = item.price,
+                        amount = item.amount * item.price,
+                        fillRatio = (item.amount / maxVol).toFloat().coerceIn(0.05f, 1f),
+                        color = TvRed,
+                        onClick = { onSelectPrice(item.price) }
+                    )
+                }
+            }
+        }
+
+        // Mid Last Price Banner
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 6.dp)
+                .clip(RoundedCornerShape(4.dp))
+                .background(Color(0xFF162032))
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            contentAlignment = Alignment.CenterStart
+        ) {
+            Text(
+                text = if (currentPrice > 0.0) PriceFormatter.formatPrice(currentPrice) else "-",
+                color = if (isPriceUp) TvGreen else TvRed,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.ExtraBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+
+        // Bids (Buy Orders - Hijau)
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            if (displayBids.isEmpty()) {
+                repeat(5) {
+                    EmptyOrderBookRow(color = TvGreen)
+                }
+            } else {
+                displayBids.forEach { item ->
+                    OrderBookRow(
+                        price = item.price,
+                        amount = item.amount * item.price,
+                        fillRatio = (item.amount / maxVol).toFloat().coerceIn(0.05f, 1f),
+                        color = TvGreen,
+                        onClick = { onSelectPrice(item.price) }
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.height(8.dp))
+
+        // Footer: Lebih banyak & Icon Mode
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                modifier = Modifier.clickable { onViewMore() },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Lebih banyak",
+                    color = TvTextSecondary,
+                    fontSize = 11.sp
+                )
+                Icon(
+                    imageVector = Icons.Default.ChevronRight,
+                    contentDescription = "Lebih banyak",
+                    tint = TvTextSecondary,
+                    modifier = Modifier.size(14.dp)
+                )
+            }
+
+            Icon(
+                imageVector = Icons.Default.GridView,
+                contentDescription = "Depth Mode",
+                tint = TvTextSecondary,
+                modifier = Modifier.size(16.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun OrderBookRow(
+    price: Double,
+    amount: Double,
+    fillRatio: Float,
+    color: Color,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(22.dp)
+            .clip(RoundedCornerShape(3.dp))
+            .clickable { onClick() }
+    ) {
+        // Horizontal Depth Fill Bar (From Right to Left)
+        Box(
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .fillMaxHeight()
+                .fillMaxWidth(fillRatio)
+                .background(color.copy(alpha = 0.16f))
+        )
+
+        // Text Values
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = PriceFormatter.formatPrice(price),
+                color = color,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = formatAmountShort(amount),
+                color = Color(0xFFD1D5DB),
+                fontSize = 11.sp,
+                textAlign = TextAlign.End
+            )
+        }
+    }
+}
+
+@Composable
+private fun EmptyOrderBookRow(color: Color) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(22.dp)
+            .padding(horizontal = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(text = "—", color = color.copy(alpha = 0.4f), fontSize = 11.sp)
+        Text(text = "—", color = Color.Gray.copy(alpha = 0.4f), fontSize = 11.sp)
+    }
+}
+
+private fun formatAmountShort(idrAmount: Double): String {
+    return when {
+        idrAmount >= 1_000_000_000 -> String.format("%.2f M", idrAmount / 1_000_000_000)
+        idrAmount >= 1_000_000 -> String.format("%.2f Jt", idrAmount / 1_000_000)
+        idrAmount >= 1_000 -> String.format("%.1f Rb", idrAmount / 1_000)
+        else -> String.format("%.0f", idrAmount)
+    }
+}
