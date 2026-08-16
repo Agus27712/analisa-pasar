@@ -18,7 +18,6 @@ object PriceFormatter {
             groupingSeparator = '.'
             decimalSeparator = ','
         }
-        // Harga kecil (meme) boleh desimal
         return if (price < 1.0) {
             prefix + DecimalFormat("0.########", symbols).format(price)
         } else {
@@ -26,7 +25,6 @@ object PriceFormatter {
         }
     }
 
-    /** Alias — selalu full IDR (bukan compact) untuk level AI */
     fun formatPriceFull(price: Double): String = formatPrice(price, showSymbol = true)
 
     fun formatVolume(volume: Double): String {
@@ -117,7 +115,7 @@ object PriceFormatter {
             decimalSeparator = ','
         }
         val rounded = kotlin.math.round(abs(amount)).toLong()
-        val formatted = DecimalFormat("#,# #0", symbols).format(rounded).replace(" ", "")
+        val formatted = DecimalFormat("#,##0", symbols).format(rounded)
         return if (amount < 0) "- $formatted" else formatted
     }
 }
