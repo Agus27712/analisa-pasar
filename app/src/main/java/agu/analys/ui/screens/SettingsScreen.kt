@@ -74,18 +74,9 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
         Text("Pilih mode utama. Mode tidak mengubah sumber data market.", fontSize = 11.sp, color = TvTextSecondary)
         Spacer(Modifier.height(8.dp))
 
-        ModeCard(
-            title = "SCALPING", badge = "BUY MODE", selected = scalping, accent = TvGreen,
-            bullets = listOf("Bias 1H", "Setup 15M", "Trigger 1M"),
-            description = "BUY-only · entry jangka pendek"
-        ) { scalping = true; saved = false }
-
+        ModeCard("SCALPING", "BUY MODE", scalping, TvGreen, listOf("Bias 1H", "Setup 15M", "Trigger 1M"), "BUY-only · entry jangka pendek") { scalping = true; saved = false }
         Spacer(Modifier.height(8.dp))
-        ModeCard(
-            title = "SWING", badge = "ANALISIS TREND", selected = !scalping, accent = Color(0xFF72B7FF),
-            bullets = listOf("Timeframe lebih besar", "Struktur trend", "Posisi swing"),
-            description = "Trend jangka menengah · bukan BUY-only"
-        ) { scalping = false; saved = false }
+        ModeCard("SWING", "ANALISIS TREND", !scalping, Color(0xFF72B7FF), listOf("Timeframe lebih besar", "Struktur trend", "Posisi swing"), "Trend jangka menengah · bukan BUY-only") { scalping = false; saved = false }
 
         Spacer(Modifier.height(12.dp))
         SettingCard("FEE INDODAX · ALL-IN") {
@@ -122,7 +113,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
             Text("Pelajari alasan engine tanpa mengubah sinyal.", fontSize = 11.sp, color = TvTextSecondary)
             Spacer(Modifier.height(6.dp))
             Button(onClick = { showLearning = true }, colors = ButtonDefaults.buttonColors(containerColor = TvCardBackground), modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(vertical = 10.dp)) {
-                Icon(Icons.Default.MenuBook, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Mode Belajar Trading", fontSize = 12.sp)
+                Icon(Icons.Default.MenuBook, null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Mode Belajar Trading", fontSize = 12.sp)
             }
         }
 
@@ -141,7 +132,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
             val progress by viewModel.updateDownloadProgress.collectAsState()
             Spacer(Modifier.height(6.dp))
             Button(onClick = { viewModel.checkGitHubUpdate(agu.analys.util.GitHubUpdater.DEFAULT_REPO) }, enabled = !checking, modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(vertical = 10.dp), colors = ButtonDefaults.buttonColors(containerColor = TvGreen)) {
-                Icon(Icons.Default.SystemUpdate, null, tint = Color.Black, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(if (checking) "Memeriksa..." else "Cek Update", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                Icon(Icons.Default.SystemUpdate, null, modifier = Modifier.size(18.dp), tint = Color.Black); Spacer(Modifier.width(6.dp)); Text(if (checking) "Memeriksa..." else "Cek Update", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
             }
             releaseInfo?.let { release ->
                 Spacer(Modifier.height(6.dp))
@@ -159,16 +150,13 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
             Text("Membersihkan cache market. Mode, fee, API key, dan watchlist tetap tersimpan.", color = TvTextSecondary, fontSize = 10.sp)
             Spacer(Modifier.height(6.dp))
             Button(onClick = { MarketDataCache(context).clearAll(); cacheCleared = true }, modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(vertical = 10.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2A3540))) {
-                Icon(Icons.Default.DeleteSweep, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(if (cacheCleared) "Cache dibersihkan" else "Bersihkan Cache", fontSize = 12.sp)
+                Icon(Icons.Default.DeleteSweep, null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(if (cacheCleared) "Cache dibersihkan" else "Bersihkan Cache", fontSize = 12.sp)
             }
         }
 
         Spacer(Modifier.height(12.dp))
-        Button(
-            onClick = { prefs.isScalpingMode = scalping; prefs.aiProvider = provider; prefs.groqApiKey = groq; prefs.geminiApiKey = gemini; prefs.tradingFees = fees; viewModel.setScalpingMode(scalping); saved = true },
-            modifier = Modifier.fillMaxWidth().height(48.dp), colors = ButtonDefaults.buttonColors(containerColor = TvGreen), shape = RoundedCornerShape(11.dp)
-        ) {
-            if (saved) Icon(Icons.Default.CheckCircle, null, tint = Color.Black, Modifier.size(18.dp))
+        Button(onClick = { prefs.isScalpingMode = scalping; prefs.aiProvider = provider; prefs.groqApiKey = groq; prefs.geminiApiKey = gemini; prefs.tradingFees = fees; viewModel.setScalpingMode(scalping); saved = true }, modifier = Modifier.fillMaxWidth().height(48.dp), colors = ButtonDefaults.buttonColors(containerColor = TvGreen), shape = RoundedCornerShape(11.dp)) {
+            if (saved) Icon(Icons.Default.CheckCircle, null, modifier = Modifier.size(18.dp), tint = Color.Black)
             Spacer(Modifier.width(5.dp)); Text(if (saved) "Tersimpan" else "Simpan Perubahan", color = Color.Black, fontWeight = FontWeight.Black, fontSize = 13.sp)
         }
         Spacer(Modifier.height(18.dp))
@@ -177,8 +165,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
 
 @Composable private fun SectionLabel(text: String) { Text(text, color = Color(0xFF72B7FF), fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 0.8.sp) }
 
-@Composable
-private fun ModeCard(title: String, badge: String, selected: Boolean, accent: Color, bullets: List<String>, description: String, onClick: () -> Unit) {
+@Composable private fun ModeCard(title: String, badge: String, selected: Boolean, accent: Color, bullets: List<String>, description: String, onClick: () -> Unit) {
     val border = if (selected) accent.copy(alpha = 0.55f) else Color(0xFF2A3540)
     val bg = if (selected) accent.copy(alpha = 0.09f) else Color(0xFF121820)
     Row(Modifier.fillMaxWidth().background(bg, RoundedCornerShape(13.dp)).border(BorderStroke(1.3.dp, border), RoundedCornerShape(13.dp)).clickable(onClick = onClick).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
