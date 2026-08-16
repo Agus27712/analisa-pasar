@@ -15,6 +15,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -27,6 +28,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.sp
+import agu.analys.ui.theme.TvGreen
+import agu.analys.ui.theme.TvRed
 import agu.analys.util.PriceFormatter
 import kotlinx.coroutines.delay
 import kotlin.math.abs
@@ -268,6 +272,62 @@ fun FlipCardPriceText(
         },
         maxLines = maxLines
     )
+}
+
+@Composable
+fun AnimatedPercentageBadge(
+    percentage: Double,
+    modifier: Modifier = Modifier,
+    fontSize: TextUnit = 13.sp,
+    fontWeight: FontWeight = FontWeight.Bold
+) {
+    val isPositive = percentage >= 0
+    val color = if (isPositive) TvGreen else TvRed
+    val formatted = PriceFormatter.formatPercentage(percentage)
+
+    var pulseTrigger by remember { mutableStateOf(false) }
+    var previousPct by remember { mutableStateOf(percentage) }
+
+    LaunchedEffect(percentage) {
+        if (!percentage.isFinite()) return@LaunchedEffect
+        if (percentage != previousPct) {
+            pulseTrigger = true
+            delay(180)
+            pulseTrigger = false
+            previousPct = percentage
+        }
+    }
+
+    val scale by animateFloatAsState(
+        targetValue = if (pulseTrigger) 1.06f else 1.0f,
+        animationSpec = tween(160, easing = FastOutSlowInEasing),
+        label = "pct_pulse_scale"
+    )
+
+    Box(
+        modifier = modifier
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+    ) {
+        AnimatedContent(
+            targetState = formatted,
+            transitionSpec = {
+                (slideInVertically(tween(AppAnimations.FAST_MS)) { height -> if (isPositive) -height / 2 else height / 2 } + fadeIn(tween(AppAnimations.FAST_MS)))
+                    .togetherWith(slideOutVertically(tween(AppAnimations.FAST_MS)) { height -> if (isPositive) height / 2 else -height / 2 } + fadeOut(tween(AppAnimations.FAST_MS)))
+            },
+            label = "animated_percentage"
+        ) { text ->
+            Text(
+                text = text,
+                color = color,
+                fontSize = fontSize,
+                fontWeight = fontWeight,
+                maxLines = 1
+            )
+        }
+    }
 }
 
 @Composable

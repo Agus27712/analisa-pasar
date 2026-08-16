@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import agu.analys.engine.MarketStructureAnalyzer
 import agu.analys.model.*
+import agu.analys.ui.animation.AnimatedPercentageBadge
 import agu.analys.ui.animation.SmoothPriceText
 import agu.analys.ui.components.MarketStructureLearningCard
 import agu.analys.ui.components.SimpleComposeChart
@@ -165,7 +166,7 @@ fun DetailChartScreenV2(
 
         Spacer(Modifier.height(10.dp))
 
-        // Price Header + 24H Change + Badge Aktivitas
+        // Price Header + 24H Change + Badge Aktivitas (Dengan Animasi Live Smooth & Percentage)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -173,9 +174,9 @@ fun DetailChartScreenV2(
         ) {
             Column {
                 if (tick != null && tick!!.price > 0) {
-                    SmoothPriceText(tick!!.price, TvTextPrimary, 24.sp, FontWeight.Black)
+                    SmoothPriceText(tick!!.price, TvTextPrimary, 26.sp, FontWeight.Black)
                 } else {
-                    Text("Rp —", color = TvTextPrimary, fontSize = 24.sp, fontWeight = FontWeight.Black)
+                    Text("Rp —", color = TvTextPrimary, fontSize = 26.sp, fontWeight = FontWeight.Black)
                 }
                 Spacer(Modifier.height(4.dp))
                 // Badge Aktivitas
@@ -195,14 +196,17 @@ fun DetailChartScreenV2(
             }
 
             Column(horizontalAlignment = Alignment.End) {
+                if (tick != null) {
+                    AnimatedPercentageBadge(
+                        percentage = tick!!.change24h,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                } else {
+                    Text("—", color = TvTextSecondary, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+                }
                 Text(
-                    text = if (tick != null) PriceFormatter.formatPercentage(tick!!.change24h) else "—",
-                    color = changeColor,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.ExtraBold
-                )
-                Text(
-                    text = "24H",
+                    text = "Perubahan 24H",
                     color = TvTextSecondary,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Medium
@@ -332,12 +336,24 @@ fun DetailChartScreenV2(
 
         Spacer(Modifier.height(14.dp))
 
-        // 1. READING MODE PEMBELAJARAN STRUKTUR PASAR (Market Structure & Price Action Reading)
-        MarketStructureLearningCard(snapshot = marketStructure)
+        // 1. REKOMENDASI EKSEKUSI (BUY READY / LEVEL ENTRY - SL - TP1 - TP2 + COPY + TOMBOL BELI INDODAX)
+        RecommendationCard(
+            signal = signal,
+            scalping = isScalping,
+            onOpenIndodax = { openIndodax(context) }
+        )
 
         Spacer(Modifier.height(10.dp))
 
-        // 2. KONDISI PASAR & SCALPING STAGE (Real Engine MTF)
+        // 2. RADAR & PROGRES MENUNGGU ENTRY (Status Live Scanning, MTF Steps, Micro-Tips Edukasi Interaktif)
+        WaitingEntryRadarCard(
+            signal = signal,
+            scalping = isScalping
+        )
+
+        Spacer(Modifier.height(10.dp))
+
+        // 3. KONDISI PASAR & BIAS STRUKTUR (Trend Pasar Real MTF)
         MarketConditionCard(
             structure = marketStructure,
             indicators = indicators,
@@ -347,17 +363,7 @@ fun DetailChartScreenV2(
 
         Spacer(Modifier.height(10.dp))
 
-        // 3. PROGRESS MENUJU ENTRY (Checklist 1H Bias -> 15M Setup -> 1M Trigger)
-        ProgressEntryCard(signal = signal, scalping = isScalping)
-
-        Spacer(Modifier.height(10.dp))
-
-        // 4. REKOMENDASI EKSEKUSI & NET R:R (Entry, SL, TP1, TP2, Fee Indodax)
-        RecommendationCard(signal = signal, scalping = isScalping)
-
-        Spacer(Modifier.height(10.dp))
-
-        // 5. LEVEL PENTING (Support, Resistance, Jarak % dari harga terkini)
+        // 4. LEVEL PENTING (Support, Resistance, Jarak % dari harga terkini)
         ImportantLevelsCard(
             signal = signal,
             structure = marketStructure,
@@ -366,7 +372,7 @@ fun DetailChartScreenV2(
 
         Spacer(Modifier.height(10.dp))
 
-        // 6. DETAIL INDIKATOR TEKNIKAL REAL-TIME (RSI, EMA, MACD, Volume, ATR)
+        // 5. DETAIL INDIKATOR TEKNIKAL REAL-TIME (RSI, EMA, MACD, Volume, ATR)
         TechnicalDetailsCard(
             indicators = indicators,
             structure = marketStructure,
@@ -376,7 +382,7 @@ fun DetailChartScreenV2(
 
         Spacer(Modifier.height(10.dp))
 
-        // 7. YANG PERLU DIPANTAU (Real live data observation points)
+        // 6. YANG PERLU DIPANTAU (Area Observasi & Key Alert Level)
         MonitorCard(
             signal = signal,
             structure = marketStructure,
@@ -386,7 +392,7 @@ fun DetailChartScreenV2(
 
         Spacer(Modifier.height(10.dp))
 
-        // 8. MANAJEMEN POSISI SPOT TRADING
+        // 7. MANAJEMEN POSISI SPOT TRADING (Simulasi Portofolio & Average)
         SpotPositionCard(
             symbol = pair.symbol,
             signal = signal,
@@ -397,7 +403,7 @@ fun DetailChartScreenV2(
 
         Spacer(Modifier.height(10.dp))
 
-        // 9. ASISTEN AI AUDIT & RINGKASAN
+        // 8. ASISTEN AI AUDIT & RINGKASAN
         AiAssistantCard(
             auditText = aiGroq,
             auditLoading = aiLoadingGroq,
@@ -411,7 +417,7 @@ fun DetailChartScreenV2(
 
         Spacer(Modifier.height(10.dp))
 
-        // 10. DISCLAIMER & MANAJEMEN RISIKO
+        // 9. DISCLAIMER & MANAJEMEN RISIKO
         DisclaimerCard()
 
         Spacer(Modifier.height(14.dp))

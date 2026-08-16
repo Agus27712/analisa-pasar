@@ -62,6 +62,7 @@ fun DashboardScreen(
             isConnected = isConnected,
             isManualTab = isManualTab,
             onToggleTab = { isManualTab = it },
+            onToggleMode = { viewModel.setScalpingMode(it) },
             onRefresh = { viewModel.retryConnection() },
             onMenuClick = onOpenSettings
         )

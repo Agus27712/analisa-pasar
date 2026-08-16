@@ -42,6 +42,7 @@ fun DashboardMockupHeader(
     isConnected: Boolean,
     isManualTab: Boolean,
     onToggleTab: (Boolean) -> Unit,
+    onToggleMode: (Boolean) -> Unit = {},
     onRefresh: () -> Unit,
     onMenuClick: () -> Unit
 ) {
@@ -114,6 +115,7 @@ fun DashboardMockupHeader(
                     .weight(1f)
                     .background(Color(0xFF101720), RoundedCornerShape(10.dp))
                     .border(1.dp, Color(0xFF1E2836), RoundedCornerShape(10.dp))
+                    .clickable { onToggleMode(!isScalpingMode) }
                     .padding(horizontal = 8.dp, vertical = 8.dp),
                 contentAlignment = Alignment.Center
             ) {

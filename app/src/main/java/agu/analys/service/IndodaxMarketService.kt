@@ -105,7 +105,9 @@ object IndodaxMarketService {
                 if (last <= 0) return@mapNotNull null
 
                 var change24h: Double? = null
-                val p24 = prices24h?.optString(pair, "0")?.toDoubleOrNull() ?: 0.0
+                val keyNoUnderscore = pair.replace("_", "").lowercase()
+                val p24 = (prices24h?.optString(keyNoUnderscore, "0")?.toDoubleOrNull()
+                    ?: prices24h?.optString(pair, "0")?.toDoubleOrNull()) ?: 0.0
                 if (p24 > 0) {
                     change24h = ((last - p24) / p24) * 100.0
                     changeReferenceCache[pair] = ChangeReference(p24, now)
@@ -156,8 +158,11 @@ object IndodaxMarketService {
                 val symbol = pair.uppercase().replace("_", "")
 
                 // Rumus: Persentase = ((P_akhir - P_awal) / P_awal) * 100%
+                // Di Indodax API prices_24h kuncinya tanpa underscore (contoh: "vanryidr", "btcidr")
                 var change: Double? = null
-                val p24 = prices24h?.optString(pair, "0")?.toDoubleOrNull() ?: 0.0
+                val keyNoUnderscore = pair.replace("_", "").lowercase()
+                val p24 = (prices24h?.optString(keyNoUnderscore, "0")?.toDoubleOrNull()
+                    ?: prices24h?.optString(pair, "0")?.toDoubleOrNull()) ?: 0.0
                 if (p24 > 0) {
                     change = ((last - p24) / p24) * 100.0
                     changeReferenceCache[pair] = ChangeReference(p24, now)
@@ -206,13 +211,16 @@ object IndodaxMarketService {
                 val t = tickers.optJSONObject(pair) ?: continue
                 val last = t.optString("last", "0").toDoubleOrNull() ?: 0.0
                 val volIdr = t.optString("vol_idr", "0").toDoubleOrNull() ?: 0.0
-                // Minimal volume IDR agar koin likuid untuk scalping
-                if (last <= 0 || volIdr < 50_000_000.0) continue
+                // Minimal volume IDR agar koin memiliki transaksi aktif (Rp 1 jt+)
+                if (last <= 0 || volIdr < 1_000_000.0) continue
                 val symbol = pair.uppercase().replace("_", "")
 
                 // Rumus: ((P_akhir - P_awal) / P_awal) * 100%
+                // Di Indodax API prices_24h kuncinya tanpa underscore (contoh: "vanryidr", "zkwasmidr")
                 var change: Double? = null
-                val p24 = prices24h?.optString(pair, "0")?.toDoubleOrNull() ?: 0.0
+                val keyNoUnderscore = pair.replace("_", "").lowercase()
+                val p24 = (prices24h?.optString(keyNoUnderscore, "0")?.toDoubleOrNull()
+                    ?: prices24h?.optString(pair, "0")?.toDoubleOrNull()) ?: 0.0
                 if (p24 > 0) {
                     change = ((last - p24) / p24) * 100.0
                     changeReferenceCache[pair] = ChangeReference(p24, now)

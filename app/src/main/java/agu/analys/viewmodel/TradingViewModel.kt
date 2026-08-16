@@ -150,6 +150,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         if (enabled) marketWebSocket.start(_selectedPair.value.symbol) else marketWebSocket.stop()
         val tick = _currentTick.value; val candles = _recentCandles.value
         if (tick != null && candles.isNotEmpty()) { engine.resetForOffline(); engine.onTickUpdate(tick); candles.forEach { engine.onCandleUpdate(it) } }
+        refreshWorthCoinsFromMarket()
     }
 
     fun setScalpingSensitivity(sensitivity: ScalpingSensitivity) {
