@@ -60,7 +60,7 @@ enum class TrendSentiment(val displayName: String) {
     EXTREME_OVERSOLD("Pantulan Jenuh Jual (Oversold)")
 }
 
-enum class AppScreen { DASHBOARD, DETAIL, LANDSCAPE_CHART, SETTINGS, LEARNING }
+enum class AppScreen { DASHBOARD, DETAIL, SIMULATION_TRADE, LANDSCAPE_CHART, SETTINGS, LEARNING }
 
 data class WorthCoinInfo(val pair: TradingPair, val worthScore: Int, val isWorthIt: Boolean, val recommendation: String, val potentialProfitPct: Double, val aiRationale: String)
 data class MarketTick(val symbol: String, val price: Double, val high24h: Double, val low24h: Double, val volume24h: Double, val change24h: Double, val timestamp: Long = System.currentTimeMillis())

@@ -4,7 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material.icons.filled.FormatListBulleted
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Settings
@@ -22,7 +22,7 @@ import agu.analys.ui.theme.TvGreen
 import agu.analys.ui.theme.TvTextSecondary
 
 enum class NavTab {
-    WATCHLIST, CHART, BELAJAR, SETTINGS
+    WATCHLIST, SIMULASI, BELAJAR, SETTINGS
 }
 
 @Composable
@@ -46,10 +46,10 @@ fun AppBottomNavigationBar(
             onClick = { onSelectTab(NavTab.WATCHLIST) }
         )
         NavItem(
-            icon = Icons.Default.BarChart,
-            label = "Chart",
-            isSelected = currentTab == NavTab.CHART,
-            onClick = { onSelectTab(NavTab.CHART) }
+            icon = Icons.AutoMirrored.Filled.CompareArrows,
+            label = "Simulasi",
+            isSelected = currentTab == NavTab.SIMULASI,
+            onClick = { onSelectTab(NavTab.SIMULASI) }
         )
         NavItem(
             icon = Icons.Default.MenuBook,

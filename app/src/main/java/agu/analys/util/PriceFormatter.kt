@@ -73,4 +73,28 @@ object PriceFormatter {
         }
         return DecimalFormat(pattern, DecimalFormatSymbols(Locale.US)).format(value)
     }
+
+    fun formatRawDecimal(value: Double): String {
+        if (value.isNaN() || value.isInfinite() || value <= 0.0) return "0"
+        return if (value >= 1.0) {
+            if (value % 1.0 == 0.0) {
+                value.toLong().toString()
+            } else {
+                String.format(Locale.US, "%.4f", value).trimEnd('0').trimEnd('.')
+            }
+        } else {
+            String.format(Locale.US, "%.8f", value).trimEnd('0').trimEnd('.')
+        }
+    }
+
+    fun formatQuantity(quantity: Double): String {
+        if (quantity.isNaN() || quantity.isInfinite() || quantity <= 0.0) return "0"
+        return if (quantity >= 1000.0) {
+            String.format(Locale.US, "%,.2f", quantity).replace(",", ".")
+        } else if (quantity >= 1.0) {
+            String.format(Locale.US, "%.4f", quantity).trimEnd('0').trimEnd('.')
+        } else {
+            String.format(Locale.US, "%.6f", quantity).trimEnd('0').trimEnd('.')
+        }
+    }
 }

@@ -1,0 +1,511 @@
+package agu.analys.ui.components.simulation
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import agu.analys.model.TradingPair
+import agu.analys.trading.SimulationOrderSide
+import agu.analys.trading.SimulationOrderType
+import agu.analys.trading.SimulationWallet
+import agu.analys.ui.theme.*
+import agu.analys.util.PriceFormatter
+
+@Composable
+fun SimulationOrderForm(
+    pair: TradingPair,
+    currentPrice: Double,
+    wallet: SimulationWallet,
+    selectedSide: SimulationOrderSide,
+    selectedType: SimulationOrderType,
+    onSideChange: (SimulationOrderSide) -> Unit,
+    onTypeChange: (SimulationOrderType) -> Unit,
+    inputPrice: String,
+    inputStopPrice: String,
+    inputQuantity: String,
+    inputTotalIdr: String,
+    onPriceChange: (String) -> Unit,
+    onStopPriceChange: (String) -> Unit,
+    onQuantityChange: (String) -> Unit,
+    onTotalIdrChange: (String) -> Unit,
+    onSubmitOrder: () -> Unit,
+    onOpenTopUp: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var showTypeMenu by remember { mutableStateOf(false) }
+    val isBuy = selectedSide == SimulationOrderSide.BUY
+    val themeColor = if (isBuy) TvGreen else TvRed
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(end = 6.dp)
+    ) {
+        // Tab Beli / Jual Toggle (Indodax style)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(38.dp)
+        ) {
+            // Tab Beli
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .clickable { onSideChange(SimulationOrderSide.BUY) },
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = "Beli",
+                        color = if (isBuy) TvGreen else TvTextSecondary,
+                        fontSize = 15.sp,
+                        fontWeight = if (isBuy) FontWeight.Bold else FontWeight.Medium
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(3.dp)
+                            .background(if (isBuy) TvGreen else Color.Transparent)
+                    )
+                }
+            }
+
+            // Tab Jual
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .clickable { onSideChange(SimulationOrderSide.SELL) },
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = "Jual",
+                        color = if (!isBuy) TvRed else TvTextSecondary,
+                        fontSize = 15.sp,
+                        fontWeight = if (!isBuy) FontWeight.Bold else FontWeight.Medium
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(3.dp)
+                            .background(if (!isBuy) TvRed else Color.Transparent)
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.height(10.dp))
+
+        // Dropdown Tipe Order (Limit Order / Market Order / Stop Limit Order)
+        Box(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(36.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(Color(0xFF162032))
+                    .border(1.dp, Color(0xFF223249), RoundedCornerShape(6.dp))
+                    .clickable { showTypeMenu = true }
+                    .padding(horizontal = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = selectedType.displayName,
+                    color = Color.White,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Icon(
+                    imageVector = Icons.Default.ArrowDropDown,
+                    contentDescription = "Dropdown Order Type",
+                    tint = Color.LightGray,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+
+            DropdownMenu(
+                expanded = showTypeMenu,
+                onDismissRequest = { showTypeMenu = false },
+                modifier = Modifier.background(Color(0xFF162032))
+            ) {
+                SimulationOrderType.entries.forEach { type ->
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = type.displayName,
+                                color = if (selectedType == type) TvGreen else Color.White,
+                                fontSize = 13.sp,
+                                fontWeight = if (selectedType == type) FontWeight.Bold else FontWeight.Normal
+                            )
+                        },
+                        onClick = {
+                            onTypeChange(type)
+                            showTypeMenu = false
+                        }
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.height(8.dp))
+
+        // STOP LIMIT: Field Stop Price
+        if (selectedType == SimulationOrderType.STOP_LIMIT) {
+            StepperInputField(
+                label = "Stop (IDR)",
+                value = inputStopPrice,
+                onValueChange = onStopPriceChange,
+                onStepMinus = {
+                    val cur = inputStopPrice.toDoubleOrNull() ?: currentPrice
+                    val step = calculatePriceStep(cur)
+                    onStopPriceChange(PriceFormatter.formatRawDecimal((cur - step).coerceAtLeast(0.0)))
+                },
+                onStepPlus = {
+                    val cur = inputStopPrice.toDoubleOrNull() ?: currentPrice
+                    val step = calculatePriceStep(cur)
+                    onStopPriceChange(PriceFormatter.formatRawDecimal(cur + step))
+                }
+            )
+            Spacer(Modifier.height(8.dp))
+        }
+
+        // LIMIT / STOP LIMIT: Field Harga (IDR) / Limit (IDR)
+        if (selectedType != SimulationOrderType.MARKET) {
+            StepperInputField(
+                label = if (selectedType == SimulationOrderType.STOP_LIMIT) "Limit (IDR)" else "Harga (IDR)",
+                value = inputPrice,
+                onValueChange = onPriceChange,
+                onStepMinus = {
+                    val cur = inputPrice.toDoubleOrNull() ?: currentPrice
+                    val step = calculatePriceStep(cur)
+                    onPriceChange(PriceFormatter.formatRawDecimal((cur - step).coerceAtLeast(0.0)))
+                },
+                onStepPlus = {
+                    val cur = inputPrice.toDoubleOrNull() ?: currentPrice
+                    val step = calculatePriceStep(cur)
+                    onPriceChange(PriceFormatter.formatRawDecimal(cur + step))
+                }
+            )
+            Spacer(Modifier.height(8.dp))
+        }
+
+        // Field Jumlah Koin
+        StepperInputField(
+            label = "Jumlah (${pair.baseAsset})",
+            value = inputQuantity,
+            onValueChange = onQuantityChange,
+            onStepMinus = {
+                val cur = inputQuantity.toDoubleOrNull() ?: 0.0
+                val step = calculateCoinStep(cur, currentPrice)
+                onQuantityChange(formatCoinDecimals((cur - step).coerceAtLeast(0.0)))
+            },
+            onStepPlus = {
+                val cur = inputQuantity.toDoubleOrNull() ?: 0.0
+                val step = calculateCoinStep(cur, currentPrice)
+                onQuantityChange(formatCoinDecimals(cur + step))
+            }
+        )
+
+        Spacer(Modifier.height(8.dp))
+
+        // Quick Percentage Chips (25%, 50%, 75%, 100%)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            listOf(25, 50, 75, 100).forEach { pct ->
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(28.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(Color(0xFF162032))
+                        .border(1.dp, Color(0xFF223249), RoundedCornerShape(4.dp))
+                        .clickable {
+                            if (isBuy) {
+                                val availIdr = wallet.getAvailableIdr()
+                                val targetIdr = availIdr * (pct / 100.0)
+                                val price = if (selectedType == SimulationOrderType.MARKET) currentPrice else (inputPrice.toDoubleOrNull() ?: currentPrice)
+                                if (price > 0.0) {
+                                    val coin = targetIdr / price
+                                    onQuantityChange(formatCoinDecimals(coin))
+                                    onTotalIdrChange(PriceFormatter.formatRawDecimal(targetIdr))
+                                }
+                            } else {
+                                val availCoin = wallet.getAvailableCoin(pair.baseAsset)
+                                val targetCoin = availCoin * (pct / 100.0)
+                                val price = if (selectedType == SimulationOrderType.MARKET) currentPrice else (inputPrice.toDoubleOrNull() ?: currentPrice)
+                                onQuantityChange(formatCoinDecimals(targetCoin))
+                                onTotalIdrChange(PriceFormatter.formatRawDecimal(targetCoin * price))
+                            }
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "$pct%",
+                        color = Color.LightGray,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.height(8.dp))
+
+        // Field Total (IDR)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(38.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(Color(0xFF162032))
+                .border(1.dp, Color(0xFF223249), RoundedCornerShape(6.dp))
+                .padding(horizontal = 10.dp),
+            contentAlignment = Alignment.CenterStart
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "Total (IDR)",
+                    color = TvTextSecondary,
+                    fontSize = 11.sp
+                )
+                BasicTextField(
+                    value = inputTotalIdr,
+                    onValueChange = onTotalIdrChange,
+                    textStyle = TextStyle(
+                        color = Color.White,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.End
+                    ),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    cursorBrush = SolidColor(TvGreen),
+                    modifier = Modifier.weight(1f).padding(start = 8.dp)
+                )
+            }
+        }
+
+        Spacer(Modifier.height(10.dp))
+
+        // Info Saldo User & Tombol Top-up
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = if (isBuy) "Saldo (IDR)" else "Saldo (${pair.baseAsset})",
+                    color = TvTextSecondary,
+                    fontSize = 11.sp
+                )
+                Spacer(Modifier.width(4.dp))
+                Box(
+                    modifier = Modifier
+                        .size(16.dp)
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(Color(0xFF1E293B))
+                        .clickable { onOpenTopUp() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "Top Up",
+                        tint = TvGreen,
+                        modifier = Modifier.size(12.dp)
+                    )
+                }
+            }
+
+            Text(
+                text = if (isBuy) {
+                    "Rp ${PriceFormatter.formatPrice(wallet.getAvailableIdr())}"
+                } else {
+                    "${formatCoinDecimals(wallet.getAvailableCoin(pair.baseAsset))} ${pair.baseAsset}"
+                },
+                color = Color.White,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        // Tombol Eksekusi Order (Beli [Coin] / Jual [Coin])
+        Button(
+            onClick = onSubmitOrder,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = themeColor,
+                contentColor = Color.White
+            ),
+            shape = RoundedCornerShape(6.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(42.dp)
+        ) {
+            Text(
+                text = if (isBuy) "Beli ${pair.baseAsset}" else "Jual ${pair.baseAsset}",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+@Composable
+private fun StepperInputField(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    onStepMinus: () -> Unit,
+    onStepPlus: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(38.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .background(Color(0xFF162032))
+            .border(1.dp, Color(0xFF223249), RoundedCornerShape(6.dp)),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Minus Button
+        Box(
+            modifier = Modifier
+                .width(34.dp)
+                .fillMaxHeight()
+                .clickable { onStepMinus() },
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.Remove,
+                contentDescription = "Minus",
+                tint = Color.LightGray,
+                modifier = Modifier.size(16.dp)
+            )
+        }
+
+        // Center Input / Placeholder
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight()
+                .padding(horizontal = 4.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            if (value.isEmpty()) {
+                Text(
+                    text = label,
+                    color = TvTextSecondary.copy(alpha = 0.6f),
+                    fontSize = 11.sp,
+                    textAlign = TextAlign.Center
+                )
+            }
+            BasicTextField(
+                value = value,
+                onValueChange = onValueChange,
+                textStyle = TextStyle(
+                    color = Color.White,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.Center
+                ),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                cursorBrush = SolidColor(TvGreen),
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+
+        // Plus Button
+        Box(
+            modifier = Modifier
+                .width(34.dp)
+                .fillMaxHeight()
+                .clickable { onStepPlus() },
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.Add,
+                contentDescription = "Plus",
+                tint = Color.LightGray,
+                modifier = Modifier.size(16.dp)
+            )
+        }
+    }
+}
+
+private fun calculatePriceStep(price: Double): Double {
+    return when {
+        price >= 1_000_000 -> 10_000.0
+        price >= 100_000 -> 1_000.0
+        price >= 10_000 -> 100.0
+        price >= 1_000 -> 10.0
+        price >= 100 -> 1.0
+        price >= 10 -> 0.1
+        else -> 0.01
+    }
+}
+
+private fun calculateCoinStep(coinQty: Double, price: Double): Double {
+    return when {
+        coinQty >= 1000 -> 100.0
+        coinQty >= 100 -> 10.0
+        coinQty >= 10 -> 1.0
+        coinQty >= 1 -> 0.1
+        price >= 1_000_000 -> 0.0001
+        else -> 0.01
+    }
+}
+
+private fun formatCoinDecimals(qty: Double): String {
+    if (qty == 0.0) return "0"
+    return if (qty >= 1000) {
+        String.format("%.2f", qty)
+    } else if (qty >= 1) {
+        String.format("%.4f", qty).trimEnd('0').trimEnd('.')
+    } else {
+        String.format("%.6f", qty).trimEnd('0').trimEnd('.')
+    }
+}
