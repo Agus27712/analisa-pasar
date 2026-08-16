@@ -61,14 +61,14 @@ fun WatchlistCoinCard(
         colors = CardDefaults.cardColors(containerColor = DashboardColors.Card),
         border = BorderStroke(1.dp, DashboardColors.Border)
     ) {
-        Column(Modifier.padding(horizontal = 13.dp, vertical = 12.dp)) {
+        Column(Modifier.padding(horizontal = 13.dp, vertical = 10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(rankText, color = DashboardColors.AccentBlue, fontSize = 12.sp, fontWeight = FontWeight.Black, modifier = Modifier.width(30.dp))
                 AssetAvatar(baseAsset = pair.baseAsset, iconUrl = pair.iconUrl, size = 38.dp)
                 Spacer(Modifier.width(9.dp))
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
                     Text("${pair.baseAsset}/${pair.quoteAsset}", color = TvTextPrimary, fontSize = 17.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1)
-                    Spacer(Modifier.height(3.dp))
+                    Spacer(Modifier.height(2.dp))
                     ActivityChip(activity)
                 }
                 Spacer(Modifier.width(8.dp))
@@ -79,31 +79,30 @@ fun WatchlistCoinCard(
                 }
             }
 
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(8.dp))
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     MetricLine("Score", scoreText)
-                    Spacer(Modifier.height(5.dp))
+                    Spacer(Modifier.height(4.dp))
                     MetricLine("Volume 24H", if (volume > 0) PriceFormatter.formatPrice(volume) else "—")
                     if (tick != null && tick.high24h > 0 && tick.low24h > 0) {
-                        Spacer(Modifier.height(5.dp))
+                        Spacer(Modifier.height(4.dp))
                         MetricLine("Range 24H", "${PriceFormatter.formatPrice(tick.low24h)} – ${PriceFormatter.formatPrice(tick.high24h)}")
                     }
                 }
-                Spacer(Modifier.width(10.dp))
-                MiniSparkline(tick = tick, modifier = Modifier.width(88.dp).height(42.dp), lineColor = changeColor)
+                Spacer(Modifier.width(8.dp))
+                MiniSparkline(tick = tick, modifier = Modifier.width(76.dp).height(36.dp), lineColor = changeColor)
             }
 
-            Spacer(Modifier.height(9.dp))
+            Spacer(Modifier.height(6.dp))
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(if (isScalping) "SCALPING" else "SWING", color = if (isScalping) TvGreen else DashboardColors.AccentBlue, fontSize = 9.sp, fontWeight = FontWeight.ExtraBold)
                 Spacer(Modifier.weight(1f))
                 Text("Lihat detail", color = TvTextSecondary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                Icon(Icons.Default.ShowChart, null, Modifier.size(15.dp), tint = TvTextSecondary)
+                Icon(Icons.Default.ShowChart, null, modifier = Modifier.size(14.dp), tint = TvTextSecondary)
                 if (!isAuto) {
-                    Spacer(Modifier.width(4.dp))
-                    IconButton(onClick = onRemove, modifier = Modifier.size(28.dp)) {
-                        Icon(Icons.Default.DeleteOutline, "Hapus", tint = TvRed, modifier = Modifier.size(17.dp))
+                    Spacer(Modifier.width(2.dp))
+                    IconButton(onClick = onRemove, modifier = Modifier.size(26.dp)) {
+                        Icon(Icons.Default.DeleteOutline, "Hapus", tint = TvRed, modifier = Modifier.size(16.dp))
                     }
                 }
             }
