@@ -37,7 +37,7 @@ fun RadarFeeDetailDialog(
     fees: TradingFeeConfig,
     orderAmountIdr: Double,
     isMakerOrder: Boolean,
-    coinSymbol: String = "BTC"
+    coinSymbol: String
 ) {
     if (!isOpen) return
 

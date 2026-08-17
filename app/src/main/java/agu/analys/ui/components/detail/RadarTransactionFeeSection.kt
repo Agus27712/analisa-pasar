@@ -39,24 +39,24 @@ import agu.analys.util.PriceFormatter
 
 /**
  * Komponen Modular: Estimasi & Simulasi Biaya Transaksi pada Card Radar Status Live.
- * Dihitung berdasarkan Setting fee pengguna (Maker/Taker) dan harga koin aktif (cth: BTC).
+ * Dihitung murni berdasarkan Setting fee pengguna (Maker/Taker) dan harga real-time pair yang aktif.
  */
 @Composable
 fun RadarTransactionFeeSection(
     fees: TradingFeeConfig,
     currentPrice: Double,
-    baseAsset: String = "BTC",
-    quoteAsset: String = "IDR",
+    baseAsset: String,
+    quoteAsset: String,
     modifier: Modifier = Modifier
 ) {
     var isMakerOrder by remember { mutableStateOf(true) } // true = Limit Order (Maker), false = Instant (Taker)
-    var selectedNominal by remember { mutableDoubleStateOf(38028.0) } // Default contoh nominal beli user pada BTC
+    var selectedNominal by remember { mutableDoubleStateOf(50000.0) } // Default nominal IDR beli umum (Rp 50.000)
     var customNominalInput by remember { mutableStateOf("") }
     var isCustomInputOpen by remember { mutableStateOf(false) }
     var showFeeDetailModal by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
 
-    val validPrice = if (currentPrice > 0.0) currentPrice else 1_367_959_000.0
+    val validPrice = if (currentPrice > 0.0) currentPrice else 1.0
     val activeFeePct = if (isMakerOrder) fees.buyMakerPct else fees.buyTakerPct
 
     // Perhitungan kalkulasi transaksi
@@ -150,21 +150,21 @@ fun RadarTransactionFeeSection(
 
         Spacer(Modifier.height(8.dp))
 
-        // Quick Nominal Selector
+        // Quick Nominal Selector murni IDR (Minimal order di Indodax 10rb)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             QuickNominalChip(
-                label = "38 Rb (BTC)",
-                amount = 38028.0,
-                selected = selectedNominal == 38028.0 && !isCustomInputOpen,
+                label = "10 Rb",
+                amount = 10000.0,
+                selected = selectedNominal == 10000.0 && !isCustomInputOpen,
                 onClick = {
-                    selectedNominal = 38028.0
+                    selectedNominal = 10000.0
                     isCustomInputOpen = false
                 },
-                modifier = Modifier.weight(1.1f)
+                modifier = Modifier.weight(1f)
             )
             QuickNominalChip(
                 label = "50 Rb",
