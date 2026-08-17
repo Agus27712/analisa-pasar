@@ -33,7 +33,7 @@ sealed class UpdateCheckResult {
 }
 
 object GitHubUpdater {
-    const val DEFAULT_REPO = "Agus27712/analisa-pasar"
+    const val DEFAULT_REPO = "agus27712/analisa-pasar"
 
     suspend fun checkUpdate(context: Context, repo: String): UpdateCheckResult = withContext(Dispatchers.IO) {
         val normalizedRepo = normalizeRepo(repo)

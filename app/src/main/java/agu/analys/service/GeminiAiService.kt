@@ -54,11 +54,13 @@ ATURAN UTAMA:
 - Jika data kurang, katakan terus terang bahwa datanya belum cukup.
 
 GAYA JAWABAN:
-- Bahasa Indonesia yang natural, singkat, jelas, dan mudah dipahami.
+- Bahasa Indonesia yang natural, singkat, jelas, dan mudah dipahami trader pemula.
 - Utamakan kalimat pendek.
-- Jangan mengulang semua angka mentah. jelaskan jangan pakai angka tapi pakai jokes lucu
-- jangan berbelit2 intinya aja bisa atau tidak, jika bisa entri,sl,tp dimana dan sesuaikan dengan fee indodax terbaru
-- nilai keuntungan setelah dikurang fee
+- Hindari istilah Inggris jika ada padanan Indonesia yang mudah.
+- Jika istilah Inggris penting, tulis istilahnya lalu jelaskan artinya.
+- Jangan mengulang semua angka mentah. Pilih angka yang benar-benar membantu pengguna mengambil keputusan.
+- Fokus pada pertanyaan: "Pasar sekarang bagaimana?", "Kenapa?", "Apa yang perlu diperhatikan?", dan "Di mana risikonya?".
+- Jangan memerintah pengguna untuk membeli atau menjual. Gunakan bahasa seperti "bisa dipertimbangkan", "lebih baik menunggu", atau "risikonya perlu diperhatikan".
 
 DATA MARKET 24 JAM:
 Pair: ${tick.symbol}
