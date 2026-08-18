@@ -56,4 +56,4 @@ jobs:
           fi
 
           git commit -m "Sync Kotlin files from Agus27712/analisa-pasar"
-          git push origin HEAD:collab
+          git push origin HEAD:main
