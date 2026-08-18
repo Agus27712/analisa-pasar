@@ -18,6 +18,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import agu.analys.config.MarketDataSource
 import agu.analys.model.TradingPair
 import agu.analys.trading.SimulationOrderResult
 import agu.analys.trading.SimulationOrderSide
@@ -49,6 +50,7 @@ fun TradeSimulationScreen(
     val hotCoins by viewModel.hotCoins.collectAsState()
     val dashboardTicks by viewModel.dashboardTicks.collectAsState()
     val lastFilledOrder by viewModel.lastFilledSimulationOrder.collectAsState()
+    val marketSource by viewModel.marketDataSource.collectAsState()
 
     var selectedSide by remember { mutableStateOf(SimulationOrderSide.BUY) }
     var selectedType by remember { mutableStateOf(SimulationOrderType.LIMIT) }
@@ -63,39 +65,40 @@ fun TradeSimulationScreen(
 
     val currentPrice = currentTick?.price ?: 0.0
     val isPriceUp = (currentTick?.change24h ?: 0.0) >= 0
+    val quote = selectedPair.quoteAsset
+    val exchangeLabel = if (marketSource == MarketDataSource.TOKOCRYPTO) "Tokocrypto" else "Indodax"
 
-    // Auto update input price if empty when tick arrives
     LaunchedEffect(selectedPair, currentTick?.price) {
         if (inputPrice.isEmpty() && currentPrice > 0.0) {
             inputPrice = PriceFormatter.formatRawDecimal(currentPrice)
         }
     }
 
-    // Toast notification when order matches/fills in background
     LaunchedEffect(lastFilledOrder) {
         lastFilledOrder?.let { order ->
+            val q = order.quoteAsset.ifBlank { quote }
             Toast.makeText(
                 context,
-                "Order ${order.side.displayName} ${order.baseAsset} FILLED pada Rp ${PriceFormatter.formatPrice(order.filledAvgPrice)}!",
+                "Order ${order.side.displayName} ${order.baseAsset} FILLED @ ${PriceFormatter.formatPrice(order.filledAvgPrice, quoteAsset = q)}!",
                 Toast.LENGTH_SHORT
             ).show()
         }
     }
 
-    // Auto-calculate Total when Price or Quantity changes
     val updateCalculatedTotal: (String, String) -> Unit = { priceStr, qtyStr ->
-        val p = if (selectedType == SimulationOrderType.MARKET) currentPrice else (priceStr.toDoubleOrNull() ?: 0.0)
-        val q = qtyStr.toDoubleOrNull() ?: 0.0
+        val p = if (selectedType == SimulationOrderType.MARKET) currentPrice else (parseSimulationDecimal(priceStr) ?: 0.0)
+        val q = parseSimulationDecimal(qtyStr) ?: 0.0
         if (p > 0.0 && q > 0.0) {
             inputTotalIdr = PriceFormatter.formatRawDecimal(p * q)
         }
     }
 
-    val availablePairs = remember(watchlist, hotCoins) {
+    val defaultQuote = if (marketSource == MarketDataSource.TOKOCRYPTO) "USDT" else "IDR"
+    val availablePairs = remember(watchlist, hotCoins, marketSource) {
         val list = mutableListOf<TradingPair>()
-        list.addAll(TradingPair.POPULAR_PAIRS)
-        list.addAll(watchlist.map { TradingPair.fromCustomSymbol(it) })
-        list.addAll(hotCoins.map { TradingPair.fromCustomSymbol(it.symbol) })
+        list.addAll(TradingPair.popularPairsForSource(marketSource))
+        list.addAll(watchlist.map { TradingPair.fromCustomSymbol(it, defaultQuote) })
+        list.addAll(hotCoins.map { TradingPair.fromCustomSymbol(it.symbol, defaultQuote) })
         list.distinctBy { it.symbol }
     }
 
@@ -108,7 +111,6 @@ fun TradeSimulationScreen(
             .fillMaxSize()
             .background(TvBackground)
     ) {
-        // TOP BAR
         SimulationTopBar(
             pair = selectedPair,
             onOpenPairSelector = { showPairSelector = true },
@@ -116,7 +118,6 @@ fun TradeSimulationScreen(
             onOpenMore = { showOptionsMenu = true }
         )
 
-        // Dropdown Menu Top Right
         Box(modifier = Modifier.fillMaxWidth().wrapContentSize(Alignment.TopEnd)) {
             DropdownMenu(
                 expanded = showOptionsMenu,
@@ -137,20 +138,18 @@ fun TradeSimulationScreen(
                     onClick = {
                         showOptionsMenu = false
                         viewModel.resetSimulationAccount()
-                        Toast.makeText(context, "Akun simulasi direset ke saldo Rp 10.000.000", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "Akun simulasi direset ke saldo awal 10.000.000", Toast.LENGTH_SHORT).show()
                     }
                 )
             }
         }
 
-        // MAIN BODY (Scrollable LazyColumn)
         LazyColumn(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth(),
             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
         ) {
-            // Notice Banner (Indodax style amber notice)
             item {
                 Box(
                     modifier = Modifier
@@ -169,7 +168,7 @@ fun TradeSimulationScreen(
                         )
                         Spacer(Modifier.width(6.dp))
                         Text(
-                            text = "Simulasi Trade Spot Indodax menggunakan data harga live real-time.",
+                            text = "Simulasi Trade Spot $exchangeLabel · pair $quote · harga live real-time.",
                             color = Color(0xFFFDE68A),
                             fontSize = 11.sp
                         )
@@ -177,7 +176,6 @@ fun TradeSimulationScreen(
                 }
             }
 
-            // 2 COLUMNS (Trade Form + Live Order Book)
             item {
                 Row(
                     modifier = Modifier
@@ -185,7 +183,6 @@ fun TradeSimulationScreen(
                         .padding(vertical = 4.dp),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    // LEFT COLUMN (Order Form: 56% width)
                     Box(modifier = Modifier.weight(0.56f)) {
                         SimulationOrderForm(
                             pair = selectedPair,
@@ -215,30 +212,36 @@ fun TradeSimulationScreen(
                             },
                             onTotalIdrChange = {
                                 inputTotalIdr = it
-                                val tot = it.toDoubleOrNull() ?: 0.0
-                                val p = if (selectedType == SimulationOrderType.MARKET) currentPrice else (inputPrice.toDoubleOrNull() ?: currentPrice)
+                                val tot = parseSimulationDecimal(it) ?: 0.0
+                                val p = if (selectedType == SimulationOrderType.MARKET) currentPrice else (parseSimulationDecimal(inputPrice) ?: currentPrice)
                                 if (p > 0.0 && tot > 0.0) {
                                     val q = tot / p
-                                    inputQuantity = if (q >= 1000) String.format("%.2f", q) else String.format("%.4f", q).trimEnd('0').trimEnd('.')
+                                    inputQuantity = formatCoinDecimals(q)
                                 }
                             },
                             onSubmitOrder = {
-                                val p = if (selectedType == SimulationOrderType.MARKET) currentPrice else (inputPrice.toDoubleOrNull() ?: 0.0)
-                                val stopP = inputStopPrice.toDoubleOrNull() ?: 0.0
-                                val q = inputQuantity.toDoubleOrNull() ?: 0.0
+                                val p = if (selectedType == SimulationOrderType.MARKET) currentPrice else (parseSimulationDecimal(inputPrice) ?: 0.0)
+                                val stopP = parseSimulationDecimal(inputStopPrice) ?: 0.0
+                                val q = parseSimulationDecimal(inputQuantity) ?: 0.0
 
+                                if (inputQuantity.isNotBlank() && parseSimulationDecimal(inputQuantity) == null) {
+                                    Toast.makeText(context, "Format jumlah salah. Pakai titik desimal, contoh: 0.5 atau 1.25", Toast.LENGTH_SHORT).show()
+                                    return@SimulationOrderForm
+                                }
+                                if (selectedType != SimulationOrderType.MARKET && inputPrice.isNotBlank() && parseSimulationDecimal(inputPrice) == null) {
+                                    Toast.makeText(context, "Format harga salah. Pakai titik desimal, contoh: 98000.5", Toast.LENGTH_SHORT).show()
+                                    return@SimulationOrderForm
+                                }
                                 if (q <= 0.0) {
-                                    Toast.makeText(context, "Masukkan jumlah koin yang valid", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "Masukkan jumlah koin yang valid (> 0)", Toast.LENGTH_SHORT).show()
                                     return@SimulationOrderForm
                                 }
-
                                 if (selectedType != SimulationOrderType.MARKET && p <= 0.0) {
-                                    Toast.makeText(context, "Masukkan harga limit yang valid", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "Masukkan harga limit yang valid (> 0)", Toast.LENGTH_SHORT).show()
                                     return@SimulationOrderForm
                                 }
-
                                 if (selectedType == SimulationOrderType.STOP_LIMIT && stopP <= 0.0) {
-                                    Toast.makeText(context, "Masukkan harga stop trigger yang valid", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "Masukkan harga stop trigger yang valid (> 0)", Toast.LENGTH_SHORT).show()
                                     return@SimulationOrderForm
                                 }
 
@@ -265,13 +268,13 @@ fun TradeSimulationScreen(
                         )
                     }
 
-                    // RIGHT COLUMN (Live Order Book: 44% width)
                     Box(modifier = Modifier.weight(0.44f)) {
                         SimulationOrderBook(
                             bids = orderBookBids,
                             asks = orderBookAsks,
                             currentPrice = currentPrice,
                             isPriceUp = isPriceUp,
+                            quoteAsset = quote,
                             onSelectPrice = { selectedPrice ->
                                 inputPrice = PriceFormatter.formatRawDecimal(selectedPrice)
                                 updateCalculatedTotal(inputPrice, inputQuantity)
@@ -282,7 +285,6 @@ fun TradeSimulationScreen(
                 }
             }
 
-            // BOTTOM SECTION: Open Orders & Riwayat
             item {
                 SimulationOpenOrdersList(
                     openOrders = openOrders,
@@ -302,13 +304,12 @@ fun TradeSimulationScreen(
             item { Spacer(Modifier.height(16.dp)) }
         }
 
-        // BOTTOM NAVIGATION BAR
         AppBottomNavigationBar(
             currentTab = NavTab.SIMULASI,
             onSelectTab = { tab ->
                 when (tab) {
                     NavTab.WATCHLIST -> onNavigateToDashboard()
-                    NavTab.SIMULASI -> { /* Already on Simulasi */ }
+                    NavTab.SIMULASI -> { }
                     NavTab.BELAJAR -> viewModel.openLearning()
                     NavTab.SETTINGS -> onOpenSettings()
                 }
@@ -316,7 +317,6 @@ fun TradeSimulationScreen(
         )
     }
 
-    // Modal Pair Selector
     if (showPairSelector) {
         SimulationPairSelectorModal(
             availablePairs = availablePairs,
@@ -332,13 +332,12 @@ fun TradeSimulationScreen(
         )
     }
 
-    // Modal Top Up
     if (showTopUpModal) {
         SimulationTopUpModal(
             wallet = simulationWallet,
             onTopUp = { amount ->
                 viewModel.topUpSimulationBalance(amount)
-                Toast.makeText(context, "Modal berhasil ditambah Rp ${PriceFormatter.formatPrice(amount)}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "Modal berhasil ditambah ${PriceFormatter.formatPrice(amount, quoteAsset = "IDR")}", Toast.LENGTH_SHORT).show()
             },
             onReset = {
                 viewModel.resetSimulationAccount()
@@ -363,7 +362,6 @@ private fun SimulationTopBar(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Dropdown Pair Title (e.g. PRCL/IDR v)
         Row(
             modifier = Modifier
                 .clip(RoundedCornerShape(6.dp))
@@ -386,7 +384,6 @@ private fun SimulationTopBar(
             )
         }
 
-        // Action Icons: Chart + More Vert
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp)
