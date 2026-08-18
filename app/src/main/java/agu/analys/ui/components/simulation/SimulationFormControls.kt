@@ -77,14 +77,14 @@ fun StepperInputField(
             }
             BasicTextField(
                 value = value,
-                onValueChange = onValueChange,
+                onValueChange = { onValueChange(normalizeSimulationDecimalInput(it)) },
                 textStyle = TextStyle(
                     color = Color.White,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
                     textAlign = TextAlign.Center
                 ),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 cursorBrush = SolidColor(TvGreen),
                 modifier = Modifier.fillMaxWidth()
             )
@@ -107,6 +107,26 @@ fun StepperInputField(
     }
 }
 
+/**
+ * Normalisasi input angka lokal:
+ * - koma → titik (1,5 → 1.5)
+ * - hanya satu titik desimal
+ * - buang karakter non-digit selain titik
+ */
+fun normalizeSimulationDecimalInput(value: String): String {
+    val normalized = value.replace(',', '.')
+    if (normalized.count { it == '.' } > 1) {
+        val firstDot = normalized.indexOf('.')
+        return normalized.filterIndexed { index, c ->
+            c.isDigit() || (c == '.' && index == firstDot)
+        }
+    }
+    return normalized.filter { it.isDigit() || it == '.' }
+}
+
+fun parseSimulationDecimal(value: String): Double? =
+    normalizeSimulationDecimalInput(value).toDoubleOrNull()
+
 fun calculatePriceStep(price: Double): Double {
     return when {
         price >= 1_000_000 -> 10_000.0
@@ -115,7 +135,9 @@ fun calculatePriceStep(price: Double): Double {
         price >= 1_000 -> 10.0
         price >= 100 -> 1.0
         price >= 10 -> 0.1
-        else -> 0.01
+        price >= 1 -> 0.01
+        price >= 0.1 -> 0.001
+        else -> 0.0001
     }
 }
 
@@ -126,7 +148,8 @@ fun calculateCoinStep(coinQty: Double, price: Double): Double {
         coinQty >= 10 -> 1.0
         coinQty >= 1 -> 0.1
         price >= 1_000_000 -> 0.0001
-        else -> 0.01
+        price >= 1 -> 0.01
+        else -> 0.001
     }
 }
 
@@ -137,6 +160,6 @@ fun formatCoinDecimals(qty: Double): String {
     } else if (qty >= 1) {
         String.format("%.4f", qty).trimEnd('0').trimEnd('.')
     } else {
-        String.format("%.6f", qty).trimEnd('0').trimEnd('.')
+        String.format("%.8f", qty).trimEnd('0').trimEnd('.')
     }
 }
