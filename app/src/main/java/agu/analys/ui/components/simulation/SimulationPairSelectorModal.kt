@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
@@ -17,7 +16,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -42,7 +40,11 @@ fun SimulationPairSelectorModal(
         if (searchQuery.isBlank()) availablePairs
         else {
             val q = searchQuery.trim().lowercase()
-            availablePairs.filter { it.symbol.lowercase().contains(q) || it.baseAsset.lowercase().contains(q) }
+            availablePairs.filter {
+                it.symbol.lowercase().contains(q) ||
+                    it.baseAsset.lowercase().contains(q) ||
+                    it.quoteAsset.lowercase().contains(q)
+            }
         }
     }
 
@@ -59,7 +61,6 @@ fun SimulationPairSelectorModal(
                     .fillMaxSize()
                     .padding(16.dp)
             ) {
-                // Header
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -78,11 +79,10 @@ fun SimulationPairSelectorModal(
 
                 Spacer(Modifier.height(12.dp))
 
-                // Search Box
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
-                    placeholder = { Text("Cari koin (misal: BTC, ETH, PRCL)", color = TvTextSecondary, fontSize = 12.sp) },
+                    placeholder = { Text("Cari koin (misal: BTC, ETH, USDT)", color = TvTextSecondary, fontSize = 12.sp) },
                     leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Cari", tint = TvTextSecondary) },
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
@@ -97,7 +97,6 @@ fun SimulationPairSelectorModal(
 
                 Spacer(Modifier.height(12.dp))
 
-                // List Pairs
                 LazyColumn(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -150,7 +149,7 @@ fun SimulationPairSelectorModal(
 
                             Column(horizontalAlignment = Alignment.End) {
                                 Text(
-                                    text = if (price > 0) "Rp ${PriceFormatter.formatPrice(price)}" else "—",
+                                    text = if (price > 0) PriceFormatter.formatPrice(price, quoteAsset = pair.quoteAsset) else "—",
                                     color = Color.White,
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.SemiBold
