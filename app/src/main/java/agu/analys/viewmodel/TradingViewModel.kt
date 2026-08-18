@@ -200,6 +200,15 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     private val _hotCoins = MutableStateFlow<List<MarketTick>>(emptyList())
     val hotCoins: StateFlow<List<MarketTick>> = _hotCoins.asStateFlow()
 
+    private val _gainersCoins = MutableStateFlow<List<MarketTick>>(emptyList())
+    val gainersCoins: StateFlow<List<MarketTick>> = _gainersCoins.asStateFlow()
+
+    private val _topVolumeCoins = MutableStateFlow<List<MarketTick>>(emptyList())
+    val topVolumeCoins: StateFlow<List<MarketTick>> = _topVolumeCoins.asStateFlow()
+
+    private val _usdtIdrRate = MutableStateFlow(16450.0)
+    val usdtIdrRate: StateFlow<Double> = _usdtIdrRate.asStateFlow()
+
     private val _dashboardTicks = MutableStateFlow<Map<String, MarketTick>>(emptyMap())
     val dashboardTicks: StateFlow<Map<String, MarketTick>> = _dashboardTicks.asStateFlow()
 
@@ -525,23 +534,27 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
 
             if (currentSource == MarketDataSource.TOKOCRYPTO) {
                 // Fetch REAL Tokocrypto / Binance Cloud Market Data
-                val scannerJob = async {
-                    if (scalpingMode) {
-                        val gainers = TokocryptoMarketService.fetchScalpingGainersTicks(limit = 15, quoteCurrency = "USDT", excludeStable = true)
-                        if (gainers.isNotEmpty()) gainers else TokocryptoMarketService.fetchTopVolumeTicks(limit = 15, quoteCurrency = "USDT", excludeStable = true)
-                    } else {
-                        TokocryptoMarketService.fetchTopVolumeTicks(limit = 15, quoteCurrency = "USDT", excludeStable = true)
-                    }
-                }
+                val gainersJob = async { TokocryptoMarketService.fetchGainersTicks(limit = 30, quoteCurrency = "USDT", excludeStable = true) }
+                val hotJob = async { TokocryptoMarketService.fetchHotTicks(limit = 30, quoteCurrency = "USDT", excludeStable = true) }
+                val volJob = async { TokocryptoMarketService.fetchTopVolumeTicks(limit = 30, quoteCurrency = "USDT", excludeStable = true) }
+                val rateJob = async { TokocryptoMarketService.getUsdtIdrRate() }
 
                 val popularList = TradingPair.POPULAR_TOKOCRYPTO_PAIRS
                 val watchPairs = _watchlist.value.map { TradingPair.fromCustomSymbol(it, "USDT") }
                 val pairs = (popularList + watchPairs).distinctBy { it.symbol }
                 val ticks = TokocryptoMarketService.fetchTickers(pairs.map { it.effectiveTokocryptoPair() })
-                val hot = scannerJob.await()
-                if (hot.isNotEmpty()) _hotCoins.value = hot
 
-                if (ticks.isEmpty() && hot.isEmpty()) {
+                val gainers = gainersJob.await()
+                val hot = hotJob.await()
+                val topVol = volJob.await()
+                val rate = rateJob.await()
+
+                if (gainers.isNotEmpty()) _gainersCoins.value = gainers
+                if (hot.isNotEmpty()) _hotCoins.value = hot
+                if (topVol.isNotEmpty()) _topVolumeCoins.value = topVol
+                if (rate > 0.0) _usdtIdrRate.value = rate
+
+                if (ticks.isEmpty() && hot.isEmpty() && gainers.isEmpty()) {
                     if (_dashboardTicks.value.isEmpty() && _hotCoins.value.isEmpty()) {
                         markMarketOffline("Tidak ada respons market dari Tokocrypto.")
                     } else {
@@ -551,8 +564,9 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
                     return@launch
                 }
 
-                val hotMap = hot.associateBy { it.symbol }
-                val combinedTicks = (ticks.associateBy { it.symbol } + hotMap)
+                val allScanned = (gainers + hot + topVol).distinctBy { it.symbol }
+                val scannedMap = allScanned.associateBy { it.symbol }
+                val combinedTicks = (ticks.associateBy { it.symbol } + scannedMap)
                 _dashboardTicks.value = combinedTicks
 
                 if (!_isScalpingMode.value || _connectionState.value !is MarketConnectionState.Connected) {
@@ -561,11 +575,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
                 _isShowingCachedData.value = false
                 marketCache.saveDashboardTicks(MarketDataSource.TOKOCRYPTO, _dashboardTicks.value)
 
-                val evaluatedPairs = if (scalpingMode && hot.isNotEmpty()) {
-                    (hot.map { TradingPair.fromCustomSymbol(it.symbol, "USDT") } + pairs).distinctBy { it.symbol }
-                } else {
-                    pairs
-                }
+                val evaluatedPairs = (allScanned.map { TradingPair.fromCustomSymbol(it.symbol, "USDT") } + pairs).distinctBy { it.symbol }
 
                 val worth = evaluatedPairs.mapNotNull { pair ->
                     val tick = combinedTicks[pair.symbol] ?: return@mapNotNull null
@@ -620,19 +630,27 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
 
             } else {
                 // Fetch REAL Indodax Market Data
-                val scannerJob = async {
-                    if (scalpingMode) {
-                        val gainers = IndodaxMarketService.fetchScalpingGainersTicks(limit = 15, excludeStable = true)
-                        if (gainers.isNotEmpty()) gainers else IndodaxMarketService.fetchTopVolumeTicks(limit = 15, excludeStable = true)
-                    } else {
-                        IndodaxMarketService.fetchTopVolumeTicks(limit = 15, excludeStable = true)
-                    }
+                val gainersJob = async {
+                    IndodaxMarketService.fetchScalpingGainersTicks(limit = 30, excludeStable = true)
+                }
+                val volJob = async {
+                    IndodaxMarketService.fetchTopVolumeTicks(limit = 30, excludeStable = true)
                 }
                 val pairs = (TradingPair.POPULAR_INDODAX_PAIRS + _watchlist.value.map { TradingPair.fromCustomSymbol(it, "IDR") }).distinctBy { it.symbol }
                 val ticks = IndodaxMarketService.fetchTickers(pairs.map { it.effectiveIndodaxPair() })
-                val hot = scannerJob.await()
-                if (hot.isNotEmpty()) _hotCoins.value = hot
-                if (ticks.isEmpty() && hot.isEmpty()) {
+
+                val gainers = gainersJob.await()
+                val topVol = volJob.await()
+
+                if (gainers.isNotEmpty()) {
+                    _gainersCoins.value = gainers
+                    _hotCoins.value = gainers
+                }
+                if (topVol.isNotEmpty()) {
+                    _topVolumeCoins.value = topVol
+                }
+
+                if (ticks.isEmpty() && gainers.isEmpty() && topVol.isEmpty()) {
                     if (_dashboardTicks.value.isEmpty() && _hotCoins.value.isEmpty()) markMarketOffline("Tidak ada respons market dari Indodax.")
                     else {
                         _isShowingCachedData.value = true
@@ -640,18 +658,15 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
                     }
                     return@launch
                 }
-                val hotMap = hot.associateBy { it.symbol }
-                val combinedTicks = (ticks.associateBy { it.symbol } + hotMap)
+                val allScanned = (gainers + topVol).distinctBy { it.symbol }
+                val scannedMap = allScanned.associateBy { it.symbol }
+                val combinedTicks = (ticks.associateBy { it.symbol } + scannedMap)
                 _dashboardTicks.value = combinedTicks
                 if (!_isScalpingMode.value || _connectionState.value !is MarketConnectionState.Connected) _connectionState.value = MarketConnectionState.Connected
                 _isShowingCachedData.value = false
                 marketCache.saveDashboardTicks(MarketDataSource.INDODAX, _dashboardTicks.value)
 
-                val evaluatedPairs = if (scalpingMode && hot.isNotEmpty()) {
-                    (hot.map { TradingPair.fromCustomSymbol(it.symbol, "IDR") } + pairs).distinctBy { it.symbol }
-                } else {
-                    pairs
-                }
+                val evaluatedPairs = (allScanned.map { TradingPair.fromCustomSymbol(it.symbol, "IDR") } + pairs).distinctBy { it.symbol }
 
                 val worth = evaluatedPairs.mapNotNull { pair ->
                     val tick = combinedTicks[pair.symbol] ?: return@mapNotNull null

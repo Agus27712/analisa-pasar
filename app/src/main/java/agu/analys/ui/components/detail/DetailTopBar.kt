@@ -167,37 +167,88 @@ fun getCoinFullName(symbol: String): String = when (symbol.uppercase()) {
     "ADA" -> "Cardano"
     "BNB" -> "BNB"
     "USDT" -> "Tether"
+    "BIDR" -> "Binance IDR"
     "PEPE" -> "Pepe"
     "SHIB" -> "Shiba Inu"
-    "SUI" -> "Sui"
+    "SUI" -> "Sui Network"
     "AVAX" -> "Avalanche"
     "DOT" -> "Polkadot"
     "NEAR" -> "Near Protocol"
     "LINK" -> "Chainlink"
     "TRX" -> "TRON"
+    "RED" -> "RedStone"
+    "EDEN" -> "OpenEden"
+    "GPS" -> "GoPlus Security"
+    "CARV" -> "CARV"
+    "COMP" -> "Compound"
+    "POL" -> "Polygon Ecosystem"
+    "EGLD" -> "MultiversX"
+    "HEMI" -> "Hemi Network"
+    "SOON" -> "SOON"
+    "KOM" -> "Kommunitas"
+    "MORPHO" -> "Morpho"
+    "IO" -> "io.net"
+    "ONDO" -> "Ondo Finance"
+    "TIA" -> "Celestia"
+    "SEI" -> "Sei Network"
+    "RENDER" -> "Render"
+    "FET" -> "Artificial Superintelligence"
+    "INJ" -> "Injective"
+    "TAO" -> "Bittensor"
+    "WIF" -> "dogwifhat"
+    "BONK" -> "Bonk"
+    "FLOKI" -> "Floki"
+    "JUP" -> "Jupiter"
+    "PYTH" -> "Pyth Network"
+    "STRK" -> "Starknet"
+    "ARB" -> "Arbitrum"
+    "OP" -> "Optimism"
+    "KAS" -> "Kaspa"
+    "PENDLE" -> "Pendle"
+    "JTO" -> "Jito"
+    "ENA" -> "Ethena"
+    "W" -> "Wormhole"
     else -> symbol
 }
 
 fun openExchange(context: Context, source: MarketDataSource) {
-    val packageName = if (source == MarketDataSource.TOKOCRYPTO) "com.tokocrypto.app" else "id.co.bitcoin"
-    val appName = source.label
-    val intent = context.packageManager.getLaunchIntentForPackage(packageName)
-    if (intent != null) {
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        context.startActivity(intent)
+    val packageCandidates = if (source == MarketDataSource.TOKOCRYPTO) {
+        listOf("com.binance.cloud.tokocrypto", "com.tokocrypto.app", "com.tokocrypto")
     } else {
-        val playStoreUrl = if (source == MarketDataSource.TOKOCRYPTO) {
-            "https://play.google.com/store/apps/details?id=com.tokocrypto.app"
-        } else {
-            "https://play.google.com/store/apps/details?id=id.co.bitcoin"
+        listOf("id.co.bitcoin")
+    }
+    val appName = source.label
+
+    var launchIntent: Intent? = null
+    for (pkg in packageCandidates) {
+        val intent = context.packageManager.getLaunchIntentForPackage(pkg)
+        if (intent != null) {
+            launchIntent = intent
+            break
         }
+    }
+
+    if (launchIntent != null) {
+        launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(launchIntent)
+    } else {
+        val primaryPackage = packageCandidates.first()
+        val playStoreUri = Uri.parse("market://details?id=$primaryPackage")
+        val webStoreUri = Uri.parse("https://play.google.com/store/apps/details?id=$primaryPackage")
         try {
-            val marketIntent = Intent(Intent.ACTION_VIEW, Uri.parse(playStoreUrl)).apply {
+            val marketIntent = Intent(Intent.ACTION_VIEW, playStoreUri).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             context.startActivity(marketIntent)
         } catch (_: Exception) {
-            Toast.makeText(context, "Aplikasi $appName belum terpasang di HP ini.", Toast.LENGTH_SHORT).show()
+            try {
+                val webIntent = Intent(Intent.ACTION_VIEW, webStoreUri).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(webIntent)
+            } catch (_: Exception) {
+                Toast.makeText(context, "Aplikasi $appName belum terpasang di HP ini.", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 }

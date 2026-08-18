@@ -31,12 +31,20 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+enum class MarketRankingTab(val label: String) {
+    UNTUNG("🔥 Untung"),
+    HOT("⚡ Hot"),
+    VOLUME("📊 24H Vol"),
+    AI_PICKS("🎯 AI Rekomendasi"),
+    WATCHLIST("⭐ Watchlist")
+}
+
 /**
  * Top Stat Header & Exchange Source & Mode & Tabs:
  * - EXCHANGE SWITCHER: [INDODAX | TOKOCRYPTO]
  * - 24H VOL | AVG 24H | MODE (SCALPING / SWING)
  * - ● Data realtime Tokocrypto (Binance Engine) / Indodax
- * - AUTO WATCHLIST | MANUAL WATCHLIST
+ * - TABS: [🔥 Untung | ⚡ Hot | 📊 24H Vol | 🎯 AI Rekomendasi | ⭐ Watchlist]
  */
 @Composable
 fun DashboardMockupHeader(
@@ -44,8 +52,8 @@ fun DashboardMockupHeader(
     marketDataSource: MarketDataSource = MarketDataSource.INDODAX,
     isScalpingMode: Boolean,
     isConnected: Boolean,
-    isManualTab: Boolean,
-    onToggleTab: (Boolean) -> Unit,
+    selectedTab: MarketRankingTab = MarketRankingTab.UNTUNG,
+    onSelectTab: (MarketRankingTab) -> Unit,
     onToggleMode: (Boolean) -> Unit = {},
     onRefresh: () -> Unit,
     onMenuClick: () -> Unit
@@ -77,7 +85,7 @@ fun DashboardMockupHeader(
 
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = "Watchlist Pasar",
+                    text = "Watchlist & Hotlist Pasar",
                     color = TvTextPrimary,
                     fontSize = 17.sp,
                     fontWeight = FontWeight.Bold,
@@ -212,59 +220,36 @@ fun DashboardMockupHeader(
 
         Spacer(Modifier.height(10.dp))
 
-        // Tabs: AUTO WATCHLIST | MANUAL WATCHLIST
-        Row(
+        // Category Ranking Tabs
+        androidx.compose.foundation.lazy.LazyRow(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            // Auto Watchlist Tab
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .background(
-                        if (!isManualTab) Color(0xFF123D2A).copy(alpha = 0.5f) else Color(0xFF101720),
-                        RoundedCornerShape(8.dp)
+            items(MarketRankingTab.values().size) { idx ->
+                val tab = MarketRankingTab.values()[idx]
+                val isSelected = selectedTab == tab
+                Box(
+                    modifier = Modifier
+                        .background(
+                            if (isSelected) Color(0xFF123D2A) else Color(0xFF101720),
+                            RoundedCornerShape(8.dp)
+                        )
+                        .border(
+                            1.dp,
+                            if (isSelected) TvGreen else Color(0xFF1E2836),
+                            RoundedCornerShape(8.dp)
+                        )
+                        .clickable { onSelectTab(tab) }
+                        .padding(horizontal = 12.dp, vertical = 7.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = tab.label,
+                        color = if (isSelected) TvGreen else TvTextSecondary,
+                        fontSize = 12.sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
                     )
-                    .border(
-                        1.dp,
-                        if (!isManualTab) TvGreen else Color(0xFF1E2836),
-                        RoundedCornerShape(8.dp)
-                    )
-                    .clickable { onToggleTab(false) }
-                    .padding(vertical = 9.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = if (isScalpingMode) "TOP MOMENTUM (NAIK)" else "AUTO WATCHLIST",
-                    color = if (!isManualTab) TvGreen else TvTextSecondary,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-
-            // Manual Watchlist Tab
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .background(
-                        if (isManualTab) Color(0xFF123D2A).copy(alpha = 0.5f) else Color(0xFF101720),
-                        RoundedCornerShape(8.dp)
-                    )
-                    .border(
-                        1.dp,
-                        if (isManualTab) TvGreen else Color(0xFF1E2836),
-                        RoundedCornerShape(8.dp)
-                    )
-                    .clickable { onToggleTab(true) }
-                    .padding(vertical = 9.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "MANUAL WATCHLIST",
-                    color = if (isManualTab) TvGreen else TvTextSecondary,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                }
             }
         }
     }

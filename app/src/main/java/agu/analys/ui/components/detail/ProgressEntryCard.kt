@@ -47,10 +47,11 @@ fun ProgressEntryCard(signal: AISignalState, scalping: Boolean) {
 
     val mtf = signal.mtf
     val stage = signal.scalpingStage
-    val completed = listOf(mtf.biasStatus, mtf.setupStatus, mtf.triggerStatus).count { it == MtfLegStatus.OK }
+    val completed = listOf(mtf.biasStatus, mtf.setupStatus, mtf.triggerStatus, mtf.entryPriceStatus).count { it == MtfLegStatus.OK }
 
     val semanticStatus = when {
-        completed == 3 || stage == ScalpingStage.ENTRY || stage == ScalpingStage.STRONG_ENTRY -> "ENTRY"
+        completed == 4 || stage == ScalpingStage.ENTRY || stage == ScalpingStage.STRONG_ENTRY -> "ENTRY READY"
+        completed == 3 -> "TRIGGER TERVALIDASI"
         completed == 2 -> "SETUP TERBENTUK"
         completed == 1 && mtf.biasStatus == MtfLegStatus.OK -> "MENUNGGU SETUP"
         completed == 1 -> "MENUNGGU KONFIRMASI"
@@ -59,7 +60,7 @@ fun ProgressEntryCard(signal: AISignalState, scalping: Boolean) {
     }
     val displayTitle = mtf.statusTitle.ifBlank { semanticStatus }
     val statusColor = when {
-        completed == 3 || stage == ScalpingStage.ENTRY || stage == ScalpingStage.STRONG_ENTRY -> TvGreen
+        completed == 4 || stage == ScalpingStage.ENTRY || stage == ScalpingStage.STRONG_ENTRY -> TvGreen
         completed >= 1 || stage == ScalpingStage.WAIT_PULLBACK || stage == ScalpingStage.WATCH -> WarningAmber
         else -> TvTextSecondary
     }
@@ -71,7 +72,7 @@ fun ProgressEntryCard(signal: AISignalState, scalping: Boolean) {
         ScalpingPath.NONE -> "Jalur: belum terbentuk"
     }
 
-    val progress by animateFloatAsState(completed / 3f, tween(400, easing = FastOutSlowInEasing), label = "entry_progress")
+    val progress by animateFloatAsState(completed / 4f, tween(400, easing = FastOutSlowInEasing), label = "entry_progress")
     val idleTransition = rememberInfiniteTransition(label = "entry_monitoring")
     val idlePulse by idleTransition.animateFloat(0.75f, 1f, infiniteRepeatable(tween(1300, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "entry_monitoring_pulse")
 
@@ -90,14 +91,14 @@ fun ProgressEntryCard(signal: AISignalState, scalping: Boolean) {
                 Text(displayTitle, color = statusColor, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1)
                 Text(semanticStatus, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TvTextSecondary)
             }
-            Text("$completed/3", fontSize = 18.sp, fontWeight = FontWeight.Black, color = statusColor)
+            Text("$completed/4", fontSize = 18.sp, fontWeight = FontWeight.Black, color = statusColor)
         }
 
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("Kedekatan menuju entry", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = TvTextSecondary)
             Spacer(Modifier.weight(1f))
-            Text("$completed/3", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TvTextSecondary)
+            Text("$completed/4", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TvTextSecondary)
         }
         Spacer(Modifier.height(4.dp))
         Box(Modifier.fillMaxWidth().height(5.dp).background(Color(0x22FFFFFF), RoundedCornerShape(8.dp))) {
@@ -111,9 +112,10 @@ fun ProgressEntryCard(signal: AISignalState, scalping: Boolean) {
         Text(
             when (completed) {
                 0 -> "Engine memantau, belum ada tahap terpenuhi"
-                1 -> "1 tahap terpenuhi"
-                2 -> "2 tahap terpenuhi"
-                else -> "Kondisi entry terpenuhi"
+                1 -> "1 tahap terpenuhi (1H Bias)"
+                2 -> "2 tahap terpenuhi (1H Bias + 15M Setup)"
+                3 -> "3 tahap terpenuhi (1M Trigger Aktif · Siapkan Indodax)"
+                else -> "4/4 Kondisi terpenuhi · Siap eksekusi BUY"
             }, fontSize = 11.sp, color = TvTextSecondary
         )
         Spacer(Modifier.height(6.dp))
@@ -122,11 +124,12 @@ fun ProgressEntryCard(signal: AISignalState, scalping: Boolean) {
         Spacer(Modifier.height(9.dp))
         AnalysisDivider()
         Spacer(Modifier.height(9.dp))
-        Text("CHECKLIST MTF", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = TvTextSecondary, letterSpacing = 0.6.sp)
+        Text("CHECKLIST MTF & EKSEKUSI", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = TvTextSecondary, letterSpacing = 0.6.sp)
         Spacer(Modifier.height(5.dp))
-        MtfRow("1H Bias", mtf.biasStatus, mtf.biasDetail.ifBlank { "Menunggu data 1H" })
-        MtfRow("15M Setup", mtf.setupStatus, mtf.setupDetail.ifBlank { "Menunggu data 15M" })
-        MtfRow("1M Trigger", mtf.triggerStatus, mtf.triggerDetail.ifBlank { "Menunggu data 1M" })
+        MtfRow("1. 1H Bias", mtf.biasStatus, mtf.biasDetail.ifBlank { "Menunggu data 1H" })
+        MtfRow("2. 15M Setup", mtf.setupStatus, mtf.setupDetail.ifBlank { "Menunggu data 15M" })
+        MtfRow("3. 1M Trigger", mtf.triggerStatus, mtf.triggerDetail.ifBlank { "Menunggu data 1M" })
+        MtfRow("4. Area Entry", mtf.entryPriceStatus, mtf.entryPriceDetail.ifBlank { "Siapkan harga entri di Indodax" })
 
         Spacer(Modifier.height(9.dp))
         AnalysisDivider()

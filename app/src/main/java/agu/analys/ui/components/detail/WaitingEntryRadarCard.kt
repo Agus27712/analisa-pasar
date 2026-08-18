@@ -64,7 +64,7 @@ fun WaitingEntryRadarCard(
     val buyReady = signal.action == SignalAction.BUY && signal.entryPrice > 0.0
     val stage = signal.scalpingStage
     val mtf = signal.mtf
-    val completed = listOf(mtf.biasStatus, mtf.setupStatus, mtf.triggerStatus).count { it.name == "OK" }
+    val completed = listOf(mtf.biasStatus, mtf.setupStatus, mtf.triggerStatus, mtf.entryPriceStatus).count { it.name == "OK" }
     val effectivePrice = if (currentPrice > 0.0) currentPrice else if (signal.entryPrice > 0.0) signal.entryPrice else 0.0
 
     // Jika sinyal BUY sudah siap, tampilkan banner konfirmasi hijau ringkas plus rincian biaya
@@ -94,14 +94,14 @@ fun WaitingEntryRadarCard(
                 Spacer(Modifier.width(10.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "SETUP BUY SIAP DIEKSEKUSI",
+                        text = "SETUP BUY SIAP DIEKSEKUSI (4/4 LENGKAP)",
                         color = TvGreen,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.ExtraBold,
                         letterSpacing = 0.5.sp
                     )
                     Text(
-                        text = "Konfirmasi Multi-Timeframe 3/3 terpenuhi. Silakan cek Rekomendasi di atas/bawah.",
+                        text = "Konfirmasi 4/4 lengkap: Bias 1H, Setup 15M, Trigger 1M, & Harga Pas. Silakan klik BUY di Indodax.",
                         color = TvTextPrimary,
                         fontSize = 11.sp
                     )
@@ -229,14 +229,42 @@ fun WaitingEntryRadarCard(
 
             Spacer(Modifier.height(10.dp))
 
-            // Step Progress Checklist
+            // Step Progress Checklist (4 Konfirmasi MTF & Entry)
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 StepProgressChip("1. Bias 1H", mtf.biasStatus.name == "OK", Modifier.weight(1f))
                 StepProgressChip("2. Setup 15M", mtf.setupStatus.name == "OK", Modifier.weight(1f))
                 StepProgressChip("3. Trigger 1M", mtf.triggerStatus.name == "OK", Modifier.weight(1f))
+                StepProgressChip("4. Area Entry", mtf.entryPriceStatus.name == "OK", Modifier.weight(1f))
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            // Panduan Cepat Eksekusi Indodax
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFF131F2E), RoundedCornerShape(8.dp))
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = null,
+                    tint = if (completed >= 3) TvGreen else WarningAmber,
+                    modifier = Modifier.size(13.dp)
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = if (completed == 4) "Kondisi 4/4 terpenuhi! Segera klik BUY di Indodax."
+                    else if (completed >= 2) "Siapkan input harga di Indodax sekarang. Saat Step 4 terkonfirmasi HIJAU, langsung klik BUY."
+                    else "Siapkan aplikasi Indodax web/HP sambil menunggu konfirmasi sinyal.",
+                    color = if (completed >= 3) TvGreen else TvTextSecondary,
+                    fontSize = 9.5.sp,
+                    lineHeight = 13.sp
+                )
             }
         }
 

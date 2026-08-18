@@ -14,7 +14,7 @@ android {
     minSdk = 24
     targetSdk = 35
     versionCode = providers.gradleProperty("VERSION_CODE").map(String::toInt).getOrElse(10)
-    versionName = "1.2.8"
+    versionName = "1.2.9"
 
     val envFile = rootProject.file(".env")
     val envProperties = Properties().apply {
