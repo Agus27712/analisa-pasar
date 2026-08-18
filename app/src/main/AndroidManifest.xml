@@ -9,6 +9,9 @@
     <queries>
         <!-- Android 11+ requires package visibility declaration before querying/launching another app. -->
         <package android:name="id.co.bitcoin" />
+        <package android:name="com.binance.cloud.tokocrypto" />
+        <package android:name="com.tokocrypto.app" />
+        <package android:name="com.tokocrypto" />
     </queries>
 
     <application

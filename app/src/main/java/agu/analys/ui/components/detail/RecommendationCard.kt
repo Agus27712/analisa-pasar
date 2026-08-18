@@ -129,7 +129,7 @@ fun RecommendationCard(
                 Button(
                     onClick = {
                         if (onOpenIndodax != null) onOpenIndodax()
-                        else launchIndodaxApp(context)
+                        else openExchange(context, marketDataSource)
                     },
                     modifier = Modifier.fillMaxWidth().height(42.dp),
                     shape = RoundedCornerShape(8.dp),

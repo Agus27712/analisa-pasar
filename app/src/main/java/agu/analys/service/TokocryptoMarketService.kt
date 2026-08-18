@@ -146,16 +146,98 @@ object TokocryptoMarketService {
         }
     }
 
+    @Volatile
+    private var cachedUsdtIdrRate: Double = 16450.0
+
+    @Volatile
+    private var cachedTokocryptoSymbols: Set<String>? = null
+    @Volatile
+    private var lastSymbolsFetchTime: Long = 0L
+
+    private val EXCLUDED_GLOBAL_COINS = setOf("CREAM", "PNT", "FTT", "LUNC", "USTC")
+
+    private val FALLBACK_TOKOCRYPTO_SYMBOLS = setOf(
+        "BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT", "DOGEUSDT", "PEPEUSDT", "SUIUSDT",
+        "NEARUSDT", "AVAXUSDT", "DOTUSDT", "LINKUSDT", "ADAUSDT", "ARBUSDT", "OPUSDT", "MATICUSDT",
+        "POLUSDT", "ONDOUSDT", "TIAUSDT", "SEIUSDT", "RENDERUSDT", "FETUSDT", "INJUSDT", "TAOUSDT",
+        "WIFUSDT", "BONKUSDT", "FLOKIUSDT", "JUPUSDT", "PYTHUSDT", "STRKUSDT", "KASUSDT", "PENDLEUSDT",
+        "JTOUSDT", "ENAUSDT", "WUSDT", "REDUSDT", "EDENUSDT", "GPSUSDT", "CARVUSDT", "COMPUSDT",
+        "EGLDUSDT", "HEMIUSDT", "SOONUSDT", "KOMUSDT", "MORPHOUSDT", "IOUSDT", "SHIBUSDT", "TRXUSDT",
+        "LTCUSDT", "BCHUSDT", "ATOMUSDT", "ICPUSDT", "APTUSDT", "FTMUSDT", "ARUSDT",
+        "BTCBIDR", "ETHBIDR", "SOLBIDR", "BNBBIDR", "XRPBIDR", "DOGEBIDR", "PEPEBIDR", "SUIBIDR",
+        "SHIBBIDR", "USDTBIDR", "PNUTUSDT", "ACTUSDT", "NEIROUSDT", "GOATUSDT"
+    )
+
+    /**
+     * Ambil whitelist koin resmi yang aktif terdaftar di bursa Tokocrypto (Bappebti compliant).
+     * Mencegah koin global Binance yang tidak ada di Tokocrypto (seperti CREAM, PNT, dll) muncul di app.
+     */
+    suspend fun getTokocryptoValidSymbols(): Set<String> = withContext(Dispatchers.IO) {
+        val cached = cachedTokocryptoSymbols
+        val now = System.currentTimeMillis()
+        if (cached != null && cached.isNotEmpty() && (now - lastSymbolsFetchTime) < 30 * 60 * 1000L) {
+            return@withContext cached
+        }
+
+        val validSet = mutableSetOf<String>()
+        validSet.addAll(FALLBACK_TOKOCRYPTO_SYMBOLS)
+
+        try {
+            val res = get("https://www.tokocrypto.com/open/v1/common/symbols")
+                ?: get("https://api.tokocrypto.com/open/v1/common/symbols")
+            if (res != null) {
+                val obj = JSONObject(res)
+                val data = obj.optJSONObject("data")
+                val list = data?.optJSONArray("list")
+                if (list != null && list.length() > 0) {
+                    for (i in 0 until list.length()) {
+                        val item = list.optJSONObject(i) ?: continue
+                        val sym = item.optString("symbol", "").replace("_", "").uppercase()
+                        val base = item.optString("baseAsset", "").uppercase()
+                        if (sym.isNotBlank() && base !in EXCLUDED_GLOBAL_COINS) validSet.add(sym)
+                        if (base.isNotBlank() && base !in EXCLUDED_GLOBAL_COINS) {
+                            validSet.add("${base}USDT")
+                            validSet.add("${base}BIDR")
+                            validSet.add("${base}IDR")
+                            validSet.add("${base}USDC")
+                        }
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+
+        cachedTokocryptoSymbols = validSet
+        lastSymbolsFetchTime = now
+        validSet
+    }
+
+    suspend fun getUsdtIdrRate(): Double = withContext(Dispatchers.IO) {
+        try {
+            val res = getWithFallback("/ticker/price?symbol=USDTBIDR")
+                ?: getWithFallback("/ticker/24hr?symbol=USDTBIDR")
+            if (res != null) {
+                val obj = JSONObject(res)
+                val price = obj.optString("price", obj.optString("lastPrice", "0")).toDoubleOrNull() ?: 0.0
+                if (price > 10000.0) {
+                    cachedUsdtIdrRate = price
+                    return@withContext price
+                }
+            }
+        } catch (_: Exception) {}
+        cachedUsdtIdrRate
+    }
+
     /**
      * Top Volume real-time scanner dari Tokocrypto.
      * Mengambil seluruh koin likuid berdasarkan quote volume tertinggi.
      */
     suspend fun fetchTopVolumeTicks(
-        limit: Int = 15,
+        limit: Int = 30,
         quoteCurrency: String = "USDT",
         excludeStable: Boolean = true
     ): List<MarketTick> = withContext(Dispatchers.IO) {
         try {
+            val validSymbols = getTokocryptoValidSymbols()
             val body = getWithFallback("/ticker/24hr") ?: return@withContext emptyList()
             val arr = JSONArray(body)
             val stableBases = setOf("USDC", "FDUSD", "TUSD", "DAI", "BUSD", "EUR", "USDP", "AEUR")
@@ -168,6 +250,11 @@ object TokocryptoMarketService {
                 if (!sym.endsWith(quoteCurrency)) continue
                 val base = sym.removeSuffix(quoteCurrency)
                 if (excludeStable && base in stableBases) continue
+
+                // Pastikan koin terdaftar di Tokocrypto resmi
+                if (validSymbols.isNotEmpty() && sym !in validSymbols && "${base}USDT" !in validSymbols) {
+                    continue
+                }
 
                 val last = obj.optString("lastPrice", "0").toDoubleOrNull() ?: 0.0
                 val quoteVol = obj.optString("quoteVolume", "0").toDoubleOrNull() ?: 0.0
@@ -195,15 +282,16 @@ object TokocryptoMarketService {
     }
 
     /**
-     * Scanner koin Gainers (Momentum Positif) real-time Tokocrypto untuk Scalping.
-     * 100% data live, persentase kenaikan > 0% dengan volume likuid.
+     * Scanner koin "Untung / Gainers" real-time Tokocrypto (100% cocok dengan tab Untung di app resmi).
+     * Mengurutkan berdasarkan persentase kenaikan 24 jam tertinggi.
      */
-    suspend fun fetchScalpingGainersTicks(
-        limit: Int = 15,
+    suspend fun fetchGainersTicks(
+        limit: Int = 30,
         quoteCurrency: String = "USDT",
         excludeStable: Boolean = true
     ): List<MarketTick> = withContext(Dispatchers.IO) {
         try {
+            val validSymbols = getTokocryptoValidSymbols()
             val body = getWithFallback("/ticker/24hr") ?: return@withContext emptyList()
             val arr = JSONArray(body)
             val stableBases = setOf("USDC", "FDUSD", "TUSD", "DAI", "BUSD", "EUR", "USDP", "AEUR")
@@ -217,10 +305,14 @@ object TokocryptoMarketService {
                 val base = sym.removeSuffix(quoteCurrency)
                 if (excludeStable && base in stableBases) continue
 
+                // Pastikan koin terdaftar di Tokocrypto resmi
+                if (validSymbols.isNotEmpty() && sym !in validSymbols && "${base}USDT" !in validSymbols) {
+                    continue
+                }
+
                 val last = obj.optString("lastPrice", "0").toDoubleOrNull() ?: 0.0
                 val quoteVol = obj.optString("quoteVolume", "0").toDoubleOrNull() ?: 0.0
-                // Minimal quote volume agar koin likuid
-                val minVol = if (quoteCurrency == "BIDR") 100_000_000.0 else 50_000.0
+                val minVol = if (quoteCurrency == "BIDR") 10_000_000.0 else 500.0
                 if (last <= 0.0 || quoteVol < minVol) continue
 
                 val change = obj.optString("priceChangePercent", "0").toDoubleOrNull() ?: Double.NaN
@@ -245,6 +337,73 @@ object TokocryptoMarketService {
             emptyList()
         }
     }
+
+    /**
+     * Scanner koin "Hot / Trending" real-time Tokocrypto.
+     * Menggabungkan faktor likuiditas volume besar dan tren pergerakan harga.
+     */
+    suspend fun fetchHotTicks(
+        limit: Int = 30,
+        quoteCurrency: String = "USDT",
+        excludeStable: Boolean = true
+    ): List<MarketTick> = withContext(Dispatchers.IO) {
+        try {
+            val validSymbols = getTokocryptoValidSymbols()
+            val body = getWithFallback("/ticker/24hr") ?: return@withContext emptyList()
+            val arr = JSONArray(body)
+            val stableBases = setOf("USDC", "FDUSD", "TUSD", "DAI", "BUSD", "EUR", "USDP", "AEUR")
+            val list = mutableListOf<MarketTick>()
+            val now = System.currentTimeMillis()
+
+            for (i in 0 until arr.length()) {
+                val obj = arr.optJSONObject(i) ?: continue
+                val sym = obj.optString("symbol", "")
+                if (!sym.endsWith(quoteCurrency)) continue
+                val base = sym.removeSuffix(quoteCurrency)
+                if (excludeStable && base in stableBases) continue
+
+                // Pastikan koin terdaftar di Tokocrypto resmi
+                if (validSymbols.isNotEmpty() && sym !in validSymbols && "${base}USDT" !in validSymbols) {
+                    continue
+                }
+
+                val last = obj.optString("lastPrice", "0").toDoubleOrNull() ?: 0.0
+                val quoteVol = obj.optString("quoteVolume", "0").toDoubleOrNull() ?: 0.0
+                val minVol = if (quoteCurrency == "BIDR") 50_000_000.0 else 5_000.0
+                if (last <= 0.0 || quoteVol < minVol) continue
+
+                val high = obj.optString("highPrice", "0").toDoubleOrNull() ?: last
+                val low = obj.optString("lowPrice", "0").toDoubleOrNull() ?: last
+                val change = obj.optString("priceChangePercent", "0").toDoubleOrNull() ?: Double.NaN
+
+                list += MarketTick(
+                    symbol = sym,
+                    price = last,
+                    high24h = high,
+                    low24h = low,
+                    volume24h = quoteVol,
+                    change24h = change,
+                    timestamp = now
+                )
+            }
+
+            // Urutkan koin HOT: pembobotan pergerakan positif & volume aktif
+            list.sortedByDescending { (it.change24h.coerceAtLeast(-5.0) + 10.0) * (kotlin.math.log10(it.volume24h.coerceAtLeast(1.0))) }
+                .take(limit)
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    /**
+     * Scanner koin Gainers (Momentum Positif) real-time Tokocrypto untuk Scalping.
+     * 100% data live, persentase kenaikan > 0% dengan volume likuid.
+     */
+    suspend fun fetchScalpingGainersTicks(
+        limit: Int = 30,
+        quoteCurrency: String = "USDT",
+        excludeStable: Boolean = true
+    ): List<MarketTick> = fetchGainersTicks(limit, quoteCurrency, excludeStable)
 
     /**
      * Ambil data candlestick (klines) real-time Tokocrypto/Binance.

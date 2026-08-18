@@ -25,32 +25,67 @@ fun DashboardScreen(
     val marketDataSource by viewModel.marketDataSource.collectAsState()
     val worthCoins by viewModel.worthCoins.collectAsState()
     val hotCoins by viewModel.hotCoins.collectAsState()
+    val gainersCoins by viewModel.gainersCoins.collectAsState()
+    val topVolumeCoins by viewModel.topVolumeCoins.collectAsState()
+    val usdtIdrRate by viewModel.usdtIdrRate.collectAsState()
     val connectionState by viewModel.connectionState.collectAsState()
     val dashboardTicks by viewModel.dashboardTicks.collectAsState()
     val watchlist by viewModel.watchlist.collectAsState()
     val isScalpingMode by viewModel.isScalpingMode.collectAsState()
     val recentCandles by viewModel.recentCandles.collectAsState()
-    var isManualTab by remember { mutableStateOf(false) }
+    var selectedRankingTab by remember { mutableStateOf(MarketRankingTab.UNTUNG) }
     var currentTab by remember { mutableStateOf(NavTab.WATCHLIST) }
     var showAddDialog by remember { mutableStateOf(false) }
 
     val defaultQuote = if (marketDataSource == MarketDataSource.TOKOCRYPTO) "USDT" else "IDR"
 
-    val manualPairs = remember(watchlist, marketDataSource) {
-        watchlist.map { TradingPair.fromCustomSymbol(it, defaultQuote) }.distinctBy { it.symbol }
-    }
-    val autoPairs = remember(hotCoins, worthCoins, isScalpingMode, marketDataSource) {
-        val source = if (isScalpingMode) {
-            if (hotCoins.isNotEmpty()) hotCoins.map { it.symbol } else worthCoins.map { it.pair.symbol }
-        } else {
-            worthCoins.map { it.pair.symbol }
+    val displayPairs = remember(
+        selectedRankingTab,
+        gainersCoins,
+        hotCoins,
+        topVolumeCoins,
+        worthCoins,
+        watchlist,
+        marketDataSource
+    ) {
+        when (selectedRankingTab) {
+            MarketRankingTab.UNTUNG -> {
+                val list = if (gainersCoins.isNotEmpty()) gainersCoins.map { it.symbol }
+                else if (hotCoins.isNotEmpty()) hotCoins.map { it.symbol }
+                else worthCoins.filter { it.isWorthIt || it.potentialProfitPct > 0 }.map { it.pair.symbol }
+
+                val mapped = list.map { TradingPair.fromCustomSymbol(it, defaultQuote) }.distinctBy { it.symbol }
+                if (mapped.isNotEmpty()) mapped else TradingPair.popularPairsForSource(marketDataSource)
+            }
+            MarketRankingTab.HOT -> {
+                val list = if (hotCoins.isNotEmpty()) hotCoins.map { it.symbol }
+                else worthCoins.map { it.pair.symbol }
+                val mapped = list.map { TradingPair.fromCustomSymbol(it, defaultQuote) }.distinctBy { it.symbol }
+                if (mapped.isNotEmpty()) mapped else TradingPair.popularPairsForSource(marketDataSource)
+            }
+            MarketRankingTab.VOLUME -> {
+                val list = if (topVolumeCoins.isNotEmpty()) topVolumeCoins.map { it.symbol }
+                else worthCoins.map { it.pair.symbol }
+                val mapped = list.map { TradingPair.fromCustomSymbol(it, defaultQuote) }.distinctBy { it.symbol }
+                if (mapped.isNotEmpty()) mapped else TradingPair.popularPairsForSource(marketDataSource)
+            }
+            MarketRankingTab.AI_PICKS -> {
+                val list = worthCoins.map { it.pair.symbol }
+                val mapped = list.map { TradingPair.fromCustomSymbol(it, defaultQuote) }.distinctBy { it.symbol }
+                if (mapped.isNotEmpty()) mapped else TradingPair.popularPairsForSource(marketDataSource)
+            }
+            MarketRankingTab.WATCHLIST -> {
+                watchlist.map { TradingPair.fromCustomSymbol(it, defaultQuote) }.distinctBy { it.symbol }
+            }
         }
-        val list = source.map { TradingPair.fromCustomSymbol(it, defaultQuote) }.distinctBy { it.symbol }
-        if (list.isNotEmpty()) list.take(10) else TradingPair.popularPairsForSource(marketDataSource).take(6)
     }
 
-    val displayPairs = if (isManualTab) manualPairs else autoPairs
-    val allTicks = remember(dashboardTicks, hotCoins) { dashboardTicks + hotCoins.associateBy { it.symbol } }
+    val allTicks = remember(dashboardTicks, hotCoins, gainersCoins, topVolumeCoins) {
+        dashboardTicks +
+            hotCoins.associateBy { it.symbol } +
+            gainersCoins.associateBy { it.symbol } +
+            topVolumeCoins.associateBy { it.symbol }
+    }
     val worthBySymbol = remember(worthCoins) { worthCoins.associateBy { it.pair.symbol } }
     val isConnected = connectionState is MarketConnectionState.Connected
 
@@ -59,14 +94,14 @@ fun DashboardScreen(
             .fillMaxSize()
             .background(TvBackground)
     ) {
-        // Header Mockup with Indodax / Tokocrypto active badge
+        // Header Mockup with Indodax / Tokocrypto active badge & Ranking Tabs
         DashboardMockupHeader(
             allTicks = allTicks,
             marketDataSource = marketDataSource,
             isScalpingMode = isScalpingMode,
             isConnected = isConnected,
-            isManualTab = isManualTab,
-            onToggleTab = { isManualTab = it },
+            selectedTab = selectedRankingTab,
+            onSelectTab = { selectedRankingTab = it },
             onToggleMode = { viewModel.setScalpingMode(it) },
             onRefresh = { viewModel.retryConnection() },
             onMenuClick = onOpenSettings
@@ -96,9 +131,10 @@ fun DashboardScreen(
                         tick = allTicks[pair.symbol],
                         worth = worthBySymbol[pair.symbol],
                         rank = index + 1,
-                        isAuto = !isManualTab,
+                        isAuto = selectedRankingTab != MarketRankingTab.WATCHLIST,
                         isScalping = isScalpingMode,
                         isFavorite = watchlist.contains(pair.symbol),
+                        usdtIdrRate = usdtIdrRate,
                         recentCandles = recentCandles,
                         onToggleFavorite = { viewModel.toggleWatchlist(pair.symbol) },
                         onClick = {

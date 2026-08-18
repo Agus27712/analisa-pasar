@@ -55,6 +55,7 @@ fun WatchlistCoinCard(
     isAuto: Boolean,
     isScalping: Boolean,
     isFavorite: Boolean = true,
+    usdtIdrRate: Double = 16450.0,
     recentCandles: List<CandleBar> = emptyList(),
     onToggleFavorite: () -> Unit = {},
     onClick: () -> Unit
@@ -184,6 +185,15 @@ fun WatchlistCoinCard(
                             fontWeight = FontWeight.ExtraBold,
                             quoteAsset = pair.quoteAsset
                         )
+                        if (isUsdt && usdtIdrRate > 0) {
+                            val idrEst = tick.price * usdtIdrRate
+                            Text(
+                                text = "≈ ${PriceFormatter.formatPrice(idrEst, quoteAsset = "IDR")}",
+                                color = TvTextSecondary,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Normal
+                            )
+                        }
                     } else {
                         Text("—", color = TvTextSecondary, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                     }
