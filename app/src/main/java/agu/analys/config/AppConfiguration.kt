@@ -11,13 +11,42 @@ data class TradingFeeConfig(
     val sellTakerPct: Double = 0.42
 )
 
-enum class MarketDataSource(val label: String) { INDODAX("Indodax") }
+enum class MarketDataSource(
+    val label: String,
+    val shortCode: String,
+    val defaultQuoteAsset: String,
+    val defaultFeeConfig: TradingFeeConfig,
+    val description: String
+) {
+    INDODAX(
+        label = "Indodax",
+        shortCode = "IDR",
+        defaultQuoteAsset = "IDR",
+        defaultFeeConfig = TradingFeeConfig(
+            buyMakerPct = 0.11,
+            buyTakerPct = 0.21,
+            sellMakerPct = 0.32,
+            sellTakerPct = 0.42
+        ),
+        description = "Pasar Kripto Indonesia (Pair IDR) dengan orderbook & candle live Indodax."
+    ),
+    TOKOCRYPTO(
+        label = "Tokocrypto",
+        shortCode = "TOKO",
+        defaultQuoteAsset = "USDT",
+        defaultFeeConfig = TradingFeeConfig(
+            buyMakerPct = 0.10,
+            buyTakerPct = 0.10,
+            sellMakerPct = 0.10,
+            sellTakerPct = 0.10
+        ),
+        description = "Engine Binance Cloud (Pair USDT & BIDR) dengan likuiditas tinggi & pergerakan rapat."
+    )
+}
 enum class MarketDataTransport(val label: String) { REST("REST"), WEBSOCKET("WebSocket") }
 
 object MarketDataConfiguration {
-    val activeSource = MarketDataSource.INDODAX
     val transports = listOf(MarketDataTransport.REST, MarketDataTransport.WEBSOCKET)
-    // Future providers such as Pintu/Pluang belong behind this seam. UI remains Indodax-only for now.
 }
 
 object FeeCalculator {

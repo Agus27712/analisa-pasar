@@ -20,24 +20,28 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import agu.analys.config.MarketDataSource
 import agu.analys.model.MarketTick
 import agu.analys.ui.theme.TvGreen
 import agu.analys.ui.theme.TvRed
 import agu.analys.ui.theme.TvTextPrimary
 import agu.analys.ui.theme.TvTextSecondary
+import agu.analys.util.PriceFormatter
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
 /**
- * Top Stat Header & Mode & Tabs sesuai Mockup:
+ * Top Stat Header & Exchange Source & Mode & Tabs:
+ * - EXCHANGE SWITCHER: [INDODAX | TOKOCRYPTO]
  * - 24H VOL | AVG 24H | MODE (SCALPING / SWING)
- * - ● Data realtime Indodax    Update: 09:41:30
- * - AUTO WATCHLIST  |  MANUAL WATCHLIST
+ * - ● Data realtime Tokocrypto (Binance Engine) / Indodax
+ * - AUTO WATCHLIST | MANUAL WATCHLIST
  */
 @Composable
 fun DashboardMockupHeader(
     allTicks: Map<String, MarketTick>,
+    marketDataSource: MarketDataSource = MarketDataSource.INDODAX,
     isScalpingMode: Boolean,
     isConnected: Boolean,
     isManualTab: Boolean,
@@ -49,13 +53,14 @@ fun DashboardMockupHeader(
     val totalVolume = allTicks.values.sumOf { it.volume24h }
     val avgVolume = if (allTicks.isNotEmpty()) totalVolume / allTicks.size else 0.0
     val currentTime = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
+    val quoteAsset = marketDataSource.defaultQuoteAsset
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 14.dp, vertical = 6.dp)
     ) {
-        // Top Nav: Menu, Title, Refresh
+        // Top Nav: Menu, Title + Source Badge, Refresh
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -70,13 +75,40 @@ fun DashboardMockupHeader(
                 )
             }
 
-            Text(
-                text = "Watchlist",
-                color = TvTextPrimary,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center
-            )
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = "Watchlist Pasar",
+                    color = TvTextPrimary,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(top = 2.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .background(
+                                if (marketDataSource == MarketDataSource.TOKOCRYPTO) Color(0xFF00C087).copy(alpha = 0.15f) else Color(0xFF2196F3).copy(alpha = 0.15f),
+                                RoundedCornerShape(4.dp)
+                            )
+                            .border(
+                                0.8.dp,
+                                if (marketDataSource == MarketDataSource.TOKOCRYPTO) Color(0xFF00C087).copy(alpha = 0.4f) else Color(0xFF2196F3).copy(alpha = 0.4f),
+                                RoundedCornerShape(4.dp)
+                            )
+                            .padding(horizontal = 6.dp, vertical = 1.dp)
+                    ) {
+                        Text(
+                            text = "${marketDataSource.label.uppercase()} ($quoteAsset)",
+                            color = if (marketDataSource == MarketDataSource.TOKOCRYPTO) Color(0xFF00E676) else Color(0xFF64B5F6),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
 
             IconButton(onClick = onRefresh, modifier = Modifier.size(36.dp)) {
                 Icon(
@@ -88,7 +120,7 @@ fun DashboardMockupHeader(
             }
         }
 
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(8.dp))
 
         // 3 Stat Cards: 24H VOL | AVG 24H | MODE
         Row(
@@ -97,15 +129,15 @@ fun DashboardMockupHeader(
         ) {
             // Card 1: 24H VOL
             StatBox(
-                label = "24H VOL",
-                value = formatTrillion(totalVolume),
+                label = "24H VOL (${quoteAsset})",
+                value = PriceFormatter.formatVolume(totalVolume, quoteAsset = quoteAsset),
                 modifier = Modifier.weight(1f)
             )
 
             // Card 2: AVG 24H
             StatBox(
-                label = "AVG 24H",
-                value = formatTrillion(avgVolume),
+                label = "AVG VOL",
+                value = PriceFormatter.formatVolume(avgVolume, quoteAsset = quoteAsset),
                 modifier = Modifier.weight(1f)
             )
 
@@ -148,7 +180,7 @@ fun DashboardMockupHeader(
 
         Spacer(Modifier.height(10.dp))
 
-        // Live Status Row: ● Data realtime Indodax    Update: 09:41:30
+        // Live Status Row: ● Data realtime Tokocrypto/Indodax    Update: 09:41:30
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -161,8 +193,9 @@ fun DashboardMockupHeader(
                         .background(if (isConnected) TvGreen else TvRed, CircleShape)
                 )
                 Spacer(Modifier.width(6.dp))
+                val exchangeLabel = if (marketDataSource == MarketDataSource.TOKOCRYPTO) "Tokocrypto (Live Binance)" else "Indodax"
                 Text(
-                    text = if (isConnected) "Data realtime Indodax" else "Koneksi offline / cache",
+                    text = if (isConnected) "Data realtime $exchangeLabel" else "Koneksi offline / cache",
                     color = if (isConnected) TvGreen else TvRed,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Medium
@@ -261,16 +294,5 @@ private fun StatBox(label: String, value: String, modifier: Modifier = Modifier)
                 fontWeight = FontWeight.ExtraBold
             )
         }
-    }
-}
-
-private fun formatTrillion(vol: Double): String {
-    if (vol <= 0) return "Rp 0 T"
-    val inTrillion = vol / 1_000_000_000_000.0
-    return if (inTrillion >= 1.0) {
-        String.format(Locale.US, "Rp %.2f T", inTrillion)
-    } else {
-        val inBillion = vol / 1_000_000_000.0
-        String.format(Locale.US, "Rp %.1f M", inBillion)
     }
 }

@@ -1,0 +1,205 @@
+package agu.analys.ui.components.detail
+
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.CompareArrows
+import androidx.compose.material.icons.filled.CropRotate
+import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import agu.analys.config.MarketDataSource
+import agu.analys.model.TradingPair
+import agu.analys.ui.animation.AnimatedPercentageBadge
+import agu.analys.ui.animation.SmoothPriceText
+import agu.analys.ui.components.dashboard.AssetAvatar
+import agu.analys.ui.theme.TvGreen
+import agu.analys.ui.theme.TvTextPrimary
+import agu.analys.ui.theme.TvTextSecondary
+
+@Composable
+fun DetailTopBar(
+    pair: TradingPair,
+    isFavorite: Boolean,
+    onNavigateToDashboard: () -> Unit,
+    onOpenSimulation: () -> Unit,
+    onOpenLearning: () -> Unit,
+    onToggleWatchlist: () -> Unit,
+    onOpenLandscapeChart: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        IconButton(onClick = onNavigateToDashboard) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = "Kembali",
+                tint = TvTextPrimary,
+                modifier = Modifier.size(24.dp)
+            )
+        }
+
+        AssetAvatar(baseAsset = pair.baseAsset, iconUrl = pair.iconUrl, size = 36.dp)
+        Spacer(Modifier.width(10.dp))
+
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = "${pair.baseAsset}/${pair.quoteAsset}",
+                color = TvTextPrimary,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.ExtraBold
+            )
+            Text(
+                text = getCoinFullName(pair.baseAsset),
+                color = TvTextSecondary,
+                fontSize = 12.sp
+            )
+        }
+
+        IconButton(onClick = onOpenSimulation) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.CompareArrows,
+                contentDescription = "Simulasi Trade",
+                tint = TvGreen,
+                modifier = Modifier.size(22.dp)
+            )
+        }
+
+        IconButton(onClick = onOpenLearning) {
+            Icon(
+                imageVector = Icons.Default.MenuBook,
+                contentDescription = "Mode Belajar",
+                tint = Color(0xFF72B7FF),
+                modifier = Modifier.size(22.dp)
+            )
+        }
+
+        IconButton(onClick = onToggleWatchlist) {
+            Icon(
+                imageVector = if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
+                contentDescription = "Favorite",
+                tint = if (isFavorite) Color(0xFFFFB300) else TvTextSecondary,
+                modifier = Modifier.size(22.dp)
+            )
+        }
+
+        IconButton(onClick = onOpenLandscapeChart) {
+            Icon(
+                imageVector = Icons.Default.CropRotate,
+                contentDescription = "Landscape",
+                tint = TvGreen,
+                modifier = Modifier.size(22.dp)
+            )
+        }
+    }
+}
+
+@Composable
+fun DetailPriceHeader(
+    price: Double,
+    change24h: Double,
+    activityText: String,
+    activityColor: Color,
+    quoteAsset: String = "IDR"
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.Bottom
+    ) {
+        Column {
+            if (price > 0) {
+                SmoothPriceText(
+                    price = price,
+                    color = TvTextPrimary,
+                    fontSize = 26.sp,
+                    fontWeight = FontWeight.Black,
+                    quoteAsset = quoteAsset
+                )
+            } else {
+                val placeholder = if (quoteAsset.equals("USDT", true) || quoteAsset.equals("USD", true)) "$ —" else "Rp —"
+                Text(placeholder, color = TvTextPrimary, fontSize = 26.sp, fontWeight = FontWeight.Black)
+            }
+            Spacer(Modifier.height(4.dp))
+            Box(
+                modifier = Modifier
+                    .background(activityColor.copy(alpha = 0.15f), RoundedCornerShape(6.dp))
+                    .border(1.dp, activityColor.copy(alpha = 0.4f), RoundedCornerShape(6.dp))
+                    .padding(horizontal = 8.dp, vertical = 3.dp)
+            ) {
+                Text(
+                    text = activityText,
+                    color = activityColor,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+
+        AnimatedPercentageBadge(percentage = change24h)
+    }
+}
+
+fun getCoinFullName(symbol: String): String = when (symbol.uppercase()) {
+    "BTC" -> "Bitcoin"
+    "ETH" -> "Ethereum"
+    "SOL" -> "Solana"
+    "XRP" -> "Ripple"
+    "DOGE" -> "Dogecoin"
+    "ADA" -> "Cardano"
+    "BNB" -> "BNB"
+    "USDT" -> "Tether"
+    "PEPE" -> "Pepe"
+    "SHIB" -> "Shiba Inu"
+    "SUI" -> "Sui"
+    "AVAX" -> "Avalanche"
+    "DOT" -> "Polkadot"
+    "NEAR" -> "Near Protocol"
+    "LINK" -> "Chainlink"
+    "TRX" -> "TRON"
+    else -> symbol
+}
+
+fun openExchange(context: Context, source: MarketDataSource) {
+    val packageName = if (source == MarketDataSource.TOKOCRYPTO) "com.tokocrypto.app" else "id.co.bitcoin"
+    val appName = source.label
+    val intent = context.packageManager.getLaunchIntentForPackage(packageName)
+    if (intent != null) {
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(intent)
+    } else {
+        val playStoreUrl = if (source == MarketDataSource.TOKOCRYPTO) {
+            "https://play.google.com/store/apps/details?id=com.tokocrypto.app"
+        } else {
+            "https://play.google.com/store/apps/details?id=id.co.bitcoin"
+        }
+        try {
+            val marketIntent = Intent(Intent.ACTION_VIEW, Uri.parse(playStoreUrl)).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(marketIntent)
+        } catch (_: Exception) {
+            Toast.makeText(context, "Aplikasi $appName belum terpasang di HP ini.", Toast.LENGTH_SHORT).show()
+        }
+    }
+}
+
+fun openIndodax(context: Context) = openExchange(context, MarketDataSource.INDODAX)

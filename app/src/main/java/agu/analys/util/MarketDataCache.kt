@@ -17,24 +17,30 @@ class MarketDataCache(context: Context) {
 
     fun clearAll() { prefs.edit().clear().apply(); lastDashboardWriteAt = 0L; lastPairWriteAt.clear() }
 
-    fun saveDashboardTicks(ticks: Map<String, MarketTick>) {
+    fun saveDashboardTicks(source: agu.analys.config.MarketDataSource, ticks: Map<String, MarketTick>) {
         if (ticks.isEmpty()) return
         val now = System.currentTimeMillis()
+        val key = KEY_DASHBOARD_TICKS + "_" + source.name.lowercase()
+        val keySavedAt = KEY_DASHBOARD_SAVED_AT + "_" + source.name.lowercase()
         if (now - lastDashboardWriteAt < DASHBOARD_WRITE_INTERVAL_MS) return
         val arr = JSONArray(); ticks.values.forEach { arr.put(tickToJson(it)) }
-        prefs.edit().putString(KEY_DASHBOARD_TICKS, arr.toString()).putLong(KEY_DASHBOARD_SAVED_AT, now).apply(); lastDashboardWriteAt = now
+        prefs.edit().putString(key, arr.toString()).putLong(keySavedAt, now).apply(); lastDashboardWriteAt = now
     }
-    fun loadDashboardTicks(): Map<String, MarketTick> {
-        val raw = prefs.getString(KEY_DASHBOARD_TICKS, null) ?: return emptyMap()
+    fun loadDashboardTicks(source: agu.analys.config.MarketDataSource): Map<String, MarketTick> {
+        val key = KEY_DASHBOARD_TICKS + "_" + source.name.lowercase()
+        val raw = prefs.getString(key, null) ?: return emptyMap()
         return try { val arr = JSONArray(raw); buildMap { for (i in 0 until arr.length()) jsonToTick(arr.getJSONObject(i))?.let { put(it.symbol, it) } } } catch (_: Exception) { emptyMap() }
     }
-    fun saveWorthCoins(items: List<WorthCoinInfo>) {
+    fun saveWorthCoins(source: agu.analys.config.MarketDataSource, items: List<WorthCoinInfo>) {
         if (items.isEmpty()) return
+        val key = KEY_WORTH_COINS + "_" + source.name.lowercase()
+        val keySavedAt = KEY_WORTH_SAVED_AT + "_" + source.name.lowercase()
         val arr = JSONArray(); items.forEach { w -> arr.put(JSONObject().put("symbol", w.pair.symbol).put("score", w.worthScore).put("isWorth", w.isWorthIt).put("rec", w.recommendation).put("potential", w.potentialProfitPct).put("rationale", w.aiRationale)) }
-        prefs.edit().putString(KEY_WORTH_COINS, arr.toString()).putLong(KEY_WORTH_SAVED_AT, System.currentTimeMillis()).apply()
+        prefs.edit().putString(key, arr.toString()).putLong(keySavedAt, System.currentTimeMillis()).apply()
     }
-    fun loadWorthCoins(): List<WorthCoinInfo> {
-        val raw = prefs.getString(KEY_WORTH_COINS, null) ?: return emptyList()
+    fun loadWorthCoins(source: agu.analys.config.MarketDataSource): List<WorthCoinInfo> {
+        val key = KEY_WORTH_COINS + "_" + source.name.lowercase()
+        val raw = prefs.getString(key, null) ?: return emptyList()
         return try { val arr = JSONArray(raw); buildList { for (i in 0 until arr.length()) { val o = arr.getJSONObject(i); val symbol = o.optString("symbol", ""); if (symbol.isNotBlank()) add(WorthCoinInfo(TradingPair.fromCustomSymbol(symbol), o.optInt("score", 0), o.optBoolean("isWorth", false), o.optString("rec", ""), o.optDouble("potential", 0.0), o.optString("rationale", ""))) } } } catch (_: Exception) { emptyList() }
     }
     fun savePairSnapshot(symbol: String, timeframe: Timeframe, tick: MarketTick?, candles: List<CandleBar>) {

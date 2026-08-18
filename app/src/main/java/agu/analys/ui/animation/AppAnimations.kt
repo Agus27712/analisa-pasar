@@ -147,6 +147,7 @@ fun SmoothPriceText(
     fontWeight: FontWeight = FontWeight.Bold,
     modifier: Modifier = Modifier,
     showSymbol: Boolean = true,
+    quoteAsset: String = "IDR",
     maxLines: Int = 1
 ) {
     val smooth = rememberSmoothPrice(price)
@@ -165,7 +166,7 @@ fun SmoothPriceText(
     }
 
     Text(
-        text = PriceFormatter.formatPrice(smooth, showSymbol = showSymbol),
+        text = PriceFormatter.formatPrice(smooth, showSymbol = showSymbol, quoteAsset = quoteAsset),
         color = color,
         fontSize = fontSize,
         fontWeight = fontWeight,
@@ -192,20 +193,21 @@ fun FlipCardPriceText(
     fontWeight: FontWeight = FontWeight.Bold,
     modifier: Modifier = Modifier,
     showSymbol: Boolean = true,
+    quoteAsset: String = "IDR",
     maxLines: Int = 1
 ) {
     var previousPrice by remember { mutableStateOf(price) }
-    var previousText by remember { mutableStateOf(if (price.isFinite() && price > 0.0) PriceFormatter.formatPrice(price, showSymbol) else "—") }
-    var currentText by remember { mutableStateOf(if (price.isFinite() && price > 0.0) PriceFormatter.formatPrice(price, showSymbol) else "—") }
+    var previousText by remember { mutableStateOf(if (price.isFinite() && price > 0.0) PriceFormatter.formatPrice(price, showSymbol, quoteAsset) else "—") }
+    var currentText by remember { mutableStateOf(if (price.isFinite() && price > 0.0) PriceFormatter.formatPrice(price, showSymbol, quoteAsset) else "—") }
     var isUp by remember { mutableStateOf(true) }
     val flipProgress = remember { Animatable(1f) }
 
-    LaunchedEffect(price) {
+    LaunchedEffect(price, quoteAsset) {
         if (!price.isFinite() || price <= 0.0) return@LaunchedEffect
 
         if (!previousPrice.isFinite() || previousPrice <= 0.0) {
             previousPrice = price
-            val formatted = PriceFormatter.formatPrice(price, showSymbol)
+            val formatted = PriceFormatter.formatPrice(price, showSymbol, quoteAsset)
             previousText = formatted
             currentText = formatted
             flipProgress.snapTo(1f)
@@ -220,7 +222,7 @@ fun FlipCardPriceText(
         // Jika perubahan ekstrem (>25%), langsung snap/loncat tanpa transisi bertahap
         if (relativeDelta > 0.25) {
             previousPrice = price
-            val formatted = PriceFormatter.formatPrice(price, showSymbol)
+            val formatted = PriceFormatter.formatPrice(price, showSymbol, quoteAsset)
             previousText = formatted
             currentText = formatted
             flipProgress.snapTo(1f)
@@ -229,7 +231,7 @@ fun FlipCardPriceText(
 
         // Fluktuasi normal: jalankan 1x efek flipcard (tidak looping)
         previousText = currentText
-        currentText = PriceFormatter.formatPrice(price, showSymbol)
+        currentText = PriceFormatter.formatPrice(price, showSymbol, quoteAsset)
         previousPrice = price
 
         flipProgress.snapTo(0f)

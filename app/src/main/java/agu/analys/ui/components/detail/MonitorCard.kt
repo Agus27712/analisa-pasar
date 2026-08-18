@@ -23,7 +23,8 @@ fun MonitorCard(
     signal: AISignalState,
     structure: MarketStructureSnapshot,
     price: Double,
-    cached: Boolean
+    cached: Boolean,
+    quoteAsset: String = "IDR"
 ) {
     AnalysisCard {
         SectionTitle("YANG PERLU DIPANTAU", Icons.Default.Info)
@@ -33,17 +34,17 @@ fun MonitorCard(
         when {
             support != null && price > 0 && price < support ->
                 Text(
-                    "Harga di bawah support ${PriceFormatter.formatPrice(support)}. Tunggu konfirmasi struktur sebelum ambil posisi.",
+                    "Harga di bawah support ${PriceFormatter.formatPrice(support, quoteAsset = quoteAsset)}. Tunggu konfirmasi struktur sebelum ambil posisi.",
                     fontSize = 14.sp, color = TvTextPrimary, lineHeight = 20.sp
                 )
             support != null && price > 0 && price <= support * 1.01 ->
                 Text(
-                    "Harga dekat support ${PriceFormatter.formatPrice(support)}. Perhatikan apakah support bertahan atau jebol.",
+                    "Harga dekat support ${PriceFormatter.formatPrice(support, quoteAsset = quoteAsset)}. Perhatikan apakah support bertahan atau jebol.",
                     fontSize = 14.sp, color = TvTextPrimary, lineHeight = 20.sp
                 )
             resistance != null && price > 0 && price >= resistance * 0.99 ->
                 Text(
-                    "Harga dekat resistance ${PriceFormatter.formatPrice(resistance)}. Pantau breakout dengan volume atau rejection.",
+                    "Harga dekat resistance ${PriceFormatter.formatPrice(resistance, quoteAsset = quoteAsset)}. Pantau breakout dengan volume atau rejection.",
                     fontSize = 14.sp, color = TvTextPrimary, lineHeight = 20.sp
                 )
             else ->
