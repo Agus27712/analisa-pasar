@@ -120,10 +120,11 @@ data class TradingPair(
     val displayName: String,
     val initialPrice: Double = 0.0,
     val iconUrl: String = "",
-    val indodaxPair: String = ""
+    val indodaxPair: String = "",
+    val tokocryptoPair: String = ""
 ) {
     companion object {
-        val POPULAR_PAIRS = listOf(
+        val POPULAR_INDODAX_PAIRS = listOf(
             TradingPair("BTCIDR", "BTC", "IDR", "Bitcoin / IDR", indodaxPair = "btc_idr"),
             TradingPair("ETHIDR", "ETH", "IDR", "Ethereum / IDR", indodaxPair = "eth_idr"),
             TradingPair("SOLIDR", "SOL", "IDR", "Solana / IDR", indodaxPair = "sol_idr"),
@@ -134,22 +135,53 @@ data class TradingPair(
             TradingPair("MYXIDR", "MYX", "IDR", "MYX Finance / IDR", indodaxPair = "myx_idr")
         )
 
-        fun fromCustomSymbol(raw: String): TradingPair {
+        val POPULAR_TOKOCRYPTO_PAIRS = listOf(
+            TradingPair("BTCUSDT", "BTC", "USDT", "Bitcoin / USDT", tokocryptoPair = "BTCUSDT"),
+            TradingPair("ETHUSDT", "ETH", "USDT", "Ethereum / USDT", tokocryptoPair = "ETHUSDT"),
+            TradingPair("SOLUSDT", "SOL", "USDT", "Solana / USDT", tokocryptoPair = "SOLUSDT"),
+            TradingPair("BNBUSDT", "BNB", "USDT", "BNB / USDT", tokocryptoPair = "BNBUSDT"),
+            TradingPair("XRPUSDT", "XRP", "USDT", "XRP / USDT", tokocryptoPair = "XRPUSDT"),
+            TradingPair("DOGEUSDT", "DOGE", "USDT", "Dogecoin / USDT", tokocryptoPair = "DOGEUSDT"),
+            TradingPair("PEPEUSDT", "PEPE", "USDT", "Pepe / USDT", tokocryptoPair = "PEPEUSDT"),
+            TradingPair("SUIUSDT", "SUI", "USDT", "Sui / USDT", tokocryptoPair = "SUIUSDT"),
+            TradingPair("NEARUSDT", "NEAR", "USDT", "NEAR Protocol / USDT", tokocryptoPair = "NEARUSDT"),
+            TradingPair("AVAXUSDT", "AVAX", "USDT", "Avalanche / USDT", tokocryptoPair = "AVAXUSDT")
+        )
+
+        val POPULAR_PAIRS = POPULAR_INDODAX_PAIRS
+
+        fun popularPairsForSource(source: agu.analys.config.MarketDataSource): List<TradingPair> =
+            if (source == agu.analys.config.MarketDataSource.TOKOCRYPTO) POPULAR_TOKOCRYPTO_PAIRS else POPULAR_INDODAX_PAIRS
+
+        fun fromCustomSymbol(
+            raw: String,
+            defaultQuote: String = "IDR"
+        ): TradingPair {
             val cleaned = raw.trim().uppercase().replace(" ", "").replace("/", "").replace("-", "").replace("_", "")
-            val base = when {
-                cleaned.endsWith("USDT") -> cleaned.removeSuffix("USDT")
-                cleaned.endsWith("IDR") -> cleaned.removeSuffix("IDR")
-                cleaned.endsWith("USD") -> cleaned.removeSuffix("USD")
-                else -> cleaned
-            }.ifEmpty { "BTC" }
-            val symbol = "${base}IDR"
-            val known = POPULAR_PAIRS.find { it.symbol == symbol || it.baseAsset == base }
+            val (base, quote) = when {
+                cleaned.endsWith("USDT") -> cleaned.removeSuffix("USDT") to "USDT"
+                cleaned.endsWith("BIDR") -> cleaned.removeSuffix("BIDR") to "BIDR"
+                cleaned.endsWith("IDR") -> cleaned.removeSuffix("IDR") to "IDR"
+                cleaned.endsWith("USD") -> cleaned.removeSuffix("USD") to "USD"
+                else -> cleaned to defaultQuote
+            }
+            val finalBase = base.ifEmpty { "BTC" }
+            val symbol = "$finalBase$quote"
+            val known = (POPULAR_INDODAX_PAIRS + POPULAR_TOKOCRYPTO_PAIRS).find { it.symbol == symbol || (it.baseAsset == finalBase && it.quoteAsset == quote) }
             if (known != null) return known
-            return TradingPair(symbol, base, "IDR", "$base / IDR", indodaxPair = "${base.lowercase()}_idr")
+            return TradingPair(
+                symbol = symbol,
+                baseAsset = finalBase,
+                quoteAsset = quote,
+                displayName = "$finalBase / $quote",
+                indodaxPair = "${finalBase.lowercase()}_${quote.lowercase()}",
+                tokocryptoPair = symbol
+            )
         }
     }
 
     fun effectiveIndodaxPair(): String = if (indodaxPair.isNotBlank()) indodaxPair else "${baseAsset.lowercase()}_idr"
+    fun effectiveTokocryptoPair(): String = if (tokocryptoPair.isNotBlank()) tokocryptoPair else "$baseAsset$quoteAsset"
 }
 
 enum class Timeframe(val code: String, val label: String) {

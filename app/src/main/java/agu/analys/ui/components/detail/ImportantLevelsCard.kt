@@ -29,7 +29,8 @@ import kotlin.math.abs
 fun ImportantLevelsCard(
     @Suppress("UNUSED_PARAMETER") signal: AISignalState,
     structure: MarketStructureSnapshot,
-    price: Double
+    price: Double,
+    quoteAsset: String = "IDR"
 ) {
     AnalysisCard {
         Text(
@@ -49,7 +50,7 @@ fun ImportantLevelsCard(
         if (validPrice) {
             Text("POSISI HARGA", fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, color = TvTextSecondary, letterSpacing = 0.5.sp)
             Spacer(Modifier.height(4.dp))
-            Text(PriceFormatter.formatPrice(price), fontSize = 20.sp, fontWeight = FontWeight.Black, color = TvTextPrimary)
+            Text(PriceFormatter.formatPrice(price, quoteAsset = quoteAsset), fontSize = 20.sp, fontWeight = FontWeight.Black, color = TvTextPrimary)
 
             if (support != null && resistance != null && resistance > support) {
                 Spacer(Modifier.height(6.dp))
@@ -90,7 +91,8 @@ fun ImportantLevelsCard(
                         level = support,
                         price = price,
                         accent = TvGreen,
-                        isResistance = false
+                        isResistance = false,
+                        quoteAsset = quoteAsset
                     )
                     Spacer(Modifier.height(8.dp))
                 } else if (support == null) {
@@ -110,7 +112,8 @@ fun ImportantLevelsCard(
                         level = resistance,
                         price = price,
                         accent = TvRed,
-                        isResistance = true
+                        isResistance = true,
+                        quoteAsset = quoteAsset
                     )
                 } else if (resistance == null) {
                     ObservasiLine(
@@ -159,7 +162,8 @@ private fun LevelLine(
     level: Double,
     price: Double,
     accent: Color,
-    isResistance: Boolean
+    isResistance: Boolean,
+    quoteAsset: String
 ) {
     val dist = abs(price - level) / price.coerceAtLeast(1e-9) * 100.0
     val relation = when {
@@ -177,7 +181,7 @@ private fun LevelLine(
     ) {
         Text(title.uppercase(), fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, color = accent, letterSpacing = 0.5.sp)
         Spacer(Modifier.height(4.dp))
-        Text(PriceFormatter.formatPrice(level), fontSize = 17.sp, fontWeight = FontWeight.Black, color = TvTextPrimary)
+        Text(PriceFormatter.formatPrice(level, quoteAsset = quoteAsset), fontSize = 17.sp, fontWeight = FontWeight.Black, color = TvTextPrimary)
         Spacer(Modifier.height(2.dp))
         Text(relation, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = accent)
     }

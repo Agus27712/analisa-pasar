@@ -3,6 +3,7 @@ package agu.analys.util
 import android.content.Context
 import agu.analys.BuildConfig
 import agu.analys.config.AiProvider
+import agu.analys.config.MarketDataSource
 import agu.analys.config.ScalpingSensitivity
 import agu.analys.config.TradingFeeConfig
 
@@ -28,6 +29,10 @@ class AppPreferences(context: Context) {
         get() = runCatching { AiProvider.valueOf(prefs.getString(KEY_AI_PROVIDER, AiProvider.GROQ.name).orEmpty()) }.getOrDefault(AiProvider.GROQ)
         set(value) = prefs.edit().putString(KEY_AI_PROVIDER, value.name).apply()
 
+    var marketDataSource: MarketDataSource
+        get() = runCatching { MarketDataSource.valueOf(prefs.getString(KEY_MARKET_SOURCE, MarketDataSource.INDODAX.name).orEmpty()) }.getOrDefault(MarketDataSource.INDODAX)
+        set(value) = prefs.edit().putString(KEY_MARKET_SOURCE, value.name).apply()
+
     var isScalpingMode: Boolean
         get() = prefs.getBoolean(KEY_SCALPING_MODE, false)
         set(value) = prefs.edit().putBoolean(KEY_SCALPING_MODE, value).apply()
@@ -50,17 +55,33 @@ class AppPreferences(context: Context) {
             .putString(KEY_SELL_TAKER, value.sellTakerPct.toString())
             .apply()
 
-    fun getWatchlist(): Set<String> = prefs.getStringSet(KEY_WATCHLIST, emptySet())?.toSet() ?: emptySet()
+    private fun watchlistKeyForSource(source: MarketDataSource): String =
+        if (source == MarketDataSource.TOKOCRYPTO) KEY_WATCHLIST_TOKOCRYPTO else KEY_WATCHLIST_INDODAX
 
-    fun toggleWatchlist(symbol: String): Boolean {
-        val set = getWatchlist().toMutableSet()
+    fun getWatchlist(source: MarketDataSource = marketDataSource): Set<String> {
+        val key = watchlistKeyForSource(source)
+        val saved = prefs.getStringSet(key, null)
+        if (saved != null && saved.isNotEmpty()) return saved.toSet()
+        // If legacy KEY_WATCHLIST exists for Indodax, migrate it
+        if (source == MarketDataSource.INDODAX) {
+            val legacy = prefs.getStringSet(KEY_WATCHLIST_LEGACY, null)
+            if (legacy != null && legacy.isNotEmpty()) return legacy.toSet()
+        }
+        val defaultSymbol = if (source == MarketDataSource.TOKOCRYPTO) "BTCUSDT" else "BTCIDR"
+        return setOf(defaultSymbol)
+    }
+
+    fun toggleWatchlist(symbol: String, source: MarketDataSource = marketDataSource): Boolean {
+        val key = watchlistKeyForSource(source)
+        val set = getWatchlist(source).toMutableSet()
         val upper = symbol.uppercase()
         val added = if (set.remove(upper)) false else { set.add(upper); true }
-        prefs.edit().putStringSet(KEY_WATCHLIST, set).apply()
+        prefs.edit().putStringSet(key, set).apply()
         return added
     }
 
-    fun isInWatchlist(symbol: String): Boolean = getWatchlist().contains(symbol.uppercase())
+    fun isInWatchlist(symbol: String, source: MarketDataSource = marketDataSource): Boolean =
+        getWatchlist(source).contains(symbol.uppercase())
 
     fun getCompletedLearningLessons(): Set<Int> = prefs.getStringSet(KEY_LEARNING_COMPLETED, emptySet())
         ?.mapNotNull(String::toIntOrNull)?.toSet() ?: emptySet()
@@ -76,9 +97,12 @@ class AppPreferences(context: Context) {
         private const val KEY_GROQ = "groq_api_key"
         private const val KEY_GEMINI = "gemini_api_key"
         private const val KEY_AI_PROVIDER = "ai_provider"
+        private const val KEY_MARKET_SOURCE = "market_data_source"
         private const val KEY_SCALPING_MODE = "scalping_mode"
         private const val KEY_SCALPING_SENSITIVITY = "scalping_sensitivity"
-        private const val KEY_WATCHLIST = "watchlist_symbols"
+        private const val KEY_WATCHLIST_LEGACY = "watchlist_symbols"
+        private const val KEY_WATCHLIST_INDODAX = "watchlist_symbols_indodax"
+        private const val KEY_WATCHLIST_TOKOCRYPTO = "watchlist_symbols_tokocrypto"
         private const val KEY_LEARNING_COMPLETED = "learning_completed_lessons"
         private const val KEY_BUY_MAKER = "fee_buy_maker"
         private const val KEY_BUY_TAKER = "fee_buy_taker"

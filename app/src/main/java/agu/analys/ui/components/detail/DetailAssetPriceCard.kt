@@ -31,14 +31,12 @@ import kotlinx.coroutines.delay
 import kotlin.math.abs
 
 /**
- * Card Harga Aset di Detail Screen dengan FlipCard Price Effect.
- * - Angka aset bertransisi dengan efek flip 3D halus saat update harga.
- * - Tidak looping (single animation cycle).
- * - Tidak loncat/jitter kecuali ada perubahan harga ekstrem (>25%).
+ * Card Harga Aset di Detail Screen dengan FlipCard Price Effect (Mendukung IDR / USDT).
  */
 @Composable
 fun DetailAssetPriceCard(
     tick: MarketTick?,
+    quoteAsset: String = "IDR",
     modifier: Modifier = Modifier
 ) {
     if (tick == null) return
@@ -56,7 +54,6 @@ fun DetailAssetPriceCard(
             val delta = price - previousPrice
             val rel = if (previousPrice > 0.0) abs(delta) / previousPrice else 0.0
             if (rel <= 0.25) {
-                // Subtle flash border on regular tick
                 flashState = if (delta > 0) TvGreen.copy(alpha = 0.4f) else TvRed.copy(alpha = 0.4f)
                 delay(220)
                 flashState = null
@@ -88,7 +85,7 @@ fun DetailAssetPriceCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "HARGA ASET",
+                    text = "HARGA ASET ($quoteAsset)",
                     color = TvTextSecondary,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
@@ -96,7 +93,7 @@ fun DetailAssetPriceCard(
                 )
                 if (tick.volume24h > 0) {
                     Text(
-                        text = "Vol 24H: ${PriceFormatter.formatPrice(tick.volume24h)}",
+                        text = "Vol 24H: ${PriceFormatter.formatVolume(tick.volume24h, quoteAsset = quoteAsset)}",
                         color = TvTextSecondary,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Medium
@@ -125,10 +122,10 @@ fun DetailAssetPriceCard(
                         color = TvTextPrimary,
                         fontSize = 29.sp,
                         fontWeight = FontWeight.Black,
+                        quoteAsset = quoteAsset,
                         modifier = Modifier.testTag("live_price_header")
                     )
 
-                    // Subtle horizontal split indicator for realistic flipboard feel
                     Spacer(Modifier.height(3.dp))
                     Box(
                         Modifier
@@ -170,7 +167,7 @@ fun DetailAssetPriceCard(
 
                 if (tick.low24h > 0 && tick.high24h > 0) {
                     Text(
-                        text = "L: ${PriceFormatter.formatPrice(tick.low24h)} · H: ${PriceFormatter.formatPrice(tick.high24h)}",
+                        text = "L: ${PriceFormatter.formatPrice(tick.low24h, quoteAsset = quoteAsset)} · H: ${PriceFormatter.formatPrice(tick.high24h, quoteAsset = quoteAsset)}",
                         color = TvTextSecondary,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Medium

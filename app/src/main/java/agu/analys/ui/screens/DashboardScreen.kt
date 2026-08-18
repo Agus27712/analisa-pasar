@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import agu.analys.config.MarketDataSource
 import agu.analys.model.MarketConnectionState
 import agu.analys.model.TradingPair
 import agu.analys.ui.components.dashboard.*
@@ -21,6 +22,7 @@ fun DashboardScreen(
     onOpenLandscapeChart: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val marketDataSource by viewModel.marketDataSource.collectAsState()
     val worthCoins by viewModel.worthCoins.collectAsState()
     val hotCoins by viewModel.hotCoins.collectAsState()
     val connectionState by viewModel.connectionState.collectAsState()
@@ -32,17 +34,19 @@ fun DashboardScreen(
     var currentTab by remember { mutableStateOf(NavTab.WATCHLIST) }
     var showAddDialog by remember { mutableStateOf(false) }
 
-    val manualPairs = remember(watchlist) {
-        watchlist.map(TradingPair::fromCustomSymbol).distinctBy { it.symbol }
+    val defaultQuote = if (marketDataSource == MarketDataSource.TOKOCRYPTO) "USDT" else "IDR"
+
+    val manualPairs = remember(watchlist, marketDataSource) {
+        watchlist.map { TradingPair.fromCustomSymbol(it, defaultQuote) }.distinctBy { it.symbol }
     }
-    val autoPairs = remember(hotCoins, worthCoins, isScalpingMode) {
+    val autoPairs = remember(hotCoins, worthCoins, isScalpingMode, marketDataSource) {
         val source = if (isScalpingMode) {
             if (hotCoins.isNotEmpty()) hotCoins.map { it.symbol } else worthCoins.map { it.pair.symbol }
         } else {
             worthCoins.map { it.pair.symbol }
         }
-        val list = source.map(TradingPair::fromCustomSymbol).distinctBy { it.symbol }
-        if (list.isNotEmpty()) list.take(10) else TradingPair.POPULAR_PAIRS.take(6)
+        val list = source.map { TradingPair.fromCustomSymbol(it, defaultQuote) }.distinctBy { it.symbol }
+        if (list.isNotEmpty()) list.take(10) else TradingPair.popularPairsForSource(marketDataSource).take(6)
     }
 
     val displayPairs = if (isManualTab) manualPairs else autoPairs
@@ -55,9 +59,10 @@ fun DashboardScreen(
             .fillMaxSize()
             .background(TvBackground)
     ) {
-        // Header Mockup
+        // Header Mockup with Indodax / Tokocrypto active badge
         DashboardMockupHeader(
             allTicks = allTicks,
+            marketDataSource = marketDataSource,
             isScalpingMode = isScalpingMode,
             isConnected = isConnected,
             isManualTab = isManualTab,
@@ -114,7 +119,7 @@ fun DashboardScreen(
                 when (tab) {
                     NavTab.WATCHLIST -> { /* Sudah di Watchlist */ }
                     NavTab.SIMULASI -> {
-                        val firstPair = displayPairs.firstOrNull() ?: TradingPair.POPULAR_PAIRS.first()
+                        val firstPair = displayPairs.firstOrNull() ?: TradingPair.popularPairsForSource(marketDataSource).first()
                         viewModel.openSimulation(firstPair)
                     }
                     NavTab.BELAJAR -> {

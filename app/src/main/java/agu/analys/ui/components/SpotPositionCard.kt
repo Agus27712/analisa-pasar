@@ -57,6 +57,7 @@ fun SpotPositionCard(
     signal: AISignalState,
     position: SpotPosition,
     currentPrice: Double = 0.0,
+    quoteAsset: String = "IDR",
     onPositionChanged: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -127,8 +128,8 @@ fun SpotPositionCard(
                         value = investedInput,
                         onValueChange = { investedInput = normalizeDecimalInput(it) },
                         modifier = Modifier.fillMaxWidth().testTag("position_invested_input"),
-                        label = { Text("Nilai Pembelian (IDR)", fontSize = 12.sp) },
-                        placeholder = { Text("100.000", color = TvTextSecondary.copy(alpha = 0.5f)) },
+                        label = { Text("Nilai Pembelian ($quoteAsset)", fontSize = 12.sp) },
+                        placeholder = { Text(if (quoteAsset.equals("IDR", true)) "100.000" else "100", color = TvTextSecondary.copy(alpha = 0.5f)) },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         colors = OutlinedTextFieldDefaults.colors(
@@ -149,8 +150,8 @@ fun SpotPositionCard(
                         value = entryInput,
                         onValueChange = { entryInput = normalizeDecimalInput(it) },
                         modifier = Modifier.fillMaxWidth().testTag("position_entry_input"),
-                        label = { Text("Harga Beli per $displaySymbol (IDR)", fontSize = 12.sp) },
-                        placeholder = { Text("1.800.000.000", color = TvTextSecondary.copy(alpha = 0.5f)) },
+                        label = { Text("Harga Beli per $displaySymbol ($quoteAsset)", fontSize = 12.sp) },
+                        placeholder = { Text(if (currentPrice > 0.0) PriceFormatter.formatPrice(currentPrice, quoteAsset = quoteAsset) else "Harga beli", color = TvTextSecondary.copy(alpha = 0.5f)) },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         colors = OutlinedTextFieldDefaults.colors(
@@ -189,13 +190,13 @@ fun SpotPositionCard(
                                 Spacer(Modifier.height(6.dp))
                                 Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                     Text("Estimasi Nilai Sekarang", fontSize = 11.sp, color = TvTextSecondary)
-                                    Text(PriceFormatter.formatPrice(valueNow), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TvTextPrimary)
+                                    Text(PriceFormatter.formatPrice(valueNow, quoteAsset = quoteAsset), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TvTextPrimary)
                                 }
                                 Spacer(Modifier.height(4.dp))
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                     Text("Estimasi P/L", fontSize = 11.sp, color = TvTextSecondary)
                                     Text(
-                                        "${formatSignedMoney(pnl)} (${formatSignedPct(pct)})",
+                                        "${formatSignedMoney(pnl, quoteAsset)} (${formatSignedPct(pct)})",
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = if (pnl >= 0) TvGreen else TvRed
@@ -275,18 +276,18 @@ fun SpotPositionCard(
         if (position.isHolding) {
             Spacer(Modifier.height(12.dp))
             Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                PositionValue("Modal Investasi", PriceFormatter.formatPrice(position.investedAmount), Modifier.weight(1f))
-                PositionValue("Harga Sekarang", PriceFormatter.formatPrice(currentPrice), Modifier.weight(1f))
+                PositionValue("Modal Investasi", PriceFormatter.formatPrice(position.investedAmount, quoteAsset = quoteAsset), Modifier.weight(1f))
+                PositionValue("Harga Sekarang", PriceFormatter.formatPrice(currentPrice, quoteAsset = quoteAsset), Modifier.weight(1f))
             }
             Spacer(Modifier.height(8.dp))
             Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                PositionValue("Harga Beli", PriceFormatter.formatPrice(position.entryPrice), Modifier.weight(1f))
-                PositionValue("Nilai Sekarang", PriceFormatter.formatPrice(currentValue), Modifier.weight(1f))
+                PositionValue("Harga Beli", PriceFormatter.formatPrice(position.entryPrice, quoteAsset = quoteAsset), Modifier.weight(1f))
+                PositionValue("Nilai Sekarang", PriceFormatter.formatPrice(currentValue, quoteAsset = quoteAsset), Modifier.weight(1f))
             }
             Spacer(Modifier.height(8.dp))
             Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 PositionValue("Jumlah $displaySymbol", formatPositionQuantity(position.quantity), Modifier.weight(1f))
-                PositionValue("P/L", "${formatSignedMoney(profitLoss)} (${formatSignedPct(profitPercent)})", Modifier.weight(1f), profitColor)
+                PositionValue("P/L", "${formatSignedMoney(profitLoss, quoteAsset)} (${formatSignedPct(profitPercent)})", Modifier.weight(1f), profitColor)
             }
             Spacer(Modifier.height(10.dp))
             Row(
@@ -344,8 +345,8 @@ private fun formatPositionQuantity(value: Double): String = when {
     else -> String.format("%.16f", value).trimEnd('0').trimEnd('.')
 }
 
-private fun formatSignedMoney(value: Double): String =
-    (if (value >= 0) "+" else "-") + PriceFormatter.formatPrice(abs(value))
+private fun formatSignedMoney(value: Double, quoteAsset: String = "IDR"): String =
+    (if (value >= 0) "+" else "-") + PriceFormatter.formatPrice(abs(value), quoteAsset = quoteAsset)
 
 private fun formatSignedPct(value: Double): String =
     (if (value >= 0) "+" else "-") + PriceFormatter.formatPercentage(abs(value), includePlusSign = false)

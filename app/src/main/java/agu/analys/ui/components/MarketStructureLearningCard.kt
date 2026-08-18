@@ -28,6 +28,7 @@ private val Warning = Color(0xFFFFC857)
 @Composable
 fun MarketStructureLearningCard(
     snapshot: MarketStructureSnapshot,
+    quoteAsset: String = "IDR",
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -49,15 +50,15 @@ fun MarketStructureLearningCard(
         Spacer(Modifier.height(12.dp))
 
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            LevelBox("Support", snapshot.support, snapshot.supportDistancePct, Modifier.weight(1f))
-            LevelBox("Resistance", snapshot.resistance, snapshot.resistanceDistancePct, Modifier.weight(1f))
+            LevelBox("Support", snapshot.support, snapshot.supportDistancePct, quoteAsset, Modifier.weight(1f))
+            LevelBox("Resistance", snapshot.resistance, snapshot.resistanceDistancePct, quoteAsset, Modifier.weight(1f))
         }
         Spacer(Modifier.height(10.dp))
         Text("Swing High terakhir", fontSize = 9.sp, color = Secondary)
-        Text(snapshot.lastSwingHigh?.let(PriceFormatter::formatPrice) ?: "Belum terbentuk", fontSize = 11.sp, color = Primary)
+        Text(snapshot.lastSwingHigh?.let { PriceFormatter.formatPrice(it, quoteAsset = quoteAsset) } ?: "Belum terbentuk", fontSize = 11.sp, color = Primary)
         Spacer(Modifier.height(5.dp))
         Text("Swing Low terakhir", fontSize = 9.sp, color = Secondary)
-        Text(snapshot.lastSwingLow?.let(PriceFormatter::formatPrice) ?: "Belum terbentuk", fontSize = 11.sp, color = Primary)
+        Text(snapshot.lastSwingLow?.let { PriceFormatter.formatPrice(it, quoteAsset = quoteAsset) } ?: "Belum terbentuk", fontSize = 11.sp, color = Primary)
         Spacer(Modifier.height(9.dp))
         Text(snapshot.structureExplanation, fontSize = 9.sp, color = Secondary, lineHeight = 14.sp)
         Spacer(Modifier.height(5.dp))
@@ -70,11 +71,12 @@ private fun LevelBox(
     label: String,
     value: Double?,
     distancePct: Double?,
+    quoteAsset: String,
     modifier: Modifier = Modifier
 ) {
     Column(modifier.background(Color(0x0DFFFFFF), RoundedCornerShape(10.dp)).padding(9.dp)) {
         Text(label, fontSize = 9.sp, color = Secondary)
-        Text(value?.let(PriceFormatter::formatPrice) ?: "Belum ada", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Primary)
+        Text(value?.let { PriceFormatter.formatPrice(it, quoteAsset = quoteAsset) } ?: "Belum ada", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Primary)
         Text(distancePct?.let { "${String.format(java.util.Locale.US, "%.2f", it)}% dari harga" } ?: "Tidak tersedia", fontSize = 8.sp, color = Secondary)
     }
 }

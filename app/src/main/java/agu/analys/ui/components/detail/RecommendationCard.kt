@@ -47,6 +47,8 @@ import agu.analys.util.PriceFormatter
 fun RecommendationCard(
     signal: AISignalState,
     scalping: Boolean,
+    quoteAsset: String = "IDR",
+    marketDataSource: agu.analys.config.MarketDataSource = agu.analys.config.MarketDataSource.INDODAX,
     onOpenIndodax: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
@@ -98,10 +100,10 @@ fun RecommendationCard(
 
             if (buyReady) {
                 Spacer(Modifier.height(12.dp))
-                LevelRow("Entry Area", PriceFormatter.formatPrice(signal.entryPrice), context, signal.entryPrice, "Entry Area")
-                LevelRow("Stop Loss (SL)", PriceFormatter.formatPrice(signal.stopLoss), context, signal.stopLoss, "Stop Loss")
-                LevelRow("Take Profit 1 (TP1)", PriceFormatter.formatPrice(signal.targetPrice1), context, signal.targetPrice1, "Take Profit 1")
-                LevelRow("Take Profit 2 (TP2)", PriceFormatter.formatPrice(signal.targetPrice2), context, signal.targetPrice2, "Take Profit 2")
+                LevelRow("Entry Area", PriceFormatter.formatPrice(signal.entryPrice, quoteAsset = quoteAsset), context, signal.entryPrice, quoteAsset, "Entry Area")
+                LevelRow("Stop Loss (SL)", PriceFormatter.formatPrice(signal.stopLoss, quoteAsset = quoteAsset), context, signal.stopLoss, quoteAsset, "Stop Loss")
+                LevelRow("Take Profit 1 (TP1)", PriceFormatter.formatPrice(signal.targetPrice1, quoteAsset = quoteAsset), context, signal.targetPrice1, quoteAsset, "Take Profit 1")
+                LevelRow("Take Profit 2 (TP2)", PriceFormatter.formatPrice(signal.targetPrice2, quoteAsset = quoteAsset), context, signal.targetPrice2, quoteAsset, "Take Profit 2")
                 
                 Spacer(Modifier.height(10.dp))
                 DividerSoft()
@@ -121,7 +123,8 @@ fun RecommendationCard(
 
                 Spacer(Modifier.height(12.dp))
 
-                // Tombol Buka Indodax Langsung dari Card Rekomendasi
+                // Tombol Buka Exchange Langsung dari Card Rekomendasi
+                val appLabel = if (marketDataSource == agu.analys.config.MarketDataSource.TOKOCRYPTO) "Tokocrypto" else "Indodax"
                 Button(
                     onClick = {
                         if (onOpenIndodax != null) onOpenIndodax()
@@ -129,18 +132,21 @@ fun RecommendationCard(
                     },
                     modifier = Modifier.fillMaxWidth().height(42.dp),
                     shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF087FF5))
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (marketDataSource == agu.analys.config.MarketDataSource.TOKOCRYPTO) Color(0xFF00C087) else Color(0xFF087FF5)
+                    )
                 ) {
                     Icon(Icons.AutoMirrored.Filled.OpenInNew, null, tint = Color.White, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text("Buka App Indodax untuk Beli", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Text("Buka App $appLabel untuk Beli", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 }
             }
         }
 
         Spacer(Modifier.height(10.dp))
+        val exchangeName = if (marketDataSource == agu.analys.config.MarketDataSource.TOKOCRYPTO) "Tokocrypto" else "Indodax"
         Text(
-            "Skor keyakinan: ${signal.confidence}/100 · Selalu pasang stop loss sebelum mengeksekusi di Indodax.",
+            "Skor keyakinan: ${signal.confidence}/100 · Selalu pasang stop loss sebelum mengeksekusi di $exchangeName.",
             fontSize = 11.sp,
             color = TvTextSecondary,
             lineHeight = 15.sp
@@ -154,12 +160,13 @@ private fun LevelRow(
     display: String,
     context: Context,
     price: Double,
+    quoteAsset: String,
     toastLabel: String
 ) {
     Row(
         Modifier
             .fillMaxWidth()
-            .clickable { copyValue(context, price, toastLabel) }
+            .clickable { copyValue(context, price, quoteAsset, toastLabel) }
             .padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -195,11 +202,12 @@ private fun DividerSoft() {
     Box(Modifier.fillMaxWidth().height(1.dp).background(Color(0x22FFFFFF)))
 }
 
-private fun copyValue(context: Context, price: Double, label: String) {
+private fun copyValue(context: Context, price: Double, quoteAsset: String, label: String) {
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    val rawValue = if (price >= 1.0) price.toLong().toString() else price.toString()
+    val rawValue = if (quoteAsset.equals("IDR", true) && price >= 1.0) price.toLong().toString() else price.toString()
     clipboard.setPrimaryClip(ClipData.newPlainText(label, rawValue))
-    Toast.makeText(context, "Disalin: $label (Rp $rawValue)", Toast.LENGTH_SHORT).show()
+    val formatted = PriceFormatter.formatPrice(price, quoteAsset = quoteAsset)
+    Toast.makeText(context, "Disalin: $label ($formatted)", Toast.LENGTH_SHORT).show()
 }
 
 private fun launchIndodaxApp(context: Context) {

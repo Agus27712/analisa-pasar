@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import agu.analys.BuildConfig
 import agu.analys.config.AiProvider
+import agu.analys.config.MarketDataSource
 import agu.analys.config.ScalpingSensitivity
 import agu.analys.util.MarketDataCache
 import agu.analys.ui.theme.TvBackground
@@ -37,6 +38,8 @@ import agu.analys.viewmodel.TradingViewModel
 fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val prefs = remember { AppPreferences(context) }
+    val currentMarketSource by viewModel.marketDataSource.collectAsState()
+    var selectedSource by remember(currentMarketSource) { mutableStateOf(currentMarketSource) }
     var scalping by remember { mutableStateOf(prefs.isScalpingMode) }
     var sensitivity by remember { mutableStateOf(prefs.scalpingSensitivity) }
     var provider by remember { mutableStateOf(prefs.aiProvider) }
@@ -85,6 +88,69 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
         }
 
         Spacer(Modifier.height(14.dp))
+
+        // SECTION: SUMBER DATA PASAR (EXCHANGE SOURCE)
+        SectionHeader("SUMBER PASAR (EXCHANGE)")
+        Text(
+            "Pilih bursa kripto sumber data harga, orderbook, candlestick & sinyal analisis.",
+            color = TvTextSecondary,
+            fontSize = 11.sp
+        )
+        Spacer(Modifier.height(8.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Card Tokocrypto
+            ExchangeSourceCard(
+                name = "TOKOCRYPTO",
+                subtitle = "Binance Cloud API",
+                quoteAsset = "USDT / BIDR",
+                isSelected = selectedSource == MarketDataSource.TOKOCRYPTO,
+                accentColor = Color(0xFF00C087),
+                modifier = Modifier.weight(1f)
+            ) {
+                selectedSource = MarketDataSource.TOKOCRYPTO
+                val defaultFees = MarketDataSource.TOKOCRYPTO.defaultFeeConfig
+                buyMakerFee = defaultFees.buyMakerPct.toString()
+                buyTakerFee = defaultFees.buyTakerPct.toString()
+                sellMakerFee = defaultFees.sellMakerPct.toString()
+                sellTakerFee = defaultFees.sellTakerPct.toString()
+                saved = false
+            }
+
+            // Card Indodax
+            ExchangeSourceCard(
+                name = "INDODAX",
+                subtitle = "Indodax Public API",
+                quoteAsset = "IDR",
+                isSelected = selectedSource == MarketDataSource.INDODAX,
+                accentColor = Color(0xFF2196F3),
+                modifier = Modifier.weight(1f)
+            ) {
+                selectedSource = MarketDataSource.INDODAX
+                val defaultFees = MarketDataSource.INDODAX.defaultFeeConfig
+                buyMakerFee = defaultFees.buyMakerPct.toString()
+                buyTakerFee = defaultFees.buyTakerPct.toString()
+                sellMakerFee = defaultFees.sellMakerPct.toString()
+                sellTakerFee = defaultFees.sellTakerPct.toString()
+                saved = false
+            }
+        }
+
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = if (selectedSource == MarketDataSource.TOKOCRYPTO)
+                "✓ Data live dari Tokocrypto/Binance (Real API endpoint & WebSocket wss://stream.binance.com). Tidak ada mock data."
+            else
+                "✓ Data live dari Indodax (Real API endpoint indodax.com & WebSocket kline). Tidak ada mock data.",
+            color = TvGreen,
+            fontSize = 10.sp,
+            lineHeight = 14.sp
+        )
+
+        Spacer(Modifier.height(16.dp))
 
         // SECTION: MODE PEMBELAJARAN (READING MODE)
         Card(
@@ -228,65 +294,20 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
 
         // SECTION 2: INTEGRASI AI ASSISTANT
         SectionHeader("INTEGRASI AI ASSISTANT")
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(10.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF101720)),
-            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E2836))
-        ) {
-            Column(Modifier.padding(14.dp)) {
-                Text("Pilih Model AI", color = TvTextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(6.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SensitivityChoice(
-                        label = "GROQ (LLaMA 3.3)",
-                        selected = provider == AiProvider.GROQ,
-                        activeBg = Color(0xFF122840),
-                        activeFg = Color(0xFF72B7FF),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        provider = AiProvider.GROQ
-                        saved = false
-                    }
-                    SensitivityChoice(
-                        label = "GEMINI 2.5",
-                        selected = provider == AiProvider.GEMINI,
-                        activeBg = Color(0xFF123D2A),
-                        activeFg = TvGreen,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        provider = AiProvider.GEMINI
-                        saved = false
-                    }
-                }
-
-                Spacer(Modifier.height(10.dp))
-                Text("API Key ${provider.name}", color = TvTextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(4.dp))
-                OutlinedTextField(
-                    value = if (provider == AiProvider.GROQ) groq else gemini,
-                    onValueChange = {
-                        if (provider == AiProvider.GROQ) groq = it else gemini = it
-                        saved = false
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    placeholder = { Text("Masukkan API Key opsional...", color = TvTextSecondary, fontSize = 12.sp) },
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = TvGreen,
-                        unfocusedBorderColor = Color(0xFF2A3540),
-                        focusedTextColor = TvTextPrimary,
-                        unfocusedTextColor = TvTextPrimary
-                    )
-                )
-                Spacer(Modifier.height(4.dp))
-                Text("Kunci disimpan aman secara lokal di perangkat Anda.", color = TvTextSecondary, fontSize = 10.sp)
+        AiProviderSettingsCard(
+            provider = provider,
+            groqKey = groq,
+            geminiKey = gemini,
+            onProviderChange = { provider = it; saved = false },
+            onKeyChange = {
+                if (provider == AiProvider.GROQ) groq = it else gemini = it
+                saved = false
             }
-        }
+        )
 
         Spacer(Modifier.height(16.dp))
 
-        // SECTION 3: PENGATURAN BIAYA TRADING (FEE INDODAX)
+        // SECTION 3: PENGATURAN BIAYA TRADING (FEE EXCHANGE)
         SectionHeader("BIAYA TRADING (NET R:R & RADAR STATUS)")
         Card(
             modifier = Modifier.fillMaxWidth(),
@@ -374,130 +395,26 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
 
         // SECTION 4: PEMELIHARAAN & PEMBARUAN APLIKASI
         SectionHeader("PEMELIHARAAN & UPDATE")
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(10.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF101720)),
-            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E2836))
-        ) {
-            Column(Modifier.padding(14.dp)) {
-                // Bersihkan Cache
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable {
-                            MarketDataCache(context).clearAll()
-                            cacheCleared = true
-                            Toast.makeText(context, "Cache offline pasar berhasil dibersihkan", Toast.LENGTH_SHORT).show()
-                        }
-                        .padding(vertical = 6.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text("Bersihkan Cache Data Pasar", color = TvTextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                        Text("Hapus data candle dan tick tersimpan lokal", color = TvTextSecondary, fontSize = 10.sp)
-                    }
-                    Text(
-                        if (cacheCleared) "0,00 MB (Bersih)" else "Bersihkan >",
-                        color = if (cacheCleared) TvGreen else Color(0xFF72B7FF),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-
-                Spacer(Modifier.height(10.dp))
-                Divider(color = Color(0xFF1E2836), thickness = 0.5.dp)
-                Spacer(Modifier.height(10.dp))
-
-                // Pembaruan Aplikasi (GitHub Updater)
-                Text(
-                    "Pembaruan Aplikasi",
-                    color = TvTextPrimary,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    "Versi terpasang: v${BuildConfig.VERSION_NAME}",
-                    color = TvTextSecondary,
-                    fontSize = 11.sp
-                )
-
-                if (updateStatus != null) {
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        updateStatus!!,
-                        color = if (releaseInfo != null) TvGreen else Color(0xFFFFB300),
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-
-                Spacer(Modifier.height(10.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Button(
-                        onClick = { viewModel.checkGitHubUpdate(context) },
-                        enabled = !checkingUpdate,
-                        modifier = Modifier.weight(1f).height(42.dp),
-                        shape = RoundedCornerShape(8.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E2836))
-                    ) {
-                        if (checkingUpdate) {
-                            CircularProgressIndicator(modifier = Modifier.size(16.dp), color = TvGreen, strokeWidth = 2.dp)
-                            Spacer(Modifier.width(6.dp))
-                        } else {
-                            Icon(Icons.Default.SystemUpdate, null, modifier = Modifier.size(16.dp), tint = TvGreen)
-                            Spacer(Modifier.width(6.dp))
-                        }
-                        Text(
-                            if (checkingUpdate) "Memeriksa..." else "Cek Update",
-                            color = TvTextPrimary,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp
-                        )
-                    }
-
-                    if (releaseInfo != null) {
-                        Button(
-                            onClick = { viewModel.downloadAndInstallUpdate(context) },
-                            modifier = Modifier.weight(1.2f).height(42.dp),
-                            shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = TvGreen)
-                        ) {
-                            Text(
-                                if (downloadProgress == null) "Unduh & Install"
-                                else if (downloadProgress == 100) "Membuka APK..."
-                                else "Unduh ($downloadProgress%)",
-                                color = Color.Black,
-                                fontWeight = FontWeight.Black,
-                                fontSize = 12.sp
-                            )
-                        }
-                    } else {
-                        OutlinedButton(
-                            onClick = { GitHubUpdater.openGitHubReleasesPage(context, GitHubUpdater.DEFAULT_REPO) },
-                            modifier = Modifier.weight(1f).height(42.dp),
-                            shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF72B7FF)),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E2836))
-                        ) {
-                            Text("Buka GitHub", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-            }
-        }
+        AppMaintenanceCard(
+            context = context,
+            cacheCleared = cacheCleared,
+            onClearCache = { cacheCleared = true },
+            releaseInfo = releaseInfo,
+            checkingUpdate = checkingUpdate,
+            updateStatus = updateStatus,
+            downloadProgress = downloadProgress,
+            onCheckUpdate = { viewModel.checkGitHubUpdate(context) },
+            onDownloadAndInstall = { viewModel.downloadAndInstallUpdate(context) }
+        )
 
         Spacer(Modifier.height(18.dp))
 
         // Action Buttons: Simpan Perubahan & Batal
         Button(
             onClick = {
+                if (selectedSource != prefs.marketDataSource) {
+                    viewModel.setMarketDataSource(selectedSource)
+                }
                 prefs.isScalpingMode = scalping
                 prefs.scalpingSensitivity = sensitivity
                 prefs.aiProvider = provider
@@ -548,106 +465,59 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
 }
 
 @Composable
-private fun SectionHeader(title: String) {
-    Text(
-        text = title,
-        color = Color(0xFF72B7FF),
-        fontSize = 11.sp,
-        fontWeight = FontWeight.Black,
-        letterSpacing = 0.6.sp,
-        modifier = Modifier.padding(bottom = 6.dp)
-    )
-}
-
-@Composable
-private fun ModeOptionCard(
-    title: String,
-    tag: String,
-    tagBg: Color,
-    tagFg: Color,
+private fun ExchangeSourceCard(
+    name: String,
+    subtitle: String,
+    quoteAsset: String,
     isSelected: Boolean,
-    desc: String,
-    bullets: List<String>,
+    accentColor: Color,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() },
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF101720)),
+        modifier = modifier.clickable { onClick() },
+        shape = RoundedCornerShape(10.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isSelected) accentColor.copy(alpha = 0.15f) else Color(0xFF101720)
+        ),
         border = androidx.compose.foundation.BorderStroke(
-            if (isSelected) 1.5.dp else 1.dp,
-            if (isSelected) tagFg else Color(0xFF1E2836)
+            width = if (isSelected) 1.5.dp else 1.dp,
+            color = if (isSelected) accentColor else Color(0xFF1E2836)
         )
     ) {
-        Column(Modifier.padding(14.dp)) {
+        Column(Modifier.padding(12.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(title, color = TvTextPrimary, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
-                    Spacer(Modifier.width(8.dp))
+                Text(
+                    text = name,
+                    color = if (isSelected) accentColor else TvTextPrimary,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Black
+                )
+                if (isSelected) {
                     Box(
                         modifier = Modifier
-                            .background(tagBg, RoundedCornerShape(5.dp))
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
-                        Text(tag, color = tagFg, fontSize = 10.sp, fontWeight = FontWeight.Black)
-                    }
-                }
-
-                // Radio Circle
-                Box(
-                    modifier = Modifier
-                        .size(20.dp)
-                        .background(
-                            if (isSelected) tagFg else Color.Transparent,
-                            CircleShape
-                        )
-                        .border(1.5.dp, if (isSelected) tagFg else Color(0xFF455A64), CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (isSelected) {
-                        Box(Modifier.size(8.dp).background(Color.Black, CircleShape))
-                    }
+                            .size(10.dp)
+                            .background(accentColor, CircleShape)
+                    )
                 }
             }
-
-            Spacer(Modifier.height(6.dp))
-            Text(desc, color = TvTextSecondary, fontSize = 12.sp, lineHeight = 16.sp)
-
-            Spacer(Modifier.height(8.dp))
-            bullets.forEach { bullet ->
-                Row(modifier = Modifier.padding(vertical = 1.dp)) {
-                    Text("•", color = tagFg, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.width(6.dp))
-                    Text(bullet, color = TvTextPrimary, fontSize = 11.sp)
-                }
-            }
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = subtitle,
+                color = TvTextSecondary,
+                fontSize = 10.sp
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = "Quote: $quoteAsset",
+                color = if (isSelected) Color.White else TvTextSecondary,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold
+            )
         }
-    }
-}
-
-@Composable
-private fun SensitivityChoice(
-    label: String,
-    selected: Boolean,
-    activeBg: Color,
-    activeFg: Color,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    Box(
-        modifier = modifier
-            .background(if (selected) activeBg else Color(0xFF1E2836), RoundedCornerShape(8.dp))
-            .border(1.dp, if (selected) activeFg else Color(0xFF2A3540), RoundedCornerShape(8.dp))
-            .clickable { onClick() }
-            .padding(vertical = 8.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(label, color = if (selected) activeFg else TvTextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
     }
 }

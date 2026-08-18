@@ -7,45 +7,74 @@ import kotlin.math.abs
 
 object PriceFormatter {
 
-    /** Format harga Rupiah lengkap: Rp 1.542.728.000 */
-    fun formatPrice(price: Double, showSymbol: Boolean = true): String {
+    /** Format harga dengan simbol mata uang dinamis (IDR / USDT / BIDR / USD) */
+    fun formatPrice(price: Double, showSymbol: Boolean = true, quoteAsset: String = "IDR"): String {
         if (price.isNaN() || price.isInfinite() || price <= 0) {
-            return if (showSymbol) "Rp 0" else "0"
+            val isUsdt = quoteAsset.equals("USDT", true) || quoteAsset.equals("USD", true)
+            return if (!showSymbol) "0" else if (isUsdt) "$0.00" else "Rp 0"
         }
-        val prefix = if (showSymbol) "Rp " else ""
-        val rounded = kotlin.math.round(price).toLong()
-        val symbols = DecimalFormatSymbols(Locale("id", "ID")).apply {
-            groupingSeparator = '.'
-            decimalSeparator = ','
-        }
-        // Harga kecil (meme) boleh desimal
-        return if (price < 1.0) {
-            prefix + DecimalFormat("0.########", symbols).format(price)
+        val isUsdt = quoteAsset.equals("USDT", true) || quoteAsset.equals("USD", true)
+        if (isUsdt) {
+            val prefix = if (showSymbol) "$" else ""
+            val symbols = DecimalFormatSymbols(Locale.US)
+            return when {
+                price < 0.0001 -> prefix + DecimalFormat("0.########", symbols).format(price)
+                price < 1.0 -> prefix + DecimalFormat("0.######", symbols).format(price)
+                price < 10.0 -> prefix + DecimalFormat("0.####", symbols).format(price)
+                else -> prefix + DecimalFormat("#,##0.00", symbols).format(price)
+            }
         } else {
-            prefix + DecimalFormat("#,##0", symbols).format(rounded)
+            val prefix = if (showSymbol) "Rp " else ""
+            val rounded = kotlin.math.round(price).toLong()
+            val symbols = DecimalFormatSymbols(Locale("id", "ID")).apply {
+                groupingSeparator = '.'
+                decimalSeparator = ','
+            }
+            return if (price < 1.0) {
+                prefix + DecimalFormat("0.########", symbols).format(price)
+            } else {
+                prefix + DecimalFormat("#,##0", symbols).format(rounded)
+            }
         }
     }
 
-    /** Alias — selalu full IDR (bukan compact) untuk level AI */
-    fun formatPriceFull(price: Double): String = formatPrice(price, showSymbol = true)
+    /** Alias — selalu full price untuk level AI */
+    fun formatPriceFull(price: Double, quoteAsset: String = "IDR"): String =
+        formatPrice(price, showSymbol = true, quoteAsset = quoteAsset)
 
-    fun formatVolume(volume: Double): String {
-        if (volume.isNaN() || volume.isInfinite() || volume == 0.0) return "Rp 0"
-        val absVol = abs(volume)
-        val symbols = DecimalFormatSymbols(Locale("id", "ID")).apply {
-            groupingSeparator = '.'
-            decimalSeparator = ','
+    fun formatVolume(volume: Double, quoteAsset: String = "IDR"): String {
+        if (volume.isNaN() || volume.isInfinite() || volume == 0.0) {
+            return if (quoteAsset.equals("USDT", true) || quoteAsset.equals("USD", true)) "$0" else "Rp 0"
         }
-        return when {
-            absVol >= 1_000_000_000_000.0 ->
-                "Rp " + DecimalFormat("#.##", symbols).format(volume / 1_000_000_000_000.0) + " T"
-            absVol >= 1_000_000_000.0 ->
-                "Rp " + DecimalFormat("#.##", symbols).format(volume / 1_000_000_000.0) + " M"
-            absVol >= 1_000_000.0 ->
-                "Rp " + DecimalFormat("#.##", symbols).format(volume / 1_000_000.0) + " jt"
-            absVol >= 1_000.0 ->
-                "Rp " + DecimalFormat("#.##", symbols).format(volume / 1_000.0) + " rb"
-            else -> formatPrice(volume)
+        val absVol = abs(volume)
+        val isUsdt = quoteAsset.equals("USDT", true) || quoteAsset.equals("USD", true)
+        if (isUsdt) {
+            val symbols = DecimalFormatSymbols(Locale.US)
+            return when {
+                absVol >= 1_000_000_000.0 ->
+                    "$" + DecimalFormat("#.##", symbols).format(volume / 1_000_000_000.0) + " B"
+                absVol >= 1_000_000.0 ->
+                    "$" + DecimalFormat("#.##", symbols).format(volume / 1_000_000.0) + " M"
+                absVol >= 1_000.0 ->
+                    "$" + DecimalFormat("#.##", symbols).format(volume / 1_000.0) + " K"
+                else -> "$" + DecimalFormat("#.##", symbols).format(volume)
+            }
+        } else {
+            val symbols = DecimalFormatSymbols(Locale("id", "ID")).apply {
+                groupingSeparator = '.'
+                decimalSeparator = ','
+            }
+            return when {
+                absVol >= 1_000_000_000_000.0 ->
+                    "Rp " + DecimalFormat("#.##", symbols).format(volume / 1_000_000_000_000.0) + " T"
+                absVol >= 1_000_000_000.0 ->
+                    "Rp " + DecimalFormat("#.##", symbols).format(volume / 1_000_000.0) + " M"
+                absVol >= 1_000_000.0 ->
+                    "Rp " + DecimalFormat("#.##", symbols).format(volume / 1_000_000.0) + " jt"
+                absVol >= 1_000.0 ->
+                    "Rp " + DecimalFormat("#.##", symbols).format(volume / 1_000.0) + " rb"
+                else -> formatPrice(volume, showSymbol = true, quoteAsset = quoteAsset)
+            }
         }
     }
 

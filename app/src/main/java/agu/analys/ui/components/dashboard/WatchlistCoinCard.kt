@@ -37,11 +37,11 @@ import agu.analys.ui.theme.TvTextSecondary
 import agu.analys.util.PriceFormatter
 
 /**
- * Watchlist Card sesuai Mockup:
+ * Watchlist Card multi-exchange (Indodax / Tokocrypto):
  * - Nomor urut [01]
- * - Symbol & Nama Koin (BTC/IDR · Bitcoin)
+ * - Symbol & Nama Koin (BTC/USDT atau BTC/IDR)
  * - Star favorite icon
- * - Harga & 24h %
+ * - Harga & 24h % (Format dinamis USD / IDR)
  * - Badge Aktivitas (Tinggi, Sedang, Rendah)
  * - Meter Volume & Momentum 10-segmen
  * - Tombol Buka Chart > dengan toggle show/hide chart inline
@@ -62,6 +62,8 @@ fun WatchlistCoinCard(
     var isInlineChartExpanded by remember { mutableStateOf(false) }
     val change = tick?.change24h ?: Double.NaN
     val volume = tick?.volume24h ?: 0.0
+    val isUsdt = pair.quoteAsset.equals("USDT", true) || pair.quoteAsset.equals("USD", true)
+
     val changeColor = when {
         change > 0 -> TvGreen
         change < 0 -> TvRed
@@ -69,14 +71,26 @@ fun WatchlistCoinCard(
     }
 
     // Skor Volume & Momentum untuk 10-segment meter
-    val volumeScore = when {
-        volume >= 100_000_000_000 -> 9
-        volume >= 50_000_000_000 -> 8
-        volume >= 10_000_000_000 -> 7
-        volume >= 1_000_000_000 -> 6
-        volume >= 200_000_000 -> 5
-        volume > 0 -> 4
-        else -> 2
+    val volumeScore = if (isUsdt) {
+        when {
+            volume >= 100_000_000.0 -> 9
+            volume >= 20_000_000.0 -> 8
+            volume >= 5_000_000.0 -> 7
+            volume >= 1_000_000.0 -> 6
+            volume >= 200_000.0 -> 5
+            volume > 0 -> 4
+            else -> 2
+        }
+    } else {
+        when {
+            volume >= 100_000_000_000 -> 9
+            volume >= 50_000_000_000 -> 8
+            volume >= 10_000_000_000 -> 7
+            volume >= 1_000_000_000 -> 6
+            volume >= 200_000_000 -> 5
+            volume > 0 -> 4
+            else -> 2
+        }
     }
 
     val momentumScore = when {
@@ -163,7 +177,13 @@ fun WatchlistCoinCard(
                 // Price & Percentage
                 Column(horizontalAlignment = Alignment.End) {
                     if (tick != null && tick.price > 0) {
-                        SmoothPriceText(tick.price, TvTextPrimary, 15.sp, FontWeight.ExtraBold)
+                        SmoothPriceText(
+                            price = tick.price,
+                            color = TvTextPrimary,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            quoteAsset = pair.quoteAsset
+                        )
                     } else {
                         Text("—", color = TvTextSecondary, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                     }
