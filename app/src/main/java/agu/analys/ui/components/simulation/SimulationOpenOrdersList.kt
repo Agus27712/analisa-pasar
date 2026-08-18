@@ -6,8 +6,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.ReceiptLong
@@ -39,7 +37,7 @@ fun SimulationOpenOrdersList(
     onCancelAllOrders: (String?) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var selectedTab by remember { mutableStateOf(0) } // 0 = Open Orders, 1 = Riwayat
+    var selectedTab by remember { mutableStateOf(0) }
     var showAllCoins by remember { mutableStateOf(false) }
 
     val filteredOpenOrders = remember(openOrders, showAllCoins, currentSymbol) {
@@ -55,7 +53,6 @@ fun SimulationOpenOrdersList(
             .fillMaxWidth()
             .padding(top = 12.dp)
     ) {
-        // Tabs Header: Open Orders (i) | Riwayat
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -65,7 +62,6 @@ fun SimulationOpenOrdersList(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Tab Open Orders
                 Row(
                     modifier = Modifier.clickable { selectedTab = 0 },
                     verticalAlignment = Alignment.CenterVertically
@@ -80,7 +76,7 @@ fun SimulationOpenOrdersList(
                     Icon(
                         imageVector = Icons.Default.Info,
                         contentDescription = "Info",
-                        tint = if (selectedTab == 0) TvTextSecondary else TvTextSecondary.copy(alpha = 0.5f),
+                        tint = TvTextSecondary,
                         modifier = Modifier.size(14.dp)
                     )
                     if (openOrders.isNotEmpty()) {
@@ -101,7 +97,6 @@ fun SimulationOpenOrdersList(
                     }
                 }
 
-                // Tab Riwayat
                 Row(
                     modifier = Modifier.clickable { selectedTab = 1 },
                     verticalAlignment = Alignment.CenterVertically
@@ -122,7 +117,6 @@ fun SimulationOpenOrdersList(
                 }
             }
 
-            // Batalkan Semua Button (Khusus Open Orders jika ada order)
             if (selectedTab == 0 && filteredOpenOrders.isNotEmpty()) {
                 Box(
                     modifier = Modifier
@@ -143,7 +137,6 @@ fun SimulationOpenOrdersList(
 
         Spacer(Modifier.height(8.dp))
 
-        // Filter Row: Checkbox "Tampilkan semua"
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
@@ -169,9 +162,7 @@ fun SimulationOpenOrdersList(
 
         Spacer(Modifier.height(10.dp))
 
-        // Content
         if (selectedTab == 0) {
-            // OPEN ORDERS
             if (filteredOpenOrders.isEmpty()) {
                 EmptyStateView(
                     icon = Icons.Default.ReceiptLong,
@@ -191,7 +182,6 @@ fun SimulationOpenOrdersList(
                 }
             }
         } else {
-            // RIWAYAT TRANSAKSI
             if (filteredHistory.isEmpty()) {
                 EmptyStateView(
                     icon = Icons.Default.History,
@@ -217,6 +207,7 @@ private fun OpenOrderItemCard(
     onCancel: () -> Unit
 ) {
     val isBuy = order.side == SimulationOrderSide.BUY
+    val quote = order.quoteAsset.ifBlank { "IDR" }
     val timeFormat = remember { SimpleDateFormat("dd/MM/yy HH:mm", Locale.getDefault()) }
 
     Card(
@@ -225,7 +216,6 @@ private fun OpenOrderItemCard(
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
-            // Top Bar Card
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -247,7 +237,7 @@ private fun OpenOrderItemCard(
                     }
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        text = "${order.baseAsset}/${order.quoteAsset}",
+                        text = "${order.baseAsset}/${quote}",
                         color = Color.White,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold
@@ -278,7 +268,6 @@ private fun OpenOrderItemCard(
 
             Spacer(Modifier.height(8.dp))
 
-            // Details
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -286,14 +275,14 @@ private fun OpenOrderItemCard(
                 Column {
                     Text(text = "Harga Order", color = TvTextSecondary, fontSize = 10.sp)
                     Text(
-                        text = "Rp ${PriceFormatter.formatPrice(order.limitPrice)}",
+                        text = PriceFormatter.formatPrice(order.limitPrice, quoteAsset = quote),
                         color = Color.White,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold
                     )
                     if (order.type == SimulationOrderType.STOP_LIMIT) {
                         Text(
-                            text = "Stop: Rp ${PriceFormatter.formatPrice(order.stopPrice)}",
+                            text = "Stop: ${PriceFormatter.formatPrice(order.stopPrice, quoteAsset = quote)}",
                             color = TvOrange,
                             fontSize = 10.sp
                         )
@@ -311,9 +300,9 @@ private fun OpenOrderItemCard(
                 }
 
                 Column(horizontalAlignment = Alignment.End) {
-                    Text(text = "Total (IDR)", color = TvTextSecondary, fontSize = 10.sp)
+                    Text(text = "Total ($quote)", color = TvTextSecondary, fontSize = 10.sp)
                     Text(
-                        text = "Rp ${PriceFormatter.formatPrice(order.totalIdr)}",
+                        text = PriceFormatter.formatPrice(order.totalIdr, quoteAsset = quote),
                         color = Color.White,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold
@@ -347,6 +336,7 @@ private fun OpenOrderItemCard(
 @Composable
 private fun TradeHistoryItemCard(history: SimulationTradeHistoryItem) {
     val isBuy = history.side == SimulationOrderSide.BUY
+    val quote = history.quoteAsset.ifBlank { "IDR" }
     val timeFormat = remember { SimpleDateFormat("dd/MM/yy HH:mm:ss", Locale.getDefault()) }
 
     Card(
@@ -376,7 +366,7 @@ private fun TradeHistoryItemCard(history: SimulationTradeHistoryItem) {
                     }
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        text = "${history.baseAsset}/${history.quoteAsset}",
+                        text = "${history.baseAsset}/${quote}",
                         color = Color.White,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold
@@ -392,7 +382,7 @@ private fun TradeHistoryItemCard(history: SimulationTradeHistoryItem) {
                 if (history.pnlIdr != null && history.pnlPercent != null) {
                     val isProfit = history.pnlIdr >= 0
                     Text(
-                        text = "${if (isProfit) "+" else ""}Rp ${PriceFormatter.formatPrice(history.pnlIdr)} (${String.format("%.2f", history.pnlPercent)}%)",
+                        text = "${if (isProfit) "+" else ""}${PriceFormatter.formatPrice(kotlin.math.abs(history.pnlIdr), quoteAsset = quote)} (${String.format("%.2f", history.pnlPercent)}%)",
                         color = if (isProfit) TvGreen else TvRed,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold
@@ -409,7 +399,7 @@ private fun TradeHistoryItemCard(history: SimulationTradeHistoryItem) {
                 Column {
                     Text(text = "Harga Eksekusi", color = TvTextSecondary, fontSize = 10.sp)
                     Text(
-                        text = "Rp ${PriceFormatter.formatPrice(history.executionPrice)}",
+                        text = PriceFormatter.formatPrice(history.executionPrice, quoteAsset = quote),
                         color = Color.White,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold
@@ -429,7 +419,7 @@ private fun TradeHistoryItemCard(history: SimulationTradeHistoryItem) {
                 Column(horizontalAlignment = Alignment.End) {
                     Text(text = "Total Eksekusi", color = TvTextSecondary, fontSize = 10.sp)
                     Text(
-                        text = "Rp ${PriceFormatter.formatPrice(history.totalIdr)}",
+                        text = PriceFormatter.formatPrice(history.totalIdr, quoteAsset = quote),
                         color = Color.White,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold
@@ -449,7 +439,7 @@ private fun TradeHistoryItemCard(history: SimulationTradeHistoryItem) {
                     fontSize = 10.sp
                 )
                 Text(
-                    text = "Fee: Rp ${PriceFormatter.formatPrice(history.feeIdr)}",
+                    text = "Fee: ${PriceFormatter.formatPrice(history.feeIdr, quoteAsset = quote)}",
                     color = TvTextSecondary.copy(alpha = 0.7f),
                     fontSize = 10.sp
                 )

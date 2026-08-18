@@ -2,7 +2,6 @@ package agu.analys.trading
 
 import android.content.Context
 import org.json.JSONArray
-import org.json.JSONObject
 import java.util.UUID
 
 class SimulationTradeStore(context: Context) {
@@ -98,11 +97,6 @@ class SimulationTradeStore(context: Context) {
         prefs.edit().putString(KEY_TRADE_HISTORY, array.toString()).apply()
     }
 
-    /**
-     * Membuat Order Baru (Limit, Market, atau Stop-Limit).
-     * Jika MARKET ORDER: Seketika dieksekusi berdasarkan currentMarketPrice.
-     * Jika LIMIT / STOP-LIMIT: Saldo IDR/Koin dikunci (locked) dan masuk ke Open Orders.
-     */
     @Synchronized
     fun placeOrder(
         symbol: String,
@@ -118,6 +112,7 @@ class SimulationTradeStore(context: Context) {
         if (quantity <= 0.0) return SimulationOrderResult.Error("Jumlah koin harus lebih besar dari 0.")
         val wallet = getWallet()
         val baseKey = baseAsset.uppercase()
+        val quote = quoteAsset.ifBlank { "IDR" }
 
         when (type) {
             SimulationOrderType.MARKET -> {
@@ -130,10 +125,11 @@ class SimulationTradeStore(context: Context) {
                 if (side == SimulationOrderSide.BUY) {
                     val requiredIdr = totalIdr + feeIdr
                     if (wallet.getAvailableIdr() < requiredIdr) {
-                        return SimulationOrderResult.Error("Saldo IDR tidak cukup. Dibutuhkan Rp ${formatNumber(requiredIdr)}, Saldo Rp ${formatNumber(wallet.getAvailableIdr())}.")
+                        return SimulationOrderResult.Error(
+                            "Saldo $quote tidak cukup. Dibutuhkan ${formatMoney(requiredIdr, quote)}, saldo ${formatMoney(wallet.getAvailableIdr(), quote)}."
+                        )
                     }
 
-                    // Update wallet (Buy Market)
                     val newCoinBalances = wallet.coinBalances.toMutableMap()
                     val currentCoin = newCoinBalances[baseKey] ?: 0.0
                     val currentAvg = wallet.avgBuyPrices[baseKey] ?: 0.0
@@ -157,7 +153,7 @@ class SimulationTradeStore(context: Context) {
                         orderId = UUID.randomUUID().toString(),
                         symbol = symbol,
                         baseAsset = baseKey,
-                        quoteAsset = quoteAsset,
+                        quoteAsset = quote,
                         side = side,
                         type = type,
                         executionPrice = execPrice,
@@ -172,7 +168,7 @@ class SimulationTradeStore(context: Context) {
                         id = history.orderId,
                         symbol = symbol,
                         baseAsset = baseKey,
-                        quoteAsset = quoteAsset,
+                        quoteAsset = quote,
                         side = side,
                         type = type,
                         limitPrice = execPrice,
@@ -184,9 +180,8 @@ class SimulationTradeStore(context: Context) {
                         status = SimulationOrderStatus.FILLED,
                         filledAt = System.currentTimeMillis()
                     )
-                    return SimulationOrderResult.Success(order, "Market Buy berhasil dieksekusi di harga Rp ${formatNumber(execPrice)}!")
+                    return SimulationOrderResult.Success(order, "Market Buy berhasil @ ${formatMoney(execPrice, quote)}!")
                 } else {
-                    // SELL MARKET
                     if (wallet.getAvailableCoin(baseKey) < quantity) {
                         return SimulationOrderResult.Error("Saldo $baseKey tidak cukup. Tersedia: ${wallet.getAvailableCoin(baseKey)}")
                     }
@@ -216,7 +211,7 @@ class SimulationTradeStore(context: Context) {
                         orderId = UUID.randomUUID().toString(),
                         symbol = symbol,
                         baseAsset = baseKey,
-                        quoteAsset = quoteAsset,
+                        quoteAsset = quote,
                         side = side,
                         type = type,
                         executionPrice = execPrice,
@@ -233,7 +228,7 @@ class SimulationTradeStore(context: Context) {
                         id = history.orderId,
                         symbol = symbol,
                         baseAsset = baseKey,
-                        quoteAsset = quoteAsset,
+                        quoteAsset = quote,
                         side = side,
                         type = type,
                         limitPrice = execPrice,
@@ -245,7 +240,7 @@ class SimulationTradeStore(context: Context) {
                         status = SimulationOrderStatus.FILLED,
                         filledAt = System.currentTimeMillis()
                     )
-                    return SimulationOrderResult.Success(order, "Market Sell berhasil dieksekusi di harga Rp ${formatNumber(execPrice)}!")
+                    return SimulationOrderResult.Success(order, "Market Sell berhasil @ ${formatMoney(execPrice, quote)}!")
                 }
             }
 
@@ -258,10 +253,11 @@ class SimulationTradeStore(context: Context) {
                 if (side == SimulationOrderSide.BUY) {
                     val requiredIdr = totalIdr + feeIdr
                     if (wallet.getAvailableIdr() < requiredIdr) {
-                        return SimulationOrderResult.Error("Saldo IDR tidak cukup untuk memasang limit order. Tersedia: Rp ${formatNumber(wallet.getAvailableIdr())}")
+                        return SimulationOrderResult.Error(
+                            "Saldo $quote tidak cukup untuk limit order. Tersedia: ${formatMoney(wallet.getAvailableIdr(), quote)}"
+                        )
                     }
 
-                    // Kunci saldo IDR
                     val updatedWallet = wallet.copy(
                         lockedIdr = wallet.lockedIdr + requiredIdr
                     )
@@ -271,7 +267,7 @@ class SimulationTradeStore(context: Context) {
                         id = UUID.randomUUID().toString(),
                         symbol = symbol,
                         baseAsset = baseKey,
-                        quoteAsset = quoteAsset,
+                        quoteAsset = quote,
                         side = side,
                         type = type,
                         limitPrice = price,
@@ -287,17 +283,14 @@ class SimulationTradeStore(context: Context) {
                     openList.add(order)
                     saveOpenOrders(openList)
 
-                    // Cek langsung apakah limit langsung match dengan market price saat ini
                     processPriceTick(symbol, currentMarketPrice, currentMarketPrice, currentMarketPrice)
 
-                    return SimulationOrderResult.Success(order, "Order ${type.displayName} Beli berhasil dipasang pada Rp ${formatNumber(price)}.")
+                    return SimulationOrderResult.Success(order, "Order ${type.displayName} Beli dipasang @ ${formatMoney(price, quote)}.")
                 } else {
-                    // SELL LIMIT / STOP LIMIT
                     if (wallet.getAvailableCoin(baseKey) < quantity) {
                         return SimulationOrderResult.Error("Saldo koin $baseKey tidak cukup. Tersedia: ${wallet.getAvailableCoin(baseKey)}")
                     }
 
-                    // Kunci koin
                     val lockedMap = wallet.lockedCoinBalances.toMutableMap()
                     lockedMap[baseKey] = (lockedMap[baseKey] ?: 0.0) + quantity
                     val updatedWallet = wallet.copy(lockedCoinBalances = lockedMap)
@@ -307,7 +300,7 @@ class SimulationTradeStore(context: Context) {
                         id = UUID.randomUUID().toString(),
                         symbol = symbol,
                         baseAsset = baseKey,
-                        quoteAsset = quoteAsset,
+                        quoteAsset = quote,
                         side = side,
                         type = type,
                         limitPrice = price,
@@ -323,10 +316,9 @@ class SimulationTradeStore(context: Context) {
                     openList.add(order)
                     saveOpenOrders(openList)
 
-                    // Cek langsung jika match
                     processPriceTick(symbol, currentMarketPrice, currentMarketPrice, currentMarketPrice)
 
-                    return SimulationOrderResult.Success(order, "Order ${type.displayName} Jual berhasil dipasang pada Rp ${formatNumber(price)}.")
+                    return SimulationOrderResult.Success(order, "Order ${type.displayName} Jual dipasang @ ${formatMoney(price, quote)}.")
                 }
             }
         }
@@ -339,7 +331,6 @@ class SimulationTradeStore(context: Context) {
         if (index == -1) return false
         val order = openOrders.removeAt(index)
 
-        // Buka kembali saldo yang dikunci
         val wallet = getWallet()
         val baseKey = order.baseAsset.uppercase()
 
@@ -370,10 +361,6 @@ class SimulationTradeStore(context: Context) {
         return count
     }
 
-    /**
-     * Matching Engine yang memeriksa order buku terbuka terhadap harga real Indodax saat ini.
-     * Mengembalikan daftar order yang baru saja FILLED.
-     */
     @Synchronized
     fun processPriceTick(
         symbol: String,
@@ -396,41 +383,27 @@ class SimulationTradeStore(context: Context) {
             when (order.type) {
                 SimulationOrderType.LIMIT -> {
                     if (order.side == SimulationOrderSide.BUY) {
-                        // Limit BUY match jika harga pasar turun sampai <= limit price
-                        if (currentPrice <= order.limitPrice) {
-                            shouldFill = true
-                        }
+                        if (currentPrice <= order.limitPrice) shouldFill = true
                     } else {
-                        // Limit SELL match jika harga pasar naik sampai >= limit price
-                        if (currentPrice >= order.limitPrice) {
-                            shouldFill = true
-                        }
+                        if (currentPrice >= order.limitPrice) shouldFill = true
                     }
                 }
                 SimulationOrderType.STOP_LIMIT -> {
                     if (order.side == SimulationOrderSide.BUY) {
-                        // Stop trigger Buy: saat harga menyentuh stopPrice ke atas
                         val triggered = order.isStopTriggered || (currentPrice >= order.stopPrice && order.stopPrice > 0.0)
                         if (triggered) {
                             updatedOrder = order.copy(isStopTriggered = true)
-                            if (currentPrice <= order.limitPrice) {
-                                shouldFill = true
-                            }
+                            if (currentPrice <= order.limitPrice) shouldFill = true
                         }
                     } else {
-                        // Stop trigger Sell: saat harga turun menyentuh stopPrice ke bawah (Stop Loss)
                         val triggered = order.isStopTriggered || (currentPrice <= order.stopPrice && order.stopPrice > 0.0)
                         if (triggered) {
                             updatedOrder = order.copy(isStopTriggered = true)
-                            if (currentPrice >= order.limitPrice) {
-                                shouldFill = true
-                            }
+                            if (currentPrice >= order.limitPrice) shouldFill = true
                         }
                     }
                 }
-                SimulationOrderType.MARKET -> {
-                    shouldFill = true
-                }
+                SimulationOrderType.MARKET -> shouldFill = true
             }
 
             if (shouldFill) {
@@ -478,7 +451,6 @@ class SimulationTradeStore(context: Context) {
                     )
                     addTradeHistory(history)
                 } else {
-                    // SELL FILL
                     val lockedMap = wallet.lockedCoinBalances.toMutableMap()
                     val curLocked = lockedMap[baseKey] ?: 0.0
                     val remLocked = (curLocked - order.quantity).coerceAtLeast(0.0)
@@ -530,7 +502,6 @@ class SimulationTradeStore(context: Context) {
                 )
                 filledOrders.add(completed)
             } else if (updatedOrder != order) {
-                // Update trigger state in list
                 val idx = allOpen.indexOf(order)
                 if (idx != -1) allOpen[idx] = updatedOrder
             }
@@ -544,7 +515,12 @@ class SimulationTradeStore(context: Context) {
         return filledOrders
     }
 
-    private fun formatNumber(value: Double): String {
-        return String.format("%,.0f", value).replace(",", ".")
+    private fun formatMoney(value: Double, quoteAsset: String): String {
+        val isUsdt = quoteAsset.equals("USDT", true) || quoteAsset.equals("USD", true)
+        return if (isUsdt) {
+            String.format("%.4f %s", value, quoteAsset.uppercase())
+        } else {
+            "Rp " + String.format("%,.0f", value).replace(",", ".")
+        }
     }
 }

@@ -1,0 +1,55 @@
+name: Sync Kotlin to analisa-pasarv2/main
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-kt-to-collab
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    env:
+      PAT: ${{ secrets.PAT }}
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check PAT
+        run: |
+          if [ -z "$PAT" ]; then
+            echo "PAT secret is missing. Add PAT to analisa-pasar Actions secrets as 'PAT' and ensure it has push rights to Agus27712/analisa-pasarv2."
+            exit 1
+          fi
+
+      - name: Prepare target repository
+        run: |
+          set -euo pipefail
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # clone target repo using PAT (must have push rights)
+          rm -rf target
+          git clone --branch main --depth 1 https://${PAT}@github.com/Agus27712/analisa-pasarv2.git target
+
+          # sync Kotlin sources into target repository
+          rsync -av --delete --prune-empty-dirs app/src/ target/app/src/
+
+          cd target
+          git add -A
+
+          if git diff --cached --quiet; then
+            echo "No Kotlin changes to sync."
+            exit 0
+          fi
+
+          git commit -m "Sync Kotlin files from Agus27712/analisa-pasar (branch: collab)"
+          git push origin HEAD:main

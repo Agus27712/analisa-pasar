@@ -10,7 +10,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -56,19 +55,19 @@ fun SimulationOrderForm(
     var showTypeMenu by remember { mutableStateOf(false) }
     val isBuy = selectedSide == SimulationOrderSide.BUY
     val themeColor = if (isBuy) TvGreen else TvRed
+    val quote = pair.quoteAsset
 
     Column(
         modifier = modifier
             .fillMaxWidth()
             .padding(end = 6.dp)
     ) {
-        // Tab Beli / Jual Toggle (Indodax style)
+        // Tab Beli / Jual Toggle
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(38.dp)
         ) {
-            // Tab Beli
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -97,7 +96,6 @@ fun SimulationOrderForm(
                 }
             }
 
-            // Tab Jual
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -129,7 +127,7 @@ fun SimulationOrderForm(
 
         Spacer(Modifier.height(10.dp))
 
-        // Dropdown Tipe Order (Limit Order / Market Order / Stop Limit Order)
+        // Dropdown Tipe Order
         Box(modifier = Modifier.fillMaxWidth()) {
             Row(
                 modifier = Modifier
@@ -186,16 +184,16 @@ fun SimulationOrderForm(
         // STOP LIMIT: Field Stop Price
         if (selectedType == SimulationOrderType.STOP_LIMIT) {
             StepperInputField(
-                label = "Stop (IDR)",
+                label = "Stop ($quote)",
                 value = inputStopPrice,
                 onValueChange = onStopPriceChange,
                 onStepMinus = {
-                    val cur = inputStopPrice.toDoubleOrNull() ?: currentPrice
+                    val cur = parseSimulationDecimal(inputStopPrice) ?: currentPrice
                     val step = calculatePriceStep(cur)
                     onStopPriceChange(PriceFormatter.formatRawDecimal((cur - step).coerceAtLeast(0.0)))
                 },
                 onStepPlus = {
-                    val cur = inputStopPrice.toDoubleOrNull() ?: currentPrice
+                    val cur = parseSimulationDecimal(inputStopPrice) ?: currentPrice
                     val step = calculatePriceStep(cur)
                     onStopPriceChange(PriceFormatter.formatRawDecimal(cur + step))
                 }
@@ -203,19 +201,19 @@ fun SimulationOrderForm(
             Spacer(Modifier.height(8.dp))
         }
 
-        // LIMIT / STOP LIMIT: Field Harga (IDR) / Limit (IDR)
+        // LIMIT / STOP LIMIT: Field Harga
         if (selectedType != SimulationOrderType.MARKET) {
             StepperInputField(
-                label = if (selectedType == SimulationOrderType.STOP_LIMIT) "Limit (IDR)" else "Harga (IDR)",
+                label = if (selectedType == SimulationOrderType.STOP_LIMIT) "Limit ($quote)" else "Harga ($quote)",
                 value = inputPrice,
                 onValueChange = onPriceChange,
                 onStepMinus = {
-                    val cur = inputPrice.toDoubleOrNull() ?: currentPrice
+                    val cur = parseSimulationDecimal(inputPrice) ?: currentPrice
                     val step = calculatePriceStep(cur)
                     onPriceChange(PriceFormatter.formatRawDecimal((cur - step).coerceAtLeast(0.0)))
                 },
                 onStepPlus = {
-                    val cur = inputPrice.toDoubleOrNull() ?: currentPrice
+                    val cur = parseSimulationDecimal(inputPrice) ?: currentPrice
                     val step = calculatePriceStep(cur)
                     onPriceChange(PriceFormatter.formatRawDecimal(cur + step))
                 }
@@ -229,12 +227,12 @@ fun SimulationOrderForm(
             value = inputQuantity,
             onValueChange = onQuantityChange,
             onStepMinus = {
-                val cur = inputQuantity.toDoubleOrNull() ?: 0.0
+                val cur = parseSimulationDecimal(inputQuantity) ?: 0.0
                 val step = calculateCoinStep(cur, currentPrice)
                 onQuantityChange(formatCoinDecimals((cur - step).coerceAtLeast(0.0)))
             },
             onStepPlus = {
-                val cur = inputQuantity.toDoubleOrNull() ?: 0.0
+                val cur = parseSimulationDecimal(inputQuantity) ?: 0.0
                 val step = calculateCoinStep(cur, currentPrice)
                 onQuantityChange(formatCoinDecimals(cur + step))
             }
@@ -242,7 +240,7 @@ fun SimulationOrderForm(
 
         Spacer(Modifier.height(8.dp))
 
-        // Quick Percentage Chips (25%, 50%, 75%, 100%)
+        // Quick Percentage Chips
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -257,18 +255,18 @@ fun SimulationOrderForm(
                         .border(1.dp, Color(0xFF223249), RoundedCornerShape(4.dp))
                         .clickable {
                             if (isBuy) {
-                                val availIdr = wallet.getAvailableIdr()
-                                val targetIdr = availIdr * (pct / 100.0)
-                                val price = if (selectedType == SimulationOrderType.MARKET) currentPrice else (inputPrice.toDoubleOrNull() ?: currentPrice)
+                                val availQuote = wallet.getAvailableIdr()
+                                val targetQuote = availQuote * (pct / 100.0)
+                                val price = if (selectedType == SimulationOrderType.MARKET) currentPrice else (parseSimulationDecimal(inputPrice) ?: currentPrice)
                                 if (price > 0.0) {
-                                    val coin = targetIdr / price
+                                    val coin = targetQuote / price
                                     onQuantityChange(formatCoinDecimals(coin))
-                                    onTotalIdrChange(PriceFormatter.formatRawDecimal(targetIdr))
+                                    onTotalIdrChange(PriceFormatter.formatRawDecimal(targetQuote))
                                 }
                             } else {
                                 val availCoin = wallet.getAvailableCoin(pair.baseAsset)
                                 val targetCoin = availCoin * (pct / 100.0)
-                                val price = if (selectedType == SimulationOrderType.MARKET) currentPrice else (inputPrice.toDoubleOrNull() ?: currentPrice)
+                                val price = if (selectedType == SimulationOrderType.MARKET) currentPrice else (parseSimulationDecimal(inputPrice) ?: currentPrice)
                                 onQuantityChange(formatCoinDecimals(targetCoin))
                                 onTotalIdrChange(PriceFormatter.formatRawDecimal(targetCoin * price))
                             }
@@ -287,7 +285,7 @@ fun SimulationOrderForm(
 
         Spacer(Modifier.height(8.dp))
 
-        // Field Total (IDR)
+        // Field Total
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -304,20 +302,20 @@ fun SimulationOrderForm(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = "Total (IDR)",
+                    text = "Total ($quote)",
                     color = TvTextSecondary,
                     fontSize = 11.sp
                 )
                 BasicTextField(
                     value = inputTotalIdr,
-                    onValueChange = onTotalIdrChange,
+                    onValueChange = { onTotalIdrChange(normalizeSimulationDecimalInput(it)) },
                     textStyle = TextStyle(
                         color = Color.White,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         textAlign = TextAlign.End
                     ),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     cursorBrush = SolidColor(TvGreen),
                     modifier = Modifier.weight(1f).padding(start = 8.dp)
                 )
@@ -326,7 +324,7 @@ fun SimulationOrderForm(
 
         Spacer(Modifier.height(10.dp))
 
-        // Info Saldo User & Tombol Top-up
+        // Info Saldo & Top-up
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -334,7 +332,7 @@ fun SimulationOrderForm(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = if (isBuy) "Saldo (IDR)" else "Saldo (${pair.baseAsset})",
+                    text = if (isBuy) "Saldo ($quote)" else "Saldo (${pair.baseAsset})",
                     color = TvTextSecondary,
                     fontSize = 11.sp
                 )
@@ -358,7 +356,7 @@ fun SimulationOrderForm(
 
             Text(
                 text = if (isBuy) {
-                    "Rp ${PriceFormatter.formatPrice(wallet.getAvailableIdr())}"
+                    PriceFormatter.formatPrice(wallet.getAvailableIdr(), quoteAsset = quote)
                 } else {
                     "${formatCoinDecimals(wallet.getAvailableCoin(pair.baseAsset))} ${pair.baseAsset}"
                 },
@@ -372,7 +370,6 @@ fun SimulationOrderForm(
 
         Spacer(Modifier.height(12.dp))
 
-        // Tombol Eksekusi Order (Beli [Coin] / Jual [Coin])
         Button(
             onClick = onSubmitOrder,
             colors = ButtonDefaults.buttonColors(

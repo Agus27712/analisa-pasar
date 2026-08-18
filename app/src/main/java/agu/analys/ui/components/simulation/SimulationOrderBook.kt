@@ -31,12 +31,13 @@ fun SimulationOrderBook(
     asks: List<OrderBookItem>,
     currentPrice: Double,
     isPriceUp: Boolean,
+    quoteAsset: String = "IDR",
     onSelectPrice: (Double) -> Unit,
     onViewMore: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    val displayAsks = asks.take(5).reversed() // Display 5 asks above current price (lowest ask closest to mid price)
-    val displayBids = bids.take(5) // Display 5 bids below current price (highest bid closest to mid price)
+    val displayAsks = asks.take(5).reversed()
+    val displayBids = bids.take(5)
 
     val maxAskVol = (displayAsks.maxOfOrNull { it.amount } ?: 1.0).coerceAtLeast(0.001)
     val maxBidVol = (displayBids.maxOfOrNull { it.amount } ?: 1.0).coerceAtLeast(0.001)
@@ -47,7 +48,6 @@ fun SimulationOrderBook(
             .fillMaxWidth()
             .padding(start = 4.dp)
     ) {
-        // Header Kolom
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -56,28 +56,25 @@ fun SimulationOrderBook(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "Harga (IDR)",
+                text = "Harga ($quoteAsset)",
                 color = TvTextSecondary,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Medium
             )
             Text(
-                text = "Jumlah (IDR)",
+                text = "Nilai ($quoteAsset)",
                 color = TvTextSecondary,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Medium
             )
         }
 
-        // Asks (Sell Orders - Merah)
         Column(
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             if (displayAsks.isEmpty()) {
-                repeat(5) {
-                    EmptyOrderBookRow(color = TvRed)
-                }
+                repeat(5) { EmptyOrderBookRow(color = TvRed) }
             } else {
                 displayAsks.forEach { item ->
                     OrderBookRow(
@@ -85,13 +82,13 @@ fun SimulationOrderBook(
                         amount = item.amount * item.price,
                         fillRatio = (item.amount / maxVol).toFloat().coerceIn(0.05f, 1f),
                         color = TvRed,
+                        quoteAsset = quoteAsset,
                         onClick = { onSelectPrice(item.price) }
                     )
                 }
             }
         }
 
-        // Mid Last Price Banner
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -102,7 +99,7 @@ fun SimulationOrderBook(
             contentAlignment = Alignment.CenterStart
         ) {
             Text(
-                text = if (currentPrice > 0.0) PriceFormatter.formatPrice(currentPrice) else "-",
+                text = if (currentPrice > 0.0) PriceFormatter.formatPrice(currentPrice, quoteAsset = quoteAsset) else "-",
                 color = if (isPriceUp) TvGreen else TvRed,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.ExtraBold,
@@ -111,15 +108,12 @@ fun SimulationOrderBook(
             )
         }
 
-        // Bids (Buy Orders - Hijau)
         Column(
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             if (displayBids.isEmpty()) {
-                repeat(5) {
-                    EmptyOrderBookRow(color = TvGreen)
-                }
+                repeat(5) { EmptyOrderBookRow(color = TvGreen) }
             } else {
                 displayBids.forEach { item ->
                     OrderBookRow(
@@ -127,6 +121,7 @@ fun SimulationOrderBook(
                         amount = item.amount * item.price,
                         fillRatio = (item.amount / maxVol).toFloat().coerceIn(0.05f, 1f),
                         color = TvGreen,
+                        quoteAsset = quoteAsset,
                         onClick = { onSelectPrice(item.price) }
                     )
                 }
@@ -135,7 +130,6 @@ fun SimulationOrderBook(
 
         Spacer(Modifier.height(8.dp))
 
-        // Footer: Lebih banyak & Icon Mode
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -145,11 +139,7 @@ fun SimulationOrderBook(
                 modifier = Modifier.clickable { onViewMore() },
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "Lebih banyak",
-                    color = TvTextSecondary,
-                    fontSize = 11.sp
-                )
+                Text(text = "Lebih banyak", color = TvTextSecondary, fontSize = 11.sp)
                 Icon(
                     imageVector = Icons.Default.ChevronRight,
                     contentDescription = "Lebih banyak",
@@ -157,7 +147,6 @@ fun SimulationOrderBook(
                     modifier = Modifier.size(14.dp)
                 )
             }
-
             Icon(
                 imageVector = Icons.Default.GridView,
                 contentDescription = "Depth Mode",
@@ -174,6 +163,7 @@ private fun OrderBookRow(
     amount: Double,
     fillRatio: Float,
     color: Color,
+    quoteAsset: String,
     onClick: () -> Unit
 ) {
     Box(
@@ -183,7 +173,6 @@ private fun OrderBookRow(
             .clip(RoundedCornerShape(3.dp))
             .clickable { onClick() }
     ) {
-        // Horizontal Depth Fill Bar (From Right to Left)
         Box(
             modifier = Modifier
                 .align(Alignment.CenterEnd)
@@ -191,8 +180,6 @@ private fun OrderBookRow(
                 .fillMaxWidth(fillRatio)
                 .background(color.copy(alpha = 0.16f))
         )
-
-        // Text Values
         Row(
             modifier = Modifier
                 .fillMaxSize()
@@ -201,13 +188,13 @@ private fun OrderBookRow(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = PriceFormatter.formatPrice(price),
+                text = PriceFormatter.formatPrice(price, showSymbol = false, quoteAsset = quoteAsset),
                 color = color,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.SemiBold
             )
             Text(
-                text = formatAmountShort(amount),
+                text = formatAmountShort(amount, quoteAsset),
                 color = Color(0xFFD1D5DB),
                 fontSize = 11.sp,
                 textAlign = TextAlign.End
@@ -231,11 +218,13 @@ private fun EmptyOrderBookRow(color: Color) {
     }
 }
 
-private fun formatAmountShort(idrAmount: Double): String {
+private fun formatAmountShort(amount: Double, quoteAsset: String): String {
+    val isUsdt = quoteAsset.equals("USDT", true) || quoteAsset.equals("USD", true)
     return when {
-        idrAmount >= 1_000_000_000 -> String.format("%.2f M", idrAmount / 1_000_000_000)
-        idrAmount >= 1_000_000 -> String.format("%.2f Jt", idrAmount / 1_000_000)
-        idrAmount >= 1_000 -> String.format("%.1f Rb", idrAmount / 1_000)
-        else -> String.format("%.0f", idrAmount)
+        amount >= 1_000_000_000 -> String.format("%.2fB", amount / 1_000_000_000)
+        amount >= 1_000_000 -> if (isUsdt) String.format("%.2fM", amount / 1_000_000) else String.format("%.2fJt", amount / 1_000_000)
+        amount >= 1_000 -> if (isUsdt) String.format("%.1fK", amount / 1_000) else String.format("%.1fRb", amount / 1_000)
+        isUsdt -> String.format("%.2f", amount)
+        else -> String.format("%.0f", amount)
     }
 }
