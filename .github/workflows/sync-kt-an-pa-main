@@ -1,10 +1,6 @@
 name: Sync Kotlin to analisa-pasarv2/main
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'app/src/**/*.kt'
   workflow_dispatch:
 
 permissions:
@@ -30,7 +26,7 @@ jobs:
       - name: Check PAT
         run: |
           if [ -z "$PAT" ]; then
-            echo "PAT secret is missing. Add PAT to analisa-pasarv2 Actions secrets as 'PAT'."
+            echo "PAT secret is missing. Add PAT to analisa-pasar Actions secrets as 'PAT' and ensure it has push rights to Agus27712/analisa-pasarv2."
             exit 1
           fi
 
@@ -55,5 +51,5 @@ jobs:
             exit 0
           fi
 
-          git commit -m "Sync Kotlin files from Agus27712/analisa-pasar"
+          git commit -m "Sync Kotlin files from Agus27712/analisa-pasar (branch: collab)"
           git push origin HEAD:main
