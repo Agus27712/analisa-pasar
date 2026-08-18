@@ -16,7 +16,8 @@ object FrameAnalyzer {
         macdFast: Int = 5,
         macdSlow: Int = 12,
         macdSignal: Int = 4,
-        atrPeriod: Int = 7
+        atrPeriod: Int = 7,
+        isAggressive: Boolean = false
     ): FrameSignal? {
         if (history.size < maxOf(30, slowPeriod + 5)) return null
         val closes = history.map { it.close }
@@ -29,7 +30,9 @@ object FrameAnalyzer {
         val atr = IndicatorMath.atr(history, atrPeriod)
         val structureWindow = min(40, history.size)
         val structure = MarketStructureAnalyzer.analyze(history.takeLast(structureWindow))
-        val avgVolume = history.takeLast(5).dropLast(1).map { it.volume }.average()
+        val windowCount = if (isAggressive) 16 else 6
+        val actualWindow = min(windowCount, history.size)
+        val avgVolume = history.takeLast(actualWindow).dropLast(1).map { it.volume }.average()
         val lastVolume = history.last().volume
         val volumeRatio = if (avgVolume > 0.0) lastVolume / avgVolume else 0.0
         val previous = history[history.lastIndex - 1]

@@ -8,10 +8,10 @@ package agu.analys.config
 enum class ScalpingSensitivity(val label: String, val description: String) {
     CONSERVATIVE(
         label = "Konservatif",
-        description = "Sangat selektif · Anti-false breakout · Net R:R min 1.2 · Aman dari churn fee"
+        description = "SL 0.30–0.55% · Vol 5 candle · Bias EMA H1 · Trigger Boolean · Net R:R min 1.2"
     ),
     AGGRESSIVE(
         label = "Agresif",
-        description = "Peluang lebih sering · RSI 35–66 · Menangkap quick pump lebih awal"
+        description = "SL 0.60–1.20% (ATR x1.5) · Vol 15 candle · Bias EMA+RSI H1>50 · Trigger Multi-Level Scoring"
     )
 }
