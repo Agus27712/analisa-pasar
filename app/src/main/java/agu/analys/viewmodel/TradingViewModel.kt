@@ -327,6 +327,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     private var dashboardPollJob: Job? = null
 
     init {
+        engine.strategyMode = _strategyMode.value
         engine.isScalpingMode = _isScalpingMode.value
         engine.scalpingSensitivity = _scalpingSensitivity.value
         engine.tradingFees = prefs.tradingFees
@@ -741,12 +742,12 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     val isCheckingUpdate: StateFlow<Boolean> = updateCoordinator.isCheckingUpdate
     val updateDownloadProgress: StateFlow<Int?> = updateCoordinator.downloadProgress
 
-    fun checkGitHubUpdate(context: android.content.Context, repo: String = GitHubUpdater.DEFAULT_REPO) {
-        updateCoordinator.checkUpdate(context, repo)
+    fun checkGitHubUpdate(context: android.content.Context, repo: String = prefs.updateRepo, token: String = prefs.updateGitHubToken) {
+        updateCoordinator.checkUpdate(context, repo, token)
     }
 
-    fun downloadAndInstallUpdate(context: android.content.Context, repo: String = GitHubUpdater.DEFAULT_REPO) {
-        updateCoordinator.downloadAndInstall(context, repo)
+    fun downloadAndInstallUpdate(context: android.content.Context, repo: String = prefs.updateRepo, token: String = prefs.updateGitHubToken) {
+        updateCoordinator.downloadAndInstall(context, repo, token)
     }
 
     override fun onCleared() {

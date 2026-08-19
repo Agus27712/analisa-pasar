@@ -30,7 +30,11 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
     var isScalpingMode: Boolean
         get() = strategyMode == StrategyMode.SCALPING
         set(value) {
-            strategyMode = if (value) StrategyMode.SCALPING else StrategyMode.SWING
+            if (value) {
+                strategyMode = StrategyMode.SCALPING
+            } else if (strategyMode == StrategyMode.SCALPING) {
+                strategyMode = StrategyMode.SWING
+            }
         }
     var scalpingSensitivity = ScalpingSensitivity.CONSERVATIVE
     var tradingFees = TradingFeeConfig()

@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import agu.analys.config.MarketDataSource
+import agu.analys.config.StrategyMode
 import agu.analys.engine.MarketStructureAnalyzer
 import agu.analys.model.*
 import agu.analys.ui.components.MarketStructureLearningCard
@@ -61,6 +62,7 @@ fun DetailChartScreen(
     val signal by viewModel.aiSignalState.collectAsStateWithLifecycle()
     val connection by viewModel.connectionState.collectAsStateWithLifecycle()
     val isScalping by viewModel.isScalpingMode.collectAsStateWithLifecycle()
+    val strategyMode by viewModel.strategyMode.collectAsStateWithLifecycle()
     val tradingFees by viewModel.tradingFees.collectAsStateWithLifecycle()
     val watchlist by viewModel.watchlist.collectAsStateWithLifecycle()
     val spotPosition by viewModel.spotPosition.collectAsStateWithLifecycle()
@@ -167,24 +169,40 @@ fun DetailChartScreen(
                 }
             }
 
-            // Mode Badge
+            // Mode Badge with 3-way toggle (SCALPING -> SECOND_WAVE -> SWING)
+            val badgeBg = when (strategyMode) {
+                StrategyMode.SCALPING -> Color(0xFF123D2A)
+                StrategyMode.SECOND_WAVE -> Color(0xFF0C2B3E)
+                StrategyMode.SWING -> Color(0xFF122840)
+            }
+            val badgeBorder = when (strategyMode) {
+                StrategyMode.SCALPING -> TvGreen
+                StrategyMode.SECOND_WAVE -> Color(0xFF00E5FF)
+                StrategyMode.SWING -> Color(0xFF72B7FF)
+            }
+            val badgeText = when (strategyMode) {
+                StrategyMode.SCALPING -> "SCALPING"
+                StrategyMode.SECOND_WAVE -> "2ND-WAVE"
+                StrategyMode.SWING -> "SWING"
+            }
+
             Box(
                 modifier = Modifier
-                    .background(
-                        if (isScalping) Color(0xFF123D2A) else Color(0xFF122840),
-                        RoundedCornerShape(6.dp)
-                    )
-                    .border(
-                        1.dp,
-                        if (isScalping) TvGreen else Color(0xFF72B7FF),
-                        RoundedCornerShape(6.dp)
-                    )
-                    .clickable { viewModel.setScalpingMode(!isScalping) }
+                    .background(badgeBg, RoundedCornerShape(6.dp))
+                    .border(1.dp, badgeBorder, RoundedCornerShape(6.dp))
+                    .clickable {
+                        val nextMode = when (strategyMode) {
+                            StrategyMode.SCALPING -> StrategyMode.SECOND_WAVE
+                            StrategyMode.SECOND_WAVE -> StrategyMode.SWING
+                            StrategyMode.SWING -> StrategyMode.SCALPING
+                        }
+                        viewModel.setStrategyMode(nextMode)
+                    }
                     .padding(horizontal = 10.dp, vertical = 4.dp)
             ) {
                 Text(
-                    text = if (isScalping) "SCALPING" else "SWING",
-                    color = if (isScalping) TvGreen else Color(0xFF72B7FF),
+                    text = badgeText,
+                    color = badgeBorder,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Black
                 )

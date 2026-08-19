@@ -24,13 +24,13 @@ class AppUpdateCoordinator(private val scope: CoroutineScope) {
     private val _downloadProgress = MutableStateFlow<Int?>(null)
     val downloadProgress: StateFlow<Int?> = _downloadProgress.asStateFlow()
 
-    fun checkUpdate(context: Context, repo: String = GitHubUpdater.DEFAULT_REPO) {
+    fun checkUpdate(context: Context, repo: String = GitHubUpdater.DEFAULT_REPO, token: String = "") {
         scope.launch {
             _isCheckingUpdate.value = true
-            _updateCheckStatus.value = "Memeriksa rilis terbaru di GitHub..."
+            _updateCheckStatus.value = "Memeriksa rilis terbaru di GitHub ($repo)..."
             _releaseInfo.value = null
             _downloadProgress.value = null
-            when (val result = GitHubUpdater.checkUpdate(context, repo)) {
+            when (val result = GitHubUpdater.checkUpdate(context, repo, token)) {
                 is UpdateCheckResult.UpdateAvailable -> {
                     _releaseInfo.value = result.info
                     _updateCheckStatus.value = "Pembaruan ${result.info.tagName} tersedia!"
@@ -51,7 +51,7 @@ class AppUpdateCoordinator(private val scope: CoroutineScope) {
         }
     }
 
-    fun downloadAndInstall(context: Context, repo: String = GitHubUpdater.DEFAULT_REPO) {
+    fun downloadAndInstall(context: Context, repo: String = GitHubUpdater.DEFAULT_REPO, token: String = "") {
         val release = _releaseInfo.value
         if (release == null || release.apkUrl.isBlank()) {
             GitHubUpdater.openGitHubReleasesPage(context, repo)
@@ -59,7 +59,7 @@ class AppUpdateCoordinator(private val scope: CoroutineScope) {
         }
         scope.launch {
             _downloadProgress.value = 0
-            GitHubUpdater.downloadAndInstallApk(context, release.apkUrl, release.apkName) { progress ->
+            GitHubUpdater.downloadAndInstallApk(context, release.apkUrl, release.apkName, token) { progress ->
                 _downloadProgress.value = progress
             }
         }

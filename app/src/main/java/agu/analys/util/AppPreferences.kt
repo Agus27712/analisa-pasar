@@ -67,6 +67,14 @@ class AppPreferences(context: Context) {
             .putString(KEY_SELL_TAKER, value.sellTakerPct.toString())
             .apply()
 
+    var updateRepo: String
+        get() = prefs.getString(KEY_UPDATE_REPO, "agus27712/analisa-pasar").orEmpty().ifBlank { "agus27712/analisa-pasar" }
+        set(value) = prefs.edit().putString(KEY_UPDATE_REPO, value.trim()).apply()
+
+    var updateGitHubToken: String
+        get() = prefs.getString(KEY_UPDATE_GH_TOKEN, "").orEmpty()
+        set(value) = prefs.edit().putString(KEY_UPDATE_GH_TOKEN, value.trim()).apply()
+
     fun getWatchlist(): Set<String> {
         val saved = prefs.getStringSet(KEY_WATCHLIST_INDODAX, null)
         if (saved != null && saved.isNotEmpty()) return saved.toSet()
@@ -111,5 +119,7 @@ class AppPreferences(context: Context) {
         private const val KEY_BUY_TAKER = "fee_buy_taker"
         private const val KEY_SELL_MAKER = "fee_sell_maker"
         private const val KEY_SELL_TAKER = "fee_sell_taker"
+        private const val KEY_UPDATE_REPO = "github_update_repo"
+        private const val KEY_UPDATE_GH_TOKEN = "github_update_token"
     }
 }
