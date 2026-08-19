@@ -196,6 +196,10 @@ fun AppMaintenanceCard(
     context: Context,
     cacheCleared: Boolean,
     onClearCache: () -> Unit,
+    updateRepo: String,
+    onUpdateRepoChange: (String) -> Unit,
+    updateToken: String,
+    onUpdateTokenChange: (String) -> Unit,
     releaseInfo: GitHubReleaseInfo?,
     checkingUpdate: Boolean,
     updateStatus: String?,
@@ -203,6 +207,8 @@ fun AppMaintenanceCard(
     onCheckUpdate: () -> Unit,
     onDownloadAndInstall: () -> Unit
 ) {
+    var showAdvancedRepoSettings by remember { mutableStateOf(false) }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(10.dp),
@@ -238,27 +244,115 @@ fun AppMaintenanceCard(
             Divider(color = Color(0xFF1E2836), thickness = 0.5.dp)
             Spacer(Modifier.height(10.dp))
 
-            Text(
-                "Pembaruan Aplikasi",
-                color = TvTextPrimary,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(Modifier.height(2.dp))
-            Text(
-                "Versi terpasang: v${BuildConfig.VERSION_NAME}",
-                color = TvTextSecondary,
-                fontSize = 11.sp
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        "Pembaruan Aplikasi",
+                        color = TvTextPrimary,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        "Versi terpasang: v${BuildConfig.VERSION_NAME}",
+                        color = TvTextSecondary,
+                        fontSize = 11.sp
+                    )
+                }
+
+                Text(
+                    text = if (showAdvancedRepoSettings) "Tutup Konfigurasi" else "Ubah Repo / Token",
+                    color = Color(0xFF72B7FF),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .clickable { showAdvancedRepoSettings = !showAdvancedRepoSettings }
+                        .padding(4.dp)
+                )
+            }
+
+            // Input Konfigurasi Repository & Token
+            if (showAdvancedRepoSettings) {
+                Spacer(Modifier.height(10.dp))
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF0B1015), RoundedCornerShape(8.dp))
+                        .padding(10.dp)
+                ) {
+                    Text("REPOSITORY GITHUB RILIS APK", color = Color(0xFF72B7FF), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(4.dp))
+                    OutlinedTextField(
+                        value = updateRepo,
+                        onValueChange = onUpdateRepoChange,
+                        singleLine = true,
+                        placeholder = { Text("username/repository-rilis", fontSize = 11.sp, color = TvTextSecondary) },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = TvGreen,
+                            unfocusedBorderColor = Color(0xFF2A3540),
+                            focusedTextColor = TvTextPrimary,
+                            unfocusedTextColor = TvTextPrimary
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(Modifier.height(8.dp))
+                    Text("GITHUB TOKEN / PAT (OPSIONAL)", color = Color(0xFF72B7FF), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(2.dp))
+                    Text("Wajib diisi jika repository rilis berstatus Private.", color = TvTextSecondary, fontSize = 9.5.sp)
+                    Spacer(Modifier.height(4.dp))
+                    OutlinedTextField(
+                        value = updateToken,
+                        onValueChange = onUpdateTokenChange,
+                        singleLine = true,
+                        placeholder = { Text("ghp_xxxx atau github_pat_xxxx", fontSize = 11.sp, color = TvTextSecondary) },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = TvGreen,
+                            unfocusedBorderColor = Color(0xFF2A3540),
+                            focusedTextColor = TvTextPrimary,
+                            unfocusedTextColor = TvTextPrimary
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
 
             if (updateStatus != null) {
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(8.dp))
                 Text(
                     updateStatus,
                     color = if (releaseInfo != null) TvGreen else Color(0xFFFFB300),
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Medium
                 )
+            }
+
+            if (releaseInfo != null && releaseInfo.releaseNotes.isNotBlank()) {
+                Spacer(Modifier.height(8.dp))
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF0B141C), RoundedCornerShape(6.dp))
+                        .padding(8.dp)
+                ) {
+                    Text(
+                        "Catatan Rilis ${releaseInfo.tagName}:",
+                        color = Color(0xFF00E5FF),
+                        fontSize = 10.5.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        releaseInfo.releaseNotes.take(300) + if (releaseInfo.releaseNotes.length > 300) "..." else "",
+                        color = TvTextSecondary,
+                        fontSize = 10.sp,
+                        lineHeight = 14.sp
+                    )
+                }
             }
 
             Spacer(Modifier.height(10.dp))
@@ -307,7 +401,7 @@ fun AppMaintenanceCard(
                     }
                 } else {
                     OutlinedButton(
-                        onClick = { GitHubUpdater.openGitHubReleasesPage(context, GitHubUpdater.DEFAULT_REPO) },
+                        onClick = { GitHubUpdater.openGitHubReleasesPage(context, updateRepo) },
                         modifier = Modifier.weight(1f).height(42.dp),
                         shape = RoundedCornerShape(8.dp),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF72B7FF)),

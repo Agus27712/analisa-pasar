@@ -50,6 +50,8 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
     var buyTakerFee by remember { mutableStateOf(prefs.tradingFees.buyTakerPct.toString()) }
     var sellMakerFee by remember { mutableStateOf(prefs.tradingFees.sellMakerPct.toString()) }
     var sellTakerFee by remember { mutableStateOf(prefs.tradingFees.sellTakerPct.toString()) }
+    var updateRepo by remember { mutableStateOf(prefs.updateRepo) }
+    var updateToken by remember { mutableStateOf(prefs.updateGitHubToken) }
     var saved by remember { mutableStateOf(false) }
     var cacheCleared by remember { mutableStateOf(false) }
 
@@ -401,12 +403,16 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
             context = context,
             cacheCleared = cacheCleared,
             onClearCache = { cacheCleared = true },
+            updateRepo = updateRepo,
+            onUpdateRepoChange = { updateRepo = it; saved = false },
+            updateToken = updateToken,
+            onUpdateTokenChange = { updateToken = it; saved = false },
             releaseInfo = releaseInfo,
             checkingUpdate = checkingUpdate,
             updateStatus = updateStatus,
             downloadProgress = downloadProgress,
-            onCheckUpdate = { viewModel.checkGitHubUpdate(context) },
-            onDownloadAndInstall = { viewModel.downloadAndInstallUpdate(context) }
+            onCheckUpdate = { viewModel.checkGitHubUpdate(context, updateRepo, updateToken) },
+            onDownloadAndInstall = { viewModel.downloadAndInstallUpdate(context, updateRepo, updateToken) }
         )
 
         Spacer(Modifier.height(18.dp))
@@ -423,6 +429,8 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                 prefs.aiProvider = provider
                 prefs.groqApiKey = groq
                 prefs.geminiApiKey = gemini
+                prefs.updateRepo = updateRepo
+                prefs.updateGitHubToken = updateToken
                 val currentFees = prefs.tradingFees
                 val updatedFees = currentFees.copy(
                     buyMakerPct = buyMakerFee.toDoubleOrNull() ?: currentFees.buyMakerPct,

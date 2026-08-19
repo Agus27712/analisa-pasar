@@ -35,25 +35,25 @@ sealed class UpdateCheckResult {
 object GitHubUpdater {
     const val DEFAULT_REPO = "agus27712/analisa-pasar"
 
-    suspend fun checkUpdate(context: Context, repo: String): UpdateCheckResult = withContext(Dispatchers.IO) {
+    suspend fun checkUpdate(context: Context, repo: String, token: String = ""): UpdateCheckResult = withContext(Dispatchers.IO) {
         val normalizedRepo = normalizeRepo(repo)
         val currentVersion = normalizeVersion(BuildConfig.VERSION_NAME)
         try {
             // 1. Coba fetch rilis terbaru (releases/latest)
             var releaseObj: JSONObject? = null
             val latestUrl = "https://api.github.com/repos/$normalizedRepo/releases/latest"
-            val latestConn = openGitHubConnection(latestUrl)
+            val latestConn = openGitHubConnection(latestUrl, token)
             val latestCode = latestConn.responseCode
 
             if (latestCode in 200..299) {
                 val body = latestConn.inputStream.bufferedReader().use { it.readText() }
                 releaseObj = JSONObject(body)
             } else if (latestCode == 403) {
-                return@withContext UpdateCheckResult.Error("Batas request GitHub terlampaui (rate limit). Coba lagi beberapa saat atau buka lewat browser.")
+                return@withContext UpdateCheckResult.Error("Batas request GitHub terlampaui (rate limit). Coba lagi beberapa saat atau masukkan GitHub Token di Pengaturan.")
             } else {
                 // 2. Fallback: Cek daftar semua rilis (releases)
                 val allReleasesUrl = "https://api.github.com/repos/$normalizedRepo/releases"
-                val allConn = openGitHubConnection(allReleasesUrl)
+                val allConn = openGitHubConnection(allReleasesUrl, token)
                 if (allConn.responseCode in 200..299) {
                     val body = allConn.inputStream.bufferedReader().use { it.readText() }
                     val array = JSONArray(body)
@@ -77,9 +77,10 @@ object GitHubUpdater {
                     val asset = assets.getJSONObject(i)
                     val name = asset.optString("name", "")
                     val browserUrl = asset.optString("browser_download_url", "")
-                    if (name.endsWith(".apk", ignoreCase = true) && browserUrl.isNotBlank()) {
+                    val apiUrl = asset.optString("url", "")
+                    if (name.endsWith(".apk", ignoreCase = true)) {
                         apkName = name
-                        apkUrl = browserUrl
+                        apkUrl = if (token.isNotBlank() && apiUrl.isNotBlank()) apiUrl else browserUrl
                         break
                     }
                 }
@@ -106,7 +107,7 @@ object GitHubUpdater {
 
             // 3. Fallback: Cek Git Tags jika rilis belum diformalkan di GitHub Releases UI
             val tagsUrl = "https://api.github.com/repos/$normalizedRepo/tags"
-            val tagsConn = openGitHubConnection(tagsUrl)
+            val tagsConn = openGitHubConnection(tagsUrl, token)
             if (tagsConn.responseCode in 200..299) {
                 val body = tagsConn.inputStream.bufferedReader().use { it.readText() }
                 val tagsArray = JSONArray(body)
@@ -133,17 +134,25 @@ object GitHubUpdater {
                 }
             }
 
-            UpdateCheckResult.Error("Repository atau tag rilis belum ditemukan di GitHub ($normalizedRepo). Buka halaman rilis di browser untuk mengecek rilis.")
+            UpdateCheckResult.Error("Repository atau tag rilis belum ditemukan di GitHub ($normalizedRepo). Jika repository bersifat Private, silakan masukkan GitHub Personal Access Token di Pengaturan.")
         } catch (e: Exception) {
             UpdateCheckResult.Error("Gagal memeriksa update: ${e.localizedMessage ?: "Koneksi terputus"}")
         }
     }
 
-    private fun openGitHubConnection(urlStr: String): HttpURLConnection {
+    private fun openGitHubConnection(urlStr: String, token: String = ""): HttpURLConnection {
         return (URL(urlStr).openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
             setRequestProperty("Accept", "application/vnd.github.v3+json")
             setRequestProperty("User-Agent", "AnalisaPasarApp/${BuildConfig.VERSION_NAME}")
+            if (token.isNotBlank()) {
+                val authHeader = if (token.startsWith("ghp_", true) || token.startsWith("github_pat_", true) || token.startsWith("Bearer ", true)) {
+                    if (token.startsWith("Bearer ", true)) token else "Bearer $token"
+                } else {
+                    "token $token"
+                }
+                setRequestProperty("Authorization", authHeader)
+            }
             connectTimeout = 12000
             readTimeout = 12000
         }
@@ -153,6 +162,7 @@ object GitHubUpdater {
         context: Context,
         apkUrl: String,
         apkName: String,
+        token: String = "",
         onProgress: (Int) -> Unit
     ): Boolean = withContext(Dispatchers.IO) {
         try {
@@ -190,6 +200,18 @@ object GitHubUpdater {
                     instanceFollowRedirects = false
                     requestMethod = "GET"
                     setRequestProperty("User-Agent", "AnalisaPasarApp/${BuildConfig.VERSION_NAME}")
+                    val isGitHubHost = url.host.contains("github.com", ignoreCase = true) || url.host.contains("githubusercontent.com", ignoreCase = true)
+                    if (isGitHubHost && token.isNotBlank()) {
+                        val authHeader = if (token.startsWith("ghp_", true) || token.startsWith("github_pat_", true) || token.startsWith("Bearer ", true)) {
+                            if (token.startsWith("Bearer ", true)) token else "Bearer $token"
+                        } else {
+                            "token $token"
+                        }
+                        setRequestProperty("Authorization", authHeader)
+                    }
+                    if (currentUrl.contains("/releases/assets/")) {
+                        setRequestProperty("Accept", "application/octet-stream")
+                    }
                 }
                 val code = connection.responseCode
                 if (code in listOf(HttpURLConnection.HTTP_MOVED_PERM, HttpURLConnection.HTTP_MOVED_TEMP, HttpURLConnection.HTTP_SEE_OTHER, 307, 308)) {
