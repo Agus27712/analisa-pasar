@@ -25,8 +25,6 @@ import agu.analys.service.GeminiAiService
 import agu.analys.service.GroqAiService
 import agu.analys.service.IndodaxMarketService
 import agu.analys.service.IndodaxMarketWebSocket
-import agu.analys.service.TokocryptoMarketService
-import agu.analys.service.TokocryptoMarketWebSocket
 import agu.analys.trading.SimulationOrder
 import agu.analys.trading.SimulationOrderResult
 import agu.analys.trading.SimulationOrderSide
@@ -64,48 +62,25 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     private val indodaxWebSocket = IndodaxMarketWebSocket(
         scope = viewModelScope,
         onTick = { tick ->
-            handleWebSocketTick(tick, MarketDataSource.INDODAX)
+            handleWebSocketTick(tick)
         },
         onCandle = { candle ->
-            handleWebSocketCandle(candle, MarketDataSource.INDODAX)
+            handleWebSocketCandle(candle)
         },
         onConnected = {
-            if (_isScalpingMode.value && _marketDataSource.value == MarketDataSource.INDODAX) {
+            if (_isScalpingMode.value) {
                 _connectionState.value = MarketConnectionState.Connected
                 _isShowingCachedData.value = false
             }
         },
         onDisconnected = {
-            if (_isScalpingMode.value && _marketDataSource.value == MarketDataSource.INDODAX) {
+            if (_isScalpingMode.value) {
                 _connectionState.value = MarketConnectionState.ConnectionLost("WebSocket realtime Indodax terputus. Menunggu koneksi kembali.")
             }
         }
     )
 
-    // WebSocket Tokocrypto
-    private val tokocryptoWebSocket = TokocryptoMarketWebSocket(
-        scope = viewModelScope,
-        onTick = { tick ->
-            handleWebSocketTick(tick, MarketDataSource.TOKOCRYPTO)
-        },
-        onCandle = { candle ->
-            handleWebSocketCandle(candle, MarketDataSource.TOKOCRYPTO)
-        },
-        onConnected = {
-            if (_isScalpingMode.value && _marketDataSource.value == MarketDataSource.TOKOCRYPTO) {
-                _connectionState.value = MarketConnectionState.Connected
-                _isShowingCachedData.value = false
-            }
-        },
-        onDisconnected = {
-            if (_isScalpingMode.value && _marketDataSource.value == MarketDataSource.TOKOCRYPTO) {
-                _connectionState.value = MarketConnectionState.ConnectionLost("WebSocket realtime Tokocrypto terputus. Menunggu koneksi kembali.")
-            }
-        }
-    )
-
-    private fun handleWebSocketTick(tick: MarketTick, source: MarketDataSource) {
-        if (_marketDataSource.value != source) return
+    private fun handleWebSocketTick(tick: MarketTick) {
         if (!_isScalpingMode.value || tick.symbol != _selectedPair.value.symbol) return
         val previous = _currentTick.value
         val normalized = tick.copy(
@@ -129,8 +104,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    private fun handleWebSocketCandle(candle: CandleBar, source: MarketDataSource) {
-        if (_marketDataSource.value != source) return
+    private fun handleWebSocketCandle(candle: CandleBar) {
         if (!_isScalpingMode.value || candle.timestamp < (_recentCandles.value.firstOrNull()?.timestamp ?: 0L)) return
         val updated = (_recentCandles.value + candle).distinctBy { it.timestamp }.sortedBy { it.timestamp }.takeLast(300)
         _recentCandles.value = updated
@@ -218,7 +192,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     private val _watchlist = MutableStateFlow(
         prefs.getWatchlist().let { set ->
             if (set.isEmpty()) {
-                val defaultSymbol = if (prefs.marketDataSource == MarketDataSource.TOKOCRYPTO) "BTCUSDT" else "BTCIDR"
+                val defaultSymbol = "BTCIDR"
                 prefs.toggleWatchlist(defaultSymbol)
                 setOf(defaultSymbol)
             } else set
@@ -303,52 +277,9 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         refreshSimulationState()
     }
 
-    /**
-     * Ganti Sumber Pasar (Indodax <-> Tokocrypto).
-     * Pengaturan dipusatkan di Settings agar data tidak tercampur.
-     * 100% Real Live Market Data — tanpa mock/sample data.
-     */
     fun setMarketDataSource(source: MarketDataSource) {
-        if (_marketDataSource.value == source) return
         _marketDataSource.value = source
         prefs.marketDataSource = source
-
-        // 1. Hentikan seluruh koneksi websocket & polling sebelumnya
-        stopActiveWebSockets(false)
-        marketPollJob?.cancel()
-
-        // 2. Bersihkan in-memory state agar data exchange lama tidak tercampur
-        clearLiveData()
-        _dashboardTicks.value = emptyMap()
-        _worthCoins.value = emptyList()
-        _hotCoins.value = emptyList()
-        _connectionState.value = MarketConnectionState.Loading
-        _isShowingCachedData.value = false
-
-        // 3. Set default fee preset sesuai exchange
-        val defaultFees = source.defaultFeeConfig
-        updateTradingFees(defaultFees)
-
-        // 4. Update watchlist terisolasi untuk exchange terpilih
-        _watchlist.value = prefs.getWatchlist(source)
-
-        // 5. Restore cache khusus exchange yang dipilih
-        val ticks = marketCache.loadDashboardTicks(source)
-        val worth = marketCache.loadWorthCoins(source)
-        if (ticks.isNotEmpty()) {
-            _dashboardTicks.value = ticks
-            _isShowingCachedData.value = true
-        }
-        if (worth.isNotEmpty()) {
-            _worthCoins.value = worth
-            _isShowingCachedData.value = true
-        }
-
-        // 6. Pilih pair default exchange baru
-        val newPair = TradingPair.popularPairsForSource(source).first()
-        selectPair(newPair)
-
-        // 7. Refresh live market data dari exchange baru
         refreshWorthCoinsFromMarket()
     }
 
@@ -377,18 +308,11 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     }
 
     private fun startActiveWebSocket(symbol: String) {
-        if (_marketDataSource.value == MarketDataSource.TOKOCRYPTO) {
-            indodaxWebSocket.stop(false)
-            tokocryptoWebSocket.start(symbol)
-        } else {
-            tokocryptoWebSocket.stop(false)
-            indodaxWebSocket.start(symbol)
-        }
+        indodaxWebSocket.start(symbol)
     }
 
     private fun stopActiveWebSockets(notify: Boolean = true) {
         indodaxWebSocket.stop(notify)
-        tokocryptoWebSocket.stop(notify)
     }
 
     fun setScalpingSensitivity(sensitivity: ScalpingSensitivity) {
@@ -478,24 +402,21 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     fun saveGeminiApiKey(key: String) { prefs.geminiApiKey = key }
 
     fun toggleWatchlist(symbol: String) {
-        val source = _marketDataSource.value
-        prefs.toggleWatchlist(symbol, source)
-        _watchlist.value = prefs.getWatchlist(source)
+        prefs.toggleWatchlist(symbol)
+        _watchlist.value = prefs.getWatchlist()
     }
 
-    fun isWatched(symbol: String) = prefs.isInWatchlist(symbol, _marketDataSource.value)
+    fun isWatched(symbol: String) = prefs.isInWatchlist(symbol)
 
     fun selectCustomSymbol(rawSymbol: String) {
         if (rawSymbol.isNotBlank()) {
-            val defaultQuote = if (_marketDataSource.value == MarketDataSource.TOKOCRYPTO) "USDT" else "IDR"
-            selectPair(TradingPair.fromCustomSymbol(rawSymbol, defaultQuote))
+            selectPair(TradingPair.fromCustomSymbol(rawSymbol, "IDR"))
         }
     }
 
     fun selectAndWatch(rawSymbol: String, addToWatchlist: Boolean = true) {
         if (rawSymbol.isBlank()) return
-        val defaultQuote = if (_marketDataSource.value == MarketDataSource.TOKOCRYPTO) "USDT" else "IDR"
-        val pair = TradingPair.fromCustomSymbol(rawSymbol, defaultQuote)
+        val pair = TradingPair.fromCustomSymbol(rawSymbol, "IDR")
         selectPair(pair)
         if (addToWatchlist && !prefs.isInWatchlist(pair.symbol)) toggleWatchlist(pair.symbol)
     }
@@ -530,192 +451,93 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     fun refreshWorthCoinsFromMarket() {
         viewModelScope.launch {
             val scalpingMode = _isScalpingMode.value
-            val currentSource = _marketDataSource.value
 
-            if (currentSource == MarketDataSource.TOKOCRYPTO) {
-                // Fetch REAL Tokocrypto / Binance Cloud Market Data
-                val gainersJob = async { TokocryptoMarketService.fetchGainersTicks(limit = 30, quoteCurrency = "USDT", excludeStable = true) }
-                val hotJob = async { TokocryptoMarketService.fetchHotTicks(limit = 30, quoteCurrency = "USDT", excludeStable = true) }
-                val volJob = async { TokocryptoMarketService.fetchTopVolumeTicks(limit = 30, quoteCurrency = "USDT", excludeStable = true) }
-                val rateJob = async { TokocryptoMarketService.getUsdtIdrRate() }
-
-                val popularList = TradingPair.POPULAR_TOKOCRYPTO_PAIRS
-                val watchPairs = _watchlist.value.map { TradingPair.fromCustomSymbol(it, "USDT") }
-                val pairs = (popularList + watchPairs).distinctBy { it.symbol }
-                val ticks = TokocryptoMarketService.fetchTickers(pairs.map { it.effectiveTokocryptoPair() })
-
-                val gainers = gainersJob.await()
-                val hot = hotJob.await()
-                val topVol = volJob.await()
-                val rate = rateJob.await()
-
-                if (gainers.isNotEmpty()) _gainersCoins.value = gainers
-                if (hot.isNotEmpty()) _hotCoins.value = hot
-                if (topVol.isNotEmpty()) _topVolumeCoins.value = topVol
-                if (rate > 0.0) _usdtIdrRate.value = rate
-
-                if (ticks.isEmpty() && hot.isEmpty() && gainers.isEmpty()) {
-                    if (_dashboardTicks.value.isEmpty() && _hotCoins.value.isEmpty()) {
-                        markMarketOffline("Tidak ada respons market dari Tokocrypto.")
-                    } else {
-                        _isShowingCachedData.value = true
-                        _connectionState.value = MarketConnectionState.ConnectionLost("Koneksi terputus. Menampilkan data cache terakhir.")
-                    }
-                    return@launch
-                }
-
-                val allScanned = (gainers + hot + topVol).distinctBy { it.symbol }
-                val scannedMap = allScanned.associateBy { it.symbol }
-                val combinedTicks = (ticks.associateBy { it.symbol } + scannedMap)
-                _dashboardTicks.value = combinedTicks
-
-                if (!_isScalpingMode.value || _connectionState.value !is MarketConnectionState.Connected) {
-                    _connectionState.value = MarketConnectionState.Connected
-                }
-                _isShowingCachedData.value = false
-                marketCache.saveDashboardTicks(MarketDataSource.TOKOCRYPTO, _dashboardTicks.value)
-
-                val evaluatedPairs = (allScanned.map { TradingPair.fromCustomSymbol(it.symbol, "USDT") } + pairs).distinctBy { it.symbol }
-
-                val worth = evaluatedPairs.mapNotNull { pair ->
-                    val tick = combinedTicks[pair.symbol] ?: return@mapNotNull null
-                    val rangePct = if (tick.low24h > 0) ((tick.high24h - tick.low24h) / tick.low24h) * 100.0 else 0.0
-                    // Volume thresholds Tokocrypto (USDT)
-                    val volScore = when {
-                        tick.volume24h >= 500_000_000.0 -> 30
-                        tick.volume24h >= 50_000_000.0 -> 25
-                        tick.volume24h >= 5_000_000.0 -> 18
-                        tick.volume24h >= 500_000.0 -> 12
-                        else -> 6
-                    }
-                    val change24h = tick.change24h.takeIf { it.isFinite() } ?: 0.0
-                    val momentumScore = when {
-                        change24h >= 8 -> 40
-                        change24h >= 3 -> 32
-                        change24h > 0 -> 25
-                        change24h >= -3 -> 12
-                        change24h >= -8 -> 6
-                        else -> 2
-                    }
-                    val volaScore = min(20, (rangePct * 1.5).toInt())
-                    val score = (volScore + momentumScore + volaScore).coerceIn(1, 99)
-                    val rec = when {
-                        change24h >= 5.0 -> "PUMP / MOMENTUM NAIK"
-                        change24h > 0.0 -> "BERGERAK NAIK"
-                        change24h >= -2.0 -> "LAYAK DIPANTAU"
-                        change24h <= -8.0 -> "TEKANAN JUAL"
-                        else -> "NETRAL / VOLATIL"
-                    }
-                    WorthCoinInfo(
-                        pair = pair,
-                        worthScore = score,
-                        isWorthIt = score >= 50 && change24h > 0,
-                        recommendation = rec,
-                        potentialProfitPct = abs(change24h),
-                        aiRationale = "${PriceFormatter.formatPrice(tick.price, quoteAsset = pair.quoteAsset)} · Vol ${PriceFormatter.formatVolume(tick.volume24h, quoteAsset = pair.quoteAsset)} · +${PriceFormatter.formatPercentage(change24h, false)}"
-                    )
-                }.sortedWith(
-                    if (scalpingMode) {
-                        compareByDescending<WorthCoinInfo> { info ->
-                            val tick = combinedTicks[info.pair.symbol]
-                            tick?.change24h?.takeIf { it.isFinite() } ?: -999.0
-                        }.thenByDescending { it.worthScore }
-                    } else {
-                        compareByDescending { it.worthScore }
-                    }
-                )
-
-                _worthCoins.value = worth
-                marketCache.saveWorthCoins(MarketDataSource.TOKOCRYPTO, worth)
-
-            } else {
-                // Fetch REAL Indodax Market Data
-                val gainersJob = async {
-                    IndodaxMarketService.fetchScalpingGainersTicks(limit = 30, excludeStable = true)
-                }
-                val volJob = async {
-                    IndodaxMarketService.fetchTopVolumeTicks(limit = 30, excludeStable = true)
-                }
-                val pairs = (TradingPair.POPULAR_INDODAX_PAIRS + _watchlist.value.map { TradingPair.fromCustomSymbol(it, "IDR") }).distinctBy { it.symbol }
-                val ticks = IndodaxMarketService.fetchTickers(pairs.map { it.effectiveIndodaxPair() })
-
-                val gainers = gainersJob.await()
-                val topVol = volJob.await()
-
-                if (gainers.isNotEmpty()) {
-                    _gainersCoins.value = gainers
-                    _hotCoins.value = gainers
-                }
-                if (topVol.isNotEmpty()) {
-                    _topVolumeCoins.value = topVol
-                }
-
-                if (ticks.isEmpty() && gainers.isEmpty() && topVol.isEmpty()) {
-                    if (_dashboardTicks.value.isEmpty() && _hotCoins.value.isEmpty()) markMarketOffline("Tidak ada respons market dari Indodax.")
-                    else {
-                        _isShowingCachedData.value = true
-                        _connectionState.value = MarketConnectionState.ConnectionLost("Koneksi terputus. Menampilkan data cache terakhir.")
-                    }
-                    return@launch
-                }
-                val allScanned = (gainers + topVol).distinctBy { it.symbol }
-                val scannedMap = allScanned.associateBy { it.symbol }
-                val combinedTicks = (ticks.associateBy { it.symbol } + scannedMap)
-                _dashboardTicks.value = combinedTicks
-                if (!_isScalpingMode.value || _connectionState.value !is MarketConnectionState.Connected) _connectionState.value = MarketConnectionState.Connected
-                _isShowingCachedData.value = false
-                marketCache.saveDashboardTicks(MarketDataSource.INDODAX, _dashboardTicks.value)
-
-                val evaluatedPairs = (allScanned.map { TradingPair.fromCustomSymbol(it.symbol, "IDR") } + pairs).distinctBy { it.symbol }
-
-                val worth = evaluatedPairs.mapNotNull { pair ->
-                    val tick = combinedTicks[pair.symbol] ?: return@mapNotNull null
-                    val rangePct = if (tick.low24h > 0) ((tick.high24h - tick.low24h) / tick.low24h) * 100.0 else 0.0
-                    val volScore = when {
-                        tick.volume24h >= 100_000_000_000 -> 30
-                        tick.volume24h >= 10_000_000_000 -> 22
-                        tick.volume24h >= 1_000_000_000 -> 14
-                        else -> 6
-                    }
-                    val change24h = tick.change24h.takeIf { it.isFinite() } ?: 0.0
-                    val momentumScore = when {
-                        change24h >= 8 -> 40
-                        change24h >= 3 -> 32
-                        change24h > 0 -> 25
-                        change24h >= -3 -> 12
-                        change24h >= -8 -> 6
-                        else -> 2
-                    }
-                    val volaScore = min(20, (rangePct * 1.5).toInt())
-                    val score = (volScore + momentumScore + volaScore).coerceIn(1, 99)
-                    val rec = when {
-                        change24h >= 5.0 -> "PUMP / MOMENTUM NAIK"
-                        change24h > 0.0 -> "BERGERAK NAIK"
-                        change24h >= -2.0 -> "LAYAK DIPANTAU"
-                        change24h <= -8.0 -> "TEKANAN JUAL"
-                        else -> "NETRAL / VOLATIL"
-                    }
-                    WorthCoinInfo(
-                        pair = pair,
-                        worthScore = score,
-                        isWorthIt = score >= 50 && change24h > 0,
-                        recommendation = rec,
-                        potentialProfitPct = abs(change24h),
-                        aiRationale = "${PriceFormatter.formatPrice(tick.price)} · Vol ${PriceFormatter.formatVolume(tick.volume24h)} · +${PriceFormatter.formatPercentage(change24h, false)}"
-                    )
-                }.sortedWith(
-                    if (scalpingMode) {
-                        compareByDescending<WorthCoinInfo> { info ->
-                            val tick = combinedTicks[info.pair.symbol]
-                            tick?.change24h?.takeIf { it.isFinite() } ?: -999.0
-                        }.thenByDescending { it.worthScore }
-                    } else {
-                        compareByDescending { it.worthScore }
-                    }
-                )
-                _worthCoins.value = worth
-                marketCache.saveWorthCoins(MarketDataSource.INDODAX, worth)
+            // Fetch REAL Indodax Market Data
+            val gainersJob = async {
+                IndodaxMarketService.fetchScalpingGainersTicks(limit = 30, excludeStable = true)
             }
+            val volJob = async {
+                IndodaxMarketService.fetchTopVolumeTicks(limit = 30, excludeStable = true)
+            }
+            val pairs = (TradingPair.POPULAR_INDODAX_PAIRS + _watchlist.value.map { TradingPair.fromCustomSymbol(it, "IDR") }).distinctBy { it.symbol }
+            val ticks = IndodaxMarketService.fetchTickers(pairs.map { it.effectiveIndodaxPair() })
+
+            val gainers = gainersJob.await()
+            val topVol = volJob.await()
+
+            if (gainers.isNotEmpty()) {
+                _gainersCoins.value = gainers
+                _hotCoins.value = gainers
+            }
+            if (topVol.isNotEmpty()) {
+                _topVolumeCoins.value = topVol
+            }
+
+            if (ticks.isEmpty() && gainers.isEmpty() && topVol.isEmpty()) {
+                if (_dashboardTicks.value.isEmpty() && _hotCoins.value.isEmpty()) markMarketOffline("Tidak ada respons market dari Indodax.")
+                else {
+                    _isShowingCachedData.value = true
+                    _connectionState.value = MarketConnectionState.ConnectionLost("Koneksi terputus. Menampilkan data cache terakhir.")
+                }
+                return@launch
+            }
+            val allScanned = (gainers + topVol).distinctBy { it.symbol }
+            val scannedMap = allScanned.associateBy { it.symbol }
+            val combinedTicks = (ticks.associateBy { it.symbol } + scannedMap)
+            _dashboardTicks.value = combinedTicks
+            if (!_isScalpingMode.value || _connectionState.value !is MarketConnectionState.Connected) _connectionState.value = MarketConnectionState.Connected
+            _isShowingCachedData.value = false
+            marketCache.saveDashboardTicks(MarketDataSource.INDODAX, _dashboardTicks.value)
+
+            val evaluatedPairs = (allScanned.map { TradingPair.fromCustomSymbol(it.symbol, "IDR") } + pairs).distinctBy { it.symbol }
+
+            val worth = evaluatedPairs.mapNotNull { pair ->
+                val tick = combinedTicks[pair.symbol] ?: return@mapNotNull null
+                val rangePct = if (tick.low24h > 0) ((tick.high24h - tick.low24h) / tick.low24h) * 100.0 else 0.0
+                val volScore = when {
+                    tick.volume24h >= 100_000_000_000 -> 30
+                    tick.volume24h >= 10_000_000_000 -> 22
+                    tick.volume24h >= 1_000_000_000 -> 14
+                    else -> 6
+                }
+                val change24h = tick.change24h.takeIf { it.isFinite() } ?: 0.0
+                val momentumScore = when {
+                    change24h >= 8 -> 40
+                    change24h >= 3 -> 32
+                    change24h > 0 -> 25
+                    change24h >= -3 -> 12
+                    change24h >= -8 -> 6
+                    else -> 2
+                }
+                val volaScore = min(20, (rangePct * 1.5).toInt())
+                val score = (volScore + momentumScore + volaScore).coerceIn(1, 99)
+                val rec = when {
+                    change24h >= 5.0 -> "PUMP / MOMENTUM NAIK"
+                    change24h > 0.0 -> "BERGERAK NAIK"
+                    change24h >= -2.0 -> "LAYAK DIPANTAU"
+                    change24h <= -8.0 -> "TEKANAN JUAL"
+                    else -> "NETRAL / VOLATIL"
+                }
+                WorthCoinInfo(
+                    pair = pair,
+                    worthScore = score,
+                    isWorthIt = score >= 50 && change24h > 0,
+                    recommendation = rec,
+                    potentialProfitPct = abs(change24h),
+                    aiRationale = "${PriceFormatter.formatPrice(tick.price)} · Vol ${PriceFormatter.formatVolume(tick.volume24h)} · +${PriceFormatter.formatPercentage(change24h, false)}"
+                )
+            }.sortedWith(
+                if (scalpingMode) {
+                    compareByDescending<WorthCoinInfo> { info ->
+                        val tick = combinedTicks[info.pair.symbol]
+                        tick?.change24h?.takeIf { it.isFinite() } ?: -999.0
+                    }.thenByDescending { it.worthScore }
+                } else {
+                    compareByDescending { it.worthScore }
+                }
+            )
+            _worthCoins.value = worth
+            marketCache.saveWorthCoins(MarketDataSource.INDODAX, worth)
         }
     }
 
@@ -769,15 +591,10 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
             var failCount = 0
             lastCandleRefresh = 0L
             lastDepthRefresh = 0L
-            val isTokocrypto = _marketDataSource.value == MarketDataSource.TOKOCRYPTO
 
             while (isActive) {
                 val prev = _currentTick.value?.price ?: 0.0
-                val tick = if (isTokocrypto) {
-                    TokocryptoMarketService.fetchTicker(pair.effectiveTokocryptoPair(), prevPrice = prev)
-                } else {
-                    IndodaxMarketService.fetchTicker(pair.effectiveIndodaxPair(), prevPrice = prev)
-                }
+                val tick = IndodaxMarketService.fetchTicker(pair.effectiveIndodaxPair(), prevPrice = prev)
 
                 if (tick != null && tick.price > 0) {
                     failCount = 0
@@ -806,11 +623,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
 
                     // Refresh Candles
                     if (now - lastCandleRefresh >= 15_000L) {
-                        val candles = if (isTokocrypto) {
-                            TokocryptoMarketService.fetchCandles(pair.effectiveTokocryptoPair(), selectedTf, 300)
-                        } else {
-                            IndodaxMarketService.fetchCandles(pair.effectiveIndodaxPair(), selectedTf, 300)
-                        }
+                        val candles = IndodaxMarketService.fetchCandles(pair.effectiveIndodaxPair(), selectedTf, 300)
                         if (candles.size >= 30) {
                             _recentCandles.value = candles
                             engine.resetForOffline(preserveState = true)
@@ -825,14 +638,8 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
 
                     // Refresh Depth & Trades
                     if (now - lastDepthRefresh >= 5_000L) {
-                        val depth = async {
-                            if (isTokocrypto) TokocryptoMarketService.fetchOrderBook(pair.effectiveTokocryptoPair())
-                            else IndodaxMarketService.fetchOrderBook(pair.effectiveIndodaxPair())
-                        }
-                        val trades = async {
-                            if (isTokocrypto) TokocryptoMarketService.fetchRecentTrades(pair.effectiveTokocryptoPair())
-                            else IndodaxMarketService.fetchRecentTrades(pair.effectiveIndodaxPair())
-                        }
+                        val depth = async { IndodaxMarketService.fetchOrderBook(pair.effectiveIndodaxPair()) }
+                        val trades = async { IndodaxMarketService.fetchRecentTrades(pair.effectiveIndodaxPair()) }
                         val (bids, asks) = depth.await()
                         val newTrades = trades.await()
                         if (bids.isNotEmpty()) _orderBookBids.value = bids
@@ -844,8 +651,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
                     failCount++
                     if (failCount >= 2 && !_isScalpingMode.value) {
                         _isShowingCachedData.value = true
-                        val exchangeName = if (isTokocrypto) "Tokocrypto" else "Indodax"
-                        _connectionState.value = MarketConnectionState.ConnectionLost("Koneksi pasar $exchangeName terputus. Menampilkan data cache terakhir.")
+                        _connectionState.value = MarketConnectionState.ConnectionLost("Koneksi pasar Indodax terputus. Menampilkan data cache terakhir.")
                     }
                     delay(5000L)
                     continue

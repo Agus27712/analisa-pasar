@@ -37,7 +37,7 @@ fun DashboardScreen(
     var currentTab by remember { mutableStateOf(NavTab.WATCHLIST) }
     var showAddDialog by remember { mutableStateOf(false) }
 
-    val defaultQuote = if (marketDataSource == MarketDataSource.TOKOCRYPTO) "USDT" else "IDR"
+    val defaultQuote = "IDR"
 
     val displayPairs = remember(
         selectedRankingTab,

@@ -29,18 +29,6 @@ enum class MarketDataSource(
             sellTakerPct = 0.42
         ),
         description = "Pasar Kripto Indonesia (Pair IDR) dengan orderbook & candle live Indodax."
-    ),
-    TOKOCRYPTO(
-        label = "Tokocrypto",
-        shortCode = "TOKO",
-        defaultQuoteAsset = "USDT",
-        defaultFeeConfig = TradingFeeConfig(
-            buyMakerPct = 0.10,
-            buyTakerPct = 0.10,
-            sellMakerPct = 0.10,
-            sellTakerPct = 0.10
-        ),
-        description = "Engine Binance Cloud (Pair USDT & BIDR) dengan likuiditas tinggi & pergerakan rapat."
     )
 }
 enum class MarketDataTransport(val label: String) { REST("REST"), WEBSOCKET("WebSocket") }

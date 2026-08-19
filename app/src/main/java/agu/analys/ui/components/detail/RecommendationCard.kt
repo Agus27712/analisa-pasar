@@ -125,7 +125,7 @@ fun RecommendationCard(
                 Spacer(Modifier.height(12.dp))
 
                 // Tombol Buka Exchange Langsung dari Card Rekomendasi
-                val appLabel = if (marketDataSource == agu.analys.config.MarketDataSource.TOKOCRYPTO) "Tokocrypto" else "Indodax"
+                val appLabel = "Indodax"
                 Button(
                     onClick = {
                         if (onOpenIndodax != null) onOpenIndodax()
@@ -134,7 +134,7 @@ fun RecommendationCard(
                     modifier = Modifier.fillMaxWidth().height(42.dp),
                     shape = RoundedCornerShape(8.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = if (marketDataSource == agu.analys.config.MarketDataSource.TOKOCRYPTO) Color(0xFF00C087) else Color(0xFF087FF5)
+                        containerColor = Color(0xFF087FF5)
                     )
                 ) {
                     Icon(Icons.AutoMirrored.Filled.OpenInNew, null, tint = Color.White, modifier = Modifier.size(16.dp))
@@ -145,7 +145,7 @@ fun RecommendationCard(
         }
 
         Spacer(Modifier.height(10.dp))
-        val exchangeName = if (marketDataSource == agu.analys.config.MarketDataSource.TOKOCRYPTO) "Tokocrypto" else "Indodax"
+        val exchangeName = "Indodax"
         Text(
             "Skor keyakinan: ${signal.confidence}/100 · Selalu pasang stop loss sebelum mengeksekusi di $exchangeName.",
             fontSize = 11.sp,

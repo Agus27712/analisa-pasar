@@ -211,13 +211,9 @@ fun getCoinFullName(symbol: String): String = when (symbol.uppercase()) {
     else -> symbol
 }
 
-fun openExchange(context: Context, source: MarketDataSource) {
-    val packageCandidates = if (source == MarketDataSource.TOKOCRYPTO) {
-        listOf("com.binance.cloud.tokocrypto", "com.tokocrypto.app", "com.tokocrypto")
-    } else {
-        listOf("id.co.bitcoin")
-    }
-    val appName = source.label
+fun openExchange(context: Context, source: MarketDataSource = MarketDataSource.INDODAX) {
+    val packageCandidates = listOf("id.co.bitcoin")
+    val appName = "Indodax"
 
     var launchIntent: Intent? = null
     for (pkg in packageCandidates) {

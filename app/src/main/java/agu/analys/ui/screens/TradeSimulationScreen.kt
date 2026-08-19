@@ -66,7 +66,7 @@ fun TradeSimulationScreen(
     val currentPrice = currentTick?.price ?: 0.0
     val isPriceUp = (currentTick?.change24h ?: 0.0) >= 0
     val quote = selectedPair.quoteAsset
-    val exchangeLabel = if (marketSource == MarketDataSource.TOKOCRYPTO) "Tokocrypto" else "Indodax"
+    val exchangeLabel = "Indodax"
 
     LaunchedEffect(selectedPair, currentTick?.price) {
         if (inputPrice.isEmpty() && currentPrice > 0.0) {
@@ -93,7 +93,7 @@ fun TradeSimulationScreen(
         }
     }
 
-    val defaultQuote = if (marketSource == MarketDataSource.TOKOCRYPTO) "USDT" else "IDR"
+    val defaultQuote = "IDR"
     val availablePairs = remember(watchlist, hotCoins, marketSource) {
         val list = mutableListOf<TradingPair>()
         list.addAll(TradingPair.popularPairsForSource(marketSource))

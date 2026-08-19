@@ -91,60 +91,42 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
 
         // SECTION: SUMBER DATA PASAR (EXCHANGE SOURCE)
         SectionHeader("SUMBER PASAR (EXCHANGE)")
-        Text(
-            "Pilih bursa kripto sumber data harga, orderbook, candlestick & sinyal analisis.",
-            color = TvTextSecondary,
-            fontSize = 11.sp
-        )
-        Spacer(Modifier.height(8.dp))
-
-        Row(
+        Card(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            shape = RoundedCornerShape(10.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF2196F3).copy(alpha = 0.12f)),
+            border = androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFF2196F3))
         ) {
-            // Card Tokocrypto
-            ExchangeSourceCard(
-                name = "TOKOCRYPTO",
-                subtitle = "Binance Cloud API",
-                quoteAsset = "USDT / BIDR",
-                isSelected = selectedSource == MarketDataSource.TOKOCRYPTO,
-                accentColor = Color(0xFF00C087),
-                modifier = Modifier.weight(1f)
-            ) {
-                selectedSource = MarketDataSource.TOKOCRYPTO
-                val defaultFees = MarketDataSource.TOKOCRYPTO.defaultFeeConfig
-                buyMakerFee = defaultFees.buyMakerPct.toString()
-                buyTakerFee = defaultFees.buyTakerPct.toString()
-                sellMakerFee = defaultFees.sellMakerPct.toString()
-                sellTakerFee = defaultFees.sellTakerPct.toString()
-                saved = false
-            }
-
-            // Card Indodax
-            ExchangeSourceCard(
-                name = "INDODAX",
-                subtitle = "Indodax Public API",
-                quoteAsset = "IDR",
-                isSelected = selectedSource == MarketDataSource.INDODAX,
-                accentColor = Color(0xFF2196F3),
-                modifier = Modifier.weight(1f)
-            ) {
-                selectedSource = MarketDataSource.INDODAX
-                val defaultFees = MarketDataSource.INDODAX.defaultFeeConfig
-                buyMakerFee = defaultFees.buyMakerPct.toString()
-                buyTakerFee = defaultFees.buyTakerPct.toString()
-                sellMakerFee = defaultFees.sellMakerPct.toString()
-                sellTakerFee = defaultFees.sellTakerPct.toString()
-                saved = false
+            Column(Modifier.padding(12.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "INDODAX",
+                        color = Color(0xFF2196F3),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Black
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .background(Color(0xFF2196F3), CircleShape)
+                    )
+                }
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = "Indodax Public API · Kline WebSocket · Pasar Kripto Indonesia (Pair IDR)",
+                    color = TvTextSecondary,
+                    fontSize = 10.sp
+                )
             }
         }
 
         Spacer(Modifier.height(8.dp))
         Text(
-            text = if (selectedSource == MarketDataSource.TOKOCRYPTO)
-                "✓ Data live dari Tokocrypto/Binance (Real API endpoint & WebSocket wss://stream.binance.com). Tidak ada mock data."
-            else
-                "✓ Data live dari Indodax (Real API endpoint indodax.com & WebSocket kline). Tidak ada mock data.",
+            text = "✓ Data live dari Indodax (Real API endpoint indodax.com & WebSocket kline). Tanpa mock data.",
             color = TvGreen,
             fontSize = 10.sp,
             lineHeight = 14.sp
