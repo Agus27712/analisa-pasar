@@ -386,7 +386,7 @@ fun DetailChartScreen(
         Spacer(Modifier.height(8.dp))
 
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            val exchangeColor = if (marketDataSource == MarketDataSource.TOKOCRYPTO) Color(0xFF00C087) else Color(0xFF087FF5)
+            val exchangeColor = Color(0xFF087FF5)
             Button(
                 onClick = { openExchange(context, marketDataSource) },
                 modifier = Modifier.weight(1f).height(44.dp),

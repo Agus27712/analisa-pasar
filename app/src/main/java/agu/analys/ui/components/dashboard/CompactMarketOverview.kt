@@ -98,19 +98,19 @@ fun DashboardMockupHeader(
                     Box(
                         modifier = Modifier
                             .background(
-                                if (marketDataSource == MarketDataSource.TOKOCRYPTO) Color(0xFF00C087).copy(alpha = 0.15f) else Color(0xFF2196F3).copy(alpha = 0.15f),
+                                Color(0xFF2196F3).copy(alpha = 0.15f),
                                 RoundedCornerShape(4.dp)
                             )
                             .border(
                                 0.8.dp,
-                                if (marketDataSource == MarketDataSource.TOKOCRYPTO) Color(0xFF00C087).copy(alpha = 0.4f) else Color(0xFF2196F3).copy(alpha = 0.4f),
+                                Color(0xFF2196F3).copy(alpha = 0.4f),
                                 RoundedCornerShape(4.dp)
                             )
                             .padding(horizontal = 6.dp, vertical = 1.dp)
                     ) {
                         Text(
                             text = "${marketDataSource.label.uppercase()} ($quoteAsset)",
-                            color = if (marketDataSource == MarketDataSource.TOKOCRYPTO) Color(0xFF00E676) else Color(0xFF64B5F6),
+                            color = Color(0xFF64B5F6),
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -201,7 +201,7 @@ fun DashboardMockupHeader(
                         .background(if (isConnected) TvGreen else TvRed, CircleShape)
                 )
                 Spacer(Modifier.width(6.dp))
-                val exchangeLabel = if (marketDataSource == MarketDataSource.TOKOCRYPTO) "Tokocrypto (Live Binance)" else "Indodax"
+                val exchangeLabel = "Indodax"
                 Text(
                     text = if (isConnected) "Data realtime $exchangeLabel" else "Koneksi offline / cache",
                     color = if (isConnected) TvGreen else TvRed,
