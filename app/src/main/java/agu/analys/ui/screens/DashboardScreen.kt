@@ -161,6 +161,9 @@ fun DashboardScreen(
                 currentTab = tab
                 when (tab) {
                     NavTab.WATCHLIST -> { /* Sudah di Watchlist */ }
+                    NavTab.PORTOFOLIO -> {
+                        viewModel.openPortfolio()
+                    }
                     NavTab.SIMULASI -> {
                         val firstPair = displayPairs.firstOrNull() ?: TradingPair.popularPairsForSource(marketDataSource).first()
                         viewModel.openSimulation(firstPair)

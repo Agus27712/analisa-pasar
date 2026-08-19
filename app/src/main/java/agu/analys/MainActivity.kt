@@ -27,6 +27,7 @@ import agu.analys.ui.screens.DashboardScreen
 import agu.analys.ui.screens.DetailChartScreen
 import agu.analys.ui.screens.LandscapeChartScreen
 import agu.analys.ui.screens.LearningPathScreen
+import agu.analys.ui.screens.PortfolioScreen
 import agu.analys.ui.screens.SettingsScreen
 import agu.analys.ui.screens.TradeSimulationScreen
 import agu.analys.ui.theme.TradingViewAITheme
@@ -78,6 +79,13 @@ class MainActivity : ComponentActivity() {
                             onNavigateToDashboard = { tradingViewModel.goBack() },
                             onOpenLandscapeChart = { tradingViewModel.openLandscapeChart() }
                         )
+                        AppScreen.PORTFOLIO -> PortfolioScreen(
+                            viewModel = tradingViewModel,
+                            onNavigateToDetail = { tradingViewModel.openCoinDetail(it) },
+                            onNavigateToSimulation = { tradingViewModel.openSimulation(it) },
+                            onOpenSettings = { tradingViewModel.openSettings() },
+                            onBack = { tradingViewModel.goBack() }
+                        )
                         AppScreen.SIMULATION_TRADE -> TradeSimulationScreen(
                             viewModel = tradingViewModel,
                             onOpenChart = { tradingViewModel.openCoinDetail(tradingViewModel.selectedPair.value) },
@@ -93,6 +101,8 @@ class MainActivity : ComponentActivity() {
                             onBack = { tradingViewModel.goBack() }
                         )
                         AppScreen.LEARNING -> LearningPathScreen(
+                            viewModel = tradingViewModel,
+                            onOpenSettings = { tradingViewModel.openSettings() },
                             onBack = { tradingViewModel.goBack() }
                         )
                     }

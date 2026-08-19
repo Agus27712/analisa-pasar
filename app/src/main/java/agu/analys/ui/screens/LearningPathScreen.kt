@@ -28,6 +28,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -39,6 +40,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import agu.analys.model.CandleBar
+import agu.analys.model.TradingPair
 import agu.analys.ui.theme.TvBackground
 import agu.analys.ui.theme.TvCardBackground
 import agu.analys.ui.theme.TvGreen
@@ -65,13 +68,34 @@ private val lessons = listOf(
 )
 
 @Composable
-fun LearningPathScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
+fun LearningPathScreen(
+    onBack: () -> Unit,
+    viewModel: TradingViewModel? = null,
+    onOpenSettings: () -> Unit = {},
+    modifier: Modifier = Modifier
+) {
     val context = LocalContext.current
     val prefs = remember { AppPreferences(context) }
     var completed by remember { mutableStateOf(prefs.getCompletedLearningLessons()) }
     var expanded by remember { mutableStateOf<Int?>(null) }
     val completedCount = completed.size.coerceAtMost(lessons.size)
     val progress = completedCount.toFloat() / lessons.size.toFloat()
+
+    val candles: List<CandleBar> = if (viewModel != null) {
+        val candlesState by viewModel.recentCandles.collectAsState()
+        candlesState
+    } else {
+        emptyList<CandleBar>()
+    }
+
+    val pair: TradingPair? = if (viewModel != null) {
+        val pairState by viewModel.selectedPair.collectAsState()
+        pairState
+    } else {
+        null
+    }
+
+    val marketStructure = remember(candles) { agu.analys.engine.MarketStructureAnalyzer.analyze(candles) }
 
     Column(modifier = modifier.fillMaxSize().background(TvBackground)) {
         Row(
@@ -82,8 +106,8 @@ fun LearningPathScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Kembali", tint = TvTextPrimary)
             }
             Column(modifier = Modifier.weight(1f)) {
-                Text("MODE BELAJAR", fontSize = 17.sp, fontWeight = FontWeight.Black, color = TvTextPrimary)
-                Text("Pahami konsep sebelum mempercayai sinyal.", fontSize = 10.sp, color = TvTextSecondary)
+                Text("MODE BELAJAR & EDUKASI", fontSize = 16.sp, fontWeight = FontWeight.Black, color = TvTextPrimary)
+                Text("Pahami konsep & struktur sebelum eksekusi.", fontSize = 10.sp, color = TvTextSecondary)
             }
             Icon(Icons.Default.MenuBook, contentDescription = null, tint = TvGreen)
         }
@@ -111,10 +135,21 @@ fun LearningPathScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
         }
 
         LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+            modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             item { Spacer(Modifier.height(4.dp)) }
+
+            // LIVE STRUCTURE LEARNING CARD (Dipindah dari DetailScreen ke Modul Belajar)
+            if (candles.isNotEmpty()) {
+                item {
+                    agu.analys.ui.components.MarketStructureLearningCard(
+                        snapshot = marketStructure,
+                        quoteAsset = pair?.quoteAsset ?: "IDR"
+                    )
+                }
+            }
+
             itemsIndexed(lessons) { index, lesson ->
                 val isExpanded = expanded == index
                 val isCompleted = completed.contains(index)
@@ -165,6 +200,21 @@ fun LearningPathScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                 }
             }
             item { Spacer(Modifier.height(20.dp)) }
+        }
+
+        if (viewModel != null) {
+            agu.analys.ui.components.dashboard.AppBottomNavigationBar(
+                currentTab = agu.analys.ui.components.dashboard.NavTab.BELAJAR,
+                onSelectTab = { tab ->
+                    when (tab) {
+                        agu.analys.ui.components.dashboard.NavTab.WATCHLIST -> viewModel.navigateTo(agu.analys.model.AppScreen.DASHBOARD)
+                        agu.analys.ui.components.dashboard.NavTab.PORTOFOLIO -> viewModel.openPortfolio()
+                        agu.analys.ui.components.dashboard.NavTab.SIMULASI -> viewModel.openSimulation()
+                        agu.analys.ui.components.dashboard.NavTab.BELAJAR -> { /* Sudah di Belajar */ }
+                        agu.analys.ui.components.dashboard.NavTab.SETTINGS -> onOpenSettings()
+                    }
+                }
+            )
         }
     }
 }

@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.CompareArrows
+import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.FormatListBulleted
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Settings
@@ -22,7 +23,7 @@ import agu.analys.ui.theme.TvGreen
 import agu.analys.ui.theme.TvTextSecondary
 
 enum class NavTab {
-    WATCHLIST, SIMULASI, BELAJAR, SETTINGS
+    WATCHLIST, PORTOFOLIO, SIMULASI, BELAJAR, SETTINGS
 }
 
 @Composable
@@ -44,6 +45,12 @@ fun AppBottomNavigationBar(
             label = "Watchlist",
             isSelected = currentTab == NavTab.WATCHLIST,
             onClick = { onSelectTab(NavTab.WATCHLIST) }
+        )
+        NavItem(
+            icon = Icons.Default.AccountBalanceWallet,
+            label = "Portofolio",
+            isSelected = currentTab == NavTab.PORTOFOLIO,
+            onClick = { onSelectTab(NavTab.PORTOFOLIO) }
         )
         NavItem(
             icon = Icons.AutoMirrored.Filled.CompareArrows,
