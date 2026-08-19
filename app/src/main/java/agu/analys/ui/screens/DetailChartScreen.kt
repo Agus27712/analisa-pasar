@@ -16,9 +16,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
+import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CropRotate
 import androidx.compose.material.icons.filled.ShowChart
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -297,21 +299,13 @@ fun DetailChartScreen(
 
         Spacer(Modifier.height(10.dp))
 
-        // 1.5. RADAR PROGRESS ENTRY (STATUS TUNGGU / SIAP / BUY)
+        // 2. RADAR PROGRESS ENTRY (STATUS TUNGGU / SIAP / BUY & FEE TRANSAKSI)
         WaitingEntryRadarCard(
             signal = signal,
             scalping = isScalping,
             fees = tradingFees,
             currentPrice = tick?.price ?: 0.0,
             baseAsset = pair.baseAsset,
-            quoteAsset = pair.quoteAsset
-        )
-
-        Spacer(Modifier.height(10.dp))
-
-        // 2. EDUKASI STRUKTUR PASAR BERJALAN
-        MarketStructureLearningCard(
-            snapshot = marketStructure,
             quoteAsset = pair.quoteAsset
         )
 
@@ -337,40 +331,69 @@ fun DetailChartScreen(
 
         Spacer(Modifier.height(10.dp))
 
-        // 5. DETAIL INDIKATOR TEKNIKAL REAL-TIME (RSI, EMA, MACD, Volume, ATR)
-        TechnicalDetailsCard(
-            indicators = indicators,
-            structure = marketStructure,
-            volume24h = tick?.volume24h ?: 0.0,
-            scalping = isScalping
-        )
+        // 5. DETAIL INDIKATOR TEKNIKAL & OBSERVASI PASAR (Collapsible untuk menjaga tampilan tetap bersih)
+        var showTechnicalDetails by remember { mutableStateOf(false) }
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF09121C)),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E2836))
+        ) {
+            Column(modifier = Modifier.padding(12.dp)) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showTechnicalDetails = !showTechnicalDetails },
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Tune,
+                            contentDescription = null,
+                            tint = Color(0xFF72B7FF),
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = "DETAIL INDIKATOR & OBSERVASI",
+                            color = Color(0xFF72B7FF),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Text(
+                        text = if (showTechnicalDetails) "Tutup ▲" else "Lihat Detail ▼",
+                        color = TvTextSecondary,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+
+                AnimatedVisibility(visible = showTechnicalDetails) {
+                    Column(modifier = Modifier.padding(top = 10.dp)) {
+                        TechnicalDetailsCard(
+                            indicators = indicators,
+                            structure = marketStructure,
+                            volume24h = tick?.volume24h ?: 0.0,
+                            scalping = isScalping
+                        )
+                        Spacer(Modifier.height(10.dp))
+                        MonitorCard(
+                            signal = signal,
+                            structure = marketStructure,
+                            price = tick?.price ?: 0.0,
+                            cached = false,
+                            quoteAsset = pair.quoteAsset
+                        )
+                    }
+                }
+            }
+        }
 
         Spacer(Modifier.height(10.dp))
 
-        // 6. YANG PERLU DIPANTAU (Area Observasi & Key Alert Level)
-        MonitorCard(
-            signal = signal,
-            structure = marketStructure,
-            price = tick?.price ?: 0.0,
-            cached = false,
-            quoteAsset = pair.quoteAsset
-        )
-
-        Spacer(Modifier.height(10.dp))
-
-        // 7. MANAJEMEN POSISI SPOT TRADING (Simulasi Portofolio & Average)
-        SpotPositionCard(
-            symbol = pair.symbol,
-            signal = signal,
-            position = spotPosition,
-            currentPrice = tick?.price ?: 0.0,
-            quoteAsset = pair.quoteAsset,
-            onPositionChanged = viewModel::refreshSpotPosition
-        )
-
-        Spacer(Modifier.height(10.dp))
-
-        // 8. ASISTEN AI AUDIT & RINGKASAN
+        // 6. ASISTEN AI AUDIT & RINGKASAN
         AiAssistantCard(
             auditText = aiGroq,
             auditLoading = aiLoadingGroq,
@@ -384,12 +407,12 @@ fun DetailChartScreen(
 
         Spacer(Modifier.height(10.dp))
 
-        // 9. DISCLAIMER & MANAJEMEN RISIKO
+        // 7. DISCLAIMER & MANAJEMEN RISIKO
         DisclaimerCard()
 
         Spacer(Modifier.height(14.dp))
 
-        // Action Buttons: Simulasi Trade + Buka Exchange + AI Analisis
+        // Action Buttons: Simulasi Trade + Buka Portofolio + Buka Exchange + AI Analisis
         Button(
             onClick = { viewModel.openSimulation(pair) },
             modifier = Modifier.fillMaxWidth().height(46.dp),
@@ -404,6 +427,18 @@ fun DetailChartScreen(
         Spacer(Modifier.height(8.dp))
 
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(
+                onClick = { viewModel.openPortfolio() },
+                modifier = Modifier.weight(1f).height(44.dp),
+                shape = RoundedCornerShape(10.dp),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF72B7FF)),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E2836))
+            ) {
+                Icon(Icons.Default.AccountBalanceWallet, null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Portofolio", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            }
+
             val exchangeColor = Color(0xFF087FF5)
             Button(
                 onClick = { openExchange(context, marketDataSource) },
@@ -411,28 +446,32 @@ fun DetailChartScreen(
                 shape = RoundedCornerShape(10.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = exchangeColor)
             ) {
-                Text("Buka ${marketDataSource.label}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-            }
-            Button(
-                onClick = {
-                    if (provider == agu.analys.config.AiProvider.GROQ) viewModel.requestDeepAiAudit()
-                    else viewModel.requestGeminiChartSummary()
-                },
-                enabled = !aiLoadingGroq && !aiLoadingGemini && live,
-                modifier = Modifier.weight(1f).height(44.dp),
-                shape = RoundedCornerShape(10.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E2836))
-            ) {
-                Icon(Icons.Default.AutoAwesome, null, tint = TvTextPrimary, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(5.dp))
-                Text(
-                    if (aiLoadingGroq || aiLoadingGemini) "Menganalisis..." else "AI Analisis",
-                    color = TvTextPrimary,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp
-                )
+                Text("Buka ${marketDataSource.label}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
             }
         }
+
+        Spacer(Modifier.height(8.dp))
+
+        Button(
+            onClick = {
+                if (provider == agu.analys.config.AiProvider.GROQ) viewModel.requestDeepAiAudit()
+                else viewModel.requestGeminiChartSummary()
+            },
+            enabled = !aiLoadingGroq && !aiLoadingGemini && live,
+            modifier = Modifier.fillMaxWidth().height(44.dp),
+            shape = RoundedCornerShape(10.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E2836))
+        ) {
+            Icon(Icons.Default.AutoAwesome, null, tint = TvTextPrimary, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(5.dp))
+            Text(
+                if (aiLoadingGroq || aiLoadingGemini) "Menganalisis..." else "AI Analisis Pasar",
+                color = TvTextPrimary,
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp
+            )
+        }
+
         Spacer(Modifier.height(16.dp))
     }
 }

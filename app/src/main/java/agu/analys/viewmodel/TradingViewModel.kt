@@ -370,6 +370,8 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         navigateTo(AppScreen.SIMULATION_TRADE)
     }
 
+    fun openPortfolio() { navigateTo(AppScreen.PORTFOLIO) }
+
     fun openLandscapeChart() { navigateTo(AppScreen.LANDSCAPE_CHART) }
     fun closeLandscapeChart() { goBack() }
     fun openSettings() { navigateTo(AppScreen.SETTINGS) }
