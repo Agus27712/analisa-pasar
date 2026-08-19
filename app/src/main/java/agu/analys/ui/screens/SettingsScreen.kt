@@ -25,6 +25,7 @@ import agu.analys.BuildConfig
 import agu.analys.config.AiProvider
 import agu.analys.config.MarketDataSource
 import agu.analys.config.ScalpingSensitivity
+import agu.analys.config.StrategyMode
 import agu.analys.util.MarketDataCache
 import agu.analys.ui.theme.TvBackground
 import agu.analys.ui.theme.TvGreen
@@ -40,7 +41,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
     val prefs = remember { AppPreferences(context) }
     val currentMarketSource by viewModel.marketDataSource.collectAsState()
     var selectedSource by remember(currentMarketSource) { mutableStateOf(currentMarketSource) }
-    var scalping by remember { mutableStateOf(prefs.isScalpingMode) }
+    var strategyMode by remember { mutableStateOf(prefs.strategyMode) }
     var sensitivity by remember { mutableStateOf(prefs.scalpingSensitivity) }
     var provider by remember { mutableStateOf(prefs.aiProvider) }
     var groq by remember { mutableStateOf(prefs.groqApiKey) }
@@ -198,20 +199,20 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
         )
         Spacer(Modifier.height(8.dp))
 
-        // Card SCALPING (BUY MODE)
+        // Card 1: SCALPING (BUY MODE)
         ModeOptionCard(
             title = "SCALPING",
             tag = "BUY MODE",
             tagBg = Color(0xFF123D2A),
             tagFg = TvGreen,
-            isSelected = scalping,
+            isSelected = strategyMode == StrategyMode.SCALPING,
             desc = "Mencari peluang BUY jangka pendek (1M – 15M) dengan eksekusi cepat dan filter MTF.",
             bullets = listOf("Bias: 1H (Bullish)", "Setup: 15M", "Trigger: 1M", "Fokus: Quick Entry & Tight SL"),
-            onClick = { scalping = true; saved = false }
+            onClick = { strategyMode = StrategyMode.SCALPING; saved = false }
         )
 
         // Sensitivitas Scalping jika scalping dipilih
-        if (scalping) {
+        if (strategyMode == StrategyMode.SCALPING) {
             Spacer(Modifier.height(8.dp))
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -260,16 +261,35 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
 
         Spacer(Modifier.height(10.dp))
 
-        // Card SWING (ANALISIS TREND)
+        // Card 2: SECOND-WAVE (2ND-WAVE HUNTER)
+        ModeOptionCard(
+            title = "SECOND-WAVE",
+            tag = "2ND-WAVE HUNTER",
+            tagBg = Color(0xFF0F3845),
+            tagFg = Color(0xFF00E5FF),
+            isSelected = strategyMode == StrategyMode.SECOND_WAVE,
+            desc = "Membidik pantulan gelombang kedua pada koin pasca pump dengan koreksi terukur dan konfirmasi reclaim.",
+            bullets = listOf(
+                "Timeframe: 15M (Eksekusi) & 1H (Struktur)",
+                "Kriteria: Prior Run > 20% & Pullback Drawdown 50–85%",
+                "Sinyal: Base-Dip & Reclaim Entry",
+                "Target: TP1 (+10–15%) & TP2 (+25–50%+)"
+            ),
+            onClick = { strategyMode = StrategyMode.SECOND_WAVE; saved = false }
+        )
+
+        Spacer(Modifier.height(10.dp))
+
+        // Card 3: SWING (ANALISIS TREND)
         ModeOptionCard(
             title = "SWING",
             tag = "ANALISIS TREND",
             tagBg = Color(0xFF122840),
             tagFg = Color(0xFF72B7FF),
-            isSelected = !scalping,
+            isSelected = strategyMode == StrategyMode.SWING,
             desc = "Menganalisis trend jangka menengah (1H – 1D) untuk posisi swing yang lebih tenang.",
             bullets = listOf("Timeframe: 1H & 1D", "Analisis struktur trend (HH/HL/LH/LL)", "Fokus: Support / Resistance & Demand Zone"),
-            onClick = { scalping = false; saved = false }
+            onClick = { strategyMode = StrategyMode.SWING; saved = false }
         )
 
         Spacer(Modifier.height(16.dp))
@@ -397,7 +417,8 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                 if (selectedSource != prefs.marketDataSource) {
                     viewModel.setMarketDataSource(selectedSource)
                 }
-                prefs.isScalpingMode = scalping
+                prefs.strategyMode = strategyMode
+                prefs.isScalpingMode = (strategyMode == StrategyMode.SCALPING)
                 prefs.scalpingSensitivity = sensitivity
                 prefs.aiProvider = provider
                 prefs.groqApiKey = groq
@@ -411,7 +432,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                 )
                 prefs.tradingFees = updatedFees
                 viewModel.updateTradingFees(updatedFees)
-                viewModel.setScalpingMode(scalping)
+                viewModel.setStrategyMode(strategyMode)
                 viewModel.setScalpingSensitivity(sensitivity)
                 saved = true
                 Toast.makeText(context, "Pengaturan berhasil disimpan", Toast.LENGTH_SHORT).show()

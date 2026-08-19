@@ -8,6 +8,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import agu.analys.config.MarketDataSource
+import agu.analys.config.StrategyMode
 import agu.analys.model.MarketConnectionState
 import agu.analys.model.TradingPair
 import agu.analys.ui.components.dashboard.*
@@ -26,14 +27,16 @@ fun DashboardScreen(
     val worthCoins by viewModel.worthCoins.collectAsState()
     val hotCoins by viewModel.hotCoins.collectAsState()
     val gainersCoins by viewModel.gainersCoins.collectAsState()
+    val secondWaveCoins by viewModel.secondWaveCoins.collectAsState()
     val topVolumeCoins by viewModel.topVolumeCoins.collectAsState()
     val usdtIdrRate by viewModel.usdtIdrRate.collectAsState()
     val connectionState by viewModel.connectionState.collectAsState()
     val dashboardTicks by viewModel.dashboardTicks.collectAsState()
     val watchlist by viewModel.watchlist.collectAsState()
     val isScalpingMode by viewModel.isScalpingMode.collectAsState()
+    val strategyMode by viewModel.strategyMode.collectAsState()
     val recentCandles by viewModel.recentCandles.collectAsState()
-    var selectedRankingTab by remember { mutableStateOf(MarketRankingTab.UNTUNG) }
+    var selectedRankingTab by remember { mutableStateOf(MarketRankingTab.SCALPING_FAST) }
     var currentTab by remember { mutableStateOf(NavTab.WATCHLIST) }
     var showAddDialog by remember { mutableStateOf(false) }
 
@@ -42,6 +45,7 @@ fun DashboardScreen(
     val displayPairs = remember(
         selectedRankingTab,
         gainersCoins,
+        secondWaveCoins,
         hotCoins,
         topVolumeCoins,
         worthCoins,
@@ -49,30 +53,21 @@ fun DashboardScreen(
         marketDataSource
     ) {
         when (selectedRankingTab) {
-            MarketRankingTab.UNTUNG -> {
-                val list = if (gainersCoins.isNotEmpty()) gainersCoins.map { it.symbol }
-                else if (hotCoins.isNotEmpty()) hotCoins.map { it.symbol }
-                else worthCoins.filter { it.isWorthIt || it.potentialProfitPct > 0 }.map { it.pair.symbol }
+            MarketRankingTab.SCALPING_FAST -> {
+                val list = if (gainersCoins.isNotEmpty()) gainersCoins.take(4).map { it.symbol }
+                else if (hotCoins.isNotEmpty()) hotCoins.take(4).map { it.symbol }
+                else worthCoins.filter { it.isWorthIt || it.potentialProfitPct > 0 }.take(4).map { it.pair.symbol }
 
                 val mapped = list.map { TradingPair.fromCustomSymbol(it, defaultQuote) }.distinctBy { it.symbol }
-                if (mapped.isNotEmpty()) mapped else TradingPair.popularPairsForSource(marketDataSource)
+                if (mapped.isNotEmpty()) mapped else TradingPair.popularPairsForSource(marketDataSource).take(4)
             }
-            MarketRankingTab.HOT -> {
-                val list = if (hotCoins.isNotEmpty()) hotCoins.map { it.symbol }
-                else worthCoins.map { it.pair.symbol }
+            MarketRankingTab.SECOND_WAVE -> {
+                val list = if (secondWaveCoins.isNotEmpty()) secondWaveCoins.take(4).map { it.symbol }
+                else if (gainersCoins.isNotEmpty()) gainersCoins.take(4).map { it.symbol }
+                else worthCoins.map { it.pair.symbol }.take(4)
+
                 val mapped = list.map { TradingPair.fromCustomSymbol(it, defaultQuote) }.distinctBy { it.symbol }
-                if (mapped.isNotEmpty()) mapped else TradingPair.popularPairsForSource(marketDataSource)
-            }
-            MarketRankingTab.VOLUME -> {
-                val list = if (topVolumeCoins.isNotEmpty()) topVolumeCoins.map { it.symbol }
-                else worthCoins.map { it.pair.symbol }
-                val mapped = list.map { TradingPair.fromCustomSymbol(it, defaultQuote) }.distinctBy { it.symbol }
-                if (mapped.isNotEmpty()) mapped else TradingPair.popularPairsForSource(marketDataSource)
-            }
-            MarketRankingTab.AI_PICKS -> {
-                val list = worthCoins.map { it.pair.symbol }
-                val mapped = list.map { TradingPair.fromCustomSymbol(it, defaultQuote) }.distinctBy { it.symbol }
-                if (mapped.isNotEmpty()) mapped else TradingPair.popularPairsForSource(marketDataSource)
+                if (mapped.isNotEmpty()) mapped else TradingPair.popularPairsForSource(marketDataSource).take(4)
             }
             MarketRankingTab.WATCHLIST -> {
                 watchlist.map { TradingPair.fromCustomSymbol(it, defaultQuote) }.distinctBy { it.symbol }
@@ -80,10 +75,11 @@ fun DashboardScreen(
         }
     }
 
-    val allTicks = remember(dashboardTicks, hotCoins, gainersCoins, topVolumeCoins) {
+    val allTicks = remember(dashboardTicks, hotCoins, gainersCoins, secondWaveCoins, topVolumeCoins) {
         dashboardTicks +
             hotCoins.associateBy { it.symbol } +
             gainersCoins.associateBy { it.symbol } +
+            secondWaveCoins.associateBy { it.symbol } +
             topVolumeCoins.associateBy { it.symbol }
     }
     val worthBySymbol = remember(worthCoins) { worthCoins.associateBy { it.pair.symbol } }
@@ -101,8 +97,19 @@ fun DashboardScreen(
             isScalpingMode = isScalpingMode,
             isConnected = isConnected,
             selectedTab = selectedRankingTab,
-            onSelectTab = { selectedRankingTab = it },
-            onToggleMode = { viewModel.setScalpingMode(it) },
+            onSelectTab = { tab ->
+                selectedRankingTab = tab
+                when (tab) {
+                    MarketRankingTab.SCALPING_FAST -> viewModel.setStrategyMode(StrategyMode.SCALPING)
+                    MarketRankingTab.SECOND_WAVE -> viewModel.setStrategyMode(StrategyMode.SECOND_WAVE)
+                    MarketRankingTab.WATCHLIST -> { /* tetap pada mode aktif */ }
+                }
+            },
+            onToggleMode = { isScalp ->
+                val newMode = if (isScalp) StrategyMode.SCALPING else StrategyMode.SECOND_WAVE
+                viewModel.setStrategyMode(newMode)
+                selectedRankingTab = if (isScalp) MarketRankingTab.SCALPING_FAST else MarketRankingTab.SECOND_WAVE
+            },
             onRefresh = { viewModel.retryConnection() },
             onMenuClick = onOpenSettings
         )

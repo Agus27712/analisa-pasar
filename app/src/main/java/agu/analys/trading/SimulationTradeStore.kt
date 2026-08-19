@@ -118,129 +118,31 @@ class SimulationTradeStore(context: Context) {
             SimulationOrderType.MARKET -> {
                 val execPrice = if (currentMarketPrice > 0.0) currentMarketPrice else price
                 if (execPrice <= 0.0) return SimulationOrderResult.Error("Harga pasar realtime belum tersedia.")
-                val totalIdr = quantity * execPrice
-                val feeRate = INDODAX_TAKER_FEE_RATE
-                val feeIdr = totalIdr * feeRate
 
                 if (side == SimulationOrderSide.BUY) {
-                    val requiredIdr = totalIdr + feeIdr
-                    if (wallet.getAvailableIdr() < requiredIdr) {
-                        return SimulationOrderResult.Error(
-                            "Saldo $quote tidak cukup. Dibutuhkan ${formatMoney(requiredIdr, quote)}, saldo ${formatMoney(wallet.getAvailableIdr(), quote)}."
-                        )
-                    }
-
-                    val newCoinBalances = wallet.coinBalances.toMutableMap()
-                    val currentCoin = newCoinBalances[baseKey] ?: 0.0
-                    val currentAvg = wallet.avgBuyPrices[baseKey] ?: 0.0
-                    val newTotalCoin = currentCoin + quantity
-                    val newAvgPrice = if (newTotalCoin > 0.0) {
-                        ((currentCoin * currentAvg) + totalIdr) / newTotalCoin
-                    } else execPrice
-
-                    newCoinBalances[baseKey] = newTotalCoin
-                    val newAvgMap = wallet.avgBuyPrices.toMutableMap().apply { put(baseKey, newAvgPrice) }
-
-                    val updatedWallet = wallet.copy(
-                        idrBalance = (wallet.idrBalance - requiredIdr).coerceAtLeast(0.0),
-                        coinBalances = newCoinBalances,
-                        avgBuyPrices = newAvgMap
+                    val result = SimulationOrderEngine.executeMarketBuy(wallet, symbol, baseKey, quote, execPrice, quantity)
+                    return result.fold(
+                        onSuccess = { res ->
+                            saveWallet(res.updatedWallet)
+                            addTradeHistory(res.historyItem)
+                            SimulationOrderResult.Success(res.completedOrder, "Market Buy berhasil @ ${formatMoney(execPrice, quote)}!")
+                        },
+                        onFailure = { err ->
+                            SimulationOrderResult.Error(err.message ?: "Gagal memproses Market Buy.")
+                        }
                     )
-                    saveWallet(updatedWallet)
-
-                    val history = SimulationTradeHistoryItem(
-                        id = UUID.randomUUID().toString(),
-                        orderId = UUID.randomUUID().toString(),
-                        symbol = symbol,
-                        baseAsset = baseKey,
-                        quoteAsset = quote,
-                        side = side,
-                        type = type,
-                        executionPrice = execPrice,
-                        quantity = quantity,
-                        totalIdr = totalIdr,
-                        feeIdr = feeIdr,
-                        timestamp = System.currentTimeMillis()
-                    )
-                    addTradeHistory(history)
-
-                    val order = SimulationOrder(
-                        id = history.orderId,
-                        symbol = symbol,
-                        baseAsset = baseKey,
-                        quoteAsset = quote,
-                        side = side,
-                        type = type,
-                        limitPrice = execPrice,
-                        quantity = quantity,
-                        totalIdr = totalIdr,
-                        filledQuantity = quantity,
-                        filledAvgPrice = execPrice,
-                        feeIdr = feeIdr,
-                        status = SimulationOrderStatus.FILLED,
-                        filledAt = System.currentTimeMillis()
-                    )
-                    return SimulationOrderResult.Success(order, "Market Buy berhasil @ ${formatMoney(execPrice, quote)}!")
                 } else {
-                    if (wallet.getAvailableCoin(baseKey) < quantity) {
-                        return SimulationOrderResult.Error("Saldo $baseKey tidak cukup. Tersedia: ${wallet.getAvailableCoin(baseKey)}")
-                    }
-
-                    val netIdr = (totalIdr - feeIdr).coerceAtLeast(0.0)
-                    val avgBuy = wallet.avgBuyPrices[baseKey] ?: execPrice
-                    val costBasis = quantity * avgBuy
-                    val pnlIdr = totalIdr - costBasis - feeIdr
-                    val pnlPercent = if (costBasis > 0.0) (pnlIdr / costBasis) * 100.0 else 0.0
-
-                    val newCoinBalances = wallet.coinBalances.toMutableMap()
-                    val remaining = (newCoinBalances[baseKey] ?: 0.0) - quantity
-                    if (remaining <= 0.00000001) {
-                        newCoinBalances.remove(baseKey)
-                    } else {
-                        newCoinBalances[baseKey] = remaining
-                    }
-
-                    val updatedWallet = wallet.copy(
-                        idrBalance = wallet.idrBalance + netIdr,
-                        coinBalances = newCoinBalances
+                    val result = SimulationOrderEngine.executeMarketSell(wallet, symbol, baseKey, quote, execPrice, quantity)
+                    return result.fold(
+                        onSuccess = { res ->
+                            saveWallet(res.updatedWallet)
+                            addTradeHistory(res.historyItem)
+                            SimulationOrderResult.Success(res.completedOrder, "Market Sell berhasil @ ${formatMoney(execPrice, quote)}!")
+                        },
+                        onFailure = { err ->
+                            SimulationOrderResult.Error(err.message ?: "Gagal memproses Market Sell.")
+                        }
                     )
-                    saveWallet(updatedWallet)
-
-                    val history = SimulationTradeHistoryItem(
-                        id = UUID.randomUUID().toString(),
-                        orderId = UUID.randomUUID().toString(),
-                        symbol = symbol,
-                        baseAsset = baseKey,
-                        quoteAsset = quote,
-                        side = side,
-                        type = type,
-                        executionPrice = execPrice,
-                        quantity = quantity,
-                        totalIdr = totalIdr,
-                        feeIdr = feeIdr,
-                        timestamp = System.currentTimeMillis(),
-                        pnlIdr = pnlIdr,
-                        pnlPercent = pnlPercent
-                    )
-                    addTradeHistory(history)
-
-                    val order = SimulationOrder(
-                        id = history.orderId,
-                        symbol = symbol,
-                        baseAsset = baseKey,
-                        quoteAsset = quote,
-                        side = side,
-                        type = type,
-                        limitPrice = execPrice,
-                        quantity = quantity,
-                        totalIdr = totalIdr,
-                        filledQuantity = quantity,
-                        filledAvgPrice = execPrice,
-                        feeIdr = feeIdr,
-                        status = SimulationOrderStatus.FILLED,
-                        filledAt = System.currentTimeMillis()
-                    )
-                    return SimulationOrderResult.Success(order, "Market Sell berhasil @ ${formatMoney(execPrice, quote)}!")
                 }
             }
 

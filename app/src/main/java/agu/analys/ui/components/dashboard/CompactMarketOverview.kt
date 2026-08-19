@@ -31,20 +31,18 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-enum class MarketRankingTab(val label: String) {
-    UNTUNG("🔥 Untung"),
-    HOT("⚡ Hot"),
-    VOLUME("📊 24H Vol"),
-    AI_PICKS("🎯 AI Rekomendasi"),
-    WATCHLIST("⭐ Watchlist")
+enum class MarketRankingTab(val label: String, val badge: String) {
+    SCALPING_FAST("⚡ Scalping Agresif", "⚡ CEPAT"),
+    SECOND_WAVE("🌊 Second-Wave", "🌊 2ND-WAVE"),
+    WATCHLIST("⭐ Watchlist", "⭐ FAVORIT")
 }
 
 /**
  * Top Stat Header & Exchange Source & Mode & Tabs:
- * - EXCHANGE SWITCHER: [INDODAX | TOKOCRYPTO]
- * - 24H VOL | AVG 24H | MODE (SCALPING / SWING)
- * - ● Data realtime Tokocrypto (Binance Engine) / Indodax
- * - TABS: [🔥 Untung | ⚡ Hot | 📊 24H Vol | 🎯 AI Rekomendasi | ⭐ Watchlist]
+ * - EXCHANGE BADGE: [INDODAX (IDR)]
+ * - 24H VOL | AVG 24H | STRATEGY MODE (SCALPING / 2ND-WAVE)
+ * - ● Data realtime Indodax
+ * - 3 TABS: [⚡ Scalping Agresif (Top 4) | 🌊 Second-Wave (Top 4) | ⭐ Watchlist]
  */
 @Composable
 fun DashboardMockupHeader(
@@ -52,7 +50,7 @@ fun DashboardMockupHeader(
     marketDataSource: MarketDataSource = MarketDataSource.INDODAX,
     isScalpingMode: Boolean,
     isConnected: Boolean,
-    selectedTab: MarketRankingTab = MarketRankingTab.UNTUNG,
+    selectedTab: MarketRankingTab = MarketRankingTab.SCALPING_FAST,
     onSelectTab: (MarketRankingTab) -> Unit,
     onToggleMode: (Boolean) -> Unit = {},
     onRefresh: () -> Unit,
@@ -176,8 +174,8 @@ fun DashboardMockupHeader(
                             .padding(horizontal = 8.dp, vertical = 2.dp)
                     ) {
                         Text(
-                            text = if (isScalpingMode) "SCALPING" else "SWING",
-                            color = if (isScalpingMode) TvGreen else Color(0xFF72B7FF),
+                            text = if (isScalpingMode) "SCALPING" else "2ND-WAVE",
+                            color = if (isScalpingMode) TvGreen else Color(0xFF00E5FF),
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Black
                         )
