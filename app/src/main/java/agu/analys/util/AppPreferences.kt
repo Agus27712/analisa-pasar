@@ -5,11 +5,23 @@ import agu.analys.BuildConfig
 import agu.analys.config.AiProvider
 import agu.analys.config.MarketDataSource
 import agu.analys.config.ScalpingSensitivity
+import agu.analys.config.StrategyMode
 import agu.analys.config.TradingFeeConfig
 
 /** Local user configuration. Runtime market data is deliberately kept elsewhere. */
 class AppPreferences(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    var strategyMode: StrategyMode
+        get() = runCatching {
+            val name = prefs.getString(KEY_STRATEGY_MODE, null)
+            if (name != null) StrategyMode.valueOf(name)
+            else if (isScalpingMode) StrategyMode.SCALPING else StrategyMode.SECOND_WAVE
+        }.getOrDefault(StrategyMode.SCALPING)
+        set(value) {
+            prefs.edit().putString(KEY_STRATEGY_MODE, value.name).apply()
+            isScalpingMode = (value == StrategyMode.SCALPING)
+        }
 
     var groqApiKey: String
         get() {
@@ -89,6 +101,7 @@ class AppPreferences(context: Context) {
         private const val KEY_GEMINI = "gemini_api_key"
         private const val KEY_AI_PROVIDER = "ai_provider"
         private const val KEY_MARKET_SOURCE = "market_data_source"
+        private const val KEY_STRATEGY_MODE = "strategy_mode"
         private const val KEY_SCALPING_MODE = "scalping_mode"
         private const val KEY_SCALPING_SENSITIVITY = "scalping_sensitivity"
         private const val KEY_WATCHLIST_LEGACY = "watchlist_symbols"

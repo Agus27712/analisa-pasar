@@ -6,8 +6,10 @@ import androidx.lifecycle.viewModelScope
 import agu.analys.bridge.TradingViewBridge
 import agu.analys.config.MarketDataSource
 import agu.analys.config.ScalpingSensitivity
+import agu.analys.config.StrategyMode
 import agu.analys.config.TradingFeeConfig
 import agu.analys.engine.LearningTradingEngine
+import agu.analys.engine.secondwave.SecondWaveEvaluator
 import agu.analys.model.AISignalState
 import agu.analys.model.AppScreen
 import agu.analys.model.CandleBar
@@ -57,6 +59,8 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     private val marketCache = MarketDataCache(application)
     private val positionStore = SpotPositionStore(application)
     private val simulationStore = SimulationTradeStore(application)
+    private val simCoordinator = SimulationCoordinator(simulationStore)
+    private val updateCoordinator = AppUpdateCoordinator(viewModelScope)
 
     // WebSocket Indodax
     private val indodaxWebSocket = IndodaxMarketWebSocket(
@@ -97,11 +101,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         _recentPrices.value = prices
 
         // Trigger Realtime Simulation Matching Engine
-        val filled = simulationStore.processPriceTick(normalized.symbol, normalized.price, normalized.high24h, normalized.low24h)
-        if (filled.isNotEmpty()) {
-            refreshSimulationState()
-            _lastFilledSimulationOrder.value = filled.first()
-        }
+        simCoordinator.onPriceTick(normalized.symbol, normalized.price, normalized.high24h, normalized.low24h)
     }
 
     private fun handleWebSocketCandle(candle: CandleBar) {
@@ -177,6 +177,9 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     private val _gainersCoins = MutableStateFlow<List<MarketTick>>(emptyList())
     val gainersCoins: StateFlow<List<MarketTick>> = _gainersCoins.asStateFlow()
 
+    private val _secondWaveCoins = MutableStateFlow<List<MarketTick>>(emptyList())
+    val secondWaveCoins: StateFlow<List<MarketTick>> = _secondWaveCoins.asStateFlow()
+
     private val _topVolumeCoins = MutableStateFlow<List<MarketTick>>(emptyList())
     val topVolumeCoins: StateFlow<List<MarketTick>> = _topVolumeCoins.asStateFlow()
 
@@ -206,6 +209,9 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     private val _spotPosition = MutableStateFlow(SpotPosition())
     val spotPosition: StateFlow<SpotPosition> = _spotPosition.asStateFlow()
 
+    private val _strategyMode = MutableStateFlow(prefs.strategyMode)
+    val strategyMode: StateFlow<StrategyMode> = _strategyMode.asStateFlow()
+
     private val _isScalpingMode = MutableStateFlow(prefs.isScalpingMode)
     val isScalpingMode: StateFlow<Boolean> = _isScalpingMode.asStateFlow()
 
@@ -215,21 +221,13 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     private val _tradingFees = MutableStateFlow(prefs.tradingFees)
     val tradingFees: StateFlow<TradingFeeConfig> = _tradingFees.asStateFlow()
 
-    // Simulation Trading StateFlows
-    private val _simulationWallet = MutableStateFlow(simulationStore.getWallet())
-    val simulationWallet: StateFlow<SimulationWallet> = _simulationWallet.asStateFlow()
-    private val _simulationOpenOrders = MutableStateFlow(simulationStore.getOpenOrders())
-    val simulationOpenOrders: StateFlow<List<SimulationOrder>> = _simulationOpenOrders.asStateFlow()
-    private val _simulationHistory = MutableStateFlow(simulationStore.getTradeHistory())
-    val simulationHistory: StateFlow<List<SimulationTradeHistoryItem>> = _simulationHistory.asStateFlow()
-    private val _lastFilledSimulationOrder = MutableStateFlow<SimulationOrder?>(null)
-    val lastFilledSimulationOrder: StateFlow<SimulationOrder?> = _lastFilledSimulationOrder.asStateFlow()
+    // Simulation Trading StateFlows (Delegated to SimulationCoordinator)
+    val simulationWallet: StateFlow<SimulationWallet> = simCoordinator.wallet
+    val simulationOpenOrders: StateFlow<List<SimulationOrder>> = simCoordinator.openOrders
+    val simulationHistory: StateFlow<List<SimulationTradeHistoryItem>> = simCoordinator.history
+    val lastFilledSimulationOrder: StateFlow<SimulationOrder?> = simCoordinator.lastFilledOrder
 
-    fun refreshSimulationState() {
-        _simulationWallet.value = simulationStore.getWallet()
-        _simulationOpenOrders.value = simulationStore.getOpenOrders()
-        _simulationHistory.value = simulationStore.getTradeHistory()
-    }
+    fun refreshSimulationState() = simCoordinator.refresh()
 
     fun submitSimulationOrder(
         side: SimulationOrderSide,
@@ -238,44 +236,24 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         stopPrice: Double = 0.0,
         quantity: Double
     ): SimulationOrderResult {
-        val currentPrice = _currentTick.value?.price ?: price
-        val pair = _selectedPair.value
-        val result = simulationStore.placeOrder(
-            symbol = pair.symbol,
-            baseAsset = pair.baseAsset,
-            quoteAsset = pair.quoteAsset,
+        return simCoordinator.submitOrder(
+            pair = _selectedPair.value,
+            currentPrice = _currentTick.value?.price ?: price,
             side = side,
             type = type,
             price = price,
             stopPrice = stopPrice,
-            quantity = quantity,
-            currentMarketPrice = currentPrice
+            quantity = quantity
         )
-        refreshSimulationState()
-        return result
     }
 
-    fun cancelSimulationOrder(orderId: String): Boolean {
-        val ok = simulationStore.cancelOrder(orderId)
-        if (ok) refreshSimulationState()
-        return ok
-    }
+    fun cancelSimulationOrder(orderId: String): Boolean = simCoordinator.cancelOrder(orderId)
 
-    fun cancelAllSimulationOrders(symbol: String? = null): Int {
-        val count = simulationStore.cancelAllOrders(symbol)
-        if (count > 0) refreshSimulationState()
-        return count
-    }
+    fun cancelAllSimulationOrders(symbol: String? = null): Int = simCoordinator.cancelAllOrders(symbol)
 
-    fun topUpSimulationBalance(amount: Double) {
-        simulationStore.topUpIdr(amount)
-        refreshSimulationState()
-    }
+    fun topUpSimulationBalance(amount: Double) = simCoordinator.topUpIdr(amount)
 
-    fun resetSimulationAccount() {
-        simulationStore.resetWallet()
-        refreshSimulationState()
-    }
+    fun resetSimulationAccount() = simCoordinator.resetAccount()
 
     fun setMarketDataSource(source: MarketDataSource) {
         _marketDataSource.value = source
@@ -283,15 +261,18 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         refreshWorthCoinsFromMarket()
     }
 
-    fun setScalpingMode(enabled: Boolean) {
-        if (_isScalpingMode.value == enabled) return
-        _isScalpingMode.value = enabled
-        prefs.isScalpingMode = enabled
-        engine.isScalpingMode = enabled
+    fun setStrategyMode(mode: StrategyMode) {
+        _strategyMode.value = mode
+        prefs.strategyMode = mode
+        val scalpingEnabled = mode == StrategyMode.SCALPING
+        _isScalpingMode.value = scalpingEnabled
+        prefs.isScalpingMode = scalpingEnabled
+        engine.strategyMode = mode
+        engine.isScalpingMode = scalpingEnabled
         engine.scalpingSensitivity = prefs.scalpingSensitivity
         engine.tradingFees = prefs.tradingFees
 
-        if (enabled) {
+        if (scalpingEnabled || mode == StrategyMode.SECOND_WAVE) {
             startActiveWebSocket(_selectedPair.value.symbol)
         } else {
             stopActiveWebSockets()
@@ -305,6 +286,10 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
             candles.forEach { engine.onCandleUpdate(it) }
         }
         refreshWorthCoinsFromMarket()
+    }
+
+    fun setScalpingMode(enabled: Boolean) {
+        setStrategyMode(if (enabled) StrategyMode.SCALPING else StrategyMode.SECOND_WAVE)
     }
 
     private fun startActiveWebSocket(symbol: String) {
@@ -466,11 +451,11 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
             val topVol = volJob.await()
 
             if (gainers.isNotEmpty()) {
-                _gainersCoins.value = gainers
-                _hotCoins.value = gainers
+                _gainersCoins.value = gainers.take(4)
+                _hotCoins.value = gainers.take(4)
             }
             if (topVol.isNotEmpty()) {
-                _topVolumeCoins.value = topVol
+                _topVolumeCoins.value = topVol.take(4)
             }
 
             if (ticks.isEmpty() && gainers.isEmpty() && topVol.isEmpty()) {
@@ -488,6 +473,22 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
             if (!_isScalpingMode.value || _connectionState.value !is MarketConnectionState.Connected) _connectionState.value = MarketConnectionState.Connected
             _isShowingCachedData.value = false
             marketCache.saveDashboardTicks(MarketDataSource.INDODAX, _dashboardTicks.value)
+
+            // EVALUATE SECOND-WAVE HUNTER CANDIDATES (Top 4)
+            val secondWaveCandidates = combinedTicks.values
+                .filter { it.price > 0 && it.high24h > 0 && it.volume24h >= 1_000_000_000 }
+                .map { tick ->
+                    val fastScore = SecondWaveEvaluator.evaluateFast(tick, tick.high24h, tick.low24h)
+                    tick to fastScore
+                }
+                .sortedWith(
+                    compareByDescending<Pair<MarketTick, agu.analys.engine.secondwave.FastSecondWaveScore>> { it.second.score }
+                        .thenByDescending { it.first.volume24h }
+                )
+                .map { it.first }
+                .take(4)
+
+            _secondWaveCoins.value = if (secondWaveCandidates.isNotEmpty()) secondWaveCandidates else gainers.take(4)
 
             val evaluatedPairs = (allScanned.map { TradingPair.fromCustomSymbol(it.symbol, "IDR") } + pairs).distinctBy { it.symbol }
 
@@ -612,11 +613,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
                     _dashboardTicks.value = _dashboardTicks.value.toMutableMap().apply { put(pair.symbol, normalizedTick) }
 
                     // Trigger Realtime Simulation Matching Engine
-                    val filled = simulationStore.processPriceTick(normalizedTick.symbol, normalizedTick.price, normalizedTick.high24h, normalizedTick.low24h)
-                    if (filled.isNotEmpty()) {
-                        refreshSimulationState()
-                        _lastFilledSimulationOrder.value = filled.first()
-                    }
+                    simCoordinator.onPriceTick(normalizedTick.symbol, normalizedTick.price, normalizedTick.high24h, normalizedTick.low24h)
 
                     val now = System.currentTimeMillis()
                     val selectedTf = _selectedTimeframe.value
@@ -738,54 +735,18 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         markMarketOffline("Mode offline: koneksi pasar $exchangeName dihentikan. Data cache terakhir tetap ditampilkan.")
     }
 
-    private val _githubReleaseInfo = MutableStateFlow<GitHubReleaseInfo?>(null)
-    val githubReleaseInfo: StateFlow<GitHubReleaseInfo?> = _githubReleaseInfo.asStateFlow()
-    private val _updateCheckStatus = MutableStateFlow<String?>(null)
-    val updateCheckStatus: StateFlow<String?> = _updateCheckStatus.asStateFlow()
-    private val _isCheckingUpdate = MutableStateFlow(false)
-    val isCheckingUpdate: StateFlow<Boolean> = _isCheckingUpdate.asStateFlow()
-    private val _updateDownloadProgress = MutableStateFlow<Int?>(null)
-    val updateDownloadProgress: StateFlow<Int?> = _updateDownloadProgress.asStateFlow()
+    // GitHub Updater (Delegated to AppUpdateCoordinator)
+    val githubReleaseInfo: StateFlow<GitHubReleaseInfo?> = updateCoordinator.releaseInfo
+    val updateCheckStatus: StateFlow<String?> = updateCoordinator.updateCheckStatus
+    val isCheckingUpdate: StateFlow<Boolean> = updateCoordinator.isCheckingUpdate
+    val updateDownloadProgress: StateFlow<Int?> = updateCoordinator.downloadProgress
 
     fun checkGitHubUpdate(context: android.content.Context, repo: String = GitHubUpdater.DEFAULT_REPO) {
-        viewModelScope.launch {
-            _isCheckingUpdate.value = true
-            _updateCheckStatus.value = "Memeriksa rilis terbaru di GitHub..."
-            _githubReleaseInfo.value = null
-            _updateDownloadProgress.value = null
-            when (val result = GitHubUpdater.checkUpdate(context, repo)) {
-                is agu.analys.util.UpdateCheckResult.UpdateAvailable -> {
-                    _githubReleaseInfo.value = result.info
-                    _updateCheckStatus.value = "Pembaruan ${result.info.tagName} tersedia!"
-                    android.widget.Toast.makeText(context, "Pembaruan ${result.info.tagName} ditemukan!", android.widget.Toast.LENGTH_LONG).show()
-                }
-                is agu.analys.util.UpdateCheckResult.AlreadyLatest -> {
-                    _githubReleaseInfo.value = null
-                    _updateCheckStatus.value = "Aplikasi sudah dalam versi terbaru (${result.version})."
-                    android.widget.Toast.makeText(context, "Aplikasi sudah versi terbaru (${result.version})", android.widget.Toast.LENGTH_SHORT).show()
-                }
-                is agu.analys.util.UpdateCheckResult.Error -> {
-                    _githubReleaseInfo.value = null
-                    _updateCheckStatus.value = result.message
-                    android.widget.Toast.makeText(context, result.message, android.widget.Toast.LENGTH_LONG).show()
-                }
-            }
-            _isCheckingUpdate.value = false
-        }
+        updateCoordinator.checkUpdate(context, repo)
     }
 
     fun downloadAndInstallUpdate(context: android.content.Context, repo: String = GitHubUpdater.DEFAULT_REPO) {
-        val release = _githubReleaseInfo.value
-        if (release == null || release.apkUrl.isBlank()) {
-            GitHubUpdater.openGitHubReleasesPage(context, repo)
-            return
-        }
-        viewModelScope.launch {
-            _updateDownloadProgress.value = 0
-            GitHubUpdater.downloadAndInstallApk(context, release.apkUrl, release.apkName) { progress ->
-                _updateDownloadProgress.value = progress
-            }
-        }
+        updateCoordinator.downloadAndInstall(context, repo)
     }
 
     override fun onCleared() {
