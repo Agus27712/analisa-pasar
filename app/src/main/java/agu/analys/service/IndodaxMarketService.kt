@@ -411,15 +411,15 @@ object IndodaxMarketService {
         return hash.joinToString("") { "%02x".format(it) }
     }
 
-    suspend fun fetchAccountBalance(apiKey: String, secretKey: String): Map<String, Double>? = withContext(Dispatchers.IO) {
-        if (apiKey.isBlank() || secretKey.isBlank()) return@withContext null
+    suspend fun fetchAccountBalanceDetails(apiKey: String, secretKey: String): Pair<Map<String, Double>?, String> = withContext(Dispatchers.IO) {
+        if (apiKey.isBlank() || secretKey.isBlank()) return@withContext Pair(null, "API Key atau Secret Key belum diisi.")
         try {
             val nonce = System.currentTimeMillis()
-            val postData = "method=getInfo&timestamp=$nonce"
+            val postData = "method=getInfo&nonce=$nonce"
             val sign = signHmacSha512(postData, secretKey)
             val formBody = okhttp3.FormBody.Builder()
                 .add("method", "getInfo")
-                .add("timestamp", nonce.toString())
+                .add("nonce", nonce.toString())
                 .build()
             val request = Request.Builder()
                 .url("https://indodax.com/tapi")
@@ -429,11 +429,11 @@ object IndodaxMarketService {
                 .header("Content-Type", "application/x-www-form-urlencoded")
                 .build()
             client.newCall(request).execute().use { response ->
-                val body = response.body?.string() ?: return@withContext null
+                val body = response.body?.string() ?: return@withContext Pair(null, "Respon Indodax kosong.")
                 val json = JSONObject(body)
                 if (json.optInt("success", 0) == 1) {
-                    val returnObj = json.optJSONObject("return") ?: return@withContext null
-                    val balanceObj = returnObj.optJSONObject("balance") ?: return@withContext null
+                    val returnObj = json.optJSONObject("return") ?: return@withContext Pair(null, "Data 'return' tidak ditemukan.")
+                    val balanceObj = returnObj.optJSONObject("balance") ?: return@withContext Pair(null, "Data 'balance' tidak ditemukan.")
                     val map = mutableMapOf<String, Double>()
                     val keys = balanceObj.keys()
                     while (keys.hasNext()) {
@@ -441,14 +441,30 @@ object IndodaxMarketService {
                         val valDbl = balanceObj.optString(k, "0").toDoubleOrNull() ?: 0.0
                         map[k.lowercase()] = valDbl
                     }
-                    map
+                    Pair(map, "Berhasil membaca saldo dari Indodax.")
                 } else {
-                    null
+                    val errorMsg = json.optString("error", "Pesan dari Indodax: Gagal autentikasi")
+                    Pair(null, "Indodax API Error: $errorMsg")
                 }
             }
-        } catch (_: Exception) {
-            null
+        } catch (e: Exception) {
+            Pair(null, "Error koneksi TAPI: ${e.localizedMessage ?: "Gagal terhubung"}")
         }
+    }
+
+    suspend fun fetchPublicIp(): String = withContext(Dispatchers.IO) {
+        try {
+            val request = Request.Builder().url("https://api.ipify.org").build()
+            client.newCall(request).execute().use { resp ->
+                resp.body?.string()?.trim() ?: "Gagal mendapatkan IP"
+            }
+        } catch (_: Exception) {
+            "Gagal mengecek IP"
+        }
+    }
+
+    suspend fun fetchAccountBalance(apiKey: String, secretKey: String): Map<String, Double>? {
+        return fetchAccountBalanceDetails(apiKey, secretKey).first
     }
 
     suspend fun placeTradeOrder(
@@ -466,7 +482,7 @@ object IndodaxMarketService {
             val baseAsset = pairId.removeSuffix("_idr")
             val postParams = mutableMapOf<String, String>(
                 "method" to "trade",
-                "timestamp" to nonce.toString(),
+                "nonce" to nonce.toString(),
                 "pair" to pairId,
                 "type" to type.lowercase(),
                 "price" to price.toString()

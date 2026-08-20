@@ -195,12 +195,16 @@ fun AiProviderSettingsCard(
 fun RealBuyModeAndSecurityCard(
     isRealBuyMode: Boolean,
     hasPin: Boolean,
+    isPinUnlocked: Boolean,
     indodaxApiKey: String,
     indodaxSecretKey: String,
+    userPublicIp: String = "",
     onToggleRealBuyMode: () -> Unit,
     onOpenPinSetup: () -> Unit,
+    onRequirePinUnlock: () -> Unit,
     onApiKeyChange: (String) -> Unit,
-    onSecretKeyChange: (String) -> Unit
+    onSecretKeyChange: (String) -> Unit,
+    onCheckPublicIp: () -> Unit = {}
 ) {
     var showApiKey by remember { mutableStateOf(false) }
     var showSecretKey by remember { mutableStateOf(false) }
@@ -282,34 +286,42 @@ fun RealBuyModeAndSecurityCard(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        "PIN Keamanan & Proteksi Porto",
+                        "PIN Keamanan & Proteksi API/Porto",
                         color = TvTextPrimary,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        if (hasPin) "✓ PIN Keamanan telah dikonfigurasi." else "⚠️ Belum ada PIN. Atur PIN untuk mengunci Mode Beli & Porto Real.",
-                        color = if (hasPin) TvGreen else Color(0xFFFFB300),
+                        if (!hasPin) "⚠️ Belum ada PIN. Atur PIN untuk mengunci Mode Beli & Kredensial API."
+                        else if (isPinUnlocked) "✓ PIN Terverifikasi (Kredensial API Terbuka)."
+                        else "🔒 Kredensial API Terkunci PIN.",
+                        color = if (!hasPin) Color(0xFFFFB300) else if (isPinUnlocked) TvGreen else Color(0xFF00E5FF),
                         fontSize = 10.sp
                     )
                 }
 
                 OutlinedButton(
-                    onClick = onOpenPinSetup,
+                    onClick = {
+                        if (hasPin && !isPinUnlocked) {
+                            onRequirePinUnlock()
+                        } else {
+                            onOpenPinSetup()
+                        }
+                    },
                     shape = RoundedCornerShape(8.dp),
                     colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = if (hasPin) Color(0xFF72B7FF) else TvGreen
+                        contentColor = if (hasPin && !isPinUnlocked) Color(0xFF00E5FF) else if (hasPin) Color(0xFF72B7FF) else TvGreen
                     ),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, if (hasPin) Color(0xFF1E3A5F) else TvGreen)
+                    border = androidx.compose.foundation.BorderStroke(1.dp, if (hasPin && !isPinUnlocked) Color(0xFF00E5FF) else if (hasPin) Color(0xFF1E3A5F) else TvGreen)
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Lock,
+                        imageVector = if (hasPin && isPinUnlocked) Icons.Default.LockOpen else Icons.Default.Lock,
                         contentDescription = null,
                         modifier = Modifier.size(14.dp)
                     )
                     Spacer(Modifier.width(4.dp))
                     Text(
-                        if (hasPin) "Ubah PIN" else "Buat PIN",
+                        if (!hasPin) "Buat PIN" else if (!isPinUnlocked) "Buka PIN" else "Ubah PIN",
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -321,29 +333,56 @@ fun RealBuyModeAndSecurityCard(
             Spacer(Modifier.height(12.dp))
 
             // Indodax API Key & Secret Section
-            Text(
-                "KREDENSIAL INDODAX TRADE API",
-                color = Color(0xFF72B7FF),
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Black
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "KREDENSIAL INDODAX TRADE API",
+                    color = Color(0xFF72B7FF),
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Black
+                )
+
+                if (hasPin && !isPinUnlocked) {
+                    Text(
+                        "🔒 Terkunci PIN",
+                        color = Color(0xFFFFB300),
+                        fontSize = 9.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .clickable { onRequirePinUnlock() }
+                            .padding(2.dp)
+                    )
+                }
+            }
             Spacer(Modifier.height(6.dp))
+
+            val keysLocked = hasPin && !isPinUnlocked
 
             // API Key
             OutlinedTextField(
-                value = indodaxApiKey,
-                onValueChange = onApiKeyChange,
+                value = if (keysLocked) "••••••••••••••••••••••••" else indodaxApiKey,
+                onValueChange = { if (!keysLocked) onApiKeyChange(it) },
+                enabled = !keysLocked,
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 label = { Text("Indodax API Key (Trade)", fontSize = 10.sp) },
                 placeholder = { Text("Masukkan Indodax API Key...", color = TvTextSecondary, fontSize = 11.sp) },
-                visualTransformation = if (showApiKey) androidx.compose.ui.text.input.VisualTransformation.None else androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                visualTransformation = if (!keysLocked && showApiKey) androidx.compose.ui.text.input.VisualTransformation.None else androidx.compose.ui.text.input.PasswordVisualTransformation(),
                 trailingIcon = {
-                    IconButton(onClick = { showApiKey = !showApiKey }) {
+                    IconButton(onClick = {
+                        if (keysLocked) {
+                            onRequirePinUnlock()
+                        } else {
+                            showApiKey = !showApiKey
+                        }
+                    }) {
                         Icon(
-                            imageVector = if (showApiKey) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                            imageVector = if (!keysLocked && showApiKey) Icons.Default.VisibilityOff else Icons.Default.Visibility,
                             contentDescription = "Toggle Visibility",
-                            tint = TvTextSecondary,
+                            tint = if (keysLocked) Color(0xFFFFB300) else TvTextSecondary,
                             modifier = Modifier.size(18.dp)
                         )
                     }
@@ -351,8 +390,10 @@ fun RealBuyModeAndSecurityCard(
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = TvGreen,
                     unfocusedBorderColor = Color(0xFF2A3540),
+                    disabledBorderColor = Color(0xFF1E2836),
                     focusedTextColor = TvTextPrimary,
-                    unfocusedTextColor = TvTextPrimary
+                    unfocusedTextColor = TvTextPrimary,
+                    disabledTextColor = Color(0xFF78909C)
                 )
             )
 
@@ -360,19 +401,26 @@ fun RealBuyModeAndSecurityCard(
 
             // Secret Key
             OutlinedTextField(
-                value = indodaxSecretKey,
-                onValueChange = onSecretKeyChange,
+                value = if (keysLocked) "••••••••••••••••••••••••" else indodaxSecretKey,
+                onValueChange = { if (!keysLocked) onSecretKeyChange(it) },
+                enabled = !keysLocked,
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 label = { Text("Indodax Secret Key (Trade)", fontSize = 10.sp) },
                 placeholder = { Text("Masukkan Indodax Secret Key...", color = TvTextSecondary, fontSize = 11.sp) },
-                visualTransformation = if (showSecretKey) androidx.compose.ui.text.input.VisualTransformation.None else androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                visualTransformation = if (!keysLocked && showSecretKey) androidx.compose.ui.text.input.VisualTransformation.None else androidx.compose.ui.text.input.PasswordVisualTransformation(),
                 trailingIcon = {
-                    IconButton(onClick = { showSecretKey = !showSecretKey }) {
+                    IconButton(onClick = {
+                        if (keysLocked) {
+                            onRequirePinUnlock()
+                        } else {
+                            showSecretKey = !showSecretKey
+                        }
+                    }) {
                         Icon(
-                            imageVector = if (showSecretKey) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                            imageVector = if (!keysLocked && showSecretKey) Icons.Default.VisibilityOff else Icons.Default.Visibility,
                             contentDescription = "Toggle Visibility",
-                            tint = TvTextSecondary,
+                            tint = if (keysLocked) Color(0xFFFFB300) else TvTextSecondary,
                             modifier = Modifier.size(18.dp)
                         )
                     }
@@ -380,10 +428,69 @@ fun RealBuyModeAndSecurityCard(
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = TvGreen,
                     unfocusedBorderColor = Color(0xFF2A3540),
+                    disabledBorderColor = Color(0xFF1E2836),
                     focusedTextColor = TvTextPrimary,
-                    unfocusedTextColor = TvTextPrimary
+                    unfocusedTextColor = TvTextPrimary,
+                    disabledTextColor = Color(0xFF78909C)
                 )
             )
+
+            Spacer(Modifier.height(8.dp))
+
+            // IP Whitelist Assistant Box
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFF0F2338), RoundedCornerShape(8.dp))
+                    .border(1.dp, Color(0xFF1E3A5F), RoundedCornerShape(8.dp))
+                    .padding(10.dp)
+            ) {
+                Column {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("🌐 IP PUBLIK HP ANDA SAAT INI:", color = Color(0xFF72B7FF), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            Text(
+                                if (userPublicIp.isNotBlank()) userPublicIp else "Memuat...",
+                                color = TvGreen,
+                                fontSize = 12.5.sp,
+                                fontWeight = FontWeight.Black
+                            )
+                        }
+
+                        val context = androidx.compose.ui.platform.LocalContext.current
+                        OutlinedButton(
+                            onClick = {
+                                if (userPublicIp.isNotBlank() && !userPublicIp.contains("Gagal") && !userPublicIp.contains("Memuat")) {
+                                    val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                    val clip = android.content.ClipData.newPlainText("IP Address", userPublicIp)
+                                    clipboard.setPrimaryClip(clip)
+                                    android.widget.Toast.makeText(context, "IP Publik ($userPublicIp) berhasil disalin!", android.widget.Toast.LENGTH_SHORT).show()
+                                } else {
+                                    onCheckPublicIp()
+                                }
+                            },
+                            shape = RoundedCornerShape(6.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF00E5FF)),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF00E5FF))
+                        ) {
+                            Text("📋 SALIN IP", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "⚠️ PENTING UNTUK USER INDODAX:\nIndodax MEWAJIBKAN mengisi IP Whitelist saat membuat API Key. Karena Anda menggunakan HP/Mobile, masukkan IP Publik di atas ke dalam kolom IP Whitelist Indodax. Jika IP berubah saat ganti Wi-Fi/4G, salin IP terbaru dari tombol di atas lalu perbarui di Indodax.",
+                        color = TvTextSecondary,
+                        fontSize = 9.5.sp,
+                        lineHeight = 13.5.sp
+                    )
+                }
+            }
 
             Spacer(Modifier.height(8.dp))
 

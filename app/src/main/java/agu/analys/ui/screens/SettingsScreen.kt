@@ -54,6 +54,8 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
     var indodaxApiKey by remember { mutableStateOf(prefs.indodaxApiKey) }
     var indodaxSecretKey by remember { mutableStateOf(prefs.indodaxSecretKey) }
     val isRealBuyMode by viewModel.isRealBuyMode.collectAsState()
+    val isPinUnlocked by viewModel.isPinUnlocked.collectAsState()
+    val userPublicIp by viewModel.userPublicIp.collectAsState()
     var hasPin by remember { mutableStateOf(viewModel.hasSecurityPin()) }
 
     var showPinDialog by remember { mutableStateOf(false) }
@@ -338,8 +340,10 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
         RealBuyModeAndSecurityCard(
             isRealBuyMode = isRealBuyMode,
             hasPin = hasPin,
+            isPinUnlocked = isPinUnlocked,
             indodaxApiKey = indodaxApiKey,
             indodaxSecretKey = indodaxSecretKey,
+            userPublicIp = userPublicIp,
             onToggleRealBuyMode = {
                 if (!isRealBuyMode) {
                     // Trying to turn ON
@@ -371,8 +375,14 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                 }
                 showPinDialog = true
             },
+            onRequirePinUnlock = {
+                pinDialogAction = PinDialogAction.UNLOCK_ONLY
+                pinDialogError = null
+                showPinDialog = true
+            },
             onApiKeyChange = { indodaxApiKey = it; saved = false },
-            onSecretKeyChange = { indodaxSecretKey = it; saved = false }
+            onSecretKeyChange = { indodaxSecretKey = it; saved = false },
+            onCheckPublicIp = { viewModel.checkPublicIp() }
         )
 
         Spacer(Modifier.height(16.dp))
@@ -563,12 +573,14 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
             PinDialogAction.ENTER_NEW_PIN -> "MASUKKAN PIN BARU"
             PinDialogAction.CREATE_FIRST_PIN -> "ATUR PIN KEAMANAN BARU"
             PinDialogAction.TOGGLE_REAL_BUY -> "VERIFIKASI PIN KEAMANAN"
+            PinDialogAction.UNLOCK_ONLY -> "VERIFIKASI PIN KEAMANAN"
         }
         val subtitle = when (pinDialogAction) {
             PinDialogAction.VERIFY_OLD_FOR_CHANGE -> "Masukkan PIN lama Anda terlebih dahulu untuk mengubah PIN."
             PinDialogAction.ENTER_NEW_PIN -> "Masukkan 6-digit PIN baru untuk memperbarui PIN Keamanan Anda."
             PinDialogAction.CREATE_FIRST_PIN -> "Masukkan 6-digit PIN untuk melindungi Mode Beli & Porto Real."
             PinDialogAction.TOGGLE_REAL_BUY -> "Masukkan PIN untuk mengaktifkan Mode Beli Real Indodax."
+            PinDialogAction.UNLOCK_ONLY -> "Masukkan PIN untuk membuka akses Kredensial API & Mode Real."
         }
         val isSetupMode = pinDialogAction == PinDialogAction.ENTER_NEW_PIN || pinDialogAction == PinDialogAction.CREATE_FIRST_PIN
 
@@ -626,6 +638,16 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                             pinDialogError = "PIN Keamanan Salah. Silakan coba lagi."
                         }
                     }
+                    PinDialogAction.UNLOCK_ONLY -> {
+                        val ok = viewModel.verifyPin(enteredPin)
+                        if (ok) {
+                            showPinDialog = false
+                            pinDialogError = null
+                            Toast.makeText(context, "PIN Terverifikasi! Kredensial API & Mode Real Terbuka.", Toast.LENGTH_SHORT).show()
+                        } else {
+                            pinDialogError = "PIN Keamanan Salah. Silakan coba lagi."
+                        }
+                    }
                 }
             },
             onDismiss = {
@@ -641,7 +663,8 @@ enum class PinDialogAction {
     TOGGLE_REAL_BUY,
     CREATE_FIRST_PIN,
     VERIFY_OLD_FOR_CHANGE,
-    ENTER_NEW_PIN
+    ENTER_NEW_PIN,
+    UNLOCK_ONLY
 }
 
 @Composable

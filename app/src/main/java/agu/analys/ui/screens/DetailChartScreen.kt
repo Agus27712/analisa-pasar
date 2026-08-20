@@ -66,6 +66,7 @@ fun DetailChartScreen(
     val isScalping by viewModel.isScalpingMode.collectAsStateWithLifecycle()
     val strategyMode by viewModel.strategyMode.collectAsStateWithLifecycle()
     val tradingFees by viewModel.tradingFees.collectAsStateWithLifecycle()
+    val isRealBuyMode by viewModel.isRealBuyMode.collectAsStateWithLifecycle()
     val watchlist by viewModel.watchlist.collectAsStateWithLifecycle()
     val spotPosition by viewModel.spotPosition.collectAsStateWithLifecycle()
     val selectedTimeframe by viewModel.selectedTimeframe.collectAsStateWithLifecycle()
@@ -277,6 +278,11 @@ fun DetailChartScreen(
                             candles = candles,
                             currentPrice = tick?.price ?: 0.0,
                             isPositiveTrend = (tick?.change24h ?: 0.0) >= 0,
+                            entryPrice = signal.entryPrice,
+                            targetPrice1 = signal.targetPrice1,
+                            targetPrice2 = signal.targetPrice2,
+                            stopLoss = signal.stopLoss,
+                            quoteAsset = pair.quoteAsset,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(220.dp)
@@ -306,7 +312,59 @@ fun DetailChartScreen(
             fees = tradingFees,
             currentPrice = tick?.price ?: 0.0,
             baseAsset = pair.baseAsset,
-            quoteAsset = pair.quoteAsset
+            quoteAsset = pair.quoteAsset,
+            isRealBuyMode = isRealBuyMode,
+            onExecuteBuy = {
+                val execPrice = if (tick?.price != null && tick!!.price > 0) tick!!.price else signal.entryPrice
+                if (execPrice > 0) {
+                    if (isRealBuyMode) {
+                        viewModel.executeRealTrade(pair.symbol, "buy", execPrice.toLong(), 100000.0) { success, msg ->
+                            android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
+                        }
+                    } else {
+                        val qty = 100000.0 / execPrice
+                        val res = viewModel.submitSimulationOrder(
+                            side = agu.analys.trading.SimulationOrderSide.BUY,
+                            type = agu.analys.trading.SimulationOrderType.MARKET,
+                            price = execPrice,
+                            quantity = qty
+                        )
+                        val msg = when (res) {
+                            is agu.analys.trading.SimulationOrderResult.Success -> res.message
+                            is agu.analys.trading.SimulationOrderResult.Error -> res.message
+                        }
+                        viewModel.setOwnership(true, execPrice)
+                        android.widget.Toast.makeText(context, "Simulasi Beli Berhasil! " + msg, android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                } else {
+                    android.widget.Toast.makeText(context, "Harga belum tersedia untuk Beli.", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            },
+            onExecuteSell = {
+                val execPrice = if (tick?.price != null && tick!!.price > 0) tick!!.price else signal.targetPrice1
+                if (execPrice > 0) {
+                    if (isRealBuyMode) {
+                        viewModel.executeRealTrade(pair.symbol, "sell", execPrice.toLong(), 0.0) { success, msg ->
+                            android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
+                        }
+                    } else {
+                        val res = viewModel.submitSimulationOrder(
+                            side = agu.analys.trading.SimulationOrderSide.SELL,
+                            type = agu.analys.trading.SimulationOrderType.MARKET,
+                            price = execPrice,
+                            quantity = 1.0
+                        )
+                        val msg = when (res) {
+                            is agu.analys.trading.SimulationOrderResult.Success -> res.message
+                            is agu.analys.trading.SimulationOrderResult.Error -> res.message
+                        }
+                        viewModel.setOwnership(false)
+                        android.widget.Toast.makeText(context, "Simulasi Jual Berhasil! " + msg, android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                } else {
+                    android.widget.Toast.makeText(context, "Harga belum tersedia untuk Jual.", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
         )
 
         Spacer(Modifier.height(10.dp))

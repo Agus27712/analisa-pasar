@@ -28,6 +28,7 @@ fun LandscapeChartScreen(viewModel: TradingViewModel, onBackToDetail: () -> Unit
     val pair by viewModel.selectedPair.collectAsState()
     val tick by viewModel.currentTick.collectAsState()
     val recentCandles by viewModel.recentCandles.collectAsState()
+    val signal by viewModel.aiSignalState.collectAsState()
     val timeframe by viewModel.selectedTimeframe.collectAsState()
     val connectionState by viewModel.connectionState.collectAsState()
 
@@ -47,6 +48,11 @@ fun LandscapeChartScreen(viewModel: TradingViewModel, onBackToDetail: () -> Unit
                 candles = recentCandles,
                 currentPrice = tick?.price ?: pair.initialPrice,
                 isPositiveTrend = (tick?.change24h ?: 0.0) >= 0,
+                entryPrice = signal.entryPrice,
+                targetPrice1 = signal.targetPrice1,
+                targetPrice2 = signal.targetPrice2,
+                stopLoss = signal.stopLoss,
+                quoteAsset = pair.quoteAsset,
                 modifier = Modifier.fillMaxSize()
             )
         }
