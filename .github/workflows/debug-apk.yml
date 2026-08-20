@@ -23,7 +23,7 @@ jobs:
       # KUNCI: selalu checkout branch tempat workflow dijalankan.
       # Push ke backup -> validasi kode backup.
       - name: Checkout workflow branch
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
         with:
           ref: ${{ github.ref }}
 
@@ -46,7 +46,7 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
