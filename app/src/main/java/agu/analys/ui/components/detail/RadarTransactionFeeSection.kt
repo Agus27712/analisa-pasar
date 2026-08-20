@@ -47,10 +47,12 @@ fun RadarTransactionFeeSection(
     currentPrice: Double,
     baseAsset: String,
     quoteAsset: String,
+    selectedNominal: Double,
+    onNominalChanged: (Double) -> Unit,
+    isMakerOrder: Boolean,
+    onOrderTypeChanged: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var isMakerOrder by remember { mutableStateOf(true) } // true = Limit Order (Maker), false = Instant (Taker)
-    var selectedNominal by remember { mutableDoubleStateOf(50000.0) } // Default nominal IDR beli umum (Rp 50.000)
     var customNominalInput by remember { mutableStateOf("") }
     var isCustomInputOpen by remember { mutableStateOf(false) }
     var showFeeDetailModal by remember { mutableStateOf(false) }
@@ -137,13 +139,13 @@ fun RadarTransactionFeeSection(
             OrderTypeTab(
                 title = "Limit Order (Maker: ${fees.buyMakerPct}%)",
                 isSelected = isMakerOrder,
-                onClick = { isMakerOrder = true },
+                onClick = { onOrderTypeChanged(true) },
                 modifier = Modifier.weight(1f)
             )
             OrderTypeTab(
                 title = "Instant (Taker: ${fees.buyTakerPct}%)",
                 isSelected = !isMakerOrder,
-                onClick = { isMakerOrder = false },
+                onClick = { onOrderTypeChanged(false) },
                 modifier = Modifier.weight(1f)
             )
         }
@@ -161,7 +163,7 @@ fun RadarTransactionFeeSection(
                 amount = 10000.0,
                 selected = selectedNominal == 10000.0 && !isCustomInputOpen,
                 onClick = {
-                    selectedNominal = 10000.0
+                    onNominalChanged(10000.0)
                     isCustomInputOpen = false
                 },
                 modifier = Modifier.weight(1f)
@@ -171,7 +173,7 @@ fun RadarTransactionFeeSection(
                 amount = 50000.0,
                 selected = selectedNominal == 50000.0 && !isCustomInputOpen,
                 onClick = {
-                    selectedNominal = 50000.0
+                    onNominalChanged(50000.0)
                     isCustomInputOpen = false
                 },
                 modifier = Modifier.weight(1f)
@@ -181,7 +183,7 @@ fun RadarTransactionFeeSection(
                 amount = 100000.0,
                 selected = selectedNominal == 100000.0 && !isCustomInputOpen,
                 onClick = {
-                    selectedNominal = 100000.0
+                    onNominalChanged(100000.0)
                     isCustomInputOpen = false
                 },
                 modifier = Modifier.weight(1f)
@@ -191,7 +193,7 @@ fun RadarTransactionFeeSection(
                 amount = 1000000.0,
                 selected = selectedNominal == 1000000.0 && !isCustomInputOpen,
                 onClick = {
-                    selectedNominal = 1000000.0
+                    onNominalChanged(1000000.0)
                     isCustomInputOpen = false
                 },
                 modifier = Modifier.weight(1f)
@@ -219,7 +221,7 @@ fun RadarTransactionFeeSection(
                         customNominalInput = filtered
                         val parsed = filtered.toDoubleOrNull()
                         if (parsed != null && parsed > 0) {
-                            selectedNominal = parsed
+                            onNominalChanged(parsed)
                         }
                     },
                     label = { Text("Masukkan Nominal Pembelian (IDR)", fontSize = 11.sp) },

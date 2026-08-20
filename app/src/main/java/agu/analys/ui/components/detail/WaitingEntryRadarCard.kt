@@ -54,7 +54,7 @@ fun WaitingEntryRadarCard(
     baseAsset: String = "BTC",
     quoteAsset: String = "IDR",
     isRealBuyMode: Boolean = false,
-    onExecuteBuy: (() -> Unit)? = null,
+    onExecuteBuy: ((Double) -> Unit)? = null,
     onExecuteSell: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
@@ -63,6 +63,10 @@ fun WaitingEntryRadarCard(
         .count { it.name == "OK" }
     
     val effectivePrice = if (currentPrice > 0.0) currentPrice else if (signal.entryPrice > 0.0) signal.entryPrice else 0.0
+
+    // Hoisted states for live transaction details
+    var selectedNominal by remember { mutableDoubleStateOf(50000.0) }
+    var isMakerOrder by remember { mutableStateOf(true) }
 
     // Animasi Pulse Radar
     val transition = rememberInfiniteTransition(label = "waiting_radar_pulse")
@@ -123,7 +127,7 @@ fun WaitingEntryRadarCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             SectionTitle(
-                if (scalping) "⚡ RADAR SCALPING HUNTER" else "🌊 RADAR SECOND-WAVE HUNTER",
+                if (scalping) "⚡ SCALPING (${signal.confidence}%)" else "🌊 SECOND-WAVE (${signal.confidence}%)",
                 Icons.Default.Timeline
             )
 
@@ -298,7 +302,7 @@ fun WaitingEntryRadarCard(
         ) {
             // BUY Button
             Button(
-                onClick = { onExecuteBuy?.invoke() },
+                onClick = { onExecuteBuy?.invoke(selectedNominal) },
                 enabled = onExecuteBuy != null,
                 modifier = Modifier
                     .weight(1f)
@@ -348,7 +352,11 @@ fun WaitingEntryRadarCard(
             fees = fees,
             currentPrice = effectivePrice,
             baseAsset = baseAsset,
-            quoteAsset = quoteAsset
+            quoteAsset = quoteAsset,
+            selectedNominal = selectedNominal,
+            onNominalChanged = { selectedNominal = it },
+            isMakerOrder = isMakerOrder,
+            onOrderTypeChanged = { isMakerOrder = it }
         )
 
         Spacer(Modifier.height(10.dp))
