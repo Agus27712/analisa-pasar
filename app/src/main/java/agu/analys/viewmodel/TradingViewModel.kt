@@ -237,6 +237,16 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     private val _realTradeStatus = MutableStateFlow<String?>(null)
     val realTradeStatus: StateFlow<String?> = _realTradeStatus.asStateFlow()
 
+    private val _userPublicIp = MutableStateFlow<String>("Memuat IP...")
+    val userPublicIp: StateFlow<String> = _userPublicIp.asStateFlow()
+
+    fun checkPublicIp() {
+        viewModelScope.launch {
+            val ip = IndodaxMarketService.fetchPublicIp()
+            _userPublicIp.value = ip
+        }
+    }
+
     fun hasSecurityPin(): Boolean = prefs.hasSecurityPin()
 
     fun createSecurityPin(pin: String) {
@@ -274,10 +284,14 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     fun fetchRealBalance() {
         val apiKey = prefs.indodaxApiKey
         val secretKey = prefs.indodaxSecretKey
-        if (apiKey.isBlank() || secretKey.isBlank()) return
+        if (apiKey.isBlank() || secretKey.isBlank()) {
+            _realTradeStatus.value = "Kredensial API Indodax belum diisi."
+            return
+        }
         viewModelScope.launch {
             _isFetchingRealBalance.value = true
-            val bal = IndodaxMarketService.fetchAccountBalance(apiKey, secretKey)
+            val (bal, msg) = IndodaxMarketService.fetchAccountBalanceDetails(apiKey, secretKey)
+            _realTradeStatus.value = msg
             if (bal != null) {
                 _realIndodaxBalance.value = bal
             }
@@ -418,6 +432,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         selectPair(initialPair)
         startDashboardPolling()
         listenToEngineSignals()
+        checkPublicIp()
     }
 
     private fun restoreFromCache() {
@@ -536,11 +551,11 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
             val topVol = volJob.await()
 
             if (gainers.isNotEmpty()) {
-                _gainersCoins.value = gainers.take(4)
-                _hotCoins.value = gainers.take(4)
+                _gainersCoins.value = gainers.take(10)
+                _hotCoins.value = gainers.take(10)
             }
             if (topVol.isNotEmpty()) {
-                _topVolumeCoins.value = topVol.take(4)
+                _topVolumeCoins.value = topVol.take(10)
             }
 
             if (ticks.isEmpty() && gainers.isEmpty() && topVol.isEmpty()) {
@@ -571,9 +586,9 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
                         .thenByDescending { it.first.volume24h }
                 )
                 .map { it.first }
-                .take(4)
+                .take(10)
 
-            _secondWaveCoins.value = if (secondWaveCandidates.isNotEmpty()) secondWaveCandidates else gainers.take(4)
+            _secondWaveCoins.value = if (secondWaveCandidates.isNotEmpty()) secondWaveCandidates else gainers.take(10)
 
             val evaluatedPairs = (allScanned.map { TradingPair.fromCustomSymbol(it.symbol, "IDR") } + pairs).distinctBy { it.symbol }
 

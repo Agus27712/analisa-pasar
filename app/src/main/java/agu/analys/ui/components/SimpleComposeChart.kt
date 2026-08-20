@@ -35,8 +35,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
@@ -59,6 +61,11 @@ fun SimpleComposeChart(
     currentPrice: Double,
     isPositiveTrend: Boolean = true,
     candles: List<CandleBar> = emptyList(),
+    entryPrice: Double = 0.0,
+    targetPrice1: Double = 0.0,
+    targetPrice2: Double = 0.0,
+    stopLoss: Double = 0.0,
+    quoteAsset: String = "IDR",
     modifier: Modifier = Modifier
 ) {
     val validCandles = remember(candles) {
@@ -74,6 +81,7 @@ fun SimpleComposeChart(
     var showEma50 by remember { mutableStateOf(true) }
     var showEma200 by remember { mutableStateOf(false) }
     var showBb by remember { mutableStateOf(true) }
+    var showOverlayLevels by remember { mutableStateOf(true) }
 
     LaunchedEffect(candleCount) {
         if (candleCount <= 0) {
@@ -95,8 +103,14 @@ fun SimpleComposeChart(
     val ema200 = remember(closePrices) { emaSeries(closePrices, 200) }
     val bb = remember(closePrices) { bollingerSeries(closePrices, 20) }
 
-    val minPrice = visible.minOfOrNull { minOf(it.low, bb.first.getOrNull(startIndex) ?: it.low) } ?: currentPrice
-    val maxPrice = visible.maxOfOrNull { maxOf(it.high, bb.second.getOrNull(startIndex) ?: it.high) } ?: currentPrice
+    val rawMin = visible.minOfOrNull { minOf(it.low, bb.first.getOrNull(startIndex) ?: it.low) } ?: currentPrice
+    val rawMax = visible.maxOfOrNull { maxOf(it.high, bb.second.getOrNull(startIndex) ?: it.high) } ?: currentPrice
+    
+    // Include entry/TP/SL levels in min/max bounds when visible
+    val levels = listOf(entryPrice, targetPrice1, targetPrice2, stopLoss).filter { it > 0 }
+    val minPrice = if (levels.isNotEmpty() && showOverlayLevels) minOf(rawMin, levels.minOrNull()!!) else rawMin
+    val maxPrice = if (levels.isNotEmpty() && showOverlayLevels) maxOf(rawMax, levels.maxOrNull()!!) else rawMax
+
     val themeColor = if (isPositiveTrend) TvGreen else TvRed
     val smoothLive = rememberSmoothPrice(currentPrice)
     val livePrice = smoothLive.takeIf { it > 0 }
@@ -117,7 +131,7 @@ fun SimpleComposeChart(
                     Spacer(modifier = Modifier.width(5.dp))
                     Text("GRAFIK HARGA · INDODAX", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = TvTextSecondary)
                 }
-                if (livePrice != null) Text("LIVE ${PriceFormatter.formatPrice(livePrice)}", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = TvTextPrimary)
+                if (livePrice != null) Text("LIVE ${PriceFormatter.formatPrice(livePrice, quoteAsset = quoteAsset)}", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = TvTextPrimary)
             }
 
             Spacer(modifier = Modifier.height(6.dp))
@@ -129,6 +143,7 @@ fun SimpleComposeChart(
                 IndicatorChip("EMA 50", Color(0xFF42A5F5), showEma50) { showEma50 = !showEma50 }
                 IndicatorChip("EMA 200", Color(0xFFAB47BC), showEma200) { showEma200 = !showEma200 }
                 IndicatorChip("BB", Color.White.copy(alpha = 0.7f), showBb) { showBb = !showBb }
+                IndicatorChip("LEVELS (TP/SL/BASE)", Color(0xFF00E5FF), showOverlayLevels) { showOverlayLevels = !showOverlayLevels }
             }
 
             Spacer(modifier = Modifier.height(6.dp))
@@ -176,6 +191,28 @@ fun SimpleComposeChart(
                         }
                     }
 
+                    // 1. Draw Green Base Box (Accumulation Support Zone) if active
+                    if (showOverlayLevels && entryPrice > 0.0) {
+                        val baseTopPrice = entryPrice * 1.004
+                        val baseBottomPrice = if (stopLoss > 0.0) stopLoss else entryPrice * 0.994
+                        val topY = y(baseTopPrice)
+                        val bottomY = y(baseBottomPrice)
+                        val boxHeight = (bottomY - topY).coerceAtLeast(4f)
+                        
+                        drawRect(
+                            color = Color(0x2200E5FF),
+                            topLeft = Offset(left, topY),
+                            size = Size(chartWidth, boxHeight)
+                        )
+                        drawLine(
+                            color = Color(0xFF00E5FF).copy(alpha = 0.5f),
+                            start = Offset(left, topY),
+                            end = Offset(left + chartWidth, topY),
+                            strokeWidth = 1f
+                        )
+                    }
+
+                    // 2. Draw Candlesticks
                     visible.forEachIndexed { index, candle ->
                         val x = left + step * index + step / 2f
                         val openY = y(candle.open)
@@ -186,9 +223,10 @@ fun SimpleComposeChart(
                         drawLine(candleColor, Offset(x, highY), Offset(x, lowY), strokeWidth = 1.5f)
                         val bodyTop = minOf(openY, closeY)
                         val bodyBottom = maxOf(openY, closeY).coerceAtLeast(bodyTop + 2f)
-                        drawRect(candleColor, topLeft = Offset(x - bodyWidth / 2f, bodyTop), size = androidx.compose.ui.geometry.Size(bodyWidth, bodyBottom - bodyTop))
+                        drawRect(candleColor, topLeft = Offset(x - bodyWidth / 2f, bodyTop), size = Size(bodyWidth, bodyBottom - bodyTop))
                     }
 
+                    // 3. Technical Indicators (EMA / BB)
                     if (showEma20) drawSeries(ema20, Color(0xFFFFD54F))
                     if (showEma50) drawSeries(ema50, Color(0xFF42A5F5))
                     if (showEma200) drawSeries(ema200, Color(0xFFAB47BC))
@@ -198,6 +236,48 @@ fun SimpleComposeChart(
                         drawSeries(bb.third, Color.White.copy(alpha = 0.25f))
                     }
 
+                    // 4. Draw Gold Dashed Lines (TP1 & TP2) and Red Dashed Line (SL)
+                    if (showOverlayLevels) {
+                        val dashEffect = PathEffect.dashPathEffect(floatArrayOf(12f, 8f), 0f)
+
+                        // TP1 Line (Gold)
+                        if (targetPrice1 > 0.0 && targetPrice1 in minPrice..maxPrice) {
+                            val tp1Y = y(targetPrice1)
+                            drawLine(
+                                color = Color(0xFFFFD54F),
+                                start = Offset(left, tp1Y),
+                                end = Offset(left + chartWidth, tp1Y),
+                                strokeWidth = 1.5f,
+                                pathEffect = dashEffect
+                            )
+                        }
+
+                        // TP2 Line (Gold)
+                        if (targetPrice2 > 0.0 && targetPrice2 in minPrice..maxPrice) {
+                            val tp2Y = y(targetPrice2)
+                            drawLine(
+                                color = Color(0xFFFFD700),
+                                start = Offset(left, tp2Y),
+                                end = Offset(left + chartWidth, tp2Y),
+                                strokeWidth = 1.5f,
+                                pathEffect = dashEffect
+                            )
+                        }
+
+                        // Stop Loss Line (Red)
+                        if (stopLoss > 0.0 && stopLoss in minPrice..maxPrice) {
+                            val slY = y(stopLoss)
+                            drawLine(
+                                color = TvRed,
+                                start = Offset(left, slY),
+                                end = Offset(left + chartWidth, slY),
+                                strokeWidth = 1.5f,
+                                pathEffect = dashEffect
+                            )
+                        }
+                    }
+
+                    // 5. Live Price Line
                     livePrice?.let { price ->
                         if (price in minPrice..maxPrice) {
                             val liveY = y(price)
@@ -206,15 +286,15 @@ fun SimpleComposeChart(
                     }
                 }
                 Column(modifier = Modifier.align(Alignment.CenterEnd).padding(end = 4.dp), verticalArrangement = Arrangement.SpaceBetween) {
-                    Text(PriceFormatter.formatPrice(maxPrice), fontSize = 8.sp, color = TvGreen, maxLines = 1)
+                    Text(PriceFormatter.formatPrice(maxPrice, quoteAsset = quoteAsset), fontSize = 8.sp, color = TvGreen, maxLines = 1)
                     Spacer(Modifier.weight(1f))
-                    Text(PriceFormatter.formatPrice((maxPrice + minPrice) / 2.0), fontSize = 8.sp, color = TvTextSecondary, maxLines = 1)
+                    Text(PriceFormatter.formatPrice((maxPrice + minPrice) / 2.0, quoteAsset = quoteAsset), fontSize = 8.sp, color = TvTextSecondary, maxLines = 1)
                     Spacer(Modifier.weight(1f))
-                    Text(PriceFormatter.formatPrice(minPrice), fontSize = 8.sp, color = TvRed, maxLines = 1)
+                    Text(PriceFormatter.formatPrice(minPrice, quoteAsset = quoteAsset), fontSize = 8.sp, color = TvRed, maxLines = 1)
                 }
             }
             Spacer(modifier = Modifier.height(5.dp))
-            Text("Geser untuk lihat candle • Cubit zoom • Tap chip untuk on/off indikator", fontSize = 8.sp, color = TvTextSecondary, lineHeight = 11.sp)
+            Text("Geser untuk lihat candle • Cubit zoom • Tap chip untuk on/off indikator & level plan", fontSize = 8.sp, color = TvTextSecondary, lineHeight = 11.sp)
         }
     }
 }

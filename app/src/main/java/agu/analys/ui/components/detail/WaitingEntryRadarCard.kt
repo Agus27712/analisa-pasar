@@ -1,21 +1,12 @@
 package agu.analys.ui.components.detail
 
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -23,46 +14,36 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.HourglassEmpty
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lightbulb
-import androidx.compose.material.icons.filled.RadioButtonChecked
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Timeline
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import agu.analys.config.TradingFeeConfig
 import agu.analys.model.AISignalState
-import agu.analys.model.ScalpingMtfSnapshot
 import agu.analys.model.ScalpingPath
-import agu.analys.model.ScalpingStage
-import agu.analys.model.SignalAction
 import agu.analys.ui.theme.TvGreen
 import agu.analys.ui.theme.TvRed
 import agu.analys.ui.theme.TvTextPrimary
 import agu.analys.ui.theme.TvTextSecondary
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.graphics.graphicsLayer
+import agu.analys.util.PriceFormatter
 import kotlinx.coroutines.delay
 
 /**
- * Radar & Progres Menunggu Entry yang interaktif dan edukatif.
- * Menghilangkan kejenuhan user saat menunggu sinyal dengan:
- * 1. Visual Status Pulse & Radar Scan Indicator
- * 2. Estimasi Biaya Transaksi (Limit vs Instant) sesuai setting
- * 3. Progres Multi-Timeframe (1H Trend -> 15M Struktur -> 1M Trigger)
- * 4. Micro-tips trading spot & scalping disiplin yang berganti
+ * Radar & Progres Entry Interaktif dengan 4 Konfirmasi Bertahap (Progress Bar 1/4 -> 4/4)
  */
 @Composable
 fun WaitingEntryRadarCard(
@@ -72,67 +53,22 @@ fun WaitingEntryRadarCard(
     currentPrice: Double = 0.0,
     baseAsset: String = "BTC",
     quoteAsset: String = "IDR",
+    isRealBuyMode: Boolean = false,
+    onExecuteBuy: ((Double) -> Unit)? = null,
+    onExecuteSell: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
-    val buyReady = signal.action == SignalAction.BUY && signal.entryPrice > 0.0
-    val stage = signal.scalpingStage
     val mtf = signal.mtf
-    val completed = listOf(mtf.biasStatus, mtf.setupStatus, mtf.triggerStatus, mtf.entryPriceStatus).count { it.name == "OK" }
+    val completed = listOf(mtf.biasStatus, mtf.setupStatus, mtf.triggerStatus, mtf.entryPriceStatus)
+        .count { it.name == "OK" }
+    
     val effectivePrice = if (currentPrice > 0.0) currentPrice else if (signal.entryPrice > 0.0) signal.entryPrice else 0.0
 
-    // Jika sinyal BUY sudah siap, tampilkan banner konfirmasi hijau ringkas plus rincian biaya
-    if (buyReady) {
-        Column(
-            modifier = modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        Brush.horizontalGradient(
-                            colors = listOf(Color(0xFF0F3822), Color(0xFF132B1E))
-                        ),
-                        RoundedCornerShape(12.dp)
-                    )
-                    .border(1.dp, TvGreen.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(10.dp)
-                        .background(TvGreen, CircleShape)
-                )
-                Spacer(Modifier.width(10.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "SETUP BUY SIAP DIEKSEKUSI (4/4 LENGKAP)",
-                        color = TvGreen,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        letterSpacing = 0.5.sp
-                    )
-                    Text(
-                        text = "Konfirmasi 4/4 lengkap: Bias 1H, Setup 15M, Trigger 1M, & Harga Pas. Silakan klik BUY.",
-                        color = TvTextPrimary,
-                        fontSize = 11.sp
-                    )
-                }
-            }
+    // Hoisted states for live transaction details
+    var selectedNominal by remember { mutableDoubleStateOf(50000.0) }
+    var isMakerOrder by remember { mutableStateOf(true) }
 
-            // Tampilkan estimasi biaya transaksi berdasarkan setting
-            RadarTransactionFeeSection(
-                fees = fees,
-                currentPrice = effectivePrice,
-                baseAsset = baseAsset,
-                quoteAsset = quoteAsset
-            )
-        }
-        return
-    }
-
-    // Animasi Pulse Radar saat menunggu entry
+    // Animasi Pulse Radar
     val transition = rememberInfiniteTransition(label = "waiting_radar_pulse")
     val pulseScale by transition.animateFloat(
         initialValue = 0.85f,
@@ -153,18 +89,28 @@ fun WaitingEntryRadarCard(
         label = "radar_glow"
     )
 
-    // Tips berganti untuk mencegah kebosanan
+    // Deteksi Tipe Entry Badge (Reclaim vs Base-Dip)
+    val isReclaim = mtf.path == ScalpingPath.MOMENTUM_CONTINUATION ||
+                    mtf.triggerDetail.contains("Reclaim", ignoreCase = true) ||
+                    signal.reasoning.any { it.contains("Reclaim", ignoreCase = true) }
+    
+    val entryTypeBadgeTitle = if (isReclaim) "🚀 RECLAIM ENTRY" else "🛡️ BASE-DIP ENTRY"
+    val entryTypeBadgeDesc = if (isReclaim) {
+        "Reclaim terkonfirmasi! Volume beli meledak menembus Resistance. Momentum Scalping / Second-Wave aktif."
+    } else {
+        "Harga menyentuh lantai akumulasi support. Risiko sangat rendah (SL ketat)."
+    }
+
+    // Micro Tips
     val tips = remember {
         listOf(
-            "Disiplin menunggu konfirmasi lebih menguntungkan daripada terburu-buru masuk di tengah candle.",
+            "Disiplin menunggu konfirmasi 4/4 lebih menguntungkan daripada FOMO di tengah candle.",
             "Indodax menerapkan taker/maker fee. Membeli di area pullback meminimalkan risiko terjebak puncak.",
-            "Jangan pernah all-in. Bagi modal menjadi 3-4 peluru untuk mengamankan average harga terbaik.",
-            "Kondisi sideways sering memicu false breakout. Tunggu volume spike di timeframe 15M/1M.",
-            "Pasang stop loss segera setelah order beli tereksekusi di aplikasi Indodax."
+            "Jangan all-in. Bagi modal menjadi 3-4 peluru untuk mengamankan average harga terbaik.",
+            "Kondisi sideways sering memicu false breakout. Tunggu volume spike di timeframe 15M/1M."
         )
     }
     var currentTipIndex by remember { mutableIntStateOf(0) }
-    var expandedDetails by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         while (true) {
@@ -173,29 +119,19 @@ fun WaitingEntryRadarCard(
         }
     }
 
-    val statusTitle = when {
-        stage == ScalpingStage.WAIT_PULLBACK -> "MENUNGGU PULLBACK BERSIH"
-        stage == ScalpingStage.WATCH -> "MEMBENTUK SETUP (WATCH)"
-        completed >= 2 -> "SETUP TERKONFIRMASI · MENUNGGU TRIGGER"
-        completed == 1 -> "BIAS 1H VALID · MENUNGGU STRUKTUR 15M"
-        else -> "SCANNING LIVE LIQUIDITY & TREND"
-    }
-
-    val statusSubtitle = when {
-        stage == ScalpingStage.WAIT_PULLBACK -> "Tren naik terbentuk. Sistem menunggu harga menguji support EMA sebelum sinyal BUY dikeluarkan."
-        stage == ScalpingStage.WATCH -> "Struktur mulai searah. Menunggu konfirmasi volume dan candle penutupan."
-        else -> "Memantau order book dan perubahan candle secara real-time tiap detik."
-    }
-
     AnalysisCard {
+        // Header
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            SectionTitle("RADAR STATUS LIVE", Icons.Default.Timeline)
-            
-            // Badge Live Scanning
+            SectionTitle(
+                if (scalping) "⚡ SCALPING (${signal.confidence}%)" else "🌊 SECOND-WAVE (${signal.confidence}%)",
+                Icons.Default.Timeline
+            )
+
+            // Scanning Live Badge
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
@@ -210,93 +146,222 @@ fun WaitingEntryRadarCard(
                         .background(Color(0xFF00E5FF).copy(alpha = glowAlpha), CircleShape)
                 )
                 Spacer(Modifier.width(5.dp))
-                Text("SCANNING..!!!", color = Color(0xFF00E5FF), fontSize = 9.sp, fontWeight = FontWeight.Black)
+                Text(
+                    text = if (completed == 4) "SIAP EKSEKUSI!" else "SCANNING..!!!",
+                    color = if (completed == 4) TvGreen else Color(0xFF00E5FF),
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Black
+                )
+            }
+        }
+
+        Spacer(Modifier.height(8.dp))
+
+        // Badge Tipe Setup Terdeteksi
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    if (isReclaim) Color(0xFF0F3040) else Color(0xFF0F3822),
+                    RoundedCornerShape(8.dp)
+                )
+                .border(
+                    1.dp,
+                    if (isReclaim) Color(0xFF00E5FF).copy(alpha = 0.6f) else TvGreen.copy(alpha = 0.6f),
+                    RoundedCornerShape(8.dp)
+                )
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Setup Terdeteksi: $entryTypeBadgeTitle (Konfirmasi $completed/4)",
+                    color = if (isReclaim) Color(0xFF00E5FF) else TvGreen,
+                    fontSize = 11.5.sp,
+                    fontWeight = FontWeight.ExtraBold
+                )
+                Text(
+                    text = entryTypeBadgeDesc,
+                    color = TvTextSecondary,
+                    fontSize = 10.sp,
+                    lineHeight = 13.5.sp
+                )
             }
         }
 
         Spacer(Modifier.height(10.dp))
 
-        // Banner Status
+        // 4 Checklist Konfirmasi
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xFF0B141F), RoundedCornerShape(12.dp))
-                .border(1.dp, Color(0xFF1B2E42), RoundedCornerShape(12.dp))
-                .padding(12.dp)
+                .background(Color(0xFF0B141F), RoundedCornerShape(10.dp))
+                .border(1.dp, Color(0xFF1B2E42), RoundedCornerShape(10.dp))
+                .padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(10.dp)
-                        .scale(pulseScale)
-                        .background(WarningAmber, CircleShape)
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = statusTitle,
-                    color = WarningAmber,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.ExtraBold
-                )
-            }
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = statusSubtitle,
-                color = TvTextPrimary,
-                fontSize = 11.sp,
-                lineHeight = 16.sp
-            )
+            val isStep1Ok = mtf.biasStatus.name == "OK" || mtf.biasOk
+            val isStep2Ok = mtf.setupStatus.name == "OK" || mtf.setupOk
+            val isStep3Ok = mtf.triggerStatus.name == "OK" || mtf.triggerOk
+            val isStep4Ok = mtf.entryPriceStatus.name == "OK" || mtf.entryPriceOk
 
-            Spacer(Modifier.height(10.dp))
+            val step1Text = if (scalping) "1. Trend & Bias 1H Valid (Bullish Alignment)" else "1. Prior Run & Drawdown Reset (Valid 4H/1H)"
+            val step2Text = if (scalping) "2. Base Compression & Volume Kering (Valid 15M)" else "2. Accumulation Base & Drawdown Dry (Valid 1H)"
+            val step3Text = if (scalping) "3. Smart Inflow & Higher Low Terbentuk (1M)" else "3. Smart Inflow & Higher Low Terbentuk (15M)"
+            val step4Text = if (scalping) "4. Trigger Reclaim Resistance 15M (Volume Masuk!)" else "4. Trigger Reclaim Resistance & Zona Entry Ideal"
 
-            // Step Progress Linear Indicator & Animated Checkpoint Stepper
-            RadarLinearCheckpointStepper(
-                mtf = mtf,
-                completed = completed,
-                pulseScale = pulseScale
-            )
-
-            Spacer(Modifier.height(8.dp))
-
-            // Panduan Cepat Eksekusi Indodax
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color(0xFF131F2E), RoundedCornerShape(8.dp))
-                    .padding(horizontal = 8.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Info,
-                    contentDescription = null,
-                    tint = if (completed >= 3) TvGreen else WarningAmber,
-                    modifier = Modifier.size(13.dp)
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    text = if (completed == 4) "Kondisi 4/4 terpenuhi! Segera klik BUY."
-                    else if (completed >= 2) "Siapkan input harga sekarang. Saat Step 4 terkonfirmasi HIJAU, langsung klik BUY."
-                    else "Siapkan aplikasi web/HP sambil menunggu konfirmasi sinyal.",
-                    color = if (completed >= 3) TvGreen else TvTextSecondary,
-                    fontSize = 9.5.sp,
-                    lineHeight = 13.sp
-                )
-            }
+            RadarChecklistItem(1, step1Text, isStep1Ok, mtf.biasDetail)
+            RadarChecklistItem(2, step2Text, isStep2Ok, mtf.setupDetail)
+            RadarChecklistItem(3, step3Text, isStep3Ok, mtf.triggerDetail)
+            RadarChecklistItem(4, step4Text, isStep4Ok, mtf.entryPriceDetail)
         }
 
         Spacer(Modifier.height(10.dp))
 
-        // Estimasi Biaya Transaksi Live berdasarkan Setting Fee Pengguna
-        RadarTransactionFeeSection(
-            fees = fees,
-            currentPrice = effectivePrice,
-            baseAsset = baseAsset,
-            quoteAsset = quoteAsset
+        // Global Progress Bar
+        RadarLinearCheckpointStepper(
+            mtf = mtf,
+            completed = completed,
+            pulseScale = pulseScale
         )
 
         Spacer(Modifier.height(10.dp))
 
-        // Interaktif Micro-Tip Card (User tidak jenuh saat nunggu)
+        // Target Levels Box
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color(0xFF101B2B), RoundedCornerShape(10.dp))
+                .border(0.5.dp, Color(0xFF213852), RoundedCornerShape(10.dp))
+                .padding(10.dp)
+        ) {
+            Text(
+                text = if (completed == 4) "🔥 STATUS: SIAP EKSEKUSI SEKARANG!" else "⚡ LEVEL PLAN ENTRY & TARGET:",
+                color = if (completed == 4) TvGreen else WarningAmber,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Black
+            )
+            Spacer(Modifier.height(6.dp))
+
+            val targetPrice1 = signal.targetPrice1
+            val targetPrice2 = signal.targetPrice2
+            val stopLoss = signal.stopLoss
+
+            val tp1Gain = if (signal.entryPrice > 0) ((targetPrice1 - signal.entryPrice) / signal.entryPrice) * 100 else 0.0
+            val tp2Gain = if (signal.entryPrice > 0) ((targetPrice2 - signal.entryPrice) / signal.entryPrice) * 100 else 0.0
+            val slLoss = if (signal.entryPrice > 0) ((stopLoss - signal.entryPrice) / signal.entryPrice) * 100 else 0.0
+
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("• Entry Area", color = TvTextSecondary, fontSize = 11.sp)
+                Text(
+                    PriceFormatter.formatPrice(if (signal.entryPrice > 0) signal.entryPrice else effectivePrice, quoteAsset = quoteAsset),
+                    color = TvTextPrimary,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Spacer(Modifier.height(3.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("• Target TP1", color = TvTextSecondary, fontSize = 11.sp)
+                Text(
+                    "${PriceFormatter.formatPrice(targetPrice1, quoteAsset = quoteAsset)} (${PriceFormatter.formatPercentage(tp1Gain, true)})",
+                    color = TvGreen,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Spacer(Modifier.height(3.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("• Target TP2", color = TvTextSecondary, fontSize = 11.sp)
+                Text(
+                    "${PriceFormatter.formatPrice(targetPrice2, quoteAsset = quoteAsset)} (${PriceFormatter.formatPercentage(tp2Gain, true)})",
+                    color = TvGreen,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Spacer(Modifier.height(3.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("• Cut Loss (SL)", color = TvTextSecondary, fontSize = 11.sp)
+                Text(
+                    "${PriceFormatter.formatPrice(stopLoss, quoteAsset = quoteAsset)} (${PriceFormatter.formatPercentage(slLoss, true)})",
+                    color = TvRed,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+
+        Spacer(Modifier.height(10.dp))
+
+        // Interactive Direct Trade Execution Buttons
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // BUY Button
+            Button(
+                onClick = { onExecuteBuy?.invoke(selectedNominal) },
+                enabled = onExecuteBuy != null,
+                modifier = Modifier
+                    .weight(1f)
+                    .height(42.dp),
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = TvGreen,
+                    contentColor = Color.Black,
+                    disabledContainerColor = TvGreen.copy(alpha = 0.3f)
+                )
+            ) {
+                Icon(Icons.Default.ShoppingCart, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = if (isRealBuyMode) "⚡ REAL BUY NOW" else "⚡ SIMULASI BUY",
+                    fontSize = 11.5.sp,
+                    fontWeight = FontWeight.Black
+                )
+            }
+
+            // SELL Button (If action callback provided)
+            if (onExecuteSell != null) {
+                Button(
+                    onClick = { onExecuteSell() },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(42.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = TvRed,
+                        contentColor = Color.White
+                    )
+                ) {
+                    Text(
+                        text = if (isRealBuyMode) "🔴 REAL SELL" else "🔴 SIMULASI SELL",
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.Black
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.height(10.dp))
+
+        // Estimasi Biaya Transaksi
+        RadarTransactionFeeSection(
+            fees = fees,
+            currentPrice = effectivePrice,
+            baseAsset = baseAsset,
+            quoteAsset = quoteAsset,
+            selectedNominal = selectedNominal,
+            onNominalChanged = { selectedNominal = it },
+            isMakerOrder = isMakerOrder,
+            onOrderTypeChanged = { isMakerOrder = it }
+        )
+
+        Spacer(Modifier.height(10.dp))
+
+        // Interaktif Micro-Tip Card
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -338,8 +403,8 @@ fun WaitingEntryRadarCard(
                     Text(
                         text = tips[currentTipIndex],
                         color = TvTextSecondary,
-                        fontSize = 11.sp,
-                        lineHeight = 15.sp
+                        fontSize = 10.5.sp,
+                        lineHeight = 14.sp
                     )
                 }
             }
@@ -347,3 +412,81 @@ fun WaitingEntryRadarCard(
     }
 }
 
+@Composable
+private fun RadarChecklistItem(
+    stepNumber: Int,
+    label: String,
+    isOk: Boolean,
+    detail: String
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(18.dp)
+                .background(
+                    if (isOk) TvGreen.copy(alpha = 0.2f) else Color(0xFF1A2A3A),
+                    CircleShape
+                )
+                .border(
+                    1.dp,
+                    if (isOk) TvGreen else Color(0xFF2C3E52),
+                    CircleShape
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            if (isOk) {
+                Icon(
+                    imageVector = Icons.Default.Check,
+                    contentDescription = "OK",
+                    tint = TvGreen,
+                    modifier = Modifier.size(12.dp)
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Default.HourglassEmpty,
+                    contentDescription = "Pending",
+                    tint = Color(0xFF00E5FF),
+                    modifier = Modifier.size(10.dp)
+                )
+            }
+        }
+
+        Spacer(Modifier.width(8.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = label,
+                color = if (isOk) TvGreen else TvTextPrimary,
+                fontSize = 11.sp,
+                fontWeight = if (isOk) FontWeight.Bold else FontWeight.Medium
+            )
+            if (detail.isNotBlank()) {
+                Text(
+                    text = detail,
+                    color = TvTextSecondary,
+                    fontSize = 9.5.sp,
+                    maxLines = 1
+                )
+            }
+        }
+
+        Box(
+            modifier = Modifier
+                .background(
+                    if (isOk) TvGreen.copy(alpha = 0.15f) else Color(0xFF132232),
+                    RoundedCornerShape(4.dp)
+                )
+                .padding(horizontal = 6.dp, vertical = 2.dp)
+        ) {
+            Text(
+                text = if (isOk) "[✓] OK" else "[⚡ SCAN]",
+                color = if (isOk) TvGreen else Color(0xFF00E5FF),
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}

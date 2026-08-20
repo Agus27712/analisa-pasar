@@ -142,6 +142,14 @@ data class TradingPair(
             TradingPair("XRPIDR", "XRP", "IDR", "XRP / IDR", indodaxPair = "xrp_idr"),
             TradingPair("DOGEIDR", "DOGE", "IDR", "Dogecoin / IDR", indodaxPair = "doge_idr"),
             TradingPair("PEPEIDR", "PEPE", "IDR", "Pepe / IDR", indodaxPair = "pepe_idr"),
+            TradingPair("ADAIDR", "ADA", "IDR", "Cardano / IDR", indodaxPair = "ada_idr"),
+            TradingPair("AVAXIDR", "AVAX", "IDR", "Avalanche / IDR", indodaxPair = "avax_idr"),
+            TradingPair("SHIBIDR", "SHIB", "IDR", "Shiba Inu / IDR", indodaxPair = "shib_idr"),
+            TradingPair("NEARIDR", "NEAR", "IDR", "NEAR / IDR", indodaxPair = "near_idr"),
+            TradingPair("SUIIDR", "SUI", "IDR", "Sui / IDR", indodaxPair = "sui_idr"),
+            TradingPair("DOTIDR", "DOT", "IDR", "Polkadot / IDR", indodaxPair = "dot_idr"),
+            TradingPair("LTCIDR", "LTC", "IDR", "Litecoin / IDR", indodaxPair = "ltc_idr"),
+            TradingPair("LINKIDR", "LINK", "IDR", "Chainlink / IDR", indodaxPair = "link_idr"),
             TradingPair("MYXIDR", "MYX", "IDR", "MYX Finance / IDR", indodaxPair = "myx_idr")
         )
 
