@@ -129,22 +129,22 @@ jobs:
           [ -n "$FIXES" ] || FIXES="- Perbaikan stabilitas dan konsistensi sistem."
           [ -n "$OTHERS" ] || OTHERS="- Peningkatan performa dan sinkronisasi data."
 
-          cat > "$RUNNER_TEMP/release-notes.md" <<EOF
-           ## 🚀 Versi Aplikasi
-           **Analysis Pasar v$VERSION** (Build Code: ${{ steps.version.outputs.code }})
-
-           ### ✨ Fitur Baru & Pembaruan
-           $FEATS
-
-           ### 🛠️ Perbaikan Bug
-           $FIXES
-
-           ### ⚡ Peningkatan Sistem & Performa
-           $OTHERS
-
-           ---
-           *📦 Build otomatis oleh GitHub Actions (Release Workflow).*
-   EOF
+          {
+            echo "## 🚀 Versi Aplikasi"
+            echo "**Analysis Pasar v$VERSION** (Build Code: ${{ steps.version.outputs.code }})"
+            echo ""
+            echo "### ✨ Fitur Baru & Pembaruan"
+            echo "$FEATS"
+            echo ""
+            echo "### 🛠️ Perbaikan Bug"
+            echo "$FIXES"
+            echo ""
+            echo "### ⚡ Peningkatan Sistem & Performa"
+            echo "$OTHERS"
+            echo ""
+            echo "---"
+            echo "*📦 Build otomatis oleh GitHub Actions (Release Workflow).*"
+          } > "$RUNNER_TEMP/release-notes.md"
 
       - name: Create or update GitHub release and upload APK
         env:
