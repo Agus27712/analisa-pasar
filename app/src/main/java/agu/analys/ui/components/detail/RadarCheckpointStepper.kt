@@ -282,7 +282,7 @@ fun RadarLinearCheckpointStepper(
                             Text(
                                 text = when {
                                     currentItem.isOk -> "✓ SIAP"
-                                    isCurrentScanning -> "⚡ SCAN"
+                                    isCurrentScanning -> "⚡ TUNGGU"
                                     else -> "⏳ TUNGGU"
                                 },
                                 color = when {

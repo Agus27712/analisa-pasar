@@ -72,6 +72,35 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
             }
         }
 
+        // Synthetic live 15M candle update for SECOND_WAVE
+        if (strategyMode == StrategyMode.SECOND_WAVE && m15Candles.isNotEmpty()) {
+            val lastM15 = m15Candles.last()
+            val updatedLast = lastM15.copy(
+                high = maxOf(lastM15.high, tick.price),
+                low = if (lastM15.low <= 0.0) tick.price else minOf(lastM15.low, tick.price),
+                close = tick.price
+            )
+            m15Candles = (m15Candles.dropLast(1) + updatedLast).takeLast(250)
+            runSecondWave()
+        }
+
+        // Synthetic live chart timeframe candle update for SWING
+        if (strategyMode == StrategyMode.SWING) {
+            val hasCandles = synchronized(candles) { candles.isNotEmpty() }
+            if (hasCandles) {
+                synchronized(candles) {
+                    val lastCandle = candles.last()
+                    val updatedLast = lastCandle.copy(
+                        high = maxOf(lastCandle.high, tick.price),
+                        low = if (lastCandle.low <= 0.0) tick.price else minOf(lastCandle.low, tick.price),
+                        close = tick.price
+                    )
+                    candles[candles.lastIndex] = updatedLast
+                }
+            }
+            runSwing()
+        }
+
         if (strategyMode == StrategyMode.SCALPING || strategyMode == StrategyMode.SECOND_WAVE) {
             refreshScalpingTimeframesIfDue(tick.symbol)
         }
