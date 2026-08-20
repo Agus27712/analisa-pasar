@@ -44,6 +44,7 @@ fun RealPortfolioView(
     isFetchingRealBalance: Boolean,
     dashboardTicks: Map<String, MarketTick>,
     currentTick: MarketTick?,
+    realTradeStatus: String? = null,
     onUnlockPin: () -> Unit,
     onRefreshRealBalance: () -> Unit,
     onNavigateToDetail: (TradingPair) -> Unit,
@@ -111,19 +112,60 @@ fun RealPortfolioView(
                 }
             }
         } else {
+            // STATUS BANNER (IF ANY)
+            if (!realTradeStatus.isNullOrBlank()) {
+                item {
+                    val isSuccess = realTradeStatus.contains("berhasil", ignoreCase = true) || realTradeStatus.contains("success", ignoreCase = true)
+                    val isError = realTradeStatus.contains("error", ignoreCase = true) || realTradeStatus.contains("gagal", ignoreCase = true) || realTradeStatus.contains("invalid", ignoreCase = true)
+                    val bgColor = if (isError) Color(0xFF2C1518) else if (isSuccess) Color(0xFF0F261C) else Color(0xFF131D2A)
+                    val borderColor = if (isError) TvRed.copy(alpha = 0.5f) else if (isSuccess) TvGreen.copy(alpha = 0.5f) else Color(0xFF1E2836)
+                    val textColor = if (isError) Color(0xFFFF8B8B) else if (isSuccess) Color(0xFF8BFFC7) else TvTextSecondary
+
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = CardDefaults.cardColors(containerColor = bgColor),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, borderColor)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.Info,
+                                contentDescription = null,
+                                tint = if (isError) TvRed else if (isSuccess) TvGreen else Color(0xFF72B7FF),
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = realTradeStatus,
+                                color = textColor,
+                                fontSize = 10.5.sp,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
+            }
+
             // UNLOCKED REAL PORTFOLIO
             item {
                 val realIdr = realBalance["idr"] ?: 0.0
                 val realCoinItems = remember(realBalance, dashboardTicks, currentTick) {
                     realBalance.filter { it.key != "idr" && it.value > 0.00000001 }.map { (coin, qty) ->
-                        val symbol = "${coin.uppercase()}IDR"
+                        val coinUpper = coin.uppercase()
+                        val coinLower = coin.lowercase()
+                        val symbol = "${coinUpper}IDR"
                         val price = when {
                             symbol.equals(currentTick?.symbol, ignoreCase = true) -> currentTick?.price ?: 0.0
                             dashboardTicks.containsKey(symbol) -> dashboardTicks[symbol]?.price ?: 0.0
+                            dashboardTicks.containsKey("${coinLower}_idr") -> dashboardTicks["${coinLower}_idr"]?.price ?: 0.0
+                            dashboardTicks.containsKey(coinUpper) -> dashboardTicks[coinUpper]?.price ?: 0.0
                             else -> 0.0
                         }
                         val estIdr = qty * price
-                        Pair(coin.uppercase(), Pair(qty, estIdr))
+                        Pair(coinUpper, Pair(qty, estIdr))
                     }.sortedByDescending { it.second.second }
                 }
                 val estTotalCryptoIdr = realCoinItems.sumOf { it.second.second }

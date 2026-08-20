@@ -242,7 +242,15 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     fun verifyPin(pin: String): Boolean = realCoordinator.verifyPin(pin)
     fun lockPin() = realCoordinator.lockPin()
     fun setRealBuyMode(enabled: Boolean, pin: String? = null): Boolean = realCoordinator.setRealBuyMode(enabled, pin)
-    fun fetchRealBalance() = realCoordinator.fetchRealBalance()
+    fun fetchRealBalance() {
+        viewModelScope.launch {
+            val allTicks = IndodaxMarketService.fetchAllMarketTicks()
+            if (allTicks.isNotEmpty()) {
+                _dashboardTicks.value = _dashboardTicks.value + allTicks
+            }
+        }
+        realCoordinator.fetchRealBalance()
+    }
     fun executeRealTrade(pair: String, type: String, price: Long, amountIdr: Double, onResult: (Boolean, String) -> Unit) =
         realCoordinator.executeRealTrade(pair, type, price, amountIdr, onResult)
 

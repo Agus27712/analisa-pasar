@@ -55,6 +55,13 @@ fun PortfolioScreen(
     val isPinUnlocked by viewModel.isPinUnlocked.collectAsStateWithLifecycle()
     val realBalance by viewModel.realIndodaxBalance.collectAsStateWithLifecycle()
     val isFetchingRealBalance by viewModel.isFetchingRealBalance.collectAsStateWithLifecycle()
+    val realTradeStatus by viewModel.realTradeStatus.collectAsStateWithLifecycle()
+
+    LaunchedEffect(isPinUnlocked) {
+        if (isPinUnlocked && viewModel.hasRealCredentialsConfigured()) {
+            viewModel.fetchRealBalance()
+        }
+    }
 
     var showRealPortfolioMode by remember(isRealBuyMode) { mutableStateOf(isRealBuyMode) }
     var showPinDialog by remember { mutableStateOf(false) }
@@ -245,6 +252,7 @@ fun PortfolioScreen(
                 isFetchingRealBalance = isFetchingRealBalance,
                 dashboardTicks = dashboardTicks,
                 currentTick = currentTick,
+                realTradeStatus = realTradeStatus,
                 onUnlockPin = {
                     if (!viewModel.hasSecurityPin()) {
                         onOpenSettings()
