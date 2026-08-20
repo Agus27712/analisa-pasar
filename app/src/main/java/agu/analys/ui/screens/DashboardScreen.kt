@@ -54,20 +54,20 @@ fun DashboardScreen(
     ) {
         when (selectedRankingTab) {
             MarketRankingTab.SCALPING_FAST -> {
-                val list = if (gainersCoins.isNotEmpty()) gainersCoins.take(4).map { it.symbol }
-                else if (hotCoins.isNotEmpty()) hotCoins.take(4).map { it.symbol }
-                else worthCoins.filter { it.isWorthIt || it.potentialProfitPct > 0 }.take(4).map { it.pair.symbol }
+                val list = if (gainersCoins.isNotEmpty()) gainersCoins.take(10).map { it.symbol }
+                else if (hotCoins.isNotEmpty()) hotCoins.take(10).map { it.symbol }
+                else worthCoins.filter { it.isWorthIt || it.potentialProfitPct > 0 }.take(10).map { it.pair.symbol }
 
                 val mapped = list.map { TradingPair.fromCustomSymbol(it, defaultQuote) }.distinctBy { it.symbol }
-                if (mapped.isNotEmpty()) mapped else TradingPair.popularPairsForSource(marketDataSource).take(4)
+                if (mapped.isNotEmpty()) mapped else TradingPair.popularPairsForSource(marketDataSource).take(10)
             }
             MarketRankingTab.SECOND_WAVE -> {
-                val list = if (secondWaveCoins.isNotEmpty()) secondWaveCoins.take(4).map { it.symbol }
-                else if (gainersCoins.isNotEmpty()) gainersCoins.take(4).map { it.symbol }
-                else worthCoins.map { it.pair.symbol }.take(4)
+                val list = if (secondWaveCoins.isNotEmpty()) secondWaveCoins.take(10).map { it.symbol }
+                else if (gainersCoins.isNotEmpty()) gainersCoins.take(10).map { it.symbol }
+                else worthCoins.map { it.pair.symbol }.take(10)
 
                 val mapped = list.map { TradingPair.fromCustomSymbol(it, defaultQuote) }.distinctBy { it.symbol }
-                if (mapped.isNotEmpty()) mapped else TradingPair.popularPairsForSource(marketDataSource).take(4)
+                if (mapped.isNotEmpty()) mapped else TradingPair.popularPairsForSource(marketDataSource).take(10)
             }
             MarketRankingTab.WATCHLIST -> {
                 watchlist.map { TradingPair.fromCustomSymbol(it, defaultQuote) }.distinctBy { it.symbol }

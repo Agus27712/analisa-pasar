@@ -551,11 +551,11 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
             val topVol = volJob.await()
 
             if (gainers.isNotEmpty()) {
-                _gainersCoins.value = gainers.take(4)
-                _hotCoins.value = gainers.take(4)
+                _gainersCoins.value = gainers.take(10)
+                _hotCoins.value = gainers.take(10)
             }
             if (topVol.isNotEmpty()) {
-                _topVolumeCoins.value = topVol.take(4)
+                _topVolumeCoins.value = topVol.take(10)
             }
 
             if (ticks.isEmpty() && gainers.isEmpty() && topVol.isEmpty()) {
@@ -586,9 +586,9 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
                         .thenByDescending { it.first.volume24h }
                 )
                 .map { it.first }
-                .take(4)
+                .take(10)
 
-            _secondWaveCoins.value = if (secondWaveCandidates.isNotEmpty()) secondWaveCandidates else gainers.take(4)
+            _secondWaveCoins.value = if (secondWaveCandidates.isNotEmpty()) secondWaveCandidates else gainers.take(10)
 
             val evaluatedPairs = (allScanned.map { TradingPair.fromCustomSymbol(it.symbol, "IDR") } + pairs).distinctBy { it.symbol }
 
