@@ -6,6 +6,9 @@ import agu.analys.model.OrderBookItem
 import agu.analys.model.Timeframe
 import agu.analys.model.TradeStreamItem
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -15,13 +18,25 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
 
 object IndodaxMarketService {
-    private val client = OkHttpClient.Builder().connectTimeout(12, TimeUnit.SECONDS).readTimeout(12, TimeUnit.SECONDS).retryOnConnectionFailure(true).build()
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(12, TimeUnit.SECONDS)
+        .readTimeout(15, TimeUnit.SECONDS)
+        .retryOnConnectionFailure(true)
+        .build()
+
     private val timeFormat = SimpleDateFormat("HH:mm:ss", Locale("id", "ID"))
     private data class ChangeReference(val close: Double, val fetchedAt: Long)
     private val changeReferenceCache = mutableMapOf<String, ChangeReference>()
     private const val CHANGE_REFERENCE_CACHE_MS = 60_000L
+
+    // --- Rate limit + retry ---
+    private val rateMutex = Mutex()
+    private val lastRequestAt = AtomicLong(0L)
+    private const val MIN_INTERVAL_MS = 250L // ~4 req/detik
+    private const val MAX_RETRIES = 3
 
     fun toPairId(symbol: String): String {
         val s = symbol.trim().lowercase().replace("/", "_").replace("-", "_").replace(" ", "")
@@ -35,15 +50,56 @@ object IndodaxMarketService {
 
     fun toDepthPairId(symbol: String): String = toPairId(symbol).replace("_", "")
 
-    private fun get(url: String): String? = try {
-        val req = Request.Builder().url(url).get().header("User-Agent", "KryptoAnalysis/1.0 (Android)").header("Accept", "application/json").build()
-        client.newCall(req).execute().use { response -> if (!response.isSuccessful) null else response.body?.string() }
-    } catch (_: Exception) { null }
+    private suspend fun throttle() {
+        rateMutex.withLock {
+            val now = System.currentTimeMillis()
+            val wait = MIN_INTERVAL_MS - (now - lastRequestAt.get())
+            if (wait > 0) delay(wait)
+            lastRequestAt.set(System.currentTimeMillis())
+        }
+    }
 
-    private fun fetch24hChange(pair: String, last: Double): Double? {
+    /** GET dengan rate-limit + exponential backoff pada 429 / 5xx / network error. */
+    private suspend fun get(url: String): String? {
+        var attempt = 0
+        var lastError: Exception? = null
+        while (attempt < MAX_RETRIES) {
+            attempt++
+            try {
+                throttle()
+                val req = Request.Builder()
+                    .url(url)
+                    .get()
+                    .header("User-Agent", "KryptoAnalysis/1.2.6 (Android)")
+                    .header("Accept", "application/json")
+                    .build()
+                client.newCall(req).execute().use { response ->
+                    val code = response.code
+                    val body = response.body?.string()
+                    when {
+                        response.isSuccessful -> return body
+                        code == 429 || code in 500..599 -> {
+                            val backoff = (400L * (1 shl (attempt - 1))).coerceAtMost(4000L)
+                            delay(backoff)
+                        }
+                        else -> return null // 4xx lain: jangan retry
+                    }
+                }
+            } catch (e: Exception) {
+                lastError = e
+                val backoff = (300L * (1 shl (attempt - 1))).coerceAtMost(3000L)
+                delay(backoff)
+            }
+        }
+        return null
+    }
+
+    private suspend fun fetch24hChange(pair: String, last: Double): Double? {
         val cached = changeReferenceCache[pair]
         val now = System.currentTimeMillis()
-        if (cached != null && now - cached.fetchedAt < CHANGE_REFERENCE_CACHE_MS && cached.close > 0) return ((last - cached.close) / cached.close) * 100.0
+        if (cached != null && now - cached.fetchedAt < CHANGE_REFERENCE_CACHE_MS && cached.close > 0) {
+            return ((last - cached.close) / cached.close) * 100.0
+        }
         return try {
             val nowSec = now / 1000L
             val targetSec = nowSec - 24L * 60L * 60L
@@ -57,12 +113,17 @@ object IndodaxMarketService {
                 val row = array.optJSONObject(i) ?: continue
                 val time = row.optLong("Time", 0L)
                 val close = row.optDouble("Close", 0.0)
-                if (time > 0 && time <= targetSec && close > 0 && time >= referenceTime) { referenceTime = time; referenceClose = close }
+                if (time > 0 && time <= targetSec && close > 0 && time >= referenceTime) {
+                    referenceTime = time
+                    referenceClose = close
+                }
             }
             if (referenceClose <= 0) return null
             changeReferenceCache[pair] = ChangeReference(referenceClose, now)
             ((last - referenceClose) / referenceClose) * 100.0
-        } catch (_: Exception) { null }
+        } catch (_: Exception) {
+            null
+        }
     }
 
     suspend fun fetchTicker(symbol: String, prevPrice: Double = 0.0): MarketTick? = withContext(Dispatchers.IO) {
@@ -87,7 +148,9 @@ object IndodaxMarketService {
                 change24h = change ?: Double.NaN,
                 timestamp = System.currentTimeMillis()
             )
-        } catch (_: Exception) { null }
+        } catch (_: Exception) {
+            null
+        }
     }
 
     suspend fun fetchTickers(pairIds: List<String>): List<MarketTick> = withContext(Dispatchers.IO) {
@@ -128,13 +191,11 @@ object IndodaxMarketService {
                     timestamp = now
                 )
             }
-        } catch (_: Exception) { emptyList() }
+        } catch (_: Exception) {
+            emptyList()
+        }
     }
 
-    /**
-     * Ambil top pair berdasarkan volume IDR 24 jam dari seluruh market Indodax.
-     * Data real-time dari /api/summaries — 100% sesuai market Indodax.
-     */
     suspend fun fetchTopVolumeTicks(limit: Int = 15, excludeStable: Boolean = true): List<MarketTick> = withContext(Dispatchers.IO) {
         try {
             val body = get("https://indodax.com/api/summaries") ?: return@withContext emptyList()
@@ -157,8 +218,6 @@ object IndodaxMarketService {
                 if (last <= 0 || volIdr <= 0) continue
                 val symbol = pair.uppercase().replace("_", "")
 
-                // Rumus: Persentase = ((P_akhir - P_awal) / P_awal) * 100%
-                // Di Indodax API prices_24h kuncinya tanpa underscore (contoh: "vanryidr", "btcidr")
                 var change: Double? = null
                 val keyNoUnderscore = pair.replace("_", "").lowercase()
                 val p24 = (prices24h?.optString(keyNoUnderscore, "0")?.toDoubleOrNull()
@@ -184,14 +243,11 @@ object IndodaxMarketService {
                 )
             }
             list.sortedByDescending { it.volume24h }.take(limit)
-        } catch (_: Exception) { emptyList() }
+        } catch (_: Exception) {
+            emptyList()
+        }
     }
 
-    /**
-     * Scanner khusus koin yang SEDANG NAIK (Gainers / Momentum Positif) untuk Scalping.
-     * Menggunakan rumus: Persentase = ((P_akhir - P_awal) / P_awal) * 100% > 0%
-     * Diurutkan dari persentase kenaikan tertinggi ke terendah dengan volume likuid.
-     */
     suspend fun fetchScalpingGainersTicks(limit: Int = 15, excludeStable: Boolean = true): List<MarketTick> = withContext(Dispatchers.IO) {
         try {
             val body = get("https://indodax.com/api/summaries") ?: return@withContext emptyList()
@@ -211,12 +267,9 @@ object IndodaxMarketService {
                 val t = tickers.optJSONObject(pair) ?: continue
                 val last = t.optString("last", "0").toDoubleOrNull() ?: 0.0
                 val volIdr = t.optString("vol_idr", "0").toDoubleOrNull() ?: 0.0
-                // Minimal volume IDR agar koin memiliki transaksi aktif (Rp 1 jt+)
                 if (last <= 0 || volIdr < 1_000_000.0) continue
                 val symbol = pair.uppercase().replace("_", "")
 
-                // Rumus: ((P_akhir - P_awal) / P_awal) * 100%
-                // Di Indodax API prices_24h kuncinya tanpa underscore (contoh: "vanryidr", "zkwasmidr")
                 var change: Double? = null
                 val keyNoUnderscore = pair.replace("_", "").lowercase()
                 val p24 = (prices24h?.optString(keyNoUnderscore, "0")?.toDoubleOrNull()
@@ -232,7 +285,6 @@ object IndodaxMarketService {
                 }
 
                 val finalChange = change ?: Double.NaN
-                // Hanya ambil koin yang bergerak NAIK / Positif (Persentase > 0)
                 if (finalChange.isFinite() && finalChange > 0.0) {
                     list += MarketTick(
                         symbol = symbol,
@@ -245,16 +297,18 @@ object IndodaxMarketService {
                     )
                 }
             }
-
-            // Urutkan dari persentase kenaikan tertinggi (Top Gainers)
             list.sortedByDescending { it.change24h }.take(limit)
-        } catch (_: Exception) { emptyList() }
+        } catch (_: Exception) {
+            emptyList()
+        }
     }
 
     suspend fun fetchCandles(symbol: String, timeframe: Timeframe, limit: Int = 300): List<CandleBar> = withContext(Dispatchers.IO) {
         try {
             val tf = timeframe.code
-            val minutesPerCandle = when (tf) { "1" -> 1L; "5" -> 5L; "15" -> 15L; "60" -> 60L; "240" -> 240L; "D" -> 1440L; else -> 1L }
+            val minutesPerCandle = when (tf) {
+                "1" -> 1L; "5" -> 5L; "15" -> 15L; "60" -> 60L; "240" -> 240L; "D" -> 1440L; else -> 1L
+            }
             val candleSeconds = minutesPerCandle * 60L
             val nowSec = System.currentTimeMillis() / 1000L
             val currentCandleStart = nowSec - (nowSec % candleSeconds)
@@ -262,42 +316,88 @@ object IndodaxMarketService {
             val fromSec = nowSec - (candleSeconds * requestCount)
             val apiTf = if (tf == "D") "1D" else tf
             val pair = toDepthPairId(symbol).uppercase()
-            val body = get("https://indodax.com/tradingview/history_v2?from=$fromSec&symbol=$pair&tf=$apiTf&to=$nowSec") ?: return@withContext emptyList()
+            val body = get("https://indodax.com/tradingview/history_v2?from=$fromSec&symbol=$pair&tf=$apiTf&to=$nowSec")
+                ?: return@withContext emptyList()
             val array = JSONArray(body)
             val result = mutableListOf<CandleBar>()
             for (i in 0 until array.length()) {
                 val row = array.optJSONObject(i) ?: continue
-                val open = row.optDouble("Open", 0.0); val high = row.optDouble("High", 0.0); val low = row.optDouble("Low", 0.0); val close = row.optDouble("Close", 0.0)
+                val open = row.optDouble("Open", 0.0)
+                val high = row.optDouble("High", 0.0)
+                val low = row.optDouble("Low", 0.0)
+                val close = row.optDouble("Close", 0.0)
                 if (open <= 0 || high <= 0 || low <= 0 || close <= 0) continue
                 val timeSec = row.optLong("Time", 0L)
                 if (timeSec <= 0 || timeSec >= currentCandleStart) continue
-                result += CandleBar(timeSec * 1000L, open, high, low, close, row.optString("Volume", "0").toDoubleOrNull() ?: 0.0)
+                result += CandleBar(
+                    timeSec * 1000L, open, high, low, close,
+                    row.optString("Volume", "0").toDoubleOrNull() ?: 0.0
+                )
             }
             result.sortedBy { it.timestamp }.takeLast(limit)
-        } catch (_: Exception) { emptyList() }
+        } catch (_: Exception) {
+            emptyList()
+        }
     }
 
-    suspend fun fetchOrderBook(symbol: String, limit: Int = 12): Pair<List<OrderBookItem>, List<OrderBookItem>> = withContext(Dispatchers.IO) {
-        try {
-            val body = get("https://indodax.com/api/depth/${toDepthPairId(symbol)}") ?: return@withContext emptyList<OrderBookItem>() to emptyList()
-            val j = JSONObject(body)
-            if (j.has("error")) return@withContext emptyList<OrderBookItem>() to emptyList()
-            val bids = mutableListOf<OrderBookItem>(); val asks = mutableListOf<OrderBookItem>(); var bidSum = 0.0; var askSum = 0.0
-            val bidArr = j.optJSONArray("buy") ?: JSONArray()
-            for (i in 0 until minOf(limit, bidArr.length())) { val row = bidArr.optJSONArray(i) ?: continue; val price = row.optString(0).toDoubleOrNull() ?: row.optDouble(0); val amount = row.optString(1).toDoubleOrNull() ?: row.optDouble(1); if (price <= 0 || amount <= 0) continue; bidSum += amount; bids.add(OrderBookItem(price, amount, bidSum, true)) }
-            val askArr = j.optJSONArray("sell") ?: JSONArray()
-            for (i in 0 until minOf(limit, askArr.length())) { val row = askArr.optJSONArray(i) ?: continue; val price = row.optString(0).toDoubleOrNull() ?: row.optDouble(0); val amount = row.optString(1).toDoubleOrNull() ?: row.optDouble(1); if (price <= 0 || amount <= 0) continue; askSum += amount; asks.add(OrderBookItem(price, amount, askSum, false)) }
-            bids to asks
-        } catch (_: Exception) { emptyList<OrderBookItem>() to emptyList() }
-    }
+    suspend fun fetchOrderBook(symbol: String, limit: Int = 12): Pair<List<OrderBookItem>, List<OrderBookItem>> =
+        withContext(Dispatchers.IO) {
+            try {
+                val body = get("https://indodax.com/api/depth/${toDepthPairId(symbol)}")
+                    ?: return@withContext emptyList<OrderBookItem>() to emptyList()
+                val j = JSONObject(body)
+                if (j.has("error")) return@withContext emptyList<OrderBookItem>() to emptyList()
+                val bids = mutableListOf<OrderBookItem>()
+                val asks = mutableListOf<OrderBookItem>()
+                var bidSum = 0.0
+                var askSum = 0.0
+                val bidArr = j.optJSONArray("buy") ?: JSONArray()
+                for (i in 0 until minOf(limit, bidArr.length())) {
+                    val row = bidArr.optJSONArray(i) ?: continue
+                    val price = row.optString(0).toDoubleOrNull() ?: row.optDouble(0)
+                    val amount = row.optString(1).toDoubleOrNull() ?: row.optDouble(1)
+                    if (price <= 0 || amount <= 0) continue
+                    bidSum += amount
+                    bids.add(OrderBookItem(price, amount, bidSum, true))
+                }
+                val askArr = j.optJSONArray("sell") ?: JSONArray()
+                for (i in 0 until minOf(limit, askArr.length())) {
+                    val row = askArr.optJSONArray(i) ?: continue
+                    val price = row.optString(0).toDoubleOrNull() ?: row.optDouble(0)
+                    val amount = row.optString(1).toDoubleOrNull() ?: row.optDouble(1)
+                    if (price <= 0 || amount <= 0) continue
+                    askSum += amount
+                    asks.add(OrderBookItem(price, amount, askSum, false))
+                }
+                bids to asks
+            } catch (_: Exception) {
+                emptyList<OrderBookItem>() to emptyList()
+            }
+        }
 
     suspend fun fetchRecentTrades(symbol: String, limit: Int = 15): List<TradeStreamItem> = withContext(Dispatchers.IO) {
         try {
             val body = get("https://indodax.com/api/trades/${toDepthPairId(symbol)}") ?: return@withContext emptyList()
             if (body.trimStart().startsWith("{")) return@withContext emptyList()
-            val arr = JSONArray(body); val list = mutableListOf<TradeStreamItem>()
-            for (i in 0 until minOf(limit, arr.length())) { val t = arr.getJSONObject(i); val tsSec = t.optLong("date", System.currentTimeMillis() / 1000); val ts = if (tsSec < 10_000_000_000L) tsSec * 1000 else tsSec; list.add(TradeStreamItem(t.optString("tid", ts.toString()), t.optString("price", "0").toDoubleOrNull() ?: 0.0, t.optString("amount", "0").toDoubleOrNull() ?: 0.0, timeFormat.format(Date(ts)), t.optString("type", "buy").equals("buy", true))) }
+            val arr = JSONArray(body)
+            val list = mutableListOf<TradeStreamItem>()
+            for (i in 0 until minOf(limit, arr.length())) {
+                val t = arr.getJSONObject(i)
+                val tsSec = t.optLong("date", System.currentTimeMillis() / 1000)
+                val ts = if (tsSec < 10_000_000_000L) tsSec * 1000 else tsSec
+                list.add(
+                    TradeStreamItem(
+                        t.optString("tid", ts.toString()),
+                        t.optString("price", "0").toDoubleOrNull() ?: 0.0,
+                        t.optString("amount", "0").toDoubleOrNull() ?: 0.0,
+                        timeFormat.format(Date(ts)),
+                        t.optString("type", "buy").equals("buy", true)
+                    )
+                )
+            }
             list
-        } catch (_: Exception) { emptyList() }
+        } catch (_: Exception) {
+            emptyList()
+        }
     }
 }

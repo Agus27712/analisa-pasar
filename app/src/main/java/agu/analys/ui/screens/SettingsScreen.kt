@@ -225,7 +225,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                 Column(Modifier.padding(12.dp)) {
                     Text("SENSITIVITAS SCALPING", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF72B7FF))
                     Spacer(Modifier.height(6.dp))
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         SensitivityChoice(
                             label = "KONSERVATIF",
                             selected = sensitivity == ScalpingSensitivity.CONSERVATIVE,
@@ -234,6 +234,16 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                             modifier = Modifier.weight(1f)
                         ) {
                             sensitivity = ScalpingSensitivity.CONSERVATIVE
+                            saved = false
+                        }
+                        SensitivityChoice(
+                            label = "SEIMBANG",
+                            selected = sensitivity == ScalpingSensitivity.BALANCED,
+                            activeBg = Color(0xFF132F4C),
+                            activeFg = Color(0xFF6FB8FF),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            sensitivity = ScalpingSensitivity.BALANCED
                             saved = false
                         }
                         SensitivityChoice(
@@ -246,15 +256,32 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                             sensitivity = ScalpingSensitivity.AGGRESSIVE
                             saved = false
                         }
+                        SensitivityChoice(
+                            label = "AUTO (AI)",
+                            selected = sensitivity == ScalpingSensitivity.DYNAMIC_AUTO,
+                            activeBg = Color(0xFF2E1C4E),
+                            activeFg = Color(0xFFB388FF),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            sensitivity = ScalpingSensitivity.DYNAMIC_AUTO
+                            saved = false
+                        }
                     }
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        if (sensitivity == ScalpingSensitivity.CONSERVATIVE)
-                            "Konservatif: Filter ketat MTF 1H+15M+1M, anti-false breakout, Net R:R ≥ 1.2."
-                        else
-                            "Agresif: Peluang lebih sering, RSI 35–66, volume 0.85x, tangkap quick pump lebih awal.",
+                        when (sensitivity) {
+                            ScalpingSensitivity.CONSERVATIVE -> "Konservatif: Filter ketat MTF 1H+15M+1M, anti-false breakout, Net R:R ≥ 1.25."
+                            ScalpingSensitivity.BALANCED -> "Seimbang (Rekomendasi): RSI 36–64, Walk-Forward, Net R:R ≥ 1.20."
+                            ScalpingSensitivity.AGGRESSIVE -> "Agresif: Peluang lebih sering, RSI 35–68, volume 0.85x, quick pump."
+                            ScalpingSensitivity.DYNAMIC_AUTO -> "Adaptif Otomatis: AI menyesuaikan threshold berdasarkan Rejim Pasar (Sideways/Volatile/Trending)."
+                        },
                         fontSize = 10.sp,
-                        color = if (sensitivity == ScalpingSensitivity.CONSERVATIVE) TvGreen else Color(0xFFFFB300),
+                        color = when (sensitivity) {
+                            ScalpingSensitivity.CONSERVATIVE -> TvGreen
+                            ScalpingSensitivity.BALANCED -> Color(0xFF6FB8FF)
+                            ScalpingSensitivity.AGGRESSIVE -> Color(0xFFFFB300)
+                            ScalpingSensitivity.DYNAMIC_AUTO -> Color(0xFFB388FF)
+                        },
                         lineHeight = 14.sp
                     )
                 }

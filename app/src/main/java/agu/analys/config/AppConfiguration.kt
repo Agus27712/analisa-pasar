@@ -46,26 +46,30 @@ object MarketDataConfiguration {
 object FeeCalculator {
     data class Result(
         val feePct: Double,
+        val slippagePct: Double,
+        val totalCostPct: Double,
         val netRewardPct: Double,
         val netRiskPct: Double,
         val netRr: Double
     )
 
-    /** Round-trip fee is buy + sell. Uses absolute price distances so it also works for short setups. */
+    /** Round-trip fee is buy + sell plus estimated orderbook slippage. */
     fun roundTrip(
         entry: Double,
         stopLoss: Double,
         takeProfit: Double,
         fees: TradingFeeConfig,
-        useMaker: Boolean = false
+        useMaker: Boolean = false,
+        slippagePct: Double = 0.08
     ): Result {
-        if (entry <= 0.0 || stopLoss <= 0.0 || takeProfit <= 0.0) return Result(0.0, 0.0, 0.0, 0.0)
+        if (entry <= 0.0 || stopLoss <= 0.0 || takeProfit <= 0.0) return Result(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
         val buyFee = if (useMaker) fees.buyMakerPct else fees.buyTakerPct
         val sellFee = if (useMaker) fees.sellMakerPct else fees.sellTakerPct
         val feePct = buyFee + sellFee
-        val reward = abs(takeProfit - entry) / entry * 100.0 - feePct
-        val risk = abs(entry - stopLoss) / entry * 100.0 + feePct
-        val rr = if (risk > 0.0) reward / risk else 0.0
-        return Result(feePct, reward, risk, rr)
+        val totalCostPct = feePct + (2 * slippagePct) // Slippage saat buy & sell
+        val reward = abs(takeProfit - entry) / entry * 100.0 - totalCostPct
+        val risk = abs(entry - stopLoss) / entry * 100.0 + totalCostPct
+        val rr = if (risk > 0.0) (reward / risk).coerceAtLeast(0.0) else 0.0
+        return Result(feePct, slippagePct, totalCostPct, reward, risk, rr)
     }
 }

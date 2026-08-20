@@ -56,10 +56,28 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
     fun onTickUpdate(tick: MarketTick) {
         if (tick.price <= 0.0) return
         currentTick = tick
+
+        // Synthetic live 1M candle update from tick
+        if (m1Candles.isNotEmpty()) {
+            val lastM1 = m1Candles.last()
+            val now = System.currentTimeMillis()
+            val updatedLast = lastM1.copy(
+                high = maxOf(lastM1.high, tick.price),
+                low = minOf(lastLastLow(lastM1.low, tick.price)),
+                close = tick.price
+            )
+            m1Candles = (m1Candles.dropLast(1) + updatedLast).takeLast(250)
+            if (strategyMode == StrategyMode.SCALPING) {
+                runScalping()
+            }
+        }
+
         if (strategyMode == StrategyMode.SCALPING || strategyMode == StrategyMode.SECOND_WAVE) {
             refreshScalpingTimeframesIfDue(tick.symbol)
         }
     }
+
+    private fun lastLastLow(currLow: Double, price: Double): Double = if (currLow <= 0.0) price else minOf(currLow, price)
 
     fun onCandleUpdate(candle: CandleBar) {
         if (candle.open <= 0.0 || candle.high <= 0.0 || candle.low <= 0.0 || candle.close <= 0.0) return
@@ -67,19 +85,19 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
             val index = candles.indexOfFirst { it.timestamp == candle.timestamp }
             if (index >= 0) candles[index] = candle else candles.add(candle)
             candles.sortBy { it.timestamp }
-            while (candles.size > 250) candles.removeAt(0)
+            while (candles.size > 500) candles.removeAt(0)
         }
         when (strategyMode) {
             StrategyMode.SCALPING -> {
                 if (candle.timestamp >= (m1Candles.lastOrNull()?.timestamp ?: 0L)) {
-                    val updated = (m1Candles + candle).distinctBy { it.timestamp }.sortedBy { it.timestamp }.takeLast(180)
+                    val updated = (m1Candles + candle).distinctBy { it.timestamp }.sortedBy { it.timestamp }.takeLast(250)
                     m1Candles = updated
                     runScalping()
                 }
             }
             StrategyMode.SECOND_WAVE -> {
                 if (candle.timestamp >= (m15Candles.lastOrNull()?.timestamp ?: 0L)) {
-                    val updated = (m15Candles + candle).distinctBy { it.timestamp }.sortedBy { it.timestamp }.takeLast(180)
+                    val updated = (m15Candles + candle).distinctBy { it.timestamp }.sortedBy { it.timestamp }.takeLast(250)
                     m15Candles = updated
                     runSecondWave()
                 }
@@ -88,7 +106,7 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
         }
     }
 
-    fun resetForOffline(preserveState: Boolean = false) {
+    fun resetForOffline(preserveState: Boolean = false, lastKnownPrice: Double = 0.0, cachedCandles: List<CandleBar> = emptyList()) {
         currentTick = null
         mtfRefreshJob?.cancel()
         mtfRefreshJob = null
@@ -97,41 +115,51 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
         h4Candles = emptyList(); h1Candles = emptyList(); m15Candles = emptyList(); m1Candles = emptyList()
         synchronized(candles) { candles.clear() }
         if (preserveState) return
+
+        val priceText = if (lastKnownPrice > 0.0) "Rp ${String.format(java.util.Locale.US, "%,.0f", lastKnownPrice)}" else "Terakhir Disimpan"
         _indicators.value = TechnicalIndicators()
         _signalState.value = AISignalState(
             action = SignalAction.HOLD,
             confidence = 0,
             sentiment = TrendSentiment.NEUTRAL_CONSOLIDATION,
-            reasoning = listOf("OFFLINE: analisis dihentikan.", "Tidak ada harga/candle live yang dapat dipercaya."),
+            reasoning = listOf(
+                "MODE OFFLINE: Terputus dari Server Indodax.",
+                "Snapshot Harga Terakhir: $priceText",
+                "Sinyal LIVE ditangguhkan untuk keamanan modal.",
+                "Periksa koneksi internet / status API Indodax."
+            ),
             timestamp = System.currentTimeMillis(),
-            scalpingStage = ScalpingStage.HOLD
+            scalpingStage = ScalpingStage.HOLD,
+            isOfflineMode = true,
+            offlineSnapshotTime = System.currentTimeMillis(),
+            offlineReason = "Koneksi terputus — Sinyal live dihentikan."
         )
     }
 
     private fun refreshScalpingTimeframesIfDue(symbol: String) {
         if (symbol.isBlank()) return
         val now = System.currentTimeMillis()
-        if (now - lastMtfRefresh < 30_000L && mtfSymbol == symbol) return
+        val intervalMs = if (strategyMode == StrategyMode.SCALPING) 10_000L else 20_000L
+        if (now - lastMtfRefresh < intervalMs && mtfSymbol == symbol) return
         if (mtfRefreshJob?.isActive == true) return
         lastMtfRefresh = now; mtfSymbol = symbol
         mtfRefreshJob = scope.launch {
             if (strategyMode == StrategyMode.SECOND_WAVE) {
-                val h4Job = async { IndodaxMarketService.fetchCandles(symbol, Timeframe.H4, 100) }
-                val h1Job = async { IndodaxMarketService.fetchCandles(symbol, Timeframe.H1, 120) }
-                val m15Job = async { IndodaxMarketService.fetchCandles(symbol, Timeframe.M15, 160) }
+                val h4Job = async { IndodaxMarketService.fetchCandles(symbol, Timeframe.H4, 120) }
+                val h1Job = async { IndodaxMarketService.fetchCandles(symbol, Timeframe.H1, 150) }
+                val m15Job = async { IndodaxMarketService.fetchCandles(symbol, Timeframe.M15, 200) }
                 val h4 = h4Job.await(); val h1 = h1Job.await(); val m15 = m15Job.await()
                 if (h4.size >= 20 && h1.size >= 20 && m15.size >= 20 && currentTick?.symbol == symbol) {
                     h4Candles = h4; h1Candles = h1; m15Candles = m15
                     runSecondWave()
                 }
             } else {
-                val h1Job = async { IndodaxMarketService.fetchCandles(symbol, Timeframe.H1, 120) }
-                val m15Job = async { IndodaxMarketService.fetchCandles(symbol, Timeframe.M15, 160) }
-                val m1Job = async { IndodaxMarketService.fetchCandles(symbol, Timeframe.M1, 180) }
+                val h1Job = async { IndodaxMarketService.fetchCandles(symbol, Timeframe.H1, 150) }
+                val m15Job = async { IndodaxMarketService.fetchCandles(symbol, Timeframe.M15, 200) }
+                val m1Job = async { IndodaxMarketService.fetchCandles(symbol, Timeframe.M1, 250) }
                 val h1 = h1Job.await(); val m15 = m15Job.await(); val m1 = m1Job.await()
                 if (h1.size >= 55 && m15.size >= 55 && m1.size >= 55 && currentTick?.symbol == symbol) {
                     h1Candles = h1; m15Candles = m15
-                    // REST is bootstrap; realtime WebSocket candles replace/update the latest 1M candle.
                     m1Candles = m1
                     runScalping()
                 }

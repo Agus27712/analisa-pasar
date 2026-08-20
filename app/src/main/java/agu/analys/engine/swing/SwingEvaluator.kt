@@ -70,7 +70,7 @@ object SwingEvaluator {
             SignalAction.SELL -> { sl = price + rawStopDistance; tp1 = price - rawTp1Distance; tp2 = price - rawTp2Distance; structure.lastSwingHigh?.takeIf { it > price }?.let { sl = max(sl, it + atr * .25) }; structure.support?.takeIf { it > 0 && it < price }?.let { tp1 = max(tp1, it) } }
             SignalAction.HOLD -> Unit
         }
-        val fee = if (action != SignalAction.HOLD) FeeCalculator.roundTrip(price, sl, tp2, fees) else FeeCalculator.Result(0.0, 0.0, 0.0, 0.0)
+        val fee = if (action != SignalAction.HOLD) FeeCalculator.roundTrip(price, sl, tp2, fees) else FeeCalculator.Result(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
         val finalAction = if (action != SignalAction.HOLD && fee.netRr >= 1.5 && fee.netRewardPct > 0) action else SignalAction.HOLD
         if (volatilityTooHigh) reasons += "Entry ditahan: volatilitas terlalu tinggi."
         if (action != SignalAction.HOLD && finalAction == SignalAction.HOLD) reasons += "Entry ditahan: net R:R setelah fee belum mencapai 1:1.5."

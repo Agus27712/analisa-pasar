@@ -13,20 +13,13 @@ android {
     applicationId = "agu.analys"
     minSdk = 24
     targetSdk = 35
-    versionCode = providers.gradleProperty("VERSION_CODE").map(String::toInt).getOrElse(10)
-    versionName = "1.3.3"
+    versionCode = providers.gradleProperty("VERSION_CODE").map(String::toInt).getOrElse(11)
+    versionName = "1.3.2"
 
-    val envFile = rootProject.file(".env")
-    val envProperties = Properties().apply {
-      if (envFile.exists()) {
-        load(envFile.inputStream())
-      }
-    }
-    val geminiKey = envProperties.getProperty("GEMINI_API_KEY") ?: System.getenv("GEMINI_API_KEY") ?: ""
-    val groqKey = envProperties.getProperty("GROQ_API_KEY") ?: System.getenv("GROQ_API_KEY") ?: ""
-
-    buildConfigField("String", "GEMINI_API_KEY", "\"$geminiKey\"")
-    buildConfigField("String", "GROQ_API_KEY", "\"$groqKey\"")
+    // Keys TIDAK di-embed ke BuildConfig agar tidak bocor di APK.
+    // User isi via Settings → disimpan di SharedPreferences (yang sudah di-exclude backup).
+    buildConfigField("String", "GEMINI_API_KEY", "\"\"")
+    buildConfigField("String", "GROQ_API_KEY", "\"\"")
   }
   signingConfigs {
     create("debugConfig") {
@@ -46,7 +39,12 @@ android {
     }
   }
   buildTypes {
-    release { isMinifyEnabled = false; isShrinkResources = false; signingConfig = signingConfigs.getByName("release"); proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro") }
+    release {
+      isMinifyEnabled = true
+      isShrinkResources = true
+      signingConfig = signingConfigs.getByName("release")
+      proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+    }
     debug {
       isMinifyEnabled = false
       signingConfig = signingConfigs.getByName("debugConfig")
