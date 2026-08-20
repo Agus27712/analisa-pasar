@@ -25,6 +25,7 @@ import agu.analys.trading.SimulationOrderSide
 import agu.analys.trading.SimulationOrderType
 import agu.analys.ui.components.dashboard.AppBottomNavigationBar
 import agu.analys.ui.components.dashboard.NavTab
+import agu.analys.ui.components.security.SecurityPinDialog
 import agu.analys.ui.components.simulation.*
 import agu.analys.ui.theme.*
 import agu.analys.util.PriceFormatter
@@ -51,6 +52,13 @@ fun TradeSimulationScreen(
     val dashboardTicks by viewModel.dashboardTicks.collectAsState()
     val lastFilledOrder by viewModel.lastFilledSimulationOrder.collectAsState()
     val marketSource by viewModel.marketDataSource.collectAsState()
+
+    val isRealBuyMode by viewModel.isRealBuyMode.collectAsState()
+    val isPinUnlocked by viewModel.isPinUnlocked.collectAsState()
+    val realTradeStatus by viewModel.realTradeStatus.collectAsState()
+
+    var showPinDialog by remember { mutableStateOf(false) }
+    var pinDialogError by remember { mutableStateOf<String?>(null) }
 
     var selectedSide by remember { mutableStateOf(SimulationOrderSide.BUY) }
     var selectedType by remember { mutableStateOf(SimulationOrderType.LIMIT) }
@@ -245,6 +253,34 @@ fun TradeSimulationScreen(
                                     return@SimulationOrderForm
                                 }
 
+                                if (isRealBuyMode) {
+                                    if (!isPinUnlocked) {
+                                        if (!viewModel.hasSecurityPin()) {
+                                            Toast.makeText(context, "Atur PIN Keamanan terlebih dahulu di Pengaturan.", Toast.LENGTH_LONG).show()
+                                            onOpenSettings()
+                                        } else {
+                                            pinDialogError = null
+                                            showPinDialog = true
+                                        }
+                                        return@SimulationOrderForm
+                                    }
+
+                                    val totalIdr = parseSimulationDecimal(inputTotalIdr) ?: (p * q)
+                                    viewModel.executeRealTrade(
+                                        pair = selectedPair.symbol,
+                                        type = if (selectedSide == SimulationOrderSide.BUY) "buy" else "sell",
+                                        price = p.toLong(),
+                                        amountIdr = if (selectedSide == SimulationOrderSide.BUY) totalIdr else q
+                                    ) { success, msg ->
+                                        Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                                        if (success) {
+                                            inputQuantity = ""
+                                            inputTotalIdr = ""
+                                        }
+                                    }
+                                    return@SimulationOrderForm
+                                }
+
                                 val result = viewModel.submitSimulationOrder(
                                     side = selectedSide,
                                     type = selectedType,
@@ -345,6 +381,29 @@ fun TradeSimulationScreen(
                 Toast.makeText(context, "Akun simulasi direset ke saldo awal Rp 10.000.000", Toast.LENGTH_SHORT).show()
             },
             onDismiss = { showTopUpModal = false }
+        )
+    }
+
+    if (showPinDialog) {
+        SecurityPinDialog(
+            title = "VERIFIKASI PIN EKSEKUSI INDODAX",
+            subtitle = "Masukkan 6-digit PIN untuk menyetujui transaksi Beli/Jual Real.",
+            isSetupMode = false,
+            errorMessage = pinDialogError,
+            onPinSubmitted = { enteredPin ->
+                val ok = viewModel.verifyPin(enteredPin)
+                if (ok) {
+                    showPinDialog = false
+                    pinDialogError = null
+                    Toast.makeText(context, "PIN Terverifikasi! Silakan klik Eksekusi Order lagi.", Toast.LENGTH_SHORT).show()
+                } else {
+                    pinDialogError = "PIN Keamanan Salah. Silakan coba lagi."
+                }
+            },
+            onDismiss = {
+                showPinDialog = false
+                pinDialogError = null
+            }
         )
     }
 }
