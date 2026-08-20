@@ -22,6 +22,38 @@ class AppPreferences(context: Context) {
             isScalpingMode = (value == StrategyMode.SCALPING)
         }
 
+    /** Real Buy Mode Switch. Requires PIN verification before turning ON. */
+    var isRealBuyModeEnabled: Boolean
+        get() = prefs.getBoolean(KEY_REAL_BUY_MODE, false)
+        set(value) = prefs.edit().putBoolean(KEY_REAL_BUY_MODE, value).apply()
+
+    /** Security PIN SHA-256 Hash */
+    var securityPinHash: String
+        get() = prefs.getString(KEY_SECURITY_PIN_HASH, "").orEmpty()
+        set(value) = prefs.edit().putString(KEY_SECURITY_PIN_HASH, value).apply()
+
+    fun setSecurityPin(pin: String) {
+        securityPinHash = hashPin(pin)
+    }
+
+    fun verifySecurityPin(pin: String): Boolean {
+        val current = securityPinHash
+        if (current.isBlank()) return false
+        return current == hashPin(pin)
+    }
+
+    fun hasSecurityPin(): Boolean = securityPinHash.isNotBlank()
+
+    /** Indodax API Key (Encrypted in SharedPreferences) */
+    var indodaxApiKey: String
+        get() = decryptSecret(prefs.getString(KEY_INDODAX_API_KEY, "").orEmpty())
+        set(value) = prefs.edit().putString(KEY_INDODAX_API_KEY, encryptSecret(value.trim())).apply()
+
+    /** Indodax Secret Key (Encrypted in SharedPreferences) */
+    var indodaxSecretKey: String
+        get() = decryptSecret(prefs.getString(KEY_INDODAX_SECRET_KEY, "").orEmpty())
+        set(value) = prefs.edit().putString(KEY_INDODAX_SECRET_KEY, encryptSecret(value.trim())).apply()
+
     /** Keys hanya dari prefs user — TIDAK fallback BuildConfig (hindari bocor di APK). */
     var groqApiKey: String
         get() = prefs.getString(KEY_GROQ, "").orEmpty()
@@ -75,7 +107,51 @@ class AppPreferences(context: Context) {
         set(value) = prefs.edit().putBoolean(KEY_COMPACT_UI, value).apply()
 
     fun clearApiKeys() {
-        prefs.edit().remove(KEY_GROQ).remove(KEY_GEMINI).remove(KEY_UPDATE_GH_TOKEN).apply()
+        prefs.edit()
+            .remove(KEY_GROQ)
+            .remove(KEY_GEMINI)
+            .remove(KEY_INDODAX_API_KEY)
+            .remove(KEY_INDODAX_SECRET_KEY)
+            .remove(KEY_UPDATE_GH_TOKEN)
+            .apply()
+    }
+
+    private fun hashPin(pin: String): String {
+        val md = java.security.MessageDigest.getInstance("SHA-256")
+        val digest = md.digest("agu_analys_pin_salt_$pin".toByteArray(Charsets.UTF_8))
+        return digest.joinToString("") { "%02x".format(it) }
+    }
+
+    private fun encryptSecret(plainText: String): String {
+        if (plainText.isBlank()) return ""
+        return try {
+            val salt = "agu_analys_secret_salt_v1_key"
+            val bytes = plainText.toByteArray(Charsets.UTF_8)
+            val saltBytes = salt.toByteArray(Charsets.UTF_8)
+            val encrypted = ByteArray(bytes.size)
+            for (i in bytes.indices) {
+                encrypted[i] = (bytes[i].toInt() xor saltBytes[i % saltBytes.size].toInt()).toByte()
+            }
+            android.util.Base64.encodeToString(encrypted, android.util.Base64.NO_WRAP)
+        } catch (_: Exception) {
+            plainText
+        }
+    }
+
+    private fun decryptSecret(cipherText: String): String {
+        if (cipherText.isBlank()) return ""
+        return try {
+            val decoded = android.util.Base64.decode(cipherText, android.util.Base64.NO_WRAP)
+            val salt = "agu_analys_secret_salt_v1_key"
+            val saltBytes = salt.toByteArray(Charsets.UTF_8)
+            val decrypted = ByteArray(decoded.size)
+            for (i in decoded.indices) {
+                decrypted[i] = (decoded[i].toInt() xor saltBytes[i % saltBytes.size].toInt()).toByte()
+            }
+            String(decrypted, Charsets.UTF_8)
+        } catch (_: Exception) {
+            cipherText
+        }
     }
 
     fun getWatchlist(): Set<String> {
@@ -125,5 +201,9 @@ class AppPreferences(context: Context) {
         private const val KEY_UPDATE_REPO = "github_update_repo"
         private const val KEY_UPDATE_GH_TOKEN = "github_update_token"
         private const val KEY_COMPACT_UI = "compact_ui"
+        private const val KEY_REAL_BUY_MODE = "real_buy_mode_enabled"
+        private const val KEY_SECURITY_PIN_HASH = "security_pin_hash"
+        private const val KEY_INDODAX_API_KEY = "indodax_encrypted_api_key"
+        private const val KEY_INDODAX_SECRET_KEY = "indodax_encrypted_secret_key"
     }
 }

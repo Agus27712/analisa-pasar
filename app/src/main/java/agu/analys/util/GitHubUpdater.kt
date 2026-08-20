@@ -68,7 +68,8 @@ object GitHubUpdater {
                 val tagName = releaseObj.optString("tag_name", "").trim()
                 val latestVersion = normalizeVersion(tagName)
                 val htmlUrl = releaseObj.optString("html_url", "https://github.com/$normalizedRepo/releases")
-                val releaseNotes = releaseObj.optString("body", "Pembaruan versi $tagName tersedia.")
+                val rawNotes = releaseObj.optString("body", "Pembaruan versi $tagName tersedia.")
+                val releaseNotes = extractLatestReleaseNotes(rawNotes)
 
                 val assets = releaseObj.optJSONArray("assets") ?: JSONArray()
                 var apkUrl = ""
@@ -80,7 +81,7 @@ object GitHubUpdater {
                     val apiUrl = asset.optString("url", "")
                     if (name.endsWith(".apk", ignoreCase = true)) {
                         apkName = name
-                        apkUrl = if (token.isNotBlank() && apiUrl.isNotBlank()) apiUrl else browserUrl
+                        apkUrl = if (browserUrl.isNotBlank()) browserUrl else apiUrl
                         break
                     }
                 }
@@ -173,8 +174,13 @@ object GitHubUpdater {
                 return@withContext false
             }
 
-            // Jika URL adalah halaman web GitHub (bukan file APK mentah), arahkan langsung ke browser
-            if (!apkUrl.endsWith(".apk", ignoreCase = true)) {
+            // Jika URL/nama bukan file APK mentah, arahkan ke browser
+            val isApkFile = apkName.endsWith(".apk", ignoreCase = true) ||
+                    apkUrl.substringBefore('?').substringBefore('#').endsWith(".apk", ignoreCase = true) ||
+                    apkUrl.contains("/releases/assets/", ignoreCase = true) ||
+                    apkUrl.contains("/releases/download/", ignoreCase = true)
+
+            if (!isApkFile) {
                 withContext(Dispatchers.Main) {
                     val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(apkUrl)).apply {
                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -200,8 +206,12 @@ object GitHubUpdater {
                     instanceFollowRedirects = false
                     requestMethod = "GET"
                     setRequestProperty("User-Agent", "AnalisaPasarApp/${BuildConfig.VERSION_NAME}")
-                    val isGitHubHost = url.host.contains("github.com", ignoreCase = true) || url.host.contains("githubusercontent.com", ignoreCase = true)
-                    if (isGitHubHost && token.isNotBlank()) {
+
+                    val isOfficialGitHubDomain = url.host.equals("github.com", ignoreCase = true) ||
+                            url.host.equals("api.github.com", ignoreCase = true)
+
+                    // Kirim Authorization hanya pada domain resmi GitHub sebelum redirect (S3/AWS membalas HTTP 400 jika dikirimi Authorization Header)
+                    if (isOfficialGitHubDomain && redirects == 0 && token.isNotBlank()) {
                         val authHeader = if (token.startsWith("ghp_", true) || token.startsWith("github_pat_", true) || token.startsWith("Bearer ", true)) {
                             if (token.startsWith("Bearer ", true)) token else "Bearer $token"
                         } else {
@@ -209,7 +219,8 @@ object GitHubUpdater {
                         }
                         setRequestProperty("Authorization", authHeader)
                     }
-                    if (currentUrl.contains("/releases/assets/")) {
+
+                    if (currentUrl.contains("/releases/assets/") && isOfficialGitHubDomain && redirects == 0) {
                         setRequestProperty("Accept", "application/octet-stream")
                     }
                 }
@@ -356,5 +367,33 @@ object GitHubUpdater {
             if (av != bv) return av.compareTo(bv)
         }
         return 0
+    }
+
+    private fun extractLatestReleaseNotes(rawBody: String): String {
+        if (rawBody.isBlank()) return ""
+        val lines = rawBody.lines()
+        val cleanLines = mutableListOf<String>()
+        var headerCount = 0
+        for (line in lines) {
+            val trimmed = line.trim()
+            if (trimmed.startsWith("## ") || trimmed.startsWith("# ") || trimmed.startsWith("### ")) {
+                headerCount++
+                if (headerCount > 1) {
+                    // Ignore release notes from previous releases
+                    break
+                }
+            }
+            if (trimmed.startsWith("---") && cleanLines.isNotEmpty()) {
+                break
+            }
+            if (trimmed.contains("perubahan sebelumnya", ignoreCase = true) ||
+                trimmed.contains("previous release", ignoreCase = true) ||
+                trimmed.contains("changelog lama", ignoreCase = true)) {
+                break
+            }
+            cleanLines.add(line)
+        }
+        val result = cleanLines.joinToString("\n").trim()
+        return result.ifBlank { rawBody.trim() }
     }
 }

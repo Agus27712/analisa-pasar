@@ -35,6 +35,7 @@ import agu.analys.ui.components.SpotPositionCard
 import agu.analys.ui.components.dashboard.AppBottomNavigationBar
 import agu.analys.ui.components.dashboard.AssetAvatar
 import agu.analys.ui.components.dashboard.NavTab
+import agu.analys.ui.components.security.SecurityPinDialog
 import agu.analys.ui.components.simulation.SimulationTopUpModal
 import agu.analys.ui.theme.*
 import agu.analys.util.PriceFormatter
@@ -77,6 +78,15 @@ fun PortfolioScreen(
     val selectedPair by viewModel.selectedPair.collectAsStateWithLifecycle()
     val spotPosition by viewModel.spotPosition.collectAsStateWithLifecycle()
     val signal by viewModel.aiSignalState.collectAsStateWithLifecycle()
+
+    val isRealBuyMode by viewModel.isRealBuyMode.collectAsStateWithLifecycle()
+    val isPinUnlocked by viewModel.isPinUnlocked.collectAsStateWithLifecycle()
+    val realBalance by viewModel.realIndodaxBalance.collectAsStateWithLifecycle()
+    val isFetchingRealBalance by viewModel.isFetchingRealBalance.collectAsStateWithLifecycle()
+
+    var showRealPortfolioMode by remember(isRealBuyMode) { mutableStateOf(isRealBuyMode) }
+    var showPinDialog by remember { mutableStateOf(false) }
+    var pinDialogError by remember { mutableStateOf<String?>(null) }
 
     var selectedTab by remember { mutableStateOf(PortfolioTab.HOLDINGS) }
     var showTopUpModal by remember { mutableStateOf(false) }
@@ -160,27 +170,374 @@ fun PortfolioScreen(
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                IconButton(
-                    onClick = { showTopUpModal = true },
-                    modifier = Modifier.size(36.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.AddCircleOutline,
-                        contentDescription = "Top Up / Reset",
-                        tint = TvGreen
-                    )
+                if (!showRealPortfolioMode) {
+                    IconButton(
+                        onClick = { showTopUpModal = true },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AddCircleOutline,
+                            contentDescription = "Top Up / Reset",
+                            tint = TvGreen
+                        )
+                    }
                 }
             }
         }
 
-        LazyColumn(
+        // SEGMENT SWITCHER: SIMULASI VS REAL INDODAX
+        Row(
             modifier = Modifier
-                .weight(1f)
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp),
-            contentPadding = PaddingValues(top = 12.dp, bottom = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .background(Color(0xFF09101A))
+                .padding(horizontal = 14.dp, vertical = 6.dp)
         ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFF101720), RoundedCornerShape(10.dp))
+                    .padding(3.dp)
+            ) {
+                // Tab 1: SIMULASI
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (!showRealPortfolioMode) Color(0xFF1E2836) else Color.Transparent)
+                        .clickable { showRealPortfolioMode = false }
+                        .padding(vertical = 8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.AccountBalanceWallet,
+                            contentDescription = null,
+                            tint = if (!showRealPortfolioMode) Color(0xFF72B7FF) else TvTextSecondary,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = "Portofolio Simulasi",
+                            color = if (!showRealPortfolioMode) TvTextPrimary else TvTextSecondary,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                // Tab 2: REAL INDODAX
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (showRealPortfolioMode) Color(0xFF1E2836) else Color.Transparent)
+                        .clickable {
+                            showRealPortfolioMode = true
+                            if (!isPinUnlocked) {
+                                if (!viewModel.hasSecurityPin()) {
+                                    onOpenSettings()
+                                } else {
+                                    showPinDialog = true
+                                }
+                            } else {
+                                viewModel.fetchRealBalance()
+                            }
+                        }
+                        .padding(vertical = 8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = if (isPinUnlocked) Icons.Default.LockOpen else Icons.Default.Lock,
+                            contentDescription = null,
+                            tint = if (showRealPortfolioMode) TvGreen else TvTextSecondary,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = "Portofolio Real (Indodax)",
+                            color = if (showRealPortfolioMode) TvGreen else TvTextSecondary,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        }
+
+        if (showRealPortfolioMode) {
+            // REAL INDODAX PORTFOLIO VIEW
+            LazyColumn(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp),
+                contentPadding = PaddingValues(top = 12.dp, bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                if (!isPinUnlocked) {
+                    item {
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFF0F1722)),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E2836))
+                        ) {
+                            Column(
+                                modifier = Modifier.fillMaxWidth().padding(24.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(56.dp)
+                                        .background(TvGreen.copy(alpha = 0.15f), CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Lock,
+                                        contentDescription = null,
+                                        tint = TvGreen,
+                                        modifier = Modifier.size(28.dp)
+                                    )
+                                }
+                                Spacer(Modifier.height(12.dp))
+                                Text(
+                                    "PORTOFOLIO REAL TERKUNCI",
+                                    color = TvTextPrimary,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Black
+                                )
+                                Spacer(Modifier.height(6.dp))
+                                Text(
+                                    "Masukkan PIN Keamanan untuk melihat rincian saldo & aset Indodax riil Anda.",
+                                    color = TvTextSecondary,
+                                    fontSize = 11.sp,
+                                    lineHeight = 15.sp,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                )
+                                Spacer(Modifier.height(16.dp))
+                                Button(
+                                    onClick = {
+                                        if (!viewModel.hasSecurityPin()) {
+                                            onOpenSettings()
+                                        } else {
+                                            pinDialogError = null
+                                            showPinDialog = true
+                                        }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = TvGreen),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Icon(Icons.Default.LockOpen, null, modifier = Modifier.size(16.dp), tint = Color.Black)
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Buka Access Portofolio Real", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // UNLOCKED REAL PORTFOLIO
+                    item {
+                        // TOTAL REAL VALUE CARD
+                        val realIdr = realBalance["idr"] ?: 0.0
+                        val realCoinItems = remember(realBalance, dashboardTicks, currentTick) {
+                            realBalance.filter { it.key != "idr" && it.value > 0.00000001 }.map { (coin, qty) ->
+                                val symbol = "${coin.uppercase()}IDR"
+                                val price = when {
+                                    symbol.equals(currentTick?.symbol, ignoreCase = true) -> currentTick?.price ?: 0.0
+                                    dashboardTicks.containsKey(symbol) -> dashboardTicks[symbol]?.price ?: 0.0
+                                    else -> 0.0
+                                }
+                                val estIdr = qty * price
+                                Pair(coin.uppercase(), Pair(qty, estIdr))
+                            }.sortedByDescending { it.second.second }
+                        }
+                        val estTotalCryptoIdr = realCoinItems.sumOf { it.second.second }
+                        val totalRealPortfolioIdr = realIdr + estTotalCryptoIdr
+
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFF0D1826)),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, TvGreen.copy(alpha = 0.5f))
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Default.VerifiedUser, null, tint = TvGreen, modifier = Modifier.size(16.dp))
+                                        Spacer(Modifier.width(6.dp))
+                                        Text(
+                                            text = "SALDO REAL INDODAX",
+                                            color = TvGreen,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Black
+                                        )
+                                    }
+
+                                    if (isFetchingRealBalance) {
+                                        CircularProgressIndicator(modifier = Modifier.size(16.dp), color = TvGreen, strokeWidth = 2.dp)
+                                    } else {
+                                        IconButton(
+                                            onClick = { viewModel.fetchRealBalance() },
+                                            modifier = Modifier.size(28.dp)
+                                        ) {
+                                            Icon(Icons.Default.Refresh, "Refresh", tint = TvTextSecondary, modifier = Modifier.size(16.dp))
+                                        }
+                                    }
+                                }
+
+                                Spacer(Modifier.height(8.dp))
+
+                                Text(
+                                    text = "Rp ${PriceFormatter.formatPrice(totalRealPortfolioIdr)}",
+                                    color = TvTextPrimary,
+                                    fontSize = 24.sp,
+                                    fontWeight = FontWeight.Black
+                                )
+                                Text(
+                                    text = "Estimasi Total Aset (Cash IDR + Koin Kripto)",
+                                    color = TvTextSecondary,
+                                    fontSize = 10.sp
+                                )
+
+                                Spacer(Modifier.height(14.dp))
+                                HorizontalDivider(color = Color(0xFF1E2836))
+                                Spacer(Modifier.height(12.dp))
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column {
+                                        Text("SALDO CASH IDR", color = TvTextSecondary, fontSize = 9.5.sp, fontWeight = FontWeight.Bold)
+                                        Text("Rp ${PriceFormatter.formatPrice(realIdr)}", color = TvGreen, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                    Column(horizontalAlignment = Alignment.End) {
+                                        Text("ESTIMASI KOIN", color = TvTextSecondary, fontSize = 9.5.sp, fontWeight = FontWeight.Bold)
+                                        Text("Rp ${PriceFormatter.formatPrice(estTotalCryptoIdr)}", color = Color(0xFF72B7FF), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // REAL HOLDINGS ITEM LIST
+                    item {
+                        Text(
+                            "ASET KRIPTO DI INDODAX",
+                            color = TvTextPrimary,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                    }
+
+                    val realCoinItemsList = realBalance.filter { it.key != "idr" && it.value > 0.00000001 }.entries.toList()
+                    if (realCoinItemsList.isEmpty()) {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(Color(0xFF101720), RoundedCornerShape(10.dp))
+                                    .padding(20.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    "Belum ada aset koin kripto terdeteksi di akun Indodax.",
+                                    color = TvTextSecondary,
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
+                    } else {
+                        items(realCoinItemsList) { (coin, qty) ->
+                            val coinUpper = coin.uppercase()
+                            val symbol = "${coinUpper}IDR"
+                            val price = when {
+                                symbol.equals(currentTick?.symbol, ignoreCase = true) -> currentTick?.price ?: 0.0
+                                dashboardTicks.containsKey(symbol) -> dashboardTicks[symbol]?.price ?: 0.0
+                                else -> 0.0
+                            }
+                            val estVal = qty * price
+
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFF101720)),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E2836))
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(12.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        AssetAvatar(baseAsset = coinUpper, size = 32.dp)
+                                        Spacer(Modifier.width(10.dp))
+                                        Column {
+                                            Text(coinUpper, color = TvTextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                            Text("Jumlah: $qty $coinUpper", color = TvTextSecondary, fontSize = 10.sp)
+                                        }
+                                    }
+
+                                    Column(horizontalAlignment = Alignment.End) {
+                                        Text(
+                                            "Rp ${PriceFormatter.formatPrice(estVal)}",
+                                            color = TvTextPrimary,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(
+                                            if (price > 0) "@ Rp ${PriceFormatter.formatPrice(price)}" else "Harga Ticker Off",
+                                            color = TvTextSecondary,
+                                            fontSize = 10.sp
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // TOP-UP & WITHDRAW NOTICE CARD FOR REAL MODE
+                    item {
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFF0D1B2A)),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E3A5F))
+                        ) {
+                            Column(Modifier.padding(12.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Info, null, tint = Color(0xFF72B7FF), modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("INFORMASI DEPOSIT & WITHDRAW", color = Color(0xFF72B7FF), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    "Akses API Indodax dikhususkan untuk Mode Trade saja. Untuk melakukan Top-Up Rupiah atau Penarikan Dana (Withdraw), silakan gunakan aplikasi atau website resmi Indodax.",
+                                    color = TvTextSecondary,
+                                    fontSize = 10.sp,
+                                    lineHeight = 14.sp
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            // SIMULATION PORTFOLIO VIEW
+            LazyColumn(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp),
+                contentPadding = PaddingValues(top = 12.dp, bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
             // CARD 1: TOTAL PORTOFOLIO & PNL OVERVIEW
             item {
                 Card(
@@ -439,8 +796,9 @@ fun PortfolioScreen(
                 }
             }
         }
+    }
 
-        // BOTTOM NAVIGATION BAR
+    // BOTTOM NAVIGATION BAR
         AppBottomNavigationBar(
             currentTab = NavTab.PORTOFOLIO,
             onSelectTab = { tab ->
@@ -467,6 +825,29 @@ fun PortfolioScreen(
                 showTopUpModal = false
             },
             onDismiss = { showTopUpModal = false }
+        )
+    }
+
+    if (showPinDialog) {
+        SecurityPinDialog(
+            title = "VERIFIKASI PIN PORTOFOLIO REAL",
+            subtitle = "Masukkan 6-digit PIN untuk membuka akses Portofolio Indodax.",
+            isSetupMode = false,
+            errorMessage = pinDialogError,
+            onPinSubmitted = { enteredPin ->
+                val ok = viewModel.verifyPin(enteredPin)
+                if (ok) {
+                    showPinDialog = false
+                    pinDialogError = null
+                    viewModel.fetchRealBalance()
+                } else {
+                    pinDialogError = "PIN Keamanan Salah. Silakan coba lagi."
+                }
+            },
+            onDismiss = {
+                showPinDialog = false
+                pinDialogError = null
+            }
         )
     }
 }

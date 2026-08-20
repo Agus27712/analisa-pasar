@@ -31,6 +31,7 @@ import agu.analys.ui.theme.TvBackground
 import agu.analys.ui.theme.TvGreen
 import agu.analys.ui.theme.TvTextPrimary
 import agu.analys.ui.theme.TvTextSecondary
+import agu.analys.ui.components.security.SecurityPinDialog
 import agu.analys.util.AppPreferences
 import agu.analys.util.GitHubUpdater
 import agu.analys.viewmodel.TradingViewModel
@@ -50,6 +51,15 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
     var buyTakerFee by remember { mutableStateOf(prefs.tradingFees.buyTakerPct.toString()) }
     var sellMakerFee by remember { mutableStateOf(prefs.tradingFees.sellMakerPct.toString()) }
     var sellTakerFee by remember { mutableStateOf(prefs.tradingFees.sellTakerPct.toString()) }
+    var indodaxApiKey by remember { mutableStateOf(prefs.indodaxApiKey) }
+    var indodaxSecretKey by remember { mutableStateOf(prefs.indodaxSecretKey) }
+    val isRealBuyMode by viewModel.isRealBuyMode.collectAsState()
+    var hasPin by remember { mutableStateOf(viewModel.hasSecurityPin()) }
+
+    var showPinDialog by remember { mutableStateOf(false) }
+    var pinDialogAction by remember { mutableStateOf(PinDialogAction.TOGGLE_REAL_BUY) }
+    var pinDialogError by remember { mutableStateOf<String?>(null) }
+    var pendingRealBuyToggle by remember { mutableStateOf(false) }
     var updateRepo by remember { mutableStateOf(prefs.updateRepo) }
     var updateToken by remember { mutableStateOf(prefs.updateGitHubToken) }
     var saved by remember { mutableStateOf(false) }
@@ -323,6 +333,50 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
 
         Spacer(Modifier.height(16.dp))
 
+        // SECTION: KEAMANAN & MODE BELI REAL
+        SectionHeader("KEAMANAN & EKSEKUSI INDODAX")
+        RealBuyModeAndSecurityCard(
+            isRealBuyMode = isRealBuyMode,
+            hasPin = hasPin,
+            indodaxApiKey = indodaxApiKey,
+            indodaxSecretKey = indodaxSecretKey,
+            onToggleRealBuyMode = {
+                if (!isRealBuyMode) {
+                    // Trying to turn ON
+                    if (!hasPin) {
+                        pinDialogAction = PinDialogAction.CREATE_FIRST_PIN
+                        pinDialogError = "Buat PIN baru terlebih dahulu sebelum mengaktifkan Mode Beli Real."
+                        pendingRealBuyToggle = true
+                        showPinDialog = true
+                    } else {
+                        pinDialogAction = PinDialogAction.TOGGLE_REAL_BUY
+                        pinDialogError = null
+                        pendingRealBuyToggle = true
+                        showPinDialog = true
+                    }
+                } else {
+                    // Turning OFF does not require PIN
+                    viewModel.setRealBuyMode(false, "")
+                    saved = false
+                }
+            },
+            onOpenPinSetup = {
+                if (!hasPin) {
+                    pinDialogAction = PinDialogAction.CREATE_FIRST_PIN
+                    pinDialogError = null
+                } else {
+                    // Require old PIN verification before resetting/changing PIN
+                    pinDialogAction = PinDialogAction.VERIFY_OLD_FOR_CHANGE
+                    pinDialogError = null
+                }
+                showPinDialog = true
+            },
+            onApiKeyChange = { indodaxApiKey = it; saved = false },
+            onSecretKeyChange = { indodaxSecretKey = it; saved = false }
+        )
+
+        Spacer(Modifier.height(16.dp))
+
         // SECTION 2: INTEGRASI AI ASSISTANT
         SectionHeader("INTEGRASI AI ASSISTANT")
         AiProviderSettingsCard(
@@ -456,6 +510,8 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                 prefs.aiProvider = provider
                 prefs.groqApiKey = groq
                 prefs.geminiApiKey = gemini
+                prefs.indodaxApiKey = indodaxApiKey
+                prefs.indodaxSecretKey = indodaxSecretKey
                 prefs.updateRepo = updateRepo
                 prefs.updateGitHubToken = updateToken
                 val currentFees = prefs.tradingFees
@@ -500,6 +556,92 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
 
         Spacer(Modifier.height(18.dp))
     }
+
+    if (showPinDialog) {
+        val title = when (pinDialogAction) {
+            PinDialogAction.VERIFY_OLD_FOR_CHANGE -> "VERIFIKASI PIN SAAT INI"
+            PinDialogAction.ENTER_NEW_PIN -> "MASUKKAN PIN BARU"
+            PinDialogAction.CREATE_FIRST_PIN -> "ATUR PIN KEAMANAN BARU"
+            PinDialogAction.TOGGLE_REAL_BUY -> "VERIFIKASI PIN KEAMANAN"
+        }
+        val subtitle = when (pinDialogAction) {
+            PinDialogAction.VERIFY_OLD_FOR_CHANGE -> "Masukkan PIN lama Anda terlebih dahulu untuk mengubah PIN."
+            PinDialogAction.ENTER_NEW_PIN -> "Masukkan 6-digit PIN baru untuk memperbarui PIN Keamanan Anda."
+            PinDialogAction.CREATE_FIRST_PIN -> "Masukkan 6-digit PIN untuk melindungi Mode Beli & Porto Real."
+            PinDialogAction.TOGGLE_REAL_BUY -> "Masukkan PIN untuk mengaktifkan Mode Beli Real Indodax."
+        }
+        val isSetupMode = pinDialogAction == PinDialogAction.ENTER_NEW_PIN || pinDialogAction == PinDialogAction.CREATE_FIRST_PIN
+
+        SecurityPinDialog(
+            title = title,
+            subtitle = subtitle,
+            isSetupMode = isSetupMode,
+            errorMessage = pinDialogError,
+            onPinSubmitted = { enteredPin ->
+                when (pinDialogAction) {
+                    PinDialogAction.VERIFY_OLD_FOR_CHANGE -> {
+                        val ok = viewModel.verifyPin(enteredPin)
+                        if (ok) {
+                            pinDialogAction = PinDialogAction.ENTER_NEW_PIN
+                            pinDialogError = null
+                            Toast.makeText(context, "PIN Lama Terverifikasi! Silakan masukkan PIN Baru.", Toast.LENGTH_SHORT).show()
+                        } else {
+                            pinDialogError = "PIN Lama Salah. Silakan coba lagi."
+                        }
+                    }
+                    PinDialogAction.ENTER_NEW_PIN -> {
+                        if (enteredPin.length < 4) {
+                            pinDialogError = "PIN minimal 4 digit (rekomendasi 6 digit)"
+                        } else {
+                            viewModel.createSecurityPin(enteredPin)
+                            hasPin = true
+                            showPinDialog = false
+                            pinDialogError = null
+                            Toast.makeText(context, "PIN Keamanan Berhasil Diperbarui!", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    PinDialogAction.CREATE_FIRST_PIN -> {
+                        if (enteredPin.length < 4) {
+                            pinDialogError = "PIN minimal 4 digit (rekomendasi 6 digit)"
+                        } else {
+                            viewModel.createSecurityPin(enteredPin)
+                            hasPin = true
+                            showPinDialog = false
+                            pinDialogError = null
+                            if (pendingRealBuyToggle) {
+                                viewModel.setRealBuyMode(true, enteredPin)
+                                pendingRealBuyToggle = false
+                            }
+                            Toast.makeText(context, "PIN Keamanan Berhasil Dibuat!", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    PinDialogAction.TOGGLE_REAL_BUY -> {
+                        val ok = viewModel.setRealBuyMode(true, enteredPin)
+                        if (ok) {
+                            showPinDialog = false
+                            pinDialogError = null
+                            pendingRealBuyToggle = false
+                            Toast.makeText(context, "Mode Beli Real (Indodax) DIAKTIFKAN!", Toast.LENGTH_SHORT).show()
+                        } else {
+                            pinDialogError = "PIN Keamanan Salah. Silakan coba lagi."
+                        }
+                    }
+                }
+            },
+            onDismiss = {
+                showPinDialog = false
+                pendingRealBuyToggle = false
+                pinDialogError = null
+            }
+        )
+    }
+}
+
+enum class PinDialogAction {
+    TOGGLE_REAL_BUY,
+    CREATE_FIRST_PIN,
+    VERIFY_OLD_FOR_CHANGE,
+    ENTER_NEW_PIN
 }
 
 @Composable

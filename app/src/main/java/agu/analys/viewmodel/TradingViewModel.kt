@@ -221,6 +221,88 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     private val _tradingFees = MutableStateFlow(prefs.tradingFees)
     val tradingFees: StateFlow<TradingFeeConfig> = _tradingFees.asStateFlow()
 
+    // --- REAL BUY MODE & SECURITY PIN ---
+    private val _isRealBuyMode = MutableStateFlow(prefs.isRealBuyModeEnabled)
+    val isRealBuyMode: StateFlow<Boolean> = _isRealBuyMode.asStateFlow()
+
+    private val _isPinUnlocked = MutableStateFlow(false)
+    val isPinUnlocked: StateFlow<Boolean> = _isPinUnlocked.asStateFlow()
+
+    private val _realIndodaxBalance = MutableStateFlow<Map<String, Double>>(emptyMap())
+    val realIndodaxBalance: StateFlow<Map<String, Double>> = _realIndodaxBalance.asStateFlow()
+
+    private val _isFetchingRealBalance = MutableStateFlow(false)
+    val isFetchingRealBalance: StateFlow<Boolean> = _isFetchingRealBalance.asStateFlow()
+
+    private val _realTradeStatus = MutableStateFlow<String?>(null)
+    val realTradeStatus: StateFlow<String?> = _realTradeStatus.asStateFlow()
+
+    fun hasSecurityPin(): Boolean = prefs.hasSecurityPin()
+
+    fun createSecurityPin(pin: String) {
+        prefs.setSecurityPin(pin)
+        _isPinUnlocked.value = true
+    }
+
+    fun verifyPin(pin: String): Boolean {
+        val valid = prefs.verifySecurityPin(pin)
+        if (valid) {
+            _isPinUnlocked.value = true
+        }
+        return valid
+    }
+
+    fun lockPin() {
+        _isPinUnlocked.value = false
+    }
+
+    fun setRealBuyMode(enabled: Boolean, pin: String): Boolean {
+        if (enabled) {
+            if (!prefs.verifySecurityPin(pin)) return false
+            prefs.isRealBuyModeEnabled = true
+            _isRealBuyMode.value = true
+            _isPinUnlocked.value = true
+            fetchRealBalance()
+            return true
+        } else {
+            prefs.isRealBuyModeEnabled = false
+            _isRealBuyMode.value = false
+            return true
+        }
+    }
+
+    fun fetchRealBalance() {
+        val apiKey = prefs.indodaxApiKey
+        val secretKey = prefs.indodaxSecretKey
+        if (apiKey.isBlank() || secretKey.isBlank()) return
+        viewModelScope.launch {
+            _isFetchingRealBalance.value = true
+            val bal = IndodaxMarketService.fetchAccountBalance(apiKey, secretKey)
+            if (bal != null) {
+                _realIndodaxBalance.value = bal
+            }
+            _isFetchingRealBalance.value = false
+        }
+    }
+
+    fun executeRealTrade(pair: String, type: String, price: Long, amountIdr: Double, onResult: (Boolean, String) -> Unit) {
+        val apiKey = prefs.indodaxApiKey
+        val secretKey = prefs.indodaxSecretKey
+        if (apiKey.isBlank() || secretKey.isBlank()) {
+            onResult(false, "API Key atau Secret Key Indodax belum diisi di Settings.")
+            return
+        }
+        viewModelScope.launch {
+            _realTradeStatus.value = "Mengirim order $type ke Indodax..."
+            val (success, message) = IndodaxMarketService.placeTradeOrder(apiKey, secretKey, pair, type, price, amountIdr)
+            _realTradeStatus.value = message
+            if (success) {
+                fetchRealBalance()
+            }
+            onResult(success, message)
+        }
+    }
+
     // Simulation Trading StateFlows (Delegated to SimulationCoordinator)
     val simulationWallet: StateFlow<SimulationWallet> = simCoordinator.wallet
     val simulationOpenOrders: StateFlow<List<SimulationOrder>> = simCoordinator.openOrders
