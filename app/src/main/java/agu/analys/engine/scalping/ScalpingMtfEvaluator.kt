@@ -18,7 +18,7 @@ import kotlin.math.max
 
 /**
  * Scalping BUY-only. 1H=bias, 15M=setup, 1M=trigger.
- * Mendukung opsi Sensitivitas: Konservatif (ketat) vs Agresif (peluang lebih sering).
+ * Quality gate: penalize score bila history tipis / MTF tidak sejalan (proxy validasi historis).
  */
 object ScalpingMtfEvaluator {
     data class Result(val signal: AISignalState, val indicators: TechnicalIndicators)
@@ -42,7 +42,6 @@ object ScalpingMtfEvaluator {
         val h1GoldenCross = goldenCross(h1Candles, 20, 50)
         val m15GoldenCross = goldenCross(m15Candles, 20, 50)
 
-        // Bias H1: Konservatif = EMA Check; Agresif = EMA Check + RSI H1 (> 50) sebagai penentu kualitas tren
         val biasLong = if (isAggressive) {
             ((h1.ema20 > h1.ema50) || (h1.price > h1.ema20 && h1.price > h1.ema50)) && h1.rsi > 50.0
         } else {
@@ -50,7 +49,6 @@ object ScalpingMtfEvaluator {
         }
         val biasStrong = biasLong && (structureH1.trend == "Bullish structure" || h1GoldenCross)
 
-        // Setup: Konservatif = EMA 15M tidak bearish (EMA20 ≥ EMA50); Agresif = EMA20>=50 ATAU Harga>EMA20
         val setupLong = if (isAggressive) {
             (m15.ema20 >= m15.ema50) || (m15.price > m15.ema20)
         } else {
@@ -63,7 +61,6 @@ object ScalpingMtfEvaluator {
         val momentumLong = m1.macdHist > 0.0 || m1.price > m1.ema20
         val volumeOk = if (isAggressive) m1.volumeRatio >= 0.85 else m1.volumeRatio >= 1.0
 
-        // Trigger 1M: Konservatif = Boolean Check; Agresif = Scoring Multi-Level (EMA50 saja = Poin Kecil, EMA20 + Vol/Retest = Poin Maksimal)
         val triggerScore = when {
             isAggressive && m1.price > m1.ema20 && (volumeOk || m1.retestUp || m1.breakoutUp) -> 20
             isAggressive && m1.price > m1.ema20 -> 12
@@ -76,7 +73,6 @@ object ScalpingMtfEvaluator {
             priceAboveEma20 && rsiEntryZone && (momentumLong || volumeOk || m1.retestUp || m1.breakoutUp)
         }
 
-        // Extended: batas overbought
         val extended = if (isAggressive) {
             h1.rsi > 78.0 || m15.rsi > 78.0 || m1.rsi > 75.0
         } else {
@@ -103,9 +99,20 @@ object ScalpingMtfEvaluator {
             if (m1.breakoutUp || m1.retestUp) score += 5
         }
         if (h1GoldenCross) score += 5
-        score = score.coerceIn(0, 100)
 
-        // SL Range: Konservatif = 0.30% - 0.55%; Agresif = 0.60% - 1.20% (ATR Multiplier x1.5)
+        // --- Historical / data-quality gate (proxy validasi) ---
+        val qualityPenalty = historicalQualityPenalty(
+            h1Size = h1Candles.size,
+            m15Size = m15Candles.size,
+            m1Size = m1Candles.size,
+            biasLong = biasLong,
+            setupLong = setupLong,
+            triggerLong = triggerLong,
+            structureAligned = structureH1.trend == "Bullish structure" && structure15.trend == "Bullish structure",
+            volumeOk = volumeOk
+        )
+        score = (score - qualityPenalty).coerceIn(0, 100)
+
         val rawSlPct = if (isAggressive) {
             ((m1.atr / price) * 100.0 * 1.5).coerceIn(0.60, 1.20)
         } else {
@@ -124,7 +131,10 @@ object ScalpingMtfEvaluator {
         val tp2 = price * (1.0 + tp2Pct / 100.0)
         val feeResult = FeeCalculator.roundTrip(entry, sl, tp2, fees)
 
-        val ready = biasLong && setupLong && triggerLong && !extended && !extremeVolatility && feeResult.netRr >= minNetRr
+        // Siap entry hanya jika quality gate lolos (score tetap masuk akal)
+        val qualityOk = qualityPenalty <= 18
+        val ready = biasLong && setupLong && triggerLong && !extended && !extremeVolatility &&
+            feeResult.netRr >= minNetRr && qualityOk
         val stage = when {
             ready && score >= (if (isAggressive) 68 else 72) -> ScalpingStage.STRONG_ENTRY
             ready -> ScalpingStage.ENTRY
@@ -142,14 +152,14 @@ object ScalpingMtfEvaluator {
 
         val reasons = mutableListOf<String>()
         if (isAggressive) reasons += "[Mode Agresif Aktif]"
-        reasons += "1H bias: ${if (biasLong) "bullish" else "belum bullish"} · EMA20 ${fmt(h1.ema20)} / EMA50 ${fmt(h1.ema50)}."
-        reasons += "15M setup: ${if (setupLong) "searah" else "belum searah"} · EMA20 ${fmt(m15.ema20)} / EMA50 ${fmt(m15.ema50)}."
-        reasons += "1M trigger: harga ${if (priceAboveEma20) "> EMA20" else "≤ EMA20"}, RSI ${fmt(m1.rsi)}, vol ${fmt(m1.volumeRatio)}×."
-        if (h1GoldenCross || m15GoldenCross) reasons += "Golden cross EMA20/50 mendukung."
-        if (extended) reasons += "RSI extended — tunggu pullback, jangan kejar."
+        reasons += "1H bias: ${if (biasLong) "bullish" else "belum bullish"}."
+        reasons += "15M setup: ${if (setupLong) "searah" else "belum searah"}."
+        reasons += "1M trigger: RSI ${fmt(m1.rsi)}, vol ${fmt(m1.volumeRatio)}×."
+        if (qualityPenalty > 0) reasons += "Quality gate −$qualityPenalty (history/MTF)."
+        if (extended) reasons += "RSI extended — tunggu pullback."
         if (extremeVolatility) reasons += "ATR 1M ≥ 4%; entry ditahan."
-        reasons += "Fee RT ${fmt(feePct)}%; net R:R TP2 1:${fmt(feeResult.netRr)} (min $minNetRr)."
-        if (!ready) reasons += "Belum BUY READY — tunggu bias+setup+trigger searah."
+        reasons += "Net R:R TP2 1:${fmt(feeResult.netRr)} (min $minNetRr)."
+        if (!ready) reasons += "Belum BUY READY."
 
         val entryPriceOk = ready && price > 0.0
         val entryPriceStatus = when {
@@ -159,10 +169,10 @@ object ScalpingMtfEvaluator {
             else -> MtfLegStatus.UNKNOWN
         }
         val entryPriceDetail = when {
-            entryPriceOk -> "Harga pas di ${fmt(entry)} · Siap eksekusi BUY di Indodax"
-            biasLong && setupLong -> "Siapkan harga ${fmt(entry)} di Indodax · Menunggu trigger"
-            biasLong -> "Siapkan pantauan harga di Indodax"
-            else -> "Menunggu konfirmasi time-frame"
+            entryPriceOk -> "Harga ${fmt(entry)} · Siap BUY di Indodax"
+            biasLong && setupLong -> "Siapkan ${fmt(entry)} · Menunggu trigger"
+            biasLong -> "Pantau harga di Indodax"
+            else -> "Menunggu konfirmasi TF"
         }
 
         val mtf = ScalpingMtfSnapshot(
@@ -175,7 +185,7 @@ object ScalpingMtfEvaluator {
             setupDetail = "EMA20/50 · RSI ${fmt(m15.rsi)}" + if (setupStrong) " · kuat" else "",
             triggerOk = triggerLong,
             triggerStatus = if (triggerLong) MtfLegStatus.OK else MtfLegStatus.WAITING,
-            triggerDetail = "RSI ${fmt(m1.rsi)} · vs EMA20 · vol ${fmt(m1.volumeRatio)}×",
+            triggerDetail = "RSI ${fmt(m1.rsi)} · vol ${fmt(m1.volumeRatio)}×",
             entryPriceOk = entryPriceOk,
             entryPriceStatus = entryPriceStatus,
             entryPriceDetail = entryPriceDetail,
@@ -187,10 +197,10 @@ object ScalpingMtfEvaluator {
                 ScalpingStage.WATCH -> "MENUNGGU KONFIRMASI"
                 ScalpingStage.HOLD -> "BELUM TERSEDIA"
             },
-            waitingFor = if (ready) "Harga pas di area entry! Langsung klik BUY di Indodax."
-            else if (isAggressive) "Tunggu bias 1H/setup 15M searah + trigger 1M (RSI 35–66) & harga entri pas."
-            else "Tunggu bias 1H, setup 15M, trigger 1M (RSI 38–62, harga > EMA20) & harga entri pas.",
-            entryCondition = "1H bias + 15M setup + 1M trigger + Harga Entri Pas + net R:R ≥ $minNetRr.",
+            waitingFor = if (ready) "Harga di area entry — BUY di Indodax."
+            else if (isAggressive) "Tunggu bias+setup+trigger & quality gate."
+            else "Tunggu bias 1H, setup 15M, trigger 1M & quality gate.",
+            entryCondition = "1H+15M+1M searah + quality OK + net R:R ≥ $minNetRr.",
             extended = extended,
             extremeVolatility = extremeVolatility
         )
@@ -209,7 +219,7 @@ object ScalpingMtfEvaluator {
             targetPrice2 = if (action == SignalAction.BUY) tp2 else 0.0,
             stopLoss = if (action == SignalAction.BUY) sl else 0.0,
             riskRewardRatio = if (action == SignalAction.BUY) "Net R:R 1:${fmt(feeResult.netRr)}" else "Belum tersedia",
-            reasoning = reasons.take(9),
+            reasoning = reasons.take(6),
             timestamp = System.currentTimeMillis(),
             scalpingStage = stage,
             mtf = mtf
@@ -226,6 +236,34 @@ object ScalpingMtfEvaluator {
                 momentum = m1.momentum
             )
         )
+    }
+
+    /**
+     * Proxy validasi historis:
+     * - history tipis → score turun
+     * - MTF tidak sejalan → score turun
+     * - volume lemah → score turun
+     */
+    private fun historicalQualityPenalty(
+        h1Size: Int,
+        m15Size: Int,
+        m1Size: Int,
+        biasLong: Boolean,
+        setupLong: Boolean,
+        triggerLong: Boolean,
+        structureAligned: Boolean,
+        volumeOk: Boolean
+    ): Int {
+        var p = 0
+        if (h1Size < 80) p += 6
+        if (m15Size < 80) p += 5
+        if (m1Size < 100) p += 5
+        val legsOk = listOf(biasLong, setupLong, triggerLong).count { it }
+        if (legsOk == 1) p += 12
+        else if (legsOk == 2) p += 6
+        if (!structureAligned && biasLong) p += 4
+        if (!volumeOk) p += 5
+        return p.coerceAtMost(30)
     }
 
     private data class Frame(
