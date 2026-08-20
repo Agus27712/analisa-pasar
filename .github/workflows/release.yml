@@ -3,11 +3,18 @@ name: Release APK
 on:
   workflow_dispatch:
   push:
+    branches:
+      - main
+      - master
     tags:
       - 'v*'
 
 permissions:
   contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   release:
@@ -27,6 +34,12 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Setup Gradle with cache
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+          gradle-home-cache-cleanup: true
+
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
@@ -45,14 +58,12 @@ jobs:
         id: release_tag
         shell: bash
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            TAG="v${{ steps.version.outputs.name }}"
-          else
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             TAG="${GITHUB_REF_NAME}"
+          else
+            TAG="v${{ steps.version.outputs.name }}"
           fi
-          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          EXPECTED_TAG="v${{ steps.version.outputs.name }}"
-          test "$TAG" = "$EXPECTED_TAG"
+          echo "Resolved Tag: $TAG"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
       - name: Restore release keystore
@@ -71,7 +82,7 @@ jobs:
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: |
           chmod +x ./gradlew
-          ./gradlew :app:assembleRelease
+          ./gradlew :app:assembleRelease --no-daemon
 
       - name: Prepare release notes
         shell: bash
@@ -79,20 +90,19 @@ jobs:
           VERSION="${{ steps.version.outputs.name }}"
           TAG="${{ steps.release_tag.outputs.tag }}"
           
-          # Pastikan semua tag di-fetch dari remote agar komparasi akurat
+          # Fetch remote tags for clean comparison
           git fetch --tags --force origin 2>/dev/null || true
           
-          # Cari tag rilis sebelumnya (format vX.Y.Z) yang bukan tag rilis saat ini
           PREVIOUS_TAG=$(git tag --sort=-creatordate | grep -E '^v[0-9]+\.[0-9]+' | grep -v "^$TAG$" | head -n 1 || true)
           
           if [ -n "$PREVIOUS_TAG" ] && git rev-parse -q --verify "refs/tags/$PREVIOUS_TAG" >/dev/null 2>&1; then
-            echo "Membandingkan perubahan sejak rilis sebelumnya: $PREVIOUS_TAG..$TAG"
+            echo "Comparing changes since: $PREVIOUS_TAG..HEAD"
             RANGE="$PREVIOUS_TAG..HEAD"
             FEATS=$(git log $RANGE --no-merges --pretty=format:'- %s' --grep='^feat' -i || true)
             FIXES=$(git log $RANGE --no-merges --pretty=format:'- %s' --grep='^fix' -i || true)
             OTHERS=$(git log $RANGE --no-merges --pretty=format:'- %s' --grep='^\(feat\|fix\)' -i --invert-grep || true)
           else
-            echo "Tag rilis sebelumnya tidak ditemukan. Mengambil hanya commit terbaru (max 10 commit)."
+            echo "No previous tag found. Getting recent commits (max 10)."
             FEATS=$(git log -n 10 --no-merges --pretty=format:'- %s' --grep='^feat' -i || true)
             FIXES=$(git log -n 10 --no-merges --pretty=format:'- %s' --grep='^fix' -i || true)
             OTHERS=$(git log -n 10 --no-merges --pretty=format:'- %s' --grep='^\(feat\|fix\)' -i --invert-grep || true)
@@ -103,20 +113,23 @@ jobs:
           [ -n "$OTHERS" ] || OTHERS="- Peningkatan performa dan sinkronisasi data."
 
           cat > "$RUNNER_TEMP/release-notes.md" <<EOF
-          ## Versi
-          **v$VERSION** (Build ${{ steps.version.outputs.code }})
+## 🚀 Versi Aplikasi
+**Analysis Pasar v$VERSION** (Build Code: ${{ steps.version.outputs.code }})
 
-          ## Fitur & Pembaruan
-          $FEATS
+### ✨ Fitur Baru & Pembaruan
+$FEATS
 
-          ## Perbaikan Bug
-          $FIXES
+### 🛠️ Perbaikan Bug
+$FIXES
 
-          ## Peningkatan Sistem
-          $OTHERS
-          EOF
+### ⚡ Peningkatan Sistem & Performa
+$OTHERS
 
-      - name: Create GitHub release and upload APK
+---
+*📦 Build otomatis oleh GitHub Actions (Release Workflow).*
+EOF
+
+      - name: Create or update GitHub release and upload APK
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -124,8 +137,12 @@ jobs:
           TAG="${{ steps.release_tag.outputs.tag }}"
           APK="app/build/outputs/apk/release/app-release.apk"
           test -f "$APK"
+
           if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Release $TAG already exists. Stop to avoid replacing a published release."
-            exit 1
+            echo "Release $TAG already exists. Updating existing release notes and asset..."
+            gh release edit "$TAG" --title "Analysis Pasar v$VERSION" --notes-file "$RUNNER_TEMP/release-notes.md"
+            gh release upload "$TAG" "$APK" --clobber
+          else
+            echo "Creating new release $TAG..."
+            gh release create "$TAG" "$APK" --title "Analysis Pasar v$VERSION" --notes-file "$RUNNER_TEMP/release-notes.md" --target "${GITHUB_SHA}"
           fi
-          gh release create "$TAG" "$APK" --title "Analysis Pasar v$VERSION" --notes-file "$RUNNER_TEMP/release-notes.md" --target "${GITHUB_SHA}"

@@ -1,4 +1,5 @@
 import java.util.Properties
+import java.util.Base64
 
 plugins {
   alias(libs.plugins.android.application)
@@ -13,8 +14,8 @@ android {
     applicationId = "agu.analys"
     minSdk = 24
     targetSdk = 35
-    versionCode = providers.gradleProperty("VERSION_CODE").map(String::toInt).getOrElse(21)
-    versionName = "2.0.2"
+    versionCode = providers.gradleProperty("VERSION_CODE").map(String::toInt).getOrElse(22)
+    versionName = "2.0.3"
 
     // Keys TIDAK di-embed ke BuildConfig agar tidak bocor di APK.
     // User isi via Settings → disimpan di SharedPreferences (yang sudah di-exclude backup).
@@ -29,12 +30,30 @@ android {
       keyPassword = "android"
     }
     create("release") {
-      val keystorePath = System.getenv("RELEASE_KEYSTORE_PATH")
       val storePassword = System.getenv("RELEASE_STORE_PASSWORD")
       val keyAlias = System.getenv("RELEASE_KEY_ALIAS")
       val keyPassword = System.getenv("RELEASE_KEY_PASSWORD")
+      var keystorePath = System.getenv("RELEASE_KEYSTORE_PATH")
+      val keystoreBase64 = System.getenv("RELEASE_KEYSTORE_BASE64")
+
+      if (!keystoreBase64.isNullOrBlank()) {
+        val tempKeystore = file("${rootDir}/release_temp.keystore")
+        if (!tempKeystore.exists()) {
+          try {
+            val bytes = Base64.getDecoder().decode(keystoreBase64.trim())
+            tempKeystore.writeBytes(bytes)
+          } catch (e: Exception) {
+            System.err.println("Gagal mendekode RELEASE_KEYSTORE_BASE64: ${e.message}")
+          }
+        }
+        keystorePath = tempKeystore.absolutePath
+      }
+
       if (!keystorePath.isNullOrBlank() && !storePassword.isNullOrBlank() && !keyAlias.isNullOrBlank() && !keyPassword.isNullOrBlank()) {
-        storeFile = file(keystorePath); this.storePassword = storePassword; this.keyAlias = keyAlias; this.keyPassword = keyPassword
+        storeFile = file(keystorePath)
+        this.storePassword = storePassword
+        this.keyAlias = keyAlias
+        this.keyPassword = keyPassword
       }
     }
   }
@@ -47,7 +66,8 @@ android {
     }
     debug {
       isMinifyEnabled = false
-      signingConfig = signingConfigs.getByName("debugConfig")
+      val hasReleaseKeys = !System.getenv("RELEASE_KEYSTORE_BASE64").isNullOrBlank() || !System.getenv("RELEASE_KEYSTORE_PATH").isNullOrBlank()
+      signingConfig = if (hasReleaseKeys) signingConfigs.getByName("release") else signingConfigs.getByName("debugConfig")
     }
   }
   compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }

@@ -29,6 +29,8 @@ fun SecurityPinDialog(
     subtitle: String = "Masukkan 6-digit PIN Keamanan Anda untuk melanjutkan.",
     isSetupMode: Boolean = false,
     errorMessage: String? = null,
+    failedAttempts: Int = 0,
+    maxAttempts: Int = 5,
     onPinSubmitted: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -109,12 +111,23 @@ fun SecurityPinDialog(
 
                 if (displayError != null) {
                     Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = displayError,
-                        color = Color(0xFFFF5252),
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = displayError,
+                            color = Color(0xFFFF5252),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        if (failedAttempts > 0 && !isSetupMode) {
+                            val remaining = (maxAttempts - failedAttempts).coerceAtLeast(0)
+                            Text(
+                                text = "⚠️ Sisa kesempatan: $remaining kali sebelum API & PIN dihapus otomatis!",
+                                color = Color(0xFFFFB300),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
                 }
 
                 Spacer(Modifier.height(12.dp))

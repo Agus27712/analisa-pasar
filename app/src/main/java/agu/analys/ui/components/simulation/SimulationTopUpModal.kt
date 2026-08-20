@@ -83,7 +83,7 @@ fun SimulationTopUpModal(
                         Text(text = "Total Saldo IDR Tersedia", color = TvTextSecondary, fontSize = 11.sp)
                         Spacer(Modifier.height(2.dp))
                         Text(
-                            text = "Rp ${PriceFormatter.formatPrice(wallet.getAvailableIdr())}",
+                            text = PriceFormatter.formatPrice(wallet.getAvailableIdr()),
                             color = TvGreen,
                             fontSize = 18.sp,
                             fontWeight = FontWeight.ExtraBold
@@ -91,7 +91,7 @@ fun SimulationTopUpModal(
                         if (wallet.lockedIdr > 0) {
                             Spacer(Modifier.height(2.dp))
                             Text(
-                                text = "Tertahan di Open Orders: Rp ${PriceFormatter.formatPrice(wallet.lockedIdr)}",
+                                text = "Tertahan di Open Orders: ${PriceFormatter.formatPrice(wallet.lockedIdr)}",
                                 color = TvOrange,
                                 fontSize = 10.sp
                             )

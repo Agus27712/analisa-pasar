@@ -32,6 +32,7 @@ import agu.analys.ui.theme.TvGreen
 import agu.analys.ui.theme.TvTextPrimary
 import agu.analys.ui.theme.TvTextSecondary
 import agu.analys.ui.components.security.SecurityPinDialog
+import agu.analys.ui.components.security.SetupRealApiDialog
 import agu.analys.util.AppPreferences
 import agu.analys.util.GitHubUpdater
 import agu.analys.viewmodel.TradingViewModel
@@ -51,13 +52,13 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
     var buyTakerFee by remember { mutableStateOf(prefs.tradingFees.buyTakerPct.toString()) }
     var sellMakerFee by remember { mutableStateOf(prefs.tradingFees.sellMakerPct.toString()) }
     var sellTakerFee by remember { mutableStateOf(prefs.tradingFees.sellTakerPct.toString()) }
-    var indodaxApiKey by remember { mutableStateOf(prefs.indodaxApiKey) }
-    var indodaxSecretKey by remember { mutableStateOf(prefs.indodaxSecretKey) }
     val isRealBuyMode by viewModel.isRealBuyMode.collectAsState()
     val isPinUnlocked by viewModel.isPinUnlocked.collectAsState()
     val userPublicIp by viewModel.userPublicIp.collectAsState()
+    val failedPinAttempts by viewModel.failedPinAttempts.collectAsState()
     var hasPin by remember { mutableStateOf(viewModel.hasSecurityPin()) }
 
+    var showSetupRealApiDialog by remember { mutableStateOf(false) }
     var showPinDialog by remember { mutableStateOf(false) }
     var pinDialogAction by remember { mutableStateOf(PinDialogAction.TOGGLE_REAL_BUY) }
     var pinDialogError by remember { mutableStateOf<String?>(null) }
@@ -340,18 +341,14 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
         RealBuyModeAndSecurityCard(
             isRealBuyMode = isRealBuyMode,
             hasPin = hasPin,
+            hasApiCredentials = prefs.hasIndodaxCredentials(),
             isPinUnlocked = isPinUnlocked,
-            indodaxApiKey = indodaxApiKey,
-            indodaxSecretKey = indodaxSecretKey,
             userPublicIp = userPublicIp,
+            failedPinAttempts = failedPinAttempts,
             onToggleRealBuyMode = {
                 if (!isRealBuyMode) {
-                    // Trying to turn ON
-                    if (!hasPin) {
-                        pinDialogAction = PinDialogAction.CREATE_FIRST_PIN
-                        pinDialogError = "Buat PIN baru terlebih dahulu sebelum mengaktifkan Mode Beli Real."
-                        pendingRealBuyToggle = true
-                        showPinDialog = true
+                    if (!hasPin || !prefs.hasIndodaxCredentials()) {
+                        showSetupRealApiDialog = true
                     } else {
                         pinDialogAction = PinDialogAction.TOGGLE_REAL_BUY
                         pinDialogError = null
@@ -359,29 +356,23 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                         showPinDialog = true
                     }
                 } else {
-                    // Turning OFF does not require PIN
                     viewModel.setRealBuyMode(false, "")
-                    saved = false
+                    Toast.makeText(context, "Mode beralih ke SIMULASI.", Toast.LENGTH_SHORT).show()
                 }
             },
-            onOpenPinSetup = {
-                if (!hasPin) {
-                    pinDialogAction = PinDialogAction.CREATE_FIRST_PIN
-                    pinDialogError = null
-                } else {
-                    // Require old PIN verification before resetting/changing PIN
-                    pinDialogAction = PinDialogAction.VERIFY_OLD_FOR_CHANGE
-                    pinDialogError = null
-                }
-                showPinDialog = true
+            onOpenSetupDialog = {
+                showSetupRealApiDialog = true
             },
             onRequirePinUnlock = {
                 pinDialogAction = PinDialogAction.UNLOCK_ONLY
                 pinDialogError = null
                 showPinDialog = true
             },
-            onApiKeyChange = { indodaxApiKey = it; saved = false },
-            onSecretKeyChange = { indodaxSecretKey = it; saved = false },
+            onWipeCredentials = {
+                viewModel.wipeSecurityCredentials()
+                hasPin = false
+                Toast.makeText(context, "Seluruh Kredensial API & PIN berhasil dihapus.", Toast.LENGTH_SHORT).show()
+            },
             onCheckPublicIp = { viewModel.checkPublicIp() }
         )
 
@@ -520,8 +511,6 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                 prefs.aiProvider = provider
                 prefs.groqApiKey = groq
                 prefs.geminiApiKey = gemini
-                prefs.indodaxApiKey = indodaxApiKey
-                prefs.indodaxSecretKey = indodaxSecretKey
                 prefs.updateRepo = updateRepo
                 prefs.updateGitHubToken = updateToken
                 val currentFees = prefs.tradingFees
@@ -654,6 +643,24 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                 showPinDialog = false
                 pendingRealBuyToggle = false
                 pinDialogError = null
+            }
+        )
+    }
+
+    if (showSetupRealApiDialog) {
+        SetupRealApiDialog(
+            initialApiKey = prefs.indodaxApiKey,
+            initialSecretKey = prefs.indodaxSecretKey,
+            userPublicIp = userPublicIp,
+            onCheckPublicIp = { viewModel.checkPublicIp() },
+            onSaveAndActivate = { newPin, newApiKey, newSecretKey ->
+                viewModel.saveRealCredentialsAndPin(newPin, newApiKey, newSecretKey)
+                hasPin = true
+                showSetupRealApiDialog = false
+                Toast.makeText(context, "Kredensial disimpan! Mode Real (Indodax) DIAKTIFKAN.", Toast.LENGTH_SHORT).show()
+            },
+            onDismiss = {
+                showSetupRealApiDialog = false
             }
         )
     }

@@ -32,8 +32,23 @@ class AppPreferences(context: Context) {
         get() = prefs.getString(KEY_SECURITY_PIN_HASH, "").orEmpty()
         set(value) = prefs.edit().putString(KEY_SECURITY_PIN_HASH, value).apply()
 
+    var failedPinAttempts: Int
+        get() = prefs.getInt(KEY_FAILED_PIN_ATTEMPTS, 0)
+        set(value) = prefs.edit().putInt(KEY_FAILED_PIN_ATTEMPTS, value).apply()
+
+    fun recordFailedPinAttempt(): Int {
+        val next = failedPinAttempts + 1
+        failedPinAttempts = next
+        return next
+    }
+
+    fun resetFailedPinAttempts() {
+        failedPinAttempts = 0
+    }
+
     fun setSecurityPin(pin: String) {
         securityPinHash = hashPin(pin)
+        resetFailedPinAttempts()
     }
 
     fun verifySecurityPin(pin: String): Boolean {
@@ -43,6 +58,18 @@ class AppPreferences(context: Context) {
     }
 
     fun hasSecurityPin(): Boolean = securityPinHash.isNotBlank()
+
+    fun hasIndodaxCredentials(): Boolean = indodaxApiKey.isNotBlank() && indodaxSecretKey.isNotBlank()
+
+    fun wipeAllRealSecurityData() {
+        prefs.edit()
+            .remove(KEY_SECURITY_PIN_HASH)
+            .remove(KEY_INDODAX_API_KEY)
+            .remove(KEY_INDODAX_SECRET_KEY)
+            .putBoolean(KEY_REAL_BUY_MODE, false)
+            .putInt(KEY_FAILED_PIN_ATTEMPTS, 0)
+            .apply()
+    }
 
     /** Indodax API Key (Encrypted in SharedPreferences) */
     var indodaxApiKey: String
@@ -203,6 +230,7 @@ class AppPreferences(context: Context) {
         private const val KEY_COMPACT_UI = "compact_ui"
         private const val KEY_REAL_BUY_MODE = "real_buy_mode_enabled"
         private const val KEY_SECURITY_PIN_HASH = "security_pin_hash"
+        private const val KEY_FAILED_PIN_ATTEMPTS = "failed_pin_attempts_count"
         private const val KEY_INDODAX_API_KEY = "indodax_encrypted_api_key"
         private const val KEY_INDODAX_SECRET_KEY = "indodax_encrypted_secret_key"
     }

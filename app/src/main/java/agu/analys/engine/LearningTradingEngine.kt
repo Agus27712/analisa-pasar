@@ -101,9 +101,7 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
             runSwing()
         }
 
-        if (strategyMode == StrategyMode.SCALPING || strategyMode == StrategyMode.SECOND_WAVE) {
-            refreshScalpingTimeframesIfDue(tick.symbol)
-        }
+        refreshScalpingTimeframesIfDue(tick.symbol)
     }
 
     private fun lastLastLow(currLow: Double, price: Double): Double = if (currLow <= 0.0) price else minOf(currLow, price)
@@ -173,24 +171,40 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
         if (mtfRefreshJob?.isActive == true) return
         lastMtfRefresh = now; mtfSymbol = symbol
         mtfRefreshJob = scope.launch {
-            if (strategyMode == StrategyMode.SECOND_WAVE) {
-                val h4Job = async { IndodaxMarketService.fetchCandles(symbol, Timeframe.H4, 120) }
-                val h1Job = async { IndodaxMarketService.fetchCandles(symbol, Timeframe.H1, 150) }
-                val m15Job = async { IndodaxMarketService.fetchCandles(symbol, Timeframe.M15, 200) }
-                val h4 = h4Job.await(); val h1 = h1Job.await(); val m15 = m15Job.await()
-                if (h4.size >= 20 && h1.size >= 20 && m15.size >= 20 && currentTick?.symbol == symbol) {
-                    h4Candles = h4; h1Candles = h1; m15Candles = m15
-                    runSecondWave()
+            when (strategyMode) {
+                StrategyMode.SECOND_WAVE -> {
+                    val h4Job = async { IndodaxMarketService.fetchCandles(symbol, Timeframe.H4, 120) }
+                    val h1Job = async { IndodaxMarketService.fetchCandles(symbol, Timeframe.H1, 150) }
+                    val m15Job = async { IndodaxMarketService.fetchCandles(symbol, Timeframe.M15, 200) }
+                    val h4 = h4Job.await(); val h1 = h1Job.await(); val m15 = m15Job.await()
+                    if (h4.size >= 20 && h1.size >= 20 && m15.size >= 20 && currentTick?.symbol == symbol) {
+                        h4Candles = h4; h1Candles = h1; m15Candles = m15
+                        runSecondWave()
+                    }
                 }
-            } else {
-                val h1Job = async { IndodaxMarketService.fetchCandles(symbol, Timeframe.H1, 150) }
-                val m15Job = async { IndodaxMarketService.fetchCandles(symbol, Timeframe.M15, 200) }
-                val m1Job = async { IndodaxMarketService.fetchCandles(symbol, Timeframe.M1, 250) }
-                val h1 = h1Job.await(); val m15 = m15Job.await(); val m1 = m1Job.await()
-                if (h1.size >= 55 && m15.size >= 55 && m1.size >= 55 && currentTick?.symbol == symbol) {
-                    h1Candles = h1; m15Candles = m15
-                    m1Candles = m1
-                    runScalping()
+                StrategyMode.SCALPING -> {
+                    val h1Job = async { IndodaxMarketService.fetchCandles(symbol, Timeframe.H1, 150) }
+                    val m15Job = async { IndodaxMarketService.fetchCandles(symbol, Timeframe.M15, 200) }
+                    val m1Job = async { IndodaxMarketService.fetchCandles(symbol, Timeframe.M1, 250) }
+                    val h1 = h1Job.await(); val m15 = m15Job.await(); val m1 = m1Job.await()
+                    if (h1.size >= 55 && m15.size >= 55 && m1.size >= 55 && currentTick?.symbol == symbol) {
+                        h1Candles = h1; m15Candles = m15
+                        m1Candles = m1
+                        runScalping()
+                    }
+                }
+                StrategyMode.SWING -> {
+                    val h1Job = async { IndodaxMarketService.fetchCandles(symbol, Timeframe.H1, 200) }
+                    val h1 = h1Job.await()
+                    if (h1.isNotEmpty() && currentTick?.symbol == symbol) {
+                        synchronized(candles) {
+                            if (candles.isEmpty() || candles.size < h1.size) {
+                                candles.clear()
+                                candles.addAll(h1)
+                            }
+                        }
+                        runSwing()
+                    }
                 }
             }
         }
@@ -213,7 +227,7 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
     }
 
     private fun runSwing() {
-        if (strategyMode == StrategyMode.SCALPING || strategyMode == StrategyMode.SECOND_WAVE) return
+        if (strategyMode != StrategyMode.SWING) return
         val tick = currentTick ?: return
         val history = synchronized(candles) { candles.toList() }
         val result = SwingEvaluator.evaluate(tick.price, history, tradingFees)

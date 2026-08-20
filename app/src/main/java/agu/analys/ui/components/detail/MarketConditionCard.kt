@@ -13,6 +13,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import agu.analys.config.StrategyMode
 import agu.analys.engine.MarketStructureSnapshot
 import agu.analys.model.AISignalState
 import agu.analys.model.ScalpingStage
@@ -28,9 +29,10 @@ fun MarketConditionCard(
     structure: MarketStructureSnapshot,
     indicators: TechnicalIndicators,
     signal: AISignalState,
-    scalping: Boolean
+    strategyMode: StrategyMode = StrategyMode.SCALPING,
+    scalping: Boolean = strategyMode == StrategyMode.SCALPING
 ) {
-    if (scalping) {
+    if (strategyMode == StrategyMode.SCALPING || (strategyMode == StrategyMode.SECOND_WAVE && scalping)) {
         val stage = signal.scalpingStage
         val color = when (stage) {
             ScalpingStage.ENTRY, ScalpingStage.STRONG_ENTRY -> if (signal.action == SignalAction.SELL) TvRed else TvGreen
@@ -46,7 +48,7 @@ fun MarketConditionCard(
         }
         val mtf = signal.reasoning.filter { it.startsWith("1H:") || it.startsWith("15M:") || it.startsWith("1M:") }
         AnalysisCard {
-            SectionTitle("KONDISI SCALPING", Icons.Default.TrendingUp)
+            SectionTitle(if (strategyMode == StrategyMode.SECOND_WAVE) "KONDISI SECOND-WAVE" else "KONDISI SCALPING", Icons.Default.TrendingUp)
             Spacer(Modifier.height(7.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(12.dp).background(color, CircleShape))
@@ -72,9 +74,9 @@ fun MarketConditionCard(
             if (mtf.isEmpty()) Text("Data MTF belum lengkap.", color = TvTextSecondary, fontSize = 12.sp)
         }
     } else {
-        // Kondisi Pasar = structure + indicators ONLY (no AI signal action)
-        val bullishStructure = structure.trend == "Bullish structure"
-        val bearishStructure = structure.trend == "Bearish structure"
+        // Kondisi Pasar / Swing = structure + indicators ONLY
+        val bullishStructure = structure.trend.contains("Bull", true)
+        val bearishStructure = structure.trend.contains("Bear", true)
         val emaBullish = indicators.ema20.isFinite() && indicators.ema50.isFinite() && indicators.ema20 > indicators.ema50
         val emaBearish = indicators.ema20.isFinite() && indicators.ema50.isFinite() && indicators.ema20 < indicators.ema50
         val macdBullish = indicators.macdHist.isFinite() && indicators.macdHist > 0
@@ -86,20 +88,20 @@ fun MarketConditionCard(
         val detail: String
         when {
             bullishScore >= 2 && bullishScore > bearishScore -> {
-                title = "CENDERUNG NAIK"; color = TvGreen
-                detail = "Struktur pasar dan indikator lebih banyak mendukung kenaikan."
+                title = "STRUKTUR CENDERUNG NAIK"; color = TvGreen
+                detail = "Struktur pasar dan indikator teknikal makro mendukung kenaikan harga."
             }
             bearishScore >= 2 && bearishScore > bullishScore -> {
-                title = "CENDERUNG TURUN"; color = TvRed
-                detail = "Struktur pasar dan indikator lebih banyak menunjukkan tekanan turun."
+                title = "STRUKTUR CENDERUNG TURUN"; color = TvRed
+                detail = "Struktur pasar dan indikator teknikal makro menunjukkan tekanan turun."
             }
             else -> {
-                title = "MASIH CAMPURAN"; color = WarningAmber
-                detail = "Struktur pasar dan indikator belum cukup searah."
+                title = "KONSOLIDASI / CAMPURAN"; color = WarningAmber
+                detail = "Struktur pasar dan indikator makro sedang berkonsolidasi di area rentang harga."
             }
         }
         AnalysisCard {
-            SectionTitle("KONDISI PASAR", Icons.Default.TrendingUp)
+            SectionTitle(if (strategyMode == StrategyMode.SWING) "KONDISI SWING TRADING" else "KONDISI PASAR", Icons.Default.TrendingUp)
             Spacer(Modifier.height(7.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(12.dp).background(color, CircleShape))
@@ -110,7 +112,7 @@ fun MarketConditionCard(
             Text(detail, color = TvTextPrimary, fontSize = 14.sp, lineHeight = 20.sp)
             Spacer(Modifier.height(9.dp))
             Text(
-                "RSI ${formatIndicator(indicators.rsi14)}  •  EMA20/50 ${emaRelation(indicators)}",
+                "RSI ${formatIndicator(indicators.rsi14)}  •  EMA20/50 ${emaRelation(indicators)}  •  Hist MACD ${formatIndicator(indicators.macdHist)}",
                 color = TvTextSecondary, fontSize = 12.sp
             )
         }

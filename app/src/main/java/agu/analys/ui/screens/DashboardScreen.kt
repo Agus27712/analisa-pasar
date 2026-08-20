@@ -94,21 +94,11 @@ fun DashboardScreen(
         DashboardMockupHeader(
             allTicks = allTicks,
             marketDataSource = marketDataSource,
-            isScalpingMode = isScalpingMode,
+            strategyMode = strategyMode,
             isConnected = isConnected,
             selectedTab = selectedRankingTab,
             onSelectTab = { tab ->
                 selectedRankingTab = tab
-                when (tab) {
-                    MarketRankingTab.SCALPING_FAST -> viewModel.setStrategyMode(StrategyMode.SCALPING)
-                    MarketRankingTab.SECOND_WAVE -> viewModel.setStrategyMode(StrategyMode.SECOND_WAVE)
-                    MarketRankingTab.WATCHLIST -> { /* tetap pada mode aktif */ }
-                }
-            },
-            onToggleMode = { isScalp ->
-                val newMode = if (isScalp) StrategyMode.SCALPING else StrategyMode.SECOND_WAVE
-                viewModel.setStrategyMode(newMode)
-                selectedRankingTab = if (isScalp) MarketRankingTab.SCALPING_FAST else MarketRankingTab.SECOND_WAVE
             },
             onRefresh = { viewModel.retryConnection() },
             onMenuClick = onOpenSettings

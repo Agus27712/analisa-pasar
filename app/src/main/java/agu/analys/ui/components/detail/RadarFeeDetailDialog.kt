@@ -37,11 +37,16 @@ fun RadarFeeDetailDialog(
     fees: TradingFeeConfig,
     orderAmountIdr: Double,
     isMakerOrder: Boolean,
-    coinSymbol: String
+    coinSymbol: String,
+    isBuyMode: Boolean = true
 ) {
     if (!isOpen) return
 
-    val feePct = if (isMakerOrder) fees.buyMakerPct else fees.buyTakerPct
+    val feePct = if (isBuyMode) {
+        if (isMakerOrder) fees.buyMakerPct else fees.buyTakerPct
+    } else {
+        if (isMakerOrder) fees.sellMakerPct else fees.sellTakerPct
+    }
     val totalFeeIdr = orderAmountIdr * (feePct / 100.0)
     // Proporsi breakdown Indodax: Biaya Layanan (~92.5%) + CFX (~7.5%), Pajak 0/PPh
     val serviceFeeIdr = (totalFeeIdr * 0.925).coerceAtLeast(0.0)
@@ -173,7 +178,13 @@ fun RadarFeeDetailDialog(
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        text = "Dihitung dari Setting: ${if (isMakerOrder) "Limit (Maker) ${fees.buyMakerPct}%" else "Instant (Taker) ${fees.buyTakerPct}%"}",
+                        text = "Dihitung dari Setting: ${
+                            if (isBuyMode) {
+                                if (isMakerOrder) "Limit Beli (Maker) ${fees.buyMakerPct}%" else "Instant Beli (Taker) ${fees.buyTakerPct}%"
+                            } else {
+                                if (isMakerOrder) "Limit Jual (Maker) ${fees.sellMakerPct}%" else "Instant Jual (Taker) ${fees.sellTakerPct}%"
+                            }
+                        }",
                         color = Color(0xFFB0BEC5),
                         fontSize = 11.sp
                     )

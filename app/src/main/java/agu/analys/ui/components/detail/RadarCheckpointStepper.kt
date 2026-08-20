@@ -26,6 +26,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import agu.analys.config.StrategyMode
 import agu.analys.model.ScalpingMtfSnapshot
 import agu.analys.ui.theme.TvGreen
 import agu.analys.ui.theme.TvTextSecondary
@@ -43,53 +44,127 @@ fun RadarLinearCheckpointStepper(
     mtf: ScalpingMtfSnapshot,
     completed: Int,
     pulseScale: Float,
+    strategyMode: StrategyMode = StrategyMode.SCALPING,
     modifier: Modifier = Modifier
 ) {
-    val checkpoints = remember(mtf) {
+    val checkpoints = remember(mtf, strategyMode) {
+        val isStep1Ok = mtf.biasStatus.name == "OK" || mtf.biasOk
+        val isStep2Ok = mtf.setupStatus.name == "OK" || mtf.setupOk
+        val isStep3Ok = mtf.triggerStatus.name == "OK" || mtf.triggerOk
+        val isStep4Ok = mtf.entryPriceStatus.name == "OK" || mtf.entryPriceOk
+
+        val (tab1, title1, def1Ok, def1Wait) = when (strategyMode) {
+            StrategyMode.SWING -> listOf(
+                "1. Tren Makro",
+                "1. Tren Makro · Keselarasan EMA",
+                "Tren Makro Bullish Kuat (Harga bergerak di atas EMA 20/50).",
+                "Memantau keselarasan tren dan keselarasan EMA makro..."
+            )
+            StrategyMode.SECOND_WAVE -> listOf(
+                "1. Prior Run",
+                "1. Prior Run · Drawdown Reset",
+                "Prior run terkonfirmasi dan koreksi drawdown reset normal.",
+                "Memantau prior run dan siklus reset drawdown 4H/1H..."
+            )
+            StrategyMode.SCALPING -> listOf(
+                "1. Bias 1H",
+                "1. Bias 1H · Tren Utama",
+                "Tren 1 Jam Bullish Kuat (EMA 20/50/200 selaras naik).",
+                "Memantau keselarasan tren pada timeframe 1 Jam..."
+            )
+        }
+
+        val (tab2, title2, def2Ok, def2Wait) = when (strategyMode) {
+            StrategyMode.SWING -> listOf(
+                "2. Struktur",
+                "2. Struktur · Support Lantai",
+                "Struktur market higher-low & support lantai swing bertahan.",
+                "Menunggu pembentukan konsolidasi atau pantulan support swing..."
+            )
+            StrategyMode.SECOND_WAVE -> listOf(
+                "2. Base Support",
+                "2. Base Support · Akumulasi 1H",
+                "Lantai base support terbentuk dan volume koreksi kering.",
+                "Menunggu konfirmasi pembentukan base support 1H..."
+            )
+            StrategyMode.SCALPING -> listOf(
+                "2. Setup 15M",
+                "2. Setup 15M · Struktur Pasar",
+                "Struktur 15M valid (Pullback ke support EMA / Golden Cross).",
+                "Menunggu pembentukan konsolidasi atau pantulan support 15M..."
+            )
+        }
+
+        val (tab3, title3, def3Ok, def3Wait) = when (strategyMode) {
+            StrategyMode.SWING -> listOf(
+                "3. Momentum",
+                "3. Momentum · RSI & MACD Inflow",
+                "Momentum RSI & histogram MACD mendukung arah swing.",
+                "Menunggu trigger momentum RSI dan konfirmasi volume swing..."
+            )
+            StrategyMode.SECOND_WAVE -> listOf(
+                "3. Inflow 15M",
+                "3. Inflow 15M · Smart Money",
+                "Volume beli 15M masuk dan candle konfirmasi terbentuk.",
+                "Menunggu smart inflow dan higher-low 15M..."
+            )
+            StrategyMode.SCALPING -> listOf(
+                "3. Trigger 1M",
+                "3. Trigger 1M · Momentum Sinyal",
+                "Breakout volume 1M & momentum RSI/MACD terkonfirmasi aktif.",
+                "Menunggu trigger lonjakan volume beli dan stochastic/MACD 1M..."
+            )
+        }
+
+        val (tab4, title4, def4Ok, def4Wait) = when (strategyMode) {
+            StrategyMode.SWING -> listOf(
+                "4. Risk:Reward",
+                "4. Area Entry · Net R:R >= 1:1.5",
+                "Harga berada di zona entry dengan Net R:R optimal.",
+                "Menunggu harga bergerak masuk ke toleransi zona beli swing..."
+            )
+            StrategyMode.SECOND_WAVE -> listOf(
+                "4. Entry Ready",
+                "4. Area Entry · Reclaim / Dip",
+                "Harga berada di zona ideal beli dengan risk/reward optimal.",
+                "Menunggu harga bergerak masuk ke dalam toleransi zona beli ideal..."
+            )
+            StrategyMode.SCALPING -> listOf(
+                "4. Area Entry",
+                "4. Area Entry · Konfirmasi Harga",
+                "Harga saat ini berada di zona ideal beli dengan risk/reward optimal.",
+                "Menunggu harga bergerak masuk ke dalam toleransi zona beli ideal..."
+            )
+        }
+
         listOf(
             RadarCheckpointItem(
                 number = 1,
-                tabLabel = "1. Bias 1H",
-                title = "1. Bias 1H · Tren Utama",
-                isOk = mtf.biasStatus.name == "OK" || mtf.biasOk,
-                detail = if (mtf.biasStatus.name == "OK" || mtf.biasOk) {
-                    mtf.biasDetail.ifBlank { "Tren 1 Jam Bullish Kuat (EMA 20/50/200 selaras naik)." }
-                } else {
-                    mtf.biasDetail.ifBlank { "Memantau keselarasan tren pada timeframe 1 Jam..." }
-                }
+                tabLabel = tab1,
+                title = title1,
+                isOk = isStep1Ok,
+                detail = if (isStep1Ok) mtf.biasDetail.ifBlank { def1Ok } else mtf.biasDetail.ifBlank { def1Wait }
             ),
             RadarCheckpointItem(
                 number = 2,
-                tabLabel = "2. Setup 15M",
-                title = "2. Setup 15M · Struktur Pasar",
-                isOk = mtf.setupStatus.name == "OK" || mtf.setupOk,
-                detail = if (mtf.setupStatus.name == "OK" || mtf.setupOk) {
-                    mtf.setupDetail.ifBlank { "Struktur 15M valid (Pullback ke support EMA / Golden Cross)." }
-                } else {
-                    mtf.setupDetail.ifBlank { "Menunggu pembentukan konsolidasi atau pantulan support 15M..." }
-                }
+                tabLabel = tab2,
+                title = title2,
+                isOk = isStep2Ok,
+                detail = if (isStep2Ok) mtf.setupDetail.ifBlank { def2Ok } else mtf.setupDetail.ifBlank { def2Wait }
             ),
             RadarCheckpointItem(
                 number = 3,
-                tabLabel = "3. Trigger 1M",
-                title = "3. Trigger 1M · Momentum Sinyal",
-                isOk = mtf.triggerStatus.name == "OK" || mtf.triggerOk,
-                detail = if (mtf.triggerStatus.name == "OK" || mtf.triggerOk) {
-                    mtf.triggerDetail.ifBlank { "Breakout volume 1M & momentum RSI/MACD terkonfirmasi aktif." }
-                } else {
-                    mtf.triggerDetail.ifBlank { "Menunggu trigger lonjakan volume beli dan stochastic/MACD 1M..." }
-                }
+                tabLabel = tab3,
+                title = title3,
+                isOk = isStep3Ok,
+                detail = if (isStep3Ok) mtf.triggerDetail.ifBlank { def3Ok } else mtf.triggerDetail.ifBlank { def3Wait }
             ),
             RadarCheckpointItem(
                 number = 4,
-                tabLabel = "4. Area Entry",
-                title = "4. Area Entry · Konfirmasi Harga",
-                isOk = mtf.entryPriceStatus.name == "OK" || mtf.entryPriceOk,
-                detail = if (mtf.entryPriceStatus.name == "OK" || mtf.entryPriceOk) {
-                    mtf.entryPriceDetail.ifBlank { "Harga saat ini berada di zona ideal beli dengan risk/reward optimal." }
-                } else {
-                    mtf.entryPriceDetail.ifBlank { "Menunggu harga bergerak masuk ke dalam toleransi zona beli ideal..." }
-                }
+                tabLabel = tab4,
+                title = title4,
+                isOk = isStep4Ok,
+                detail = if (isStep4Ok) mtf.entryPriceDetail.ifBlank { def4Ok } else mtf.entryPriceDetail.ifBlank { def4Wait }
             )
         )
     }

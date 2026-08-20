@@ -174,10 +174,10 @@ fun DetailChartScreen(
                 }
             }
 
-            // Mode Badge with 3-way toggle (SCALPING -> SECOND_WAVE -> SWING)
+            // Mode Badge (Info-only display, configured in Settings)
             val badgeBg = when (strategyMode) {
                 StrategyMode.SCALPING -> Color(0xFF123D2A)
-                StrategyMode.SECOND_WAVE -> Color(0xFF0C2B3E)
+                StrategyMode.SECOND_WAVE -> Color(0xFF0F3845)
                 StrategyMode.SWING -> Color(0xFF122840)
             }
             val badgeBorder = when (strategyMode) {
@@ -194,15 +194,7 @@ fun DetailChartScreen(
             Box(
                 modifier = Modifier
                     .background(badgeBg, RoundedCornerShape(6.dp))
-                    .border(1.dp, badgeBorder, RoundedCornerShape(6.dp))
-                    .clickable {
-                        val nextMode = when (strategyMode) {
-                            StrategyMode.SCALPING -> StrategyMode.SECOND_WAVE
-                            StrategyMode.SECOND_WAVE -> StrategyMode.SWING
-                            StrategyMode.SWING -> StrategyMode.SCALPING
-                        }
-                        viewModel.setStrategyMode(nextMode)
-                    }
+                    .border(1.dp, badgeBorder.copy(alpha = 0.6f), RoundedCornerShape(6.dp))
                     .padding(horizontal = 10.dp, vertical = 4.dp)
             ) {
                 Text(
@@ -296,14 +288,22 @@ fun DetailChartScreen(
 
         Spacer(Modifier.height(14.dp))
 
+        val availableIdr = if (isRealBuyMode) (realBalance["idr"] ?: 0.0) else wallet.getAvailableIdr()
+        val availableCoin = if (isRealBuyMode) (realBalance[pair.baseAsset.uppercase()] ?: 0.0) else wallet.getAvailableCoin(pair.baseAsset)
+        val avgBuyPrice = if (isRealBuyMode) (spotPosition.takeIf { it.isHolding }?.entryPrice ?: 0.0) else (wallet.avgBuyPrices[pair.baseAsset.uppercase()] ?: 0.0)
+
         // 1. RADAR PROGRESS ENTRY (STATUS TUNGGU / SIAP / BUY & FEE TRANSAKSI)
         WaitingEntryRadarCard(
             signal = signal,
+            strategyMode = strategyMode,
             scalping = isScalping,
             fees = tradingFees,
             currentPrice = tick?.price ?: 0.0,
             baseAsset = pair.baseAsset,
             quoteAsset = pair.quoteAsset,
+            availableIdr = availableIdr,
+            availableCoin = availableCoin,
+            avgBuyPrice = avgBuyPrice,
             isRealBuyMode = isRealBuyMode,
             onExecuteBuy = { nominalIdr ->
                 val execPrice = if (tick?.price != null && tick!!.price > 0) tick!!.price else signal.entryPrice
@@ -331,32 +331,34 @@ fun DetailChartScreen(
                     android.widget.Toast.makeText(context, "Harga belum tersedia untuk Beli.", android.widget.Toast.LENGTH_SHORT).show()
                 }
             },
-            onExecuteSell = {
+            onExecuteSell = { sellQty ->
                 val execPrice = if (tick?.price != null && tick!!.price > 0) tick!!.price else signal.targetPrice1
                 if (execPrice > 0) {
                     if (isRealBuyMode) {
-                        val coinBalance = realBalance[pair.baseAsset.uppercase()] ?: 0.0
-                        if (coinBalance > 0.0) {
-                            viewModel.executeRealTrade(pair.symbol, "sell", execPrice.toLong(), coinBalance) { success, msg ->
+                        val currentCoinBalance = realBalance[pair.baseAsset.uppercase()] ?: 0.0
+                        if (currentCoinBalance > 0.0 && sellQty > 0.0) {
+                            viewModel.executeRealTrade(pair.symbol, "sell", execPrice.toLong(), sellQty.coerceAtMost(currentCoinBalance)) { success, msg ->
                                 android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
                             }
                         } else {
                             android.widget.Toast.makeText(context, "Saldo koin ${pair.baseAsset} tidak mencukupi untuk Jual.", android.widget.Toast.LENGTH_SHORT).show()
                         }
                     } else {
-                        val coinBalance = wallet.getAvailableCoin(pair.baseAsset)
-                        if (coinBalance > 0.0) {
+                        val currentCoinBalance = wallet.getAvailableCoin(pair.baseAsset)
+                        if (currentCoinBalance > 0.0 && sellQty > 0.0) {
                             val res = viewModel.submitSimulationOrder(
                                 side = agu.analys.trading.SimulationOrderSide.SELL,
                                 type = agu.analys.trading.SimulationOrderType.MARKET,
                                 price = execPrice,
-                                quantity = coinBalance
+                                quantity = sellQty.coerceAtMost(currentCoinBalance)
                             )
                             val msg = when (res) {
                                 is agu.analys.trading.SimulationOrderResult.Success -> res.message
                                 is agu.analys.trading.SimulationOrderResult.Error -> res.message
                             }
-                            viewModel.setOwnership(false)
+                            if (sellQty >= currentCoinBalance) {
+                                viewModel.setOwnership(false)
+                            }
                             android.widget.Toast.makeText(context, "Simulasi Jual Berhasil! " + msg, android.widget.Toast.LENGTH_SHORT).show()
                         } else {
                             android.widget.Toast.makeText(context, "Saldo koin simulasi ${pair.baseAsset} Anda kosong.", android.widget.Toast.LENGTH_SHORT).show()
@@ -375,6 +377,7 @@ fun DetailChartScreen(
             structure = marketStructure,
             indicators = indicators,
             signal = signal,
+            strategyMode = strategyMode,
             scalping = isScalping
         )
 

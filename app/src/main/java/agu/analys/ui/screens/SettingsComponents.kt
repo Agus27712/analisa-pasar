@@ -22,6 +22,7 @@ import agu.analys.BuildConfig
 import agu.analys.config.AiProvider
 import agu.analys.util.GitHubReleaseInfo
 import agu.analys.ui.theme.TvGreen
+import agu.analys.ui.theme.TvRed
 import agu.analys.ui.theme.TvTextPrimary
 import agu.analys.ui.theme.TvTextSecondary
 import agu.analys.util.GitHubUpdater
@@ -195,23 +196,21 @@ fun AiProviderSettingsCard(
 fun RealBuyModeAndSecurityCard(
     isRealBuyMode: Boolean,
     hasPin: Boolean,
+    hasApiCredentials: Boolean,
     isPinUnlocked: Boolean,
-    indodaxApiKey: String,
-    indodaxSecretKey: String,
     userPublicIp: String = "",
+    failedPinAttempts: Int = 0,
     onToggleRealBuyMode: () -> Unit,
-    onOpenPinSetup: () -> Unit,
+    onOpenSetupDialog: () -> Unit,
     onRequirePinUnlock: () -> Unit,
-    onApiKeyChange: (String) -> Unit,
-    onSecretKeyChange: (String) -> Unit,
+    onWipeCredentials: () -> Unit,
     onCheckPublicIp: () -> Unit = {}
 ) {
-    var showApiKey by remember { mutableStateOf(false) }
-    var showSecretKey by remember { mutableStateOf(false) }
+    var showWipeConfirm by remember { mutableStateOf(false) }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(10.dp),
+        shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = Color(0xFF101720)),
         border = androidx.compose.foundation.BorderStroke(
             1.dp,
@@ -228,7 +227,7 @@ fun RealBuyModeAndSecurityCard(
                 Column(modifier = Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            "MODE BELI REAL (INDODAX)",
+                            "MODE TRADING REAL (INDODAX)",
                             color = if (isRealBuyMode) TvGreen else TvTextPrimary,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Black
@@ -243,7 +242,7 @@ fun RealBuyModeAndSecurityCard(
                                 .padding(horizontal = 6.dp, vertical = 2.dp)
                         ) {
                             Text(
-                                if (isRealBuyMode) "AKTIF (PIN)" else "SIMULASI",
+                                if (isRealBuyMode) "AKTIF (REAL)" else "SIMULASI",
                                 color = if (isRealBuyMode) TvGreen else TvTextSecondary,
                                 fontSize = 9.sp,
                                 fontWeight = FontWeight.Bold
@@ -253,9 +252,9 @@ fun RealBuyModeAndSecurityCard(
                     Spacer(Modifier.height(4.dp))
                     Text(
                         if (isRealBuyMode)
-                            "Sistem akan mengeksekusi order Beli langsung ke Indodax via API."
+                            "Sistem akan mengeksekusi order Beli & Jual langsung ke Indodax via API."
                         else
-                            "Mode Beli NONAKTIF: Semua transaksi otomatis dialihkan ke SIMULASI (Virtual IDR).",
+                            "Mode Beli & Jual dialihkan ke SIMULASI (Saldo Virtual IDR).",
                         color = TvTextSecondary,
                         fontSize = 10.sp,
                         lineHeight = 14.sp
@@ -278,164 +277,155 @@ fun RealBuyModeAndSecurityCard(
             HorizontalDivider(color = Color(0xFF1E2836))
             Spacer(Modifier.height(12.dp))
 
-            // Security PIN Row
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        "PIN Keamanan & Proteksi API/Porto",
-                        color = TvTextPrimary,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        if (!hasPin) "⚠️ Belum ada PIN. Atur PIN untuk mengunci Mode Beli & Kredensial API."
-                        else if (isPinUnlocked) "✓ PIN Terverifikasi (Kredensial API Terbuka)."
-                        else "🔒 Kredensial API Terkunci PIN.",
-                        color = if (!hasPin) Color(0xFFFFB300) else if (isPinUnlocked) TvGreen else Color(0xFF00E5FF),
-                        fontSize = 10.sp
-                    )
-                }
-
-                OutlinedButton(
-                    onClick = {
-                        if (hasPin && !isPinUnlocked) {
-                            onRequirePinUnlock()
-                        } else {
-                            onOpenPinSetup()
-                        }
-                    },
-                    shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = if (hasPin && !isPinUnlocked) Color(0xFF00E5FF) else if (hasPin) Color(0xFF72B7FF) else TvGreen
-                    ),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, if (hasPin && !isPinUnlocked) Color(0xFF00E5FF) else if (hasPin) Color(0xFF1E3A5F) else TvGreen)
+            // State: Not Configured vs Configured
+            if (!hasPin || !hasApiCredentials) {
+                // Belum dikonfigurasi
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF172333), RoundedCornerShape(10.dp))
+                        .border(1.dp, Color(0xFF233E60), RoundedCornerShape(10.dp))
+                        .padding(12.dp)
                 ) {
-                    Icon(
-                        imageVector = if (hasPin && isPinUnlocked) Icons.Default.LockOpen else Icons.Default.Lock,
-                        contentDescription = null,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    Text(
-                        if (!hasPin) "Buat PIN" else if (!isPinUnlocked) "Buka PIN" else "Ubah PIN",
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Shield,
+                                contentDescription = null,
+                                tint = Color(0xFFFFD54F),
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                "Kredensial API Indodax Belum Diatur",
+                                color = Color(0xFFFFD54F),
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            "Untuk beralih ke Mode Real, masukkan API Key, Secret Key, dan PIN Keamanan 6-digit. Setelah disimpan, input akan otomatis disembunyikan dan dienkripsi lokal.",
+                            color = Color(0xFFB0BEC5),
+                            fontSize = 10.5.sp,
+                            lineHeight = 14.5.sp
+                        )
+                        Spacer(Modifier.height(10.dp))
+                        Button(
+                            onClick = onOpenSetupDialog,
+                            modifier = Modifier.fillMaxWidth().height(38.dp),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = TvGreen)
+                        ) {
+                            Icon(Icons.Default.Key, null, modifier = Modifier.size(14.dp), tint = Color.Black)
+                            Spacer(Modifier.width(6.dp))
+                            Text("Konfigurasi API & PIN Mode Real", color = Color.Black, fontWeight = FontWeight.Black, fontSize = 11.5.sp)
+                        }
+                    }
+                }
+            } else {
+                // Sudah Terkonfigurasi & Terenkripsi
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF0F1E2E), RoundedCornerShape(10.dp))
+                        .border(1.dp, Color(0xFF1B3D5E), RoundedCornerShape(10.dp))
+                        .padding(12.dp)
+                ) {
+                    Column {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Lock,
+                                    contentDescription = null,
+                                    tint = TvGreen,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    "Kredensial Terenkripsi & Terlindungi",
+                                    color = TvGreen,
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.Black
+                                )
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .background(Color(0xFF122C44), RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    if (isPinUnlocked) "PIN TERVERIFIKASI" else "PIN TERKUNCI",
+                                    color = if (isPinUnlocked) TvGreen else Color(0xFF00E5FF),
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            "API Key & Secret Key Indodax tersimpan aman di memori lokal. Mode Real dapat dipicu kapan saja tanpa perlu input ulang kunci API.",
+                            color = Color(0xFFB0BEC5),
+                            fontSize = 10.sp,
+                            lineHeight = 14.sp
+                        )
+
+                        if (failedPinAttempts > 0) {
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                "⚠️ Peringatan: $failedPinAttempts kali percobaan PIN salah! (5x salah akan auto-wipe kredensial)",
+                                color = TvRed,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        Spacer(Modifier.height(10.dp))
+
+                        // Action buttons: Update or Wipe
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    if (!isPinUnlocked) onRequirePinUnlock() else onOpenSetupDialog()
+                                },
+                                modifier = Modifier.weight(1f).height(34.dp),
+                                shape = RoundedCornerShape(6.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF72B7FF)),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E3A5F)),
+                                contentPadding = PaddingValues(0.dp)
+                            ) {
+                                Icon(Icons.Default.Edit, null, modifier = Modifier.size(13.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Ubah API / PIN", fontSize = 10.5.sp, fontWeight = FontWeight.Bold)
+                            }
+
+                            OutlinedButton(
+                                onClick = { showWipeConfirm = true },
+                                modifier = Modifier.weight(1f).height(34.dp),
+                                shape = RoundedCornerShape(6.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = TvRed),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, TvRed.copy(alpha = 0.6f)),
+                                contentPadding = PaddingValues(0.dp)
+                            ) {
+                                Icon(Icons.Default.DeleteOutline, null, modifier = Modifier.size(13.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Hapus Kredensial", fontSize = 10.5.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
                 }
             }
 
-            Spacer(Modifier.height(12.dp))
-            HorizontalDivider(color = Color(0xFF1E2836))
-            Spacer(Modifier.height(12.dp))
-
-            // Indodax API Key & Secret Section
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    "KREDENSIAL INDODAX TRADE API",
-                    color = Color(0xFF72B7FF),
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Black
-                )
-
-                if (hasPin && !isPinUnlocked) {
-                    Text(
-                        "🔒 Terkunci PIN",
-                        color = Color(0xFFFFB300),
-                        fontSize = 9.5.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier
-                            .clickable { onRequirePinUnlock() }
-                            .padding(2.dp)
-                    )
-                }
-            }
-            Spacer(Modifier.height(6.dp))
-
-            val keysLocked = hasPin && !isPinUnlocked
-
-            // API Key
-            OutlinedTextField(
-                value = if (keysLocked) "••••••••••••••••••••••••" else indodaxApiKey,
-                onValueChange = { if (!keysLocked) onApiKeyChange(it) },
-                enabled = !keysLocked,
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                label = { Text("Indodax API Key (Trade)", fontSize = 10.sp) },
-                placeholder = { Text("Masukkan Indodax API Key...", color = TvTextSecondary, fontSize = 11.sp) },
-                visualTransformation = if (!keysLocked && showApiKey) androidx.compose.ui.text.input.VisualTransformation.None else androidx.compose.ui.text.input.PasswordVisualTransformation(),
-                trailingIcon = {
-                    IconButton(onClick = {
-                        if (keysLocked) {
-                            onRequirePinUnlock()
-                        } else {
-                            showApiKey = !showApiKey
-                        }
-                    }) {
-                        Icon(
-                            imageVector = if (!keysLocked && showApiKey) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                            contentDescription = "Toggle Visibility",
-                            tint = if (keysLocked) Color(0xFFFFB300) else TvTextSecondary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                },
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = TvGreen,
-                    unfocusedBorderColor = Color(0xFF2A3540),
-                    disabledBorderColor = Color(0xFF1E2836),
-                    focusedTextColor = TvTextPrimary,
-                    unfocusedTextColor = TvTextPrimary,
-                    disabledTextColor = Color(0xFF78909C)
-                )
-            )
-
-            Spacer(Modifier.height(8.dp))
-
-            // Secret Key
-            OutlinedTextField(
-                value = if (keysLocked) "••••••••••••••••••••••••" else indodaxSecretKey,
-                onValueChange = { if (!keysLocked) onSecretKeyChange(it) },
-                enabled = !keysLocked,
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                label = { Text("Indodax Secret Key (Trade)", fontSize = 10.sp) },
-                placeholder = { Text("Masukkan Indodax Secret Key...", color = TvTextSecondary, fontSize = 11.sp) },
-                visualTransformation = if (!keysLocked && showSecretKey) androidx.compose.ui.text.input.VisualTransformation.None else androidx.compose.ui.text.input.PasswordVisualTransformation(),
-                trailingIcon = {
-                    IconButton(onClick = {
-                        if (keysLocked) {
-                            onRequirePinUnlock()
-                        } else {
-                            showSecretKey = !showSecretKey
-                        }
-                    }) {
-                        Icon(
-                            imageVector = if (!keysLocked && showSecretKey) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                            contentDescription = "Toggle Visibility",
-                            tint = if (keysLocked) Color(0xFFFFB300) else TvTextSecondary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                },
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = TvGreen,
-                    unfocusedBorderColor = Color(0xFF2A3540),
-                    disabledBorderColor = Color(0xFF1E2836),
-                    focusedTextColor = TvTextPrimary,
-                    unfocusedTextColor = TvTextPrimary,
-                    disabledTextColor = Color(0xFF78909C)
-                )
-            )
-
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(10.dp))
 
             // IP Whitelist Assistant Box
             Box(
@@ -484,7 +474,7 @@ fun RealBuyModeAndSecurityCard(
 
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        "⚠️ PENTING UNTUK USER INDODAX:\nIndodax MEWAJIBKAN mengisi IP Whitelist saat membuat API Key. Karena Anda menggunakan HP/Mobile, masukkan IP Publik di atas ke dalam kolom IP Whitelist Indodax. Jika IP berubah saat ganti Wi-Fi/4G, salin IP terbaru dari tombol di atas lalu perbarui di Indodax.",
+                        "⚠️ PENTING UNTUK USER INDODAX:\nIndodax MEWAJIBKAN mengisi IP Whitelist saat membuat API Key. Masukkan IP Publik di atas ke dalam kolom IP Whitelist Indodax.",
                         color = TvTextSecondary,
                         fontSize = 9.5.sp,
                         lineHeight = 13.5.sp
@@ -501,13 +491,45 @@ fun RealBuyModeAndSecurityCard(
                     .padding(8.dp)
             ) {
                 Text(
-                    "🔒 API Key disimpan terenkripsi secara lokal. Membutuhkan izin mode Trade saja. Top-Up & Withdraw IDR tidak didukung oleh API (dilakukan di aplikasi resmi Indodax).",
-                    color = TvTextSecondary,
+                    "🔒 Proteksi Otomatis: Jika PIN salah dimasukkan 5 kali berturut-turut, sistem akan langsung menghapus seluruh Kredensial API demi keamanan saldo Anda.",
+                    color = Color(0xFF90A4AE),
                     fontSize = 9.5.sp,
                     lineHeight = 13.5.sp
                 )
             }
         }
+    }
+
+    if (showWipeConfirm) {
+        AlertDialog(
+            onDismissRequest = { showWipeConfirm = false },
+            title = { Text("Hapus Semua Kredensial API?", color = TvTextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    "Tindakan ini akan menghapus seluruh API Key, Secret Key, dan PIN Keamanan dari perangkat ini. Mode akan kembali ke Simulasi.",
+                    color = TvTextSecondary,
+                    fontSize = 12.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showWipeConfirm = false
+                        onWipeCredentials()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = TvRed)
+                ) {
+                    Text("Ya, Hapus Kredensial", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.5.sp)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showWipeConfirm = false }) {
+                    Text("Batal", color = TvTextSecondary, fontSize = 11.5.sp)
+                }
+            },
+            containerColor = Color(0xFF101720),
+            shape = RoundedCornerShape(14.dp)
+        )
     }
 }
 

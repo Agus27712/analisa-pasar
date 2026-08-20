@@ -21,6 +21,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import agu.analys.config.MarketDataSource
+import agu.analys.config.StrategyMode
 import agu.analys.model.MarketTick
 import agu.analys.ui.theme.TvGreen
 import agu.analys.ui.theme.TvRed
@@ -40,19 +41,18 @@ enum class MarketRankingTab(val label: String, val badge: String) {
 /**
  * Top Stat Header & Exchange Source & Mode & Tabs:
  * - EXCHANGE BADGE: [INDODAX (IDR)]
- * - 24H VOL | AVG 24H | STRATEGY MODE (SCALPING / 2ND-WAVE)
+ * - 24H VOL | AVG 24H | STRATEGY MODE (SCALPING / 2ND-WAVE / SWING - Info Only)
  * - ● Data realtime Indodax
- * - 3 TABS: [⚡ Scalping Agresif (Top 4) | 🌊 Second-Wave (Top 4) | ⭐ Watchlist]
+ * - 3 TABS: [⚡ Scalping Agresif | 🌊 Second-Wave | ⭐ Watchlist]
  */
 @Composable
 fun DashboardMockupHeader(
     allTicks: Map<String, MarketTick>,
     marketDataSource: MarketDataSource = MarketDataSource.INDODAX,
-    isScalpingMode: Boolean,
+    strategyMode: StrategyMode = StrategyMode.SCALPING,
     isConnected: Boolean,
     selectedTab: MarketRankingTab = MarketRankingTab.SCALPING_FAST,
     onSelectTab: (MarketRankingTab) -> Unit,
-    onToggleMode: (Boolean) -> Unit = {},
     onRefresh: () -> Unit,
     onMenuClick: () -> Unit
 ) {
@@ -128,7 +128,7 @@ fun DashboardMockupHeader(
 
         Spacer(Modifier.height(8.dp))
 
-        // 3 Stat Cards: 24H VOL | AVG 24H | MODE
+        // 3 Stat Cards: 24H VOL | AVG 24H | STRATEGI (Info Only)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -147,19 +147,24 @@ fun DashboardMockupHeader(
                 modifier = Modifier.weight(1f)
             )
 
-            // Card 3: MODE Pill
+            // Card 3: STRATEGI Pill (Info only - Pengaturan hanya di Settings)
+            val (modeBg, modeBorder, modeColor, modeLabel) = when (strategyMode) {
+                StrategyMode.SCALPING -> listOf(Color(0xFF123D2A), Color(0xFF1B5E38), TvGreen, "SCALPING")
+                StrategyMode.SECOND_WAVE -> listOf(Color(0xFF0F3845), Color(0xFF155060), Color(0xFF00E5FF), "2ND-WAVE")
+                StrategyMode.SWING -> listOf(Color(0xFF122840), Color(0xFF1E3A5F), Color(0xFF72B7FF), "SWING")
+            }
+
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .background(Color(0xFF101720), RoundedCornerShape(10.dp))
                     .border(1.dp, Color(0xFF1E2836), RoundedCornerShape(10.dp))
-                    .clickable { onToggleMode(!isScalpingMode) }
                     .padding(horizontal = 8.dp, vertical = 8.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text = "MODE",
+                        text = "STRATEGI",
                         color = TvTextSecondary,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold
@@ -167,15 +172,13 @@ fun DashboardMockupHeader(
                     Spacer(Modifier.height(3.dp))
                     Box(
                         modifier = Modifier
-                            .background(
-                                if (isScalpingMode) Color(0xFF123D2A) else Color(0xFF122840),
-                                RoundedCornerShape(6.dp)
-                            )
+                            .background(modeBg as Color, RoundedCornerShape(6.dp))
+                            .border(0.8.dp, modeBorder as Color, RoundedCornerShape(6.dp))
                             .padding(horizontal = 8.dp, vertical = 2.dp)
                     ) {
                         Text(
-                            text = if (isScalpingMode) "SCALPING" else "2ND-WAVE",
-                            color = if (isScalpingMode) TvGreen else Color(0xFF00E5FF),
+                            text = modeLabel as String,
+                            color = modeColor as Color,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Black
                         )
