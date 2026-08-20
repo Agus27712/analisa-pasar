@@ -401,54 +401,70 @@ object IndodaxMarketService {
         }
     }
 
-    // --- INDODAX PRIVATE TRADE API (tapi) ---
+    // --- INDODAX TRADE API V2 ---
 
-    private fun signHmacSha512(data: String, secretKey: String): String {
-        val mac = javax.crypto.Mac.getInstance("HmacSHA512")
-        val secretKeySpec = javax.crypto.spec.SecretKeySpec(secretKey.toByteArray(Charsets.UTF_8), "HmacSHA512")
+    private const val TAPI_V2_BASE = "https://api.indodax.com"
+
+    /** HMAC-SHA256 (Trade API V2 uses SHA256, bukan SHA512) */
+    private fun signHmacSha256(data: String, secretKey: String): String {
+        val mac = javax.crypto.Mac.getInstance("HmacSHA256")
+        val secretKeySpec = javax.crypto.spec.SecretKeySpec(secretKey.toByteArray(Charsets.UTF_8), "HmacSHA256")
         mac.init(secretKeySpec)
         val hash = mac.doFinal(data.toByteArray(Charsets.UTF_8))
         return hash.joinToString("") { "%02x".format(it) }
     }
 
+    /**
+     * Ambil saldo akun via Trade API V2
+     * Endpoint: GET /api/v2/account
+     */
     suspend fun fetchAccountBalanceDetails(apiKey: String, secretKey: String): Pair<Map<String, Double>?, String> = withContext(Dispatchers.IO) {
         if (apiKey.isBlank() || secretKey.isBlank()) return@withContext Pair(null, "API Key atau Secret Key belum diisi.")
         try {
-            val nonce = System.currentTimeMillis()
-            val postData = "method=getInfo&nonce=$nonce"
-            val sign = signHmacSha512(postData, secretKey)
-            val formBody = okhttp3.FormBody.Builder()
-                .add("method", "getInfo")
-                .add("nonce", nonce.toString())
-                .build()
+            val timestamp = System.currentTimeMillis()
+            val recvWindow = 5000L
+            val query = "timestamp=$timestamp&recvWindow=$recvWindow&omitZeroBalances=false"
+            val sign = signHmacSha256(query, secretKey)
+
             val request = Request.Builder()
-                .url("https://indodax.com/tapi")
-                .post(formBody)
-                .header("Key", apiKey)
+                .url("$TAPI_V2_BASE/api/v2/account?$query")
+                .get()
+                .header("X-APIKEY", apiKey)
                 .header("Sign", sign)
-                .header("Content-Type", "application/x-www-form-urlencoded")
+                .header("Accept", "application/json")
                 .build()
+
             client.newCall(request).execute().use { response ->
                 val body = response.body?.string() ?: return@withContext Pair(null, "Respon Indodax kosong.")
                 val json = JSONObject(body)
-                if (json.optInt("success", 0) == 1) {
-                    val returnObj = json.optJSONObject("return") ?: return@withContext Pair(null, "Data 'return' tidak ditemukan.")
-                    val balanceObj = returnObj.optJSONObject("balance") ?: return@withContext Pair(null, "Data 'balance' tidak ditemukan.")
-                    val map = mutableMapOf<String, Double>()
-                    val keys = balanceObj.keys()
-                    while (keys.hasNext()) {
-                        val k = keys.next()
-                        val valDbl = balanceObj.optString(k, "0").toDoubleOrNull() ?: 0.0
-                        map[k.lowercase()] = valDbl
-                    }
-                    Pair(map, "Berhasil membaca saldo dari Indodax.")
-                } else {
-                    val errorMsg = json.optString("error", "Pesan dari Indodax: Gagal autentikasi")
-                    Pair(null, "Indodax API Error: $errorMsg")
+
+                // Error format V2: { "code": -xxxx, "msg": "..." }
+                if (json.has("code") && json.optInt("code", 0) != 0) {
+                    val errMsg = json.optString("msg", "Unknown error")
+                    return@withContext Pair(null, "Indodax API Error: $errMsg")
                 }
+
+                val balancesArr = json.optJSONArray("balances")
+                    ?: return@withContext Pair(null, "Data balances tidak ditemukan.")
+
+                val map = mutableMapOf<String, Double>()
+                for (i in 0 until balancesArr.length()) {
+                    val item = balancesArr.optJSONObject(i) ?: continue
+                    val asset = item.optString("asset", "").lowercase()
+                    val free = item.optString("free", "0").toDoubleOrNull() ?: 0.0
+                    val locked = item.optString("locked", "0").toDoubleOrNull() ?: 0.0
+                    // Total = free + locked (sama seperti balance lama)
+                    map[asset] = free + locked
+                }
+
+                if (map.isEmpty()) {
+                    return@withContext Pair(null, "Saldo kosong / tidak ada aset terdeteksi.")
+                }
+
+                Pair(map, "Berhasil membaca saldo dari Indodax (Trade API V2).")
             }
         } catch (e: Exception) {
-            Pair(null, "Error koneksi TAPI: ${e.localizedMessage ?: "Gagal terhubung"}")
+            Pair(null, "Error koneksi TAPI V2: ${e.localizedMessage ?: "Gagal terhubung"}")
         }
     }
 
@@ -467,6 +483,15 @@ object IndodaxMarketService {
         return fetchAccountBalanceDetails(apiKey, secretKey).first
     }
 
+    /**
+     * Place order via Trade API V2
+     * Endpoint: POST /api/v2/order
+     *
+     * Mapping dari fungsi lama:
+     * - type = "buy" / "sell"
+     * - price = harga limit
+     * - amountIdr = nominal IDR (untuk buy) atau quantity base (untuk sell)
+     */
     suspend fun placeTradeOrder(
         apiKey: String,
         secretKey: String,
@@ -477,46 +502,59 @@ object IndodaxMarketService {
     ): Pair<Boolean, String> = withContext(Dispatchers.IO) {
         if (apiKey.isBlank() || secretKey.isBlank()) return@withContext false to "API Key atau Secret Key Indodax belum diisi."
         try {
-            val nonce = System.currentTimeMillis()
-            val pairId = toPairId(pair)
-            val baseAsset = pairId.removeSuffix("_idr")
-            val postParams = mutableMapOf<String, String>(
-                "method" to "trade",
-                "nonce" to nonce.toString(),
-                "pair" to pairId,
-                "type" to type.lowercase(),
-                "price" to price.toString()
+            val symbol = toDepthPairId(pair).uppercase() // BTCIDR
+            val side = type.uppercase() // BUY / SELL
+            val timestamp = System.currentTimeMillis()
+            val recvWindow = 5000L
+
+            val params = mutableMapOf(
+                "symbol" to symbol,
+                "side" to side,
+                "type" to "LIMIT",
+                "price" to price.toString(),
+                "timestamp" to timestamp.toString(),
+                "recvWindow" to recvWindow.toString()
             )
-            if (type.equals("buy", true)) {
-                postParams["idr"] = amountIdr.toLong().coerceAtLeast(10000L).toString()
+
+            if (side == "BUY") {
+                // Buy pakai quoteOrderQty (IDR)
+                params["quoteOrderQty"] = amountIdr.toLong().coerceAtLeast(10000L).toString()
             } else {
-                postParams[baseAsset] = amountIdr.toString()
+                // Sell pakai quantity (base asset)
+                params["quantity"] = amountIdr.toString()
             }
-            val postData = postParams.entries.joinToString("&") { "${it.key}=${it.value}" }
-            val sign = signHmacSha512(postData, secretKey)
+
+            // Sort param untuk signature (penting)
+            val sortedQuery = params.toSortedMap().entries.joinToString("&") { "${it.key}=${it.value}" }
+            val sign = signHmacSha256(sortedQuery, secretKey)
+
             val formBuilder = okhttp3.FormBody.Builder()
-            postParams.forEach { (k, v) -> formBuilder.add(k, v) }
+            params.forEach { (k, v) -> formBuilder.add(k, v) }
+
             val request = Request.Builder()
-                .url("https://indodax.com/tapi")
+                .url("$TAPI_V2_BASE/api/v2/order")
                 .post(formBuilder.build())
-                .header("Key", apiKey)
+                .header("X-APIKEY", apiKey)
                 .header("Sign", sign)
                 .header("Content-Type", "application/x-www-form-urlencoded")
+                .header("Accept", "application/json")
                 .build()
+
             client.newCall(request).execute().use { response ->
                 val body = response.body?.string() ?: return@withContext false to "Tidak ada respons dari server Indodax."
                 val json = JSONObject(body)
-                if (json.optInt("success", 0) == 1) {
-                    val returnObj = json.optJSONObject("return")
-                    val orderId = returnObj?.optLong("order_id", 0L) ?: 0L
-                    true to "Order $type $pairId berhasil terkirim! Order ID: $orderId"
-                } else {
-                    val errorMsg = json.optString("error", "Gagal mengeksekusi order.")
-                    false to "Indodax API Error: $errorMsg"
+
+                if (json.has("code") && json.optInt("code", 0) != 0) {
+                    val errMsg = json.optString("msg", "Gagal mengeksekusi order.")
+                    return@withContext false to "Indodax API Error: $errMsg"
                 }
+
+                val orderId = json.optLong("orderId", 0L)
+                val clientOrderId = json.optString("clientOrderId", "-")
+                true to "Order $side $symbol berhasil terkirim! Order ID: $orderId ($clientOrderId)"
             }
         } catch (e: Exception) {
-            false to "Gagal menghubungi API Indodax: ${e.localizedMessage}"
+            false to "Gagal menghubungi API Indodax V2: ${e.localizedMessage}"
         }
     }
 }
