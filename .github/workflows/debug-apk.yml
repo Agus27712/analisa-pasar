@@ -4,12 +4,11 @@ on:
   push:
     branches:
       - backup
+  workflow_dispatch:
 
 permissions:
   contents: read
 
-# Jangan antrekan banyak debug untuk commit lama.
-# Jika ada push baru saat debug berjalan, yang lama dibatalkan.
 concurrency:
   group: debug-code-${{ github.ref }}
   cancel-in-progress: true
@@ -20,12 +19,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # KUNCI: selalu checkout branch tempat workflow dijalankan.
-      # Push ke backup -> validasi kode backup.
       - name: Checkout workflow branch
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.ref }}
 
       - name: Verify source
         run: |
@@ -39,8 +34,6 @@ jobs:
           echo " Message: $MSG"
           echo " Ref    : $GITHUB_REF"
           echo "========================================"
-          test "$BRANCH" = "backup"
-          test -n "$SHA"
 
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
@@ -50,11 +43,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+          cache: 'gradle'
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-
-      # Fokus hanya validasi kode Kotlin/Compose.
-      # Tidak membuat APK dan tidak upload artifact.
       - name: Compile debug code
         run: ./gradlew :app:compileDebugKotlin --stacktrace
