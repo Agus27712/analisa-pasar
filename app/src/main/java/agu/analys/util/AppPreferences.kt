@@ -1,7 +1,6 @@
 package agu.analys.util
 
 import android.content.Context
-import agu.analys.BuildConfig
 import agu.analys.config.AiProvider
 import agu.analys.config.MarketDataSource
 import agu.analys.config.ScalpingSensitivity
@@ -23,18 +22,13 @@ class AppPreferences(context: Context) {
             isScalpingMode = (value == StrategyMode.SCALPING)
         }
 
+    /** Keys hanya dari prefs user — TIDAK fallback BuildConfig (hindari bocor di APK). */
     var groqApiKey: String
-        get() {
-            val saved = prefs.getString(KEY_GROQ, "").orEmpty()
-            return if (saved.isNotBlank()) saved else try { BuildConfig.GROQ_API_KEY } catch (_: Throwable) { "" }
-        }
+        get() = prefs.getString(KEY_GROQ, "").orEmpty()
         set(value) = prefs.edit().putString(KEY_GROQ, value.trim()).apply()
 
     var geminiApiKey: String
-        get() {
-            val saved = prefs.getString(KEY_GEMINI, "").orEmpty()
-            return if (saved.isNotBlank()) saved else try { BuildConfig.GEMINI_API_KEY } catch (_: Throwable) { "" }
-        }
+        get() = prefs.getString(KEY_GEMINI, "").orEmpty()
         set(value) = prefs.edit().putString(KEY_GEMINI, value.trim()).apply()
 
     var aiProvider: AiProvider
@@ -68,12 +62,21 @@ class AppPreferences(context: Context) {
             .apply()
 
     var updateRepo: String
-        get() = prefs.getString(KEY_UPDATE_REPO, "agus27712/analisa-pasar").orEmpty().ifBlank { "agus27712/analisa-pasar" }
+        get() = prefs.getString(KEY_UPDATE_REPO, "agus27712/analisa-pasarv2").orEmpty().ifBlank { "agus27712/analisa-pasarv2" }
         set(value) = prefs.edit().putString(KEY_UPDATE_REPO, value.trim()).apply()
 
     var updateGitHubToken: String
         get() = prefs.getString(KEY_UPDATE_GH_TOKEN, "").orEmpty()
         set(value) = prefs.edit().putString(KEY_UPDATE_GH_TOKEN, value.trim()).apply()
+
+    /** UI compact: kurangi info overload di detail/dashboard. Default true. */
+    var compactUi: Boolean
+        get() = prefs.getBoolean(KEY_COMPACT_UI, true)
+        set(value) = prefs.edit().putBoolean(KEY_COMPACT_UI, value).apply()
+
+    fun clearApiKeys() {
+        prefs.edit().remove(KEY_GROQ).remove(KEY_GEMINI).remove(KEY_UPDATE_GH_TOKEN).apply()
+    }
 
     fun getWatchlist(): Set<String> {
         val saved = prefs.getStringSet(KEY_WATCHLIST_INDODAX, null)
@@ -121,5 +124,6 @@ class AppPreferences(context: Context) {
         private const val KEY_SELL_TAKER = "fee_sell_taker"
         private const val KEY_UPDATE_REPO = "github_update_repo"
         private const val KEY_UPDATE_GH_TOKEN = "github_update_token"
+        private const val KEY_COMPACT_UI = "compact_ui"
     }
 }
