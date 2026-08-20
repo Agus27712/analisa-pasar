@@ -317,7 +317,7 @@ fun WaitingEntryRadarCard(
                 Icon(Icons.Default.ShoppingCart, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(6.dp))
                 Text(
-                    text = if (isRealBuyMode) "⚡ REAL BUY NOW" else "⚡ SIMULASI BUY",
+                    text = if (isRealBuyMode) "[REAL] BUY" else "[SIM] BUY",
                     fontSize = 11.5.sp,
                     fontWeight = FontWeight.Black
                 )
@@ -337,7 +337,7 @@ fun WaitingEntryRadarCard(
                     )
                 ) {
                     Text(
-                        text = if (isRealBuyMode) "🔴 REAL SELL" else "🔴 SIMULASI SELL",
+                        text = if (isRealBuyMode) "[REAL] SELL" else "[SIM] SELL",
                         fontSize = 11.5.sp,
                         fontWeight = FontWeight.Black
                     )

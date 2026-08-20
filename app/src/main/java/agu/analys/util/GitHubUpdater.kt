@@ -50,16 +50,21 @@ object GitHubUpdater {
                 releaseObj = JSONObject(body)
             } else if (latestCode == 403) {
                 return@withContext UpdateCheckResult.Error("Batas request GitHub terlampaui (rate limit). Coba lagi beberapa saat atau masukkan GitHub Token di Pengaturan.")
+            } else if (latestCode == 401) {
+                return@withContext UpdateCheckResult.Error("Akses ditolak (HTTP 401). Personal Access Token GitHub tidak valid atau tidak memiliki izin akses.")
             } else {
                 // 2. Fallback: Cek daftar semua rilis (releases)
                 val allReleasesUrl = "https://api.github.com/repos/$normalizedRepo/releases"
                 val allConn = openGitHubConnection(allReleasesUrl, token)
-                if (allConn.responseCode in 200..299) {
+                val allCode = allConn.responseCode
+                if (allCode in 200..299) {
                     val body = allConn.inputStream.bufferedReader().use { it.readText() }
                     val array = JSONArray(body)
                     if (array.length() > 0) {
                         releaseObj = array.getJSONObject(0)
                     }
+                } else if (allCode == 401) {
+                    return@withContext UpdateCheckResult.Error("Akses ditolak (HTTP 401). Personal Access Token GitHub tidak valid atau tidak memiliki izin akses.")
                 }
             }
 
@@ -109,7 +114,8 @@ object GitHubUpdater {
             // 3. Fallback: Cek Git Tags jika rilis belum diformalkan di GitHub Releases UI
             val tagsUrl = "https://api.github.com/repos/$normalizedRepo/tags"
             val tagsConn = openGitHubConnection(tagsUrl, token)
-            if (tagsConn.responseCode in 200..299) {
+            val tagsCode = tagsConn.responseCode
+            if (tagsCode in 200..299) {
                 val body = tagsConn.inputStream.bufferedReader().use { it.readText() }
                 val tagsArray = JSONArray(body)
                 if (tagsArray.length() > 0) {
@@ -133,9 +139,23 @@ object GitHubUpdater {
                         return@withContext UpdateCheckResult.AlreadyLatest(BuildConfig.VERSION_NAME)
                     }
                 }
+            } else if (tagsCode == 401) {
+                return@withContext UpdateCheckResult.Error("Akses ditolak (HTTP 401). Personal Access Token GitHub tidak valid atau tidak memiliki izin akses.")
             }
 
-            UpdateCheckResult.Error("Repository atau tag rilis belum ditemukan di GitHub ($normalizedRepo). Jika repository bersifat Private, silakan masukkan GitHub Personal Access Token di Pengaturan.")
+            if (latestCode == 404 && tagsCode == 404) {
+                return@withContext UpdateCheckResult.Error(
+                    "Repository tidak ditemukan di GitHub (HTTP 404). Silakan pastikan:\n" +
+                    "1. Nama repository di Pengaturan sudah benar (format: username/repository).\n" +
+                    "2. Jika repository bersifat Private, pastikan Anda telah memasukkan GitHub Personal Access Token yang valid di Pengaturan.\n" +
+                    "3. Jika repository bersifat Public, pastikan nama repository diinput secara tepat."
+                )
+            }
+
+            return@withContext UpdateCheckResult.Error(
+                "Repository ditemukan ($normalizedRepo), tetapi tidak ada rilis formal maupun tag rilis yang terdeteksi (HTTP $latestCode / $tagsCode).\n" +
+                "Silakan buat minimal satu 'Release' atau 'Tag' di GitHub agar sistem dapat mendeteksi pembaruan."
+            )
         } catch (e: Exception) {
             UpdateCheckResult.Error("Gagal memeriksa update: ${e.localizedMessage ?: "Koneksi terputus"}")
         }
