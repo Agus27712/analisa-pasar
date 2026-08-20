@@ -44,7 +44,7 @@ class AppPreferences(context: Context) {
         set(value) = prefs.edit().putBoolean(KEY_SCALPING_MODE, value).apply()
 
     var scalpingSensitivity: ScalpingSensitivity
-        get() = runCatching { ScalpingSensitivity.valueOf(prefs.getString(KEY_SCALPING_SENSITIVITY, ScalpingSensitivity.CONSERVATIVE.name).orEmpty()) }.getOrDefault(ScalpingSensitivity.CONSERVATIVE)
+        get() = runCatching { ScalpingSensitivity.valueOf(prefs.getString(KEY_SCALPING_SENSITIVITY, ScalpingSensitivity.BALANCED.name).orEmpty()) }.getOrDefault(ScalpingSensitivity.BALANCED)
         set(value) = prefs.edit().putString(KEY_SCALPING_SENSITIVITY, value.name).apply()
 
     var tradingFees: TradingFeeConfig

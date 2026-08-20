@@ -113,7 +113,15 @@ data class AISignalState(
     val marketSymbol: String = "",
     val scalpingStage: ScalpingStage = ScalpingStage.HOLD,
     /** Structured MTF — diisi evaluator scalping. Default kosong untuk swing/offline. */
-    val mtf: ScalpingMtfSnapshot = ScalpingMtfSnapshot()
+    val mtf: ScalpingMtfSnapshot = ScalpingMtfSnapshot(),
+    /** Info mode offline & backtest walk-forward validation */
+    val isOfflineMode: Boolean = false,
+    val offlineSnapshotTime: Long = 0L,
+    val offlineReason: String = "",
+    val backtestWinRatePct: Double = 0.0,
+    val backtestScore: Int = 0,
+    val walkForwardEfficiencyPct: Double = 0.0,
+    val regimeDetected: String = ""
 )
 
 data class TradingPair(

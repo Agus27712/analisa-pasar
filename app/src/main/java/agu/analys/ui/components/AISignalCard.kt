@@ -91,8 +91,33 @@ fun AISignalCard(
     Card(modifier = modifier.fillMaxWidth().border(1.dp, TvGreen.copy(alpha = 0.25f), RoundedCornerShape(20.dp)).testTag("ai_signal_card"), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = TvCardBackground), elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)) {
         Column(modifier = Modifier.padding(16.dp).fillMaxWidth()) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Row(verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(8.dp).background(TvGreen, CircleShape)); Spacer(Modifier.width(8.dp)); Text("ANALISIS TEKNIKAL", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TvGreen, letterSpacing = 1.2.sp) }
-                Box(Modifier.clip(RoundedCornerShape(20.dp)).background(actionColor).padding(horizontal = 10.dp, vertical = 4.dp)) { Text(if (signal.confidence == 0) "DATA BELUM CUKUP" else scoreLabel, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White) }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(8.dp).background(if (signal.isOfflineMode) TvAmber else TvGreen, CircleShape))
+                    Spacer(Modifier.width(8.dp))
+                    Text(if (signal.isOfflineMode) "MODE OFFLINE (SNAPSHOT)" else "ANALISIS TEKNIKAL", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = if (signal.isOfflineMode) TvAmber else TvGreen, letterSpacing = 1.2.sp)
+                }
+                Box(Modifier.clip(RoundedCornerShape(20.dp)).background(actionColor).padding(horizontal = 10.dp, vertical = 4.dp)) { Text(if (signal.confidence == 0 && !signal.isOfflineMode) "DATA BELUM CUKUP" else scoreLabel, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White) }
+            }
+            if (signal.isOfflineMode) {
+                Spacer(Modifier.height(8.dp))
+                Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(TvAmber.copy(alpha = 0.12f)).border(1.dp, TvAmber.copy(alpha = 0.35f), RoundedCornerShape(10.dp)).padding(horizontal = 10.dp, vertical = 7.dp)) {
+                    Text("OFFLINE SNAPSHOT: Sinyal live ditangguhkan untuk keamanan modal. Menggunakan cache harga terakhir.", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TvAmber, maxLines = 2)
+                }
+            }
+            if (signal.regimeDetected.isNotBlank() || signal.backtestScore > 0) {
+                Spacer(Modifier.height(6.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (signal.regimeDetected.isNotBlank()) {
+                        Box(Modifier.clip(RoundedCornerShape(6.dp)).background(Color(0x1AFFFFFF)).padding(horizontal = 8.dp, vertical = 3.dp)) {
+                            Text("Rejim: ${signal.regimeDetected}", fontSize = 9.sp, fontWeight = FontWeight.SemiBold, color = TvTextSecondary)
+                        }
+                    }
+                    if (signal.backtestScore > 0) {
+                        Box(Modifier.clip(RoundedCornerShape(6.dp)).background(Color(0x1A00E676)).padding(horizontal = 8.dp, vertical = 3.dp)) {
+                            Text("Walk-Forward Score: ${signal.backtestScore}/100 (${String.format(java.util.Locale.US, "%.0f", signal.backtestWinRatePct)}% Win)", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = TvGreen)
+                        }
+                    }
+                }
             }
             if (structureBlocked) {
                 Spacer(Modifier.height(8.dp))

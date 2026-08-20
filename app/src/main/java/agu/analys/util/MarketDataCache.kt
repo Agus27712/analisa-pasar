@@ -47,8 +47,50 @@ class MarketDataCache(context: Context) {
         if (tick == null && candles.isEmpty()) return
         val normalized = symbol.uppercase(); val timeframeKey = timeframeCacheKey(timeframe); val key = KEY_PAIR_PREFIX + normalized + "_" + timeframeKey; val now = System.currentTimeMillis()
         if (now - (lastPairWriteAt[key] ?: 0L) < PAIR_WRITE_INTERVAL_MS) return
-        val root = JSONObject(); if (tick != null) root.put("tick", tickToJson(tick)); val cArr = JSONArray(); candles.takeLast(250).forEach { c -> cArr.put(JSONObject().put("t", c.timestamp).put("o", c.open).put("h", c.high).put("l", c.low).put("c", c.close).put("v", c.volume)) }
+        val root = JSONObject(); if (tick != null) root.put("tick", tickToJson(tick)); val cArr = JSONArray(); candles.takeLast(500).forEach { c -> cArr.put(JSONObject().put("t", c.timestamp).put("o", c.open).put("h", c.high).put("l", c.low).put("c", c.close).put("v", c.volume)) }
         root.put("candles", cArr).put("savedAt", now).put("timeframe", timeframeKey); prefs.edit().putString(key, root.toString()).apply(); lastPairWriteAt[key] = now
+    }
+
+    /**
+     * Sintesis/Update candle terbaru secara real-time dari Ticker Tick.
+     * Mencegah race condition & data lag tanpa menunggu refetch API 30 detik.
+     */
+    fun synthesizeLiveCandle(
+        candles: List<CandleBar>,
+        livePrice: Double,
+        addedVolume: Double = 0.0,
+        timeframe: Timeframe = Timeframe.M1
+    ): List<CandleBar> {
+        if (livePrice <= 0.0) return candles
+        if (candles.isEmpty()) {
+            val now = System.currentTimeMillis()
+            return listOf(CandleBar(now, livePrice, livePrice, livePrice, livePrice, addedVolume))
+        }
+
+        val last = candles.last()
+        val candleMs = when (timeframe) {
+            Timeframe.M1 -> 60_000L
+            Timeframe.M5 -> 300_000L
+            Timeframe.M15 -> 900_000L
+            Timeframe.H1 -> 3_600_000L
+            else -> 60_000L
+        }
+
+        val now = System.currentTimeMillis()
+        val isSameBar = (now - last.timestamp) < candleMs
+
+        return if (isSameBar) {
+            val updatedLast = last.copy(
+                high = maxOf(last.high, livePrice),
+                low = minOf(last.low, livePrice),
+                close = livePrice,
+                volume = last.volume + addedVolume
+            )
+            candles.dropLast(1) + updatedLast
+        } else {
+            val newBar = CandleBar(now, livePrice, livePrice, livePrice, livePrice, addedVolume)
+            (candles + newBar).takeLast(500)
+        }
     }
     fun savePairSnapshot(symbol: String, tick: MarketTick?, candles: List<CandleBar>) { if (candles.isNotEmpty()) savePairSnapshot(symbol, inferTimeframe(candles), tick, candles) }
     fun loadPairSnapshot(symbol: String, timeframe: Timeframe): Pair<MarketTick?, List<CandleBar>> {

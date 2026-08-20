@@ -662,18 +662,26 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     }
 
     private fun clearLiveData() {
+        val lastPrice = _currentTick.value?.price ?: 0.0
+        val lastCandles = _recentCandles.value
         _currentTick.value = null
         _recentPrices.value = emptyList()
         _recentCandles.value = emptyList()
         _orderBookBids.value = emptyList()
         _orderBookAsks.value = emptyList()
         _tradeStream.value = emptyList()
-        engine.resetForOffline()
+        engine.resetForOffline(preserveState = false, lastKnownPrice = lastPrice, cachedCandles = lastCandles)
     }
 
     private fun markMarketOffline(reason: String) {
         marketPollJob?.cancel()
-        if (_dashboardTicks.value.isEmpty() && _worthCoins.value.isEmpty()) clearLiveData()
+        val lastPrice = _currentTick.value?.price ?: 0.0
+        val lastCandles = _recentCandles.value
+        if (_dashboardTicks.value.isEmpty() && _worthCoins.value.isEmpty()) {
+            clearLiveData()
+        } else {
+            engine.resetForOffline(preserveState = false, lastKnownPrice = lastPrice, cachedCandles = lastCandles)
+        }
         _isShowingCachedData.value = _dashboardTicks.value.isNotEmpty() || _currentTick.value != null
         _connectionState.value = MarketConnectionState.ConnectionLost(reason)
     }
