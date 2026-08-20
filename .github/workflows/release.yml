@@ -78,25 +78,41 @@ jobs:
         run: |
           VERSION="${{ steps.version.outputs.name }}"
           TAG="${{ steps.release_tag.outputs.tag }}"
-          PREVIOUS_TAG=$(git tag --sort=-version:refname | grep -v "^$TAG$" | head -1 || true)
-          if [ -n "$PREVIOUS_TAG" ]; then RANGE="$PREVIOUS_TAG..HEAD"; else RANGE="HEAD"; fi
-          FEATS=$(git log $RANGE --pretty=format:'- %s' --grep='^feat' -i || true)
-          FIXES=$(git log $RANGE --pretty=format:'- %s' --grep='^fix' -i || true)
-          OTHERS=$(git log $RANGE --pretty=format:'- %s' --grep='^\(feat\|fix\)' -i --invert-grep || true)
-          [ -n "$FEATS" ] || FEATS="- Tidak ada perubahan utama yang dicatat."
-          [ -n "$FIXES" ] || FIXES="- Tidak ada bug fix yang dicatat."
-          [ -n "$OTHERS" ] || OTHERS="- Tidak ada peningkatan lain yang dicatat."
+          
+          # Pastikan semua tag di-fetch dari remote agar komparasi akurat
+          git fetch --tags --force origin 2>/dev/null || true
+          
+          # Cari tag rilis sebelumnya (format vX.Y.Z) yang bukan tag rilis saat ini
+          PREVIOUS_TAG=$(git tag --sort=-creatordate | grep -E '^v[0-9]+\.[0-9]+' | grep -v "^$TAG$" | head -n 1 || true)
+          
+          if [ -n "$PREVIOUS_TAG" ] && git rev-parse -q --verify "refs/tags/$PREVIOUS_TAG" >/dev/null 2>&1; then
+            echo "Membandingkan perubahan sejak rilis sebelumnya: $PREVIOUS_TAG..$TAG"
+            RANGE="$PREVIOUS_TAG..HEAD"
+            FEATS=$(git log $RANGE --no-merges --pretty=format:'- %s' --grep='^feat' -i || true)
+            FIXES=$(git log $RANGE --no-merges --pretty=format:'- %s' --grep='^fix' -i || true)
+            OTHERS=$(git log $RANGE --no-merges --pretty=format:'- %s' --grep='^\(feat\|fix\)' -i --invert-grep || true)
+          else
+            echo "Tag rilis sebelumnya tidak ditemukan. Mengambil hanya commit terbaru (max 10 commit)."
+            FEATS=$(git log -n 10 --no-merges --pretty=format:'- %s' --grep='^feat' -i || true)
+            FIXES=$(git log -n 10 --no-merges --pretty=format:'- %s' --grep='^fix' -i || true)
+            OTHERS=$(git log -n 10 --no-merges --pretty=format:'- %s' --grep='^\(feat\|fix\)' -i --invert-grep || true)
+          fi
+
+          [ -n "$FEATS" ] || FEATS="- Pembaruan fitur dan optimasi aplikasi."
+          [ -n "$FIXES" ] || FIXES="- Perbaikan stabilitas dan konsistensi sistem."
+          [ -n "$OTHERS" ] || OTHERS="- Peningkatan performa dan sinkronisasi data."
+
           cat > "$RUNNER_TEMP/release-notes.md" <<EOF
           ## Versi
-          **v$VERSION** (versionCode ${{ steps.version.outputs.code }})
+          **v$VERSION** (Build ${{ steps.version.outputs.code }})
 
-          ## Perubahan utama
+          ## Fitur & Pembaruan
           $FEATS
 
-          ## Bug fix
+          ## Perbaikan Bug
           $FIXES
 
-          ## Peningkatan fitur
+          ## Peningkatan Sistem
           $OTHERS
           EOF
 
