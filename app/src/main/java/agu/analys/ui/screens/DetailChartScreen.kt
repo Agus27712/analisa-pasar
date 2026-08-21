@@ -289,7 +289,7 @@ fun DetailChartScreen(
         Spacer(Modifier.height(14.dp))
 
         val availableIdr = if (isRealBuyMode) (realBalance["idr"] ?: 0.0) else wallet.getAvailableIdr()
-        val availableCoin = if (isRealBuyMode) (realBalance[pair.baseAsset.uppercase()] ?: 0.0) else wallet.getAvailableCoin(pair.baseAsset)
+        val availableCoin = if (isRealBuyMode) (realBalance[pair.baseAsset.lowercase()] ?: realBalance[pair.baseAsset.uppercase()] ?: 0.0) else wallet.getAvailableCoin(pair.baseAsset)
         val avgBuyPrice = if (isRealBuyMode) (spotPosition.takeIf { it.isHolding }?.entryPrice ?: 0.0) else (wallet.avgBuyPrices[pair.baseAsset.uppercase()] ?: 0.0)
 
         // 1. RADAR PROGRESS ENTRY (STATUS TUNGGU / SIAP / BUY & FEE TRANSAKSI)
@@ -335,7 +335,7 @@ fun DetailChartScreen(
                 val execPrice = if (tick?.price != null && tick!!.price > 0) tick!!.price else signal.targetPrice1
                 if (execPrice > 0) {
                     if (isRealBuyMode) {
-                        val currentCoinBalance = realBalance[pair.baseAsset.uppercase()] ?: 0.0
+                        val currentCoinBalance = realBalance[pair.baseAsset.lowercase()] ?: realBalance[pair.baseAsset.uppercase()] ?: 0.0
                         if (currentCoinBalance > 0.0 && sellQty > 0.0) {
                             viewModel.executeRealTrade(pair.symbol, "sell", execPrice.toLong(), sellQty.coerceAtMost(currentCoinBalance)) { success, msg ->
                                 android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()

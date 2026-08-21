@@ -227,7 +227,7 @@ fun RealBuyModeAndSecurityCard(
                 Column(modifier = Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            "MODE TRADING REAL (INDODAX)",
+                            "MODE TRADING",
                             color = if (isRealBuyMode) TvGreen else TvTextPrimary,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Black
@@ -242,7 +242,7 @@ fun RealBuyModeAndSecurityCard(
                                 .padding(horizontal = 6.dp, vertical = 2.dp)
                         ) {
                             Text(
-                                if (isRealBuyMode) "AKTIF (REAL)" else "SIMULASI",
+                                if (isRealBuyMode) "REAL (INDODAX)" else "SIMULASI",
                                 color = if (isRealBuyMode) TvGreen else TvTextSecondary,
                                 fontSize = 9.sp,
                                 fontWeight = FontWeight.Bold

@@ -85,7 +85,7 @@ fun RadarTransactionFeeSection(
                 )
                 Spacer(Modifier.width(6.dp))
                 Text(
-                    text = if (isBuyMode) "ESTIMASI TRANSAKSI & BIAYA BELI" else "KALKULASI PENJUALAN & PROFIT NET",
+                    text = if (isBuyMode) "Transaski & Biaya (buy)" else "Penjualan & Profit (sell)",
                     color = Color(0xFF4FC3F7),
                     fontSize = 11.sp,
                     fontWeight = FontWeight.ExtraBold,
