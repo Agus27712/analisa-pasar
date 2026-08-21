@@ -61,6 +61,7 @@ fun WaitingEntryRadarCard(
     isRealBuyMode: Boolean = false,
     onExecuteBuy: ((Double) -> Unit)? = null,
     onExecuteSell: ((Double) -> Unit)? = null,
+    onSetManualBuyPrice: ((Double, Double) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val mtf = signal.mtf
@@ -378,7 +379,8 @@ fun WaitingEntryRadarCard(
             onBuyModeChanged = { isBuyMode = it },
             isRealMode = isRealBuyMode,
             onExecuteBuy = onExecuteBuy,
-            onExecuteSell = onExecuteSell
+            onExecuteSell = onExecuteSell,
+            onSetManualBuyPrice = onSetManualBuyPrice
         )
 
         Spacer(Modifier.height(10.dp))

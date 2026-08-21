@@ -372,6 +372,10 @@ fun DetailChartScreen(
                 } else {
                     android.widget.Toast.makeText(context, "Harga belum tersedia untuk Jual.", android.widget.Toast.LENGTH_SHORT).show()
                 }
+            },
+            onSetManualBuyPrice = { entryPrice, investedAmount ->
+                viewModel.setManualPositionPrice(pair.symbol, entryPrice, investedAmount)
+                android.widget.Toast.makeText(context, "Harga beli manual tersimpan!", android.widget.Toast.LENGTH_SHORT).show()
             }
         )
 

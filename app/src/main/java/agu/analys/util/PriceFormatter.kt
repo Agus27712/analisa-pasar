@@ -68,7 +68,7 @@ object PriceFormatter {
                 absVol >= 1_000_000_000_000.0 ->
                     "Rp " + DecimalFormat("#.##", symbols).format(volume / 1_000_000_000_000.0) + " T"
                 absVol >= 1_000_000_000.0 ->
-                    "Rp " + DecimalFormat("#.##", symbols).format(volume / 1_000_000.0) + " M"
+                    "Rp " + DecimalFormat("#.##", symbols).format(volume / 1_000_000_000.0) + " Mil"
                 absVol >= 1_000_000.0 ->
                     "Rp " + DecimalFormat("#.##", symbols).format(volume / 1_000_000.0) + " jt"
                 absVol >= 1_000.0 ->

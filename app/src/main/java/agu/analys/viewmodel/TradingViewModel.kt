@@ -457,6 +457,11 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         refreshSpotPosition()
     }
 
+    fun setManualPositionPrice(symbol: String, entryPrice: Double, investedAmount: Double = 0.0) {
+        positionStore.setManualEntryPrice(symbol, entryPrice, investedAmount)
+        refreshSpotPosition()
+    }
+
     private fun startDashboardPolling() {
         dashboardPollJob?.cancel()
         dashboardPollJob = viewModelScope.launch {

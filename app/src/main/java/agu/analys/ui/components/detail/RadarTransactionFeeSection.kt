@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import agu.analys.config.TradingFeeConfig
@@ -49,6 +50,7 @@ fun RadarTransactionFeeSection(
     isRealMode: Boolean = false,
     onExecuteBuy: ((Double) -> Unit)? = null,
     onExecuteSell: ((Double) -> Unit)? = null,
+    onSetManualBuyPrice: ((Double, Double) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var showFeeDetailModal by remember { mutableStateOf(false) }
@@ -240,7 +242,8 @@ fun RadarTransactionFeeSection(
                 onSellQuantityChanged = onSellQuantityChanged,
                 activeFeePct = activeFeePct,
                 isRealMode = isRealMode,
-                onExecuteSell = onExecuteSell
+                onExecuteSell = onExecuteSell,
+                onSetManualBuyPrice = onSetManualBuyPrice
             )
         }
     }
@@ -321,20 +324,31 @@ fun TransactionDetailRow(
         Text(
             text = label,
             color = Color(0xFF90A4AE),
-            fontSize = 11.sp
+            fontSize = 11.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            softWrap = false,
+            modifier = Modifier.weight(1f, fill = false)
         )
+        Spacer(Modifier.width(6.dp))
         Column(horizontalAlignment = Alignment.End) {
             Text(
                 text = value,
                 color = valueColor,
                 fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                softWrap = false
             )
             if (subValue != null) {
                 Text(
                     text = subValue,
                     color = TvTextSecondary,
-                    fontSize = 9.5.sp
+                    fontSize = 9.5.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    softWrap = false
                 )
             }
         }

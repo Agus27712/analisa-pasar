@@ -76,6 +76,43 @@ class SpotPositionStore(context: Context) {
 
     fun isHolding(symbol: String): Boolean = get(symbol).isHolding
 
+    fun setManualEntryPrice(symbol: String, entryPrice: Double, investedAmount: Double = 0.0) {
+        val key = normalize(symbol)
+        val safeEntry = entryPrice.coerceAtLeast(0.0)
+        val current = get(symbol)
+        val safeInvested = if (investedAmount > 0.0) {
+            investedAmount
+        } else if (current.quantity > 0.0 && safeEntry > 0.0) {
+            current.quantity * safeEntry
+        } else {
+            current.investedAmount
+        }
+        val quantity = if (current.quantity > 0.0) {
+            current.quantity
+        } else if (safeInvested > 0.0 && safeEntry > 0.0) {
+            safeInvested / safeEntry
+        } else {
+            0.0
+        }
+        val openedAt = if (current.openedAt > 0L) current.openedAt else System.currentTimeMillis()
+
+        val position = SpotPosition(
+            state = SpotPositionState.HOLDING,
+            investedAmount = safeInvested,
+            entryPrice = safeEntry,
+            quantity = quantity,
+            openedAt = openedAt
+        )
+        prefs.edit()
+            .putString("${key}_state", SpotPositionState.HOLDING.name)
+            .putString("${key}_invested", safeInvested.toString())
+            .putString("${key}_entry", safeEntry.toString())
+            .putString("${key}_quantity", quantity.toString())
+            .putLong("${key}_opened_at", openedAt)
+            .putString("${key}_history", appendHistoryEvent(key, position))
+            .apply()
+    }
+
     fun markBought(symbol: String, referenceEntryPrice: Double) {
         val current = get(symbol)
         if (current.isHolding && current.entryPrice == referenceEntryPrice) return
