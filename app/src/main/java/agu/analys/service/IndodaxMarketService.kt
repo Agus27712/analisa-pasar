@@ -471,7 +471,7 @@ object IndodaxMarketService {
     }
 
     /**
-     * Ambil saldo akun langsung dari API Indodax V2 (Primary) dengan fallback ke V1
+     * Ambil saldo akun langsung dari Indodax Trade API V2 (Primary) dengan fallback ke TAPI V1
      * Mengembalikan rincian saldo (IDR + seluruh koin seperti MYX, ABYSS, BTC, dll.)
      */
     suspend fun fetchAccountBalanceDetails(apiKey: String, secretKey: String): Pair<Map<String, Double>?, String> = withContext(Dispatchers.IO) {
@@ -488,13 +488,13 @@ object IndodaxMarketService {
             val timestamp = System.currentTimeMillis()
             val recvWindow = 5000L
             val query = "timestamp=$timestamp&recvWindow=$recvWindow&omitZeroBalances=false"
-            val sign256 = signHmacSha256(query, cleanSecret)
+            val sign512 = signHmacSha512(query, cleanSecret)
 
             val request = Request.Builder()
                 .url("$TAPI_V2_BASE/api/v2/account?$query")
                 .get()
                 .header("X-APIKEY", cleanKey)
-                .header("Sign", sign256)
+                .header("Sign", sign512)
                 .header("Accept", "application/json")
                 .build()
 
@@ -529,6 +529,8 @@ object IndodaxMarketService {
         } catch (e: Exception) {
             v2ErrorMsg = e.localizedMessage ?: "Gagal terhubung ke Trade API V2"
         }
+
+        var tapiV1ErrorMsg: String? = null
 
         // 2. FALLBACK: Indodax TAPI V1 (method=getInfo) jika V2 gagal
         try {
@@ -574,8 +576,8 @@ object IndodaxMarketService {
                     }
                 }
             }
-        } catch (_: Exception) {
-            // Abaikan fallback error V1
+        } catch (e: Exception) {
+            tapiV1ErrorMsg = e.localizedMessage
         }
 
         Pair(null, "Indodax Trade API V2 Error: ${v2ErrorMsg ?: "Gagal terhubung. Pastikan API Key/Secret V2 benar & IP diizinkan."}")
@@ -597,7 +599,7 @@ object IndodaxMarketService {
     }
 
     /**
-     * Place order riil ke Indodax (Mendukung TAPI V1 & V2)
+     * Place order riil ke Indodax (Trade API V2 Primary, Fallback ke TAPI V1)
      */
     suspend fun placeTradeOrder(
         apiKey: String,
@@ -638,7 +640,7 @@ object IndodaxMarketService {
             }
 
             val sortedQuery = params.toSortedMap().entries.joinToString("&") { "${it.key}=${it.value}" }
-            val sign = signHmacSha256(sortedQuery, cleanSecret)
+            val sign512 = signHmacSha512(sortedQuery, cleanSecret)
 
             val formBuilder = okhttp3.FormBody.Builder()
             params.forEach { (k, v) -> formBuilder.add(k, v) }
@@ -647,7 +649,7 @@ object IndodaxMarketService {
                 .url("$TAPI_V2_BASE/api/v2/order")
                 .post(formBuilder.build())
                 .header("X-APIKEY", cleanKey)
-                .header("Sign", sign)
+                .header("Sign", sign512)
                 .header("Content-Type", "application/x-www-form-urlencoded")
                 .header("Accept", "application/json")
                 .build()
@@ -664,7 +666,7 @@ object IndodaxMarketService {
                 }
             }
         } catch (_: Exception) {
-            // Lanjut ke fallback V1
+            // Lanjut ke fallback TAPI V1
         }
 
         // 2. FALLBACK: Indodax TAPI V1 (method=trade)
@@ -707,6 +709,6 @@ object IndodaxMarketService {
             return@withContext false to "Gagal menghubungi API Indodax: ${e.localizedMessage}"
         }
 
-        return@withContext false to "Gagal mengeksekusi order pada Indodax API V2."
+        return@withContext false to "Gagal mengeksekusi order pada Indodax Trade API V2."
     }
 }
