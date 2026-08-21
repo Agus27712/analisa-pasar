@@ -13,8 +13,7 @@ import kotlinx.coroutines.launch
  * Coordinator for real INDODAX trading.
  *
  * Uses the current INDODAX API contract:
- * - /tapi for account, create order and cancel order
- * - Trade API 2.0 dedicated endpoints for order/trade history
+ * - Trade API 2.0 for account, create/cancel order, and trade history (myTrades)
  */
 class RealTradeCoordinator(
     private val scope: CoroutineScope,
@@ -153,26 +152,27 @@ class RealTradeCoordinator(
 
         for ((asset, currentQty) in nonZeroAssets) {
             val symbol = "${asset}idr"
-            // Gunakan legacy /tapi tradeHistory yang bisa menarik riwayat lama
-            val (success, jsonResponse) = IndodaxTradeApiV2.tradeHistoryLegacy(apiKey, secretKey, symbol, 1000)
+            // Pakai TAPIv2 myTrades (ganti legacy yang sudah deprecated)
+            val (success, jsonResponse) = IndodaxTradeApiV2.myTrades(apiKey, secretKey, symbol, 1000)
             if (success) {
                 try {
                     val jsonObj = org.json.JSONObject(jsonResponse)
-                    val tradesArray = if (jsonObj.has("return")) {
-                        jsonObj.getJSONObject("return").optJSONArray("trades") ?: org.json.JSONArray()
-                    } else {
-                        org.json.JSONArray()
+                    // Response V2: { "data": [ { tradeId, isBuyer, price, qty, time, ... } ] }
+                    val tradesArray = when {
+                        jsonObj.has("data") -> jsonObj.optJSONArray("data") ?: org.json.JSONArray()
+                        jsonObj.has("return") -> jsonObj.getJSONObject("return").optJSONArray("trades") ?: org.json.JSONArray()
+                        else -> org.json.JSONArray()
                     }
-                    
+
                     // Ekstrak ke List dan urutkan berdasarkan waktu transaksi (terbaru ke terlama)
                     val tradeList = mutableListOf<org.json.JSONObject>()
                     for (i in 0 until tradesArray.length()) {
                         val trade = tradesArray.optJSONObject(i)
                         if (trade != null) tradeList.add(trade)
                     }
-                    
-                    tradeList.sortByDescending { 
-                        it.optLong("time", it.optString("trade_time", "0").toLongOrNull() ?: 0L) 
+
+                    tradeList.sortByDescending {
+                        it.optLong("time", it.optString("trade_time", "0").toLongOrNull() ?: 0L)
                     }
 
                     var accumulatedQty = 0.0
@@ -181,16 +181,18 @@ class RealTradeCoordinator(
                         val isBuyer = if (trade.has("isBuyer")) {
                             trade.optBoolean("isBuyer", false)
                         } else {
-                            trade.optString("type", "").equals("buy", ignoreCase = true) || trade.optString("side", "").equals("BUY", ignoreCase = true)
+                            trade.optString("type", "").equals("buy", ignoreCase = true) ||
+                                    trade.optString("side", "").equals("BUY", ignoreCase = true)
                         }
 
                         if (isBuyer) {
                             val priceStr = trade.optString("price", "0")
-                            // Pada endpoint /tapi, field koin dinamai sesuai koinnya (contoh: "btc")
-                            val qtyStr = if (trade.has("qty")) trade.optString("qty", "0") 
-                                         else if (trade.has("amount")) trade.optString("amount", "0")
-                                         else trade.optString(asset.lowercase(), "0")
-                                         
+                            val qtyStr = when {
+                                trade.has("qty") -> trade.optString("qty", "0")
+                                trade.has("amount") -> trade.optString("amount", "0")
+                                else -> trade.optString(asset.lowercase(), "0")
+                            }
+
                             val tPrice = priceStr.toDoubleOrNull() ?: 0.0
                             val tQty = qtyStr.toDoubleOrNull() ?: 0.0
 
