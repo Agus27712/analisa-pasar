@@ -450,10 +450,10 @@ object IndodaxMarketService {
     private const val TAPI_V2_BASE = "https://api.indodax.com"
     private const val RECV_WINDOW_MS = 10_000L
 
-    /** HMAC-SHA256 (Official Trade API V2) */
-    private fun signHmacSha256(data: String, secretKey: String): String {
-        val mac = javax.crypto.Mac.getInstance("HmacSHA256")
-        val secretKeySpec = javax.crypto.spec.SecretKeySpec(secretKey.trim().toByteArray(Charsets.UTF_8), "HmacSHA256")
+    /** HMAC-SHA512 (Official Indodax Trade API V2) */
+    private fun signHmacSha512(data: String, secretKey: String): String {
+        val mac = javax.crypto.Mac.getInstance("HmacSHA512")
+        val secretKeySpec = javax.crypto.spec.SecretKeySpec(secretKey.trim().toByteArray(Charsets.UTF_8), "HmacSHA512")
         mac.init(secretKeySpec)
         val hash = mac.doFinal(data.toByteArray(Charsets.UTF_8))
         return hash.joinToString("") { "%02x".format(it) }
@@ -482,7 +482,7 @@ object IndodaxMarketService {
                 "timestamp" to timestamp.toString()
             )
             val query = buildSortedQuery(params)
-            val sign = signHmacSha256(query, cleanSecret)
+            val sign = signHmacSha512(query, cleanSecret)
 
             val request = Request.Builder()
                 .url("$TAPI_V2_BASE/api/v2/account?$query")
@@ -599,7 +599,7 @@ object IndodaxMarketService {
             }
 
             val sortedQuery = buildSortedQuery(params)
-            val sign = signHmacSha256(sortedQuery, cleanSecret)
+            val sign = signHmacSha512(sortedQuery, cleanSecret)
 
             val formBuilder = okhttp3.FormBody.Builder()
             params.toSortedMap().forEach { (k, v) -> formBuilder.add(k, v) }
