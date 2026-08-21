@@ -64,82 +64,110 @@ fun DetailTopBar(
         AssetAvatar(baseAsset = pair.baseAsset, iconUrl = pair.iconUrl, size = 36.dp)
         Spacer(Modifier.width(10.dp))
 
-        Column(Modifier.weight(1f)) {
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(end = 4.dp)
+        ) {
             Text(
                 text = "${pair.baseAsset}/${pair.quoteAsset}",
                 color = TvTextPrimary,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.ExtraBold
+                fontSize = 16.sp,
+                fontWeight = FontWeight.ExtraBold,
+                maxLines = 1,
+                softWrap = false
             )
             Text(
                 text = getCoinFullName(pair.baseAsset),
                 color = TvTextSecondary,
-                fontSize = 12.sp
+                fontSize = 11.sp,
+                maxLines = 1,
+                softWrap = false
             )
         }
 
-        if (onOpenAlerts != null) {
-            Box(contentAlignment = Alignment.TopEnd) {
-                IconButton(onClick = onOpenAlerts) {
-                    Icon(
-                        imageVector = if (activeAlertCount > 0) Icons.Default.Notifications else Icons.Default.NotificationsNone,
-                        contentDescription = "Alert Pasar",
-                        tint = if (activeAlertCount > 0) Color(0xFF00E5FF) else TvTextSecondary,
-                        modifier = Modifier.size(22.dp)
-                    )
-                }
-                if (activeAlertCount > 0) {
-                    Box(
-                        modifier = Modifier
-                            .offset(x = (-4).dp, y = 4.dp)
-                            .background(Color(0xFF00E5FF), RoundedCornerShape(10.dp))
-                            .padding(horizontal = 4.dp, vertical = 1.dp)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy((-4).dp)
+        ) {
+            if (onOpenAlerts != null) {
+                Box(contentAlignment = Alignment.TopEnd) {
+                    IconButton(
+                        onClick = onOpenAlerts,
+                        modifier = Modifier.size(36.dp)
                     ) {
-                        Text(
-                            text = "$activeAlertCount",
-                            color = Color.Black,
-                            fontSize = 8.sp,
-                            fontWeight = FontWeight.Black
+                        Icon(
+                            imageVector = if (activeAlertCount > 0) Icons.Default.Notifications else Icons.Default.NotificationsNone,
+                            contentDescription = "Alert Pasar",
+                            tint = if (activeAlertCount > 0) Color(0xFF00E5FF) else TvTextSecondary,
+                            modifier = Modifier.size(20.dp)
                         )
+                    }
+                    if (activeAlertCount > 0) {
+                        Box(
+                            modifier = Modifier
+                                .offset(x = (-2).dp, y = 2.dp)
+                                .background(Color(0xFF00E5FF), RoundedCornerShape(10.dp))
+                                .padding(horizontal = 4.dp, vertical = 1.dp)
+                        ) {
+                            Text(
+                                text = "$activeAlertCount",
+                                color = Color.Black,
+                                fontSize = 8.sp,
+                                fontWeight = FontWeight.Black
+                            )
+                        }
                     }
                 }
             }
-        }
 
-        IconButton(onClick = onOpenSimulation) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.CompareArrows,
-                contentDescription = "Simulasi Trade",
-                tint = TvGreen,
-                modifier = Modifier.size(22.dp)
-            )
-        }
+            IconButton(
+                onClick = onOpenSimulation,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.CompareArrows,
+                    contentDescription = "Simulasi Trade",
+                    tint = TvGreen,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
 
-        IconButton(onClick = onOpenLearning) {
-            Icon(
-                imageVector = Icons.Default.MenuBook,
-                contentDescription = "Mode Belajar",
-                tint = Color(0xFF72B7FF),
-                modifier = Modifier.size(22.dp)
-            )
-        }
+            IconButton(
+                onClick = onOpenLearning,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.MenuBook,
+                    contentDescription = "Mode Belajar",
+                    tint = Color(0xFF72B7FF),
+                    modifier = Modifier.size(20.dp)
+                )
+            }
 
-        IconButton(onClick = onToggleWatchlist) {
-            Icon(
-                imageVector = if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
-                contentDescription = "Favorite",
-                tint = if (isFavorite) Color(0xFFFFB300) else TvTextSecondary,
-                modifier = Modifier.size(22.dp)
-            )
-        }
+            IconButton(
+                onClick = onToggleWatchlist,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    imageVector = if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
+                    contentDescription = "Favorite",
+                    tint = if (isFavorite) Color(0xFFFFB300) else TvTextSecondary,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
 
-        IconButton(onClick = onOpenLandscapeChart) {
-            Icon(
-                imageVector = Icons.Default.CropRotate,
-                contentDescription = "Landscape",
-                tint = TvGreen,
-                modifier = Modifier.size(22.dp)
-            )
+            IconButton(
+                onClick = onOpenLandscapeChart,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.CropRotate,
+                    contentDescription = "Landscape",
+                    tint = TvGreen,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
         }
     }
 }

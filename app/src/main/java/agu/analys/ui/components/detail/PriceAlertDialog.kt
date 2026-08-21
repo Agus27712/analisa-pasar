@@ -102,7 +102,11 @@ fun PriceAlertDialog(
             }
         },
         text = {
-            Column(modifier = Modifier.fillMaxWidth().heightIn(max = 480.dp)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 520.dp)
+            ) {
                 // Tab Navigasi
                 Row(
                     modifier = Modifier
@@ -122,9 +126,9 @@ fun PriceAlertDialog(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "+ Buat Alert Baru",
+                            text = "+ Create Alert",
                             color = if (selectedTab == 0) Color.White else TvTextSecondary,
-                            fontSize = 11.sp,
+                            fontSize = 11.5.sp,
                             fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal
                         )
                     }
@@ -142,9 +146,9 @@ fun PriceAlertDialog(
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = "Daftar Alert",
+                                text = "Active Alerts",
                                 color = if (selectedTab == 1) Color.White else TvTextSecondary,
-                                fontSize = 11.sp,
+                                fontSize = 11.5.sp,
                                 fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal
                             )
                             if (alerts.isNotEmpty()) {
@@ -166,172 +170,210 @@ fun PriceAlertDialog(
                     }
                 }
 
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(10.dp))
 
                 if (selectedTab == 0) {
-                    // TAB BUAT ALERT
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
+                    // TAB BUAT ALERT DENGAN SCROLL
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f, fill = false),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        // Info Harga Saat Ini
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(Color(0xFF102033), RoundedCornerShape(8.dp))
-                                .padding(horizontal = 10.dp, vertical = 6.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("Harga Pasar Saat Ini:", color = TvTextSecondary, fontSize = 10.5.sp)
-                            Text(
-                                text = "${PriceFormatter.formatIdrNumber(currentPrice)} $quoteAsset",
-                                color = Color.White,
-                                fontSize = 11.5.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-
-                        // Preset Cepat
-                        Text(
-                            text = "PRESET CEPAT 1-TAP:",
-                            color = Color(0xFF90A4AE),
-                            fontSize = 9.5.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            QuickPresetButton(
-                                label = "+3% TP",
-                                color = TvGreen,
-                                onClick = {
-                                    selectedType = PriceAlertType.PRICE_ABOVE
-                                    targetPriceInput = PriceFormatter.formatIdrNumber(currentPrice * 1.03)
-                                    noteInput = "Take Profit Target +3%"
-                                },
-                                modifier = Modifier.weight(1f)
-                            )
-                            QuickPresetButton(
-                                label = "+5% TP",
-                                color = TvGreen,
-                                onClick = {
-                                    selectedType = PriceAlertType.PRICE_ABOVE
-                                    targetPriceInput = PriceFormatter.formatIdrNumber(currentPrice * 1.05)
-                                    noteInput = "Take Profit Target +5%"
-                                },
-                                modifier = Modifier.weight(1f)
-                            )
-                            QuickPresetButton(
-                                label = "-2% SL",
-                                color = TvRed,
-                                onClick = {
-                                    selectedType = PriceAlertType.PRICE_BELOW
-                                    targetPriceInput = PriceFormatter.formatIdrNumber(currentPrice * 0.98)
-                                    noteInput = "Stop Loss Level -2%"
-                                },
-                                modifier = Modifier.weight(1f)
-                            )
-                            QuickPresetButton(
-                                label = "-4% SL",
-                                color = TvRed,
-                                onClick = {
-                                    selectedType = PriceAlertType.PRICE_BELOW
-                                    targetPriceInput = PriceFormatter.formatIdrNumber(currentPrice * 0.96)
-                                    noteInput = "Stop Loss Level -4%"
-                                },
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            QuickPresetButton(
-                                label = "RSI < 30 (Oversold)",
-                                color = Color(0xFF00E5FF),
-                                onClick = {
-                                    selectedType = PriceAlertType.RSI_OVERSOLD
-                                    noteInput = "RSI Oversold Potensi Rebound"
-                                },
-                                modifier = Modifier.weight(1f)
-                            )
-                            QuickPresetButton(
-                                label = "Second-Wave Reclaim",
-                                color = Color(0xFFFFD54F),
-                                onClick = {
-                                    selectedType = PriceAlertType.SECOND_WAVE_RECLAIM
-                                    noteInput = "Sinyal Reclaim Terkonfirmasi"
-                                },
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-
-                        // Pilihan Kategori Alert
-                        Text(
-                            text = "KATEGORI ALERT:",
-                            color = Color(0xFF90A4AE),
-                            fontSize = 9.5.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-
-                        PriceAlertType.values().forEach { type ->
+                        item {
+                            // Info Harga Saat Ini
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .background(
-                                        if (selectedType == type) Color(0xFF162D47) else Color(0xFF101B29),
-                                        RoundedCornerShape(8.dp)
-                                    )
-                                    .border(
-                                        1.dp,
-                                        if (selectedType == type) Color(0xFF00E5FF) else Color(0xFF1B2E42),
-                                        RoundedCornerShape(8.dp)
-                                    )
-                                    .clickable { selectedType = type }
-                                    .padding(horizontal = 10.dp, vertical = 7.dp),
+                                    .background(Color(0xFF102033), RoundedCornerShape(8.dp))
+                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                RadioButton(
-                                    selected = selectedType == type,
-                                    onClick = { selectedType = type },
-                                    colors = RadioButtonDefaults.colors(
-                                        selectedColor = Color(0xFF00E5FF),
-                                        unselectedColor = Color(0xFF546E7A)
-                                    ),
-                                    modifier = Modifier.size(20.dp)
+                                Text("Market Price:", color = TvTextSecondary, fontSize = 10.5.sp)
+                                Text(
+                                    text = "${PriceFormatter.formatIdrNumber(currentPrice)} $quoteAsset",
+                                    color = Color.White,
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.Bold
                                 )
-                                Spacer(Modifier.width(8.dp))
-                                Column {
-                                    Text(
-                                        text = type.label,
-                                        color = if (selectedType == type) Color.White else TvTextSecondary,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Text(
-                                        text = type.description,
-                                        color = Color(0xFF78909C),
-                                        fontSize = 9.5.sp
-                                    )
+                            }
+                        }
+
+                        item {
+                            // Preset Cepat
+                            Text(
+                                text = "QUICK 1-TAP PRESETS:",
+                                color = Color(0xFF90A4AE),
+                                fontSize = 9.5.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+
+                            Spacer(Modifier.height(4.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                QuickPresetButton(
+                                    label = "+3% TP",
+                                    color = TvGreen,
+                                    onClick = {
+                                        selectedType = PriceAlertType.PRICE_ABOVE
+                                        targetPriceInput = PriceFormatter.formatIdrNumber(currentPrice * 1.03)
+                                        noteInput = "Take Profit Target +3%"
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                )
+                                QuickPresetButton(
+                                    label = "+5% TP",
+                                    color = TvGreen,
+                                    onClick = {
+                                        selectedType = PriceAlertType.PRICE_ABOVE
+                                        targetPriceInput = PriceFormatter.formatIdrNumber(currentPrice * 1.05)
+                                        noteInput = "Take Profit Target +5%"
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                )
+                                QuickPresetButton(
+                                    label = "-2% SL",
+                                    color = TvRed,
+                                    onClick = {
+                                        selectedType = PriceAlertType.PRICE_BELOW
+                                        targetPriceInput = PriceFormatter.formatIdrNumber(currentPrice * 0.98)
+                                        noteInput = "Stop Loss Level -2%"
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                )
+                                QuickPresetButton(
+                                    label = "-4% SL",
+                                    color = TvRed,
+                                    onClick = {
+                                        selectedType = PriceAlertType.PRICE_BELOW
+                                        targetPriceInput = PriceFormatter.formatIdrNumber(currentPrice * 0.96)
+                                        noteInput = "Stop Loss Level -4%"
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+
+                            Spacer(Modifier.height(4.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                QuickPresetButton(
+                                    label = "RSI < 30 (Oversold)",
+                                    color = Color(0xFF00E5FF),
+                                    onClick = {
+                                        selectedType = PriceAlertType.RSI_OVERSOLD
+                                        noteInput = "RSI Oversold Dip Buyer"
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                )
+                                QuickPresetButton(
+                                    label = "Second-Wave Reclaim",
+                                    color = Color(0xFFFFD54F),
+                                    onClick = {
+                                        selectedType = PriceAlertType.SECOND_WAVE_RECLAIM
+                                        noteInput = "Second-Wave Reclaim Trigger"
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+
+                        item {
+                            // Pilihan Kategori Alert
+                            Text(
+                                text = "ALERT CONDITION:",
+                                color = Color(0xFF90A4AE),
+                                fontSize = 9.5.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+
+                            Spacer(Modifier.height(4.dp))
+
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                PriceAlertType.values().forEach { type ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(
+                                                if (selectedType == type) Color(0xFF162D47) else Color(0xFF101B29),
+                                                RoundedCornerShape(8.dp)
+                                            )
+                                            .border(
+                                                1.dp,
+                                                if (selectedType == type) Color(0xFF00E5FF) else Color(0xFF1B2E42),
+                                                RoundedCornerShape(8.dp)
+                                            )
+                                            .clickable { selectedType = type }
+                                            .padding(horizontal = 10.dp, vertical = 7.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        RadioButton(
+                                            selected = selectedType == type,
+                                            onClick = { selectedType = type },
+                                            colors = RadioButtonDefaults.colors(
+                                                selectedColor = Color(0xFF00E5FF),
+                                                unselectedColor = Color(0xFF546E7A)
+                                            ),
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Spacer(Modifier.width(8.dp))
+                                        Column {
+                                            Text(
+                                                text = type.label,
+                                                color = if (selectedType == type) Color.White else TvTextSecondary,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Text(
+                                                text = type.description,
+                                                color = Color(0xFF78909C),
+                                                fontSize = 9.5.sp
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
 
-                        // Target Harga Input (Hanya untuk Type PRICE_ABOVE atau PRICE_BELOW)
                         if (selectedType == PriceAlertType.PRICE_ABOVE || selectedType == PriceAlertType.PRICE_BELOW) {
+                            item {
+                                OutlinedTextField(
+                                    value = targetPriceInput,
+                                    onValueChange = { targetPriceInput = it },
+                                    label = { Text("Target Price ($quoteAsset)", fontSize = 11.sp) },
+                                    placeholder = { Text("Example: 1,450,000,000", fontSize = 11.sp) },
+                                    keyboardOptions = KeyboardOptions(
+                                        keyboardType = KeyboardType.Number,
+                                        imeAction = ImeAction.Next
+                                    ),
+                                    singleLine = true,
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = Color(0xFF00E5FF),
+                                        unfocusedBorderColor = Color(0xFF263C52),
+                                        focusedContainerColor = Color(0xFF101C2B),
+                                        unfocusedContainerColor = Color(0xFF101C2B),
+                                        focusedTextColor = Color.White,
+                                        unfocusedTextColor = Color.White
+                                    ),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+
+                        item {
                             OutlinedTextField(
-                                value = targetPriceInput,
-                                onValueChange = { targetPriceInput = it },
-                                label = { Text("Target Harga ($quoteAsset)", fontSize = 11.sp) },
-                                placeholder = { Text("Contoh: 1.450.000.000", fontSize = 11.sp) },
-                                keyboardOptions = KeyboardOptions(
-                                    keyboardType = KeyboardType.Number,
-                                    imeAction = ImeAction.Next
-                                ),
+                                value = noteInput,
+                                onValueChange = { noteInput = it },
+                                label = { Text("Note / Label (Optional)", fontSize = 11.sp) },
+                                placeholder = { Text("e.g., TP1 resistance level", fontSize = 11.sp) },
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                                keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
                                 singleLine = true,
                                 colors = OutlinedTextFieldDefaults.colors(
                                     focusedBorderColor = Color(0xFF00E5FF),
@@ -345,49 +387,31 @@ fun PriceAlertDialog(
                             )
                         }
 
-                        // Catatan Tambahan
-                        OutlinedTextField(
-                            value = noteInput,
-                            onValueChange = { noteInput = it },
-                            label = { Text("Catatan / Label Alert (Opsional)", fontSize = 11.sp) },
-                            placeholder = { Text("Misal: TP 1 target resistance", fontSize = 11.sp) },
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                            keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
-                            singleLine = true,
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = Color(0xFF00E5FF),
-                                unfocusedBorderColor = Color(0xFF263C52),
-                                focusedContainerColor = Color(0xFF101C2B),
-                                unfocusedContainerColor = Color(0xFF101C2B),
-                                focusedTextColor = Color.White,
-                                unfocusedTextColor = Color.White
-                            ),
-                            modifier = Modifier.fillMaxWidth()
-                        )
-
-                        // Tombol Simpan
-                        Button(
-                            onClick = {
-                                val targetP = PriceFormatter.parseCleanIdrDouble(targetPriceInput)
-                                val alert = PriceAlert(
-                                    symbol = symbol,
-                                    type = selectedType,
-                                    targetPrice = targetP,
-                                    note = noteInput.trim()
+                        item {
+                            // Tombol Simpan Alert
+                            Button(
+                                onClick = {
+                                    val targetP = PriceFormatter.parseCleanIdrDouble(targetPriceInput)
+                                    val alert = PriceAlert(
+                                        symbol = symbol,
+                                        type = selectedType,
+                                        targetPrice = targetP,
+                                        note = noteInput.trim()
+                                    )
+                                    onAddAlert(alert)
+                                    selectedTab = 1 // Pindah ke tab daftar
+                                },
+                                modifier = Modifier.fillMaxWidth().height(42.dp),
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF00E5FF),
+                                    contentColor = Color.Black
                                 )
-                                onAddAlert(alert)
-                                selectedTab = 1 // Pindah ke tab daftar
-                            },
-                            modifier = Modifier.fillMaxWidth().height(42.dp),
-                            shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFF00E5FF),
-                                contentColor = Color.Black
-                            )
-                        ) {
-                            Icon(Icons.Default.AddAlert, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Simpan & Aktifkan Alert", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            ) {
+                                Icon(Icons.Default.AddAlert, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Save & Activate Alert", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
                         }
                     }
                 } else {
@@ -408,14 +432,14 @@ fun PriceAlertDialog(
                                 )
                                 Spacer(Modifier.height(8.dp))
                                 Text(
-                                    text = "Belum Ada Alert Aktif untuk $symbol",
+                                    text = "No Active Alerts for $symbol",
                                     color = TvTextSecondary,
                                     fontSize = 11.5.sp,
                                     fontWeight = FontWeight.SemiBold
                                 )
                                 Spacer(Modifier.height(4.dp))
                                 Text(
-                                    text = "Buat alert baru untuk menerima notifikasi saat target tercapai.",
+                                    text = "Create an alert to receive notifications when target is reached.",
                                     color = Color(0xFF78909C),
                                     fontSize = 10.sp
                                 )
@@ -441,7 +465,7 @@ fun PriceAlertDialog(
         },
         confirmButton = {
             TextButton(onClick = onDismiss) {
-                Text("Tutup", color = Color(0xFFB0BEC5), fontSize = 12.sp)
+                Text("Close", color = Color(0xFFB0BEC5), fontSize = 12.sp)
             }
         }
     )

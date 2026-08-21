@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -117,14 +118,12 @@ fun RadarBuySection(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = "🛡️ KALKULATOR RISIKO (POSITION SIZING)",
-                            color = Color(0xFF00E5FF),
-                            fontSize = 10.5.sp,
-                            fontWeight = FontWeight.Black
-                        )
-                    }
+                    Text(
+                        text = "🛡️ POSITION SIZING (RISK MGMT)",
+                        color = Color(0xFF00E5FF),
+                        fontSize = 10.5.sp,
+                        fontWeight = FontWeight.Black
+                    )
 
                     TextButton(
                         onClick = { isRiskCalculatorOpen = !isRiskCalculatorOpen },
@@ -132,7 +131,7 @@ fun RadarBuySection(
                         modifier = Modifier.height(24.dp)
                     ) {
                         Text(
-                            text = if (isRiskCalculatorOpen) "Tutup ▲" else "Buka Hitung ▼",
+                            text = if (isRiskCalculatorOpen) "Close ▲" else "Calculate ▼",
                             color = Color(0xFF00E5FF),
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold
@@ -150,7 +149,7 @@ fun RadarBuySection(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text(
-                            text = "Atur % risiko modal agar kerugian per transaksi terkontrol secara matematis:",
+                            text = "Control maximum loss per trade based on risk budget:",
                             color = Color(0xFFB0BEC5),
                             fontSize = 9.5.sp
                         )
@@ -161,7 +160,7 @@ fun RadarBuySection(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("1. Risiko Modal (Risk %):", color = Color(0xFF90A4AE), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            Text("1. Risk / Trade:", color = Color(0xFF90A4AE), fontSize = 10.sp, fontWeight = FontWeight.Bold)
                             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                 listOf(1.0, 2.0, 3.0, 5.0).forEach { r ->
                                     Box(
@@ -175,14 +174,14 @@ fun RadarBuySection(
                                                 if (selectedRiskPct == r) Color(0xFF00E5FF) else Color(0xFF263C52),
                                                 RoundedCornerShape(4.dp)
                                             )
-                                            .padding(horizontal = 6.dp, vertical = 3.dp)
+                                            .clickable { selectedRiskPct = r }
+                                            .padding(horizontal = 8.dp, vertical = 4.dp)
                                     ) {
                                         Text(
                                             text = "$r%",
                                             color = if (selectedRiskPct == r) Color.Black else Color.White,
-                                            fontSize = 9.5.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            modifier = Modifier.padding(0.dp)
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold
                                         )
                                     }
                                 }
@@ -195,7 +194,7 @@ fun RadarBuySection(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("2. Jarak Stop Loss (SL %):", color = Color(0xFF90A4AE), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            Text("2. Stop Loss (SL):", color = Color(0xFF90A4AE), fontSize = 10.sp, fontWeight = FontWeight.Bold)
                             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                 listOf(1.5, 2.5, 3.5, 5.0).forEach { sl ->
                                     Box(
@@ -209,12 +208,13 @@ fun RadarBuySection(
                                                 if (selectedSlTolerancePct == sl) TvRed else Color(0xFF263C52),
                                                 RoundedCornerShape(4.dp)
                                             )
-                                            .padding(horizontal = 6.dp, vertical = 3.dp)
+                                            .clickable { selectedSlTolerancePct = sl }
+                                            .padding(horizontal = 8.dp, vertical = 4.dp)
                                     ) {
                                         Text(
                                             text = "-$sl%",
-                                            color = if (selectedSlTolerancePct == sl) Color.White else Color.White,
-                                            fontSize = 9.5.sp,
+                                            color = Color.White,
+                                            fontSize = 10.sp,
                                             fontWeight = FontWeight.Bold
                                         )
                                     }
@@ -232,11 +232,11 @@ fun RadarBuySection(
                         ) {
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text("Maksimal Rugi Ditanggung:", color = Color(0xFF78909C), fontSize = 9.5.sp)
-                                    Text("Rp ${PriceFormatter.formatIdrNumber(maxRiskAmountIdr)} ($selectedRiskPct% Modal)", color = TvRed, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                    Text("Max Loss Tolerated:", color = Color(0xFF78909C), fontSize = 9.5.sp)
+                                    Text("Rp ${PriceFormatter.formatIdrNumber(maxRiskAmountIdr)} ($selectedRiskPct% Capital)", color = TvRed, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                 }
                                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text("Ukuran Beli Ideal (Position Size):", color = Color(0xFF00E5FF), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                    Text("Suggested Position Size:", color = Color(0xFF00E5FF), fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                     Text("Rp ${PriceFormatter.formatIdrNumber(calculatedPositionSizeIdr)}", color = Color(0xFF00E5FF), fontSize = 11.sp, fontWeight = FontWeight.Black)
                                 }
                             }
@@ -251,10 +251,10 @@ fun RadarBuySection(
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E5FF), contentColor = Color.Black),
                             shape = RoundedCornerShape(6.dp),
-                            modifier = Modifier.fillMaxWidth().height(32.dp),
+                            modifier = Modifier.fillMaxWidth().height(34.dp),
                             contentPadding = PaddingValues(0.dp)
                         ) {
-                            Text("✓ Gunakan Ukuran Posisi Ini (${PriceFormatter.formatIdrNumber(calculatedPositionSizeIdr)} IDR)", fontSize = 10.5.sp, fontWeight = FontWeight.Bold)
+                            Text("✓ Apply Size (${PriceFormatter.formatIdrNumber(calculatedPositionSizeIdr)} IDR)", fontSize = 10.5.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
