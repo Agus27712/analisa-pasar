@@ -1,6 +1,7 @@
 package agu.analys.service
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import okhttp3.FormBody
 import okhttp3.OkHttpClient
@@ -13,7 +14,7 @@ import javax.crypto.spec.SecretKeySpec
 
 /**
  * INDODAX Trade API 2.0 ONLY.
- * Docs: https://github.com/btcid/indodax-official-api-docs/blob/master/INDODAX-TradeAPI-2.md
+ * Fetch sengaja pelan biar tidak kena -2015 / rate-limit IP.
  */
 object IndodaxTradeApiV2 {
     private const val V2_BASE_URL = "https://api.indodax.com"
@@ -21,6 +22,8 @@ object IndodaxTradeApiV2 {
     private const val RECV_WINDOW_MS = 10_000L
     /** Docs: interval startTime–endTime max 7 hari. */
     private const val MY_TRADES_MAX_RANGE_MS = 7L * 24 * 60 * 60 * 1000
+    /** Jeda antar signed request (aman vs rate limit). */
+    private const val REQUEST_GAP_MS = 1_200L
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(12, TimeUnit.SECONDS)
@@ -39,7 +42,6 @@ object IndodaxTradeApiV2 {
     private fun encodeQuery(params: LinkedHashMap<String, String>): String =
         params.entries.joinToString("&") { "${it.key}=${it.value}" }
 
-    /** Symbol format docs myTrades: btcidr (lowercase). Order create: BTCIDR (uppercase). */
     fun toTradeSymbol(symbol: String): String =
         IndodaxMarketService.toPairId(symbol).replace("_", "").lowercase()
 
@@ -84,12 +86,8 @@ object IndodaxTradeApiV2 {
         val fullUrl = "$V2_BASE_URL$path"
 
         when (method.uppercase()) {
-            "GET" -> {
-                requestBuilder.url("$fullUrl?$payloadString").get()
-            }
-            "DELETE" -> {
-                requestBuilder.url("$fullUrl?$payloadString").delete()
-            }
+            "GET" -> requestBuilder.url("$fullUrl?$payloadString").get()
+            "DELETE" -> requestBuilder.url("$fullUrl?$payloadString").delete()
             "POST" -> {
                 requestBuilder.url(fullUrl)
                 val formBody = FormBody.Builder()
@@ -122,12 +120,14 @@ object IndodaxTradeApiV2 {
             -1021 -> "Timestamp invalid (-1021). Sinkronkan jam HP."
             -1022 -> "Signature invalid (-1022). Secret Key salah."
             -1121 -> "Invalid symbol (-1121)."
-            -2015 -> "Akses ditolak (-2015). IP whitelist / permission View."
+            -2015 -> "Akses ditolak (-2015). IP whitelist / permission / rate-limit sementara. Jangan spam refresh."
             -2014 -> "API Key tidak di header (-2014)."
+            -1003 -> "Too many requests (-1003). Tunggu beberapa menit."
             else -> "Error V2 [$code]: $msg | $fallback"
         }
     }
 
+    /** 1 request saja — aman. */
     suspend fun getAccount(apiKey: String, secretKey: String): Pair<Map<String, Double>?, String> {
         if (apiKey.isBlank() || secretKey.isBlank()) return null to "API Key / Secret Key kosong."
         val timestamp = serverTimeMs()
@@ -211,41 +211,14 @@ object IndodaxTradeApiV2 {
         return if (ok) true to "Order $orderId dibatalkan (V2)." else false to raw
     }
 
-    suspend fun orderHistory(
-        apiKey: String,
-        secretKey: String,
-        symbol: String,
-        limit: Int = 100
-    ): Pair<Boolean, String> {
-        val formattedSymbol = toTradeSymbol(symbol)
-        val end = serverTimeMs()
-        val start = end - MY_TRADES_MAX_RANGE_MS
-        return signedV2Request(
-            apiKey,
-            secretKey,
-            "GET",
-            "/api/v2/order/histories",
-            linkedMapOf(
-                "symbol" to formattedSymbol,
-                "limit" to limit.coerceIn(10, 1000).toString(),
-                "sort" to "desc",
-                "startTime" to start.toString(),
-                "endTime" to end.toString(),
-                "timestamp" to end.toString(),
-                "recvWindow" to RECV_WINDOW_MS.toString()
-            )
-        )
-    }
-
     /**
-     * Trade fills untuk 1 window (max 7 hari per docs).
-     * Response: { "data": [ { tradeId, isBuyer, price, qty, time, ... } ] }
+     * 1 window max 7 hari (sesuai docs). Jangan loop banyak window.
      */
     suspend fun myTrades(
         apiKey: String,
         secretKey: String,
         symbol: String,
-        limit: Int = 1000,
+        limit: Int = 500,
         startTimeMs: Long? = null,
         endTimeMs: Long? = null
     ): Pair<Boolean, String> {
@@ -265,39 +238,23 @@ object IndodaxTradeApiV2 {
     }
 
     /**
-     * Ambil fills BUY dalam beberapa window 7-hari (default ~90 hari ke belakang).
-     * Dipakai hitung avg buy price dari posisi yang masih dipegang.
+     * Hanya **1 request** (7 hari terakhir). Tidak multi-window biar aman dari -2015.
      */
-    suspend fun myTradesMultiWindow(
+    suspend fun myTradesRecent(
         apiKey: String,
         secretKey: String,
         symbol: String,
-        lookbackDays: Int = 90,
-        limitPerWindow: Int = 1000
+        limit: Int = 500
     ): List<JSONObject> {
-        val now = serverTimeMs()
-        val windows = ((lookbackDays + 6) / 7).coerceIn(1, 15)
-        val all = mutableListOf<JSONObject>()
-        val seenIds = mutableSetOf<String>()
-
-        for (w in 0 until windows) {
-            val end = now - (w * MY_TRADES_MAX_RANGE_MS)
-            val start = end - MY_TRADES_MAX_RANGE_MS
-            val (ok, raw) = myTrades(apiKey, secretKey, symbol, limitPerWindow, start, end)
-            if (!ok) continue
-
-            val arr = parseTradesArray(raw) ?: continue
-            for (i in 0 until arr.length()) {
-                val t = arr.optJSONObject(i) ?: continue
-                val id = t.optString("tradeId", "")
-                if (id.isNotBlank() && !seenIds.add(id)) continue
-                all.add(t)
-            }
-            kotlinx.coroutines.delay(350)
+        val (ok, raw) = myTrades(apiKey, secretKey, symbol, limit)
+        if (!ok) return emptyList()
+        val arr = parseTradesArray(raw) ?: return emptyList()
+        val list = mutableListOf<JSONObject>()
+        for (i in 0 until arr.length()) {
+            arr.optJSONObject(i)?.let { list.add(it) }
         }
-
-        all.sortByDescending { it.optLong("time", 0L) }
-        return all
+        list.sortByDescending { it.optLong("time", 0L) }
+        return list
     }
 
     fun parseTradesArray(raw: String): JSONArray? {
