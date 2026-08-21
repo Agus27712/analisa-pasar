@@ -13,6 +13,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material.icons.filled.CropRotate
 import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.Icon
@@ -42,7 +44,9 @@ fun DetailTopBar(
     onOpenSimulation: () -> Unit,
     onOpenLearning: () -> Unit,
     onToggleWatchlist: () -> Unit,
-    onOpenLandscapeChart: () -> Unit
+    onOpenLandscapeChart: () -> Unit,
+    activeAlertCount: Int = 0,
+    onOpenAlerts: (() -> Unit)? = null
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -72,6 +76,34 @@ fun DetailTopBar(
                 color = TvTextSecondary,
                 fontSize = 12.sp
             )
+        }
+
+        if (onOpenAlerts != null) {
+            Box(contentAlignment = Alignment.TopEnd) {
+                IconButton(onClick = onOpenAlerts) {
+                    Icon(
+                        imageVector = if (activeAlertCount > 0) Icons.Default.Notifications else Icons.Default.NotificationsNone,
+                        contentDescription = "Alert Pasar",
+                        tint = if (activeAlertCount > 0) Color(0xFF00E5FF) else TvTextSecondary,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+                if (activeAlertCount > 0) {
+                    Box(
+                        modifier = Modifier
+                            .offset(x = (-4).dp, y = 4.dp)
+                            .background(Color(0xFF00E5FF), RoundedCornerShape(10.dp))
+                            .padding(horizontal = 4.dp, vertical = 1.dp)
+                    ) {
+                        Text(
+                            text = "$activeAlertCount",
+                            color = Color.Black,
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Black
+                        )
+                    }
+                }
+            }
         }
 
         IconButton(onClick = onOpenSimulation) {

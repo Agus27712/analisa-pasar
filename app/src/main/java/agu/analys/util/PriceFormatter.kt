@@ -149,4 +149,32 @@ object PriceFormatter {
         val formatted = DecimalFormat("#,##0", symbols).format(rounded)
         return if (amount < 0) "- $formatted" else formatted
     }
+
+    /** Parser serbaguna untuk input nominal IDR/koin dari pengguna (menangani titik/koma/spasi/teks) */
+    fun parseCleanIdrDouble(input: String): Double {
+        if (input.isBlank()) return 0.0
+        val cleaned = input.trim()
+            .replace("Rp", "", ignoreCase = true)
+            .replace("IDR", "", ignoreCase = true)
+            .replace("BTC", "", ignoreCase = true)
+            .trim()
+        if (cleaned.isBlank()) return 0.0
+
+        val hasComma = cleaned.contains(",")
+        val hasDot = cleaned.contains(".")
+
+        val sanitized = if (hasDot && hasComma) {
+            // Contoh: "1.367.959,50" -> titik adalah ribuan, koma adalah desimal
+            cleaned.replace(".", "").replace(",", ".")
+        } else if (hasDot) {
+            // Dalam konteks IDR Indodax, titik digunakan sebagai pemisah ribuan (contoh: "37.987" atau "1.367.959.000")
+            cleaned.replace(".", "")
+        } else if (hasComma) {
+            cleaned.replace(",", ".")
+        } else {
+            cleaned
+        }
+
+        return sanitized.filter { it.isDigit() || it == '.' }.toDoubleOrNull() ?: 0.0
+    }
 }

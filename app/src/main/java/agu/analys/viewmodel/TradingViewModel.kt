@@ -58,6 +58,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     private val prefs = AppPreferences(application)
     private val marketCache = MarketDataCache(application)
     private val positionStore = SpotPositionStore(application)
+    private val alertStore = agu.analys.trading.PriceAlertStore(application)
     private val simulationStore = SimulationTradeStore(application)
     private val simCoordinator = SimulationCoordinator(simulationStore)
     private val realCoordinator = RealTradeCoordinator(viewModelScope, prefs)
@@ -103,6 +104,9 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
 
         // Trigger Realtime Simulation Matching Engine
         simCoordinator.onPriceTick(normalized.symbol, normalized.price, normalized.high24h, normalized.low24h)
+
+        // Trigger Alerts and Trailing Stop Loss Monitor
+        checkAlertsAndTrailing(normalized.symbol, normalized.price, currentIndicators.value.rsi14.takeIf { it.isFinite() })
     }
 
     private fun handleWebSocketCandle(candle: CandleBar) {
@@ -209,6 +213,9 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
 
     private val _spotPosition = MutableStateFlow(SpotPosition())
     val spotPosition: StateFlow<SpotPosition> = _spotPosition.asStateFlow()
+
+    private val _priceAlerts = MutableStateFlow<List<agu.analys.model.PriceAlert>>(emptyList())
+    val priceAlerts: StateFlow<List<agu.analys.model.PriceAlert>> = _priceAlerts.asStateFlow()
 
     private val _strategyMode = MutableStateFlow(prefs.strategyMode)
     val strategyMode: StateFlow<StrategyMode> = _strategyMode.asStateFlow()
@@ -462,6 +469,113 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         refreshSpotPosition()
     }
 
+    fun setTrailingStop(enabled: Boolean, trailingPercent: Double) {
+        val symbol = _selectedPair.value.symbol
+        val currentP = _currentTick.value?.price ?: _spotPosition.value.entryPrice
+        positionStore.setTrailingStop(symbol, enabled, trailingPercent, currentP)
+        refreshSpotPosition()
+    }
+
+    fun resetTrailingTrigger() {
+        val symbol = _selectedPair.value.symbol
+        positionStore.resetTrailingTrigger(symbol)
+        refreshSpotPosition()
+    }
+
+    fun refreshPriceAlerts() {
+        _priceAlerts.value = alertStore.getAlertsForSymbol(_selectedPair.value.symbol)
+    }
+
+    fun addPriceAlert(alert: agu.analys.model.PriceAlert) {
+        alertStore.addAlert(alert)
+        refreshPriceAlerts()
+    }
+
+    fun removePriceAlert(alertId: String) {
+        alertStore.removeAlert(alertId)
+        refreshPriceAlerts()
+    }
+
+    fun togglePriceAlert(alertId: String) {
+        alertStore.toggleAlert(alertId)
+        refreshPriceAlerts()
+    }
+
+    private fun checkAlertsAndTrailing(symbol: String, currentPrice: Double, rsiValue: Double? = null) {
+        if (currentPrice <= 0.0) return
+
+        // 1. Check Trailing Stop Loss
+        val (updatedPos, justTriggered) = positionStore.updateTrailingPrice(symbol, currentPrice)
+        if (justTriggered) {
+            _spotPosition.value = updatedPos
+            agu.analys.util.AlertNotificationHelper.sendPriceAlertNotification(
+                context = getApplication(),
+                title = "🚨 TRAILING STOP LOSS TERPICU ($symbol)",
+                message = "Harga turun ke ${PriceFormatter.formatIdrNumber(currentPrice)} IDR (Batas Trailing: ${PriceFormatter.formatIdrNumber(updatedPos.trailingStopPrice)} IDR). Amankan modal sekarang!",
+                notificationId = (symbol.hashCode() and 0x7FFFFFFF) + 1000
+            )
+        } else if (updatedPos.isTrailingEnabled && symbol == _selectedPair.value.symbol) {
+            _spotPosition.value = updatedPos
+        }
+
+        // 2. Check Price & Indicator Alerts
+        val activeAlerts = alertStore.getActiveAlertsForSymbol(symbol)
+        for (alert in activeAlerts) {
+            var shouldTrigger = false
+            var triggerTitle = ""
+            var triggerMsg = ""
+
+            when (alert.type) {
+                agu.analys.model.PriceAlertType.PRICE_ABOVE -> {
+                    if (currentPrice >= alert.targetPrice) {
+                        shouldTrigger = true
+                        triggerTitle = "🎯 Target Tercapai: $symbol Naik!"
+                        triggerMsg = "Harga saat ini ${PriceFormatter.formatIdrNumber(currentPrice)} IDR telah melampaui target ${PriceFormatter.formatIdrNumber(alert.targetPrice)} IDR. ${alert.note}"
+                    }
+                }
+                agu.analys.model.PriceAlertType.PRICE_BELOW -> {
+                    if (currentPrice <= alert.targetPrice) {
+                        shouldTrigger = true
+                        triggerTitle = "⚠️ Support / Stop Alert: $symbol Turun!"
+                        triggerMsg = "Harga saat ini ${PriceFormatter.formatIdrNumber(currentPrice)} IDR telah menyentuh batas bawah ${PriceFormatter.formatIdrNumber(alert.targetPrice)} IDR. ${alert.note}"
+                    }
+                }
+                agu.analys.model.PriceAlertType.RSI_OVERSOLD -> {
+                    if (rsiValue != null && rsiValue < 30.0) {
+                        shouldTrigger = true
+                        triggerTitle = "⚡ RSI Oversold ($symbol): Potensi Rebound"
+                        triggerMsg = "RSI berada di level ${String.format(java.util.Locale.US, "%.1f", rsiValue)} (< 30). Waktu yang tepat untuk pantau sinyal Reclaim! ${alert.note}"
+                    }
+                }
+                agu.analys.model.PriceAlertType.RSI_OVERBOUGHT -> {
+                    if (rsiValue != null && rsiValue > 70.0) {
+                        shouldTrigger = true
+                        triggerTitle = "🔥 RSI Overbought ($symbol): Area Jenuh Beli"
+                        triggerMsg = "RSI mencapai ${String.format(java.util.Locale.US, "%.1f", rsiValue)} (> 70). Waspada potensi koreksi/take profit! ${alert.note}"
+                    }
+                }
+                agu.analys.model.PriceAlertType.SECOND_WAVE_RECLAIM -> {
+                    if (aiSignalState.value.action == SignalAction.BUY) {
+                        shouldTrigger = true
+                        triggerTitle = "🚀 Sinyal Reclaim Terkonfirmasi ($symbol)"
+                        triggerMsg = "Second-Wave Algorithm mendeteksi konfirmasi BUY di harga ${PriceFormatter.formatIdrNumber(currentPrice)} IDR. ${alert.note}"
+                    }
+                }
+            }
+
+            if (shouldTrigger) {
+                alertStore.markTriggered(alert.id)
+                refreshPriceAlerts()
+                agu.analys.util.AlertNotificationHelper.sendPriceAlertNotification(
+                    context = getApplication(),
+                    title = triggerTitle,
+                    message = triggerMsg.trim(),
+                    notificationId = alert.id.hashCode() and 0x7FFFFFFF
+                )
+            }
+        }
+    }
+
     private fun startDashboardPolling() {
         dashboardPollJob?.cancel()
         dashboardPollJob = viewModelScope.launch {
@@ -600,6 +714,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         _selectedPair.value = pair
         lastSavedSignalTimestamp = 0L
         refreshSpotPosition()
+        refreshPriceAlerts()
 
         val (cachedTick, cachedCandles) = marketCache.loadPairSnapshot(pair.symbol, _selectedTimeframe.value)
         if (cachedTick != null || cachedCandles.isNotEmpty()) {
@@ -653,6 +768,9 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
 
                     // Trigger Realtime Simulation Matching Engine
                     simCoordinator.onPriceTick(normalizedTick.symbol, normalizedTick.price, normalizedTick.high24h, normalizedTick.low24h)
+
+                    // Trigger Alerts & Trailing Stop Monitor
+                    checkAlertsAndTrailing(normalizedTick.symbol, normalizedTick.price, currentIndicators.value.rsi14.takeIf { it.isFinite() })
 
                     val now = System.currentTimeMillis()
                     val selectedTf = _selectedTimeframe.value

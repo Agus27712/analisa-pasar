@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -45,11 +46,21 @@ fun RadarSellSection(
     activeFeePct: Double,
     isRealMode: Boolean,
     onExecuteSell: ((Double) -> Unit)?,
-    onSetManualBuyPrice: ((Double, Double) -> Unit)? = null
+    onSetManualBuyPrice: ((Double, Double) -> Unit)? = null,
+    spotPosition: agu.analys.trading.SpotPosition? = null,
+    onSetTrailingStop: ((Boolean, Double) -> Unit)? = null,
+    onResetTrailingTrigger: (() -> Unit)? = null
 ) {
     var customSellQtyInput by remember { mutableStateOf("") }
     var isCustomSellQtyOpen by remember { mutableStateOf(false) }
     var selectedSellPercent by remember { mutableIntStateOf(100) }
+    var isTrailingOptionsOpen by remember { mutableStateOf(false) }
+
+    val isTrailingActive = spotPosition?.isTrailingEnabled == true
+    val trailingPercent = spotPosition?.trailingPercent ?: 2.0
+    val peakPrice = spotPosition?.peakPrice ?: validPrice
+    val trailingStopPrice = spotPosition?.trailingStopPrice ?: (peakPrice * (1.0 - trailingPercent / 100.0))
+    val isTrailingTriggered = spotPosition?.isTrailingTriggered == true
 
     // Dialog Input Manual (>7 Hari)
     var showManualDialog by remember { mutableStateOf(false) }
@@ -106,15 +117,15 @@ fun RadarSellSection(
                         value = manualAvgBuyInput,
                         onValueChange = { input ->
                             manualAvgBuyInput = input
-                            val p = input.toDoubleOrNull()
-                            if (p != null && p > 0.0 && availableCoin > 0.0) {
+                            val p = PriceFormatter.parseCleanIdrDouble(input)
+                            if (p > 0.0 && availableCoin > 0.0) {
                                 val calcTotal = p * availableCoin
-                                manualTotalCostInput = String.format(Locale.US, "%.0f", calcTotal)
+                                manualTotalCostInput = PriceFormatter.formatIdrNumber(calcTotal)
                             }
                         },
                         label = { Text("Harga Rata-rata Beli ($quoteAsset)", fontSize = 11.sp) },
                         placeholder = { Text("Contoh: 1.367.959.000", fontSize = 11.sp) },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = Color(0xFFFFD54F),
@@ -131,15 +142,15 @@ fun RadarSellSection(
                         value = manualTotalCostInput,
                         onValueChange = { input ->
                             manualTotalCostInput = input
-                            val total = input.toDoubleOrNull()
-                            if (total != null && total > 0.0 && availableCoin > 0.0) {
+                            val total = PriceFormatter.parseCleanIdrDouble(input)
+                            if (total > 0.0 && availableCoin > 0.0) {
                                 val calcPrice = total / availableCoin
-                                manualAvgBuyInput = String.format(Locale.US, "%.2f", calcPrice)
+                                manualAvgBuyInput = PriceFormatter.formatIdrNumber(calcPrice)
                             }
                         },
                         label = { Text("Total Order Terisi / Modal ($quoteAsset)", fontSize = 11.sp) },
                         placeholder = { Text("Contoh: 37.987", fontSize = 11.sp) },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = Color(0xFFFFD54F),
@@ -165,8 +176,8 @@ fun RadarSellSection(
             confirmButton = {
                 Button(
                     onClick = {
-                        val parsedPrice = manualAvgBuyInput.toDoubleOrNull() ?: 0.0
-                        val parsedTotal = manualTotalCostInput.toDoubleOrNull() ?: 0.0
+                        val parsedPrice = PriceFormatter.parseCleanIdrDouble(manualAvgBuyInput)
+                        val parsedTotal = PriceFormatter.parseCleanIdrDouble(manualTotalCostInput)
                         val finalPrice = if (parsedPrice > 0.0) parsedPrice else if (parsedTotal > 0.0 && availableCoin > 0.0) parsedTotal / availableCoin else 0.0
                         val finalTotal = if (parsedTotal > 0.0) parsedTotal else finalPrice * availableCoin
 
@@ -531,6 +542,126 @@ fun RadarSellSection(
                         ) {
                             Text("+ Input Manual", fontSize = 10.sp, fontWeight = FontWeight.Bold)
                         }
+                    }
+                }
+            }
+        }
+
+        // --- TRAILING STOP LOSS PROTECTION CARD ---
+        if (effectiveBuyPrice > 0.0 || availableCoin > 0.0) {
+            Spacer(Modifier.height(8.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        if (isTrailingTriggered) Color(0xFF331515) else if (isTrailingActive) Color(0xFF0D253A) else Color(0xFF101B26),
+                        RoundedCornerShape(10.dp)
+                    )
+                    .border(
+                        1.dp,
+                        if (isTrailingTriggered) TvRed else if (isTrailingActive) Color(0xFF00E5FF) else Color(0xFF1E3247),
+                        RoundedCornerShape(10.dp)
+                    )
+                    .padding(10.dp)
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "🔒 TRAILING STOP LOSS",
+                                color = if (isTrailingTriggered) TvRed else if (isTrailingActive) Color(0xFF00E5FF) else Color(0xFF90A4AE),
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.Black
+                            )
+                            if (isTrailingTriggered) {
+                                Spacer(Modifier.width(6.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .background(TvRed, RoundedCornerShape(4.dp))
+                                        .padding(horizontal = 4.dp, vertical = 1.dp)
+                                ) {
+                                    Text("TERPICU / EXIT NOW", color = Color.White, fontSize = 8.5.sp, fontWeight = FontWeight.Black)
+                                }
+                            }
+                        }
+
+                        Switch(
+                            checked = isTrailingActive,
+                            onCheckedChange = { enabled ->
+                                onSetTrailingStop?.invoke(enabled, trailingPercent)
+                            },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color(0xFF00E5FF),
+                                checkedTrackColor = Color(0xFF00E5FF).copy(alpha = 0.4f),
+                                uncheckedThumbColor = Color(0xFF78909C),
+                                uncheckedTrackColor = Color(0xFF1E2D3D)
+                            ),
+                            modifier = Modifier.height(24.dp)
+                        )
+                    }
+
+                    if (isTrailingActive) {
+                        // Preset Persentase Trailing
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Jarak Trailing (Dari Peak):", color = Color(0xFFB0BEC5), fontSize = 10.sp)
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                listOf(1.5, 2.0, 3.0, 5.0).forEach { pct ->
+                                    Box(
+                                        modifier = Modifier
+                                            .background(
+                                                if (trailingPercent == pct) Color(0xFF00E5FF) else Color(0xFF16273B),
+                                                RoundedCornerShape(4.dp)
+                                            )
+                                            .border(
+                                                0.5.dp,
+                                                if (trailingPercent == pct) Color(0xFF00E5FF) else Color(0xFF263C52),
+                                                RoundedCornerShape(4.dp)
+                                            )
+                                            .clickable { onSetTrailingStop?.invoke(true, pct) }
+                                            .padding(horizontal = 6.dp, vertical = 3.dp)
+                                    ) {
+                                        Text(
+                                            text = "$pct%",
+                                            color = if (trailingPercent == pct) Color.Black else Color.White,
+                                            fontSize = 9.5.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // Info Real-time Trailing
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color(0xFF0A1624), RoundedCornerShape(6.dp))
+                                .padding(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("Harga Puncak Tercatat:", color = Color(0xFF78909C), fontSize = 9.5.sp)
+                                Text("${PriceFormatter.formatIdrNumber(peakPrice)} $quoteAsset", color = Color(0xFFFFD54F), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            }
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("Garis Stop Loss Dinamis:", color = Color(0xFF00E5FF), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                Text("${PriceFormatter.formatIdrNumber(trailingStopPrice)} $quoteAsset", color = if (isTrailingTriggered) TvRed else Color(0xFF00E5FF), fontSize = 10.5.sp, fontWeight = FontWeight.Black)
+                            }
+                        }
+                    } else {
+                        Text(
+                            text = "Aktifkan untuk mengunci profit otomatis: stop loss naik mengikuti kenaikan harga puncak.",
+                            color = Color(0xFF78909C),
+                            fontSize = 9.5.sp
+                        )
                     }
                 }
             }

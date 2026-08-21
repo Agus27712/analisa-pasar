@@ -62,6 +62,9 @@ fun WaitingEntryRadarCard(
     onExecuteBuy: ((Double) -> Unit)? = null,
     onExecuteSell: ((Double) -> Unit)? = null,
     onSetManualBuyPrice: ((Double, Double) -> Unit)? = null,
+    spotPosition: agu.analys.trading.SpotPosition? = null,
+    onSetTrailingStop: ((Boolean, Double) -> Unit)? = null,
+    onResetTrailingTrigger: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val mtf = signal.mtf
@@ -380,7 +383,10 @@ fun WaitingEntryRadarCard(
             isRealMode = isRealBuyMode,
             onExecuteBuy = onExecuteBuy,
             onExecuteSell = onExecuteSell,
-            onSetManualBuyPrice = onSetManualBuyPrice
+            onSetManualBuyPrice = onSetManualBuyPrice,
+            spotPosition = spotPosition,
+            onSetTrailingStop = onSetTrailingStop,
+            onResetTrailingTrigger = onResetTrailingTrigger
         )
 
         Spacer(Modifier.height(10.dp))

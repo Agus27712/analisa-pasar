@@ -44,7 +44,18 @@ fun RadarBuySection(
 ) {
     var customNominalInput by remember { mutableStateOf("") }
     var isCustomNominalOpen by remember { mutableStateOf(false) }
+    var isRiskCalculatorOpen by remember { mutableStateOf(false) }
+    var selectedRiskPct by remember { mutableDoubleStateOf(2.0) } // Default risk 2% per trade
+    var selectedSlTolerancePct by remember { mutableDoubleStateOf(2.5) } // Default SL tolerance 2.5%
+
     val focusManager = LocalFocusManager.current
+
+    // Kalkulasi Manajemen Risiko & Position Sizing
+    val effectiveCapital = if (availableIdr > 0) availableIdr else 1000000.0 // Default 1jt jika saldo kosong untuk demo
+    val maxRiskAmountIdr = effectiveCapital * (selectedRiskPct / 100.0)
+    val calculatedPositionSizeIdr = if (selectedSlTolerancePct > 0) {
+        (maxRiskAmountIdr / (selectedSlTolerancePct / 100.0)).coerceAtLeast(10000.0).coerceAtMost(if (availableIdr > 0) availableIdr else 100000000.0)
+    } else 10000.0
 
     val grossBuyOrderAmount = selectedNominalIdr.coerceAtLeast(10000.0)
     val buyFeeIdr = grossBuyOrderAmount * (activeFeePct / 100.0)
@@ -87,6 +98,166 @@ fun RadarBuySection(
                     fontSize = 11.5.sp,
                     fontWeight = FontWeight.Black
                 )
+            }
+        }
+
+        Spacer(Modifier.height(8.dp))
+
+        // Toggle Expandable Risk Management & Position Sizing Calculator
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color(0xFF0F2338), RoundedCornerShape(8.dp))
+                .border(1.dp, Color(0xFF00E5FF).copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                .padding(horizontal = 10.dp, vertical = 8.dp)
+        ) {
+            Column {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "🛡️ KALKULATOR RISIKO (POSITION SIZING)",
+                            color = Color(0xFF00E5FF),
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Black
+                        )
+                    }
+
+                    TextButton(
+                        onClick = { isRiskCalculatorOpen = !isRiskCalculatorOpen },
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
+                        modifier = Modifier.height(24.dp)
+                    ) {
+                        Text(
+                            text = if (isRiskCalculatorOpen) "Tutup ▲" else "Buka Hitung ▼",
+                            color = Color(0xFF00E5FF),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                AnimatedVisibility(
+                    visible = isRiskCalculatorOpen,
+                    enter = fadeIn() + expandVertically(),
+                    exit = fadeOut() + shrinkVertically()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(top = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "Atur % risiko modal agar kerugian per transaksi terkontrol secara matematis:",
+                            color = Color(0xFFB0BEC5),
+                            fontSize = 9.5.sp
+                        )
+
+                        // Selector Risk %
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("1. Risiko Modal (Risk %):", color = Color(0xFF90A4AE), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                listOf(1.0, 2.0, 3.0, 5.0).forEach { r ->
+                                    Box(
+                                        modifier = Modifier
+                                            .background(
+                                                if (selectedRiskPct == r) Color(0xFF00E5FF) else Color(0xFF16273B),
+                                                RoundedCornerShape(4.dp)
+                                            )
+                                            .border(
+                                                0.5.dp,
+                                                if (selectedRiskPct == r) Color(0xFF00E5FF) else Color(0xFF263C52),
+                                                RoundedCornerShape(4.dp)
+                                            )
+                                            .padding(horizontal = 6.dp, vertical = 3.dp)
+                                    ) {
+                                        Text(
+                                            text = "$r%",
+                                            color = if (selectedRiskPct == r) Color.Black else Color.White,
+                                            fontSize = 9.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(0.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // Selector Stop Loss %
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("2. Jarak Stop Loss (SL %):", color = Color(0xFF90A4AE), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                listOf(1.5, 2.5, 3.5, 5.0).forEach { sl ->
+                                    Box(
+                                        modifier = Modifier
+                                            .background(
+                                                if (selectedSlTolerancePct == sl) TvRed else Color(0xFF16273B),
+                                                RoundedCornerShape(4.dp)
+                                            )
+                                            .border(
+                                                0.5.dp,
+                                                if (selectedSlTolerancePct == sl) TvRed else Color(0xFF263C52),
+                                                RoundedCornerShape(4.dp)
+                                            )
+                                            .padding(horizontal = 6.dp, vertical = 3.dp)
+                                    ) {
+                                        Text(
+                                            text = "-$sl%",
+                                            color = if (selectedSlTolerancePct == sl) Color.White else Color.White,
+                                            fontSize = 9.5.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // Ringkasan Formula
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color(0xFF0A1420), RoundedCornerShape(6.dp))
+                                .border(0.5.dp, Color(0xFF162B40), RoundedCornerShape(6.dp))
+                                .padding(8.dp)
+                        ) {
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text("Maksimal Rugi Ditanggung:", color = Color(0xFF78909C), fontSize = 9.5.sp)
+                                    Text("Rp ${PriceFormatter.formatIdrNumber(maxRiskAmountIdr)} ($selectedRiskPct% Modal)", color = TvRed, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                }
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text("Ukuran Beli Ideal (Position Size):", color = Color(0xFF00E5FF), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                    Text("Rp ${PriceFormatter.formatIdrNumber(calculatedPositionSizeIdr)}", color = Color(0xFF00E5FF), fontSize = 11.sp, fontWeight = FontWeight.Black)
+                                }
+                            }
+                        }
+
+                        // Tombol Terapkan Position Size
+                        Button(
+                            onClick = {
+                                onNominalIdrChanged(calculatedPositionSizeIdr)
+                                isCustomNominalOpen = false
+                                isRiskCalculatorOpen = false
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E5FF), contentColor = Color.Black),
+                            shape = RoundedCornerShape(6.dp),
+                            modifier = Modifier.fillMaxWidth().height(32.dp),
+                            contentPadding = PaddingValues(0.dp)
+                        ) {
+                            Text("✓ Gunakan Ukuran Posisi Ini (${PriceFormatter.formatIdrNumber(calculatedPositionSizeIdr)} IDR)", fontSize = 10.5.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
             }
         }
 

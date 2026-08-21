@@ -22,8 +22,8 @@ import java.util.concurrent.atomic.AtomicLong
 
 object IndodaxMarketService {
     private val client = OkHttpClient.Builder()
-        .connectTimeout(12, TimeUnit.SECONDS)
-        .readTimeout(15, TimeUnit.SECONDS)
+        .connectTimeout(8, TimeUnit.SECONDS)
+        .readTimeout(8, TimeUnit.SECONDS)
         .retryOnConnectionFailure(true)
         .build()
 
@@ -35,8 +35,8 @@ object IndodaxMarketService {
     // --- Rate limit + retry ---
     private val rateMutex = Mutex()
     private val lastRequestAt = AtomicLong(0L)
-    private const val MIN_INTERVAL_MS = 250L // ~4 req/detik
-    private const val MAX_RETRIES = 3
+    private const val MIN_INTERVAL_MS = 200L
+    private const val MAX_RETRIES = 2
 
     fun toPairId(symbol: String): String {
         val s = symbol.trim().lowercase().replace("/", "_").replace("-", "_").replace(" ", "")
@@ -59,8 +59,8 @@ object IndodaxMarketService {
         }
     }
 
-    /** GET dengan rate-limit + exponential backoff pada 429 / 5xx / network error. */
-    private suspend fun get(url: String): String? {
+    /** GET dengan rate-limit + exponential backoff pada 429 / 5xx / network error. Selalu di Dispatchers.IO */
+    private suspend fun get(url: String): String? = withContext(Dispatchers.IO) {
         var attempt = 0
         while (attempt < MAX_RETRIES) {
             attempt++
@@ -76,20 +76,20 @@ object IndodaxMarketService {
                     val code = response.code
                     val body = response.body?.string()
                     when {
-                        response.isSuccessful -> return body
+                        response.isSuccessful -> return@withContext body
                         code == 429 || code in 500..599 -> {
-                            val backoff = (400L * (1 shl (attempt - 1))).coerceAtMost(4000L)
+                            val backoff = (300L * (1 shl (attempt - 1))).coerceAtMost(1500L)
                             delay(backoff)
                         }
-                        else -> return null // 4xx lain: jangan retry
+                        else -> return@withContext null // 4xx lain: jangan retry
                     }
                 }
             } catch (_: Exception) {
-                val backoff = (300L * (1 shl (attempt - 1))).coerceAtMost(3000L)
+                val backoff = (200L * (1 shl (attempt - 1))).coerceAtMost(1000L)
                 delay(backoff)
             }
         }
-        return null
+        null
     }
 
     private suspend fun fetch24hChange(pair: String, last: Double): Double? {

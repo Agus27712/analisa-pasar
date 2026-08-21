@@ -272,11 +272,14 @@ fun TradeSimulationScreen(
                                         price = p.toLong(),
                                         amountIdr = if (selectedSide == SimulationOrderSide.BUY) totalIdr else q
                                     ) { success, msg ->
-                                        Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
                                         if (success) {
+                                            agu.analys.util.HapticUtil.vibrateTradeSuccess(context)
                                             inputQuantity = ""
                                             inputTotalIdr = ""
+                                        } else {
+                                            agu.analys.util.HapticUtil.vibrateTradeFailure(context)
                                         }
+                                        Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
                                     }
                                     return@SimulationOrderForm
                                 }
@@ -291,11 +294,13 @@ fun TradeSimulationScreen(
 
                                 when (result) {
                                     is SimulationOrderResult.Success -> {
+                                        agu.analys.util.HapticUtil.vibrateTradeSuccess(context)
                                         Toast.makeText(context, result.message, Toast.LENGTH_LONG).show()
                                         inputQuantity = ""
                                         inputTotalIdr = ""
                                     }
                                     is SimulationOrderResult.Error -> {
+                                        agu.analys.util.HapticUtil.vibrateTradeFailure(context)
                                         Toast.makeText(context, result.message, Toast.LENGTH_LONG).show()
                                     }
                                 }

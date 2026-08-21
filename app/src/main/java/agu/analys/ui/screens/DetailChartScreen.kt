@@ -77,6 +77,9 @@ fun DetailChartScreen(
     val wallet by viewModel.simulationWallet.collectAsStateWithLifecycle()
     val realBalance by viewModel.realIndodaxBalance.collectAsStateWithLifecycle()
     val realAvgBuyPrices by viewModel.realAvgBuyPrices.collectAsStateWithLifecycle()
+    val priceAlerts by viewModel.priceAlerts.collectAsStateWithLifecycle()
+
+    var showPriceAlertDialog by remember { mutableStateOf(false) }
 
     val marketStructure = remember(candles) { MarketStructureAnalyzer.analyze(candles) }
     var chartVisible by remember { mutableStateOf(false) }
@@ -126,7 +129,9 @@ fun DetailChartScreen(
             onOpenSimulation = { viewModel.openSimulation(pair) },
             onOpenLearning = { viewModel.openLearning() },
             onToggleWatchlist = { viewModel.toggleWatchlist(pair.symbol) },
-            onOpenLandscapeChart = onOpenLandscapeChart
+            onOpenLandscapeChart = onOpenLandscapeChart,
+            activeAlertCount = priceAlerts.count { it.isEnabled && !it.isTriggered },
+            onOpenAlerts = { showPriceAlertDialog = true }
         )
 
         Spacer(Modifier.height(10.dp))
@@ -175,7 +180,7 @@ fun DetailChartScreen(
                 }
             }
 
-            // Mode Badge (Info-only display, configured in Settings)
+            // Mode Badge + Status Online/Offline Indicator (di samping mode trading)
             val badgeBg = when (strategyMode) {
                 StrategyMode.SCALPING -> Color(0xFF123D2A)
                 StrategyMode.SECOND_WAVE -> Color(0xFF0F3845)
@@ -192,18 +197,27 @@ fun DetailChartScreen(
                 StrategyMode.SWING -> "SWING"
             }
 
-            Box(
-                modifier = Modifier
-                    .background(badgeBg, RoundedCornerShape(6.dp))
-                    .border(1.dp, badgeBorder.copy(alpha = 0.6f), RoundedCornerShape(6.dp))
-                    .padding(horizontal = 10.dp, vertical = 4.dp)
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = badgeText,
-                    color = badgeBorder,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Black
-                )
+                // Indikator titik saja (pulse hijau jika ON, merah jika OFF) di sebelah kiri mode trading
+                OnlineStatusIndicator(isOnline = live)
+
+                // Strategy Mode Badge (Mode Trading)
+                Box(
+                    modifier = Modifier
+                        .background(badgeBg, RoundedCornerShape(6.dp))
+                        .border(1.dp, badgeBorder.copy(alpha = 0.6f), RoundedCornerShape(6.dp))
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = badgeText,
+                        color = badgeBorder,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Black
+                    )
+                }
             }
         }
 
@@ -291,10 +305,12 @@ fun DetailChartScreen(
 
         val availableIdr = if (isRealBuyMode) (realBalance["idr"] ?: 0.0) else wallet.getAvailableIdr()
         val availableCoin = if (isRealBuyMode) (realBalance[pair.baseAsset.lowercase()] ?: realBalance[pair.baseAsset.uppercase()] ?: 0.0) else wallet.getAvailableCoin(pair.baseAsset)
+        val realApiAvg = realAvgBuyPrices[pair.baseAsset.lowercase()] ?: realAvgBuyPrices[pair.baseAsset.uppercase()] ?: 0.0
+        val simApiAvg = wallet.avgBuyPrices[pair.baseAsset.uppercase()] ?: 0.0
         val avgBuyPrice = if (isRealBuyMode) {
-            realAvgBuyPrices[pair.baseAsset.lowercase()] ?: realAvgBuyPrices[pair.baseAsset.uppercase()] ?: 0.0
+            if (realApiAvg > 0.0) realApiAvg else spotPosition.entryPrice
         } else {
-            wallet.avgBuyPrices[pair.baseAsset.uppercase()] ?: 0.0
+            if (simApiAvg > 0.0) simApiAvg else spotPosition.entryPrice
         }
 
         // 1. RADAR PROGRESS ENTRY (STATUS TUNGGU / SIAP / BUY & FEE TRANSAKSI)
@@ -315,6 +331,11 @@ fun DetailChartScreen(
                 if (execPrice > 0) {
                     if (isRealBuyMode) {
                         viewModel.executeRealTrade(pair.symbol, "buy", execPrice.toLong(), nominalIdr) { success, msg ->
+                            if (success) {
+                                agu.analys.util.HapticUtil.vibrateTradeSuccess(context)
+                            } else {
+                                agu.analys.util.HapticUtil.vibrateTradeFailure(context)
+                            }
                             android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
                         }
                     } else {
@@ -325,14 +346,21 @@ fun DetailChartScreen(
                             price = execPrice,
                             quantity = qty
                         )
+                        val isSuccess = res is agu.analys.trading.SimulationOrderResult.Success
                         val msg = when (res) {
                             is agu.analys.trading.SimulationOrderResult.Success -> res.message
                             is agu.analys.trading.SimulationOrderResult.Error -> res.message
                         }
                         viewModel.setOwnership(true, execPrice)
+                        if (isSuccess) {
+                            agu.analys.util.HapticUtil.vibrateTradeSuccess(context)
+                        } else {
+                            agu.analys.util.HapticUtil.vibrateTradeFailure(context)
+                        }
                         android.widget.Toast.makeText(context, "Simulasi Beli Berhasil! " + msg, android.widget.Toast.LENGTH_SHORT).show()
                     }
                 } else {
+                    agu.analys.util.HapticUtil.vibrateTradeFailure(context)
                     android.widget.Toast.makeText(context, "Harga belum tersedia untuk Beli.", android.widget.Toast.LENGTH_SHORT).show()
                 }
             },
@@ -343,9 +371,15 @@ fun DetailChartScreen(
                         val currentCoinBalance = realBalance[pair.baseAsset.lowercase()] ?: realBalance[pair.baseAsset.uppercase()] ?: 0.0
                         if (currentCoinBalance > 0.0 && sellQty > 0.0) {
                             viewModel.executeRealTrade(pair.symbol, "sell", execPrice.toLong(), sellQty.coerceAtMost(currentCoinBalance)) { success, msg ->
+                                if (success) {
+                                    agu.analys.util.HapticUtil.vibrateTradeSuccess(context)
+                                } else {
+                                    agu.analys.util.HapticUtil.vibrateTradeFailure(context)
+                                }
                                 android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
                             }
                         } else {
+                            agu.analys.util.HapticUtil.vibrateTradeFailure(context)
                             android.widget.Toast.makeText(context, "Saldo koin ${pair.baseAsset} tidak mencukupi untuk Jual.", android.widget.Toast.LENGTH_SHORT).show()
                         }
                     } else {
@@ -357,6 +391,7 @@ fun DetailChartScreen(
                                 price = execPrice,
                                 quantity = sellQty.coerceAtMost(currentCoinBalance)
                             )
+                            val isSuccess = res is agu.analys.trading.SimulationOrderResult.Success
                             val msg = when (res) {
                                 is agu.analys.trading.SimulationOrderResult.Success -> res.message
                                 is agu.analys.trading.SimulationOrderResult.Error -> res.message
@@ -364,18 +399,36 @@ fun DetailChartScreen(
                             if (sellQty >= currentCoinBalance) {
                                 viewModel.setOwnership(false)
                             }
+                            if (isSuccess) {
+                                agu.analys.util.HapticUtil.vibrateTradeSuccess(context)
+                            } else {
+                                agu.analys.util.HapticUtil.vibrateTradeFailure(context)
+                            }
                             android.widget.Toast.makeText(context, "Simulasi Jual Berhasil! " + msg, android.widget.Toast.LENGTH_SHORT).show()
                         } else {
+                            agu.analys.util.HapticUtil.vibrateTradeFailure(context)
                             android.widget.Toast.makeText(context, "Saldo koin simulasi ${pair.baseAsset} Anda kosong.", android.widget.Toast.LENGTH_SHORT).show()
                         }
                     }
                 } else {
+                    agu.analys.util.HapticUtil.vibrateTradeFailure(context)
                     android.widget.Toast.makeText(context, "Harga belum tersedia untuk Jual.", android.widget.Toast.LENGTH_SHORT).show()
                 }
             },
             onSetManualBuyPrice = { entryPrice, investedAmount ->
                 viewModel.setManualPositionPrice(pair.symbol, entryPrice, investedAmount)
+                agu.analys.util.HapticUtil.vibrateTradeSuccess(context)
                 android.widget.Toast.makeText(context, "Harga beli manual tersimpan!", android.widget.Toast.LENGTH_SHORT).show()
+            },
+            spotPosition = spotPosition,
+            onSetTrailingStop = { enabled, pct ->
+                viewModel.setTrailingStop(enabled, pct)
+                agu.analys.util.HapticUtil.vibrateTradeSuccess(context)
+                val statusText = if (enabled) "Trailing Stop Loss $pct% Aktif" else "Trailing Stop Dimatikan"
+                android.widget.Toast.makeText(context, statusText, android.widget.Toast.LENGTH_SHORT).show()
+            },
+            onResetTrailingTrigger = {
+                viewModel.resetTrailingTrigger()
             }
         )
 
@@ -544,5 +597,27 @@ fun DetailChartScreen(
         }
 
         Spacer(Modifier.height(16.dp))
+    }
+
+    if (showPriceAlertDialog) {
+        agu.analys.ui.components.detail.PriceAlertDialog(
+            symbol = pair.symbol,
+            currentPrice = tick?.price ?: 0.0,
+            quoteAsset = pair.quoteAsset,
+            alerts = priceAlerts,
+            onAddAlert = { alert ->
+                viewModel.addPriceAlert(alert)
+                agu.analys.util.HapticUtil.vibrateTradeSuccess(context)
+                android.widget.Toast.makeText(context, "Alert ${alert.type.label} Disimpan & Aktif!", android.widget.Toast.LENGTH_SHORT).show()
+            },
+            onRemoveAlert = { alertId ->
+                viewModel.removePriceAlert(alertId)
+                android.widget.Toast.makeText(context, "Alert Dihapus", android.widget.Toast.LENGTH_SHORT).show()
+            },
+            onToggleAlert = { alertId ->
+                viewModel.togglePriceAlert(alertId)
+            },
+            onDismiss = { showPriceAlertDialog = false }
+        )
     }
 }

@@ -22,7 +22,12 @@ data class SpotPosition(
     val investedAmount: Double = 0.0,
     val entryPrice: Double = 0.0,
     val quantity: Double = 0.0,
-    val openedAt: Long = 0L
+    val openedAt: Long = 0L,
+    val isTrailingEnabled: Boolean = false,
+    val trailingPercent: Double = 0.0,
+    val peakPrice: Double = 0.0,
+    val trailingStopPrice: Double = 0.0,
+    val isTrailingTriggered: Boolean = false
 ) {
     val isHolding: Boolean get() = state == SpotPositionState.HOLDING
 }
@@ -35,12 +40,26 @@ class SpotPositionStore(context: Context) {
         val state = prefs.getString("${key}_state", SpotPositionState.NO_POSITION.name)
             ?.let { runCatching { SpotPositionState.valueOf(it) }.getOrDefault(SpotPositionState.NO_POSITION) }
             ?: SpotPositionState.NO_POSITION
+        val entry = prefs.getString("${key}_entry", null)?.toDoubleOrNull() ?: 0.0
+        val peak = prefs.getString("${key}_peak", null)?.toDoubleOrNull() ?: entry
+        val trailingPct = prefs.getString("${key}_trailing_pct", null)?.toDoubleOrNull() ?: 0.0
+        val isTrailing = prefs.getBoolean("${key}_trailing_enabled", false)
+        val isTriggered = prefs.getBoolean("${key}_trailing_triggered", false)
+        val trailingStop = if (isTrailing && peak > 0.0 && trailingPct > 0.0) {
+            peak * (1.0 - trailingPct / 100.0)
+        } else 0.0
+
         return SpotPosition(
             state = state,
             investedAmount = prefs.getString("${key}_invested", null)?.toDoubleOrNull() ?: 0.0,
-            entryPrice = prefs.getString("${key}_entry", null)?.toDoubleOrNull() ?: 0.0,
+            entryPrice = entry,
             quantity = prefs.getString("${key}_quantity", null)?.toDoubleOrNull() ?: 0.0,
-            openedAt = prefs.getLong("${key}_opened_at", 0L)
+            openedAt = prefs.getLong("${key}_opened_at", 0L),
+            isTrailingEnabled = isTrailing,
+            trailingPercent = trailingPct,
+            peakPrice = peak,
+            trailingStopPrice = trailingStop,
+            isTrailingTriggered = isTriggered
         )
     }
 
@@ -136,13 +155,16 @@ class SpotPositionStore(context: Context) {
             investedAmount = safeInvested,
             entryPrice = safeEntry,
             quantity = quantity,
-            openedAt = openedAt
+            openedAt = openedAt,
+            peakPrice = safeEntry
         )
         prefs.edit()
             .putString("${key}_state", SpotPositionState.HOLDING.name)
             .putString("${key}_invested", safeInvested.toString())
             .putString("${key}_entry", safeEntry.toString())
             .putString("${key}_quantity", quantity.toString())
+            .putString("${key}_peak", safeEntry.toString())
+            .putBoolean("${key}_trailing_triggered", false)
             .putLong("${key}_opened_at", openedAt)
             .putString("${key}_history", appendHistoryEvent(key, position))
             .apply()
@@ -160,8 +182,58 @@ class SpotPositionStore(context: Context) {
             .remove("${key}_entry")
             .remove("${key}_quantity")
             .remove("${key}_opened_at")
+            .remove("${key}_peak")
+            .remove("${key}_trailing_pct")
+            .remove("${key}_trailing_enabled")
+            .remove("${key}_trailing_triggered")
             .putString("${key}_history", appendHistoryEvent(key, position))
             .apply()
+    }
+
+    fun setTrailingStop(symbol: String, enabled: Boolean, trailingPercent: Double, referencePrice: Double = 0.0) {
+        val key = normalize(symbol)
+        val current = get(symbol)
+        val peak = if (current.peakPrice > 0.0) current.peakPrice else if (current.entryPrice > 0.0) current.entryPrice else referencePrice
+        prefs.edit()
+            .putBoolean("${key}_trailing_enabled", enabled)
+            .putString("${key}_trailing_pct", trailingPercent.coerceAtLeast(0.5).toString())
+            .putString("${key}_peak", peak.toString())
+            .putBoolean("${key}_trailing_triggered", false)
+            .apply()
+    }
+
+    /**
+     * Updates peak price and checks if trailing stop is triggered.
+     * Returns Pair<SpotPosition, Boolean(justTriggered)>
+     */
+    fun updateTrailingPrice(symbol: String, currentPrice: Double): Pair<SpotPosition, Boolean> {
+        val current = get(symbol)
+        if (!current.isHolding || !current.isTrailingEnabled || currentPrice <= 0.0) {
+            return Pair(current, false)
+        }
+
+        val key = normalize(symbol)
+        var newPeak = current.peakPrice.coerceAtLeast(current.entryPrice)
+        var justTriggered = false
+
+        if (currentPrice > newPeak) {
+            newPeak = currentPrice
+            prefs.edit().putString("${key}_peak", newPeak.toString()).apply()
+        }
+
+        val trailingStop = newPeak * (1.0 - current.trailingPercent / 100.0)
+        if (currentPrice <= trailingStop && !current.isTrailingTriggered) {
+            justTriggered = true
+            prefs.edit().putBoolean("${key}_trailing_triggered", true).apply()
+        }
+
+        val updated = get(symbol)
+        return Pair(updated, justTriggered)
+    }
+
+    fun resetTrailingTrigger(symbol: String) {
+        val key = normalize(symbol)
+        prefs.edit().putBoolean("${key}_trailing_triggered", false).apply()
     }
 
     private fun readHistory(key: String): JSONArray {
