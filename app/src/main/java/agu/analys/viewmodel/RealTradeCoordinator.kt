@@ -1,6 +1,7 @@
 package agu.analys.viewmodel
 
 import agu.analys.service.IndodaxMarketService
+import agu.analys.service.IndodaxTradeApiV2
 import agu.analys.util.AppPreferences
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -9,12 +10,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 /**
- * Koordinator khusus untuk mengelola data dan operasi Real Trading (Indodax):
- * - Kredensial API & PIN Keamanan
- * - Saldo Real (IDR & Kripto) langsung dari API Indodax
- * - Eksekusi Order Riil
- * - Deteksi IP Publik untuk Whitelist API
- * - Proteksi Brute-Force PIN & Auto-Wipe
+ * Coordinator for real INDODAX trading.
+ *
+ * Uses the current INDODAX API contract:
+ * - /tapi for account, create order and cancel order
+ * - Trade API 2.0 dedicated endpoints for order/trade history
  */
 class RealTradeCoordinator(
     private val scope: CoroutineScope,
@@ -46,8 +46,7 @@ class RealTradeCoordinator(
 
     fun checkPublicIp() {
         scope.launch {
-            val ip = IndodaxMarketService.fetchPublicIp()
-            _userPublicIp.value = ip
+            _userPublicIp.value = IndodaxMarketService.fetchPublicIp()
         }
     }
 
@@ -57,7 +56,8 @@ class RealTradeCoordinator(
 
     fun hasSecurityPin(): Boolean = prefs.hasSecurityPin()
 
-    fun hasRealCredentialsConfigured(): Boolean = prefs.hasSecurityPin() && prefs.hasIndodaxCredentials()
+    fun hasRealCredentialsConfigured(): Boolean =
+        prefs.hasSecurityPin() && prefs.hasIndodaxCredentials()
 
     fun createSecurityPin(pin: String) {
         prefs.setSecurityPin(pin)
@@ -93,15 +93,14 @@ class RealTradeCoordinator(
             _failedPinAttempts.value = 0
             _isPinUnlocked.value = true
             return true
-        } else {
-            val failedCount = prefs.recordFailedPinAttempt()
-            _failedPinAttempts.value = failedCount
-            if (failedCount >= 5) {
-                wipeSecurityCredentials()
-                _securityAlertMessage.value = "⚠️ KEAMANAN: Percobaan PIN salah 5x berturut-turut! Seluruh kredensial API dan PIN telah dihapus otomatis demi melindungi akun Anda."
-            }
-            return false
         }
+        val failedCount = prefs.recordFailedPinAttempt()
+        _failedPinAttempts.value = failedCount
+        if (failedCount >= 5) {
+            wipeSecurityCredentials()
+            _securityAlertMessage.value = "⚠️ KEAMANAN: Percobaan PIN salah 5x berturut-turut! Seluruh kredensial API dan PIN telah dihapus otomatis demi melindungi akun Anda."
+        }
+        return false
     }
 
     fun lockPin() {
@@ -112,53 +111,79 @@ class RealTradeCoordinator(
         if (enabled) {
             if (pin != null) {
                 if (!verifyPin(pin)) return false
-            } else {
-                if (!_isPinUnlocked.value && prefs.hasSecurityPin()) return false
+            } else if (!_isPinUnlocked.value && prefs.hasSecurityPin()) {
+                return false
             }
             prefs.isRealBuyModeEnabled = true
             _isRealBuyMode.value = true
             _isPinUnlocked.value = true
             fetchRealBalance()
             return true
-        } else {
-            prefs.isRealBuyModeEnabled = false
-            _isRealBuyMode.value = false
-            return true
         }
+        prefs.isRealBuyModeEnabled = false
+        _isRealBuyMode.value = false
+        return true
     }
 
     fun fetchRealBalance() {
         val apiKey = prefs.indodaxApiKey
         val secretKey = prefs.indodaxSecretKey
         if (apiKey.isBlank() || secretKey.isBlank()) {
-            _realTradeStatus.value = "Kredensial API Indodax belum diisi."
+            _realTradeStatus.value = "Kredensial API INDODAX belum diisi."
             return
         }
         scope.launch {
             _isFetchingRealBalance.value = true
-            val (bal, msg) = IndodaxMarketService.fetchAccountBalanceDetails(apiKey, secretKey)
-            _realTradeStatus.value = msg
-            if (bal != null) {
-                _realIndodaxBalance.value = bal
-            }
+            val (balance, message) = IndodaxTradeApiV2.getAccount(apiKey, secretKey)
+            _realTradeStatus.value = message
+            if (balance != null) _realIndodaxBalance.value = balance
             _isFetchingRealBalance.value = false
         }
     }
 
-    fun executeRealTrade(pair: String, type: String, price: Long, amountIdr: Double, onResult: (Boolean, String) -> Unit) {
+    /**
+     * UI contract remains unchanged: amountIdr means total IDR for BUY and
+     * base-coin quantity for SELL, matching the existing TradeSimulationScreen.
+     */
+    fun executeRealTrade(
+        pair: String,
+        type: String,
+        price: Long,
+        amountIdr: Double,
+        onResult: (Boolean, String) -> Unit
+    ) {
         val apiKey = prefs.indodaxApiKey
         val secretKey = prefs.indodaxSecretKey
         if (apiKey.isBlank() || secretKey.isBlank()) {
-            onResult(false, "API Key atau Secret Key Indodax belum diisi di Settings.")
+            onResult(false, "API Key atau Secret Key INDODAX belum diisi di Settings.")
             return
         }
+
+        val quantity = if (type.equals("buy", ignoreCase = true)) {
+            if (price <= 0L || amountIdr <= 0.0) 0.0 else amountIdr / price.toDouble()
+        } else {
+            amountIdr
+        }
+
+        if (quantity <= 0.0) {
+            onResult(false, "Quantity order tidak valid. Cek harga dan jumlah.")
+            return
+        }
+
         scope.launch {
-            _realTradeStatus.value = "Mengirim order $type ke Indodax..."
-            val (success, message) = IndodaxMarketService.placeTradeOrder(apiKey, secretKey, pair, type, price, amountIdr)
+            _realTradeStatus.value = "Mengirim order $type ke INDODAX..."
+            val clientOrderId = "agu-${type.lowercase()}-${System.currentTimeMillis()}"
+            val (success, message) = IndodaxTradeApiV2.createLimitOrder(
+                apiKey = apiKey,
+                secretKey = secretKey,
+                symbol = pair,
+                side = type,
+                price = price.toDouble(),
+                quantity = quantity,
+                clientOrderId = clientOrderId
+            )
             _realTradeStatus.value = message
-            if (success) {
-                fetchRealBalance()
-            }
+            if (success) fetchRealBalance()
             onResult(success, message)
         }
     }
