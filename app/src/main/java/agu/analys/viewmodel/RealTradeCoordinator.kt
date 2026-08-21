@@ -153,25 +153,31 @@ class RealTradeCoordinator(
 
         for ((asset, currentQty) in nonZeroAssets) {
             val symbol = "${asset}idr"
-            val (success, jsonResponse) = IndodaxTradeApiV2.myTrades(apiKey, secretKey, symbol, 100)
+            // Gunakan legacy /tapi tradeHistory yang bisa menarik riwayat lama
+            val (success, jsonResponse) = IndodaxTradeApiV2.tradeHistoryLegacy(apiKey, secretKey, symbol, 1000)
             if (success) {
                 try {
-                    val tradesArray = if (jsonResponse.trim().startsWith("[")) {
-                        org.json.JSONArray(jsonResponse)
+                    val jsonObj = org.json.JSONObject(jsonResponse)
+                    val tradesArray = if (jsonObj.has("return")) {
+                        jsonObj.getJSONObject("return").optJSONArray("trades") ?: org.json.JSONArray()
                     } else {
-                        val jsonObj = org.json.JSONObject(jsonResponse)
-                        if (jsonObj.has("return")) {
-                            jsonObj.getJSONObject("return").optJSONArray("trades") ?: org.json.JSONArray()
-                        } else {
-                            org.json.JSONArray()
-                        }
+                        org.json.JSONArray()
                     }
                     
+                    // Ekstrak ke List dan urutkan berdasarkan waktu transaksi (terbaru ke terlama)
+                    val tradeList = mutableListOf<org.json.JSONObject>()
+                    for (i in 0 until tradesArray.length()) {
+                        val trade = tradesArray.optJSONObject(i)
+                        if (trade != null) tradeList.add(trade)
+                    }
+                    
+                    tradeList.sortByDescending { 
+                        it.optLong("time", it.optString("trade_time", "0").toLongOrNull() ?: 0L) 
+                    }
+
                     var accumulatedQty = 0.0
                     var accumulatedCost = 0.0
-                    for (i in 0 until tradesArray.length()) {
-                        val trade = tradesArray.optJSONObject(i) ?: continue
-                        
+                    for (trade in tradeList) {
                         val isBuyer = if (trade.has("isBuyer")) {
                             trade.optBoolean("isBuyer", false)
                         } else {
@@ -180,7 +186,11 @@ class RealTradeCoordinator(
 
                         if (isBuyer) {
                             val priceStr = trade.optString("price", "0")
-                            val qtyStr = if (trade.has("qty")) trade.optString("qty", "0") else trade.optString("amount", "0")
+                            // Pada endpoint /tapi, field koin dinamai sesuai koinnya (contoh: "btc")
+                            val qtyStr = if (trade.has("qty")) trade.optString("qty", "0") 
+                                         else if (trade.has("amount")) trade.optString("amount", "0")
+                                         else trade.optString(asset.lowercase(), "0")
+                                         
                             val tPrice = priceStr.toDoubleOrNull() ?: 0.0
                             val tQty = qtyStr.toDoubleOrNull() ?: 0.0
 
@@ -201,6 +211,8 @@ class RealTradeCoordinator(
                     e.printStackTrace()
                 }
             }
+            // Jeda 1 detik antar request koin agar tidak diblokir Indodax (Error -2015 / Limit API)
+            kotlinx.coroutines.delay(1000)
         }
         _realAvgBuyPrices.value = newAvgPrices
     }

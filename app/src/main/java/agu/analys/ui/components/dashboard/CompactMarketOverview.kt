@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -54,7 +55,8 @@ fun DashboardMockupHeader(
     selectedTab: MarketRankingTab = MarketRankingTab.SCALPING_FAST,
     onSelectTab: (MarketRankingTab) -> Unit,
     onRefresh: () -> Unit,
-    onMenuClick: () -> Unit
+    onMenuClick: () -> Unit,
+    onAddAsset: () -> Unit = {}
 ) {
     val totalVolume = allTicks.values.sumOf { it.volume24h }
     val avgVolume = if (allTicks.isNotEmpty()) totalVolume / allTicks.size else 0.0
@@ -116,13 +118,25 @@ fun DashboardMockupHeader(
                 }
             }
 
-            IconButton(onClick = onRefresh, modifier = Modifier.size(36.dp)) {
-                Icon(
-                    imageVector = Icons.Default.Refresh,
-                    contentDescription = "Refresh",
-                    tint = TvTextPrimary,
-                    modifier = Modifier.size(24.dp)
-                )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (selectedTab == MarketRankingTab.WATCHLIST) {
+                    IconButton(onClick = onAddAsset, modifier = Modifier.size(36.dp)) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "Add to Watchlist",
+                            tint = TvTextPrimary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
+                IconButton(onClick = onRefresh, modifier = Modifier.size(36.dp)) {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = "Refresh",
+                        tint = TvTextPrimary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
             }
         }
 

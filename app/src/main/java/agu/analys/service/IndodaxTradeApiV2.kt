@@ -5,6 +5,8 @@ import kotlinx.coroutines.withContext
 import okhttp3.FormBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 import javax.crypto.Mac
@@ -29,6 +31,13 @@ object IndodaxTradeApiV2 {
         .writeTimeout(15, TimeUnit.SECONDS)
         .retryOnConnectionFailure(true)
         .build()
+
+    private fun hmacSha512(secret: String, payload: String): String {
+        val mac = Mac.getInstance("HmacSHA512")
+        mac.init(SecretKeySpec(secret.trim().toByteArray(Charsets.UTF_8), "HmacSHA512"))
+        return mac.doFinal(payload.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
+    }
 
     private fun hmacSha256(secret: String, payload: String): String {
         val mac = Mac.getInstance("HmacSHA256")
@@ -248,6 +257,43 @@ object IndodaxTradeApiV2 {
                 "recvWindow" to RECV_WINDOW_MS.toString()
             )
         )
+    }
+
+    @Suppress("DEPRECATION")
+    suspend fun tradeHistoryLegacy(
+        apiKey: String,
+        secretKey: String,
+        pair: String,
+        count: Int = 1000
+    ): Pair<Boolean, String> = withContext(Dispatchers.IO) {
+        runCatching {
+            val nonce = System.currentTimeMillis().toString()
+            val formattedPair = IndodaxMarketService.toPairId(pair).lowercase()
+            
+            val postBody = "method=tradeHistory&nonce=$nonce&pair=$formattedPair&count=$count"
+            val sign = hmacSha512(secretKey, postBody)
+            
+            val mediaType = "application/x-www-form-urlencoded".toMediaType()
+            val body = postBody.toRequestBody(mediaType)
+            
+            val request = Request.Builder()
+                .url("https://indodax.com/tapi")
+                .header("Key", apiKey.trim())
+                .header("Sign", sign)
+                .post(body)
+                .build()
+                
+            client.newCall(request).execute().use { response ->
+                val responseBody = response.body?.string().orEmpty()
+                if (response.isSuccessful) {
+                    true to responseBody
+                } else {
+                    false to responseBody
+                }
+            }
+        }.getOrElse {
+            false to (it.message ?: "Unknown error")
+        }
     }
 
     private fun decimal(value: Double): String =

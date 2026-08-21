@@ -101,7 +101,8 @@ fun DashboardScreen(
                 selectedRankingTab = tab
             },
             onRefresh = { viewModel.retryConnection() },
-            onMenuClick = onOpenSettings
+            onMenuClick = onOpenSettings,
+            onAddAsset = { showAddDialog = true }
         )
 
         if (connectionState is MarketConnectionState.ConnectionLost) {

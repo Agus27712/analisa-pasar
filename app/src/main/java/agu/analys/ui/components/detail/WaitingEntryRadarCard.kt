@@ -126,9 +126,9 @@ fun WaitingEntryRadarCard(
     }
 
     val titleHeader = when (strategyMode) {
-        StrategyMode.SCALPING -> "⚡ SCALPING AGGRESIF (${signal.confidence}%)"
+        StrategyMode.SCALPING -> "⚡ SCALPING (${signal.confidence}%)"
         StrategyMode.SECOND_WAVE -> "🌊 SECOND-WAVE (${signal.confidence}%)"
-        StrategyMode.SWING -> "🎯 SWING TRADING (${signal.confidence}%)"
+        StrategyMode.SWING -> "🎯 SWING (${signal.confidence}%)"
     }
 
     // Micro Tips
@@ -191,7 +191,7 @@ fun WaitingEntryRadarCard(
                 )
                 Spacer(Modifier.width(5.dp))
                 Text(
-                    text = if (completed == 4) "SIAP EKSEKUSI!" else "SCANNING..!!!",
+                    text = if (completed == 4) "Eksekusi" else "Wait!",
                     color = if (completed == 4) TvGreen else Color(0xFF00E5FF),
                     fontSize = 9.sp,
                     fontWeight = FontWeight.Black

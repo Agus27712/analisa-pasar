@@ -320,7 +320,7 @@ fun RadarSellSection(
                 )
             ) {
                 Text(
-                    text = if (isRealMode) "[REAL] JUAL ${PriceFormatter.formatCryptoExact(activeSellQty, 4)} $baseAsset" else "[SIM] JUAL ${PriceFormatter.formatCryptoExact(activeSellQty, 4)} $baseAsset",
+                    text = if (isRealMode) "[REAL] JUAL ${PriceFormatter.formatCryptoExact(activeSellQty, 8)} $baseAsset" else "[SIM] JUAL ${PriceFormatter.formatCryptoExact(activeSellQty, 8)} $baseAsset",
                     fontWeight = FontWeight.Black,
                     fontSize = 12.sp
                 )
