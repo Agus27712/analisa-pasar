@@ -1,7 +1,6 @@
 package agu.analys.service
 
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import okhttp3.FormBody
 import okhttp3.OkHttpClient
@@ -14,7 +13,7 @@ import javax.crypto.spec.SecretKeySpec
 
 /**
  * INDODAX Trade API 2.0 ONLY.
- * Fetch sengaja pelan biar tidak kena -2015 / rate-limit IP.
+ * Fetch sengaja pelan: 1x account, myTrades max 1 window 7 hari.
  */
 object IndodaxTradeApiV2 {
     private const val V2_BASE_URL = "https://api.indodax.com"
@@ -22,8 +21,6 @@ object IndodaxTradeApiV2 {
     private const val RECV_WINDOW_MS = 10_000L
     /** Docs: interval startTime–endTime max 7 hari. */
     private const val MY_TRADES_MAX_RANGE_MS = 7L * 24 * 60 * 60 * 1000
-    /** Jeda antar signed request (aman vs rate limit). */
-    private const val REQUEST_GAP_MS = 1_200L
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(12, TimeUnit.SECONDS)
@@ -77,29 +74,40 @@ object IndodaxTradeApiV2 {
     ): Pair<Boolean, String> = withContext(Dispatchers.IO) {
         val payloadString = encodeQuery(params)
         val sign = hmacSha256(secretKey, payloadString)
-
-        val requestBuilder = Request.Builder()
-            .header("X-APIKEY", apiKey.trim())
-            .header("Sign", sign)
-            .header("Accept", "application/json")
-
         val fullUrl = "$V2_BASE_URL$path"
 
-        when (method.uppercase()) {
-            "GET" -> requestBuilder.url("$fullUrl?$payloadString").get()
-            "DELETE" -> requestBuilder.url("$fullUrl?$payloadString").delete()
+        val request = when (method.uppercase()) {
+            "GET" -> Request.Builder()
+                .url("$fullUrl?$payloadString")
+                .get()
+                .header("X-APIKEY", apiKey.trim())
+                .header("Sign", sign)
+                .header("Accept", "application/json")
+                .build()
+            "DELETE" -> Request.Builder()
+                .url("$fullUrl?$payloadString")
+                .delete()
+                .header("X-APIKEY", apiKey.trim())
+                .header("Sign", sign)
+                .header("Accept", "application/json")
+                .build()
             "POST" -> {
-                requestBuilder.url(fullUrl)
                 val formBody = FormBody.Builder()
                 params.forEach { (key, value) -> formBody.add(key, value) }
-                requestBuilder
+                Request.Builder()
+                    .url(fullUrl)
                     .post(formBody.build())
+                    .header("X-APIKEY", apiKey.trim())
+                    .header("Sign", sign)
+                    .header("Accept", "application/json")
                     .header("Content-Type", "application/x-www-form-urlencoded")
+                    .build()
             }
+            else -> return@withContext false to "Unsupported HTTP method: $method"
         }
 
         runCatching {
-            client.newCall(requestBuilder.build()).execute().use { response ->
+            client.newCall(request).execute().use { response ->
                 val responseBody = response.body?.string().orEmpty()
                 val json = runCatching { JSONObject(responseBody) }.getOrNull()
                 val hasErrorCode = json != null && json.has("code") && json.optInt("code", 0) != 0
@@ -127,7 +135,6 @@ object IndodaxTradeApiV2 {
         }
     }
 
-    /** 1 request saja — aman. */
     suspend fun getAccount(apiKey: String, secretKey: String): Pair<Map<String, Double>?, String> {
         if (apiKey.isBlank() || secretKey.isBlank()) return null to "API Key / Secret Key kosong."
         val timestamp = serverTimeMs()
@@ -211,8 +218,34 @@ object IndodaxTradeApiV2 {
         return if (ok) true to "Order $orderId dibatalkan (V2)." else false to raw
     }
 
+    suspend fun orderHistory(
+        apiKey: String,
+        secretKey: String,
+        symbol: String,
+        limit: Int = 100
+    ): Pair<Boolean, String> {
+        val formattedSymbol = toTradeSymbol(symbol)
+        val end = serverTimeMs()
+        val start = end - MY_TRADES_MAX_RANGE_MS
+        return signedV2Request(
+            apiKey,
+            secretKey,
+            "GET",
+            "/api/v2/order/histories",
+            linkedMapOf(
+                "symbol" to formattedSymbol,
+                "limit" to limit.coerceIn(10, 1000).toString(),
+                "sort" to "desc",
+                "startTime" to start.toString(),
+                "endTime" to end.toString(),
+                "timestamp" to end.toString(),
+                "recvWindow" to RECV_WINDOW_MS.toString()
+            )
+        )
+    }
+
     /**
-     * 1 window max 7 hari (sesuai docs). Jangan loop banyak window.
+     * 1 window max 7 hari (sesuai docs).
      */
     suspend fun myTrades(
         apiKey: String,
@@ -237,9 +270,7 @@ object IndodaxTradeApiV2 {
         return signedV2Request(apiKey, secretKey, "GET", "/api/v2/myTrades", params)
     }
 
-    /**
-     * Hanya **1 request** (7 hari terakhir). Tidak multi-window biar aman dari -2015.
-     */
+    /** 1 request saja (7 hari). */
     suspend fun myTradesRecent(
         apiKey: String,
         secretKey: String,
