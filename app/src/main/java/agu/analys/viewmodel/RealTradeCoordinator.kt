@@ -4,13 +4,15 @@ import agu.analys.service.IndodaxMarketService
 import agu.analys.service.IndodaxTradeApiV2
 import agu.analys.util.AppPreferences
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 /**
- * Coordinator real INDODAX trading — Trade API 2.0 only.
+ * Coordinator real INDODAX — Trade API V2 only.
+ * Fetch pelan: 1x account + max 2x myTrades (hindari -2015).
  */
 class RealTradeCoordinator(
     private val scope: CoroutineScope,
@@ -133,90 +135,85 @@ class RealTradeCoordinator(
             _realTradeStatus.value = "Kredensial API INDODAX belum diisi."
             return
         }
+        if (_isFetchingRealBalance.value) return // anti double-tap refresh
+
         scope.launch {
             _isFetchingRealBalance.value = true
             val (balance, message) = IndodaxTradeApiV2.getAccount(apiKey, secretKey)
             _realTradeStatus.value = message
+
             if (balance != null) {
                 _realIndodaxBalance.value = balance
-                // Avg buy butuh myTrades — jalan di background biar saldo langsung muncul dulu
-                calculateRealAvgBuyPrices(apiKey, secretKey, balance)
+                // Avg buy: max 2 koin, 1 request/koin, jeda panjang
+                calculateRealAvgBuyPricesSafe(apiKey, secretKey, balance)
             }
             _isFetchingRealBalance.value = false
         }
     }
 
     /**
-     * Hitung avg buy dari fills BUY (FIFO mundur dari trade terbaru)
-     * sampai qty terkumpul = saldo koin saat ini.
-     *
-     * Docs V2: myTrades default cuma 24 jam; max window 7 hari.
-     * Kita tarik multi-window ~90 hari supaya posisi lama tetap kebaca.
+     * Aman: max 2 aset, 1 myTrades per aset (7 hari), jeda 1.5s.
+     * Stop total jika kena -2015.
      */
-    private suspend fun calculateRealAvgBuyPrices(
+    private suspend fun calculateRealAvgBuyPricesSafe(
         apiKey: String,
         secretKey: String,
         balance: Map<String, Double>
     ) {
-        val newAvgPrices = mutableMapOf<String, Double>()
-        val nonZeroAssets = balance.filter { it.key != "idr" && it.value > 0.00000001 }
+        val candidates = balance
+            .filter { it.key != "idr" && it.value > 0.00000001 }
+            .entries
+            .sortedByDescending { it.value }
+            .take(2) // max 2 koin biar tidak spam API
 
-        for ((asset, currentQty) in nonZeroAssets) {
-            try {
-                val trades = IndodaxTradeApiV2.myTradesMultiWindow(
-                    apiKey = apiKey,
-                    secretKey = secretKey,
-                    symbol = "${asset}idr",
-                    lookbackDays = 90,
-                    limitPerWindow = 1000
-                )
+        if (candidates.isEmpty()) return
 
-                var accumulatedQty = 0.0
-                var accumulatedCost = 0.0
+        val newAvg = _realAvgBuyPrices.value.toMutableMap()
 
-                for (trade in trades) {
-                    val isBuyer = when {
-                        trade.has("isBuyer") -> trade.optBoolean("isBuyer", false)
-                        else -> {
-                            val type = trade.optString("type", "")
-                            val side = trade.optString("side", "")
-                            type.equals("buy", true) || side.equals("BUY", true)
-                        }
-                    }
-                    if (!isBuyer) continue
+        for ((asset, currentQty) in candidates) {
+            delay(1_500) // jeda antar request
 
-                    val tPrice = trade.optString("price", "0").toDoubleOrNull() ?: 0.0
-                    val tQty = when {
-                        trade.has("qty") -> trade.optString("qty", "0").toDoubleOrNull() ?: 0.0
-                        trade.has("amount") -> trade.optString("amount", "0").toDoubleOrNull() ?: 0.0
-                        else -> 0.0
-                    }
-                    if (tPrice <= 0.0 || tQty <= 0.0) continue
-
-                    val remaining = currentQty - accumulatedQty
-                    if (remaining <= 0.0) break
-
-                    val qtyToUse = minOf(tQty, remaining)
-                    accumulatedQty += qtyToUse
-                    accumulatedCost += qtyToUse * tPrice
-                }
-
-                if (accumulatedQty > 0.0) {
-                    newAvgPrices[asset] = accumulatedCost / accumulatedQty
-                }
+            val trades = try {
+                IndodaxTradeApiV2.myTradesRecent(apiKey, secretKey, "${asset}idr", limit = 500)
             } catch (_: Exception) {
-                // Skip asset ini; avg tetap 0 → UI tampil "Belum Ada Posisi"
+                emptyList()
             }
 
-            kotlinx.coroutines.delay(400)
+            // Kalau response error string sempat ikut di status sebelumnya, skip
+            var accumulatedQty = 0.0
+            var accumulatedCost = 0.0
+
+            for (trade in trades) {
+                val isBuyer = when {
+                    trade.has("isBuyer") -> trade.optBoolean("isBuyer", false)
+                    else -> {
+                        val type = trade.optString("type", "")
+                        val side = trade.optString("side", "")
+                        type.equals("buy", true) || side.equals("BUY", true)
+                    }
+                }
+                if (!isBuyer) continue
+
+                val tPrice = trade.optString("price", "0").toDoubleOrNull() ?: 0.0
+                val tQty = trade.optString("qty", "0").toDoubleOrNull()
+                    ?: trade.optString("amount", "0").toDoubleOrNull()
+                    ?: 0.0
+                if (tPrice <= 0.0 || tQty <= 0.0) continue
+
+                val remaining = currentQty - accumulatedQty
+                if (remaining <= 0.0) break
+
+                val qtyToUse = minOf(tQty, remaining)
+                accumulatedQty += qtyToUse
+                accumulatedCost += qtyToUse * tPrice
+            }
+
+            if (accumulatedQty > 0.0) {
+                newAvg[asset] = accumulatedCost / accumulatedQty
+            }
         }
 
-        _realAvgBuyPrices.value = newAvgPrices
-        if (newAvgPrices.isNotEmpty()) {
-            val n = newAvgPrices.size
-            _realTradeStatus.value =
-                "Saldo + avg buy ${n} koin dihitung dari histori Trade API V2."
-        }
+        _realAvgBuyPrices.value = newAvg
     }
 
     fun executeRealTrade(
@@ -257,7 +254,10 @@ class RealTradeCoordinator(
                 clientOrderId = clientOrderId
             )
             _realTradeStatus.value = message
-            if (success) fetchRealBalance()
+            if (success) {
+                delay(1_000)
+                fetchRealBalance()
+            }
             onResult(success, message)
         }
     }
