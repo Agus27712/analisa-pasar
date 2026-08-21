@@ -54,6 +54,7 @@ fun PortfolioScreen(
     val isRealBuyMode by viewModel.isRealBuyMode.collectAsStateWithLifecycle()
     val isPinUnlocked by viewModel.isPinUnlocked.collectAsStateWithLifecycle()
     val realBalance by viewModel.realIndodaxBalance.collectAsStateWithLifecycle()
+    val realAvgBuyPrices by viewModel.realAvgBuyPrices.collectAsStateWithLifecycle()
     val isFetchingRealBalance by viewModel.isFetchingRealBalance.collectAsStateWithLifecycle()
     val realTradeStatus by viewModel.realTradeStatus.collectAsStateWithLifecycle()
 
@@ -249,6 +250,7 @@ fun PortfolioScreen(
             RealPortfolioView(
                 isPinUnlocked = isPinUnlocked,
                 realBalance = realBalance,
+                realAvgBuyPrices = realAvgBuyPrices,
                 isFetchingRealBalance = isFetchingRealBalance,
                 dashboardTicks = dashboardTicks,
                 currentTick = currentTick,

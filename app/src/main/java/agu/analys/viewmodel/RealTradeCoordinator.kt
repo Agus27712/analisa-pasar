@@ -29,6 +29,9 @@ class RealTradeCoordinator(
     private val _realIndodaxBalance = MutableStateFlow<Map<String, Double>>(emptyMap())
     val realIndodaxBalance: StateFlow<Map<String, Double>> = _realIndodaxBalance.asStateFlow()
 
+    private val _realAvgBuyPrices = MutableStateFlow<Map<String, Double>>(emptyMap())
+    val realAvgBuyPrices: StateFlow<Map<String, Double>> = _realAvgBuyPrices.asStateFlow()
+
     private val _isFetchingRealBalance = MutableStateFlow(false)
     val isFetchingRealBalance: StateFlow<Boolean> = _isFetchingRealBalance.asStateFlow()
 
@@ -136,9 +139,70 @@ class RealTradeCoordinator(
             _isFetchingRealBalance.value = true
             val (balance, message) = IndodaxTradeApiV2.getAccount(apiKey, secretKey)
             _realTradeStatus.value = message
-            if (balance != null) _realIndodaxBalance.value = balance
+            if (balance != null) {
+                _realIndodaxBalance.value = balance
+                calculateRealAvgBuyPrices(apiKey, secretKey, balance)
+            }
             _isFetchingRealBalance.value = false
         }
+    }
+
+    private suspend fun calculateRealAvgBuyPrices(apiKey: String, secretKey: String, balance: Map<String, Double>) {
+        val newAvgPrices = mutableMapOf<String, Double>()
+        val nonZeroAssets = balance.filter { it.key != "idr" && it.value > 0.00000001 }
+
+        for ((asset, currentQty) in nonZeroAssets) {
+            val symbol = "${asset}idr"
+            val (success, jsonResponse) = IndodaxTradeApiV2.myTrades(apiKey, secretKey, symbol, 100)
+            if (success) {
+                try {
+                    val tradesArray = if (jsonResponse.trim().startsWith("[")) {
+                        org.json.JSONArray(jsonResponse)
+                    } else {
+                        val jsonObj = org.json.JSONObject(jsonResponse)
+                        if (jsonObj.has("return")) {
+                            jsonObj.getJSONObject("return").optJSONArray("trades") ?: org.json.JSONArray()
+                        } else {
+                            org.json.JSONArray()
+                        }
+                    }
+                    
+                    var accumulatedQty = 0.0
+                    var accumulatedCost = 0.0
+                    for (i in 0 until tradesArray.length()) {
+                        val trade = tradesArray.optJSONObject(i) ?: continue
+                        
+                        val isBuyer = if (trade.has("isBuyer")) {
+                            trade.optBoolean("isBuyer", false)
+                        } else {
+                            trade.optString("type", "").equals("buy", ignoreCase = true) || trade.optString("side", "").equals("BUY", ignoreCase = true)
+                        }
+
+                        if (isBuyer) {
+                            val priceStr = trade.optString("price", "0")
+                            val qtyStr = if (trade.has("qty")) trade.optString("qty", "0") else trade.optString("amount", "0")
+                            val tPrice = priceStr.toDoubleOrNull() ?: 0.0
+                            val tQty = qtyStr.toDoubleOrNull() ?: 0.0
+
+                            if (tPrice > 0 && tQty > 0) {
+                                val remainingNeeded = currentQty - accumulatedQty
+                                if (remainingNeeded <= 0) break
+
+                                val qtyToUse = minOf(tQty, remainingNeeded)
+                                accumulatedQty += qtyToUse
+                                accumulatedCost += (qtyToUse * tPrice)
+                            }
+                        }
+                    }
+                    if (accumulatedQty > 0) {
+                        newAvgPrices[asset] = accumulatedCost / accumulatedQty
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        }
+        _realAvgBuyPrices.value = newAvgPrices
     }
 
     /**

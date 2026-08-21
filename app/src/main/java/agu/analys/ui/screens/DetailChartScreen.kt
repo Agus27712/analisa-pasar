@@ -76,6 +76,7 @@ fun DetailChartScreen(
     val aiLoadingGemini by viewModel.isGeminiLoading.collectAsStateWithLifecycle()
     val wallet by viewModel.simulationWallet.collectAsStateWithLifecycle()
     val realBalance by viewModel.realIndodaxBalance.collectAsStateWithLifecycle()
+    val realAvgBuyPrices by viewModel.realAvgBuyPrices.collectAsStateWithLifecycle()
 
     val marketStructure = remember(candles) { MarketStructureAnalyzer.analyze(candles) }
     var chartVisible by remember { mutableStateOf(false) }
@@ -290,7 +291,11 @@ fun DetailChartScreen(
 
         val availableIdr = if (isRealBuyMode) (realBalance["idr"] ?: 0.0) else wallet.getAvailableIdr()
         val availableCoin = if (isRealBuyMode) (realBalance[pair.baseAsset.lowercase()] ?: realBalance[pair.baseAsset.uppercase()] ?: 0.0) else wallet.getAvailableCoin(pair.baseAsset)
-        val avgBuyPrice = if (isRealBuyMode) (spotPosition.takeIf { it.isHolding }?.entryPrice ?: 0.0) else (wallet.avgBuyPrices[pair.baseAsset.uppercase()] ?: 0.0)
+        val avgBuyPrice = if (isRealBuyMode) {
+            realAvgBuyPrices[pair.baseAsset.lowercase()] ?: realAvgBuyPrices[pair.baseAsset.uppercase()] ?: 0.0
+        } else {
+            wallet.avgBuyPrices[pair.baseAsset.uppercase()] ?: 0.0
+        }
 
         // 1. RADAR PROGRESS ENTRY (STATUS TUNGGU / SIAP / BUY & FEE TRANSAKSI)
         WaitingEntryRadarCard(

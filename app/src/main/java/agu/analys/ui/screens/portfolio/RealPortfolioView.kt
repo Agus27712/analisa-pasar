@@ -41,6 +41,7 @@ import agu.analys.util.PriceFormatter
 fun RealPortfolioView(
     isPinUnlocked: Boolean,
     realBalance: Map<String, Double>,
+    realAvgBuyPrices: Map<String, Double> = emptyMap(),
     isFetchingRealBalance: Boolean,
     dashboardTicks: Map<String, MarketTick>,
     currentTick: MarketTick?,
@@ -51,6 +52,32 @@ fun RealPortfolioView(
     onSelectPair: (TradingPair) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val realIdr = realBalance["idr"] ?: 0.0
+    val realCoinItemsList = remember(realBalance, realAvgBuyPrices, dashboardTicks, currentTick) {
+        realBalance.filter { it.key != "idr" && it.value > 0.00000001 }.entries.map { (coin, qty) ->
+            val coinUpper = coin.uppercase()
+            val coinLower = coin.lowercase()
+            val symbol = "${coinUpper}IDR"
+            val price = when {
+                symbol.equals(currentTick?.symbol, ignoreCase = true) -> currentTick?.price ?: 0.0
+                dashboardTicks.containsKey(symbol) -> dashboardTicks[symbol]?.price ?: 0.0
+                dashboardTicks.containsKey("${coinLower}_idr") -> dashboardTicks["${coinLower}_idr"]?.price ?: 0.0
+                dashboardTicks.containsKey(coinUpper) -> dashboardTicks[coinUpper]?.price ?: 0.0
+                else -> 0.0
+            }
+            val avgPrice = realAvgBuyPrices[coin] ?: 0.0
+            val effectivePrice = if (price > 0.0) price else avgPrice
+            val estVal = qty * effectivePrice
+            val pnlIdr = if (avgPrice > 0.0) (effectivePrice - avgPrice) * qty else 0.0
+            val pnlPct = if (avgPrice > 0.0) ((effectivePrice - avgPrice) / avgPrice) * 100.0 else 0.0
+
+            Triple(coinUpper, Triple(qty, estVal, price), Triple(avgPrice, pnlIdr, pnlPct))
+        }.sortedByDescending { it.second.second }
+    }
+    
+    val estTotalCryptoIdr = remember(realCoinItemsList) { realCoinItemsList.sumOf { it.second.second } }
+    val totalRealPortfolioIdr = realIdr + estTotalCryptoIdr
+
     LazyColumn(
         modifier = modifier
             .fillMaxWidth()
@@ -151,26 +178,6 @@ fun RealPortfolioView(
 
             // UNLOCKED REAL PORTFOLIO
             item {
-                val realIdr = realBalance["idr"] ?: 0.0
-                val realCoinItems = remember(realBalance, dashboardTicks, currentTick) {
-                    realBalance.filter { it.key != "idr" && it.value > 0.00000001 }.map { (coin, qty) ->
-                        val coinUpper = coin.uppercase()
-                        val coinLower = coin.lowercase()
-                        val symbol = "${coinUpper}IDR"
-                        val price = when {
-                            symbol.equals(currentTick?.symbol, ignoreCase = true) -> currentTick?.price ?: 0.0
-                            dashboardTicks.containsKey(symbol) -> dashboardTicks[symbol]?.price ?: 0.0
-                            dashboardTicks.containsKey("${coinLower}_idr") -> dashboardTicks["${coinLower}_idr"]?.price ?: 0.0
-                            dashboardTicks.containsKey(coinUpper) -> dashboardTicks[coinUpper]?.price ?: 0.0
-                            else -> 0.0
-                        }
-                        val estIdr = qty * price
-                        Pair(coinUpper, Pair(qty, estIdr))
-                    }.sortedByDescending { it.second.second }
-                }
-                val estTotalCryptoIdr = realCoinItems.sumOf { it.second.second }
-                val totalRealPortfolioIdr = realIdr + estTotalCryptoIdr
-
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(14.dp),
@@ -252,7 +259,6 @@ fun RealPortfolioView(
                 )
             }
 
-            val realCoinItemsList = realBalance.filter { it.key != "idr" && it.value > 0.00000001 }.entries.toList()
             if (realCoinItemsList.isEmpty()) {
                 item {
                     Box(
@@ -270,16 +276,14 @@ fun RealPortfolioView(
                     }
                 }
             } else {
-                items(realCoinItemsList) { (coin, qty) ->
-                    val coinUpper = coin.uppercase()
+                items(realCoinItemsList) { (coinUpper, valTriple, pnlTriple) ->
+                    val (qty, estVal, price) = valTriple
+                    val (avgPrice, pnlIdr, pnlPct) = pnlTriple
                     val symbol = "${coinUpper}IDR"
-                    val price = when {
-                        symbol.equals(currentTick?.symbol, ignoreCase = true) -> currentTick?.price ?: 0.0
-                        dashboardTicks.containsKey(symbol) -> dashboardTicks[symbol]?.price ?: 0.0
-                        else -> 0.0
-                    }
-                    val estVal = qty * price
                     val pair = TradingPair.fromCustomSymbol(symbol, "IDR")
+                    
+                    val pnlColor = if (pnlIdr > 0) TvGreen else if (pnlIdr < 0) TvRed else TvTextSecondary
+                    val pnlPrefix = if (pnlIdr > 0) "+" else ""
 
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -309,11 +313,37 @@ fun RealPortfolioView(
                                         fontSize = 13.sp,
                                         fontWeight = FontWeight.Bold
                                     )
-                                    Text(
-                                        if (price > 0) "@ ${PriceFormatter.formatPrice(price)}" else "Ticker Menunggu",
-                                        color = Color(0xFF72B7FF),
-                                        fontSize = 10.sp
-                                    )
+                                    if (avgPrice > 0.0) {
+                                        Text(
+                                            "$pnlPrefix${PriceFormatter.formatPrice(pnlIdr)} ($pnlPrefix${String.format("%.2f", pnlPct)}%)",
+                                            color = pnlColor,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    } else {
+                                        Text(
+                                            if (price > 0) "@ ${PriceFormatter.formatPrice(price)}" else "Ticker Menunggu",
+                                            color = Color(0xFF72B7FF),
+                                            fontSize = 10.sp
+                                        )
+                                    }
+                                }
+                            }
+                            
+                            if (avgPrice > 0.0) {
+                                Spacer(Modifier.height(8.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().background(Color(0xFF1E2836).copy(alpha = 0.3f), RoundedCornerShape(6.dp)).padding(horizontal = 8.dp, vertical = 6.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column {
+                                        Text("Avg Buy Price", color = TvTextSecondary, fontSize = 9.sp)
+                                        Text(PriceFormatter.formatPrice(avgPrice), color = TvTextPrimary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                    }
+                                    Column(horizontalAlignment = Alignment.End) {
+                                        Text("Current Price", color = TvTextSecondary, fontSize = 9.sp)
+                                        Text(if (price > 0) PriceFormatter.formatPrice(price) else "-", color = Color(0xFF72B7FF), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                    }
                                 }
                             }
 
