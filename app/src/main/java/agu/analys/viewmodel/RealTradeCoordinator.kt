@@ -10,10 +10,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 /**
- * Coordinator for real INDODAX trading.
- *
- * Uses the current INDODAX API contract:
- * - Trade API 2.0 for account, create/cancel order, and trade history (myTrades)
+ * Coordinator real INDODAX trading — Trade API 2.0 only.
  */
 class RealTradeCoordinator(
     private val scope: CoroutineScope,
@@ -84,6 +81,7 @@ class RealTradeCoordinator(
         _isRealBuyMode.value = false
         _isPinUnlocked.value = false
         _realIndodaxBalance.value = emptyMap()
+        _realAvgBuyPrices.value = emptyMap()
         _failedPinAttempts.value = 0
         _realTradeStatus.value = "Kredensial API dan PIN telah dihapus."
     }
@@ -100,7 +98,8 @@ class RealTradeCoordinator(
         _failedPinAttempts.value = failedCount
         if (failedCount >= 5) {
             wipeSecurityCredentials()
-            _securityAlertMessage.value = "⚠️ KEAMANAN: Percobaan PIN salah 5x berturut-turut! Seluruh kredensial API dan PIN telah dihapus otomatis demi melindungi akun Anda."
+            _securityAlertMessage.value =
+                "⚠️ KEAMANAN: PIN salah 5x! Kredensial API & PIN dihapus otomatis."
         }
         return false
     }
@@ -140,89 +139,86 @@ class RealTradeCoordinator(
             _realTradeStatus.value = message
             if (balance != null) {
                 _realIndodaxBalance.value = balance
+                // Avg buy butuh myTrades — jalan di background biar saldo langsung muncul dulu
                 calculateRealAvgBuyPrices(apiKey, secretKey, balance)
             }
             _isFetchingRealBalance.value = false
         }
     }
 
-    private suspend fun calculateRealAvgBuyPrices(apiKey: String, secretKey: String, balance: Map<String, Double>) {
+    /**
+     * Hitung avg buy dari fills BUY (FIFO mundur dari trade terbaru)
+     * sampai qty terkumpul = saldo koin saat ini.
+     *
+     * Docs V2: myTrades default cuma 24 jam; max window 7 hari.
+     * Kita tarik multi-window ~90 hari supaya posisi lama tetap kebaca.
+     */
+    private suspend fun calculateRealAvgBuyPrices(
+        apiKey: String,
+        secretKey: String,
+        balance: Map<String, Double>
+    ) {
         val newAvgPrices = mutableMapOf<String, Double>()
         val nonZeroAssets = balance.filter { it.key != "idr" && it.value > 0.00000001 }
 
         for ((asset, currentQty) in nonZeroAssets) {
-            val symbol = "${asset}idr"
-            // Pakai TAPIv2 myTrades (ganti legacy yang sudah deprecated)
-            val (success, jsonResponse) = IndodaxTradeApiV2.myTrades(apiKey, secretKey, symbol, 1000)
-            if (success) {
-                try {
-                    val jsonObj = org.json.JSONObject(jsonResponse)
-                    // Response V2: { "data": [ { tradeId, isBuyer, price, qty, time, ... } ] }
-                    val tradesArray = when {
-                        jsonObj.has("data") -> jsonObj.optJSONArray("data") ?: org.json.JSONArray()
-                        jsonObj.has("return") -> jsonObj.getJSONObject("return").optJSONArray("trades") ?: org.json.JSONArray()
-                        else -> org.json.JSONArray()
-                    }
+            try {
+                val trades = IndodaxTradeApiV2.myTradesMultiWindow(
+                    apiKey = apiKey,
+                    secretKey = secretKey,
+                    symbol = "${asset}idr",
+                    lookbackDays = 90,
+                    limitPerWindow = 1000
+                )
 
-                    // Ekstrak ke List dan urutkan berdasarkan waktu transaksi (terbaru ke terlama)
-                    val tradeList = mutableListOf<org.json.JSONObject>()
-                    for (i in 0 until tradesArray.length()) {
-                        val trade = tradesArray.optJSONObject(i)
-                        if (trade != null) tradeList.add(trade)
-                    }
+                var accumulatedQty = 0.0
+                var accumulatedCost = 0.0
 
-                    tradeList.sortByDescending {
-                        it.optLong("time", it.optString("trade_time", "0").toLongOrNull() ?: 0L)
-                    }
-
-                    var accumulatedQty = 0.0
-                    var accumulatedCost = 0.0
-                    for (trade in tradeList) {
-                        val isBuyer = if (trade.has("isBuyer")) {
-                            trade.optBoolean("isBuyer", false)
-                        } else {
-                            trade.optString("type", "").equals("buy", ignoreCase = true) ||
-                                    trade.optString("side", "").equals("BUY", ignoreCase = true)
-                        }
-
-                        if (isBuyer) {
-                            val priceStr = trade.optString("price", "0")
-                            val qtyStr = when {
-                                trade.has("qty") -> trade.optString("qty", "0")
-                                trade.has("amount") -> trade.optString("amount", "0")
-                                else -> trade.optString(asset.lowercase(), "0")
-                            }
-
-                            val tPrice = priceStr.toDoubleOrNull() ?: 0.0
-                            val tQty = qtyStr.toDoubleOrNull() ?: 0.0
-
-                            if (tPrice > 0 && tQty > 0) {
-                                val remainingNeeded = currentQty - accumulatedQty
-                                if (remainingNeeded <= 0) break
-
-                                val qtyToUse = minOf(tQty, remainingNeeded)
-                                accumulatedQty += qtyToUse
-                                accumulatedCost += (qtyToUse * tPrice)
-                            }
+                for (trade in trades) {
+                    val isBuyer = when {
+                        trade.has("isBuyer") -> trade.optBoolean("isBuyer", false)
+                        else -> {
+                            val type = trade.optString("type", "")
+                            val side = trade.optString("side", "")
+                            type.equals("buy", true) || side.equals("BUY", true)
                         }
                     }
-                    if (accumulatedQty > 0) {
-                        newAvgPrices[asset] = accumulatedCost / accumulatedQty
+                    if (!isBuyer) continue
+
+                    val tPrice = trade.optString("price", "0").toDoubleOrNull() ?: 0.0
+                    val tQty = when {
+                        trade.has("qty") -> trade.optString("qty", "0").toDoubleOrNull() ?: 0.0
+                        trade.has("amount") -> trade.optString("amount", "0").toDoubleOrNull() ?: 0.0
+                        else -> 0.0
                     }
-                } catch (e: Exception) {
-                    e.printStackTrace()
+                    if (tPrice <= 0.0 || tQty <= 0.0) continue
+
+                    val remaining = currentQty - accumulatedQty
+                    if (remaining <= 0.0) break
+
+                    val qtyToUse = minOf(tQty, remaining)
+                    accumulatedQty += qtyToUse
+                    accumulatedCost += qtyToUse * tPrice
                 }
+
+                if (accumulatedQty > 0.0) {
+                    newAvgPrices[asset] = accumulatedCost / accumulatedQty
+                }
+            } catch (_: Exception) {
+                // Skip asset ini; avg tetap 0 → UI tampil "Belum Ada Posisi"
             }
-            // Jeda 1 detik antar request koin agar tidak diblokir Indodax (Error -2015 / Limit API)
-            kotlinx.coroutines.delay(1000)
+
+            kotlinx.coroutines.delay(400)
         }
+
         _realAvgBuyPrices.value = newAvgPrices
+        if (newAvgPrices.isNotEmpty()) {
+            val n = newAvgPrices.size
+            _realTradeStatus.value =
+                "Saldo + avg buy ${n} koin dihitung dari histori Trade API V2."
+        }
     }
 
-    /**
-     * UI contract remains unchanged: amountIdr means total IDR for BUY and
-     * base-coin quantity for SELL, matching the existing TradeSimulationScreen.
-     */
     fun executeRealTrade(
         pair: String,
         type: String,
