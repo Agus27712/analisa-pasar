@@ -151,29 +151,13 @@ fun SmoothPriceText(
     maxLines: Int = 1
 ) {
     val smooth = rememberSmoothPrice(price)
-    var pulse by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(
-        targetValue = if (pulse) 1.01f else 1f,
-        animationSpec = tween(140, easing = FastOutSlowInEasing),
-        label = "price_change_scale"
-    )
-
-    LaunchedEffect(price) {
-        if (!price.isFinite() || price <= 0.0) return@LaunchedEffect
-        pulse = true
-        delay(140)
-        pulse = false
-    }
 
     Text(
         text = PriceFormatter.formatPrice(smooth, showSymbol = showSymbol, quoteAsset = quoteAsset),
         color = color,
         fontSize = fontSize,
         fontWeight = fontWeight,
-        modifier = modifier.graphicsLayer {
-            scaleX = scale
-            scaleY = scale
-        },
+        modifier = modifier,
         maxLines = maxLines
     )
 }
@@ -287,32 +271,7 @@ fun AnimatedPercentageBadge(
     val color = if (isPositive) TvGreen else TvRed
     val formatted = PriceFormatter.formatPercentage(percentage)
 
-    var pulseTrigger by remember { mutableStateOf(false) }
-    var previousPct by remember { mutableStateOf(percentage) }
-
-    LaunchedEffect(percentage) {
-        if (!percentage.isFinite()) return@LaunchedEffect
-        if (percentage != previousPct) {
-            pulseTrigger = true
-            delay(180)
-            pulseTrigger = false
-            previousPct = percentage
-        }
-    }
-
-    val scale by animateFloatAsState(
-        targetValue = if (pulseTrigger) 1.06f else 1.0f,
-        animationSpec = tween(160, easing = FastOutSlowInEasing),
-        label = "pct_pulse_scale"
-    )
-
-    Box(
-        modifier = modifier
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-            }
-    ) {
+    Box(modifier = modifier) {
         AnimatedContent(
             targetState = formatted,
             transitionSpec = {

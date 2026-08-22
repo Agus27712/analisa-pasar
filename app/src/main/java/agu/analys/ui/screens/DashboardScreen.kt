@@ -90,7 +90,7 @@ fun DashboardScreen(
             .fillMaxSize()
             .background(TvBackground)
     ) {
-        // Header Mockup with Indodax / Tokocrypto active badge & Ranking Tabs
+        // Header Mockup with Indodax active badge & Redesigned Ranking Tabs & Rotating Refresh Button
         DashboardMockupHeader(
             allTicks = allTicks,
             marketDataSource = marketDataSource,
@@ -101,7 +101,6 @@ fun DashboardScreen(
                 selectedRankingTab = tab
             },
             onRefresh = { viewModel.retryConnection() },
-            onMenuClick = onOpenSettings,
             onAddAsset = { showAddDialog = true }
         )
 
@@ -145,7 +144,7 @@ fun DashboardScreen(
             item { Spacer(Modifier.height(10.dp)) }
         }
 
-        // Bottom Navigation Bar
+        // Bottom Navigation Bar (4 Tab Bersih)
         AppBottomNavigationBar(
             currentTab = currentTab,
             onSelectTab = { tab ->
@@ -158,9 +157,6 @@ fun DashboardScreen(
                     NavTab.SIMULASI -> {
                         val firstPair = displayPairs.firstOrNull() ?: TradingPair.popularPairsForSource(marketDataSource).first()
                         viewModel.openSimulation(firstPair)
-                    }
-                    NavTab.BELAJAR -> {
-                        viewModel.openLearning()
                     }
                     NavTab.SETTINGS -> {
                         onOpenSettings()

@@ -4,23 +4,18 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.CompareArrows
-import androidx.compose.material.icons.filled.CropRotate
-import androidx.compose.material.icons.filled.MenuBook
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.NotificationsNone
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -30,29 +25,30 @@ import androidx.compose.ui.unit.sp
 import agu.analys.config.MarketDataSource
 import agu.analys.model.TradingPair
 import agu.analys.ui.animation.AnimatedPercentageBadge
-import agu.analys.ui.animation.SmoothPriceText
+import agu.analys.ui.animation.FlipCardPriceText
 import agu.analys.ui.components.dashboard.AssetAvatar
 import agu.analys.ui.theme.TvGreen
+import agu.analys.ui.theme.TvRed
 import agu.analys.ui.theme.TvTextPrimary
 import agu.analys.ui.theme.TvTextSecondary
+import kotlinx.coroutines.delay
 
 @Composable
 fun DetailTopBar(
     pair: TradingPair,
-    isFavorite: Boolean,
     onNavigateToDashboard: () -> Unit,
-    onOpenSimulation: () -> Unit,
-    onOpenLearning: () -> Unit,
-    onToggleWatchlist: () -> Unit,
-    onOpenLandscapeChart: () -> Unit,
-    activeAlertCount: Int = 0,
-    onOpenAlerts: (() -> Unit)? = null
+    modifier: Modifier = Modifier
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        IconButton(onClick = onNavigateToDashboard) {
+        IconButton(
+            onClick = onNavigateToDashboard,
+            modifier = Modifier.size(40.dp)
+        ) {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                 contentDescription = "Kembali",
@@ -61,18 +57,17 @@ fun DetailTopBar(
             )
         }
 
+        Spacer(Modifier.width(4.dp))
         AssetAvatar(baseAsset = pair.baseAsset, iconUrl = pair.iconUrl, size = 36.dp)
         Spacer(Modifier.width(10.dp))
 
         Column(
-            modifier = Modifier
-                .weight(1f)
-                .padding(end = 4.dp)
+            modifier = Modifier.weight(1f)
         ) {
             Text(
                 text = "${pair.baseAsset}/${pair.quoteAsset}",
                 color = TvTextPrimary,
-                fontSize = 16.sp,
+                fontSize = 17.sp,
                 fontWeight = FontWeight.ExtraBold,
                 maxLines = 1,
                 softWrap = false
@@ -80,94 +75,11 @@ fun DetailTopBar(
             Text(
                 text = getCoinFullName(pair.baseAsset),
                 color = TvTextSecondary,
-                fontSize = 11.sp,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
                 maxLines = 1,
                 softWrap = false
             )
-        }
-
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy((-4).dp)
-        ) {
-            if (onOpenAlerts != null) {
-                Box(contentAlignment = Alignment.TopEnd) {
-                    IconButton(
-                        onClick = onOpenAlerts,
-                        modifier = Modifier.size(36.dp)
-                    ) {
-                        Icon(
-                            imageVector = if (activeAlertCount > 0) Icons.Default.Notifications else Icons.Default.NotificationsNone,
-                            contentDescription = "Alert Pasar",
-                            tint = if (activeAlertCount > 0) Color(0xFF00E5FF) else TvTextSecondary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                    if (activeAlertCount > 0) {
-                        Box(
-                            modifier = Modifier
-                                .offset(x = (-2).dp, y = 2.dp)
-                                .background(Color(0xFF00E5FF), RoundedCornerShape(10.dp))
-                                .padding(horizontal = 4.dp, vertical = 1.dp)
-                        ) {
-                            Text(
-                                text = "$activeAlertCount",
-                                color = Color.Black,
-                                fontSize = 8.sp,
-                                fontWeight = FontWeight.Black
-                            )
-                        }
-                    }
-                }
-            }
-
-            IconButton(
-                onClick = onOpenSimulation,
-                modifier = Modifier.size(36.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.CompareArrows,
-                    contentDescription = "Simulasi Trade",
-                    tint = TvGreen,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-
-            IconButton(
-                onClick = onOpenLearning,
-                modifier = Modifier.size(36.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.MenuBook,
-                    contentDescription = "Mode Belajar",
-                    tint = Color(0xFF72B7FF),
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-
-            IconButton(
-                onClick = onToggleWatchlist,
-                modifier = Modifier.size(36.dp)
-            ) {
-                Icon(
-                    imageVector = if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
-                    contentDescription = "Favorite",
-                    tint = if (isFavorite) Color(0xFFFFB300) else TvTextSecondary,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-
-            IconButton(
-                onClick = onOpenLandscapeChart,
-                modifier = Modifier.size(36.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.CropRotate,
-                    contentDescription = "Landscape",
-                    tint = TvGreen,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
         }
     }
 }
@@ -180,6 +92,25 @@ fun DetailPriceHeader(
     activityColor: Color,
     quoteAsset: String = "IDR"
 ) {
+    var previousPrice by remember { mutableStateOf(price) }
+    var priceTickColor by remember { mutableStateOf(TvTextPrimary) }
+
+    LaunchedEffect(price) {
+        if (!price.isFinite() || price <= 0.0) return@LaunchedEffect
+        if (previousPrice > 0.0 && price != previousPrice) {
+            priceTickColor = if (price > previousPrice) TvGreen else TvRed
+            delay(1000L)
+            priceTickColor = TvTextPrimary
+        }
+        previousPrice = price
+    }
+
+    val animatedColor by animateColorAsState(
+        targetValue = priceTickColor,
+        animationSpec = tween(durationMillis = 300),
+        label = "price_color_anim"
+    )
+
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -187,9 +118,9 @@ fun DetailPriceHeader(
     ) {
         Column {
             if (price > 0) {
-                SmoothPriceText(
+                FlipCardPriceText(
                     price = price,
-                    color = TvTextPrimary,
+                    color = animatedColor,
                     fontSize = 26.sp,
                     fontWeight = FontWeight.Black,
                     quoteAsset = quoteAsset

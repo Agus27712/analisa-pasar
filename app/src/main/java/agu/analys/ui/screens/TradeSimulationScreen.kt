@@ -352,7 +352,6 @@ fun TradeSimulationScreen(
                     NavTab.WATCHLIST -> onNavigateToDashboard()
                     NavTab.PORTOFOLIO -> viewModel.openPortfolio()
                     NavTab.SIMULASI -> { }
-                    NavTab.BELAJAR -> viewModel.openLearning()
                     NavTab.SETTINGS -> onOpenSettings()
                 }
             }

@@ -298,7 +298,6 @@ fun PortfolioScreen(
                     NavTab.WATCHLIST -> viewModel.navigateTo(AppScreen.DASHBOARD)
                     NavTab.PORTOFOLIO -> { /* Sudah di Portofolio */ }
                     NavTab.SIMULASI -> viewModel.openSimulation()
-                    NavTab.BELAJAR -> viewModel.openLearning()
                     NavTab.SETTINGS -> onOpenSettings()
                 }
             }

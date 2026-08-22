@@ -1,5 +1,8 @@
 package agu.analys.ui.components.dashboard
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -7,18 +10,18 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import agu.analys.config.MarketDataSource
@@ -29,6 +32,7 @@ import agu.analys.ui.theme.TvRed
 import agu.analys.ui.theme.TvTextPrimary
 import agu.analys.ui.theme.TvTextSecondary
 import agu.analys.util.PriceFormatter
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -40,11 +44,12 @@ enum class MarketRankingTab(val label: String, val badge: String) {
 }
 
 /**
- * Top Stat Header & Exchange Source & Mode & Tabs:
- * - EXCHANGE BADGE: [INDODAX (IDR)]
+ * Top Stat Header & Exchange Source & Mode & Redesigned Tabs:
+ * - Title: Watchlist Indodax
+ * - Refresh Button with 360-degree rotation animation on click
  * - 24H VOL | AVG 24H | STRATEGY MODE (SCALPING / 2ND-WAVE / SWING - Info Only)
  * - ● Data realtime Indodax
- * - 3 TABS: [⚡ Scalping Agresif | 🌊 Second-Wave | ⭐ Watchlist]
+ * - Redesigned Tab bar: [⚡ Scalping Agresif | 🌊 Second-Wave | ⭐ Watchlist]
  */
 @Composable
 fun DashboardMockupHeader(
@@ -55,7 +60,7 @@ fun DashboardMockupHeader(
     selectedTab: MarketRankingTab = MarketRankingTab.SCALPING_FAST,
     onSelectTab: (MarketRankingTab) -> Unit,
     onRefresh: () -> Unit,
-    onMenuClick: () -> Unit,
+    onMenuClick: () -> Unit = {},
     onAddAsset: () -> Unit = {}
 ) {
     val totalVolume = allTicks.values.sumOf { it.volume24h }
@@ -63,78 +68,86 @@ fun DashboardMockupHeader(
     val currentTime = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
     val quoteAsset = marketDataSource.defaultQuoteAsset
 
+    // Rotasi animasi untuk tombol refresh
+    val rotation = remember { Animatable(0f) }
+    val coroutineScope = rememberCoroutineScope()
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 14.dp, vertical = 6.dp)
     ) {
-        // Top Nav: Menu, Title + Source Badge, Refresh
+        // Top Nav: Judul Watchlist Indodax + Badge Sumber + Tombol Refresh Berputar
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = onMenuClick, modifier = Modifier.size(36.dp)) {
-                Icon(
-                    imageVector = Icons.Default.Menu,
-                    contentDescription = "Menu",
-                    tint = TvTextPrimary,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Column {
                 Text(
-                    text = "Watchlist & Hotlist Pasar",
+                    text = "Watchlist Indodax",
                     color = TvTextPrimary,
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Black
                 )
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(top = 2.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .background(
-                                Color(0xFF2196F3).copy(alpha = 0.15f),
-                                RoundedCornerShape(4.dp)
-                            )
-                            .border(
-                                0.8.dp,
-                                Color(0xFF2196F3).copy(alpha = 0.4f),
-                                RoundedCornerShape(4.dp)
-                            )
-                            .padding(horizontal = 6.dp, vertical = 1.dp)
-                    ) {
-                        Text(
-                            text = "${marketDataSource.label.uppercase()} ($quoteAsset)",
-                            color = Color(0xFF64B5F6),
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold
+                Spacer(Modifier.height(3.dp))
+                Box(
+                    modifier = Modifier
+                        .background(
+                            Color(0xFF2196F3).copy(alpha = 0.15f),
+                            RoundedCornerShape(4.dp)
                         )
-                    }
+                        .border(
+                            0.8.dp,
+                            Color(0xFF2196F3).copy(alpha = 0.4f),
+                            RoundedCornerShape(4.dp)
+                        )
+                        .padding(horizontal = 6.dp, vertical = 1.dp)
+                ) {
+                    Text(
+                        text = "${marketDataSource.label.uppercase()} ($quoteAsset)",
+                        color = Color(0xFF64B5F6),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (selectedTab == MarketRankingTab.WATCHLIST) {
-                    IconButton(onClick = onAddAsset, modifier = Modifier.size(36.dp)) {
+                    IconButton(onClick = onAddAsset, modifier = Modifier.size(38.dp)) {
                         Icon(
                             imageVector = Icons.Default.Add,
-                            contentDescription = "Add to Watchlist",
-                            tint = TvTextPrimary,
+                            contentDescription = "Tambah ke Watchlist",
+                            tint = Color(0xFF72B7FF),
                             modifier = Modifier.size(24.dp)
                         )
                     }
+                    Spacer(Modifier.width(2.dp))
                 }
-                IconButton(onClick = onRefresh, modifier = Modifier.size(36.dp)) {
+
+                IconButton(
+                    onClick = {
+                        coroutineScope.launch {
+                            rotation.snapTo(0f)
+                            rotation.animateTo(
+                                targetValue = 360f,
+                                animationSpec = tween(durationMillis = 600, easing = LinearEasing)
+                            )
+                        }
+                        onRefresh()
+                    },
+                    modifier = Modifier.size(38.dp)
+                ) {
                     Icon(
                         imageVector = Icons.Default.Refresh,
-                        contentDescription = "Refresh",
+                        contentDescription = "Refresh Data Pasar",
                         tint = TvTextPrimary,
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier
+                            .size(24.dp)
+                            .rotate(rotation.value)
                     )
                 }
             }
@@ -161,7 +174,7 @@ fun DashboardMockupHeader(
                 modifier = Modifier.weight(1f)
             )
 
-            // Card 3: STRATEGI Pill (Info only - Pengaturan hanya di Settings)
+            // Card 3: STRATEGI Pill
             val (modeBg, modeBorder, modeColor, modeLabel) = when (strategyMode) {
                 StrategyMode.SCALPING -> listOf(Color(0xFF123D2A), Color(0xFF1B5E38), TvGreen, "SCALPING")
                 StrategyMode.SECOND_WAVE -> listOf(Color(0xFF0F3845), Color(0xFF155060), Color(0xFF00E5FF), "2ND-WAVE")
@@ -203,7 +216,7 @@ fun DashboardMockupHeader(
 
         Spacer(Modifier.height(10.dp))
 
-        // Live Status Row: ● Data realtime Tokocrypto/Indodax    Update: 09:41:30
+        // Live Status Row: ● Data realtime Indodax    Update: 09:41:30
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -216,9 +229,8 @@ fun DashboardMockupHeader(
                         .background(if (isConnected) TvGreen else TvRed, CircleShape)
                 )
                 Spacer(Modifier.width(6.dp))
-                val exchangeLabel = "Indodax"
                 Text(
-                    text = if (isConnected) "Data realtime $exchangeLabel" else "Koneksi offline / cache",
+                    text = if (isConnected) "Data realtime Indodax" else "Koneksi offline / cache",
                     color = if (isConnected) TvGreen else TvRed,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Medium
@@ -235,34 +247,43 @@ fun DashboardMockupHeader(
 
         Spacer(Modifier.height(10.dp))
 
-        // Category Ranking Tabs
-        androidx.compose.foundation.lazy.LazyRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        // REDESIGNED TAB BAR (Kapsul Modern & Elegan dengan Kontras Jelas)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color(0xFF0C141F))
+                .border(1.dp, Color(0xFF1A2636), RoundedCornerShape(12.dp))
+                .padding(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            items(MarketRankingTab.values().size) { idx ->
-                val tab = MarketRankingTab.values()[idx]
+            MarketRankingTab.values().forEach { tab ->
                 val isSelected = selectedTab == tab
+                val (tabActiveBg, tabActiveBorder, tabActiveTextColor) = when (tab) {
+                    MarketRankingTab.SCALPING_FAST -> Triple(Color(0xFF103322), TvGreen.copy(alpha = 0.7f), TvGreen)
+                    MarketRankingTab.SECOND_WAVE -> Triple(Color(0xFF0D2F3A), Color(0xFF00E5FF).copy(alpha = 0.7f), Color(0xFF00E5FF))
+                    MarketRankingTab.WATCHLIST -> Triple(Color(0xFF332B10), Color(0xFFFFB300).copy(alpha = 0.7f), Color(0xFFFFB300))
+                }
+
                 Box(
                     modifier = Modifier
-                        .background(
-                            if (isSelected) Color(0xFF123D2A) else Color(0xFF101720),
-                            RoundedCornerShape(8.dp)
-                        )
-                        .border(
-                            1.dp,
-                            if (isSelected) TvGreen else Color(0xFF1E2836),
-                            RoundedCornerShape(8.dp)
+                        .weight(1f)
+                        .clip(RoundedCornerShape(9.dp))
+                        .background(if (isSelected) tabActiveBg else Color.Transparent)
+                        .then(
+                            if (isSelected) Modifier.border(1.dp, tabActiveBorder, RoundedCornerShape(9.dp))
+                            else Modifier
                         )
                         .clickable { onSelectTab(tab) }
-                        .padding(horizontal = 12.dp, vertical = 7.dp),
+                        .padding(vertical = 8.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = tab.label,
-                        color = if (isSelected) TvGreen else TvTextSecondary,
-                        fontSize = 12.sp,
-                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                        color = if (isSelected) tabActiveTextColor else TvTextSecondary,
+                        fontSize = 11.5.sp,
+                        fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
+                        maxLines = 1
                     )
                 }
             }

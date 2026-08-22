@@ -3,17 +3,18 @@ package agu.analys.ui.components.dashboard
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.CompareArrows
+import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
 import androidx.compose.material.icons.filled.AccountBalanceWallet
-import androidx.compose.material.icons.filled.FormatListBulleted
-import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -23,7 +24,7 @@ import agu.analys.ui.theme.TvGreen
 import agu.analys.ui.theme.TvTextSecondary
 
 enum class NavTab {
-    WATCHLIST, PORTOFOLIO, SIMULASI, BELAJAR, SETTINGS
+    WATCHLIST, PORTOFOLIO, SIMULASI, SETTINGS
 }
 
 @Composable
@@ -41,7 +42,7 @@ fun AppBottomNavigationBar(
         verticalAlignment = Alignment.CenterVertically
     ) {
         NavItem(
-            icon = Icons.Default.FormatListBulleted,
+            icon = Icons.AutoMirrored.Filled.FormatListBulleted,
             label = "Watchlist",
             isSelected = currentTab == NavTab.WATCHLIST,
             onClick = { onSelectTab(NavTab.WATCHLIST) }
@@ -57,12 +58,6 @@ fun AppBottomNavigationBar(
             label = "Simulasi",
             isSelected = currentTab == NavTab.SIMULASI,
             onClick = { onSelectTab(NavTab.SIMULASI) }
-        )
-        NavItem(
-            icon = Icons.Default.MenuBook,
-            label = "Belajar",
-            isSelected = currentTab == NavTab.BELAJAR,
-            onClick = { onSelectTab(NavTab.BELAJAR) }
         )
         NavItem(
             icon = Icons.Default.Settings,
@@ -82,8 +77,9 @@ private fun NavItem(
 ) {
     Column(
         modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
             .clickable { onClick() }
-            .padding(horizontal = 12.dp, vertical = 4.dp),
+            .padding(horizontal = 14.dp, vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Icon(
@@ -96,7 +92,7 @@ private fun NavItem(
         Text(
             text = label,
             color = if (isSelected) TvGreen else TvTextSecondary,
-            fontSize = 10.sp,
+            fontSize = 11.sp,
             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
         )
     }

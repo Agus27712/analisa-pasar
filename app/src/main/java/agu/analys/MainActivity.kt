@@ -89,7 +89,7 @@ class MainActivity : ComponentActivity() {
                         AppScreen.SIMULATION_TRADE -> TradeSimulationScreen(
                             viewModel = tradingViewModel,
                             onOpenChart = { tradingViewModel.openCoinDetail(tradingViewModel.selectedPair.value) },
-                            onNavigateToDashboard = { tradingViewModel.navigateTo(AppScreen.DASHBOARD) },
+                            onNavigateToDashboard = { tradingViewModel.goBack() },
                             onOpenSettings = { tradingViewModel.openSettings() }
                         )
                         AppScreen.LANDSCAPE_CHART -> LandscapeChartScreen(

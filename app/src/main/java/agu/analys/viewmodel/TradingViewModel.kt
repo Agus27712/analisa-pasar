@@ -390,7 +390,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     private val navigationStack = mutableListOf<AppScreen>()
     fun navigateTo(screen: AppScreen) {
         if (_currentScreen.value != screen) {
-            if (_currentScreen.value != AppScreen.DASHBOARD) navigationStack.add(_currentScreen.value)
+            navigationStack.add(_currentScreen.value)
             _currentScreen.value = screen
         }
     }

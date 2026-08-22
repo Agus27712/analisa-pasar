@@ -201,21 +201,6 @@ fun LearningPathScreen(
             }
             item { Spacer(Modifier.height(20.dp)) }
         }
-
-        if (viewModel != null) {
-            agu.analys.ui.components.dashboard.AppBottomNavigationBar(
-                currentTab = agu.analys.ui.components.dashboard.NavTab.BELAJAR,
-                onSelectTab = { tab ->
-                    when (tab) {
-                        agu.analys.ui.components.dashboard.NavTab.WATCHLIST -> viewModel.navigateTo(agu.analys.model.AppScreen.DASHBOARD)
-                        agu.analys.ui.components.dashboard.NavTab.PORTOFOLIO -> viewModel.openPortfolio()
-                        agu.analys.ui.components.dashboard.NavTab.SIMULASI -> viewModel.openSimulation()
-                        agu.analys.ui.components.dashboard.NavTab.BELAJAR -> { /* Sudah di Belajar */ }
-                        agu.analys.ui.components.dashboard.NavTab.SETTINGS -> onOpenSettings()
-                    }
-                }
-            )
-        }
     }
 }
 

@@ -1,10 +1,13 @@
 package agu.analys.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -13,16 +16,23 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CropRotate
+import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.material.icons.filled.ShowChart
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -35,7 +45,6 @@ import agu.analys.model.*
 import agu.analys.ui.components.detail.*
 import agu.analys.ui.theme.TvBackground
 import agu.analys.ui.theme.TvGreen
-import agu.analys.ui.theme.TvRed
 import agu.analys.ui.theme.TvTextPrimary
 import agu.analys.ui.theme.TvTextSecondary
 import agu.analys.util.AppPreferences
@@ -101,39 +110,30 @@ fun DetailChartScreen(
         else -> Color(0xFF78909C)
     }
 
-    Column(
+    val scrollState = rememberScrollState()
+    val isScrolled by remember { derivedStateOf { scrollState.value > 140 } }
+
+    Box(
         modifier = modifier
             .fillMaxSize()
             .background(TvBackground)
     ) {
-        // ===== STICKY: status koneksi tidak ikut scroll =====
-        StickyConnectionBar(
-            connection = connection,
-            strategyMode = strategyMode,
-            onRetry = { viewModel.retryConnection() }
-        )
-
-        // ===== Konten scroll (compact padding untuk layar kecil) =====
+        // Konten scrollable
         Column(
             modifier = Modifier
-                .weight(1f)
-                .verticalScroll(rememberScrollState())
+                .fillMaxSize()
+                .verticalScroll(scrollState)
                 .padding(horizontal = 12.dp, vertical = 6.dp)
         ) {
+            // 1. Top Bar Bersih (Hanya Back, Logo Avatar, Nama Pair, dan Nama Lengkap)
             DetailTopBar(
                 pair = pair,
-                isFavorite = isFavorite,
-                onNavigateToDashboard = onNavigateToDashboard,
-                onOpenSimulation = { viewModel.openSimulation(pair) },
-                onOpenLearning = { viewModel.openLearning() },
-                onToggleWatchlist = { viewModel.toggleWatchlist(pair.symbol) },
-                onOpenLandscapeChart = onOpenLandscapeChart,
-                activeAlertCount = priceAlerts.count { it.isEnabled && !it.isTriggered },
-                onOpenAlerts = { showPriceAlertDialog = true }
+                onNavigateToDashboard = onNavigateToDashboard
             )
 
             Spacer(modifier.height(8.dp))
 
+            // 2. Header Harga Aset (3D Flip Animation & Realtime Color Change tanpa pulse)
             DetailPriceHeader(
                 price = tick?.price ?: 0.0,
                 change24h = change,
@@ -142,34 +142,140 @@ fun DetailChartScreen(
                 quoteAsset = pair.quoteAsset
             )
 
-            Spacer(modifier.height(10.dp))
+            Spacer(modifier.height(12.dp))
 
-            // Timeframe chips — wrap-friendly, tanpa mode badge (sudah di sticky)
+            // 3. Baris Timeframe + Tombol Aksi (Alert, Simulasi, Belajar, Favorit)
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(5.dp)
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                listOf(Timeframe.M1, Timeframe.M15, Timeframe.H1, Timeframe.H4, Timeframe.D1).forEach { tf ->
-                    val isSelected = selectedTimeframe == tf
+                // Timeframe Chips (1M, 15M, 1H, 4H, 1D)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    listOf(Timeframe.M1, Timeframe.M15, Timeframe.H1, Timeframe.H4, Timeframe.D1).forEach { tf ->
+                        val isSelected = selectedTimeframe == tf
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(if (isSelected) Color(0xFF1E2836) else Color(0xFF101720))
+                                .border(
+                                    1.dp,
+                                    if (isSelected) Color(0xFF72B7FF) else Color(0xFF1E2836),
+                                    RoundedCornerShape(6.dp)
+                                )
+                                .clickable { viewModel.selectTimeframe(tf) }
+                                .padding(horizontal = 7.dp, vertical = 5.dp)
+                        ) {
+                            Text(
+                                text = tf.label.uppercase(),
+                                color = if (isSelected) Color(0xFF72B7FF) else TvTextSecondary,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.width(8.dp))
+
+                // Action Chips (Alert, Simulasi, Belajar, Favorit)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val activeAlertCount = priceAlerts.count { it.isEnabled && !it.isTriggered }
+
+                    // Alert Chip (🔔)
                     Box(
                         modifier = Modifier
-                            .background(
-                                if (isSelected) Color(0xFF1E2836) else Color(0xFF101720),
-                                RoundedCornerShape(6.dp)
-                            )
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color(0xFF101720))
                             .border(
                                 1.dp,
-                                if (isSelected) Color(0xFF72B7FF) else Color(0xFF1E2836),
+                                if (activeAlertCount > 0) Color(0xFF00E5FF).copy(alpha = 0.6f) else Color(0xFF1E2836),
                                 RoundedCornerShape(6.dp)
                             )
-                            .clickable { viewModel.selectTimeframe(tf) }
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                            .clickable { showPriceAlertDialog = true }
+                            .padding(horizontal = 7.dp, vertical = 5.dp),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = tf.label.uppercase(),
-                            color = if (isSelected) Color(0xFF72B7FF) else TvTextSecondary,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = if (activeAlertCount > 0) Icons.Default.Notifications else Icons.Default.NotificationsNone,
+                                contentDescription = "Alert Pasar",
+                                tint = if (activeAlertCount > 0) Color(0xFF00E5FF) else TvTextSecondary,
+                                modifier = Modifier.size(15.dp)
+                            )
+                            if (activeAlertCount > 0) {
+                                Spacer(Modifier.width(2.dp))
+                                Text(
+                                    text = "$activeAlertCount",
+                                    color = Color(0xFF00E5FF),
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+
+                    // Simulasi Chip (⇄)
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color(0xFF101720))
+                            .border(1.dp, Color(0xFF1E2836), RoundedCornerShape(6.dp))
+                            .clickable { viewModel.openSimulation(pair) }
+                            .padding(horizontal = 7.dp, vertical = 5.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.CompareArrows,
+                            contentDescription = "Simulasi Trade",
+                            tint = TvGreen,
+                            modifier = Modifier.size(15.dp)
+                        )
+                    }
+
+                    // Mode Belajar Chip (📖)
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color(0xFF101720))
+                            .border(1.dp, Color(0xFF1E2836), RoundedCornerShape(6.dp))
+                            .clickable { viewModel.openLearning() }
+                            .padding(horizontal = 7.dp, vertical = 5.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.MenuBook,
+                            contentDescription = "Mode Belajar",
+                            tint = Color(0xFF72B7FF),
+                            modifier = Modifier.size(15.dp)
+                        )
+                    }
+
+                    // Favorit / Watchlist Chip (⭐)
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color(0xFF101720))
+                            .border(
+                                1.dp,
+                                if (isFavorite) Color(0xFFFFB300).copy(alpha = 0.6f) else Color(0xFF1E2836),
+                                RoundedCornerShape(6.dp)
+                            )
+                            .clickable { viewModel.toggleWatchlist(pair.symbol) }
+                            .padding(horizontal = 7.dp, vertical = 5.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
+                            contentDescription = "Favorit",
+                            tint = if (isFavorite) Color(0xFFFFB300) else TvTextSecondary,
+                            modifier = Modifier.size(15.dp)
                         )
                     }
                 }
@@ -177,6 +283,7 @@ fun DetailChartScreen(
 
             Spacer(modifier.height(8.dp))
 
+            // Tombol Tampilkan Chart & Fullscreen
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -242,7 +349,16 @@ fun DetailChartScreen(
                 }
             }
 
-            Spacer(modifier.height(12.dp))
+            Spacer(modifier.height(8.dp))
+
+            // In-Line Live Status & Strategi Mode (Di bawah area chart)
+            LiveModeStatusBar(
+                connection = connection,
+                strategyMode = strategyMode,
+                onRetry = { viewModel.retryConnection() }
+            )
+
+            Spacer(modifier.height(10.dp))
 
             val availableIdr = if (isRealBuyMode) (realBalance["idr"] ?: 0.0) else wallet.getAvailableIdr()
             val availableCoin = if (isRealBuyMode) {
@@ -499,6 +615,23 @@ fun DetailChartScreen(
             }
 
             Spacer(modifier.height(16.dp))
+        }
+
+        // Floating Sticky Status Bar saat scroll ke bawah
+        AnimatedVisibility(
+            visible = isScrolled,
+            enter = fadeIn(tween(200)) + slideInVertically(tween(200)) { -it },
+            exit = fadeOut(tween(150)) + slideOutVertically(tween(150)) { -it },
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 6.dp)
+        ) {
+            StickyFloatingStatusBar(
+                connection = connection,
+                strategyMode = strategyMode,
+                onRetry = { viewModel.retryConnection() }
+            )
         }
     }
 
