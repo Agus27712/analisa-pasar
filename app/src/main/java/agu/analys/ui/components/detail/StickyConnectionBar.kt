@@ -143,7 +143,7 @@ fun StickyFloatingStatusBar(
     val statusLabel = when {
         live -> "LIVE"
         loading -> "SYNC"
-        else -> "OFF"
+        else -> "OFFLINE"
     }
     val statusColor = when {
         live -> TvGreen
@@ -157,9 +157,9 @@ fun StickyFloatingStatusBar(
     }
 
     val modeLabel = when (strategyMode) {
-        StrategyMode.SCALPING -> "SCALP"
-        StrategyMode.SECOND_WAVE -> "2ND"
-        StrategyMode.SWING -> "SWING"
+        StrategyMode.SCALPING -> "SCALPING MODE"
+        StrategyMode.SECOND_WAVE -> "2ND-WAVE MODE"
+        StrategyMode.SWING -> "SWING MODE"
     }
     val modeColor = when (strategyMode) {
         StrategyMode.SCALPING -> TvGreen

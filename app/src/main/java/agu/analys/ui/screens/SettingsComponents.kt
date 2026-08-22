@@ -151,7 +151,7 @@ fun AiProviderSettingsCard(
             Spacer(Modifier.height(6.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 SensitivityChoice(
-                    label = "GROQ (LLaMA 3.3)",
+                    label = "GROQ (OpenAI GPT)",
                     selected = provider == AiProvider.GROQ,
                     activeBg = Color(0xFF122840),
                     activeFg = Color(0xFF72B7FF),

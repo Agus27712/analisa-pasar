@@ -314,7 +314,7 @@ fun RadarSellSection(
         ) {
             listOf(25, 50, 75, 100).forEach { pct ->
                 QuickNominalChip(
-                    label = if (pct == 100) "100% (All)" else "$pct%",
+                    label = "$pct%",
                     selected = selectedSellPercent == pct && !isCustomSellQtyOpen,
                     onClick = {
                         selectedSellPercent = pct

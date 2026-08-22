@@ -20,60 +20,29 @@ import java.util.concurrent.TimeUnit
 object GroqAiService {
     private val client = OkHttpClient.Builder().connectTimeout(20, TimeUnit.SECONDS).readTimeout(45, TimeUnit.SECONDS).build()
     private const val BASE_URL = "https://api.groq.com/openai/v1/chat/completions"
-    private const val MODEL = "openai/gpt-oss-20b"
+    private const val MODEL = "openai/gpt-oss-120b"
 
     suspend fun generateDeepMarketAudit(apiKey: String, tick: MarketTick, indicators: TechnicalIndicators, signal: AISignalState): String = withContext(Dispatchers.IO) {
         val cpi = if (safeContextReady) BpsMacroService(AppContextProvider.context).getLatest() else null
         if (apiKey.isBlank()) return@withContext buildFallback(tick, indicators, signal, cpi) + "\n\n⚠️ Groq API key belum di-set. Buka Settings dan isi Groq API key."
         val macroBlock = macroText(cpi)
         val prompt = """
-Kamu adalah tutor analisis teknikal kripto untuk trader Indonesia yang menggunakan INDODAX IDR.
-
-ATURAN DATA:
-- Gunakan hanya data market dan makro yang diberikan.
-- Bedakan fakta dari interpretasi.
-- CPI Indonesia hanya konteks makro, BUKAN pemicu BUY/SELL otomatis dan tidak menambah skor engine.
-- Jangan mengarang funding rate, open interest, liquidation, berita, geopolitik, data AS, atau data lain yang tidak tersedia.
-- Jangan menjanjikan profit.
-
-DATA MARKET INDODAX/IDR:
+Kamu asisten analisa spot crypto Indodax IDR. Berikan ringkasan SANGAT PADAT & RINGKAS (maksimal 4 poin singkat):
 Pair: ${tick.symbol}
-Harga: ${PriceFormatter.formatPrice(tick.price)}
-Perubahan 24 jam: ${PriceFormatter.formatPercentage(tick.change24h)}
-High 24 jam: ${PriceFormatter.formatPrice(tick.high24h)}
-Low 24 jam: ${PriceFormatter.formatPrice(tick.low24h)}
-Volume 24 jam: ${PriceFormatter.formatVolume(tick.volume24h)}
-
-INDIKATOR:
-RSI14: ${PriceFormatter.formatRsi(indicators.rsi14)}
-MACD Histogram: ${PriceFormatter.formatIndicatorVal(indicators.macdHist, 4)}
-EMA20: ${PriceFormatter.formatPrice(indicators.ema20)}
-EMA50: ${PriceFormatter.formatPrice(indicators.ema50)}
-EMA200: ${PriceFormatter.formatPrice(indicators.ema200)}
-ATR: ${PriceFormatter.formatIndicatorVal(indicators.atr, 4)}
-Momentum: ${PriceFormatter.formatIndicatorVal(indicators.momentum, 4)}
-
-SINYAL ENGINE:
-Aksi: ${signal.action.name}
-Confidence: ${signal.confidence}/100, bukan probabilitas profit
-Entry: ${PriceFormatter.formatPrice(signal.entryPrice)}
-TP1: ${PriceFormatter.formatPrice(signal.targetPrice1)}
-TP2: ${PriceFormatter.formatPrice(signal.targetPrice2)}
-SL: ${PriceFormatter.formatPrice(signal.stopLoss)}
-RR: ${signal.riskRewardRatio}
-Alasan: ${signal.reasoning.joinToString("; ")}
-
+Harga: ${PriceFormatter.formatPrice(tick.price)} (${PriceFormatter.formatPercentage(tick.change24h)} 24j)
+Range: ${PriceFormatter.formatPrice(tick.low24h)} - ${PriceFormatter.formatPrice(tick.high24h)}
+Volume: ${PriceFormatter.formatVolume(tick.volume24h)}
+RSI 14: ${PriceFormatter.formatRsi(indicators.rsi14)} | MACD Hist: ${PriceFormatter.formatIndicatorVal(indicators.macdHist, 4)}
+EMA 20/50: ${PriceFormatter.formatPrice(indicators.ema20)} / ${PriceFormatter.formatPrice(indicators.ema50)}
+Sinyal Engine: ${signal.action.name} (${signal.confidence}/100)
+Level: Entry ${PriceFormatter.formatPrice(signal.entryPrice)} | TP1 ${PriceFormatter.formatPrice(signal.targetPrice1)} | SL ${PriceFormatter.formatPrice(signal.stopLoss)} | RR ${signal.riskRewardRatio}
 $macroBlock
 
-FORMAT JAWABAN:
-1. KONDISI MARKET
-2. MAKRO INDONESIA
-3. SKENARIO BULLISH/BEARISH/SIDEWAYS + pemicu dan invalidasi
-4. RISK MANAGEMENT dari level engine
-5. KESIMPULAN: apakah makro memperkuat, netral, atau menambah risiko terhadap setup teknikal
-6. DATA YANG TIDAK TERSEDIA
-
-Bahasa Indonesia, ringkas, edukatif, tanpa jargon yang tidak dijelaskan.
+Format respon:
+1. 🎯 Sinyal & Tren: [Aksi & tren saat ini]
+2. 📊 Kondisi Indikator: [RSI, MACD, Volume]
+3. 🛡️ Level Kunci: [Support/Resistance/SL]
+4. 💡 Saran Eksekusi: [Saran eksekusi spot aman & fee maker 0.21%]
         """.trimIndent()
 
         try {
@@ -88,40 +57,57 @@ Bahasa Indonesia, ringkas, edukatif, tanpa jargon yang tidak dijelaskan.
             val request = Request.Builder().url(BASE_URL).addHeader("Authorization", "Bearer $apiKey").addHeader("Content-Type", "application/json").post(payload.toString().toRequestBody("application/json".toMediaType())).build()
             client.newCall(request).execute().use { resp ->
                 val responseBody = resp.body?.string().orEmpty()
-                if (!resp.isSuccessful) return@withContext buildFallback(tick, indicators, signal, cpi) + "\n\n⚠️ Groq API error HTTP ${resp.code}: ${responseBody.take(180)}"
+                if (!resp.isSuccessful) return@withContext buildFallback(tick, indicators, signal, cpi)
                 val text = JSONObject(responseBody).optJSONArray("choices")?.takeIf { it.length() > 0 }?.getJSONObject(0)?.optJSONObject("message")?.optString("content").orEmpty()
-                if (text.isNotBlank()) text else buildFallback(tick, indicators, signal, cpi)
+                if (text.isNotBlank()) text.trim() else buildFallback(tick, indicators, signal, cpi)
             }
         } catch (e: Exception) {
-            buildFallback(tick, indicators, signal, cpi) + "\n\n⚠️ Gagal memanggil Groq: ${e.message}"
+            buildFallback(tick, indicators, signal, cpi)
         }
     }
 
     private fun macroText(cpi: IndonesiaCpiData?): String = cpi?.let {
-        """DATA MAKRO INDONESIA TERVALIDASI — SUMBER BPS
-Periode: ${it.period}
-CPI/IHK Index: ${it.cpiIndex?.toString() ?: "tidak tersedia"}
-Inflasi IHK YoY: ${if (it.yoyPercent.isFinite()) "${it.yoyPercent}%" else "tidak tersedia"}
-Target inflasi: ${it.inflationTargetCenterPercent}% ± ${it.inflationTargetBandPercent}%
-Sumber: ${it.source}
-Status cache: ${if (System.currentTimeMillis() - it.fetchedAt <= 24L * 60L * 60L * 1000L) "fresh" else "cached/stale"}
-JANGAN mengisi nilai yang tidak tersedia.""".trimIndent()
-    } ?: "DATA MAKRO INDONESIA: tidak tersedia. Jangan menebak CPI/IHK."
+        "Makro BPS: CPI ${it.cpiIndex ?: "-"} | Inflasi YoY ${if (it.yoyPercent.isFinite()) "${it.yoyPercent}%" else "-"}"
+    } ?: "Makro BPS: Normal"
 
     private fun buildFallback(tick: MarketTick, indicators: TechnicalIndicators, signal: AISignalState, cpi: IndonesiaCpiData?): String {
-        val rsiText = when { indicators.rsi14 < 30 -> "oversold (${PriceFormatter.formatRsi(indicators.rsi14)})"; indicators.rsi14 > 70 -> "overbought (${PriceFormatter.formatRsi(indicators.rsi14)})"; else -> "netral (${PriceFormatter.formatRsi(indicators.rsi14)})" }
-        val action = when (signal.action.name) { "BUY" -> "BELI"; "SELL" -> "JUAL"; else -> "TAHAN" }
-        val macro = cpi?.let { "• BPS CPI/IHK: ${it.cpiIndex?.toString() ?: "-"} | inflasi YoY: ${if (it.yoyPercent.isFinite()) "${it.yoyPercent}%" else "-"} | ${it.period}" } ?: "• BPS CPI/IHK: tidak tersedia."
+        val rsiText = when {
+            indicators.rsi14 < 30 -> "Oversold (potensi pantulan)"
+            indicators.rsi14 > 70 -> "Overbought (waspada koreksi)"
+            else -> "Netral (${PriceFormatter.formatRsi(indicators.rsi14)})"
+        }
+        val trendStatus = when {
+            indicators.ema20 > indicators.ema50 && tick.price >= indicators.ema20 -> "Bullish Uptrend"
+            indicators.ema20 < indicators.ema50 && tick.price <= indicators.ema20 -> "Bearish Downtrend"
+            else -> "Konsolidasi / Sideways"
+        }
+        val action = when (signal.action.name) {
+            "BUY" -> "BELI (Setup Terkonfirmasi)"
+            "SELL" -> "JUAL / AMBIL PROFIT"
+            else -> "WAIT & SEE (Tunggu Momentum)"
+        }
+        val macro = cpi?.let { "• BPS CPI: ${it.cpiIndex ?: "-"} | Inflasi YoY ${if (it.yoyPercent.isFinite()) "${it.yoyPercent}%" else "-"}" } ?: "• Makro BPS: Normal"
+
         return """
-📊 LAPORAN AUDIT PASAR (${tick.symbol}) — Fallback
+📌 RINGKASAN TEKNIKAL (${tick.symbol})
 
-• Harga: ${PriceFormatter.formatPrice(tick.price)} (${PriceFormatter.formatPercentage(tick.change24h)} 24j)
-• RSI: $rsiText | MACD hist: ${PriceFormatter.formatIndicatorVal(indicators.macdHist, 4)}
-• Sinyal engine: $action (${signal.confidence}/100)
+1. 🎯 Sinyal & Tren:
+• Sinyal: $action (${signal.confidence}/100)
+• Tren: $trendStatus
+
+2. 📊 Indikator Kunci:
+• RSI (14): $rsiText
+• Volume 24j: ${PriceFormatter.formatVolume(tick.volume24h)}
+• MACD Hist: ${PriceFormatter.formatIndicatorVal(indicators.macdHist, 4)}
+
+3. 🛡️ Level Kritis (Plan):
+• Entry Acuan: ${PriceFormatter.formatPrice(signal.entryPrice)}
+• Target (TP1): ${PriceFormatter.formatPrice(signal.targetPrice1)}
+• Batas Risiko (SL): ${PriceFormatter.formatPrice(signal.stopLoss)} (RR: ${signal.riskRewardRatio})
+
+4. 💡 Saran Eksekusi:
+• Pasang antrean limit order (Maker 0.21%) dan perhatikan money management.
 $macro
-• Entry ${PriceFormatter.formatPrice(signal.entryPrice)} | TP1 ${PriceFormatter.formatPrice(signal.targetPrice1)} | SL ${PriceFormatter.formatPrice(signal.stopLoss)} | RR ${signal.riskRewardRatio}
-
-Data funding, liquidation, open interest, berita, dan data makro lain tidak tersedia.
         """.trimIndent()
     }
 

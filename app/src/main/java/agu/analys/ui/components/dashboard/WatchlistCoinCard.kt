@@ -19,6 +19,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -126,83 +127,121 @@ fun WatchlistCoinCard(
         colors = CardDefaults.cardColors(containerColor = DashboardColors.Card),
         border = BorderStroke(1.dp, DashboardColors.Border)
     ) {
-        Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
-            // Baris 1: Rank, Avatar, Nama, Star, Harga, & %
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+            // Baris 1: Layout Responsif Kiri-Kanan (Bebas Wrapping di Redmi Note 11)
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                // Rank Pill
-                Box(
-                    modifier = Modifier
-                        .background(Color(0xFF1E2836), RoundedCornerShape(6.dp))
-                        .padding(horizontal = 6.dp, vertical = 3.dp)
+                // Sisi Kiri: Rank + Avatar + Simbol Pair
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f, fill = false)
                 ) {
-                    Text(
-                        text = rankText,
-                        color = Color(0xFFFFB300),
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Black
-                    )
-                }
-
-                Spacer(Modifier.width(8.dp))
-                AssetAvatar(baseAsset = pair.baseAsset, iconUrl = pair.iconUrl, size = 34.dp)
-                Spacer(Modifier.width(8.dp))
-
-                // Symbol & Coin Name
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = "${pair.baseAsset}/${pair.quoteAsset}",
-                        color = TvTextPrimary,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.ExtraBold
-                    )
-                }
-
-                // Star Favorite Icon
-                IconButton(
-                    onClick = onToggleFavorite,
-                    modifier = Modifier.size(32.dp)
-                ) {
-                    Icon(
-                        imageVector = if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
-                        contentDescription = "Favorite",
-                        tint = if (isFavorite) Color(0xFFFFB300) else TvTextSecondary,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-
-                Spacer(Modifier.width(4.dp))
-
-                // Price & Percentage
-                Column(horizontalAlignment = Alignment.End) {
-                    if (tick != null && tick.price > 0) {
-                        SmoothPriceText(
-                            price = tick.price,
-                            color = TvTextPrimary,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            quoteAsset = pair.quoteAsset
+                    // Rank Pill
+                    Box(
+                        modifier = Modifier
+                            .background(Color(0xFF1E2836), RoundedCornerShape(5.dp))
+                            .padding(horizontal = 5.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = rankText,
+                            color = Color(0xFFFFB300),
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Black
                         )
-                        if (isUsdt && usdtIdrRate > 0) {
-                            val idrEst = tick.price * usdtIdrRate
+                    }
+
+                    Spacer(Modifier.width(6.dp))
+                    AssetAvatar(baseAsset = pair.baseAsset, iconUrl = pair.iconUrl, size = 32.dp)
+                    Spacer(Modifier.width(6.dp))
+
+                    // Symbol & Quote Badge
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = "≈ ${PriceFormatter.formatPrice(idrEst, quoteAsset = "IDR")}",
+                                text = pair.baseAsset,
+                                color = TvTextPrimary,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                maxLines = 1
+                            )
+                            Spacer(Modifier.width(3.dp))
+                            Text(
+                                text = "/${pair.quoteAsset}",
                                 color = TvTextSecondary,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Normal
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1
                             )
                         }
-                    } else {
-                        Text("—", color = TvTextSecondary, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(1.dp))
+                        ActivityChip(activity)
                     }
-                    if (change.isFinite()) {
-                        AnimatedMetricText(
-                            value = PriceFormatter.formatPercentage(change),
-                            color = changeColor,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
+                }
+
+                Spacer(Modifier.width(8.dp))
+
+                // Sisi Kanan: Harga, % Badge, & Star Favorit
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    Column(horizontalAlignment = Alignment.End) {
+                        if (tick != null && tick.price > 0) {
+                            SmoothPriceText(
+                                price = tick.price,
+                                color = TvTextPrimary,
+                                fontSize = 14.5.sp,
+                                fontWeight = FontWeight.Black,
+                                quoteAsset = pair.quoteAsset
+                            )
+                            if (isUsdt && usdtIdrRate > 0) {
+                                val idrEst = tick.price * usdtIdrRate
+                                Text(
+                                    text = "≈ ${PriceFormatter.formatPrice(idrEst, quoteAsset = "IDR")}",
+                                    color = TvTextSecondary,
+                                    fontSize = 9.5.sp,
+                                    fontWeight = FontWeight.Normal,
+                                    maxLines = 1
+                                )
+                            }
+                        } else {
+                            Text("—", color = TvTextSecondary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        if (change.isFinite()) {
+                            Box(
+                                modifier = Modifier
+                                    .background(
+                                        if (change >= 0) TvGreen.copy(alpha = 0.15f) else TvRed.copy(alpha = 0.15f),
+                                        RoundedCornerShape(4.dp)
+                                    )
+                                    .padding(horizontal = 5.dp, vertical = 1.dp)
+                            ) {
+                                AnimatedMetricText(
+                                    value = PriceFormatter.formatPercentage(change),
+                                    color = changeColor,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.width(4.dp))
+
+                    // Star Favorite Icon
+                    IconButton(
+                        onClick = onToggleFavorite,
+                        modifier = Modifier.size(30.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
+                            contentDescription = "Favorite",
+                            tint = if (isFavorite) Color(0xFFFFB300) else TvTextSecondary,
+                            modifier = Modifier.size(17.dp)
                         )
                     }
                 }
@@ -210,37 +249,28 @@ fun WatchlistCoinCard(
 
             Spacer(Modifier.height(8.dp))
 
-            // Baris 2: Activity Badge
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                ActivityChip(activity)
-            }
-
-            Spacer(Modifier.height(10.dp))
-
-            // Baris 3 & 4: Meter Bars
+            // Baris 2 & 3: Meter Bars
             SegmentedMeterRow(
                 label = "Volume",
                 score = volumeScore,
                 activeColor = meterColor
             )
-            Spacer(Modifier.height(5.dp))
+            Spacer(Modifier.height(4.dp))
             SegmentedMeterRow(
                 label = "Momentum",
                 score = momentumScore,
                 activeColor = meterColor
             )
 
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(6.dp))
 
-            // Baris 5: Buka Chart > Link / Button
+            // Baris 4: Buka Chart Toggle Link / Button
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .clip(RoundedCornerShape(6.dp))
                     .clickable { isInlineChartExpanded = !isInlineChartExpanded }
-                    .padding(vertical = 4.dp),
+                    .padding(vertical = 3.dp, horizontal = 2.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -249,27 +279,27 @@ fun WatchlistCoinCard(
                         imageVector = Icons.Default.ShowChart,
                         contentDescription = null,
                         tint = TvGreen,
-                        modifier = Modifier.size(14.dp)
+                        modifier = Modifier.size(13.dp)
                     )
                     Spacer(Modifier.width(4.dp))
                     Text(
                         text = if (isInlineChartExpanded) "Tutup Chart" else "Buka Chart",
                         color = TvGreen,
-                        fontSize = 11.sp,
+                        fontSize = 10.5.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Icon(
                         imageVector = Icons.Default.ChevronRight,
                         contentDescription = null,
                         tint = TvGreen,
-                        modifier = Modifier.size(14.dp)
+                        modifier = Modifier.size(13.dp)
                     )
                 }
 
                 Text(
                     text = "Lihat Rekomendasi >",
                     color = TvTextSecondary,
-                    fontSize = 11.sp,
+                    fontSize = 10.5.sp,
                     fontWeight = FontWeight.Medium
                 )
             }

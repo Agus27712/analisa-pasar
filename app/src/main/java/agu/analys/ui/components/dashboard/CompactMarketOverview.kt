@@ -38,18 +38,18 @@ import java.util.Date
 import java.util.Locale
 
 enum class MarketRankingTab(val label: String, val badge: String) {
-    SCALPING_FAST("⚡ Scalping Agresif", "⚡ CEPAT"),
-    SECOND_WAVE("🌊 Second-Wave", "🌊 2ND-WAVE"),
-    WATCHLIST("⭐ Watchlist", "⭐ FAVORIT")
+    SCALPING_FAST("⚡ Scalping", "⚡ CEPAT"),
+    SECOND_WAVE("🌊 2nd-Wave", "🌊 2ND-WAVE"),
+    WATCHLIST("⭐ Favorit", "⭐ FAVORIT")
 }
 
 /**
  * Top Stat Header & Exchange Source & Mode & Redesigned Tabs:
  * - Title: Watchlist Indodax
  * - Refresh Button with 360-degree rotation animation on click
- * - 24H VOL | AVG 24H | STRATEGY MODE (SCALPING / 2ND-WAVE / SWING - Info Only)
+ * - 24H VOL | AVG VOL | STRATEGI MODE (SCALPING / 2ND-WAVE / SWING)
  * - ● Data realtime Indodax
- * - Redesigned Tab bar: [⚡ Scalping Agresif | 🌊 Second-Wave | ⭐ Watchlist]
+ * - Responsive Tab bar: [⚡ Scalping | 🌊 2nd-Wave | ⭐ Favorit]
  */
 @Composable
 fun DashboardMockupHeader(
@@ -75,7 +75,7 @@ fun DashboardMockupHeader(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 14.dp, vertical = 6.dp)
+            .padding(horizontal = 12.dp, vertical = 6.dp)
     ) {
         // Top Nav: Judul Watchlist Indodax + Badge Sumber + Tombol Refresh Berputar
         Row(
@@ -89,19 +89,20 @@ fun DashboardMockupHeader(
                 Text(
                     text = "Watchlist Indodax",
                     color = TvTextPrimary,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Black
+                    fontSize = 19.sp,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = (-0.3).sp
                 )
-                Spacer(Modifier.height(3.dp))
+                Spacer(Modifier.height(2.dp))
                 Box(
                     modifier = Modifier
                         .background(
-                            Color(0xFF2196F3).copy(alpha = 0.15f),
+                            Color(0xFF2196F3).copy(alpha = 0.12f),
                             RoundedCornerShape(4.dp)
                         )
                         .border(
                             0.8.dp,
-                            Color(0xFF2196F3).copy(alpha = 0.4f),
+                            Color(0xFF2196F3).copy(alpha = 0.35f),
                             RoundedCornerShape(4.dp)
                         )
                         .padding(horizontal = 6.dp, vertical = 1.dp)
@@ -109,23 +110,30 @@ fun DashboardMockupHeader(
                     Text(
                         text = "${marketDataSource.label.uppercase()} ($quoteAsset)",
                         color = Color(0xFF64B5F6),
-                        fontSize = 10.sp,
+                        fontSize = 9.5.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
             }
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
                 if (selectedTab == MarketRankingTab.WATCHLIST) {
-                    IconButton(onClick = onAddAsset, modifier = Modifier.size(38.dp)) {
+                    IconButton(
+                        onClick = onAddAsset,
+                        modifier = Modifier
+                            .size(36.dp)
+                            .background(Color(0xFF132338), RoundedCornerShape(8.dp))
+                    ) {
                         Icon(
                             imageVector = Icons.Default.Add,
                             contentDescription = "Tambah ke Watchlist",
                             tint = Color(0xFF72B7FF),
-                            modifier = Modifier.size(24.dp)
+                            modifier = Modifier.size(20.dp)
                         )
                     }
-                    Spacer(Modifier.width(2.dp))
                 }
 
                 IconButton(
@@ -139,14 +147,16 @@ fun DashboardMockupHeader(
                         }
                         onRefresh()
                     },
-                    modifier = Modifier.size(38.dp)
+                    modifier = Modifier
+                        .size(36.dp)
+                        .background(Color(0xFF132338), RoundedCornerShape(8.dp))
                 ) {
                     Icon(
                         imageVector = Icons.Default.Refresh,
                         contentDescription = "Refresh Data Pasar",
                         tint = TvTextPrimary,
                         modifier = Modifier
-                            .size(24.dp)
+                            .size(20.dp)
                             .rotate(rotation.value)
                     )
                 }
@@ -155,14 +165,14 @@ fun DashboardMockupHeader(
 
         Spacer(Modifier.height(8.dp))
 
-        // 3 Stat Cards: 24H VOL | AVG 24H | STRATEGI (Info Only)
+        // 3 Stat Cards Responsive: 24H VOL | AVG VOL | STRATEGI
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             // Card 1: 24H VOL
             StatBox(
-                label = "24H VOL (${quoteAsset})",
+                label = "24H VOL",
                 value = PriceFormatter.formatVolume(totalVolume, quoteAsset = quoteAsset),
                 modifier = Modifier.weight(1f)
             )
@@ -184,37 +194,38 @@ fun DashboardMockupHeader(
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .background(Color(0xFF101720), RoundedCornerShape(10.dp))
-                    .border(1.dp, Color(0xFF1E2836), RoundedCornerShape(10.dp))
-                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                    .background(Color(0xFF0F1824), RoundedCornerShape(10.dp))
+                    .border(0.8.dp, Color(0xFF1C2A3C), RoundedCornerShape(10.dp))
+                    .padding(horizontal = 6.dp, vertical = 7.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
                         text = "STRATEGI",
                         color = TvTextSecondary,
-                        fontSize = 10.sp,
+                        fontSize = 9.sp,
                         fontWeight = FontWeight.Bold
                     )
-                    Spacer(Modifier.height(3.dp))
+                    Spacer(Modifier.height(2.dp))
                     Box(
                         modifier = Modifier
-                            .background(modeBg as Color, RoundedCornerShape(6.dp))
-                            .border(0.8.dp, modeBorder as Color, RoundedCornerShape(6.dp))
-                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                            .background(modeBg as Color, RoundedCornerShape(5.dp))
+                            .border(0.6.dp, modeBorder as Color, RoundedCornerShape(5.dp))
+                            .padding(horizontal = 6.dp, vertical = 1.5.dp)
                     ) {
                         Text(
                             text = modeLabel as String,
                             color = modeColor as Color,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Black
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Black,
+                            maxLines = 1
                         )
                     }
                 }
             }
         }
 
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(8.dp))
 
         // Live Status Row: ● Data realtime Indodax    Update: 09:41:30
         Row(
@@ -225,14 +236,14 @@ fun DashboardMockupHeader(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = Modifier
-                        .size(7.dp)
+                        .size(6.dp)
                         .background(if (isConnected) TvGreen else TvRed, CircleShape)
                 )
-                Spacer(Modifier.width(6.dp))
+                Spacer(Modifier.width(5.dp))
                 Text(
                     text = if (isConnected) "Data realtime Indodax" else "Koneksi offline / cache",
                     color = if (isConnected) TvGreen else TvRed,
-                    fontSize = 11.sp,
+                    fontSize = 10.5.sp,
                     fontWeight = FontWeight.Medium
                 )
             }
@@ -240,22 +251,22 @@ fun DashboardMockupHeader(
             Text(
                 text = "Update: $currentTime",
                 color = TvTextSecondary,
-                fontSize = 11.sp,
+                fontSize = 10.5.sp,
                 fontWeight = FontWeight.Medium
             )
         }
 
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(8.dp))
 
-        // REDESIGNED TAB BAR (Kapsul Modern & Elegan dengan Kontras Jelas)
+        // REDESIGNED TAB BAR (Modern Pills with responsive sizes for Redmi Note 11)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .background(Color(0xFF0C141F))
-                .border(1.dp, Color(0xFF1A2636), RoundedCornerShape(12.dp))
-                .padding(4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(Color(0xFF0B131D))
+                .border(0.8.dp, Color(0xFF182535), RoundedCornerShape(10.dp))
+                .padding(3.dp),
+            horizontalArrangement = Arrangement.spacedBy(3.dp)
         ) {
             MarketRankingTab.values().forEach { tab ->
                 val isSelected = selectedTab == tab
@@ -268,20 +279,20 @@ fun DashboardMockupHeader(
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .clip(RoundedCornerShape(9.dp))
+                        .clip(RoundedCornerShape(8.dp))
                         .background(if (isSelected) tabActiveBg else Color.Transparent)
                         .then(
-                            if (isSelected) Modifier.border(1.dp, tabActiveBorder, RoundedCornerShape(9.dp))
+                            if (isSelected) Modifier.border(0.8.dp, tabActiveBorder, RoundedCornerShape(8.dp))
                             else Modifier
                         )
                         .clickable { onSelectTab(tab) }
-                        .padding(vertical = 8.dp),
+                        .padding(vertical = 7.dp, horizontal = 2.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = tab.label,
                         color = if (isSelected) tabActiveTextColor else TvTextSecondary,
-                        fontSize = 11.5.sp,
+                        fontSize = 11.sp,
                         fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
                         maxLines = 1
                     )
@@ -295,24 +306,26 @@ fun DashboardMockupHeader(
 private fun StatBox(label: String, value: String, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
-            .background(Color(0xFF101720), RoundedCornerShape(10.dp))
-            .border(1.dp, Color(0xFF1E2836), RoundedCornerShape(10.dp))
-            .padding(horizontal = 8.dp, vertical = 8.dp),
+            .background(Color(0xFF0F1824), RoundedCornerShape(10.dp))
+            .border(0.8.dp, Color(0xFF1C2A3C), RoundedCornerShape(10.dp))
+            .padding(horizontal = 6.dp, vertical = 7.dp),
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
                 text = label,
                 color = TvTextSecondary,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1
             )
-            Spacer(Modifier.height(3.dp))
+            Spacer(Modifier.height(2.dp))
             Text(
                 text = value,
                 color = TvTextPrimary,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.ExtraBold
+                fontSize = 11.5.sp,
+                fontWeight = FontWeight.ExtraBold,
+                maxLines = 1
             )
         }
     }

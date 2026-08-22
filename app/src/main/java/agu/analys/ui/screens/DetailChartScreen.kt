@@ -11,6 +11,7 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -82,11 +83,50 @@ fun DetailChartScreen(
     val priceAlerts by viewModel.priceAlerts.collectAsStateWithLifecycle()
 
     var showPriceAlertDialog by remember { mutableStateOf(false) }
+    var showAiAssistantDialog by remember { mutableStateOf(false) }
     val marketStructure = remember(candles) { MarketStructureAnalyzer.analyze(candles) }
     var chartVisible by remember { mutableStateOf(false) }
     val isFavorite = watchlist.contains(pair.symbol)
     val provider = remember { AppPreferences(context).aiProvider }
     val live = connection is MarketConnectionState.Connected
+
+    if (showPriceAlertDialog) {
+        PriceAlertDialog(
+            symbol = pair.symbol,
+            currentPrice = tick?.price ?: 0.0,
+            quoteAsset = pair.quoteAsset,
+            alerts = priceAlerts,
+            onAddAlert = { alert ->
+                viewModel.addPriceAlert(alert)
+            },
+            onRemoveAlert = { id ->
+                viewModel.removePriceAlert(id)
+            },
+            onToggleAlert = { id ->
+                viewModel.togglePriceAlert(id)
+            },
+            onDismiss = { showPriceAlertDialog = false }
+        )
+    }
+
+    if (showAiAssistantDialog) {
+        val isAiLoading = aiLoadingGroq || aiLoadingGemini
+        val aiSignalText = if (provider == agu.analys.config.AiProvider.GROQ) aiGroq ?: "" else aiGemini ?: ""
+
+        AiAssistantDialog(
+            aiSignal = aiSignalText,
+            isLoading = isAiLoading,
+            provider = provider,
+            onDismiss = { showAiAssistantDialog = false },
+            onAnalyze = {
+                if (provider == agu.analys.config.AiProvider.GROQ) {
+                    viewModel.requestDeepAiAudit()
+                } else {
+                    viewModel.requestGeminiChartSummary()
+                }
+            }
+        )
+    }
 
     val volume = tick?.volume24h ?: 0.0
     val change = tick?.change24h ?: 0.0
@@ -142,17 +182,17 @@ fun DetailChartScreen(
                 quoteAsset = pair.quoteAsset
             )
 
-            Spacer(modifier.height(12.dp))
+            Spacer(modifier.height(10.dp))
 
-            // 3. Baris Timeframe + Tombol Aksi (Alert, Simulasi, Belajar, Favorit)
+            // 3. Baris Sejajar: Timeframe + Quick Actions (Muat 1 Layar tanpa scroll horizontal)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Timeframe Chips (1M, 15M, 1H, 4H, 1D)
+                // Timeframe Chips (Grup Kiri)
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    horizontalArrangement = Arrangement.spacedBy(3.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     listOf(Timeframe.M1, Timeframe.M15, Timeframe.H1, Timeframe.H4, Timeframe.D1).forEach { tf ->
@@ -160,123 +200,137 @@ fun DetailChartScreen(
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(6.dp))
-                                .background(if (isSelected) Color(0xFF1E2836) else Color(0xFF101720))
+                                .background(if (isSelected) Color(0xFF162D45) else Color(0xFF0F1722))
                                 .border(
-                                    1.dp,
-                                    if (isSelected) Color(0xFF72B7FF) else Color(0xFF1E2836),
+                                    0.8.dp,
+                                    if (isSelected) Color(0xFF00E5FF) else Color(0xFF1B2836),
                                     RoundedCornerShape(6.dp)
                                 )
                                 .clickable { viewModel.selectTimeframe(tf) }
-                                .padding(horizontal = 7.dp, vertical = 5.dp)
+                                .padding(horizontal = 6.dp, vertical = 4.5.dp),
+                            contentAlignment = Alignment.Center
                         ) {
                             Text(
                                 text = tf.label.uppercase(),
-                                color = if (isSelected) Color(0xFF72B7FF) else TvTextSecondary,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold
+                                color = if (isSelected) Color(0xFF00E5FF) else TvTextSecondary,
+                                fontSize = 10.5.sp,
+                                fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.SemiBold
                             )
                         }
                     }
                 }
 
-                Spacer(Modifier.width(8.dp))
-
-                // Action Chips (Alert, Simulasi, Belajar, Favorit)
+                // Quick Action Icons (Grup Kanan dengan warna & fungsi yang kontras)
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     val activeAlertCount = priceAlerts.count { it.isEnabled && !it.isTriggered }
 
-                    // Alert Chip (🔔)
-                    Box(
+                    // 1. Alert Icon Button (Amber/Cyan Tone)
+                    Surface(
                         modifier = Modifier
+                            .size(28.dp)
                             .clip(RoundedCornerShape(6.dp))
-                            .background(Color(0xFF101720))
-                            .border(
-                                1.dp,
-                                if (activeAlertCount > 0) Color(0xFF00E5FF).copy(alpha = 0.6f) else Color(0xFF1E2836),
-                                RoundedCornerShape(6.dp)
-                            )
-                            .clickable { showPriceAlertDialog = true }
-                            .padding(horizontal = 7.dp, vertical = 5.dp),
-                        contentAlignment = Alignment.Center
+                            .clickable { showPriceAlertDialog = true },
+                        color = if (activeAlertCount > 0) Color(0xFF1A2635) else Color(0xFF101924),
+                        border = androidx.compose.foundation.BorderStroke(
+                            0.8.dp,
+                            if (activeAlertCount > 0) Color(0xFF00E5FF).copy(alpha = 0.7f) else Color(0xFF1C2B3C)
+                        ),
+                        shape = RoundedCornerShape(6.dp)
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(contentAlignment = Alignment.Center) {
                             Icon(
                                 imageVector = if (activeAlertCount > 0) Icons.Default.Notifications else Icons.Default.NotificationsNone,
-                                contentDescription = "Alert Pasar",
+                                contentDescription = "Alert",
                                 tint = if (activeAlertCount > 0) Color(0xFF00E5FF) else TvTextSecondary,
                                 modifier = Modifier.size(15.dp)
                             )
-                            if (activeAlertCount > 0) {
-                                Spacer(Modifier.width(2.dp))
-                                Text(
-                                    text = "$activeAlertCount",
-                                    color = Color(0xFF00E5FF),
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
                         }
                     }
 
-                    // Simulasi Chip (⇄)
-                    Box(
+                    // 2. AI Assistant Icon Button (Cyan/Electric Blue Glow Tone)
+                    Surface(
                         modifier = Modifier
+                            .size(28.dp)
                             .clip(RoundedCornerShape(6.dp))
-                            .background(Color(0xFF101720))
-                            .border(1.dp, Color(0xFF1E2836), RoundedCornerShape(6.dp))
-                            .clickable { viewModel.openSimulation(pair) }
-                            .padding(horizontal = 7.dp, vertical = 5.dp),
-                        contentAlignment = Alignment.Center
+                            .clickable { showAiAssistantDialog = true },
+                        color = Color(0xFF0E2235),
+                        border = androidx.compose.foundation.BorderStroke(0.8.dp, Color(0xFF00E5FF).copy(alpha = 0.6f)),
+                        shape = RoundedCornerShape(6.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.CompareArrows,
-                            contentDescription = "Simulasi Trade",
-                            tint = TvGreen,
-                            modifier = Modifier.size(15.dp)
-                        )
-                    }
-
-                    // Mode Belajar Chip (📖)
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(Color(0xFF101720))
-                            .border(1.dp, Color(0xFF1E2836), RoundedCornerShape(6.dp))
-                            .clickable { viewModel.openLearning() }
-                            .padding(horizontal = 7.dp, vertical = 5.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.MenuBook,
-                            contentDescription = "Mode Belajar",
-                            tint = Color(0xFF72B7FF),
-                            modifier = Modifier.size(15.dp)
-                        )
-                    }
-
-                    // Favorit / Watchlist Chip (⭐)
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(Color(0xFF101720))
-                            .border(
-                                1.dp,
-                                if (isFavorite) Color(0xFFFFB300).copy(alpha = 0.6f) else Color(0xFF1E2836),
-                                RoundedCornerShape(6.dp)
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.AutoAwesome,
+                                contentDescription = "AI Analisa",
+                                tint = Color(0xFF00E5FF),
+                                modifier = Modifier.size(15.dp)
                             )
-                            .clickable { viewModel.toggleWatchlist(pair.symbol) }
-                            .padding(horizontal = 7.dp, vertical = 5.dp),
-                        contentAlignment = Alignment.Center
+                        }
+                    }
+
+                    // 3. Simulasi Icon Button (Emerald Green Tone)
+                    Surface(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .clickable { viewModel.openSimulation(pair) },
+                        color = Color(0xFF0C241B),
+                        border = androidx.compose.foundation.BorderStroke(0.8.dp, Color(0xFF00E676).copy(alpha = 0.5f)),
+                        shape = RoundedCornerShape(6.dp)
                     ) {
-                        Icon(
-                            imageVector = if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
-                            contentDescription = "Favorit",
-                            tint = if (isFavorite) Color(0xFFFFB300) else TvTextSecondary,
-                            modifier = Modifier.size(15.dp)
-                        )
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.CompareArrows,
+                                contentDescription = "Simulasi",
+                                tint = TvGreen,
+                                modifier = Modifier.size(15.dp)
+                            )
+                        }
+                    }
+
+                    // 4. Belajar / Edukasi Icon Button (Sky Blue Tone)
+                    Surface(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .clickable { viewModel.openLearning() },
+                        color = Color(0xFF101E33),
+                        border = androidx.compose.foundation.BorderStroke(0.8.dp, Color(0xFF72B7FF).copy(alpha = 0.5f)),
+                        shape = RoundedCornerShape(6.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.MenuBook,
+                                contentDescription = "Belajar",
+                                tint = Color(0xFF72B7FF),
+                                modifier = Modifier.size(15.dp)
+                            )
+                        }
+                    }
+
+                    // 5. Favorit Icon Button (Gold Tone)
+                    Surface(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .clickable { viewModel.toggleWatchlist(pair.symbol) },
+                        color = if (isFavorite) Color(0xFF2E2412) else Color(0xFF141922),
+                        border = androidx.compose.foundation.BorderStroke(
+                            0.8.dp,
+                            if (isFavorite) Color(0xFFFFB300).copy(alpha = 0.7f) else Color(0xFF262016)
+                        ),
+                        shape = RoundedCornerShape(6.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
+                                contentDescription = "Favorit",
+                                tint = if (isFavorite) Color(0xFFFFB300) else TvTextSecondary,
+                                modifier = Modifier.size(15.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -540,35 +594,9 @@ fun DetailChartScreen(
                 }
             }
 
-            Spacer(modifier.height(8.dp))
-
-            AiAssistantCard(
-                auditText = aiGroq,
-                auditLoading = aiLoadingGroq,
-                geminiText = aiGemini,
-                geminiLoading = aiLoadingGemini,
-                onGroq = viewModel::requestDeepAiAudit,
-                onGemini = viewModel::requestGeminiChartSummary,
-                onClearGroq = viewModel::clearAuditReport,
-                onClearGemini = viewModel::clearGeminiSummary
-            )
-
             Spacer(Modifier.height(8.dp))
             DisclaimerCard()
             Spacer(modifier.height(12.dp))
-
-            Button(
-                onClick = { viewModel.openSimulation(pair) },
-                modifier = Modifier.fillMaxWidth().height(44.dp),
-                shape = RoundedCornerShape(10.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = TvGreen)
-            ) {
-                Icon(Icons.AutoMirrored.Filled.TrendingUp, null, tint = Color.Black, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(6.dp))
-                Text("Simulasi Trade ${pair.baseAsset}", color = Color.Black, fontWeight = FontWeight.ExtraBold, fontSize = 13.sp)
-            }
-
-            Spacer(modifier.height(6.dp))
 
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(
@@ -590,28 +618,6 @@ fun DetailChartScreen(
                 ) {
                     Text("Buka ${marketDataSource.label}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp)
                 }
-            }
-
-            Spacer(modifier.height(6.dp))
-
-            Button(
-                onClick = {
-                    if (provider == agu.analys.config.AiProvider.GROQ) viewModel.requestDeepAiAudit()
-                    else viewModel.requestGeminiChartSummary()
-                },
-                enabled = !aiLoadingGroq && !aiLoadingGemini && live,
-                modifier = Modifier.fillMaxWidth().height(42.dp),
-                shape = RoundedCornerShape(10.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E2836))
-            ) {
-                Icon(Icons.Default.AutoAwesome, null, tint = TvTextPrimary, modifier = Modifier.size(15.dp))
-                Spacer(Modifier.width(4.dp))
-                Text(
-                    if (aiLoadingGroq || aiLoadingGemini) "Menganalisis..." else "AI Analisis Pasar",
-                    color = TvTextPrimary,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 12.sp
-                )
             }
 
             Spacer(modifier.height(16.dp))

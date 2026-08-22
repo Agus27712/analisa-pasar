@@ -361,8 +361,6 @@ fun WaitingEntryRadarCard(
 
         Spacer(Modifier.height(10.dp))
 
-        Spacer(Modifier.height(10.dp))
-
         // Estimasi Biaya Transaksi & Kalkulasi Net Profit / Loss Jual
         RadarTransactionFeeSection(
             fees = fees,
