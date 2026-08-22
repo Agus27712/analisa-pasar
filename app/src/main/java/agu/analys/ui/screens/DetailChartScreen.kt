@@ -165,10 +165,11 @@ fun DetailChartScreen(
                 .verticalScroll(scrollState)
                 .padding(horizontal = 12.dp, vertical = 6.dp)
         ) {
-            // 1. Top Bar Bersih (Hanya Back, Logo Avatar, Nama Pair, dan Nama Lengkap)
+            // 1. Top Bar Bersih dengan Jam Server Berjalan Realtime & LED Koneksi Hijau/Merah Kaku
             DetailTopBar(
                 pair = pair,
-                onNavigateToDashboard = onNavigateToDashboard
+                onNavigateToDashboard = onNavigateToDashboard,
+                isConnected = live
             )
 
             Spacer(modifier.height(8.dp))

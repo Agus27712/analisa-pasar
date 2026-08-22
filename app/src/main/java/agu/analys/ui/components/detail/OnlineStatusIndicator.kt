@@ -18,58 +18,27 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun OnlineStatusIndicator(
     isOnline: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    sizeDp: Int = 10
 ) {
-    // Transisi warna halus saat status berpindah antara Online & Offline
-    val targetDotColor = if (isOnline) Color(0xFF00E676) else Color(0xFFFF5252)
-    val animatedDotColor by animateColorAsState(
-        targetValue = targetDotColor,
-        animationSpec = tween(durationMillis = 600, easing = LinearOutSlowInEasing),
-        label = "dotColor"
-    )
+    // LED Status Indicator: Kaku & Solid seperti lampu LED fisik (tanpa denyut / pulse)
+    val ledColor = if (isOnline) Color(0xFF00E676) else Color(0xFFFF3B30)
 
-    // Animasi pulse (denyut) halus pada titik indikator
-    val infiniteTransition = rememberInfiniteTransition(label = "pulseTransition")
-    val pulseScale by infiniteTransition.animateFloat(
-        initialValue = 1.0f,
-        targetValue = 1.6f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1200, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "pulseScale"
-    )
-    val pulseAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.65f,
-        targetValue = 0.15f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1200, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "pulseAlpha"
-    )
-
-    // Indikator MURNI TITIK saja (tanpa kotak background / border)
     Box(
         contentAlignment = Alignment.Center,
-        modifier = modifier.size(12.dp)
+        modifier = modifier.size(sizeDp.dp)
     ) {
-        // Lingkaran luar berdenyut (pulse aura)
+        // Lingkaran luar border tipis LED
         Box(
             modifier = Modifier
-                .size(9.5.dp)
-                .graphicsLayer {
-                    scaleX = pulseScale
-                    scaleY = pulseScale
-                    alpha = pulseAlpha
-                }
-                .background(animatedDotColor, CircleShape)
+                .size(sizeDp.dp)
+                .background(ledColor.copy(alpha = 0.25f), CircleShape)
         )
-        // Inti titik utama (solid dot)
+        // Inti lampu LED padat / solid
         Box(
             modifier = Modifier
-                .size(7.5.dp)
-                .background(animatedDotColor, CircleShape)
+                .size((sizeDp - 2.5).coerceAtLeast(5.0).dp)
+                .background(ledColor, CircleShape)
         )
     }
 }

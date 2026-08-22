@@ -111,12 +111,15 @@ object SwingEvaluator {
         }
 
         // EMA Trend Alignment
-        val emaBullish = price > ema20 && ema20 > ema50
-        val emaModerateBullish = price > ema50 || price > ema20
+        val emaBullish = indicators.ema20.isFinite() && indicators.ema50.isFinite() && (ema20 > ema50) && (price >= ema50 * 0.99)
+        val isReclaimBreakout = (price > ema20 && price > ema50 && macdHist > 0)
+        val isBearishTrend = indicators.ema20.isFinite() && indicators.ema50.isFinite() && (ema20 < ema50 && price < ema20)
+
         when {
-            emaBullish -> { buy += 25; reasons += "EMA20 > EMA50 dan harga di atas EMA20 (Uptrend kuat)." }
-            emaModerateBullish -> { buy += 15; reasons += "Harga bertahan di atas support rata-rata EMA." }
-            price < ema20 && ema20 < ema50 -> { sell += 25; reasons += "EMA20 < EMA50 dan harga di bawah EMA20 (Downtrend)." }
+            emaBullish -> { buy += 25; reasons += "EMA20 > EMA50 dan harga di atas EMA (Uptrend selaras)." }
+            isReclaimBreakout -> { buy += 20; reasons += "Harga breakout menembus EMA20 & EMA50 dengan momentum positif." }
+            isBearishTrend -> { sell += 25; reasons += "EMA20 < EMA50 dan harga di bawah EMA20 (Downtrend makro)." }
+            price > ema50 -> { buy += 10; reasons += "Harga bertahan di atas support rata-rata EMA50." }
             else -> reasons += "EMA berkonsolidasi, menunggu arah tren tegas."
         }
 
@@ -151,10 +154,11 @@ object SwingEvaluator {
 
         // Market structure
         val isBullishStructure = structure.trend.contains("Bull", true)
+        val isBearishStructure = structure.trend.contains("Bear", true)
         if (structure.dataEnough) {
             when {
                 isBullishStructure -> { buy += 15; reasons += "Struktur market bullish (Higher-High & Higher-Low)." }
-                structure.trend.contains("Bear", true) -> { sell += 15; reasons += "Struktur market bearish (Lower-Low)." }
+                isBearishStructure -> { sell += 15; reasons += "Struktur market bearish (Lower-Low)." }
                 else -> reasons += "Struktur market berkonsolidasi di rentang harga."
             }
         }
@@ -191,49 +195,68 @@ object SwingEvaluator {
         val netRr = feeResult.netRr.coerceAtLeast(1.5)
         val rrString = "1:${fmt(netRr)}"
 
-        // 3. 4-Step Checkpoint Validation for SWING
-        // Checkpoint 1: Tren Makro & Alignment EMA (1D/4H/1H)
-        val step1Ok = (price >= ema50 * 0.98) || (ema20 > ema50) || isBullishStructure || (regime.contains("BULL", true))
+        // 3. 4-Step Checkpoint Validation for SWING (Disiplin & Selaras dengan Tren)
+        // Checkpoint 1: Tren Makro & Alignment EMA (Wajib Bullish atau Reclaim, tidak boleh Downtrend)
+        val step1Ok = (emaBullish || isReclaimBreakout) && !isBearishStructure && !isBearishTrend
         val step1Detail = if (step1Ok) {
-            "Tren makro selaras positif di atas support EMA (Harga Rp ${fmtPrice(price)})."
+            "Tren makro selaras positif (EMA20 > EMA50 di Rp ${fmtPrice(ema20)})."
         } else {
-            "Memantau keselarasan tren rata-rata EMA (Harga menguji area Rp ${fmtPrice(ema20)})."
+            if (ema20 < ema50) {
+                "Tren makro downtrend (EMA20 < EMA50). Menunggu Reclaim EMA20 (Rp ${fmtPrice(ema20)})."
+            } else {
+                "Memantau keselarasan tren rata-rata EMA (Harga menguji area Rp ${fmtPrice(ema20)})."
+            }
         }
 
-        // Checkpoint 2: Struktur Market & Support Lantai (Higher Low)
-        val step2Ok = (price >= supportLevel * 0.99) && (isBullishStructure || price > bb.first || structure.lastSwingLow != null)
+        // Checkpoint 2: Struktur Market & Support Lantai (Higher Low / Support Demand yang Bertahan)
+        val isHoldingSupport = price >= supportLevel * 0.995
+        val step2Ok = step1Ok && isHoldingSupport && !isBearishStructure && (isBullishStructure || (history.last().close >= history.last().open && price > supportLevel))
         val step2Detail = if (step2Ok) {
             "Lantai support swing kokoh di Rp ${fmtPrice(supportLevel)} (Higher-Low terbentuk)."
         } else {
-            "Memantau pertahanan area support swing Rp ${fmtPrice(supportLevel)}."
+            if (isBearishStructure) {
+                "Struktur pasar masih Lower-Low. Menunggu pembentukan base support kokoh."
+            } else {
+                "Memantau pertahanan area support swing Rp ${fmtPrice(supportLevel)}."
+            }
         }
 
-        // Checkpoint 3: Momentum & Volume Inflow (RSI/MACD)
-        val step3Ok = (rsi in 32.0..72.0) && (macdHist >= -0.0005 || lastVolume >= avgVolume * 0.95 || buy >= 30)
+        // Checkpoint 3: Momentum & Volume Inflow (RSI/MACD Positif)
+        val isRsiBullish = rsi in 42.0..68.0 || (rsi in 32.0..42.0 && macdHist > 0)
+        val step3Ok = step1Ok && isRsiBullish && (macdHist >= 0 || (lastVolume >= avgVolume * 1.1 && buy > sell))
         val step3Detail = if (step3Ok) {
-            "Momentum RSI (${fmt(rsi)}) & MACD ${if (macdHist >= 0) "Inflow Bullish" else "Konsolidasi Terjaga"}."
+            "Momentum RSI (${fmt(rsi)}) & MACD Inflow Bullish (+${fmt(macdHist)})."
         } else {
-            "Menunggu dorongan volume beli dan penguatan RSI (${fmt(rsi)})."
+            if (macdHist < 0) {
+                "MACD masih berada di area negatif (${fmt(macdHist)}). Menunggu golden cross momentum."
+            } else {
+                "Menunggu dorongan volume beli dan penguatan RSI (${fmt(rsi)})."
+            }
         }
 
-        // Checkpoint 4: Risk/Reward Optimal & Toleransi Entry
-        val step4Ok = (step1Ok && step2Ok && (step3Ok || netRr >= 1.5)) || (buy >= 50.0)
+        // Checkpoint 4: Risk/Reward Optimal & Toleransi Entry (Wajib Lolos Step 1, 2, 3)
+        val step4Ok = step1Ok && step2Ok && step3Ok && netRr >= 1.5 && buy >= 40.0
         val step4Detail = if (step4Ok) {
             "Zona entry ideal dengan Net R:R $rrString (TP1: +${fmt(((calculatedTp1 - price) / price) * 100)}%)."
         } else {
-            "Menunggu konfirmasi harga masuk ke zona beli ideal dengan toleransi risiko optimal."
+            if (!step1Ok || !step2Ok || !step3Ok) {
+                "Menunggu konfirmasi lengkap Checkpoint 1-3 sebelum validasi zona entry."
+            } else {
+                "Menunggu konfirmasi harga masuk ke zona beli ideal dengan toleransi risiko optimal."
+            }
         }
 
         val completedSteps = listOf(step1Ok, step2Ok, step3Ok, step4Ok).count { it }
 
         // Action Decision
-        val isQualifiedBuy = completedSteps >= 3 && buy >= 45.0 && buy > sell * 1.15
+        val isQualifiedBuy = completedSteps == 4 && buy >= 45.0 && buy > sell * 1.2
         val finalAction = if (isQualifiedBuy) SignalAction.BUY else SignalAction.HOLD
         val finalScore = when {
-            completedSteps == 4 && isQualifiedBuy -> (78 + min(17, (buy * 0.2).toInt())).coerceIn(80, 95)
-            completedSteps >= 3 -> (65 + min(12, (buy * 0.15).toInt())).coerceIn(65, 76)
-            completedSteps == 2 -> 55
-            else -> 42
+            isQualifiedBuy -> (80 + min(15, (buy * 0.18).toInt())).coerceIn(80, 95)
+            completedSteps == 3 -> 68
+            completedSteps == 2 -> 52
+            completedSteps == 1 -> 38
+            else -> 25
         }
 
         val mtfSnapshot = ScalpingMtfSnapshot(

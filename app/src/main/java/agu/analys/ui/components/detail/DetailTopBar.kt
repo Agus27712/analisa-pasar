@@ -9,6 +9,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -19,6 +20,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -32,13 +34,43 @@ import agu.analys.ui.theme.TvRed
 import agu.analys.ui.theme.TvTextPrimary
 import agu.analys.ui.theme.TvTextSecondary
 import kotlinx.coroutines.delay
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun DetailTopBar(
     pair: TradingPair,
     onNavigateToDashboard: () -> Unit,
+    isConnected: Boolean = true,
     modifier: Modifier = Modifier
 ) {
+    // Waktu realtime server/aplikasi berjalan terus setiap detik saat terhubung (LIVE).
+    // Jika koneksi terputus/lama tidak tersambung, waktu berhenti dan mencatat jam berapa terputusnya.
+    var currentTimeString by remember {
+        mutableStateOf(SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date()))
+    }
+    var lastDisconnectTime by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(isConnected) {
+        if (!isConnected && lastDisconnectTime == null) {
+            lastDisconnectTime = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
+        } else if (isConnected) {
+            lastDisconnectTime = null
+        }
+    }
+
+    LaunchedEffect(isConnected) {
+        if (isConnected) {
+            val sdf = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
+            while (true) {
+                currentTimeString = sdf.format(Date())
+                // Interval update 500ms agar pergantian detik selalu presisi dan mulus tanpa jeda
+                delay(500L)
+            }
+        }
+    }
+
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -79,6 +111,47 @@ fun DetailTopBar(
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
                 softWrap = false
+            )
+        }
+
+        // Widget Waktu dengan Dot LED Merah/Hijau yang Kaku (tanpa pulse) di sebelah kiri
+        val ledColor = if (isConnected) Color(0xFF00E676) else Color(0xFFFF3B30)
+        val displayTime = if (isConnected) currentTimeString else (lastDisconnectTime ?: currentTimeString)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .background(Color(0xFF0D1824), RoundedCornerShape(8.dp))
+                .border(0.8.dp, if (isConnected) Color(0xFF1E3348) else Color(0xFF4A1A1A), RoundedCornerShape(8.dp))
+                .padding(horizontal = 8.dp, vertical = 5.dp)
+        ) {
+            // Dot LED Merah/Hijau agak besar di sebelah kiri
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier.size(11.dp)
+            ) {
+                // Ring luar statis
+                Box(
+                    modifier = Modifier
+                        .size(11.dp)
+                        .background(ledColor.copy(alpha = 0.28f), CircleShape)
+                )
+                // Inti lampu LED solid kaku
+                Box(
+                    modifier = Modifier
+                        .size(8.5.dp)
+                        .background(ledColor, CircleShape)
+                )
+            }
+
+            Spacer(Modifier.width(6.dp))
+
+            Text(
+                text = displayTime,
+                color = if (isConnected) TvTextPrimary else Color(0xFFFF6B6B),
+                fontSize = 12.5.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace,
+                letterSpacing = 0.5.sp
             )
         }
     }

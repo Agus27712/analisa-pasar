@@ -100,32 +100,56 @@ fun WaitingEntryRadarCard(
         label = "radar_glow"
     )
 
-    // Deteksi Tipe Entry Badge (Reclaim vs Base-Dip vs Swing)
+    // Deteksi Tipe Entry Badge (Reclaim vs Base-Dip vs Swing vs Waiting)
     val isReclaim = mtf.path == ScalpingPath.MOMENTUM_CONTINUATION ||
                     mtf.triggerDetail.contains("Reclaim", ignoreCase = true) ||
                     signal.reasoning.any { it.contains("Reclaim", ignoreCase = true) || it.contains("Breakout", ignoreCase = true) }
-    
+
     val entryTypeBadgeTitle = when (strategyMode) {
-        StrategyMode.SWING -> if (isReclaim) "🚀 SWING BREAKOUT / RECLAIM" else "🛡️ SWING PULLBACK / DIP ENTRY"
-        StrategyMode.SECOND_WAVE -> if (isReclaim) "🚀 RECLAIM ENTRY" else "🛡️ BASE-DIP ENTRY"
-        StrategyMode.SCALPING -> if (isReclaim) "🚀 RECLAIM BREAKOUT" else "🛡️ PULLBACK DIP ENTRY"
+        StrategyMode.SWING -> when {
+            completed == 4 -> if (isReclaim) "🚀 SWING BREAKOUT / RECLAIM" else "🛡️ SWING PULLBACK ENTRY"
+            completed >= 2 -> "⏳ SWING SETUP IN-PROGRESS"
+            else -> "🔍 ANALISIS STRUKTUR SWING"
+        }
+        StrategyMode.SECOND_WAVE -> when {
+            completed == 4 -> if (isReclaim) "🚀 RECLAIM ENTRY" else "🛡️ BASE-DIP ENTRY"
+            completed >= 2 -> "⏳ SECOND-WAVE IN-PROGRESS"
+            else -> "🔍 SCANNING SECOND-WAVE"
+        }
+        StrategyMode.SCALPING -> when {
+            completed == 4 -> if (isReclaim) "🚀 RECLAIM BREAKOUT" else "🛡️ PULLBACK DIP ENTRY"
+            completed >= 2 -> "⏳ SETUP SCALPING IN-PROGRESS"
+            else -> "🔍 SCANNING SCALPING"
+        }
     }
 
     val entryTypeBadgeDesc = when (strategyMode) {
-        StrategyMode.SWING -> if (isReclaim) {
-            "Struktur Swing Bullish terkonfirmasi. Menembus resistance dengan inflow momentum multi-timeframe."
-        } else {
-            "Harga menguji demand zone / support EMA swing. Risiko rendah dengan Stop Loss terukur."
+        StrategyMode.SWING -> when {
+            completed == 4 -> if (isReclaim) {
+                "Struktur Swing Bullish terkonfirmasi. Menembus resistance dengan inflow momentum multi-timeframe."
+            } else {
+                "Harga menguji demand zone / support EMA swing. Risiko rendah dengan Stop Loss terukur."
+            }
+            completed >= 2 -> "Sinyal swing sedang mengumpulkan konfirmasi volume & struktur higher-low."
+            else -> "Tren pasar belum selaras untuk Swing Buy. Menunggu reclaim support/EMA."
         }
-        StrategyMode.SECOND_WAVE -> if (isReclaim) {
-            "Reclaim terkonfirmasi! Volume beli meledak menembus Resistance. Momentum Second-Wave aktif."
-        } else {
-            "Harga menyentuh lantai akumulasi support. Risiko sangat rendah (SL ketat)."
+        StrategyMode.SECOND_WAVE -> when {
+            completed == 4 -> if (isReclaim) {
+                "Reclaim terkonfirmasi! Volume beli meledak menembus Resistance. Momentum Second-Wave aktif."
+            } else {
+                "Harga menyentuh lantai akumulasi support. Risiko sangat rendah (SL ketat)."
+            }
+            completed >= 2 -> "Formasi base dan drawdown reset sedang dipantau di timeframe 1H/15M."
+            else -> "Menunggu kriteria dasar Second-Wave (prior run & base akumulasi)."
         }
-        StrategyMode.SCALPING -> if (isReclaim) {
-            "Reclaim momentum 1M terkonfirmasi aktif! Volume beli meledak menembus level 15M."
-        } else {
-            "Pullback ke support EMA 15M/1M terkonfirmasi. Risiko terkendali."
+        StrategyMode.SCALPING -> when {
+            completed == 4 -> if (isReclaim) {
+                "Reclaim momentum 1M terkonfirmasi aktif! Volume beli meledak menembus level 15M."
+            } else {
+                "Pullback ke support EMA 15M/1M terkonfirmasi. Risiko terkendali."
+            }
+            completed >= 2 -> "Bias tren mendukung, menunggu trigger momentum dan volume 1M."
+            else -> "Memantau struktur tren pasar multi-timeframe (1H, 15M, 1M)."
         }
     }
 
@@ -179,7 +203,8 @@ fun WaitingEntryRadarCard(
                 Icons.Default.Timeline
             )
 
-            // Scanning Live Badge
+            // Radar Status LED Badge (Solid tanpa denyut)
+            val radarLedColor = if (completed == 4) TvGreen else Color(0xFF00E5FF)
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
@@ -188,11 +213,20 @@ fun WaitingEntryRadarCard(
                     .padding(horizontal = 8.dp, vertical = 3.dp)
             ) {
                 Box(
-                    modifier = Modifier
-                        .size(7.dp)
-                        .scale(pulseScale)
-                        .background(Color(0xFF00E5FF).copy(alpha = glowAlpha), CircleShape)
-                )
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.size(9.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(9.dp)
+                            .background(radarLedColor.copy(alpha = 0.28f), CircleShape)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(6.5.dp)
+                            .background(radarLedColor, CircleShape)
+                    )
+                }
                 Spacer(Modifier.width(5.dp))
                 Text(
                     text = if (completed == 4) "Eksekusi" else "Wait!",

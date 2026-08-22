@@ -80,22 +80,22 @@ object ScalpingMtfEvaluator {
         }
 
         val biasLong = if (isAggressive) {
-            ((h1.ema20 > h1.ema50) || (h1.price > h1.ema20 && h1.price > h1.ema50)) && h1.rsi > 50.0
+            ((h1.ema20 > h1.ema50) || (h1.price > h1.ema20) || (h1.price > h1.ema50)) && h1.rsi > 42.0
         } else {
-            h1.ema20 > h1.ema50 && h1.price > h1.ema20
+            (h1.ema20 >= h1.ema50 && h1.price >= h1.ema50 * 0.99) || (h1.price > h1.ema20 && h1.price > h1.ema50)
         }
         val biasStrong = biasLong && (structureH1.trend == "Bullish structure" || h1GoldenCross)
 
         val setupLong = if (isAggressive) {
-            (m15.ema20 >= m15.ema50) || (m15.price > m15.ema20)
+            (m15.ema20 >= m15.ema50) || (m15.price >= m15.ema20 * 0.99) || (m15.price > m15.ema50)
         } else {
-            m15.ema20 >= m15.ema50
+            (m15.ema20 >= m15.ema50 && m15.price >= m15.ema50 * 0.99) || (m15.price > m15.ema20)
         }
         val setupStrong = setupLong && (structure15.trend == "Bullish structure" || m15GoldenCross)
 
-        val priceAboveEma20 = m1.price > m1.ema20
-        val rsiEntryZone = if (isAggressive) m1.rsi in 35.0..68.0 else m1.rsi in 36.0..64.0
-        val momentumLong = m1.macdHist > 0.0 || m1.price > m1.ema20
+        val priceAboveEma20 = m1.price >= m1.ema20 * 0.998 || m1.price > m1.ema50
+        val rsiEntryZone = if (isAggressive) m1.rsi in 32.0..72.0 else m1.rsi in 35.0..68.0
+        val momentumLong = m1.macdHist >= -0.0001 || m1.price > m1.ema20 || m1.retestUp || m1.breakoutUp
         val volumeOk = m1.volumeRatio >= minVolRatio
 
         val triggerScore = when {
@@ -105,7 +105,7 @@ object ScalpingMtfEvaluator {
             else -> 0
         }
         val triggerLong = if (isAggressive) {
-            (m1.price > m1.ema50) && rsiEntryZone && triggerScore >= 5
+            (m1.price > m1.ema50 || m1.price > m1.ema20) && rsiEntryZone && (momentumLong || triggerScore >= 5)
         } else {
             priceAboveEma20 && rsiEntryZone && (momentumLong || volumeOk || m1.retestUp || m1.breakoutUp)
         }

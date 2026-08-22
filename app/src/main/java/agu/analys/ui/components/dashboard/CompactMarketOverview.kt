@@ -65,8 +65,32 @@ fun DashboardMockupHeader(
 ) {
     val totalVolume = allTicks.values.sumOf { it.volume24h }
     val avgVolume = if (allTicks.isNotEmpty()) totalVolume / allTicks.size else 0.0
-    val currentTime = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
     val quoteAsset = marketDataSource.defaultQuoteAsset
+
+    // Waktu realtime server/aplikasi berjalan terus saat terhubung (LIVE).
+    // Jika koneksi terputus/lama tidak tersambung, waktu berhenti dan mencatat jam berapa terputusnya.
+    var currentTime by remember {
+        mutableStateOf(SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date()))
+    }
+    var lastDisconnectTime by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(isConnected) {
+        if (!isConnected && lastDisconnectTime == null) {
+            lastDisconnectTime = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
+        } else if (isConnected) {
+            lastDisconnectTime = null
+        }
+    }
+
+    LaunchedEffect(isConnected) {
+        if (isConnected) {
+            val sdf = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
+            while (true) {
+                currentTime = sdf.format(Date())
+                kotlinx.coroutines.delay(500L)
+            }
+        }
+    }
 
     // Rotasi animasi untuk tombol refresh
     val rotation = remember { Animatable(0f) }
@@ -227,33 +251,73 @@ fun DashboardMockupHeader(
 
         Spacer(Modifier.height(8.dp))
 
-        // Live Status Row: ● Data realtime Indodax    Update: 09:41:30
+        // Live Status Row: ● Data Realtime Indodax    ● [HH:mm:ss]
+        val ledColor = if (isConnected) Color(0xFF00E676) else Color(0xFFFF3B30)
+        val displayTime = if (isConnected) currentTime else (lastDisconnectTime ?: currentTime)
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                // Dot LED solid agak besar tanpa pulse
                 Box(
-                    modifier = Modifier
-                        .size(6.dp)
-                        .background(if (isConnected) TvGreen else TvRed, CircleShape)
-                )
-                Spacer(Modifier.width(5.dp))
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.size(10.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .background(ledColor.copy(alpha = 0.28f), CircleShape)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(7.5.dp)
+                            .background(ledColor, CircleShape)
+                    )
+                }
+                Spacer(Modifier.width(6.dp))
                 Text(
-                    text = if (isConnected) "Data realtime Indodax" else "Koneksi offline / cache",
-                    color = if (isConnected) TvGreen else TvRed,
-                    fontSize = 10.5.sp,
-                    fontWeight = FontWeight.Medium
+                    text = if (isConnected) "Data Realtime Indodax" else "Terputus",
+                    color = if (isConnected) TvGreen else Color(0xFFFF6B6B),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold
                 )
             }
 
-            Text(
-                text = "Update: $currentTime",
-                color = TvTextSecondary,
-                fontSize = 10.5.sp,
-                fontWeight = FontWeight.Medium
-            )
+            // Widget waktu di kanan dengan dot LED dan format bersih (tanpa kata 'Server:')
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .background(Color(0xFF0D1824), RoundedCornerShape(6.dp))
+                    .border(0.8.dp, if (isConnected) Color(0xFF1E3348) else Color(0xFF4A1A1A), RoundedCornerShape(6.dp))
+                    .padding(horizontal = 7.dp, vertical = 3.dp)
+            ) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.size(9.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(9.dp)
+                            .background(ledColor.copy(alpha = 0.28f), CircleShape)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(6.5.dp)
+                            .background(ledColor, CircleShape)
+                    )
+                }
+                Spacer(Modifier.width(5.dp))
+                Text(
+                    text = displayTime,
+                    color = if (isConnected) TvTextPrimary else Color(0xFFFF6B6B),
+                    fontSize = 11.5.sp,
+                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
 
         Spacer(Modifier.height(8.dp))

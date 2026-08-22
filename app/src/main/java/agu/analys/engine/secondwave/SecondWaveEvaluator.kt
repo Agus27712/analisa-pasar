@@ -94,10 +94,10 @@ object SecondWaveEvaluator {
         // STAGE 3: Pullback Quality (Drawdown = (prior_high - current_price) / prior_high)
         val drawdownPct = if (priorHigh > 0) ((priorHigh - price) / priorHigh) * 100.0 else 0.0
         val drawdownScore = when {
-            drawdownPct in 50.0..75.0 -> 2 // Healthy second-wave sweet spot
-            drawdownPct in 75.0..85.0 -> 1 // High risk/reward zone
-            drawdownPct in 40.0..50.0 -> 1 // Reset awal
-            else -> 0 // Terlalu dangkal (<40%) atau koin mati (>85%)
+            drawdownPct in 35.0..78.0 -> 2 // Healthy second-wave sweet spot
+            drawdownPct in 78.0..88.0 -> 1 // Deep dip discount zone
+            drawdownPct in 20.0..35.0 -> 1 // Reset awal / consolidation
+            else -> 0 // Terlalu dangkal (<20%) atau koin mati (>88%)
         }
 
         // STAGE 5: Structure Detection di Timeframe 1H
@@ -111,15 +111,15 @@ object SecondWaveEvaluator {
         val olderLows = h1Candles.dropLast(8).takeLast(8).map { it.low }
         val minRecentLow = recentLows.minOrNull() ?: baseFloor
         val minOlderLow = olderLows.minOrNull() ?: baseFloor
-        val hasHigherLow = minRecentLow >= minOlderLow * 0.99 // Membentuk Higher Low atau Double Bottom
+        val hasHigherLow = minRecentLow >= minOlderLow * 0.985 // Membentuk Higher Low atau Double Bottom
 
         val closesH1 = h1Candles.map { it.close }
         val ema20H1 = IndicatorMath.ema(closesH1, 20)
         val ema50H1 = IndicatorMath.ema(closesH1, 50)
-        val isBaseHolding = price >= baseFloor && (price >= ema20H1 * 0.985)
+        val isBaseHolding = price >= baseFloor * 0.995 && (price >= ema20H1 * 0.975 || price >= baseFloor)
 
         val structureScore = when {
-            hasHigherLow && isBaseHolding && price >= ema20H1 -> 2
+            hasHigherLow && isBaseHolding && price >= ema20H1 * 0.99 -> 2
             isBaseHolding || hasHigherLow -> 1
             else -> 0
         }
@@ -129,8 +129,8 @@ object SecondWaveEvaluator {
         val avgRecentVolH1 = h1Candles.takeLast(10).map { it.volume }.average()
         val latestVolM15 = m15Candles.takeLast(3).map { it.volume }.average()
         val volumeDryUpRatio = if (peakVolume > 0) (avgRecentVolH1 / peakVolume) else 1.0
-        val isVolumeDriedUp = volumeDryUpRatio <= 0.45 // Volume mengecil drastis saat koreksi
-        val isVolumeReturning = latestVolM15 >= avgRecentVolH1 * 1.25 && m15Candles.last().close >= m15Candles.last().open
+        val isVolumeDriedUp = volumeDryUpRatio <= 0.60 // Volume mengecil drastis saat koreksi
+        val isVolumeReturning = latestVolM15 >= avgRecentVolH1 * 1.10 && m15Candles.last().close >= m15Candles.last().open * 0.998
 
         val volumeScore = when {
             isVolumeDriedUp && isVolumeReturning -> 2
@@ -145,21 +145,21 @@ object SecondWaveEvaluator {
         val macdHist = (macd15m?.first ?: 0.0) - (macd15m?.second ?: 0.0)
 
         val flowScore = when {
-            rsi1h in 40.0..62.0 && macdHist >= 0 && rsi15m >= 45.0 -> 2
-            rsi1h in 35.0..68.0 || macdHist >= 0 -> 1
+            rsi1h in 38.0..68.0 && macdHist >= -0.0001 && rsi15m >= 40.0 -> 2
+            rsi1h in 32.0..72.0 || macdHist >= -0.0001 -> 1
             else -> 0
         }
 
         // STAGE 4: Safety & Liquidity Score
-        val safetyScore = if (drawdownPct <= 85.0 && price > 0 && baseFloor > 0) 2 else 0
+        val safetyScore = if (drawdownPct <= 88.0 && price > 0 && baseFloor > 0) 2 else 0
 
         // TOTAL SCORE (0 - 12)
         val totalScore = priorRunScore + drawdownScore + structureScore + volumeScore + flowScore + safetyScore
-        val isQualified = totalScore >= 8 && drawdownScore >= 1 && priorRunScore >= 1
+        val isQualified = totalScore >= 7 && drawdownScore >= 1 && priorRunScore >= 1
 
         // ENTRY LOGIC: Base-Dip vs Reclaim
-        val isNearBaseFloor = (price - baseFloor) / baseFloor <= 0.035 // Dalam rentang 3.5% dari lantai
-        val isReclaimingResistance = price >= localResistance * 0.995 && isVolumeReturning
+        val isNearBaseFloor = (price - baseFloor) / baseFloor <= 0.06 // Dalam rentang 6% dari lantai
+        val isReclaimingResistance = price >= localResistance * 0.99 && isVolumeReturning
 
         val entryType = when {
             !isQualified -> SecondWaveEntryType.NONE
