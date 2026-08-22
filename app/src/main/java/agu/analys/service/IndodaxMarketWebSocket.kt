@@ -15,10 +15,14 @@ import okhttp3.WebSocketListener
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.max
 import kotlin.math.min
 
-/** Exchange-native realtime transport for scalping. REST remains the historical/bootstrap source. */
+/**
+ * Realtime Indodax WS. REST tetap bootstrap + fallback di ViewModel.
+ * Reconnect: 0.8s → max 12s (lebih responsif).
+ */
 class IndodaxMarketWebSocket(
     private val scope: CoroutineScope,
     private val onTick: (MarketTick) -> Unit,
@@ -27,9 +31,9 @@ class IndodaxMarketWebSocket(
     private val onDisconnected: () -> Unit
 ) {
     private val client = OkHttpClient.Builder()
-        .connectTimeout(10, TimeUnit.SECONDS)
+        .connectTimeout(12, TimeUnit.SECONDS)
         .readTimeout(0, TimeUnit.MILLISECONDS)
-        .pingInterval(20, TimeUnit.SECONDS)
+        .pingInterval(15, TimeUnit.SECONDS)
         .retryOnConnectionFailure(true)
         .build()
 
@@ -39,6 +43,7 @@ class IndodaxMarketWebSocket(
     private var reconnectAttempt = 0
     private var candle: CandleBar? = null
     private var lastSequence = -1L
+    private val lastMessageAt = AtomicLong(0L)
 
     fun start(symbol: String) {
         val nextPair = IndodaxMarketService.toPairId(symbol).replace("_", "").lowercase()
@@ -62,16 +67,27 @@ class IndodaxMarketWebSocket(
 
     fun close() = stop(false)
 
+    /** True jika belum ada pesan > staleMs (socket zombie). */
+    fun isStale(staleMs: Long = 25_000L): Boolean {
+        val last = lastMessageAt.get()
+        if (last <= 0L) return false
+        return System.currentTimeMillis() - last > staleMs
+    }
+
     private fun connect() {
         if (pairId.isBlank()) return
-        val request = Request.Builder().url(WS_URL).header("User-Agent", "AnalysisPasar/1.0").build()
+        val request = Request.Builder()
+            .url(WS_URL)
+            .header("User-Agent", "AnalysisPasar/2.1")
+            .header("Origin", "https://indodax.com")
+            .build()
         socket = client.newWebSocket(request, Listener())
     }
 
     private fun reconnect() {
         if (pairId.isBlank() || reconnectJob?.isActive == true) return
         reconnectJob = scope.launch {
-            val waitMs = min(15_000L, 1_000L * (1L shl min(reconnectAttempt, 4)))
+            val waitMs = min(12_000L, (800L * (1L shl min(reconnectAttempt, 4))))
             reconnectAttempt++
             delay(waitMs)
             if (isActive && pairId.isNotBlank()) connect()
@@ -92,6 +108,7 @@ class IndodaxMarketWebSocket(
     }
 
     private fun consume(message: String) {
+        lastMessageAt.set(System.currentTimeMillis())
         val root = runCatching { JSONObject(message) }.getOrNull() ?: return
         val result = root.optJSONObject("result") ?: return
         if (result.optString("channel") != "chart:tick-$pairId") return
@@ -139,6 +156,7 @@ class IndodaxMarketWebSocket(
     private inner class Listener : WebSocketListener() {
         override fun onOpen(webSocket: WebSocket, response: Response) {
             reconnectAttempt = 0
+            lastMessageAt.set(System.currentTimeMillis())
             onConnected()
             subscribe(webSocket)
         }
@@ -160,6 +178,7 @@ class IndodaxMarketWebSocket(
 
     companion object {
         private const val WS_URL = "wss://ws3.indodax.com/ws/"
-        private const val STATIC_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE5NDY2MTg0MTV9.UR1lBM6Eqh0yWz-PVirw1uPCxe60FdchR8eNVdsske"
+        private const val STATIC_TOKEN =
+            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE5NDY2MTg0MTV9.UR1lBM6Eqh0yWz-PVirw1uPCxe60FdchR8eNVdsske"
     }
 }
