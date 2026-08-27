@@ -106,7 +106,7 @@ fun RadarTransactionFeeSection(
                     tint = TvBlue,
                     modifier = Modifier.size(14.dp)
                 )
-                Spacer(modifier.width(4.dp))
+                Spacer(Modifier.width(4.dp))
                 Text(
                     text = "Rincian Fee",
                     color = TvBlue,
@@ -116,7 +116,7 @@ fun RadarTransactionFeeSection(
             }
         }
 
-        Spacer(modifier.height(10.dp))
+        Spacer(Modifier.height(10.dp))
 
         Row(
             modifier = Modifier
@@ -142,7 +142,7 @@ fun RadarTransactionFeeSection(
                         tint = if (isBuyMode) TvGreen else TvTextSecondary,
                         modifier = Modifier.size(14.dp)
                     )
-                    Spacer(modifier.width(4.dp))
+                    Spacer(Modifier.width(4.dp))
                     Text(
                         text = "Beli",
                         color = if (isBuyMode) TvGreen else TvTextSecondary,
@@ -171,7 +171,7 @@ fun RadarTransactionFeeSection(
                         tint = if (!isBuyMode) TvRed else TvTextSecondary,
                         modifier = Modifier.size(14.dp)
                     )
-                    Spacer(modifier.width(4.dp))
+                    Spacer(Modifier.width(4.dp))
                     Text(
                         text = "Jual",
                         color = if (!isBuyMode) TvRed else TvTextSecondary,
@@ -182,7 +182,7 @@ fun RadarTransactionFeeSection(
             }
         }
 
-        Spacer(modifier.height(8.dp))
+        Spacer(Modifier.height(8.dp))
 
         Row(
             modifier = Modifier
@@ -207,7 +207,7 @@ fun RadarTransactionFeeSection(
             )
         }
 
-        Spacer(modifier.height(10.dp))
+        Spacer(Modifier.height(10.dp))
 
         if (isBuyMode) {
             RadarBuySection(
@@ -328,7 +328,7 @@ fun TransactionDetailRow(
             softWrap = false,
             modifier = Modifier.weight(1f, fill = false)
         )
-        Spacer(modifier.width(8.dp))
+        Spacer(Modifier.width(8.dp))
         Column(horizontalAlignment = Alignment.End) {
             Text(
                 text = value,

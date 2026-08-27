@@ -248,6 +248,26 @@ fun DetailChartScreen(
                         }
                     }
 
+                    // 1b. Portofolio Shortcut Icon Button (Disebelah Ikon Lonceng Notifikasi)
+                    Surface(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .clickable { viewModel.openPortfolio() },
+                        color = TvGreen.copy(alpha = 0.15f),
+                        border = androidx.compose.foundation.BorderStroke(0.8.dp, TvGreen.copy(alpha = 0.5f)),
+                        shape = RoundedCornerShape(6.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.AccountBalanceWallet,
+                                contentDescription = "Portofolio",
+                                tint = TvGreen,
+                                modifier = Modifier.size(15.dp)
+                            )
+                        }
+                    }
+
                     // 2. AI Assistant Icon Button (Cyan/Electric Blue Glow Tone)
                     Surface(
                         modifier = Modifier
