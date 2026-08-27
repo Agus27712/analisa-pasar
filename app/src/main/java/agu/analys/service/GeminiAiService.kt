@@ -16,7 +16,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
-/** Chart summary Gemini — insight pair, bukan dump RSI. */
+/** Chart summary Gemini — insight + headline publik gratis. */
 object GeminiAiService {
     private val client = OkHttpClient.Builder()
         .connectTimeout(12, TimeUnit.SECONDS)
@@ -35,9 +35,12 @@ object GeminiAiService {
     ): String = withContext(Dispatchers.IO) {
         val effectiveKey = if (apiKey.isBlank()) "" else apiKey
         val cpi = if (safeContextReady) BpsMacroService(AppContextProvider.context).getLatest() else null
-        if (effectiveKey.isBlank()) return@withContext buildFallback(tick, indicators, signal, cpi)
-
         val base = extractBase(tick.symbol)
+        val headlines = runCatching { CryptoHeadlineService.snapshotForBase(base) }.getOrNull()
+        val headlineBlock = headlines?.promptBlock() ?: "Headline: tidak tersedia."
+
+        if (effectiveKey.isBlank()) return@withContext buildFallback(tick, indicators, signal, cpi, headlineBlock)
+
         val pairCtx = PairNarrative.forBase(base)
         val move = describeMove(tick.change24h)
         val rsiHint = when {
@@ -52,8 +55,8 @@ object GeminiAiService {
         }
 
         val prompt = """
-Kamu asisten spot Indodax. Kasih insight singkat soal pair (bukan hafalan indikator).
-Bahasa Indonesia santai, max ~100 kata. Jangan klaim berita live; pakai "kemungkinan".
+Kamu asisten spot Indodax. Kasih insight singkat soal pair.
+Bahasa Indonesia santai, max ~120 kata. Pakai headline yang diberi; jangan mengarang berita.
 
 Pair: ${tick.symbol} ($base)
 Identitas: ${pairCtx.label}
@@ -63,9 +66,11 @@ Gerak 24j: $move (${PriceFormatter.formatPercentage(tick.change24h)})
 Harga ${PriceFormatter.formatPrice(tick.price)} | Vol ${PriceFormatter.formatVolume(tick.volume24h)}
 Teknikal: $trendHint, $rsiHint, engine ${signal.action.name}
 
+$headlineBlock
+
 Format:
 1. 🔎 Apa ini: ...
-2. 📈 Kenapa gerak: ...
+2. 📰 Headline & alasan gerak: ...
 3. 🔗 Hubungan: ...
 4. 💡 Insight pantau: ...
         """.trimIndent()
@@ -80,8 +85,8 @@ Format:
                     })
                 })
                 put("generationConfig", JSONObject().apply {
-                    put("temperature", 0.45)
-                    put("maxOutputTokens", 400)
+                    put("temperature", 0.4)
+                    put("maxOutputTokens", 450)
                 })
             }
             val request = Request.Builder()
@@ -91,7 +96,7 @@ Format:
                 .build()
             client.newCall(request).execute().use { resp ->
                 val responseBody = resp.body?.string().orEmpty()
-                if (!resp.isSuccessful) return@withContext buildFallback(tick, indicators, signal, cpi)
+                if (!resp.isSuccessful) return@withContext buildFallback(tick, indicators, signal, cpi, headlineBlock)
                 val parts = JSONObject(responseBody)
                     .optJSONArray("candidates")
                     ?.takeIf { it.length() > 0 }
@@ -103,10 +108,10 @@ Format:
                         arr.getJSONObject(i).optString("text").orEmpty()
                     }
                 }.orEmpty()
-                if (text.isNotBlank()) text.trim() else buildFallback(tick, indicators, signal, cpi)
+                if (text.isNotBlank()) text.trim() else buildFallback(tick, indicators, signal, cpi, headlineBlock)
             }
         } catch (_: Exception) {
-            buildFallback(tick, indicators, signal, cpi)
+            buildFallback(tick, indicators, signal, cpi, headlineBlock)
         }
     }
 
@@ -131,7 +136,8 @@ Format:
         tick: MarketTick,
         indicators: TechnicalIndicators,
         signal: AISignalState,
-        cpi: IndonesiaCpiData?
+        cpi: IndonesiaCpiData?,
+        headlineBlock: String
     ): String {
         val base = extractBase(tick.symbol)
         val ctx = PairNarrative.forBase(base)
@@ -139,11 +145,13 @@ Format:
         return """
 🔎 Apa ini: ${ctx.label}. ${ctx.narrative}
 
-📈 Kenapa gerak: 24j $move (${PriceFormatter.formatPercentage(tick.change24h)}), vol ${PriceFormatter.formatVolume(tick.volume24h)}. Kemungkinan ikut aliran ${ctx.ecosystem}.
+📰 Headline & alasan gerak:
+$headlineBlock
+24j $move (${PriceFormatter.formatPercentage(tick.change24h)}), vol ${PriceFormatter.formatVolume(tick.volume24h)}.
 
 🔗 Hubungan: ${ctx.ecosystem}
 
-💡 Insight pantau: Cek dulu arah BTC. Engine ${signal.action.name} — eksekusi limit maker, jangan kejar candle.
+💡 Insight pantau: Cek dulu arah BTC. Engine ${signal.action.name} — limit maker, jangan kejar candle.
         """.trimIndent()
     }
 

@@ -17,8 +17,7 @@ import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
 /**
- * AI insight via Groq — fokus narasi pair, bukan dump matematis.
- * Model ringan biar cepat; max_tokens dibatasi.
+ * AI insight via Groq — narasi pair + headline publik (gratis).
  */
 object GroqAiService {
     private val client = OkHttpClient.Builder()
@@ -27,9 +26,8 @@ object GroqAiService {
         .build()
 
     private const val BASE_URL = "https://api.groq.com/openai/v1/chat/completions"
-    /** Cepat & cukup pintar untuk insight singkat. 120B terlalu lambat. */
     private const val MODEL = "llama-3.3-70b-versatile"
-    private const val MAX_TOKENS = 420
+    private const val MAX_TOKENS = 480
 
     suspend fun generateDeepMarketAudit(
         apiKey: String,
@@ -38,12 +36,15 @@ object GroqAiService {
         signal: AISignalState
     ): String = withContext(Dispatchers.IO) {
         val cpi = if (safeContextReady) BpsMacroService(AppContextProvider.context).getLatest() else null
+        val base = extractBase(tick.symbol)
+        val headlines = runCatching { CryptoHeadlineService.snapshotForBase(base) }.getOrNull()
+        val headlineBlock = headlines?.promptBlock() ?: "Headline: tidak tersedia."
+
         if (apiKey.isBlank()) {
-            return@withContext buildFallback(tick, indicators, signal, cpi) +
+            return@withContext buildFallback(tick, indicators, signal, cpi, headlineBlock) +
                 "\n\n⚠️ Groq API key belum di-set. Buka Settings dan isi Groq API key."
         }
 
-        val base = extractBase(tick.symbol)
         val pairCtx = PairNarrative.forBase(base)
         val move = describeMove(tick.change24h)
         val rsiHint = when {
@@ -62,11 +63,11 @@ Kamu asisten trading spot Indodax yang ngobrol santai tapi tajam.
 Tugas: kasih INSIGHT soal pair yang dipantau user — bukan hafalan indikator.
 
 Aturan:
-- Bahasa Indonesia, singkat, manusiawi (bukan robot angka).
-- Fokus: kenapa pair ini bergerak, identitas/asal-usul koin, hubungan ekosistem, risiko.
-- Angka teknikal cuma pendukung 1 baris, jangan jadi isi utama.
-- Jangan mengaku punya berita live real-time. Kalau spekulasi alasan naik/turun, bilang "kemungkinan" / "biasanya".
-- Jangan menjamin profit. Max ~120 kata.
+- Bahasa Indonesia, singkat, manusiawi.
+- Pakai headline yang diberi HANYA sebagai petunjuk; jangan mengarang berita baru.
+- Kalau headline relevan dengan arah harga, hubungkan. Kalau tidak relevan, bilang kemungkinan teknis/korelasi.
+- Angka teknikal cuma pendukung 1 baris.
+- Jangan menjamin profit. Max ~140 kata.
         """.trimIndent()
 
         val userPrompt = """
@@ -79,17 +80,19 @@ Gerakan 24j: $move (${PriceFormatter.formatPercentage(tick.change24h)})
 Harga: ${PriceFormatter.formatPrice(tick.price)} | Vol: ${PriceFormatter.formatVolume(tick.volume24h)}
 Teknikal ringkas: $trendHint, $rsiHint, sinyal engine ${signal.action.name} (${signal.confidence}/100)
 
+$headlineBlock
+
 Jawab dengan format tepat ini:
-1. 🔎 Apa ini: [1 kalimat identitas + kenapa relevan dipantau]
-2. 📈 Kenapa gerak: [alasan paling masuk akal untuk arah 24j — korelasi BTC/ecosystem/volume/sentiment, pakai "kemungkinan"]
-3. 🔗 Hubungan: [pair ini "ikut" apa — BTC, SOL eco, meme flow, dll]
-4. 💡 Insight pantau: [1 saran praktis spot Indodax, tanpa dump angka TP/SL]
+1. 🔎 Apa ini: [1 kalimat identitas]
+2. 📰 Headline & alasan gerak: [hubungkan headline + arah 24j; kalau headline lemah, bilang kemungkinan teknis/eco]
+3. 🔗 Hubungan: [BTC / eco / meme flow / dll]
+4. 💡 Insight pantau: [1 saran praktis spot Indodax]
         """.trimIndent()
 
         try {
             val payload = JSONObject().apply {
                 put("model", MODEL)
-                put("temperature", 0.45)
+                put("temperature", 0.4)
                 put("max_tokens", MAX_TOKENS)
                 put("messages", JSONArray().apply {
                     put(JSONObject().apply {
@@ -110,7 +113,7 @@ Jawab dengan format tepat ini:
                 .build()
             client.newCall(request).execute().use { resp ->
                 val responseBody = resp.body?.string().orEmpty()
-                if (!resp.isSuccessful) return@withContext buildFallback(tick, indicators, signal, cpi)
+                if (!resp.isSuccessful) return@withContext buildFallback(tick, indicators, signal, cpi, headlineBlock)
                 val text = JSONObject(responseBody)
                     .optJSONArray("choices")
                     ?.takeIf { it.length() > 0 }
@@ -118,10 +121,10 @@ Jawab dengan format tepat ini:
                     ?.optJSONObject("message")
                     ?.optString("content")
                     .orEmpty()
-                if (text.isNotBlank()) text.trim() else buildFallback(tick, indicators, signal, cpi)
+                if (text.isNotBlank()) text.trim() else buildFallback(tick, indicators, signal, cpi, headlineBlock)
             }
         } catch (_: Exception) {
-            buildFallback(tick, indicators, signal, cpi)
+            buildFallback(tick, indicators, signal, cpi, headlineBlock)
         }
     }
 
@@ -146,7 +149,8 @@ Jawab dengan format tepat ini:
         tick: MarketTick,
         indicators: TechnicalIndicators,
         signal: AISignalState,
-        cpi: IndonesiaCpiData?
+        cpi: IndonesiaCpiData?,
+        headlineBlock: String
     ): String {
         val base = extractBase(tick.symbol)
         val ctx = PairNarrative.forBase(base)
@@ -159,11 +163,13 @@ Jawab dengan format tepat ini:
         return """
 🔎 Apa ini: ${ctx.label}. ${ctx.narrative}
 
-📈 Kenapa gerak: 24j $move (${PriceFormatter.formatPercentage(tick.change24h)}). $trend; volume ${PriceFormatter.formatVolume(tick.volume24h)}. Tanpa berita live, gerakan seperti ini biasanya ikut aliran ${ctx.ecosystem}.
+📰 Headline & alasan gerak:
+$headlineBlock
+24j $move (${PriceFormatter.formatPercentage(tick.change24h)}). $trend; vol ${PriceFormatter.formatVolume(tick.volume24h)}.
 
 🔗 Hubungan: ${ctx.ecosystem}
 
-💡 Insight pantau: Pantau korelasi dengan BTC dulu. Sinyal engine ${signal.action.name} (${signal.confidence}/100) — pakai limit maker 0.21%, jangan FOMO candle tunggal.
+💡 Insight pantau: Pantau BTC dulu. Engine ${signal.action.name} (${signal.confidence}/100) — limit maker 0.21%, jangan FOMO 1 candle.
         """.trimIndent()
     }
 
