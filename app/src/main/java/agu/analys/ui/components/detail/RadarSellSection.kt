@@ -13,9 +13,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountBalanceWallet
-import androidx.compose.material.icons.filled.TrendingDown
-import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,13 +20,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import agu.analys.ui.theme.*
 import agu.analys.util.PriceFormatter
+import agu.analys.ui.components.detail.sell.*
 import java.util.Locale
 
 @Composable
@@ -54,7 +52,6 @@ fun RadarSellSection(
     var customSellQtyInput by remember { mutableStateOf("") }
     var isCustomSellQtyOpen by remember { mutableStateOf(false) }
     var selectedSellPercent by remember { mutableIntStateOf(100) }
-    var isTrailingOptionsOpen by remember { mutableStateOf(false) }
 
     var isAutoSellActive by remember { mutableStateOf(spotPosition?.isAutoSellEnabled == true) }
     var tp1PriceInput by remember { mutableStateOf("") }
@@ -63,30 +60,35 @@ fun RadarSellSection(
     var tp2PercentInput by remember { mutableStateOf("50") }
     var stopLossPriceInput by remember { mutableStateOf("") }
 
-    LaunchedEffect(spotPosition, signal) {
-        if (spotPosition != null) {
+    // Flag to prevent LaunchedEffect from overwriting user typing
+    var hasInitialized by remember { mutableStateOf(false) }
+    val currentPositionId = remember(baseAsset, quoteAsset) { "$baseAsset-$quoteAsset" }
+
+    LaunchedEffect(spotPosition, signal, currentPositionId) {
+        if (spotPosition != null && !hasInitialized) {
             isAutoSellActive = spotPosition.isAutoSellEnabled
-            tp1PriceInput = if (spotPosition.tp1Price > 0.0) {
-                String.format(Locale.US, "%.0f", spotPosition.tp1Price)
-            } else if (signal != null && signal.targetPrice1 > 0.0) {
-                String.format(Locale.US, "%.0f", signal.targetPrice1)
-            } else ""
+            tp1PriceInput = if (spotPosition.tp1Price > 0.0) String.format(Locale.US, "%.0f", spotPosition.tp1Price) 
+                            else if (signal != null && signal.targetPrice1 > 0.0) String.format(Locale.US, "%.0f", signal.targetPrice1) 
+                            else ""
+            
+            tp2PriceInput = if (spotPosition.tp2Price > 0.0) String.format(Locale.US, "%.0f", spotPosition.tp2Price)
+                            else if (signal != null && signal.targetPrice2 > 0.0) String.format(Locale.US, "%.0f", signal.targetPrice2)
+                            else ""
 
-            tp2PriceInput = if (spotPosition.tp2Price > 0.0) {
-                String.format(Locale.US, "%.0f", spotPosition.tp2Price)
-            } else if (signal != null && signal.targetPrice2 > 0.0) {
-                String.format(Locale.US, "%.0f", signal.targetPrice2)
-            } else ""
-
-            stopLossPriceInput = if (spotPosition.stopLossPrice > 0.0) {
-                String.format(Locale.US, "%.0f", spotPosition.stopLossPrice)
-            } else if (signal != null && signal.stopLoss > 0.0) {
-                String.format(Locale.US, "%.0f", signal.stopLoss)
-            } else ""
+            stopLossPriceInput = if (spotPosition.stopLossPrice > 0.0) String.format(Locale.US, "%.0f", spotPosition.stopLossPrice)
+                                 else if (signal != null && signal.stopLoss > 0.0) String.format(Locale.US, "%.0f", signal.stopLoss)
+                                 else ""
 
             tp1PercentInput = if (spotPosition.tp1Percent > 0) String.format(Locale.US, "%.0f", spotPosition.tp1Percent) else "50"
             tp2PercentInput = if (spotPosition.tp2Percent > 0) String.format(Locale.US, "%.0f", spotPosition.tp2Percent) else "50"
+            
+            hasInitialized = true
         }
+    }
+
+    // Reset initialization when changing pairs
+    LaunchedEffect(currentPositionId) {
+        hasInitialized = false
     }
 
     val isTrailingActive = spotPosition?.isTrailingEnabled == true
@@ -95,10 +97,8 @@ fun RadarSellSection(
     val trailingStopPrice = spotPosition?.trailingStopPrice ?: (peakPrice * (1.0 - trailingPercent / 100.0))
     val isTrailingTriggered = spotPosition?.isTrailingTriggered == true
 
-    // Dialog Input Manual (>7 Hari)
     var showManualDialog by remember { mutableStateOf(false) }
-    var manualAvgBuyInput by remember { mutableStateOf("") }
-    var manualTotalCostInput by remember { mutableStateOf("") }
+    var showSellConfirmDialog by remember { mutableStateOf(false) }
 
     val focusManager = LocalFocusManager.current
 
@@ -113,233 +113,21 @@ fun RadarSellSection(
     val netProfitPct = if (costBasisIdr > 0.0) (netProfitIdr / costBasisIdr) * 100.0 else 0.0
     val isProfitable = netProfitIdr >= 0.0
 
-    // DIALOG MODAL INPUT HARGA BELI MANUAL (>7 HARI)
-    if (showManualDialog) {
-        AlertDialog(
-            onDismissRequest = { showManualDialog = false },
-            containerColor = TvSurface,
-            titleContentColor = TvTextPrimary,
-            shape = RoundedCornerShape(16.dp),
-            title = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.AccountBalanceWallet,
-                        contentDescription = null,
-                        tint = TvAmber,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = "Set Harga Beli Manual (>7 Hari)",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TvTextPrimary
-                    )
-                }
-            },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        text = "Gunakan ini untuk koin $baseAsset yang dibeli >7 hari lalu di Indodax. Isikan salah satu nilai di bawah dari nota Indodax Anda:",
-                        color = TvTextSecondary,
-                        fontSize = 11.sp,
-                        lineHeight = 15.sp
-                    )
-
-                    OutlinedTextField(
-                        value = manualAvgBuyInput,
-                        onValueChange = { input ->
-                            manualAvgBuyInput = input
-                            val p = PriceFormatter.parseCleanIdrDouble(input)
-                            if (p > 0.0 && availableCoin > 0.0) {
-                                val calcTotal = p * availableCoin
-                                manualTotalCostInput = PriceFormatter.formatIdrNumber(calcTotal)
-                            }
-                        },
-                        label = { Text("Harga Rata-rata Beli ($quoteAsset)", fontSize = 11.sp) },
-                        placeholder = { Text("Contoh: 1.367.959.000", fontSize = 11.sp) },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = TvAmber,
-                            unfocusedBorderColor = TvBorder,
-                            focusedContainerColor = TvSurfaceVariant,
-                            unfocusedContainerColor = TvSurfaceVariant,
-                            focusedTextColor = TvTextPrimary,
-                            unfocusedTextColor = TvTextPrimary
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    OutlinedTextField(
-                        value = manualTotalCostInput,
-                        onValueChange = { input ->
-                            manualTotalCostInput = input
-                            val total = PriceFormatter.parseCleanIdrDouble(input)
-                            if (total > 0.0 && availableCoin > 0.0) {
-                                val calcPrice = total / availableCoin
-                                manualAvgBuyInput = PriceFormatter.formatIdrNumber(calcPrice)
-                            }
-                        },
-                        label = { Text("Total Order Terisi / Modal ($quoteAsset)", fontSize = 11.sp) },
-                        placeholder = { Text("Contoh: 37.987", fontSize = 11.sp) },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = TvAmber,
-                            unfocusedBorderColor = TvBorder,
-                            focusedContainerColor = TvSurfaceVariant,
-                            unfocusedContainerColor = TvSurfaceVariant,
-                            focusedTextColor = TvTextPrimary,
-                            unfocusedTextColor = TvTextPrimary
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    if (availableCoin > 0.0) {
-                        Text(
-                            text = "Kuantitas Koin ($baseAsset): ${PriceFormatter.formatCryptoExact(availableCoin, 8)}",
-                            color = TvBlue,
-                            fontSize = 10.5.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        val parsedPrice = PriceFormatter.parseCleanIdrDouble(manualAvgBuyInput)
-                        val parsedTotal = PriceFormatter.parseCleanIdrDouble(manualTotalCostInput)
-                        val finalPrice = if (parsedPrice > 0.0) parsedPrice else if (parsedTotal > 0.0 && availableCoin > 0.0) parsedTotal / availableCoin else 0.0
-                        val finalTotal = if (parsedTotal > 0.0) parsedTotal else finalPrice * availableCoin
-
-                        if (finalPrice > 0.0) {
-                            onSetManualBuyPrice?.invoke(finalPrice, finalTotal)
-                            showManualDialog = false
-                        }
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = TvAmber, contentColor = Color.Black),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text("Simpan Harga Beli", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showManualDialog = false }) {
-                    Text("Batal", color = TvTextSecondary, fontSize = 12.sp)
-                }
-            }
-        )
-    }
-
     Column {
-        // Card Koin yang Dimiliki
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(TvCardBackground, RoundedCornerShape(10.dp))
-                .border(1.dp, TvBorder, RoundedCornerShape(10.dp))
-                .padding(10.dp)
-        ) {
-            Column {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.weight(1f, fill = false)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.AccountBalanceWallet,
-                            contentDescription = null,
-                            tint = TvBlue,
-                            modifier = Modifier.size(15.dp)
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text(
-                            text = "Koin Dimiliki (${if (isRealMode) "Real Indodax" else "Simulasi"}):",
-                            color = TvTextSecondary,
-                            fontSize = 10.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-
-                    Text(
-                        text = "${PriceFormatter.formatCryptoExact(availableCoin, 8)} $baseAsset",
-                        color = if (availableCoin > 0) TvBlue else TvTextSecondary,
-                        fontSize = 11.5.sp,
-                        fontWeight = FontWeight.Black,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-
-                Spacer(Modifier.height(4.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Harga Beli Rata-Rata:",
-                        color = TvTextSecondary,
-                        fontSize = 10.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false)
-                    )
-
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = if (effectiveBuyPrice > 0.0) "${PriceFormatter.formatIdrNumber(effectiveBuyPrice)} $quoteAsset" else "Belum Ada Posisi",
-                            color = if (effectiveBuyPrice > 0.0) TvAmber else TvTextSecondary,
-                            fontSize = 10.5.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-
-                        Spacer(Modifier.width(6.dp))
-
-                        // Tombol Cepat Set / Ubah Manual
-                        TextButton(
-                            onClick = {
-                                manualAvgBuyInput = if (effectiveBuyPrice > 0.0) String.format(Locale.US, "%.0f", effectiveBuyPrice) else ""
-                                manualTotalCostInput = if (costBasisIdr > 0.0) String.format(Locale.US, "%.0f", costBasisIdr) else ""
-                                showManualDialog = true
-                            },
-                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
-                            modifier = Modifier.height(22.dp)
-                        ) {
-                            Text(
-                                text = if (effectiveBuyPrice > 0.0) "[Ubah Manual]" else "[+ Manual >7 Hari]",
-                                color = TvAmber,
-                                fontSize = 9.5.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-                }
-            }
-        }
+        SellPositionHeader(
+            isRealMode = isRealMode,
+            baseAsset = baseAsset,
+            quoteAsset = quoteAsset,
+            availableCoin = availableCoin,
+            effectiveBuyPrice = effectiveBuyPrice,
+            onManualBuyClick = { showManualDialog = true }
+        )
 
         Spacer(Modifier.height(8.dp))
 
         // Shortcut Persentase Jual
-        Text(
-            text = "PILIH JUMLAH KOIN DIJUAL:",
-            color = TvTextSecondary,
-            fontSize = 9.5.sp,
-            fontWeight = FontWeight.Black
-        )
+        Text(text = "PILIH JUMLAH KOIN DIJUAL:", color = TvTextSecondary, fontSize = 9.5.sp, fontWeight = FontWeight.Black)
         Spacer(Modifier.height(4.dp))
-
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -352,13 +140,11 @@ fun RadarSellSection(
                     onClick = {
                         selectedSellPercent = pct
                         isCustomSellQtyOpen = false
-                        val qty = (availableCoin * (pct / 100.0))
-                        onSellQuantityChanged(qty)
+                        onSellQuantityChanged(availableCoin * (pct / 100.0))
                     },
                     modifier = Modifier.weight(1f)
                 )
             }
-
             QuickNominalChip(
                 label = "Kustom",
                 selected = isCustomSellQtyOpen,
@@ -370,606 +156,170 @@ fun RadarSellSection(
             )
         }
 
-        // Input Kustom Koin
-        AnimatedVisibility(
-            visible = isCustomSellQtyOpen,
-            enter = fadeIn() + expandVertically(),
-            exit = fadeOut() + shrinkVertically()
-        ) {
-            Column(modifier = Modifier.padding(top = 6.dp)) {
-                OutlinedTextField(
-                    value = customSellQtyInput,
-                    onValueChange = { input ->
-                        customSellQtyInput = input
-                        val parsed = input.toDoubleOrNull()
-                        if (parsed != null && parsed > 0.0) {
-                            onSellQuantityChanged(parsed.coerceAtMost(availableCoin.coerceAtLeast(parsed)))
-                        }
-                    },
-                    label = { Text("Jumlah Koin $baseAsset Dijual", fontSize = 11.sp) },
-                    placeholder = { Text("Contoh: 0.005", fontSize = 11.sp) },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = TvBlue,
-                        unfocusedBorderColor = TvBorder,
-                        focusedContainerColor = TvSurfaceVariant,
-                        unfocusedContainerColor = TvSurfaceVariant,
-                        focusedTextColor = TvTextPrimary,
-                        unfocusedTextColor = TvTextPrimary
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
+        AnimatedVisibility(visible = isCustomSellQtyOpen, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
+            OutlinedTextField(
+                value = customSellQtyInput,
+                onValueChange = { input ->
+                    customSellQtyInput = input
+                    val parsed = input.toDoubleOrNull()
+                    if (parsed != null && parsed > 0.0) onSellQuantityChanged(parsed.coerceAtMost(availableCoin))
+                },
+                label = { Text("Jumlah Koin $baseAsset Dijual", fontSize = 11.sp) },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+                singleLine = true,
+                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = TvBlue, unfocusedBorderColor = TvBorder, focusedContainerColor = TvSurfaceVariant, unfocusedContainerColor = TvSurfaceVariant, focusedTextColor = TvTextPrimary, unfocusedTextColor = TvTextPrimary),
+                modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
+            )
         }
 
         Spacer(Modifier.height(8.dp))
 
-        // Card Kalkulasi Rincian Jual & Hasil Keuntungan Bersih
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(TvCardBackground, RoundedCornerShape(10.dp))
-                .border(0.5.dp, TvBorder, RoundedCornerShape(10.dp))
-                .padding(10.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+        SellCalculationCard(
+            validPrice = validPrice,
+            baseAsset = baseAsset,
+            quoteAsset = quoteAsset,
+            activeSellQty = activeSellQty,
+            grossSellValueIdr = grossSellValueIdr,
+            effectiveBuyPrice = effectiveBuyPrice,
+            costBasisIdr = costBasisIdr,
+            sellFeeIdr = sellFeeIdr,
+            activeFeePct = activeFeePct,
+            netReceivedSellIdr = netReceivedSellIdr,
+            isProfitable = isProfitable,
+            netProfitIdr = netProfitIdr,
+            netProfitPct = netProfitPct,
+            onManualBuyClick = { showManualDialog = true }
+        )
+
+        if (effectiveBuyPrice > 0.0 || availableCoin > 0.0) {
+            Spacer(Modifier.height(8.dp))
+            SellTpSlSection(
+                isRealMode = isRealMode,
+                isAutoSellActive = isAutoSellActive,
+                onAutoSellActiveChanged = { enabled ->
+                    isAutoSellActive = enabled
+                    onSetAutoSellParams?.invoke(
+                        enabled,
+                        PriceFormatter.parseCleanIdrDouble(tp1PriceInput),
+                        PriceFormatter.parseCleanIdrDouble(tp1PercentInput).coerceIn(1.0, 100.0),
+                        PriceFormatter.parseCleanIdrDouble(tp2PriceInput),
+                        PriceFormatter.parseCleanIdrDouble(tp2PercentInput).coerceIn(1.0, 100.0),
+                        PriceFormatter.parseCleanIdrDouble(stopLossPriceInput)
+                    )
+                },
+                tp1Price = tp1PriceInput,
+                onTp1PriceChanged = { tp1PriceInput = it },
+                tp1Percent = tp1PercentInput,
+                onTp1PercentChanged = { tp1PercentInput = it },
+                tp2Price = tp2PriceInput,
+                onTp2PriceChanged = { tp2PriceInput = it },
+                tp2Percent = tp2PercentInput,
+                onTp2PercentChanged = { tp2PercentInput = it },
+                stopLossPrice = stopLossPriceInput,
+                onStopLossPriceChanged = { stopLossPriceInput = it },
+                quoteAsset = quoteAsset,
+                onSaveParams = {
+                    onSetAutoSellParams?.invoke(
+                        isAutoSellActive,
+                        PriceFormatter.parseCleanIdrDouble(tp1PriceInput),
+                        PriceFormatter.parseCleanIdrDouble(tp1PercentInput).coerceIn(1.0, 100.0),
+                        PriceFormatter.parseCleanIdrDouble(tp2PriceInput),
+                        PriceFormatter.parseCleanIdrDouble(tp2PercentInput).coerceIn(1.0, 100.0),
+                        PriceFormatter.parseCleanIdrDouble(stopLossPriceInput)
+                    )
+                }
+            )
+
+            Spacer(Modifier.height(8.dp))
+            SellTrailingSection(
+                isTrailingActive = isTrailingActive,
+                onTrailingActiveChanged = { enabled -> onSetTrailingStop?.invoke(enabled, trailingPercent) },
+                isTrailingTriggered = isTrailingTriggered,
+                trailingPercent = trailingPercent,
+                onSetTrailingPercent = { pct -> onSetTrailingStop?.invoke(true, pct) },
+                peakPrice = peakPrice,
+                trailingStopPrice = trailingStopPrice,
+                quoteAsset = quoteAsset
+            )
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        // TOMBOL EKSEKUSI JUAL MARKET (INSTAN)
+        Button(
+            onClick = {
+                if (isRealMode) showSellConfirmDialog = true
+                else onExecuteSell?.invoke(activeSellQty)
+            },
+            modifier = Modifier.fillMaxWidth().height(48.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = TvRed, contentColor = Color.White),
+            shape = RoundedCornerShape(10.dp)
         ) {
-            TransactionDetailRow(
-                label = "Harga Jual Sekarang",
-                value = "${PriceFormatter.formatIdrNumber(validPrice)} $quoteAsset"
+            Text(
+                text = "${if (isRealMode) "[REAL] " else "[SIMULASI] "}JUAL ${PriceFormatter.formatCryptoExact(activeSellQty, 8)} $baseAsset",
+                fontWeight = FontWeight.Black,
+                fontSize = 13.5.sp
             )
-            TransactionDetailRow(
-                label = "Jumlah Koin Dijual",
-                value = "${PriceFormatter.formatCryptoExact(activeSellQty, 8)} $baseAsset",
-                subValue = "= ${PriceFormatter.formatIdrNumber(grossSellValueIdr)} $quoteAsset (Kotor)"
-            )
-            if (effectiveBuyPrice > 0.0) {
-                TransactionDetailRow(
-                    label = "Modal Pembelian",
-                    value = "${PriceFormatter.formatIdrNumber(costBasisIdr)} $quoteAsset",
-                    subValue = "(@ ${PriceFormatter.formatIdrNumber(effectiveBuyPrice)})"
-                )
-            }
-            TransactionDetailRow(
-                label = "Biaya Fee (${String.format(Locale.US, "%.2f", activeFeePct)}%)",
-                value = "- ${PriceFormatter.formatIdrNumber(sellFeeIdr)} $quoteAsset",
-                valueColor = TvRed
-            )
-
-            HorizontalDivider(color = TvBorder, thickness = 0.5.dp, modifier = Modifier.padding(vertical = 2.dp))
-
-            // Diterima Bersih Kas
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Hasil Kas Diterima",
-                    color = TvTextSecondary,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = "${PriceFormatter.formatIdrNumber(netReceivedSellIdr)} $quoteAsset",
-                    color = TvTextPrimary,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Black,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
-            Spacer(Modifier.height(4.dp))
-
-            // Highlight HASIL KEUNTUNGAN / KERUGIAN BERSIH
-            if (effectiveBuyPrice > 0.0) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(
-                            if (isProfitable) TvGreen.copy(alpha = 0.15f) else TvRed.copy(alpha = 0.15f),
-                            RoundedCornerShape(8.dp)
-                        )
-                        .border(
-                            1.dp,
-                            if (isProfitable) TvGreen else TvRed,
-                            RoundedCornerShape(8.dp)
-                        )
-                        .padding(10.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f, fill = false)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = if (isProfitable) Icons.Default.TrendingUp else Icons.Default.TrendingDown,
-                                    contentDescription = null,
-                                    tint = if (isProfitable) TvGreen else TvRed,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(Modifier.width(4.dp))
-                                Text(
-                                    text = if (isProfitable) "KEUNTUNGAN BERSIH (NET PROFIT)" else "KERUGIAN / CUT LOSS NET",
-                                    color = if (isProfitable) TvGreen else TvRed,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Black,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                            Text(
-                                text = "Sudah dipotong fee (${String.format(Locale.US, "%.2f", activeFeePct)}%)",
-                                color = TvTextSecondary,
-                                fontSize = 9.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-
-                        Spacer(Modifier.width(8.dp))
-
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text(
-                                text = "${if (isProfitable) "+" else ""}${PriceFormatter.formatIdrNumber(netProfitIdr)} $quoteAsset",
-                                color = if (isProfitable) TvGreen else TvRed,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Black,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Text(
-                                text = "(${if (isProfitable) "+" else ""}${String.format(Locale.US, "%.2f", netProfitPct)}%)",
-                                color = if (isProfitable) TvGreen else TvRed,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
-                }
-            } else {
-                // Banner ajakan input manual (>7 Hari) jika harga beli belum ada
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(TvSurfaceVariant, RoundedCornerShape(8.dp))
-                        .border(1.dp, TvAmber.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-                        .padding(8.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Histori >7 Hari Tidak Tersedia di API",
-                                color = TvAmber,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = "Set harga beli manual dari nota Anda agar Unrealized PnL (+/-) bisa dihitung.",
-                                color = TvTextSecondary,
-                                fontSize = 9.sp,
-                                lineHeight = 12.sp
-                            )
-                        }
-
-                        Spacer(Modifier.width(6.dp))
-
-                        Button(
-                            onClick = { showManualDialog = true },
-                            colors = ButtonDefaults.buttonColors(containerColor = TvAmber, contentColor = Color.Black),
-                            shape = RoundedCornerShape(6.dp),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                            modifier = Modifier.height(28.dp)
-                        ) {
-                            Text("+ Input Manual", fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-            }
         }
 
-        // --- TARGET TAKE PROFIT & STOP LOSS OTOMATIS CARD ---
-        if (effectiveBuyPrice > 0.0 || availableCoin > 0.0) {
+        if (isTrailingTriggered) {
             Spacer(Modifier.height(8.dp))
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        if (isAutoSellActive) TvGreen.copy(alpha = 0.1f) else TvSurfaceVariant,
-                        RoundedCornerShape(10.dp)
-                    )
-                    .border(
-                        1.dp,
-                        if (isAutoSellActive) TvGreen.copy(alpha = 0.5f) else TvBorder,
-                        RoundedCornerShape(10.dp)
-                    )
-                    .padding(10.dp)
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = if (isRealMode) "🎯 AUTO TP1 & TP2 SERVER" else "🎯 AUTO TP1, TP2 & STOP LOSS",
-                                color = if (isAutoSellActive) TvGreen else Color(0xFF90A4AE),
-                                fontSize = 10.5.sp,
-                                fontWeight = FontWeight.Black
-                            )
-                        }
-
-                        Switch(
-                            checked = isAutoSellActive,
-                            onCheckedChange = { enabled ->
-                                isAutoSellActive = enabled
-                                onSetAutoSellParams?.invoke(
-                                    enabled,
-                                    PriceFormatter.parseCleanIdrDouble(tp1PriceInput),
-                                    PriceFormatter.parseCleanIdrDouble(tp1PercentInput).coerceIn(1.0, 100.0),
-                                    PriceFormatter.parseCleanIdrDouble(tp2PriceInput),
-                                    PriceFormatter.parseCleanIdrDouble(tp2PercentInput).coerceIn(1.0, 100.0),
-                                    PriceFormatter.parseCleanIdrDouble(stopLossPriceInput)
-                                )
-                            },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = TvGreen,
-                                checkedTrackColor = TvGreen.copy(alpha = 0.4f),
-                                uncheckedThumbColor = Color(0xFF78909C),
-                                uncheckedTrackColor = Color(0xFF1E2D3D)
-                            ),
-                            modifier = Modifier.height(24.dp)
-                        )
-                    }
-
-                    if (isAutoSellActive) {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            // Row for TP1
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1.6f)) {
-                                    Text("Harga TP 1 ($quoteAsset)", color = TvTextSecondary, fontSize = 9.sp, fontWeight = FontWeight.Medium)
-                                    Spacer(Modifier.height(3.dp))
-                                    OutlinedTextField(
-                                        value = tp1PriceInput,
-                                        onValueChange = { tp1PriceInput = it },
-                                        placeholder = { Text("Harga TP 1", fontSize = 10.5.sp, color = TvTextSecondary.copy(alpha = 0.5f)) },
-                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
-                                        singleLine = true,
-                                        colors = OutlinedTextFieldDefaults.colors(
-                                            focusedBorderColor = TvGreen,
-                                            unfocusedBorderColor = TvBorder,
-                                            focusedContainerColor = TvSurfaceVariant,
-                                            unfocusedContainerColor = TvSurfaceVariant,
-                                            focusedTextColor = TvTextPrimary,
-                                            unfocusedTextColor = TvTextPrimary
-                                        ),
-                                        modifier = Modifier.fillMaxWidth().height(42.dp),
-                                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp, color = TvTextPrimary)
-                                    )
-                                }
-
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text("Porsi TP 1 %", color = TvTextSecondary, fontSize = 9.sp, fontWeight = FontWeight.Medium)
-                                    Spacer(Modifier.height(3.dp))
-                                    OutlinedTextField(
-                                        value = tp1PercentInput,
-                                        onValueChange = { input ->
-                                            tp1PercentInput = input
-                                            val p1 = input.toDoubleOrNull()
-                                            if (p1 != null) {
-                                                val p2 = (100.0 - p1).coerceIn(0.0, 100.0)
-                                                tp2PercentInput = if (p2 % 1.0 == 0.0) p2.toInt().toString() else String.format(Locale.US, "%.1f", p2)
-                                            }
-                                        },
-                                        placeholder = { Text("50", fontSize = 10.5.sp, color = TvTextSecondary.copy(alpha = 0.5f)) },
-                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
-                                        singleLine = true,
-                                        colors = OutlinedTextFieldDefaults.colors(
-                                            focusedBorderColor = TvGreen,
-                                            unfocusedBorderColor = TvBorder,
-                                            focusedContainerColor = TvSurfaceVariant,
-                                            unfocusedContainerColor = TvSurfaceVariant,
-                                            focusedTextColor = TvTextPrimary,
-                                            unfocusedTextColor = TvTextPrimary
-                                        ),
-                                        modifier = Modifier.fillMaxWidth().height(42.dp),
-                                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp, color = TvTextPrimary)
-                                    )
-                                }
-                            }
-
-                            // Row for TP2
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1.6f)) {
-                                    Text("Harga TP 2 ($quoteAsset)", color = TvTextSecondary, fontSize = 9.sp, fontWeight = FontWeight.Medium)
-                                    Spacer(Modifier.height(3.dp))
-                                    OutlinedTextField(
-                                        value = tp2PriceInput,
-                                        onValueChange = { tp2PriceInput = it },
-                                        placeholder = { Text("Harga TP 2", fontSize = 10.5.sp, color = TvTextSecondary.copy(alpha = 0.5f)) },
-                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
-                                        singleLine = true,
-                                        colors = OutlinedTextFieldDefaults.colors(
-                                            focusedBorderColor = TvGreen,
-                                            unfocusedBorderColor = TvBorder,
-                                            focusedContainerColor = TvSurfaceVariant,
-                                            unfocusedContainerColor = TvSurfaceVariant,
-                                            focusedTextColor = TvTextPrimary,
-                                            unfocusedTextColor = TvTextPrimary
-                                        ),
-                                        modifier = Modifier.fillMaxWidth().height(42.dp),
-                                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp, color = TvTextPrimary)
-                                    )
-                                }
-
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text("Porsi TP 2 %", color = TvTextSecondary, fontSize = 9.sp, fontWeight = FontWeight.Medium)
-                                    Spacer(Modifier.height(3.dp))
-                                    OutlinedTextField(
-                                        value = tp2PercentInput,
-                                        onValueChange = { input ->
-                                            tp2PercentInput = input
-                                            val p2 = input.toDoubleOrNull()
-                                            if (p2 != null) {
-                                                val p1 = (100.0 - p2).coerceIn(0.0, 100.0)
-                                                tp1PercentInput = if (p1 % 1.0 == 0.0) p1.toInt().toString() else String.format(Locale.US, "%.1f", p1)
-                                            }
-                                        },
-                                        placeholder = { Text("100", fontSize = 10.5.sp, color = TvTextSecondary.copy(alpha = 0.5f)) },
-                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
-                                        singleLine = true,
-                                        colors = OutlinedTextFieldDefaults.colors(
-                                            focusedBorderColor = TvGreen,
-                                            unfocusedBorderColor = TvBorder,
-                                            focusedContainerColor = TvSurfaceVariant,
-                                            unfocusedContainerColor = TvSurfaceVariant,
-                                            focusedTextColor = TvTextPrimary,
-                                            unfocusedTextColor = TvTextPrimary
-                                        ),
-                                        modifier = Modifier.fillMaxWidth().height(42.dp),
-                                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp, color = TvTextPrimary)
-                                    )
-                                }
-                            }
-
-                            // Stop Loss or Real Mode Notice
-                            if (!isRealMode) {
-                                Column(modifier = Modifier.fillMaxWidth()) {
-                                    val slColor = if (LocalAppColors.current == LightAppColors) Color(0xFFD32F2F) else Color(0xFFEF9A9A)
-                                    Text("Harga Stop Loss ($quoteAsset)", color = slColor, fontSize = 9.sp, fontWeight = FontWeight.Medium)
-                                    Spacer(Modifier.height(3.dp))
-                                    OutlinedTextField(
-                                        value = stopLossPriceInput,
-                                        onValueChange = { stopLossPriceInput = it },
-                                        placeholder = { Text("Harga Stop Loss", fontSize = 10.5.sp, color = slColor.copy(alpha = 0.5f)) },
-                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
-                                        keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
-                                        singleLine = true,
-                                        colors = OutlinedTextFieldDefaults.colors(
-                                            focusedBorderColor = TvRed,
-                                            unfocusedBorderColor = TvBorder,
-                                            focusedContainerColor = TvSurfaceVariant,
-                                            unfocusedContainerColor = TvSurfaceVariant,
-                                            focusedTextColor = TvTextPrimary,
-                                            unfocusedTextColor = TvTextPrimary
-                                        ),
-                                        modifier = Modifier.fillMaxWidth().height(42.dp),
-                                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp, color = TvTextPrimary)
-                                    )
-                                }
-                            } else {
-                                // Red outline notice for Indodax API restriction
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .background(Color(0xFF231012), RoundedCornerShape(8.dp))
-                                        .border(1.dp, Color(0xFFD32F2F).copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-                                        .padding(8.dp)
-                                ) {
-                                    Text(
-                                        text = "⚠️ Di Akun Riil, Stop Loss (SL) otomatis ditiadakan karena keterbatasan saldo terkunci di server Indodax. Gunakan TP1 & TP2 murni server agar aman.",
-                                        color = Color(0xFFEF9A9A),
-                                        fontSize = 9.sp,
-                                        lineHeight = 11.sp
-                                    )
-                                }
-                            }
-
-                            // Save button
-                            Button(
-                                onClick = {
-                                    focusManager.clearFocus()
-                                    onSetAutoSellParams?.invoke(
-                                        true,
-                                        PriceFormatter.parseCleanIdrDouble(tp1PriceInput),
-                                        PriceFormatter.parseCleanIdrDouble(tp1PercentInput).coerceIn(1.0, 100.0),
-                                        PriceFormatter.parseCleanIdrDouble(tp2PriceInput),
-                                        PriceFormatter.parseCleanIdrDouble(tp2PercentInput).coerceIn(1.0, 100.0),
-                                        if (isRealMode) 0.0 else PriceFormatter.parseCleanIdrDouble(stopLossPriceInput)
-                                    )
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = TvGreen, contentColor = Color.Black),
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier.fillMaxWidth().height(36.dp)
-                            ) {
-                                Text("Simpan Target Jual Otomatis", fontSize = 11.sp, fontWeight = FontWeight.Black)
-                            }
-                        }
-                    } else {
-                        Text(
-                            text = if (isRealMode) "Aktifkan untuk memasang target Take Profit 1 (50%) dan Take Profit 2 (50%) otomatis di server Indodax."
-                                   else "Aktifkan untuk menjual secara otomatis pada target Take Profit 1 (parsial), Take Profit 2 (sisa), dan Stop Loss yang ditentukan.",
-                            color = Color(0xFF78909C),
-                            fontSize = 9.5.sp
-                        )
-                    }
-                }
-            }
-        }
-
-        // --- TRAILING STOP LOSS PROTECTION CARD ---
-        if (effectiveBuyPrice > 0.0 || availableCoin > 0.0) {
-            Spacer(Modifier.height(8.dp))
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        if (isTrailingTriggered) TvRed.copy(alpha = 0.15f) else if (isTrailingActive) TvBlue.copy(alpha = 0.1f) else TvSurfaceVariant,
-                        RoundedCornerShape(10.dp)
-                    )
-                    .border(
-                        1.dp,
-                        if (isTrailingTriggered) TvRed else if (isTrailingActive) TvBlue else TvBorder,
-                        RoundedCornerShape(10.dp)
-                    )
-                    .padding(10.dp)
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = "🔒 TRAILING STOP LOSS",
-                                color = if (isTrailingTriggered) TvRed else if (isTrailingActive) TvBlue else TvTextSecondary,
-                                fontSize = 10.5.sp,
-                                fontWeight = FontWeight.Black
-                            )
-                            if (isTrailingTriggered) {
-                                Spacer(Modifier.width(6.dp))
-                                Box(
-                                    modifier = Modifier
-                                        .background(TvRed, RoundedCornerShape(4.dp))
-                                        .padding(horizontal = 4.dp, vertical = 1.dp)
-                                ) {
-                                    Text("TERPICU / EXIT NOW", color = Color.White, fontSize = 8.5.sp, fontWeight = FontWeight.Black)
-                                }
-                            }
-                        }
-
-                        Switch(
-                            checked = isTrailingActive,
-                            onCheckedChange = { enabled ->
-                                onSetTrailingStop?.invoke(enabled, trailingPercent)
-                            },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = TvBlue,
-                                checkedTrackColor = TvBlue.copy(alpha = 0.4f),
-                                uncheckedThumbColor = TvTextSecondary,
-                                uncheckedTrackColor = TvSurfaceVariant
-                            ),
-                            modifier = Modifier.height(24.dp)
-                        )
-                    }
-
-                    if (isTrailingActive) {
-                        // Preset Persentase Trailing
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("Jarak Trailing (Dari Peak):", color = TvTextSecondary, fontSize = 10.sp)
-                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                listOf(1.5, 2.0, 3.0, 5.0).forEach { pct ->
-                                    Box(
-                                        modifier = Modifier
-                                            .background(
-                                                if (trailingPercent == pct) TvBlue else TvSurfaceVariant,
-                                                RoundedCornerShape(4.dp)
-                                            )
-                                            .border(
-                                                0.5.dp,
-                                                if (trailingPercent == pct) TvBlue else TvBorder,
-                                                RoundedCornerShape(4.dp)
-                                            )
-                                            .clickable { onSetTrailingStop?.invoke(true, pct) }
-                                            .padding(horizontal = 6.dp, vertical = 3.dp)
-                                    ) {
-                                        Text(
-                                            text = "$pct%",
-                                            color = if (trailingPercent == pct) Color.Black else TvTextPrimary,
-                                            fontSize = 9.5.sp,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
-                                }
-                            }
-                        }
-
-                        // Info Real-time Trailing
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(TvSurfaceVariant, RoundedCornerShape(6.dp))
-                                .padding(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(3.dp)
-                        ) {
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("Harga Puncak Tercatat:", color = TvTextSecondary, fontSize = 9.5.sp)
-                                Text("${PriceFormatter.formatIdrNumber(peakPrice)} $quoteAsset", color = TvAmber, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                            }
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("Garis Stop Loss Dinamis:", color = TvBlue, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                                Text("${PriceFormatter.formatIdrNumber(trailingStopPrice)} $quoteAsset", color = if (isTrailingTriggered) TvRed else TvBlue, fontSize = 10.5.sp, fontWeight = FontWeight.Black)
-                            }
-                        }
-                    } else {
-                        Text(
-                            text = "Aktifkan untuk mengunci profit otomatis: stop loss naik mengikuti kenaikan harga puncak.",
-                            color = TvTextSecondary,
-                            fontSize = 9.5.sp
-                        )
-                    }
-                }
-            }
-        }
-
-        // Tombol Eksekusi Jual Terintegrasi
-        if (onExecuteSell != null) {
-            Spacer(Modifier.height(10.dp))
             Button(
-                onClick = { onExecuteSell(activeSellQty) },
-                enabled = availableCoin > 0.0 && activeSellQty > 0.0,
-                modifier = Modifier.fillMaxWidth().height(42.dp),
+                onClick = { onResetTrailingTrigger?.invoke() },
+                modifier = Modifier.fillMaxWidth().height(36.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = TvSurfaceVariant, contentColor = TvTextPrimary),
                 shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = TvRed,
-                    disabledContainerColor = TvRed.copy(alpha = 0.3f),
-                    contentColor = Color.White
-                )
+                border = androidx.compose.foundation.BorderStroke(1.dp, TvRed)
             ) {
-                Text(
-                    text = if (isRealMode) "[REAL] JUAL ${PriceFormatter.formatCryptoExact(activeSellQty, 8)} $baseAsset" else "[SIM] JUAL ${PriceFormatter.formatCryptoExact(activeSellQty, 8)} $baseAsset",
-                    fontWeight = FontWeight.Black,
-                    fontSize = 12.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Text("RESET TRAILING TRIGGER", fontSize = 11.sp, fontWeight = FontWeight.Bold)
             }
         }
+    }
+
+    SellManualBuyDialog(
+        show = showManualDialog,
+        onDismiss = { showManualDialog = false },
+        baseAsset = baseAsset,
+        quoteAsset = quoteAsset,
+        availableCoin = availableCoin,
+        initialAvgBuy = avgBuyPrice,
+        initialTotalCost = costBasisIdr,
+        onSave = { price, total ->
+            onSetManualBuyPrice?.invoke(price, total)
+            showManualDialog = false
+        }
+    )
+
+    if (showSellConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showSellConfirmDialog = false },
+            containerColor = TvSurface,
+            titleContentColor = TvRed,
+            title = { Text("Konfirmasi Jual Market", fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    "Anda akan menjual ${PriceFormatter.formatCryptoExact(activeSellQty, 8)} $baseAsset secara INSTAN di harga pasar Indodax (sekitar ${PriceFormatter.formatIdrNumber(validPrice)}).\n\nLanjutkan?",
+                    color = TvTextPrimary,
+                    fontSize = 13.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onExecuteSell?.invoke(activeSellQty)
+                        showSellConfirmDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = TvRed)
+                ) {
+                    Text("IYA, JUAL SEKARANG", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSellConfirmDialog = false }) {
+                    Text("BATAL", color = TvTextSecondary)
+                }
+            }
+        )
     }
 }
