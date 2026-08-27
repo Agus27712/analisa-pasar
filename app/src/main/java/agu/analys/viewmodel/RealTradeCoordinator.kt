@@ -17,10 +17,7 @@ import org.json.JSONArray
 
 /**
  * Coordinator real INDODAX — Trade API V2 only.
- * Rate-limit safe:
- * - portfolio kecil (≤3 aset): fetch SEMUA (biar XRP dll tidak ke-skip)
- * - portfolio besar: max 3 aset
- * - 1x myTrades/aset, jeda 2s, cooldown 20s
+ * Histori: saldo aktif + pair yang pernah di-trade/dijual + watchlist (max 4).
  */
 class RealTradeCoordinator(
     private val scope: CoroutineScope,
@@ -53,7 +50,7 @@ class RealTradeCoordinator(
     companion object {
         private const val REFRESH_COOLDOWN_MS = 20_000L
         private const val INTER_REQUEST_DELAY_MS = 2_000L
-        private const val MAX_HISTORY_ASSETS = 3
+        private const val MAX_HISTORY_ASSETS = 4
         private const val RATE_LIMIT_COOLDOWN_MS = 120_000L
     }
 
@@ -192,6 +189,36 @@ class RealTradeCoordinator(
             m.contains("too many") || m.contains("rate-limit") || m.contains("rate limit")
     }
 
+    private fun baseFromPair(pair: String): String {
+        val s = pair.lowercase().replace("_", "")
+        return when {
+            s.endsWith("idr") -> s.removeSuffix("idr")
+            s.endsWith("usdt") -> s.removeSuffix("usdt")
+            else -> s
+        }
+    }
+
+    /**
+     * Kandidat histori: saldo aktif dulu, lalu pair yang pernah diingat (setelah jual),
+     * lalu watchlist — max 4 biar rate-limit aman.
+     */
+    private fun buildHistoryCandidates(balance: Map<String, Double>): List<Pair<String, Double>> {
+        val active = balance.filter { it.key != "idr" && it.value > 0.00000001 }
+        prefs.rememberHistoryBases(active.keys)
+
+        val ordered = linkedSetOf<String>()
+        active.keys.forEach { ordered.add(it) }
+        prefs.getRecentHistoryBases().forEach { ordered.add(it) }
+        prefs.getWatchlist().forEach { sym ->
+            val b = baseFromPair(sym)
+            if (b.isNotBlank()) ordered.add(b)
+        }
+
+        return ordered.take(MAX_HISTORY_ASSETS).map { base ->
+            base to (balance[base] ?: 0.0)
+        }
+    }
+
     fun fetchRealBalance() {
         val apiKey = prefs.indodaxApiKey
         val secretKey = prefs.indodaxSecretKey
@@ -287,25 +314,15 @@ class RealTradeCoordinator(
         }
     }
 
-    /**
-     * Portfolio ≤3 aset → fetch SEMUA (kasus lo: XRP+MYX+ABYSS).
-     * >3 aset → max 3. Jeda 2s antar request.
-     */
     private suspend fun fetchTradesAndAvgSafe(
         apiKey: String,
         secretKey: String,
         balance: Map<String, Double>
     ) {
-        val active = balance.filter { it.key != "idr" && it.value > 0.00000001 }
-        // Jangan sort by qty coin (ABYSS 10 > XRP 1.5) — prefer alphabet stable + ambil semua kalau kecil
-        val candidates = if (active.size <= MAX_HISTORY_ASSETS) {
-            active.entries.toList()
-        } else {
-            active.entries.sortedByDescending { it.value }.take(MAX_HISTORY_ASSETS)
-        }
+        val candidates = buildHistoryCandidates(balance)
 
         if (candidates.isEmpty()) {
-            _realTradeStatus.value = "Saldo diperbarui. Tidak ada aset koin untuk histori."
+            _realTradeStatus.value = "Saldo diperbarui. Tidak ada pair untuk histori (tambah ke watchlist: SOL/BTC)."
             return
         }
 
@@ -320,8 +337,8 @@ class RealTradeCoordinator(
 
         for ((index, entry) in candidates.withIndex()) {
             if (index > 0) delay(INTER_REQUEST_DELAY_MS)
-            val asset = entry.key
-            val currentQty = entry.value
+            val asset = entry.first
+            val currentQty = entry.second
 
             val (ok, raw) = try {
                 IndodaxTradeApiV2.myTrades(apiKey, secretKey, "${asset}idr", limit = 200)
@@ -341,6 +358,9 @@ class RealTradeCoordinator(
                 _realTradeStatus.value = "Histori $asset: $raw"
                 continue
             }
+
+            // Pair yang sukses di-query → ingat (meski qty 0 / sudah dijual)
+            prefs.rememberHistoryBase(asset)
 
             val trades = IndodaxTradeApiV2.parseTradesList(raw)
             if (trades.isEmpty()) {
@@ -377,7 +397,7 @@ class RealTradeCoordinator(
                     )
                 )
 
-                if (isBuyer && accumulatedBuyQty < currentQty) {
+                if (isBuyer && currentQty > 0.0 && accumulatedBuyQty < currentQty) {
                     val remaining = currentQty - accumulatedBuyQty
                     val qtyToUse = minOf(tQty, remaining)
                     accumulatedBuyQty += qtyToUse
@@ -399,13 +419,14 @@ class RealTradeCoordinator(
 
         if (!rateLimited) {
             val n = accumulatedEntities.size
+            val pairList = candidates.joinToString(",") { it.first.uppercase() }
             _realTradeStatus.value = when {
                 n > 0 ->
-                    "Histori: $n trade ter-cache dari $assetsWithTrades aset (cek tab Riwayat)."
+                    "Histori: $n trade ($assetsWithTrades pair: $pairList). Cek tab Riwayat."
                 fetchErrors > 0 ->
-                    "Saldo OK, histori gagal ($fetchErrors error). Cek permission Trade History API."
+                    "Saldo OK, histori gagal ($fetchErrors). Cek permission Trade History API."
                 emptyAssets > 0 ->
-                    "Saldo OK. API myTrades kosong utk $emptyAssets aset (window 7 hari / belum settle)."
+                    "Saldo OK. myTrades kosong utk $emptyAssets/$pairList (7 hari / permission)."
                 else ->
                     "Saldo OK, histori kosong."
             }
@@ -501,6 +522,8 @@ class RealTradeCoordinator(
             }
 
             if (success) {
+                prefs.rememberHistoryBase(baseFromPair(pair))
+
                 if (type.equals("buy", ignoreCase = true) && autoLimitSellPrice1 > price) {
                     val halfQty = quantity / 2.0
                     delay(INTER_REQUEST_DELAY_MS)
@@ -582,13 +605,7 @@ class RealTradeCoordinator(
 
         scope.launch(kotlinx.coroutines.Dispatchers.IO) {
             _realTradeStatus.value = "Mengambil saldo koin real untuk $pair..."
-            val pairId = pair.lowercase()
-            val baseAsset = when {
-                pairId.endsWith("idr") -> pairId.removeSuffix("idr")
-                pairId.endsWith("usdt") -> pairId.removeSuffix("usdt")
-                pairId.contains("_") -> pairId.split("_").first()
-                else -> pairId
-            }
+            val baseAsset = baseFromPair(pair)
 
             if (baseAsset.isEmpty()) {
                 onResult(false, "Symbol pair tidak valid.")
@@ -661,6 +678,7 @@ class RealTradeCoordinator(
                 }
             }
 
+            if (successAll) prefs.rememberHistoryBase(baseAsset)
             _realTradeStatus.value = if (successAll) "Split TP Berhasil terpasang di Server!" else "Sebagian/Seluruh Split TP Gagal dipasang."
             onResult(successAll, finalMsg)
         }
