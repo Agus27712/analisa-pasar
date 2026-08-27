@@ -35,7 +35,7 @@ import agu.analys.ui.components.security.SecurityPinDialog
 import agu.analys.ui.components.security.SetupRealApiDialog
 import agu.analys.util.AppPreferences
 import agu.analys.util.GitHubUpdater
-import agu.analys.viewmodel.TradingViewModel
+import agu.analys.viewmodel.*
 
 @Composable
 fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Modifier = Modifier) {

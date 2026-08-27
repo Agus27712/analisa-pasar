@@ -30,7 +30,7 @@ import agu.analys.ui.screens.portfolio.SimulationPortfolioView
 import agu.analys.database.RealOpenOrderEntity
 import agu.analys.database.RealTradeEntity
 import agu.analys.ui.theme.*
-import agu.analys.viewmodel.TradingViewModel
+import agu.analys.viewmodel.*
 
 /**
  * Screen Utama Portofolio (Coordinator):

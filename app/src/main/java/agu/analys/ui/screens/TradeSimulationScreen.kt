@@ -29,7 +29,7 @@ import agu.analys.ui.components.security.SecurityPinDialog
 import agu.analys.ui.components.simulation.*
 import agu.analys.ui.theme.*
 import agu.analys.util.PriceFormatter
-import agu.analys.viewmodel.TradingViewModel
+import agu.analys.viewmodel.*
 
 @Composable
 fun TradeSimulationScreen(

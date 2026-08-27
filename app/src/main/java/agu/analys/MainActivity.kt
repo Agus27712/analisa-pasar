@@ -31,7 +31,7 @@ import agu.analys.ui.screens.PortfolioScreen
 import agu.analys.ui.screens.SettingsScreen
 import agu.analys.ui.screens.TradeSimulationScreen
 import agu.analys.ui.theme.TradingViewAITheme
-import agu.analys.viewmodel.TradingViewModel
+import agu.analys.viewmodel.*
 
 class MainActivity : ComponentActivity() {
     private val tradingViewModel: TradingViewModel by viewModels {

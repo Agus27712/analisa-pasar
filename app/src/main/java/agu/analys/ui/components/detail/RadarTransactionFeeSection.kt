@@ -48,7 +48,7 @@ fun RadarTransactionFeeSection(
     isBuyMode: Boolean = true,
     onBuyModeChanged: (Boolean) -> Unit = {},
     isRealMode: Boolean = false,
-    onExecuteBuy: ((Double) -> Unit)? = null,
+    onExecuteBuy: ((Double, Double, Double) -> Unit)? = null,
     onExecuteSell: ((Double) -> Unit)? = null,
     onSetManualBuyPrice: ((Double, Double) -> Unit)? = null,
     spotPosition: agu.analys.trading.SpotPosition? = null,
@@ -234,6 +234,7 @@ fun RadarTransactionFeeSection(
                 onNominalIdrChanged = onNominalIdrChanged,
                 activeFeePct = activeFeePct,
                 isRealMode = isRealMode,
+                signal = signal,
                 onExecuteBuy = onExecuteBuy
             )
         } else {

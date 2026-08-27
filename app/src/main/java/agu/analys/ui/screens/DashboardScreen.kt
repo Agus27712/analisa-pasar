@@ -13,7 +13,7 @@ import agu.analys.model.MarketConnectionState
 import agu.analys.model.TradingPair
 import agu.analys.ui.components.dashboard.*
 import agu.analys.ui.theme.TvBackground
-import agu.analys.viewmodel.TradingViewModel
+import agu.analys.viewmodel.*
 
 @Composable
 fun DashboardScreen(

@@ -49,7 +49,7 @@ import agu.analys.ui.theme.TvGreen
 import agu.analys.ui.theme.TvTextPrimary
 import agu.analys.ui.theme.TvTextSecondary
 import agu.analys.util.AppPreferences
-import agu.analys.viewmodel.TradingViewModel
+import agu.analys.viewmodel.*
 
 @Composable
 fun DetailChartScreen(
@@ -439,11 +439,11 @@ fun DetailChartScreen(
                 availableCoin = availableCoin,
                 avgBuyPrice = avgBuyPrice,
                 isRealBuyMode = isRealBuyMode,
-                onExecuteBuy = { nominalIdr ->
+                onExecuteBuy = { nominalIdr, tp1Price, tp2Price ->
                     val execPrice = if (tick?.price != null && tick!!.price > 0) tick!!.price else signal.entryPrice
                     if (execPrice > 0) {
                         if (isRealBuyMode) {
-                            viewModel.executeRealTrade(pair.symbol, "buy", execPrice.toLong(), nominalIdr) { success, msg ->
+                            viewModel.executeRealTrade(pair.symbol, "buy", execPrice.toLong(), nominalIdr, tp1Price, tp2Price) { success, msg ->
                                 if (success) agu.analys.util.HapticUtil.vibrateTradeSuccess(context)
                                 else agu.analys.util.HapticUtil.vibrateTradeFailure(context)
                                 android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()

@@ -1,6 +1,7 @@
 package agu.analys.ui.screens.portfolio
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -16,10 +17,10 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.ShowChart
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -35,10 +36,16 @@ import agu.analys.ui.theme.TvTextPrimary
 import agu.analys.ui.theme.TvTextSecondary
 import agu.analys.util.PriceFormatter
 
+enum class RealPortfolioTab(val title: String) {
+    ASSETS("Aset"),
+    OPEN_ORDERS("Antrean"),
+    HISTORY("Riwayat")
+}
+
 /**
  * Tampilan khusus Portofolio Real (Indodax):
  * Memisahkan secara total data riil dari data simulasi.
- * Mengelola kartu saldo live, daftar aset koin kripto di akun Indodax, antrean order aktif, riwayat transaksi, dan shortcut trade.
+ * Mengelola kartu saldo live, tab ber-Navigasi (Aset, Antrean, Riwayat), antrean order aktif dengan tombol cancel, riwayat transaksi, dan shortcut trade.
  */
 @Composable
 fun RealPortfolioView(
@@ -60,6 +67,8 @@ fun RealPortfolioView(
     onSelectPair: (TradingPair) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var selectedRealTab by remember { mutableStateOf(RealPortfolioTab.ASSETS) }
+
     val realIdr = realBalance["idr"] ?: 0.0
     val freeIdr = realFreeBalance["idr"] ?: realIdr
     val lockedIdr = realLockedBalance["idr"] ?: 0.0
@@ -190,7 +199,7 @@ fun RealPortfolioView(
                 }
             }
 
-            // UNLOCKED REAL PORTFOLIO CARD
+            // UNLOCKED REAL PORTFOLIO SUMMARY CARD
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -270,344 +279,365 @@ fun RealPortfolioView(
                 }
             }
 
-            // REAL HOLDINGS ITEM LIST
+            // TAB SEGMENT: Aset | Antrean | Riwayat
             item {
-                Text(
-                    "ASET KRIPTO DI INDODAX",
-                    color = TvTextPrimary,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
-            }
-
-            if (realCoinItemsList.isEmpty()) {
-                item {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(Color(0xFF101720), RoundedCornerShape(10.dp))
-                            .padding(20.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            "Belum ada aset koin kripto terdeteksi di akun Indodax.",
-                            color = TvTextSecondary,
-                            fontSize = 11.sp
-                        )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF0B111A), RoundedCornerShape(10.dp))
+                        .padding(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    RealPortfolioTab.entries.forEach { tab ->
+                        val isSelected = selectedRealTab == tab
+                        val countText = when (tab) {
+                            RealPortfolioTab.ASSETS -> if (realCoinItemsList.isNotEmpty()) " (${realCoinItemsList.size})" else ""
+                            RealPortfolioTab.OPEN_ORDERS -> if (realOpenOrders.isNotEmpty()) " (${realOpenOrders.size})" else ""
+                            RealPortfolioTab.HISTORY -> if (realTrades.isNotEmpty()) " (${realTrades.size})" else ""
+                        }
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (isSelected) Color(0xFF1E2836) else Color.Transparent)
+                                .clickable { selectedRealTab = tab }
+                                .padding(vertical = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "${tab.title}$countText",
+                                color = if (isSelected) Color(0xFF72B7FF) else TvTextSecondary,
+                                fontSize = 11.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                            )
+                        }
                     }
                 }
-            } else {
-                items(realCoinItemsList) { itemData ->
-                    val (coinUpper, qtyTriple) = itemData.first
-                    val (qty, freeQty, lockedQty) = qtyTriple
-                    val (estVal, details) = itemData.second
-                    val (price, avgPrice, pnlPair) = details
-                    val (pnlIdr, pnlPct) = pnlPair
+            }
 
-                    val symbol = "${coinUpper}IDR"
-                    val pair = TradingPair.fromCustomSymbol(symbol, "IDR")
-                    
-                    val pnlColor = if (pnlIdr > 0) TvGreen else if (pnlIdr < 0) TvRed else TvTextSecondary
-                    val pnlPrefix = if (pnlIdr > 0) "+" else ""
-
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFF101720)),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E2836))
-                    ) {
-                        Column(modifier = Modifier.padding(12.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+            // KONTEN TAB REAL PORTOFOLIO
+            when (selectedRealTab) {
+                RealPortfolioTab.ASSETS -> {
+                    if (realCoinItemsList.isEmpty()) {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(Color(0xFF101720), RoundedCornerShape(10.dp))
+                                    .padding(20.dp),
+                                contentAlignment = Alignment.Center
                             ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    AssetAvatar(baseAsset = coinUpper, size = 34.dp)
-                                    Spacer(Modifier.width(10.dp))
-                                    Column {
-                                        Text(coinUpper, color = TvTextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                                        Text("Total: $qty $coinUpper", color = TvTextSecondary, fontSize = 11.sp)
-                                        Row {
-                                            Text("Free: $freeQty", color = TvGreen, fontSize = 9.5.sp)
-                                            Spacer(Modifier.width(8.dp))
-                                            Text("Locked: $lockedQty", color = TvRed, fontSize = 9.5.sp)
+                                Text(
+                                    "Belum ada aset koin kripto terdeteksi di akun Indodax.",
+                                    color = TvTextSecondary,
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
+                    } else {
+                        items(realCoinItemsList) { itemData ->
+                            val (coinUpper, qtyTriple) = itemData.first
+                            val (qty, freeQty, lockedQty) = qtyTriple
+                            val (estVal, details) = itemData.second
+                            val (price, avgPrice, pnlPair) = details
+                            val (pnlIdr, pnlPct) = pnlPair
+
+                            val symbol = "${coinUpper}IDR"
+                            val pair = TradingPair.fromCustomSymbol(symbol, "IDR")
+                            
+                            val pnlColor = if (pnlIdr > 0) TvGreen else if (pnlIdr < 0) TvRed else TvTextSecondary
+                            val pnlPrefix = if (pnlIdr > 0) "+" else ""
+
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFF101720)),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E2836))
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            AssetAvatar(baseAsset = coinUpper, size = 34.dp)
+                                            Spacer(Modifier.width(10.dp))
+                                            Column {
+                                                Text(coinUpper, color = TvTextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                                Text("Total: $qty $coinUpper", color = TvTextSecondary, fontSize = 11.sp)
+                                                Row {
+                                                    Text("Free: $freeQty", color = TvGreen, fontSize = 9.5.sp)
+                                                    Spacer(Modifier.width(8.dp))
+                                                    Text("Locked: $lockedQty", color = TvRed, fontSize = 9.5.sp)
+                                                }
+                                            }
+                                        }
+
+                                        Column(horizontalAlignment = Alignment.End) {
+                                            Text(
+                                                PriceFormatter.formatPrice(estVal),
+                                                color = TvTextPrimary,
+                                                fontSize = 13.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            if (avgPrice > 0.0) {
+                                                Text(
+                                                    "$pnlPrefix${PriceFormatter.formatPrice(pnlIdr)} ($pnlPrefix${String.format("%.2f", pnlPct)}%)",
+                                                    color = pnlColor,
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            } else {
+                                                Text(
+                                                    if (price > 0) "@ ${PriceFormatter.formatPrice(price)}" else "Ticker Menunggu",
+                                                    color = Color(0xFF72B7FF),
+                                                    fontSize = 10.sp
+                                                )
+                                            }
+                                        }
+                                    }
+                                    
+                                    if (avgPrice > 0.0) {
+                                        Spacer(Modifier.height(8.dp))
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .background(Color(0xFF1E2836).copy(alpha = 0.3f), RoundedCornerShape(6.dp))
+                                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Column {
+                                                Text("Avg Buy Price", color = TvTextSecondary, fontSize = 9.sp)
+                                                Text(PriceFormatter.formatPrice(avgPrice), color = TvTextPrimary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                            }
+                                            Column(horizontalAlignment = Alignment.End) {
+                                                Text("Current Price", color = TvTextSecondary, fontSize = 9.sp)
+                                                Text(if (price > 0) PriceFormatter.formatPrice(price) else "-", color = Color(0xFF72B7FF), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                            }
+                                        }
+                                    }
+
+                                    Spacer(Modifier.height(10.dp))
+
+                                    // Action Buttons for Real Coin
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        OutlinedButton(
+                                            onClick = {
+                                                onSelectPair(pair)
+                                                onNavigateToDetail(pair)
+                                            },
+                                            modifier = Modifier.weight(1f).height(32.dp),
+                                            shape = RoundedCornerShape(6.dp),
+                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF72B7FF)),
+                                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E2836)),
+                                            contentPadding = PaddingValues(0.dp)
+                                        ) {
+                                            Icon(Icons.Default.ShowChart, null, modifier = Modifier.size(13.dp))
+                                            Spacer(Modifier.width(4.dp))
+                                            Text("Chart", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                        }
+
+                                        Button(
+                                            onClick = {
+                                                onSelectPair(pair)
+                                                onNavigateToDetail(pair)
+                                            },
+                                            modifier = Modifier.weight(1f).height(32.dp),
+                                            shape = RoundedCornerShape(6.dp),
+                                            colors = ButtonDefaults.buttonColors(containerColor = TvRed),
+                                            contentPadding = PaddingValues(0.dp)
+                                        ) {
+                                            Icon(Icons.AutoMirrored.Filled.CompareArrows, null, tint = Color.White, modifier = Modifier.size(13.dp))
+                                            Spacer(Modifier.width(4.dp))
+                                            Text("Jual / Trade", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Black)
                                         }
                                     }
                                 }
+                            }
+                        }
+                    }
+                }
 
-                                Column(horizontalAlignment = Alignment.End) {
-                                    Text(
-                                        PriceFormatter.formatPrice(estVal),
-                                        color = TvTextPrimary,
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    if (avgPrice > 0.0) {
+                RealPortfolioTab.OPEN_ORDERS -> {
+                    if (realOpenOrders.isEmpty()) {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(Color(0xFF101720), RoundedCornerShape(10.dp))
+                                    .padding(20.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    "Tidak ada antrean order aktif di Indodax.",
+                                    color = TvTextSecondary,
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
+                    } else {
+                        items(realOpenOrders) { order ->
+                            val orderSymbolUpper = order.symbol.uppercase()
+                            val orderSideColor = if (order.side.equals("BUY", true)) TvGreen else TvRed
+                            
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFF131C28)),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E2836))
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(12.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Surface(
+                                                color = orderSideColor.copy(alpha = 0.15f),
+                                                shape = RoundedCornerShape(4.dp)
+                                            ) {
+                                                Text(
+                                                    text = order.side,
+                                                    color = orderSideColor,
+                                                    fontSize = 9.5.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                )
+                                            }
+                                            Spacer(Modifier.width(8.dp))
+                                            Text(
+                                                text = orderSymbolUpper.replace("IDR", "/IDR"),
+                                                color = TvTextPrimary,
+                                                fontSize = 13.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                        Spacer(Modifier.height(4.dp))
                                         Text(
-                                            "$pnlPrefix${PriceFormatter.formatPrice(pnlIdr)} ($pnlPrefix${String.format("%.2f", pnlPct)}%)",
-                                            color = pnlColor,
-                                            fontSize = 10.sp,
+                                            text = "Harga: ${PriceFormatter.formatPrice(order.price)}",
+                                            color = TvTextSecondary,
+                                            fontSize = 11.sp
+                                        )
+                                        Text(
+                                            text = "Jumlah: ${order.quantity} | Executed: ${order.executedQty}",
+                                            color = TvTextSecondary,
+                                            fontSize = 10.sp
+                                        )
+                                    }
+
+                                    // Tombol Cancel Order Real
+                                    Button(
+                                        onClick = { onCancelRealOrder(order.symbol, order.orderId) },
+                                        modifier = Modifier.height(34.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = TvRed),
+                                        shape = RoundedCornerShape(8.dp),
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Close,
+                                            contentDescription = "Batalkan Order",
+                                            tint = Color.White,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Spacer(Modifier.width(4.dp))
+                                        Text(
+                                            text = "Cancel",
+                                            color = Color.White,
+                                            fontSize = 11.sp,
                                             fontWeight = FontWeight.Bold
                                         )
-                                    } else {
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                RealPortfolioTab.HISTORY -> {
+                    if (realTrades.isEmpty()) {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(Color(0xFF101720), RoundedCornerShape(10.dp))
+                                    .padding(20.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    "Belum ada riwayat transaksi ter-cache (Mulai terkumpul seiring refresh/trade).",
+                                    color = TvTextSecondary,
+                                    fontSize = 10.sp,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                )
+                            }
+                        }
+                    } else {
+                        items(realTrades) { trade ->
+                            val symbolUpper = trade.symbol.uppercase()
+                            val sideColor = if (trade.isBuyer) TvGreen else TvRed
+                            
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFF0F1722)),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E2836).copy(alpha = 0.5f))
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(10.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Surface(
+                                                color = sideColor.copy(alpha = 0.15f),
+                                                shape = RoundedCornerShape(4.dp)
+                                            ) {
+                                                Text(
+                                                    text = trade.side,
+                                                    color = sideColor,
+                                                    fontSize = 9.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                )
+                                            }
+                                            Spacer(Modifier.width(8.dp))
+                                            Text(
+                                                text = symbolUpper.replace("IDR", "/IDR"),
+                                                color = TvTextPrimary,
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                        Spacer(Modifier.height(4.dp))
+                                        val dateFormat = remember { java.text.SimpleDateFormat("dd MMM yyyy, HH:mm", java.util.Locale.getDefault()) }
+                                        val dateStr = remember(trade.time) { dateFormat.format(java.util.Date(trade.time)) }
                                         Text(
-                                            if (price > 0) "@ ${PriceFormatter.formatPrice(price)}" else "Ticker Menunggu",
-                                            color = Color(0xFF72B7FF),
+                                            text = dateStr,
+                                            color = TvTextSecondary,
+                                            fontSize = 10.sp
+                                        )
+                                    }
+
+                                    Column(horizontalAlignment = Alignment.End) {
+                                        Text(
+                                            text = "Total: ${PriceFormatter.formatPrice(trade.amount)}",
+                                            color = TvTextPrimary,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(
+                                            text = "@ ${PriceFormatter.formatPrice(trade.price)} (${trade.qty})",
+                                            color = TvTextSecondary,
                                             fontSize = 10.sp
                                         )
                                     }
                                 }
-                            }
-                            
-                            if (avgPrice > 0.0) {
-                                Spacer(Modifier.height(8.dp))
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .background(Color(0xFF1E2836).copy(alpha = 0.3f), RoundedCornerShape(6.dp))
-                                        .padding(horizontal = 8.dp, vertical = 6.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Column {
-                                        Text("Avg Buy Price", color = TvTextSecondary, fontSize = 9.sp)
-                                        Text(PriceFormatter.formatPrice(avgPrice), color = TvTextPrimary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                                    }
-                                    Column(horizontalAlignment = Alignment.End) {
-                                        Text("Current Price", color = TvTextSecondary, fontSize = 9.sp)
-                                        Text(if (price > 0) PriceFormatter.formatPrice(price) else "-", color = Color(0xFF72B7FF), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                                    }
-                                }
-                            }
-
-                            Spacer(Modifier.height(10.dp))
-
-                            // Action Buttons for Real Coin
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                OutlinedButton(
-                                    onClick = {
-                                        onSelectPair(pair)
-                                        onNavigateToDetail(pair)
-                                    },
-                                    modifier = Modifier.weight(1f).height(32.dp),
-                                    shape = RoundedCornerShape(6.dp),
-                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF72B7FF)),
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E2836)),
-                                    contentPadding = PaddingValues(0.dp)
-                                ) {
-                                    Icon(Icons.Default.ShowChart, null, modifier = Modifier.size(13.dp))
-                                    Spacer(Modifier.width(4.dp))
-                                    Text("Chart", fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                                }
-
-                                Button(
-                                    onClick = {
-                                        onSelectPair(pair)
-                                        onNavigateToDetail(pair)
-                                    },
-                                    modifier = Modifier.weight(1f).height(32.dp),
-                                    shape = RoundedCornerShape(6.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = TvRed),
-                                    contentPadding = PaddingValues(0.dp)
-                                ) {
-                                    Icon(Icons.AutoMirrored.Filled.CompareArrows, null, tint = Color.White, modifier = Modifier.size(13.dp))
-                                    Spacer(Modifier.width(4.dp))
-                                    Text("Jual / Trade", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Black)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // REAL OPEN ORDERS SECTION
-            item {
-                Text(
-                    "ANTREAN ORDER AKTIF",
-                    color = TvTextPrimary,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(top = 16.dp, bottom = 4.dp)
-                )
-            }
-
-            if (realOpenOrders.isEmpty()) {
-                item {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(Color(0xFF101720), RoundedCornerShape(10.dp))
-                            .padding(20.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            "Tidak ada antrean order aktif di Indodax.",
-                            color = TvTextSecondary,
-                            fontSize = 11.sp
-                        )
-                    }
-                }
-            } else {
-                items(realOpenOrders) { order ->
-                    val orderSymbolUpper = order.symbol.uppercase()
-                    val orderSideColor = if (order.side.equals("BUY", true)) TvGreen else TvRed
-                    
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(10.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFF131C28)),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E2836))
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(12.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Surface(
-                                        color = orderSideColor.copy(alpha = 0.15f),
-                                        shape = RoundedCornerShape(4.dp)
-                                    ) {
-                                        Text(
-                                            text = order.side,
-                                            color = orderSideColor,
-                                            fontSize = 9.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                        )
-                                    }
-                                    Spacer(Modifier.width(8.dp))
-                                    Text(
-                                        text = orderSymbolUpper.replace("IDR", "/IDR"),
-                                        color = TvTextPrimary,
-                                        fontSize = 12.5.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                                Spacer(Modifier.height(4.dp))
-                                Text(
-                                    text = "Harga: ${PriceFormatter.formatPrice(order.price)}",
-                                    color = TvTextSecondary,
-                                    fontSize = 11.sp
-                                )
-                                Text(
-                                    text = "Jumlah: ${order.quantity} | Executed: ${order.executedQty}",
-                                    color = TvTextSecondary,
-                                    fontSize = 10.sp
-                                )
-                            }
-
-                            IconButton(
-                                onClick = { onCancelRealOrder(order.symbol, order.orderId) },
-                                modifier = Modifier
-                                    .background(TvRed.copy(alpha = 0.12f), CircleShape)
-                                    .size(32.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = "Batalkan Order",
-                                    tint = TvRed,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            // REAL TRADE HISTORY SECTION (PERSISTENTLY CACHED IN ROOM DB)
-            item {
-                Text(
-                    "RIWAYAT TRANSAKSI (LOCAL CACHED)",
-                    color = TvTextPrimary,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(top = 16.dp, bottom = 4.dp)
-                )
-            }
-
-            if (realTrades.isEmpty()) {
-                item {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(Color(0xFF101720), RoundedCornerShape(10.dp))
-                            .padding(20.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            "Belum ada riwayat transaksi ter-cache (Mulai terkumpul seiring refresh/trade).",
-                            color = TvTextSecondary,
-                            fontSize = 10.sp,
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                        )
-                    }
-                }
-            } else {
-                items(realTrades) { trade ->
-                    val symbolUpper = trade.symbol.uppercase()
-                    val sideColor = if (trade.isBuyer) TvGreen else TvRed
-                    
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(10.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFF0F1722)),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E2836).copy(alpha = 0.5f))
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(10.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Surface(
-                                        color = sideColor.copy(alpha = 0.15f),
-                                        shape = RoundedCornerShape(4.dp)
-                                    ) {
-                                        Text(
-                                            text = trade.side,
-                                            color = sideColor,
-                                            fontSize = 9.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                        )
-                                    }
-                                    Spacer(Modifier.width(8.dp))
-                                    Text(
-                                        text = symbolUpper.replace("IDR", "/IDR"),
-                                        color = TvTextPrimary,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                                Spacer(Modifier.height(4.dp))
-                                val dateFormat = remember { java.text.SimpleDateFormat("dd MMM yyyy, HH:mm", java.util.Locale.getDefault()) }
-                                val dateStr = remember(trade.time) { dateFormat.format(java.util.Date(trade.time)) }
-                                Text(
-                                    text = dateStr,
-                                    color = TvTextSecondary,
-                                    fontSize = 10.sp
-                                )
-                            }
-
-                            Column(horizontalAlignment = Alignment.End) {
-                                Text(
-                                    text = "Total: ${PriceFormatter.formatPrice(trade.amount)}",
-                                    color = TvTextPrimary,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = "@ ${PriceFormatter.formatPrice(trade.price)} (${trade.qty})",
-                                    color = TvTextSecondary,
-                                    fontSize = 10.sp
-                                )
                             }
                         }
                     }

@@ -607,7 +607,7 @@ fun RadarSellSection(
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = "🎯 AUTO TP1, TP2 & STOP LOSS",
+                                text = if (isRealMode) "🎯 AUTO TP1 & TP2 SERVER" else "🎯 AUTO TP1, TP2 & STOP LOSS",
                                 color = if (isAutoSellActive) TvGreen else Color(0xFF90A4AE),
                                 fontSize = 10.5.sp,
                                 fontWeight = FontWeight.Black
@@ -741,28 +741,46 @@ fun RadarSellSection(
                                 }
                             }
 
-                            // Stop Loss
-                            Column(modifier = Modifier.fillMaxWidth()) {
-                                Text("Harga Stop Loss ($quoteAsset)", color = Color(0xFFEF9A9A), fontSize = 9.sp, fontWeight = FontWeight.Medium)
-                                Spacer(Modifier.height(3.dp))
-                                OutlinedTextField(
-                                    value = stopLossPriceInput,
-                                    onValueChange = { stopLossPriceInput = it },
-                                    placeholder = { Text("Harga Stop Loss", fontSize = 10.5.sp, color = Color(0xFFEF9A9A).copy(alpha = 0.5f)) },
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
-                                    keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
-                                    singleLine = true,
-                                    colors = OutlinedTextFieldDefaults.colors(
-                                        focusedBorderColor = TvRed,
-                                        unfocusedBorderColor = Color(0xFF263C52),
-                                        focusedContainerColor = Color(0xFF0C131A),
-                                        unfocusedContainerColor = Color(0xFF0C131A),
-                                        focusedTextColor = Color.White,
-                                        unfocusedTextColor = Color.White
-                                    ),
-                                    modifier = Modifier.fillMaxWidth().height(42.dp),
-                                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp, color = Color.White)
-                                )
+                            // Stop Loss or Real Mode Notice
+                            if (!isRealMode) {
+                                Column(modifier = Modifier.fillMaxWidth()) {
+                                    Text("Harga Stop Loss ($quoteAsset)", color = Color(0xFFEF9A9A), fontSize = 9.sp, fontWeight = FontWeight.Medium)
+                                    Spacer(Modifier.height(3.dp))
+                                    OutlinedTextField(
+                                        value = stopLossPriceInput,
+                                        onValueChange = { stopLossPriceInput = it },
+                                        placeholder = { Text("Harga Stop Loss", fontSize = 10.5.sp, color = Color(0xFFEF9A9A).copy(alpha = 0.5f)) },
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                                        keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+                                        singleLine = true,
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedBorderColor = TvRed,
+                                            unfocusedBorderColor = Color(0xFF263C52),
+                                            focusedContainerColor = Color(0xFF0C131A),
+                                            unfocusedContainerColor = Color(0xFF0C131A),
+                                            focusedTextColor = Color.White,
+                                            unfocusedTextColor = Color.White
+                                        ),
+                                        modifier = Modifier.fillMaxWidth().height(42.dp),
+                                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp, color = Color.White)
+                                    )
+                                }
+                            } else {
+                                // Red outline notice for Indodax API restriction
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(Color(0xFF231012), RoundedCornerShape(8.dp))
+                                        .border(1.dp, Color(0xFFD32F2F).copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                                        .padding(8.dp)
+                                ) {
+                                    Text(
+                                        text = "⚠️ Di Akun Riil, Stop Loss (SL) otomatis ditiadakan karena keterbatasan saldo terkunci di server Indodax. Gunakan TP1 & TP2 murni server agar aman.",
+                                        color = Color(0xFFEF9A9A),
+                                        fontSize = 9.sp,
+                                        lineHeight = 11.sp
+                                    )
+                                }
                             }
 
                             // Save button
@@ -775,7 +793,7 @@ fun RadarSellSection(
                                         PriceFormatter.parseCleanIdrDouble(tp1PercentInput).coerceIn(1.0, 100.0),
                                         PriceFormatter.parseCleanIdrDouble(tp2PriceInput),
                                         PriceFormatter.parseCleanIdrDouble(tp2PercentInput).coerceIn(1.0, 100.0),
-                                        PriceFormatter.parseCleanIdrDouble(stopLossPriceInput)
+                                        if (isRealMode) 0.0 else PriceFormatter.parseCleanIdrDouble(stopLossPriceInput)
                                     )
                                 },
                                 colors = ButtonDefaults.buttonColors(containerColor = TvGreen, contentColor = Color.Black),
@@ -787,7 +805,8 @@ fun RadarSellSection(
                         }
                     } else {
                         Text(
-                            text = "Aktifkan untuk menjual secara otomatis pada target Take Profit 1 (parsial), Take Profit 2 (sisa), dan Stop Loss yang ditentukan.",
+                            text = if (isRealMode) "Aktifkan untuk memasang target Take Profit 1 (50%) dan Take Profit 2 (50%) otomatis di server Indodax."
+                                   else "Aktifkan untuk menjual secara otomatis pada target Take Profit 1 (parsial), Take Profit 2 (sisa), dan Stop Loss yang ditentukan.",
                             color = Color(0xFF78909C),
                             fontSize = 9.5.sp
                         )

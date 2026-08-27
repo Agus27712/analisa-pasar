@@ -55,15 +55,15 @@ import kotlin.math.min
 
 class TradingViewModel(application: Application) : AndroidViewModel(application) {
     val bridge = TradingViewBridge(viewModelScope)
-    private val engine = LearningTradingEngine(viewModelScope)
-    private val prefs = AppPreferences(application)
+    internal val engine = LearningTradingEngine(viewModelScope)
+    internal val prefs = AppPreferences(application)
     private val marketCache = MarketDataCache(application)
     private val positionStore = SpotPositionStore(application)
     private val alertStore = agu.analys.trading.PriceAlertStore(application)
     private val simulationStore = SimulationTradeStore(application)
     private val simCoordinator = SimulationCoordinator(simulationStore)
     private val realCoordinator = RealTradeCoordinator(viewModelScope, prefs)
-    private val updateCoordinator = AppUpdateCoordinator(viewModelScope)
+    internal val updateCoordinator = AppUpdateCoordinator(viewModelScope)
 
     @Volatile private var lastLiveTickAt = 0L
     @Volatile private var wsLive = false
@@ -132,10 +132,10 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     private val _marketDataSource = MutableStateFlow(prefs.marketDataSource)
     val marketDataSource: StateFlow<MarketDataSource> = _marketDataSource.asStateFlow()
 
-    private val _currentScreen = MutableStateFlow(AppScreen.DASHBOARD)
+    internal val _currentScreen = MutableStateFlow(AppScreen.DASHBOARD)
     val currentScreen: StateFlow<AppScreen> = _currentScreen.asStateFlow()
 
-    private val _selectedPair = MutableStateFlow(TradingPair.popularPairsForSource(prefs.marketDataSource).first())
+    internal val _selectedPair = MutableStateFlow(TradingPair.popularPairsForSource(prefs.marketDataSource).first())
     val selectedPair: StateFlow<TradingPair> = _selectedPair.asStateFlow()
 
     private val _selectedTimeframe = MutableStateFlow(Timeframe.H4)
@@ -156,7 +156,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     private val _isChartExpanded = MutableStateFlow(false)
     val isChartExpanded: StateFlow<Boolean> = _isChartExpanded.asStateFlow()
 
-    private val _currentTick = MutableStateFlow<MarketTick?>(null)
+    internal val _currentTick = MutableStateFlow<MarketTick?>(null)
     val currentTick: StateFlow<MarketTick?> = _currentTick.asStateFlow()
 
     val currentIndicators: StateFlow<TechnicalIndicators> = engine.indicators
@@ -174,16 +174,16 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     private val _signalHistory = MutableStateFlow<List<AISignalState>>(emptyList())
     val signalHistory: StateFlow<List<AISignalState>> = _signalHistory.asStateFlow()
 
-    private val _auditReportText = MutableStateFlow<String?>(null)
+    internal val _auditReportText = MutableStateFlow<String?>(null)
     val auditReportText: StateFlow<String?> = _auditReportText.asStateFlow()
 
-    private val _isAuditLoading = MutableStateFlow(false)
+    internal val _isAuditLoading = MutableStateFlow(false)
     val isAuditLoading: StateFlow<Boolean> = _isAuditLoading.asStateFlow()
 
-    private val _geminiSummaryText = MutableStateFlow<String?>(null)
+    internal val _geminiSummaryText = MutableStateFlow<String?>(null)
     val geminiSummaryText: StateFlow<String?> = _geminiSummaryText.asStateFlow()
 
-    private val _isGeminiLoading = MutableStateFlow(false)
+    internal val _isGeminiLoading = MutableStateFlow(false)
     val isGeminiLoading: StateFlow<Boolean> = _isGeminiLoading.asStateFlow()
 
     private val _worthCoins = MutableStateFlow<List<WorthCoinInfo>>(emptyList())
@@ -207,10 +207,10 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     private val _dashboardTicks = MutableStateFlow<Map<String, MarketTick>>(emptyMap())
     val dashboardTicks: StateFlow<Map<String, MarketTick>> = _dashboardTicks.asStateFlow()
 
-    private val _connectionState = MutableStateFlow<MarketConnectionState>(MarketConnectionState.Loading)
+    internal val _connectionState = MutableStateFlow<MarketConnectionState>(MarketConnectionState.Loading)
     val connectionState: StateFlow<MarketConnectionState> = _connectionState.asStateFlow()
 
-    private val _watchlist = MutableStateFlow(
+    internal val _watchlist = MutableStateFlow(
         prefs.getWatchlist().let { set ->
             if (set.isEmpty()) {
                 val defaultSymbol = "BTCIDR"
@@ -277,8 +277,8 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         }
         realCoordinator.fetchRealBalance()
     }
-    fun executeRealTrade(pair: String, type: String, price: Long, amountIdr: Double, onResult: (Boolean, String) -> Unit) =
-        realCoordinator.executeRealTrade(pair, type, price, amountIdr, onResult)
+    fun executeRealTrade(pair: String, type: String, price: Long, amountIdr: Double, autoLimitSellPrice1: Double = 0.0, autoLimitSellPrice2: Double = 0.0, onResult: (Boolean, String) -> Unit) =
+        realCoordinator.executeRealTrade(pair, type, price, amountIdr, autoLimitSellPrice1, autoLimitSellPrice2, onResult)
 
     val simulationWallet: StateFlow<SimulationWallet> = simCoordinator.wallet
     val simulationOpenOrders: StateFlow<List<SimulationOrder>> = simCoordinator.openOrders
@@ -396,48 +396,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    private val navigationStack = mutableListOf<AppScreen>()
-    fun navigateTo(screen: AppScreen) {
-        if (_currentScreen.value != screen) {
-            navigationStack.add(_currentScreen.value)
-            _currentScreen.value = screen
-        }
-    }
-
-    fun openCoinDetail(pair: TradingPair) {
-        selectPair(pair)
-        navigateTo(AppScreen.DETAIL)
-    }
-
-    fun openSimulation(pair: TradingPair? = null) {
-        if (pair != null) selectPair(pair)
-        navigateTo(AppScreen.SIMULATION_TRADE)
-    }
-
-    fun openPortfolio() { navigateTo(AppScreen.PORTFOLIO) }
-    fun openLandscapeChart() { navigateTo(AppScreen.LANDSCAPE_CHART) }
-    fun closeLandscapeChart() { goBack() }
-    fun openSettings() { navigateTo(AppScreen.SETTINGS) }
-    fun openLearning() { navigateTo(AppScreen.LEARNING) }
-    fun goBack() {
-        if (navigationStack.isNotEmpty()) {
-            _currentScreen.value = navigationStack.removeAt(navigationStack.size - 1)
-        } else if (_currentScreen.value != AppScreen.DASHBOARD) {
-            _currentScreen.value = AppScreen.DASHBOARD
-        }
-    }
-
-    fun getGroqApiKey() = prefs.groqApiKey
-    fun saveGroqApiKey(key: String) { prefs.groqApiKey = key }
-    fun getGeminiApiKey() = prefs.geminiApiKey
-    fun saveGeminiApiKey(key: String) { prefs.geminiApiKey = key }
-
-    fun toggleWatchlist(symbol: String) {
-        prefs.toggleWatchlist(symbol)
-        _watchlist.value = prefs.getWatchlist()
-    }
-
-    fun isWatched(symbol: String) = prefs.isInWatchlist(symbol)
+    internal val navigationStack = mutableListOf<AppScreen>()
 
     fun selectCustomSymbol(rawSymbol: String) {
         if (rawSymbol.isNotBlank()) selectPair(TradingPair.fromCustomSymbol(rawSymbol, "IDR"))
@@ -486,6 +445,24 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         val symbol = _selectedPair.value.symbol
         positionStore.setAutoSellParams(symbol, enabled, tp1Price, tp1Percent, tp2Price, tp2Percent, stopLossPrice)
         refreshSpotPosition()
+
+        if (enabled && isRealBuyMode.value) {
+            realCoordinator.executeRealAutoSellOnServer(
+                pair = symbol,
+                tp1Price = tp1Price,
+                tp1Percent = tp1Percent,
+                tp2Price = tp2Price,
+                tp2Percent = tp2Percent
+            ) { success, msg ->
+                viewModelScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                    android.widget.Toast.makeText(
+                        getApplication(),
+                        if (success) "Split TP Server Berhasil:\n$msg" else "Gagal pasang Split TP Server: $msg",
+                        android.widget.Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }
     }
 
     fun resetTrailingTrigger() {
@@ -870,38 +847,6 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     fun selectChartStyle(style: ChartStyle) { _selectedChartStyle.value = style }
     fun toggleChartExpanded() { _isChartExpanded.value = !_isChartExpanded.value }
 
-    fun requestDeepAiAudit() {
-        val tick = _currentTick.value ?: return
-        if (_connectionState.value !is MarketConnectionState.Connected || _isAuditLoading.value || _isGeminiLoading.value) return
-        viewModelScope.launch {
-            _isAuditLoading.value = true
-            _auditReportText.value = null
-            try {
-                _auditReportText.value = GroqAiService.generateDeepMarketAudit(
-                    prefs.groqApiKey, tick, currentIndicators.value, aiSignalState.value
-                )
-            } finally { _isAuditLoading.value = false }
-        }
-    }
-
-    fun clearAuditReport() { _auditReportText.value = null }
-
-    fun requestGeminiChartSummary() {
-        val tick = _currentTick.value ?: return
-        if (_connectionState.value !is MarketConnectionState.Connected || _isAuditLoading.value || _isGeminiLoading.value) return
-        viewModelScope.launch {
-            _isGeminiLoading.value = true
-            _geminiSummaryText.value = null
-            try {
-                _geminiSummaryText.value = GeminiAiService.generateChartSummary24h(
-                    prefs.geminiApiKey, tick, currentIndicators.value, aiSignalState.value
-                )
-            } finally { _isGeminiLoading.value = false }
-        }
-    }
-
-    fun clearGeminiSummary() { _geminiSummaryText.value = null }
-
     fun retryConnection() {
         _connectionState.value = MarketConnectionState.Loading
         startMarketPolling(_selectedPair.value)
@@ -918,14 +863,6 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     val updateCheckStatus: StateFlow<String?> = updateCoordinator.updateCheckStatus
     val isCheckingUpdate: StateFlow<Boolean> = updateCoordinator.isCheckingUpdate
     val updateDownloadProgress: StateFlow<Int?> = updateCoordinator.downloadProgress
-
-    fun checkGitHubUpdate(context: android.content.Context, repo: String = prefs.updateRepo, token: String = prefs.updateGitHubToken) {
-        updateCoordinator.checkUpdate(context, repo, token)
-    }
-
-    fun downloadAndInstallUpdate(context: android.content.Context, repo: String = prefs.updateRepo, token: String = prefs.updateGitHubToken) {
-        updateCoordinator.downloadAndInstall(context, repo, token)
-    }
 
     override fun onCleared() {
         stopActiveWebSockets(false)

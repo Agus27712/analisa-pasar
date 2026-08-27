@@ -41,13 +41,28 @@ fun RadarBuySection(
     onNominalIdrChanged: (Double) -> Unit,
     activeFeePct: Double,
     isRealMode: Boolean,
-    onExecuteBuy: ((Double) -> Unit)?
+    signal: agu.analys.model.AISignalState? = null,
+    onExecuteBuy: ((Double, Double, Double) -> Unit)?
 ) {
     var customNominalInput by remember { mutableStateOf("") }
     var isCustomNominalOpen by remember { mutableStateOf(false) }
     var isRiskCalculatorOpen by remember { mutableStateOf(false) }
     var selectedRiskPct by remember { mutableDoubleStateOf(2.0) } // Default risk 2% per trade
     var selectedSlTolerancePct by remember { mutableDoubleStateOf(2.5) } // Default SL tolerance 2.5%
+
+    // Auto Limit Sell Server Settings (TP Direct to Server)
+    var isAutoLimitSellEnabled by remember { mutableStateOf(isRealMode) }
+    val defaultTpPrice1 = remember(validPrice, signal) {
+        if (signal != null && signal.targetPrice1 > validPrice) signal.targetPrice1 else validPrice * 1.03
+    }
+    val defaultTpPrice2 = remember(validPrice, signal) {
+        if (signal != null && signal.targetPrice2 > validPrice) signal.targetPrice2 else validPrice * 1.06
+    }
+    var tp1PriceInput by remember(defaultTpPrice1) { mutableStateOf(String.format("%.0f", defaultTpPrice1)) }
+    var tp2PriceInput by remember(defaultTpPrice2) { mutableStateOf(String.format("%.0f", defaultTpPrice2)) }
+    
+    val tp1Price = tp1PriceInput.toDoubleOrNull() ?: defaultTpPrice1
+    val tp2Price = tp2PriceInput.toDoubleOrNull() ?: defaultTpPrice2
 
     val focusManager = LocalFocusManager.current
 
@@ -103,6 +118,104 @@ fun RadarBuySection(
         }
 
         Spacer(Modifier.height(8.dp))
+
+        // Auto Limit Sell (Server Indodax Direct Order) Card
+        if (isRealMode) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFF0A1810), RoundedCornerShape(8.dp))
+                    .border(1.dp, TvGreen.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                    .padding(horizontal = 10.dp, vertical = 8.dp)
+            ) {
+                Column {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(
+                                checked = isAutoLimitSellEnabled,
+                                onCheckedChange = { isAutoLimitSellEnabled = it },
+                                colors = CheckboxDefaults.colors(checkedColor = TvGreen, uncheckedColor = TvTextSecondary),
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = "🚀 SPLIT AUTO LIMIT SELL SERVER (INDODAX)",
+                                color = TvGreen,
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.Black
+                            )
+                        }
+                    }
+
+                    AnimatedVisibility(
+                        visible = isAutoLimitSellEnabled,
+                        enter = fadeIn() + expandVertically(),
+                        exit = fadeOut() + shrinkVertically()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(top = 6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = "Setelah BUY ACC, sistem langsung pasang 2 Limit Sell otomatis (Masing-masing 50% Qty koin) di Server Indodax tanpa perlu HP standby:",
+                                color = TvTextSecondary,
+                                fontSize = 9.5.sp
+                            )
+                            
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedTextField(
+                                    value = tp1PriceInput,
+                                    onValueChange = { input ->
+                                        tp1PriceInput = input.filter { it.isDigit() || it == '.' }
+                                    },
+                                    label = { Text("Target TP 1 (50% Qty)", fontSize = 9.5.sp) },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
+                                    singleLine = true,
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = TvGreen,
+                                        unfocusedBorderColor = Color(0xFF1E2836),
+                                        focusedContainerColor = Color(0xFF09121B),
+                                        unfocusedContainerColor = Color(0xFF09121B),
+                                        focusedTextColor = Color.White,
+                                        unfocusedTextColor = Color.White
+                                    ),
+                                    modifier = Modifier.weight(1f)
+                                )
+
+                                OutlinedTextField(
+                                    value = tp2PriceInput,
+                                    onValueChange = { input ->
+                                        tp2PriceInput = input.filter { it.isDigit() || it == '.' }
+                                    },
+                                    label = { Text("Target TP 2 (50% Qty)", fontSize = 9.5.sp) },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                                    keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+                                    singleLine = true,
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = TvGreen,
+                                        unfocusedBorderColor = Color(0xFF1E2836),
+                                        focusedContainerColor = Color(0xFF09121B),
+                                        unfocusedContainerColor = Color(0xFF09121B),
+                                        focusedTextColor = Color.White,
+                                        unfocusedTextColor = Color.White
+                                    ),
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+        }
 
         // Toggle Expandable Risk Management & Position Sizing Calculator
         Box(
@@ -418,7 +531,11 @@ fun RadarBuySection(
         if (onExecuteBuy != null) {
             Spacer(Modifier.height(10.dp))
             Button(
-                onClick = { onExecuteBuy(grossBuyOrderAmount) },
+                onClick = {
+                    val sell1 = if (isAutoLimitSellEnabled) tp1Price else 0.0
+                    val sell2 = if (isAutoLimitSellEnabled) tp2Price else 0.0
+                    onExecuteBuy(grossBuyOrderAmount, sell1, sell2)
+                },
                 modifier = Modifier.fillMaxWidth().height(42.dp),
                 shape = RoundedCornerShape(8.dp),
                 colors = ButtonDefaults.buttonColors(

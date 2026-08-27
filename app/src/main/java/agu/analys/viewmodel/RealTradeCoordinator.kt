@@ -6,6 +6,7 @@ import agu.analys.database.RealTradeEntity
 import agu.analys.service.IndodaxMarketService
 import agu.analys.service.IndodaxTradeApiV2
 import agu.analys.util.AppPreferences
+import agu.analys.util.PriceFormatter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -400,6 +401,8 @@ class RealTradeCoordinator(
         type: String,
         price: Long,
         amountIdr: Double,
+        autoLimitSellPrice1: Double = 0.0,
+        autoLimitSellPrice2: Double = 0.0,
         onResult: (Boolean, String) -> Unit
     ) {
         val apiKey = prefs.indodaxApiKey
@@ -432,12 +435,153 @@ class RealTradeCoordinator(
                 quantity = quantity,
                 clientOrderId = clientOrderId
             )
-            _realTradeStatus.value = message
+            
             if (success) {
+                if (type.equals("buy", ignoreCase = true) && autoLimitSellPrice1 > price) {
+                    val halfQty = quantity / 2.0
+                    // Kirim order TP 1 (50% koin)
+                    delay(800)
+                    _realTradeStatus.value = "Mengirim TP 1 (${PriceFormatter.formatPrice(autoLimitSellPrice1)}) - Qty: $halfQty ke INDODAX..."
+                    val sellClientOrderId1 = "agu-tp1-${System.currentTimeMillis()}"
+                    val (sellSuccess1, sellMessage1) = IndodaxTradeApiV2.createLimitOrder(
+                        apiKey = apiKey,
+                        secretKey = secretKey,
+                        symbol = pair,
+                        side = "sell",
+                        price = autoLimitSellPrice1,
+                        quantity = halfQty,
+                        clientOrderId = sellClientOrderId1
+                    )
+
+                    var finalMsg = ""
+                    if (sellSuccess1) {
+                        finalMsg += "TP1 (${PriceFormatter.formatPrice(autoLimitSellPrice1)}) berhasil."
+                    } else {
+                        finalMsg += "TP1 gagal: $sellMessage1."
+                    }
+
+                    // Kirim order TP 2 (50% koin) seandainya TP2 diaktifkan
+                    val actualTp2Price = if (autoLimitSellPrice2 > price) autoLimitSellPrice2 else autoLimitSellPrice1 * 1.03
+                    delay(800)
+                    _realTradeStatus.value = "Mengirim TP 2 (${PriceFormatter.formatPrice(actualTp2Price)}) - Qty: $halfQty ke INDODAX..."
+                    val sellClientOrderId2 = "agu-tp2-${System.currentTimeMillis()}"
+                    val (sellSuccess2, sellMessage2) = IndodaxTradeApiV2.createLimitOrder(
+                        apiKey = apiKey,
+                        secretKey = secretKey,
+                        symbol = pair,
+                        side = "sell",
+                        price = actualTp2Price,
+                        quantity = halfQty,
+                        clientOrderId = sellClientOrderId2
+                    )
+
+                    if (sellSuccess2) {
+                        finalMsg += " TP2 (${PriceFormatter.formatPrice(actualTp2Price)}) berhasil."
+                    } else {
+                        finalMsg += " TP2 gagal: $sellMessage2."
+                    }
+
+                    _realTradeStatus.value = "BUY Sukses! Status TP: $finalMsg"
+                    onResult(true, "BUY berhasil di server Indodax!\nAuto Sell: $finalMsg")
+                } else {
+                    _realTradeStatus.value = message
+                    onResult(true, message)
+                }
                 delay(1_000)
                 fetchRealBalance()
+            } else {
+                _realTradeStatus.value = message
+                onResult(false, message)
             }
-            onResult(success, message)
+        }
+    }
+
+    fun executeRealAutoSellOnServer(
+        pair: String,
+        tp1Price: Double,
+        tp1Percent: Double,
+        tp2Price: Double,
+        tp2Percent: Double,
+        onResult: (Boolean, String) -> Unit
+    ) {
+        val apiKey = prefs.indodaxApiKey
+        val secretKey = prefs.indodaxSecretKey
+        if (apiKey.isEmpty() || secretKey.isEmpty()) {
+            onResult(false, "API Key atau Secret Key kosong! Harap atur di menu Settings.")
+            return
+        }
+
+        scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            _realTradeStatus.value = "Mengambil saldo koin real untuk $pair..."
+            val baseAsset = pair.split("_").firstOrNull()?.lowercase() ?: ""
+            if (baseAsset.isEmpty()) {
+                onResult(false, "Symbol pair tidak valid.")
+                return@launch
+            }
+
+            val (balances, err) = IndodaxTradeApiV2.getAccount(apiKey, secretKey)
+            if (balances == null) {
+                _realTradeStatus.value = "Gagal memuat saldo real: $err"
+                onResult(false, "Gagal memuat saldo: $err")
+                return@launch
+            }
+
+            val availableCoin = balances.free[baseAsset] ?: 0.0
+            if (availableCoin <= 0.0) {
+                _realTradeStatus.value = "Gagal: Saldo koin $baseAsset Anda 0 atau tidak terbaca."
+                onResult(false, "Gagal: Saldo koin $baseAsset Anda 0 atau tidak terbaca.")
+                return@launch
+            }
+
+            val qtyTp1 = availableCoin * (tp1Percent / 100.0)
+            val qtyTp2 = availableCoin - qtyTp1
+
+            var finalMsg = ""
+            var successAll = true
+
+            if (tp1Price > 0.0 && qtyTp1 > 0.0) {
+                _realTradeStatus.value = "Mengirim TP1 (${PriceFormatter.formatPrice(tp1Price)}) ke INDODAX..."
+                val (ok, msg) = IndodaxTradeApiV2.createLimitOrder(
+                    apiKey = apiKey,
+                    secretKey = secretKey,
+                    symbol = pair,
+                    side = "sell",
+                    price = tp1Price,
+                    quantity = qtyTp1,
+                    clientOrderId = "agu-manualtp1-${System.currentTimeMillis()}"
+                )
+                if (ok) {
+                    finalMsg += "TP1 berhasil."
+                } else {
+                    finalMsg += "TP1 gagal: $msg."
+                    successAll = false
+                }
+                delay(800)
+            }
+
+            if (tp2Price > 0.0 && qtyTp2 > 0.0) {
+                _realTradeStatus.value = "Mengirim TP2 (${PriceFormatter.formatPrice(tp2Price)}) ke INDODAX..."
+                val (ok, msg) = IndodaxTradeApiV2.createLimitOrder(
+                    apiKey = apiKey,
+                    secretKey = secretKey,
+                    symbol = pair,
+                    side = "sell",
+                    price = tp2Price,
+                    quantity = qtyTp2,
+                    clientOrderId = "agu-manualtp2-${System.currentTimeMillis()}"
+                )
+                if (ok) {
+                    finalMsg += " TP2 berhasil."
+                } else {
+                    finalMsg += " TP2 gagal: $msg."
+                    successAll = false
+                }
+            }
+
+            _realTradeStatus.value = if (successAll) "Split TP Berhasil terpasang di Server!" else "Sebagian/Seluruh Split TP Gagal dipasang."
+            onResult(successAll, finalMsg)
+            delay(1000)
+            fetchRealBalance()
         }
     }
 }
