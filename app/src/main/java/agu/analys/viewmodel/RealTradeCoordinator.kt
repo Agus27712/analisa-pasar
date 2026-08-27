@@ -18,7 +18,12 @@ import org.json.JSONObject
 
 /**
  * Coordinator real INDODAX — Trade API V2 only.
- * Fetch pelan: 1x account + max 2x myTrades (hindari -2015).
+ * Rate-limit safe:
+ * - 1x account + 1x openOrders
+ * - max 2 aset, 1x myTrades/aset (hasil dipakai Room + avg buy)
+ * - jeda 2s antar request, cooldown refresh 20s
+ * - stop total jika -2015 / -1003
+ * - TIDAK ada multi-window backfill (hindari ban IP)
  */
 class RealTradeCoordinator(
     private val scope: CoroutineScope,
@@ -46,6 +51,14 @@ class RealTradeCoordinator(
     val realTrades: StateFlow<List<RealTradeEntity>> = _realTrades.asStateFlow()
 
     private var lastFetchTimeMs = 0L
+    private var rateLimitedUntilMs = 0L
+
+    companion object {
+        private const val REFRESH_COOLDOWN_MS = 20_000L
+        private const val INTER_REQUEST_DELAY_MS = 2_000L
+        private const val MAX_HISTORY_ASSETS = 2
+        private const val RATE_LIMIT_COOLDOWN_MS = 120_000L
+    }
 
     init {
         scope.launch {
@@ -66,6 +79,10 @@ class RealTradeCoordinator(
 
     private val _realAvgBuyPrices = MutableStateFlow<Map<String, Double>>(emptyMap())
     val realAvgBuyPrices: StateFlow<Map<String, Double>> = _realAvgBuyPrices.asStateFlow()
+
+    /** true = avg dihitung dari window partial (histori 7 hari belum menutup qty posisi) */
+    private val _realAvgBuyPartial = MutableStateFlow<Map<String, Boolean>>(emptyMap())
+    val realAvgBuyPartial: StateFlow<Map<String, Boolean>> = _realAvgBuyPartial.asStateFlow()
 
     private val _isFetchingRealBalance = MutableStateFlow(false)
     val isFetchingRealBalance: StateFlow<Boolean> = _isFetchingRealBalance.asStateFlow()
@@ -121,6 +138,7 @@ class RealTradeCoordinator(
         _isPinUnlocked.value = false
         _realIndodaxBalance.value = emptyMap()
         _realAvgBuyPrices.value = emptyMap()
+        _realAvgBuyPartial.value = emptyMap()
         _failedPinAttempts.value = 0
         _realTradeStatus.value = "Kredensial API dan PIN telah dihapus."
     }
@@ -165,6 +183,19 @@ class RealTradeCoordinator(
         return true
     }
 
+    private fun isRateLimitedNow(): Boolean = System.currentTimeMillis() < rateLimitedUntilMs
+
+    private fun markRateLimited(message: String) {
+        rateLimitedUntilMs = System.currentTimeMillis() + RATE_LIMIT_COOLDOWN_MS
+        _realTradeStatus.value = "$message · Jeda 2 menit sebelum refresh lagi."
+    }
+
+    private fun looksLikeRateLimit(msg: String): Boolean {
+        val m = msg.lowercase()
+        return m.contains("-2015") || m.contains("-1003") ||
+            m.contains("too many") || m.contains("rate-limit") || m.contains("rate limit")
+    }
+
     fun fetchRealBalance() {
         val apiKey = prefs.indodaxApiKey
         val secretKey = prefs.indodaxSecretKey
@@ -172,11 +203,16 @@ class RealTradeCoordinator(
             _realTradeStatus.value = "Kredensial API INDODAX belum diisi."
             return
         }
-        if (_isFetchingRealBalance.value) return // anti double-tap refresh
+        if (_isFetchingRealBalance.value) return
 
         val now = System.currentTimeMillis()
-        if (now - lastFetchTimeMs < 15_000L && _realIndodaxBalance.value.isNotEmpty()) {
-            _realTradeStatus.value = "Menggunakan data ter-cache (jeda refresh 15s)."
+        if (isRateLimitedNow()) {
+            val waitSec = ((rateLimitedUntilMs - now) / 1000L).coerceAtLeast(1)
+            _realTradeStatus.value = "Rate-limit aktif. Tunggu ~${waitSec}s lagi."
+            return
+        }
+        if (now - lastFetchTimeMs < REFRESH_COOLDOWN_MS && _realIndodaxBalance.value.isNotEmpty()) {
+            _realTradeStatus.value = "Cache aktif (cooldown ${REFRESH_COOLDOWN_MS / 1000}s). Jangan spam refresh."
             return
         }
 
@@ -186,6 +222,11 @@ class RealTradeCoordinator(
             _realTradeStatus.value = "Memperbarui saldo INDODAX..."
 
             val (balances, message) = IndodaxTradeApiV2.getAccount(apiKey, secretKey)
+            if (looksLikeRateLimit(message)) {
+                markRateLimited(message)
+                _isFetchingRealBalance.value = false
+                return@launch
+            }
             _realTradeStatus.value = message
 
             if (balances != null) {
@@ -193,111 +234,203 @@ class RealTradeCoordinator(
                 _realFreeBalance.value = balances.free
                 _realLockedBalance.value = balances.locked
 
-                // Fetch Open Orders from Indodax and save to Room DB
-                fetchRealOpenOrdersSafe(apiKey, secretKey)
+                delay(INTER_REQUEST_DELAY_MS)
+                val openOk = fetchRealOpenOrdersSafe(apiKey, secretKey)
+                if (!openOk) {
+                    _isFetchingRealBalance.value = false
+                    return@launch
+                }
 
-                // Fetch Trades History from Indodax and accumulate in Room DB
-                fetchRealTradeHistoriesSafe(apiKey, secretKey, balances.total)
-
-                // Avg buy: max 2 koin, 1 request/koin, jeda panjang
-                calculateRealAvgBuyPricesSafe(apiKey, secretKey, balances.total)
+                // 1x myTrades per aset (max 2) → Room + avg buy (tanpa call kedua)
+                delay(INTER_REQUEST_DELAY_MS)
+                fetchTradesAndAvgSafe(apiKey, secretKey, balances.total)
             }
             _isFetchingRealBalance.value = false
         }
     }
 
-    private suspend fun fetchRealOpenOrdersSafe(apiKey: String, secretKey: String) {
-        try {
+    /** @return false jika rate-limit dan chain harus stop */
+    private suspend fun fetchRealOpenOrdersSafe(apiKey: String, secretKey: String): Boolean {
+        return try {
             val (ok, raw) = IndodaxTradeApiV2.openOrders(apiKey, secretKey)
-            if (ok) {
-                val db = AppDatabase.getInstance().realTradeDao()
-                db.clearOpenOrders()
-                val jsonArr = runCatching { JSONArray(raw) }.getOrNull()
-                if (jsonArr != null) {
-                    val entityList = mutableListOf<RealOpenOrderEntity>()
-                    for (i in 0 until jsonArr.length()) {
-                        val obj = jsonArr.optJSONObject(i) ?: continue
-                        val orderId = obj.optString("orderId", "")
-                        if (orderId.isBlank()) continue
-
-                        entityList.add(
-                            RealOpenOrderEntity(
-                                orderId = orderId,
-                                symbol = obj.optString("symbol", "").lowercase(),
-                                side = obj.optString("side", "").uppercase(),
-                                type = obj.optString("type", "LIMIT").uppercase(),
-                                price = obj.optString("price", "0").toDoubleOrNull() ?: 0.0,
-                                quantity = obj.optString("origQty", "0").toDoubleOrNull() ?: 0.0,
-                                executedQty = obj.optString("executedQty", "0").toDoubleOrNull() ?: 0.0,
-                                status = obj.optString("status", "OPEN").uppercase(),
-                                time = obj.optLong("time", System.currentTimeMillis())
-                            )
-                        )
-                    }
-                    db.insertOpenOrders(entityList)
+            if (!ok) {
+                if (looksLikeRateLimit(raw)) {
+                    markRateLimited(raw)
+                    return false
                 }
+                _realTradeStatus.value = "Open orders: $raw"
+                return true
             }
-        } catch (_: Exception) {}
+            val db = AppDatabase.getInstance().realTradeDao()
+            db.clearOpenOrders()
+            val jsonArr = runCatching { JSONArray(raw) }.getOrNull()
+            if (jsonArr != null) {
+                val entityList = mutableListOf<RealOpenOrderEntity>()
+                for (i in 0 until jsonArr.length()) {
+                    val obj = jsonArr.optJSONObject(i) ?: continue
+                    val orderId = obj.optString("orderId", "")
+                    if (orderId.isBlank()) continue
+                    entityList.add(
+                        RealOpenOrderEntity(
+                            orderId = orderId,
+                            symbol = obj.optString("symbol", "").lowercase(),
+                            side = obj.optString("side", "").uppercase(),
+                            type = obj.optString("type", "LIMIT").uppercase(),
+                            price = obj.optString("price", "0").toDoubleOrNull() ?: 0.0,
+                            quantity = obj.optString("origQty", "0").toDoubleOrNull() ?: 0.0,
+                            executedQty = obj.optString("executedQty", "0").toDoubleOrNull() ?: 0.0,
+                            status = obj.optString("status", "OPEN").uppercase(),
+                            time = obj.optLong("time", System.currentTimeMillis())
+                        )
+                    )
+                }
+                if (entityList.isNotEmpty()) db.insertOpenOrders(entityList)
+            }
+            true
+        } catch (e: Exception) {
+            _realTradeStatus.value = "Gagal open orders: ${e.localizedMessage}"
+            true
+        }
     }
 
-    private suspend fun fetchRealTradeHistoriesSafe(
+    /**
+     * Satu putaran aman:
+     * - max 2 aset ber-saldo
+     * - 1 request myTrades / aset (window 7 hari default API)
+     * - hasil → insert Room + hitung avg buy
+     * - stop jika rate-limit
+     */
+    private suspend fun fetchTradesAndAvgSafe(
         apiKey: String,
         secretKey: String,
         balance: Map<String, Double>
     ) {
-        val activeAssets = balance
+        val candidates = balance
             .filter { it.key != "idr" && it.value > 0.00000001 }
-            .keys
-            .take(3)
-            .toMutableSet()
+            .entries
+            .sortedByDescending { it.value }
+            .take(MAX_HISTORY_ASSETS)
 
-        if (activeAssets.size < 2) activeAssets.add("btc")
-        if (activeAssets.size < 3) activeAssets.add("eth")
+        if (candidates.isEmpty()) {
+            _realTradeStatus.value = "Saldo diperbarui. Tidak ada aset koin untuk histori."
+            return
+        }
 
         val db = AppDatabase.getInstance().realTradeDao()
         val accumulatedEntities = mutableListOf<RealTradeEntity>()
+        val newAvg = _realAvgBuyPrices.value.toMutableMap()
+        val newPartial = _realAvgBuyPartial.value.toMutableMap()
+        var rateLimited = false
+        var fetchErrors = 0
+        var fetchOk = 0
 
-        for (asset in activeAssets) {
-            delay(1000)
-            try {
-                val trades = IndodaxTradeApiV2.myTradesRecent(apiKey, secretKey, "${asset}idr", limit = 100)
-                for (trade in trades) {
-                    val id = trade.optString("id", "")
-                    if (id.isBlank()) continue
+        for ((index, entry) in candidates.withIndex()) {
+            if (index > 0) delay(INTER_REQUEST_DELAY_MS)
+            val asset = entry.key
+            val currentQty = entry.value
 
-                    val isBuyer = when {
-                        trade.has("isBuyer") -> trade.optBoolean("isBuyer", false)
-                        else -> {
-                            val type = trade.optString("type", "")
-                            val side = trade.optString("side", "")
-                            type.equals("buy", true) || side.equals("BUY", true)
-                        }
-                    }
+            val (ok, raw) = try {
+                IndodaxTradeApiV2.myTrades(apiKey, secretKey, "${asset}idr", limit = 200)
+            } catch (e: Exception) {
+                fetchErrors++
+                _realTradeStatus.value = "Histori $asset gagal: ${e.localizedMessage}"
+                continue
+            }
 
-                    val tPrice = trade.optString("price", "0").toDoubleOrNull() ?: 0.0
-                    val tQty = trade.optString("qty", "0").toDoubleOrNull()
-                        ?: trade.optString("amount", "0").toDoubleOrNull()
-                        ?: 0.0
-                    if (tPrice <= 0.0 || tQty <= 0.0) continue
-
-                    accumulatedEntities.add(
-                        RealTradeEntity(
-                            id = id,
-                            symbol = "${asset}idr",
-                            price = tPrice,
-                            qty = tQty,
-                            amount = tPrice * tQty,
-                            time = trade.optLong("time", System.currentTimeMillis()),
-                            side = if (isBuyer) "BUY" else "SELL",
-                            isBuyer = isBuyer
-                        )
-                    )
+            if (!ok) {
+                if (looksLikeRateLimit(raw)) {
+                    markRateLimited(raw)
+                    rateLimited = true
+                    break
                 }
-            } catch (_: Exception) {}
+                fetchErrors++
+                _realTradeStatus.value = "Histori $asset: $raw"
+                continue
+            }
+
+            val trades = IndodaxTradeApiV2.parseTradesArray(raw)?.let { arr ->
+                val list = mutableListOf<JSONObject>()
+                for (i in 0 until arr.length()) arr.optJSONObject(i)?.let { list.add(it) }
+                list.sortedByDescending { it.optLong("time", 0L) }
+            } ?: emptyList()
+
+            if (trades.isEmpty()) {
+                // response sukses tapi kosong / format beda
+                fetchOk++
+                continue
+            }
+
+            fetchOk++
+            var accumulatedBuyQty = 0.0
+            var accumulatedBuyCost = 0.0
+
+            for (trade in trades) {
+                val id = trade.optString("id", "").ifBlank {
+                    trade.optString("tradeId", "").ifBlank { trade.optString("orderId", "") }
+                }
+                if (id.isBlank()) continue
+
+                val isBuyer = when {
+                    trade.has("isBuyer") -> trade.optBoolean("isBuyer", false)
+                    else -> {
+                        val type = trade.optString("type", "")
+                        val side = trade.optString("side", "")
+                        type.equals("buy", true) || side.equals("BUY", true)
+                    }
+                }
+
+                val tPrice = trade.optString("price", "0").toDoubleOrNull() ?: 0.0
+                val tQty = trade.optString("qty", "0").toDoubleOrNull()
+                    ?: trade.optString("amount", "0").toDoubleOrNull()
+                    ?: 0.0
+                if (tPrice <= 0.0 || tQty <= 0.0) continue
+
+                accumulatedEntities.add(
+                    RealTradeEntity(
+                        id = id,
+                        symbol = "${asset}idr",
+                        price = tPrice,
+                        qty = tQty,
+                        amount = tPrice * tQty,
+                        time = trade.optLong("time", System.currentTimeMillis()),
+                        side = if (isBuyer) "BUY" else "SELL",
+                        isBuyer = isBuyer
+                    )
+                )
+
+                // Avg buy dari batch yang sama (tanpa request kedua)
+                if (isBuyer && accumulatedBuyQty < currentQty) {
+                    val remaining = currentQty - accumulatedBuyQty
+                    val qtyToUse = minOf(tQty, remaining)
+                    accumulatedBuyQty += qtyToUse
+                    accumulatedBuyCost += qtyToUse * tPrice
+                }
+            }
+
+            if (accumulatedBuyQty > 0.0) {
+                newAvg[asset] = accumulatedBuyCost / accumulatedBuyQty
+                newPartial[asset] = accumulatedBuyQty + 1e-12 < currentQty
+            }
         }
 
         if (accumulatedEntities.isNotEmpty()) {
             db.insertTrades(accumulatedEntities)
+        }
+        _realAvgBuyPrices.value = newAvg
+        _realAvgBuyPartial.value = newPartial
+
+        if (!rateLimited) {
+            val partialCount = newPartial.values.count { it }
+            _realTradeStatus.value = when {
+                fetchOk > 0 && fetchErrors == 0 && partialCount > 0 ->
+                    "Saldo + histori OK ($fetchOk aset). Avg buy sebagian partial (window 7 hari)."
+                fetchOk > 0 && fetchErrors == 0 ->
+                    "Saldo + histori OK ($fetchOk aset, 1 request/aset)."
+                fetchOk > 0 ->
+                    "Sebagian histori OK ($fetchOk), gagal $fetchErrors."
+                else ->
+                    "Saldo OK, histori kosong/gagal. Cek permission API atau coba nanti."
+            }
         }
     }
 
@@ -312,6 +445,10 @@ class RealTradeCoordinator(
             onResult(false, "API Key atau Secret Key INDODAX belum diisi di Settings.")
             return
         }
+        if (isRateLimitedNow()) {
+            onResult(false, "Rate-limit aktif. Tunggu dulu sebelum cancel/refresh.")
+            return
+        }
 
         scope.launch {
             _realTradeStatus.value = "Membatalkan order $orderId..."
@@ -321,79 +458,19 @@ class RealTradeCoordinator(
                 symbol = symbol,
                 orderId = orderId
             )
+            if (!success && looksLikeRateLimit(message)) {
+                markRateLimited(message)
+                onResult(false, message)
+                return@launch
+            }
             _realTradeStatus.value = message
             if (success) {
                 AppDatabase.getInstance().realTradeDao().deleteOpenOrderById(orderId)
-                delay(1_000)
-                fetchRealBalance()
+                delay(INTER_REQUEST_DELAY_MS)
+                // soft: jangan full fetch chain; user bisa refresh manual
             }
             onResult(success, message)
         }
-    }
-
-    /**
-     * Aman: max 2 aset, 1 myTrades per aset (7 hari), jeda 1.5s.
-     * Stop total jika kena -2015.
-     */
-    private suspend fun calculateRealAvgBuyPricesSafe(
-        apiKey: String,
-        secretKey: String,
-        balance: Map<String, Double>
-    ) {
-        val candidates = balance
-            .filter { it.key != "idr" && it.value > 0.00000001 }
-            .entries
-            .sortedByDescending { it.value }
-            .take(2) // max 2 koin biar tidak spam API
-
-        if (candidates.isEmpty()) return
-
-        val newAvg = _realAvgBuyPrices.value.toMutableMap()
-
-        for ((asset, currentQty) in candidates) {
-            delay(1_500) // jeda antar request
-
-            val trades = try {
-                IndodaxTradeApiV2.myTradesRecent(apiKey, secretKey, "${asset}idr", limit = 500)
-            } catch (_: Exception) {
-                emptyList()
-            }
-
-            // Kalau response error string sempat ikut di status sebelumnya, skip
-            var accumulatedQty = 0.0
-            var accumulatedCost = 0.0
-
-            for (trade in trades) {
-                val isBuyer = when {
-                    trade.has("isBuyer") -> trade.optBoolean("isBuyer", false)
-                    else -> {
-                        val type = trade.optString("type", "")
-                        val side = trade.optString("side", "")
-                        type.equals("buy", true) || side.equals("BUY", true)
-                    }
-                }
-                if (!isBuyer) continue
-
-                val tPrice = trade.optString("price", "0").toDoubleOrNull() ?: 0.0
-                val tQty = trade.optString("qty", "0").toDoubleOrNull()
-                    ?: trade.optString("amount", "0").toDoubleOrNull()
-                    ?: 0.0
-                if (tPrice <= 0.0 || tQty <= 0.0) continue
-
-                val remaining = currentQty - accumulatedQty
-                if (remaining <= 0.0) break
-
-                val qtyToUse = minOf(tQty, remaining)
-                accumulatedQty += qtyToUse
-                accumulatedCost += qtyToUse * tPrice
-            }
-
-            if (accumulatedQty > 0.0) {
-                newAvg[asset] = accumulatedCost / accumulatedQty
-            }
-        }
-
-        _realAvgBuyPrices.value = newAvg
     }
 
     fun executeRealTrade(
@@ -409,6 +486,10 @@ class RealTradeCoordinator(
         val secretKey = prefs.indodaxSecretKey
         if (apiKey.isBlank() || secretKey.isBlank()) {
             onResult(false, "API Key atau Secret Key INDODAX belum diisi di Settings.")
+            return
+        }
+        if (isRateLimitedNow()) {
+            onResult(false, "Rate-limit aktif. Tunggu 2 menit sebelum order.")
             return
         }
 
@@ -435,13 +516,18 @@ class RealTradeCoordinator(
                 quantity = quantity,
                 clientOrderId = clientOrderId
             )
-            
+
+            if (!success && looksLikeRateLimit(message)) {
+                markRateLimited(message)
+                onResult(false, message)
+                return@launch
+            }
+
             if (success) {
                 if (type.equals("buy", ignoreCase = true) && autoLimitSellPrice1 > price) {
                     val halfQty = quantity / 2.0
-                    // Kirim order TP 1 (50% koin)
-                    delay(800)
-                    _realTradeStatus.value = "Mengirim TP 1 (${PriceFormatter.formatPrice(autoLimitSellPrice1)}) - Qty: $halfQty ke INDODAX..."
+                    delay(INTER_REQUEST_DELAY_MS)
+                    _realTradeStatus.value = "Mengirim TP 1 (${PriceFormatter.formatPrice(autoLimitSellPrice1)})..."
                     val sellClientOrderId1 = "agu-tp1-${System.currentTimeMillis()}"
                     val (sellSuccess1, sellMessage1) = IndodaxTradeApiV2.createLimitOrder(
                         apiKey = apiKey,
@@ -458,12 +544,12 @@ class RealTradeCoordinator(
                         finalMsg += "TP1 (${PriceFormatter.formatPrice(autoLimitSellPrice1)}) berhasil."
                     } else {
                         finalMsg += "TP1 gagal: $sellMessage1."
+                        if (looksLikeRateLimit(sellMessage1)) markRateLimited(sellMessage1)
                     }
 
-                    // Kirim order TP 2 (50% koin) seandainya TP2 diaktifkan
                     val actualTp2Price = if (autoLimitSellPrice2 > price) autoLimitSellPrice2 else autoLimitSellPrice1 * 1.03
-                    delay(800)
-                    _realTradeStatus.value = "Mengirim TP 2 (${PriceFormatter.formatPrice(actualTp2Price)}) - Qty: $halfQty ke INDODAX..."
+                    delay(INTER_REQUEST_DELAY_MS)
+                    _realTradeStatus.value = "Mengirim TP 2 (${PriceFormatter.formatPrice(actualTp2Price)})..."
                     val sellClientOrderId2 = "agu-tp2-${System.currentTimeMillis()}"
                     val (sellSuccess2, sellMessage2) = IndodaxTradeApiV2.createLimitOrder(
                         apiKey = apiKey,
@@ -479,6 +565,7 @@ class RealTradeCoordinator(
                         finalMsg += " TP2 (${PriceFormatter.formatPrice(actualTp2Price)}) berhasil."
                     } else {
                         finalMsg += " TP2 gagal: $sellMessage2."
+                        if (looksLikeRateLimit(sellMessage2)) markRateLimited(sellMessage2)
                     }
 
                     _realTradeStatus.value = "BUY Sukses! Status TP: $finalMsg"
@@ -487,7 +574,9 @@ class RealTradeCoordinator(
                     _realTradeStatus.value = message
                     onResult(true, message)
                 }
-                delay(1_000)
+                delay(INTER_REQUEST_DELAY_MS)
+                // jangan auto full-refresh beruntun; cooldown tetap jaga
+                lastFetchTimeMs = 0L // allow one refresh after trade
                 fetchRealBalance()
             } else {
                 _realTradeStatus.value = message
@@ -510,6 +599,10 @@ class RealTradeCoordinator(
             onResult(false, "API Key atau Secret Key kosong! Harap atur di menu Settings.")
             return
         }
+        if (isRateLimitedNow()) {
+            onResult(false, "Rate-limit aktif. Tunggu dulu.")
+            return
+        }
 
         scope.launch(kotlinx.coroutines.Dispatchers.IO) {
             _realTradeStatus.value = "Mengambil saldo koin real untuk $pair..."
@@ -518,7 +611,7 @@ class RealTradeCoordinator(
                 pairId.endsWith("idr") -> pairId.removeSuffix("idr")
                 pairId.endsWith("usdt") -> pairId.removeSuffix("usdt")
                 pairId.contains("_") -> pairId.split("_").first()
-                else -> pairId // Fallback
+                else -> pairId
             }
 
             if (baseAsset.isEmpty()) {
@@ -528,12 +621,12 @@ class RealTradeCoordinator(
 
             val (balances, err) = IndodaxTradeApiV2.getAccount(apiKey, secretKey)
             if (balances == null) {
+                if (looksLikeRateLimit(err)) markRateLimited(err)
                 _realTradeStatus.value = "Gagal memuat saldo real: $err"
                 onResult(false, "Gagal memuat saldo: $err")
                 return@launch
             }
 
-            // Gunakan available koin yang benar-benar free
             val availableCoin = balances.free[baseAsset] ?: 0.0
             if (availableCoin <= 0.00000001) {
                 _realTradeStatus.value = "Gagal: Saldo koin $baseAsset Anda 0 atau tidak terbaca (API V2)."
@@ -541,9 +634,8 @@ class RealTradeCoordinator(
                 return@launch
             }
 
-            // Pembulatan ke bawah yang aman (8 desimal)
             val qtyTp1 = (availableCoin * (tp1Percent / 100.0) * 100_000_000.0).toLong() / 100_000_000.0
-            val qtyTp2 = (availableCoin - qtyTp1) 
+            val qtyTp2 = availableCoin - qtyTp1
 
             var finalMsg = ""
             var successAll = true
@@ -564,8 +656,13 @@ class RealTradeCoordinator(
                 } else {
                     finalMsg += "TP1 gagal: $msg."
                     successAll = false
+                    if (looksLikeRateLimit(msg)) {
+                        markRateLimited(msg)
+                        onResult(false, finalMsg)
+                        return@launch
+                    }
                 }
-                delay(800)
+                delay(INTER_REQUEST_DELAY_MS)
             }
 
             if (tp2Price > 0.0 && qtyTp2 > 0.0) {
@@ -584,13 +681,12 @@ class RealTradeCoordinator(
                 } else {
                     finalMsg += " TP2 gagal: $msg."
                     successAll = false
+                    if (looksLikeRateLimit(msg)) markRateLimited(msg)
                 }
             }
 
             _realTradeStatus.value = if (successAll) "Split TP Berhasil terpasang di Server!" else "Sebagian/Seluruh Split TP Gagal dipasang."
             onResult(successAll, finalMsg)
-            delay(1000)
-            fetchRealBalance()
         }
     }
 }
