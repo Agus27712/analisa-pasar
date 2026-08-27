@@ -60,7 +60,7 @@ fun RadarSellSection(
     var tp1PriceInput by remember { mutableStateOf("") }
     var tp1PercentInput by remember { mutableStateOf("50") }
     var tp2PriceInput by remember { mutableStateOf("") }
-    var tp2PercentInput by remember { mutableStateOf("100") }
+    var tp2PercentInput by remember { mutableStateOf("50") }
     var stopLossPriceInput by remember { mutableStateOf("") }
 
     LaunchedEffect(spotPosition, signal) {
@@ -84,8 +84,8 @@ fun RadarSellSection(
                 String.format(Locale.US, "%.0f", signal.stopLoss)
             } else ""
 
-            tp1PercentInput = String.format(Locale.US, "%.0f", spotPosition.tp1Percent)
-            tp2PercentInput = String.format(Locale.US, "%.0f", spotPosition.tp2Percent)
+            tp1PercentInput = if (spotPosition.tp1Percent > 0) String.format(Locale.US, "%.0f", spotPosition.tp1Percent) else "50"
+            tp2PercentInput = if (spotPosition.tp2Percent > 0) String.format(Locale.US, "%.0f", spotPosition.tp2Percent) else "50"
         }
     }
 
@@ -670,7 +670,14 @@ fun RadarSellSection(
                                     Spacer(Modifier.height(3.dp))
                                     OutlinedTextField(
                                         value = tp1PercentInput,
-                                        onValueChange = { tp1PercentInput = it },
+                                        onValueChange = { input ->
+                                            tp1PercentInput = input
+                                            val p1 = input.toDoubleOrNull()
+                                            if (p1 != null) {
+                                                val p2 = (100.0 - p1).coerceIn(0.0, 100.0)
+                                                tp2PercentInput = if (p2 % 1.0 == 0.0) p2.toInt().toString() else String.format(Locale.US, "%.1f", p2)
+                                            }
+                                        },
                                         placeholder = { Text("50", fontSize = 10.5.sp, color = TvTextSecondary.copy(alpha = 0.5f)) },
                                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
                                         singleLine = true,
@@ -721,7 +728,14 @@ fun RadarSellSection(
                                     Spacer(Modifier.height(3.dp))
                                     OutlinedTextField(
                                         value = tp2PercentInput,
-                                        onValueChange = { tp2PercentInput = it },
+                                        onValueChange = { input ->
+                                            tp2PercentInput = input
+                                            val p2 = input.toDoubleOrNull()
+                                            if (p2 != null) {
+                                                val p1 = (100.0 - p2).coerceIn(0.0, 100.0)
+                                                tp1PercentInput = if (p1 % 1.0 == 0.0) p1.toInt().toString() else String.format(Locale.US, "%.1f", p1)
+                                            }
+                                        },
                                         placeholder = { Text("100", fontSize = 10.5.sp, color = TvTextSecondary.copy(alpha = 0.5f)) },
                                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
                                         singleLine = true,
