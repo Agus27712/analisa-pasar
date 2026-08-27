@@ -271,6 +271,7 @@ object IndodaxTradeApiV2 {
 
     /**
      * 1 window max 7 hari (sesuai docs).
+     * Response resmi: { "data": [ { tradeId, price, qty, isBuyer, time, ... } ] }
      */
     suspend fun myTrades(
         apiKey: String,
@@ -295,7 +296,6 @@ object IndodaxTradeApiV2 {
         return signedV2Request(apiKey, secretKey, "GET", "/api/v2/myTrades", params)
     }
 
-    /** 1 request saja (7 hari). */
     suspend fun myTradesRecent(
         apiKey: String,
         secretKey: String,
@@ -304,32 +304,92 @@ object IndodaxTradeApiV2 {
     ): List<JSONObject> {
         val (ok, raw) = myTrades(apiKey, secretKey, symbol, limit)
         if (!ok) return emptyList()
-        val arr = parseTradesArray(raw) ?: return emptyList()
-        val list = mutableListOf<JSONObject>()
-        for (i in 0 until arr.length()) {
-            arr.optJSONObject(i)?.let { list.add(it) }
-        }
-        list.sortByDescending { it.optLong("time", 0L) }
-        return list
+        return parseTradesList(raw)
     }
 
     fun parseTradesArray(raw: String): JSONArray? {
+        val list = parseTradesList(raw)
+        if (list.isEmpty()) return null
+        val arr = JSONArray()
+        list.forEach { arr.put(it) }
+        return arr
+    }
+
+    /** Parse fleksibel: array langsung, {data}, {trades}, angka/string field. */
+    fun parseTradesList(raw: String): List<JSONObject> {
         val trimmed = raw.trim()
-        if (trimmed.isEmpty()) return null
+        if (trimmed.isEmpty()) return emptyList()
         return runCatching {
-            when {
+            val arr: JSONArray? = when {
                 trimmed.startsWith("[") -> JSONArray(trimmed)
                 else -> {
                     val obj = JSONObject(trimmed)
                     when {
-                        obj.has("data") -> obj.optJSONArray("data")
+                        obj.has("data") && !obj.isNull("data") -> {
+                            val d = obj.opt("data")
+                            when (d) {
+                                is JSONArray -> d
+                                else -> null
+                            }
+                        }
                         obj.has("trades") -> obj.optJSONArray("trades")
                         obj.has("return") -> obj.optJSONObject("return")?.optJSONArray("trades")
                         else -> null
                     }
                 }
             }
-        }.getOrNull()
+            if (arr == null) return@runCatching emptyList()
+            val out = mutableListOf<JSONObject>()
+            for (i in 0 until arr.length()) {
+                arr.optJSONObject(i)?.let { out.add(it) }
+            }
+            out.sortedByDescending { tradeTimeMs(it) }
+        }.getOrElse { emptyList() }
+    }
+
+    fun tradeIdOf(trade: JSONObject): String =
+        sequenceOf("tradeId", "trade_id", "id", "tid", "orderId")
+            .map { trade.optString(it, "") }
+            .firstOrNull { it.isNotBlank() }
+            .orEmpty()
+
+    fun tradePriceOf(trade: JSONObject): Double = jsonNumber(trade, "price")
+
+    fun tradeQtyOf(trade: JSONObject): Double =
+        jsonNumber(trade, "qty", "amount", "quantity", "filled")
+
+    fun tradeTimeMs(trade: JSONObject): Long {
+        val t = when {
+            trade.has("time") -> trade.optLong("time", 0L)
+            trade.has("trade_time") -> trade.optLong("trade_time", 0L)
+            trade.has("timestamp") -> trade.optLong("timestamp", 0L)
+            else -> 0L
+        }
+        return if (t in 1 until 1_000_000_000_000L) t * 1000L else t
+    }
+
+    fun isBuyerOf(trade: JSONObject): Boolean = when {
+        trade.has("isBuyer") -> trade.optBoolean("isBuyer", false)
+        else -> {
+            val type = trade.optString("type", "")
+            val side = trade.optString("side", "")
+            type.equals("buy", true) || side.equals("BUY", true)
+        }
+    }
+
+    private fun jsonNumber(obj: JSONObject, vararg keys: String): Double {
+        for (k in keys) {
+            if (!obj.has(k) || obj.isNull(k)) continue
+            val d = obj.optDouble(k, Double.NaN)
+            if (d.isFinite() && d != 0.0) return d
+            if (d.isFinite() && d == 0.0) {
+                // could be real zero; still accept if string parses
+            }
+            val s = obj.optString(k, "").replace(",", "").toDoubleOrNull()
+            if (s != null && s.isFinite()) return s
+            if (d.isFinite()) return d
+        }
+        return 0.0
     }
 
     private fun decimal(value: Double): String =
