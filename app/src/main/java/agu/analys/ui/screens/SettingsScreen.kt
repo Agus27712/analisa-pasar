@@ -27,10 +27,7 @@ import agu.analys.config.MarketDataSource
 import agu.analys.config.ScalpingSensitivity
 import agu.analys.config.StrategyMode
 import agu.analys.util.MarketDataCache
-import agu.analys.ui.theme.TvBackground
-import agu.analys.ui.theme.TvGreen
-import agu.analys.ui.theme.TvTextPrimary
-import agu.analys.ui.theme.TvTextSecondary
+import agu.analys.ui.theme.*
 import agu.analys.ui.components.security.SecurityPinDialog
 import agu.analys.ui.components.security.SetupRealApiDialog
 import agu.analys.util.AppPreferences
@@ -105,13 +102,66 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
 
         Spacer(Modifier.height(14.dp))
 
+        // SECTION: TEMA APLIKASI
+        val isDarkTheme by viewModel.isDarkTheme.collectAsState()
+        SectionHeader("TEMA APLIKASI")
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(10.dp),
+            colors = CardDefaults.cardColors(containerColor = TvSurfaceVariant),
+            border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = if (isDarkTheme) Icons.Default.NightsStay else Icons.Default.WbSunny,
+                        contentDescription = "Tema",
+                        tint = TvBlue,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = if (isDarkTheme) "Mode Gelap (Dark Mode)" else "Mode Terang (Light Mode)",
+                            color = TvTextPrimary,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Ganti tampilan grafik & menu ke terang/gelap",
+                            color = TvTextSecondary,
+                            fontSize = 10.sp
+                        )
+                    }
+                }
+                Switch(
+                    checked = isDarkTheme,
+                    onCheckedChange = { viewModel.setDarkTheme(it) },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.Black,
+                        checkedTrackColor = TvGreen,
+                        uncheckedThumbColor = TvTextSecondary,
+                        uncheckedTrackColor = TvSurfaceVariant
+                    )
+                )
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+
         // SECTION: SUMBER DATA PASAR (EXCHANGE SOURCE)
         SectionHeader("SUMBER PASAR (EXCHANGE)")
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(10.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF2196F3).copy(alpha = 0.12f)),
-            border = androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFF2196F3))
+            colors = CardDefaults.cardColors(containerColor = TvBlue.copy(alpha = 0.15f)),
+            border = androidx.compose.foundation.BorderStroke(1.dp, TvBlue)
         ) {
             Column(Modifier.padding(12.dp)) {
                 Row(
@@ -121,14 +171,14 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                 ) {
                     Text(
                         text = "INDODAX",
-                        color = Color(0xFF2196F3),
+                        color = TvBlue,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Black
                     )
                     Box(
                         modifier = Modifier
                             .size(10.dp)
-                            .background(Color(0xFF2196F3), CircleShape)
+                            .background(TvBlue, CircleShape)
                     )
                 }
                 Spacer(Modifier.height(4.dp))
@@ -156,8 +206,8 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                 .fillMaxWidth()
                 .clickable { viewModel.openLearning() },
             shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF101E2E)),
-            border = androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFF72B7FF))
+            colors = CardDefaults.cardColors(containerColor = TvCardBackground),
+            border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder)
         ) {
             Row(
                 modifier = Modifier.padding(14.dp),
@@ -166,13 +216,13 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                 Box(
                     modifier = Modifier
                         .size(42.dp)
-                        .background(Color(0xFF1E3A5F), CircleShape),
+                        .background(TvBlue.copy(alpha = 0.15f), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         Icons.Default.MenuBook,
                         contentDescription = null,
-                        tint = Color(0xFF72B7FF),
+                        tint = TvBlue,
                         modifier = Modifier.size(22.dp)
                     )
                 }
@@ -180,7 +230,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                 Column(Modifier.weight(1f)) {
                     Text(
                         "MODE BELAJAR ANALISIS PASAR",
-                        color = Color(0xFF72B7FF),
+                        color = TvBlue,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Black
                     )
@@ -199,7 +249,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                         fontWeight = FontWeight.Bold
                     )
                 }
-                Icon(Icons.Default.ChevronRight, null, tint = Color(0xFF72B7FF), modifier = Modifier.size(20.dp))
+                Icon(Icons.Default.ChevronRight, null, tint = TvBlue, modifier = Modifier.size(20.dp))
             }
         }
 
@@ -208,7 +258,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
         // SECTION 1: MODE ANALISIS TRADING
         SectionHeader("MODE ANALISIS TRADING")
         Text(
-            "Sesuaikan strategi perhitungan engine sinyal dan timeframe aktif.",
+            "Sesuaikan strategi perhitungan engine sinyal and timeframe aktif.",
             color = TvTextSecondary,
             fontSize = 11.sp
         )
@@ -218,7 +268,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
         ModeOptionCard(
             title = "SCALPING",
             tag = "BUY MODE",
-            tagBg = Color(0xFF123D2A),
+            tagBg = TvGreen.copy(alpha = 0.15f),
             tagFg = TvGreen,
             isSelected = strategyMode == StrategyMode.SCALPING,
             desc = "Mencari peluang BUY jangka pendek (1M – 15M) dengan eksekusi cepat dan filter MTF.",
@@ -232,17 +282,17 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(10.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF101720)),
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E2836))
+                colors = CardDefaults.cardColors(containerColor = TvCardBackground),
+                border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder)
             ) {
                 Column(Modifier.padding(12.dp)) {
-                    Text("SENSITIVITAS SCALPING", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF72B7FF))
+                    Text("SENSITIVITAS SCALPING", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TvBlue)
                     Spacer(Modifier.height(6.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         SensitivityChoice(
                             label = "KONSERVATIF",
                             selected = sensitivity == ScalpingSensitivity.CONSERVATIVE,
-                            activeBg = Color(0xFF123D2A),
+                            activeBg = TvGreen.copy(alpha = 0.15f),
                             activeFg = TvGreen,
                             modifier = Modifier.weight(1f)
                         ) {
@@ -252,8 +302,8 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                         SensitivityChoice(
                             label = "SEIMBANG",
                             selected = sensitivity == ScalpingSensitivity.BALANCED,
-                            activeBg = Color(0xFF132F4C),
-                            activeFg = Color(0xFF6FB8FF),
+                            activeBg = TvBlue.copy(alpha = 0.15f),
+                            activeFg = TvBlue,
                             modifier = Modifier.weight(1f)
                         ) {
                             sensitivity = ScalpingSensitivity.BALANCED
@@ -262,8 +312,8 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                         SensitivityChoice(
                             label = "AGRESIF",
                             selected = sensitivity == ScalpingSensitivity.AGGRESSIVE,
-                            activeBg = Color(0xFF3D3212),
-                            activeFg = Color(0xFFFFB300),
+                            activeBg = TvAmber.copy(alpha = 0.15f),
+                            activeFg = TvAmber,
                             modifier = Modifier.weight(1f)
                         ) {
                             sensitivity = ScalpingSensitivity.AGGRESSIVE
@@ -272,8 +322,8 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                         SensitivityChoice(
                             label = "AUTO (AI)",
                             selected = sensitivity == ScalpingSensitivity.DYNAMIC_AUTO,
-                            activeBg = Color(0xFF2E1C4E),
-                            activeFg = Color(0xFFB388FF),
+                            activeBg = TvOrange.copy(alpha = 0.15f),
+                            activeFg = TvOrange,
                             modifier = Modifier.weight(1f)
                         ) {
                             sensitivity = ScalpingSensitivity.DYNAMIC_AUTO
@@ -291,9 +341,9 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                         fontSize = 10.sp,
                         color = when (sensitivity) {
                             ScalpingSensitivity.CONSERVATIVE -> TvGreen
-                            ScalpingSensitivity.BALANCED -> Color(0xFF6FB8FF)
-                            ScalpingSensitivity.AGGRESSIVE -> Color(0xFFFFB300)
-                            ScalpingSensitivity.DYNAMIC_AUTO -> Color(0xFFB388FF)
+                            ScalpingSensitivity.BALANCED -> TvBlue
+                            ScalpingSensitivity.AGGRESSIVE -> TvAmber
+                            ScalpingSensitivity.DYNAMIC_AUTO -> TvOrange
                         },
                         lineHeight = 14.sp
                     )
@@ -307,8 +357,8 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
         ModeOptionCard(
             title = "SECOND-WAVE",
             tag = "2ND-WAVE HUNTER",
-            tagBg = Color(0xFF0F3845),
-            tagFg = Color(0xFF00E5FF),
+            tagBg = TvBlue.copy(alpha = 0.15f),
+            tagFg = TvBlue,
             isSelected = strategyMode == StrategyMode.SECOND_WAVE,
             desc = "Membidik pantulan gelombang kedua pada koin pasca pump dengan koreksi terukur dan konfirmasi reclaim.",
             bullets = listOf(
@@ -326,8 +376,8 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
         ModeOptionCard(
             title = "SWING",
             tag = "ANALISIS TREND",
-            tagBg = Color(0xFF122840),
-            tagFg = Color(0xFF72B7FF),
+            tagBg = TvBlue.copy(alpha = 0.15f),
+            tagFg = TvBlue,
             isSelected = strategyMode == StrategyMode.SWING,
             desc = "Menganalisis trend jangka menengah (1H – 1D) untuk posisi swing yang lebih tenang.",
             bullets = listOf("Timeframe: 1H & 1D", "Analisis struktur trend (HH/HL/LH/LL)", "Fokus: Support / Resistance & Demand Zone"),
@@ -398,8 +448,8 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(10.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF101720)),
-            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E2836))
+            colors = CardDefaults.cardColors(containerColor = TvCardBackground),
+            border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder)
         ) {
             Column(Modifier.padding(14.dp)) {
                 Text(
@@ -419,7 +469,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                             singleLine = true,
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = TvGreen,
-                                unfocusedBorderColor = Color(0xFF2A3540),
+                                unfocusedBorderColor = TvBorder,
                                 focusedTextColor = TvTextPrimary,
                                 unfocusedTextColor = TvTextPrimary
                             )
@@ -434,7 +484,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                             singleLine = true,
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = TvGreen,
-                                unfocusedBorderColor = Color(0xFF2A3540),
+                                unfocusedBorderColor = TvBorder,
                                 focusedTextColor = TvTextPrimary,
                                 unfocusedTextColor = TvTextPrimary
                             )
@@ -452,7 +502,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                             singleLine = true,
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = TvGreen,
-                                unfocusedBorderColor = Color(0xFF2A3540),
+                                unfocusedBorderColor = TvBorder,
                                 focusedTextColor = TvTextPrimary,
                                 unfocusedTextColor = TvTextPrimary
                             )
@@ -467,7 +517,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                             singleLine = true,
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = TvGreen,
-                                unfocusedBorderColor = Color(0xFF2A3540),
+                                unfocusedBorderColor = TvBorder,
                                 focusedTextColor = TvTextPrimary,
                                 unfocusedTextColor = TvTextPrimary
                             )
@@ -548,7 +598,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
             modifier = Modifier.fillMaxWidth().height(46.dp),
             shape = RoundedCornerShape(10.dp),
             colors = ButtonDefaults.outlinedButtonColors(contentColor = TvTextSecondary),
-            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E2836))
+            border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder)
         ) {
             Text("Batal", color = TvTextSecondary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         }
@@ -688,11 +738,11 @@ private fun ExchangeSourceCard(
         modifier = modifier.clickable { onClick() },
         shape = RoundedCornerShape(10.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) accentColor.copy(alpha = 0.15f) else Color(0xFF101720)
+            containerColor = if (isSelected) accentColor.copy(alpha = 0.15f) else TvCardBackground
         ),
         border = androidx.compose.foundation.BorderStroke(
             width = if (isSelected) 1.5.dp else 1.dp,
-            color = if (isSelected) accentColor else Color(0xFF1E2836)
+            color = if (isSelected) accentColor else TvBorder
         )
     ) {
         Column(Modifier.padding(12.dp)) {
@@ -724,7 +774,7 @@ private fun ExchangeSourceCard(
             Spacer(Modifier.height(4.dp))
             Text(
                 text = "Quote: $quoteAsset",
-                color = if (isSelected) Color.White else TvTextSecondary,
+                color = if (isSelected) TvTextPrimary else TvTextSecondary,
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold
             )

@@ -22,15 +22,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import agu.analys.model.MarketTick
 import agu.analys.ui.animation.SmoothPriceText
-import agu.analys.ui.theme.TvTextPrimary
-import agu.analys.ui.theme.TvTextSecondary
+import agu.analys.ui.theme.*
 import agu.analys.util.PriceFormatter
-
-private val CardBg = Color(0xFF0D1722)
-private val CardBorder = Color(0xFF1A3347)
-private val AccentBlue = Color(0xFF2196F3)
-private val AccentBlueSoft = Color(0xFF6FB8FF)
-private val TvGold = Color(0xFFFFD54A)
 
 @Composable
 fun VolumeLeaderChip(
@@ -50,8 +43,8 @@ fun VolumeLeaderChip(
             .clickable { onOpen() }
             .testTag("volume_leader_${tick.symbol}"),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = CardBg),
-        border = BorderStroke(1.dp, if (highlight) AccentBlue.copy(alpha = 0.4f) else CardBorder)
+        colors = CardDefaults.cardColors(containerColor = TvCardBackground),
+        border = BorderStroke(1.dp, if (highlight) TvBlue.copy(alpha = 0.4f) else TvBorder)
     ) {
         Column(Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -59,10 +52,10 @@ fun VolumeLeaderChip(
                     Modifier
                         .size(28.dp)
                         .clip(CircleShape)
-                        .background(AccentBlue.copy(alpha = 0.15f)),
+                        .background(TvBlue.copy(alpha = 0.15f)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("#" + rank, color = AccentBlueSoft, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold)
+                    Text("#" + rank, color = TvBlue, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold)
                 }
                 Spacer(Modifier.width(8.dp))
                 Column(Modifier.weight(1f)) {
@@ -80,7 +73,7 @@ fun VolumeLeaderChip(
             Spacer(Modifier.height(2.dp))
             Text(
                 "Vol " + PriceFormatter.formatPrice(tick.volume24h),
-                color = AccentBlueSoft,
+                color = TvBlue,
                 fontSize = 10.sp,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1
@@ -98,19 +91,19 @@ fun VolumeLeaderChip(
                 Button(
                     onClick = onOpen,
                     modifier = Modifier.weight(1f).height(32.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = AccentBlue),
+                    colors = ButtonDefaults.buttonColors(containerColor = TvBlue),
                     shape = RoundedCornerShape(9.dp),
                     contentPadding = PaddingValues(0.dp)
                 ) {
-                    Text("Chart", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    Text("Chart", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TvSurface)
                 }
                 OutlinedButton(
                     onClick = onToggleWatch,
                     modifier = Modifier.height(32.dp),
                     shape = RoundedCornerShape(9.dp),
-                    border = BorderStroke(1.dp, if (isWatched) TvGold.copy(alpha = 0.5f) else CardBorder),
+                    border = BorderStroke(1.dp, if (isWatched) TvAmber.copy(alpha = 0.5f) else TvBorder),
                     colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = if (isWatched) TvGold else TvTextSecondary
+                        contentColor = if (isWatched) TvAmber else TvTextSecondary
                     ),
                     contentPadding = PaddingValues(horizontal = 8.dp)
                 ) {

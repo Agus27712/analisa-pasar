@@ -133,6 +133,10 @@ class AppPreferences(context: Context) {
         get() = prefs.getBoolean(KEY_COMPACT_UI, true)
         set(value) = prefs.edit().putBoolean(KEY_COMPACT_UI, value).apply()
 
+    var isDarkTheme: Boolean
+        get() = prefs.getBoolean("is_dark_theme", true)
+        set(value) = prefs.edit().putBoolean("is_dark_theme", value).apply()
+
     fun clearApiKeys() {
         prefs.edit()
             .remove(KEY_GROQ)

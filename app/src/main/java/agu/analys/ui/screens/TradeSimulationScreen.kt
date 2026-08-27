@@ -130,10 +130,10 @@ fun TradeSimulationScreen(
             DropdownMenu(
                 expanded = showOptionsMenu,
                 onDismissRequest = { showOptionsMenu = false },
-                modifier = Modifier.background(Color(0xFF162032))
+                modifier = Modifier.background(TvSurfaceVariant)
             ) {
                 DropdownMenuItem(
-                    text = { Text("Top Up Saldo Virtual", color = Color.White, fontSize = 13.sp) },
+                    text = { Text("Top Up Saldo Virtual", color = TvTextPrimary, fontSize = 13.sp) },
                     leadingIcon = { Icon(Icons.Default.AccountBalanceWallet, contentDescription = null, tint = TvGreen) },
                     onClick = {
                         showOptionsMenu = false
@@ -164,20 +164,20 @@ fun TradeSimulationScreen(
                         .fillMaxWidth()
                         .padding(bottom = 8.dp)
                         .clip(RoundedCornerShape(6.dp))
-                        .background(Color(0xFF2E2413))
+                        .background(TvSurfaceVariant)
                         .padding(horizontal = 10.dp, vertical = 6.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
                             imageVector = Icons.Default.Info,
                             contentDescription = "Info",
-                            tint = Color(0xFFFBBF24),
+                            tint = TvAmber,
                             modifier = Modifier.size(14.dp)
                         )
                         Spacer(Modifier.width(6.dp))
                         Text(
                             text = "Simulasi Trade Spot $exchangeLabel · pair $quote · harga live real-time.",
-                            color = Color(0xFFFDE68A),
+                            color = TvTextSecondary,
                             fontSize = 11.sp
                         )
                     }

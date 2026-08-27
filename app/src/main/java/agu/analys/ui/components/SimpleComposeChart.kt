@@ -46,11 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import agu.analys.model.CandleBar
 import agu.analys.ui.animation.rememberSmoothPrice
-import agu.analys.ui.theme.TvCardBackground
-import agu.analys.ui.theme.TvGreen
-import agu.analys.ui.theme.TvRed
-import agu.analys.ui.theme.TvTextPrimary
-import agu.analys.ui.theme.TvTextSecondary
+import agu.analys.ui.theme.*
 import agu.analys.util.PriceFormatter
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
@@ -68,6 +64,12 @@ fun SimpleComposeChart(
     quoteAsset: String = "IDR",
     modifier: Modifier = Modifier
 ) {
+    val greenColor = TvGreen
+    val redColor = TvRed
+    val textColor = TvTextPrimary
+    val textSecColor = TvTextSecondary
+    val chartBgColor = TvBackground
+
     val validCandles = remember(candles) {
         candles.filter { it.open > 0 && it.high > 0 && it.low > 0 && it.close > 0 }
     }
@@ -152,7 +154,7 @@ fun SimpleComposeChart(
                     .fillMaxWidth()
                     .weight(1f)
                     .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFF121212))
+                    .background(chartBgColor)
                     .pointerInput(candleCount) {
                         detectTransformGestures { _, pan, zoom, _ ->
                             if (candleCount < 2) return@detectTransformGestures
@@ -219,7 +221,7 @@ fun SimpleComposeChart(
                         val closeY = y(candle.close)
                         val highY = y(candle.high)
                         val lowY = y(candle.low)
-                        val candleColor = if (candle.close >= candle.open) TvGreen else TvRed
+                        val candleColor = if (candle.close >= candle.open) greenColor else redColor
                         drawLine(candleColor, Offset(x, highY), Offset(x, lowY), strokeWidth = 1.5f)
                         val bodyTop = minOf(openY, closeY)
                         val bodyBottom = maxOf(openY, closeY).coerceAtLeast(bodyTop + 2f)
@@ -268,7 +270,7 @@ fun SimpleComposeChart(
                         if (stopLoss > 0.0 && stopLoss in minPrice..maxPrice) {
                             val slY = y(stopLoss)
                             drawLine(
-                                color = TvRed,
+                                color = redColor,
                                 start = Offset(left, slY),
                                 end = Offset(left + chartWidth, slY),
                                 strokeWidth = 1.5f,
@@ -281,7 +283,7 @@ fun SimpleComposeChart(
                     livePrice?.let { price ->
                         if (price in minPrice..maxPrice) {
                             val liveY = y(price)
-                            drawLine(Color.White.copy(alpha = 0.65f), Offset(left, liveY), Offset(left + chartWidth, liveY), strokeWidth = 1f)
+                            drawLine(textColor.copy(alpha = 0.65f), Offset(left, liveY), Offset(left + chartWidth, liveY), strokeWidth = 1f)
                         }
                     }
                 }
@@ -301,8 +303,8 @@ fun SimpleComposeChart(
 
 @Composable
 private fun IndicatorChip(label: String, color: Color, active: Boolean, onClick: () -> Unit) {
-    val bg = if (active) color.copy(alpha = 0.18f) else Color(0xFF1A1A1A)
-    val border = if (active) color.copy(alpha = 0.7f) else Color(0x33FFFFFF)
+    val bg = if (active) color.copy(alpha = 0.18f) else TvSurface
+    val border = if (active) color.copy(alpha = 0.7f) else TvBorder
     val textColor = if (active) color else TvTextSecondary
     Box(
         modifier = Modifier

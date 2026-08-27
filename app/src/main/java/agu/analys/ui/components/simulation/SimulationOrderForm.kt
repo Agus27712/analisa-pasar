@@ -134,8 +134,8 @@ fun SimulationOrderForm(
                     .fillMaxWidth()
                     .height(36.dp)
                     .clip(RoundedCornerShape(6.dp))
-                    .background(Color(0xFF162032))
-                    .border(1.dp, Color(0xFF223249), RoundedCornerShape(6.dp))
+                    .background(TvSurfaceVariant)
+                    .border(1.dp, TvBorder, RoundedCornerShape(6.dp))
                     .clickable { showTypeMenu = true }
                     .padding(horizontal = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -143,14 +143,14 @@ fun SimulationOrderForm(
             ) {
                 Text(
                     text = selectedType.displayName,
-                    color = Color.White,
+                    color = TvTextPrimary,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold
                 )
                 Icon(
                     imageVector = Icons.Default.ArrowDropDown,
                     contentDescription = "Dropdown Order Type",
-                    tint = Color.LightGray,
+                    tint = TvTextSecondary,
                     modifier = Modifier.size(20.dp)
                 )
             }
@@ -158,14 +158,14 @@ fun SimulationOrderForm(
             DropdownMenu(
                 expanded = showTypeMenu,
                 onDismissRequest = { showTypeMenu = false },
-                modifier = Modifier.background(Color(0xFF162032))
+                modifier = Modifier.background(TvCardBackground)
             ) {
                 SimulationOrderType.entries.forEach { type ->
                     DropdownMenuItem(
                         text = {
                             Text(
                                 text = type.displayName,
-                                color = if (selectedType == type) TvGreen else Color.White,
+                                color = if (selectedType == type) TvGreen else TvTextPrimary,
                                 fontSize = 13.sp,
                                 fontWeight = if (selectedType == type) FontWeight.Bold else FontWeight.Normal
                             )
@@ -251,8 +251,8 @@ fun SimulationOrderForm(
                         .weight(1f)
                         .height(28.dp)
                         .clip(RoundedCornerShape(4.dp))
-                        .background(Color(0xFF162032))
-                        .border(1.dp, Color(0xFF223249), RoundedCornerShape(4.dp))
+                        .background(TvSurfaceVariant)
+                        .border(1.dp, TvBorder, RoundedCornerShape(4.dp))
                         .clickable {
                             if (isBuy) {
                                 val availQuote = wallet.getAvailableIdr()
@@ -275,7 +275,7 @@ fun SimulationOrderForm(
                 ) {
                     Text(
                         text = "$pct%",
-                        color = Color.LightGray,
+                        color = TvTextPrimary,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -291,8 +291,8 @@ fun SimulationOrderForm(
                 .fillMaxWidth()
                 .height(38.dp)
                 .clip(RoundedCornerShape(6.dp))
-                .background(Color(0xFF162032))
-                .border(1.dp, Color(0xFF223249), RoundedCornerShape(6.dp))
+                .background(TvSurfaceVariant)
+                .border(1.dp, TvBorder, RoundedCornerShape(6.dp))
                 .padding(horizontal = 10.dp),
             contentAlignment = Alignment.CenterStart
         ) {
@@ -310,7 +310,7 @@ fun SimulationOrderForm(
                     value = inputTotalIdr,
                     onValueChange = { onTotalIdrChange(normalizeSimulationDecimalInput(it)) },
                     textStyle = TextStyle(
-                        color = Color.White,
+                        color = TvTextPrimary,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         textAlign = TextAlign.End
@@ -341,7 +341,7 @@ fun SimulationOrderForm(
                     modifier = Modifier
                         .size(16.dp)
                         .clip(RoundedCornerShape(3.dp))
-                        .background(Color(0xFF1E293B))
+                        .background(TvSurfaceVariant)
                         .clickable { onOpenTopUp() },
                     contentAlignment = Alignment.Center
                 ) {
@@ -360,7 +360,7 @@ fun SimulationOrderForm(
                 } else {
                     "${formatCoinDecimals(wallet.getAvailableCoin(pair.baseAsset))} ${pair.baseAsset}"
                 },
-                color = Color.White,
+                color = TvTextPrimary,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,

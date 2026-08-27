@@ -36,10 +36,7 @@ import agu.analys.config.StrategyMode
 import agu.analys.config.TradingFeeConfig
 import agu.analys.model.AISignalState
 import agu.analys.model.ScalpingPath
-import agu.analys.ui.theme.TvGreen
-import agu.analys.ui.theme.TvRed
-import agu.analys.ui.theme.TvTextPrimary
-import agu.analys.ui.theme.TvTextSecondary
+import agu.analys.ui.theme.*
 import agu.analys.util.PriceFormatter
 import kotlinx.coroutines.delay
 
@@ -205,12 +202,12 @@ fun WaitingEntryRadarCard(
             )
 
             // Radar Status LED Badge (Solid tanpa denyut)
-            val radarLedColor = if (completed == 4) TvGreen else Color(0xFF00E5FF)
+            val radarLedColor = if (completed == 4) TvGreen else TvBlue
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
-                    .background(Color(0xFF142436), RoundedCornerShape(20.dp))
-                    .border(1.dp, Color(0xFF26527C), RoundedCornerShape(20.dp))
+                    .background(TvSurfaceVariant, RoundedCornerShape(20.dp))
+                    .border(1.dp, TvBorder, RoundedCornerShape(20.dp))
                     .padding(horizontal = 8.dp, vertical = 3.dp)
             ) {
                 Box(
@@ -231,7 +228,7 @@ fun WaitingEntryRadarCard(
                 Spacer(Modifier.width(5.dp))
                 Text(
                     text = if (completed == 4) "Eksekusi" else "Wait!",
-                    color = if (completed == 4) TvGreen else Color(0xFF00E5FF),
+                    color = if (completed == 4) TvGreen else TvBlue,
                     fontSize = 9.sp,
                     fontWeight = FontWeight.Black
                 )
@@ -245,12 +242,12 @@ fun WaitingEntryRadarCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(
-                    if (isReclaim) Color(0xFF0F3040) else Color(0xFF0F3822),
+                    if (isReclaim) TvBlue.copy(alpha = 0.15f) else TvGreen.copy(alpha = 0.15f),
                     RoundedCornerShape(8.dp)
                 )
                 .border(
                     1.dp,
-                    if (isReclaim) Color(0xFF00E5FF).copy(alpha = 0.6f) else TvGreen.copy(alpha = 0.6f),
+                    if (isReclaim) TvBlue.copy(alpha = 0.4f) else TvGreen.copy(alpha = 0.4f),
                     RoundedCornerShape(8.dp)
                 )
                 .padding(horizontal = 10.dp, vertical = 6.dp),
@@ -260,7 +257,7 @@ fun WaitingEntryRadarCard(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = "Setup Terdeteksi: $entryTypeBadgeTitle (Konfirmasi $completed/4)",
-                    color = if (isReclaim) Color(0xFF00E5FF) else TvGreen,
+                    color = if (isReclaim) TvBlue else TvGreen,
                     fontSize = 11.5.sp,
                     fontWeight = FontWeight.ExtraBold
                 )
@@ -279,8 +276,8 @@ fun WaitingEntryRadarCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xFF0B141F), RoundedCornerShape(10.dp))
-                .border(1.dp, Color(0xFF1B2E42), RoundedCornerShape(10.dp))
+                .background(TvSurfaceVariant, RoundedCornerShape(10.dp))
+                .border(1.dp, TvBorder, RoundedCornerShape(10.dp))
                 .padding(10.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
@@ -332,8 +329,8 @@ fun WaitingEntryRadarCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xFF101B2B), RoundedCornerShape(10.dp))
-                .border(0.5.dp, Color(0xFF213852), RoundedCornerShape(10.dp))
+                .background(TvSurfaceVariant, RoundedCornerShape(10.dp))
+                .border(0.5.dp, TvBorder, RoundedCornerShape(10.dp))
                 .padding(10.dp)
         ) {
             Text(
@@ -430,8 +427,8 @@ fun WaitingEntryRadarCard(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xFF101C2B), RoundedCornerShape(10.dp))
-                .border(0.5.dp, Color(0xFF233B54), RoundedCornerShape(10.dp))
+                .background(TvSurfaceVariant, RoundedCornerShape(10.dp))
+                .border(0.5.dp, TvBorder, RoundedCornerShape(10.dp))
                 .clickable {
                     currentTipIndex = (currentTipIndex + 1) % tips.size
                 }
@@ -441,7 +438,7 @@ fun WaitingEntryRadarCard(
                 Icon(
                     imageVector = Icons.Default.Lightbulb,
                     contentDescription = "Tips",
-                    tint = Color(0xFFFFD54F),
+                    tint = TvAmber,
                     modifier = Modifier.size(16.dp).padding(top = 1.dp)
                 )
                 Spacer(Modifier.width(8.dp))
@@ -453,7 +450,7 @@ fun WaitingEntryRadarCard(
                     ) {
                         Text(
                             text = "TIPS SAMBIL MENUNGGU ENTRY",
-                            color = Color(0xFFFFD54F),
+                            color = TvAmber,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -492,12 +489,12 @@ private fun RadarChecklistItem(
             modifier = Modifier
                 .size(18.dp)
                 .background(
-                    if (isOk) TvGreen.copy(alpha = 0.2f) else Color(0xFF1A2A3A),
+                    if (isOk) TvGreen.copy(alpha = 0.2f) else TvSurfaceVariant,
                     CircleShape
                 )
                 .border(
                     1.dp,
-                    if (isOk) TvGreen else Color(0xFF2C3E52),
+                    if (isOk) TvGreen else TvBorder,
                     CircleShape
                 ),
             contentAlignment = Alignment.Center
@@ -513,7 +510,7 @@ private fun RadarChecklistItem(
                 Icon(
                     imageVector = Icons.Default.HourglassEmpty,
                     contentDescription = "Pending",
-                    tint = Color(0xFF00E5FF),
+                    tint = TvBlue,
                     modifier = Modifier.size(10.dp)
                 )
             }
@@ -541,14 +538,14 @@ private fun RadarChecklistItem(
         Box(
             modifier = Modifier
                 .background(
-                    if (isOk) TvGreen.copy(alpha = 0.15f) else Color(0xFF132232),
+                    if (isOk) TvGreen.copy(alpha = 0.15f) else TvSurfaceVariant,
                     RoundedCornerShape(4.dp)
                 )
                 .padding(horizontal = 6.dp, vertical = 2.dp)
         ) {
             Text(
                 text = if (isOk) "[✓] OK" else "[⚡ SCAN]",
-                color = if (isOk) TvGreen else Color(0xFF00E5FF),
+                color = if (isOk) TvGreen else TvBlue,
                 fontSize = 9.sp,
                 fontWeight = FontWeight.Bold
             )

@@ -29,10 +29,7 @@ import agu.analys.model.TradingPair
 import agu.analys.ui.animation.AnimatedPercentageBadge
 import agu.analys.ui.animation.FlipCardPriceText
 import agu.analys.ui.components.dashboard.AssetAvatar
-import agu.analys.ui.theme.TvGreen
-import agu.analys.ui.theme.TvRed
-import agu.analys.ui.theme.TvTextPrimary
-import agu.analys.ui.theme.TvTextSecondary
+import agu.analys.ui.theme.*
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -115,13 +112,14 @@ fun DetailTopBar(
         }
 
         // Widget Waktu dengan Dot LED Merah/Hijau yang Kaku (tanpa pulse) di sebelah kiri
-        val ledColor = if (isConnected) Color(0xFF00E676) else Color(0xFFFF3B30)
+        val isLight = LocalAppColors.current == LightAppColors
+        val ledColor = if (isConnected) TvGreen else (if (isLight) Color(0xFFD32F2F) else Color(0xFFFF3B30))
         val displayTime = if (isConnected) currentTimeString else (lastDisconnectTime ?: currentTimeString)
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
-                .background(Color(0xFF0D1824), RoundedCornerShape(8.dp))
-                .border(0.8.dp, if (isConnected) Color(0xFF1E3348) else Color(0xFF4A1A1A), RoundedCornerShape(8.dp))
+                .background(TvSurface, RoundedCornerShape(8.dp))
+                .border(0.8.dp, if (isConnected) TvBorder else (if (isLight) Color(0xFFFFCDD2) else Color(0xFF4A1A1A)), RoundedCornerShape(8.dp))
                 .padding(horizontal = 8.dp, vertical = 5.dp)
         ) {
             // Dot LED Merah/Hijau agak besar di sebelah kiri
@@ -147,7 +145,7 @@ fun DetailTopBar(
 
             Text(
                 text = displayTime,
-                color = if (isConnected) TvTextPrimary else Color(0xFFFF6B6B),
+                color = if (isConnected) TvTextPrimary else (if (isLight) Color(0xFFC62828) else Color(0xFFFF6B6B)),
                 fontSize = 12.5.sp,
                 fontWeight = FontWeight.Bold,
                 fontFamily = FontFamily.Monospace,
@@ -165,15 +163,19 @@ fun DetailPriceHeader(
     activityColor: Color,
     quoteAsset: String = "IDR"
 ) {
+    val textPrimaryColor = TvTextPrimary
+    val greenColor = TvGreen
+    val redColor = TvRed
+
     var previousPrice by remember { mutableStateOf(price) }
-    var priceTickColor by remember { mutableStateOf(TvTextPrimary) }
+    var priceTickColor by remember(textPrimaryColor) { mutableStateOf(textPrimaryColor) }
 
     LaunchedEffect(price) {
         if (!price.isFinite() || price <= 0.0) return@LaunchedEffect
         if (previousPrice > 0.0 && price != previousPrice) {
-            priceTickColor = if (price > previousPrice) TvGreen else TvRed
+            priceTickColor = if (price > previousPrice) greenColor else redColor
             delay(1000L)
-            priceTickColor = TvTextPrimary
+            priceTickColor = textPrimaryColor
         }
         previousPrice = price
     }

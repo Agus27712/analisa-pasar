@@ -31,10 +31,7 @@ import agu.analys.model.WorthCoinInfo
 import agu.analys.ui.animation.AnimatedMetricText
 import agu.analys.ui.animation.SmoothPriceText
 import agu.analys.ui.components.SimpleComposeChart
-import agu.analys.ui.theme.TvGreen
-import agu.analys.ui.theme.TvRed
-import agu.analys.ui.theme.TvTextPrimary
-import agu.analys.ui.theme.TvTextSecondary
+import agu.analys.ui.theme.*
 import agu.analys.util.PriceFormatter
 
 /**
@@ -112,8 +109,8 @@ fun WatchlistCoinCard(
 
     val meterColor = when (activity) {
         ActivityLevel.HIGH -> TvGreen
-        ActivityLevel.MEDIUM -> Color(0xFFFFB300)
-        ActivityLevel.LOW -> Color(0xFF78909C)
+        ActivityLevel.MEDIUM -> TvAmber
+        ActivityLevel.LOW -> TvTextSecondary
         ActivityLevel.UNKNOWN -> TvTextSecondary
     }
 
@@ -142,12 +139,12 @@ fun WatchlistCoinCard(
                     // Rank Pill
                     Box(
                         modifier = Modifier
-                            .background(Color(0xFF1E2836), RoundedCornerShape(5.dp))
+                            .background(TvSurfaceVariant, RoundedCornerShape(5.dp))
                             .padding(horizontal = 5.dp, vertical = 2.dp)
                     ) {
                         Text(
                             text = rankText,
-                            color = Color(0xFFFFB300),
+                            color = TvAmber,
                             fontSize = 10.5.sp,
                             fontWeight = FontWeight.Black
                         )
@@ -240,7 +237,7 @@ fun WatchlistCoinCard(
                         Icon(
                             imageVector = if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
                             contentDescription = "Favorite",
-                            tint = if (isFavorite) Color(0xFFFFB300) else TvTextSecondary,
+                            tint = if (isFavorite) TvAmber else TvTextSecondary,
                             modifier = Modifier.size(17.dp)
                         )
                     }
@@ -318,7 +315,7 @@ fun WatchlistCoinCard(
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(8.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFF09101A))
+                        colors = CardDefaults.cardColors(containerColor = TvSurfaceVariant)
                     ) {
                         SimpleComposeChart(
                             prices = emptyList(),
@@ -341,10 +338,10 @@ private enum class ActivityLevel { HIGH, MEDIUM, LOW, UNKNOWN }
 @Composable
 private fun ActivityChip(activity: ActivityLevel) {
     val (label, background, foreground) = when (activity) {
-        ActivityLevel.HIGH -> Triple("Aktivitas tinggi", Color(0xFF123D2A), TvGreen)
-        ActivityLevel.MEDIUM -> Triple("Aktivitas sedang", Color(0xFF3D3212), Color(0xFFFFB300))
-        ActivityLevel.LOW -> Triple("Aktivitas rendah", Color(0xFF1E2836), Color(0xFF90A4AE))
-        ActivityLevel.UNKNOWN -> Triple("Aktivitas normal", Color(0xFF1E2836), TvTextSecondary)
+        ActivityLevel.HIGH -> Triple("Aktivitas tinggi", TvGreen.copy(alpha = 0.15f), TvGreen)
+        ActivityLevel.MEDIUM -> Triple("Aktivitas sedang", TvAmber.copy(alpha = 0.15f), TvAmber)
+        ActivityLevel.LOW -> Triple("Aktivitas rendah", TvSurfaceVariant, TvTextSecondary)
+        ActivityLevel.UNKNOWN -> Triple("Aktivitas normal", TvSurfaceVariant, TvTextSecondary)
     }
 
     Box(

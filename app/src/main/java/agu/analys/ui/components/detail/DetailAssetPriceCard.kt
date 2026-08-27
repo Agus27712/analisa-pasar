@@ -22,10 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import agu.analys.model.MarketTick
 import agu.analys.ui.animation.FlipCardPriceText
-import agu.analys.ui.theme.TvGreen
-import agu.analys.ui.theme.TvRed
-import agu.analys.ui.theme.TvTextPrimary
-import agu.analys.ui.theme.TvTextSecondary
+import agu.analys.ui.theme.*
 import agu.analys.util.PriceFormatter
 import kotlinx.coroutines.delay
 import kotlin.math.abs
@@ -41,9 +38,13 @@ fun DetailAssetPriceCard(
 ) {
     if (tick == null) return
 
+    val gColor = TvGreen
+    val rColor = TvRed
+    val cardBg = TvCardBackground
+
     val price = tick.price
     val change = tick.change24h
-    val changeColor = if (change >= 0) TvGreen else TvRed
+    val changeColor = if (change >= 0) gColor else rColor
 
     var previousPrice by remember { mutableStateOf(price) }
     var flashState by remember { mutableStateOf<Color?>(null) }
@@ -54,7 +55,7 @@ fun DetailAssetPriceCard(
             val delta = price - previousPrice
             val rel = if (previousPrice > 0.0) abs(delta) / previousPrice else 0.0
             if (rel <= 0.25) {
-                flashState = if (delta > 0) TvGreen.copy(alpha = 0.4f) else TvRed.copy(alpha = 0.4f)
+                flashState = if (delta > 0) gColor.copy(alpha = 0.4f) else rColor.copy(alpha = 0.4f)
                 delay(220)
                 flashState = null
             }
@@ -63,7 +64,7 @@ fun DetailAssetPriceCard(
     }
 
     val animatedBorderColor by animateColorAsState(
-        targetValue = flashState ?: Color(0xFF1E2D3D),
+        targetValue = flashState ?: TvBorder,
         animationSpec = tween(durationMillis = 200),
         label = "price_card_border_glow"
     )
@@ -71,7 +72,7 @@ fun DetailAssetPriceCard(
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF101720)),
+        colors = CardDefaults.cardColors(containerColor = cardBg),
         border = BorderStroke(1.dp, animatedBorderColor)
     ) {
         Column(
@@ -108,12 +109,8 @@ fun DetailAssetPriceCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(10.dp))
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(Color(0xFF141E2A), Color(0xFF0C131B))
-                        )
-                    )
-                    .border(0.5.dp, Color(0x3344607A), RoundedCornerShape(10.dp))
+                    .background(TvSurfaceVariant)
+                    .border(0.5.dp, TvBorder, RoundedCornerShape(10.dp))
                     .padding(horizontal = 12.dp, vertical = 8.dp)
             ) {
                 Column {
@@ -131,7 +128,7 @@ fun DetailAssetPriceCard(
                         Modifier
                             .fillMaxWidth()
                             .height(0.5.dp)
-                            .background(Color(0x1AFFFFFF))
+                            .background(TvBorder)
                     )
                 }
             }

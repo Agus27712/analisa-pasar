@@ -28,8 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import agu.analys.config.StrategyMode
 import agu.analys.model.ScalpingMtfSnapshot
-import agu.analys.ui.theme.TvGreen
-import agu.analys.ui.theme.TvTextSecondary
+import agu.analys.ui.theme.*
 
 data class RadarCheckpointItem(
     val number: Int,
@@ -205,7 +204,7 @@ fun RadarLinearCheckpointStepper(
                 Spacer(Modifier.width(6.dp))
                 Text(
                     text = "($completed/4 Checkpoint)",
-                    color = Color.White,
+                    color = TvTextPrimary,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold
                 )
@@ -213,7 +212,7 @@ fun RadarLinearCheckpointStepper(
 
             Text(
                 text = "$progressPercent%",
-                color = if (completed == 4) TvGreen else Color(0xFF00E5FF),
+                color = if (completed == 4) TvGreen else TvBlue,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.ExtraBold
             )
@@ -225,7 +224,7 @@ fun RadarLinearCheckpointStepper(
                 .fillMaxWidth()
                 .height(7.dp)
                 .clip(RoundedCornerShape(4.dp))
-                .background(Color(0xFF142232))
+                .background(TvSurfaceVariant)
         ) {
             // Fill Bar with smooth gradient animation
             Box(
@@ -235,7 +234,7 @@ fun RadarLinearCheckpointStepper(
                     .clip(RoundedCornerShape(4.dp))
                     .background(
                         if (completed == 4) Brush.horizontalGradient(listOf(Color(0xFF00C853), TvGreen))
-                        else Brush.horizontalGradient(listOf(Color(0xFF0288D1), Color(0xFF00E5FF)))
+                        else Brush.horizontalGradient(listOf(TvBlue.copy(alpha = 0.7f), TvBlue))
                     )
             )
 
@@ -250,7 +249,7 @@ fun RadarLinearCheckpointStepper(
                         modifier = Modifier
                             .width(1.5.dp)
                             .fillMaxHeight()
-                            .background(Color(0xFF0A121C).copy(alpha = 0.7f))
+                            .background(TvBackground.copy(alpha = 0.7f))
                     )
                 }
             }
@@ -272,13 +271,13 @@ fun RadarLinearCheckpointStepper(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFF0E1A27))
+                    .background(TvSurface)
                     .border(
                         1.dp,
                         when {
                             currentItem.isOk -> TvGreen.copy(alpha = 0.4f)
-                            isCurrentScanning -> Color(0xFF00E5FF).copy(alpha = 0.4f)
-                            else -> Color(0xFF1E334A)
+                            isCurrentScanning -> TvBlue.copy(alpha = 0.4f)
+                            else -> TvBorder
                         },
                         RoundedCornerShape(8.dp)
                     )
@@ -300,8 +299,8 @@ fun RadarLinearCheckpointStepper(
                                     .background(
                                         when {
                                             currentItem.isOk -> TvGreen.copy(alpha = 0.15f)
-                                            isCurrentScanning -> Color(0xFF00E5FF).copy(alpha = 0.15f)
-                                            else -> Color(0xFF1A2B3D)
+                                            isCurrentScanning -> TvBlue.copy(alpha = 0.15f)
+                                            else -> TvSurfaceVariant
                                         }
                                     )
                                     .padding(horizontal = 5.dp, vertical = 2.dp)
@@ -310,8 +309,8 @@ fun RadarLinearCheckpointStepper(
                                     text = "STEP ${currentItem.number}/4",
                                     color = when {
                                         currentItem.isOk -> TvGreen
-                                        isCurrentScanning -> Color(0xFF00E5FF)
-                                        else -> Color(0xFF94A3B8)
+                                        isCurrentScanning -> TvBlue
+                                        else -> TvTextSecondary
                                     },
                                     fontSize = 9.sp,
                                     fontWeight = FontWeight.ExtraBold,
@@ -322,7 +321,7 @@ fun RadarLinearCheckpointStepper(
                             Spacer(Modifier.width(5.dp))
                             Text(
                                 text = currentItem.title.substringAfter("· "),
-                                color = Color.White,
+                                color = TvTextPrimary,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 maxLines = 1,
@@ -338,17 +337,17 @@ fun RadarLinearCheckpointStepper(
                                 .clip(RoundedCornerShape(12.dp))
                                 .background(
                                     when {
-                                        currentItem.isOk -> Color(0xFF0F3A22)
-                                        isCurrentScanning -> Color(0xFF0D324D)
-                                        else -> Color(0xFF1A2634)
+                                        currentItem.isOk -> TvGreen.copy(alpha = 0.15f)
+                                        isCurrentScanning -> TvBlue.copy(alpha = 0.15f)
+                                        else -> TvSurfaceVariant
                                     }
                                 )
                                 .border(
                                     0.5.dp,
                                     when {
-                                        currentItem.isOk -> TvGreen.copy(alpha = 0.6f)
-                                        isCurrentScanning -> Color(0xFF00E5FF).copy(alpha = 0.6f)
-                                        else -> Color(0xFF2C3E52)
+                                        currentItem.isOk -> TvGreen.copy(alpha = 0.4f)
+                                        isCurrentScanning -> TvBlue.copy(alpha = 0.4f)
+                                        else -> TvBorder
                                     },
                                     RoundedCornerShape(12.dp)
                                 )
@@ -362,8 +361,8 @@ fun RadarLinearCheckpointStepper(
                                 },
                                 color = when {
                                     currentItem.isOk -> TvGreen
-                                    isCurrentScanning -> Color(0xFF00E5FF)
-                                    else -> Color(0xFF94A3B8)
+                                    isCurrentScanning -> TvBlue
+                                    else -> TvTextSecondary
                                 },
                                 fontSize = 9.sp,
                                 fontWeight = FontWeight.Bold,
@@ -376,7 +375,7 @@ fun RadarLinearCheckpointStepper(
 
                     Text(
                         text = currentItem.detail,
-                        color = if (currentItem.isOk) Color(0xFFE2E8F0) else TvTextSecondary,
+                        color = if (currentItem.isOk) TvTextPrimary else TvTextSecondary,
                         fontSize = 10.5.sp,
                         lineHeight = 14.5.sp,
                         maxLines = 3,

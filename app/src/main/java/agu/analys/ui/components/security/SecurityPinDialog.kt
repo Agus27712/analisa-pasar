@@ -19,9 +19,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import agu.analys.ui.theme.TvGreen
-import agu.analys.ui.theme.TvTextPrimary
-import agu.analys.ui.theme.TvTextSecondary
+import agu.analys.ui.theme.*
 
 @Composable
 fun SecurityPinDialog(
@@ -40,7 +38,7 @@ fun SecurityPinDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = Color(0xFF0F1722),
+        containerColor = TvSurface,
         shape = RoundedCornerShape(20.dp),
         title = {
             Column(
@@ -51,7 +49,7 @@ fun SecurityPinDialog(
                     modifier = Modifier
                         .size(48.dp)
                         .background(
-                            if (isSetupMode) Color(0xFF72B7FF).copy(alpha = 0.15f) else TvGreen.copy(alpha = 0.15f),
+                            if (isSetupMode) TvBlue.copy(alpha = 0.15f) else TvGreen.copy(alpha = 0.15f),
                             CircleShape
                         ),
                     contentAlignment = Alignment.Center
@@ -59,7 +57,7 @@ fun SecurityPinDialog(
                     Icon(
                         imageVector = if (isSetupMode) Icons.Default.Security else Icons.Default.Lock,
                         contentDescription = null,
-                        tint = if (isSetupMode) Color(0xFF72B7FF) else TvGreen,
+                        tint = if (isSetupMode) TvBlue else TvGreen,
                         modifier = Modifier.size(24.dp)
                     )
                 }
@@ -97,12 +95,12 @@ fun SecurityPinDialog(
                             modifier = Modifier
                                 .size(16.dp)
                                 .background(
-                                    if (isFilled) (if (isSetupMode) Color(0xFF72B7FF) else TvGreen) else Color(0xFF1E2836),
+                                    if (isFilled) (if (isSetupMode) TvBlue else TvGreen) else TvBorder,
                                     CircleShape
                                 )
                                 .border(
                                     1.dp,
-                                    if (isFilled) (if (isSetupMode) Color(0xFF72B7FF) else TvGreen) else Color(0xFF37474F),
+                                    if (isFilled) (if (isSetupMode) TvBlue else TvGreen) else TvSurfaceVariant,
                                     CircleShape
                                 )
                         )
@@ -114,7 +112,7 @@ fun SecurityPinDialog(
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
                             text = displayError,
-                            color = Color(0xFFFF5252),
+                            color = TvRed,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -122,7 +120,7 @@ fun SecurityPinDialog(
                             val remaining = (maxAttempts - failedAttempts).coerceAtLeast(0)
                             Text(
                                 text = "⚠️ Sisa kesempatan: $remaining kali sebelum API & PIN dihapus otomatis!",
-                                color = Color(0xFFFFB300),
+                                color = TvAmber,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.SemiBold
                             )
@@ -157,8 +155,8 @@ fun SecurityPinDialog(
                                         .clip(RoundedCornerShape(10.dp))
                                         .background(
                                             when (key) {
-                                                "CLEAR", "BACK" -> Color(0xFF1A2332)
-                                                else -> Color(0xFF1E2A3A)
+                                                "CLEAR", "BACK" -> TvSurfaceVariant
+                                                else -> TvBorder
                                             }
                                         )
                                         .clickable {
@@ -215,7 +213,7 @@ fun SecurityPinDialog(
                     }
                 },
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = if (isSetupMode) Color(0xFF2196F3) else TvGreen
+                    containerColor = if (isSetupMode) TvBlue else TvGreen
                 ),
                 shape = RoundedCornerShape(10.dp),
                 modifier = Modifier.fillMaxWidth()

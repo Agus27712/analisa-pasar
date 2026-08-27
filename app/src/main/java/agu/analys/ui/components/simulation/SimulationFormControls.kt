@@ -24,8 +24,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import agu.analys.ui.theme.TvGreen
-import agu.analys.ui.theme.TvTextSecondary
+import agu.analys.ui.theme.*
 
 @Composable
 fun StepperInputField(
@@ -41,8 +40,8 @@ fun StepperInputField(
             .fillMaxWidth()
             .height(38.dp)
             .clip(RoundedCornerShape(6.dp))
-            .background(Color(0xFF162032))
-            .border(1.dp, Color(0xFF223249), RoundedCornerShape(6.dp)),
+            .background(TvSurfaceVariant)
+            .border(1.dp, TvBorder, RoundedCornerShape(6.dp)),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
@@ -55,7 +54,7 @@ fun StepperInputField(
             Icon(
                 imageVector = Icons.Default.Remove,
                 contentDescription = "Minus",
-                tint = Color.LightGray,
+                tint = TvTextSecondary,
                 modifier = Modifier.size(16.dp)
             )
         }
@@ -79,7 +78,7 @@ fun StepperInputField(
                 value = value,
                 onValueChange = { onValueChange(normalizeSimulationDecimalInput(it)) },
                 textStyle = TextStyle(
-                    color = Color.White,
+                    color = TvTextPrimary,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
                     textAlign = TextAlign.Center
@@ -100,7 +99,7 @@ fun StepperInputField(
             Icon(
                 imageVector = Icons.Default.Add,
                 contentDescription = "Plus",
-                tint = Color.LightGray,
+                tint = TvTextSecondary,
                 modifier = Modifier.size(16.dp)
             )
         }

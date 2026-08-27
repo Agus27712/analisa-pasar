@@ -21,9 +21,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import agu.analys.config.TradingFeeConfig
-import agu.analys.ui.theme.TvGreen
-import agu.analys.ui.theme.TvRed
-import agu.analys.ui.theme.TvTextSecondary
+import agu.analys.ui.theme.*
 
 /**
  * Komponen Modular: Estimasi & Simulasi Biaya Transaksi pada Card Radar Status Live.
@@ -73,8 +71,8 @@ fun RadarTransactionFeeSection(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(Color(0xFF0C1622), RoundedCornerShape(12.dp))
-            .border(1.dp, Color(0xFF1B2F44), RoundedCornerShape(12.dp))
+            .background(TvSurfaceVariant, RoundedCornerShape(12.dp))
+            .border(1.dp, TvBorder, RoundedCornerShape(12.dp))
             .padding(12.dp)
     ) {
         // 1. Header Section
@@ -87,13 +85,13 @@ fun RadarTransactionFeeSection(
                 Icon(
                     imageVector = Icons.Default.ReceiptLong,
                     contentDescription = null,
-                    tint = Color(0xFF4FC3F7),
+                    tint = TvBlue,
                     modifier = Modifier.size(16.dp)
                 )
                 Spacer(Modifier.width(6.dp))
                 Text(
                     text = if (isBuyMode) "Transaski & Biaya (buy)" else "Penjualan & Profit (sell)",
-                    color = Color(0xFF4FC3F7),
+                    color = TvBlue,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.ExtraBold,
                     letterSpacing = 0.4.sp
@@ -106,20 +104,20 @@ fun RadarTransactionFeeSection(
                 modifier = Modifier
                     .clip(RoundedCornerShape(12.dp))
                     .clickable { showFeeDetailModal = true }
-                    .background(Color(0xFF142436))
-                    .border(0.5.dp, Color(0xFF26527C), RoundedCornerShape(12.dp))
+                    .background(TvSurface)
+                    .border(0.5.dp, TvBorder, RoundedCornerShape(12.dp))
                     .padding(horizontal = 7.dp, vertical = 3.dp)
             ) {
                 Icon(
                     imageVector = Icons.Default.Info,
                     contentDescription = "Rincian Biaya",
-                    tint = Color(0xFF00E5FF),
+                    tint = TvBlue,
                     modifier = Modifier.size(12.dp)
                 )
                 Spacer(Modifier.width(4.dp))
                 Text(
                     text = "Rincian Fee",
-                    color = Color(0xFF00E5FF),
+                    color = TvBlue,
                     fontSize = 9.sp,
                     fontWeight = FontWeight.Bold
                 )
@@ -132,7 +130,7 @@ fun RadarTransactionFeeSection(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xFF14202E), RoundedCornerShape(8.dp))
+                .background(TvSurface, RoundedCornerShape(8.dp))
                 .padding(3.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
@@ -201,7 +199,7 @@ fun RadarTransactionFeeSection(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xFF14202E), RoundedCornerShape(8.dp))
+                .background(TvSurface, RoundedCornerShape(8.dp))
                 .padding(3.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
@@ -281,14 +279,14 @@ fun OrderTypeTab(
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(6.dp))
-            .background(if (isSelected) Color(0xFF1E3A5A) else Color.Transparent)
+            .background(if (isSelected) TvBlue.copy(alpha = 0.15f) else Color.Transparent)
             .clickable(onClick = onClick)
             .padding(vertical = 5.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(
             text = title,
-            color = if (isSelected) Color(0xFF00E5FF) else TvTextSecondary,
+            color = if (isSelected) TvBlue else TvTextSecondary,
             fontSize = 9.5.sp,
             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
         )
@@ -305,15 +303,15 @@ fun QuickNominalChip(
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(6.dp))
-            .background(if (selected) Color(0xFF173650) else Color(0xFF101A24))
-            .border(1.dp, if (selected) Color(0xFF00E5FF) else Color(0xFF1E2E3E), RoundedCornerShape(6.dp))
+            .background(if (selected) TvBlue.copy(alpha = 0.15f) else TvSurface)
+            .border(1.dp, if (selected) TvBlue else TvBorder, RoundedCornerShape(6.dp))
             .clickable(onClick = onClick)
             .padding(vertical = 5.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(
             text = label,
-            color = if (selected) Color(0xFF00E5FF) else TvTextSecondary,
+            color = if (selected) TvBlue else TvTextSecondary,
             fontSize = 9.5.sp,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
         )
@@ -325,8 +323,9 @@ fun TransactionDetailRow(
     label: String,
     value: String,
     subValue: String? = null,
-    valueColor: Color = Color.White
+    valueColor: Color = Color.Unspecified
 ) {
+    val resolvedValueColor = if (valueColor == Color.Unspecified) TvTextPrimary else valueColor
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -334,7 +333,7 @@ fun TransactionDetailRow(
     ) {
         Text(
             text = label,
-            color = Color(0xFF90A4AE),
+            color = TvTextSecondary,
             fontSize = 11.sp,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -345,7 +344,7 @@ fun TransactionDetailRow(
         Column(horizontalAlignment = Alignment.End) {
             Text(
                 text = value,
-                color = valueColor,
+                color = resolvedValueColor,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,

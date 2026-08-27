@@ -58,12 +58,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import agu.analys.model.AISignalState
 import agu.analys.model.SignalAction
-import agu.analys.ui.theme.TvAmber
-import agu.analys.ui.theme.TvCardBackground
-import agu.analys.ui.theme.TvGreen
-import agu.analys.ui.theme.TvRed
-import agu.analys.ui.theme.TvTextPrimary
-import agu.analys.ui.theme.TvTextSecondary
+import agu.analys.ui.theme.*
 import agu.analys.util.PriceFormatter
 
 @Composable
@@ -108,12 +103,12 @@ fun AISignalCard(
                 Spacer(Modifier.height(6.dp))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     if (signal.regimeDetected.isNotBlank()) {
-                        Box(Modifier.clip(RoundedCornerShape(6.dp)).background(Color(0x1AFFFFFF)).padding(horizontal = 8.dp, vertical = 3.dp)) {
+                        Box(Modifier.clip(RoundedCornerShape(6.dp)).background(TvSurfaceVariant).padding(horizontal = 8.dp, vertical = 3.dp)) {
                             Text("Rejim: ${signal.regimeDetected}", fontSize = 9.sp, fontWeight = FontWeight.SemiBold, color = TvTextSecondary)
                         }
                     }
                     if (signal.backtestScore > 0) {
-                        Box(Modifier.clip(RoundedCornerShape(6.dp)).background(Color(0x1A00E676)).padding(horizontal = 8.dp, vertical = 3.dp)) {
+                        Box(Modifier.clip(RoundedCornerShape(6.dp)).background(TvGreen.copy(alpha = 0.15f)).padding(horizontal = 8.dp, vertical = 3.dp)) {
                             Text("Walk-Forward Score: ${signal.backtestScore}/100 (${String.format(java.util.Locale.US, "%.0f", signal.backtestWinRatePct)}% Win)", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = TvGreen)
                         }
                     }
@@ -134,7 +129,7 @@ fun AISignalCard(
                 Text(actionNameIndo, fontSize = 18.sp, fontWeight = FontWeight.Black, color = actionColor, modifier = Modifier.padding(start = 8.dp))
             }
             Spacer(Modifier.height(10.dp))
-            LinearProgressIndicator(progress = { (signal.confidence / 100.0f).coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(3.dp)), color = actionColor, trackColor = Color(0x1AFFFFFF))
+            LinearProgressIndicator(progress = { (signal.confidence / 100.0f).coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(3.dp)), color = actionColor, trackColor = TvBorder)
             Spacer(Modifier.height(14.dp))
             Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 LevelRow("ENTRY / MASUK", formatLevel(signal.entryPrice), TvTextPrimary)
@@ -144,9 +139,9 @@ fun AISignalCard(
                 LevelRow("R:R MATEMATIS", signal.riskRewardRatio, TvTextPrimary)
             }
             Spacer(Modifier.height(10.dp))
-            Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Color(0x0AFFFFFF)).padding(horizontal = 10.dp, vertical = 8.dp), verticalAlignment = Alignment.Top) { Icon(Icons.Default.Info, contentDescription = null, tint = TvTextSecondary, modifier = Modifier.size(16.dp)); Spacer(Modifier.width(7.dp)); Text("TP/SL adalah level latihan berbasis ATR, bukan prediksi harga pasti atau support/resistance.", fontSize = 10.sp, color = TvTextSecondary, lineHeight = 14.sp) }
+            Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(TvSurfaceVariant.copy(alpha = 0.4f)).padding(horizontal = 10.dp, vertical = 8.dp), verticalAlignment = Alignment.Top) { Icon(Icons.Default.Info, contentDescription = null, tint = TvTextSecondary, modifier = Modifier.size(16.dp)); Spacer(Modifier.width(7.dp)); Text("TP/SL adalah level latihan berbasis ATR, bukan prediksi harga pasti atau support/resistance.", fontSize = 10.sp, color = TvTextSecondary, lineHeight = 14.sp) }
             Spacer(Modifier.height(10.dp))
-            Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Color(0x0DFFFFFF)).border(1.dp, Color(0x14FFFFFF), RoundedCornerShape(14.dp)).animateContentSize()) {
+            Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(TvSurfaceVariant).border(1.dp, TvBorder, RoundedCornerShape(14.dp)).animateContentSize()) {
                 Row(modifier = Modifier.fillMaxWidth().clickable { detailsExpanded = !detailsExpanded }.padding(horizontal = 12.dp, vertical = 11.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Column(modifier = Modifier.weight(1f)) { Text("KENAPA HASILNYA BEGINI?", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TvGreen, letterSpacing = 0.8.sp); Text(if (detailsExpanded) "Ringkasan lengkap faktor analisis" else "Ketuk untuk belajar Market Regime, RSI, EMA, MACD, ATR, dan lainnya", fontSize = 11.sp, color = TvTextSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis) }
                     Icon(if (detailsExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, contentDescription = null, tint = TvGreen, modifier = Modifier.size(22.dp))
@@ -168,28 +163,28 @@ fun AISignalCard(
             Spacer(Modifier.height(12.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = { val launchIntent = context.packageManager.getLaunchIntentForPackage("id.co.bitcoin"); if (launchIntent != null) { launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); context.startActivity(launchIntent) } else Toast.makeText(context, "Aplikasi Indodax belum terpasang di HP ini.", Toast.LENGTH_SHORT).show() }, modifier = Modifier.weight(1f).height(44.dp).testTag("execute_signal_button"), colors = ButtonDefaults.buttonColors(containerColor = TvGreen), shape = RoundedCornerShape(12.dp), contentPadding = PaddingValues(horizontal = 8.dp)) { Icon(Icons.Default.OpenInNew, null, Modifier.size(16.dp), tint = Color.Black); Spacer(Modifier.width(4.dp)); Text("Buka Indodax", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.Black, maxLines = 1) }
-                OutlinedButton(onClick = onDeepAuditClick, enabled = !isAuditLoading, modifier = Modifier.weight(1f).height(44.dp).testTag("ai_audit_button"), colors = ButtonDefaults.outlinedButtonColors(contentColor = TvTextPrimary), border = BorderStroke(1.dp, Color(0x33FFFFFF)), shape = RoundedCornerShape(12.dp), contentPadding = PaddingValues(horizontal = 8.dp)) {
-                    if (isAuditLoading) CircularProgressIndicator(modifier = Modifier.size(15.dp), strokeWidth = 2.dp, color = TvGreen) else Icon(Icons.Default.AutoAwesome, null, tint = Color(0xFF8E8CD8), modifier = Modifier.size(16.dp))
+                OutlinedButton(onClick = onDeepAuditClick, enabled = !isAuditLoading, modifier = Modifier.weight(1f).height(44.dp).testTag("ai_audit_button"), colors = ButtonDefaults.outlinedButtonColors(contentColor = TvTextPrimary), border = BorderStroke(1.dp, TvBorder), shape = RoundedCornerShape(12.dp), contentPadding = PaddingValues(horizontal = 8.dp)) {
+                    if (isAuditLoading) CircularProgressIndicator(modifier = Modifier.size(15.dp), strokeWidth = 2.dp, color = TvGreen) else Icon(Icons.Default.AutoAwesome, null, tint = TvBlue, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp)); Text("Groq Audit", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
                 }
             }
             if (onRequestGemini != null) {
                 Spacer(Modifier.height(8.dp))
-                OutlinedButton(onClick = onRequestGemini, enabled = !isGeminiLoading, modifier = Modifier.fillMaxWidth().height(42.dp).testTag("gemini_summary_button"), colors = ButtonDefaults.outlinedButtonColors(contentColor = TvTextPrimary), border = BorderStroke(1.dp, Color(0x3324A8FF)), shape = RoundedCornerShape(12.dp), contentPadding = PaddingValues(horizontal = 6.dp)) {
-                    if (isGeminiLoading) CircularProgressIndicator(modifier = Modifier.size(15.dp), strokeWidth = 2.dp, color = TvGreen) else Icon(Icons.Default.AutoAwesome, null, tint = Color(0xFF6FB8FF), modifier = Modifier.size(15.dp))
+                OutlinedButton(onClick = onRequestGemini, enabled = !isGeminiLoading, modifier = Modifier.fillMaxWidth().height(42.dp).testTag("gemini_summary_button"), colors = ButtonDefaults.outlinedButtonColors(contentColor = TvTextPrimary), border = BorderStroke(1.dp, TvBlue.copy(alpha = 0.25f)), shape = RoundedCornerShape(12.dp), contentPadding = PaddingValues(horizontal = 6.dp)) {
+                    if (isGeminiLoading) CircularProgressIndicator(modifier = Modifier.size(15.dp), strokeWidth = 2.dp, color = TvGreen) else Icon(Icons.Default.AutoAwesome, null, tint = TvBlue, modifier = Modifier.size(15.dp))
                     Spacer(Modifier.width(4.dp)); Text("Gemini 24J", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
                 }
             }
             if (auditText != null || geminiSummaryText != null) {
                 Spacer(Modifier.height(10.dp))
-                Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Color(0x0DFFFFFF)).border(1.dp, Color(0x14FFFFFF), RoundedCornerShape(14.dp)).padding(12.dp)) {
+                Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(TvSurfaceVariant).border(1.dp, TvBorder, RoundedCornerShape(14.dp)).padding(12.dp)) {
                     if (auditText != null) {
                         Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) { Text("GROQ • AUDIT AI", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TvGreen); if (onClearAudit != null) Text("Hapus", fontSize = 10.sp, color = TvTextSecondary, modifier = Modifier.clickable { onClearAudit() }) }
                         Spacer(Modifier.height(6.dp)); Text(auditText, fontSize = 11.sp, color = TvTextPrimary, lineHeight = 16.sp)
                     }
                     if (geminiSummaryText != null) {
                         if (auditText != null) Spacer(Modifier.height(12.dp))
-                        Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) { Text("GEMINI • CHART 24J", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF6FB8FF)); if (onClearGemini != null) Text("Hapus", fontSize = 10.sp, color = TvTextSecondary, modifier = Modifier.clickable { onClearGemini() }) }
+                        Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) { Text("GEMINI • CHART 24J", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TvBlue); if (onClearGemini != null) Text("Hapus", fontSize = 10.sp, color = TvTextSecondary, modifier = Modifier.clickable { onClearGemini() }) }
                         Spacer(Modifier.height(6.dp)); Text(geminiSummaryText, fontSize = 11.sp, color = TvTextPrimary, lineHeight = 16.sp)
                     }
                 }
@@ -202,7 +197,7 @@ private fun findReason(signal: AISignalState, prefix: String): String = signal.r
 
 @Composable
 private fun LearningFactorRow(title: String, value: String, lesson: String) {
-    Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp)).background(Color(0x0AFFFFFF)).padding(10.dp)) {
+    Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp)).background(TvSurfaceVariant).padding(10.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) { Text(title, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TvTextPrimary, modifier = Modifier.weight(0.35f)); Text(value, fontSize = 10.sp, color = TvGreen, lineHeight = 14.sp, modifier = Modifier.weight(0.65f)) }
         Spacer(Modifier.height(4.dp)); Text("Belajar: $lesson", fontSize = 10.sp, color = TvTextSecondary, lineHeight = 14.sp)
     }
@@ -212,7 +207,7 @@ private fun formatLevel(value: Double): String = if (value > 0.0 && value.isFini
 
 @Composable
 private fun LevelRow(label: String, value: String, color: Color) {
-    Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Color(0x0AFFFFFF)).border(1.dp, Color(0x14FFFFFF), RoundedCornerShape(10.dp)).padding(horizontal = 12.dp, vertical = 9.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+    Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(TvSurfaceVariant).border(1.dp, TvBorder, RoundedCornerShape(10.dp)).padding(horizontal = 12.dp, vertical = 9.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
         Text(label, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = color, letterSpacing = 0.3.sp)
         Text(value, fontSize = 13.sp, fontWeight = FontWeight.Medium, fontFamily = FontFamily.SansSerif, color = color, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }

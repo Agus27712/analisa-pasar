@@ -26,9 +26,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import agu.analys.ui.theme.TvGreen
-import agu.analys.ui.theme.TvRed
-import agu.analys.ui.theme.TvTextSecondary
+import agu.analys.ui.theme.*
 import agu.analys.util.PriceFormatter
 
 @Composable
@@ -83,8 +81,8 @@ fun RadarBuySection(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xFF101E2E), RoundedCornerShape(10.dp))
-                .border(1.dp, Color(0xFF1C3754), RoundedCornerShape(10.dp))
+                .background(TvCardBackground, RoundedCornerShape(10.dp))
+                .border(1.dp, TvBorder, RoundedCornerShape(10.dp))
                 .padding(10.dp)
         ) {
             Row(
@@ -102,7 +100,7 @@ fun RadarBuySection(
                     Spacer(Modifier.width(6.dp))
                     Text(
                         text = "Saldo IDR (${if (isRealMode) "Real Indodax" else "Simulasi"}):",
-                        color = Color(0xFFB0BEC5),
+                        color = TvTextSecondary,
                         fontSize = 10.5.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -124,7 +122,7 @@ fun RadarBuySection(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xFF0A1810), RoundedCornerShape(8.dp))
+                    .background(TvSurfaceVariant, RoundedCornerShape(8.dp))
                     .border(1.dp, TvGreen.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
                     .padding(horizontal = 10.dp, vertical = 8.dp)
             ) {
@@ -180,11 +178,11 @@ fun RadarBuySection(
                                     singleLine = true,
                                     colors = OutlinedTextFieldDefaults.colors(
                                         focusedBorderColor = TvGreen,
-                                        unfocusedBorderColor = Color(0xFF1E2836),
-                                        focusedContainerColor = Color(0xFF09121B),
-                                        unfocusedContainerColor = Color(0xFF09121B),
-                                        focusedTextColor = Color.White,
-                                        unfocusedTextColor = Color.White
+                                        unfocusedBorderColor = TvBorder,
+                                        focusedContainerColor = TvSurfaceVariant,
+                                        unfocusedContainerColor = TvSurfaceVariant,
+                                        focusedTextColor = TvTextPrimary,
+                                        unfocusedTextColor = TvTextPrimary
                                     ),
                                     modifier = Modifier.weight(1f)
                                 )
@@ -200,11 +198,11 @@ fun RadarBuySection(
                                     singleLine = true,
                                     colors = OutlinedTextFieldDefaults.colors(
                                         focusedBorderColor = TvGreen,
-                                        unfocusedBorderColor = Color(0xFF1E2836),
-                                        focusedContainerColor = Color(0xFF09121B),
-                                        unfocusedContainerColor = Color(0xFF09121B),
-                                        focusedTextColor = Color.White,
-                                        unfocusedTextColor = Color.White
+                                        unfocusedBorderColor = TvBorder,
+                                        focusedContainerColor = TvSurfaceVariant,
+                                        unfocusedContainerColor = TvSurfaceVariant,
+                                        focusedTextColor = TvTextPrimary,
+                                        unfocusedTextColor = TvTextPrimary
                                     ),
                                     modifier = Modifier.weight(1f)
                                 )
@@ -221,8 +219,8 @@ fun RadarBuySection(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xFF0F2338), RoundedCornerShape(8.dp))
-                .border(1.dp, Color(0xFF00E5FF).copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                .background(TvCardBackground, RoundedCornerShape(8.dp))
+                .border(1.dp, TvBlue.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
                 .padding(horizontal = 10.dp, vertical = 8.dp)
         ) {
             Column {
@@ -233,7 +231,7 @@ fun RadarBuySection(
                 ) {
                     Text(
                         text = "🛡️ POSITION SIZING (RISK MGMT)",
-                        color = Color(0xFF00E5FF),
+                        color = TvBlue,
                         fontSize = 10.5.sp,
                         fontWeight = FontWeight.Black
                     )
@@ -245,7 +243,7 @@ fun RadarBuySection(
                     ) {
                         Text(
                             text = if (isRiskCalculatorOpen) "Close ▲" else "Calculate ▼",
-                            color = Color(0xFF00E5FF),
+                            color = TvBlue,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -273,18 +271,18 @@ fun RadarBuySection(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("1. Risk / Trade:", color = Color(0xFF90A4AE), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            Text("1. Risk / Trade:", color = TvTextSecondary, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                 listOf(1.0, 2.0, 3.0, 5.0).forEach { r ->
                                     Box(
                                         modifier = Modifier
                                             .background(
-                                                if (selectedRiskPct == r) Color(0xFF00E5FF) else Color(0xFF16273B),
+                                                if (selectedRiskPct == r) TvBlue else TvSurfaceVariant,
                                                 RoundedCornerShape(4.dp)
                                             )
                                             .border(
                                                 0.5.dp,
-                                                if (selectedRiskPct == r) Color(0xFF00E5FF) else Color(0xFF263C52),
+                                                if (selectedRiskPct == r) TvBlue else TvBorder,
                                                 RoundedCornerShape(4.dp)
                                             )
                                             .clickable { selectedRiskPct = r }
@@ -292,7 +290,7 @@ fun RadarBuySection(
                                     ) {
                                         Text(
                                             text = "$r%",
-                                            color = if (selectedRiskPct == r) Color.Black else Color.White,
+                                            color = if (selectedRiskPct == r) Color.Black else TvTextPrimary,
                                             fontSize = 10.sp,
                                             fontWeight = FontWeight.Bold
                                         )
@@ -307,18 +305,18 @@ fun RadarBuySection(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("2. Stop Loss (SL):", color = Color(0xFF90A4AE), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            Text("2. Stop Loss (SL):", color = TvTextSecondary, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                 listOf(1.5, 2.5, 3.5, 5.0).forEach { sl ->
                                     Box(
                                         modifier = Modifier
                                             .background(
-                                                if (selectedSlTolerancePct == sl) TvRed else Color(0xFF16273B),
+                                                if (selectedSlTolerancePct == sl) TvRed else TvSurfaceVariant,
                                                 RoundedCornerShape(4.dp)
                                             )
                                             .border(
                                                 0.5.dp,
-                                                if (selectedSlTolerancePct == sl) TvRed else Color(0xFF263C52),
+                                                if (selectedSlTolerancePct == sl) TvRed else TvBorder,
                                                 RoundedCornerShape(4.dp)
                                             )
                                             .clickable { selectedSlTolerancePct = sl }
@@ -326,7 +324,7 @@ fun RadarBuySection(
                                     ) {
                                         Text(
                                             text = "-$sl%",
-                                            color = Color.White,
+                                            color = if (selectedSlTolerancePct == sl) Color.White else TvTextPrimary,
                                             fontSize = 10.sp,
                                             fontWeight = FontWeight.Bold
                                         )
@@ -339,18 +337,18 @@ fun RadarBuySection(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .background(Color(0xFF0A1420), RoundedCornerShape(6.dp))
-                                .border(0.5.dp, Color(0xFF162B40), RoundedCornerShape(6.dp))
+                                .background(TvSurfaceVariant, RoundedCornerShape(6.dp))
+                                .border(0.5.dp, TvBorder, RoundedCornerShape(6.dp))
                                 .padding(8.dp)
                         ) {
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text("Max Loss Tolerated:", color = Color(0xFF78909C), fontSize = 9.5.sp)
+                                    Text("Max Loss Tolerated:", color = TvTextSecondary, fontSize = 9.5.sp)
                                     Text("Rp ${PriceFormatter.formatIdrNumber(maxRiskAmountIdr)} ($selectedRiskPct% Capital)", color = TvRed, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                 }
                                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text("Suggested Position Size:", color = Color(0xFF00E5FF), fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                                    Text("Rp ${PriceFormatter.formatIdrNumber(calculatedPositionSizeIdr)}", color = Color(0xFF00E5FF), fontSize = 11.sp, fontWeight = FontWeight.Black)
+                                    Text("Suggested Position Size:", color = TvBlue, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                    Text("Rp ${PriceFormatter.formatIdrNumber(calculatedPositionSizeIdr)}", color = TvBlue, fontSize = 11.sp, fontWeight = FontWeight.Black)
                                 }
                             }
                         }
@@ -362,7 +360,7 @@ fun RadarBuySection(
                                 isCustomNominalOpen = false
                                 isRiskCalculatorOpen = false
                             },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E5FF), contentColor = Color.Black),
+                            colors = ButtonDefaults.buttonColors(containerColor = TvBlue, contentColor = Color.Black),
                             shape = RoundedCornerShape(6.dp),
                             modifier = Modifier.fillMaxWidth().height(34.dp),
                             contentPadding = PaddingValues(0.dp)
@@ -379,7 +377,7 @@ fun RadarBuySection(
         // Quick Nominal Selector
         Text(
             text = "PILIH NOMINAL PEMBELIAN (IDR):",
-            color = Color(0xFF90A4AE),
+            color = TvTextSecondary,
             fontSize = 9.5.sp,
             fontWeight = FontWeight.Black
         )
@@ -460,12 +458,12 @@ fun RadarBuySection(
                     keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Color(0xFF4FC3F7),
-                        unfocusedBorderColor = Color(0xFF263C52),
-                        focusedContainerColor = Color(0xFF101C2B),
-                        unfocusedContainerColor = Color(0xFF101C2B),
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White
+                        focusedBorderColor = TvBlue,
+                        unfocusedBorderColor = TvBorder,
+                        focusedContainerColor = TvSurfaceVariant,
+                        unfocusedContainerColor = TvSurfaceVariant,
+                        focusedTextColor = TvTextPrimary,
+                        unfocusedTextColor = TvTextPrimary
                     ),
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -478,8 +476,8 @@ fun RadarBuySection(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xFF101C2A), RoundedCornerShape(10.dp))
-                .border(0.5.dp, Color(0xFF1C3147), RoundedCornerShape(10.dp))
+                .background(TvCardBackground, RoundedCornerShape(10.dp))
+                .border(0.5.dp, TvBorder, RoundedCornerShape(10.dp))
                 .padding(10.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
@@ -497,7 +495,7 @@ fun RadarBuySection(
                 valueColor = TvRed
             )
 
-            HorizontalDivider(color = Color(0xFF1B2D40), thickness = 0.5.dp, modifier = Modifier.padding(vertical = 2.dp))
+            HorizontalDivider(color = TvBorder, thickness = 0.5.dp, modifier = Modifier.padding(vertical = 2.dp))
 
             // Total Diterima Bersih Koin
             Row(

@@ -16,8 +16,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import agu.analys.config.StrategyMode
 import agu.analys.model.MarketConnectionState
-import agu.analys.ui.theme.TvGreen
-import agu.analys.ui.theme.TvTextSecondary
+import agu.analys.ui.theme.*
 
 /**
  * Bar status koneksi in-line di bawah area Chart.
@@ -39,15 +38,16 @@ fun LiveModeStatusBar(
         loading -> "SYNC"
         else -> "OFFLINE"
     }
+    val isLight = LocalAppColors.current == LightAppColors
     val statusColor = when {
         live -> TvGreen
-        loading -> Color(0xFFFFB300)
-        else -> Color(0xFFFF5252)
+        loading -> if (isLight) Color(0xFFE65100) else Color(0xFFFFB300)
+        else -> if (isLight) Color(0xFFC62828) else Color(0xFFFF5252)
     }
     val barBg = when {
-        live -> Color(0xFF0C1917)
-        loading -> Color(0xFF1F1A0A)
-        else -> Color(0xFF1F0A0A)
+        live -> if (isLight) Color(0xFFE8F5E9) else Color(0xFF0C1917)
+        loading -> if (isLight) Color(0xFFFFF3E0) else Color(0xFF1F1A0A)
+        else -> if (isLight) Color(0xFFFFEBEE) else Color(0xFF1F0A0A)
     }
 
     val modeLabel = when (strategyMode) {
@@ -57,8 +57,8 @@ fun LiveModeStatusBar(
     }
     val modeColor = when (strategyMode) {
         StrategyMode.SCALPING -> TvGreen
-        StrategyMode.SECOND_WAVE -> Color(0xFF00E5FF)
-        StrategyMode.SWING -> Color(0xFF72B7FF)
+        StrategyMode.SECOND_WAVE -> TvBlue
+        StrategyMode.SWING -> if (isLight) Color(0xFF1565C0) else Color(0xFF72B7FF)
     }
 
     Row(
@@ -145,15 +145,16 @@ fun StickyFloatingStatusBar(
         loading -> "SYNC"
         else -> "OFFLINE"
     }
+    val isLight = LocalAppColors.current == LightAppColors
     val statusColor = when {
         live -> TvGreen
-        loading -> Color(0xFFFFB300)
-        else -> Color(0xFFFF5252)
+        loading -> if (isLight) Color(0xFFE65100) else Color(0xFFFFB300)
+        else -> if (isLight) Color(0xFFC62828) else Color(0xFFFF5252)
     }
     val barBg = when {
-        live -> Color(0xF2091815)
-        loading -> Color(0xF21F1A0A)
-        else -> Color(0xF21F0A0A)
+        live -> if (isLight) Color(0xF2E8F5E9) else Color(0xF2091815)
+        loading -> if (isLight) Color(0xF2FFF3E0) else Color(0xF21F1A0A)
+        else -> if (isLight) Color(0xF2FFEBEE) else Color(0xF21F0A0A)
     }
 
     val modeLabel = when (strategyMode) {
@@ -163,8 +164,8 @@ fun StickyFloatingStatusBar(
     }
     val modeColor = when (strategyMode) {
         StrategyMode.SCALPING -> TvGreen
-        StrategyMode.SECOND_WAVE -> Color(0xFF00E5FF)
-        StrategyMode.SWING -> Color(0xFF72B7FF)
+        StrategyMode.SECOND_WAVE -> TvBlue
+        StrategyMode.SWING -> if (isLight) Color(0xFF1565C0) else Color(0xFF72B7FF)
     }
 
     Row(

@@ -20,9 +20,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import agu.analys.model.OrderBookItem
-import agu.analys.ui.theme.TvGreen
-import agu.analys.ui.theme.TvRed
-import agu.analys.ui.theme.TvTextSecondary
+import agu.analys.ui.theme.*
 import agu.analys.util.PriceFormatter
 
 @Composable
@@ -94,7 +92,7 @@ fun SimulationOrderBook(
                 .fillMaxWidth()
                 .padding(vertical = 6.dp)
                 .clip(RoundedCornerShape(4.dp))
-                .background(Color(0xFF162032))
+                .background(TvSurfaceVariant)
                 .padding(horizontal = 8.dp, vertical = 4.dp),
             contentAlignment = Alignment.CenterStart
         ) {
@@ -195,7 +193,7 @@ private fun OrderBookRow(
             )
             Text(
                 text = formatAmountShort(amount, quoteAsset),
-                color = Color(0xFFD1D5DB),
+                color = TvTextPrimary,
                 fontSize = 11.sp,
                 textAlign = TextAlign.End
             )

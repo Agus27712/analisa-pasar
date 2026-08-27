@@ -123,7 +123,7 @@ fun PortfolioScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xFF09101A))
+                .background(TvBackground)
                 .padding(horizontal = 14.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
@@ -175,13 +175,13 @@ fun PortfolioScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xFF09101A))
+                .background(TvBackground)
                 .padding(horizontal = 14.dp, vertical = 6.dp)
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xFF101720), RoundedCornerShape(10.dp))
+                    .background(TvSurfaceVariant, RoundedCornerShape(10.dp))
                     .padding(3.dp)
             ) {
                 // Tab 1: SIMULASI
@@ -189,7 +189,7 @@ fun PortfolioScreen(
                     modifier = Modifier
                         .weight(1f)
                         .clip(RoundedCornerShape(8.dp))
-                        .background(if (!showRealPortfolioMode) Color(0xFF1E2836) else Color.Transparent)
+                        .background(if (!showRealPortfolioMode) TvCardBackground else Color.Transparent)
                         .clickable { showRealPortfolioMode = false }
                         .padding(vertical = 8.dp),
                     contentAlignment = Alignment.Center
@@ -198,7 +198,7 @@ fun PortfolioScreen(
                         Icon(
                             imageVector = Icons.Default.AccountBalanceWallet,
                             contentDescription = null,
-                            tint = if (!showRealPortfolioMode) Color(0xFF72B7FF) else TvTextSecondary,
+                            tint = if (!showRealPortfolioMode) TvBlue else TvTextSecondary,
                             modifier = Modifier.size(14.dp)
                         )
                         Spacer(Modifier.width(6.dp))
@@ -216,7 +216,7 @@ fun PortfolioScreen(
                     modifier = Modifier
                         .weight(1f)
                         .clip(RoundedCornerShape(8.dp))
-                        .background(if (showRealPortfolioMode) Color(0xFF1E2836) else Color.Transparent)
+                        .background(if (showRealPortfolioMode) TvCardBackground else Color.Transparent)
                         .clickable {
                             showRealPortfolioMode = true
                             if (!isPinUnlocked) {

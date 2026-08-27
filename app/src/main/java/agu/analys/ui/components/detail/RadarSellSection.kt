@@ -28,9 +28,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import agu.analys.ui.theme.TvGreen
-import agu.analys.ui.theme.TvRed
-import agu.analys.ui.theme.TvTextSecondary
+import agu.analys.ui.theme.*
 import agu.analys.util.PriceFormatter
 import java.util.Locale
 
@@ -119,15 +117,15 @@ fun RadarSellSection(
     if (showManualDialog) {
         AlertDialog(
             onDismissRequest = { showManualDialog = false },
-            containerColor = Color(0xFF0F1B2B),
-            titleContentColor = Color.White,
+            containerColor = TvSurface,
+            titleContentColor = TvTextPrimary,
             shape = RoundedCornerShape(16.dp),
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         imageVector = Icons.Default.AccountBalanceWallet,
                         contentDescription = null,
-                        tint = Color(0xFFFFD54F),
+                        tint = TvAmber,
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(Modifier.width(8.dp))
@@ -135,7 +133,7 @@ fun RadarSellSection(
                         text = "Set Harga Beli Manual (>7 Hari)",
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White
+                        color = TvTextPrimary
                     )
                 }
             },
@@ -143,7 +141,7 @@ fun RadarSellSection(
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
                         text = "Gunakan ini untuk koin $baseAsset yang dibeli >7 hari lalu di Indodax. Isikan salah satu nilai di bawah dari nota Indodax Anda:",
-                        color = Color(0xFFB0BEC5),
+                        color = TvTextSecondary,
                         fontSize = 11.sp,
                         lineHeight = 15.sp
                     )
@@ -163,12 +161,12 @@ fun RadarSellSection(
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Color(0xFFFFD54F),
-                            unfocusedBorderColor = Color(0xFF263C52),
-                            focusedContainerColor = Color(0xFF101C2B),
-                            unfocusedContainerColor = Color(0xFF101C2B),
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White
+                            focusedBorderColor = TvAmber,
+                            unfocusedBorderColor = TvBorder,
+                            focusedContainerColor = TvSurfaceVariant,
+                            unfocusedContainerColor = TvSurfaceVariant,
+                            focusedTextColor = TvTextPrimary,
+                            unfocusedTextColor = TvTextPrimary
                         ),
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -188,12 +186,12 @@ fun RadarSellSection(
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Color(0xFFFFD54F),
-                            unfocusedBorderColor = Color(0xFF263C52),
-                            focusedContainerColor = Color(0xFF101C2B),
-                            unfocusedContainerColor = Color(0xFF101C2B),
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White
+                            focusedBorderColor = TvAmber,
+                            unfocusedBorderColor = TvBorder,
+                            focusedContainerColor = TvSurfaceVariant,
+                            unfocusedContainerColor = TvSurfaceVariant,
+                            focusedTextColor = TvTextPrimary,
+                            unfocusedTextColor = TvTextPrimary
                         ),
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -201,7 +199,7 @@ fun RadarSellSection(
                     if (availableCoin > 0.0) {
                         Text(
                             text = "Kuantitas Koin ($baseAsset): ${PriceFormatter.formatCryptoExact(availableCoin, 8)}",
-                            color = Color(0xFF00E5FF),
+                            color = TvBlue,
                             fontSize = 10.5.sp,
                             fontWeight = FontWeight.SemiBold
                         )
@@ -221,7 +219,7 @@ fun RadarSellSection(
                             showManualDialog = false
                         }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD54F), contentColor = Color.Black),
+                    colors = ButtonDefaults.buttonColors(containerColor = TvAmber, contentColor = Color.Black),
                     shape = RoundedCornerShape(8.dp)
                 ) {
                     Text("Simpan Harga Beli", fontWeight = FontWeight.Bold, fontSize = 12.sp)
@@ -229,7 +227,7 @@ fun RadarSellSection(
             },
             dismissButton = {
                 TextButton(onClick = { showManualDialog = false }) {
-                    Text("Batal", color = Color(0xFFB0BEC5), fontSize = 12.sp)
+                    Text("Batal", color = TvTextSecondary, fontSize = 12.sp)
                 }
             }
         )
@@ -240,8 +238,8 @@ fun RadarSellSection(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xFF101E2E), RoundedCornerShape(10.dp))
-                .border(1.dp, Color(0xFF1C3754), RoundedCornerShape(10.dp))
+                .background(TvCardBackground, RoundedCornerShape(10.dp))
+                .border(1.dp, TvBorder, RoundedCornerShape(10.dp))
                 .padding(10.dp)
         ) {
             Column {
@@ -257,13 +255,13 @@ fun RadarSellSection(
                         Icon(
                             imageVector = Icons.Default.AccountBalanceWallet,
                             contentDescription = null,
-                            tint = Color(0xFF00E5FF),
+                            tint = TvBlue,
                             modifier = Modifier.size(15.dp)
                         )
                         Spacer(Modifier.width(6.dp))
                         Text(
                             text = "Koin Dimiliki (${if (isRealMode) "Real Indodax" else "Simulasi"}):",
-                            color = Color(0xFFB0BEC5),
+                            color = TvTextSecondary,
                             fontSize = 10.5.sp,
                             fontWeight = FontWeight.Bold,
                             maxLines = 1,
@@ -273,7 +271,7 @@ fun RadarSellSection(
 
                     Text(
                         text = "${PriceFormatter.formatCryptoExact(availableCoin, 8)} $baseAsset",
-                        color = if (availableCoin > 0) Color(0xFF00E5FF) else TvTextSecondary,
+                        color = if (availableCoin > 0) TvBlue else TvTextSecondary,
                         fontSize = 11.5.sp,
                         fontWeight = FontWeight.Black,
                         maxLines = 1,
@@ -290,7 +288,7 @@ fun RadarSellSection(
                 ) {
                     Text(
                         text = "Harga Beli Rata-Rata:",
-                        color = Color(0xFF78909C),
+                        color = TvTextSecondary,
                         fontSize = 10.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -300,7 +298,7 @@ fun RadarSellSection(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = if (effectiveBuyPrice > 0.0) "${PriceFormatter.formatIdrNumber(effectiveBuyPrice)} $quoteAsset" else "Belum Ada Posisi",
-                            color = if (effectiveBuyPrice > 0.0) Color(0xFFFFD54F) else TvTextSecondary,
+                            color = if (effectiveBuyPrice > 0.0) TvAmber else TvTextSecondary,
                             fontSize = 10.5.sp,
                             fontWeight = FontWeight.SemiBold,
                             maxLines = 1,
@@ -321,7 +319,7 @@ fun RadarSellSection(
                         ) {
                             Text(
                                 text = if (effectiveBuyPrice > 0.0) "[Ubah Manual]" else "[+ Manual >7 Hari]",
-                                color = Color(0xFFFFD54F),
+                                color = TvAmber,
                                 fontSize = 9.5.sp,
                                 fontWeight = FontWeight.Bold
                             )
@@ -336,7 +334,7 @@ fun RadarSellSection(
         // Shortcut Persentase Jual
         Text(
             text = "PILIH JUMLAH KOIN DIJUAL:",
-            color = Color(0xFF90A4AE),
+            color = TvTextSecondary,
             fontSize = 9.5.sp,
             fontWeight = FontWeight.Black
         )
@@ -394,12 +392,12 @@ fun RadarSellSection(
                     keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Color(0xFF4FC3F7),
-                        unfocusedBorderColor = Color(0xFF263C52),
-                        focusedContainerColor = Color(0xFF101C2B),
-                        unfocusedContainerColor = Color(0xFF101C2B),
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White
+                        focusedBorderColor = TvBlue,
+                        unfocusedBorderColor = TvBorder,
+                        focusedContainerColor = TvSurfaceVariant,
+                        unfocusedContainerColor = TvSurfaceVariant,
+                        focusedTextColor = TvTextPrimary,
+                        unfocusedTextColor = TvTextPrimary
                     ),
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -412,8 +410,8 @@ fun RadarSellSection(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xFF101C2A), RoundedCornerShape(10.dp))
-                .border(0.5.dp, Color(0xFF1C3147), RoundedCornerShape(10.dp))
+                .background(TvCardBackground, RoundedCornerShape(10.dp))
+                .border(0.5.dp, TvBorder, RoundedCornerShape(10.dp))
                 .padding(10.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
@@ -439,7 +437,7 @@ fun RadarSellSection(
                 valueColor = TvRed
             )
 
-            HorizontalDivider(color = Color(0xFF1B2D40), thickness = 0.5.dp, modifier = Modifier.padding(vertical = 2.dp))
+            HorizontalDivider(color = TvBorder, thickness = 0.5.dp, modifier = Modifier.padding(vertical = 2.dp))
 
             // Diterima Bersih Kas
             Row(
@@ -449,7 +447,7 @@ fun RadarSellSection(
             ) {
                 Text(
                     text = "Hasil Kas Diterima",
-                    color = Color(0xFFB0BEC5),
+                    color = TvTextSecondary,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
@@ -457,7 +455,7 @@ fun RadarSellSection(
                 )
                 Text(
                     text = "${PriceFormatter.formatIdrNumber(netReceivedSellIdr)} $quoteAsset",
-                    color = Color.White,
+                    color = TvTextPrimary,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Black,
                     maxLines = 1,
@@ -542,8 +540,8 @@ fun RadarSellSection(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFF231B0C), RoundedCornerShape(8.dp))
-                        .border(1.dp, Color(0xFFFFD54F).copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                        .background(TvSurfaceVariant, RoundedCornerShape(8.dp))
+                        .border(1.dp, TvAmber.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
                         .padding(8.dp)
                 ) {
                     Row(
@@ -554,13 +552,13 @@ fun RadarSellSection(
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = "Histori >7 Hari Tidak Tersedia di API",
-                                color = Color(0xFFFFD54F),
+                                color = TvAmber,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
                                 text = "Set harga beli manual dari nota Anda agar Unrealized PnL (+/-) bisa dihitung.",
-                                color = Color(0xFFD1C4E9),
+                                color = TvTextSecondary,
                                 fontSize = 9.sp,
                                 lineHeight = 12.sp
                             )
@@ -570,7 +568,7 @@ fun RadarSellSection(
 
                         Button(
                             onClick = { showManualDialog = true },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD54F), contentColor = Color.Black),
+                            colors = ButtonDefaults.buttonColors(containerColor = TvAmber, contentColor = Color.Black),
                             shape = RoundedCornerShape(6.dp),
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                             modifier = Modifier.height(28.dp)
@@ -589,12 +587,12 @@ fun RadarSellSection(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(
-                        if (isAutoSellActive) Color(0xFF0F1E24) else Color(0xFF101B26),
+                        if (isAutoSellActive) TvGreen.copy(alpha = 0.1f) else TvSurfaceVariant,
                         RoundedCornerShape(10.dp)
                     )
                     .border(
                         1.dp,
-                        if (isAutoSellActive) TvGreen.copy(alpha = 0.8f) else Color(0xFF1E3247),
+                        if (isAutoSellActive) TvGreen.copy(alpha = 0.5f) else TvBorder,
                         RoundedCornerShape(10.dp)
                     )
                     .padding(10.dp)
@@ -646,46 +644,46 @@ fun RadarSellSection(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Column(modifier = Modifier.weight(1.6f)) {
-                                    Text("Harga TP 1 ($quoteAsset)", color = Color(0xFFB0BEC5), fontSize = 9.sp, fontWeight = FontWeight.Medium)
+                                    Text("Harga TP 1 ($quoteAsset)", color = TvTextSecondary, fontSize = 9.sp, fontWeight = FontWeight.Medium)
                                     Spacer(Modifier.height(3.dp))
                                     OutlinedTextField(
                                         value = tp1PriceInput,
                                         onValueChange = { tp1PriceInput = it },
-                                        placeholder = { Text("Harga TP 1", fontSize = 10.5.sp, color = Color(0xFF546E7A)) },
+                                        placeholder = { Text("Harga TP 1", fontSize = 10.5.sp, color = TvTextSecondary.copy(alpha = 0.5f)) },
                                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
                                         singleLine = true,
                                         colors = OutlinedTextFieldDefaults.colors(
                                             focusedBorderColor = TvGreen,
-                                            unfocusedBorderColor = Color(0xFF263C52),
-                                            focusedContainerColor = Color(0xFF0C131A),
-                                            unfocusedContainerColor = Color(0xFF0C131A),
-                                            focusedTextColor = Color.White,
-                                            unfocusedTextColor = Color.White
+                                            unfocusedBorderColor = TvBorder,
+                                            focusedContainerColor = TvSurfaceVariant,
+                                            unfocusedContainerColor = TvSurfaceVariant,
+                                            focusedTextColor = TvTextPrimary,
+                                            unfocusedTextColor = TvTextPrimary
                                         ),
                                         modifier = Modifier.fillMaxWidth().height(42.dp),
-                                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp, color = Color.White)
+                                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp, color = TvTextPrimary)
                                     )
                                 }
 
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text("Porsi TP 1 %", color = Color(0xFFB0BEC5), fontSize = 9.sp, fontWeight = FontWeight.Medium)
+                                    Text("Porsi TP 1 %", color = TvTextSecondary, fontSize = 9.sp, fontWeight = FontWeight.Medium)
                                     Spacer(Modifier.height(3.dp))
                                     OutlinedTextField(
                                         value = tp1PercentInput,
                                         onValueChange = { tp1PercentInput = it },
-                                        placeholder = { Text("50", fontSize = 10.5.sp, color = Color(0xFF546E7A)) },
+                                        placeholder = { Text("50", fontSize = 10.5.sp, color = TvTextSecondary.copy(alpha = 0.5f)) },
                                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
                                         singleLine = true,
                                         colors = OutlinedTextFieldDefaults.colors(
                                             focusedBorderColor = TvGreen,
-                                            unfocusedBorderColor = Color(0xFF263C52),
-                                            focusedContainerColor = Color(0xFF0C131A),
-                                            unfocusedContainerColor = Color(0xFF0C131A),
-                                            focusedTextColor = Color.White,
-                                            unfocusedTextColor = Color.White
+                                            unfocusedBorderColor = TvBorder,
+                                            focusedContainerColor = TvSurfaceVariant,
+                                            unfocusedContainerColor = TvSurfaceVariant,
+                                            focusedTextColor = TvTextPrimary,
+                                            unfocusedTextColor = TvTextPrimary
                                         ),
                                         modifier = Modifier.fillMaxWidth().height(42.dp),
-                                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp, color = Color.White)
+                                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp, color = TvTextPrimary)
                                     )
                                 }
                             }
@@ -697,46 +695,46 @@ fun RadarSellSection(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Column(modifier = Modifier.weight(1.6f)) {
-                                    Text("Harga TP 2 ($quoteAsset)", color = Color(0xFFB0BEC5), fontSize = 9.sp, fontWeight = FontWeight.Medium)
+                                    Text("Harga TP 2 ($quoteAsset)", color = TvTextSecondary, fontSize = 9.sp, fontWeight = FontWeight.Medium)
                                     Spacer(Modifier.height(3.dp))
                                     OutlinedTextField(
                                         value = tp2PriceInput,
                                         onValueChange = { tp2PriceInput = it },
-                                        placeholder = { Text("Harga TP 2", fontSize = 10.5.sp, color = Color(0xFF546E7A)) },
+                                        placeholder = { Text("Harga TP 2", fontSize = 10.5.sp, color = TvTextSecondary.copy(alpha = 0.5f)) },
                                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
                                         singleLine = true,
                                         colors = OutlinedTextFieldDefaults.colors(
                                             focusedBorderColor = TvGreen,
-                                            unfocusedBorderColor = Color(0xFF263C52),
-                                            focusedContainerColor = Color(0xFF0C131A),
-                                            unfocusedContainerColor = Color(0xFF0C131A),
-                                            focusedTextColor = Color.White,
-                                            unfocusedTextColor = Color.White
+                                            unfocusedBorderColor = TvBorder,
+                                            focusedContainerColor = TvSurfaceVariant,
+                                            unfocusedContainerColor = TvSurfaceVariant,
+                                            focusedTextColor = TvTextPrimary,
+                                            unfocusedTextColor = TvTextPrimary
                                         ),
                                         modifier = Modifier.fillMaxWidth().height(42.dp),
-                                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp, color = Color.White)
+                                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp, color = TvTextPrimary)
                                     )
                                 }
 
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text("Porsi TP 2 %", color = Color(0xFFB0BEC5), fontSize = 9.sp, fontWeight = FontWeight.Medium)
+                                    Text("Porsi TP 2 %", color = TvTextSecondary, fontSize = 9.sp, fontWeight = FontWeight.Medium)
                                     Spacer(Modifier.height(3.dp))
                                     OutlinedTextField(
                                         value = tp2PercentInput,
                                         onValueChange = { tp2PercentInput = it },
-                                        placeholder = { Text("100", fontSize = 10.5.sp, color = Color(0xFF546E7A)) },
+                                        placeholder = { Text("100", fontSize = 10.5.sp, color = TvTextSecondary.copy(alpha = 0.5f)) },
                                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
                                         singleLine = true,
                                         colors = OutlinedTextFieldDefaults.colors(
                                             focusedBorderColor = TvGreen,
-                                            unfocusedBorderColor = Color(0xFF263C52),
-                                            focusedContainerColor = Color(0xFF0C131A),
-                                            unfocusedContainerColor = Color(0xFF0C131A),
-                                            focusedTextColor = Color.White,
-                                            unfocusedTextColor = Color.White
+                                            unfocusedBorderColor = TvBorder,
+                                            focusedContainerColor = TvSurfaceVariant,
+                                            unfocusedContainerColor = TvSurfaceVariant,
+                                            focusedTextColor = TvTextPrimary,
+                                            unfocusedTextColor = TvTextPrimary
                                         ),
                                         modifier = Modifier.fillMaxWidth().height(42.dp),
-                                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp, color = Color.White)
+                                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp, color = TvTextPrimary)
                                     )
                                 }
                             }
@@ -744,25 +742,26 @@ fun RadarSellSection(
                             // Stop Loss or Real Mode Notice
                             if (!isRealMode) {
                                 Column(modifier = Modifier.fillMaxWidth()) {
-                                    Text("Harga Stop Loss ($quoteAsset)", color = Color(0xFFEF9A9A), fontSize = 9.sp, fontWeight = FontWeight.Medium)
+                                    val slColor = if (LocalAppColors.current == LightAppColors) Color(0xFFD32F2F) else Color(0xFFEF9A9A)
+                                    Text("Harga Stop Loss ($quoteAsset)", color = slColor, fontSize = 9.sp, fontWeight = FontWeight.Medium)
                                     Spacer(Modifier.height(3.dp))
                                     OutlinedTextField(
                                         value = stopLossPriceInput,
                                         onValueChange = { stopLossPriceInput = it },
-                                        placeholder = { Text("Harga Stop Loss", fontSize = 10.5.sp, color = Color(0xFFEF9A9A).copy(alpha = 0.5f)) },
+                                        placeholder = { Text("Harga Stop Loss", fontSize = 10.5.sp, color = slColor.copy(alpha = 0.5f)) },
                                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
                                         keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
                                         singleLine = true,
                                         colors = OutlinedTextFieldDefaults.colors(
                                             focusedBorderColor = TvRed,
-                                            unfocusedBorderColor = Color(0xFF263C52),
-                                            focusedContainerColor = Color(0xFF0C131A),
-                                            unfocusedContainerColor = Color(0xFF0C131A),
-                                            focusedTextColor = Color.White,
-                                            unfocusedTextColor = Color.White
+                                            unfocusedBorderColor = TvBorder,
+                                            focusedContainerColor = TvSurfaceVariant,
+                                            unfocusedContainerColor = TvSurfaceVariant,
+                                            focusedTextColor = TvTextPrimary,
+                                            unfocusedTextColor = TvTextPrimary
                                         ),
                                         modifier = Modifier.fillMaxWidth().height(42.dp),
-                                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp, color = Color.White)
+                                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp, color = TvTextPrimary)
                                     )
                                 }
                             } else {
@@ -822,12 +821,12 @@ fun RadarSellSection(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(
-                        if (isTrailingTriggered) Color(0xFF331515) else if (isTrailingActive) Color(0xFF0D253A) else Color(0xFF101B26),
+                        if (isTrailingTriggered) TvRed.copy(alpha = 0.15f) else if (isTrailingActive) TvBlue.copy(alpha = 0.1f) else TvSurfaceVariant,
                         RoundedCornerShape(10.dp)
                     )
                     .border(
                         1.dp,
-                        if (isTrailingTriggered) TvRed else if (isTrailingActive) Color(0xFF00E5FF) else Color(0xFF1E3247),
+                        if (isTrailingTriggered) TvRed else if (isTrailingActive) TvBlue else TvBorder,
                         RoundedCornerShape(10.dp)
                     )
                     .padding(10.dp)
@@ -841,7 +840,7 @@ fun RadarSellSection(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 text = "🔒 TRAILING STOP LOSS",
-                                color = if (isTrailingTriggered) TvRed else if (isTrailingActive) Color(0xFF00E5FF) else Color(0xFF90A4AE),
+                                color = if (isTrailingTriggered) TvRed else if (isTrailingActive) TvBlue else TvTextSecondary,
                                 fontSize = 10.5.sp,
                                 fontWeight = FontWeight.Black
                             )
@@ -863,10 +862,10 @@ fun RadarSellSection(
                                 onSetTrailingStop?.invoke(enabled, trailingPercent)
                             },
                             colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color(0xFF00E5FF),
-                                checkedTrackColor = Color(0xFF00E5FF).copy(alpha = 0.4f),
-                                uncheckedThumbColor = Color(0xFF78909C),
-                                uncheckedTrackColor = Color(0xFF1E2D3D)
+                                checkedThumbColor = TvBlue,
+                                checkedTrackColor = TvBlue.copy(alpha = 0.4f),
+                                uncheckedThumbColor = TvTextSecondary,
+                                uncheckedTrackColor = TvSurfaceVariant
                             ),
                             modifier = Modifier.height(24.dp)
                         )
@@ -879,18 +878,18 @@ fun RadarSellSection(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Jarak Trailing (Dari Peak):", color = Color(0xFFB0BEC5), fontSize = 10.sp)
+                            Text("Jarak Trailing (Dari Peak):", color = TvTextSecondary, fontSize = 10.sp)
                             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                 listOf(1.5, 2.0, 3.0, 5.0).forEach { pct ->
                                     Box(
                                         modifier = Modifier
                                             .background(
-                                                if (trailingPercent == pct) Color(0xFF00E5FF) else Color(0xFF16273B),
+                                                if (trailingPercent == pct) TvBlue else TvSurfaceVariant,
                                                 RoundedCornerShape(4.dp)
                                             )
                                             .border(
                                                 0.5.dp,
-                                                if (trailingPercent == pct) Color(0xFF00E5FF) else Color(0xFF263C52),
+                                                if (trailingPercent == pct) TvBlue else TvBorder,
                                                 RoundedCornerShape(4.dp)
                                             )
                                             .clickable { onSetTrailingStop?.invoke(true, pct) }
@@ -898,7 +897,7 @@ fun RadarSellSection(
                                     ) {
                                         Text(
                                             text = "$pct%",
-                                            color = if (trailingPercent == pct) Color.Black else Color.White,
+                                            color = if (trailingPercent == pct) Color.Black else TvTextPrimary,
                                             fontSize = 9.5.sp,
                                             fontWeight = FontWeight.Bold
                                         )
@@ -911,23 +910,23 @@ fun RadarSellSection(
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .background(Color(0xFF0A1624), RoundedCornerShape(6.dp))
+                                .background(TvSurfaceVariant, RoundedCornerShape(6.dp))
                                 .padding(8.dp),
                             verticalArrangement = Arrangement.spacedBy(3.dp)
                         ) {
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("Harga Puncak Tercatat:", color = Color(0xFF78909C), fontSize = 9.5.sp)
-                                Text("${PriceFormatter.formatIdrNumber(peakPrice)} $quoteAsset", color = Color(0xFFFFD54F), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                Text("Harga Puncak Tercatat:", color = TvTextSecondary, fontSize = 9.5.sp)
+                                Text("${PriceFormatter.formatIdrNumber(peakPrice)} $quoteAsset", color = TvAmber, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                             }
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("Garis Stop Loss Dinamis:", color = Color(0xFF00E5FF), fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                                Text("${PriceFormatter.formatIdrNumber(trailingStopPrice)} $quoteAsset", color = if (isTrailingTriggered) TvRed else Color(0xFF00E5FF), fontSize = 10.5.sp, fontWeight = FontWeight.Black)
+                                Text("Garis Stop Loss Dinamis:", color = TvBlue, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                Text("${PriceFormatter.formatIdrNumber(trailingStopPrice)} $quoteAsset", color = if (isTrailingTriggered) TvRed else TvBlue, fontSize = 10.5.sp, fontWeight = FontWeight.Black)
                             }
                         }
                     } else {
                         Text(
                             text = "Aktifkan untuk mengunci profit otomatis: stop loss naik mengikuti kenaikan harga puncak.",
-                            color = Color(0xFF78909C),
+                            color = TvTextSecondary,
                             fontSize = 9.5.sp
                         )
                     }

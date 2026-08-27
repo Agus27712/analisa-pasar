@@ -24,9 +24,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import agu.analys.config.AiProvider
-import agu.analys.ui.theme.TvGreen
-import agu.analys.ui.theme.TvTextPrimary
-import agu.analys.ui.theme.TvTextSecondary
+import agu.analys.ui.theme.*
 
 /**
  * Popup Dialog Ringkas untuk Analisis AI menggunakan asisten aktif dari Pengaturan (Gemini / Groq).
@@ -46,13 +44,14 @@ fun AiAssistantDialog(
         }
     }
 
+    val isLight = LocalAppColors.current == LightAppColors
     val providerName = when (provider) {
         AiProvider.GROQ -> "Groq (OpenAI GPT-OSS)"
         AiProvider.GEMINI -> "Gemini 2.0 Flash"
     }
     val providerColor = when (provider) {
         AiProvider.GROQ -> Color(0xFFFF9800)
-        AiProvider.GEMINI -> Color(0xFF00E5FF)
+        AiProvider.GEMINI -> TvBlue
     }
 
     Dialog(
@@ -64,8 +63,8 @@ fun AiAssistantDialog(
                 .fillMaxWidth(0.92f)
                 .padding(vertical = 20.dp),
             shape = RoundedCornerShape(14.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF0C141F)),
-            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1B2A3D))
+            colors = CardDefaults.cardColors(containerColor = TvSurface),
+            border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder)
         ) {
             Column(
                 modifier = Modifier
@@ -129,8 +128,8 @@ fun AiAssistantDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = 120.dp, max = 340.dp)
-                        .background(Color(0xFF070D14), RoundedCornerShape(8.dp))
-                        .border(0.8.dp, Color(0xFF172433), RoundedCornerShape(8.dp))
+                        .background(TvSurfaceVariant, RoundedCornerShape(8.dp))
+                        .border(0.8.dp, TvBorder, RoundedCornerShape(8.dp))
                         .padding(10.dp)
                         .verticalScroll(rememberScrollState())
                 ) {

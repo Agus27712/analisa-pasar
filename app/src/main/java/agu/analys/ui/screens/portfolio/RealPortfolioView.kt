@@ -30,10 +30,7 @@ import agu.analys.database.RealTradeEntity
 import agu.analys.model.MarketTick
 import agu.analys.model.TradingPair
 import agu.analys.ui.components.dashboard.AssetAvatar
-import agu.analys.ui.theme.TvGreen
-import agu.analys.ui.theme.TvRed
-import agu.analys.ui.theme.TvTextPrimary
-import agu.analys.ui.theme.TvTextSecondary
+import agu.analys.ui.theme.*
 import agu.analys.util.PriceFormatter
 
 enum class RealPortfolioTab(val title: String) {
@@ -113,8 +110,8 @@ fun RealPortfolioView(
                 Card(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
                     shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF0F1722)),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E2836))
+                    colors = CardDefaults.cardColors(containerColor = TvCardBackground),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder)
                 ) {
                     Column(
                         modifier = Modifier.fillMaxWidth().padding(24.dp),
@@ -167,9 +164,9 @@ fun RealPortfolioView(
                 item {
                     val isSuccess = realTradeStatus.contains("berhasil", ignoreCase = true) || realTradeStatus.contains("success", ignoreCase = true)
                     val isError = realTradeStatus.contains("error", ignoreCase = true) || realTradeStatus.contains("gagal", ignoreCase = true) || realTradeStatus.contains("invalid", ignoreCase = true)
-                    val bgColor = if (isError) Color(0xFF2C1518) else if (isSuccess) Color(0xFF0F261C) else Color(0xFF131D2A)
-                    val borderColor = if (isError) TvRed.copy(alpha = 0.5f) else if (isSuccess) TvGreen.copy(alpha = 0.5f) else Color(0xFF1E2836)
-                    val textColor = if (isError) Color(0xFFFF8B8B) else if (isSuccess) Color(0xFF8BFFC7) else TvTextSecondary
+                    val bgColor = if (isError) TvRed.copy(alpha = 0.15f) else if (isSuccess) TvGreen.copy(alpha = 0.15f) else TvSurfaceVariant
+                    val borderColor = if (isError) TvRed.copy(alpha = 0.5f) else if (isSuccess) TvGreen.copy(alpha = 0.5f) else TvBorder
+                    val textColor = if (isError) TvRed else if (isSuccess) TvGreen else TvTextSecondary
 
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -184,7 +181,7 @@ fun RealPortfolioView(
                             Icon(
                                 Icons.Default.Info,
                                 contentDescription = null,
-                                tint = if (isError) TvRed else if (isSuccess) TvGreen else Color(0xFF72B7FF),
+                                tint = if (isError) TvRed else if (isSuccess) TvGreen else TvBlue,
                                 modifier = Modifier.size(14.dp)
                             )
                             Spacer(Modifier.width(8.dp))
@@ -204,7 +201,7 @@ fun RealPortfolioView(
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF0D1826)),
+                    colors = CardDefaults.cardColors(containerColor = TvCardBackground),
                     border = androidx.compose.foundation.BorderStroke(1.dp, TvGreen.copy(alpha = 0.5f))
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
@@ -251,7 +248,7 @@ fun RealPortfolioView(
                         )
 
                         Spacer(Modifier.height(14.dp))
-                        HorizontalDivider(color = Color(0xFF1E2836))
+                        HorizontalDivider(color = TvBorder)
                         Spacer(Modifier.height(12.dp))
 
                         Row(
@@ -272,7 +269,7 @@ fun RealPortfolioView(
                             }
                             Column(horizontalAlignment = Alignment.End) {
                                 Text("ESTIMASI KOIN", color = TvTextSecondary, fontSize = 9.5.sp, fontWeight = FontWeight.Bold)
-                                Text(PriceFormatter.formatPrice(estTotalCryptoIdr), color = Color(0xFF72B7FF), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                Text(PriceFormatter.formatPrice(estTotalCryptoIdr), color = TvBlue, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -284,7 +281,7 @@ fun RealPortfolioView(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFF0B111A), RoundedCornerShape(10.dp))
+                        .background(TvSurfaceVariant, RoundedCornerShape(10.dp))
                         .padding(4.dp),
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
@@ -299,14 +296,14 @@ fun RealPortfolioView(
                             modifier = Modifier
                                 .weight(1f)
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(if (isSelected) Color(0xFF1E2836) else Color.Transparent)
+                                .background(if (isSelected) TvCardBackground else Color.Transparent)
                                 .clickable { selectedRealTab = tab }
                                 .padding(vertical = 8.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
                                 text = "${tab.title}$countText",
-                                color = if (isSelected) Color(0xFF72B7FF) else TvTextSecondary,
+                                color = if (isSelected) TvBlue else TvTextSecondary,
                                 fontSize = 11.sp,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                             )
@@ -323,7 +320,7 @@ fun RealPortfolioView(
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .background(Color(0xFF101720), RoundedCornerShape(10.dp))
+                                    .background(TvCardBackground, RoundedCornerShape(10.dp))
                                     .padding(20.dp),
                                 contentAlignment = Alignment.Center
                             ) {
@@ -351,8 +348,8 @@ fun RealPortfolioView(
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(12.dp),
-                                colors = CardDefaults.cardColors(containerColor = Color(0xFF101720)),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E2836))
+                                colors = CardDefaults.cardColors(containerColor = TvCardBackground),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder)
                             ) {
                                 Column(modifier = Modifier.padding(12.dp)) {
                                     Row(
@@ -391,7 +388,7 @@ fun RealPortfolioView(
                                             } else {
                                                 Text(
                                                     if (price > 0) "@ ${PriceFormatter.formatPrice(price)}" else "Ticker Menunggu",
-                                                    color = Color(0xFF72B7FF),
+                                                    color = TvBlue,
                                                     fontSize = 10.sp
                                                 )
                                             }
@@ -403,7 +400,7 @@ fun RealPortfolioView(
                                         Row(
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .background(Color(0xFF1E2836).copy(alpha = 0.3f), RoundedCornerShape(6.dp))
+                                                .background(TvSurfaceVariant, RoundedCornerShape(6.dp))
                                                 .padding(horizontal = 8.dp, vertical = 6.dp),
                                             horizontalArrangement = Arrangement.SpaceBetween
                                         ) {
@@ -413,7 +410,7 @@ fun RealPortfolioView(
                                             }
                                             Column(horizontalAlignment = Alignment.End) {
                                                 Text("Current Price", color = TvTextSecondary, fontSize = 9.sp)
-                                                Text(if (price > 0) PriceFormatter.formatPrice(price) else "-", color = Color(0xFF72B7FF), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                                Text(if (price > 0) PriceFormatter.formatPrice(price) else "-", color = TvBlue, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                                             }
                                         }
                                     }
@@ -432,8 +429,8 @@ fun RealPortfolioView(
                                             },
                                             modifier = Modifier.weight(1f).height(32.dp),
                                             shape = RoundedCornerShape(6.dp),
-                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF72B7FF)),
-                                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E2836)),
+                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = TvBlue),
+                                            border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder),
                                             contentPadding = PaddingValues(0.dp)
                                         ) {
                                             Icon(Icons.Default.ShowChart, null, modifier = Modifier.size(13.dp))
@@ -468,7 +465,7 @@ fun RealPortfolioView(
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .background(Color(0xFF101720), RoundedCornerShape(10.dp))
+                                    .background(TvCardBackground, RoundedCornerShape(10.dp))
                                     .padding(20.dp),
                                 contentAlignment = Alignment.Center
                             ) {
@@ -487,8 +484,8 @@ fun RealPortfolioView(
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(10.dp),
-                                colors = CardDefaults.cardColors(containerColor = Color(0xFF131C28)),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E2836))
+                                colors = CardDefaults.cardColors(containerColor = TvCardBackground),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder)
                             ) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth().padding(12.dp),
@@ -564,7 +561,7 @@ fun RealPortfolioView(
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .background(Color(0xFF101720), RoundedCornerShape(10.dp))
+                                    .background(TvCardBackground, RoundedCornerShape(10.dp))
                                     .padding(20.dp),
                                 contentAlignment = Alignment.Center
                             ) {
@@ -584,8 +581,8 @@ fun RealPortfolioView(
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(10.dp),
-                                colors = CardDefaults.cardColors(containerColor = Color(0xFF0F1722)),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E2836).copy(alpha = 0.5f))
+                                colors = CardDefaults.cardColors(containerColor = TvCardBackground),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder.copy(alpha = 0.5f))
                             ) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth().padding(10.dp),
@@ -649,14 +646,14 @@ fun RealPortfolioView(
                 Card(
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                     shape = RoundedCornerShape(10.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF0D1B2A)),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E3A5F))
+                    colors = CardDefaults.cardColors(containerColor = TvSurfaceVariant),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder)
                 ) {
                     Column(Modifier.padding(12.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Info, null, tint = Color(0xFF72B7FF), modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.Info, null, tint = TvBlue, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text("INFORMASI DEPOSIT & WITHDRAW", color = Color(0xFF72B7FF), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Text("INFORMASI DEPOSIT & WITHDRAW", color = TvBlue, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
                         Spacer(Modifier.height(4.dp))
                         Text(

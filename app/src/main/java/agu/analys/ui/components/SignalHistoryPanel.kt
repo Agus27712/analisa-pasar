@@ -37,12 +37,7 @@ import agu.analys.model.AISignalState
 import agu.analys.model.SignalAction
 import agu.analys.trading.SpotPosition
 import agu.analys.trading.SpotPositionStore
-import agu.analys.ui.theme.TvAmber
-import agu.analys.ui.theme.TvCardBackground
-import agu.analys.ui.theme.TvGreen
-import agu.analys.ui.theme.TvRed
-import agu.analys.ui.theme.TvTextPrimary
-import agu.analys.ui.theme.TvTextSecondary
+import agu.analys.ui.theme.*
 import agu.analys.util.PriceFormatter
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -167,8 +162,8 @@ fun SignalHistoryPanel(
                         Modifier.fillMaxWidth()
                             .padding(vertical = 4.dp)
                             .clip(RoundedCornerShape(12.dp))
-                            .background(Color(0xFF121212))
-                            .border(1.dp, Color(0x1AFFFFFF), RoundedCornerShape(12.dp))
+                            .background(TvCardBackground)
+                            .border(1.dp, TvBorder, RoundedCornerShape(12.dp))
                             .padding(horizontal = 14.dp, vertical = 10.dp)
                     ) {
                         Column(Modifier.fillMaxWidth()) {

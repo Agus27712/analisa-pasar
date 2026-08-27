@@ -44,10 +44,7 @@ import agu.analys.config.StrategyMode
 import agu.analys.engine.MarketStructureAnalyzer
 import agu.analys.model.*
 import agu.analys.ui.components.detail.*
-import agu.analys.ui.theme.TvBackground
-import agu.analys.ui.theme.TvGreen
-import agu.analys.ui.theme.TvTextPrimary
-import agu.analys.ui.theme.TvTextSecondary
+import agu.analys.ui.theme.*
 import agu.analys.util.AppPreferences
 import agu.analys.viewmodel.*
 
@@ -146,8 +143,8 @@ fun DetailChartScreen(
     }
     val activityColor = when (activityText) {
         "Aktivitas tinggi" -> TvGreen
-        "Aktivitas sedang" -> Color(0xFFFFB300)
-        else -> Color(0xFF78909C)
+        "Aktivitas sedang" -> TvAmber
+        else -> TvTextSecondary
     }
 
     val scrollState = rememberScrollState()
@@ -201,10 +198,10 @@ fun DetailChartScreen(
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(6.dp))
-                                .background(if (isSelected) Color(0xFF162D45) else Color(0xFF0F1722))
+                                .background(if (isSelected) TvSurfaceVariant else TvCardBackground)
                                 .border(
                                     0.8.dp,
-                                    if (isSelected) Color(0xFF00E5FF) else Color(0xFF1B2836),
+                                    if (isSelected) TvBlue else TvBorder,
                                     RoundedCornerShape(6.dp)
                                 )
                                 .clickable { viewModel.selectTimeframe(tf) }
@@ -213,7 +210,7 @@ fun DetailChartScreen(
                         ) {
                             Text(
                                 text = tf.label.uppercase(),
-                                color = if (isSelected) Color(0xFF00E5FF) else TvTextSecondary,
+                                color = if (isSelected) TvBlue else TvTextSecondary,
                                 fontSize = 10.5.sp,
                                 fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.SemiBold
                             )
@@ -234,10 +231,10 @@ fun DetailChartScreen(
                             .size(28.dp)
                             .clip(RoundedCornerShape(6.dp))
                             .clickable { showPriceAlertDialog = true },
-                        color = if (activeAlertCount > 0) Color(0xFF1A2635) else Color(0xFF101924),
+                        color = if (activeAlertCount > 0) TvBlue.copy(alpha = 0.15f) else TvSurfaceVariant,
                         border = androidx.compose.foundation.BorderStroke(
                             0.8.dp,
-                            if (activeAlertCount > 0) Color(0xFF00E5FF).copy(alpha = 0.7f) else Color(0xFF1C2B3C)
+                            if (activeAlertCount > 0) TvBlue.copy(alpha = 0.5f) else TvBorder
                         ),
                         shape = RoundedCornerShape(6.dp)
                     ) {
@@ -245,7 +242,7 @@ fun DetailChartScreen(
                             Icon(
                                 imageVector = if (activeAlertCount > 0) Icons.Default.Notifications else Icons.Default.NotificationsNone,
                                 contentDescription = "Alert",
-                                tint = if (activeAlertCount > 0) Color(0xFF00E5FF) else TvTextSecondary,
+                                tint = if (activeAlertCount > 0) TvBlue else TvTextSecondary,
                                 modifier = Modifier.size(15.dp)
                             )
                         }
@@ -257,15 +254,15 @@ fun DetailChartScreen(
                             .size(28.dp)
                             .clip(RoundedCornerShape(6.dp))
                             .clickable { showAiAssistantDialog = true },
-                        color = Color(0xFF0E2235),
-                        border = androidx.compose.foundation.BorderStroke(0.8.dp, Color(0xFF00E5FF).copy(alpha = 0.6f)),
+                        color = TvBlue.copy(alpha = 0.15f),
+                        border = androidx.compose.foundation.BorderStroke(0.8.dp, TvBlue.copy(alpha = 0.5f)),
                         shape = RoundedCornerShape(6.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
                                 imageVector = Icons.Default.AutoAwesome,
                                 contentDescription = "AI Analisa",
-                                tint = Color(0xFF00E5FF),
+                                tint = TvBlue,
                                 modifier = Modifier.size(15.dp)
                             )
                         }
@@ -277,8 +274,8 @@ fun DetailChartScreen(
                             .size(28.dp)
                             .clip(RoundedCornerShape(6.dp))
                             .clickable { viewModel.openSimulation(pair) },
-                        color = Color(0xFF0C241B),
-                        border = androidx.compose.foundation.BorderStroke(0.8.dp, Color(0xFF00E676).copy(alpha = 0.5f)),
+                        color = TvGreen.copy(alpha = 0.15f),
+                        border = androidx.compose.foundation.BorderStroke(0.8.dp, TvGreen.copy(alpha = 0.5f)),
                         shape = RoundedCornerShape(6.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
@@ -297,15 +294,15 @@ fun DetailChartScreen(
                             .size(28.dp)
                             .clip(RoundedCornerShape(6.dp))
                             .clickable { viewModel.openLearning() },
-                        color = Color(0xFF101E33),
-                        border = androidx.compose.foundation.BorderStroke(0.8.dp, Color(0xFF72B7FF).copy(alpha = 0.5f)),
+                        color = TvBlue.copy(alpha = 0.15f),
+                        border = androidx.compose.foundation.BorderStroke(0.8.dp, TvBlue.copy(alpha = 0.5f)),
                         shape = RoundedCornerShape(6.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
                                 imageVector = Icons.Default.MenuBook,
                                 contentDescription = "Belajar",
-                                tint = Color(0xFF72B7FF),
+                                tint = TvBlue,
                                 modifier = Modifier.size(15.dp)
                             )
                         }
@@ -317,10 +314,10 @@ fun DetailChartScreen(
                             .size(28.dp)
                             .clip(RoundedCornerShape(6.dp))
                             .clickable { viewModel.toggleWatchlist(pair.symbol) },
-                        color = if (isFavorite) Color(0xFF2E2412) else Color(0xFF141922),
+                        color = if (isFavorite) TvAmber.copy(alpha = 0.15f) else TvSurfaceVariant,
                         border = androidx.compose.foundation.BorderStroke(
                             0.8.dp,
-                            if (isFavorite) Color(0xFFFFB300).copy(alpha = 0.7f) else Color(0xFF262016)
+                            if (isFavorite) TvAmber.copy(alpha = 0.5f) else TvBorder
                         ),
                         shape = RoundedCornerShape(6.dp)
                     ) {
@@ -328,7 +325,7 @@ fun DetailChartScreen(
                             Icon(
                                 imageVector = if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
                                 contentDescription = "Favorit",
-                                tint = if (isFavorite) Color(0xFFFFB300) else TvTextSecondary,
+                                tint = if (isFavorite) TvAmber else TvTextSecondary,
                                 modifier = Modifier.size(15.dp)
                             )
                         }
@@ -348,7 +345,7 @@ fun DetailChartScreen(
                     modifier = Modifier.weight(1f).height(38.dp),
                     shape = RoundedCornerShape(8.dp),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = TvGreen),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E2836)),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder),
                     contentPadding = PaddingValues(horizontal = 8.dp)
                 ) {
                     Icon(Icons.Default.ShowChart, null, modifier = Modifier.size(15.dp))
@@ -359,8 +356,8 @@ fun DetailChartScreen(
                     onClick = onOpenLandscapeChart,
                     modifier = Modifier.weight(1f).height(38.dp),
                     shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF72B7FF)),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E2836)),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = TvBlue),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder),
                     contentPadding = PaddingValues(horizontal = 8.dp)
                 ) {
                     Icon(Icons.Default.CropRotate, null, modifier = Modifier.size(15.dp))
@@ -377,13 +374,13 @@ fun DetailChartScreen(
                 Card(
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                     shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF09101A)),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E2836))
+                    colors = CardDefaults.cardColors(containerColor = TvCardBackground),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder)
                 ) {
                     Column(Modifier.padding(8.dp)) {
                         Text(
                             "CHART ${selectedTimeframe.label.uppercase()}",
-                            color = Color(0xFF72B7FF),
+                            color = TvBlue,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -563,8 +560,8 @@ fun DetailChartScreen(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF09121C)),
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E2836))
+                colors = CardDefaults.cardColors(containerColor = TvCardBackground),
+                border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder)
             ) {
                 Column(Modifier.padding(10.dp)) {
                     Row(
@@ -573,9 +570,9 @@ fun DetailChartScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Tune, null, tint = Color(0xFF72B7FF), modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.Tune, null, tint = TvBlue, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text("INDIKATOR & OBSERVASI", color = Color(0xFF72B7FF), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Text("INDIKATOR & OBSERVASI", color = TvBlue, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
                         Text(
                             if (showTechnicalDetails) "Tutup ▲" else "Lihat ▼",
@@ -613,8 +610,8 @@ fun DetailChartScreen(
                     onClick = { viewModel.openPortfolio() },
                     modifier = Modifier.weight(1f).height(42.dp),
                     shape = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF72B7FF)),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E2836))
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = TvBlue),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder)
                 ) {
                     Icon(Icons.Default.AccountBalanceWallet, null, modifier = Modifier.size(15.dp))
                     Spacer(Modifier.width(4.dp))
@@ -624,7 +621,7 @@ fun DetailChartScreen(
                     onClick = { openExchange(context, marketDataSource) },
                     modifier = Modifier.weight(1f).height(42.dp),
                     shape = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF087FF5))
+                    colors = ButtonDefaults.buttonColors(containerColor = TvBlue)
                 ) {
                     Text("Buka ${marketDataSource.label}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp)
                 }

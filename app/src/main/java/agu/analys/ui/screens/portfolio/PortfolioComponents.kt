@@ -25,10 +25,7 @@ import androidx.compose.ui.unit.sp
 import agu.analys.trading.SimulationOrderSide
 import agu.analys.trading.SimulationTradeHistoryItem
 import agu.analys.ui.components.dashboard.AssetAvatar
-import agu.analys.ui.theme.TvGreen
-import agu.analys.ui.theme.TvRed
-import agu.analys.ui.theme.TvTextPrimary
-import agu.analys.ui.theme.TvTextSecondary
+import agu.analys.ui.theme.*
 import agu.analys.util.PriceFormatter
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -43,15 +40,15 @@ fun HoldingCoinCard(
 ) {
     val isProfit = item.pnlIdr >= 0
     val pnlColor = if (isProfit) TvGreen else TvRed
-    val pnlBg = if (isProfit) Color(0xFF0B241B) else Color(0xFF280E14)
+    val pnlBg = if (isProfit) TvGreen.copy(alpha = 0.15f) else TvRed.copy(alpha = 0.15f)
     val pnlBorder = if (isProfit) TvGreen.copy(alpha = 0.4f) else TvRed.copy(alpha = 0.4f)
     val pnlPrefix = if (isProfit) "+" else ""
 
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF0B1420)),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E2836))
+        colors = CardDefaults.cardColors(containerColor = TvCardBackground),
+        border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder)
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             // Row 1: Asset Info & Total Value
@@ -75,7 +72,7 @@ fun HoldingCoinCard(
                         )
                         Text(
                             text = "Miliki: ${PriceFormatter.formatRawDecimal(item.quantity)} ${item.baseAsset}",
-                            color = Color(0xFF72B7FF),
+                            color = TvBlue,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Medium
                         )
@@ -105,7 +102,7 @@ fun HoldingCoinCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFF070D14))
+                    .background(TvSurfaceVariant)
                     .padding(10.dp)
             ) {
                 Row(
@@ -122,7 +119,7 @@ fun HoldingCoinCard(
                         Spacer(Modifier.height(2.dp))
                         Text(
                             text = PriceFormatter.formatPrice(item.avgBuyPrice, quoteAsset = "IDR"),
-                            color = Color(0xFF72B7FF),
+                            color = TvBlue,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -194,8 +191,8 @@ fun HoldingCoinCard(
                     onClick = onViewChart,
                     modifier = Modifier.weight(1f).height(36.dp),
                     shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF72B7FF)),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E2836)),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = TvBlue),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder),
                     contentPadding = PaddingValues(0.dp)
                 ) {
                     Icon(Icons.Default.ShowChart, null, modifier = Modifier.size(15.dp))
@@ -244,8 +241,8 @@ fun TradeHistoryItemCard(
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(10.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF0B1420)),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E2836))
+        colors = CardDefaults.cardColors(containerColor = TvCardBackground),
+        border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder)
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Row(
@@ -300,7 +297,7 @@ fun TradeHistoryItemCard(
                     Text("Jumlah", color = TvTextSecondary, fontSize = 10.sp)
                     Text(
                         "${PriceFormatter.formatRawDecimal(trade.quantity)} ${trade.baseAsset}",
-                        color = Color(0xFF72B7FF),
+                        color = TvBlue,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -339,8 +336,8 @@ fun EmptyHoldingsCard(
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF09121C)),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E2836))
+        colors = CardDefaults.cardColors(containerColor = TvCardBackground),
+        border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder)
     ) {
         Column(
             modifier = Modifier
@@ -374,9 +371,9 @@ fun EmptyHoldingsCard(
                 shape = RoundedCornerShape(8.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = TvGreen)
             ) {
-                Icon(Icons.AutoMirrored.Filled.CompareArrows, null, tint = Color.Black, modifier = Modifier.size(16.dp))
+                Icon(Icons.AutoMirrored.Filled.CompareArrows, null, tint = Color.White, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(6.dp))
-                Text("Beli Koin Pertama", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                Text("Beli Koin Pertama", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
             }
         }
     }
@@ -387,8 +384,8 @@ fun EmptyHistoryCard(modifier: Modifier = Modifier) {
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF09121C)),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E2836))
+        colors = CardDefaults.cardColors(containerColor = TvCardBackground),
+        border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder)
     ) {
         Column(
             modifier = Modifier

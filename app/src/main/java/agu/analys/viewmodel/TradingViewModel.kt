@@ -242,6 +242,9 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     private val _tradingFees = MutableStateFlow(prefs.tradingFees)
     val tradingFees: StateFlow<TradingFeeConfig> = _tradingFees.asStateFlow()
 
+    private val _isDarkTheme = MutableStateFlow(prefs.isDarkTheme)
+    val isDarkTheme: StateFlow<Boolean> = _isDarkTheme.asStateFlow()
+
     val isRealBuyMode: StateFlow<Boolean> = realCoordinator.isRealBuyMode
     val isPinUnlocked: StateFlow<Boolean> = realCoordinator.isPinUnlocked
     val realIndodaxBalance: StateFlow<Map<String, Double>> = realCoordinator.realIndodaxBalance
@@ -361,6 +364,11 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         prefs.tradingFees = fees
         _tradingFees.value = fees
         engine.tradingFees = fees
+    }
+
+    fun setDarkTheme(enabled: Boolean) {
+        prefs.isDarkTheme = enabled
+        _isDarkTheme.value = enabled
     }
 
     private var lastSavedSignalTimestamp = 0L

@@ -1,14 +1,16 @@
 package agu.analys.ui.components.dashboard
 
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import agu.analys.ui.theme.*
 
 object DashboardColors {
-    val Background = Color(0xFF070A0F)
-    val Surface = Color(0xFF0D1722)
-    val Card = Color(0xFF0D1722)
-    val Border = Color(0xFF1A3347)
-    val AccentBlue = Color(0xFF2196F3)
-    val AccentBlueSoft = Color(0xFF6FB8FF)
-    val Gold = Color(0xFFFFD54A)
-    val Amber = Color(0xFFFFB300)
+    val Background: Color @Composable get() = TvBackground
+    val Surface: Color @Composable get() = TvSurface
+    val Card: Color @Composable get() = TvCardBackground
+    val Border: Color @Composable get() = TvBorder
+    val AccentBlue: Color @Composable get() = TvBlue
+    val AccentBlueSoft: Color @Composable get() = TvBlue
+    val Gold: Color @Composable get() = TvAmber
+    val Amber: Color @Composable get() = TvAmber
 }

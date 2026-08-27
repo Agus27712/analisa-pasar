@@ -20,8 +20,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import agu.analys.ui.theme.TvGreen
-import agu.analys.ui.theme.TvTextSecondary
+import agu.analys.ui.theme.*
 
 enum class NavTab {
     WATCHLIST, PORTOFOLIO, SIMULASI, SETTINGS
@@ -36,7 +35,7 @@ fun AppBottomNavigationBar(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .background(Color(0xFF09101A))
+            .background(TvSurface)
             .padding(vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceAround,
         verticalAlignment = Alignment.CenterVertically

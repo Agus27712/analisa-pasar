@@ -19,11 +19,7 @@ import androidx.compose.ui.unit.sp
 import agu.analys.engine.MarketStructureSnapshot
 import agu.analys.util.PriceFormatter
 
-private val CardBg = Color(0xFF15171D)
-private val Primary = Color(0xFFF2F4F8)
-private val Secondary = Color(0xFF9AA0AA)
-private val Accent = Color(0xFF52D273)
-private val Warning = Color(0xFFFFC857)
+import agu.analys.ui.theme.*
 
 @Composable
 fun MarketStructureLearningCard(
@@ -32,21 +28,21 @@ fun MarketStructureLearningCard(
     modifier: Modifier = Modifier
 ) {
     Column(
-        modifier = modifier.fillMaxWidth().background(CardBg, RoundedCornerShape(14.dp)).padding(14.dp)
+        modifier = modifier.fillMaxWidth().background(TvCardBackground, RoundedCornerShape(14.dp)).padding(14.dp)
     ) {
-        Text("MARKET STRUCTURE", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Accent)
+        Text("MARKET STRUCTURE", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TvGreen)
         Spacer(Modifier.height(3.dp))
-        Text("Belajar membaca arah pasar", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Primary)
+        Text("Belajar membaca arah pasar", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TvTextPrimary)
         Spacer(Modifier.height(10.dp))
 
         if (!snapshot.dataEnough) {
-            Text(snapshot.trendExplanation, fontSize = 11.sp, color = Secondary)
+            Text(snapshot.trendExplanation, fontSize = 11.sp, color = TvTextSecondary)
             return@Column
         }
 
-        Text(snapshot.trend, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Warning)
+        Text(snapshot.trend, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TvAmber)
         Spacer(Modifier.height(4.dp))
-        Text(snapshot.trendExplanation, fontSize = 11.sp, color = Secondary, lineHeight = 16.sp)
+        Text(snapshot.trendExplanation, fontSize = 11.sp, color = TvTextSecondary, lineHeight = 16.sp)
         Spacer(Modifier.height(12.dp))
 
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -54,15 +50,15 @@ fun MarketStructureLearningCard(
             LevelBox("Resistance", snapshot.resistance, snapshot.resistanceDistancePct, quoteAsset, Modifier.weight(1f))
         }
         Spacer(Modifier.height(10.dp))
-        Text("Swing High terakhir", fontSize = 9.sp, color = Secondary)
-        Text(snapshot.lastSwingHigh?.let { PriceFormatter.formatPrice(it, quoteAsset = quoteAsset) } ?: "Belum terbentuk", fontSize = 11.sp, color = Primary)
+        Text("Swing High terakhir", fontSize = 9.sp, color = TvTextSecondary)
+        Text(snapshot.lastSwingHigh?.let { PriceFormatter.formatPrice(it, quoteAsset = quoteAsset) } ?: "Belum terbentuk", fontSize = 11.sp, color = TvTextPrimary)
         Spacer(Modifier.height(5.dp))
-        Text("Swing Low terakhir", fontSize = 9.sp, color = Secondary)
-        Text(snapshot.lastSwingLow?.let { PriceFormatter.formatPrice(it, quoteAsset = quoteAsset) } ?: "Belum terbentuk", fontSize = 11.sp, color = Primary)
+        Text("Swing Low terakhir", fontSize = 9.sp, color = TvTextSecondary)
+        Text(snapshot.lastSwingLow?.let { PriceFormatter.formatPrice(it, quoteAsset = quoteAsset) } ?: "Belum terbentuk", fontSize = 11.sp, color = TvTextPrimary)
         Spacer(Modifier.height(9.dp))
-        Text(snapshot.structureExplanation, fontSize = 9.sp, color = Secondary, lineHeight = 14.sp)
+        Text(snapshot.structureExplanation, fontSize = 9.sp, color = TvTextSecondary, lineHeight = 14.sp)
         Spacer(Modifier.height(5.dp))
-        Text("Latihan: jangan langsung BUY/SELL. Tanyakan dulu: apakah HH/HL atau LH/LL masih bertahan?", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = Primary, lineHeight = 15.sp)
+        Text("Latihan: jangan langsung BUY/SELL. Tanyakan dulu: apakah HH/HL atau LH/LL masih bertahan?", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = TvTextPrimary, lineHeight = 15.sp)
     }
 }
 
@@ -74,9 +70,9 @@ private fun LevelBox(
     quoteAsset: String,
     modifier: Modifier = Modifier
 ) {
-    Column(modifier.background(Color(0x0DFFFFFF), RoundedCornerShape(10.dp)).padding(9.dp)) {
-        Text(label, fontSize = 9.sp, color = Secondary)
-        Text(value?.let { PriceFormatter.formatPrice(it, quoteAsset = quoteAsset) } ?: "Belum ada", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Primary)
-        Text(distancePct?.let { "${String.format(java.util.Locale.US, "%.2f", it)}% dari harga" } ?: "Tidak tersedia", fontSize = 8.sp, color = Secondary)
+    Column(modifier.background(TvSurfaceVariant, RoundedCornerShape(10.dp)).padding(9.dp)) {
+        Text(label, fontSize = 9.sp, color = TvTextSecondary)
+        Text(value?.let { PriceFormatter.formatPrice(it, quoteAsset = quoteAsset) } ?: "Belum ada", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TvTextPrimary)
+        Text(distancePct?.let { "${String.format(java.util.Locale.US, "%.2f", it)}% dari harga" } ?: "Tidak tersedia", fontSize = 8.sp, color = TvTextSecondary)
     }
 }

@@ -14,10 +14,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import agu.analys.engine.MarketStructureSnapshot
 import agu.analys.model.AISignalState
-import agu.analys.ui.theme.TvGreen
-import agu.analys.ui.theme.TvRed
-import agu.analys.ui.theme.TvTextPrimary
-import agu.analys.ui.theme.TvTextSecondary
+import agu.analys.ui.theme.*
 import agu.analys.util.PriceFormatter
 import kotlin.math.abs
 
@@ -68,7 +65,7 @@ fun ImportantLevelsCard(
                 }
                 Text(nearLabel, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = nearColor)
                 Spacer(Modifier.height(6.dp))
-                Box(Modifier.fillMaxWidth().height(5.dp).background(Color(0x22FFFFFF), RoundedCornerShape(8.dp))) {
+                Box(Modifier.fillMaxWidth().height(5.dp).background(TvBorder, RoundedCornerShape(8.dp))) {
                     Box(
                         Modifier
                             .fillMaxWidth(position.toFloat())
@@ -192,7 +189,7 @@ private fun ObservasiLine(title: String, reason: String) {
     Column(
         Modifier
             .fillMaxWidth()
-            .background(Color(0x0AFFFFFF), RoundedCornerShape(10.dp))
+            .background(TvSurfaceVariant, RoundedCornerShape(10.dp))
             .padding(horizontal = 12.dp, vertical = 10.dp)
     ) {
         Text("AREA OBSERVASI · $title", fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, color = TvTextSecondary, letterSpacing = 0.4.sp)

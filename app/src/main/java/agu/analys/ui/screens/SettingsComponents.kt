@@ -21,10 +21,7 @@ import androidx.compose.ui.unit.sp
 import agu.analys.BuildConfig
 import agu.analys.config.AiProvider
 import agu.analys.util.GitHubReleaseInfo
-import agu.analys.ui.theme.TvGreen
-import agu.analys.ui.theme.TvRed
-import agu.analys.ui.theme.TvTextPrimary
-import agu.analys.ui.theme.TvTextSecondary
+import agu.analys.ui.theme.*
 import agu.analys.util.GitHubUpdater
 import agu.analys.util.MarketDataCache
 
@@ -32,7 +29,7 @@ import agu.analys.util.MarketDataCache
 fun SectionHeader(title: String) {
     Text(
         text = title,
-        color = Color(0xFF72B7FF),
+        color = TvBlue,
         fontSize = 11.sp,
         fontWeight = FontWeight.Black,
         letterSpacing = 0.6.sp,
@@ -56,10 +53,10 @@ fun ModeOptionCard(
             .fillMaxWidth()
             .clickable { onClick() },
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF101720)),
+        colors = CardDefaults.cardColors(containerColor = TvCardBackground),
         border = androidx.compose.foundation.BorderStroke(
             if (isSelected) 1.5.dp else 1.dp,
-            if (isSelected) tagFg else Color(0xFF1E2836)
+            if (isSelected) tagFg else TvBorder
         )
     ) {
         Column(Modifier.padding(14.dp)) {
@@ -87,11 +84,11 @@ fun ModeOptionCard(
                             if (isSelected) tagFg else Color.Transparent,
                             CircleShape
                         )
-                        .border(1.5.dp, if (isSelected) tagFg else Color(0xFF455A64), CircleShape),
+                        .border(1.5.dp, if (isSelected) tagFg else TvBorder, CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     if (isSelected) {
-                        Box(Modifier.size(8.dp).background(Color.Black, CircleShape))
+                        Box(Modifier.size(8.dp).background(TvBackground, CircleShape))
                     }
                 }
             }
@@ -122,8 +119,8 @@ fun SensitivityChoice(
 ) {
     Box(
         modifier = modifier
-            .background(if (selected) activeBg else Color(0xFF1E2836), RoundedCornerShape(8.dp))
-            .border(1.dp, if (selected) activeFg else Color(0xFF2A3540), RoundedCornerShape(8.dp))
+            .background(if (selected) activeBg else TvSurfaceVariant, RoundedCornerShape(8.dp))
+            .border(1.dp, if (selected) activeFg else TvBorder, RoundedCornerShape(8.dp))
             .clickable { onClick() }
             .padding(vertical = 8.dp),
         contentAlignment = Alignment.Center
@@ -143,8 +140,8 @@ fun AiProviderSettingsCard(
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(10.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF101720)),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E2836))
+        colors = CardDefaults.cardColors(containerColor = TvCardBackground),
+        border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder)
     ) {
         Column(Modifier.padding(14.dp)) {
             Text("Pilih Model AI", color = TvTextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
@@ -153,8 +150,8 @@ fun AiProviderSettingsCard(
                 SensitivityChoice(
                     label = "GROQ (OpenAI GPT)",
                     selected = provider == AiProvider.GROQ,
-                    activeBg = Color(0xFF122840),
-                    activeFg = Color(0xFF72B7FF),
+                    activeBg = TvBlue.copy(alpha = 0.15f),
+                    activeFg = TvBlue,
                     modifier = Modifier.weight(1f)
                 ) {
                     onProviderChange(AiProvider.GROQ)
@@ -162,7 +159,7 @@ fun AiProviderSettingsCard(
                 SensitivityChoice(
                     label = "GEMINI 2.5",
                     selected = provider == AiProvider.GEMINI,
-                    activeBg = Color(0xFF123D2A),
+                    activeBg = TvGreen.copy(alpha = 0.15f),
                     activeFg = TvGreen,
                     modifier = Modifier.weight(1f)
                 ) {
@@ -181,7 +178,7 @@ fun AiProviderSettingsCard(
                 placeholder = { Text("Masukkan API Key opsional...", color = TvTextSecondary, fontSize = 12.sp) },
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = TvGreen,
-                    unfocusedBorderColor = Color(0xFF2A3540),
+                    unfocusedBorderColor = TvBorder,
                     focusedTextColor = TvTextPrimary,
                     unfocusedTextColor = TvTextPrimary
                 )
@@ -211,10 +208,10 @@ fun RealBuyModeAndSecurityCard(
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF101720)),
+        colors = CardDefaults.cardColors(containerColor = TvCardBackground),
         border = androidx.compose.foundation.BorderStroke(
             1.dp,
-            if (isRealBuyMode) TvGreen else Color(0xFF1E2836)
+            if (isRealBuyMode) TvGreen else TvBorder
         )
     ) {
         Column(Modifier.padding(14.dp)) {
@@ -236,7 +233,7 @@ fun RealBuyModeAndSecurityCard(
                         Box(
                             modifier = Modifier
                                 .background(
-                                    if (isRealBuyMode) TvGreen.copy(alpha = 0.2f) else Color(0xFF2A3540),
+                                    if (isRealBuyMode) TvGreen.copy(alpha = 0.15f) else TvSurfaceVariant,
                                     RoundedCornerShape(4.dp)
                                 )
                                 .padding(horizontal = 6.dp, vertical = 2.dp)
@@ -268,13 +265,13 @@ fun RealBuyModeAndSecurityCard(
                         checkedThumbColor = Color.Black,
                         checkedTrackColor = TvGreen,
                         uncheckedThumbColor = TvTextSecondary,
-                        uncheckedTrackColor = Color(0xFF1E2836)
+                        uncheckedTrackColor = TvSurfaceVariant
                     )
                 )
             }
 
             Spacer(Modifier.height(12.dp))
-            HorizontalDivider(color = Color(0xFF1E2836))
+            HorizontalDivider(color = TvBorder)
             Spacer(Modifier.height(12.dp))
 
             // State: Not Configured vs Configured
@@ -283,8 +280,8 @@ fun RealBuyModeAndSecurityCard(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFF172333), RoundedCornerShape(10.dp))
-                        .border(1.dp, Color(0xFF233E60), RoundedCornerShape(10.dp))
+                        .background(TvSurfaceVariant, RoundedCornerShape(10.dp))
+                        .border(1.dp, TvBorder, RoundedCornerShape(10.dp))
                         .padding(12.dp)
                 ) {
                     Column {
@@ -292,13 +289,13 @@ fun RealBuyModeAndSecurityCard(
                             Icon(
                                 imageVector = Icons.Default.Shield,
                                 contentDescription = null,
-                                tint = Color(0xFFFFD54F),
+                                tint = TvAmber,
                                 modifier = Modifier.size(18.dp)
                             )
                             Spacer(Modifier.width(8.dp))
                             Text(
                                 "Kredensial API Indodax Belum Diatur",
-                                color = Color(0xFFFFD54F),
+                                color = TvAmber,
                                 fontSize = 11.5.sp,
                                 fontWeight = FontWeight.Bold
                             )
@@ -306,7 +303,7 @@ fun RealBuyModeAndSecurityCard(
                         Spacer(Modifier.height(6.dp))
                         Text(
                             "Untuk beralih ke Mode Real, masukkan API Key, Secret Key, dan PIN Keamanan 6-digit. Setelah disimpan, input akan otomatis disembunyikan dan dienkripsi lokal.",
-                            color = Color(0xFFB0BEC5),
+                            color = TvTextSecondary,
                             fontSize = 10.5.sp,
                             lineHeight = 14.5.sp
                         )
@@ -328,8 +325,8 @@ fun RealBuyModeAndSecurityCard(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFF0F1E2E), RoundedCornerShape(10.dp))
-                        .border(1.dp, Color(0xFF1B3D5E), RoundedCornerShape(10.dp))
+                        .background(TvSurfaceVariant, RoundedCornerShape(10.dp))
+                        .border(1.dp, TvBorder, RoundedCornerShape(10.dp))
                         .padding(12.dp)
                 ) {
                     Column {
@@ -356,12 +353,12 @@ fun RealBuyModeAndSecurityCard(
 
                             Box(
                                 modifier = Modifier
-                                    .background(Color(0xFF122C44), RoundedCornerShape(4.dp))
+                                    .background(TvSurfaceVariant, RoundedCornerShape(4.dp))
                                     .padding(horizontal = 6.dp, vertical = 2.dp)
                             ) {
                                 Text(
                                     if (isPinUnlocked) "PIN TERVERIFIKASI" else "PIN TERKUNCI",
-                                    color = if (isPinUnlocked) TvGreen else Color(0xFF00E5FF),
+                                    color = if (isPinUnlocked) TvGreen else TvBlue,
                                     fontSize = 9.sp,
                                     fontWeight = FontWeight.Bold
                                 )
@@ -371,7 +368,7 @@ fun RealBuyModeAndSecurityCard(
                         Spacer(Modifier.height(6.dp))
                         Text(
                             "API Key & Secret Key Indodax tersimpan aman di memori lokal. Mode Real dapat dipicu kapan saja tanpa perlu input ulang kunci API.",
-                            color = Color(0xFFB0BEC5),
+                            color = TvTextSecondary,
                             fontSize = 10.sp,
                             lineHeight = 14.sp
                         )
@@ -399,8 +396,8 @@ fun RealBuyModeAndSecurityCard(
                                 },
                                 modifier = Modifier.weight(1f).height(34.dp),
                                 shape = RoundedCornerShape(6.dp),
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF72B7FF)),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E3A5F)),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = TvBlue),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder),
                                 contentPadding = PaddingValues(0.dp)
                             ) {
                                 Icon(Icons.Default.Edit, null, modifier = Modifier.size(13.dp))
@@ -431,8 +428,8 @@ fun RealBuyModeAndSecurityCard(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xFF0F2338), RoundedCornerShape(8.dp))
-                    .border(1.dp, Color(0xFF1E3A5F), RoundedCornerShape(8.dp))
+                    .background(TvSurfaceVariant, RoundedCornerShape(8.dp))
+                    .border(1.dp, TvBorder, RoundedCornerShape(8.dp))
                     .padding(10.dp)
             ) {
                 Column {
@@ -442,7 +439,7 @@ fun RealBuyModeAndSecurityCard(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("🌐 IP PUBLIK HP ANDA SAAT INI:", color = Color(0xFF72B7FF), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            Text("🌐 IP PUBLIK HP ANDA SAAT INI:", color = TvBlue, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                             Text(
                                 if (userPublicIp.isNotBlank()) userPublicIp else "Memuat...",
                                 color = TvGreen,
@@ -465,8 +462,8 @@ fun RealBuyModeAndSecurityCard(
                             },
                             shape = RoundedCornerShape(6.dp),
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF00E5FF)),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF00E5FF))
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = TvBlue),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, TvBlue)
                         ) {
                             Text("📋 SALIN IP", fontSize = 10.sp, fontWeight = FontWeight.Bold)
                         }
@@ -487,12 +484,12 @@ fun RealBuyModeAndSecurityCard(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xFF0D1B2A), RoundedCornerShape(6.dp))
+                    .background(TvSurfaceVariant, RoundedCornerShape(6.dp))
                     .padding(8.dp)
             ) {
                 Text(
                     "🔒 Proteksi Otomatis: Jika PIN salah dimasukkan 5 kali berturut-turut, sistem akan langsung menghapus seluruh Kredensial API demi keamanan saldo Anda.",
-                    color = Color(0xFF90A4AE),
+                    color = TvTextSecondary,
                     fontSize = 9.5.sp,
                     lineHeight = 13.5.sp
                 )
@@ -527,7 +524,7 @@ fun RealBuyModeAndSecurityCard(
                     Text("Batal", color = TvTextSecondary, fontSize = 11.5.sp)
                 }
             },
-            containerColor = Color(0xFF101720),
+            containerColor = TvSurface,
             shape = RoundedCornerShape(14.dp)
         )
     }
@@ -554,8 +551,8 @@ fun AppMaintenanceCard(
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(10.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF101720)),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E2836))
+        colors = CardDefaults.cardColors(containerColor = TvCardBackground),
+        border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder)
     ) {
         Column(Modifier.padding(14.dp)) {
             Row(
@@ -576,14 +573,14 @@ fun AppMaintenanceCard(
                 }
                 Text(
                     if (cacheCleared) "0,00 MB (Bersih)" else "Bersihkan >",
-                    color = if (cacheCleared) TvGreen else Color(0xFF72B7FF),
+                    color = if (cacheCleared) TvGreen else TvBlue,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold
                 )
             }
 
             Spacer(Modifier.height(10.dp))
-            Divider(color = Color(0xFF1E2836), thickness = 0.5.dp)
+            HorizontalDivider(color = TvBorder, thickness = 0.5.dp)
             Spacer(Modifier.height(10.dp))
 
             Row(
@@ -608,7 +605,7 @@ fun AppMaintenanceCard(
 
                 Text(
                     text = if (showAdvancedRepoSettings) "Tutup Konfigurasi" else "Ubah Repo / Token",
-                    color = Color(0xFF72B7FF),
+                    color = TvBlue,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier
@@ -623,10 +620,10 @@ fun AppMaintenanceCard(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFF0B1015), RoundedCornerShape(8.dp))
+                        .background(TvSurfaceVariant, RoundedCornerShape(8.dp))
                         .padding(10.dp)
                 ) {
-                    Text("REPOSITORY GITHUB RILIS APK", color = Color(0xFF72B7FF), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Text("REPOSITORY GITHUB RILIS APK", color = TvBlue, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(4.dp))
                     OutlinedTextField(
                         value = updateRepo,
@@ -635,7 +632,7 @@ fun AppMaintenanceCard(
                         placeholder = { Text("username/repository-rilis", fontSize = 11.sp, color = TvTextSecondary) },
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = TvGreen,
-                            unfocusedBorderColor = Color(0xFF2A3540),
+                            unfocusedBorderColor = TvBorder,
                             focusedTextColor = TvTextPrimary,
                             unfocusedTextColor = TvTextPrimary
                         ),
@@ -643,7 +640,7 @@ fun AppMaintenanceCard(
                     )
 
                     Spacer(Modifier.height(8.dp))
-                    Text("GITHUB TOKEN / PAT (OPSIONAL)", color = Color(0xFF72B7FF), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Text("GITHUB TOKEN / PAT (OPSIONAL)", color = TvBlue, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(2.dp))
                     Text("Wajib diisi jika repository rilis berstatus Private.", color = TvTextSecondary, fontSize = 9.5.sp)
                     Spacer(Modifier.height(4.dp))
@@ -654,7 +651,7 @@ fun AppMaintenanceCard(
                         placeholder = { Text("ghp_xxxx atau github_pat_xxxx", fontSize = 11.sp, color = TvTextSecondary) },
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = TvGreen,
-                            unfocusedBorderColor = Color(0xFF2A3540),
+                            unfocusedBorderColor = TvBorder,
                             focusedTextColor = TvTextPrimary,
                             unfocusedTextColor = TvTextPrimary
                         ),
@@ -667,7 +664,7 @@ fun AppMaintenanceCard(
                 Spacer(Modifier.height(8.dp))
                 Text(
                     updateStatus,
-                    color = if (releaseInfo != null) TvGreen else Color(0xFFFFB300),
+                    color = if (releaseInfo != null) TvGreen else TvAmber,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Medium
                 )
@@ -678,12 +675,12 @@ fun AppMaintenanceCard(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFF0B141C), RoundedCornerShape(6.dp))
+                        .background(TvSurfaceVariant, RoundedCornerShape(6.dp))
                         .padding(8.dp)
                 ) {
                     Text(
                         "Catatan Rilis ${releaseInfo.tagName}:",
-                        color = Color(0xFF00E5FF),
+                        color = TvBlue,
                         fontSize = 10.5.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -708,7 +705,7 @@ fun AppMaintenanceCard(
                     enabled = !checkingUpdate,
                     modifier = Modifier.weight(1f).height(42.dp),
                     shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E2836))
+                    colors = ButtonDefaults.buttonColors(containerColor = TvSurfaceVariant)
                 ) {
                     if (checkingUpdate) {
                         CircularProgressIndicator(modifier = Modifier.size(16.dp), color = TvGreen, strokeWidth = 2.dp)
@@ -746,8 +743,8 @@ fun AppMaintenanceCard(
                         onClick = { GitHubUpdater.openGitHubReleasesPage(context, updateRepo) },
                         modifier = Modifier.weight(1f).height(42.dp),
                         shape = RoundedCornerShape(8.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF72B7FF)),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E2836))
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = TvBlue),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder)
                     ) {
                         Text("Buka GitHub", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
                     }

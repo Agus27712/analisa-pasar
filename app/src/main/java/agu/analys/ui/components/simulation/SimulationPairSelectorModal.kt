@@ -21,9 +21,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import agu.analys.model.MarketTick
 import agu.analys.model.TradingPair
-import agu.analys.ui.theme.TvGreen
-import agu.analys.ui.theme.TvRed
-import agu.analys.ui.theme.TvTextSecondary
+import agu.analys.ui.theme.*
 import agu.analys.util.PriceFormatter
 
 @Composable
@@ -51,7 +49,7 @@ fun SimulationPairSelectorModal(
     Dialog(onDismissRequest = onDismiss) {
         Card(
             shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
+            colors = CardDefaults.cardColors(containerColor = TvCardBackground),
             modifier = Modifier
                 .fillMaxWidth()
                 .fillMaxHeight(0.8f)
@@ -68,12 +66,12 @@ fun SimulationPairSelectorModal(
                 ) {
                     Text(
                         text = "Pilih Pasangan Koin",
-                        color = Color.White,
+                        color = TvTextPrimary,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold
                     )
                     IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
-                        Icon(Icons.Default.Close, contentDescription = "Tutup", tint = Color.LightGray)
+                        Icon(Icons.Default.Close, contentDescription = "Tutup", tint = TvTextSecondary)
                     }
                 }
 
@@ -87,9 +85,9 @@ fun SimulationPairSelectorModal(
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = TvGreen,
-                        unfocusedBorderColor = Color(0xFF334155),
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White
+                        unfocusedBorderColor = TvBorder,
+                        focusedTextColor = TvTextPrimary,
+                        unfocusedTextColor = TvTextPrimary
                     ),
                     shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.fillMaxWidth()
@@ -111,7 +109,7 @@ fun SimulationPairSelectorModal(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(if (isSelected) Color(0xFF1E293B) else Color(0xFF162032))
+                                .background(if (isSelected) TvSurfaceVariant else TvCardBackground)
                                 .clickable {
                                     onSelectPair(pair)
                                     onDismiss()
@@ -124,7 +122,7 @@ fun SimulationPairSelectorModal(
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(
                                         text = "${pair.baseAsset}/${pair.quoteAsset}",
-                                        color = if (isSelected) TvGreen else Color.White,
+                                        color = if (isSelected) TvGreen else TvTextPrimary,
                                         fontSize = 14.sp,
                                         fontWeight = FontWeight.Bold
                                     )
@@ -150,7 +148,7 @@ fun SimulationPairSelectorModal(
                             Column(horizontalAlignment = Alignment.End) {
                                 Text(
                                     text = if (price > 0) PriceFormatter.formatPrice(price, quoteAsset = pair.quoteAsset) else "—",
-                                    color = Color.White,
+                                    color = TvTextPrimary,
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.SemiBold
                                 )

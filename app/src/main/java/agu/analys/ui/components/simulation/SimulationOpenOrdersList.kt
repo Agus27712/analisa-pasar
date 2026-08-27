@@ -68,7 +68,7 @@ fun SimulationOpenOrdersList(
                 ) {
                     Text(
                         text = "Open Orders",
-                        color = if (selectedTab == 0) Color.White else TvTextSecondary,
+                        color = if (selectedTab == 0) TvTextPrimary else TvTextSecondary,
                         fontSize = 15.sp,
                         fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Medium
                     )
@@ -89,7 +89,7 @@ fun SimulationOpenOrdersList(
                         ) {
                             Text(
                                 text = "${openOrders.size}",
-                                color = Color.Black,
+                                color = Color.White,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold
                             )
@@ -104,13 +104,13 @@ fun SimulationOpenOrdersList(
                     Icon(
                         imageVector = Icons.Default.History,
                         contentDescription = "Riwayat",
-                        tint = if (selectedTab == 1) Color.White else TvTextSecondary,
+                        tint = if (selectedTab == 1) TvTextPrimary else TvTextSecondary,
                         modifier = Modifier.size(16.dp)
                     )
                     Spacer(Modifier.width(4.dp))
                     Text(
                         text = "Riwayat",
-                        color = if (selectedTab == 1) Color.White else TvTextSecondary,
+                        color = if (selectedTab == 1) TvTextPrimary else TvTextSecondary,
                         fontSize = 15.sp,
                         fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Medium
                     )
@@ -121,13 +121,13 @@ fun SimulationOpenOrdersList(
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(4.dp))
-                        .border(1.dp, Color(0xFF334155), RoundedCornerShape(4.dp))
+                        .border(1.dp, TvBorder, RoundedCornerShape(4.dp))
                         .clickable { onCancelAllOrders(if (showAllCoins) null else currentSymbol) }
                         .padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
                     Text(
                         text = "Batalkan Semua",
-                        color = Color(0xFFD1D5DB),
+                        color = TvTextPrimary,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Medium
                     )

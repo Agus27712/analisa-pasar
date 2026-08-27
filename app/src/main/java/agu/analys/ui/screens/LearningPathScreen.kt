@@ -42,12 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import agu.analys.model.CandleBar
 import agu.analys.model.TradingPair
-import agu.analys.ui.theme.TvBackground
-import agu.analys.ui.theme.TvCardBackground
-import agu.analys.ui.theme.TvGreen
-import agu.analys.ui.theme.TvRed
-import agu.analys.ui.theme.TvTextPrimary
-import agu.analys.ui.theme.TvTextSecondary
+import agu.analys.ui.theme.*
 import agu.analys.util.AppPreferences
 import agu.analys.viewmodel.TradingViewModel
 
@@ -124,7 +119,7 @@ fun LearningPathScreen(
                 progress = { progress },
                 modifier = Modifier.fillMaxWidth().height(6.dp),
                 color = TvGreen,
-                trackColor = Color(0xFF30343B)
+                trackColor = TvSurfaceVariant
             )
             Spacer(Modifier.height(5.dp))
             Text(
@@ -182,7 +177,7 @@ fun LearningPathScreen(
                                     completed = prefs.getCompletedLearningLessons()
                                 },
                                 colors = ButtonDefaults.buttonColors(
-                                    containerColor = if (isCompleted) Color(0xFF2B2E34) else TvGreen
+                                    containerColor = if (isCompleted) TvSurfaceVariant else TvGreen
                                 ),
                                 shape = RoundedCornerShape(10.dp),
                                 modifier = Modifier.fillMaxWidth()

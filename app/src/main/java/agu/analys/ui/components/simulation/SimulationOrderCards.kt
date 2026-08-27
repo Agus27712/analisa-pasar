@@ -40,7 +40,8 @@ fun OpenOrderItemCard(
 
     Card(
         shape = RoundedCornerShape(8.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF162032)),
+        colors = CardDefaults.cardColors(containerColor = TvCardBackground),
+        border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
@@ -66,7 +67,7 @@ fun OpenOrderItemCard(
                     Spacer(Modifier.width(8.dp))
                     Text(
                         text = "${order.baseAsset}/${quote}",
-                        color = Color.White,
+                        color = TvTextPrimary,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -81,13 +82,13 @@ fun OpenOrderItemCard(
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(4.dp))
-                        .border(1.dp, Color(0xFFEF4444).copy(alpha = 0.5f), RoundedCornerShape(4.dp))
+                        .border(1.dp, TvRed.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
                         .clickable { onCancel() }
                         .padding(horizontal = 8.dp, vertical = 3.dp)
                 ) {
                     Text(
                         text = "Batal",
-                        color = Color(0xFFFCA5A5),
+                        color = TvRed,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -104,7 +105,7 @@ fun OpenOrderItemCard(
                     Text(text = "Harga Order", color = TvTextSecondary, fontSize = 10.sp)
                     Text(
                         text = PriceFormatter.formatPrice(order.limitPrice, quoteAsset = quote),
-                        color = Color.White,
+                        color = TvTextPrimary,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -121,7 +122,7 @@ fun OpenOrderItemCard(
                     Text(text = "Jumlah", color = TvTextSecondary, fontSize = 10.sp)
                     Text(
                         text = "${PriceFormatter.formatQuantity(order.quantity)} ${order.baseAsset}",
-                        color = Color.White,
+                        color = TvTextPrimary,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -131,7 +132,7 @@ fun OpenOrderItemCard(
                     Text(text = "Total ($quote)", color = TvTextSecondary, fontSize = 10.sp)
                     Text(
                         text = PriceFormatter.formatPrice(order.totalIdr, quoteAsset = quote),
-                        color = Color.White,
+                        color = TvTextPrimary,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -169,7 +170,8 @@ fun TradeHistoryItemCard(history: SimulationTradeHistoryItem) {
 
     Card(
         shape = RoundedCornerShape(8.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF162032)),
+        colors = CardDefaults.cardColors(containerColor = TvCardBackground),
+        border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
@@ -195,7 +197,7 @@ fun TradeHistoryItemCard(history: SimulationTradeHistoryItem) {
                     Spacer(Modifier.width(8.dp))
                     Text(
                         text = "${history.baseAsset}/${quote}",
-                        color = Color.White,
+                        color = TvTextPrimary,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -228,7 +230,7 @@ fun TradeHistoryItemCard(history: SimulationTradeHistoryItem) {
                     Text(text = "Harga Eksekusi", color = TvTextSecondary, fontSize = 10.sp)
                     Text(
                         text = PriceFormatter.formatPrice(history.executionPrice, quoteAsset = quote),
-                        color = Color.White,
+                        color = TvTextPrimary,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -238,7 +240,7 @@ fun TradeHistoryItemCard(history: SimulationTradeHistoryItem) {
                     Text(text = "Jumlah Koin", color = TvTextSecondary, fontSize = 10.sp)
                     Text(
                         text = "${PriceFormatter.formatQuantity(history.quantity)} ${history.baseAsset}",
-                        color = Color.White,
+                        color = TvTextPrimary,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -248,7 +250,7 @@ fun TradeHistoryItemCard(history: SimulationTradeHistoryItem) {
                     Text(text = "Total Eksekusi", color = TvTextSecondary, fontSize = 10.sp)
                     Text(
                         text = PriceFormatter.formatPrice(history.totalIdr, quoteAsset = quote),
-                        color = Color.White,
+                        color = TvTextPrimary,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -291,13 +293,13 @@ fun SimulationEmptyStateView(
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = Color(0xFF475569),
+            tint = TvTextSecondary,
             modifier = Modifier.size(44.dp)
         )
         Spacer(Modifier.height(10.dp))
         Text(
             text = message,
-            color = Color(0xFF94A3B8),
+            color = TvTextSecondary,
             fontSize = 12.sp,
             textAlign = TextAlign.Center
         )

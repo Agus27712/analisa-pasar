@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.sp
 import agu.analys.model.MarketConnectionState
 import agu.analys.ui.components.MarketEmptyOrErrorState
 import agu.analys.ui.components.SimpleComposeChart
+import agu.analys.ui.theme.*
 import agu.analys.viewmodel.TradingViewModel
 
 @Composable
@@ -39,7 +40,7 @@ fun LandscapeChartScreen(viewModel: TradingViewModel, onBackToDetail: () -> Unit
     }
     BackHandler { onBackToDetail() }
 
-    Box(modifier = modifier.fillMaxSize().background(Color(0xFF0D0E12))) {
+    Box(modifier = modifier.fillMaxSize().background(TvBackground)) {
         when (val state = connectionState) {
             is MarketConnectionState.ConnectionLost -> MarketEmptyOrErrorState(false, true, state.title, state.reason, { viewModel.retryConnection() }, Modifier.fillMaxSize())
             is MarketConnectionState.Loading -> MarketEmptyOrErrorState(true, false, onRetry = { viewModel.retryConnection() }, modifier = Modifier.fillMaxSize())

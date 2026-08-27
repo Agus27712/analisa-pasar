@@ -43,11 +43,7 @@ import agu.analys.model.AISignalState
 import agu.analys.model.SignalAction
 import agu.analys.trading.SpotPosition
 import agu.analys.trading.SpotPositionStore
-import agu.analys.ui.theme.TvAmber
-import agu.analys.ui.theme.TvGreen
-import agu.analys.ui.theme.TvRed
-import agu.analys.ui.theme.TvTextPrimary
-import agu.analys.ui.theme.TvTextSecondary
+import agu.analys.ui.theme.*
 import agu.analys.util.PriceFormatter
 import kotlin.math.abs
 
@@ -81,15 +77,15 @@ fun SpotPositionCard(
     if (showDialog) {
         AlertDialog(
             onDismissRequest = { showDialog = false },
-            containerColor = Color(0xFF0F1720),
+            containerColor = TvSurface,
             titleContentColor = TvTextPrimary,
             textContentColor = TvTextSecondary,
             shape = RoundedCornerShape(20.dp),
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.AccountBalanceWallet, null, tint = Color(0xFF4FC3F7), modifier = Modifier.size(22.dp))
+                    Icon(Icons.Default.AccountBalanceWallet, null, tint = TvBlue, modifier = Modifier.size(22.dp))
                     Spacer(Modifier.padding(horizontal = 6.dp))
-                    Text("ATUR POSISI SAYA", fontWeight = FontWeight.ExtraBold, fontSize = 16.sp, color = Color(0xFF4FC3F7))
+                    Text("ATUR POSISI SAYA", fontWeight = FontWeight.ExtraBold, fontSize = 16.sp, color = TvBlue)
                 }
             },
             text = {
@@ -97,11 +93,11 @@ fun SpotPositionCard(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(Color(0xFF1A2A3A), RoundedCornerShape(12.dp))
+                            .background(TvSurfaceVariant, RoundedCornerShape(12.dp))
                             .padding(12.dp),
                         verticalAlignment = Alignment.Top
                     ) {
-                        Icon(Icons.Default.Info, null, tint = Color(0xFF4FC3F7), modifier = Modifier.size(18.dp))
+                        Icon(Icons.Default.Info, null, tint = TvBlue, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.padding(horizontal = 6.dp))
                         Text(
                             "Masukkan data pembelian Anda. Aplikasi akan menghitung jumlah koin dan profit/loss secara otomatis.",
@@ -120,7 +116,10 @@ fun SpotPositionCard(
                         Switch(
                             checked = true,
                             onCheckedChange = { },
-                            colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = Color(0xFF4FC3F7))
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = TvBlue
+                            )
                         )
                     }
 
@@ -133,15 +132,15 @@ fun SpotPositionCard(
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Color(0xFF4FC3F7),
-                            unfocusedBorderColor = Color(0xFF2A3540),
+                            focusedBorderColor = TvBlue,
+                            unfocusedBorderColor = TvBorder,
                             focusedTextColor = TvTextPrimary,
                             unfocusedTextColor = TvTextPrimary,
-                            focusedLabelColor = Color(0xFF4FC3F7),
+                            focusedLabelColor = TvBlue,
                             unfocusedLabelColor = TvTextSecondary,
-                            cursorColor = Color(0xFF4FC3F7),
-                            focusedContainerColor = Color(0xFF0D1420),
-                            unfocusedContainerColor = Color(0xFF0D1420)
+                            cursorColor = TvBlue,
+                            focusedContainerColor = TvSurfaceVariant,
+                            unfocusedContainerColor = TvSurfaceVariant
                         ),
                         shape = RoundedCornerShape(10.dp)
                     )
@@ -155,15 +154,15 @@ fun SpotPositionCard(
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Color(0xFF4FC3F7),
-                            unfocusedBorderColor = Color(0xFF2A3540),
+                            focusedBorderColor = TvBlue,
+                            unfocusedBorderColor = TvBorder,
                             focusedTextColor = TvTextPrimary,
                             unfocusedTextColor = TvTextPrimary,
-                            focusedLabelColor = Color(0xFF4FC3F7),
+                            focusedLabelColor = TvBlue,
                             unfocusedLabelColor = TvTextSecondary,
-                            cursorColor = Color(0xFF4FC3F7),
-                            focusedContainerColor = Color(0xFF0D1420),
-                            unfocusedContainerColor = Color(0xFF0D1420)
+                            cursorColor = TvBlue,
+                            focusedContainerColor = TvSurfaceVariant,
+                            unfocusedContainerColor = TvSurfaceVariant
                         ),
                         shape = RoundedCornerShape(10.dp)
                     )
@@ -175,8 +174,8 @@ fun SpotPositionCard(
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .background(Color(0xFF13253A), RoundedCornerShape(12.dp))
-                                .border(1.dp, Color(0xFF1E3A5F), RoundedCornerShape(12.dp))
+                                .background(TvSurfaceVariant, RoundedCornerShape(12.dp))
+                                .border(1.dp, TvBorder, RoundedCornerShape(12.dp))
                                 .padding(12.dp)
                         ) {
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -218,8 +217,8 @@ fun SpotPositionCard(
                     },
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF2196F3),
-                        disabledContainerColor = Color(0xFF2A3540)
+                        containerColor = TvBlue,
+                        disabledContainerColor = TvBorder
                     ),
                     shape = RoundedCornerShape(12.dp)
                 ) {
@@ -237,8 +236,8 @@ fun SpotPositionCard(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(Color(0xFF0D1722), RoundedCornerShape(16.dp))
-            .border(1.dp, Color(0xFF1A3347), RoundedCornerShape(16.dp))
+            .background(TvCardBackground, RoundedCornerShape(16.dp))
+            .border(1.dp, TvBorder, RoundedCornerShape(16.dp))
             .padding(14.dp)
     ) {
         Row(modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
@@ -264,9 +263,7 @@ fun SpotPositionCard(
                     },
                     colors = SwitchDefaults.colors(
                         checkedThumbColor = Color.White,
-                        checkedTrackColor = Color(0xFF4FC3F7),
-                        uncheckedThumbColor = Color.White,
-                        uncheckedTrackColor = Color(0xFF3A3A3A)
+                        checkedTrackColor = TvBlue
                     ),
                     modifier = Modifier.testTag("asset_ownership_switch")
                 )
@@ -293,7 +290,7 @@ fun SpotPositionCard(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xFF0A1218), RoundedCornerShape(10.dp))
+                    .background(TvSurfaceVariant, RoundedCornerShape(10.dp))
                     .padding(10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -309,7 +306,7 @@ fun SpotPositionCard(
                     showDialog = true
                 },
                 modifier = Modifier.fillMaxWidth().height(36.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0x1AFFFFFF)),
+                colors = ButtonDefaults.buttonColors(containerColor = TvSurfaceVariant),
                 shape = RoundedCornerShape(9.dp)
             ) { Text("Ubah Data Pembelian", fontSize = 11.sp, color = TvTextPrimary) }
         } else {
@@ -324,7 +321,7 @@ fun SpotPositionCard(
             Button(
                 onClick = { showDialog = true },
                 modifier = Modifier.fillMaxWidth().height(42.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2196F3)),
+                colors = ButtonDefaults.buttonColors(containerColor = TvBlue),
                 shape = RoundedCornerShape(12.dp)
             ) { Text("ATUR POSISI", fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, color = Color.White) }
         }

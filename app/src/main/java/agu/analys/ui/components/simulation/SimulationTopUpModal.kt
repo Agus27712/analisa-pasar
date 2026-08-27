@@ -35,7 +35,7 @@ fun SimulationTopUpModal(
     Dialog(onDismissRequest = onDismiss) {
         Card(
             shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
+            colors = CardDefaults.cardColors(containerColor = TvCardBackground),
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(
@@ -59,13 +59,13 @@ fun SimulationTopUpModal(
                         Spacer(Modifier.width(8.dp))
                         Text(
                             text = "Kelola Modal Simulasi",
-                            color = Color.White,
+                            color = TvTextPrimary,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold
                         )
                     }
                     IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
-                        Icon(Icons.Default.Close, contentDescription = "Tutup", tint = Color.LightGray)
+                        Icon(Icons.Default.Close, contentDescription = "Tutup", tint = TvTextSecondary)
                     }
                 }
 
@@ -76,7 +76,7 @@ fun SimulationTopUpModal(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0xFF1E293B))
+                        .background(TvSurfaceVariant)
                         .padding(14.dp)
                 ) {
                     Column {
@@ -103,7 +103,7 @@ fun SimulationTopUpModal(
 
                 Text(
                     text = "Tambah Modal Virtual (Top Up):",
-                    color = Color.White,
+                    color = TvTextPrimary,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -121,14 +121,14 @@ fun SimulationTopUpModal(
                                 onTopUp(amount)
                                 onDismiss()
                             },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF162032)),
-                            border = ButtonDefaults.outlinedButtonBorder.copy(brush = androidx.compose.ui.graphics.SolidColor(Color(0xFF334155))),
+                            colors = ButtonDefaults.buttonColors(containerColor = TvSurfaceVariant),
+                            border = ButtonDefaults.outlinedButtonBorder.copy(brush = androidx.compose.ui.graphics.SolidColor(TvBorder)),
                             shape = RoundedCornerShape(6.dp),
                             modifier = Modifier.weight(1f)
                         ) {
                             Text(
                                 text = "+Rp ${formatShort(amount)}",
-                                color = Color.White,
+                                color = TvTextPrimary,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold
                             )
@@ -148,14 +148,14 @@ fun SimulationTopUpModal(
                                 onTopUp(amount)
                                 onDismiss()
                             },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF162032)),
-                            border = ButtonDefaults.outlinedButtonBorder.copy(brush = androidx.compose.ui.graphics.SolidColor(Color(0xFF334155))),
+                            colors = ButtonDefaults.buttonColors(containerColor = TvSurfaceVariant),
+                            border = ButtonDefaults.outlinedButtonBorder.copy(brush = androidx.compose.ui.graphics.SolidColor(TvBorder)),
                             shape = RoundedCornerShape(6.dp),
                             modifier = Modifier.weight(1f)
                         ) {
                             Text(
                                 text = "+Rp ${formatShort(amount)}",
-                                color = Color.White,
+                                color = TvTextPrimary,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold
                             )

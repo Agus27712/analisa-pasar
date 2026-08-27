@@ -14,22 +14,19 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import agu.analys.ui.theme.TvGreen
-import agu.analys.ui.theme.TvTextPrimary
-import agu.analys.ui.theme.TvTextSecondary
+import agu.analys.ui.theme.*
 
-val AnalysisCardBg = Color(0xFF0D1722)
-val AnalysisBorder = Color(0xFF1A3347)
-val WarningAmber = Color(0xFFFFB300)
-val InfoBlue = Color(0xFF2196F3)
-val TvGold = Color(0xFFFFD54A)
+val AnalysisCardBg: Color @Composable get() = TvCardBackground
+val AnalysisBorder: Color @Composable get() = TvBorder
+val WarningAmber: Color @Composable get() = TvAmber
+val InfoBlue: Color @Composable get() = TvBlue
+val TvGold: Color @Composable get() = TvAmber
 
 /** Shared spacing for detail cards — keep hierarchy consistent. */
 object AnalysisSpacing {
     val cardPadding = 16.dp
     val sectionGap = 10.dp
     val rowGap = 6.dp
-    val dividerAlpha = 0x14FFFFFF
 }
 
 @Composable
@@ -51,9 +48,9 @@ fun SectionTitle(text: String, icon: ImageVector? = null) {
             Icon(
                 icon, null,
                 tint = when {
-                    text.contains("TEKNIKAL", ignoreCase = true) -> Color(0xFF6FB8FF)
-                    text.contains("LEVEL", ignoreCase = true) -> InfoBlue
-                    text.contains("PROGRESS", ignoreCase = true) -> InfoBlue
+                    text.contains("TEKNIKAL", ignoreCase = true) -> TvBlue
+                    text.contains("LEVEL", ignoreCase = true) -> TvBlue
+                    text.contains("PROGRESS", ignoreCase = true) -> TvBlue
                     else -> TvGreen
                 },
                 modifier = Modifier.size(20.dp)
@@ -76,7 +73,7 @@ fun AnalysisDivider() {
         Modifier
             .fillMaxWidth()
             .height(0.5.dp)
-            .background(Color(AnalysisSpacing.dividerAlpha))
+            .background(TvBorder)
     )
 }
 

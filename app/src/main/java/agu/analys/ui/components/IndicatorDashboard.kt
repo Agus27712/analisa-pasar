@@ -26,12 +26,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import agu.analys.model.TechnicalIndicators
-import agu.analys.ui.theme.TvAmber
-import agu.analys.ui.theme.TvCardBackground
-import agu.analys.ui.theme.TvGreen
-import agu.analys.ui.theme.TvRed
-import agu.analys.ui.theme.TvTextPrimary
-import agu.analys.ui.theme.TvTextSecondary
+import agu.analys.ui.theme.*
 import agu.analys.util.PriceFormatter
 
 @Composable
@@ -85,8 +80,8 @@ private fun IndicatorRow(label: String, value: String) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
-            .background(Color(0xFF121212))
-            .border(1.dp, Color(0x1AFFFFFF), RoundedCornerShape(10.dp))
+            .background(TvCardBackground)
+            .border(1.dp, TvBorder, RoundedCornerShape(10.dp))
             .padding(horizontal = 12.dp, vertical = 10.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically

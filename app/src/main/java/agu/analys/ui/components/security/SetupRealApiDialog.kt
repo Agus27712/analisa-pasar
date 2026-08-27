@@ -31,9 +31,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import agu.analys.ui.theme.TvGreen
-import agu.analys.ui.theme.TvTextPrimary
-import agu.analys.ui.theme.TvTextSecondary
+import agu.analys.ui.theme.*
 
 @Composable
 fun SetupRealApiDialog(
@@ -55,7 +53,7 @@ fun SetupRealApiDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = Color(0xFF0F1722),
+        containerColor = TvSurface,
         shape = RoundedCornerShape(20.dp),
         title = {
             Column(
@@ -103,21 +101,21 @@ fun SetupRealApiDialog(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFF0F2338), RoundedCornerShape(8.dp))
-                        .border(1.dp, Color(0xFF1E3A5F), RoundedCornerShape(8.dp))
+                        .background(TvBlue.copy(alpha = 0.12f), RoundedCornerShape(8.dp))
+                        .border(1.dp, TvBlue.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
                         .padding(10.dp)
                 ) {
                     Row(verticalAlignment = Alignment.Top) {
                         Icon(
                             imageVector = Icons.Default.Lock,
                             contentDescription = null,
-                            tint = Color(0xFF72B7FF),
+                            tint = TvBlue,
                             modifier = Modifier.size(16.dp).padding(top = 2.dp)
                         )
                         Spacer(Modifier.width(8.dp))
                         Text(
                             text = "Kredensial disimpan terenkripsi di perangkat lokal Anda dan dikunci dengan PIN. API Key & Secret tidak akan tampil terbuka di layar.",
-                            color = Color(0xFFB0BEC5),
+                            color = TvTextSecondary,
                             fontSize = 10.5.sp,
                             lineHeight = 14.sp
                         )
@@ -128,8 +126,8 @@ fun SetupRealApiDialog(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFF131D2A), RoundedCornerShape(8.dp))
-                        .border(0.5.dp, Color(0xFF263C52), RoundedCornerShape(8.dp))
+                        .background(TvCardBackground, RoundedCornerShape(8.dp))
+                        .border(0.5.dp, TvBorder, RoundedCornerShape(8.dp))
                         .padding(8.dp)
                 ) {
                     Row(
@@ -159,8 +157,8 @@ fun SetupRealApiDialog(
                             },
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                             shape = RoundedCornerShape(6.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF00E5FF)),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF00E5FF))
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = TvBlue),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, TvBlue)
                         ) {
                             Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(12.dp))
                             Spacer(Modifier.width(3.dp))
@@ -196,7 +194,7 @@ fun SetupRealApiDialog(
                     },
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = TvGreen,
-                        unfocusedBorderColor = Color(0xFF2A3540),
+                        unfocusedBorderColor = TvBorder,
                         focusedTextColor = TvTextPrimary,
                         unfocusedTextColor = TvTextPrimary
                     )
@@ -219,7 +217,7 @@ fun SetupRealApiDialog(
                     visualTransformation = if (showPin) VisualTransformation.None else PasswordVisualTransformation(),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = TvGreen,
-                        unfocusedBorderColor = Color(0xFF2A3540),
+                        unfocusedBorderColor = TvBorder,
                         focusedTextColor = TvTextPrimary,
                         unfocusedTextColor = TvTextPrimary
                     )
@@ -237,11 +235,11 @@ fun SetupRealApiDialog(
                     placeholder = { Text("Paste Indodax API Key...", color = TvTextSecondary, fontSize = 11.sp) },
                     singleLine = true,
                     leadingIcon = {
-                        Icon(Icons.Default.Key, null, tint = Color(0xFF72B7FF), modifier = Modifier.size(18.dp))
+                        Icon(Icons.Default.Key, null, tint = TvBlue, modifier = Modifier.size(18.dp))
                     },
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = TvGreen,
-                        unfocusedBorderColor = Color(0xFF2A3540),
+                        unfocusedBorderColor = TvBorder,
                         focusedTextColor = TvTextPrimary,
                         unfocusedTextColor = TvTextPrimary
                     )
@@ -271,7 +269,7 @@ fun SetupRealApiDialog(
                     },
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = TvGreen,
-                        unfocusedBorderColor = Color(0xFF2A3540),
+                        unfocusedBorderColor = TvBorder,
                         focusedTextColor = TvTextPrimary,
                         unfocusedTextColor = TvTextPrimary
                     )
@@ -280,7 +278,7 @@ fun SetupRealApiDialog(
                 if (errorMessage != null) {
                     Text(
                         text = errorMessage ?: "",
-                        color = Color(0xFFFF5252),
+                        color = TvRed,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold
                     )

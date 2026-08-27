@@ -12,6 +12,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.background
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -31,6 +32,7 @@ import agu.analys.ui.screens.PortfolioScreen
 import agu.analys.ui.screens.SettingsScreen
 import agu.analys.ui.screens.TradeSimulationScreen
 import agu.analys.ui.theme.TradingViewAITheme
+import agu.analys.ui.theme.TvBackground
 import agu.analys.viewmodel.*
 
 class MainActivity : ComponentActivity() {
@@ -48,10 +50,12 @@ class MainActivity : ComponentActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
         setContent {
-            TradingViewAITheme {
+            val isDarkTheme by tradingViewModel.isDarkTheme.collectAsState()
+            TradingViewAITheme(isDarkTheme = isDarkTheme) {
                 val currentScreen by tradingViewModel.currentScreen.collectAsState()
                 val rootModifier = Modifier
                     .fillMaxSize()
+                    .background(TvBackground)
                     .statusBarsPadding()
                     .navigationBarsPadding()
 

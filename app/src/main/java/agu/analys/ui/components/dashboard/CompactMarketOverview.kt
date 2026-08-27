@@ -27,10 +27,7 @@ import androidx.compose.ui.unit.sp
 import agu.analys.config.MarketDataSource
 import agu.analys.config.StrategyMode
 import agu.analys.model.MarketTick
-import agu.analys.ui.theme.TvGreen
-import agu.analys.ui.theme.TvRed
-import agu.analys.ui.theme.TvTextPrimary
-import agu.analys.ui.theme.TvTextSecondary
+import agu.analys.ui.theme.*
 import agu.analys.util.PriceFormatter
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -149,12 +146,12 @@ fun DashboardMockupHeader(
                         onClick = onAddAsset,
                         modifier = Modifier
                             .size(36.dp)
-                            .background(Color(0xFF132338), RoundedCornerShape(8.dp))
+                            .background(TvSurfaceVariant, RoundedCornerShape(8.dp))
                     ) {
                         Icon(
                             imageVector = Icons.Default.Add,
                             contentDescription = "Tambah ke Watchlist",
-                            tint = Color(0xFF72B7FF),
+                            tint = TvBlue,
                             modifier = Modifier.size(20.dp)
                         )
                     }
@@ -173,7 +170,7 @@ fun DashboardMockupHeader(
                     },
                     modifier = Modifier
                         .size(36.dp)
-                        .background(Color(0xFF132338), RoundedCornerShape(8.dp))
+                        .background(TvSurfaceVariant, RoundedCornerShape(8.dp))
                 ) {
                     Icon(
                         imageVector = Icons.Default.Refresh,
@@ -218,8 +215,8 @@ fun DashboardMockupHeader(
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .background(Color(0xFF0F1824), RoundedCornerShape(10.dp))
-                    .border(0.8.dp, Color(0xFF1C2A3C), RoundedCornerShape(10.dp))
+                    .background(TvSurface, RoundedCornerShape(10.dp))
+                    .border(0.8.dp, TvBorder, RoundedCornerShape(10.dp))
                     .padding(horizontal = 6.dp, vertical = 7.dp),
                 contentAlignment = Alignment.Center
             ) {
@@ -252,7 +249,7 @@ fun DashboardMockupHeader(
         Spacer(Modifier.height(8.dp))
 
         // Live Status Row: ● Data Realtime Indodax    ● [HH:mm:ss]
-        val ledColor = if (isConnected) Color(0xFF00E676) else Color(0xFFFF3B30)
+        val ledColor = if (isConnected) TvGreen else TvRed
         val displayTime = if (isConnected) currentTime else (lastDisconnectTime ?: currentTime)
 
         Row(
@@ -280,7 +277,7 @@ fun DashboardMockupHeader(
                 Spacer(Modifier.width(6.dp))
                 Text(
                     text = if (isConnected) "Data Realtime Indodax" else "Terputus",
-                    color = if (isConnected) TvGreen else Color(0xFFFF6B6B),
+                    color = if (isConnected) TvGreen else TvRed,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -290,8 +287,8 @@ fun DashboardMockupHeader(
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
-                    .background(Color(0xFF0D1824), RoundedCornerShape(6.dp))
-                    .border(0.8.dp, if (isConnected) Color(0xFF1E3348) else Color(0xFF4A1A1A), RoundedCornerShape(6.dp))
+                    .background(TvSurfaceVariant, RoundedCornerShape(6.dp))
+                    .border(0.8.dp, if (isConnected) TvBorder else TvRed.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
                     .padding(horizontal = 7.dp, vertical = 3.dp)
             ) {
                 Box(
@@ -312,7 +309,7 @@ fun DashboardMockupHeader(
                 Spacer(Modifier.width(5.dp))
                 Text(
                     text = displayTime,
-                    color = if (isConnected) TvTextPrimary else Color(0xFFFF6B6B),
+                    color = if (isConnected) TvTextPrimary else TvRed,
                     fontSize = 11.5.sp,
                     fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
                     fontWeight = FontWeight.Bold
@@ -327,17 +324,17 @@ fun DashboardMockupHeader(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(10.dp))
-                .background(Color(0xFF0B131D))
-                .border(0.8.dp, Color(0xFF182535), RoundedCornerShape(10.dp))
+                .background(TvSurfaceVariant)
+                .border(0.8.dp, TvBorder, RoundedCornerShape(10.dp))
                 .padding(3.dp),
             horizontalArrangement = Arrangement.spacedBy(3.dp)
         ) {
             MarketRankingTab.values().forEach { tab ->
                 val isSelected = selectedTab == tab
                 val (tabActiveBg, tabActiveBorder, tabActiveTextColor) = when (tab) {
-                    MarketRankingTab.SCALPING_FAST -> Triple(Color(0xFF103322), TvGreen.copy(alpha = 0.7f), TvGreen)
-                    MarketRankingTab.SECOND_WAVE -> Triple(Color(0xFF0D2F3A), Color(0xFF00E5FF).copy(alpha = 0.7f), Color(0xFF00E5FF))
-                    MarketRankingTab.WATCHLIST -> Triple(Color(0xFF332B10), Color(0xFFFFB300).copy(alpha = 0.7f), Color(0xFFFFB300))
+                    MarketRankingTab.SCALPING_FAST -> Triple(TvGreen.copy(alpha = 0.15f), TvGreen.copy(alpha = 0.7f), TvGreen)
+                    MarketRankingTab.SECOND_WAVE -> Triple(TvBlue.copy(alpha = 0.15f), TvBlue.copy(alpha = 0.7f), TvBlue)
+                    MarketRankingTab.WATCHLIST -> Triple(TvAmber.copy(alpha = 0.15f), TvAmber.copy(alpha = 0.7f), TvAmber)
                 }
 
                 Box(
@@ -370,8 +367,8 @@ fun DashboardMockupHeader(
 private fun StatBox(label: String, value: String, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
-            .background(Color(0xFF0F1824), RoundedCornerShape(10.dp))
-            .border(0.8.dp, Color(0xFF1C2A3C), RoundedCornerShape(10.dp))
+            .background(TvSurface, RoundedCornerShape(10.dp))
+            .border(0.8.dp, TvBorder, RoundedCornerShape(10.dp))
             .padding(horizontal = 6.dp, vertical = 7.dp),
         contentAlignment = Alignment.Center
     ) {

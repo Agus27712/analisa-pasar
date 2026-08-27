@@ -26,10 +26,7 @@ import agu.analys.trading.SimulationTradeHistoryItem
 import agu.analys.trading.SimulationWallet
 import agu.analys.trading.SpotPosition
 import agu.analys.ui.components.SpotPositionCard
-import agu.analys.ui.theme.TvGreen
-import agu.analys.ui.theme.TvRed
-import agu.analys.ui.theme.TvTextPrimary
-import agu.analys.ui.theme.TvTextSecondary
+import agu.analys.ui.theme.*
 import agu.analys.util.PriceFormatter
 import java.util.Locale
 
@@ -70,8 +67,8 @@ fun SimulationPortfolioView(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF0D1826)),
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E2F46))
+                colors = CardDefaults.cardColors(containerColor = TvCardBackground),
+                border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Row(
@@ -88,20 +85,20 @@ fun SimulationPortfolioView(
                         )
                         Row(
                             modifier = Modifier
-                                .background(Color(0xFF162338), RoundedCornerShape(6.dp))
+                                .background(TvSurfaceVariant, RoundedCornerShape(6.dp))
                                 .padding(horizontal = 8.dp, vertical = 3.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
                                 imageVector = Icons.Default.PieChart,
                                 contentDescription = null,
-                                tint = Color(0xFF72B7FF),
+                                tint = TvBlue,
                                 modifier = Modifier.size(12.dp)
                             )
                             Spacer(Modifier.width(4.dp))
                             Text(
                                 text = "${holdings.size} Koin",
-                                color = Color(0xFF72B7FF),
+                                color = TvBlue,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold
                             )
@@ -145,8 +142,8 @@ fun SimulationPortfolioView(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF09121C)),
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E2836))
+                colors = CardDefaults.cardColors(containerColor = TvCardBackground),
+                border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder)
             ) {
                 Column(modifier = Modifier.padding(14.dp)) {
                     Row(
@@ -164,7 +161,7 @@ fun SimulationPortfolioView(
                             Spacer(Modifier.width(6.dp))
                             Text(
                                 text = "SALDO KAS RUPIAH (IDR)",
-                                color = Color(0xFF72B7FF),
+                                color = TvBlue,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold
                             )
@@ -176,7 +173,7 @@ fun SimulationPortfolioView(
                             shape = RoundedCornerShape(6.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = TvGreen)
                         ) {
-                            Text("+ Top Up Saldo", color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Text("+ Top Up Saldo", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
                     }
 
@@ -186,7 +183,7 @@ fun SimulationPortfolioView(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(Color(0xFF101C2B), RoundedCornerShape(8.dp))
+                            .background(TvSurfaceVariant, RoundedCornerShape(8.dp))
                             .padding(12.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
@@ -224,7 +221,7 @@ fun SimulationPortfolioView(
                             Text("Terkunci di Open Order", color = TvTextSecondary, fontSize = 10.sp)
                             Text(
                                 PriceFormatter.formatPrice(wallet.lockedIdr, quoteAsset = "IDR"),
-                                color = Color(0xFFFFB300),
+                                color = TvAmber,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold
                             )
@@ -248,7 +245,7 @@ fun SimulationPortfolioView(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xFF0B111A), RoundedCornerShape(10.dp))
+                    .background(TvSurfaceVariant, RoundedCornerShape(10.dp))
                     .padding(4.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
@@ -258,14 +255,14 @@ fun SimulationPortfolioView(
                         modifier = Modifier
                             .weight(1f)
                             .clip(RoundedCornerShape(8.dp))
-                            .background(if (isSelected) Color(0xFF1E2836) else Color.Transparent)
+                            .background(if (isSelected) TvCardBackground else Color.Transparent)
                             .clickable { onSelectTab(tab) }
                             .padding(vertical = 8.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             text = tab.title,
-                            color = if (isSelected) Color(0xFF72B7FF) else TvTextSecondary,
+                            color = if (isSelected) TvBlue else TvTextSecondary,
                             fontSize = 11.sp,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                         )
