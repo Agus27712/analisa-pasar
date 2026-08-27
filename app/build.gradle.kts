@@ -5,6 +5,7 @@ plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.kotlin.compose)
   alias(libs.plugins.secrets)
+  alias(libs.plugins.google.devtools.ksp)
 }
 
 android {
@@ -14,8 +15,8 @@ android {
     applicationId = "agu.analys"
     minSdk = 24
     targetSdk = 35
-    versionCode = providers.gradleProperty("VERSION_CODE").map(String::toInt).getOrElse(35)
-    versionName = "2.1.7"
+    versionCode = providers.gradleProperty("VERSION_CODE").map(String::toInt).getOrElse(36)
+    versionName = "2.1.8"
 
     // Keys TIDAK di-embed ke BuildConfig agar tidak bocor di APK.
     // User isi via Settings → disimpan di SharedPreferences (yang sudah di-exclude backup).
@@ -104,6 +105,12 @@ dependencies {
   implementation(libs.kotlinx.serialization.json)
   implementation(libs.androidx.datastore.preferences)
   implementation(libs.coil.compose)
+
+  // Room Database Caching
+  implementation(libs.androidx.room.runtime)
+  implementation(libs.androidx.room.ktx)
+  ksp(libs.androidx.room.compiler)
+
   testImplementation(libs.junit)
   testImplementation(libs.robolectric)
   testImplementation(libs.androidx.core)

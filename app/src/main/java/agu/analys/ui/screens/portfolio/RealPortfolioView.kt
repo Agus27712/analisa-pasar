@@ -8,6 +8,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.CompareArrows
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
@@ -23,6 +24,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import agu.analys.database.RealOpenOrderEntity
+import agu.analys.database.RealTradeEntity
 import agu.analys.model.MarketTick
 import agu.analys.model.TradingPair
 import agu.analys.ui.components.dashboard.AssetAvatar
@@ -35,12 +38,16 @@ import agu.analys.util.PriceFormatter
 /**
  * Tampilan khusus Portofolio Real (Indodax):
  * Memisahkan secara total data riil dari data simulasi.
- * Mengelola kartu saldo live, daftar aset koin kripto di akun Indodax, dan shortcut trade.
+ * Mengelola kartu saldo live, daftar aset koin kripto di akun Indodax, antrean order aktif, riwayat transaksi, dan shortcut trade.
  */
 @Composable
 fun RealPortfolioView(
     isPinUnlocked: Boolean,
     realBalance: Map<String, Double>,
+    realFreeBalance: Map<String, Double> = emptyMap(),
+    realLockedBalance: Map<String, Double> = emptyMap(),
+    realOpenOrders: List<RealOpenOrderEntity> = emptyList(),
+    realTrades: List<RealTradeEntity> = emptyList(),
     realAvgBuyPrices: Map<String, Double> = emptyMap(),
     isFetchingRealBalance: Boolean,
     dashboardTicks: Map<String, MarketTick>,
@@ -48,12 +55,16 @@ fun RealPortfolioView(
     realTradeStatus: String? = null,
     onUnlockPin: () -> Unit,
     onRefreshRealBalance: () -> Unit,
+    onCancelRealOrder: (String, String) -> Unit = { _, _ -> },
     onNavigateToDetail: (TradingPair) -> Unit,
     onSelectPair: (TradingPair) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val realIdr = realBalance["idr"] ?: 0.0
-    val realCoinItemsList = remember(realBalance, realAvgBuyPrices, dashboardTicks, currentTick) {
+    val freeIdr = realFreeBalance["idr"] ?: realIdr
+    val lockedIdr = realLockedBalance["idr"] ?: 0.0
+
+    val realCoinItemsList = remember(realBalance, realFreeBalance, realLockedBalance, realAvgBuyPrices, dashboardTicks, currentTick) {
         realBalance.filter { it.key != "idr" && it.value > 0.00000001 }.entries.map { (coin, qty) ->
             val coinUpper = coin.uppercase()
             val coinLower = coin.lowercase()
@@ -71,11 +82,14 @@ fun RealPortfolioView(
             val pnlIdr = if (avgPrice > 0.0) (effectivePrice - avgPrice) * qty else 0.0
             val pnlPct = if (avgPrice > 0.0) ((effectivePrice - avgPrice) / avgPrice) * 100.0 else 0.0
 
-            Triple(coinUpper, Triple(qty, estVal, price), Triple(avgPrice, pnlIdr, pnlPct))
-        }.sortedByDescending { it.second.second }
+            val freeQty = realFreeBalance[coinLower] ?: qty
+            val lockedQty = realLockedBalance[coinLower] ?: 0.0
+
+            Pair(coinUpper, Triple(qty, freeQty, lockedQty)) to Pair(estVal, Triple(price, avgPrice, Pair(pnlIdr, pnlPct)))
+        }.sortedByDescending { it.second.first }
     }
     
-    val estTotalCryptoIdr = remember(realCoinItemsList) { realCoinItemsList.sumOf { it.second.second } }
+    val estTotalCryptoIdr = remember(realCoinItemsList) { realCoinItemsList.sumOf { it.second.first } }
     val totalRealPortfolioIdr = realIdr + estTotalCryptoIdr
 
     LazyColumn(
@@ -176,7 +190,7 @@ fun RealPortfolioView(
                 }
             }
 
-            // UNLOCKED REAL PORTFOLIO
+            // UNLOCKED REAL PORTFOLIO CARD
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -238,6 +252,14 @@ fun RealPortfolioView(
                             Column {
                                 Text("SALDO CASH IDR", color = TvTextSecondary, fontSize = 9.5.sp, fontWeight = FontWeight.Bold)
                                 Text(PriceFormatter.formatPrice(realIdr), color = TvGreen, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                Spacer(Modifier.height(4.dp))
+                                Row {
+                                    Text("Free: ", color = TvTextSecondary, fontSize = 9.sp)
+                                    Text(PriceFormatter.formatPrice(freeIdr), color = TvGreen, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("Locked: ", color = TvTextSecondary, fontSize = 9.sp)
+                                    Text(PriceFormatter.formatPrice(lockedIdr), color = TvRed, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                }
                             }
                             Column(horizontalAlignment = Alignment.End) {
                                 Text("ESTIMASI KOIN", color = TvTextSecondary, fontSize = 9.5.sp, fontWeight = FontWeight.Bold)
@@ -276,9 +298,13 @@ fun RealPortfolioView(
                     }
                 }
             } else {
-                items(realCoinItemsList) { (coinUpper, valTriple, pnlTriple) ->
-                    val (qty, estVal, price) = valTriple
-                    val (avgPrice, pnlIdr, pnlPct) = pnlTriple
+                items(realCoinItemsList) { itemData ->
+                    val (coinUpper, qtyTriple) = itemData.first
+                    val (qty, freeQty, lockedQty) = qtyTriple
+                    val (estVal, details) = itemData.second
+                    val (price, avgPrice, pnlPair) = details
+                    val (pnlIdr, pnlPct) = pnlPair
+
                     val symbol = "${coinUpper}IDR"
                     val pair = TradingPair.fromCustomSymbol(symbol, "IDR")
                     
@@ -302,7 +328,12 @@ fun RealPortfolioView(
                                     Spacer(Modifier.width(10.dp))
                                     Column {
                                         Text(coinUpper, color = TvTextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                                        Text("Saldo: $qty $coinUpper", color = TvTextSecondary, fontSize = 11.sp)
+                                        Text("Total: $qty $coinUpper", color = TvTextSecondary, fontSize = 11.sp)
+                                        Row {
+                                            Text("Free: $freeQty", color = TvGreen, fontSize = 9.5.sp)
+                                            Spacer(Modifier.width(8.dp))
+                                            Text("Locked: $lockedQty", color = TvRed, fontSize = 9.5.sp)
+                                        }
                                     }
                                 }
 
@@ -333,7 +364,10 @@ fun RealPortfolioView(
                             if (avgPrice > 0.0) {
                                 Spacer(Modifier.height(8.dp))
                                 Row(
-                                    modifier = Modifier.fillMaxWidth().background(Color(0xFF1E2836).copy(alpha = 0.3f), RoundedCornerShape(6.dp)).padding(horizontal = 8.dp, vertical = 6.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(Color(0xFF1E2836).copy(alpha = 0.3f), RoundedCornerShape(6.dp))
+                                        .padding(horizontal = 8.dp, vertical = 6.dp),
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
                                     Column {
@@ -384,6 +418,196 @@ fun RealPortfolioView(
                                     Spacer(Modifier.width(4.dp))
                                     Text("Jual / Trade", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Black)
                                 }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // REAL OPEN ORDERS SECTION
+            item {
+                Text(
+                    "ANTREAN ORDER AKTIF",
+                    color = TvTextPrimary,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(top = 16.dp, bottom = 4.dp)
+                )
+            }
+
+            if (realOpenOrders.isEmpty()) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFF101720), RoundedCornerShape(10.dp))
+                            .padding(20.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "Tidak ada antrean order aktif di Indodax.",
+                            color = TvTextSecondary,
+                            fontSize = 11.sp
+                        )
+                    }
+                }
+            } else {
+                items(realOpenOrders) { order ->
+                    val orderSymbolUpper = order.symbol.uppercase()
+                    val orderSideColor = if (order.side.equals("BUY", true)) TvGreen else TvRed
+                    
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF131C28)),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E2836))
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Surface(
+                                        color = orderSideColor.copy(alpha = 0.15f),
+                                        shape = RoundedCornerShape(4.dp)
+                                    ) {
+                                        Text(
+                                            text = order.side,
+                                            color = orderSideColor,
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        text = orderSymbolUpper.replace("IDR", "/IDR"),
+                                        color = TvTextPrimary,
+                                        fontSize = 12.5.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    text = "Harga: ${PriceFormatter.formatPrice(order.price)}",
+                                    color = TvTextSecondary,
+                                    fontSize = 11.sp
+                                )
+                                Text(
+                                    text = "Jumlah: ${order.quantity} | Executed: ${order.executedQty}",
+                                    color = TvTextSecondary,
+                                    fontSize = 10.sp
+                                )
+                            }
+
+                            IconButton(
+                                onClick = { onCancelRealOrder(order.symbol, order.orderId) },
+                                modifier = Modifier
+                                    .background(TvRed.copy(alpha = 0.12f), CircleShape)
+                                    .size(32.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Batalkan Order",
+                                    tint = TvRed,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // REAL TRADE HISTORY SECTION (PERSISTENTLY CACHED IN ROOM DB)
+            item {
+                Text(
+                    "RIWAYAT TRANSAKSI (LOCAL CACHED)",
+                    color = TvTextPrimary,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(top = 16.dp, bottom = 4.dp)
+                )
+            }
+
+            if (realTrades.isEmpty()) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFF101720), RoundedCornerShape(10.dp))
+                            .padding(20.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "Belum ada riwayat transaksi ter-cache (Mulai terkumpul seiring refresh/trade).",
+                            color = TvTextSecondary,
+                            fontSize = 10.sp,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    }
+                }
+            } else {
+                items(realTrades) { trade ->
+                    val symbolUpper = trade.symbol.uppercase()
+                    val sideColor = if (trade.isBuyer) TvGreen else TvRed
+                    
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF0F1722)),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E2836).copy(alpha = 0.5f))
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(10.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Surface(
+                                        color = sideColor.copy(alpha = 0.15f),
+                                        shape = RoundedCornerShape(4.dp)
+                                    ) {
+                                        Text(
+                                            text = trade.side,
+                                            color = sideColor,
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        text = symbolUpper.replace("IDR", "/IDR"),
+                                        color = TvTextPrimary,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                Spacer(Modifier.height(4.dp))
+                                val dateFormat = remember { java.text.SimpleDateFormat("dd MMM yyyy, HH:mm", java.util.Locale.getDefault()) }
+                                val dateStr = remember(trade.time) { dateFormat.format(java.util.Date(trade.time)) }
+                                Text(
+                                    text = dateStr,
+                                    color = TvTextSecondary,
+                                    fontSize = 10.sp
+                                )
+                            }
+
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text(
+                                    text = "Total: ${PriceFormatter.formatPrice(trade.amount)}",
+                                    color = TvTextPrimary,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "@ ${PriceFormatter.formatPrice(trade.price)} (${trade.qty})",
+                                    color = TvTextSecondary,
+                                    fontSize = 10.sp
+                                )
                             }
                         }
                     }

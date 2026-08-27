@@ -27,6 +27,8 @@ import agu.analys.ui.screens.portfolio.HoldingItem
 import agu.analys.ui.screens.portfolio.PortfolioTab
 import agu.analys.ui.screens.portfolio.RealPortfolioView
 import agu.analys.ui.screens.portfolio.SimulationPortfolioView
+import agu.analys.database.RealOpenOrderEntity
+import agu.analys.database.RealTradeEntity
 import agu.analys.ui.theme.*
 import agu.analys.viewmodel.TradingViewModel
 
@@ -54,6 +56,10 @@ fun PortfolioScreen(
     val isRealBuyMode by viewModel.isRealBuyMode.collectAsStateWithLifecycle()
     val isPinUnlocked by viewModel.isPinUnlocked.collectAsStateWithLifecycle()
     val realBalance by viewModel.realIndodaxBalance.collectAsStateWithLifecycle()
+    val realFreeBalance by viewModel.realFreeBalance.collectAsStateWithLifecycle()
+    val realLockedBalance by viewModel.realLockedBalance.collectAsStateWithLifecycle()
+    val realOpenOrders by viewModel.realOpenOrders.collectAsStateWithLifecycle()
+    val realTrades by viewModel.realTrades.collectAsStateWithLifecycle()
     val realAvgBuyPrices by viewModel.realAvgBuyPrices.collectAsStateWithLifecycle()
     val isFetchingRealBalance by viewModel.isFetchingRealBalance.collectAsStateWithLifecycle()
     val realTradeStatus by viewModel.realTradeStatus.collectAsStateWithLifecycle()
@@ -250,6 +256,10 @@ fun PortfolioScreen(
             RealPortfolioView(
                 isPinUnlocked = isPinUnlocked,
                 realBalance = realBalance,
+                realFreeBalance = realFreeBalance,
+                realLockedBalance = realLockedBalance,
+                realOpenOrders = realOpenOrders,
+                realTrades = realTrades,
                 realAvgBuyPrices = realAvgBuyPrices,
                 isFetchingRealBalance = isFetchingRealBalance,
                 dashboardTicks = dashboardTicks,
@@ -264,6 +274,9 @@ fun PortfolioScreen(
                     }
                 },
                 onRefreshRealBalance = { viewModel.fetchRealBalance() },
+                onCancelRealOrder = { symbol, orderId ->
+                    viewModel.executeCancelRealOrder(symbol, orderId) { _, _ -> }
+                },
                 onNavigateToDetail = onNavigateToDetail,
                 onSelectPair = { viewModel.selectPair(it) },
                 modifier = Modifier.weight(1f)

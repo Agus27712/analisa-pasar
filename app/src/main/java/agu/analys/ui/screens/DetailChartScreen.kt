@@ -526,7 +526,16 @@ fun DetailChartScreen(
                         android.widget.Toast.LENGTH_SHORT
                     ).show()
                 },
-                onResetTrailingTrigger = { viewModel.resetTrailingTrigger() }
+                onResetTrailingTrigger = { viewModel.resetTrailingTrigger() },
+                onSetAutoSellParams = { enabled, tp1Price, tp1Percent, tp2Price, tp2Percent, stopLossPrice ->
+                    viewModel.setAutoSellParams(enabled, tp1Price, tp1Percent, tp2Price, tp2Percent, stopLossPrice)
+                    agu.analys.util.HapticUtil.vibrateTradeSuccess(context)
+                    android.widget.Toast.makeText(
+                        context,
+                        if (enabled) "Auto TP/SL aktif" else "Auto TP/SL dimatikan",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                }
             )
 
             Spacer(modifier.height(8.dp))

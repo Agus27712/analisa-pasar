@@ -27,7 +27,16 @@ data class SpotPosition(
     val trailingPercent: Double = 0.0,
     val peakPrice: Double = 0.0,
     val trailingStopPrice: Double = 0.0,
-    val isTrailingTriggered: Boolean = false
+    val isTrailingTriggered: Boolean = false,
+    val isAutoSellEnabled: Boolean = false,
+    val tp1Price: Double = 0.0,
+    val tp1Percent: Double = 50.0,
+    val tp2Price: Double = 0.0,
+    val tp2Percent: Double = 100.0,
+    val stopLossPrice: Double = 0.0,
+    val isTp1Triggered: Boolean = false,
+    val isTp2Triggered: Boolean = false,
+    val isSlTriggered: Boolean = false
 ) {
     val isHolding: Boolean get() = state == SpotPositionState.HOLDING
 }
@@ -59,7 +68,16 @@ class SpotPositionStore(context: Context) {
             trailingPercent = trailingPct,
             peakPrice = peak,
             trailingStopPrice = trailingStop,
-            isTrailingTriggered = isTriggered
+            isTrailingTriggered = isTriggered,
+            isAutoSellEnabled = prefs.getBoolean("${key}_auto_sell_enabled", false),
+            tp1Price = prefs.getString("${key}_tp1_price", null)?.toDoubleOrNull() ?: 0.0,
+            tp1Percent = prefs.getString("${key}_tp1_percent", null)?.toDoubleOrNull() ?: 50.0,
+            tp2Price = prefs.getString("${key}_tp2_price", null)?.toDoubleOrNull() ?: 0.0,
+            tp2Percent = prefs.getString("${key}_tp2_percent", null)?.toDoubleOrNull() ?: 100.0,
+            stopLossPrice = prefs.getString("${key}_stop_loss_price", null)?.toDoubleOrNull() ?: 0.0,
+            isTp1Triggered = prefs.getBoolean("${key}_tp1_triggered", false),
+            isTp2Triggered = prefs.getBoolean("${key}_tp2_triggered", false),
+            isSlTriggered = prefs.getBoolean("${key}_sl_triggered", false)
         )
     }
 
@@ -186,6 +204,15 @@ class SpotPositionStore(context: Context) {
             .remove("${key}_trailing_pct")
             .remove("${key}_trailing_enabled")
             .remove("${key}_trailing_triggered")
+            .remove("${key}_auto_sell_enabled")
+            .remove("${key}_tp1_price")
+            .remove("${key}_tp1_percent")
+            .remove("${key}_tp2_price")
+            .remove("${key}_tp2_percent")
+            .remove("${key}_stop_loss_price")
+            .remove("${key}_tp1_triggered")
+            .remove("${key}_tp2_triggered")
+            .remove("${key}_sl_triggered")
             .putString("${key}_history", appendHistoryEvent(key, position))
             .apply()
     }
@@ -234,6 +261,61 @@ class SpotPositionStore(context: Context) {
     fun resetTrailingTrigger(symbol: String) {
         val key = normalize(symbol)
         prefs.edit().putBoolean("${key}_trailing_triggered", false).apply()
+    }
+
+    fun setAutoSellParams(
+        symbol: String,
+        enabled: Boolean,
+        tp1Price: Double,
+        tp1Percent: Double,
+        tp2Price: Double,
+        tp2Percent: Double,
+        stopLossPrice: Double
+    ) {
+        val key = normalize(symbol)
+        prefs.edit()
+            .putBoolean("${key}_auto_sell_enabled", enabled)
+            .putString("${key}_tp1_price", tp1Price.toString())
+            .putString("${key}_tp1_percent", tp1Percent.toString())
+            .putString("${key}_tp2_price", tp2Price.toString())
+            .putString("${key}_tp2_percent", tp2Percent.toString())
+            .putString("${key}_stop_loss_price", stopLossPrice.toString())
+            .putBoolean("${key}_tp1_triggered", false)
+            .putBoolean("${key}_tp2_triggered", false)
+            .putBoolean("${key}_sl_triggered", false)
+            .apply()
+    }
+
+    fun markTp1Triggered(symbol: String, triggered: Boolean = true) {
+        val key = normalize(symbol)
+        prefs.edit().putBoolean("${key}_tp1_triggered", triggered).apply()
+    }
+
+    fun markTp2Triggered(symbol: String, triggered: Boolean = true) {
+        val key = normalize(symbol)
+        prefs.edit().putBoolean("${key}_tp2_triggered", triggered).apply()
+    }
+
+    fun markSlTriggered(symbol: String, triggered: Boolean = true) {
+        val key = normalize(symbol)
+        prefs.edit().putBoolean("${key}_sl_triggered", triggered).apply()
+    }
+
+    fun deductQuantity(symbol: String, sellQty: Double) {
+        val key = normalize(symbol)
+        val current = get(symbol)
+        if (current.isHolding) {
+            val newQty = (current.quantity - sellQty).coerceAtLeast(0.0)
+            if (newQty <= 0.0) {
+                markSold(symbol)
+            } else {
+                val newInvested = (current.investedAmount * (newQty / current.quantity)).coerceAtLeast(0.0)
+                prefs.edit()
+                    .putString("${key}_quantity", newQty.toString())
+                    .putString("${key}_invested", newInvested.toString())
+                    .apply()
+            }
+        }
     }
 
     private fun readHistory(key: String): JSONArray {

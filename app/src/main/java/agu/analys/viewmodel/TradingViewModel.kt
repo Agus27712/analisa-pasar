@@ -3,6 +3,8 @@ package agu.analys.viewmodel
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import agu.analys.database.RealOpenOrderEntity
+import agu.analys.database.RealTradeEntity
 import agu.analys.bridge.TradingViewBridge
 import agu.analys.config.MarketDataSource
 import agu.analys.config.ScalpingSensitivity
@@ -243,12 +245,19 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     val isRealBuyMode: StateFlow<Boolean> = realCoordinator.isRealBuyMode
     val isPinUnlocked: StateFlow<Boolean> = realCoordinator.isPinUnlocked
     val realIndodaxBalance: StateFlow<Map<String, Double>> = realCoordinator.realIndodaxBalance
+    val realFreeBalance: StateFlow<Map<String, Double>> = realCoordinator.realFreeBalance
+    val realLockedBalance: StateFlow<Map<String, Double>> = realCoordinator.realLockedBalance
+    val realOpenOrders: StateFlow<List<RealOpenOrderEntity>> = realCoordinator.realOpenOrders
+    val realTrades: StateFlow<List<RealTradeEntity>> = realCoordinator.realTrades
     val realAvgBuyPrices: StateFlow<Map<String, Double>> = realCoordinator.realAvgBuyPrices
     val isFetchingRealBalance: StateFlow<Boolean> = realCoordinator.isFetchingRealBalance
     val realTradeStatus: StateFlow<String?> = realCoordinator.realTradeStatus
     val userPublicIp: StateFlow<String> = realCoordinator.userPublicIp
     val failedPinAttempts: StateFlow<Int> = realCoordinator.failedPinAttempts
     val securityAlertMessage: StateFlow<String?> = realCoordinator.securityAlertMessage
+
+    fun executeCancelRealOrder(symbol: String, orderId: String, onResult: (Boolean, String) -> Unit) =
+        realCoordinator.executeCancelRealOrder(symbol, orderId, onResult)
 
     fun checkPublicIp() = realCoordinator.checkPublicIp()
     fun clearSecurityAlert() = realCoordinator.clearSecurityAlert()
@@ -466,6 +475,19 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         refreshSpotPosition()
     }
 
+    fun setAutoSellParams(
+        enabled: Boolean,
+        tp1Price: Double,
+        tp1Percent: Double,
+        tp2Price: Double,
+        tp2Percent: Double,
+        stopLossPrice: Double
+    ) {
+        val symbol = _selectedPair.value.symbol
+        positionStore.setAutoSellParams(symbol, enabled, tp1Price, tp1Percent, tp2Price, tp2Percent, stopLossPrice)
+        refreshSpotPosition()
+    }
+
     fun resetTrailingTrigger() {
         positionStore.resetTrailingTrigger(_selectedPair.value.symbol)
         refreshSpotPosition()
@@ -490,6 +512,39 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         } else if (updatedPos.isTrailingEnabled && symbol == _selectedPair.value.symbol) {
             _spotPosition.value = updatedPos
         }
+
+        // Check Auto-Sell TP/SL Triggers
+        val pos = positionStore.get(symbol)
+        if (pos.isHolding && pos.isAutoSellEnabled && pos.quantity > 0.0) {
+            val isReal = isRealBuyMode.value
+            // 1. Stop Loss
+            if (pos.stopLossPrice > 0.0 && currentPrice <= pos.stopLossPrice && !pos.isSlTriggered) {
+                positionStore.markSlTriggered(symbol)
+                refreshSpotPosition()
+                executeAutoSellOrder(symbol, currentPrice, pos.quantity, "STOP LOSS", isReal)
+            }
+            // 2. Take Profit 2 (Ultimate Target)
+            else if (pos.tp2Price > 0.0 && currentPrice >= pos.tp2Price && !pos.isTp2Triggered) {
+                positionStore.markTp2Triggered(symbol)
+                refreshSpotPosition()
+                executeAutoSellOrder(symbol, currentPrice, pos.quantity, "TAKE PROFIT 2 (100%)", isReal)
+            }
+            // 3. Take Profit 1 (Partial)
+            else if (pos.tp1Price > 0.0 && currentPrice >= pos.tp1Price && !pos.isTp1Triggered) {
+                positionStore.markTp1Triggered(symbol)
+                val sellQty = pos.quantity * (pos.tp1Percent / 100.0)
+                if (sellQty > 0.0 && sellQty < pos.quantity) {
+                    positionStore.deductQuantity(symbol, sellQty)
+                    refreshSpotPosition()
+                    executeAutoSellOrder(symbol, currentPrice, sellQty, "TAKE PROFIT 1 (${pos.tp1Percent}%)", isReal, isPartial = true)
+                } else if (sellQty >= pos.quantity) {
+                    positionStore.markTp2Triggered(symbol) // fully closed
+                    refreshSpotPosition()
+                    executeAutoSellOrder(symbol, currentPrice, pos.quantity, "TAKE PROFIT 1 (100%)", isReal)
+                }
+            }
+        }
+
         val activeAlerts = alertStore.getActiveAlertsForSymbol(symbol)
         for (alert in activeAlerts) {
             var shouldTrigger = false
@@ -532,6 +587,49 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
                     notificationId = alert.id.hashCode() and 0x7FFFFFFF
                 )
             }
+        }
+    }
+
+    private fun executeAutoSellOrder(symbol: String, price: Double, quantity: Double, triggerType: String, isReal: Boolean, isPartial: Boolean = false) {
+        if (isReal) {
+            executeRealTrade(symbol, "sell", price.toLong(), quantity) { success, msg ->
+                val notifTitle = if (success) "✅ AUTO-SELL TERKIRIM ($symbol)" else "❌ AUTO-SELL GAGAL ($symbol)"
+                val notifMsg = if (success) {
+                    "Trigger $triggerType aktif. Berhasil menjual $quantity $symbol di harga ${PriceFormatter.formatIdrNumber(price)} IDR."
+                } else {
+                    "Gagal menjual karena: $msg"
+                }
+                agu.analys.util.AlertNotificationHelper.sendPriceAlertNotification(
+                    context = getApplication(),
+                    title = notifTitle,
+                    message = notifMsg,
+                    notificationId = (symbol.hashCode() and 0x7FFFFFFF) + 2000
+                )
+            }
+        } else {
+            val res = submitSimulationOrder(
+                side = SimulationOrderSide.SELL,
+                type = SimulationOrderType.MARKET,
+                price = price,
+                quantity = quantity
+            )
+            val success = res is SimulationOrderResult.Success
+            val msg = when (res) {
+                is SimulationOrderResult.Success -> res.message
+                is SimulationOrderResult.Error -> res.message
+            }
+            if (!isPartial) {
+                setOwnership(false)
+            } else {
+                refreshSpotPosition()
+            }
+            val notifTitle = if (success) "✅ SIM AUTO-SELL ($symbol)" else "❌ SIM AUTO-SELL GAGAL ($symbol)"
+            agu.analys.util.AlertNotificationHelper.sendPriceAlertNotification(
+                context = getApplication(),
+                title = notifTitle,
+                message = "Simulasi $triggerType terpicu: $msg",
+                notificationId = (symbol.hashCode() and 0x7FFFFFFF) + 2000
+            )
         }
     }
 

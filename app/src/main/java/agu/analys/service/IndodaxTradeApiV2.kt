@@ -135,7 +135,13 @@ object IndodaxTradeApiV2 {
         }
     }
 
-    suspend fun getAccount(apiKey: String, secretKey: String): Pair<Map<String, Double>?, String> {
+    data class IndodaxBalances(
+        val total: Map<String, Double>,
+        val free: Map<String, Double>,
+        val locked: Map<String, Double>
+    )
+
+    suspend fun getAccount(apiKey: String, secretKey: String): Pair<IndodaxBalances?, String> {
         if (apiKey.isBlank() || secretKey.isBlank()) return null to "API Key / Secret Key kosong."
         val timestamp = serverTimeMs()
         val params = linkedMapOf(
@@ -149,17 +155,36 @@ object IndodaxTradeApiV2 {
             val json = JSONObject(raw)
             val balancesArr = json.optJSONArray("balances")
                 ?: return@runCatching null to "Format account V2 tidak sesuai."
-            val result = mutableMapOf<String, Double>()
+            val totalMap = mutableMapOf<String, Double>()
+            val freeMap = mutableMapOf<String, Double>()
+            val lockedMap = mutableMapOf<String, Double>()
             for (i in 0 until balancesArr.length()) {
                 val item = balancesArr.optJSONObject(i) ?: continue
                 val asset = item.optString("asset", "").lowercase()
                 if (asset.isBlank()) continue
                 val free = item.optString("free", "0").toDoubleOrNull() ?: 0.0
                 val locked = item.optString("locked", "0").toDoubleOrNull() ?: 0.0
-                result[asset] = free + locked
+                freeMap[asset] = free
+                lockedMap[asset] = locked
+                totalMap[asset] = free + locked
             }
-            result to "Saldo INDODAX berhasil diperbarui (API V2)."
+            IndodaxBalances(totalMap, freeMap, lockedMap) to "Saldo INDODAX berhasil diperbarui (API V2)."
         }.getOrElse { null to "Gagal parse account V2: ${it.localizedMessage}" }
+    }
+
+    suspend fun openOrders(
+        apiKey: String,
+        secretKey: String,
+        symbol: String? = null
+    ): Pair<Boolean, String> {
+        if (apiKey.isBlank() || secretKey.isBlank()) return false to "API Key / Secret Key kosong."
+        val params = linkedMapOf<String, String>()
+        symbol?.takeIf { it.isNotBlank() }?.let {
+            params["symbol"] = toOrderSymbol(it)
+        }
+        params["timestamp"] = serverTimeMs().toString()
+        params["recvWindow"] = RECV_WINDOW_MS.toString()
+        return signedV2Request(apiKey, secretKey, "GET", "/api/v2/openOrders", params)
     }
 
     suspend fun createLimitOrder(

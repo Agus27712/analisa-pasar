@@ -49,12 +49,47 @@ fun RadarSellSection(
     onSetManualBuyPrice: ((Double, Double) -> Unit)? = null,
     spotPosition: agu.analys.trading.SpotPosition? = null,
     onSetTrailingStop: ((Boolean, Double) -> Unit)? = null,
-    onResetTrailingTrigger: (() -> Unit)? = null
+    onResetTrailingTrigger: (() -> Unit)? = null,
+    signal: agu.analys.model.AISignalState? = null,
+    onSetAutoSellParams: ((Boolean, Double, Double, Double, Double, Double) -> Unit)? = null
 ) {
     var customSellQtyInput by remember { mutableStateOf("") }
     var isCustomSellQtyOpen by remember { mutableStateOf(false) }
     var selectedSellPercent by remember { mutableIntStateOf(100) }
     var isTrailingOptionsOpen by remember { mutableStateOf(false) }
+
+    var isAutoSellActive by remember { mutableStateOf(spotPosition?.isAutoSellEnabled == true) }
+    var tp1PriceInput by remember { mutableStateOf("") }
+    var tp1PercentInput by remember { mutableStateOf("50") }
+    var tp2PriceInput by remember { mutableStateOf("") }
+    var tp2PercentInput by remember { mutableStateOf("100") }
+    var stopLossPriceInput by remember { mutableStateOf("") }
+
+    LaunchedEffect(spotPosition, signal) {
+        if (spotPosition != null) {
+            isAutoSellActive = spotPosition.isAutoSellEnabled
+            tp1PriceInput = if (spotPosition.tp1Price > 0.0) {
+                String.format(Locale.US, "%.0f", spotPosition.tp1Price)
+            } else if (signal != null && signal.targetPrice1 > 0.0) {
+                String.format(Locale.US, "%.0f", signal.targetPrice1)
+            } else ""
+
+            tp2PriceInput = if (spotPosition.tp2Price > 0.0) {
+                String.format(Locale.US, "%.0f", spotPosition.tp2Price)
+            } else if (signal != null && signal.targetPrice2 > 0.0) {
+                String.format(Locale.US, "%.0f", signal.targetPrice2)
+            } else ""
+
+            stopLossPriceInput = if (spotPosition.stopLossPrice > 0.0) {
+                String.format(Locale.US, "%.0f", spotPosition.stopLossPrice)
+            } else if (signal != null && signal.stopLoss > 0.0) {
+                String.format(Locale.US, "%.0f", signal.stopLoss)
+            } else ""
+
+            tp1PercentInput = String.format(Locale.US, "%.0f", spotPosition.tp1Percent)
+            tp2PercentInput = String.format(Locale.US, "%.0f", spotPosition.tp2Percent)
+        }
+    }
 
     val isTrailingActive = spotPosition?.isTrailingEnabled == true
     val trailingPercent = spotPosition?.trailingPercent ?: 2.0
@@ -542,6 +577,220 @@ fun RadarSellSection(
                         ) {
                             Text("+ Input Manual", fontSize = 10.sp, fontWeight = FontWeight.Bold)
                         }
+                    }
+                }
+            }
+        }
+
+        // --- TARGET TAKE PROFIT & STOP LOSS OTOMATIS CARD ---
+        if (effectiveBuyPrice > 0.0 || availableCoin > 0.0) {
+            Spacer(Modifier.height(8.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        if (isAutoSellActive) Color(0xFF0F1E24) else Color(0xFF101B26),
+                        RoundedCornerShape(10.dp)
+                    )
+                    .border(
+                        1.dp,
+                        if (isAutoSellActive) TvGreen.copy(alpha = 0.8f) else Color(0xFF1E3247),
+                        RoundedCornerShape(10.dp)
+                    )
+                    .padding(10.dp)
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "🎯 AUTO TP1, TP2 & STOP LOSS",
+                                color = if (isAutoSellActive) TvGreen else Color(0xFF90A4AE),
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.Black
+                            )
+                        }
+
+                        Switch(
+                            checked = isAutoSellActive,
+                            onCheckedChange = { enabled ->
+                                isAutoSellActive = enabled
+                                onSetAutoSellParams?.invoke(
+                                    enabled,
+                                    PriceFormatter.parseCleanIdrDouble(tp1PriceInput),
+                                    PriceFormatter.parseCleanIdrDouble(tp1PercentInput).coerceIn(1.0, 100.0),
+                                    PriceFormatter.parseCleanIdrDouble(tp2PriceInput),
+                                    PriceFormatter.parseCleanIdrDouble(tp2PercentInput).coerceIn(1.0, 100.0),
+                                    PriceFormatter.parseCleanIdrDouble(stopLossPriceInput)
+                                )
+                            },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = TvGreen,
+                                checkedTrackColor = TvGreen.copy(alpha = 0.4f),
+                                uncheckedThumbColor = Color(0xFF78909C),
+                                uncheckedTrackColor = Color(0xFF1E2D3D)
+                            ),
+                            modifier = Modifier.height(24.dp)
+                        )
+                    }
+
+                    if (isAutoSellActive) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            // Row for TP1
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1.6f)) {
+                                    Text("Harga TP 1 ($quoteAsset)", color = Color(0xFFB0BEC5), fontSize = 9.sp, fontWeight = FontWeight.Medium)
+                                    Spacer(Modifier.height(3.dp))
+                                    OutlinedTextField(
+                                        value = tp1PriceInput,
+                                        onValueChange = { tp1PriceInput = it },
+                                        placeholder = { Text("Harga TP 1", fontSize = 10.5.sp, color = Color(0xFF546E7A)) },
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
+                                        singleLine = true,
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedBorderColor = TvGreen,
+                                            unfocusedBorderColor = Color(0xFF263C52),
+                                            focusedContainerColor = Color(0xFF0C131A),
+                                            unfocusedContainerColor = Color(0xFF0C131A),
+                                            focusedTextColor = Color.White,
+                                            unfocusedTextColor = Color.White
+                                        ),
+                                        modifier = Modifier.fillMaxWidth().height(42.dp),
+                                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp, color = Color.White)
+                                    )
+                                }
+
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("Porsi TP 1 %", color = Color(0xFFB0BEC5), fontSize = 9.sp, fontWeight = FontWeight.Medium)
+                                    Spacer(Modifier.height(3.dp))
+                                    OutlinedTextField(
+                                        value = tp1PercentInput,
+                                        onValueChange = { tp1PercentInput = it },
+                                        placeholder = { Text("50", fontSize = 10.5.sp, color = Color(0xFF546E7A)) },
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
+                                        singleLine = true,
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedBorderColor = TvGreen,
+                                            unfocusedBorderColor = Color(0xFF263C52),
+                                            focusedContainerColor = Color(0xFF0C131A),
+                                            unfocusedContainerColor = Color(0xFF0C131A),
+                                            focusedTextColor = Color.White,
+                                            unfocusedTextColor = Color.White
+                                        ),
+                                        modifier = Modifier.fillMaxWidth().height(42.dp),
+                                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp, color = Color.White)
+                                    )
+                                }
+                            }
+
+                            // Row for TP2
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1.6f)) {
+                                    Text("Harga TP 2 ($quoteAsset)", color = Color(0xFFB0BEC5), fontSize = 9.sp, fontWeight = FontWeight.Medium)
+                                    Spacer(Modifier.height(3.dp))
+                                    OutlinedTextField(
+                                        value = tp2PriceInput,
+                                        onValueChange = { tp2PriceInput = it },
+                                        placeholder = { Text("Harga TP 2", fontSize = 10.5.sp, color = Color(0xFF546E7A)) },
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
+                                        singleLine = true,
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedBorderColor = TvGreen,
+                                            unfocusedBorderColor = Color(0xFF263C52),
+                                            focusedContainerColor = Color(0xFF0C131A),
+                                            unfocusedContainerColor = Color(0xFF0C131A),
+                                            focusedTextColor = Color.White,
+                                            unfocusedTextColor = Color.White
+                                        ),
+                                        modifier = Modifier.fillMaxWidth().height(42.dp),
+                                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp, color = Color.White)
+                                    )
+                                }
+
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("Porsi TP 2 %", color = Color(0xFFB0BEC5), fontSize = 9.sp, fontWeight = FontWeight.Medium)
+                                    Spacer(Modifier.height(3.dp))
+                                    OutlinedTextField(
+                                        value = tp2PercentInput,
+                                        onValueChange = { tp2PercentInput = it },
+                                        placeholder = { Text("100", fontSize = 10.5.sp, color = Color(0xFF546E7A)) },
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
+                                        singleLine = true,
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedBorderColor = TvGreen,
+                                            unfocusedBorderColor = Color(0xFF263C52),
+                                            focusedContainerColor = Color(0xFF0C131A),
+                                            unfocusedContainerColor = Color(0xFF0C131A),
+                                            focusedTextColor = Color.White,
+                                            unfocusedTextColor = Color.White
+                                        ),
+                                        modifier = Modifier.fillMaxWidth().height(42.dp),
+                                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp, color = Color.White)
+                                    )
+                                }
+                            }
+
+                            // Stop Loss
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                Text("Harga Stop Loss ($quoteAsset)", color = Color(0xFFEF9A9A), fontSize = 9.sp, fontWeight = FontWeight.Medium)
+                                Spacer(Modifier.height(3.dp))
+                                OutlinedTextField(
+                                    value = stopLossPriceInput,
+                                    onValueChange = { stopLossPriceInput = it },
+                                    placeholder = { Text("Harga Stop Loss", fontSize = 10.5.sp, color = Color(0xFFEF9A9A).copy(alpha = 0.5f)) },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                                    keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+                                    singleLine = true,
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = TvRed,
+                                        unfocusedBorderColor = Color(0xFF263C52),
+                                        focusedContainerColor = Color(0xFF0C131A),
+                                        unfocusedContainerColor = Color(0xFF0C131A),
+                                        focusedTextColor = Color.White,
+                                        unfocusedTextColor = Color.White
+                                    ),
+                                    modifier = Modifier.fillMaxWidth().height(42.dp),
+                                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp, color = Color.White)
+                                )
+                            }
+
+                            // Save button
+                            Button(
+                                onClick = {
+                                    focusManager.clearFocus()
+                                    onSetAutoSellParams?.invoke(
+                                        true,
+                                        PriceFormatter.parseCleanIdrDouble(tp1PriceInput),
+                                        PriceFormatter.parseCleanIdrDouble(tp1PercentInput).coerceIn(1.0, 100.0),
+                                        PriceFormatter.parseCleanIdrDouble(tp2PriceInput),
+                                        PriceFormatter.parseCleanIdrDouble(tp2PercentInput).coerceIn(1.0, 100.0),
+                                        PriceFormatter.parseCleanIdrDouble(stopLossPriceInput)
+                                    )
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = TvGreen, contentColor = Color.Black),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth().height(36.dp)
+                            ) {
+                                Text("Simpan Target Jual Otomatis", fontSize = 11.sp, fontWeight = FontWeight.Black)
+                            }
+                        }
+                    } else {
+                        Text(
+                            text = "Aktifkan untuk menjual secara otomatis pada target Take Profit 1 (parsial), Take Profit 2 (sisa), dan Stop Loss yang ditentukan.",
+                            color = Color(0xFF78909C),
+                            fontSize = 9.5.sp
+                        )
                     }
                 }
             }

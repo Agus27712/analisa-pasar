@@ -1,5 +1,8 @@
 package agu.analys.viewmodel
 
+import agu.analys.database.AppDatabase
+import agu.analys.database.RealOpenOrderEntity
+import agu.analys.database.RealTradeEntity
 import agu.analys.service.IndodaxMarketService
 import agu.analys.service.IndodaxTradeApiV2
 import agu.analys.util.AppPreferences
@@ -9,6 +12,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import org.json.JSONArray
+import org.json.JSONObject
 
 /**
  * Coordinator real INDODAX — Trade API V2 only.
@@ -26,6 +31,37 @@ class RealTradeCoordinator(
 
     private val _realIndodaxBalance = MutableStateFlow<Map<String, Double>>(emptyMap())
     val realIndodaxBalance: StateFlow<Map<String, Double>> = _realIndodaxBalance.asStateFlow()
+
+    private val _realFreeBalance = MutableStateFlow<Map<String, Double>>(emptyMap())
+    val realFreeBalance: StateFlow<Map<String, Double>> = _realFreeBalance.asStateFlow()
+
+    private val _realLockedBalance = MutableStateFlow<Map<String, Double>>(emptyMap())
+    val realLockedBalance: StateFlow<Map<String, Double>> = _realLockedBalance.asStateFlow()
+
+    private val _realOpenOrders = MutableStateFlow<List<RealOpenOrderEntity>>(emptyList())
+    val realOpenOrders: StateFlow<List<RealOpenOrderEntity>> = _realOpenOrders.asStateFlow()
+
+    private val _realTrades = MutableStateFlow<List<RealTradeEntity>>(emptyList())
+    val realTrades: StateFlow<List<RealTradeEntity>> = _realTrades.asStateFlow()
+
+    private var lastFetchTimeMs = 0L
+
+    init {
+        scope.launch {
+            try {
+                AppDatabase.getInstance().realTradeDao().getOpenOrdersFlow().collect {
+                    _realOpenOrders.value = it
+                }
+            } catch (_: Exception) {}
+        }
+        scope.launch {
+            try {
+                AppDatabase.getInstance().realTradeDao().getAllTradesFlow().collect {
+                    _realTrades.value = it
+                }
+            } catch (_: Exception) {}
+        }
+    }
 
     private val _realAvgBuyPrices = MutableStateFlow<Map<String, Double>>(emptyMap())
     val realAvgBuyPrices: StateFlow<Map<String, Double>> = _realAvgBuyPrices.asStateFlow()
@@ -137,17 +173,160 @@ class RealTradeCoordinator(
         }
         if (_isFetchingRealBalance.value) return // anti double-tap refresh
 
+        val now = System.currentTimeMillis()
+        if (now - lastFetchTimeMs < 15_000L && _realIndodaxBalance.value.isNotEmpty()) {
+            _realTradeStatus.value = "Menggunakan data ter-cache (jeda refresh 15s)."
+            return
+        }
+
         scope.launch {
             _isFetchingRealBalance.value = true
-            val (balance, message) = IndodaxTradeApiV2.getAccount(apiKey, secretKey)
+            lastFetchTimeMs = now
+            _realTradeStatus.value = "Memperbarui saldo INDODAX..."
+
+            val (balances, message) = IndodaxTradeApiV2.getAccount(apiKey, secretKey)
             _realTradeStatus.value = message
 
-            if (balance != null) {
-                _realIndodaxBalance.value = balance
+            if (balances != null) {
+                _realIndodaxBalance.value = balances.total
+                _realFreeBalance.value = balances.free
+                _realLockedBalance.value = balances.locked
+
+                // Fetch Open Orders from Indodax and save to Room DB
+                fetchRealOpenOrdersSafe(apiKey, secretKey)
+
+                // Fetch Trades History from Indodax and accumulate in Room DB
+                fetchRealTradeHistoriesSafe(apiKey, secretKey, balances.total)
+
                 // Avg buy: max 2 koin, 1 request/koin, jeda panjang
-                calculateRealAvgBuyPricesSafe(apiKey, secretKey, balance)
+                calculateRealAvgBuyPricesSafe(apiKey, secretKey, balances.total)
             }
             _isFetchingRealBalance.value = false
+        }
+    }
+
+    private suspend fun fetchRealOpenOrdersSafe(apiKey: String, secretKey: String) {
+        try {
+            val (ok, raw) = IndodaxTradeApiV2.openOrders(apiKey, secretKey)
+            if (ok) {
+                val db = AppDatabase.getInstance().realTradeDao()
+                db.clearOpenOrders()
+                val jsonArr = runCatching { JSONArray(raw) }.getOrNull()
+                if (jsonArr != null) {
+                    val entityList = mutableListOf<RealOpenOrderEntity>()
+                    for (i in 0 until jsonArr.length()) {
+                        val obj = jsonArr.optJSONObject(i) ?: continue
+                        val orderId = obj.optString("orderId", "")
+                        if (orderId.isBlank()) continue
+
+                        entityList.add(
+                            RealOpenOrderEntity(
+                                orderId = orderId,
+                                symbol = obj.optString("symbol", "").lowercase(),
+                                side = obj.optString("side", "").uppercase(),
+                                type = obj.optString("type", "LIMIT").uppercase(),
+                                price = obj.optString("price", "0").toDoubleOrNull() ?: 0.0,
+                                quantity = obj.optString("origQty", "0").toDoubleOrNull() ?: 0.0,
+                                executedQty = obj.optString("executedQty", "0").toDoubleOrNull() ?: 0.0,
+                                status = obj.optString("status", "OPEN").uppercase(),
+                                time = obj.optLong("time", System.currentTimeMillis())
+                            )
+                        )
+                    }
+                    db.insertOpenOrders(entityList)
+                }
+            }
+        } catch (_: Exception) {}
+    }
+
+    private suspend fun fetchRealTradeHistoriesSafe(
+        apiKey: String,
+        secretKey: String,
+        balance: Map<String, Double>
+    ) {
+        val activeAssets = balance
+            .filter { it.key != "idr" && it.value > 0.00000001 }
+            .keys
+            .take(3)
+            .toMutableSet()
+
+        if (activeAssets.size < 2) activeAssets.add("btc")
+        if (activeAssets.size < 3) activeAssets.add("eth")
+
+        val db = AppDatabase.getInstance().realTradeDao()
+        val accumulatedEntities = mutableListOf<RealTradeEntity>()
+
+        for (asset in activeAssets) {
+            delay(1000)
+            try {
+                val trades = IndodaxTradeApiV2.myTradesRecent(apiKey, secretKey, "${asset}idr", limit = 100)
+                for (trade in trades) {
+                    val id = trade.optString("id", "")
+                    if (id.isBlank()) continue
+
+                    val isBuyer = when {
+                        trade.has("isBuyer") -> trade.optBoolean("isBuyer", false)
+                        else -> {
+                            val type = trade.optString("type", "")
+                            val side = trade.optString("side", "")
+                            type.equals("buy", true) || side.equals("BUY", true)
+                        }
+                    }
+
+                    val tPrice = trade.optString("price", "0").toDoubleOrNull() ?: 0.0
+                    val tQty = trade.optString("qty", "0").toDoubleOrNull()
+                        ?: trade.optString("amount", "0").toDoubleOrNull()
+                        ?: 0.0
+                    if (tPrice <= 0.0 || tQty <= 0.0) continue
+
+                    accumulatedEntities.add(
+                        RealTradeEntity(
+                            id = id,
+                            symbol = "${asset}idr",
+                            price = tPrice,
+                            qty = tQty,
+                            amount = tPrice * tQty,
+                            time = trade.optLong("time", System.currentTimeMillis()),
+                            side = if (isBuyer) "BUY" else "SELL",
+                            isBuyer = isBuyer
+                        )
+                    )
+                }
+            } catch (_: Exception) {}
+        }
+
+        if (accumulatedEntities.isNotEmpty()) {
+            db.insertTrades(accumulatedEntities)
+        }
+    }
+
+    fun executeCancelRealOrder(
+        symbol: String,
+        orderId: String,
+        onResult: (Boolean, String) -> Unit
+    ) {
+        val apiKey = prefs.indodaxApiKey
+        val secretKey = prefs.indodaxSecretKey
+        if (apiKey.isBlank() || secretKey.isBlank()) {
+            onResult(false, "API Key atau Secret Key INDODAX belum diisi di Settings.")
+            return
+        }
+
+        scope.launch {
+            _realTradeStatus.value = "Membatalkan order $orderId..."
+            val (success, message) = IndodaxTradeApiV2.cancelOrder(
+                apiKey = apiKey,
+                secretKey = secretKey,
+                symbol = symbol,
+                orderId = orderId
+            )
+            _realTradeStatus.value = message
+            if (success) {
+                AppDatabase.getInstance().realTradeDao().deleteOpenOrderById(orderId)
+                delay(1_000)
+                fetchRealBalance()
+            }
+            onResult(success, message)
         }
     }
 

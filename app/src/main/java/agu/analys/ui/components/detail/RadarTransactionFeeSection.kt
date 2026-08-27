@@ -54,6 +54,8 @@ fun RadarTransactionFeeSection(
     spotPosition: agu.analys.trading.SpotPosition? = null,
     onSetTrailingStop: ((Boolean, Double) -> Unit)? = null,
     onResetTrailingTrigger: (() -> Unit)? = null,
+    signal: agu.analys.model.AISignalState? = null,
+    onSetAutoSellParams: ((Boolean, Double, Double, Double, Double, Double) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var showFeeDetailModal by remember { mutableStateOf(false) }
@@ -249,7 +251,9 @@ fun RadarTransactionFeeSection(
                 onSetManualBuyPrice = onSetManualBuyPrice,
                 spotPosition = spotPosition,
                 onSetTrailingStop = onSetTrailingStop,
-                onResetTrailingTrigger = onResetTrailingTrigger
+                onResetTrailingTrigger = onResetTrailingTrigger,
+                signal = signal,
+                onSetAutoSellParams = onSetAutoSellParams
             )
         }
     }
