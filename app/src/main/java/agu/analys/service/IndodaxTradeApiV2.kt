@@ -308,5 +308,8 @@ object IndodaxTradeApiV2 {
     }
 
     private fun decimal(value: Double): String =
-        java.math.BigDecimal.valueOf(value).stripTrailingZeros().toPlainString()
+        java.math.BigDecimal.valueOf(value)
+            .setScale(8, java.math.RoundingMode.DOWN)
+            .stripTrailingZeros()
+            .toPlainString()
 }

@@ -14,8 +14,8 @@ android {
     applicationId = "agu.analys"
     minSdk = 24
     targetSdk = 35
-    versionCode = providers.gradleProperty("VERSION_CODE").map(String::toInt).getOrElse(34)
-    versionName = "2.1.6"
+    versionCode = providers.gradleProperty("VERSION_CODE").map(String::toInt).getOrElse(35)
+    versionName = "2.1.7"
 
     // Keys TIDAK di-embed ke BuildConfig agar tidak bocor di APK.
     // User isi via Settings → disimpan di SharedPreferences (yang sudah di-exclude backup).
