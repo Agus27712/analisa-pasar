@@ -7,6 +7,7 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
@@ -17,40 +18,46 @@ fun TradingViewAITheme(
     content: @Composable () -> Unit
 ) {
     val appColors = if (isDarkTheme) DarkAppColors else LightAppColors
-    
+
     val colorScheme = if (isDarkTheme) {
         darkColorScheme(
-            primary = appColors.green,
-            onPrimary = appColors.background,
+            primary = appColors.blue,
+            onPrimary = Color.White,
             primaryContainer = appColors.surfaceVariant,
             onPrimaryContainer = appColors.textPrimary,
-            secondary = appColors.blue,
-            onSecondary = appColors.textPrimary,
-            tertiary = appColors.red,
+            secondary = appColors.blueSoft,
+            onSecondary = Color.White,
+            tertiary = appColors.green,
+            onTertiary = Color.White,
             background = appColors.background,
             onBackground = appColors.textPrimary,
             surface = appColors.surface,
             onSurface = appColors.textPrimary,
             surfaceVariant = appColors.surfaceVariant,
             onSurfaceVariant = appColors.textSecondary,
-            outline = appColors.border
+            outline = appColors.border,
+            error = appColors.red,
+            onError = Color.White
         )
     } else {
         lightColorScheme(
-            primary = appColors.green,
-            onPrimary = appColors.background,
+            primary = appColors.blue,
+            onPrimary = Color.White,
             primaryContainer = appColors.surfaceVariant,
             onPrimaryContainer = appColors.textPrimary,
-            secondary = appColors.blue,
-            onSecondary = appColors.textPrimary,
-            tertiary = appColors.red,
+            secondary = appColors.blueSoft,
+            onSecondary = Color.White,
+            tertiary = appColors.green,
+            onTertiary = Color.White,
             background = appColors.background,
             onBackground = appColors.textPrimary,
             surface = appColors.surface,
             onSurface = appColors.textPrimary,
             surfaceVariant = appColors.surfaceVariant,
             onSurfaceVariant = appColors.textSecondary,
-            outline = appColors.border
+            outline = appColors.border,
+            error = appColors.red,
+            onError = Color.White
         )
     }
 
