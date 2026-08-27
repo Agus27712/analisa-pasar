@@ -40,17 +40,20 @@ fun SellTpSlSection(
     onSaveParams: () -> Unit
 ) {
     val focusManager = LocalFocusManager.current
-    val fieldColors = OutlinedTextFieldDefaults.colors(
-        focusedBorderColor = TvBlue,
+
+    @Composable
+    fun defaultFieldColors(borderFocus: Color = TvBlue) = OutlinedTextFieldDefaults.colors(
+        focusedBorderColor = borderFocus,
         unfocusedBorderColor = TvBorder,
         focusedContainerColor = TvCardBackground,
         unfocusedContainerColor = TvCardBackground,
         focusedTextColor = TvTextPrimary,
         unfocusedTextColor = TvTextPrimary,
-        cursorColor = TvBlue,
+        cursorColor = borderFocus,
         focusedPlaceholderColor = TvTextMuted,
         unfocusedPlaceholderColor = TvTextMuted
     )
+
     val fieldText = TextStyle(fontSize = 13.sp, color = TvTextPrimary, fontWeight = FontWeight.Medium)
 
     Box(
@@ -106,7 +109,7 @@ fun SellTpSlSection(
                             onValueChange = onTp1PriceChanged,
                             placeholder = "Harga TP 1",
                             modifier = Modifier.weight(1.6f),
-                            colors = fieldColors,
+                            colors = defaultFieldColors(),
                             textStyle = fieldText,
                             imeAction = ImeAction.Next
                         )
@@ -125,7 +128,7 @@ fun SellTpSlSection(
                             },
                             placeholder = "50",
                             modifier = Modifier.weight(1f),
-                            colors = fieldColors,
+                            colors = defaultFieldColors(),
                             textStyle = fieldText,
                             imeAction = ImeAction.Next
                         )
@@ -141,7 +144,7 @@ fun SellTpSlSection(
                             onValueChange = onTp2PriceChanged,
                             placeholder = "Harga TP 2",
                             modifier = Modifier.weight(1.6f),
-                            colors = fieldColors,
+                            colors = defaultFieldColors(),
                             textStyle = fieldText,
                             imeAction = ImeAction.Next
                         )
@@ -160,7 +163,7 @@ fun SellTpSlSection(
                             },
                             placeholder = "50",
                             modifier = Modifier.weight(1f),
-                            colors = fieldColors,
+                            colors = defaultFieldColors(),
                             textStyle = fieldText,
                             imeAction = ImeAction.Next
                         )
@@ -173,10 +176,7 @@ fun SellTpSlSection(
                             onValueChange = onStopLossPriceChanged,
                             placeholder = "Harga Stop Loss",
                             modifier = Modifier.fillMaxWidth(),
-                            colors = fieldColors.copy(
-                                focusedBorderColor = TvRed,
-                                focusedIndicatorColor = TvRed
-                            ),
+                            colors = defaultFieldColors(borderFocus = TvRed),
                             textStyle = fieldText,
                             imeAction = ImeAction.Done,
                             onDone = { focusManager.clearFocus() }
@@ -261,10 +261,7 @@ private fun CompactNumberField(
             colors = colors,
             textStyle = textStyle,
             shape = RoundedCornerShape(10.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 48.dp),
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp)
+            modifier = Modifier.fillMaxWidth()
         )
     }
 }

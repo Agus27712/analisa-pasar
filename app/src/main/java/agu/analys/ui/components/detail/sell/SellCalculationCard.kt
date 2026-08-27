@@ -41,10 +41,10 @@ fun SellCalculationCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(TvCardBackground, RoundedCornerShape(10.dp))
-            .border(0.5.dp, TvBorder, RoundedCornerShape(10.dp))
-            .padding(10.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+            .background(TvCardBackground, RoundedCornerShape(12.dp))
+            .border(1.dp, TvBorder, RoundedCornerShape(12.dp))
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         TransactionDetailRow(
             label = "Harga Jual Sekarang",
@@ -68,9 +68,8 @@ fun SellCalculationCard(
             valueColor = TvRed
         )
 
-        HorizontalDivider(color = TvBorder, thickness = 0.5.dp, modifier = Modifier.padding(vertical = 2.dp))
+        HorizontalDivider(color = TvBorder, thickness = 1.dp, modifier = Modifier.padding(vertical = 2.dp))
 
-        // Diterima Bersih Kas
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -79,45 +78,42 @@ fun SellCalculationCard(
             Text(
                 text = "Hasil Kas Diterima",
                 color = TvTextSecondary,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
             Text(
                 text = "${PriceFormatter.formatIdrNumber(netReceivedSellIdr)} $quoteAsset",
                 color = TvTextPrimary,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Black,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
         }
 
-        Spacer(Modifier.height(4.dp))
-
-        // Highlight HASIL KEUNTUNGAN / KERUGIAN BERSIH
         if (effectiveBuyPrice > 0.0) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(
-                        if (isProfitable) TvGreen.copy(alpha = 0.15f) else TvRed.copy(alpha = 0.15f),
-                        RoundedCornerShape(8.dp)
+                        if (isProfitable) TvGreen.copy(alpha = 0.12f) else TvRed.copy(alpha = 0.12f),
+                        RoundedCornerShape(10.dp)
                     )
                     .border(
                         1.dp,
-                        if (isProfitable) TvGreen else TvRed,
-                        RoundedCornerShape(8.dp)
+                        if (isProfitable) TvGreen.copy(alpha = 0.5f) else TvRed.copy(alpha = 0.5f),
+                        RoundedCornerShape(10.dp)
                     )
-                    .padding(10.dp)
+                    .padding(12.dp)
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(modifier = Modifier.weight(1f, fill = false)) {
+                    Column(modifier = Modifier.weight(1f)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
                                 imageVector = if (isProfitable) Icons.Default.TrendingUp else Icons.Default.TrendingDown,
@@ -125,12 +121,12 @@ fun SellCalculationCard(
                                 tint = if (isProfitable) TvGreen else TvRed,
                                 modifier = Modifier.size(16.dp)
                             )
-                            Spacer(Modifier.width(4.dp))
+                            Spacer(Modifier.width(6.dp))
                             Text(
-                                text = if (isProfitable) "KEUNTUNGAN BERSIH (NET PROFIT)" else "KERUGIAN / CUT LOSS NET",
+                                text = if (isProfitable) "Keuntungan Bersih" else "Kerugian / Cut Loss",
                                 color = if (isProfitable) TvGreen else TvRed,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Black,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -138,42 +134,39 @@ fun SellCalculationCard(
                         Text(
                             text = "Sudah dipotong fee (${String.format(Locale.US, "%.2f", activeFeePct)}%)",
                             color = TvTextSecondary,
-                            fontSize = 9.sp,
+                            fontSize = 11.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                     }
 
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
 
                     Column(horizontalAlignment = Alignment.End) {
                         Text(
                             text = "${if (isProfitable) "+" else ""}${PriceFormatter.formatIdrNumber(netProfitIdr)} $quoteAsset",
                             color = if (isProfitable) TvGreen else TvRed,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Black,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1
                         )
                         Text(
                             text = "(${if (isProfitable) "+" else ""}${String.format(Locale.US, "%.2f", netProfitPct)}%)",
                             color = if (isProfitable) TvGreen else TvRed,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1
                         )
                     }
                 }
             }
         } else {
-            // Banner ajakan input manual (>7 Hari) jika harga beli belum ada
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(TvSurfaceVariant, RoundedCornerShape(8.dp))
-                    .border(1.dp, TvAmber.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-                    .padding(8.dp)
+                    .background(TvSurfaceVariant, RoundedCornerShape(10.dp))
+                    .border(1.dp, TvAmber.copy(alpha = 0.45f), RoundedCornerShape(10.dp))
+                    .padding(10.dp)
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -182,29 +175,29 @@ fun SellCalculationCard(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Histori >7 Hari Tidak Tersedia di API",
+                            text = "Histori >7 hari tidak tersedia di API",
                             color = TvAmber,
-                            fontSize = 10.sp,
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "Set harga beli manual dari nota Anda agar Unrealized PnL (+/-) bisa dihitung.",
+                            text = "Isi harga beli manual agar PnL bisa dihitung.",
                             color = TvTextSecondary,
-                            fontSize = 9.sp,
-                            lineHeight = 12.sp
+                            fontSize = 11.sp,
+                            lineHeight = 14.sp
                         )
                     }
-
-                    Spacer(Modifier.width(6.dp))
-
+                    Spacer(modifier = Modifier.width(8.dp))
                     Button(
                         onClick = onManualBuyClick,
-                        colors = ButtonDefaults.buttonColors(containerColor = TvAmber, contentColor = Color.Black),
-                        shape = RoundedCornerShape(6.dp),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                        modifier = Modifier.height(28.dp)
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = TvAmber,
+                            contentColor = Color.Black
+                        ),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
                     ) {
-                        Text("+ Input Manual", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        Text("+ Manual", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
