@@ -13,10 +13,8 @@ import java.util.concurrent.TimeUnit
 
 /**
  * Headline gratis, tanpa API key.
- * - Primary: Google News RSS (query per koin)
- * - Fallback: freenewsapi.ai
- * - Sentiment market: Alternative.me Fear & Greed
- * Cache 12 menit biar nggak spam & AI tetap cepat.
+ * Prioritas: Google News locale Indonesia → fallback EN → freenewsapi.
+ * AI wajib menerjemahkan ke Bahasa Indonesia di output.
  */
 object CryptoHeadlineService {
     private val client = OkHttpClient.Builder()
@@ -36,12 +34,12 @@ object CryptoHeadlineService {
         fun promptBlock(): String {
             val lines = buildList {
                 if (headlines.isNotEmpty()) {
-                    add("Headline publik terbaru (boleh noise, pakai hati-hati):")
+                    add("Headline publik terbaru (boleh campuran EN/ID — WAJIB diterjemahkan ke Bahasa Indonesia di jawaban):")
                     headlines.forEachIndexed { i, h -> add("${i + 1}. $h") }
                 } else {
                     add("Headline: tidak tersedia saat ini.")
                 }
-                fearGreedLabel?.let { add("Fear & Greed market: $it") }
+                fearGreedLabel?.let { add("Indeks Fear & Greed market: $it") }
             }
             return lines.joinToString("\n")
         }
@@ -70,17 +68,29 @@ object CryptoHeadlineService {
 
     private fun fetchHeadlines(base: String): List<String> {
         val queryName = displayName(base)
-        val q = URLEncoder.encode("$queryName OR ${base.uppercase()} crypto", "UTF-8")
-        val google = fetchGoogleNewsRss(q)
-        if (google.isNotEmpty()) return google.take(MAX_HEADLINES)
+        val symbol = base.uppercase()
 
-        val free = fetchFreeNewsApi("$queryName crypto OR ${base.uppercase()}")
-        return free.take(MAX_HEADLINES)
+        // 1) Google News Indonesia dulu
+        val qId = URLEncoder.encode("$queryName OR $symbol kripto OR crypto", "UTF-8")
+        val idNews = fetchGoogleNewsRss(qId, localeId = true)
+        if (idNews.isNotEmpty()) return idNews.take(MAX_HEADLINES)
+
+        // 2) Google News EN (AI yang translate)
+        val qEn = URLEncoder.encode("$queryName OR $symbol crypto", "UTF-8")
+        val enNews = fetchGoogleNewsRss(qEn, localeId = false)
+        if (enNews.isNotEmpty()) return enNews.take(MAX_HEADLINES)
+
+        // 3) Fallback freenewsapi
+        return fetchFreeNewsApi("$queryName crypto OR $symbol").take(MAX_HEADLINES)
     }
 
-    private fun fetchGoogleNewsRss(encodedQuery: String): List<String> {
-        val url =
-            "https://news.google.com/rss/search?q=$encodedQuery&hl=en-US&gl=US&ceid=US:en"
+    private fun fetchGoogleNewsRss(encodedQuery: String, localeId: Boolean): List<String> {
+        val locale = if (localeId) {
+            "hl=id&gl=ID&ceid=ID:id"
+        } else {
+            "hl=en-US&gl=US&ceid=US:en"
+        }
+        val url = "https://news.google.com/rss/search?q=$encodedQuery&$locale"
         return runCatching {
             val body = httpGet(url) ?: return emptyList()
             parseRssTitles(body)
@@ -120,8 +130,16 @@ object CryptoHeadlineService {
             val body = httpGet("https://api.alternative.me/fng/?limit=1") ?: return null
             val data = JSONObject(body).optJSONArray("data")?.optJSONObject(0) ?: return null
             val value = data.optString("value", "?")
-            val cls = data.optString("value_classification", "?")
-            val label = "$value ($cls)"
+            val clsEn = data.optString("value_classification", "?")
+            val clsId = when (clsEn.lowercase()) {
+                "extreme fear" -> "Ketakutan ekstrem"
+                "fear" -> "Takut"
+                "neutral" -> "Netral"
+                "greed" -> "Serakah"
+                "extreme greed" -> "Keserakahan ekstrem"
+                else -> clsEn
+            }
+            val label = "$value ($clsId)"
             fearGreedCache = label to (now + CACHE_TTL_MS)
             label
         }.getOrNull()
@@ -132,6 +150,7 @@ object CryptoHeadlineService {
             .url(url)
             .header("User-Agent", "AnalysPasar/2.2.1 (Android; headline-assist)")
             .header("Accept", "application/json, application/rss+xml, text/xml, */*")
+            .header("Accept-Language", "id-ID,id;q=0.9,en;q=0.5")
             .get()
             .build()
         return client.newCall(request).execute().use { resp ->
@@ -142,7 +161,6 @@ object CryptoHeadlineService {
 
     private fun parseRssTitles(xml: String): List<String> {
         val titles = mutableListOf<String>()
-        // Ambil <item>...</item> dulu biar skip channel <title>
         val itemRegex = Regex("<item>([\\s\\S]*?)</item>", RegexOption.IGNORE_CASE)
         val titleRegex = Regex("<title><!\\[CDATA\\[(.*?)\\]\\]></title>|<title>(.*?)</title>", RegexOption.IGNORE_CASE)
         itemRegex.findAll(xml).forEach { itemMatch ->

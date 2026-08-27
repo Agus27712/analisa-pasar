@@ -16,9 +16,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
-/**
- * AI insight via Groq — narasi pair + headline publik (gratis).
- */
+/** AI insight via Groq — narasi pair + headline (output wajib Bahasa Indonesia). */
 object GroqAiService {
     private val client = OkHttpClient.Builder()
         .connectTimeout(12, TimeUnit.SECONDS)
@@ -27,7 +25,7 @@ object GroqAiService {
 
     private const val BASE_URL = "https://api.groq.com/openai/v1/chat/completions"
     private const val MODEL = "llama-3.3-70b-versatile"
-    private const val MAX_TOKENS = 480
+    private const val MAX_TOKENS = 520
 
     suspend fun generateDeepMarketAudit(
         apiKey: String,
@@ -59,15 +57,11 @@ object GroqAiService {
         }
 
         val systemPrompt = """
-Kamu asisten trading spot Indodax yang ngobrol santai tapi tajam.
-Tugas: kasih INSIGHT soal pair yang dipantau user — bukan hafalan indikator.
-
-Aturan:
-- Bahasa Indonesia, singkat, manusiawi.
-- Pakai headline yang diberi HANYA sebagai petunjuk; jangan mengarang berita baru.
-- Kalau headline relevan dengan arah harga, hubungkan. Kalau tidak relevan, bilang kemungkinan teknis/korelasi.
-- Angka teknikal cuma pendukung 1 baris.
-- Jangan menjamin profit. Max ~140 kata.
+Kamu asisten trading spot Indodax.
+SELURUH jawaban WAJIB Bahasa Indonesia (termasuk kutipan headline).
+Kalau headline sumbernya bahasa Inggris, TERJEMAHKAN ke Indonesia dulu, baru hubungkan ke pergerakan harga.
+Jangan biarkan kalimat Inggris utuh di jawaban user.
+Fokus insight, bukan dump angka. Max ~140 kata. Jangan jamin profit.
         """.trimIndent()
 
         val userPrompt = """
@@ -82,17 +76,17 @@ Teknikal ringkas: $trendHint, $rsiHint, sinyal engine ${signal.action.name} (${s
 
 $headlineBlock
 
-Jawab dengan format tepat ini:
-1. 🔎 Apa ini: [1 kalimat identitas]
-2. 📰 Headline & alasan gerak: [hubungkan headline + arah 24j; kalau headline lemah, bilang kemungkinan teknis/eco]
-3. 🔗 Hubungan: [BTC / eco / meme flow / dll]
-4. 💡 Insight pantau: [1 saran praktis spot Indodax]
+Jawab format ini (semua Bahasa Indonesia):
+1. 🔎 Apa ini: ...
+2. 📰 Headline & alasan gerak: [terjemahkan headline, lalu hubungkan ke arah harga]
+3. 🔗 Hubungan: ...
+4. 💡 Insight pantau: ...
         """.trimIndent()
 
         try {
             val payload = JSONObject().apply {
                 put("model", MODEL)
-                put("temperature", 0.4)
+                put("temperature", 0.35)
                 put("max_tokens", MAX_TOKENS)
                 put("messages", JSONArray().apply {
                     put(JSONObject().apply {
@@ -165,11 +159,11 @@ Jawab dengan format tepat ini:
 
 📰 Headline & alasan gerak:
 $headlineBlock
-24j $move (${PriceFormatter.formatPercentage(tick.change24h)}). $trend; vol ${PriceFormatter.formatVolume(tick.volume24h)}.
+(Pergerakan 24 jam: $move / ${PriceFormatter.formatPercentage(tick.change24h)}. $trend; volume ${PriceFormatter.formatVolume(tick.volume24h)}. Jika headline masih Inggris, intinya hubungkan ke arah harga di atas.)
 
 🔗 Hubungan: ${ctx.ecosystem}
 
-💡 Insight pantau: Pantau BTC dulu. Engine ${signal.action.name} (${signal.confidence}/100) — limit maker 0.21%, jangan FOMO 1 candle.
+💡 Insight pantau: Pantau BTC dulu. Sinyal engine ${signal.action.name} (${signal.confidence}/100) — pakai limit maker 0.21%, jangan FOMO satu candle.
         """.trimIndent()
     }
 
@@ -181,7 +175,6 @@ $headlineBlock
         }
 }
 
-/** Konteks identitas pair — biar AI/fallback nggak cuma ngomong RSI. */
 internal object PairNarrative {
     data class Ctx(val label: String, val ecosystem: String, val narrative: String)
 
@@ -201,7 +194,7 @@ internal object PairNarrative {
             "sol", "solana" -> Ctx(
                 "Solana — L1 cepat, ekosistem meme/DeFi/NFT aktif",
                 "Cenderung risk-on; sensitif sentimen meme + throughput network",
-                "Naik sering karena hype ekosistem (meme, DeFi, atau narrative speed/cheap fees), bukan cuma chart."
+                "Naik sering karena hype ekosistem (meme, DeFi, atau narrative biaya murah/cepat), bukan cuma chart."
             )
             "bnb" -> Ctx(
                 "BNB — token ekosistem Binance / BNB Chain",
@@ -209,54 +202,54 @@ internal object PairNarrative {
                 "Gerakan BNB sering terkait aktivitas on-chain BNB Chain dan berita exchange."
             )
             "xrp", "ripple" -> Ctx(
-                "XRP — fokus pembayaran / cross-border",
+                "XRP — fokus pembayaran / lintas negara",
                 "Sensitif berita regulasi & kemitraan payment",
-                "Bukan murni ‘ikut BTC’; sering loncat karena headline legal/partnership."
+                "Bukan murni ikut BTC; sering loncat karena headline legal/partnership."
             )
             "ada", "cardano" -> Ctx(
-                "Cardano — L1 research-driven",
+                "Cardano — L1 berbasis riset",
                 "Alt L1; gerak lebih lambat vs SOL/ETH",
-                "Narrative-nya upgrade & adoption, jarang pure meme pump."
+                "Narasinya upgrade & adopsi, jarang pure meme pump."
             )
             "doge", "shib", "pepe", "floki", "bonk", "wif", "bome" -> Ctx(
-                "Meme coin — gerak didorong social & spekulasi",
-                "Sangat sensitif BTC risk-on + hype Twitter/KOL",
-                "Receh/meme biasanya ‘ikut angin’: volume sosial naik → volatilitas meledak, fundamental tipis."
+                "Koin meme — didorong sosial & spekulasi",
+                "Sangat sensitif risk-on BTC + hype medsos/KOL",
+                "Receh/meme biasanya ikut angin: volume sosial naik → volatilitas meledak."
             )
             "matic", "pol", "polygon" -> Ctx(
                 "Polygon — scaling Ethereum",
-                "Ikut ETH + narrative L2",
-                "Gerak sering selaras ekosistem Ethereum, bukan independent."
+                "Ikut ETH + narasi L2",
+                "Gerak sering selaras ekosistem Ethereum."
             )
             "avax" -> Ctx(
                 "Avalanche — L1 subnet / DeFi",
-                "Alt L1 risk-on, korelasi BTC & DeFi season",
+                "Alt L1 risk-on, korelasi BTC & musim DeFi",
                 "Naik biasanya saat risk appetite alt L1 meningkat."
             )
             "dot", "atom", "near", "sui", "apt", "sei", "tia" -> Ctx(
-                "Alt L1 / modular chain",
+                "Alt L1 / rantai modular",
                 "Kompetisi L1; ikut siklus risk-on alt",
-                "Gerakan sering soal narrative tech + rotasi modal dari BTC/ETH ke alt L1."
+                "Sering soal narasi tech + rotasi modal dari BTC/ETH."
             )
             "link", "aave", "uni", "crv", "mkr", "ldo" -> Ctx(
                 "Token DeFi / infrastruktur",
-                "Ikut ETH + total value locked / fee narrative",
-                "Naik saat DeFi season atau utility on-chain lagi ramai."
+                "Ikut ETH + TVL / fee on-chain",
+                "Naik saat musim DeFi atau utilitas on-chain ramai."
             )
             "rndr", "fet", "tao", "akt", "wld" -> Ctx(
-                "Narrative AI / compute",
+                "Narasi AI / compute",
                 "Sektor tematik AI; bisa lepas sementara dari BTC",
-                "Gerak sering karena hype AI sector, bukan cuma teknikal pair."
+                "Gerak sering karena hype sektor AI, bukan cuma teknikal pair."
             )
             "trx" -> Ctx(
                 "TRON — fokus stablecoin & transfer murah",
-                "On-chain USDT activity; kurang ‘hype L1’",
-                "Stabilitas transfer & stablecoin flow lebih relevan dari meme narrative."
+                "Aktivitas on-chain USDT",
+                "Stabilitas transfer & aliran stablecoin lebih relevan dari hype meme."
             )
             else -> Ctx(
                 "Altcoin di pair IDR Indodax",
                 "Umumnya ikut BTC; receh lebih volatil & sensitif volume lokal",
-                "Cek dulu: ini ikut BTC, ikut sektor (L1/meme/DeFi), atau volume spekulatif Indodax saja."
+                "Cek dulu: ikut BTC, ikut sektor, atau spekulasi volume Indodax saja."
             )
         }
     }

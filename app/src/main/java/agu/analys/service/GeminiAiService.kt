@@ -16,7 +16,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
-/** Chart summary Gemini — insight + headline publik gratis. */
+/** Chart summary Gemini — output wajib Bahasa Indonesia (headline di-translate). */
 object GeminiAiService {
     private val client = OkHttpClient.Builder()
         .connectTimeout(12, TimeUnit.SECONDS)
@@ -55,8 +55,9 @@ object GeminiAiService {
         }
 
         val prompt = """
-Kamu asisten spot Indodax. Kasih insight singkat soal pair.
-Bahasa Indonesia santai, max ~120 kata. Pakai headline yang diberi; jangan mengarang berita.
+Kamu asisten spot Indodax. SELURUH jawaban WAJIB Bahasa Indonesia.
+Kalau headline Inggris, TERJEMAHKAN ke Indonesia dulu. Jangan biarkan teks Inggris utuh.
+Max ~120 kata.
 
 Pair: ${tick.symbol} ($base)
 Identitas: ${pairCtx.label}
@@ -68,9 +69,9 @@ Teknikal: $trendHint, $rsiHint, engine ${signal.action.name}
 
 $headlineBlock
 
-Format:
+Format (Bahasa Indonesia):
 1. 🔎 Apa ini: ...
-2. 📰 Headline & alasan gerak: ...
+2. 📰 Headline & alasan gerak: [terjemahan + kaitan harga]
 3. 🔗 Hubungan: ...
 4. 💡 Insight pantau: ...
         """.trimIndent()
@@ -85,8 +86,8 @@ Format:
                     })
                 })
                 put("generationConfig", JSONObject().apply {
-                    put("temperature", 0.4)
-                    put("maxOutputTokens", 450)
+                    put("temperature", 0.35)
+                    put("maxOutputTokens", 480)
                 })
             }
             val request = Request.Builder()
@@ -147,7 +148,7 @@ Format:
 
 📰 Headline & alasan gerak:
 $headlineBlock
-24j $move (${PriceFormatter.formatPercentage(tick.change24h)}), vol ${PriceFormatter.formatVolume(tick.volume24h)}.
+Pergerakan 24 jam: $move (${PriceFormatter.formatPercentage(tick.change24h)}), volume ${PriceFormatter.formatVolume(tick.volume24h)}.
 
 🔗 Hubungan: ${ctx.ecosystem}
 
