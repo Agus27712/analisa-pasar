@@ -44,9 +44,6 @@ fun RadarBuySection(
 ) {
     var customNominalInput by remember { mutableStateOf("") }
     var isCustomNominalOpen by remember { mutableStateOf(false) }
-    var isRiskCalculatorOpen by remember { mutableStateOf(false) }
-    var selectedRiskPct by remember { mutableDoubleStateOf(2.0) } // Default risk 2% per trade
-    var selectedSlTolerancePct by remember { mutableDoubleStateOf(2.5) } // Default SL tolerance 2.5%
 
     // Auto Limit Sell Server Settings (TP Direct to Server)
     var isAutoLimitSellEnabled by remember { mutableStateOf(isRealMode) }
@@ -63,13 +60,6 @@ fun RadarBuySection(
     val tp2Price = tp2PriceInput.toDoubleOrNull() ?: defaultTpPrice2
 
     val focusManager = LocalFocusManager.current
-
-    // Kalkulasi Manajemen Risiko & Position Sizing
-    val effectiveCapital = if (availableIdr > 0) availableIdr else 1000000.0 // Default 1jt jika saldo kosong untuk demo
-    val maxRiskAmountIdr = effectiveCapital * (selectedRiskPct / 100.0)
-    val calculatedPositionSizeIdr = if (selectedSlTolerancePct > 0) {
-        (maxRiskAmountIdr / (selectedSlTolerancePct / 100.0)).coerceAtLeast(10000.0).coerceAtMost(if (availableIdr > 0) availableIdr else 100000000.0)
-    } else 10000.0
 
     val grossBuyOrderAmount = selectedNominalIdr.coerceAtLeast(10000.0)
     val buyFeeIdr = grossBuyOrderAmount * (activeFeePct / 100.0)
@@ -141,7 +131,7 @@ fun RadarBuySection(
                             )
                             Spacer(Modifier.width(8.dp))
                             Text(
-                                text = "🚀 SPLIT AUTO LIMIT SELL SERVER (INDODAX)",
+                                text = "SPLIT AUTO LIMIT SELL",
                                 color = TvGreen,
                                 fontSize = 10.5.sp,
                                 fontWeight = FontWeight.Black
@@ -159,7 +149,7 @@ fun RadarBuySection(
                             verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Text(
-                                text = "Setelah BUY ACC, sistem langsung pasang 2 Limit Sell otomatis (Masing-masing 50% Qty koin) di Server Indodax tanpa perlu HP standby:",
+                                text = "Setelah BUY OK, sistem langsung pasang 2 Limit Sell otomatis (Masing-masing 50% Qty koin):",
                                 color = TvTextSecondary,
                                 fontSize = 9.5.sp
                             )
@@ -173,7 +163,7 @@ fun RadarBuySection(
                                     onValueChange = { input ->
                                         tp1PriceInput = input.filter { it.isDigit() || it == '.' }
                                     },
-                                    label = { Text("Target TP 1 (50% Qty)", fontSize = 9.5.sp) },
+                                    label = { Text("TP 1 (50% Qty)", fontSize = 9.5.sp) },
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
                                     singleLine = true,
                                     colors = OutlinedTextFieldDefaults.colors(
@@ -192,7 +182,7 @@ fun RadarBuySection(
                                     onValueChange = { input ->
                                         tp2PriceInput = input.filter { it.isDigit() || it == '.' }
                                     },
-                                    label = { Text("Target TP 2 (50% Qty)", fontSize = 9.5.sp) },
+                                    label = { Text("TP 2 (50% Qty)", fontSize = 9.5.sp) },
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
                                     keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
                                     singleLine = true,
@@ -215,168 +205,15 @@ fun RadarBuySection(
             Spacer(Modifier.height(8.dp))
         }
 
-        // Toggle Expandable Risk Management & Position Sizing Calculator
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(TvCardBackground, RoundedCornerShape(8.dp))
-                .border(1.dp, TvBlue.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-                .padding(horizontal = 10.dp, vertical = 8.dp)
-        ) {
-            Column {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "🛡️ POSITION SIZING (RISK MGMT)",
-                        color = TvBlue,
-                        fontSize = 10.5.sp,
-                        fontWeight = FontWeight.Black
-                    )
+        Spacer(Modifier.height(8.dp))
 
-                    TextButton(
-                        onClick = { isRiskCalculatorOpen = !isRiskCalculatorOpen },
-                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
-                        modifier = Modifier.height(24.dp)
-                    ) {
-                        Text(
-                            text = if (isRiskCalculatorOpen) "Close ▲" else "Calculate ▼",
-                            color = TvBlue,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-
-                AnimatedVisibility(
-                    visible = isRiskCalculatorOpen,
-                    enter = fadeIn() + expandVertically(),
-                    exit = fadeOut() + shrinkVertically()
-                ) {
-                    Column(
-                        modifier = Modifier.padding(top = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
-                            text = "Control maximum loss per trade based on risk budget:",
-                            color = Color(0xFFB0BEC5),
-                            fontSize = 9.5.sp
-                        )
-
-                        // Selector Risk %
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("1. Risk / Trade:", color = TvTextSecondary, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                listOf(1.0, 2.0, 3.0, 5.0).forEach { r ->
-                                    Box(
-                                        modifier = Modifier
-                                            .background(
-                                                if (selectedRiskPct == r) TvBlue else TvSurfaceVariant,
-                                                RoundedCornerShape(4.dp)
-                                            )
-                                            .border(
-                                                0.5.dp,
-                                                if (selectedRiskPct == r) TvBlue else TvBorder,
-                                                RoundedCornerShape(4.dp)
-                                            )
-                                            .clickable { selectedRiskPct = r }
-                                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                                    ) {
-                                        Text(
-                                            text = "$r%",
-                                            color = if (selectedRiskPct == r) Color.Black else TvTextPrimary,
-                                            fontSize = 10.sp,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
-                                }
-                            }
-                        }
-
-                        // Selector Stop Loss %
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("2. Stop Loss (SL):", color = TvTextSecondary, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                listOf(1.5, 2.5, 3.5, 5.0).forEach { sl ->
-                                    Box(
-                                        modifier = Modifier
-                                            .background(
-                                                if (selectedSlTolerancePct == sl) TvRed else TvSurfaceVariant,
-                                                RoundedCornerShape(4.dp)
-                                            )
-                                            .border(
-                                                0.5.dp,
-                                                if (selectedSlTolerancePct == sl) TvRed else TvBorder,
-                                                RoundedCornerShape(4.dp)
-                                            )
-                                            .clickable { selectedSlTolerancePct = sl }
-                                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                                    ) {
-                                        Text(
-                                            text = "-$sl%",
-                                            color = if (selectedSlTolerancePct == sl) Color.White else TvTextPrimary,
-                                            fontSize = 10.sp,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
-                                }
-                            }
-                        }
-
-                        // Ringkasan Formula
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(TvSurfaceVariant, RoundedCornerShape(6.dp))
-                                .border(0.5.dp, TvBorder, RoundedCornerShape(6.dp))
-                                .padding(8.dp)
-                        ) {
-                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text("Max Loss Tolerated:", color = TvTextSecondary, fontSize = 9.5.sp)
-                                    Text("Rp ${PriceFormatter.formatIdrNumber(maxRiskAmountIdr)} ($selectedRiskPct% Capital)", color = TvRed, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                                }
-                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text("Suggested Position Size:", color = TvBlue, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                                    Text("Rp ${PriceFormatter.formatIdrNumber(calculatedPositionSizeIdr)}", color = TvBlue, fontSize = 11.sp, fontWeight = FontWeight.Black)
-                                }
-                            }
-                        }
-
-                        // Tombol Terapkan Position Size
-                        Button(
-                            onClick = {
-                                onNominalIdrChanged(calculatedPositionSizeIdr)
-                                isCustomNominalOpen = false
-                                isRiskCalculatorOpen = false
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = TvBlue, contentColor = Color.Black),
-                            shape = RoundedCornerShape(6.dp),
-                            modifier = Modifier.fillMaxWidth().height(34.dp),
-                            contentPadding = PaddingValues(0.dp)
-                        ) {
-                            Text("✓ Apply Size (${PriceFormatter.formatIdrNumber(calculatedPositionSizeIdr)} IDR)", fontSize = 10.5.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-            }
-        }
+        // Quick Nominal Selector
 
         Spacer(Modifier.height(8.dp))
 
         // Quick Nominal Selector
         Text(
-            text = "PILIH NOMINAL PEMBELIAN (IDR):",
+            text = "PILIH JUMLAH SALDO DIGUNAKAN:",
             color = TvTextSecondary,
             fontSize = 9.5.sp,
             fontWeight = FontWeight.Black
@@ -388,42 +225,22 @@ fun RadarBuySection(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            QuickNominalChip(
-                label = "10 Rb",
-                selected = selectedNominalIdr == 10000.0 && !isCustomNominalOpen,
-                onClick = {
-                    onNominalIdrChanged(10000.0)
-                    isCustomNominalOpen = false
-                },
-                modifier = Modifier.weight(1f)
-            )
-            QuickNominalChip(
-                label = "50 Rb",
-                selected = selectedNominalIdr == 50000.0 && !isCustomNominalOpen,
-                onClick = {
-                    onNominalIdrChanged(50000.0)
-                    isCustomNominalOpen = false
-                },
-                modifier = Modifier.weight(1f)
-            )
-            QuickNominalChip(
-                label = "100 Rb",
-                selected = selectedNominalIdr == 100000.0 && !isCustomNominalOpen,
-                onClick = {
-                    onNominalIdrChanged(100000.0)
-                    isCustomNominalOpen = false
-                },
-                modifier = Modifier.weight(1f)
-            )
-            QuickNominalChip(
-                label = "1 Jt",
-                selected = selectedNominalIdr == 1000000.0 && !isCustomNominalOpen,
-                onClick = {
-                    onNominalIdrChanged(1000000.0)
-                    isCustomNominalOpen = false
-                },
-                modifier = Modifier.weight(1f)
-            )
+            val percentages = listOf(25, 50, 75, 100)
+            percentages.forEach { pct ->
+                val calculatedAmount = if (availableIdr > 0) (availableIdr * (pct / 100.0)).toLong().toDouble() else 0.0
+                QuickNominalChip(
+                    label = "$pct%",
+                    selected = !isCustomNominalOpen && selectedNominalIdr > 0 && 
+                              (Math.abs(selectedNominalIdr - calculatedAmount) < 100 || (pct == 100 && selectedNominalIdr == availableIdr)),
+                    onClick = {
+                        val amount = if (pct == 100) availableIdr else calculatedAmount
+                        onNominalIdrChanged(amount.toLong().toDouble()) // Ensure integer for IDR
+                        isCustomNominalOpen = false
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            
             QuickNominalChip(
                 label = "Lainnya",
                 selected = isCustomNominalOpen,

@@ -53,7 +53,7 @@ fun RadarSellSection(
     var isCustomSellQtyOpen by remember { mutableStateOf(false) }
     var selectedSellPercent by remember { mutableIntStateOf(100) }
 
-    var isAutoSellActive by remember { mutableStateOf(spotPosition?.isAutoSellEnabled == true) }
+    var isAutoSellActive by remember { mutableStateOf(false) }
     var tp1PriceInput by remember { mutableStateOf("") }
     var tp1PercentInput by remember { mutableStateOf("50") }
     var tp2PriceInput by remember { mutableStateOf("") }

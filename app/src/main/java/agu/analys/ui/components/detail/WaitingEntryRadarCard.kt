@@ -157,37 +157,9 @@ fun WaitingEntryRadarCard(
         StrategyMode.SWING -> "🎯 SWING (${signal.confidence}%)"
     }
 
-    // Micro Tips
-    val tips = remember(strategyMode) {
-        when (strategyMode) {
-            StrategyMode.SWING -> listOf(
-                "Swing trading mengutamakan tren makro (1H/4H/1D) dengan target profit lebih lebar.",
-                "Pasang Stop Loss di bawah Swing Low atau support EMA untuk membatasi risiko kerugian.",
-                "Biarkan posisi berjalan menuju TP1/TP2 selama struktur higher-low tetap bertahan.",
-                "Gunakan trailing stop saat harga sudah menembus TP1 untuk mengunci profit."
-            )
-            StrategyMode.SECOND_WAVE -> listOf(
-                "Second Wave mengincar momentum lanjutan setelah koreksi sehat pertama selesai.",
-                "Konfirmasi inflow volume di timeframe 15M sebelum masuk saat reclaim terjadi.",
-                "Jangan all-in. Bagi modal menjadi 2-3 peluru untuk mengamankan average harga terbaik.",
-                "Disiplin menunggu konfirmasi 4/4 lebih menguntungkan daripada FOMO di tengah jalan."
-            )
-            StrategyMode.SCALPING -> listOf(
-                "Disiplin menunggu konfirmasi 4/4 lebih menguntungkan daripada FOMO di tengah candle.",
-                "Indodax menerapkan taker/maker fee. Membeli di area pullback meminimalkan risiko terjebak puncak.",
-                "Jangan all-in. Gunakan eksekusi cepat di timeframe 1M dengan target profit realistis.",
-                "Kondisi sideways sering memicu false breakout. Tunggu volume spike di timeframe 1M."
-            )
-        }
-    }
-    var currentTipIndex by remember { mutableIntStateOf(0) }
-
-    LaunchedEffect(strategyMode) {
-        while (true) {
-            delay(7000L)
-            currentTipIndex = (currentTipIndex + 1) % tips.size
-        }
-    }
+    // UI State for Hide/Show sections
+    var isChecklistVisible by remember { mutableStateOf(false) }
+    var isLevelPlanVisible by remember { mutableStateOf(false) }
 
     AnalysisCard {
         // Header
@@ -201,14 +173,15 @@ fun WaitingEntryRadarCard(
                 Icons.Default.Timeline
             )
 
-            // Radar Status LED Badge (Solid tanpa denyut)
+            // Radar Status LED Badge (Solid tanpa denyut) - Clickable as toggle
             val radarLedColor = if (completed == 4) TvGreen else TvBlue
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
+            Box(
+                contentAlignment = Alignment.Center,
                 modifier = Modifier
                     .background(TvSurfaceVariant, RoundedCornerShape(20.dp))
                     .border(1.dp, TvBorder, RoundedCornerShape(20.dp))
-                    .padding(horizontal = 8.dp, vertical = 3.dp)
+                    .clickable { isChecklistVisible = !isChecklistVisible }
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
             ) {
                 Box(
                     contentAlignment = Alignment.Center,
@@ -225,92 +198,55 @@ fun WaitingEntryRadarCard(
                             .background(radarLedColor, CircleShape)
                     )
                 }
-                Spacer(Modifier.width(5.dp))
-                Text(
-                    text = if (completed == 4) "Eksekusi" else "Wait!",
-                    color = if (completed == 4) TvGreen else TvBlue,
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.Black
-                )
             }
         }
 
         Spacer(Modifier.height(8.dp))
 
-        // Badge Tipe Setup Terdeteksi
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    if (isReclaim) TvBlue.copy(alpha = 0.15f) else TvGreen.copy(alpha = 0.15f),
-                    RoundedCornerShape(8.dp)
-                )
-                .border(
-                    1.dp,
-                    if (isReclaim) TvBlue.copy(alpha = 0.4f) else TvGreen.copy(alpha = 0.4f),
-                    RoundedCornerShape(8.dp)
-                )
-                .padding(horizontal = 10.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "Setup Terdeteksi: $entryTypeBadgeTitle (Konfirmasi $completed/4)",
-                    color = if (isReclaim) TvBlue else TvGreen,
-                    fontSize = 11.5.sp,
-                    fontWeight = FontWeight.ExtraBold
-                )
-                Text(
-                    text = entryTypeBadgeDesc,
-                    color = TvTextSecondary,
-                    fontSize = 10.sp,
-                    lineHeight = 13.5.sp
-                )
-            }
-        }
-
         Spacer(Modifier.height(10.dp))
 
-        // 4 Checklist Konfirmasi
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(TvSurfaceVariant, RoundedCornerShape(10.dp))
-                .border(1.dp, TvBorder, RoundedCornerShape(10.dp))
-                .padding(10.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            val isStep1Ok = mtf.biasStatus.name == "OK" || mtf.biasOk
-            val isStep2Ok = mtf.setupStatus.name == "OK" || mtf.setupOk
-            val isStep3Ok = mtf.triggerStatus.name == "OK" || mtf.triggerOk
-            val isStep4Ok = mtf.entryPriceStatus.name == "OK" || mtf.entryPriceOk
+        // 4 Checklist Konfirmasi (Hideable via badge)
 
-            val (step1Text, step2Text, step3Text, step4Text) = when (strategyMode) {
-                StrategyMode.SWING -> listOf(
-                    "1. Tren Makro & Alignment EMA (1D/4H/1H)",
-                    "2. Struktur Market & Support Lantai (Higher Low)",
-                    "3. Momentum & Volume Inflow (RSI/MACD)",
-                    "4. Risk/Reward Optimal & Toleransi Entry"
-                )
-                StrategyMode.SECOND_WAVE -> listOf(
-                    "1. Prior Run & Drawdown Reset (Valid 4H/1H)",
-                    "2. Accumulation Base & Drawdown Dry (Valid 1H)",
-                    "3. Smart Inflow & Higher Low Terbentuk (15M)",
-                    "4. Trigger Reclaim Resistance & Zona Entry Ideal"
-                )
-                StrategyMode.SCALPING -> listOf(
-                    "1. Trend & Bias 1H Valid (Bullish Alignment)",
-                    "2. Base Compression & Volume Kering (Valid 15M)",
-                    "3. Smart Inflow & Higher Low Terbentuk (1M)",
-                    "4. Trigger Reclaim Resistance 15M (Volume Masuk!)"
-                )
+        AnimatedVisibility(visible = isChecklistVisible) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(TvSurfaceVariant, RoundedCornerShape(10.dp))
+                    .border(1.dp, TvBorder, RoundedCornerShape(10.dp))
+                    .padding(10.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                val isStep1Ok = mtf.biasStatus.name == "OK" || mtf.biasOk
+                val isStep2Ok = mtf.setupStatus.name == "OK" || mtf.setupOk
+                val isStep3Ok = mtf.triggerStatus.name == "OK" || mtf.triggerOk
+                val isStep4Ok = mtf.entryPriceStatus.name == "OK" || mtf.entryPriceOk
+
+                val (step1Text, step2Text, step3Text, step4Text) = when (strategyMode) {
+                    StrategyMode.SWING -> listOf(
+                        "1. Tren Makro & Alignment EMA (1D/4H/1H)",
+                        "2. Struktur Market & Support Lantai (Higher Low)",
+                        "3. Momentum & Volume Inflow (RSI/MACD)",
+                        "4. Risk/Reward Optimal & Toleransi Entry"
+                    )
+                    StrategyMode.SECOND_WAVE -> listOf(
+                        "1. Prior Run & Drawdown Reset (Valid 4H/1H)",
+                        "2. Accumulation Base & Drawdown Dry (Valid 1H)",
+                        "3. Smart Inflow & Higher Low Terbentuk (15M)",
+                        "4. Trigger Reclaim Resistance & Zona Entry Ideal"
+                    )
+                    StrategyMode.SCALPING -> listOf(
+                        "1. Trend & Bias 1H Valid (Bullish Alignment)",
+                        "2. Base Compression & Volume Kering (Valid 15M)",
+                        "3. Smart Inflow & Higher Low Terbentuk (1M)",
+                        "4. Trigger Reclaim Resistance 15M (Volume Masuk!)"
+                    )
+                }
+
+                RadarChecklistItem(1, step1Text, isStep1Ok, mtf.biasDetail)
+                RadarChecklistItem(2, step2Text, isStep2Ok, mtf.setupDetail)
+                RadarChecklistItem(3, step3Text, isStep3Ok, mtf.triggerDetail)
+                RadarChecklistItem(4, step4Text, isStep4Ok, mtf.entryPriceDetail)
             }
-
-            RadarChecklistItem(1, step1Text, isStep1Ok, mtf.biasDetail)
-            RadarChecklistItem(2, step2Text, isStep2Ok, mtf.setupDetail)
-            RadarChecklistItem(3, step3Text, isStep3Ok, mtf.triggerDetail)
-            RadarChecklistItem(4, step4Text, isStep4Ok, mtf.entryPriceDetail)
         }
 
         Spacer(Modifier.height(10.dp))
@@ -325,69 +261,85 @@ fun WaitingEntryRadarCard(
 
         Spacer(Modifier.height(10.dp))
 
-        // Target Levels Box
+        // Target Levels Box (Hideable)
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(TvSurfaceVariant, RoundedCornerShape(10.dp))
                 .border(0.5.dp, TvBorder, RoundedCornerShape(10.dp))
+                .clickable { isLevelPlanVisible = !isLevelPlanVisible }
                 .padding(10.dp)
         ) {
-            Text(
-                text = if (completed == 4) "🔥 STATUS: SIAP EKSEKUSI SEKARANG!" else "⚡ LEVEL PLAN ENTRY & TARGET:",
-                color = if (completed == 4) TvGreen else WarningAmber,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Black
-            )
-            Spacer(Modifier.height(6.dp))
-
-            val refPrice = if (signal.entryPrice > 0.0) signal.entryPrice else effectivePrice
-            val targetPrice1 = if (signal.targetPrice1 > 0.0) signal.targetPrice1 else if (refPrice > 0.0) refPrice * 1.08 else 0.0
-            val targetPrice2 = if (signal.targetPrice2 > 0.0) signal.targetPrice2 else if (refPrice > 0.0) refPrice * 1.18 else 0.0
-            val stopLoss = if (signal.stopLoss > 0.0) signal.stopLoss else if (refPrice > 0.0) refPrice * 0.95 else 0.0
-
-            val tp1Gain = if (refPrice > 0.0 && targetPrice1 > 0.0) ((targetPrice1 - refPrice) / refPrice) * 100 else 0.0
-            val tp2Gain = if (refPrice > 0.0 && targetPrice2 > 0.0) ((targetPrice2 - refPrice) / refPrice) * 100 else 0.0
-            val slLoss = if (refPrice > 0.0 && stopLoss > 0.0) ((stopLoss - refPrice) / refPrice) * 100 else 0.0
-
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("• Entry Area", color = TvTextSecondary, fontSize = 11.sp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Text(
-                    PriceFormatter.formatPrice(refPrice, quoteAsset = quoteAsset),
-                    color = TvTextPrimary,
+                    text = if (completed == 4) "🔥 STATUS: SIAP EKSEKUSI!" else "⚡ LEVEL PLAN ENTRY & TARGET",
+                    color = if (completed == 4) TvGreen else WarningAmber,
                     fontSize = 11.sp,
+                    fontWeight = FontWeight.Black
+                )
+                Text(
+                    text = if (isLevelPlanVisible) "SEMBUNYIKAN" else "LIHAT PLAN",
+                    color = TvBlue,
+                    fontSize = 9.sp,
                     fontWeight = FontWeight.Bold
                 )
             }
-            Spacer(Modifier.height(3.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("• Target TP1", color = TvTextSecondary, fontSize = 11.sp)
-                Text(
-                    "${PriceFormatter.formatPrice(targetPrice1, quoteAsset = quoteAsset)} (${PriceFormatter.formatPercentage(tp1Gain, true)})",
-                    color = TvGreen,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-            Spacer(Modifier.height(3.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("• Target TP2", color = TvTextSecondary, fontSize = 11.sp)
-                Text(
-                    "${PriceFormatter.formatPrice(targetPrice2, quoteAsset = quoteAsset)} (${PriceFormatter.formatPercentage(tp2Gain, true)})",
-                    color = TvGreen,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-            Spacer(Modifier.height(3.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("• Cut Loss (SL)", color = TvTextSecondary, fontSize = 11.sp)
-                Text(
-                    "${PriceFormatter.formatPrice(stopLoss, quoteAsset = quoteAsset)} (${PriceFormatter.formatPercentage(slLoss, true)})",
-                    color = TvRed,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold
-                )
+
+            AnimatedVisibility(visible = isLevelPlanVisible) {
+                Column(modifier = Modifier.padding(top = 8.dp)) {
+                    val refPrice = if (signal.entryPrice > 0.0) signal.entryPrice else effectivePrice
+                    val targetPrice1 = if (signal.targetPrice1 > 0.0) signal.targetPrice1 else if (refPrice > 0.0) refPrice * 1.08 else 0.0
+                    val targetPrice2 = if (signal.targetPrice2 > 0.0) signal.targetPrice2 else if (refPrice > 0.0) refPrice * 1.18 else 0.0
+                    val stopLoss = if (signal.stopLoss > 0.0) signal.stopLoss else if (refPrice > 0.0) refPrice * 0.95 else 0.0
+
+                    val tp1Gain = if (refPrice > 0.0 && targetPrice1 > 0.0) ((targetPrice1 - refPrice) / refPrice) * 100 else 0.0
+                    val tp2Gain = if (refPrice > 0.0 && targetPrice2 > 0.0) ((targetPrice2 - refPrice) / refPrice) * 100 else 0.0
+                    val slLoss = if (refPrice > 0.0 && stopLoss > 0.0) ((stopLoss - refPrice) / refPrice) * 100 else 0.0
+
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("• Entry Area", color = TvTextSecondary, fontSize = 11.sp)
+                        Text(
+                            PriceFormatter.formatPrice(refPrice, quoteAsset = quoteAsset),
+                            color = TvTextPrimary,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(Modifier.height(3.dp))
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("• Target TP1", color = TvTextSecondary, fontSize = 11.sp)
+                        Text(
+                            "${PriceFormatter.formatPrice(targetPrice1, quoteAsset = quoteAsset)} (${PriceFormatter.formatPercentage(tp1Gain, true)})",
+                            color = TvGreen,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(Modifier.height(3.dp))
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("• Target TP2", color = TvTextSecondary, fontSize = 11.sp)
+                        Text(
+                            "${PriceFormatter.formatPrice(targetPrice2, quoteAsset = quoteAsset)} (${PriceFormatter.formatPercentage(tp2Gain, true)})",
+                            color = TvGreen,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(Modifier.height(3.dp))
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("• Cut Loss (SL)", color = TvTextSecondary, fontSize = 11.sp)
+                        Text(
+                            "${PriceFormatter.formatPrice(stopLoss, quoteAsset = quoteAsset)} (${PriceFormatter.formatPercentage(slLoss, true)})",
+                            color = TvRed,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
             }
         }
 
@@ -422,55 +374,6 @@ fun WaitingEntryRadarCard(
         )
 
         Spacer(Modifier.height(10.dp))
-
-        // Interaktif Micro-Tip Card
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(TvSurfaceVariant, RoundedCornerShape(10.dp))
-                .border(0.5.dp, TvBorder, RoundedCornerShape(10.dp))
-                .clickable {
-                    currentTipIndex = (currentTipIndex + 1) % tips.size
-                }
-                .padding(horizontal = 10.dp, vertical = 8.dp)
-        ) {
-            Row(verticalAlignment = Alignment.Top) {
-                Icon(
-                    imageVector = Icons.Default.Lightbulb,
-                    contentDescription = "Tips",
-                    tint = TvAmber,
-                    modifier = Modifier.size(16.dp).padding(top = 1.dp)
-                )
-                Spacer(Modifier.width(8.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "TIPS SAMBIL MENUNGGU ENTRY",
-                            color = TvAmber,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Icon(
-                            imageVector = Icons.Default.Refresh,
-                            contentDescription = "Ganti Tip",
-                            tint = TvTextSecondary,
-                            modifier = Modifier.size(12.dp)
-                        )
-                    }
-                    Spacer(Modifier.height(2.dp))
-                    Text(
-                        text = tips[currentTipIndex],
-                        color = TvTextSecondary,
-                        fontSize = 10.5.sp,
-                        lineHeight = 14.sp
-                    )
-                }
-            }
-        }
     }
 }
 

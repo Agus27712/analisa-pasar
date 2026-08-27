@@ -513,7 +513,14 @@ class RealTradeCoordinator(
 
         scope.launch(kotlinx.coroutines.Dispatchers.IO) {
             _realTradeStatus.value = "Mengambil saldo koin real untuk $pair..."
-            val baseAsset = pair.split("_").firstOrNull()?.lowercase() ?: ""
+            val pairId = pair.lowercase()
+            val baseAsset = when {
+                pairId.endsWith("idr") -> pairId.removeSuffix("idr")
+                pairId.endsWith("usdt") -> pairId.removeSuffix("usdt")
+                pairId.contains("_") -> pairId.split("_").first()
+                else -> pairId // Fallback
+            }
+
             if (baseAsset.isEmpty()) {
                 onResult(false, "Symbol pair tidak valid.")
                 return@launch
@@ -526,15 +533,17 @@ class RealTradeCoordinator(
                 return@launch
             }
 
+            // Gunakan available koin yang benar-benar free
             val availableCoin = balances.free[baseAsset] ?: 0.0
-            if (availableCoin <= 0.0) {
-                _realTradeStatus.value = "Gagal: Saldo koin $baseAsset Anda 0 atau tidak terbaca."
-                onResult(false, "Gagal: Saldo koin $baseAsset Anda 0 atau tidak terbaca.")
+            if (availableCoin <= 0.00000001) {
+                _realTradeStatus.value = "Gagal: Saldo koin $baseAsset Anda 0 atau tidak terbaca (API V2)."
+                onResult(false, "Gagal: Saldo koin $baseAsset tidak mencukupi untuk dijual.")
                 return@launch
             }
 
-            val qtyTp1 = availableCoin * (tp1Percent / 100.0)
-            val qtyTp2 = availableCoin - qtyTp1
+            // Pembulatan ke bawah yang aman (8 desimal)
+            val qtyTp1 = (availableCoin * (tp1Percent / 100.0) * 100_000_000.0).toLong() / 100_000_000.0
+            val qtyTp2 = (availableCoin - qtyTp1) 
 
             var finalMsg = ""
             var successAll = true

@@ -403,13 +403,8 @@ fun DetailChartScreen(
 
             Spacer(modifier.height(8.dp))
 
-            // In-Line Live Status & Strategi Mode (Di bawah area chart)
-            LiveModeStatusBar(
-                connection = connection,
-                strategyMode = strategyMode,
-                onRetry = { viewModel.retryConnection() }
-            )
-
+            // In-Line Live Status & Strategi Mode (Di bawah area chart) - REMOVED AS PER USER REQUEST
+            
             Spacer(modifier.height(10.dp))
 
             val availableIdr = if (isRealBuyMode) (realBalance["idr"] ?: 0.0) else wallet.getAvailableIdr()
