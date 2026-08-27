@@ -11,48 +11,56 @@ data class AppColors(
     val cardBackground: Color,
     val textPrimary: Color,
     val textSecondary: Color,
+    val textMuted: Color,
     val border: Color,
     val green: Color,
     val greenLight: Color,
     val red: Color,
     val redLight: Color,
     val blue: Color,
+    val blueSoft: Color,
     val amber: Color,
     val orange: Color
 )
 
+/** Dark: navy-blue canvas ala Indodax, aksen cyan/blue, bukan pure black. */
 val DarkAppColors = AppColors(
-    background = Color(0xFF12161C),       // Dark Canvas Utama (Tokocrypto style)
-    surface = Color(0xFF181A20),          // Surface & Kartu
-    surfaceVariant = Color(0xFF2B313A),   // Surface Sekunder
-    cardBackground = Color(0xFF181A20),
-    textPrimary = Color(0xFFEAECF0),       // Teks Utama Kontras Tinggi
-    textSecondary = Color(0xFF848E9C),     // Teks Sekunder
-    border = Color(0xFF2B313A),           // Border Pembatas
-    green = Color(0xFF0ECB81),            // Bullish Green
-    greenLight = Color(0xFF00C076),
-    red = Color(0xFFF6465D),              // Bearish Red
-    redLight = Color(0xFFFF5364),
-    blue = Color(0xFF90CAF9),             // Pastel Blue (Aksen Terang di Dark Mode)
-    amber = Color(0xFFFCD535),
-    orange = Color(0xFFF0B90B)
+    background = Color(0xFF0B1220),
+    surface = Color(0xFF121A2B),
+    surfaceVariant = Color(0xFF1A2438),
+    cardBackground = Color(0xFF151E30),
+    textPrimary = Color(0xFFE8EEF8),
+    textSecondary = Color(0xFF8B9BB5),
+    textMuted = Color(0xFF5C6B84),
+    border = Color(0xFF243047),
+    green = Color(0xFF22C55E),
+    greenLight = Color(0xFF4ADE80),
+    red = Color(0xFFEF4444),
+    redLight = Color(0xFFF87171),
+    blue = Color(0xFF3B82F6),
+    blueSoft = Color(0xFF60A5FA),
+    amber = Color(0xFFFBBF24),
+    orange = Color(0xFFF59E0B)
 )
 
+/** Light: putih kebiruan, teks gelap kontras tinggi (hindari gray pudar). */
 val LightAppColors = AppColors(
-    background = Color(0xFFF5F6FA),       // Light Canvas Utama (Soft Off-White)
-    surface = Color(0xFFFFFFFF),          // Surface & Kartu Terang
-    surfaceVariant = Color(0xFFEAECEF),   // Surface Sekunder
+    background = Color(0xFFF0F4FA),
+    surface = Color(0xFFFFFFFF),
+    surfaceVariant = Color(0xFFE4EBF5),
     cardBackground = Color(0xFFFFFFFF),
-    textPrimary = Color(0xFF1E2329),       // Teks Utama Gelap (Kontras Tinggi)
-    textSecondary = Color(0xFF707A8A),     // Teks Sekunder Gray
-    border = Color(0xFFE6E8EA),           // Border Pembatas Light
-    green = Color(0xFF00B074),            // Bullish Green High Contrast
-    greenLight = Color(0xFF00C076),
-    red = Color(0xFFE03A50),              // Bearish Red High Contrast
-    redLight = Color(0xFFFF5364),
-    blue = Color(0xFF1565C0),             // Darker Pastel Blue (Aksen Terbaca di Light Mode)
-    amber = Color(0xFFD4AF37),
-    orange = Color(0xFFE0A000)
+    textPrimary = Color(0xFF0F172A),
+    textSecondary = Color(0xFF475569),
+    textMuted = Color(0xFF64748B),
+    border = Color(0xFFCBD5E1),
+    green = Color(0xFF059669),
+    greenLight = Color(0xFF10B981),
+    red = Color(0xFFDC2626),
+    redLight = Color(0xFFEF4444),
+    blue = Color(0xFF1D4ED8),
+    blueSoft = Color(0xFF3B82F6),
+    amber = Color(0xFFD97706),
+    orange = Color(0xFFEA580C)
 )
 
 val LocalAppColors = staticCompositionLocalOf { DarkAppColors }
@@ -64,6 +72,7 @@ val TvCardBackground: Color @Composable get() = LocalAppColors.current.cardBackg
 
 val TvTextPrimary: Color @Composable get() = LocalAppColors.current.textPrimary
 val TvTextSecondary: Color @Composable get() = LocalAppColors.current.textSecondary
+val TvTextMuted: Color @Composable get() = LocalAppColors.current.textMuted
 val TvBorder: Color @Composable get() = LocalAppColors.current.border
 
 val TvGreen: Color @Composable get() = LocalAppColors.current.green
@@ -71,5 +80,6 @@ val TvGreenLight: Color @Composable get() = LocalAppColors.current.greenLight
 val TvRed: Color @Composable get() = LocalAppColors.current.red
 val TvRedLight: Color @Composable get() = LocalAppColors.current.redLight
 val TvBlue: Color @Composable get() = LocalAppColors.current.blue
+val TvBlueSoft: Color @Composable get() = LocalAppColors.current.blueSoft
 val TvAmber: Color @Composable get() = LocalAppColors.current.amber
 val TvOrange: Color @Composable get() = LocalAppColors.current.orange
