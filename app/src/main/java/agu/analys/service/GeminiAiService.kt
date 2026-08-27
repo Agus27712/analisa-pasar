@@ -1,7 +1,6 @@
 package agu.analys.service
 
 import agu.analys.AppContextProvider
-import agu.analys.BuildConfig
 import agu.analys.model.AISignalState
 import agu.analys.model.IndonesiaCpiData
 import agu.analys.model.MarketTick
@@ -17,95 +16,141 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
+/** Chart summary Gemini — insight pair, bukan dump RSI. */
 object GeminiAiService {
-    private val client = OkHttpClient.Builder().connectTimeout(30, TimeUnit.SECONDS).readTimeout(60, TimeUnit.SECONDS).writeTimeout(30, TimeUnit.SECONDS).build()
-    private const val MODEL = "gemini-3.5-flash"
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(12, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .writeTimeout(15, TimeUnit.SECONDS)
+        .build()
+
+    private const val MODEL = "gemini-2.0-flash"
     private const val BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models/$MODEL:generateContent"
 
-    suspend fun generateChartSummary24h(apiKey: String, tick: MarketTick, indicators: TechnicalIndicators, signal: AISignalState): String = withContext(Dispatchers.IO) {
+    suspend fun generateChartSummary24h(
+        apiKey: String,
+        tick: MarketTick,
+        indicators: TechnicalIndicators,
+        signal: AISignalState
+    ): String = withContext(Dispatchers.IO) {
         val effectiveKey = if (apiKey.isBlank()) "" else apiKey
         val cpi = if (safeContextReady) BpsMacroService(AppContextProvider.context).getLatest() else null
         if (effectiveKey.isBlank()) return@withContext buildFallback(tick, indicators, signal, cpi)
-        val macro = cpi?.let {
-            "BPS CPI: ${it.cpiIndex ?: "-"} | Inflasi YoY: ${if (it.yoyPercent.isFinite()) "${it.yoyPercent}%" else "-"}"
-        } ?: "Makro BPS: Normal"
-        val prompt = """
-Kamu asisten analisa spot crypto Indodax IDR. Berikan ringkasan SANGAT PADAT & RINGKAS (maksimal 4 poin singkat):
-Pair: ${tick.symbol}
-Harga: ${PriceFormatter.formatPrice(tick.price)} (${PriceFormatter.formatPercentage(tick.change24h)} 24j)
-Range: ${PriceFormatter.formatPrice(tick.low24h)} - ${PriceFormatter.formatPrice(tick.high24h)}
-Volume: ${PriceFormatter.formatVolume(tick.volume24h)}
-RSI 14: ${PriceFormatter.formatRsi(indicators.rsi14)} | MACD Hist: ${PriceFormatter.formatIndicatorVal(indicators.macdHist, 4)}
-EMA 20/50: ${PriceFormatter.formatPrice(indicators.ema20)} / ${PriceFormatter.formatPrice(indicators.ema50)}
-Sinyal Engine: ${signal.action.name} (${signal.confidence}/100)
-Level: Entry ${PriceFormatter.formatPrice(signal.entryPrice)} | TP1 ${PriceFormatter.formatPrice(signal.targetPrice1)} | SL ${PriceFormatter.formatPrice(signal.stopLoss)} | RR ${signal.riskRewardRatio}
-$macro
 
-Format respon:
-1. 🎯 Sinyal & Tren: [Aksi & tren saat ini]
-2. 📊 Kondisi Indikator: [RSI, MACD, Volume]
-3. 🛡️ Level Kunci: [Support/Resistance/SL]
-4. 💡 Saran Eksekusi: [Saran eksekusi spot aman & fee maker 0.21%]
+        val base = extractBase(tick.symbol)
+        val pairCtx = PairNarrative.forBase(base)
+        val move = describeMove(tick.change24h)
+        val rsiHint = when {
+            indicators.rsi14 < 30 -> "RSI oversold"
+            indicators.rsi14 > 70 -> "RSI overbought"
+            else -> "RSI netral"
+        }
+        val trendHint = when {
+            indicators.ema20 > indicators.ema50 && tick.price >= indicators.ema20 -> "struktur bullish"
+            indicators.ema20 < indicators.ema50 && tick.price <= indicators.ema20 -> "struktur bearish"
+            else -> "sideways"
+        }
+
+        val prompt = """
+Kamu asisten spot Indodax. Kasih insight singkat soal pair (bukan hafalan indikator).
+Bahasa Indonesia santai, max ~100 kata. Jangan klaim berita live; pakai "kemungkinan".
+
+Pair: ${tick.symbol} ($base)
+Identitas: ${pairCtx.label}
+Ekosistem: ${pairCtx.ecosystem}
+Narasi: ${pairCtx.narrative}
+Gerak 24j: $move (${PriceFormatter.formatPercentage(tick.change24h)})
+Harga ${PriceFormatter.formatPrice(tick.price)} | Vol ${PriceFormatter.formatVolume(tick.volume24h)}
+Teknikal: $trendHint, $rsiHint, engine ${signal.action.name}
+
+Format:
+1. 🔎 Apa ini: ...
+2. 📈 Kenapa gerak: ...
+3. 🔗 Hubungan: ...
+4. 💡 Insight pantau: ...
         """.trimIndent()
+
         try {
             val payload = JSONObject().apply {
-                put("contents", JSONArray().apply { put(JSONObject().apply { put("parts", JSONArray().apply { put(JSONObject().apply { put("text", prompt) }) }) }) })
-                put("generationConfig", JSONObject().apply { put("temperature", 0.2) })
+                put("contents", JSONArray().apply {
+                    put(JSONObject().apply {
+                        put("parts", JSONArray().apply {
+                            put(JSONObject().apply { put("text", prompt) })
+                        })
+                    })
+                })
+                put("generationConfig", JSONObject().apply {
+                    put("temperature", 0.45)
+                    put("maxOutputTokens", 400)
+                })
             }
-            val request = Request.Builder().url("$BASE_URL?key=$effectiveKey").addHeader("Content-Type", "application/json").post(payload.toString().toRequestBody("application/json".toMediaType())).build()
+            val request = Request.Builder()
+                .url("$BASE_URL?key=$effectiveKey")
+                .addHeader("Content-Type", "application/json")
+                .post(payload.toString().toRequestBody("application/json".toMediaType()))
+                .build()
             client.newCall(request).execute().use { resp ->
                 val responseBody = resp.body?.string().orEmpty()
                 if (!resp.isSuccessful) return@withContext buildFallback(tick, indicators, signal, cpi)
-                val parts = JSONObject(responseBody).optJSONArray("candidates")?.takeIf { it.length() > 0 }?.getJSONObject(0)?.optJSONObject("content")?.optJSONArray("parts")
-                val text = parts?.let { arr -> (0 until arr.length()).joinToString("\n") { i -> arr.getJSONObject(i).optString("text").orEmpty() } }.orEmpty()
+                val parts = JSONObject(responseBody)
+                    .optJSONArray("candidates")
+                    ?.takeIf { it.length() > 0 }
+                    ?.getJSONObject(0)
+                    ?.optJSONObject("content")
+                    ?.optJSONArray("parts")
+                val text = parts?.let { arr ->
+                    (0 until arr.length()).joinToString("\n") { i ->
+                        arr.getJSONObject(i).optString("text").orEmpty()
+                    }
+                }.orEmpty()
                 if (text.isNotBlank()) text.trim() else buildFallback(tick, indicators, signal, cpi)
             }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             buildFallback(tick, indicators, signal, cpi)
         }
     }
 
-    private fun buildFallback(tick: MarketTick, indicators: TechnicalIndicators, signal: AISignalState, cpi: IndonesiaCpiData?): String {
-        val rsiStatus = when {
-            indicators.rsi14 < 30 -> "Oversold (potensi pantulan)"
-            indicators.rsi14 > 70 -> "Overbought (waspada koreksi)"
-            else -> "Netral (${PriceFormatter.formatRsi(indicators.rsi14)})"
+    private fun extractBase(symbol: String): String {
+        val s = symbol.lowercase().replace("_", "")
+        return when {
+            s.endsWith("idr") -> s.removeSuffix("idr")
+            s.endsWith("usdt") -> s.removeSuffix("usdt")
+            else -> s
         }
-        val trendStatus = when {
-            indicators.ema20 > indicators.ema50 && tick.price >= indicators.ema20 -> "Bullish Uptrend"
-            indicators.ema20 < indicators.ema50 && tick.price <= indicators.ema20 -> "Bearish Downtrend"
-            else -> "Konsolidasi / Sideways"
-        }
-        val actionText = when (signal.action.name) {
-            "BUY" -> "BELI (Setup Terkonfirmasi)"
-            "SELL" -> "JUAL / AMBIL PROFIT"
-            else -> "WAIT & SEE (Tunggu Momentum)"
-        }
-        val macroText = cpi?.let { "• BPS CPI: ${it.cpiIndex ?: "-"} | Inflasi YoY ${if (it.yoyPercent.isFinite()) "${it.yoyPercent}%" else "-"}" } ?: "• Makro BPS: Normal"
+    }
 
+    private fun describeMove(change24h: Double): String = when {
+        change24h >= 8 -> "naik tajam"
+        change24h >= 3 -> "naik"
+        change24h <= -8 -> "turun tajam"
+        change24h <= -3 -> "turun"
+        else -> "relatif flat"
+    }
+
+    private fun buildFallback(
+        tick: MarketTick,
+        indicators: TechnicalIndicators,
+        signal: AISignalState,
+        cpi: IndonesiaCpiData?
+    ): String {
+        val base = extractBase(tick.symbol)
+        val ctx = PairNarrative.forBase(base)
+        val move = describeMove(tick.change24h)
         return """
-📌 RINGKASAN TEKNIKAL (${tick.symbol})
+🔎 Apa ini: ${ctx.label}. ${ctx.narrative}
 
-1. 🎯 Sinyal & Tren:
-• Sinyal: $actionText (${signal.confidence}/100)
-• Tren: $trendStatus
+📈 Kenapa gerak: 24j $move (${PriceFormatter.formatPercentage(tick.change24h)}), vol ${PriceFormatter.formatVolume(tick.volume24h)}. Kemungkinan ikut aliran ${ctx.ecosystem}.
 
-2. 📊 Indikator Kunci:
-• RSI (14): $rsiStatus
-• Volume 24j: ${PriceFormatter.formatVolume(tick.volume24h)}
-• MACD Hist: ${PriceFormatter.formatIndicatorVal(indicators.macdHist, 4)}
+🔗 Hubungan: ${ctx.ecosystem}
 
-3. 🛡️ Level Kritis (Plan):
-• Entry Acuan: ${PriceFormatter.formatPrice(signal.entryPrice)}
-• Target (TP1): ${PriceFormatter.formatPrice(signal.targetPrice1)}
-• Batas Risiko (SL): ${PriceFormatter.formatPrice(signal.stopLoss)} (RR: ${signal.riskRewardRatio})
-
-4. 💡 Saran Eksekusi:
-• Gunakan limit order pasang antrean (Maker 0.21%) dan perhatikan money management.
-$macroText
+💡 Insight pantau: Cek dulu arah BTC. Engine ${signal.action.name} — eksekusi limit maker, jangan kejar candle.
         """.trimIndent()
     }
 
     private val safeContextReady: Boolean
-        get() = try { AppContextProvider.context; true } catch (_: UninitializedPropertyAccessException) { false }
+        get() = try {
+            AppContextProvider.context; true
+        } catch (_: UninitializedPropertyAccessException) {
+            false
+        }
 }
