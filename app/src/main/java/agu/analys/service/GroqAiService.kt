@@ -61,7 +61,7 @@ Kamu asisten trading spot Indodax.
 SELURUH jawaban WAJIB Bahasa Indonesia (termasuk kutipan headline).
 Kalau headline sumbernya bahasa Inggris, TERJEMAHKAN ke Indonesia dulu, baru hubungkan ke pergerakan harga.
 Jangan biarkan kalimat Inggris utuh di jawaban user.
-Fokus insight, bukan dump angka. Max ~140 kata. Jangan jamin profit.
+Fokus insight, bukan dump angka. Max ~220 kata.
         """.trimIndent()
 
         val userPrompt = """
