@@ -57,7 +57,7 @@ object GeminiAiService {
         val prompt = """
 Kamu asisten spot Indodax. SELURUH jawaban WAJIB Bahasa Indonesia.
 Kalau headline Inggris, TERJEMAHKAN ke Indonesia dulu. Jangan biarkan teks Inggris utuh.
-Max ~120 kata.
+Max ~200 kata.
 
 Pair: ${tick.symbol} ($base)
 Identitas: ${pairCtx.label}
