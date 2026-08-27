@@ -15,11 +15,9 @@ android {
     applicationId = "agu.analys"
     minSdk = 24
     targetSdk = 35
-    versionCode = providers.gradleProperty("VERSION_CODE").map(String::toInt).getOrElse(39)
-    versionName = "2.2.2"
+    versionCode = providers.gradleProperty("VERSION_CODE").map(String::toInt).getOrElse(40)
+    versionName = "2.2.3"
 
-    // Keys TIDAK di-embed ke BuildConfig agar tidak bocor di APK.
-    // User isi via Settings → disimpan di SharedPreferences (yang sudah di-exclude backup).
     buildConfigField("String", "GEMINI_API_KEY", "\"\"")
     buildConfigField("String", "GROQ_API_KEY", "\"\"")
   }
@@ -105,12 +103,9 @@ dependencies {
   implementation(libs.kotlinx.serialization.json)
   implementation(libs.androidx.datastore.preferences)
   implementation(libs.coil.compose)
-
-  // Room Database Caching
   implementation(libs.androidx.room.runtime)
   implementation(libs.androidx.room.ktx)
   ksp(libs.androidx.room.compiler)
-
   testImplementation(libs.junit)
   testImplementation(libs.robolectric)
   testImplementation(libs.androidx.core)

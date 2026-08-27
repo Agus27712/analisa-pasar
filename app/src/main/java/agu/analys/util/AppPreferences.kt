@@ -22,12 +22,10 @@ class AppPreferences(context: Context) {
             isScalpingMode = (value == StrategyMode.SCALPING)
         }
 
-    /** Real Buy Mode Switch. Requires PIN verification before turning ON. */
     var isRealBuyModeEnabled: Boolean
         get() = prefs.getBoolean(KEY_REAL_BUY_MODE, false)
         set(value) = prefs.edit().putBoolean(KEY_REAL_BUY_MODE, value).apply()
 
-    /** Security PIN SHA-256 Hash */
     var securityPinHash: String
         get() = prefs.getString(KEY_SECURITY_PIN_HASH, "").orEmpty()
         set(value) = prefs.edit().putString(KEY_SECURITY_PIN_HASH, value).apply()
@@ -66,22 +64,44 @@ class AppPreferences(context: Context) {
             .remove(KEY_SECURITY_PIN_HASH)
             .remove(KEY_INDODAX_API_KEY)
             .remove(KEY_INDODAX_SECRET_KEY)
+            .remove(KEY_RECENT_HISTORY_BASES)
             .putBoolean(KEY_REAL_BUY_MODE, false)
             .putInt(KEY_FAILED_PIN_ATTEMPTS, 0)
             .apply()
     }
 
-    /** Indodax API Key (Encrypted in SharedPreferences) */
     var indodaxApiKey: String
         get() = decryptSecret(prefs.getString(KEY_INDODAX_API_KEY, "").orEmpty())
         set(value) = prefs.edit().putString(KEY_INDODAX_API_KEY, encryptSecret(value.trim())).apply()
 
-    /** Indodax Secret Key (Encrypted in SharedPreferences) */
     var indodaxSecretKey: String
         get() = decryptSecret(prefs.getString(KEY_INDODAX_SECRET_KEY, "").orEmpty())
         set(value) = prefs.edit().putString(KEY_INDODAX_SECRET_KEY, encryptSecret(value.trim())).apply()
 
-    /** Keys hanya dari prefs user — TIDAK fallback BuildConfig (hindari bocor di APK). */
+    /**
+     * Base asset (btc, sol, xrp, …) yang pernah punya saldo / di-trade.
+     * Dipakai biar histori tetap di-fetch setelah koin dijual habis.
+     */
+    fun getRecentHistoryBases(): List<String> =
+        prefs.getString(KEY_RECENT_HISTORY_BASES, "")
+            .orEmpty()
+            .split(',')
+            .map { it.trim().lowercase() }
+            .filter { it.isNotBlank() && it != "idr" && it != "usdt" }
+            .distinct()
+
+    fun rememberHistoryBases(bases: Collection<String>) {
+        if (bases.isEmpty()) return
+        val merged = (bases.map { it.lowercase().trim() }.filter {
+            it.isNotBlank() && it != "idr" && it != "usdt"
+        } + getRecentHistoryBases()).distinct().take(12)
+        prefs.edit().putString(KEY_RECENT_HISTORY_BASES, merged.joinToString(",")).apply()
+    }
+
+    fun rememberHistoryBase(base: String) {
+        rememberHistoryBases(listOf(base))
+    }
+
     var groqApiKey: String
         get() = prefs.getString(KEY_GROQ, "").orEmpty()
         set(value) = prefs.edit().putString(KEY_GROQ, value.trim()).apply()
@@ -128,7 +148,6 @@ class AppPreferences(context: Context) {
         get() = prefs.getString(KEY_UPDATE_GH_TOKEN, "").orEmpty()
         set(value) = prefs.edit().putString(KEY_UPDATE_GH_TOKEN, value.trim()).apply()
 
-    /** UI compact: kurangi info overload di detail/dashboard. Default true. */
     var compactUi: Boolean
         get() = prefs.getBoolean(KEY_COMPACT_UI, true)
         set(value) = prefs.edit().putBoolean(KEY_COMPACT_UI, value).apply()
@@ -237,5 +256,6 @@ class AppPreferences(context: Context) {
         private const val KEY_FAILED_PIN_ATTEMPTS = "failed_pin_attempts_count"
         private const val KEY_INDODAX_API_KEY = "indodax_encrypted_api_key"
         private const val KEY_INDODAX_SECRET_KEY = "indodax_encrypted_secret_key"
+        private const val KEY_RECENT_HISTORY_BASES = "recent_history_bases_v1"
     }
 }
