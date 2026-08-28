@@ -53,6 +53,10 @@ class RealTradeCoordinator(
         private const val INTER_REQUEST_DELAY_MS = 2_000L
         private const val MAX_HISTORY_ASSETS = 4
         private const val RATE_LIMIT_COOLDOWN_MS = 120_000L
+        /** Poll BUY status max ~30 detik (15 x 2s). */
+        private const val BUY_POLL_MAX_ATTEMPTS = 15
+        private const val BUY_POLL_INTERVAL_MS = 2_000L
+        private const val MIN_EXECUTED_QTY = 0.00000001
     }
 
     init {
@@ -479,6 +483,77 @@ class RealTradeCoordinator(
         }
     }
 
+    /**
+     * Poll status order BUY sampai FILLED / PARTIALLY_FILLED dengan executedQty > 0,
+     * atau timeout / CANCELLED.
+     * Return executedQty aktual (0 jika gagal / timeout).
+     */
+    private suspend fun waitForBuyFill(
+        apiKey: String,
+        secretKey: String,
+        pair: String,
+        orderId: String,
+        clientOrderId: String,
+        requestedQty: Double
+    ): Double {
+        var lastExecuted = 0.0
+        var lastStatus = "NEW"
+
+        for (attempt in 1..BUY_POLL_MAX_ATTEMPTS) {
+            delay(BUY_POLL_INTERVAL_MS)
+            _realTradeStatus.value = "Menunggu BUY terisi... ($attempt/$BUY_POLL_MAX_ATTEMPTS)"
+
+            val result = IndodaxTradeApiV2.getOrder(
+                apiKey = apiKey,
+                secretKey = secretKey,
+                symbol = pair,
+                orderId = orderId.takeIf { it.isNotBlank() && it != "0" },
+                clientOrderId = clientOrderId.takeIf { it.isNotBlank() }
+            )
+
+            if (!result.success) {
+                if (looksLikeRateLimit(result.message)) {
+                    markRateLimited(result.message)
+                    break
+                }
+                Timber.w("Poll BUY gagal: ${result.message}")
+                continue
+            }
+
+            lastStatus = result.status
+            lastExecuted = result.executedQty
+
+            when (result.status) {
+                "FILLED" -> {
+                    Timber.i("BUY fully filled: executed=${result.executedQty}")
+                    return result.executedQty.coerceAtLeast(0.0)
+                }
+                "PARTIALLY_FILLED" -> {
+                    if (result.executedQty > MIN_EXECUTED_QTY) {
+                        Timber.i("BUY partial fill: executed=${result.executedQty} / ${result.origQty}")
+                        // Tetap return partial supaya TP bisa dipasang sesuai qty yang sudah ada
+                        return result.executedQty
+                    }
+                }
+                "CANCELLED", "REJECTED", "EXPIRED" -> {
+                    Timber.w("BUY order $lastStatus, stop polling")
+                    return 0.0
+                }
+                else -> {
+                    // NEW / OPEN — continue polling
+                }
+            }
+        }
+
+        // Timeout: kalau sempat partial, pakai yang ada; kalau 0, jangan pasang TP
+        if (lastExecuted > MIN_EXECUTED_QTY) {
+            Timber.w("BUY poll timeout, pakai partial executed=$lastExecuted status=$lastStatus")
+            return lastExecuted
+        }
+        Timber.w("BUY poll timeout / belum terisi. requested=$requestedQty status=$lastStatus")
+        return 0.0
+    }
+
     fun executeRealTrade(
         pair: String,
         type: String,
@@ -513,7 +588,7 @@ class RealTradeCoordinator(
         scope.launch {
             _realTradeStatus.value = "Mengirim order $type ke INDODAX..."
             val clientOrderId = "agu-${type.lowercase()}-${System.currentTimeMillis()}"
-            val (success, message) = IndodaxTradeApiV2.createLimitOrder(
+            val buyResult = IndodaxTradeApiV2.createLimitOrderDetailed(
                 apiKey = apiKey,
                 secretKey = secretKey,
                 symbol = pair,
@@ -523,19 +598,53 @@ class RealTradeCoordinator(
                 clientOrderId = clientOrderId
             )
 
-            if (!success && looksLikeRateLimit(message)) {
-                markRateLimited(message)
-                onResult(false, message)
+            if (!buyResult.success && looksLikeRateLimit(buyResult.message)) {
+                markRateLimited(buyResult.message)
+                onResult(false, buyResult.message)
                 return@launch
             }
 
-            if (success) {
+            if (buyResult.success) {
                 prefs.rememberHistoryBase(baseFromPair(pair))
 
                 if (type.equals("buy", ignoreCase = true) && autoLimitSellPrice1 > price) {
-                    val halfQty = quantity / 2.0
+                    // === FIX: tunggu BUY terisi dulu, pakai executedQty aktual ===
+                    val executedQty = if (buyResult.executedQty > MIN_EXECUTED_QTY &&
+                        buyResult.status == "FILLED"
+                    ) {
+                        buyResult.executedQty
+                    } else {
+                        waitForBuyFill(
+                            apiKey = apiKey,
+                            secretKey = secretKey,
+                            pair = pair,
+                            orderId = buyResult.orderId,
+                            clientOrderId = buyResult.clientOrderId.ifBlank { clientOrderId },
+                            requestedQty = quantity
+                        )
+                    }
+
+                    if (executedQty <= MIN_EXECUTED_QTY) {
+                        _realTradeStatus.value =
+                            "BUY terkirim tapi belum terisi (atau timeout). TP tidak dipasang. Cek Open Orders."
+                        onResult(
+                            true,
+                            "BUY berhasil di server, tapi belum FILLED.\n" +
+                                "Auto-TP dibatalkan biar aman (saldo koin belum ada).\n" +
+                                "Pakai tombol Auto Sell manual setelah order terisi."
+                        )
+                        delay(INTER_REQUEST_DELAY_MS)
+                        lastFetchTimeMs = 0L
+                        fetchRealBalance()
+                        return@launch
+                    }
+
+                    val halfQty = executedQty / 2.0
+                    var finalMsg = "BUY filled ${"%.8f".format(executedQty)}. "
+
                     delay(INTER_REQUEST_DELAY_MS)
-                    _realTradeStatus.value = "Mengirim TP 1 (${PriceFormatter.formatPrice(autoLimitSellPrice1)})..."
+                    _realTradeStatus.value =
+                        "Mengirim TP 1 (${PriceFormatter.formatPrice(autoLimitSellPrice1)}) qty=${"%.8f".format(halfQty)}..."
                     val sellClientOrderId1 = "agu-tp1-${System.currentTimeMillis()}"
                     val (sellSuccess1, sellMessage1) = IndodaxTradeApiV2.createLimitOrder(
                         apiKey = apiKey,
@@ -547,7 +656,6 @@ class RealTradeCoordinator(
                         clientOrderId = sellClientOrderId1
                     )
 
-                    var finalMsg = ""
                     if (sellSuccess1) {
                         finalMsg += "TP1 (${PriceFormatter.formatPrice(autoLimitSellPrice1)}) berhasil."
                     } else {
@@ -555,9 +663,11 @@ class RealTradeCoordinator(
                         if (looksLikeRateLimit(sellMessage1)) markRateLimited(sellMessage1)
                     }
 
-                    val actualTp2Price = if (autoLimitSellPrice2 > price) autoLimitSellPrice2 else autoLimitSellPrice1 * 1.03
+                    val actualTp2Price =
+                        if (autoLimitSellPrice2 > price) autoLimitSellPrice2 else autoLimitSellPrice1 * 1.03
                     delay(INTER_REQUEST_DELAY_MS)
-                    _realTradeStatus.value = "Mengirim TP 2 (${PriceFormatter.formatPrice(actualTp2Price)})..."
+                    _realTradeStatus.value =
+                        "Mengirim TP 2 (${PriceFormatter.formatPrice(actualTp2Price)}) qty=${"%.8f".format(halfQty)}..."
                     val sellClientOrderId2 = "agu-tp2-${System.currentTimeMillis()}"
                     val (sellSuccess2, sellMessage2) = IndodaxTradeApiV2.createLimitOrder(
                         apiKey = apiKey,
@@ -576,18 +686,18 @@ class RealTradeCoordinator(
                         if (looksLikeRateLimit(sellMessage2)) markRateLimited(sellMessage2)
                     }
 
-                    _realTradeStatus.value = "BUY Sukses! Status TP: $finalMsg"
-                    onResult(true, "BUY berhasil di server Indodax!\nAuto Sell: $finalMsg")
+                    _realTradeStatus.value = "BUY + TP: $finalMsg"
+                    onResult(true, "BUY berhasil (executed ${"%.8f".format(executedQty)})!\nAuto Sell: $finalMsg")
                 } else {
-                    _realTradeStatus.value = message
-                    onResult(true, message)
+                    _realTradeStatus.value = buyResult.message
+                    onResult(true, buyResult.message)
                 }
                 delay(INTER_REQUEST_DELAY_MS)
                 lastFetchTimeMs = 0L
                 fetchRealBalance()
             } else {
-                _realTradeStatus.value = message
-                onResult(false, message)
+                _realTradeStatus.value = buyResult.message
+                onResult(false, buyResult.message)
             }
         }
     }
