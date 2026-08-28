@@ -60,10 +60,10 @@
       chart.applyOptions({ width: el.clientWidth, height: el.clientHeight });
     }
 
-    function setCandles(jsonStr) {
+    function setCandles(input) {
       if (!ready) return;
       try {
-        const raw = JSON.parse(jsonStr);
+        const raw = (typeof input === 'string') ? JSON.parse(input) : input;
         if (!Array.isArray(raw) || raw.length === 0) return;
         const candles = [];
         const volumes = [];
@@ -102,10 +102,10 @@
       } catch (e) {}
     }
 
-    function setLevels(jsonStr) {
+    function setLevels(input) {
       if (!ready || !candleSeries) return;
       try {
-        const lv = JSON.parse(jsonStr);
+        const lv = (typeof input === 'string') ? JSON.parse(input) : input;
         candleSeries.setMarkers([]);
         if (window._lines) {
           window._lines.forEach(l => { try { candleSeries.removePriceLine(l); } catch(e){} });
