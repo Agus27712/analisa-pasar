@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; background: #0d1117; overflow: hidden; }
+    #chart { width: 100%; height: 100%; }
+  </style>
+  <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+</head>
+<body>
+  <div id="chart"></div>
+  <script>
+    let chart, candleSeries, volumeSeries;
+    let ready = false;
+
+    function init() {
+      const el = document.getElementById('chart');
+      chart = LightweightCharts.createChart(el, {
+        layout: {
+          background: { type: 'solid', color: '#0d1117' },
+          textColor: '#8b949e',
+          fontSize: 11
+        },
+        grid: {
+          vertLines: { color: 'rgba(255,255,255,0.04)' },
+          horzLines: { color: 'rgba(255,255,255,0.04)' }
+        },
+        crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+        rightPriceScale: { borderColor: 'rgba(255,255,255,0.08)' },
+        timeScale: {
+          borderColor: 'rgba(255,255,255,0.08)',
+          timeVisible: true,
+          secondsVisible: false
+        },
+        handleScroll: { vertTouchDrag: false }
+      });
+
+      candleSeries = chart.addCandlestickSeries({
+        upColor: '#26a69a',
+        downColor: '#ef5350',
+        borderUpColor: '#26a69a',
+        borderDownColor: '#ef5350',
+        wickUpColor: '#26a69a',
+        wickDownColor: '#ef5350'
+      });
+
+      volumeSeries = chart.addHistogramSeries({
+        priceFormat: { type: 'volume' },
+        priceScaleId: '',
+        scaleMargins: { top: 0.8, bottom: 0 }
+      });
+
+      ready = true;
+      window.addEventListener('resize', () => {
+        chart.applyOptions({ width: el.clientWidth, height: el.clientHeight });
+      });
+      chart.applyOptions({ width: el.clientWidth, height: el.clientHeight });
+    }
+
+    function setCandles(jsonStr) {
+      if (!ready) return;
+      try {
+        const raw = JSON.parse(jsonStr);
+        if (!Array.isArray(raw) || raw.length === 0) return;
+        const candles = [];
+        const volumes = [];
+        for (let i = 0; i < raw.length; i++) {
+          const c = raw[i];
+          const t = Math.floor(Number(c.t) / 1000);
+          if (!t || c.o <= 0) continue;
+          candles.push({ time: t, open: c.o, high: c.h, low: c.l, close: c.c });
+          const up = c.c >= c.o;
+          volumes.push({
+            time: t,
+            value: c.v || 0,
+            color: up ? 'rgba(38,166,154,0.45)' : 'rgba(239,83,80,0.45)'
+          });
+        }
+        candleSeries.setData(candles);
+        volumeSeries.setData(volumes);
+        chart.timeScale().fitContent();
+      } catch (e) {
+        console.error('setCandles', e);
+      }
+    }
+
+    function updateLast(jsonStr) {
+      if (!ready) return;
+      try {
+        const c = JSON.parse(jsonStr);
+        const t = Math.floor(Number(c.t) / 1000);
+        if (!t || c.o <= 0) return;
+        candleSeries.update({ time: t, open: c.o, high: c.h, low: c.l, close: c.c });
+        volumeSeries.update({
+          time: t,
+          value: c.v || 0,
+          color: c.c >= c.o ? 'rgba(38,166,154,0.45)' : 'rgba(239,83,80,0.45)'
+        });
+      } catch (e) {}
+    }
+
+    function setLevels(jsonStr) {
+      if (!ready || !candleSeries) return;
+      try {
+        const lv = JSON.parse(jsonStr);
+        candleSeries.setMarkers([]);
+        if (window._lines) {
+          window._lines.forEach(l => { try { candleSeries.removePriceLine(l); } catch(e){} });
+        }
+        window._lines = [];
+        function addLine(price, color, title) {
+          if (!price || price <= 0) return;
+          const line = candleSeries.createPriceLine({
+            price: price,
+            color: color,
+            lineWidth: 1,
+            lineStyle: LightweightCharts.LineStyle.Dashed,
+            axisLabelVisible: true,
+            title: title
+          });
+          window._lines.push(line);
+        }
+        addLine(lv.entry, '#00E5FF', 'Entry');
+        addLine(lv.tp1, '#26a69a', 'TP1');
+        addLine(lv.tp2, '#66BB6A', 'TP2');
+        addLine(lv.sl, '#ef5350', 'SL');
+      } catch (e) {}
+    }
+
+    document.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>
