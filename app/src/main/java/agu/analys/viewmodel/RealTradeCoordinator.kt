@@ -49,10 +49,11 @@ class RealTradeCoordinator(
     private var rateLimitedUntilMs = 0L
 
     companion object {
-        private const val REFRESH_COOLDOWN_MS = 20_000L
-        private const val INTER_REQUEST_DELAY_MS = 2_000L
+        /** Cooldown 60s biar aman dari rate-limit / ban. */
+        private const val REFRESH_COOLDOWN_MS = 60_000L
+        private const val INTER_REQUEST_DELAY_MS = 2_500L
         private const val MAX_HISTORY_ASSETS = 4
-        private const val RATE_LIMIT_COOLDOWN_MS = 120_000L
+        private const val RATE_LIMIT_COOLDOWN_MS = 180_000L
         /** Poll BUY status max ~30 detik (15 x 2s). */
         private const val BUY_POLL_MAX_ATTEMPTS = 15
         private const val BUY_POLL_INTERVAL_MS = 2_000L
@@ -177,7 +178,7 @@ class RealTradeCoordinator(
             prefs.isRealBuyModeEnabled = true
             _isRealBuyMode.value = true
             _isPinUnlocked.value = true
-            fetchRealBalance()
+            // Jangan auto-fetch di sini — biar UI (PIN unlock) yang trigger sekali.
             return true
         }
         prefs.isRealBuyModeEnabled = false
@@ -189,7 +190,7 @@ class RealTradeCoordinator(
 
     private fun markRateLimited(message: String) {
         rateLimitedUntilMs = System.currentTimeMillis() + RATE_LIMIT_COOLDOWN_MS
-        _realTradeStatus.value = "$message · Jeda 2 menit sebelum refresh lagi."
+        _realTradeStatus.value = "$message · Jeda 3 menit sebelum refresh lagi."
     }
 
     private fun looksLikeRateLimit(msg: String): Boolean {
@@ -244,7 +245,7 @@ class RealTradeCoordinator(
             return
         }
         if (now - lastFetchTimeMs < REFRESH_COOLDOWN_MS && _realIndodaxBalance.value.isNotEmpty()) {
-            _realTradeStatus.value = "Cache aktif (cooldown ${REFRESH_COOLDOWN_MS / 1000}s). Jangan spam refresh."
+            _realTradeStatus.value = "Cache aktif (cooldown ${REFRESH_COOLDOWN_MS / 1000}s). Pakai data terakhir."
             return
         }
 
@@ -531,7 +532,6 @@ class RealTradeCoordinator(
                 "PARTIALLY_FILLED" -> {
                     if (result.executedQty > MIN_EXECUTED_QTY) {
                         Timber.i("BUY partial fill: executed=${result.executedQty} / ${result.origQty}")
-                        // Tetap return partial supaya TP bisa dipasang sesuai qty yang sudah ada
                         return result.executedQty
                     }
                 }
@@ -545,7 +545,6 @@ class RealTradeCoordinator(
             }
         }
 
-        // Timeout: kalau sempat partial, pakai yang ada; kalau 0, jangan pasang TP
         if (lastExecuted > MIN_EXECUTED_QTY) {
             Timber.w("BUY poll timeout, pakai partial executed=$lastExecuted status=$lastStatus")
             return lastExecuted
@@ -608,7 +607,6 @@ class RealTradeCoordinator(
                 prefs.rememberHistoryBase(baseFromPair(pair))
 
                 if (type.equals("buy", ignoreCase = true) && autoLimitSellPrice1 > price) {
-                    // === FIX: tunggu BUY terisi dulu, pakai executedQty aktual ===
                     val executedQty = if (buyResult.executedQty > MIN_EXECUTED_QTY &&
                         buyResult.status == "FILLED"
                     ) {

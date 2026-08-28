@@ -64,8 +64,10 @@ fun PortfolioScreen(
     val isFetchingRealBalance by viewModel.isFetchingRealBalance.collectAsStateWithLifecycle()
     val realTradeStatus by viewModel.realTradeStatus.collectAsStateWithLifecycle()
 
+    // Refresh saldo HANYA saat PIN baru unlock + belum ada cache saldo.
+    // Jangan spam API tiap buka tab Real / recompose.
     LaunchedEffect(isPinUnlocked) {
-        if (isPinUnlocked && viewModel.hasRealCredentialsConfigured()) {
+        if (isPinUnlocked && viewModel.hasRealCredentialsConfigured() && realBalance.isEmpty()) {
             viewModel.fetchRealBalance()
         }
     }
@@ -212,6 +214,7 @@ fun PortfolioScreen(
                 }
 
                 // Tab 2: REAL INDODAX
+                // JANGAN auto-refresh di sini — cuma switch UI + minta PIN kalau locked.
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -225,9 +228,8 @@ fun PortfolioScreen(
                                 } else {
                                     showPinDialog = true
                                 }
-                            } else {
-                                viewModel.fetchRealBalance()
                             }
+                            // sudah unlock → pakai cache saldo, refresh manual via tombol ↻
                         }
                         .padding(vertical = 8.dp),
                     contentAlignment = Alignment.Center
@@ -239,7 +241,7 @@ fun PortfolioScreen(
                             tint = if (showRealPortfolioMode) TvGreen else TvTextSecondary,
                             modifier = Modifier.size(14.dp)
                         )
-                        Spacer(Modifier.width(6.dp))
+                        Spacer(modifier.width(6.dp))
                         Text(
                             text = "Portofolio Real (Indodax)",
                             color = if (showRealPortfolioMode) TvGreen else TvTextSecondary,
@@ -343,6 +345,7 @@ fun PortfolioScreen(
                 if (ok) {
                     showPinDialog = false
                     pinDialogError = null
+                    // Satu kali refresh setelah unlock PIN (cooldown di coordinator tetap berlaku)
                     viewModel.fetchRealBalance()
                 } else {
                     pinDialogError = "PIN Keamanan Salah. Silakan coba lagi."
