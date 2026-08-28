@@ -62,8 +62,9 @@ fun LightweightChartView(
 
     fun pushData(wv: WebView) {
         val json = candlesToJson(candles)
-        wv.evaluateJavascript("setCandles('$json')", null)
-        wv.evaluateJavascript("setLevels('${levelsJson()}')", null)
+        // JSON as JS object literal — no string escaping issues
+        wv.evaluateJavascript("setCandles($json)", null)
+        wv.evaluateJavascript("setLevels(${levelsJson()})", null)
     }
 
     LaunchedEffect(candles, entryPrice, targetPrice1, targetPrice2, stopLoss, pageReady) {
