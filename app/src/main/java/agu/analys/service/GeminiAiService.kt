@@ -14,6 +14,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
+import timber.log.Timber
 import java.util.concurrent.TimeUnit
 
 /** Chart summary Gemini — output wajib Bahasa Indonesia (headline di-translate). */
@@ -111,7 +112,8 @@ Format (Bahasa Indonesia):
                 }.orEmpty()
                 if (text.isNotBlank()) text.trim() else buildFallback(tick, indicators, signal, cpi, headlineBlock)
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Timber.e(e, "Gagal memanggil Gemini AI Service")
             buildFallback(tick, indicators, signal, cpi, headlineBlock)
         }
     }

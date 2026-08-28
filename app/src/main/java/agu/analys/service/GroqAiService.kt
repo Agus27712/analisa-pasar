@@ -14,6 +14,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
+import timber.log.Timber
 import java.util.concurrent.TimeUnit
 
 /** AI insight via Groq — narasi pair + headline (output wajib Bahasa Indonesia). */
@@ -117,7 +118,8 @@ Jawab format ini (semua Bahasa Indonesia):
                     .orEmpty()
                 if (text.isNotBlank()) text.trim() else buildFallback(tick, indicators, signal, cpi, headlineBlock)
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Timber.e(e, "Gagal memanggil Groq AI Service")
             buildFallback(tick, indicators, signal, cpi, headlineBlock)
         }
     }

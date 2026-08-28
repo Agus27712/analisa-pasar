@@ -7,6 +7,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
+import timber.log.Timber
 import java.util.concurrent.TimeUnit
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
@@ -14,6 +15,12 @@ import javax.crypto.spec.SecretKeySpec
 /**
  * INDODAX Trade API 2.0 ONLY.
  * Fetch sengaja pelan: 1x account, myTrades max 1 window 7 hari.
+ * 
+ * Arsitektur:
+ * - Singleton Object: Untuk akses global yang stateless.
+ * - OkHttp: Digunakan untuk request sinkron di dalam withContext(Dispatchers.IO).
+ * - HMAC-SHA256: Digunakan untuk signing request sesuai standar API V2 Indodax.
+ * - Error Mapping: Mengubah kode error API menjadi pesan yang dapat dipahami user.
  */
 object IndodaxTradeApiV2 {
     private const val V2_BASE_URL = "https://api.indodax.com"
@@ -46,7 +53,7 @@ object IndodaxTradeApiV2 {
         IndodaxMarketService.toPairId(symbol).replace("_", "").uppercase()
 
     private suspend fun serverTimeMs(): Long = withContext(Dispatchers.IO) {
-        runCatching {
+        try {
             val request = Request.Builder()
                 .url(SERVER_TIME_URL)
                 .header("Accept", "application/json")
@@ -62,7 +69,10 @@ object IndodaxTradeApiV2 {
                 if (raw <= 0L) System.currentTimeMillis()
                 else if (raw < 1_000_000_000_000L) raw * 1000L else raw
             }
-        }.getOrElse { System.currentTimeMillis() }
+        } catch (e: Exception) {
+            Timber.e(e, "Gagal mengambil server time Indodax")
+            System.currentTimeMillis()
+        }
     }
 
     private suspend fun signedV2Request(
@@ -106,18 +116,23 @@ object IndodaxTradeApiV2 {
             else -> return@withContext false to "Unsupported HTTP method: $method"
         }
 
-        runCatching {
+        try {
             client.newCall(request).execute().use { response ->
                 val responseBody = response.body?.string().orEmpty()
-                val json = runCatching { JSONObject(responseBody) }.getOrNull()
+                val json = try { JSONObject(responseBody) } catch (_: Exception) { null }
                 val hasErrorCode = json != null && json.has("code") && json.optInt("code", 0) != 0
                 if (response.isSuccessful && !hasErrorCode) {
                     true to responseBody
                 } else {
-                    false to mapV2Error(json, responseBody.ifBlank { response.message })
+                    val errorMsg = mapV2Error(json, responseBody.ifBlank { response.message })
+                    Timber.w("V2 Request Failed: $path | $errorMsg")
+                    false to errorMsg
                 }
             }
-        }.getOrElse { false to "Trade API V2 network error: ${it.localizedMessage}" }
+        } catch (e: Exception) {
+            Timber.e(e, "Trade API V2 network error")
+            false to "Trade API V2 network error: ${e.localizedMessage}"
+        }
     }
 
     private fun mapV2Error(json: JSONObject?, fallback: String): String {
@@ -151,10 +166,10 @@ object IndodaxTradeApiV2 {
         val (ok, raw) = signedV2Request(apiKey, secretKey, "GET", "/api/v2/account", params)
         if (!ok) return null to raw
 
-        return runCatching {
+        return try {
             val json = JSONObject(raw)
             val balancesArr = json.optJSONArray("balances")
-                ?: return@runCatching null to "Format account V2 tidak sesuai."
+                ?: return null to "Format account V2 tidak sesuai."
             val totalMap = mutableMapOf<String, Double>()
             val freeMap = mutableMapOf<String, Double>()
             val lockedMap = mutableMapOf<String, Double>()
@@ -169,7 +184,10 @@ object IndodaxTradeApiV2 {
                 totalMap[asset] = free + locked
             }
             IndodaxBalances(totalMap, freeMap, lockedMap) to "Saldo INDODAX berhasil diperbarui (API V2)."
-        }.getOrElse { null to "Gagal parse account V2: ${it.localizedMessage}" }
+        } catch (e: Exception) {
+            Timber.e(e, "Gagal parse account V2")
+            null to "Gagal parse account V2: ${e.localizedMessage}"
+        }
     }
 
     suspend fun openOrders(
@@ -325,13 +343,7 @@ object IndodaxTradeApiV2 {
                 else -> {
                     val obj = JSONObject(trimmed)
                     when {
-                        obj.has("data") && !obj.isNull("data") -> {
-                            val d = obj.opt("data")
-                            when (d) {
-                                is JSONArray -> d
-                                else -> null
-                            }
-                        }
+                        obj.has("data") && !obj.isNull("data") -> obj.optJSONArray("data")
                         obj.has("trades") -> obj.optJSONArray("trades")
                         obj.has("return") -> obj.optJSONObject("return")?.optJSONArray("trades")
                         else -> null

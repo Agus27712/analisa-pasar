@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import org.json.JSONArray
+import timber.log.Timber
 
 /**
  * Coordinator real INDODAX — Trade API V2 only.
@@ -60,14 +61,18 @@ class RealTradeCoordinator(
                 AppDatabase.getInstance().realTradeDao().getOpenOrdersFlow().collect {
                     _realOpenOrders.value = it
                 }
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                Timber.e(e, "Gagal mengamati aliran open orders")
+            }
         }
         scope.launch {
             try {
                 AppDatabase.getInstance().realTradeDao().getAllTradesFlow().collect {
                     _realTrades.value = it
                 }
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                Timber.e(e, "Gagal mengamati aliran histori trade")
+            }
         }
     }
 
@@ -284,7 +289,10 @@ class RealTradeCoordinator(
             }
             val db = AppDatabase.getInstance().realTradeDao()
             db.clearOpenOrders()
-            val jsonArr = runCatching { JSONArray(raw) }.getOrNull()
+            val jsonArr = try { JSONArray(raw) } catch (e: Exception) {
+                Timber.e(e, "Gagal parse JSONArray open orders")
+                null
+            }
             if (jsonArr != null) {
                 val entityList = mutableListOf<RealOpenOrderEntity>()
                 for (i in 0 until jsonArr.length()) {

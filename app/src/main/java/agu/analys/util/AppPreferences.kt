@@ -1,6 +1,8 @@
 package agu.analys.util
 
 import android.content.Context
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 import agu.analys.config.AiProvider
 import agu.analys.config.MarketDataSource
 import agu.analys.config.ScalpingSensitivity
@@ -9,7 +11,17 @@ import agu.analys.config.TradingFeeConfig
 
 /** Local user configuration. Runtime market data is deliberately kept elsewhere. */
 class AppPreferences(context: Context) {
-    private val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val masterKey = MasterKey.Builder(context)
+        .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+        .build()
+
+    private val prefs = EncryptedSharedPreferences.create(
+        context,
+        PREFS_NAME,
+        masterKey,
+        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+    )
 
     var strategyMode: StrategyMode
         get() = runCatching {
@@ -71,12 +83,12 @@ class AppPreferences(context: Context) {
     }
 
     var indodaxApiKey: String
-        get() = decryptSecret(prefs.getString(KEY_INDODAX_API_KEY, "").orEmpty())
-        set(value) = prefs.edit().putString(KEY_INDODAX_API_KEY, encryptSecret(value.trim())).apply()
+        get() = prefs.getString(KEY_INDODAX_API_KEY, "").orEmpty()
+        set(value) = prefs.edit().putString(KEY_INDODAX_API_KEY, value.trim()).apply()
 
     var indodaxSecretKey: String
-        get() = decryptSecret(prefs.getString(KEY_INDODAX_SECRET_KEY, "").orEmpty())
-        set(value) = prefs.edit().putString(KEY_INDODAX_SECRET_KEY, encryptSecret(value.trim())).apply()
+        get() = prefs.getString(KEY_INDODAX_SECRET_KEY, "").orEmpty()
+        set(value) = prefs.edit().putString(KEY_INDODAX_SECRET_KEY, value.trim()).apply()
 
     /**
      * Base asset (btc, sol, xrp, …) yang pernah punya saldo / di-trade.
@@ -170,38 +182,6 @@ class AppPreferences(context: Context) {
         val md = java.security.MessageDigest.getInstance("SHA-256")
         val digest = md.digest("agu_analys_pin_salt_$pin".toByteArray(Charsets.UTF_8))
         return digest.joinToString("") { "%02x".format(it) }
-    }
-
-    private fun encryptSecret(plainText: String): String {
-        if (plainText.isBlank()) return ""
-        return try {
-            val salt = "agu_analys_secret_salt_v1_key"
-            val bytes = plainText.toByteArray(Charsets.UTF_8)
-            val saltBytes = salt.toByteArray(Charsets.UTF_8)
-            val encrypted = ByteArray(bytes.size)
-            for (i in bytes.indices) {
-                encrypted[i] = (bytes[i].toInt() xor saltBytes[i % saltBytes.size].toInt()).toByte()
-            }
-            android.util.Base64.encodeToString(encrypted, android.util.Base64.NO_WRAP)
-        } catch (_: Exception) {
-            plainText
-        }
-    }
-
-    private fun decryptSecret(cipherText: String): String {
-        if (cipherText.isBlank()) return ""
-        return try {
-            val decoded = android.util.Base64.decode(cipherText, android.util.Base64.NO_WRAP)
-            val salt = "agu_analys_secret_salt_v1_key"
-            val saltBytes = salt.toByteArray(Charsets.UTF_8)
-            val decrypted = ByteArray(decoded.size)
-            for (i in decoded.indices) {
-                decrypted[i] = (decoded[i].toInt() xor saltBytes[i % saltBytes.size].toInt()).toByte()
-            }
-            String(decrypted, Charsets.UTF_8)
-        } catch (_: Exception) {
-            cipherText
-        }
     }
 
     fun getWatchlist(): Set<String> {

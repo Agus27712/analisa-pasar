@@ -21,6 +21,14 @@ import kotlin.math.max
 /**
  * Scalping BUY-only dengan Evaluasi Adaptif Multi-Timeframe (1H, 15M, 1M).
  * Mencegah Overfit & False Signal di Market Sideways melalui Walk-Forward Validation & Market Regime Detection.
+ * 
+ * Alur Kerja (Pipeline):
+ * 1. Data Normalization: Mengambil candle dari 3 timeframe berbeda.
+ * 2. Indicator Calculation: Menghitung EMA, RSI, MACD, ATR untuk tiap timeframe.
+ * 3. Market Regime Detection: Mendeteksi apakah market sedang Trending atau Sideways.
+ * 4. Walk-Forward Validation: Melakukan backtest singkat untuk memvalidasi efektivitas strategi di market saat ini.
+ * 5. Score Calculation: Memberikan bobot pada tiap kondisi (Bias, Setup, Trigger).
+ * 6. Risk Management: Menghitung SL, TP, dan Net Reward-to-Risk Ratio setelah biaya (fee) dan slippage.
  */
 object ScalpingMtfEvaluator {
     data class Result(val signal: AISignalState, val indicators: TechnicalIndicators)

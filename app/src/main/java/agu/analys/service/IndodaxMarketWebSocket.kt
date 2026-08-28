@@ -14,6 +14,7 @@ import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import org.json.JSONArray
 import org.json.JSONObject
+import timber.log.Timber
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.max
@@ -109,7 +110,10 @@ class IndodaxMarketWebSocket(
 
     private fun consume(message: String) {
         lastMessageAt.set(System.currentTimeMillis())
-        val root = runCatching { JSONObject(message) }.getOrNull() ?: return
+        val root = try { JSONObject(message) } catch (e: Exception) {
+            Timber.e(e, "Gagal parse message WebSocket Indodax")
+            null
+        } ?: return
         val result = root.optJSONObject("result") ?: return
         if (result.optString("channel") != "chart:tick-$pairId") return
         val payload = result.optJSONObject("data") ?: return

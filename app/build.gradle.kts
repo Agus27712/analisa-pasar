@@ -15,8 +15,8 @@ android {
     applicationId = "agu.analys"
     minSdk = 24
     targetSdk = 35
-    versionCode = providers.gradleProperty("VERSION_CODE").map(String::toInt).getOrElse(41)
-    versionName = "2.2.4"
+    versionCode = providers.gradleProperty("VERSION_CODE").map(String::toInt).getOrElse(42)
+    versionName = "2.2.5"
 
     buildConfigField("String", "GEMINI_API_KEY", "\"\"")
     buildConfigField("String", "GROQ_API_KEY", "\"\"")
@@ -101,12 +101,15 @@ dependencies {
   implementation(libs.kotlinx.coroutines.android)
   implementation(libs.okhttp)
   implementation(libs.kotlinx.serialization.json)
-  implementation(libs.androidx.datastore.preferences)
+  implementation(libs.androidx.security.crypto)
+  implementation(libs.timber)
   implementation(libs.coil.compose)
   implementation(libs.androidx.room.runtime)
   implementation(libs.androidx.room.ktx)
   ksp(libs.androidx.room.compiler)
   testImplementation(libs.junit)
+  testImplementation(libs.mockk)
+  testImplementation(libs.mockwebserver)
   testImplementation(libs.robolectric)
   testImplementation(libs.androidx.core)
   testImplementation(libs.androidx.compose.ui.test.junit4)
