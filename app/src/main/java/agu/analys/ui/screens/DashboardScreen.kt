@@ -54,20 +54,20 @@ fun DashboardScreen(
     ) {
         when (selectedRankingTab) {
             MarketRankingTab.SCALPING_FAST -> {
-                val list = if (gainersCoins.isNotEmpty()) gainersCoins.take(10).map { it.symbol }
-                else if (hotCoins.isNotEmpty()) hotCoins.take(10).map { it.symbol }
-                else worthCoins.filter { it.isWorthIt || it.potentialProfitPct > 0 }.take(10).map { it.pair.symbol }
+                val list = if (gainersCoins.isNotEmpty()) gainersCoins.take(15).map { it.symbol }
+                else if (hotCoins.isNotEmpty()) hotCoins.take(15).map { it.symbol }
+                else worthCoins.filter { it.isWorthIt || it.potentialProfitPct > 0 }.take(15).map { it.pair.symbol }
 
                 val mapped = list.map { TradingPair.fromCustomSymbol(it, defaultQuote) }.distinctBy { it.symbol }
-                if (mapped.isNotEmpty()) mapped else TradingPair.popularPairsForSource(marketDataSource).take(10)
+                if (mapped.isNotEmpty()) mapped else TradingPair.popularPairsForSource(marketDataSource).take(15)
             }
             MarketRankingTab.SECOND_WAVE -> {
-                val list = if (secondWaveCoins.isNotEmpty()) secondWaveCoins.take(10).map { it.symbol }
-                else if (gainersCoins.isNotEmpty()) gainersCoins.take(10).map { it.symbol }
-                else worthCoins.map { it.pair.symbol }.take(10)
+                val list = if (secondWaveCoins.isNotEmpty()) secondWaveCoins.take(15).map { it.symbol }
+                else if (gainersCoins.isNotEmpty()) gainersCoins.take(15).map { it.symbol }
+                else worthCoins.map { it.pair.symbol }.take(15)
 
                 val mapped = list.map { TradingPair.fromCustomSymbol(it, defaultQuote) }.distinctBy { it.symbol }
-                if (mapped.isNotEmpty()) mapped else TradingPair.popularPairsForSource(marketDataSource).take(10)
+                if (mapped.isNotEmpty()) mapped else TradingPair.popularPairsForSource(marketDataSource).take(15)
             }
             MarketRankingTab.WATCHLIST -> {
                 watchlist.map { TradingPair.fromCustomSymbol(it, defaultQuote) }.distinctBy { it.symbol }
@@ -114,8 +114,8 @@ fun DashboardScreen(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth(),
-            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             if (displayPairs.isEmpty()) {
                 item {

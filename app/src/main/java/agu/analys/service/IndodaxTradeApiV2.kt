@@ -15,7 +15,7 @@ import javax.crypto.spec.SecretKeySpec
 /**
  * INDODAX Trade API 2.0 ONLY.
  * Fetch sengaja pelan: 1x account, myTrades max 1 window 7 hari.
- * 
+ *
  * Arsitektur:
  * - Singleton Object: Untuk akses global yang stateless.
  * - OkHttp: Digunakan untuk request sinkron di dalam withContext(Dispatchers.IO).
@@ -156,6 +156,17 @@ object IndodaxTradeApiV2 {
         val locked: Map<String, Double>
     )
 
+    /** Hasil create / get order yang lebih structured. */
+    data class OrderResult(
+        val success: Boolean,
+        val message: String,
+        val orderId: String = "",
+        val clientOrderId: String = "",
+        val executedQty: Double = 0.0,
+        val origQty: Double = 0.0,
+        val status: String = ""
+    )
+
     suspend fun getAccount(apiKey: String, secretKey: String): Pair<IndodaxBalances?, String> {
         if (apiKey.isBlank() || secretKey.isBlank()) return null to "API Key / Secret Key kosong."
         val timestamp = serverTimeMs()
@@ -205,6 +216,60 @@ object IndodaxTradeApiV2 {
         return signedV2Request(apiKey, secretKey, "GET", "/api/v2/openOrders", params)
     }
 
+    /**
+     * GET /api/v2/order — detail order by orderId atau clientOrderId.
+     * Return executedQty + status (NEW / PARTIALLY_FILLED / FILLED / CANCELLED / ...).
+     */
+    suspend fun getOrder(
+        apiKey: String,
+        secretKey: String,
+        symbol: String,
+        orderId: String? = null,
+        clientOrderId: String? = null
+    ): OrderResult {
+        if (apiKey.isBlank() || secretKey.isBlank()) {
+            return OrderResult(false, "API Key / Secret Key kosong.")
+        }
+        if (orderId.isNullOrBlank() && clientOrderId.isNullOrBlank()) {
+            return OrderResult(false, "orderId atau clientOrderId wajib diisi.")
+        }
+
+        val params = linkedMapOf(
+            "symbol" to toOrderSymbol(symbol),
+            "timestamp" to serverTimeMs().toString(),
+            "recvWindow" to RECV_WINDOW_MS.toString()
+        )
+        if (!orderId.isNullOrBlank()) {
+            params["orderId"] = orderId
+        } else if (!clientOrderId.isNullOrBlank()) {
+            params["origClientOrderId"] = clientOrderId
+        }
+
+        val (ok, raw) = signedV2Request(apiKey, secretKey, "GET", "/api/v2/order", params)
+        if (!ok) return OrderResult(false, raw)
+
+        return try {
+            val json = JSONObject(raw)
+            val oid = json.optString("orderId", json.optLong("orderId", 0L).toString())
+            val cid = json.optString("clientOrderId", "")
+            val status = json.optString("status", "").uppercase()
+            val executed = json.optString("executedQty", "0").toDoubleOrNull() ?: 0.0
+            val orig = json.optString("origQty", "0").toDoubleOrNull() ?: 0.0
+            OrderResult(
+                success = true,
+                message = "Order $oid status=$status executed=$executed",
+                orderId = oid,
+                clientOrderId = cid,
+                executedQty = executed,
+                origQty = orig,
+                status = status
+            )
+        } catch (e: Exception) {
+            Timber.e(e, "Gagal parse getOrder")
+            OrderResult(false, "Gagal parse getOrder: ${e.localizedMessage}")
+        }
+    }
+
     suspend fun createLimitOrder(
         apiKey: String,
         secretKey: String,
@@ -214,13 +279,31 @@ object IndodaxTradeApiV2 {
         quantity: Double,
         clientOrderId: String? = null
     ): Pair<Boolean, String> {
-        if (apiKey.isBlank() || secretKey.isBlank()) return false to "API Key / Secret Key kosong."
-        if (price <= 0.0 || quantity <= 0.0) return false to "Harga dan quantity harus > 0."
+        val result = createLimitOrderDetailed(apiKey, secretKey, symbol, side, price, quantity, clientOrderId)
+        return result.success to result.message
+    }
+
+    /** Versi detailed: return OrderResult (orderId + status + executedQty). */
+    suspend fun createLimitOrderDetailed(
+        apiKey: String,
+        secretKey: String,
+        symbol: String,
+        side: String,
+        price: Double,
+        quantity: Double,
+        clientOrderId: String? = null
+    ): OrderResult {
+        if (apiKey.isBlank() || secretKey.isBlank()) {
+            return OrderResult(false, "API Key / Secret Key kosong.")
+        }
+        if (price <= 0.0 || quantity <= 0.0) {
+            return OrderResult(false, "Harga dan quantity harus > 0.")
+        }
 
         val formattedSymbol = toOrderSymbol(symbol)
         val normalizedSide = side.uppercase()
         if (normalizedSide != "BUY" && normalizedSide != "SELL") {
-            return false to "Side harus BUY atau SELL."
+            return OrderResult(false, "Side harus BUY atau SELL.")
         }
 
         val params = linkedMapOf(
@@ -235,12 +318,28 @@ object IndodaxTradeApiV2 {
         clientOrderId?.takeIf { it.isNotBlank() }?.let { params["newClientOrderId"] = it.take(36) }
 
         val (ok, raw) = signedV2Request(apiKey, secretKey, "POST", "/api/v2/order", params)
-        if (!ok) return false to raw
+        if (!ok) return OrderResult(false, raw)
 
-        val json = JSONObject(raw)
-        val orderId = json.optLong("orderId", 0L)
-        val clientId = json.optString("clientOrderId", "-")
-        return true to "Order $normalizedSide $formattedSymbol berhasil. Order ID: $orderId ($clientId)"
+        return try {
+            val json = JSONObject(raw)
+            val orderId = json.optString("orderId", json.optLong("orderId", 0L).toString())
+            val clientId = json.optString("clientOrderId", clientOrderId.orEmpty())
+            val status = json.optString("status", "NEW").uppercase()
+            val executed = json.optString("executedQty", "0").toDoubleOrNull() ?: 0.0
+            val orig = json.optString("origQty", decimal(quantity)).toDoubleOrNull() ?: quantity
+            OrderResult(
+                success = true,
+                message = "Order $normalizedSide $formattedSymbol berhasil. Order ID: $orderId ($clientId)",
+                orderId = orderId,
+                clientOrderId = clientId,
+                executedQty = executed,
+                origQty = orig,
+                status = status
+            )
+        } catch (e: Exception) {
+            Timber.e(e, "Gagal parse create order response")
+            OrderResult(false, "Order terkirim tapi parse gagal: ${e.localizedMessage}")
+        }
     }
 
     suspend fun cancelOrder(
@@ -288,7 +387,7 @@ object IndodaxTradeApiV2 {
     }
 
     /**
-     * 1 window max 7 hari (sesuai docs).
+     * 1 request max 7 hari (sesuai docs).
      * Response resmi: { "data": [ { tradeId, price, qty, isBuyer, time, ... } ] }
      */
     suspend fun myTrades(
