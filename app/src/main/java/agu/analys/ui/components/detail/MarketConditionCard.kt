@@ -35,13 +35,14 @@ fun MarketConditionCard(
     if (strategyMode == StrategyMode.SCALPING || (strategyMode == StrategyMode.SECOND_WAVE && scalping)) {
         val stage = signal.scalpingStage
         val color = when (stage) {
-            ScalpingStage.ENTRY, ScalpingStage.STRONG_ENTRY -> if (signal.action == SignalAction.SELL) TvRed else TvGreen
+            ScalpingStage.ENTRY, ScalpingStage.STRONG_ENTRY, ScalpingStage.EARLY_ENTRY -> if (signal.action == SignalAction.SELL) TvRed else TvGreen
             ScalpingStage.WAIT_PULLBACK, ScalpingStage.WATCH -> WarningAmber
             ScalpingStage.HOLD -> TvTextSecondary
         }
         val title = when (stage) {
             ScalpingStage.ENTRY -> if (signal.action == SignalAction.SELL) "SHORT ENTRY" else "LONG ENTRY"
             ScalpingStage.STRONG_ENTRY -> if (signal.action == SignalAction.SELL) "SHORT ENTRY KUAT" else "LONG ENTRY KUAT"
+            ScalpingStage.EARLY_ENTRY -> if (signal.action == SignalAction.SELL) "EARLY SHORT" else "EARLY BUY"
             ScalpingStage.WAIT_PULLBACK -> "MOMENTUM / PULLBACK"
             ScalpingStage.WATCH -> "WATCH"
             ScalpingStage.HOLD -> "TAHAN / TUNGGU"
@@ -60,6 +61,8 @@ fun MarketConditionCard(
                 when (stage) {
                     ScalpingStage.ENTRY, ScalpingStage.STRONG_ENTRY ->
                         "Bias 1H, setup 15M, dan trigger 1M sudah searah."
+                    ScalpingStage.EARLY_ENTRY ->
+                        "Breakout 1M terdeteksi lebih awal."
                     ScalpingStage.WAIT_PULLBACK ->
                         "Bias masih mendukung. Ada dua jalur: tunggu pullback bersih, atau konfirmasi momentum continuation di 1M."
                     ScalpingStage.WATCH ->

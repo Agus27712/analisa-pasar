@@ -43,10 +43,11 @@ object ScalpingMtfEvaluator {
     ): Result? {
         if (price <= 0.0 || h1Candles.size < 55 || m15Candles.size < 55 || m1Candles.size < 55) return null
 
-        val isAggressive = sensitivity == ScalpingSensitivity.AGGRESSIVE
-        val h1 = analyze(h1Candles, isAggressive = isAggressive)
-        val m15 = analyze(m15Candles, isAggressive = isAggressive)
-        val m1 = analyze(m1Candles, isAggressive = isAggressive)
+        val isDynamic = sensitivity == ScalpingSensitivity.DYNAMIC_AUTO
+        var isAggressive = sensitivity == ScalpingSensitivity.AGGRESSIVE
+        var h1 = analyze(h1Candles, isAggressive = isAggressive)
+        var m15 = analyze(m15Candles, isAggressive = isAggressive)
+        var m1 = analyze(m1Candles, isAggressive = isAggressive)
 
         // 1. Detect Market Regime
         val bbUpper1M = m1.ema20 + (2.0 * m1.atr)
@@ -62,6 +63,13 @@ object ScalpingMtfEvaluator {
             bbUpper = bbUpper1M
         )
         val isSidewaysRegime = regime.contains("SIDEWAYS")
+
+        if (isDynamic && (regime.contains("Volatile") || regime.contains("TREND"))) {
+            isAggressive = true
+            h1 = analyze(h1Candles, isAggressive = true)
+            m15 = analyze(m15Candles, isAggressive = true)
+            m1 = analyze(m1Candles, isAggressive = true)
+        }
 
         // 2. Walk-Forward Validation
         val wfReport = WalkForwardEvaluator.validate(m1Candles, fees)
@@ -147,12 +155,16 @@ object ScalpingMtfEvaluator {
 
         // Penalize score if in sideways regime to avoid overfit
         if (isSidewaysRegime) {
-            score -= 15
+            if (m1.breakoutUp && volumeOk) {
+                score += 10 // P0.2 Breakout context is rewarded!
+            } else {
+                score -= 15
+            }
         }
 
         // Penalize score if Walk-Forward validation shows overfitting
         if (wfReport.isOverfitted) {
-            score -= 15
+            score -= 20 // P0.1 Penalty instead of absolute veto
         }
 
         // --- Historical / data-quality gate (proxy validasi) ---
@@ -188,19 +200,23 @@ object ScalpingMtfEvaluator {
         // Siap entry hanya jika quality gate lolos & net RR mencukupi setelah fee + slippage
         val qualityOk = qualityPenalty <= 18
         val feeOk = feeResult.netRr >= minNetRr
-        val ready = biasLong && setupLong && triggerLong && !extended && !extremeVolatility &&
-            feeOk && qualityOk && !isSidewaysRegime && !wfReport.isOverfitted
+        
+        val confirmedEntry = biasLong && setupLong && triggerLong && !extended && !extremeVolatility && feeOk && qualityOk
+        val earlyEntry = setupLong && triggerLong && m1.breakoutUp && !extremeVolatility && feeOk && qualityOk
+
+        val ready = confirmedEntry || earlyEntry
 
         val stage = when {
-            ready && score >= (if (isAggressive) 68 else 72) -> ScalpingStage.STRONG_ENTRY
-            ready -> ScalpingStage.ENTRY
+            confirmedEntry && score >= (if (isAggressive) 68 else 72) -> ScalpingStage.STRONG_ENTRY
+            confirmedEntry -> ScalpingStage.ENTRY
+            earlyEntry -> ScalpingStage.EARLY_ENTRY
             biasLong && extended -> ScalpingStage.WAIT_PULLBACK
             biasLong && !triggerLong -> ScalpingStage.WAIT_PULLBACK
             biasLong || setupLong -> ScalpingStage.WATCH
             else -> ScalpingStage.HOLD
         }
         val path = when (stage) {
-            ScalpingStage.ENTRY, ScalpingStage.STRONG_ENTRY -> ScalpingPath.ENTRY_READY
+            ScalpingStage.ENTRY, ScalpingStage.STRONG_ENTRY, ScalpingStage.EARLY_ENTRY -> ScalpingPath.ENTRY_READY
             ScalpingStage.WAIT_PULLBACK -> ScalpingPath.PULLBACK
             ScalpingStage.WATCH -> ScalpingPath.MOMENTUM_CONTINUATION
             ScalpingStage.HOLD -> ScalpingPath.NONE
@@ -253,6 +269,7 @@ object ScalpingMtfEvaluator {
             statusTitle = when (stage) {
                 ScalpingStage.STRONG_ENTRY -> "BUY READY · KUAT"
                 ScalpingStage.ENTRY -> "BUY READY"
+                ScalpingStage.EARLY_ENTRY -> "BUY AWAL (BREAKOUT)"
                 ScalpingStage.WAIT_PULLBACK -> "MENUNGGU PULLBACK"
                 ScalpingStage.WATCH -> "MENUNGGU KONFIRMASI"
                 ScalpingStage.HOLD -> "BELUM TERSEDIA"

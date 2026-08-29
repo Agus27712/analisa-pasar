@@ -35,12 +35,32 @@ object FrameAnalyzer {
         val avgVolume = history.takeLast(actualWindow).dropLast(1).map { it.volume }.average()
         val lastVolume = history.last().volume
         val volumeRatio = if (avgVolume > 0.0) lastVolume / avgVolume else 0.0
-        val previous = history[history.lastIndex - 1]
-        val last = history.last()
-        val breakoutUp = last.close > previous.high && last.high >= previous.high
-        val breakoutDown = last.close < previous.low && last.low <= previous.low
-        val retestUp = last.low <= emaFast && last.close > emaFast && previous.close >= emaFast
-        val retestDown = last.high >= emaFast && last.close < emaFast && previous.close <= emaFast
+        val ttlWindow = kotlin.math.min(4, history.size)
+        val recentCandles = history.takeLast(ttlWindow)
+        var breakoutUp = false
+        var breakoutDown = false
+        var retestUp = false
+        var retestDown = false
+        for (i in 1 until recentCandles.size) {
+            val curr = recentCandles[i]
+            val prev = recentCandles[i-1]
+            if (curr.close > prev.high && curr.high >= prev.high) {
+                val invalidated = recentCandles.drop(i + 1).any { it.close < prev.low }
+                if (!invalidated) breakoutUp = true
+            }
+            if (curr.close < prev.low && curr.low <= prev.low) {
+                val invalidated = recentCandles.drop(i + 1).any { it.close > prev.high }
+                if (!invalidated) breakoutDown = true
+            }
+            if (curr.low <= emaFast && curr.close > emaFast && prev.close >= emaFast) {
+                val invalidated = recentCandles.drop(i + 1).any { it.close < emaFast * 0.999 }
+                if (!invalidated) retestUp = true
+            }
+            if (curr.high >= emaFast && curr.close < emaFast && prev.close <= emaFast) {
+                val invalidated = recentCandles.drop(i + 1).any { it.close > emaFast * 1.001 }
+                if (!invalidated) retestDown = true
+            }
+        }
         return FrameSignal(
             candles = history,
             price = price,

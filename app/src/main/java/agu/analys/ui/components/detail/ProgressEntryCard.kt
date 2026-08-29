@@ -50,7 +50,7 @@ fun ProgressEntryCard(signal: AISignalState, scalping: Boolean) {
     val completed = listOf(mtf.biasStatus, mtf.setupStatus, mtf.triggerStatus, mtf.entryPriceStatus).count { it == MtfLegStatus.OK }
 
     val semanticStatus = when {
-        completed == 4 || stage == ScalpingStage.ENTRY || stage == ScalpingStage.STRONG_ENTRY -> "ENTRY READY"
+        completed == 4 || stage == ScalpingStage.ENTRY || stage == ScalpingStage.STRONG_ENTRY || stage == ScalpingStage.EARLY_ENTRY -> "ENTRY READY"
         completed == 3 -> "TRIGGER TERVALIDASI"
         completed == 2 -> "SETUP TERBENTUK"
         completed == 1 && mtf.biasStatus == MtfLegStatus.OK -> "MENUNGGU SETUP"
@@ -60,7 +60,7 @@ fun ProgressEntryCard(signal: AISignalState, scalping: Boolean) {
     }
     val displayTitle = mtf.statusTitle.ifBlank { semanticStatus }
     val statusColor = when {
-        completed == 4 || stage == ScalpingStage.ENTRY || stage == ScalpingStage.STRONG_ENTRY -> TvGreen
+        completed == 4 || stage == ScalpingStage.ENTRY || stage == ScalpingStage.STRONG_ENTRY || stage == ScalpingStage.EARLY_ENTRY -> TvGreen
         completed >= 1 || stage == ScalpingStage.WAIT_PULLBACK || stage == ScalpingStage.WATCH -> WarningAmber
         else -> TvTextSecondary
     }

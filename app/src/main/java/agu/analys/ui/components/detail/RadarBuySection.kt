@@ -46,7 +46,7 @@ fun RadarBuySection(
     var isCustomNominalOpen by remember { mutableStateOf(false) }
 
     // Auto Limit Sell Server Settings (TP Direct to Server)
-    var isAutoLimitSellEnabled by remember { mutableStateOf(isRealMode) }
+    var isAutoLimitSellEnabled by remember { mutableStateOf(false) }
     val defaultTpPrice1 = remember(validPrice, signal) {
         if (signal != null && signal.targetPrice1 > validPrice) signal.targetPrice1 else validPrice * 1.03
     }

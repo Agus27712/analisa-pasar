@@ -6,6 +6,7 @@ enum class ScalpingStage(val displayName: String) {
     HOLD("TAHAN"),
     WATCH("WATCH"),
     WAIT_PULLBACK("TUNGGU PULLBACK"),
+    EARLY_ENTRY("AWAL ENTRY"),
     ENTRY("ENTRY"),
     STRONG_ENTRY("ENTRY KUAT")
 }

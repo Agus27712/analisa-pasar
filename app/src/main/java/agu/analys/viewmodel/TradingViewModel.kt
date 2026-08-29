@@ -119,6 +119,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         if (prices.size > 50) prices.removeAt(0)
         _recentPrices.value = prices
         simCoordinator.onPriceTick(normalized.symbol, normalized.price, normalized.high24h, normalized.low24h)
+        agu.analys.service.TradingForegroundService.updatePrice(getApplication(), normalized.symbol, normalized.price)
         checkAlertsAndTrailing(normalized.symbol, normalized.price, currentIndicators.value.rsi14.takeIf { it.isFinite() })
     }
 
@@ -651,6 +652,10 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
             val allScanned = (gainers + topVol).distinctBy { it.symbol }
             val combinedTicks = ticks.associateBy { it.symbol } + allScanned.associateBy { it.symbol }
             _dashboardTicks.value = combinedTicks
+            try {
+                val priceMap = combinedTicks.mapValues { it.value.price }
+                agu.analys.service.TradingForegroundService.updatePrices(getApplication(), priceMap)
+            } catch (_: Exception) {}
             lastLiveTickAt = System.currentTimeMillis()
             _connectionState.value = MarketConnectionState.Connected
             _isShowingCachedData.value = false
