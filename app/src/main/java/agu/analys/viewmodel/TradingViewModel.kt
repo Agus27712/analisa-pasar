@@ -147,6 +147,26 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     private val _usdtIdrRate = MutableStateFlow(16450.0)
     val usdtIdrRate: StateFlow<Double> = _usdtIdrRate.asStateFlow()
 
+    private val _strategyMode = MutableStateFlow(prefs.strategyMode)
+    val strategyMode: StateFlow<StrategyMode> = _strategyMode.asStateFlow()
+
+    private val _isScalpingMode = MutableStateFlow(prefs.isScalpingMode)
+    val isScalpingMode: StateFlow<Boolean> = _isScalpingMode.asStateFlow()
+
+    private val _scalpingSensitivity = MutableStateFlow(prefs.scalpingSensitivity)
+    val scalpingSensitivity: StateFlow<ScalpingSensitivity> = _scalpingSensitivity.asStateFlow()
+
+    private val _tradingFees = MutableStateFlow(prefs.tradingFees)
+    val tradingFees: StateFlow<TradingFeeConfig> = _tradingFees.asStateFlow()
+
+    private val _isDarkTheme = MutableStateFlow(prefs.isDarkTheme)
+    val isDarkTheme: StateFlow<Boolean> = _isDarkTheme.asStateFlow()
+
+    val isShowingCachedData: StateFlow<Boolean> = marketDataCoordinator.isShowingCachedData
+    internal val _spotPosition = MutableStateFlow(SpotPosition())
+    val spotPosition: StateFlow<SpotPosition> = positionCoordinator.spotPosition
+    val priceAlerts: StateFlow<List<agu.analys.model.PriceAlert>> = positionCoordinator.priceAlerts
+
     private var dashboardPollJob: Job? = null
     internal var lastLiveTickAt = 0L
     internal val _dashboardTicks = MutableStateFlow<Map<String, MarketTick>>(emptyMap())
@@ -181,26 +201,6 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         listenToEngineSignals()
         checkPublicIp()
     }
-
-    val isShowingCachedData: StateFlow<Boolean> = marketDataCoordinator.isShowingCachedData
-    internal val _spotPosition = MutableStateFlow(SpotPosition())
-    val spotPosition: StateFlow<SpotPosition> = positionCoordinator.spotPosition
-    val priceAlerts: StateFlow<List<agu.analys.model.PriceAlert>> = positionCoordinator.priceAlerts
-
-    private val _strategyMode = MutableStateFlow(prefs.strategyMode)
-    val strategyMode: StateFlow<StrategyMode> = _strategyMode.asStateFlow()
-
-    private val _isScalpingMode = MutableStateFlow(prefs.isScalpingMode)
-    val isScalpingMode: StateFlow<Boolean> = _isScalpingMode.asStateFlow()
-
-    private val _scalpingSensitivity = MutableStateFlow(prefs.scalpingSensitivity)
-    val scalpingSensitivity: StateFlow<ScalpingSensitivity> = _scalpingSensitivity.asStateFlow()
-
-    private val _tradingFees = MutableStateFlow(prefs.tradingFees)
-    val tradingFees: StateFlow<TradingFeeConfig> = _tradingFees.asStateFlow()
-
-    private val _isDarkTheme = MutableStateFlow(prefs.isDarkTheme)
-    val isDarkTheme: StateFlow<Boolean> = _isDarkTheme.asStateFlow()
 
     val isRealBuyMode: StateFlow<Boolean> = realCoordinator.isRealBuyEnabled
     val isPinUnlocked: StateFlow<Boolean> = realCoordinator.isPinRequired
