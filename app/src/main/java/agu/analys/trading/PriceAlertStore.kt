@@ -51,6 +51,23 @@ class PriceAlertStore(context: Context) {
         saveAlerts(list)
     }
 
+    fun checkAlerts(symbol: String, currentPrice: Double): List<PriceAlert> {
+        val active = getActiveAlertsForSymbol(symbol)
+        val triggered = mutableListOf<PriceAlert>()
+        active.forEach { alert ->
+            val isTriggered = when (alert.type) {
+                PriceAlertType.PRICE_ABOVE -> currentPrice >= alert.targetPrice
+                PriceAlertType.PRICE_BELOW -> currentPrice <= alert.targetPrice
+                else -> false
+            }
+            if (isTriggered) {
+                markTriggered(alert.id)
+                triggered.add(alert.copy(isTriggered = true, triggeredAt = System.currentTimeMillis()))
+            }
+        }
+        return triggered
+    }
+
     fun resetTriggered(id: String) {
         val list = getAllAlerts().map {
             if (it.id == id) it.copy(isTriggered = false) else it

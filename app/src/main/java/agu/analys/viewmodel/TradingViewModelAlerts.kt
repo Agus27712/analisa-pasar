@@ -13,7 +13,7 @@ fun TradingViewModel.checkAlertsAndTrailing(symbol: String, currentPrice: Double
     if (currentPrice <= 0.0) return
     val (updatedPos, justTriggered) = positionStore.updateTrailingPrice(symbol, currentPrice)
     if (justTriggered) {
-        _spotPosition.value = updatedPos
+        refreshSpotPosition()
         agu.analys.util.AlertNotificationHelper.sendPriceAlertNotification(
             context = getApplication(),
             title = "🚨 TRAILING STOP LOSS TERPICU ($symbol)",
@@ -21,7 +21,7 @@ fun TradingViewModel.checkAlertsAndTrailing(symbol: String, currentPrice: Double
             notificationId = (symbol.hashCode() and 0x7FFFFFFF) + 1000
         )
     } else if (updatedPos.isTrailingEnabled && symbol == selectedPair.value.symbol) {
-        _spotPosition.value = updatedPos
+        refreshSpotPosition()
     }
 
     // Check Auto-Sell TP/SL Triggers
@@ -103,7 +103,7 @@ fun TradingViewModel.checkAlertsAndTrailing(symbol: String, currentPrice: Double
 
 fun TradingViewModel.executeAutoSellOrder(symbol: String, price: Double, quantity: Double, triggerType: String, isReal: Boolean, isPartial: Boolean = false) {
     if (isReal) {
-        executeRealTrade(symbol, "sell", price.toLong(), quantity) { success, msg ->
+        executeRealTrade(symbol, "sell", price.toLong(), quantity, 0.0, 0.0) { success, msg ->
             val notifTitle = if (success) "✅ AUTO-SELL TERKIRIM ($symbol)" else "❌ AUTO-SELL GAGAL ($symbol)"
             val notifMsg = if (success) {
                 "Trigger $triggerType aktif. Berhasil menjual $quantity $symbol di harga ${PriceFormatter.formatIdrNumber(price)} IDR."

@@ -28,7 +28,6 @@ import agu.analys.model.WorthCoinInfo
 import agu.analys.service.GeminiAiService
 import agu.analys.service.GroqAiService
 import agu.analys.service.IndodaxMarketService
-import agu.analys.service.IndodaxMarketWebSocket
 import agu.analys.trading.SimulationOrder
 import agu.analys.trading.SimulationOrderResult
 import agu.analys.trading.SimulationOrderSide
@@ -64,68 +63,24 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     internal val simCoordinator = SimulationCoordinator(simulationStore)
     internal val realCoordinator = RealTradeCoordinator(viewModelScope, prefs)
     internal val updateCoordinator = AppUpdateCoordinator(viewModelScope)
-
-    @Volatile private var lastLiveTickAt = 0L
-    @Volatile private var wsLive = false
-
-    // WebSocket Indodax — REST tetap fallback harga
-    private val indodaxWebSocket = IndodaxMarketWebSocket(
-        scope = viewModelScope,
-        onTick = { tick -> handleWebSocketTick(tick) },
-        onCandle = { candle -> handleWebSocketCandle(candle) },
-        onConnected = {
-            wsLive = true
-            lastLiveTickAt = System.currentTimeMillis()
-            _connectionState.value = MarketConnectionState.Connected
-            _isShowingCachedData.value = false
-        },
-        onDisconnected = {
-            wsLive = false
-            // Jangan panik offline: REST polling masih jaga harga
-            val recentRest = System.currentTimeMillis() - lastLiveTickAt < 12_000L
-            if (!recentRest && _currentTick.value == null) {
-                _connectionState.value = MarketConnectionState.ConnectionLost(
-                    "Realtime terputus. Mencoba reconnect + REST fallback..."
-                )
-            }
-        }
+    
+    internal val positionCoordinator = PositionCoordinator(
+        positionStore = positionStore,
+        alertStore = alertStore,
+        onPositionChanged = { /* can add specific logic here if needed */ }
     )
 
-    private fun handleWebSocketTick(tick: MarketTick) {
-        if (tick.symbol != _selectedPair.value.symbol &&
-            !tick.symbol.equals(_selectedPair.value.symbol, true)
-        ) {
-            // Terima juga format pair tanpa underscore
-            val normalizedSym = _selectedPair.value.symbol
-            if (!tick.symbol.equals(normalizedSym.replace("_", ""), true)) return
+    internal val marketDataCoordinator = MarketDataCoordinator(
+        scope = viewModelScope,
+        prefs = prefs,
+        marketCache = marketCache,
+        engine = engine,
+        simCoordinator = simCoordinator,
+        onPriceUpdate = { symbol, price, rsi -> 
+            positionCoordinator.checkAlertsAndTrailing(symbol, price, rsi)
+            agu.analys.service.TradingForegroundService.updatePrice(getApplication(), symbol, price)
         }
-        lastLiveTickAt = System.currentTimeMillis()
-        wsLive = true
-        if (_connectionState.value !is MarketConnectionState.Connected) {
-            _connectionState.value = MarketConnectionState.Connected
-            _isShowingCachedData.value = false
-        }
-        val previous = _currentTick.value
-        val normalized = tick.copy(
-            symbol = _selectedPair.value.symbol,
-            high24h = previous?.high24h ?: tick.price,
-            low24h = previous?.low24h ?: tick.price,
-            volume24h = previous?.volume24h ?: 0.0,
-            change24h = previous?.change24h ?: Double.NaN
-        )
-        _currentTick.value = normalized
-        engine.onTickUpdate(normalized)
-        val prices = _recentPrices.value.toMutableList().apply { add(tick.price) }
-        if (prices.size > 50) prices.removeAt(0)
-        _recentPrices.value = prices
-        simCoordinator.onPriceTick(normalized.symbol, normalized.price, normalized.high24h, normalized.low24h)
-        agu.analys.service.TradingForegroundService.updatePrice(getApplication(), normalized.symbol, normalized.price)
-        checkAlertsAndTrailing(normalized.symbol, normalized.price, currentIndicators.value.rsi14.takeIf { it.isFinite() })
-    }
-
-    private fun handleWebSocketCandle(candle: CandleBar) {
-        engine.currentFormingVolume = candle.volume
-    }
+    )
 
     private val _marketDataSource = MutableStateFlow(prefs.marketDataSource)
     val marketDataSource: StateFlow<MarketDataSource> = _marketDataSource.asStateFlow()
@@ -145,29 +100,19 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     private val _useSimpleChart = MutableStateFlow(false)
     val useSimpleChart: StateFlow<Boolean> = _useSimpleChart.asStateFlow()
 
-    private val _recentPrices = MutableStateFlow<List<Double>>(emptyList())
-    val recentPrices: StateFlow<List<Double>> = _recentPrices.asStateFlow()
-
-    private val _recentCandles = MutableStateFlow<List<CandleBar>>(emptyList())
-    val recentCandles: StateFlow<List<CandleBar>> = _recentCandles.asStateFlow()
+    val recentPrices: StateFlow<List<Double>> = marketDataCoordinator.recentPrices
+    val recentCandles: StateFlow<List<CandleBar>> = marketDataCoordinator.recentCandles
 
     private val _isChartExpanded = MutableStateFlow(false)
     val isChartExpanded: StateFlow<Boolean> = _isChartExpanded.asStateFlow()
 
-    internal val _currentTick = MutableStateFlow<MarketTick?>(null)
-    val currentTick: StateFlow<MarketTick?> = _currentTick.asStateFlow()
-
+    val currentTick: StateFlow<MarketTick?> = marketDataCoordinator.currentTick
     val currentIndicators: StateFlow<TechnicalIndicators> = engine.indicators
     val aiSignalState: StateFlow<AISignalState> = engine.signalState
 
-    private val _orderBookBids = MutableStateFlow<List<OrderBookItem>>(emptyList())
-    val orderBookBids: StateFlow<List<OrderBookItem>> = _orderBookBids.asStateFlow()
-
-    private val _orderBookAsks = MutableStateFlow<List<OrderBookItem>>(emptyList())
-    val orderBookAsks: StateFlow<List<OrderBookItem>> = _orderBookAsks.asStateFlow()
-
-    private val _tradeStream = MutableStateFlow<List<TradeStreamItem>>(emptyList())
-    val tradeStream: StateFlow<List<TradeStreamItem>> = _tradeStream.asStateFlow()
+    val orderBookBids: StateFlow<List<OrderBookItem>> = marketDataCoordinator.orderBookBids
+    val orderBookAsks: StateFlow<List<OrderBookItem>> = marketDataCoordinator.orderBookAsks
+    val tradeStream: StateFlow<List<TradeStreamItem>> = marketDataCoordinator.tradeStream
 
     private val _signalHistory = MutableStateFlow<List<AISignalState>>(emptyList())
     val signalHistory: StateFlow<List<AISignalState>> = _signalHistory.asStateFlow()
@@ -202,11 +147,14 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     private val _usdtIdrRate = MutableStateFlow(16450.0)
     val usdtIdrRate: StateFlow<Double> = _usdtIdrRate.asStateFlow()
 
-    private val _dashboardTicks = MutableStateFlow<Map<String, MarketTick>>(emptyMap())
-    val dashboardTicks: StateFlow<Map<String, MarketTick>> = _dashboardTicks.asStateFlow()
+    private var dashboardPollJob: Job? = null
+    internal var lastLiveTickAt = 0L
+    internal val _dashboardTicks = MutableStateFlow<Map<String, MarketTick>>(emptyMap())
+    internal val _connectionState = MutableStateFlow<MarketConnectionState>(MarketConnectionState.ConnectionLost())
+    internal val _isShowingCachedData = MutableStateFlow(false)
 
-    internal val _connectionState = MutableStateFlow<MarketConnectionState>(MarketConnectionState.Loading)
-    val connectionState: StateFlow<MarketConnectionState> = _connectionState.asStateFlow()
+    val dashboardTicks: StateFlow<Map<String, MarketTick>> = marketDataCoordinator.dashboardTicks
+    val connectionState: StateFlow<MarketConnectionState> = marketDataCoordinator.connectionState
 
     internal val _watchlist = MutableStateFlow(
         prefs.getWatchlist().let { set ->
@@ -222,16 +170,22 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
 
     init {
         agu.analys.util.MtfCacheManager.updateQueues(_watchlist.value.toList(), emptyList())
+        engine.strategyMode = prefs.strategyMode
+        engine.isScalpingMode = prefs.isScalpingMode
+        engine.scalpingSensitivity = prefs.scalpingSensitivity
+        engine.tradingFees = prefs.tradingFees
+        marketDataCoordinator.restoreFromCache(MarketDataSource.INDODAX)
+        val initialPair = TradingPair.popularPairsForSource(prefs.marketDataSource).first()
+        selectPair(initialPair)
+        startDashboardPolling()
+        listenToEngineSignals()
+        checkPublicIp()
     }
 
-    private val _isShowingCachedData = MutableStateFlow(false)
-    val isShowingCachedData: StateFlow<Boolean> = _isShowingCachedData.asStateFlow()
-
+    val isShowingCachedData: StateFlow<Boolean> = marketDataCoordinator.isShowingCachedData
     internal val _spotPosition = MutableStateFlow(SpotPosition())
-    val spotPosition: StateFlow<SpotPosition> = _spotPosition.asStateFlow()
-
-    internal val _priceAlerts = MutableStateFlow<List<agu.analys.model.PriceAlert>>(emptyList())
-    val priceAlerts: StateFlow<List<agu.analys.model.PriceAlert>> = _priceAlerts.asStateFlow()
+    val spotPosition: StateFlow<SpotPosition> = positionCoordinator.spotPosition
+    val priceAlerts: StateFlow<List<agu.analys.model.PriceAlert>> = positionCoordinator.priceAlerts
 
     private val _strategyMode = MutableStateFlow(prefs.strategyMode)
     val strategyMode: StateFlow<StrategyMode> = _strategyMode.asStateFlow()
@@ -248,43 +202,51 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     private val _isDarkTheme = MutableStateFlow(prefs.isDarkTheme)
     val isDarkTheme: StateFlow<Boolean> = _isDarkTheme.asStateFlow()
 
-    val isRealBuyMode: StateFlow<Boolean> = realCoordinator.isRealBuyMode
-    val isPinUnlocked: StateFlow<Boolean> = realCoordinator.isPinUnlocked
+    val isRealBuyMode: StateFlow<Boolean> = realCoordinator.isRealBuyEnabled
+    val isPinUnlocked: StateFlow<Boolean> = realCoordinator.isPinRequired
     val realIndodaxBalance: StateFlow<Map<String, Double>> = realCoordinator.realIndodaxBalance
     val realFreeBalance: StateFlow<Map<String, Double>> = realCoordinator.realFreeBalance
     val realLockedBalance: StateFlow<Map<String, Double>> = realCoordinator.realLockedBalance
-    val realOpenOrders: StateFlow<List<RealOpenOrderEntity>> = realCoordinator.realOpenOrders
-    val realTrades: StateFlow<List<RealTradeEntity>> = realCoordinator.realTrades
+    val realOpenOrders: StateFlow<List<RealOpenOrderEntity>> = MutableStateFlow(emptyList<RealOpenOrderEntity>()).asStateFlow()
+    val realTrades: StateFlow<List<RealTradeEntity>> = MutableStateFlow(emptyList<RealTradeEntity>()).asStateFlow()
     val realAvgBuyPrices: StateFlow<Map<String, Double>> = realCoordinator.realAvgBuyPrices
     val isFetchingRealBalance: StateFlow<Boolean> = realCoordinator.isFetchingRealBalance
-    val realTradeStatus: StateFlow<String?> = realCoordinator.realTradeStatus
-    val userPublicIp: StateFlow<String> = realCoordinator.userPublicIp
-    val failedPinAttempts: StateFlow<Int> = realCoordinator.failedPinAttempts
-    val securityAlertMessage: StateFlow<String?> = realCoordinator.securityAlertMessage
+    val realTradeStatus: StateFlow<String> = realCoordinator.realTradeStatus
+    val userPublicIp: StateFlow<String?> = realCoordinator.publicIp
+    val failedPinAttempts: StateFlow<Int> = MutableStateFlow(prefs.failedPinAttempts).asStateFlow()
+
+    private fun markMarketOffline(reason: String) {
+        _connectionState.value = MarketConnectionState.ConnectionLost(reason = reason)
+        _isShowingCachedData.value = true
+    }
 
     fun executeCancelRealOrder(symbol: String, orderId: String, onResult: (Boolean, String) -> Unit) =
         realCoordinator.executeCancelRealOrder(symbol, orderId, onResult)
 
     fun checkPublicIp() = realCoordinator.checkPublicIp()
-    fun clearSecurityAlert() = realCoordinator.clearSecurityAlert()
-    fun hasSecurityPin(): Boolean = realCoordinator.hasSecurityPin()
-    fun hasRealCredentialsConfigured(): Boolean = realCoordinator.hasRealCredentialsConfigured()
-    fun createSecurityPin(pin: String) = realCoordinator.createSecurityPin(pin)
-    fun saveRealCredentialsAndPin(pin: String, apiKey: String, secretKey: String): Boolean =
-        realCoordinator.saveRealCredentialsAndPin(pin, apiKey, secretKey)
-    fun wipeSecurityCredentials() = realCoordinator.wipeSecurityCredentials()
+    fun clearSecurityAlert() { /* handle locally if needed */ }
+    fun hasSecurityPin(): Boolean = prefs.hasSecurityPin()
+    fun hasRealCredentialsConfigured(): Boolean = prefs.hasIndodaxCredentials()
+    fun createSecurityPin(pin: String) { prefs.setSecurityPin(pin) }
+    fun saveRealCredentialsAndPin(pin: String, apiKey: String, secretKey: String) {
+        prefs.setSecurityPin(pin)
+        prefs.indodaxApiKey = apiKey
+        prefs.indodaxSecretKey = secretKey
+    }
+    fun wipeSecurityCredentials() { prefs.wipeAllRealSecurityData() }
     fun verifyPin(pin: String): Boolean = realCoordinator.verifyPin(pin)
     fun lockPin() = realCoordinator.lockPin()
     fun setRealBuyMode(enabled: Boolean, pin: String? = null): Boolean = realCoordinator.setRealBuyMode(enabled, pin)
-    fun fetchRealBalance() {
+    fun fetchRealBalance() = realCoordinator.fetchRealBalance()
+    fun refreshRealBalance() {
         viewModelScope.launch {
             val allTicks = IndodaxMarketService.fetchAllMarketTicks()
-            if (allTicks.isNotEmpty()) _dashboardTicks.value = _dashboardTicks.value + allTicks
+            if (allTicks.isNotEmpty()) marketDataCoordinator.updateDashboardTicks(allTicks)
         }
-        realCoordinator.fetchRealBalance()
+        fetchRealBalance()
     }
-    fun executeRealTrade(pair: String, type: String, price: Long, amountIdr: Double, autoLimitSellPrice1: Double = 0.0, autoLimitSellPrice2: Double = 0.0, onResult: (Boolean, String) -> Unit) =
-        realCoordinator.executeRealTrade(pair, type, price, amountIdr, autoLimitSellPrice1, autoLimitSellPrice2, onResult)
+    fun executeRealTrade(pair: String, type: String, price: Long, amountIdr: Double, tp1: Double = 0.0, tp2: Double = 0.0, onResult: (Boolean, String) -> Unit) =
+        realCoordinator.executeRealTrade(pair, type, price, amountIdr, tp1, tp2, onResult)
 
     val simulationWallet: StateFlow<SimulationWallet> = simCoordinator.wallet
     val simulationOpenOrders: StateFlow<List<SimulationOrder>> = simCoordinator.openOrders
@@ -292,6 +254,12 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     val lastFilledSimulationOrder: StateFlow<SimulationOrder?> = simCoordinator.lastFilledOrder
 
     fun refreshSimulationState() = simCoordinator.refresh()
+    fun refreshSpotPosition() { positionCoordinator.refreshPosition(_selectedPair.value.symbol) }
+    fun refreshPriceAlerts() { positionCoordinator.refreshAlerts(_selectedPair.value.symbol) }
+    fun setOwnership(owned: Boolean, price: Double = 0.0) {
+        val symbol = _selectedPair.value.symbol
+        positionCoordinator.setOwnership(symbol, owned, price)
+    }
 
     fun submitSimulationOrder(
         side: SimulationOrderSide,
@@ -301,7 +269,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         quantity: Double
     ): SimulationOrderResult = simCoordinator.submitOrder(
         pair = _selectedPair.value,
-        currentPrice = _currentTick.value?.price ?: price,
+        currentPrice = marketDataCoordinator.currentTick.value?.price ?: price,
         side = side, type = type, price = price, stopPrice = stopPrice, quantity = quantity
     )
 
@@ -326,9 +294,8 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         engine.isScalpingMode = scalpingEnabled
         engine.scalpingSensitivity = prefs.scalpingSensitivity
         engine.tradingFees = prefs.tradingFees
-        startActiveWebSocket(_selectedPair.value.symbol)
-        val tick = _currentTick.value
-        val candles = _recentCandles.value
+        marketDataCoordinator.startMarketPolling(_selectedPair.value, _selectedTimeframe.value)
+        val tick = marketDataCoordinator.currentTick.value
         if (tick != null) {
             engine.resetForOffline()
             engine.onTickUpdate(tick)
@@ -340,21 +307,13 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         setStrategyMode(if (enabled) StrategyMode.SCALPING else StrategyMode.SECOND_WAVE)
     }
 
-    private fun startActiveWebSocket(symbol: String) {
-        indodaxWebSocket.start(symbol)
-    }
-
-    private fun stopActiveWebSockets(notify: Boolean = true) {
-        indodaxWebSocket.stop(notify)
-    }
-
     fun setScalpingSensitivity(sensitivity: ScalpingSensitivity) {
         if (_scalpingSensitivity.value == sensitivity) return
         _scalpingSensitivity.value = sensitivity
         prefs.scalpingSensitivity = sensitivity
         engine.scalpingSensitivity = sensitivity
-        val tick = _currentTick.value
-        val candles = _recentCandles.value
+        val tick = marketDataCoordinator.currentTick.value
+        val candles = marketDataCoordinator.recentCandles.value
         if (tick != null && candles.isNotEmpty()) {
             engine.resetForOffline()
             engine.onTickUpdate(tick)
@@ -373,38 +332,6 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     }
 
     private var lastSavedSignalTimestamp = 0L
-    private var lastCandleRefresh = 0L
-    private var lastDepthRefresh = 0L
-    private var marketPollJob: Job? = null
-    private var dashboardPollJob: Job? = null
-
-    init {
-        engine.strategyMode = _strategyMode.value
-        engine.isScalpingMode = _isScalpingMode.value
-        engine.scalpingSensitivity = _scalpingSensitivity.value
-        engine.tradingFees = prefs.tradingFees
-        restoreFromCache()
-        val initialPair = TradingPair.popularPairsForSource(prefs.marketDataSource).first()
-        selectPair(initialPair)
-        startDashboardPolling()
-        listenToEngineSignals()
-        checkPublicIp()
-    }
-
-    private fun restoreFromCache() {
-        val source = _marketDataSource.value
-        val ticks = marketCache.loadDashboardTicks(source)
-        val worth = marketCache.loadWorthCoins(source)
-        if (ticks.isNotEmpty()) {
-            _dashboardTicks.value = ticks
-            _isShowingCachedData.value = true
-        }
-        if (worth.isNotEmpty()) {
-            _worthCoins.value = worth
-            _isShowingCachedData.value = true
-        }
-    }
-
     internal val navigationStack = mutableListOf<AppScreen>()
 
     fun selectCustomSymbol(rawSymbol: String) {
@@ -418,29 +345,14 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         if (addToWatchlist && !prefs.isInWatchlist(pair.symbol)) toggleWatchlist(pair.symbol)
     }
 
-    fun refreshSpotPosition() { _spotPosition.value = positionStore.get(_selectedPair.value.symbol) }
-
-    fun setOwnership(owned: Boolean, referenceEntryPrice: Double = 0.0) {
-        val symbol = _selectedPair.value.symbol
-        if (owned) {
-            positionStore.markBought(
-                symbol,
-                referenceEntryPrice.takeIf { it > 0.0 } ?: _spotPosition.value.entryPrice.takeIf { it > 0.0 } ?: 0.0
-            )
-        } else positionStore.markSold(symbol)
-        refreshSpotPosition()
-    }
-
     fun setManualPositionPrice(symbol: String, entryPrice: Double, investedAmount: Double = 0.0) {
-        positionStore.setManualEntryPrice(symbol, entryPrice, investedAmount)
-        refreshSpotPosition()
+        positionCoordinator.setManualEntry(symbol, entryPrice, investedAmount)
     }
 
     fun setTrailingStop(enabled: Boolean, trailingPercent: Double) {
         val symbol = _selectedPair.value.symbol
-        val currentP = _currentTick.value?.price ?: _spotPosition.value.entryPrice
-        positionStore.setTrailingStop(symbol, enabled, trailingPercent, currentP)
-        refreshSpotPosition()
+        val currentP = currentTick.value?.price ?: spotPosition.value.entryPrice
+        positionCoordinator.setTrailing(symbol, enabled, trailingPercent, currentP)
     }
 
     fun setAutoSellParams(
@@ -451,23 +363,18 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         tp2Percent: Double,
         stopLossPrice: Double
     ) {
-        val symbol = _selectedPair.value.symbol
-        positionStore.setAutoSellParams(symbol, enabled, tp1Price, tp1Percent, tp2Price, tp2Percent, stopLossPrice)
-        refreshSpotPosition()
-
-        // AUTO TP1/TP2 SERVER sengaja tidak dipanggil di mode REAL (fitur dihapus dari UI jual real)
-        // Simpan param lokal saja; eksekusi server hanya relevan di simulasi / future use.
+        positionCoordinator.setAutoSell(
+            _selectedPair.value.symbol, enabled, tp1Price, tp1Percent, tp2Price, tp2Percent, stopLossPrice
+        )
     }
 
     fun resetTrailingTrigger() {
-        positionStore.resetTrailingTrigger(_selectedPair.value.symbol)
-        refreshSpotPosition()
+        positionCoordinator.resetTrailing(_selectedPair.value.symbol)
     }
 
-    fun refreshPriceAlerts() { _priceAlerts.value = alertStore.getAlertsForSymbol(_selectedPair.value.symbol) }
-    fun addPriceAlert(alert: agu.analys.model.PriceAlert) { alertStore.addAlert(alert); refreshPriceAlerts() }
-    fun removePriceAlert(alertId: String) { alertStore.removeAlert(alertId); refreshPriceAlerts() }
-    fun togglePriceAlert(alertId: String) { alertStore.toggleAlert(alertId); refreshPriceAlerts() }
+    fun addPriceAlert(alert: agu.analys.model.PriceAlert) { positionCoordinator.addAlert(alert, _selectedPair.value.symbol) }
+    fun removePriceAlert(alertId: String) { positionCoordinator.removeAlert(alertId, _selectedPair.value.symbol) }
+    fun togglePriceAlert(alertId: String) { positionCoordinator.toggleAlert(alertId, _selectedPair.value.symbol) }
 
     private fun startDashboardPolling() {
         dashboardPollJob?.cancel()
@@ -513,7 +420,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
             lastLiveTickAt = System.currentTimeMillis()
             _connectionState.value = MarketConnectionState.Connected
             _isShowingCachedData.value = false
-            marketCache.saveDashboardTicks(MarketDataSource.INDODAX, _dashboardTicks.value)
+            marketCache.saveDashboardTicks(MarketDataSource.INDODAX, combinedTicks)
 
             val secondWaveCandidates = combinedTicks.values
                 .filter { it.price > 0 && it.high24h > 0 && it.volume24h >= 1_000_000_000 }
@@ -584,119 +491,11 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     fun selectPair(pair: TradingPair) {
         _selectedPair.value = pair
         lastSavedSignalTimestamp = 0L
-        refreshSpotPosition()
-        refreshPriceAlerts()
-        val (cachedTick, cachedCandles) = marketCache.loadPairSnapshot(pair.symbol, _selectedTimeframe.value)
-        if (cachedTick != null || cachedCandles.isNotEmpty()) {
-            if (cachedTick != null) _currentTick.value = cachedTick
-            if (cachedCandles.isNotEmpty()) {
-                _recentCandles.value = cachedCandles
-                engine.resetForOffline()
-                cachedTick?.let { engine.onTickUpdate(it) }
-            }
-            _isShowingCachedData.value = true
-        } else clearLiveData()
-        startMarketPolling(pair)
-        // WS selalu on — harga lebih responsif di semua mode
-        startActiveWebSocket(pair.symbol)
-    }
-
-    private fun startMarketPolling(pair: TradingPair) {
-        marketPollJob?.cancel()
-        marketPollJob = viewModelScope.launch {
-            if (_currentTick.value == null) _connectionState.value = MarketConnectionState.Loading
-            var failCount = 0
-            lastCandleRefresh = 0L
-            lastDepthRefresh = 0L
-
-            while (isActive) {
-                // Restart WS jika zombie (stale > 25s)
-                if (indodaxWebSocket.isStale(25_000L)) {
-                    startActiveWebSocket(pair.symbol)
-                }
-
-                val prev = _currentTick.value?.price ?: 0.0
-                val tick = IndodaxMarketService.fetchTicker(pair.effectiveIndodaxPair(), prevPrice = prev)
-
-                if (tick != null && tick.price > 0) {
-                    failCount = 0
-                    lastLiveTickAt = System.currentTimeMillis()
-                    // REST sukses = tetap LIVE (meski WS putus)
-                    _connectionState.value = MarketConnectionState.Connected
-                    _isShowingCachedData.value = false
-
-                    val normalizedTick = tick.copy(symbol = pair.symbol)
-                    // Jangan override harga WS yang lebih fresh (< 2s)
-                    val preferWs = wsLive && System.currentTimeMillis() - lastLiveTickAt < 2_000L
-                    if (!preferWs || _currentTick.value == null) {
-                        _currentTick.value = normalizedTick
-                        engine.onTickUpdate(normalizedTick)
-                    }
-
-                    val hist = _recentPrices.value.toMutableList().apply { add(tick.price) }
-                    if (hist.size > 50) hist.removeAt(0)
-                    _recentPrices.value = hist
-                    _dashboardTicks.value = _dashboardTicks.value.toMutableMap().apply { put(pair.symbol, normalizedTick) }
-                    simCoordinator.onPriceTick(normalizedTick.symbol, normalizedTick.price, normalizedTick.high24h, normalizedTick.low24h)
-                    checkAlertsAndTrailing(normalizedTick.symbol, normalizedTick.price, currentIndicators.value.rsi14.takeIf { it.isFinite() })
-
-                    val now = System.currentTimeMillis()
-                    if (now - lastCandleRefresh >= 15_000L) {
-                        val candles = IndodaxMarketService.fetchCandles(pair.effectiveIndodaxPair(), _selectedTimeframe.value, 300)
-                        if (candles.size >= 30) {
-                            _recentCandles.value = candles
-                            engine.resetForOffline(preserveState = true)
-                            engine.onTickUpdate(normalizedTick)
-                            lastCandleRefresh = now
-                            marketCache.savePairSnapshot(pair.symbol, _selectedTimeframe.value, normalizedTick, candles)
-                        }
-                    }
-                    if (now - lastDepthRefresh >= 5_000L) {
-                        val depth = async { IndodaxMarketService.fetchOrderBook(pair.effectiveIndodaxPair()) }
-                        val trades = async { IndodaxMarketService.fetchRecentTrades(pair.effectiveIndodaxPair()) }
-                        val (bids, asks) = depth.await()
-                        val newTrades = trades.await()
-                        if (bids.isNotEmpty()) _orderBookBids.value = bids
-                        if (asks.isNotEmpty()) _orderBookAsks.value = asks
-                        if (newTrades.isNotEmpty()) _tradeStream.value = newTrades
-                        lastDepthRefresh = now
-                    }
-                } else {
-                    failCount++
-                    if (failCount >= 4 && System.currentTimeMillis() - lastLiveTickAt > 20_000L) {
-                        _isShowingCachedData.value = true
-                        _connectionState.value = MarketConnectionState.ConnectionLost(
-                            "Koneksi pasar Indodax lemah. Menampilkan cache."
-                        )
-                    }
-                    delay(4000L)
-                    continue
-                }
-                delay(3000L)
-            }
-        }
-    }
-
-    private fun clearLiveData() {
-        val lastPrice = _currentTick.value?.price ?: 0.0
-        val lastCandles = _recentCandles.value
-        _currentTick.value = null
-        _recentPrices.value = emptyList()
-        _recentCandles.value = emptyList()
-        _orderBookBids.value = emptyList()
-        _orderBookAsks.value = emptyList()
-        _tradeStream.value = emptyList()
-        engine.resetForOffline(false, lastPrice, lastCandles)
-    }
-
-    private fun markMarketOffline(reason: String) {
-        marketPollJob?.cancel()
-        val lastPrice = _currentTick.value?.price ?: 0.0
-        val lastCandles = _recentCandles.value
-        if (_dashboardTicks.value.isEmpty() && _worthCoins.value.isEmpty()) clearLiveData()
-        else engine.resetForOffline(false, lastPrice, lastCandles)
-        _isShowingCachedData.value = _dashboardTicks.value.isNotEmpty() || _currentTick.value != null
-        _connectionState.value = MarketConnectionState.ConnectionLost(reason)
+        positionCoordinator.refreshPosition(pair.symbol)
+        positionCoordinator.refreshAlerts(pair.symbol)
+        val loaded = marketDataCoordinator.loadPairCache(pair.symbol, _selectedTimeframe.value)
+        if (!loaded) marketDataCoordinator.clearPairData()
+        marketDataCoordinator.startMarketPolling(pair, _selectedTimeframe.value)
     }
 
     fun toggleSimpleChart() { _useSimpleChart.value = !_useSimpleChart.value }
@@ -709,16 +508,13 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     fun toggleChartExpanded() { _isChartExpanded.value = !_isChartExpanded.value }
 
     fun retryConnection() {
-        _connectionState.value = MarketConnectionState.Loading
-        startMarketPolling(_selectedPair.value)
-        startActiveWebSocket(_selectedPair.value.symbol)
+        marketDataCoordinator.startMarketPolling(_selectedPair.value, _selectedTimeframe.value)
         refreshWorthCoinsFromMarket()
         agu.analys.util.MtfCacheManager.setActiveSymbol(_selectedPair.value.symbol)
     }
 
     fun simulateDisconnect() {
-        stopActiveWebSockets(false)
-        markMarketOffline("Mode offline: koneksi dihentikan manual.")
+        marketDataCoordinator.markOffline("Mode offline: koneksi dihentikan manual.")
     }
 
     val githubReleaseInfo: StateFlow<GitHubReleaseInfo?> = updateCoordinator.releaseInfo
@@ -727,9 +523,13 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     val updateDownloadProgress: StateFlow<Int?> = updateCoordinator.downloadProgress
 
     override fun onCleared() {
-        stopActiveWebSockets(false)
-        marketPollJob?.cancel()
-        dashboardPollJob?.cancel()
+        marketDataCoordinator.stopPolling()
         super.onCleared()
+    }
+    
+    fun toggleWatchlist(symbol: String) {
+        prefs.toggleWatchlist(symbol)
+        _watchlist.value = prefs.getWatchlist()
+        agu.analys.util.MtfCacheManager.updateQueues(_watchlist.value.toList(), emptyList())
     }
 }

@@ -114,8 +114,8 @@ fun MarketConditionCard(
             }
         }
     } else {
-        val bullishStructure = structure.structureBias.equals("BULLISH", true) || structure.structureBias.equals("UP", true)
-        val bearishStructure = structure.structureBias.equals("BEARISH", true) || structure.structureBias.equals("DOWN", true)
+        val bullishStructure = structure.trend.contains("Bull", true)
+        val bearishStructure = structure.trend.contains("Bear", true)
         val emaBullish = indicators.ema20.isFinite() && indicators.ema50.isFinite() && indicators.ema20 > indicators.ema50
         val emaBearish = indicators.ema20.isFinite() && indicators.ema50.isFinite() && indicators.ema20 < indicators.ema50
         val macdBullish = indicators.macdHist.isFinite() && indicators.macdHist > 0

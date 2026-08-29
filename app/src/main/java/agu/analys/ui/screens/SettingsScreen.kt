@@ -21,6 +21,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import agu.analys.BuildConfig
 import agu.analys.config.AiProvider
 import agu.analys.config.MarketDataSource
@@ -30,6 +31,7 @@ import agu.analys.util.MarketDataCache
 import agu.analys.ui.theme.*
 import agu.analys.ui.components.security.SecurityPinDialog
 import agu.analys.ui.components.security.SetupRealApiDialog
+import agu.analys.ui.components.settings.*
 import agu.analys.util.AppPreferences
 import agu.analys.util.GitHubUpdater
 import agu.analys.viewmodel.*
@@ -38,7 +40,7 @@ import agu.analys.viewmodel.*
 fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val prefs = remember { AppPreferences(context) }
-    val currentMarketSource by viewModel.marketDataSource.collectAsState()
+    val currentMarketSource by viewModel.marketDataSource.collectAsStateWithLifecycle()
     var selectedSource by remember(currentMarketSource) { mutableStateOf(currentMarketSource) }
     var strategyMode by remember { mutableStateOf(prefs.strategyMode) }
     var sensitivity by remember { mutableStateOf(prefs.scalpingSensitivity) }
@@ -49,10 +51,10 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
     var buyTakerFee by remember { mutableStateOf(prefs.tradingFees.buyTakerPct.toString()) }
     var sellMakerFee by remember { mutableStateOf(prefs.tradingFees.sellMakerPct.toString()) }
     var sellTakerFee by remember { mutableStateOf(prefs.tradingFees.sellTakerPct.toString()) }
-    val isRealBuyMode by viewModel.isRealBuyMode.collectAsState()
-    val isPinUnlocked by viewModel.isPinUnlocked.collectAsState()
-    val userPublicIp by viewModel.userPublicIp.collectAsState()
-    val failedPinAttempts by viewModel.failedPinAttempts.collectAsState()
+    val isRealBuyMode by viewModel.isRealBuyMode.collectAsStateWithLifecycle()
+    val isPinUnlocked by viewModel.isPinUnlocked.collectAsStateWithLifecycle()
+    val userPublicIp by viewModel.userPublicIp.collectAsStateWithLifecycle()
+    val failedPinAttempts by viewModel.failedPinAttempts.collectAsState(initial = 0)
     var hasPin by remember { mutableStateOf(viewModel.hasSecurityPin()) }
 
     var showSetupRealApiDialog by remember { mutableStateOf(false) }
@@ -66,10 +68,10 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
     var cacheCleared by remember { mutableStateOf(false) }
 
     val completedLessons = remember { prefs.getCompletedLearningLessons() }
-    val releaseInfo by viewModel.githubReleaseInfo.collectAsState()
-    val checkingUpdate by viewModel.isCheckingUpdate.collectAsState()
-    val updateStatus by viewModel.updateCheckStatus.collectAsState()
-    val downloadProgress by viewModel.updateDownloadProgress.collectAsState()
+    val releaseInfo by viewModel.githubReleaseInfo.collectAsStateWithLifecycle()
+    val checkingUpdate by viewModel.isCheckingUpdate.collectAsStateWithLifecycle()
+    val updateStatus by viewModel.updateCheckStatus.collectAsStateWithLifecycle()
+    val downloadProgress by viewModel.updateDownloadProgress.collectAsStateWithLifecycle()
 
     Column(
         modifier
@@ -256,132 +258,11 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
         Spacer(Modifier.height(16.dp))
 
         // SECTION 1: MODE ANALISIS TRADING
-        SectionHeader("MODE ANALISIS TRADING")
-        Text(
-            "Sesuaikan strategi perhitungan engine sinyal and timeframe aktif.",
-            color = TvTextSecondary,
-            fontSize = 11.sp
-        )
-        Spacer(Modifier.height(8.dp))
-
-        // Card 1: SCALPING (BUY MODE)
-        ModeOptionCard(
-            title = "SCALPING",
-            tag = "BUY MODE",
-            tagBg = TvGreen.copy(alpha = 0.15f),
-            tagFg = TvGreen,
-            isSelected = strategyMode == StrategyMode.SCALPING,
-            desc = "Mencari peluang BUY jangka pendek (1M – 15M) dengan eksekusi cepat dan filter MTF.",
-            bullets = listOf("Bias: 1H (Bullish)", "Setup: 15M", "Trigger: 1M", "Fokus: Quick Entry & Tight SL"),
-            onClick = { strategyMode = StrategyMode.SCALPING; saved = false }
-        )
-
-        // Sensitivitas Scalping jika scalping dipilih
-        if (strategyMode == StrategyMode.SCALPING) {
-            Spacer(Modifier.height(8.dp))
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(10.dp),
-                colors = CardDefaults.cardColors(containerColor = TvCardBackground),
-                border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder)
-            ) {
-                Column(Modifier.padding(12.dp)) {
-                    Text("SENSITIVITAS SCALPING", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TvBlue)
-                    Spacer(Modifier.height(6.dp))
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        SensitivityChoice(
-                            label = "KONSERVATIF",
-                            selected = sensitivity == ScalpingSensitivity.CONSERVATIVE,
-                            activeBg = TvGreen.copy(alpha = 0.15f),
-                            activeFg = TvGreen,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            sensitivity = ScalpingSensitivity.CONSERVATIVE
-                            saved = false
-                        }
-                        SensitivityChoice(
-                            label = "SEIMBANG",
-                            selected = sensitivity == ScalpingSensitivity.BALANCED,
-                            activeBg = TvBlue.copy(alpha = 0.15f),
-                            activeFg = TvBlue,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            sensitivity = ScalpingSensitivity.BALANCED
-                            saved = false
-                        }
-                        SensitivityChoice(
-                            label = "AGRESIF",
-                            selected = sensitivity == ScalpingSensitivity.AGGRESSIVE,
-                            activeBg = TvAmber.copy(alpha = 0.15f),
-                            activeFg = TvAmber,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            sensitivity = ScalpingSensitivity.AGGRESSIVE
-                            saved = false
-                        }
-                        SensitivityChoice(
-                            label = "AUTO (AI)",
-                            selected = sensitivity == ScalpingSensitivity.DYNAMIC_AUTO,
-                            activeBg = TvOrange.copy(alpha = 0.15f),
-                            activeFg = TvOrange,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            sensitivity = ScalpingSensitivity.DYNAMIC_AUTO
-                            saved = false
-                        }
-                    }
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        when (sensitivity) {
-                            ScalpingSensitivity.CONSERVATIVE -> "Konservatif: Filter ketat MTF 1H+15M+1M, anti-false breakout, Net R:R ≥ 1.25."
-                            ScalpingSensitivity.BALANCED -> "Seimbang (Rekomendasi): RSI 36–64, Walk-Forward, Net R:R ≥ 1.20."
-                            ScalpingSensitivity.AGGRESSIVE -> "Agresif: Peluang lebih sering, RSI 35–68, volume 0.85x, quick pump."
-                            ScalpingSensitivity.DYNAMIC_AUTO -> "Adaptif Otomatis: AI menyesuaikan threshold berdasarkan Rejim Pasar (Sideways/Volatile/Trending)."
-                        },
-                        fontSize = 10.sp,
-                        color = when (sensitivity) {
-                            ScalpingSensitivity.CONSERVATIVE -> TvGreen
-                            ScalpingSensitivity.BALANCED -> TvBlue
-                            ScalpingSensitivity.AGGRESSIVE -> TvAmber
-                            ScalpingSensitivity.DYNAMIC_AUTO -> TvOrange
-                        },
-                        lineHeight = 14.sp
-                    )
-                }
-            }
-        }
-
-        Spacer(Modifier.height(10.dp))
-
-        // Card 2: SECOND-WAVE (2ND-WAVE HUNTER)
-        ModeOptionCard(
-            title = "SECOND-WAVE",
-            tag = "2ND-WAVE HUNTER",
-            tagBg = TvBlue.copy(alpha = 0.15f),
-            tagFg = TvBlue,
-            isSelected = strategyMode == StrategyMode.SECOND_WAVE,
-            desc = "Membidik pantulan gelombang kedua pada koin pasca pump dengan koreksi terukur dan konfirmasi reclaim.",
-            bullets = listOf(
-                "Timeframe: 15M (Eksekusi) & 1H (Struktur)",
-                "Kriteria: Prior Run > 20% & Pullback Drawdown 50–85%",
-                "Sinyal: Base-Dip & Reclaim Entry",
-                "Target: TP1 (+10–15%) & TP2 (+25–50%+)"
-            ),
-            onClick = { strategyMode = StrategyMode.SECOND_WAVE; saved = false }
-        )
-
-        Spacer(Modifier.height(10.dp))
-
-        // Card 3: SWING (ANALISIS TREND)
-        ModeOptionCard(
-            title = "SWING",
-            tag = "ANALISIS TREND",
-            tagBg = TvBlue.copy(alpha = 0.15f),
-            tagFg = TvBlue,
-            isSelected = strategyMode == StrategyMode.SWING,
-            desc = "Menganalisis trend jangka menengah (1H – 1D) untuk posisi swing yang lebih tenang.",
-            bullets = listOf("Timeframe: 1H & 1D", "Analisis struktur trend (HH/HL/LH/LL)", "Fokus: Support / Resistance & Demand Zone"),
-            onClick = { strategyMode = StrategyMode.SWING; saved = false }
+        TradingModeSettings(
+            strategyMode = strategyMode,
+            sensitivity = sensitivity,
+            onStrategyChange = { strategyMode = it; saved = false },
+            onSensitivityChange = { sensitivity = it; saved = false }
         )
 
         Spacer(Modifier.height(16.dp))
@@ -393,7 +274,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
             hasPin = hasPin,
             hasApiCredentials = prefs.hasIndodaxCredentials(),
             isPinUnlocked = isPinUnlocked,
-            userPublicIp = userPublicIp,
+            userPublicIp = userPublicIp ?: "Detecting...",
             failedPinAttempts = failedPinAttempts,
             onToggleRealBuyMode = {
                 if (!isRealBuyMode) {
@@ -429,8 +310,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
         Spacer(Modifier.height(16.dp))
 
         // SECTION 2: INTEGRASI AI ASSISTANT
-        SectionHeader("INTEGRASI AI ASSISTANT")
-        AiProviderSettingsCard(
+        AiAssistantSettings(
             provider = provider,
             groqKey = groq,
             geminiKey = gemini,
@@ -444,88 +324,16 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
         Spacer(Modifier.height(16.dp))
 
         // SECTION 3: PENGATURAN BIAYA TRADING (FEE EXCHANGE)
-        SectionHeader("BIAYA TRADING (NET R:R & RADAR STATUS)")
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(10.dp),
-            colors = CardDefaults.cardColors(containerColor = TvCardBackground),
-            border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder)
-        ) {
-            Column(Modifier.padding(14.dp)) {
-                Text(
-                    "Digunakan untuk menghitung estimasi biaya transaksi di Card Radar Live dan Net Risk-to-Reward riil.",
-                    color = TvTextSecondary,
-                    fontSize = 11.sp,
-                    lineHeight = 15.sp
-                )
-                Spacer(Modifier.height(8.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Column(Modifier.weight(1f)) {
-                        Text("Beli Maker (%) - Limit", color = TvTextSecondary, fontSize = 10.sp)
-                        Spacer(Modifier.height(3.dp))
-                        OutlinedTextField(
-                            value = buyMakerFee,
-                            onValueChange = { buyMakerFee = it; saved = false },
-                            singleLine = true,
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = TvGreen,
-                                unfocusedBorderColor = TvBorder,
-                                focusedTextColor = TvTextPrimary,
-                                unfocusedTextColor = TvTextPrimary
-                            )
-                        )
-                    }
-                    Column(Modifier.weight(1f)) {
-                        Text("Beli Taker (%) - Instant", color = TvTextSecondary, fontSize = 10.sp)
-                        Spacer(Modifier.height(3.dp))
-                        OutlinedTextField(
-                            value = buyTakerFee,
-                            onValueChange = { buyTakerFee = it; saved = false },
-                            singleLine = true,
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = TvGreen,
-                                unfocusedBorderColor = TvBorder,
-                                focusedTextColor = TvTextPrimary,
-                                unfocusedTextColor = TvTextPrimary
-                            )
-                        )
-                    }
-                }
-                Spacer(Modifier.height(8.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Column(Modifier.weight(1f)) {
-                        Text("Jual Maker (%) - Limit", color = TvTextSecondary, fontSize = 10.sp)
-                        Spacer(Modifier.height(3.dp))
-                        OutlinedTextField(
-                            value = sellMakerFee,
-                            onValueChange = { sellMakerFee = it; saved = false },
-                            singleLine = true,
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = TvGreen,
-                                unfocusedBorderColor = TvBorder,
-                                focusedTextColor = TvTextPrimary,
-                                unfocusedTextColor = TvTextPrimary
-                            )
-                        )
-                    }
-                    Column(Modifier.weight(1f)) {
-                        Text("Jual Taker (%) - Instant", color = TvTextSecondary, fontSize = 10.sp)
-                        Spacer(Modifier.height(3.dp))
-                        OutlinedTextField(
-                            value = sellTakerFee,
-                            onValueChange = { sellTakerFee = it; saved = false },
-                            singleLine = true,
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = TvGreen,
-                                unfocusedBorderColor = TvBorder,
-                                focusedTextColor = TvTextPrimary,
-                                unfocusedTextColor = TvTextPrimary
-                            )
-                        )
-                    }
-                }
-            }
-        }
+        TradingFeeSettings(
+            buyMaker = buyMakerFee,
+            buyTaker = buyTakerFee,
+            sellMaker = sellMakerFee,
+            sellTaker = sellTakerFee,
+            onBuyMakerChange = { buyMakerFee = it; saved = false },
+            onBuyTakerChange = { buyTakerFee = it; saved = false },
+            onSellMakerChange = { sellMakerFee = it; saved = false },
+            onSellTakerChange = { sellTakerFee = it; saved = false }
+        )
 
         Spacer(Modifier.height(16.dp))
 
@@ -701,7 +509,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
         SetupRealApiDialog(
             initialApiKey = prefs.indodaxApiKey,
             initialSecretKey = prefs.indodaxSecretKey,
-            userPublicIp = userPublicIp,
+            userPublicIp = userPublicIp ?: "Detecting...",
             onCheckPublicIp = { viewModel.checkPublicIp() },
             onSaveAndActivate = { newPin, newApiKey, newSecretKey ->
                 viewModel.saveRealCredentialsAndPin(newPin, newApiKey, newSecretKey)

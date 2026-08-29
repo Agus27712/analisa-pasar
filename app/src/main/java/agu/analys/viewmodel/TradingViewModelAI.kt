@@ -7,8 +7,8 @@ import agu.analys.service.GroqAiService
 import kotlinx.coroutines.launch
 
 fun TradingViewModel.requestDeepAiAudit() {
-    val tick = _currentTick.value ?: return
-    if (_connectionState.value !is MarketConnectionState.Connected || _isAuditLoading.value || _isGeminiLoading.value) return
+    val tick = currentTick.value ?: return
+    if (connectionState.value !is MarketConnectionState.Connected || _isAuditLoading.value || _isGeminiLoading.value) return
     viewModelScope.launch {
         _isAuditLoading.value = true
         _auditReportText.value = null
@@ -23,8 +23,8 @@ fun TradingViewModel.requestDeepAiAudit() {
 fun TradingViewModel.clearAuditReport() { _auditReportText.value = null }
 
 fun TradingViewModel.requestGeminiChartSummary() {
-    val tick = _currentTick.value ?: return
-    if (_connectionState.value !is MarketConnectionState.Connected || _isAuditLoading.value || _isGeminiLoading.value) return
+    val tick = currentTick.value ?: return
+    if (connectionState.value !is MarketConnectionState.Connected || _isAuditLoading.value || _isGeminiLoading.value) return
     viewModelScope.launch {
         _isGeminiLoading.value = true
         _geminiSummaryText.value = null
