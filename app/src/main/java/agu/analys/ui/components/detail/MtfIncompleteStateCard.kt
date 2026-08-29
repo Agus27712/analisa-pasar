@@ -47,7 +47,8 @@ fun MtfIncompleteContent(
     loadedTimeframes: List<String> = emptyList(),
     totalTimeframes: List<String> = listOf("1H", "15M", "1M"),
     message: String = "Data MTF belum lengkap. Sedang menyelaraskan riwayat candle...",
-    onRetry: (() -> Unit)? = null
+    onRetry: (() -> Unit)? = null,
+    mtfState: Map<agu.analys.model.Timeframe, agu.analys.util.MtfStatus> = emptyMap()
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "MtfLoadingRotate")
     val angle by infiniteTransition.animateFloat(
@@ -64,6 +65,9 @@ fun MtfIncompleteContent(
     var isCoolingDown by remember { mutableStateOf(false) }
     var cooldownSeconds by remember { mutableStateOf(0) }
     val scope = rememberCoroutineScope()
+
+    val tfKeys = listOf(agu.analys.model.Timeframe.H1, agu.analys.model.Timeframe.M15, agu.analys.model.Timeframe.M1)
+    val syncCount = if (mtfState.isNotEmpty()) mtfState.count { it.value == agu.analys.util.MtfStatus.READY } else loadedTimeframes.size
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -90,7 +94,7 @@ fun MtfIncompleteContent(
             )
             Spacer(Modifier.width(5.dp))
             Text(
-                text = "${loadedTimeframes.size}/${totalTimeframes.size} TIMEFRAME",
+                text = "$syncCount/3 TIMEFRAME",
                 color = TvAmber,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold
@@ -114,10 +118,23 @@ fun MtfIncompleteContent(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        totalTimeframes.forEach { tf ->
-            val isLoaded = loadedTimeframes.contains(tf)
-            val badgeColor = if (isLoaded) TvGreen else TvTextMuted
-            val bgColor = if (isLoaded) TvGreen.copy(alpha = 0.12f) else TvSurfaceVariant
+        tfKeys.forEachIndexed { index, tf ->
+            val status = mtfState[tf] ?: if (loadedTimeframes.contains(totalTimeframes.getOrNull(index) ?: "")) agu.analys.util.MtfStatus.READY else agu.analys.util.MtfStatus.SYNCING
+            val isLoaded = status == agu.analys.util.MtfStatus.READY
+            
+            val badgeColor = when (status) {
+                agu.analys.util.MtfStatus.READY -> TvGreen
+                agu.analys.util.MtfStatus.UPDATING -> TvAmber
+                agu.analys.util.MtfStatus.ERROR -> TvRed
+                else -> TvTextMuted
+            }
+            val bgColor = when (status) {
+                agu.analys.util.MtfStatus.READY -> TvGreen.copy(alpha = 0.12f)
+                agu.analys.util.MtfStatus.UPDATING -> TvAmber.copy(alpha = 0.12f)
+                agu.analys.util.MtfStatus.ERROR -> TvRed.copy(alpha = 0.12f)
+                else -> TvSurfaceVariant
+            }
+            val textLabel = status.name
 
             Box(
                 modifier = Modifier
@@ -129,14 +146,14 @@ fun MtfIncompleteContent(
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text = tf,
+                        text = totalTimeframes.getOrNull(index) ?: tf.code,
                         color = if (isLoaded) TvGreenLight else TvTextSecondary,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(Modifier.height(2.dp))
                     Text(
-                        text = if (isLoaded) "READY" else "SYNCING",
+                        text = textLabel,
                         color = badgeColor,
                         fontSize = 9.sp,
                         fontWeight = FontWeight.Medium

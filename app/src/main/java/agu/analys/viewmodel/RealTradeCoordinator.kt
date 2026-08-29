@@ -268,7 +268,7 @@ class RealTradeCoordinator(
                 _realLockedBalance.value = balances.locked
 
                 delay(INTER_REQUEST_DELAY_MS)
-                val openOk = fetchRealOpenOrdersSafe(apiKey, secretKey)
+                val openOk = fetchRealOpenOrdersSafe(apiKey, secretKey, balances)
                 if (!openOk) {
                     _isFetchingRealBalance.value = false
                     return@launch
@@ -281,44 +281,87 @@ class RealTradeCoordinator(
         }
     }
 
-    private suspend fun fetchRealOpenOrdersSafe(apiKey: String, secretKey: String): Boolean {
+    private suspend fun fetchRealOpenOrdersSafe(apiKey: String, secretKey: String, balances: IndodaxTradeApiV2.IndodaxBalances): Boolean {
         return try {
-            val (ok, raw) = IndodaxTradeApiV2.openOrders(apiKey, secretKey)
-            if (!ok) {
-                if (looksLikeRateLimit(raw)) {
-                    markRateLimited(raw)
-                    return false
-                }
-                _realTradeStatus.value = "Open orders: $raw"
-                return true
-            }
             val db = AppDatabase.getInstance().realTradeDao()
-            db.clearOpenOrders()
-            val jsonArr = try { JSONArray(raw) } catch (e: Exception) {
-                Timber.e(e, "Gagal parse JSONArray open orders")
-                null
+            val entityMap = mutableMapOf<String, RealOpenOrderEntity>()
+
+            // 1. Fetch without symbol (Indodax V2 API bug often returns only 1 order or incomplete list here, but we take what we can get)
+            val (okAll, rawAll) = IndodaxTradeApiV2.openOrders(apiKey, secretKey)
+            if (!okAll && looksLikeRateLimit(rawAll)) {
+                markRateLimited(rawAll)
+                return false
             }
-            if (jsonArr != null) {
-                val entityList = mutableListOf<RealOpenOrderEntity>()
-                for (i in 0 until jsonArr.length()) {
-                    val obj = jsonArr.optJSONObject(i) ?: continue
-                    val orderId = obj.optString("orderId", "")
-                    if (orderId.isBlank()) continue
-                    entityList.add(
-                        RealOpenOrderEntity(
-                            orderId = orderId,
-                            symbol = obj.optString("symbol", "").lowercase(),
-                            side = obj.optString("side", "").uppercase(),
-                            type = obj.optString("type", "LIMIT").uppercase(),
-                            price = obj.optString("price", "0").toDoubleOrNull() ?: 0.0,
-                            quantity = obj.optString("origQty", "0").toDoubleOrNull() ?: 0.0,
-                            executedQty = obj.optString("executedQty", "0").toDoubleOrNull() ?: 0.0,
-                            status = obj.optString("status", "OPEN").uppercase(),
-                            time = obj.optLong("time", System.currentTimeMillis())
-                        )
-                    )
+            if (okAll) {
+                try {
+                    val arr = JSONArray(rawAll)
+                    for (i in 0 until arr.length()) {
+                        val obj = arr.optJSONObject(i) ?: continue
+                        val oId = obj.optString("orderId", "")
+                        if (oId.isNotBlank()) {
+                            entityMap[oId] = RealOpenOrderEntity(
+                                orderId = oId,
+                                symbol = obj.optString("symbol", "").lowercase(),
+                                side = obj.optString("side", "").uppercase(),
+                                type = obj.optString("type", "LIMIT").uppercase(),
+                                price = obj.optString("price", "0").toDoubleOrNull() ?: 0.0,
+                                quantity = obj.optString("origQty", "0").toDoubleOrNull() ?: 0.0,
+                                executedQty = obj.optString("executedQty", "0").toDoubleOrNull() ?: 0.0,
+                                status = obj.optString("status", "OPEN").uppercase(),
+                                time = obj.optLong("time", System.currentTimeMillis())
+                            )
+                        }
+                    }
+                } catch (e: Exception) { Timber.e(e, "Gagal parse open orders all") }
+            }
+
+            // 2. Fetch specific candidate symbols to patch the missing data bug
+            val candidates = linkedSetOf<String>()
+            balances.locked.filter { it.key != "idr" && it.value > 0.0 }.keys.forEach { candidates.add(it) }
+            prefs.getRecentHistoryBases().forEach { candidates.add(it) }
+            prefs.getWatchlist().forEach { candidates.add(baseFromPair(it)) }
+
+            var rateLimited = false
+            for (base in candidates.take(15)) {
+                if (base.isBlank()) continue
+                delay(300)
+                val sym = "${base}idr"
+                val (okSym, rawSym) = IndodaxTradeApiV2.openOrders(apiKey, secretKey, sym)
+                if (!okSym) {
+                    if (looksLikeRateLimit(rawSym)) {
+                        markRateLimited(rawSym)
+                        rateLimited = true
+                        break
+                    }
+                    continue
                 }
-                if (entityList.isNotEmpty()) db.insertOpenOrders(entityList)
+                try {
+                    val arr = JSONArray(rawSym)
+                    for (i in 0 until arr.length()) {
+                        val obj = arr.optJSONObject(i) ?: continue
+                        val oId = obj.optString("orderId", "")
+                        if (oId.isNotBlank()) {
+                            entityMap[oId] = RealOpenOrderEntity(
+                                orderId = oId,
+                                symbol = obj.optString("symbol", "").lowercase(),
+                                side = obj.optString("side", "").uppercase(),
+                                type = obj.optString("type", "LIMIT").uppercase(),
+                                price = obj.optString("price", "0").toDoubleOrNull() ?: 0.0,
+                                quantity = obj.optString("origQty", "0").toDoubleOrNull() ?: 0.0,
+                                executedQty = obj.optString("executedQty", "0").toDoubleOrNull() ?: 0.0,
+                                status = obj.optString("status", "OPEN").uppercase(),
+                                time = obj.optLong("time", System.currentTimeMillis())
+                            )
+                        }
+                    }
+                } catch (e: Exception) { Timber.e(e, "Gagal parse open orders sym") }
+            }
+
+            if (rateLimited) return false
+
+            db.clearOpenOrders()
+            if (entityMap.isNotEmpty()) {
+                db.insertOpenOrders(entityMap.values.toList())
             }
             true
         } catch (e: Exception) {

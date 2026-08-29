@@ -154,10 +154,20 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
                     }
                 }
                 StrategyMode.SCALPING -> {
-                    val h1Job = async { IndodaxMarketService.fetchCandles(symbol, Timeframe.H1, 150) }
-                    val m15Job = async { IndodaxMarketService.fetchCandles(symbol, Timeframe.M15, 200) }
-                    val m1Job = async { IndodaxMarketService.fetchCandles(symbol, Timeframe.M1, 250) }
-                    val h1 = h1Job.await(); val m15 = m15Job.await(); val m1 = m1Job.await()
+                    agu.analys.util.MtfCacheManager.setActiveSymbol(symbol)
+                    
+                    var h1 = agu.analys.util.MtfCacheManager.getCachedCandles(symbol, Timeframe.H1) ?: emptyList()
+                    var m15 = agu.analys.util.MtfCacheManager.getCachedCandles(symbol, Timeframe.M15) ?: emptyList()
+                    var m1 = agu.analys.util.MtfCacheManager.getCachedCandles(symbol, Timeframe.M1) ?: emptyList()
+
+                    // Try waiting briefly if not yet complete (give Tier 1 prefetch a chance to hit)
+                    if (h1.size < 55 || m15.size < 55 || m1.size < 55) {
+                        kotlinx.coroutines.delay(2000)
+                        h1 = agu.analys.util.MtfCacheManager.getCachedCandles(symbol, Timeframe.H1) ?: emptyList()
+                        m15 = agu.analys.util.MtfCacheManager.getCachedCandles(symbol, Timeframe.M15) ?: emptyList()
+                        m1 = agu.analys.util.MtfCacheManager.getCachedCandles(symbol, Timeframe.M1) ?: emptyList()
+                    }
+
                     if (h1.size >= 55 && m15.size >= 55 && m1.size >= 55 && currentTick?.symbol == symbol) {
                         h1Candles = h1.dropLast(1); m15Candles = m15.dropLast(1)
                         m1Candles = m1.dropLast(1)

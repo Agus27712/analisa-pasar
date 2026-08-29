@@ -78,6 +78,8 @@ fun DetailChartScreen(
     val realBalance by viewModel.realIndodaxBalance.collectAsStateWithLifecycle()
     val realAvgBuyPrices by viewModel.realAvgBuyPrices.collectAsStateWithLifecycle()
     val priceAlerts by viewModel.priceAlerts.collectAsStateWithLifecycle()
+    val mtfStateAll by viewModel.mtfState.collectAsStateWithLifecycle()
+    val mtfState = mtfStateAll[pair.symbol] ?: emptyMap()
 
     var showPriceAlertDialog by remember { mutableStateOf(false) }
     var showAiAssistantDialog by remember { mutableStateOf(false) }
@@ -624,7 +626,8 @@ fun DetailChartScreen(
                 signal = signal,
                 strategyMode = strategyMode,
                 scalping = isScalping,
-                onRetry = { viewModel.retryConnection() }
+                onRetry = { viewModel.retryConnection() },
+                mtfState = mtfState
             )
 
             Spacer(modifier.height(8.dp))

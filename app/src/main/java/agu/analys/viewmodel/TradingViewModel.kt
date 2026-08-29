@@ -218,6 +218,11 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         }
     )
     val watchlist: StateFlow<Set<String>> = _watchlist.asStateFlow()
+    val mtfState = agu.analys.util.MtfCacheManager.mtfState
+
+    init {
+        agu.analys.util.MtfCacheManager.updateQueues(_watchlist.value.toList(), emptyList())
+    }
 
     private val _isShowingCachedData = MutableStateFlow(false)
     val isShowingCachedData: StateFlow<Boolean> = _isShowingCachedData.asStateFlow()
@@ -723,6 +728,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         startMarketPolling(_selectedPair.value)
         startActiveWebSocket(_selectedPair.value.symbol)
         refreshWorthCoinsFromMarket()
+        agu.analys.util.MtfCacheManager.setActiveSymbol(_selectedPair.value.symbol)
     }
 
     fun simulateDisconnect() {

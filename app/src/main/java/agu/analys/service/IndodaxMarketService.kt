@@ -301,17 +301,16 @@ object IndodaxMarketService {
         }
     }
 
-    suspend fun fetchCandles(symbol: String, timeframe: Timeframe, limit: Int = 300): List<CandleBar> = withContext(Dispatchers.IO) {
+    suspend fun fetchCandles(symbol: String, timeframe: Timeframe, limit: Int = 300, explicitFromSec: Long? = null, explicitToSec: Long? = null): List<CandleBar> = withContext(Dispatchers.IO) {
         try {
             val tf = timeframe.code
             val minutesPerCandle = when (tf) {
                 "1" -> 1L; "5" -> 5L; "15" -> 15L; "60" -> 60L; "240" -> 240L; "D" -> 1440L; else -> 1L
             }
             val candleSeconds = minutesPerCandle * 60L
-            val nowSec = System.currentTimeMillis() / 1000L
-            val currentCandleStart = nowSec - (nowSec % candleSeconds)
+            val nowSec = explicitToSec ?: (System.currentTimeMillis() / 1000L)
             val requestCount = limit.coerceAtLeast(40) + 1
-            val fromSec = nowSec - (candleSeconds * requestCount)
+            val fromSec = explicitFromSec ?: (nowSec - (candleSeconds * requestCount))
             val apiTf = if (tf == "D") "1D" else tf
             val pair = toDepthPairId(symbol).uppercase()
             val body = get("https://indodax.com/tradingview/history_v2?from=$fromSec&symbol=$pair&tf=$apiTf&to=$nowSec")

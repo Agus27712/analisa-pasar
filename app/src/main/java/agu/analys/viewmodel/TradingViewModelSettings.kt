@@ -7,7 +7,9 @@ fun TradingViewModel.saveGeminiApiKey(key: String) { prefs.geminiApiKey = key }
 
 fun TradingViewModel.toggleWatchlist(symbol: String) {
     prefs.toggleWatchlist(symbol)
-    _watchlist.value = prefs.getWatchlist()
+    val newList = prefs.getWatchlist()
+    _watchlist.value = newList
+    agu.analys.util.MtfCacheManager.updateQueues(newList.toList(), emptyList())
 }
 
 fun TradingViewModel.isWatched(symbol: String) = prefs.isInWatchlist(symbol)

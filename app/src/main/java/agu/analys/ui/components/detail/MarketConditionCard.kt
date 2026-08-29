@@ -31,7 +31,8 @@ fun MarketConditionCard(
     signal: AISignalState,
     strategyMode: StrategyMode = StrategyMode.SCALPING,
     scalping: Boolean = strategyMode == StrategyMode.SCALPING,
-    onRetry: (() -> Unit)? = null
+    onRetry: (() -> Unit)? = null,
+    mtfState: Map<agu.analys.model.Timeframe, agu.analys.util.MtfStatus> = emptyMap()
 ) {
     if (strategyMode == StrategyMode.SCALPING || (strategyMode == StrategyMode.SECOND_WAVE && scalping)) {
         val stage = signal.scalpingStage
@@ -87,7 +88,8 @@ fun MarketConditionCard(
                 MtfIncompleteContent(
                     loadedTimeframes = loadedTfs,
                     message = if (mtf.isEmpty()) "Data MTF belum lengkap. Sedang menyelaraskan riwayat candle..." else "Sebagian data MTF belum lengkap (${loadedTfs.size}/3 timeframe siap).",
-                    onRetry = onRetry
+                    onRetry = onRetry,
+                    mtfState = mtfState
                 )
             }
         }
