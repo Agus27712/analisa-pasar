@@ -19,6 +19,8 @@ import agu.analys.model.AISignalState
 import agu.analys.model.ScalpingStage
 import agu.analys.model.SignalAction
 import agu.analys.model.TechnicalIndicators
+import agu.analys.model.Timeframe
+import agu.analys.util.MtfStatus
 import agu.analys.ui.theme.TvGreen
 import agu.analys.ui.theme.TvRed
 import agu.analys.ui.theme.TvTextPrimary
@@ -83,20 +85,37 @@ fun MarketConditionCard(
             if (mtf.isNotEmpty()) {
                 mtf.forEach { Text(it, color = TvTextSecondary, fontSize = 12.sp, modifier = Modifier.padding(vertical = 2.dp)) }
             }
-            if (mtf.isEmpty() || loadedTfs.size < 3) {
+            // Sumber kebenaran status data = mtfState (cache), bukan signal.reasoning
+            val readyFromCache = if (mtfState.isNotEmpty()) {
+                listOf(Timeframe.H1, Timeframe.M15, Timeframe.M1).count { mtfState[it] == MtfStatus.READY }
+            } else loadedTfs.size
+            if (readyFromCache < 3) {
                 Spacer(Modifier.height(8.dp))
+                val syncingLabels = listOf(Timeframe.H1 to "1H", Timeframe.M15 to "15M", Timeframe.M1 to "1M")
+                    .filter { (tf, _) -> mtfState[tf] != MtfStatus.READY }
+                    .map { it.second }
                 MtfIncompleteContent(
-                    loadedTimeframes = loadedTfs,
-                    message = if (mtf.isEmpty()) "Data MTF belum lengkap. Sedang menyelaraskan riwayat candle..." else "Sebagian data MTF belum lengkap (${loadedTfs.size}/3 timeframe siap).",
+                    loadedTimeframes = if (mtfState.isNotEmpty()) {
+                        listOf(Timeframe.H1 to "1H", Timeframe.M15 to "15M", Timeframe.M1 to "1M")
+                            .filter { (tf, _) -> mtfState[tf] == MtfStatus.READY }
+                            .map { it.second }
+                    } else loadedTfs,
+                    message = when {
+                        mtfState.isEmpty() && mtf.isEmpty() ->
+                            "Data MTF belum lengkap. Sedang menyelaraskan riwayat candle..."
+                        syncingLabels.isNotEmpty() ->
+                            "Menyelaraskan ${syncingLabels.joinToString(", ")} (${readyFromCache}/3 timeframe siap)."
+                        else ->
+                            "Sebagian data MTF belum lengkap (${readyFromCache}/3 timeframe siap)."
+                    },
                     onRetry = onRetry,
                     mtfState = mtfState
                 )
             }
         }
     } else {
-        // Kondisi Pasar / Swing = structure + indicators ONLY
-        val bullishStructure = structure.trend.contains("Bull", true)
-        val bearishStructure = structure.trend.contains("Bear", true)
+        val bullishStructure = structure.structureBias.equals("BULLISH", true) || structure.structureBias.equals("UP", true)
+        val bearishStructure = structure.structureBias.equals("BEARISH", true) || structure.structureBias.equals("DOWN", true)
         val emaBullish = indicators.ema20.isFinite() && indicators.ema50.isFinite() && indicators.ema20 > indicators.ema50
         val emaBearish = indicators.ema20.isFinite() && indicators.ema50.isFinite() && indicators.ema20 < indicators.ema50
         val macdBullish = indicators.macdHist.isFinite() && indicators.macdHist > 0

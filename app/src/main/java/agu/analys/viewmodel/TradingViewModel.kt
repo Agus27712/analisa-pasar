@@ -455,23 +455,8 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         positionStore.setAutoSellParams(symbol, enabled, tp1Price, tp1Percent, tp2Price, tp2Percent, stopLossPrice)
         refreshSpotPosition()
 
-        if (enabled && isRealBuyMode.value) {
-            realCoordinator.executeRealAutoSellOnServer(
-                pair = symbol,
-                tp1Price = tp1Price,
-                tp1Percent = tp1Percent,
-                tp2Price = tp2Price,
-                tp2Percent = tp2Percent
-            ) { success, msg ->
-                viewModelScope.launch(kotlinx.coroutines.Dispatchers.Main) {
-                    android.widget.Toast.makeText(
-                        getApplication(),
-                        if (success) "Split TP Server Berhasil:\n$msg" else "Gagal pasang Split TP Server: $msg",
-                        android.widget.Toast.LENGTH_LONG
-                    ).show()
-                }
-            }
-        }
+        // AUTO TP1/TP2 SERVER sengaja tidak dipanggil di mode REAL (fitur dihapus dari UI jual real)
+        // Simpan param lokal saja; eksekusi server hanya relevan di simulasi / future use.
     }
 
     fun resetTrailingTrigger() {
