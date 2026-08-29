@@ -16,6 +16,10 @@ fun SimpleComposeChart(
     currentPrice: Double,
     isPositiveTrend: Boolean = true,
     candles: List<CandleBar> = emptyList(),
+    showVolume: Boolean = true,
+    showEma: Boolean = false,
+    showBb: Boolean = false,
+    showStochRsi: Boolean = false,
     entryPrice: Double = 0.0,
     targetPrice1: Double = 0.0,
     targetPrice2: Double = 0.0,
@@ -25,6 +29,11 @@ fun SimpleComposeChart(
 ) {
     LightweightChartView(
         candles = candles,
+        currentPrice = currentPrice,
+        showVolume = showVolume,
+        showEma = showEma,
+        showBb = showBb,
+        showStochRsi = showStochRsi,
         entryPrice = entryPrice,
         targetPrice1 = targetPrice1,
         targetPrice2 = targetPrice2,

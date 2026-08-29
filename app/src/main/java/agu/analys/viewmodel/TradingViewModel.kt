@@ -123,10 +123,8 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     }
 
     private fun handleWebSocketCandle(candle: CandleBar) {
-        if (candle.timestamp < (_recentCandles.value.firstOrNull()?.timestamp ?: 0L)) return
-        val updated = (_recentCandles.value + candle).distinctBy { it.timestamp }.sortedBy { it.timestamp }.takeLast(300)
-        _recentCandles.value = updated
-        engine.onCandleUpdate(candle)
+        // WS synthetic M1 candles are not needed anymore as engine pulls its own data via refreshMtfData
+        // and updates its live candle via onTickUpdate.
     }
 
     private val _marketDataSource = MutableStateFlow(prefs.marketDataSource)
@@ -328,7 +326,6 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         val candles = _recentCandles.value
         if (tick != null) {
             engine.resetForOffline()
-            candles.forEach { engine.onCandleUpdate(it) }
             engine.onTickUpdate(tick)
         }
         refreshWorthCoinsFromMarket()
@@ -356,7 +353,6 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         if (tick != null && candles.isNotEmpty()) {
             engine.resetForOffline()
             engine.onTickUpdate(tick)
-            candles.forEach { engine.onCandleUpdate(it) }
         }
     }
 
@@ -738,7 +734,6 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
                 _recentCandles.value = cachedCandles
                 engine.resetForOffline()
                 cachedTick?.let { engine.onTickUpdate(it) }
-                cachedCandles.forEach { engine.onCandleUpdate(it) }
             }
             _isShowingCachedData.value = true
         } else clearLiveData()
@@ -793,7 +788,6 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
                             _recentCandles.value = candles
                             engine.resetForOffline(preserveState = true)
                             engine.onTickUpdate(normalizedTick)
-                            candles.forEach { engine.onCandleUpdate(it) }
                             lastCandleRefresh = now
                             marketCache.savePairSnapshot(pair.symbol, _selectedTimeframe.value, normalizedTick, candles)
                         }

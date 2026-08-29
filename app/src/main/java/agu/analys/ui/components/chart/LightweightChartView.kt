@@ -26,6 +26,11 @@ import org.json.JSONObject
 @Composable
 fun LightweightChartView(
     candles: List<CandleBar>,
+    currentPrice: Double = 0.0,
+    showVolume: Boolean = true,
+    showEma: Boolean = false,
+    showBb: Boolean = false,
+    showStochRsi: Boolean = false,
     entryPrice: Double = 0.0,
     targetPrice1: Double = 0.0,
     targetPrice2: Double = 0.0,
@@ -73,6 +78,35 @@ fun LightweightChartView(
         pushData(wv)
     }
 
+    LaunchedEffect(showVolume, showEma, showBb, showStochRsi, pageReady) {
+        val wv = webView ?: return@LaunchedEffect
+        if (!pageReady) return@LaunchedEffect
+        val json = JSONObject()
+            .put("volume", showVolume)
+            .put("ema", showEma)
+            .put("bb", showBb)
+            .put("stoch", showStochRsi)
+            .toString()
+        wv.evaluateJavascript("setIndicators($json)", null)
+    }
+
+    LaunchedEffect(currentPrice, pageReady) {
+        val wv = webView ?: return@LaunchedEffect
+        if (!pageReady || currentPrice <= 0.0 || candles.isEmpty()) return@LaunchedEffect
+        val last = candles.last()
+        val h = maxOf(last.high, currentPrice)
+        val l = minOf(last.low, currentPrice)
+        val json = JSONObject()
+            .put("t", last.timestamp)
+            .put("o", last.open)
+            .put("h", h)
+            .put("l", l)
+            .put("c", currentPrice)
+            .put("v", last.volume)
+            .toString()
+        wv.evaluateJavascript("updateLast($json)", null)
+    }
+
     AndroidView(
         modifier = modifier,
         factory = { ctx ->
@@ -81,7 +115,7 @@ fun LightweightChartView(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT
                 )
-                setBackgroundColor(Color.parseColor("#0d1117"))
+                setBackgroundColor(android.graphics.Color.TRANSPARENT)
                 settings.javaScriptEnabled = true
                 settings.domStorageEnabled = true
                 settings.cacheMode = WebSettings.LOAD_DEFAULT

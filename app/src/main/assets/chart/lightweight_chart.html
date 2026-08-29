@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body { width: 100%; height: 100%; background: #0d1117; overflow: hidden; }
+    html, body { width: 100%; height: 100%; background: transparent; overflow: hidden; }
     #chart { width: 100%; height: 100%; }
   </style>
   <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
@@ -14,13 +14,17 @@
   <div id="chart"></div>
   <script>
     let chart, candleSeries, volumeSeries;
+    let emaSeries, bbUpper, bbLower, bbMiddle;
+    let stochK, stochD;
     let ready = false;
+    let currentRaw = [];
+    let currentConfig = { volume: true, ema: false, bb: false, stoch: false };
 
     function init() {
       const el = document.getElementById('chart');
       chart = LightweightCharts.createChart(el, {
         layout: {
-          background: { type: 'solid', color: '#0d1117' },
+          background: { type: 'solid', color: 'transparent' },
           textColor: '#8b949e',
           fontSize: 11
         },
@@ -39,18 +43,29 @@
       });
 
       candleSeries = chart.addCandlestickSeries({
-        upColor: '#26a69a',
-        downColor: '#ef5350',
-        borderUpColor: '#26a69a',
-        borderDownColor: '#ef5350',
-        wickUpColor: '#26a69a',
-        wickDownColor: '#ef5350'
+        upColor: '#26a69a', downColor: '#ef5350',
+        borderUpColor: '#26a69a', borderDownColor: '#ef5350',
+        wickUpColor: '#26a69a', wickDownColor: '#ef5350'
       });
 
       volumeSeries = chart.addHistogramSeries({
         priceFormat: { type: 'volume' },
         priceScaleId: '',
         scaleMargins: { top: 0.8, bottom: 0 }
+      });
+
+      emaSeries = chart.addLineSeries({ color: '#f6c343', lineWidth: 2, crosshairMarkerVisible: false });
+      
+      bbUpper = chart.addLineSeries({ color: 'rgba(0, 188, 212, 0.6)', lineWidth: 1, crosshairMarkerVisible: false });
+      bbMiddle = chart.addLineSeries({ color: 'rgba(0, 188, 212, 0.9)', lineWidth: 2, crosshairMarkerVisible: false });
+      bbLower = chart.addLineSeries({ color: 'rgba(0, 188, 212, 0.6)', lineWidth: 1, crosshairMarkerVisible: false });
+
+      stochK = chart.addLineSeries({ color: '#00E5FF', lineWidth: 1, priceScaleId: 'stoch' });
+      stochD = chart.addLineSeries({ color: '#FF9800', lineWidth: 1, priceScaleId: 'stoch' });
+      
+      chart.priceScale('stoch').applyOptions({
+        scaleMargins: { top: 0.8, bottom: 0 },
+        visible: false
       });
 
       ready = true;
@@ -60,11 +75,153 @@
       chart.applyOptions({ width: el.clientWidth, height: el.clientHeight });
     }
 
+    function calculateIndicators(data) {
+        if (!data || data.length === 0) return;
+        
+        let emaData = [], bbUp = [], bbMid = [], bbLow = [];
+        let rsiData = [], stochKData = [], stochDData = [];
+        
+        // EMA 20
+        const emaPeriod = 20;
+        let k = 2 / (emaPeriod + 1);
+        let ema = data[0].c;
+        
+        // BB 20, 2
+        const bbPeriod = 20;
+        
+        // StochRSI 14, 14, 3, 3
+        const rsiPeriod = 14;
+        const stochPeriod = 14;
+        let gains = 0, losses = 0;
+        
+        for (let i = 0; i < data.length; i++) {
+            const time = Math.floor(Number(data[i].t) / 1000);
+            if (!time) continue;
+            
+            // EMA
+            if (i > 0) ema = (data[i].c - ema) * k + ema;
+            emaData.push({ time, value: ema });
+            
+            // BB
+            if (i >= bbPeriod - 1) {
+                let sum = 0;
+                for (let j = i - bbPeriod + 1; j <= i; j++) sum += data[j].c;
+                let sma = sum / bbPeriod;
+                let sumSq = 0;
+                for (let j = i - bbPeriod + 1; j <= i; j++) sumSq += Math.pow(data[j].c - sma, 2);
+                let stdDev = Math.sqrt(sumSq / bbPeriod);
+                bbMid.push({ time, value: sma });
+                bbUp.push({ time, value: sma + 2 * stdDev });
+                bbLow.push({ time, value: sma - 2 * stdDev });
+            }
+            
+            // RSI
+            if (i > 0 && i <= rsiPeriod) {
+                let diff = data[i].c - data[i-1].c;
+                if (diff >= 0) gains += diff; else losses -= diff;
+                if (i === rsiPeriod) {
+                    let avgGain = gains / rsiPeriod, avgLoss = losses / rsiPeriod;
+                    let rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
+                    let rsiVal = avgLoss === 0 ? 100 : 100 - (100 / (1 + rs));
+                    rsiData.push({ time, value: rsiVal, avgGain, avgLoss });
+                }
+            } else if (i > rsiPeriod) {
+                let diff = data[i].c - data[i-1].c;
+                let gain = Math.max(diff, 0), loss = Math.max(-diff, 0);
+                let prev = rsiData[rsiData.length - 1];
+                let avgGain = (prev.avgGain * (rsiPeriod - 1) + gain) / rsiPeriod;
+                let avgLoss = (prev.avgLoss * (rsiPeriod - 1) + loss) / rsiPeriod;
+                let rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
+                let rsiVal = avgLoss === 0 ? 100 : 100 - (100 / (1 + rs));
+                rsiData.push({ time, value: rsiVal, avgGain, avgLoss });
+            }
+        }
+        
+        // Stoch K
+        let kValues = [];
+        for (let i = 0; i < rsiData.length; i++) {
+            if (i < stochPeriod - 1) {
+                kValues.push(null);
+                continue;
+            }
+            let minRsi = rsiData[i].value, maxRsi = rsiData[i].value;
+            for (let j = i - stochPeriod + 1; j <= i; j++) {
+                minRsi = Math.min(minRsi, rsiData[j].value);
+                maxRsi = Math.max(maxRsi, rsiData[j].value);
+            }
+            let stochVal = (maxRsi - minRsi === 0) ? 0 : 100 * (rsiData[i].value - minRsi) / (maxRsi - minRsi);
+            kValues.push(stochVal);
+        }
+        
+        // Smooth K (3)
+        let smoothedK = [];
+        for (let i = 0; i < rsiData.length; i++) {
+            if (kValues[i] === null || i < stochPeriod - 1 + 2) {
+                smoothedK.push(null);
+                continue;
+            }
+            let sum = 0;
+            for (let j = i - 2; j <= i; j++) sum += kValues[j];
+            let val = sum / 3;
+            smoothedK.push(val);
+            stochKData.push({ time: rsiData[i].time, value: val });
+        }
+        
+        // Smooth D (3)
+        for (let i = 0; i < rsiData.length; i++) {
+            if (smoothedK[i] === null || i < stochPeriod - 1 + 2 + 2) continue;
+            let sum = 0;
+            for (let j = i - 2; j <= i; j++) sum += smoothedK[j];
+            stochDData.push({ time: rsiData[i].time, value: sum / 3 });
+        }
+        
+        emaSeries.setData(emaData);
+        bbUpper.setData(bbUp);
+        bbMiddle.setData(bbMid);
+        bbLower.setData(bbLow);
+        stochK.setData(stochKData);
+        stochD.setData(stochDData);
+    }
+
+    function applyVisibility() {
+        volumeSeries.applyOptions({ visible: currentConfig.volume });
+        emaSeries.applyOptions({ visible: currentConfig.ema });
+        bbUpper.applyOptions({ visible: currentConfig.bb });
+        bbMiddle.applyOptions({ visible: currentConfig.bb });
+        bbLower.applyOptions({ visible: currentConfig.bb });
+        stochK.applyOptions({ visible: currentConfig.stoch });
+        stochD.applyOptions({ visible: currentConfig.stoch });
+        
+        chart.priceScale('stoch').applyOptions({ visible: currentConfig.stoch });
+        
+        if (currentConfig.stoch) {
+             candleSeries.priceScale().applyOptions({ scaleMargins: { top: 0.1, bottom: 0.25 } });
+             if (currentConfig.volume) {
+                 volumeSeries.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0.25 } });
+             }
+             chart.priceScale('stoch').applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
+        } else {
+             candleSeries.priceScale().applyOptions({ scaleMargins: { top: 0.1, bottom: 0.1 } });
+             if (currentConfig.volume) {
+                 volumeSeries.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
+             }
+        }
+    }
+
+    function setIndicators(configStr) {
+        try {
+            currentConfig = (typeof configStr === 'string') ? JSON.parse(configStr) : configStr;
+            applyVisibility();
+        } catch(e) {}
+    }
+
     function setCandles(input) {
       if (!ready) return;
       try {
         const raw = (typeof input === 'string') ? JSON.parse(input) : input;
         if (!Array.isArray(raw) || raw.length === 0) return;
+        currentRaw = raw;
+        
         const candles = [];
         const volumes = [];
         for (let i = 0; i < raw.length; i++) {
@@ -81,14 +238,21 @@
         }
         candleSeries.setData(candles);
         volumeSeries.setData(volumes);
-        chart.timeScale().fitContent();
-      } catch (e) {
-        console.error('setCandles', e);
-      }
+        
+        calculateIndicators(currentRaw);
+        applyVisibility();
+        
+        const total = candles.length;
+        if (total > 40) {
+            chart.timeScale().setVisibleLogicalRange({ from: total - 40, to: total });
+        } else {
+            chart.timeScale().fitContent();
+        }
+      } catch (e) {}
     }
 
     function updateLast(jsonStr) {
-      if (!ready) return;
+      if (!ready || currentRaw.length === 0) return;
       try {
         const c = JSON.parse(jsonStr);
         const t = Math.floor(Number(c.t) / 1000);
@@ -99,6 +263,22 @@
           value: c.v || 0,
           color: c.c >= c.o ? 'rgba(38,166,154,0.45)' : 'rgba(239,83,80,0.45)'
         });
+        
+        // update indicators is tricky for live tick without full recalc,
+        // for performance we just recalc the whole array if it's not huge
+        // Or simpler: replace last item in currentRaw and recalc
+        let lastRaw = currentRaw[currentRaw.length - 1];
+        if (Math.floor(Number(lastRaw.t)/1000) === t) {
+             currentRaw[currentRaw.length - 1] = c;
+             if (!window._lastIndCalc || Date.now() - window._lastIndCalc > 1500) {
+                 window._lastIndCalc = Date.now();
+                 calculateIndicators(currentRaw);
+             }
+        } else {
+             currentRaw.push(c);
+             calculateIndicators(currentRaw);
+        }
+        
       } catch (e) {}
     }
 
@@ -114,12 +294,7 @@
         function addLine(price, color, title) {
           if (!price || price <= 0) return;
           const line = candleSeries.createPriceLine({
-            price: price,
-            color: color,
-            lineWidth: 1,
-            lineStyle: LightweightCharts.LineStyle.Dashed,
-            axisLabelVisible: true,
-            title: title
+            price: price, color: color, lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true, title: title
           });
           window._lines.push(line);
         }
@@ -129,7 +304,6 @@
         addLine(lv.sl, '#ef5350', 'SL');
       } catch (e) {}
     }
-
     document.addEventListener('DOMContentLoaded', init);
   </script>
 </body>

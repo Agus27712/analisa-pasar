@@ -147,6 +147,11 @@ fun DetailChartScreen(
         else -> TvTextSecondary
     }
 
+    var showVolume by remember { mutableStateOf(true) }
+    var showEma by remember { mutableStateOf(false) }
+    var showBb by remember { mutableStateOf(false) }
+    var showStochRsi by remember { mutableStateOf(false) }
+
     val scrollState = rememberScrollState()
     val isScrolled by remember { derivedStateOf { scrollState.value > 140 } }
 
@@ -398,24 +403,85 @@ fun DetailChartScreen(
                     border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder)
                 ) {
                     Column(Modifier.padding(8.dp)) {
-                        Text(
-                            "CHART ${selectedTimeframe.label.uppercase()}",
-                            color = TvBlue,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(Modifier.height(4.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "CHART ${selectedTimeframe.label.uppercase()}",
+                                color = TvBlue,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            androidx.compose.foundation.layout.Row(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                val chipColors = androidx.compose.material3.FilterChipDefaults.filterChipColors(
+                                    containerColor = Color.Transparent,
+                                    labelColor = TvTextSecondary,
+                                    selectedContainerColor = TvBlue.copy(alpha = 0.2f),
+                                    selectedLabelColor = TvBlue
+                                )
+                                val chipBorder = androidx.compose.material3.FilterChipDefaults.filterChipBorder(
+                                    borderColor = TvBorder,
+                                    enabled = true,
+                                    selected = false
+                                )
+                                androidx.compose.material3.FilterChip(
+                                    selected = showBb,
+                                    onClick = { showBb = !showBb },
+                                    label = { Text("BB", fontSize = 9.sp, fontWeight = FontWeight.Bold) },
+                                    colors = chipColors,
+                                    border = chipBorder,
+                                    shape = RoundedCornerShape(4.dp),
+                                    modifier = Modifier.height(24.dp)
+                                )
+                                androidx.compose.material3.FilterChip(
+                                    selected = showStochRsi,
+                                    onClick = { showStochRsi = !showStochRsi },
+                                    label = { Text("StochRSI", fontSize = 9.sp, fontWeight = FontWeight.Bold) },
+                                    colors = chipColors,
+                                    border = chipBorder,
+                                    shape = RoundedCornerShape(4.dp),
+                                    modifier = Modifier.height(24.dp)
+                                )
+                                androidx.compose.material3.FilterChip(
+                                    selected = showEma,
+                                    onClick = { showEma = !showEma },
+                                    label = { Text("EMA", fontSize = 9.sp, fontWeight = FontWeight.Bold) },
+                                    colors = chipColors,
+                                    border = chipBorder,
+                                    shape = RoundedCornerShape(4.dp),
+                                    modifier = Modifier.height(24.dp)
+                                )
+                                androidx.compose.material3.FilterChip(
+                                    selected = showVolume,
+                                    onClick = { showVolume = !showVolume },
+                                    label = { Text("Vol", fontSize = 9.sp, fontWeight = FontWeight.Bold) },
+                                    colors = chipColors,
+                                    border = chipBorder,
+                                    shape = RoundedCornerShape(4.dp),
+                                    modifier = Modifier.height(24.dp)
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(8.dp))
                         agu.analys.ui.components.SimpleComposeChart(
                             prices = emptyList(),
                             candles = candles,
                             currentPrice = tick?.price ?: 0.0,
                             isPositiveTrend = (tick?.change24h ?: 0.0) >= 0,
+                            showVolume = showVolume,
+                            showEma = showEma,
+                            showBb = showBb,
+                            showStochRsi = showStochRsi,
                             entryPrice = signal.entryPrice,
                             targetPrice1 = signal.targetPrice1,
                             targetPrice2 = signal.targetPrice2,
                             stopLoss = signal.stopLoss,
                             quoteAsset = pair.quoteAsset,
-                            modifier = Modifier.fillMaxWidth().height(200.dp)
+                            modifier = Modifier.fillMaxWidth().height(agu.analys.ui.components.detail.ChartLayoutDefaults.PortraitHeight)
                         )
                     }
                 }

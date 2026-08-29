@@ -215,8 +215,8 @@ fun WatchlistCoinCard(
                 MiniSparkline(
                     tick = tick,
                     modifier = Modifier
-                        .width(72.dp)
-                        .height(28.dp),
+                        .width(84.dp)
+                        .height(34.dp),
                     lineColor = sparkColor
                 )
 
@@ -234,13 +234,14 @@ fun WatchlistCoinCard(
                             else -> "Trend →"
                         },
                         color = changeColor,
-                        fontSize = 10.sp,
+                        fontSize = 11.5.sp,
                         fontWeight = FontWeight.Bold
                     )
+                    Spacer(Modifier.height(2.dp))
                     Text(
                         text = "Vol ${PriceFormatter.formatVolume(volume, quoteAsset = pair.quoteAsset)}",
                         color = TvTextSecondary,
-                        fontSize = 10.sp,
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.Medium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -252,14 +253,15 @@ fun WatchlistCoinCard(
                         Text(
                             text = "H ${PriceFormatter.formatPrice(tick.high24h, quoteAsset = pair.quoteAsset)}",
                             color = TvGreen.copy(alpha = 0.85f),
-                            fontSize = 9.sp,
+                            fontSize = 10.5.sp,
                             fontWeight = FontWeight.Medium,
                             maxLines = 1
                         )
+                        Spacer(Modifier.height(2.dp))
                         Text(
                             text = "L ${PriceFormatter.formatPrice(tick.low24h, quoteAsset = pair.quoteAsset)}",
                             color = TvRed.copy(alpha = 0.85f),
-                            fontSize = 9.sp,
+                            fontSize = 10.5.sp,
                             fontWeight = FontWeight.Medium,
                             maxLines = 1
                         )

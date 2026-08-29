@@ -97,17 +97,5 @@ fun LandscapeChartScreen(
                 )
             }
         }
-
-        Text(
-            text = "‹  ${pair.baseAsset}/${pair.quoteAsset} · ${timeframe.label}  ·  Indodax TV",
-            color = Color.White,
-            fontSize = 12.sp,
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(start = 10.dp, top = 8.dp)
-                .background(Color.Black.copy(alpha = 0.55f))
-                .padding(horizontal = 10.dp, vertical = 5.dp)
-                .clickable(onClick = onBackToDetail)
-        )
     }
 }

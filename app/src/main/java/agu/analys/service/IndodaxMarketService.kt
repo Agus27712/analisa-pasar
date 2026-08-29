@@ -326,7 +326,7 @@ object IndodaxMarketService {
                 val close = row.optDouble("Close", 0.0)
                 if (open <= 0 || high <= 0 || low <= 0 || close <= 0) continue
                 val timeSec = row.optLong("Time", 0L)
-                if (timeSec <= 0 || timeSec >= currentCandleStart) continue
+                if (timeSec <= 0) continue
                 result += CandleBar(
                     timeSec * 1000L, open, high, low, close,
                     row.optString("Volume", "0").toDoubleOrNull() ?: 0.0

@@ -40,12 +40,12 @@ fun MiniSparkline(
         drawPath(
             path = path,
             color = lineColor,
-            style = Stroke(width = 2.2f, cap = StrokeCap.Round)
+            style = Stroke(width = 2.6f, cap = StrokeCap.Round)
         )
         val last = points.last()
         val lastX = pad + (w - 2 * pad)
         val lastY = pad + (h - 2 * pad) * (1f - ((last - minV) / range).toFloat())
-        drawCircle(color = lineColor, radius = 3.2f, center = Offset(lastX, lastY))
+        drawCircle(color = lineColor, radius = 3.8f, center = Offset(lastX, lastY))
     }
 }
 
