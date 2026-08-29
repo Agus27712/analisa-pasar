@@ -219,10 +219,24 @@ class SpotPositionStore(context: Context) {
 
     fun setTrailingStop(symbol: String, enabled: Boolean, trailingPercent: Double, referencePrice: Double = 0.0) {
         val key = normalize(symbol)
+        if (!enabled) {
+            // Matikan trailing tanpa menyimpan peak lama (hindari false trigger saat ON lagi)
+            prefs.edit()
+                .putBoolean("${key}_trailing_enabled", false)
+                .putBoolean("${key}_trailing_triggered", false)
+                .apply()
+            return
+        }
+        // Saat ON: selalu arm dari harga live (referencePrice), reset peak & triggered
         val current = get(symbol)
-        val peak = if (current.peakPrice > 0.0) current.peakPrice else if (current.entryPrice > 0.0) current.entryPrice else referencePrice
+        val peak = when {
+            referencePrice > 0.0 -> referencePrice
+            current.entryPrice > 0.0 -> current.entryPrice
+            current.peakPrice > 0.0 -> current.peakPrice
+            else -> 0.0
+        }
         prefs.edit()
-            .putBoolean("${key}_trailing_enabled", enabled)
+            .putBoolean("${key}_trailing_enabled", true)
             .putString("${key}_trailing_pct", trailingPercent.coerceAtLeast(0.5).toString())
             .putString("${key}_peak", peak.toString())
             .putBoolean("${key}_trailing_triggered", false)
