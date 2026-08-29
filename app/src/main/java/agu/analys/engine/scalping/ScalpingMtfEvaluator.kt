@@ -76,6 +76,7 @@ object ScalpingMtfEvaluator {
 
         val structureH1 = MarketStructureAnalyzer.analyze(h1Candles.takeLast(60))
         val structure15 = MarketStructureAnalyzer.analyze(m15Candles.takeLast(60))
+        val structure1M = MarketStructureAnalyzer.analyze(m1Candles.takeLast(40))
 
         val h1GoldenCross = goldenCross(h1Candles, 20, 50)
         val m15GoldenCross = goldenCross(m15Candles, 20, 50)
@@ -85,6 +86,7 @@ object ScalpingMtfEvaluator {
             isSidewaysRegime -> 1.35
             isAggressive -> 0.85
             sensitivity == ScalpingSensitivity.CONSERVATIVE -> 1.10
+            isDynamic && regime.contains("TREND") -> 0.90 // P1.3 DYNAMIC_AUTO adaptive threshold
             else -> 1.00
         }
 
@@ -92,6 +94,7 @@ object ScalpingMtfEvaluator {
             isSidewaysRegime -> 1.35
             isAggressive -> 1.15
             sensitivity == ScalpingSensitivity.CONSERVATIVE -> 1.25
+            isDynamic && regime.contains("TREND") -> 1.10 // P1.3 DYNAMIC_AUTO adaptive target reward
             else -> 1.20
         }
 
@@ -168,6 +171,7 @@ object ScalpingMtfEvaluator {
         }
 
         // --- Historical / data-quality gate (proxy validasi) ---
+        val structure1MAligned = structure1M.trend == "Bullish structure"
         val qualityPenalty = historicalQualityPenalty(
             h1Size = h1Candles.size,
             m15Size = m15Candles.size,
@@ -176,6 +180,7 @@ object ScalpingMtfEvaluator {
             setupLong = setupLong,
             triggerLong = triggerLong,
             structureAligned = structureH1.trend == "Bullish structure" && structure15.trend == "Bullish structure",
+            structure1MAligned = structure1MAligned,
             volumeOk = volumeOk
         )
         score = (score - qualityPenalty).coerceIn(0, 100)
@@ -235,6 +240,20 @@ object ScalpingMtfEvaluator {
         if (qualityPenalty > 0) reasons += "Quality gate −$qualityPenalty."
         if (extended) reasons += "RSI extended — tunggu pullback."
         if (extremeVolatility) reasons += "ATR 1M ≥ 4%; entry ditahan."
+
+        // P2.1 precise blockage telemetry
+        val blockedReasons = mutableListOf<String>()
+        if (!biasLong) blockedReasons += "Bias 1H"
+        if (!setupLong) blockedReasons += "Setup 15M"
+        if (!triggerLong) blockedReasons += "Trigger 1M"
+        if (extended) blockedReasons += "RSI Extended"
+        if (extremeVolatility) blockedReasons += "Volatilitas Ekstrem"
+        if (!feeOk) blockedReasons += "Fee/Slippage"
+        if (!qualityOk) blockedReasons += "Quality Gate"
+        if (blockedReasons.isNotEmpty() && !ready) {
+            reasons += "Dihalang oleh: ${blockedReasons.joinToString(", ")}"
+        }
+
         if (!ready && reasons.size < 6) reasons += "Belum BUY READY."
 
         val entryPriceOk = ready && price > 0.0
@@ -335,6 +354,7 @@ object ScalpingMtfEvaluator {
         setupLong: Boolean,
         triggerLong: Boolean,
         structureAligned: Boolean,
+        structure1MAligned: Boolean,
         volumeOk: Boolean
     ): Int {
         var p = 0
@@ -345,6 +365,7 @@ object ScalpingMtfEvaluator {
         if (legsOk == 1) p += 12
         else if (legsOk == 2) p += 6
         if (!structureAligned && biasLong) p += 4
+        if (!structure1MAligned && triggerLong) p += 3
         if (!volumeOk) p += 5
         return p.coerceAtMost(30)
     }
@@ -363,21 +384,51 @@ object ScalpingMtfEvaluator {
     )
 
     private fun analyze(history: List<CandleBar>, isAggressive: Boolean = false): Frame {
-        val closes = history.map { it.close }
-        val price = closes.last()
-        val ema20 = IndicatorMath.ema(closes, 20)
-        val ema50 = IndicatorMath.ema(closes, 50)
-        val macd = IndicatorMath.macdSeries(closes, 12, 26, 9).last()
-        val atr = IndicatorMath.atr(history, 14)
-        val rsi = IndicatorMath.rsi(history, 14)
+        // P0.3: Separate closed candles (stable indicators) and forming candle (last candle)
+        val closedCandles = history.dropLast(1)
+        val closedCloses = closedCandles.map { it.close }
+
+        val ema20 = IndicatorMath.ema(closedCloses, 20)
+        val ema50 = IndicatorMath.ema(closedCloses, 50)
+        val macd = IndicatorMath.macdSeries(closedCloses, 12, 26, 9).last()
+        val atr = IndicatorMath.atr(closedCandles, 14)
+        val rsi = IndicatorMath.rsi(closedCandles, 14)
+
+        // Forming candle / latest live state
+        val lastCandle = history.last()
+        val price = lastCandle.close
+
         val windowCount = if (isAggressive) 16 else 6
-        val actualWindow = minOf(windowCount, history.size)
-        val avgVolume = history.takeLast(actualWindow).dropLast(1).map { it.volume }.average()
-        val volumeRatio = if (avgVolume > 0) history.last().volume / avgVolume else 0.0
-        val prev = history[history.lastIndex - 1]
-        val breakoutUp = history.last().close > prev.high
-        val retestUp = history.last().low <= ema20 && price > ema20
-        val base = closes[closes.lastIndex - minOf(4, closes.lastIndex)]
+        val actualWindow = minOf(windowCount, closedCandles.size)
+        val avgVolume = closedCandles.takeLast(actualWindow).map { it.volume }.average()
+        val volumeRatio = if (avgVolume > 0) lastCandle.volume / avgVolume else 0.0
+
+        // P0.4 Trigger event Memory and TTL window
+        // Check recent 4 candles to see if breakout or retest is active
+        var breakoutUp = false
+        var retestUp = false
+        val ttlWindow = minOf(4, history.size)
+        val recentSegment = history.takeLast(ttlWindow)
+        for (i in 1 until recentSegment.size) {
+            val curr = recentSegment[i]
+            val prev = recentSegment[i - 1]
+            // Breakout criteria
+            if (curr.close > prev.high && curr.high >= prev.high) {
+                val invalidated = recentSegment.drop(i + 1).any { it.close < prev.low }
+                if (!invalidated) {
+                    breakoutUp = true
+                }
+            }
+            // Retest criteria
+            if (curr.low <= ema20 && curr.close > ema20 && prev.close >= ema20) {
+                val invalidated = recentSegment.drop(i + 1).any { it.close < ema20 * 0.999 }
+                if (!invalidated) {
+                    retestUp = true
+                }
+            }
+        }
+
+        val base = closedCloses[closedCloses.lastIndex - minOf(4, closedCloses.lastIndex)]
         val momentum = if (base > 0) (price - base) / base else 0.0
         return Frame(price, rsi, ema20, ema50, macd.first - macd.second, atr, volumeRatio, breakoutUp, retestUp, momentum)
     }
