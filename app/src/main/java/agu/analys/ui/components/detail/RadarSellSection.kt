@@ -192,7 +192,8 @@ fun RadarSellSection(
             onManualBuyClick = { showManualDialog = true }
         )
 
-        if (effectiveBuyPrice > 0.0 || availableCoin > 0.0) {
+        // AUTO TP1/TP2 SERVER dihapus dari tab jual REAL — hanya mode simulasi
+        if (!isRealMode && (effectiveBuyPrice > 0.0 || availableCoin > 0.0)) {
             Spacer(Modifier.height(8.dp))
             SellTpSlSection(
                 isRealMode = isRealMode,
@@ -231,6 +232,21 @@ fun RadarSellSection(
                 }
             )
 
+            Spacer(Modifier.height(8.dp))
+            SellTrailingSection(
+                isTrailingActive = isTrailingActive,
+                onTrailingActiveChanged = { enabled -> onSetTrailingStop?.invoke(enabled, trailingPercent) },
+                isTrailingTriggered = isTrailingTriggered,
+                trailingPercent = trailingPercent,
+                onSetTrailingPercent = { pct -> onSetTrailingStop?.invoke(true, pct) },
+                peakPrice = peakPrice,
+                trailingStopPrice = trailingStopPrice,
+                quoteAsset = quoteAsset
+            )
+        }
+
+        // Trailing tetap tersedia di mode REAL (tanpa blok Auto TP server)
+        if (isRealMode && (effectiveBuyPrice > 0.0 || availableCoin > 0.0)) {
             Spacer(Modifier.height(8.dp))
             SellTrailingSection(
                 isTrailingActive = isTrailingActive,
