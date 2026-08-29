@@ -53,6 +53,10 @@ class SimulationCoordinator(private val store: SimulationTradeStore) {
             currentMarketPrice = execPrice
         )
         refresh()
+        // P2.2 Lifecycle
+        if (result is agu.analys.trading.SimulationOrderResult.Success) {
+            agu.analys.engine.scalping.SignalLifecycleManager.markTriggered(pair.symbol)
+        }
         return result
     }
 

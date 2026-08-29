@@ -38,6 +38,7 @@ object ScalpingMtfEvaluator {
         h1Candles: List<CandleBar>,
         m15Candles: List<CandleBar>,
         m1Candles: List<CandleBar>,
+        formingVolume: Double = 0.0,
         fees: TradingFeeConfig = TradingFeeConfig(),
         sensitivity: ScalpingSensitivity = ScalpingSensitivity.BALANCED
     ): Result? {
@@ -45,9 +46,9 @@ object ScalpingMtfEvaluator {
 
         val isDynamic = sensitivity == ScalpingSensitivity.DYNAMIC_AUTO
         var isAggressive = sensitivity == ScalpingSensitivity.AGGRESSIVE
-        var h1 = analyze(h1Candles, isAggressive = isAggressive)
-        var m15 = analyze(m15Candles, isAggressive = isAggressive)
-        var m1 = analyze(m1Candles, isAggressive = isAggressive)
+        var h1 = analyze(h1Candles, price, 0.0, isAggressive = isAggressive)
+        var m15 = analyze(m15Candles, price, 0.0, isAggressive = isAggressive)
+        var m1 = analyze(m1Candles, price, formingVolume, isAggressive = isAggressive)
 
         // 1. Detect Market Regime
         val bbUpper1M = m1.ema20 + (2.0 * m1.atr)
@@ -66,9 +67,9 @@ object ScalpingMtfEvaluator {
 
         if (isDynamic && (regime.contains("Volatile") || regime.contains("TREND"))) {
             isAggressive = true
-            h1 = analyze(h1Candles, isAggressive = true)
-            m15 = analyze(m15Candles, isAggressive = true)
-            m1 = analyze(m1Candles, isAggressive = true)
+            h1 = analyze(h1Candles, price, 0.0, isAggressive = true)
+            m15 = analyze(m15Candles, price, 0.0, isAggressive = true)
+            m1 = analyze(m1Candles, price, formingVolume, isAggressive = true)
         }
 
         // 2. Walk-Forward Validation
@@ -76,7 +77,7 @@ object ScalpingMtfEvaluator {
 
         val structureH1 = MarketStructureAnalyzer.analyze(h1Candles.takeLast(60))
         val structure15 = MarketStructureAnalyzer.analyze(m15Candles.takeLast(60))
-        val structure1M = MarketStructureAnalyzer.analyze(m1Candles.takeLast(40))
+        val micro1M = MarketStructureAnalyzer.analyzeMicro(m1Candles)
 
         val h1GoldenCross = goldenCross(h1Candles, 20, 50)
         val m15GoldenCross = goldenCross(m15Candles, 20, 50)
@@ -114,11 +115,11 @@ object ScalpingMtfEvaluator {
 
         val priceAboveEma20 = m1.price >= m1.ema20 * 0.998 || m1.price > m1.ema50
         val rsiEntryZone = if (isAggressive) m1.rsi in 32.0..72.0 else m1.rsi in 35.0..68.0
-        val momentumLong = m1.macdHist >= -0.0001 || m1.price > m1.ema20 || m1.retestUp || m1.breakoutUp
+        val momentumLong = m1.macdHist >= -0.0001 || m1.price > m1.ema20 || m1.retestUp || m1.breakoutUp || micro1M.hasBullishBOS || micro1M.hasBullishSweep
         val volumeOk = m1.volumeRatio >= minVolRatio
 
         val triggerScore = when {
-            isAggressive && m1.price > m1.ema20 && (volumeOk || m1.retestUp || m1.breakoutUp) -> 20
+            isAggressive && m1.price > m1.ema20 && (volumeOk || m1.retestUp || m1.breakoutUp || micro1M.hasBullishBOS) -> 20
             isAggressive && m1.price > m1.ema20 -> 12
             isAggressive && m1.price > m1.ema50 -> 5
             else -> 0
@@ -126,7 +127,7 @@ object ScalpingMtfEvaluator {
         val triggerLong = if (isAggressive) {
             (m1.price > m1.ema50 || m1.price > m1.ema20) && rsiEntryZone && (momentumLong || triggerScore >= 5)
         } else {
-            priceAboveEma20 && rsiEntryZone && (momentumLong || volumeOk || m1.retestUp || m1.breakoutUp)
+            priceAboveEma20 && rsiEntryZone && (momentumLong || volumeOk || m1.retestUp || m1.breakoutUp || micro1M.hasBullishBOS)
         }
 
         val extended = if (isAggressive) {
@@ -147,18 +148,22 @@ object ScalpingMtfEvaluator {
             if (rsiEntryZone) score += 10
             if (momentumLong) score += 8
             if (m1.breakoutUp || m1.retestUp) score += 5
+            if (micro1M.hasBullishBOS) score += 8
+            if (micro1M.hasBullishSweep) score += 10
         } else {
             if (priceAboveEma20) score += 10
             if (rsiEntryZone) score += 10
             if (momentumLong) score += 8
             if (volumeOk) score += 7
             if (m1.breakoutUp || m1.retestUp) score += 5
+            if (micro1M.hasBullishBOS) score += 6
+            if (micro1M.hasBullishSweep) score += 8
         }
         if (h1GoldenCross) score += 5
 
         // Penalize score if in sideways regime to avoid overfit
         if (isSidewaysRegime) {
-            if (m1.breakoutUp && volumeOk) {
+            if ((m1.breakoutUp || micro1M.hasBullishBOS) && volumeOk) {
                 score += 10 // P0.2 Breakout context is rewarded!
             } else {
                 score -= 15
@@ -171,7 +176,7 @@ object ScalpingMtfEvaluator {
         }
 
         // --- Historical / data-quality gate (proxy validasi) ---
-        val structure1MAligned = structure1M.trend == "Bullish structure"
+        val structure1MAligned = micro1M.hasBullishBOS || micro1M.hasBullishSweep
         val qualityPenalty = historicalQualityPenalty(
             h1Size = h1Candles.size,
             m15Size = m15Candles.size,
@@ -383,9 +388,9 @@ object ScalpingMtfEvaluator {
         val momentum: Double
     )
 
-    private fun analyze(history: List<CandleBar>, isAggressive: Boolean = false): Frame {
-        // P0.3: Separate closed candles (stable indicators) and forming candle (last candle)
-        val closedCandles = history.dropLast(1)
+    private fun analyze(history: List<CandleBar>, price: Double, formingVolume: Double, isAggressive: Boolean = false): Frame {
+        // P0.3: History is strictly closed candles (stable indicators).
+        val closedCandles = history
         val closedCloses = closedCandles.map { it.close }
 
         val ema20 = IndicatorMath.ema(closedCloses, 20)
@@ -394,14 +399,11 @@ object ScalpingMtfEvaluator {
         val atr = IndicatorMath.atr(closedCandles, 14)
         val rsi = IndicatorMath.rsi(closedCandles, 14)
 
-        // Forming candle / latest live state
-        val lastCandle = history.last()
-        val price = lastCandle.close
-
+        // Evaluate forming volume relative to historical closed volume
         val windowCount = if (isAggressive) 16 else 6
         val actualWindow = minOf(windowCount, closedCandles.size)
         val avgVolume = closedCandles.takeLast(actualWindow).map { it.volume }.average()
-        val volumeRatio = if (avgVolume > 0) lastCandle.volume / avgVolume else 0.0
+        val volumeRatio = if (avgVolume > 0 && formingVolume > 0) formingVolume / avgVolume else 1.0
 
         // P0.4 Trigger event Memory and TTL window
         // Check recent 4 candles to see if breakout or retest is active

@@ -20,7 +20,94 @@ data class MarketStructureSnapshot(
     val dataEnough: Boolean
 )
 
+data class MicroStructureSnapshot(
+    val trend: String,
+    val lastSwingHigh: Double?,
+    val lastSwingLow: Double?,
+    val hasBullishBOS: Boolean,
+    val hasBearishBOS: Boolean,
+    val hasBullishSweep: Boolean,
+    val hasBearishSweep: Boolean,
+    val explanation: String
+)
+
 object MarketStructureAnalyzer {
+    fun analyzeMicro(candles: List<CandleBar>): MicroStructureSnapshot {
+        if (candles.size < 5) {
+            return MicroStructureSnapshot(
+                trend = "Wait", lastSwingHigh = null, lastSwingLow = null,
+                hasBullishBOS = false, hasBearishBOS = false,
+                hasBullishSweep = false, hasBearishSweep = false,
+                explanation = "Data kurang untuk micro-structure"
+            )
+        }
+        
+        val recent = candles.takeLast(40)
+        val swingHighs = mutableListOf<Double>()
+        val swingLows = mutableListOf<Double>()
+        
+        // 3-candle swing detection
+        for (i in 1 until recent.lastIndex) {
+            val c = recent[i]
+            val prev = recent[i - 1]
+            val next = recent[i + 1]
+            
+            if (c.high > prev.high && c.high > next.high) swingHighs += c.high
+            if (c.low < prev.low && c.low < next.low) swingLows += c.low
+        }
+        
+        val lastSwingHigh = swingHighs.lastOrNull()
+        val lastSwingLow = swingLows.lastOrNull()
+        
+        var hasBullishBOS = false
+        var hasBearishBOS = false
+        var hasBullishSweep = false
+        var hasBearishSweep = false
+        
+        val checkWindow = recent.takeLast(3)
+        
+        if (lastSwingHigh != null) {
+            hasBullishBOS = checkWindow.any { it.close > lastSwingHigh }
+            if (!hasBullishBOS) {
+                hasBearishSweep = checkWindow.any { it.high > lastSwingHigh && it.close <= lastSwingHigh }
+            }
+        }
+        
+        if (lastSwingLow != null) {
+            hasBearishBOS = checkWindow.any { it.close < lastSwingLow }
+            if (!hasBearishBOS) {
+                hasBullishSweep = checkWindow.any { it.low < lastSwingLow && it.close >= lastSwingLow }
+            }
+        }
+        
+        val trend = when {
+            hasBullishBOS -> "Bullish Micro"
+            hasBearishBOS -> "Bearish Micro"
+            hasBullishSweep -> "Sweep Low (Reversal Up)"
+            hasBearishSweep -> "Sweep High (Reversal Down)"
+            else -> "Ranging Micro"
+        }
+        
+        val explanation = when (trend) {
+            "Bullish Micro" -> "Harga close menembus micro resistance (BOS). Tren naik jangka pendek."
+            "Bearish Micro" -> "Harga close menembus micro support (BOS). Tren turun jangka pendek."
+            "Sweep Low (Reversal Up)" -> "Jebakan ekor di support (Liquidity Sweep). Potensi pantulan naik."
+            "Sweep High (Reversal Down)" -> "Jebakan ekor di resistance (Liquidity Sweep). Potensi pantulan turun."
+            else -> "Konsolidasi di dalam micro-swing."
+        }
+        
+        return MicroStructureSnapshot(
+            trend = trend,
+            lastSwingHigh = lastSwingHigh,
+            lastSwingLow = lastSwingLow,
+            hasBullishBOS = hasBullishBOS,
+            hasBearishBOS = hasBearishBOS,
+            hasBullishSweep = hasBullishSweep,
+            hasBearishSweep = hasBearishSweep,
+            explanation = explanation
+        )
+    }
+
     fun analyze(candles: List<CandleBar>): MarketStructureSnapshot {
         if (candles.size < 12) {
             return MarketStructureSnapshot(

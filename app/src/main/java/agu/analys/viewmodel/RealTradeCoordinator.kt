@@ -604,6 +604,9 @@ class RealTradeCoordinator(
             }
 
             if (buyResult.success) {
+                // P2.2 Lifecycle
+                agu.analys.engine.scalping.SignalLifecycleManager.markTriggered(pair)
+                
                 prefs.rememberHistoryBase(baseFromPair(pair))
 
                 if (type.equals("buy", ignoreCase = true) && autoLimitSellPrice1 > price) {

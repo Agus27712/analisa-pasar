@@ -11,6 +11,16 @@ enum class ScalpingStage(val displayName: String) {
     STRONG_ENTRY("ENTRY KUAT")
 }
 
+enum class LifecycleState(val displayName: String) {
+    IDLE("IDLE"),
+    DETECTED("TERDETEKSI"),
+    CONFIRMING("KONFIRMASI"),
+    READY("SIAP ENTRY"),
+    TRIGGERED("TERPICU"),
+    EXPIRED("KEDALUWARSA"),
+    INVALIDATED("BATAL")
+}
+
 /** Status satu leg MTF untuk UI — diisi engine, bukan dihitung ulang di Compose. */
 enum class MtfLegStatus {
     OK,
@@ -113,6 +123,7 @@ data class AISignalState(
     val timestamp: Long = System.currentTimeMillis(),
     val marketSymbol: String = "",
     val scalpingStage: ScalpingStage = ScalpingStage.HOLD,
+    val lifecycleState: LifecycleState = LifecycleState.IDLE,
     /** Structured MTF — diisi evaluator scalping. Default kosong untuk swing/offline. */
     val mtf: ScalpingMtfSnapshot = ScalpingMtfSnapshot(),
     /** Info mode offline & backtest walk-forward validation */

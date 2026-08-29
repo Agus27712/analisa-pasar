@@ -53,52 +53,23 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
     private val _indicators = MutableStateFlow(TechnicalIndicators())
     val indicators: StateFlow<TechnicalIndicators> = _indicators.asStateFlow()
 
+    var currentFormingVolume: Double = 0.0
+
     fun onTickUpdate(tick: MarketTick) {
         if (tick.price <= 0.0) return
         currentTick = tick
 
-        // Synthetic live 1M candle update from tick
-        if (m1Candles.isNotEmpty()) {
-            val lastM1 = m1Candles.last()
-            val now = System.currentTimeMillis()
-            val updatedLast = lastM1.copy(
-                high = maxOf(lastM1.high, tick.price),
-                low = minOf(lastLastLow(lastM1.low, tick.price)),
-                close = tick.price
-            )
-            m1Candles = (m1Candles.dropLast(1) + updatedLast).takeLast(250)
-            if (strategyMode == StrategyMode.SCALPING) {
-                runScalping()
+        when (strategyMode) {
+            StrategyMode.SCALPING -> {
+                if (m1Candles.isNotEmpty()) runScalping()
             }
-        }
-
-        // Synthetic live 15M candle update for SECOND_WAVE
-        if (strategyMode == StrategyMode.SECOND_WAVE && m15Candles.isNotEmpty()) {
-            val lastM15 = m15Candles.last()
-            val updatedLast = lastM15.copy(
-                high = maxOf(lastM15.high, tick.price),
-                low = if (lastM15.low <= 0.0) tick.price else minOf(lastM15.low, tick.price),
-                close = tick.price
-            )
-            m15Candles = (m15Candles.dropLast(1) + updatedLast).takeLast(250)
-            runSecondWave()
-        }
-
-        // Synthetic live chart timeframe candle update for SWING
-        if (strategyMode == StrategyMode.SWING) {
-            val hasCandles = synchronized(candles) { candles.isNotEmpty() }
-            if (hasCandles) {
-                synchronized(candles) {
-                    val lastCandle = candles.last()
-                    val updatedLast = lastCandle.copy(
-                        high = maxOf(lastCandle.high, tick.price),
-                        low = if (lastCandle.low <= 0.0) tick.price else minOf(lastCandle.low, tick.price),
-                        close = tick.price
-                    )
-                    candles[candles.lastIndex] = updatedLast
-                }
+            StrategyMode.SECOND_WAVE -> {
+                if (m15Candles.isNotEmpty()) runSecondWave()
             }
-            runSwing()
+            StrategyMode.SWING -> {
+                val hasCandles = synchronized(candles) { candles.isNotEmpty() }
+                if (hasCandles) runSwing()
+            }
         }
 
         refreshScalpingTimeframesIfDue(tick.symbol)
@@ -178,7 +149,7 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
                     val m15Job = async { IndodaxMarketService.fetchCandles(symbol, Timeframe.M15, 200) }
                     val h4 = h4Job.await(); val h1 = h1Job.await(); val m15 = m15Job.await()
                     if (h4.size >= 20 && h1.size >= 20 && m15.size >= 20 && currentTick?.symbol == symbol) {
-                        h4Candles = h4; h1Candles = h1; m15Candles = m15
+                        h4Candles = h4.dropLast(1); h1Candles = h1.dropLast(1); m15Candles = m15.dropLast(1)
                         runSecondWave()
                     }
                 }
@@ -188,8 +159,8 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
                     val m1Job = async { IndodaxMarketService.fetchCandles(symbol, Timeframe.M1, 250) }
                     val h1 = h1Job.await(); val m15 = m15Job.await(); val m1 = m1Job.await()
                     if (h1.size >= 55 && m15.size >= 55 && m1.size >= 55 && currentTick?.symbol == symbol) {
-                        h1Candles = h1; m15Candles = m15
-                        m1Candles = m1
+                        h1Candles = h1.dropLast(1); m15Candles = m15.dropLast(1)
+                        m1Candles = m1.dropLast(1)
                         runScalping()
                     }
                 }
@@ -197,10 +168,11 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
                     val h1Job = async { IndodaxMarketService.fetchCandles(symbol, Timeframe.H1, 200) }
                     val h1 = h1Job.await()
                     if (h1.isNotEmpty() && currentTick?.symbol == symbol) {
+                        val closedH1 = h1.dropLast(1)
                         synchronized(candles) {
-                            if (candles.isEmpty() || candles.size < h1.size) {
+                            if (candles.isEmpty() || candles.size < closedH1.size) {
                                 candles.clear()
-                                candles.addAll(h1)
+                                candles.addAll(closedH1)
                             }
                         }
                         runSwing()
@@ -213,9 +185,16 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
     private fun runScalping() {
         val tick = currentTick ?: return
         if (h1Candles.size < 55 || m15Candles.size < 55 || m1Candles.size < 55) return
-        val result = ScalpingMtfEvaluator.evaluate(tick.price, h1Candles, m15Candles, m1Candles, tradingFees, scalpingSensitivity) ?: return
+        val result = ScalpingMtfEvaluator.evaluate(tick.price, h1Candles, m15Candles, m1Candles, currentFormingVolume, tradingFees, scalpingSensitivity) ?: return
+        
+        // P2.2 Signal Lifecycle Tracking
+        val tracked = agu.analys.engine.scalping.SignalLifecycleManager.process(tick.symbol, tick.price, result.signal)
+        val finalSignal = (tracked.activeSignalState ?: result.signal).copy(
+            lifecycleState = tracked.state
+        )
+        
         _indicators.value = result.indicators
-        _signalState.value = result.signal
+        _signalState.value = finalSignal
     }
 
     private fun runSecondWave() {

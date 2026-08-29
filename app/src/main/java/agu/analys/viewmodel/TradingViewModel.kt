@@ -124,8 +124,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     }
 
     private fun handleWebSocketCandle(candle: CandleBar) {
-        // WS synthetic M1 candles are not needed anymore as engine pulls its own data via refreshMtfData
-        // and updates its live candle via onTickUpdate.
+        engine.currentFormingVolume = candle.volume
     }
 
     private val _marketDataSource = MutableStateFlow(prefs.marketDataSource)
