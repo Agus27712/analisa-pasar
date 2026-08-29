@@ -623,7 +623,8 @@ fun DetailChartScreen(
                 indicators = indicators,
                 signal = signal,
                 strategyMode = strategyMode,
-                scalping = isScalping
+                scalping = isScalping,
+                onRetry = { viewModel.retryConnection() }
             )
 
             Spacer(modifier.height(8.dp))

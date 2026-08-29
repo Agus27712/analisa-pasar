@@ -30,7 +30,8 @@ fun MarketConditionCard(
     indicators: TechnicalIndicators,
     signal: AISignalState,
     strategyMode: StrategyMode = StrategyMode.SCALPING,
-    scalping: Boolean = strategyMode == StrategyMode.SCALPING
+    scalping: Boolean = strategyMode == StrategyMode.SCALPING,
+    onRetry: (() -> Unit)? = null
 ) {
     if (strategyMode == StrategyMode.SCALPING || (strategyMode == StrategyMode.SECOND_WAVE && scalping)) {
         val stage = signal.scalpingStage
@@ -48,6 +49,11 @@ fun MarketConditionCard(
             ScalpingStage.HOLD -> "TAHAN / TUNGGU"
         }
         val mtf = signal.reasoning.filter { it.startsWith("1H:") || it.startsWith("15M:") || it.startsWith("1M:") }
+        val loadedTfs = mutableListOf<String>()
+        if (mtf.any { it.startsWith("1H:") }) loadedTfs.add("1H")
+        if (mtf.any { it.startsWith("15M:") }) loadedTfs.add("15M")
+        if (mtf.any { it.startsWith("1M:") }) loadedTfs.add("1M")
+
         AnalysisCard {
             SectionTitle(if (strategyMode == StrategyMode.SECOND_WAVE) "KONDISI SECOND-WAVE" else "KONDISI SCALPING", Icons.Default.TrendingUp)
             Spacer(Modifier.height(7.dp))
@@ -73,8 +79,17 @@ fun MarketConditionCard(
                 color = TvTextPrimary, fontSize = 14.sp, lineHeight = 20.sp
             )
             Spacer(Modifier.height(9.dp))
-            mtf.forEach { Text(it, color = TvTextSecondary, fontSize = 12.sp, modifier = Modifier.padding(vertical = 2.dp)) }
-            if (mtf.isEmpty()) Text("Data MTF belum lengkap.", color = TvTextSecondary, fontSize = 12.sp)
+            if (mtf.isNotEmpty()) {
+                mtf.forEach { Text(it, color = TvTextSecondary, fontSize = 12.sp, modifier = Modifier.padding(vertical = 2.dp)) }
+            }
+            if (mtf.isEmpty() || loadedTfs.size < 3) {
+                Spacer(Modifier.height(8.dp))
+                MtfIncompleteContent(
+                    loadedTimeframes = loadedTfs,
+                    message = if (mtf.isEmpty()) "Data MTF belum lengkap. Sedang menyelaraskan riwayat candle..." else "Sebagian data MTF belum lengkap (${loadedTfs.size}/3 timeframe siap).",
+                    onRetry = onRetry
+                )
+            }
         }
     } else {
         // Kondisi Pasar / Swing = structure + indicators ONLY
