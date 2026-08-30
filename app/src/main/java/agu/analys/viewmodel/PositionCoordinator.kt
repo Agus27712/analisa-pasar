@@ -44,6 +44,11 @@ class PositionCoordinator(
         refreshPosition(symbol)
     }
 
+    fun setTrailingOrderIdAndUpdateTime(symbol: String, orderId: String?, updateTime: Long) {
+        positionStore.setTrailingOrderIdAndUpdateTime(symbol, orderId, updateTime)
+        refreshPosition(symbol)
+    }
+
     fun setAutoSell(symbol: String, enabled: Boolean, tp1: Double, tp1P: Double, tp2: Double, tp2P: Double, sl: Double) {
         positionStore.setAutoSellParams(symbol, enabled, tp1, tp1P, tp2, tp2P, sl)
         refreshPosition(symbol)

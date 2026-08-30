@@ -80,7 +80,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         engine = engine,
         simCoordinator = simCoordinator,
         onPriceUpdate = { symbol, price, rsi -> 
-            positionCoordinator.checkAlertsAndTrailing(symbol, price, rsi)
+            this@TradingViewModel.checkAlertsAndTrailing(symbol, price, rsi)
             agu.analys.service.TradingForegroundService.updatePrice(getApplication(), symbol, price)
         }
     )

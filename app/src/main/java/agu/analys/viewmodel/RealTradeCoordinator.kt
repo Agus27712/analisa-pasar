@@ -142,6 +142,7 @@ class RealTradeCoordinator(
                 _realIndodaxBalance.value = balances.total
                 _realFreeBalance.value = balances.free
                 _realLockedBalance.value = balances.locked
+                prefs.saveRealBalance(balances.total)
                 delay(INTER_REQUEST_DELAY_MS)
                 if (fetchRealOpenOrdersSafe(apiKey, secretKey, balances)) {
                     delay(INTER_REQUEST_DELAY_MS)

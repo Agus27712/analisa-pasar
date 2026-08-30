@@ -14,6 +14,7 @@ import agu.analys.trading.SpotPositionStore
 import agu.analys.trading.SimulationTradeStore
 import agu.analys.model.TradingPair
 import agu.analys.util.PriceFormatter
+import agu.analys.util.AppPreferences
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 
@@ -101,11 +102,26 @@ class TradingForegroundService : Service() {
         // 1. Check Real Spot positions (SpotPositionStore manual/real tracking)
         val realHoldings = mutableListOf<String>()
         var realProfitCount = 0
+
+        val prefs = AppPreferences(context)
+        val savedRealBalance = if (prefs.hasIndodaxCredentials()) prefs.getSavedRealBalance() else null
         
         for (pair in TradingPair.POPULAR_INDODAX_PAIRS) {
             val pos = positionStore.get(pair.symbol)
             if (pos.isHolding && pos.quantity > 0.0) {
                 val currentPrice = livePrices[pair.symbol.uppercase()] ?: pos.entryPrice
+                
+                // Cross-reference with real balance if credentials and cache exist
+                if (savedRealBalance != null) {
+                    val actualQty = savedRealBalance[pair.baseAsset.lowercase()] ?: 0.0
+                    val estimatedValueIdr = actualQty * currentPrice
+                    if (actualQty <= 0.0001 || estimatedValueIdr < 5000.0) {
+                        // Automatically clear the manual position tracker for this coin
+                        positionStore.markSold(pair.symbol)
+                        continue
+                    }
+                }
+
                 val isProfit = currentPrice > pos.entryPrice && pos.entryPrice > 0.0
                 val diffPct = if (pos.entryPrice > 0.0) ((currentPrice - pos.entryPrice) / pos.entryPrice) * 100.0 else 0.0
                 

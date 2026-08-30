@@ -63,6 +63,8 @@ fun WaitingEntryRadarCard(
     onSetTrailingStop: ((Boolean, Double) -> Unit)? = null,
     onResetTrailingTrigger: (() -> Unit)? = null,
     onSetAutoSellParams: ((Boolean, Double, Double, Double, Double, Double) -> Unit)? = null,
+    onDeployTrailingOrder: (() -> Unit)? = null,
+    onCancelTrailingOrder: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val mtf = signal.mtf
@@ -370,7 +372,9 @@ fun WaitingEntryRadarCard(
             onSetTrailingStop = onSetTrailingStop,
             onResetTrailingTrigger = onResetTrailingTrigger,
             signal = signal,
-            onSetAutoSellParams = onSetAutoSellParams
+            onSetAutoSellParams = onSetAutoSellParams,
+            onDeployTrailingOrder = onDeployTrailingOrder,
+            onCancelTrailingOrder = onCancelTrailingOrder
         )
 
         Spacer(Modifier.height(10.dp))

@@ -4,6 +4,10 @@ import agu.analys.model.AISignalState
 import agu.analys.model.LifecycleState
 import agu.analys.model.ScalpingStage
 
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
+
 data class TrackedSignal(
     val symbol: String,
     var state: LifecycleState = LifecycleState.IDLE,
@@ -16,12 +20,13 @@ data class TrackedSignal(
 )
 
 object SignalLifecycleManager {
-    private val activeSignals = mutableMapOf<String, TrackedSignal>()
+    private val activeSignals = ConcurrentHashMap<String, TrackedSignal>()
+    private val lock = ReentrantLock()
 
     // Expire signals older than 3 minutes if not triggered (scalping is fast)
     private const val EXPIRY_MS = 3 * 60 * 1000L 
 
-    fun process(symbol: String, currentPrice: Double, rawSignal: AISignalState): TrackedSignal {
+    fun process(symbol: String, currentPrice: Double, rawSignal: AISignalState): TrackedSignal = lock.withLock {
         val now = System.currentTimeMillis()
         val tracked = activeSignals.getOrPut(symbol) { 
             TrackedSignal(symbol)
@@ -104,7 +109,7 @@ object SignalLifecycleManager {
         tracked.activeSignalState = raw
     }
 
-    fun markTriggered(symbol: String) {
+    fun markTriggered(symbol: String) = lock.withLock {
         activeSignals[symbol]?.let {
             if (it.state == LifecycleState.READY || it.state == LifecycleState.CONFIRMING) {
                 it.state = LifecycleState.TRIGGERED
@@ -113,7 +118,7 @@ object SignalLifecycleManager {
         }
     }
 
-    fun reset(symbol: String) {
+    fun reset(symbol: String) = lock.withLock {
         activeSignals.remove(symbol)
     }
 }

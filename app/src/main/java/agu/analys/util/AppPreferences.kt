@@ -8,6 +8,7 @@ import agu.analys.config.MarketDataSource
 import agu.analys.config.ScalpingSensitivity
 import agu.analys.config.StrategyMode
 import agu.analys.config.TradingFeeConfig
+import org.json.JSONObject
 
 /** Local user configuration. Runtime market data is deliberately kept elsewhere. */
 class AppPreferences(context: Context) {
@@ -52,12 +53,17 @@ class AppPreferences(context: Context) {
         return next
     }
 
+    var isPinResetRequired: Boolean
+        get() = prefs.getBoolean(KEY_PIN_RESET_REQUIRED, false)
+        set(value) = prefs.edit().putBoolean(KEY_PIN_RESET_REQUIRED, value).apply()
+
     fun resetFailedPinAttempts() {
         failedPinAttempts = 0
     }
 
     fun setSecurityPin(pin: String) {
         securityPinHash = hashPin(pin)
+        isPinResetRequired = false
         resetFailedPinAttempts()
     }
 
@@ -77,6 +83,7 @@ class AppPreferences(context: Context) {
             .remove(KEY_INDODAX_API_KEY)
             .remove(KEY_INDODAX_SECRET_KEY)
             .remove(KEY_RECENT_HISTORY_BASES)
+            .remove(KEY_PIN_RESET_REQUIRED)
             .putBoolean(KEY_REAL_BUY_MODE, false)
             .putInt(KEY_FAILED_PIN_ATTEMPTS, 0)
             .apply()
@@ -178,10 +185,31 @@ class AppPreferences(context: Context) {
             .apply()
     }
 
+    private fun getInstallationSalt(): ByteArray {
+        var saltStr = prefs.getString(KEY_INSTALLATION_SALT, null)
+        if (saltStr.isNullOrBlank()) {
+            val randomBytes = ByteArray(16)
+            java.security.SecureRandom().nextBytes(randomBytes)
+            saltStr = android.util.Base64.encodeToString(randomBytes, android.util.Base64.NO_WRAP)
+
+            val oldHash = prefs.getString(KEY_SECURITY_PIN_HASH, "")
+            if (!oldHash.isNullOrBlank()) {
+                prefs.edit()
+                    .putBoolean(KEY_PIN_RESET_REQUIRED, true)
+                    .remove(KEY_SECURITY_PIN_HASH)
+                    .apply()
+            }
+            prefs.edit().putString(KEY_INSTALLATION_SALT, saltStr).apply()
+        }
+        return android.util.Base64.decode(saltStr, android.util.Base64.NO_WRAP)
+    }
+
     private fun hashPin(pin: String): String {
-        val md = java.security.MessageDigest.getInstance("SHA-256")
-        val digest = md.digest("agu_analys_pin_salt_$pin".toByteArray(Charsets.UTF_8))
-        return digest.joinToString("") { "%02x".format(it) }
+        val salt = getInstallationSalt()
+        val spec = javax.crypto.spec.PBEKeySpec(pin.toCharArray(), salt, 100_000, 256)
+        val factory = javax.crypto.SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
+        val hash = factory.generateSecret(spec).encoded
+        return hash.joinToString("") { "%02x".format(it) }
     }
 
     fun getWatchlist(): Set<String> {
@@ -212,6 +240,31 @@ class AppPreferences(context: Context) {
         prefs.edit().putStringSet(KEY_LEARNING_COMPLETED, set.map(Int::toString).toSet()).apply()
     }
 
+    fun getSavedRealBalance(): Map<String, Double> {
+        val jsonStr = prefs.getString("saved_real_balance", "") ?: ""
+        if (jsonStr.isBlank()) return emptyMap()
+        return try {
+            val json = JSONObject(jsonStr)
+            val map = mutableMapOf<String, Double>()
+            json.keys().forEach { key ->
+                map[key.lowercase()] = json.optDouble(key, 0.0)
+            }
+            map
+        } catch (_: Exception) {
+            emptyMap()
+        }
+    }
+
+    fun saveRealBalance(balances: Map<String, Double>) {
+        try {
+            val json = JSONObject()
+            balances.forEach { (k, v) ->
+                json.put(k.lowercase(), v)
+            }
+            prefs.edit().putString("saved_real_balance", json.toString()).apply()
+        } catch (_: Exception) {}
+    }
+
     companion object {
         private const val PREFS_NAME = "krypto_analysis_prefs"
         private const val KEY_GROQ = "groq_api_key"
@@ -237,5 +290,7 @@ class AppPreferences(context: Context) {
         private const val KEY_INDODAX_API_KEY = "indodax_encrypted_api_key"
         private const val KEY_INDODAX_SECRET_KEY = "indodax_encrypted_secret_key"
         private const val KEY_RECENT_HISTORY_BASES = "recent_history_bases_v1"
+        private const val KEY_INSTALLATION_SALT = "sec_installation_salt_v2"
+        private const val KEY_PIN_RESET_REQUIRED = "sec_pin_reset_required"
     }
 }

@@ -615,6 +615,14 @@ fun DetailChartScreen(
                         if (enabled) "Auto TP/SL aktif" else "Auto TP/SL dimatikan",
                         android.widget.Toast.LENGTH_SHORT
                     ).show()
+                },
+                onDeployTrailingOrder = {
+                    viewModel.deployTrailingOrder(pair.symbol)
+                    agu.analys.util.HapticUtil.vibrateTradeSuccess(context)
+                },
+                onCancelTrailingOrder = {
+                    viewModel.cancelTrailingOrder(pair.symbol)
+                    agu.analys.util.HapticUtil.vibrateTradeSuccess(context)
                 }
             )
 

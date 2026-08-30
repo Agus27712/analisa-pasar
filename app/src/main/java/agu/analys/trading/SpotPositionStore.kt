@@ -36,7 +36,9 @@ data class SpotPosition(
     val stopLossPrice: Double = 0.0,
     val isTp1Triggered: Boolean = false,
     val isTp2Triggered: Boolean = false,
-    val isSlTriggered: Boolean = false
+    val isSlTriggered: Boolean = false,
+    val lastTrailingOrderId: String? = null,
+    val lastOrderUpdateTime: Long = 0L
 ) {
     val isHolding: Boolean get() = state == SpotPositionState.HOLDING
 }
@@ -58,6 +60,9 @@ class SpotPositionStore(context: Context) {
             peak * (1.0 - trailingPct / 100.0)
         } else 0.0
 
+        val lastTrailingOrderId = prefs.getString("${key}_last_trailing_order_id", null)
+        val lastOrderUpdateTime = prefs.getLong("${key}_last_order_update_time", 0L)
+
         return SpotPosition(
             state = state,
             investedAmount = prefs.getString("${key}_invested", null)?.toDoubleOrNull() ?: 0.0,
@@ -77,7 +82,9 @@ class SpotPositionStore(context: Context) {
             stopLossPrice = prefs.getString("${key}_stop_loss_price", null)?.toDoubleOrNull() ?: 0.0,
             isTp1Triggered = prefs.getBoolean("${key}_tp1_triggered", false),
             isTp2Triggered = prefs.getBoolean("${key}_tp2_triggered", false),
-            isSlTriggered = prefs.getBoolean("${key}_sl_triggered", false)
+            isSlTriggered = prefs.getBoolean("${key}_sl_triggered", false),
+            lastTrailingOrderId = lastTrailingOrderId,
+            lastOrderUpdateTime = lastOrderUpdateTime
         )
     }
 
@@ -213,7 +220,17 @@ class SpotPositionStore(context: Context) {
             .remove("${key}_tp1_triggered")
             .remove("${key}_tp2_triggered")
             .remove("${key}_sl_triggered")
+            .remove("${key}_last_trailing_order_id")
+            .remove("${key}_last_order_update_time")
             .putString("${key}_history", appendHistoryEvent(key, position))
+            .apply()
+    }
+
+    fun setTrailingOrderIdAndUpdateTime(symbol: String, orderId: String?, updateTime: Long) {
+        val key = normalize(symbol)
+        prefs.edit()
+            .putString("${key}_last_trailing_order_id", orderId)
+            .putLong("${key}_last_order_update_time", updateTime)
             .apply()
     }
 
@@ -224,6 +241,8 @@ class SpotPositionStore(context: Context) {
             prefs.edit()
                 .putBoolean("${key}_trailing_enabled", false)
                 .putBoolean("${key}_trailing_triggered", false)
+                .remove("${key}_last_trailing_order_id")
+                .remove("${key}_last_order_update_time")
                 .apply()
             return
         }
@@ -240,6 +259,8 @@ class SpotPositionStore(context: Context) {
             .putString("${key}_trailing_pct", trailingPercent.coerceAtLeast(0.5).toString())
             .putString("${key}_peak", peak.toString())
             .putBoolean("${key}_trailing_triggered", false)
+            .remove("${key}_last_trailing_order_id")
+            .remove("${key}_last_order_update_time")
             .apply()
     }
 

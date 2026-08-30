@@ -47,7 +47,9 @@ fun RadarSellSection(
     onSetTrailingStop: ((Boolean, Double) -> Unit)? = null,
     onResetTrailingTrigger: (() -> Unit)? = null,
     signal: agu.analys.model.AISignalState? = null,
-    onSetAutoSellParams: ((Boolean, Double, Double, Double, Double, Double) -> Unit)? = null
+    onSetAutoSellParams: ((Boolean, Double, Double, Double, Double, Double) -> Unit)? = null,
+    onDeployTrailingOrder: (() -> Unit)? = null,
+    onCancelTrailingOrder: (() -> Unit)? = null
 ) {
     var customSellQtyInput by remember { mutableStateOf("") }
     var isCustomSellQtyOpen by remember { mutableStateOf(false) }
@@ -241,7 +243,10 @@ fun RadarSellSection(
                 onSetTrailingPercent = { pct -> onSetTrailingStop?.invoke(true, pct) },
                 peakPrice = peakPrice,
                 trailingStopPrice = trailingStopPrice,
-                quoteAsset = quoteAsset
+                quoteAsset = quoteAsset,
+                lastTrailingOrderId = spotPosition?.lastTrailingOrderId,
+                onDeployTrailingOrder = onDeployTrailingOrder,
+                onCancelTrailingOrder = onCancelTrailingOrder
             )
         }
 
@@ -256,7 +261,10 @@ fun RadarSellSection(
                 onSetTrailingPercent = { pct -> onSetTrailingStop?.invoke(true, pct) },
                 peakPrice = peakPrice,
                 trailingStopPrice = trailingStopPrice,
-                quoteAsset = quoteAsset
+                quoteAsset = quoteAsset,
+                lastTrailingOrderId = spotPosition?.lastTrailingOrderId,
+                onDeployTrailingOrder = onDeployTrailingOrder,
+                onCancelTrailingOrder = onCancelTrailingOrder
             )
         }
 

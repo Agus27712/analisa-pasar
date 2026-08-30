@@ -26,8 +26,13 @@ fun SellTrailingSection(
     onSetTrailingPercent: (Double) -> Unit,
     peakPrice: Double,
     trailingStopPrice: Double,
-    quoteAsset: String
+    quoteAsset: String,
+    lastTrailingOrderId: String? = null,
+    onDeployTrailingOrder: (() -> Unit)? = null,
+    onCancelTrailingOrder: (() -> Unit)? = null
 ) {
+    val hasDeployedOrder = !lastTrailingOrderId.isNullOrEmpty()
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -42,7 +47,7 @@ fun SellTrailingSection(
             )
             .padding(10.dp)
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -52,14 +57,20 @@ fun SellTrailingSection(
                     Text(
                         text = "🔒 TRAILING STOP LOSS",
                         color = if (isTrailingTriggered) TvRed else if (isTrailingActive) TvBlue else TvTextSecondary,
-                        fontSize = 10.5.sp,
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.Black
                     )
                 }
 
                 Switch(
                     checked = isTrailingActive,
-                    onCheckedChange = onTrailingActiveChanged,
+                    onCheckedChange = { checked ->
+                        if (!checked) {
+                            onCancelTrailingOrder?.invoke()
+                        } else {
+                            onTrailingActiveChanged(true)
+                        }
+                    },
                     colors = SwitchDefaults.colors(
                         checkedThumbColor = TvBlue,
                         checkedTrackColor = TvBlue.copy(alpha = 0.4f),
@@ -72,6 +83,7 @@ fun SellTrailingSection(
 
             if (isTrailingActive) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Jarak Trailing Selector
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -106,20 +118,88 @@ fun SellTrailingSection(
                         }
                     }
 
+                    // Tampilan Harga Live Peak & Stop Loss
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .background(TvSurfaceVariant, RoundedCornerShape(6.dp))
                             .padding(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(3.dp)
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Harga Puncak Tercatat:", color = TvTextSecondary, fontSize = 9.5.sp)
-                            Text("${PriceFormatter.formatIdrNumber(peakPrice)} $quoteAsset", color = TvAmber, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            Text("Harga Puncak Tercatat (Peak):", color = TvTextSecondary, fontSize = 9.5.sp)
+                            Text("${PriceFormatter.formatIdrNumber(peakPrice)} $quoteAsset", color = TvAmber, fontSize = 10.5.sp, fontWeight = FontWeight.Bold)
                         }
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Garis Stop Loss Dinamis:", color = TvBlue, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                            Text("${PriceFormatter.formatIdrNumber(trailingStopPrice)} $quoteAsset", color = if (isTrailingTriggered) TvRed else TvBlue, fontSize = 10.5.sp, fontWeight = FontWeight.Black)
+                            Text("Garis Stop Loss Dinamis:", color = TvBlue, fontSize = 9.5.sp, fontWeight = FontWeight.Bold)
+                            Text("${PriceFormatter.formatIdrNumber(trailingStopPrice)} $quoteAsset", color = if (isTrailingTriggered) TvRed else TvBlue, fontSize = 11.sp, fontWeight = FontWeight.Black)
+                        }
+                    }
+
+                    // Status Integrasi Bursa / Eksekutor Sell
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        if (hasDeployedOrder) {
+                            // Status Order Aktif
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(TvGreen.copy(alpha = 0.15f), RoundedCornerShape(6.dp))
+                                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "🟢 TRAILING AKTIF DI BURSA\nID: ${lastTrailingOrderId?.take(18)}...",
+                                    color = TvGreen,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    lineHeight = 13.sp
+                                )
+                            }
+
+                            // Tombol Matikan Trailing
+                            Button(
+                                onClick = { onCancelTrailingOrder?.invoke() },
+                                colors = ButtonDefaults.buttonColors(containerColor = TvSurfaceVariant),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(34.dp),
+                                shape = RoundedCornerShape(6.dp),
+                                contentPadding = PaddingValues(0.dp)
+                            ) {
+                                Text("Matikan Trailing & Batal Order", color = TvRed, fontSize = 10.5.sp, fontWeight = FontWeight.Bold)
+                            }
+                        } else {
+                            // Status Belum Terpasang
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(TvAmber.copy(alpha = 0.15f), RoundedCornerShape(6.dp))
+                                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "⚠️ Trailing siap, belum dipasang di bursa.",
+                                    color = TvAmber,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+
+                            // Tombol Pasang Trailing
+                            Button(
+                                onClick = { onDeployTrailingOrder?.invoke() },
+                                colors = ButtonDefaults.buttonColors(containerColor = TvBlue),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(36.dp),
+                                shape = RoundedCornerShape(6.dp),
+                                contentPadding = PaddingValues(0.dp)
+                            ) {
+                                Text("Pasang Trailing di Bursa", color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Black)
+                            }
                         }
                     }
                 }
