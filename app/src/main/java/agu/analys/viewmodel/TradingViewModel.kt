@@ -41,12 +41,15 @@ import agu.analys.util.AppPreferences
 import agu.analys.util.GitHubReleaseInfo
 import agu.analys.util.MarketDataCache
 import agu.analys.util.PriceFormatter
+import agu.analys.database.AppDatabase
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.math.abs
@@ -207,8 +210,10 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     val realIndodaxBalance: StateFlow<Map<String, Double>> = realCoordinator.realIndodaxBalance
     val realFreeBalance: StateFlow<Map<String, Double>> = realCoordinator.realFreeBalance
     val realLockedBalance: StateFlow<Map<String, Double>> = realCoordinator.realLockedBalance
-    val realOpenOrders: StateFlow<List<RealOpenOrderEntity>> = MutableStateFlow(emptyList<RealOpenOrderEntity>()).asStateFlow()
-    val realTrades: StateFlow<List<RealTradeEntity>> = MutableStateFlow(emptyList<RealTradeEntity>()).asStateFlow()
+    val realOpenOrders: StateFlow<List<RealOpenOrderEntity>> = AppDatabase.getInstance().realTradeDao().getOpenOrdersFlow()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val realTrades: StateFlow<List<RealTradeEntity>> = AppDatabase.getInstance().realTradeDao().getAllTradesFlow()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val realAvgBuyPrices: StateFlow<Map<String, Double>> = realCoordinator.realAvgBuyPrices
     val isFetchingRealBalance: StateFlow<Boolean> = realCoordinator.isFetchingRealBalance
     val realTradeStatus: StateFlow<String> = realCoordinator.realTradeStatus

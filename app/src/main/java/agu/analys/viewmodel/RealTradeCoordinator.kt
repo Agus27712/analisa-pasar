@@ -20,7 +20,7 @@ class RealTradeCoordinator(
     private val scope: CoroutineScope,
     private val prefs: AppPreferences
 ) {
-    private val MAX_HISTORY_ASSETS = 4
+    private val MAX_HISTORY_ASSETS = 15
     private val INTER_REQUEST_DELAY_MS = 1500L
     private val REFRESH_COOLDOWN_MS = 30000L
 
