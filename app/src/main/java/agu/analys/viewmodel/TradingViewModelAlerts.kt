@@ -74,15 +74,29 @@ fun TradingViewModel.checkAlertsAndTrailing(symbol: String, currentPrice: Double
             refreshSpotPosition()
         }
         
-        // Logika update order limit di bursa saat harga naik signifikan
+        // Logika update order limit di bursa / sim saat harga naik (new peak)
         val newPeak = updatedPos.peakPrice
-        val isReal = isRealBuyMode.value
-        if (newPeak > oldPeak && isReal && updatedPos.isHolding && !updatedPos.lastTrailingOrderId.isNullOrEmpty()) {
-            val increasePct = (newPeak - oldPeak) / oldPeak * 100.0
+        val isSimTrailing = updatedPos.lastTrailingOrderId?.startsWith("sim-") == true || !isRealBuyMode.value
+        val isReal = isRealBuyMode.value && !isSimTrailing
+
+        if (newPeak > oldPeak && updatedPos.isHolding) {
+            val increasePct = if (oldPeak > 0.0) (newPeak - oldPeak) / oldPeak * 100.0 else 100.0
             val timeSinceLastUpdate = System.currentTimeMillis() - updatedPos.lastOrderUpdateTime
-            // Minimal kenaikan Peak: 0.4%, Cooldown: 12-20s (kita pakai 15s)
-            if (increasePct >= 0.4 && timeSinceLastUpdate >= 15_000) {
-                updateRealTrailingOrder(symbol, updatedPos, currentPrice)
+            
+            if (isReal) {
+                // Bursa Real: Minimal kenaikan Peak: 0.4%, Cooldown: 15s (agar tidak kena rate-limit bursa)
+                if (!updatedPos.lastTrailingOrderId.isNullOrEmpty() && increasePct >= 0.4 && timeSinceLastUpdate >= 15_000) {
+                    updateRealTrailingOrder(symbol, updatedPos, currentPrice)
+                }
+            } else {
+                // Simulasi: Responsif seketika saat Peak naik (cooldown 1 detik)
+                if (timeSinceLastUpdate >= 1_000) {
+                    if (updatedPos.lastTrailingOrderId.isNullOrEmpty()) {
+                        deployTrailingOrder(symbol)
+                    } else {
+                        updateSimTrailingOrder(symbol, updatedPos, currentPrice)
+                    }
+                }
             }
         }
     }
@@ -257,26 +271,118 @@ fun TradingViewModel.deployTrailingOrder(symbol: String) {
             }
         }
     } else {
-        // Simulation mode: just mark as deployed (virtual orderId)
-        positionCoordinator.setTrailingOrderIdAndUpdateTime(symbol, "sim-${System.currentTimeMillis()}", System.currentTimeMillis())
+        // Simulation mode: submit STOP_LIMIT order in simulation store
+        val quantityToSell = if (pos.quantity > 0.0) pos.quantity else {
+            val wallet = simCoordinator.wallet.value
+            val baseKey = agu.analys.model.TradingPair.fromCustomSymbol(symbol).baseAsset.uppercase()
+            wallet.getTotalCoin(baseKey).takeIf { it > 0.0 } ?: (if (pos.investedAmount > 0.0 && pos.entryPrice > 0.0) pos.investedAmount / pos.entryPrice else 0.0)
+        }
+        
+        if (quantityToSell <= 0.0) {
+            Timber.e("Gagal pasang trailing order simulasi: Jumlah koin 0 atau belum ada posisi koin di wallet simulasi.")
+            return
+        }
+
+        val pair = agu.analys.model.TradingPair.fromCustomSymbol(symbol)
+        val slPrice = pos.peakPrice * (1.0 - pos.trailingPercent / 100.0)
+        val currentPrice = marketDataCoordinator.currentTick.value?.price 
+            ?: marketDataCoordinator.dashboardTicks.value[symbol]?.price 
+            ?: pos.peakPrice
+        
+        // Ensure wallet has available coin or add it for simulation so trailing can be placed
+        val wallet = simCoordinator.wallet.value
+        val baseKey = pair.baseAsset.uppercase()
+        if (wallet.getTotalCoin(baseKey) < quantityToSell) {
+            // Auto top-up or record holding in simulation wallet so sim trailing works seamlessly
+            val store = agu.analys.trading.SimulationTradeStore(getApplication())
+            val w = store.getWallet()
+            val coins = w.coinBalances.toMutableMap()
+            coins[baseKey] = (coins[baseKey] ?: 0.0) + quantityToSell
+            val avgs = w.avgBuyPrices.toMutableMap()
+            avgs[baseKey] = if (pos.entryPrice > 0.0) pos.entryPrice else currentPrice
+            store.saveWallet(w.copy(coinBalances = coins, avgBuyPrices = avgs))
+            simCoordinator.refresh()
+        }
+
+        val res = simCoordinator.submitOrder(
+            pair = pair,
+            currentPrice = currentPrice,
+            side = SimulationOrderSide.SELL,
+            type = SimulationOrderType.STOP_LIMIT,
+            price = slPrice,
+            stopPrice = slPrice,
+            quantity = quantityToSell
+        )
+        if (res is SimulationOrderResult.Success) {
+            positionCoordinator.setTrailingOrderIdAndUpdateTime(symbol, res.order.id, System.currentTimeMillis())
+            agu.analys.util.AlertNotificationHelper.sendPriceAlertNotification(
+                 context = getApplication(),
+                 title = "🔒 SIM TRAILING STOP DIPASANG ($symbol)",
+                 message = "Stop-loss simulasi aktif di Rp ${PriceFormatter.formatIdrNumber(slPrice)}.",
+                 notificationId = (symbol.hashCode() and 0x7FFFFFFF) + 1000
+            )
+        } else if (res is SimulationOrderResult.Error) {
+            Timber.e("Gagal pasang trailing order simulasi: ${res.message}")
+        }
     }
 }
 
 fun TradingViewModel.cancelTrailingOrder(symbol: String) {
     val pos = positionStore.get(symbol)
     val orderId = pos.lastTrailingOrderId
-    val isReal = isRealBuyMode.value
+    val isSimTrailing = orderId?.startsWith("sim-") == true || !isRealBuyMode.value
+    val isReal = isRealBuyMode.value && !isSimTrailing
     
-    if (isReal && !orderId.isNullOrEmpty()) {
-        val apiKey = prefs.indodaxApiKey
-        val secretKey = prefs.indodaxSecretKey
-        if (apiKey.isNotBlank() && secretKey.isNotBlank()) {
-            viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                IndodaxTradeApiV2.cancelOrder(apiKey, secretKey, symbol, orderId)
+    if (!orderId.isNullOrEmpty()) {
+        if (isReal) {
+            val apiKey = prefs.indodaxApiKey
+            val secretKey = prefs.indodaxSecretKey
+            if (apiKey.isNotBlank() && secretKey.isNotBlank()) {
+                viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                    IndodaxTradeApiV2.cancelOrder(apiKey, secretKey, symbol, orderId)
+                }
             }
+        } else {
+            simCoordinator.cancelOrder(orderId)
         }
     }
     positionCoordinator.setTrailing(symbol, enabled = false, pos.trailingPercent, 0.0)
+}
+
+fun TradingViewModel.updateSimTrailingOrder(symbol: String, pos: SpotPosition, currentPrice: Double) {
+    val oldOrderId = pos.lastTrailingOrderId ?: return
+    simCoordinator.cancelOrder(oldOrderId)
+    
+    val pair = agu.analys.model.TradingPair.fromCustomSymbol(symbol)
+    val slPrice = pos.peakPrice * (1.0 - pos.trailingPercent / 100.0)
+    val quantityToSell = if (pos.quantity > 0.0) pos.quantity else {
+        val wallet = simCoordinator.wallet.value
+        val baseKey = pair.baseAsset.uppercase()
+        wallet.getTotalCoin(baseKey).takeIf { it > 0.0 } ?: (if (pos.investedAmount > 0.0 && pos.entryPrice > 0.0) pos.investedAmount / pos.entryPrice else 0.0)
+    }
+
+    if (quantityToSell <= 0.0) {
+        return
+    }
+
+    val res = simCoordinator.submitOrder(
+        pair = pair,
+        currentPrice = currentPrice,
+        side = SimulationOrderSide.SELL,
+        type = SimulationOrderType.STOP_LIMIT,
+        price = slPrice,
+        stopPrice = slPrice,
+        quantity = quantityToSell
+    )
+    if (res is SimulationOrderResult.Success) {
+        positionCoordinator.setTrailingOrderIdAndUpdateTime(symbol, res.order.id, System.currentTimeMillis())
+        agu.analys.util.AlertNotificationHelper.sendPriceAlertNotification(
+            context = getApplication(),
+            title = "📈 SIM TRAILING STOP NAIK ($symbol)",
+            message = "Stop-loss naik ke Rp ${PriceFormatter.formatIdrNumber(slPrice)} (Peak: ${PriceFormatter.formatIdrNumber(pos.peakPrice)}).",
+            notificationId = (symbol.hashCode() and 0x7FFFFFFF) + 1000
+        )
+    }
 }
 
 fun TradingViewModel.updateRealTrailingOrder(symbol: String, pos: SpotPosition, currentPrice: Double) {

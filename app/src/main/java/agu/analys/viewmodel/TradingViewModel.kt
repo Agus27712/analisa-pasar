@@ -67,6 +67,20 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     internal val realCoordinator = RealTradeCoordinator(viewModelScope, prefs)
     internal val updateCoordinator = AppUpdateCoordinator(viewModelScope)
     
+    init {
+        viewModelScope.launch {
+            simCoordinator.lastFilledOrder.collect { filledOrder ->
+                if (filledOrder != null && filledOrder.status == agu.analys.trading.SimulationOrderStatus.FILLED) {
+                    if (filledOrder.side == SimulationOrderSide.SELL) {
+                        positionStore.markSold(filledOrder.symbol)
+                        positionCoordinator.setTrailing(filledOrder.symbol, enabled = false, 0.0, 0.0)
+                        refreshSpotPosition()
+                    }
+                }
+            }
+        }
+    }
+    
     internal val positionCoordinator = PositionCoordinator(
         positionStore = positionStore,
         alertStore = alertStore,

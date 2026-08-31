@@ -29,7 +29,8 @@ fun SellTrailingSection(
     quoteAsset: String,
     lastTrailingOrderId: String? = null,
     onDeployTrailingOrder: (() -> Unit)? = null,
-    onCancelTrailingOrder: (() -> Unit)? = null
+    onCancelTrailingOrder: (() -> Unit)? = null,
+    isRealMode: Boolean = true
 ) {
     val hasDeployedOrder = !lastTrailingOrderId.isNullOrEmpty()
 
@@ -151,7 +152,8 @@ fun SellTrailingSection(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "🟢 TRAILING AKTIF DI BURSA\nID: ${lastTrailingOrderId?.take(18)}...",
+                                    text = if (isRealMode) "🟢 TRAILING AKTIF DI BURSA\nID: ${lastTrailingOrderId?.take(18)}..."
+                                           else "🟢 TRAILING AKTIF (SIMULASI)\nID: ${lastTrailingOrderId?.take(18)}...",
                                     color = TvGreen,
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
@@ -169,7 +171,12 @@ fun SellTrailingSection(
                                 shape = RoundedCornerShape(6.dp),
                                 contentPadding = PaddingValues(0.dp)
                             ) {
-                                Text("Matikan Trailing & Batal Order", color = TvRed, fontSize = 10.5.sp, fontWeight = FontWeight.Bold)
+                                Text(
+                                    if (isRealMode) "Matikan Trailing & Batal Order" else "Matikan Trailing & Batal Order Sim",
+                                    color = TvRed,
+                                    fontSize = 10.5.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
                             }
                         } else {
                             // Status Belum Terpasang
@@ -181,7 +188,8 @@ fun SellTrailingSection(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "⚠️ Trailing siap, belum dipasang di bursa.",
+                                    text = if (isRealMode) "⚠️ Trailing siap, belum dipasang di bursa."
+                                           else "⚠️ Trailing siap, belum dipasang (Simulasi).",
                                     color = TvAmber,
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold
@@ -198,7 +206,12 @@ fun SellTrailingSection(
                                 shape = RoundedCornerShape(6.dp),
                                 contentPadding = PaddingValues(0.dp)
                             ) {
-                                Text("Pasang Trailing di Bursa", color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Black)
+                                Text(
+                                    if (isRealMode) "Pasang Trailing di Bursa" else "Pasang Trailing (Simulasi)",
+                                    color = Color.Black,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Black
+                                )
                             }
                         }
                     }

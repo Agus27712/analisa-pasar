@@ -246,7 +246,8 @@ fun RadarSellSection(
                 quoteAsset = quoteAsset,
                 lastTrailingOrderId = spotPosition?.lastTrailingOrderId,
                 onDeployTrailingOrder = onDeployTrailingOrder,
-                onCancelTrailingOrder = onCancelTrailingOrder
+                onCancelTrailingOrder = onCancelTrailingOrder,
+                isRealMode = isRealMode
             )
         }
 
@@ -264,7 +265,8 @@ fun RadarSellSection(
                 quoteAsset = quoteAsset,
                 lastTrailingOrderId = spotPosition?.lastTrailingOrderId,
                 onDeployTrailingOrder = onDeployTrailingOrder,
-                onCancelTrailingOrder = onCancelTrailingOrder
+                onCancelTrailingOrder = onCancelTrailingOrder,
+                isRealMode = isRealMode
             )
         }
 

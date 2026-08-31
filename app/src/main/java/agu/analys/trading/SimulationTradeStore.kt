@@ -189,12 +189,19 @@ class SimulationTradeStore(context: Context) {
 
                     return SimulationOrderResult.Success(order, "Order ${type.displayName} Beli dipasang @ ${formatMoney(price, quote)}.")
                 } else {
-                    if (wallet.getAvailableCoin(baseKey) < quantity) {
-                        return SimulationOrderResult.Error("Saldo koin $baseKey tidak cukup. Tersedia: ${wallet.getAvailableCoin(baseKey)}")
+                    val availableCoin = wallet.getAvailableCoin(baseKey)
+                    val actualQuantity = if (quantity > availableCoin && (quantity - availableCoin < 0.001 || (quantity - availableCoin) / availableCoin.coerceAtLeast(0.0001) < 0.001)) {
+                        availableCoin
+                    } else {
+                        quantity
+                    }
+
+                    if (availableCoin < actualQuantity) {
+                        return SimulationOrderResult.Error("Saldo koin $baseKey tidak cukup. Tersedia: $availableCoin")
                     }
 
                     val lockedMap = wallet.lockedCoinBalances.toMutableMap()
-                    lockedMap[baseKey] = (lockedMap[baseKey] ?: 0.0) + quantity
+                    lockedMap[baseKey] = (lockedMap[baseKey] ?: 0.0) + actualQuantity
                     val updatedWallet = wallet.copy(lockedCoinBalances = lockedMap)
                     saveWallet(updatedWallet)
 
@@ -207,7 +214,7 @@ class SimulationTradeStore(context: Context) {
                         type = type,
                         limitPrice = price,
                         stopPrice = stopPrice,
-                        quantity = quantity,
+                        quantity = actualQuantity,
                         totalIdr = totalIdr,
                         feeIdr = feeIdr,
                         status = SimulationOrderStatus.OPEN,
@@ -301,7 +308,8 @@ class SimulationTradeStore(context: Context) {
                         val triggered = order.isStopTriggered || (currentPrice <= order.stopPrice && order.stopPrice > 0.0)
                         if (triggered) {
                             updatedOrder = order.copy(isStopTriggered = true)
-                            if (currentPrice >= order.limitPrice) shouldFill = true
+                            // Sell stop loss / trailing stop fills immediately when stop price is reached
+                            shouldFill = true
                         }
                     }
                 }
@@ -310,7 +318,11 @@ class SimulationTradeStore(context: Context) {
 
             if (shouldFill) {
                 val baseKey = order.baseAsset.uppercase()
-                val execPrice = order.limitPrice
+                val execPrice = if (order.type == SimulationOrderType.STOP_LIMIT && order.side == SimulationOrderSide.SELL) {
+                    currentPrice
+                } else {
+                    order.limitPrice
+                }
                 val totalIdr = order.quantity * execPrice
                 val feeIdr = totalIdr * INDODAX_MAKER_FEE_RATE
 
