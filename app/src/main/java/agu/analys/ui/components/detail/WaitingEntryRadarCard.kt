@@ -7,38 +7,17 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.HourglassEmpty
-import androidx.compose.material.icons.filled.Lightbulb
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.ShoppingCart
-import androidx.compose.material.icons.filled.Timeline
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import agu.analys.config.StrategyMode
 import agu.analys.config.TradingFeeConfig
 import agu.analys.model.AISignalState
-import agu.analys.model.ScalpingPath
-import agu.analys.ui.theme.*
-import agu.analys.util.PriceFormatter
-import kotlinx.coroutines.delay
+import agu.analys.trading.SpotPosition
+import agu.analys.ui.components.detail.radar.RadarConfirmationChecklist
+import agu.analys.ui.components.detail.radar.RadarHeaderSection
+import agu.analys.ui.components.detail.radar.RadarTargetLevelsSection
 
 /**
  * Radar & Progres Entry Interaktif dengan 4 Konfirmasi Bertahap (Progress Bar 1/4 -> 4/4)
@@ -59,7 +38,7 @@ fun WaitingEntryRadarCard(
     onExecuteBuy: ((Double, Double, Double) -> Unit)? = null,
     onExecuteSell: ((Double) -> Unit)? = null,
     onSetManualBuyPrice: ((Double, Double) -> Unit)? = null,
-    spotPosition: agu.analys.trading.SpotPosition? = null,
+    spotPosition: SpotPosition? = null,
     onSetTrailingStop: ((Boolean, Double) -> Unit)? = null,
     onResetTrailingTrigger: (() -> Unit)? = null,
     onSetAutoSellParams: ((Boolean, Double, Double, Double, Double, Double) -> Unit)? = null,
@@ -68,9 +47,11 @@ fun WaitingEntryRadarCard(
     modifier: Modifier = Modifier
 ) {
     val mtf = signal.mtf
-    val completed = listOf(mtf.biasStatus, mtf.setupStatus, mtf.triggerStatus, mtf.entryPriceStatus)
-        .count { it.name == "OK" || it.name == "CONFIRMED" }
-    
+    val completed = remember(mtf) {
+        listOf(mtf.biasStatus, mtf.setupStatus, mtf.triggerStatus, mtf.entryPriceStatus)
+            .count { it.name == "OK" || it.name == "CONFIRMED" }
+    }
+
     val effectivePrice = if (currentPrice > 0.0) currentPrice else if (signal.entryPrice > 0.0) signal.entryPrice else 0.0
 
     // Hoisted states for live transaction details
@@ -90,68 +71,6 @@ fun WaitingEntryRadarCard(
         ),
         label = "radar_scale"
     )
-    val glowAlpha by transition.animateFloat(
-        initialValue = 0.3f,
-        targetValue = 0.8f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1200, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "radar_glow"
-    )
-
-    // Deteksi Tipe Entry Badge (Reclaim vs Base-Dip vs Swing vs Waiting)
-    val isReclaim = mtf.path == ScalpingPath.MOMENTUM_CONTINUATION ||
-                    mtf.triggerDetail.contains("Reclaim", ignoreCase = true) ||
-                    signal.reasoning.any { it.contains("Reclaim", ignoreCase = true) || it.contains("Breakout", ignoreCase = true) }
-
-    val entryTypeBadgeTitle = when (strategyMode) {
-        StrategyMode.SWING -> when {
-            completed == 4 -> if (isReclaim) "🚀 SWING BREAKOUT / RECLAIM" else "🛡️ SWING PULLBACK ENTRY"
-            completed >= 2 -> "⏳ SWING SETUP IN-PROGRESS"
-            else -> "🔍 ANALISIS STRUKTUR SWING"
-        }
-        StrategyMode.SECOND_WAVE -> when {
-            completed == 4 -> if (isReclaim) "🚀 RECLAIM ENTRY" else "🛡️ BASE-DIP ENTRY"
-            completed >= 2 -> "⏳ SECOND-WAVE IN-PROGRESS"
-            else -> "🔍 SCANNING SECOND-WAVE"
-        }
-        StrategyMode.SCALPING -> when {
-            completed == 4 -> if (isReclaim) "🚀 RECLAIM BREAKOUT" else "🛡️ PULLBACK DIP ENTRY"
-            completed >= 2 -> "⏳ SETUP SCALPING IN-PROGRESS"
-            else -> "🔍 SCANNING SCALPING"
-        }
-    }
-
-    val entryTypeBadgeDesc = when (strategyMode) {
-        StrategyMode.SWING -> when {
-            completed == 4 -> if (isReclaim) {
-                "Struktur Swing Bullish terkonfirmasi. Menembus resistance dengan inflow momentum multi-timeframe."
-            } else {
-                "Harga menguji demand zone / support EMA swing. Risiko rendah dengan Stop Loss terukur."
-            }
-            completed >= 2 -> "Sinyal swing sedang mengumpulkan konfirmasi volume & struktur higher-low."
-            else -> "Tren pasar belum selaras untuk Swing Buy. Menunggu reclaim support/EMA."
-        }
-        StrategyMode.SECOND_WAVE -> when {
-            completed == 4 -> if (isReclaim) {
-                "Reclaim terkonfirmasi! Volume beli meledak menembus Resistance. Momentum Second-Wave aktif."
-            } else {
-                "Harga menyentuh lantai akumulasi support. Risiko sangat rendah (SL ketat)."
-            }
-            completed >= 2 -> "Formasi base dan drawdown reset sedang dipantau di timeframe 1H/15M."
-            else -> "Menunggu kriteria dasar Second-Wave (prior run & base akumulasi)."
-        }
-        StrategyMode.SCALPING -> when {
-            completed == 4 -> if (isReclaim) {
-                "Reclaim momentum 1M terkonfirmasi aktif! Volume beli meledak menembus level 15M."
-            } else {
-                "Pullback ke support EMA 15M/1M terkonfirmasi. Risiko terkendali."
-            }
-            completed >= 2 -> "Bias tren mendukung, menunggu trigger momentum dan volume 1M."
-            else -> "Memantau struktur tren pasar multi-timeframe (1H, 15M, 1M)."
-        }
-    }
 
     val titleHeader = when (strategyMode) {
         StrategyMode.SCALPING -> "⚡ SCALPING (${signal.confidence}%)"
@@ -159,99 +78,30 @@ fun WaitingEntryRadarCard(
         StrategyMode.SWING -> "🎯 SWING (${signal.confidence}%)"
     }
 
-    // UI State for Hide/Show sections
     var isChecklistVisible by remember { mutableStateOf(false) }
     var isLevelPlanVisible by remember { mutableStateOf(false) }
 
-    AnalysisCard {
-        // Header
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            SectionTitle(
-                titleHeader,
-                Icons.Default.Timeline
-            )
-
-            // Radar Status LED Badge (Solid tanpa denyut) - Clickable as toggle
-            val radarLedColor = if (completed == 4) TvGreen else TvBlue
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .background(TvSurfaceVariant, RoundedCornerShape(20.dp))
-                    .border(1.dp, TvBorder, RoundedCornerShape(20.dp))
-                    .clickable { isChecklistVisible = !isChecklistVisible }
-                    .padding(horizontal = 10.dp, vertical = 6.dp)
-            ) {
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier.size(9.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(9.dp)
-                            .background(radarLedColor.copy(alpha = 0.28f), CircleShape)
-                    )
-                    Box(
-                        modifier = Modifier
-                            .size(6.5.dp)
-                            .background(radarLedColor, CircleShape)
-                    )
-                }
-            }
-        }
-
-        Spacer(Modifier.height(8.dp))
+    AnalysisCard(modifier = modifier) {
+        // Header dengan LED Indicator status
+        RadarHeaderSection(
+            titleHeader = titleHeader,
+            completed = completed,
+            onToggleChecklist = { isChecklistVisible = !isChecklistVisible }
+        )
 
         Spacer(Modifier.height(10.dp))
 
         // 4 Checklist Konfirmasi (Hideable via badge)
-
         AnimatedVisibility(visible = isChecklistVisible) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(TvSurfaceVariant, RoundedCornerShape(10.dp))
-                    .border(1.dp, TvBorder, RoundedCornerShape(10.dp))
-                    .padding(10.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                val isStep1Ok = mtf.biasStatus.name == "OK" || mtf.biasOk
-                val isStep2Ok = mtf.setupStatus.name == "OK" || mtf.setupOk
-                val isStep3Ok = mtf.triggerStatus.name == "OK" || mtf.triggerOk
-                val isStep4Ok = mtf.entryPriceStatus.name == "OK" || mtf.entryPriceOk
-
-                val (step1Text, step2Text, step3Text, step4Text) = when (strategyMode) {
-                    StrategyMode.SWING -> listOf(
-                        "1. Tren Makro & Alignment EMA (1D/4H/1H)",
-                        "2. Struktur Market & Support Lantai (Higher Low)",
-                        "3. Momentum & Volume Inflow (RSI/MACD)",
-                        "4. Risk/Reward Optimal & Toleransi Entry"
-                    )
-                    StrategyMode.SECOND_WAVE -> listOf(
-                        "1. Prior Run & Drawdown Reset (Valid 4H/1H)",
-                        "2. Accumulation Base & Drawdown Dry (Valid 1H)",
-                        "3. Smart Inflow & Higher Low Terbentuk (15M)",
-                        "4. Trigger Reclaim Resistance & Zona Entry Ideal"
-                    )
-                    StrategyMode.SCALPING -> listOf(
-                        "1. Trend & Bias 1H Valid (Bullish Alignment)",
-                        "2. Base Compression & Volume Kering (Valid 15M)",
-                        "3. Smart Inflow & Higher Low Terbentuk (1M)",
-                        "4. Trigger Reclaim Resistance 15M (Volume Masuk!)"
-                    )
-                }
-
-                RadarChecklistItem(1, step1Text, isStep1Ok, mtf.biasDetail)
-                RadarChecklistItem(2, step2Text, isStep2Ok, mtf.setupDetail)
-                RadarChecklistItem(3, step3Text, isStep3Ok, mtf.triggerDetail)
-                RadarChecklistItem(4, step4Text, isStep4Ok, mtf.entryPriceDetail)
-            }
+            RadarConfirmationChecklist(
+                mtf = mtf,
+                strategyMode = strategyMode
+            )
         }
 
-        Spacer(Modifier.height(10.dp))
+        if (isChecklistVisible) {
+            Spacer(Modifier.height(10.dp))
+        }
 
         // Global Progress Bar
         RadarLinearCheckpointStepper(
@@ -264,86 +114,14 @@ fun WaitingEntryRadarCard(
         Spacer(Modifier.height(10.dp))
 
         // Target Levels Box (Hideable)
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(TvSurfaceVariant, RoundedCornerShape(10.dp))
-                .border(0.5.dp, TvBorder, RoundedCornerShape(10.dp))
-                .clickable { isLevelPlanVisible = !isLevelPlanVisible }
-                .padding(10.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = if (completed == 4) "🔥 STATUS: SIAP EKSEKUSI!" else "⚡ LEVEL PLAN ENTRY & TARGET",
-                    color = if (completed == 4) TvGreen else WarningAmber,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Black
-                )
-                Text(
-                    text = if (isLevelPlanVisible) "SEMBUNYIKAN" else "LIHAT PLAN",
-                    color = TvBlue,
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-
-            AnimatedVisibility(visible = isLevelPlanVisible) {
-                Column(modifier = Modifier.padding(top = 8.dp)) {
-                    val refPrice = if (signal.entryPrice > 0.0) signal.entryPrice else effectivePrice
-                    val targetPrice1 = if (signal.targetPrice1 > 0.0) signal.targetPrice1 else if (refPrice > 0.0) refPrice * 1.08 else 0.0
-                    val targetPrice2 = if (signal.targetPrice2 > 0.0) signal.targetPrice2 else if (refPrice > 0.0) refPrice * 1.18 else 0.0
-                    val stopLoss = if (signal.stopLoss > 0.0) signal.stopLoss else if (refPrice > 0.0) refPrice * 0.95 else 0.0
-
-                    val tp1Gain = if (refPrice > 0.0 && targetPrice1 > 0.0) ((targetPrice1 - refPrice) / refPrice) * 100 else 0.0
-                    val tp2Gain = if (refPrice > 0.0 && targetPrice2 > 0.0) ((targetPrice2 - refPrice) / refPrice) * 100 else 0.0
-                    val slLoss = if (refPrice > 0.0 && stopLoss > 0.0) ((stopLoss - refPrice) / refPrice) * 100 else 0.0
-
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("• Entry Area", color = TvTextSecondary, fontSize = 11.sp)
-                        Text(
-                            PriceFormatter.formatPrice(refPrice, quoteAsset = quoteAsset),
-                            color = TvTextPrimary,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                    Spacer(Modifier.height(3.dp))
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("• Target TP1", color = TvTextSecondary, fontSize = 11.sp)
-                        Text(
-                            "${PriceFormatter.formatPrice(targetPrice1, quoteAsset = quoteAsset)} (${PriceFormatter.formatPercentage(tp1Gain, true)})",
-                            color = TvGreen,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                    Spacer(Modifier.height(3.dp))
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("• Target TP2", color = TvTextSecondary, fontSize = 11.sp)
-                        Text(
-                            "${PriceFormatter.formatPrice(targetPrice2, quoteAsset = quoteAsset)} (${PriceFormatter.formatPercentage(tp2Gain, true)})",
-                            color = TvGreen,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                    Spacer(Modifier.height(3.dp))
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("• Cut Loss (SL)", color = TvTextSecondary, fontSize = 11.sp)
-                        Text(
-                            "${PriceFormatter.formatPrice(stopLoss, quoteAsset = quoteAsset)} (${PriceFormatter.formatPercentage(slLoss, true)})",
-                            color = TvRed,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-            }
-        }
+        RadarTargetLevelsSection(
+            signal = signal,
+            effectivePrice = effectivePrice,
+            quoteAsset = quoteAsset,
+            completed = completed,
+            isLevelPlanVisible = isLevelPlanVisible,
+            onToggleLevelPlan = { isLevelPlanVisible = !isLevelPlanVisible }
+        )
 
         Spacer(Modifier.height(10.dp))
 
@@ -378,84 +156,5 @@ fun WaitingEntryRadarCard(
         )
 
         Spacer(Modifier.height(10.dp))
-    }
-}
-
-@Composable
-private fun RadarChecklistItem(
-    stepNumber: Int,
-    label: String,
-    isOk: Boolean,
-    detail: String
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .size(18.dp)
-                .background(
-                    if (isOk) TvGreen.copy(alpha = 0.2f) else TvSurfaceVariant,
-                    CircleShape
-                )
-                .border(
-                    1.dp,
-                    if (isOk) TvGreen else TvBorder,
-                    CircleShape
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            if (isOk) {
-                Icon(
-                    imageVector = Icons.Default.Check,
-                    contentDescription = "OK",
-                    tint = TvGreen,
-                    modifier = Modifier.size(12.dp)
-                )
-            } else {
-                Icon(
-                    imageVector = Icons.Default.HourglassEmpty,
-                    contentDescription = "Pending",
-                    tint = TvBlue,
-                    modifier = Modifier.size(10.dp)
-                )
-            }
-        }
-
-        Spacer(Modifier.width(8.dp))
-
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = label,
-                color = if (isOk) TvGreen else TvTextPrimary,
-                fontSize = 11.sp,
-                fontWeight = if (isOk) FontWeight.Bold else FontWeight.Medium
-            )
-            if (detail.isNotBlank()) {
-                Text(
-                    text = detail,
-                    color = TvTextSecondary,
-                    fontSize = 9.5.sp,
-                    maxLines = 1
-                )
-            }
-        }
-
-        Box(
-            modifier = Modifier
-                .background(
-                    if (isOk) TvGreen.copy(alpha = 0.15f) else TvSurfaceVariant,
-                    RoundedCornerShape(4.dp)
-                )
-                .padding(horizontal = 6.dp, vertical = 2.dp)
-        ) {
-            Text(
-                text = if (isOk) "[✓] OK" else "[⚡ SCAN]",
-                color = if (isOk) TvGreen else TvBlue,
-                fontSize = 9.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
     }
 }

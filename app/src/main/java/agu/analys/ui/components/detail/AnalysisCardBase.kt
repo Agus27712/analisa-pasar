@@ -30,9 +30,12 @@ object AnalysisSpacing {
 }
 
 @Composable
-fun AnalysisCard(content: @Composable ColumnScope.() -> Unit) {
+fun AnalysisCard(
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit
+) {
     Column(
-        Modifier
+        modifier
             .fillMaxWidth()
             .background(AnalysisCardBg, RoundedCornerShape(16.dp))
             .border(1.dp, AnalysisBorder, RoundedCornerShape(16.dp))
