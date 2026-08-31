@@ -90,7 +90,232 @@ class SpotPositionStore(context: Context) {
         )
     }
 
-    // truncated for tool size - will follow with full in next if needed
+    /** Reconstruct the position state at a historical timestamp. */
+    fun getAt(symbol: String, timestamp: Long): SpotPosition {
+        val key = normalize(symbol)
+        val history = readHistory(key)
+        if (history.length() == 0) {
+            val current = get(symbol)
+            if (current.isHolding && current.openedAt > 0L && current.openedAt <= timestamp) return current
+            return SpotPosition()
+        }
+
+        var best: JSONObject? = null
+        for (i in 0 until history.length()) {
+            val event = history.optJSONObject(i) ?: continue
+            val eventTime = event.optLong("timestamp", 0L)
+            if (eventTime <= 0L || eventTime > timestamp) continue
+            if (best == null || eventTime > best!!.optLong("timestamp", 0L)) best = event
+        }
+
+        if (best == null) return SpotPosition()
+        val state = best.optString("state", SpotPositionState.NO_POSITION.name)
+            .let { runCatching { SpotPositionState.valueOf(it) }.getOrDefault(SpotPositionState.NO_POSITION) }
+        return SpotPosition(
+            state = state,
+            investedAmount = best.optDouble("investedAmount", 0.0),
+            entryPrice = best.optDouble("entryPrice", 0.0),
+            quantity = best.optDouble("quantity", 0.0),
+            openedAt = best.optLong("openedAt", 0L)
+        )
+    }
+
+    fun setHolding(symbol: String, invested: Double, entry: Double, quantity: Double) {
+        val key = normalize(symbol)
+        val changedAt = System.currentTimeMillis()
+        val position = SpotPosition(
+            state = SpotPositionState.HOLDING,
+            investedAmount = invested,
+            entryPrice = entry,
+            quantity = quantity,
+            openedAt = changedAt,
+            peakPrice = entry
+        )
+        prefs.edit()
+            .putString("${key}_state", SpotPositionState.HOLDING.name)
+            .putString("${key}_invested", invested.toString())
+            .putString("${key}_entry", entry.toString())
+            .putString("${key}_quantity", quantity.toString())
+            .putLong("${key}_opened_at", changedAt)
+            .putString("${key}_peak", entry.toString())
+            .putString("${key}_history", appendHistoryEvent(key, position))
+            .apply()
+    }
+
+    fun markSold(symbol: String) {
+        val key = normalize(symbol)
+        val current = get(symbol)
+        if (!current.isHolding && current.entryPrice == 0.0 && current.investedAmount == 0.0 && current.quantity == 0.0) return
+        val changedAt = System.currentTimeMillis()
+        val position = SpotPosition(state = SpotPositionState.NO_POSITION, openedAt = changedAt)
+        prefs.edit()
+            .putString("${key}_state", SpotPositionState.NO_POSITION.name)
+            .remove("${key}_invested")
+            .remove("${key}_entry")
+            .remove("${key}_quantity")
+            .remove("${key}_opened_at")
+            .remove("${key}_peak")
+            .remove("${key}_trailing_pct")
+            .remove("${key}_trailing_enabled")
+            .remove("${key}_trailing_triggered")
+            .remove("${key}_auto_sell_enabled")
+            .remove("${key}_tp1_price")
+            .remove("${key}_tp1_percent")
+            .remove("${key}_tp2_price")
+            .remove("${key}_tp2_percent")
+            .remove("${key}_stop_loss_price")
+            .remove("${key}_tp1_triggered")
+            .remove("${key}_tp2_triggered")
+            .remove("${key}_sl_triggered")
+            .remove("${key}_last_trailing_order_id")
+            .remove("${key}_last_order_update_time")
+            .putString("${key}_history", appendHistoryEvent(key, position))
+            .apply()
+    }
+
+    fun setTrailingOrderIdAndUpdateTime(symbol: String, orderId: String?, updateTime: Long) {
+        val key = normalize(symbol)
+        prefs.edit()
+            .putString("${key}_last_trailing_order_id", orderId)
+            .putLong("${key}_last_order_update_time", updateTime)
+            .apply()
+    }
+
+    fun setTrailingStop(symbol: String, enabled: Boolean, trailingPercent: Double, referencePrice: Double = 0.0) {
+        val key = normalize(symbol)
+        if (!enabled) {
+            prefs.edit()
+                .putBoolean("${key}_trailing_enabled", false)
+                .putBoolean("${key}_trailing_triggered", false)
+                .remove("${key}_last_trailing_order_id")
+                .remove("${key}_last_order_update_time")
+                .apply()
+            return
+        }
+        val current = get(symbol)
+        val peak = when {
+            referencePrice > 0.0 -> referencePrice
+            current.entryPrice > 0.0 -> current.entryPrice
+            else -> 0.0
+        }
+        prefs.edit()
+            .putBoolean("${key}_trailing_enabled", true)
+            .putString("${key}_trailing_pct", trailingPercent.coerceAtLeast(0.5).toString())
+            .putString("${key}_peak", peak.toString())
+            .putBoolean("${key}_trailing_triggered", false)
+            .remove("${key}_last_trailing_order_id")
+            .remove("${key}_last_order_update_time")
+            .apply()
+    }
+
+    /**
+     * Updates peak price and checks if trailing stop is triggered.
+     * Returns Pair<SpotPosition, Boolean(justTriggered)>
+     */
+    fun updateTrailingPrice(symbol: String, currentPrice: Double): Pair<SpotPosition, Boolean> {
+        val current = get(symbol)
+        if (!current.isHolding || !current.isTrailingEnabled || currentPrice <= 0.0) {
+            return Pair(current, false)
+        }
+
+        val key = normalize(symbol)
+        var newPeak = current.peakPrice.coerceAtLeast(current.entryPrice)
+        var justTriggered = false
+
+        if (currentPrice > newPeak) {
+            newPeak = currentPrice
+            prefs.edit().putString("${key}_peak", newPeak.toString()).apply()
+        }
+
+        // HARD FLOOR di entryPrice → trailing sell limit, jangan pernah jual di bawah modal
+        val rawStop = newPeak * (1.0 - current.trailingPercent / 100.0)
+        val trailingStop = if (current.entryPrice > 0.0) maxOf(rawStop, current.entryPrice) else rawStop
+        if (currentPrice <= trailingStop && !current.isTrailingTriggered) {
+            justTriggered = true
+            prefs.edit().putBoolean("${key}_trailing_triggered", true).apply()
+        }
+
+        val updated = get(symbol)
+        return Pair(updated, justTriggered)
+    }
+
+    fun resetTrailingTrigger(symbol: String) {
+        val key = normalize(symbol)
+        prefs.edit().putBoolean("${key}_trailing_triggered", false).apply()
+    }
+
+    fun setAutoSellParams(
+        symbol: String,
+        enabled: Boolean,
+        tp1Price: Double,
+        tp1Percent: Double,
+        tp2Price: Double,
+        tp2Percent: Double,
+        stopLossPrice: Double
+    ) {
+        val key = normalize(symbol)
+        prefs.edit()
+            .putBoolean("${key}_auto_sell_enabled", enabled)
+            .putString("${key}_tp1_price", tp1Price.toString())
+            .putString("${key}_tp1_percent", tp1Percent.toString())
+            .putString("${key}_tp2_price", tp2Price.toString())
+            .putString("${key}_tp2_percent", tp2Percent.toString())
+            .putString("${key}_stop_loss_price", stopLossPrice.toString())
+            .putBoolean("${key}_tp1_triggered", false)
+            .putBoolean("${key}_tp2_triggered", false)
+            .putBoolean("${key}_sl_triggered", false)
+            .apply()
+    }
+
+    fun markTp1Triggered(symbol: String) {
+        prefs.edit().putBoolean("${normalize(symbol)}_tp1_triggered", true).apply()
+    }
+
+    fun markTp2Triggered(symbol: String) {
+        prefs.edit().putBoolean("${normalize(symbol)}_tp2_triggered", true).apply()
+    }
+
+    fun markSlTriggered(symbol: String) {
+        prefs.edit().putBoolean("${normalize(symbol)}_sl_triggered", true).apply()
+    }
+
+    fun getAllActiveTrailingSymbols(): List<String> {
+        val result = mutableListOf<String>()
+        val all = prefs.all
+        for ((k, _) in all) {
+            if (!k.endsWith("_state")) continue
+            val prefix = k.removeSuffix("_state")
+            val stateStr = prefs.getString(k, null) ?: continue
+            val isTrailing = prefs.getBoolean("${prefix}_trailing_enabled", false)
+            if (stateStr == SpotPositionState.HOLDING.name && isTrailing) {
+                result.add(prefix)
+            }
+        }
+        return result
+    }
+
+    private fun readHistory(key: String): JSONArray {
+        val raw = prefs.getString("${key}_history", null).orEmpty()
+        return if (raw.isBlank()) JSONArray() else runCatching { JSONArray(raw) }.getOrElse { JSONArray() }
+    }
+
+    private fun appendHistoryEvent(key: String, position: SpotPosition): String {
+        val history = readHistory(key)
+        val event = JSONObject()
+            .put("timestamp", System.currentTimeMillis())
+            .put("state", position.state.name)
+            .put("investedAmount", position.investedAmount)
+            .put("entryPrice", position.entryPrice)
+            .put("quantity", position.quantity)
+            .put("openedAt", position.openedAt)
+        history.put(event)
+        while (history.length() > MAX_HISTORY_EVENTS) history.remove(0)
+        return history.toString()
+    }
+
+    private fun normalize(symbol: String): String =
+        symbol.uppercase().replace(Regex("[^A-Z0-9_]"), "_")
+
     companion object {
         private const val PREFS_NAME = "analysis_ui_spot_positions"
         private const val MAX_HISTORY_EVENTS = 50
