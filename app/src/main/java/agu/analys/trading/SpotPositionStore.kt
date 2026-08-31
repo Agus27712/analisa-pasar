@@ -353,6 +353,20 @@ class SpotPositionStore(context: Context) {
         }
     }
 
+    fun getAllActiveTrailingSymbols(): List<String> {
+        val allKeys = prefs.all.keys
+        val prefixes = allKeys.filter { it.endsWith("_state") }.map { it.removeSuffix("_state") }
+        val result = mutableListOf<String>()
+        for (prefix in prefixes) {
+            val stateStr = prefs.getString("${prefix}_state", null)
+            val isTrailing = prefs.getBoolean("${prefix}_trailing_enabled", false)
+            if (stateStr == SpotPositionState.HOLDING.name && isTrailing) {
+                result.add(prefix)
+            }
+        }
+        return result
+    }
+
     private fun readHistory(key: String): JSONArray {
         val raw = prefs.getString("${key}_history", null).orEmpty()
         return if (raw.isBlank()) JSONArray() else runCatching { JSONArray(raw) }.getOrElse { JSONArray() }

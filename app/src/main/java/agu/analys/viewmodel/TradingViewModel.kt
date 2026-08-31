@@ -75,6 +75,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
                         positionStore.markSold(filledOrder.symbol)
                         positionCoordinator.setTrailing(filledOrder.symbol, enabled = false, 0.0, 0.0)
                         refreshSpotPosition()
+                        checkAndStopTrailingServiceIfEmpty()
                     }
                 }
             }
@@ -185,6 +186,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     val priceAlerts: StateFlow<List<agu.analys.model.PriceAlert>> = positionCoordinator.priceAlerts
 
     private var dashboardPollJob: Job? = null
+    private var trailingPollJob: Job? = null
     internal var lastLiveTickAt = 0L
     internal val _dashboardTicks = MutableStateFlow<Map<String, MarketTick>>(emptyMap())
     internal val _connectionState = MutableStateFlow<MarketConnectionState>(MarketConnectionState.ConnectionLost())
@@ -215,6 +217,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         val initialPair = TradingPair.popularPairsForSource(prefs.marketDataSource).first()
         selectPair(initialPair)
         startDashboardPolling()
+        startTrailingPolling()
         listenToEngineSignals()
         checkPublicIp()
     }
@@ -402,6 +405,40 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
                 refreshWorthCoinsFromMarket()
                 delay(15_000L)
             }
+        }
+    }
+
+    internal fun startTrailingPolling() {
+        if (trailingPollJob?.isActive == true) return
+        trailingPollJob = viewModelScope.launch {
+            while (isActive) {
+                try {
+                    val activeSymbols = positionStore.getAllActiveTrailingSymbols()
+                    if (activeSymbols.isNotEmpty()) {
+                        val pairs = activeSymbols.map { TradingPair.fromCustomSymbol(it, "IDR").effectiveIndodaxPair() }
+                        val ticks = IndodaxMarketService.fetchTickers(pairs)
+                        for (tick in ticks) {
+                            simCoordinator.onPriceTick(tick.symbol, tick.price, tick.high24h, tick.low24h)
+                            checkAlertsAndTrailing(tick.symbol, tick.price)
+                        }
+                    } else {
+                        checkAndStopTrailingServiceIfEmpty()
+                    }
+                } catch (e: Exception) {
+                    // Ignore network error for this tick
+                }
+                delay(4000L)
+            }
+        }
+    }
+
+    internal fun checkAndStopTrailingServiceIfEmpty() {
+        if (positionStore.getAllActiveTrailingSymbols().isEmpty()) {
+            trailingPollJob?.cancel()
+            trailingPollJob = null
+            val intent = android.content.Intent(getApplication<android.app.Application>(), agu.analys.service.TradingForegroundService::class.java)
+            intent.action = agu.analys.service.TradingForegroundService.ACTION_STOP
+            getApplication<android.app.Application>().startService(intent)
         }
     }
 

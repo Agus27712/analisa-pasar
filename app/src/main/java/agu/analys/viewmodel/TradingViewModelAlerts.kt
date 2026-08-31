@@ -66,7 +66,16 @@ fun TradingViewModel.checkAlertsAndTrailing(symbol: String, currentPrice: Double
                     refreshSpotPosition()
                 }
             } else {
-                executeAutoSellOrder(symbol, currentPrice, posQty, "TRAILING STOP (SIMULASI)", isReal = false)
+                val simOrderId = updatedPos.lastTrailingOrderId
+                val isSimOrderOpen = simOrderId != null && simCoordinator.openOrders.value.any { it.id == simOrderId }
+                if (simOrderId != null && !isSimOrderOpen) {
+                    // STOP_LIMIT engine akan/sudah mengisi order ini.
+                    // Bersihkan posisi lokal
+                    positionStore.markSold(symbol)
+                    refreshSpotPosition()
+                } else {
+                    executeAutoSellOrder(symbol, currentPrice, posQty, "TRAILING STOP (SIMULASI)", isReal = false)
+                }
             }
         }
     } else if (updatedPos.isTrailingEnabled) {
@@ -235,6 +244,8 @@ fun TradingViewModel.deployTrailingOrder(symbol: String) {
     val pos = positionStore.get(symbol)
     if (!pos.isHolding || !pos.isTrailingEnabled) return
     val isReal = isRealBuyMode.value
+    agu.analys.service.TradingForegroundService.startService(getApplication<android.app.Application>())
+    startTrailingPolling()
     
     if (isReal) {
         val apiKey = prefs.indodaxApiKey
@@ -347,6 +358,7 @@ fun TradingViewModel.cancelTrailingOrder(symbol: String) {
         }
     }
     positionCoordinator.setTrailing(symbol, enabled = false, pos.trailingPercent, 0.0)
+    checkAndStopTrailingServiceIfEmpty()
 }
 
 fun TradingViewModel.updateSimTrailingOrder(symbol: String, pos: SpotPosition, currentPrice: Double) {
