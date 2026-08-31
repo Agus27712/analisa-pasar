@@ -142,6 +142,22 @@ class SpotPositionStore(context: Context) {
             .apply()
     }
 
+    fun markBought(symbol: String, entryPrice: Double, invested: Double = 0.0, quantity: Double = 0.0) {
+        val finalInvested = if (invested > 0.0) invested else (if (quantity > 0.0 && entryPrice > 0.0) quantity * entryPrice else entryPrice)
+        val finalQty = if (quantity > 0.0) quantity else (if (entryPrice > 0.0 && finalInvested > 0.0) finalInvested / entryPrice else (if (entryPrice > 0.0) 1.0 else 0.0))
+        setHolding(symbol, invested = finalInvested, entry = entryPrice, quantity = finalQty)
+    }
+
+    fun markBought(symbol: String, invested: Double, entry: Double) {
+        val qty = if (entry > 0.0) invested / entry else 0.0
+        setHolding(symbol, invested = invested, entry = entry, quantity = qty)
+    }
+
+    fun setManualEntryPrice(symbol: String, price: Double, amount: Double = 0.0) {
+        val qty = if (price > 0.0 && amount > 0.0) amount / price else (if (price > 0.0) 1.0 else 0.0)
+        setHolding(symbol, invested = if (amount > 0.0) amount else price, entry = price, quantity = qty)
+    }
+
     fun markSold(symbol: String) {
         val key = normalize(symbol)
         val current = get(symbol)

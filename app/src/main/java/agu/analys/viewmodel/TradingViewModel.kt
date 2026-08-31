@@ -278,9 +278,9 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     fun refreshSimulationState() = simCoordinator.refresh()
     fun refreshSpotPosition() { positionCoordinator.refreshPosition(_selectedPair.value.symbol) }
     fun refreshPriceAlerts() { positionCoordinator.refreshAlerts(_selectedPair.value.symbol) }
-    fun setOwnership(owned: Boolean, price: Double = 0.0) {
+    fun setOwnership(owned: Boolean, price: Double = 0.0, quantity: Double = 0.0, invested: Double = 0.0) {
         val symbol = _selectedPair.value.symbol
-        positionCoordinator.setOwnership(symbol, owned, price)
+        positionCoordinator.setOwnership(symbol, owned, price, quantity, invested)
     }
 
     fun submitSimulationOrder(

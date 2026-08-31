@@ -28,8 +28,8 @@ class PositionCoordinator(
         _priceAlerts.value = alertStore.getAlertsForSymbol(symbol)
     }
 
-    fun setOwnership(symbol: String, owned: Boolean, entryPrice: Double) {
-        if (owned) positionStore.markBought(symbol, entryPrice)
+    fun setOwnership(symbol: String, owned: Boolean, entryPrice: Double = 0.0, quantity: Double = 0.0, invested: Double = 0.0) {
+        if (owned) positionStore.markBought(symbol, entryPrice, invested, quantity)
         else positionStore.markSold(symbol)
         refreshPosition(symbol)
     }

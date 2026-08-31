@@ -268,7 +268,7 @@ fun DetailChartScreen(
                                 is agu.analys.trading.SimulationOrderResult.Success -> res.message
                                 is agu.analys.trading.SimulationOrderResult.Error -> res.message
                             }
-                            viewModel.setOwnership(true, execPrice)
+                            viewModel.setOwnership(true, execPrice, quantity = qty, invested = nominalIdr)
                             if (isSuccess) HapticUtil.vibrateTradeSuccess(context)
                             else HapticUtil.vibrateTradeFailure(context)
                             android.widget.Toast.makeText(context, "Simulasi: $msg", android.widget.Toast.LENGTH_SHORT).show()
@@ -346,10 +346,12 @@ fun DetailChartScreen(
                 onDeployTrailingOrder = {
                     viewModel.deployTrailingOrder(pair.symbol)
                     HapticUtil.vibrateTradeSuccess(context)
+                    android.widget.Toast.makeText(context, "Jaring Pengaman Aktif!", android.widget.Toast.LENGTH_SHORT).show()
                 },
                 onCancelTrailingOrder = {
                     viewModel.cancelTrailingOrder(pair.symbol)
                     HapticUtil.vibrateTradeSuccess(context)
+                    android.widget.Toast.makeText(context, "Jaring Pengaman Dimatikan", android.widget.Toast.LENGTH_SHORT).show()
                 }
             )
 
