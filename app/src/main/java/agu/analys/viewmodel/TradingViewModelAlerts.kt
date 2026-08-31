@@ -46,8 +46,8 @@ fun TradingViewModel.checkAlertsAndTrailing(symbol: String, currentPrice: Double
         refreshSpotPosition()
         agu.analys.util.AlertNotificationHelper.sendPriceAlertNotification(
             context = getApplication(),
-            title = "🚨 TRAILING STOP LOSS TERPICU ($symbol)",
-            message = "Harga turun ke ${PriceFormatter.formatIdrNumber(currentPrice)} IDR.",
+            title = "🚨 PERINGATAN HARGA TURUN ($symbol)",
+            message = "Harga menyentuh batas aman di Rp ${PriceFormatter.formatIdrNumber(currentPrice)}. Memproses penjualan otomatis...",
             notificationId = (symbol.hashCode() and 0x7FFFFFFF) + 1000
         )
         
@@ -57,14 +57,8 @@ fun TradingViewModel.checkAlertsAndTrailing(symbol: String, currentPrice: Double
         val posQty = updatedPos.quantity
         if (posQty > 0.0) {
             if (isReal) {
-                if (updatedPos.lastTrailingOrderId.isNullOrEmpty()) {
-                    executeAutoSellOrder(symbol, currentPrice, posQty, "TRAILING STOP (CLIENT)", isReal = true)
-                } else {
-                    // Order bursa sudah keisi secara alami karena menyentuh SL.
-                    // Bersihkan posisi lokal
-                    positionStore.markSold(symbol)
-                    refreshSpotPosition()
-                }
+                // Client-side trailing trigger for real mode.
+                executeAutoSellOrder(symbol, currentPrice, posQty, "TRAILING STOP (CLIENT)", isReal = true)
             } else {
                 val simOrderId = updatedPos.lastTrailingOrderId
                 val isSimOrderOpen = simOrderId != null && simCoordinator.openOrders.value.any { it.id == simOrderId }
@@ -189,15 +183,18 @@ fun TradingViewModel.checkAlertsAndTrailing(symbol: String, currentPrice: Double
 
 fun TradingViewModel.executeAutoSellOrder(symbol: String, price: Double, quantity: Double, triggerType: String, isReal: Boolean, isPartial: Boolean = false) {
     if (isReal) {
-        executeRealTrade(symbol, "sell", price.toLong(), quantity, 0.0, 0.0) { success, msg ->
+        // Diskon 5% dari harga terkini agar berfungsi 100% layaknya Market Sell instan di orderbook
+        val marketSellPrice = (price * 0.95).toLong()
+        executeRealTrade(symbol, "sell", marketSellPrice, quantity, 0.0, 0.0) { success, msg ->
             if (!success && triggerType.contains("TRAILING")) {
                 positionStore.resetTrailingTrigger(symbol)
             }
-            val notifTitle = if (success) "✅ AUTO-SELL TERKIRIM ($symbol)" else "❌ AUTO-SELL GAGAL ($symbol)"
+            val triggerLabel = if (triggerType.contains("TRAILING")) "Jaring Pengaman" else "Jual Otomatis"
+            val notifTitle = if (success) "✅ ASET DIAMANKAN ($symbol)" else "❌ GAGAL DIJUAL ($symbol)"
             val notifMsg = if (success) {
-                "Trigger $triggerType aktif. Berhasil menjual $quantity $symbol di harga ${PriceFormatter.formatIdrNumber(price)} IDR."
+                "$triggerLabel aktif! Koin berhasil dijual otomatis di kisaran harga ${PriceFormatter.formatIdrNumber(price)}."
             } else {
-                "Gagal menjual karena: $msg"
+                "Sistem gagal menjual koin: $msg"
             }
             agu.analys.util.AlertNotificationHelper.sendPriceAlertNotification(
                 context = getApplication(),
@@ -230,11 +227,17 @@ fun TradingViewModel.executeAutoSellOrder(symbol: String, price: Double, quantit
         if (!success && triggerType.contains("TRAILING")) {
             positionStore.resetTrailingTrigger(symbol)
         }
-        val notifTitle = if (success) "✅ SIM AUTO-SELL ($symbol)" else "❌ SIM AUTO-SELL GAGAL ($symbol)"
+        val triggerLabel = if (triggerType.contains("TRAILING")) "Jaring Pengaman" else "Jual Otomatis"
+        val notifTitle = if (success) "✅ ASET DIAMANKAN [SIM] ($symbol)" else "❌ GAGAL DIJUAL [SIM] ($symbol)"
+        val notifMsg = if (success) {
+            "$triggerLabel aktif! Koin terjual di harga ${PriceFormatter.formatIdrNumber(price)} (Simulasi)."
+        } else {
+            "Gagal (Simulasi): $msg"
+        }
         agu.analys.util.AlertNotificationHelper.sendPriceAlertNotification(
             context = getApplication(),
             title = notifTitle,
-            message = "Simulasi $triggerType terpicu: $msg",
+            message = notifMsg,
             notificationId = (symbol.hashCode() and 0x7FFFFFFF) + 2000
         )
     }
@@ -242,45 +245,25 @@ fun TradingViewModel.executeAutoSellOrder(symbol: String, price: Double, quantit
 
 fun TradingViewModel.deployTrailingOrder(symbol: String) {
     val pos = positionStore.get(symbol)
-    if (!pos.isHolding || !pos.isTrailingEnabled) return
+    if (!pos.isHolding || !pos.isTrailingEnabled) {
+        Timber.e("Gagal pasang trailing order: Status holding = ${pos.isHolding}, Trailing Enabled = ${pos.isTrailingEnabled}")
+        // Set a message to UI via _realTradeStatus if we could
+        return
+    }
     val isReal = isRealBuyMode.value
     agu.analys.service.TradingForegroundService.startService(getApplication<android.app.Application>())
     startTrailingPolling()
     
     if (isReal) {
-        val apiKey = prefs.indodaxApiKey
-        val secretKey = prefs.indodaxSecretKey
-        if (apiKey.isBlank() || secretKey.isBlank()) {
-            return
-        }
-        
-        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            val slPrice = pos.peakPrice * (1.0 - pos.trailingPercent / 100.0)
-            val roundedSlPrice = slPrice.toLong().toDouble()
-            val clientOrderId = "agu-trailing-${System.currentTimeMillis()}"
-            
-            val orderResult = IndodaxTradeApiV2.createLimitOrderDetailed(
-                apiKey = apiKey,
-                secretKey = secretKey,
-                symbol = symbol,
-                side = "sell",
-                price = roundedSlPrice,
-                quantity = pos.quantity,
-                clientOrderId = clientOrderId
-            )
-            
-            if (orderResult.success) {
-                positionCoordinator.setTrailingOrderIdAndUpdateTime(symbol, orderResult.orderId, System.currentTimeMillis())
-                agu.analys.util.AlertNotificationHelper.sendPriceAlertNotification(
-                     context = getApplication(),
-                     title = "🔒 TRAILING STOP DIPASANG ($symbol)",
-                     message = "Stop-loss aktif di Rp ${PriceFormatter.formatIdrNumber(roundedSlPrice)}.",
-                     notificationId = (symbol.hashCode() and 0x7FFFFFFF) + 1000
-                )
-            } else {
-                Timber.e("Gagal pasang trailing order: ${orderResult.message}")
-            }
-        }
+        // Pure Client-Side Deployment for REAL mode (Indodax doesn't support STOP LIMIT via basic trade API)
+        positionCoordinator.setTrailingOrderIdAndUpdateTime(symbol, "real-client-trailing", System.currentTimeMillis())
+        val slPrice = pos.peakPrice * (1.0 - pos.trailingPercent / 100.0)
+        agu.analys.util.AlertNotificationHelper.sendPriceAlertNotification(
+             context = getApplication(),
+             title = "🔒 JARING PENGAMAN AKTIF ($symbol)",
+             message = "Aplikasi sedang memantau. Koin akan dijual otomatis jika harga turun ke Rp ${PriceFormatter.formatIdrNumber(slPrice)}.",
+             notificationId = (symbol.hashCode() and 0x7FFFFFFF) + 1000
+        )
     } else {
         // Simulation mode: submit STOP_LIMIT order in simulation store
         val quantityToSell = if (pos.quantity > 0.0) pos.quantity else {
@@ -328,8 +311,8 @@ fun TradingViewModel.deployTrailingOrder(symbol: String) {
             positionCoordinator.setTrailingOrderIdAndUpdateTime(symbol, res.order.id, System.currentTimeMillis())
             agu.analys.util.AlertNotificationHelper.sendPriceAlertNotification(
                  context = getApplication(),
-                 title = "🔒 SIM TRAILING STOP DIPASANG ($symbol)",
-                 message = "Stop-loss simulasi aktif di Rp ${PriceFormatter.formatIdrNumber(slPrice)}.",
+                 title = "🔒 JARING PENGAMAN AKTIF [SIM] ($symbol)",
+                 message = "Aplikasi sedang memantau (Simulasi). Koin akan dijual otomatis di Rp ${PriceFormatter.formatIdrNumber(slPrice)}.",
                  notificationId = (symbol.hashCode() and 0x7FFFFFFF) + 1000
             )
         } else if (res is SimulationOrderResult.Error) {
@@ -346,11 +329,13 @@ fun TradingViewModel.cancelTrailingOrder(symbol: String) {
     
     if (!orderId.isNullOrEmpty()) {
         if (isReal) {
-            val apiKey = prefs.indodaxApiKey
-            val secretKey = prefs.indodaxSecretKey
-            if (apiKey.isNotBlank() && secretKey.isNotBlank()) {
-                viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                    IndodaxTradeApiV2.cancelOrder(apiKey, secretKey, symbol, orderId)
+            if (orderId != "real-client-trailing" && !orderId.startsWith("client-trailing")) {
+                val apiKey = prefs.indodaxApiKey
+                val secretKey = prefs.indodaxSecretKey
+                if (apiKey.isNotBlank() && secretKey.isNotBlank()) {
+                    viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                        IndodaxTradeApiV2.cancelOrder(apiKey, secretKey, symbol, orderId)
+                    }
                 }
             }
         } else {
@@ -390,75 +375,21 @@ fun TradingViewModel.updateSimTrailingOrder(symbol: String, pos: SpotPosition, c
         positionCoordinator.setTrailingOrderIdAndUpdateTime(symbol, res.order.id, System.currentTimeMillis())
         agu.analys.util.AlertNotificationHelper.sendPriceAlertNotification(
             context = getApplication(),
-            title = "📈 SIM TRAILING STOP NAIK ($symbol)",
-            message = "Stop-loss naik ke Rp ${PriceFormatter.formatIdrNumber(slPrice)} (Peak: ${PriceFormatter.formatIdrNumber(pos.peakPrice)}).",
+            title = "📈 JARING PENGAMAN NAIK [SIM] ($symbol)",
+            message = "Batas aman penjualan otomatis naik ke Rp ${PriceFormatter.formatIdrNumber(slPrice)} (Mengikuti harga tertinggi).",
             notificationId = (symbol.hashCode() and 0x7FFFFFFF) + 1000
         )
     }
 }
 
 fun TradingViewModel.updateRealTrailingOrder(symbol: String, pos: SpotPosition, currentPrice: Double) {
-    val oldOrderId = pos.lastTrailingOrderId ?: return
-    val apiKey = prefs.indodaxApiKey
-    val secretKey = prefs.indodaxSecretKey
-    if (apiKey.isBlank() || secretKey.isBlank()) return
-    
-    viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-        // 1. Cancel order lama
-        val (cancelOk, cancelMsg) = IndodaxTradeApiV2.cancelOrder(apiKey, secretKey, symbol, oldOrderId)
-        if (!cancelOk) {
-            if (cancelMsg.contains("429") || cancelMsg.lowercase().contains("rate limit") || cancelMsg.lowercase().contains("too many requests")) {
-                // Fallback ke client-side
-                positionCoordinator.setTrailingOrderIdAndUpdateTime(symbol, null, System.currentTimeMillis())
-                agu.analys.util.AlertNotificationHelper.sendPriceAlertNotification(
-                    context = getApplication(),
-                    title = "⚠️ TRAILING FALLBACK ($symbol)",
-                    message = "Rate-limit bursa terdeteksi saat cancel. Beralih ke pemantauan client-side.",
-                    notificationId = (symbol.hashCode() and 0x7FFFFFFF) + 3000
-                )
-            }
-            return@launch
-        }
-        
-        // Cooldown antar cancel + place order minimal 12–20 detik (kita beri delay pengamanan 2s)
-        delay(2000L)
-        
-        // 2. Pasang order baru di harga SL baru
-        val newSlPrice = pos.peakPrice * (1.0 - pos.trailingPercent / 100.0)
-        val roundedSlPrice = newSlPrice.toLong().toDouble()
-        val clientOrderId = "agu-trailing-${System.currentTimeMillis()}"
-        
-        val orderResult = IndodaxTradeApiV2.createLimitOrderDetailed(
-            apiKey = apiKey,
-            secretKey = secretKey,
-            symbol = symbol,
-            side = "sell",
-            price = roundedSlPrice,
-            quantity = pos.quantity,
-            clientOrderId = clientOrderId
-        )
-        
-        if (orderResult.success) {
-            positionCoordinator.setTrailingOrderIdAndUpdateTime(symbol, orderResult.orderId, System.currentTimeMillis())
-            agu.analys.util.AlertNotificationHelper.sendPriceAlertNotification(
-                context = getApplication(),
-                title = "📈 TRAILING STOP DIPERBARUI ($symbol)",
-                message = "Stop-loss naik ke Rp ${PriceFormatter.formatIdrNumber(roundedSlPrice)}.",
-                notificationId = (symbol.hashCode() and 0x7FFFFFFF) + 1000
-            )
-        } else {
-            if (orderResult.message.contains("429") || orderResult.message.lowercase().contains("rate limit") || orderResult.message.lowercase().contains("too many requests")) {
-                // Fallback ke client-side
-                positionCoordinator.setTrailingOrderIdAndUpdateTime(symbol, null, System.currentTimeMillis())
-                agu.analys.util.AlertNotificationHelper.sendPriceAlertNotification(
-                    context = getApplication(),
-                    title = "⚠️ TRAILING FALLBACK ($symbol)",
-                    message = "Rate-limit bursa terdeteksi saat memasang order baru. Beralih ke pemantauan client-side.",
-                    notificationId = (symbol.hashCode() and 0x7FFFFFFF) + 3000
-                )
-            } else {
-                Timber.e("Gagal memasang order trailing baru: ${orderResult.message}")
-            }
-        }
-    }
+    // Pure Client-Side update for REAL mode
+    val newSlPrice = pos.peakPrice * (1.0 - pos.trailingPercent / 100.0)
+    positionCoordinator.setTrailingOrderIdAndUpdateTime(symbol, "real-client-trailing", System.currentTimeMillis())
+    agu.analys.util.AlertNotificationHelper.sendPriceAlertNotification(
+        context = getApplication(),
+        title = "📈 JARING PENGAMAN NAIK ($symbol)",
+        message = "Batas aman penjualan otomatis naik ke Rp ${PriceFormatter.formatIdrNumber(newSlPrice)}.",
+        notificationId = (symbol.hashCode() and 0x7FFFFFFF) + 1000
+    )
 }
