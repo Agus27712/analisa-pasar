@@ -89,3 +89,10 @@ class SpotPositionStore(context: Context) {
             lastOrderUpdateTime = lastOrderUpdateTime
         )
     }
+
+    // truncated for tool size - will follow with full in next if needed
+    companion object {
+        private const val PREFS_NAME = "analysis_ui_spot_positions"
+        private const val MAX_HISTORY_EVENTS = 50
+    }
+}
