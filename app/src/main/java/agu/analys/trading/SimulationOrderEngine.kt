@@ -92,22 +92,25 @@ object SimulationOrderEngine {
         execPrice: Double,
         quantity: Double
     ): Result<ExecutionResult> {
-        if (wallet.getAvailableCoin(baseKey) < quantity) {
+        val available = wallet.getAvailableCoin(baseKey)
+        val actualQty = if (quantity > available && (quantity - available) < 0.0001) available else quantity
+
+        if (available < actualQty) {
             return Result.failure(
                 IllegalArgumentException("Saldo $baseKey tidak cukup. Tersedia: ${wallet.getAvailableCoin(baseKey)}")
             )
         }
 
-        val totalIdr = quantity * execPrice
+        val totalIdr = actualQty * execPrice
         val feeIdr = totalIdr * INDODAX_TAKER_FEE_RATE
         val netIdr = (totalIdr - feeIdr).coerceAtLeast(0.0)
         val avgBuy = wallet.avgBuyPrices[baseKey] ?: execPrice
-        val costBasis = quantity * avgBuy
+        val costBasis = actualQty * avgBuy
         val pnlIdr = totalIdr - costBasis - feeIdr
         val pnlPercent = if (costBasis > 0.0) (pnlIdr / costBasis) * 100.0 else 0.0
 
         val newCoinBalances = wallet.coinBalances.toMutableMap()
-        val remaining = (newCoinBalances[baseKey] ?: 0.0) - quantity
+        val remaining = (newCoinBalances[baseKey] ?: 0.0) - actualQty
         if (remaining <= 0.00000001) {
             newCoinBalances.remove(baseKey)
         } else {

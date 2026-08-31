@@ -47,11 +47,10 @@ fun PortfolioScreen(
 ) {
     val wallet by viewModel.simulationWallet.collectAsStateWithLifecycle()
     val history by viewModel.simulationHistory.collectAsStateWithLifecycle()
+    val openOrders by viewModel.simulationOpenOrders.collectAsStateWithLifecycle()
     val dashboardTicks by viewModel.dashboardTicks.collectAsStateWithLifecycle()
     val currentTick by viewModel.currentTick.collectAsStateWithLifecycle()
     val selectedPair by viewModel.selectedPair.collectAsStateWithLifecycle()
-    val spotPosition by viewModel.spotPosition.collectAsStateWithLifecycle()
-    val signal by viewModel.aiSignalState.collectAsStateWithLifecycle()
 
     val isRealBuyMode by viewModel.isRealBuyMode.collectAsStateWithLifecycle()
     val isPinUnlocked by viewModel.isPinUnlocked.collectAsStateWithLifecycle()
@@ -287,6 +286,7 @@ fun PortfolioScreen(
             SimulationPortfolioView(
                 wallet = wallet,
                 history = history,
+                openOrders = openOrders,
                 holdings = holdings,
                 totalPortfolioValueIdr = totalPortfolioValueIdr,
                 totalUnrealizedPnlIdr = totalUnrealizedPnlIdr,
@@ -296,11 +296,8 @@ fun PortfolioScreen(
                 onOpenTopUp = { showTopUpModal = true },
                 onNavigateToDetail = onNavigateToDetail,
                 onNavigateToSimulation = onNavigateToSimulation,
-                selectedPair = selectedPair,
-                spotPosition = spotPosition,
-                signal = signal,
-                currentTick = currentTick,
-                onRefreshSpotPosition = viewModel::refreshSpotPosition,
+                onCancelOrder = { orderId -> viewModel.cancelSimulationOrder(orderId) },
+                onCancelAllOrders = { symbol -> viewModel.cancelAllSimulationOrders(symbol) },
                 modifier = Modifier.weight(1f)
             )
         }

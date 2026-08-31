@@ -4,8 +4,8 @@ import agu.analys.model.TradingPair
 
 enum class PortfolioTab(val title: String) {
     HOLDINGS("Koin Dimiliki"),
-    HISTORY("Riwayat Transaksi"),
-    SPOT_TRACKER("Catatan Spot")
+    OPEN_ORDERS("Antrean Order"),
+    HISTORY("Riwayat Transaksi")
 }
 
 data class HoldingItem(

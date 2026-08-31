@@ -19,13 +19,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import agu.analys.model.AISignalState
-import agu.analys.model.MarketTick
 import agu.analys.model.TradingPair
+import agu.analys.trading.SimulationOrder
 import agu.analys.trading.SimulationTradeHistoryItem
 import agu.analys.trading.SimulationWallet
-import agu.analys.trading.SpotPosition
-import agu.analys.ui.components.SpotPositionCard
+import agu.analys.ui.components.simulation.OpenOrderItemCard
 import agu.analys.ui.theme.*
 import agu.analys.util.PriceFormatter
 import java.util.Locale
@@ -33,12 +31,13 @@ import java.util.Locale
 /**
  * Tampilan khusus Portofolio Simulasi:
  * Menampilkan ringkasan portofolio virtual, kas Rupiah simulasi,
- * daftar koin virtual yang dimiliki, riwayat eksekusi, serta pelacak posisi spot.
+ * daftar koin virtual yang dimiliki, antrean open orders, serta riwayat eksekusi.
  */
 @Composable
 fun SimulationPortfolioView(
     wallet: SimulationWallet,
     history: List<SimulationTradeHistoryItem>,
+    openOrders: List<SimulationOrder>,
     holdings: List<HoldingItem>,
     totalPortfolioValueIdr: Double,
     totalUnrealizedPnlIdr: Double,
@@ -48,11 +47,8 @@ fun SimulationPortfolioView(
     onOpenTopUp: () -> Unit,
     onNavigateToDetail: (TradingPair) -> Unit,
     onNavigateToSimulation: (TradingPair) -> Unit,
-    selectedPair: TradingPair,
-    spotPosition: SpotPosition,
-    signal: AISignalState,
-    currentTick: MarketTick?,
-    onRefreshSpotPosition: () -> Unit,
+    onCancelOrder: (String) -> Unit,
+    onCancelAllOrders: (String?) -> Unit,
     modifier: Modifier = Modifier
 ) {
     LazyColumn(
@@ -294,6 +290,61 @@ fun SimulationPortfolioView(
                 }
             }
 
+            PortfolioTab.OPEN_ORDERS -> {
+                if (openOrders.isEmpty()) {
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(TvCardBackground, RoundedCornerShape(10.dp))
+                                .padding(20.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                "Tidak ada antrean order terbuka saat ini.",
+                                color = TvTextSecondary,
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+                } else {
+                    item {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Total ${openOrders.size} Order Aktif",
+                                color = TvTextSecondary,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(TvSurfaceVariant)
+                                    .clickable { onCancelAllOrders(null) }
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    text = "Batalkan Semua",
+                                    color = TvRed,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                    items(openOrders, key = { it.id }) { order ->
+                        OpenOrderItemCard(
+                            order = order,
+                            onCancel = { onCancelOrder(order.id) }
+                        )
+                    }
+                }
+            }
+
             PortfolioTab.HISTORY -> {
                 if (history.isEmpty()) {
                     item {
@@ -303,19 +354,6 @@ fun SimulationPortfolioView(
                     items(history, key = { it.id }) { trade ->
                         TradeHistoryItemCard(trade = trade)
                     }
-                }
-            }
-
-            PortfolioTab.SPOT_TRACKER -> {
-                item {
-                    SpotPositionCard(
-                        symbol = selectedPair.symbol,
-                        signal = signal,
-                        position = spotPosition,
-                        currentPrice = currentTick?.price ?: 0.0,
-                        quoteAsset = selectedPair.quoteAsset,
-                        onPositionChanged = onRefreshSpotPosition
-                    )
                 }
             }
         }

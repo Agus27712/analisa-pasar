@@ -13,10 +13,33 @@ import kotlinx.coroutines.launch
 import timber.log.Timber
 import kotlin.math.min
 
+fun TradingViewModel.printTrailingDiagnostics(symbol: String, currentPrice: Double, pos: SpotPosition) {
+    if (!pos.isHolding) return
+    val trailingStop = pos.peakPrice * (1.0 - pos.trailingPercent / 100.0)
+    val isSimTrailing = pos.lastTrailingOrderId?.startsWith("sim-") == true
+    val mode = if (isRealBuyMode.value && !isSimTrailing) "REAL" else "SIMULASI"
+    Timber.d(
+        """
+        [DIAGNOSTIK TRAILING - $symbol]
+        - Mode: $mode
+        - Status: ${if (pos.isTrailingEnabled) "AKTIF" else "MATI"}
+        - Entry Price: ${pos.entryPrice}
+        - Peak Price (Tertinggi): ${pos.peakPrice}
+        - Current Price (Sekarang): $currentPrice
+        - Trailing Distance: ${pos.trailingPercent}%
+        - Garis Stop-Loss (Cut-off): $trailingStop
+        - Jarak Saat Ini ke SL: ${currentPrice - trailingStop}
+        - Apakah Sudah Terpicu?: ${pos.isTrailingTriggered}
+        - Qty Dimiliki: ${pos.quantity}
+        """.trimIndent()
+    )
+}
+
 fun TradingViewModel.checkAlertsAndTrailing(symbol: String, currentPrice: Double, rsiValue: Double? = null) {
     if (currentPrice <= 0.0) return
     val posBeforeUpdate = positionStore.get(symbol)
     val oldPeak = posBeforeUpdate.peakPrice
+    printTrailingDiagnostics(symbol, currentPrice, posBeforeUpdate)
     val (updatedPos, justTriggered) = positionStore.updateTrailingPrice(symbol, currentPrice)
 
     if (justTriggered) {
@@ -29,7 +52,8 @@ fun TradingViewModel.checkAlertsAndTrailing(symbol: String, currentPrice: Double
         )
         
         // Eksekutor Jual Aktif
-        val isReal = isRealBuyMode.value
+        val isSimTrailing = updatedPos.lastTrailingOrderId?.startsWith("sim-") == true
+        val isReal = isRealBuyMode.value && !isSimTrailing
         val posQty = updatedPos.quantity
         if (posQty > 0.0) {
             if (isReal) {
@@ -143,6 +167,9 @@ fun TradingViewModel.checkAlertsAndTrailing(symbol: String, currentPrice: Double
 fun TradingViewModel.executeAutoSellOrder(symbol: String, price: Double, quantity: Double, triggerType: String, isReal: Boolean, isPartial: Boolean = false) {
     if (isReal) {
         executeRealTrade(symbol, "sell", price.toLong(), quantity, 0.0, 0.0) { success, msg ->
+            if (!success && triggerType.contains("TRAILING")) {
+                positionStore.resetTrailingTrigger(symbol)
+            }
             val notifTitle = if (success) "✅ AUTO-SELL TERKIRIM ($symbol)" else "❌ AUTO-SELL GAGAL ($symbol)"
             val notifMsg = if (success) {
                 "Trigger $triggerType aktif. Berhasil menjual $quantity $symbol di harga ${PriceFormatter.formatIdrNumber(price)} IDR."
@@ -157,10 +184,14 @@ fun TradingViewModel.executeAutoSellOrder(symbol: String, price: Double, quantit
             )
         }
     } else {
-        val res = submitSimulationOrder(
+        val pair = agu.analys.model.TradingPair.fromCustomSymbol(raw = symbol)
+        val res = simCoordinator.submitOrder(
+            pair = pair,
+            currentPrice = price,
             side = SimulationOrderSide.SELL,
             type = SimulationOrderType.MARKET,
             price = price,
+            stopPrice = 0.0,
             quantity = quantity
         )
         val success = res is SimulationOrderResult.Success
@@ -169,9 +200,12 @@ fun TradingViewModel.executeAutoSellOrder(symbol: String, price: Double, quantit
             is SimulationOrderResult.Error -> res.message
         }
         if (!isPartial) {
-            setOwnership(false)
+            positionCoordinator.setOwnership(symbol, false, price)
         } else {
-            refreshSpotPosition()
+            positionCoordinator.refreshPosition(symbol)
+        }
+        if (!success && triggerType.contains("TRAILING")) {
+            positionStore.resetTrailingTrigger(symbol)
         }
         val notifTitle = if (success) "✅ SIM AUTO-SELL ($symbol)" else "❌ SIM AUTO-SELL GAGAL ($symbol)"
         agu.analys.util.AlertNotificationHelper.sendPriceAlertNotification(
