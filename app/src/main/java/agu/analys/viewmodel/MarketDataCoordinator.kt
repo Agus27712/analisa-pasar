@@ -184,6 +184,7 @@ class MarketDataCoordinator(
                         val newTrades = trades.await()
                         if (bids.isNotEmpty()) _orderBookBids.value = bids
                         if (asks.isNotEmpty()) _orderBookAsks.value = asks
+                        if (bids.isNotEmpty() || asks.isNotEmpty()) engine.onOrderBookUpdate(bids, asks)
                         if (newTrades.isNotEmpty()) _tradeStream.value = newTrades
                         lastDepthRefresh = now
                     }

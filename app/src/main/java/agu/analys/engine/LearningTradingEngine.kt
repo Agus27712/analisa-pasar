@@ -55,6 +55,14 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
 
     var currentFormingVolume: Double = 0.0
 
+    var currentOrderBookBids: List<agu.analys.model.OrderBookItem> = emptyList()
+    var currentOrderBookAsks: List<agu.analys.model.OrderBookItem> = emptyList()
+
+    fun onOrderBookUpdate(bids: List<agu.analys.model.OrderBookItem>, asks: List<agu.analys.model.OrderBookItem>) {
+        currentOrderBookBids = bids
+        currentOrderBookAsks = asks
+    }
+
     fun onTickUpdate(tick: MarketTick) {
         if (tick.price <= 0.0) return
         currentTick = tick
@@ -195,7 +203,7 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
     private fun runScalping() {
         val tick = currentTick ?: return
         if (h1Candles.size < 55 || m15Candles.size < 55 || m1Candles.size < 55) return
-        val result = ScalpingMtfEvaluator.evaluate(tick.price, h1Candles, m15Candles, m1Candles, currentFormingVolume, tradingFees, scalpingSensitivity) ?: return
+        val result = ScalpingMtfEvaluator.evaluate(tick.price, h1Candles, m15Candles, m1Candles, currentFormingVolume, currentOrderBookBids, currentOrderBookAsks, tradingFees, scalpingSensitivity) ?: return
         
         // P2.2 Signal Lifecycle Tracking
         val tracked = agu.analys.engine.scalping.SignalLifecycleManager.process(tick.symbol, tick.price, result.signal)

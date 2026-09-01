@@ -219,12 +219,24 @@ object SecondWaveEvaluator {
             entryCondition = thesis
         )
 
-        val action = if (isQualified && step4Ok) SignalAction.BUY else SignalAction.HOLD
+        val isSellSignal = (drawdownPct < 5.0 && price >= priorHigh * 0.95) || rsi1h >= 75.0 || price >= tp1
+        val action = when {
+            isSellSignal -> SignalAction.SELL
+            isQualified && step4Ok -> SignalAction.BUY
+            else -> SignalAction.HOLD
+        }
+        if (isSellSignal) {
+            reasons.add(0, "🎯 Target Second-Wave Tercapai / Overbought - Rekomendasi Take Profit.")
+        }
 
         val signalState = AISignalState(
             action = action,
             confidence = (totalScore * 8.33).toInt().coerceIn(10, 95),
-            sentiment = if (action == SignalAction.BUY) TrendSentiment.BULLISH_REVERSAL else TrendSentiment.ACCUMULATION_SQUEEZE,
+            sentiment = when (action) {
+                SignalAction.BUY -> TrendSentiment.BULLISH_REVERSAL
+                SignalAction.SELL -> TrendSentiment.BEARISH_DISTRIBUTION
+                SignalAction.HOLD -> TrendSentiment.ACCUMULATION_SQUEEZE
+            },
             entryPrice = price,
             targetPrice1 = tp1,
             targetPrice2 = tp2,
@@ -232,7 +244,11 @@ object SecondWaveEvaluator {
             riskRewardRatio = rrRatio,
             reasoning = reasons,
             timestamp = System.currentTimeMillis(),
-            scalpingStage = if (action == SignalAction.BUY) ScalpingStage.ENTRY else ScalpingStage.WAIT_PULLBACK,
+            scalpingStage = when (action) {
+                SignalAction.BUY -> ScalpingStage.ENTRY
+                SignalAction.SELL -> ScalpingStage.STRONG_ENTRY
+                SignalAction.HOLD -> ScalpingStage.WAIT_PULLBACK
+            },
             mtf = mtfSnapshot
         )
 

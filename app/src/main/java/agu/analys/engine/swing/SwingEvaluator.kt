@@ -250,8 +250,17 @@ object SwingEvaluator {
 
         // Action Decision
         val isQualifiedBuy = completedSteps == 4 && buy >= 45.0 && buy > sell * 1.2
-        val finalAction = if (isQualifiedBuy) SignalAction.BUY else SignalAction.HOLD
+        val isSellSignal = (rsi >= 70.0 || price >= calculatedTp1 || (sell >= 45.0 && sell > buy * 1.1))
+        val finalAction = when {
+            isSellSignal -> SignalAction.SELL
+            isQualifiedBuy -> SignalAction.BUY
+            else -> SignalAction.HOLD
+        }
+        if (isSellSignal) {
+            reasons.add(0, if (price >= calculatedTp1) "🎯 Target TP1 tercapai di Rp ${fmtPrice(calculatedTp1)} - Amankan Profit!" else "⚠️ RSI Jenuh Beli (${fmt(rsi)}) / Tekanan Jual tinggi - Rekomendasi Take Profit.")
+        }
         val finalScore = when {
+            isSellSignal -> (80 + min(15, (sell * 0.18).toInt())).coerceIn(80, 95)
             isQualifiedBuy -> (80 + min(15, (buy * 0.18).toInt())).coerceIn(80, 95)
             completedSteps == 3 -> 68
             completedSteps == 2 -> 52

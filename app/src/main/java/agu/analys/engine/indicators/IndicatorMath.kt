@@ -90,4 +90,17 @@ object IndicatorMath {
         }
         return if (trs.isEmpty()) 0.0 else trs.average()
     }
+
+    fun rollingVwap(history: List<CandleBar>, period: Int): Double {
+        if (history.isEmpty()) return 0.0
+        val window = history.takeLast(period)
+        var sumPV = 0.0
+        var sumV = 0.0
+        for (candle in window) {
+            val typical = (candle.high + candle.low + candle.close) / 3.0
+            sumPV += typical * candle.volume
+            sumV += candle.volume
+        }
+        return if (sumV > 0) sumPV / sumV else window.last().close
+    }
 }
