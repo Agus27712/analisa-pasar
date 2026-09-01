@@ -65,6 +65,7 @@ class RealTradeCoordinator(
     val isRealBuyEnabled: StateFlow<Boolean> = securityManager.isRealBuyEnabled
     val publicIp: StateFlow<String?> = securityManager.publicIp
     val isPinRequired: StateFlow<Boolean> = securityManager.isPinRequired
+    val isPinUnlocked: StateFlow<Boolean> = securityManager.isPinUnlocked
     fun checkPublicIp() = securityManager.checkPublicIp()
     fun verifyPin(pin: String) = securityManager.verifyPin(pin)
     fun lockPin() = securityManager.lockPin()

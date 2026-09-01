@@ -22,6 +22,9 @@ class RealTradeSecurityManager(
     private val _isPinRequired = MutableStateFlow(prefs.hasSecurityPin())
     val isPinRequired: StateFlow<Boolean> = _isPinRequired.asStateFlow()
 
+    private val _isPinUnlocked = MutableStateFlow(!prefs.hasSecurityPin())
+    val isPinUnlocked: StateFlow<Boolean> = _isPinUnlocked.asStateFlow()
+
     fun checkPublicIp() {
         scope.launch {
             try {
@@ -34,14 +37,20 @@ class RealTradeSecurityManager(
     }
 
     fun verifyPin(pin: String): Boolean {
-        return prefs.verifySecurityPin(pin)
+        val ok = prefs.verifySecurityPin(pin)
+        if (ok) {
+            _isPinUnlocked.value = true
+        }
+        return ok
     }
 
     fun lockPin() {
         _isRealBuyEnabled.value = false
+        _isPinUnlocked.value = !prefs.hasSecurityPin()
     }
 
     fun setRealBuyMode(enabled: Boolean, pin: String? = null): Boolean {
+        _isPinRequired.value = prefs.hasSecurityPin()
         if (!enabled) {
             _isRealBuyEnabled.value = false
             prefs.isRealBuyModeEnabled = false
@@ -50,11 +59,13 @@ class RealTradeSecurityManager(
         if (!prefs.hasSecurityPin()) {
             _isRealBuyEnabled.value = true
             prefs.isRealBuyModeEnabled = true
+            _isPinUnlocked.value = true
             return true
         }
         if (pin != null && verifyPin(pin)) {
             _isRealBuyEnabled.value = true
             prefs.isRealBuyModeEnabled = true
+            _isPinUnlocked.value = true
             return true
         }
         return false

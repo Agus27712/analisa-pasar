@@ -244,25 +244,6 @@ fun RadarSellSection(
             )
         }
 
-        // Trailing tetap tersedia di mode REAL (tanpa blok Auto TP server)
-        if (isRealMode && (effectiveBuyPrice > 0.0 || availableCoin > 0.0)) {
-            Spacer(Modifier.height(8.dp))
-            SellTrailingSection(
-                isTrailingActive = isTrailingActive,
-                onTrailingActiveChanged = { enabled -> onSetTrailingStop?.invoke(enabled, trailingPercent) },
-                isTrailingTriggered = isTrailingTriggered,
-                trailingPercent = trailingPercent,
-                onSetTrailingPercent = { pct -> onSetTrailingStop?.invoke(true, pct) },
-                peakPrice = peakPrice,
-                trailingStopPrice = trailingStopPrice,
-                quoteAsset = quoteAsset,
-                lastTrailingOrderId = spotPosition?.lastTrailingOrderId,
-                onDeployTrailingOrder = onDeployTrailingOrder,
-                onCancelTrailingOrder = onCancelTrailingOrder,
-                isRealMode = isRealMode
-            )
-        }
-
         Spacer(Modifier.height(12.dp))
 
         // TOMBOL EKSEKUSI JUAL MARKET (INSTAN)

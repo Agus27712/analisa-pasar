@@ -251,7 +251,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     }
 
     val isRealBuyMode: StateFlow<Boolean> = realCoordinator.isRealBuyEnabled
-    val isPinUnlocked: StateFlow<Boolean> = realCoordinator.isPinRequired
+    val isPinUnlocked: StateFlow<Boolean> = realCoordinator.isPinUnlocked
     val realIndodaxBalance: StateFlow<Map<String, Double>> = realCoordinator.realIndodaxBalance
     val realFreeBalance: StateFlow<Map<String, Double>> = realCoordinator.realFreeBalance
     val realLockedBalance: StateFlow<Map<String, Double>> = realCoordinator.realLockedBalance

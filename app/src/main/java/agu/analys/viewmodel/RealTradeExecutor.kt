@@ -221,18 +221,22 @@ class RealTradeExecutor(
             val (balances, err) = IndodaxTradeApiV2.getAccount(apiKey, secretKey)
             if (balances == null) {
                 if (looksLikeRateLimit(err)) onRateLimit(err)
-                onResult(false, "Gagal saldo: $err")
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    onResult(false, "Gagal saldo: $err")
+                }
                 return@launch
             }
 
             val free = balances.free[base] ?: 0.0
             if (free <= 0.00000001) {
-                onResult(false, "Saldo $base 0.")
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    onResult(false, "Saldo $base 0.")
+                }
                 return@launch
             }
 
-            val qty1 = (free * (tp1Percent / 100.0) * 100_000_000.0).toLong() / 100_000_000.0
-            val qty2 = free - qty1
+            val qty1 = if (tp1Percent >= 100.0) free else (free * (tp1Percent / 100.0) * 100_000_000.0).toLong() / 100_000_000.0
+            val qty2 = if (tp1Percent >= 100.0) 0.0 else if (tp2Percent >= 100.0) free else free - qty1
             var msg = ""
             var okAll = true
 
@@ -241,7 +245,13 @@ class RealTradeExecutor(
                 msg += if (ok) "TP1 OK. " else "TP1 Gagal: $m. "
                 if (!ok) {
                     okAll = false
-                    if (looksLikeRateLimit(m)) { onRateLimit(m); onResult(false, msg); return@launch }
+                    if (looksLikeRateLimit(m)) {
+                        onRateLimit(m)
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                            onResult(false, msg)
+                        }
+                        return@launch
+                    }
                 }
                 delay(INTER_REQUEST_DELAY_MS)
             }
@@ -255,7 +265,9 @@ class RealTradeExecutor(
             }
             if (okAll) prefs.rememberHistoryBase(base)
             onStatusUpdate(if (okAll) "TP Berhasil!" else "Sebagian TP Gagal.")
-            onResult(okAll, msg)
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                onResult(okAll, msg)
+            }
         }
     }
 
