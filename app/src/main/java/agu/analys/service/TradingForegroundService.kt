@@ -43,10 +43,10 @@ class TradingForegroundService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "AGU Trading Background Monitor",
+                "Background Monitor",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Menjaga proses aplikasi tetap hidup dan memantau koin siap jual untung"
+                description = "Menjaga proses aplikasi tetap hidup dan memantau pair"
             }
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.createNotificationChannel(channel)
@@ -54,7 +54,7 @@ class TradingForegroundService : Service() {
     }
 
     private fun updateNotification() {
-        val title = "AGU Trading Monitor Aktif"
+        val title = "Monitor Aktif"
         val contentText = getOwnedCoinsSummary()
 
         val notificationIntent = Intent(this, MainActivity::class.java).apply {
@@ -83,7 +83,7 @@ class TradingForegroundService : Service() {
             .setContentText(contentText.substringBefore("\n"))
             .setStyle(NotificationCompat.BigTextStyle().bigText(contentText))
             .setContentIntent(pendingIntent)
-            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Hentikan Monitor", stopPendingIntent)
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stop Monitor", stopPendingIntent)
             .setOngoing(true)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .build()
@@ -127,9 +127,9 @@ class TradingForegroundService : Service() {
                 
                 val statusStr = if (isProfit) {
                     realProfitCount++
-                    "🔥 UNTUNG (+${String.format(Locale.US, "%.2f", diffPct)}%) [SIAP JUAL!]"
+                    "🔥 + (+${String.format(Locale.US, "%.2f", diffPct)}%) [SIAP JUAL!]"
                 } else {
-                    "❄️ TUNGGU (${String.format(Locale.US, "%.2f", diffPct)}%)"
+                    "❄️ WAIT (${String.format(Locale.US, "%.2f", diffPct)}%)"
                 }
 
                 realHoldings.add(
@@ -152,9 +152,9 @@ class TradingForegroundService : Service() {
                 
                 val statusStr = if (isProfit) {
                     simProfitCount++
-                    "🔥 UNTUNG (+${String.format(Locale.US, "%.2f", diffPct)}%) [SIAP JUAL!]"
+                    "🔥 + (+${String.format(Locale.US, "%.2f", diffPct)}%) [SIAP JUAL!]"
                 } else {
-                    "❄️ TUNGGU (${String.format(Locale.US, "%.2f", diffPct)}%)"
+                    "❄️ WAIT (${String.format(Locale.US, "%.2f", diffPct)}%)"
                 }
 
                 simHoldings.add(
@@ -164,16 +164,16 @@ class TradingForegroundService : Service() {
         }
 
         if (realHoldings.isEmpty() && simHoldings.isEmpty()) {
-            return "Belum ada koin yang dimiliki saat ini.\nBeli atau tambahkan posisi untuk memantau."
+            return "Belum ada pair yang dimiliki saat ini.\nBeli atau tambahkan posisi untuk memantau."
         }
 
         if (realHoldings.isNotEmpty()) {
-            sb.append("ASET REAL (Siap Jual Untung: $realProfitCount):\n")
+            sb.append("ASET REAL (Siap Jual + : $realProfitCount):\n")
             realHoldings.forEach { sb.append("• $it\n") }
         }
         if (simHoldings.isNotEmpty()) {
             if (realHoldings.isNotEmpty()) sb.append("\n")
-            sb.append("ASET SIMULASI (Siap Jual Untung: $simProfitCount):\n")
+            sb.append("ASET SIMULASI (Siap Jual + : $simProfitCount):\n")
             simHoldings.forEach { sb.append("• $it\n") }
         }
 

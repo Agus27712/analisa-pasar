@@ -46,6 +46,11 @@ data class SpotPosition(
 class SpotPositionStore(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
+    fun calculateTrailingLimitPrice(peakPrice: Double, entryPrice: Double, trailingPercent: Double): Double {
+        val rawStop = peakPrice * (1.0 - trailingPercent / 100.0)
+        return maxOf(rawStop, entryPrice)
+    }
+
     fun get(symbol: String): SpotPosition {
         val key = normalize(symbol)
         val state = prefs.getString("${key}_state", SpotPositionState.NO_POSITION.name)
@@ -57,9 +62,7 @@ class SpotPositionStore(context: Context) {
         val isTrailing = prefs.getBoolean("${key}_trailing_enabled", false)
         val isTriggered = prefs.getBoolean("${key}_trailing_triggered", false)
         val trailingStop = if (isTrailing && peak > 0.0 && trailingPct > 0.0) {
-            // HARD FLOOR: never below entry → Trailing Sell Limit (bukan Stop-Loss diskon)
-            val raw = peak * (1.0 - trailingPct / 100.0)
-            if (entry > 0.0) maxOf(raw, entry) else raw
+            calculateTrailingLimitPrice(peak, entry, trailingPct)
         } else 0.0
 
         val lastTrailingOrderId = prefs.getString("${key}_last_trailing_order_id", null)
@@ -238,14 +241,16 @@ class SpotPositionStore(context: Context) {
         var newPeak = current.peakPrice.coerceAtLeast(current.entryPrice)
         var justTriggered = false
 
+        // Rule 3: Peak price hanya di-update saat harga naik (tidak pernah turun)
         if (currentPrice > newPeak) {
             newPeak = currentPrice
             prefs.edit().putString("${key}_peak", newPeak.toString()).apply()
         }
 
-        // HARD FLOOR di entryPrice → trailing sell limit, jangan pernah jual di bawah modal
-        val rawStop = newPeak * (1.0 - current.trailingPercent / 100.0)
-        val trailingStop = if (current.entryPrice > 0.0) maxOf(rawStop, current.entryPrice) else rawStop
+        // Rule 1 & 2: Hard floor = entryPrice. Limit = max(peak * (1 - pct), entry)
+        val trailingStop = calculateTrailingLimitPrice(newPeak, current.entryPrice, current.trailingPercent)
+        
+        // Rule 4: Saat harga turun menyentuh trailing price -> trigger
         if (currentPrice <= trailingStop && !current.isTrailingTriggered) {
             justTriggered = true
             prefs.edit().putBoolean("${key}_trailing_triggered", true).apply()
