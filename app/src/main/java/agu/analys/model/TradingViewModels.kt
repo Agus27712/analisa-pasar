@@ -77,6 +77,15 @@ enum class TrendSentiment(val displayName: String) {
 enum class AppScreen { DASHBOARD, DETAIL, SIMULATION_TRADE, LANDSCAPE_CHART, SETTINGS, LEARNING, PORTFOLIO }
 
 data class WorthCoinInfo(val pair: TradingPair, val worthScore: Int, val isWorthIt: Boolean, val recommendation: String, val potentialProfitPct: Double, val aiRationale: String)
+data class CoinHoldingStatus(
+    val isHolding: Boolean = false,
+    val quantity: Double = 0.0,
+    val entryPrice: Double = 0.0,
+    val isReal: Boolean = false,
+    val tp1Price: Double = 0.0,
+    val tp2Price: Double = 0.0,
+    val isTrailingTriggered: Boolean = false
+)
 data class MarketTick(val symbol: String, val price: Double, val high24h: Double, val low24h: Double, val volume24h: Double, val change24h: Double, val timestamp: Long = System.currentTimeMillis())
 data class CandleBar(val timestamp: Long, val open: Double, val high: Double, val low: Double, val close: Double, val volume: Double)
 

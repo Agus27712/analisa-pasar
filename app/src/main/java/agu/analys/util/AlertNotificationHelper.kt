@@ -35,6 +35,9 @@ object AlertNotificationHelper {
         message: String,
         symbol: String = ""
     ) {
+        val prefs = AppPreferences(context)
+        if (!prefs.isNotificationsEnabled) return
+
         createNotificationChannel(context)
 
         val intent = Intent(context, MainActivity::class.java).apply {

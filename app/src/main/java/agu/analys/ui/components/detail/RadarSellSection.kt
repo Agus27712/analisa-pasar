@@ -47,7 +47,7 @@ fun RadarSellSection(
     onSetTrailingStop: ((Boolean, Double) -> Unit)? = null,
     onResetTrailingTrigger: (() -> Unit)? = null,
     signal: agu.analys.model.AISignalState? = null,
-    onSetAutoSellParams: ((Boolean, Double, Double, Double, Double, Double) -> Unit)? = null,
+    onSetAutoSellParams: ((Boolean, Double, Double, Double, Double) -> Unit)? = null,
     onDeployTrailingOrder: (() -> Unit)? = null,
     onCancelTrailingOrder: (() -> Unit)? = null
 ) {
@@ -60,7 +60,6 @@ fun RadarSellSection(
     var tp1PercentInput by remember { mutableStateOf("50") }
     var tp2PriceInput by remember { mutableStateOf("") }
     var tp2PercentInput by remember { mutableStateOf("50") }
-    var stopLossPriceInput by remember { mutableStateOf("") }
 
     // Flag to prevent LaunchedEffect from overwriting user typing
     var hasInitialized by remember { mutableStateOf(false) }
@@ -76,10 +75,6 @@ fun RadarSellSection(
             tp2PriceInput = if (spotPosition.tp2Price > 0.0) String.format(Locale.US, "%.0f", spotPosition.tp2Price)
                             else if (signal != null && signal.targetPrice2 > 0.0) String.format(Locale.US, "%.0f", signal.targetPrice2)
                             else ""
-
-            stopLossPriceInput = if (spotPosition.stopLossPrice > 0.0) String.format(Locale.US, "%.0f", spotPosition.stopLossPrice)
-                                 else if (signal != null && signal.stopLoss > 0.0) String.format(Locale.US, "%.0f", signal.stopLoss)
-                                 else ""
 
             tp1PercentInput = if (spotPosition.tp1Percent > 0) String.format(Locale.US, "%.0f", spotPosition.tp1Percent) else "50"
             tp2PercentInput = if (spotPosition.tp2Percent > 0) String.format(Locale.US, "%.0f", spotPosition.tp2Percent) else "50"
@@ -194,22 +189,23 @@ fun RadarSellSection(
             onManualBuyClick = { showManualDialog = true }
         )
 
-        // AUTO TP1/TP2 SERVER dihapus dari tab jual REAL — hanya mode simulasi
-        if (!isRealMode && (effectiveBuyPrice > 0.0 || availableCoin > 0.0)) {
+        // AUTO TP1/TP2 untuk simulasi maupun real mode saat user buka switch & tap SIMPAN
+        if (effectiveBuyPrice > 0.0 || availableCoin > 0.0) {
             Spacer(Modifier.height(8.dp))
             SellTpSlSection(
                 isRealMode = isRealMode,
                 isAutoSellActive = isAutoSellActive,
                 onAutoSellActiveChanged = { enabled ->
                     isAutoSellActive = enabled
-                    onSetAutoSellParams?.invoke(
-                        enabled,
-                        PriceFormatter.parseCleanIdrDouble(tp1PriceInput),
-                        PriceFormatter.parseCleanIdrDouble(tp1PercentInput).coerceIn(1.0, 100.0),
-                        PriceFormatter.parseCleanIdrDouble(tp2PriceInput),
-                        PriceFormatter.parseCleanIdrDouble(tp2PercentInput).coerceIn(1.0, 100.0),
-                        PriceFormatter.parseCleanIdrDouble(stopLossPriceInput)
-                    )
+                    if (!enabled) {
+                        onSetAutoSellParams?.invoke(
+                            false,
+                            0.0,
+                            50.0,
+                            0.0,
+                            50.0
+                        )
+                    }
                 },
                 tp1Price = tp1PriceInput,
                 onTp1PriceChanged = { tp1PriceInput = it },
@@ -219,17 +215,14 @@ fun RadarSellSection(
                 onTp2PriceChanged = { tp2PriceInput = it },
                 tp2Percent = tp2PercentInput,
                 onTp2PercentChanged = { tp2PercentInput = it },
-                stopLossPrice = stopLossPriceInput,
-                onStopLossPriceChanged = { stopLossPriceInput = it },
                 quoteAsset = quoteAsset,
                 onSaveParams = {
                     onSetAutoSellParams?.invoke(
-                        isAutoSellActive,
+                        true,
                         PriceFormatter.parseCleanIdrDouble(tp1PriceInput),
                         PriceFormatter.parseCleanIdrDouble(tp1PercentInput).coerceIn(1.0, 100.0),
                         PriceFormatter.parseCleanIdrDouble(tp2PriceInput),
-                        PriceFormatter.parseCleanIdrDouble(tp2PercentInput).coerceIn(1.0, 100.0),
-                        PriceFormatter.parseCleanIdrDouble(stopLossPriceInput)
+                        PriceFormatter.parseCleanIdrDouble(tp2PercentInput).coerceIn(1.0, 100.0)
                     )
                 }
             )

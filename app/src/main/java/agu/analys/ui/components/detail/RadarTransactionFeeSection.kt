@@ -48,7 +48,7 @@ fun RadarTransactionFeeSection(
     onSetTrailingStop: ((Boolean, Double) -> Unit)? = null,
     onResetTrailingTrigger: (() -> Unit)? = null,
     signal: agu.analys.model.AISignalState? = null,
-    onSetAutoSellParams: ((Boolean, Double, Double, Double, Double, Double) -> Unit)? = null,
+    onSetAutoSellParams: ((Boolean, Double, Double, Double, Double) -> Unit)? = null,
     onDeployTrailingOrder: (() -> Unit)? = null,
     onCancelTrailingOrder: (() -> Unit)? = null,
     modifier: Modifier = Modifier

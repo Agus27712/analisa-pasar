@@ -1,5 +1,11 @@
 package agu.analys.ui.components.dashboard
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -18,6 +24,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import agu.analys.model.CandleBar
+import agu.analys.model.CoinHoldingStatus
 import agu.analys.model.MarketTick
 import agu.analys.model.TradingPair
 import agu.analys.model.WorthCoinInfo
@@ -45,6 +52,7 @@ fun WatchlistCoinCard(
     isFavorite: Boolean = true,
     usdtIdrRate: Double = 16450.0,
     recentCandles: List<CandleBar> = emptyList(),
+    holdingStatus: CoinHoldingStatus? = null,
     onToggleFavorite: () -> Unit = {},
     onClick: () -> Unit
 ) {
@@ -89,13 +97,55 @@ fun WatchlistCoinCard(
     val rankText = rank?.let { String.format("%02d", it) } ?: "··"
     val sparkColor = if (change >= 0) TvGreen else TvRed
 
+    val isHolding = holdingStatus != null && holdingStatus.isHolding && holdingStatus.quantity > 0.00000001
+    val badgeInfo: Triple<String, Color, Color>? = if (isHolding) {
+        val currentPrice = tick?.price ?: 0.0
+        val entryPrice = holdingStatus.entryPrice
+        val profitPct = if (entryPrice > 0.0 && currentPrice > 0.0) {
+            ((currentPrice - entryPrice) / entryPrice) * 100.0
+        } else {
+            tick?.change24h ?: 0.0
+        }
+        val rsiVal = if (recentCandles.size >= 15) agu.analys.engine.indicators.IndicatorMath.rsi(recentCandles, 14) else Double.NaN
+        
+        val isTp1Reached = (holdingStatus.tp1Price > 0.0 && currentPrice >= holdingStatus.tp1Price) || 
+                            (profitPct >= 5.0) || 
+                            (tick != null && tick.high24h > 0 && currentPrice >= tick.high24h * 0.98 && profitPct > 0.0)
+        val isRsiOverbought = (rsiVal.isFinite() && rsiVal >= 70.0) || (worth?.recommendation?.contains("RSI", true) == true)
+        val isTakeProfit = profitPct >= 2.5 || holdingStatus.isTrailingTriggered
+
+        when {
+            isTp1Reached -> Triple("🎯 TARGET TP1 TERCAPAI", TvOrange, TvOrange.copy(alpha = 0.18f))
+            isRsiOverbought -> Triple("⚠️ RSI OVERBOUGHT", TvRed, TvRed.copy(alpha = 0.18f))
+            isTakeProfit -> Triple("💰 TAKE PROFIT", TvGreen, TvGreen.copy(alpha = 0.18f))
+            else -> null
+        }
+    } else null
+
+    val pulseTransition = rememberInfiniteTransition(label = "pulse_card_${pair.symbol}")
+    val pulseAlpha by pulseTransition.animateFloat(
+        initialValue = 0.25f,
+        targetValue = 0.85f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulse_alpha_${pair.symbol}"
+    )
+
+    val cardBorder = if (badgeInfo != null) {
+        BorderStroke(1.2.dp, badgeInfo.second.copy(alpha = pulseAlpha))
+    } else {
+        BorderStroke(1.dp, DashboardColors.Border)
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() },
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = DashboardColors.Card),
-        border = BorderStroke(1.dp, DashboardColors.Border)
+        border = cardBorder
     ) {
         Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
             Row(
@@ -140,7 +190,27 @@ fun WatchlistCoinCard(
                                 maxLines = 1
                             )
                         }
-                        CompactActivityChip(activity)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            CompactActivityChip(activity)
+                            
+                            if (badgeInfo != null) {
+                                Box(
+                                    modifier = Modifier
+                                        .background(badgeInfo.second.copy(alpha = (0.12f + 0.12f * pulseAlpha)), RoundedCornerShape(4.dp))
+                                        .padding(horizontal = 4.dp, vertical = 1.dp)
+                                ) {
+                                    Text(
+                                        text = badgeInfo.first,
+                                        color = badgeInfo.second,
+                                        fontSize = 8.sp,
+                                        fontWeight = FontWeight.Black
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -229,9 +299,9 @@ fun WatchlistCoinCard(
                     Text(
                         text = when {
                             !change.isFinite() -> "Trend —"
-                            change > 0 -> "Trend ↑"
-                            change < 0 -> "Trend ↓"
-                            else -> "Trend →"
+                            change > 0 -> "Trend Naik"
+                            change < 0 -> "Trend Turun"
+                            else -> "Trend Sideways"
                         },
                         color = changeColor,
                         fontSize = 11.5.sp,
@@ -277,9 +347,9 @@ private enum class ActivityLevel { HIGH, MEDIUM, LOW, UNKNOWN }
 @Composable
 private fun CompactActivityChip(activity: ActivityLevel) {
     val (label, background, foreground) = when (activity) {
-        ActivityLevel.HIGH -> Triple("Hot", TvGreen.copy(alpha = 0.15f), TvGreen)
-        ActivityLevel.MEDIUM -> Triple("Aktif", TvAmber.copy(alpha = 0.15f), TvAmber)
-        ActivityLevel.LOW -> Triple("Quiet", TvSurfaceVariant, TvTextSecondary)
+        ActivityLevel.HIGH -> Triple("Tinggi", TvGreen.copy(alpha = 0.15f), TvGreen)
+        ActivityLevel.MEDIUM -> Triple("Sedang", TvAmber.copy(alpha = 0.15f), TvAmber)
+        ActivityLevel.LOW -> Triple("Rendah", TvSurfaceVariant, TvTextSecondary)
         ActivityLevel.UNKNOWN -> Triple("—", TvSurfaceVariant, TvTextSecondary)
     }
     Box(

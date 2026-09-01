@@ -17,6 +17,7 @@ import agu.analys.model.AppScreen
 import agu.analys.model.CandleBar
 import agu.analys.model.ChartStyle
 import agu.analys.model.MarketConnectionState
+import agu.analys.model.CoinHoldingStatus
 import agu.analys.model.MarketTick
 import agu.analys.model.OrderBookItem
 import agu.analys.model.SignalAction
@@ -87,6 +88,30 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         alertStore = alertStore,
         onPositionChanged = { /* can add specific logic here if needed */ }
     )
+
+    internal val batchSellCoordinator = BatchSellCoordinator(
+        context = application,
+        scope = viewModelScope,
+        prefs = prefs,
+        simCoordinator = simCoordinator,
+        realCoordinator = realCoordinator,
+        positionStore = positionStore,
+        positionCoordinator = positionCoordinator
+    )
+    val batchExecutionState: StateFlow<agu.analys.model.BatchExecutionState> = batchSellCoordinator.executionState
+
+    fun executeBatchSellReadyAssets(
+        items: List<agu.analys.model.ReadySellCoinSummary>,
+        isRealMode: Boolean,
+        pin: String? = null,
+        onCompleted: ((agu.analys.model.BatchResultSummary) -> Unit)? = null
+    ) {
+        batchSellCoordinator.executeBatchSell(items, isRealMode, pin, onCompleted)
+    }
+
+    fun resetBatchSellState() {
+        batchSellCoordinator.resetState()
+    }
 
     internal val marketDataCoordinator = MarketDataCoordinator(
         scope = viewModelScope,
@@ -179,6 +204,9 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
 
     private val _isDarkTheme = MutableStateFlow(prefs.isDarkTheme)
     val isDarkTheme: StateFlow<Boolean> = _isDarkTheme.asStateFlow()
+
+    private val _isNotificationsEnabled = MutableStateFlow(prefs.isNotificationsEnabled)
+    val isNotificationsEnabled: StateFlow<Boolean> = _isNotificationsEnabled.asStateFlow()
 
     val isShowingCachedData: StateFlow<Boolean> = marketDataCoordinator.isShowingCachedData
     internal val _spotPosition = MutableStateFlow(SpotPosition())
@@ -300,6 +328,63 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     fun topUpSimulationBalance(amount: Double) = simCoordinator.topUpIdr(amount)
     fun resetSimulationAccount() = simCoordinator.resetAccount()
 
+    fun getHoldingStatus(pair: TradingPair): CoinHoldingStatus {
+        val baseLower = pair.baseAsset.lowercase()
+        val baseUpper = pair.baseAsset.uppercase()
+        val symbolNorm = pair.symbol.replace("_", "").uppercase()
+
+        // 1. Check SpotPositionStore (Manual Spot / Real Tracking)
+        val spotPos = positionStore.get(pair.symbol)
+        if (spotPos.isHolding && spotPos.quantity > 0.00000001) {
+            return CoinHoldingStatus(
+                isHolding = true,
+                quantity = spotPos.quantity,
+                entryPrice = spotPos.entryPrice,
+                isReal = true,
+                tp1Price = spotPos.tp1Price,
+                tp2Price = spotPos.tp2Price,
+                isTrailingTriggered = spotPos.isTrailingTriggered
+            )
+        }
+
+        // 2. Check Real Indodax Balance
+        val realBalances = realIndodaxBalance.value
+        val realQty = realBalances[baseLower] ?: realBalances[baseUpper] ?: 0.0
+        if (realQty > 0.00000001 && baseUpper != "IDR") {
+            val realAvg = realAvgBuyPrices.value[symbolNorm]
+                ?: realAvgBuyPrices.value[pair.symbol.uppercase()]
+                ?: realAvgBuyPrices.value[baseUpper]
+                ?: spotPos.entryPrice
+            return CoinHoldingStatus(
+                isHolding = true,
+                quantity = realQty,
+                entryPrice = realAvg,
+                isReal = true,
+                tp1Price = spotPos.tp1Price,
+                tp2Price = spotPos.tp2Price,
+                isTrailingTriggered = spotPos.isTrailingTriggered
+            )
+        }
+
+        // 3. Check Simulation Wallet
+        val simWallet = simulationWallet.value
+        val simQty = simWallet.coinBalances[baseLower] ?: simWallet.coinBalances[baseUpper] ?: 0.0
+        if (simQty > 0.00000001 && baseUpper != "IDR") {
+            val simAvg = simWallet.avgBuyPrices[baseLower] ?: simWallet.avgBuyPrices[baseUpper] ?: 0.0
+            return CoinHoldingStatus(
+                isHolding = true,
+                quantity = simQty,
+                entryPrice = simAvg,
+                isReal = false,
+                tp1Price = spotPos.tp1Price,
+                tp2Price = spotPos.tp2Price,
+                isTrailingTriggered = spotPos.isTrailingTriggered
+            )
+        }
+
+        return CoinHoldingStatus(isHolding = false)
+    }
+
     fun setMarketDataSource(source: MarketDataSource) {
         _marketDataSource.value = source
         prefs.marketDataSource = source
@@ -353,6 +438,11 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         _isDarkTheme.value = enabled
     }
 
+    fun setNotificationsEnabled(enabled: Boolean) {
+        prefs.isNotificationsEnabled = enabled
+        _isNotificationsEnabled.value = enabled
+    }
+
     private var lastSavedSignalTimestamp = 0L
     internal val navigationStack = mutableListOf<AppScreen>()
 
@@ -383,11 +473,20 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         tp1Percent: Double,
         tp2Price: Double,
         tp2Percent: Double,
-        stopLossPrice: Double
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
     ) {
-        positionCoordinator.setAutoSell(
-            _selectedPair.value.symbol, enabled, tp1Price, tp1Percent, tp2Price, tp2Percent, stopLossPrice
-        )
+        val symbol = _selectedPair.value.symbol
+        positionCoordinator.setAutoSell(symbol, enabled, tp1Price, tp1Percent, tp2Price, tp2Percent)
+        if (enabled) {
+            val isReal = realCoordinator.isRealBuyEnabled.value
+            if (isReal) {
+                realCoordinator.executeRealAutoSellOnServer(symbol, tp1Price, tp1Percent, tp2Price, tp2Percent, onResult)
+            } else {
+                simCoordinator.placeSimulationAutoSellOrders(_selectedPair.value, tp1Price, tp1Percent, tp2Price, tp2Percent, onResult)
+            }
+        } else {
+            onResult(true, "Auto TP dimatikan.")
+        }
     }
 
     fun resetTrailingTrigger() {

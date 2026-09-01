@@ -80,12 +80,6 @@ fun TradingViewModel.checkAlertsAndTrailing(symbol: String, currentPrice: Double
                 val sellQty = qty * (updatedPos.tp2Percent / 100.0)
                 executeAutoSellOrder(symbol, currentPrice, sellQty, "TP2", isReal, isPartial = updatedPos.tp2Percent < 100.0)
             }
-            // Check SL
-            if (!updatedPos.isSlTriggered && updatedPos.stopLossPrice > 0.0 && currentPrice <= updatedPos.stopLossPrice) {
-                positionStore.markSlTriggered(symbol)
-                refreshSpotPosition()
-                executeAutoSellOrder(symbol, currentPrice, qty, "STOP LOSS", isReal, isPartial = false)
-            }
         }
     }
 

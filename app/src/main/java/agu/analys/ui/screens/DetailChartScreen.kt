@@ -334,14 +334,11 @@ fun DetailChartScreen(
                     ).show()
                 },
                 onResetTrailingTrigger = { viewModel.resetTrailingTrigger() },
-                onSetAutoSellParams = { enabled, tp1Price, tp1Percent, tp2Price, tp2Percent, stopLossPrice ->
-                    viewModel.setAutoSellParams(enabled, tp1Price, tp1Percent, tp2Price, tp2Percent, stopLossPrice)
+                onSetAutoSellParams = { enabled, tp1Price, tp1Percent, tp2Price, tp2Percent ->
+                    viewModel.setAutoSellParams(enabled, tp1Price, tp1Percent, tp2Price, tp2Percent) { success, msg ->
+                        android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
+                    }
                     HapticUtil.vibrateTradeSuccess(context)
-                    android.widget.Toast.makeText(
-                        context,
-                        if (enabled) "Auto TP/SL aktif" else "Auto TP/SL dimatikan",
-                        android.widget.Toast.LENGTH_SHORT
-                    ).show()
                 },
                 onDeployTrailingOrder = {
                     viewModel.deployTrailingOrder(pair.symbol)

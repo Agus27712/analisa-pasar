@@ -72,6 +72,70 @@ class SimulationCoordinator(private val store: SimulationTradeStore) {
         return count
     }
 
+    fun placeSimulationAutoSellOrders(
+        pair: agu.analys.model.TradingPair,
+        tp1Price: Double,
+        tp1Percent: Double,
+        tp2Price: Double,
+        tp2Percent: Double,
+        onResult: (Boolean, String) -> Unit
+    ) {
+        val wallet = store.getWallet()
+        val availableCoin = wallet.getAvailableCoin(pair.baseAsset)
+        if (availableCoin <= 0.0) {
+            onResult(false, "Saldo koin ${pair.baseAsset} kosong, tidak dapat pasang limit sell TP.")
+            return
+        }
+        val qty1 = availableCoin * (tp1Percent / 100.0)
+        val qty2 = availableCoin * (tp2Percent / 100.0)
+
+        var successCount = 0
+        var msg = ""
+
+        if (tp1Price > 0.0 && qty1 > 0.0) {
+            val res = store.placeOrder(
+                symbol = pair.symbol,
+                baseAsset = pair.baseAsset,
+                quoteAsset = pair.quoteAsset,
+                side = agu.analys.trading.SimulationOrderSide.SELL,
+                type = agu.analys.trading.SimulationOrderType.LIMIT,
+                price = tp1Price,
+                stopPrice = 0.0,
+                quantity = qty1,
+                currentMarketPrice = tp1Price
+            )
+            if (res is agu.analys.trading.SimulationOrderResult.Success) {
+                successCount++
+                msg += "TP1 OK. "
+            } else if (res is agu.analys.trading.SimulationOrderResult.Error) {
+                msg += "TP1 Gagal: ${res.message}. "
+            }
+        }
+
+        if (tp2Price > 0.0 && qty2 > 0.0) {
+            val res = store.placeOrder(
+                symbol = pair.symbol,
+                baseAsset = pair.baseAsset,
+                quoteAsset = pair.quoteAsset,
+                side = agu.analys.trading.SimulationOrderSide.SELL,
+                type = agu.analys.trading.SimulationOrderType.LIMIT,
+                price = tp2Price,
+                stopPrice = 0.0,
+                quantity = qty2,
+                currentMarketPrice = tp2Price
+            )
+            if (res is agu.analys.trading.SimulationOrderResult.Success) {
+                successCount++
+                msg += "TP2 OK."
+            } else if (res is agu.analys.trading.SimulationOrderResult.Error) {
+                msg += "TP2 Gagal: ${res.message}."
+            }
+        }
+
+        refresh()
+        onResult(successCount > 0, if (successCount > 0) "Order TP Berhasil dipasang! $msg" else "Gagal pasang order TP: $msg")
+    }
+
     fun topUpIdr(amount: Double) {
         store.topUpIdr(amount)
         refresh()

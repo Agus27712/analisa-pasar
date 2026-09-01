@@ -34,8 +34,6 @@ fun SellTpSlSection(
     onTp2PriceChanged: (String) -> Unit,
     tp2Percent: String,
     onTp2PercentChanged: (String) -> Unit,
-    stopLossPrice: String,
-    onStopLossPriceChanged: (String) -> Unit,
     quoteAsset: String,
     onSaveParams: () -> Unit
 ) {
@@ -54,7 +52,7 @@ fun SellTpSlSection(
         unfocusedPlaceholderColor = TvTextMuted
     )
 
-    val fieldText = TextStyle(fontSize = 13.sp, color = TvTextPrimary, fontWeight = FontWeight.Medium)
+    val fieldText = TextStyle(fontSize = 12.sp, color = TvTextPrimary, fontWeight = FontWeight.Medium)
 
     Box(
         modifier = Modifier
@@ -68,18 +66,18 @@ fun SellTpSlSection(
                 if (isAutoSellActive) TvBlue.copy(alpha = 0.45f) else TvBorder,
                 RoundedCornerShape(12.dp)
             )
-            .padding(12.dp)
+            .padding(10.dp)
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = if (isRealMode) "AUTO TP1 & TP2 SERVER" else "AUTO TP1, TP2 & STOP LOSS",
+                    text = "AUTO TAKE PROFIT (TP1 & TP2)",
                     color = if (isAutoSellActive) TvBlueSoft else TvTextSecondary,
-                    fontSize = 12.sp,
+                    fontSize = 11.5.sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1
                 )
@@ -98,23 +96,25 @@ fun SellTpSlSection(
             }
 
             if (isAutoSellActive) {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // TP 1 Row (Compact Width)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         CompactNumberField(
                             label = "Harga TP 1 ($quoteAsset)",
                             value = tp1Price,
                             onValueChange = onTp1PriceChanged,
-                            placeholder = "Harga TP 1",
-                            modifier = Modifier.weight(1.6f),
+                            placeholder = "TP 1",
+                            modifier = Modifier.weight(1.8f),
                             colors = defaultFieldColors(),
                             textStyle = fieldText,
                             imeAction = ImeAction.Next
                         )
                         CompactNumberField(
-                            label = "Porsi TP 1 %",
+                            label = "Porsi %",
                             value = tp1Percent,
                             onValueChange = { input ->
                                 onTp1PercentChanged(input)
@@ -134,22 +134,25 @@ fun SellTpSlSection(
                         )
                     }
 
+                    // TP 2 Row (Compact Width)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         CompactNumberField(
                             label = "Harga TP 2 ($quoteAsset)",
                             value = tp2Price,
                             onValueChange = onTp2PriceChanged,
-                            placeholder = "Harga TP 2",
-                            modifier = Modifier.weight(1.6f),
+                            placeholder = "TP 2",
+                            modifier = Modifier.weight(1.8f),
                             colors = defaultFieldColors(),
                             textStyle = fieldText,
-                            imeAction = ImeAction.Next
+                            imeAction = ImeAction.Done,
+                            onDone = { focusManager.clearFocus() }
                         )
                         CompactNumberField(
-                            label = "Porsi TP 2 %",
+                            label = "Porsi %",
                             value = tp2Percent,
                             onValueChange = { input ->
                                 onTp2PercentChanged(input)
@@ -165,58 +168,32 @@ fun SellTpSlSection(
                             modifier = Modifier.weight(1f),
                             colors = defaultFieldColors(),
                             textStyle = fieldText,
-                            imeAction = ImeAction.Next
-                        )
-                    }
-
-                    if (!isRealMode) {
-                        CompactNumberField(
-                            label = "Harga Stop Loss ($quoteAsset)",
-                            value = stopLossPrice,
-                            onValueChange = onStopLossPriceChanged,
-                            placeholder = "Harga Stop Loss",
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = defaultFieldColors(borderFocus = TvRed),
-                            textStyle = fieldText,
                             imeAction = ImeAction.Done,
                             onDone = { focusManager.clearFocus() }
                         )
-                    } else {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(TvAmber.copy(alpha = 0.12f), RoundedCornerShape(10.dp))
-                                .border(1.dp, TvAmber.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
-                                .padding(10.dp)
-                        ) {
-                            Text(
-                                text = "Di akun riil, Stop Loss otomatis dimatikan (saldo terkunci di server). Pakai TP1 & TP2 server saja.",
-                                color = TvTextPrimary,
-                                fontSize = 12.sp,
-                                lineHeight = 16.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
                     }
 
                     Button(
-                        onClick = onSaveParams,
-                        modifier = Modifier.fillMaxWidth().height(44.dp),
+                        onClick = {
+                            focusManager.clearFocus()
+                            onSaveParams()
+                        },
+                        modifier = Modifier.fillMaxWidth().height(40.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = TvBlue,
                             contentColor = Color.White
                         ),
                         shape = RoundedCornerShape(10.dp)
                     ) {
-                        Text("Simpan Target Jual Otomatis", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        Text("SIMPAN & KIRIM ORDER TP", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                     }
                 }
             } else {
                 Text(
-                    text = "Aktifkan untuk target profit & stop loss otomatis di server (tetap jalan meski HP mati).",
+                    text = "Buka switch & isi harga TP1/TP2, lalu tap SIMPAN untuk mengirim order jual otomatis.",
                     color = TvTextSecondary,
-                    fontSize = 12.sp,
-                    lineHeight = 16.sp
+                    fontSize = 11.sp,
+                    lineHeight = 15.sp
                 )
             }
         }

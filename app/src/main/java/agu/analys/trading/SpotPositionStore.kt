@@ -33,10 +33,8 @@ data class SpotPosition(
     val tp1Percent: Double = 50.0,
     val tp2Price: Double = 0.0,
     val tp2Percent: Double = 100.0,
-    val stopLossPrice: Double = 0.0,
     val isTp1Triggered: Boolean = false,
     val isTp2Triggered: Boolean = false,
-    val isSlTriggered: Boolean = false,
     val lastTrailingOrderId: String? = null,
     val lastOrderUpdateTime: Long = 0L
 ) {
@@ -84,10 +82,8 @@ class SpotPositionStore(context: Context) {
             tp1Percent = prefs.getString("${key}_tp1_percent", null)?.toDoubleOrNull() ?: 50.0,
             tp2Price = prefs.getString("${key}_tp2_price", null)?.toDoubleOrNull() ?: 0.0,
             tp2Percent = prefs.getString("${key}_tp2_percent", null)?.toDoubleOrNull() ?: 100.0,
-            stopLossPrice = prefs.getString("${key}_stop_loss_price", null)?.toDoubleOrNull() ?: 0.0,
             isTp1Triggered = prefs.getBoolean("${key}_tp1_triggered", false),
             isTp2Triggered = prefs.getBoolean("${key}_tp2_triggered", false),
-            isSlTriggered = prefs.getBoolean("${key}_sl_triggered", false),
             lastTrailingOrderId = lastTrailingOrderId,
             lastOrderUpdateTime = lastOrderUpdateTime
         )
@@ -271,8 +267,7 @@ class SpotPositionStore(context: Context) {
         tp1Price: Double,
         tp1Percent: Double,
         tp2Price: Double,
-        tp2Percent: Double,
-        stopLossPrice: Double
+        tp2Percent: Double
     ) {
         val key = normalize(symbol)
         prefs.edit()
@@ -281,10 +276,8 @@ class SpotPositionStore(context: Context) {
             .putString("${key}_tp1_percent", tp1Percent.toString())
             .putString("${key}_tp2_price", tp2Price.toString())
             .putString("${key}_tp2_percent", tp2Percent.toString())
-            .putString("${key}_stop_loss_price", stopLossPrice.toString())
             .putBoolean("${key}_tp1_triggered", false)
             .putBoolean("${key}_tp2_triggered", false)
-            .putBoolean("${key}_sl_triggered", false)
             .apply()
     }
 
@@ -294,10 +287,6 @@ class SpotPositionStore(context: Context) {
 
     fun markTp2Triggered(symbol: String) {
         prefs.edit().putBoolean("${normalize(symbol)}_tp2_triggered", true).apply()
-    }
-
-    fun markSlTriggered(symbol: String) {
-        prefs.edit().putBoolean("${normalize(symbol)}_sl_triggered", true).apply()
     }
 
     fun getAllActiveTrailingSymbols(): List<String> {

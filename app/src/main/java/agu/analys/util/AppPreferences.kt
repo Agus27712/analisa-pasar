@@ -175,6 +175,10 @@ class AppPreferences(context: Context) {
         get() = prefs.getBoolean("is_dark_theme", true)
         set(value) = prefs.edit().putBoolean("is_dark_theme", value).apply()
 
+    var isNotificationsEnabled: Boolean
+        get() = prefs.getBoolean(KEY_NOTIFICATIONS_ENABLED, true)
+        set(value) = prefs.edit().putBoolean(KEY_NOTIFICATIONS_ENABLED, value).apply()
+
     fun clearApiKeys() {
         prefs.edit()
             .remove(KEY_GROQ)
@@ -292,5 +296,6 @@ class AppPreferences(context: Context) {
         private const val KEY_RECENT_HISTORY_BASES = "recent_history_bases_v1"
         private const val KEY_INSTALLATION_SALT = "sec_installation_salt_v2"
         private const val KEY_PIN_RESET_REQUIRED = "sec_pin_reset_required"
+        private const val KEY_NOTIFICATIONS_ENABLED = "notifications_enabled_v1"
     }
 }

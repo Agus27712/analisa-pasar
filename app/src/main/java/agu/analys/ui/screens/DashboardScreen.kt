@@ -36,6 +36,13 @@ fun DashboardScreen(
     val isScalpingMode by viewModel.isScalpingMode.collectAsState()
     val strategyMode by viewModel.strategyMode.collectAsState()
     val recentCandles by viewModel.recentCandles.collectAsState()
+    val simulationWallet by viewModel.simulationWallet.collectAsState()
+    val realIndodaxBalance by viewModel.realIndodaxBalance.collectAsState()
+    val realAvgBuyPrices by viewModel.realAvgBuyPrices.collectAsState()
+    val spotPosition by viewModel.spotPosition.collectAsState()
+    val isRealBuyMode by viewModel.isRealBuyMode.collectAsState()
+    val batchExecutionState by viewModel.batchExecutionState.collectAsState()
+    val hasSecurityPin = remember { viewModel.hasSecurityPin() }
     var selectedRankingTab by remember { mutableStateOf(MarketRankingTab.SCALPING_FAST) }
     var currentTab by remember { mutableStateOf(NavTab.WATCHLIST) }
     var showAddDialog by remember { mutableStateOf(false) }
@@ -109,6 +116,33 @@ fun DashboardScreen(
             OfflineBanner(lost.reason) { viewModel.retryConnection() }
         }
 
+        // Proactive Profit Summary (Aggregates total unrealized gains across all Ready Sell coins)
+        val allEvaluatedPairs = remember(displayPairs, watchlist, marketDataSource) {
+            (displayPairs + watchlist.map { TradingPair.fromCustomSymbol(it, defaultQuote) } + TradingPair.popularPairsForSource(marketDataSource))
+                .distinctBy { it.symbol }
+        }
+        ProactiveProfitSummaryCard(
+            allPairs = allEvaluatedPairs,
+            allTicks = allTicks,
+            worthBySymbol = worthBySymbol,
+            recentCandles = recentCandles,
+            usdtIdrRate = usdtIdrRate,
+            isRealTradingMode = isRealBuyMode,
+            batchExecutionState = batchExecutionState,
+            hasSecurityPin = hasSecurityPin,
+            getHoldingStatus = { pair -> viewModel.getHoldingStatus(pair) },
+            onCoinClick = { pair ->
+                viewModel.selectPair(pair)
+                onNavigateToDetail(pair)
+            },
+            onExecuteBatchSell = { items, isReal, pin ->
+                viewModel.executeBatchSellReadyAssets(items, isReal, pin)
+            },
+            onResetBatchState = {
+                viewModel.resetBatchSellState()
+            }
+        )
+
         // List Aset
         LazyColumn(
             modifier = Modifier
@@ -123,6 +157,9 @@ fun DashboardScreen(
                 }
             } else {
                 itemsIndexed(displayPairs, key = { _, pair -> pair.symbol }) { index, pair ->
+                    val holdingStatus = remember(pair.symbol, simulationWallet, realIndodaxBalance, realAvgBuyPrices, spotPosition) {
+                        viewModel.getHoldingStatus(pair)
+                    }
                     WatchlistCoinCard(
                         pair = pair,
                         tick = allTicks[pair.symbol],
@@ -133,6 +170,7 @@ fun DashboardScreen(
                         isFavorite = watchlist.contains(pair.symbol),
                         usdtIdrRate = usdtIdrRate,
                         recentCandles = recentCandles,
+                        holdingStatus = holdingStatus,
                         onToggleFavorite = { viewModel.toggleWatchlist(pair.symbol) },
                         onClick = {
                             viewModel.selectPair(pair)

@@ -157,6 +157,59 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
 
         Spacer(Modifier.height(16.dp))
 
+        // SECTION: NOTIFIKASI TRADING & SINYAL
+        val isNotificationsEnabled by viewModel.isNotificationsEnabled.collectAsState()
+        SectionHeader("NOTIFIKASI TRADING & SINYAL")
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(10.dp),
+            colors = CardDefaults.cardColors(containerColor = TvSurfaceVariant),
+            border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = if (isNotificationsEnabled) Icons.Default.NotificationsActive else Icons.Default.NotificationsOff,
+                        contentDescription = "Notifikasi",
+                        tint = TvBlue,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = "Notifikasi Harga & Sinyal Sell",
+                            color = TvTextPrimary,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Matikan untuk hemat baterai & tanpa push alert",
+                            color = TvTextSecondary,
+                            fontSize = 10.sp
+                        )
+                    }
+                }
+                Switch(
+                    checked = isNotificationsEnabled,
+                    onCheckedChange = { viewModel.setNotificationsEnabled(it) },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.Black,
+                        checkedTrackColor = TvGreen,
+                        uncheckedThumbColor = TvTextSecondary,
+                        uncheckedTrackColor = TvSurfaceVariant
+                    )
+                )
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+
         // SECTION: SUMBER DATA PASAR (EXCHANGE SOURCE)
         SectionHeader("SUMBER PASAR (EXCHANGE)")
         Card(
