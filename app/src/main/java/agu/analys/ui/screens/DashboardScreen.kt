@@ -42,6 +42,8 @@ fun DashboardScreen(
     val spotPosition by viewModel.spotPosition.collectAsState()
     val isRealBuyMode by viewModel.isRealBuyMode.collectAsState()
     val batchExecutionState by viewModel.batchExecutionState.collectAsState()
+    val holdingStatuses by viewModel.holdingStatuses.collectAsState()
+    val tradingFees by viewModel.tradingFees.collectAsState()
     val hasSecurityPin = remember { viewModel.hasSecurityPin() }
     var selectedRankingTab by remember { mutableStateOf(MarketRankingTab.SCALPING_FAST) }
     var currentTab by remember { mutableStateOf(NavTab.WATCHLIST) }
@@ -130,7 +132,8 @@ fun DashboardScreen(
             isRealTradingMode = isRealBuyMode,
             batchExecutionState = batchExecutionState,
             hasSecurityPin = hasSecurityPin,
-            getHoldingStatus = { pair -> viewModel.getHoldingStatus(pair) },
+            holdingStatuses = holdingStatuses,
+            tradingFees = tradingFees,
             onCoinClick = { pair ->
                 viewModel.selectPair(pair)
                 onNavigateToDetail(pair)
@@ -171,6 +174,7 @@ fun DashboardScreen(
                         usdtIdrRate = usdtIdrRate,
                         recentCandles = recentCandles,
                         holdingStatus = holdingStatus,
+                        tradingFees = tradingFees,
                         onToggleFavorite = { viewModel.toggleWatchlist(pair.symbol) },
                         onClick = {
                             viewModel.selectPair(pair)

@@ -260,6 +260,23 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     val realTrades: StateFlow<List<RealTradeEntity>> = AppDatabase.getInstance().realTradeDao().getAllTradesFlow()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val realAvgBuyPrices: StateFlow<Map<String, Double>> = realCoordinator.realAvgBuyPrices
+    
+    val holdingStatuses: StateFlow<Map<String, agu.analys.model.CoinHoldingStatus>> = kotlinx.coroutines.flow.combine(
+        marketDataCoordinator.dashboardTicks,
+        simCoordinator.wallet,
+        realIndodaxBalance,
+        realAvgBuyPrices
+    ) { _, _, _, _ ->
+        val defaultQuote = prefs.marketDataSource.defaultQuoteAsset
+        val basePairs = agu.analys.model.TradingPair.popularPairsForSource(prefs.marketDataSource)
+        val watchPairs = _watchlist.value.map { agu.analys.model.TradingPair.fromCustomSymbol(it, defaultQuote) }
+        val pairs = (basePairs + watchPairs).distinctBy { it.symbol }
+        
+        pairs.associate { pair ->
+            pair.symbol to getHoldingStatus(pair)
+        }
+    }.stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000), emptyMap())
+    
     val isFetchingRealBalance: StateFlow<Boolean> = realCoordinator.isFetchingRealBalance
     val realTradeStatus: StateFlow<String> = realCoordinator.realTradeStatus
     val userPublicIp: StateFlow<String?> = realCoordinator.publicIp

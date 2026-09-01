@@ -59,7 +59,8 @@ fun ProactiveProfitSummaryCard(
     isRealTradingMode: Boolean,
     batchExecutionState: BatchExecutionState,
     hasSecurityPin: Boolean,
-    getHoldingStatus: (TradingPair) -> CoinHoldingStatus,
+    holdingStatuses: Map<String, CoinHoldingStatus>,
+    tradingFees: agu.analys.config.TradingFeeConfig = agu.analys.config.TradingFeeConfig(),
     onCoinClick: (TradingPair) -> Unit,
     onExecuteBatchSell: (List<ReadySellCoinSummary>, Boolean, String?) -> Unit,
     onResetBatchState: () -> Unit,
@@ -70,41 +71,40 @@ fun ProactiveProfitSummaryCard(
     val colorGreen = TvGreen
 
     // Collect all coins with active Ready Sell status
-    val readyCoins = remember(allPairs, allTicks, worthBySymbol, recentCandles, usdtIdrRate, colorOrange, colorRed, colorGreen) {
+    val readyCoins = remember(allPairs, allTicks, worthBySymbol, holdingStatuses, recentCandles, usdtIdrRate, tradingFees, colorOrange, colorRed, colorGreen) {
         allPairs.mapNotNull { pair ->
-            val holding = getHoldingStatus(pair)
+            val holding = holdingStatuses[pair.symbol] ?: return@mapNotNull null
             if (!holding.isHolding || holding.quantity <= 0.00000001) return@mapNotNull null
+            if (holding.isReal != isRealTradingMode) return@mapNotNull null
 
             val tick = allTicks[pair.symbol]
             val currentPrice = tick?.price ?: 0.0
             val entryPrice = holding.entryPrice
-            val profitPct = if (entryPrice > 0.0 && currentPrice > 0.0) {
-                ((currentPrice - entryPrice) / entryPrice) * 100.0
-            } else {
-                tick?.change24h ?: 0.0
-            }
+            val sellFeeRate = (tradingFees.sellMakerPct / 100.0).coerceAtLeast(0.0)
+            val grossSell = holding.quantity * currentPrice
+            val netSell = grossSell * (1.0 - sellFeeRate)
+            val costBasis = holding.quantity * (if (entryPrice > 0.0) entryPrice else currentPrice)
+            val netProfitIdrLocal = netSell - costBasis
+            val netProfitPct = if (costBasis > 0.0) (netProfitIdrLocal / costBasis) * 100.0 else 0.0
+
             val worth = worthBySymbol[pair.symbol]
             val rsiVal = if (recentCandles.size >= 15) {
                 agu.analys.engine.indicators.IndicatorMath.rsi(recentCandles, 14)
             } else Double.NaN
 
-            val isTp1Reached = (holding.tp1Price > 0.0 && currentPrice >= holding.tp1Price) ||
-                    (profitPct >= 5.0) ||
-                    (tick != null && tick.high24h > 0 && currentPrice >= tick.high24h * 0.98 && profitPct > 0.0)
-            val isRsiOverbought = (rsiVal.isFinite() && rsiVal >= 70.0) || (worth?.recommendation?.contains("RSI", true) == true)
-            val isTakeProfit = profitPct >= 2.5 || holding.isTrailingTriggered
-
             val badgeInfo: Pair<String, Color>? = when {
-                isTp1Reached -> Pair("TARGET TP1", colorOrange)
-                isRsiOverbought -> Pair("RSI OVERBOUGHT", colorRed)
-                isTakeProfit -> Pair("TAKE PROFIT", colorGreen)
+                holding.tp1Price > 0.0 && currentPrice >= holding.tp1Price && netProfitPct > 0.0 -> Pair("TARGET TP1", colorOrange)
+                netProfitPct >= 5.0 -> Pair("PROFIT +5%", colorOrange)
+                tick != null && tick.high24h > 0 && currentPrice >= tick.high24h * 0.98 && netProfitPct >= 1.0 -> Pair("NEAR 24H HIGH", colorOrange)
+                netProfitPct >= 2.5 || (holding.isTrailingTriggered && netProfitPct > 0.0) -> Pair("READY PROFIT", colorGreen)
+                rsiVal.isFinite() && rsiVal >= 70.0 && netProfitPct > 0.0 -> Pair("RSI OVERBOUGHT", colorRed)
                 else -> null
             }
 
             if (badgeInfo != null) {
                 val rate = if (pair.quoteAsset.equals("USDT", true) || pair.quoteAsset.equals("USD", true)) usdtIdrRate else 1.0
-                val cashOutValueIdr = holding.quantity * currentPrice * rate
-                val costIdr = holding.quantity * (if (entryPrice > 0.0) entryPrice else currentPrice) * rate
+                val cashOutValueIdr = netSell * rate
+                val costIdr = costBasis * rate
                 val profitIdr = cashOutValueIdr - costIdr
 
                 ReadySellCoinSummary(
@@ -112,7 +112,7 @@ fun ProactiveProfitSummaryCard(
                     quantity = holding.quantity,
                     entryPrice = entryPrice,
                     currentPrice = currentPrice,
-                    profitPct = profitPct,
+                    profitPct = netProfitPct,
                     profitIdr = profitIdr,
                     cashOutValueIdr = cashOutValueIdr,
                     badgeLabel = badgeInfo.first,
@@ -595,65 +595,6 @@ private fun BatchSellConfirmationDialog(
                 }
 
                 Spacer(Modifier.height(14.dp))
-
-                // Mode Selector Toggle (Dipicu dari setting trading dan dapat disinkronkan)
-                Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = Color(0xFF0D141C),
-                    border = BorderStroke(1.dp, TvBorder)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(4.dp)
-                    ) {
-                        // Simulasi Tab
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .background(
-                                    if (!isRealMode) TvBlue.copy(alpha = 0.3f) else Color.Transparent,
-                                    RoundedCornerShape(8.dp)
-                                )
-                                .clickable { isRealMode = false }
-                                .padding(vertical = 8.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = "📊 Simulasi",
-                                    color = if (!isRealMode) Color.White else TvTextSecondary,
-                                    fontSize = 11.5.sp,
-                                    fontWeight = if (!isRealMode) FontWeight.Bold else FontWeight.Normal
-                                )
-                            }
-                        }
-
-                        // Real Indodax Tab
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .background(
-                                    if (isRealMode) TvOrange.copy(alpha = 0.35f) else Color.Transparent,
-                                    RoundedCornerShape(8.dp)
-                                )
-                                .clickable { isRealMode = true }
-                                .padding(vertical = 8.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = "⚡ Real Order (INDODAX)",
-                                    color = if (isRealMode) TvOrange else TvTextSecondary,
-                                    fontSize = 11.5.sp,
-                                    fontWeight = if (isRealMode) FontWeight.Bold else FontWeight.Normal
-                                )
-                            }
-                        }
-                    }
-                }
-
-                Spacer(Modifier.height(12.dp))
 
                 // Aggregated Summary Box
                 Box(

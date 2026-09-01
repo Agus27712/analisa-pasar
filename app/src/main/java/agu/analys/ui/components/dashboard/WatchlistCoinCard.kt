@@ -53,6 +53,7 @@ fun WatchlistCoinCard(
     usdtIdrRate: Double = 16450.0,
     recentCandles: List<CandleBar> = emptyList(),
     holdingStatus: CoinHoldingStatus? = null,
+    tradingFees: agu.analys.config.TradingFeeConfig = agu.analys.config.TradingFeeConfig(),
     onToggleFavorite: () -> Unit = {},
     onClick: () -> Unit
 ) {
@@ -101,23 +102,21 @@ fun WatchlistCoinCard(
     val badgeInfo: Triple<String, Color, Color>? = if (isHolding) {
         val currentPrice = tick?.price ?: 0.0
         val entryPrice = holdingStatus.entryPrice
-        val profitPct = if (entryPrice > 0.0 && currentPrice > 0.0) {
-            ((currentPrice - entryPrice) / entryPrice) * 100.0
-        } else {
-            tick?.change24h ?: 0.0
-        }
+        val sellFeeRate = (tradingFees.sellMakerPct / 100.0).coerceAtLeast(0.0)
+        val grossSell = holdingStatus.quantity * currentPrice
+        val netSell = grossSell * (1.0 - sellFeeRate)
+        val costBasis = holdingStatus.quantity * entryPrice
+        val netProfitIdr = netSell - costBasis
+        val netProfitPct = if (costBasis > 0.0) (netProfitIdr / costBasis) * 100.0 else 0.0
+
         val rsiVal = if (recentCandles.size >= 15) agu.analys.engine.indicators.IndicatorMath.rsi(recentCandles, 14) else Double.NaN
         
-        val isTp1Reached = (holdingStatus.tp1Price > 0.0 && currentPrice >= holdingStatus.tp1Price) || 
-                            (profitPct >= 5.0) || 
-                            (tick != null && tick.high24h > 0 && currentPrice >= tick.high24h * 0.98 && profitPct > 0.0)
-        val isRsiOverbought = (rsiVal.isFinite() && rsiVal >= 70.0) || (worth?.recommendation?.contains("RSI", true) == true)
-        val isTakeProfit = profitPct >= 2.5 || holdingStatus.isTrailingTriggered
-
         when {
-            isTp1Reached -> Triple("🎯 TARGET TP1 TERCAPAI", TvOrange, TvOrange.copy(alpha = 0.18f))
-            isRsiOverbought -> Triple("⚠️ RSI OVERBOUGHT", TvRed, TvRed.copy(alpha = 0.18f))
-            isTakeProfit -> Triple("💰 TAKE PROFIT", TvGreen, TvGreen.copy(alpha = 0.18f))
+            holdingStatus.tp1Price > 0.0 && currentPrice >= holdingStatus.tp1Price && netProfitPct > 0.0 -> Triple("🎯 TARGET TP1", TvOrange, TvOrange.copy(alpha = 0.18f))
+            netProfitPct >= 5.0 -> Triple("🔥 PROFIT +5%", TvOrange, TvOrange.copy(alpha = 0.18f))
+            tick != null && tick.high24h > 0 && currentPrice >= tick.high24h * 0.98 && netProfitPct >= 1.0 -> Triple("📈 NEAR 24H HIGH", TvOrange, TvOrange.copy(alpha = 0.18f))
+            netProfitPct >= 2.5 || (holdingStatus.isTrailingTriggered && netProfitPct > 0.0) -> Triple("💰 READY PROFIT", TvGreen, TvGreen.copy(alpha = 0.18f))
+            rsiVal.isFinite() && rsiVal >= 70.0 && netProfitPct > 0.0 -> Triple("⚠️ RSI OVERBOUGHT", TvRed, TvRed.copy(alpha = 0.18f))
             else -> null
         }
     } else null
