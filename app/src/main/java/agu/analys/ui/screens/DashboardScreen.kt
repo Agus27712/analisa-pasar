@@ -160,9 +160,7 @@ fun DashboardScreen(
                 }
             } else {
                 itemsIndexed(displayPairs, key = { _, pair -> pair.symbol }) { index, pair ->
-                    val holdingStatus = remember(pair.symbol, simulationWallet, realIndodaxBalance, realAvgBuyPrices, spotPosition) {
-                        viewModel.getHoldingStatus(pair)
-                    }
+                    val holdingStatus = holdingStatuses[pair.symbol] ?: viewModel.getHoldingStatus(pair)
                     WatchlistCoinCard(
                         pair = pair,
                         tick = allTicks[pair.symbol],

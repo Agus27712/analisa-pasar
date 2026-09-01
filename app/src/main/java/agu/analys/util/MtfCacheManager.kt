@@ -63,13 +63,14 @@ object MtfCacheManager {
     }
 
     fun isCacheValid(timeframe: Timeframe, candles: List<CandleBar>?): Boolean {
-        if (candles.isNullOrEmpty() || candles.size < 55) return false
+        if (candles.isNullOrEmpty() || candles.size < 20) return false
         val lastTimestamp = candles.last().timestamp
         val ageMs = System.currentTimeMillis() - lastTimestamp
         return when (timeframe) {
             Timeframe.M1 -> ageMs <= 5 * 60 * 1000L
             Timeframe.M15 -> ageMs <= 45 * 60 * 1000L
             Timeframe.H1 -> ageMs <= 180 * 60 * 1000L
+            Timeframe.H4 -> ageMs <= 12 * 60 * 60 * 1000L
             else -> false
         }
     }
@@ -103,7 +104,7 @@ object MtfCacheManager {
 
     private fun needsRefresh(symbol: String): Boolean {
         val symbolCache = cache[symbol] ?: return true
-        val tfs = listOf(Timeframe.H1, Timeframe.M15, Timeframe.M1)
+        val tfs = listOf(Timeframe.H4, Timeframe.H1, Timeframe.M15, Timeframe.M1)
         for (tf in tfs) {
             if (!isCacheValid(tf, symbolCache[tf])) return true
         }
@@ -111,7 +112,7 @@ object MtfCacheManager {
     }
 
     private suspend fun prefetchSymbol(symbol: String, isTier1: Boolean) {
-        val tfs = listOf(Timeframe.H1, Timeframe.M15, Timeframe.M1)
+        val tfs = listOf(Timeframe.H4, Timeframe.H1, Timeframe.M15, Timeframe.M1)
         for (tf in tfs) {
             if (!scope.isActive) break
             val currentCandles = getCachedCandles(symbol, tf)
@@ -131,6 +132,7 @@ object MtfCacheManager {
         }
 
         val limit = when (tf) {
+            Timeframe.H4 -> 120
             Timeframe.H1 -> 150
             Timeframe.M15 -> 200
             Timeframe.M1 -> 250
@@ -138,7 +140,7 @@ object MtfCacheManager {
         }
 
         val existing = getCachedCandles(symbol, tf)
-        val fetched = if (!existing.isNullOrEmpty() && existing.size >= 55) {
+        val fetched = if (!existing.isNullOrEmpty() && existing.size >= 20) {
             // Incremental sync
             val lastTimeSec = existing.last().timestamp / 1000L
             val nowSec = System.currentTimeMillis() / 1000L

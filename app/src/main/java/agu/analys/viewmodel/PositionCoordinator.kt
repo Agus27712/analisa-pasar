@@ -11,31 +11,39 @@ import kotlinx.coroutines.flow.asStateFlow
 class PositionCoordinator(
     private val positionStore: SpotPositionStore,
     private val alertStore: PriceAlertStore,
-    private val onPositionChanged: () -> Unit
+    private val onPositionChanged: () -> Unit = {}
 ) {
+    private val _positionVersion = MutableStateFlow(0L)
+    val positionVersion: StateFlow<Long> = _positionVersion.asStateFlow()
+
     private val _spotPosition = MutableStateFlow(SpotPosition())
     val spotPosition: StateFlow<SpotPosition> = _spotPosition.asStateFlow()
 
     private val _priceAlerts = MutableStateFlow<List<PriceAlert>>(emptyList())
     val priceAlerts: StateFlow<List<PriceAlert>> = _priceAlerts.asStateFlow()
 
+    private fun notifyPositionChange() {
+        _positionVersion.value = System.currentTimeMillis()
+        onPositionChanged()
+    }
+
     fun refreshPosition(symbol: String) {
         _spotPosition.value = positionStore.get(symbol)
-        onPositionChanged()
+        notifyPositionChange()
     }
 
     fun refreshAlerts(symbol: String) {
         _priceAlerts.value = alertStore.getAlertsForSymbol(symbol)
     }
 
-    fun setOwnership(symbol: String, owned: Boolean, entryPrice: Double = 0.0, quantity: Double = 0.0, invested: Double = 0.0) {
-        if (owned) positionStore.markBought(symbol, entryPrice, invested, quantity)
+    fun setOwnership(symbol: String, owned: Boolean, entryPrice: Double = 0.0, quantity: Double = 0.0, invested: Double = 0.0, isReal: Boolean = false) {
+        if (owned) positionStore.markBought(symbol, entryPrice, invested, quantity, isReal)
         else positionStore.markSold(symbol)
         refreshPosition(symbol)
     }
 
-    fun setManualEntry(symbol: String, price: Double, amount: Double) {
-        positionStore.setManualEntryPrice(symbol, price, amount)
+    fun setManualEntry(symbol: String, price: Double, amount: Double, isReal: Boolean = false) {
+        positionStore.setManualEntryPrice(symbol, price, amount, isReal)
         refreshPosition(symbol)
     }
 

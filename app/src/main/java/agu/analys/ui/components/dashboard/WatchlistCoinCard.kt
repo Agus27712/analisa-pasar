@@ -98,28 +98,22 @@ fun WatchlistCoinCard(
     val rankText = rank?.let { String.format("%02d", it) } ?: "··"
     val sparkColor = if (change >= 0) TvGreen else TvRed
 
-    val isHolding = holdingStatus != null && holdingStatus.isHolding && holdingStatus.quantity > 0.00000001
-    val badgeInfo: Triple<String, Color, Color>? = if (isHolding) {
-        val currentPrice = tick?.price ?: 0.0
-        val entryPrice = holdingStatus.entryPrice
-        val sellFeeRate = (tradingFees.sellMakerPct / 100.0).coerceAtLeast(0.0)
-        val grossSell = holdingStatus.quantity * currentPrice
-        val netSell = grossSell * (1.0 - sellFeeRate)
-        val costBasis = holdingStatus.quantity * entryPrice
-        val netProfitIdr = netSell - costBasis
-        val netProfitPct = if (costBasis > 0.0) (netProfitIdr / costBasis) * 100.0 else 0.0
+    val colorOrange = TvOrange
+    val colorGreen = TvGreen
+    val colorRed = TvRed
 
-        val rsiVal = if (recentCandles.size >= 15) agu.analys.engine.indicators.IndicatorMath.rsi(recentCandles, 14) else Double.NaN
-        
-        when {
-            holdingStatus.tp1Price > 0.0 && currentPrice >= holdingStatus.tp1Price && netProfitPct > 0.0 -> Triple("🎯 TARGET TP1", TvOrange, TvOrange.copy(alpha = 0.18f))
-            netProfitPct >= 5.0 -> Triple("🔥 PROFIT +5%", TvOrange, TvOrange.copy(alpha = 0.18f))
-            tick != null && tick.high24h > 0 && currentPrice >= tick.high24h * 0.98 && netProfitPct >= 1.0 -> Triple("📈 NEAR 24H HIGH", TvOrange, TvOrange.copy(alpha = 0.18f))
-            netProfitPct >= 2.5 || (holdingStatus.isTrailingTriggered && netProfitPct > 0.0) -> Triple("💰 READY PROFIT", TvGreen, TvGreen.copy(alpha = 0.18f))
-            rsiVal.isFinite() && rsiVal >= 70.0 && netProfitPct > 0.0 -> Triple("⚠️ RSI OVERBOUGHT", TvRed, TvRed.copy(alpha = 0.18f))
-            else -> null
-        }
-    } else null
+    val isHolding = holdingStatus != null && holdingStatus.isHolding && holdingStatus.quantity > 0.00000001
+    val badgeInfo: ReadySellBadge? = remember(holdingStatus, tick, tradingFees, colorOrange, colorGreen, colorRed) {
+        ReadySellBadgeEvaluator.computeReadyBadge(
+            holding = holdingStatus,
+            tick = tick,
+            tradingFees = tradingFees,
+            colorOrange = colorOrange,
+            colorGreen = colorGreen,
+            colorRed = colorRed,
+            rsi = null
+        )
+    }
 
     val pulseTransition = rememberInfiniteTransition(label = "pulse_card_${pair.symbol}")
     val pulseAlpha by pulseTransition.animateFloat(
@@ -133,7 +127,7 @@ fun WatchlistCoinCard(
     )
 
     val cardBorder = if (badgeInfo != null) {
-        BorderStroke(1.2.dp, badgeInfo.second.copy(alpha = pulseAlpha))
+        BorderStroke(1.2.dp, badgeInfo.color.copy(alpha = pulseAlpha))
     } else {
         BorderStroke(1.dp, DashboardColors.Border)
     }
@@ -198,12 +192,12 @@ fun WatchlistCoinCard(
                             if (badgeInfo != null) {
                                 Box(
                                     modifier = Modifier
-                                        .background(badgeInfo.second.copy(alpha = (0.12f + 0.12f * pulseAlpha)), RoundedCornerShape(4.dp))
+                                        .background(badgeInfo.color.copy(alpha = (0.12f + 0.12f * pulseAlpha)), RoundedCornerShape(4.dp))
                                         .padding(horizontal = 4.dp, vertical = 1.dp)
                                 ) {
                                     Text(
-                                        text = badgeInfo.first,
-                                        color = badgeInfo.second,
+                                        text = badgeInfo.label,
+                                        color = badgeInfo.color,
                                         fontSize = 8.sp,
                                         fontWeight = FontWeight.Black
                                     )

@@ -33,12 +33,14 @@ object ScalpingMtfEvaluator {
         fees: TradingFeeConfig = TradingFeeConfig(),
         sensitivity: ScalpingSensitivity = ScalpingSensitivity.BALANCED
     ): Result? {
-        if (price <= 0.0 || h1Candles.size < 55 || m15Candles.size < 55 || m1Candles.size < 55) return null
+        if (price <= 0.0 || h1Candles.size < 20 || m15Candles.size < 20 || m1Candles.size < 20) return null
 
         val isAggressive = sensitivity == ScalpingSensitivity.AGGRESSIVE || sensitivity == ScalpingSensitivity.DYNAMIC_AUTO
+        val m15Ready = m15Candles.size >= 40
 
         // 1. Order Book Pressure & VSA (Volume Spread Analysis)
-        val buyPressure = OrderBookAnalyzer.calculateBuyPressure(bids, asks, 15)
+        val isOrderBookEmpty = bids.isEmpty() && asks.isEmpty()
+        val buyPressure = if (!isOrderBookEmpty) OrderBookAnalyzer.calculateBuyPressure(bids, asks, 15) else 1.0
         
         val last1M = m1Candles.last()
         val avgVol1M = m1Candles.takeLast(20).map { it.volume }.average()
@@ -59,13 +61,14 @@ object ScalpingMtfEvaluator {
         val isDangerousNoise = isExtremeVol && !isMomentum
 
         // 3. VWAP & RSI Trigger (M1)
-        val vwap1M = IndicatorMath.rollingVwap(m1Candles, 60)
-        val rsi1M = IndicatorMath.rsi(m1Candles, 14)
-        val triggerLong = (price > vwap1M || isVSABreakout) && buyPressure > 1.05 && rsi1M < 78.0
+        val safeVwapCandles = if (m1Candles.size >= 60) m1Candles else m1Candles.takeLast(m1Candles.size)
+        val vwap1M = IndicatorMath.rollingVwap(safeVwapCandles, minOf(60, safeVwapCandles.size))
+        val rsi1M = IndicatorMath.rsi(m1Candles, minOf(14, m1Candles.size - 1))
+        val triggerLong = (price > vwap1M || isVSABreakout) && (buyPressure > 1.05 || isOrderBookEmpty) && rsi1M < 80.0
         
         // 4. Macro Room to Grow (M15 / H1)
-        val struct15M = MarketStructureAnalyzer.analyze(m15Candles.takeLast(40))
-        val resistance = struct15M.resistance ?: (price * 1.05)
+        val struct15M = if (m15Ready) MarketStructureAnalyzer.analyze(m15Candles.takeLast(40)) else null
+        val resistance = struct15M?.resistance ?: (price * 1.05)
         val hasRoomToGrow = price < resistance * 0.995
 
         // Indicators for state
@@ -76,7 +79,11 @@ object ScalpingMtfEvaluator {
 
         val reasons = mutableListOf<String>()
         reasons.add("VWAP 1M: ${fmt(vwap1M)}")
-        reasons.add("Tekanan Beli (Orderbook): ${fmt(buyPressure)}x")
+        if (isOrderBookEmpty) {
+            reasons.add("Tekanan Beli: Diabaikan (Orderbook Kosong)")
+        } else {
+            reasons.add("Tekanan Beli (Orderbook): ${fmt(buyPressure)}x")
+        }
         if (isVSABreakout) reasons.add("VSA Breakout Terdeteksi! (Vol: ${fmt(formingVolValid / avgVol1M)}x)")
         if (isDangerousNoise) reasons.add("Noise liar/Choppy! Entry ditahan.")
         if (!hasRoomToGrow) reasons.add("Harga terlalu dekat resistance M15.")
@@ -94,7 +101,7 @@ object ScalpingMtfEvaluator {
         val ready = triggerLong && hasRoomToGrow && !isDangerousNoise && feeResult.netRr >= 1.05
         
         if (ready) reasons.add("BUY READY: Kondisi scalping valid (Net R:R 1:${fmt(feeResult.netRr)}).")
-        else if (triggerLong) reasons.add("Trigger ON, namun tidak siap (RR < 1.05 atau nabrak resistance).")
+        else if (triggerLong) reasons.add("Trigger ON, namun RR tidak memenuhi syarat (RR < 1.05).")
         else reasons.add("Menunggu momentum VWAP & Orderbook.")
 
         val action = if (ready) SignalAction.BUY else SignalAction.HOLD

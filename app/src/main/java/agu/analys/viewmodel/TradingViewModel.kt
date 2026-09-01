@@ -265,8 +265,9 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         marketDataCoordinator.dashboardTicks,
         simCoordinator.wallet,
         realIndodaxBalance,
-        realAvgBuyPrices
-    ) { _, _, _, _ ->
+        realAvgBuyPrices,
+        positionCoordinator.positionVersion
+    ) { _, _, _, _, _ ->
         val defaultQuote = prefs.marketDataSource.defaultQuoteAsset
         val basePairs = agu.analys.model.TradingPair.popularPairsForSource(prefs.marketDataSource)
         val watchPairs = _watchlist.value.map { agu.analys.model.TradingPair.fromCustomSymbol(it, defaultQuote) }
@@ -323,9 +324,9 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     fun refreshSimulationState() = simCoordinator.refresh()
     fun refreshSpotPosition() { positionCoordinator.refreshPosition(_selectedPair.value.symbol) }
     fun refreshPriceAlerts() { positionCoordinator.refreshAlerts(_selectedPair.value.symbol) }
-    fun setOwnership(owned: Boolean, price: Double = 0.0, quantity: Double = 0.0, invested: Double = 0.0) {
+    fun setOwnership(owned: Boolean, price: Double = 0.0, quantity: Double = 0.0, invested: Double = 0.0, isReal: Boolean = isRealBuyMode.value) {
         val symbol = _selectedPair.value.symbol
-        positionCoordinator.setOwnership(symbol, owned, price, quantity, invested)
+        positionCoordinator.setOwnership(symbol, owned, price, quantity, invested, isReal)
     }
 
     fun submitSimulationOrder(
@@ -350,24 +351,28 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         val baseUpper = pair.baseAsset.uppercase()
         val symbolNorm = pair.symbol.replace("_", "").uppercase()
 
-        // 1. Check SpotPositionStore (Manual Spot / Real Tracking)
+        // 1. Check Real Indodax Balance
+        val realBalances = realIndodaxBalance.value
+        val realQty = realBalances[baseLower] ?: realBalances[baseUpper] ?: 0.0
+        val hasRealBalance = realQty > 0.00000001 && baseUpper != "IDR"
+
+        // 2. Check SpotPositionStore (Manual Spot / Real Tracking)
         val spotPos = positionStore.get(pair.symbol)
         if (spotPos.isHolding && spotPos.quantity > 0.00000001) {
+            val effectiveIsReal = spotPos.isReal || (hasRealBalance && prefs.hasIndodaxCredentials())
             return CoinHoldingStatus(
                 isHolding = true,
                 quantity = spotPos.quantity,
                 entryPrice = spotPos.entryPrice,
-                isReal = true,
+                isReal = effectiveIsReal,
                 tp1Price = spotPos.tp1Price,
                 tp2Price = spotPos.tp2Price,
                 isTrailingTriggered = spotPos.isTrailingTriggered
             )
         }
 
-        // 2. Check Real Indodax Balance
-        val realBalances = realIndodaxBalance.value
-        val realQty = realBalances[baseLower] ?: realBalances[baseUpper] ?: 0.0
-        if (realQty > 0.00000001 && baseUpper != "IDR") {
+        // 3. Check Real Indodax Balance fallback if spotPos not explicitly set
+        if (hasRealBalance) {
             val realAvg = realAvgBuyPrices.value[symbolNorm]
                 ?: realAvgBuyPrices.value[pair.symbol.uppercase()]
                 ?: realAvgBuyPrices.value[baseUpper]
@@ -383,7 +388,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
             )
         }
 
-        // 3. Check Simulation Wallet
+        // 4. Check Simulation Wallet
         val simWallet = simulationWallet.value
         val simQty = simWallet.coinBalances[baseLower] ?: simWallet.coinBalances[baseUpper] ?: 0.0
         if (simQty > 0.00000001 && baseUpper != "IDR") {
@@ -418,6 +423,11 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         engine.isScalpingMode = scalpingEnabled
         engine.scalpingSensitivity = prefs.scalpingSensitivity
         engine.tradingFees = prefs.tradingFees
+        
+        if (mode == StrategyMode.SCALPING || mode == StrategyMode.SECOND_WAVE) {
+            agu.analys.util.MtfCacheManager.setActiveSymbol(_selectedPair.value.symbol)
+        }
+        
         marketDataCoordinator.startMarketPolling(_selectedPair.value, _selectedTimeframe.value)
         val tick = marketDataCoordinator.currentTick.value
         if (tick != null) {
@@ -474,8 +484,8 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         if (addToWatchlist && !prefs.isInWatchlist(pair.symbol)) toggleWatchlist(pair.symbol)
     }
 
-    fun setManualPositionPrice(symbol: String, entryPrice: Double, investedAmount: Double = 0.0) {
-        positionCoordinator.setManualEntry(symbol, entryPrice, investedAmount)
+    fun setManualPositionPrice(symbol: String, entryPrice: Double, investedAmount: Double = 0.0, isReal: Boolean = isRealBuyMode.value) {
+        positionCoordinator.setManualEntry(symbol, entryPrice, investedAmount, isReal)
     }
 
     fun setTrailingStop(enabled: Boolean, trailingPercent: Double) {
@@ -665,6 +675,11 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         lastSavedSignalTimestamp = 0L
         positionCoordinator.refreshPosition(pair.symbol)
         positionCoordinator.refreshAlerts(pair.symbol)
+        
+        if (_strategyMode.value == StrategyMode.SCALPING || _strategyMode.value == StrategyMode.SECOND_WAVE) {
+            agu.analys.util.MtfCacheManager.setActiveSymbol(pair.symbol)
+        }
+        
         val loaded = marketDataCoordinator.loadPairCache(pair.symbol, _selectedTimeframe.value)
         if (!loaded) marketDataCoordinator.clearPairData()
         marketDataCoordinator.startMarketPolling(pair, _selectedTimeframe.value)

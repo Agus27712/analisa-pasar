@@ -23,6 +23,7 @@ data class SpotPosition(
     val entryPrice: Double = 0.0,
     val quantity: Double = 0.0,
     val openedAt: Long = 0L,
+    val isReal: Boolean = false,
     val isTrailingEnabled: Boolean = false,
     val trailingPercent: Double = 0.0,
     val peakPrice: Double = 0.0,
@@ -72,6 +73,7 @@ class SpotPositionStore(context: Context) {
             entryPrice = entry,
             quantity = prefs.getString("${key}_quantity", null)?.toDoubleOrNull() ?: 0.0,
             openedAt = prefs.getLong("${key}_opened_at", 0L),
+            isReal = prefs.getBoolean("${key}_is_real", false),
             isTrailingEnabled = isTrailing,
             trailingPercent = trailingPct,
             peakPrice = peak,
@@ -115,11 +117,12 @@ class SpotPositionStore(context: Context) {
             investedAmount = best.optDouble("investedAmount", 0.0),
             entryPrice = best.optDouble("entryPrice", 0.0),
             quantity = best.optDouble("quantity", 0.0),
-            openedAt = best.optLong("openedAt", 0L)
+            openedAt = best.optLong("openedAt", 0L),
+            isReal = best.optBoolean("isReal", false)
         )
     }
 
-    fun setHolding(symbol: String, invested: Double, entry: Double, quantity: Double) {
+    fun setHolding(symbol: String, invested: Double, entry: Double, quantity: Double, isReal: Boolean = false) {
         val key = normalize(symbol)
         val changedAt = System.currentTimeMillis()
         val position = SpotPosition(
@@ -128,6 +131,7 @@ class SpotPositionStore(context: Context) {
             entryPrice = entry,
             quantity = quantity,
             openedAt = changedAt,
+            isReal = isReal,
             peakPrice = entry
         )
         prefs.edit()
@@ -136,25 +140,26 @@ class SpotPositionStore(context: Context) {
             .putString("${key}_entry", entry.toString())
             .putString("${key}_quantity", quantity.toString())
             .putLong("${key}_opened_at", changedAt)
+            .putBoolean("${key}_is_real", isReal)
             .putString("${key}_peak", entry.toString())
             .putString("${key}_history", appendHistoryEvent(key, position))
             .apply()
     }
 
-    fun markBought(symbol: String, entryPrice: Double, invested: Double = 0.0, quantity: Double = 0.0) {
+    fun markBought(symbol: String, entryPrice: Double, invested: Double = 0.0, quantity: Double = 0.0, isReal: Boolean = false) {
         val finalInvested = if (invested > 0.0) invested else (if (quantity > 0.0 && entryPrice > 0.0) quantity * entryPrice else entryPrice)
         val finalQty = if (quantity > 0.0) quantity else (if (entryPrice > 0.0 && finalInvested > 0.0) finalInvested / entryPrice else (if (entryPrice > 0.0) 1.0 else 0.0))
-        setHolding(symbol, invested = finalInvested, entry = entryPrice, quantity = finalQty)
+        setHolding(symbol, invested = finalInvested, entry = entryPrice, quantity = finalQty, isReal = isReal)
     }
 
-    fun markBought(symbol: String, invested: Double, entry: Double) {
+    fun markBought(symbol: String, invested: Double, entry: Double, isReal: Boolean = false) {
         val qty = if (entry > 0.0) invested / entry else 0.0
-        setHolding(symbol, invested = invested, entry = entry, quantity = qty)
+        setHolding(symbol, invested = invested, entry = entry, quantity = qty, isReal = isReal)
     }
 
-    fun setManualEntryPrice(symbol: String, price: Double, amount: Double = 0.0) {
+    fun setManualEntryPrice(symbol: String, price: Double, amount: Double = 0.0, isReal: Boolean = false) {
         val qty = if (price > 0.0 && amount > 0.0) amount / price else (if (price > 0.0) 1.0 else 0.0)
-        setHolding(symbol, invested = if (amount > 0.0) amount else price, entry = price, quantity = qty)
+        setHolding(symbol, invested = if (amount > 0.0) amount else price, entry = price, quantity = qty, isReal = isReal)
     }
 
     fun markSold(symbol: String) {
@@ -169,6 +174,7 @@ class SpotPositionStore(context: Context) {
             .remove("${key}_entry")
             .remove("${key}_quantity")
             .remove("${key}_opened_at")
+            .remove("${key}_is_real")
             .remove("${key}_peak")
             .remove("${key}_trailing_pct")
             .remove("${key}_trailing_enabled")
@@ -318,6 +324,7 @@ class SpotPositionStore(context: Context) {
             .put("entryPrice", position.entryPrice)
             .put("quantity", position.quantity)
             .put("openedAt", position.openedAt)
+            .put("isReal", position.isReal)
         history.put(event)
         while (history.length() > MAX_HISTORY_EVENTS) history.remove(0)
         return history.toString()

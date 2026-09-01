@@ -268,7 +268,7 @@ fun DetailChartScreen(
                                 is agu.analys.trading.SimulationOrderResult.Success -> res.message
                                 is agu.analys.trading.SimulationOrderResult.Error -> res.message
                             }
-                            viewModel.setOwnership(true, execPrice, quantity = qty, invested = nominalIdr)
+                            viewModel.setOwnership(true, execPrice, quantity = qty, invested = nominalIdr, isReal = false)
                             if (isSuccess) HapticUtil.vibrateTradeSuccess(context)
                             else HapticUtil.vibrateTradeFailure(context)
                             android.widget.Toast.makeText(context, "Simulasi: $msg", android.widget.Toast.LENGTH_SHORT).show()
@@ -302,7 +302,7 @@ fun DetailChartScreen(
                                     price = execPrice,
                                     quantity = sellQty.coerceAtMost(bal)
                                 )
-                                if (sellQty >= bal) viewModel.setOwnership(false)
+                                if (sellQty >= bal) viewModel.setOwnership(false, isReal = false)
                                 val isSuccess = res is agu.analys.trading.SimulationOrderResult.Success
                                 val msg = when (res) {
                                     is agu.analys.trading.SimulationOrderResult.Success -> res.message
@@ -319,7 +319,7 @@ fun DetailChartScreen(
                     }
                 },
                 onSetManualBuyPrice = { entryPrice, investedAmount ->
-                    viewModel.setManualPositionPrice(pair.symbol, entryPrice, investedAmount)
+                    viewModel.setManualPositionPrice(pair.symbol, entryPrice, investedAmount, isReal = isRealBuyMode)
                     HapticUtil.vibrateTradeSuccess(context)
                     android.widget.Toast.makeText(context, "Harga beli manual tersimpan!", android.widget.Toast.LENGTH_SHORT).show()
                 },

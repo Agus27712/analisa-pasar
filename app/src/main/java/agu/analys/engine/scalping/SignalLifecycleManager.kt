@@ -23,8 +23,8 @@ object SignalLifecycleManager {
     private val activeSignals = ConcurrentHashMap<String, TrackedSignal>()
     private val lock = ReentrantLock()
 
-    // Expire signals older than 3 minutes if not triggered (scalping is fast)
-    private const val EXPIRY_MS = 3 * 60 * 1000L 
+    // Expire signals older than 10 minutes if not triggered
+    private const val EXPIRY_MS = 10 * 60 * 1000L 
 
     fun process(symbol: String, currentPrice: Double, rawSignal: AISignalState): TrackedSignal = lock.withLock {
         val now = System.currentTimeMillis()

@@ -71,7 +71,7 @@ fun ProactiveProfitSummaryCard(
     val colorGreen = TvGreen
 
     // Collect all coins with active Ready Sell status
-    val readyCoins = remember(allPairs, allTicks, worthBySymbol, holdingStatuses, recentCandles, usdtIdrRate, tradingFees, colorOrange, colorRed, colorGreen) {
+    val readyCoins = remember(allPairs, allTicks, worthBySymbol, holdingStatuses, usdtIdrRate, tradingFees, isRealTradingMode, colorOrange, colorGreen, colorRed) {
         allPairs.mapNotNull { pair ->
             val holding = holdingStatuses[pair.symbol] ?: return@mapNotNull null
             if (!holding.isHolding || holding.quantity <= 0.00000001) return@mapNotNull null
@@ -79,6 +79,18 @@ fun ProactiveProfitSummaryCard(
 
             val tick = allTicks[pair.symbol]
             val currentPrice = tick?.price ?: 0.0
+            if (currentPrice <= 0.0) return@mapNotNull null
+
+            val badge = ReadySellBadgeEvaluator.computeReadyBadge(
+                holding = holding,
+                tick = tick,
+                tradingFees = tradingFees,
+                colorOrange = colorOrange,
+                colorGreen = colorGreen,
+                colorRed = colorRed,
+                rsi = null
+            ) ?: return@mapNotNull null
+
             val entryPrice = holding.entryPrice
             val sellFeeRate = (tradingFees.sellMakerPct / 100.0).coerceAtLeast(0.0)
             val grossSell = holding.quantity * currentPrice
@@ -87,41 +99,23 @@ fun ProactiveProfitSummaryCard(
             val netProfitIdrLocal = netSell - costBasis
             val netProfitPct = if (costBasis > 0.0) (netProfitIdrLocal / costBasis) * 100.0 else 0.0
 
-            val worth = worthBySymbol[pair.symbol]
-            val rsiVal = if (recentCandles.size >= 15) {
-                agu.analys.engine.indicators.IndicatorMath.rsi(recentCandles, 14)
-            } else Double.NaN
+            val rate = if (pair.quoteAsset.equals("USDT", true) || pair.quoteAsset.equals("USD", true)) usdtIdrRate else 1.0
+            val cashOutValueIdr = netSell * rate
+            val costIdr = costBasis * rate
+            val profitIdr = cashOutValueIdr - costIdr
 
-            val badgeInfo: Pair<String, Color>? = when {
-                holding.tp1Price > 0.0 && currentPrice >= holding.tp1Price && netProfitPct > 0.0 -> Pair("TARGET TP1", colorOrange)
-                netProfitPct >= 5.0 -> Pair("PROFIT +5%", colorOrange)
-                tick != null && tick.high24h > 0 && currentPrice >= tick.high24h * 0.98 && netProfitPct >= 1.0 -> Pair("NEAR 24H HIGH", colorOrange)
-                netProfitPct >= 2.5 || (holding.isTrailingTriggered && netProfitPct > 0.0) -> Pair("READY PROFIT", colorGreen)
-                rsiVal.isFinite() && rsiVal >= 70.0 && netProfitPct > 0.0 -> Pair("RSI OVERBOUGHT", colorRed)
-                else -> null
-            }
-
-            if (badgeInfo != null) {
-                val rate = if (pair.quoteAsset.equals("USDT", true) || pair.quoteAsset.equals("USD", true)) usdtIdrRate else 1.0
-                val cashOutValueIdr = netSell * rate
-                val costIdr = costBasis * rate
-                val profitIdr = cashOutValueIdr - costIdr
-
-                ReadySellCoinSummary(
-                    pair = pair,
-                    quantity = holding.quantity,
-                    entryPrice = entryPrice,
-                    currentPrice = currentPrice,
-                    profitPct = netProfitPct,
-                    profitIdr = profitIdr,
-                    cashOutValueIdr = cashOutValueIdr,
-                    badgeLabel = badgeInfo.first,
-                    badgeColor = badgeInfo.second,
-                    isReal = holding.isReal
-                )
-            } else {
-                null
-            }
+            ReadySellCoinSummary(
+                pair = pair,
+                quantity = holding.quantity,
+                entryPrice = entryPrice,
+                currentPrice = currentPrice,
+                profitPct = netProfitPct,
+                profitIdr = profitIdr,
+                cashOutValueIdr = cashOutValueIdr,
+                badgeLabel = badge.label,
+                badgeColor = badge.color,
+                isReal = holding.isReal
+            )
         }
     }
 
