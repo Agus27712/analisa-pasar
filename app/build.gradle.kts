@@ -1,5 +1,22 @@
 import java.util.Properties
 import java.util.Base64
+import java.io.FileInputStream
+
+fun getSecret(key: String): String {
+    val envFile = rootProject.file(".env")
+    if (envFile.exists()) {
+        val props = Properties()
+        props.load(FileInputStream(envFile))
+        props.getProperty(key)?.let { return it }
+    }
+    val exampleFile = rootProject.file(".env.example")
+    if (exampleFile.exists()) {
+        val props = Properties()
+        props.load(FileInputStream(exampleFile))
+        props.getProperty(key)?.let { return it }
+    }
+    return System.getenv(key) ?: project.findProperty(key)?.toString() ?: ""
+}
 
 plugins {
   alias(libs.plugins.android.application)
@@ -18,8 +35,8 @@ android {
     versionCode = providers.gradleProperty("VERSION_CODE").map(String::toInt).getOrElse(53)
     versionName = "2.5.3"
 
-    buildConfigField("String", "GEMINI_API_KEY", "\"\"")
-    buildConfigField("String", "GROQ_API_KEY", "\"\"")
+    buildConfigField("String", "GEMINI_API_KEY", "\"${getSecret("GEMINI_API_KEY")}\"")
+    buildConfigField("String", "GROQ_API_KEY", "\"${getSecret("GROQ_API_KEY")}\"")
   }
   signingConfigs {
     create("debugConfig") {
@@ -81,6 +98,8 @@ secrets {
   defaultPropertiesFileName = ".env.example"
   ignoreList.add("FIREBASE_APPCHECK_DEBUG_TOKEN")
   ignoreList.add("DEEPSEEK_API_KEY")
+  ignoreList.add("GROQ_API_KEY")
+  ignoreList.add("GEMINI_API_KEY")
 }
 
 dependencies {
