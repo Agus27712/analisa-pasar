@@ -23,41 +23,41 @@ data class AppColors(
     val orange: Color
 )
 
-/** Dark: navy-blue canvas ala Indodax, aksen cyan/blue, bukan pure black. */
+/** Dark: navy-blue slate canvas ala Indodax / TradingView Dark, high-contrast crisp text & vibrant accents. */
 val DarkAppColors = AppColors(
     background = Color(0xFF0B1220),
-    surface = Color(0xFF121A2B),
-    surfaceVariant = Color(0xFF1A2438),
-    cardBackground = Color(0xFF151E30),
-    textPrimary = Color(0xFFE8EEF8),
-    textSecondary = Color(0xFF8B9BB5),
-    textMuted = Color(0xFF5C6B84),
-    border = Color(0xFF243047),
-    green = Color(0xFF22C55E),
-    greenLight = Color(0xFF4ADE80),
+    surface = Color(0xFF111A2E),
+    surfaceVariant = Color(0xFF172239),
+    cardBackground = Color(0xFF111A2E),
+    textPrimary = Color(0xFFF1F5F9),
+    textSecondary = Color(0xFF94A3B8),
+    textMuted = Color(0xFF64748B),
+    border = Color(0xFF1E2D4A),
+    green = Color(0xFF10B981),
+    greenLight = Color(0xFF34D399),
     red = Color(0xFFEF4444),
     redLight = Color(0xFFF87171),
     blue = Color(0xFF3B82F6),
     blueSoft = Color(0xFF60A5FA),
-    amber = Color(0xFFFBBF24),
-    orange = Color(0xFFF59E0B)
+    amber = Color(0xFFF59E0B),
+    orange = Color(0xFFFB923C)
 )
 
-/** Light: putih kebiruan, teks gelap kontras tinggi (hindari gray pudar). */
+/** Light: clean slate-50 canvas, pure white cards, soft border & high-contrast deep slate text. */
 val LightAppColors = AppColors(
-    background = Color(0xFFF0F4FA),
+    background = Color(0xFFF1F5F9),
     surface = Color(0xFFFFFFFF),
-    surfaceVariant = Color(0xFFE4EBF5),
+    surfaceVariant = Color(0xFFF8FAFC),
     cardBackground = Color(0xFFFFFFFF),
     textPrimary = Color(0xFF0F172A),
     textSecondary = Color(0xFF475569),
     textMuted = Color(0xFF64748B),
-    border = Color(0xFFCBD5E1),
+    border = Color(0xFFE2E8F0),
     green = Color(0xFF059669),
     greenLight = Color(0xFF10B981),
     red = Color(0xFFDC2626),
     redLight = Color(0xFFEF4444),
-    blue = Color(0xFF1D4ED8),
+    blue = Color(0xFF2563EB),
     blueSoft = Color(0xFF3B82F6),
     amber = Color(0xFFD97706),
     orange = Color(0xFFEA580C)

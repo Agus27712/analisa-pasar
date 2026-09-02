@@ -46,25 +46,25 @@ fun DetailControlsRow(
     ) {
         // Timeframe Chips (Grup Kiri)
         Row(
-            horizontalArrangement = Arrangement.spacedBy(3.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             listOf(Timeframe.M1, Timeframe.M15, Timeframe.H1, Timeframe.H4, Timeframe.D1).forEach { tf ->
                 val isSelected = selectedTimeframe == tf
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(if (isSelected) TvSurfaceVariant else TvCardBackground)
-                        .border(0.8.dp, if (isSelected) TvBlue else TvBorder, RoundedCornerShape(6.dp))
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (isSelected) TvBlue.copy(alpha = 0.15f) else TvSurface)
+                        .border(1.dp, if (isSelected) TvBlue else TvBorder, RoundedCornerShape(8.dp))
                         .clickable { onSelectTimeframe(tf) }
-                        .padding(horizontal = 6.dp, vertical = 4.5.dp),
+                        .padding(horizontal = 7.dp, vertical = 5.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = tf.label.uppercase(),
                         color = if (isSelected) TvBlue else TvTextSecondary,
-                        fontSize = 10.5.sp,
-                        fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.SemiBold
+                        fontSize = 11.sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
                     )
                 }
             }
@@ -72,7 +72,7 @@ fun DetailControlsRow(
 
         // Quick Action Icons (Grup Kanan)
         Row(
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             val activeAlertCount = priceAlerts.count { it.isEnabled && !it.isTriggered }
@@ -81,7 +81,7 @@ fun DetailControlsRow(
             DetailQuickActionButton(
                 icon = if (activeAlertCount > 0) Icons.Default.Notifications else Icons.Default.NotificationsNone,
                 tint = if (activeAlertCount > 0) TvBlue else TvTextSecondary,
-                bgColor = if (activeAlertCount > 0) TvBlue.copy(alpha = 0.15f) else TvSurfaceVariant,
+                bgColor = if (activeAlertCount > 0) TvBlue.copy(alpha = 0.15f) else TvSurface,
                 borderColor = if (activeAlertCount > 0) TvBlue.copy(alpha = 0.5f) else TvBorder,
                 contentDescription = "Alert",
                 onClick = onOpenAlerts
@@ -91,8 +91,8 @@ fun DetailControlsRow(
             DetailQuickActionButton(
                 icon = Icons.Default.AccountBalanceWallet,
                 tint = TvGreen,
-                bgColor = TvGreen.copy(alpha = 0.15f),
-                borderColor = TvGreen.copy(alpha = 0.5f),
+                bgColor = TvGreen.copy(alpha = 0.12f),
+                borderColor = TvGreen.copy(alpha = 0.4f),
                 contentDescription = "Portofolio",
                 onClick = onOpenPortfolio
             )
@@ -101,8 +101,8 @@ fun DetailControlsRow(
             DetailQuickActionButton(
                 icon = Icons.Default.AutoAwesome,
                 tint = TvBlue,
-                bgColor = TvBlue.copy(alpha = 0.15f),
-                borderColor = TvBlue.copy(alpha = 0.5f),
+                bgColor = TvBlue.copy(alpha = 0.12f),
+                borderColor = TvBlue.copy(alpha = 0.4f),
                 contentDescription = "AI Analisa",
                 onClick = onOpenAiAssistant
             )
@@ -111,8 +111,8 @@ fun DetailControlsRow(
             DetailQuickActionButton(
                 icon = Icons.AutoMirrored.Filled.CompareArrows,
                 tint = TvGreen,
-                bgColor = TvGreen.copy(alpha = 0.15f),
-                borderColor = TvGreen.copy(alpha = 0.5f),
+                bgColor = TvGreen.copy(alpha = 0.12f),
+                borderColor = TvGreen.copy(alpha = 0.4f),
                 contentDescription = "Simulasi",
                 onClick = onOpenSimulation
             )
@@ -121,8 +121,8 @@ fun DetailControlsRow(
             DetailQuickActionButton(
                 icon = Icons.Default.MenuBook,
                 tint = TvBlue,
-                bgColor = TvBlue.copy(alpha = 0.15f),
-                borderColor = TvBlue.copy(alpha = 0.5f),
+                bgColor = TvBlue.copy(alpha = 0.12f),
+                borderColor = TvBlue.copy(alpha = 0.4f),
                 contentDescription = "Belajar",
                 onClick = onOpenLearning
             )
@@ -131,8 +131,8 @@ fun DetailControlsRow(
             DetailQuickActionButton(
                 icon = if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
                 tint = if (isFavorite) TvAmber else TvTextSecondary,
-                bgColor = if (isFavorite) TvAmber.copy(alpha = 0.15f) else TvSurfaceVariant,
-                borderColor = if (isFavorite) TvAmber.copy(alpha = 0.5f) else TvBorder,
+                bgColor = if (isFavorite) TvAmber.copy(alpha = 0.12f) else TvSurface,
+                borderColor = if (isFavorite) TvAmber.copy(alpha = 0.4f) else TvBorder,
                 contentDescription = "Favorit",
                 onClick = onToggleWatchlist
             )
@@ -151,12 +151,12 @@ fun DetailQuickActionButton(
 ) {
     Surface(
         modifier = Modifier
-            .size(28.dp)
-            .clip(RoundedCornerShape(6.dp))
+            .size(30.dp)
+            .clip(RoundedCornerShape(8.dp))
             .clickable(onClick = onClick),
         color = bgColor,
-        border = BorderStroke(0.8.dp, borderColor),
-        shape = RoundedCornerShape(6.dp)
+        border = BorderStroke(1.dp, borderColor),
+        shape = RoundedCornerShape(8.dp)
     ) {
         Box(contentAlignment = Alignment.Center) {
             Icon(

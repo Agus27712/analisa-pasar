@@ -122,11 +122,11 @@ class AppPreferences(context: Context) {
     }
 
     var groqApiKey: String
-        get() = prefs.getString(KEY_GROQ, "").orEmpty()
+        get() = prefs.getString(KEY_GROQ, "").orEmpty().ifEmpty { agu.analys.BuildConfig.GROQ_API_KEY }
         set(value) = prefs.edit().putString(KEY_GROQ, value.trim()).apply()
 
     var geminiApiKey: String
-        get() = prefs.getString(KEY_GEMINI, "").orEmpty()
+        get() = prefs.getString(KEY_GEMINI, "").orEmpty().ifEmpty { agu.analys.BuildConfig.GEMINI_API_KEY }
         set(value) = prefs.edit().putString(KEY_GEMINI, value.trim()).apply()
 
     var aiProvider: AiProvider

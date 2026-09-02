@@ -1,7 +1,9 @@
 package agu.analys.ui.components.detail
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Info
@@ -201,22 +203,44 @@ private fun DetailedTechRow(
     subtext: String? = null,
     showDivider: Boolean = true
 ) {
-    Column(Modifier.fillMaxWidth().padding(vertical = 5.dp)) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                Icon(icon, null, tint = iconTint, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(10.dp))
-                Text(label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TvTextPrimary, maxLines = 1)
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .background(iconTint.copy(alpha = 0.12f), androidx.compose.foundation.shape.RoundedCornerShape(6.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(icon, null, tint = iconTint, modifier = Modifier.size(14.dp))
+                }
+                Spacer(Modifier.width(9.dp))
+                Text(label, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, color = TvTextPrimary, maxLines = 1)
             }
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (value != null) Text(value, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TvTextPrimary)
-                if (status != null) Text(status, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = statusColor)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (value != null) {
+                    Text(value, fontSize = 12.5.sp, fontWeight = FontWeight.Bold, color = TvTextPrimary)
+                }
+                if (status != null) {
+                    val isStatusColored = statusColor != TvTextPrimary && statusColor != TvTextSecondary
+                    if (isStatusColored) {
+                        Box(
+                            modifier = Modifier
+                                .background(statusColor.copy(alpha = 0.12f), androidx.compose.foundation.shape.RoundedCornerShape(4.dp))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(status, fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = statusColor)
+                        }
+                    } else {
+                        Text(status, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = statusColor)
+                    }
+                }
             }
         }
         if (!subtext.isNullOrBlank()) {
             Spacer(Modifier.height(2.dp))
             Row(Modifier.fillMaxWidth()) {
-                Spacer(Modifier.width(28.dp))
+                Spacer(Modifier.width(33.dp))
                 Text(subtext, fontSize = 11.sp, color = TvTextSecondary, maxLines = 1)
             }
         }

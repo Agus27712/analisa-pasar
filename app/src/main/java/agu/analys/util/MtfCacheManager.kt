@@ -67,10 +67,10 @@ object MtfCacheManager {
         val lastTimestamp = candles.last().timestamp
         val ageMs = System.currentTimeMillis() - lastTimestamp
         return when (timeframe) {
-            Timeframe.M1 -> ageMs <= 5 * 60 * 1000L
-            Timeframe.M15 -> ageMs <= 45 * 60 * 1000L
-            Timeframe.H1 -> ageMs <= 180 * 60 * 1000L
-            Timeframe.H4 -> ageMs <= 12 * 60 * 60 * 1000L
+            Timeframe.M1 -> ageMs <= 90 * 1000L
+            Timeframe.M15 -> ageMs <= 16 * 60 * 1000L
+            Timeframe.H1 -> ageMs <= 65 * 60 * 1000L
+            Timeframe.H4 -> ageMs <= 245 * 60 * 1000L
             else -> false
         }
     }

@@ -105,13 +105,7 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
                     runScalping()
                 }
             }
-            StrategyMode.SECOND_WAVE -> {
-                if (candle.timestamp >= (m15Candles.lastOrNull()?.timestamp ?: 0L)) {
-                    val updated = (m15Candles + candle).distinctBy { it.timestamp }.sortedBy { it.timestamp }.takeLast(250)
-                    m15Candles = updated
-                    runSecondWave()
-                }
-            }
+            StrategyMode.SECOND_WAVE -> runSecondWave()
             StrategyMode.SWING -> runSwing()
             StrategyMode.OFFICE_DAILY -> runOfficeDaily()
         }

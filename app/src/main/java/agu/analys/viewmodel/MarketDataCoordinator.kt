@@ -68,7 +68,10 @@ class MarketDataCoordinator(
     private val indodaxWebSocket = IndodaxMarketWebSocket(
         scope = scope,
         onTick = { handleWebSocketTick(it) },
-        onCandle = { candle -> engine.currentFormingVolume = candle.volume },
+        onCandle = { candle -> 
+            engine.currentFormingVolume = candle.volume
+            engine.onCandleUpdate(candle)
+        },
         onConnected = {
             wsLive = true
             lastLiveTickAt = System.currentTimeMillis()

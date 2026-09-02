@@ -78,6 +78,9 @@ fun LandscapeChartScreen(
         }
     }
 
+    val candles by viewModel.recentCandles.collectAsState()
+    val ticker by viewModel.currentTick.collectAsState()
+
     BackHandler { onBackToDetail() }
 
     Box(modifier = modifier.fillMaxSize().background(Color.Black)) {
@@ -93,6 +96,8 @@ fun LandscapeChartScreen(
             is MarketConnectionState.Connected -> {
                 TradingViewFullscreenChart(
                     pair = pair,
+                    candles = candles,
+                    currentPrice = ticker?.price ?: 0.0,
                     modifier = Modifier.fillMaxSize()
                 )
             }

@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -30,13 +32,7 @@ fun ImportantLevelsCard(
     quoteAsset: String = "IDR"
 ) {
     AnalysisCard {
-        Text(
-            "LEVEL PENTING",
-            fontSize = 15.sp,
-            fontWeight = FontWeight.ExtraBold,
-            color = InfoBlue,
-            letterSpacing = 0.8.sp
-        )
+        SectionTitle("LEVEL PENTING", androidx.compose.material.icons.Icons.Default.TrendingUp)
         Spacer(Modifier.height(10.dp))
 
         val support = structure.support?.takeIf { it > 0.0 && it.isFinite() }
@@ -61,11 +57,11 @@ fun ImportantLevelsCard(
                 val nearColor = when {
                     position < 0.25 -> TvGreen
                     position > 0.75 -> TvRed
-                    else -> InfoBlue
+                    else -> TvBlue
                 }
-                Text(nearLabel, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = nearColor)
+                Text(nearLabel, fontSize = 12.5.sp, fontWeight = FontWeight.Bold, color = nearColor)
                 Spacer(Modifier.height(6.dp))
-                Box(Modifier.fillMaxWidth().height(5.dp).background(TvBorder, RoundedCornerShape(8.dp))) {
+                Box(Modifier.fillMaxWidth().height(6.dp).background(TvSurfaceVariant, RoundedCornerShape(8.dp)).border(0.5.dp, TvBorder, RoundedCornerShape(8.dp))) {
                     Box(
                         Modifier
                             .fillMaxWidth(position.toFloat())
