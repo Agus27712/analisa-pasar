@@ -54,11 +54,13 @@ fun StickyFloatingStatusBar(
         StrategyMode.SCALPING -> "SCALPING MODE"
         StrategyMode.SECOND_WAVE -> "2ND-WAVE MODE"
         StrategyMode.SWING -> "SWING MODE"
+        StrategyMode.OFFICE_DAILY -> "OFFICE DAILY"
     }
     val modeColor = when (strategyMode) {
         StrategyMode.SCALPING -> TvGreen
         StrategyMode.SECOND_WAVE -> TvBlue
         StrategyMode.SWING -> if (isLight) Color(0xFF1565C0) else Color(0xFF72B7FF)
+        StrategyMode.OFFICE_DAILY -> if (isLight) Color(0xFF4338CA) else Color(0xFFA5B4FC)
     }
 
     Row(

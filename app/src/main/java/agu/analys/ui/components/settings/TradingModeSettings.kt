@@ -138,6 +138,24 @@ fun TradingModeSettings(
             bullets = listOf("Timeframe: 1H & 1D", "Analisis struktur trend (HH/HL/LH/LL)", "Fokus: Support / Resistance & Demand Zone"),
             onClick = { onStrategyChange(StrategyMode.SWING) }
         )
+
+        Spacer(Modifier.height(10.dp))
+
+        ModeOptionCard(
+            title = "OFFICE DAILY",
+            tag = "DAILY MODE",
+            tagBg = Color(0xFFA5B4FC).copy(alpha = 0.18f),
+            tagFg = Color(0xFFA5B4FC),
+            isSelected = strategyMode == StrategyMode.OFFICE_DAILY,
+            desc = "Setup harian santai & terukur (H4–1D). Cocok buat yang kerja kantoran, entry selektif, risiko lebih longgar.",
+            bullets = listOf(
+                "Timeframe: H4 & 1D",
+                "Fokus: likuiditas + tren positif stabil",
+                "Filter: range sehat, volume cukup, bukan scalp",
+                "Gaya: 1–2 setup/hari, hold intraday–swing pendek"
+            ),
+            onClick = { onStrategyChange(StrategyMode.OFFICE_DAILY) }
+        )
     }
 }
 

@@ -98,14 +98,32 @@ object ScalpingMtfEvaluator {
         
         val feeResult = FeeCalculator.roundTrip(price, sl, tp2, fees, false, 0.08)
         
-        val ready = triggerLong && hasRoomToGrow && !isDangerousNoise && feeResult.netRr >= 1.05
-        
-        if (ready) reasons.add("BUY READY: Kondisi scalping valid (Net R:R 1:${fmt(feeResult.netRr)}).")
-        else if (triggerLong) reasons.add("Trigger ON, namun RR tidak memenuhi syarat (RR < 1.05).")
-        else reasons.add("Menunggu momentum VWAP & Orderbook.")
+        val rrOk = feeResult.netRr >= 1.05
+        val ready = triggerLong && hasRoomToGrow && !isDangerousNoise && rrOk
+        // Partial setup: ada trigger / room, belum full ready
+        val early = !ready && !isDangerousNoise && (
+            (triggerLong && hasRoomToGrow) ||
+            (triggerLong && rrOk) ||
+            (hasRoomToGrow && buyPressure > 1.1 && price > vwap1M && rsi1M < 75.0)
+        )
+        val strong = ready && (isVSABreakout || buyPressure >= 1.25 || (rsi1M in 45.0..68.0 && price > vwap1M))
+
+        when {
+            strong -> reasons.add("STRONG ENTRY: VSA/OB kuat + Net R:R 1:${fmt(feeResult.netRr)}")
+            ready -> reasons.add("BUY READY: Kondisi scalping valid (Net R:R 1:${fmt(feeResult.netRr)}).")
+            early -> reasons.add("EARLY: setup terbentuk, tunggu konfirmasi penuh.")
+            triggerLong -> reasons.add("Trigger ON, belum qualify (RR/room/noise).")
+            else -> reasons.add("Menunggu momentum VWAP & Orderbook.")
+        }
 
         val action = if (ready) SignalAction.BUY else SignalAction.HOLD
-        val stage = if (ready) ScalpingStage.ENTRY else ScalpingStage.WATCH
+        val stage = when {
+            strong -> ScalpingStage.STRONG_ENTRY
+            ready -> ScalpingStage.ENTRY
+            early -> ScalpingStage.EARLY_ENTRY
+            isDangerousNoise -> ScalpingStage.HOLD
+            else -> ScalpingStage.WATCH
+        }
 
         val mtf = ScalpingMtfSnapshot(
             biasOk = hasRoomToGrow,
@@ -121,9 +139,18 @@ object ScalpingMtfEvaluator {
             entryPriceOk = ready,
             entryPriceStatus = if (ready) MtfLegStatus.OK else MtfLegStatus.WAITING,
             entryPriceDetail = "Net RR: 1:${fmt(feeResult.netRr)}",
-            path = ScalpingPath.ENTRY_READY,
-            statusTitle = if (ready) "BUY READY" else "WATCH",
-            waitingFor = if (ready) "Eksekusi" else "Momentum",
+            path = if (ready) ScalpingPath.ENTRY_READY else ScalpingPath.NONE,
+            statusTitle = when {
+                strong -> "STRONG ENTRY"
+                ready -> "BUY READY"
+                early -> "EARLY SETUP"
+                else -> "WATCH"
+            },
+            waitingFor = when {
+                ready -> "Eksekusi"
+                early -> "Konfirmasi"
+                else -> "Momentum"
+            },
             entryCondition = "M1 VSA/VWAP & Orderbook > 1.0",
             extended = rsi1M > 78.0,
             extremeVolatility = isDangerousNoise
@@ -131,7 +158,7 @@ object ScalpingMtfEvaluator {
 
         val signal = AISignalState(
             action = action,
-            confidence = if (ready) 85 else 40,
+            confidence = when { strong -> 92; ready -> 85; early -> 62; else -> 40 },
             sentiment = TrendSentiment.NEUTRAL_CONSOLIDATION,
             entryPrice = price,
             targetPrice1 = tp1,

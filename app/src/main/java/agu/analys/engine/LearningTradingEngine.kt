@@ -78,6 +78,10 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
                 val hasCandles = synchronized(candles) { candles.isNotEmpty() }
                 if (hasCandles) runSwing()
             }
+            StrategyMode.OFFICE_DAILY -> {
+                val hasCandles = synchronized(candles) { candles.isNotEmpty() }
+                if (hasCandles) runOfficeDaily()
+            }
         }
 
         refreshScalpingTimeframesIfDue(tick.symbol)
@@ -109,6 +113,7 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
                 }
             }
             StrategyMode.SWING -> runSwing()
+            StrategyMode.OFFICE_DAILY -> runOfficeDaily()
         }
     }
 
@@ -204,21 +209,52 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
                         runSwing()
                     }
                 }
+                StrategyMode.OFFICE_DAILY -> {
+                    val h1Job = async { IndodaxMarketService.fetchCandles(symbol, Timeframe.H1, 200) }
+                    val h1 = h1Job.await()
+                    if (h1.isNotEmpty() && currentTick?.symbol == symbol) {
+                        val closedH1 = h1.dropLast(1)
+                        synchronized(candles) {
+                            if (candles.isEmpty() || candles.size < closedH1.size) {
+                                candles.clear()
+                                candles.addAll(closedH1)
+                            }
+                        }
+                        runOfficeDaily()
+                    }
+                }
             }
         }
     }
 
     private fun runScalping() {
         val tick = currentTick ?: return
-        if (h1Candles.size < 20 || m15Candles.size < 20 || m1Candles.size < 20) return
-        val result = ScalpingMtfEvaluator.evaluate(tick.price, h1Candles, m15Candles, m1Candles, currentFormingVolume, currentOrderBookBids, currentOrderBookAsks, tradingFees, scalpingSensitivity) ?: return
-        
+        // Jangan silent-return total: update state "menunggu data" biar UI nggak beku/bengong
+        if (h1Candles.size < 20 || m15Candles.size < 20 || m1Candles.size < 20) {
+            val need = "H1 ${h1Candles.size}/20 · M15 ${m15Candles.size}/20 · M1 ${m1Candles.size}/20"
+            _signalState.value = AISignalState(
+                action = SignalAction.HOLD,
+                confidence = 15,
+                entryPrice = tick.price,
+                reasoning = listOf("Menunggu data MTF scalping ($need)."),
+                timestamp = System.currentTimeMillis(),
+                scalpingStage = ScalpingStage.WATCH,
+                isOfflineMode = false
+            )
+            return
+        }
+        val result = ScalpingMtfEvaluator.evaluate(
+            tick.price, h1Candles, m15Candles, m1Candles,
+            currentFormingVolume, currentOrderBookBids, currentOrderBookAsks,
+            tradingFees, scalpingSensitivity
+        ) ?: return
+
         // P2.2 Signal Lifecycle Tracking
         val tracked = agu.analys.engine.scalping.SignalLifecycleManager.process(tick.symbol, tick.price, result.signal)
         val finalSignal = (tracked.activeSignalState ?: result.signal).copy(
             lifecycleState = tracked.state
         )
-        
+
         _indicators.value = result.indicators
         _signalState.value = finalSignal
     }
@@ -236,6 +272,15 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
         val tick = currentTick ?: return
         val history = synchronized(candles) { candles.toList() }
         val result = SwingEvaluator.evaluate(tick.price, history, tradingFees)
+        _indicators.value = result.indicators
+        _signalState.value = result.signal
+    }
+
+    private fun runOfficeDaily() {
+        if (strategyMode != StrategyMode.OFFICE_DAILY) return
+        val tick = currentTick ?: return
+        val history = synchronized(candles) { candles.toList() }
+        val result = agu.analys.engine.officedaily.OfficeDailyEvaluator.evaluate(tick.price, history, tradingFees)
         _indicators.value = result.indicators
         _signalState.value = result.signal
     }

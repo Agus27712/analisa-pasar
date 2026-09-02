@@ -50,6 +50,7 @@ fun WatchlistCoinCard(
     isAuto: Boolean,
     isScalping: Boolean,
     isFavorite: Boolean = true,
+    badges: List<agu.analys.model.CoinBadge> = emptyList(),
     usdtIdrRate: Double = 16450.0,
     recentCandles: List<CandleBar> = emptyList(),
     holdingStatus: CoinHoldingStatus? = null,
@@ -187,7 +188,11 @@ fun WatchlistCoinCard(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            CompactActivityChip(activity)
+                            if (badges.isNotEmpty()) {
+                                CoinBadgeRow(badges = badges.take(4))
+                            } else {
+                                CompactActivityChip(activity)
+                            }
                             
                             if (badgeInfo != null) {
                                 Box(

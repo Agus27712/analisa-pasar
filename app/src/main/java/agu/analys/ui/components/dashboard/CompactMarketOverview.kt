@@ -35,9 +35,8 @@ import java.util.Date
 import java.util.Locale
 
 enum class MarketRankingTab(val label: String, val badge: String) {
-    SCALPING_FAST("⚡ Scalping", "⚡ CEPAT"),
-    SECOND_WAVE("🌊 2nd-Wave", "🌊 2ND-WAVE"),
-    WATCHLIST("⭐ Favorit", "⭐ FAVORIT")
+    WATCHLIST("📋 Watchlist", "📋 WATCHLIST"),
+    FAVORITE("⭐ Favorit", "⭐ FAVORIT")
 }
 
 /**
@@ -54,7 +53,7 @@ fun DashboardMockupHeader(
     marketDataSource: MarketDataSource = MarketDataSource.INDODAX,
     strategyMode: StrategyMode = StrategyMode.SCALPING,
     isConnected: Boolean,
-    selectedTab: MarketRankingTab = MarketRankingTab.SCALPING_FAST,
+    selectedTab: MarketRankingTab = MarketRankingTab.WATCHLIST,
     onSelectTab: (MarketRankingTab) -> Unit,
     onRefresh: () -> Unit,
     onMenuClick: () -> Unit = {},
@@ -210,6 +209,7 @@ fun DashboardMockupHeader(
                 StrategyMode.SCALPING -> listOf(Color(0xFF123D2A), Color(0xFF1B5E38), TvGreen, "SCALPING")
                 StrategyMode.SECOND_WAVE -> listOf(Color(0xFF0F3845), Color(0xFF155060), Color(0xFF00E5FF), "2ND-WAVE")
                 StrategyMode.SWING -> listOf(Color(0xFF122840), Color(0xFF1E3A5F), Color(0xFF72B7FF), "SWING")
+                StrategyMode.OFFICE_DAILY -> listOf(Color(0xFF1F2448), Color(0xFF3730A3), Color(0xFFA5B4FC), "OFFICE")
             }
 
             Box(
@@ -332,9 +332,8 @@ fun DashboardMockupHeader(
             MarketRankingTab.values().forEach { tab ->
                 val isSelected = selectedTab == tab
                 val (tabActiveBg, tabActiveBorder, tabActiveTextColor) = when (tab) {
-                    MarketRankingTab.SCALPING_FAST -> Triple(TvGreen.copy(alpha = 0.15f), TvGreen.copy(alpha = 0.7f), TvGreen)
-                    MarketRankingTab.SECOND_WAVE -> Triple(TvBlue.copy(alpha = 0.15f), TvBlue.copy(alpha = 0.7f), TvBlue)
-                    MarketRankingTab.WATCHLIST -> Triple(TvAmber.copy(alpha = 0.15f), TvAmber.copy(alpha = 0.7f), TvAmber)
+                    MarketRankingTab.WATCHLIST -> Triple(TvBlue.copy(alpha = 0.22f), TvBlue.copy(alpha = 0.85f), TvBlueSoft)
+                    MarketRankingTab.FAVORITE -> Triple(TvAmber.copy(alpha = 0.22f), TvAmber.copy(alpha = 0.85f), TvAmber)
                 }
 
                 Box(
@@ -347,13 +346,13 @@ fun DashboardMockupHeader(
                             else Modifier
                         )
                         .clickable { onSelectTab(tab) }
-                        .padding(vertical = 7.dp, horizontal = 2.dp),
+                        .padding(vertical = 8.dp, horizontal = 6.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = tab.label,
                         color = if (isSelected) tabActiveTextColor else TvTextSecondary,
-                        fontSize = 11.sp,
+                        fontSize = 12.5.sp,
                         fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
                         maxLines = 1
                     )

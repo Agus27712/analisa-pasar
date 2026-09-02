@@ -233,6 +233,21 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         }
     )
     val watchlist: StateFlow<Set<String>> = _watchlist.asStateFlow()
+
+    internal val _favorites = MutableStateFlow(
+        prefs.getFavorites().let { set ->
+            if (set.isEmpty()) {
+                val defaultSymbol = "BTCIDR"
+                prefs.toggleFavorite(defaultSymbol)
+                setOf(defaultSymbol)
+            } else set
+        }
+    )
+    val favorites: StateFlow<Set<String>> = _favorites.asStateFlow()
+
+    internal val _coinBadges = MutableStateFlow<Map<String, List<agu.analys.model.CoinBadge>>>(emptyMap())
+    val coinBadges: StateFlow<Map<String, List<agu.analys.model.CoinBadge>>> = _coinBadges.asStateFlow()
+
     val mtfState = agu.analys.util.MtfCacheManager.mtfState
 
     init {
@@ -585,10 +600,10 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
             val gainers = gainersJob.await()
             val topVol = volJob.await()
             if (gainers.isNotEmpty()) {
-                _gainersCoins.value = gainers.take(10)
-                _hotCoins.value = gainers.take(10)
+                _gainersCoins.value = gainers.take(25)
+                _hotCoins.value = gainers.take(25)
             }
-            if (topVol.isNotEmpty()) _topVolumeCoins.value = topVol.take(10)
+            if (topVol.isNotEmpty()) _topVolumeCoins.value = topVol.take(25)
             if (ticks.isEmpty() && gainers.isEmpty() && topVol.isEmpty()) {
                 if (_dashboardTicks.value.isEmpty() && _hotCoins.value.isEmpty()) {
                     markMarketOffline("Tidak ada respons market dari Indodax.")
@@ -618,7 +633,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
                 )
                 .map { it.first }
                 .take(10)
-            _secondWaveCoins.value = secondWaveCandidates.ifEmpty { gainers.take(10) }
+            _secondWaveCoins.value = secondWaveCandidates.ifEmpty { gainers.take(25) }.take(25)
 
             val evaluatedPairs = (allScanned.map { TradingPair.fromCustomSymbol(it.symbol, "IDR") } + pairs).distinctBy { it.symbol }
             val worth = evaluatedPairs.mapNotNull { pair ->
@@ -657,6 +672,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
             )
             _worthCoins.value = worth
             marketCache.saveWorthCoins(MarketDataSource.INDODAX, worth)
+            recalculateDashboardBadges()
         }
     }
 
@@ -723,5 +739,46 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         prefs.toggleWatchlist(symbol)
         _watchlist.value = prefs.getWatchlist()
         agu.analys.util.MtfCacheManager.updateQueues(_watchlist.value.toList(), emptyList())
+        recalculateDashboardBadges()
+    }
+
+    fun toggleFavorite(symbol: String) {
+        prefs.toggleFavorite(symbol)
+        _favorites.value = prefs.getFavorites()
+        recalculateDashboardBadges()
+    }
+
+    fun isFavorite(symbol: String): Boolean =
+        _favorites.value.contains(symbol.uppercase())
+
+    fun recalculateDashboardBadges() {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.Default) {
+            val defaultQuote = prefs.marketDataSource.defaultQuoteAsset
+            val basePairs = TradingPair.popularPairsForSource(prefs.marketDataSource)
+            val watchPairs = _watchlist.value.map { TradingPair.fromCustomSymbol(it, defaultQuote) }
+            val favPairs = _favorites.value.map { TradingPair.fromCustomSymbol(it, defaultQuote) }
+            val marketPairs = (_gainersCoins.value + _hotCoins.value + _topVolumeCoins.value + _secondWaveCoins.value)
+                .map { TradingPair.fromCustomSymbol(it.symbol, defaultQuote) }
+            val allPairs = (marketPairs + basePairs + watchPairs + favPairs).distinctBy { it.symbol }.take(40)
+            val ticks = _dashboardTicks.value
+            val strategy = _strategyMode.value
+
+            val resultMap = mutableMapOf<String, List<agu.analys.model.CoinBadge>>()
+            for (pair in allPairs) {
+                val tick = ticks[pair.symbol]
+                if (tick != null) {
+                    val badges = agu.analys.engine.badge.CoinBadgeEvaluator.evaluateBadges(
+                        pair = pair,
+                        tick = tick,
+                        activeStrategy = strategy,
+                        maxBadges = 4
+                    )
+                    if (badges.isNotEmpty()) {
+                        resultMap[pair.symbol] = badges
+                    }
+                }
+            }
+            _coinBadges.value = resultMap
+        }
     }
 }

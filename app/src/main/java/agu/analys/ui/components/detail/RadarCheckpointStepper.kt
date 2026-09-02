@@ -60,6 +60,12 @@ fun RadarLinearCheckpointStepper(
                 "Tren Makro Bullish Kuat (Harga bergerak di atas EMA 20/50).",
                 "Memantau keselarasan tren dan keselarasan EMA makro..."
             )
+            StrategyMode.OFFICE_DAILY -> listOf(
+                "1. Tren 1H/4H",
+                "1. Tren 1H/4H · Tren Santai",
+                "Tren 1 Jam & 4 Jam Bullish Stabil (Di atas EMA 20/50).",
+                "Memantau kestabilan tren 1 Jam / 4 Jam..."
+            )
             StrategyMode.SECOND_WAVE -> listOf(
                 "1. Prior Run",
                 "1. Prior Run · Drawdown Reset",
@@ -80,6 +86,12 @@ fun RadarLinearCheckpointStepper(
                 "2. Struktur · Support Lantai",
                 "Struktur market higher-low & support lantai swing bertahan.",
                 "Menunggu pembentukan konsolidasi atau pantulan support swing..."
+            )
+            StrategyMode.OFFICE_DAILY -> listOf(
+                "2. Base Lantai",
+                "2. Base Lantai · Akumulasi Sehat",
+                "Base lantai harga terbentuk rapi tanpa dump liar.",
+                "Menunggu konsolidasi base support terbentuk..."
             )
             StrategyMode.SECOND_WAVE -> listOf(
                 "2. Base Support",
@@ -102,6 +114,12 @@ fun RadarLinearCheckpointStepper(
                 "Momentum RSI & histogram MACD mendukung arah swing.",
                 "Menunggu trigger momentum RSI dan konfirmasi volume swing..."
             )
+            StrategyMode.OFFICE_DAILY -> listOf(
+                "3. RSI & Inflow",
+                "3. Inflow · Smart Accumulation",
+                "RSI berada di zona aman & volume akumulasi masuk.",
+                "Menunggu konfirmasi momentum RSI & akumulasi santai..."
+            )
             StrategyMode.SECOND_WAVE -> listOf(
                 "3. Inflow 15M",
                 "3. Inflow 15M · Smart Money",
@@ -122,6 +140,12 @@ fun RadarLinearCheckpointStepper(
                 "4. Area Entry · Net R:R >= 1:1.5",
                 "Harga berada di zona entry dengan Net R:R optimal.",
                 "Menunggu harga bergerak masuk ke toleransi zona beli swing..."
+            )
+            StrategyMode.OFFICE_DAILY -> listOf(
+                "4. Area Entry",
+                "4. Area Entry · TP Santai & Terukur",
+                "Harga berada di zona beli aman dengan target TP terukur.",
+                "Menunggu harga berada di zona entry yang aman..."
             )
             StrategyMode.SECOND_WAVE -> listOf(
                 "4. Entry Ready",

@@ -235,6 +235,30 @@ class AppPreferences(context: Context) {
     fun isInWatchlist(symbol: String): Boolean =
         getWatchlist().contains(symbol.uppercase())
 
+    fun getFavorites(): Set<String> {
+        val saved = prefs.getStringSet(KEY_FAVORITES_INDODAX, null)
+        if (saved != null && saved.isNotEmpty()) return saved.toSet()
+        return setOf("BTCIDR")
+    }
+
+    fun toggleFavorite(symbol: String): Boolean {
+        val set = getFavorites().toMutableSet()
+        val upper = symbol.uppercase()
+        val added = if (set.remove(upper)) false else { set.add(upper); true }
+        prefs.edit().putStringSet(KEY_FAVORITES_INDODAX, set).apply()
+        return added
+    }
+
+    fun isFavorite(symbol: String): Boolean =
+        getFavorites().contains(symbol.uppercase())
+
+    fun setFavorite(symbol: String, isFav: Boolean) {
+        val set = getFavorites().toMutableSet()
+        val upper = symbol.uppercase()
+        if (isFav) set.add(upper) else set.remove(upper)
+        prefs.edit().putStringSet(KEY_FAVORITES_INDODAX, set).apply()
+    }
+
     fun getCompletedLearningLessons(): Set<Int> = prefs.getStringSet(KEY_LEARNING_COMPLETED, emptySet())
         ?.mapNotNull(String::toIntOrNull)?.toSet() ?: emptySet()
 
@@ -280,6 +304,7 @@ class AppPreferences(context: Context) {
         private const val KEY_SCALPING_SENSITIVITY = "scalping_sensitivity"
         private const val KEY_WATCHLIST_LEGACY = "watchlist_symbols"
         private const val KEY_WATCHLIST_INDODAX = "watchlist_symbols_indodax"
+        private const val KEY_FAVORITES_INDODAX = "favorites_symbols_indodax"
         private const val KEY_LEARNING_COMPLETED = "learning_completed_lessons"
         private const val KEY_BUY_MAKER = "fee_buy_maker"
         private const val KEY_BUY_TAKER = "fee_buy_taker"

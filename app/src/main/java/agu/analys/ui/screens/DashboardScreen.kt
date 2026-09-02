@@ -33,6 +33,8 @@ fun DashboardScreen(
     val connectionState by viewModel.connectionState.collectAsState()
     val dashboardTicks by viewModel.dashboardTicks.collectAsState()
     val watchlist by viewModel.watchlist.collectAsState()
+    val favorites by viewModel.favorites.collectAsState()
+    val coinBadges by viewModel.coinBadges.collectAsState()
     val isScalpingMode by viewModel.isScalpingMode.collectAsState()
     val strategyMode by viewModel.strategyMode.collectAsState()
     val recentCandles by viewModel.recentCandles.collectAsState()
@@ -45,44 +47,11 @@ fun DashboardScreen(
     val holdingStatuses by viewModel.holdingStatuses.collectAsState()
     val tradingFees by viewModel.tradingFees.collectAsState()
     val hasSecurityPin = remember { viewModel.hasSecurityPin() }
-    var selectedRankingTab by remember { mutableStateOf(MarketRankingTab.SCALPING_FAST) }
+    var selectedRankingTab by remember { mutableStateOf(MarketRankingTab.WATCHLIST) }
     var currentTab by remember { mutableStateOf(NavTab.WATCHLIST) }
     var showAddDialog by remember { mutableStateOf(false) }
 
     val defaultQuote = "IDR"
-
-    val displayPairs = remember(
-        selectedRankingTab,
-        gainersCoins,
-        secondWaveCoins,
-        hotCoins,
-        topVolumeCoins,
-        worthCoins,
-        watchlist,
-        marketDataSource
-    ) {
-        when (selectedRankingTab) {
-            MarketRankingTab.SCALPING_FAST -> {
-                val list = if (gainersCoins.isNotEmpty()) gainersCoins.take(15).map { it.symbol }
-                else if (hotCoins.isNotEmpty()) hotCoins.take(15).map { it.symbol }
-                else worthCoins.filter { it.isWorthIt || it.potentialProfitPct > 0 }.take(15).map { it.pair.symbol }
-
-                val mapped = list.map { TradingPair.fromCustomSymbol(it, defaultQuote) }.distinctBy { it.symbol }
-                if (mapped.isNotEmpty()) mapped else TradingPair.popularPairsForSource(marketDataSource).take(15)
-            }
-            MarketRankingTab.SECOND_WAVE -> {
-                val list = if (secondWaveCoins.isNotEmpty()) secondWaveCoins.take(15).map { it.symbol }
-                else if (gainersCoins.isNotEmpty()) gainersCoins.take(15).map { it.symbol }
-                else worthCoins.map { it.pair.symbol }.take(15)
-
-                val mapped = list.map { TradingPair.fromCustomSymbol(it, defaultQuote) }.distinctBy { it.symbol }
-                if (mapped.isNotEmpty()) mapped else TradingPair.popularPairsForSource(marketDataSource).take(15)
-            }
-            MarketRankingTab.WATCHLIST -> {
-                watchlist.map { TradingPair.fromCustomSymbol(it, defaultQuote) }.distinctBy { it.symbol }
-            }
-        }
-    }
 
     val allTicks = remember(dashboardTicks, hotCoins, gainersCoins, secondWaveCoins, topVolumeCoins) {
         dashboardTicks +
@@ -90,6 +59,43 @@ fun DashboardScreen(
             gainersCoins.associateBy { it.symbol } +
             secondWaveCoins.associateBy { it.symbol } +
             topVolumeCoins.associateBy { it.symbol }
+    }
+
+    val displayPairs = remember(
+        selectedRankingTab,
+        watchlist,
+        favorites,
+        marketDataSource,
+        hotCoins,
+        gainersCoins,
+        topVolumeCoins,
+        secondWaveCoins,
+        allTicks
+    ) {
+        when (selectedRankingTab) {
+            MarketRankingTab.WATCHLIST -> {
+                // Auto-isi dari market movers (gainers/hot/volume/second-wave) + watchlist user + popular
+                // Max 25, diurutkan aktivitas (volume + change)
+                val fromUser = watchlist.map { TradingPair.fromCustomSymbol(it, defaultQuote) }
+                val fromMarket = (gainersCoins + hotCoins + topVolumeCoins + secondWaveCoins)
+                    .map { TradingPair.fromCustomSymbol(it.symbol, defaultQuote) }
+                val fromPopular = TradingPair.popularPairsForSource(marketDataSource)
+                val merged = (fromMarket + fromUser + fromPopular).distinctBy { it.symbol }
+                merged.sortedByDescending { pair ->
+                    val t = allTicks[pair.symbol] ?: return@sortedByDescending -1.0
+                    val ch = t.change24h.takeIf { c -> c.isFinite() } ?: 0.0
+                    val vol = t.volume24h.coerceAtLeast(0.0)
+                    val volScore = kotlin.math.ln(vol + 1.0)
+                    val momScore = kotlin.math.abs(ch) * 2.5 + if (ch > 0.0) 8.0 else 0.0
+                    volScore + momScore
+                }.take(25)
+            }
+            MarketRankingTab.FAVORITE -> {
+                val list = favorites.map { TradingPair.fromCustomSymbol(it, defaultQuote) }.distinctBy { it.symbol }
+                if (list.isNotEmpty()) list.take(25)
+                else watchlist.take(1).map { TradingPair.fromCustomSymbol(it, defaultQuote) }
+            }
+        }
     }
     val worthBySymbol = remember(worthCoins) { worthCoins.associateBy { it.pair.symbol } }
     val isConnected = connectionState is MarketConnectionState.Connected
@@ -161,19 +167,36 @@ fun DashboardScreen(
             } else {
                 itemsIndexed(displayPairs, key = { _, pair -> pair.symbol }) { index, pair ->
                     val holdingStatus = holdingStatuses[pair.symbol] ?: viewModel.getHoldingStatus(pair)
+                    val tick = allTicks[pair.symbol]
+                    val effectiveBadges = remember(coinBadges, pair.symbol, tick, strategyMode) {
+                        val fromState = coinBadges[pair.symbol]
+                        if (!fromState.isNullOrEmpty()) {
+                            fromState
+                        } else if (tick != null) {
+                            agu.analys.engine.badge.CoinBadgeEvaluator.evaluateBadges(
+                                pair = pair,
+                                tick = tick,
+                                activeStrategy = strategyMode,
+                                maxBadges = 4
+                            )
+                        } else {
+                            emptyList()
+                        }
+                    }
                     WatchlistCoinCard(
                         pair = pair,
-                        tick = allTicks[pair.symbol],
+                        tick = tick,
                         worth = worthBySymbol[pair.symbol],
                         rank = index + 1,
-                        isAuto = selectedRankingTab != MarketRankingTab.WATCHLIST,
+                        isAuto = selectedRankingTab != MarketRankingTab.WATCHLIST && selectedRankingTab != MarketRankingTab.FAVORITE,
                         isScalping = isScalpingMode,
-                        isFavorite = watchlist.contains(pair.symbol),
+                        isFavorite = favorites.contains(pair.symbol),
+                        badges = effectiveBadges,
                         usdtIdrRate = usdtIdrRate,
                         recentCandles = recentCandles,
                         holdingStatus = holdingStatus,
                         tradingFees = tradingFees,
-                        onToggleFavorite = { viewModel.toggleWatchlist(pair.symbol) },
+                        onToggleFavorite = { viewModel.toggleFavorite(pair.symbol) },
                         onClick = {
                             viewModel.selectPair(pair)
                             onNavigateToDetail(pair)

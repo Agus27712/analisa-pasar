@@ -76,6 +76,7 @@ fun WaitingEntryRadarCard(
         StrategyMode.SCALPING -> "⚡ SCALPING (${signal.confidence}%)"
         StrategyMode.SECOND_WAVE -> "🌊 SECOND-WAVE (${signal.confidence}%)"
         StrategyMode.SWING -> "🎯 SWING (${signal.confidence}%)"
+        StrategyMode.OFFICE_DAILY -> "🏢 OFFICE-DAILY (${signal.confidence}%)"
     }
 
     var isChecklistVisible by remember { mutableStateOf(false) }

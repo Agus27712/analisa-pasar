@@ -24,84 +24,114 @@ object SignalLifecycleManager {
     private val lock = ReentrantLock()
 
     // Expire signals older than 10 minutes if not triggered
-    private const val EXPIRY_MS = 10 * 60 * 1000L 
+    private const val EXPIRY_MS = 10 * 60 * 1000L
 
     fun process(symbol: String, currentPrice: Double, rawSignal: AISignalState): TrackedSignal = lock.withLock {
         val now = System.currentTimeMillis()
-        val tracked = activeSignals.getOrPut(symbol) { 
+        val tracked = activeSignals.getOrPut(symbol) {
             TrackedSignal(symbol)
         }
 
         // 1. Time-based Expiration
         if (tracked.state in listOf(LifecycleState.DETECTED, LifecycleState.CONFIRMING, LifecycleState.READY)) {
-            if (now - tracked.detectedAt > EXPIRY_MS) {
+            if (tracked.detectedAt > 0L && now - tracked.detectedAt > EXPIRY_MS) {
                 tracked.state = LifecycleState.EXPIRED
             }
         }
 
-        // 2. Price-based Invalidation (if drops below Stop Loss before Triggered)
+        // 2. Price-based Invalidation (drop below SL before triggered)
         if (tracked.state in listOf(LifecycleState.CONFIRMING, LifecycleState.READY)) {
             if (tracked.stopLoss > 0.0 && currentPrice <= tracked.stopLoss) {
                 tracked.state = LifecycleState.INVALIDATED
             }
         }
 
-        // 3. State Progression based on rawSignal's scalping stage
+        // 3. State progression — ENTRY juga boleh naik ke READY (bukan cuma STRONG_ENTRY)
         when (tracked.state) {
             LifecycleState.IDLE, LifecycleState.EXPIRED, LifecycleState.INVALIDATED -> {
-                if (rawSignal.scalpingStage in listOf(ScalpingStage.EARLY_ENTRY, ScalpingStage.WAIT_PULLBACK)) {
-                    tracked.state = LifecycleState.DETECTED
-                    tracked.detectedAt = now
-                    updateSignalData(tracked, rawSignal, now)
-                } else if (rawSignal.scalpingStage in listOf(ScalpingStage.ENTRY, ScalpingStage.STRONG_ENTRY)) {
-                    tracked.state = LifecycleState.CONFIRMING
-                    tracked.detectedAt = now
-                    updateSignalData(tracked, rawSignal, now)
-                } else {
-                    tracked.activeSignalState = rawSignal // Ensure UI gets the HOLD state
+                when (rawSignal.scalpingStage) {
+                    ScalpingStage.EARLY_ENTRY, ScalpingStage.WAIT_PULLBACK -> {
+                        tracked.state = LifecycleState.DETECTED
+                        tracked.detectedAt = now
+                        updateSignalData(tracked, rawSignal, now)
+                    }
+                    ScalpingStage.ENTRY -> {
+                        tracked.state = LifecycleState.CONFIRMING
+                        tracked.detectedAt = now
+                        updateSignalData(tracked, rawSignal, now)
+                    }
+                    ScalpingStage.STRONG_ENTRY -> {
+                        // Langsung READY biar nggak stuck CONFIRMING
+                        tracked.state = LifecycleState.READY
+                        tracked.detectedAt = now
+                        updateSignalData(tracked, rawSignal, now)
+                    }
+                    else -> {
+                        // WATCH/HOLD: tetap publish signal ke UI, state idle
+                        updateSignalData(tracked, rawSignal, now)
+                    }
                 }
             }
             LifecycleState.DETECTED -> {
-                if (rawSignal.scalpingStage in listOf(ScalpingStage.ENTRY, ScalpingStage.STRONG_ENTRY)) {
-                    tracked.state = LifecycleState.CONFIRMING
-                    updateSignalData(tracked, rawSignal, now)
-                } else if (rawSignal.scalpingStage == ScalpingStage.HOLD) {
-                    // Momentum lost before it even confirmed
-                    tracked.state = LifecycleState.INVALIDATED
-                } else {
-                    updateSignalData(tracked, rawSignal, now)
+                when (rawSignal.scalpingStage) {
+                    ScalpingStage.ENTRY -> {
+                        tracked.state = LifecycleState.CONFIRMING
+                        updateSignalData(tracked, rawSignal, now)
+                    }
+                    ScalpingStage.STRONG_ENTRY -> {
+                        tracked.state = LifecycleState.READY
+                        updateSignalData(tracked, rawSignal, now)
+                    }
+                    ScalpingStage.HOLD -> {
+                        tracked.state = LifecycleState.INVALIDATED
+                        updateSignalData(tracked, rawSignal, now)
+                    }
+                    ScalpingStage.WATCH -> {
+                        // Mundur ke idle calmly
+                        tracked.state = LifecycleState.IDLE
+                        updateSignalData(tracked, rawSignal, now)
+                    }
+                    else -> updateSignalData(tracked, rawSignal, now)
                 }
             }
             LifecycleState.CONFIRMING -> {
-                if (rawSignal.scalpingStage == ScalpingStage.STRONG_ENTRY) {
-                    tracked.state = LifecycleState.READY
-                    updateSignalData(tracked, rawSignal, now)
-                } else if (rawSignal.scalpingStage == ScalpingStage.HOLD) {
-                    tracked.state = LifecycleState.INVALIDATED
-                } else {
-                    updateSignalData(tracked, rawSignal, now)
+                when (rawSignal.scalpingStage) {
+                    ScalpingStage.ENTRY, ScalpingStage.STRONG_ENTRY -> {
+                        // ENTRY stabil / STRONG → READY (fix bengong)
+                        tracked.state = LifecycleState.READY
+                        updateSignalData(tracked, rawSignal, now)
+                    }
+                    ScalpingStage.HOLD -> {
+                        tracked.state = LifecycleState.INVALIDATED
+                        updateSignalData(tracked, rawSignal, now)
+                    }
+                    ScalpingStage.WATCH, ScalpingStage.EARLY_ENTRY -> {
+                        updateSignalData(tracked, rawSignal, now)
+                    }
+                    else -> updateSignalData(tracked, rawSignal, now)
                 }
             }
             LifecycleState.READY -> {
-                if (rawSignal.scalpingStage == ScalpingStage.HOLD) {
-                    tracked.state = LifecycleState.INVALIDATED
-                } else {
-                    updateSignalData(tracked, rawSignal, now)
+                when (rawSignal.scalpingStage) {
+                    ScalpingStage.HOLD, ScalpingStage.WATCH -> {
+                        tracked.state = LifecycleState.INVALIDATED
+                        updateSignalData(tracked, rawSignal, now)
+                    }
+                    else -> updateSignalData(tracked, rawSignal, now)
                 }
             }
             LifecycleState.TRIGGERED -> {
-                // Kept as triggered. (UI or execution engine will reset it when position closed)
+                // Kept as triggered until UI/execution resets
             }
         }
-        
-        // Return a safe copy
+
         return tracked.copy()
     }
 
     private fun updateSignalData(tracked: TrackedSignal, raw: AISignalState, now: Long) {
         tracked.lastUpdatedAt = now
-        // Keep the worst-case (lowest) stop loss to prevent shifting SL down maliciously
-        if (tracked.stopLoss == 0.0 || raw.stopLoss > tracked.stopLoss) {
+        // Keep the safest (highest) stop for long bias — jangan geser SL makin jauh ke bawah tanpa alasan
+        if (tracked.stopLoss == 0.0 || (raw.stopLoss > 0.0 && raw.stopLoss > tracked.stopLoss)) {
             tracked.stopLoss = raw.stopLoss
         }
         tracked.entryPrice = raw.entryPrice

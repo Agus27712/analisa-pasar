@@ -46,6 +46,12 @@ fun RadarConfirmationChecklist(
                 "3. Momentum & Volume Inflow (RSI/MACD)",
                 "4. Risk/Reward Optimal & Toleransi Entry"
             )
+            StrategyMode.OFFICE_DAILY -> listOf(
+                "1. Tren Stabil 1H/4H & Support EMA 20/50",
+                "2. Struktur Base Sehat (Akumulasi Tanpa Dump)",
+                "3. Smart Inflow & RSI Zona Aman",
+                "4. Area Beli Terukur & Target TP Santai"
+            )
             StrategyMode.SECOND_WAVE -> listOf(
                 "1. Prior Run & Drawdown Reset (Valid 4H/1H)",
                 "2. Accumulation Base & Drawdown Dry (Valid 1H)",
