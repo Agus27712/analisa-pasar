@@ -219,6 +219,8 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     internal val _dashboardTicks = MutableStateFlow<Map<String, MarketTick>>(emptyMap())
     internal val _connectionState = MutableStateFlow<MarketConnectionState>(MarketConnectionState.ConnectionLost())
     internal val _isShowingCachedData = MutableStateFlow(false)
+    internal val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
 
     val dashboardTicks: StateFlow<Map<String, MarketTick>> = marketDataCoordinator.dashboardTicks
     val connectionState: StateFlow<MarketConnectionState> = marketDataCoordinator.connectionState
@@ -590,89 +592,94 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
 
     fun refreshWorthCoinsFromMarket() {
         viewModelScope.launch {
-            val scalpingMode = _isScalpingMode.value
-            val gainersJob = async { IndodaxMarketService.fetchScalpingGainersTicks(30, true) }
-            val volJob = async { IndodaxMarketService.fetchTopVolumeTicks(30, true) }
-            val pairs = (TradingPair.POPULAR_INDODAX_PAIRS + _watchlist.value.map {
-                TradingPair.fromCustomSymbol(it, "IDR")
-            }).distinctBy { it.symbol }
-            val ticks = IndodaxMarketService.fetchTickers(pairs.map { it.effectiveIndodaxPair() })
-            val gainers = gainersJob.await()
-            val topVol = volJob.await()
-            if (gainers.isNotEmpty()) {
-                _gainersCoins.value = gainers.take(25)
-                _hotCoins.value = gainers.take(25)
-            }
-            if (topVol.isNotEmpty()) _topVolumeCoins.value = topVol.take(25)
-            if (ticks.isEmpty() && gainers.isEmpty() && topVol.isEmpty()) {
-                if (_dashboardTicks.value.isEmpty() && _hotCoins.value.isEmpty()) {
-                    markMarketOffline("Tidak ada respons market dari Indodax.")
-                } else {
-                    _isShowingCachedData.value = true
-                }
-                return@launch
-            }
-            val allScanned = (gainers + topVol).distinctBy { it.symbol }
-            val combinedTicks = ticks.associateBy { it.symbol } + allScanned.associateBy { it.symbol }
-            _dashboardTicks.value = combinedTicks
+            _isRefreshing.value = true
             try {
-                val priceMap = combinedTicks.mapValues { it.value.price }
-                agu.analys.service.TradingForegroundService.updatePrices(getApplication(), priceMap)
-            } catch (_: Exception) {}
-            lastLiveTickAt = System.currentTimeMillis()
-            _connectionState.value = MarketConnectionState.Connected
-            _isShowingCachedData.value = false
-            marketCache.saveDashboardTicks(MarketDataSource.INDODAX, combinedTicks)
+                val scalpingMode = _isScalpingMode.value
+                val gainersJob = async { IndodaxMarketService.fetchScalpingGainersTicks(30, true) }
+                val volJob = async { IndodaxMarketService.fetchTopVolumeTicks(30, true) }
+                val pairs = (TradingPair.POPULAR_INDODAX_PAIRS + _watchlist.value.map {
+                    TradingPair.fromCustomSymbol(it, "IDR")
+                }).distinctBy { it.symbol }
+                val ticks = IndodaxMarketService.fetchTickers(pairs.map { it.effectiveIndodaxPair() })
+                val gainers = gainersJob.await()
+                val topVol = volJob.await()
+                if (gainers.isNotEmpty()) {
+                    _gainersCoins.value = gainers.take(25)
+                    _hotCoins.value = gainers.take(25)
+                }
+                if (topVol.isNotEmpty()) _topVolumeCoins.value = topVol.take(25)
+                if (ticks.isEmpty() && gainers.isEmpty() && topVol.isEmpty()) {
+                    if (_dashboardTicks.value.isEmpty() && _hotCoins.value.isEmpty()) {
+                        markMarketOffline("Tidak ada respons market dari Indodax.")
+                    } else {
+                        _isShowingCachedData.value = true
+                    }
+                    return@launch
+                }
+                val allScanned = (gainers + topVol).distinctBy { it.symbol }
+                val combinedTicks = ticks.associateBy { it.symbol } + allScanned.associateBy { it.symbol }
+                _dashboardTicks.value = combinedTicks
+                try {
+                    val priceMap = combinedTicks.mapValues { it.value.price }
+                    agu.analys.service.TradingForegroundService.updatePrices(getApplication(), priceMap)
+                } catch (_: Exception) {}
+                lastLiveTickAt = System.currentTimeMillis()
+                _connectionState.value = MarketConnectionState.Connected
+                _isShowingCachedData.value = false
+                marketCache.saveDashboardTicks(MarketDataSource.INDODAX, combinedTicks)
 
-            val secondWaveCandidates = combinedTicks.values
-                .filter { it.price > 0 && it.high24h > 0 && it.volume24h >= 1_000_000_000 }
-                .map { t -> t to SecondWaveEvaluator.evaluateFast(t, t.high24h, t.low24h) }
-                .sortedWith(
-                    compareByDescending<Pair<MarketTick, agu.analys.engine.secondwave.FastSecondWaveScore>> { it.second.score }
-                        .thenByDescending { it.first.volume24h }
-                )
-                .map { it.first }
-                .take(10)
-            _secondWaveCoins.value = secondWaveCandidates.ifEmpty { gainers.take(25) }.take(25)
+                val secondWaveCandidates = combinedTicks.values
+                    .filter { it.price > 0 && it.high24h > 0 && it.volume24h >= 1_000_000_000 }
+                    .map { t -> t to SecondWaveEvaluator.evaluateFast(t, t.high24h, t.low24h) }
+                    .sortedWith(
+                        compareByDescending<Pair<MarketTick, agu.analys.engine.secondwave.FastSecondWaveScore>> { it.second.score }
+                            .thenByDescending { it.first.volume24h }
+                    )
+                    .map { it.first }
+                    .take(10)
+                _secondWaveCoins.value = secondWaveCandidates.ifEmpty { gainers.take(25) }.take(25)
 
-            val evaluatedPairs = (allScanned.map { TradingPair.fromCustomSymbol(it.symbol, "IDR") } + pairs).distinctBy { it.symbol }
-            val worth = evaluatedPairs.mapNotNull { pair ->
-                val tick = combinedTicks[pair.symbol] ?: return@mapNotNull null
-                val rangePct = if (tick.low24h > 0) ((tick.high24h - tick.low24h) / tick.low24h) * 100.0 else 0.0
-                val volScore = when {
-                    tick.volume24h >= 100_000_000_000 -> 30
-                    tick.volume24h >= 10_000_000_000 -> 22
-                    tick.volume24h >= 1_000_000_000 -> 14
-                    else -> 6
-                }
-                val change24h = tick.change24h.takeIf { it.isFinite() } ?: 0.0
-                val momentumScore = when {
-                    change24h >= 8 -> 40; change24h >= 3 -> 32; change24h > 0 -> 25
-                    change24h >= -3 -> 12; change24h >= -8 -> 6; else -> 2
-                }
-                val score = (volScore + momentumScore + min(20, (rangePct * 1.5).toInt())).coerceIn(1, 99)
-                val rec = when {
-                    change24h >= 5.0 -> "PUMP / MOMENTUM NAIK"
-                    change24h > 0.0 -> "BERGERAK NAIK"
-                    change24h >= -2.0 -> "LAYAK DIPANTAU"
-                    change24h <= -8.0 -> "TEKANAN JUAL"
-                    else -> "NETRAL / VOLATIL"
-                }
-                WorthCoinInfo(
-                    pair = pair, worthScore = score,
-                    isWorthIt = score >= 50 && change24h > 0,
-                    recommendation = rec, potentialProfitPct = abs(change24h),
-                    aiRationale = "${PriceFormatter.formatPrice(tick.price)} · Vol ${PriceFormatter.formatVolume(tick.volume24h)}"
+                val evaluatedPairs = (allScanned.map { TradingPair.fromCustomSymbol(it.symbol, "IDR") } + pairs).distinctBy { it.symbol }
+                val worth = evaluatedPairs.mapNotNull { pair ->
+                    val tick = combinedTicks[pair.symbol] ?: return@mapNotNull null
+                    val rangePct = if (tick.low24h > 0) ((tick.high24h - tick.low24h) / tick.low24h) * 100.0 else 0.0
+                    val volScore = when {
+                        tick.volume24h >= 100_000_000_000 -> 30
+                        tick.volume24h >= 10_000_000_000 -> 22
+                        tick.volume24h >= 1_000_000_000 -> 14
+                        else -> 6
+                    }
+                    val change24h = tick.change24h.takeIf { it.isFinite() } ?: 0.0
+                    val momentumScore = when {
+                        change24h >= 8 -> 40; change24h >= 3 -> 32; change24h > 0 -> 25
+                        change24h >= -3 -> 12; change24h >= -8 -> 6; else -> 2
+                    }
+                    val score = (volScore + momentumScore + min(20, (rangePct * 1.5).toInt())).coerceIn(1, 99)
+                    val rec = when {
+                        change24h >= 5.0 -> "PUMP / MOMENTUM NAIK"
+                        change24h > 0.0 -> "BERGERAK NAIK"
+                        change24h >= -2.0 -> "LAYAK DIPANTAU"
+                        change24h <= -8.0 -> "TEKANAN JUAL"
+                        else -> "NETRAL / VOLATIL"
+                    }
+                    WorthCoinInfo(
+                        pair = pair, worthScore = score,
+                        isWorthIt = score >= 50 && change24h > 0,
+                        recommendation = rec, potentialProfitPct = abs(change24h),
+                        aiRationale = "${PriceFormatter.formatPrice(tick.price)} · Vol ${PriceFormatter.formatVolume(tick.volume24h)}"
+                    )
+                }.sortedWith(
+                    if (scalpingMode) compareByDescending<WorthCoinInfo> {
+                        combinedTicks[it.pair.symbol]?.change24h?.takeIf { c -> c.isFinite() } ?: -999.0
+                    }.thenByDescending { it.worthScore }
+                    else compareByDescending { it.worthScore }
                 )
-            }.sortedWith(
-                if (scalpingMode) compareByDescending<WorthCoinInfo> {
-                    combinedTicks[it.pair.symbol]?.change24h?.takeIf { c -> c.isFinite() } ?: -999.0
-                }.thenByDescending { it.worthScore }
-                else compareByDescending { it.worthScore }
-            )
-            _worthCoins.value = worth
-            marketCache.saveWorthCoins(MarketDataSource.INDODAX, worth)
-            recalculateDashboardBadges()
+                _worthCoins.value = worth
+                marketCache.saveWorthCoins(MarketDataSource.INDODAX, worth)
+                recalculateDashboardBadges()
+            } finally {
+                _isRefreshing.value = false
+            }
         }
     }
 
@@ -771,7 +778,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
                         pair = pair,
                         tick = tick,
                         activeStrategy = strategy,
-                        maxBadges = 4
+                        maxBadges = 1
                     )
                     if (badges.isNotEmpty()) {
                         resultMap[pair.symbol] = badges

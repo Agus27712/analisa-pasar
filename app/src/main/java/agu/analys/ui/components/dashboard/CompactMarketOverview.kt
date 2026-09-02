@@ -1,7 +1,12 @@
 package agu.analys.ui.components.dashboard
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -41,11 +46,11 @@ enum class MarketRankingTab(val label: String, val badge: String) {
 
 /**
  * Top Stat Header & Exchange Source & Mode & Redesigned Tabs:
- * - Title: Watchlist Indodax
- * - Refresh Button with 360-degree rotation animation on click
+ * - Title: Watchlist Indodax IDR
+ * - Synchronized Refresh Button with smooth rotation during loading
  * - 24H VOL | AVG VOL | STRATEGI MODE (SCALPING / 2ND-WAVE / SWING)
- * - ● Data realtime Indodax
- * - Responsive Tab bar: [⚡ Scalping | 🌊 2nd-Wave | ⭐ Favorit]
+ * - Realtime status indicator
+ * - Tab bar: [📋 Watchlist | ⭐ Favorit]
  */
 @Composable
 fun DashboardMockupHeader(
@@ -53,6 +58,7 @@ fun DashboardMockupHeader(
     marketDataSource: MarketDataSource = MarketDataSource.INDODAX,
     strategyMode: StrategyMode = StrategyMode.SCALPING,
     isConnected: Boolean,
+    isRefreshing: Boolean = false,
     selectedTab: MarketRankingTab = MarketRankingTab.WATCHLIST,
     onSelectTab: (MarketRankingTab) -> Unit,
     onRefresh: () -> Unit,
@@ -88,245 +94,257 @@ fun DashboardMockupHeader(
         }
     }
 
-    // Rotasi animasi untuk tombol refresh
-    val rotation = remember { Animatable(0f) }
+    // Rotasi animasi tombol refresh yang tersinkronisasi dengan isRefreshing state
+    val infiniteTransition = rememberInfiniteTransition(label = "refresh_infinite")
+    val spinningRotation by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(800, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "refresh_spin"
+    )
+    val manualRotation = remember { Animatable(0f) }
     val coroutineScope = rememberCoroutineScope()
+
+    val currentRotationAngle = if (isRefreshing) spinningRotation else manualRotation.value
+
+    val ledColor = if (isConnected) TvGreen else TvRed
+    val displayTime = if (isConnected) currentTime else (lastDisconnectTime ?: currentTime)
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 6.dp)
+            .padding(horizontal = 12.dp, vertical = 4.dp)
     ) {
-        // Top Nav: Judul Watchlist Indodax + Badge Sumber + Tombol Refresh Berputar
+        // Top Nav: Judul Bersih "Watchlist Indodax IDR" + Status Live Terintegrasi + Refresh
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 4.dp),
+                .padding(vertical = 2.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
                 Text(
-                    text = "Watchlist Indodax",
+                    text = "Watchlist Indodax IDR",
                     color = TvTextPrimary,
-                    fontSize = 19.sp,
+                    fontSize = 16.5.sp,
                     fontWeight = FontWeight.Black,
                     letterSpacing = (-0.3).sp
                 )
-                Spacer(Modifier.height(2.dp))
-                Box(
-                    modifier = Modifier
-                        .background(
-                            Color(0xFF2196F3).copy(alpha = 0.12f),
-                            RoundedCornerShape(4.dp)
-                        )
-                        .border(
-                            0.8.dp,
-                            Color(0xFF2196F3).copy(alpha = 0.35f),
-                            RoundedCornerShape(4.dp)
-                        )
-                        .padding(horizontal = 6.dp, vertical = 1.dp)
-                ) {
-                    Text(
-                        text = "${marketDataSource.label.uppercase()} ($quoteAsset)",
-                        color = Color(0xFF64B5F6),
-                        fontSize = 9.5.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
             }
 
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                horizontalArrangement = Arrangement.spacedBy(5.dp)
             ) {
+                // Sleek Live Status Pill dengan LED & Jam
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .height(26.dp)
+                        .background(TvSurfaceVariant, RoundedCornerShape(6.dp))
+                        .border(0.8.dp, if (isConnected) TvBorder else TvRed.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
+                        .padding(horizontal = 7.dp)
+                ) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier.size(8.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .background(ledColor.copy(alpha = 0.28f), CircleShape)
+                        )
+                        Box(
+                            modifier = Modifier
+                                .size(5.5.dp)
+                                .background(ledColor, CircleShape)
+                        )
+                    }
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        text = if (isConnected) "LIVE $displayTime" else "OFFLINE $displayTime",
+                        color = if (isConnected) TvGreen else TvRed,
+                        fontSize = 10.sp,
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
                 if (selectedTab == MarketRankingTab.FAVORITE) {
-                    IconButton(
-                        onClick = onAddAsset,
+                    Box(
                         modifier = Modifier
-                            .size(36.dp)
-                            .background(TvSurfaceVariant, RoundedCornerShape(8.dp))
+                            .size(26.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(TvSurfaceVariant)
+                            .border(0.8.dp, TvBorder, RoundedCornerShape(6.dp))
+                            .clickable(onClick = onAddAsset),
+                        contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.Add,
                             contentDescription = "Tambah ke Favorit",
                             tint = TvAmber,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(15.dp)
                         )
                     }
                 }
 
-                IconButton(
-                    onClick = {
-                        coroutineScope.launch {
-                            rotation.snapTo(0f)
-                            rotation.animateTo(
-                                targetValue = 360f,
-                                animationSpec = tween(durationMillis = 600, easing = LinearEasing)
-                            )
-                        }
-                        onRefresh()
-                    },
+                Box(
                     modifier = Modifier
-                        .size(36.dp)
-                        .background(TvSurfaceVariant, RoundedCornerShape(8.dp))
+                        .size(26.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(TvSurfaceVariant)
+                        .border(
+                            0.8.dp,
+                            if (isRefreshing) TvBlue.copy(alpha = 0.6f) else TvBorder,
+                            RoundedCornerShape(6.dp)
+                        )
+                        .clickable(
+                            enabled = !isRefreshing,
+                            onClick = {
+                                coroutineScope.launch {
+                                    manualRotation.snapTo(0f)
+                                    manualRotation.animateTo(
+                                        targetValue = 360f,
+                                        animationSpec = tween(durationMillis = 600, easing = LinearEasing)
+                                    )
+                                }
+                                onRefresh()
+                            }
+                        ),
+                    contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Default.Refresh,
                         contentDescription = "Refresh Data Pasar",
-                        tint = TvTextPrimary,
+                        tint = if (isRefreshing) TvBlueSoft else TvTextPrimary,
                         modifier = Modifier
-                            .size(20.dp)
-                            .rotate(rotation.value)
+                            .size(15.dp)
+                            .rotate(currentRotationAngle)
                     )
                 }
             }
         }
 
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(6.dp))
 
-        // 3 Stat Cards Responsive: 24H VOL | AVG VOL | STRATEGI
+        // Compact Unified Stat Strip: 24H VOL | AVG VOL | STRATEGI
+        val (modeBg, modeBorder, modeColor, modeLabel) = when (strategyMode) {
+            StrategyMode.SCALPING -> listOf(Color(0xFF123D2A), Color(0xFF1B5E38), TvGreen, "SCALPING")
+            StrategyMode.SECOND_WAVE -> listOf(Color(0xFF0F3845), Color(0xFF155060), Color(0xFF00E5FF), "2ND-WAVE")
+            StrategyMode.SWING -> listOf(Color(0xFF122840), Color(0xFF1E3A5F), Color(0xFF72B7FF), "SWING")
+            StrategyMode.OFFICE_DAILY -> listOf(Color(0xFF1F2448), Color(0xFF3730A3), Color(0xFFA5B4FC), "OFFICE")
+        }
+
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(TvSurface, RoundedCornerShape(8.dp))
+                .border(0.8.dp, TvBorder, RoundedCornerShape(8.dp))
+                .padding(horizontal = 8.dp, vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            // Card 1: 24H VOL
-            StatBox(
-                label = "24H VOL",
-                value = PriceFormatter.formatVolume(totalVolume, quoteAsset = quoteAsset),
-                modifier = Modifier.weight(1f)
-            )
-
-            // Card 2: AVG 24H
-            StatBox(
-                label = "AVG VOL",
-                value = PriceFormatter.formatVolume(avgVolume, quoteAsset = quoteAsset),
-                modifier = Modifier.weight(1f)
-            )
-
-            // Card 3: STRATEGI Pill
-            val (modeBg, modeBorder, modeColor, modeLabel) = when (strategyMode) {
-                StrategyMode.SCALPING -> listOf(Color(0xFF123D2A), Color(0xFF1B5E38), TvGreen, "SCALPING")
-                StrategyMode.SECOND_WAVE -> listOf(Color(0xFF0F3845), Color(0xFF155060), Color(0xFF00E5FF), "2ND-WAVE")
-                StrategyMode.SWING -> listOf(Color(0xFF122840), Color(0xFF1E3A5F), Color(0xFF72B7FF), "SWING")
-                StrategyMode.OFFICE_DAILY -> listOf(Color(0xFF1F2448), Color(0xFF3730A3), Color(0xFFA5B4FC), "OFFICE")
+            // Stat 1: 24H VOL
+            Column(
+                modifier = Modifier.weight(1.1f),
+                horizontalAlignment = Alignment.Start
+            ) {
+                Text(
+                    text = "24H VOL",
+                    color = TvTextSecondary,
+                    fontSize = 8.5.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = PriceFormatter.formatVolume(totalVolume, quoteAsset = quoteAsset),
+                    color = TvTextPrimary,
+                    fontSize = 11.5.sp,
+                    fontWeight = FontWeight.Black,
+                    maxLines = 1
+                )
             }
 
             Box(
                 modifier = Modifier
-                    .weight(1f)
-                    .background(TvSurface, RoundedCornerShape(10.dp))
-                    .border(0.8.dp, TvBorder, RoundedCornerShape(10.dp))
-                    .padding(horizontal = 6.dp, vertical = 7.dp),
-                contentAlignment = Alignment.Center
+                    .width(1.dp)
+                    .height(22.dp)
+                    .background(TvBorder)
+            )
+
+            // Stat 2: AVG VOL
+            Column(
+                modifier = Modifier.weight(1f),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = "STRATEGI",
-                        color = TvTextSecondary,
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(Modifier.height(2.dp))
-                    Box(
-                        modifier = Modifier
-                            .background(modeBg as Color, RoundedCornerShape(5.dp))
-                            .border(0.6.dp, modeBorder as Color, RoundedCornerShape(5.dp))
-                            .padding(horizontal = 6.dp, vertical = 1.5.dp)
-                    ) {
-                        Text(
-                            text = modeLabel as String,
-                            color = modeColor as Color,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Black,
-                            maxLines = 1
-                        )
-                    }
-                }
-            }
-        }
-
-        Spacer(Modifier.height(8.dp))
-
-        // Live Status Row: ● Data Realtime Indodax    ● [HH:mm:ss]
-        val ledColor = if (isConnected) TvGreen else TvRed
-        val displayTime = if (isConnected) currentTime else (lastDisconnectTime ?: currentTime)
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                // Dot LED solid agak besar tanpa pulse
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier.size(10.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(10.dp)
-                            .background(ledColor.copy(alpha = 0.28f), CircleShape)
-                    )
-                    Box(
-                        modifier = Modifier
-                            .size(7.5.dp)
-                            .background(ledColor, CircleShape)
-                    )
-                }
-                Spacer(Modifier.width(6.dp))
                 Text(
-                    text = if (isConnected) "Data Realtime Indodax" else "Terputus",
-                    color = if (isConnected) TvGreen else TvRed,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
-
-            // Widget waktu di kanan dengan dot LED dan format bersih (tanpa kata 'Server:')
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .background(TvSurfaceVariant, RoundedCornerShape(6.dp))
-                    .border(0.8.dp, if (isConnected) TvBorder else TvRed.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
-                    .padding(horizontal = 7.dp, vertical = 3.dp)
-            ) {
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier.size(9.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(9.dp)
-                            .background(ledColor.copy(alpha = 0.28f), CircleShape)
-                    )
-                    Box(
-                        modifier = Modifier
-                            .size(6.5.dp)
-                            .background(ledColor, CircleShape)
-                    )
-                }
-                Spacer(Modifier.width(5.dp))
-                Text(
-                    text = displayTime,
-                    color = if (isConnected) TvTextPrimary else TvRed,
-                    fontSize = 11.5.sp,
-                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                    text = "AVG VOL",
+                    color = TvTextSecondary,
+                    fontSize = 8.5.sp,
                     fontWeight = FontWeight.Bold
                 )
+                Text(
+                    text = PriceFormatter.formatVolume(avgVolume, quoteAsset = quoteAsset),
+                    color = TvTextPrimary,
+                    fontSize = 11.5.sp,
+                    fontWeight = FontWeight.Black,
+                    maxLines = 1
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .width(1.dp)
+                    .height(22.dp)
+                    .background(TvBorder)
+            )
+
+            // Stat 3: STRATEGI
+            Column(
+                modifier = Modifier.weight(1f),
+                horizontalAlignment = Alignment.End
+            ) {
+                Text(
+                    text = "STRATEGI",
+                    color = TvTextSecondary,
+                    fontSize = 8.5.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(Modifier.height(1.dp))
+                Box(
+                    modifier = Modifier
+                        .background(modeBg as Color, RoundedCornerShape(4.dp))
+                        .border(0.6.dp, modeBorder as Color, RoundedCornerShape(4.dp))
+                        .padding(horizontal = 5.dp, vertical = 1.dp)
+                ) {
+                    Text(
+                        text = modeLabel as String,
+                        color = modeColor as Color,
+                        fontSize = 9.5.sp,
+                        fontWeight = FontWeight.Black,
+                        maxLines = 1
+                    )
+                }
             }
         }
 
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(6.dp))
 
-        // REDESIGNED TAB BAR (Modern Pills with responsive sizes for Redmi Note 11)
+        // TAB BAR (Modern Sleek Segmented Control)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(10.dp))
+                .clip(RoundedCornerShape(8.dp))
                 .background(TvSurfaceVariant)
-                .border(0.8.dp, TvBorder, RoundedCornerShape(10.dp))
-                .padding(3.dp),
+                .border(0.8.dp, TvBorder, RoundedCornerShape(8.dp))
+                .padding(2.5.dp),
             horizontalArrangement = Arrangement.spacedBy(3.dp)
         ) {
             MarketRankingTab.values().forEach { tab ->
@@ -339,54 +357,25 @@ fun DashboardMockupHeader(
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .clip(RoundedCornerShape(8.dp))
+                        .clip(RoundedCornerShape(6.dp))
                         .background(if (isSelected) tabActiveBg else Color.Transparent)
                         .then(
-                            if (isSelected) Modifier.border(0.8.dp, tabActiveBorder, RoundedCornerShape(8.dp))
+                            if (isSelected) Modifier.border(0.8.dp, tabActiveBorder, RoundedCornerShape(6.dp))
                             else Modifier
                         )
                         .clickable { onSelectTab(tab) }
-                        .padding(vertical = 8.dp, horizontal = 6.dp),
+                        .padding(vertical = 6.dp, horizontal = 6.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = tab.label,
                         color = if (isSelected) tabActiveTextColor else TvTextSecondary,
-                        fontSize = 12.5.sp,
+                        fontSize = 12.sp,
                         fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
                         maxLines = 1
                     )
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun StatBox(label: String, value: String, modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier
-            .background(TvSurface, RoundedCornerShape(10.dp))
-            .border(0.8.dp, TvBorder, RoundedCornerShape(10.dp))
-            .padding(horizontal = 6.dp, vertical = 7.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                text = label,
-                color = TvTextSecondary,
-                fontSize = 9.sp,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1
-            )
-            Spacer(Modifier.height(2.dp))
-            Text(
-                text = value,
-                color = TvTextPrimary,
-                fontSize = 11.5.sp,
-                fontWeight = FontWeight.ExtraBold,
-                maxLines = 1
-            )
         }
     }
 }

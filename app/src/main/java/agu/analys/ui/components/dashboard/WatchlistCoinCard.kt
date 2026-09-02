@@ -8,6 +8,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -189,21 +190,29 @@ fun WatchlistCoinCard(
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             if (badges.isNotEmpty()) {
-                                CoinBadgeRow(badges = badges.take(4))
+                                CoinBadgeRow(badges = badges.take(1))
                             } else {
                                 CompactActivityChip(activity)
                             }
-                            
+
                             if (badgeInfo != null) {
                                 Box(
                                     modifier = Modifier
-                                        .background(badgeInfo.color.copy(alpha = (0.12f + 0.12f * pulseAlpha)), RoundedCornerShape(4.dp))
-                                        .padding(horizontal = 4.dp, vertical = 1.dp)
+                                        .background(
+                                            badgeInfo.color.copy(alpha = (0.16f + 0.14f * pulseAlpha)),
+                                            RoundedCornerShape(4.dp)
+                                        )
+                                        .border(
+                                            0.8.dp,
+                                            badgeInfo.color.copy(alpha = pulseAlpha),
+                                            RoundedCornerShape(4.dp)
+                                        )
+                                        .padding(horizontal = 5.dp, vertical = 1.5.dp)
                                 ) {
                                     Text(
                                         text = badgeInfo.label,
                                         color = badgeInfo.color,
-                                        fontSize = 8.sp,
+                                        fontSize = 8.5.sp,
                                         fontWeight = FontWeight.Black
                                     )
                                 }

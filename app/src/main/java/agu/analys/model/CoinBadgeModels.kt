@@ -9,15 +9,15 @@ enum class BadgeType(
     val label: String,
     val defaultPriority: Int
 ) {
-    OFFICEDAILY("OFFICEDAILY", 1),
-    SECONDWAVE("SECONDWAVE", 2),
+    OFFICEDAILY("OFFICE DAILY", 1),
+    SECONDWAVE("2ND WAVE", 2),
     SWING("SWING", 3),
     SCALPING("SCALPING", 4),
-    READY("READY", 5),
+    READY("SIAP ENTRY", 5),
     HOT("HOT", 6),
-    PUMP("PUMP", 7),
-    VOL24("VOL24", 8),
-    DUMP("DUMP", 9)
+    PUMP("BREAKOUT", 7),
+    VOL24("HIGH VOL", 8),
+    DUMP("PULLBACK", 9)
 }
 
 /**

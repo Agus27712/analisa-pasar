@@ -5,16 +5,19 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.unit.dp
 import agu.analys.model.MarketTick
 import kotlin.math.abs
 
 /**
- * Mini sparkline dari field tick real: price, high24h, low24h, change24h.
- * Bukan random walk — path disintesis dari range 24H Indodax.
+ * Mini sparkline dengan kurva halus (Smooth Cubic Bezier Spline) & subtle translucent gradient fill.
+ * Bukan random walk — titik disintesis dari data harga, high, low, & change 24H nyata Indodax.
  */
 @Composable
 fun MiniSparkline(
@@ -30,28 +33,90 @@ fun MiniSparkline(
         val range = (maxV - minV).takeIf { it > 0 } ?: 1.0
         val w = size.width
         val h = size.height
-        val pad = 2f
-        val path = Path()
-        points.forEachIndexed { i, v ->
-            val x = pad + (w - 2 * pad) * i / (points.size - 1).toFloat()
-            val y = pad + (h - 2 * pad) * (1f - ((v - minV) / range).toFloat())
-            if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+        val padX = 2.dp.toPx()
+        val padY = 3.dp.toPx()
+        val usableW = (w - 2 * padX).coerceAtLeast(1f)
+        val usableH = (h - 2 * padY).coerceAtLeast(1f)
+
+        val offsets = points.mapIndexed { i, v ->
+            val x = padX + usableW * (i.toFloat() / (points.size - 1))
+            val normalizedY = ((v - minV) / range).toFloat().coerceIn(0f, 1f)
+            val y = padY + usableH * (1f - normalizedY)
+            Offset(x, y)
         }
+
+        val strokePath = Path()
+        val fillPath = Path()
+
+        strokePath.moveTo(offsets[0].x, offsets[0].y)
+        fillPath.moveTo(offsets[0].x, offsets[0].y)
+
+        // Smooth cubic Bezier spline interpolation antar titik
+        for (i in 0 until offsets.size - 1) {
+            val p0 = offsets[i]
+            val p1 = offsets[i + 1]
+            val midX = (p0.x + p1.x) / 2f
+
+            strokePath.cubicTo(
+                x1 = midX, y1 = p0.y,
+                x2 = midX, y2 = p1.y,
+                x3 = p1.x, y3 = p1.y
+            )
+            fillPath.cubicTo(
+                x1 = midX, y1 = p0.y,
+                x2 = midX, y2 = p1.y,
+                x3 = p1.x, y3 = p1.y
+            )
+        }
+
+        val lastPoint = offsets.last()
+        val firstPoint = offsets.first()
+        fillPath.lineTo(lastPoint.x, h)
+        fillPath.lineTo(firstPoint.x, h)
+        fillPath.close()
+
+        // 1. Gambar gradient fill halus di bawah kurva
         drawPath(
-            path = path,
-            color = lineColor,
-            style = Stroke(width = 2.6f, cap = StrokeCap.Round)
+            path = fillPath,
+            brush = Brush.verticalGradient(
+                colors = listOf(
+                    lineColor.copy(alpha = 0.25f),
+                    lineColor.copy(alpha = 0.05f),
+                    Color.Transparent
+                ),
+                startY = padY,
+                endY = h
+            )
         )
-        val last = points.last()
-        val lastX = pad + (w - 2 * pad)
-        val lastY = pad + (h - 2 * pad) * (1f - ((last - minV) / range).toFloat())
-        drawCircle(color = lineColor, radius = 3.8f, center = Offset(lastX, lastY))
+
+        // 2. Gambar garis kurva halus (Smooth Spline)
+        drawPath(
+            path = strokePath,
+            color = lineColor,
+            style = Stroke(
+                width = 2.2.dp.toPx(),
+                cap = StrokeCap.Round,
+                join = StrokeJoin.Round
+            )
+        )
+
+        // 3. Glowing endpoint pada harga live terakhir
+        drawCircle(
+            color = lineColor.copy(alpha = 0.32f),
+            radius = 4.2.dp.toPx(),
+            center = lastPoint
+        )
+        drawCircle(
+            color = lineColor,
+            radius = 2.dp.toPx(),
+            center = lastPoint
+        )
     }
 }
 
 /**
- * Bangun 6 titik dari data 24H nyata:
- * open≈price/(1+chg), low, mid, high, near-close, price.
+ * Bangun 7 titik intraday dari data 24H nyata:
+ * Open, Intraday Dip, Mid, High, Consolidation, Live Price.
  */
 private fun sparkPoints(tick: MarketTick?): List<Double> {
     if (tick == null || tick.price <= 0) return emptyList()
@@ -61,13 +126,27 @@ private fun sparkPoints(tick: MarketTick?): List<Double> {
     val chg = tick.change24h.takeIf { it.isFinite() } ?: 0.0
     val open = if (abs(chg) < 99.0) price / (1.0 + chg / 100.0) else price
     val mid = (high + low) / 2.0
-    // Urutan kasar intraday dari open → ekstrem → close (semua dari field real)
-    return listOf(
-        open,
-        open * 0.4 + mid * 0.6,
-        if (chg >= 0) low else high,
-        mid,
-        if (chg >= 0) high else low,
-        price
-    ).map { it.coerceIn(minOf(low, open, price), maxOf(high, open, price)) }
+
+    return if (chg >= 0) {
+        listOf(
+            open,
+            low * 0.75 + open * 0.25,
+            mid * 0.92,
+            high * 0.95,
+            high,
+            price * 0.98 + high * 0.02,
+            price
+        )
+    } else {
+        listOf(
+            open,
+            high * 0.75 + open * 0.25,
+            mid * 1.08,
+            low * 1.05,
+            low,
+            price * 1.02 + low * -0.02,
+            price
+        )
+    }.map { it.coerceIn(minOf(low, open, price), maxOf(high, open, price)) }
 }
+

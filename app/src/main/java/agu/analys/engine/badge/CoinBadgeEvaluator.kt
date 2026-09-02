@@ -11,19 +11,18 @@ import agu.analys.model.TradingPair
 object CoinBadgeEvaluator {
 
     /**
-     * Evaluasi badge per koin. Active strategy diprioritaskan.
-     * Max [maxBadges] (default 4). Badge beda-beda tergantung setup yang cocok.
+     * Evaluasi badge per koin. Maksimal 1 badge per pair dipilih sesuai dengan
+     * mode trading yang paling cocok di pair tersebut.
      */
     fun evaluateBadges(
         pair: TradingPair,
         tick: MarketTick?,
         activeStrategy: StrategyMode = StrategyMode.SCALPING,
         isSetupReady: Boolean = false,
-        maxBadges: Int = 4
+        maxBadges: Int = 1
     ): List<CoinBadge> {
         if (tick == null || tick.price <= 0.0) return emptyList()
 
-        val badges = mutableListOf<CoinBadge>()
         val change = if (tick.change24h.isFinite()) tick.change24h else 0.0
         val volume = tick.volume24h
         val isUsdt = pair.quoteAsset.equals("USDT", true) || pair.quoteAsset.equals("USD", true)
@@ -32,74 +31,59 @@ object CoinBadgeEvaluator {
         val volThresholdMed = if (isUsdt) 1_000_000.0 else 5_000_000_000.0
         val volThresholdMin = if (isUsdt) 200_000.0 else 1_000_000_000.0
 
-        // Strategy badges
+        // Evaluasi kelayakan untuk masing-masing 4 strategi trading:
         val officeScore = OfficeDailyScreener.evaluateFast(tick)
-        if (officeScore.isQualified) {
-            val prio = if (activeStrategy == StrategyMode.OFFICE_DAILY) 0 else BadgeType.OFFICEDAILY.defaultPriority
-            badges.add(CoinBadge(BadgeType.OFFICEDAILY, priority = prio, description = officeScore.summary))
-        }
+        val isOfficeQualified = officeScore.isQualified
 
         val secondWaveScore = SecondWaveEvaluator.evaluateFast(tick, tick.high24h, tick.low24h)
-        if (secondWaveScore.isQualified) {
-            val prio = if (activeStrategy == StrategyMode.SECOND_WAVE) 0 else BadgeType.SECONDWAVE.defaultPriority
-            badges.add(CoinBadge(BadgeType.SECONDWAVE, priority = prio, description = secondWaveScore.summary))
-        }
+        val isSecondWaveQualified = secondWaveScore.isQualified
 
         val isSwingCandidate = volume >= volThresholdMin && change in -3.0..8.0
-        if (isSwingCandidate) {
-            val prio = if (activeStrategy == StrategyMode.SWING) 0 else BadgeType.SWING.defaultPriority
-            badges.add(CoinBadge(BadgeType.SWING, priority = prio, description = "Setup Swing terdeteksi"))
-        }
-
         val isScalpingCandidate =
-            volume >= volThresholdMin && (change >= 2.0 || change <= -2.0 || volume >= volThresholdMed)
-        if (isScalpingCandidate) {
-            val prio = if (activeStrategy == StrategyMode.SCALPING) 0 else BadgeType.SCALPING.defaultPriority
-            badges.add(CoinBadge(BadgeType.SCALPING, priority = prio, description = "Momentum Scalping aktif"))
+            volume >= volThresholdMin && (change >= 1.5 || change <= -1.5 || volume >= volThresholdMed)
+
+        // Pilih 1 badge mode strategi yang paling cocok untuk pair ini:
+        val chosenBadge: CoinBadge? = when {
+            // 1. Jika mode aktif pengguna cocok dengan kondisi pair ini, prioritaskan mode aktif
+            activeStrategy == StrategyMode.SCALPING && isScalpingCandidate ->
+                CoinBadge(BadgeType.SCALPING, priority = 0, description = "Momentum Scalping aktif")
+            activeStrategy == StrategyMode.SECOND_WAVE && isSecondWaveQualified ->
+                CoinBadge(BadgeType.SECONDWAVE, priority = 0, description = secondWaveScore.summary)
+            activeStrategy == StrategyMode.SWING && isSwingCandidate ->
+                CoinBadge(BadgeType.SWING, priority = 0, description = "Setup Swing terdeteksi")
+            activeStrategy == StrategyMode.OFFICE_DAILY && isOfficeQualified ->
+                CoinBadge(BadgeType.OFFICEDAILY, priority = 0, description = officeScore.summary)
+
+            // 2. Jika mode aktif tidak cocok, pilih mode strategi dengan setup terbaik
+            isSecondWaveQualified && secondWaveScore.score >= 6 ->
+                CoinBadge(BadgeType.SECONDWAVE, priority = 1, description = secondWaveScore.summary)
+            isOfficeQualified && officeScore.score >= 6 ->
+                CoinBadge(BadgeType.OFFICEDAILY, priority = 2, description = officeScore.summary)
+            isSwingCandidate && change in 0.0..6.0 ->
+                CoinBadge(BadgeType.SWING, priority = 3, description = "Setup Swing terdeteksi")
+            isScalpingCandidate ->
+                CoinBadge(BadgeType.SCALPING, priority = 4, description = "Momentum Scalping aktif")
+
+            // 3. Konfirmasi siap entry
+            isSetupReady ->
+                CoinBadge(BadgeType.READY, priority = 5, description = "Siap Entry")
+
+            // 4. Sinyal pasar teknikal profesional (bukan spekulatif pump/dump)
+            volume >= volThresholdMed && change >= 3.5 ->
+                CoinBadge(BadgeType.PUMP, label = "BREAKOUT", priority = 6, description = "+${String.format(java.util.Locale.US, "%.1f", change)}% 24h")
+            volume >= volThresholdMed && change <= -3.5 ->
+                CoinBadge(BadgeType.DUMP, label = "PULLBACK", priority = 7, description = "${String.format(java.util.Locale.US, "%.1f", change)}% 24h")
+            volume >= volThresholdHigh ->
+                CoinBadge(BadgeType.VOL24, label = "HIGH VOL", priority = 8, description = "Volume 24H sangat tinggi")
+            change >= 5.0 ->
+                CoinBadge(BadgeType.PUMP, label = "MOMENTUM", priority = 9, description = "+${String.format(java.util.Locale.US, "%.1f", change)}% 24h")
+            else -> null
         }
 
-        // READY — heuristic internal + flag eksternal
-        val strongMomentumReady =
-            isScalpingCandidate && change >= 2.5 && volume >= volThresholdMed &&
-                (activeStrategy == StrategyMode.SCALPING || activeStrategy == StrategyMode.SECOND_WAVE)
-        val officeReady =
-            officeScore.isQualified && activeStrategy == StrategyMode.OFFICE_DAILY && change in 0.5..8.0
-        val secondWaveReady =
-            secondWaveScore.isQualified && activeStrategy == StrategyMode.SECOND_WAVE &&
-                secondWaveScore.drawdownPct in 15.0..55.0
-
-        if (isSetupReady || strongMomentumReady || officeReady || secondWaveReady) {
-            badges.add(CoinBadge(BadgeType.READY, priority = BadgeType.READY.defaultPriority, description = "Siap Entry"))
+        return if (chosenBadge != null) {
+            listOf(chosenBadge).take(maxBadges.coerceAtLeast(1))
+        } else {
+            emptyList()
         }
-
-        if (volume >= volThresholdMed && change >= 3.0) {
-            badges.add(CoinBadge(BadgeType.HOT, priority = BadgeType.HOT.defaultPriority, description = "Aktivitas Volume & Kenaikan Tinggi"))
-        }
-        if (change >= 6.0) {
-            badges.add(
-                CoinBadge(
-                    BadgeType.PUMP,
-                    priority = BadgeType.PUMP.defaultPriority,
-                    description = "+${String.format(java.util.Locale.US, "%.1f", change)}% dalam 24h"
-                )
-            )
-        }
-        if (change <= -6.0) {
-            badges.add(
-                CoinBadge(
-                    BadgeType.DUMP,
-                    priority = BadgeType.DUMP.defaultPriority,
-                    description = "${String.format(java.util.Locale.US, "%.1f", change)}% dalam 24h"
-                )
-            )
-        }
-        if (volume >= volThresholdHigh) {
-            badges.add(CoinBadge(BadgeType.VOL24, priority = BadgeType.VOL24.defaultPriority, description = "Volume 24H sangat tinggi"))
-        }
-
-        return badges
-            .distinctBy { it.type }
-            .sortedBy { it.priority }
-            .take(maxBadges.coerceAtLeast(1))
     }
 }

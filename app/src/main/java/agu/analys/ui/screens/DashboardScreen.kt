@@ -36,6 +36,7 @@ fun DashboardScreen(
     val favorites by viewModel.favorites.collectAsState()
     val coinBadges by viewModel.coinBadges.collectAsState()
     val isScalpingMode by viewModel.isScalpingMode.collectAsState()
+    val isRefreshing by viewModel.isRefreshing.collectAsState()
     val strategyMode by viewModel.strategyMode.collectAsState()
     val recentCandles by viewModel.recentCandles.collectAsState()
     val simulationWallet by viewModel.simulationWallet.collectAsState()
@@ -109,6 +110,7 @@ fun DashboardScreen(
             marketDataSource = marketDataSource,
             strategyMode = strategyMode,
             isConnected = isConnected,
+            isRefreshing = isRefreshing,
             selectedTab = selectedRankingTab,
             onSelectTab = { tab ->
                 selectedRankingTab = tab
@@ -178,7 +180,7 @@ fun DashboardScreen(
                                 pair = pair,
                                 tick = tick,
                                 activeStrategy = strategyMode,
-                                maxBadges = 4
+                                maxBadges = 1
                             )
                         } else {
                             emptyList()
