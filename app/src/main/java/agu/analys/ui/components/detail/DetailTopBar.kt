@@ -140,7 +140,6 @@ fun DetailTopBar(
                         .background(ledColor, CircleShape)
                 )
             }
-
             Spacer(Modifier.width(6.dp))
 
             Text(

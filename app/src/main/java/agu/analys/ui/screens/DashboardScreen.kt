@@ -91,9 +91,7 @@ fun DashboardScreen(
                 }.take(25)
             }
             MarketRankingTab.FAVORITE -> {
-                val list = favorites.map { TradingPair.fromCustomSymbol(it, defaultQuote) }.distinctBy { it.symbol }
-                if (list.isNotEmpty()) list.take(25)
-                else watchlist.take(1).map { TradingPair.fromCustomSymbol(it, defaultQuote) }
+                favorites.map { TradingPair.fromCustomSymbol(it, defaultQuote) }.distinctBy { it.symbol }
             }
         }
     }
@@ -162,7 +160,10 @@ fun DashboardScreen(
         ) {
             if (displayPairs.isEmpty()) {
                 item {
-                    EmptyWatchlistState { showAddDialog = true }
+                    EmptyWatchlistState(
+                        isFavoriteTab = selectedRankingTab == MarketRankingTab.FAVORITE,
+                        onAddClick = { showAddDialog = true }
+                    )
                 }
             } else {
                 itemsIndexed(displayPairs, key = { _, pair -> pair.symbol }) { index, pair ->
@@ -231,10 +232,12 @@ fun DashboardScreen(
 
     if (showAddDialog) {
         AddAssetDialog(
-            currentWatchlist = watchlist,
+            currentFavorites = favorites,
             onDismiss = { showAddDialog = false },
             onAddPair = { pair ->
-                if (!watchlist.contains(pair.symbol)) viewModel.toggleWatchlist(pair.symbol)
+                if (!favorites.contains(pair.symbol)) {
+                    viewModel.toggleFavorite(pair.symbol)
+                }
                 showAddDialog = false
             }
         )

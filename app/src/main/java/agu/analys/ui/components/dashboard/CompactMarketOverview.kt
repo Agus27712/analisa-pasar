@@ -140,7 +140,7 @@ fun DashboardMockupHeader(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                if (selectedTab == MarketRankingTab.WATCHLIST) {
+                if (selectedTab == MarketRankingTab.FAVORITE) {
                     IconButton(
                         onClick = onAddAsset,
                         modifier = Modifier
@@ -149,8 +149,8 @@ fun DashboardMockupHeader(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Add,
-                            contentDescription = "Tambah ke Watchlist",
-                            tint = TvBlue,
+                            contentDescription = "Tambah ke Favorit",
+                            tint = TvAmber,
                             modifier = Modifier.size(20.dp)
                         )
                     }
