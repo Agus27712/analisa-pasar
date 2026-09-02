@@ -2,14 +2,11 @@ package agu.analys.ui.components.chart
 
 import android.annotation.SuppressLint
 import android.graphics.Color
-import android.view.View
 import android.view.ViewGroup
-import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -20,7 +17,6 @@ import androidx.compose.ui.viewinterop.AndroidView
 import agu.analys.model.CandleBar
 import org.json.JSONArray
 import org.json.JSONObject
-import timber.log.Timber
 
 /**
  * Lightweight Charts (TradingView open-source) — data murni dari Indodax candles.
@@ -43,24 +39,6 @@ fun LightweightChartView(
 ) {
     var webView by remember { mutableStateOf<WebView?>(null) }
     var pageReady by remember { mutableStateOf(false) }
-    var useNativeFallback by remember { mutableStateOf(false) }
-
-    if (useNativeFallback) {
-        NativeCandlestickChart(
-            candles = candles,
-            currentPrice = currentPrice,
-            showVolume = showVolume,
-            showEma = showEma,
-            showBb = showBb,
-            showStochRsi = showStochRsi,
-            entryPrice = entryPrice,
-            targetPrice1 = targetPrice1,
-            targetPrice2 = targetPrice2,
-            stopLoss = stopLoss,
-            modifier = modifier
-        )
-        return
-    }
 
     fun candlesToJson(list: List<CandleBar>): String {
         val arr = JSONArray()
@@ -88,13 +66,10 @@ fun LightweightChartView(
         .toString()
 
     fun pushData(wv: WebView) {
-        try {
-            val json = candlesToJson(candles)
-            wv.evaluateJavascript("setCandles($json)", null)
-            wv.evaluateJavascript("setLevels(${levelsJson()})", null)
-        } catch (e: Throwable) {
-            Timber.w(e, "Failed to evaluate Javascript on chart WebView")
-        }
+        val json = candlesToJson(candles)
+        // JSON as JS object literal — no string escaping issues
+        wv.evaluateJavascript("setCandles($json)", null)
+        wv.evaluateJavascript("setLevels(${levelsJson()})", null)
     }
 
     LaunchedEffect(candles, entryPrice, targetPrice1, targetPrice2, stopLoss, pageReady) {
@@ -106,48 +81,30 @@ fun LightweightChartView(
     LaunchedEffect(showVolume, showEma, showBb, showStochRsi, pageReady) {
         val wv = webView ?: return@LaunchedEffect
         if (!pageReady) return@LaunchedEffect
-        try {
-            val json = JSONObject()
-                .put("volume", showVolume)
-                .put("ema", showEma)
-                .put("bb", showBb)
-                .put("stoch", showStochRsi)
-                .toString()
-            wv.evaluateJavascript("setIndicators($json)", null)
-        } catch (e: Throwable) {
-            Timber.w(e, "Failed to update indicators on chart WebView")
-        }
+        val json = JSONObject()
+            .put("volume", showVolume)
+            .put("ema", showEma)
+            .put("bb", showBb)
+            .put("stoch", showStochRsi)
+            .toString()
+        wv.evaluateJavascript("setIndicators($json)", null)
     }
 
     LaunchedEffect(currentPrice, pageReady) {
         val wv = webView ?: return@LaunchedEffect
         if (!pageReady || currentPrice <= 0.0 || candles.isEmpty()) return@LaunchedEffect
-        try {
-            val last = candles.last()
-            val h = maxOf(last.high, currentPrice)
-            val l = minOf(last.low, currentPrice)
-            val json = JSONObject()
-                .put("t", last.timestamp)
-                .put("o", last.open)
-                .put("h", h)
-                .put("l", l)
-                .put("c", currentPrice)
-                .put("v", last.volume)
-                .toString()
-            wv.evaluateJavascript("updateLast($json)", null)
-        } catch (e: Throwable) {
-            Timber.w(e, "Failed to update last tick on chart WebView")
-        }
-    }
-
-    DisposableEffect(Unit) {
-        onDispose {
-            try {
-                webView?.destroy()
-            } catch (_: Throwable) {}
-            webView = null
-            pageReady = false
-        }
+        val last = candles.last()
+        val h = maxOf(last.high, currentPrice)
+        val l = minOf(last.low, currentPrice)
+        val json = JSONObject()
+            .put("t", last.timestamp)
+            .put("o", last.open)
+            .put("h", h)
+            .put("l", l)
+            .put("c", currentPrice)
+            .put("v", last.volume)
+            .toString()
+        wv.evaluateJavascript("updateLast($json)", null)
     }
 
     AndroidView(
@@ -158,8 +115,6 @@ fun LightweightChartView(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT
                 )
-                // Use software layer to prevent MESA rendernode GPU crash on virtualized emulators
-                setLayerType(View.LAYER_TYPE_SOFTWARE, null)
                 setBackgroundColor(android.graphics.Color.TRANSPARENT)
                 settings.javaScriptEnabled = true
                 settings.domStorageEnabled = true
@@ -171,14 +126,6 @@ fun LightweightChartView(
                         pageReady = true
                         view?.let { pushData(it) }
                     }
-
-                    override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
-                        Timber.w("WebView render process gone (crashed: %s)", detail?.didCrash())
-                        pageReady = false
-                        webView = null
-                        useNativeFallback = true
-                        return true // Do not terminate host application
-                    }
                 }
                 loadUrl("file:///android_asset/chart/lightweight_chart.html")
                 webView = this
@@ -187,12 +134,6 @@ fun LightweightChartView(
         update = { wv ->
             webView = wv
             if (pageReady) pushData(wv)
-        },
-        onRelease = { wv ->
-            try {
-                wv.stopLoading()
-                wv.destroy()
-            } catch (_: Throwable) {}
         }
     )
 }
