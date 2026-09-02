@@ -468,6 +468,11 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     fun setNotificationsEnabled(enabled: Boolean) {
         prefs.isNotificationsEnabled = enabled
         _isNotificationsEnabled.value = enabled
+        if (enabled) {
+            agu.analys.service.TradingForegroundService.startService(getApplication())
+        } else {
+            agu.analys.service.TradingForegroundService.stopService(getApplication())
+        }
     }
 
     private var lastSavedSignalTimestamp = 0L

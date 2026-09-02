@@ -214,12 +214,17 @@ fun PortfolioScreen(
 
                 // Tab 2: REAL INDODAX
                 // JANGAN auto-refresh di sini — cuma switch UI + minta PIN kalau locked.
+                val context = androidx.compose.ui.platform.LocalContext.current
                 Box(
                     modifier = Modifier
                         .weight(1f)
                         .clip(RoundedCornerShape(8.dp))
                         .background(if (showRealPortfolioMode) TvCardBackground else Color.Transparent)
                         .clickable {
+                            if (!isRealBuyMode) {
+                                android.widget.Toast.makeText(context, "Mode Real Trade dinonaktifkan di Pengaturan", android.widget.Toast.LENGTH_SHORT).show()
+                                return@clickable
+                            }
                             showRealPortfolioMode = true
                             if (!isPinUnlocked) {
                                 if (!viewModel.hasSecurityPin()) {
@@ -235,15 +240,15 @@ fun PortfolioScreen(
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            imageVector = if (isPinUnlocked) Icons.Default.LockOpen else Icons.Default.Lock,
+                            imageVector = if (!isRealBuyMode) Icons.Default.Lock else if (isPinUnlocked) Icons.Default.LockOpen else Icons.Default.Lock,
                             contentDescription = null,
-                            tint = if (showRealPortfolioMode) TvGreen else TvTextSecondary,
+                            tint = if (showRealPortfolioMode) TvGreen else if (!isRealBuyMode) TvTextSecondary.copy(alpha = 0.5f) else TvTextSecondary,
                             modifier = Modifier.size(14.dp)
                         )
-                        Spacer(modifier.width(6.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = "Portofolio Real (Indodax)",
-                            color = if (showRealPortfolioMode) TvGreen else TvTextSecondary,
+                            color = if (showRealPortfolioMode) TvGreen else if (!isRealBuyMode) TvTextSecondary.copy(alpha = 0.5f) else TvTextSecondary,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold
                         )

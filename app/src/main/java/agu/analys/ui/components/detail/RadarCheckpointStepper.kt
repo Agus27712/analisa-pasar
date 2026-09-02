@@ -44,6 +44,7 @@ fun RadarLinearCheckpointStepper(
     completed: Int,
     pulseScale: Float,
     strategyMode: StrategyMode = StrategyMode.SCALPING,
+    confidence: Int = 0,
     modifier: Modifier = Modifier
 ) {
     val checkpoints = remember(mtf, strategyMode) {
@@ -252,6 +253,23 @@ fun RadarLinearCheckpointStepper(
                             .background(TvBackground.copy(alpha = 0.7f))
                     )
                 }
+            }
+        }
+
+        if (progressPercent != confidence) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(TvSurfaceVariant.copy(alpha = 0.5f))
+                    .padding(8.dp)
+            ) {
+                Text(
+                    text = "Progres $progressPercent% adalah status konfirmasi entry saat ini, sedangkan kekuatan sinyal AI (kondisi setup) adalah $confidence%. Keduanya dapat berbeda karena mengukur hal yang berbeda.",
+                    fontSize = 9.sp,
+                    color = TvTextSecondary,
+                    lineHeight = 12.sp
+                )
             }
         }
 

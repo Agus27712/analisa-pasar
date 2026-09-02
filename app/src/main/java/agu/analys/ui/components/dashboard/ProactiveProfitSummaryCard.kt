@@ -867,6 +867,11 @@ private fun BatchSellResultDialog(
     summary: BatchResultSummary,
     onDismiss: () -> Unit
 ) {
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(4000L)
+        onDismiss()
+    }
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)

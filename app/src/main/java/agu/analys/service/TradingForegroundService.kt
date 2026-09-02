@@ -30,6 +30,8 @@ class TradingForegroundService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action
         if (action == ACTION_STOP) {
+            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            manager.cancel(NOTIFICATION_ID)
             stopForeground(true)
             stopSelf()
             return START_NOT_STICKY
@@ -89,6 +91,8 @@ class TradingForegroundService : Service() {
             .build()
 
         startForeground(NOTIFICATION_ID, notification)
+        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        manager.notify(NOTIFICATION_ID, notification)
     }
 
     private fun getOwnedCoinsSummary(): String {
@@ -189,6 +193,9 @@ class TradingForegroundService : Service() {
         val livePrices = ConcurrentHashMap<String, Double>()
 
         fun startService(context: Context) {
+            val prefs = AppPreferences(context)
+            if (!prefs.isNotificationsEnabled) return
+            
             val intent = Intent(context, TradingForegroundService::class.java)
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -198,8 +205,18 @@ class TradingForegroundService : Service() {
                 }
             } catch (_: Exception) {}
         }
+        
+        fun stopService(context: Context) {
+            val intent = Intent(context, TradingForegroundService::class.java)
+            intent.action = ACTION_STOP
+            try {
+                context.startService(intent)
+            } catch (_: Exception) {}
+        }
 
         fun updatePrice(context: Context, symbol: String, price: Double) {
+            val prefs = AppPreferences(context)
+            if (!prefs.isNotificationsEnabled) return
             val symUpper = symbol.uppercase()
             val oldPrice = livePrices[symUpper]
             if (oldPrice == price) return // Avoid redundant notification redraw updates if price hasn't changed
@@ -214,6 +231,8 @@ class TradingForegroundService : Service() {
         }
 
         fun updatePrices(context: Context, prices: Map<String, Double>) {
+            val prefs = AppPreferences(context)
+            if (!prefs.isNotificationsEnabled) return
             var changed = false
             for ((sym, price) in prices) {
                 val symUpper = sym.uppercase()

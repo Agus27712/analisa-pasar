@@ -108,7 +108,8 @@ fun WaitingEntryRadarCard(
             mtf = mtf,
             completed = completed,
             pulseScale = pulseScale,
-            strategyMode = strategyMode
+            strategyMode = strategyMode,
+            confidence = signal.confidence
         )
 
         Spacer(Modifier.height(10.dp))

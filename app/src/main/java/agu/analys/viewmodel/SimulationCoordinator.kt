@@ -102,7 +102,7 @@ class SimulationCoordinator(private val store: SimulationTradeStore) {
                 price = tp1Price,
                 stopPrice = 0.0,
                 quantity = qty1,
-                currentMarketPrice = tp1Price
+                currentMarketPrice = 0.0
             )
             if (res is agu.analys.trading.SimulationOrderResult.Success) {
                 successCount++
@@ -122,7 +122,7 @@ class SimulationCoordinator(private val store: SimulationTradeStore) {
                 price = tp2Price,
                 stopPrice = 0.0,
                 quantity = qty2,
-                currentMarketPrice = tp2Price
+                currentMarketPrice = 0.0
             )
             if (res is agu.analys.trading.SimulationOrderResult.Success) {
                 successCount++
