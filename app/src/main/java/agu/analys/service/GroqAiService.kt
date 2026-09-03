@@ -46,42 +46,72 @@ object GroqAiService {
 
         val pairCtx = PairNarrative.forBase(base)
         val move = describeMove(tick.change24h)
-        val rsiHint = when {
-            indicators.rsi14 < 30 -> "RSI oversold"
-            indicators.rsi14 > 70 -> "RSI overbought"
-            else -> "RSI netral"
+        val rsiFormatted = if (indicators.rsi14.isFinite()) String.format(java.util.Locale.US, "%.1f", indicators.rsi14) else "—"
+        val rsiExplanation = when {
+            !indicators.rsi14.isFinite() -> "Data RSI belum cukup"
+            indicators.rsi14 > 70 -> "**Jenuh Beli (Overbought)** ($rsiFormatted) — Tekanan beli mencapai titik puncak, waspada potensi koreksi / taking profit"
+            indicators.rsi14 < 30 -> "**Jenuh Jual (Oversold)** ($rsiFormatted) — Tekanan jual klimaks, peluang pantulan teknikal / rebound menguat"
+            indicators.rsi14 >= 50 -> "**Netral Bullish** ($rsiFormatted) — Momentum beli aktif dan terukur"
+            else -> "**Netral Bearish** ($rsiFormatted) — Tekanan jual moderat dalam batas aman"
         }
-        val trendHint = when {
-            indicators.ema20 > indicators.ema50 && tick.price >= indicators.ema20 -> "struktur bullish (harga di atas EMA)"
-            indicators.ema20 < indicators.ema50 && tick.price <= indicators.ema20 -> "struktur bearish (harga di bawah EMA)"
-            else -> "sideways / konsolidasi"
+        val trendExplanation = when {
+            indicators.ema20.isFinite() && indicators.ema50.isFinite() && indicators.ema20 > indicators.ema50 && tick.price >= indicators.ema20 ->
+                "**Struktur Bullish Kuat** (Harga berada di atas EMA 20 & EMA 50)"
+            indicators.ema20.isFinite() && indicators.ema50.isFinite() && indicators.ema20 < indicators.ema50 && tick.price <= indicators.ema20 ->
+                "**Struktur Bearish Kuat** (Harga tertekan di bawah EMA 20 & EMA 50)"
+            else -> "**Konsolidasi / Sideways** (EMA berhimpit)"
         }
+        val macdExplanation = when {
+            !indicators.macdHist.isFinite() -> "Data MACD belum cukup"
+            indicators.macdHist > 0 -> "**Histogram Positif (Bullish Momentum)** — Volume dorongan beli aktif"
+            indicators.macdHist < 0 -> "**Histogram Negatif (Bearish Momentum)** — Tekanan jual mendominasi"
+            else -> "**Netral** — Momentum berimbang"
+        }
+        val atrExplanation = if (indicators.atr.isFinite() && indicators.atr > 0) {
+            "Rentang fluktuasi candle rata-rata: ${PriceFormatter.formatPrice(indicators.atr)}"
+        } else "Volatilitas normal"
 
         val systemPrompt = """
-Kamu asisten trading spot Indodax.
-SELURUH jawaban WAJIB Bahasa Indonesia (termasuk kutipan headline).
-Kalau headline sumbernya bahasa Inggris, TERJEMAHKAN ke Indonesia dulu, baru hubungkan ke pergerakan harga.
-Jangan biarkan kalimat Inggris utuh di jawaban user.
-Fokus insight, bukan dump angka. Max ~220 kata.
+Kamu asisten quantitative & technical analyst spot Indodax.
+SELURUH jawaban WAJIB Bahasa Indonesia (termasuk kutipan berita/headline).
+Terjemahkan headline Inggris ke Bahasa Indonesia dulu, lalu hubungkan ke pergerakan harga.
+Gunakan format Markdown terstruktur dengan poin-poin bullet (-), teks tebal (**bold**), dan judul bab (###).
+Fokus insight tajam, edukatif, dan praktis. Maksimal ~250 kata.
         """.trimIndent()
 
         val userPrompt = """
 Pair: ${tick.symbol} (base: $base)
 Identitas: ${pairCtx.label}
-Ekosistem / hubungan: ${pairCtx.ecosystem}
-Narasi umum: ${pairCtx.narrative}
+Ekosistem: ${pairCtx.ecosystem}
+Narasi: ${pairCtx.narrative}
 
-Gerakan 24j: $move (${PriceFormatter.formatPercentage(tick.change24h)})
+Gerakan 24J: $move (${PriceFormatter.formatPercentage(tick.change24h)})
 Harga: ${PriceFormatter.formatPrice(tick.price)} | Vol: ${PriceFormatter.formatVolume(tick.volume24h)}
-Teknikal ringkas: $trendHint, $rsiHint, sinyal engine ${signal.action.name} (${signal.confidence}/100)
+Status Indikator:
+- RSI (14): $rsiExplanation
+- Tren EMA: $trendExplanation
+- MACD: $macdExplanation
+- ATR & Volatilitas: $atrExplanation
+- Sinyal Engine: ${signal.action.name} (${signal.confidence}/100)
 
 $headlineBlock
 
-Jawab format ini (semua Bahasa Indonesia):
-1. 🔎 Apa ini: ...
-2. 📰 Headline & alasan gerak: [terjemahkan headline, lalu hubungkan ke arah harga]
-3. 🔗 Hubungan: ...
-4. 💡 Insight pantau: ...
+Wajib susun jawaban dalam format Markdown berikut:
+### 🔎 1. Profil & Ekosistem Aset
+- **Aset**: ...
+- **Karakteristik & Korelasi**: ...
+
+### 📊 2. Analisis Indikator Teknikal
+- **RSI (14)**: [Jelaskan status Jenuh Beli / Overbought, Jenuh Jual / Oversold, atau Netral beserta implikasinya]
+- **Tren EMA & MACD**: [Jelaskan arah struktur tren dan dorongan momentum]
+- **Volatilitas**: [Kondisi volatilitas & batas risiko]
+
+### 📰 3. Sentimen Pasar & Alasan Gerakan
+- **Faktor Penggerak**: [Terjemahan & analisa berita/volume terhadap harga]
+
+### 💡 4. Panduan Strategi & Action Plan
+- **Sinyal Engine**: **${signal.action.name}** (Confidence: ${signal.confidence}/100)
+- **Rekomendasi**: [Entry, TP/SL, disiplin limit order maker]
         """.trimIndent()
 
         try {
@@ -151,21 +181,51 @@ Jawab format ini (semua Bahasa Indonesia):
         val base = extractBase(tick.symbol)
         val ctx = PairNarrative.forBase(base)
         val move = describeMove(tick.change24h)
-        val trend = when {
-            indicators.ema20 > indicators.ema50 && tick.price >= indicators.ema20 -> "struktur chart lagi bullish"
-            indicators.ema20 < indicators.ema50 && tick.price <= indicators.ema20 -> "struktur chart lagi bearish"
-            else -> "chart lagi konsolidasi"
+        val rsiFormatted = if (indicators.rsi14.isFinite()) String.format(java.util.Locale.US, "%.1f", indicators.rsi14) else "—"
+        val rsiStatus = when {
+            !indicators.rsi14.isFinite() -> "Netral (Data belum cukup)"
+            indicators.rsi14 > 70 -> "**Jenuh Beli (Overbought)** ($rsiFormatted) — Tekanan beli mencapai batas atas jangka pendek, waspada koreksi / pullback"
+            indicators.rsi14 < 30 -> "**Jenuh Jual (Oversold)** ($rsiFormatted) — Tekanan jual klimaks, potensi pantulan teknikal / akumulasi"
+            indicators.rsi14 >= 50 -> "**Netral Bullish** ($rsiFormatted) — Tren beli stabil dalam batas aman"
+            else -> "**Netral Bearish** ($rsiFormatted) — Tekanan jual moderat dalam batas aman"
         }
+        val emaStatus = when {
+            indicators.ema20.isFinite() && indicators.ema50.isFinite() && indicators.ema20 > indicators.ema50 && tick.price >= indicators.ema20 ->
+                "**Bullish Alignment** (Harga berada di atas EMA 20 & 50)"
+            indicators.ema20.isFinite() && indicators.ema50.isFinite() && indicators.ema20 < indicators.ema50 && tick.price <= indicators.ema20 ->
+                "**Bearish Alignment** (Harga tertekan di bawah EMA 20 & 50)"
+            else -> "**Konsolidasi / Sideways** (EMA berhimpit)"
+        }
+        val macdStatus = when {
+            !indicators.macdHist.isFinite() -> "Netral"
+            indicators.macdHist > 0 -> "**Histogram Positif (Bullish Momentum)**"
+            indicators.macdHist < 0 -> "**Histogram Negatif (Bearish Momentum)**"
+            else -> "Netral"
+        }
+        val atrStatus = if (indicators.atr.isFinite() && indicators.atr > 0) {
+            PriceFormatter.formatPrice(indicators.atr)
+        } else "Normal"
+
         return """
-🔎 Apa ini: ${ctx.label}. ${ctx.narrative}
+### 🔎 1. Profil & Ekosistem Aset
+- **Aset**: ${ctx.label}
+- **Karakteristik**: ${ctx.narrative}
+- **Korelasi**: ${ctx.ecosystem}
 
-📰 Headline & alasan gerak:
+### 📊 2. Analisis Indikator Teknikal
+- **RSI (14)**: $rsiStatus
+- **Struktur EMA**: $emaStatus
+- **Momentum MACD**: $macdStatus
+- **Rentang ATR**: $atrStatus (rentang fluktuasi candle untuk toleransi risiko)
+
+### 📰 3. Sentimen Pasar & Alasan Gerakan
+- **Pergerakan 24J**: $move (${PriceFormatter.formatPercentage(tick.change24h)}), Volume: ${PriceFormatter.formatVolume(tick.volume24h)}
+- **Sentimen & Berita**:
 $headlineBlock
-(Pergerakan 24 jam: $move / ${PriceFormatter.formatPercentage(tick.change24h)}. $trend; volume ${PriceFormatter.formatVolume(tick.volume24h)}. Jika headline masih Inggris, intinya hubungkan ke arah harga di atas.)
 
-🔗 Hubungan: ${ctx.ecosystem}
-
-💡 Insight pantau: Pantau BTC dulu. Sinyal engine ${signal.action.name} (${signal.confidence}/100) — pakai limit maker 0.21%, jangan FOMO satu candle.
+### 💡 4. Panduan Strategi & Action Plan
+- **Sinyal Engine**: **${signal.action.name}** (Confidence: ${signal.confidence}/100)
+- **Tindakan**: Pantau konfirmasi arah BTC terlebih dahulu. Gunakan limit order maker 0.21%, hindari FOMO atau mengejar candle.
         """.trimIndent()
     }
 

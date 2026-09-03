@@ -149,12 +149,12 @@ fun AISignalCard(
                 if (detailsExpanded) {
                     Column(modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                         LearningFactorRow("Market Regime", findReason(signal, "Market regime"), "Kondisi umum pasar: trending, sideways, transisi, atau volatilitas tinggi.")
-                        LearningFactorRow("RSI (14)", findReason(signal, "RSI"), "RSI mengukur momentum. Di bawah 30 disebut jenuh jual, di atas 70 jenuh beli. Nilai tengah bukan sinyal otomatis.")
-                        LearningFactorRow("EMA 20 / EMA 50", findReason(signal, "EMA20"), "EMA membantu membaca tren. Harga dan EMA20 di atas EMA50 mendukung bullish, sebaliknya mendukung bearish.")
-                        LearningFactorRow("MACD", findReason(signal, "MACD"), "MACD membantu membaca momentum. Histogram positif mendukung momentum naik, negatif mendukung turun.")
-                        LearningFactorRow("Bollinger Band", findReason(signal, "Bollinger"), "Band memberi konteks volatilitas dan posisi harga, bukan support/resistance pasti.")
-                        LearningFactorRow("ATR", "ATR dipakai untuk mengukur jarak volatilitas", "ATR makin besar berarti pergerakan candle cenderung lebih lebar. Di aplikasi ini ATR dipakai untuk level latihan TP/SL.")
-                        LearningFactorRow("Volume", findReason(signal, "Volume"), "Lonjakan volume dibanding 5 candle terakhir adalah konfirmasi tambahan, bukan penentu tunggal.")
+                        LearningFactorRow("RSI (14)", findReason(signal, "RSI"), "RSI mengukur momentum. Di atas 70 disebut Jenuh Beli (Overbought, rawan koreksi), di bawah 30 Jenuh Jual (Oversold, potensi rebound).")
+                        LearningFactorRow("EMA 20 / EMA 50", findReason(signal, "EMA20"), "EMA membaca struktur tren. Harga & EMA20 di atas EMA50 menandakan Bullish, sedangkan di bawahnya menandakan Bearish.")
+                        LearningFactorRow("MACD", findReason(signal, "MACD"), "MACD mengukur momentum. Histogram positif menandakan dorongan beli menguat, negatif menandakan tekanan jual.")
+                        LearningFactorRow("Bollinger Band", findReason(signal, "Bollinger"), "Band mengukur batas deviasi volatilitas harga, band atas rawan resistensi dan band bawah potensi support.")
+                        LearningFactorRow("ATR", "ATR dipakai untuk mengukur jarak volatilitas", "ATR mengukur lebar rata-rata pergerakan candle untuk menentukan batas stop loss & target profit yang aman.")
+                        LearningFactorRow("Volume", findReason(signal, "Volume"), "Lonjakan volume transaksi memberi konfirmasi validitas arah pergerakan harga.")
                         signal.patternDetected?.let { LearningFactorRow("Candlestick", "Pola: $it", "Pola candle hanya konfirmasi tambahan dan tidak menjamin arah berikutnya.") }
                         Spacer(Modifier.height(2.dp)); Text("${if (signal.action == SignalAction.HOLD) "SETUP BELUM CUKUP KUAT" else "SCORE ${signal.confidence}/100"}. Ini kekuatan setup, BUKAN ${signal.confidence}% kemungkinan profit.", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TvAmber, lineHeight = 14.sp)
                     }
@@ -180,12 +180,14 @@ fun AISignalCard(
                 Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(TvSurfaceVariant).border(1.dp, TvBorder, RoundedCornerShape(14.dp)).padding(12.dp)) {
                     if (auditText != null) {
                         Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) { Text("GROQ • AUDIT AI", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TvGreen); if (onClearAudit != null) Text("Hapus", fontSize = 10.sp, color = TvTextSecondary, modifier = Modifier.clickable { onClearAudit() }) }
-                        Spacer(Modifier.height(6.dp)); Text(auditText, fontSize = 11.sp, color = TvTextPrimary, lineHeight = 16.sp)
+                        Spacer(Modifier.height(6.dp))
+                        MarkdownText(markdown = auditText, fontSize = 11.5.sp, lineHeight = 16.5.sp)
                     }
                     if (geminiSummaryText != null) {
                         if (auditText != null) Spacer(Modifier.height(12.dp))
                         Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) { Text("GEMINI • CHART 24J", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TvBlue); if (onClearGemini != null) Text("Hapus", fontSize = 10.sp, color = TvTextSecondary, modifier = Modifier.clickable { onClearGemini() }) }
-                        Spacer(Modifier.height(6.dp)); Text(geminiSummaryText, fontSize = 11.sp, color = TvTextPrimary, lineHeight = 16.sp)
+                        Spacer(Modifier.height(6.dp))
+                        MarkdownText(markdown = geminiSummaryText, fontSize = 11.5.sp, lineHeight = 16.5.sp)
                     }
                 }
             }

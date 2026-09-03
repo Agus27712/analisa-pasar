@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import agu.analys.config.AiProvider
+import agu.analys.ui.components.MarkdownText
 import agu.analys.ui.theme.*
 
 /**
@@ -154,9 +155,9 @@ fun AiAssistantDialog(
                             )
                         }
                     } else if (aiSignal.isNotBlank()) {
-                        Text(
-                            text = aiSignal,
-                            color = TvTextPrimary,
+                        MarkdownText(
+                            markdown = aiSignal,
+                            textColor = TvTextPrimary,
                             fontSize = 12.sp,
                             lineHeight = 17.sp
                         )
@@ -224,6 +225,9 @@ fun AiAssistantCard(
         Text("Provider aktif: ${provider.label}. AI menjelaskan hasil engine, bukan menentukan arah market.", fontSize = 12.sp, color = TvTextSecondary, lineHeight = 17.sp)
         Spacer(Modifier.height(8.dp))
         Button(onClick = action, enabled = !loading, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = TvGreen), shape = RoundedCornerShape(10.dp)) { Text(if (loading) "Menganalisis..." else "Analisa dengan ${provider.label}", color = Color.Black, fontWeight = FontWeight.Bold) }
-        result?.let { Spacer(Modifier.height(8.dp)); Text(it, fontSize = 13.sp, color = TvTextPrimary, lineHeight = 19.sp) }
+        result?.let {
+            Spacer(Modifier.height(8.dp))
+            MarkdownText(markdown = it, fontSize = 12.sp, lineHeight = 17.sp)
+        }
     }
 }
