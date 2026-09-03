@@ -5,7 +5,14 @@ import agu.analys.model.TradingPair
 
 fun TradingViewModel.navigateTo(screen: AppScreen) {
     if (_currentScreen.value != screen) {
-        navigationStack.add(_currentScreen.value)
+        if (screen == AppScreen.DASHBOARD) {
+            navigationStack.clear()
+            _currentScreen.value = AppScreen.DASHBOARD
+            return
+        }
+        if (navigationStack.isEmpty() || navigationStack.last() != _currentScreen.value) {
+            navigationStack.add(_currentScreen.value)
+        }
         _currentScreen.value = screen
     }
 }
@@ -26,10 +33,19 @@ fun TradingViewModel.closeLandscapeChart() { goBack() }
 fun TradingViewModel.openSettings() { navigateTo(AppScreen.SETTINGS) }
 fun TradingViewModel.openLearning() { navigateTo(AppScreen.LEARNING) }
 
-fun TradingViewModel.goBack() {
-    if (navigationStack.isNotEmpty()) {
+fun TradingViewModel.goBack(): Boolean {
+    while (navigationStack.isNotEmpty() && navigationStack.last() == _currentScreen.value) {
+        navigationStack.removeAt(navigationStack.size - 1)
+    }
+
+    return if (navigationStack.isNotEmpty()) {
         _currentScreen.value = navigationStack.removeAt(navigationStack.size - 1)
+        true
     } else if (_currentScreen.value != AppScreen.DASHBOARD) {
         _currentScreen.value = AppScreen.DASHBOARD
+        true
+    } else {
+        false
     }
 }
+

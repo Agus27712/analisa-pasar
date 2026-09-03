@@ -33,6 +33,7 @@ import agu.analys.ui.screens.SettingsScreen
 import agu.analys.ui.screens.TradeSimulationScreen
 import agu.analys.ui.theme.TradingViewAITheme
 import agu.analys.ui.theme.TvBackground
+import agu.analys.ui.util.edgeSwipeBack
 import agu.analys.viewmodel.*
 
 class MainActivity : ComponentActivity() {
@@ -62,6 +63,10 @@ class MainActivity : ComponentActivity() {
                     .background(TvBackground)
                     .statusBarsPadding()
                     .navigationBarsPadding()
+                    .edgeSwipeBack(
+                        enabled = currentScreen != AppScreen.DASHBOARD && currentScreen != AppScreen.LANDSCAPE_CHART,
+                        onBack = { tradingViewModel.goBack() }
+                    )
 
                 BackHandler(enabled = currentScreen != AppScreen.DASHBOARD) {
                     tradingViewModel.goBack()

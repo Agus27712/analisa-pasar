@@ -49,7 +49,9 @@ object ReadySellBadgeEvaluator {
                 ReadySellBadge("🔥 PROFIT +5%", colorOrange)
             high24h > 0.0 && currentPrice >= high24h * 0.98 && netProfitPct >= 1.0 ->
                 ReadySellBadge("📈 NEAR 24H HIGH", colorOrange)
-            netProfitPct >= 2.5 || (holding.isTrailingTriggered && netProfitPct > 0.0) ->
+            netProfitPct >= 2.0 ->
+                ReadySellBadge("💰 PROFIT +2%", colorGreen)
+            netProfitPct > 0.0 || (holding.isTrailingTriggered && netProfitPct > 0.0) ->
                 ReadySellBadge("💰 READY PROFIT", colorGreen)
             rsi != null && rsi.isFinite() && rsi >= 70.0 && netProfitPct > 0.0 ->
                 ReadySellBadge("⚠️ RSI OVERBOUGHT", colorRed)

@@ -73,6 +73,7 @@ fun DetailChartScreen(
     val tradingFees by viewModel.tradingFees.collectAsStateWithLifecycle()
     val isRealBuyMode by viewModel.isRealBuyMode.collectAsStateWithLifecycle()
     val watchlist by viewModel.watchlist.collectAsStateWithLifecycle()
+    val favorites by viewModel.favorites.collectAsStateWithLifecycle()
     val spotPosition by viewModel.spotPosition.collectAsStateWithLifecycle()
     val selectedTimeframe by viewModel.selectedTimeframe.collectAsStateWithLifecycle()
     val aiGroq by viewModel.auditReportText.collectAsStateWithLifecycle()
@@ -89,7 +90,7 @@ fun DetailChartScreen(
     var showPriceAlertDialog by remember { mutableStateOf(false) }
     var showAiAssistantDialog by remember { mutableStateOf(false) }
     val marketStructure = remember(candles) { MarketStructureAnalyzer.analyze(candles) }
-    val isFavorite = watchlist.contains(pair.symbol)
+    val isFavorite = favorites.contains(pair.symbol.uppercase()) || favorites.contains(pair.symbol)
     val provider = remember { AppPreferences(context).aiProvider }
     val isConnected = connection is MarketConnectionState.Connected
 
@@ -216,7 +217,10 @@ fun DetailChartScreen(
                 onOpenAiAssistant = { showAiAssistantDialog = true },
                 onOpenSimulation = { viewModel.openSimulation(pair) },
                 onOpenLearning = { viewModel.openLearning() },
-                onToggleWatchlist = { viewModel.toggleWatchlist(pair.symbol) }
+                onToggleFavorite = {
+                    viewModel.toggleFavorite(pair.symbol)
+                    HapticUtil.vibrateTick(context)
+                }
             )
 
             Spacer(Modifier.height(8.dp))

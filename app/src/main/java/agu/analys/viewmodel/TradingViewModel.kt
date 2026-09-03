@@ -284,11 +284,16 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         realIndodaxBalance,
         realAvgBuyPrices,
         positionCoordinator.positionVersion
-    ) { _, _, _, _, _ ->
+    ) { _, wallet, realBal, _, _ ->
         val defaultQuote = prefs.marketDataSource.defaultQuoteAsset
         val basePairs = agu.analys.model.TradingPair.popularPairsForSource(prefs.marketDataSource)
         val watchPairs = _watchlist.value.map { agu.analys.model.TradingPair.fromCustomSymbol(it, defaultQuote) }
-        val pairs = (basePairs + watchPairs).distinctBy { it.symbol }
+        val favPairs = _favorites.value.map { agu.analys.model.TradingPair.fromCustomSymbol(it, defaultQuote) }
+        val simPairs = wallet.coinBalances.filter { it.value > 0.00000001 && !it.key.equals("IDR", true) && !it.key.equals("USDT", true) }
+            .map { agu.analys.model.TradingPair.fromCustomSymbol(it.key, defaultQuote) }
+        val realPairs = realBal.filter { it.value > 0.00000001 && !it.key.equals("IDR", true) && !it.key.equals("USDT", true) }
+            .map { agu.analys.model.TradingPair.fromCustomSymbol(it.key, defaultQuote) }
+        val pairs = (basePairs + watchPairs + favPairs + simPairs + realPairs).distinctBy { it.symbol }
         
         pairs.associate { pair ->
             pair.symbol to getHoldingStatus(pair)

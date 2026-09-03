@@ -66,6 +66,7 @@ fun ProactiveProfitSummaryCard(
     onResetBatchState: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val isLight = LocalAppColors.current == LightAppColors
     val colorOrange = TvOrange
     val colorRed = TvRed
     val colorGreen = TvGreen
@@ -149,7 +150,7 @@ fun ProactiveProfitSummaryCard(
                 .testTag("proactive_profit_summary_card"),
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(
-                containerColor = Color(0xFF13231B) // Deep emerald dark canvas
+                containerColor = if (isLight) Color(0xFFE6F4EA) else Color(0xFF13231B) // Light mint canvas in Light mode, deep emerald in Dark mode
             ),
             border = BorderStroke(
                 1.5.dp,
@@ -254,7 +255,7 @@ fun ProactiveProfitSummaryCard(
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .background(Color(0xFF0A1811), RoundedCornerShape(12.dp))
+                            .background(if (isLight) Color(0xFFFFFFFF) else Color(0xFF0A1811), RoundedCornerShape(12.dp))
                             .border(0.8.dp, TvGreen.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
                             .padding(10.dp)
                             .testTag("total_unrealized_profit_box")
@@ -295,7 +296,7 @@ fun ProactiveProfitSummaryCard(
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .background(Color(0xFF0A1811), RoundedCornerShape(12.dp))
+                            .background(if (isLight) Color(0xFFFFFFFF) else Color(0xFF0A1811), RoundedCornerShape(12.dp))
                             .border(0.8.dp, TvAmber.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
                             .padding(10.dp)
                             .testTag("total_cashout_value_box")
@@ -466,11 +467,12 @@ private fun ReadySellChip(
     coin: ReadySellCoinSummary,
     onClick: () -> Unit
 ) {
+    val isLight = LocalAppColors.current == LightAppColors
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(10.dp),
-        color = Color(0xFF1B2C22),
-        border = BorderStroke(1.dp, coin.badgeColor.copy(alpha = 0.45f))
+        color = if (isLight) Color(0xFFD1FAE5) else Color(0xFF1B2C22),
+        border = BorderStroke(1.dp, coin.badgeColor.copy(alpha = if (isLight) 0.65f else 0.45f))
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp),
@@ -520,6 +522,7 @@ private fun BatchSellConfirmationDialog(
     onDismiss: () -> Unit,
     onConfirm: (isReal: Boolean, pin: String?) -> Unit
 ) {
+    val isLight = LocalAppColors.current == LightAppColors
     var isRealMode by remember { mutableStateOf(initialRealMode) }
     var pinText by remember { mutableStateOf("") }
     var pinError by remember { mutableStateOf<String?>(null) }
@@ -536,7 +539,7 @@ private fun BatchSellConfirmationDialog(
                 .fillMaxWidth(0.92f)
                 .padding(16.dp),
             shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF141C24)),
+            colors = CardDefaults.cardColors(containerColor = if (isLight) TvSurface else Color(0xFF141C24)),
             border = BorderStroke(1.dp, TvBorder)
         ) {
             Column(
@@ -594,7 +597,7 @@ private fun BatchSellConfirmationDialog(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFF0F1A15), RoundedCornerShape(12.dp))
+                        .background(if (isLight) Color(0xFFECFDF5) else Color(0xFF0F1A15), RoundedCornerShape(12.dp))
                         .border(1.dp, TvGreen.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
                         .padding(12.dp)
                 ) {
@@ -656,7 +659,7 @@ private fun BatchSellConfirmationDialog(
                     readyCoins.forEach { item ->
                         Surface(
                             shape = RoundedCornerShape(8.dp),
-                            color = Color(0xFF0B1117),
+                            color = if (isLight) TvSurfaceVariant else Color(0xFF0B1117),
                             border = BorderStroke(0.6.dp, TvBorder)
                         ) {
                             Row(
@@ -784,6 +787,7 @@ private fun BatchSellConfirmationDialog(
 private fun BatchSellProgressDialog(
     state: BatchExecutionState.InProgress
 ) {
+    val isLight = LocalAppColors.current == LightAppColors
     Dialog(
         onDismissRequest = { /* Non-cancelable during execution */ },
         properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false)
@@ -793,7 +797,7 @@ private fun BatchSellProgressDialog(
                 .fillMaxWidth(0.88f)
                 .padding(16.dp),
             shape = RoundedCornerShape(18.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF131E27)),
+            colors = CardDefaults.cardColors(containerColor = if (isLight) TvSurface else Color(0xFF131E27)),
             border = BorderStroke(1.dp, TvBorder)
         ) {
             Column(
@@ -867,6 +871,7 @@ private fun BatchSellResultDialog(
     summary: BatchResultSummary,
     onDismiss: () -> Unit
 ) {
+    val isLight = LocalAppColors.current == LightAppColors
     LaunchedEffect(Unit) {
         kotlinx.coroutines.delay(4000L)
         onDismiss()
@@ -881,7 +886,7 @@ private fun BatchSellResultDialog(
                 .fillMaxWidth(0.92f)
                 .padding(16.dp),
             shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF141D26)),
+            colors = CardDefaults.cardColors(containerColor = if (isLight) TvSurface else Color(0xFF141D26)),
             border = BorderStroke(1.dp, TvBorder)
         ) {
             Column(
@@ -939,7 +944,7 @@ private fun BatchSellResultDialog(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFF0F1A16), RoundedCornerShape(12.dp))
+                        .background(if (isLight) Color(0xFFECFDF5) else Color(0xFF0F1A16), RoundedCornerShape(12.dp))
                         .border(1.dp, TvGreen.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
                         .padding(12.dp)
                 ) {
@@ -1018,7 +1023,7 @@ private fun BatchSellResultDialog(
                     summary.itemResults.forEach { res ->
                         Surface(
                             shape = RoundedCornerShape(8.dp),
-                            color = Color(0xFF0C1319),
+                            color = if (isLight) TvSurfaceVariant else Color(0xFF0C1319),
                             border = BorderStroke(
                                 0.6.dp,
                                 if (res.success) TvGreen.copy(alpha = 0.4f) else TvRed.copy(alpha = 0.4f)

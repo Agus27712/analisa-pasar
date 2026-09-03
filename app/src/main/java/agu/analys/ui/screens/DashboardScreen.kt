@@ -125,8 +125,12 @@ fun DashboardScreen(
         }
 
         // Proactive Profit Summary (Aggregates total unrealized gains across all Ready Sell coins)
-        val allEvaluatedPairs = remember(displayPairs, watchlist, marketDataSource) {
-            (displayPairs + watchlist.map { TradingPair.fromCustomSymbol(it, defaultQuote) } + TradingPair.popularPairsForSource(marketDataSource))
+        val allEvaluatedPairs = remember(displayPairs, watchlist, favorites, holdingStatuses, marketDataSource) {
+            (displayPairs +
+                watchlist.map { TradingPair.fromCustomSymbol(it, defaultQuote) } +
+                favorites.map { TradingPair.fromCustomSymbol(it, defaultQuote) } +
+                holdingStatuses.keys.map { TradingPair.fromCustomSymbol(it, defaultQuote) } +
+                TradingPair.popularPairsForSource(marketDataSource))
                 .distinctBy { it.symbol }
         }
         ProactiveProfitSummaryCard(

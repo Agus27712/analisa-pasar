@@ -36,7 +36,7 @@ fun DetailControlsRow(
     onOpenAiAssistant: () -> Unit,
     onOpenSimulation: () -> Unit,
     onOpenLearning: () -> Unit,
-    onToggleWatchlist: () -> Unit,
+    onToggleFavorite: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -134,7 +134,7 @@ fun DetailControlsRow(
                 bgColor = if (isFavorite) TvAmber.copy(alpha = 0.12f) else TvSurface,
                 borderColor = if (isFavorite) TvAmber.copy(alpha = 0.4f) else TvBorder,
                 contentDescription = "Favorit",
-                onClick = onToggleWatchlist
+                onClick = onToggleFavorite
             )
         }
     }
