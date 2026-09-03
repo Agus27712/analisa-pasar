@@ -1,6 +1,7 @@
 package agu.analys.ui.components.detail
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -76,7 +77,9 @@ fun SectionTitle(text: String, icon: ImageVector? = null) {
             fontSize = 14.sp,
             fontWeight = FontWeight.Bold,
             color = TvTextPrimary,
-            letterSpacing = 0.4.sp
+            letterSpacing = 0.4.sp,
+            maxLines = 1,
+            modifier = Modifier.basicMarquee()
         )
     }
 }

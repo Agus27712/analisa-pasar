@@ -10,6 +10,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -292,7 +293,9 @@ fun RadarLinearCheckpointStepper(
                     text = "Progres $progressPercent% adalah status konfirmasi entry saat ini, sedangkan kekuatan sinyal AI (kondisi setup) adalah $confidence%. Keduanya dapat berbeda karena mengukur hal yang berbeda.",
                     fontSize = 9.sp,
                     color = TvTextSecondary,
-                    lineHeight = 12.sp
+                    lineHeight = 12.sp,
+                    maxLines = 1,
+                    modifier = Modifier.basicMarquee()
                 )
             }
         }
@@ -367,7 +370,7 @@ fun RadarLinearCheckpointStepper(
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                                modifier = Modifier.basicMarquee()
                             )
                         }
 
@@ -420,8 +423,8 @@ fun RadarLinearCheckpointStepper(
                         color = if (currentItem.isOk) TvTextPrimary else TvTextSecondary,
                         fontSize = 10.5.sp,
                         lineHeight = 14.5.sp,
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis
+                        maxLines = 1,
+                        modifier = Modifier.basicMarquee()
                     )
                 }
             }

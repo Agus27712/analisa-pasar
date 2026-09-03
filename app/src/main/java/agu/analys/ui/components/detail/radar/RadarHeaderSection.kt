@@ -27,10 +27,14 @@ fun RadarHeaderSection(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        SectionTitle(
-            titleHeader,
-            Icons.Default.Timeline
-        )
+        Box(modifier = Modifier.weight(1f, fill = false)) {
+            SectionTitle(
+                titleHeader,
+                Icons.Default.Timeline
+            )
+        }
+
+        Spacer(Modifier.width(8.dp))
 
         val radarLedColor = if (completed == 4) TvGreen else TvBlue
         Box(

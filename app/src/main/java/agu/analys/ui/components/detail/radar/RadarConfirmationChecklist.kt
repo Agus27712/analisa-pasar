@@ -1,6 +1,7 @@
 package agu.analys.ui.components.detail.radar
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -122,14 +123,17 @@ fun RadarChecklistItem(
                 text = label,
                 color = if (isOk) TvGreen else TvTextPrimary,
                 fontSize = 11.sp,
-                fontWeight = if (isOk) FontWeight.Bold else FontWeight.Medium
+                fontWeight = if (isOk) FontWeight.Bold else FontWeight.Medium,
+                maxLines = 1,
+                modifier = Modifier.basicMarquee()
             )
             if (detail.isNotBlank()) {
                 Text(
                     text = detail,
                     color = TvTextSecondary,
                     fontSize = 9.5.sp,
-                    maxLines = 1
+                    maxLines = 1,
+                    modifier = Modifier.basicMarquee()
                 )
             }
         }

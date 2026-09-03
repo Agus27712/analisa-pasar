@@ -2,6 +2,7 @@ package agu.analys.ui.components.detail.radar
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -44,8 +45,13 @@ fun RadarTargetLevelsSection(
                 text = if (completed == 4) "🔥 STATUS: SIAP EKSEKUSI!" else "⚡ LEVEL PLAN ENTRY & TARGET",
                 color = if (completed == 4) TvGreen else TvAmber,
                 fontSize = 11.sp,
-                fontWeight = FontWeight.Black
+                fontWeight = FontWeight.Black,
+                maxLines = 1,
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    .basicMarquee()
             )
+            Spacer(Modifier.width(8.dp))
             Text(
                 text = if (isLevelPlanVisible) "SEMBUNYIKAN" else "LIHAT PLAN",
                 color = TvBlue,
