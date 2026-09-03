@@ -37,8 +37,12 @@ class PositionCoordinator(
     }
 
     fun setOwnership(symbol: String, owned: Boolean, entryPrice: Double = 0.0, quantity: Double = 0.0, invested: Double = 0.0, isReal: Boolean = false) {
-        if (owned) positionStore.markBought(symbol, entryPrice, invested, quantity, isReal)
-        else positionStore.markSold(symbol)
+        if (owned) {
+            positionStore.markBought(symbol, entryPrice, invested, quantity, isReal)
+        } else {
+            positionStore.markSold(symbol)
+            agu.analys.engine.sell.SellSignalLifecycleManager.reset(symbol)
+        }
         refreshPosition(symbol)
     }
 

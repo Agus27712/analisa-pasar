@@ -52,6 +52,7 @@ fun SpotPositionCard(
     symbol: String,
     signal: AISignalState,
     position: SpotPosition,
+    sellSignalState: agu.analys.model.SellSignalState? = null,
     currentPrice: Double = 0.0,
     quoteAsset: String = "IDR",
     onPositionChanged: () -> Unit,
@@ -73,6 +74,12 @@ fun SpotPositionCard(
         profitLoss < 0.0 -> TvRed
         else -> TvTextSecondary
     }
+
+    val isReadyToSell = sellSignalState?.state == agu.analys.model.SellLifecycleState.READY_TO_SELL || sellSignalState?.state == agu.analys.model.SellLifecycleState.TRAILING_TRIGGERED
+    val cardBorderColor = if (isReadyToSell) TvGreen else TvBorder
+    val buttonLabel = if (isReadyToSell) "🔥 Siap Jual — ${agu.analys.util.PriceFormatter.formatPercentage(sellSignalState?.netProfitPct ?: 0.0, includePlusSign = true)}" else "Ubah Data Pembelian"
+    val buttonColor = if (isReadyToSell) TvGreen.copy(alpha = 0.2f) else TvSurfaceVariant
+    val buttonTextColor = if (isReadyToSell) TvGreen else TvTextPrimary
 
     if (showDialog) {
         AlertDialog(
@@ -237,7 +244,7 @@ fun SpotPositionCard(
         modifier = modifier
             .fillMaxWidth()
             .background(TvCardBackground, RoundedCornerShape(16.dp))
-            .border(1.dp, TvBorder, RoundedCornerShape(16.dp))
+            .border(1.dp, cardBorderColor, RoundedCornerShape(16.dp))
             .padding(14.dp)
     ) {
         Row(modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
@@ -306,9 +313,9 @@ fun SpotPositionCard(
                     showDialog = true
                 },
                 modifier = Modifier.fillMaxWidth().height(36.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = TvSurfaceVariant),
+                colors = ButtonDefaults.buttonColors(containerColor = buttonColor),
                 shape = RoundedCornerShape(9.dp)
-            ) { Text("Ubah Data Pembelian", fontSize = 11.sp, color = TvTextPrimary) }
+            ) { Text(buttonLabel, fontSize = 11.sp, color = buttonTextColor, fontWeight = if (isReadyToSell) FontWeight.ExtraBold else FontWeight.Normal) }
         } else {
             Spacer(Modifier.height(10.dp))
             Text(

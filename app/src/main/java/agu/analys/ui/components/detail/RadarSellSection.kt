@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -49,7 +50,8 @@ fun RadarSellSection(
     signal: agu.analys.model.AISignalState? = null,
     onSetAutoSellParams: ((Boolean, Double, Double, Double, Double) -> Unit)? = null,
     onDeployTrailingOrder: (() -> Unit)? = null,
-    onCancelTrailingOrder: (() -> Unit)? = null
+    onCancelTrailingOrder: (() -> Unit)? = null,
+    sellSignalState: agu.analys.model.SellSignalState = agu.analys.model.SellSignalState()
 ) {
     var customSellQtyInput by remember { mutableStateOf("") }
     var isCustomSellQtyOpen by remember { mutableStateOf(false) }
@@ -110,7 +112,28 @@ fun RadarSellSection(
     val netProfitPct = if (costBasisIdr > 0.0) (netProfitIdr / costBasisIdr) * 100.0 else 0.0
     val isProfitable = netProfitIdr >= 0.0
 
+    val showReadyBanner = sellSignalState.state == agu.analys.model.SellLifecycleState.READY_TO_SELL ||
+                          sellSignalState.state == agu.analys.model.SellLifecycleState.TRAILING_TRIGGERED ||
+                          sellSignalState.state == agu.analys.model.SellLifecycleState.STOP_LOSS_HIT
+
     Column {
+        if (showReadyBanner) {
+            val bannerColor = if (sellSignalState.state == agu.analys.model.SellLifecycleState.READY_TO_SELL) TvGreen else TvRed
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp)
+                    .background(bannerColor.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
+                    .border(1.dp, bannerColor, RoundedCornerShape(8.dp))
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Default.Info, null, tint = bannerColor, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.padding(horizontal = 4.dp))
+                Text(sellSignalState.reason, color = bannerColor, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+
         SellPositionHeader(
             isRealMode = isRealMode,
             baseAsset = baseAsset,

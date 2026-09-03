@@ -51,6 +51,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.math.abs
@@ -152,6 +153,28 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     val currentTick: StateFlow<MarketTick?> = marketDataCoordinator.currentTick
     val currentIndicators: StateFlow<TechnicalIndicators> = engine.indicators
     val aiSignalState: StateFlow<AISignalState> = engine.signalState
+
+    val sellSignalState: StateFlow<agu.analys.model.SellSignalState> = kotlinx.coroutines.flow.combine(
+        positionCoordinator.spotPosition,
+        currentTick,
+        currentIndicators
+    ) { position, tick, indicators ->
+        agu.analys.engine.sell.SellSignalEvaluator.evaluate(position, tick, indicators, tradingFees.value)
+    }
+    .onEach { state ->
+        val symbol = _selectedPair.value.symbol
+        val transition = agu.analys.engine.sell.SellSignalLifecycleManager.process(symbol, state)
+        if (transition.hasTriggeringTransition && isNotificationsEnabled.value) {
+            agu.analys.util.AlertNotificationHelper.sendPriceAlertNotification(
+                context = getApplication(),
+                notificationId = symbol.hashCode() + 1000,
+                title = "Sinyal Jual: $symbol",
+                message = "${state.reason} - P/L: ${agu.analys.util.PriceFormatter.formatPercentage(state.netProfitPct, includePlusSign = true)}",
+                symbol = symbol
+            )
+        }
+    }
+    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), agu.analys.model.SellSignalState())
 
     val orderBookBids: StateFlow<List<OrderBookItem>> = marketDataCoordinator.orderBookBids
     val orderBookAsks: StateFlow<List<OrderBookItem>> = marketDataCoordinator.orderBookAsks

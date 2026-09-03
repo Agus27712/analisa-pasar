@@ -75,6 +75,7 @@ fun DetailChartScreen(
     val watchlist by viewModel.watchlist.collectAsStateWithLifecycle()
     val favorites by viewModel.favorites.collectAsStateWithLifecycle()
     val spotPosition by viewModel.spotPosition.collectAsStateWithLifecycle()
+    val sellSignalState by viewModel.sellSignalState.collectAsStateWithLifecycle()
     val selectedTimeframe by viewModel.selectedTimeframe.collectAsStateWithLifecycle()
     val aiGroq by viewModel.auditReportText.collectAsStateWithLifecycle()
     val aiGemini by viewModel.geminiSummaryText.collectAsStateWithLifecycle()
@@ -328,6 +329,7 @@ fun DetailChartScreen(
                     android.widget.Toast.makeText(context, "Harga beli manual tersimpan!", android.widget.Toast.LENGTH_SHORT).show()
                 },
                 spotPosition = spotPosition,
+                sellSignalState = sellSignalState,
                 onSetTrailingStop = { enabled, pct ->
                     viewModel.setTrailingStop(enabled, pct)
                     HapticUtil.vibrateTradeSuccess(context)
