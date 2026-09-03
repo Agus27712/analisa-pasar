@@ -25,8 +25,8 @@ object GroqAiService {
         .build()
 
     private const val BASE_URL = "https://api.groq.com/openai/v1/chat/completions"
-    private const val MODEL = "llama-3.3-70b-versatile"
-    private const val MAX_TOKENS = 520
+    private const val MODEL = "qwen/qwen3.8-27b"
+    private const val MAX_TOKENS = 4096
 
     suspend fun generateDeepMarketAudit(
         apiKey: String,
@@ -117,8 +117,10 @@ Wajib susun jawaban dalam format Markdown berikut:
         try {
             val payload = JSONObject().apply {
                 put("model", MODEL)
-                put("temperature", 0.35)
+                put("temperature", 0.40)
                 put("max_tokens", MAX_TOKENS)
+                put("reasoning_effort", "high")
+                put("top_p", 0.9)
                 put("messages", JSONArray().apply {
                     put(JSONObject().apply {
                         put("role", "system")
