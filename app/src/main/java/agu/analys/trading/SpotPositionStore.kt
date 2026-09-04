@@ -34,7 +34,7 @@ data class SpotPosition(
     val tp1Price: Double = 0.0,
     val tp1Percent: Double = 50.0,
     val tp2Price: Double = 0.0,
-    val tp2Percent: Double = 100.0,
+    val tp2Percent: Double = 50.0,
     val isTp1Triggered: Boolean = false,
     val isTp2Triggered: Boolean = false,
     val lastTrailingOrderId: String? = null,
@@ -67,6 +67,7 @@ class SpotPositionStore(context: Context) {
 
         val lastTrailingOrderId = prefs.getString("${key}_last_trailing_order_id", null)
         val lastOrderUpdateTime = prefs.getLong("${key}_last_order_update_time", 0L)
+        val stopLossPrice = prefs.getString("${key}_stop_loss", null)?.toDoubleOrNull() ?: if (entry > 0.0) entry * 0.99 else 0.0
 
         return SpotPosition(
             state = state,
@@ -79,12 +80,13 @@ class SpotPositionStore(context: Context) {
             trailingPercent = trailingPct,
             peakPrice = peak,
             trailingStopPrice = trailingStop,
+            stopLossPrice = stopLossPrice,
             isTrailingTriggered = isTriggered,
             isAutoSellEnabled = prefs.getBoolean("${key}_auto_sell_enabled", false),
             tp1Price = prefs.getString("${key}_tp1_price", null)?.toDoubleOrNull() ?: 0.0,
             tp1Percent = prefs.getString("${key}_tp1_percent", null)?.toDoubleOrNull() ?: 50.0,
             tp2Price = prefs.getString("${key}_tp2_price", null)?.toDoubleOrNull() ?: 0.0,
-            tp2Percent = prefs.getString("${key}_tp2_percent", null)?.toDoubleOrNull() ?: 100.0,
+            tp2Percent = prefs.getString("${key}_tp2_percent", null)?.toDoubleOrNull() ?: 50.0,
             isTp1Triggered = prefs.getBoolean("${key}_tp1_triggered", false),
             isTp2Triggered = prefs.getBoolean("${key}_tp2_triggered", false),
             lastTrailingOrderId = lastTrailingOrderId,

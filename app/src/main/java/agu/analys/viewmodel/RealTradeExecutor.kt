@@ -271,6 +271,130 @@ class RealTradeExecutor(
         }
     }
 
+    fun executeRealSellOrders(
+        pair: String,
+        totalQuantity: Double,
+        marketPrice: Double,
+        isAutoTpEnabled: Boolean,
+        tp1Price: Double,
+        tp1Percent: Double,
+        tp2Price: Double,
+        tp2Percent: Double,
+        onResult: (Boolean, String) -> Unit
+    ) {
+        val apiKey = prefs.indodaxApiKey
+        val secretKey = prefs.indodaxSecretKey
+        if (apiKey.isEmpty() || secretKey.isEmpty()) {
+            onResult(false, "API Key/Secret INDODAX belum diisi.")
+            return
+        }
+        if (isRateLimited()) {
+            onResult(false, "Rate-limit aktif.")
+            return
+        }
+
+        scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            onStatusUpdate("Mengecek saldo real $pair...")
+            val base = baseFromPair(pair)
+            val (balances, err) = IndodaxTradeApiV2.getAccount(apiKey, secretKey)
+            if (balances == null) {
+                if (looksLikeRateLimit(err)) onRateLimit(err)
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    onResult(false, "Gagal cek saldo: $err")
+                }
+                return@launch
+            }
+
+            val free = balances.free[base] ?: 0.0
+            val sellQty = if (totalQuantity > 0.0) totalQuantity.coerceAtMost(free) else free
+            if (sellQty <= 0.00000001) {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    onResult(false, "Saldo $base tidak mencukupi.")
+                }
+                return@launch
+            }
+
+            if (isAutoTpEnabled && tp1Price > 0.0 && tp2Price > 0.0) {
+                val p1 = (tp1Percent / 100.0).coerceIn(0.01, 0.99)
+                val qty1 = ((sellQty * p1) * 100_000_000.0).toLong() / 100_000_000.0
+                val qty2 = sellQty - qty1
+
+                var msg = ""
+                var okAll = true
+
+                if (qty1 > 0.0) {
+                    onStatusUpdate("Memasang order jual TP1...")
+                    val (ok1, m1) = IndodaxTradeApiV2.createLimitOrder(
+                        apiKey, secretKey, pair, "sell", tp1Price, qty1, "agu-tp1-${System.currentTimeMillis()}"
+                    )
+                    msg += if (ok1) "TP1 (${agu.analys.util.PriceFormatter.formatCryptoExact(qty1, 8)} @ Rp ${agu.analys.util.PriceFormatter.formatIdrNumber(tp1Price)}) OK. " else "TP1 Gagal: $m1. "
+                    if (!ok1) {
+                        okAll = false
+                        if (looksLikeRateLimit(m1)) onRateLimit(m1)
+                    }
+                    delay(INTER_REQUEST_DELAY_MS)
+                }
+
+                if (qty2 > 0.0) {
+                    onStatusUpdate("Memasang order jual TP2...")
+                    val (ok2, m2) = IndodaxTradeApiV2.createLimitOrder(
+                        apiKey, secretKey, pair, "sell", tp2Price, qty2, "agu-tp2-${System.currentTimeMillis()}"
+                    )
+                    msg += if (ok2) "TP2 (${agu.analys.util.PriceFormatter.formatCryptoExact(qty2, 8)} @ Rp ${agu.analys.util.PriceFormatter.formatIdrNumber(tp2Price)}) OK." else "TP2 Gagal: $m2."
+                    if (!ok2) {
+                        okAll = false
+                        if (looksLikeRateLimit(m2)) onRateLimit(m2)
+                    }
+                }
+
+                if (okAll) prefs.rememberHistoryBase(base)
+                onStatusUpdate(if (okAll) "2 Order TP Real Berhasil!" else "Sebagian Order TP Gagal.")
+                delay(INTER_REQUEST_DELAY_MS)
+                refreshBalance()
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    onResult(okAll, if (okAll) "2 Order TP Berhasil (100% tanpa sisa):\n$msg" else msg)
+                }
+            } else if (isAutoTpEnabled && tp1Price > 0.0) {
+                onStatusUpdate("Memasang order jual TP1...")
+                val (ok, m) = IndodaxTradeApiV2.createLimitOrder(
+                    apiKey, secretKey, pair, "sell", tp1Price, sellQty, "agu-tp1-${System.currentTimeMillis()}"
+                )
+                if (ok) prefs.rememberHistoryBase(base)
+                if (!ok && looksLikeRateLimit(m)) onRateLimit(m)
+                delay(INTER_REQUEST_DELAY_MS)
+                refreshBalance()
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    onResult(ok, if (ok) "Order TP1 (${agu.analys.util.PriceFormatter.formatCryptoExact(sellQty, 8)} @ Rp ${agu.analys.util.PriceFormatter.formatIdrNumber(tp1Price)}) berhasil terpasang." else "Order TP1 Gagal: $m")
+                }
+            } else if (isAutoTpEnabled && tp2Price > 0.0) {
+                onStatusUpdate("Memasang order jual TP2...")
+                val (ok, m) = IndodaxTradeApiV2.createLimitOrder(
+                    apiKey, secretKey, pair, "sell", tp2Price, sellQty, "agu-tp2-${System.currentTimeMillis()}"
+                )
+                if (ok) prefs.rememberHistoryBase(base)
+                if (!ok && looksLikeRateLimit(m)) onRateLimit(m)
+                delay(INTER_REQUEST_DELAY_MS)
+                refreshBalance()
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    onResult(ok, if (ok) "Order TP2 (${agu.analys.util.PriceFormatter.formatCryptoExact(sellQty, 8)} @ Rp ${agu.analys.util.PriceFormatter.formatIdrNumber(tp2Price)}) berhasil terpasang." else "Order TP2 Gagal: $m")
+                }
+            } else {
+                // Switch OFF -> 1 limit order at current market price
+                onStatusUpdate("Memasang order jual limit...")
+                val (ok, m) = IndodaxTradeApiV2.createLimitOrder(
+                    apiKey, secretKey, pair, "sell", marketPrice, sellQty, "agu-sell-${System.currentTimeMillis()}"
+                )
+                if (ok) prefs.rememberHistoryBase(base)
+                if (!ok && looksLikeRateLimit(m)) onRateLimit(m)
+                delay(INTER_REQUEST_DELAY_MS)
+                refreshBalance()
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    onResult(ok, if (ok) "Order Jual Limit (${agu.analys.util.PriceFormatter.formatCryptoExact(sellQty, 8)} @ Rp ${agu.analys.util.PriceFormatter.formatIdrNumber(marketPrice)}) berhasil terpasang." else "Order Jual Gagal: $m")
+                }
+            }
+        }
+    }
+
     private fun looksLikeRateLimit(msg: String): Boolean {
         return msg.contains("429") || msg.lowercase().contains("rate limit") || msg.lowercase().contains("too many requests")
     }

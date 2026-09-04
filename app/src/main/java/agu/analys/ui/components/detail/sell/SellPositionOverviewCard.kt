@@ -1,6 +1,7 @@
 package agu.analys.ui.components.detail.sell
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -135,56 +136,65 @@ fun SellPositionOverviewCard(
             }
         }
 
-        // Info Detail: Entry vs Current
+        // Info Detail: Entry vs Current vs TP1 (Bungkus masing-masing nilai dengan weight & basicMarquee)
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(TvSurface, RoundedCornerShape(8.dp))
-                .padding(horizontal = 10.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Column {
-                Text(
-                    text = "Harga Beli (Avg Entry)",
-                    color = TvTextSecondary,
-                    fontSize = 10.sp
-                )
-                Text(
-                    text = if (entry != null && entry > 0.0) PriceFormatter.formatPrice(entry, quoteAsset = quoteAsset) else "—",
-                    color = TvTextPrimary,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
+            DetailValueBox(
+                label = "Harga Beli (Entry)",
+                value = if (entry != null && entry > 0.0) PriceFormatter.formatPrice(entry, quoteAsset = quoteAsset) else "—",
+                valueColor = TvTextPrimary,
+                modifier = Modifier.weight(1f)
+            )
 
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = "Harga Pasar Saat Ini",
-                    color = TvTextSecondary,
-                    fontSize = 10.sp
-                )
-                Text(
-                    text = PriceFormatter.formatPrice(current, quoteAsset = quoteAsset),
-                    color = pnlColor,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
+            DetailValueBox(
+                label = "Harga Pasar",
+                value = PriceFormatter.formatPrice(current, quoteAsset = quoteAsset),
+                valueColor = pnlColor,
+                modifier = Modifier.weight(1f)
+            )
 
-            Column(horizontalAlignment = Alignment.End) {
-                Text(
-                    text = "Target TP1",
-                    color = TvTextSecondary,
-                    fontSize = 10.sp
-                )
-                Text(
-                    text = if (context.tp1 != null && context.tp1 > 0.0) PriceFormatter.formatPrice(context.tp1, quoteAsset = quoteAsset) else "Belum diset",
-                    color = TvAmber,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
+            DetailValueBox(
+                label = "Target TP1",
+                value = if (context.tp1 != null && context.tp1 > 0.0) PriceFormatter.formatPrice(context.tp1, quoteAsset = quoteAsset) else "Belum diset",
+                valueColor = TvAmber,
+                modifier = Modifier.weight(1f)
+            )
         }
+    }
+}
+
+@Composable
+private fun DetailValueBox(
+    label: String,
+    value: String,
+    valueColor: Color,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .background(TvSurface, RoundedCornerShape(8.dp))
+            .border(0.6.dp, TvBorder.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
+            .padding(horizontal = 6.dp, vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text(
+            text = label,
+            color = TvTextSecondary,
+            fontSize = 9.5.sp,
+            maxLines = 1,
+            modifier = Modifier.basicMarquee()
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(
+            text = value,
+            color = valueColor,
+            fontSize = 11.5.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            modifier = Modifier.basicMarquee()
+        )
     }
 }

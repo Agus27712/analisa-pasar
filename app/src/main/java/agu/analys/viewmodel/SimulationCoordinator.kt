@@ -72,6 +72,133 @@ class SimulationCoordinator(private val store: SimulationTradeStore) {
         return count
     }
 
+    fun executeSimulationSellOrders(
+        pair: agu.analys.model.TradingPair,
+        totalQuantity: Double,
+        marketPrice: Double,
+        isAutoTpEnabled: Boolean,
+        tp1Price: Double,
+        tp1Percent: Double,
+        tp2Price: Double,
+        tp2Percent: Double,
+        onResult: (Boolean, String) -> Unit
+    ) {
+        val wallet = store.getWallet()
+        val availableCoin = wallet.getAvailableCoin(pair.baseAsset)
+        val sellQty = if (totalQuantity > 0.0) totalQuantity.coerceAtMost(availableCoin) else availableCoin
+        if (sellQty <= 0.0) {
+            onResult(false, "Saldo simulasi ${pair.baseAsset} kosong.")
+            return
+        }
+
+        if (isAutoTpEnabled && tp1Price > 0.0 && tp2Price > 0.0) {
+            val p1 = (tp1Percent / 100.0).coerceIn(0.01, 0.99)
+            val qty1 = ((sellQty * p1) * 100_000_000.0).toLong() / 100_000_000.0
+            val qty2 = sellQty - qty1
+
+            var msg = ""
+            var okCount = 0
+            if (qty1 > 0.0) {
+                val r1 = store.placeOrder(
+                    symbol = pair.symbol,
+                    baseAsset = pair.baseAsset,
+                    quoteAsset = pair.quoteAsset,
+                    side = agu.analys.trading.SimulationOrderSide.SELL,
+                    type = agu.analys.trading.SimulationOrderType.LIMIT,
+                    price = tp1Price,
+                    stopPrice = 0.0,
+                    quantity = qty1,
+                    currentMarketPrice = marketPrice
+                )
+                if (r1 is agu.analys.trading.SimulationOrderResult.Success) {
+                    okCount++
+                    msg += "TP1: ${agu.analys.util.PriceFormatter.formatCryptoExact(qty1, 8)} @ Rp ${agu.analys.util.PriceFormatter.formatIdrNumber(tp1Price)} (OK). "
+                } else if (r1 is agu.analys.trading.SimulationOrderResult.Error) {
+                    msg += "TP1 Gagal: ${r1.message}. "
+                }
+            }
+            if (qty2 > 0.0) {
+                val r2 = store.placeOrder(
+                    symbol = pair.symbol,
+                    baseAsset = pair.baseAsset,
+                    quoteAsset = pair.quoteAsset,
+                    side = agu.analys.trading.SimulationOrderSide.SELL,
+                    type = agu.analys.trading.SimulationOrderType.LIMIT,
+                    price = tp2Price,
+                    stopPrice = 0.0,
+                    quantity = qty2,
+                    currentMarketPrice = marketPrice
+                )
+                if (r2 is agu.analys.trading.SimulationOrderResult.Success) {
+                    okCount++
+                    msg += "TP2: ${agu.analys.util.PriceFormatter.formatCryptoExact(qty2, 8)} @ Rp ${agu.analys.util.PriceFormatter.formatIdrNumber(tp2Price)} (OK)."
+                } else if (r2 is agu.analys.trading.SimulationOrderResult.Error) {
+                    msg += "TP2 Gagal: ${r2.message}."
+                }
+            }
+            refresh()
+            onResult(okCount > 0, if (okCount > 0) "2 Order TP Simulasi terpasang (100% tanpa sisa):\n$msg" else "Gagal pasang order TP: $msg")
+        } else if (isAutoTpEnabled && tp1Price > 0.0) {
+            val r = store.placeOrder(
+                symbol = pair.symbol,
+                baseAsset = pair.baseAsset,
+                quoteAsset = pair.quoteAsset,
+                side = agu.analys.trading.SimulationOrderSide.SELL,
+                type = agu.analys.trading.SimulationOrderType.LIMIT,
+                price = tp1Price,
+                stopPrice = 0.0,
+                quantity = sellQty,
+                currentMarketPrice = marketPrice
+            )
+            refresh()
+            val ok = r is agu.analys.trading.SimulationOrderResult.Success
+            val m = when (r) {
+                is agu.analys.trading.SimulationOrderResult.Success -> "Order Limit TP1 ${agu.analys.util.PriceFormatter.formatCryptoExact(sellQty, 8)} @ Rp ${agu.analys.util.PriceFormatter.formatIdrNumber(tp1Price)} terpasang."
+                is agu.analys.trading.SimulationOrderResult.Error -> r.message
+            }
+            onResult(ok, m)
+        } else if (isAutoTpEnabled && tp2Price > 0.0) {
+            val r = store.placeOrder(
+                symbol = pair.symbol,
+                baseAsset = pair.baseAsset,
+                quoteAsset = pair.quoteAsset,
+                side = agu.analys.trading.SimulationOrderSide.SELL,
+                type = agu.analys.trading.SimulationOrderType.LIMIT,
+                price = tp2Price,
+                stopPrice = 0.0,
+                quantity = sellQty,
+                currentMarketPrice = marketPrice
+            )
+            refresh()
+            val ok = r is agu.analys.trading.SimulationOrderResult.Success
+            val m = when (r) {
+                is agu.analys.trading.SimulationOrderResult.Success -> "Order Limit TP2 ${agu.analys.util.PriceFormatter.formatCryptoExact(sellQty, 8)} @ Rp ${agu.analys.util.PriceFormatter.formatIdrNumber(tp2Price)} terpasang."
+                is agu.analys.trading.SimulationOrderResult.Error -> r.message
+            }
+            onResult(ok, m)
+        } else {
+            // Switch OFF -> 1 limit order at current market price
+            val r = store.placeOrder(
+                symbol = pair.symbol,
+                baseAsset = pair.baseAsset,
+                quoteAsset = pair.quoteAsset,
+                side = agu.analys.trading.SimulationOrderSide.SELL,
+                type = agu.analys.trading.SimulationOrderType.LIMIT,
+                price = marketPrice,
+                stopPrice = 0.0,
+                quantity = sellQty,
+                currentMarketPrice = marketPrice
+            )
+            refresh()
+            val ok = r is agu.analys.trading.SimulationOrderResult.Success
+            val m = when (r) {
+                is agu.analys.trading.SimulationOrderResult.Success -> "Order Jual Limit ${agu.analys.util.PriceFormatter.formatCryptoExact(sellQty, 8)} @ Rp ${agu.analys.util.PriceFormatter.formatIdrNumber(marketPrice)} berhasil."
+                is agu.analys.trading.SimulationOrderResult.Error -> r.message
+            }
+            onResult(ok, m)
+        }
+    }
+
     fun placeSimulationAutoSellOrders(
         pair: agu.analys.model.TradingPair,
         tp1Price: Double,

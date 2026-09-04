@@ -42,7 +42,7 @@ fun RadarTransactionFeeSection(
     onBuyModeChanged: (Boolean) -> Unit = {},
     isRealMode: Boolean = false,
     onExecuteBuy: ((Double, Double, Double) -> Unit)? = null,
-    onExecuteSell: ((Double) -> Unit)? = null,
+    onExecuteSell: ((Double, Boolean, Double, Double, Double, Double) -> Unit)? = null,
     onSetManualBuyPrice: ((Double, Double) -> Unit)? = null,
     spotPosition: agu.analys.trading.SpotPosition? = null,
     sellSignalState: agu.analys.model.SellSignalState = agu.analys.model.SellSignalState(),

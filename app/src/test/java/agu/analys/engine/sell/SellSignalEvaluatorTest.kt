@@ -134,6 +134,56 @@ class SellSignalEvaluatorTest {
     }
 
     @Test
+    fun testReadyToSell_TP2Reached() {
+        val position = SpotPosition(
+            state = SpotPositionState.HOLDING,
+            quantity = 1.0,
+            entryPrice = 100000.0,
+            tp2Price = 105000.0
+        )
+        val tick = MarketTick("BTCIDR", 105000.0, 0.0, 0.0, 0.0, 0.0)
+        
+        val result = SellSignalEvaluator.evaluate(position, tick, null, TradingFeeConfig(sellMakerPct = 0.0))
+        
+        assertEquals(SellLifecycleState.READY_TO_SELL, result.state)
+        assertEquals("Target TP2 tercapai", result.reason)
+        assertEquals(5.0, result.netProfitPct, 0.01)
+    }
+
+    @Test
+    fun testStopLossHit_CalculatedFromEntryMinus1Percent() {
+        val position = SpotPosition(
+            state = SpotPositionState.HOLDING,
+            quantity = 1.0,
+            entryPrice = 100000.0 // Default SL is 100000 * 0.99 = 99000
+        )
+        // Price drops to 98900 (<= 99000)
+        val tick = MarketTick("BTCIDR", 98900.0, 0.0, 0.0, 0.0, 0.0)
+        
+        val result = SellSignalEvaluator.evaluate(position, tick, null, TradingFeeConfig(sellMakerPct = 0.0))
+        
+        assertEquals(SellLifecycleState.STOP_LOSS_HIT, result.state)
+        assertEquals("Stop loss terpicu", result.reason)
+    }
+
+    @Test
+    fun testApproachingTP1() {
+        val position = SpotPosition(
+            state = SpotPositionState.HOLDING,
+            quantity = 1.0,
+            entryPrice = 100000.0,
+            tp1Price = 100000.0 * 1.05 // 105000
+        )
+        // Current price is 103000 (>= 105000 * 0.98 = 102900, < 105000)
+        val tick = MarketTick("BTCIDR", 103000.0, 0.0, 0.0, 0.0, 0.0)
+        
+        val result = SellSignalEvaluator.evaluate(position, tick, null, TradingFeeConfig(sellMakerPct = 0.0))
+        
+        assertEquals(SellLifecycleState.APPROACHING_TARGET, result.state)
+        assertEquals("Mendekati target TP1", result.reason)
+    }
+
+    @Test
     fun testLifecycleManager_TransitionDetectionAndDeduplication() {
         val symbol = "TESTIDR"
         SellSignalLifecycleManager.reset(symbol)

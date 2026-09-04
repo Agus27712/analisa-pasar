@@ -185,12 +185,12 @@ fun SellTpSlSection(
                         ),
                         shape = RoundedCornerShape(10.dp)
                     ) {
-                        Text("SIMPAN & KIRIM ORDER TP", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        Text("SIMPAN", fontWeight = FontWeight.Bold, fontSize = 12.5.sp)
                     }
                 }
             } else {
                 Text(
-                    text = "Buka switch & isi harga TP1/TP2, lalu tap SIMPAN untuk mengirim order jual otomatis.",
+                    text = "Buka switch & isi target TP1/TP2, lalu tap SIMPAN untuk menyimpan target pada sinyal jual.",
                     color = TvTextSecondary,
                     fontSize = 11.sp,
                     lineHeight = 15.sp

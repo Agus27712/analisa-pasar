@@ -42,7 +42,7 @@ fun RadarSellSection(
     onSellQuantityChanged: (Double) -> Unit,
     activeFeePct: Double,
     isRealMode: Boolean,
-    onExecuteSell: ((Double) -> Unit)?,
+    onExecuteSell: ((Double, Boolean, Double, Double, Double, Double) -> Unit)?,
     onSetManualBuyPrice: ((Double, Double) -> Unit)? = null,
     spotPosition: agu.analys.trading.SpotPosition? = null,
     onSetTrailingStop: ((Boolean, Double) -> Unit)? = null,
@@ -267,22 +267,44 @@ fun RadarSellSection(
             )
         }
 
+        val parsedTp1Price = PriceFormatter.parseCleanIdrDouble(tp1PriceInput)
+        val parsedTp1Pct = PriceFormatter.parseCleanIdrDouble(tp1PercentInput).coerceIn(1.0, 99.0).takeIf { it > 0 } ?: 50.0
+        val parsedTp2Price = PriceFormatter.parseCleanIdrDouble(tp2PriceInput)
+        val parsedTp2Pct = PriceFormatter.parseCleanIdrDouble(tp2PercentInput).coerceIn(1.0, 99.0).takeIf { it > 0 } ?: 50.0
+
+        val hasTwoTpOrders = isAutoSellActive && parsedTp1Price > 0.0 && parsedTp2Price > 0.0
+        val hasSingleTpOrder = isAutoSellActive && (parsedTp1Price > 0.0 || parsedTp2Price > 0.0) && !hasTwoTpOrders
+
+        val previewQty1 = if (hasTwoTpOrders) {
+            ((activeSellQty * (parsedTp1Pct / 100.0)) * 100_000_000.0).toLong() / 100_000_000.0
+        } else 0.0
+        val previewQty2 = if (hasTwoTpOrders) activeSellQty - previewQty1 else 0.0
+
         Spacer(Modifier.height(12.dp))
 
-        // TOMBOL EKSEKUSI JUAL MARKET (INSTAN)
+        // TOMBOL EKSEKUSI JUAL
+        val sellButtonLabel = when {
+            hasTwoTpOrders -> "${if (isRealMode) "[REAL] " else "[SIMULASI] "}PASANG 2 ORDER TP (${PriceFormatter.formatCryptoExact(activeSellQty, 8)} $baseAsset)"
+            hasSingleTpOrder -> "${if (isRealMode) "[REAL] " else "[SIMULASI] "}PASANG ORDER TP (${PriceFormatter.formatCryptoExact(activeSellQty, 8)} $baseAsset)"
+            else -> "${if (isRealMode) "[REAL] " else "[SIMULASI] "}JUAL ${PriceFormatter.formatCryptoExact(activeSellQty, 8)} $baseAsset"
+        }
+
         Button(
             onClick = {
-                if (isRealMode) showSellConfirmDialog = true
-                else onExecuteSell?.invoke(activeSellQty)
+                if (isRealMode) {
+                    showSellConfirmDialog = true
+                } else {
+                    onExecuteSell?.invoke(activeSellQty, isAutoSellActive, parsedTp1Price, parsedTp1Pct, parsedTp2Price, parsedTp2Pct)
+                }
             },
             modifier = Modifier.fillMaxWidth().height(48.dp),
             colors = ButtonDefaults.buttonColors(containerColor = TvRed, contentColor = Color.White),
             shape = RoundedCornerShape(10.dp)
         ) {
             Text(
-                text = "${if (isRealMode) "[REAL] " else "[SIMULASI] "}JUAL ${PriceFormatter.formatCryptoExact(activeSellQty, 8)} $baseAsset",
+                text = sellButtonLabel,
                 fontWeight = FontWeight.Black,
-                fontSize = 13.5.sp
+                fontSize = 13.sp
             )
         }
 
@@ -315,27 +337,53 @@ fun RadarSellSection(
     )
 
     if (showSellConfirmDialog) {
+        val parsedTp1Price = PriceFormatter.parseCleanIdrDouble(tp1PriceInput)
+        val parsedTp1Pct = PriceFormatter.parseCleanIdrDouble(tp1PercentInput).coerceIn(1.0, 99.0).takeIf { it > 0 } ?: 50.0
+        val parsedTp2Price = PriceFormatter.parseCleanIdrDouble(tp2PriceInput)
+        val parsedTp2Pct = PriceFormatter.parseCleanIdrDouble(tp2PercentInput).coerceIn(1.0, 99.0).takeIf { it > 0 } ?: 50.0
+
+        val hasTwoTpOrders = isAutoSellActive && parsedTp1Price > 0.0 && parsedTp2Price > 0.0
+        val previewQty1 = if (hasTwoTpOrders) {
+            ((activeSellQty * (parsedTp1Pct / 100.0)) * 100_000_000.0).toLong() / 100_000_000.0
+        } else 0.0
+        val previewQty2 = if (hasTwoTpOrders) activeSellQty - previewQty1 else 0.0
+
+        val confirmTitle = if (hasTwoTpOrders) "Konfirmasi 2 Order TP" else "Konfirmasi Jual Order"
+        val confirmMsg = when {
+            hasTwoTpOrders -> "Anda akan memasang 2 order jual Take Profit di Indodax:\n\n" +
+                    "• TP 1: ${PriceFormatter.formatCryptoExact(previewQty1, 8)} $baseAsset (${String.format(Locale.US, "%.0f", parsedTp1Pct)}%) @ Rp ${PriceFormatter.formatIdrNumber(parsedTp1Price)}\n" +
+                    "• TP 2: ${PriceFormatter.formatCryptoExact(previewQty2, 8)} $baseAsset (${String.format(Locale.US, "%.0f", parsedTp2Pct)}%) @ Rp ${PriceFormatter.formatIdrNumber(parsedTp2Price)}\n\n" +
+                    "Total: ${PriceFormatter.formatCryptoExact(activeSellQty, 8)} $baseAsset (100% koin dialokasikan tanpa sisa/anti-dust).\n\nLanjutkan?"
+            isAutoSellActive && parsedTp1Price > 0.0 -> "Anda akan memasang 1 order jual Limit TP1 di Indodax:\n\n" +
+                    "• TP 1: ${PriceFormatter.formatCryptoExact(activeSellQty, 8)} $baseAsset @ Rp ${PriceFormatter.formatIdrNumber(parsedTp1Price)}\n\nLanjutkan?"
+            isAutoSellActive && parsedTp2Price > 0.0 -> "Anda akan memasang 1 order jual Limit TP2 di Indodax:\n\n" +
+                    "• TP 2: ${PriceFormatter.formatCryptoExact(activeSellQty, 8)} $baseAsset @ Rp ${PriceFormatter.formatIdrNumber(parsedTp2Price)}\n\nLanjutkan?"
+            else -> "Anda akan memasang 1 order jual Limit di Indodax:\n\n" +
+                    "• ${PriceFormatter.formatCryptoExact(activeSellQty, 8)} $baseAsset di harga pasar saat ini (Rp ${PriceFormatter.formatIdrNumber(validPrice)}).\n\nLanjutkan?"
+        }
+
         AlertDialog(
             onDismissRequest = { showSellConfirmDialog = false },
             containerColor = TvSurface,
             titleContentColor = TvRed,
-            title = { Text("Konfirmasi Jual Market", fontWeight = FontWeight.Bold) },
+            title = { Text(confirmTitle, fontWeight = FontWeight.Bold) },
             text = {
                 Text(
-                    "Anda akan menjual ${PriceFormatter.formatCryptoExact(activeSellQty, 8)} $baseAsset secara INSTAN di harga pasar Indodax (sekitar ${PriceFormatter.formatIdrNumber(validPrice)}).\n\nLanjutkan?",
+                    confirmMsg,
                     color = TvTextPrimary,
-                    fontSize = 13.sp
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp
                 )
             },
             confirmButton = {
                 Button(
                     onClick = {
-                        onExecuteSell?.invoke(activeSellQty)
+                        onExecuteSell?.invoke(activeSellQty, isAutoSellActive, parsedTp1Price, parsedTp1Pct, parsedTp2Price, parsedTp2Pct)
                         showSellConfirmDialog = false
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = TvRed)
                 ) {
-                    Text("IYA, JUAL SEKARANG", fontWeight = FontWeight.Bold)
+                    Text("IYA, PASANG ORDER", fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {

@@ -95,6 +95,7 @@ data class PositionContext(
             val sl = when {
                 spotPosition != null && spotPosition.stopLossPrice > 0.0 -> spotPosition.stopLossPrice
                 holdingStatus != null && holdingStatus.stopLossPrice > 0.0 -> holdingStatus.stopLossPrice
+                entry != null && entry > 0.0 -> entry * 0.99
                 else -> null
             }
 

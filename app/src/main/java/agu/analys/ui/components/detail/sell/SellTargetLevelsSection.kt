@@ -1,6 +1,7 @@
 package agu.analys.ui.components.detail.sell
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -8,6 +9,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -63,72 +65,105 @@ fun SellTargetLevelsSection(
             fontWeight = FontWeight.Bold
         )
 
-        Row(
+        Column(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            // Stop Loss Card
-            LevelInfoCard(
+            // Stop Loss Row
+            LevelInfoRow(
                 title = "Stop Loss",
                 priceText = if (sl != null && sl > 0.0) PriceFormatter.formatPrice(sl, quoteAsset = quoteAsset) else "Tidak diset",
                 pctText = if (slNetPct != null) PriceFormatter.formatPercentage(slNetPct, includePlusSign = true) else "--",
-                color = TvRed,
-                modifier = Modifier.weight(1f)
+                color = TvRed
             )
 
-            // Target TP1 Card
-            LevelInfoCard(
+            // Target TP1 Row
+            LevelInfoRow(
                 title = "Target TP1",
                 priceText = if (tp1 != null && tp1 > 0.0) PriceFormatter.formatPrice(tp1, quoteAsset = quoteAsset) else "--",
                 pctText = if (tp1NetPct != null) PriceFormatter.formatPercentage(tp1NetPct, includePlusSign = true) else "--",
-                color = TvGreen,
-                modifier = Modifier.weight(1f)
+                color = TvGreen
             )
 
-            // Target TP2 Card
-            LevelInfoCard(
+            // Target TP2 Row
+            LevelInfoRow(
                 title = "Target TP2",
                 priceText = if (tp2 != null && tp2 > 0.0) PriceFormatter.formatPrice(tp2, quoteAsset = quoteAsset) else "--",
                 pctText = if (tp2NetPct != null) PriceFormatter.formatPercentage(tp2NetPct, includePlusSign = true) else "--",
-                color = TvAmber,
-                modifier = Modifier.weight(1f)
+                color = TvAmber
             )
         }
     }
 }
 
 @Composable
-private fun LevelInfoCard(
+private fun LevelInfoRow(
     title: String,
     priceText: String,
     pctText: String,
-    color: androidx.compose.ui.graphics.Color,
+    color: Color,
     modifier: Modifier = Modifier
 ) {
-    Column(
+    Row(
         modifier = modifier
+            .fillMaxWidth()
             .background(TvSurface, RoundedCornerShape(8.dp))
-            .border(0.8.dp, color.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
-            .padding(8.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp)
+            .border(0.8.dp, color.copy(alpha = 0.25f), RoundedCornerShape(8.dp))
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = title,
-            color = TvTextSecondary,
-            fontSize = 9.sp,
-            fontWeight = FontWeight.Medium
-        )
-        Text(
-            text = priceText,
-            color = color,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Bold
-        )
-        Text(
-            text = "Net $pctText",
-            color = if (pctText.startsWith("+")) TvGreen else if (pctText.startsWith("-")) TvRed else TvTextSecondary,
-            fontSize = 9.5.sp,
-            fontWeight = FontWeight.SemiBold
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.weight(1f, fill = false)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(6.dp)
+                    .background(color, RoundedCornerShape(3.dp))
+            )
+            Text(
+                text = title,
+                color = TvTextSecondary,
+                fontSize = 11.5.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1
+            )
+        }
+
+        Spacer(Modifier.width(8.dp))
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.weight(2f, fill = false)
+        ) {
+            Text(
+                text = priceText,
+                color = color,
+                fontSize = 12.5.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    .basicMarquee()
+            )
+
+            Box(
+                modifier = Modifier
+                    .background(color.copy(alpha = 0.12f), RoundedCornerShape(4.dp))
+                    .padding(horizontal = 6.dp, vertical = 2.dp)
+            ) {
+                Text(
+                    text = "Net $pctText",
+                    color = color,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1
+                )
+            }
+        }
     }
 }
+

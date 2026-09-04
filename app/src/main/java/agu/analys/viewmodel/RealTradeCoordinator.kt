@@ -76,6 +76,17 @@ class RealTradeCoordinator(
         executor.executeCancelOrder(symbol, orderId, onResult)
     fun executeRealTrade(p: String, t: String, pr: Long, a: Double, tp1: Double, tp2: Double, cb: (Boolean, String) -> Unit) =
         executor.executeTrade(p, t, pr, a, tp1, tp2, cb)
+    fun executeRealSellOrders(
+        pair: String,
+        totalQuantity: Double,
+        marketPrice: Double,
+        isAutoTpEnabled: Boolean,
+        tp1Price: Double,
+        tp1Percent: Double,
+        tp2Price: Double,
+        tp2Percent: Double,
+        onResult: (Boolean, String) -> Unit
+    ) = executor.executeRealSellOrders(pair, totalQuantity, marketPrice, isAutoTpEnabled, tp1Price, tp1Percent, tp2Price, tp2Percent, onResult)
     fun executeRealAutoSellOnServer(p: String, tp1P: Double, tp1Pct: Double, tp2P: Double, tp2Pct: Double, cb: (Boolean, String) -> Unit) =
         executor.executeAutoSellOnServer(p, tp1P, tp1Pct, tp2P, tp2Pct, cb)
 

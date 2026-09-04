@@ -285,44 +285,27 @@ fun DetailChartScreen(
                         android.widget.Toast.makeText(context, "Harga belum tersedia.", android.widget.Toast.LENGTH_SHORT).show()
                     }
                 },
-                onExecuteSell = { sellQty ->
+                onExecuteSell = { sellQty, isAutoSell, tp1P, tp1Pct, tp2P, tp2Pct ->
                     val execPrice = if (tick?.price != null && tick!!.price > 0) tick!!.price else signal.targetPrice1
                     if (execPrice > 0) {
-                        if (isRealBuyMode) {
-                            val bal = realBalance[pair.baseAsset.lowercase()] ?: realBalance[pair.baseAsset.uppercase()] ?: 0.0
-                            if (bal > 0 && sellQty > 0) {
-                                viewModel.executeRealTrade(pair.symbol, "sell", execPrice.toLong(), sellQty.coerceAtMost(bal)) { success, msg ->
-                                    if (success) HapticUtil.vibrateTradeSuccess(context)
-                                    else HapticUtil.vibrateTradeFailure(context)
-                                    android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
-                                }
-                            } else {
-                                HapticUtil.vibrateTradeFailure(context)
-                                android.widget.Toast.makeText(context, "Saldo ${pair.baseAsset} kosong.", android.widget.Toast.LENGTH_SHORT).show()
-                            }
-                        } else {
-                            val bal = wallet.getAvailableCoin(pair.baseAsset)
-                            if (bal > 0 && sellQty > 0) {
-                                val res = viewModel.submitSimulationOrder(
-                                    side = agu.analys.trading.SimulationOrderSide.SELL,
-                                    type = agu.analys.trading.SimulationOrderType.MARKET,
-                                    price = execPrice,
-                                    quantity = sellQty.coerceAtMost(bal)
-                                )
-                                if (sellQty >= bal) viewModel.setOwnership(false, isReal = false)
-                                val isSuccess = res is agu.analys.trading.SimulationOrderResult.Success
-                                val msg = when (res) {
-                                    is agu.analys.trading.SimulationOrderResult.Success -> res.message
-                                    is agu.analys.trading.SimulationOrderResult.Error -> res.message
-                                }
-                                if (isSuccess) HapticUtil.vibrateTradeSuccess(context)
-                                else HapticUtil.vibrateTradeFailure(context)
-                                android.widget.Toast.makeText(context, "Simulasi: $msg", android.widget.Toast.LENGTH_SHORT).show()
-                            } else {
-                                HapticUtil.vibrateTradeFailure(context)
-                                android.widget.Toast.makeText(context, "Saldo simulasi kosong.", android.widget.Toast.LENGTH_SHORT).show()
-                            }
+                        viewModel.executeSellOrders(
+                            pair = pair,
+                            sellQty = sellQty,
+                            marketPrice = execPrice,
+                            isAutoTpEnabled = isAutoSell,
+                            tp1Price = tp1P,
+                            tp1Percent = tp1Pct,
+                            tp2Price = tp2P,
+                            tp2Percent = tp2Pct,
+                            isRealMode = isRealBuyMode
+                        ) { success, msg ->
+                            if (success) HapticUtil.vibrateTradeSuccess(context)
+                            else HapticUtil.vibrateTradeFailure(context)
+                            android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
                         }
+                    } else {
+                        HapticUtil.vibrateTradeFailure(context)
+                        android.widget.Toast.makeText(context, "Harga belum tersedia.", android.widget.Toast.LENGTH_SHORT).show()
                     }
                 },
                 onSetManualBuyPrice = { entryPrice, investedAmount ->

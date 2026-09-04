@@ -39,10 +39,11 @@ object SellSignalEvaluator {
         }
 
         val tp1 = context.tp1 ?: 0.0
-        val sl = context.stopLoss ?: 0.0
+        val tp2 = context.tp2 ?: 0.0
+        val sl = context.stopLoss ?: if (hasCostBasis && entryPrice != null && entryPrice > 0.0) entryPrice * 0.99 else 0.0
         val rsi = indicators?.rsi14
 
-        // 1. Stop Loss Hit
+        // 1. Stop Loss Hit (Harga Beli - 1%)
         if (sl > 0.0 && currentPrice <= sl) {
             return SellSignalState(
                 state = SellLifecycleState.STOP_LOSS_HIT,
@@ -60,7 +61,16 @@ object SellSignalEvaluator {
             )
         }
 
-        // 3. Take Profit 1 Target Reached
+        // 3. Take Profit 2 Target Reached
+        if (tp2 > 0.0 && currentPrice >= tp2 && (!hasCostBasis || netProfitPct > 0.0)) {
+            return SellSignalState(
+                state = SellLifecycleState.READY_TO_SELL,
+                reason = "Target TP2 tercapai",
+                netProfitPct = netProfitPct
+            )
+        }
+
+        // 4. Take Profit 1 Target Reached
         if (tp1 > 0.0 && currentPrice >= tp1 && (!hasCostBasis || netProfitPct > 0.0)) {
             return SellSignalState(
                 state = SellLifecycleState.READY_TO_SELL,
@@ -69,11 +79,17 @@ object SellSignalEvaluator {
             )
         }
 
-        // 4. Approaching TP1 Target
+        // 5. Approaching TP1 / TP2 Target
         if (tp1 > 0.0 && currentPrice >= tp1 * 0.98 && currentPrice < tp1) {
             return SellSignalState(
                 state = SellLifecycleState.APPROACHING_TARGET,
                 reason = "Mendekati target TP1",
+                netProfitPct = netProfitPct
+            )
+        } else if (tp2 > 0.0 && tp1 <= 0.0 && currentPrice >= tp2 * 0.98 && currentPrice < tp2) {
+            return SellSignalState(
+                state = SellLifecycleState.APPROACHING_TARGET,
+                reason = "Mendekati target TP2",
                 netProfitPct = netProfitPct
             )
         }

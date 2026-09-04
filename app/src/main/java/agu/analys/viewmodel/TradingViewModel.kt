@@ -430,6 +430,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         val spotPos = positionStore.get(pair.symbol)
         if (spotPos.isHolding && spotPos.quantity > 0.00000001) {
             val effectiveIsReal = spotPos.isReal || (hasRealBalance && prefs.hasIndodaxCredentials())
+            val sl = if (spotPos.stopLossPrice > 0.0) spotPos.stopLossPrice else if (spotPos.entryPrice > 0.0) spotPos.entryPrice * 0.99 else 0.0
             return CoinHoldingStatus(
                 isHolding = true,
                 quantity = spotPos.quantity,
@@ -437,6 +438,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
                 isReal = effectiveIsReal,
                 tp1Price = spotPos.tp1Price,
                 tp2Price = spotPos.tp2Price,
+                stopLossPrice = sl,
                 isTrailingTriggered = spotPos.isTrailingTriggered
             )
         }
@@ -447,6 +449,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
                 ?: realAvgBuyPrices.value[pair.symbol.uppercase()]
                 ?: realAvgBuyPrices.value[baseUpper]
                 ?: spotPos.entryPrice
+            val sl = if (spotPos.stopLossPrice > 0.0) spotPos.stopLossPrice else if (realAvg > 0.0) realAvg * 0.99 else 0.0
             return CoinHoldingStatus(
                 isHolding = true,
                 quantity = realQty,
@@ -454,6 +457,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
                 isReal = true,
                 tp1Price = spotPos.tp1Price,
                 tp2Price = spotPos.tp2Price,
+                stopLossPrice = sl,
                 isTrailingTriggered = spotPos.isTrailingTriggered
             )
         }
@@ -463,6 +467,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         val simQty = simWallet.coinBalances[baseLower] ?: simWallet.coinBalances[baseUpper] ?: 0.0
         if (simQty > 0.00000001 && baseUpper != "IDR") {
             val simAvg = simWallet.avgBuyPrices[baseLower] ?: simWallet.avgBuyPrices[baseUpper] ?: 0.0
+            val sl = if (spotPos.stopLossPrice > 0.0) spotPos.stopLossPrice else if (simAvg > 0.0) simAvg * 0.99 else 0.0
             return CoinHoldingStatus(
                 isHolding = true,
                 quantity = simQty,
@@ -470,6 +475,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
                 isReal = false,
                 tp1Price = spotPos.tp1Price,
                 tp2Price = spotPos.tp2Price,
+                stopLossPrice = sl,
                 isTrailingTriggered = spotPos.isTrailingTriggered
             )
         }
@@ -579,15 +585,55 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     ) {
         val symbol = _selectedPair.value.symbol
         positionCoordinator.setAutoSell(symbol, enabled, tp1Price, tp1Percent, tp2Price, tp2Percent)
-        if (enabled) {
-            val isReal = realCoordinator.isRealBuyEnabled.value
-            if (isReal) {
-                realCoordinator.executeRealAutoSellOnServer(symbol, tp1Price, tp1Percent, tp2Price, tp2Percent, onResult)
-            } else {
-                simCoordinator.placeSimulationAutoSellOrders(_selectedPair.value, tp1Price, tp1Percent, tp2Price, tp2Percent, onResult)
-            }
+        onResult(true, if (enabled) "Target TP1 & TP2 tersimpan ke evaluator sinyal." else "Target TP dinonaktifkan.")
+    }
+
+    fun executeSellOrders(
+        pair: agu.analys.model.TradingPair,
+        sellQty: Double,
+        marketPrice: Double,
+        isAutoTpEnabled: Boolean,
+        tp1Price: Double,
+        tp1Percent: Double,
+        tp2Price: Double,
+        tp2Percent: Double,
+        isRealMode: Boolean,
+        onResult: (Boolean, String) -> Unit
+    ) {
+        if (isRealMode) {
+            realCoordinator.executeRealSellOrders(
+                pair = pair.symbol,
+                totalQuantity = sellQty,
+                marketPrice = marketPrice,
+                isAutoTpEnabled = isAutoTpEnabled,
+                tp1Price = tp1Price,
+                tp1Percent = tp1Percent,
+                tp2Price = tp2Price,
+                tp2Percent = tp2Percent,
+                onResult = { success, msg ->
+                    if (success) {
+                        positionCoordinator.setOwnership(pair.symbol, false)
+                    }
+                    onResult(success, msg)
+                }
+            )
         } else {
-            onResult(true, "Auto TP dimatikan.")
+            simCoordinator.executeSimulationSellOrders(
+                pair = pair,
+                totalQuantity = sellQty,
+                marketPrice = marketPrice,
+                isAutoTpEnabled = isAutoTpEnabled,
+                tp1Price = tp1Price,
+                tp1Percent = tp1Percent,
+                tp2Price = tp2Price,
+                tp2Percent = tp2Percent,
+                onResult = { success, msg ->
+                    if (success) {
+                        positionCoordinator.setOwnership(pair.symbol, false)
+                    }
+                    onResult(success, msg)
+                }
+            )
         }
     }
 
