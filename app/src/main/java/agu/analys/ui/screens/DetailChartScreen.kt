@@ -76,6 +76,8 @@ fun DetailChartScreen(
     val favorites by viewModel.favorites.collectAsStateWithLifecycle()
     val spotPosition by viewModel.spotPosition.collectAsStateWithLifecycle()
     val sellSignalState by viewModel.sellSignalState.collectAsStateWithLifecycle()
+    val positionContext by viewModel.positionContext.collectAsStateWithLifecycle()
+    val tradingWorkflow by viewModel.tradingWorkflow.collectAsStateWithLifecycle()
     val selectedTimeframe by viewModel.selectedTimeframe.collectAsStateWithLifecycle()
     val aiGroq by viewModel.auditReportText.collectAsStateWithLifecycle()
     val aiGemini by viewModel.geminiSummaryText.collectAsStateWithLifecycle()
@@ -330,6 +332,8 @@ fun DetailChartScreen(
                 },
                 spotPosition = spotPosition,
                 sellSignalState = sellSignalState,
+                positionContext = positionContext,
+                workflow = tradingWorkflow,
                 onSetTrailingStop = { enabled, pct ->
                     viewModel.setTrailingStop(enabled, pct)
                     HapticUtil.vibrateTradeSuccess(context)

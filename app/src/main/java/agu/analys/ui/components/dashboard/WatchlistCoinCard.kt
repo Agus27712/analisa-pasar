@@ -117,6 +117,17 @@ fun WatchlistCoinCard(
         )
     }
 
+    val isBuyReady = badges.any { it.type == agu.analys.model.BadgeType.READY }
+    val isWorthIt = worth?.isWorthIt == true && worth.potentialProfitPct >= 2.0
+
+    // User constraint P1: "tidak semua koin yang belum dibeli memiliki pulse"
+    // HANYA koin yang berstatus READY to buy yang berdenyut (pulse).
+    val shouldPulse = if (isHolding) {
+        badgeInfo?.isExitDecisionEvent == true
+    } else {
+        isBuyReady
+    }
+
     val pulseTransition = rememberInfiniteTransition(label = "pulse_card_${pair.symbol}")
     val pulseAlpha by pulseTransition.animateFloat(
         initialValue = 0.25f,
@@ -128,8 +139,18 @@ fun WatchlistCoinCard(
         label = "pulse_alpha_${pair.symbol}"
     )
 
-    val cardBorder = if (badgeInfo != null) {
-        BorderStroke(1.2.dp, badgeInfo.color.copy(alpha = pulseAlpha))
+    val cardBorder = if (isHolding) {
+        if (badgeInfo != null && badgeInfo.isExitDecisionEvent) {
+            BorderStroke(1.4.dp, badgeInfo.color.copy(alpha = pulseAlpha))
+        } else {
+            BorderStroke(1.dp, Color(0xFF2962FF).copy(alpha = 0.45f))
+        }
+    } else if (isBuyReady) {
+        // Sinyal eksekusi BUY aktif: berdenyut (pulse)
+        BorderStroke(1.4.dp, TvGreen.copy(alpha = pulseAlpha))
+    } else if (isWorthIt) {
+        // Layak dianalisa tapi belum ada sinyal konfirmasi READY: aksen border statis tenang tanpa pulse
+        BorderStroke(1.dp, TvGreen.copy(alpha = 0.35f))
     } else {
         BorderStroke(1.dp, DashboardColors.Border)
     }
@@ -196,15 +217,17 @@ fun WatchlistCoinCard(
                             }
 
                             if (badgeInfo != null) {
+                                val badgeBgAlpha = if (badgeInfo.isExitDecisionEvent) (0.16f + 0.14f * pulseAlpha) else 0.16f
+                                val badgeBorderAlpha = if (badgeInfo.isExitDecisionEvent) pulseAlpha else 0.5f
                                 Box(
                                     modifier = Modifier
                                         .background(
-                                            badgeInfo.color.copy(alpha = (0.16f + 0.14f * pulseAlpha)),
+                                            badgeInfo.color.copy(alpha = badgeBgAlpha),
                                             RoundedCornerShape(4.dp)
                                         )
                                         .border(
                                             0.8.dp,
-                                            badgeInfo.color.copy(alpha = pulseAlpha),
+                                            badgeInfo.color.copy(alpha = badgeBorderAlpha),
                                             RoundedCornerShape(4.dp)
                                         )
                                         .padding(horizontal = 5.dp, vertical = 1.5.dp)

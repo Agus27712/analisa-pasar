@@ -199,16 +199,18 @@ fun RadarLinearCheckpointStepper(
         val idx = checkpoints.indexOfFirst { !it.isOk }
         if (idx >= 0) idx else 3
     }
+    
+    val effectiveCompleted = completed
 
     // 1 Linear Progress Bar Global (masing-masing checkpoint = 25%)
-    val targetProgress = (completed.coerceIn(0, 4) / 4f)
+    val targetProgress = (effectiveCompleted.coerceIn(0, 4) / 4f)
     val animGlobalProgress by animateFloatAsState(
         targetValue = targetProgress,
         animationSpec = tween(600, easing = FastOutSlowInEasing),
         label = "global_linear_progress"
     )
 
-    val progressPercent = (completed.coerceIn(0, 4) * 25)
+    val progressPercent = (effectiveCompleted.coerceIn(0, 4) * 25)
 
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -229,7 +231,7 @@ fun RadarLinearCheckpointStepper(
                 )
                 Spacer(Modifier.width(6.dp))
                 Text(
-                    text = "($completed/4 Checkpoint)",
+                    text = "($effectiveCompleted/4 Checkpoint)",
                     color = TvTextPrimary,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold
@@ -238,7 +240,7 @@ fun RadarLinearCheckpointStepper(
 
             Text(
                 text = "$progressPercent%",
-                color = if (completed == 4) TvGreen else TvBlue,
+                color = if (effectiveCompleted == 4) TvGreen else TvBlue,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.ExtraBold
             )

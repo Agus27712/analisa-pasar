@@ -2,17 +2,23 @@ package agu.analys.ui.components.dashboard
 
 import androidx.compose.ui.graphics.Color
 import agu.analys.config.TradingFeeConfig
+import agu.analys.engine.sell.SellSignalEvaluator
 import agu.analys.model.CoinHoldingStatus
 import agu.analys.model.MarketTick
+import agu.analys.model.PositionContext
+import agu.analys.model.SellLifecycleState
+import agu.analys.model.TechnicalIndicators
 import agu.analys.ui.theme.DarkAppColors
+import java.util.Locale
 
 /**
- * Single source of truth for evaluating "Ready Sell" badges across the application
- * (WatchlistCoinCard, ProactiveProfitSummaryCard, etc.)
+ * Single source of truth for evaluating "Ready Sell" badges across the application,
+ * delegating all calculations to [SellSignalEvaluator].
  */
 data class ReadySellBadge(
     val label: String,
-    val color: Color
+    val color: Color,
+    val isExitDecisionEvent: Boolean = false
 )
 
 object ReadySellBadgeEvaluator {
@@ -29,33 +35,46 @@ object ReadySellBadgeEvaluator {
         val currentPrice = tick?.price ?: 0.0
         if (currentPrice <= 0.0) return null
 
-        val entryPrice = holding.entryPrice
-        val sellFeeRate = (tradingFees.sellMakerPct / 100.0).coerceAtLeast(0.0)
-        val grossSell = holding.quantity * currentPrice
-        val netSell = grossSell * (1.0 - sellFeeRate)
-        val costBasis = holding.quantity * (if (entryPrice > 0.0) entryPrice else currentPrice)
-        if (costBasis <= 0.0) return null
+        val pairSymbol = tick?.symbol ?: ""
+        val context = PositionContext.create(
+            symbol = pairSymbol,
+            spotPosition = null,
+            holdingStatus = holding,
+            currentPrice = currentPrice,
+            fees = tradingFees
+        )
+        val indicators = if (rsi != null) TechnicalIndicators(rsi14 = rsi) else null
+        val sellState = SellSignalEvaluator.evaluate(
+            context = context,
+            indicators = indicators,
+            tradingFees = tradingFees,
+            high24h = tick?.high24h ?: 0.0
+        )
 
-        val netProfitIdr = netSell - costBasis
-        val netProfitPct = (netProfitIdr / costBasis) * 100.0
-
-        val tp1 = holding.tp1Price
-        val high24h = tick?.high24h ?: 0.0
-
-        return when {
-            tp1 > 0.0 && currentPrice >= tp1 && netProfitPct > 0.0 ->
-                ReadySellBadge("🎯 TARGET TP1", colorOrange)
-            netProfitPct >= 5.0 ->
-                ReadySellBadge("🔥 PROFIT +5%", colorOrange)
-            high24h > 0.0 && currentPrice >= high24h * 0.98 && netProfitPct >= 1.0 ->
-                ReadySellBadge("📈 NEAR 24H HIGH", colorOrange)
-            netProfitPct >= 2.0 ->
-                ReadySellBadge("💰 PROFIT +2%", colorGreen)
-            netProfitPct > 0.0 || (holding.isTrailingTriggered && netProfitPct > 0.0) ->
-                ReadySellBadge("💰 READY PROFIT", colorGreen)
-            rsi != null && rsi.isFinite() && rsi >= 70.0 && netProfitPct > 0.0 ->
-                ReadySellBadge("⚠️ RSI OVERBOUGHT", colorRed)
-            else -> null
+        return when (sellState.state) {
+            SellLifecycleState.TRAILING_TRIGGERED ->
+                ReadySellBadge("🚨 TRAILING", colorOrange, isExitDecisionEvent = true)
+            SellLifecycleState.STOP_LOSS_HIT ->
+                ReadySellBadge("⚠️ STOP LOSS", colorRed, isExitDecisionEvent = true)
+            SellLifecycleState.READY_TO_SELL -> {
+                when {
+                    sellState.reason == "Target TP1 tercapai" ->
+                        ReadySellBadge("🎯 READY TO SELL", colorGreen, isExitDecisionEvent = true)
+                    sellState.reason == "RSI Overbought" ->
+                        ReadySellBadge("⚠️ RSI OVERBOUGHT", colorRed, isExitDecisionEvent = true)
+                    sellState.reason == "Dekat High 24j" ->
+                        ReadySellBadge("📈 DEKAT HIGH 24J", colorGreen, isExitDecisionEvent = true)
+                    sellState.netProfitPct >= 2.0 ->
+                        ReadySellBadge("💰 PROFIT +${String.format(Locale.US, "%.1f", sellState.netProfitPct)}%", colorGreen, isExitDecisionEvent = true)
+                    else ->
+                        ReadySellBadge("🎯 READY TO SELL", colorGreen, isExitDecisionEvent = true)
+                }
+            }
+            SellLifecycleState.APPROACHING_TARGET ->
+                ReadySellBadge("🎯 APPROACHING TARGET", colorOrange, isExitDecisionEvent = true)
+            SellLifecycleState.MONITORING ->
+                ReadySellBadge("🛡️ HOLDING", Color(0xFF2962FF), isExitDecisionEvent = false)
+            SellLifecycleState.NOT_HOLDING -> null
         }
     }
 }

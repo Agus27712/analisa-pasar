@@ -38,8 +38,7 @@ object OfficeDailyEvaluator {
     fun evaluate(
         price: Double,
         history: List<CandleBar>,
-        fees: TradingFeeConfig = TradingFeeConfig(),
-        holdingStatus: agu.analys.model.CoinHoldingStatus? = null
+        fees: TradingFeeConfig = TradingFeeConfig()
     ): OfficeDailyEvalResult {
         if (price <= 0.0) {
             return OfficeDailyEvalResult(AISignalState(), TechnicalIndicators())
@@ -47,12 +46,6 @@ object OfficeDailyEvaluator {
 
         val minCandles = 20
         if (history.size < minCandles) {
-            val defaultSl = price * 0.94
-            val defaultTp1 = price * 1.10
-            val defaultTp2 = price * 1.22
-            val feeResult = FeeCalculator.roundTrip(price, defaultSl, defaultTp2, fees)
-            val netRr = feeResult.netRr.coerceAtLeast(1.8)
-
             val mtfSnapshot = ScalpingMtfSnapshot(
                 biasOk = false,
                 biasDirection = "neutral",
@@ -66,7 +59,7 @@ object OfficeDailyEvaluator {
                 triggerDetail = "Menunggu konfirmasi area beli aman.",
                 entryPriceOk = false,
                 entryPriceStatus = MtfLegStatus.WAITING,
-                entryPriceDetail = "Area entry santai: Rp ${fmtPrice(price)} (Estimasi Net R:R 1:${fmt(netRr)}).",
+                entryPriceDetail = "Menunggu riwayat candle pasar untuk memetakan level entry Office Daily.",
                 path = ScalpingPath.PULLBACK,
                 statusTitle = "MENGUMPULKAN DATA",
                 waitingFor = "Menunggu sinkronisasi candle makro",
@@ -76,16 +69,16 @@ object OfficeDailyEvaluator {
             return OfficeDailyEvalResult(
                 signal = AISignalState(
                     action = SignalAction.HOLD,
-                    confidence = 30,
+                    confidence = 0,
                     sentiment = TrendSentiment.NEUTRAL_CONSOLIDATION,
                     entryPrice = price,
-                    targetPrice1 = defaultTp1,
-                    targetPrice2 = defaultTp2,
-                    stopLoss = defaultSl,
-                    riskRewardRatio = "1:${fmt(netRr)}",
+                    targetPrice1 = 0.0,
+                    targetPrice2 = 0.0,
+                    stopLoss = 0.0,
+                    riskRewardRatio = "--",
                     reasoning = listOf(
                         "Data candle sedang disinkronkan (${history.size}/$minCandles candle).",
-                        "Estimasi target telah disiapkan."
+                        "Menunggu riwayat candle untuk setup Office Daily."
                     ),
                     timestamp = System.currentTimeMillis(),
                     scalpingStage = ScalpingStage.HOLD,
@@ -195,35 +188,9 @@ object OfficeDailyEvaluator {
 
         val completedSteps = listOf(step1Ok, step2Ok, step3Ok, step4Ok).count { it }
 
-        // Position-Aware Logic
-        val isHolding = holdingStatus?.isHolding == true
-        val entryPrice = holdingStatus?.entryPrice ?: 0.0
-        val pnlPct = if (isHolding && entryPrice > 0.0) ((price - entryPrice) / entryPrice) * 100.0 else 0.0
-
-        var isOfficeTp = false
-        var isOfficeSl = false
-
-        if (isHolding) {
-            val tp1 = if (holdingStatus!!.tp1Price > 0.0) holdingStatus.tp1Price else entryPrice * 1.08 // Target harian santai +8%
-            val sl = entryPrice * 0.94  // Support bawah -6%
-
-            when {
-                price >= tp1 || rsi >= 74.0 -> {
-                    isOfficeTp = true
-                    reasons.add(0, "OFFICE TARGET: Profit tercapai (+${fmt(pnlPct)}%) / RSI Overbought. Saatnya Take Profit santai.")
-                }
-                price <= sl -> {
-                    isOfficeSl = true
-                    reasons.add(0, "OFFICE CUT LOSS: Tren harian melanggar batas support (${fmt(pnlPct)}%).")
-                }
-                else -> {
-                    reasons.add(0, "OFFICE HOLD: Posisi aman (Floating ${fmt(pnlPct)}%). Tidak perlu pantau chart terus.")
-                }
-            }
-        }
-
-        val isQualified = !isHolding && completedSteps == 4 && buyScore >= 55.0 && buyScore > sellScore * 1.3
-        val isSellSignal = isOfficeTp || isOfficeSl || rsi >= 74.0 || price >= calculatedTp1 || (sellScore >= 50.0 && sellScore > buyScore * 1.2)
+        // ── Keputusan akhir (Market Analysis) ────────────────────────────────
+        val isQualified = completedSteps == 4 && buyScore >= 55.0 && buyScore > sellScore * 1.3
+        val isSellSignal = rsi >= 74.0 || price >= calculatedTp1 || (sellScore >= 50.0 && sellScore > buyScore * 1.2)
 
         val finalAction = when {
             isSellSignal -> SignalAction.SELL
@@ -231,7 +198,7 @@ object OfficeDailyEvaluator {
             else -> SignalAction.HOLD
         }
 
-        if (isSellSignal && !isOfficeTp && !isOfficeSl) {
+        if (isSellSignal) {
             reasons.add(0, if (price >= calculatedTp1) "🎯 Target TP tercapai di Rp ${fmtPrice(calculatedTp1)} - Take Profit!" else "⚠️ Jenuh Beli / Sinyal Distribusi - Amankan Profit!")
         }
 

@@ -31,8 +31,7 @@ object ScalpingMtfEvaluator {
         bids: List<OrderBookItem> = emptyList(),
         asks: List<OrderBookItem> = emptyList(),
         fees: TradingFeeConfig = TradingFeeConfig(),
-        sensitivity: ScalpingSensitivity = ScalpingSensitivity.BALANCED,
-        holdingStatus: agu.analys.model.CoinHoldingStatus? = null
+        sensitivity: ScalpingSensitivity = ScalpingSensitivity.BALANCED
     ): Result? {
         if (price <= 0.0 || h1Candles.size < 20 || m15Candles.size < 20 || m1Candles.size < 20) return null
 
@@ -89,35 +88,6 @@ object ScalpingMtfEvaluator {
         if (isDangerousNoise) reasons.add("Noise liar/Choppy! Entry ditahan.")
         if (!hasRoomToGrow) reasons.add("Harga terlalu dekat resistance M15.")
 
-        // Position-Aware Logic
-        val isHolding = holdingStatus?.isHolding == true
-        val entryPrice = holdingStatus?.entryPrice ?: 0.0
-        val pnlPct = if (isHolding && entryPrice > 0.0) ((price - entryPrice) / entryPrice) * 100.0 else 0.0
-
-        var isTakeProfitSell = false
-        var isCutLossSell = false
-
-        if (isHolding) {
-            val scalpingTp = entryPrice * 1.015 // Target scalping tipis +1.5%
-            val scalpingSl = entryPrice * 0.992 // Stop loss ketat -0.8%
-            
-            when {
-                price >= scalpingTp -> {
-                    isTakeProfitSell = true
-                    reasons.add(0, "SCALPING TP: Profit +${fmt(pnlPct)}%. Amankan target cepat!")
-                }
-                price <= scalpingSl -> {
-                    isCutLossSell = true
-                    reasons.add(0, "SCALPING CUT LOSS: Batas risiko tersentuh (${fmt(pnlPct)}%).")
-                }
-                else -> {
-                    reasons.add(0, "SCALPING HOLD: Posisi aktif (Floating ${fmt(pnlPct)}%). Memantau M1.")
-                }
-            }
-        }
-
-        val finalSellSignal = isTakeProfitSell || isCutLossSell || (isHolding && rsi1M > 82.0)
-
         // 5. Risk / Reward & Action
         val stopPct = if (isAggressive) volPct * 1.2 else volPct * 0.8
         val sl = price * (1.0 - (stopPct.coerceIn(0.5, 3.0) / 100.0))
@@ -147,12 +117,10 @@ object ScalpingMtfEvaluator {
         }
 
         val action = when {
-            finalSellSignal -> SignalAction.SELL
-            ready && !isHolding -> SignalAction.BUY
+            ready -> SignalAction.BUY
             else -> SignalAction.HOLD
         }
         val stage = when {
-            finalSellSignal -> ScalpingStage.HOLD
             strong -> ScalpingStage.STRONG_ENTRY
             ready -> ScalpingStage.ENTRY
             early -> ScalpingStage.EARLY_ENTRY

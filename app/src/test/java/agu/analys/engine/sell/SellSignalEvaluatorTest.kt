@@ -113,7 +113,7 @@ class SellSignalEvaluatorTest {
         val result = SellSignalEvaluator.evaluate(position, tick, indicators, TradingFeeConfig(sellMakerPct = 0.0))
         
         assertEquals(SellLifecycleState.READY_TO_SELL, result.state)
-        assertEquals("Siap profit", result.reason.let { if (it == "Siap profit" || it == "RSI Overbought") it else "" })
+        assertEquals("RSI Overbought", result.reason)
     }
 
     @Test

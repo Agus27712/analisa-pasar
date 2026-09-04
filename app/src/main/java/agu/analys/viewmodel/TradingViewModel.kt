@@ -20,12 +20,15 @@ import agu.analys.model.MarketConnectionState
 import agu.analys.model.CoinHoldingStatus
 import agu.analys.model.MarketTick
 import agu.analys.model.OrderBookItem
+import agu.analys.model.PositionContext
 import agu.analys.model.SignalAction
 import agu.analys.model.TechnicalIndicators
 import agu.analys.model.Timeframe
 import agu.analys.model.TradeStreamItem
 import agu.analys.model.TradingPair
+import agu.analys.model.TradingWorkflow
 import agu.analys.model.WorthCoinInfo
+import agu.analys.model.resolveWorkflow
 import agu.analys.service.GeminiAiService
 import agu.analys.service.GroqAiService
 import agu.analys.service.IndodaxMarketService
@@ -50,6 +53,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.isActive
@@ -153,28 +157,6 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     val currentTick: StateFlow<MarketTick?> = marketDataCoordinator.currentTick
     val currentIndicators: StateFlow<TechnicalIndicators> = engine.indicators
     val aiSignalState: StateFlow<AISignalState> = engine.signalState
-
-    val sellSignalState: StateFlow<agu.analys.model.SellSignalState> = kotlinx.coroutines.flow.combine(
-        positionCoordinator.spotPosition,
-        currentTick,
-        currentIndicators
-    ) { position, tick, indicators ->
-        agu.analys.engine.sell.SellSignalEvaluator.evaluate(position, tick, indicators, tradingFees.value)
-    }
-    .onEach { state ->
-        val symbol = _selectedPair.value.symbol
-        val transition = agu.analys.engine.sell.SellSignalLifecycleManager.process(symbol, state)
-        if (transition.hasTriggeringTransition && isNotificationsEnabled.value) {
-            agu.analys.util.AlertNotificationHelper.sendPriceAlertNotification(
-                context = getApplication(),
-                notificationId = symbol.hashCode() + 1000,
-                title = "Sinyal Jual: $symbol",
-                message = "${state.reason} - P/L: ${agu.analys.util.PriceFormatter.formatPercentage(state.netProfitPct, includePlusSign = true)}",
-                symbol = symbol
-            )
-        }
-    }
-    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), agu.analys.model.SellSignalState())
 
     val orderBookBids: StateFlow<List<OrderBookItem>> = marketDataCoordinator.orderBookBids
     val orderBookAsks: StateFlow<List<OrderBookItem>> = marketDataCoordinator.orderBookAsks
@@ -328,15 +310,48 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         }
     }.stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000), emptyMap())
 
-    init {
-        viewModelScope.launch {
-            kotlinx.coroutines.flow.combine(selectedPair, holdingStatuses) { pair, statuses ->
-                statuses[pair.symbol] ?: getHoldingStatus(pair)
-            }.collect { status ->
-                engine.currentHoldingStatus = status
-            }
+    val positionContext: StateFlow<PositionContext> = kotlinx.coroutines.flow.combine(
+        _selectedPair,
+        spotPosition,
+        currentTick,
+        tradingFees,
+        holdingStatuses
+    ) { pair, spotPos, tick, fees, statuses ->
+        val holding = statuses[pair.symbol] ?: getHoldingStatus(pair)
+        val price = tick?.price ?: 0.0
+        PositionContext.create(
+            symbol = pair.symbol,
+            spotPosition = spotPos,
+            holdingStatus = holding,
+            currentPrice = price,
+            fees = fees
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), PositionContext())
+
+    val tradingWorkflow: StateFlow<TradingWorkflow> = positionContext
+        .map { resolveWorkflow(it) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), TradingWorkflow.BUY)
+
+    val sellSignalState: StateFlow<agu.analys.model.SellSignalState> = kotlinx.coroutines.flow.combine(
+        positionContext,
+        currentIndicators
+    ) { posContext, indicators ->
+        agu.analys.engine.sell.SellSignalEvaluator.evaluate(posContext, indicators, tradingFees.value)
+    }
+    .onEach { state ->
+        val symbol = _selectedPair.value.symbol
+        val transition = agu.analys.engine.sell.SellSignalLifecycleManager.process(symbol, state)
+        if (transition.hasTriggeringTransition && isNotificationsEnabled.value) {
+            agu.analys.util.AlertNotificationHelper.sendPriceAlertNotification(
+                context = getApplication(),
+                notificationId = symbol.hashCode() + 1000,
+                title = "Sinyal Jual: $symbol",
+                message = "${state.reason} - P/L: ${agu.analys.util.PriceFormatter.formatPercentage(state.netProfitPct, includePlusSign = true)}",
+                symbol = symbol
+            )
         }
     }
+    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), agu.analys.model.SellSignalState())
     
     val isFetchingRealBalance: StateFlow<Boolean> = realCoordinator.isFetchingRealBalance
     val realTradeStatus: StateFlow<String> = realCoordinator.realTradeStatus

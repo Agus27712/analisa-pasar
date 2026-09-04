@@ -8,10 +8,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Timeline
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import agu.analys.ui.components.detail.SectionTitle
 import agu.analys.ui.theme.*
 
@@ -20,7 +24,9 @@ fun RadarHeaderSection(
     titleHeader: String,
     completed: Int,
     onToggleChecklist: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    statusText: String? = null,
+    statusColor: Color? = null
 ) {
     Row(
         modifier = modifier.fillMaxWidth(),
@@ -36,14 +42,15 @@ fun RadarHeaderSection(
 
         Spacer(Modifier.width(8.dp))
 
-        val radarLedColor = if (completed == 4) TvGreen else TvBlue
-        Box(
-            contentAlignment = Alignment.Center,
+        val radarLedColor = statusColor ?: if (completed == 4) TvGreen else TvBlue
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
             modifier = Modifier
                 .background(TvSurfaceVariant, RoundedCornerShape(20.dp))
                 .border(1.dp, TvBorder, RoundedCornerShape(20.dp))
                 .clickable(onClick = onToggleChecklist)
-                .padding(horizontal = 10.dp, vertical = 6.dp)
+                .padding(horizontal = 10.dp, vertical = 5.dp)
         ) {
             Box(
                 contentAlignment = Alignment.Center,
@@ -58,6 +65,15 @@ fun RadarHeaderSection(
                     modifier = Modifier
                         .size(6.5.dp)
                         .background(radarLedColor, CircleShape)
+                )
+            }
+
+            if (statusText != null) {
+                Text(
+                    text = statusText,
+                    color = radarLedColor,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold
                 )
             }
         }

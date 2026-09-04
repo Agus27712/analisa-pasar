@@ -226,7 +226,7 @@ fun TradingViewModel.deployTrailingOrder(symbol: String) {
     if (!isReal) {
         val simCoin = simCoordinator.wallet.value.getTotalCoin(baseKey)
         if (simCoin > 0.0 && (!pos.isHolding || pos.quantity <= 0.0)) {
-            val entryP = if (pos.entryPrice > 0.0) pos.entryPrice else (if (currentPrice > 0.0) currentPrice else 1.0)
+            val entryP = if (pos.entryPrice > 0.0) pos.entryPrice else 0.0
             positionStore.setHolding(symbol, invested = simCoin * entryP, entry = entryP, quantity = simCoin)
             pos = positionStore.get(symbol)
         }

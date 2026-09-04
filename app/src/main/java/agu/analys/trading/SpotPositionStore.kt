@@ -28,6 +28,7 @@ data class SpotPosition(
     val trailingPercent: Double = 0.0,
     val peakPrice: Double = 0.0,
     val trailingStopPrice: Double = 0.0,
+    val stopLossPrice: Double = 0.0,
     val isTrailingTriggered: Boolean = false,
     val isAutoSellEnabled: Boolean = false,
     val tp1Price: Double = 0.0,

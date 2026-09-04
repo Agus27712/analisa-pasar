@@ -41,19 +41,13 @@ private enum class SwingSetup {
 
 object SwingEvaluator {
 
-    fun evaluate(price: Double, history: List<CandleBar>, fees: TradingFeeConfig = TradingFeeConfig(), holdingStatus: agu.analys.model.CoinHoldingStatus? = null): SwingEvalResult {
+    fun evaluate(price: Double, history: List<CandleBar>, fees: TradingFeeConfig = TradingFeeConfig()): SwingEvalResult {
         if (price <= 0.0) {
             return SwingEvalResult(AISignalState(), TechnicalIndicators())
         }
 
         val minCandles = 20
         if (history.size < minCandles) {
-            val defaultSl = price * 0.95
-            val defaultTp1 = price * 1.08
-            val defaultTp2 = price * 1.18
-            val feeResult = FeeCalculator.roundTrip(price, defaultSl, defaultTp2, fees)
-            val netRr = feeResult.netRr.coerceAtLeast(1.5)
-
             val mtfSnapshot = ScalpingMtfSnapshot(
                 biasOk = false,
                 biasDirection = "neutral",
@@ -67,7 +61,7 @@ object SwingEvaluator {
                 triggerDetail = "Menunggu data volume dan momentum.",
                 entryPriceOk = false,
                 entryPriceStatus = MtfLegStatus.WAITING,
-                entryPriceDetail = "Area entry swing: Rp ${fmtPrice(price)} (Estimasi Net R:R 1:${fmt(netRr)}).",
+                entryPriceDetail = "Menunggu riwayat candle pasar untuk memetakan level entry swing.",
                 path = ScalpingPath.PULLBACK,
                 statusTitle = "MENGUMPULKAN DATA",
                 waitingFor = "Menunggu sinkronisasi data candle",
@@ -77,16 +71,16 @@ object SwingEvaluator {
             return SwingEvalResult(
                 AISignalState(
                     action = SignalAction.HOLD,
-                    confidence = 30,
+                    confidence = 0,
                     sentiment = TrendSentiment.NEUTRAL_CONSOLIDATION,
                     entryPrice = price,
-                    targetPrice1 = defaultTp1,
-                    targetPrice2 = defaultTp2,
-                    stopLoss = defaultSl,
-                    riskRewardRatio = "1:${fmt(netRr)}",
+                    targetPrice1 = 0.0,
+                    targetPrice2 = 0.0,
+                    stopLoss = 0.0,
+                    riskRewardRatio = "--",
                     reasoning = listOf(
                         "Data candle sedang disinkronkan (${history.size}/$minCandles candle).",
-                        "Estimasi entry dan target swing awal telah disiapkan."
+                        "Menunggu riwayat candle pasar untuk kalkulasi Swing."
                     ),
                     timestamp = System.currentTimeMillis(),
                     scalpingStage = ScalpingStage.HOLD,
@@ -380,40 +374,8 @@ object SwingEvaluator {
 
         val completedSteps = listOf(step1Ok, step2Ok, step3Ok, step4Ok).count { it }
 
-        // ── Keputusan akhir ─────────────────────────────────────────────────
-        // Position-Aware Logic
-        val isHolding = holdingStatus?.isHolding == true
-        val entryPrice = holdingStatus?.entryPrice ?: 0.0
-        val pnlPct = if (isHolding && entryPrice > 0.0) ((price - entryPrice) / entryPrice) * 100.0 else 0.0
-
-        var isTakeProfitSell = false
-        var isCutLossSell = false
-        var isEmergencySell = false
-
-        if (isHolding) {
-            val tp1 = if (holdingStatus!!.tp1Price > 0.0) holdingStatus.tp1Price else entryPrice * 1.08
-            val sl = entryPrice * 0.95
-
-            when {
-                price >= tp1 -> {
-                    isTakeProfitSell = true
-                    reasons.add(0, "TARGET TERCAPAI: Profit +${fmt(pnlPct)}%. Amankan keuntungan sekarang!")
-                }
-                price <= sl -> {
-                    isCutLossSell = true
-                    reasons.add(0, "CUT LOSS: Harga menembus batas risiko (${fmt(pnlPct)}%).")
-                }
-                rsi >= 75.0 || macdHist < -0.02 -> {
-                    isEmergencySell = true
-                    reasons.add(0, "MOMENTUM HILANG: Indikator melemah saat posisi terbuka. Waspada pembalikan!")
-                }
-                else -> {
-                    reasons.add(0, "HOLDING: Posisi aktif (Floating ${fmt(pnlPct)}%). Tren masih aman.")
-                }
-            }
-        }
-
-        val isQualifiedBuy = !isHolding && completedSteps == 4 && buy >= 42.0 && buy > sell * 1.15 &&
+        // ── Keputusan akhir (Market Analysis) ────────────────────────────────
+        val isQualifiedBuy = completedSteps == 4 && buy >= 42.0 && buy > sell * 1.15 &&
             detectedSetup in listOf(SwingSetup.REJECTION, SwingSetup.BREAKOUT, SwingSetup.RETEST, SwingSetup.RECLAIM_FAILED) &&
             (detectedSetup != SwingSetup.REJECTION || !rejectionAtResistance) // rejection di resistance = bukan buy
 
@@ -422,7 +384,7 @@ object SwingEvaluator {
             (detectedSetup == SwingSetup.RECLAIM_FAILED && (reclaimFromAbove || failedBreakout)) ||
             (detectedSetup == SwingSetup.BREAKOUT && (solidBreakdown || bosBreakdown)))
 
-        val isSellSignal = isTechnicalSell || isTakeProfitSell || isCutLossSell || isEmergencySell
+        val isSellSignal = isTechnicalSell
 
         val finalAction = when {
             isSellSignal -> SignalAction.SELL
@@ -430,7 +392,7 @@ object SwingEvaluator {
             else -> SignalAction.HOLD
         }
 
-        if (isSellSignal && !isTakeProfitSell && !isCutLossSell && !isEmergencySell) {
+        if (isSellSignal) {
             reasons.add(0, when {
                 price >= calculatedTp1 * 0.995 -> "🎯 Target TP1 tercapai di Rp ${fmtPrice(calculatedTp1)} — Amankan profit!"
                 detectedSetup == SwingSetup.REJECTION && rejectionAtResistance -> "⚠️ Rejection di Resistance — rekomendasi take profit / hindari buy."

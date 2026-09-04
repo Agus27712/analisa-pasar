@@ -84,6 +84,8 @@ data class CoinHoldingStatus(
     val isReal: Boolean = false,
     val tp1Price: Double = 0.0,
     val tp2Price: Double = 0.0,
+    val stopLossPrice: Double = 0.0,
+    val isTrailingEnabled: Boolean = false,
     val isTrailingTriggered: Boolean = false
 )
 data class MarketTick(val symbol: String, val price: Double, val high24h: Double, val low24h: Double, val volume24h: Double, val change24h: Double, val timestamp: Long = System.currentTimeMillis())

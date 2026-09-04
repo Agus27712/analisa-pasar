@@ -92,13 +92,16 @@ fun ProactiveProfitSummaryCard(
                 rsi = null
             ) ?: return@mapNotNull null
 
+            if (!badge.isExitDecisionEvent) return@mapNotNull null
+
             val entryPrice = holding.entryPrice
+            val hasCostBasis = entryPrice > 0.0
             val sellFeeRate = (tradingFees.sellMakerPct / 100.0).coerceAtLeast(0.0)
             val grossSell = holding.quantity * currentPrice
             val netSell = grossSell * (1.0 - sellFeeRate)
-            val costBasis = holding.quantity * (if (entryPrice > 0.0) entryPrice else currentPrice)
-            val netProfitIdrLocal = netSell - costBasis
-            val netProfitPct = if (costBasis > 0.0) (netProfitIdrLocal / costBasis) * 100.0 else 0.0
+            val costBasis = if (hasCostBasis) holding.quantity * entryPrice else 0.0
+            val netProfitIdrLocal = if (hasCostBasis) netSell - costBasis else 0.0
+            val netProfitPct = if (hasCostBasis && costBasis > 0.0) (netProfitIdrLocal / costBasis) * 100.0 else 0.0
 
             val rate = if (pair.quoteAsset.equals("USDT", true) || pair.quoteAsset.equals("USD", true)) usdtIdrRate else 1.0
             val cashOutValueIdr = netSell * rate

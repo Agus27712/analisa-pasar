@@ -63,9 +63,9 @@ fun RadarTargetLevelsSection(
         AnimatedVisibility(visible = isLevelPlanVisible) {
             Column(modifier = Modifier.padding(top = 8.dp)) {
                 val refPrice = if (signal.entryPrice > 0.0) signal.entryPrice else effectivePrice
-                val targetPrice1 = if (signal.targetPrice1 > 0.0) signal.targetPrice1 else if (refPrice > 0.0) refPrice * 1.08 else 0.0
-                val targetPrice2 = if (signal.targetPrice2 > 0.0) signal.targetPrice2 else if (refPrice > 0.0) refPrice * 1.18 else 0.0
-                val stopLoss = if (signal.stopLoss > 0.0) signal.stopLoss else if (refPrice > 0.0) refPrice * 0.95 else 0.0
+                val targetPrice1 = if (signal.targetPrice1 > 0.0) signal.targetPrice1 else 0.0
+                val targetPrice2 = if (signal.targetPrice2 > 0.0) signal.targetPrice2 else 0.0
+                val stopLoss = if (signal.stopLoss > 0.0) signal.stopLoss else 0.0
 
                 val tp1Gain = if (refPrice > 0.0 && targetPrice1 > 0.0) ((targetPrice1 - refPrice) / refPrice) * 100 else 0.0
                 val tp2Gain = if (refPrice > 0.0 && targetPrice2 > 0.0) ((targetPrice2 - refPrice) / refPrice) * 100 else 0.0
@@ -84,8 +84,8 @@ fun RadarTargetLevelsSection(
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("• Target TP1", color = TvTextSecondary, fontSize = 11.sp)
                     Text(
-                        "${PriceFormatter.formatPrice(targetPrice1, quoteAsset = quoteAsset)} (${PriceFormatter.formatPercentage(tp1Gain, true)})",
-                        color = TvGreen,
+                        if (targetPrice1 > 0.0) "${PriceFormatter.formatPrice(targetPrice1, quoteAsset = quoteAsset)} (${PriceFormatter.formatPercentage(tp1Gain, true)})" else "--",
+                        color = if (targetPrice1 > 0.0) TvGreen else TvTextSecondary,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -94,8 +94,8 @@ fun RadarTargetLevelsSection(
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("• Target TP2", color = TvTextSecondary, fontSize = 11.sp)
                     Text(
-                        "${PriceFormatter.formatPrice(targetPrice2, quoteAsset = quoteAsset)} (${PriceFormatter.formatPercentage(tp2Gain, true)})",
-                        color = TvGreen,
+                        if (targetPrice2 > 0.0) "${PriceFormatter.formatPrice(targetPrice2, quoteAsset = quoteAsset)} (${PriceFormatter.formatPercentage(tp2Gain, true)})" else "--",
+                        color = if (targetPrice2 > 0.0) TvGreen else TvTextSecondary,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -104,8 +104,8 @@ fun RadarTargetLevelsSection(
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("• Cut Loss (SL)", color = TvTextSecondary, fontSize = 11.sp)
                     Text(
-                        "${PriceFormatter.formatPrice(stopLoss, quoteAsset = quoteAsset)} (${PriceFormatter.formatPercentage(slLoss, true)})",
-                        color = TvRed,
+                        if (stopLoss > 0.0) "${PriceFormatter.formatPrice(stopLoss, quoteAsset = quoteAsset)} (${PriceFormatter.formatPercentage(slLoss, true)})" else "Tidak diset",
+                        color = if (stopLoss > 0.0) TvRed else TvTextSecondary,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold
                     )
