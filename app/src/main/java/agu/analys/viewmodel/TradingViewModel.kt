@@ -290,6 +290,11 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         checkPublicIp()
     }
 
+    val simulationWallet: StateFlow<SimulationWallet> = simCoordinator.wallet
+    val simulationOpenOrders: StateFlow<List<SimulationOrder>> = simCoordinator.openOrders
+    val simulationHistory: StateFlow<List<SimulationTradeHistoryItem>> = simCoordinator.history
+    val lastFilledSimulationOrder: StateFlow<SimulationOrder?> = simCoordinator.lastFilledOrder
+
     val isRealBuyMode: StateFlow<Boolean> = realCoordinator.isRealBuyEnabled
     val isPinUnlocked: StateFlow<Boolean> = realCoordinator.isPinUnlocked
     val realIndodaxBalance: StateFlow<Map<String, Double>> = realCoordinator.realIndodaxBalance
@@ -322,6 +327,16 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
             pair.symbol to getHoldingStatus(pair)
         }
     }.stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000), emptyMap())
+
+    init {
+        viewModelScope.launch {
+            kotlinx.coroutines.flow.combine(selectedPair, holdingStatuses) { pair, statuses ->
+                statuses[pair.symbol] ?: getHoldingStatus(pair)
+            }.collect { status ->
+                engine.currentHoldingStatus = status
+            }
+        }
+    }
     
     val isFetchingRealBalance: StateFlow<Boolean> = realCoordinator.isFetchingRealBalance
     val realTradeStatus: StateFlow<String> = realCoordinator.realTradeStatus
@@ -360,11 +375,6 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     }
     fun executeRealTrade(pair: String, type: String, price: Long, amountIdr: Double, tp1: Double = 0.0, tp2: Double = 0.0, onResult: (Boolean, String) -> Unit) =
         realCoordinator.executeRealTrade(pair, type, price, amountIdr, tp1, tp2, onResult)
-
-    val simulationWallet: StateFlow<SimulationWallet> = simCoordinator.wallet
-    val simulationOpenOrders: StateFlow<List<SimulationOrder>> = simCoordinator.openOrders
-    val simulationHistory: StateFlow<List<SimulationTradeHistoryItem>> = simCoordinator.history
-    val lastFilledSimulationOrder: StateFlow<SimulationOrder?> = simCoordinator.lastFilledOrder
 
     fun refreshSimulationState() = simCoordinator.refresh()
     fun refreshSpotPosition() { positionCoordinator.refreshPosition(_selectedPair.value.symbol) }

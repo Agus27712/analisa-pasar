@@ -38,6 +38,9 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
         }
     var scalpingSensitivity = ScalpingSensitivity.CONSERVATIVE
     var tradingFees = TradingFeeConfig()
+    
+    // Status kepemilikan aset aktif (Position-Aware)
+    var currentHoldingStatus: agu.analys.model.CoinHoldingStatus? = null
 
     private val candles = mutableListOf<CandleBar>()
     private var currentTick: MarketTick? = null
@@ -240,7 +243,7 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
         val result = ScalpingMtfEvaluator.evaluate(
             tick.price, h1Candles, m15Candles, m1Candles,
             currentFormingVolume, currentOrderBookBids, currentOrderBookAsks,
-            tradingFees, scalpingSensitivity
+            tradingFees, scalpingSensitivity, currentHoldingStatus
         ) ?: return
 
         // P2.2 Signal Lifecycle Tracking
@@ -265,7 +268,7 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
         if (strategyMode != StrategyMode.SWING) return
         val tick = currentTick ?: return
         val history = synchronized(candles) { candles.toList() }
-        val result = SwingEvaluator.evaluate(tick.price, history, tradingFees)
+        val result = SwingEvaluator.evaluate(tick.price, history, tradingFees, currentHoldingStatus)
         _indicators.value = result.indicators
         _signalState.value = result.signal
     }
@@ -274,7 +277,7 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
         if (strategyMode != StrategyMode.OFFICE_DAILY) return
         val tick = currentTick ?: return
         val history = synchronized(candles) { candles.toList() }
-        val result = agu.analys.engine.officedaily.OfficeDailyEvaluator.evaluate(tick.price, history, tradingFees)
+        val result = agu.analys.engine.officedaily.OfficeDailyEvaluator.evaluate(tick.price, history, tradingFees, currentHoldingStatus)
         _indicators.value = result.indicators
         _signalState.value = result.signal
     }

@@ -41,7 +41,7 @@ private enum class SwingSetup {
 
 object SwingEvaluator {
 
-    fun evaluate(price: Double, history: List<CandleBar>, fees: TradingFeeConfig = TradingFeeConfig()): SwingEvalResult {
+    fun evaluate(price: Double, history: List<CandleBar>, fees: TradingFeeConfig = TradingFeeConfig(), holdingStatus: agu.analys.model.CoinHoldingStatus? = null): SwingEvalResult {
         if (price <= 0.0) {
             return SwingEvalResult(AISignalState(), TechnicalIndicators())
         }
@@ -381,14 +381,48 @@ object SwingEvaluator {
         val completedSteps = listOf(step1Ok, step2Ok, step3Ok, step4Ok).count { it }
 
         // ── Keputusan akhir ─────────────────────────────────────────────────
-        val isQualifiedBuy = completedSteps == 4 && buy >= 42.0 && buy > sell * 1.15 &&
+        // Position-Aware Logic
+        val isHolding = holdingStatus?.isHolding == true
+        val entryPrice = holdingStatus?.entryPrice ?: 0.0
+        val pnlPct = if (isHolding && entryPrice > 0.0) ((price - entryPrice) / entryPrice) * 100.0 else 0.0
+
+        var isTakeProfitSell = false
+        var isCutLossSell = false
+        var isEmergencySell = false
+
+        if (isHolding) {
+            val tp1 = if (holdingStatus!!.tp1Price > 0.0) holdingStatus.tp1Price else entryPrice * 1.08
+            val sl = entryPrice * 0.95
+
+            when {
+                price >= tp1 -> {
+                    isTakeProfitSell = true
+                    reasons.add(0, "TARGET TERCAPAI: Profit +${fmt(pnlPct)}%. Amankan keuntungan sekarang!")
+                }
+                price <= sl -> {
+                    isCutLossSell = true
+                    reasons.add(0, "CUT LOSS: Harga menembus batas risiko (${fmt(pnlPct)}%).")
+                }
+                rsi >= 75.0 || macdHist < -0.02 -> {
+                    isEmergencySell = true
+                    reasons.add(0, "MOMENTUM HILANG: Indikator melemah saat posisi terbuka. Waspada pembalikan!")
+                }
+                else -> {
+                    reasons.add(0, "HOLDING: Posisi aktif (Floating ${fmt(pnlPct)}%). Tren masih aman.")
+                }
+            }
+        }
+
+        val isQualifiedBuy = !isHolding && completedSteps == 4 && buy >= 42.0 && buy > sell * 1.15 &&
             detectedSetup in listOf(SwingSetup.REJECTION, SwingSetup.BREAKOUT, SwingSetup.RETEST, SwingSetup.RECLAIM_FAILED) &&
             (detectedSetup != SwingSetup.REJECTION || !rejectionAtResistance) // rejection di resistance = bukan buy
 
-        val isSellSignal = (rsi >= 72.0 || price >= calculatedTp1 * 0.995 || (sell >= 42.0 && sell > buy * 1.15) ||
+        val isTechnicalSell = (rsi >= 72.0 || price >= calculatedTp1 * 0.995 || (sell >= 42.0 && sell > buy * 1.15) ||
             (detectedSetup == SwingSetup.REJECTION && rejectionAtResistance) ||
             (detectedSetup == SwingSetup.RECLAIM_FAILED && (reclaimFromAbove || failedBreakout)) ||
             (detectedSetup == SwingSetup.BREAKOUT && (solidBreakdown || bosBreakdown)))
+
+        val isSellSignal = isTechnicalSell || isTakeProfitSell || isCutLossSell || isEmergencySell
 
         val finalAction = when {
             isSellSignal -> SignalAction.SELL
@@ -396,7 +430,7 @@ object SwingEvaluator {
             else -> SignalAction.HOLD
         }
 
-        if (isSellSignal) {
+        if (isSellSignal && !isTakeProfitSell && !isCutLossSell && !isEmergencySell) {
             reasons.add(0, when {
                 price >= calculatedTp1 * 0.995 -> "🎯 Target TP1 tercapai di Rp ${fmtPrice(calculatedTp1)} — Amankan profit!"
                 detectedSetup == SwingSetup.REJECTION && rejectionAtResistance -> "⚠️ Rejection di Resistance — rekomendasi take profit / hindari buy."

@@ -38,7 +38,8 @@ object OfficeDailyEvaluator {
     fun evaluate(
         price: Double,
         history: List<CandleBar>,
-        fees: TradingFeeConfig = TradingFeeConfig()
+        fees: TradingFeeConfig = TradingFeeConfig(),
+        holdingStatus: agu.analys.model.CoinHoldingStatus? = null
     ): OfficeDailyEvalResult {
         if (price <= 0.0) {
             return OfficeDailyEvalResult(AISignalState(), TechnicalIndicators())
@@ -193,8 +194,36 @@ object OfficeDailyEvaluator {
         val step4Ok = step1Ok && step2Ok && step3Ok && netRr >= 1.7 && buyScore >= 50.0
 
         val completedSteps = listOf(step1Ok, step2Ok, step3Ok, step4Ok).count { it }
-        val isQualified = completedSteps == 4 && buyScore >= 55.0 && buyScore > sellScore * 1.3
-        val isSellSignal = rsi >= 74.0 || price >= calculatedTp1 || (sellScore >= 50.0 && sellScore > buyScore * 1.2)
+
+        // Position-Aware Logic
+        val isHolding = holdingStatus?.isHolding == true
+        val entryPrice = holdingStatus?.entryPrice ?: 0.0
+        val pnlPct = if (isHolding && entryPrice > 0.0) ((price - entryPrice) / entryPrice) * 100.0 else 0.0
+
+        var isOfficeTp = false
+        var isOfficeSl = false
+
+        if (isHolding) {
+            val tp1 = if (holdingStatus!!.tp1Price > 0.0) holdingStatus.tp1Price else entryPrice * 1.08 // Target harian santai +8%
+            val sl = entryPrice * 0.94  // Support bawah -6%
+
+            when {
+                price >= tp1 || rsi >= 74.0 -> {
+                    isOfficeTp = true
+                    reasons.add(0, "OFFICE TARGET: Profit tercapai (+${fmt(pnlPct)}%) / RSI Overbought. Saatnya Take Profit santai.")
+                }
+                price <= sl -> {
+                    isOfficeSl = true
+                    reasons.add(0, "OFFICE CUT LOSS: Tren harian melanggar batas support (${fmt(pnlPct)}%).")
+                }
+                else -> {
+                    reasons.add(0, "OFFICE HOLD: Posisi aman (Floating ${fmt(pnlPct)}%). Tidak perlu pantau chart terus.")
+                }
+            }
+        }
+
+        val isQualified = !isHolding && completedSteps == 4 && buyScore >= 55.0 && buyScore > sellScore * 1.3
+        val isSellSignal = isOfficeTp || isOfficeSl || rsi >= 74.0 || price >= calculatedTp1 || (sellScore >= 50.0 && sellScore > buyScore * 1.2)
 
         val finalAction = when {
             isSellSignal -> SignalAction.SELL
@@ -202,7 +231,7 @@ object OfficeDailyEvaluator {
             else -> SignalAction.HOLD
         }
 
-        if (isSellSignal) {
+        if (isSellSignal && !isOfficeTp && !isOfficeSl) {
             reasons.add(0, if (price >= calculatedTp1) "🎯 Target TP tercapai di Rp ${fmtPrice(calculatedTp1)} - Take Profit!" else "⚠️ Jenuh Beli / Sinyal Distribusi - Amankan Profit!")
         }
 

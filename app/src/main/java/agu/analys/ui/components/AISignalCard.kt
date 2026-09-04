@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
@@ -31,6 +32,7 @@ import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.TrendingDown
 import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -93,6 +95,43 @@ fun AISignalCard(
                 }
                 Box(Modifier.clip(RoundedCornerShape(20.dp)).background(actionColor).padding(horizontal = 10.dp, vertical = 4.dp)) { Text(if (signal.confidence == 0 && !signal.isOfflineMode) "DATA BELUM CUKUP" else scoreLabel, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White) }
             }
+
+            // Banner khusus Position-Aware (jika sedang hold koin)
+            val holdingReason = signal.reasoning.firstOrNull { 
+                it.contains("Floating") || it.contains("TARGET TERCAPAI") || it.contains("CUT LOSS") || it.contains("HOLDING") || it.contains("SCALPING") || it.contains("OFFICE")
+            }
+            
+            if (holdingReason != null) {
+                Spacer(Modifier.height(12.dp))
+                val isProfit = holdingReason.contains("+") || holdingReason.contains("TARGET TERCAPAI")
+                val bannerColor = if (isProfit) TvGreen else TvRed
+                
+                Box(
+                    Modifier.fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(bannerColor.copy(alpha = 0.15f))
+                        .border(1.dp, bannerColor.copy(alpha = 0.4f), RoundedCornerShape(10.dp))
+                        .padding(12.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = if (signal.action == SignalAction.SELL) Icons.Default.Warning else Icons.Default.AccountBalanceWallet,
+                            contentDescription = null,
+                            tint = bannerColor,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = holdingReason,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = bannerColor,
+                            lineHeight = 15.sp
+                        )
+                    }
+                }
+            }
+
             if (signal.isOfflineMode) {
                 Spacer(Modifier.height(8.dp))
                 Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(TvAmber.copy(alpha = 0.12f)).border(1.dp, TvAmber.copy(alpha = 0.35f), RoundedCornerShape(10.dp)).padding(horizontal = 10.dp, vertical = 7.dp)) {
