@@ -19,7 +19,7 @@ import java.util.concurrent.TimeUnit
 /**
  * Service AI Screener Berita (Standalone untuk Dashboard)
  * Menyeleksi koin berpotensi naik dari agregasi RSS feed, strictly divalidasi koin listing di Indodax.
- * Mendukung Groq (Qwen 2.5 32B High-Think 757) dan Gemini (2.0 Flash 757).
+ * Mendukung Groq (Qwen) dan Gemini 3.7 Flash.
  */
 object NewsAiScreenerService {
     private val client = OkHttpClient.Builder()
@@ -29,8 +29,8 @@ object NewsAiScreenerService {
 
     private const val GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
     private const val GROQ_QWEN_MODEL = "qwen/qwen3.8-27b"
-    private const val GEMINI_MODEL = "gemini-2.0-flash"
-    private const val GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+    private const val GEMINI_MODEL = "gemini-3.7-flash"
+    private const val GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/$GEMINI_MODEL:generateContent"
     private const val MAX_TOKENS = 757
 
     suspend fun screenCoinsFromNews(
@@ -68,7 +68,7 @@ object NewsAiScreenerService {
             AiProvider.GEMINI -> {
                 if (geminiApiKey.isNotBlank()) {
                     val res = callGeminiFlash(geminiApiKey, sampleWhitelist, headlinesText)
-                    Triple(res, GEMINI_MODEL, "Gemini 2.0 Flash")
+                    Triple(res, GEMINI_MODEL, "Gemini 3.7 Flash")
                 } else {
                     val fallback = buildLocalFallback(articles, indodaxValidBases, liveTicks, "Gemini API Key belum diisi di Pengaturan")
                     Triple(fallback, "Heuristik", "Gemini (API Key Kosong)")
