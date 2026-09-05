@@ -25,7 +25,7 @@ object GeminiAiService {
         .writeTimeout(15, TimeUnit.SECONDS)
         .build()
 
-    private const val MODEL = "gemini-2.0-flash"
+    private const val MODEL = "gemini-3.7-flash"
     private const val BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models/$MODEL:generateContent"
 
     suspend fun generateChartSummary24h(
