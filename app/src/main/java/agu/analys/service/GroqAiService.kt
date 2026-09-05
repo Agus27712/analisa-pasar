@@ -76,7 +76,7 @@ Kamu asisten quantitative & technical analyst spot Indodax.
 SELURUH jawaban WAJIB Bahasa Indonesia (termasuk kutipan berita/headline).
 Terjemahkan headline Inggris ke Bahasa Indonesia dulu, lalu hubungkan ke pergerakan harga.
 Gunakan format Markdown terstruktur dengan poin-poin bullet (-), teks tebal (**bold**), dan judul bab (###).
-Fokus insight tajam, edukatif, dan praktis. Maksimal ~250 kata.
+Fokus insight tajam, edukatif, dan praktis. Maksimal ~1379 kata.
         """.trimIndent()
 
         val userPrompt = """
