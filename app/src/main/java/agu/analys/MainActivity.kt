@@ -1,5 +1,6 @@
 package agu.analys
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -53,6 +54,8 @@ class MainActivity : ComponentActivity() {
         }
         enableEdgeToEdge()
         WindowCompat.setDecorFitsSystemWindows(window, false)
+
+        handleIntent(intent)
 
         setContent {
             val isDarkTheme by tradingViewModel.isDarkTheme.collectAsState()
@@ -121,6 +124,34 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIntent(intent)
+    }
+
+    private fun handleIntent(intent: Intent?) {
+        if (intent == null) return
+        val action = intent.action
+        val symbol = intent.getStringExtra("EXTRA_SYMBOL")
+        
+        if (action == "agu.analys.ACTION_EXECUTE_TRAILING_SELL") {
+            val limitPrice = intent.getDoubleExtra("EXTRA_LIMIT_PRICE", 0.0)
+            val qty = intent.getDoubleExtra("EXTRA_QUANTITY", 0.0)
+            val isReal = intent.getBooleanExtra("EXTRA_IS_REAL", false)
+            if (symbol != null && limitPrice > 0.0 && qty > 0.0) {
+                tradingViewModel.executeTrailingSellLimitOrder(symbol, limitPrice, qty, isReal)
+                tradingViewModel.openCoinDetail(agu.analys.model.TradingPair.fromCustomSymbol(symbol))
+                
+                // Clear action so it doesn't re-trigger on rotation
+                intent.action = null
+            }
+        } else if (!symbol.isNullOrEmpty()) {
+            tradingViewModel.openCoinDetail(agu.analys.model.TradingPair.fromCustomSymbol(symbol))
+            intent.removeExtra("EXTRA_SYMBOL") // Consume
         }
     }
 }

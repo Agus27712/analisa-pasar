@@ -38,8 +38,6 @@ fun AppMaintenanceCard(
     onCheckUpdate: () -> Unit,
     onDownloadAndInstall: () -> Unit
 ) {
-    var showAdvancedRepoSettings by remember { mutableStateOf(false) }
-
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(10.dp),
@@ -95,59 +93,17 @@ fun AppMaintenanceCard(
                     )
                 }
 
-                Text(
-                    text = if (showAdvancedRepoSettings) "Tutup Konfigurasi" else "Ubah Repo / Token",
-                    color = TvBlue,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier
-                        .clickable { showAdvancedRepoSettings = !showAdvancedRepoSettings }
-                        .padding(4.dp)
-                )
-            }
-
-            // Input Konfigurasi Repository & Token
-            if (showAdvancedRepoSettings) {
-                Spacer(Modifier.height(10.dp))
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(TvSurfaceVariant, RoundedCornerShape(8.dp))
-                        .padding(10.dp)
+                Surface(
+                    shape = RoundedCornerShape(4.dp),
+                    color = TvSurfaceVariant,
+                    border = androidx.compose.foundation.BorderStroke(0.5.dp, TvBorder)
                 ) {
-                    Text("REPOSITORY GITHUB RILIS APK", color = TvBlue, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(4.dp))
-                    OutlinedTextField(
-                        value = updateRepo,
-                        onValueChange = onUpdateRepoChange,
-                        singleLine = true,
-                        placeholder = { Text("username/repository-rilis", fontSize = 11.sp, color = TvTextSecondary) },
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = TvGreen,
-                            unfocusedBorderColor = TvBorder,
-                            focusedTextColor = TvTextPrimary,
-                            unfocusedTextColor = TvTextPrimary
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    Spacer(Modifier.height(8.dp))
-                    Text("GITHUB TOKEN / PAT (OPSIONAL)", color = TvBlue, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(2.dp))
-                    Text("Wajib diisi jika repository rilis berstatus Private.", color = TvTextSecondary, fontSize = 9.5.sp)
-                    Spacer(Modifier.height(4.dp))
-                    OutlinedTextField(
-                        value = updateToken,
-                        onValueChange = onUpdateTokenChange,
-                        singleLine = true,
-                        placeholder = { Text("ghp_xxxx atau github_pat_xxxx", fontSize = 11.sp, color = TvTextSecondary) },
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = TvGreen,
-                            unfocusedBorderColor = TvBorder,
-                            focusedTextColor = TvTextPrimary,
-                            unfocusedTextColor = TvTextPrimary
-                        ),
-                        modifier = Modifier.fillMaxWidth()
+                    Text(
+                        text = "GitHub Official",
+                        color = TvTextSecondary,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
                     )
                 }
             }

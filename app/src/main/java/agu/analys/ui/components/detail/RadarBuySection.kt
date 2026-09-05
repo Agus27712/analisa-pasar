@@ -40,10 +40,12 @@ fun RadarBuySection(
     activeFeePct: Double,
     isRealMode: Boolean,
     signal: agu.analys.model.AISignalState? = null,
-    onExecuteBuy: ((Double, Double, Double) -> Unit)?
+    onExecuteBuy: ((Double, Double, Double, Double) -> Unit)?
 ) {
     var customNominalInput by remember { mutableStateOf("") }
     var isCustomNominalOpen by remember { mutableStateOf(false) }
+    var showBuyOrderDialog by remember { mutableStateOf(false) }
+    var customTargetBuyPrice by remember { mutableStateOf(0.0) }
 
     // Auto Limit Sell Server Settings (TP Direct to Server)
     var isAutoLimitSellEnabled by remember { mutableStateOf(false) }
@@ -61,10 +63,13 @@ fun RadarBuySection(
 
     val focusManager = LocalFocusManager.current
 
+    val effectiveBuyPrice = if (customTargetBuyPrice > 0.0) customTargetBuyPrice else validPrice
     val grossBuyOrderAmount = selectedNominalIdr.coerceAtLeast(10000.0)
-    val buyFeeIdr = grossBuyOrderAmount * (activeFeePct / 100.0)
+    val isMakerOrder = validPrice > 0 && effectiveBuyPrice < validPrice
+    val effectiveFeePct = if (isMakerOrder) 0.0 else activeFeePct
+    val buyFeeIdr = grossBuyOrderAmount * (effectiveFeePct / 100.0)
     val netBuyAmountIdr = (grossBuyOrderAmount - buyFeeIdr).coerceAtLeast(0.0)
-    val estimatedBuyCoinQty = netBuyAmountIdr / validPrice
+    val estimatedBuyCoinQty = if (effectiveBuyPrice > 0) netBuyAmountIdr / effectiveBuyPrice else 0.0
 
     Column {
         // Header Saldo IDR
@@ -298,18 +303,48 @@ fun RadarBuySection(
                 .padding(10.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            TransactionDetailRow(
-                label = "Harga Pasar Beli",
-                value = "${PriceFormatter.formatIdrNumber(validPrice)} $quoteAsset"
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = if (customTargetBuyPrice > 0.0 && customTargetBuyPrice != validPrice) "Harga Beli (Limit)" else "Harga Beli (Pasar)",
+                        color = TvTextSecondary,
+                        fontSize = 11.sp
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Surface(
+                        modifier = Modifier.clickable { showBuyOrderDialog = true },
+                        shape = RoundedCornerShape(4.dp),
+                        color = TvGreen.copy(alpha = 0.15f),
+                        border = androidx.compose.foundation.BorderStroke(0.5.dp, TvGreen)
+                    ) {
+                        Text(
+                            text = "Atur Limit",
+                            color = TvGreen,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+                Text(
+                    text = "${PriceFormatter.formatIdrNumber(effectiveBuyPrice)} $quoteAsset",
+                    color = if (customTargetBuyPrice > 0.0 && customTargetBuyPrice != validPrice) TvGreen else TvTextPrimary,
+                    fontSize = 11.5.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
             TransactionDetailRow(
                 label = "Nominal Order",
                 value = "${PriceFormatter.formatIdrNumber(grossBuyOrderAmount)} $quoteAsset"
             )
             TransactionDetailRow(
-                label = "Biaya Fee (${String.format("%.2f", activeFeePct)}%)",
-                value = "- ${PriceFormatter.formatIdrNumber(buyFeeIdr)} $quoteAsset",
-                valueColor = TvRed
+                label = "Biaya Fee (${String.format("%.2f", effectiveFeePct)}%)",
+                value = if (isMakerOrder) "Rp 0 (Maker)" else "- ${PriceFormatter.formatIdrNumber(buyFeeIdr)} $quoteAsset",
+                valueColor = if (isMakerOrder) TvGreen else TvRed
             )
 
             HorizontalDivider(color = TvBorder, thickness = 0.5.dp, modifier = Modifier.padding(vertical = 2.dp))
@@ -347,9 +382,7 @@ fun RadarBuySection(
             Spacer(Modifier.height(10.dp))
             Button(
                 onClick = {
-                    val sell1 = if (isAutoLimitSellEnabled) tp1Price else 0.0
-                    val sell2 = if (isAutoLimitSellEnabled) tp2Price else 0.0
-                    onExecuteBuy(grossBuyOrderAmount, sell1, sell2)
+                    showBuyOrderDialog = true
                 },
                 modifier = Modifier.fillMaxWidth().height(42.dp),
                 shape = RoundedCornerShape(8.dp),
@@ -361,11 +394,36 @@ fun RadarBuySection(
                 Icon(Icons.Default.ShoppingCart, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(6.dp))
                 Text(
-                    text = if (isRealMode) "[REAL] BELI (${PriceFormatter.formatIdrNumber(grossBuyOrderAmount)} IDR)" else "[SIM] BELI (${PriceFormatter.formatIdrNumber(grossBuyOrderAmount)} IDR)",
+                    text = if (isRealMode) {
+                        "[REAL] BELI / PASANG LIMIT (${PriceFormatter.formatIdrNumber(grossBuyOrderAmount)} IDR)"
+                    } else {
+                        "[SIM] BELI / PASANG LIMIT (${PriceFormatter.formatIdrNumber(grossBuyOrderAmount)} IDR)"
+                    },
                     fontWeight = FontWeight.Black,
                     fontSize = 12.sp
                 )
             }
+        }
+
+        if (showBuyOrderDialog) {
+            CustomBuyOrderDialog(
+                show = showBuyOrderDialog,
+                onDismiss = { showBuyOrderDialog = false },
+                validPrice = validPrice,
+                baseAsset = baseAsset,
+                quoteAsset = quoteAsset,
+                availableIdr = availableIdr,
+                initialNominalIdr = grossBuyOrderAmount,
+                activeFeePct = activeFeePct,
+                isRealMode = isRealMode,
+                initialTp1 = defaultTpPrice1,
+                initialTp2 = defaultTpPrice2,
+                onConfirmBuy = { nominal, targetBuyPrice, tp1, tp2 ->
+                    customTargetBuyPrice = targetBuyPrice
+                    onNominalIdrChanged(nominal)
+                    onExecuteBuy?.invoke(nominal, targetBuyPrice, tp1, tp2)
+                }
+            )
         }
     }
 }

@@ -31,23 +31,24 @@ fun TradingViewModel.checkAlertsAndTrailing(symbol: String, currentPrice: Double
         refreshSpotPosition()
         val limitSellPrice = positionStore.calculateTrailingLimitPrice(updatedPos.peakPrice, updatedPos.entryPrice, updatedPos.trailingPercent)
         
-        AlertNotificationHelper.sendPriceAlertNotification(
-            context = getApplication(),
-            title = "🚨 PROFIT LOCK TERPICU ($symbol)",
-            message = "Harga menyentuh batas aman (Rp ${PriceFormatter.formatIdrNumber(limitSellPrice)}). Memproses Limit Sell order...",
-            notificationId = (symbol.hashCode() and 0x7FFFFFFF) + 1000,
-            symbol = symbol
-        )
-
-        // Eksekutor Jual Aktif
         val isSimTrailing = updatedPos.lastTrailingOrderId?.startsWith("sim") == true
         val isReal = isRealBuyMode.value && !isSimTrailing
         val baseKey = TradingPair.fromCustomSymbol(symbol).baseAsset.uppercase()
         val posQty = if (updatedPos.quantity > 0.0) updatedPos.quantity else {
             if (isReal) 0.0 else simCoordinator.wallet.value.getAvailableCoin(baseKey)
         }
+
         if (posQty > 0.0) {
-            executeTrailingSellLimitOrder(symbol, limitSellPrice, posQty, isReal)
+            AlertNotificationHelper.sendTrailingHitNotification(
+                context = getApplication(),
+                symbol = symbol,
+                entryPrice = updatedPos.entryPrice,
+                peakPrice = updatedPos.peakPrice,
+                currentPrice = currentPrice,
+                limitSellPrice = limitSellPrice,
+                quantity = posQty,
+                isReal = isReal
+            )
         }
     } else if (updatedPos.isHolding && updatedPos.isTrailingEnabled && updatedPos.peakPrice > oldPeak) {
         refreshSpotPosition()

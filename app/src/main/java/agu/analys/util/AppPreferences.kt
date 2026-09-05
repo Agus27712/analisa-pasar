@@ -160,12 +160,12 @@ class AppPreferences(context: Context) {
             .apply()
 
     var updateRepo: String
-        get() = prefs.getString(KEY_UPDATE_REPO, "agus27712/analisa-pasarv2").orEmpty().ifBlank { "agus27712/analisa-pasarv2" }
-        set(value) = prefs.edit().putString(KEY_UPDATE_REPO, value.trim()).apply()
+        get() = DEFAULT_UPDATE_REPO
+        set(_) { /* hardcoded to Agus27712/analisa-pasar */ }
 
     var updateGitHubToken: String
-        get() = prefs.getString(KEY_UPDATE_GH_TOKEN, "").orEmpty()
-        set(value) = prefs.edit().putString(KEY_UPDATE_GH_TOKEN, value.trim()).apply()
+        get() = ""
+        set(_) { /* hardcoded empty for public repo */ }
 
     var compactUi: Boolean
         get() = prefs.getBoolean(KEY_COMPACT_UI, true)
@@ -294,6 +294,7 @@ class AppPreferences(context: Context) {
     }
 
     companion object {
+        const val DEFAULT_UPDATE_REPO = "Agus27712/analisa-pasar"
         private const val PREFS_NAME = "krypto_analysis_prefs"
         private const val KEY_GROQ = "groq_api_key"
         private const val KEY_GEMINI = "gemini_api_key"

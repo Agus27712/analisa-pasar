@@ -9,6 +9,7 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import agu.analys.MainActivity
+import agu.analys.util.PriceFormatter
 
 object AlertNotificationHelper {
     const val CHANNEL_ID = "channel_agu_trading_alerts"
@@ -68,5 +69,78 @@ object AlertNotificationHelper {
         } catch (_: SecurityException) {
             // Permission not granted on Android 13+
         }
+    }
+
+    fun sendTrailingHitNotification(
+        context: Context,
+        symbol: String,
+        entryPrice: Double,
+        peakPrice: Double,
+        currentPrice: Double,
+        limitSellPrice: Double,
+        quantity: Double,
+        isReal: Boolean
+    ) {
+        val prefs = AppPreferences(context)
+        if (!prefs.isNotificationsEnabled) return
+
+        createNotificationChannel(context)
+
+        // Main Intent (when tapped)
+        val mainIntent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("EXTRA_SYMBOL", symbol)
+        }
+        val pendingMainIntent = PendingIntent.getActivity(
+            context,
+            (symbol.hashCode() and 0x7FFFFFFF) + 1000,
+            mainIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        // Action Intent (JUAL SEKARANG)
+        val actionIntent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            action = "agu.analys.ACTION_EXECUTE_TRAILING_SELL"
+            putExtra("EXTRA_SYMBOL", symbol)
+            putExtra("EXTRA_LIMIT_PRICE", limitSellPrice)
+            putExtra("EXTRA_QUANTITY", quantity)
+            putExtra("EXTRA_IS_REAL", isReal)
+        }
+        val pendingActionIntent = PendingIntent.getActivity(
+            context,
+            (symbol.hashCode() and 0x7FFFFFFF) + 1001,
+            actionIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val profitPct = if (entryPrice > 0.0) ((limitSellPrice - entryPrice) / entryPrice) * 100.0 else 0.0
+        val formattedProfit = String.format(java.util.Locale.US, "%.1f%%", profitPct)
+        
+        val title = "🛡️ Trailing Profit Triggered [$symbol]"
+        val message = "Modal: Rp ${PriceFormatter.formatIdrNumber(entryPrice)} | Puncak: Rp ${PriceFormatter.formatIdrNumber(peakPrice)}\nSaat ini: Rp ${PriceFormatter.formatIdrNumber(currentPrice)}\nKeuntungan Terkunci: +$formattedProfit (Rp ${PriceFormatter.formatIdrNumber(limitSellPrice)})"
+
+        val action = NotificationCompat.Action.Builder(
+            0,
+            "JUAL SEKARANG",
+            pendingActionIntent
+        ).build()
+
+        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_popup_reminder)
+            .setContentTitle(title)
+            .setContentText(message)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(message))
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setAutoCancel(true)
+            .setContentIntent(pendingMainIntent)
+            .addAction(action)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
+
+        try {
+            val manager = NotificationManagerCompat.from(context)
+            manager.notify((symbol.hashCode() and 0x7FFFFFFF) + 1000, builder.build())
+        } catch (_: SecurityException) {}
     }
 }

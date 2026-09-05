@@ -252,13 +252,27 @@ class SpotPositionStore(context: Context) {
             prefs.edit().putString("${key}_peak", newPeak.toString()).apply()
         }
 
-        // Rule 1 & 2: Hard floor = entryPrice. Limit = max(peak * (1 - pct), entry)
+        // Rule 1: Hard floor = entryPrice. Limit = max(peak * (1 - pct), entry)
         val trailingStop = calculateTrailingLimitPrice(newPeak, current.entryPrice, current.trailingPercent)
         
-        // Rule 4: Saat harga turun menyentuh trailing price -> trigger
-        if (currentPrice <= trailingStop && !current.isTrailingTriggered) {
-            justTriggered = true
-            prefs.edit().putBoolean("${key}_trailing_triggered", true).apply()
+        // Rule 2: Activation threshold - Trailing baru aktif jika harga sudah naik minimal 1% dari modal
+        val isEligibleForTrailing = newPeak >= current.entryPrice * 1.01
+
+        // Rule 4: Saat harga turun menyentuh trailing price -> trigger (Noise filter: minimal 2 ticks di bawah garis)
+        if (isEligibleForTrailing && currentPrice <= trailingStop && !current.isTrailingTriggered) {
+            val ticksBelow = prefs.getInt("${key}_trailing_ticks_below", 0) + 1
+            if (ticksBelow >= 2) {
+                justTriggered = true
+                prefs.edit()
+                    .putBoolean("${key}_trailing_triggered", true)
+                    .putInt("${key}_trailing_ticks_below", 0)
+                    .apply()
+            } else {
+                prefs.edit().putInt("${key}_trailing_ticks_below", ticksBelow).apply()
+            }
+        } else {
+            // Reset noise filter jika harga memantul ke atas batas trailing
+            prefs.edit().putInt("${key}_trailing_ticks_below", 0).apply()
         }
 
         val updated = get(symbol)

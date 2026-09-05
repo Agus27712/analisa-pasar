@@ -32,8 +32,8 @@ android {
     applicationId = "agu.analys"
     minSdk = 24
     targetSdk = 35
-    versionCode = providers.gradleProperty("VERSION_CODE").map(String::toInt).getOrElse(57)
-    versionName = "3.0.9"
+    versionCode = providers.gradleProperty("VERSION_CODE").map(String::toInt).getOrElse(58)
+    versionName = "3.1.1"
 
     buildConfigField("String", "GEMINI_API_KEY", "\"${getSecret("GEMINI_API_KEY")}\"")
     buildConfigField("String", "GROQ_API_KEY", "\"${getSecret("GROQ_API_KEY")}\"")

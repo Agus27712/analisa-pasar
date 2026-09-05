@@ -253,8 +253,8 @@ fun DetailChartScreen(
                 availableCoin = availableCoin,
                 avgBuyPrice = avgBuyPrice,
                 isRealBuyMode = isRealBuyMode,
-                onExecuteBuy = { nominalIdr, tp1Price, tp2Price ->
-                    val execPrice = if (tick?.price != null && tick!!.price > 0) tick!!.price else signal.entryPrice
+                onExecuteBuy = { nominalIdr, customBuyPrice, tp1Price, tp2Price ->
+                    val execPrice = if (customBuyPrice > 0.0) customBuyPrice else if (tick?.price != null && tick!!.price > 0) tick!!.price else signal.entryPrice
                     if (execPrice > 0) {
                         if (isRealBuyMode) {
                             viewModel.executeRealTrade(pair.symbol, "buy", execPrice.toLong(), nominalIdr, tp1Price, tp2Price) { success, msg ->
@@ -264,9 +264,14 @@ fun DetailChartScreen(
                             }
                         } else {
                             val qty = nominalIdr / execPrice
+                            val orderType = if (tick?.price != null && execPrice < tick!!.price) {
+                                agu.analys.trading.SimulationOrderType.LIMIT
+                            } else {
+                                agu.analys.trading.SimulationOrderType.MARKET
+                            }
                             val res = viewModel.submitSimulationOrder(
                                 side = agu.analys.trading.SimulationOrderSide.BUY,
-                                type = agu.analys.trading.SimulationOrderType.MARKET,
+                                type = orderType,
                                 price = execPrice,
                                 quantity = qty
                             )
@@ -275,7 +280,9 @@ fun DetailChartScreen(
                                 is agu.analys.trading.SimulationOrderResult.Success -> res.message
                                 is agu.analys.trading.SimulationOrderResult.Error -> res.message
                             }
-                            viewModel.setOwnership(true, execPrice, quantity = qty, invested = nominalIdr, isReal = false)
+                            if (orderType == agu.analys.trading.SimulationOrderType.MARKET) {
+                                viewModel.setOwnership(true, execPrice, quantity = qty, invested = nominalIdr, isReal = false)
+                            }
                             if (isSuccess) HapticUtil.vibrateTradeSuccess(context)
                             else HapticUtil.vibrateTradeFailure(context)
                             android.widget.Toast.makeText(context, "Simulasi: $msg", android.widget.Toast.LENGTH_SHORT).show()

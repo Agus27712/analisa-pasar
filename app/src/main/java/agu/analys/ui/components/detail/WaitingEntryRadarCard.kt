@@ -65,7 +65,7 @@ fun WaitingEntryRadarCard(
     availableCoin: Double = 0.0,
     avgBuyPrice: Double = 0.0,
     isRealBuyMode: Boolean = false,
-    onExecuteBuy: ((Double, Double, Double) -> Unit)? = null,
+    onExecuteBuy: ((Double, Double, Double, Double) -> Unit)? = null,
     onExecuteSell: ((Double, Boolean, Double, Double, Double, Double) -> Unit)? = null,
     onSetManualBuyPrice: ((Double, Double) -> Unit)? = null,
     spotPosition: SpotPosition? = null,
