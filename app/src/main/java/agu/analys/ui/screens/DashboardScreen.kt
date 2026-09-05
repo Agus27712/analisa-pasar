@@ -1,12 +1,22 @@
 package agu.analys.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.FloatingActionButtonDefaults
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import agu.analys.config.MarketDataSource
 import agu.analys.config.StrategyMode
 import agu.analys.model.MarketConnectionState
@@ -47,10 +57,12 @@ fun DashboardScreen(
     val batchExecutionState by viewModel.batchExecutionState.collectAsState()
     val holdingStatuses by viewModel.holdingStatuses.collectAsState()
     val tradingFees by viewModel.tradingFees.collectAsState()
+    val newsScreenerState by viewModel.newsScreenerState.collectAsState()
     val hasSecurityPin = remember { viewModel.hasSecurityPin() }
     var selectedRankingTab by remember { mutableStateOf(MarketRankingTab.WATCHLIST) }
     var currentTab by remember { mutableStateOf(NavTab.WATCHLIST) }
     var showAddDialog by remember { mutableStateOf(false) }
+    var showNewsScreener by remember { mutableStateOf(false) }
 
     val defaultQuote = "IDR"
 
@@ -99,25 +111,26 @@ fun DashboardScreen(
     val worthBySymbol = remember(worthCoins) { worthCoins.associateBy { it.pair.symbol } }
     val isConnected = connectionState is MarketConnectionState.Connected
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(TvBackground)
-    ) {
-        // Header Mockup with Indodax active badge & Redesigned Ranking Tabs & Rotating Refresh Button
-        DashboardMockupHeader(
-            allTicks = allTicks,
-            marketDataSource = marketDataSource,
-            strategyMode = strategyMode,
-            isConnected = isConnected,
-            isRefreshing = isRefreshing,
-            selectedTab = selectedRankingTab,
-            onSelectTab = { tab ->
-                selectedRankingTab = tab
-            },
-            onRefresh = { viewModel.retryConnection() },
-            onAddAsset = { showAddDialog = true }
-        )
+    Box(modifier = modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(TvBackground)
+        ) {
+            // Header Mockup with Indodax active badge & Redesigned Ranking Tabs & Rotating Refresh Button
+            DashboardMockupHeader(
+                allTicks = allTicks,
+                marketDataSource = marketDataSource,
+                strategyMode = strategyMode,
+                isConnected = isConnected,
+                isRefreshing = isRefreshing,
+                selectedTab = selectedRankingTab,
+                onSelectTab = { tab ->
+                    selectedRankingTab = tab
+                },
+                onRefresh = { viewModel.retryConnection() },
+                onAddAsset = { showAddDialog = true }
+            )
 
         if (connectionState is MarketConnectionState.ConnectionLost) {
             val lost = connectionState as MarketConnectionState.ConnectionLost
@@ -236,6 +249,56 @@ fun DashboardScreen(
         )
     }
 
+    // Shortcut Floating AI Screener Button (Melayang tepat di atas Bottom Navigation)
+    Box(
+        modifier = Modifier
+            .align(Alignment.BottomEnd)
+            .padding(end = 16.dp, bottom = 68.dp)
+    ) {
+        FloatingActionButton(
+            onClick = { showNewsScreener = true },
+            containerColor = Color.Transparent,
+            contentColor = Color.White,
+            shape = RoundedCornerShape(22.dp),
+            elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 6.dp, pressedElevation = 10.dp),
+            modifier = Modifier
+                .border(
+                    width = 1.2.dp,
+                    brush = androidx.compose.ui.graphics.Brush.linearGradient(
+                        listOf(Color(0xFF818CF8), Color(0xFF38BDF8))
+                    ),
+                    shape = RoundedCornerShape(22.dp)
+                )
+                .testTag("floating_ai_screener_btn")
+        ) {
+            Box(
+                modifier = Modifier
+                    .background(
+                        androidx.compose.ui.graphics.Brush.horizontalGradient(
+                            listOf(Color(0xFF4338CA), Color(0xFF0284C7))
+                        ),
+                        shape = RoundedCornerShape(22.dp)
+                    )
+                    .padding(horizontal = 14.dp, vertical = 9.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text("✨", fontSize = 13.sp)
+                    Text(
+                        text = "AI Screener",
+                        color = Color.White,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 0.3.sp
+                    )
+                }
+            }
+        }
+    }
+
     if (showAddDialog) {
         AddAssetDialog(
             currentFavorites = favorites,
@@ -248,4 +311,20 @@ fun DashboardScreen(
             }
         )
     }
+
+    if (showNewsScreener) {
+        NewsAiScreenerModal(
+            state = newsScreenerState,
+            preferredProvider = viewModel.prefs.aiProvider,
+            onDismiss = { showNewsScreener = false },
+            onRunScreener = { force, provider ->
+                viewModel.runNewsAiScreener(forceRefresh = force, overrideProvider = provider)
+            },
+            onSelectCoin = { pair ->
+                viewModel.selectPair(pair)
+                onNavigateToDetail(pair)
+            }
+        )
+    }
+}
 }

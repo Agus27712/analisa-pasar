@@ -177,6 +177,9 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     internal val _isGeminiLoading = MutableStateFlow(false)
     val isGeminiLoading: StateFlow<Boolean> = _isGeminiLoading.asStateFlow()
 
+    internal val _newsScreenerState = MutableStateFlow<agu.analys.model.NewsScreenerUiState>(agu.analys.model.NewsScreenerUiState.Idle)
+    val newsScreenerState: StateFlow<agu.analys.model.NewsScreenerUiState> = _newsScreenerState.asStateFlow()
+
     private val _worthCoins = MutableStateFlow<List<WorthCoinInfo>>(emptyList())
     val worthCoins: StateFlow<List<WorthCoinInfo>> = _worthCoins.asStateFlow()
 
