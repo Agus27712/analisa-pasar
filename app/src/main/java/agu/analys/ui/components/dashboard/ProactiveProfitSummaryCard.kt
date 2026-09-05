@@ -526,7 +526,7 @@ private fun BatchSellConfirmationDialog(
     onConfirm: (isReal: Boolean, pin: String?) -> Unit
 ) {
     val isLight = LocalAppColors.current == LightAppColors
-    var isRealMode by remember { mutableStateOf(initialRealMode) }
+    val isRealMode = initialRealMode
     var pinText by remember { mutableStateOf("") }
     var pinError by remember { mutableStateOf<String?>(null) }
 

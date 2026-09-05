@@ -360,32 +360,20 @@ fun DetailChartScreen(
 
             Spacer(Modifier.height(8.dp))
 
-            // 7. Important Levels Card
-            ImportantLevelsCard(
-                signal = signal,
-                structure = marketStructure,
-                price = tick?.price ?: 0.0,
-                quoteAsset = pair.quoteAsset
-            )
-
-            Spacer(Modifier.height(8.dp))
-
-            // 8. Technical Details Accordion
+            // 6.1 Detail Indikator & Observasi
             DetailTechnicalDetailsSection(
                 indicators = indicators,
                 structure = marketStructure,
-                volume24h = tick?.volume24h ?: 0.0,
+                volume24h = volume,
                 scalping = isScalping,
                 signal = signal,
                 price = tick?.price ?: 0.0,
                 quoteAsset = pair.quoteAsset
             )
 
-            Spacer(Modifier.height(8.dp))
-            DisclaimerCard()
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(14.dp))
 
-            // 9. Bottom Actions
+            // 7. Bottom Actions
             DetailBottomActions(
                 marketDataSource = marketDataSource,
                 onOpenPortfolio = { viewModel.openPortfolio() },

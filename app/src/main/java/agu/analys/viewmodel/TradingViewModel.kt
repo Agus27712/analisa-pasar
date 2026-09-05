@@ -289,24 +289,28 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     val realAvgBuyPrices: StateFlow<Map<String, Double>> = realCoordinator.realAvgBuyPrices
     
     val holdingStatuses: StateFlow<Map<String, agu.analys.model.CoinHoldingStatus>> = kotlinx.coroutines.flow.combine(
-        marketDataCoordinator.dashboardTicks,
         simCoordinator.wallet,
         realIndodaxBalance,
         realAvgBuyPrices,
+        realCoordinator.isRealBuyEnabled,
         positionCoordinator.positionVersion
-    ) { _, wallet, realBal, _, _ ->
+    ) { wallet, realBal, _, isRealMode, _ ->
         val defaultQuote = prefs.marketDataSource.defaultQuoteAsset
         val basePairs = agu.analys.model.TradingPair.popularPairsForSource(prefs.marketDataSource)
         val watchPairs = _watchlist.value.map { agu.analys.model.TradingPair.fromCustomSymbol(it, defaultQuote) }
         val favPairs = _favorites.value.map { agu.analys.model.TradingPair.fromCustomSymbol(it, defaultQuote) }
-        val simPairs = wallet.coinBalances.filter { it.value > 0.00000001 && !it.key.equals("IDR", true) && !it.key.equals("USDT", true) }
-            .map { agu.analys.model.TradingPair.fromCustomSymbol(it.key, defaultQuote) }
-        val realPairs = realBal.filter { it.value > 0.00000001 && !it.key.equals("IDR", true) && !it.key.equals("USDT", true) }
-            .map { agu.analys.model.TradingPair.fromCustomSymbol(it.key, defaultQuote) }
+        val simPairs = if (!isRealMode) {
+            wallet.coinBalances.filter { it.value > 0.00000001 && !it.key.equals("IDR", true) && !it.key.equals("USDT", true) }
+                .map { agu.analys.model.TradingPair.fromCustomSymbol(it.key, defaultQuote) }
+        } else emptyList()
+        val realPairs = if (isRealMode) {
+            realBal.filter { it.value > 0.00000001 && !it.key.equals("IDR", true) && !it.key.equals("USDT", true) }
+                .map { agu.analys.model.TradingPair.fromCustomSymbol(it.key, defaultQuote) }
+        } else emptyList()
         val pairs = (basePairs + watchPairs + favPairs + simPairs + realPairs).distinctBy { it.symbol }
         
         pairs.associate { pair ->
-            pair.symbol to getHoldingStatus(pair)
+            pair.symbol to getHoldingStatus(pair, isRealMode)
         }
     }.stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000), emptyMap())
 
@@ -416,71 +420,86 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     fun topUpSimulationBalance(amount: Double) = simCoordinator.topUpIdr(amount)
     fun resetSimulationAccount() = simCoordinator.resetAccount()
 
-    fun getHoldingStatus(pair: TradingPair): CoinHoldingStatus {
+    fun getHoldingStatus(pair: TradingPair, forceIsReal: Boolean? = null): CoinHoldingStatus {
+        val targetIsReal = forceIsReal ?: isRealBuyMode.value
         val baseLower = pair.baseAsset.lowercase()
         val baseUpper = pair.baseAsset.uppercase()
         val symbolNorm = pair.symbol.replace("_", "").uppercase()
 
-        // 1. Check Real Indodax Balance
-        val realBalances = realIndodaxBalance.value
-        val realQty = realBalances[baseLower] ?: realBalances[baseUpper] ?: 0.0
-        val hasRealBalance = realQty > 0.00000001 && baseUpper != "IDR"
+        if (targetIsReal) {
+            // STRICTLY REAL MODE: Hanya evaluasi posisi Real / saldo akun Real Indodax
+            val spotPos = positionStore.get(pair.symbol)
+            if (spotPos.isHolding && spotPos.isReal && spotPos.quantity > 0.00000001) {
+                val sl = if (spotPos.stopLossPrice > 0.0) spotPos.stopLossPrice else if (spotPos.entryPrice > 0.0) spotPos.entryPrice * 0.99 else 0.0
+                return CoinHoldingStatus(
+                    isHolding = true,
+                    quantity = spotPos.quantity,
+                    entryPrice = spotPos.entryPrice,
+                    isReal = true,
+                    tp1Price = spotPos.tp1Price,
+                    tp2Price = spotPos.tp2Price,
+                    stopLossPrice = sl,
+                    isTrailingTriggered = spotPos.isTrailingTriggered
+                )
+            }
 
-        // 2. Check SpotPositionStore (Manual Spot / Real Tracking)
-        val spotPos = positionStore.get(pair.symbol)
-        if (spotPos.isHolding && spotPos.quantity > 0.00000001) {
-            val effectiveIsReal = spotPos.isReal || (hasRealBalance && prefs.hasIndodaxCredentials())
-            val sl = if (spotPos.stopLossPrice > 0.0) spotPos.stopLossPrice else if (spotPos.entryPrice > 0.0) spotPos.entryPrice * 0.99 else 0.0
-            return CoinHoldingStatus(
-                isHolding = true,
-                quantity = spotPos.quantity,
-                entryPrice = spotPos.entryPrice,
-                isReal = effectiveIsReal,
-                tp1Price = spotPos.tp1Price,
-                tp2Price = spotPos.tp2Price,
-                stopLossPrice = sl,
-                isTrailingTriggered = spotPos.isTrailingTriggered
-            )
+            val realBalances = realIndodaxBalance.value
+            val realQty = realBalances[baseLower] ?: realBalances[baseUpper] ?: 0.0
+            if (realQty > 0.00000001 && baseUpper != "IDR" && prefs.hasIndodaxCredentials()) {
+                val realAvg = realAvgBuyPrices.value[symbolNorm]
+                    ?: realAvgBuyPrices.value[pair.symbol.uppercase()]
+                    ?: realAvgBuyPrices.value[baseUpper]
+                    ?: if (spotPos.isReal) spotPos.entryPrice else 0.0
+                val sl = if (spotPos.isReal && spotPos.stopLossPrice > 0.0) spotPos.stopLossPrice else if (realAvg > 0.0) realAvg * 0.99 else 0.0
+                return CoinHoldingStatus(
+                    isHolding = true,
+                    quantity = realQty,
+                    entryPrice = realAvg,
+                    isReal = true,
+                    tp1Price = if (spotPos.isReal) spotPos.tp1Price else 0.0,
+                    tp2Price = if (spotPos.isReal) spotPos.tp2Price else 0.0,
+                    stopLossPrice = sl,
+                    isTrailingTriggered = spotPos.isReal && spotPos.isTrailingTriggered
+                )
+            }
+
+            return CoinHoldingStatus(isHolding = false, isReal = true)
+        } else {
+            // STRICTLY SIMULATION MODE: Hanya evaluasi posisi Simulasi / saldo akun Simulasi
+            val spotPos = positionStore.get(pair.symbol)
+            if (spotPos.isHolding && !spotPos.isReal && spotPos.quantity > 0.00000001) {
+                val sl = if (spotPos.stopLossPrice > 0.0) spotPos.stopLossPrice else if (spotPos.entryPrice > 0.0) spotPos.entryPrice * 0.99 else 0.0
+                return CoinHoldingStatus(
+                    isHolding = true,
+                    quantity = spotPos.quantity,
+                    entryPrice = spotPos.entryPrice,
+                    isReal = false,
+                    tp1Price = spotPos.tp1Price,
+                    tp2Price = spotPos.tp2Price,
+                    stopLossPrice = sl,
+                    isTrailingTriggered = spotPos.isTrailingTriggered
+                )
+            }
+
+            val simWallet = simulationWallet.value
+            val simQty = simWallet.coinBalances[baseLower] ?: simWallet.coinBalances[baseUpper] ?: 0.0
+            if (simQty > 0.00000001 && baseUpper != "IDR") {
+                val simAvg = simWallet.avgBuyPrices[baseLower] ?: simWallet.avgBuyPrices[baseUpper] ?: 0.0
+                val sl = if (!spotPos.isReal && spotPos.stopLossPrice > 0.0) spotPos.stopLossPrice else if (simAvg > 0.0) simAvg * 0.99 else 0.0
+                return CoinHoldingStatus(
+                    isHolding = true,
+                    quantity = simQty,
+                    entryPrice = simAvg,
+                    isReal = false,
+                    tp1Price = if (!spotPos.isReal) spotPos.tp1Price else 0.0,
+                    tp2Price = if (!spotPos.isReal) spotPos.tp2Price else 0.0,
+                    stopLossPrice = sl,
+                    isTrailingTriggered = !spotPos.isReal && spotPos.isTrailingTriggered
+                )
+            }
+
+            return CoinHoldingStatus(isHolding = false, isReal = false)
         }
-
-        // 3. Check Real Indodax Balance fallback if spotPos not explicitly set
-        if (hasRealBalance) {
-            val realAvg = realAvgBuyPrices.value[symbolNorm]
-                ?: realAvgBuyPrices.value[pair.symbol.uppercase()]
-                ?: realAvgBuyPrices.value[baseUpper]
-                ?: spotPos.entryPrice
-            val sl = if (spotPos.stopLossPrice > 0.0) spotPos.stopLossPrice else if (realAvg > 0.0) realAvg * 0.99 else 0.0
-            return CoinHoldingStatus(
-                isHolding = true,
-                quantity = realQty,
-                entryPrice = realAvg,
-                isReal = true,
-                tp1Price = spotPos.tp1Price,
-                tp2Price = spotPos.tp2Price,
-                stopLossPrice = sl,
-                isTrailingTriggered = spotPos.isTrailingTriggered
-            )
-        }
-
-        // 4. Check Simulation Wallet
-        val simWallet = simulationWallet.value
-        val simQty = simWallet.coinBalances[baseLower] ?: simWallet.coinBalances[baseUpper] ?: 0.0
-        if (simQty > 0.00000001 && baseUpper != "IDR") {
-            val simAvg = simWallet.avgBuyPrices[baseLower] ?: simWallet.avgBuyPrices[baseUpper] ?: 0.0
-            val sl = if (spotPos.stopLossPrice > 0.0) spotPos.stopLossPrice else if (simAvg > 0.0) simAvg * 0.99 else 0.0
-            return CoinHoldingStatus(
-                isHolding = true,
-                quantity = simQty,
-                entryPrice = simAvg,
-                isReal = false,
-                tp1Price = spotPos.tp1Price,
-                tp2Price = spotPos.tp2Price,
-                stopLossPrice = sl,
-                isTrailingTriggered = spotPos.isTrailingTriggered
-            )
-        }
-
-        return CoinHoldingStatus(isHolding = false)
     }
 
     fun setMarketDataSource(source: MarketDataSource) {

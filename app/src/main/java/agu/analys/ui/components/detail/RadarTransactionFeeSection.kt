@@ -52,6 +52,16 @@ fun RadarTransactionFeeSection(
     onSetAutoSellParams: ((Boolean, Double, Double, Double, Double) -> Unit)? = null,
     onDeployTrailingOrder: (() -> Unit)? = null,
     onCancelTrailingOrder: (() -> Unit)? = null,
+    isAutoSellActive: Boolean = false,
+    onAutoSellActiveChanged: (Boolean) -> Unit = {},
+    tp1PriceInput: String = "",
+    onTp1PriceChanged: (String) -> Unit = {},
+    tp1PercentInput: String = "50",
+    onTp1PercentChanged: (String) -> Unit = {},
+    tp2PriceInput: String = "",
+    onTp2PriceChanged: (String) -> Unit = {},
+    tp2PercentInput: String = "50",
+    onTp2PercentChanged: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var showFeeDetailModal by remember { mutableStateOf(false) }
@@ -245,7 +255,17 @@ fun RadarTransactionFeeSection(
                 signal = signal,
                 onSetAutoSellParams = onSetAutoSellParams,
                 onDeployTrailingOrder = onDeployTrailingOrder,
-                onCancelTrailingOrder = onCancelTrailingOrder
+                onCancelTrailingOrder = onCancelTrailingOrder,
+                isAutoSellActive = isAutoSellActive,
+                onAutoSellActiveChanged = onAutoSellActiveChanged,
+                tp1PriceInput = tp1PriceInput,
+                onTp1PriceChanged = onTp1PriceChanged,
+                tp1PercentInput = tp1PercentInput,
+                onTp1PercentChanged = onTp1PercentChanged,
+                tp2PriceInput = tp2PriceInput,
+                onTp2PriceChanged = onTp2PriceChanged,
+                tp2PercentInput = tp2PercentInput,
+                onTp2PercentChanged = onTp2PercentChanged
             )
         }
     }

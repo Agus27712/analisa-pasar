@@ -5,6 +5,10 @@ import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -23,6 +27,7 @@ fun SellTargetLevelsSection(
     context: PositionContext,
     fees: TradingFeeConfig,
     quoteAsset: String = "IDR",
+    onClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val entry = context.entryPrice ?: 0.0
@@ -55,15 +60,41 @@ fun SellTargetLevelsSection(
             .fillMaxWidth()
             .background(TvSurfaceVariant, RoundedCornerShape(10.dp))
             .border(1.dp, TvBorder, RoundedCornerShape(10.dp))
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(10.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Text(
-            text = "TARGET LEVEL & PROTEKSI POSISI",
-            color = TvTextSecondary,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Bold
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "TARGET LEVEL & PROTEKSI POSISI",
+                color = TvTextSecondary,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold
+            )
+            if (onClick != null) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = "Atur TP/SL",
+                        color = TvBlueSoft,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Icon(
+                        imageVector = Icons.Default.Edit,
+                        contentDescription = "Atur TP/SL",
+                        tint = TvBlueSoft,
+                        modifier = Modifier.size(12.dp)
+                    )
+                }
+            }
+        }
 
         Column(
             modifier = Modifier.fillMaxWidth(),

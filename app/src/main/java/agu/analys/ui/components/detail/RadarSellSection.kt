@@ -51,44 +51,22 @@ fun RadarSellSection(
     onSetAutoSellParams: ((Boolean, Double, Double, Double, Double) -> Unit)? = null,
     onDeployTrailingOrder: (() -> Unit)? = null,
     onCancelTrailingOrder: (() -> Unit)? = null,
-    sellSignalState: agu.analys.model.SellSignalState = agu.analys.model.SellSignalState()
+    sellSignalState: agu.analys.model.SellSignalState = agu.analys.model.SellSignalState(),
+    // Hoisted auto-sell states
+    isAutoSellActive: Boolean = false,
+    onAutoSellActiveChanged: (Boolean) -> Unit = {},
+    tp1PriceInput: String = "",
+    onTp1PriceChanged: (String) -> Unit = {},
+    tp1PercentInput: String = "50",
+    onTp1PercentChanged: (String) -> Unit = {},
+    tp2PriceInput: String = "",
+    onTp2PriceChanged: (String) -> Unit = {},
+    tp2PercentInput: String = "50",
+    onTp2PercentChanged: (String) -> Unit = {}
 ) {
     var customSellQtyInput by remember { mutableStateOf("") }
     var isCustomSellQtyOpen by remember { mutableStateOf(false) }
     var selectedSellPercent by remember { mutableIntStateOf(100) }
-
-    var isAutoSellActive by remember { mutableStateOf(false) }
-    var tp1PriceInput by remember { mutableStateOf("") }
-    var tp1PercentInput by remember { mutableStateOf("50") }
-    var tp2PriceInput by remember { mutableStateOf("") }
-    var tp2PercentInput by remember { mutableStateOf("50") }
-
-    // Flag to prevent LaunchedEffect from overwriting user typing
-    var hasInitialized by remember { mutableStateOf(false) }
-    val currentPositionId = remember(baseAsset, quoteAsset) { "$baseAsset-$quoteAsset" }
-
-    LaunchedEffect(spotPosition, signal, currentPositionId) {
-        if (spotPosition != null && !hasInitialized) {
-            isAutoSellActive = spotPosition.isAutoSellEnabled
-            tp1PriceInput = if (spotPosition.tp1Price > 0.0) String.format(Locale.US, "%.0f", spotPosition.tp1Price) 
-                            else if (signal != null && signal.targetPrice1 > 0.0) String.format(Locale.US, "%.0f", signal.targetPrice1) 
-                            else ""
-            
-            tp2PriceInput = if (spotPosition.tp2Price > 0.0) String.format(Locale.US, "%.0f", spotPosition.tp2Price)
-                            else if (signal != null && signal.targetPrice2 > 0.0) String.format(Locale.US, "%.0f", signal.targetPrice2)
-                            else ""
-
-            tp1PercentInput = if (spotPosition.tp1Percent > 0) String.format(Locale.US, "%.0f", spotPosition.tp1Percent) else "50"
-            tp2PercentInput = if (spotPosition.tp2Percent > 0) String.format(Locale.US, "%.0f", spotPosition.tp2Percent) else "50"
-            
-            hasInitialized = true
-        }
-    }
-
-    // Reset initialization when changing pairs
-    LaunchedEffect(currentPositionId) {
-        hasInitialized = false
-    }
 
     val isTrailingActive = spotPosition?.isTrailingEnabled == true
     val trailingPercent = spotPosition?.trailingPercent ?: 2.0
@@ -214,42 +192,6 @@ fun RadarSellSection(
 
         // AUTO TP1/TP2 untuk simulasi maupun real mode saat user buka switch & tap SIMPAN
         if (effectiveBuyPrice > 0.0 || availableCoin > 0.0) {
-            Spacer(Modifier.height(8.dp))
-            SellTpSlSection(
-                isRealMode = isRealMode,
-                isAutoSellActive = isAutoSellActive,
-                onAutoSellActiveChanged = { enabled ->
-                    isAutoSellActive = enabled
-                    if (!enabled) {
-                        onSetAutoSellParams?.invoke(
-                            false,
-                            0.0,
-                            50.0,
-                            0.0,
-                            50.0
-                        )
-                    }
-                },
-                tp1Price = tp1PriceInput,
-                onTp1PriceChanged = { tp1PriceInput = it },
-                tp1Percent = tp1PercentInput,
-                onTp1PercentChanged = { tp1PercentInput = it },
-                tp2Price = tp2PriceInput,
-                onTp2PriceChanged = { tp2PriceInput = it },
-                tp2Percent = tp2PercentInput,
-                onTp2PercentChanged = { tp2PercentInput = it },
-                quoteAsset = quoteAsset,
-                onSaveParams = {
-                    onSetAutoSellParams?.invoke(
-                        true,
-                        PriceFormatter.parseCleanIdrDouble(tp1PriceInput),
-                        PriceFormatter.parseCleanIdrDouble(tp1PercentInput).coerceIn(1.0, 100.0),
-                        PriceFormatter.parseCleanIdrDouble(tp2PriceInput),
-                        PriceFormatter.parseCleanIdrDouble(tp2PercentInput).coerceIn(1.0, 100.0)
-                    )
-                }
-            )
-
             Spacer(Modifier.height(8.dp))
             SellTrailingSection(
                 isTrailingActive = isTrailingActive,
