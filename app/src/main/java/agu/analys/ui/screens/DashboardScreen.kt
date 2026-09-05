@@ -2,21 +2,29 @@ package agu.analys.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.FloatingActionButtonDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.roundToInt
 import agu.analys.config.MarketDataSource
 import agu.analys.config.StrategyMode
 import agu.analys.model.MarketConnectionState
@@ -249,52 +257,75 @@ fun DashboardScreen(
         )
     }
 
-    // Shortcut Floating AI Screener Button (Melayang tepat di atas Bottom Navigation)
+    // Shortcut Free-Floating Draggable AI Screener Button (Dapat digeser bebas ke seluruh layar)
+    var fabOffsetX by remember { mutableStateOf(0f) }
+    var fabOffsetY by remember { mutableStateOf(0f) }
+
     Box(
         modifier = Modifier
             .align(Alignment.BottomEnd)
             .padding(end = 16.dp, bottom = 68.dp)
+            .offset { IntOffset(fabOffsetX.roundToInt(), fabOffsetY.roundToInt()) }
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    var dragDistance = 0f
+                    var isDown = true
+                    while (isDown) {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.firstOrNull { it.id == down.id }
+                        if (change == null || !change.pressed) {
+                            isDown = false
+                            // Jika pergeseran minim (< 15 px), anggap sebagai klik/tap
+                            if (dragDistance < 15f) {
+                                showNewsScreener = true
+                            }
+                        } else {
+                            val delta = change.positionChange()
+                            if (delta != androidx.compose.ui.geometry.Offset.Zero) {
+                                dragDistance += kotlin.math.abs(delta.x) + kotlin.math.abs(delta.y)
+                                if (dragDistance > 6f) {
+                                    change.consume()
+                                    fabOffsetX += delta.x
+                                    fabOffsetY += delta.y
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .testTag("floating_ai_screener_btn")
     ) {
-        FloatingActionButton(
-            onClick = { showNewsScreener = true },
-            containerColor = Color.Transparent,
-            contentColor = Color.White,
-            shape = RoundedCornerShape(22.dp),
-            elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 6.dp, pressedElevation = 10.dp),
-            modifier = Modifier
-                .border(
-                    width = 1.2.dp,
-                    brush = androidx.compose.ui.graphics.Brush.linearGradient(
-                        listOf(Color(0xFF818CF8), Color(0xFF38BDF8))
-                    ),
-                    shape = RoundedCornerShape(22.dp)
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = Color(0xFF1E1B4B),
+            shadowElevation = 5.dp,
+            border = androidx.compose.foundation.BorderStroke(
+                1.dp,
+                Brush.linearGradient(
+                    listOf(Color(0xFF818CF8), Color(0xFF38BDF8))
                 )
-                .testTag("floating_ai_screener_btn")
+            )
         ) {
-            Box(
+            Row(
                 modifier = Modifier
                     .background(
-                        androidx.compose.ui.graphics.Brush.horizontalGradient(
-                            listOf(Color(0xFF4338CA), Color(0xFF0284C7))
-                        ),
-                        shape = RoundedCornerShape(22.dp)
+                        Brush.horizontalGradient(
+                            listOf(Color(0xFF312E81), Color(0xFF0369A1))
+                        )
                     )
-                    .padding(horizontal = 14.dp, vertical = 9.dp),
-                contentAlignment = Alignment.Center
+                    .padding(horizontal = 9.dp, vertical = 5.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Text("✨", fontSize = 13.sp)
-                    Text(
-                        text = "AI Screener",
-                        color = Color.White,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Black,
-                        letterSpacing = 0.3.sp
-                    )
-                }
+                Text("✨", fontSize = 11.sp)
+                Text(
+                    text = "AI Screener",
+                    color = Color.White,
+                    fontSize = 10.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.2.sp
+                )
             }
         }
     }
@@ -315,10 +346,10 @@ fun DashboardScreen(
     if (showNewsScreener) {
         NewsAiScreenerModal(
             state = newsScreenerState,
-            preferredProvider = viewModel.prefs.aiProvider,
+            provider = viewModel.prefs.aiProvider,
             onDismiss = { showNewsScreener = false },
-            onRunScreener = { force, provider ->
-                viewModel.runNewsAiScreener(forceRefresh = force, overrideProvider = provider)
+            onRunScreener = { force ->
+                viewModel.runNewsAiScreener(forceRefresh = force)
             },
             onSelectCoin = { pair ->
                 viewModel.selectPair(pair)

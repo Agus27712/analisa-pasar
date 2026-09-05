@@ -28,9 +28,9 @@ object NewsAiScreenerService {
         .build()
 
     private const val GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
-    private const val GROQ_QWEN_MODEL = "qwen/qwen-2.5-32b"
+    private const val GROQ_QWEN_MODEL = "qwen/qwen3.8-27b"
     private const val GEMINI_MODEL = "gemini-2.0-flash"
-    private const val GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/$GEMINI_MODEL:generateContent"
+    private const val GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
     private const val MAX_TOKENS = 757
 
     suspend fun screenCoinsFromNews(
@@ -41,14 +41,6 @@ object NewsAiScreenerService {
         groqApiKey: String,
         geminiApiKey: String
     ): NewsScreenerResult = withContext(Dispatchers.IO) {
-        val effectiveProvider = when {
-            preferredProvider == AiProvider.GROQ && groqApiKey.isNotBlank() -> AiProvider.GROQ
-            preferredProvider == AiProvider.GEMINI && geminiApiKey.isNotBlank() -> AiProvider.GEMINI
-            groqApiKey.isNotBlank() -> AiProvider.GROQ
-            geminiApiKey.isNotBlank() -> AiProvider.GEMINI
-            else -> AiProvider.GROQ
-        }
-
         // Whitelist koin Indodax teratas & aktif untuk context AI
         val sampleWhitelist = indodaxValidBases
             .map { it.uppercase().trim() }
@@ -62,15 +54,26 @@ object NewsAiScreenerService {
             "${idx + 1}. [${art.source}] ${art.title}"
         }.joinToString("\n")
 
-        val (rawResponse, modelName, providerName) = if (effectiveProvider == AiProvider.GROQ && groqApiKey.isNotBlank()) {
-            val res = callGroqQwen(groqApiKey, sampleWhitelist, headlinesText)
-            Triple(res, GROQ_QWEN_MODEL, "Groq (Qwen 2.5 32B)")
-        } else if (geminiApiKey.isNotBlank()) {
-            val res = callGeminiFlash(geminiApiKey, sampleWhitelist, headlinesText)
-            Triple(res, GEMINI_MODEL, "Gemini (2.0 Flash)")
-        } else {
-            val fallback = buildLocalFallback(articles, indodaxValidBases, liveTicks)
-            Triple(fallback, "Local Fallback", "Engine Heuristik (API Key Belum Diisi)")
+        // Gunakan secara mutlak asisten AI aktif dari halaman Pengaturan (hanya 1 AI)
+        val (rawResponse, modelName, providerName) = when (preferredProvider) {
+            AiProvider.GROQ -> {
+                if (groqApiKey.isNotBlank()) {
+                    val res = callGroqQwen(groqApiKey, sampleWhitelist, headlinesText)
+                    Triple(res, GROQ_QWEN_MODEL, "Groq (Qwen 27B)")
+                } else {
+                    val fallback = buildLocalFallback(articles, indodaxValidBases, liveTicks, "Groq API Key belum diisi di Pengaturan")
+                    Triple(fallback, "Heuristik", "Groq (API Key Kosong)")
+                }
+            }
+            AiProvider.GEMINI -> {
+                if (geminiApiKey.isNotBlank()) {
+                    val res = callGeminiFlash(geminiApiKey, sampleWhitelist, headlinesText)
+                    Triple(res, GEMINI_MODEL, "Gemini 2.0 Flash")
+                } else {
+                    val fallback = buildLocalFallback(articles, indodaxValidBases, liveTicks, "Gemini API Key belum diisi di Pengaturan")
+                    Triple(fallback, "Heuristik", "Gemini (API Key Kosong)")
+                }
+            }
         }
 
         val parsedPicks = parseCoinPicks(rawResponse, indodaxValidBases, liveTicks)
@@ -201,19 +204,17 @@ TUGAS:
 Saring seluruh berita di atas dan cocokkan dengan daftar koin Indodax. Pilih 2 sampai 4 koin kandidat terbaik yang berpotensi naik paling tinggi berdasarkan katalis berita.
         """.trimIndent()
 
+        val combinedPrompt = """$systemInstruction
+
+$userPrompt""".trimIndent()
+
         return try {
             val url = "$GEMINI_URL?key=$apiKey"
             val payload = JSONObject().apply {
-                put("system_instruction", JSONObject().apply {
-                    put("parts", JSONArray().apply {
-                        put(JSONObject().apply { put("text", systemInstruction) })
-                    })
-                })
                 put("contents", JSONArray().apply {
                     put(JSONObject().apply {
-                        put("role", "user")
                         put("parts", JSONArray().apply {
-                            put(JSONObject().apply { put("text", userPrompt) })
+                            put(JSONObject().apply { put("text", combinedPrompt) })
                         })
                     })
                 })
@@ -331,7 +332,8 @@ Saring seluruh berita di atas dan cocokkan dengan daftar koin Indodax. Pilih 2 s
     private fun buildLocalFallback(
         articles: List<NewsArticle>,
         indodaxBases: Set<String>,
-        liveTicks: Map<String, MarketTick>
+        liveTicks: Map<String, MarketTick>,
+        hintMessage: String = "Masukkan API Key di Pengaturan"
     ): String {
         val matchedCoins = mutableSetOf<String>()
         for (art in articles) {
@@ -346,8 +348,8 @@ Saring seluruh berita di atas dan cocokkan dengan daftar koin Indodax. Pilih 2 s
         val topCandidates = matchedCoins.take(3).ifEmpty { listOf("BTC", "SOL", "ETH") }
 
         return buildString {
-            appendLine("### 📋 Hasil Screening Heuristik Berita (Koin Listing Indodax)")
-            appendLine("*(Untuk analisis mendalam dengan model Qwen/Gemini, masukkan API Key di Pengaturan)*\n")
+            appendLine("### 📋 Hasil Screening Koin Berita Indodax")
+            appendLine("*(ℹ️ $hintMessage)*\n")
             topCandidates.forEach { coin ->
                 appendLine("🔥 [$coin/IDR]")
                 appendLine("• Narasi/Sektor: Major Liquid Altcoin / Spot")
