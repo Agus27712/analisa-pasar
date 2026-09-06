@@ -28,10 +28,20 @@ object NewsAiScreenerService {
         .build()
 
     private const val GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
-    private const val GROQ_QWEN_MODEL = "qwen/qwen3.8-27b"
-    private const val GEMINI_MODEL = "gemini-3.7-flash"
-    private const val GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/$GEMINI_MODEL:generateContent"
-    private const val MAX_TOKENS = 757
+    private const val GROQ_PRIMARY_MODEL = "qwen/qwen3.8-27b"
+    private val GROQ_MODELS = listOf(
+        "qwen/qwen3.8-27b",
+        "openai/gpt-oss-20b",
+        "openai/gpt-oss-120b",
+        "qwen/qwen3.6-27b"
+    )
+    private const val GEMINI_MODEL = "gemini-3.6-flash"
+    private val GEMINI_MODELS = listOf(
+        "gemini-3.6-flash",
+        "gemini-2.0-flash",
+        "gemini-1.5-flash"
+    )
+    private const val MAX_TOKENS = 750
 
     suspend fun screenCoinsFromNews(
         articles: List<NewsArticle>,
@@ -41,58 +51,166 @@ object NewsAiScreenerService {
         groqApiKey: String,
         geminiApiKey: String
     ): NewsScreenerResult = withContext(Dispatchers.IO) {
-        // Whitelist koin Indodax teratas & aktif untuk context AI
+        // Kompresi token: Ambil maksimal 50 koin teraktif & 12 headline teratas agar tidak menabrak TPM rate limit (6000 TPM)
         val sampleWhitelist = indodaxValidBases
             .map { it.uppercase().trim() }
             .filter { it.isNotBlank() && it.length in 2..10 && it != "IDR" && it != "USDT" }
             .distinct()
             .sorted()
-            .take(120)
+            .take(50)
             .joinToString(", ")
 
-        val headlinesText = articles.mapIndexed { idx, art ->
-            "${idx + 1}. [${art.source}] ${art.title}"
+        val selectedArticles = articles.take(12)
+        val headlinesText = selectedArticles.mapIndexed { idx, art ->
+            "${idx + 1}. [${art.source}] ${art.title.take(120)}"
         }.joinToString("\n")
 
-        // Gunakan secara mutlak asisten AI aktif dari halaman Pengaturan (hanya 1 AI)
-        val (rawResponse, modelName, providerName) = when (preferredProvider) {
-            AiProvider.GROQ -> {
-                if (groqApiKey.isNotBlank()) {
-                    val res = callGroqQwen(groqApiKey, sampleWhitelist, headlinesText)
-                    Triple(res, GROQ_QWEN_MODEL, "Groq (Qwen 27B)")
-                } else {
-                    val fallback = buildLocalFallback(articles, indodaxValidBases, liveTicks, "Groq API Key belum diisi di Pengaturan")
-                    Triple(fallback, "Heuristik", "Groq (API Key Kosong)")
+        var usedProvider = preferredProvider
+        var usedModel = when (preferredProvider) {
+            AiProvider.GROQ -> GROQ_PRIMARY_MODEL
+            AiProvider.GEMINI -> GEMINI_MODEL
+        }
+        var providerLabel = when (preferredProvider) {
+            AiProvider.GROQ -> "Groq (Qwen / GPT-OSS)"
+            AiProvider.GEMINI -> "Gemini Flash"
+        }
+
+        var rawResponse = ""
+
+        if (preferredProvider == AiProvider.GROQ) {
+            if (groqApiKey.isNotBlank()) {
+                val groqResult = callGroqWithFallback(groqApiKey, sampleWhitelist, headlinesText)
+                rawResponse = groqResult.text
+                usedModel = groqResult.modelUsed
+                providerLabel = "Groq (${groqResult.modelUsed.substringAfterLast("/")})"
+
+                // Jika Groq terkena HTTP 429 / Rate limit, coba failover ke Gemini jika ada key-nya
+                if (groqResult.isRateLimited || groqResult.isFailed) {
+                    if (geminiApiKey.isNotBlank()) {
+                        Timber.w("Groq bermasalah/rate limited. Melakukan auto failover ke Gemini...")
+                        val geminiRes = callGeminiFlash(geminiApiKey, sampleWhitelist, headlinesText)
+                        if (!geminiRes.startsWith("⚠️")) {
+                            rawResponse = geminiRes
+                            usedModel = GEMINI_MODEL
+                            providerLabel = "Gemini Flash (Auto Failover)"
+                            usedProvider = AiProvider.GEMINI
+                        }
+                    }
                 }
+            } else {
+                rawResponse = buildLocalFallback(articles, indodaxValidBases, liveTicks, "Groq API Key belum diisi di Pengaturan")
+                usedModel = "Heuristik"
+                providerLabel = "Groq (API Key Kosong)"
             }
-            AiProvider.GEMINI -> {
-                if (geminiApiKey.isNotBlank()) {
-                    val res = callGeminiFlash(geminiApiKey, sampleWhitelist, headlinesText)
-                    Triple(res, GEMINI_MODEL, "Gemini 3.7 Flash")
-                } else {
-                    val fallback = buildLocalFallback(articles, indodaxValidBases, liveTicks, "Gemini API Key belum diisi di Pengaturan")
-                    Triple(fallback, "Heuristik", "Gemini (API Key Kosong)")
+        } else {
+            // GEMINI
+            if (geminiApiKey.isNotBlank()) {
+                val geminiRes = callGeminiFlash(geminiApiKey, sampleWhitelist, headlinesText)
+                rawResponse = geminiRes
+                usedModel = GEMINI_MODEL
+                providerLabel = "Gemini Flash"
+
+                if (geminiRes.startsWith("⚠️") && groqApiKey.isNotBlank()) {
+                    Timber.w("Gemini bermasalah. Melakukan auto failover ke Groq...")
+                    val groqResult = callGroqWithFallback(groqApiKey, sampleWhitelist, headlinesText)
+                    if (!groqResult.isFailed) {
+                        rawResponse = groqResult.text
+                        usedModel = groqResult.modelUsed
+                        providerLabel = "Groq (${groqResult.modelUsed.substringAfterLast("/")}) (Failover)"
+                        usedProvider = AiProvider.GROQ
+                    }
                 }
+            } else {
+                rawResponse = buildLocalFallback(articles, indodaxValidBases, liveTicks, "Gemini API Key belum diisi di Pengaturan")
+                usedModel = "Heuristik"
+                providerLabel = "Gemini (API Key Kosong)"
             }
         }
 
-        val parsedPicks = parseCoinPicks(rawResponse, indodaxValidBases, liveTicks)
+        var parsedPicks = parseCoinPicks(rawResponse, indodaxValidBases, liveTicks)
+
+        // JAMINAN TIDAK KOSONG: Jika AI gagal atau mengembalikan error rate limit sehingga parsedPicks kosong,
+        // segera aktifkan fallback heuristik berbasis feed RSS berita agar user tetap mendapatkan data!
+        if (parsedPicks.isEmpty()) {
+            val failureReason = when {
+                rawResponse.contains("429") -> "Kuota TPM Groq terkena Rate Limit (HTTP 429). Beralih ke analisis heuristik berita Indodax."
+                rawResponse.contains("API Key", ignoreCase = true) -> "API Key belum diisi di Pengaturan."
+                rawResponse.startsWith("⚠️") -> rawResponse.take(150)
+                else -> "Model AI tidak mendeteksi format koin. Mengaktifkan kurasi heuristik berita."
+            }
+            val fallbackText = buildLocalFallback(articles, indodaxValidBases, liveTicks, failureReason)
+            parsedPicks = parseCoinPicks(fallbackText, indodaxValidBases, liveTicks)
+            rawResponse = "$failureReason\n\n$fallbackText"
+            usedModel = "Heuristik Fallback"
+            providerLabel = "$providerLabel (Heuristik)"
+        }
 
         NewsScreenerResult(
             picks = parsedPicks,
             rawAnalysis = rawResponse,
             articlesAnalyzed = articles,
-            providerUsed = providerName,
-            modelUsed = modelName,
+            providerUsed = providerLabel,
+            modelUsed = usedModel,
             timestampMs = System.currentTimeMillis()
         )
     }
 
-    private fun callGroqQwen(
+    private data class GroqCallResult(
+        val text: String,
+        val modelUsed: String,
+        val isRateLimited: Boolean = false,
+        val isFailed: Boolean = false
+    )
+
+    private fun callGroqWithFallback(
         apiKey: String,
         indodaxCoins: String,
         headlines: String
-    ): String {
+    ): GroqCallResult {
+        var lastError = ""
+        var rateLimited = false
+
+        for (model in GROQ_MODELS) {
+            val result = executeGroqRequest(apiKey, model, indodaxCoins, headlines)
+            if (result.isSuccess) {
+                return GroqCallResult(
+                    text = result.getOrNull().orEmpty(),
+                    modelUsed = model,
+                    isRateLimited = false,
+                    isFailed = false
+                )
+            } else {
+                val msg = result.exceptionOrNull()?.message.orEmpty()
+                lastError = msg
+                if (msg.contains("429")) {
+                    rateLimited = true
+                    Timber.w("Groq model $model terkena Rate Limit 429, mencoba model alternatif...")
+                } else {
+                    Timber.w("Groq model $model gagal: $msg, mencoba model alternatif...")
+                }
+            }
+        }
+
+        val friendlyError = if (rateLimited) {
+            "⚠️ Groq API terkena Rate Limit (HTTP 429 - Kuota TPM Groq penuh). Menampilkan rekomendasi koin lokal."
+        } else {
+            "⚠️ Gagal memanggil Groq: $lastError"
+        }
+
+        return GroqCallResult(
+            text = friendlyError,
+            modelUsed = GROQ_PRIMARY_MODEL,
+            isRateLimited = rateLimited,
+            isFailed = true
+        )
+    }
+
+    private fun executeGroqRequest(
+        apiKey: String,
+        modelName: String,
+        indodaxCoins: String,
+        headlines: String
+    ): Result<String> {
         val systemPrompt = """
 Anda adalah Quantitative Crypto Screener & News Catalyst Analyst khusus pasar Indodax Spot Exchange.
 Tugas Anda adalah menyeleksi 2 sampai 4 koin calon beli (bullish candidates) berdasarkan ringkasan berita/RSS terbaru.
@@ -100,8 +218,8 @@ Tugas Anda adalah menyeleksi 2 sampai 4 koin calon beli (bullish candidates) ber
 ATURAN KETAT:
 1. FILTER LISTING INDODAX: Hanya rekomendasikan koin yang valid ada di dalam [DAFTAR KOIN AKTIF INDODAX]. Koin di luar daftar ini wajib diabaikan total.
 2. PURE SPOT MINDSET: Fokus hanya pada potensi kenaikan harga (upside/buy catalyst). Jangan berikan rekomendasi shorting/futures.
-3. OUTPUT MAKSIMAL 757 TOKEN: Berikan analisis padat, tajam, edukatif, dan to the point tanpa basa-basi pembuka/penutup.
-4. FORMAT OUTPUT PER KOIN:
+3. OUTPUT PADAT DAN TUNTAS: Berikan analisis padat, tajam, edukatif, dan to the point tanpa basa-basi pembuka/penutup.
+4. FORMAT OUTPUT PER KOIN WAJIB PERSIS SEPERTI INI:
 🔥 [SIMBOL/IDR] (Contoh: SOL/IDR)
 • Narasi/Sektor: [Sektor koin, misal: Layer-1 / DeFi / AI]
 • Potensi Sentimen: [Sangat Kuat / Menengah]
@@ -120,15 +238,14 @@ $indodaxCoins
 $headlines
 
 INSTRUKSI:
-Analisis berita di atas secara mendalam. Identifikasi koin yang masuk dalam daftar Indodax yang memiliki sentimen positif terkuat dan berpotensi mengalami kenaikan harga spot. Sajikan sesuai format yang telah ditentukan (maksimal 757 token).
+Pilih 2 sampai 4 koin kandidat bullish terbaik yang ada di daftar Indodax berdasarkan katalis berita di atas. Sajikan persis sesuai format yang ditentukan.
         """.trimIndent()
 
         return try {
             val payload = JSONObject().apply {
-                put("model", GROQ_QWEN_MODEL)
-                put("temperature", 0.30)
+                put("model", modelName)
+                put("temperature", 0.25)
                 put("max_tokens", MAX_TOKENS)
-                put("reasoning_effort", "high")
                 put("messages", JSONArray().apply {
                     put(JSONObject().apply {
                         put("role", "system")
@@ -151,20 +268,32 @@ Analisis berita di atas secara mendalam. Identifikasi koin yang masuk dalam daft
             client.newCall(request).execute().use { resp ->
                 val body = resp.body?.string().orEmpty()
                 if (!resp.isSuccessful) {
-                    Timber.e("Groq screener call failed: ${resp.code} - $body")
-                    return "⚠️ Gagal memanggil Groq ($GROQ_QWEN_MODEL): HTTP ${resp.code}. Periksa Groq API Key di Settings."
+                    Timber.e("Groq call failed for $modelName: ${resp.code} - $body")
+                    return Result.failure(Exception("HTTP ${resp.code}: $body"))
                 }
-                val text = JSONObject(body)
-                    .optJSONArray("choices")
-                    ?.optJSONObject(0)
-                    ?.optJSONObject("message")
-                    ?.optString("content")
-                    .orEmpty()
-                if (text.isNotBlank()) text.trim() else "Tidak ada output dari model Groq."
+                val choiceObj = JSONObject(body).optJSONArray("choices")?.optJSONObject(0)
+                val messageObj = choiceObj?.optJSONObject("message")
+                var text = messageObj?.optString("content").orEmpty().trim()
+
+                // Jika content kosong tetapi reasoning ada (kasus model reasoning kehabisan token), gunakan reasoning_content
+                if (text.isBlank()) {
+                    val reasoning = messageObj?.optString("reasoning").orEmpty().ifEmpty {
+                        messageObj?.optString("reasoning_content").orEmpty()
+                    }
+                    if (reasoning.isNotBlank()) {
+                        text = reasoning.trim()
+                    }
+                }
+
+                if (text.isNotBlank()) {
+                    Result.success(text)
+                } else {
+                    Result.failure(Exception("Output dari model $modelName kosong"))
+                }
             }
         } catch (e: Exception) {
-            Timber.e(e, "Error executing Groq Qwen Screener")
-            "⚠️ Kendala koneksi ke Groq API: ${e.localizedMessage ?: "Timeout"}"
+            Timber.e(e, "Exception calling Groq with $modelName")
+            Result.failure(e)
         }
     }
 
@@ -208,47 +337,50 @@ Saring seluruh berita di atas dan cocokkan dengan daftar koin Indodax. Pilih 2 s
 
 $userPrompt""".trimIndent()
 
-        return try {
-            val url = "$GEMINI_URL?key=$apiKey"
-            val payload = JSONObject().apply {
-                put("contents", JSONArray().apply {
-                    put(JSONObject().apply {
-                        put("parts", JSONArray().apply {
-                            put(JSONObject().apply { put("text", combinedPrompt) })
+        for (model in GEMINI_MODELS) {
+            try {
+                val url = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey"
+                val payload = JSONObject().apply {
+                    put("contents", JSONArray().apply {
+                        put(JSONObject().apply {
+                            put("parts", JSONArray().apply {
+                                put(JSONObject().apply { put("text", combinedPrompt) })
+                            })
                         })
                     })
-                })
-                put("generationConfig", JSONObject().apply {
-                    put("temperature", 0.20)
-                    put("maxOutputTokens", MAX_TOKENS)
-                })
-            }
-
-            val request = Request.Builder()
-                .url(url)
-                .addHeader("Content-Type", "application/json")
-                .post(payload.toString().toRequestBody("application/json".toMediaType()))
-                .build()
-
-            client.newCall(request).execute().use { resp ->
-                val body = resp.body?.string().orEmpty()
-                if (!resp.isSuccessful) {
-                    Timber.e("Gemini screener call failed: ${resp.code} - $body")
-                    return "⚠️ Gagal memanggil Gemini ($GEMINI_MODEL): HTTP ${resp.code}. Periksa Gemini API Key di Settings."
+                    put("generationConfig", JSONObject().apply {
+                        put("temperature", 0.20)
+                        put("maxOutputTokens", 1200)
+                    })
                 }
-                val candidates = JSONObject(body).optJSONArray("candidates")
-                val text = candidates?.optJSONObject(0)
-                    ?.optJSONObject("content")
-                    ?.optJSONArray("parts")
-                    ?.optJSONObject(0)
-                    ?.optString("text")
-                    .orEmpty()
-                if (text.isNotBlank()) text.trim() else "Tidak ada output dari Gemini."
+
+                val request = Request.Builder()
+                    .url(url)
+                    .addHeader("Content-Type", "application/json")
+                    .post(payload.toString().toRequestBody("application/json".toMediaType()))
+                    .build()
+
+                client.newCall(request).execute().use { resp ->
+                    val body = resp.body?.string().orEmpty()
+                    if (resp.isSuccessful) {
+                        val candidates = JSONObject(body).optJSONArray("candidates")
+                        val text = candidates?.optJSONObject(0)
+                            ?.optJSONObject("content")
+                            ?.optJSONArray("parts")
+                            ?.optJSONObject(0)
+                            ?.optString("text")
+                            .orEmpty()
+                        if (text.isNotBlank()) return text.trim()
+                    } else {
+                        Timber.w("Gemini screener model $model failed: ${resp.code} - $body")
+                    }
+                }
+            } catch (e: Exception) {
+                Timber.w(e, "Error executing Gemini Screener with $model")
             }
-        } catch (e: Exception) {
-            Timber.e(e, "Error executing Gemini Screener")
-            "⚠️ Kendala koneksi ke Gemini API: ${e.localizedMessage ?: "Timeout"}"
         }
+
+        return "⚠️ Gagal memanggil Gemini API. Periksa kuota atau Gemini API Key di Settings."
     }
 
     private fun parseCoinPicks(
@@ -257,14 +389,15 @@ $userPrompt""".trimIndent()
         liveTicks: Map<String, MarketTick>
     ): List<ScreenerCoinPick> {
         val picks = mutableListOf<ScreenerCoinPick>()
-        val blocks = rawText.split(Regex("(?:^|\n)(?=🔥|###|\\*\\*\\s*\\[?[A-Z0-9]{2,10}(?:/IDR)?\\]?)"))
+        // Toleransi format luas: 🔥, ###, **, 1., 2., [SIMBOL/IDR]
+        val blocks = rawText.split(Regex("(?:^|\n)(?=(?:🔥|###|\\*\\*|\\d+\\.)\\s*\\[?[A-Z0-9]{2,10}(?:/IDR)?\\]?)"))
 
         for (block in blocks) {
             val trimmed = block.trim()
-            if (trimmed.length < 30) continue
+            if (trimmed.length < 25) continue
 
             // Ekstrak Simbol Koin
-            val symbolMatch = Regex("(?:🔥|###)?\\s*\\[?([A-Z0-9]{2,10})(?:/IDR)?\\]?").find(trimmed)
+            val symbolMatch = Regex("(?:🔥|###|\\*\\*|\\d+\\.)?\\s*\\[?([A-Z0-9]{2,10})(?:/IDR)?\\]?").find(trimmed)
             val base = symbolMatch?.groupValues?.getOrNull(1)?.uppercase() ?: continue
 
             // Validasi apakah benar listing di Indodax!
@@ -324,6 +457,35 @@ $userPrompt""".trimIndent()
                     volume24h = tick?.volume24h ?: 0.0
                 )
             )
+        }
+
+        // Secondary Pass: Jika formatting AI bebas (paragraf/list) dan lolos dari split utama
+        if (picks.isEmpty() && !rawText.startsWith("⚠️") && rawText.length > 50) {
+            val mentionMatches = Regex("(?:\\b|🔥|#)([A-Z0-9]{2,8})(?:/IDR|\\b)").findAll(rawText)
+            for (match in mentionMatches) {
+                val candidate = match.groupValues.getOrNull(1)?.uppercase() ?: continue
+                if (indodaxBases.any { it.equals(candidate, ignoreCase = true) } && picks.none { it.baseSymbol == candidate }) {
+                    val pairSymbol = "${candidate}IDR"
+                    val indodaxPair = "${candidate.lowercase()}_idr"
+                    val tick = liveTicks[pairSymbol] ?: liveTicks[indodaxPair] ?: liveTicks[candidate]
+                    picks.add(
+                        ScreenerCoinPick(
+                            baseSymbol = candidate,
+                            pairSymbol = pairSymbol,
+                            indodaxPair = indodaxPair,
+                            sentimentGrade = "Sangat Kuat",
+                            sectorNarrative = "Spot Momentum",
+                            mainCatalyst = "Kandidat katalis bullish berdasarkan analisis narasi berita global.",
+                            reasons = listOf("Disebutkan dalam feed berita dengan sentimen positif.", "Likuiditas aktif pada pair Indodax IDR."),
+                            validityGrade = "Tinggi",
+                            currentPrice = tick?.price ?: 0.0,
+                            change24h = tick?.change24h ?: 0.0,
+                            volume24h = tick?.volume24h ?: 0.0
+                        )
+                    )
+                    if (picks.size >= 4) break
+                }
+            }
         }
 
         return picks.distinctBy { it.baseSymbol }

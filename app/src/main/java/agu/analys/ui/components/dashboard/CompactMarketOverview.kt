@@ -16,7 +16,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -26,11 +30,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import agu.analys.config.MarketDataSource
 import agu.analys.config.StrategyMode
+import agu.analys.engine.global.GlobalMarketContext
+import agu.analys.engine.global.GlobalRegime
 import agu.analys.model.MarketTick
 import agu.analys.ui.theme.*
 import agu.analys.util.PriceFormatter
@@ -40,7 +47,7 @@ import java.util.Date
 import java.util.Locale
 
 enum class MarketRankingTab(val label: String, val badge: String) {
-    WATCHLIST("📋 Watchlist", "📋 WATCHLIST"),
+    WATCHLIST("📋 Pantauan", "📋 PANTAUAN"),
     FAVORITE("⭐ Favorit", "⭐ FAVORIT")
 }
 
@@ -57,13 +64,15 @@ fun DashboardMockupHeader(
     allTicks: Map<String, MarketTick>,
     marketDataSource: MarketDataSource = MarketDataSource.INDODAX,
     strategyMode: StrategyMode = StrategyMode.SCALPING,
+    globalContext: GlobalMarketContext = GlobalMarketContext(),
     isConnected: Boolean,
     isRefreshing: Boolean = false,
     selectedTab: MarketRankingTab = MarketRankingTab.WATCHLIST,
     onSelectTab: (MarketRankingTab) -> Unit,
     onRefresh: () -> Unit,
     onMenuClick: () -> Unit = {},
-    onAddAsset: () -> Unit = {}
+    onAddAsset: () -> Unit = {},
+    onEditStrategy: () -> Unit = {}
 ) {
     val totalVolume = allTicks.values.sumOf { it.volume24h }
     val avgVolume = if (allTicks.isNotEmpty()) totalVolume / allTicks.size else 0.0
@@ -131,7 +140,7 @@ fun DashboardMockupHeader(
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Text(
-                    text = "Watchlist Indodax IDR",
+                    text = "Daftar Pantauan Indodax IDR",
                     color = TvTextPrimary,
                     fontSize = 16.5.sp,
                     fontWeight = FontWeight.Black,
@@ -254,7 +263,7 @@ fun DashboardMockupHeader(
         ) {
             // Stat 1: 24H VOL
             Column(
-                modifier = Modifier.weight(1.1f),
+                modifier = Modifier.weight(1.0f),
                 horizontalAlignment = Alignment.Start
             ) {
                 Text(
@@ -263,10 +272,11 @@ fun DashboardMockupHeader(
                     fontSize = 8.5.sp,
                     fontWeight = FontWeight.Bold
                 )
+                Spacer(Modifier.height(1.dp))
                 Text(
                     text = PriceFormatter.formatVolume(totalVolume, quoteAsset = quoteAsset),
                     color = TvTextPrimary,
-                    fontSize = 11.5.sp,
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.Black,
                     maxLines = 1
                 )
@@ -275,54 +285,189 @@ fun DashboardMockupHeader(
             Box(
                 modifier = Modifier
                     .width(1.dp)
-                    .height(22.dp)
+                    .height(32.dp)
                     .background(TvBorder)
             )
 
-            // Stat 2: AVG VOL
-            Column(
-                modifier = Modifier.weight(1f),
-                horizontalAlignment = Alignment.CenterHorizontally
+            // Stat 2: GLOBAL SHIELD (Shield di kiri, 3 baris keterangan di kanan)
+            val btcTick = remember(allTicks) {
+                allTicks.entries.firstOrNull { entry ->
+                    val k = entry.key.lowercase().replace("_", "")
+                    k == "btcidr" || k == "btc"
+                }?.value
+            }
+            val usdtTick = remember(allTicks) {
+                allTicks.entries.firstOrNull { entry ->
+                    val k = entry.key.lowercase().replace("_", "")
+                    k == "usdtidr" || k == "usdt"
+                }?.value
+            }
+            val btcPriceIdr = remember(btcTick, usdtTick, globalContext.btcPriceUsdt) {
+                val liveBtcPrice = btcTick?.price ?: 0.0
+                if (liveBtcPrice > 0) {
+                    liveBtcPrice
+                } else if (globalContext.btcPriceUsdt > 0) {
+                    val usdtRate = usdtTick?.price?.takeIf { it > 0 } ?: 16200.0
+                    globalContext.btcPriceUsdt * usdtRate
+                } else {
+                    0.0
+                }
+            }
+            val btcChangePct = remember(btcTick, globalContext.btc24hChangePct) {
+                if (btcTick != null && btcTick.change24h != 0.0) {
+                    btcTick.change24h
+                } else {
+                    globalContext.btc24hChangePct
+                }
+            }
+            val btcFormattedIdr = if (btcPriceIdr > 0) {
+                "BTC ${PriceFormatter.formatPrice(btcPriceIdr, showSymbol = true, quoteAsset = "IDR")}"
+            } else {
+                "BTC --"
+            }
+
+            val shieldIcon: ImageVector
+            val shieldColor: Color
+            val shieldText: String
+            when {
+                !globalContext.isConnected -> {
+                    shieldIcon = Icons.Default.Info
+                    shieldColor = TvTextSecondary
+                    shieldText = "Menghubungkan..."
+                }
+                globalContext.isVetoActive -> {
+                    shieldIcon = Icons.Default.Warning
+                    shieldColor = TvRed
+                    shieldText = "VETO AKTIF"
+                }
+                globalContext.regime == GlobalRegime.BULLISH -> {
+                    shieldIcon = Icons.Default.Security
+                    shieldColor = TvGreen
+                    shieldText = "SHIELD AMAN"
+                }
+                globalContext.regime == GlobalRegime.BEARISH -> {
+                    shieldIcon = Icons.Default.Security
+                    shieldColor = TvAmber
+                    shieldText = "STANDBY (BEARISH)"
+                }
+                else -> {
+                    shieldIcon = Icons.Default.Security
+                    shieldColor = TvBlue
+                    shieldText = "STANDBY (SIDEWAYS)"
+                }
+            }
+
+            Row(
+                modifier = Modifier
+                    .weight(1.9f)
+                    .padding(horizontal = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
             ) {
-                Text(
-                    text = "AVG VOL",
-                    color = TvTextSecondary,
-                    fontSize = 8.5.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = PriceFormatter.formatVolume(avgVolume, quoteAsset = quoteAsset),
-                    color = TvTextPrimary,
-                    fontSize = 11.5.sp,
-                    fontWeight = FontWeight.Black,
-                    maxLines = 1
-                )
+                // Shield di sebelah kiri (diperbesar agar matching dengan 3 baris keterangan)
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .background(shieldColor.copy(alpha = 0.15f), CircleShape)
+                        .border(0.8.dp, shieldColor.copy(alpha = 0.35f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = shieldIcon,
+                        contentDescription = "Market Shield",
+                        tint = shieldColor,
+                        modifier = Modifier.size(17.dp)
+                    )
+                }
+                Spacer(Modifier.width(6.dp))
+                // Keterangan 3 baris di sebelah kanan shield (jarak baris rapat dan proporsional)
+                Column(
+                    horizontalAlignment = Alignment.Start,
+                    verticalArrangement = Arrangement.spacedBy(1.dp)
+                ) {
+                    // Baris 1: Keterangan status (tukar posisi dengan nilai BTC)
+                    Text(
+                        text = shieldText,
+                        color = shieldColor,
+                        fontSize = 8.5.sp,
+                        fontWeight = FontWeight.Black,
+                        lineHeight = 11.sp,
+                        maxLines = 1
+                    )
+                    // Baris 2: Sumber data & Persentase BTC di tengah sejajar
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Text(
+                            text = if (globalContext.isConnected) "• ${globalContext.dataSource}" else "• Menunggu...",
+                            color = TvTextSecondary,
+                            fontSize = 7.5.sp,
+                            fontWeight = FontWeight.Medium,
+                            lineHeight = 10.sp,
+                            maxLines = 1
+                        )
+                        val changePrefix = if (btcChangePct > 0) "+" else ""
+                        Text(
+                            text = "($changePrefix${String.format(Locale.US, "%.2f", btcChangePct)}%)",
+                            color = if (btcChangePct >= 0) TvGreen else TvRed,
+                            fontSize = 7.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            lineHeight = 10.sp,
+                            maxLines = 1
+                        )
+                    }
+                    // Baris 3: Nilai BTC konversi ke IDR dengan pemisah ribuan
+                    Text(
+                        text = btcFormattedIdr,
+                        color = TvTextPrimary,
+                        fontSize = 8.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        lineHeight = 11.sp,
+                        maxLines = 1
+                    )
+                }
             }
 
             Box(
                 modifier = Modifier
                     .width(1.dp)
-                    .height(22.dp)
+                    .height(32.dp)
                     .background(TvBorder)
             )
 
-            // Stat 3: STRATEGI
+            // Stat 3: TOMBOL EDIT STRATEGI (NAMA STRATEGI)
             Column(
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1.0f)
+                    .clip(RoundedCornerShape(6.dp))
+                    .clickable { onEditStrategy() }
+                    .padding(vertical = 1.dp),
                 horizontalAlignment = Alignment.End
             ) {
-                Text(
-                    text = "STRATEGI",
-                    color = TvTextSecondary,
-                    fontSize = 8.5.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(Modifier.height(1.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Text(
+                        text = "STRATEGI",
+                        color = TvTextSecondary,
+                        fontSize = 8.5.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Icon(
+                        imageVector = Icons.Default.Edit,
+                        contentDescription = "Edit Strategi",
+                        tint = TvTextSecondary.copy(alpha = 0.7f),
+                        modifier = Modifier.size(9.dp)
+                    )
+                }
+                Spacer(Modifier.height(2.dp))
                 Box(
                     modifier = Modifier
                         .background(modeBg as Color, RoundedCornerShape(4.dp))
-                        .border(0.6.dp, modeBorder as Color, RoundedCornerShape(4.dp))
-                        .padding(horizontal = 5.dp, vertical = 1.dp)
+                        .border(0.7.dp, modeBorder as Color, RoundedCornerShape(4.dp))
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
                 ) {
                     Text(
                         text = modeLabel as String,

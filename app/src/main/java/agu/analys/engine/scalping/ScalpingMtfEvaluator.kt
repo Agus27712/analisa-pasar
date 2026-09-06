@@ -22,7 +22,7 @@ import kotlin.math.max
 object ScalpingMtfEvaluator {
     data class Result(val signal: AISignalState, val indicators: TechnicalIndicators)
 
-    fun evaluate(
+    fun evaluate(globalContext: agu.analys.engine.global.GlobalMarketContext = agu.analys.engine.global.GlobalMarketContext(),
         price: Double,
         h1Candles: List<CandleBar>,
         m15Candles: List<CandleBar>,
@@ -116,17 +116,25 @@ object ScalpingMtfEvaluator {
             else -> reasons.add("Menunggu momentum VWAP & Orderbook.")
         }
 
-        val action = when {
+        var finalAction = when {
             ready -> SignalAction.BUY
             else -> SignalAction.HOLD
         }
-        val stage = when {
+        var stage = when {
             strong -> ScalpingStage.STRONG_ENTRY
             ready -> ScalpingStage.ENTRY
             early -> ScalpingStage.EARLY_ENTRY
             isDangerousNoise -> ScalpingStage.HOLD
             else -> ScalpingStage.WATCH
         }
+        
+        // --- GLOBAL CONTEXT LAYER (VETO / SHIELD) ---
+        if (finalAction == SignalAction.BUY && globalContext.isVetoActive) {
+            finalAction = SignalAction.HOLD
+            stage = ScalpingStage.HOLD
+            reasons.add(0, "🛡️ ${globalContext.getVetoMessage()}")
+        }
+        // ---------------------------------------------
 
         val mtf = ScalpingMtfSnapshot(
             biasOk = hasRoomToGrow,
@@ -144,12 +152,14 @@ object ScalpingMtfEvaluator {
             entryPriceDetail = "Net RR: 1:${fmt(feeResult.netRr)}",
             path = if (ready) ScalpingPath.ENTRY_READY else ScalpingPath.NONE,
             statusTitle = when {
+                globalContext.isVetoActive -> "VETO AKTIF"
                 strong -> "STRONG ENTRY"
                 ready -> "BUY READY"
                 early -> "EARLY SETUP"
                 else -> "WATCH"
             },
             waitingFor = when {
+                globalContext.isVetoActive -> "Crash Reda"
                 ready -> "Eksekusi"
                 early -> "Konfirmasi"
                 else -> "Momentum"
@@ -160,8 +170,8 @@ object ScalpingMtfEvaluator {
         )
 
         val signal = AISignalState(
-            action = action,
-            confidence = when { strong -> 92; ready -> 85; early -> 62; else -> 40 },
+            action = finalAction,
+            confidence = when { globalContext.isVetoActive -> 0; strong -> 92; ready -> 85; early -> 62; else -> 40 },
             sentiment = TrendSentiment.NEUTRAL_CONSOLIDATION,
             entryPrice = price,
             targetPrice1 = tp1,

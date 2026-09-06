@@ -58,9 +58,9 @@ fun RealPortfolioAssetItem(
                         Text(coinUpper, color = TvTextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                         Text("Total: $qty $coinUpper", color = TvTextSecondary, fontSize = 11.sp)
                         Row {
-                            Text("Free: $freeQty", color = TvGreen, fontSize = 9.5.sp)
+                            Text("Tersedia: $freeQty", color = TvGreen, fontSize = 9.5.sp)
                             Spacer(Modifier.width(8.dp))
-                            Text("Locked: $lockedQty", color = TvRed, fontSize = 9.5.sp)
+                            Text("Terkunci: $lockedQty", color = TvRed, fontSize = 9.5.sp)
                         }
                     }
                 }
@@ -99,11 +99,11 @@ fun RealPortfolioAssetItem(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Column {
-                        Text("Avg Buy Price", color = TvTextSecondary, fontSize = 9.sp)
+                        Text("Rata-rata Harga Beli", color = TvTextSecondary, fontSize = 9.sp)
                         Text(PriceFormatter.formatPrice(avgPrice), color = TvTextPrimary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                     }
                     Column(horizontalAlignment = Alignment.End) {
-                        Text("Current Price", color = TvTextSecondary, fontSize = 9.sp)
+                        Text("Harga Saat Ini", color = TvTextSecondary, fontSize = 9.sp)
                         Text(if (price > 0) PriceFormatter.formatPrice(price) else "-", color = TvBlue, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }

@@ -44,7 +44,7 @@ fun EmptyWatchlistState(
             )
             Spacer(Modifier.height(10.dp))
             Text(
-                text = if (isFavoriteTab) "Daftar Favorit Masih Kosong" else "Watchlist Masih Kosong",
+                text = if (isFavoriteTab) "Daftar Favorit Masih Kosong" else "Daftar Pantauan Masih Kosong",
                 color = TvTextPrimary,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.ExtraBold
@@ -52,7 +52,7 @@ fun EmptyWatchlistState(
             Spacer(Modifier.height(4.dp))
             Text(
                 text = if (isFavoriteTab) {
-                    "Tambahkan koin dengan menekan ikon bintang (⭐) pada kartu koin di Watchlist, atau klik tombol di bawah untuk menambah pair secara manual."
+                    "Tambahkan koin dengan menekan ikon bintang (⭐) pada kartu koin di Pantauan, atau klik tombol di bawah untuk menambah pair secara manual."
                 } else {
                     "Sedang menyinkronkan data koin terpilih dari pasar Indodax."
                 },

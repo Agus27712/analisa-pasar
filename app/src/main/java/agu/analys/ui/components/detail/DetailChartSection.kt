@@ -54,7 +54,7 @@ fun DetailChartSection(
             ) {
                 Icon(Icons.Default.ShowChart, null, modifier = Modifier.size(15.dp))
                 Spacer(Modifier.width(4.dp))
-                Text(if (chartVisible) "Tutup Chart" else "Chart", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text(if (chartVisible) "Tutup Grafik" else "Grafik", fontSize = 11.sp, fontWeight = FontWeight.Bold)
             }
             OutlinedButton(
                 onClick = onOpenLandscapeChart,
@@ -66,7 +66,7 @@ fun DetailChartSection(
             ) {
                 Icon(Icons.Default.CropRotate, null, modifier = Modifier.size(15.dp))
                 Spacer(Modifier.width(4.dp))
-                Text("Fullscreen", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text("Layar Penuh", fontSize = 11.sp, fontWeight = FontWeight.Bold)
             }
         }
 
@@ -88,7 +88,7 @@ fun DetailChartSection(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            "CHART ${selectedTimeframe.label.uppercase()}",
+                            "GRAFIK ${selectedTimeframe.label.uppercase()}",
                             color = TvBlue,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold

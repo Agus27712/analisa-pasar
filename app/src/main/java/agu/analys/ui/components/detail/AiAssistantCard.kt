@@ -48,7 +48,7 @@ fun AiAssistantDialog(
     val isLight = LocalAppColors.current == LightAppColors
     val providerName = when (provider) {
         AiProvider.GROQ -> "Groq (OpenAI GPT-OSS)"
-        AiProvider.GEMINI -> "Gemini 2.0 Flash"
+        AiProvider.GEMINI -> "Gemini Flash"
     }
     val providerColor = when (provider) {
         AiProvider.GROQ -> Color(0xFFFF9800)
@@ -124,11 +124,11 @@ fun AiAssistantDialog(
 
                 Spacer(Modifier.height(10.dp))
 
-                // Result Box Ringkas & Padat
+                // Result Box Ringkas & Padat (Tinggi disesuaikan agar tidak mudah terpotong)
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 120.dp, max = 340.dp)
+                        .heightIn(min = 140.dp, max = 480.dp)
                         .background(TvSurfaceVariant, RoundedCornerShape(8.dp))
                         .border(0.8.dp, TvBorder, RoundedCornerShape(8.dp))
                         .padding(10.dp)

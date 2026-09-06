@@ -36,6 +36,7 @@ data class OfficeDailyEvalResult(
 object OfficeDailyEvaluator {
 
     fun evaluate(
+        globalContext: agu.analys.engine.global.GlobalMarketContext = agu.analys.engine.global.GlobalMarketContext(),
         price: Double,
         history: List<CandleBar>,
         fees: TradingFeeConfig = TradingFeeConfig()
@@ -192,11 +193,18 @@ object OfficeDailyEvaluator {
         val isQualified = completedSteps == 4 && buyScore >= 55.0 && buyScore > sellScore * 1.3
         val isSellSignal = rsi >= 74.0 || price >= calculatedTp1 || (sellScore >= 50.0 && sellScore > buyScore * 1.2)
 
-        val finalAction = when {
+        var finalAction = when {
             isSellSignal -> SignalAction.SELL
             isQualified -> SignalAction.BUY
             else -> SignalAction.HOLD
         }
+
+        // --- GLOBAL CONTEXT LAYER (VETO / SHIELD) ---
+        if (finalAction == SignalAction.BUY && globalContext.isVetoActive) {
+            finalAction = SignalAction.HOLD
+            reasons.add(0, "🛡️ ${globalContext.getVetoMessage()}")
+        }
+        // ---------------------------------------------
 
         if (isSellSignal) {
             reasons.add(0, if (price >= calculatedTp1) "🎯 Target TP tercapai di Rp ${fmtPrice(calculatedTp1)} - Take Profit!" else "⚠️ Jenuh Beli / Sinyal Distribusi - Amankan Profit!")
@@ -238,7 +246,7 @@ object OfficeDailyEvaluator {
         return OfficeDailyEvalResult(
             signal = AISignalState(
                 action = finalAction,
-                confidence = finalScore,
+                confidence = if (globalContext.isVetoActive && isQualified) 0 else finalScore,
                 sentiment = when (finalAction) {
                     SignalAction.BUY -> TrendSentiment.STRONG_BULLISH_CONTINUATION
                     SignalAction.SELL -> TrendSentiment.BEARISH_DISTRIBUTION

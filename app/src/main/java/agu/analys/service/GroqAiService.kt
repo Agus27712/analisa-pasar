@@ -26,7 +26,8 @@ object GroqAiService {
 
     private const val BASE_URL = "https://api.groq.com/openai/v1/chat/completions"
     private const val MODEL = "qwen/qwen3.8-27b"
-    private const val MAX_TOKENS = 4096
+    private val FALLBACK_MODELS = listOf("qwen/qwen3.8-27b", "openai/gpt-oss-20b", "qwen/qwen3.6-27b")
+    private const val MAX_TOKENS = 750
 
     suspend fun generateDeepMarketAudit(
         apiKey: String,
@@ -114,46 +115,56 @@ Wajib susun jawaban dalam format Markdown berikut:
 - **Rekomendasi**: [Entry, TP/SL, disiplin limit order maker]
         """.trimIndent()
 
-        try {
-            val payload = JSONObject().apply {
-                put("model", MODEL)
-                put("temperature", 0.40)
-                put("max_tokens", MAX_TOKENS)
-                put("reasoning_effort", "high")
-                put("top_p", 0.9)
-                put("messages", JSONArray().apply {
-                    put(JSONObject().apply {
-                        put("role", "system")
-                        put("content", systemPrompt)
+        for (modelName in FALLBACK_MODELS) {
+            try {
+                val payload = JSONObject().apply {
+                    put("model", modelName)
+                    put("temperature", 0.35)
+                    put("max_tokens", MAX_TOKENS)
+                    put("top_p", 0.9)
+                    put("messages", JSONArray().apply {
+                        put(JSONObject().apply {
+                            put("role", "system")
+                            put("content", systemPrompt)
+                        })
+                        put(JSONObject().apply {
+                            put("role", "user")
+                            put("content", userPrompt)
+                        })
                     })
-                    put(JSONObject().apply {
-                        put("role", "user")
-                        put("content", userPrompt)
-                    })
-                })
+                }
+                val request = Request.Builder()
+                    .url(BASE_URL)
+                    .addHeader("Authorization", "Bearer $apiKey")
+                    .addHeader("Content-Type", "application/json")
+                    .post(payload.toString().toRequestBody("application/json".toMediaType()))
+                    .build()
+                client.newCall(request).execute().use { resp ->
+                    val responseBody = resp.body?.string().orEmpty()
+                    if (resp.isSuccessful) {
+                        val msgObj = JSONObject(responseBody)
+                            .optJSONArray("choices")
+                            ?.takeIf { it.length() > 0 }
+                            ?.getJSONObject(0)
+                            ?.optJSONObject("message")
+                        var text = msgObj?.optString("content").orEmpty().trim()
+                        if (text.isBlank()) {
+                            val reasoning = msgObj?.optString("reasoning").orEmpty().ifEmpty {
+                                msgObj?.optString("reasoning_content").orEmpty()
+                            }
+                            if (reasoning.isNotBlank()) text = reasoning.trim()
+                        }
+                        if (text.isNotBlank()) return@withContext text
+                    } else {
+                        Timber.w("Groq model $modelName returned ${resp.code}: $responseBody")
+                    }
+                }
+            } catch (e: Exception) {
+                Timber.w(e, "Groq model $modelName request error")
             }
-            val request = Request.Builder()
-                .url(BASE_URL)
-                .addHeader("Authorization", "Bearer $apiKey")
-                .addHeader("Content-Type", "application/json")
-                .post(payload.toString().toRequestBody("application/json".toMediaType()))
-                .build()
-            client.newCall(request).execute().use { resp ->
-                val responseBody = resp.body?.string().orEmpty()
-                if (!resp.isSuccessful) return@withContext buildFallback(tick, indicators, signal, cpi, headlineBlock)
-                val text = JSONObject(responseBody)
-                    .optJSONArray("choices")
-                    ?.takeIf { it.length() > 0 }
-                    ?.getJSONObject(0)
-                    ?.optJSONObject("message")
-                    ?.optString("content")
-                    .orEmpty()
-                if (text.isNotBlank()) text.trim() else buildFallback(tick, indicators, signal, cpi, headlineBlock)
-            }
-        } catch (e: Exception) {
-            Timber.e(e, "Gagal memanggil Groq AI Service")
-            buildFallback(tick, indicators, signal, cpi, headlineBlock)
         }
+
+        buildFallback(tick, indicators, signal, cpi, headlineBlock)
     }
 
     private fun extractBase(symbol: String): String {

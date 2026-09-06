@@ -238,6 +238,7 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
             return
         }
         val result = ScalpingMtfEvaluator.evaluate(
+            agu.analys.engine.global.GlobalContextManager.context.value,
             tick.price, h1Candles, m15Candles, m1Candles,
             currentFormingVolume, currentOrderBookBids, currentOrderBookAsks,
             tradingFees, scalpingSensitivity
@@ -256,7 +257,7 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
     private fun runSecondWave() {
         val tick = currentTick ?: return
         if (h4Candles.size < 20 || h1Candles.size < 20 || m15Candles.size < 20) return
-        val result = SecondWaveEvaluator.evaluate(tick.price, h4Candles, h1Candles, m15Candles, tradingFees)
+        val result = SecondWaveEvaluator.evaluate(agu.analys.engine.global.GlobalContextManager.context.value, tick.price, h4Candles, h1Candles, m15Candles, tradingFees)
         _indicators.value = result.indicators
         _signalState.value = result.signal
     }
@@ -265,7 +266,7 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
         if (strategyMode != StrategyMode.SWING) return
         val tick = currentTick ?: return
         val history = synchronized(candles) { candles.toList() }
-        val result = SwingEvaluator.evaluate(tick.price, history, tradingFees)
+        val result = SwingEvaluator.evaluate(agu.analys.engine.global.GlobalContextManager.context.value, tick.price, history, tradingFees)
         _indicators.value = result.indicators
         _signalState.value = result.signal
     }
@@ -274,7 +275,7 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
         if (strategyMode != StrategyMode.OFFICE_DAILY) return
         val tick = currentTick ?: return
         val history = synchronized(candles) { candles.toList() }
-        val result = agu.analys.engine.officedaily.OfficeDailyEvaluator.evaluate(tick.price, history, tradingFees)
+        val result = agu.analys.engine.officedaily.OfficeDailyEvaluator.evaluate(agu.analys.engine.global.GlobalContextManager.context.value, tick.price, history, tradingFees)
         _indicators.value = result.indicators
         _signalState.value = result.signal
     }

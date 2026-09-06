@@ -63,6 +63,7 @@ object SecondWaveEvaluator {
      * Evaluasi mendalam Multi-Timeframe (H4 / 1D Makro + 1H Setup + 15M Trigger).
      */
     fun evaluate(
+        globalContext: agu.analys.engine.global.GlobalMarketContext = agu.analys.engine.global.GlobalMarketContext(),
         price: Double,
         macroCandles: List<CandleBar>, // H4 atau 1D (min 30 candles)
         h1Candles: List<CandleBar>,    // 1H (min 40 candles)
@@ -220,19 +221,27 @@ object SecondWaveEvaluator {
         )
 
         val isSellSignal = (drawdownPct < 5.0 && price >= priorHigh * 0.95) || rsi1h >= 75.0 || price >= tp1
-        val action = when {
+        var finalAction = when {
             isSellSignal -> SignalAction.SELL
             isQualified && step4Ok -> SignalAction.BUY
             else -> SignalAction.HOLD
         }
+        
+        // --- GLOBAL CONTEXT LAYER (VETO / SHIELD) ---
+        if (finalAction == SignalAction.BUY && globalContext.isVetoActive) {
+            finalAction = SignalAction.HOLD
+            reasons.add(0, "🛡️ ${globalContext.getVetoMessage()}")
+        }
+        // ---------------------------------------------
+        
         if (isSellSignal) {
             reasons.add(0, "🎯 Target Second-Wave Tercapai / Overbought - Rekomendasi Take Profit.")
         }
 
         val signalState = AISignalState(
-            action = action,
-            confidence = (totalScore * 8.33).toInt().coerceIn(10, 95),
-            sentiment = when (action) {
+            action = finalAction,
+            confidence = if (globalContext.isVetoActive) 0 else (totalScore * 8.33).toInt().coerceIn(10, 95),
+            sentiment = when (finalAction) {
                 SignalAction.BUY -> TrendSentiment.BULLISH_REVERSAL
                 SignalAction.SELL -> TrendSentiment.BEARISH_DISTRIBUTION
                 SignalAction.HOLD -> TrendSentiment.ACCUMULATION_SQUEEZE
@@ -244,10 +253,10 @@ object SecondWaveEvaluator {
             riskRewardRatio = rrRatio,
             reasoning = reasons,
             timestamp = System.currentTimeMillis(),
-            scalpingStage = when (action) {
+            scalpingStage = when (finalAction) {
                 SignalAction.BUY -> ScalpingStage.ENTRY
                 SignalAction.SELL -> ScalpingStage.STRONG_ENTRY
-                SignalAction.HOLD -> ScalpingStage.WAIT_PULLBACK
+                else -> ScalpingStage.WAIT_PULLBACK
             },
             mtf = mtfSnapshot
         )

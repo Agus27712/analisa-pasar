@@ -106,7 +106,7 @@ fun PriceAlertDialog(
         },
         confirmButton = {
             TextButton(onClick = onDismiss) {
-                Text("Close", color = Color(0xFFB0BEC5), fontSize = 12.sp)
+                Text("Tutup", color = Color(0xFFB0BEC5), fontSize = 12.sp)
             }
         }
     )
@@ -184,7 +184,7 @@ private fun PriceAlertTabNavigation(
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = "+ Create Alert",
+                text = "+ Buat Notifikasi",
                 color = if (selectedTab == 0) Color.White else TvTextSecondary,
                 fontSize = 11.5.sp,
                 fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal
@@ -204,7 +204,7 @@ private fun PriceAlertTabNavigation(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = "Active Alerts",
+                    text = "Notifikasi Aktif",
                     color = if (selectedTab == 1) Color.White else TvTextSecondary,
                     fontSize = 11.5.sp,
                     fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal

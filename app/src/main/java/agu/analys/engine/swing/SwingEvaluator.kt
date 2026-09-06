@@ -41,7 +41,12 @@ private enum class SwingSetup {
 
 object SwingEvaluator {
 
-    fun evaluate(price: Double, history: List<CandleBar>, fees: TradingFeeConfig = TradingFeeConfig()): SwingEvalResult {
+    fun evaluate(
+        globalContext: agu.analys.engine.global.GlobalMarketContext = agu.analys.engine.global.GlobalMarketContext(),
+        price: Double, 
+        history: List<CandleBar>, 
+        fees: TradingFeeConfig = TradingFeeConfig()
+    ): SwingEvalResult {
         if (price <= 0.0) {
             return SwingEvalResult(AISignalState(), TechnicalIndicators())
         }
@@ -386,11 +391,18 @@ object SwingEvaluator {
 
         val isSellSignal = isTechnicalSell
 
-        val finalAction = when {
+        var finalAction = when {
             isSellSignal -> SignalAction.SELL
             isQualifiedBuy -> SignalAction.BUY
             else -> SignalAction.HOLD
         }
+        
+        // --- GLOBAL CONTEXT LAYER (VETO / SHIELD) ---
+        if (finalAction == SignalAction.BUY && globalContext.isVetoActive) {
+            finalAction = SignalAction.HOLD
+            reasons.add(0, "🛡️ ${globalContext.getVetoMessage()}")
+        }
+        // ---------------------------------------------
 
         if (isSellSignal) {
             reasons.add(0, when {
@@ -451,7 +463,7 @@ object SwingEvaluator {
         return SwingEvalResult(
             AISignalState(
                 action = finalAction,
-                confidence = finalScore,
+                confidence = if (globalContext.isVetoActive && isQualifiedBuy) 0 else finalScore,
                 sentiment = when (finalAction) {
                     SignalAction.BUY -> when (detectedSetup) {
                         SwingSetup.BREAKOUT -> TrendSentiment.STRONG_BULLISH_CONTINUATION

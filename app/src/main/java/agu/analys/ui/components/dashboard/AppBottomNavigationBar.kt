@@ -60,7 +60,7 @@ fun AppBottomNavigationBar(
         )
         NavItem(
             icon = Icons.Default.Settings,
-            label = "Settings",
+            label = "Pengaturan",
             isSelected = currentTab == NavTab.SETTINGS,
             onClick = { onSelectTab(NavTab.SETTINGS) }
         )

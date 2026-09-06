@@ -62,6 +62,6 @@ fun DashboardHeader(
             }
         }
         Spacer(Modifier.height(7.dp))
-        Text("Watchlist Koin", color = TvTextPrimary, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
+        Text("Daftar Pantauan Koin", color = TvTextPrimary, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
     }
 }

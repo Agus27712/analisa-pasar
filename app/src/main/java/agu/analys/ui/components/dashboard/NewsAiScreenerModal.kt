@@ -50,8 +50,8 @@ fun NewsAiScreenerModal(
         if (state is NewsScreenerUiState.Idle) {
             onRunScreener(false)
         } else if (state is NewsScreenerUiState.Success) {
-            val isGroqAndStateIsGemini = provider == AiProvider.GROQ && state.result.modelUsed.contains("Gemini", ignoreCase = true)
-            val isGeminiAndStateIsGroq = provider == AiProvider.GEMINI && state.result.modelUsed.contains("qwen", ignoreCase = true)
+            val isGroqAndStateIsGemini = provider == AiProvider.GROQ && state.result.providerUsed.startsWith("Gemini Flash") && !state.result.providerUsed.contains("Failover")
+            val isGeminiAndStateIsGroq = provider == AiProvider.GEMINI && state.result.providerUsed.startsWith("Groq") && !state.result.providerUsed.contains("Failover")
             if (isGroqAndStateIsGemini || isGeminiAndStateIsGroq) {
                 onRunScreener(true)
             }
@@ -59,11 +59,11 @@ fun NewsAiScreenerModal(
     }
 
     val providerName = when (provider) {
-        AiProvider.GROQ -> "Groq (Qwen 27B)"
-        AiProvider.GEMINI -> "Gemini 3.7 Flash"
+        AiProvider.GROQ -> "Groq (Qwen / GPT-OSS)"
+        AiProvider.GEMINI -> "Gemini Flash"
     }
     val providerColor = when (provider) {
-        AiProvider.GROQ -> Color(0xFFF44336)
+        AiProvider.GROQ -> Color(0xFFFF9800)
         AiProvider.GEMINI -> Color(0xFF2196F3)
     }
 
@@ -219,6 +219,43 @@ private fun ScreenerResultsContent(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // Info / Warning Banner jika terjadi fallback atau rate limit
+        if (result.rawAnalysis.contains("⚠️") || result.rawAnalysis.contains("429") || result.providerUsed.contains("Heuristik") || result.providerUsed.contains("Failover")) {
+            item {
+                Surface(
+                    color = Color(0xFFFF9800).copy(alpha = 0.12f),
+                    shape = RoundedCornerShape(10.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFF9800).copy(alpha = 0.4f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = null,
+                            tint = Color(0xFFFF9800),
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        val bannerText = when {
+                            result.rawAnalysis.contains("429") -> "Kuota Groq Free Tier sedang padat / Rate Limit (HTTP 429). Menampilkan hasil kurasi heuristik berita Indodax."
+                            result.rawAnalysis.contains("API Key", ignoreCase = true) -> "API Key belum diisi di Pengaturan. Menampilkan rekomendasi berita heuristik."
+                            result.providerUsed.contains("Failover") -> "API Groq dialihkan sementara ke ${result.providerUsed} untuk menjaga kestabilan data."
+                            else -> "Mode Heuristik aktif untuk menyaring kandidat koin berita Indodax."
+                        }
+                        Text(
+                            text = bannerText,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
+        }
+
         item {
             Text(
                 text = "Kandidat Bullish Terkuat:",

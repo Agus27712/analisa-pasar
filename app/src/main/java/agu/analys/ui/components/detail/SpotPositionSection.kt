@@ -6,5 +6,5 @@ import androidx.compose.runtime.Composable
 /** Placeholder for spot-position UI. */
 @Composable
 fun SpotPositionSectionPlaceholder() {
-    Text("Spot position")
+    Text("Posisi Spot")
 }

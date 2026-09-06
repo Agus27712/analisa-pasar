@@ -133,6 +133,8 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     private val _marketDataSource = MutableStateFlow(prefs.marketDataSource)
     val marketDataSource: StateFlow<MarketDataSource> = _marketDataSource.asStateFlow()
 
+    val globalContext: StateFlow<agu.analys.engine.global.GlobalMarketContext> = agu.analys.engine.global.GlobalContextManager.context
+    
     internal val _currentScreen = MutableStateFlow(AppScreen.DASHBOARD)
     val currentScreen: StateFlow<AppScreen> = _currentScreen.asStateFlow()
 
@@ -261,6 +263,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     val mtfState = agu.analys.util.MtfCacheManager.mtfState
 
     init {
+        agu.analys.engine.global.GlobalContextManager.start()
         agu.analys.util.MtfCacheManager.updateQueues(_watchlist.value.toList(), emptyList())
         engine.strategyMode = prefs.strategyMode
         engine.isScalpingMode = prefs.isScalpingMode

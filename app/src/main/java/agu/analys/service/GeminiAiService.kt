@@ -25,8 +25,8 @@ object GeminiAiService {
         .writeTimeout(15, TimeUnit.SECONDS)
         .build()
 
-    private const val MODEL = "gemini-3.7-flash"
-    private const val BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models/$MODEL:generateContent"
+    private const val MODEL = "gemini-3.6-flash"
+    private val CANDIDATE_MODELS = listOf("gemini-3.6-flash", "gemini-2.0-flash", "gemini-1.5-flash")
 
     suspend fun generateChartSummary24h(
         apiKey: String,
@@ -73,7 +73,7 @@ object GeminiAiService {
 Kamu asisten quantitative & technical analyst spot Indodax. SELURUH jawaban WAJIB Bahasa Indonesia.
 Keluarkan output dalam format Markdown yang rapi, terstruktur, gunakan poin bullet (-), teks tebal (**bold**), dan judul bab (###).
 Jika ada kutipan berita Inggris, TERJEMAHKAN ke Bahasa Indonesia.
-Maksimal ~250 kata.
+Berikan analisis yang padat, tajam, edukatif, dan to-the-point. Pastikan menyelesaikan seluruh poin dari Bagian 1 hingga Bagian 4 secara lengkap dan tuntas tanpa terpotong di tengah kalimat.
 
 Data Pasar Real-Time:
 - Pair: ${tick.symbol} ($base)
@@ -90,7 +90,7 @@ Data Pasar Real-Time:
 
 $headlineBlock
 
-Format Output (Wajib Markdown Terstruktur):
+Format Output (Wajib Markdown Terstruktur Lengkap):
 ### 🔎 1. Profil & Ekosistem Aset
 - **Aset**: ...
 - **Korelasi**: ...
@@ -108,45 +108,52 @@ Format Output (Wajib Markdown Terstruktur):
 - **Tindakan Disarankan**: [Strategi entry/exit, limit order maker, disiplin money management]
         """.trimIndent()
 
-        try {
-            val payload = JSONObject().apply {
-                put("contents", JSONArray().apply {
-                    put(JSONObject().apply {
-                        put("parts", JSONArray().apply {
-                            put(JSONObject().apply { put("text", prompt) })
+        for (modelName in CANDIDATE_MODELS) {
+            try {
+                val payload = JSONObject().apply {
+                    put("contents", JSONArray().apply {
+                        put(JSONObject().apply {
+                            put("parts", JSONArray().apply {
+                                put(JSONObject().apply { put("text", prompt) })
+                            })
                         })
                     })
-                })
-                put("generationConfig", JSONObject().apply {
-                    put("temperature", 0.35)
-                    put("maxOutputTokens", 480)
-                })
-            }
-            val request = Request.Builder()
-                .url("$BASE_URL?key=$effectiveKey")
-                .addHeader("Content-Type", "application/json")
-                .post(payload.toString().toRequestBody("application/json".toMediaType()))
-                .build()
-            client.newCall(request).execute().use { resp ->
-                val responseBody = resp.body?.string().orEmpty()
-                if (!resp.isSuccessful) return@withContext buildFallback(tick, indicators, signal, cpi, headlineBlock)
-                val parts = JSONObject(responseBody)
-                    .optJSONArray("candidates")
-                    ?.takeIf { it.length() > 0 }
-                    ?.getJSONObject(0)
-                    ?.optJSONObject("content")
-                    ?.optJSONArray("parts")
-                val text = parts?.let { arr ->
-                    (0 until arr.length()).joinToString("\n") { i ->
-                        arr.getJSONObject(i).optString("text").orEmpty()
+                    put("generationConfig", JSONObject().apply {
+                        put("temperature", 0.35)
+                        put("maxOutputTokens", 2048)
+                    })
+                }
+                val url = "https://generativelanguage.googleapis.com/v1beta/models/$modelName:generateContent?key=$effectiveKey"
+                val request = Request.Builder()
+                    .url(url)
+                    .addHeader("Content-Type", "application/json")
+                    .post(payload.toString().toRequestBody("application/json".toMediaType()))
+                    .build()
+                client.newCall(request).execute().use { resp ->
+                    val responseBody = resp.body?.string().orEmpty()
+                    if (resp.isSuccessful) {
+                        val parts = JSONObject(responseBody)
+                            .optJSONArray("candidates")
+                            ?.takeIf { it.length() > 0 }
+                            ?.getJSONObject(0)
+                            ?.optJSONObject("content")
+                            ?.optJSONArray("parts")
+                        val text = parts?.let { arr ->
+                            (0 until arr.length()).joinToString("\n") { i ->
+                                arr.getJSONObject(i).optString("text").orEmpty()
+                            }
+                        }.orEmpty().trim()
+                        if (text.isNotBlank()) return@withContext text
+                    } else {
+                        Timber.w("Gemini model $modelName returned ${resp.code}: $responseBody")
                     }
-                }.orEmpty()
-                if (text.isNotBlank()) text.trim() else buildFallback(tick, indicators, signal, cpi, headlineBlock)
+                }
+            } catch (e: Exception) {
+                Timber.w(e, "Gemini model $modelName call failed")
             }
-        } catch (e: Exception) {
-            Timber.e(e, "Gagal memanggil Gemini AI Service")
-            buildFallback(tick, indicators, signal, cpi, headlineBlock)
         }
+
+        buildFallback(tick, indicators, signal, cpi, headlineBlock)
     }
 
     private fun extractBase(symbol: String): String {

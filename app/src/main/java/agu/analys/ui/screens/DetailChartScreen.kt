@@ -88,6 +88,7 @@ fun DetailChartScreen(
     val realAvgBuyPrices by viewModel.realAvgBuyPrices.collectAsStateWithLifecycle()
     val priceAlerts by viewModel.priceAlerts.collectAsStateWithLifecycle()
     val mtfStateAll by viewModel.mtfState.collectAsStateWithLifecycle()
+    val globalContext by viewModel.globalContext.collectAsStateWithLifecycle()
     val mtfState = remember(mtfStateAll, pair.symbol) { mtfStateAll[pair.symbol] ?: emptyMap() }
 
     var showPriceAlertDialog by remember { mutableStateOf(false) }
@@ -354,7 +355,11 @@ fun DetailChartScreen(
 
             Spacer(Modifier.height(8.dp))
 
-            // 6. Market Condition Card
+            // 6. Global Context Shield Card
+            GlobalMarketShieldCard(context = globalContext)
+            Spacer(Modifier.height(12.dp))
+
+            // 7. Market Condition Card
             MarketConditionCard(
                 structure = marketStructure,
                 indicators = indicators,

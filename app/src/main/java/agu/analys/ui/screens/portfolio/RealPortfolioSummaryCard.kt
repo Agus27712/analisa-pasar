@@ -97,10 +97,10 @@ fun RealPortfolioSummaryCard(
                     Text(PriceFormatter.formatPrice(realIdr), color = TvGreen, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(4.dp))
                     Row {
-                        Text("Free: ", color = TvTextSecondary, fontSize = 9.sp)
+                        Text("Tersedia: ", color = TvTextSecondary, fontSize = 9.sp)
                         Text(PriceFormatter.formatPrice(freeIdr), color = TvGreen, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                         Spacer(Modifier.width(8.dp))
-                        Text("Locked: ", color = TvTextSecondary, fontSize = 9.sp)
+                        Text("Terkunci: ", color = TvTextSecondary, fontSize = 9.sp)
                         Text(PriceFormatter.formatPrice(lockedIdr), color = TvRed, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                     }
                 }
