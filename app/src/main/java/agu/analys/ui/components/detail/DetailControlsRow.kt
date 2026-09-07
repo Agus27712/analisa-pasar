@@ -4,6 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -47,7 +48,8 @@ fun DetailControlsRow(
         // Timeframe Chips (Grup Kiri)
         Row(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.weight(1f).horizontalScroll(androidx.compose.foundation.rememberScrollState())
         ) {
             listOf(Timeframe.M1, Timeframe.M15, Timeframe.H1, Timeframe.H4, Timeframe.D1).forEach { tf ->
                 val isSelected = selectedTimeframe == tf
@@ -69,6 +71,8 @@ fun DetailControlsRow(
                 }
             }
         }
+        
+        Spacer(Modifier.width(8.dp))
 
         // Quick Action Icons (Grup Kanan)
         Row(

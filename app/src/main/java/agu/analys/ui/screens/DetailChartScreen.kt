@@ -23,6 +23,9 @@ import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CropRotate
 import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.material.icons.filled.ShowChart
@@ -93,12 +96,22 @@ fun DetailChartScreen(
 
     var showPriceAlertDialog by remember { mutableStateOf(false) }
     var showAiAssistantDialog by remember { mutableStateOf(false) }
+    var showShieldDialog by remember { mutableStateOf(false) }
     val marketStructure = remember(candles) { MarketStructureAnalyzer.analyze(candles) }
     val isFavorite = favorites.contains(pair.symbol.uppercase()) || favorites.contains(pair.symbol)
     val provider = remember { AppPreferences(context).aiProvider }
     val isConnected = connection is MarketConnectionState.Connected
 
     // Dialogs
+    if (showShieldDialog) {
+        GlobalMarketShieldDialog(
+            context = globalContext,
+            symbol = pair.symbol,
+            isFavorite = isFavorite,
+            onDismiss = { showShieldDialog = false }
+        )
+    }
+
     if (showPriceAlertDialog) {
         PriceAlertDialog(
             symbol = pair.symbol,
@@ -199,45 +212,100 @@ fun DetailChartScreen(
 
             Spacer(Modifier.height(8.dp))
 
-            // 2. Header Harga Aset
-            DetailPriceHeader(
-                price = tick?.price ?: 0.0,
-                change24h = change,
-                activityText = activityText,
-                activityColor = activityColor,
-                quoteAsset = pair.quoteAsset
-            )
-
-            Spacer(Modifier.height(10.dp))
-
-            // 3. Timeframe Chips + Quick Action Icons
-            DetailControlsRow(
-                selectedTimeframe = selectedTimeframe,
-                onSelectTimeframe = { viewModel.selectTimeframe(it) },
-                priceAlerts = priceAlerts,
-                isFavorite = isFavorite,
-                onOpenAlerts = { showPriceAlertDialog = true },
-                onOpenPortfolio = { viewModel.openPortfolio() },
-                onOpenAiAssistant = { showAiAssistantDialog = true },
-                onOpenSimulation = { viewModel.openSimulation(pair) },
-                onOpenLearning = { viewModel.openLearning() },
-                onToggleFavorite = {
-                    viewModel.toggleFavorite(pair.symbol)
-                    HapticUtil.vibrateTick(context)
+            // 2 & 3. Hero Ambient Header (Price & Controls)
+            val ambientColor: androidx.compose.ui.graphics.Color
+            val watermarkIcon: androidx.compose.ui.graphics.vector.ImageVector
+            when {
+                !isConnected -> {
+                    ambientColor = TvTextSecondary
+                    watermarkIcon = Icons.Default.Info
                 }
-            )
+                globalContext.isVetoActive -> {
+                    ambientColor = TvRed
+                    watermarkIcon = Icons.Default.Warning
+                }
+                globalContext.regime == agu.analys.engine.global.GlobalRegime.BULLISH -> {
+                    ambientColor = TvGreen
+                    watermarkIcon = Icons.Default.Security
+                }
+                globalContext.regime == agu.analys.engine.global.GlobalRegime.BEARISH -> {
+                    ambientColor = TvAmber
+                    watermarkIcon = Icons.Default.Security
+                }
+                else -> {
+                    ambientColor = TvBlue
+                    watermarkIcon = Icons.Default.Security
+                }
+            }
 
-            Spacer(Modifier.height(8.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+                    .background(
+                        androidx.compose.ui.graphics.Brush.verticalGradient(
+                            colors = listOf(
+                                ambientColor.copy(alpha = 0.20f),
+                                ambientColor.copy(alpha = 0.06f)
+                            )
+                        )
+                    )
+                    .border(1.dp, ambientColor.copy(alpha = 0.35f), androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+                    .padding(14.dp)
+            ) {
+                androidx.compose.material3.Icon(
+                    imageVector = watermarkIcon,
+                    contentDescription = null,
+                    tint = ambientColor.copy(alpha = 0.10f),
+                    modifier = Modifier
+                        .size(110.dp)
+                        .align(Alignment.Center)
+                )
+                
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    DetailPriceHeader(
+                        price = tick?.price ?: 0.0,
+                        change24h = change,
+                        activityText = activityText,
+                        activityColor = activityColor,
+                        quoteAsset = pair.quoteAsset,
+                        symbol = pair.symbol,
+                        isFavorite = isFavorite,
+                        globalContext = globalContext,
+                        onOpenShieldInfo = { showShieldDialog = true }
+                    )
 
-            // 4. Chart Preview & Landscape Launcher
-            DetailChartSection(
-                candles = candles,
-                tick = tick,
-                signal = signal,
-                pair = pair,
-                selectedTimeframe = selectedTimeframe,
-                onOpenLandscapeChart = onOpenLandscapeChart
-            )
+                    Spacer(Modifier.height(14.dp))
+
+                    DetailControlsRow(
+                        selectedTimeframe = selectedTimeframe,
+                        onSelectTimeframe = { viewModel.selectTimeframe(it) },
+                        priceAlerts = priceAlerts,
+                        isFavorite = isFavorite,
+                        onOpenAlerts = { showPriceAlertDialog = true },
+                        onOpenPortfolio = { viewModel.openPortfolio() },
+                        onOpenAiAssistant = { showAiAssistantDialog = true },
+                        onOpenSimulation = { viewModel.openSimulation(pair) },
+                        onOpenLearning = { viewModel.openLearning() },
+                        onToggleFavorite = {
+                            viewModel.toggleFavorite(pair.symbol)
+                            HapticUtil.vibrateTick(context)
+                        }
+                    )
+                    
+                    Spacer(Modifier.height(14.dp))
+
+                    // 4. Chart Preview & Landscape Launcher
+                    DetailChartSection(
+                        candles = candles,
+                        tick = tick,
+                        signal = signal,
+                        pair = pair,
+                        selectedTimeframe = selectedTimeframe,
+                        onOpenLandscapeChart = onOpenLandscapeChart
+                    )
+                }
+            }
 
             Spacer(Modifier.height(10.dp))
 
@@ -353,13 +421,9 @@ fun DetailChartScreen(
                 }
             )
 
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(10.dp))
 
-            // 6. Global Context Shield Card
-            GlobalMarketShieldCard(context = globalContext)
-            Spacer(Modifier.height(12.dp))
-
-            // 7. Market Condition Card
+            // 6. Market Condition Card
             MarketConditionCard(
                 structure = marketStructure,
                 indicators = indicators,

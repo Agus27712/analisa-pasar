@@ -25,6 +25,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import agu.analys.config.MarketDataSource
+import agu.analys.engine.global.GlobalMarketContext
 import agu.analys.model.TradingPair
 import agu.analys.ui.animation.AnimatedPercentageBadge
 import agu.analys.ui.animation.FlipCardPriceText
@@ -160,7 +161,11 @@ fun DetailPriceHeader(
     change24h: Double,
     activityText: String,
     activityColor: Color,
-    quoteAsset: String = "IDR"
+    quoteAsset: String = "IDR",
+    symbol: String,
+    isFavorite: Boolean,
+    globalContext: GlobalMarketContext? = null,
+    onOpenShieldInfo: (() -> Unit)? = null
 ) {
     val textPrimaryColor = TvTextPrimary
     val greenColor = TvGreen
@@ -185,41 +190,60 @@ fun DetailPriceHeader(
         label = "price_color_anim"
     )
 
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.Bottom
-    ) {
-        Column {
-            if (price > 0) {
-                FlipCardPriceText(
-                    price = price,
-                    color = animatedColor,
-                    fontSize = 26.sp,
-                    fontWeight = FontWeight.Black,
-                    quoteAsset = quoteAsset
-                )
-            } else {
-                val placeholder = if (quoteAsset.equals("USDT", true) || quoteAsset.equals("USD", true)) "$ —" else "Rp —"
-                Text(placeholder, color = TvTextPrimary, fontSize = 26.sp, fontWeight = FontWeight.Black)
-            }
-            Spacer(Modifier.height(4.dp))
-            Box(
-                modifier = Modifier
-                    .background(activityColor.copy(alpha = 0.15f), RoundedCornerShape(6.dp))
-                    .border(1.dp, activityColor.copy(alpha = 0.4f), RoundedCornerShape(6.dp))
-                    .padding(horizontal = 8.dp, vertical = 3.dp)
-            ) {
-                Text(
-                    text = activityText,
-                    color = activityColor,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
+    Column(modifier = Modifier.fillMaxWidth()) {
+        if (price > 0) {
+            FlipCardPriceText(
+                price = price,
+                color = animatedColor,
+                fontSize = 26.sp,
+                fontWeight = FontWeight.Black,
+                quoteAsset = quoteAsset
+            )
+        } else {
+            val placeholder = if (quoteAsset.equals("USDT", true) || quoteAsset.equals("USD", true)) "$ —" else "Rp —"
+            Text(placeholder, color = TvTextPrimary, fontSize = 26.sp, fontWeight = FontWeight.Black)
         }
 
-        AnimatedPercentageBadge(percentage = change24h)
+        Spacer(Modifier.height(5.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .background(activityColor.copy(alpha = 0.15f), RoundedCornerShape(6.dp))
+                        .border(1.dp, activityColor.copy(alpha = 0.4f), RoundedCornerShape(6.dp))
+                        .padding(horizontal = 7.dp, vertical = 3.dp)
+                ) {
+                    Text(
+                        text = activityText,
+                        color = activityColor,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1
+                    )
+                }
+
+                if (globalContext != null) {
+                    GlobalMarketShieldChip(
+                        context = globalContext,
+                        symbol = symbol,
+                        isFavorite = isFavorite,
+                        pairChange24h = change24h,
+                        onClick = onOpenShieldInfo
+                    )
+                }
+            }
+
+            AnimatedPercentageBadge(percentage = change24h)
+        }
     }
 }
 

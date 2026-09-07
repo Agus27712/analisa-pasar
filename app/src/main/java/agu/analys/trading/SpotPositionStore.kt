@@ -51,44 +51,86 @@ class SpotPositionStore(context: Context) {
         return maxOf(rawStop, entryPrice)
     }
 
+    private fun getSafeString(key: String): String? {
+        return try {
+            prefs.getString(key, null)
+        } catch (_: ClassCastException) {
+            try {
+                prefs.all[key]?.toString()
+            } catch (_: Exception) {
+                null
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun getSafeBoolean(key: String, defaultValue: Boolean = false): Boolean {
+        return try {
+            prefs.getBoolean(key, defaultValue)
+        } catch (_: ClassCastException) {
+            try {
+                prefs.all[key]?.toString()?.toBooleanStrictOrNull() ?: defaultValue
+            } catch (_: Exception) {
+                defaultValue
+            }
+        } catch (_: Exception) {
+            defaultValue
+        }
+    }
+
+    private fun getSafeLong(key: String, defaultValue: Long = 0L): Long {
+        return try {
+            prefs.getLong(key, defaultValue)
+        } catch (_: ClassCastException) {
+            try {
+                prefs.all[key]?.toString()?.toLongOrNull() ?: defaultValue
+            } catch (_: Exception) {
+                defaultValue
+            }
+        } catch (_: Exception) {
+            defaultValue
+        }
+    }
+
     fun get(symbol: String): SpotPosition {
         val key = normalize(symbol)
-        val state = prefs.getString("${key}_state", SpotPositionState.NO_POSITION.name)
+        val state = getSafeString("${key}_state")
             ?.let { runCatching { SpotPositionState.valueOf(it) }.getOrDefault(SpotPositionState.NO_POSITION) }
             ?: SpotPositionState.NO_POSITION
-        val entry = prefs.getString("${key}_entry", null)?.toDoubleOrNull() ?: 0.0
-        val peak = prefs.getString("${key}_peak", null)?.toDoubleOrNull() ?: entry
-        val trailingPct = prefs.getString("${key}_trailing_pct", null)?.toDoubleOrNull() ?: 0.0
-        val isTrailing = prefs.getBoolean("${key}_trailing_enabled", false)
-        val isTriggered = prefs.getBoolean("${key}_trailing_triggered", false)
+        val entry = getSafeString("${key}_entry")?.toDoubleOrNull() ?: 0.0
+        val peak = getSafeString("${key}_peak")?.toDoubleOrNull() ?: entry
+        val trailingPct = getSafeString("${key}_trailing_pct")?.toDoubleOrNull() ?: 0.0
+        val isTrailing = getSafeBoolean("${key}_trailing_enabled", false)
+        val isTriggered = getSafeBoolean("${key}_trailing_triggered", false)
         val trailingStop = if (isTrailing && peak > 0.0 && trailingPct > 0.0) {
             calculateTrailingLimitPrice(peak, entry, trailingPct)
         } else 0.0
 
-        val lastTrailingOrderId = prefs.getString("${key}_last_trailing_order_id", null)
-        val lastOrderUpdateTime = prefs.getLong("${key}_last_order_update_time", 0L)
-        val stopLossPrice = prefs.getString("${key}_stop_loss", null)?.toDoubleOrNull() ?: if (entry > 0.0) entry * 0.99 else 0.0
+        val lastTrailingOrderId = getSafeString("${key}_last_trailing_order_id")
+        val lastOrderUpdateTime = getSafeLong("${key}_last_order_update_time", 0L)
+        val stopLossPrice = getSafeString("${key}_stop_loss")?.toDoubleOrNull() ?: if (entry > 0.0) entry * 0.99 else 0.0
 
         return SpotPosition(
             state = state,
-            investedAmount = prefs.getString("${key}_invested", null)?.toDoubleOrNull() ?: 0.0,
+            investedAmount = getSafeString("${key}_invested")?.toDoubleOrNull() ?: 0.0,
             entryPrice = entry,
-            quantity = prefs.getString("${key}_quantity", null)?.toDoubleOrNull() ?: 0.0,
-            openedAt = prefs.getLong("${key}_opened_at", 0L),
-            isReal = prefs.getBoolean("${key}_is_real", false),
+            quantity = getSafeString("${key}_quantity")?.toDoubleOrNull() ?: 0.0,
+            openedAt = getSafeLong("${key}_opened_at", 0L),
+            isReal = getSafeBoolean("${key}_is_real", false),
             isTrailingEnabled = isTrailing,
             trailingPercent = trailingPct,
             peakPrice = peak,
             trailingStopPrice = trailingStop,
             stopLossPrice = stopLossPrice,
             isTrailingTriggered = isTriggered,
-            isAutoSellEnabled = prefs.getBoolean("${key}_auto_sell_enabled", false),
-            tp1Price = prefs.getString("${key}_tp1_price", null)?.toDoubleOrNull() ?: 0.0,
-            tp1Percent = prefs.getString("${key}_tp1_percent", null)?.toDoubleOrNull() ?: 50.0,
-            tp2Price = prefs.getString("${key}_tp2_price", null)?.toDoubleOrNull() ?: 0.0,
-            tp2Percent = prefs.getString("${key}_tp2_percent", null)?.toDoubleOrNull() ?: 50.0,
-            isTp1Triggered = prefs.getBoolean("${key}_tp1_triggered", false),
-            isTp2Triggered = prefs.getBoolean("${key}_tp2_triggered", false),
+            isAutoSellEnabled = getSafeBoolean("${key}_auto_sell_enabled", false),
+            tp1Price = getSafeString("${key}_tp1_price")?.toDoubleOrNull() ?: 0.0,
+            tp1Percent = getSafeString("${key}_tp1_percent")?.toDoubleOrNull() ?: 50.0,
+            tp2Price = getSafeString("${key}_tp2_price")?.toDoubleOrNull() ?: 0.0,
+            tp2Percent = getSafeString("${key}_tp2_percent")?.toDoubleOrNull() ?: 50.0,
+            isTp1Triggered = getSafeBoolean("${key}_tp1_triggered", false),
+            isTp2Triggered = getSafeBoolean("${key}_tp2_triggered", false),
             lastTrailingOrderId = lastTrailingOrderId,
             lastOrderUpdateTime = lastOrderUpdateTime
         )
@@ -200,6 +242,7 @@ class SpotPositionStore(context: Context) {
             .remove("${key}_tp1_percent")
             .remove("${key}_tp2_price")
             .remove("${key}_tp2_percent")
+            .remove("${key}_stop_loss")
             .remove("${key}_stop_loss_price")
             .remove("${key}_tp1_triggered")
             .remove("${key}_tp2_triggered")
