@@ -215,5 +215,5 @@ object ScalpingMtfEvaluator {
         )
     }
 
-    private fun fmt(v: Double) = String.format(java.util.Locale.US, "%.2f", v)
+    private fun fmt(v: Double) = agu.analys.util.PriceFormatter.fmt(v)
 }

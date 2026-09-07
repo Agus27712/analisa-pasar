@@ -153,6 +153,7 @@ fun WaitingEntryRadarCard(
         StrategyMode.SECOND_WAVE -> "🌊 SECOND-WAVE BUY (${signal.confidence}%)"
         StrategyMode.SWING -> "🎯 SWING BUY (${signal.confidence}%)"
         StrategyMode.OFFICE_DAILY -> "🏢 OFFICE-DAILY BUY (${signal.confidence}%)"
+        StrategyMode.TRENCHING -> "⛏ TRENNCHING BUY (${signal.confidence}%)"
     }
 
     var isChecklistVisible by remember { mutableStateOf(false) }

@@ -67,6 +67,12 @@ fun RadarLinearCheckpointStepper(
                 "Tren 1 Jam & 4 Jam Bullish Stabil (Di atas EMA 20/50).",
                 "Memantau kestabilan tren 1 Jam / 4 Jam..."
             )
+            StrategyMode.TRENCHING -> listOf(
+                "1. Flow M15",
+                "1. Flow M15 · Persistensi Tekanan",
+                "Flow konsisten positif dengan volume akumulasi & persistensi aktif.",
+                "Memantau persistensi flow volume dan order book inflow..."
+            )
             StrategyMode.SECOND_WAVE -> listOf(
                 "1. Prior Run",
                 "1. Prior Run · Drawdown Reset",
@@ -93,6 +99,12 @@ fun RadarLinearCheckpointStepper(
                 "2. Base Lantai · Akumulasi Sehat",
                 "Base lantai harga terbentuk rapi tanpa dump liar.",
                 "Menunggu konsolidasi base support terbentuk..."
+            )
+            StrategyMode.TRENCHING -> listOf(
+                "2. Trench Base",
+                "2. Kompresi Trench · Range Ketat",
+                "Harga terkompresi rapi di area support trench tanpa volatilitas liar.",
+                "Menunggu pembentukan batas kompresi trench yang stabil..."
             )
             StrategyMode.SECOND_WAVE -> listOf(
                 "2. Base Support",
@@ -121,6 +133,12 @@ fun RadarLinearCheckpointStepper(
                 "RSI berada di zona aman & volume akumulasi masuk.",
                 "Menunggu konfirmasi momentum RSI & akumulasi santai..."
             )
+            StrategyMode.TRENCHING -> listOf(
+                "3. Flow Return",
+                "3. Timing · Pullback & Flow Return",
+                "Pullback sehat terlewati & flow beralih menguat kembali (Reclaim).",
+                "Menunggu timing flow return setelah pullback/absorption..."
+            )
             StrategyMode.SECOND_WAVE -> listOf(
                 "3. Inflow 15M",
                 "3. Inflow 15M · Smart Money",
@@ -147,6 +165,12 @@ fun RadarLinearCheckpointStepper(
                 "4. Area Entry · TP Santai & Terukur",
                 "Harga berada di zona beli aman dengan target TP terukur.",
                 "Menunggu harga berada di zona entry yang aman..."
+            )
+            StrategyMode.TRENCHING -> listOf(
+                "4. Anti-FOMO",
+                "4. Anti-FOMO Guard & Sizing",
+                "Anti-FOMO Guard lulus, harga tidak extended, alokasi risiko terhitung aman.",
+                "Menunggu validasi Anti-FOMO Guard & toleransi resiko..."
             )
             StrategyMode.SECOND_WAVE -> listOf(
                 "4. Entry Ready",

@@ -141,5 +141,5 @@ object OfficeDailyScreener {
         )
     }
 
-    private fun fmt(v: Double) = String.format(java.util.Locale.US, "%.1f", v)
+    private fun fmt(v: Double) = agu.analys.util.PriceFormatter.fmt(v, 1)
 }

@@ -177,4 +177,16 @@ object PriceFormatter {
 
         return sanitized.filter { it.isDigit() || it == '.' }.toDoubleOrNull() ?: 0.0
     }
+
+    /** Helper umum untuk format angka desimal ringkas di evaluator & sinyal */
+    fun fmt(v: Double, decimals: Int = 2): String =
+        String.format(Locale.US, "%.${decimals}f", v)
+
+    /** Helper umum untuk format angka harga ringkas di evaluator & sinyal */
+    fun fmtPrice(v: Double): String =
+        if (v >= 1000) String.format(Locale.US, "%,.0f", v) else String.format(Locale.US, "%.2f", v)
+
+    /** Helper umum untuk format angka harga bulat integer di evaluator & sinyal */
+    fun fmtPriceInt(v: Double): String =
+        String.format(Locale.US, "%,.0f", v)
 }

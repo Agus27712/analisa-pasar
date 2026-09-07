@@ -500,7 +500,7 @@ object SwingEvaluator {
         )
     }
 
-    private fun fmt(v: Double) = String.format(java.util.Locale.US, "%.2f", v)
-    private fun fmtPrice(v: Double) = String.format(java.util.Locale.US, "%,.0f", v)
+    private fun fmt(v: Double) = agu.analys.util.PriceFormatter.fmt(v)
+    private fun fmtPrice(v: Double) = agu.analys.util.PriceFormatter.fmtPriceInt(v)
 }
 

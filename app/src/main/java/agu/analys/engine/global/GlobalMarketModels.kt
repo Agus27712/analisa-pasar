@@ -17,6 +17,12 @@ data class BinanceCoinTicker(
     val isAvailable: Boolean = true
 )
 
+data class BtcTickerData(
+    val price: Double,
+    val changePct: Double,
+    val source: String
+)
+
 data class GlobalMarketContext(
     val btcPriceUsdt: Double = 0.0,
     val btc24hChangePct: Double = 0.0,

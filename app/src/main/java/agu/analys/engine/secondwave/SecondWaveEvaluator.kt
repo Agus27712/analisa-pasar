@@ -349,8 +349,8 @@ object SecondWaveEvaluator {
         )
     }
 
-    private fun fmt(v: Double) = String.format(java.util.Locale.US, "%.1f", v)
-    private fun fmtPrice(v: Double) = if (v >= 1000) String.format(java.util.Locale.US, "%,.0f", v) else String.format(java.util.Locale.US, "%.2f", v)
+    private fun fmt(v: Double) = agu.analys.util.PriceFormatter.fmt(v, 1)
+    private fun fmtPrice(v: Double) = agu.analys.util.PriceFormatter.fmtPrice(v)
 }
 
 data class FastSecondWaveScore(

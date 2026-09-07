@@ -1,6 +1,8 @@
-package agu.analys.engine.global
+package agu.analys.service
 
 import android.util.Log
+import agu.analys.engine.global.BinanceCoinTicker
+import agu.analys.engine.global.BtcTickerData
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -222,9 +224,3 @@ class GlobalMarketWebSocket {
         _isConnected.value = false
     }
 }
-
-data class BtcTickerData(
-    val price: Double,
-    val changePct: Double,
-    val source: String
-)

@@ -8,7 +8,8 @@ enum class StrategyMode(val label: String, val badge: String, val shortDesc: Str
     SCALPING("Scalping Agresif", "⚡ SCALPING", "Cepat (1M–15M) · Trigger mikro"),
     SECOND_WAVE("Second-Wave Hunter", "🌊 2ND-WAVE", "Pantulan 50–85% · Reclaim base"),
     SWING("Swing Trad", "📈 SWING", "Jangka menengah (1H–1D)"),
-    OFFICE_DAILY("Office Daily", "🏢 OFFICE DAILY", "Santai & Presisi (H4–1D) · Setup harian")
+    OFFICE_DAILY("Office Daily", "🏢 OFFICE DAILY", "Santai & Presisi (H4–1D) · Setup harian"),
+    TRENCHING("Trenching", "⛏ TRENNCHING", "Flow, Pullback & Trench Building (M15-H1)");
 }
 
 data class TradingFeeConfig(

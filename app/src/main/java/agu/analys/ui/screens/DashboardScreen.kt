@@ -414,7 +414,8 @@ fun DashboardScreen(
                         Triple(StrategyMode.SCALPING, "SCALPING (1M – 15M)", "Fast execution, MTF bias 1H, trigger 1M"),
                         Triple(StrategyMode.SECOND_WAVE, "SECOND WAVE", "Rebound hunter pasca drop & lonjakan volume"),
                         Triple(StrategyMode.SWING, "SWING TRADING", "4 setup Support/Resistance + RSI + EMA"),
-                        Triple(StrategyMode.OFFICE_DAILY, "OFFICE DAILY", "Santai & low-monitoring, safety confirmation")
+                        Triple(StrategyMode.OFFICE_DAILY, "OFFICE DAILY", "Santai & low-monitoring, safety confirmation"),
+                        Triple(StrategyMode.TRENCHING, "TRENCHING", "Market flow, kompresi trench & timing anti-FOMO")
                     )
 
                     modes.forEach { (mode, title, desc) ->

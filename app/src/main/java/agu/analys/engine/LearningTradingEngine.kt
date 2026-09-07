@@ -82,6 +82,9 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
                 val hasCandles = synchronized(candles) { candles.isNotEmpty() }
                 if (hasCandles) runOfficeDaily()
             }
+            StrategyMode.TRENCHING -> {
+                if (m15Candles.isNotEmpty()) runTrenching()
+            }
         }
 
         refreshScalpingTimeframesIfDue(tick.symbol)
@@ -108,6 +111,7 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
             StrategyMode.SECOND_WAVE -> runSecondWave()
             StrategyMode.SWING -> runSwing()
             StrategyMode.OFFICE_DAILY -> runOfficeDaily()
+            StrategyMode.TRENCHING -> runTrenching()
         }
     }
 
@@ -217,6 +221,24 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
                         runOfficeDaily()
                     }
                 }
+                StrategyMode.TRENCHING -> {
+                    agu.analys.util.MtfCacheManager.setActiveSymbol(symbol)
+                    
+                    var h1 = agu.analys.util.MtfCacheManager.getCachedCandles(symbol, Timeframe.H1) ?: emptyList()
+                    var m15 = agu.analys.util.MtfCacheManager.getCachedCandles(symbol, Timeframe.M15) ?: emptyList()
+
+                    if (h1.size < 20 || m15.size < 20) {
+                        kotlinx.coroutines.delay(500)
+                        h1 = agu.analys.util.MtfCacheManager.getCachedCandles(symbol, Timeframe.H1) ?: emptyList()
+                        m15 = agu.analys.util.MtfCacheManager.getCachedCandles(symbol, Timeframe.M15) ?: emptyList()
+                    }
+
+                    if (h1.size >= 20 && m15.size >= 20 && currentTick?.symbol == symbol) {
+                        h1Candles = h1.dropLast(1)
+                        m15Candles = m15.dropLast(1)
+                        runTrenching()
+                    }
+                }
             }
         }
     }
@@ -278,5 +300,31 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
         val result = agu.analys.engine.officedaily.OfficeDailyEvaluator.evaluate(agu.analys.engine.global.GlobalContextManager.context.value, tick.price, history, tradingFees)
         _indicators.value = result.indicators
         _signalState.value = result.signal
+    }
+
+    private fun runTrenching() {
+        if (strategyMode != StrategyMode.TRENCHING) return
+        val tick = currentTick ?: return
+        
+        // Pass position awareness
+        val store = agu.analys.trading.SpotPositionStore(agu.analys.AppContextProvider.context)
+        val position = store.get(tick.symbol)
+        val hasPosition = position.state != agu.analys.trading.SpotPositionState.NO_POSITION
+        val entryPrice = position.entryPrice
+        
+        val result = agu.analys.engine.trenching.TrenchingEvaluator.evaluate(
+            globalContext = agu.analys.engine.global.GlobalContextManager.context.value,
+            currentPrice = tick.price,
+            candles = h1Candles,
+            ltfCandles = m15Candles,
+            bids = currentOrderBookBids,
+            asks = currentOrderBookAsks,
+            hasPosition = hasPosition,
+            entryPrice = entryPrice,
+            tradingFees = tradingFees
+        )
+        if (result != null) {
+            _signalState.value = result
+        }
     }
 }

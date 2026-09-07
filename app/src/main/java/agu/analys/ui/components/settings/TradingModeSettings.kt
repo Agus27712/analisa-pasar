@@ -156,6 +156,24 @@ fun TradingModeSettings(
             ),
             onClick = { onStrategyChange(StrategyMode.OFFICE_DAILY) }
         )
+
+        Spacer(Modifier.height(10.dp))
+
+        ModeOptionCard(
+            title = "TRENCHING",
+            tag = "FLOW & TRENCH",
+            tagBg = Color(0xFFFBBF24).copy(alpha = 0.18f),
+            tagFg = Color(0xFFFBBF24),
+            isSelected = strategyMode == StrategyMode.TRENCHING,
+            desc = "Membaca market flow, kompresi trench, dan timing entry saat pullback sehat terkonfirmasi (Anti-FOMO).",
+            bullets = listOf(
+                "Timeframe: M15 (Flow) & H1 (Structure)",
+                "Fokus: Accumulation/Absorption VSA",
+                "Posisi: Dinamis (Sizing berdasarkan kualitas trench)",
+                "Risk: Anti-FOMO VWAP & Flow Failure"
+            ),
+            onClick = { onStrategyChange(StrategyMode.TRENCHING) }
+        )
     }
 }
 
