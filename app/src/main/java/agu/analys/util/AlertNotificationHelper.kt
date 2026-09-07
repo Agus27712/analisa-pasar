@@ -54,9 +54,10 @@ object AlertNotificationHelper {
         )
 
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_popup_reminder)
+            .setSmallIcon(agu.analys.R.drawable.ic_stat_trading)
             .setContentTitle(title)
-            .setContentText(message)
+            .setContentText(message.substringBefore("\n"))
+            .setSubText(if (symbol.isNotBlank()) symbol.uppercase() else "Indodax")
             .setStyle(NotificationCompat.BigTextStyle().bigText(message))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
@@ -115,10 +116,10 @@ object AlertNotificationHelper {
         )
 
         val profitPct = if (entryPrice > 0.0) ((limitSellPrice - entryPrice) / entryPrice) * 100.0 else 0.0
-        val formattedProfit = String.format(java.util.Locale.US, "%.1f%%", profitPct)
+        val formattedProfit = String.format(java.util.Locale.US, "%.2f%%", profitPct)
         
-        val title = "🛡️ Trailing Profit Triggered [$symbol]"
-        val message = "Modal: Rp ${PriceFormatter.formatIdrNumber(entryPrice)} | Puncak: Rp ${PriceFormatter.formatIdrNumber(peakPrice)}\nSaat ini: Rp ${PriceFormatter.formatIdrNumber(currentPrice)}\nKeuntungan Terkunci: +$formattedProfit (Rp ${PriceFormatter.formatIdrNumber(limitSellPrice)})"
+        val title = "🛡️ Trailing Profit Aktif • $symbol"
+        val message = "Keuntungan Terkunci: +$formattedProfit (Rp ${PriceFormatter.formatIdrNumber(limitSellPrice)})\nSaat ini: Rp ${PriceFormatter.formatIdrNumber(currentPrice)} | Modal: Rp ${PriceFormatter.formatIdrNumber(entryPrice)}"
 
         val action = NotificationCompat.Action.Builder(
             0,
@@ -127,9 +128,10 @@ object AlertNotificationHelper {
         ).build()
 
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_popup_reminder)
+            .setSmallIcon(agu.analys.R.drawable.ic_stat_trading)
             .setContentTitle(title)
-            .setContentText(message)
+            .setContentText("Terkunci: +$formattedProfit (Rp ${PriceFormatter.formatIdrNumber(limitSellPrice)})")
+            .setSubText("Trailing Stop")
             .setStyle(NotificationCompat.BigTextStyle().bigText(message))
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_ALARM)

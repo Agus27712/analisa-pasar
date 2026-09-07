@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Info
@@ -30,61 +31,79 @@ fun GlobalMarketShieldChip(
     symbol: String,
     isFavorite: Boolean,
     pairChange24h: Double,
+    baseAsset: String = "",
     onClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
-    val (icon, badgeColor, statusLabel) = when {
-        !context.isConnected -> Triple(
-            Icons.Default.Info,
-            TvTextSecondary,
-            "OFFLINE"
-        )
-        context.isVetoActive -> Triple(
-            Icons.Default.Warning,
-            TvRed,
-            "VETO"
-        )
-        context.regime == GlobalRegime.BULLISH -> Triple(
-            Icons.Default.Security,
-            TvGreen,
-            "BULLISH"
-        )
-        context.regime == GlobalRegime.BEARISH -> Triple(
-            Icons.Default.Security,
-            TvAmber,
-            "BEARISH"
-        )
-        else -> Triple(
-            Icons.Default.Security,
-            TvBlue,
-            "SIDEWAYS"
-        )
+    val auraColor = when {
+        !context.isConnected -> TvTextSecondary
+        context.isVetoActive -> TvRed
+        context.regime == GlobalRegime.BULLISH -> TvGreen
+        context.regime == GlobalRegime.BEARISH -> TvAmber
+        else -> TvBlue
     }
 
-    val subtext = remember(isFavorite, symbol, pairChange24h, context.isConnected) {
+    val statusLabel = when {
+        !context.isConnected -> "OFFLINE"
+        context.isVetoActive -> "VETO FLASH CRASH"
+        context.regime == GlobalRegime.BULLISH -> "BULLISH"
+        context.regime == GlobalRegime.BEARISH -> "BEARISH"
+        else -> "SIDEWAYS"
+    }
+
+    val resolvedBase = if (baseAsset.isNotBlank()) baseAsset.uppercase() else {
+        if (symbol.endsWith("IDR", ignoreCase = true)) {
+            symbol.substring(0, symbol.length - 3).uppercase()
+        } else if (symbol.endsWith("USDT", ignoreCase = true)) {
+            symbol.substring(0, symbol.length - 4).uppercase()
+        } else symbol.uppercase()
+    }
+
+    val activeTicker = context.activeCoinTicker
+    val binanceText = remember(activeTicker, resolvedBase, context.isConnected, context.btc24hChangePct) {
         if (!context.isConnected) {
             "Menghubungkan..."
-        } else if (isFavorite) {
-            val sign = if (pairChange24h > 0) "+" else ""
-            "$symbol $sign${String.format(java.util.Locale.US, "%.1f", pairChange24h)}%"
+        } else if (activeTicker != null && activeTicker.baseAsset.equals(resolvedBase, ignoreCase = true)) {
+            if (activeTicker.isAvailable) {
+                val sign = if (activeTicker.changePct24h >= 0) "+" else ""
+                val formattedPct = String.format(java.util.Locale.US, "%.2f", activeTicker.changePct24h)
+                "Binance $resolvedBase $sign$formattedPct%"
+            } else {
+                val sign = if (context.btc24hChangePct >= 0) "+" else ""
+                val btcPct = String.format(java.util.Locale.US, "%.2f", context.btc24hChangePct)
+                "Binance BTC $sign$btcPct%"
+            }
         } else {
-            "Non-Fav • BTC Fallback"
+            val sign = if (context.btc24hChangePct >= 0) "+" else ""
+            val btcPct = String.format(java.util.Locale.US, "%.2f", context.btc24hChangePct)
+            "Binance $resolvedBase • BTC $sign$btcPct%"
         }
     }
 
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
+    val clickModifier = if (onClick != null) Modifier.clickable { onClick() } else Modifier
+
+    Column(
+        verticalArrangement = Arrangement.Center,
         modifier = modifier
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-            .padding(horizontal = 4.dp, vertical = 2.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .then(clickModifier)
+            .padding(horizontal = 4.dp, vertical = 1.dp)
     ) {
         Text(
-            text = "🛡️ $statusLabel • $subtext",
-            color = TvTextPrimary.copy(alpha = 0.9f),
+            text = statusLabel,
+            color = auraColor,
             fontSize = 11.sp,
-            fontWeight = FontWeight.Bold,
-            maxLines = 1,
-            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+            fontWeight = FontWeight.Black,
+            lineHeight = 12.sp,
+            maxLines = 1
+        )
+        Text(
+            text = binanceText,
+            color = TvTextSecondary,
+            fontSize = 9.5.sp,
+            fontWeight = FontWeight.SemiBold,
+            lineHeight = 11.sp,
+            maxLines = 1
         )
     }
 }
@@ -94,6 +113,7 @@ fun GlobalMarketShieldDialog(
     context: GlobalMarketContext,
     symbol: String,
     isFavorite: Boolean,
+    baseAsset: String = "",
     onDismiss: () -> Unit
 ) {
     val (icon, titleColor, statusText, statusDesc) = when {
@@ -255,6 +275,23 @@ fun GlobalMarketShieldDialog(
                             Text(
                                 "$sign${String.format(java.util.Locale.US, "%.2f", context.btc24hChangePct)}%",
                                 color = if (context.btc24hChangePct >= 0) TvGreen else TvRed,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    val activeTicker = context.activeCoinTicker
+                    if (activeTicker != null && activeTicker.isAvailable && activeTicker.price > 0.0) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Binance ${activeTicker.baseAsset}", color = TvTextSecondary, fontSize = 11.sp)
+                            val coinSign = if (activeTicker.changePct24h >= 0) "+" else ""
+                            Text(
+                                "$coinSign${String.format(java.util.Locale.US, "%.2f", activeTicker.changePct24h)}%",
+                                color = if (activeTicker.changePct24h >= 0) TvGreen else TvRed,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold
                             )

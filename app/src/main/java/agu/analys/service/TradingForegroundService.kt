@@ -27,6 +27,8 @@ class TradingForegroundService : Service() {
         createNotificationChannel()
     }
 
+    private var lastUpdateTime = 0L
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action
         if (action == ACTION_STOP) {
@@ -35,6 +37,14 @@ class TradingForegroundService : Service() {
             stopForeground(true)
             stopSelf()
             return START_NOT_STICKY
+        }
+
+        if (action == ACTION_UPDATE) {
+            val now = System.currentTimeMillis()
+            if (now - lastUpdateTime < 1200L) {
+                return START_STICKY
+            }
+            lastUpdateTime = now
         }
 
         updateNotification()
@@ -55,9 +65,118 @@ class TradingForegroundService : Service() {
         }
     }
 
+    private data class HoldingItem(
+        val symbol: String,
+        val baseAsset: String,
+        val quantity: Double,
+        val entryPrice: Double,
+        val currentPrice: Double,
+        val isReal: Boolean
+    ) {
+        val isProfit: Boolean get() = entryPrice > 0.0 && currentPrice > entryPrice
+        val diffPct: Double get() = if (entryPrice > 0.0) ((currentPrice - entryPrice) / entryPrice) * 100.0 else 0.0
+    }
+
+    private fun formatCoinQuantity(quantity: Double, baseAsset: String): String {
+        if (quantity <= 0.0) return "0 $baseAsset"
+        val formatted = when {
+            quantity >= 1000.0 -> {
+                if (quantity % 1.0 == 0.0) {
+                    String.format(Locale("id", "ID"), "%,d", quantity.toLong())
+                } else {
+                    String.format(Locale("id", "ID"), "%,.2f", quantity)
+                }
+            }
+            quantity >= 1.0 -> {
+                if (quantity % 1.0 == 0.0) {
+                    quantity.toLong().toString()
+                } else {
+                    String.format(Locale.US, "%.4f", quantity).trimEnd('0').trimEnd('.')
+                }
+            }
+            quantity < 0.0001 -> {
+                String.format(Locale.US, "%.8f", quantity).trimEnd('0').trimEnd('.')
+            }
+            else -> {
+                String.format(Locale.US, "%.6f", quantity).trimEnd('0').trimEnd('.')
+            }
+        }
+        return "$formatted $baseAsset"
+    }
+
+    private fun formatHoldingCard(item: HoldingItem): String {
+        val currPriceStr = PriceFormatter.formatPrice(item.currentPrice, showSymbol = true)
+        val qtyStr = formatCoinQuantity(item.quantity, item.baseAsset)
+
+        return if (item.entryPrice > 0.0) {
+            val entryPriceStr = PriceFormatter.formatPrice(item.entryPrice, showSymbol = true)
+            val pctFormatted = if (item.diffPct >= 0.0) {
+                "+${String.format(Locale.US, "%.2f", item.diffPct)}%"
+            } else {
+                "${String.format(Locale.US, "%.2f", item.diffPct)}%"
+            }
+            val statusTag = if (item.isProfit) "▲ $pctFormatted  [SIAP JUAL]" else "▼ $pctFormatted  [HOLD]"
+            "• ${item.baseAsset}  $currPriceStr  $statusTag\n  Beli: $entryPriceStr • Saldo: $qtyStr"
+        } else {
+            "• ${item.baseAsset}  $currPriceStr  [HOLD]\n  Saldo: $qtyStr"
+        }
+    }
+
     private fun updateNotification() {
-        val title = "Monitor Aktif"
-        val contentText = getOwnedCoinsSummary()
+        lastUpdateTime = System.currentTimeMillis()
+        val (realItems, simItems) = getHoldingsData()
+        val totalProfitCount = realItems.count { it.isProfit } + simItems.count { it.isProfit }
+        val totalHoldings = realItems.size + simItems.size
+
+        val title = when {
+            totalProfitCount > 0 -> "⚡ $totalProfitCount Aset Siap Profit • Spot Monitor"
+            totalHoldings > 0 -> "📈 Spot Monitor • $totalHoldings Aset Aktif"
+            else -> "📈 Spot Monitor • Menunggu Posisi"
+        }
+
+        val collapsedText = when {
+            totalProfitCount > 0 -> {
+                val profitList = (realItems + simItems).filter { it.isProfit }
+                "Siap Jual: " + profitList.joinToString(", ") {
+                    "${it.baseAsset} (+${String.format(Locale.US, "%.2f", it.diffPct)}%)"
+                }
+            }
+            totalHoldings > 0 -> {
+                val allList = realItems + simItems
+                "Pantau: " + allList.take(3).joinToString(", ") {
+                    "${it.baseAsset} ${PriceFormatter.formatPrice(it.currentPrice, showSymbol = false)}"
+                }
+            }
+            else -> "Belum ada aset spot yang dipantau"
+        }
+
+        val bigText = buildString {
+            if (realItems.isEmpty() && simItems.isEmpty()) {
+                append("Belum ada koin yang dimiliki saat ini.\nBeli atau tambahkan posisi untuk mulai memantau.")
+            } else {
+                if (realItems.isNotEmpty()) {
+                    val realProfit = realItems.count { it.isProfit }
+                    append("💼 PORTOFOLIO REAL")
+                    if (realProfit > 0) append(" ($realProfit Siap Jual)")
+                    append(":\n")
+                    realItems.forEachIndexed { index, item ->
+                        append(formatHoldingCard(item))
+                        if (index < realItems.size - 1) append("\n\n")
+                    }
+                }
+                if (simItems.isNotEmpty()) {
+                    if (realItems.isNotEmpty()) append("\n\n")
+                    val simProfit = simItems.count { it.isProfit }
+                    append("🧪 PORTOFOLIO SIMULASI")
+                    if (simProfit > 0) append(" ($simProfit Siap Jual)")
+                    append(":\n")
+                    simItems.forEachIndexed { index, item ->
+                        append(formatHoldingCard(item))
+                        if (index < simItems.size - 1) append("\n\n")
+                    }
+                }
+            }
+        }.trim()
 
         val notificationIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -80,12 +199,14 @@ class TradingForegroundService : Service() {
         )
 
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_popup_reminder)
+            .setSmallIcon(agu.analys.R.drawable.ic_stat_trading)
             .setContentTitle(title)
-            .setContentText(contentText.substringBefore("\n"))
-            .setStyle(NotificationCompat.BigTextStyle().bigText(contentText))
+            .setContentText(collapsedText)
+            .setSubText("Indodax Spot")
+            .setStyle(NotificationCompat.BigTextStyle().bigText(bigText))
             .setContentIntent(pendingIntent)
-            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stop Monitor", stopPendingIntent)
+            .addAction(0, "Buka Portofolio", pendingIntent)
+            .addAction(0, "Hentikan", stopPendingIntent)
             .setOngoing(true)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .build()
@@ -95,17 +216,13 @@ class TradingForegroundService : Service() {
         manager.notify(NOTIFICATION_ID, notification)
     }
 
-    private fun getOwnedCoinsSummary(): String {
+    private fun getHoldingsData(): Pair<List<HoldingItem>, List<HoldingItem>> {
         val context = applicationContext
         val positionStore = SpotPositionStore(context)
         val simulationStore = SimulationTradeStore(context)
         val wallet = simulationStore.getWallet()
 
-        val sb = StringBuilder()
-
-        // 1. Check Real Spot positions (Dual Source: SpotPositionStore + Saved Real Balance fallback)
-        val realHoldings = mutableListOf<String>()
-        var realProfitCount = 0
+        val realItems = mutableListOf<HoldingItem>()
 
         val prefs = AppPreferences(context)
         val savedRealBalance = if (prefs.hasIndodaxCredentials()) prefs.getSavedRealBalance() else emptyMap()
@@ -157,65 +274,55 @@ class TradingForegroundService : Service() {
                     continue
                 }
 
-                val isProfit = entryPrice > 0.0 && currentPrice > entryPrice
-                val diffPct = if (entryPrice > 0.0) ((currentPrice - entryPrice) / entryPrice) * 100.0 else 0.0
-                
-                val statusStr = if (isProfit) {
-                    realProfitCount++
-                    "🔥 + (+${String.format(Locale.US, "%.2f", diffPct)}%) [SIAP JUAL!]"
-                } else if (entryPrice > 0.0) {
-                    "❄️ WAIT (${String.format(Locale.US, "%.2f", diffPct)}%)"
-                } else {
-                    "⏳ HOLD (${PriceFormatter.formatPrice(qty)} ${pair.baseAsset})"
-                }
-
-                val entryStr = if (entryPrice > 0.0) " @ Rp ${PriceFormatter.formatPrice(entryPrice)}" else ""
-                realHoldings.add(
-                    "${pair.baseAsset}: ${PriceFormatter.formatPrice(qty)}$entryStr -> Live Rp ${PriceFormatter.formatPrice(currentPrice)} $statusStr"
+                realItems.add(
+                    HoldingItem(
+                        symbol = pair.symbol,
+                        baseAsset = baseUpper,
+                        quantity = qty,
+                        entryPrice = entryPrice,
+                        currentPrice = currentPrice,
+                        isReal = true
+                    )
                 )
             }
         }
 
+        val sortedReal = realItems.sortedWith(
+            compareByDescending<HoldingItem> { it.isProfit }
+                .thenByDescending { it.diffPct }
+                .thenBy { it.baseAsset }
+        )
+
         // 2. Check Simulated positions (Simulation Wallet / SimulationTradeStore)
-        val simHoldings = mutableListOf<String>()
-        var simProfitCount = 0
+        val simItems = mutableListOf<HoldingItem>()
         for ((baseAsset, qty) in wallet.coinBalances) {
             val baseAssetUpper = baseAsset.uppercase()
             if (qty > 0.00000001 && baseAssetUpper != "IDR") {
                 val symbol = "${baseAssetUpper}IDR"
                 val avgPrice = wallet.avgBuyPrices[baseAsset] ?: 0.0
                 val currentPrice = livePrices[symbol] ?: avgPrice
-                val isProfit = currentPrice > avgPrice && avgPrice > 0.0
-                val diffPct = if (avgPrice > 0.0) ((currentPrice - avgPrice) / avgPrice) * 100.0 else 0.0
-                
-                val statusStr = if (isProfit) {
-                    simProfitCount++
-                    "🔥 + (+${String.format(Locale.US, "%.2f", diffPct)}%) [SIAP JUAL!]"
-                } else {
-                    "❄️ WAIT (${String.format(Locale.US, "%.2f", diffPct)}%)"
-                }
+                if (currentPrice <= 0.0 && avgPrice <= 0.0) continue
 
-                simHoldings.add(
-                    "${baseAssetUpper} (Sim): ${PriceFormatter.formatPrice(qty)} @ Rp ${PriceFormatter.formatPrice(avgPrice)} -> Live Rp ${PriceFormatter.formatPrice(currentPrice)} $statusStr"
+                simItems.add(
+                    HoldingItem(
+                        symbol = symbol,
+                        baseAsset = baseAssetUpper,
+                        quantity = qty,
+                        entryPrice = avgPrice,
+                        currentPrice = currentPrice,
+                        isReal = false
+                    )
                 )
             }
         }
 
-        if (realHoldings.isEmpty() && simHoldings.isEmpty()) {
-            return "Belum ada pair yang dimiliki saat ini.\nBeli atau tambahkan posisi untuk memantau."
-        }
+        val sortedSim = simItems.sortedWith(
+            compareByDescending<HoldingItem> { it.isProfit }
+                .thenByDescending { it.diffPct }
+                .thenBy { it.baseAsset }
+        )
 
-        if (realHoldings.isNotEmpty()) {
-            sb.append("ASET REAL (Siap Jual + : $realProfitCount):\n")
-            realHoldings.forEach { sb.append("• $it\n") }
-        }
-        if (simHoldings.isNotEmpty()) {
-            if (realHoldings.isNotEmpty()) sb.append("\n")
-            sb.append("ASET SIMULASI (Siap Jual + : $simProfitCount):\n")
-            simHoldings.forEach { sb.append("• $it\n") }
-        }
-
-        return sb.toString().trim()
+        return Pair(sortedReal, sortedSim)
     }
 
     companion object {

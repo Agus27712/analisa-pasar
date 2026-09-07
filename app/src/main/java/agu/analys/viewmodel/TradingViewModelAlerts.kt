@@ -96,35 +96,35 @@ fun TradingViewModel.checkAlertsAndTrailing(symbol: String, currentPrice: Double
             PriceAlertType.PRICE_ABOVE -> {
                 if (currentPrice >= alert.targetPrice) {
                     shouldTrigger = true
-                    triggerTitle = "🎯 HARGA NAIK ($symbol)"
-                    triggerMsg = "Harga telah mencapai Rp ${PriceFormatter.formatIdrNumber(currentPrice)} (Target: Rp ${PriceFormatter.formatIdrNumber(alert.targetPrice)})."
+                    triggerTitle = "🎯 Target Tercapai • $symbol"
+                    triggerMsg = "Harga naik menyentuh Rp ${PriceFormatter.formatIdrNumber(currentPrice)} (Target: Rp ${PriceFormatter.formatIdrNumber(alert.targetPrice)})."
                 }
             }
             PriceAlertType.PRICE_BELOW -> {
                 if (currentPrice <= alert.targetPrice) {
                     shouldTrigger = true
-                    triggerTitle = "📉 HARGA TURUN ($symbol)"
-                    triggerMsg = "Harga telah turun ke Rp ${PriceFormatter.formatIdrNumber(currentPrice)} (Target: Rp ${PriceFormatter.formatIdrNumber(alert.targetPrice)})."
+                    triggerTitle = "📉 Peringatan Turun • $symbol"
+                    triggerMsg = "Harga turun ke Rp ${PriceFormatter.formatIdrNumber(currentPrice)} (Target: Rp ${PriceFormatter.formatIdrNumber(alert.targetPrice)})."
                 }
             }
             PriceAlertType.RSI_OVERSOLD -> {
                 if (rsi != null && rsi <= alert.targetPrice) {
                     shouldTrigger = true
-                    triggerTitle = "📊 RSI OVERSOLD ($symbol)"
-                    triggerMsg = "RSI telah menyentuh ${"%.1f".format(rsi)} (Target: ${alert.targetPrice.toInt()})."
+                    triggerTitle = "📊 RSI Oversold • $symbol"
+                    triggerMsg = "Indikator RSI menyentuh ${"%.1f".format(rsi)} (Target: ${alert.targetPrice.toInt()})."
                 }
             }
             PriceAlertType.RSI_OVERBOUGHT -> {
                 if (rsi != null && rsi >= alert.targetPrice) {
                     shouldTrigger = true
-                    triggerTitle = "📊 RSI OVERBOUGHT ($symbol)"
-                    triggerMsg = "RSI telah menyentuh ${"%.1f".format(rsi)} (Target: ${alert.targetPrice.toInt()})."
+                    triggerTitle = "📊 RSI Overbought • $symbol"
+                    triggerMsg = "Indikator RSI menyentuh ${"%.1f".format(rsi)} (Target: ${alert.targetPrice.toInt()})."
                 }
             }
             PriceAlertType.SECOND_WAVE_RECLAIM -> {
                 if (currentPrice >= alert.targetPrice && alert.targetPrice > 0.0) {
                     shouldTrigger = true
-                    triggerTitle = "🌊 SECOND-WAVE RECLAIM ($symbol)"
+                    triggerTitle = "🌊 Second-Wave Reclaim • $symbol"
                     triggerMsg = "Setup Second-Wave terkonfirmasi di harga Rp ${PriceFormatter.formatIdrNumber(currentPrice)}."
                 }
             }
@@ -152,7 +152,7 @@ fun TradingViewModel.executeAutoSellOrder(symbol: String, price: Double, quantit
                 positionStore.resetTrailingTrigger(symbol)
             }
             val triggerLabel = if (triggerType.contains("TRAILING")) "Jaring Pengaman" else "Jual Otomatis"
-            val notifTitle = if (success) "✅ ASET DIAMANKAN ($symbol)" else "❌ GAGAL DIJUAL ($symbol)"
+            val notifTitle = if (success) "✅ Aset Diamankan • $symbol" else "❌ Gagal Jual • $symbol"
             val notifMsg = if (success) {
                 "$triggerLabel aktif! Koin berhasil dijual otomatis di kisaran harga ${PriceFormatter.formatIdrNumber(price)}."
             } else {
@@ -197,9 +197,9 @@ fun TradingViewModel.executeAutoSellOrder(symbol: String, price: Double, quantit
             positionStore.resetTrailingTrigger(symbol)
         }
         val triggerLabel = if (triggerType.contains("TRAILING")) "Jaring Pengaman" else "Jual Otomatis"
-        val notifTitle = if (success) "✅ ASET DIAMANKAN [SIM] ($symbol)" else "❌ GAGAL DIJUAL [SIM] ($symbol)"
+        val notifTitle = if (success) "✅ Aset Diamankan [Sim] • $symbol" else "❌ Gagal Jual [Sim] • $symbol"
         val notifMsg = if (success) {
-            "$triggerLabel aktif! Koin terjual di harga ${PriceFormatter.formatIdrNumber(price)} (Simulasi)."
+            "$triggerLabel aktif! Koin terjual di harga Rp ${PriceFormatter.formatIdrNumber(price)} (Simulasi)."
         } else {
             "Gagal (Simulasi): $msg"
         }
@@ -247,7 +247,7 @@ fun TradingViewModel.deployTrailingOrder(symbol: String) {
     startTrailingPolling()
 
     val slPrice = positionStore.calculateTrailingLimitPrice(effectivePeak, pos.entryPrice, effectiveTrailingPct)
-    val notifTitle = if (isReal) "🔒 JARING PENGAMAN AKTIF ($symbol)" else "🔒 JARING PENGAMAN AKTIF [SIM] ($symbol)"
+    val notifTitle = if (isReal) "🛡️ Trailing Stop Aktif • $symbol" else "🛡️ Trailing Stop Aktif [Sim] • $symbol"
     val notifMsg = if (isReal) {
         "Aplikasi sedang memantau. Koin akan dijual otomatis jika harga turun ke Rp ${PriceFormatter.formatIdrNumber(slPrice)}."
     } else {
@@ -297,8 +297,8 @@ fun TradingViewModel.updateSimTrailingOrder(symbol: String, pos: SpotPosition, s
     positionCoordinator.setTrailingOrderIdAndUpdateTime(symbol, "sim-client-trailing", System.currentTimeMillis())
     AlertNotificationHelper.sendPriceAlertNotification(
         context = getApplication(),
-        title = "📈 JARING PENGAMAN NAIK [SIM] ($symbol)",
-        message = "Batas aman penjualan otomatis naik ke Rp ${PriceFormatter.formatIdrNumber(slPrice)} (Mengikuti harga tertinggi).",
+        title = "📈 Trailing Stop Naik [Sim] • $symbol",
+        message = "Batas aman penjualan otomatis naik ke Rp ${PriceFormatter.formatIdrNumber(slPrice)} (Mengikuti kenaikan harga).",
         notificationId = (symbol.hashCode() and 0x7FFFFFFF) + 1000,
         symbol = symbol
     )
@@ -310,7 +310,7 @@ fun TradingViewModel.updateRealTrailingOrder(symbol: String, pos: SpotPosition, 
     positionCoordinator.setTrailingOrderIdAndUpdateTime(symbol, "real-client-trailing", System.currentTimeMillis())
     AlertNotificationHelper.sendPriceAlertNotification(
         context = getApplication(),
-        title = "📈 JARING PENGAMAN NAIK ($symbol)",
+        title = "📈 Trailing Stop Naik • $symbol",
         message = "Batas aman penjualan otomatis naik ke Rp ${PriceFormatter.formatIdrNumber(newSlPrice)}.",
         notificationId = (symbol.hashCode() and 0x7FFFFFFF) + 1000,
         symbol = symbol
@@ -324,7 +324,7 @@ fun TradingViewModel.executeTrailingSellLimitOrder(symbol: String, limitPrice: D
             if (!success) {
                 positionStore.resetTrailingTrigger(symbol)
             }
-            val notifTitle = if (success) "✅ LIMIT SELL TERKIRIM ($symbol)" else "❌ GAGAL LIMIT SELL ($symbol)"
+            val notifTitle = if (success) "✅ Limit Sell Terpasang • $symbol" else "❌ Gagal Limit Sell • $symbol"
             val notifMsg = if (success) {
                 "Profit Lock aktif! Limit Sell Order dipasang di harga Rp ${PriceFormatter.formatIdrNumber(limitPrice)}."
             } else {
@@ -366,7 +366,7 @@ fun TradingViewModel.executeTrailingSellLimitOrder(symbol: String, limitPrice: D
         } else {
             positionStore.resetTrailingTrigger(symbol)
         }
-        val notifTitle = if (success) "✅ LIMIT SELL TERKIRIM [SIM] ($symbol)" else "❌ GAGAL LIMIT SELL [SIM] ($symbol)"
+        val notifTitle = if (success) "✅ Limit Sell Terpasang [Sim] • $symbol" else "❌ Gagal Limit Sell [Sim] • $symbol"
         val notifMsg = if (success) {
             "Profit Lock aktif! Limit Sell Order dipasang di Rp ${PriceFormatter.formatIdrNumber(limitPrice)} (Simulasi)."
         } else {

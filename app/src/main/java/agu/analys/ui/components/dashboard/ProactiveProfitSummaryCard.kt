@@ -26,8 +26,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
@@ -124,6 +126,7 @@ fun ProactiveProfitSummaryCard(
     }
 
     var showConfirmDialog by remember { mutableStateOf(false) }
+    var isExpanded by rememberSaveable { mutableStateOf(false) }
 
     AnimatedVisibility(
         visible = readyCoins.isNotEmpty(),
@@ -169,15 +172,22 @@ fun ProactiveProfitSummaryCard(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(14.dp)
+                    .padding(if (isExpanded) 14.dp else 11.dp)
             ) {
-                // Top Row: Title + Count Badge + Active Mode Badge
+                // Top Row: Title + Quick Info + Badges + Open/Close Toggle
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { isExpanded = !isExpanded }
+                        .testTag("proactive_profit_summary_header"),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        modifier = Modifier.weight(1f, fill = false),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Box(
                             modifier = Modifier
                                 .size(28.dp)
@@ -200,10 +210,18 @@ fun ProactiveProfitSummaryCard(
                                 fontWeight = FontWeight.Bold,
                                 letterSpacing = 0.2.sp
                             )
+                            val subtitleText = if (isExpanded) {
+                                "${readyCoins.size} Koin Siap Amankan Keuntungan"
+                            } else {
+                                val profitSign = if (totalUnrealizedGainsIdr >= 0) "+" else ""
+                                val pctSign = if (totalGainPct >= 0) "+" else ""
+                                "${readyCoins.size} Koin • $profitSign${PriceFormatter.formatPrice(totalUnrealizedGainsIdr, showSymbol = true, quoteAsset = "IDR")} ($pctSign${String.format(java.util.Locale.US, "%.1f", totalGainPct)}%)"
+                            }
                             Text(
-                                text = "${readyCoins.size} Koin Siap Amankan Keuntungan",
-                                color = TvTextSecondary,
-                                fontSize = 10.5.sp
+                                text = subtitleText,
+                                color = if (!isExpanded && totalUnrealizedGainsIdr > 0.0) TvGreen else TvTextSecondary,
+                                fontSize = 10.5.sp,
+                                fontWeight = if (!isExpanded && totalUnrealizedGainsIdr > 0.0) FontWeight.SemiBold else FontWeight.Normal
                             )
                         }
                     }
@@ -219,7 +237,7 @@ fun ProactiveProfitSummaryCard(
                                     if (isRealTradingMode) TvOrange.copy(alpha = 0.25f) else TvBlue.copy(alpha = 0.25f),
                                     RoundedCornerShape(20.dp)
                                 )
-                                .padding(horizontal = 7.dp, vertical = 3.dp)
+                                .padding(horizontal = 6.dp, vertical = 3.dp)
                         ) {
                             Text(
                                 text = if (isRealTradingMode) "REAL" else "SIM",
@@ -235,170 +253,208 @@ fun ProactiveProfitSummaryCard(
                                     TvGreen.copy(alpha = 0.2f),
                                     RoundedCornerShape(20.dp)
                                 )
-                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                                .padding(horizontal = 7.dp, vertical = 3.dp)
                         ) {
                             Text(
                                 text = "🎯 READY SELL",
                                 color = TvGreen,
-                                fontSize = 9.sp,
+                                fontSize = 8.5.sp,
                                 fontWeight = FontWeight.Black
                             )
                         }
-                    }
-                }
 
-                Spacer(Modifier.height(12.dp))
-
-                // Metric Cards: Total Unrealized Gains + Total Cash-Out Value
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    // Total Unrealized Profit Box
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .background(if (isLight) Color(0xFFFFFFFF) else Color(0xFF0A1811), RoundedCornerShape(12.dp))
-                            .border(0.8.dp, TvGreen.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
-                            .padding(10.dp)
-                            .testTag("total_unrealized_profit_box")
-                    ) {
-                        Column {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                        // Open / Close Toggle Button
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(if (isLight) Color(0xFFD4EAD9) else Color(0xFF1B382A))
+                                .clickable { isExpanded = !isExpanded }
+                                .padding(horizontal = 7.dp, vertical = 3.dp)
+                                .testTag("proactive_profit_summary_toggle_btn"),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                Text(
+                                    text = if (isExpanded) "Tutup" else "Buka",
+                                    color = TvGreen,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
                                 Icon(
-                                    imageVector = Icons.Default.TrendingUp,
-                                    contentDescription = null,
+                                    imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                    contentDescription = if (isExpanded) "Tutup Proactive Profit Summary" else "Buka Proactive Profit Summary",
                                     tint = TvGreen,
                                     modifier = Modifier.size(13.dp)
                                 )
-                                Spacer(Modifier.width(4.dp))
-                                Text(
-                                    text = "PROFIT BELUM REALISASI",
-                                    color = TvTextSecondary,
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.SemiBold
-                                )
                             }
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                text = PriceFormatter.formatPrice(totalUnrealizedGainsIdr, showSymbol = true, quoteAsset = "IDR"),
-                                color = TvGreen,
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Black
-                            )
-                            Text(
-                                text = "${if (totalGainPct >= 0) "+" else ""}${String.format(java.util.Locale.US, "%.2f", totalGainPct)}% Akumulasi",
-                                color = if (totalGainPct >= 0) TvGreen else TvRed,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-
-                    // Total Potential Cash-Out Value Box
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .background(if (isLight) Color(0xFFFFFFFF) else Color(0xFF0A1811), RoundedCornerShape(12.dp))
-                            .border(0.8.dp, TvAmber.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
-                            .padding(10.dp)
-                            .testTag("total_cashout_value_box")
-                    ) {
-                        Column {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Default.CheckCircle,
-                                    contentDescription = null,
-                                    tint = TvAmber,
-                                    modifier = Modifier.size(13.dp)
-                                )
-                                Spacer(Modifier.width(4.dp))
-                                Text(
-                                    text = "POTENSI CASH-OUT KAS",
-                                    color = TvTextSecondary,
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                            }
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                text = PriceFormatter.formatPrice(totalCashOutValueIdr, showSymbol = true, quoteAsset = "IDR"),
-                                color = TvAmber,
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Black
-                            )
-                            Text(
-                                text = "Estimasi Nilai Likuidasi",
-                                color = TvTextSecondary,
-                                fontSize = 10.sp
-                            )
                         }
                     }
                 }
 
-                Spacer(Modifier.height(10.dp))
-
-                // Action Bar: "Sell All Ready Assets" Button
-                Button(
-                    onClick = { showConfirmDialog = true },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(44.dp)
-                        .testTag("sell_all_ready_assets_button"),
-                    shape = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isRealTradingMode) Color(0xFFC0392B) else TvGreen,
-                        contentColor = Color.White
-                    ),
-                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
+                // Collapsible detailed section
+                AnimatedVisibility(
+                    visible = isExpanded,
+                    enter = fadeIn() + expandVertically(),
+                    exit = fadeOut() + shrinkVertically()
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.FlashOn,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(17.dp)
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text(
-                            text = "Jual Semua Aset Siap (${readyCoins.size})",
-                            fontSize = 12.5.sp,
-                            fontWeight = FontWeight.Black,
-                            letterSpacing = 0.2.sp
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Surface(
-                            shape = RoundedCornerShape(4.dp),
-                            color = Color.Black.copy(alpha = 0.25f)
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Spacer(Modifier.height(12.dp))
+
+                        // Metric Cards: Total Unrealized Gains + Total Cash-Out Value
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Text(
-                                text = if (isRealTradingMode) "INDODAX REAL" else "SIMULASI",
-                                color = Color.White,
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
+                            // Total Unrealized Profit Box
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .background(if (isLight) Color(0xFFFFFFFF) else Color(0xFF0A1811), RoundedCornerShape(12.dp))
+                                    .border(0.8.dp, TvGreen.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+                                    .padding(10.dp)
+                                    .testTag("total_unrealized_profit_box")
+                            ) {
+                                Column {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Default.TrendingUp,
+                                            contentDescription = null,
+                                            tint = TvGreen,
+                                            modifier = Modifier.size(13.dp)
+                                        )
+                                        Spacer(Modifier.width(4.dp))
+                                        Text(
+                                            text = "PROFIT BELUM REALISASI",
+                                            color = TvTextSecondary,
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(
+                                        text = PriceFormatter.formatPrice(totalUnrealizedGainsIdr, showSymbol = true, quoteAsset = "IDR"),
+                                        color = TvGreen,
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Black
+                                    )
+                                    Text(
+                                        text = "${if (totalGainPct >= 0) "+" else ""}${String.format(java.util.Locale.US, "%.2f", totalGainPct)}% Akumulasi",
+                                        color = if (totalGainPct >= 0) TvGreen else TvRed,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+
+                            // Total Potential Cash-Out Value Box
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .background(if (isLight) Color(0xFFFFFFFF) else Color(0xFF0A1811), RoundedCornerShape(12.dp))
+                                    .border(0.8.dp, TvAmber.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+                                    .padding(10.dp)
+                                    .testTag("total_cashout_value_box")
+                            ) {
+                                Column {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Default.CheckCircle,
+                                            contentDescription = null,
+                                            tint = TvAmber,
+                                            modifier = Modifier.size(13.dp)
+                                        )
+                                        Spacer(Modifier.width(4.dp))
+                                        Text(
+                                            text = "POTENSI CASH-OUT KAS",
+                                            color = TvTextSecondary,
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(
+                                        text = PriceFormatter.formatPrice(totalCashOutValueIdr, showSymbol = true, quoteAsset = "IDR"),
+                                        color = TvAmber,
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Black
+                                    )
+                                    Text(
+                                        text = "Estimasi Nilai Likuidasi",
+                                        color = TvTextSecondary,
+                                        fontSize = 10.sp
+                                    )
+                                }
+                            }
                         }
-                    }
-                }
 
-                Spacer(Modifier.height(10.dp))
+                        Spacer(Modifier.height(10.dp))
 
-                // Horizontal scroll list of ready-to-sell coin chips
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    readyCoins.forEach { coin ->
-                        ReadySellChip(
-                            coin = coin,
-                            onClick = { onCoinClick(coin.pair) }
-                        )
+                        // Action Bar: "Sell All Ready Assets" Button
+                        Button(
+                            onClick = { showConfirmDialog = true },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(44.dp)
+                                .testTag("sell_all_ready_assets_button"),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (isRealTradingMode) Color(0xFFC0392B) else TvGreen,
+                                contentColor = Color.White
+                            ),
+                            elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.FlashOn,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(17.dp)
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    text = "Jual Semua Aset Siap (${readyCoins.size})",
+                                    fontSize = 12.5.sp,
+                                    fontWeight = FontWeight.Black,
+                                    letterSpacing = 0.2.sp
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = Color.Black.copy(alpha = 0.25f)
+                                ) {
+                                    Text(
+                                        text = if (isRealTradingMode) "INDODAX REAL" else "SIMULASI",
+                                        color = Color.White,
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(Modifier.height(10.dp))
+
+                        // Horizontal scroll list of ready-to-sell coin chips
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            readyCoins.forEach { coin ->
+                                ReadySellChip(
+                                    coin = coin,
+                                    onClick = { onCoinClick(coin.pair) }
+                                )
+                            }
+                        }
                     }
                 }
             }

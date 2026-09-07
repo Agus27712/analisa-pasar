@@ -927,6 +927,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         val loaded = marketDataCoordinator.loadPairCache(pair.symbol, _selectedTimeframe.value)
         if (!loaded) marketDataCoordinator.clearPairData()
         marketDataCoordinator.startMarketPolling(pair, _selectedTimeframe.value)
+        agu.analys.engine.global.GlobalContextManager.subscribeCoin(pair.baseAsset)
     }
 
     fun toggleSimpleChart() { _useSimpleChart.value = !_useSimpleChart.value }

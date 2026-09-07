@@ -162,6 +162,7 @@ fun DetailPriceHeader(
     activityText: String,
     activityColor: Color,
     quoteAsset: String = "IDR",
+    baseAsset: String = "",
     symbol: String,
     isFavorite: Boolean,
     globalContext: GlobalMarketContext? = null,
@@ -191,58 +192,63 @@ fun DetailPriceHeader(
     )
 
     Column(modifier = Modifier.fillMaxWidth()) {
-        if (price > 0) {
-            FlipCardPriceText(
-                price = price,
-                color = animatedColor,
-                fontSize = 26.sp,
-                fontWeight = FontWeight.Black,
-                quoteAsset = quoteAsset
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            if (price > 0) {
+                FlipCardPriceText(
+                    price = price,
+                    color = animatedColor,
+                    fontSize = 26.sp,
+                    fontWeight = FontWeight.Black,
+                    quoteAsset = quoteAsset
+                )
+            } else {
+                val placeholder = if (quoteAsset.equals("USDT", true) || quoteAsset.equals("USD", true)) "$ —" else "Rp —"
+                Text(placeholder, color = TvTextPrimary, fontSize = 26.sp, fontWeight = FontWeight.Black)
+            }
+
+            AnimatedPercentageBadge(
+                percentage = change24h,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold
             )
-        } else {
-            val placeholder = if (quoteAsset.equals("USDT", true) || quoteAsset.equals("USD", true)) "$ —" else "Rp —"
-            Text(placeholder, color = TvTextPrimary, fontSize = 26.sp, fontWeight = FontWeight.Black)
         }
 
-        Spacer(Modifier.height(5.dp))
+        Spacer(Modifier.height(6.dp))
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier.weight(1f)
+            Box(
+                modifier = Modifier
+                    .background(activityColor.copy(alpha = 0.15f), RoundedCornerShape(6.dp))
+                    .border(1.dp, activityColor.copy(alpha = 0.4f), RoundedCornerShape(6.dp))
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                contentAlignment = Alignment.Center
             ) {
-                Box(
-                    modifier = Modifier
-                        .background(activityColor.copy(alpha = 0.15f), RoundedCornerShape(6.dp))
-                        .border(1.dp, activityColor.copy(alpha = 0.4f), RoundedCornerShape(6.dp))
-                        .padding(horizontal = 7.dp, vertical = 3.dp)
-                ) {
-                    Text(
-                        text = activityText,
-                        color = activityColor,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1
-                    )
-                }
-
-                if (globalContext != null) {
-                    GlobalMarketShieldChip(
-                        context = globalContext,
-                        symbol = symbol,
-                        isFavorite = isFavorite,
-                        pairChange24h = change24h,
-                        onClick = onOpenShieldInfo
-                    )
-                }
+                Text(
+                    text = activityText,
+                    color = activityColor,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1
+                )
             }
 
-            AnimatedPercentageBadge(percentage = change24h)
+            if (globalContext != null) {
+                GlobalMarketShieldChip(
+                    context = globalContext,
+                    symbol = symbol,
+                    baseAsset = baseAsset,
+                    isFavorite = isFavorite,
+                    pairChange24h = change24h,
+                    onClick = onOpenShieldInfo
+                )
+            }
         }
     }
 }

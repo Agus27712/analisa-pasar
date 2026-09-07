@@ -103,10 +103,17 @@ fun DetailChartScreen(
     val isConnected = connection is MarketConnectionState.Connected
 
     // Dialogs
+    LaunchedEffect(pair.baseAsset) {
+        if (pair.baseAsset.isNotBlank()) {
+            agu.analys.engine.global.GlobalContextManager.subscribeCoin(pair.baseAsset)
+        }
+    }
+
     if (showShieldDialog) {
         GlobalMarketShieldDialog(
             context = globalContext,
             symbol = pair.symbol,
+            baseAsset = pair.baseAsset,
             isFavorite = isFavorite,
             onDismiss = { showShieldDialog = false }
         )
@@ -269,6 +276,7 @@ fun DetailChartScreen(
                         activityText = activityText,
                         activityColor = activityColor,
                         quoteAsset = pair.quoteAsset,
+                        baseAsset = pair.baseAsset,
                         symbol = pair.symbol,
                         isFavorite = isFavorite,
                         globalContext = globalContext,

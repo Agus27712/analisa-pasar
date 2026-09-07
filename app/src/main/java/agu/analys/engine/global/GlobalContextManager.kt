@@ -39,9 +39,18 @@ object GlobalContextManager {
                 
                 val currentContext = evaluateGlobalContext(ticker, now).copy(
                     isConnected = true,
-                    dataSource = "Binance"
+                    dataSource = "Binance",
+                    activeCoinTicker = _context.value.activeCoinTicker
                 )
                 _context.value = currentContext
+            }
+        }
+
+        scope.launch {
+            globalWebSocket.coinTickerFlow.collectLatest { coinTicker ->
+                if (coinTicker != null) {
+                    _context.value = _context.value.copy(activeCoinTicker = coinTicker)
+                }
             }
         }
         
@@ -56,6 +65,11 @@ object GlobalContextManager {
                 }
             }
         }
+    }
+
+    fun subscribeCoin(baseAsset: String) {
+        start()
+        globalWebSocket.subscribeCoin(baseAsset)
     }
 
     /**
@@ -80,7 +94,8 @@ object GlobalContextManager {
         val indodaxTicker = BtcTickerData(price = priceUsdt, changePct = changePct, source = "Indodax")
         val currentContext = evaluateGlobalContext(indodaxTicker, now).copy(
             isConnected = true,
-            dataSource = "Indodax"
+            dataSource = "Indodax",
+            activeCoinTicker = _context.value.activeCoinTicker
         )
         _context.value = currentContext
     }
