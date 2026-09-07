@@ -70,22 +70,27 @@ fun GlobalMarketShieldCard(context: GlobalMarketContext) {
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("GLOBAL MARKET SHIELD", color = TvTextSecondary, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                    if (context.isConnected) {
-                        Spacer(Modifier.width(4.dp))
+                    Spacer(Modifier.width(4.dp))
+                    val sourceBadge = if (context.isConnected) {
+                        if (context.dataSource.startsWith("Binance")) "• Binance" else "• Indodax (Fallback)"
+                    } else {
+                        "• Terputus"
+                    }
+                    Text(
+                        sourceBadge,
+                        color = if (context.isConnected) TvTextSecondary.copy(alpha = 0.7f) else TvRed,
+                        fontSize = 8.5.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    if (context.btcPriceUsdt > 0.0) {
                         Text(
-                            "• ${context.dataSource}",
-                            color = TvTextSecondary.copy(alpha = 0.5f),
-                            fontSize = 8.sp,
+                            "BTC: $${String.format(java.util.Locale.US, "%,.2f", context.btcPriceUsdt)} (${if(context.btc24hChangePct > 0) "+" else ""}${String.format(java.util.Locale.US, "%.2f", context.btc24hChangePct)}%)",
+                            color = if (context.btc24hChangePct >= 0) TvGreen else TvRed,
+                            fontSize = 9.sp,
                             fontWeight = FontWeight.Bold
                         )
                     }
-                    Spacer(Modifier.width(4.dp))
-                    Text(
-                        "BTC: ${String.format(java.util.Locale.US, "%.2f", context.btcPriceUsdt)} (${if(context.btc24hChangePct > 0) "+" else ""}${String.format(java.util.Locale.US, "%.2f", context.btc24hChangePct)}%)",
-                        color = if (context.btc24hChangePct >= 0) TvGreen else TvRed,
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold
-                    )
                 }
                 Spacer(Modifier.height(2.dp))
                 Text(statusText as String, color = titleColor, fontSize = 12.sp, fontWeight = FontWeight.Black)

@@ -70,10 +70,21 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     internal val alertStore = agu.analys.trading.PriceAlertStore(application)
     internal val simulationStore = SimulationTradeStore(application)
     internal val simCoordinator = SimulationCoordinator(simulationStore)
-    internal val realCoordinator = RealTradeCoordinator(viewModelScope, prefs)
+    internal val realCoordinator = RealTradeCoordinator(
+        scope = viewModelScope,
+        prefs = prefs,
+        onBalanceAndAvgUpdated = { balances, avgPrices ->
+            syncRealBalancesToPositionStore(balances, avgPrices)
+        }
+    )
     internal val updateCoordinator = AppUpdateCoordinator(viewModelScope)
     
     init {
+        // Sync initial cached real positions on startup immediately
+        if (prefs.hasIndodaxCredentials()) {
+            syncRealBalancesToPositionStore()
+        }
+
         viewModelScope.launch {
             simCoordinator.lastFilledOrder.collect { filledOrder ->
                 if (filledOrder != null && filledOrder.status == agu.analys.trading.SimulationOrderStatus.FILLED) {
@@ -86,6 +97,55 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
                 }
             }
         }
+    }
+
+    internal fun syncRealBalancesToPositionStore(
+        balances: Map<String, Double> = realCoordinator.realIndodaxBalance.value,
+        avgPrices: Map<String, Double> = realCoordinator.realAvgBuyPrices.value
+    ) {
+        if (!prefs.hasIndodaxCredentials()) return
+        val popularAndCustom = (TradingPair.POPULAR_INDODAX_PAIRS.map { it.baseAsset.uppercase() } + balances.keys.map { it.uppercase() }).distinct()
+        
+        for (baseUpper in popularAndCustom) {
+            if (baseUpper == "IDR" || baseUpper == "USDT") continue
+            val baseLower = baseUpper.lowercase()
+            val symbol = "${baseUpper}IDR"
+            val qty = balances[baseLower] ?: balances[baseUpper] ?: 0.0
+            val pos = positionStore.get(symbol)
+            
+            val avgPrice = avgPrices[symbol]
+                ?: avgPrices[baseUpper]
+                ?: avgPrices[baseLower]
+                ?: avgPrices["${baseLower}idr"]
+                ?: 0.0
+            
+            if (qty > 0.00000001) {
+                if (!pos.isHolding) {
+                    // Terdeteksi ada saldo real baru dari luar app -> auto-sync markBought
+                    positionStore.markBought(
+                        symbol = symbol,
+                        entryPrice = avgPrice,
+                        quantity = qty,
+                        isReal = true
+                    )
+                } else if (pos.isReal) {
+                    // Update kuantitas dan harga rata-rata jika belum disetel manual
+                    val finalEntry = if (pos.entryPrice > 0.0) pos.entryPrice else avgPrice
+                    positionStore.setHolding(
+                        symbol = symbol,
+                        invested = finalEntry * qty,
+                        entry = finalEntry,
+                        quantity = qty,
+                        isReal = true
+                    )
+                }
+            } else {
+                if (pos.isHolding && pos.isReal) {
+                    positionStore.markSold(symbol)
+                }
+            }
+        }
+        refreshSpotPosition()
     }
     
     internal val positionCoordinator = PositionCoordinator(
@@ -436,11 +496,19 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
             // STRICTLY REAL MODE: Hanya evaluasi posisi Real / saldo akun Real Indodax
             val spotPos = positionStore.get(pair.symbol)
             if (spotPos.isHolding && spotPos.isReal && spotPos.quantity > 0.00000001) {
-                val sl = if (spotPos.stopLossPrice > 0.0) spotPos.stopLossPrice else if (spotPos.entryPrice > 0.0) spotPos.entryPrice * 0.99 else 0.0
+                val entry = if (spotPos.entryPrice > 0.0) {
+                    spotPos.entryPrice
+                } else {
+                    realAvgBuyPrices.value[symbolNorm]
+                        ?: realAvgBuyPrices.value[pair.symbol.uppercase()]
+                        ?: realAvgBuyPrices.value[baseUpper]
+                        ?: 0.0
+                }
+                val sl = if (spotPos.stopLossPrice > 0.0) spotPos.stopLossPrice else if (entry > 0.0) entry * 0.99 else 0.0
                 return CoinHoldingStatus(
                     isHolding = true,
                     quantity = spotPos.quantity,
-                    entryPrice = spotPos.entryPrice,
+                    entryPrice = entry,
                     isReal = true,
                     tp1Price = spotPos.tp1Price,
                     tp2Price = spotPos.tp2Price,

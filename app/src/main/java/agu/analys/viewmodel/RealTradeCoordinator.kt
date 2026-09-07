@@ -18,7 +18,8 @@ import kotlin.math.min
 
 class RealTradeCoordinator(
     private val scope: CoroutineScope,
-    private val prefs: AppPreferences
+    private val prefs: AppPreferences,
+    private val onBalanceAndAvgUpdated: ((balances: Map<String, Double>, avgPrices: Map<String, Double>) -> Unit)? = null
 ) {
     private val MAX_HISTORY_ASSETS = 15
     private val INTER_REQUEST_DELAY_MS = 1500L
@@ -37,7 +38,7 @@ class RealTradeCoordinator(
         }
     )
 
-    private val _realIndodaxBalance = MutableStateFlow<Map<String, Double>>(emptyMap())
+    private val _realIndodaxBalance = MutableStateFlow<Map<String, Double>>(prefs.getSavedRealBalance())
     val realIndodaxBalance: StateFlow<Map<String, Double>> = _realIndodaxBalance.asStateFlow()
 
     private val _realFreeBalance = MutableStateFlow<Map<String, Double>>(emptyMap())
@@ -46,7 +47,7 @@ class RealTradeCoordinator(
     private val _realLockedBalance = MutableStateFlow<Map<String, Double>>(emptyMap())
     val realLockedBalance: StateFlow<Map<String, Double>> = _realLockedBalance.asStateFlow()
 
-    private val _realAvgBuyPrices = MutableStateFlow<Map<String, Double>>(emptyMap())
+    private val _realAvgBuyPrices = MutableStateFlow<Map<String, Double>>(prefs.getSavedRealAvgBuyPrices())
     val realAvgBuyPrices: StateFlow<Map<String, Double>> = _realAvgBuyPrices.asStateFlow()
 
     private val _realAvgBuyPartial = MutableStateFlow<Map<String, Boolean>>(emptyMap())
@@ -216,6 +217,7 @@ class RealTradeCoordinator(
         val candidates = buildHistoryCandidates(balance)
         if (candidates.isEmpty()) {
             _realTradeStatus.value = "Saldo diperbarui. Tidak ada pair untuk histori."
+            onBalanceAndAvgUpdated?.invoke(balance, _realAvgBuyPrices.value)
             return
         }
         val db = AppDatabase.getInstance().realTradeDao()
@@ -259,7 +261,10 @@ class RealTradeCoordinator(
             }
         }
         if (accumulatedEntities.isNotEmpty()) db.insertTrades(accumulatedEntities)
-        _realAvgBuyPrices.value = newAvg; _realAvgBuyPartial.value = newPartial
+        _realAvgBuyPrices.value = newAvg
+        _realAvgBuyPartial.value = newPartial
+        prefs.saveRealAvgBuyPrices(newAvg)
+        onBalanceAndAvgUpdated?.invoke(balance, newAvg)
         if (!rateLimited) _realTradeStatus.value = "Saldo diperbarui. ${accumulatedEntities.size} trade dari $assetsWithTrades pair."
     }
 }

@@ -103,41 +103,75 @@ class TradingForegroundService : Service() {
 
         val sb = StringBuilder()
 
-        // 1. Check Real Spot positions (SpotPositionStore manual/real tracking)
+        // 1. Check Real Spot positions (Dual Source: SpotPositionStore + Saved Real Balance fallback)
         val realHoldings = mutableListOf<String>()
         var realProfitCount = 0
 
         val prefs = AppPreferences(context)
-        val savedRealBalance = if (prefs.hasIndodaxCredentials()) prefs.getSavedRealBalance() else null
+        val savedRealBalance = if (prefs.hasIndodaxCredentials()) prefs.getSavedRealBalance() else emptyMap()
+        val savedAvgPrices = if (prefs.hasIndodaxCredentials()) prefs.getSavedRealAvgBuyPrices() else emptyMap()
         
+        // Scan semua kemungkinan pair: daftar populer + koin yang ada saldo di akun real
+        val processedBases = mutableSetOf<String>()
+        val realCandidatePairs = mutableListOf<TradingPair>()
+
         for (pair in TradingPair.POPULAR_INDODAX_PAIRS) {
+            val base = pair.baseAsset.uppercase()
+            if (base != "IDR" && base != "USDT") {
+                processedBases.add(base)
+                realCandidatePairs.add(pair)
+            }
+        }
+        for ((baseKey, qty) in savedRealBalance) {
+            val base = baseKey.uppercase()
+            if (qty > 0.00000001 && base != "IDR" && base != "USDT" && !processedBases.contains(base)) {
+                processedBases.add(base)
+                realCandidatePairs.add(TradingPair.fromCustomSymbol("${base}IDR"))
+            }
+        }
+        
+        for (pair in realCandidatePairs) {
+            val baseLower = pair.baseAsset.lowercase()
+            val baseUpper = pair.baseAsset.uppercase()
+            val symUpper = pair.symbol.uppercase()
             val pos = positionStore.get(pair.symbol)
-            if (pos.isHolding && pos.quantity > 0.0) {
-                val currentPrice = livePrices[pair.symbol.uppercase()] ?: pos.entryPrice
-                
-                // Cross-reference with real balance if credentials and cache exist
-                if (savedRealBalance != null) {
-                    val actualQty = savedRealBalance[pair.baseAsset.lowercase()] ?: 0.0
-                    val estimatedValueIdr = actualQty * currentPrice
-                    if (actualQty <= 0.0001 || estimatedValueIdr < 5000.0) {
-                        // Automatically clear the manual position tracker for this coin
-                        positionStore.markSold(pair.symbol)
-                        continue
-                    }
+
+            val realQty = savedRealBalance[baseLower] ?: savedRealBalance[baseUpper] ?: 0.0
+            val isHoldingInStore = pos.isHolding && pos.quantity > 0.0
+            val isHoldingInReal = realQty > 0.00000001
+
+            if (isHoldingInStore || isHoldingInReal) {
+                val qty = if (isHoldingInStore && pos.quantity > 0.0) pos.quantity else realQty
+                val entryPrice = if (isHoldingInStore && pos.entryPrice > 0.0) {
+                    pos.entryPrice
+                } else {
+                    savedAvgPrices[baseUpper] ?: savedAvgPrices[symUpper] ?: savedAvgPrices[baseLower] ?: 0.0
                 }
 
-                val isProfit = currentPrice > pos.entryPrice && pos.entryPrice > 0.0
-                val diffPct = if (pos.entryPrice > 0.0) ((currentPrice - pos.entryPrice) / pos.entryPrice) * 100.0 else 0.0
+                val currentPrice = livePrices[symUpper] ?: (if (entryPrice > 0.0) entryPrice else 0.0)
+                if (currentPrice <= 0.0 && entryPrice <= 0.0) continue
+
+                // Check jika koin di store sudah habis terjual di real
+                if (savedRealBalance.isNotEmpty() && isHoldingInStore && realQty <= 0.00000001) {
+                    positionStore.markSold(pair.symbol)
+                    continue
+                }
+
+                val isProfit = entryPrice > 0.0 && currentPrice > entryPrice
+                val diffPct = if (entryPrice > 0.0) ((currentPrice - entryPrice) / entryPrice) * 100.0 else 0.0
                 
                 val statusStr = if (isProfit) {
                     realProfitCount++
                     "🔥 + (+${String.format(Locale.US, "%.2f", diffPct)}%) [SIAP JUAL!]"
-                } else {
+                } else if (entryPrice > 0.0) {
                     "❄️ WAIT (${String.format(Locale.US, "%.2f", diffPct)}%)"
+                } else {
+                    "⏳ HOLD (${PriceFormatter.formatPrice(qty)} ${pair.baseAsset})"
                 }
 
+                val entryStr = if (entryPrice > 0.0) " @ Rp ${PriceFormatter.formatPrice(entryPrice)}" else ""
                 realHoldings.add(
-                    "${pair.baseAsset}: ${PriceFormatter.formatPrice(pos.quantity)} @ Rp ${PriceFormatter.formatPrice(pos.entryPrice)} -> Live Rp ${PriceFormatter.formatPrice(currentPrice)} $statusStr"
+                    "${pair.baseAsset}: ${PriceFormatter.formatPrice(qty)}$entryStr -> Live Rp ${PriceFormatter.formatPrice(currentPrice)} $statusStr"
                 )
             }
         }

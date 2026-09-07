@@ -37,17 +37,21 @@ object GlobalContextManager {
                 // Cleanup old ticks
                 priceHistory.removeAll { now - it.timestamp > HISTORY_WINDOW_MS }
                 
-                val currentContext = evaluateGlobalContext(ticker, now).copy(isConnected = true)
+                val currentContext = evaluateGlobalContext(ticker, now).copy(
+                    isConnected = true,
+                    dataSource = "Binance"
+                )
                 _context.value = currentContext
             }
         }
         
         scope.launch {
             globalWebSocket.isConnected.collectLatest { connected ->
-                // Jika Binance putus dan saat ini menggunakan Binance, biarkan updateFallbackFromIndodax mengambil alih
-                if (!connected && _context.value.dataSource.startsWith("Binance")) {
-                    _context.value = _context.value.copy(isConnected = false)
-                } else if (connected) {
+                if (!connected) {
+                    if (_context.value.dataSource.startsWith("Binance")) {
+                        _context.value = _context.value.copy(isConnected = false)
+                    }
+                } else {
                     _context.value = _context.value.copy(isConnected = true)
                 }
             }
@@ -59,12 +63,12 @@ object GlobalContextManager {
      */
     fun updateFallbackFromIndodax(priceIdr: Double, changePct: Double, usdtRate: Double = 16200.0) {
         val now = System.currentTimeMillis()
-        val isBinanceLive = globalWebSocket.isConnected.value && 
+        val isBinanceActive = globalWebSocket.isConnected.value && 
                 _context.value.dataSource.startsWith("Binance") && 
-                (now - _context.value.lastUpdateTime < 15_000L)
+                (now - _context.value.lastUpdateTime < 20_000L)
         
-        // Jika Binance sedang aktif live streaming, prioritaskan Binance
-        if (isBinanceLive) return
+        // Jika Binance sedang aktif live streaming, prioritaskan Binance sepenuhnya
+        if (isBinanceActive) return
         if (priceIdr <= 0) return
 
         val effectiveUsdtRate = if (usdtRate > 0) usdtRate else 16200.0
@@ -74,7 +78,10 @@ object GlobalContextManager {
         priceHistory.removeAll { now - it.timestamp > HISTORY_WINDOW_MS }
 
         val indodaxTicker = BtcTickerData(price = priceUsdt, changePct = changePct, source = "Indodax")
-        val currentContext = evaluateGlobalContext(indodaxTicker, now).copy(isConnected = true)
+        val currentContext = evaluateGlobalContext(indodaxTicker, now).copy(
+            isConnected = true,
+            dataSource = "Indodax"
+        )
         _context.value = currentContext
     }
 

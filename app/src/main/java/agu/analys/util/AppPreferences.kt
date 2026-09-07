@@ -293,6 +293,31 @@ class AppPreferences(context: Context) {
         } catch (_: Exception) {}
     }
 
+    fun getSavedRealAvgBuyPrices(): Map<String, Double> {
+        val jsonStr = prefs.getString("saved_real_avg_buy_prices", "") ?: ""
+        if (jsonStr.isBlank()) return emptyMap()
+        return try {
+            val json = JSONObject(jsonStr)
+            val map = mutableMapOf<String, Double>()
+            json.keys().forEach { key ->
+                map[key.uppercase()] = json.optDouble(key, 0.0)
+            }
+            map
+        } catch (_: Exception) {
+            emptyMap()
+        }
+    }
+
+    fun saveRealAvgBuyPrices(avgMap: Map<String, Double>) {
+        try {
+            val json = JSONObject()
+            avgMap.forEach { (k, v) ->
+                json.put(k.uppercase(), v)
+            }
+            prefs.edit().putString("saved_real_avg_buy_prices", json.toString()).apply()
+        } catch (_: Exception) {}
+    }
+
     companion object {
         const val DEFAULT_UPDATE_REPO = "Agus27712/analisa-pasar"
         private const val PREFS_NAME = "krypto_analysis_prefs"

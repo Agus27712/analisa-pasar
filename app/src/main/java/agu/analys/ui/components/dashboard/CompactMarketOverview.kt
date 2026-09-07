@@ -140,7 +140,7 @@ fun DashboardMockupHeader(
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Text(
-                    text = "Daftar Pantauan Indodax IDR",
+                    text = "Watchlist Indodax IDR",
                     color = TvTextPrimary,
                     fontSize = 16.5.sp,
                     fontWeight = FontWeight.Black,
@@ -302,19 +302,23 @@ fun DashboardMockupHeader(
                     k == "usdtidr" || k == "usdt"
                 }?.value
             }
-            val btcPriceIdr = remember(btcTick, usdtTick, globalContext.btcPriceUsdt) {
-                val liveBtcPrice = btcTick?.price ?: 0.0
-                if (liveBtcPrice > 0) {
-                    liveBtcPrice
+            val isBinanceActive = globalContext.isConnected && globalContext.dataSource.startsWith("Binance") && globalContext.btcPriceUsdt > 0
+            val btcPriceIdr = remember(btcTick, usdtTick, globalContext.btcPriceUsdt, isBinanceActive) {
+                val usdtRate = usdtTick?.price?.takeIf { it > 0 } ?: 16200.0
+                if (isBinanceActive) {
+                    globalContext.btcPriceUsdt * usdtRate
+                } else if ((btcTick?.price ?: 0.0) > 0) {
+                    btcTick!!.price
                 } else if (globalContext.btcPriceUsdt > 0) {
-                    val usdtRate = usdtTick?.price?.takeIf { it > 0 } ?: 16200.0
                     globalContext.btcPriceUsdt * usdtRate
                 } else {
                     0.0
                 }
             }
-            val btcChangePct = remember(btcTick, globalContext.btc24hChangePct) {
-                if (btcTick != null && btcTick.change24h != 0.0) {
+            val btcChangePct = remember(btcTick, globalContext.btc24hChangePct, isBinanceActive) {
+                if (isBinanceActive) {
+                    globalContext.btc24hChangePct
+                } else if (btcTick != null && btcTick.change24h != 0.0) {
                     btcTick.change24h
                 } else {
                     globalContext.btc24hChangePct

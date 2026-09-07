@@ -128,23 +128,36 @@ class SpotPositionStore(context: Context) {
     fun setHolding(symbol: String, invested: Double, entry: Double, quantity: Double, isReal: Boolean = false) {
         val key = normalize(symbol)
         val changedAt = System.currentTimeMillis()
+        val current = get(symbol)
+        val openedAt = if (current.isHolding && current.openedAt > 0L) current.openedAt else changedAt
+        val peak = if (current.isHolding && current.peakPrice > 0.0) current.peakPrice.coerceAtLeast(entry) else entry
+        val stopLossPrice = if (current.stopLossPrice > 0.0) current.stopLossPrice else if (entry > 0.0) entry * 0.99 else 0.0
         val position = SpotPosition(
             state = SpotPositionState.HOLDING,
             investedAmount = invested,
             entryPrice = entry,
             quantity = quantity,
-            openedAt = changedAt,
+            openedAt = openedAt,
             isReal = isReal,
-            peakPrice = entry
+            peakPrice = peak,
+            stopLossPrice = stopLossPrice,
+            isTrailingEnabled = current.isTrailingEnabled,
+            trailingPercent = current.trailingPercent,
+            isAutoSellEnabled = current.isAutoSellEnabled,
+            tp1Price = current.tp1Price,
+            tp1Percent = current.tp1Percent,
+            tp2Price = current.tp2Price,
+            tp2Percent = current.tp2Percent
         )
         prefs.edit()
             .putString("${key}_state", SpotPositionState.HOLDING.name)
             .putString("${key}_invested", invested.toString())
             .putString("${key}_entry", entry.toString())
             .putString("${key}_quantity", quantity.toString())
-            .putLong("${key}_opened_at", changedAt)
+            .putLong("${key}_opened_at", openedAt)
             .putBoolean("${key}_is_real", isReal)
-            .putString("${key}_peak", entry.toString())
+            .putString("${key}_peak", peak.toString())
+            .putString("${key}_stop_loss", stopLossPrice.toString())
             .putString("${key}_history", appendHistoryEvent(key, position))
             .apply()
     }
