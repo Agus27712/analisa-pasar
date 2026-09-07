@@ -36,6 +36,12 @@ data class OfficeDailyEvalResult(
 object OfficeDailyEvaluator {
 
     fun evaluate(
+        price: Double,
+        history: List<CandleBar>,
+        fees: TradingFeeConfig = TradingFeeConfig()
+    ): OfficeDailyEvalResult = evaluate(agu.analys.engine.global.GlobalMarketContext(), price, history, fees)
+
+    fun evaluate(
         globalContext: agu.analys.engine.global.GlobalMarketContext = agu.analys.engine.global.GlobalMarketContext(),
         price: Double,
         history: List<CandleBar>,

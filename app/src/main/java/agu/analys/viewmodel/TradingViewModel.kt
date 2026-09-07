@@ -78,26 +78,6 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         }
     )
     internal val updateCoordinator = AppUpdateCoordinator(viewModelScope)
-    
-    init {
-        // Sync initial cached real positions on startup immediately
-        if (prefs.hasIndodaxCredentials()) {
-            syncRealBalancesToPositionStore()
-        }
-
-        viewModelScope.launch {
-            simCoordinator.lastFilledOrder.collect { filledOrder ->
-                if (filledOrder != null && filledOrder.status == agu.analys.trading.SimulationOrderStatus.FILLED) {
-                    if (filledOrder.side == SimulationOrderSide.SELL) {
-                        positionStore.markSold(filledOrder.symbol)
-                        positionCoordinator.setTrailing(filledOrder.symbol, enabled = false, 0.0, 0.0)
-                        refreshSpotPosition()
-                        checkAndStopTrailingServiceIfEmpty()
-                    }
-                }
-            }
-        }
-    }
 
     internal fun syncRealBalancesToPositionStore(
         balances: Map<String, Double> = realCoordinator.realIndodaxBalance.value,
@@ -322,22 +302,6 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
 
     val mtfState = agu.analys.util.MtfCacheManager.mtfState
 
-    init {
-        agu.analys.engine.global.GlobalContextManager.start()
-        agu.analys.util.MtfCacheManager.updateQueues(_watchlist.value.toList(), emptyList())
-        engine.strategyMode = prefs.strategyMode
-        engine.isScalpingMode = prefs.isScalpingMode
-        engine.scalpingSensitivity = prefs.scalpingSensitivity
-        engine.tradingFees = prefs.tradingFees
-        marketDataCoordinator.restoreFromCache(MarketDataSource.INDODAX)
-        val initialPair = TradingPair.popularPairsForSource(prefs.marketDataSource).first()
-        selectPair(initialPair)
-        startDashboardPolling()
-        startTrailingPolling()
-        listenToEngineSignals()
-        checkPublicIp()
-    }
-
     val simulationWallet: StateFlow<SimulationWallet> = simCoordinator.wallet
     val simulationOpenOrders: StateFlow<List<SimulationOrder>> = simCoordinator.openOrders
     val simulationHistory: StateFlow<List<SimulationTradeHistoryItem>> = simCoordinator.history
@@ -428,6 +392,48 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     val userPublicIp: StateFlow<String?> = realCoordinator.publicIp
     val failedPinAttempts: StateFlow<Int> = MutableStateFlow(prefs.failedPinAttempts).asStateFlow()
 
+    private var lastSavedSignalTimestamp = 0L
+    internal val navigationStack = mutableListOf<AppScreen>()
+
+    val githubReleaseInfo: StateFlow<GitHubReleaseInfo?> = updateCoordinator.releaseInfo
+    val updateCheckStatus: StateFlow<String?> = updateCoordinator.updateCheckStatus
+    val isCheckingUpdate: StateFlow<Boolean> = updateCoordinator.isCheckingUpdate
+    val updateDownloadProgress: StateFlow<Int?> = updateCoordinator.downloadProgress
+
+    init {
+        agu.analys.engine.global.GlobalContextManager.start()
+        agu.analys.util.MtfCacheManager.updateQueues(_watchlist.value.toList(), emptyList())
+        engine.strategyMode = prefs.strategyMode
+        engine.isScalpingMode = prefs.isScalpingMode
+        engine.scalpingSensitivity = prefs.scalpingSensitivity
+        engine.tradingFees = prefs.tradingFees
+        marketDataCoordinator.restoreFromCache(MarketDataSource.INDODAX)
+        val initialPair = TradingPair.popularPairsForSource(prefs.marketDataSource).first()
+        selectPair(initialPair)
+        startDashboardPolling()
+        startTrailingPolling()
+        listenToEngineSignals()
+        checkPublicIp()
+
+        // Sync initial cached real positions on startup immediately
+        if (prefs.hasIndodaxCredentials()) {
+            syncRealBalancesToPositionStore()
+        }
+
+        viewModelScope.launch {
+            simCoordinator.lastFilledOrder.collect { filledOrder ->
+                if (filledOrder != null && filledOrder.status == agu.analys.trading.SimulationOrderStatus.FILLED) {
+                    if (filledOrder.side == SimulationOrderSide.SELL) {
+                        positionStore.markSold(filledOrder.symbol)
+                        positionCoordinator.setTrailing(filledOrder.symbol, enabled = false, 0.0, 0.0)
+                        refreshSpotPosition()
+                        checkAndStopTrailingServiceIfEmpty()
+                    }
+                }
+            }
+        }
+    }
+
     private fun markMarketOffline(reason: String) {
         _connectionState.value = MarketConnectionState.ConnectionLost(reason = reason)
         _isShowingCachedData.value = true
@@ -462,8 +468,18 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         realCoordinator.executeRealTrade(pair, type, price, amountIdr, tp1, tp2, onResult)
 
     fun refreshSimulationState() = simCoordinator.refresh()
-    fun refreshSpotPosition() { positionCoordinator.refreshPosition(_selectedPair.value.symbol) }
-    fun refreshPriceAlerts() { positionCoordinator.refreshAlerts(_selectedPair.value.symbol) }
+    fun refreshSpotPosition() {
+        val sym = try { _selectedPair.value.symbol } catch (_: Throwable) { null }
+        if (sym != null) {
+            positionCoordinator.refreshPosition(sym)
+        }
+    }
+    fun refreshPriceAlerts() {
+        val sym = try { _selectedPair.value.symbol } catch (_: Throwable) { null }
+        if (sym != null) {
+            positionCoordinator.refreshAlerts(sym)
+        }
+    }
     fun setOwnership(owned: Boolean, price: Double = 0.0, quantity: Double = 0.0, invested: Double = 0.0, isReal: Boolean = isRealBuyMode.value) {
         val symbol = _selectedPair.value.symbol
         positionCoordinator.setOwnership(symbol, owned, price, quantity, invested, isReal)
@@ -643,9 +659,6 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
             agu.analys.service.TradingForegroundService.stopService(getApplication())
         }
     }
-
-    private var lastSavedSignalTimestamp = 0L
-    internal val navigationStack = mutableListOf<AppScreen>()
 
     fun selectCustomSymbol(rawSymbol: String) {
         if (rawSymbol.isNotBlank()) selectPair(TradingPair.fromCustomSymbol(rawSymbol, "IDR"))
@@ -934,11 +947,6 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     fun simulateDisconnect() {
         marketDataCoordinator.markOffline("Mode offline: koneksi dihentikan manual.")
     }
-
-    val githubReleaseInfo: StateFlow<GitHubReleaseInfo?> = updateCoordinator.releaseInfo
-    val updateCheckStatus: StateFlow<String?> = updateCoordinator.updateCheckStatus
-    val isCheckingUpdate: StateFlow<Boolean> = updateCoordinator.isCheckingUpdate
-    val updateDownloadProgress: StateFlow<Int?> = updateCoordinator.downloadProgress
 
     override fun onCleared() {
         marketDataCoordinator.stopPolling()

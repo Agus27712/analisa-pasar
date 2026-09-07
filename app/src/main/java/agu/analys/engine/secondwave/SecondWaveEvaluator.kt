@@ -63,6 +63,14 @@ object SecondWaveEvaluator {
      * Evaluasi mendalam Multi-Timeframe (H4 / 1D Makro + 1H Setup + 15M Trigger).
      */
     fun evaluate(
+        price: Double,
+        macroCandles: List<CandleBar>,
+        h1Candles: List<CandleBar>,
+        m15Candles: List<CandleBar>,
+        fees: TradingFeeConfig = TradingFeeConfig()
+    ): SecondWaveEvalResult = evaluate(agu.analys.engine.global.GlobalMarketContext(), price, macroCandles, h1Candles, m15Candles, fees)
+
+    fun evaluate(
         globalContext: agu.analys.engine.global.GlobalMarketContext = agu.analys.engine.global.GlobalMarketContext(),
         price: Double,
         macroCandles: List<CandleBar>, // H4 atau 1D (min 30 candles)

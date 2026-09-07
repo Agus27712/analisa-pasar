@@ -22,6 +22,18 @@ import kotlin.math.max
 object ScalpingMtfEvaluator {
     data class Result(val signal: AISignalState, val indicators: TechnicalIndicators)
 
+    fun evaluate(
+        price: Double,
+        h1Candles: List<CandleBar>,
+        m15Candles: List<CandleBar>,
+        m1Candles: List<CandleBar>,
+        formingVolume: Double = 0.0,
+        bids: List<OrderBookItem> = emptyList(),
+        asks: List<OrderBookItem> = emptyList(),
+        fees: TradingFeeConfig = TradingFeeConfig(),
+        sensitivity: ScalpingSensitivity = ScalpingSensitivity.BALANCED
+    ): Result? = evaluate(agu.analys.engine.global.GlobalMarketContext(), price, h1Candles, m15Candles, m1Candles, formingVolume, bids, asks, fees, sensitivity)
+
     fun evaluate(globalContext: agu.analys.engine.global.GlobalMarketContext = agu.analys.engine.global.GlobalMarketContext(),
         price: Double,
         h1Candles: List<CandleBar>,

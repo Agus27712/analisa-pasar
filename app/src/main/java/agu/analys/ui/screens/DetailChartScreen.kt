@@ -245,18 +245,18 @@ fun DetailChartScreen(
                     .background(
                         androidx.compose.ui.graphics.Brush.verticalGradient(
                             colors = listOf(
-                                ambientColor.copy(alpha = 0.20f),
-                                ambientColor.copy(alpha = 0.06f)
+                                ambientColor.copy(alpha = 0.26f),
+                                ambientColor.copy(alpha = 0.12f)
                             )
                         )
                     )
-                    .border(1.dp, ambientColor.copy(alpha = 0.35f), androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+                    .border(1.dp, ambientColor.copy(alpha = 0.38f), androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
                     .padding(14.dp)
             ) {
                 androidx.compose.material3.Icon(
                     imageVector = watermarkIcon,
                     contentDescription = null,
-                    tint = ambientColor.copy(alpha = 0.10f),
+                    tint = ambientColor.copy(alpha = 0.12f),
                     modifier = Modifier
                         .size(110.dp)
                         .align(Alignment.Center)

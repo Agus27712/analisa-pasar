@@ -42,6 +42,12 @@ private enum class SwingSetup {
 object SwingEvaluator {
 
     fun evaluate(
+        price: Double, 
+        history: List<CandleBar>, 
+        fees: TradingFeeConfig = TradingFeeConfig()
+    ): SwingEvalResult = evaluate(agu.analys.engine.global.GlobalMarketContext(), price, history, fees)
+
+    fun evaluate(
         globalContext: agu.analys.engine.global.GlobalMarketContext = agu.analys.engine.global.GlobalMarketContext(),
         price: Double, 
         history: List<CandleBar>, 
