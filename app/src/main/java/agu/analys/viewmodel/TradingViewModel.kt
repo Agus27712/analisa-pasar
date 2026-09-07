@@ -744,6 +744,17 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
                 val combinedTicks = ticks.associateBy { it.symbol } + allScanned.associateBy { it.symbol }
                 _dashboardTicks.value = combinedTicks
                 try {
+                    val btcTick = combinedTicks["BTCIDR"] ?: combinedTicks["btc_idr"] ?: combinedTicks["BTC"]
+                    val usdtTick = combinedTicks["USDTIDR"] ?: combinedTicks["usdt_idr"] ?: combinedTicks["USDT"]
+                    if (btcTick != null && btcTick.price > 0) {
+                        agu.analys.engine.global.GlobalContextManager.updateFallbackFromIndodax(
+                            priceIdr = btcTick.price,
+                            changePct = btcTick.change24h,
+                            usdtRate = usdtTick?.price ?: 16200.0
+                        )
+                    }
+                } catch (_: Exception) {}
+                try {
                     val priceMap = combinedTicks.mapValues { it.value.price }
                     agu.analys.service.TradingForegroundService.updatePrices(getApplication(), priceMap)
                 } catch (_: Exception) {}

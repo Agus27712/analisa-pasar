@@ -37,16 +37,45 @@ object GlobalContextManager {
                 // Cleanup old ticks
                 priceHistory.removeAll { now - it.timestamp > HISTORY_WINDOW_MS }
                 
-                val currentContext = evaluateGlobalContext(ticker, now)
+                val currentContext = evaluateGlobalContext(ticker, now).copy(isConnected = true)
                 _context.value = currentContext
             }
         }
         
         scope.launch {
             globalWebSocket.isConnected.collectLatest { connected ->
-                _context.value = _context.value.copy(isConnected = connected)
+                // Jika Binance putus dan saat ini menggunakan Binance, biarkan updateFallbackFromIndodax mengambil alih
+                if (!connected && _context.value.dataSource.startsWith("Binance")) {
+                    _context.value = _context.value.copy(isConnected = false)
+                } else if (connected) {
+                    _context.value = _context.value.copy(isConnected = true)
+                }
             }
         }
+    }
+
+    /**
+     * Fallback cerdas ke data live BTC Indodax jika WebSocket global (Binance) diblokir oleh ISP Indonesia atau belum terhubung.
+     */
+    fun updateFallbackFromIndodax(priceIdr: Double, changePct: Double, usdtRate: Double = 16200.0) {
+        val now = System.currentTimeMillis()
+        val isBinanceLive = globalWebSocket.isConnected.value && 
+                _context.value.dataSource.startsWith("Binance") && 
+                (now - _context.value.lastUpdateTime < 15_000L)
+        
+        // Jika Binance sedang aktif live streaming, prioritaskan Binance
+        if (isBinanceLive) return
+        if (priceIdr <= 0) return
+
+        val effectiveUsdtRate = if (usdtRate > 0) usdtRate else 16200.0
+        val priceUsdt = priceIdr / effectiveUsdtRate
+
+        priceHistory.add(PriceTick(priceUsdt, now))
+        priceHistory.removeAll { now - it.timestamp > HISTORY_WINDOW_MS }
+
+        val indodaxTicker = BtcTickerData(price = priceUsdt, changePct = changePct, source = "Indodax")
+        val currentContext = evaluateGlobalContext(indodaxTicker, now).copy(isConnected = true)
+        _context.value = currentContext
     }
 
     private fun evaluateGlobalContext(ticker: BtcTickerData, now: Long): GlobalMarketContext {

@@ -326,6 +326,16 @@ fun DashboardMockupHeader(
                 "BTC --"
             }
 
+            LaunchedEffect(btcTick, usdtTick) {
+                if (btcTick != null && btcTick.price > 0) {
+                    agu.analys.engine.global.GlobalContextManager.updateFallbackFromIndodax(
+                        priceIdr = btcTick.price,
+                        changePct = btcTick.change24h,
+                        usdtRate = usdtTick?.price ?: 16200.0
+                    )
+                }
+            }
+
             val shieldIcon: ImageVector
             val shieldColor: Color
             val shieldText: String
