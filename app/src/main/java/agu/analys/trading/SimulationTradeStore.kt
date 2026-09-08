@@ -98,6 +98,39 @@ class SimulationTradeStore(context: Context) {
     }
 
     @Synchronized
+    fun recordMirroredRealTrade(
+        symbol: String,
+        baseAsset: String,
+        quoteAsset: String = "IDR",
+        side: SimulationOrderSide,
+        price: Double,
+        quantity: Double,
+        pnlIdr: Double? = null,
+        pnlPercent: Double? = null
+    ) {
+        val totalIdr = quantity * price
+        val feeIdr = totalIdr * INDODAX_TAKER_FEE_RATE
+        val item = SimulationTradeHistoryItem(
+            id = UUID.randomUUID().toString(),
+            orderId = "real-${System.currentTimeMillis()}",
+            symbol = symbol,
+            baseAsset = baseAsset.uppercase(),
+            quoteAsset = quoteAsset,
+            side = side,
+            type = SimulationOrderType.MARKET,
+            executionPrice = price,
+            quantity = quantity,
+            totalIdr = totalIdr,
+            feeIdr = feeIdr,
+            timestamp = System.currentTimeMillis(),
+            pnlIdr = pnlIdr,
+            pnlPercent = pnlPercent,
+            isRealMirror = true
+        )
+        addTradeHistory(item)
+    }
+
+    @Synchronized
     fun placeOrder(
         symbol: String,
         baseAsset: String,

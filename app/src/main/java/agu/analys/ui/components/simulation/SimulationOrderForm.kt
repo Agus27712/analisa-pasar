@@ -50,6 +50,8 @@ fun SimulationOrderForm(
     onTotalIdrChange: (String) -> Unit,
     onSubmitOrder: () -> Unit,
     onOpenTopUp: () -> Unit,
+    isRealMode: Boolean = false,
+    realIdrBalance: Double = 0.0,
     modifier: Modifier = Modifier
 ) {
     var showTypeMenu by remember { mutableStateOf(false) }
@@ -255,7 +257,7 @@ fun SimulationOrderForm(
                         .border(1.dp, TvBorder, RoundedCornerShape(4.dp))
                         .clickable {
                             if (isBuy) {
-                                val availQuote = wallet.getAvailableIdr()
+                                val availQuote = if (isRealMode && realIdrBalance > 0.0) realIdrBalance else wallet.getAvailableIdr()
                                 val targetQuote = availQuote * (pct / 100.0)
                                 val price = if (selectedType == SimulationOrderType.MARKET) currentPrice else (parseSimulationDecimal(inputPrice) ?: currentPrice)
                                 if (price > 0.0) {
@@ -336,31 +338,49 @@ fun SimulationOrderForm(
                     color = TvTextSecondary,
                     fontSize = 11.sp
                 )
-                Spacer(Modifier.width(4.dp))
-                Box(
-                    modifier = Modifier
-                        .size(16.dp)
-                        .clip(RoundedCornerShape(3.dp))
-                        .background(TvSurfaceVariant)
-                        .clickable { onOpenTopUp() },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = "Top Up",
-                        tint = TvGreen,
-                        modifier = Modifier.size(12.dp)
-                    )
+                if (isRealMode && isBuy) {
+                    Spacer(Modifier.width(4.dp))
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(TvGreen.copy(alpha = 0.2f))
+                            .padding(horizontal = 4.dp, vertical = 1.dp)
+                    ) {
+                        Text(
+                            text = "REAL",
+                            color = TvGreen,
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Black
+                        )
+                    }
+                } else if (!isRealMode && isBuy) {
+                    Spacer(Modifier.width(4.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(16.dp)
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(TvSurfaceVariant)
+                            .clickable { onOpenTopUp() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "Top Up",
+                            tint = TvGreen,
+                            modifier = Modifier.size(12.dp)
+                        )
+                    }
                 }
             }
 
             Text(
                 text = if (isBuy) {
-                    PriceFormatter.formatPrice(wallet.getAvailableIdr(), quoteAsset = quote)
+                    val avail = if (isRealMode && realIdrBalance > 0.0) realIdrBalance else wallet.getAvailableIdr()
+                    PriceFormatter.formatPrice(avail, quoteAsset = quote)
                 } else {
                     "${formatCoinDecimals(wallet.getAvailableCoin(pair.baseAsset))} ${pair.baseAsset}"
                 },
-                color = TvTextPrimary,
+                color = if (isRealMode && isBuy) TvGreen else TvTextPrimary,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,

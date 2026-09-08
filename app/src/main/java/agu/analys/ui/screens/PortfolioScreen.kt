@@ -78,9 +78,53 @@ fun PortfolioScreen(
     var selectedTab by remember { mutableStateOf(PortfolioTab.HOLDINGS) }
     var showTopUpModal by remember { mutableStateOf(false) }
 
-    // Hitung Koin Dimiliki & Metrik Portofolio Simulasi
-    val holdings = remember(wallet, dashboardTicks, currentTick) {
-        wallet.coinBalances.filter { it.value > 0.00000001 }.map { (baseAsset, qty) ->
+    val realIdr = realBalance["idr"] ?: viewModel.prefs.getSavedRealBalance()["idr"] ?: 0.0
+
+    // Hitung Koin Dimiliki & Metrik Portofolio Gabungan (Simulasi + Real Mirrored)
+    val holdings = remember(wallet, dashboardTicks, currentTick, realBalance, realAvgBuyPrices) {
+        val effectiveRealBalance = if (realBalance.isNotEmpty()) realBalance else viewModel.prefs.getSavedRealBalance()
+        val effectiveRealAvg = if (realAvgBuyPrices.isNotEmpty()) realAvgBuyPrices else viewModel.prefs.getSavedRealAvgBuyPrices()
+
+        // 1. Koin dari akun Real Indodax (Bisa dipantau 1:1 meski di luar rumah tanpa kendala IP Whitelist)
+        val realHoldings = effectiveRealBalance.filter { (coin, qty) ->
+            coin.lowercase() != "idr" && coin.lowercase() != "usdt" && qty > 0.00000001
+        }.map { (coin, qty) ->
+            val coinUpper = coin.uppercase()
+            val coinLower = coin.lowercase()
+            val symbol = "${coinUpper}IDR"
+            val price = when {
+                symbol.equals(currentTick?.symbol, ignoreCase = true) -> currentTick?.price ?: 0.0
+                dashboardTicks.containsKey(symbol) -> dashboardTicks[symbol]?.price ?: 0.0
+                dashboardTicks.containsKey("${coinLower}_idr") -> dashboardTicks["${coinLower}_idr"]?.price ?: 0.0
+                dashboardTicks.containsKey(coinUpper) -> dashboardTicks[coinUpper]?.price ?: 0.0
+                else -> 0.0
+            }
+            val avgPrice = effectiveRealAvg[coinUpper]
+                ?: effectiveRealAvg[coinLower]
+                ?: effectiveRealAvg[coin]
+                ?: effectiveRealAvg["${coinLower}idr"]
+                ?: 0.0
+            val effectivePrice = if (price > 0.0) price else avgPrice
+            val totalValue = qty * effectivePrice
+            val pnl = if (avgPrice > 0.0) (effectivePrice - avgPrice) * qty else 0.0
+            val pnlPct = if (avgPrice > 0.0) ((effectivePrice - avgPrice) / avgPrice) * 100.0 else 0.0
+
+            val pair = TradingPair.fromCustomSymbol(symbol, "IDR")
+            HoldingItem(
+                baseAsset = coinUpper,
+                quantity = qty,
+                avgBuyPrice = avgPrice,
+                currentPrice = effectivePrice,
+                totalValueIdr = totalValue,
+                pnlIdr = pnl,
+                pnlPercent = pnlPct,
+                tradingPair = pair,
+                isRealMirror = true
+            )
+        }
+
+        // 2. Koin dari akun Virtual Simulasi
+        val simHoldings = wallet.coinBalances.filter { it.value > 0.00000001 }.map { (baseAsset, qty) ->
             val symbol = "${baseAsset}IDR"
             val price = when {
                 symbol.equals(currentTick?.symbol, ignoreCase = true) -> currentTick?.price ?: 0.0
@@ -102,13 +146,17 @@ fun PortfolioScreen(
                 totalValueIdr = totalValue,
                 pnlIdr = pnl,
                 pnlPercent = pnlPct,
-                tradingPair = pair
+                tradingPair = pair,
+                isRealMirror = false
             )
-        }.sortedByDescending { it.totalValueIdr }
+        }
+
+        (realHoldings + simHoldings).sortedByDescending { it.totalValueIdr }
     }
 
     val totalCoinValueIdr = remember(holdings) { holdings.sumOf { it.totalValueIdr } }
-    val totalPortfolioValueIdr = remember(wallet, totalCoinValueIdr) { wallet.idrBalance + totalCoinValueIdr }
+    val totalKasCombined = remember(wallet.idrBalance, realIdr) { wallet.idrBalance + realIdr }
+    val totalPortfolioValueIdr = remember(totalKasCombined, totalCoinValueIdr) { totalKasCombined + totalCoinValueIdr }
     val totalUnrealizedPnlIdr = remember(holdings) { holdings.sumOf { it.pnlIdr } }
     val totalCostBasis = remember(holdings) { holdings.sumOf { it.quantity * it.avgBuyPrice } }
     val totalUnrealizedPnlPct = remember(totalCostBasis, totalUnrealizedPnlIdr) {
@@ -303,6 +351,7 @@ fun PortfolioScreen(
                 onNavigateToSimulation = onNavigateToSimulation,
                 onCancelOrder = { orderId -> viewModel.cancelSimulationOrder(orderId) },
                 onCancelAllOrders = { symbol -> viewModel.cancelAllSimulationOrders(symbol) },
+                realIdrBalance = realIdr,
                 modifier = Modifier.weight(1f)
             )
         }

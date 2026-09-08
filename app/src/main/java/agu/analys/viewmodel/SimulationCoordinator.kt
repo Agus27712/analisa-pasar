@@ -31,6 +31,29 @@ class SimulationCoordinator(private val store: SimulationTradeStore) {
         _history.value = store.getTradeHistory()
     }
 
+    fun recordMirroredRealTrade(
+        symbol: String,
+        baseAsset: String,
+        quoteAsset: String = "IDR",
+        side: SimulationOrderSide,
+        price: Double,
+        quantity: Double,
+        pnlIdr: Double? = null,
+        pnlPercent: Double? = null
+    ) {
+        store.recordMirroredRealTrade(
+            symbol = symbol,
+            baseAsset = baseAsset,
+            quoteAsset = quoteAsset,
+            side = side,
+            price = price,
+            quantity = quantity,
+            pnlIdr = pnlIdr,
+            pnlPercent = pnlPercent
+        )
+        refresh()
+    }
+
     fun submitOrder(
         pair: TradingPair,
         currentPrice: Double,

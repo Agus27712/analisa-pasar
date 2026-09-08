@@ -51,7 +51,8 @@ data class SimulationTradeHistoryItem(
     val feeIdr: Double,
     val timestamp: Long = System.currentTimeMillis(),
     val pnlIdr: Double? = null,
-    val pnlPercent: Double? = null
+    val pnlPercent: Double? = null,
+    val isRealMirror: Boolean = false
 )
 
 data class SimulationWallet(

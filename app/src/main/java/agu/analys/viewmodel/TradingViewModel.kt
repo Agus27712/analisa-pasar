@@ -75,9 +75,80 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         prefs = prefs,
         onBalanceAndAvgUpdated = { balances, avgPrices ->
             syncRealBalancesToPositionStore(balances, avgPrices)
+        },
+        onRealTradeExecuted = { pair, type, price, quantity, tp1, tp2 ->
+            syncRealTradeToSimulation(pair, type, price, quantity, tp1, tp2)
         }
     )
     internal val updateCoordinator = AppUpdateCoordinator(viewModelScope)
+
+    internal fun syncRealTradeToSimulation(
+        pair: String,
+        type: String,
+        price: Double,
+        quantity: Double,
+        tp1: Double = 0.0,
+        tp2: Double = 0.0
+    ) {
+        val base = baseFromSymbolOrPair(pair)
+        val symbol = "${base.uppercase()}IDR"
+        val isBuy = type.equals("buy", ignoreCase = true)
+
+        // 1. Mirror ke Riwayat Transaksi Simulasi dengan flag isRealMirror = true
+        simCoordinator.recordMirroredRealTrade(
+            symbol = symbol,
+            baseAsset = base,
+            quoteAsset = "IDR",
+            side = if (isBuy) agu.analys.trading.SimulationOrderSide.BUY else agu.analys.trading.SimulationOrderSide.SELL,
+            price = price,
+            quantity = quantity
+        )
+
+        // 2. Sinkronkan ke SpotPositionStore agar engine tracking (Trailing Stop / TP / SL / Alert) aktif
+        if (isBuy) {
+            positionStore.markBought(
+                symbol = symbol,
+                entryPrice = price,
+                quantity = quantity,
+                isReal = true
+            )
+            if (tp1 > price || tp2 > price) {
+                val currentPos = positionStore.get(symbol)
+                positionStore.setAutoSellParams(
+                    symbol = symbol,
+                    enabled = true,
+                    tp1Price = if (tp1 > 0.0) tp1 else currentPos.tp1Price,
+                    tp1Percent = 50.0,
+                    tp2Price = if (tp2 > 0.0) tp2 else currentPos.tp2Price,
+                    tp2Percent = 50.0
+                )
+            }
+        } else {
+            val currentPos = positionStore.get(symbol)
+            val remainingQty = (currentPos.quantity - quantity).coerceAtLeast(0.0)
+            if (remainingQty <= 0.00000001) {
+                positionStore.markSold(symbol)
+            } else {
+                positionStore.setHolding(
+                    symbol = symbol,
+                    invested = currentPos.entryPrice * remainingQty,
+                    entry = currentPos.entryPrice,
+                    quantity = remainingQty,
+                    isReal = true
+                )
+            }
+        }
+        refreshSpotPosition()
+    }
+
+    private fun baseFromSymbolOrPair(pair: String): String {
+        val s = pair.lowercase().replace("_", "")
+        return when {
+            s.endsWith("idr") -> s.removeSuffix("idr")
+            s.endsWith("usdt") -> s.removeSuffix("usdt")
+            else -> s
+        }
+    }
 
     internal fun syncRealBalancesToPositionStore(
         balances: Map<String, Double> = realCoordinator.realIndodaxBalance.value,

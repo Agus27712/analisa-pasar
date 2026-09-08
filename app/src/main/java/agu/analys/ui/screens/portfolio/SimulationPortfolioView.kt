@@ -1,6 +1,7 @@
 package agu.analys.ui.screens.portfolio
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -10,6 +11,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.PieChart
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -49,8 +51,11 @@ fun SimulationPortfolioView(
     onNavigateToSimulation: (TradingPair) -> Unit,
     onCancelOrder: (String) -> Unit,
     onCancelAllOrders: (String?) -> Unit,
+    realIdrBalance: Double = 0.0,
     modifier: Modifier = Modifier
 ) {
+    val totalKasCombinedIdr = realIdrBalance + wallet.idrBalance
+
     LazyColumn(
         modifier = modifier
             .fillMaxWidth()
@@ -133,7 +138,7 @@ fun SimulationPortfolioView(
             }
         }
 
-        // CARD 2: SALDO KAS RUPIAH (SISA SALDO BELUM TERPAKAI & SALDO TERKUNCI)
+        // CARD 2: SALDO KAS RUPIAH (MULTI-TIER: TOTAL GABUNGAN + REAL 1:1 + SIMULASI ONLY)
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -169,13 +174,13 @@ fun SimulationPortfolioView(
                             shape = RoundedCornerShape(6.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = TvGreen)
                         ) {
-                            Text("+ Top Up Saldo", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Text("+ Top Up Sim", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
                     }
 
                     Spacer(Modifier.height(10.dp))
 
-                    // Highlight Sisa Saldo Belum Terpakai
+                    // Highlight Total Saldo Kas Gabungan (Real + Sim)
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -186,15 +191,15 @@ fun SimulationPortfolioView(
                     ) {
                         Column {
                             Text(
-                                text = "Sisa Saldo Belum Terpakai (Siap Trading)",
+                                text = "Total Saldo Kas (Real + Sim)",
                                 color = TvTextSecondary,
                                 fontSize = 11.sp
                             )
                             Spacer(Modifier.height(2.dp))
                             Text(
-                                text = PriceFormatter.formatPrice(wallet.getAvailableIdr(), quoteAsset = "IDR"),
-                                color = TvGreen,
-                                fontSize = 17.sp,
+                                text = PriceFormatter.formatPrice(totalKasCombinedIdr, quoteAsset = "IDR"),
+                                color = Color.White,
+                                fontSize = 18.sp,
                                 fontWeight = FontWeight.Black
                             )
                         }
@@ -208,29 +213,124 @@ fun SimulationPortfolioView(
 
                     Spacer(Modifier.height(8.dp))
 
-                    // Rincian Saldo Terkunci & Total Kas
+                    // 2-Kolom Split: Saldo Real (1:1 Indodax) vs Saldo Simulasi Only
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Terkunci di Open Order", color = TvTextSecondary, fontSize = 10.sp)
+                        // Kolom 1: Saldo Real 1:1
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .background(TvBackground, RoundedCornerShape(8.dp))
+                                .border(1.dp, TvGreen.copy(alpha = 0.35f), RoundedCornerShape(8.dp))
+                                .padding(10.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Saldo Real", color = TvTextSecondary, fontSize = 10.sp)
+                                Box(
+                                    modifier = Modifier
+                                        .background(TvGreen.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
+                                        .padding(horizontal = 4.dp, vertical = 1.dp)
+                                ) {
+                                    Text("1:1 INDODAX", color = TvGreen, fontSize = 8.sp, fontWeight = FontWeight.Black)
+                                }
+                            }
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                text = PriceFormatter.formatPrice(realIdrBalance, quoteAsset = "IDR"),
+                                color = TvGreen,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                text = "Sinkron 1:1 live",
+                                color = TvTextSecondary,
+                                fontSize = 9.sp
+                            )
+                        }
+
+                        // Kolom 2: Saldo Simulasi Only
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .background(TvBackground, RoundedCornerShape(8.dp))
+                                .border(1.dp, TvBlue.copy(alpha = 0.35f), RoundedCornerShape(8.dp))
+                                .padding(10.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Saldo Simulasi", color = TvTextSecondary, fontSize = 10.sp)
+                                Box(
+                                    modifier = Modifier
+                                        .background(TvBlue.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
+                                        .padding(horizontal = 4.dp, vertical = 1.dp)
+                                ) {
+                                    Text("SIM ONLY", color = TvBlue, fontSize = 8.sp, fontWeight = FontWeight.Black)
+                                }
+                            }
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                text = PriceFormatter.formatPrice(wallet.getAvailableIdr(), quoteAsset = "IDR"),
+                                color = TvBlue,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                text = "Tersedia trading",
+                                color = TvTextSecondary,
+                                fontSize = 9.sp
+                            )
+                        }
+                    }
+
+                    if (wallet.lockedIdr > 0.0) {
+                        Spacer(Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Terkunci di Antrean Open Order:", color = TvTextSecondary, fontSize = 10.sp)
                             Text(
                                 PriceFormatter.formatPrice(wallet.lockedIdr, quoteAsset = "IDR"),
                                 color = TvAmber,
-                                fontSize = 12.sp,
+                                fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         }
-                        Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
-                            Text("Total Kas IDR", color = TvTextSecondary, fontSize = 10.sp)
-                            Text(
-                                PriceFormatter.formatPrice(wallet.idrBalance, quoteAsset = "IDR"),
-                                color = TvTextPrimary,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
+                    }
+
+                    Spacer(Modifier.height(8.dp))
+                    // Catatan Shadow Mirror
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(TvSurfaceVariant.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
+                            .padding(horizontal = 8.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = null,
+                            tint = TvGreen,
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = "Shadow Mirror Aktif: Order real otomatis dicerminkan 1:1 ke simulasi agar mudah dipantau saat di luar rumah tanpa kendala IP Whitelist.",
+                            color = TvTextSecondary,
+                            fontSize = 9.sp,
+                            lineHeight = 12.sp
+                        )
                     }
                 }
             }

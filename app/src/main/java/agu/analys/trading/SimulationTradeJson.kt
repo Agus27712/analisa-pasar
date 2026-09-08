@@ -64,6 +64,7 @@ object SimulationTradeJson {
         j.put("timestamp", h.timestamp)
         h.pnlIdr?.let { j.put("pnlIdr", it) }
         h.pnlPercent?.let { j.put("pnlPercent", it) }
+        j.put("isRealMirror", h.isRealMirror)
         return j
     }
 
@@ -82,7 +83,8 @@ object SimulationTradeJson {
             feeIdr = j.optDouble("feeIdr", 0.0),
             timestamp = j.optLong("timestamp", System.currentTimeMillis()),
             pnlIdr = if (j.has("pnlIdr")) j.optDouble("pnlIdr") else null,
-            pnlPercent = if (j.has("pnlPercent")) j.optDouble("pnlPercent") else null
+            pnlPercent = if (j.has("pnlPercent")) j.optDouble("pnlPercent") else null,
+            isRealMirror = j.optBoolean("isRealMirror", false)
         )
     }
 

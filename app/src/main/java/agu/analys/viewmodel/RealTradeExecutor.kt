@@ -16,7 +16,8 @@ class RealTradeExecutor(
     private val onStatusUpdate: (String) -> Unit,
     private val onRateLimit: (String) -> Unit,
     private val isRateLimited: () -> Boolean,
-    private val refreshBalance: () -> Unit
+    private val refreshBalance: () -> Unit,
+    private val onRealTradeSuccess: ((pair: String, type: String, price: Double, quantity: Double, tp1: Double, tp2: Double) -> Unit)? = null
 ) {
     private val INTER_REQUEST_DELAY_MS = 1500L
     private val BUY_POLL_INTERVAL_MS = 2500L
@@ -149,9 +150,14 @@ class RealTradeExecutor(
 
             if (buyResult.success) {
                 agu.analys.engine.scalping.SignalLifecycleManager.markTriggered(pair)
-                prefs.rememberHistoryBase(baseFromPair(pair))
+                val base = baseFromPair(pair)
+                prefs.rememberHistoryBase(base)
 
-                if (type.equals("buy", ignoreCase = true) && autoLimitSellPrice1 > price) {
+                val isBuy = type.equals("buy", ignoreCase = true)
+                val execPrice = price.toDouble()
+                var finalExecutedQty = quantity
+
+                if (isBuy && autoLimitSellPrice1 > price) {
                     val executedQty = if (buyResult.executedQty > MIN_EXECUTED_QTY && buyResult.status == "FILLED") {
                         buyResult.executedQty
                     } else {
@@ -165,6 +171,7 @@ class RealTradeExecutor(
                         refreshBalance()
                         return@launch
                     }
+                    finalExecutedQty = executedQty
 
                     val halfQty = executedQty / 2.0
                     var finalMsg = "BUY filled ${"%.8f".format(executedQty)}. "
@@ -184,9 +191,46 @@ class RealTradeExecutor(
                     onStatusUpdate("BUY + TP: $finalMsg")
                     onResult(true, "BUY berhasil!\nAuto Sell: $finalMsg")
                 } else {
+                    if (isBuy && buyResult.executedQty > MIN_EXECUTED_QTY) {
+                        finalExecutedQty = buyResult.executedQty
+                    }
                     onStatusUpdate(buyResult.message)
                     onResult(true, buyResult.message)
                 }
+
+                // Update cached real balance & average price instantly (agar saat IP berubah di luar rumah, saldo tetap akurat 1:1)
+                runCatching {
+                    val cachedBalances = prefs.getSavedRealBalance().toMutableMap()
+                    val currentIdr = cachedBalances["idr"] ?: 0.0
+                    if (isBuy) {
+                        val cost = finalExecutedQty * execPrice
+                        cachedBalances["idr"] = (currentIdr - cost).coerceAtLeast(0.0)
+                        val curCoin = cachedBalances[base.lowercase()] ?: 0.0
+                        cachedBalances[base.lowercase()] = curCoin + finalExecutedQty
+                        prefs.saveRealBalance(cachedBalances)
+
+                        val cachedAvg = prefs.getSavedRealAvgBuyPrices().toMutableMap()
+                        cachedAvg[base.uppercase()] = execPrice
+                        prefs.saveRealAvgBuyPrices(cachedAvg)
+                    } else {
+                        val proceeds = finalExecutedQty * execPrice
+                        cachedBalances["idr"] = currentIdr + proceeds
+                        val curCoin = cachedBalances[base.lowercase()] ?: 0.0
+                        cachedBalances[base.lowercase()] = (curCoin - finalExecutedQty).coerceAtLeast(0.0)
+                        prefs.saveRealBalance(cachedBalances)
+                    }
+                }
+
+                // Shadow Mirror: Sinkronkan langsung ke simulasi & SpotPosition
+                onRealTradeSuccess?.invoke(
+                    pair,
+                    type,
+                    execPrice,
+                    finalExecutedQty,
+                    if (isBuy) autoLimitSellPrice1 else 0.0,
+                    if (isBuy) autoLimitSellPrice2 else 0.0
+                )
+
                 delay(INTER_REQUEST_DELAY_MS)
                 refreshBalance()
             } else {

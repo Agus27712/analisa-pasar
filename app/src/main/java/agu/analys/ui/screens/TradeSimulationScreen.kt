@@ -56,6 +56,8 @@ fun TradeSimulationScreen(
     val isRealBuyMode by viewModel.isRealBuyMode.collectAsState()
     val isPinUnlocked by viewModel.isPinUnlocked.collectAsState()
     val realTradeStatus by viewModel.realTradeStatus.collectAsState()
+    val realBalance by viewModel.realIndodaxBalance.collectAsState()
+    val realIdr = realBalance["idr"] ?: viewModel.prefs.getSavedRealBalance()["idr"] ?: 0.0
 
     var showPinDialog by remember { mutableStateOf(false) }
     var pinDialogError by remember { mutableStateOf<String?>(null) }
@@ -305,7 +307,9 @@ fun TradeSimulationScreen(
                                     }
                                 }
                             },
-                            onOpenTopUp = { showTopUpModal = true }
+                            onOpenTopUp = { showTopUpModal = true },
+                            isRealMode = isRealBuyMode,
+                            realIdrBalance = realIdr
                         )
                     }
 

@@ -16,5 +16,6 @@ data class HoldingItem(
     val totalValueIdr: Double,
     val pnlIdr: Double,
     val pnlPercent: Double,
-    val tradingPair: TradingPair
+    val tradingPair: TradingPair,
+    val isRealMirror: Boolean = false
 )

@@ -64,12 +64,34 @@ fun HoldingCoinCard(
                     )
                     Spacer(Modifier.width(10.dp))
                     Column {
-                        Text(
-                            text = "${item.baseAsset} / IDR",
-                            color = TvTextPrimary,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "${item.baseAsset} / IDR",
+                                color = TvTextPrimary,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            if (item.isRealMirror) {
+                                Box(
+                                    modifier = Modifier
+                                        .background(TvGreen.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
+                                        .border(0.5.dp, TvGreen, RoundedCornerShape(4.dp))
+                                        .padding(horizontal = 4.dp, vertical = 1.dp)
+                                ) {
+                                    Text("1:1 REAL", color = TvGreen, fontSize = 8.sp, fontWeight = FontWeight.Black)
+                                }
+                            } else {
+                                Box(
+                                    modifier = Modifier
+                                        .background(TvBlue.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
+                                        .border(0.5.dp, TvBlue, RoundedCornerShape(4.dp))
+                                        .padding(horizontal = 4.dp, vertical = 1.dp)
+                                ) {
+                                    Text("SIM ONLY", color = TvBlue, fontSize = 8.sp, fontWeight = FontWeight.Black)
+                                }
+                            }
+                        }
                         Text(
                             text = "Miliki: ${PriceFormatter.formatRawDecimal(item.quantity)} ${item.baseAsset}",
                             color = TvBlue,
@@ -270,6 +292,17 @@ fun TradeHistoryItemCard(
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold
                     )
+                    if (trade.isRealMirror) {
+                        Spacer(Modifier.width(6.dp))
+                        Box(
+                            modifier = Modifier
+                                .background(TvGreen.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
+                                .border(0.5.dp, TvGreen, RoundedCornerShape(4.dp))
+                                .padding(horizontal = 4.dp, vertical = 1.dp)
+                        ) {
+                            Text("1:1 REAL", color = TvGreen, fontSize = 8.sp, fontWeight = FontWeight.Black)
+                        }
+                    }
                 }
                 Text(
                     text = formattedTime,

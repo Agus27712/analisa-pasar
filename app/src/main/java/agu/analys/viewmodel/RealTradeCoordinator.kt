@@ -19,7 +19,8 @@ import kotlin.math.min
 class RealTradeCoordinator(
     private val scope: CoroutineScope,
     private val prefs: AppPreferences,
-    private val onBalanceAndAvgUpdated: ((balances: Map<String, Double>, avgPrices: Map<String, Double>) -> Unit)? = null
+    private val onBalanceAndAvgUpdated: ((balances: Map<String, Double>, avgPrices: Map<String, Double>) -> Unit)? = null,
+    private val onRealTradeExecuted: ((pair: String, type: String, price: Double, quantity: Double, tp1: Double, tp2: Double) -> Unit)? = null
 ) {
     private val MAX_HISTORY_ASSETS = 15
     private val INTER_REQUEST_DELAY_MS = 1500L
@@ -35,6 +36,11 @@ class RealTradeCoordinator(
         refreshBalance = { 
             lastFetchTimeMs = 0L
             fetchRealBalance()
+        },
+        onRealTradeSuccess = { pair, type, price, qty, tp1, tp2 ->
+            _realIndodaxBalance.value = prefs.getSavedRealBalance()
+            _realAvgBuyPrices.value = prefs.getSavedRealAvgBuyPrices()
+            onRealTradeExecuted?.invoke(pair, type, price, qty, tp1, tp2)
         }
     )
 

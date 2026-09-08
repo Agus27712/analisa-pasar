@@ -45,11 +45,10 @@ fun DetailControlsRow(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Timeframe Chips (Grup Kiri)
+        // Timeframe Chips (Grup Kiri) - STATIS tanpa scroll agar mudah di-tap cepat
         Row(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.weight(1f).horizontalScroll(androidx.compose.foundation.rememberScrollState())
+            verticalAlignment = Alignment.CenterVertically
         ) {
             listOf(Timeframe.M1, Timeframe.M15, Timeframe.H1, Timeframe.H4, Timeframe.D1).forEach { tf ->
                 val isSelected = selectedTimeframe == tf
@@ -72,26 +71,19 @@ fun DetailControlsRow(
             }
         }
         
-        Spacer(Modifier.width(8.dp))
+        Spacer(Modifier.weight(1f))
 
-        // Quick Action Icons (Grup Kanan)
+        // Quick Action Icons (Grup Kanan) - SCROLLABLE & RAPI (Tersembunyi via scroll di sebelah kanan)
         Row(
             horizontalArrangement = Arrangement.spacedBy(5.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .widthIn(max = 140.dp) // Membatasi lebar agar pas menampilkan 4 item terpenting, sisanya tersembunyi lewat scroll
+                .horizontalScroll(androidx.compose.foundation.rememberScrollState())
         ) {
             val activeAlertCount = priceAlerts.count { it.isEnabled && !it.isTriggered }
 
-            // 1. Alert Icon Button
-            DetailQuickActionButton(
-                icon = if (activeAlertCount > 0) Icons.Default.Notifications else Icons.Default.NotificationsNone,
-                tint = if (activeAlertCount > 0) TvBlue else TvTextSecondary,
-                bgColor = if (activeAlertCount > 0) TvBlue.copy(alpha = 0.15f) else TvSurface,
-                borderColor = if (activeAlertCount > 0) TvBlue.copy(alpha = 0.5f) else TvBorder,
-                contentDescription = "Alert",
-                onClick = onOpenAlerts
-            )
-
-            // 2. Portofolio Shortcut Icon Button
+            // 1. Portofolio Shortcut Icon Button
             DetailQuickActionButton(
                 icon = Icons.Default.AccountBalanceWallet,
                 tint = TvGreen,
@@ -101,7 +93,17 @@ fun DetailControlsRow(
                 onClick = onOpenPortfolio
             )
 
-            // 3. AI Assistant Icon Button
+            // 2. Alert Icon Button (Notif)
+            DetailQuickActionButton(
+                icon = if (activeAlertCount > 0) Icons.Default.Notifications else Icons.Default.NotificationsNone,
+                tint = if (activeAlertCount > 0) TvBlue else TvTextSecondary,
+                bgColor = if (activeAlertCount > 0) TvBlue.copy(alpha = 0.15f) else TvSurface,
+                borderColor = if (activeAlertCount > 0) TvBlue.copy(alpha = 0.5f) else TvBorder,
+                contentDescription = "Alert",
+                onClick = onOpenAlerts
+            )
+
+            // 3. AI Assistant Icon Button (Analisa AI)
             DetailQuickActionButton(
                 icon = Icons.Default.AutoAwesome,
                 tint = TvBlue,
@@ -111,7 +113,17 @@ fun DetailControlsRow(
                 onClick = onOpenAiAssistant
             )
 
-            // 4. Simulasi Icon Button
+            // 4. Favorit Icon Button (Bookmark)
+            DetailQuickActionButton(
+                icon = if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
+                tint = if (isFavorite) TvAmber else TvTextSecondary,
+                bgColor = if (isFavorite) TvAmber.copy(alpha = 0.12f) else TvSurface,
+                borderColor = if (isFavorite) TvAmber.copy(alpha = 0.4f) else TvBorder,
+                contentDescription = "Favorit",
+                onClick = onToggleFavorite
+            )
+
+            // 5. Simulasi Icon Button (Hidden by scroll)
             DetailQuickActionButton(
                 icon = Icons.AutoMirrored.Filled.CompareArrows,
                 tint = TvGreen,
@@ -121,7 +133,7 @@ fun DetailControlsRow(
                 onClick = onOpenSimulation
             )
 
-            // 5. Belajar / Edukasi Icon Button
+            // 6. Belajar / Edukasi Icon Button (Hidden by scroll)
             DetailQuickActionButton(
                 icon = Icons.Default.MenuBook,
                 tint = TvBlue,
@@ -129,16 +141,6 @@ fun DetailControlsRow(
                 borderColor = TvBlue.copy(alpha = 0.4f),
                 contentDescription = "Belajar",
                 onClick = onOpenLearning
-            )
-
-            // 6. Favorit Icon Button
-            DetailQuickActionButton(
-                icon = if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
-                tint = if (isFavorite) TvAmber else TvTextSecondary,
-                bgColor = if (isFavorite) TvAmber.copy(alpha = 0.12f) else TvSurface,
-                borderColor = if (isFavorite) TvAmber.copy(alpha = 0.4f) else TvBorder,
-                contentDescription = "Favorit",
-                onClick = onToggleFavorite
             )
         }
     }

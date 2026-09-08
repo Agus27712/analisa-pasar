@@ -201,6 +201,22 @@ fun TradeHistoryItemCard(history: SimulationTradeHistoryItem) {
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold
                     )
+                    if (history.isRealMirror) {
+                        Spacer(Modifier.width(6.dp))
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(TvGreen.copy(alpha = 0.2f))
+                                .padding(horizontal = 4.dp, vertical = 1.dp)
+                        ) {
+                            Text(
+                                text = "1:1 REAL",
+                                color = TvGreen,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Black
+                            )
+                        }
+                    }
                     Spacer(Modifier.width(6.dp))
                     Text(
                         text = "(${history.type.displayName})",
