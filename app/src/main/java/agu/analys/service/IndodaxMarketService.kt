@@ -194,6 +194,51 @@ object IndodaxMarketService {
         }
     }
 
+    /**
+     * Memfilter apakah aset aman, likuid, dan stabil untuk trading (bukan koin receh zombi / delisting trap).
+     *
+     * Kriteria Eliminasi Koin Receh & Berisiko Delisting:
+     * 1. Harga receh ekstrem (Rp 1, 2, 3, 4, 5): Langsung dieliminasi karena pergerakannya semu
+     *    (1 tick bernilai 20% s/d 100%, bid/ask kosong, rawan nyangkut permanen).
+     * 2. Harga di bawah Rp 25 IDR: Wajib memiliki likuiditas volume 24 jam masif (>= 2 Miliar IDR)
+     *    seperti token global (PEPE, SHIB) agar bukan koin zombi yang terancam delisting Indodax.
+     * 3. Volume 24 jam minimal: >= 150 Juta IDR untuk pair IDR agar likuiditas beli/jual stabil.
+     * 4. Kestabilan pergerakan 24 jam: Mencegah anomali spike semu dari harga Rp 1 ke Rp 2.
+     *
+     * Catatan: Jika koin sengaja ditambahkan ke Favorit/Watchlist oleh pengguna,
+     * koin tersebut tetap diizinkan tampil.
+     */
+    fun isSafeTradableAsset(
+        price: Double,
+        volume24h: Double,
+        high24h: Double,
+        low24h: Double,
+        isIdrPair: Boolean = true,
+        isExplicitlyFavored: Boolean = false
+    ): Boolean {
+        if (isExplicitlyFavored) return true
+        if (!price.isFinite() || price <= 0.0) return false
+
+        if (isIdrPair) {
+            // 1. Eliminasi mutlak koin harga receh ekstrem (Rp 1 s/d 5)
+            if (price <= 5.0) return false
+
+            // 2. Koin di bawah Rp 25 IDR harus terbukti likuid dan bervolume masif (>= 2 Miliar IDR)
+            if (price < 25.0 && volume24h < 2_000_000_000.0) return false
+
+            // 3. Batas minimal volume 24 jam yang sehat untuk pair IDR (min 150 Juta IDR)
+            if (volume24h < 150_000_000.0) return false
+
+            // 4. Kestabilan pergerakan: Mencegah koin mati berharga di bawah Rp 50 yang low 24h nya menyentuh Rp 1
+            if (low24h <= 1.0 && price < 50.0) return false
+        } else {
+            // Untuk pair USDT/USD: Minimal volume ekuivalen ($10,000 USD)
+            if (volume24h < 10_000.0 && volume24h > 0) return false
+        }
+
+        return true
+    }
+
     suspend fun fetchTopVolumeTicks(limit: Int = 15, excludeStable: Boolean = true): List<MarketTick> = withContext(Dispatchers.IO) {
         try {
             val body = get("https://indodax.com/api/summaries") ?: return@withContext emptyList()
@@ -213,7 +258,14 @@ object IndodaxMarketService {
                 val t = tickers.optJSONObject(pair) ?: continue
                 val last = t.optString("last", "0").toDoubleOrNull() ?: 0.0
                 val volIdr = t.optString("vol_idr", "0").toDoubleOrNull() ?: 0.0
-                if (last <= 0 || volIdr <= 0) continue
+                val high = t.optString("high", "0").toDoubleOrNull() ?: last
+                val low = t.optString("low", "0").toDoubleOrNull() ?: last
+
+                // Eliminasi koin receh & illiquid
+                if (!isSafeTradableAsset(price = last, volume24h = volIdr, high24h = high, low24h = low, isIdrPair = true)) {
+                    continue
+                }
+
                 val symbol = pair.uppercase().replace("_", "")
 
                 var change: Double? = null
@@ -233,8 +285,8 @@ object IndodaxMarketService {
                 list += MarketTick(
                     symbol = symbol,
                     price = last,
-                    high24h = t.optString("high", "0").toDoubleOrNull() ?: last,
-                    low24h = t.optString("low", "0").toDoubleOrNull() ?: last,
+                    high24h = high,
+                    low24h = low,
                     volume24h = volIdr,
                     change24h = change ?: Double.NaN,
                     timestamp = now
@@ -265,7 +317,14 @@ object IndodaxMarketService {
                 val t = tickers.optJSONObject(pair) ?: continue
                 val last = t.optString("last", "0").toDoubleOrNull() ?: 0.0
                 val volIdr = t.optString("vol_idr", "0").toDoubleOrNull() ?: 0.0
-                if (last <= 0 || volIdr < 1_000_000.0) continue
+                val high = t.optString("high", "0").toDoubleOrNull() ?: last
+                val low = t.optString("low", "0").toDoubleOrNull() ?: last
+
+                // Eliminasi koin receh & illiquid
+                if (!isSafeTradableAsset(price = last, volume24h = volIdr, high24h = high, low24h = low, isIdrPair = true)) {
+                    continue
+                }
+
                 val symbol = pair.uppercase().replace("_", "")
 
                 var change: Double? = null
@@ -287,15 +346,21 @@ object IndodaxMarketService {
                     list += MarketTick(
                         symbol = symbol,
                         price = last,
-                        high24h = t.optString("high", "0").toDoubleOrNull() ?: last,
-                        low24h = t.optString("low", "0").toDoubleOrNull() ?: last,
+                        high24h = high,
+                        low24h = low,
                         volume24h = volIdr,
                         change24h = finalChange,
                         timestamp = now
                     )
                 }
             }
-            list.sortedByDescending { it.change24h }.take(limit)
+            // Urutkan gainers berdasarkan kombinasi kenaikan persentase dan kestabilan likuiditas volume
+            list.sortedWith(
+                compareByDescending<MarketTick> { tick ->
+                    val volScore = kotlin.math.ln((tick.volume24h / 10_000_000.0).coerceAtLeast(1.0))
+                    tick.change24h * (1.0 + volScore * 0.3)
+                }.thenByDescending { it.volume24h }
+            ).take(limit)
         } catch (_: Exception) {
             emptyList()
         }

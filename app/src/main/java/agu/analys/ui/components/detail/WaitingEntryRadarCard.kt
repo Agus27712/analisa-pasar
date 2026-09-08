@@ -45,7 +45,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import agu.analys.util.PriceFormatter
 import java.util.Locale
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AddShoppingCart
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Info
 
 /**
  * Radar & Progres Entry/Exit Interaktif dengan Single Source of Truth Position Context:
@@ -77,6 +79,8 @@ fun WaitingEntryRadarCard(
     onSetAutoSellParams: ((Boolean, Double, Double, Double, Double) -> Unit)? = null,
     onDeployTrailingOrder: (() -> Unit)? = null,
     onCancelTrailingOrder: (() -> Unit)? = null,
+    isBuyMode: Boolean = true,
+    onBuyModeChanged: ((Boolean) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val effectivePrice = if (currentPrice > 0.0) currentPrice else if (signal.entryPrice > 0.0) signal.entryPrice else 0.0
@@ -100,7 +104,12 @@ fun WaitingEntryRadarCard(
     var selectedNominal by remember { mutableDoubleStateOf(50000.0) }
     var selectedSellQty by remember { mutableDoubleStateOf(availableCoin) }
     var isMakerOrder by remember { mutableStateOf(true) }
-    var isBuyMode by remember(isHolding) { mutableStateOf(!isHolding) }
+    var internalBuyMode by remember(isHolding) { mutableStateOf(!isHolding) }
+    val currentBuyMode = if (onBuyModeChanged != null) isBuyMode else internalBuyMode
+    val setBuyMode: (Boolean) -> Unit = { newMode ->
+        internalBuyMode = newMode
+        onBuyModeChanged?.invoke(newMode)
+    }
 
     // Hoisted auto sell states for dialog and sell coordination
     var isAutoSellActive by remember { mutableStateOf(false) }
@@ -160,16 +169,42 @@ fun WaitingEntryRadarCard(
     var isLevelPlanVisible by remember { mutableStateOf(false) }
 
     AnalysisCard(modifier = modifier) {
-        if (workflow == TradingWorkflow.HOLD_SELL) {
+        if (!currentBuyMode) {
             // ═════════════════════════════════════════════════════════════════════════
-            // WORKFLOW: HOLD & SELL (Asset Active in Portfolio)
+            // WORKFLOW: HOLD & SELL (Asset Active in Portfolio / Profit Target Analysis)
             // ═════════════════════════════════════════════════════════════════════════
-            SellPositionOverviewCard(
-                context = positionContext,
-                quoteAsset = quoteAsset
-            )
-
-            Spacer(Modifier.height(10.dp))
+            if (isHolding) {
+                SellPositionOverviewCard(
+                    context = positionContext,
+                    quoteAsset = quoteAsset
+                )
+                Spacer(Modifier.height(10.dp))
+            } else {
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = TvSurfaceVariant,
+                    border = BorderStroke(0.8.dp, TvBorder),
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = null,
+                            tint = TvTextSecondary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = "Belum ada koin $baseAsset di dompet. Beralih ke BUY untuk analisa & eksekusi beli.",
+                            color = TvTextSecondary,
+                            fontSize = 11.5.sp
+                        )
+                    }
+                }
+            }
 
             val (sellStatusText, sellStatusColor) = when (sellSignalState.state) {
                 SellLifecycleState.READY_TO_SELL -> Pair("🎯 SIAP JUAL", TvGreen)
@@ -220,8 +255,36 @@ fun WaitingEntryRadarCard(
             )
         } else {
             // ═════════════════════════════════════════════════════════════════════════
-            // WORKFLOW: BUY (Searching for Market Entry Opportunity)
+            // WORKFLOW: BUY (Searching for Market Entry / DCA Re-entry Opportunity)
             // ═════════════════════════════════════════════════════════════════════════
+            if (isHolding) {
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = TvGreen.copy(alpha = 0.08f),
+                    border = BorderStroke(0.8.dp, TvGreen.copy(alpha = 0.35f)),
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AddShoppingCart,
+                            contentDescription = null,
+                            tint = TvGreen,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = "Posisi $baseAsset aktif di dompet. Mode Buy aktif untuk re-entry / cicil beli (DCA).",
+                            color = TvGreen,
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
+
             RadarHeaderSection(
                 titleHeader = buyTitleHeader,
                 completed = completedBuySteps,
@@ -280,8 +343,8 @@ fun WaitingEntryRadarCard(
             onSellQuantityChanged = { selectedSellQty = it },
             isMakerOrder = isMakerOrder,
             onOrderTypeChanged = { isMakerOrder = it },
-            isBuyMode = isBuyMode,
-            onBuyModeChanged = { isBuyMode = it },
+            isBuyMode = currentBuyMode,
+            onBuyModeChanged = setBuyMode,
             isRealMode = isRealBuyMode,
             onExecuteBuy = onExecuteBuy,
             onExecuteSell = onExecuteSell,

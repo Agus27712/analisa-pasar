@@ -57,6 +57,7 @@ fun TradeSimulationScreen(
     val isPinUnlocked by viewModel.isPinUnlocked.collectAsState()
     val realTradeStatus by viewModel.realTradeStatus.collectAsState()
     val realBalance by viewModel.realIndodaxBalance.collectAsState()
+    val isRealSimSyncEnabled by viewModel.isRealSimSyncEnabled.collectAsState()
     val realIdr = realBalance["idr"] ?: viewModel.prefs.getSavedRealBalance()["idr"] ?: 0.0
 
     var showPinDialog by remember { mutableStateOf(false) }
@@ -308,8 +309,8 @@ fun TradeSimulationScreen(
                                 }
                             },
                             onOpenTopUp = { showTopUpModal = true },
-                            isRealMode = isRealBuyMode,
-                            realIdrBalance = realIdr
+                            isRealMode = isRealBuyMode && isRealSimSyncEnabled,
+                            realIdrBalance = if (isRealSimSyncEnabled) realIdr else 0.0
                         )
                     }
 
@@ -331,9 +332,12 @@ fun TradeSimulationScreen(
             }
 
             item {
+                val effectiveHistory = remember(tradeHistory, isRealSimSyncEnabled) {
+                    if (isRealSimSyncEnabled) tradeHistory else tradeHistory.filter { !it.isRealMirror }
+                }
                 SimulationOpenOrdersList(
                     openOrders = openOrders,
-                    tradeHistory = tradeHistory,
+                    tradeHistory = effectiveHistory,
                     currentSymbol = selectedPair.symbol,
                     onCancelOrder = { orderId ->
                         val ok = viewModel.cancelSimulationOrder(orderId)

@@ -101,6 +101,8 @@ fun DetailChartScreen(
     val isFavorite = favorites.contains(pair.symbol.uppercase()) || favorites.contains(pair.symbol)
     val provider = remember { AppPreferences(context).aiProvider }
     val isConnected = connection is MarketConnectionState.Connected
+    val isHolding = positionContext.hasPosition || (spotPosition != null && spotPosition!!.isHolding)
+    var isBuyMode by remember(pair.symbol) { mutableStateOf(!isHolding) }
 
     // Dialogs
     LaunchedEffect(pair.baseAsset) {
@@ -280,7 +282,12 @@ fun DetailChartScreen(
                         symbol = pair.symbol,
                         isFavorite = isFavorite,
                         globalContext = globalContext,
-                        onOpenShieldInfo = { showShieldDialog = true }
+                        onOpenShieldInfo = { showShieldDialog = true },
+                        isBuyMode = isBuyMode,
+                        onBuyModeChanged = {
+                            isBuyMode = it
+                            HapticUtil.vibrateTick(context)
+                        }
                     )
 
                     Spacer(Modifier.height(14.dp))
@@ -330,6 +337,8 @@ fun DetailChartScreen(
                 availableCoin = availableCoin,
                 avgBuyPrice = avgBuyPrice,
                 isRealBuyMode = isRealBuyMode,
+                isBuyMode = isBuyMode,
+                onBuyModeChanged = { isBuyMode = it },
                 onExecuteBuy = { nominalIdr, customBuyPrice, tp1Price, tp2Price ->
                     val execPrice = if (customBuyPrice > 0.0) customBuyPrice else if (tick?.price != null && tick!!.price > 0) tick!!.price else signal.entryPrice
                     if (execPrice > 0) {

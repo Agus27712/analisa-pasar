@@ -64,6 +64,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
     var pendingRealBuyToggle by remember { mutableStateOf(false) }
     var updateRepo by remember { mutableStateOf(prefs.updateRepo) }
     var updateToken by remember { mutableStateOf(prefs.updateGitHubToken) }
+    var isRealSimSyncEnabled by remember { mutableStateOf(prefs.isRealSimSyncEnabled) }
     var saved by remember { mutableStateOf(false) }
     var cacheCleared by remember { mutableStateOf(false) }
 
@@ -362,6 +363,79 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
 
         Spacer(Modifier.height(16.dp))
 
+        // SECTION: SINKRONISASI ASET REAL & SIMULASI
+        SectionHeader("SINKRONISASI ASET (MIRRORING)")
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = TvCardBackground),
+            border = androidx.compose.foundation.BorderStroke(
+                1.dp,
+                if (isRealSimSyncEnabled) TvGreen else TvBorder
+            )
+        ) {
+            Column(Modifier.padding(14.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "SINKRONISASI REAL & SIMULASI",
+                                color = if (isRealSimSyncEnabled) TvGreen else TvTextPrimary,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Black
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Box(
+                                modifier = Modifier
+                                    .background(
+                                        if (isRealSimSyncEnabled) TvGreen.copy(alpha = 0.15f) else TvSurfaceVariant,
+                                        RoundedCornerShape(4.dp)
+                                    )
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    if (isRealSimSyncEnabled) "SHADOW MIRROR ON" else "ISOLASI SIMULASI",
+                                    color = if (isRealSimSyncEnabled) TvGreen else TvTextSecondary,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = if (isRealSimSyncEnabled)
+                                "Aset real Indodax & simulasi dicerminkan (mirroring 1:1) di portofolio dan riwayat transaksi untuk kemudahan pantau."
+                            else
+                                "Isolasi trade simulasi only: Hanya menampilkan simulasi murni, tidak ada aset real yang tersinkronisasi.",
+                            color = TvTextSecondary,
+                            fontSize = 10.sp,
+                            lineHeight = 14.sp
+                        )
+                    }
+
+                    Switch(
+                        checked = isRealSimSyncEnabled,
+                        onCheckedChange = {
+                            isRealSimSyncEnabled = it
+                            saved = false
+                        },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.Black,
+                            checkedTrackColor = TvGreen,
+                            uncheckedThumbColor = TvTextSecondary,
+                            uncheckedTrackColor = TvSurfaceVariant
+                        )
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+
         // SECTION 2: INTEGRASI AI ASSISTANT
         AiAssistantSettings(
             provider = provider,
@@ -424,6 +498,8 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                 prefs.geminiApiKey = gemini
                 prefs.updateRepo = updateRepo
                 prefs.updateGitHubToken = updateToken
+                prefs.isRealSimSyncEnabled = isRealSimSyncEnabled
+                viewModel.setRealSimSyncEnabled(isRealSimSyncEnabled)
                 val currentFees = prefs.tradingFees
                 val updatedFees = currentFees.copy(
                     buyMakerPct = buyMakerFee.toDoubleOrNull() ?: currentFees.buyMakerPct,

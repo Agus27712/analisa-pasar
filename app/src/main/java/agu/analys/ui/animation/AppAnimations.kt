@@ -16,13 +16,17 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -163,11 +167,12 @@ fun SmoothPriceText(
 }
 
 /**
- * 3D FlipCard Price Text — Polishing angka aset dengan efek flipcard.
- * - Efek flip 3D halus saat ada tick harga baru.
- * - Tidak loncat/jitter pada fluktuasi normal.
- * - Loncat langsung (snap) hanya jika terjadi pergerakan ekstrem > 25%.
- * - Single-shot execution (tidak looping).
+ * 3D FlipCard Price Text — Animasi flip per angka (per-digit flip).
+ * - Setiap digit memiliki lempengan flip mandiri.
+ * - Saat digit berubah (misal dari 5 ke 8), hanya digit tersebut yang berputar 3D
+ *   (ke atas jika harga naik, ke bawah jika turun).
+ * - Karakter statis (Rp, $, titik, koma, spasi) dan digit yang tidak berubah tetap kokoh tanpa jitter.
+ * - Loncat langsung (snap) jika terjadi pergerakan ekstrem > 25%.
  */
 @Composable
 fun FlipCardPriceText(
@@ -180,58 +185,102 @@ fun FlipCardPriceText(
     quoteAsset: String = "IDR",
     maxLines: Int = 1
 ) {
-    var previousPrice by remember { mutableStateOf(price) }
-    var previousText by remember { mutableStateOf(if (price.isFinite() && price > 0.0) PriceFormatter.formatPrice(price, showSymbol, quoteAsset) else "—") }
-    var currentText by remember { mutableStateOf(if (price.isFinite() && price > 0.0) PriceFormatter.formatPrice(price, showSymbol, quoteAsset) else "—") }
+    if (!price.isFinite() || price <= 0.0) {
+        val placeholder = if (quoteAsset.equals("USDT", true) || quoteAsset.equals("USD", true)) "$ —" else "Rp —"
+        Text(
+            text = placeholder,
+            color = color,
+            fontSize = fontSize,
+            fontWeight = fontWeight,
+            modifier = modifier,
+            maxLines = maxLines
+        )
+        return
+    }
+
+    var previousPrice by remember { mutableDoubleStateOf(price) }
     var isUp by remember { mutableStateOf(true) }
+
+    LaunchedEffect(price) {
+        if (price.isFinite() && price > 0.0) {
+            if (previousPrice.isFinite() && previousPrice > 0.0 && price != previousPrice) {
+                val relativeDelta = abs(price - previousPrice) / previousPrice
+                // Jika perubahan ekstrem (>25%), langsung update tanpa flip bertahap
+                if (relativeDelta <= 0.25) {
+                    isUp = price >= previousPrice
+                }
+            }
+            previousPrice = price
+        }
+    }
+
+    val formatted = remember(price, showSymbol, quoteAsset) {
+        PriceFormatter.formatPrice(price, showSymbol, quoteAsset)
+    }
+
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        for (i in formatted.indices) {
+            val char = formatted[i]
+            // Posisi dihitung dari kanan agar angka tetap sinkron nilainya saat digit bertambah
+            val indexFromRight = formatted.length - 1 - i
+            key(indexFromRight) {
+                if (!char.isDigit()) {
+                    Text(
+                        text = char.toString(),
+                        color = color,
+                        fontSize = fontSize,
+                        fontWeight = fontWeight,
+                        maxLines = 1
+                    )
+                } else {
+                    DigitFlipCell(
+                        digit = char,
+                        isUp = isUp,
+                        color = color,
+                        fontSize = fontSize,
+                        fontWeight = fontWeight
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DigitFlipCell(
+    digit: Char,
+    isUp: Boolean,
+    color: Color,
+    fontSize: TextUnit,
+    fontWeight: FontWeight
+) {
+    var previousDigit by remember { mutableStateOf(digit) }
+    var currentDigit by remember { mutableStateOf(digit) }
     val flipProgress = remember { Animatable(1f) }
 
-    LaunchedEffect(price, quoteAsset) {
-        if (!price.isFinite() || price <= 0.0) return@LaunchedEffect
-
-        if (!previousPrice.isFinite() || previousPrice <= 0.0) {
-            previousPrice = price
-            val formatted = PriceFormatter.formatPrice(price, showSymbol, quoteAsset)
-            previousText = formatted
-            currentText = formatted
-            flipProgress.snapTo(1f)
-            return@LaunchedEffect
-        }
-
-        if (price == previousPrice) return@LaunchedEffect
-
-        val relativeDelta = abs(price - previousPrice) / previousPrice
-        isUp = price >= previousPrice
-
-        // Jika perubahan ekstrem (>25%), langsung snap/loncat tanpa transisi bertahap
-        if (relativeDelta > 0.25) {
-            previousPrice = price
-            val formatted = PriceFormatter.formatPrice(price, showSymbol, quoteAsset)
-            previousText = formatted
-            currentText = formatted
-            flipProgress.snapTo(1f)
-            return@LaunchedEffect
-        }
-
-        // Fluktuasi normal: jalankan 1x efek flipcard (tidak looping)
-        previousText = currentText
-        currentText = PriceFormatter.formatPrice(price, showSymbol, quoteAsset)
-        previousPrice = price
-
-        flipProgress.snapTo(0f)
-        flipProgress.animateTo(
-            targetValue = 1f,
-            animationSpec = tween(
-                durationMillis = 200,
-                easing = FastOutSlowInEasing
+    LaunchedEffect(digit, isUp) {
+        if (digit != currentDigit) {
+            previousDigit = currentDigit
+            currentDigit = digit
+            flipProgress.snapTo(0f)
+            flipProgress.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(
+                    durationMillis = 200,
+                    easing = FastOutSlowInEasing
+                )
             )
-        )
+        }
     }
 
     val progress = flipProgress.value.coerceIn(0f, 1f)
     val isFirstHalf = progress < 0.5f
-    val displayText = if (isFirstHalf) previousText else currentText
+    val displayChar = if (isFirstHalf) previousDigit else currentDigit
 
+    // 3D rotation around X axis (flip per digit): naik = putar ke atas, turun = putar ke bawah
     val rotationX = if (isFirstHalf) {
         val frac = progress * 2f // 0f -> 1f
         if (isUp) -frac * 90f else frac * 90f
@@ -246,18 +295,22 @@ fun FlipCardPriceText(
         0.65f + ((progress - 0.5f) * 0.7f)
     }
 
-    Text(
-        text = displayText,
-        color = color,
-        fontSize = fontSize,
-        fontWeight = fontWeight,
-        modifier = modifier.graphicsLayer {
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier.graphicsLayer {
             this.rotationX = rotationX
             this.alpha = alpha.coerceIn(0f, 1f)
             this.cameraDistance = 16f * density
-        },
-        maxLines = maxLines
-    )
+        }
+    ) {
+        Text(
+            text = displayChar.toString(),
+            color = color,
+            fontSize = fontSize,
+            fontWeight = fontWeight,
+            maxLines = 1
+        )
+    }
 }
 
 @Composable

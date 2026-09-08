@@ -36,6 +36,7 @@ import agu.analys.config.MarketDataSource
 import agu.analys.config.StrategyMode
 import agu.analys.model.MarketConnectionState
 import agu.analys.model.TradingPair
+import agu.analys.service.IndodaxMarketService
 import agu.analys.ui.components.dashboard.*
 import agu.analys.ui.theme.*
 import agu.analys.viewmodel.*
@@ -95,6 +96,7 @@ fun DashboardScreen(
         selectedRankingTab,
         watchlist,
         favorites,
+        holdingStatuses,
         marketDataSource,
         hotCoins,
         gainersCoins,
@@ -105,13 +107,31 @@ fun DashboardScreen(
         when (selectedRankingTab) {
             MarketRankingTab.WATCHLIST -> {
                 // Auto-isi dari market movers (gainers/hot/volume/second-wave) + watchlist user + popular
-                // Max 25, diurutkan aktivitas (volume + change)
+                // Hanya tampilkan aset dengan change 24 jam besar & pergerakan stabil (koin receh zombi dieliminasi)
                 val fromUser = watchlist.map { TradingPair.fromCustomSymbol(it, defaultQuote) }
                 val fromMarket = (gainersCoins + hotCoins + topVolumeCoins + secondWaveCoins)
                     .map { TradingPair.fromCustomSymbol(it.symbol, defaultQuote) }
                 val fromPopular = TradingPair.popularPairsForSource(marketDataSource)
                 val merged = (fromMarket + fromUser + fromPopular).distinctBy { it.symbol }
-                merged.sortedByDescending { pair ->
+
+                val userManualPairs = (watchlist + favorites + holdingStatuses.keys)
+                    .map { it.uppercase().replace("_", "") }.toSet()
+
+                val safePairs = merged.filter { pair ->
+                    val cleanSym = pair.symbol.uppercase().replace("_", "")
+                    // Jika pengguna secara sengaja menambah ke favorit/pantauan atau memiliki koin tersebut, tetap izinkan tampil
+                    if (cleanSym in userManualPairs) return@filter true
+                    val t = allTicks[pair.symbol] ?: allTicks[pair.effectiveIndodaxPair()] ?: return@filter true
+                    IndodaxMarketService.isSafeTradableAsset(
+                        price = t.price,
+                        volume24h = t.volume24h,
+                        high24h = t.high24h,
+                        low24h = t.low24h,
+                        isIdrPair = pair.quoteAsset.equals("IDR", ignoreCase = true)
+                    )
+                }
+
+                safePairs.sortedByDescending { pair ->
                     val t = allTicks[pair.symbol] ?: return@sortedByDescending -1.0
                     val ch = t.change24h.takeIf { c -> c.isFinite() } ?: 0.0
                     val vol = t.volume24h.coerceAtLeast(0.0)

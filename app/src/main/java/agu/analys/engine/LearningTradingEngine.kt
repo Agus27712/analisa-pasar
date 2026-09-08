@@ -288,7 +288,16 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
         if (strategyMode != StrategyMode.SWING) return
         val tick = currentTick ?: return
         val history = synchronized(candles) { candles.toList() }
-        val result = SwingEvaluator.evaluate(agu.analys.engine.global.GlobalContextManager.context.value, tick.price, history, tradingFees)
+        val store = agu.analys.trading.SpotPositionStore(agu.analys.AppContextProvider.context)
+        val position = store.get(tick.symbol)
+        val hasPosition = position.state != agu.analys.trading.SpotPositionState.NO_POSITION
+        val result = SwingEvaluator.evaluate(
+            globalContext = agu.analys.engine.global.GlobalContextManager.context.value,
+            price = tick.price,
+            history = history,
+            fees = tradingFees,
+            hasPosition = hasPosition
+        )
         _indicators.value = result.indicators
         _signalState.value = result.signal
     }

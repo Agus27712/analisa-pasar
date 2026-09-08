@@ -13,11 +13,12 @@ enum class BadgeType(
     SECONDWAVE("2ND WAVE", 2),
     SWING("SWING", 3),
     SCALPING("SCALPING", 4),
-    READY("SIAP ENTRY", 5),
-    HOT("HOT", 6),
-    PUMP("BREAKOUT", 7),
-    VOL24("HIGH VOL", 8),
-    DUMP("PULLBACK", 9)
+    TRENCHING("TRENCH", 5),
+    READY("SIAP ENTRY", 6),
+    HOT("HOT", 7),
+    PUMP("BREAKOUT", 8),
+    VOL24("HIGH VOL", 9),
+    DUMP("PULLBACK", 10)
 }
 
 /**

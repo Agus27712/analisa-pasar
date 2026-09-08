@@ -90,6 +90,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         tp1: Double = 0.0,
         tp2: Double = 0.0
     ) {
+        if (!prefs.isRealSimSyncEnabled) return
         val base = baseFromSymbolOrPair(pair)
         val symbol = "${base.uppercase()}IDR"
         val isBuy = type.equals("buy", ignoreCase = true)
@@ -154,7 +155,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         balances: Map<String, Double> = realCoordinator.realIndodaxBalance.value,
         avgPrices: Map<String, Double> = realCoordinator.realAvgBuyPrices.value
     ) {
-        if (!prefs.hasIndodaxCredentials()) return
+        if (!prefs.hasIndodaxCredentials() || !prefs.isRealSimSyncEnabled) return
         val popularAndCustom = (TradingPair.POPULAR_INDODAX_PAIRS.map { it.baseAsset.uppercase() } + balances.keys.map { it.uppercase() }).distinct()
         
         for (baseUpper in popularAndCustom) {
@@ -328,6 +329,9 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
 
     private val _isNotificationsEnabled = MutableStateFlow(prefs.isNotificationsEnabled)
     val isNotificationsEnabled: StateFlow<Boolean> = _isNotificationsEnabled.asStateFlow()
+
+    private val _isRealSimSyncEnabled = MutableStateFlow(prefs.isRealSimSyncEnabled)
+    val isRealSimSyncEnabled: StateFlow<Boolean> = _isRealSimSyncEnabled.asStateFlow()
 
     val isShowingCachedData: StateFlow<Boolean> = marketDataCoordinator.isShowingCachedData
     internal val _spotPosition = MutableStateFlow(SpotPosition())
@@ -578,6 +582,13 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun setRealSimSyncEnabled(enabled: Boolean) {
+        prefs.isRealSimSyncEnabled = enabled
+        _isRealSimSyncEnabled.value = enabled
+        refreshSpotPosition()
+        simCoordinator.refresh()
+    }
+
     fun selectCustomSymbol(rawSymbol: String) {
         if (rawSymbol.isNotBlank()) selectPair(TradingPair.fromCustomSymbol(rawSymbol, "IDR"))
     }
@@ -683,7 +694,10 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
                 marketCache.saveDashboardTicks(MarketDataSource.INDODAX, combinedTicks)
 
                 val secondWaveCandidates = combinedTicks.values
-                    .filter { it.price > 0 && it.high24h > 0 && it.volume24h >= 1_000_000_000 }
+                    .filter { t ->
+                        t.price > 0 && t.high24h > 0 && t.volume24h >= 1_000_000_000 &&
+                            IndodaxMarketService.isSafeTradableAsset(t.price, t.volume24h, t.high24h, t.low24h, isIdrPair = true)
+                    }
                     .map { t -> t to SecondWaveEvaluator.evaluateFast(t, t.high24h, t.low24h) }
                     .sortedWith(
                         compareByDescending<Pair<MarketTick, agu.analys.engine.secondwave.FastSecondWaveScore>> { it.second.score }
@@ -696,6 +710,17 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
                 val evaluatedPairs = (allScanned.map { TradingPair.fromCustomSymbol(it.symbol, "IDR") } + pairs).distinctBy { it.symbol }
                 val worth = evaluatedPairs.mapNotNull { pair ->
                     val tick = combinedTicks[pair.symbol] ?: return@mapNotNull null
+                    val isUserExplicit = isFavorite(pair.symbol) || _watchlist.value.contains(pair.symbol)
+                    if (!IndodaxMarketService.isSafeTradableAsset(
+                        price = tick.price,
+                        volume24h = tick.volume24h,
+                        high24h = tick.high24h,
+                        low24h = tick.low24h,
+                        isIdrPair = pair.quoteAsset.equals("IDR", ignoreCase = true),
+                        isExplicitlyFavored = isUserExplicit
+                    )) {
+                        return@mapNotNull null
+                    }
                     val rangePct = if (tick.low24h > 0) ((tick.high24h - tick.low24h) / tick.low24h) * 100.0 else 0.0
                     val volScore = when {
                         tick.volume24h >= 100_000_000_000 -> 30

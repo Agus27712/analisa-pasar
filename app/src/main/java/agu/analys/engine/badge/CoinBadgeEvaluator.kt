@@ -31,7 +31,7 @@ object CoinBadgeEvaluator {
         val volThresholdMed = if (isUsdt) 1_000_000.0 else 5_000_000_000.0
         val volThresholdMin = if (isUsdt) 200_000.0 else 1_000_000_000.0
 
-        // Evaluasi kelayakan untuk masing-masing 4 strategi trading:
+        // Evaluasi kelayakan untuk masing-masing 5 strategi trading:
         val officeScore = OfficeDailyScreener.evaluateFast(tick)
         val isOfficeQualified = officeScore.isQualified
 
@@ -41,6 +41,7 @@ object CoinBadgeEvaluator {
         val isSwingCandidate = volume >= volThresholdMin && change in -3.0..8.0
         val isScalpingCandidate =
             volume >= volThresholdMin && (change >= 1.5 || change <= -1.5 || volume >= volThresholdMed)
+        val isTrenchCandidate = volume >= volThresholdMin && change in -2.5..4.5
 
         // Pilih 1 badge mode strategi yang paling cocok untuk pair ini:
         val chosenBadge: CoinBadge? = when {
@@ -53,6 +54,8 @@ object CoinBadgeEvaluator {
                 CoinBadge(BadgeType.SWING, priority = 0, description = "Setup Swing terdeteksi")
             activeStrategy == StrategyMode.OFFICE_DAILY && isOfficeQualified ->
                 CoinBadge(BadgeType.OFFICEDAILY, priority = 0, description = officeScore.summary)
+            activeStrategy == StrategyMode.TRENCHING && isTrenchCandidate ->
+                CoinBadge(BadgeType.TRENCHING, priority = 0, description = "Kompresi Trench terdeteksi")
 
             // 2. Jika mode aktif tidak cocok, pilih mode strategi dengan setup terbaik
             isSecondWaveQualified && secondWaveScore.score >= 6 ->
@@ -63,10 +66,12 @@ object CoinBadgeEvaluator {
                 CoinBadge(BadgeType.SWING, priority = 3, description = "Setup Swing terdeteksi")
             isScalpingCandidate ->
                 CoinBadge(BadgeType.SCALPING, priority = 4, description = "Momentum Scalping aktif")
+            isTrenchCandidate ->
+                CoinBadge(BadgeType.TRENCHING, priority = 5, description = "Kompresi Trench terdeteksi")
 
             // 3. Konfirmasi siap entry
             isSetupReady ->
-                CoinBadge(BadgeType.READY, priority = 5, description = "Siap Entry")
+                CoinBadge(BadgeType.READY, priority = 6, description = "Siap Entry")
 
             // 4. Sinyal pasar teknikal profesional (bukan spekulatif pump/dump)
             volume >= volThresholdMed && change >= 3.5 ->

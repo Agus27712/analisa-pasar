@@ -91,6 +91,11 @@ fun getBadgeColors(type: BadgeType): Triple<Color, Color, Color> {
             Color(0xFF10B981).copy(alpha = 0.6f),
             Color(0xFF6EE7B7)
         )
+        BadgeType.TRENCHING -> Triple(
+            Color(0xFFD97706).copy(alpha = 0.18f),
+            Color(0xFFF59E0B).copy(alpha = 0.6f),
+            Color(0xFFFCD34D)
+        )
         BadgeType.READY -> Triple(
             Color(0xFF16A34A).copy(alpha = 0.22f),
             Color(0xFF22C55E).copy(alpha = 0.8f),

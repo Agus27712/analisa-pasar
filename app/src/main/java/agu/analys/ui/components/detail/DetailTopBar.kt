@@ -8,17 +8,24 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.TrendingDown
+import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -166,7 +173,9 @@ fun DetailPriceHeader(
     symbol: String,
     isFavorite: Boolean,
     globalContext: GlobalMarketContext? = null,
-    onOpenShieldInfo: (() -> Unit)? = null
+    onOpenShieldInfo: (() -> Unit)? = null,
+    isBuyMode: Boolean = true,
+    onBuyModeChanged: ((Boolean) -> Unit)? = null
 ) {
     val textPrimaryColor = TvTextPrimary
     val greenColor = TvGreen
@@ -193,27 +202,42 @@ fun DetailPriceHeader(
 
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            if (price > 0) {
-                FlipCardPriceText(
-                    price = price,
-                    color = animatedColor,
-                    fontSize = 26.sp,
-                    fontWeight = FontWeight.Black,
-                    quoteAsset = quoteAsset
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.weight(1f, fill = false)
+            ) {
+                if (price > 0) {
+                    FlipCardPriceText(
+                        price = price,
+                        color = animatedColor,
+                        fontSize = 26.sp,
+                        fontWeight = FontWeight.Black,
+                        quoteAsset = quoteAsset
+                    )
+                } else {
+                    val placeholder = if (quoteAsset.equals("USDT", true) || quoteAsset.equals("USD", true)) "$ —" else "Rp —"
+                    Text(placeholder, color = TvTextPrimary, fontSize = 26.sp, fontWeight = FontWeight.Black)
+                }
+
+                AnimatedPercentageBadge(
+                    percentage = change24h,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold
                 )
-            } else {
-                val placeholder = if (quoteAsset.equals("USDT", true) || quoteAsset.equals("USD", true)) "$ —" else "Rp —"
-                Text(placeholder, color = TvTextPrimary, fontSize = 26.sp, fontWeight = FontWeight.Black)
             }
 
-            AnimatedPercentageBadge(
-                percentage = change24h,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold
-            )
+            // Tombol Switch Modern Material 3 (tepat di bawah jam server / area tanda orange)
+            if (onBuyModeChanged != null) {
+                ModernBuySellSwitchM3(
+                    isBuyMode = isBuyMode,
+                    onModeChanged = onBuyModeChanged
+                )
+            }
         }
 
         Spacer(Modifier.height(6.dp))
@@ -345,3 +369,67 @@ fun openExchange(context: Context, source: MarketDataSource = MarketDataSource.I
 }
 
 fun openIndodax(context: Context) = openExchange(context, MarketDataSource.INDODAX)
+
+/**
+ * Modern Material 3 Switch untuk mengganti mode Analisa BUY ⇄ SELL.
+ * Tampil minimalis tanpa pembungkus tebal & tanpa teks label,
+ * tombol abu-abu muda berpadu dengan dot hijau (Buy) dan dot merah (Sell).
+ */
+@Composable
+fun ModernBuySellSwitchM3(
+    isBuyMode: Boolean,
+    onModeChanged: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+        modifier = modifier
+    ) {
+        // Dot Hijau penanda BUY (di kiri)
+        Box(
+            modifier = Modifier
+                .size(7.dp)
+                .background(
+                    color = if (isBuyMode) TvGreen else TvGreen.copy(alpha = 0.28f),
+                    shape = CircleShape
+                )
+        )
+
+        Switch(
+            checked = !isBuyMode, // false: BUY (thumb di kiri dekat dot hijau), true: SELL (thumb di kanan dekat dot merah)
+            onCheckedChange = { isSell -> onModeChanged(!isSell) },
+            thumbContent = {
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .background(
+                            color = if (isBuyMode) TvGreen else TvRed,
+                            shape = CircleShape
+                        )
+                )
+            },
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = Color(0xFFE2E8F0),      // Abu-abu muda
+                uncheckedThumbColor = Color(0xFFE2E8F0),    // Abu-abu muda
+                checkedTrackColor = Color(0xFF2C323D),      // Abu-abu gelap / netral
+                uncheckedTrackColor = Color(0xFF2C323D),    // Abu-abu gelap / netral
+                checkedBorderColor = Color(0xFF475569),     // Border abu-abu netral
+                uncheckedBorderColor = Color(0xFF475569),   // Border abu-abu netral
+                checkedIconColor = Color.Unspecified,
+                uncheckedIconColor = Color.Unspecified
+            ),
+            modifier = Modifier.scale(0.72f)
+        )
+
+        // Dot Merah penanda SELL (di kanan)
+        Box(
+            modifier = Modifier
+                .size(7.dp)
+                .background(
+                    color = if (!isBuyMode) TvRed else TvRed.copy(alpha = 0.28f),
+                    shape = CircleShape
+                )
+        )
+    }
+}

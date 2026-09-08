@@ -44,14 +44,16 @@ object SwingEvaluator {
     fun evaluate(
         price: Double, 
         history: List<CandleBar>, 
-        fees: TradingFeeConfig = TradingFeeConfig()
-    ): SwingEvalResult = evaluate(agu.analys.engine.global.GlobalMarketContext(), price, history, fees)
+        fees: TradingFeeConfig = TradingFeeConfig(),
+        hasPosition: Boolean = false
+    ): SwingEvalResult = evaluate(agu.analys.engine.global.GlobalMarketContext(), price, history, fees, hasPosition)
 
     fun evaluate(
         globalContext: agu.analys.engine.global.GlobalMarketContext = agu.analys.engine.global.GlobalMarketContext(),
         price: Double, 
         history: List<CandleBar>, 
-        fees: TradingFeeConfig = TradingFeeConfig()
+        fees: TradingFeeConfig = TradingFeeConfig(),
+        hasPosition: Boolean = false
     ): SwingEvalResult {
         if (price <= 0.0) {
             return SwingEvalResult(AISignalState(), TechnicalIndicators())
@@ -396,9 +398,10 @@ object SwingEvaluator {
             (detectedSetup == SwingSetup.BREAKOUT && (solidBreakdown || bosBreakdown)))
 
         val isSellSignal = isTechnicalSell
+        val isSellActionValid = isSellSignal && hasPosition
 
         var finalAction = when {
-            isSellSignal -> SignalAction.SELL
+            isSellActionValid -> SignalAction.SELL
             isQualifiedBuy -> SignalAction.BUY
             else -> SignalAction.HOLD
         }
@@ -411,18 +414,22 @@ object SwingEvaluator {
         // ---------------------------------------------
 
         if (isSellSignal) {
-            reasons.add(0, when {
-                price >= calculatedTp1 * 0.995 -> "🎯 Target TP1 tercapai di Rp ${fmtPrice(calculatedTp1)} — Amankan profit!"
-                detectedSetup == SwingSetup.REJECTION && rejectionAtResistance -> "⚠️ Rejection di Resistance — rekomendasi take profit / hindari buy."
-                detectedSetup == SwingSetup.RECLAIM_FAILED && (reclaimFromAbove || failedBreakout) -> "⚠️ Failed Breakout — sinyal bearish kuat."
-                else -> "⚠️ Tekanan jual tinggi / RSI jenuh — rekomendasi take profit."
-            })
+            if (hasPosition) {
+                reasons.add(0, when {
+                    price >= calculatedTp1 * 0.995 -> "🎯 Target TP1 tercapai di Rp ${fmtPrice(calculatedTp1)} — Amankan profit!"
+                    detectedSetup == SwingSetup.REJECTION && rejectionAtResistance -> "⚠️ Rejection di Resistance — rekomendasi take profit / exit."
+                    detectedSetup == SwingSetup.RECLAIM_FAILED && (reclaimFromAbove || failedBreakout) -> "⚠️ Failed Breakout — sinyal exit bearish kuat."
+                    else -> "⚠️ Tekanan jual tinggi / RSI jenuh — rekomendasi take profit."
+                })
+            } else {
+                reasons.add(0, "⚠️ Sinyal distribusi / koreksi teknikal terdeteksi (Belum holding aset ini — skip entry).")
+            }
         } else if (isQualifiedBuy) {
             reasons.add(0, "✅ Setup ${detectedSetup.name.replace('_', ' ')} valid — entry swing siap.")
         }
 
         val finalScore = when {
-            isSellSignal -> (78 + min(17, (sell * 0.2).toInt())).coerceIn(78, 95)
+            isSellActionValid -> (78 + min(17, (sell * 0.2).toInt())).coerceIn(78, 95)
             isQualifiedBuy -> (80 + min(15, (buy * 0.18).toInt())).coerceIn(80, 95)
             completedSteps == 3 -> 65
             completedSteps == 2 -> 50
@@ -434,6 +441,13 @@ object SwingEvaluator {
             SwingSetup.BREAKOUT -> ScalpingPath.MOMENTUM_CONTINUATION
             SwingSetup.RETEST, SwingSetup.REJECTION, SwingSetup.RECLAIM_FAILED -> ScalpingPath.PULLBACK
             else -> if (isBullishStructure) ScalpingPath.MOMENTUM_CONTINUATION else ScalpingPath.PULLBACK
+        }
+
+        val statusTitle = when {
+            isSellActionValid -> "SWING EXIT READY"
+            isSellSignal && !hasPosition -> "SWING PULLBACK (NO POSITION)"
+            completedSteps == 4 -> "SWING ENTRY READY"
+            else -> "SWING ANALYZING ($completedSteps/4)"
         }
 
         val mtfSnapshot = ScalpingMtfSnapshot(
@@ -455,8 +469,13 @@ object SwingEvaluator {
             entryPriceDetail = step4Detail,
 
             path = path,
-            statusTitle = if (completedSteps == 4) "SWING ENTRY READY" else "SWING ANALYZING ($completedSteps/4)",
-            waitingFor = if (completedSteps == 4) "Siap eksekusi Swing Buy" else "Menunggu konfirmasi setup lengkap",
+            statusTitle = statusTitle,
+            waitingFor = when {
+                isSellActionValid -> "Siap eksekusi Swing Take Profit / Exit"
+                isSellSignal && !hasPosition -> "Menunggu lantai support baru (jangan entry)"
+                completedSteps == 4 -> "Siap eksekusi Swing Buy"
+                else -> "Menunggu konfirmasi setup lengkap"
+            },
             entryCondition = when (detectedSetup) {
                 SwingSetup.REJECTION -> "Rejection di Support"
                 SwingSetup.BREAKOUT -> "Breakout level penting"
