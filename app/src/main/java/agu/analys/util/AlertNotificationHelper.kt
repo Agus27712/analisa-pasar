@@ -9,6 +9,9 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import agu.analys.MainActivity
+import agu.analys.config.StrategyMode
+import agu.analys.model.AISignalState
+import agu.analys.model.LifecycleState
 import agu.analys.util.PriceFormatter
 
 object AlertNotificationHelper {
@@ -58,6 +61,70 @@ object AlertNotificationHelper {
             .setContentTitle(title)
             .setContentText(message.substringBefore("\n"))
             .setSubText(if (symbol.isNotBlank()) symbol.uppercase() else "Indodax")
+            .setStyle(NotificationCompat.BigTextStyle().bigText(message))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
+
+        try {
+            val manager = NotificationManagerCompat.from(context)
+            manager.notify(notificationId, builder.build())
+        } catch (_: SecurityException) {
+            // Permission not granted on Android 13+
+        }
+    }
+
+    fun sendCandidateFoundNotification(
+        context: Context,
+        symbol: String,
+        strategyMode: StrategyMode,
+        signal: AISignalState
+    ) {
+        val prefs = AppPreferences(context)
+        if (!prefs.isNotificationsEnabled) return
+
+        createNotificationChannel(context)
+
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("EXTRA_SYMBOL", symbol)
+        }
+
+        val notificationId = (symbol.uppercase().hashCode() xor (strategyMode.name.hashCode() * 31)) and 0x7FFFFFFF
+
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            notificationId,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val modeLabel = when (strategyMode) {
+            StrategyMode.SCALPING -> "Scalping"
+            StrategyMode.SECOND_WAVE -> "Second-Wave"
+            StrategyMode.SWING -> "Swing"
+            StrategyMode.OFFICE_DAILY -> "Office Daily"
+            StrategyMode.TRENCHING -> "Trenching"
+        }
+
+        val stateLabel = if (signal.lifecycleState == LifecycleState.READY) "SIAP ENTRY" else "Kandidat Terdeteksi"
+        val title = "⚡ Kandidat $modeLabel: ${symbol.uppercase()}"
+
+        val priceStr = if (signal.entryPrice > 0.0) "Rp ${PriceFormatter.formatIdrNumber(signal.entryPrice)}" else "-"
+        val tp1Str = if (signal.targetPrice1 > 0.0) "Rp ${PriceFormatter.formatIdrNumber(signal.targetPrice1)}" else "-"
+        val slStr = if (signal.stopLoss > 0.0) "Rp ${PriceFormatter.formatIdrNumber(signal.stopLoss)}" else "-"
+
+        val reasonStr = signal.reasoning.firstOrNull() ?: signal.sentiment.displayName
+        val message = "Status: $stateLabel (Confidence: ${signal.confidence}%)\n" +
+                "Entry: $priceStr | TP1: $tp1Str | SL: $slStr\n" +
+                "Analisa: $reasonStr"
+
+        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(agu.analys.R.drawable.ic_stat_trading)
+            .setContentTitle(title)
+            .setContentText("Status: $stateLabel • Conf: ${signal.confidence}% • Entry: $priceStr")
+            .setSubText(symbol.uppercase())
             .setStyle(NotificationCompat.BigTextStyle().bigText(message))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)

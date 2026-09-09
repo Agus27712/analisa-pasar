@@ -53,6 +53,8 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
     private val _indicators = MutableStateFlow(TechnicalIndicators())
     val indicators: StateFlow<TechnicalIndicators> = _indicators.asStateFlow()
 
+    var onCandidateSignalTransition: ((agu.analys.engine.scalping.SignalTransition) -> Unit)? = null
+
     var currentFormingVolume: Double = 0.0
 
     var currentOrderBookBids: List<agu.analys.model.OrderBookItem> = emptyList()
@@ -267,21 +269,37 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
         ) ?: return
 
         // P2.2 Signal Lifecycle Tracking
-        val tracked = agu.analys.engine.scalping.SignalLifecycleManager.process(tick.symbol, tick.price, result.signal)
+        val tracked = agu.analys.engine.scalping.SignalLifecycleManager.process(tick.symbol, tick.price, result.signal, StrategyMode.SCALPING)
         val finalSignal = (tracked.activeSignalState ?: result.signal).copy(
             lifecycleState = tracked.state
         )
 
         _indicators.value = result.indicators
         _signalState.value = finalSignal
+        tracked.transition?.let { trans ->
+            if (trans.hasTriggeringTransition) {
+                onCandidateSignalTransition?.invoke(trans)
+            }
+        }
     }
 
     private fun runSecondWave() {
         val tick = currentTick ?: return
         if (h4Candles.size < 20 || h1Candles.size < 20 || m15Candles.size < 20) return
         val result = SecondWaveEvaluator.evaluate(agu.analys.engine.global.GlobalContextManager.context.value, tick.price, h4Candles, h1Candles, m15Candles, tradingFees)
+        
+        val tracked = agu.analys.engine.scalping.SignalLifecycleManager.process(tick.symbol, tick.price, result.signal, StrategyMode.SECOND_WAVE)
+        val finalSignal = (tracked.activeSignalState ?: result.signal).copy(
+            lifecycleState = tracked.state
+        )
+
         _indicators.value = result.indicators
-        _signalState.value = result.signal
+        _signalState.value = finalSignal
+        tracked.transition?.let { trans ->
+            if (trans.hasTriggeringTransition) {
+                onCandidateSignalTransition?.invoke(trans)
+            }
+        }
     }
 
     private fun runSwing() {
@@ -294,8 +312,19 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
             history = history,
             fees = tradingFees
         )
+        
+        val tracked = agu.analys.engine.scalping.SignalLifecycleManager.process(tick.symbol, tick.price, result.signal, StrategyMode.SWING)
+        val finalSignal = (tracked.activeSignalState ?: result.signal).copy(
+            lifecycleState = tracked.state
+        )
+
         _indicators.value = result.indicators
-        _signalState.value = result.signal
+        _signalState.value = finalSignal
+        tracked.transition?.let { trans ->
+            if (trans.hasTriggeringTransition) {
+                onCandidateSignalTransition?.invoke(trans)
+            }
+        }
     }
 
     private fun runOfficeDaily() {
@@ -303,8 +332,19 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
         val tick = currentTick ?: return
         val history = synchronized(candles) { candles.toList() }
         val result = agu.analys.engine.officedaily.OfficeDailyEvaluator.evaluate(agu.analys.engine.global.GlobalContextManager.context.value, tick.price, history, tradingFees)
+        
+        val tracked = agu.analys.engine.scalping.SignalLifecycleManager.process(tick.symbol, tick.price, result.signal, StrategyMode.OFFICE_DAILY)
+        val finalSignal = (tracked.activeSignalState ?: result.signal).copy(
+            lifecycleState = tracked.state
+        )
+
         _indicators.value = result.indicators
-        _signalState.value = result.signal
+        _signalState.value = finalSignal
+        tracked.transition?.let { trans ->
+            if (trans.hasTriggeringTransition) {
+                onCandidateSignalTransition?.invoke(trans)
+            }
+        }
     }
 
     private fun runTrenching() {
@@ -329,7 +369,16 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
             tradingFees = tradingFees
         )
         if (result != null) {
-            _signalState.value = result
+            val tracked = agu.analys.engine.scalping.SignalLifecycleManager.process(tick.symbol, tick.price, result, StrategyMode.TRENCHING)
+            val finalSignal = (tracked.activeSignalState ?: result).copy(
+                lifecycleState = tracked.state
+            )
+            _signalState.value = finalSignal
+            tracked.transition?.let { trans ->
+                if (trans.hasTriggeringTransition) {
+                    onCandidateSignalTransition?.invoke(trans)
+                }
+            }
         }
     }
 }

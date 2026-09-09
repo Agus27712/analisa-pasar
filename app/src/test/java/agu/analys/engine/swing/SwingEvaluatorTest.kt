@@ -32,17 +32,14 @@ class SwingEvaluatorTest {
     }
 
     @Test
-    fun testSwingPositionAware() {
+    fun testSwingBearishTrend() {
         val price = 1000.0
-        // Bearish trend setup causing technical sell
+        // Bearish trend setup causing HOLD / defensive signal
         val history = TestData.generateCandles(100, 1500.0, -0.005)
         
-        // When user has no position, sell signal must be converted to HOLD
-        val resultWithoutPosition = SwingEvaluator.evaluate(price = price, history = history, hasPosition = false)
-        assertNotEquals("Should not be SELL when hasPosition = false", SignalAction.SELL, resultWithoutPosition.signal.action)
-
-        // When user has position, technical sell can trigger SELL
-        val resultWithPosition = SwingEvaluator.evaluate(price = price, history = history, hasPosition = true)
-        assertNotNull(resultWithPosition)
+        val result = SwingEvaluator.evaluate(price = price, history = history)
+        assertNotNull(result)
+        // In strong downtrend without setup, action should not be BUY
+        assertNotEquals("Should not be BUY in clear downtrend without setup", SignalAction.BUY, result.signal.action)
     }
 }

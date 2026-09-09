@@ -10,5 +10,6 @@ class AnalysApplication : Application() {
         if (BuildConfig.DEBUG) {
             Timber.plant(Timber.DebugTree())
         }
+        agu.analys.service.CandidateScanWorker.schedule(this)
     }
 }

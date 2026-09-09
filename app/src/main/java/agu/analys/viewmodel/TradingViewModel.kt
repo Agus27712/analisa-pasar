@@ -515,6 +515,21 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         engine.isScalpingMode = prefs.isScalpingMode
         engine.scalpingSensitivity = prefs.scalpingSensitivity
         engine.tradingFees = prefs.tradingFees
+
+        engine.onCandidateSignalTransition = { transition ->
+            if (isNotificationsEnabled.value) {
+                val position = positionStore.get(transition.symbol)
+                if (!position.isHolding) {
+                    agu.analys.util.AlertNotificationHelper.sendCandidateFoundNotification(
+                        context = getApplication(),
+                        symbol = transition.symbol,
+                        strategyMode = transition.mode,
+                        signal = transition.signal
+                    )
+                }
+            }
+        }
+
         marketDataCoordinator.restoreFromCache(MarketDataSource.INDODAX)
         val initialPair = TradingPair.popularPairsForSource(prefs.marketDataSource).first()
         selectPair(initialPair)
