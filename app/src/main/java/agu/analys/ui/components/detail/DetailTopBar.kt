@@ -38,7 +38,9 @@ import agu.analys.ui.animation.AnimatedPercentageBadge
 import agu.analys.ui.animation.FlipCardPriceText
 import agu.analys.ui.components.dashboard.AssetAvatar
 import agu.analys.ui.theme.*
+import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -65,13 +67,15 @@ fun DetailTopBar(
         }
     }
 
-    LaunchedEffect(isConnected) {
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    LaunchedEffect(isConnected, lifecycleOwner) {
         if (isConnected) {
-            val sdf = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
-            while (true) {
-                currentTimeString = sdf.format(Date())
-                // Interval update 500ms agar pergantian detik selalu presisi dan mulus tanpa jeda
-                delay(500L)
+            lifecycleOwner.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+                val sdf = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
+                while (isActive) {
+                    currentTimeString = sdf.format(Date())
+                    delay(1000L)
+                }
             }
         }
     }

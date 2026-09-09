@@ -105,9 +105,12 @@ fun DetailChartScreen(
     var isBuyMode by remember(pair.symbol) { mutableStateOf(!isHolding) }
 
     // Dialogs
-    LaunchedEffect(pair.baseAsset) {
+    DisposableEffect(pair.baseAsset) {
         if (pair.baseAsset.isNotBlank()) {
             agu.analys.engine.global.GlobalContextManager.subscribeCoin(pair.baseAsset)
+        }
+        onDispose {
+            agu.analys.engine.global.GlobalContextManager.stop()
         }
     }
 

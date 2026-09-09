@@ -150,56 +150,66 @@ class MarketDataCoordinator(
             lastCandleRefresh = 0L
             lastDepthRefresh = 0L
             while (isActive) {
-                if (indodaxWebSocket.isStale(25_000L)) indodaxWebSocket.start(pair.symbol)
-                val prev = _currentTick.value?.price ?: 0.0
-                val tick = IndodaxMarketService.fetchTicker(pair.effectiveIndodaxPair(), prevPrice = prev)
-                if (tick != null && tick.price > 0) {
-                    failCount = 0
-                    lastLiveTickAt = System.currentTimeMillis()
-                    _connectionState.value = MarketConnectionState.Connected
-                    _isShowingCachedData.value = false
-                    val normalizedTick = tick.copy(symbol = pair.symbol)
-                    val preferWs = wsLive && System.currentTimeMillis() - lastLiveTickAt < 2_000L
-                    if (!preferWs || _currentTick.value == null) {
+                // Reconnect WS hanya jika benar-benar stale
+                if (indodaxWebSocket.isStale(30_000L)) {
+                    indodaxWebSocket.start(pair.symbol)
+                }
+
+                val now = System.currentTimeMillis()
+                val wsFresh = wsLive && (now - lastLiveTickAt < 8_000L)
+
+                // REST ticker hanya sebagai fallback (bukan setiap 3 detik)
+                if (!wsFresh) {
+                    val prev = _currentTick.value?.price ?: 0.0
+                    val tick = IndodaxMarketService.fetchTicker(pair.effectiveIndodaxPair(), prevPrice = prev)
+                    if (tick != null && tick.price > 0) {
+                        failCount = 0
+                        lastLiveTickAt = now
+                        _connectionState.value = MarketConnectionState.Connected
+                        _isShowingCachedData.value = false
+                        val normalizedTick = tick.copy(symbol = pair.symbol)
                         _currentTick.value = normalizedTick
                         engine.onTickUpdate(normalizedTick)
-                    }
-                    updateRecentPrices(normalizedTick.price)
-                    _dashboardTicks.value = _dashboardTicks.value.toMutableMap().apply { put(pair.symbol, normalizedTick) }
-                    simCoordinator.onPriceTick(normalizedTick.symbol, normalizedTick.price, normalizedTick.high24h, normalizedTick.low24h)
-                    onPriceUpdate(normalizedTick.symbol, normalizedTick.price, engine.indicators.value.rsi14.takeIf { it.isFinite() })
-                    
-                    val now = System.currentTimeMillis()
-                    if (now - lastCandleRefresh >= 15_000L) {
-                        val candles = IndodaxMarketService.fetchCandles(pair.effectiveIndodaxPair(), timeframe, 300)
-                        if (candles.size >= 30) {
-                            _recentCandles.value = candles
-                            engine.resetForOffline(preserveState = true)
-                            engine.onTickUpdate(normalizedTick)
-                            lastCandleRefresh = now
-                            marketCache.savePairSnapshot(pair.symbol, timeframe, normalizedTick, candles)
+                        updateRecentPrices(normalizedTick.price)
+                        _dashboardTicks.value = _dashboardTicks.value.toMutableMap().apply { put(pair.symbol, normalizedTick) }
+                        simCoordinator.onPriceTick(normalizedTick.symbol, normalizedTick.price, normalizedTick.high24h, normalizedTick.low24h)
+                        onPriceUpdate(normalizedTick.symbol, normalizedTick.price, engine.indicators.value.rsi14.takeIf { it.isFinite() })
+                    } else {
+                        failCount++
+                        if (failCount >= 4 && now - lastLiveTickAt > 25_000L) {
+                            _isShowingCachedData.value = true
+                            _connectionState.value = MarketConnectionState.ConnectionLost("Koneksi Indodax lemah. Pakai cache.")
                         }
                     }
-                    if (now - lastDepthRefresh >= 5_000L) {
-                        val depth = async { IndodaxMarketService.fetchOrderBook(pair.effectiveIndodaxPair()) }
-                        val trades = async { IndodaxMarketService.fetchRecentTrades(pair.effectiveIndodaxPair()) }
-                        val (bids, asks) = depth.await()
-                        val newTrades = trades.await()
-                        if (bids.isNotEmpty()) _orderBookBids.value = bids
-                        if (asks.isNotEmpty()) _orderBookAsks.value = asks
-                        if (bids.isNotEmpty() || asks.isNotEmpty()) engine.onOrderBookUpdate(bids, asks)
-                        if (newTrades.isNotEmpty()) _tradeStream.value = newTrades
-                        lastDepthRefresh = now
-                    }
-                } else {
-                    failCount++
-                    if (failCount >= 4 && System.currentTimeMillis() - lastLiveTickAt > 20_000L) {
-                        _isShowingCachedData.value = true
-                        _connectionState.value = MarketConnectionState.ConnectionLost("Koneksi Indodax lemah. Pakai cache.")
-                    }
-                    delay(4000L); continue
                 }
-                delay(3000L)
+
+                // Candle: 30 detik (cukup untuk chart)
+                if (now - lastCandleRefresh >= 30_000L) {
+                    val candles = IndodaxMarketService.fetchCandles(pair.effectiveIndodaxPair(), timeframe, 300)
+                    if (candles.size >= 30) {
+                        _recentCandles.value = candles
+                        engine.resetForOffline(preserveState = true)
+                        _currentTick.value?.let { engine.onTickUpdate(it) }
+                        lastCandleRefresh = now
+                        marketCache.savePairSnapshot(pair.symbol, timeframe, _currentTick.value, candles)
+                    }
+                }
+
+                // Orderbook + trades: 20 detik
+                if (now - lastDepthRefresh >= 20_000L) {
+                    val depth = async { IndodaxMarketService.fetchOrderBook(pair.effectiveIndodaxPair()) }
+                    val trades = async { IndodaxMarketService.fetchRecentTrades(pair.effectiveIndodaxPair()) }
+                    val (bids, asks) = depth.await()
+                    val newTrades = trades.await()
+                    if (bids.isNotEmpty()) _orderBookBids.value = bids
+                    if (asks.isNotEmpty()) _orderBookAsks.value = asks
+                    if (bids.isNotEmpty() || asks.isNotEmpty()) engine.onOrderBookUpdate(bids, asks)
+                    if (newTrades.isNotEmpty()) _tradeStream.value = newTrades
+                    lastDepthRefresh = now
+                }
+
+                // Interval loop utama: 6–8 detik cukup
+                delay(if (wsFresh) 8000L else 5000L)
             }
         }
     }

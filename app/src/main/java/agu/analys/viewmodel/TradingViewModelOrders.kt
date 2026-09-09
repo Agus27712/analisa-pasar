@@ -164,12 +164,14 @@ fun TradingViewModel.getHoldingStatus(pair: TradingPair, forceIsReal: Boolean? =
 
 fun TradingViewModel.setManualPositionPrice(symbol: String, entryPrice: Double, investedAmount: Double = 0.0, isReal: Boolean = isRealBuyMode.value) {
     positionCoordinator.setManualEntry(symbol, entryPrice, investedAmount, isReal)
+    updateForegroundServiceState()
 }
 
 fun TradingViewModel.setTrailingStop(enabled: Boolean, trailingPercent: Double) {
     val symbol = _selectedPair.value.symbol
     val currentP = currentTick.value?.price ?: spotPosition.value.entryPrice
     positionCoordinator.setTrailing(symbol, enabled, trailingPercent, currentP)
+    updateForegroundServiceState()
 }
 
 fun TradingViewModel.setAutoSellParams(

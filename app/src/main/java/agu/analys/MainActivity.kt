@@ -48,10 +48,6 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         AppContextProvider.init(applicationContext)
-        val prefs = agu.analys.util.AppPreferences(applicationContext)
-        if (prefs.isNotificationsEnabled) {
-            agu.analys.service.TradingForegroundService.startService(this)
-        }
         enableEdgeToEdge()
         WindowCompat.setDecorFitsSystemWindows(window, false)
 

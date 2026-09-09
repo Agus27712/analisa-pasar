@@ -48,7 +48,7 @@ class SpotPositionStore(context: Context) {
 
     fun calculateTrailingLimitPrice(peakPrice: Double, entryPrice: Double, trailingPercent: Double): Double {
         val rawStop = peakPrice * (1.0 - trailingPercent / 100.0)
-        return maxOf(rawStop, entryPrice)
+        return if (entryPrice > 0.0) maxOf(rawStop, entryPrice) else rawStop
     }
 
     private fun getSafeString(key: String): String? {
@@ -302,19 +302,21 @@ class SpotPositionStore(context: Context) {
         var newPeak = current.peakPrice.coerceAtLeast(current.entryPrice)
         var justTriggered = false
 
-        // Rule 3: Peak price hanya di-update saat harga naik (tidak pernah turun)
+        // Rule 1: Peak price hanya di-update saat harga naik (tidak pernah turun)
         if (currentPrice > newPeak) {
             newPeak = currentPrice
             prefs.edit().putString("${key}_peak", newPeak.toString()).apply()
         }
 
-        // Rule 1: Hard floor = entryPrice. Limit = max(peak * (1 - pct), entry)
+        // Rule 2: Hitung batas jual trailing dari peak
+        val rawTrailingStop = newPeak * (1.0 - current.trailingPercent / 100.0)
         val trailingStop = calculateTrailingLimitPrice(newPeak, current.entryPrice, current.trailingPercent)
         
-        // Rule 2: Activation threshold - Trailing baru aktif jika harga sudah naik minimal 1% dari modal
-        val isEligibleForTrailing = newPeak >= current.entryPrice * 1.01
+        // Rule 3: Pure Profit-Lock (Anti Cut-Loss): Trailing HANYA AKTIF jika batas jual sudah di atas harga beli (in-profit)
+        // Jika harga langsung drop setelah beli atau belum naik melewati modal, jangan pernah eksekusi jual
+        val isEligibleForTrailing = current.entryPrice > 0.0 && rawTrailingStop > current.entryPrice
 
-        // Rule 4: Saat harga turun menyentuh trailing price -> trigger (Noise filter: minimal 2 ticks di bawah garis)
+        // Rule 4: Saat harga turun menyentuh trailing price dan sudah memenuhi syarat profit-lock -> trigger (Noise filter: minimal 2 ticks di bawah garis)
         if (isEligibleForTrailing && currentPrice <= trailingStop && !current.isTrailingTriggered) {
             val ticksBelow = prefs.getInt("${key}_trailing_ticks_below", 0) + 1
             if (ticksBelow >= 2) {
@@ -381,6 +383,21 @@ class SpotPositionStore(context: Context) {
             }
         }
         return result
+    }
+
+    fun hasAnyHolding(): Boolean {
+        val all = prefs.all
+        for ((k, _) in all) {
+            if (!k.endsWith("_state")) continue
+            val stateStr = prefs.getString(k, null) ?: continue
+            if (stateStr == SpotPositionState.HOLDING.name) {
+                val prefix = k.removeSuffix("_state")
+                val isHoldingFlag = getSafeBoolean("${prefix}_holding", false)
+                val qty = getSafeString("${prefix}_qty")?.toDoubleOrNull() ?: 0.0
+                if (isHoldingFlag || qty > 0.0) return true
+            }
+        }
+        return false
     }
 
     private fun readHistory(key: String): JSONArray {

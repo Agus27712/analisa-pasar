@@ -34,8 +34,13 @@ fun TradingViewModel.checkAlertsAndTrailing(symbol: String, currentPrice: Double
         val isSimTrailing = updatedPos.lastTrailingOrderId?.startsWith("sim") == true
         val isReal = isRealBuyMode.value && !isSimTrailing
         val baseKey = TradingPair.fromCustomSymbol(symbol).baseAsset.uppercase()
+        val baseLower = baseKey.lowercase()
         val posQty = if (updatedPos.quantity > 0.0) updatedPos.quantity else {
-            if (isReal) 0.0 else simCoordinator.wallet.value.getAvailableCoin(baseKey)
+            if (isReal) {
+                realCoordinator.realFreeBalance.value[baseLower]
+                    ?: realCoordinator.realIndodaxBalance.value[baseLower]
+                    ?: 0.0
+            } else simCoordinator.wallet.value.getAvailableCoin(baseKey)
         }
 
         if (posQty > 0.0) {
@@ -49,6 +54,8 @@ fun TradingViewModel.checkAlertsAndTrailing(symbol: String, currentPrice: Double
                 quantity = posQty,
                 isReal = isReal
             )
+            // Eksekusi auto-sell jaring pengaman otomatis
+            executeAutoSellOrder(symbol, limitSellPrice, posQty, "TRAILING", isReal)
         }
     } else if (updatedPos.isHolding && updatedPos.isTrailingEnabled && updatedPos.peakPrice > oldPeak) {
         refreshSpotPosition()
@@ -243,7 +250,7 @@ fun TradingViewModel.deployTrailingOrder(symbol: String) {
     positionCoordinator.setTrailingOrderIdAndUpdateTime(symbol, trailingOrderId, System.currentTimeMillis())
     positionCoordinator.refreshPosition(symbol)
 
-    agu.analys.service.TradingForegroundService.startService(getApplication<android.app.Application>())
+    updateForegroundServiceState()
     startTrailingPolling()
 
     val slPrice = positionStore.calculateTrailingLimitPrice(effectivePeak, pos.entryPrice, effectiveTrailingPct)

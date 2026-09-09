@@ -90,9 +90,9 @@ fun SellTrailingSection(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Batas Toleransi Turun:", color = TvTextSecondary, fontSize = 10.sp)
+                        Text("Kunci Profit (Trailing %):", color = TvTextSecondary, fontSize = 10.sp)
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            listOf(1.5, 2.0, 3.0, 5.0).forEach { pct ->
+                            listOf(1.5, 2.0, 3.0, 5.0, 10.0).forEach { pct ->
                                 Box(
                                     modifier = Modifier
                                         .background(

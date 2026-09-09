@@ -21,6 +21,9 @@ object GlobalContextManager {
     private val HISTORY_WINDOW_MS = 3 * 60 * 1000L // 3 minutes window for crash detection
 
     private var isStarted = false
+    private var btcJob: kotlinx.coroutines.Job? = null
+    private var coinJob: kotlinx.coroutines.Job? = null
+    private var connJob: kotlinx.coroutines.Job? = null
 
     fun start() {
         if (isStarted) return
@@ -28,7 +31,8 @@ object GlobalContextManager {
         
         globalWebSocket.connect()
 
-        scope.launch {
+        btcJob?.cancel()
+        btcJob = scope.launch {
             globalWebSocket.btcTickerFlow.collectLatest { ticker ->
                 if (ticker == null) return@collectLatest
                 
@@ -47,7 +51,8 @@ object GlobalContextManager {
             }
         }
 
-        scope.launch {
+        coinJob?.cancel()
+        coinJob = scope.launch {
             globalWebSocket.coinTickerFlow.collectLatest { coinTicker ->
                 if (coinTicker != null) {
                     _context.value = _context.value.copy(activeCoinTicker = coinTicker)
@@ -55,7 +60,8 @@ object GlobalContextManager {
             }
         }
         
-        scope.launch {
+        connJob?.cancel()
+        connJob = scope.launch {
             globalWebSocket.isConnected.collectLatest { connected ->
                 if (!connected) {
                     if (_context.value.dataSource.startsWith("Binance")) {
@@ -66,6 +72,19 @@ object GlobalContextManager {
                 }
             }
         }
+    }
+
+    fun stop() {
+        if (!isStarted) return
+        isStarted = false
+        btcJob?.cancel()
+        coinJob?.cancel()
+        connJob?.cancel()
+        btcJob = null
+        coinJob = null
+        connJob = null
+        globalWebSocket.disconnect()
+        _context.value = _context.value.copy(isConnected = false)
     }
 
     fun subscribeCoin(baseAsset: String) {

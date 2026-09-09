@@ -476,7 +476,6 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     val updateDownloadProgress: StateFlow<Int?> = updateCoordinator.downloadProgress
 
     init {
-        agu.analys.engine.global.GlobalContextManager.start()
         agu.analys.util.MtfCacheManager.updateQueues(_watchlist.value.toList(), emptyList())
         engine.strategyMode = prefs.strategyMode
         engine.isScalpingMode = prefs.isScalpingMode
@@ -487,6 +486,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         selectPair(initialPair)
         startDashboardPolling()
         startTrailingPolling()
+        updateForegroundServiceState()
         listenToEngineSignals()
         checkPublicIp()
 
@@ -572,14 +572,21 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         _isDarkTheme.value = enabled
     }
 
-    fun setNotificationsEnabled(enabled: Boolean) {
-        prefs.isNotificationsEnabled = enabled
-        _isNotificationsEnabled.value = enabled
-        if (enabled) {
+    fun updateForegroundServiceState() {
+        val hasActive = positionStore.getAllActiveTrailingSymbols().isNotEmpty() ||
+                        positionStore.hasAnyHolding()
+
+        if (hasActive && isNotificationsEnabled.value) {
             agu.analys.service.TradingForegroundService.startService(getApplication())
         } else {
             agu.analys.service.TradingForegroundService.stopService(getApplication())
         }
+    }
+
+    fun setNotificationsEnabled(enabled: Boolean) {
+        prefs.isNotificationsEnabled = enabled
+        _isNotificationsEnabled.value = enabled
+        updateForegroundServiceState()
     }
 
     fun setRealSimSyncEnabled(enabled: Boolean) {
@@ -587,6 +594,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         _isRealSimSyncEnabled.value = enabled
         refreshSpotPosition()
         simCoordinator.refresh()
+        updateForegroundServiceState()
     }
 
     fun selectCustomSymbol(rawSymbol: String) {
@@ -605,7 +613,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         dashboardPollJob = viewModelScope.launch {
             while (isActive) {
                 refreshWorthCoinsFromMarket()
-                delay(15_000L)
+                delay(30_000L)        // dari 15s → 30s
             }
         }
     }
@@ -617,30 +625,31 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
                 try {
                     val activeSymbols = positionStore.getAllActiveTrailingSymbols()
                     if (activeSymbols.isNotEmpty()) {
-                        val pairs = activeSymbols.map { TradingPair.fromCustomSymbol(it, "IDR").effectiveIndodaxPair() }
+                        val pairs = activeSymbols.map { 
+                            TradingPair.fromCustomSymbol(it, "IDR").effectiveIndodaxPair() 
+                        }
                         val ticks = IndodaxMarketService.fetchTickers(pairs)
                         for (tick in ticks) {
                             simCoordinator.onPriceTick(tick.symbol, tick.price, tick.high24h, tick.low24h)
                             checkAlertsAndTrailing(tick.symbol, tick.price)
                         }
+                        delay(10_000L)          // dari 4 detik → 10 detik
                     } else {
                         checkAndStopTrailingServiceIfEmpty()
+                        delay(20_000L)          // idle lebih lama
                     }
-                } catch (e: Exception) {
-                    // Ignore network error for this tick
+                } catch (_: Exception) {
+                    delay(12_000L)
                 }
-                delay(4000L)
             }
         }
     }
 
     internal fun checkAndStopTrailingServiceIfEmpty() {
+        updateForegroundServiceState()
         if (positionStore.getAllActiveTrailingSymbols().isEmpty()) {
             trailingPollJob?.cancel()
             trailingPollJob = null
-            val intent = android.content.Intent(getApplication<android.app.Application>(), agu.analys.service.TradingForegroundService::class.java)
-            intent.action = agu.analys.service.TradingForegroundService.ACTION_STOP
-            getApplication<android.app.Application>().startService(intent)
         }
     }
 
