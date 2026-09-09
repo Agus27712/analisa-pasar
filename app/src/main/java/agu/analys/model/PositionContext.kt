@@ -57,10 +57,10 @@ data class PositionContext(
             currentPrice: Double,
             fees: TradingFeeConfig
         ): PositionContext {
-            val isHolding = (spotPosition != null && spotPosition.isHolding && spotPosition.quantity > 0.00000001) ||
-                    (holdingStatus != null && holdingStatus.isHolding && holdingStatus.quantity > 0.00000001)
+            val isSpotHolding = spotPosition != null && spotPosition.isHolding && spotPosition.quantity > 0.00000001
+            val isHoldingStatusHolding = holdingStatus != null && holdingStatus.isHolding && holdingStatus.quantity > 0.00000001
 
-            if (!isHolding) {
+            if (!isSpotHolding && !isHoldingStatusHolding) {
                 return PositionContext(
                     hasPosition = false,
                     symbol = symbol,
@@ -68,40 +68,41 @@ data class PositionContext(
                 )
             }
 
-            val qty = when {
-                spotPosition != null && spotPosition.isHolding && spotPosition.quantity > 0.00000001 -> spotPosition.quantity
-                holdingStatus != null && holdingStatus.quantity > 0.00000001 -> holdingStatus.quantity
-                else -> 0.0
+            val qty = if (isSpotHolding) {
+                spotPosition!!.quantity
+            } else {
+                holdingStatus?.quantity ?: 0.0
             }
 
-            val entry = when {
-                spotPosition != null && spotPosition.isHolding && spotPosition.entryPrice > 0.0 -> spotPosition.entryPrice
-                holdingStatus != null && holdingStatus.entryPrice > 0.0 -> holdingStatus.entryPrice
-                else -> null
+            val entry = if (isSpotHolding) {
+                if (spotPosition!!.entryPrice > 0.0) spotPosition.entryPrice else holdingStatus?.entryPrice
+            } else {
+                if ((holdingStatus?.entryPrice ?: 0.0) > 0.0) holdingStatus?.entryPrice else null
             }
 
-            val tp1 = when {
-                spotPosition != null && spotPosition.tp1Price > 0.0 -> spotPosition.tp1Price
-                holdingStatus != null && holdingStatus.tp1Price > 0.0 -> holdingStatus.tp1Price
-                else -> null
-            }
+            val tp1 = if (isSpotHolding && spotPosition!!.tp1Price > 0.0) {
+                spotPosition.tp1Price
+            } else if ((holdingStatus?.tp1Price ?: 0.0) > 0.0) {
+                holdingStatus?.tp1Price
+            } else null
 
-            val tp2 = when {
-                spotPosition != null && spotPosition.tp2Price > 0.0 -> spotPosition.tp2Price
-                holdingStatus != null && holdingStatus.tp2Price > 0.0 -> holdingStatus.tp2Price
-                else -> null
-            }
+            val tp2 = if (isSpotHolding && spotPosition!!.tp2Price > 0.0) {
+                spotPosition.tp2Price
+            } else if ((holdingStatus?.tp2Price ?: 0.0) > 0.0) {
+                holdingStatus?.tp2Price
+            } else null
 
-            val sl = when {
-                spotPosition != null && spotPosition.stopLossPrice > 0.0 -> spotPosition.stopLossPrice
-                holdingStatus != null && holdingStatus.stopLossPrice > 0.0 -> holdingStatus.stopLossPrice
-                entry != null && entry > 0.0 -> entry * 0.99
-                else -> null
-            }
+            val sl = if (isSpotHolding && spotPosition!!.stopLossPrice > 0.0) {
+                spotPosition.stopLossPrice
+            } else if ((holdingStatus?.stopLossPrice ?: 0.0) > 0.0) {
+                holdingStatus?.stopLossPrice
+            } else if (entry != null && entry > 0.0) {
+                entry * 0.99
+            } else null
 
-            val trailingActive = spotPosition?.isTrailingEnabled == true || holdingStatus?.isTrailingEnabled == true
-            val isTrailingTrig = spotPosition?.isTrailingTriggered == true || holdingStatus?.isTrailingTriggered == true
-            val isReal = spotPosition?.isReal == true || holdingStatus?.isReal == true
+            val trailingActive = if (isSpotHolding) spotPosition!!.isTrailingEnabled else (holdingStatus?.isTrailingEnabled == true)
+            val isTrailingTrig = if (isSpotHolding) spotPosition!!.isTrailingTriggered else (holdingStatus?.isTrailingTriggered == true)
+            val isReal = if (isSpotHolding) spotPosition!!.isReal else (holdingStatus?.isReal ?: false)
 
             val validPrice = if (currentPrice > 0.0) currentPrice else entry
             val cost = if (entry != null && entry > 0.0) qty * entry else null

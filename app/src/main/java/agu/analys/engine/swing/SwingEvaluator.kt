@@ -44,16 +44,14 @@ object SwingEvaluator {
     fun evaluate(
         price: Double, 
         history: List<CandleBar>, 
-        fees: TradingFeeConfig = TradingFeeConfig(),
-        hasPosition: Boolean = false
-    ): SwingEvalResult = evaluate(agu.analys.engine.global.GlobalMarketContext(), price, history, fees, hasPosition)
+        fees: TradingFeeConfig = TradingFeeConfig()
+    ): SwingEvalResult = evaluate(agu.analys.engine.global.GlobalMarketContext(), price, history, fees)
 
     fun evaluate(
         globalContext: agu.analys.engine.global.GlobalMarketContext = agu.analys.engine.global.GlobalMarketContext(),
         price: Double, 
         history: List<CandleBar>, 
-        fees: TradingFeeConfig = TradingFeeConfig(),
-        hasPosition: Boolean = false
+        fees: TradingFeeConfig = TradingFeeConfig()
     ): SwingEvalResult {
         if (price <= 0.0) {
             return SwingEvalResult(AISignalState(), TechnicalIndicators())
@@ -387,22 +385,18 @@ object SwingEvaluator {
 
         val completedSteps = listOf(step1Ok, step2Ok, step3Ok, step4Ok).count { it }
 
-        // ── Keputusan akhir (Market Analysis) ────────────────────────────────
+        // ── Keputusan akhir (Market Analysis - Pure BUY Analyzer) ────────────────────────────────
         val isQualifiedBuy = completedSteps == 4 && buy >= 42.0 && buy > sell * 1.15 &&
             detectedSetup in listOf(SwingSetup.REJECTION, SwingSetup.BREAKOUT, SwingSetup.RETEST, SwingSetup.RECLAIM_FAILED) &&
             (detectedSetup != SwingSetup.REJECTION || !rejectionAtResistance) // rejection di resistance = bukan buy
 
-        val isTechnicalSell = (rsi >= 72.0 || price >= calculatedTp1 * 0.995 || (sell >= 42.0 && sell > buy * 1.15) ||
+        val isTechnicalDistribution = (rsi >= 72.0 || price >= calculatedTp1 * 0.995 || (sell >= 42.0 && sell > buy * 1.15) ||
             (detectedSetup == SwingSetup.REJECTION && rejectionAtResistance) ||
             (detectedSetup == SwingSetup.RECLAIM_FAILED && (reclaimFromAbove || failedBreakout)) ||
             (detectedSetup == SwingSetup.BREAKOUT && (solidBreakdown || bosBreakdown)))
 
-        val isSellSignal = isTechnicalSell
-        val isSellActionValid = isSellSignal && hasPosition
-
         var finalAction = when {
-            isSellActionValid -> SignalAction.SELL
-            isQualifiedBuy -> SignalAction.BUY
+            isQualifiedBuy && !isTechnicalDistribution -> SignalAction.BUY
             else -> SignalAction.HOLD
         }
         
@@ -413,24 +407,14 @@ object SwingEvaluator {
         }
         // ---------------------------------------------
 
-        if (isSellSignal) {
-            if (hasPosition) {
-                reasons.add(0, when {
-                    price >= calculatedTp1 * 0.995 -> "🎯 Target TP1 tercapai di Rp ${fmtPrice(calculatedTp1)} — Amankan profit!"
-                    detectedSetup == SwingSetup.REJECTION && rejectionAtResistance -> "⚠️ Rejection di Resistance — rekomendasi take profit / exit."
-                    detectedSetup == SwingSetup.RECLAIM_FAILED && (reclaimFromAbove || failedBreakout) -> "⚠️ Failed Breakout — sinyal exit bearish kuat."
-                    else -> "⚠️ Tekanan jual tinggi / RSI jenuh — rekomendasi take profit."
-                })
-            } else {
-                reasons.add(0, "⚠️ Sinyal distribusi / koreksi teknikal terdeteksi (Belum holding aset ini — skip entry).")
-            }
+        if (isTechnicalDistribution) {
+            reasons.add(0, "⚠️ Sinyal distribusi / koreksi teknikal terdeteksi — skip entry Swing baru.")
         } else if (isQualifiedBuy) {
             reasons.add(0, "✅ Setup ${detectedSetup.name.replace('_', ' ')} valid — entry swing siap.")
         }
 
         val finalScore = when {
-            isSellActionValid -> (78 + min(17, (sell * 0.2).toInt())).coerceIn(78, 95)
-            isQualifiedBuy -> (80 + min(15, (buy * 0.18).toInt())).coerceIn(80, 95)
+            isQualifiedBuy && !isTechnicalDistribution -> (80 + min(15, (buy * 0.18).toInt())).coerceIn(80, 95)
             completedSteps == 3 -> 65
             completedSteps == 2 -> 50
             completedSteps == 1 -> 36
@@ -444,9 +428,8 @@ object SwingEvaluator {
         }
 
         val statusTitle = when {
-            isSellActionValid -> "SWING EXIT READY"
-            isSellSignal && !hasPosition -> "SWING PULLBACK (NO POSITION)"
-            completedSteps == 4 -> "SWING ENTRY READY"
+            isQualifiedBuy && !isTechnicalDistribution -> "SWING ENTRY READY"
+            isTechnicalDistribution -> "SWING PULLBACK / RESISTANCE"
             else -> "SWING ANALYZING ($completedSteps/4)"
         }
 
@@ -471,8 +454,8 @@ object SwingEvaluator {
             path = path,
             statusTitle = statusTitle,
             waitingFor = when {
-                isSellActionValid -> "Siap eksekusi Swing Take Profit / Exit"
-                isSellSignal && !hasPosition -> "Menunggu lantai support baru (jangan entry)"
+                isQualifiedBuy && !isTechnicalDistribution -> "Siap eksekusi Swing Buy"
+                isTechnicalDistribution -> "Menunggu lantai support baru (jangan entry)"
                 completedSteps == 4 -> "Siap eksekusi Swing Buy"
                 else -> "Menunggu konfirmasi setup lengkap"
             },
@@ -496,7 +479,7 @@ object SwingEvaluator {
                         else -> TrendSentiment.STRONG_BULLISH_CONTINUATION
                     }
                     SignalAction.SELL -> TrendSentiment.BEARISH_DISTRIBUTION
-                    SignalAction.HOLD -> if (completedSteps >= 2) TrendSentiment.ACCUMULATION_SQUEEZE else TrendSentiment.NEUTRAL_CONSOLIDATION
+                    SignalAction.HOLD -> if (isTechnicalDistribution) TrendSentiment.BEARISH_DISTRIBUTION else if (completedSteps >= 2) TrendSentiment.ACCUMULATION_SQUEEZE else TrendSentiment.NEUTRAL_CONSOLIDATION
                 },
                 entryPrice = price,
                 targetPrice1 = calculatedTp1,

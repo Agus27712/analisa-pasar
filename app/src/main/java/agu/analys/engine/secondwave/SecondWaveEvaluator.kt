@@ -228,10 +228,9 @@ object SecondWaveEvaluator {
             entryCondition = thesis
         )
 
-        val isSellSignal = (drawdownPct < 5.0 && price >= priorHigh * 0.95) || rsi1h >= 75.0 || price >= tp1
+        val isOverextended = (drawdownPct < 5.0 && price >= priorHigh * 0.95) || rsi1h >= 75.0 || price >= tp1
         var finalAction = when {
-            isSellSignal -> SignalAction.SELL
-            isQualified && step4Ok -> SignalAction.BUY
+            isQualified && step4Ok && !isOverextended -> SignalAction.BUY
             else -> SignalAction.HOLD
         }
         
@@ -242,17 +241,17 @@ object SecondWaveEvaluator {
         }
         // ---------------------------------------------
         
-        if (isSellSignal) {
-            reasons.add(0, "🎯 Target Second-Wave Tercapai / Overbought - Rekomendasi Take Profit.")
+        if (isOverextended) {
+            reasons.add(0, "⚠️ Harga sudah mendekati target / Overbought — Bukan zona aman untuk entry BUY baru.")
         }
 
         val signalState = AISignalState(
             action = finalAction,
-            confidence = if (globalContext.isVetoActive) 0 else (totalScore * 8.33).toInt().coerceIn(10, 95),
+            confidence = if (globalContext.isVetoActive || isOverextended) 0 else (totalScore * 8.33).toInt().coerceIn(10, 95),
             sentiment = when (finalAction) {
                 SignalAction.BUY -> TrendSentiment.BULLISH_REVERSAL
                 SignalAction.SELL -> TrendSentiment.BEARISH_DISTRIBUTION
-                SignalAction.HOLD -> TrendSentiment.ACCUMULATION_SQUEEZE
+                SignalAction.HOLD -> if (isOverextended) TrendSentiment.BEARISH_DISTRIBUTION else TrendSentiment.ACCUMULATION_SQUEEZE
             },
             entryPrice = price,
             targetPrice1 = tp1,

@@ -69,7 +69,12 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     internal val positionStore = SpotPositionStore(application)
     internal val alertStore = agu.analys.trading.PriceAlertStore(application)
     internal val simulationStore = SimulationTradeStore(application)
-    internal val simCoordinator = SimulationCoordinator(simulationStore)
+    internal val simCoordinator = SimulationCoordinator(
+        store = simulationStore,
+        onOrderFilled = { order ->
+            syncSimulationTradeToPositionStore(order)
+        }
+    )
     internal val realCoordinator = RealTradeCoordinator(
         scope = viewModelScope,
         prefs = prefs,
@@ -136,6 +141,35 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
                     entry = currentPos.entryPrice,
                     quantity = remainingQty,
                     isReal = true
+                )
+            }
+        }
+        refreshSpotPosition()
+    }
+
+    internal fun syncSimulationTradeToPositionStore(order: agu.analys.trading.SimulationOrder) {
+        val symbol = order.symbol
+        if (order.side == agu.analys.trading.SimulationOrderSide.BUY) {
+            val fillPrice = if (order.filledAvgPrice > 0.0) order.filledAvgPrice else order.limitPrice
+            positionStore.markBought(
+                symbol = symbol,
+                entryPrice = fillPrice,
+                quantity = order.quantity,
+                isReal = false
+            )
+        } else if (order.side == agu.analys.trading.SimulationOrderSide.SELL) {
+            val currentPos = positionStore.get(symbol)
+            val currentQty = currentPos.quantity
+            val remainingQty = (currentQty - order.quantity).coerceAtLeast(0.0)
+            if (remainingQty <= 0.00000001) {
+                positionStore.markSold(symbol)
+            } else {
+                positionStore.setHolding(
+                    symbol = symbol,
+                    invested = currentPos.entryPrice * remainingQty,
+                    entry = currentPos.entryPrice,
+                    quantity = remainingQty,
+                    isReal = false
                 )
             }
         }

@@ -23,7 +23,7 @@ data class ReadySellBadge(
 
 object ReadySellBadgeEvaluator {
     fun computeReadyBadge(
-        holding: CoinHoldingStatus?,
+        context: PositionContext?,
         tick: MarketTick?,
         tradingFees: TradingFeeConfig,
         colorOrange: Color = DarkAppColors.orange,
@@ -31,18 +31,10 @@ object ReadySellBadgeEvaluator {
         colorRed: Color = DarkAppColors.red,
         rsi: Double? = null
     ): ReadySellBadge? {
-        if (holding == null || !holding.isHolding || holding.quantity <= 0.00000001) return null
-        val currentPrice = tick?.price ?: 0.0
+        if (context == null || !context.hasPosition || (context.quantity ?: 0.0) <= 0.00000001) return null
+        val currentPrice = tick?.price ?: context.currentPrice ?: 0.0
         if (currentPrice <= 0.0) return null
 
-        val pairSymbol = tick?.symbol ?: ""
-        val context = PositionContext.create(
-            symbol = pairSymbol,
-            spotPosition = null,
-            holdingStatus = holding,
-            currentPrice = currentPrice,
-            fees = tradingFees
-        )
         val indicators = if (rsi != null) TechnicalIndicators(rsi14 = rsi) else null
         val sellState = SellSignalEvaluator.evaluate(
             context = context,
@@ -76,5 +68,37 @@ object ReadySellBadgeEvaluator {
                 ReadySellBadge("🛡️ HOLDING", Color(0xFF2962FF), isExitDecisionEvent = false)
             SellLifecycleState.NOT_HOLDING -> null
         }
+    }
+
+    fun computeReadyBadge(
+        holding: CoinHoldingStatus?,
+        tick: MarketTick?,
+        tradingFees: TradingFeeConfig,
+        colorOrange: Color = DarkAppColors.orange,
+        colorGreen: Color = DarkAppColors.green,
+        colorRed: Color = DarkAppColors.red,
+        rsi: Double? = null
+    ): ReadySellBadge? {
+        if (holding == null || !holding.isHolding || holding.quantity <= 0.00000001) return null
+        val currentPrice = tick?.price ?: 0.0
+        if (currentPrice <= 0.0) return null
+
+        val pairSymbol = tick?.symbol ?: ""
+        val context = PositionContext.create(
+            symbol = pairSymbol,
+            spotPosition = null,
+            holdingStatus = holding,
+            currentPrice = currentPrice,
+            fees = tradingFees
+        )
+        return computeReadyBadge(
+            context = context,
+            tick = tick,
+            tradingFees = tradingFees,
+            colorOrange = colorOrange,
+            colorGreen = colorGreen,
+            colorRed = colorRed,
+            rsi = rsi
+        )
     }
 }

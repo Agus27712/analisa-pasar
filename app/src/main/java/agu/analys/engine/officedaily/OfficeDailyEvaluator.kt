@@ -195,13 +195,12 @@ object OfficeDailyEvaluator {
 
         val completedSteps = listOf(step1Ok, step2Ok, step3Ok, step4Ok).count { it }
 
-        // ── Keputusan akhir (Market Analysis) ────────────────────────────────
+        // ── Keputusan akhir (Market Analysis - Pure BUY Analyzer) ────────────────────────────────
         val isQualified = completedSteps == 4 && buyScore >= 55.0 && buyScore > sellScore * 1.3
-        val isSellSignal = rsi >= 74.0 || price >= calculatedTp1 || (sellScore >= 50.0 && sellScore > buyScore * 1.2)
+        val isOverextendedOrDistribution = rsi >= 74.0 || price >= calculatedTp1 || (sellScore >= 50.0 && sellScore > buyScore * 1.2)
 
         var finalAction = when {
-            isSellSignal -> SignalAction.SELL
-            isQualified -> SignalAction.BUY
+            isQualified && !isOverextendedOrDistribution -> SignalAction.BUY
             else -> SignalAction.HOLD
         }
 
@@ -212,13 +211,12 @@ object OfficeDailyEvaluator {
         }
         // ---------------------------------------------
 
-        if (isSellSignal) {
-            reasons.add(0, if (price >= calculatedTp1) "🎯 Target TP tercapai di Rp ${fmtPrice(calculatedTp1)} - Take Profit!" else "⚠️ Jenuh Beli / Sinyal Distribusi - Amankan Profit!")
+        if (isOverextendedOrDistribution) {
+            reasons.add(0, if (price >= calculatedTp1) "⚠️ Target harga tercapai di Rp ${fmtPrice(calculatedTp1)} — Tahan entry BUY baru." else "⚠️ Jenuh Beli / Sinyal Distribusi — Tahan entry BUY baru.")
         }
 
         val finalScore = when {
-            isSellSignal -> (80 + min(15, (sellScore * 0.15).toInt())).coerceIn(80, 95)
-            isQualified -> (80 + min(15, (buyScore * 0.15).toInt())).coerceIn(80, 95)
+            isQualified && !isOverextendedOrDistribution -> (80 + min(15, (buyScore * 0.15).toInt())).coerceIn(80, 95)
             completedSteps == 3 -> 68
             completedSteps == 2 -> 50
             completedSteps == 1 -> 35
@@ -256,7 +254,7 @@ object OfficeDailyEvaluator {
                 sentiment = when (finalAction) {
                     SignalAction.BUY -> TrendSentiment.STRONG_BULLISH_CONTINUATION
                     SignalAction.SELL -> TrendSentiment.BEARISH_DISTRIBUTION
-                    SignalAction.HOLD -> if (completedSteps >= 2) TrendSentiment.ACCUMULATION_SQUEEZE else TrendSentiment.NEUTRAL_CONSOLIDATION
+                    SignalAction.HOLD -> if (isOverextendedOrDistribution) TrendSentiment.BEARISH_DISTRIBUTION else if (completedSteps >= 2) TrendSentiment.ACCUMULATION_SQUEEZE else TrendSentiment.NEUTRAL_CONSOLIDATION
                 },
                 entryPrice = price,
                 targetPrice1 = calculatedTp1,

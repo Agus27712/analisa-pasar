@@ -12,7 +12,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-class SimulationCoordinator(private val store: SimulationTradeStore) {
+class SimulationCoordinator(
+    private val store: SimulationTradeStore,
+    private val onOrderFilled: ((SimulationOrder) -> Unit)? = null
+) {
     private val _wallet = MutableStateFlow(store.getWallet())
     val wallet: StateFlow<SimulationWallet> = _wallet.asStateFlow()
 
@@ -79,6 +82,10 @@ class SimulationCoordinator(private val store: SimulationTradeStore) {
         // P2.2 Lifecycle
         if (result is agu.analys.trading.SimulationOrderResult.Success) {
             agu.analys.engine.scalping.SignalLifecycleManager.markTriggered(pair.symbol)
+            if (result.order.status == agu.analys.trading.SimulationOrderStatus.FILLED) {
+                _lastFilledOrder.value = result.order
+                onOrderFilled?.invoke(result.order)
+            }
         }
         return result
     }
@@ -214,6 +221,10 @@ class SimulationCoordinator(private val store: SimulationTradeStore) {
             )
             refresh()
             val ok = r is agu.analys.trading.SimulationOrderResult.Success
+            if (ok && (r as agu.analys.trading.SimulationOrderResult.Success).order.status == agu.analys.trading.SimulationOrderStatus.FILLED) {
+                _lastFilledOrder.value = r.order
+                onOrderFilled?.invoke(r.order)
+            }
             val m = when (r) {
                 is agu.analys.trading.SimulationOrderResult.Success -> "Order Jual Limit ${agu.analys.util.PriceFormatter.formatCryptoExact(sellQty, 8)} @ Rp ${agu.analys.util.PriceFormatter.formatIdrNumber(marketPrice)} berhasil."
                 is agu.analys.trading.SimulationOrderResult.Error -> r.message
@@ -257,6 +268,10 @@ class SimulationCoordinator(private val store: SimulationTradeStore) {
             if (res is agu.analys.trading.SimulationOrderResult.Success) {
                 successCount++
                 msg += "TP1 OK. "
+                if (res.order.status == agu.analys.trading.SimulationOrderStatus.FILLED) {
+                    _lastFilledOrder.value = res.order
+                    onOrderFilled?.invoke(res.order)
+                }
             } else if (res is agu.analys.trading.SimulationOrderResult.Error) {
                 msg += "TP1 Gagal: ${res.message}. "
             }
@@ -277,6 +292,10 @@ class SimulationCoordinator(private val store: SimulationTradeStore) {
             if (res is agu.analys.trading.SimulationOrderResult.Success) {
                 successCount++
                 msg += "TP2 OK."
+                if (res.order.status == agu.analys.trading.SimulationOrderStatus.FILLED) {
+                    _lastFilledOrder.value = res.order
+                    onOrderFilled?.invoke(res.order)
+                }
             } else if (res is agu.analys.trading.SimulationOrderResult.Error) {
                 msg += "TP2 Gagal: ${res.message}."
             }
@@ -301,6 +320,9 @@ class SimulationCoordinator(private val store: SimulationTradeStore) {
         if (filled.isNotEmpty()) {
             _lastFilledOrder.value = filled.lastOrNull()
             refresh()
+            filled.forEach { order ->
+                onOrderFilled?.invoke(order)
+            }
         }
     }
 }

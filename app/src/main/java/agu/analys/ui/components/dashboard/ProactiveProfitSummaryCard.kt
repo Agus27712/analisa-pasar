@@ -84,8 +84,16 @@ fun ProactiveProfitSummaryCard(
             val currentPrice = tick?.price ?: 0.0
             if (currentPrice <= 0.0) return@mapNotNull null
 
+            val context = agu.analys.model.PositionContext.create(
+                symbol = pair.symbol,
+                spotPosition = null,
+                holdingStatus = holding,
+                currentPrice = currentPrice,
+                fees = tradingFees
+            )
+
             val badge = ReadySellBadgeEvaluator.computeReadyBadge(
-                holding = holding,
+                context = context,
                 tick = tick,
                 tradingFees = tradingFees,
                 colorOrange = colorOrange,
@@ -96,14 +104,9 @@ fun ProactiveProfitSummaryCard(
 
             if (!badge.isExitDecisionEvent) return@mapNotNull null
 
-            val entryPrice = holding.entryPrice
-            val hasCostBasis = entryPrice > 0.0
-            val sellFeeRate = (tradingFees.sellMakerPct / 100.0).coerceAtLeast(0.0)
-            val grossSell = holding.quantity * currentPrice
-            val netSell = grossSell * (1.0 - sellFeeRate)
-            val costBasis = if (hasCostBasis) holding.quantity * entryPrice else 0.0
-            val netProfitIdrLocal = if (hasCostBasis) netSell - costBasis else 0.0
-            val netProfitPct = if (hasCostBasis && costBasis > 0.0) (netProfitIdrLocal / costBasis) * 100.0 else 0.0
+            val netProfitPct = context.floatingProfitPct ?: 0.0
+            val netSell = context.netValue ?: 0.0
+            val costBasis = context.costBasis ?: 0.0
 
             val rate = if (pair.quoteAsset.equals("USDT", true) || pair.quoteAsset.equals("USD", true)) usdtIdrRate else 1.0
             val cashOutValueIdr = netSell * rate
@@ -113,7 +116,7 @@ fun ProactiveProfitSummaryCard(
             ReadySellCoinSummary(
                 pair = pair,
                 quantity = holding.quantity,
-                entryPrice = entryPrice,
+                entryPrice = holding.entryPrice,
                 currentPrice = currentPrice,
                 profitPct = netProfitPct,
                 profitIdr = profitIdr,

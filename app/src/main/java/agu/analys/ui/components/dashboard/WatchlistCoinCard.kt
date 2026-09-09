@@ -104,10 +104,19 @@ fun WatchlistCoinCard(
     val colorGreen = TvGreen
     val colorRed = TvRed
 
-    val isHolding = holdingStatus != null && holdingStatus.isHolding && holdingStatus.quantity > 0.00000001
-    val badgeInfo: ReadySellBadge? = remember(holdingStatus, tick, tradingFees, colorOrange, colorGreen, colorRed) {
+    val positionContext = remember(holdingStatus, tick, tradingFees) {
+        agu.analys.model.PositionContext.create(
+            symbol = pair.symbol,
+            spotPosition = null,
+            holdingStatus = holdingStatus,
+            currentPrice = tick?.price ?: 0.0,
+            fees = tradingFees
+        )
+    }
+    val isHolding = positionContext.hasPosition && (positionContext.quantity ?: 0.0) > 0.00000001
+    val badgeInfo: ReadySellBadge? = remember(positionContext, tick, tradingFees, colorOrange, colorGreen, colorRed) {
         ReadySellBadgeEvaluator.computeReadyBadge(
-            holding = holdingStatus,
+            context = positionContext,
             tick = tick,
             tradingFees = tradingFees,
             colorOrange = colorOrange,

@@ -56,7 +56,7 @@ fun SellTrailingSection(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = "🔒 JARING PENGAMAN OTOMATIS",
+                        text = "🔒 Trailing Sell Limit",
                         color = if (isTrailingTriggered) TvRed else if (isTrailingActive) TvBlue else TvTextSecondary,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Black
@@ -90,7 +90,7 @@ fun SellTrailingSection(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Kunci Profit (Trailing %):", color = TvTextSecondary, fontSize = 10.sp)
+                        Text("Lock Profit %:", color = TvTextSecondary, fontSize = 10.sp)
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                             listOf(1.5, 2.0, 3.0, 5.0, 10.0).forEach { pct ->
                                 Box(
@@ -128,7 +128,7 @@ fun SellTrailingSection(
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Harga Puncak Tercatat (Peak):", color = TvTextSecondary, fontSize = 9.5.sp)
+                            Text("Harga Peak baru:", color = TvTextSecondary, fontSize = 9.5.sp)
                             Text("${PriceFormatter.formatIdrNumber(peakPrice)} $quoteAsset", color = TvAmber, fontSize = 10.5.sp, fontWeight = FontWeight.Bold)
                         }
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -152,7 +152,7 @@ fun SellTrailingSection(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = if (isRealMode) "🟢 PEMANTAUAN OTOMATIS AKTIF\nAset akan dijual saat menyentuh batas aman."
+                                    text = if (isRealMode) "🟢 Trailing AKTIF\nAset akan dijual saat menyentuh batas aman."
                                            else "🟢 PEMANTAUAN SIMULASI AKTIF\nAset akan dijual saat menyentuh batas aman.",
                                     color = TvGreen,
                                     fontSize = 10.sp,
@@ -171,7 +171,7 @@ fun SellTrailingSection(
                                 contentPadding = PaddingValues(0.dp)
                             ) {
                                 Text(
-                                    if (isRealMode) "Matikan Pemantauan" else "Matikan Pemantauan & Batal Sim",
+                                    if (isRealMode) "Matikan Trailing" else "Matikan Trailing & Batal Sim",
                                     color = TvRed,
                                     fontSize = 10.5.sp,
                                     fontWeight = FontWeight.Bold
@@ -187,8 +187,8 @@ fun SellTrailingSection(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = if (isRealMode) "⚠️ Jaring pengaman siap, belum diaktifkan."
-                                           else "⚠️ Jaring pengaman siap, belum diaktifkan (Simulasi).",
+                                    text = if (isRealMode) "⚠️ Trailing Sell siap, belum diaktifkan."
+                                           else "⚠️ Trailing Sell siap, belum diaktifkan (Sim).",
                                     color = TvAmber,
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold
@@ -205,7 +205,7 @@ fun SellTrailingSection(
                                 contentPadding = PaddingValues(0.dp)
                             ) {
                                 Text(
-                                    if (isRealMode) "Aktifkan Jaring Pengaman" else "Aktifkan Pengaman (Simulasi)",
+                                    if (isRealMode) "Aktifkan Trailing Sell " else "Aktifkan Trailing Sell (Simu)",
                                     color = Color.Black,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Black

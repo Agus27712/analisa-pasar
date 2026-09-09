@@ -9,6 +9,14 @@ import agu.analys.model.TrendSentiment
 import agu.analys.config.TradingFeeConfig
 import agu.analys.config.FeeCalculator
 
+/**
+ * ARCHITECTURAL CONTRACT:
+ * TrenchingEvaluator adalah EXCEPTION RESMI / HYBRID STRATEGY (Position-Aware Hybrid).
+ * Berbeda dari Scalping, Second Wave, Swing, dan Office Daily yang merupakan pure BUY-analyzers,
+ * Trenching secara fundamental adalah strategi DCA / Grid Pyramiding bertingkat yang memerlukan
+ * status kepemilikan aset (hasPosition & entryPrice) untuk memetakan level averaging, defense zone,
+ * dan exit threshold.
+ */
 object TrenchingEvaluator {
     fun evaluate(
         globalContext: GlobalMarketContext?,
