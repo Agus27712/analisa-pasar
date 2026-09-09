@@ -27,7 +27,7 @@ object GroqAiService {
     private const val BASE_URL = "https://api.groq.com/openai/v1/chat/completions"
     private const val MODEL = "qwen/qwen3.8-27b"
     private val FALLBACK_MODELS = listOf("qwen/qwen3.8-27b", "openai/gpt-oss-20b", "qwen/qwen3.6-27b")
-    private const val MAX_TOKENS = 750
+    private const val MAX_TOKENS = 2048
 
     suspend fun generateDeepMarketAudit(
         apiKey: String,
