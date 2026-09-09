@@ -490,7 +490,8 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
                 notificationId = symbol.hashCode() + 1000,
                 title = "Sinyal Jual: $symbol",
                 message = "${state.reason} - P/L: ${agu.analys.util.PriceFormatter.formatPercentage(state.netProfitPct, includePlusSign = true)}",
-                symbol = symbol
+                symbol = symbol,
+                onlyWhenBackground = true
             )
         }
     }

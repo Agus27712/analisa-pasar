@@ -8,15 +8,6 @@ enum class GlobalRegime {
     FLASH_PUMP   // The VETO trigger for selling too early (optional)
 }
 
-data class BinanceCoinTicker(
-    val symbol: String = "",
-    val baseAsset: String = "",
-    val price: Double = 0.0,
-    val changePct24h: Double = 0.0,
-    val timestamp: Long = 0L,
-    val isAvailable: Boolean = true
-)
-
 data class BtcTickerData(
     val price: Double,
     val changePct: Double,
@@ -31,8 +22,7 @@ data class GlobalMarketContext(
     val vetoReason: String? = null,
     val lastUpdateTime: Long = 0L,
     val isConnected: Boolean = false,
-    val dataSource: String = "Global",
-    val activeCoinTicker: BinanceCoinTicker? = null
+    val dataSource: String = "Global"
 ) {
     fun getVetoMessage(): String {
         return if (isVetoActive) "VETO AKTIF: $vetoReason" else "Aman (Tidak Ada Veto)"

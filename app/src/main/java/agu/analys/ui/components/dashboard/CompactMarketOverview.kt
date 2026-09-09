@@ -303,27 +303,11 @@ fun DashboardMockupHeader(
                     k == "usdtidr" || k == "usdt"
                 }?.value
             }
-            val isBinanceActive = globalContext.isConnected && globalContext.dataSource.startsWith("Binance") && globalContext.btcPriceUsdt > 0
-            val btcPriceIdr = remember(btcTick, usdtTick, globalContext.btcPriceUsdt, isBinanceActive) {
-                val usdtRate = usdtTick?.price?.takeIf { it > 0 } ?: 16200.0
-                if (isBinanceActive) {
-                    globalContext.btcPriceUsdt * usdtRate
-                } else if ((btcTick?.price ?: 0.0) > 0) {
-                    btcTick!!.price
-                } else if (globalContext.btcPriceUsdt > 0) {
-                    globalContext.btcPriceUsdt * usdtRate
-                } else {
-                    0.0
-                }
+            val btcPriceIdr = remember(btcTick) {
+                btcTick?.price ?: 0.0
             }
-            val btcChangePct = remember(btcTick, globalContext.btc24hChangePct, isBinanceActive) {
-                if (isBinanceActive) {
-                    globalContext.btc24hChangePct
-                } else if (btcTick != null && btcTick.change24h != 0.0) {
-                    btcTick.change24h
-                } else {
-                    globalContext.btc24hChangePct
-                }
+            val btcChangePct = remember(btcTick) {
+                btcTick?.change24h ?: 0.0
             }
             val btcFormattedIdr = if (btcPriceIdr > 0) {
                 "BTC ${PriceFormatter.formatPrice(btcPriceIdr, showSymbol = true, quoteAsset = "IDR")}"
@@ -415,7 +399,7 @@ fun DashboardMockupHeader(
                         horizontalArrangement = Arrangement.spacedBy(3.dp)
                     ) {
                         Text(
-                            text = if (globalContext.isConnected) "• ${globalContext.dataSource}" else "• Menunggu...",
+                            text = "• Indodax",
                             color = TvTextSecondary,
                             fontSize = 7.5.sp,
                             fontWeight = FontWeight.Medium,

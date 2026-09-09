@@ -234,12 +234,9 @@ object SecondWaveEvaluator {
             else -> SignalAction.HOLD
         }
         
-        // --- GLOBAL CONTEXT LAYER (VETO / SHIELD) ---
-        if (finalAction == SignalAction.BUY && globalContext.isVetoActive) {
-            finalAction = SignalAction.HOLD
-            reasons.add(0, "🛡️ ${globalContext.getVetoMessage()}")
-        }
-        // ---------------------------------------------
+        // --- ORDERBOOK DEPTH CHECK (REPLACED GLOBAL VETO) ---
+        // Biarkan pengguna mengeksekusi order secara bebas.
+        // -----------------------------------------------------
         
         if (isOverextended) {
             reasons.add(0, "⚠️ Harga sudah mendekati target / Overbought — Bukan zona aman untuk entry BUY baru.")
@@ -247,7 +244,7 @@ object SecondWaveEvaluator {
 
         val signalState = AISignalState(
             action = finalAction,
-            confidence = if (globalContext.isVetoActive || isOverextended) 0 else (totalScore * 8.33).toInt().coerceIn(10, 95),
+            confidence = if (isOverextended) 0 else (totalScore * 8.33).toInt().coerceIn(10, 95),
             sentiment = when (finalAction) {
                 SignalAction.BUY -> TrendSentiment.BULLISH_REVERSAL
                 SignalAction.SELL -> TrendSentiment.BEARISH_DISTRIBUTION

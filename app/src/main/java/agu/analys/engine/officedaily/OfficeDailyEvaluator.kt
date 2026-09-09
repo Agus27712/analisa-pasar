@@ -204,12 +204,9 @@ object OfficeDailyEvaluator {
             else -> SignalAction.HOLD
         }
 
-        // --- GLOBAL CONTEXT LAYER (VETO / SHIELD) ---
-        if (finalAction == SignalAction.BUY && globalContext.isVetoActive) {
-            finalAction = SignalAction.HOLD
-            reasons.add(0, "🛡️ ${globalContext.getVetoMessage()}")
-        }
-        // ---------------------------------------------
+        // --- ORDERBOOK DEPTH CHECK (REPLACED GLOBAL VETO) ---
+        // Biarkan pengguna mengeksekusi order secara bebas.
+        // -----------------------------------------------------
 
         if (isOverextendedOrDistribution) {
             reasons.add(0, if (price >= calculatedTp1) "⚠️ Target harga tercapai di Rp ${fmtPrice(calculatedTp1)} — Tahan entry BUY baru." else "⚠️ Jenuh Beli / Sinyal Distribusi — Tahan entry BUY baru.")
@@ -250,7 +247,7 @@ object OfficeDailyEvaluator {
         return OfficeDailyEvalResult(
             signal = AISignalState(
                 action = finalAction,
-                confidence = if (globalContext.isVetoActive && isQualified) 0 else finalScore,
+                confidence = finalScore,
                 sentiment = when (finalAction) {
                     SignalAction.BUY -> TrendSentiment.STRONG_BULLISH_CONTINUATION
                     SignalAction.SELL -> TrendSentiment.BEARISH_DISTRIBUTION

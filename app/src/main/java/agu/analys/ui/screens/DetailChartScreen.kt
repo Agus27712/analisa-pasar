@@ -92,6 +92,8 @@ fun DetailChartScreen(
     val priceAlerts by viewModel.priceAlerts.collectAsStateWithLifecycle()
     val mtfStateAll by viewModel.mtfState.collectAsStateWithLifecycle()
     val globalContext by viewModel.globalContext.collectAsStateWithLifecycle()
+    val orderBookBids by viewModel.orderBookBids.collectAsStateWithLifecycle()
+    val orderBookAsks by viewModel.orderBookAsks.collectAsStateWithLifecycle()
     val mtfState = remember(mtfStateAll, pair.symbol) { mtfStateAll[pair.symbol] ?: emptyMap() }
 
     var showPriceAlertDialog by remember { mutableStateOf(false) }
@@ -120,6 +122,9 @@ fun DetailChartScreen(
             symbol = pair.symbol,
             baseAsset = pair.baseAsset,
             isFavorite = isFavorite,
+            bids = orderBookBids,
+            asks = orderBookAsks,
+            strategyMode = strategyMode,
             onDismiss = { showShieldDialog = false }
         )
     }
@@ -225,24 +230,26 @@ fun DetailChartScreen(
             Spacer(Modifier.height(8.dp))
 
             // 2 & 3. Hero Ambient Header (Price & Controls)
+            val totalBids = remember(orderBookBids) { orderBookBids.sumOf { it.amount } }
+            val totalAsks = remember(orderBookAsks) { orderBookAsks.sumOf { it.amount } }
+            val buyRatio = remember(totalBids, totalAsks) {
+                if (totalBids + totalAsks > 0) totalBids / (totalBids + totalAsks) else 0.5
+            }
+
             val ambientColor: androidx.compose.ui.graphics.Color
             val watermarkIcon: androidx.compose.ui.graphics.vector.ImageVector
             when {
-                !isConnected -> {
-                    ambientColor = TvTextSecondary
-                    watermarkIcon = Icons.Default.Info
+                totalBids + totalAsks == 0.0 -> {
+                    ambientColor = TvBlue
+                    watermarkIcon = Icons.Default.Security
                 }
-                globalContext.isVetoActive -> {
-                    ambientColor = TvRed
-                    watermarkIcon = Icons.Default.Warning
-                }
-                globalContext.regime == agu.analys.engine.global.GlobalRegime.BULLISH -> {
+                buyRatio >= 0.58 -> {
                     ambientColor = TvGreen
                     watermarkIcon = Icons.Default.Security
                 }
-                globalContext.regime == agu.analys.engine.global.GlobalRegime.BEARISH -> {
-                    ambientColor = TvAmber
-                    watermarkIcon = Icons.Default.Security
+                buyRatio <= 0.42 -> {
+                    ambientColor = TvRed
+                    watermarkIcon = Icons.Default.Warning
                 }
                 else -> {
                     ambientColor = TvBlue
@@ -285,6 +292,9 @@ fun DetailChartScreen(
                         symbol = pair.symbol,
                         isFavorite = isFavorite,
                         globalContext = globalContext,
+                        orderBookBids = orderBookBids,
+                        orderBookAsks = orderBookAsks,
+                        strategyMode = strategyMode,
                         onOpenShieldInfo = { showShieldDialog = true },
                         isBuyMode = isBuyMode,
                         onBuyModeChanged = {

@@ -22,8 +22,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import agu.analys.engine.global.GlobalMarketContext
-import agu.analys.engine.global.GlobalRegime
+import agu.analys.config.StrategyMode
+import agu.analys.model.OrderBookItem
 import agu.analys.ui.theme.*
+import agu.analys.util.PriceFormatter
+import java.util.Locale
 
 @Composable
 fun GlobalMarketShieldChip(
@@ -32,53 +35,35 @@ fun GlobalMarketShieldChip(
     isFavorite: Boolean,
     pairChange24h: Double,
     baseAsset: String = "",
+    bids: List<OrderBookItem> = emptyList(),
+    asks: List<OrderBookItem> = emptyList(),
+    strategyMode: StrategyMode = StrategyMode.SCALPING,
     onClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
+    val totalBids = remember(bids) { bids.sumOf { it.amount } }
+    val totalAsks = remember(asks) { asks.sumOf { it.amount } }
+    val buyRatio = remember(totalBids, totalAsks) {
+        if (totalBids + totalAsks > 0) totalBids / (totalBids + totalAsks) else 0.5
+    }
+
     val auraColor = when {
-        !context.isConnected -> TvTextSecondary
-        context.isVetoActive -> TvRed
-        context.regime == GlobalRegime.BULLISH -> TvGreen
-        context.regime == GlobalRegime.BEARISH -> TvAmber
+        totalBids + totalAsks == 0.0 -> TvTextSecondary
+        buyRatio >= 0.58 -> TvGreen
+        buyRatio <= 0.42 -> TvRed
         else -> TvBlue
     }
 
     val statusLabel = when {
-        !context.isConnected -> "OFFLINE"
-        context.isVetoActive -> "VETO FLASH CRASH"
-        context.regime == GlobalRegime.BULLISH -> "BULLISH"
-        context.regime == GlobalRegime.BEARISH -> "BEARISH"
-        else -> "SIDEWAYS"
+        totalBids + totalAsks == 0.0 -> "DEPTH SHIELD: OFF"
+        buyRatio >= 0.58 -> "DEPTH SHIELD: STRONG"
+        buyRatio <= 0.42 -> "DEPTH SHIELD: ALERT"
+        else -> "DEPTH SHIELD: NORMAL"
     }
 
-    val resolvedBase = if (baseAsset.isNotBlank()) baseAsset.uppercase() else {
-        if (symbol.endsWith("IDR", ignoreCase = true)) {
-            symbol.substring(0, symbol.length - 3).uppercase()
-        } else if (symbol.endsWith("USDT", ignoreCase = true)) {
-            symbol.substring(0, symbol.length - 4).uppercase()
-        } else symbol.uppercase()
-    }
-
-    val activeTicker = context.activeCoinTicker
-    val binanceText = remember(activeTicker, resolvedBase, context.isConnected, context.btc24hChangePct) {
-        if (!context.isConnected) {
-            "Menghubungkan..."
-        } else if (activeTicker != null && activeTicker.baseAsset.equals(resolvedBase, ignoreCase = true)) {
-            if (activeTicker.isAvailable) {
-                val sign = if (activeTicker.changePct24h >= 0) "+" else ""
-                val formattedPct = String.format(java.util.Locale.US, "%.2f", activeTicker.changePct24h)
-                "Binance $resolvedBase $sign$formattedPct%"
-            } else {
-                val sign = if (context.btc24hChangePct >= 0) "+" else ""
-                val btcPct = String.format(java.util.Locale.US, "%.2f", context.btc24hChangePct)
-                "Binance BTC $sign$btcPct%"
-            }
-        } else {
-            val sign = if (context.btc24hChangePct >= 0) "+" else ""
-            val btcPct = String.format(java.util.Locale.US, "%.2f", context.btc24hChangePct)
-            "Binance $resolvedBase • BTC $sign$btcPct%"
-        }
-    }
+    val bidPct = (buyRatio * 100).toInt()
+    val askPct = 100 - bidPct
+    val orderbookText = "Bids: $bidPct% • Asks: $askPct%"
 
     val clickModifier = if (onClick != null) Modifier.clickable { onClick() } else Modifier
 
@@ -98,7 +83,7 @@ fun GlobalMarketShieldChip(
             maxLines = 1
         )
         Text(
-            text = binanceText,
+            text = orderbookText,
             color = TvTextSecondary,
             fontSize = 9.5.sp,
             fontWeight = FontWeight.SemiBold,
@@ -114,39 +99,55 @@ fun GlobalMarketShieldDialog(
     symbol: String,
     isFavorite: Boolean,
     baseAsset: String = "",
+    bids: List<OrderBookItem> = emptyList(),
+    asks: List<OrderBookItem> = emptyList(),
+    strategyMode: StrategyMode = StrategyMode.SCALPING,
     onDismiss: () -> Unit
 ) {
+    val totalBids = remember(bids) { bids.sumOf { it.amount } }
+    val totalAsks = remember(asks) { asks.sumOf { it.amount } }
+    val buyRatio = remember(totalBids, totalAsks) {
+        if (totalBids + totalAsks > 0) totalBids / (totalBids + totalAsks) else 0.5
+    }
+
     val (icon, titleColor, statusText, statusDesc) = when {
-        !context.isConnected -> listOf(
+        totalBids + totalAsks == 0.0 -> listOf(
             Icons.Default.Info,
             TvTextSecondary,
-            "Menghubungkan...",
-            "Mengambil data Global Market BTC"
+            "LIKUIDITAS DATA KOSONG",
+            "Menunggu data order book / depth terisi oleh server Indodax."
         )
-        context.isVetoActive -> listOf(
-            Icons.Default.Warning,
-            TvRed,
-            "VETO (FLASH CRASH)",
-            context.vetoReason ?: "Terdeteksi badai market global"
-        )
-        context.regime == GlobalRegime.BULLISH -> listOf(
+        buyRatio >= 0.58 -> listOf(
             Icons.Default.Security,
             TvGreen,
-            "AMAN (BULLISH)",
-            "Kondisi global mendukung kenaikan harga altcoin"
+            "SUPPORT KUAT (BULLISH DEPTH)",
+            "Dinding beli (Bid Wall) sangat dominan. Ada dukungan likuiditas yang siap menahan koreksi."
         )
-        context.regime == GlobalRegime.BEARISH -> listOf(
-            Icons.Default.Security,
-            TvAmber,
-            "STANDBY (BEARISH)",
-            "Market global sedang tertekan, tetap waspada & disiplin SL"
+        buyRatio <= 0.42 -> listOf(
+            Icons.Default.Warning,
+            TvRed,
+            "TEKANAN TINGGI (BEARISH DEPTH)",
+            "Dinding jual (Ask Wall) menumpuk tebal di atas. Potensi harga tertahan atau mengalami pullback."
         )
         else -> listOf(
             Icons.Default.Security,
             TvBlue,
-            "STANDBY (SIDEWAYS)",
-            "Market global relatif stabil / netral"
+            "LIKUIDITAS SEIMBANG (NETRAL DEPTH)",
+            "Tekanan beli dan jual relatif seimbang. Harga cenderung konsolidasi / sideways jangka pendek."
         )
+    }
+
+    val maxBid = remember(bids) { bids.maxByOrNull { it.amount } }
+    val maxAsk = remember(asks) { asks.maxByOrNull { it.amount } }
+
+    val strategyGuide = remember(strategyMode) {
+        when (strategyMode) {
+            StrategyMode.SCALPING -> "Scalping sangat sensitif terhadap imbalance jangka pendek. Dukungan buy wall (bid > 55%) memberikan perlindungan instan untuk entri cepat 1-5 menit."
+            StrategyMode.SECOND_WAVE -> "Konfirmasi wave kedua membutuhkan likuiditas tebal untuk menahan retracement. Bid wall yang kuat menyaring sinyal palsu agar entri lebih aman."
+            StrategyMode.SWING -> "Aktivitas akumulasi jangka menengah biasanya ditandai dengan dinding bid di level harga psikologis. Hindari fomo jika ask wall terlalu tebal."
+            StrategyMode.OFFICE_DAILY -> "Dinding beli (buy walls) tebal bertindak sebagai basis harga yang solid untuk melakukan akumulasi DCA secara teratur."
+            StrategyMode.TRENCHING -> "Trading parit memanfaatkan liquidity pools di bid/ask untuk pasang jaring buy/sell limit secara presisi."
+        }
     }
 
     Dialog(onDismissRequest = onDismiss) {
@@ -174,7 +175,7 @@ fun GlobalMarketShieldDialog(
                         )
                         Spacer(Modifier.width(8.dp))
                         Text(
-                            "GLOBAL MARKET SHIELD",
+                            "ORDERBOOK DEPTH SHIELD",
                             color = TvTextPrimary,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold
@@ -229,90 +230,98 @@ fun GlobalMarketShieldDialog(
                         .padding(12.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    if (!isFavorite) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text("Mode Analisa", color = TvTextSecondary, fontSize = 11.sp)
-                            Text("BTC (Non-Fav)", color = TvAmber, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Rasio Order Book", color = TvTextSecondary, fontSize = 11.sp)
+                        val bidPct = (buyRatio * 100).toInt()
+                        Text("Bids $bidPct% : Asks ${100 - bidPct}%", color = titleColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text("Data Source", color = TvTextSecondary, fontSize = 11.sp)
-                        val sourceBadge = if (context.isConnected) {
-                            if (context.dataSource.startsWith("Binance")) "Binance (Live Stream)" else "Indodax (Fallback)"
-                        } else {
-                            "Terputus"
-                        }
-                        Text(sourceBadge, color = if (context.isConnected) TvGreen else TvRed, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                    }
-
-                    if (context.btcPriceUsdt > 0.0) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text("Harga BTC Global", color = TvTextSecondary, fontSize = 11.sp)
-                            Text(
-                                "$${String.format(java.util.Locale.US, "%,.2f", context.btcPriceUsdt)}",
-                                color = TvTextPrimary,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text("Perubahan 24 Jam", color = TvTextSecondary, fontSize = 11.sp)
-                            val sign = if (context.btc24hChangePct > 0) "+" else ""
-                            Text(
-                                "$sign${String.format(java.util.Locale.US, "%.2f", context.btc24hChangePct)}%",
-                                color = if (context.btc24hChangePct >= 0) TvGreen else TvRed,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-
-                    val activeTicker = context.activeCoinTicker
-                    if (activeTicker != null && activeTicker.isAvailable && activeTicker.price > 0.0) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text("Binance ${activeTicker.baseAsset}", color = TvTextSecondary, fontSize = 11.sp)
-                            val coinSign = if (activeTicker.changePct24h >= 0) "+" else ""
-                            Text(
-                                "$coinSign${String.format(java.util.Locale.US, "%.2f", activeTicker.changePct24h)}%",
-                                color = if (activeTicker.changePct24h >= 0) TvGreen else TvRed,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("Proteksi Badai/Crash", color = TvTextSecondary, fontSize = 11.sp)
+                        Text("Total Volume Bid (Beli)", color = TvTextSecondary, fontSize = 11.sp)
                         Text(
-                            if (context.isVetoActive) "DIBLOKIR (Veto)" else "Aman",
-                            color = if (context.isVetoActive) TvRed else TvGreen,
+                            String.format(Locale.US, "%,.4f %s", totalBids, baseAsset.uppercase()),
+                            color = TvGreen,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold
                         )
                     }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Total Volume Ask (Jual)", color = TvTextSecondary, fontSize = 11.sp)
+                        Text(
+                            String.format(Locale.US, "%,.4f %s", totalAsks, baseAsset.uppercase()),
+                            color = TvRed,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    if (maxBid != null) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Dinding Beli Terbesar", color = TvTextSecondary, fontSize = 11.sp)
+                            Text(
+                                "${String.format(Locale.US, "%.3f", maxBid.amount)} @ ${PriceFormatter.formatPrice(maxBid.price)}",
+                                color = TvGreen,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    if (maxAsk != null) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Dinding Jual Terbesar", color = TvTextSecondary, fontSize = 11.sp)
+                            Text(
+                                "${String.format(Locale.US, "%.3f", maxAsk.amount)} @ ${PriceFormatter.formatPrice(maxAsk.price)}",
+                                color = TvRed,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
                 }
 
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(12.dp))
+
+                // Strategy mode guidance
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = TvSurfaceVariant),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Column(Modifier.padding(10.dp)) {
+                        Text(
+                            text = "💡 Panduan Mode ${strategyMode.name}",
+                            color = TvTextPrimary,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = strategyGuide,
+                            color = TvTextSecondary,
+                            fontSize = 10.5.sp,
+                            lineHeight = 14.sp
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(14.dp))
 
                 Button(
                     onClick = onDismiss,
@@ -328,37 +337,41 @@ fun GlobalMarketShieldDialog(
 }
 
 @Composable
-fun GlobalMarketShieldCard(context: GlobalMarketContext) {
+fun GlobalMarketShieldCard(
+    bids: List<OrderBookItem> = emptyList(),
+    asks: List<OrderBookItem> = emptyList(),
+    strategyMode: StrategyMode = StrategyMode.SCALPING
+) {
+    val totalBids = remember(bids) { bids.sumOf { it.amount } }
+    val totalAsks = remember(asks) { asks.sumOf { it.amount } }
+    val buyRatio = remember(totalBids, totalAsks) {
+        if (totalBids + totalAsks > 0) totalBids / (totalBids + totalAsks) else 0.5
+    }
+
     val (icon, titleColor, statusText, statusDesc) = when {
-        !context.isConnected -> listOf(
+        totalBids + totalAsks == 0.0 -> listOf(
             Icons.Default.Info,
             TvTextSecondary,
-            "Menghubungkan...",
-            "Mengambil data Global Market"
+            "LIKUIDITAS KOSONG",
+            "Menunggu data order book"
         )
-        context.isVetoActive -> listOf(
-            Icons.Default.Warning,
-            TvRed,
-            "VETO (FLASH CRASH)",
-            context.vetoReason ?: "Terdeteksi badai market global"
-        )
-        context.regime == GlobalRegime.BULLISH -> listOf(
+        buyRatio >= 0.58 -> listOf(
             Icons.Default.Security,
             TvGreen,
-            "AMAN (BULLISH)",
-            "Kondisi global mendukung kenaikan"
+            "SUPPORT KUAT (BULLISH)",
+            "Dinding beli (Bid Wall) sangat dominan"
         )
-        context.regime == GlobalRegime.BEARISH -> listOf(
-            Icons.Default.Security,
-            TvAmber,
-            "STANDBY (BEARISH)",
-            "Global sedang turun, berhati-hati"
+        buyRatio <= 0.42 -> listOf(
+            Icons.Default.Warning,
+            TvRed,
+            "TEKANAN TINGGI (BEARISH)",
+            "Dinding jual (Ask Wall) menumpuk di atas"
         )
         else -> listOf(
             Icons.Default.Security,
             TvBlue,
-            "STANDBY (SIDEWAYS)",
-            "Market global relatif stabil"
+            "SEIMBANG (NETRAL)",
+            "Tekanan beli dan jual seimbang"
         )
     }
 
@@ -376,28 +389,14 @@ fun GlobalMarketShieldCard(context: GlobalMarketContext) {
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("GLOBAL MARKET SHIELD", color = TvTextSecondary, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    Text("ORDERBOOK DEPTH SHIELD", color = TvTextSecondary, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.width(4.dp))
-                    val sourceBadge = if (context.isConnected) {
-                        if (context.dataSource.startsWith("Binance")) "• Binance" else "• Indodax (Fallback)"
-                    } else {
-                        "• Terputus"
-                    }
                     Text(
-                        sourceBadge,
-                        color = if (context.isConnected) TvTextSecondary.copy(alpha = 0.7f) else TvRed,
+                        "• Mode ${strategyMode.name}",
+                        color = TvTextSecondary.copy(alpha = 0.7f),
                         fontSize = 8.5.sp,
                         fontWeight = FontWeight.Bold
                     )
-                    Spacer(Modifier.width(4.dp))
-                    if (context.btcPriceUsdt > 0.0) {
-                        Text(
-                            "BTC: $${String.format(java.util.Locale.US, "%,.2f", context.btcPriceUsdt)} (${if(context.btc24hChangePct > 0) "+" else ""}${String.format(java.util.Locale.US, "%.2f", context.btc24hChangePct)}%)",
-                            color = if (context.btc24hChangePct >= 0) TvGreen else TvRed,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
                 }
                 Spacer(Modifier.height(2.dp))
                 Text(statusText as String, color = titleColor, fontSize = 12.sp, fontWeight = FontWeight.Black)

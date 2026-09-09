@@ -2,7 +2,6 @@ package agu.analys.service
 
 import agu.analys.AppContextProvider
 import agu.analys.model.AISignalState
-import agu.analys.model.IndonesiaCpiData
 import agu.analys.model.MarketTick
 import agu.analys.model.TechnicalIndicators
 import agu.analys.util.PriceFormatter
@@ -35,13 +34,12 @@ object GroqAiService {
         indicators: TechnicalIndicators,
         signal: AISignalState
     ): String = withContext(Dispatchers.IO) {
-        val cpi = if (safeContextReady) BpsMacroService(AppContextProvider.context).getLatest() else null
         val base = extractBase(tick.symbol)
         val headlines = runCatching { CryptoHeadlineService.snapshotForBase(base) }.getOrNull()
         val headlineBlock = headlines?.promptBlock() ?: "Headline: tidak tersedia."
 
         if (apiKey.isBlank()) {
-            return@withContext buildFallback(tick, indicators, signal, cpi, headlineBlock) +
+            return@withContext buildFallback(tick, indicators, signal, headlineBlock) +
                 "\n\n⚠️ Groq API key belum di-set. Buka Settings dan isi Groq API key."
         }
 
@@ -164,7 +162,7 @@ Wajib susun jawaban dalam format Markdown berikut:
             }
         }
 
-        buildFallback(tick, indicators, signal, cpi, headlineBlock)
+        buildFallback(tick, indicators, signal, headlineBlock)
     }
 
     private fun extractBase(symbol: String): String {
@@ -188,7 +186,6 @@ Wajib susun jawaban dalam format Markdown berikut:
         tick: MarketTick,
         indicators: TechnicalIndicators,
         signal: AISignalState,
-        cpi: IndonesiaCpiData?,
         headlineBlock: String
     ): String {
         val base = extractBase(tick.symbol)

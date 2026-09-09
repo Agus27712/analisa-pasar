@@ -37,8 +37,13 @@ object AlertNotificationHelper {
         notificationId: Int,
         title: String,
         message: String,
-        symbol: String = ""
+        symbol: String = "",
+        onlyWhenBackground: Boolean = false
     ) {
+        if (onlyWhenBackground && agu.analys.AppContextProvider.isAppInForeground) {
+            timber.log.Timber.d("sendPriceAlertNotification: Diabaikan karena aplikasi aktif di foreground: $title")
+            return
+        }
         val prefs = AppPreferences(context)
         if (!prefs.isNotificationsEnabled) return
 
@@ -81,6 +86,10 @@ object AlertNotificationHelper {
         strategyMode: StrategyMode,
         signal: AISignalState
     ) {
+        if (agu.analys.AppContextProvider.isAppInForeground) {
+            timber.log.Timber.d("sendCandidateFoundNotification: Diabaikan karena aplikasi aktif di foreground: $symbol")
+            return
+        }
         val prefs = AppPreferences(context)
         if (!prefs.isNotificationsEnabled) return
 

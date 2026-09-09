@@ -2,7 +2,6 @@ package agu.analys.service
 
 import agu.analys.AppContextProvider
 import agu.analys.model.AISignalState
-import agu.analys.model.IndonesiaCpiData
 import agu.analys.model.MarketTick
 import agu.analys.model.TechnicalIndicators
 import agu.analys.util.PriceFormatter
@@ -37,12 +36,11 @@ object GeminiAiService {
         signal: AISignalState
     ): String = withContext(Dispatchers.IO) {
         val effectiveKey = if (apiKey.isBlank()) "" else apiKey
-        val cpi = if (safeContextReady) BpsMacroService(AppContextProvider.context).getLatest() else null
         val base = extractBase(tick.symbol)
         val headlines = runCatching { CryptoHeadlineService.snapshotForBase(base) }.getOrNull()
         val headlineBlock = headlines?.promptBlock() ?: "Headline: tidak tersedia."
 
-        if (effectiveKey.isBlank()) return@withContext buildFallback(tick, indicators, signal, cpi, headlineBlock)
+        if (effectiveKey.isBlank()) return@withContext buildFallback(tick, indicators, signal, headlineBlock)
 
         val pairCtx = PairNarrative.forBase(base)
         val move = describeMove(tick.change24h)
@@ -153,7 +151,7 @@ Format Output (Wajib Markdown Terstruktur Lengkap):
                         val finishReason = candidate?.optString("finishReason")
                         if (finishReason == "SAFETY") {
                             Timber.w("Gemini: Terblokir oleh safety filter!")
-                            return@withContext buildFallback(tick, indicators, signal, cpi, headlineBlock)
+                            return@withContext buildFallback(tick, indicators, signal, headlineBlock)
                         }
 
                         val parts = candidate?.optJSONObject("content")?.optJSONArray("parts")
@@ -173,7 +171,7 @@ Format Output (Wajib Markdown Terstruktur Lengkap):
             }
         }
 
-        buildFallback(tick, indicators, signal, cpi, headlineBlock)
+        buildFallback(tick, indicators, signal, headlineBlock)
     }
 
     private fun extractBase(symbol: String): String {
@@ -197,7 +195,6 @@ Format Output (Wajib Markdown Terstruktur Lengkap):
         tick: MarketTick,
         indicators: TechnicalIndicators,
         signal: AISignalState,
-        cpi: IndonesiaCpiData?,
         headlineBlock: String
     ): String {
         val base = extractBase(tick.symbol)

@@ -1,17 +1,13 @@
 package agu.analys.engine.global
 
-import agu.analys.service.GlobalMarketWebSocket
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.launch
 
 object GlobalContextManager {
-    private val globalWebSocket = GlobalMarketWebSocket()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     private val _context = MutableStateFlow(GlobalMarketContext())
@@ -21,88 +17,26 @@ object GlobalContextManager {
     private val HISTORY_WINDOW_MS = 3 * 60 * 1000L // 3 minutes window for crash detection
 
     private var isStarted = false
-    private var btcJob: kotlinx.coroutines.Job? = null
-    private var coinJob: kotlinx.coroutines.Job? = null
-    private var connJob: kotlinx.coroutines.Job? = null
 
     fun start() {
         if (isStarted) return
         isStarted = true
-        
-        globalWebSocket.connect()
-
-        btcJob?.cancel()
-        btcJob = scope.launch {
-            globalWebSocket.btcTickerFlow.collectLatest { ticker ->
-                if (ticker == null) return@collectLatest
-                
-                val now = System.currentTimeMillis()
-                priceHistory.add(PriceTick(ticker.price, now))
-                
-                // Cleanup old ticks
-                priceHistory.removeAll { now - it.timestamp > HISTORY_WINDOW_MS }
-                
-                val currentContext = evaluateGlobalContext(ticker, now).copy(
-                    isConnected = true,
-                    dataSource = "Binance",
-                    activeCoinTicker = _context.value.activeCoinTicker
-                )
-                _context.value = currentContext
-            }
-        }
-
-        coinJob?.cancel()
-        coinJob = scope.launch {
-            globalWebSocket.coinTickerFlow.collectLatest { coinTicker ->
-                if (coinTicker != null) {
-                    _context.value = _context.value.copy(activeCoinTicker = coinTicker)
-                }
-            }
-        }
-        
-        connJob?.cancel()
-        connJob = scope.launch {
-            globalWebSocket.isConnected.collectLatest { connected ->
-                if (!connected) {
-                    if (_context.value.dataSource.startsWith("Binance")) {
-                        _context.value = _context.value.copy(isConnected = false)
-                    }
-                } else {
-                    _context.value = _context.value.copy(isConnected = true)
-                }
-            }
-        }
+        _context.value = _context.value.copy(isConnected = true, dataSource = "Indodax")
     }
 
     fun stop() {
-        if (!isStarted) return
         isStarted = false
-        btcJob?.cancel()
-        coinJob?.cancel()
-        connJob?.cancel()
-        btcJob = null
-        coinJob = null
-        connJob = null
-        globalWebSocket.disconnect()
-        _context.value = _context.value.copy(isConnected = false)
     }
 
     fun subscribeCoin(baseAsset: String) {
         start()
-        globalWebSocket.subscribeCoin(baseAsset)
     }
 
     /**
-     * Fallback cerdas ke data live BTC Indodax jika WebSocket global (Binance) diblokir oleh ISP Indonesia atau belum terhubung.
+     * Memperbarui status pasar global / BTC menggunakan data BTC dari Indodax.
      */
     fun updateFallbackFromIndodax(priceIdr: Double, changePct: Double, usdtRate: Double = 16200.0) {
         val now = System.currentTimeMillis()
-        val isBinanceActive = globalWebSocket.isConnected.value && 
-                _context.value.dataSource.startsWith("Binance") && 
-                (now - _context.value.lastUpdateTime < 20_000L)
-        
-        // Jika Binance sedang aktif live streaming, prioritaskan Binance sepenuhnya
-        if (isBinanceActive) return
         if (priceIdr <= 0) return
 
         val effectiveUsdtRate = if (usdtRate > 0) usdtRate else 16200.0
@@ -114,8 +48,7 @@ object GlobalContextManager {
         val indodaxTicker = BtcTickerData(price = priceUsdt, changePct = changePct, source = "Indodax")
         val currentContext = evaluateGlobalContext(indodaxTicker, now).copy(
             isConnected = true,
-            dataSource = "Indodax",
-            activeCoinTicker = _context.value.activeCoinTicker
+            dataSource = "Indodax"
         )
         _context.value = currentContext
     }
@@ -136,11 +69,10 @@ object GlobalContextManager {
             val oldestTick = priceHistory.first()
             val dropPct = ((oldestTick.price - ticker.price) / oldestTick.price) * 100.0
             
-            // If BTC drops more than 1.5% in 3 minutes, trigger Global Crash Shield (Veto)
             if (dropPct > 1.5 || ticker.changePct < -7.0) {
                 regime = GlobalRegime.FLASH_CRASH
                 isVeto = true
-                vetoReason = "Global Flash Crash (BTC Drop: ${String.format("%.2f", dropPct)}% / 3m)"
+                vetoReason = "Flash Crash BTC (Drop: ${String.format("%.2f", dropPct)}% / 3m)"
             }
         }
 
@@ -151,7 +83,7 @@ object GlobalContextManager {
             isVetoActive = isVeto,
             vetoReason = vetoReason,
             lastUpdateTime = now,
-            isConnected = _context.value.isConnected,
+            isConnected = true,
             dataSource = ticker.source
         )
     }

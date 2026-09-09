@@ -32,8 +32,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import agu.analys.config.MarketDataSource
+import agu.analys.config.StrategyMode
 import agu.analys.engine.global.GlobalMarketContext
 import agu.analys.model.TradingPair
+import agu.analys.model.OrderBookItem
 import agu.analys.ui.animation.AnimatedPercentageBadge
 import agu.analys.ui.animation.FlipCardPriceText
 import agu.analys.ui.components.dashboard.AssetAvatar
@@ -177,6 +179,9 @@ fun DetailPriceHeader(
     symbol: String,
     isFavorite: Boolean,
     globalContext: GlobalMarketContext? = null,
+    orderBookBids: List<OrderBookItem> = emptyList(),
+    orderBookAsks: List<OrderBookItem> = emptyList(),
+    strategyMode: StrategyMode = StrategyMode.SCALPING,
     onOpenShieldInfo: (() -> Unit)? = null,
     isBuyMode: Boolean = true,
     onBuyModeChanged: ((Boolean) -> Unit)? = null
@@ -274,6 +279,9 @@ fun DetailPriceHeader(
                     baseAsset = baseAsset,
                     isFavorite = isFavorite,
                     pairChange24h = change24h,
+                    bids = orderBookBids,
+                    asks = orderBookAsks,
+                    strategyMode = strategyMode,
                     onClick = onOpenShieldInfo
                 )
             }
@@ -290,7 +298,7 @@ fun getCoinFullName(symbol: String): String = when (symbol.uppercase()) {
     "ADA" -> "Cardano"
     "BNB" -> "BNB"
     "USDT" -> "Tether"
-    "BIDR" -> "Binance IDR"
+    "BIDR" -> "Rupiah Token"
     "PEPE" -> "Pepe"
     "SHIB" -> "Shiba Inu"
     "SUI" -> "Sui Network"

@@ -400,12 +400,9 @@ object SwingEvaluator {
             else -> SignalAction.HOLD
         }
         
-        // --- GLOBAL CONTEXT LAYER (VETO / SHIELD) ---
-        if (finalAction == SignalAction.BUY && globalContext.isVetoActive) {
-            finalAction = SignalAction.HOLD
-            reasons.add(0, "🛡️ ${globalContext.getVetoMessage()}")
-        }
-        // ---------------------------------------------
+        // --- ORDERBOOK DEPTH CHECK (REPLACED GLOBAL VETO) ---
+        // Biarkan pengguna mengeksekusi order secara bebas.
+        // -----------------------------------------------------
 
         if (isTechnicalDistribution) {
             reasons.add(0, "⚠️ Sinyal distribusi / koreksi teknikal terdeteksi — skip entry Swing baru.")
@@ -471,7 +468,7 @@ object SwingEvaluator {
         return SwingEvalResult(
             AISignalState(
                 action = finalAction,
-                confidence = if (globalContext.isVetoActive && isQualifiedBuy) 0 else finalScore,
+                confidence = finalScore,
                 sentiment = when (finalAction) {
                     SignalAction.BUY -> when (detectedSetup) {
                         SwingSetup.BREAKOUT -> TrendSentiment.STRONG_BULLISH_CONTINUATION

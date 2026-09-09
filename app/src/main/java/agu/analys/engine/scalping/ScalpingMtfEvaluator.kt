@@ -140,13 +140,11 @@ object ScalpingMtfEvaluator {
             else -> ScalpingStage.WATCH
         }
         
-        // --- GLOBAL CONTEXT LAYER (VETO / SHIELD) ---
-        if (finalAction == SignalAction.BUY && globalContext.isVetoActive) {
-            finalAction = SignalAction.HOLD
-            stage = ScalpingStage.HOLD
-            reasons.add(0, "🛡️ ${globalContext.getVetoMessage()}")
+        // --- ORDERBOOK DEPTH FILTER (REPLACED GLOBAL VETO) ---
+        if (finalAction == SignalAction.BUY && buyPressure < 0.7) {
+            reasons.add("💡 Likuiditas bid/ask order book agak tipis (${fmt(buyPressure)}x), disarankan cicil bertahap.")
         }
-        // ---------------------------------------------
+        // -----------------------------------------------------
 
         val mtf = ScalpingMtfSnapshot(
             biasOk = hasRoomToGrow,
@@ -164,14 +162,12 @@ object ScalpingMtfEvaluator {
             entryPriceDetail = "Net RR: 1:${fmt(feeResult.netRr)}",
             path = if (ready) ScalpingPath.ENTRY_READY else ScalpingPath.NONE,
             statusTitle = when {
-                globalContext.isVetoActive -> "VETO AKTIF"
                 strong -> "STRONG ENTRY"
                 ready -> "BUY READY"
                 early -> "EARLY SETUP"
                 else -> "WATCH"
             },
             waitingFor = when {
-                globalContext.isVetoActive -> "Crash Reda"
                 ready -> "Eksekusi"
                 early -> "Konfirmasi"
                 else -> "Momentum"
@@ -183,7 +179,7 @@ object ScalpingMtfEvaluator {
 
         val signal = AISignalState(
             action = finalAction,
-            confidence = when { globalContext.isVetoActive -> 0; strong -> 92; ready -> 85; early -> 62; else -> 40 },
+            confidence = when { strong -> 92; ready -> 85; early -> 62; else -> 40 },
             sentiment = TrendSentiment.NEUTRAL_CONSOLIDATION,
             entryPrice = price,
             targetPrice1 = tp1,
