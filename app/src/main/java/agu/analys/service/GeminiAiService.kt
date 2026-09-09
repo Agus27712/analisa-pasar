@@ -19,14 +19,16 @@ import java.util.concurrent.TimeUnit
 
 /** Chart summary Gemini — output wajib Bahasa Indonesia (headline di-translate). */
 object GeminiAiService {
+    // PERBAIKAN 1: Waktu timeout diperpanjang (Read menjadi 60s) untuk merespon AI dengan stabil
     private val client = OkHttpClient.Builder()
-        .connectTimeout(12, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
-        .writeTimeout(15, TimeUnit.SECONDS)
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
         .build()
 
-    private const val MODEL = "gemini-3.6-flash"
-    private val CANDIDATE_MODELS = listOf("gemini-3.6-flash", "gemini-2.0-flash", "gemini-1.5-flash")
+    // PERBAIKAN 2: Gunakan daftar model yang dijamin ada di Google API publik
+    private const val MODEL = "gemini-1.5-flash"
+    private val CANDIDATE_MODELS = listOf("gemini-1.5-flash", "gemini-1.5-flash-8b", "gemini-1.5-pro")
 
     suspend fun generateChartSummary24h(
         apiKey: String,
@@ -122,34 +124,52 @@ Format Output (Wajib Markdown Terstruktur Lengkap):
                         put("temperature", 0.35)
                         put("maxOutputTokens", 2048)
                     })
+                    // PERBAIKAN 3: Matikan fitur sensor supaya analisis kripto/pasar (bull run, crash) tidak di-block
+                    put("safetySettings", JSONArray().apply {
+                        val blockNone = "BLOCK_NONE"
+                        put(JSONObject().apply { put("category", "HARM_CATEGORY_HARASSMENT"); put("threshold", blockNone) })
+                        put(JSONObject().apply { put("category", "HARM_CATEGORY_HATE_SPEECH"); put("threshold", blockNone) })
+                        put(JSONObject().apply { put("category", "HARM_CATEGORY_SEXUALLY_EXPLICIT"); put("threshold", blockNone) })
+                        put(JSONObject().apply { put("category", "HARM_CATEGORY_DANGEROUS_CONTENT"); put("threshold", blockNone) })
+                    })
                 }
+
                 val url = "https://generativelanguage.googleapis.com/v1beta/models/$modelName:generateContent?key=$effectiveKey"
                 val request = Request.Builder()
                     .url(url)
                     .addHeader("Content-Type", "application/json")
                     .post(payload.toString().toRequestBody("application/json".toMediaType()))
                     .build()
+
                 client.newCall(request).execute().use { resp ->
                     val responseBody = resp.body?.string().orEmpty()
                     if (resp.isSuccessful) {
-                        val parts = JSONObject(responseBody)
+                        val candidate = JSONObject(responseBody)
                             .optJSONArray("candidates")
                             ?.takeIf { it.length() > 0 }
                             ?.getJSONObject(0)
-                            ?.optJSONObject("content")
-                            ?.optJSONArray("parts")
+                        
+                        // PERBAIKAN 4: Validasi `finishReason` untuk mencegah error saat konten dikunci filter Google
+                        val finishReason = candidate?.optString("finishReason")
+                        if (finishReason == "SAFETY") {
+                            Timber.w("Gemini: Terblokir oleh safety filter!")
+                            return@withContext buildFallback(tick, indicators, signal, cpi, headlineBlock)
+                        }
+
+                        val parts = candidate?.optJSONObject("content")?.optJSONArray("parts")
                         val text = parts?.let { arr ->
                             (0 until arr.length()).joinToString("\n") { i ->
                                 arr.getJSONObject(i).optString("text").orEmpty()
                             }
                         }.orEmpty().trim()
+
                         if (text.isNotBlank()) return@withContext text
                     } else {
-                        Timber.w("Gemini model $modelName returned ${resp.code}: $responseBody")
+                        Timber.e("Gemini Error $modelName HTTP ${resp.code}: $responseBody")
                     }
                 }
             } catch (e: Exception) {
-                Timber.w(e, "Gemini model $modelName call failed")
+                Timber.e(e, "Gemini model $modelName call failed")
             }
         }
 
