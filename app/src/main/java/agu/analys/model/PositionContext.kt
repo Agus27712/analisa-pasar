@@ -64,7 +64,7 @@ data class PositionContext(
                 return PositionContext(
                     hasPosition = false,
                     symbol = symbol,
-                    currentPrice = if (currentPrice > 0.0) currentPrice else null
+                    currentPrice = if (currentPrice > 0.0 && currentPrice.isFinite()) currentPrice else null
                 )
             }
 
@@ -104,7 +104,7 @@ data class PositionContext(
             val isTrailingTrig = if (isSpotHolding) spotPosition!!.isTrailingTriggered else (holdingStatus?.isTrailingTriggered == true)
             val isReal = if (isSpotHolding) spotPosition!!.isReal else (holdingStatus?.isReal ?: false)
 
-            val validPrice = if (currentPrice > 0.0) currentPrice else entry
+            val validPrice = if (currentPrice > 0.0 && currentPrice.isFinite()) currentPrice else null
             val cost = if (entry != null && entry > 0.0) qty * entry else null
             val sellFeeRate = (fees.sellMakerPct / 100.0).coerceAtLeast(0.0)
             val gross = if (validPrice != null) qty * validPrice else null
@@ -175,7 +175,7 @@ object SellCheckpointEvaluator {
         if (!context.hasPosition) return emptyList()
 
         val entry = context.entryPrice
-        val current = context.currentPrice ?: (entry ?: 0.0)
+        val current = context.currentPrice ?: 0.0
         val pnlPct = context.floatingProfitPct
         val cost = context.costBasis
         val sl = context.stopLoss

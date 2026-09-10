@@ -151,6 +151,29 @@ class PositionWorkflowUnitTest {
     }
 
     @Test
+    fun testNoEntrySubstitutionWhenCurrentPriceMissing() {
+        val holding = CoinHoldingStatus(
+            quantity = 100.0,
+            entryPrice = 634.0,
+            isHolding = true
+        )
+        val context = PositionContext.create(
+            symbol = "HBAR/IDR",
+            spotPosition = null,
+            holdingStatus = holding,
+            currentPrice = 0.0,
+            fees = TradingFeeConfig()
+        )
+
+        assertTrue(context.hasPosition)
+        assertEquals(634.0, context.entryPrice ?: 0.0, 0.001)
+        assertNull("Current price must NOT fallback to entry price when 0.0", context.currentPrice)
+        assertNull("Gross value must be null when current price is missing", context.grossValue)
+        assertNull("Net value must be null when current price is missing", context.netValue)
+        assertNull("Floating profit pct must be null when current price is missing", context.floatingProfitPct)
+    }
+
+    @Test
     fun testRsiOverboughtSellBranchIsReachableAndUnified() {
         val context = PositionContext(
             hasPosition = true,

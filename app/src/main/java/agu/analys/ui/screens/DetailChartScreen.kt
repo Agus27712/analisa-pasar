@@ -129,10 +129,45 @@ fun DetailChartScreen(
         )
     }
 
+    var lastKnownLivePrice by remember(pair.symbol) { mutableDoubleStateOf(0.0) }
+    LaunchedEffect(tick?.price) {
+        val p = tick?.price ?: 0.0
+        if (p > 0.0 && p.isFinite()) {
+            lastKnownLivePrice = p
+        }
+    }
+
+    // 1. Hanya depend ke tick.price live, JANGAN ke candles
+    val lastMarketPrice = tick?.price?.takeIf { it > 0.0 && it.isFinite() }
+        ?: lastKnownLivePrice.takeIf { it > 0.0 }
+        ?: 0.0
+
+    // 2. Fallback emergency terpisah: hanya jika live tick belum pernah ada sama sekali saat cold start
+    val displayPrice = if (lastMarketPrice > 0.0) {
+        lastMarketPrice
+    } else {
+        candles.lastOrNull()?.close?.takeIf { it > 0.0 && it.isFinite() } ?: 0.0
+    }
+
+    val effectivePositionContext = remember(positionContext, displayPrice, spotPosition, pair, tradingFees, isRealBuyMode) {
+        if (displayPrice > 0.0) {
+            val holding = viewModel.getHoldingStatus(pair, isRealBuyMode)
+            PositionContext.create(
+                symbol = pair.symbol,
+                spotPosition = spotPosition,
+                holdingStatus = holding,
+                currentPrice = displayPrice,
+                fees = tradingFees
+            )
+        } else {
+            positionContext
+        }
+    }
+
     if (showPriceAlertDialog) {
         PriceAlertDialog(
             symbol = pair.symbol,
-            currentPrice = tick?.price ?: 0.0,
+            currentPrice = displayPrice,
             quoteAsset = pair.quoteAsset,
             alerts = priceAlerts,
             onAddAlert = { alert ->
@@ -168,20 +203,10 @@ fun DetailChartScreen(
         )
     }
 
-    // Market Activity & Display Price Calculation
-    val displayPrice = remember(tick, candles) {
-        val tp = tick?.price ?: 0.0
-        if (tp > 0.0) tp else (candles.lastOrNull()?.close ?: 0.0)
-    }
     val volume = tick?.volume24h ?: 0.0
-    val change = remember(tick, candles) {
+    val change = remember(tick?.change24h) {
         val tc = tick?.change24h ?: 0.0
-        if (!tc.isNaN() && tc != 0.0) tc
-        else if (candles.size >= 2) {
-            val first = candles.first().open
-            val last = candles.last().close
-            if (first > 0) ((last - first) / first) * 100.0 else 0.0
-        } else 0.0
+        if (!tc.isNaN()) tc else 0.0
     }
     val isUsdt = pair.quoteAsset.equals("USDT", true) || pair.quoteAsset.equals("USD", true)
     val activityText = remember(isUsdt, volume, change) {
@@ -355,7 +380,7 @@ fun DetailChartScreen(
                 strategyMode = strategyMode,
                 scalping = isScalping,
                 fees = tradingFees,
-                currentPrice = tick?.price ?: 0.0,
+                currentPrice = displayPrice,
                 baseAsset = pair.baseAsset,
                 quoteAsset = pair.quoteAsset,
                 availableIdr = availableIdr,
@@ -365,7 +390,7 @@ fun DetailChartScreen(
                 isBuyMode = isBuyMode,
                 onBuyModeChanged = { isBuyMode = it },
                 onExecuteBuy = { nominalIdr, customBuyPrice, tp1Price, tp2Price ->
-                    val execPrice = if (customBuyPrice > 0.0) customBuyPrice else if (tick?.price != null && tick!!.price > 0) tick!!.price else signal.entryPrice
+                    val execPrice = if (customBuyPrice > 0.0) customBuyPrice else if (displayPrice > 0.0) displayPrice else signal.entryPrice
                     if (execPrice > 0) {
                         if (isRealBuyMode) {
                             viewModel.executeRealTrade(pair.symbol, "buy", execPrice.toLong(), nominalIdr, tp1Price, tp2Price) { success, msg ->
@@ -375,7 +400,7 @@ fun DetailChartScreen(
                             }
                         } else {
                             val qty = nominalIdr / execPrice
-                            val orderType = if (tick?.price != null && execPrice < tick!!.price) {
+                            val orderType = if (displayPrice > 0.0 && execPrice < displayPrice) {
                                 agu.analys.trading.SimulationOrderType.LIMIT
                             } else {
                                 agu.analys.trading.SimulationOrderType.MARKET
@@ -404,7 +429,7 @@ fun DetailChartScreen(
                     }
                 },
                 onExecuteSell = { sellQty, isAutoSell, tp1P, tp1Pct, tp2P, tp2Pct ->
-                    val execPrice = if (tick?.price != null && tick!!.price > 0) tick!!.price else signal.targetPrice1
+                    val execPrice = if (displayPrice > 0.0) displayPrice else signal.targetPrice1
                     if (execPrice > 0) {
                         viewModel.executeSellOrders(
                             pair = pair,
@@ -433,7 +458,7 @@ fun DetailChartScreen(
                 },
                 spotPosition = spotPosition,
                 sellSignalState = sellSignalState,
-                positionContext = positionContext,
+                positionContext = effectivePositionContext,
                 workflow = tradingWorkflow,
                 onSetTrailingStop = { enabled, pct ->
                     viewModel.setTrailingStop(enabled, pct)
@@ -454,12 +479,12 @@ fun DetailChartScreen(
                 onDeployTrailingOrder = {
                     viewModel.deployTrailingOrder(pair.symbol)
                     HapticUtil.vibrateTradeSuccess(context)
-                    android.widget.Toast.makeText(context, "Jaring Pengaman Aktif!", android.widget.Toast.LENGTH_SHORT).show()
+                    android.widget.Toast.makeText(context, "Trailing Aktif!", android.widget.Toast.LENGTH_SHORT).show()
                 },
                 onCancelTrailingOrder = {
                     viewModel.cancelTrailingOrder(pair.symbol)
                     HapticUtil.vibrateTradeSuccess(context)
-                    android.widget.Toast.makeText(context, "Jaring Pengaman Dimatikan", android.widget.Toast.LENGTH_SHORT).show()
+                    android.widget.Toast.makeText(context, "Trailing Dimatikan", android.widget.Toast.LENGTH_SHORT).show()
                 }
             )
 

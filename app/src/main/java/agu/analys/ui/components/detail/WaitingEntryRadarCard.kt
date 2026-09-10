@@ -83,7 +83,7 @@ fun WaitingEntryRadarCard(
     onBuyModeChanged: ((Boolean) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
-    val effectivePrice = if (currentPrice > 0.0) currentPrice else if (signal.entryPrice > 0.0) signal.entryPrice else 0.0
+    val effectivePrice = if (currentPrice > 0.0 && currentPrice.isFinite()) currentPrice else 0.0
 
     val isHolding = workflow == TradingWorkflow.HOLD_SELL || positionContext.hasPosition
 

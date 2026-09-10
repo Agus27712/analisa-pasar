@@ -458,17 +458,17 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         _selectedPair,
         spotPosition,
         currentTick,
-        tradingFees,
         holdingStatuses
-    ) { pair, spotPos, tick, fees, statuses ->
+    ) { pair, spotPos, tick, statuses ->
         val holding = statuses[pair.symbol] ?: getHoldingStatus(pair)
-        val price = tick?.price ?: 0.0
+        val tp = tick?.price ?: 0.0
+        val price = if (tp > 0.0 && tp.isFinite()) tp else 0.0
         PositionContext.create(
             symbol = pair.symbol,
             spotPosition = spotPos,
             holdingStatus = holding,
             currentPrice = price,
-            fees = fees
+            fees = _tradingFees.value
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), PositionContext())
 
@@ -857,7 +857,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     fun selectTimeframe(tf: Timeframe) {
         if (_selectedTimeframe.value == tf) return
         _selectedTimeframe.value = tf
-        selectPair(_selectedPair.value)
+        marketDataCoordinator.switchTimeframe(_selectedPair.value, tf)
     }
     fun selectChartStyle(style: ChartStyle) { _selectedChartStyle.value = style }
     fun toggleChartExpanded() { _isChartExpanded.value = !_isChartExpanded.value }

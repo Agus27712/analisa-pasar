@@ -28,7 +28,7 @@ fun SellPositionOverviewCard(
     modifier: Modifier = Modifier
 ) {
     val entry = context.entryPrice
-    val current = context.currentPrice ?: (entry ?: 0.0)
+    val current = context.currentPrice ?: 0.0
     val pnlPct = context.floatingProfitPct
     val pnlNet = context.floatingProfitNet
     val cost = context.costBasis

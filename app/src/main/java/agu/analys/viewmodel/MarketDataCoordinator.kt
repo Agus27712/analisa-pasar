@@ -109,9 +109,12 @@ class MarketDataCoordinator(
     private fun handleWebSocketTick(tick: MarketTick) {
         val currentPair = currentActivePair ?: return
         val selected = currentPair.symbol
-        if (!tick.symbol.equals(selected, true) && 
-            !tick.symbol.equals(selected.replace("_", ""), true) &&
-            !tick.symbol.equals(currentPair.effectiveIndodaxPair(), true)) return
+        val cleanTick = tick.symbol.replace("/", "").replace("_", "").trim()
+        val cleanSelected = selected.replace("/", "").replace("_", "").trim()
+        val cleanIndodax = currentPair.effectiveIndodaxPair().replace("/", "").replace("_", "").trim()
+
+        if (!cleanTick.equals(cleanSelected, true) && 
+            !cleanTick.equals(cleanIndodax, true)) return
 
         lastLiveTickAt = System.currentTimeMillis()
         wsLive = true
@@ -122,8 +125,8 @@ class MarketDataCoordinator(
         val previous = _currentTick.value
         val normalized = tick.copy(
             symbol = selected,
-            high24h = previous?.high24h ?: tick.price,
-            low24h = previous?.low24h ?: tick.price,
+            high24h = if (previous?.high24h != null && previous.high24h > 0) previous.high24h else tick.price,
+            low24h = if (previous?.low24h != null && previous.low24h > 0) previous.low24h else tick.price,
             volume24h = previous?.volume24h ?: 0.0,
             change24h = previous?.change24h ?: 0.0
         )
@@ -156,11 +159,14 @@ class MarketDataCoordinator(
     fun loadPairCache(symbol: String, timeframe: Timeframe): Boolean {
         val (cachedTick, cachedCandles) = marketCache.loadPairSnapshot(symbol, timeframe)
         if (cachedTick != null || cachedCandles.isNotEmpty()) {
-            if (cachedTick != null) _currentTick.value = cachedTick
+            // Hanya isi _currentTick jika belum ada live ticker untuk pair ini
+            if (cachedTick != null && (_currentTick.value == null || _currentTick.value?.symbol != symbol)) {
+                _currentTick.value = cachedTick
+            }
             if (cachedCandles.isNotEmpty()) {
                 _recentCandles.value = cachedCandles
                 engine.resetForOffline()
-                cachedTick?.let { engine.onTickUpdate(it) }
+                _currentTick.value?.let { engine.onTickUpdate(it) }
             }
             _isShowingCachedData.value = true
             return true
@@ -263,6 +269,30 @@ class MarketDataCoordinator(
 
                 // Interval loop utama: 6–8 detik cukup
                 delay(if (wsFresh) 8000L else 5000L)
+            }
+        }
+    }
+
+    fun switchTimeframe(pair: TradingPair, timeframe: Timeframe) {
+        currentActivePair = pair
+        // 1. Muat candle snapshot dari cache untuk timeframe baru tanpa menyentuh live ticker
+        val (_, cachedCandles) = marketCache.loadPairSnapshot(pair.symbol, timeframe)
+        if (cachedCandles.isNotEmpty()) {
+            _recentCandles.value = cachedCandles
+            engine.resetForOffline(preserveState = true)
+            _currentTick.value?.let { engine.onTickUpdate(it) }
+        }
+
+        // 2. Fetch candle terbaru untuk timeframe baru secara asynchronous
+        scope.launch {
+            val candles = IndodaxMarketService.fetchCandles(pair.effectiveIndodaxPair(), timeframe, 300)
+            if (candles.isNotEmpty() && currentActivePair?.symbol == pair.symbol) {
+                _recentCandles.value = candles
+                engine.resetForOffline(preserveState = true)
+                _currentTick.value?.let { engine.onTickUpdate(it) }
+                lastCandleRefresh = System.currentTimeMillis()
+                // Update snapshot cache untuk timeframe ini dengan ticker aktif saat ini
+                marketCache.savePairSnapshot(pair.symbol, timeframe, _currentTick.value, candles)
             }
         }
     }

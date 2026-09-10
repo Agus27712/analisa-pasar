@@ -198,119 +198,18 @@ fun FlipCardPriceText(
         return
     }
 
-    var previousPrice by remember { mutableDoubleStateOf(price) }
-    var isUp by remember { mutableStateOf(true) }
-
-    LaunchedEffect(price) {
-        if (price.isFinite() && price > 0.0) {
-            if (previousPrice.isFinite() && previousPrice > 0.0 && price != previousPrice) {
-                val relativeDelta = abs(price - previousPrice) / previousPrice
-                // Jika perubahan ekstrem (>25%), langsung update tanpa flip bertahap
-                if (relativeDelta <= 0.25) {
-                    isUp = price >= previousPrice
-                }
-            }
-            previousPrice = price
-        }
-    }
-
     val formatted = remember(price, showSymbol, quoteAsset) {
         PriceFormatter.formatPrice(price, showSymbol, quoteAsset)
     }
 
-    Row(
+    Text(
+        text = formatted,
+        color = color,
+        fontSize = fontSize,
+        fontWeight = fontWeight,
         modifier = modifier,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        for (i in formatted.indices) {
-            val char = formatted[i]
-            // Posisi dihitung dari kanan agar angka tetap sinkron nilainya saat digit bertambah
-            val indexFromRight = formatted.length - 1 - i
-            key(indexFromRight) {
-                if (!char.isDigit()) {
-                    Text(
-                        text = char.toString(),
-                        color = color,
-                        fontSize = fontSize,
-                        fontWeight = fontWeight,
-                        maxLines = 1
-                    )
-                } else {
-                    DigitFlipCell(
-                        digit = char,
-                        isUp = isUp,
-                        color = color,
-                        fontSize = fontSize,
-                        fontWeight = fontWeight
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun DigitFlipCell(
-    digit: Char,
-    isUp: Boolean,
-    color: Color,
-    fontSize: TextUnit,
-    fontWeight: FontWeight
-) {
-    var previousDigit by remember { mutableStateOf(digit) }
-    var currentDigit by remember { mutableStateOf(digit) }
-    val flipProgress = remember { Animatable(1f) }
-
-    LaunchedEffect(digit, isUp) {
-        if (digit != currentDigit) {
-            previousDigit = currentDigit
-            currentDigit = digit
-            flipProgress.snapTo(0f)
-            flipProgress.animateTo(
-                targetValue = 1f,
-                animationSpec = tween(
-                    durationMillis = 200,
-                    easing = FastOutSlowInEasing
-                )
-            )
-        }
-    }
-
-    val progress = flipProgress.value.coerceIn(0f, 1f)
-    val isFirstHalf = progress < 0.5f
-    val displayChar = if (isFirstHalf) previousDigit else currentDigit
-
-    // 3D rotation around X axis (flip per digit): naik = putar ke atas, turun = putar ke bawah
-    val rotationX = if (isFirstHalf) {
-        val frac = progress * 2f // 0f -> 1f
-        if (isUp) -frac * 90f else frac * 90f
-    } else {
-        val frac = (progress - 0.5f) * 2f // 0f -> 1f
-        if (isUp) 90f * (1f - frac) else -90f * (1f - frac)
-    }
-
-    val alpha = if (isFirstHalf) {
-        1f - (progress * 0.35f)
-    } else {
-        0.65f + ((progress - 0.5f) * 0.7f)
-    }
-
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = Modifier.graphicsLayer {
-            this.rotationX = rotationX
-            this.alpha = alpha.coerceIn(0f, 1f)
-            this.cameraDistance = 16f * density
-        }
-    ) {
-        Text(
-            text = displayChar.toString(),
-            color = color,
-            fontSize = fontSize,
-            fontWeight = fontWeight,
-            maxLines = 1
-        )
-    }
+        maxLines = maxLines
+    )
 }
 
 @Composable
