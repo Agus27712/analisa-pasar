@@ -340,11 +340,72 @@ object SwingEvaluator {
         val netRr = feeResult.netRr.coerceAtLeast(1.4)
         val rrString = "1:${fmt(netRr)}"
 
-        // ── 4-Step Checkpoint (UI tetap kompatibel) ─────────────────────────
-        // Step 1: Bias tren makro
-        val step1Ok = (emaBullish || isReclaimEma || detectedSetup == SwingSetup.RECLAIM_FAILED || detectedSetup == SwingSetup.BREAKOUT) &&
+        // --- 1. DANGER & INVALIDATION CHECKS (DI ATAS) ---
+        val isOverbought = rsi >= 72.0 || price >= calculatedTp1 * 0.995
+        val isResistanceRejection = (detectedSetup == SwingSetup.REJECTION && rejectionAtResistance) ||
+            (detectedSetup == SwingSetup.RECLAIM_FAILED && (reclaimFromAbove || failedBreakout))
+        val isSolidBreakdown = isBearishTrend || solidBreakdown || bosBreakdown ||
+            (detectedSetup == SwingSetup.BREAKOUT && (solidBreakdown || bosBreakdown))
+        val isHeavySelling = sell >= 42.0 && sell > buy * 1.15
+
+        val isTechnicalDistribution = isOverbought || isResistanceRejection || isSolidBreakdown || isHeavySelling
+
+        // --- 2. WATERFALL CHECKPOINTS ---
+        val step1Ok = !isTechnicalDistribution &&
+            (emaBullish || isReclaimEma || detectedSetup == SwingSetup.RECLAIM_FAILED || detectedSetup == SwingSetup.BREAKOUT) &&
             !isBearishTrend
+
+        val step2Ok = step1Ok && detectedSetup != SwingSetup.NONE &&
+            (nearSupport || nearResistance || brokeAboveResistance || brokeBelowSupport || micro.hasBullishBOS || micro.hasBullishSweep)
+
+        val isRsiBullish = rsi in 35.0..68.0 || (rsi in 28.0..38.0 && macdHist >= 0)
+        val step3Ok = step2Ok && (isRsiBullish || macdHist >= 0 || strongVolume) && buy > sell
+
+        val step4Ok = step3Ok && netRr >= 1.4 && buy >= 38.0
+
+        val completedSteps = when {
+            step4Ok -> 4
+            step3Ok -> 3
+            step2Ok -> 2
+            step1Ok -> 1
+            else -> 0
+        }
+
+        // ── Keputusan akhir ────────────────────────────────
+        val isQualifiedBuy = step4Ok && buy >= 42.0 && buy > sell * 1.15 &&
+            detectedSetup in listOf(SwingSetup.REJECTION, SwingSetup.BREAKOUT, SwingSetup.RETEST, SwingSetup.RECLAIM_FAILED) &&
+            (detectedSetup != SwingSetup.REJECTION || !rejectionAtResistance)
+
+        var finalAction = when {
+            isQualifiedBuy && !isTechnicalDistribution -> SignalAction.BUY
+            else -> SignalAction.HOLD
+        }
+
+        if (isTechnicalDistribution) {
+            when {
+                isOverbought -> reasons.add(0, "⚠️ Tertahan: Harga koin sedang terlalu tinggi (Jenuh Beli/Overbought).")
+                isSolidBreakdown -> reasons.add(0, "⚠️ Tertahan: Harga koin sedang turun menembus support (Breakdown).")
+                isResistanceRejection -> reasons.add(0, "⚠️ Tertahan: Terjadi penolakan harga di Resistance (Rejection).")
+                isHeavySelling -> reasons.add(0, "⚠️ Tertahan: Tekanan jual dominan di area ini.")
+                else -> reasons.add(0, "⚠️ Tertahan: Sinyal distribusi / koreksi teknikal terdeteksi.")
+            }
+        } else if (isQualifiedBuy) {
+            reasons.add(0, "✅ Setup ${detectedSetup.name.replace('_', ' ')} valid — entry swing siap.")
+        }
+
+        val finalScore = when {
+            isTechnicalDistribution -> 0
+            isQualifiedBuy -> (80 + min(15, (buy * 0.18).toInt())).coerceIn(80, 95)
+            step3Ok -> 65
+            step2Ok -> 50
+            step1Ok -> 36
+            else -> 24
+        }
+
         val step1Detail = when {
+            isOverbought -> "Tertahan: Harga koin sedang terlalu tinggi (Jenuh Beli/Overbought)."
+            isSolidBreakdown -> "Tertahan: Harga koin sedang turun menembus support (Breakdown)."
+            isResistanceRejection -> "Tertahan: Terjadi penolakan harga di resistance."
             step1Ok && detectedSetup == SwingSetup.BREAKOUT -> "Bias bullish via Breakout level penting."
             step1Ok && detectedSetup == SwingSetup.RECLAIM_FAILED -> "Bias bullish via Reclaim / Failed Breakdown."
             step1Ok -> "Tren makro selaras positif (EMA20 > EMA50 di Rp ${fmtPrice(ema20)})."
@@ -352,70 +413,26 @@ object SwingEvaluator {
             else -> "Memantau keselarasan tren EMA (harga menguji area Rp ${fmtPrice(ema20)})."
         }
 
-        // Step 2: Setup di level penting (ada salah satu dari 4 setup)
-        val step2Ok = step1Ok && detectedSetup != SwingSetup.NONE && (nearSupport || nearResistance || brokeAboveResistance || brokeBelowSupport || micro.hasBullishBOS || micro.hasBullishSweep)
-        val step2Detail = when (detectedSetup) {
-            SwingSetup.REJECTION -> "Setup REJECTION terdeteksi di level penting."
-            SwingSetup.BREAKOUT -> "Setup BREAKOUT terdeteksi — momentum kuat."
-            SwingSetup.RETEST -> "Setup RETEST terdeteksi — level dihormati lagi."
-            SwingSetup.RECLAIM_FAILED -> "Setup RECLAIM / FAILED BREAK terdeteksi — sinyal kuat."
+        val step2Detail = when {
+            !step1Ok -> "Menunggu Checkpoint 1 lolos."
+            detectedSetup == SwingSetup.REJECTION -> "Setup REJECTION terdeteksi di level penting."
+            detectedSetup == SwingSetup.BREAKOUT -> "Setup BREAKOUT terdeteksi — momentum kuat."
+            detectedSetup == SwingSetup.RETEST -> "Setup RETEST terdeteksi — level dihormati lagi."
+            detectedSetup == SwingSetup.RECLAIM_FAILED -> "Setup RECLAIM / FAILED BREAK terdeteksi — sinyal kuat."
             else -> "Belum ada Rejection / Breakout / Retest / Reclaim yang valid di Support/Resistance."
         }
 
-        // Step 3: Konfirmasi momentum + volume
-        val isRsiBullish = rsi in 35.0..68.0 || (rsi in 28.0..38.0 && macdHist >= 0)
-        val step3Ok = step2Ok && (isRsiBullish || macdHist >= 0 || strongVolume) && buy > sell
-        val step3Detail = if (step3Ok) {
-            "Momentum & volume mendukung (RSI ${fmt(rsi)}, Vol ${fmt(volumeRatio)}×)."
-        } else if (macdHist < 0) {
-            "MACD masih negatif (${fmt(macdHist)}). Menunggu penguatan momentum."
-        } else {
-            "Menunggu dorongan volume & penguatan RSI (${fmt(rsi)})."
+        val step3Detail = when {
+            !step2Ok -> "Menunggu Checkpoint 2 lolos."
+            step3Ok -> "Momentum & volume mendukung (RSI ${fmt(rsi)}, Vol ${fmt(volumeRatio)}×)."
+            macdHist < 0 -> "MACD masih negatif (${fmt(macdHist)}). Menunggu penguatan momentum."
+            else -> "Menunggu dorongan volume & penguatan RSI (${fmt(rsi)})."
         }
 
-        // Step 4: R:R + skor setup
-        val step4Ok = step1Ok && step2Ok && step3Ok && netRr >= 1.4 && buy >= 38.0
-        val step4Detail = if (step4Ok) {
-            "Zona entry ideal · Net R:R $rrString · Setup: ${detectedSetup.name.replace('_', ' ')}"
-        } else if (!step1Ok || !step2Ok || !step3Ok) {
-            "Menunggu konfirmasi Checkpoint 1-3 sebelum validasi entry."
-        } else {
-            "Menunggu R:R optimal atau skor setup lebih tinggi."
-        }
-
-        val completedSteps = listOf(step1Ok, step2Ok, step3Ok, step4Ok).count { it }
-
-        // ── Keputusan akhir (Market Analysis - Pure BUY Analyzer) ────────────────────────────────
-        val isQualifiedBuy = completedSteps == 4 && buy >= 42.0 && buy > sell * 1.15 &&
-            detectedSetup in listOf(SwingSetup.REJECTION, SwingSetup.BREAKOUT, SwingSetup.RETEST, SwingSetup.RECLAIM_FAILED) &&
-            (detectedSetup != SwingSetup.REJECTION || !rejectionAtResistance) // rejection di resistance = bukan buy
-
-        val isTechnicalDistribution = (rsi >= 72.0 || price >= calculatedTp1 * 0.995 || (sell >= 42.0 && sell > buy * 1.15) ||
-            (detectedSetup == SwingSetup.REJECTION && rejectionAtResistance) ||
-            (detectedSetup == SwingSetup.RECLAIM_FAILED && (reclaimFromAbove || failedBreakout)) ||
-            (detectedSetup == SwingSetup.BREAKOUT && (solidBreakdown || bosBreakdown)))
-
-        var finalAction = when {
-            isQualifiedBuy && !isTechnicalDistribution -> SignalAction.BUY
-            else -> SignalAction.HOLD
-        }
-        
-        // --- ORDERBOOK DEPTH CHECK (REPLACED GLOBAL VETO) ---
-        // Biarkan pengguna mengeksekusi order secara bebas.
-        // -----------------------------------------------------
-
-        if (isTechnicalDistribution) {
-            reasons.add(0, "⚠️ Sinyal distribusi / koreksi teknikal terdeteksi — skip entry Swing baru.")
-        } else if (isQualifiedBuy) {
-            reasons.add(0, "✅ Setup ${detectedSetup.name.replace('_', ' ')} valid — entry swing siap.")
-        }
-
-        val finalScore = when {
-            isQualifiedBuy && !isTechnicalDistribution -> (80 + min(15, (buy * 0.18).toInt())).coerceIn(80, 95)
-            completedSteps == 3 -> 65
-            completedSteps == 2 -> 50
-            completedSteps == 1 -> 36
-            else -> 24
+        val step4Detail = when {
+            !step3Ok -> "Menunggu Checkpoint 3 lolos."
+            step4Ok -> "Zona entry ideal · Net R:R $rrString · Setup: ${detectedSetup.name.replace('_', ' ')}"
+            else -> "Menunggu R:R optimal (Min 1:1.4) atau skor setup lebih tinggi."
         }
 
         val path = when (detectedSetup) {
@@ -425,9 +442,12 @@ object SwingEvaluator {
         }
 
         val statusTitle = when {
-            isQualifiedBuy && !isTechnicalDistribution -> "SWING ENTRY READY"
+            isOverbought -> "SWING OVERBOUGHT (HOLD)"
+            isSolidBreakdown -> "SWING BREAKDOWN (HOLD)"
             isTechnicalDistribution -> "SWING PULLBACK / RESISTANCE"
-            else -> "SWING ANALYZING ($completedSteps/4)"
+            completedSteps == 4 -> "SWING ENTRY READY"
+            completedSteps > 0 -> "SWING ANALYZING ($completedSteps/4)"
+            else -> "SWING ANALYZING (0/4)"
         }
 
         val mtfSnapshot = ScalpingMtfSnapshot(
@@ -451,9 +471,13 @@ object SwingEvaluator {
             path = path,
             statusTitle = statusTitle,
             waitingFor = when {
-                isQualifiedBuy && !isTechnicalDistribution -> "Siap eksekusi Swing Buy"
+                isOverbought -> "Menunggu koreksi / reset RSI (Overbought)"
+                isSolidBreakdown -> "Menunggu pembentukan lantai support baru"
                 isTechnicalDistribution -> "Menunggu lantai support baru (jangan entry)"
                 completedSteps == 4 -> "Siap eksekusi Swing Buy"
+                completedSteps == 3 -> "Menunggu konfirmasi R:R & zona entry"
+                completedSteps == 2 -> "Menunggu momentum RSI & MACD"
+                completedSteps == 1 -> "Menunggu konfirmasi setup S/R"
                 else -> "Menunggu konfirmasi setup lengkap"
             },
             entryCondition = when (detectedSetup) {

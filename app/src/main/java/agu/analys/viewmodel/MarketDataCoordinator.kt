@@ -58,6 +58,25 @@ class MarketDataCoordinator(
     private val _isShowingCachedData = MutableStateFlow(false)
     val isShowingCachedData: StateFlow<Boolean> = _isShowingCachedData.asStateFlow()
 
+    private val _uiPriceThrottleMs = MutableStateFlow(prefs.priceFeedThrottleMs)
+    val uiPriceThrottleMs: StateFlow<Long> = _uiPriceThrottleMs.asStateFlow()
+
+    private val uiPriceThrottler = agu.analys.util.PriceFeedThrottler(
+        scope = scope,
+        initialThrottleIntervalMs = prefs.priceFeedThrottleMs,
+        onEmit = { throttledTick ->
+            dispatchThrottledTick(throttledTick)
+        }
+    )
+
+    fun setPriceFeedThrottleMs(ms: Long) {
+        val coerced = ms.coerceAtLeast(0L)
+        prefs.priceFeedThrottleMs = coerced
+        uiPriceThrottler.throttleIntervalMs = coerced
+        _uiPriceThrottleMs.value = coerced
+    }
+
+    private var currentActivePair: TradingPair? = null
     private var lastLiveTickAt = 0L
     private var wsLive = false
     private var lastCandleRefresh = 0L
@@ -88,8 +107,11 @@ class MarketDataCoordinator(
     )
 
     private fun handleWebSocketTick(tick: MarketTick) {
-        val selected = _currentTick.value?.symbol ?: return
-        if (!tick.symbol.equals(selected, true) && !tick.symbol.equals(selected.replace("_", ""), true)) return
+        val currentPair = currentActivePair ?: return
+        val selected = currentPair.symbol
+        if (!tick.symbol.equals(selected, true) && 
+            !tick.symbol.equals(selected.replace("_", ""), true) &&
+            !tick.symbol.equals(currentPair.effectiveIndodaxPair(), true)) return
 
         lastLiveTickAt = System.currentTimeMillis()
         wsLive = true
@@ -103,13 +125,18 @@ class MarketDataCoordinator(
             high24h = previous?.high24h ?: tick.price,
             low24h = previous?.low24h ?: tick.price,
             volume24h = previous?.volume24h ?: 0.0,
-            change24h = previous?.change24h ?: Double.NaN
+            change24h = previous?.change24h ?: 0.0
         )
-        _currentTick.value = normalized
-        engine.onTickUpdate(normalized)
-        updateRecentPrices(normalized.price)
-        simCoordinator.onPriceTick(normalized.symbol, normalized.price, normalized.high24h, normalized.low24h)
-        onPriceUpdate(normalized.symbol, normalized.price, engine.indicators.value.rsi14.takeIf { it.isFinite() })
+        // Pass through configurable UI throttler to prevent main thread bottlenecks during volatility spikes
+        uiPriceThrottler.submit(normalized)
+    }
+
+    private fun dispatchThrottledTick(tick: MarketTick) {
+        _currentTick.value = tick
+        engine.onTickUpdate(tick)
+        updateRecentPrices(tick.price)
+        simCoordinator.onPriceTick(tick.symbol, tick.price, tick.high24h, tick.low24h)
+        onPriceUpdate(tick.symbol, tick.price, engine.indicators.value.rsi14.takeIf { it.isFinite() })
     }
 
     private fun updateRecentPrices(price: Double) {
@@ -142,13 +169,41 @@ class MarketDataCoordinator(
     }
 
     fun startMarketPolling(pair: TradingPair, timeframe: Timeframe) {
+        currentActivePair = pair
         marketPollJob?.cancel()
+        uiPriceThrottler.reset()
+
+        // 1. Prime harga instan dari dashboard cache jika ada
+        val primeTick = _dashboardTicks.value[pair.symbol] 
+            ?: _dashboardTicks.value[pair.effectiveIndodaxPair()]
+            ?: _dashboardTicks.value[pair.symbol.uppercase()]
+        if (primeTick != null && (_currentTick.value == null || _currentTick.value?.symbol != pair.symbol)) {
+            val primed = primeTick.copy(symbol = pair.symbol)
+            _connectionState.value = MarketConnectionState.Connected
+            uiPriceThrottler.emitImmediate(primed)
+        }
+
         indodaxWebSocket.start(pair.symbol)
         marketPollJob = scope.launch {
             if (_currentTick.value == null) _connectionState.value = MarketConnectionState.Loading
             var failCount = 0
             lastCandleRefresh = 0L
             lastDepthRefresh = 0L
+
+            // 2. Immediate Parallel Bootstrap (REST Ticker & Candles Langsung dieksekusi detik pertama)
+            launch {
+                val prev = _currentTick.value?.price ?: 0.0
+                val tick = IndodaxMarketService.fetchTicker(pair.effectiveIndodaxPair(), prevPrice = prev)
+                if (tick != null && tick.price > 0 && currentActivePair?.symbol == pair.symbol) {
+                    lastLiveTickAt = System.currentTimeMillis()
+                    _connectionState.value = MarketConnectionState.Connected
+                    _isShowingCachedData.value = false
+                    val normalizedTick = tick.copy(symbol = pair.symbol)
+                    _dashboardTicks.value = _dashboardTicks.value.toMutableMap().apply { put(pair.symbol, normalizedTick) }
+                    uiPriceThrottler.emitImmediate(normalizedTick)
+                }
+            }
+
             while (isActive) {
                 // Reconnect WS hanya jika benar-benar stale
                 if (indodaxWebSocket.isStale(30_000L)) {
@@ -158,22 +213,18 @@ class MarketDataCoordinator(
                 val now = System.currentTimeMillis()
                 val wsFresh = wsLive && (now - lastLiveTickAt < 8_000L)
 
-                // REST ticker hanya sebagai fallback (bukan setiap 3 detik)
+                // REST ticker hanya sebagai fallback jika WS tidak fresh
                 if (!wsFresh) {
                     val prev = _currentTick.value?.price ?: 0.0
                     val tick = IndodaxMarketService.fetchTicker(pair.effectiveIndodaxPair(), prevPrice = prev)
-                    if (tick != null && tick.price > 0) {
+                    if (tick != null && tick.price > 0 && currentActivePair?.symbol == pair.symbol) {
                         failCount = 0
                         lastLiveTickAt = now
                         _connectionState.value = MarketConnectionState.Connected
                         _isShowingCachedData.value = false
                         val normalizedTick = tick.copy(symbol = pair.symbol)
-                        _currentTick.value = normalizedTick
-                        engine.onTickUpdate(normalizedTick)
-                        updateRecentPrices(normalizedTick.price)
                         _dashboardTicks.value = _dashboardTicks.value.toMutableMap().apply { put(pair.symbol, normalizedTick) }
-                        simCoordinator.onPriceTick(normalizedTick.symbol, normalizedTick.price, normalizedTick.high24h, normalizedTick.low24h)
-                        onPriceUpdate(normalizedTick.symbol, normalizedTick.price, engine.indicators.value.rsi14.takeIf { it.isFinite() })
+                        uiPriceThrottler.submit(normalizedTick)
                     } else {
                         failCount++
                         if (failCount >= 4 && now - lastLiveTickAt > 25_000L) {
@@ -186,7 +237,7 @@ class MarketDataCoordinator(
                 // Candle: 30 detik (cukup untuk chart)
                 if (now - lastCandleRefresh >= 30_000L) {
                     val candles = IndodaxMarketService.fetchCandles(pair.effectiveIndodaxPair(), timeframe, 300)
-                    if (candles.size >= 30) {
+                    if (candles.size >= 30 && currentActivePair?.symbol == pair.symbol) {
                         _recentCandles.value = candles
                         engine.resetForOffline(preserveState = true)
                         _currentTick.value?.let { engine.onTickUpdate(it) }
@@ -201,11 +252,13 @@ class MarketDataCoordinator(
                     val trades = async { IndodaxMarketService.fetchRecentTrades(pair.effectiveIndodaxPair()) }
                     val (bids, asks) = depth.await()
                     val newTrades = trades.await()
-                    if (bids.isNotEmpty()) _orderBookBids.value = bids
-                    if (asks.isNotEmpty()) _orderBookAsks.value = asks
-                    if (bids.isNotEmpty() || asks.isNotEmpty()) engine.onOrderBookUpdate(bids, asks)
-                    if (newTrades.isNotEmpty()) _tradeStream.value = newTrades
-                    lastDepthRefresh = now
+                    if (currentActivePair?.symbol == pair.symbol) {
+                        if (bids.isNotEmpty()) _orderBookBids.value = bids
+                        if (asks.isNotEmpty()) _orderBookAsks.value = asks
+                        if (bids.isNotEmpty() || asks.isNotEmpty()) engine.onOrderBookUpdate(bids, asks)
+                        if (newTrades.isNotEmpty()) _tradeStream.value = newTrades
+                        lastDepthRefresh = now
+                    }
                 }
 
                 // Interval loop utama: 6–8 detik cukup
@@ -217,6 +270,7 @@ class MarketDataCoordinator(
     fun stopPolling() {
         marketPollJob?.cancel()
         indodaxWebSocket.stop(false)
+        uiPriceThrottler.reset()
     }
 
     fun startDashboardPolling(onDashboardUpdate: (Map<String, MarketTick>) -> Unit) {
@@ -250,9 +304,13 @@ class MarketDataCoordinator(
         _connectionState.value = MarketConnectionState.ConnectionLost(reason)
     }
 
-    fun clearPairData() {
-        _currentTick.value = null
-        _recentPrices.value = emptyList()
+    fun clearPairData(symbolToPrime: String? = null) {
+        uiPriceThrottler.reset()
+        val prime = if (!symbolToPrime.isNullOrBlank()) {
+            _dashboardTicks.value[symbolToPrime] ?: _dashboardTicks.value[symbolToPrime.uppercase()]
+        } else null
+        _currentTick.value = prime
+        _recentPrices.value = if (prime != null) listOf(prime.price) else emptyList()
         _recentCandles.value = emptyList()
         _orderBookBids.value = emptyList()
         _orderBookAsks.value = emptyList()

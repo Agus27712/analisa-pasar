@@ -186,65 +186,129 @@ object SecondWaveEvaluator {
         val feeResult = FeeCalculator.roundTrip(price, stopLoss, tp2, fees)
         val rrRatio = "1:${fmt(feeResult.netRr.coerceAtLeast(1.5))}"
 
+        // --- 1. DANGER & INVALIDATION CHECKS (DI ATAS) ---
+        val isOverbought = rsi1h >= 74.0 || rsi15m >= 78.0
+        val isNearPriorPeak = (drawdownPct < 5.0 && price >= priorHigh * 0.95) || price >= tp1
+        val isBreakdown = price < baseFloor * 0.95 && baseFloor > 0
+        val isOverextended = isOverbought || isNearPriorPeak || isBreakdown
+
+        // --- 2. WATERFALL CHECKPOINTS ---
+        val step1Ok = !isOverextended && priorRunScore >= 1 && drawdownScore >= 1
+        val step2Ok = step1Ok && (structureScore >= 1)
+        val step3Ok = step2Ok && (volumeScore >= 1 || flowScore >= 1)
+        val step4Ok = step3Ok && isQualified && (entryType != SecondWaveEntryType.NONE)
+
+        val completedSteps = when {
+            step4Ok -> 4
+            step3Ok -> 3
+            step2Ok -> 2
+            step1Ok -> 1
+            else -> 0
+        }
+
         val reasons = mutableListOf<String>()
-        reasons.add("🌊 Second-Wave Score: $totalScore/12 (${if (isQualified) "QUALIFIED SETUP" else "WATCHING"})")
+        if (isOverextended) {
+            when {
+                isOverbought -> reasons.add("⚠️ Tertahan: Indikator jenuh beli (Overbought RSI 1H/15M).")
+                isNearPriorPeak -> reasons.add("⚠️ Tertahan: Harga koin sedang berada di pucuk / dekat target.")
+                isBreakdown -> reasons.add("⚠️ Tertahan: Harga koin sedang turun menembus lantai support base.")
+                else -> reasons.add("⚠️ Tertahan: Kondisi risiko tinggi terdeteksi.")
+            }
+        }
+        reasons.add("🌊 Second-Wave Score: $totalScore/12 (${if (step4Ok) "QUALIFIED SETUP" else "WATCHING $completedSteps/4"})")
         reasons.add("Prior High: Rp ${fmtPrice(priorHigh)} · Drawdown: ${fmt(drawdownPct)}%")
         reasons.add("Lantai Base Support: Rp ${fmtPrice(baseFloor)} · Reclaim Level: Rp ${fmtPrice(localResistance)}")
         if (isVolumeDriedUp) reasons.add("Volume koreksi sudah kering (Dry-Up terkonfirmasi).")
         if (isVolumeReturning) reasons.add("Volume beli 15M mulai melonjak masuk.")
 
         val thesis = when {
+            isOverextended -> "Menunggu koreksi harga atau pembentukan lantai base baru yang stabil."
             entryType == SecondWaveEntryType.RECLAIM -> "Reclaim terkonfirmasi! Volume beli baru menembus resistance lokal Rp ${fmtPrice(localResistance)}."
             entryType == SecondWaveEntryType.BASE_DIP -> "Harga tertahan kokoh di lantai akumulasi Rp ${fmtPrice(baseFloor)}. Tekanan jual habis."
             else -> "Memantau pembentukan lantai base dan serapan volume akumulasi."
         }
 
-        val step1Ok = priorRunScore >= 1 && drawdownScore >= 1
-        val step2Ok = structureScore >= 1
-        val step3Ok = volumeScore >= 1 || flowScore >= 1
-        val step4Ok = isQualified && (entryType != SecondWaveEntryType.NONE)
+        val biasDetailText = when {
+            isOverbought -> "Tertahan: Harga koin sedang terlalu tinggi (Jenuh Beli/Overbought)."
+            isNearPriorPeak -> "Tertahan: Harga koin sudah mendekati target / puncak (Overextended)."
+            isBreakdown -> "Tertahan: Harga koin sedang turun menembus support (Breakdown)."
+            step1Ok -> "Prior Run +${fmt(priorRunGainPct)}% · Drawdown ${fmt(drawdownPct)}% (Zona ${if (drawdownPct in 50.0..85.0) "Ideal" else "Pantau"})."
+            else -> "Menunggu pola koreksi ideal dari prior high."
+        }
+
+        val setupDetailText = when {
+            !step1Ok -> "Menunggu Checkpoint 1 lolos."
+            step2Ok -> "Lantai Base Rp ${fmtPrice(baseFloor)} ${if (hasHigherLow) "membentuk Higher-Low" else "sedang diuji"}."
+            else -> "Memantau pembentukan lantai support base."
+        }
+
+        val triggerDetailText = when {
+            !step2Ok -> "Menunggu Checkpoint 2 lolos."
+            step3Ok -> if (isVolumeReturning) "Volume beli baru 15M terkonfirmasi masuk." else "Volume dry-up & flow akumulasi stabil."
+            else -> "Menunggu lonjakan volume beli untuk konfirmasi."
+        }
+
+        val entryDetailText = when {
+            !step3Ok -> "Menunggu Checkpoint 3 lolos."
+            step4Ok -> "Zona Entry: ${entryType.label} (Area Rp ${fmtPrice(price)})."
+            else -> "Menunggu kualifikasi entry trigger lengkap."
+        }
 
         val mtfSnapshot = ScalpingMtfSnapshot(
             biasOk = step1Ok,
             biasDirection = if (step1Ok) "bullish" else "neutral",
             biasStatus = if (step1Ok) MtfLegStatus.OK else MtfLegStatus.WAITING,
-            biasDetail = "Prior Run +${fmt(priorRunGainPct)}% · Drawdown ${fmt(drawdownPct)}% (Zona ${if (drawdownPct in 50.0..85.0) "Ideal" else "Pantau"}).",
+            biasDetail = biasDetailText,
 
             setupOk = step2Ok,
             setupStatus = if (step2Ok) MtfLegStatus.OK else MtfLegStatus.WAITING,
-            setupDetail = "Lantai Base Rp ${fmtPrice(baseFloor)} ${if (hasHigherLow) "membentuk Higher-Low" else "sedang diuji"}.",
+            setupDetail = setupDetailText,
 
             triggerOk = step3Ok,
             triggerStatus = if (step3Ok) MtfLegStatus.OK else MtfLegStatus.WAITING,
-            triggerDetail = if (isVolumeReturning) "Volume beli baru 15M terkonfirmasi masuk." else "Menunggu lonjakan volume beli untuk konfirmasi.",
+            triggerDetail = triggerDetailText,
 
             entryPriceOk = step4Ok,
             entryPriceStatus = if (step4Ok) MtfLegStatus.OK else MtfLegStatus.WAITING,
-            entryPriceDetail = "Zona Entry: ${entryType.label} (Area Rp ${fmtPrice(price)}).",
+            entryPriceDetail = entryDetailText,
 
             path = if (entryType == SecondWaveEntryType.RECLAIM) ScalpingPath.MOMENTUM_CONTINUATION else ScalpingPath.PULLBACK,
-            statusTitle = if (step4Ok) "SECOND-WAVE READY (${entryType.badge})" else "MENUNGGU BASE & VOLUME",
-            waitingFor = if (step4Ok) "Siap eksekusi ${entryType.label}" else "Menunggu akumulasi lantai & volume",
+            statusTitle = when {
+                isOverextended -> "OVERBOUGHT / PUCAK (HOLD)"
+                step4Ok -> "SECOND-WAVE READY (${entryType.badge})"
+                step3Ok -> "VOLUME ACCUMULATING (3/4)"
+                step2Ok -> "BASE FLOOR TESTING (2/4)"
+                step1Ok -> "PULLBACK DETECTED (1/4)"
+                else -> "MENUNGGU BASE & VOLUME"
+            },
+            waitingFor = when {
+                isOverextended -> "Menunggu koreksi / reset RSI (Overbought)"
+                step4Ok -> "Siap eksekusi ${entryType.label}"
+                step3Ok -> "Menunggu konfirmasi entry trigger"
+                step2Ok -> "Menunggu lonjakan volume akumulasi"
+                step1Ok -> "Menunggu pembentukan lantai support"
+                else -> "Menunggu akumulasi lantai & volume"
+            },
             entryCondition = thesis
         )
 
-        val isOverextended = (drawdownPct < 5.0 && price >= priorHigh * 0.95) || rsi1h >= 75.0 || price >= tp1
-        var finalAction = when {
-            isQualified && step4Ok && !isOverextended -> SignalAction.BUY
+        val finalAction = when {
+            step4Ok && !isOverextended -> SignalAction.BUY
             else -> SignalAction.HOLD
         }
-        
-        // --- ORDERBOOK DEPTH CHECK (REPLACED GLOBAL VETO) ---
-        // Biarkan pengguna mengeksekusi order secara bebas.
-        // -----------------------------------------------------
-        
-        if (isOverextended) {
-            reasons.add(0, "⚠️ Harga sudah mendekati target / Overbought — Bukan zona aman untuk entry BUY baru.")
+
+        val finalConfidence = when {
+            isOverextended -> 0
+            step4Ok -> (totalScore * 8.33).toInt().coerceIn(80, 95)
+            step3Ok -> 65
+            step2Ok -> 45
+            step1Ok -> 25
+            else -> 10
         }
 
         val signalState = AISignalState(
             action = finalAction,
-            confidence = if (isOverextended) 0 else (totalScore * 8.33).toInt().coerceIn(10, 95),
+            confidence = finalConfidence,
             sentiment = when (finalAction) {
                 SignalAction.BUY -> TrendSentiment.BULLISH_REVERSAL
                 SignalAction.SELL -> TrendSentiment.BEARISH_DISTRIBUTION
@@ -260,7 +324,7 @@ object SecondWaveEvaluator {
             scalpingStage = when (finalAction) {
                 SignalAction.BUY -> ScalpingStage.ENTRY
                 SignalAction.SELL -> ScalpingStage.STRONG_ENTRY
-                else -> ScalpingStage.WAIT_PULLBACK
+                else -> if (step2Ok) ScalpingStage.WAIT_PULLBACK else ScalpingStage.HOLD
             },
             mtf = mtfSnapshot
         )

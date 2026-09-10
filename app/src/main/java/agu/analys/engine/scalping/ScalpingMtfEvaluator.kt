@@ -76,7 +76,7 @@ object ScalpingMtfEvaluator {
         val safeVwapCandles = if (m1Candles.size >= 60) m1Candles else m1Candles.takeLast(m1Candles.size)
         val vwap1M = IndicatorMath.rollingVwap(safeVwapCandles, minOf(60, safeVwapCandles.size))
         val rsi1M = IndicatorMath.rsi(m1Candles, minOf(14, m1Candles.size - 1))
-        val triggerLong = (price > vwap1M || isVSABreakout) && (buyPressure > 1.05 || isOrderBookEmpty) && rsi1M < 80.0
+        val isOverbought = rsi1M >= 80.0
         
         // 4. Macro Room to Grow (M15 / H1)
         val struct15M = if (m15Ready) MarketStructureAnalyzer.analyze(m15Candles.takeLast(40)) else null
@@ -89,18 +89,7 @@ object ScalpingMtfEvaluator {
         val ema50 = IndicatorMath.ema(m1Closes, 50)
         val macd = IndicatorMath.macdSeries(m1Closes, 12, 26, 9).last()
 
-        val reasons = mutableListOf<String>()
-        reasons.add("VWAP 1M: ${fmt(vwap1M)}")
-        if (isOrderBookEmpty) {
-            reasons.add("Tekanan Beli: Diabaikan (Orderbook Kosong)")
-        } else {
-            reasons.add("Tekanan Beli (Orderbook): ${fmt(buyPressure)}x")
-        }
-        if (isVSABreakout) reasons.add("VSA Breakout Terdeteksi! (Vol: ${fmt(formingVolValid / avgVol1M)}x)")
-        if (isDangerousNoise) reasons.add("Noise liar/Choppy! Entry ditahan.")
-        if (!hasRoomToGrow) reasons.add("Harga terlalu dekat resistance M15.")
-
-        // 5. Risk / Reward & Action
+        // 5. Risk / Reward Calculation
         val stopPct = if (isAggressive) volPct * 1.2 else volPct * 0.8
         val sl = price * (1.0 - (stopPct.coerceIn(0.5, 3.0) / 100.0))
         
@@ -109,34 +98,58 @@ object ScalpingMtfEvaluator {
         val tp2 = price * (1.0 + max(1.5, requiredNetRewardPct) / 100.0)
         
         val feeResult = FeeCalculator.roundTrip(price, sl, tp2, fees, false, 0.08)
-        
         val rrOk = feeResult.netRr >= 1.05
-        val ready = triggerLong && hasRoomToGrow && !isDangerousNoise && rrOk
-        // Partial setup: ada trigger / room, belum full ready
-        val early = !ready && !isDangerousNoise && (
-            (triggerLong && hasRoomToGrow) ||
-            (triggerLong && rrOk) ||
-            (hasRoomToGrow && buyPressure > 1.1 && price > vwap1M && rsi1M < 75.0)
-        )
+
+        // --- 1. DANGER & INVALIDATION CHECKS (DI ATAS) ---
+        val isDangerous = isDangerousNoise || isOverbought
+
+        // --- 2. WATERFALL CHECKPOINTS ---
+        val step1Ok = !isDangerous && hasRoomToGrow
+        val step2Ok = step1Ok && (buyPressure > 1.0 || isOrderBookEmpty)
+        val step3Ok = step2Ok && (price > vwap1M || isVSABreakout)
+        val step4Ok = step3Ok && rrOk
+
+        val completedSteps = when {
+            step4Ok -> 4
+            step3Ok -> 3
+            step2Ok -> 2
+            step1Ok -> 1
+            else -> 0
+        }
+
+        val ready = step4Ok
         val strong = ready && (isVSABreakout || buyPressure >= 1.25 || (rsi1M in 45.0..68.0 && price > vwap1M))
+        val early = !ready && !isDangerous && step2Ok
+
+        val reasons = mutableListOf<String>()
+        if (isDangerousNoise) reasons.add("⚠️ Tertahan: Volatilitas pasar sedang liar (Noise tinggi).")
+        if (isOverbought) reasons.add("⚠️ Tertahan: Harga koin sedang terlalu tinggi (Jenuh Beli/Overbought RSI 1M ${fmt(rsi1M)}).")
+        if (!hasRoomToGrow) reasons.add("⚠️ Tertahan: Harga koin terlalu dekat resistance M15 (Ruang naik sempit).")
+        reasons.add("VWAP 1M: ${fmt(vwap1M)}")
+        if (isOrderBookEmpty) {
+            reasons.add("Tekanan Beli: Diabaikan (Orderbook Kosong)")
+        } else {
+            reasons.add("Tekanan Beli (Orderbook): ${fmt(buyPressure)}x")
+        }
+        if (isVSABreakout) reasons.add("VSA Breakout Terdeteksi! (Vol: ${fmt(formingVolValid / avgVol1M)}x)")
 
         when {
-            strong -> reasons.add("STRONG ENTRY: VSA/OB kuat + Net R:R 1:${fmt(feeResult.netRr)}")
-            ready -> reasons.add("BUY READY: Kondisi scalping valid (Net R:R 1:${fmt(feeResult.netRr)}).")
-            early -> reasons.add("EARLY: setup terbentuk, tunggu konfirmasi penuh.")
-            triggerLong -> reasons.add("Trigger ON, belum qualify (RR/room/noise).")
+            strong -> reasons.add(0, "STRONG ENTRY: VSA/OB kuat + Net R:R 1:${fmt(feeResult.netRr)}")
+            ready -> reasons.add(0, "BUY READY: Kondisi scalping valid (Net R:R 1:${fmt(feeResult.netRr)}).")
+            early -> reasons.add(0, "EARLY: setup terbentuk, tunggu konfirmasi penuh.")
+            isDangerous -> {}
             else -> reasons.add("Menunggu momentum VWAP & Orderbook.")
         }
 
-        var finalAction = when {
-            ready -> SignalAction.BUY
+        val finalAction = when {
+            ready && !isDangerous -> SignalAction.BUY
             else -> SignalAction.HOLD
         }
-        var stage = when {
+        val stage = when {
             strong -> ScalpingStage.STRONG_ENTRY
             ready -> ScalpingStage.ENTRY
             early -> ScalpingStage.EARLY_ENTRY
-            isDangerousNoise -> ScalpingStage.HOLD
+            isDangerousNoise || isDangerous -> ScalpingStage.HOLD
             else -> ScalpingStage.WATCH
         }
         
@@ -146,40 +159,89 @@ object ScalpingMtfEvaluator {
         }
         // -----------------------------------------------------
 
+        val biasDetailText = when {
+            isDangerousNoise -> "Tertahan: Volatilitas pasar sedang liar (Noise tinggi)."
+            isOverbought -> "Tertahan: Harga koin sedang terlalu tinggi (Jenuh Beli/Overbought)."
+            !hasRoomToGrow -> "Tertahan: Harga koin terlalu dekat resistance M15 (Ruang naik sempit)."
+            step1Ok -> "Target H1/M15 aman (Ruang naik terbuka)."
+            else -> "Memantau ruang gerak M15/H1."
+        }
+
+        val setupDetailText = when {
+            !step1Ok -> "Menunggu Checkpoint 1 lolos."
+            step2Ok -> "Orderbook Bid/Ask ratio ${fmt(buyPressure)}x."
+            else -> "Menunggu tekanan beli (Bid/Ask > 1.0x)."
+        }
+
+        val triggerDetailText = when {
+            !step2Ok -> "Menunggu Checkpoint 2 lolos."
+            step3Ok -> "Price > VWAP 1M (${fmt(vwap1M)}) & VSA terkonfirmasi."
+            else -> "Menunggu harga menembus VWAP 1M."
+        }
+
+        val entryDetailText = when {
+            !step3Ok -> "Menunggu Checkpoint 3 lolos."
+            step4Ok -> "Net RR: 1:${fmt(feeResult.netRr)} (Valid)."
+            else -> "Menunggu Net RR optimal (Min 1:1.05)."
+        }
+
         val mtf = ScalpingMtfSnapshot(
-            biasOk = hasRoomToGrow,
-            biasDirection = if (hasRoomToGrow) "ruang_naik" else "terhalang",
-            biasStatus = if (hasRoomToGrow) MtfLegStatus.OK else MtfLegStatus.WAITING,
-            biasDetail = "Target H1/M15 aman.",
-            setupOk = buyPressure > 1.0,
-            setupStatus = if (buyPressure > 1.0) MtfLegStatus.OK else MtfLegStatus.WAITING,
-            setupDetail = "Orderbook Bid/Ask ratio ${fmt(buyPressure)}x",
-            triggerOk = triggerLong,
-            triggerStatus = if (triggerLong) MtfLegStatus.OK else MtfLegStatus.WAITING,
-            triggerDetail = "Price > VWAP & RSI M1 ${fmt(rsi1M)}",
-            entryPriceOk = ready,
-            entryPriceStatus = if (ready) MtfLegStatus.OK else MtfLegStatus.WAITING,
-            entryPriceDetail = "Net RR: 1:${fmt(feeResult.netRr)}",
+            biasOk = step1Ok,
+            biasDirection = if (step1Ok) "ruang_naik" else "terhalang",
+            biasStatus = if (step1Ok) MtfLegStatus.OK else MtfLegStatus.WAITING,
+            biasDetail = biasDetailText,
+
+            setupOk = step2Ok,
+            setupStatus = if (step2Ok) MtfLegStatus.OK else MtfLegStatus.WAITING,
+            setupDetail = setupDetailText,
+
+            triggerOk = step3Ok,
+            triggerStatus = if (step3Ok) MtfLegStatus.OK else MtfLegStatus.WAITING,
+            triggerDetail = triggerDetailText,
+
+            entryPriceOk = step4Ok,
+            entryPriceStatus = if (step4Ok) MtfLegStatus.OK else MtfLegStatus.WAITING,
+            entryPriceDetail = entryDetailText,
+
             path = if (ready) ScalpingPath.ENTRY_READY else ScalpingPath.NONE,
             statusTitle = when {
+                isDangerousNoise -> "NOISE TINGGI (HOLD)"
+                isOverbought -> "OVERBOUGHT (HOLD)"
                 strong -> "STRONG ENTRY"
                 ready -> "BUY READY"
-                early -> "EARLY SETUP"
-                else -> "WATCH"
+                step3Ok -> "TRIGGER READY (3/4)"
+                early -> "EARLY SETUP (2/4)"
+                step1Ok -> "BIAS OK (1/4)"
+                else -> "WATCHING (0/4)"
             },
             waitingFor = when {
+                isDangerousNoise -> "Menunggu volatilitas stabil"
+                isOverbought -> "Menunggu koreksi / reset RSI 1M"
+                !hasRoomToGrow -> "Menunggu breakout resistance M15"
                 ready -> "Eksekusi"
-                early -> "Konfirmasi"
-                else -> "Momentum"
+                step3Ok -> "Konfirmasi Net R:R"
+                step2Ok -> "Momentum VWAP & VSA"
+                step1Ok -> "Tekanan Beli Orderbook"
+                else -> "Menunggu setup lengkap"
             },
             entryCondition = "M1 VSA/VWAP & Orderbook > 1.0",
             extended = rsi1M > 78.0,
             extremeVolatility = isDangerousNoise
         )
 
+        val finalConfidence = when {
+            isDangerous -> 0
+            strong -> 92
+            ready -> 85
+            step3Ok -> 65
+            early || step2Ok -> 50
+            step1Ok -> 35
+            else -> 20
+        }
+
         val signal = AISignalState(
             action = finalAction,
-            confidence = when { strong -> 92; ready -> 85; early -> 62; else -> 40 },
+            confidence = finalConfidence,
             sentiment = TrendSentiment.NEUTRAL_CONSOLIDATION,
             entryPrice = price,
             targetPrice1 = tp1,

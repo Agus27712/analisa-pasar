@@ -168,9 +168,21 @@ fun DetailChartScreen(
         )
     }
 
-    // Market Activity Calculation
+    // Market Activity & Display Price Calculation
+    val displayPrice = remember(tick, candles) {
+        val tp = tick?.price ?: 0.0
+        if (tp > 0.0) tp else (candles.lastOrNull()?.close ?: 0.0)
+    }
     val volume = tick?.volume24h ?: 0.0
-    val change = tick?.change24h ?: 0.0
+    val change = remember(tick, candles) {
+        val tc = tick?.change24h ?: 0.0
+        if (!tc.isNaN() && tc != 0.0) tc
+        else if (candles.size >= 2) {
+            val first = candles.first().open
+            val last = candles.last().close
+            if (first > 0) ((last - first) / first) * 100.0 else 0.0
+        } else 0.0
+    }
     val isUsdt = pair.quoteAsset.equals("USDT", true) || pair.quoteAsset.equals("USD", true)
     val activityText = remember(isUsdt, volume, change) {
         if (isUsdt) {
@@ -283,7 +295,7 @@ fun DetailChartScreen(
                 
                 Column(modifier = Modifier.fillMaxWidth()) {
                     DetailPriceHeader(
-                        price = tick?.price ?: 0.0,
+                        price = displayPrice,
                         change24h = change,
                         activityText = activityText,
                         activityColor = activityColor,
@@ -473,7 +485,7 @@ fun DetailChartScreen(
                 volume24h = volume,
                 scalping = isScalping,
                 signal = signal,
-                price = tick?.price ?: 0.0,
+                price = displayPrice,
                 quoteAsset = pair.quoteAsset
             )
 

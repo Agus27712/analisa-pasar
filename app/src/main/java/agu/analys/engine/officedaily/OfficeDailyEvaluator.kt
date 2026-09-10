@@ -187,60 +187,113 @@ object OfficeDailyEvaluator {
         val netRr = feeResult.netRr.coerceAtLeast(1.8)
         val rrString = "1:${fmt(netRr)}"
 
-        // 4 Checkpoints Office Daily
-        val step1Ok = isUptrend && !isBearishStructure && !isDowntrend
+        // --- 1. DANGER & INVALIDATION CHECKS (DI ATAS) ---
+        val isOverbought = rsi >= 74.0 || price >= calculatedTp1
+        val isDistribution = sellScore >= 50.0 && sellScore > buyScore * 1.2
+        val isBreakdown = isBearishStructure || isDowntrend || (price < supportLevel * 0.96)
+        val isDangerous = isOverbought || isDistribution || isBreakdown
+
+        // --- 2. WATERFALL CHECKPOINTS ---
+        val step1Ok = !isDangerous && isUptrend && !isBearishStructure && !isDowntrend
         val step2Ok = step1Ok && (price >= supportLevel * 0.99)
-        val step3Ok = step1Ok && (rsi in 38.0..65.0) && macdHist >= -0.001
-        val step4Ok = step1Ok && step2Ok && step3Ok && netRr >= 1.7 && buyScore >= 50.0
+        val step3Ok = step2Ok && (rsi in 38.0..65.0) && macdHist >= -0.001
+        val step4Ok = step3Ok && netRr >= 1.7 && buyScore >= 50.0
 
-        val completedSteps = listOf(step1Ok, step2Ok, step3Ok, step4Ok).count { it }
+        val completedSteps = when {
+            step4Ok -> 4
+            step3Ok -> 3
+            step2Ok -> 2
+            step1Ok -> 1
+            else -> 0
+        }
 
-        // ── Keputusan akhir (Market Analysis - Pure BUY Analyzer) ────────────────────────────────
-        val isQualified = completedSteps == 4 && buyScore >= 55.0 && buyScore > sellScore * 1.3
-        val isOverextendedOrDistribution = rsi >= 74.0 || price >= calculatedTp1 || (sellScore >= 50.0 && sellScore > buyScore * 1.2)
-
-        var finalAction = when {
-            isQualified && !isOverextendedOrDistribution -> SignalAction.BUY
+        // ── Keputusan akhir ────────────────────────────────
+        val isQualified = step4Ok && buyScore >= 55.0 && buyScore > sellScore * 1.3
+        val finalAction = when {
+            isQualified && !isDangerous -> SignalAction.BUY
             else -> SignalAction.HOLD
         }
 
-        // --- ORDERBOOK DEPTH CHECK (REPLACED GLOBAL VETO) ---
-        // Biarkan pengguna mengeksekusi order secara bebas.
-        // -----------------------------------------------------
-
-        if (isOverextendedOrDistribution) {
-            reasons.add(0, if (price >= calculatedTp1) "⚠️ Target harga tercapai di Rp ${fmtPrice(calculatedTp1)} — Tahan entry BUY baru." else "⚠️ Jenuh Beli / Sinyal Distribusi — Tahan entry BUY baru.")
+        if (isDangerous) {
+            when {
+                isOverbought -> reasons.add(0, if (price >= calculatedTp1) "⚠️ Tertahan: Target harga tercapai di Rp ${fmtPrice(calculatedTp1)} (Overextended)." else "⚠️ Tertahan: Indikator jenuh beli (Overbought RSI >= 74).")
+                isBreakdown -> reasons.add(0, "⚠️ Tertahan: Harga koin sedang breakdown / downtrend menembus support.")
+                isDistribution -> reasons.add(0, "⚠️ Tertahan: Tekanan jual dan distribusi tinggi terdeteksi.")
+            }
         }
 
         val finalScore = when {
-            isQualified && !isOverextendedOrDistribution -> (80 + min(15, (buyScore * 0.15).toInt())).coerceIn(80, 95)
-            completedSteps == 3 -> 68
-            completedSteps == 2 -> 50
-            completedSteps == 1 -> 35
+            isDangerous -> 0
+            isQualified -> (80 + min(15, (buyScore * 0.15).toInt())).coerceIn(80, 95)
+            step3Ok -> 68
+            step2Ok -> 50
+            step1Ok -> 35
             else -> 20
+        }
+
+        val biasDetailText = when {
+            isOverbought -> "Tertahan: Harga koin sedang terlalu tinggi (Jenuh Beli/Overbought)."
+            isBreakdown -> "Tertahan: Harga koin sedang turun menembus support (Breakdown)."
+            isDistribution -> "Tertahan: Tekanan jual & sinyal distribusi tinggi."
+            step1Ok -> "Tren makro harian selaras (EMA20 > EMA50)."
+            else -> "Menunggu tren makro harian stabil."
+        }
+
+        val setupDetailText = when {
+            !step1Ok -> "Menunggu Checkpoint 1 lolos."
+            step2Ok -> "Support harian aman di Rp ${fmtPrice(supportLevel)}."
+            else -> "Memantau lantai support (belum stabil)."
+        }
+
+        val triggerDetailText = when {
+            !step2Ok -> "Menunggu Checkpoint 2 lolos."
+            step3Ok -> "RSI (${fmt(rsi)}) & MACD akumulasi stabil."
+            else -> "Menunggu momentum RSI & MACD stabil."
+        }
+
+        val entryPriceDetailText = when {
+            !step3Ok -> "Menunggu Checkpoint 3 lolos."
+            step4Ok -> "Zona Entry: Rp ${fmtPrice(price)} (Net R:R $rrString)."
+            else -> "Menunggu R:R optimal (Min 1:1.7) & skor buy."
         }
 
         val mtfSnapshot = ScalpingMtfSnapshot(
             biasOk = step1Ok,
             biasDirection = if (step1Ok) "bullish" else "neutral",
             biasStatus = if (step1Ok) MtfLegStatus.OK else MtfLegStatus.WAITING,
-            biasDetail = if (step1Ok) "Tren makro harian selaras (EMA20 > EMA50)." else "Menunggu tren harian selaras.",
+            biasDetail = biasDetailText,
 
             setupOk = step2Ok,
             setupStatus = if (step2Ok) MtfLegStatus.OK else MtfLegStatus.WAITING,
-            setupDetail = if (step2Ok) "Support harian aman di Rp ${fmtPrice(supportLevel)}." else "Memantau lantai support.",
+            setupDetail = setupDetailText,
 
             triggerOk = step3Ok,
             triggerStatus = if (step3Ok) MtfLegStatus.OK else MtfLegStatus.WAITING,
-            triggerDetail = if (step3Ok) "RSI (${fmt(rsi)}) & MACD akumulasi stabil." else "Menunggu momentum stabil.",
+            triggerDetail = triggerDetailText,
 
             entryPriceOk = step4Ok,
             entryPriceStatus = if (step4Ok) MtfLegStatus.OK else MtfLegStatus.WAITING,
-            entryPriceDetail = "Zona Entry: Rp ${fmtPrice(price)} (Net R:R $rrString).",
+            entryPriceDetail = entryPriceDetailText,
 
             path = if (isBullishStructure) ScalpingPath.MOMENTUM_CONTINUATION else ScalpingPath.PULLBACK,
-            statusTitle = if (completedSteps == 4) "READY" else "ANALYZING ($completedSteps/4)",
-            waitingFor = if (completedSteps == 4) "Siap eksekusi" else "Menunggu konfirmasi setup lengkap",
+            statusTitle = when {
+                isOverbought -> "OVERBOUGHT / TARGET (HOLD)"
+                isBreakdown -> "BREAKDOWN / DOWNTREND (HOLD)"
+                isDistribution -> "DISTRIBUSI TINGGI (HOLD)"
+                completedSteps == 4 -> "READY"
+                completedSteps > 0 -> "ANALYZING ($completedSteps/4)"
+                else -> "ANALYZING (0/4)"
+            },
+            waitingFor = when {
+                isOverbought -> "Menunggu koreksi harga / reset RSI"
+                isBreakdown -> "Menunggu pembentukan support baru"
+                isDistribution -> "Menunggu tekanan jual mereda"
+                completedSteps == 4 -> "Siap eksekusi"
+                completedSteps == 3 -> "Menunggu konfirmasi zona entry & R:R"
+                completedSteps == 2 -> "Menunggu momentum RSI & MACD"
+                completedSteps == 1 -> "Menunggu pantulan support harian"
+                else -> "Menunggu konfirmasi setup lengkap"
+            },
             entryCondition = "Setup H4/1D Low Noise & High R:R"
         )
 
@@ -251,7 +304,7 @@ object OfficeDailyEvaluator {
                 sentiment = when (finalAction) {
                     SignalAction.BUY -> TrendSentiment.STRONG_BULLISH_CONTINUATION
                     SignalAction.SELL -> TrendSentiment.BEARISH_DISTRIBUTION
-                    SignalAction.HOLD -> if (isOverextendedOrDistribution) TrendSentiment.BEARISH_DISTRIBUTION else if (completedSteps >= 2) TrendSentiment.ACCUMULATION_SQUEEZE else TrendSentiment.NEUTRAL_CONSOLIDATION
+                    SignalAction.HOLD -> if (isDangerous) TrendSentiment.BEARISH_DISTRIBUTION else if (completedSteps >= 2) TrendSentiment.ACCUMULATION_SQUEEZE else TrendSentiment.NEUTRAL_CONSOLIDATION
                 },
                 entryPrice = price,
                 targetPrice1 = calculatedTp1,

@@ -201,6 +201,10 @@ class AppPreferences(context: Context) {
         get() = prefs.getBoolean(KEY_REAL_SIM_SYNC_ENABLED, true)
         set(value) = prefs.edit().putBoolean(KEY_REAL_SIM_SYNC_ENABLED, value).apply()
 
+    var priceFeedThrottleMs: Long
+        get() = prefs.getLong(KEY_PRICE_FEED_THROTTLE_MS, PriceFeedThrottler.DEFAULT_THROTTLE_MS)
+        set(value) = prefs.edit().putLong(KEY_PRICE_FEED_THROTTLE_MS, value.coerceAtLeast(0L)).apply()
+
     fun clearApiKeys() {
         prefs.edit()
             .remove(KEY_GROQ)
@@ -371,5 +375,6 @@ class AppPreferences(context: Context) {
         private const val KEY_PIN_RESET_REQUIRED = "sec_pin_reset_required"
         private const val KEY_NOTIFICATIONS_ENABLED = "notifications_enabled_v1"
         private const val KEY_REAL_SIM_SYNC_ENABLED = "real_sim_sync_enabled_v1"
+        private const val KEY_PRICE_FEED_THROTTLE_MS = "price_feed_throttle_ms_v1"
     }
 }

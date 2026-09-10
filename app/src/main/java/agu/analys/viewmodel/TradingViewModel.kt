@@ -303,6 +303,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     val isChartExpanded: StateFlow<Boolean> = _isChartExpanded.asStateFlow()
 
     val currentTick: StateFlow<MarketTick?> = marketDataCoordinator.currentTick
+    val uiPriceThrottleMs: StateFlow<Long> = marketDataCoordinator.uiPriceThrottleMs
     val currentIndicators: StateFlow<TechnicalIndicators> = engine.indicators
     val aiSignalState: StateFlow<AISignalState> = engine.signalState
 
@@ -847,7 +848,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         }
         
         val loaded = marketDataCoordinator.loadPairCache(pair.symbol, _selectedTimeframe.value)
-        if (!loaded) marketDataCoordinator.clearPairData()
+        if (!loaded) marketDataCoordinator.clearPairData(pair.symbol)
         marketDataCoordinator.startMarketPolling(pair, _selectedTimeframe.value)
         agu.analys.engine.global.GlobalContextManager.subscribeCoin(pair.baseAsset)
     }
@@ -860,6 +861,10 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     }
     fun selectChartStyle(style: ChartStyle) { _selectedChartStyle.value = style }
     fun toggleChartExpanded() { _isChartExpanded.value = !_isChartExpanded.value }
+
+    fun setUiPriceThrottleMs(ms: Long) {
+        marketDataCoordinator.setPriceFeedThrottleMs(ms)
+    }
 
     fun retryConnection() {
         marketDataCoordinator.startMarketPolling(_selectedPair.value, _selectedTimeframe.value)

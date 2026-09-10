@@ -9,6 +9,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -65,6 +66,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
     var updateRepo by remember { mutableStateOf(prefs.updateRepo) }
     var updateToken by remember { mutableStateOf(prefs.updateGitHubToken) }
     var isRealSimSyncEnabled by remember { mutableStateOf(prefs.isRealSimSyncEnabled) }
+    var priceFeedThrottleMs by remember { mutableStateOf(prefs.priceFeedThrottleMs) }
     var saved by remember { mutableStateOf(false) }
     var cacheCleared by remember { mutableStateOf(false) }
 
@@ -436,6 +438,95 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
 
         Spacer(Modifier.height(16.dp))
 
+        // SECTION: PERFORMA FEED HARGA & THROTTLING UI
+        SectionHeader("PERFORMA & THROTTLING UI (VOLATILITY SHIELD)")
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(10.dp),
+            colors = CardDefaults.cardColors(containerColor = TvSurfaceVariant),
+            border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Default.Speed,
+                        contentDescription = null,
+                        tint = TvGreen,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        "Laju Refresh UI & State",
+                        color = TvTextPrimary,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Mencegah bottleneck Main Thread dan stuttering animasi Compose saat terjadi lonjakan order/trade ekstrem (high-volatility spike).",
+                    color = TvTextSecondary,
+                    fontSize = 10.sp,
+                    lineHeight = 14.sp
+                )
+                Spacer(Modifier.height(10.dp))
+
+                val throttleOptions = listOf(
+                    Triple(100L, "100 ms", "Ultra Cepat (10 fps)"),
+                    Triple(200L, "200 ms", "Standar Halus (5 fps)"),
+                    Triple(500L, "500 ms", "Hemat Daya (2 fps)"),
+                    Triple(0L, "Raw (0 ms)", "Tanpa Filter (Semua Tick)")
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    throttleOptions.forEach { (ms, label, desc) ->
+                        val isSelected = priceFeedThrottleMs == ms
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(if (isSelected) TvGreen.copy(alpha = 0.15f) else TvSurface)
+                                .border(
+                                    1.dp,
+                                    if (isSelected) TvGreen else TvBorder,
+                                    RoundedCornerShape(6.dp)
+                                )
+                                .clickable {
+                                    priceFeedThrottleMs = ms
+                                    viewModel.setUiPriceThrottleMs(ms)
+                                    saved = false
+                                }
+                                .padding(vertical = 8.dp, horizontal = 4.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = label,
+                                    fontSize = 11.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (isSelected) TvGreen else TvTextPrimary
+                                )
+                                Text(
+                                    text = desc.substringBefore(" "),
+                                    fontSize = 8.sp,
+                                    color = if (isSelected) TvGreen.copy(alpha = 0.8f) else TvTextSecondary
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+
         // SECTION 2: INTEGRASI AI ASSISTANT
         AiAssistantSettings(
             provider = provider,
@@ -500,6 +591,8 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                 prefs.updateGitHubToken = updateToken
                 prefs.isRealSimSyncEnabled = isRealSimSyncEnabled
                 viewModel.setRealSimSyncEnabled(isRealSimSyncEnabled)
+                prefs.priceFeedThrottleMs = priceFeedThrottleMs
+                viewModel.setUiPriceThrottleMs(priceFeedThrottleMs)
                 val currentFees = prefs.tradingFees
                 val updatedFees = currentFees.copy(
                     buyMakerPct = buyMakerFee.toDoubleOrNull() ?: currentFees.buyMakerPct,
