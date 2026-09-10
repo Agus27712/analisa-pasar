@@ -2,12 +2,14 @@ package agu.analys.service
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.Dns
 import okhttp3.FormBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
 import timber.log.Timber
+import java.net.Inet4Address
 import java.util.concurrent.TimeUnit
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
@@ -30,6 +32,13 @@ object IndodaxTradeApiV2 {
     private const val MY_TRADES_MAX_RANGE_MS = 7L * 24 * 60 * 60 * 1000
 
     private val client = OkHttpClient.Builder()
+        .dns(object : Dns {
+            override fun lookup(hostname: String): List<java.net.InetAddress> {
+                val addresses = Dns.SYSTEM.lookup(hostname)
+                val ipv4 = addresses.filterIsInstance<Inet4Address>()
+                return if (ipv4.isNotEmpty()) ipv4 else addresses
+            }
+        })
         .connectTimeout(12, TimeUnit.SECONDS)
         .readTimeout(20, TimeUnit.SECONDS)
         .writeTimeout(15, TimeUnit.SECONDS)
@@ -143,7 +152,7 @@ object IndodaxTradeApiV2 {
             -1021 -> "Timestamp invalid (-1021). Sinkronkan jam HP."
             -1022 -> "Signature invalid (-1022). Secret Key salah."
             -1121 -> "Invalid symbol (-1121)."
-            -2015 -> "Akses ditolak (-2015). IP whitelist / permission / rate-limit sementara. Jangan spam refresh."
+            -2015 -> if (msg.isNotBlank()) "Akses ditolak (-2015): $msg. Cek IP Whitelist, Permission Trade, atau jenis API Key V2." else "Akses ditolak (-2015). IP whitelist / permission / rate-limit sementara."
             -2014 -> "API Key tidak di header (-2014)."
             -1003 -> "Too many requests (-1003). Tunggu beberapa menit."
             else -> "Error V2 [$code]: $msg | $fallback"
