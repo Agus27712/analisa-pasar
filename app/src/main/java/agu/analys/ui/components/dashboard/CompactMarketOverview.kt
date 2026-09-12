@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -72,7 +73,8 @@ fun DashboardMockupHeader(
     onRefresh: () -> Unit,
     onMenuClick: () -> Unit = {},
     onAddAsset: () -> Unit = {},
-    onEditStrategy: () -> Unit = {}
+    onEditStrategy: () -> Unit = {},
+    onOpenLogcat: () -> Unit = {}
 ) {
     val totalVolume = allTicks.values.sumOf { it.volume24h }
     val avgVolume = if (allTicks.isNotEmpty()) totalVolume / allTicks.size else 0.0
@@ -237,6 +239,23 @@ fun DashboardMockupHeader(
                         modifier = Modifier
                             .size(15.dp)
                             .rotate(currentRotationAngle)
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .size(26.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(TvSurfaceVariant)
+                        .border(0.8.dp, TvBorder, RoundedCornerShape(6.dp))
+                        .clickable(onClick = onOpenLogcat),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Terminal,
+                        contentDescription = "Buka Logcat & Diagnostik Lengkap",
+                        tint = TvGreen,
+                        modifier = Modifier.size(15.dp)
                     )
                 }
             }

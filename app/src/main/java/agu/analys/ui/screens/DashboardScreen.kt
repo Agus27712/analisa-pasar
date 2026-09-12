@@ -38,6 +38,7 @@ import agu.analys.model.MarketConnectionState
 import agu.analys.model.TradingPair
 import agu.analys.service.IndodaxMarketService
 import agu.analys.ui.components.dashboard.*
+import agu.analys.ui.components.settings.LogcatDiagnosticDialog
 import agu.analys.ui.theme.*
 import agu.analys.viewmodel.*
 
@@ -81,6 +82,7 @@ fun DashboardScreen(
     var showAddDialog by remember { mutableStateOf(false) }
     var showNewsScreener by remember { mutableStateOf(false) }
     var showStrategyDialog by remember { mutableStateOf(false) }
+    var showLogcatDialog by remember { mutableStateOf(false) }
 
     val defaultQuote = "IDR"
 
@@ -168,7 +170,8 @@ fun DashboardScreen(
                 },
                 onRefresh = { viewModel.retryConnection() },
                 onAddAsset = { showAddDialog = true },
-                onEditStrategy = { showStrategyDialog = true }
+                onEditStrategy = { showStrategyDialog = true },
+                onOpenLogcat = { showLogcatDialog = true }
             )
 
         if (connectionState is MarketConnectionState.ConnectionLost) {
@@ -489,6 +492,12 @@ fun DashboardScreen(
                     }
                 }
             }
+        }
+
+        if (showLogcatDialog) {
+            LogcatDiagnosticDialog(
+                onDismissRequest = { showLogcatDialog = false }
+            )
         }
     }
 }

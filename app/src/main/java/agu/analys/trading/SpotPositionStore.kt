@@ -28,6 +28,7 @@ data class TrailingTier(
 )
 
 data class SpotPosition(
+    val symbol: String = "",
     val state: SpotPositionState = SpotPositionState.NO_POSITION,
     val investedAmount: Double = 0.0,
     val entryPrice: Double = 0.0,
@@ -204,6 +205,7 @@ class SpotPositionStore(context: Context) {
         val stopLossPrice = getSafeString("${key}_stop_loss")?.toDoubleOrNull() ?: if (entry > 0.0) entry * 0.99 else 0.0
 
         return SpotPosition(
+            symbol = key,
             state = state,
             investedAmount = getSafeString("${key}_invested")?.toDoubleOrNull() ?: 0.0,
             entryPrice = entry,
@@ -492,18 +494,20 @@ class SpotPositionStore(context: Context) {
     }
 
     fun getAllActiveTrailingSymbols(): List<String> {
-        val result = mutableListOf<String>()
+        val result = mutableSetOf<String>()
         val all = prefs.all
         for ((k, _) in all) {
             if (!k.endsWith("_state")) continue
-            val prefix = k.removeSuffix("_state")
+            val rawPrefix = k.removeSuffix("_state")
+            val canonical = normalize(rawPrefix)
             val stateStr = prefs.getString(k, null) ?: continue
-            val isTrailing = prefs.getBoolean("${prefix}_trailing_enabled", false)
+            val isTrailing = getSafeBoolean("${rawPrefix}_trailing_enabled", false) ||
+                             getSafeBoolean("${canonical}_trailing_enabled", false)
             if (stateStr == SpotPositionState.HOLDING.name && isTrailing) {
-                result.add(prefix)
+                result.add(canonical)
             }
         }
-        return result
+        return result.toList().sorted()
     }
 
     fun hasAnyHolding(): Boolean {
@@ -512,9 +516,13 @@ class SpotPositionStore(context: Context) {
             if (!k.endsWith("_state")) continue
             val stateStr = prefs.getString(k, null) ?: continue
             if (stateStr == SpotPositionState.HOLDING.name) {
-                val prefix = k.removeSuffix("_state")
-                val isHoldingFlag = getSafeBoolean("${prefix}_holding", false)
-                val qty = getSafeString("${prefix}_qty")?.toDoubleOrNull() ?: 0.0
+                val rawPrefix = k.removeSuffix("_state")
+                val canonical = normalize(rawPrefix)
+                val isHoldingFlag = getSafeBoolean("${rawPrefix}_holding", false) || getSafeBoolean("${canonical}_holding", false)
+                val qty = getSafeString("${rawPrefix}_quantity")?.toDoubleOrNull()
+                    ?: getSafeString("${canonical}_quantity")?.toDoubleOrNull()
+                    ?: getSafeString("${rawPrefix}_qty")?.toDoubleOrNull()
+                    ?: 0.0
                 if (isHoldingFlag || qty > 0.0) return true
             }
         }
@@ -541,6 +549,32 @@ class SpotPositionStore(context: Context) {
         return history.toString()
     }
 
-    private fun normalize(symbol: String): String =
-        symbol.uppercase().replace(Regex("[^A-Z0-9_]"), "_")
+    fun normalize(symbol: String): String {
+        val s = symbol.trim().uppercase().replace("/", "").replace("-", "").replace(" ", "").replace("_", "")
+        return when {
+            s.endsWith("IDR") -> s
+            s.endsWith("USDT") -> s
+            s.endsWith("USD") -> s
+            else -> "${s}IDR"
+        }
+    }
+
+    fun getAllStoredSymbols(): List<String> {
+        val symbols = mutableSetOf<String>()
+        for ((k, _) in prefs.all) {
+            if (k.endsWith("_state")) {
+                val raw = k.removeSuffix("_state")
+                symbols.add(normalize(raw))
+            }
+        }
+        return symbols.toList().sorted()
+    }
+
+    fun getAllPositions(): Map<String, SpotPosition> {
+        return getAllStoredSymbols().associateWith { get(it) }
+    }
+
+    fun dumpRawPrefs(): Map<String, Any?> {
+        return prefs.all
+    }
 }

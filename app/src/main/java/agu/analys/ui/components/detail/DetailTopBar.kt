@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material.icons.filled.TrendingDown
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.Icon
@@ -52,6 +53,7 @@ fun DetailTopBar(
     pair: TradingPair,
     onNavigateToDashboard: () -> Unit,
     isConnected: Boolean = true,
+    onOpenLogcat: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     // Waktu realtime server/aplikasi berjalan terus setiap detik saat terhubung (LIVE).
@@ -163,6 +165,25 @@ fun DetailTopBar(
                 fontWeight = FontWeight.Bold,
                 fontFamily = FontFamily.Monospace,
                 letterSpacing = 0.5.sp
+            )
+        }
+
+        Spacer(Modifier.width(6.dp))
+
+        Box(
+            modifier = Modifier
+                .size(32.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(TvSurface)
+                .border(0.8.dp, TvBorder, RoundedCornerShape(8.dp))
+                .clickable(onClick = onOpenLogcat),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.Terminal,
+                contentDescription = "Buka Logcat & Diagnostik Lengkap",
+                tint = TvGreen,
+                modifier = Modifier.size(16.dp)
             )
         }
     }

@@ -371,6 +371,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     val isShowingCachedData: StateFlow<Boolean> = marketDataCoordinator.isShowingCachedData
     internal val _spotPosition = MutableStateFlow(SpotPosition())
     val spotPosition: StateFlow<SpotPosition> = positionCoordinator.spotPosition
+    val positionVersion: StateFlow<Long> = positionCoordinator.positionVersion
     val priceAlerts: StateFlow<List<agu.analys.model.PriceAlert>> = positionCoordinator.priceAlerts
 
     private var dashboardPollJob: Job? = null
@@ -840,8 +841,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     fun selectPair(pair: TradingPair) {
         _selectedPair.value = pair
         lastSavedSignalTimestamp = 0L
-        positionCoordinator.refreshPosition(pair.symbol)
-        positionCoordinator.refreshAlerts(pair.symbol)
+        positionCoordinator.setSelectedSymbol(pair.symbol)
         
         if (_strategyMode.value == StrategyMode.SCALPING || _strategyMode.value == StrategyMode.SECOND_WAVE) {
             agu.analys.util.MtfCacheManager.setActiveSymbol(pair.symbol)
@@ -852,6 +852,9 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         marketDataCoordinator.startMarketPolling(pair, _selectedTimeframe.value)
         agu.analys.engine.global.GlobalContextManager.subscribeCoin(pair.baseAsset)
     }
+
+    fun getPositionFor(symbol: String): SpotPosition = positionCoordinator.getPosition(symbol)
+    fun isMatchingSymbol(s1: String, s2: String): Boolean = positionCoordinator.isSameSymbol(s1, s2)
 
     fun toggleSimpleChart() { _useSimpleChart.value = !_useSimpleChart.value }
     fun selectTimeframe(tf: Timeframe) {

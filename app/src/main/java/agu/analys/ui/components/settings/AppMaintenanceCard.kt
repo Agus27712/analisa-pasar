@@ -7,7 +7,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BugReport
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.SystemUpdate
+import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -38,6 +41,8 @@ fun AppMaintenanceCard(
     onCheckUpdate: () -> Unit,
     onDownloadAndInstall: () -> Unit
 ) {
+    var showLogcatDialog by remember { mutableStateOf(false) }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(10.dp),
@@ -45,6 +50,65 @@ fun AppMaintenanceCard(
         border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder)
     ) {
         Column(Modifier.padding(14.dp)) {
+            // Diagnostik & Logcat Lengkap Section
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .background(TvSurfaceVariant, RoundedCornerShape(6.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.Terminal, contentDescription = null, tint = TvGreen, modifier = Modifier.size(18.dp))
+                    }
+                    Column {
+                        Text("Logcat & Diagnostik Sistem", color = TvTextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        Text("Periksa state koin, trailing stop & log error", color = TvTextSecondary, fontSize = 10.sp)
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(10.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = { showLogcatDialog = true },
+                    modifier = Modifier.weight(1.2f).height(38.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = TvBlue)
+                ) {
+                    Icon(Icons.Default.BugReport, contentDescription = null, modifier = Modifier.size(15.dp), tint = Color.White)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Buka Logcat", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.5.sp)
+                }
+
+                OutlinedButton(
+                    onClick = {
+                        val dump = agu.analys.util.AppLogManager.buildDiagnosticStateDump(context)
+                        agu.analys.util.AppLogManager.exportAndShareLog(context, dump)
+                    },
+                    modifier = Modifier.weight(1f).height(38.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = TvTextPrimary),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder)
+                ) {
+                    Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(14.dp), tint = TvGreen)
+                    Spacer(Modifier.width(4.dp))
+                    Text("Ekspor Log", fontSize = 11.sp, color = TvTextPrimary, fontWeight = FontWeight.SemiBold)
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
+            HorizontalDivider(color = TvBorder, thickness = 0.5.dp)
+            Spacer(Modifier.height(10.dp))
+
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -199,5 +263,11 @@ fun AppMaintenanceCard(
                 }
             }
         }
+    }
+
+    if (showLogcatDialog) {
+        LogcatDiagnosticDialog(
+            onDismissRequest = { showLogcatDialog = false }
+        )
     }
 }

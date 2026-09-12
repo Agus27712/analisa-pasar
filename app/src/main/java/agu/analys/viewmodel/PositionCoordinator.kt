@@ -22,18 +22,42 @@ class PositionCoordinator(
     private val _priceAlerts = MutableStateFlow<List<PriceAlert>>(emptyList())
     val priceAlerts: StateFlow<List<PriceAlert>> = _priceAlerts.asStateFlow()
 
+    private var currentSelectedSymbol: String = ""
+
+    fun isSameSymbol(s1: String, s2: String): Boolean {
+        if (s1.isBlank() || s2.isBlank()) return false
+        val n1 = positionStore.normalize(s1)
+        val n2 = positionStore.normalize(s2)
+        return n1 == n2
+    }
+
+    fun setSelectedSymbol(symbol: String) {
+        currentSelectedSymbol = symbol
+        _spotPosition.value = positionStore.get(symbol)
+        _priceAlerts.value = alertStore.getAlertsForSymbol(symbol)
+        notifyPositionChange()
+    }
+
+    fun getPosition(symbol: String): SpotPosition {
+        return positionStore.get(symbol)
+    }
+
     private fun notifyPositionChange() {
         _positionVersion.value = System.currentTimeMillis()
         onPositionChanged()
     }
 
     fun refreshPosition(symbol: String) {
-        _spotPosition.value = positionStore.get(symbol)
+        if (currentSelectedSymbol.isBlank() || isSameSymbol(symbol, currentSelectedSymbol)) {
+            _spotPosition.value = positionStore.get(symbol)
+        }
         notifyPositionChange()
     }
 
     fun refreshAlerts(symbol: String) {
-        _priceAlerts.value = alertStore.getAlertsForSymbol(symbol)
+        if (currentSelectedSymbol.isBlank() || isSameSymbol(symbol, currentSelectedSymbol)) {
+            _priceAlerts.value = alertStore.getAlertsForSymbol(symbol)
+        }
     }
 
     fun setOwnership(symbol: String, owned: Boolean, entryPrice: Double = 0.0, quantity: Double = 0.0, invested: Double = 0.0, isReal: Boolean = false) {

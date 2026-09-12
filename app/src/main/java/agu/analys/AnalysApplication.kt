@@ -12,6 +12,7 @@ class AnalysApplication : Application(), Application.ActivityLifecycleCallbacks 
         super.onCreate()
         AppContextProvider.init(this)
         registerActivityLifecycleCallbacks(this)
+        Timber.plant(agu.analys.util.AppLogManager.timberTree)
         if (BuildConfig.DEBUG) {
             Timber.plant(Timber.DebugTree())
         }

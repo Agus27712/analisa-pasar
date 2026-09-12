@@ -233,8 +233,9 @@ fun TradingViewModel.deployTrailingOrder(symbol: String) {
     val pair = TradingPair.fromCustomSymbol(symbol)
     val baseKey = pair.baseAsset.uppercase()
     
-    val currentPrice = marketDataCoordinator.currentTick.value?.price 
-        ?: marketDataCoordinator.dashboardTicks.value[symbol]?.price 
+    val currentPrice = (if (marketDataCoordinator.currentTick.value?.symbol?.equals(symbol, ignoreCase = true) == true) marketDataCoordinator.currentTick.value?.price else null)
+        ?: marketDataCoordinator.dashboardTicks.value[symbol]?.price
+        ?: marketDataCoordinator.dashboardTicks.value[TradingPair.fromCustomSymbol(symbol).symbol]?.price
         ?: (if (pos.peakPrice > 0.0) pos.peakPrice else pos.entryPrice)
 
     // Auto sync holding position if in Simulation mode and wallet has coin

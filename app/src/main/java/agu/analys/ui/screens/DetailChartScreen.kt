@@ -51,6 +51,7 @@ import agu.analys.engine.MarketStructureSnapshot
 import agu.analys.model.*
 import agu.analys.ui.components.SimpleComposeChart
 import agu.analys.ui.components.detail.*
+import agu.analys.ui.components.settings.LogcatDiagnosticDialog
 import agu.analys.ui.theme.*
 import agu.analys.util.AppPreferences
 import agu.analys.util.HapticUtil
@@ -78,6 +79,10 @@ fun DetailChartScreen(
     val watchlist by viewModel.watchlist.collectAsStateWithLifecycle()
     val favorites by viewModel.favorites.collectAsStateWithLifecycle()
     val spotPosition by viewModel.spotPosition.collectAsStateWithLifecycle()
+    val positionVersion by viewModel.positionVersion.collectAsStateWithLifecycle()
+    val currentPosition = remember(spotPosition, pair.symbol, positionVersion) {
+        if (viewModel.isMatchingSymbol(spotPosition.symbol, pair.symbol)) spotPosition else viewModel.getPositionFor(pair.symbol)
+    }
     val sellSignalState by viewModel.sellSignalState.collectAsStateWithLifecycle()
     val positionContext by viewModel.positionContext.collectAsStateWithLifecycle()
     val tradingWorkflow by viewModel.tradingWorkflow.collectAsStateWithLifecycle()
@@ -99,11 +104,12 @@ fun DetailChartScreen(
     var showPriceAlertDialog by remember { mutableStateOf(false) }
     var showAiAssistantDialog by remember { mutableStateOf(false) }
     var showShieldDialog by remember { mutableStateOf(false) }
+    var showLogcatDialog by remember { mutableStateOf(false) }
     val marketStructure = remember(candles) { MarketStructureAnalyzer.analyze(candles) }
     val isFavorite = favorites.contains(pair.symbol.uppercase()) || favorites.contains(pair.symbol)
     val provider = remember { AppPreferences(context).aiProvider }
     val isConnected = connection is MarketConnectionState.Connected
-    val isHolding = positionContext.hasPosition || (spotPosition != null && spotPosition!!.isHolding)
+    val isHolding = positionContext.hasPosition || currentPosition.isHolding
     var isBuyMode by remember(pair.symbol) { mutableStateOf(!isHolding) }
 
     // Dialogs
@@ -261,7 +267,8 @@ fun DetailChartScreen(
             DetailTopBar(
                 pair = pair,
                 onNavigateToDashboard = onNavigateToDashboard,
-                isConnected = isConnected
+                isConnected = isConnected,
+                onOpenLogcat = { showLogcatDialog = true }
             )
 
             Spacer(Modifier.height(8.dp))
@@ -550,6 +557,12 @@ fun DetailChartScreen(
                 connection = connection,
                 strategyMode = strategyMode,
                 onRetry = { viewModel.retryConnection() }
+            )
+        }
+
+        if (showLogcatDialog) {
+            LogcatDiagnosticDialog(
+                onDismissRequest = { showLogcatDialog = false }
             )
         }
     }

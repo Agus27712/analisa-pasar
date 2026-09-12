@@ -173,8 +173,30 @@ fun TradingViewModel.setTrailingStop(
     isTieredEnabled: Boolean = true,
     customTiersJson: String? = null
 ) {
-    val symbol = _selectedPair.value.symbol
-    val currentP = currentTick.value?.price ?: spotPosition.value.entryPrice
+    setTrailingStop(
+        pairSymbol = _selectedPair.value.symbol,
+        enabled = enabled,
+        trailingPercent = trailingPercent,
+        isTieredEnabled = isTieredEnabled,
+        customTiersJson = customTiersJson
+    )
+}
+
+fun TradingViewModel.setTrailingStop(
+    pairSymbol: String,
+    enabled: Boolean,
+    trailingPercent: Double,
+    isTieredEnabled: Boolean = true,
+    customTiersJson: String? = null
+) {
+    val symbol = pairSymbol
+    val tick = if (currentTick.value?.symbol?.equals(symbol, ignoreCase = true) == true) {
+        currentTick.value
+    } else {
+        marketDataCoordinator.dashboardTicks.value[symbol] ?: marketDataCoordinator.dashboardTicks.value[TradingPair.fromCustomSymbol(symbol).symbol]
+    }
+    val pos = positionStore.get(symbol)
+    val currentP = tick?.price?.takeIf { it > 0.0 } ?: (if (pos.peakPrice > 0.0) pos.peakPrice else pos.entryPrice)
     positionCoordinator.setTrailing(
         symbol = symbol,
         enabled = enabled,
@@ -194,7 +216,27 @@ fun TradingViewModel.setAutoSellParams(
     tp2Percent: Double,
     onResult: (Boolean, String) -> Unit = { _, _ -> }
 ) {
-    val symbol = _selectedPair.value.symbol
+    setAutoSellParams(
+        pairSymbol = _selectedPair.value.symbol,
+        enabled = enabled,
+        tp1Price = tp1Price,
+        tp1Percent = tp1Percent,
+        tp2Price = tp2Price,
+        tp2Percent = tp2Percent,
+        onResult = onResult
+    )
+}
+
+fun TradingViewModel.setAutoSellParams(
+    pairSymbol: String,
+    enabled: Boolean,
+    tp1Price: Double,
+    tp1Percent: Double,
+    tp2Price: Double,
+    tp2Percent: Double,
+    onResult: (Boolean, String) -> Unit = { _, _ -> }
+) {
+    val symbol = pairSymbol
     positionCoordinator.setAutoSell(symbol, enabled, tp1Price, tp1Percent, tp2Price, tp2Percent)
     onResult(true, if (enabled) "Target TP1 & TP2 tersimpan ke evaluator sinyal." else "Target TP dinonaktifkan.")
 }
