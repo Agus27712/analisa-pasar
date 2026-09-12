@@ -26,8 +26,8 @@ object GeminiAiService {
         .build()
 
     // PERBAIKAN 2: Gunakan daftar model yang dijamin ada di Google API publik
-    private const val MODEL = "gemini-1.5-flash"
-    private val CANDIDATE_MODELS = listOf("gemini-1.5-flash", "gemini-1.5-flash-8b", "gemini-1.5-pro")
+    private const val MODEL = "gemini-2.5-flash"
+    private val CANDIDATE_MODELS = listOf("gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro")
 
     suspend fun generateChartSummary24h(
         apiKey: String,
@@ -69,43 +69,53 @@ object GeminiAiService {
             "Rentang fluktuasi candle rata-rata: ${PriceFormatter.formatPrice(indicators.atr)}"
         } else "Volatilitas normal"
 
-        val prompt = """
-Kamu asisten quantitative & technical analyst spot Indodax. SELURUH jawaban WAJIB Bahasa Indonesia.
-Keluarkan output dalam format Markdown yang rapi, terstruktur, gunakan poin bullet (-), teks tebal (**bold**), dan judul bab (###).
-Jika ada kutipan berita Inggris, TERJEMAHKAN ke Bahasa Indonesia.
-Berikan analisis yang padat, tajam, edukatif, dan to-the-point. Pastikan menyelesaikan seluruh poin dari Bagian 1 hingga Bagian 4 secara lengkap dan tuntas tanpa terpotong di tengah kalimat.
+        val combinedPrompt = """
+[SYSTEM INSTRUCTION]
+Kamu asisten quantitative & technical analyst spot Indodax.
+SELURUH jawaban WAJIB Bahasa Indonesia (termasuk kutipan berita/headline).
+Terjemahkan headline Inggris ke Bahasa Indonesia dulu, lalu bedah dampaknya secara kritis.
+Gunakan format Markdown terstruktur dengan poin-poin bullet (-), penomoran (1, 2, 3), teks tebal (**bold**), dan judul bab (###).
+Fokus insight tajam, kritis, edukatif, dan praktis. Jelaskan jika ada kontradiksi antara kenaikan harga teknikal vs berita buruk fundamental (misal pump lokal vs delisting/warning).
 
-Data Pasar Real-Time:
-- Pair: ${tick.symbol} ($base)
-- Identitas: ${pairCtx.label}
+[DATA PASAR INDODAX REAL-TIME]
+- Pair: ${tick.symbol} (base: $base)
+- Identitas & Profil: ${pairCtx.label}
 - Ekosistem: ${pairCtx.ecosystem}
+- Narasi: ${pairCtx.narrative}
 - Pergerakan 24J: $move (${PriceFormatter.formatPercentage(tick.change24h)})
 - Harga Terakhir: ${PriceFormatter.formatPrice(tick.price)} | Volume 24J: ${PriceFormatter.formatVolume(tick.volume24h)}
-- Status Indikator:
+- Status Indikator Teknikal:
   * RSI (14): $rsiExplanation
-  * EMA Tren: $trendExplanation
-  * MACD: $macdExplanation
+  * Tren EMA 20/50: $trendExplanation
+  * MACD Histogram: $macdExplanation
   * ATR / Volatilitas: $atrExplanation
-  * Engine Sinyal: ${signal.action.name} (Keyakinan: ${signal.confidence}/100)
+  * Engine Sinyal System: ${signal.action.name} (Confidence: ${signal.confidence}/100)
 
+[FEED BERITA & SENTIMEN TERKINI]
 $headlineBlock
 
-Format Output (Wajib Markdown Terstruktur Lengkap):
+WAJIB SUSUN JAWABAN DALAM FORMAT MARKDOWN BERIKUT:
+
 ### 🔎 1. Profil & Ekosistem Aset
-- **Aset**: ...
-- **Korelasi**: ...
+- **Aset**: ${pairCtx.label} ($base)
+- **Karakteristik & Korelasi**: Ulas peran dalam ${pairCtx.ecosystem} dan narasi yang sedang mempengaruhi pergerakannya.
 
 ### 📊 2. Analisis Indikator Teknikal
-- **RSI (14)**: [Jelaskan status apakah Jenuh Beli / Overbought, Jenuh Jual / Oversold, atau Netral beserta implikasi tradingnya]
-- **Tren EMA & MACD**: [Jelaskan arah tren & momentum dorongan pasar]
-- **Volatilitas**: [Kondisi volatilitas & batas risiko]
+- **RSI (14)**: Jelaskan kondisi RSI ($rsiFormatted), implikasi overbought/oversold, dan potensi pergerakan selanjutnya.
+- **Tren EMA & MACD**: Evaluasi arah tren EMA 20/50 serta dorongan momentum Histogram MACD.
+- **Volatilitas**: Kondisi ATR (${if (indicators.atr.isFinite() && indicators.atr > 0) PriceFormatter.formatPrice(indicators.atr) else "Normal"}) dan batas toleransi risiko.
 
 ### 📰 3. Sentimen Pasar & Alasan Gerakan
-- **Faktor Penggerak**: [Terjemahan & analisa berita/volume terhadap harga]
+- **Faktor Penggerak**: Bedah headline berita di atas secara detail dan terjemahkan ke Bahasa Indonesia. Evaluasi apakah ada kontradiksi antara aksi harga vs berita:
+  1. "[Terjemahan Headline 1]": [Analisis kritis dampak berita ini terhadap pasar]
+  2. "[Terjemahan Headline 2]": [Analisis kritis dampak berita ini terhadap pasar]
+  3. "[Terjemahan Headline 3]": [Analisis kritis dampak berita ini terhadap pasar]
+
+- **Analisis Kritis**: Hubungkan pergerakan harga ${tick.symbol} (${PriceFormatter.formatPercentage(tick.change24h)}) dengan berita di atas. Apakah kenaikan/penurunan didorong oleh sentimen global yang valid, atau sekadar spekulasi lokal / pump & dump di Indodax?
 
 ### 💡 4. Panduan Strategi & Action Plan
 - **Sinyal Engine**: **${signal.action.name}** (Confidence: ${signal.confidence}/100)
-- **Tindakan Disarankan**: [Strategi entry/exit, limit order maker, disiplin money management]
+- **Rekomendasi**: Berikan panduan konkret entry/exit, limit order maker 0.21%, serta manajemen risiko stop loss.
         """.trimIndent()
 
         for (modelName in CANDIDATE_MODELS) {
@@ -114,15 +124,15 @@ Format Output (Wajib Markdown Terstruktur Lengkap):
                     put("contents", JSONArray().apply {
                         put(JSONObject().apply {
                             put("parts", JSONArray().apply {
-                                put(JSONObject().apply { put("text", prompt) })
+                                put(JSONObject().apply { put("text", combinedPrompt) })
                             })
                         })
                     })
                     put("generationConfig", JSONObject().apply {
-                        put("temperature", 0.35)
+                        put("temperature", 0.65)
+                        put("topP", 0.95)
                         put("maxOutputTokens", 2048)
                     })
-                    // PERBAIKAN 3: Matikan fitur sensor supaya analisis kripto/pasar (bull run, crash) tidak di-block
                     put("safetySettings", JSONArray().apply {
                         val blockNone = "BLOCK_NONE"
                         put(JSONObject().apply { put("category", "HARM_CATEGORY_HARASSMENT"); put("threshold", blockNone) })
@@ -147,7 +157,6 @@ Format Output (Wajib Markdown Terstruktur Lengkap):
                             ?.takeIf { it.length() > 0 }
                             ?.getJSONObject(0)
                         
-                        // PERBAIKAN 4: Validasi `finishReason` untuk mencegah error saat konten dikunci filter Google
                         val finishReason = candidate?.optString("finishReason")
                         if (finishReason == "SAFETY") {
                             Timber.w("Gemini: Terblokir oleh safety filter!")
@@ -225,6 +234,11 @@ Format Output (Wajib Markdown Terstruktur Lengkap):
             PriceFormatter.formatPrice(indicators.atr)
         } else "Normal"
 
+        val cleanHeadlineText = headlineBlock.replace(
+            "Headline publik terbaru (boleh campuran EN/ID — WAJIB diterjemahkan ke Bahasa Indonesia di jawaban):",
+            "Headlines Berita Publik Terkini:"
+        )
+
         return """
 ### 🔎 1. Profil & Ekosistem Aset
 - **Aset**: ${ctx.label}
@@ -240,11 +254,12 @@ Format Output (Wajib Markdown Terstruktur Lengkap):
 ### 📰 3. Sentimen Pasar & Alasan Gerakan
 - **Pergerakan 24J**: $move (${PriceFormatter.formatPercentage(tick.change24h)}), Volume: ${PriceFormatter.formatVolume(tick.volume24h)}
 - **Sentimen & Berita**:
-$headlineBlock
+$cleanHeadlineText
 
 ### 💡 4. Panduan Strategi & Action Plan
 - **Sinyal Engine**: **${signal.action.name}** (Confidence: ${signal.confidence}/100)
 - **Tindakan**: Pantau konfirmasi arah BTC terlebih dahulu. Gunakan limit order maker 0.21%, hindari mengejar candle yang sudah bergerak jauh.
+(Catatan: Masukkan Gemini API Key di Pengaturan untuk mengaktifkan analisis naratif mendalam Gemini).
         """.trimIndent()
     }
 

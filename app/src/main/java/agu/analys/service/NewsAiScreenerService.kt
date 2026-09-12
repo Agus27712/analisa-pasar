@@ -333,23 +333,26 @@ TUGAS:
 Saring seluruh berita di atas dan cocokkan dengan daftar koin Indodax. Pilih 2 sampai 4 koin kandidat terbaik yang berpotensi naik paling tinggi berdasarkan katalis berita.
         """.trimIndent()
 
-        val combinedPrompt = """$systemInstruction
-
-$userPrompt""".trimIndent()
-
         for (model in GEMINI_MODELS) {
             try {
                 val url = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey"
                 val payload = JSONObject().apply {
+                    put("systemInstruction", JSONObject().apply {
+                        put("parts", JSONArray().apply {
+                            put(JSONObject().apply { put("text", systemInstruction) })
+                        })
+                    })
                     put("contents", JSONArray().apply {
                         put(JSONObject().apply {
+                            put("role", "user")
                             put("parts", JSONArray().apply {
-                                put(JSONObject().apply { put("text", combinedPrompt) })
+                                put(JSONObject().apply { put("text", userPrompt) })
                             })
                         })
                     })
                     put("generationConfig", JSONObject().apply {
-                        put("temperature", 0.20)
+                        put("temperature", 0.55)
+                        put("topP", 0.95)
                         put("maxOutputTokens", 1200)
                     })
                 }
