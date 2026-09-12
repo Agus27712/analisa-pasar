@@ -55,10 +55,12 @@ class TradingForegroundService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "Background Monitor",
-                NotificationManager.IMPORTANCE_LOW
+                "Monitor Portfolio & Spot Market",
+                NotificationManager.IMPORTANCE_DEFAULT
             ).apply {
-                description = "Menjaga proses aplikasi tetap hidup dan memantau pair"
+                description = "Menjaga proses aplikasi tetap hidup dan memantau koin aktif di AOD / Lockscreen"
+                lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+                setShowBadge(true)
             }
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.createNotificationChannel(channel)
@@ -200,15 +202,19 @@ class TradingForegroundService : Service() {
 
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(agu.analys.R.drawable.ic_stat_trading)
+            .setColor(0xFF0F172A.toInt()) // Professional Slate Navy
             .setContentTitle(title)
             .setContentText(collapsedText)
-            .setSubText("Indodax Spot")
+            .setSubText("Indodax Spot • Live")
             .setStyle(NotificationCompat.BigTextStyle().bigText(bigText))
             .setContentIntent(pendingIntent)
-            .addAction(0, "Buka Portofolio", pendingIntent)
+            .addAction(0, "Portofolio", pendingIntent)
             .addAction(0, "Hentikan", stopPendingIntent)
             .setOngoing(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .build()
 
         startForeground(NOTIFICATION_ID, notification)

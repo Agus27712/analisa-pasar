@@ -114,7 +114,8 @@ fun Modifier.livePulse(alpha: Float): Modifier =
 @Composable
 fun rememberSmoothPrice(target: Double, durationMs: Int = AppAnimations.PRICE_MS): Double {
     val progress = remember { Animatable(1f) }
-    var startPrice by remember { mutableStateOf(target) }
+    var startPrice by remember { mutableDoubleStateOf(target) }
+    var previousTarget by remember { mutableDoubleStateOf(target) }
 
     val progressValue = progress.value.coerceIn(0f, 1f)
     val displayed = startPrice + (target - startPrice) * progressValue.toDouble()
@@ -122,36 +123,19 @@ fun rememberSmoothPrice(target: Double, durationMs: Int = AppAnimations.PRICE_MS
     LaunchedEffect(target) {
         if (!target.isFinite() || target <= 0.0) return@LaunchedEffect
 
-        val current = if (startPrice.isFinite() && startPrice > 0.0) {
-            startPrice + (target - startPrice) * progress.value.toDouble()
-        } else {
-            target
-        }
-
-        if (!current.isFinite() || current <= 0.0 || current == target) {
-            startPrice = target
-            progress.snapTo(1f)
-            return@LaunchedEffect
-        }
-
-        val relativeDelta = abs(target - current) / current
-        if (relativeDelta > 0.25) {
-            startPrice = target
-            progress.snapTo(1f)
-            return@LaunchedEffect
-        }
-
-        startPrice = current
-        progress.snapTo(0f)
-        progress.animateTo(
-            targetValue = 1f,
-            animationSpec = tween(
-                durationMillis = durationMs.coerceIn(140, 200),
-                easing = FastOutSlowInEasing
+        if (target != previousTarget) {
+            val currentDisplayed = startPrice + (previousTarget - startPrice) * progress.value.toDouble()
+            startPrice = if (currentDisplayed.isFinite() && currentDisplayed > 0.0) currentDisplayed else previousTarget
+            previousTarget = target
+            progress.snapTo(0f)
+            progress.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(
+                    durationMillis = durationMs.coerceIn(180, 400),
+                    easing = FastOutSlowInEasing
+                )
             )
-        )
-        startPrice = target
-        progress.snapTo(1f)
+        }
     }
 
     return displayed
