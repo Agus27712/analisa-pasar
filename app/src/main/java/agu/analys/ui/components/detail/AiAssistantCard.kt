@@ -128,7 +128,7 @@ fun AiAssistantDialog(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 140.dp, max = 480.dp)
+                        .heightIn(min = 140.dp, max = 640.dp)
                         .background(TvSurfaceVariant, RoundedCornerShape(8.dp))
                         .border(0.8.dp, TvBorder, RoundedCornerShape(8.dp))
                         .padding(10.dp)

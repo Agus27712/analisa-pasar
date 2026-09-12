@@ -109,7 +109,7 @@ object AlertNotificationHelper {
             return
         }
         val prefs = AppPreferences(context)
-        if (!prefs.isNotificationsEnabled) return
+        if (!prefs.isNotificationsEnabled || !prefs.isNotifyPriceAlertsEnabled) return
 
         createNotificationChannels(context)
 
@@ -155,7 +155,7 @@ object AlertNotificationHelper {
             return
         }
         val prefs = AppPreferences(context)
-        if (!prefs.isNotificationsEnabled) return
+        if (!prefs.isNotificationsEnabled || !prefs.isNotifyCandidateBuyEnabled) return
 
         createNotificationChannels(context)
 
@@ -223,7 +223,7 @@ object AlertNotificationHelper {
         isReal: Boolean
     ) {
         val prefs = AppPreferences(context)
-        if (!prefs.isNotificationsEnabled) return
+        if (!prefs.isNotificationsEnabled || !prefs.isNotifyTrailingStopEnabled) return
 
         createNotificationChannels(context)
 

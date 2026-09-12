@@ -26,8 +26,8 @@ object GeminiAiService {
         .build()
 
     // PERBAIKAN 2: Gunakan daftar model yang dijamin ada di Google API publik
-    private const val MODEL = "gemini-2.5-flash"
-    private val CANDIDATE_MODELS = listOf("gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro")
+    private const val MODEL = "gemini-1.5-flash"
+    private val CANDIDATE_MODELS = listOf("gemini-1.5-flash", "gemini-2.5-flash", "gemini-3.5-flash", "gemini-1.5-pro")
 
     suspend fun generateChartSummary24h(
         apiKey: String,
@@ -40,7 +40,7 @@ object GeminiAiService {
         val headlines = runCatching { CryptoHeadlineService.snapshotForBase(base) }.getOrNull()
         val headlineBlock = headlines?.promptBlock() ?: "Headline: tidak tersedia."
 
-        if (effectiveKey.isBlank()) return@withContext buildFallback(tick, indicators, signal, headlineBlock)
+        if (effectiveKey.isBlank()) return@withContext buildFallback(tick, indicators, signal, headlineBlock, null)
 
         val pairCtx = PairNarrative.forBase(base)
         val move = describeMove(tick.change24h)
@@ -118,6 +118,7 @@ WAJIB SUSUN JAWABAN DALAM FORMAT MARKDOWN BERIKUT:
 - **Rekomendasi**: Berikan panduan konkret entry/exit, limit order maker 0.21%, serta manajemen risiko stop loss.
         """.trimIndent()
 
+        var lastError: String? = null
         for (modelName in CANDIDATE_MODELS) {
             try {
                 val payload = JSONObject().apply {
@@ -131,7 +132,7 @@ WAJIB SUSUN JAWABAN DALAM FORMAT MARKDOWN BERIKUT:
                     put("generationConfig", JSONObject().apply {
                         put("temperature", 0.65)
                         put("topP", 0.95)
-                        put("maxOutputTokens", 2048)
+                        put("maxOutputTokens", 4096)
                     })
                     put("safetySettings", JSONArray().apply {
                         val blockNone = "BLOCK_NONE"
@@ -160,7 +161,7 @@ WAJIB SUSUN JAWABAN DALAM FORMAT MARKDOWN BERIKUT:
                         val finishReason = candidate?.optString("finishReason")
                         if (finishReason == "SAFETY") {
                             Timber.w("Gemini: Terblokir oleh safety filter!")
-                            return@withContext buildFallback(tick, indicators, signal, headlineBlock)
+                            return@withContext buildFallback(tick, indicators, signal, headlineBlock, "Terblokir oleh filter keamanan AI")
                         }
 
                         val parts = candidate?.optJSONObject("content")?.optJSONArray("parts")
@@ -172,15 +173,20 @@ WAJIB SUSUN JAWABAN DALAM FORMAT MARKDOWN BERIKUT:
 
                         if (text.isNotBlank()) return@withContext text
                     } else {
+                        val errorMsg = runCatching {
+                            JSONObject(responseBody).getJSONObject("error").getString("message")
+                        }.getOrNull() ?: "HTTP ${resp.code}"
+                        lastError = "$modelName: $errorMsg"
                         Timber.e("Gemini Error $modelName HTTP ${resp.code}: $responseBody")
                     }
                 }
             } catch (e: Exception) {
+                lastError = "$modelName: ${e.localizedMessage ?: "Koneksi gagal"}"
                 Timber.e(e, "Gemini model $modelName call failed")
             }
         }
 
-        buildFallback(tick, indicators, signal, headlineBlock)
+        buildFallback(tick, indicators, signal, headlineBlock, lastError)
     }
 
     private fun extractBase(symbol: String): String {
@@ -204,7 +210,8 @@ WAJIB SUSUN JAWABAN DALAM FORMAT MARKDOWN BERIKUT:
         tick: MarketTick,
         indicators: TechnicalIndicators,
         signal: AISignalState,
-        headlineBlock: String
+        headlineBlock: String,
+        errorReason: String? = null
     ): String {
         val base = extractBase(tick.symbol)
         val ctx = PairNarrative.forBase(base)
@@ -239,6 +246,12 @@ WAJIB SUSUN JAWABAN DALAM FORMAT MARKDOWN BERIKUT:
             "Headlines Berita Publik Terkini:"
         )
 
+        val noteText = if (errorReason != null) {
+            "(Catatan: Gemini API gagal merespon: $errorReason. Menampilkan analisis lokal terstruktur sebagai cadangan)."
+        } else {
+            "(Catatan: Masukkan Gemini API Key di Pengaturan untuk mengaktifkan analisis naratif mendalam Gemini)."
+        }
+
         return """
 ### 🔎 1. Profil & Ekosistem Aset
 - **Aset**: ${ctx.label}
@@ -259,7 +272,7 @@ $cleanHeadlineText
 ### 💡 4. Panduan Strategi & Action Plan
 - **Sinyal Engine**: **${signal.action.name}** (Confidence: ${signal.confidence}/100)
 - **Tindakan**: Pantau konfirmasi arah BTC terlebih dahulu. Gunakan limit order maker 0.21%, hindari mengejar candle yang sudah bergerak jauh.
-(Catatan: Masukkan Gemini API Key di Pengaturan untuk mengaktifkan analisis naratif mendalam Gemini).
+$noteText
         """.trimIndent()
     }
 

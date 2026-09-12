@@ -243,6 +243,18 @@ class AppPreferences(context: Context) {
         get() = prefs.getBoolean(KEY_NOTIFICATIONS_ENABLED, true)
         set(value) = prefs.edit().putBoolean(KEY_NOTIFICATIONS_ENABLED, value).apply()
 
+    var isNotifyCandidateBuyEnabled: Boolean
+        get() = prefs.getBoolean("notify_candidate_buy_v1", true)
+        set(value) = prefs.edit().putBoolean("notify_candidate_buy_v1", value).apply()
+
+    var isNotifyPriceAlertsEnabled: Boolean
+        get() = prefs.getBoolean("notify_price_alerts_v1", true)
+        set(value) = prefs.edit().putBoolean("notify_price_alerts_v1", value).apply()
+
+    var isNotifyTrailingStopEnabled: Boolean
+        get() = prefs.getBoolean("notify_trailing_stop_v1", true)
+        set(value) = prefs.edit().putBoolean("notify_trailing_stop_v1", value).apply()
+
     var isRealSimSyncEnabled: Boolean
         get() = prefs.getBoolean(KEY_REAL_SIM_SYNC_ENABLED, false)
         set(value) = prefs.edit().putBoolean(KEY_REAL_SIM_SYNC_ENABLED, value).apply()

@@ -394,6 +394,15 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     private val _isNotificationsEnabled = MutableStateFlow(prefs.isNotificationsEnabled)
     val isNotificationsEnabled: StateFlow<Boolean> = _isNotificationsEnabled.asStateFlow()
 
+    private val _isNotifyCandidateBuyEnabled = MutableStateFlow(prefs.isNotifyCandidateBuyEnabled)
+    val isNotifyCandidateBuyEnabled: StateFlow<Boolean> = _isNotifyCandidateBuyEnabled.asStateFlow()
+
+    private val _isNotifyPriceAlertsEnabled = MutableStateFlow(prefs.isNotifyPriceAlertsEnabled)
+    val isNotifyPriceAlertsEnabled: StateFlow<Boolean> = _isNotifyPriceAlertsEnabled.asStateFlow()
+
+    private val _isNotifyTrailingStopEnabled = MutableStateFlow(prefs.isNotifyTrailingStopEnabled)
+    val isNotifyTrailingStopEnabled: StateFlow<Boolean> = _isNotifyTrailingStopEnabled.asStateFlow()
+
     private val _isRealSimSyncEnabled = MutableStateFlow(prefs.isRealSimSyncEnabled)
     val isRealSimSyncEnabled: StateFlow<Boolean> = _isRealSimSyncEnabled.asStateFlow()
 
@@ -745,6 +754,21 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         prefs.isNotificationsEnabled = enabled
         _isNotificationsEnabled.value = enabled
         updateForegroundServiceState()
+    }
+
+    fun setNotifyCandidateBuyEnabled(enabled: Boolean) {
+        prefs.isNotifyCandidateBuyEnabled = enabled
+        _isNotifyCandidateBuyEnabled.value = enabled
+    }
+
+    fun setNotifyPriceAlertsEnabled(enabled: Boolean) {
+        prefs.isNotifyPriceAlertsEnabled = enabled
+        _isNotifyPriceAlertsEnabled.value = enabled
+    }
+
+    fun setNotifyTrailingStopEnabled(enabled: Boolean) {
+        prefs.isNotifyTrailingStopEnabled = enabled
+        _isNotifyTrailingStopEnabled.value = enabled
     }
 
     fun setRealSimSyncEnabled(enabled: Boolean) {

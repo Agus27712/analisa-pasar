@@ -73,6 +73,12 @@ enum class SettingsCategory(
         icon = Icons.Default.SmartToy,
         accentColor = Color(0xFF9C27B0)
     ),
+    NOTIFICATIONS(
+        title = "Kategori Notifikasi Sistem",
+        subtitle = "Konfigurasi suara, getaran, lencana, & prioritas saluran sistem",
+        icon = Icons.Default.Notifications,
+        accentColor = Color(0xFFFF7043)
+    ),
     SYSTEM(
         title = "Sistem, Logcat & Pemeliharaan",
         subtitle = "Logcat diagnostik, pembersihan cache & update rilis GitHub",
@@ -137,6 +143,9 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
     val downloadProgress by viewModel.updateDownloadProgress.collectAsStateWithLifecycle()
     val isDarkTheme by viewModel.isDarkTheme.collectAsState()
     val isNotificationsEnabled by viewModel.isNotificationsEnabled.collectAsState()
+    val isNotifyCandidateBuyEnabled by viewModel.isNotifyCandidateBuyEnabled.collectAsState()
+    val isNotifyPriceAlertsEnabled by viewModel.isNotifyPriceAlertsEnabled.collectAsState()
+    val isNotifyTrailingStopEnabled by viewModel.isNotifyTrailingStopEnabled.collectAsState()
 
     fun saveAllSettings(showToast: Boolean = true) {
         if (selectedSource != prefs.marketDataSource) {
@@ -399,10 +408,23 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                             iconTint = Color(0xFFFF7043),
                             iconBackground = Color(0xFFFF7043).copy(alpha = 0.15f),
                             title = "Notifikasi Trading & Sinyal",
-                            subtitle = if (isNotificationsEnabled) "Push notifikasi sinyal aktif" else "Hemat daya & tanpa push notifikasi",
+                            subtitle = if (isNotificationsEnabled) "Push notifikasi aktif" else "Hemat daya & tanpa push notifikasi",
                             checked = isNotificationsEnabled,
                             onCheckedChange = { viewModel.setNotificationsEnabled(it) }
                         )
+
+                        if (isNotificationsEnabled) {
+                            HorizontalDivider(color = TvBorder.copy(alpha = 0.5f), thickness = 0.5.dp)
+
+                            AndroidPreferenceItem(
+                                icon = Icons.Default.Notifications,
+                                iconTint = Color(0xFFFF7043),
+                                iconBackground = Color(0xFFFF7043).copy(alpha = 0.15f),
+                                title = "Kustomisasi Kategori Notifikasi",
+                                subtitle = "Kelola suara, getaran, lencana, & prioritas saluran sistem",
+                                onClick = { activeCategory = SettingsCategory.NOTIFICATIONS }
+                            )
+                        }
                     }
 
                     Spacer(Modifier.height(14.dp))
@@ -736,6 +758,55 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                             )
                         }
 
+                        SettingsCategory.NOTIFICATIONS -> {
+                            SectionHeader("SALURAN NOTIFIKASI SISTEM")
+                            Text(
+                                text = "Ketuk kategori di bawah untuk mengatur suara, getaran, lencana, dan prioritas notifikasi langsung di sistem Android Anda.",
+                                color = TvTextSecondary,
+                                fontSize = 11.sp,
+                                lineHeight = 15.sp,
+                                modifier = Modifier.padding(bottom = 12.dp)
+                            )
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(containerColor = TvCardBackground),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder)
+                            ) {
+                                Column {
+                                    AndroidPreferenceSwitchItem(
+                                        icon = Icons.Default.NotificationsActive,
+                                        iconTint = Color(0xFFFF7043),
+                                        iconBackground = Color(0xFFFF7043).copy(alpha = 0.15f),
+                                        title = "Trading & Price Alerts",
+                                        subtitle = "Notifikasi harga target, sinyal strategi, dan trailing stop loss",
+                                        checked = isNotifyPriceAlertsEnabled,
+                                        onCheckedChange = { viewModel.setNotifyPriceAlertsEnabled(it) }
+                                    )
+                                    HorizontalDivider(color = TvBorder.copy(alpha = 0.5f), thickness = 0.5.dp)
+                                    AndroidPreferenceSwitchItem(
+                                        icon = Icons.Default.NotificationsActive,
+                                        iconTint = Color(0xFFFF7043),
+                                        iconBackground = Color(0xFFFF7043).copy(alpha = 0.15f),
+                                        title = "Notifikasi Pair Ready & Sinyal Buy",
+                                        subtitle = "Sinyal koin kandidat strategi yang siap entry / buy",
+                                        checked = isNotifyCandidateBuyEnabled,
+                                        onCheckedChange = { viewModel.setNotifyCandidateBuyEnabled(it) }
+                                    )
+                                    HorizontalDivider(color = TvBorder.copy(alpha = 0.5f), thickness = 0.5.dp)
+                                    AndroidPreferenceSwitchItem(
+                                        icon = Icons.Default.NotificationsActive,
+                                        iconTint = Color(0xFFFF7043),
+                                        iconBackground = Color(0xFFFF7043).copy(alpha = 0.15f),
+                                        title = "Notifikasi Trailing Stop & Eksekusi",
+                                        subtitle = "Sinyal penting trailing profit, stop loss, dan eksekusi jual otomatis",
+                                        checked = isNotifyTrailingStopEnabled,
+                                        onCheckedChange = { viewModel.setNotifyTrailingStopEnabled(it) }
+                                    )
+                                }
+                            }
+                        }
+
                         SettingsCategory.SYSTEM -> {
                             SectionHeader("PEMELIHARAAN & UPDATE")
                             AppMaintenanceCard(
@@ -923,6 +994,8 @@ fun AndroidPreferenceItem(
         )
     }
 }
+
+
 
 @Composable
 fun AndroidPreferenceSwitchItem(

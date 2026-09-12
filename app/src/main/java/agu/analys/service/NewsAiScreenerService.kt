@@ -35,11 +35,12 @@ object NewsAiScreenerService {
         "openai/gpt-oss-120b",
         "qwen/qwen3.6-27b"
     )
-    private const val GEMINI_MODEL = "gemini-3.6-flash"
+    private const val GEMINI_MODEL = "gemini-1.5-flash"
     private val GEMINI_MODELS = listOf(
-        "gemini-3.6-flash",
-        "gemini-2.0-flash",
-        "gemini-1.5-flash"
+        "gemini-1.5-flash",
+        "gemini-2.5-flash",
+        "gemini-3.5-flash",
+        "gemini-1.5-pro"
     )
     private const val MAX_TOKENS = 750
 
@@ -310,7 +311,7 @@ ATURAN UTAMA:
 1. FILTER WAJIB INDODAX: Anda HANYA BOLEH menyaring dan menampilkan koin yang terdaftar dalam daftar [DAFTAR VALID KOIN INDODAX SPOT]. Koin di luar daftar ini wajib diabaikan total.
 2. SPOT PERSPECTIVE: Hanya cari katalis akumulasi/kenaikan harga (Spot Buy). Tidak ada shorting/futures.
 3. DETEKSI NARASI & MAKRO: Hubungkan berita mikro koin dengan narasi besar (AI, RWA, Layer-1, aliran dana institusi).
-4. PANJANG OUTPUT: Padat, maksimal 757 token. Tanpa salam pembuka dan penutup.
+4. PANJANG OUTPUT: Berikan analisis mendalam, komprehensif, dan lengkap hingga selesai (maksimal 4096 token). Tanpa salam pembuka dan penutup.
 5. FORMAT OUTPUT PER KOIN:
 🔥 [SIMBOL/IDR] (Contoh: SOL/IDR)
 • Narasi/Sektor: [Sektor koin]
@@ -353,7 +354,7 @@ Saring seluruh berita di atas dan cocokkan dengan daftar koin Indodax. Pilih 2 s
                     put("generationConfig", JSONObject().apply {
                         put("temperature", 0.55)
                         put("topP", 0.95)
-                        put("maxOutputTokens", 1200)
+                        put("maxOutputTokens", 4096)
                     })
                 }
 
