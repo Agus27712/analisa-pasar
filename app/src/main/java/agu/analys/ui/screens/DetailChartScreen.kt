@@ -469,6 +469,15 @@ fun DetailChartScreen(
                         android.widget.Toast.LENGTH_SHORT
                     ).show()
                 },
+                onSetTieredTrailingStop = { enabled, pct, isTiered, json ->
+                    viewModel.setTrailingStop(enabled, pct, isTiered, json)
+                    HapticUtil.vibrateTradeSuccess(context)
+                    android.widget.Toast.makeText(
+                        context,
+                        if (enabled) "Trailing $pct% ${if (isTiered) "(Smart Step Aktif)" else ""} disimpan" else "Trailing off",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                },
                 onResetTrailingTrigger = { viewModel.resetTrailingTrigger() },
                 onSetAutoSellParams = { enabled, tp1Price, tp1Percent, tp2Price, tp2Percent ->
                     viewModel.setAutoSellParams(enabled, tp1Price, tp1Percent, tp2Price, tp2Percent) { success, msg ->
@@ -534,6 +543,7 @@ fun DetailChartScreen(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
+                .background(TvBackground)
                 .padding(horizontal = 12.dp, vertical = 6.dp)
         ) {
             StickyFloatingStatusBar(

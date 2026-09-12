@@ -51,8 +51,22 @@ class PositionCoordinator(
         refreshPosition(symbol)
     }
 
-    fun setTrailing(symbol: String, enabled: Boolean, pct: Double, refPrice: Double) {
-        positionStore.setTrailingStop(symbol, enabled, pct, refPrice)
+    fun setTrailing(
+        symbol: String,
+        enabled: Boolean,
+        pct: Double,
+        refPrice: Double,
+        isTieredEnabled: Boolean = true,
+        customTiersJson: String? = null
+    ) {
+        positionStore.setTrailingStop(
+            symbol = symbol,
+            enabled = enabled,
+            trailingPercent = pct,
+            referencePrice = refPrice,
+            isTieredEnabled = isTieredEnabled,
+            customTiersJson = customTiersJson
+        )
         refreshPosition(symbol)
     }
 

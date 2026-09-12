@@ -17,14 +17,16 @@ import timber.log.Timber
 
 fun TradingViewModel.printTrailingDiagnostics(symbol: String, currentPrice: Double, pos: SpotPosition) {
     if (!pos.isHolding || !pos.isTrailingEnabled) return
-    val slPrice = positionStore.calculateTrailingLimitPrice(pos.peakPrice, pos.entryPrice, pos.trailingPercent)
-    Timber.d("[$symbol] Trailing - Current: $currentPrice, Peak: ${pos.peakPrice}, Stop: $slPrice, Enabled: ${pos.isTrailingEnabled}")
+    val effectivePct = if (pos.activeTrailingPercent > 0.0) pos.activeTrailingPercent else pos.trailingPercent
+    val slPrice = positionStore.calculateTrailingLimitPrice(pos.peakPrice, pos.entryPrice, effectivePct)
+    Timber.d("[$symbol] Trailing - Current: $currentPrice, Peak: ${pos.peakPrice}, Stop: $slPrice, EffectivePct: $effectivePct%, Enabled: ${pos.isTrailingEnabled}")
 }
 
 fun TradingViewModel.checkAlertsAndTrailing(symbol: String, currentPrice: Double, rsi: Double? = null) {
     val posBeforeUpdate = positionStore.get(symbol)
     val oldPeak = posBeforeUpdate.peakPrice
-    val oldSlPrice = positionStore.calculateTrailingLimitPrice(oldPeak, posBeforeUpdate.entryPrice, posBeforeUpdate.trailingPercent)
+    val oldEffectivePct = if (posBeforeUpdate.activeTrailingPercent > 0.0) posBeforeUpdate.activeTrailingPercent else posBeforeUpdate.trailingPercent
+    val oldSlPrice = positionStore.calculateTrailingLimitPrice(oldPeak, posBeforeUpdate.entryPrice, oldEffectivePct)
     printTrailingDiagnostics(symbol, currentPrice, posBeforeUpdate)
     val (updatedPos, justTriggered) = positionStore.updateTrailingPrice(symbol, currentPrice)
 
@@ -33,7 +35,8 @@ fun TradingViewModel.checkAlertsAndTrailing(symbol: String, currentPrice: Double
 
     if (justTriggered) {
         refreshSpotPosition()
-        val limitSellPrice = positionStore.calculateTrailingLimitPrice(updatedPos.peakPrice, updatedPos.entryPrice, updatedPos.trailingPercent)
+        val effectivePct = if (updatedPos.activeTrailingPercent > 0.0) updatedPos.activeTrailingPercent else updatedPos.trailingPercent
+        val limitSellPrice = positionStore.calculateTrailingLimitPrice(updatedPos.peakPrice, updatedPos.entryPrice, effectivePct)
         
         val baseKey = TradingPair.fromCustomSymbol(symbol).baseAsset.uppercase()
         val baseLower = baseKey.lowercase()
@@ -60,7 +63,8 @@ fun TradingViewModel.checkAlertsAndTrailing(symbol: String, currentPrice: Double
             executeAutoSellOrder(symbol, limitSellPrice, posQty, "TRAILING", isReal)
         }
     } else if (updatedPos.isHolding && updatedPos.isTrailingEnabled && updatedPos.peakPrice > oldPeak) {
-        val newSlPrice = positionStore.calculateTrailingLimitPrice(updatedPos.peakPrice, updatedPos.entryPrice, updatedPos.trailingPercent)
+        val effectivePct = if (updatedPos.activeTrailingPercent > 0.0) updatedPos.activeTrailingPercent else updatedPos.trailingPercent
+        val newSlPrice = positionStore.calculateTrailingLimitPrice(updatedPos.peakPrice, updatedPos.entryPrice, effectivePct)
         // NOTIFIKASI HANYA DIKIRIM JIKA BATAS AMAN (STOP LIMIT) BENAR-BENAR NAIK
         // Mencegah spam jika harga naik sedikit namun batas aman masih tertahan di modal entry
         if (newSlPrice > oldSlPrice) {
@@ -246,8 +250,15 @@ fun TradingViewModel.deployTrailingOrder(symbol: String) {
     val effectiveTrailingPct = if (pos.trailingPercent > 0.0) pos.trailingPercent else 2.0
     val effectivePeak = if (pos.peakPrice > 0.0) pos.peakPrice.coerceAtLeast(currentPrice) else currentPrice
 
-    // Ensure trailing stop is enabled & peak updated in storage
-    positionStore.setTrailingStop(symbol, enabled = true, trailingPercent = effectiveTrailingPct, referencePrice = effectivePeak)
+    // Ensure trailing stop is enabled & peak updated in storage with tiered settings preserved
+    positionStore.setTrailingStop(
+        symbol = symbol,
+        enabled = true,
+        trailingPercent = effectiveTrailingPct,
+        referencePrice = effectivePeak,
+        isTieredEnabled = pos.isTieredTrailingEnabled,
+        customTiersJson = pos.tieredConfigJson
+    )
     
     val trailingOrderId = if (isReal) "real-client-trailing" else "sim-client-trailing"
     positionCoordinator.setTrailingOrderIdAndUpdateTime(symbol, trailingOrderId, System.currentTimeMillis())
@@ -256,7 +267,8 @@ fun TradingViewModel.deployTrailingOrder(symbol: String) {
     updateForegroundServiceState()
     startTrailingPolling()
 
-    val slPrice = positionStore.calculateTrailingLimitPrice(effectivePeak, pos.entryPrice, effectiveTrailingPct)
+    val initialEffectivePct = if (pos.activeTrailingPercent > 0.0) pos.activeTrailingPercent else effectiveTrailingPct
+    val slPrice = positionStore.calculateTrailingLimitPrice(effectivePeak, pos.entryPrice, initialEffectivePct)
     val notifTitle = if (isReal) "🛡️ Trailing Stop Aktif • $symbol" else "🛡️ Trailing Stop Aktif [Sim] • $symbol"
     val notifMsg = if (isReal) {
         "Aplikasi sedang memantau. Koin akan dijual otomatis jika harga turun ke Rp ${PriceFormatter.formatIdrNumber(slPrice)}."

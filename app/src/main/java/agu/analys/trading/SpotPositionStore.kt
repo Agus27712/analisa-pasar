@@ -17,6 +17,16 @@ enum class SpotPositionState {
     HOLDING
 }
 
+/**
+ * Konfigurasi Tier / Smart Step Trailing Stop
+ * Saat profit (peak vs entry) mencapai threshold minProfitPct, jarak trailing otomatis
+ * mengencang ke trailingPercent.
+ */
+data class TrailingTier(
+    val minProfitPct: Double,
+    val trailingPercent: Double
+)
+
 data class SpotPosition(
     val state: SpotPositionState = SpotPositionState.NO_POSITION,
     val investedAmount: Double = 0.0,
@@ -26,6 +36,9 @@ data class SpotPosition(
     val isReal: Boolean = false,
     val isTrailingEnabled: Boolean = false,
     val trailingPercent: Double = 0.0,
+    val isTieredTrailingEnabled: Boolean = true,
+    val tieredConfigJson: String = "",
+    val activeTrailingPercent: Double = 0.0,
     val peakPrice: Double = 0.0,
     val trailingStopPrice: Double = 0.0,
     val stopLossPrice: Double = 0.0,
@@ -45,6 +58,78 @@ data class SpotPosition(
 
 class SpotPositionStore(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    companion object {
+        private const val PREFS_NAME = "analysis_ui_spot_positions"
+        private const val MAX_HISTORY_EVENTS = 50
+
+        val DEFAULT_TIERS = listOf(
+            TrailingTier(minProfitPct = 1.0, trailingPercent = 2.0),
+            TrailingTier(minProfitPct = 3.0, trailingPercent = 1.5),
+            TrailingTier(minProfitPct = 5.0, trailingPercent = 1.2),
+            TrailingTier(minProfitPct = 10.0, trailingPercent = 1.0)
+        )
+
+        fun serializeTiers(tiers: List<TrailingTier>): String {
+            val arr = JSONArray()
+            for (t in tiers) {
+                val obj = JSONObject()
+                obj.put("profit", t.minProfitPct)
+                obj.put("trailing", t.trailingPercent)
+                arr.put(obj)
+            }
+            return arr.toString()
+        }
+
+        fun deserializeTiers(json: String?): List<TrailingTier> {
+            if (json.isNullOrBlank()) return emptyList()
+            return try {
+                val arr = JSONArray(json)
+                val list = mutableListOf<TrailingTier>()
+                for (i in 0 until arr.length()) {
+                    val obj = arr.getJSONObject(i)
+                    list.add(
+                        TrailingTier(
+                            minProfitPct = obj.optDouble("profit", 0.0),
+                            trailingPercent = obj.optDouble("trailing", 0.0)
+                        )
+                    )
+                }
+                list.sortedBy { it.minProfitPct }
+            } catch (_: Exception) {
+                emptyList()
+            }
+        }
+    }
+
+    /**
+     * Menghitung persentase trailing efektif berdasarkan profit saat ini (Smart Step Trailing).
+     * Jika profit membesar melebihi tier tertentu, trailing percent mengencang otomatis.
+     */
+    fun resolveEffectiveTrailingPercent(
+        peakPrice: Double,
+        entryPrice: Double,
+        baseTrailingPercent: Double,
+        isTieredEnabled: Boolean = true,
+        customTiersJson: String? = null
+    ): Double {
+        val safeBase = baseTrailingPercent.coerceAtLeast(0.1)
+        if (!isTieredEnabled || entryPrice <= 0.0 || peakPrice <= entryPrice) {
+            return safeBase
+        }
+        val profitPct = ((peakPrice - entryPrice) / entryPrice) * 100.0
+        val tiers = if (!customTiersJson.isNullOrBlank()) {
+            deserializeTiers(customTiersJson).ifEmpty { DEFAULT_TIERS }
+        } else {
+            DEFAULT_TIERS
+        }
+
+        // Cari tier tertinggi yang telah dicapai oleh profit
+        val matchedTier = tiers.filter { profitPct >= it.minProfitPct }
+            .maxByOrNull { it.minProfitPct }
+
+        return matchedTier?.trailingPercent?.coerceAtLeast(0.1) ?: safeBase
+    }
 
     fun calculateTrailingLimitPrice(peakPrice: Double, entryPrice: Double, trailingPercent: Double): Double {
         val rawStop = peakPrice * (1.0 - trailingPercent / 100.0)
@@ -103,8 +188,15 @@ class SpotPositionStore(context: Context) {
         val trailingPct = getSafeString("${key}_trailing_pct")?.toDoubleOrNull() ?: 0.0
         val isTrailing = getSafeBoolean("${key}_trailing_enabled", false)
         val isTriggered = getSafeBoolean("${key}_trailing_triggered", false)
-        val trailingStop = if (isTrailing && peak > 0.0 && trailingPct > 0.0) {
-            calculateTrailingLimitPrice(peak, entry, trailingPct)
+        val isTieredTrailing = getSafeBoolean("${key}_tiered_trailing_enabled", true)
+        val tieredJson = getSafeString("${key}_tiered_config_json").orEmpty()
+        val effectiveTrailingPct = if (isTrailing && peak > 0.0 && trailingPct > 0.0) {
+            resolveEffectiveTrailingPercent(peak, entry, trailingPct, isTieredTrailing, tieredJson)
+        } else {
+            trailingPct
+        }
+        val trailingStop = if (isTrailing && peak > 0.0 && effectiveTrailingPct > 0.0) {
+            calculateTrailingLimitPrice(peak, entry, effectiveTrailingPct)
         } else 0.0
 
         val lastTrailingOrderId = getSafeString("${key}_last_trailing_order_id")
@@ -120,6 +212,9 @@ class SpotPositionStore(context: Context) {
             isReal = getSafeBoolean("${key}_is_real", false),
             isTrailingEnabled = isTrailing,
             trailingPercent = trailingPct,
+            isTieredTrailingEnabled = isTieredTrailing,
+            tieredConfigJson = tieredJson,
+            activeTrailingPercent = effectiveTrailingPct,
             peakPrice = peak,
             trailingStopPrice = trailingStop,
             stopLossPrice = stopLossPrice,
@@ -185,6 +280,9 @@ class SpotPositionStore(context: Context) {
             stopLossPrice = stopLossPrice,
             isTrailingEnabled = current.isTrailingEnabled,
             trailingPercent = current.trailingPercent,
+            isTieredTrailingEnabled = current.isTieredTrailingEnabled,
+            tieredConfigJson = current.tieredConfigJson,
+            activeTrailingPercent = current.activeTrailingPercent,
             isAutoSellEnabled = current.isAutoSellEnabled,
             tp1Price = current.tp1Price,
             tp1Percent = current.tp1Percent,
@@ -235,6 +333,8 @@ class SpotPositionStore(context: Context) {
             .remove("${key}_is_real")
             .remove("${key}_peak")
             .remove("${key}_trailing_pct")
+            .remove("${key}_tiered_trailing_enabled")
+            .remove("${key}_tiered_config_json")
             .remove("${key}_trailing_enabled")
             .remove("${key}_trailing_triggered")
             .remove("${key}_auto_sell_enabled")
@@ -261,7 +361,14 @@ class SpotPositionStore(context: Context) {
             .apply()
     }
 
-    fun setTrailingStop(symbol: String, enabled: Boolean, trailingPercent: Double, referencePrice: Double = 0.0) {
+    fun setTrailingStop(
+        symbol: String,
+        enabled: Boolean,
+        trailingPercent: Double,
+        referencePrice: Double = 0.0,
+        isTieredEnabled: Boolean = true,
+        customTiersJson: String? = null
+    ) {
         val key = normalize(symbol)
         if (!enabled) {
             prefs.edit()
@@ -278,14 +385,19 @@ class SpotPositionStore(context: Context) {
             current.entryPrice > 0.0 -> current.entryPrice
             else -> 0.0
         }
-        prefs.edit()
+        val editor = prefs.edit()
             .putBoolean("${key}_trailing_enabled", true)
-            .putString("${key}_trailing_pct", trailingPercent.coerceAtLeast(0.5).toString())
+            .putString("${key}_trailing_pct", trailingPercent.coerceAtLeast(0.1).toString())
+            .putBoolean("${key}_tiered_trailing_enabled", isTieredEnabled)
             .putString("${key}_peak", peak.toString())
             .putBoolean("${key}_trailing_triggered", false)
             .remove("${key}_last_trailing_order_id")
             .remove("${key}_last_order_update_time")
-            .apply()
+
+        if (customTiersJson != null) {
+            editor.putString("${key}_tiered_config_json", customTiersJson)
+        }
+        editor.apply()
     }
 
     /**
@@ -308,15 +420,24 @@ class SpotPositionStore(context: Context) {
             prefs.edit().putString("${key}_peak", newPeak.toString()).apply()
         }
 
-        // Rule 2: Hitung batas jual trailing dari peak
-        val rawTrailingStop = newPeak * (1.0 - current.trailingPercent / 100.0)
-        val trailingStop = calculateTrailingLimitPrice(newPeak, current.entryPrice, current.trailingPercent)
+        // Rule 2: Resolusi dynamic Smart Step Trailing percent berdasarkan profit tertinggi yang dicapai
+        val effectivePct = resolveEffectiveTrailingPercent(
+            peakPrice = newPeak,
+            entryPrice = current.entryPrice,
+            baseTrailingPercent = current.trailingPercent,
+            isTieredEnabled = current.isTieredTrailingEnabled,
+            customTiersJson = current.tieredConfigJson
+        )
+
+        // Rule 3: Hitung batas jual trailing dari peak menggunakan effective percentage
+        val rawTrailingStop = newPeak * (1.0 - effectivePct / 100.0)
+        val trailingStop = calculateTrailingLimitPrice(newPeak, current.entryPrice, effectivePct)
         
-        // Rule 3: Pure Profit-Lock (Anti Cut-Loss): Trailing HANYA AKTIF jika batas jual sudah di atas harga beli (in-profit)
-        // Jika harga langsung drop setelah beli atau belum naik melewati modal, jangan pernah eksekusi jual
+        // Rule 4: Pure Profit-Lock (Anti Cut-Loss): Trailing HANYA AKTIF jika batas jual sudah di atas harga beli (in-profit)
+        // Jika harga langsung drop setelah beli atau belum naik melewati modal, trailing stop tidak mengorbankan modal di bawah entry
         val isEligibleForTrailing = current.entryPrice > 0.0 && rawTrailingStop > current.entryPrice
 
-        // Rule 4: Saat harga turun menyentuh trailing price dan sudah memenuhi syarat profit-lock -> trigger (Noise filter: minimal 2 ticks di bawah garis)
+        // Rule 5: Saat harga turun menyentuh trailing price dan sudah memenuhi syarat profit-lock -> trigger (Noise filter: minimal 2 ticks di bawah garis)
         if (isEligibleForTrailing && currentPrice <= trailingStop && !current.isTrailingTriggered) {
             val ticksBelow = prefs.getInt("${key}_trailing_ticks_below", 0) + 1
             if (ticksBelow >= 2) {
@@ -422,9 +543,4 @@ class SpotPositionStore(context: Context) {
 
     private fun normalize(symbol: String): String =
         symbol.uppercase().replace(Regex("[^A-Z0-9_]"), "_")
-
-    companion object {
-        private const val PREFS_NAME = "analysis_ui_spot_positions"
-        private const val MAX_HISTORY_EVENTS = 50
-    }
 }

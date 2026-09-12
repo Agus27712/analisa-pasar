@@ -167,10 +167,22 @@ fun TradingViewModel.setManualPositionPrice(symbol: String, entryPrice: Double, 
     updateForegroundServiceState()
 }
 
-fun TradingViewModel.setTrailingStop(enabled: Boolean, trailingPercent: Double) {
+fun TradingViewModel.setTrailingStop(
+    enabled: Boolean,
+    trailingPercent: Double,
+    isTieredEnabled: Boolean = true,
+    customTiersJson: String? = null
+) {
     val symbol = _selectedPair.value.symbol
     val currentP = currentTick.value?.price ?: spotPosition.value.entryPrice
-    positionCoordinator.setTrailing(symbol, enabled, trailingPercent, currentP)
+    positionCoordinator.setTrailing(
+        symbol = symbol,
+        enabled = enabled,
+        pct = trailingPercent,
+        refPrice = currentP,
+        isTieredEnabled = isTieredEnabled,
+        customTiersJson = customTiersJson
+    )
     updateForegroundServiceState()
 }
 

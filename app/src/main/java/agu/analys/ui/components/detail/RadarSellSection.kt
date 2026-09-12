@@ -46,6 +46,7 @@ fun RadarSellSection(
     onSetManualBuyPrice: ((Double, Double) -> Unit)? = null,
     spotPosition: agu.analys.trading.SpotPosition? = null,
     onSetTrailingStop: ((Boolean, Double) -> Unit)? = null,
+    onSetTieredTrailingStop: ((Boolean, Double, Boolean, String?) -> Unit)? = null,
     onResetTrailingTrigger: (() -> Unit)? = null,
     signal: agu.analys.model.AISignalState? = null,
     onSetAutoSellParams: ((Boolean, Double, Double, Double, Double) -> Unit)? = null,
@@ -192,13 +193,35 @@ fun RadarSellSection(
 
         // AUTO TP1/TP2 untuk simulasi maupun real mode saat user buka switch & tap SIMPAN
         if (effectiveBuyPrice > 0.0 || availableCoin > 0.0) {
+            val handleTrailingChange: (Boolean, Double, Boolean, String?) -> Unit = { enabled, pct, isTiered, json ->
+                if (onSetTieredTrailingStop != null) {
+                    onSetTieredTrailingStop.invoke(enabled, pct, isTiered, json)
+                } else {
+                    onSetTrailingStop?.invoke(enabled, pct)
+                }
+            }
+
             Spacer(Modifier.height(8.dp))
             SellTrailingSection(
                 isTrailingActive = isTrailingActive,
-                onTrailingActiveChanged = { enabled -> onSetTrailingStop?.invoke(enabled, trailingPercent) },
+                onTrailingActiveChanged = { enabled ->
+                    handleTrailingChange(enabled, trailingPercent, spotPosition?.isTieredTrailingEnabled ?: true, spotPosition?.tieredConfigJson)
+                },
                 isTrailingTriggered = isTrailingTriggered,
                 trailingPercent = trailingPercent,
-                onSetTrailingPercent = { pct -> onSetTrailingStop?.invoke(true, pct) },
+                onSetTrailingPercent = { pct ->
+                    handleTrailingChange(true, pct, spotPosition?.isTieredTrailingEnabled ?: true, spotPosition?.tieredConfigJson)
+                },
+                isTieredTrailingEnabled = spotPosition?.isTieredTrailingEnabled ?: true,
+                onToggleTieredTrailing = { isTiered ->
+                    handleTrailingChange(isTrailingActive, trailingPercent, isTiered, spotPosition?.tieredConfigJson)
+                },
+                tieredConfigJson = spotPosition?.tieredConfigJson.orEmpty(),
+                onUpdateTieredConfig = { json ->
+                    handleTrailingChange(isTrailingActive, trailingPercent, spotPosition?.isTieredTrailingEnabled ?: true, json)
+                },
+                activeTrailingPercent = spotPosition?.activeTrailingPercent ?: trailingPercent,
+                entryPrice = effectiveBuyPrice,
                 peakPrice = peakPrice,
                 trailingStopPrice = trailingStopPrice,
                 quoteAsset = quoteAsset,
@@ -225,10 +248,14 @@ fun RadarSellSection(
         Spacer(Modifier.height(12.dp))
 
         // TOMBOL EKSEKUSI JUAL
+        val formattedSellQty = PriceFormatter.formatCryptoExact(
+            activeSellQty,
+            if (activeSellQty >= 100.0) 2 else if (activeSellQty >= 1.0) 4 else 8
+        )
         val sellButtonLabel = when {
-            hasTwoTpOrders -> "${if (isRealMode) "[REAL] " else "[SIMULASI] "}PASANG 2 ORDER TP (${PriceFormatter.formatCryptoExact(activeSellQty, 8)} $baseAsset)"
-            hasSingleTpOrder -> "${if (isRealMode) "[REAL] " else "[SIMULASI] "}PASANG ORDER TP (${PriceFormatter.formatCryptoExact(activeSellQty, 8)} $baseAsset)"
-            else -> "${if (isRealMode) "[REAL] " else "[SIMULASI] "}JUAL ${PriceFormatter.formatCryptoExact(activeSellQty, 8)} $baseAsset"
+            hasTwoTpOrders -> "${if (isRealMode) "[REAL] " else "[SIMULASI] "}PASANG 2 ORDER TP ($formattedSellQty $baseAsset)"
+            hasSingleTpOrder -> "${if (isRealMode) "[REAL] " else "[SIMULASI] "}PASANG ORDER TP ($formattedSellQty $baseAsset)"
+            else -> "${if (isRealMode) "[REAL] " else "[SIMULASI] "}JUAL $formattedSellQty $baseAsset"
         }
 
         Button(

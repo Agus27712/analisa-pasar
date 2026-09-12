@@ -45,9 +45,9 @@ fun StickyFloatingStatusBar(
         else -> if (isLight) Color(0xFFC62828) else Color(0xFFFF5252)
     }
     val barBg = when {
-        live -> if (isLight) Color(0xF2E8F5E9) else Color(0xF2091815)
-        loading -> if (isLight) Color(0xF2FFF3E0) else Color(0xF21F1A0A)
-        else -> if (isLight) Color(0xF2FFEBEE) else Color(0xF21F0A0A)
+        live -> if (isLight) Color(0xFFE8F5E9) else Color(0xFF091815)
+        loading -> if (isLight) Color(0xFFFFF3E0) else Color(0xFF1F1A0A)
+        else -> if (isLight) Color(0xFFFFEBEE) else Color(0xFF1F0A0A)
     }
 
     val modeLabel = when (strategyMode) {
