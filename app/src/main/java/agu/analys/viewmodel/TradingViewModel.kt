@@ -41,6 +41,11 @@ import agu.analys.trading.SimulationTradeStore
 import agu.analys.trading.SimulationWallet
 import agu.analys.trading.SpotPosition
 import agu.analys.trading.SpotPositionStore
+import agu.analys.ui.animation.PriceAnimationMode
+import agu.analys.ui.theme.AccentColorPreset
+import agu.analys.ui.theme.AnimationSpeed
+import agu.analys.ui.theme.CandleColorStyle
+import agu.analys.ui.theme.ThemeStyle
 import agu.analys.util.AppPreferences
 import agu.analys.util.GitHubReleaseInfo
 import agu.analys.util.MarketDataCache
@@ -338,6 +343,9 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     private val _gainersCoins = MutableStateFlow<List<MarketTick>>(emptyList())
     val gainersCoins: StateFlow<List<MarketTick>> = _gainersCoins.asStateFlow()
 
+    private val _losersCoins = MutableStateFlow<List<MarketTick>>(emptyList())
+    val losersCoins: StateFlow<List<MarketTick>> = _losersCoins.asStateFlow()
+
     private val _secondWaveCoins = MutableStateFlow<List<MarketTick>>(emptyList())
     val secondWaveCoins: StateFlow<List<MarketTick>> = _secondWaveCoins.asStateFlow()
 
@@ -361,6 +369,27 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
 
     private val _isDarkTheme = MutableStateFlow(prefs.isDarkTheme)
     val isDarkTheme: StateFlow<Boolean> = _isDarkTheme.asStateFlow()
+
+    private val _themeStyle = MutableStateFlow(prefs.themeStyle)
+    val themeStyle: StateFlow<ThemeStyle> = _themeStyle.asStateFlow()
+
+    private val _accentColorPreset = MutableStateFlow(prefs.accentColorPreset)
+    val accentColorPreset: StateFlow<AccentColorPreset> = _accentColorPreset.asStateFlow()
+
+    private val _candleColorStyle = MutableStateFlow(prefs.candleColorStyle)
+    val candleColorStyle: StateFlow<CandleColorStyle> = _candleColorStyle.asStateFlow()
+
+    private val _animationSpeed = MutableStateFlow(prefs.animationSpeed)
+    val animationSpeed: StateFlow<AnimationSpeed> = _animationSpeed.asStateFlow()
+
+    private val _priceAnimationMode = MutableStateFlow(prefs.priceAnimationMode)
+    val priceAnimationMode: StateFlow<PriceAnimationMode> = _priceAnimationMode.asStateFlow()
+
+    private val _isPriceTickPulseEnabled = MutableStateFlow(prefs.isPriceTickPulseEnabled)
+    val isPriceTickPulseEnabled: StateFlow<Boolean> = _isPriceTickPulseEnabled.asStateFlow()
+
+    private val _isSmoothChartEnabled = MutableStateFlow(prefs.isSmoothChartEnabled)
+    val isSmoothChartEnabled: StateFlow<Boolean> = _isSmoothChartEnabled.asStateFlow()
 
     private val _isNotificationsEnabled = MutableStateFlow(prefs.isNotificationsEnabled)
     val isNotificationsEnabled: StateFlow<Boolean> = _isNotificationsEnabled.asStateFlow()
@@ -622,6 +651,83 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     fun setDarkTheme(enabled: Boolean) {
         prefs.isDarkTheme = enabled
         _isDarkTheme.value = enabled
+        val targetStyle = if (enabled) ThemeStyle.DARK_NAVY else ThemeStyle.LIGHT_CLEAN
+        _themeStyle.value = targetStyle
+        prefs.themeStyle = targetStyle
+    }
+
+    fun setThemeStyle(style: ThemeStyle) {
+        prefs.themeStyle = style
+        _themeStyle.value = style
+        val isDark = style != ThemeStyle.LIGHT_CLEAN
+        prefs.isDarkTheme = isDark
+        _isDarkTheme.value = isDark
+    }
+
+    fun setAccentColorPreset(preset: AccentColorPreset) {
+        prefs.accentColorPreset = preset
+        _accentColorPreset.value = preset
+    }
+
+    fun setCandleColorStyle(style: CandleColorStyle) {
+        prefs.candleColorStyle = style
+        _candleColorStyle.value = style
+    }
+
+    fun setAnimationSpeed(speed: AnimationSpeed) {
+        prefs.animationSpeed = speed
+        _animationSpeed.value = speed
+    }
+
+    fun setPriceAnimationMode(mode: PriceAnimationMode) {
+        prefs.priceAnimationMode = mode
+        _priceAnimationMode.value = mode
+    }
+
+    fun setPriceTickPulseEnabled(enabled: Boolean) {
+        prefs.isPriceTickPulseEnabled = enabled
+        _isPriceTickPulseEnabled.value = enabled
+    }
+
+    fun setSmoothChartEnabled(enabled: Boolean) {
+        prefs.isSmoothChartEnabled = enabled
+        _isSmoothChartEnabled.value = enabled
+    }
+
+    fun addToWatchlist(symbol: String) {
+        val upper = symbol.uppercase().trim().replace("/", "").replace("_", "")
+        if (upper.isBlank()) return
+        val current = _watchlist.value.toMutableSet()
+        current.add(upper)
+        prefs.setWatchlist(current)
+        _watchlist.value = current
+    }
+
+    fun removeFromWatchlist(symbol: String) {
+        val upper = symbol.uppercase().trim().replace("/", "").replace("_", "")
+        val current = _watchlist.value.toMutableSet()
+        current.remove(upper)
+        val finalSet = if (current.isEmpty()) setOf("BTCIDR") else current
+        prefs.setWatchlist(finalSet)
+        _watchlist.value = finalSet
+    }
+
+    fun setCustomWatchlist(symbols: Collection<String>) {
+        val upper = symbols.map { it.uppercase().trim().replace("/", "").replace("_", "") }.filter { it.isNotBlank() }.toSet()
+        val finalSet = if (upper.isEmpty()) setOf("BTCIDR") else upper
+        prefs.setWatchlist(finalSet)
+        _watchlist.value = finalSet
+    }
+
+    fun applyWatchlistPreset(presetType: String) {
+        val pairs = when (presetType.lowercase()) {
+            "top10", "top_10" -> listOf("BTCIDR", "ETHIDR", "SOLIDR", "BNBIDR", "XRPIDR", "ADAIDR", "DOGEIDR", "AVAXIDR", "SUIIDR", "NEARIDR")
+            "scalp", "scalping", "gems" -> listOf("PEPEIDR", "DOGEIDR", "SHIBIDR", "SUIIDR", "SOLIDR", "FLOKIIDR", "BONKIDR")
+            "ai", "web3" -> listOf("NEARIDR", "RENDERIDR", "FETIDR", "GRTIDR", "ICPIDR", "FILIDR")
+            "layer1", "l1" -> listOf("BTCIDR", "ETHIDR", "SOLIDR", "ADAIDR", "AVAXIDR", "DOTIDR", "SUIIDR", "ATOMIDR")
+            else -> listOf("BTCIDR", "ETHIDR", "SOLIDR", "DOGEIDR")
+        }
+        setCustomWatchlist(pairs)
     }
 
     fun updateForegroundServiceState() {
@@ -710,20 +816,31 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
             _isRefreshing.value = true
             try {
                 val scalpingMode = _isScalpingMode.value
-                val gainersJob = async { IndodaxMarketService.fetchScalpingGainersTicks(30, true) }
-                val volJob = async { IndodaxMarketService.fetchTopVolumeTicks(30, true) }
+                val rankingsJob = async { IndodaxMarketService.fetchMarketRankings(35, true) }
                 val pairs = (TradingPair.POPULAR_INDODAX_PAIRS + _watchlist.value.map {
                     TradingPair.fromCustomSymbol(it, "IDR")
                 }).distinctBy { it.symbol }
-                val ticks = IndodaxMarketService.fetchTickers(pairs.map { it.effectiveIndodaxPair() })
-                val gainers = gainersJob.await()
-                val topVol = volJob.await()
+                val ticksJob = async { IndodaxMarketService.fetchTickers(pairs.map { it.effectiveIndodaxPair() }) }
+
+                val rankings = rankingsJob.await()
+                val ticks = ticksJob.await()
+
+                val gainers = rankings.gainers
+                val losers = rankings.losers
+                val topVol = rankings.topVolume
+
                 if (gainers.isNotEmpty()) {
-                    _gainersCoins.value = gainers.take(25)
-                    _hotCoins.value = gainers.take(25)
+                    _gainersCoins.value = gainers
+                    _hotCoins.value = gainers
                 }
-                if (topVol.isNotEmpty()) _topVolumeCoins.value = topVol.take(25)
-                if (ticks.isEmpty() && gainers.isEmpty() && topVol.isEmpty()) {
+                if (losers.isNotEmpty()) {
+                    _losersCoins.value = losers
+                }
+                if (topVol.isNotEmpty()) {
+                    _topVolumeCoins.value = topVol
+                }
+
+                if (ticks.isEmpty() && rankings.allTicks.isEmpty()) {
                     if (_dashboardTicks.value.isEmpty() && _hotCoins.value.isEmpty()) {
                         markMarketOffline("Tidak ada respons market dari Indodax.")
                     } else {
@@ -731,8 +848,9 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
                     }
                     return@launch
                 }
-                val allScanned = (gainers + topVol).distinctBy { it.symbol }
-                val combinedTicks = ticks.associateBy { it.symbol } + allScanned.associateBy { it.symbol }
+
+                val allScanned = (gainers + losers + topVol).distinctBy { it.symbol }
+                val combinedTicks = ticks.associateBy { it.symbol } + rankings.allTicks
                 _dashboardTicks.value = combinedTicks
                 try {
                     val btcTick = combinedTicks["BTCIDR"] ?: combinedTicks["btc_idr"] ?: combinedTicks["BTC"]

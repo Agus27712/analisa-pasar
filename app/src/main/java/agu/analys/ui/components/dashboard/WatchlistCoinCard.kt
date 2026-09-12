@@ -30,6 +30,7 @@ import agu.analys.model.MarketTick
 import agu.analys.model.TradingPair
 import agu.analys.model.WorthCoinInfo
 import agu.analys.ui.animation.AnimatedMetricText
+import agu.analys.ui.animation.AnimatedPercentageBadge
 import agu.analys.ui.animation.SmoothPriceText
 import agu.analys.ui.theme.*
 import agu.analys.util.PriceFormatter
@@ -282,21 +283,10 @@ fun WatchlistCoinCard(
                             Text("—", color = TvTextSecondary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                         }
                         if (change.isFinite()) {
-                            Box(
-                                modifier = Modifier
-                                    .background(
-                                        if (change >= 0) TvGreen.copy(alpha = 0.15f) else TvRed.copy(alpha = 0.15f),
-                                        RoundedCornerShape(4.dp)
-                                    )
-                                    .padding(horizontal = 4.dp, vertical = 1.dp)
-                            ) {
-                                AnimatedMetricText(
-                                    value = PriceFormatter.formatPercentage(change),
-                                    color = changeColor,
-                                    fontSize = 10.5.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
+                            AnimatedPercentageBadge(
+                                percentage = change,
+                                fontSize = 10.sp
+                            )
                         }
                     }
                     Spacer(Modifier.width(2.dp))

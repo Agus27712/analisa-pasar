@@ -18,6 +18,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -25,6 +26,7 @@ import androidx.core.view.WindowCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import agu.analys.model.AppScreen
+import agu.analys.ui.animation.LocalPriceAnimationMode
 import agu.analys.ui.screens.DashboardScreen
 import agu.analys.ui.screens.DetailChartScreen
 import agu.analys.ui.screens.LandscapeChartScreen
@@ -55,8 +57,20 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val isDarkTheme by tradingViewModel.isDarkTheme.collectAsState()
-            TradingViewAITheme(isDarkTheme = isDarkTheme) {
-                val currentScreen by tradingViewModel.currentScreen.collectAsState()
+            val themeStyle by tradingViewModel.themeStyle.collectAsState()
+            val accentPreset by tradingViewModel.accentColorPreset.collectAsState()
+            val candleStyle by tradingViewModel.candleColorStyle.collectAsState()
+            val animSpeed by tradingViewModel.animationSpeed.collectAsState()
+            val priceAnimMode by tradingViewModel.priceAnimationMode.collectAsState()
+
+            TradingViewAITheme(
+                isDarkTheme = isDarkTheme,
+                themeStyle = themeStyle,
+                accentPreset = accentPreset,
+                candleStyle = candleStyle
+            ) {
+                CompositionLocalProvider(LocalPriceAnimationMode provides priceAnimMode) {
+                    val currentScreen by tradingViewModel.currentScreen.collectAsState()
                 val rootModifier = Modifier
                     .fillMaxSize()
                     .background(TvBackground)
@@ -71,11 +85,16 @@ class MainActivity : ComponentActivity() {
                     tradingViewModel.goBack()
                 }
 
+                val duration = animSpeed.durationMs
                 AnimatedContent(
                     targetState = currentScreen,
                     transitionSpec = {
-                        (slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(300)) + fadeIn(tween(300)))
-                            .togetherWith(slideOutHorizontally(targetOffsetX = { -it }, animationSpec = tween(300)) + fadeOut(tween(300)))
+                        if (duration <= 0) {
+                            fadeIn(tween(0)).togetherWith(fadeOut(tween(0)))
+                        } else {
+                            (slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(duration)) + fadeIn(tween(duration)))
+                                .togetherWith(slideOutHorizontally(targetOffsetX = { -it }, animationSpec = tween(duration)) + fadeOut(tween(duration)))
+                        }
                     },
                     modifier = rootModifier,
                     label = "screen_transition"
@@ -121,6 +140,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
     }
 
     override fun onNewIntent(intent: Intent) {

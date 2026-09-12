@@ -239,6 +239,99 @@ object IndodaxMarketService {
         return true
     }
 
+    data class MarketRankingsResult(
+        val gainers: List<MarketTick> = emptyList(),
+        val losers: List<MarketTick> = emptyList(),
+        val topVolume: List<MarketTick> = emptyList(),
+        val allTicks: Map<String, MarketTick> = emptyMap()
+    )
+
+    suspend fun fetchMarketRankings(limit: Int = 30, excludeStable: Boolean = true): MarketRankingsResult = withContext(Dispatchers.IO) {
+        try {
+            val body = get("https://indodax.com/api/summaries") ?: return@withContext MarketRankingsResult()
+            val root = JSONObject(body)
+            val tickers = root.optJSONObject("tickers") ?: return@withContext MarketRankingsResult()
+            val prices24h = root.optJSONObject("prices_24h")
+            val stableBases = setOf("usdt", "usdc", "dai", "busd", "tusd", "idrt")
+            val now = System.currentTimeMillis()
+            val allTicksMap = mutableMapOf<String, MarketTick>()
+            val tradableList = mutableListOf<MarketTick>()
+            val keys = tickers.keys()
+
+            while (keys.hasNext()) {
+                val pair = keys.next()
+                val t = tickers.optJSONObject(pair) ?: continue
+                val last = t.optString("last", "0").toDoubleOrNull() ?: 0.0
+                if (last <= 0.0) continue
+                val volIdr = t.optString("vol_idr", "0").toDoubleOrNull() ?: 0.0
+                val high = t.optString("high", "0").toDoubleOrNull() ?: last
+                val low = t.optString("low", "0").toDoubleOrNull() ?: last
+                val symbol = pair.uppercase().replace("_", "")
+
+                var change: Double? = null
+                val keyNoUnderscore = pair.replace("_", "").lowercase()
+                val p24 = (prices24h?.optString(keyNoUnderscore, "0")?.toDoubleOrNull()
+                    ?: prices24h?.optString(pair, "0")?.toDoubleOrNull()) ?: 0.0
+                if (p24 > 0) {
+                    change = ((last - p24) / p24) * 100.0
+                    changeReferenceCache[pair] = ChangeReference(p24, now)
+                } else {
+                    val cached = changeReferenceCache[pair]
+                    if (cached != null && cached.close > 0) {
+                        change = ((last - cached.close) / cached.close) * 100.0
+                    }
+                }
+
+                val tick = MarketTick(
+                    symbol = symbol,
+                    price = last,
+                    high24h = high,
+                    low24h = low,
+                    volume24h = volIdr,
+                    change24h = change ?: Double.NaN,
+                    timestamp = now
+                )
+
+                allTicksMap[symbol] = tick
+                allTicksMap[pair.uppercase()] = tick
+                allTicksMap[pair.lowercase()] = tick
+                val base = pair.removeSuffix("_idr").removeSuffix("idr").uppercase()
+                allTicksMap["${base}IDR"] = tick
+
+                val isIdr = pair.endsWith("_idr") || pair.endsWith("idr")
+                val baseLower = base.lowercase()
+                if (excludeStable && baseLower in stableBases) continue
+
+                if (isIdr && isSafeTradableAsset(price = last, volume24h = volIdr, high24h = high, low24h = low, isIdrPair = true)) {
+                    tradableList += tick
+                }
+            }
+
+            val gainers = tradableList
+                .filter { it.change24h.isFinite() && it.change24h > 0.0 }
+                .sortedByDescending { it.change24h }
+                .take(limit)
+
+            val losers = tradableList
+                .filter { it.change24h.isFinite() && it.change24h < 0.0 }
+                .sortedBy { it.change24h }
+                .take(limit)
+
+            val topVolume = tradableList
+                .sortedByDescending { it.volume24h }
+                .take(limit)
+
+            MarketRankingsResult(
+                gainers = gainers,
+                losers = losers,
+                topVolume = topVolume,
+                allTicks = allTicksMap
+            )
+        } catch (_: Exception) {
+            MarketRankingsResult()
+        }
+    }
+
     suspend fun fetchTopVolumeTicks(limit: Int = 15, excludeStable: Boolean = true): List<MarketTick> = withContext(Dispatchers.IO) {
         try {
             val body = get("https://indodax.com/api/summaries") ?: return@withContext emptyList()

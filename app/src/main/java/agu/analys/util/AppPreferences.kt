@@ -8,6 +8,11 @@ import agu.analys.config.MarketDataSource
 import agu.analys.config.ScalpingSensitivity
 import agu.analys.config.StrategyMode
 import agu.analys.config.TradingFeeConfig
+import agu.analys.ui.animation.PriceAnimationMode
+import agu.analys.ui.theme.AccentColorPreset
+import agu.analys.ui.theme.AnimationSpeed
+import agu.analys.ui.theme.CandleColorStyle
+import agu.analys.ui.theme.ThemeStyle
 import org.json.JSONObject
 
 /** Local user configuration. Runtime market data is deliberately kept elsewhere. */
@@ -193,12 +198,53 @@ class AppPreferences(context: Context) {
         get() = prefs.getBoolean("is_dark_theme", true)
         set(value) = prefs.edit().putBoolean("is_dark_theme", value).apply()
 
+    var themeStyle: ThemeStyle
+        get() = runCatching {
+            ThemeStyle.valueOf(prefs.getString("theme_style_v2", if (isDarkTheme) ThemeStyle.DARK_NAVY.name else ThemeStyle.LIGHT_CLEAN.name).orEmpty())
+        }.getOrDefault(if (isDarkTheme) ThemeStyle.DARK_NAVY else ThemeStyle.LIGHT_CLEAN)
+        set(value) {
+            prefs.edit().putString("theme_style_v2", value.name).apply()
+            isDarkTheme = (value != ThemeStyle.LIGHT_CLEAN)
+        }
+
+    var accentColorPreset: AccentColorPreset
+        get() = runCatching {
+            AccentColorPreset.valueOf(prefs.getString("accent_preset_v2", AccentColorPreset.BLUE.name).orEmpty())
+        }.getOrDefault(AccentColorPreset.BLUE)
+        set(value) = prefs.edit().putString("accent_preset_v2", value.name).apply()
+
+    var candleColorStyle: CandleColorStyle
+        get() = runCatching {
+            CandleColorStyle.valueOf(prefs.getString("candle_style_v2", CandleColorStyle.CLASSIC.name).orEmpty())
+        }.getOrDefault(CandleColorStyle.CLASSIC)
+        set(value) = prefs.edit().putString("candle_style_v2", value.name).apply()
+
+    var animationSpeed: AnimationSpeed
+        get() = runCatching {
+            AnimationSpeed.valueOf(prefs.getString("animation_speed_v2", AnimationSpeed.SMOOTH.name).orEmpty())
+        }.getOrDefault(AnimationSpeed.SMOOTH)
+        set(value) = prefs.edit().putString("animation_speed_v2", value.name).apply()
+
+    var priceAnimationMode: PriceAnimationMode
+        get() = runCatching {
+            PriceAnimationMode.valueOf(prefs.getString("price_anim_mode_v2", PriceAnimationMode.DIGIT_FLIP.name).orEmpty())
+        }.getOrDefault(PriceAnimationMode.DIGIT_FLIP)
+        set(value) = prefs.edit().putString("price_anim_mode_v2", value.name).apply()
+
+    var isPriceTickPulseEnabled: Boolean
+        get() = prefs.getBoolean("price_tick_pulse_enabled_v1", true)
+        set(value) = prefs.edit().putBoolean("price_tick_pulse_enabled_v1", value).apply()
+
+    var isSmoothChartEnabled: Boolean
+        get() = prefs.getBoolean("smooth_chart_enabled_v1", true)
+        set(value) = prefs.edit().putBoolean("smooth_chart_enabled_v1", value).apply()
+
     var isNotificationsEnabled: Boolean
         get() = prefs.getBoolean(KEY_NOTIFICATIONS_ENABLED, true)
         set(value) = prefs.edit().putBoolean(KEY_NOTIFICATIONS_ENABLED, value).apply()
 
     var isRealSimSyncEnabled: Boolean
-        get() = prefs.getBoolean(KEY_REAL_SIM_SYNC_ENABLED, true)
+        get() = prefs.getBoolean(KEY_REAL_SIM_SYNC_ENABLED, false)
         set(value) = prefs.edit().putBoolean(KEY_REAL_SIM_SYNC_ENABLED, value).apply()
 
     var priceFeedThrottleMs: Long
@@ -248,6 +294,12 @@ class AppPreferences(context: Context) {
         val legacy = prefs.getStringSet(KEY_WATCHLIST_LEGACY, null)
         if (legacy != null && legacy.isNotEmpty()) return legacy.toSet()
         return setOf("BTCIDR")
+    }
+
+    fun setWatchlist(symbols: Collection<String>) {
+        val upperSet = symbols.map { it.uppercase().trim() }.filter { it.isNotBlank() }.toSet()
+        val finalSet = if (upperSet.isEmpty()) setOf("BTCIDR") else upperSet
+        prefs.edit().putStringSet(KEY_WATCHLIST_INDODAX, finalSet).apply()
     }
 
     fun toggleWatchlist(symbol: String): Boolean {

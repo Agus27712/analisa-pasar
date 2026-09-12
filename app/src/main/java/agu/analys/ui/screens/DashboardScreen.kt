@@ -54,6 +54,7 @@ fun DashboardScreen(
     val worthCoins by viewModel.worthCoins.collectAsState()
     val hotCoins by viewModel.hotCoins.collectAsState()
     val gainersCoins by viewModel.gainersCoins.collectAsState()
+    val losersCoins by viewModel.losersCoins.collectAsState()
     val secondWaveCoins by viewModel.secondWaveCoins.collectAsState()
     val topVolumeCoins by viewModel.topVolumeCoins.collectAsState()
     val usdtIdrRate by viewModel.usdtIdrRate.collectAsState()
@@ -86,10 +87,11 @@ fun DashboardScreen(
 
     val defaultQuote = "IDR"
 
-    val allTicks = remember(dashboardTicks, hotCoins, gainersCoins, secondWaveCoins, topVolumeCoins) {
+    val allTicks = remember(dashboardTicks, hotCoins, gainersCoins, losersCoins, secondWaveCoins, topVolumeCoins) {
         dashboardTicks +
             hotCoins.associateBy { it.symbol } +
             gainersCoins.associateBy { it.symbol } +
+            losersCoins.associateBy { it.symbol } +
             secondWaveCoins.associateBy { it.symbol } +
             topVolumeCoins.associateBy { it.symbol }
     }
@@ -100,50 +102,66 @@ fun DashboardScreen(
         favorites,
         holdingStatuses,
         marketDataSource,
-        hotCoins,
         gainersCoins,
+        losersCoins,
         topVolumeCoins,
-        secondWaveCoins,
         allTicks
     ) {
         when (selectedRankingTab) {
             MarketRankingTab.WATCHLIST -> {
-                // Auto-isi dari market movers (gainers/hot/volume/second-wave) + watchlist user + popular
-                // Hanya tampilkan aset dengan change 24 jam besar & pergerakan stabil (koin receh zombi dieliminasi)
-                val fromUser = watchlist.map { TradingPair.fromCustomSymbol(it, defaultQuote) }
-                val fromMarket = (gainersCoins + hotCoins + topVolumeCoins + secondWaveCoins)
-                    .map { TradingPair.fromCustomSymbol(it.symbol, defaultQuote) }
-                val fromPopular = TradingPair.popularPairsForSource(marketDataSource)
-                val merged = (fromMarket + fromUser + fromPopular).distinctBy { it.symbol }
+                // Koin pilihan pantauan kustom pengguna (dari Pengaturan Watchlist & Tambah Koin) + koin holding
+                val userPairs = (watchlist.map { TradingPair.fromCustomSymbol(it, defaultQuote) } +
+                    holdingStatuses.keys.map { TradingPair.fromCustomSymbol(it, defaultQuote) })
+                    .distinctBy { it.symbol }
 
-                val userManualPairs = (watchlist + favorites + holdingStatuses.keys)
-                    .map { it.uppercase().replace("_", "") }.toSet()
-
-                val safePairs = merged.filter { pair ->
-                    val cleanSym = pair.symbol.uppercase().replace("_", "")
-                    // Jika pengguna secara sengaja menambah ke favorit/pantauan atau memiliki koin tersebut, tetap izinkan tampil
-                    if (cleanSym in userManualPairs) return@filter true
-                    val t = allTicks[pair.symbol] ?: allTicks[pair.effectiveIndodaxPair()] ?: return@filter true
-                    IndodaxMarketService.isSafeTradableAsset(
-                        price = t.price,
-                        volume24h = t.volume24h,
-                        high24h = t.high24h,
-                        low24h = t.low24h,
-                        isIdrPair = pair.quoteAsset.equals("IDR", ignoreCase = true)
-                    )
+                if (userPairs.isNotEmpty()) {
+                    userPairs
+                } else {
+                    TradingPair.popularPairsForSource(marketDataSource)
                 }
-
-                safePairs.sortedByDescending { pair ->
-                    val t = allTicks[pair.symbol] ?: return@sortedByDescending -1.0
-                    val ch = t.change24h.takeIf { c -> c.isFinite() } ?: 0.0
-                    val vol = t.volume24h.coerceAtLeast(0.0)
-                    val volScore = kotlin.math.ln(vol + 1.0)
-                    val momScore = kotlin.math.abs(ch) * 2.5 + if (ch > 0.0) 8.0 else 0.0
-                    volScore + momScore
-                }.take(25)
             }
             MarketRankingTab.FAVORITE -> {
+                // Koin bertanda bintang (Favorit pilihan pengguna)
                 favorites.map { TradingPair.fromCustomSymbol(it, defaultQuote) }.distinctBy { it.symbol }
+            }
+            MarketRankingTab.TOP_GAINERS -> {
+                // Top Gainers: Koin kenaikan harga persentase 24 jam tertinggi di Indodax IDR
+                if (gainersCoins.isNotEmpty()) {
+                    gainersCoins.map { TradingPair.fromCustomSymbol(it.symbol, defaultQuote) }.distinctBy { it.symbol }
+                } else {
+                    allTicks.values
+                        .filter { it.change24h.isFinite() && it.change24h > 0.0 && it.price > 5.0 && it.volume24h >= 150_000_000.0 }
+                        .sortedByDescending { it.change24h }
+                        .take(30)
+                        .map { TradingPair.fromCustomSymbol(it.symbol, defaultQuote) }
+                        .distinctBy { it.symbol }
+                }
+            }
+            MarketRankingTab.TOP_LOSERS -> {
+                // Top Losers: Koin penurunan harga persentase 24 jam terdalam (diskon/dip reversal) di Indodax IDR
+                if (losersCoins.isNotEmpty()) {
+                    losersCoins.map { TradingPair.fromCustomSymbol(it.symbol, defaultQuote) }.distinctBy { it.symbol }
+                } else {
+                    allTicks.values
+                        .filter { it.change24h.isFinite() && it.change24h < 0.0 && it.price > 5.0 && it.volume24h >= 150_000_000.0 }
+                        .sortedBy { it.change24h }
+                        .take(30)
+                        .map { TradingPair.fromCustomSymbol(it.symbol, defaultQuote) }
+                        .distinctBy { it.symbol }
+                }
+            }
+            MarketRankingTab.TOP_VOLUME -> {
+                // Top Volume: Koin dengan likuiditas & perputaran 24 jam terbesar di Indodax IDR
+                if (topVolumeCoins.isNotEmpty()) {
+                    topVolumeCoins.map { TradingPair.fromCustomSymbol(it.symbol, defaultQuote) }.distinctBy { it.symbol }
+                } else {
+                    allTicks.values
+                        .filter { it.price > 5.0 && it.volume24h >= 150_000_000.0 }
+                        .sortedByDescending { it.volume24h }
+                        .take(30)
+                        .map { TradingPair.fromCustomSymbol(it.symbol, defaultQuote) }
+                        .distinctBy { it.symbol }
+                }
             }
         }
     }
@@ -222,7 +240,7 @@ fun DashboardScreen(
             if (displayPairs.isEmpty()) {
                 item {
                     EmptyWatchlistState(
-                        isFavoriteTab = selectedRankingTab == MarketRankingTab.FAVORITE,
+                        selectedTab = selectedRankingTab,
                         onAddClick = { showAddDialog = true }
                     )
                 }

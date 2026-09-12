@@ -15,11 +15,26 @@ import androidx.core.view.WindowCompat
 @Composable
 fun TradingViewAITheme(
     isDarkTheme: Boolean = true,
+    themeStyle: ThemeStyle = if (isDarkTheme) ThemeStyle.DARK_NAVY else ThemeStyle.LIGHT_CLEAN,
+    accentPreset: AccentColorPreset = AccentColorPreset.BLUE,
+    candleStyle: CandleColorStyle = CandleColorStyle.CLASSIC,
     content: @Composable () -> Unit
 ) {
-    val appColors = if (isDarkTheme) DarkAppColors else LightAppColors
+    val effectiveStyle = if (!isDarkTheme && themeStyle != ThemeStyle.LIGHT_CLEAN) {
+        ThemeStyle.LIGHT_CLEAN
+    } else {
+        themeStyle
+    }
 
-    val colorScheme = if (isDarkTheme) {
+    val appColors = createCustomAppColors(
+        themeStyle = effectiveStyle,
+        accent = accentPreset,
+        candleStyle = candleStyle
+    )
+
+    val isDark = effectiveStyle != ThemeStyle.LIGHT_CLEAN
+
+    val colorScheme = if (isDark) {
         darkColorScheme(
             primary = appColors.blue,
             onPrimary = Color.White,
@@ -67,8 +82,8 @@ fun TradingViewAITheme(
             val window = (view.context as? Activity)?.window
             if (window != null) {
                 val insetsController = WindowCompat.getInsetsController(window, view)
-                insetsController.isAppearanceLightStatusBars = !isDarkTheme
-                insetsController.isAppearanceLightNavigationBars = !isDarkTheme
+                insetsController.isAppearanceLightStatusBars = !isDark
+                insetsController.isAppearanceLightNavigationBars = !isDark
                 window.statusBarColor = appColors.background.toArgb()
                 window.navigationBarColor = appColors.surface.toArgb()
             }

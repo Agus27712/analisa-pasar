@@ -11,6 +11,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -49,7 +51,10 @@ import java.util.Locale
 
 enum class MarketRankingTab(val label: String, val badge: String) {
     WATCHLIST("📋 Pantauan", "📋 PANTAUAN"),
-    FAVORITE("⭐ Favorit", "⭐ FAVORIT")
+    FAVORITE("⭐ Favorit", "⭐ FAVORIT"),
+    TOP_GAINERS("🚀 Top Gainer", "🚀 TOP GAINER"),
+    TOP_LOSERS("🔻 Top Loser", "🔻 TOP LOSER"),
+    TOP_VOLUME("🔥 24H Volume", "🔥 TOP VOLUME")
 }
 
 /**
@@ -500,26 +505,29 @@ fun DashboardMockupHeader(
 
         Spacer(Modifier.height(6.dp))
 
-        // TAB BAR (Modern Sleek Segmented Control)
+        // TAB BAR (Modern Sleek Segmented Control with Horizontal Scroll for 5 Tabs)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(8.dp))
                 .background(TvSurfaceVariant)
                 .border(0.8.dp, TvBorder, RoundedCornerShape(8.dp))
-                .padding(2.5.dp),
-            horizontalArrangement = Arrangement.spacedBy(3.dp)
+                .horizontalScroll(rememberScrollState())
+                .padding(3.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             MarketRankingTab.values().forEach { tab ->
                 val isSelected = selectedTab == tab
                 val (tabActiveBg, tabActiveBorder, tabActiveTextColor) = when (tab) {
                     MarketRankingTab.WATCHLIST -> Triple(TvBlue.copy(alpha = 0.22f), TvBlue.copy(alpha = 0.85f), TvBlueSoft)
                     MarketRankingTab.FAVORITE -> Triple(TvAmber.copy(alpha = 0.22f), TvAmber.copy(alpha = 0.85f), TvAmber)
+                    MarketRankingTab.TOP_GAINERS -> Triple(TvGreen.copy(alpha = 0.22f), TvGreen.copy(alpha = 0.85f), TvGreen)
+                    MarketRankingTab.TOP_LOSERS -> Triple(TvRed.copy(alpha = 0.22f), TvRed.copy(alpha = 0.85f), TvRed)
+                    MarketRankingTab.TOP_VOLUME -> Triple(Color(0xFF8B5CF6).copy(alpha = 0.22f), Color(0xFF8B5CF6).copy(alpha = 0.85f), Color(0xFFA78BFA))
                 }
 
                 Box(
                     modifier = Modifier
-                        .weight(1f)
                         .clip(RoundedCornerShape(6.dp))
                         .background(if (isSelected) tabActiveBg else Color.Transparent)
                         .then(
@@ -527,13 +535,13 @@ fun DashboardMockupHeader(
                             else Modifier
                         )
                         .clickable { onSelectTab(tab) }
-                        .padding(vertical = 6.dp, horizontal = 6.dp),
+                        .padding(vertical = 6.dp, horizontal = 10.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = tab.label,
                         color = if (isSelected) tabActiveTextColor else TvTextSecondary,
-                        fontSize = 12.sp,
+                        fontSize = 11.5.sp,
                         fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
                         maxLines = 1
                     )
