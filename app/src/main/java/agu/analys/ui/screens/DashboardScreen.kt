@@ -109,9 +109,10 @@ fun DashboardScreen(
     ) {
         when (selectedRankingTab) {
             MarketRankingTab.WATCHLIST -> {
-                // Koin pilihan pantauan kustom pengguna (dari Pengaturan Watchlist & Tambah Koin) + koin holding
+                // Koin pilihan pantauan kustom pengguna (dari Pengaturan Watchlist & Tambah Koin) + koin yang sedang di-holding aktif (isHolding == true)
+                val activeHoldingSymbols = holdingStatuses.filter { it.value.isHolding }.keys
                 val userPairs = (watchlist.map { TradingPair.fromCustomSymbol(it, defaultQuote) } +
-                    holdingStatuses.keys.map { TradingPair.fromCustomSymbol(it, defaultQuote) })
+                    activeHoldingSymbols.map { TradingPair.fromCustomSymbol(it, defaultQuote) })
                     .distinctBy { it.symbol }
 
                 if (userPairs.isNotEmpty()) {

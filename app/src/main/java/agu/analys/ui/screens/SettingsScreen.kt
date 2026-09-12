@@ -664,6 +664,8 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                                 isPriceTickPulseEnabled = isPriceTickPulseEnabled,
                                 isSmoothChartEnabled = isSmoothChartEnabled,
                                 priceFeedThrottleMs = priceFeedThrottleMs,
+                                isDarkTheme = isDarkTheme,
+                                onDarkThemeChange = { isDark -> viewModel.setDarkTheme(isDark) },
                                 onThemeStyleChange = { style -> viewModel.setThemeStyle(style) },
                                 onAccentChange = { preset -> viewModel.setAccentColorPreset(preset) },
                                 onCandleStyleChange = { candle -> viewModel.setCandleColorStyle(candle) },

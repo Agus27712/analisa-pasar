@@ -166,6 +166,7 @@ fun SmoothPriceText(
     modifier: Modifier = Modifier,
     showSymbol: Boolean = true,
     quoteAsset: String = "IDR",
+    animationMode: PriceAnimationMode = LocalPriceAnimationMode.current,
     maxLines: Int = 1
 ) {
     FlipCardPriceText(
@@ -176,6 +177,7 @@ fun SmoothPriceText(
         modifier = modifier,
         showSymbol = showSymbol,
         quoteAsset = quoteAsset,
+        animationMode = animationMode,
         maxLines = maxLines
     )
 }
@@ -296,7 +298,7 @@ fun FlipCardPriceText(
             ) {
                 // Renders character by character with individual animated rolling wheels for digits
                 formatted.forEachIndexed { index, ch ->
-                    key("$index-$ch") {
+                    key(index) {
                         FlipDigitChar(
                             char = ch,
                             isUp = isUp,
@@ -418,7 +420,7 @@ fun AnimatedPercentageBadge(
                 PriceAnimationMode.DIGIT_FLIP -> {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         formatted.forEachIndexed { idx, ch ->
-                            key("pct-$idx-$ch") {
+                            key("pct-$idx") {
                                 FlipDigitChar(
                                     char = ch,
                                     isUp = isPositive,

@@ -36,6 +36,8 @@ fun ThemeAndVisualSettings(
     isPriceTickPulseEnabled: Boolean,
     isSmoothChartEnabled: Boolean,
     priceFeedThrottleMs: Long,
+    isDarkTheme: Boolean = true,
+    onDarkThemeChange: (Boolean) -> Unit = {},
     onThemeStyleChange: (ThemeStyle) -> Unit,
     onAccentChange: (AccentColorPreset) -> Unit,
     onCandleStyleChange: (CandleColorStyle) -> Unit,
@@ -67,6 +69,107 @@ fun ThemeAndVisualSettings(
     }
 
     Column(modifier = Modifier.fillMaxWidth()) {
+        // 0. QUICK MODE SWITCH (LIGHT / DARK)
+        SectionHeader("MODE TAMPILAN UTAMA (LIGHT / DARK)")
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = TvSurfaceVariant),
+            border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Light Mode Option
+                Surface(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable {
+                            onDarkThemeChange(false)
+                            onThemeStyleChange(ThemeStyle.LIGHT_CLEAN)
+                        },
+                    color = if (!isDarkTheme || currentThemeStyle == ThemeStyle.LIGHT_CLEAN) TvBlue.copy(alpha = 0.15f) else TvSurface,
+                    shape = RoundedCornerShape(10.dp),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.5.dp,
+                        if (!isDarkTheme || currentThemeStyle == ThemeStyle.LIGHT_CLEAN) TvBlue else TvBorder
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier.padding(vertical = 12.dp, horizontal = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            Icons.Default.LightMode,
+                            contentDescription = "Mode Terang",
+                            tint = if (!isDarkTheme || currentThemeStyle == ThemeStyle.LIGHT_CLEAN) TvBlue else TvTextSecondary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                "Mode Terang",
+                                color = if (!isDarkTheme || currentThemeStyle == ThemeStyle.LIGHT_CLEAN) TvBlue else TvTextPrimary,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text("Light Clean", color = TvTextSecondary, fontSize = 10.sp)
+                        }
+                    }
+                }
+
+                // Dark Mode Option
+                Surface(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable {
+                            onDarkThemeChange(true)
+                            if (currentThemeStyle == ThemeStyle.LIGHT_CLEAN) {
+                                onThemeStyleChange(ThemeStyle.DARK_NAVY)
+                            }
+                        },
+                    color = if (isDarkTheme && currentThemeStyle != ThemeStyle.LIGHT_CLEAN) TvBlue.copy(alpha = 0.15f) else TvSurface,
+                    shape = RoundedCornerShape(10.dp),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.5.dp,
+                        if (isDarkTheme && currentThemeStyle != ThemeStyle.LIGHT_CLEAN) TvBlue else TvBorder
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier.padding(vertical = 12.dp, horizontal = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            Icons.Default.DarkMode,
+                            contentDescription = "Mode Gelap",
+                            tint = if (isDarkTheme && currentThemeStyle != ThemeStyle.LIGHT_CLEAN) TvBlue else TvTextSecondary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                "Mode Gelap",
+                                color = if (isDarkTheme && currentThemeStyle != ThemeStyle.LIGHT_CLEAN) TvBlue else TvTextPrimary,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text("Navy/Black/Matrix", color = TvTextSecondary, fontSize = 10.sp)
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(14.dp))
+
         // 1. PALET TEMA UTAMA (THEME STYLE)
         SectionHeader("PALET TEMA UTAMA (THEME STYLE)")
         Card(

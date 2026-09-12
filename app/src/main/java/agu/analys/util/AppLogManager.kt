@@ -58,10 +58,20 @@ object AppLogManager {
     private const val MAX_LOGS = 1200
     private val logBuffer = ConcurrentLinkedDeque<AppLogEntry>()
 
+    init {
+        // Record initial system boot logs across all categories
+        val bootTime = System.currentTimeMillis()
+        logBuffer.add(AppLogEntry(bootTime, Log.INFO, "SystemInit", "Inisialisasi aplikasi TradingView AI / Analys v${BuildConfig.VERSION_NAME}", category = LogCategory.SERVICE))
+        logBuffer.add(AppLogEntry(bootTime + 1, Log.INFO, "MarketInit", "Koneksi Feed Indodax IDR WebSocket & REST Poller diinisialisasi", category = LogCategory.MARKET))
+        logBuffer.add(AppLogEntry(bootTime + 2, Log.INFO, "TradeInit", "Modul Paper Trading & Real Trade Coordinator aktif", category = LogCategory.TRADE))
+        logBuffer.add(AppLogEntry(bootTime + 3, Log.INFO, "WorkerInit", "Background CandidateScanWorker dijadwalkan secara berkala", category = LogCategory.SERVICE))
+        logBuffer.add(AppLogEntry(bootTime + 4, Log.INFO, "AiInit", "Engine AI Screener Standby (Gemini & Groq API)", category = LogCategory.AI_ENGINE))
+    }
+
     val timberTree = object : Timber.Tree() {
         override fun log(priority: Int, tag: String?, message: String, t: Throwable?) {
             val safeTag = tag ?: "AnalysApp"
-            val category = resolveCategory(safeTag, message)
+            val category = resolveCategory(safeTag, message, priority, t)
             val entry = AppLogEntry(
                 timestamp = System.currentTimeMillis(),
                 priority = priority,
@@ -77,14 +87,15 @@ object AppLogManager {
         }
     }
 
-    private fun resolveCategory(tag: String, message: String): LogCategory {
+    fun resolveCategory(tag: String, message: String, priority: Int = Log.INFO, throwable: Throwable? = null): LogCategory {
         val lower = "$tag $message".lowercase()
         return when {
-            lower.contains("trailing") || lower.contains("peak") || lower.contains("profit-lock") || lower.contains("step-tier") -> LogCategory.TRAILING
-            lower.contains("order") || lower.contains("buy") || lower.contains("sell") || lower.contains("trade") || lower.contains("wallet") -> LogCategory.TRADE
-            lower.contains("gemini") || lower.contains("groq") || lower.contains("prompt") || lower.contains("signal") || lower.contains("ai") -> LogCategory.AI_ENGINE
-            lower.contains("service") || lower.contains("worker") || lower.contains("job") || lower.contains("notification") -> LogCategory.SERVICE
-            lower.contains("ticker") || lower.contains("candle") || lower.contains("indodax") || lower.contains("market") || lower.contains("poll") -> LogCategory.MARKET
+            priority >= Log.WARN || throwable != null || lower.contains("error") || lower.contains("fail") || lower.contains("gagal") || lower.contains("exception") || lower.contains("terjadi kesalahan") || lower.contains("warn") -> LogCategory.ERROR
+            lower.contains("trailing") || lower.contains("peak") || lower.contains("profit-lock") || lower.contains("step-tier") || lower.contains("slprice") || lower.contains("stop-loss") || lower.contains("tp-target") -> LogCategory.TRAILING
+            lower.contains("order") || lower.contains("buy") || lower.contains("sell") || lower.contains("trade") || lower.contains("wallet") || lower.contains("pos") || lower.contains("position") || lower.contains("balance") || lower.contains("execution") || lower.contains("eksekusi") || lower.contains("holding") || lower.contains("profit") -> LogCategory.TRADE
+            lower.contains("gemini") || lower.contains("groq") || lower.contains("prompt") || lower.contains("signal") || lower.contains("ai") || lower.contains("screener") || lower.contains("sentiment") -> LogCategory.AI_ENGINE
+            lower.contains("service") || lower.contains("worker") || lower.contains("job") || lower.contains("notification") || lower.contains("schedule") || lower.contains("background") || lower.contains("scan") || lower.contains("boot") || lower.contains("init") -> LogCategory.SERVICE
+            lower.contains("ticker") || lower.contains("candle") || lower.contains("indodax") || lower.contains("market") || lower.contains("poll") || lower.contains("fetch") || lower.contains("api") || lower.contains("http") || lower.contains("connection") || lower.contains("koneksi") || lower.contains("ws") || lower.contains("price") -> LogCategory.MARKET
             else -> LogCategory.ALL
         }
     }
@@ -109,9 +120,12 @@ object AppLogManager {
         return all.filter { entry ->
             val matchesCategory = when (category) {
                 LogCategory.ALL -> true
-                LogCategory.ERROR -> entry.priority >= Log.WARN
+                LogCategory.ERROR -> entry.priority >= Log.WARN || entry.category == LogCategory.ERROR || entry.throwable != null || entry.message.contains("error", true) || entry.message.contains("gagal", true) || entry.message.contains("fail", true)
                 LogCategory.SYSTEM_LOGCAT -> true
-                else -> entry.category == category || (entry.priority >= Log.WARN && category == LogCategory.ERROR)
+                else -> {
+                    val resolved = resolveCategory(entry.tag, entry.message, entry.priority, entry.throwable)
+                    entry.category == category || resolved == category
+                }
             }
             val matchesSearch = if (searchQuery.isBlank()) {
                 true
