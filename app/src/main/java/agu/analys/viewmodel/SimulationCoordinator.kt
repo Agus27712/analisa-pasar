@@ -310,6 +310,11 @@ class SimulationCoordinator(
         refresh()
     }
 
+    fun setBalance(amount: Double) {
+        store.setBalance(amount)
+        refresh()
+    }
+
     fun resetAccount() {
         store.resetWallet()
         refresh()

@@ -48,4 +48,18 @@ class SpotPositionTrailingTest {
         // Batas aman BENAR-BENAR NAIK -> Notifikasi boleh terpicu!
         assertTrue(newSlPriceBig > oldSlPrice)
     }
+
+    @Test
+    fun testTrailingProfitLock_FlashDropTriggerBehavior() {
+        val entryPrice = 20000.0
+        val peakPrice = 25000.0
+        val trailingPct = 2.0 // Lock price = 25000 * 0.98 = 24500.0
+        val trailingLockPrice = calculateTrailingLimitPrice(peakPrice, entryPrice, trailingPct)
+        assertEquals(24500.0, trailingLockPrice, 0.001)
+
+        // Skenario 1: Harga flash crash jatuh tajam dari 25000 langsung ke 21000 (melewati 24500)
+        val flashDropPrice = 21000.0
+        val isTriggered = flashDropPrice <= trailingLockPrice
+        assertTrue("Order sell trailing harus terpicu saat harga drop melewati batas lock profit", isTriggered)
+    }
 }

@@ -70,6 +70,7 @@ fun TradingViewModel.submitSimulationOrder(
 fun TradingViewModel.cancelSimulationOrder(orderId: String): Boolean = simCoordinator.cancelOrder(orderId)
 fun TradingViewModel.cancelAllSimulationOrders(symbol: String? = null): Int = simCoordinator.cancelAllOrders(symbol)
 fun TradingViewModel.topUpSimulationBalance(amount: Double) = simCoordinator.topUpIdr(amount)
+fun TradingViewModel.setSimulationBalance(amount: Double) = simCoordinator.setBalance(amount)
 fun TradingViewModel.resetSimulationAccount() = simCoordinator.resetAccount()
 
 fun TradingViewModel.getHoldingStatus(pair: TradingPair, forceIsReal: Boolean? = null): CoinHoldingStatus {

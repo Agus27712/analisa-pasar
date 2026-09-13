@@ -388,6 +388,10 @@ fun TradeSimulationScreen(
                 viewModel.topUpSimulationBalance(amount)
                 Toast.makeText(context, "Modal berhasil ditambah ${PriceFormatter.formatPrice(amount, quoteAsset = "IDR")}", Toast.LENGTH_SHORT).show()
             },
+            onSetBalance = { amount ->
+                viewModel.setSimulationBalance(amount)
+                Toast.makeText(context, "Saldo simulasi diatur menjadi ${PriceFormatter.formatPrice(amount, quoteAsset = "IDR")}", Toast.LENGTH_SHORT).show()
+            },
             onReset = {
                 viewModel.resetSimulationAccount()
                 Toast.makeText(context, "Akun simulasi direset ke saldo awal Rp 10.000.000", Toast.LENGTH_SHORT).show()

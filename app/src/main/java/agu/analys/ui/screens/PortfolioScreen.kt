@@ -386,6 +386,10 @@ fun PortfolioScreen(
                 viewModel.topUpSimulationBalance(amount)
                 showTopUpModal = false
             },
+            onSetBalance = { amount ->
+                viewModel.setSimulationBalance(amount)
+                showTopUpModal = false
+            },
             onReset = {
                 viewModel.resetSimulationAccount()
                 showTopUpModal = false

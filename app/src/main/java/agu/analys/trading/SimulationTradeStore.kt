@@ -35,6 +35,13 @@ class SimulationTradeStore(context: Context) {
     }
 
     @Synchronized
+    fun setBalance(amount: Double) {
+        val w = getWallet()
+        val updated = w.copy(idrBalance = amount.coerceAtLeast(0.0))
+        saveWallet(updated)
+    }
+
+    @Synchronized
     fun resetWallet(initialIdr: Double = 10_000_000.0) {
         saveWallet(SimulationWallet(idrBalance = initialIdr))
         prefs.edit().remove(KEY_OPEN_ORDERS).remove(KEY_TRADE_HISTORY).apply()
