@@ -14,6 +14,7 @@ import androidx.compose.ui.unit.dp
 import agu.analys.config.StrategyMode
 import agu.analys.config.TradingFeeConfig
 import agu.analys.model.AISignalState
+import agu.analys.model.SignalAction
 import agu.analys.model.PositionContext
 import agu.analys.model.SellCheckpointEvaluator
 import agu.analys.model.SellLifecycleState
@@ -158,12 +159,13 @@ fun WaitingEntryRadarCard(
         label = "radar_scale"
     )
 
+    val isBuyAction = signal.action == SignalAction.BUY
     val buyTitleHeader = when (strategyMode) {
-        StrategyMode.SCALPING -> "⚡ SCALPING BUY (${signal.confidence}%)"
-        StrategyMode.SECOND_WAVE -> "🌊 SECOND-WAVE BUY (${signal.confidence}%)"
-        StrategyMode.SWING -> "🎯 SWING BUY (${signal.confidence}%)"
-        StrategyMode.OFFICE_DAILY -> "🏢 OFFICE-DAILY BUY (${signal.confidence}%)"
-        StrategyMode.TRENCHING -> "⛏ TRENNCHING BUY (${signal.confidence}%)"
+        StrategyMode.SCALPING -> if (isBuyAction) "⚡ SCALPING BUY (${signal.confidence}%)" else "⚡ SCALPING RADAR (${signal.confidence}%)"
+        StrategyMode.SECOND_WAVE -> if (isBuyAction) "🌊 SECOND-WAVE BUY (${signal.confidence}%)" else "🌊 SECOND-WAVE RADAR (${signal.confidence}%)"
+        StrategyMode.SWING -> if (isBuyAction) "🎯 SWING BUY (${signal.confidence}%)" else "🎯 SWING RADAR (${signal.confidence}%)"
+        StrategyMode.OFFICE_DAILY -> if (isBuyAction) "🏢 OFFICE-DAILY BUY (${signal.confidence}%)" else "🏢 OFFICE-DAILY RADAR (${signal.confidence}%)"
+        StrategyMode.TRENCHING -> if (isBuyAction) "⛏ TRENCHING BUY (${signal.confidence}%)" else "⛏ TRENCHING RADAR (${signal.confidence}%)"
     }
 
     var isChecklistVisible by remember { mutableStateOf(false) }

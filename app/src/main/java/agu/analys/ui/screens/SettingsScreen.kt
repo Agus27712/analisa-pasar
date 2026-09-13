@@ -478,7 +478,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                             iconTint = TvBlue,
                             iconBackground = TvBlue.copy(alpha = 0.15f),
                             title = "Pembaruan & Versi Aplikasi",
-                            subtitle = "Versi 3.4.0 (Build 66) · Periksa rilis GitHub & cache",
+                            subtitle = "Versi 3.4.1 (Build 67) · Periksa rilis GitHub & cache",
                             onClick = { activeCategory = SettingsCategory.SYSTEM }
                         )
                     }

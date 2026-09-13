@@ -3,6 +3,7 @@ package agu.analys.ui.components.dashboard
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -12,20 +13,34 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
+import agu.analys.model.CandleBar
 import agu.analys.model.MarketTick
 import kotlin.math.abs
 
 /**
  * Mini sparkline dengan kurva halus (Smooth Cubic Bezier Spline) & subtle translucent gradient fill.
- * Bukan random walk — titik disintesis dari data harga, high, low, & change 24H nyata Indodax.
+ * Mendukung data candle 1 jam asli (SSOT dari detail chart) dengan live price endpoint sync,
+ * serta fallback sintesis data 24H nyata jika candle sedang memuat.
  */
 @Composable
 fun MiniSparkline(
     tick: MarketTick?,
+    candles: List<CandleBar>? = null,
     modifier: Modifier = Modifier,
     lineColor: Color
 ) {
-    val points = sparkPoints(tick)
+    val points = remember(tick?.price, candles) {
+        if (!candles.isNullOrEmpty() && candles.size >= 2) {
+            val list = candles.takeLast(30).map { it.close }.toMutableList()
+            val livePrice = tick?.price ?: 0.0
+            if (livePrice > 0.0 && livePrice.isFinite()) {
+                list[list.lastIndex] = livePrice
+            }
+            list
+        } else {
+            sparkPoints(tick)
+        }
+    }
     Canvas(modifier = modifier.fillMaxSize()) {
         if (points.size < 2) return@Canvas
         val minV = points.minOrNull() ?: return@Canvas

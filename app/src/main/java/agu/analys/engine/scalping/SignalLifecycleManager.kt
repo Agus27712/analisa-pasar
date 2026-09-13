@@ -45,7 +45,10 @@ object SignalLifecycleManager {
     // Expire swing / macro signals older than 2 hours
     private const val EXPIRY_MACRO_MS = 2 * 60 * 60 * 1000L
 
-    private fun cacheKey(symbol: String, mode: StrategyMode): String = "${symbol.uppercase()}#${mode.name}"
+    fun normalizeSymbol(symbol: String): String =
+        symbol.uppercase().replace("/", "").replace("_", "").replace("-", "")
+
+    private fun cacheKey(symbol: String, mode: StrategyMode): String = "${normalizeSymbol(symbol)}#${mode.name}"
 
     fun process(
         symbol: String,
@@ -272,7 +275,27 @@ object SignalLifecycleManager {
         }
         tracked.entryPrice = raw.entryPrice
         tracked.targetPrice = raw.targetPrice1
-        tracked.activeSignalState = raw
+        tracked.activeSignalState = raw.copy(
+            marketSymbol = tracked.symbol,
+            lifecycleState = tracked.state
+        )
+    }
+
+    fun getSignal(symbol: String, mode: StrategyMode? = null): AISignalState? = lock.withLock {
+        val norm = normalizeSymbol(symbol)
+        if (mode != null) {
+            val key = cacheKey(norm, mode)
+            val tracked = activeSignals[key] ?: return@withLock null
+            if (tracked.state == LifecycleState.EXPIRED || tracked.state == LifecycleState.INVALIDATED) {
+                return@withLock null
+            }
+            tracked.activeSignalState
+        } else {
+            val prefix = "$norm#"
+            activeSignals.entries
+                .firstOrNull { it.key.startsWith(prefix) && it.value.state != LifecycleState.EXPIRED && it.value.state != LifecycleState.INVALIDATED }
+                ?.value?.activeSignalState
+        }
     }
 
     fun markTriggered(symbol: String, mode: StrategyMode? = null) = lock.withLock {

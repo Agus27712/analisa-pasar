@@ -261,7 +261,10 @@ class MarketDataCoordinator(
                     if (currentActivePair?.symbol == pair.symbol) {
                         if (bids.isNotEmpty()) _orderBookBids.value = bids
                         if (asks.isNotEmpty()) _orderBookAsks.value = asks
-                        if (bids.isNotEmpty() || asks.isNotEmpty()) engine.onOrderBookUpdate(bids, asks)
+                        if (bids.isNotEmpty() || asks.isNotEmpty()) {
+                            engine.onOrderBookUpdate(bids, asks)
+                            agu.analys.data.OrderBookDepthCache.updateOrderBook(pair.symbol, bids, asks)
+                        }
                         if (newTrades.isNotEmpty()) _tradeStream.value = newTrades
                         lastDepthRefresh = now
                     }

@@ -253,6 +253,7 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
             _signalState.value = AISignalState(
                 action = SignalAction.HOLD,
                 confidence = 15,
+                marketSymbol = tick.symbol,
                 entryPrice = tick.price,
                 reasoning = listOf("Menunggu data MTF scalping ($need)."),
                 timestamp = System.currentTimeMillis(),
@@ -271,6 +272,7 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
         // P2.2 Signal Lifecycle Tracking
         val tracked = agu.analys.engine.scalping.SignalLifecycleManager.process(tick.symbol, tick.price, result.signal, StrategyMode.SCALPING)
         val finalSignal = (tracked.activeSignalState ?: result.signal).copy(
+            marketSymbol = tick.symbol,
             lifecycleState = tracked.state
         )
 
@@ -290,6 +292,7 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
         
         val tracked = agu.analys.engine.scalping.SignalLifecycleManager.process(tick.symbol, tick.price, result.signal, StrategyMode.SECOND_WAVE)
         val finalSignal = (tracked.activeSignalState ?: result.signal).copy(
+            marketSymbol = tick.symbol,
             lifecycleState = tracked.state
         )
 
@@ -315,6 +318,7 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
         
         val tracked = agu.analys.engine.scalping.SignalLifecycleManager.process(tick.symbol, tick.price, result.signal, StrategyMode.SWING)
         val finalSignal = (tracked.activeSignalState ?: result.signal).copy(
+            marketSymbol = tick.symbol,
             lifecycleState = tracked.state
         )
 
@@ -335,6 +339,7 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
         
         val tracked = agu.analys.engine.scalping.SignalLifecycleManager.process(tick.symbol, tick.price, result.signal, StrategyMode.OFFICE_DAILY)
         val finalSignal = (tracked.activeSignalState ?: result.signal).copy(
+            marketSymbol = tick.symbol,
             lifecycleState = tracked.state
         )
 
@@ -371,6 +376,7 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
         if (result != null) {
             val tracked = agu.analys.engine.scalping.SignalLifecycleManager.process(tick.symbol, tick.price, result, StrategyMode.TRENCHING)
             val finalSignal = (tracked.activeSignalState ?: result).copy(
+                marketSymbol = tick.symbol,
                 lifecycleState = tracked.state
             )
             _signalState.value = finalSignal

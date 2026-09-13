@@ -998,6 +998,41 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     fun getPositionFor(symbol: String): SpotPosition = positionCoordinator.getPosition(symbol)
     fun isMatchingSymbol(s1: String, s2: String): Boolean = positionCoordinator.isSameSymbol(s1, s2)
 
+    fun getEngineSignal(symbol: String): AISignalState? {
+        val activeSignal = aiSignalState.value
+        if (isMatchingSymbol(symbol, activeSignal.marketSymbol) || isMatchingSymbol(symbol, _selectedPair.value.symbol)) {
+            return activeSignal
+        }
+        return agu.analys.engine.scalping.SignalLifecycleManager.getSignal(symbol, _strategyMode.value)
+    }
+
+    /**
+     * SSOT: Ambil data candle 1 Jam (1H) untuk koin, mencerminkan persis apa yang ada di Detail chart.
+     */
+    fun getH1Candles(symbol: String): List<CandleBar> {
+        if (isMatchingSymbol(symbol, _selectedPair.value.symbol) && _selectedTimeframe.value == Timeframe.H1) {
+            val liveCandles = recentCandles.value
+            if (liveCandles.isNotEmpty()) return liveCandles
+        }
+        val mtfCandles = agu.analys.util.MtfCacheManager.getCachedCandles(symbol, Timeframe.H1)
+        if (!mtfCandles.isNullOrEmpty()) return mtfCandles
+
+        val (_, cached) = marketCache.loadPairSnapshot(symbol, Timeframe.H1)
+        if (cached.isNotEmpty()) return cached
+
+        return emptyList()
+    }
+
+    /**
+     * Pastikan koin holding aktif memiliki data candle 1 Jam yang ter-sync.
+     */
+    fun ensureH1Candles(symbol: String) {
+        val current = agu.analys.util.MtfCacheManager.getCachedCandles(symbol, Timeframe.H1)
+        if (current.isNullOrEmpty()) {
+            agu.analys.util.MtfCacheManager.retryTimeframe(symbol, Timeframe.H1)
+        }
+    }
+
     fun toggleSimpleChart() { _useSimpleChart.value = !_useSimpleChart.value }
     fun selectTimeframe(tf: Timeframe) {
         if (_selectedTimeframe.value == tf) return

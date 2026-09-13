@@ -242,3 +242,4 @@ val TvBlue: Color @Composable get() = LocalAppColors.current.blue
 val TvBlueSoft: Color @Composable get() = LocalAppColors.current.blueSoft
 val TvAmber: Color @Composable get() = LocalAppColors.current.amber
 val TvOrange: Color @Composable get() = LocalAppColors.current.orange
+val TvCyan: Color = Color(0xFF00E5FF)
