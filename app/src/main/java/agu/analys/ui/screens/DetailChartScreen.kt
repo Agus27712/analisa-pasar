@@ -339,12 +339,7 @@ fun DetailChartScreen(
                         orderBookBids = orderBookBids,
                         orderBookAsks = orderBookAsks,
                         strategyMode = strategyMode,
-                        onOpenShieldInfo = { showShieldDialog = true },
-                        isBuyMode = isBuyMode,
-                        onBuyModeChanged = {
-                            isBuyMode = it
-                            HapticUtil.vibrateTick(context)
-                        }
+                        onOpenShieldInfo = { showShieldDialog = true }
                     )
 
                     Spacer(Modifier.height(14.dp))

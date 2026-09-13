@@ -759,9 +759,9 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                         }
 
                         SettingsCategory.NOTIFICATIONS -> {
-                            SectionHeader("SALURAN NOTIFIKASI SISTEM")
+                            SectionHeader("PREFERENSI NOTIFIKASI APLIKASI")
                             Text(
-                                text = "Ketuk kategori di bawah untuk mengatur suara, getaran, lencana, dan prioritas notifikasi langsung di sistem Android Anda.",
+                                text = "Aktifkan atau matikan notifikasi spesifik di bawah ini agar Anda hanya menerima informasi peringatan yang Anda inginkan.",
                                 color = TvTextSecondary,
                                 fontSize = 11.sp,
                                 lineHeight = 15.sp,
