@@ -39,18 +39,12 @@ class TradingForegroundService : Service() {
             return START_NOT_STICKY
         }
 
-        if (action == ACTION_FORCE_REFRESH) {
-            lastUpdateTime = 0L
-            updateNotification()
-            return START_STICKY
-        }
-
         if (action == ACTION_UPDATE) {
             val now = System.currentTimeMillis()
-            // Throttle minimal 8 detik antar update notifikasi biasa untuk hemat baterai
-            if (now - lastUpdateTime < 8000L) {
+            if (now - lastUpdateTime < 1200L) {
                 return START_STICKY
             }
+            lastUpdateTime = now
         }
 
         updateNotification()
@@ -59,23 +53,14 @@ class TradingForegroundService : Service() {
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            // Hapus channel lama yang bersuara jika ada
-            try {
-                manager.deleteNotificationChannel("trading_foreground_monitor_channel")
-            } catch (_: Exception) {}
-
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "Monitor Portfolio & Spot Market (Senyap)",
+                "Background Monitor",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Memantau koin aktif di AOD / Lockscreen secara senyap tanpa suara atau getaran"
-                lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
-                setSound(null, null)
-                enableVibration(false)
-                setShowBadge(false)
+                description = "Menjaga proses aplikasi tetap hidup dan memantau pair"
             }
+            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.createNotificationChannel(channel)
         }
     }
@@ -139,46 +124,56 @@ class TradingForegroundService : Service() {
 
     private fun updateNotification() {
         lastUpdateTime = System.currentTimeMillis()
-        val prefs = AppPreferences(applicationContext)
-        val isRealMode = prefs.isRealBuyModeEnabled
-        val items = getHoldingsData()
-        val totalProfitCount = items.count { it.isProfit }
-        val totalHoldings = items.size
-
-        val modeLabel = if (isRealMode) "Real" else "Simulasi"
-        val modeIcon = if (isRealMode) "💼" else "🧪"
+        val (realItems, simItems) = getHoldingsData()
+        val totalProfitCount = realItems.count { it.isProfit } + simItems.count { it.isProfit }
+        val totalHoldings = realItems.size + simItems.size
 
         val title = when {
-            totalProfitCount > 0 -> "⚡ $totalProfitCount Aset Siap Profit • Spot $modeLabel"
-            totalHoldings > 0 -> "$modeIcon Spot $modeLabel • $totalHoldings Aset Aktif"
-            else -> "$modeIcon Spot $modeLabel • Menunggu Posisi"
+            totalProfitCount > 0 -> "⚡ $totalProfitCount Aset Siap Profit • Spot Monitor"
+            totalHoldings > 0 -> "📈 Spot Monitor • $totalHoldings Aset Aktif"
+            else -> "📈 Spot Monitor • Menunggu Posisi"
         }
 
         val collapsedText = when {
             totalProfitCount > 0 -> {
-                val profitList = items.filter { it.isProfit }
+                val profitList = (realItems + simItems).filter { it.isProfit }
                 "Siap Jual: " + profitList.joinToString(", ") {
                     "${it.baseAsset} (+${String.format(Locale.US, "%.2f", it.diffPct)}%)"
                 }
             }
             totalHoldings > 0 -> {
-                "Pantau: " + items.take(3).joinToString(", ") {
+                val allList = realItems + simItems
+                "Pantau: " + allList.take(3).joinToString(", ") {
                     "${it.baseAsset} ${PriceFormatter.formatPrice(it.currentPrice, showSymbol = false)}"
                 }
             }
-            else -> "Belum ada aset spot $modeLabel yang dipantau"
+            else -> "Belum ada aset spot yang dipantau"
         }
 
         val bigText = buildString {
-            if (items.isEmpty()) {
-                append("Belum ada koin yang dimiliki di mode $modeLabel.\nBeli atau tambahkan posisi untuk mulai memantau.")
+            if (realItems.isEmpty() && simItems.isEmpty()) {
+                append("Belum ada koin yang dimiliki saat ini.\nBeli atau tambahkan posisi untuk mulai memantau.")
             } else {
-                append(if (isRealMode) "💼 PORTOFOLIO REAL" else "🧪 PORTOFOLIO SIMULASI")
-                if (totalProfitCount > 0) append(" ($totalProfitCount Siap Jual)")
-                append(":\n")
-                items.forEachIndexed { index, item ->
-                    append(formatHoldingCard(item))
-                    if (index < items.size - 1) append("\n\n")
+                if (realItems.isNotEmpty()) {
+                    val realProfit = realItems.count { it.isProfit }
+                    append("💼 PORTOFOLIO REAL")
+                    if (realProfit > 0) append(" ($realProfit Siap Jual)")
+                    append(":\n")
+                    realItems.forEachIndexed { index, item ->
+                        append(formatHoldingCard(item))
+                        if (index < realItems.size - 1) append("\n\n")
+                    }
+                }
+                if (simItems.isNotEmpty()) {
+                    if (realItems.isNotEmpty()) append("\n\n")
+                    val simProfit = simItems.count { it.isProfit }
+                    append("🧪 PORTOFOLIO SIMULASI")
+                    if (simProfit > 0) append(" ($simProfit Siap Jual)")
+                    append(":\n")
+                    simItems.forEachIndexed { index, item ->
+                        append(formatHoldingCard(item))
+                        if (index < simItems.size - 1) append("\n\n")
+                    }
                 }
             }
         }.trim()
@@ -205,21 +200,15 @@ class TradingForegroundService : Service() {
 
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(agu.analys.R.drawable.ic_stat_trading)
-            .setColor(if (isRealMode) 0xFF0F172A.toInt() else 0xFF064E3B.toInt())
             .setContentTitle(title)
             .setContentText(collapsedText)
-            .setSubText("Indodax Spot • $modeLabel")
+            .setSubText("Indodax Spot")
             .setStyle(NotificationCompat.BigTextStyle().bigText(bigText))
             .setContentIntent(pendingIntent)
-            .addAction(0, "Portofolio", pendingIntent)
+            .addAction(0, "Buka Portofolio", pendingIntent)
             .addAction(0, "Hentikan", stopPendingIntent)
             .setOngoing(true)
-            .setOnlyAlertOnce(true)
-            .setSilent(true)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
-            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .build()
 
         startForeground(NOTIFICATION_ID, notification)
@@ -227,140 +216,124 @@ class TradingForegroundService : Service() {
         manager.notify(NOTIFICATION_ID, notification)
     }
 
-    private fun getHoldingsData(): List<HoldingItem> {
+    private fun getHoldingsData(): Pair<List<HoldingItem>, List<HoldingItem>> {
         val context = applicationContext
-        val prefs = AppPreferences(context)
-        val isReal = prefs.isRealBuyModeEnabled
         val positionStore = SpotPositionStore(context)
-        val items = mutableListOf<HoldingItem>()
+        val simulationStore = SimulationTradeStore(context)
+        val wallet = simulationStore.getWallet()
 
-        if (!isReal) {
-            // Mode Simulasi MURNI: HANYA ambil aset simulasi dari SimulationTradeStore
-            val simulationStore = SimulationTradeStore(context)
-            val wallet = simulationStore.getWallet()
-            for ((baseAsset, qty) in wallet.coinBalances) {
-                val baseAssetUpper = baseAsset.uppercase()
-                if (qty > 0.00000001 && baseAssetUpper != "IDR" && baseAssetUpper != "USDT") {
-                    val symbol = "${baseAssetUpper}IDR"
-                    val avgPrice = wallet.avgBuyPrices[baseAsset] 
-                        ?: wallet.avgBuyPrices[baseAssetUpper] 
-                        ?: wallet.avgBuyPrices[baseAsset.lowercase()] 
-                        ?: 0.0
-                    val currentPrice = livePrices[symbol] ?: (if (avgPrice > 0.0) avgPrice else 0.0)
+        val realItems = mutableListOf<HoldingItem>()
 
-                    items.add(
-                        HoldingItem(
-                            symbol = symbol,
-                            baseAsset = baseAssetUpper,
-                            quantity = qty,
-                            entryPrice = avgPrice,
-                            currentPrice = currentPrice,
-                            isReal = false
-                        )
+        val prefs = AppPreferences(context)
+        val savedRealBalance = if (prefs.hasIndodaxCredentials()) prefs.getSavedRealBalance() else emptyMap()
+        val savedAvgPrices = if (prefs.hasIndodaxCredentials()) prefs.getSavedRealAvgBuyPrices() else emptyMap()
+        
+        // Scan semua kemungkinan pair: daftar populer + koin yang ada saldo di akun real
+        val processedBases = mutableSetOf<String>()
+        val realCandidatePairs = mutableListOf<TradingPair>()
+
+        for (pair in TradingPair.POPULAR_INDODAX_PAIRS) {
+            val base = pair.baseAsset.uppercase()
+            if (base != "IDR" && base != "USDT") {
+                processedBases.add(base)
+                realCandidatePairs.add(pair)
+            }
+        }
+        for ((baseKey, qty) in savedRealBalance) {
+            val base = baseKey.uppercase()
+            if (qty > 0.00000001 && base != "IDR" && base != "USDT" && !processedBases.contains(base)) {
+                processedBases.add(base)
+                realCandidatePairs.add(TradingPair.fromCustomSymbol("${base}IDR"))
+            }
+        }
+        
+        for (pair in realCandidatePairs) {
+            val baseLower = pair.baseAsset.lowercase()
+            val baseUpper = pair.baseAsset.uppercase()
+            val symUpper = pair.symbol.uppercase()
+            val pos = positionStore.get(pair.symbol)
+
+            val realQty = savedRealBalance[baseLower] ?: savedRealBalance[baseUpper] ?: 0.0
+            val isHoldingInStore = pos.isHolding && pos.quantity > 0.0
+            val isHoldingInReal = realQty > 0.00000001
+
+            if (isHoldingInStore || isHoldingInReal) {
+                val qty = if (isHoldingInStore && pos.quantity > 0.0) pos.quantity else realQty
+                val entryPrice = if (isHoldingInStore && pos.entryPrice > 0.0) {
+                    pos.entryPrice
+                } else {
+                    savedAvgPrices[baseUpper] ?: savedAvgPrices[symUpper] ?: savedAvgPrices[baseLower] ?: 0.0
+                }
+
+                val currentPrice = livePrices[symUpper] ?: (if (entryPrice > 0.0) entryPrice else 0.0)
+                if (currentPrice <= 0.0 && entryPrice <= 0.0) continue
+
+                // Check jika koin di store sudah habis terjual di real
+                if (savedRealBalance.isNotEmpty() && isHoldingInStore && realQty <= 0.00000001) {
+                    positionStore.markSold(pair.symbol)
+                    // Clear sell-signal lifecycle agar tidak tetap muncul di Ready-to-Sell
+                    agu.analys.engine.sell.SellSignalLifecycleManager.reset(pair.symbol)
+                    continue
+                }
+
+                realItems.add(
+                    HoldingItem(
+                        symbol = pair.symbol,
+                        baseAsset = baseUpper,
+                        quantity = qty,
+                        entryPrice = entryPrice,
+                        currentPrice = currentPrice,
+                        isReal = true
                     )
-                }
-            }
-        } else {
-            // Mode Real: HANYA ambil aset Real Indodax
-            val savedRealBalance = if (prefs.hasIndodaxCredentials()) prefs.getSavedRealBalance() else emptyMap()
-            val savedAvgPrices = if (prefs.hasIndodaxCredentials()) prefs.getSavedRealAvgBuyPrices() else emptyMap()
-
-            val processedBases = mutableSetOf<String>()
-            val realCandidatePairs = mutableListOf<TradingPair>()
-
-            for (pair in TradingPair.POPULAR_INDODAX_PAIRS) {
-                val base = pair.baseAsset.uppercase()
-                if (base != "IDR" && base != "USDT") {
-                    processedBases.add(base)
-                    realCandidatePairs.add(pair)
-                }
-            }
-            for ((baseKey, qty) in savedRealBalance) {
-                val base = baseKey.uppercase()
-                if (qty > 0.00000001 && base != "IDR" && base != "USDT" && !processedBases.contains(base)) {
-                    processedBases.add(base)
-                    realCandidatePairs.add(TradingPair.fromCustomSymbol("${base}IDR"))
-                }
-            }
-
-            for (pair in realCandidatePairs) {
-                val baseLower = pair.baseAsset.lowercase()
-                val baseUpper = pair.baseAsset.uppercase()
-                val symUpper = pair.symbol.uppercase()
-                val pos = positionStore.get(pair.symbol, isReal = true)
-
-                val realQty = savedRealBalance[baseLower] ?: savedRealBalance[baseUpper] ?: 0.0
-                val isHoldingInStore = pos.isHolding && pos.quantity > 0.0
-                val isHoldingInReal = realQty > 0.00000001
-
-                if (isHoldingInStore || isHoldingInReal) {
-                    val qty = if (isHoldingInStore && pos.quantity > 0.0) pos.quantity else realQty
-                    val entryPrice = if (isHoldingInStore && pos.entryPrice > 0.0) {
-                        pos.entryPrice
-                    } else {
-                        savedAvgPrices[baseUpper] ?: savedAvgPrices[symUpper] ?: savedAvgPrices[baseLower] ?: 0.0
-                    }
-
-                    val currentPrice = livePrices[symUpper] ?: (if (entryPrice > 0.0) entryPrice else 0.0)
-                    if (currentPrice <= 0.0 && entryPrice <= 0.0) continue
-
-                    // Check jika koin di store sudah habis terjual di real
-                    if (savedRealBalance.isNotEmpty() && isHoldingInStore && realQty <= 0.00000001) {
-                        positionStore.markSold(pair.symbol, isReal = true)
-                        continue
-                    }
-
-                    items.add(
-                        HoldingItem(
-                            symbol = pair.symbol,
-                            baseAsset = baseUpper,
-                            quantity = qty,
-                            entryPrice = entryPrice,
-                            currentPrice = currentPrice,
-                            isReal = true
-                        )
-                    )
-                }
+                )
             }
         }
 
-        return items.sortedWith(
+        val sortedReal = realItems.sortedWith(
             compareByDescending<HoldingItem> { it.isProfit }
                 .thenByDescending { it.diffPct }
                 .thenBy { it.baseAsset }
         )
+
+        // 2. Check Simulated positions (Simulation Wallet / SimulationTradeStore)
+        val simItems = mutableListOf<HoldingItem>()
+        for ((baseAsset, qty) in wallet.coinBalances) {
+            val baseAssetUpper = baseAsset.uppercase()
+            if (qty > 0.00000001 && baseAssetUpper != "IDR") {
+                val symbol = "${baseAssetUpper}IDR"
+                val avgPrice = wallet.avgBuyPrices[baseAsset] ?: 0.0
+                val currentPrice = livePrices[symbol] ?: avgPrice
+                if (currentPrice <= 0.0 && avgPrice <= 0.0) continue
+
+                simItems.add(
+                    HoldingItem(
+                        symbol = symbol,
+                        baseAsset = baseAssetUpper,
+                        quantity = qty,
+                        entryPrice = avgPrice,
+                        currentPrice = currentPrice,
+                        isReal = false
+                    )
+                )
+            }
+        }
+
+        val sortedSim = simItems.sortedWith(
+            compareByDescending<HoldingItem> { it.isProfit }
+                .thenByDescending { it.diffPct }
+                .thenBy { it.baseAsset }
+        )
+
+        return Pair(sortedReal, sortedSim)
     }
 
     companion object {
-        const val CHANNEL_ID = "trading_spot_monitor_silent_v2"
+        const val CHANNEL_ID = "trading_foreground_monitor_channel"
         const val NOTIFICATION_ID = 9912
         const val ACTION_UPDATE = "agu.analys.ACTION_UPDATE_NOTIF"
-        const val ACTION_FORCE_REFRESH = "agu.analys.ACTION_FORCE_REFRESH"
         const val ACTION_STOP = "agu.analys.ACTION_STOP_SERVICE"
 
         val livePrices = ConcurrentHashMap<String, Double>()
-
-        fun isSymbolRelevant(context: Context, symbol: String): Boolean {
-            val prefs = AppPreferences(context)
-            val isReal = prefs.isRealBuyModeEnabled
-            val symUpper = symbol.uppercase()
-            val baseAsset = TradingPair.fromCustomSymbol(symUpper).baseAsset.uppercase()
-
-            if (!isReal) {
-                val wallet = SimulationTradeStore(context).getWallet()
-                val qty = wallet.coinBalances[baseAsset] ?: wallet.coinBalances[baseAsset.lowercase()] ?: 0.0
-                if (qty > 0.00000001) return true
-                val pos = SpotPositionStore(context).get(symUpper, isReal = false)
-                return pos.isHolding || pos.isTrailingEnabled
-            } else {
-                if (!prefs.hasIndodaxCredentials()) return false
-                val realBal = prefs.getSavedRealBalance()
-                val realQty = realBal[baseAsset.lowercase()] ?: realBal[baseAsset] ?: 0.0
-                if (realQty > 0.00000001) return true
-                val pos = SpotPositionStore(context).get(symUpper, isReal = true)
-                return (pos.isHolding && pos.quantity > 0.0) || pos.isTrailingEnabled
-            }
-        }
 
         fun startService(context: Context) {
             val prefs = AppPreferences(context)
@@ -384,32 +357,14 @@ class TradingForegroundService : Service() {
             } catch (_: Exception) {}
         }
 
-        fun forceRefresh(context: Context) {
-            val prefs = AppPreferences(context)
-            if (!prefs.isNotificationsEnabled) return
-            val intent = Intent(context, TradingForegroundService::class.java).apply {
-                action = ACTION_FORCE_REFRESH
-            }
-            try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    context.startForegroundService(intent)
-                } else {
-                    context.startService(intent)
-                }
-            } catch (_: Exception) {}
-        }
-
         fun updatePrice(context: Context, symbol: String, price: Double) {
             val prefs = AppPreferences(context)
             if (!prefs.isNotificationsEnabled) return
             val symUpper = symbol.uppercase()
             val oldPrice = livePrices[symUpper]
+            if (oldPrice == price) return // Avoid redundant notification redraw updates if price hasn't changed
+
             livePrices[symUpper] = price
-            if (oldPrice == price) return
-
-            // Hanya bangunkan Foreground Service jika koin ini relevan di mode aktif pengguna
-            if (!isSymbolRelevant(context, symUpper)) return
-
             val intent = Intent(context, TradingForegroundService::class.java).apply {
                 action = ACTION_UPDATE
             }
@@ -421,18 +376,15 @@ class TradingForegroundService : Service() {
         fun updatePrices(context: Context, prices: Map<String, Double>) {
             val prefs = AppPreferences(context)
             if (!prefs.isNotificationsEnabled) return
-            var relevantChanged = false
+            var changed = false
             for ((sym, price) in prices) {
                 val symUpper = sym.uppercase()
-                val oldPrice = livePrices[symUpper]
-                if (oldPrice != price) {
+                if (livePrices[symUpper] != price) {
                     livePrices[symUpper] = price
-                    if (!relevantChanged && isSymbolRelevant(context, symUpper)) {
-                        relevantChanged = true
-                    }
+                    changed = true
                 }
             }
-            if (relevantChanged) {
+            if (changed) {
                 val intent = Intent(context, TradingForegroundService::class.java).apply {
                     action = ACTION_UPDATE
                 }

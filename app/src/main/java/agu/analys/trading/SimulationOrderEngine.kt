@@ -18,9 +18,7 @@ object SimulationOrderEngine {
         baseKey: String,
         quote: String,
         execPrice: Double,
-        quantity: Double,
-        strategyMode: String = "SCALPING",
-        signalSnapshot: TradeSignalSnapshot? = null
+        quantity: Double
     ): Result<ExecutionResult> {
         val totalIdr = quantity * execPrice
         val feeIdr = totalIdr * INDODAX_TAKER_FEE_RATE
@@ -51,7 +49,6 @@ object SimulationOrderEngine {
             avgBuyPrices = newAvgMap
         )
 
-        val now = System.currentTimeMillis()
         val history = SimulationTradeHistoryItem(
             id = UUID.randomUUID().toString(),
             orderId = UUID.randomUUID().toString(),
@@ -64,12 +61,7 @@ object SimulationOrderEngine {
             quantity = quantity,
             totalIdr = totalIdr,
             feeIdr = feeIdr,
-            timestamp = now,
-            strategyMode = strategyMode,
-            holdingDurationMs = 0L,
-            entryPrice = execPrice,
-            entryTimestamp = now,
-            signalSnapshot = signalSnapshot
+            timestamp = System.currentTimeMillis()
         )
 
         val order = SimulationOrder(
@@ -86,11 +78,7 @@ object SimulationOrderEngine {
             filledAvgPrice = execPrice,
             feeIdr = feeIdr,
             status = SimulationOrderStatus.FILLED,
-            filledAt = now,
-            strategyMode = strategyMode,
-            entryPrice = execPrice,
-            entryTimestamp = now,
-            signalSnapshot = signalSnapshot
+            filledAt = System.currentTimeMillis()
         )
 
         return Result.success(ExecutionResult(updatedWallet, history, order))
@@ -102,21 +90,19 @@ object SimulationOrderEngine {
         baseKey: String,
         quote: String,
         execPrice: Double,
-        quantity: Double,
-        strategyMode: String = "SCALPING",
-        holdingDurationMs: Long? = null,
-        entryPrice: Double? = null,
-        entryTimestamp: Long? = null,
-        isTrailingUsed: Boolean = false,
-        trailingPercent: Double? = null,
-        trailingPeakPrice: Double? = null,
-        trailingLockPrice: Double? = null,
-        signalSnapshot: TradeSignalSnapshot? = null
+        quantity: Double
     ): Result<ExecutionResult> {
         val available = wallet.getAvailableCoin(baseKey)
-        val actualQty = if (quantity > available && (quantity - available) < 0.0001) available else quantity
+        // Toleransi absolut + relatif agar trailing/full-close tidak menyisakan dust
+        val qtyDiff = quantity - available
+        val actualQty = when {
+            quantity <= 0.0 || available <= 0.0 -> 0.0
+            qtyDiff <= 0.0 -> quantity
+            qtyDiff < 0.0001 || (available > 0.0 && qtyDiff / available < 1e-4) -> available
+            else -> quantity
+        }
 
-        if (available < actualQty) {
+        if (available < actualQty || actualQty <= 0.0) {
             return Result.failure(
                 IllegalArgumentException("Saldo $baseKey tidak cukup. Tersedia: ${wallet.getAvailableCoin(baseKey)}")
             )
@@ -125,25 +111,30 @@ object SimulationOrderEngine {
         val totalIdr = actualQty * execPrice
         val feeIdr = totalIdr * INDODAX_TAKER_FEE_RATE
         val netIdr = (totalIdr - feeIdr).coerceAtLeast(0.0)
-        val effectiveEntry = entryPrice ?: (wallet.avgBuyPrices[baseKey] ?: execPrice)
-        val costBasis = actualQty * effectiveEntry
+        val avgBuy = wallet.avgBuyPrices[baseKey] ?: execPrice
+        val costBasis = actualQty * avgBuy
         val pnlIdr = totalIdr - costBasis - feeIdr
         val pnlPercent = if (costBasis > 0.0) (pnlIdr / costBasis) * 100.0 else 0.0
 
         val newCoinBalances = wallet.coinBalances.toMutableMap()
+        val newAvgMap = wallet.avgBuyPrices.toMutableMap()
         val remaining = (newCoinBalances[baseKey] ?: 0.0) - actualQty
-        if (remaining <= 0.00000001) {
+        // Full close jika sisa dust (absolut atau relatif)
+        val isDustRemaining = remaining <= 0.00000001 ||
+            ((newCoinBalances[baseKey] ?: 0.0) > 0.0 && remaining / (newCoinBalances[baseKey] ?: 1.0) < 1e-6)
+        if (isDustRemaining) {
             newCoinBalances.remove(baseKey)
+            newAvgMap.remove(baseKey)
         } else {
             newCoinBalances[baseKey] = remaining
         }
 
         val updatedWallet = wallet.copy(
             idrBalance = wallet.idrBalance + netIdr,
-            coinBalances = newCoinBalances
+            coinBalances = newCoinBalances,
+            avgBuyPrices = newAvgMap
         )
 
-        val now = System.currentTimeMillis()
         val history = SimulationTradeHistoryItem(
             id = UUID.randomUUID().toString(),
             orderId = UUID.randomUUID().toString(),
@@ -153,21 +144,12 @@ object SimulationOrderEngine {
             side = SimulationOrderSide.SELL,
             type = SimulationOrderType.MARKET,
             executionPrice = execPrice,
-            quantity = quantity,
+            quantity = actualQty,
             totalIdr = totalIdr,
             feeIdr = feeIdr,
-            timestamp = now,
+            timestamp = System.currentTimeMillis(),
             pnlIdr = pnlIdr,
-            pnlPercent = pnlPercent,
-            strategyMode = strategyMode,
-            holdingDurationMs = holdingDurationMs,
-            entryPrice = effectiveEntry,
-            entryTimestamp = entryTimestamp,
-            isTrailingUsed = isTrailingUsed,
-            trailingPercent = trailingPercent,
-            trailingPeakPrice = trailingPeakPrice,
-            trailingLockPrice = trailingLockPrice,
-            signalSnapshot = signalSnapshot
+            pnlPercent = pnlPercent
         )
 
         val order = SimulationOrder(
@@ -178,21 +160,13 @@ object SimulationOrderEngine {
             side = SimulationOrderSide.SELL,
             type = SimulationOrderType.MARKET,
             limitPrice = execPrice,
-            quantity = quantity,
+            quantity = actualQty,
             totalIdr = totalIdr,
-            filledQuantity = quantity,
+            filledQuantity = actualQty,
             filledAvgPrice = execPrice,
             feeIdr = feeIdr,
             status = SimulationOrderStatus.FILLED,
-            filledAt = now,
-            strategyMode = strategyMode,
-            entryPrice = effectiveEntry,
-            entryTimestamp = entryTimestamp,
-            isTrailingUsed = isTrailingUsed,
-            trailingPercent = trailingPercent,
-            trailingPeakPrice = trailingPeakPrice,
-            trailingLockPrice = trailingLockPrice,
-            signalSnapshot = signalSnapshot
+            filledAt = System.currentTimeMillis()
         )
 
         return Result.success(ExecutionResult(updatedWallet, history, order))
