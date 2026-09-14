@@ -257,7 +257,7 @@ class TradingForegroundService : Service() {
             val baseLower = pair.baseAsset.lowercase()
             val baseUpper = pair.baseAsset.uppercase()
             val symUpper = pair.symbol.uppercase()
-            val pos = positionStore.get(pair.symbol)
+            val pos = positionStore.get(pair.symbol, isReal = true)
 
             val realQty = savedRealBalance[baseLower] ?: savedRealBalance[baseUpper] ?: 0.0
             val isHoldingInStore = pos.isHolding && pos.quantity > 0.0
@@ -276,7 +276,7 @@ class TradingForegroundService : Service() {
 
                 // Check jika koin di store sudah habis terjual di real
                 if (savedRealBalance.isNotEmpty() && isHoldingInStore && realQty <= 0.00000001) {
-                    positionStore.markSold(pair.symbol)
+                    positionStore.markSold(pair.symbol, isReal = true)
                     continue
                 }
 

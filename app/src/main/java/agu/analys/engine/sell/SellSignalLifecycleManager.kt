@@ -18,15 +18,20 @@ data class SellTransition(
 }
 
 object SellSignalLifecycleManager {
-    // Menyimpan state terakhir per symbol, HANYA untuk deteksi transisi (edge-trigger notifikasi)
+    // Menyimpan state terakhir per key (real/sim + symbol), HANYA untuk deteksi transisi (edge-trigger notifikasi)
     private val activeStates = ConcurrentHashMap<String, SellLifecycleState>()
     private val lock = ReentrantLock()
 
-    fun process(symbol: String, newState: SellSignalState): SellTransition = lock.withLock {
-        val previousState = activeStates[symbol] ?: SellLifecycleState.NOT_HOLDING
+    private fun buildKey(symbol: String, isReal: Boolean): String {
+        return "${if (isReal) "real" else "sim"}_${symbol.uppercase().trim()}"
+    }
+
+    fun process(symbol: String, newState: SellSignalState, isReal: Boolean = false): SellTransition = lock.withLock {
+        val key = buildKey(symbol, isReal)
+        val previousState = activeStates[key] ?: SellLifecycleState.NOT_HOLDING
         
         // Simpan state baru
-        activeStates[symbol] = newState.state
+        activeStates[key] = newState.state
 
         val isNewReadyToSell = previousState != SellLifecycleState.READY_TO_SELL && newState.state == SellLifecycleState.READY_TO_SELL
         val isNewTrailingTriggered = previousState != SellLifecycleState.TRAILING_TRIGGERED && newState.state == SellLifecycleState.TRAILING_TRIGGERED
@@ -41,7 +46,7 @@ object SellSignalLifecycleManager {
         )
     }
 
-    fun reset(symbol: String) = lock.withLock {
-        activeStates.remove(symbol)
+    fun reset(symbol: String, isReal: Boolean = false) = lock.withLock {
+        activeStates.remove(buildKey(symbol, isReal))
     }
 }

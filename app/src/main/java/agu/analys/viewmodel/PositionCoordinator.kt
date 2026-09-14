@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.asStateFlow
 class PositionCoordinator(
     private val positionStore: SpotPositionStore,
     private val alertStore: PriceAlertStore,
+    private val isRealProvider: () -> Boolean = { false },
     private val onPositionChanged: () -> Unit = {}
 ) {
     private val _positionVersion = MutableStateFlow(0L)
@@ -33,13 +34,14 @@ class PositionCoordinator(
 
     fun setSelectedSymbol(symbol: String) {
         currentSelectedSymbol = symbol
-        _spotPosition.value = positionStore.get(symbol)
+        val isReal = isRealProvider()
+        _spotPosition.value = positionStore.get(symbol, isReal)
         _priceAlerts.value = alertStore.getAlertsForSymbol(symbol)
         notifyPositionChange()
     }
 
-    fun getPosition(symbol: String): SpotPosition {
-        return positionStore.get(symbol)
+    fun getPosition(symbol: String, isReal: Boolean = isRealProvider()): SpotPosition {
+        return positionStore.get(symbol, isReal)
     }
 
     private fun notifyPositionChange() {
@@ -47,30 +49,49 @@ class PositionCoordinator(
         onPositionChanged()
     }
 
-    fun refreshPosition(symbol: String) {
-        if (currentSelectedSymbol.isBlank() || isSameSymbol(symbol, currentSelectedSymbol)) {
-            _spotPosition.value = positionStore.get(symbol)
+    fun refreshPosition(symbol: String = currentSelectedSymbol) {
+        val target = if (symbol.isNotBlank()) symbol else currentSelectedSymbol
+        val isReal = isRealProvider()
+        if (target.isNotBlank()) {
+            if (currentSelectedSymbol.isBlank() || isSameSymbol(target, currentSelectedSymbol)) {
+                _spotPosition.value = positionStore.get(target, isReal)
+            }
         }
         notifyPositionChange()
     }
 
-    fun refreshAlerts(symbol: String) {
-        if (currentSelectedSymbol.isBlank() || isSameSymbol(symbol, currentSelectedSymbol)) {
-            _priceAlerts.value = alertStore.getAlertsForSymbol(symbol)
+    fun refreshAlerts(symbol: String = currentSelectedSymbol) {
+        val target = if (symbol.isNotBlank()) symbol else currentSelectedSymbol
+        if (target.isNotBlank()) {
+            if (currentSelectedSymbol.isBlank() || isSameSymbol(target, currentSelectedSymbol)) {
+                _priceAlerts.value = alertStore.getAlertsForSymbol(target)
+            }
         }
     }
 
-    fun setOwnership(symbol: String, owned: Boolean, entryPrice: Double = 0.0, quantity: Double = 0.0, invested: Double = 0.0, isReal: Boolean = false) {
+    fun setOwnership(
+        symbol: String,
+        owned: Boolean,
+        entryPrice: Double = 0.0,
+        quantity: Double = 0.0,
+        invested: Double = 0.0,
+        isReal: Boolean = isRealProvider()
+    ) {
         if (owned) {
             positionStore.markBought(symbol, entryPrice, invested, quantity, isReal)
         } else {
-            positionStore.markSold(symbol)
-            agu.analys.engine.sell.SellSignalLifecycleManager.reset(symbol)
+            positionStore.markSold(symbol, isReal)
+            agu.analys.engine.sell.SellSignalLifecycleManager.reset(symbol, isReal)
         }
         refreshPosition(symbol)
     }
 
-    fun setManualEntry(symbol: String, price: Double, amount: Double, isReal: Boolean = false) {
+    fun setManualEntry(
+        symbol: String,
+        price: Double,
+        amount: Double,
+        isReal: Boolean = isRealProvider()
+    ) {
         positionStore.setManualEntryPrice(symbol, price, amount, isReal)
         refreshPosition(symbol)
     }
@@ -81,7 +102,8 @@ class PositionCoordinator(
         pct: Double,
         refPrice: Double,
         isTieredEnabled: Boolean = true,
-        customTiersJson: String? = null
+        customTiersJson: String? = null,
+        isReal: Boolean = isRealProvider()
     ) {
         positionStore.setTrailingStop(
             symbol = symbol,
@@ -89,23 +111,37 @@ class PositionCoordinator(
             trailingPercent = pct,
             referencePrice = refPrice,
             isTieredEnabled = isTieredEnabled,
-            customTiersJson = customTiersJson
+            customTiersJson = customTiersJson,
+            isReal = isReal
         )
         refreshPosition(symbol)
     }
 
-    fun setTrailingOrderIdAndUpdateTime(symbol: String, orderId: String?, updateTime: Long) {
-        positionStore.setTrailingOrderIdAndUpdateTime(symbol, orderId, updateTime)
+    fun setTrailingOrderIdAndUpdateTime(
+        symbol: String,
+        orderId: String?,
+        updateTime: Long,
+        isReal: Boolean = isRealProvider()
+    ) {
+        positionStore.setTrailingOrderIdAndUpdateTime(symbol, orderId, updateTime, isReal)
         refreshPosition(symbol)
     }
 
-    fun setAutoSell(symbol: String, enabled: Boolean, tp1: Double, tp1P: Double, tp2: Double, tp2P: Double) {
-        positionStore.setAutoSellParams(symbol, enabled, tp1, tp1P, tp2, tp2P)
+    fun setAutoSell(
+        symbol: String,
+        enabled: Boolean,
+        tp1: Double,
+        tp1P: Double,
+        tp2: Double,
+        tp2P: Double,
+        isReal: Boolean = isRealProvider()
+    ) {
+        positionStore.setAutoSellParams(symbol, enabled, tp1, tp1P, tp2, tp2P, isReal)
         refreshPosition(symbol)
     }
 
-    fun resetTrailing(symbol: String) {
-        positionStore.resetTrailingTrigger(symbol)
+    fun resetTrailing(symbol: String, isReal: Boolean = isRealProvider()) {
+        positionStore.resetTrailingTrigger(symbol, isReal)
         refreshPosition(symbol)
     }
 
@@ -124,13 +160,13 @@ class PositionCoordinator(
         refreshAlerts(symbol)
     }
 
-    fun checkAlertsAndTrailing(symbol: String, price: Double, rsi: Double?) {
+    fun checkAlertsAndTrailing(symbol: String, price: Double, rsi: Double?, isReal: Boolean = isRealProvider()) {
         val triggered = alertStore.checkAlerts(symbol, price)
         if (triggered.isNotEmpty()) refreshAlerts(symbol)
         
-        val pos = positionStore.get(symbol)
+        val pos = positionStore.get(symbol, isReal)
         if (pos.isTrailingEnabled) {
-            positionStore.updateTrailingPrice(symbol, price)
+            positionStore.updateTrailingPrice(symbol, price, isReal)
             refreshPosition(symbol)
         }
     }

@@ -55,16 +55,19 @@ data class PositionContext(
             spotPosition: SpotPosition?,
             holdingStatus: CoinHoldingStatus?,
             currentPrice: Double,
-            fees: TradingFeeConfig
+            fees: TradingFeeConfig,
+            currentModeIsReal: Boolean? = null
         ): PositionContext {
-            val isSpotHolding = spotPosition != null && spotPosition.isHolding && spotPosition.quantity > 0.00000001
-            val isHoldingStatusHolding = holdingStatus != null && holdingStatus.isHolding && holdingStatus.quantity > 0.00000001
+            val targetIsReal = currentModeIsReal ?: holdingStatus?.isReal ?: spotPosition?.isReal ?: false
+            val isSpotHolding = spotPosition != null && spotPosition.isHolding && spotPosition.isReal == targetIsReal && spotPosition.quantity > 0.00000001
+            val isHoldingStatusHolding = holdingStatus != null && holdingStatus.isHolding && holdingStatus.isReal == targetIsReal && holdingStatus.quantity > 0.00000001
 
             if (!isSpotHolding && !isHoldingStatusHolding) {
                 return PositionContext(
                     hasPosition = false,
                     symbol = symbol,
-                    currentPrice = if (currentPrice > 0.0 && currentPrice.isFinite()) currentPrice else null
+                    currentPrice = if (currentPrice > 0.0 && currentPrice.isFinite()) currentPrice else null,
+                    isReal = targetIsReal
                 )
             }
 
@@ -102,7 +105,7 @@ data class PositionContext(
 
             val trailingActive = if (isSpotHolding) spotPosition!!.isTrailingEnabled else (holdingStatus?.isTrailingEnabled == true)
             val isTrailingTrig = if (isSpotHolding) spotPosition!!.isTrailingTriggered else (holdingStatus?.isTrailingTriggered == true)
-            val isReal = if (isSpotHolding) spotPosition!!.isReal else (holdingStatus?.isReal ?: false)
+            val isReal = targetIsReal
 
             val validPrice = if (currentPrice > 0.0 && currentPrice.isFinite()) currentPrice else null
             val cost = if (entry != null && entry > 0.0) qty * entry else null

@@ -124,9 +124,9 @@ fun FocusCoinCard(
     val borderCol = TvBorder
     val cardBg = TvCardBackground
 
-    val (signalColor: Color, badgeBgColor: Color, badgeBorderColor: Color, badgeLabel: String) = when (signalType) {
+    val (signalColor, badgeBgColor, badgeBorderColor, badgeLabel) = when (signalType) {
         FocusSignalType.BUY -> {
-            Quadruple(
+            FocusSignalBadgeStyle(
                 primaryGreen,
                 primaryGreen.copy(alpha = 0.12f),
                 primaryGreen.copy(alpha = 0.8f),
@@ -134,7 +134,7 @@ fun FocusCoinCard(
             )
         }
         FocusSignalType.WATCH -> {
-            Quadruple(
+            FocusSignalBadgeStyle(
                 Color(0xFFFF9800), // Amber oranye presisi sinyal Watch
                 Color(0xFFFF9800).copy(alpha = 0.12f),
                 Color(0xFFFF9800).copy(alpha = 0.8f),
@@ -142,7 +142,7 @@ fun FocusCoinCard(
             )
         }
         FocusSignalType.SCANNING -> {
-            Quadruple(
+            FocusSignalBadgeStyle(
                 primaryCyan,
                 primaryCyan.copy(alpha = 0.10f),
                 primaryCyan.copy(alpha = 0.6f),
@@ -150,7 +150,7 @@ fun FocusCoinCard(
             )
         }
         FocusSignalType.HOLD -> {
-            Quadruple(
+            FocusSignalBadgeStyle(
                 textSec,
                 textSec.copy(alpha = 0.10f),
                 textSec.copy(alpha = 0.6f),
@@ -405,287 +405,3 @@ fun FocusCoinCard(
     }
 }
 
-/**
- * Capsule Orderbook Pressure sesuai gambar mockup:
- * - Pressure positif (cth: +62%): Bar Cyan/Teal terang + Teks "+62%" Cyan terang
- * - Pressure negatif (cth: -38%): Bar Merah/Oranye + Teks "-38%" Merah terang
- * - Pressure netral (cth: +8%): Bar Cyan/Teal soft + Teks "+8%" Cyan
- */
-@Composable
-private fun OrderbookPressureCapsule(
-    pressure: Int,
-    modifier: Modifier = Modifier
-) {
-    val cyanColor = TvCyan
-    val redColor = TvRed
-    val textSec = TvTextSecondary
-    val surfaceVar = TvSurfaceVariant
-
-    val (barColor, textColor, textVal) = when {
-        pressure > 0 -> Triple(cyanColor, cyanColor, "+$pressure%")
-        pressure < 0 -> Triple(redColor, redColor, "$pressure%")
-        else -> Triple(cyanColor.copy(alpha = 0.7f), textSec, "0%")
-    }
-
-    val absPressure = abs(pressure)
-    val fillRatio = (absPressure / 100f).coerceIn(0.12f, 1f)
-
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = modifier
-    ) {
-        // Capsule Bar Container
-        Box(
-            modifier = Modifier
-                .width(72.dp)
-                .height(5.dp)
-                .clip(RoundedCornerShape(2.5.dp))
-                .background(surfaceVar)
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .fillMaxWidth(fraction = fillRatio)
-                    .clip(RoundedCornerShape(2.5.dp))
-                    .background(barColor)
-            )
-        }
-
-        Spacer(modifier = Modifier.width(6.dp))
-
-        // Angka % Berwarna
-        Text(
-            text = textVal,
-            color = textColor,
-            fontSize = 11.5.sp,
-            fontWeight = FontWeight.Bold
-        )
-    }
-}
-
-/**
- * Segmented Progress Indicator (8 kotak kecil horizontal berdampingan)
- */
-@Composable
-private fun SegmentedConfidenceIndicator(
-    confidence: Int,
-    activeColor: Color,
-    totalSegments: Int = 8,
-    modifier: Modifier = Modifier
-) {
-    val inactiveColor = TvSurfaceVariant
-    val activeCount = if (confidence <= 0) 0 else {
-        ((confidence / 100f) * totalSegments).roundToInt().coerceIn(1, totalSegments)
-    }
-
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(2.5.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = modifier
-    ) {
-        for (i in 0 until totalSegments) {
-            val isActive = i < activeCount
-            Box(
-                modifier = Modifier
-                    .width(7.dp)
-                    .height(5.5.dp)
-                    .clip(RoundedCornerShape(1.dp))
-                    .background(if (isActive) activeColor else inactiveColor)
-            )
-        }
-    }
-}
-
-/**
- * Mini Volume Histogram Bars: 7 batang vertikal dengan variasi tinggi dinamis unik berdasarkan volume dan signature koin
- */
-@Composable
-private fun MiniVolumeHistogram(
-    symbol: String,
-    volume: Double,
-    maxVolume: Double,
-    color: Color,
-    modifier: Modifier = Modifier
-) {
-    val barHeights = remember(symbol, volume, maxVolume) {
-        val seed = abs(symbol.hashCode())
-        val ratio = if (maxVolume > 0) (volume / maxVolume).coerceIn(0.15, 1.0) else 0.5
-        // Tentukan 7 tinggi batang unik per koin (3dp sampai 16dp)
-        listOf(
-            (4 + ((seed % 5) * ratio * 2)).coerceIn(3.0, 16.0).dp,
-            (6 + (((seed / 3) % 7) * ratio * 2)).coerceIn(3.0, 16.0).dp,
-            (8 + (((seed / 7) % 6) * ratio * 2)).coerceIn(4.0, 16.0).dp,
-            (5 + (((seed / 11) % 8) * ratio * 2)).coerceIn(3.0, 16.0).dp,
-            (10 + (((seed / 13) % 5) * ratio * 2)).coerceIn(5.0, 16.0).dp,
-            (7 + (((seed / 17) % 7) * ratio * 2)).coerceIn(4.0, 16.0).dp,
-            (11 + (((seed / 19) % 5) * ratio * 2)).coerceIn(6.0, 16.0).dp
-        )
-    }
-
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(2.dp),
-        verticalAlignment = Alignment.Bottom,
-        modifier = modifier.height(16.dp)
-    ) {
-        barHeights.forEach { h ->
-            Box(
-                modifier = Modifier
-                    .width(3.dp)
-                    .height(h)
-                    .clip(RoundedCornerShape(topStart = 1.dp, topEnd = 1.dp))
-                    .background(color)
-            )
-        }
-    }
-}
-
-/**
- * Format Volume bersih tanpa embel-embel "IDR": misal "24.81B", "18.36B", "9.12M", "540.20K"
- */
-fun formatCardVolume(volume: Double): String {
-    val absVol = abs(volume)
-    return when {
-        absVol >= 1_000_000_000_000.0 -> String.format(Locale.US, "%.2fT", volume / 1_000_000_000_000.0)
-        absVol >= 1_000_000_000.0 -> String.format(Locale.US, "%.2fB", volume / 1_000_000_000.0)
-        absVol >= 1_000_000.0 -> String.format(Locale.US, "%.2fM", volume / 1_000_000.0)
-        absVol >= 1_000.0 -> String.format(Locale.US, "%.2fK", volume / 1_000.0)
-        absVol > 0.0 -> String.format(Locale.US, "%.0f", volume)
-        else -> "0"
-    }
-}
-
-/**
- * Format elapsed time (misal: "12s ago", "45s ago", "1m ago")
- */
-private fun formatTimeAgo(timestamp: Long): String {
-    val diffSec = (System.currentTimeMillis() - timestamp) / 1000
-    return when {
-        diffSec < 5 -> "just now"
-        diffSec < 60 -> "${diffSec}s ago"
-        diffSec < 3600 -> "${diffSec / 60}m ago"
-        else -> "${diffSec / 3600}h ago"
-    }
-}
-
-/**
- * Sintesis alasan teknikal 3 faktor: [MTF status] • [OB status] • [RSI status]
- */
-private fun formatTechnicalReason(
-    aiSignal: AISignalState?,
-    pressure: Int,
-    change24h: Double,
-    signalType: FocusSignalType,
-    rawReasons: String
-): String {
-    if (aiSignal != null && aiSignal.reasoning.isNotEmpty()) {
-        val clean = aiSignal.reasoning.filter { !it.contains("⚠️") && !it.contains("Tertahan") }
-        if (clean.size >= 2) {
-            return clean.take(3).joinToString(" • ")
-        }
-    }
-
-    val mtfPart = when (signalType) {
-        FocusSignalType.BUY -> "MTF aligned"
-        FocusSignalType.WATCH -> if (change24h < 0) "MTF mixed" else "MTF retesting"
-        FocusSignalType.SCANNING -> "MTF neutral"
-        FocusSignalType.HOLD -> "MTF consolidation"
-    }
-
-    val obPart = when {
-        pressure >= 40 -> "OB buy pressure"
-        pressure >= 10 -> "OB buy support"
-        pressure in -10..9 -> "OB balanced"
-        pressure in -35..-11 -> "OB sell resistance"
-        else -> "OB sell wall"
-    }
-
-    val rsiPart = when {
-        signalType == FocusSignalType.BUY && change24h > 0 -> "RSI reclaim"
-        signalType == FocusSignalType.BUY -> "RSI bullish"
-        signalType == FocusSignalType.WATCH && change24h < 0 -> "RSI cooling"
-        signalType == FocusSignalType.WATCH -> "RSI consolidation"
-        else -> if (abs(change24h) < 1.5) "RSI midrange" else "RSI momentum"
-    }
-
-    return "$mtfPart • $obPart • $rsiPart"
-}
-
-/**
- * Estimasi pressure awal dari data ticker real jika depth belum selesai ter-fetch
- */
-private fun deriveEstimatedPressure(
-    tick: MarketTick?,
-    signalType: FocusSignalType,
-    confidence: Int
-): Int {
-    if (tick == null) return if (signalType == FocusSignalType.BUY) 62 else if (signalType == FocusSignalType.WATCH) -38 else 8
-
-    val change = tick.change24h
-    return when {
-        signalType == FocusSignalType.BUY -> ((confidence * 0.8) + (change * 4)).roundToInt().coerceIn(25, 92)
-        signalType == FocusSignalType.WATCH && change < 0 -> ((change * 15) - 10).roundToInt().coerceIn(-85, -15)
-        signalType == FocusSignalType.WATCH -> ((change * 8) + 12).roundToInt().coerceIn(-40, 40)
-        else -> (change * 5).roundToInt().coerceIn(-25, 25)
-    }
-}
-
-/**
- * Evaluasi Sinyal Real
- */
-private fun evaluateSignalReal(data: FocusCoinCardData): Triple<FocusSignalType, Int, String> {
-    val aiSignal = data.aiSignal
-    val worth = data.worth
-    val tick = data.tick
-    val badges = data.badges
-
-    if (aiSignal != null) {
-        val type = when (aiSignal.action) {
-            SignalAction.BUY -> FocusSignalType.BUY
-            SignalAction.SELL -> FocusSignalType.WATCH
-            SignalAction.HOLD -> {
-                if (aiSignal.confidence == 0) FocusSignalType.HOLD
-                else if (aiSignal.confidence >= 50) FocusSignalType.WATCH
-                else FocusSignalType.HOLD
-            }
-        }
-        val reasons = if (aiSignal.reasoning.isNotEmpty()) {
-            aiSignal.reasoning.take(2).joinToString(" • ")
-        } else {
-            when {
-                aiSignal.confidence == 0 -> "Menunggu konfirmasi setup (0/4)"
-                aiSignal.action == SignalAction.HOLD -> "Hold • Menunggu trigger"
-                else -> "Setup engine aktif"
-            }
-        }
-        return Triple(type, aiSignal.confidence, reasons)
-    }
-
-    val score = worth?.worthScore ?: run {
-        val chg = tick?.change24h ?: 0.0
-        val vol = tick?.volume24h ?: 0.0
-        val volPart = if (vol >= 10_000_000_000.0) 30 else if (vol >= 1_000_000_000.0) 20 else 10
-        val momPart = if (chg >= 5.0) 40 else if (chg > 0.0) 25 else 10
-        (volPart + momPart).coerceIn(10, 95)
-    }
-
-    val change = tick?.change24h ?: 0.0
-
-    val signalType = when {
-        score >= 65 && change > 0.0 -> FocusSignalType.WATCH
-        score >= 45 -> FocusSignalType.SCANNING
-        else -> FocusSignalType.SCANNING
-    }
-
-    val tagList = mutableListOf<String>()
-    badges.firstOrNull()?.let { tagList.add(it.description) }
-    if (change >= 3.0) tagList.add("Momentum naik")
-    if (score >= 60) tagList.add("Volatil aktif")
-    if (tagList.isEmpty()) {
-        tagList.add(if (change >= 0.0) "Trend positif" else "Tekanan pasar")
-    }
-
-    val reasons = tagList.take(3).joinToString(" • ")
-    return Triple(signalType, score, reasons)
-}
-
-data class Quadruple<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)

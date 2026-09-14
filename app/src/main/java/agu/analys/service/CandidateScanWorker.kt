@@ -97,7 +97,7 @@ class CandidateScanWorker(
                         mode = StrategyMode.SWING
                     )
                     if (trackedSwing.transition?.hasTriggeringTransition == true && prefs.isNotificationsEnabled) {
-                        if (!positionStore.get(cleanSymbol).isHolding) {
+                        if (!positionStore.get(cleanSymbol, isReal = prefs.isRealBuyMode).isHolding) {
                             AlertNotificationHelper.sendCandidateFoundNotification(
                                 context = applicationContext,
                                 symbol = cleanSymbol,
@@ -121,7 +121,7 @@ class CandidateScanWorker(
                         mode = StrategyMode.OFFICE_DAILY
                     )
                     if (trackedOffice.transition?.hasTriggeringTransition == true && prefs.isNotificationsEnabled) {
-                        if (!positionStore.get(cleanSymbol).isHolding) {
+                        if (!positionStore.get(cleanSymbol, isReal = prefs.isRealBuyMode).isHolding) {
                             AlertNotificationHelper.sendCandidateFoundNotification(
                                 context = applicationContext,
                                 symbol = cleanSymbol,
@@ -155,7 +155,7 @@ class CandidateScanWorker(
                             mode = StrategyMode.SECOND_WAVE
                         )
                         if (trackedSecond.transition?.hasTriggeringTransition == true && prefs.isNotificationsEnabled) {
-                            if (!positionStore.get(cleanSymbol).isHolding) {
+                            if (!positionStore.get(cleanSymbol, isReal = prefs.isRealBuyMode).isHolding) {
                                 AlertNotificationHelper.sendCandidateFoundNotification(
                                     context = applicationContext,
                                     symbol = cleanSymbol,

@@ -112,6 +112,10 @@ class AppPreferences(context: Context) {
             .apply()
     }
 
+    var isRealBuyMode: Boolean
+        get() = prefs.getBoolean(KEY_REAL_BUY_MODE, false)
+        set(value) = prefs.edit().putBoolean(KEY_REAL_BUY_MODE, value).apply()
+
     var indodaxApiKey: String
         get() = prefs.getString(KEY_INDODAX_API_KEY, "").orEmpty()
         set(value) = prefs.edit().putString(KEY_INDODAX_API_KEY, value.trim()).apply()

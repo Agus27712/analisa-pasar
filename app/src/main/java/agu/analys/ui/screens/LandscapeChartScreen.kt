@@ -29,7 +29,7 @@ import agu.analys.model.MarketConnectionState
 import agu.analys.ui.components.MarketEmptyOrErrorState
 import agu.analys.ui.components.chart.TradingViewFullscreenChart
 import agu.analys.ui.theme.*
-import agu.analys.viewmodel.TradingViewModel
+import agu.analys.viewmodel.*
 
 @Composable
 fun LandscapeChartScreen(

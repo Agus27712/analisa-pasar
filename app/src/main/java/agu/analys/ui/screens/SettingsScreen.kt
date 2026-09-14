@@ -4,8 +4,6 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -13,22 +11,18 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import agu.analys.config.AiProvider
-import agu.analys.config.ScalpingSensitivity
 import agu.analys.config.StrategyMode
 import agu.analys.ui.components.security.SecurityPinDialog
 import agu.analys.ui.components.security.SetupRealApiDialog
@@ -36,61 +30,6 @@ import agu.analys.ui.components.settings.*
 import agu.analys.ui.theme.*
 import agu.analys.util.AppPreferences
 import agu.analys.viewmodel.*
-
-enum class SettingsCategory(
-    val title: String,
-    val subtitle: String,
-    val icon: ImageVector,
-    val accentColor: Color
-) {
-    TRADING(
-        title = "Strategi & Trading",
-        subtitle = "Mode sinyal, sensitivitas scalping, sumber pasar & fee transaksi",
-        icon = Icons.Default.TrendingUp,
-        accentColor = Color(0xFF3B82F6)
-    ),
-    WATCHLIST(
-        title = "Pair Watchlist & Koin",
-        subtitle = "Kustomisasi daftar pantau, cari koin, preset Top 10, Scalping & AI",
-        icon = Icons.Default.FormatListBulleted,
-        accentColor = Color(0xFF00BCD4)
-    ),
-    APPEARANCE(
-        title = "Tampilan, Tema & Animasi",
-        subtitle = "Palet tema (AMOLED/Dark/Light), warna aksen, candle & kecepatan animasi",
-        icon = Icons.Default.Palette,
-        accentColor = Color(0xFFFF9800)
-    ),
-    SECURITY(
-        title = "Keamanan & Kredensial API",
-        subtitle = "Mode Beli Real Indodax, PIN keamanan, API Key/Secret & IP Whitelist",
-        icon = Icons.Default.Shield,
-        accentColor = Color(0xFFEF4444)
-    ),
-    AI_ASSISTANT(
-        title = "AI Assistant & Engine",
-        subtitle = "Konfigurasi engine AI Groq (LLaMA-3) & Google Gemini",
-        icon = Icons.Default.SmartToy,
-        accentColor = Color(0xFF9C27B0)
-    ),
-    NOTIFICATIONS(
-        title = "Kategori Notifikasi Sistem",
-        subtitle = "Konfigurasi suara, getaran, lencana, & prioritas saluran sistem",
-        icon = Icons.Default.Notifications,
-        accentColor = Color(0xFFFF7043)
-    ),
-    SYSTEM(
-        title = "Sistem, Logcat & Pemeliharaan",
-        subtitle = "Logcat diagnostik, pembersihan cache & update rilis GitHub",
-        icon = Icons.Default.Settings,
-        accentColor = Color(0xFF10B981)
-    )
-}
-
-enum class PinDialogAction {
-    TOGGLE_REAL_BUY,
-    UNLOCK_ONLY
-}
 
 @Composable
 fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Modifier = Modifier) {
@@ -178,7 +117,6 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
         }
     }
 
-    // Android Hardware / Gesture Back Handler
     BackHandler(enabled = activeCategory != null) {
         activeCategory = null
     }
@@ -188,7 +126,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
             .fillMaxSize()
             .background(TvBackground)
     ) {
-        // TOP APP BAR (Native Android Settings Style)
+        // TOP APP BAR
         Surface(
             color = TvSurface,
             shadowElevation = 2.dp,
@@ -260,7 +198,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
             }
         }
 
-        // MAIN CONTENT (Switch between Preference Groups vs Sub-Setting Screen)
+        // MAIN CONTENT
         AnimatedContent(
             targetState = activeCategory,
             transitionSpec = {
@@ -275,7 +213,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
             modifier = Modifier.weight(1f)
         ) { category ->
             if (category == null) {
-                // ANDROID PREFERENCE MAIN SCREEN
+                // OVERVIEW PREFERENCE GROUPS
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
@@ -342,9 +280,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                             subtitle = "Mode ${strategyMode.name} · Sensitivitas ${sensitivity.name}",
                             onClick = { activeCategory = SettingsCategory.TRADING }
                         )
-
                         HorizontalDivider(color = TvBorder.copy(alpha = 0.5f), thickness = 0.5.dp)
-
                         AndroidPreferenceItem(
                             icon = Icons.Default.FormatListBulleted,
                             iconTint = Color(0xFF00BCD4),
@@ -353,9 +289,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                             subtitle = "${watchlistPairs.size} Pair dipantau · Cari koin & preset cepat",
                             onClick = { activeCategory = SettingsCategory.WATCHLIST }
                         )
-
                         HorizontalDivider(color = TvBorder.copy(alpha = 0.5f), thickness = 0.5.dp)
-
                         AndroidPreferenceItem(
                             icon = Icons.Default.ReceiptLong,
                             iconTint = Color(0xFFFFB300),
@@ -364,9 +298,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                             subtitle = "Maker ${buyMakerFee}% · Taker ${buyTakerFee}%",
                             onClick = { activeCategory = SettingsCategory.TRADING }
                         )
-
                         HorizontalDivider(color = TvBorder.copy(alpha = 0.5f), thickness = 0.5.dp)
-
                         AndroidPreferenceItem(
                             icon = Icons.Default.MenuBook,
                             iconTint = Color(0xFF00BCD4),
@@ -389,9 +321,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                             subtitle = "Tema: ${currentThemeStyle.displayName} · Aksen: ${currentAccentPreset.displayName}",
                             onClick = { activeCategory = SettingsCategory.APPEARANCE }
                         )
-
                         HorizontalDivider(color = TvBorder.copy(alpha = 0.5f), thickness = 0.5.dp)
-
                         AndroidPreferenceItem(
                             icon = Icons.Default.MotionPhotosAuto,
                             iconTint = TvBlue,
@@ -400,9 +330,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                             subtitle = "Kecepatan: ${currentAnimationSpeed.displayName.substringBefore(" ")} · Efek Pulse & Chart",
                             onClick = { activeCategory = SettingsCategory.APPEARANCE }
                         )
-
                         HorizontalDivider(color = TvBorder.copy(alpha = 0.5f), thickness = 0.5.dp)
-
                         AndroidPreferenceSwitchItem(
                             icon = if (isNotificationsEnabled) Icons.Default.NotificationsActive else Icons.Default.NotificationsOff,
                             iconTint = Color(0xFFFF7043),
@@ -412,10 +340,8 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                             checked = isNotificationsEnabled,
                             onCheckedChange = { viewModel.setNotificationsEnabled(it) }
                         )
-
                         if (isNotificationsEnabled) {
                             HorizontalDivider(color = TvBorder.copy(alpha = 0.5f), thickness = 0.5.dp)
-
                             AndroidPreferenceItem(
                                 icon = Icons.Default.Notifications,
                                 iconTint = Color(0xFFFF7043),
@@ -470,9 +396,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                             subtitle = "Periksa log trailing, koin, error, filter & ekspor log",
                             onClick = { activeCategory = SettingsCategory.SYSTEM }
                         )
-
                         HorizontalDivider(color = TvBorder.copy(alpha = 0.5f), thickness = 0.5.dp)
-
                         AndroidPreferenceItem(
                             icon = Icons.Default.SystemUpdate,
                             iconTint = TvBlue,
@@ -493,7 +417,6 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                         .verticalScroll(rememberScrollState())
                         .padding(horizontal = 14.dp, vertical = 12.dp)
                 ) {
-                    // Category Header Card
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(10.dp),
@@ -537,299 +460,94 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
 
                     Spacer(Modifier.height(14.dp))
 
-                    when (category) {
-                        SettingsCategory.TRADING -> {
-                            // 1. Trading Strategy Mode
-                            TradingModeSettings(
-                                strategyMode = strategyMode,
-                                sensitivity = sensitivity,
-                                onStrategyChange = { strategyMode = it; saved = false },
-                                onSensitivityChange = { sensitivity = it; saved = false }
-                            )
-
-                            Spacer(Modifier.height(14.dp))
-
-                            // 2. Exchange Market Source
-                            SectionHeader("SUMBER PASAR (EXCHANGE)")
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(10.dp),
-                                colors = CardDefaults.cardColors(containerColor = TvBlue.copy(alpha = 0.12f)),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, TvBlue)
-                            ) {
-                                Column(Modifier.padding(12.dp)) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Text(
-                                                text = "INDODAX",
-                                                color = TvBlue,
-                                                fontSize = 13.sp,
-                                                fontWeight = FontWeight.Black
-                                            )
-                                            Spacer(Modifier.width(6.dp))
-                                            Box(
-                                                modifier = Modifier
-                                                    .background(TvGreen.copy(alpha = 0.2f), RoundedCornerShape(4.dp))
-                                                    .padding(horizontal = 6.dp, vertical = 2.dp)
-                                            ) {
-                                                Text("LIVE API", color = TvGreen, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                                            }
-                                        }
-                                        Box(
-                                            modifier = Modifier
-                                                .size(10.dp)
-                                                .background(TvGreen, CircleShape)
-                                        )
-                                    }
-                                    Spacer(Modifier.height(4.dp))
-                                    Text(
-                                        text = "Indodax Public API · Kline WebSocket · Pasar Kripto Indonesia (Pair IDR)",
-                                        color = TvTextSecondary,
-                                        fontSize = 10.sp
-                                    )
-                                }
-                            }
-
-                            Spacer(Modifier.height(14.dp))
-
-                            // 3. Trading Fees
-                            TradingFeeSettings(
-                                buyMaker = buyMakerFee,
-                                buyTaker = buyTakerFee,
-                                sellMaker = sellMakerFee,
-                                sellTaker = sellTakerFee,
-                                onBuyMakerChange = { buyMakerFee = it; saved = false },
-                                onBuyTakerChange = { buyTakerFee = it; saved = false },
-                                onSellMakerChange = { sellMakerFee = it; saved = false },
-                                onSellTakerChange = { sellTakerFee = it; saved = false }
-                            )
-
-                            Spacer(Modifier.height(14.dp))
-
-                            // 4. Learning Path Module Card
-                            SectionHeader("MODUL EDUKASI & ANALISIS")
-                            Card(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { viewModel.openLearning() },
-                                shape = RoundedCornerShape(12.dp),
-                                colors = CardDefaults.cardColors(containerColor = TvCardBackground),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder)
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(14.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(40.dp)
-                                            .background(TvBlue.copy(alpha = 0.15f), CircleShape),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            Icons.Default.MenuBook,
-                                            contentDescription = null,
-                                            tint = TvBlue,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                    }
-                                    Spacer(Modifier.width(12.dp))
-                                    Column(Modifier.weight(1f)) {
-                                        Text(
-                                            "MODE BELAJAR ANALISIS PASAR",
-                                            color = TvBlue,
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.Black
-                                        )
-                                        Spacer(Modifier.height(2.dp))
-                                        Text(
-                                            "11 Materi: Candlestick, Support & Resistance, Structure HH/HL, Indikator, Risk Management.",
-                                            color = TvTextPrimary,
-                                            fontSize = 10.5.sp,
-                                            lineHeight = 14.sp
-                                        )
-                                        Spacer(Modifier.height(3.dp))
-                                        Text(
-                                            "Progress: ${completedLessons.size}/11 Materi selesai · Ketuk untuk membuka",
-                                            color = TvGreen,
-                                            fontSize = 9.5.sp,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
-                                    Icon(Icons.Default.ChevronRight, null, tint = TvBlue, modifier = Modifier.size(20.dp))
-                                }
-                            }
-                        }
-
-                        SettingsCategory.WATCHLIST -> {
-                            WatchlistManagerSettings(
-                                currentWatchlist = watchlistPairs,
-                                dashboardTicks = dashboardTicks,
-                                onAddPair = { sym -> viewModel.addToWatchlist(sym) },
-                                onRemovePair = { sym -> viewModel.removeFromWatchlist(sym) },
-                                onApplyPreset = { preset -> viewModel.applyWatchlistPreset(preset) },
-                                onClearAll = { viewModel.setCustomWatchlist(listOf("BTCIDR")) }
-                            )
-                        }
-
-                        SettingsCategory.APPEARANCE -> {
-                            ThemeAndVisualSettings(
-                                currentThemeStyle = currentThemeStyle,
-                                currentAccentPreset = currentAccentPreset,
-                                currentCandleStyle = currentCandleStyle,
-                                currentAnimationSpeed = currentAnimationSpeed,
-                                currentPriceAnimMode = currentPriceAnimationMode,
-                                isPriceTickPulseEnabled = isPriceTickPulseEnabled,
-                                isSmoothChartEnabled = isSmoothChartEnabled,
-                                priceFeedThrottleMs = priceFeedThrottleMs,
-                                isDarkTheme = isDarkTheme,
-                                onDarkThemeChange = { isDark -> viewModel.setDarkTheme(isDark) },
-                                onThemeStyleChange = { style -> viewModel.setThemeStyle(style) },
-                                onAccentChange = { preset -> viewModel.setAccentColorPreset(preset) },
-                                onCandleStyleChange = { candle -> viewModel.setCandleColorStyle(candle) },
-                                onAnimationSpeedChange = { speed -> viewModel.setAnimationSpeed(speed) },
-                                onPriceAnimModeChange = { mode -> viewModel.setPriceAnimationMode(mode) },
-                                onPriceTickPulseChange = { pulse -> viewModel.setPriceTickPulseEnabled(pulse) },
-                                onSmoothChartChange = { smooth -> viewModel.setSmoothChartEnabled(smooth) },
-                                onThrottleChange = { ms ->
-                                    priceFeedThrottleMs = ms
-                                    viewModel.setUiPriceThrottleMs(ms)
-                                    saved = false
-                                }
-                            )
-                        }
-
-                        SettingsCategory.SECURITY -> {
-                            // 1. Real Buy Mode & PIN Security
-                            SectionHeader("KEAMANAN & EKSEKUSI INDODAX")
-                            RealBuyModeAndSecurityCard(
-                                isRealBuyMode = isRealBuyMode,
-                                hasPin = hasPin,
-                                hasApiCredentials = prefs.hasIndodaxCredentials(),
-                                isPinUnlocked = isPinUnlocked,
-                                userPublicIp = userPublicIp ?: "Detecting...",
-                                failedPinAttempts = failedPinAttempts,
-                                onToggleRealBuyMode = {
-                                    if (!isRealBuyMode) {
-                                        if (!hasPin || !prefs.hasIndodaxCredentials()) {
-                                            showSetupRealApiDialog = true
-                                        } else {
-                                            pinDialogAction = PinDialogAction.TOGGLE_REAL_BUY
-                                            pinDialogError = null
-                                            pendingRealBuyToggle = true
-                                            showPinDialog = true
-                                        }
-                                    } else {
-                                        viewModel.setRealBuyMode(false, "")
-                                        Toast.makeText(context, "Mode beralih ke SIMULASI.", Toast.LENGTH_SHORT).show()
-                                    }
-                                },
-                                onOpenSetupDialog = {
+                    SettingsCategoryDetailContent(
+                        category = category,
+                        context = context,
+                        viewModel = viewModel,
+                        strategyMode = strategyMode,
+                        onStrategyModeChange = { strategyMode = it; saved = false },
+                        sensitivity = sensitivity,
+                        onSensitivityChange = { sensitivity = it; saved = false },
+                        buyMakerFee = buyMakerFee,
+                        onBuyMakerFeeChange = { buyMakerFee = it; saved = false },
+                        buyTakerFee = buyTakerFee,
+                        onBuyTakerFeeChange = { buyTakerFee = it; saved = false },
+                        sellMakerFee = sellMakerFee,
+                        onSellMakerFeeChange = { sellMakerFee = it; saved = false },
+                        sellTakerFee = sellTakerFee,
+                        onSellTakerFeeChange = { sellTakerFee = it; saved = false },
+                        completedLessonsCount = completedLessons.size,
+                        watchlistPairs = watchlistPairs,
+                        dashboardTicks = dashboardTicks,
+                        currentThemeStyle = currentThemeStyle,
+                        currentAccentPreset = currentAccentPreset,
+                        currentCandleStyle = currentCandleStyle,
+                        currentAnimationSpeed = currentAnimationSpeed,
+                        currentPriceAnimationMode = currentPriceAnimationMode,
+                        isPriceTickPulseEnabled = isPriceTickPulseEnabled,
+                        isSmoothChartEnabled = isSmoothChartEnabled,
+                        priceFeedThrottleMs = priceFeedThrottleMs,
+                        isDarkTheme = isDarkTheme,
+                        onThrottleChange = { ms ->
+                            priceFeedThrottleMs = ms
+                            viewModel.setUiPriceThrottleMs(ms)
+                            saved = false
+                        },
+                        isRealBuyMode = isRealBuyMode,
+                        hasPin = hasPin,
+                        hasApiCredentials = prefs.hasIndodaxCredentials(),
+                        isPinUnlocked = isPinUnlocked,
+                        userPublicIp = userPublicIp ?: "Detecting...",
+                        failedPinAttempts = failedPinAttempts,
+                        onToggleRealBuyMode = {
+                            if (!isRealBuyMode) {
+                                if (!hasPin || !prefs.hasIndodaxCredentials()) {
                                     showSetupRealApiDialog = true
-                                },
-                                onRequirePinUnlock = {
-                                    pinDialogAction = PinDialogAction.UNLOCK_ONLY
+                                } else {
+                                    pinDialogAction = PinDialogAction.TOGGLE_REAL_BUY
                                     pinDialogError = null
+                                    pendingRealBuyToggle = true
                                     showPinDialog = true
-                                },
-                                onWipeCredentials = {
-                                    viewModel.wipeSecurityCredentials()
-                                    hasPin = false
-                                    Toast.makeText(context, "Seluruh Kredensial API & PIN berhasil dihapus.", Toast.LENGTH_SHORT).show()
-                                },
-                                onCheckPublicIp = { viewModel.checkPublicIp() }
-                            )
-                        }
-
-                        SettingsCategory.AI_ASSISTANT -> {
-                            AiAssistantSettings(
-                                provider = provider,
-                                groqKey = groq,
-                                geminiKey = gemini,
-                                onProviderChange = { provider = it; saved = false },
-                                onKeyChange = {
-                                    if (provider == AiProvider.GROQ) groq = it else gemini = it
-                                    saved = false
                                 }
-                            )
-                        }
-
-                        SettingsCategory.NOTIFICATIONS -> {
-                            SectionHeader("PREFERENSI NOTIFIKASI APLIKASI")
-                            Text(
-                                text = "Aktifkan atau matikan notifikasi spesifik di bawah ini agar Anda hanya menerima informasi peringatan yang Anda inginkan.",
-                                color = TvTextSecondary,
-                                fontSize = 11.sp,
-                                lineHeight = 15.sp,
-                                modifier = Modifier.padding(bottom = 12.dp)
-                            )
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(12.dp),
-                                colors = CardDefaults.cardColors(containerColor = TvCardBackground),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder)
-                            ) {
-                                Column {
-                                    AndroidPreferenceSwitchItem(
-                                        icon = Icons.Default.NotificationsActive,
-                                        iconTint = Color(0xFFFF7043),
-                                        iconBackground = Color(0xFFFF7043).copy(alpha = 0.15f),
-                                        title = "Trading & Price Alerts",
-                                        subtitle = "Notifikasi harga target, sinyal strategi, dan trailing stop loss",
-                                        checked = isNotifyPriceAlertsEnabled,
-                                        onCheckedChange = { viewModel.setNotifyPriceAlertsEnabled(it) }
-                                    )
-                                    HorizontalDivider(color = TvBorder.copy(alpha = 0.5f), thickness = 0.5.dp)
-                                    AndroidPreferenceSwitchItem(
-                                        icon = Icons.Default.NotificationsActive,
-                                        iconTint = Color(0xFFFF7043),
-                                        iconBackground = Color(0xFFFF7043).copy(alpha = 0.15f),
-                                        title = "Notifikasi Pair Ready & Sinyal Buy",
-                                        subtitle = "Sinyal koin kandidat strategi yang siap entry / buy",
-                                        checked = isNotifyCandidateBuyEnabled,
-                                        onCheckedChange = { viewModel.setNotifyCandidateBuyEnabled(it) }
-                                    )
-                                    HorizontalDivider(color = TvBorder.copy(alpha = 0.5f), thickness = 0.5.dp)
-                                    AndroidPreferenceSwitchItem(
-                                        icon = Icons.Default.NotificationsActive,
-                                        iconTint = Color(0xFFFF7043),
-                                        iconBackground = Color(0xFFFF7043).copy(alpha = 0.15f),
-                                        title = "Notifikasi Trailing Stop & Eksekusi",
-                                        subtitle = "Sinyal penting trailing profit, stop loss, dan eksekusi jual otomatis",
-                                        checked = isNotifyTrailingStopEnabled,
-                                        onCheckedChange = { viewModel.setNotifyTrailingStopEnabled(it) }
-                                    )
-                                }
+                            } else {
+                                viewModel.setRealBuyMode(false, "")
+                                Toast.makeText(context, "Mode beralih ke SIMULASI.", Toast.LENGTH_SHORT).show()
                             }
-                        }
-
-                        SettingsCategory.SYSTEM -> {
-                            SectionHeader("PEMELIHARAAN & UPDATE")
-                            AppMaintenanceCard(
-                                context = context,
-                                cacheCleared = cacheCleared,
-                                onClearCache = { cacheCleared = true },
-                                updateRepo = updateRepo,
-                                onUpdateRepoChange = { updateRepo = it; saved = false },
-                                updateToken = updateToken,
-                                onUpdateTokenChange = { updateToken = it; saved = false },
-                                releaseInfo = releaseInfo,
-                                checkingUpdate = checkingUpdate,
-                                updateStatus = updateStatus,
-                                downloadProgress = downloadProgress,
-                                onCheckUpdate = { viewModel.checkGitHubUpdate(context, updateRepo, updateToken) },
-                                onDownloadAndInstall = { viewModel.downloadAndInstallUpdate(context, updateRepo, updateToken) }
-                            )
-                        }
-                    }
+                        },
+                        onOpenSetupDialog = { showSetupRealApiDialog = true },
+                        onRequirePinUnlock = {
+                            pinDialogAction = PinDialogAction.UNLOCK_ONLY
+                            pinDialogError = null
+                            showPinDialog = true
+                        },
+                        onWipeCredentials = {
+                            viewModel.wipeSecurityCredentials()
+                            hasPin = false
+                            Toast.makeText(context, "Seluruh Kredensial API & PIN berhasil dihapus.", Toast.LENGTH_SHORT).show()
+                        },
+                        provider = provider,
+                        onProviderChange = { provider = it; saved = false },
+                        groq = groq,
+                        onGroqChange = { groq = it; saved = false },
+                        gemini = gemini,
+                        onGeminiChange = { gemini = it; saved = false },
+                        isNotifyPriceAlertsEnabled = isNotifyPriceAlertsEnabled,
+                        isNotifyCandidateBuyEnabled = isNotifyCandidateBuyEnabled,
+                        isNotifyTrailingStopEnabled = isNotifyTrailingStopEnabled,
+                        cacheCleared = cacheCleared,
+                        onClearCache = { cacheCleared = true },
+                        updateRepo = updateRepo,
+                        onUpdateRepoChange = { updateRepo = it; saved = false },
+                        updateToken = updateToken,
+                        onUpdateTokenChange = { updateToken = it; saved = false },
+                        releaseInfo = releaseInfo,
+                        checkingUpdate = checkingUpdate,
+                        updateStatus = updateStatus,
+                        downloadProgress = downloadProgress
+                    )
 
                     Spacer(Modifier.height(18.dp))
 
-                    // Bottom Save Button
                     Button(
                         onClick = { saveAllSettings(true) },
                         modifier = Modifier
@@ -913,145 +631,6 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                 pendingRealBuyToggle = false
                 pinDialogError = null
             }
-        )
-    }
-}
-
-@Composable
-fun AndroidSettingsGroup(
-    title: String,
-    content: @Composable ColumnScope.() -> Unit
-) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Text(
-            text = title,
-            color = TvTextSecondary,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(start = 4.dp, bottom = 6.dp)
-        )
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = TvSurfaceVariant),
-            border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder)
-        ) {
-            Column(content = content)
-        }
-    }
-}
-
-@Composable
-fun AndroidPreferenceItem(
-    icon: ImageVector,
-    iconTint: Color,
-    iconBackground: Color,
-    title: String,
-    subtitle: String,
-    onClick: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .size(36.dp)
-                .background(iconBackground, RoundedCornerShape(8.dp)),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = iconTint,
-                modifier = Modifier.size(19.dp)
-            )
-        }
-        Spacer(Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                color = TvTextPrimary,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(Modifier.height(1.dp))
-            Text(
-                text = subtitle,
-                color = TvTextSecondary,
-                fontSize = 11.sp,
-                lineHeight = 14.sp
-            )
-        }
-        Icon(
-            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-            contentDescription = null,
-            tint = TvTextSecondary,
-            modifier = Modifier.size(20.dp)
-        )
-    }
-}
-
-
-
-@Composable
-fun AndroidPreferenceSwitchItem(
-    icon: ImageVector,
-    iconTint: Color,
-    iconBackground: Color,
-    title: String,
-    subtitle: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onCheckedChange(!checked) }
-            .padding(horizontal = 14.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .size(36.dp)
-                .background(iconBackground, RoundedCornerShape(8.dp)),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = iconTint,
-                modifier = Modifier.size(19.dp)
-            )
-        }
-        Spacer(Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                color = TvTextPrimary,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(Modifier.height(1.dp))
-            Text(
-                text = subtitle,
-                color = TvTextSecondary,
-                fontSize = 11.sp,
-                lineHeight = 14.sp
-            )
-        }
-        Switch(
-            checked = checked,
-            onCheckedChange = onCheckedChange,
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = Color.Black,
-                checkedTrackColor = TvGreen,
-                uncheckedThumbColor = TvTextSecondary,
-                uncheckedTrackColor = TvSurface
-            )
         )
     }
 }
