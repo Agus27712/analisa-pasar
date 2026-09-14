@@ -186,11 +186,12 @@ object SwingEvaluator {
         if (detectedSetup == SwingSetup.NONE) {
             if (solidBreakout || bosBreakout) {
                 detectedSetup = SwingSetup.BREAKOUT
-                setupScore = if (strongVolume) 30.0 else 22.0
-                reasons += "BREAKOUT: harga tembus Resistance Rp ${fmtPrice(resistanceLevel)} dengan candle solid${if (strongVolume) " + volume ${fmt(volumeRatio)}×" else ""}."
+                // FIX: skor breakout instan diturunkan; prefer retest (win-rate lebih tinggi)
+                setupScore = if (strongVolume) 24.0 else 16.0
+                reasons += "BREAKOUT: harga tembus Resistance Rp ${fmtPrice(resistanceLevel)} dengan candle solid${if (strongVolume) " + volume ${fmt(volumeRatio)}×" else ""} (lebih aman tunggu retest)."
             } else if (solidBreakdown || bosBreakdown) {
                 detectedSetup = SwingSetup.BREAKOUT
-                setupScore = if (strongVolume) 28.0 else 20.0
+                setupScore = if (strongVolume) 22.0 else 14.0
                 reasons += "BREAKDOWN: harga tembus Support Rp ${fmtPrice(supportLevel)} dengan candle solid${if (strongVolume) " + volume ${fmt(volumeRatio)}×" else ""}."
             }
         }
@@ -211,12 +212,12 @@ object SwingEvaluator {
                 reasons += "RETEST Resistance gagal: level Rp ${fmtPrice(resistanceLevel)} ditolak lagi setelah pernah tembus."
             } else if (hadBreakBelow && nearSupport && (rejectionAtSupport || (isBullCandle && bodyRatio >= 0.35))) {
                 detectedSetup = SwingSetup.RETEST
-                setupScore = 24.0
+                setupScore = 28.0
                 reasons += "RETEST Support: harga balik ngetes Rp ${fmtPrice(supportLevel)} setelah breakdown lalu ditolak (support hold)."
             } else if (price > resistanceLevel * 0.995 && price < resistanceLevel * 1.025 && isBullCandle && strongVolume) {
                 // Retest dari atas (resistance become support)
                 detectedSetup = SwingSetup.RETEST
-                setupScore = 26.0
+                setupScore = 30.0
                 reasons += "RETEST: Resistance lama jadi Support. Harga ditolak naik dari area Rp ${fmtPrice(resistanceLevel)}."
             }
         }

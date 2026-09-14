@@ -27,11 +27,19 @@ data class OfficeDailyEvalResult(
 )
 
 /**
- * OFFICE DAILY TRADING STRATEGY EVALUATOR
- * Strategi santai & presisi untuk pekerja kantoran:
- * - Timeframe: H4 / 1D Makro + H1 Pullback
- * - Disiplin: Trend Following, Base Accumulation, High R:R (>= 1.8:1), Low Noise.
- * - Tidak memerlukan pantauan chart konstan di jam kerja.
+ * OFFICE DAILY TRADING STRATEGY EVALUATOR (FIXED)
+ *
+ * Filosofi: Santai & presisi untuk pekerja kantoran.
+ * - Timeframe intended: H4 / 1D Makro (bukan H1 noise)
+ * - Trend Following + Base Accumulation
+ * - High R:R (>= 1.8:1 net), Low Noise
+ * - Hindari entry di pucuk (filter jarak ke recent high + ATR extension)
+ *
+ * FIXES (Sep 2026):
+ * 1. isOverbought dead-code dihilangkan (price >= price*1.085 mustahil)
+ * 2. Tambah filter distance-to-recent-high & ATR extension → cegah "beli di pucuk"
+ * 3. R:R minimum dinaikkan ke 1.8 net
+ * 4. RSI sweet-spot lebih ketat di zona akumulasi
  */
 object OfficeDailyEvaluator {
 
@@ -98,6 +106,7 @@ object OfficeDailyEvaluator {
         }
 
         val closes = history.map { it.close }
+        val highs = history.map { it.high }
         val rsi = IndicatorMath.rsi(history, min(14, history.size - 1))
         val ema20 = IndicatorMath.ema(closes, min(20, closes.size))
         val ema50 = IndicatorMath.ema(closes, min(50, closes.size))
@@ -120,33 +129,47 @@ object OfficeDailyEvaluator {
         val reasons = mutableListOf<String>()
         reasons += "Kondisi Pasar: $regime (Office Daily Mode)."
 
+        // ── Recent high / extension filter (FIX: cegah beli di pucuk) ────────
+        val lookbackHigh = min(30, highs.size)
+        val recentHigh = highs.takeLast(lookbackHigh).maxOrNull() ?: price
+        val effectiveAtr = if (atr.isFinite() && atr > 0.0) atr else (price * 0.04)
+        val distToHighPct = if (recentHigh > 0.0) (recentHigh - price) / recentHigh else 1.0
+        val mean20 = closes.takeLast(min(20, closes.size)).average()
+        val atrExtension = if (effectiveAtr > 0.0) (price - mean20) / effectiveAtr else 0.0
+
+        // Terlalu dekat high lokal (< 1.2% dari recent high) → berbahaya untuk Office Daily
+        val tooCloseToHigh = distToHighPct < 0.012
+        // Harga sudah extended > 1.8 ATR di atas mean 20 → overextended
+        val isOverExtended = atrExtension > 1.8
+
         // 1. Trend & Moving Average Alignment
         val isUptrend = indicators.ema20.isFinite() && indicators.ema50.isFinite() && (ema20 > ema50) && (price >= ema50 * 0.985)
         val isGoldenCross = ema20 > ema50 && closes.takeLast(5).firstOrNull()?.let { it <= ema50 } ?: false
         val isDowntrend = indicators.ema20.isFinite() && indicators.ema50.isFinite() && (ema20 < ema50 && price < ema20)
 
         when {
-            isUptrend -> { buyScore += 30; reasons += "Tren makro solid (EMA20 > EMA50, harga di atas support dinamis)." }
-            isGoldenCross -> { buyScore += 25; reasons += "Baru terjadi Golden Cross EMA harian." }
+            isUptrend -> { buyScore += 28; reasons += "Tren makro solid (EMA20 > EMA50, harga di atas support dinamis)." }
+            isGoldenCross -> { buyScore += 22; reasons += "Baru terjadi Golden Cross EMA." }
             isDowntrend -> { sellScore += 30; reasons += "Tren makro bearish (EMA20 < EMA50). Hindari buy santai." }
             else -> reasons += "Tren berkonsolidasi, menunggu arah tren tegas."
         }
 
-        // 2. RSI Sweet Spot (40-62 adalah zona akumulasi & pullback terbaik untuk swing santai)
+        // 2. RSI Sweet Spot (lebih ketat: 40-58 ideal untuk akumulasi Office Daily)
         when {
-            rsi in 42.0..62.0 -> { buyScore += 25; reasons += "RSI ${fmt(rsi)} berada di zona akumulasi ideal." }
-            rsi in 30.0..42.0 && macdHist > 0 -> { buyScore += 20; reasons += "RSI oversold rebound dengan momentum positif." }
-            rsi > 72.0 -> { sellScore += 25; reasons += "RSI ${fmt(rsi)} overbought (potensi koreksi harian)." }
-            rsi < 30.0 -> { buyScore += 15; reasons += "RSI ${fmt(rsi)} jenuh jual (peluang rebound)." }
+            rsi in 40.0..58.0 -> { buyScore += 26; reasons += "RSI ${fmt(rsi)} di zona akumulasi ideal (Office Daily)." }
+            rsi in 30.0..40.0 && macdHist > 0 -> { buyScore += 18; reasons += "RSI oversold rebound dengan momentum positif." }
+            rsi in 58.0..68.0 -> { buyScore += 8; reasons += "RSI ${fmt(rsi)} masih OK tapi mendekati zona tinggi." }
+            rsi > 72.0 -> { sellScore += 28; reasons += "RSI ${fmt(rsi)} overbought (potensi koreksi)." }
+            rsi < 30.0 -> { buyScore += 12; reasons += "RSI ${fmt(rsi)} jenuh jual (peluang rebound)." }
             else -> reasons += "RSI ${fmt(rsi)} netral."
         }
 
         // 3. MACD Momentum
         if (macdHist > 0) {
-            buyScore += 20
+            buyScore += 18
             reasons += "Histogram MACD positif (+${fmt(macdHist)})."
         } else {
-            sellScore += 15
+            sellScore += 14
             reasons += "Histogram MACD negatif (${fmt(macdHist)})."
         }
 
@@ -155,7 +178,7 @@ object OfficeDailyEvaluator {
         val isBearishStructure = structure.trend.contains("Bear", true)
         if (structure.dataEnough) {
             when {
-                isBullishStructure -> { buyScore += 20; reasons += "Struktur chart: Higher-High & Higher-Low stabil." }
+                isBullishStructure -> { buyScore += 18; reasons += "Struktur chart: Higher-High & Higher-Low stabil." }
                 isBearishStructure -> { sellScore += 20; reasons += "Struktur chart: Lower-Low (Risiko penurunan)." }
             }
         }
@@ -163,41 +186,50 @@ object OfficeDailyEvaluator {
         // 5. Pola Candlestick
         pattern?.let {
             if (it.contains("Bullish", true) || it.contains("Hammer", true) || it.contains("Morning", true)) {
-                buyScore += 15; reasons += "Pola Reversal: $it."
+                buyScore += 12; reasons += "Pola Reversal: $it."
             } else if (it.contains("Bearish", true) || it.contains("Shooting", true) || it.contains("Evening", true)) {
-                sellScore += 15; reasons += "Pola Pelemahan: $it."
+                sellScore += 14; reasons += "Pola Pelemahan: $it."
             }
         }
 
-        // 6. Level SL & TP
-        val effectiveAtr = if (atr.isFinite() && atr > 0.0) atr else (price * 0.04)
+        // 6. Level SL & TP (lebih konservatif)
         val supportLevel = structure.support?.takeIf { it > 0.0 && it < price }
             ?: (price - effectiveAtr * 1.6)
 
         val calculatedSl = maxOf(
-            supportLevel - (effectiveAtr * 0.3),
-            price - (effectiveAtr * 1.8),
-            price * 0.935
-        ).coerceAtMost(price * 0.985)
+            supportLevel - (effectiveAtr * 0.35),
+            price - (effectiveAtr * 2.0),
+            price * 0.93
+        ).coerceAtMost(price * 0.982)
 
-        val calculatedTp1 = price * 1.085
-        val calculatedTp2 = price * 1.185
+        // TP berbasis struktur + ATR, bukan fixed % semata
+        val resistanceHint = structure.resistance?.takeIf { it > price } ?: (price + effectiveAtr * 2.8)
+        val calculatedTp1 = maxOf(price * 1.09, resistanceHint, price + effectiveAtr * 2.2)
+        val calculatedTp2 = maxOf(calculatedTp1 * 1.07, price * 1.18, price + effectiveAtr * 3.6)
 
         val feeResult = FeeCalculator.roundTrip(price, calculatedSl, calculatedTp2, fees)
         val netRr = feeResult.netRr.coerceAtLeast(1.8)
         val rrString = "1:${fmt(netRr)}"
 
-        // --- 1. DANGER & INVALIDATION CHECKS (DI ATAS) ---
-        val isOverbought = rsi >= 74.0 || price >= calculatedTp1
-        val isDistribution = sellScore >= 50.0 && sellScore > buyScore * 1.2
-        val isBreakdown = isBearishStructure || isDowntrend || (price < supportLevel * 0.96)
-        val isDangerous = isOverbought || isDistribution || isBreakdown
+        // ── DANGER & INVALIDATION (FIXED) ───────────────────────────────────
+        // RSI overbought nyata
+        val isRsiOverbought = rsi >= 72.0
+        // Jarak ke high lokal terlalu kecil (FIX utama kasus XRP 9 Sep)
+        val isNearHighDanger = tooCloseToHigh || isOverExtended
+        // Distribusi / breakdown
+        val isDistribution = sellScore >= 48.0 && sellScore > buyScore * 1.15
+        val isBreakdown = isBearishStructure || isDowntrend || (price < supportLevel * 0.965)
+        val isDangerous = isRsiOverbought || isNearHighDanger || isDistribution || isBreakdown
 
-        // --- 2. WATERFALL CHECKPOINTS ---
+        if (isNearHighDanger) {
+            reasons.add(0, "⚠️ Tertahan: Harga terlalu dekat recent high (Rp ${fmtPrice(recentHigh)}) / overextended. Hindari beli di pucuk.")
+        }
+
+        // ── WATERFALL CHECKPOINTS ───────────────────────────────────────────
         val step1Ok = !isDangerous && isUptrend && !isBearishStructure && !isDowntrend
-        val step2Ok = step1Ok && (price >= supportLevel * 0.99)
-        val step3Ok = step2Ok && (rsi in 38.0..65.0) && macdHist >= -0.001
-        val step4Ok = step3Ok && netRr >= 1.7 && buyScore >= 50.0
+        val step2Ok = step1Ok && (price >= supportLevel * 0.988) && !tooCloseToHigh
+        val step3Ok = step2Ok && (rsi in 36.0..62.0) && macdHist >= -0.002
+        val step4Ok = step3Ok && netRr >= 1.8 && buyScore >= 52.0 && !isOverExtended
 
         val completedSteps = when {
             step4Ok -> 4
@@ -208,41 +240,42 @@ object OfficeDailyEvaluator {
         }
 
         // ── Keputusan akhir ────────────────────────────────
-        val isQualified = step4Ok && buyScore >= 55.0 && buyScore > sellScore * 1.3
+        val isQualified = step4Ok && buyScore >= 58.0 && buyScore > sellScore * 1.35 && !isNearHighDanger
         val finalAction = when {
             isQualified && !isDangerous -> SignalAction.BUY
             else -> SignalAction.HOLD
         }
 
-        if (isDangerous) {
+        if (isDangerous && !isNearHighDanger) {
             when {
-                isOverbought -> reasons.add(0, if (price >= calculatedTp1) "⚠️ Tertahan: Target harga tercapai di Rp ${fmtPrice(calculatedTp1)} (Overextended)." else "⚠️ Tertahan: Indikator jenuh beli (Overbought RSI >= 74).")
-                isBreakdown -> reasons.add(0, "⚠️ Tertahan: Harga koin sedang breakdown / downtrend menembus support.")
-                isDistribution -> reasons.add(0, "⚠️ Tertahan: Tekanan jual dan distribusi tinggi terdeteksi.")
+                isRsiOverbought -> reasons.add(0, "⚠️ Tertahan: RSI jenuh beli (>= 72).")
+                isBreakdown -> reasons.add(0, "⚠️ Tertahan: Harga breakdown / downtrend menembus support.")
+                isDistribution -> reasons.add(0, "⚠️ Tertahan: Tekanan jual & distribusi tinggi terdeteksi.")
             }
         }
 
         val finalScore = when {
             isDangerous -> 0
-            isQualified -> (80 + min(15, (buyScore * 0.15).toInt())).coerceIn(80, 95)
-            step3Ok -> 68
-            step2Ok -> 50
-            step1Ok -> 35
-            else -> 20
+            isQualified -> (82 + min(13, (buyScore * 0.12).toInt())).coerceIn(80, 95)
+            step3Ok -> 62
+            step2Ok -> 48
+            step1Ok -> 32
+            else -> 18
         }
 
         val biasDetailText = when {
-            isOverbought -> "Tertahan: Harga koin sedang terlalu tinggi (Jenuh Beli/Overbought)."
-            isBreakdown -> "Tertahan: Harga koin sedang turun menembus support (Breakdown)."
-            isDistribution -> "Tertahan: Tekanan jual & sinyal distribusi tinggi."
-            step1Ok -> "Tren makro harian selaras (EMA20 > EMA50)."
-            else -> "Menunggu tren makro harian stabil."
+            isRsiOverbought -> "Tertahan: RSI overbought."
+            isNearHighDanger -> "Tertahan: Terlalu dekat recent high / overextended (hindari pucuk)."
+            isBreakdown -> "Tertahan: Breakdown / downtrend."
+            isDistribution -> "Tertahan: Distribusi tinggi."
+            step1Ok -> "Tren makro selaras (EMA20 > EMA50)."
+            else -> "Menunggu tren makro stabil."
         }
 
         val setupDetailText = when {
             !step1Ok -> "Menunggu Checkpoint 1 lolos."
-            step2Ok -> "Support harian aman di Rp ${fmtPrice(supportLevel)}."
-            else -> "Memantau lantai support (belum stabil)."
+            step2Ok -> "Support aman di Rp ${fmtPrice(supportLevel)} · Jarak ke high ${fmt(distToHighPct * 100)}%."
+            else -> "Memantau lantai support / jarak ke high."
         }
 
         val triggerDetailText = when {
@@ -254,7 +287,7 @@ object OfficeDailyEvaluator {
         val entryPriceDetailText = when {
             !step3Ok -> "Menunggu Checkpoint 3 lolos."
             step4Ok -> "Zona Entry: Rp ${fmtPrice(price)} (Net R:R $rrString)."
-            else -> "Menunggu R:R optimal (Min 1:1.7) & skor buy."
+            else -> "Menunggu R:R optimal (Min 1:1.8) & skor buy."
         }
 
         val mtfSnapshot = ScalpingMtfSnapshot(
@@ -277,7 +310,8 @@ object OfficeDailyEvaluator {
 
             path = if (isBullishStructure) ScalpingPath.MOMENTUM_CONTINUATION else ScalpingPath.PULLBACK,
             statusTitle = when {
-                isOverbought -> "OVERBOUGHT / TARGET (HOLD)"
+                isRsiOverbought -> "OVERBOUGHT (HOLD)"
+                isNearHighDanger -> "DEKAT HIGH / OVEREXTENDED (HOLD)"
                 isBreakdown -> "BREAKDOWN / DOWNTREND (HOLD)"
                 isDistribution -> "DISTRIBUSI TINGGI (HOLD)"
                 completedSteps == 4 -> "READY"
@@ -285,16 +319,17 @@ object OfficeDailyEvaluator {
                 else -> "ANALYZING (0/4)"
             },
             waitingFor = when {
-                isOverbought -> "Menunggu koreksi harga / reset RSI"
+                isRsiOverbought -> "Menunggu koreksi / reset RSI"
+                isNearHighDanger -> "Menunggu pullback dari zona high (jangan entry di pucuk)"
                 isBreakdown -> "Menunggu pembentukan support baru"
                 isDistribution -> "Menunggu tekanan jual mereda"
                 completedSteps == 4 -> "Siap eksekusi"
                 completedSteps == 3 -> "Menunggu konfirmasi zona entry & R:R"
                 completedSteps == 2 -> "Menunggu momentum RSI & MACD"
-                completedSteps == 1 -> "Menunggu pantulan support harian"
+                completedSteps == 1 -> "Menunggu pantulan support + jarak aman dari high"
                 else -> "Menunggu konfirmasi setup lengkap"
             },
-            entryCondition = "Setup H4/1D Low Noise & High R:R"
+            entryCondition = "Setup H4/1D Low Noise · Jauh dari high · High R:R"
         )
 
         return OfficeDailyEvalResult(
@@ -311,7 +346,7 @@ object OfficeDailyEvaluator {
                 targetPrice2 = calculatedTp2,
                 stopLoss = calculatedSl,
                 riskRewardRatio = rrString,
-                reasoning = reasons.take(7),
+                reasoning = reasons.take(8),
                 timestamp = System.currentTimeMillis(),
                 patternDetected = pattern,
                 scalpingStage = if (completedSteps == 4) ScalpingStage.ENTRY else if (completedSteps >= 2) ScalpingStage.WAIT_PULLBACK else ScalpingStage.HOLD,

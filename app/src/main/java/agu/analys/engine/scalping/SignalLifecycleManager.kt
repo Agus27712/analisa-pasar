@@ -33,7 +33,9 @@ data class TrackedSignal(
     var targetPrice: Double = 0.0,
     var stopLoss: Double = 0.0,
     var activeSignalState: AISignalState? = null,
-    var transition: SignalTransition? = null
+    var transition: SignalTransition? = null,
+    /** FIX: hysteresis counter — butuh N tick berturut-turut conf rendah sebelum INVALIDATED dari READY */
+    var weakTickCount: Int = 0
 )
 
 object SignalLifecycleManager {
@@ -42,8 +44,10 @@ object SignalLifecycleManager {
 
     // Expire scalping signals older than 10 minutes if not triggered
     private const val EXPIRY_SCALPING_MS = 10 * 60 * 1000L
-    // Expire swing / macro signals older than 2 hours
-    private const val EXPIRY_MACRO_MS = 2 * 60 * 60 * 1000L
+    // Expire swing / macro signals older than 4 hours (dinaikkan dari 2 jam)
+    private const val EXPIRY_MACRO_MS = 4 * 60 * 60 * 1000L
+    // Hysteresis: butuh 3 tick berturut-turut conf lemah sebelum drop dari READY
+    private const val WEAK_TICK_THRESHOLD = 3
 
     fun normalizeSymbol(symbol: String): String =
         symbol.uppercase().replace("/", "").replace("_", "").replace("-", "")
@@ -69,15 +73,17 @@ object SignalLifecycleManager {
         if (tracked.state in listOf(LifecycleState.DETECTED, LifecycleState.CONFIRMING, LifecycleState.READY)) {
             if (tracked.detectedAt > 0L && now - tracked.detectedAt > expiryMs) {
                 tracked.state = LifecycleState.EXPIRED
+                tracked.weakTickCount = 0
             }
         }
 
-        // 2. Price-based Invalidation (drop below SL before triggered)
+        // 2. Price-based Invalidation (drop below SL before triggered) — hard, instant
         val isPriceBelowStopLoss = (tracked.stopLoss > 0.0 && currentPrice <= tracked.stopLoss) ||
                 (rawSignal.stopLoss > 0.0 && currentPrice <= rawSignal.stopLoss)
         if (isPriceBelowStopLoss) {
             if (tracked.state in listOf(LifecycleState.CONFIRMING, LifecycleState.READY, LifecycleState.DETECTED)) {
                 tracked.state = LifecycleState.INVALIDATED
+                tracked.weakTickCount = 0
             }
         }
 
@@ -85,28 +91,29 @@ object SignalLifecycleManager {
         if (isPriceBelowStopLoss) {
             updateSignalData(tracked, rawSignal, now)
         } else if (mode == StrategyMode.SCALPING) {
-            // Mode SCALPING: Mempertahankan rule spesifik berbasis scalpingStage
+            // Mode SCALPING: rule spesifik berbasis scalpingStage
             when (tracked.state) {
                 LifecycleState.IDLE, LifecycleState.EXPIRED, LifecycleState.INVALIDATED -> {
                     when (rawSignal.scalpingStage) {
                         ScalpingStage.EARLY_ENTRY, ScalpingStage.WAIT_PULLBACK -> {
                             tracked.state = LifecycleState.DETECTED
                             tracked.detectedAt = now
+                            tracked.weakTickCount = 0
                             updateSignalData(tracked, rawSignal, now)
                         }
                         ScalpingStage.ENTRY -> {
                             tracked.state = LifecycleState.CONFIRMING
                             tracked.detectedAt = now
+                            tracked.weakTickCount = 0
                             updateSignalData(tracked, rawSignal, now)
                         }
                         ScalpingStage.STRONG_ENTRY -> {
-                            // Langsung READY biar nggak stuck CONFIRMING
                             tracked.state = LifecycleState.READY
                             tracked.detectedAt = now
+                            tracked.weakTickCount = 0
                             updateSignalData(tracked, rawSignal, now)
                         }
                         else -> {
-                            // WATCH/HOLD: tetap publish signal ke UI, state idle
                             updateSignalData(tracked, rawSignal, now)
                         }
                     }
@@ -115,18 +122,22 @@ object SignalLifecycleManager {
                     when (rawSignal.scalpingStage) {
                         ScalpingStage.ENTRY -> {
                             tracked.state = LifecycleState.CONFIRMING
+                            tracked.weakTickCount = 0
                             updateSignalData(tracked, rawSignal, now)
                         }
                         ScalpingStage.STRONG_ENTRY -> {
                             tracked.state = LifecycleState.READY
+                            tracked.weakTickCount = 0
                             updateSignalData(tracked, rawSignal, now)
                         }
                         ScalpingStage.HOLD -> {
                             tracked.state = LifecycleState.INVALIDATED
+                            tracked.weakTickCount = 0
                             updateSignalData(tracked, rawSignal, now)
                         }
                         ScalpingStage.WATCH -> {
                             tracked.state = LifecycleState.IDLE
+                            tracked.weakTickCount = 0
                             updateSignalData(tracked, rawSignal, now)
                         }
                         else -> updateSignalData(tracked, rawSignal, now)
@@ -135,12 +146,13 @@ object SignalLifecycleManager {
                 LifecycleState.CONFIRMING -> {
                     when (rawSignal.scalpingStage) {
                         ScalpingStage.ENTRY, ScalpingStage.STRONG_ENTRY -> {
-                            // ENTRY stabil / STRONG → READY (fix bengong)
                             tracked.state = LifecycleState.READY
+                            tracked.weakTickCount = 0
                             updateSignalData(tracked, rawSignal, now)
                         }
                         ScalpingStage.HOLD -> {
                             tracked.state = LifecycleState.INVALIDATED
+                            tracked.weakTickCount = 0
                             updateSignalData(tracked, rawSignal, now)
                         }
                         ScalpingStage.WATCH, ScalpingStage.EARLY_ENTRY -> {
@@ -153,6 +165,7 @@ object SignalLifecycleManager {
                     when (rawSignal.scalpingStage) {
                         ScalpingStage.HOLD, ScalpingStage.WATCH -> {
                             tracked.state = LifecycleState.INVALIDATED
+                            tracked.weakTickCount = 0
                             updateSignalData(tracked, rawSignal, now)
                         }
                         else -> updateSignalData(tracked, rawSignal, now)
@@ -163,11 +176,12 @@ object SignalLifecycleManager {
                 }
             }
         } else {
-            // Mode NON-SCALPING: Evaluasi generik berbasis action == SignalAction.BUY & confidence
+            // Mode NON-SCALPING (SWING / OFFICE_DAILY / dll)
             // Thresholds:
-            // - CONF >= 75 -> READY (setup matang)
-            // - CONF >= 65 -> CONFIRMING (konfirmasi indikator & volume)
-            // - CONF >= 50 -> DETECTED (setup mulai terdeteksi / early candidate)
+            // - CONF >= 75 -> READY
+            // - CONF >= 65 -> CONFIRMING
+            // - CONF >= 50 -> DETECTED
+            // FIX: hysteresis saat keluar dari READY — butuh WEAK_TICK_THRESHOLD tick conf lemah
             val isBuy = rawSignal.action == SignalAction.BUY
             val conf = rawSignal.confidence
 
@@ -178,16 +192,19 @@ object SignalLifecycleManager {
                             conf >= 75 -> {
                                 tracked.state = LifecycleState.READY
                                 tracked.detectedAt = now
+                                tracked.weakTickCount = 0
                                 updateSignalData(tracked, rawSignal, now)
                             }
                             conf >= 65 -> {
                                 tracked.state = LifecycleState.CONFIRMING
                                 tracked.detectedAt = now
+                                tracked.weakTickCount = 0
                                 updateSignalData(tracked, rawSignal, now)
                             }
                             conf >= 50 -> {
                                 tracked.state = LifecycleState.DETECTED
                                 tracked.detectedAt = now
+                                tracked.weakTickCount = 0
                                 updateSignalData(tracked, rawSignal, now)
                             }
                             else -> updateSignalData(tracked, rawSignal, now)
@@ -201,20 +218,24 @@ object SignalLifecycleManager {
                         when {
                             conf >= 75 -> {
                                 tracked.state = LifecycleState.READY
+                                tracked.weakTickCount = 0
                                 updateSignalData(tracked, rawSignal, now)
                             }
                             conf >= 65 -> {
                                 tracked.state = LifecycleState.CONFIRMING
+                                tracked.weakTickCount = 0
                                 updateSignalData(tracked, rawSignal, now)
                             }
                             conf < 45 -> {
                                 tracked.state = LifecycleState.INVALIDATED
+                                tracked.weakTickCount = 0
                                 updateSignalData(tracked, rawSignal, now)
                             }
                             else -> updateSignalData(tracked, rawSignal, now)
                         }
                     } else {
                         tracked.state = LifecycleState.INVALIDATED
+                        tracked.weakTickCount = 0
                         updateSignalData(tracked, rawSignal, now)
                     }
                 }
@@ -223,24 +244,39 @@ object SignalLifecycleManager {
                         when {
                             conf >= 75 -> {
                                 tracked.state = LifecycleState.READY
+                                tracked.weakTickCount = 0
                                 updateSignalData(tracked, rawSignal, now)
                             }
                             conf < 50 -> {
                                 tracked.state = LifecycleState.INVALIDATED
+                                tracked.weakTickCount = 0
                                 updateSignalData(tracked, rawSignal, now)
                             }
                             else -> updateSignalData(tracked, rawSignal, now)
                         }
                     } else {
                         tracked.state = LifecycleState.INVALIDATED
+                        tracked.weakTickCount = 0
                         updateSignalData(tracked, rawSignal, now)
                     }
                 }
                 LifecycleState.READY -> {
-                    if (!isBuy || conf < 50) {
+                    // FIX HYSTERESIS: jangan langsung INVALIDATED saat conf < 50 sekali
+                    // Butuh WEAK_TICK_THRESHOLD tick berturut-turut, kecuali conf sangat jelek (< 30)
+                    if (!isBuy || conf < 30) {
                         tracked.state = LifecycleState.INVALIDATED
+                        tracked.weakTickCount = 0
+                        updateSignalData(tracked, rawSignal, now)
+                    } else if (conf < 55) {
+                        tracked.weakTickCount += 1
+                        if (tracked.weakTickCount >= WEAK_TICK_THRESHOLD) {
+                            tracked.state = LifecycleState.INVALIDATED
+                            tracked.weakTickCount = 0
+                        }
                         updateSignalData(tracked, rawSignal, now)
                     } else {
+                        // conf masih sehat → reset counter
+                        tracked.weakTickCount = 0
                         updateSignalData(tracked, rawSignal, now)
                     }
                 }
@@ -305,6 +341,7 @@ object SignalLifecycleManager {
                 if (it.state == LifecycleState.READY || it.state == LifecycleState.CONFIRMING) {
                     it.state = LifecycleState.TRIGGERED
                     it.lastUpdatedAt = System.currentTimeMillis()
+                    it.weakTickCount = 0
                 }
             }
         } else {
@@ -314,6 +351,7 @@ object SignalLifecycleManager {
                     if (it.state == LifecycleState.READY || it.state == LifecycleState.CONFIRMING) {
                         it.state = LifecycleState.TRIGGERED
                         it.lastUpdatedAt = System.currentTimeMillis()
+                        it.weakTickCount = 0
                     }
                 }
             }
