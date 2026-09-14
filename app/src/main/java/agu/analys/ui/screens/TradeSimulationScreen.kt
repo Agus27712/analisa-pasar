@@ -256,37 +256,6 @@ fun TradeSimulationScreen(
                                     return@SimulationOrderForm
                                 }
 
-                                if (isRealBuyMode) {
-                                    if (!isPinUnlocked) {
-                                        if (!viewModel.hasSecurityPin()) {
-                                            Toast.makeText(context, "Atur PIN Keamanan terlebih dahulu di Pengaturan.", Toast.LENGTH_LONG).show()
-                                            onOpenSettings()
-                                        } else {
-                                            pinDialogError = null
-                                            showPinDialog = true
-                                        }
-                                        return@SimulationOrderForm
-                                    }
-
-                                    val totalIdr = parseSimulationDecimal(inputTotalIdr) ?: (p * q)
-                                    viewModel.executeRealTrade(
-                                        pair = selectedPair.symbol,
-                                        type = if (selectedSide == SimulationOrderSide.BUY) "buy" else "sell",
-                                        price = p.toLong(),
-                                        amountIdr = if (selectedSide == SimulationOrderSide.BUY) totalIdr else q
-                                    ) { success, msg ->
-                                        if (success) {
-                                            agu.analys.util.HapticUtil.vibrateTradeSuccess(context)
-                                            inputQuantity = ""
-                                            inputTotalIdr = ""
-                                        } else {
-                                            agu.analys.util.HapticUtil.vibrateTradeFailure(context)
-                                        }
-                                        Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
-                                    }
-                                    return@SimulationOrderForm
-                                }
-
                                 val result = viewModel.submitSimulationOrder(
                                     side = selectedSide,
                                     type = selectedType,
@@ -309,8 +278,8 @@ fun TradeSimulationScreen(
                                 }
                             },
                             onOpenTopUp = { showTopUpModal = true },
-                            isRealMode = isRealBuyMode && isRealSimSyncEnabled,
-                            realIdrBalance = if (isRealSimSyncEnabled) realIdr else 0.0
+                            isRealMode = false,
+                            realIdrBalance = 0.0
                         )
                     }
 
@@ -332,20 +301,17 @@ fun TradeSimulationScreen(
             }
 
             item {
-                val effectiveHistory = remember(tradeHistory, isRealSimSyncEnabled) {
-                    if (isRealSimSyncEnabled) tradeHistory else tradeHistory.filter { !it.isRealMirror }
-                }
                 SimulationOpenOrdersList(
                     openOrders = openOrders,
-                    tradeHistory = effectiveHistory,
+                    tradeHistory = tradeHistory,
                     currentSymbol = selectedPair.symbol,
                     onCancelOrder = { orderId ->
                         val ok = viewModel.cancelSimulationOrder(orderId)
-                        if (ok) Toast.makeText(context, "Order berhasil dibatalkan", Toast.LENGTH_SHORT).show()
+                        if (ok) Toast.makeText(context, "Order simulasi berhasil dibatalkan", Toast.LENGTH_SHORT).show()
                     },
                     onCancelAllOrders = { symbol ->
                         val count = viewModel.cancelAllSimulationOrders(symbol)
-                        Toast.makeText(context, "$count order berhasil dibatalkan", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "$count order simulasi berhasil dibatalkan", Toast.LENGTH_SHORT).show()
                     }
                 )
             }

@@ -119,6 +119,9 @@ fun DashboardScreen(
         favorites,
         basePopular
     ) {
+        val watchAndFav = (watchlist.map { TradingPair.fromCustomSymbol(it, defaultQuote) } +
+            favorites.map { TradingPair.fromCustomSymbol(it, defaultQuote) })
+
         when (strategyMode) {
             StrategyMode.SCALPING -> {
                 val highVol = allTicks.values
@@ -127,15 +130,13 @@ fun DashboardScreen(
                     .take(30)
                     .map { TradingPair.fromCustomSymbol(it.symbol, defaultQuote) }
                 val explicit = (gainersCoins.map { TradingPair.fromCustomSymbol(it.symbol, defaultQuote) } +
-                    hotCoins.map { TradingPair.fromCustomSymbol(it.symbol, defaultQuote) } +
-                    watchlist.map { TradingPair.fromCustomSymbol(it, defaultQuote) } +
-                    favorites.map { TradingPair.fromCustomSymbol(it, defaultQuote) })
-                (explicit + highVol + basePopular).distinctBy { it.symbol }
+                    hotCoins.map { TradingPair.fromCustomSymbol(it.symbol, defaultQuote) })
+                (watchAndFav + explicit + highVol + basePopular).distinctBy { it.symbol }
             }
             StrategyMode.SECOND_WAVE -> {
                 val secondWave = secondWaveCoins.map { TradingPair.fromCustomSymbol(it.symbol, defaultQuote) }
                 val dipReversal = losersCoins.take(15).map { TradingPair.fromCustomSymbol(it.symbol, defaultQuote) }
-                (secondWave + dipReversal + basePopular).distinctBy { it.symbol }
+                (watchAndFav + secondWave + dipReversal + basePopular).distinctBy { it.symbol }
             }
             StrategyMode.SWING -> {
                 val swingCandidates = allTicks.values
@@ -143,7 +144,7 @@ fun DashboardScreen(
                     .sortedByDescending { it.volume24h }
                     .take(25)
                     .map { TradingPair.fromCustomSymbol(it.symbol, defaultQuote) }
-                (swingCandidates + basePopular).distinctBy { it.symbol }
+                (watchAndFav + swingCandidates + basePopular).distinctBy { it.symbol }
             }
             StrategyMode.OFFICE_DAILY -> {
                 val officeCandidates = allTicks.values
@@ -151,7 +152,7 @@ fun DashboardScreen(
                     .sortedByDescending { it.volume24h }
                     .take(25)
                     .map { TradingPair.fromCustomSymbol(it.symbol, defaultQuote) }
-                (officeCandidates + basePopular).distinctBy { it.symbol }
+                (watchAndFav + officeCandidates + basePopular).distinctBy { it.symbol }
             }
             StrategyMode.TRENCHING -> {
                 val trenchCandidates = allTicks.values
@@ -159,7 +160,7 @@ fun DashboardScreen(
                     .sortedByDescending { it.volume24h }
                     .take(25)
                     .map { TradingPair.fromCustomSymbol(it.symbol, defaultQuote) }
-                (trenchCandidates + basePopular).distinctBy { it.symbol }
+                (watchAndFav + trenchCandidates + basePopular).distinctBy { it.symbol }
             }
         }
     }
@@ -198,9 +199,13 @@ fun DashboardScreen(
                 }
             }
             DashboardQuickFilter.WATCHLIST -> {
-                strategyPairs.filter { pair ->
-                    watchlist.contains(pair.symbol) || favorites.contains(pair.symbol)
+                val watchListPairs = (watchlist.map { TradingPair.fromCustomSymbol(it, defaultQuote) } +
+                    favorites.map { TradingPair.fromCustomSymbol(it, defaultQuote) })
+                val matchedStrategyPairs = strategyPairs.filter { pair ->
+                    watchlist.any { it.equals(pair.symbol, ignoreCase = true) || it.equals(pair.baseAsset, ignoreCase = true) } ||
+                    favorites.any { it.equals(pair.symbol, ignoreCase = true) || it.equals(pair.baseAsset, ignoreCase = true) }
                 }
+                (watchListPairs + matchedStrategyPairs).distinctBy { it.symbol }
             }
         }
     }
