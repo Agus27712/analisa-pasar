@@ -14,7 +14,18 @@ data class RealTradeEntity(
     val amount: Double,         // price * qty
     val time: Long,             // timestamp
     val side: String,           // "BUY" or "SELL"
-    val isBuyer: Boolean
+    val isBuyer: Boolean,
+    val strategyMode: String = "MANUAL",
+    val holdingDurationMs: Long? = null,
+    val entryPrice: Double? = null,
+    val entryTimestamp: Long? = null,
+    val pnlIdr: Double? = null,
+    val pnlPercent: Double? = null,
+    val isTrailingUsed: Boolean = false,
+    val trailingPercent: Double? = null,
+    val trailingPeakPrice: Double? = null,
+    val trailingLockPrice: Double? = null,
+    val signalSnapshotJson: String? = null
 )
 
 @Entity(tableName = "real_open_orders")
@@ -58,7 +69,7 @@ interface RealTradeDao {
     suspend fun deleteOpenOrderById(orderId: String)
 }
 
-@Database(entities = [RealTradeEntity::class, RealOpenOrderEntity::class], version = 1, exportSchema = false)
+@Database(entities = [RealTradeEntity::class, RealOpenOrderEntity::class], version = 2, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun realTradeDao(): RealTradeDao
 

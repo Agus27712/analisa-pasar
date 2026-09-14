@@ -52,8 +52,10 @@ fun CustomBuyOrderDialog(
         if (p <= 0.0) return ""
         return if (p < 1.0) {
             String.format(Locale.US, "%.8f", p).trimEnd('0').trimEnd('.')
-        } else if (p < 100.0) {
-            String.format(Locale.US, "%.2f", p)
+        } else if (p % 1.0 == 0.0) {
+            p.toLong().toString()
+        } else if (p < 1000.0) {
+            String.format(Locale.US, "%.4f", p).trimEnd('0').trimEnd('.')
         } else {
             PriceFormatter.formatIdrNumber(p)
         }

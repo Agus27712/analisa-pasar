@@ -18,7 +18,9 @@ object SimulationOrderEngine {
         baseKey: String,
         quote: String,
         execPrice: Double,
-        quantity: Double
+        quantity: Double,
+        strategyMode: String = "SCALPING",
+        signalSnapshot: TradeSignalSnapshot? = null
     ): Result<ExecutionResult> {
         val totalIdr = quantity * execPrice
         val feeIdr = totalIdr * INDODAX_TAKER_FEE_RATE
@@ -49,6 +51,7 @@ object SimulationOrderEngine {
             avgBuyPrices = newAvgMap
         )
 
+        val now = System.currentTimeMillis()
         val history = SimulationTradeHistoryItem(
             id = UUID.randomUUID().toString(),
             orderId = UUID.randomUUID().toString(),
@@ -61,7 +64,12 @@ object SimulationOrderEngine {
             quantity = quantity,
             totalIdr = totalIdr,
             feeIdr = feeIdr,
-            timestamp = System.currentTimeMillis()
+            timestamp = now,
+            strategyMode = strategyMode,
+            holdingDurationMs = 0L,
+            entryPrice = execPrice,
+            entryTimestamp = now,
+            signalSnapshot = signalSnapshot
         )
 
         val order = SimulationOrder(
@@ -78,7 +86,11 @@ object SimulationOrderEngine {
             filledAvgPrice = execPrice,
             feeIdr = feeIdr,
             status = SimulationOrderStatus.FILLED,
-            filledAt = System.currentTimeMillis()
+            filledAt = now,
+            strategyMode = strategyMode,
+            entryPrice = execPrice,
+            entryTimestamp = now,
+            signalSnapshot = signalSnapshot
         )
 
         return Result.success(ExecutionResult(updatedWallet, history, order))
@@ -90,7 +102,16 @@ object SimulationOrderEngine {
         baseKey: String,
         quote: String,
         execPrice: Double,
-        quantity: Double
+        quantity: Double,
+        strategyMode: String = "SCALPING",
+        holdingDurationMs: Long? = null,
+        entryPrice: Double? = null,
+        entryTimestamp: Long? = null,
+        isTrailingUsed: Boolean = false,
+        trailingPercent: Double? = null,
+        trailingPeakPrice: Double? = null,
+        trailingLockPrice: Double? = null,
+        signalSnapshot: TradeSignalSnapshot? = null
     ): Result<ExecutionResult> {
         val available = wallet.getAvailableCoin(baseKey)
         val actualQty = if (quantity > available && (quantity - available) < 0.0001) available else quantity
@@ -104,8 +125,8 @@ object SimulationOrderEngine {
         val totalIdr = actualQty * execPrice
         val feeIdr = totalIdr * INDODAX_TAKER_FEE_RATE
         val netIdr = (totalIdr - feeIdr).coerceAtLeast(0.0)
-        val avgBuy = wallet.avgBuyPrices[baseKey] ?: execPrice
-        val costBasis = actualQty * avgBuy
+        val effectiveEntry = entryPrice ?: (wallet.avgBuyPrices[baseKey] ?: execPrice)
+        val costBasis = actualQty * effectiveEntry
         val pnlIdr = totalIdr - costBasis - feeIdr
         val pnlPercent = if (costBasis > 0.0) (pnlIdr / costBasis) * 100.0 else 0.0
 
@@ -122,6 +143,7 @@ object SimulationOrderEngine {
             coinBalances = newCoinBalances
         )
 
+        val now = System.currentTimeMillis()
         val history = SimulationTradeHistoryItem(
             id = UUID.randomUUID().toString(),
             orderId = UUID.randomUUID().toString(),
@@ -134,9 +156,18 @@ object SimulationOrderEngine {
             quantity = quantity,
             totalIdr = totalIdr,
             feeIdr = feeIdr,
-            timestamp = System.currentTimeMillis(),
+            timestamp = now,
             pnlIdr = pnlIdr,
-            pnlPercent = pnlPercent
+            pnlPercent = pnlPercent,
+            strategyMode = strategyMode,
+            holdingDurationMs = holdingDurationMs,
+            entryPrice = effectiveEntry,
+            entryTimestamp = entryTimestamp,
+            isTrailingUsed = isTrailingUsed,
+            trailingPercent = trailingPercent,
+            trailingPeakPrice = trailingPeakPrice,
+            trailingLockPrice = trailingLockPrice,
+            signalSnapshot = signalSnapshot
         )
 
         val order = SimulationOrder(
@@ -153,7 +184,15 @@ object SimulationOrderEngine {
             filledAvgPrice = execPrice,
             feeIdr = feeIdr,
             status = SimulationOrderStatus.FILLED,
-            filledAt = System.currentTimeMillis()
+            filledAt = now,
+            strategyMode = strategyMode,
+            entryPrice = effectiveEntry,
+            entryTimestamp = entryTimestamp,
+            isTrailingUsed = isTrailingUsed,
+            trailingPercent = trailingPercent,
+            trailingPeakPrice = trailingPeakPrice,
+            trailingLockPrice = trailingLockPrice,
+            signalSnapshot = signalSnapshot
         )
 
         return Result.success(ExecutionResult(updatedWallet, history, order))

@@ -34,7 +34,15 @@ data class SimulationOrder(
     val status: SimulationOrderStatus = SimulationOrderStatus.OPEN,
     val isStopTriggered: Boolean = false,
     val createdAt: Long = System.currentTimeMillis(),
-    val filledAt: Long? = null
+    val filledAt: Long? = null,
+    val strategyMode: String = "SCALPING",
+    val entryPrice: Double? = null,
+    val entryTimestamp: Long? = null,
+    val isTrailingUsed: Boolean = false,
+    val trailingPercent: Double? = null,
+    val trailingPeakPrice: Double? = null,
+    val trailingLockPrice: Double? = null,
+    val signalSnapshot: TradeSignalSnapshot? = null
 )
 
 data class SimulationTradeHistoryItem(
@@ -52,7 +60,16 @@ data class SimulationTradeHistoryItem(
     val timestamp: Long = System.currentTimeMillis(),
     val pnlIdr: Double? = null,
     val pnlPercent: Double? = null,
-    val isRealMirror: Boolean = false
+    val isRealMirror: Boolean = false,
+    val strategyMode: String = "SCALPING",
+    val holdingDurationMs: Long? = null,
+    val entryPrice: Double? = null,
+    val entryTimestamp: Long? = null,
+    val isTrailingUsed: Boolean = false,
+    val trailingPercent: Double? = null,
+    val trailingPeakPrice: Double? = null,
+    val trailingLockPrice: Double? = null,
+    val signalSnapshot: TradeSignalSnapshot? = null
 )
 
 data class SimulationWallet(

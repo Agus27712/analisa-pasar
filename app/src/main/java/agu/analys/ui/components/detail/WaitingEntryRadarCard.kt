@@ -27,6 +27,7 @@ import agu.analys.ui.components.detail.radar.RadarHeaderSection
 import agu.analys.ui.components.detail.radar.RadarTargetLevelsSection
 import agu.analys.ui.components.detail.sell.SellCheckpointStepper
 import agu.analys.ui.components.detail.sell.SellConfirmationChecklist
+import agu.analys.ui.components.detail.sell.SellManualBuyDialog
 import agu.analys.ui.components.detail.sell.SellPositionOverviewCard
 import agu.analys.ui.components.detail.sell.SellTargetLevelsSection
 import agu.analys.ui.components.detail.sell.SellTpSlSection
@@ -170,6 +171,7 @@ fun WaitingEntryRadarCard(
 
     var isChecklistVisible by remember { mutableStateOf(false) }
     var isLevelPlanVisible by remember { mutableStateOf(false) }
+    var showManualBuyDialog by remember { mutableStateOf(false) }
 
     AnalysisCard(modifier = modifier) {
         if (!currentBuyMode) {
@@ -179,7 +181,8 @@ fun WaitingEntryRadarCard(
             if (isHolding) {
                 SellPositionOverviewCard(
                     context = positionContext,
-                    quoteAsset = quoteAsset
+                    quoteAsset = quoteAsset,
+                    onEditEntryClick = { showManualBuyDialog = true }
                 )
                 Spacer(Modifier.height(10.dp))
             } else {
@@ -453,4 +456,18 @@ fun WaitingEntryRadarCard(
             }
         }
     }
+
+    SellManualBuyDialog(
+        show = showManualBuyDialog,
+        onDismiss = { showManualBuyDialog = false },
+        baseAsset = baseAsset,
+        quoteAsset = quoteAsset,
+        availableCoin = availableCoin,
+        initialAvgBuy = avgBuyPrice,
+        initialTotalCost = spotPosition?.investedAmount ?: 0.0,
+        onSave = { newPrice, newInvested ->
+            onSetManualBuyPrice?.invoke(newPrice, newInvested)
+            showManualBuyDialog = false
+        }
+    )
 }

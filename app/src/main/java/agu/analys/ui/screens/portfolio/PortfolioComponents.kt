@@ -2,6 +2,7 @@ package agu.analys.ui.screens.portfolio
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -13,8 +14,7 @@ import androidx.compose.material.icons.filled.ShowChart
 import androidx.compose.material.icons.filled.TrendingDown
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -255,13 +255,45 @@ fun TradeHistoryItemCard(
     trade: SimulationTradeHistoryItem,
     modifier: Modifier = Modifier
 ) {
+    var showDetailDialog by remember { mutableStateOf(false) }
     val isBuy = trade.side == SimulationOrderSide.BUY
     val sideColor = if (isBuy) TvGreen else TvRed
     val dateFormat = remember { SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault()) }
     val formattedTime = remember(trade.timestamp) { dateFormat.format(Date(trade.timestamp)) }
 
+    if (showDetailDialog) {
+        agu.analys.ui.components.trade.TradeLogDetailDialog(
+            tradeId = trade.id,
+            symbol = trade.symbol,
+            baseAsset = trade.baseAsset,
+            quoteAsset = trade.quoteAsset,
+            side = trade.side.name,
+            orderType = trade.type.displayName,
+            executionPrice = trade.executionPrice,
+            quantity = trade.quantity,
+            totalIdr = trade.totalIdr,
+            feeIdr = trade.feeIdr,
+            timestamp = trade.timestamp,
+            isReal = trade.isRealMirror,
+            strategyMode = trade.strategyMode,
+            holdingDurationMs = trade.holdingDurationMs,
+            entryPrice = trade.entryPrice,
+            entryTimestamp = trade.entryTimestamp,
+            pnlIdr = trade.pnlIdr,
+            pnlPercent = trade.pnlPercent,
+            isTrailingUsed = trade.isTrailingUsed,
+            trailingPercent = trade.trailingPercent,
+            trailingPeakPrice = trade.trailingPeakPrice,
+            trailingLockPrice = trade.trailingLockPrice,
+            snapshot = trade.signalSnapshot,
+            onDismiss = { showDetailDialog = false }
+        )
+    }
+
     Card(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable { showDetailDialog = true },
         shape = RoundedCornerShape(10.dp),
         colors = CardDefaults.cardColors(containerColor = TvCardBackground),
         border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder)
@@ -285,15 +317,29 @@ fun TradeHistoryItemCard(
                             fontWeight = FontWeight.Black
                         )
                     }
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.width(6.dp))
                     Text(
                         text = "${trade.baseAsset} / ${trade.quoteAsset}",
                         color = TvTextPrimary,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold
                     )
+                    Spacer(Modifier.width(6.dp))
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(TvBlue.copy(alpha = 0.15f))
+                            .padding(horizontal = 5.dp, vertical = 1.dp)
+                    ) {
+                        Text(
+                            text = trade.strategyMode.uppercase(),
+                            color = TvBlue,
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Black
+                        )
+                    }
                     if (trade.isRealMirror) {
-                        Spacer(Modifier.width(6.dp))
+                        Spacer(Modifier.width(4.dp))
                         Box(
                             modifier = Modifier
                                 .background(TvGreen.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
@@ -353,6 +399,72 @@ fun TradeHistoryItemCard(
                 Text(
                     text = "Realized PnL: $pnlPrefix${PriceFormatter.formatPrice(trade.pnlIdr, quoteAsset = "IDR")} (${pnlPrefix}${String.format(Locale.US, "%.2f", trade.pnlPercent ?: 0.0)}%)",
                     color = pnlColor,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            Spacer(Modifier.height(6.dp))
+
+            // Metadata Row: Duration, Trailing, Snapshot, Action
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (trade.holdingDurationMs != null && trade.holdingDurationMs > 0L) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(TvSurfaceVariant)
+                                .padding(horizontal = 5.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "⏱ ${agu.analys.trading.TradeLogExporter.formatDuration(trade.holdingDurationMs)}",
+                                color = TvTextSecondary,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+
+                    if (trade.isTrailingUsed) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(TvGreen.copy(alpha = 0.15f))
+                                .padding(horizontal = 5.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "🔒 Trailing Lock",
+                                color = TvGreen,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    if (trade.signalSnapshot != null) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(TvAmber.copy(alpha = 0.15f))
+                                .padding(horizontal = 5.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "📊 Sinyal OK",
+                                color = TvAmber,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+
+                Text(
+                    text = "Detail & AI Log ›",
+                    color = TvBlue,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold
                 )

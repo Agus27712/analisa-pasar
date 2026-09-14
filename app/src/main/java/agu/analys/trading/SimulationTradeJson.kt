@@ -23,6 +23,14 @@ object SimulationTradeJson {
         j.put("isStopTriggered", order.isStopTriggered)
         j.put("createdAt", order.createdAt)
         order.filledAt?.let { j.put("filledAt", it) }
+        j.put("strategyMode", order.strategyMode)
+        order.entryPrice?.let { j.put("entryPrice", it) }
+        order.entryTimestamp?.let { j.put("entryTimestamp", it) }
+        j.put("isTrailingUsed", order.isTrailingUsed)
+        order.trailingPercent?.let { j.put("trailingPercent", it) }
+        order.trailingPeakPrice?.let { j.put("trailingPeakPrice", it) }
+        order.trailingLockPrice?.let { j.put("trailingLockPrice", it) }
+        order.signalSnapshot?.let { j.put("signalSnapshot", it.toJson()) }
         return j
     }
 
@@ -44,7 +52,15 @@ object SimulationTradeJson {
             status = runCatching { SimulationOrderStatus.valueOf(j.optString("status", "OPEN")) }.getOrDefault(SimulationOrderStatus.OPEN),
             isStopTriggered = j.optBoolean("isStopTriggered", false),
             createdAt = j.optLong("createdAt", System.currentTimeMillis()),
-            filledAt = if (j.has("filledAt")) j.optLong("filledAt") else null
+            filledAt = if (j.has("filledAt")) j.optLong("filledAt") else null,
+            strategyMode = j.optString("strategyMode", "SCALPING"),
+            entryPrice = if (j.has("entryPrice")) j.optDouble("entryPrice") else null,
+            entryTimestamp = if (j.has("entryTimestamp")) j.optLong("entryTimestamp") else null,
+            isTrailingUsed = j.optBoolean("isTrailingUsed", false),
+            trailingPercent = if (j.has("trailingPercent")) j.optDouble("trailingPercent") else null,
+            trailingPeakPrice = if (j.has("trailingPeakPrice")) j.optDouble("trailingPeakPrice") else null,
+            trailingLockPrice = if (j.has("trailingLockPrice")) j.optDouble("trailingLockPrice") else null,
+            signalSnapshot = if (j.has("signalSnapshot")) TradeSignalSnapshot.fromJson(j.optJSONObject("signalSnapshot")) else null
         )
     }
 
@@ -65,6 +81,15 @@ object SimulationTradeJson {
         h.pnlIdr?.let { j.put("pnlIdr", it) }
         h.pnlPercent?.let { j.put("pnlPercent", it) }
         j.put("isRealMirror", h.isRealMirror)
+        j.put("strategyMode", h.strategyMode)
+        h.holdingDurationMs?.let { j.put("holdingDurationMs", it) }
+        h.entryPrice?.let { j.put("entryPrice", it) }
+        h.entryTimestamp?.let { j.put("entryTimestamp", it) }
+        j.put("isTrailingUsed", h.isTrailingUsed)
+        h.trailingPercent?.let { j.put("trailingPercent", it) }
+        h.trailingPeakPrice?.let { j.put("trailingPeakPrice", it) }
+        h.trailingLockPrice?.let { j.put("trailingLockPrice", it) }
+        h.signalSnapshot?.let { j.put("signalSnapshot", it.toJson()) }
         return j
     }
 
@@ -84,7 +109,16 @@ object SimulationTradeJson {
             timestamp = j.optLong("timestamp", System.currentTimeMillis()),
             pnlIdr = if (j.has("pnlIdr")) j.optDouble("pnlIdr") else null,
             pnlPercent = if (j.has("pnlPercent")) j.optDouble("pnlPercent") else null,
-            isRealMirror = j.optBoolean("isRealMirror", false)
+            isRealMirror = j.optBoolean("isRealMirror", false),
+            strategyMode = j.optString("strategyMode", "SCALPING"),
+            holdingDurationMs = if (j.has("holdingDurationMs")) j.optLong("holdingDurationMs") else null,
+            entryPrice = if (j.has("entryPrice")) j.optDouble("entryPrice") else null,
+            entryTimestamp = if (j.has("entryTimestamp")) j.optLong("entryTimestamp") else null,
+            isTrailingUsed = j.optBoolean("isTrailingUsed", false),
+            trailingPercent = if (j.has("trailingPercent")) j.optDouble("trailingPercent") else null,
+            trailingPeakPrice = if (j.has("trailingPeakPrice")) j.optDouble("trailingPeakPrice") else null,
+            trailingLockPrice = if (j.has("trailingLockPrice")) j.optDouble("trailingLockPrice") else null,
+            signalSnapshot = if (j.has("signalSnapshot")) TradeSignalSnapshot.fromJson(j.optJSONObject("signalSnapshot")) else null
         )
     }
 

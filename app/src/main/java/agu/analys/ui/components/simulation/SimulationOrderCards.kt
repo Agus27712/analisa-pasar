@@ -9,8 +9,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -164,15 +163,48 @@ fun OpenOrderItemCard(
 
 @Composable
 fun TradeHistoryItemCard(history: SimulationTradeHistoryItem) {
+    var showDetailDialog by remember { mutableStateOf(false) }
     val isBuy = history.side == SimulationOrderSide.BUY
     val quote = history.quoteAsset.ifBlank { "IDR" }
     val timeFormat = remember { SimpleDateFormat("dd/MM/yy HH:mm:ss", Locale.getDefault()) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    if (showDetailDialog) {
+        agu.analys.ui.components.trade.TradeLogDetailDialog(
+            tradeId = history.id,
+            symbol = history.symbol,
+            baseAsset = history.baseAsset,
+            quoteAsset = history.quoteAsset,
+            side = history.side.name,
+            orderType = history.type.displayName,
+            executionPrice = history.executionPrice,
+            quantity = history.quantity,
+            totalIdr = history.totalIdr,
+            feeIdr = history.feeIdr,
+            timestamp = history.timestamp,
+            isReal = history.isRealMirror,
+            strategyMode = history.strategyMode,
+            holdingDurationMs = history.holdingDurationMs,
+            entryPrice = history.entryPrice,
+            entryTimestamp = history.entryTimestamp,
+            pnlIdr = history.pnlIdr,
+            pnlPercent = history.pnlPercent,
+            isTrailingUsed = history.isTrailingUsed,
+            trailingPercent = history.trailingPercent,
+            trailingPeakPrice = history.trailingPeakPrice,
+            trailingLockPrice = history.trailingLockPrice,
+            snapshot = history.signalSnapshot,
+            onDismiss = { showDetailDialog = false }
+        )
+    }
 
     Card(
         shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(containerColor = TvCardBackground),
         border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { showDetailDialog = true }
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Row(
@@ -194,15 +226,29 @@ fun TradeHistoryItemCard(history: SimulationTradeHistoryItem) {
                             fontWeight = FontWeight.Bold
                         )
                     }
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.width(6.dp))
                     Text(
                         text = "${history.baseAsset}/${quote}",
                         color = TvTextPrimary,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold
                     )
+                    Spacer(Modifier.width(6.dp))
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(TvBlue.copy(alpha = 0.15f))
+                            .padding(horizontal = 5.dp, vertical = 1.dp)
+                    ) {
+                        Text(
+                            text = history.strategyMode.uppercase(),
+                            color = TvBlue,
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Black
+                        )
+                    }
                     if (history.isRealMirror) {
-                        Spacer(Modifier.width(6.dp))
+                        Spacer(Modifier.width(4.dp))
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(4.dp))
@@ -212,23 +258,17 @@ fun TradeHistoryItemCard(history: SimulationTradeHistoryItem) {
                             Text(
                                 text = "1:1 REAL",
                                 color = TvGreen,
-                                fontSize = 9.sp,
+                                fontSize = 8.sp,
                                 fontWeight = FontWeight.Black
                             )
                         }
                     }
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        text = "(${history.type.displayName})",
-                        color = TvTextSecondary,
-                        fontSize = 11.sp
-                    )
                 }
 
                 if (history.pnlIdr != null && history.pnlPercent != null) {
                     val isProfit = history.pnlIdr >= 0
                     Text(
-                        text = "${if (isProfit) "+" else ""}${PriceFormatter.formatPrice(kotlin.math.abs(history.pnlIdr), quoteAsset = quote)} (${String.format("%.2f", history.pnlPercent)}%)",
+                        text = "${if (isProfit) "+" else ""}${PriceFormatter.formatPrice(kotlin.math.abs(history.pnlIdr), quoteAsset = quote)} (${String.format(Locale.US, "%.2f", history.pnlPercent)}%)",
                         color = if (isProfit) TvGreen else TvRed,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold
@@ -273,11 +313,80 @@ fun TradeHistoryItemCard(history: SimulationTradeHistoryItem) {
                 }
             }
 
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(8.dp))
+
+            // Metadata Row: Holding Duration, Trailing Lock, Signal Snapshot
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (history.holdingDurationMs != null && history.holdingDurationMs > 0L) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(TvSurfaceVariant)
+                                .padding(horizontal = 5.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "⏱ ${agu.analys.trading.TradeLogExporter.formatDuration(history.holdingDurationMs)}",
+                                color = TvTextSecondary,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+
+                    if (history.isTrailingUsed) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(TvGreen.copy(alpha = 0.15f))
+                                .padding(horizontal = 5.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "🔒 Trailing Lock",
+                                color = TvGreen,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    if (history.signalSnapshot != null) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(TvAmber.copy(alpha = 0.15f))
+                                .padding(horizontal = 5.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "📊 Sinyal OK",
+                                color = TvAmber,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Detail & AI Log ›",
+                        color = TvBlue,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(4.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
                     text = timeFormat.format(Date(history.timestamp)),

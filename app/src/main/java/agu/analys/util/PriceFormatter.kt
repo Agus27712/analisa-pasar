@@ -9,33 +9,42 @@ object PriceFormatter {
 
     /** Format harga dengan simbol mata uang dinamis (IDR / USDT / BIDR / USD) */
     fun formatPrice(price: Double, showSymbol: Boolean = true, quoteAsset: String = "IDR"): String {
-        if (price.isNaN() || price.isInfinite() || price <= 0) {
+        if (price.isNaN() || price.isInfinite()) {
             val isUsdt = quoteAsset.equals("USDT", true) || quoteAsset.equals("USD", true)
             return if (!showSymbol) "0" else if (isUsdt) "$0.00" else "Rp 0"
         }
+        if (price == 0.0) {
+            val isUsdt = quoteAsset.equals("USDT", true) || quoteAsset.equals("USD", true)
+            return if (!showSymbol) "0" else if (isUsdt) "$0.00" else "Rp 0"
+        }
+        val isNegative = price < 0.0
+        val absPrice = abs(price)
         val isUsdt = quoteAsset.equals("USDT", true) || quoteAsset.equals("USD", true)
-        if (isUsdt) {
+        val formatted = if (isUsdt) {
             val prefix = if (showSymbol) "$" else ""
             val symbols = DecimalFormatSymbols(Locale.US)
-            return when {
-                price < 0.0001 -> prefix + DecimalFormat("0.########", symbols).format(price)
-                price < 1.0 -> prefix + DecimalFormat("0.######", symbols).format(price)
-                price < 10.0 -> prefix + DecimalFormat("0.####", symbols).format(price)
-                else -> prefix + DecimalFormat("#,##0.00", symbols).format(price)
+            when {
+                absPrice < 0.0001 -> prefix + DecimalFormat("0.########", symbols).format(absPrice)
+                absPrice < 1.0 -> prefix + DecimalFormat("0.######", symbols).format(absPrice)
+                absPrice < 10.0 -> prefix + DecimalFormat("0.####", symbols).format(absPrice)
+                else -> prefix + DecimalFormat("#,##0.00", symbols).format(absPrice)
             }
         } else {
             val prefix = if (showSymbol) "Rp " else ""
-            val rounded = kotlin.math.round(price).toLong()
+            val rounded = kotlin.math.round(absPrice).toLong()
             val symbols = DecimalFormatSymbols(Locale("id", "ID")).apply {
                 groupingSeparator = '.'
                 decimalSeparator = ','
             }
-            return if (price < 1.0) {
-                prefix + DecimalFormat("0.########", symbols).format(price)
+            if (absPrice < 1.0) {
+                prefix + DecimalFormat("0.########", symbols).format(absPrice)
+            } else if (absPrice < 100.0 && absPrice % 1.0 != 0.0) {
+                prefix + DecimalFormat("#,##0.##", symbols).format(absPrice)
             } else {
                 prefix + DecimalFormat("#,##0", symbols).format(rounded)
             }
         }
+        return if (isNegative) "-$formatted" else formatted
     }
 
     /** Alias — selalu full price untuk level AI */
@@ -157,6 +166,8 @@ object PriceFormatter {
             .replace("Rp", "", ignoreCase = true)
             .replace("IDR", "", ignoreCase = true)
             .replace("BTC", "", ignoreCase = true)
+            .replace("USDT", "", ignoreCase = true)
+            .replace("$", "")
             .trim()
         if (cleaned.isBlank()) return 0.0
 
@@ -164,18 +175,46 @@ object PriceFormatter {
         val hasDot = cleaned.contains(".")
 
         val sanitized = if (hasDot && hasComma) {
-            // Contoh: "1.367.959,50" -> titik adalah ribuan, koma adalah desimal
-            cleaned.replace(".", "").replace(",", ".")
+            val lastDot = cleaned.lastIndexOf('.')
+            val lastComma = cleaned.lastIndexOf(',')
+            if (lastDot > lastComma) {
+                // Contoh: "1,367,959.50" -> koma ribuan, titik desimal
+                cleaned.replace(",", "")
+            } else {
+                // Contoh: "1.367.959,50" -> titik ribuan, koma desimal
+                cleaned.replace(".", "").replace(",", ".")
+            }
         } else if (hasDot) {
-            // Dalam konteks IDR Indodax, titik digunakan sebagai pemisah ribuan (contoh: "37.987" atau "1.367.959.000")
-            cleaned.replace(".", "")
+            val dotCount = cleaned.count { it == '.' }
+            if (dotCount > 1) {
+                // Multiple dots (cth: "1.367.959.000" atau "2.500.000") -> pemisah ribuan
+                cleaned.replace(".", "")
+            } else {
+                // Single dot: cth "41.00", "41.0", "41.25", "0.5", "1.000"
+                val parts = cleaned.split('.')
+                val beforeDot = parts.getOrNull(0).orEmpty().trim()
+                val afterDot = parts.getOrNull(1).orEmpty().trim()
+                if (beforeDot == "0" || afterDot.length != 3) {
+                    // Jelas desimal pecahan: "0.5", "41.00", "41.0", "41.25", "12.5"
+                    cleaned
+                } else {
+                    // Panjang tepat 3 digit setelah titik & angka >= 1 (cth: "25.000" atau "1.000" di IDR)
+                    cleaned.replace(".", "")
+                }
+            }
         } else if (hasComma) {
-            cleaned.replace(",", ".")
+            val commaCount = cleaned.count { it == ',' }
+            if (commaCount > 1) {
+                cleaned.replace(",", "")
+            } else {
+                // Single comma: cth "41,50" atau "0,5" -> koma adalah desimal
+                cleaned.replace(",", ".")
+            }
         } else {
             cleaned
         }
 
-        return sanitized.filter { it.isDigit() || it == '.' }.toDoubleOrNull() ?: 0.0
+        return sanitized.filter { it.isDigit() || it == '.' || it == '-' }.toDoubleOrNull() ?: 0.0
     }
 
     /** Helper umum untuk format angka desimal ringkas di evaluator & sinyal */

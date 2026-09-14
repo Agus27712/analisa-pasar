@@ -5,7 +5,9 @@ import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.ShowChart
 import androidx.compose.material3.Icon
@@ -25,6 +27,7 @@ import agu.analys.util.PriceFormatter
 fun SellPositionOverviewCard(
     context: PositionContext,
     quoteAsset: String = "IDR",
+    onEditEntryClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val entry = context.entryPrice
@@ -142,9 +145,10 @@ fun SellPositionOverviewCard(
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             DetailValueBox(
-                label = "Harga Beli (Entry)",
+                label = if (onEditEntryClick != null) "Harga Beli ✎" else "Harga Beli (Entry)",
                 value = if (entry != null && entry > 0.0) PriceFormatter.formatPrice(entry, quoteAsset = quoteAsset) else "—",
                 valueColor = TvTextPrimary,
+                onClick = onEditEntryClick,
                 modifier = Modifier.weight(1f)
             )
 
@@ -170,20 +174,23 @@ private fun DetailValueBox(
     label: String,
     value: String,
     valueColor: Color,
+    onClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     Column(
         modifier = modifier
             .background(TvSurface, RoundedCornerShape(8.dp))
-            .border(0.6.dp, TvBorder.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
+            .border(0.6.dp, if (onClick != null) TvAmber.copy(alpha = 0.5f) else TvBorder.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
+            .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)
             .padding(horizontal = 6.dp, vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
         Text(
             text = label,
-            color = TvTextSecondary,
+            color = if (onClick != null) TvAmber else TvTextSecondary,
             fontSize = 9.5.sp,
+            fontWeight = if (onClick != null) FontWeight.SemiBold else FontWeight.Normal,
             maxLines = 1,
             modifier = Modifier.basicMarquee()
         )

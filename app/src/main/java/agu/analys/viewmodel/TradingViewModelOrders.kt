@@ -61,11 +61,52 @@ fun TradingViewModel.submitSimulationOrder(
     price: Double,
     stopPrice: Double = 0.0,
     quantity: Double
-): SimulationOrderResult = simCoordinator.submitOrder(
-    pair = _selectedPair.value,
-    currentPrice = marketDataCoordinator.currentTick.value?.price ?: price,
-    side = side, type = type, price = price, stopPrice = stopPrice, quantity = quantity
-)
+): SimulationOrderResult {
+    val pair = _selectedPair.value
+    val curTick = marketDataCoordinator.currentTick.value
+    val curIndicators = currentIndicators.value
+    val curSignal = aiSignalState.value
+    val curBids = marketDataCoordinator.orderBookBids.value
+    val curAsks = marketDataCoordinator.orderBookAsks.value
+    val mode = strategyMode.value.name
+    val spotPos = positionStore.get(pair.symbol)
+
+    val snapshot = agu.analys.trading.TradeSignalSnapshot.capture(
+        symbol = pair.symbol,
+        strategyMode = mode,
+        tick = curTick,
+        indicators = curIndicators,
+        signal = curSignal,
+        bids = curBids,
+        asks = curAsks
+    )
+
+    val isHolding = spotPos.isHolding && !spotPos.isReal
+    val holdDuration = if (side == SimulationOrderSide.SELL && isHolding && spotPos.openedAt > 0L) {
+        (System.currentTimeMillis() - spotPos.openedAt).coerceAtLeast(0L)
+    } else null
+    val entryPrice = if (side == SimulationOrderSide.SELL && isHolding) spotPos.entryPrice else if (side == SimulationOrderSide.BUY) price else null
+    val entryTimestamp = if (side == SimulationOrderSide.SELL && isHolding) spotPos.openedAt else if (side == SimulationOrderSide.BUY) System.currentTimeMillis() else null
+
+    return simCoordinator.submitOrder(
+        pair = pair,
+        currentPrice = curTick?.price ?: price,
+        side = side,
+        type = type,
+        price = price,
+        stopPrice = stopPrice,
+        quantity = quantity,
+        strategyMode = mode,
+        holdingDurationMs = holdDuration,
+        entryPrice = entryPrice,
+        entryTimestamp = entryTimestamp,
+        isTrailingUsed = spotPos.isTrailingEnabled,
+        trailingPercent = spotPos.trailingPercent,
+        trailingPeakPrice = spotPos.peakPrice,
+        trailingLockPrice = spotPos.trailingStopPrice,
+        signalSnapshot = snapshot
+    )
+}
 
 fun TradingViewModel.cancelSimulationOrder(orderId: String): Boolean = simCoordinator.cancelOrder(orderId)
 fun TradingViewModel.cancelAllSimulationOrders(symbol: String? = null): Int = simCoordinator.cancelAllOrders(symbol)
@@ -272,6 +313,31 @@ fun TradingViewModel.executeSellOrders(
             }
         )
     } else {
+        val curTick = marketDataCoordinator.currentTick.value
+        val curIndicators = currentIndicators.value
+        val curSignal = aiSignalState.value
+        val curBids = marketDataCoordinator.orderBookBids.value
+        val curAsks = marketDataCoordinator.orderBookAsks.value
+        val mode = strategyMode.value.name
+        val spotPos = positionStore.get(pair.symbol)
+
+        val snapshot = agu.analys.trading.TradeSignalSnapshot.capture(
+            symbol = pair.symbol,
+            strategyMode = mode,
+            tick = curTick,
+            indicators = curIndicators,
+            signal = curSignal,
+            bids = curBids,
+            asks = curAsks
+        )
+
+        val isHolding = spotPos.isHolding && !spotPos.isReal
+        val holdDuration = if (isHolding && spotPos.openedAt > 0L) {
+            (System.currentTimeMillis() - spotPos.openedAt).coerceAtLeast(0L)
+        } else null
+        val entryPrice = if (isHolding) spotPos.entryPrice else null
+        val entryTimestamp = if (isHolding) spotPos.openedAt else null
+
         simCoordinator.executeSimulationSellOrders(
             pair = pair,
             totalQuantity = sellQty,
@@ -281,6 +347,15 @@ fun TradingViewModel.executeSellOrders(
             tp1Percent = tp1Percent,
             tp2Price = tp2Price,
             tp2Percent = tp2Percent,
+            strategyMode = mode,
+            holdingDurationMs = holdDuration,
+            entryPrice = entryPrice,
+            entryTimestamp = entryTimestamp,
+            isTrailingUsed = spotPos.isTrailingEnabled,
+            trailingPercent = spotPos.trailingPercent,
+            trailingPeakPrice = spotPos.peakPrice,
+            trailingLockPrice = spotPos.trailingStopPrice,
+            signalSnapshot = snapshot,
             onResult = { success, msg ->
                 if (success) {
                     positionCoordinator.setOwnership(pair.symbol, false)

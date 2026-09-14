@@ -147,7 +147,16 @@ class SimulationTradeStore(context: Context) {
         price: Double,
         stopPrice: Double = 0.0,
         quantity: Double,
-        currentMarketPrice: Double
+        currentMarketPrice: Double,
+        strategyMode: String = "SCALPING",
+        holdingDurationMs: Long? = null,
+        entryPrice: Double? = null,
+        entryTimestamp: Long? = null,
+        isTrailingUsed: Boolean = false,
+        trailingPercent: Double? = null,
+        trailingPeakPrice: Double? = null,
+        trailingLockPrice: Double? = null,
+        signalSnapshot: TradeSignalSnapshot? = null
     ): SimulationOrderResult {
         if (quantity <= 0.0) return SimulationOrderResult.Error("Jumlah koin harus lebih besar dari 0.")
         val wallet = getWallet()
@@ -160,7 +169,16 @@ class SimulationTradeStore(context: Context) {
                 if (execPrice <= 0.0) return SimulationOrderResult.Error("Harga pasar realtime belum tersedia.")
 
                 if (side == SimulationOrderSide.BUY) {
-                    val result = SimulationOrderEngine.executeMarketBuy(wallet, symbol, baseKey, quote, execPrice, quantity)
+                    val result = SimulationOrderEngine.executeMarketBuy(
+                        wallet = wallet,
+                        symbol = symbol,
+                        baseKey = baseKey,
+                        quote = quote,
+                        execPrice = execPrice,
+                        quantity = quantity,
+                        strategyMode = strategyMode,
+                        signalSnapshot = signalSnapshot
+                    )
                     return result.fold(
                         onSuccess = { res ->
                             saveWallet(res.updatedWallet)
@@ -172,7 +190,23 @@ class SimulationTradeStore(context: Context) {
                         }
                     )
                 } else {
-                    val result = SimulationOrderEngine.executeMarketSell(wallet, symbol, baseKey, quote, execPrice, quantity)
+                    val result = SimulationOrderEngine.executeMarketSell(
+                        wallet = wallet,
+                        symbol = symbol,
+                        baseKey = baseKey,
+                        quote = quote,
+                        execPrice = execPrice,
+                        quantity = quantity,
+                        strategyMode = strategyMode,
+                        holdingDurationMs = holdingDurationMs,
+                        entryPrice = entryPrice,
+                        entryTimestamp = entryTimestamp,
+                        isTrailingUsed = isTrailingUsed,
+                        trailingPercent = trailingPercent,
+                        trailingPeakPrice = trailingPeakPrice,
+                        trailingLockPrice = trailingLockPrice,
+                        signalSnapshot = signalSnapshot
+                    )
                     return result.fold(
                         onSuccess = { res ->
                             saveWallet(res.updatedWallet)
@@ -218,7 +252,15 @@ class SimulationTradeStore(context: Context) {
                         totalIdr = totalIdr,
                         feeIdr = feeIdr,
                         status = SimulationOrderStatus.OPEN,
-                        isStopTriggered = type == SimulationOrderType.LIMIT
+                        isStopTriggered = type == SimulationOrderType.LIMIT,
+                        strategyMode = strategyMode,
+                        entryPrice = price,
+                        entryTimestamp = System.currentTimeMillis(),
+                        isTrailingUsed = isTrailingUsed,
+                        trailingPercent = trailingPercent,
+                        trailingPeakPrice = trailingPeakPrice,
+                        trailingLockPrice = trailingLockPrice,
+                        signalSnapshot = signalSnapshot
                     )
 
                     val openList = getOpenOrders().toMutableList()
@@ -258,7 +300,15 @@ class SimulationTradeStore(context: Context) {
                         totalIdr = totalIdr,
                         feeIdr = feeIdr,
                         status = SimulationOrderStatus.OPEN,
-                        isStopTriggered = type == SimulationOrderType.LIMIT
+                        isStopTriggered = type == SimulationOrderType.LIMIT,
+                        strategyMode = strategyMode,
+                        entryPrice = entryPrice,
+                        entryTimestamp = entryTimestamp,
+                        isTrailingUsed = isTrailingUsed,
+                        trailingPercent = trailingPercent,
+                        trailingPeakPrice = trailingPeakPrice,
+                        trailingLockPrice = trailingLockPrice,
+                        signalSnapshot = signalSnapshot
                     )
 
                     val openList = getOpenOrders().toMutableList()
@@ -389,6 +439,7 @@ class SimulationTradeStore(context: Context) {
                         avgBuyPrices = newAvgMap
                     )
 
+                    val now = System.currentTimeMillis()
                     val history = SimulationTradeHistoryItem(
                         id = UUID.randomUUID().toString(),
                         orderId = order.id,
@@ -401,7 +452,16 @@ class SimulationTradeStore(context: Context) {
                         quantity = order.quantity,
                         totalIdr = totalIdr,
                         feeIdr = feeIdr,
-                        timestamp = System.currentTimeMillis()
+                        timestamp = now,
+                        strategyMode = order.strategyMode,
+                        holdingDurationMs = 0L,
+                        entryPrice = execPrice,
+                        entryTimestamp = now,
+                        isTrailingUsed = order.isTrailingUsed,
+                        trailingPercent = order.trailingPercent,
+                        trailingPeakPrice = order.trailingPeakPrice,
+                        trailingLockPrice = order.trailingLockPrice,
+                        signalSnapshot = order.signalSnapshot
                     )
                     addTradeHistory(history)
                 } else {
@@ -415,8 +475,8 @@ class SimulationTradeStore(context: Context) {
                     val remCoin = (curCoin - order.quantity).coerceAtLeast(0.0)
                     if (remCoin <= 0.00000001) newCoinBalances.remove(baseKey) else newCoinBalances[baseKey] = remCoin
 
-                    val avgBuy = wallet.avgBuyPrices[baseKey] ?: execPrice
-                    val costBasis = order.quantity * avgBuy
+                    val effectiveEntry = order.entryPrice ?: (wallet.avgBuyPrices[baseKey] ?: execPrice)
+                    val costBasis = order.quantity * effectiveEntry
                     val netIdr = totalIdr - feeIdr
                     val pnlIdr = totalIdr - costBasis - feeIdr
                     val pnlPercent = if (costBasis > 0.0) (pnlIdr / costBasis) * 100.0 else 0.0
@@ -427,6 +487,8 @@ class SimulationTradeStore(context: Context) {
                         lockedCoinBalances = lockedMap
                     )
 
+                    val now = System.currentTimeMillis()
+                    val duration = if (order.entryTimestamp != null && order.entryTimestamp > 0L) (now - order.entryTimestamp).coerceAtLeast(0L) else null
                     val history = SimulationTradeHistoryItem(
                         id = UUID.randomUUID().toString(),
                         orderId = order.id,
@@ -439,9 +501,18 @@ class SimulationTradeStore(context: Context) {
                         quantity = order.quantity,
                         totalIdr = totalIdr,
                         feeIdr = feeIdr,
-                        timestamp = System.currentTimeMillis(),
+                        timestamp = now,
                         pnlIdr = pnlIdr,
-                        pnlPercent = pnlPercent
+                        pnlPercent = pnlPercent,
+                        strategyMode = order.strategyMode,
+                        holdingDurationMs = duration,
+                        entryPrice = effectiveEntry,
+                        entryTimestamp = order.entryTimestamp,
+                        isTrailingUsed = order.isTrailingUsed,
+                        trailingPercent = order.trailingPercent,
+                        trailingPeakPrice = order.trailingPeakPrice,
+                        trailingLockPrice = order.trailingLockPrice,
+                        signalSnapshot = order.signalSnapshot
                     )
                     addTradeHistory(history)
                 }
