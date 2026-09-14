@@ -262,7 +262,11 @@ class RealTradeCoordinator(
                 }
             }
             if (accBuyQty > 0.0) {
-                newAvg[asset] = accBuyCost / accBuyQty
+                val avgP = accBuyCost / accBuyQty
+                newAvg[asset.lowercase()] = avgP
+                newAvg[asset.uppercase()] = avgP
+                newAvg["${asset.lowercase()}idr"] = avgP
+                newAvg["${asset.uppercase()}IDR"] = avgP
                 newPartial[asset] = accBuyQty + 1e-12 < currentQty
             }
         }

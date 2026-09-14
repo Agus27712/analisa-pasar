@@ -34,12 +34,26 @@ fun TradingViewModel.syncRealTradeToSimulation(
 
     // 2. Sinkronkan ke SpotPositionStore agar engine tracking (Trailing Stop / TP / SL / Alert) aktif
     if (isBuy) {
-        positionStore.markBought(
-            symbol = symbol,
-            entryPrice = price,
-            quantity = quantity,
-            isReal = true
-        )
+        val currentPos = positionStore.get(symbol, isReal = true)
+        if (currentPos.isHolding && currentPos.quantity > 0.00000001 && currentPos.entryPrice > 0.0) {
+            val totalQty = currentPos.quantity + quantity
+            val totalCost = (currentPos.entryPrice * currentPos.quantity) + (price * quantity)
+            val weightedAvgPrice = if (totalQty > 0.0) totalCost / totalQty else price
+            positionStore.setHolding(
+                symbol = symbol,
+                invested = totalCost,
+                entry = weightedAvgPrice,
+                quantity = totalQty,
+                isReal = true
+            )
+        } else {
+            positionStore.markBought(
+                symbol = symbol,
+                entryPrice = price,
+                quantity = quantity,
+                isReal = true
+            )
+        }
         if (tp1 > price || tp2 > price) {
             val currentPos = positionStore.get(symbol, isReal = true)
             positionStore.setAutoSellParams(
@@ -74,12 +88,26 @@ fun TradingViewModel.syncSimulationTradeToPositionStore(order: SimulationOrder) 
     val symbol = order.symbol
     if (order.side == SimulationOrderSide.BUY) {
         val fillPrice = if (order.filledAvgPrice > 0.0) order.filledAvgPrice else order.limitPrice
-        positionStore.markBought(
-            symbol = symbol,
-            entryPrice = fillPrice,
-            quantity = order.quantity,
-            isReal = false
-        )
+        val currentPos = positionStore.get(symbol, isReal = false)
+        if (currentPos.isHolding && currentPos.quantity > 0.00000001 && currentPos.entryPrice > 0.0) {
+            val totalQty = currentPos.quantity + order.quantity
+            val totalCost = (currentPos.entryPrice * currentPos.quantity) + (fillPrice * order.quantity)
+            val weightedAvg = if (totalQty > 0.0) totalCost / totalQty else fillPrice
+            positionStore.setHolding(
+                symbol = symbol,
+                invested = totalCost,
+                entry = weightedAvg,
+                quantity = totalQty,
+                isReal = false
+            )
+        } else {
+            positionStore.markBought(
+                symbol = symbol,
+                entryPrice = fillPrice,
+                quantity = order.quantity,
+                isReal = false
+            )
+        }
     } else if (order.side == SimulationOrderSide.SELL) {
         val currentPos = positionStore.get(symbol, isReal = false)
         val currentQty = currentPos.quantity
@@ -129,20 +157,22 @@ fun TradingViewModel.syncRealBalancesToPositionStore(
             ?: 0.0
         
         if (qty > 0.00000001) {
+            val finalEntry = if (avgPrice > 0.0) avgPrice else if (pos.entryPrice > 0.0) pos.entryPrice else 0.0
+            val totalInvested = if (finalEntry > 0.0) finalEntry * qty else pos.investedAmount
             if (!pos.isHolding) {
                 // Terdeteksi ada saldo real baru dari luar app -> auto-sync markBought
                 positionStore.markBought(
                     symbol = symbol,
-                    entryPrice = avgPrice,
+                    entryPrice = finalEntry,
                     quantity = qty,
+                    invested = totalInvested,
                     isReal = true
                 )
             } else {
-                // Update kuantitas dan harga rata-rata jika belum disetel manual
-                val finalEntry = if (pos.entryPrice > 0.0) pos.entryPrice else avgPrice
+                // Update kuantitas dan harga rata-rata secara sinkron
                 positionStore.setHolding(
                     symbol = symbol,
-                    invested = finalEntry * qty,
+                    invested = totalInvested,
                     entry = finalEntry,
                     quantity = qty,
                     isReal = true

@@ -60,7 +60,11 @@ fun RealPortfolioView(
                 dashboardTicks.containsKey(coinUpper) -> dashboardTicks[coinUpper]?.price ?: 0.0
                 else -> 0.0
             }
-            val avgPrice = realAvgBuyPrices[coin] ?: 0.0
+            val avgPrice = realAvgBuyPrices[coin]
+                ?: realAvgBuyPrices[coinLower]
+                ?: realAvgBuyPrices[coinUpper]
+                ?: realAvgBuyPrices[symbol]
+                ?: 0.0
             val effectivePrice = if (price > 0.0) price else avgPrice
             val estVal = qty * effectivePrice
             val pnlIdr = if (avgPrice > 0.0) (effectivePrice - avgPrice) * qty else 0.0

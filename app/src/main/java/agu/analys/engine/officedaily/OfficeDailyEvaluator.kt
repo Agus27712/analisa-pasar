@@ -255,7 +255,7 @@ object OfficeDailyEvaluator {
         }
 
         val finalScore = when {
-            isDangerous -> 0
+            isDangerous -> 20
             isQualified -> (82 + min(13, (buyScore * 0.12).toInt())).coerceIn(80, 95)
             step3Ok -> 62
             step2Ok -> 48

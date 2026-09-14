@@ -122,20 +122,21 @@ fun TradingViewModel.getHoldingStatus(pair: TradingPair, forceIsReal: Boolean? =
 
     if (targetIsReal) {
         // STRICTLY REAL MODE: Hanya evaluasi posisi Real / saldo akun Real Indodax
-        val spotPos = positionStore.get(pair.symbol)
+        val spotPos = positionStore.get(pair.symbol, isReal = true)
+        val realBalances = realIndodaxBalance.value
+        val realQty = realBalances[baseLower] ?: realBalances[baseUpper] ?: 0.0
+        val realAvg = realAvgBuyPrices.value[symbolNorm]
+            ?: realAvgBuyPrices.value[pair.symbol.uppercase()]
+            ?: realAvgBuyPrices.value[baseUpper]
+            ?: realAvgBuyPrices.value[baseLower]
+            ?: if (spotPos.isReal && spotPos.entryPrice > 0.0) spotPos.entryPrice else 0.0
+
         if (spotPos.isHolding && spotPos.isReal && spotPos.quantity > 0.00000001) {
-            val entry = if (spotPos.entryPrice > 0.0) {
-                spotPos.entryPrice
-            } else {
-                realAvgBuyPrices.value[symbolNorm]
-                    ?: realAvgBuyPrices.value[pair.symbol.uppercase()]
-                    ?: realAvgBuyPrices.value[baseUpper]
-                    ?: 0.0
-            }
+            val entry = if (realAvg > 0.0) realAvg else spotPos.entryPrice
             val sl = if (spotPos.stopLossPrice > 0.0) spotPos.stopLossPrice else if (entry > 0.0) entry * 0.99 else 0.0
             return CoinHoldingStatus(
                 isHolding = true,
-                quantity = spotPos.quantity,
+                quantity = if (realQty > 0.0) realQty else spotPos.quantity,
                 entryPrice = entry,
                 isReal = true,
                 tp1Price = spotPos.tp1Price,
@@ -145,13 +146,7 @@ fun TradingViewModel.getHoldingStatus(pair: TradingPair, forceIsReal: Boolean? =
             )
         }
 
-        val realBalances = realIndodaxBalance.value
-        val realQty = realBalances[baseLower] ?: realBalances[baseUpper] ?: 0.0
         if (realQty > 0.00000001 && baseUpper != "IDR" && prefs.hasIndodaxCredentials()) {
-            val realAvg = realAvgBuyPrices.value[symbolNorm]
-                ?: realAvgBuyPrices.value[pair.symbol.uppercase()]
-                ?: realAvgBuyPrices.value[baseUpper]
-                ?: if (spotPos.isReal) spotPos.entryPrice else 0.0
             val sl = if (spotPos.isReal && spotPos.stopLossPrice > 0.0) spotPos.stopLossPrice else if (realAvg > 0.0) realAvg * 0.99 else 0.0
             return CoinHoldingStatus(
                 isHolding = true,
@@ -168,7 +163,7 @@ fun TradingViewModel.getHoldingStatus(pair: TradingPair, forceIsReal: Boolean? =
         return CoinHoldingStatus(isHolding = false, isReal = true)
     } else {
         // STRICTLY SIMULATION MODE: Hanya evaluasi posisi Simulasi / saldo akun Simulasi
-        val spotPos = positionStore.get(pair.symbol)
+        val spotPos = positionStore.get(pair.symbol, isReal = false)
         if (spotPos.isHolding && !spotPos.isReal && spotPos.quantity > 0.00000001) {
             val sl = if (spotPos.stopLossPrice > 0.0) spotPos.stopLossPrice else if (spotPos.entryPrice > 0.0) spotPos.entryPrice * 0.99 else 0.0
             return CoinHoldingStatus(

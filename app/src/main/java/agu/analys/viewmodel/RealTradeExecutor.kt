@@ -202,21 +202,31 @@ class RealTradeExecutor(
                 runCatching {
                     val cachedBalances = prefs.getSavedRealBalance().toMutableMap()
                     val currentIdr = cachedBalances["idr"] ?: 0.0
+                    val baseLower = base.lowercase()
+                    val curCoin = cachedBalances[baseLower] ?: 0.0
                     if (isBuy) {
                         val cost = finalExecutedQty * execPrice
+                        val newTotalCoin = curCoin + finalExecutedQty
                         cachedBalances["idr"] = (currentIdr - cost).coerceAtLeast(0.0)
-                        val curCoin = cachedBalances[base.lowercase()] ?: 0.0
-                        cachedBalances[base.lowercase()] = curCoin + finalExecutedQty
+                        cachedBalances[baseLower] = newTotalCoin
                         prefs.saveRealBalance(cachedBalances)
 
                         val cachedAvg = prefs.getSavedRealAvgBuyPrices().toMutableMap()
-                        cachedAvg[base.uppercase()] = execPrice
+                        val prevAvg = cachedAvg[baseLower] ?: cachedAvg[base.uppercase()] ?: 0.0
+                        val newAvgPrice = if (curCoin > 0.0 && prevAvg > 0.0 && newTotalCoin > 0.0) {
+                            ((prevAvg * curCoin) + (execPrice * finalExecutedQty)) / newTotalCoin
+                        } else {
+                            execPrice
+                        }
+                        cachedAvg[baseLower] = newAvgPrice
+                        cachedAvg[base.uppercase()] = newAvgPrice
+                        cachedAvg["${baseLower}idr"] = newAvgPrice
+                        cachedAvg["${base.uppercase()}IDR"] = newAvgPrice
                         prefs.saveRealAvgBuyPrices(cachedAvg)
                     } else {
                         val proceeds = finalExecutedQty * execPrice
                         cachedBalances["idr"] = currentIdr + proceeds
-                        val curCoin = cachedBalances[base.lowercase()] ?: 0.0
-                        cachedBalances[base.lowercase()] = (curCoin - finalExecutedQty).coerceAtLeast(0.0)
+                        cachedBalances[baseLower] = (curCoin - finalExecutedQty).coerceAtLeast(0.0)
                         prefs.saveRealBalance(cachedBalances)
                     }
                 }

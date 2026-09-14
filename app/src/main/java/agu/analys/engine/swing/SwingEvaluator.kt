@@ -103,6 +103,7 @@ object SwingEvaluator {
 
         // ── Indicators ──────────────────────────────────────────────────────
         val closes = history.map { it.close }
+        val highs = history.map { it.high }
         val rsi = IndicatorMath.rsi(history, min(14, history.size - 1))
         val ema20 = IndicatorMath.ema(closes, min(20, closes.size))
         val ema50 = IndicatorMath.ema(closes, min(50, closes.size))
@@ -341,28 +342,44 @@ object SwingEvaluator {
         val netRr = feeResult.netRr.coerceAtLeast(1.4)
         val rrString = "1:${fmt(netRr)}"
 
+        // ── Recent high / extension filter (FIX: dead-code sama seperti bug lama Office Daily —
+        // `price >= calculatedTp1 * 0.995` mustahil true karena calculatedTp1 selalu >= price*1.07.
+        // Diganti guard nyata: jarak ke recent high + extension dari rata-rata ATR, mencegah
+        // "beli di pucuk" seperti kasus XRP 9 Sep di Office Daily.) ─────────────────────────
+        val lookbackHigh = min(30, highs.size)
+        val recentHigh = highs.takeLast(lookbackHigh).maxOrNull() ?: price
+        val distToHighPct = if (recentHigh > 0.0) (recentHigh - price) / recentHigh else 1.0
+        val mean20 = closes.takeLast(min(20, closes.size)).average()
+        val atrExtension = if (effectiveAtr > 0.0) (price - mean20) / effectiveAtr else 0.0
+        val tooCloseToHigh = distToHighPct < 0.012
+        val isOverExtended = atrExtension > 1.8
+
         // --- 1. DANGER & INVALIDATION CHECKS (DI ATAS) ---
-        val isOverbought = rsi >= 72.0 || price >= calculatedTp1 * 0.995
+        val isOverbought = rsi >= 72.0
+        val isNearHighDanger = tooCloseToHigh || isOverExtended
         val isResistanceRejection = (detectedSetup == SwingSetup.REJECTION && rejectionAtResistance) ||
             (detectedSetup == SwingSetup.RECLAIM_FAILED && (reclaimFromAbove || failedBreakout))
         val isSolidBreakdown = isBearishTrend || solidBreakdown || bosBreakdown ||
             (detectedSetup == SwingSetup.BREAKOUT && (solidBreakdown || bosBreakdown))
         val isHeavySelling = sell >= 42.0 && sell > buy * 1.15
 
-        val isTechnicalDistribution = isOverbought || isResistanceRejection || isSolidBreakdown || isHeavySelling
+        val isTechnicalDistribution = isOverbought || isNearHighDanger || isResistanceRejection || isSolidBreakdown || isHeavySelling
+        if (isNearHighDanger) {
+            reasons.add(0, "⚠️ Tertahan: Harga terlalu dekat recent high (Rp ${fmtPrice(recentHigh)}) / overextended. Hindari beli di pucuk.")
+        }
 
         // --- 2. WATERFALL CHECKPOINTS ---
         val step1Ok = !isTechnicalDistribution &&
             (emaBullish || isReclaimEma || detectedSetup == SwingSetup.RECLAIM_FAILED || detectedSetup == SwingSetup.BREAKOUT) &&
             !isBearishTrend
 
-        val step2Ok = step1Ok && detectedSetup != SwingSetup.NONE &&
+        val step2Ok = step1Ok && detectedSetup != SwingSetup.NONE && !tooCloseToHigh &&
             (nearSupport || nearResistance || brokeAboveResistance || brokeBelowSupport || micro.hasBullishBOS || micro.hasBullishSweep)
 
         val isRsiBullish = rsi in 35.0..68.0 || (rsi in 28.0..38.0 && macdHist >= 0)
         val step3Ok = step2Ok && (isRsiBullish || macdHist >= 0 || strongVolume) && buy > sell
 
-        val step4Ok = step3Ok && netRr >= 1.4 && buy >= 38.0
+        val step4Ok = step3Ok && netRr >= 1.4 && buy >= 38.0 && !isOverExtended
 
         val completedSteps = when {
             step4Ok -> 4
@@ -373,7 +390,7 @@ object SwingEvaluator {
         }
 
         // ── Keputusan akhir ────────────────────────────────
-        val isQualifiedBuy = step4Ok && buy >= 42.0 && buy > sell * 1.15 &&
+        val isQualifiedBuy = step4Ok && buy >= 42.0 && buy > sell * 1.15 && !isNearHighDanger &&
             detectedSetup in listOf(SwingSetup.REJECTION, SwingSetup.BREAKOUT, SwingSetup.RETEST, SwingSetup.RECLAIM_FAILED) &&
             (detectedSetup != SwingSetup.REJECTION || !rejectionAtResistance)
 
@@ -444,6 +461,7 @@ object SwingEvaluator {
 
         val statusTitle = when {
             isOverbought -> "SWING OVERBOUGHT (HOLD)"
+            isNearHighDanger -> "SWING DEKAT HIGH / OVEREXTENDED (HOLD)"
             isSolidBreakdown -> "SWING BREAKDOWN (HOLD)"
             isTechnicalDistribution -> "SWING PULLBACK / RESISTANCE"
             completedSteps == 4 -> "SWING ENTRY READY"
@@ -473,6 +491,7 @@ object SwingEvaluator {
             statusTitle = statusTitle,
             waitingFor = when {
                 isOverbought -> "Menunggu koreksi / reset RSI (Overbought)"
+                isNearHighDanger -> "Menunggu pullback dari zona high (jangan entry di pucuk)"
                 isSolidBreakdown -> "Menunggu pembentukan lantai support baru"
                 isTechnicalDistribution -> "Menunggu lantai support baru (jangan entry)"
                 completedSteps == 4 -> "Siap eksekusi Swing Buy"
@@ -527,4 +546,3 @@ object SwingEvaluator {
     private fun fmt(v: Double) = agu.analys.util.PriceFormatter.fmt(v)
     private fun fmtPrice(v: Double) = agu.analys.util.PriceFormatter.fmtPriceInt(v)
 }
-
