@@ -199,8 +199,24 @@ fun TradingViewModel.getHoldingStatus(pair: TradingPair, forceIsReal: Boolean? =
     }
 }
 
-fun TradingViewModel.setManualPositionPrice(symbol: String, entryPrice: Double, investedAmount: Double = 0.0, isReal: Boolean = isRealBuyMode.value) {
-    positionCoordinator.setManualEntry(symbol, entryPrice, investedAmount, isReal)
+fun TradingViewModel.updateRealAvgBuyPrice(coin: String, newAvgPrice: Double, totalInvested: Double? = null) {
+    realCoordinator.updateAvgBuyPrice(coin, newAvgPrice)
+    val base = baseFromSymbolOrPair(coin)
+    val symbol = "${base.uppercase()}IDR"
+    val balances = realCoordinator.realIndodaxBalance.value
+    val qty = balances[base.lowercase()] ?: balances[base.uppercase()] ?: 0.0
+    val cost = totalInvested ?: if (qty > 0.0) newAvgPrice * qty else newAvgPrice
+    val finalQty = if (qty > 0.0) qty else 1.0
+
+    positionStore.setHolding(
+        symbol = symbol,
+        invested = cost,
+        entry = newAvgPrice,
+        quantity = finalQty,
+        isReal = true
+    )
+    positionCoordinator.refreshPosition(symbol)
+    recalculateDashboardBadges()
     updateForegroundServiceState()
 }
 
@@ -227,12 +243,13 @@ fun TradingViewModel.setTrailingStop(
     customTiersJson: String? = null
 ) {
     val symbol = pairSymbol
+    val isReal = isRealBuyMode.value
     val tick = if (currentTick.value?.symbol?.equals(symbol, ignoreCase = true) == true) {
         currentTick.value
     } else {
         marketDataCoordinator.dashboardTicks.value[symbol] ?: marketDataCoordinator.dashboardTicks.value[TradingPair.fromCustomSymbol(symbol).symbol]
     }
-    val pos = positionStore.get(symbol)
+    val pos = positionStore.get(symbol, isReal)
     val currentP = tick?.price?.takeIf { it > 0.0 } ?: (if (pos.peakPrice > 0.0) pos.peakPrice else pos.entryPrice)
     positionCoordinator.setTrailing(
         symbol = symbol,
@@ -240,7 +257,8 @@ fun TradingViewModel.setTrailingStop(
         pct = trailingPercent,
         refPrice = currentP,
         isTieredEnabled = isTieredEnabled,
-        customTiersJson = customTiersJson
+        customTiersJson = customTiersJson,
+        isReal = isReal
     )
     updateForegroundServiceState()
 }
@@ -274,7 +292,7 @@ fun TradingViewModel.setAutoSellParams(
     onResult: (Boolean, String) -> Unit = { _, _ -> }
 ) {
     val symbol = pairSymbol
-    positionCoordinator.setAutoSell(symbol, enabled, tp1Price, tp1Percent, tp2Price, tp2Percent)
+    positionCoordinator.setAutoSell(symbol, enabled, tp1Price, tp1Percent, tp2Price, tp2Percent, isReal = isRealBuyMode.value)
     onResult(true, if (enabled) "Target TP1 & TP2 tersimpan ke evaluator sinyal." else "Target TP dinonaktifkan.")
 }
 

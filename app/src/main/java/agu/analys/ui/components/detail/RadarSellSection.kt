@@ -43,7 +43,6 @@ fun RadarSellSection(
     activeFeePct: Double,
     isRealMode: Boolean,
     onExecuteSell: ((Double, Boolean, Double, Double, Double, Double) -> Unit)?,
-    onSetManualBuyPrice: ((Double, Double) -> Unit)? = null,
     spotPosition: agu.analys.trading.SpotPosition? = null,
     onSetTrailingStop: ((Boolean, Double) -> Unit)? = null,
     onSetTieredTrailingStop: ((Boolean, Double, Boolean, String?) -> Unit)? = null,
@@ -75,7 +74,6 @@ fun RadarSellSection(
     val trailingStopPrice = spotPosition?.trailingStopPrice ?: (peakPrice * (1.0 - trailingPercent / 100.0))
     val isTrailingTriggered = spotPosition?.isTrailingTriggered == true
 
-    var showManualDialog by remember { mutableStateOf(false) }
     var showSellConfirmDialog by remember { mutableStateOf(false) }
 
     val focusManager = LocalFocusManager.current
@@ -118,8 +116,7 @@ fun RadarSellSection(
             baseAsset = baseAsset,
             quoteAsset = quoteAsset,
             availableCoin = availableCoin,
-            effectiveBuyPrice = effectiveBuyPrice,
-            onManualBuyClick = { showManualDialog = true }
+            effectiveBuyPrice = effectiveBuyPrice
         )
 
         Spacer(Modifier.height(8.dp))
@@ -187,8 +184,7 @@ fun RadarSellSection(
             netReceivedSellIdr = netReceivedSellIdr,
             isProfitable = isProfitable,
             netProfitIdr = netProfitIdr,
-            netProfitPct = netProfitPct,
-            onManualBuyClick = { showManualDialog = true }
+            netProfitPct = netProfitPct
         )
 
         // AUTO TP1/TP2 untuk simulasi maupun real mode saat user buka switch & tap SIMPAN
@@ -290,20 +286,6 @@ fun RadarSellSection(
             }
         }
     }
-
-    SellManualBuyDialog(
-        show = showManualDialog,
-        onDismiss = { showManualDialog = false },
-        baseAsset = baseAsset,
-        quoteAsset = quoteAsset,
-        availableCoin = availableCoin,
-        initialAvgBuy = avgBuyPrice,
-        initialTotalCost = costBasisIdr,
-        onSave = { price, total ->
-            onSetManualBuyPrice?.invoke(price, total)
-            showManualDialog = false
-        }
-    )
 
     if (showSellConfirmDialog) {
         val parsedTp1Price = PriceFormatter.parseCleanIdrDouble(tp1PriceInput)

@@ -453,11 +453,6 @@ fun DetailChartScreen(
                         android.widget.Toast.makeText(context, "Harga belum tersedia.", android.widget.Toast.LENGTH_SHORT).show()
                     }
                 },
-                onSetManualBuyPrice = { entryPrice, investedAmount ->
-                    viewModel.setManualPositionPrice(pair.symbol, entryPrice, investedAmount, isReal = isRealBuyMode)
-                    HapticUtil.vibrateTradeSuccess(context)
-                    android.widget.Toast.makeText(context, "Harga beli manual tersimpan!", android.widget.Toast.LENGTH_SHORT).show()
-                },
                 spotPosition = spotPosition,
                 sellSignalState = sellSignalState,
                 positionContext = effectivePositionContext,

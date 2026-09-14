@@ -37,6 +37,7 @@ fun RealPortfolioView(
     realTradeStatus: String? = null,
     onUnlockPin: () -> Unit,
     onRefreshRealBalance: () -> Unit,
+    onEditAvgBuyPrice: (coin: String, newAvgPrice: Double, newInvested: Double) -> Unit = { _, _, _ -> },
     onCancelRealOrder: (String, String) -> Unit = { _, _ -> },
     onNavigateToDetail: (TradingPair) -> Unit,
     onSelectPair: (TradingPair) -> Unit,
@@ -160,6 +161,7 @@ fun RealPortfolioView(
                                 avgPrice = avgPrice,
                                 pnlIdr = pnlIdr,
                                 pnlPct = pnlPct,
+                                onEditAvgBuyPrice = onEditAvgBuyPrice,
                                 onSelectPair = onSelectPair,
                                 onNavigateToDetail = onNavigateToDetail
                             )

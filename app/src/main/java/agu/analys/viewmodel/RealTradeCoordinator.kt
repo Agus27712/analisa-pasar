@@ -68,6 +68,17 @@ class RealTradeCoordinator(
     private var lastFetchTimeMs = 0L
     private var rateLimitedUntilMs = 0L
 
+    fun updateAvgBuyPrice(coin: String, newAvgPrice: Double) {
+        val asset = baseFromPair(coin)
+        val current = _realAvgBuyPrices.value.toMutableMap()
+        current[asset.lowercase()] = newAvgPrice
+        current[asset.uppercase()] = newAvgPrice
+        current["${asset.lowercase()}idr"] = newAvgPrice
+        current["${asset.uppercase()}IDR"] = newAvgPrice
+        _realAvgBuyPrices.value = current
+        prefs.saveRealAvgBuyPrices(current)
+    }
+
     // Security delegation
     val isRealBuyEnabled: StateFlow<Boolean> = securityManager.isRealBuyEnabled
     val publicIp: StateFlow<String?> = securityManager.publicIp

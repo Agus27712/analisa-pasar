@@ -35,8 +35,7 @@ fun SellCalculationCard(
     netReceivedSellIdr: Double,
     isProfitable: Boolean,
     netProfitIdr: Double,
-    netProfitPct: Double,
-    onManualBuyClick: () -> Unit
+    netProfitPct: Double
 ) {
     Column(
         modifier = Modifier
@@ -165,39 +164,33 @@ fun SellCalculationCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(TvSurfaceVariant, RoundedCornerShape(10.dp))
-                    .border(1.dp, TvAmber.copy(alpha = 0.45f), RoundedCornerShape(10.dp))
+                    .border(1.dp, TvBorder, RoundedCornerShape(10.dp))
                     .padding(10.dp)
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    Icon(
+                        imageVector = Icons.Default.TrendingUp,
+                        contentDescription = null,
+                        tint = TvTextSecondary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Histori >7 hari tidak tersedia di API",
-                            color = TvAmber,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
+                            text = "Harga Beli Mengikuti Portofolio",
+                            color = TvTextPrimary,
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.SemiBold
                         )
                         Text(
-                            text = "Isi harga beli manual agar PnL bisa dihitung.",
+                            text = "Estimasi PnL dihitung otomatis berdasarkan data sync / portofolio Anda.",
                             color = TvTextSecondary,
-                            fontSize = 11.sp,
+                            fontSize = 10.5.sp,
                             lineHeight = 14.sp
                         )
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Button(
-                        onClick = onManualBuyClick,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = TvAmber,
-                            contentColor = Color.Black
-                        ),
-                        shape = RoundedCornerShape(8.dp),
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
-                    ) {
-                        Text("+ Manual", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }

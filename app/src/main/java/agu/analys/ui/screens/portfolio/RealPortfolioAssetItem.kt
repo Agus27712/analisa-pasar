@@ -5,9 +5,10 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.CompareArrows
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ShowChart
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -30,10 +31,12 @@ fun RealPortfolioAssetItem(
     avgPrice: Double,
     pnlIdr: Double,
     pnlPct: Double,
+    onEditAvgBuyPrice: (coin: String, newAvgPrice: Double, newInvested: Double) -> Unit,
     onSelectPair: (TradingPair) -> Unit,
     onNavigateToDetail: (TradingPair) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var showEditDialog by remember { mutableStateOf(false) }
     val symbol = "${coinUpper}IDR"
     val pair = TradingPair.fromCustomSymbol(symbol, "IDR")
     val pnlColor = if (pnlIdr > 0) TvGreen else if (pnlIdr < 0) TvRed else TvTextSecondary
@@ -89,22 +92,41 @@ fun RealPortfolioAssetItem(
                 }
             }
             
-            if (avgPrice > 0.0) {
-                Spacer(Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(TvSurfaceVariant, RoundedCornerShape(6.dp))
-                        .padding(horizontal = 8.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column {
-                        Text("Rata-rata Harga Beli", color = TvTextSecondary, fontSize = 9.sp)
-                        Text(PriceFormatter.formatPrice(avgPrice), color = TvTextPrimary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                    }
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(TvSurfaceVariant, RoundedCornerShape(6.dp))
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text("Rata-rata Harga Beli", color = TvTextSecondary, fontSize = 9.sp)
+                    Text(
+                        if (avgPrice > 0.0) PriceFormatter.formatPrice(avgPrice) else "Belum Diset",
+                        color = if (avgPrice > 0.0) TvTextPrimary else TvAmber,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(horizontalAlignment = Alignment.End) {
-                        Text("Harga Saat Ini", color = TvTextSecondary, fontSize = 9.sp)
+                        Text("Harga Live", color = TvTextSecondary, fontSize = 9.sp)
                         Text(if (price > 0) PriceFormatter.formatPrice(price) else "-", color = TvBlue, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    IconButton(
+                        onClick = { showEditDialog = true },
+                        modifier = Modifier.size(26.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "Edit Harga Beli",
+                            tint = TvGreen,
+                            modifier = Modifier.size(15.dp)
+                        )
                     }
                 }
             }
@@ -148,5 +170,19 @@ fun RealPortfolioAssetItem(
                 }
             }
         }
+    }
+
+    if (showEditDialog) {
+        RealAvgPriceEditDialog(
+            show = showEditDialog,
+            onDismiss = { showEditDialog = false },
+            coinUpper = coinUpper,
+            availableQty = qty,
+            initialAvgBuy = avgPrice,
+            onSave = { c, newAvg, newInv ->
+                onEditAvgBuyPrice(c, newAvg, newInv)
+                showEditDialog = false
+            }
+        )
     }
 }

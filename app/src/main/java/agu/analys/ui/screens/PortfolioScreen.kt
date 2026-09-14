@@ -286,6 +286,9 @@ fun PortfolioScreen(
                     }
                 },
                 onRefreshRealBalance = { viewModel.fetchRealBalance() },
+                onEditAvgBuyPrice = { coin, newAvg, newInv ->
+                    viewModel.updateRealAvgBuyPrice(coin, newAvg, newInv)
+                },
                 onCancelRealOrder = { symbol, orderId ->
                     viewModel.executeCancelRealOrder(symbol, orderId) { _, _ -> }
                 },

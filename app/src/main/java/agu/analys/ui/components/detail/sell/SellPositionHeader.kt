@@ -23,8 +23,7 @@ fun SellPositionHeader(
     baseAsset: String,
     quoteAsset: String,
     availableCoin: Double,
-    effectiveBuyPrice: Double,
-    onManualBuyClick: () -> Unit
+    effectiveBuyPrice: Double
 ) {
     Box(
         modifier = Modifier
@@ -86,31 +85,14 @@ fun SellPositionHeader(
                     modifier = Modifier.weight(1f, fill = false)
                 )
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = if (effectiveBuyPrice > 0.0) "${PriceFormatter.formatIdrNumber(effectiveBuyPrice)} $quoteAsset" else "Belum Ada Posisi",
-                        color = if (effectiveBuyPrice > 0.0) TvAmber else TvTextSecondary,
-                        fontSize = 10.5.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-
-                    Spacer(Modifier.width(6.dp))
-
-                    TextButton(
-                        onClick = onManualBuyClick,
-                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
-                        modifier = Modifier.height(22.dp)
-                    ) {
-                        Text(
-                            text = if (effectiveBuyPrice > 0.0) "[Ubah Manual]" else "[+ Manual >7 Hari]",
-                            color = TvAmber,
-                            fontSize = 9.5.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
+                Text(
+                    text = if (effectiveBuyPrice > 0.0) "${PriceFormatter.formatIdrNumber(effectiveBuyPrice)} $quoteAsset" else "Belum Ada Posisi",
+                    color = if (effectiveBuyPrice > 0.0) TvAmber else TvTextSecondary,
+                    fontSize = 10.5.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
     }

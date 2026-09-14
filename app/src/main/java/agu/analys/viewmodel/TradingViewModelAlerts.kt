@@ -23,80 +23,8 @@ fun TradingViewModel.printTrailingDiagnostics(symbol: String, currentPrice: Doub
 }
 
 fun TradingViewModel.checkAlertsAndTrailing(symbol: String, currentPrice: Double, rsi: Double? = null) {
-    val posBeforeUpdate = positionStore.get(symbol)
-    val oldPeak = posBeforeUpdate.peakPrice
-    val oldEffectivePct = if (posBeforeUpdate.activeTrailingPercent > 0.0) posBeforeUpdate.activeTrailingPercent else posBeforeUpdate.trailingPercent
-    val oldSlPrice = positionStore.calculateTrailingLimitPrice(oldPeak, posBeforeUpdate.entryPrice, oldEffectivePct)
-    printTrailingDiagnostics(symbol, currentPrice, posBeforeUpdate)
-    val (updatedPos, justTriggered) = positionStore.updateTrailingPrice(symbol, currentPrice)
-
-    // Mode REAL vs SIMULASI mutlak ditentukan dari status kepemilikan koin di SpotPositionStore (anti-leaking)
-    val isReal = updatedPos.isReal
-
-    if (justTriggered) {
-        refreshSpotPosition()
-        val effectivePct = if (updatedPos.activeTrailingPercent > 0.0) updatedPos.activeTrailingPercent else updatedPos.trailingPercent
-        val limitSellPrice = positionStore.calculateTrailingLimitPrice(updatedPos.peakPrice, updatedPos.entryPrice, effectivePct)
-        
-        val baseKey = TradingPair.fromCustomSymbol(symbol).baseAsset.uppercase()
-        val baseLower = baseKey.lowercase()
-        val posQty = if (updatedPos.quantity > 0.0) updatedPos.quantity else {
-            if (isReal) {
-                realCoordinator.realFreeBalance.value[baseLower]
-                    ?: realCoordinator.realIndodaxBalance.value[baseLower]
-                    ?: 0.0
-            } else simCoordinator.wallet.value.getAvailableCoin(baseKey)
-        }
-
-        if (posQty > 0.0) {
-            AlertNotificationHelper.sendTrailingHitNotification(
-                context = getApplication(),
-                symbol = symbol,
-                entryPrice = updatedPos.entryPrice,
-                peakPrice = updatedPos.peakPrice,
-                currentPrice = currentPrice,
-                limitSellPrice = limitSellPrice,
-                quantity = posQty,
-                isReal = isReal
-            )
-            // Eksekusi auto-sell jaring pengaman otomatis
-            executeAutoSellOrder(symbol, limitSellPrice, posQty, "TRAILING", isReal)
-        }
-    } else if (updatedPos.isHolding && updatedPos.isTrailingEnabled && updatedPos.peakPrice > oldPeak) {
-        val effectivePct = if (updatedPos.activeTrailingPercent > 0.0) updatedPos.activeTrailingPercent else updatedPos.trailingPercent
-        val newSlPrice = positionStore.calculateTrailingLimitPrice(updatedPos.peakPrice, updatedPos.entryPrice, effectivePct)
-        // NOTIFIKASI HANYA DIKIRIM JIKA BATAS AMAN (STOP LIMIT) BENAR-BENAR NAIK
-        // Mencegah spam jika harga naik sedikit namun batas aman masih tertahan di modal entry
-        if (newSlPrice > oldSlPrice) {
-            refreshSpotPosition()
-            if (isReal) {
-                updateRealTrailingOrder(symbol, updatedPos, newSlPrice)
-            } else {
-                updateSimTrailingOrder(symbol, updatedPos, newSlPrice, updatedPos.quantity)
-            }
-        }
-    }
-
-    // Auto Take Profit / Stop Loss Check
-    if (updatedPos.isHolding && updatedPos.isAutoSellEnabled) {
-        val qty = updatedPos.quantity
-        if (qty > 0.0) {
-            // Check TP1
-            if (!updatedPos.isTp1Triggered && updatedPos.tp1Price > 0.0 && currentPrice >= updatedPos.tp1Price) {
-                positionStore.markTp1Triggered(symbol)
-                refreshSpotPosition()
-                val sellQty = qty * (updatedPos.tp1Percent / 100.0)
-                executeAutoSellOrder(symbol, currentPrice, sellQty, "TP1", isReal, isPartial = updatedPos.tp1Percent < 100.0)
-            }
-            // Check TP2
-            if (!updatedPos.isTp2Triggered && updatedPos.tp2Price > 0.0 && currentPrice >= updatedPos.tp2Price) {
-                positionStore.markTp2Triggered(symbol)
-                refreshSpotPosition()
-                val sellQty = qty * (updatedPos.tp2Percent / 100.0)
-                executeAutoSellOrder(symbol, currentPrice, sellQty, "TP2", isReal, isPartial = updatedPos.tp2Percent < 100.0)
-            }
-        }
-    }
+    checkTrailingForMode(symbol, currentPrice, isReal = true)
+    checkTrailingForMode(symbol, currentPrice, isReal = false)
 
     // Price Alerts Trigger Check
     val alerts = alertStore.getAlertsForSymbol(symbol)
@@ -157,26 +85,101 @@ fun TradingViewModel.checkAlertsAndTrailing(symbol: String, currentPrice: Double
     }
 }
 
+fun TradingViewModel.checkTrailingForMode(symbol: String, currentPrice: Double, isReal: Boolean) {
+    val posBeforeUpdate = positionStore.get(symbol, isReal)
+    if (!posBeforeUpdate.isHolding) return
+
+    val oldPeak = posBeforeUpdate.peakPrice
+    val oldEffectivePct = if (posBeforeUpdate.activeTrailingPercent > 0.0) posBeforeUpdate.activeTrailingPercent else posBeforeUpdate.trailingPercent
+    val oldSlPrice = positionStore.calculateTrailingLimitPrice(oldPeak, posBeforeUpdate.entryPrice, oldEffectivePct)
+    printTrailingDiagnostics(symbol, currentPrice, posBeforeUpdate)
+    val (updatedPos, justTriggered) = positionStore.updateTrailingPrice(symbol, currentPrice, isReal)
+
+    if (justTriggered) {
+        refreshSpotPosition()
+        val effectivePct = if (updatedPos.activeTrailingPercent > 0.0) updatedPos.activeTrailingPercent else updatedPos.trailingPercent
+        val limitSellPrice = positionStore.calculateTrailingLimitPrice(updatedPos.peakPrice, updatedPos.entryPrice, effectivePct)
+        
+        val baseKey = TradingPair.fromCustomSymbol(symbol).baseAsset.uppercase()
+        val baseLower = baseKey.lowercase()
+        val posQty = if (updatedPos.quantity > 0.0) updatedPos.quantity else {
+            if (isReal) {
+                realCoordinator.realFreeBalance.value[baseLower]
+                    ?: realCoordinator.realIndodaxBalance.value[baseLower]
+                    ?: 0.0
+            } else simCoordinator.wallet.value.getAvailableCoin(baseKey)
+        }
+
+        if (posQty > 0.0) {
+            AlertNotificationHelper.sendTrailingHitNotification(
+                context = getApplication(),
+                symbol = symbol,
+                entryPrice = updatedPos.entryPrice,
+                peakPrice = updatedPos.peakPrice,
+                currentPrice = currentPrice,
+                limitSellPrice = limitSellPrice,
+                quantity = posQty,
+                isReal = isReal
+            )
+            // Eksekusi auto-sell jaring pengaman otomatis
+            executeAutoSellOrder(symbol, limitSellPrice, posQty, "TRAILING", isReal)
+        }
+    } else if (updatedPos.isHolding && updatedPos.isTrailingEnabled && updatedPos.peakPrice > oldPeak) {
+        val effectivePct = if (updatedPos.activeTrailingPercent > 0.0) updatedPos.activeTrailingPercent else updatedPos.trailingPercent
+        val newSlPrice = positionStore.calculateTrailingLimitPrice(updatedPos.peakPrice, updatedPos.entryPrice, effectivePct)
+        // NOTIFIKASI HANYA DIKIRIM JIKA BATAS AMAN (STOP LIMIT) BENAR-BENAR NAIK
+        if (newSlPrice > oldSlPrice) {
+            refreshSpotPosition()
+            if (isReal) {
+                updateRealTrailingOrder(symbol, updatedPos, newSlPrice)
+            } else {
+                updateSimTrailingOrder(symbol, updatedPos, newSlPrice, updatedPos.quantity)
+            }
+        }
+    }
+
+    // Auto Take Profit / Stop Loss Check
+    if (updatedPos.isHolding && updatedPos.isAutoSellEnabled) {
+        val qty = updatedPos.quantity
+        if (qty > 0.0) {
+            // Check TP1
+            if (!updatedPos.isTp1Triggered && updatedPos.tp1Price > 0.0 && currentPrice >= updatedPos.tp1Price) {
+                positionStore.markTp1Triggered(symbol, isReal)
+                refreshSpotPosition()
+                val sellQty = qty * (updatedPos.tp1Percent / 100.0)
+                executeAutoSellOrder(symbol, currentPrice, sellQty, "TP1", isReal, isPartial = updatedPos.tp1Percent < 100.0)
+            }
+            // Check TP2
+            if (!updatedPos.isTp2Triggered && updatedPos.tp2Price > 0.0 && currentPrice >= updatedPos.tp2Price) {
+                positionStore.markTp2Triggered(symbol, isReal)
+                refreshSpotPosition()
+                val sellQty = qty * (updatedPos.tp2Percent / 100.0)
+                executeAutoSellOrder(symbol, currentPrice, sellQty, "TP2", isReal, isPartial = updatedPos.tp2Percent < 100.0)
+            }
+        }
+    }
+}
+
 fun TradingViewModel.executeAutoSellOrder(symbol: String, price: Double, quantity: Double, triggerType: String, isReal: Boolean, isPartial: Boolean = false) {
     if (isReal) {
         // Diskon 5% dari harga terkini agar berfungsi 100% layaknya Market Sell instan di orderbook
         val marketSellPrice = (price * 0.95).toLong()
         executeRealTrade(symbol, "sell", marketSellPrice, quantity, 0.0, 0.0) { success, msg ->
             if (!success && triggerType.contains("TRAILING")) {
-                positionStore.resetTrailingTrigger(symbol)
+                positionStore.resetTrailingTrigger(symbol, isReal = true)
             }
             val triggerLabel = if (triggerType.contains("TRAILING")) "Jaring Pengaman" else "Jual Otomatis"
-            val notifTitle = if (success) "✅ Aset Diamankan • $symbol" else "❌ Gagal Jual • $symbol"
+            val notifTitle = if (success) "✅ [REAL] Aset Diamankan • $symbol" else "❌ [REAL] Gagal Jual • $symbol"
             val notifMsg = if (success) {
-                "$triggerLabel aktif! Koin berhasil dijual otomatis di kisaran harga ${PriceFormatter.formatIdrNumber(price)}."
+                "$triggerLabel [REAL] aktif! Koin berhasil dijual otomatis di kisaran harga Rp ${PriceFormatter.formatIdrNumber(price)}."
             } else {
-                "Sistem gagal menjual koin: $msg"
+                "Sistem gagal menjual koin [REAL]: $msg"
             }
             AlertNotificationHelper.sendPriceAlertNotification(
                 context = getApplication(),
                 title = notifTitle,
                 message = notifMsg,
-                notificationId = (symbol.hashCode() and 0x7FFFFFFF) + 2000,
+                notificationId = (symbol.hashCode() and 0x3FFFFFFF) + 100000 + 2000,
                 symbol = symbol
             )
         }
@@ -185,7 +188,7 @@ fun TradingViewModel.executeAutoSellOrder(symbol: String, price: Double, quantit
         val simBal = simCoordinator.wallet.value.getAvailableCoin(pair.baseAsset)
         val finalSellQty = if (!isPartial) (if (simBal > 0.0) simBal else quantity) else quantity.coerceAtMost(simBal)
         if (finalSellQty <= 0.0) {
-            positionCoordinator.setOwnership(symbol, false, price)
+            positionCoordinator.setOwnership(symbol, false, price, isReal = false)
             return
         }
         val res = simCoordinator.submitOrder(
@@ -203,17 +206,17 @@ fun TradingViewModel.executeAutoSellOrder(symbol: String, price: Double, quantit
             is SimulationOrderResult.Error -> res.message
         }
         if (!isPartial) {
-            positionCoordinator.setOwnership(symbol, false, price)
+            positionCoordinator.setOwnership(symbol, false, price, isReal = false)
         } else {
             positionCoordinator.refreshPosition(symbol)
         }
         if (!success && triggerType.contains("TRAILING")) {
-            positionStore.resetTrailingTrigger(symbol)
+            positionStore.resetTrailingTrigger(symbol, isReal = false)
         }
         val triggerLabel = if (triggerType.contains("TRAILING")) "Jaring Pengaman" else "Jual Otomatis"
-        val notifTitle = if (success) "✅ Aset Diamankan [Sim] • $symbol" else "❌ Gagal Jual [Sim] • $symbol"
+        val notifTitle = if (success) "✅ [SIMULASI] Aset Diamankan • $symbol" else "❌ [SIMULASI] Gagal Jual • $symbol"
         val notifMsg = if (success) {
-            "$triggerLabel aktif! Koin terjual di harga Rp ${PriceFormatter.formatIdrNumber(price)} (Simulasi)."
+            "$triggerLabel [SIMULASI] aktif! Koin terjual di harga Rp ${PriceFormatter.formatIdrNumber(price)}."
         } else {
             "Gagal (Simulasi): $msg"
         }
@@ -221,15 +224,15 @@ fun TradingViewModel.executeAutoSellOrder(symbol: String, price: Double, quantit
             context = getApplication(),
             title = notifTitle,
             message = notifMsg,
-            notificationId = (symbol.hashCode() and 0x7FFFFFFF) + 2000,
+            notificationId = (symbol.hashCode() and 0x3FFFFFFF) + 200000 + 2000,
             symbol = symbol
         )
     }
 }
 
 fun TradingViewModel.deployTrailingOrder(symbol: String) {
-    var pos = positionStore.get(symbol)
-    val isReal = if (pos.isHolding) pos.isReal else isRealBuyMode.value
+    val isReal = isRealBuyMode.value
+    var pos = positionStore.get(symbol, isReal)
     val pair = TradingPair.fromCustomSymbol(symbol)
     val baseKey = pair.baseAsset.uppercase()
     
@@ -244,7 +247,7 @@ fun TradingViewModel.deployTrailingOrder(symbol: String) {
         if (simCoin > 0.0 && (!pos.isHolding || pos.quantity <= 0.0)) {
             val entryP = if (pos.entryPrice > 0.0) pos.entryPrice else 0.0
             positionStore.setHolding(symbol, invested = simCoin * entryP, entry = entryP, quantity = simCoin, isReal = false)
-            pos = positionStore.get(symbol)
+            pos = positionStore.get(symbol, isReal = false)
         }
     }
 
@@ -258,11 +261,12 @@ fun TradingViewModel.deployTrailingOrder(symbol: String) {
         trailingPercent = effectiveTrailingPct,
         referencePrice = effectivePeak,
         isTieredEnabled = pos.isTieredTrailingEnabled,
-        customTiersJson = pos.tieredConfigJson
+        customTiersJson = pos.tieredConfigJson,
+        isReal = isReal
     )
     
     val trailingOrderId = if (isReal) "real-client-trailing" else "sim-client-trailing"
-    positionCoordinator.setTrailingOrderIdAndUpdateTime(symbol, trailingOrderId, System.currentTimeMillis())
+    positionCoordinator.setTrailingOrderIdAndUpdateTime(symbol, trailingOrderId, System.currentTimeMillis(), isReal = isReal)
     positionCoordinator.refreshPosition(symbol)
 
     updateForegroundServiceState()
@@ -270,27 +274,27 @@ fun TradingViewModel.deployTrailingOrder(symbol: String) {
 
     val initialEffectivePct = if (pos.activeTrailingPercent > 0.0) pos.activeTrailingPercent else effectiveTrailingPct
     val slPrice = positionStore.calculateTrailingLimitPrice(effectivePeak, pos.entryPrice, initialEffectivePct)
-    val notifTitle = if (isReal) "🛡️ Trailing Stop Aktif • $symbol" else "🛡️ Trailing Stop Aktif [Sim] • $symbol"
+    val notifTitle = if (isReal) "🛡️ [REAL] Trailing Stop Aktif • $symbol" else "🛡️ [SIMULASI] Trailing Stop Aktif • $symbol"
     val notifMsg = if (isReal) {
-        "Aplikasi sedang memantau. Koin akan dijual otomatis jika harga turun ke Rp ${PriceFormatter.formatIdrNumber(slPrice)}."
+        "Aplikasi sedang memantau [REAL]. Koin akan dijual otomatis jika harga turun ke Rp ${PriceFormatter.formatIdrNumber(slPrice)}."
     } else {
-        "Aplikasi sedang memantau (Simulasi). Koin akan dijual otomatis di Rp ${PriceFormatter.formatIdrNumber(slPrice)}."
+        "Aplikasi sedang memantau [SIMULASI]. Koin akan dijual otomatis di Rp ${PriceFormatter.formatIdrNumber(slPrice)}."
     }
 
     AlertNotificationHelper.sendPriceAlertNotification(
         context = getApplication(),
         title = notifTitle,
         message = notifMsg,
-        notificationId = (symbol.hashCode() and 0x7FFFFFFF) + 1000,
+        notificationId = (symbol.hashCode() and 0x3FFFFFFF) + (if (isReal) 100000 else 200000) + 1000,
         symbol = symbol
     )
-    Timber.d("[$symbol] Trailing order deployed successfully ($trailingOrderId) @ peak=$effectivePeak, stop=$slPrice")
+    Timber.d("[$symbol] Trailing order deployed successfully ($trailingOrderId) @ peak=$effectivePeak, stop=$slPrice (isReal=$isReal)")
 }
 
 fun TradingViewModel.cancelTrailingOrder(symbol: String) {
-    val pos = positionStore.get(symbol)
+    val isReal = isRealBuyMode.value
+    val pos = positionStore.get(symbol, isReal)
     val orderId = pos.lastTrailingOrderId
-    val isReal = pos.isReal
     
     if (!orderId.isNullOrEmpty()) {
         if (isReal) {
@@ -310,19 +314,19 @@ fun TradingViewModel.cancelTrailingOrder(symbol: String) {
         }
     }
     
-    positionCoordinator.setTrailing(symbol, enabled = false, 0.0, 0.0)
-    positionCoordinator.setTrailingOrderIdAndUpdateTime(symbol, null, 0L)
+    positionCoordinator.setTrailing(symbol, enabled = false, 0.0, 0.0, isReal = isReal)
+    positionCoordinator.setTrailingOrderIdAndUpdateTime(symbol, null, 0L, isReal = isReal)
     positionCoordinator.refreshPosition(symbol)
     checkAndStopTrailingServiceIfEmpty()
 }
 
 fun TradingViewModel.updateSimTrailingOrder(symbol: String, pos: SpotPosition, slPrice: Double, quantityToSell: Double) {
-    positionCoordinator.setTrailingOrderIdAndUpdateTime(symbol, "sim-client-trailing", System.currentTimeMillis())
+    positionCoordinator.setTrailingOrderIdAndUpdateTime(symbol, "sim-client-trailing", System.currentTimeMillis(), isReal = false)
     AlertNotificationHelper.sendPriceAlertNotification(
         context = getApplication(),
-        title = "📈 Trailing Stop Naik [Sim] • $symbol",
+        title = "📈 [SIMULASI] Trailing Stop Naik • $symbol",
         message = "Batas aman penjualan otomatis naik ke Rp ${PriceFormatter.formatIdrNumber(slPrice)} (Mengikuti kenaikan harga).",
-        notificationId = (symbol.hashCode() and 0x7FFFFFFF) + 1000,
+        notificationId = (symbol.hashCode() and 0x3FFFFFFF) + 200000 + 1000,
         symbol = symbol,
         onlyWhenBackground = true
     )
@@ -330,12 +334,12 @@ fun TradingViewModel.updateSimTrailingOrder(symbol: String, pos: SpotPosition, s
 
 fun TradingViewModel.updateRealTrailingOrder(symbol: String, pos: SpotPosition, newSlPrice: Double) {
     // Pure Client-Side update for REAL mode
-    positionCoordinator.setTrailingOrderIdAndUpdateTime(symbol, "real-client-trailing", System.currentTimeMillis())
+    positionCoordinator.setTrailingOrderIdAndUpdateTime(symbol, "real-client-trailing", System.currentTimeMillis(), isReal = true)
     AlertNotificationHelper.sendPriceAlertNotification(
         context = getApplication(),
-        title = "📈 Trailing Stop Naik • $symbol",
+        title = "📈 [REAL] Trailing Stop Naik • $symbol",
         message = "Batas aman penjualan otomatis naik ke Rp ${PriceFormatter.formatIdrNumber(newSlPrice)}.",
-        notificationId = (symbol.hashCode() and 0x7FFFFFFF) + 1000,
+        notificationId = (symbol.hashCode() and 0x3FFFFFFF) + 100000 + 1000,
         symbol = symbol,
         onlyWhenBackground = true
     )
@@ -346,19 +350,19 @@ fun TradingViewModel.executeTrailingSellLimitOrder(symbol: String, limitPrice: D
         val limitPriceLong = limitPrice.toLong()
         executeRealTrade(symbol, "sell", limitPriceLong, quantity, 0.0, 0.0) { success, msg ->
             if (!success) {
-                positionStore.resetTrailingTrigger(symbol)
+                positionStore.resetTrailingTrigger(symbol, isReal = true)
             }
-            val notifTitle = if (success) "✅ Limit Sell Terpasang • $symbol" else "❌ Gagal Limit Sell • $symbol"
+            val notifTitle = if (success) "✅ [REAL] Limit Sell Terpasang • $symbol" else "❌ [REAL] Gagal Limit Sell • $symbol"
             val notifMsg = if (success) {
-                "Profit Lock aktif! Limit Sell Order dipasang di harga Rp ${PriceFormatter.formatIdrNumber(limitPrice)}."
+                "Profit Lock [REAL] aktif! Limit Sell Order dipasang di harga Rp ${PriceFormatter.formatIdrNumber(limitPrice)}."
             } else {
-                "Sistem gagal memasang Limit Sell: $msg"
+                "Sistem gagal memasang Limit Sell [REAL]: $msg"
             }
             AlertNotificationHelper.sendPriceAlertNotification(
                 context = getApplication(),
                 title = notifTitle,
                 message = notifMsg,
-                notificationId = (symbol.hashCode() and 0x7FFFFFFF) + 2000,
+                notificationId = (symbol.hashCode() and 0x3FFFFFFF) + 100000 + 3000,
                 symbol = symbol
             )
         }
@@ -368,7 +372,7 @@ fun TradingViewModel.executeTrailingSellLimitOrder(symbol: String, limitPrice: D
         val finalSellQty = quantity.coerceAtMost(if (simBal > 0.0) simBal else quantity)
         
         if (finalSellQty <= 0.0) {
-            positionCoordinator.setOwnership(symbol, false, limitPrice)
+            positionCoordinator.setOwnership(symbol, false, limitPrice, isReal = false)
             return
         }
         val res = simCoordinator.submitOrder(
@@ -388,11 +392,11 @@ fun TradingViewModel.executeTrailingSellLimitOrder(symbol: String, limitPrice: D
         if (success) {
             positionCoordinator.refreshPosition(symbol)
         } else {
-            positionStore.resetTrailingTrigger(symbol)
+            positionStore.resetTrailingTrigger(symbol, isReal = false)
         }
-        val notifTitle = if (success) "✅ Limit Sell Terpasang [Sim] • $symbol" else "❌ Gagal Limit Sell [Sim] • $symbol"
+        val notifTitle = if (success) "✅ [SIMULASI] Limit Sell Terpasang • $symbol" else "❌ [SIMULASI] Gagal Limit Sell • $symbol"
         val notifMsg = if (success) {
-            "Profit Lock aktif! Limit Sell Order dipasang di Rp ${PriceFormatter.formatIdrNumber(limitPrice)} (Simulasi)."
+            "Profit Lock [SIMULASI] aktif! Limit Sell Order dipasang di Rp ${PriceFormatter.formatIdrNumber(limitPrice)}."
         } else {
             "Gagal (Simulasi): $msg"
         }
@@ -400,7 +404,7 @@ fun TradingViewModel.executeTrailingSellLimitOrder(symbol: String, limitPrice: D
             context = getApplication(),
             title = notifTitle,
             message = notifMsg,
-            notificationId = (symbol.hashCode() and 0x7FFFFFFF) + 2000,
+            notificationId = (symbol.hashCode() and 0x3FFFFFFF) + 200000 + 3000,
             symbol = symbol
         )
     }
