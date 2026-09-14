@@ -292,4 +292,57 @@ object AlertNotificationHelper {
             manager.notify(notifBaseId + 1000, builder.build())
         } catch (_: SecurityException) {}
     }
+
+    fun sendTrailingPeakUpdateNotification(
+        context: Context,
+        symbol: String,
+        newPeak: Double,
+        stopLimitPrice: Double,
+        entryPrice: Double,
+        profitPct: Double,
+        isReal: Boolean
+    ) {
+        val prefs = AppPreferences(context)
+        if (!prefs.isNotificationsEnabled || !prefs.isNotifyTrailingStopEnabled) return
+
+        createNotificationChannels(context)
+
+        val modeTag = if (isReal) "[REAL]" else "[SIMULASI]"
+        val notifId = (symbol.hashCode() and 0x3FFFFFFF) + (if (isReal) 100000 else 200000) + 500
+
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("EXTRA_SYMBOL", symbol)
+            putExtra("EXTRA_IS_REAL", isReal)
+        }
+
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            notifId,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val title = "🚀 $modeTag TRAILING NAIK • ${symbol.uppercase()}"
+        val message = "$modeTag 📈 Peak baru tercapai: Rp ${PriceFormatter.formatIdrNumber(newPeak)} (+${String.format(java.util.Locale.US, "%.2f", profitPct)}%)\n" +
+                "🛡️ Batas Stop Limit dinaikkan ke: Rp ${PriceFormatter.formatIdrNumber(stopLimitPrice)}\n" +
+                "💰 Modal Beli: Rp ${PriceFormatter.formatIdrNumber(entryPrice)}"
+
+        val builder = NotificationCompat.Builder(context, CHANNEL_PRICE_ALERT_ID)
+            .setSmallIcon(agu.analys.R.drawable.ic_stat_trading)
+            .setColor(if (isReal) 0xFF059669.toInt() else 0xFF2563EB.toInt())
+            .setContentTitle(title)
+            .setContentText("$modeTag Stop Limit naik: Rp ${PriceFormatter.formatIdrNumber(stopLimitPrice)} (+${String.format(java.util.Locale.US, "%.2f", profitPct)}%)")
+            .setSubText("$modeTag ${symbol.uppercase()} • Trailing Naik")
+            .setStyle(NotificationCompat.BigTextStyle().bigText(message))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
+
+        try {
+            val manager = NotificationManagerCompat.from(context)
+            manager.notify(notifId, builder.build())
+        } catch (_: SecurityException) {}
+    }
 }

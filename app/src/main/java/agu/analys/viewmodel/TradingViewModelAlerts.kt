@@ -14,6 +14,9 @@ import agu.analys.util.PriceFormatter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import timber.log.Timber
+import java.util.concurrent.ConcurrentHashMap
+
+private val lastPeakNotificationTimes = ConcurrentHashMap<String, Long>()
 
 fun TradingViewModel.printTrailingDiagnostics(symbol: String, currentPrice: Double, pos: SpotPosition) {
     if (!pos.isHolding || !pos.isTrailingEnabled) return
@@ -23,8 +26,22 @@ fun TradingViewModel.printTrailingDiagnostics(symbol: String, currentPrice: Doub
 }
 
 fun TradingViewModel.checkAlertsAndTrailing(symbol: String, currentPrice: Double, rsi: Double? = null) {
-    checkTrailingForMode(symbol, currentPrice, isReal = true)
-    checkTrailingForMode(symbol, currentPrice, isReal = false)
+    val activeIsReal = isRealBuyMode.value
+    // Prioritaskan evaluasi trailing untuk mode yang aktif
+    checkTrailingForMode(symbol, currentPrice, isReal = activeIsReal)
+    
+    // Evaluasi mode alternatif HANYA jika ada holding aktif dengan trailing di store
+    if (!activeIsReal) {
+        val realPos = positionStore.get(symbol, isReal = true)
+        if (realPos.isHolding && realPos.isTrailingEnabled) {
+            checkTrailingForMode(symbol, currentPrice, isReal = true)
+        }
+    } else {
+        val simPos = positionStore.get(symbol, isReal = false)
+        if (simPos.isHolding && simPos.isTrailingEnabled) {
+            checkTrailingForMode(symbol, currentPrice, isReal = false)
+        }
+    }
 
     // Price Alerts Trigger Check
     val alerts = alertStore.getAlertsForSymbol(symbol)
@@ -135,6 +152,23 @@ fun TradingViewModel.checkTrailingForMode(symbol: String, currentPrice: Double, 
             } else {
                 updateSimTrailingOrder(symbol, updatedPos, newSlPrice, updatedPos.quantity)
             }
+
+            // Notifikasi Trailing Peak Naik: Diberi jeda cerdas (minimal 30 detik antar notifikasi per koin)
+            val now = System.currentTimeMillis()
+            val lastAlertTime = lastPeakNotificationTimes["${symbol}_$isReal"] ?: 0L
+            val currentProfitPct = if (updatedPos.entryPrice > 0.0) ((updatedPos.peakPrice - updatedPos.entryPrice) / updatedPos.entryPrice) * 100.0 else 0.0
+            if (now - lastAlertTime > 30_000L) {
+                lastPeakNotificationTimes["${symbol}_$isReal"] = now
+                AlertNotificationHelper.sendTrailingPeakUpdateNotification(
+                    context = getApplication(),
+                    symbol = symbol,
+                    newPeak = updatedPos.peakPrice,
+                    stopLimitPrice = newSlPrice,
+                    entryPrice = updatedPos.entryPrice,
+                    profitPct = currentProfitPct,
+                    isReal = isReal
+                )
+            }
         }
     }
 
@@ -156,11 +190,25 @@ fun TradingViewModel.checkTrailingForMode(symbol: String, currentPrice: Double, 
                 val sellQty = qty * (updatedPos.tp2Percent / 100.0)
                 executeAutoSellOrder(symbol, currentPrice, sellQty, "TP2", isReal, isPartial = updatedPos.tp2Percent < 100.0)
             }
+            // Check Stop Loss / Cut Loss Terpicu
+            if (updatedPos.stopLossPrice > 0.0 && currentPrice <= updatedPos.stopLossPrice) {
+                refreshSpotPosition()
+                executeAutoSellOrder(symbol, currentPrice, qty, "STOP_LOSS", isReal, isPartial = false)
+            }
         }
     }
 }
 
 fun TradingViewModel.executeAutoSellOrder(symbol: String, price: Double, quantity: Double, triggerType: String, isReal: Boolean, isPartial: Boolean = false) {
+    val modeTag = if (isReal) "REAL" else "SIMULASI"
+    val triggerLabel = when {
+        triggerType.contains("TRAILING") -> "Trailing Stop Terpicu"
+        triggerType.contains("STOP_LOSS") -> "Stop Loss / Cut Loss"
+        triggerType.contains("TP1") -> "Target Profit 1 (TP1)"
+        triggerType.contains("TP2") -> "Target Profit 2 (TP2)"
+        else -> "Jual Otomatis"
+    }
+
     if (isReal) {
         // Diskon 5% dari harga terkini agar berfungsi 100% layaknya Market Sell instan di orderbook
         val marketSellPrice = (price * 0.95).toLong()
@@ -168,12 +216,15 @@ fun TradingViewModel.executeAutoSellOrder(symbol: String, price: Double, quantit
             if (!success && triggerType.contains("TRAILING")) {
                 positionStore.resetTrailingTrigger(symbol, isReal = true)
             }
-            val triggerLabel = if (triggerType.contains("TRAILING")) "Jaring Pengaman" else "Jual Otomatis"
-            val notifTitle = if (success) "✅ [REAL] Aset Diamankan • $symbol" else "❌ [REAL] Gagal Jual • $symbol"
+            val notifTitle = if (success) {
+                if (triggerType.contains("STOP_LOSS")) "🛡️ [$modeTag] Cut Loss Terlaksana • $symbol"
+                else "✅ [$modeTag] Aset Diamankan ($triggerLabel) • $symbol"
+            } else "❌ [$modeTag] Gagal Jual • $symbol"
+
             val notifMsg = if (success) {
-                "$triggerLabel [REAL] aktif! Koin berhasil dijual otomatis di kisaran harga Rp ${PriceFormatter.formatIdrNumber(price)}."
+                "$triggerLabel [$modeTag] aktif! Koin berhasil dieksekusi di kisaran harga Rp ${PriceFormatter.formatIdrNumber(price)}."
             } else {
-                "Sistem gagal menjual koin [REAL]: $msg"
+                "Sistem gagal mengeksekusi order [$modeTag]: $msg"
             }
             AlertNotificationHelper.sendPriceAlertNotification(
                 context = getApplication(),
@@ -213,10 +264,13 @@ fun TradingViewModel.executeAutoSellOrder(symbol: String, price: Double, quantit
         if (!success && triggerType.contains("TRAILING")) {
             positionStore.resetTrailingTrigger(symbol, isReal = false)
         }
-        val triggerLabel = if (triggerType.contains("TRAILING")) "Jaring Pengaman" else "Jual Otomatis"
-        val notifTitle = if (success) "✅ [SIMULASI] Aset Diamankan • $symbol" else "❌ [SIMULASI] Gagal Jual • $symbol"
+        val notifTitle = if (success) {
+            if (triggerType.contains("STOP_LOSS")) "🛡️ [$modeTag] Cut Loss Terlaksana • $symbol"
+            else "✅ [$modeTag] Aset Diamankan ($triggerLabel) • $symbol"
+        } else "❌ [$modeTag] Gagal Jual • $symbol"
+
         val notifMsg = if (success) {
-            "$triggerLabel [SIMULASI] aktif! Koin terjual di harga Rp ${PriceFormatter.formatIdrNumber(price)}."
+            "$triggerLabel [$modeTag] aktif! Koin terjual di harga Rp ${PriceFormatter.formatIdrNumber(price)}."
         } else {
             "Gagal (Simulasi): $msg"
         }

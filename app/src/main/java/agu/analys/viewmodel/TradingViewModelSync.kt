@@ -188,11 +188,15 @@ fun TradingViewModel.syncRealBalancesToPositionStore(
 }
 
 fun TradingViewModel.updateForegroundServiceState() {
-    val hasActive = positionStore.getAllActiveTrailingSymbols().isNotEmpty() ||
-                    positionStore.hasAnyHolding()
+    val isReal = isRealBuyMode.value
+    val hasActive = positionStore.getAllActiveTrailingSymbols(isReal = isReal).isNotEmpty() ||
+                    positionStore.hasAnyHolding(isReal = isReal) ||
+                    (!isReal && simCoordinator.wallet.value.coinBalances.any { it.value > 0.00000001 && !it.key.equals("IDR", true) && !it.key.equals("USDT", true) }) ||
+                    (isReal && realCoordinator.realIndodaxBalance.value.any { it.value > 0.00000001 && !it.key.equals("IDR", true) && !it.key.equals("USDT", true) })
 
     if (hasActive && isNotificationsEnabled.value) {
         agu.analys.service.TradingForegroundService.startService(getApplication())
+        agu.analys.service.TradingForegroundService.forceRefresh(getApplication())
     } else {
         agu.analys.service.TradingForegroundService.stopService(getApplication())
     }

@@ -442,6 +442,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
             isRealBuyMode.collect {
                 refreshSpotPosition()
                 recalculateDashboardBadges()
+                updateForegroundServiceState()
             }
         }
 

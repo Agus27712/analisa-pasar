@@ -45,7 +45,8 @@ fun TradingViewModel.startTrailingPolling() {
     trailingPollJob = viewModelScope.launch {
         while (isActive) {
             try {
-                val activeSymbols = positionStore.getAllActiveTrailingSymbols()
+                val isReal = isRealBuyMode.value
+                val activeSymbols = positionStore.getAllActiveTrailingSymbols(isReal = isReal)
                 if (activeSymbols.isNotEmpty()) {
                     val pairs = activeSymbols.map { 
                         TradingPair.fromCustomSymbol(it, "IDR").effectiveIndodaxPair() 
@@ -69,7 +70,8 @@ fun TradingViewModel.startTrailingPolling() {
 
 fun TradingViewModel.checkAndStopTrailingServiceIfEmpty() {
     updateForegroundServiceState()
-    if (positionStore.getAllActiveTrailingSymbols().isEmpty()) {
+    val isReal = isRealBuyMode.value
+    if (positionStore.getAllActiveTrailingSymbols(isReal = isReal).isEmpty()) {
         trailingPollJob?.cancel()
         trailingPollJob = null
     }
