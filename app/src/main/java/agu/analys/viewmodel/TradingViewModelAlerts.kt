@@ -401,16 +401,45 @@ fun TradingViewModel.updateRealTrailingOrder(symbol: String, pos: SpotPosition, 
 
 fun TradingViewModel.executeTrailingSellLimitOrder(symbol: String, limitPrice: Double, quantity: Double, isReal: Boolean) {
     if (isReal) {
-        val limitPriceLong = limitPrice.toLong()
-        executeRealTrade(symbol, "sell", limitPriceLong, quantity, 0.0, 0.0) { success, msg ->
-            if (!success) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val apiKey = prefs.indodaxApiKey
+            val secretKey = prefs.indodaxSecretKey
+            if (apiKey.isBlank() || secretKey.isBlank()) return@launch
+
+            val latestTick = marketDataCoordinator.dashboardTicks.value[symbol]
+            val maxAge = if (prefs.isScalpingMode) 400L else 800L
+            if (latestTick != null && (System.currentTimeMillis() - latestTick.timestamp > maxAge)) {
                 positionStore.resetTrailingTrigger(symbol, isReal = true)
+                AlertNotificationHelper.sendPriceAlertNotification(
+                    context = getApplication(),
+                    title = "❌ [REAL] Gagal Trailing Sell • $symbol",
+                    message = "Data harga terlalu usang (delay > ${maxAge}ms).",
+                    notificationId = (symbol.hashCode() and 0x3FFFFFFF) + 100000 + 3000,
+                    symbol = symbol
+                )
+                return@launch
             }
-            val notifTitle = if (success) "✅ [REAL] Limit Sell Terpasang • $symbol" else "❌ [REAL] Gagal Limit Sell • $symbol"
-            val notifMsg = if (success) {
-                "Profit Lock [REAL] aktif! Limit Sell Order dipasang di harga Rp ${PriceFormatter.formatIdrNumber(limitPrice)}."
+            
+            // Terapkan diskon 5% ke FRESH PRICE agar jaring order laku instan (seperti market sell)
+            val execPrice = latestTick?.price ?: limitPrice
+            val discountedPrice = execPrice * 0.95
+
+            val res = agu.analys.service.IndodaxTradeApiV2.createLimitOrderDetailed(
+                apiKey = apiKey, secretKey = secretKey, symbol = symbol, side = "sell",
+                price = discountedPrice, quantity = quantity, clientOrderId = "agu-trail-${System.currentTimeMillis()}"
+            )
+            
+            if (!res.success) {
+                positionStore.resetTrailingTrigger(symbol, isReal = true)
             } else {
-                "Sistem gagal memasang Limit Sell [REAL]: $msg"
+                refreshRealBalance()
+            }
+
+            val notifTitle = if (res.success) "✅ [REAL] Trailing Sell Terlaksana • $symbol" else "❌ [REAL] Gagal Trailing Sell • $symbol"
+            val notifMsg = if (res.success) {
+                "Profit Lock [REAL] aktif! Koin berhasil dieksekusi di kisaran harga Rp ${PriceFormatter.formatIdrNumber(execPrice)}."
+            } else {
+                "Sistem gagal mengeksekusi order [REAL]: ${res.message}"
             }
             AlertNotificationHelper.sendPriceAlertNotification(
                 context = getApplication(),
