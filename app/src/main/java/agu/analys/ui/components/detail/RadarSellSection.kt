@@ -201,12 +201,21 @@ fun RadarSellSection(
             SellTrailingSection(
                 isTrailingActive = isTrailingActive,
                 onTrailingActiveChanged = { enabled ->
-                    handleTrailingChange(enabled, trailingPercent, spotPosition?.isTieredTrailingEnabled ?: true, spotPosition?.tieredConfigJson)
+                    if (enabled) {
+                        handleTrailingChange(true, trailingPercent, spotPosition?.isTieredTrailingEnabled ?: true, spotPosition?.tieredConfigJson)
+                        onDeployTrailingOrder?.invoke()
+                    } else {
+                        handleTrailingChange(false, trailingPercent, spotPosition?.isTieredTrailingEnabled ?: true, spotPosition?.tieredConfigJson)
+                        onCancelTrailingOrder?.invoke()
+                    }
                 },
                 isTrailingTriggered = isTrailingTriggered,
                 trailingPercent = trailingPercent,
                 onSetTrailingPercent = { pct ->
                     handleTrailingChange(true, pct, spotPosition?.isTieredTrailingEnabled ?: true, spotPosition?.tieredConfigJson)
+                    if (isTrailingActive) {
+                        onDeployTrailingOrder?.invoke()
+                    }
                 },
                 isTieredTrailingEnabled = spotPosition?.isTieredTrailingEnabled ?: true,
                 onToggleTieredTrailing = { isTiered ->

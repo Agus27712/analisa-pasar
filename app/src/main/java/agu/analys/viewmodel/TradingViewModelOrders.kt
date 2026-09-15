@@ -249,8 +249,38 @@ fun TradingViewModel.setTrailingStop(
     } else {
         marketDataCoordinator.dashboardTicks.value[symbol] ?: marketDataCoordinator.dashboardTicks.value[TradingPair.fromCustomSymbol(symbol).symbol]
     }
-    val pos = positionStore.get(symbol, isReal)
+    var pos = positionStore.get(symbol, isReal)
     val currentP = tick?.price?.takeIf { it > 0.0 } ?: (if (pos.peakPrice > 0.0) pos.peakPrice else pos.entryPrice)
+    val pair = TradingPair.fromCustomSymbol(symbol)
+    val baseKey = pair.baseAsset.uppercase()
+    val baseLower = baseKey.lowercase()
+
+    if (enabled) {
+        if (isReal) {
+            val realQty = realCoordinator.realFreeBalance.value[baseLower]
+                ?: realCoordinator.realFreeBalance.value[baseKey]
+                ?: realCoordinator.realIndodaxBalance.value[baseLower]
+                ?: realCoordinator.realIndodaxBalance.value[baseKey]
+                ?: 0.0
+            if (realQty > 0.0 && (!pos.isHolding || pos.quantity <= 0.0)) {
+                val entryP = if (pos.entryPrice > 0.0) pos.entryPrice
+                    else (realCoordinator.realAvgBuyPrices.value[symbol]
+                        ?: realCoordinator.realAvgBuyPrices.value[baseLower]
+                        ?: realCoordinator.realAvgBuyPrices.value[baseKey]
+                        ?: currentP)
+                positionStore.setHolding(symbol, invested = realQty * entryP, entry = entryP, quantity = realQty, isReal = true)
+                pos = positionStore.get(symbol, isReal = true)
+            }
+        } else {
+            val simCoin = simCoordinator.wallet.value.getTotalCoin(baseKey)
+            if (simCoin > 0.0 && (!pos.isHolding || pos.quantity <= 0.0)) {
+                val entryP = if (pos.entryPrice > 0.0) pos.entryPrice else currentP
+                positionStore.setHolding(symbol, invested = simCoin * entryP, entry = entryP, quantity = simCoin, isReal = false)
+                pos = positionStore.get(symbol, isReal = false)
+            }
+        }
+    }
+
     positionCoordinator.setTrailing(
         symbol = symbol,
         enabled = enabled,
@@ -260,6 +290,11 @@ fun TradingViewModel.setTrailingStop(
         customTiersJson = customTiersJson,
         isReal = isReal
     )
+    if (enabled) {
+        startTrailingPolling()
+    } else {
+        checkAndStopTrailingServiceIfEmpty()
+    }
     updateForegroundServiceState()
 }
 

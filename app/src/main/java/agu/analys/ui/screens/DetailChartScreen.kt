@@ -80,8 +80,12 @@ fun DetailChartScreen(
     val favorites by viewModel.favorites.collectAsStateWithLifecycle()
     val spotPosition by viewModel.spotPosition.collectAsStateWithLifecycle()
     val positionVersion by viewModel.positionVersion.collectAsStateWithLifecycle()
-    val currentPosition = remember(spotPosition, pair.symbol, positionVersion) {
-        if (viewModel.isMatchingSymbol(spotPosition.symbol, pair.symbol)) spotPosition else viewModel.getPositionFor(pair.symbol)
+    val currentPosition = remember(spotPosition, pair.symbol, positionVersion, isRealBuyMode) {
+        if (viewModel.isMatchingSymbol(spotPosition.symbol, pair.symbol) && spotPosition.isReal == isRealBuyMode) {
+            spotPosition
+        } else {
+            viewModel.getPositionFor(pair.symbol, isRealBuyMode)
+        }
     }
     val sellSignalState by viewModel.sellSignalState.collectAsStateWithLifecycle()
     val positionContext by viewModel.positionContext.collectAsStateWithLifecycle()
@@ -458,7 +462,7 @@ fun DetailChartScreen(
                 positionContext = effectivePositionContext,
                 workflow = tradingWorkflow,
                 onSetTrailingStop = { enabled, pct ->
-                    viewModel.setTrailingStop(enabled, pct)
+                    viewModel.setTrailingStop(pair.symbol, enabled, pct)
                     HapticUtil.vibrateTradeSuccess(context)
                     android.widget.Toast.makeText(
                         context,
@@ -467,7 +471,7 @@ fun DetailChartScreen(
                     ).show()
                 },
                 onSetTieredTrailingStop = { enabled, pct, isTiered, json ->
-                    viewModel.setTrailingStop(enabled, pct, isTiered, json)
+                    viewModel.setTrailingStop(pair.symbol, enabled, pct, isTiered, json)
                     HapticUtil.vibrateTradeSuccess(context)
                     android.widget.Toast.makeText(
                         context,

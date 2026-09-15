@@ -251,6 +251,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     internal val positionCoordinator = PositionCoordinator(
         positionStore = positionStore,
         alertStore = alertStore,
+        isRealProvider = { realCoordinator.isRealBuyEnabled.value },
         onPositionChanged = { /* can add specific logic here if needed */ }
     )
 
@@ -560,6 +561,11 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     val updateDownloadProgress: StateFlow<Int?> = updateCoordinator.downloadProgress
 
     init {
+        viewModelScope.launch {
+            realCoordinator.isRealBuyEnabled.collect {
+                refreshSpotPosition()
+            }
+        }
         agu.analys.util.MtfCacheManager.updateQueues(_watchlist.value.toList(), emptyList())
         engine.strategyMode = prefs.strategyMode
         engine.isScalpingMode = prefs.isScalpingMode

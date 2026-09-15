@@ -299,9 +299,25 @@ fun TradingViewModel.deployTrailingOrder(symbol: String) {
     if (!isReal) {
         val simCoin = simCoordinator.wallet.value.getTotalCoin(baseKey)
         if (simCoin > 0.0 && (!pos.isHolding || pos.quantity <= 0.0)) {
-            val entryP = if (pos.entryPrice > 0.0) pos.entryPrice else 0.0
+            val entryP = if (pos.entryPrice > 0.0) pos.entryPrice else currentPrice
             positionStore.setHolding(symbol, invested = simCoin * entryP, entry = entryP, quantity = simCoin, isReal = false)
             pos = positionStore.get(symbol, isReal = false)
+        }
+    } else {
+        val baseLower = baseKey.lowercase()
+        val realCoin = realCoordinator.realFreeBalance.value[baseLower]
+            ?: realCoordinator.realFreeBalance.value[baseKey]
+            ?: realCoordinator.realIndodaxBalance.value[baseLower]
+            ?: realCoordinator.realIndodaxBalance.value[baseKey]
+            ?: 0.0
+        if (realCoin > 0.0 && (!pos.isHolding || pos.quantity <= 0.0)) {
+            val entryP = if (pos.entryPrice > 0.0) pos.entryPrice
+                else (realCoordinator.realAvgBuyPrices.value[symbol]
+                    ?: realCoordinator.realAvgBuyPrices.value[baseLower]
+                    ?: realCoordinator.realAvgBuyPrices.value[baseKey]
+                    ?: currentPrice)
+            positionStore.setHolding(symbol, invested = realCoin * entryP, entry = entryP, quantity = realCoin, isReal = true)
+            pos = positionStore.get(symbol, isReal = true)
         }
     }
 

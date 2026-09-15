@@ -62,4 +62,18 @@ class SpotPositionTrailingTest {
         val isTriggered = flashDropPrice <= trailingLockPrice
         assertTrue("Order sell trailing harus terpicu saat harga drop melewati batas lock profit", isTriggered)
     }
+
+    @Test
+    fun testRealModeTrailingCalculations() {
+        val entryPrice = 50000.0
+        val peakPrice = 60000.0
+        val trailingPct = 2.5
+        val slPrice = calculateTrailingLimitPrice(peakPrice, entryPrice, trailingPct)
+        // 60000 * (1 - 0.025) = 58500.0
+        assertEquals(58500.0, slPrice, 0.001)
+
+        // Drop below SL
+        val dropPrice = 58400.0
+        assertTrue("Real mode trailing must trigger when price drops below stop limit", dropPrice <= slPrice)
+    }
 }

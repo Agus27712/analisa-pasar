@@ -97,7 +97,7 @@ fun TradingViewModel.selectPair(pair: TradingPair) {
     agu.analys.engine.global.GlobalContextManager.subscribeCoin(pair.baseAsset)
 }
 
-fun TradingViewModel.getPositionFor(symbol: String): SpotPosition = positionCoordinator.getPosition(symbol)
+fun TradingViewModel.getPositionFor(symbol: String, isReal: Boolean = isRealBuyMode.value): SpotPosition = positionCoordinator.getPosition(symbol, isReal)
 
 fun TradingViewModel.isMatchingSymbol(s1: String, s2: String): Boolean = positionCoordinator.isSameSymbol(s1, s2)
 
