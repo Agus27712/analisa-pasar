@@ -155,12 +155,12 @@ fun DetailChartScreen(
         candles.lastOrNull()?.close?.takeIf { it > 0.0 && it.isFinite() } ?: 0.0
     }
 
-    val effectivePositionContext = remember(positionContext, displayPrice, spotPosition, pair, tradingFees, isRealBuyMode) {
+    val effectivePositionContext = remember(positionContext, displayPrice, currentPosition, pair, tradingFees, isRealBuyMode) {
         if (displayPrice > 0.0) {
             val holding = viewModel.getHoldingStatus(pair, isRealBuyMode)
             PositionContext.create(
                 symbol = pair.symbol,
-                spotPosition = spotPosition,
+                spotPosition = currentPosition,
                 holdingStatus = holding,
                 currentPrice = displayPrice,
                 fees = tradingFees
@@ -453,7 +453,7 @@ fun DetailChartScreen(
                         android.widget.Toast.makeText(context, "Harga belum tersedia.", android.widget.Toast.LENGTH_SHORT).show()
                     }
                 },
-                spotPosition = spotPosition,
+                spotPosition = currentPosition,
                 sellSignalState = sellSignalState,
                 positionContext = effectivePositionContext,
                 workflow = tradingWorkflow,

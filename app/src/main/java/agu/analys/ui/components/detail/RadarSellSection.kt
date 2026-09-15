@@ -69,8 +69,8 @@ fun RadarSellSection(
     var selectedSellPercent by remember { mutableIntStateOf(100) }
 
     val isTrailingActive = spotPosition?.isTrailingEnabled == true
-    val trailingPercent = spotPosition?.trailingPercent ?: 2.0
-    val peakPrice = spotPosition?.peakPrice ?: validPrice
+    val trailingPercent = if ((spotPosition?.trailingPercent ?: 0.0) > 0.0) spotPosition!!.trailingPercent else 2.0
+    val peakPrice = if ((spotPosition?.peakPrice ?: 0.0) > 0.0) spotPosition!!.peakPrice else validPrice
     val trailingStopPrice = spotPosition?.trailingStopPrice ?: (peakPrice * (1.0 - trailingPercent / 100.0))
     val isTrailingTriggered = spotPosition?.isTrailingTriggered == true
 
