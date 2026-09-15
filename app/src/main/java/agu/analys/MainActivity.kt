@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.ViewModel
@@ -109,16 +110,18 @@ class MainActivity : ComponentActivity() {
                 }
 
                 val duration = animSpeed.durationMs
+                val transitionSpecObj = remember(duration) {
+                    if (duration <= 0) {
+                        fadeIn(tween(0)).togetherWith(fadeOut(tween(0)))
+                    } else {
+                        (slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(duration)) + fadeIn(tween(duration)))
+                            .togetherWith(slideOutHorizontally(targetOffsetX = { -it }, animationSpec = tween(duration)) + fadeOut(tween(duration)))
+                    }
+                }
+                
                 AnimatedContent(
                     targetState = currentScreen,
-                    transitionSpec = {
-                        if (duration <= 0) {
-                            fadeIn(tween(0)).togetherWith(fadeOut(tween(0)))
-                        } else {
-                            (slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(duration)) + fadeIn(tween(duration)))
-                                .togetherWith(slideOutHorizontally(targetOffsetX = { -it }, animationSpec = tween(duration)) + fadeOut(tween(duration)))
-                        }
-                    },
+                    transitionSpec = { transitionSpecObj },
                     modifier = rootModifier,
                     label = "screen_transition"
                 ) { screen ->

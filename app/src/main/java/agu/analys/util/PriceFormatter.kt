@@ -228,4 +228,16 @@ object PriceFormatter {
     /** Helper umum untuk format angka harga bulat integer di evaluator & sinyal */
     fun fmtPriceInt(v: Double): String =
         String.format(Locale.US, "%,.0f", v)
+
+    fun formatCoinQuantity(quantity: java.math.BigDecimal, baseAsset: String, decimals: Int): String {
+        if (quantity.compareTo(java.math.BigDecimal.ZERO) == 0) return "0 $baseAsset"
+        val formatted = quantity.setScale(decimals, java.math.RoundingMode.DOWN)
+            .stripTrailingZeros()
+            .toPlainString()
+        return "$formatted $baseAsset"
+    }
+
+    fun formatCoinQuantity(quantity: Double, baseAsset: String, decimals: Int): String {
+        return formatCoinQuantity(java.math.BigDecimal.valueOf(quantity), baseAsset, decimals)
+    }
 }

@@ -579,6 +579,14 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
             }
         }
 
+                // Background fetch API pairs metadata
+        viewModelScope.launch {
+            val meta = agu.analys.service.IndodaxMarketService.fetchPairsMetadata()
+            if (meta.isNotEmpty()) {
+                marketCache.savePairsMetadata(meta)
+            }
+        }
+        
         marketDataCoordinator.restoreFromCache(MarketDataSource.INDODAX)
         val initialPair = TradingPair.popularPairsForSource(prefs.marketDataSource).first()
         selectPair(initialPair)

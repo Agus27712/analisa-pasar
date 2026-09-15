@@ -245,6 +245,39 @@ object IndodaxMarketService {
         val topVolume: List<MarketTick> = emptyList(),
         val allTicks: Map<String, MarketTick> = emptyMap()
     )
+    suspend fun fetchPairsMetadata(): List<agu.analys.model.PairPrecision> = withContext(Dispatchers.IO) {
+        val body = get("https://indodax.com/api/pairs") ?: return@withContext emptyList()
+        try {
+            val jsonArray = org.json.JSONArray(body)
+            val results = mutableListOf<agu.analys.model.PairPrecision>()
+            for (i in 0 until jsonArray.length()) {
+                val item = jsonArray.optJSONObject(i) ?: continue
+                val id = item.optString("id", "")
+                val symbol = item.optString("symbol", "")
+                val base = item.optString("base_currency", "")
+                val traded = item.optString("traded_currency", "")
+                val qtyIncrement = item.optDouble("quantity_increment", 1.0)
+                val qtyDecimals = Math.max(0, -Math.log10(qtyIncrement).toInt())
+                val pricePrecision = item.optDouble("price_precision", 1.0)
+                val priceDecimals = if (pricePrecision > 0) Math.max(0, -Math.log10(pricePrecision).toInt()) else 2
+                results.add(
+                    agu.analys.model.PairPrecision(
+                        id = id,
+                        symbol = symbol,
+                        baseCurrency = base,
+                        tradedCurrency = traded,
+                        priceDecimals = priceDecimals,
+                        quantityDecimals = qtyDecimals
+                    )
+                )
+            }
+            results
+        } catch (e: Exception) {
+            timber.log.Timber.e(e, "Gagal fetch metadata pairs indodax")
+            emptyList()
+        }
+    }
+
 
     suspend fun fetchMarketRankings(limit: Int = 30, excludeStable: Boolean = true): MarketRankingsResult = withContext(Dispatchers.IO) {
         try {

@@ -2,20 +2,23 @@ import java.util.Properties
 import java.util.Base64
 import java.io.FileInputStream
 
+val cachedSecrets = Properties()
+var isSecretsLoaded = false
+
 fun getSecret(key: String): String {
-    val envFile = rootProject.file(".env")
-    if (envFile.exists()) {
-        val props = Properties()
-        props.load(FileInputStream(envFile))
-        props.getProperty(key)?.let { return it }
+    if (!isSecretsLoaded) {
+        val envFile = rootProject.file(".env")
+        if (envFile.exists()) {
+            cachedSecrets.load(FileInputStream(envFile))
+        } else {
+            val exampleFile = rootProject.file(".env.example")
+            if (exampleFile.exists()) {
+                cachedSecrets.load(FileInputStream(exampleFile))
+            }
+        }
+        isSecretsLoaded = true
     }
-    val exampleFile = rootProject.file(".env.example")
-    if (exampleFile.exists()) {
-        val props = Properties()
-        props.load(FileInputStream(exampleFile))
-        props.getProperty(key)?.let { return it }
-    }
-    return System.getenv(key) ?: project.findProperty(key)?.toString() ?: ""
+    return cachedSecrets.getProperty(key) ?: System.getenv(key) ?: project.findProperty(key)?.toString() ?: ""
 }
 
 plugins {

@@ -319,8 +319,8 @@ object IndodaxTradeApiV2 {
             "symbol" to formattedSymbol,
             "side" to normalizedSide,
             "type" to "LIMIT",
-            "price" to decimal(price),
-            "quantity" to decimal(quantity),
+            "price" to decimal(price, symbol, true),
+            "quantity" to decimal(quantity, symbol, false),
             "timestamp" to serverTimeMs().toString(),
             "recvWindow" to RECV_WINDOW_MS.toString()
         )
@@ -335,7 +335,7 @@ object IndodaxTradeApiV2 {
             val clientId = json.optString("clientOrderId", clientOrderId.orEmpty())
             val status = json.optString("status", "NEW").uppercase()
             val executed = json.optString("executedQty", "0").toDoubleOrNull() ?: 0.0
-            val orig = json.optString("origQty", decimal(quantity)).toDoubleOrNull() ?: quantity
+            val orig = json.optString("origQty", decimal(quantity, symbol, false)).toDoubleOrNull() ?: quantity
             OrderResult(
                 success = true,
                 message = "Order $normalizedSide $formattedSymbol berhasil. Order ID: $orderId ($clientId)",
@@ -512,9 +512,12 @@ object IndodaxTradeApiV2 {
         return 0.0
     }
 
-    private fun decimal(value: Double): String =
-        java.math.BigDecimal.valueOf(value)
-            .setScale(8, java.math.RoundingMode.DOWN)
-            .stripTrailingZeros()
-            .toPlainString()
+    private fun decimal(value: Double, symbol: String, isPrice: Boolean): String {
+        val meta = agu.analys.util.MarketDataCache(agu.analys.AppContextProvider.context)
+            .loadPairsMetadata()
+            .find { it.symbol.equals(symbol.replace("_", ""), ignoreCase = true) }
+        val decimals = if (isPrice) (meta?.priceDecimals ?: 0) else (meta?.quantityDecimals ?: 8)
+        val formatted = java.math.BigDecimal.valueOf(value).setScale(decimals, java.math.RoundingMode.DOWN).stripTrailingZeros().toPlainString()
+        return if (formatted.contains(".")) formatted else "$formatted.0" // Ensure valid format if needed, actually indodax usually accepts plain string, but stripTrailingZeros on 1000 can be 1E+3 which is bad!
+    }
 }

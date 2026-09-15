@@ -109,5 +109,44 @@ class MarketDataCache(context: Context) {
     private fun candleIntervalMs(candles: List<CandleBar>): Long { if (candles.size < 2) return DAY_MS; val times = candles.takeLast(6).map { it.timestamp }.sorted(); val diffs = times.zipWithNext().map { it.second - it.first }.filter { it > 0 }; return diffs.sorted().getOrNull(diffs.size / 2) ?: DAY_MS }
     private fun tickToJson(t: MarketTick): JSONObject = JSONObject().put("symbol", t.symbol).put("price", t.price).put("high", t.high24h).put("low", t.low24h).put("vol", t.volume24h).put("change", if (t.change24h.isNaN()) JSONObject.NULL else t.change24h).put("ts", t.timestamp)
     private fun jsonToTick(o: JSONObject): MarketTick? { val price = o.optDouble("price", 0.0); if (price <= 0) return null; val raw = o.opt("change"); val change = when (raw) { null, JSONObject.NULL -> Double.NaN; is Number -> raw.toDouble(); else -> o.optDouble("change", Double.NaN) }; return MarketTick(o.optString("symbol", ""), price, o.optDouble("high", price), o.optDouble("low", price), o.optDouble("vol", 0.0), change, o.optLong("ts", System.currentTimeMillis())) }
-    companion object { private const val PREFS_NAME = "krypto_market_cache"; private const val KEY_DASHBOARD_TICKS = "dashboard_ticks_json"; private const val KEY_DASHBOARD_SAVED_AT = "dashboard_saved_at"; private const val KEY_WORTH_COINS = "worth_coins_json"; private const val KEY_WORTH_SAVED_AT = "worth_coins_saved_at"; private const val KEY_PAIR_PREFIX = "pair_"; private const val DASHBOARD_WRITE_INTERVAL_MS = 15_000L; private const val PAIR_WRITE_INTERVAL_MS = 15_000L; private const val DAY_MS = 24L * 60L * 60L * 1000L }
+    companion object {
+    private const val KEY_PAIRS_METADATA = "pairs_metadata_json"
+ private const val PREFS_NAME = "krypto_market_cache"; private const val KEY_DASHBOARD_TICKS = "dashboard_ticks_json"; private const val KEY_DASHBOARD_SAVED_AT = "dashboard_saved_at"; private const val KEY_WORTH_COINS = "worth_coins_json"; private const val KEY_WORTH_SAVED_AT = "worth_coins_saved_at"; private const val KEY_PAIR_PREFIX = "pair_"; private const val DASHBOARD_WRITE_INTERVAL_MS = 15_000L; private const val PAIR_WRITE_INTERVAL_MS = 15_000L; private const val DAY_MS = 24L * 60L * 60L * 1000L }
+
+    fun savePairsMetadata(metadata: List<agu.analys.model.PairPrecision>) {
+        val arr = org.json.JSONArray()
+        metadata.forEach { m ->
+            val obj = org.json.JSONObject()
+            obj.put("id", m.id)
+            obj.put("symbol", m.symbol)
+            obj.put("base", m.baseCurrency)
+            obj.put("traded", m.tradedCurrency)
+            obj.put("priceDec", m.priceDecimals)
+            obj.put("qtyDec", m.quantityDecimals)
+            arr.put(obj)
+        }
+        prefs.edit().putString(KEY_PAIRS_METADATA, arr.toString()).apply()
+    }
+
+    fun loadPairsMetadata(): List<agu.analys.model.PairPrecision> {
+        val raw = prefs.getString(KEY_PAIRS_METADATA, null) ?: return emptyList()
+        return try {
+            val arr = org.json.JSONArray(raw)
+            val list = mutableListOf<agu.analys.model.PairPrecision>()
+            for (i in 0 until arr.length()) {
+                val o = arr.optJSONObject(i) ?: continue
+                list.add(agu.analys.model.PairPrecision(
+                    id = o.optString("id", ""),
+                    symbol = o.optString("symbol", ""),
+                    baseCurrency = o.optString("base", ""),
+                    tradedCurrency = o.optString("traded", ""),
+                    priceDecimals = o.optInt("priceDec", 2),
+                    quantityDecimals = o.optInt("qtyDec", 0)
+                ))
+            }
+            list
+        } catch(e: Exception) {
+            emptyList()
+        }
+    }
 }

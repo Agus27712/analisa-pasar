@@ -79,29 +79,10 @@ class TradingForegroundService : Service() {
 
     private fun formatCoinQuantity(quantity: Double, baseAsset: String): String {
         if (quantity <= 0.0) return "0 $baseAsset"
-        val formatted = when {
-            quantity >= 1000.0 -> {
-                if (quantity % 1.0 == 0.0) {
-                    String.format(Locale("id", "ID"), "%,d", quantity.toLong())
-                } else {
-                    String.format(Locale("id", "ID"), "%,.2f", quantity)
-                }
-            }
-            quantity >= 1.0 -> {
-                if (quantity % 1.0 == 0.0) {
-                    quantity.toLong().toString()
-                } else {
-                    String.format(Locale.US, "%.4f", quantity).trimEnd('0').trimEnd('.')
-                }
-            }
-            quantity < 0.0001 -> {
-                String.format(Locale.US, "%.8f", quantity).trimEnd('0').trimEnd('.')
-            }
-            else -> {
-                String.format(Locale.US, "%.6f", quantity).trimEnd('0').trimEnd('.')
-            }
-        }
-        return "$formatted $baseAsset"
+        val cache = agu.analys.util.MarketDataCache(this)
+        val meta = cache.loadPairsMetadata().find { it.baseCurrency.equals(baseAsset, ignoreCase = true) || it.tradedCurrency.equals(baseAsset, ignoreCase = true) }
+        val decimals = meta?.quantityDecimals ?: if (quantity >= 1000.0) 2 else if (quantity >= 1.0) 4 else 8
+        return agu.analys.util.PriceFormatter.formatCoinQuantity(quantity, baseAsset, decimals)
     }
 
     private fun formatHoldingCard(item: HoldingItem): String {
