@@ -65,7 +65,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     val bridge = TradingViewBridge(viewModelScope)
     internal val engine = LearningTradingEngine(viewModelScope)
     internal val prefs = AppPreferences(application)
-    private val marketCache = MarketDataCache(application)
+    internal val marketCache = MarketDataCache(application)
     internal val positionStore = SpotPositionStore(application)
     internal val alertStore = agu.analys.trading.PriceAlertStore(application)
     internal val simulationStore = SimulationTradeStore(application)
@@ -289,7 +289,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         }
     )
 
-    private val _marketDataSource = MutableStateFlow(prefs.marketDataSource)
+    internal val _marketDataSource = MutableStateFlow(prefs.marketDataSource)
     val marketDataSource: StateFlow<MarketDataSource> = _marketDataSource.asStateFlow()
 
     val globalContext: StateFlow<agu.analys.engine.global.GlobalMarketContext> = agu.analys.engine.global.GlobalContextManager.context
@@ -300,19 +300,19 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     internal val _selectedPair = MutableStateFlow(TradingPair.popularPairsForSource(prefs.marketDataSource).first())
     val selectedPair: StateFlow<TradingPair> = _selectedPair.asStateFlow()
 
-    private val _selectedTimeframe = MutableStateFlow(Timeframe.H4)
+    internal val _selectedTimeframe = MutableStateFlow(Timeframe.H4)
     val selectedTimeframe: StateFlow<Timeframe> = _selectedTimeframe.asStateFlow()
 
-    private val _selectedChartStyle = MutableStateFlow(ChartStyle.CANDLES)
+    internal val _selectedChartStyle = MutableStateFlow(ChartStyle.CANDLES)
     val selectedChartStyle: StateFlow<ChartStyle> = _selectedChartStyle.asStateFlow()
 
-    private val _useSimpleChart = MutableStateFlow(false)
+    internal val _useSimpleChart = MutableStateFlow(false)
     val useSimpleChart: StateFlow<Boolean> = _useSimpleChart.asStateFlow()
 
     val recentPrices: StateFlow<List<Double>> = marketDataCoordinator.recentPrices
     val recentCandles: StateFlow<List<CandleBar>> = marketDataCoordinator.recentCandles
 
-    private val _isChartExpanded = MutableStateFlow(false)
+    internal val _isChartExpanded = MutableStateFlow(false)
     val isChartExpanded: StateFlow<Boolean> = _isChartExpanded.asStateFlow()
 
     val currentTick: StateFlow<MarketTick?> = marketDataCoordinator.currentTick
@@ -324,7 +324,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     val orderBookAsks: StateFlow<List<OrderBookItem>> = marketDataCoordinator.orderBookAsks
     val tradeStream: StateFlow<List<TradeStreamItem>> = marketDataCoordinator.tradeStream
 
-    private val _signalHistory = MutableStateFlow<List<AISignalState>>(emptyList())
+    internal val _signalHistory = MutableStateFlow<List<AISignalState>>(emptyList())
     val signalHistory: StateFlow<List<AISignalState>> = _signalHistory.asStateFlow()
 
     internal val _auditReportText = MutableStateFlow<String?>(null)
@@ -342,52 +342,86 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     internal val _newsScreenerState = MutableStateFlow<agu.analys.model.NewsScreenerUiState>(agu.analys.model.NewsScreenerUiState.Idle)
     val newsScreenerState: StateFlow<agu.analys.model.NewsScreenerUiState> = _newsScreenerState.asStateFlow()
 
-    private val _worthCoins = MutableStateFlow<List<WorthCoinInfo>>(emptyList())
+    internal val _worthCoins = MutableStateFlow<List<WorthCoinInfo>>(emptyList())
     val worthCoins: StateFlow<List<WorthCoinInfo>> = _worthCoins.asStateFlow()
 
-    private val _hotCoins = MutableStateFlow<List<MarketTick>>(emptyList())
+    internal val _hotCoins = MutableStateFlow<List<MarketTick>>(emptyList())
     val hotCoins: StateFlow<List<MarketTick>> = _hotCoins.asStateFlow()
 
-    private val _gainersCoins = MutableStateFlow<List<MarketTick>>(emptyList())
+    internal val _gainersCoins = MutableStateFlow<List<MarketTick>>(emptyList())
     val gainersCoins: StateFlow<List<MarketTick>> = _gainersCoins.asStateFlow()
 
-    private val _secondWaveCoins = MutableStateFlow<List<MarketTick>>(emptyList())
+    internal val _losersCoins = MutableStateFlow<List<MarketTick>>(emptyList())
+    val losersCoins: StateFlow<List<MarketTick>> = _losersCoins.asStateFlow()
+
+    internal val _secondWaveCoins = MutableStateFlow<List<MarketTick>>(emptyList())
     val secondWaveCoins: StateFlow<List<MarketTick>> = _secondWaveCoins.asStateFlow()
 
-    private val _topVolumeCoins = MutableStateFlow<List<MarketTick>>(emptyList())
+    internal val _topVolumeCoins = MutableStateFlow<List<MarketTick>>(emptyList())
     val topVolumeCoins: StateFlow<List<MarketTick>> = _topVolumeCoins.asStateFlow()
 
-    private val _usdtIdrRate = MutableStateFlow(16450.0)
+    internal val _usdtIdrRate = MutableStateFlow(16450.0)
     val usdtIdrRate: StateFlow<Double> = _usdtIdrRate.asStateFlow()
 
-    private val _strategyMode = MutableStateFlow(prefs.strategyMode)
+    internal val _strategyMode = MutableStateFlow(prefs.strategyMode)
     val strategyMode: StateFlow<StrategyMode> = _strategyMode.asStateFlow()
 
-    private val _isScalpingMode = MutableStateFlow(prefs.isScalpingMode)
+    internal val _isScalpingMode = MutableStateFlow(prefs.isScalpingMode)
     val isScalpingMode: StateFlow<Boolean> = _isScalpingMode.asStateFlow()
 
-    private val _scalpingSensitivity = MutableStateFlow(prefs.scalpingSensitivity)
+    internal val _scalpingSensitivity = MutableStateFlow(prefs.scalpingSensitivity)
     val scalpingSensitivity: StateFlow<ScalpingSensitivity> = _scalpingSensitivity.asStateFlow()
 
-    private val _tradingFees = MutableStateFlow(prefs.tradingFees)
+    internal val _tradingFees = MutableStateFlow(prefs.tradingFees)
     val tradingFees: StateFlow<TradingFeeConfig> = _tradingFees.asStateFlow()
 
-    private val _isDarkTheme = MutableStateFlow(prefs.isDarkTheme)
+    internal val _isDarkTheme = MutableStateFlow(prefs.isDarkTheme)
     val isDarkTheme: StateFlow<Boolean> = _isDarkTheme.asStateFlow()
 
-    private val _isNotificationsEnabled = MutableStateFlow(prefs.isNotificationsEnabled)
+    internal val _themeStyle = MutableStateFlow(prefs.themeStyle)
+    val themeStyle: StateFlow<agu.analys.ui.theme.ThemeStyle> = _themeStyle.asStateFlow()
+
+    internal val _accentColorPreset = MutableStateFlow(prefs.accentColorPreset)
+    val accentColorPreset: StateFlow<agu.analys.ui.theme.AccentColorPreset> = _accentColorPreset.asStateFlow()
+
+    internal val _candleColorStyle = MutableStateFlow(prefs.candleColorStyle)
+    val candleColorStyle: StateFlow<agu.analys.ui.theme.CandleColorStyle> = _candleColorStyle.asStateFlow()
+
+    internal val _animationSpeed = MutableStateFlow(prefs.animationSpeed)
+    val animationSpeed: StateFlow<agu.analys.ui.theme.AnimationSpeed> = _animationSpeed.asStateFlow()
+
+    internal val _priceAnimationMode = MutableStateFlow(prefs.priceAnimationMode)
+    val priceAnimationMode: StateFlow<agu.analys.ui.animation.PriceAnimationMode> = _priceAnimationMode.asStateFlow()
+
+    internal val _isPriceTickPulseEnabled = MutableStateFlow(prefs.isPriceTickPulseEnabled)
+    val isPriceTickPulseEnabled: StateFlow<Boolean> = _isPriceTickPulseEnabled.asStateFlow()
+
+    internal val _isSmoothChartEnabled = MutableStateFlow(prefs.isSmoothChartEnabled)
+    val isSmoothChartEnabled: StateFlow<Boolean> = _isSmoothChartEnabled.asStateFlow()
+
+    internal val _isNotificationsEnabled = MutableStateFlow(prefs.isNotificationsEnabled)
     val isNotificationsEnabled: StateFlow<Boolean> = _isNotificationsEnabled.asStateFlow()
 
-    private val _isRealSimSyncEnabled = MutableStateFlow(prefs.isRealSimSyncEnabled)
+    internal val _isNotifyCandidateBuyEnabled = MutableStateFlow(prefs.isNotifyCandidateBuyEnabled)
+    val isNotifyCandidateBuyEnabled: StateFlow<Boolean> = _isNotifyCandidateBuyEnabled.asStateFlow()
+
+    internal val _isNotifyPriceAlertsEnabled = MutableStateFlow(prefs.isNotifyPriceAlertsEnabled)
+    val isNotifyPriceAlertsEnabled: StateFlow<Boolean> = _isNotifyPriceAlertsEnabled.asStateFlow()
+
+    internal val _isNotifyTrailingStopEnabled = MutableStateFlow(prefs.isNotifyTrailingStopEnabled)
+    val isNotifyTrailingStopEnabled: StateFlow<Boolean> = _isNotifyTrailingStopEnabled.asStateFlow()
+
+    internal val _isRealSimSyncEnabled = MutableStateFlow(prefs.isRealSimSyncEnabled)
     val isRealSimSyncEnabled: StateFlow<Boolean> = _isRealSimSyncEnabled.asStateFlow()
 
     val isShowingCachedData: StateFlow<Boolean> = marketDataCoordinator.isShowingCachedData
     internal val _spotPosition = MutableStateFlow(SpotPosition())
     val spotPosition: StateFlow<SpotPosition> = positionCoordinator.spotPosition
+    val positionVersion: StateFlow<Long> = positionCoordinator.positionVersion
     val priceAlerts: StateFlow<List<agu.analys.model.PriceAlert>> = positionCoordinator.priceAlerts
 
-    private var dashboardPollJob: Job? = null
-    private var trailingPollJob: Job? = null
+    internal var dashboardPollJob: Job? = null
+    internal var trailingPollJob: Job? = null
     internal var lastLiveTickAt = 0L
     internal val _dashboardTicks = MutableStateFlow<Map<String, MarketTick>>(emptyMap())
     internal val _connectionState = MutableStateFlow<MarketConnectionState>(MarketConnectionState.ConnectionLost())
@@ -516,7 +550,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     val userPublicIp: StateFlow<String?> = realCoordinator.publicIp
     val failedPinAttempts: StateFlow<Int> = MutableStateFlow(prefs.failedPinAttempts).asStateFlow()
 
-    private var lastSavedSignalTimestamp = 0L
+    internal var lastSavedSignalTimestamp = 0L
     internal val navigationStack = mutableListOf<AppScreen>()
 
     val githubReleaseInfo: StateFlow<GitHubReleaseInfo?> = updateCoordinator.releaseInfo

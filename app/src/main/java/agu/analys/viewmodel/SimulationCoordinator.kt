@@ -86,16 +86,7 @@ class SimulationCoordinator(
             price = price,
             stopPrice = stopPrice,
             quantity = quantity,
-            currentMarketPrice = execPrice,
-            strategyMode = strategyMode,
-            holdingDurationMs = holdingDurationMs,
-            entryPrice = entryPrice,
-            entryTimestamp = entryTimestamp,
-            isTrailingUsed = isTrailingUsed,
-            trailingPercent = trailingPercent,
-            trailingPeakPrice = trailingPeakPrice,
-            trailingLockPrice = trailingLockPrice,
-            signalSnapshot = signalSnapshot
+            currentMarketPrice = execPrice
         )
         refresh()
         // P2.2 Lifecycle
@@ -166,16 +157,7 @@ class SimulationCoordinator(
                     price = tp1Price,
                     stopPrice = 0.0,
                     quantity = qty1,
-                    currentMarketPrice = marketPrice,
-                    strategyMode = strategyMode,
-                    holdingDurationMs = holdingDurationMs,
-                    entryPrice = entryPrice,
-                    entryTimestamp = entryTimestamp,
-                    isTrailingUsed = isTrailingUsed,
-                    trailingPercent = trailingPercent,
-                    trailingPeakPrice = trailingPeakPrice,
-                    trailingLockPrice = trailingLockPrice,
-                    signalSnapshot = signalSnapshot
+                    currentMarketPrice = marketPrice
                 )
                 if (r1 is agu.analys.trading.SimulationOrderResult.Success) {
                     okCount++
@@ -194,16 +176,7 @@ class SimulationCoordinator(
                     price = tp2Price,
                     stopPrice = 0.0,
                     quantity = qty2,
-                    currentMarketPrice = marketPrice,
-                    strategyMode = strategyMode,
-                    holdingDurationMs = holdingDurationMs,
-                    entryPrice = entryPrice,
-                    entryTimestamp = entryTimestamp,
-                    isTrailingUsed = isTrailingUsed,
-                    trailingPercent = trailingPercent,
-                    trailingPeakPrice = trailingPeakPrice,
-                    trailingLockPrice = trailingLockPrice,
-                    signalSnapshot = signalSnapshot
+                    currentMarketPrice = marketPrice
                 )
                 if (r2 is agu.analys.trading.SimulationOrderResult.Success) {
                     okCount++
@@ -224,16 +197,7 @@ class SimulationCoordinator(
                 price = tp1Price,
                 stopPrice = 0.0,
                 quantity = sellQty,
-                currentMarketPrice = marketPrice,
-                strategyMode = strategyMode,
-                holdingDurationMs = holdingDurationMs,
-                entryPrice = entryPrice,
-                entryTimestamp = entryTimestamp,
-                isTrailingUsed = isTrailingUsed,
-                trailingPercent = trailingPercent,
-                trailingPeakPrice = trailingPeakPrice,
-                trailingLockPrice = trailingLockPrice,
-                signalSnapshot = signalSnapshot
+                currentMarketPrice = marketPrice
             )
             refresh()
             val ok = r is agu.analys.trading.SimulationOrderResult.Success
@@ -252,16 +216,7 @@ class SimulationCoordinator(
                 price = tp2Price,
                 stopPrice = 0.0,
                 quantity = sellQty,
-                currentMarketPrice = marketPrice,
-                strategyMode = strategyMode,
-                holdingDurationMs = holdingDurationMs,
-                entryPrice = entryPrice,
-                entryTimestamp = entryTimestamp,
-                isTrailingUsed = isTrailingUsed,
-                trailingPercent = trailingPercent,
-                trailingPeakPrice = trailingPeakPrice,
-                trailingLockPrice = trailingLockPrice,
-                signalSnapshot = signalSnapshot
+                currentMarketPrice = marketPrice
             )
             refresh()
             val ok = r is agu.analys.trading.SimulationOrderResult.Success
@@ -281,16 +236,7 @@ class SimulationCoordinator(
                 price = marketPrice,
                 stopPrice = 0.0,
                 quantity = sellQty,
-                currentMarketPrice = marketPrice,
-                strategyMode = strategyMode,
-                holdingDurationMs = holdingDurationMs,
-                entryPrice = entryPrice,
-                entryTimestamp = entryTimestamp,
-                isTrailingUsed = isTrailingUsed,
-                trailingPercent = trailingPercent,
-                trailingPeakPrice = trailingPeakPrice,
-                trailingLockPrice = trailingLockPrice,
-                signalSnapshot = signalSnapshot
+                currentMarketPrice = marketPrice
             )
             refresh()
             val ok = r is agu.analys.trading.SimulationOrderResult.Success

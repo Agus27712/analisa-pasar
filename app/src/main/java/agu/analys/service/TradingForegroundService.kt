@@ -331,6 +331,7 @@ class TradingForegroundService : Service() {
         const val CHANNEL_ID = "trading_foreground_monitor_channel"
         const val NOTIFICATION_ID = 9912
         const val ACTION_UPDATE = "agu.analys.ACTION_UPDATE_NOTIF"
+        const val ACTION_FORCE_REFRESH = "agu.analys.ACTION_FORCE_REFRESH"
         const val ACTION_STOP = "agu.analys.ACTION_STOP_SERVICE"
 
         val livePrices = ConcurrentHashMap<String, Double>()
@@ -340,6 +341,21 @@ class TradingForegroundService : Service() {
             if (!prefs.isNotificationsEnabled) return
             
             val intent = Intent(context, TradingForegroundService::class.java)
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
+                }
+            } catch (_: Exception) {}
+        }
+
+        fun forceRefresh(context: Context) {
+            val prefs = AppPreferences(context)
+            if (!prefs.isNotificationsEnabled) return
+            val intent = Intent(context, TradingForegroundService::class.java).apply {
+                action = ACTION_FORCE_REFRESH
+            }
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     context.startForegroundService(intent)
