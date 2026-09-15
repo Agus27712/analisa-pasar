@@ -108,7 +108,7 @@ class PriceFeedThrottler(
     }
 
     companion object {
-        const val DEFAULT_THROTTLE_MS = 200L
+        const val DEFAULT_THROTTLE_MS = 100L
         const val FAST_THROTTLE_MS = 100L
         const val SMOOTH_THROTTLE_MS = 200L
         const val ECO_THROTTLE_MS = 500L

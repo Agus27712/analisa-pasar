@@ -19,6 +19,7 @@ import kotlin.math.min
 class RealTradeCoordinator(
     private val scope: CoroutineScope,
     private val prefs: AppPreferences,
+    private val getLatestTick: (String) -> agu.analys.model.MarketTick?,
     private val onBalanceAndAvgUpdated: ((balances: Map<String, Double>, avgPrices: Map<String, Double>) -> Unit)? = null,
     private val onRealTradeExecuted: ((pair: String, type: String, price: Double, quantity: Double, tp1: Double, tp2: Double) -> Unit)? = null
 ) {
@@ -28,6 +29,7 @@ class RealTradeCoordinator(
 
     private val securityManager = RealTradeSecurityManager(scope, prefs)
     private val executor = RealTradeExecutor(
+        getLatestTick = getLatestTick,
         scope = scope,
         prefs = prefs,
         onStatusUpdate = { _realTradeStatus.value = it },

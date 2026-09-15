@@ -78,6 +78,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     internal val realCoordinator = RealTradeCoordinator(
         scope = viewModelScope,
         prefs = prefs,
+        getLatestTick = { symbol -> marketDataCoordinator.dashboardTicks.value[symbol] },
         onBalanceAndAvgUpdated = { balances, avgPrices ->
             syncRealBalancesToPositionStore(balances, avgPrices)
         },

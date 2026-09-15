@@ -61,7 +61,9 @@ object IndodaxTradeApiV2 {
     fun toOrderSymbol(symbol: String): String =
         IndodaxMarketService.toPairId(symbol).replace("_", "").uppercase()
 
-    private suspend fun serverTimeMs(): Long = withContext(Dispatchers.IO) {
+    private var serverTimeOffset: Long? = null
+
+    private suspend fun fetchServerTimeOffset(): Long = withContext(Dispatchers.IO) {
         try {
             val request = Request.Builder()
                 .url(SERVER_TIME_URL)
@@ -75,13 +77,22 @@ object IndodaxTradeApiV2 {
                     root.has("serverTime") -> root.optLong("serverTime", 0L)
                     else -> 0L
                 }
-                if (raw <= 0L) System.currentTimeMillis()
+                val serverMs = if (raw <= 0L) System.currentTimeMillis()
                 else if (raw < 1_000_000_000_000L) raw * 1000L else raw
+                
+                val offset = serverMs - System.currentTimeMillis()
+                serverTimeOffset = offset
+                offset
             }
         } catch (e: Exception) {
-            Timber.e(e, "Gagal mengambil server time Indodax")
-            System.currentTimeMillis()
+            Timber.e(e, "Gagal fetch server_time Indodax")
+            0L
         }
+    }
+
+    private suspend fun serverTimeMs(): Long {
+        val offset = serverTimeOffset ?: fetchServerTimeOffset()
+        return System.currentTimeMillis() + offset
     }
 
     private suspend fun signedV2Request(
@@ -95,7 +106,13 @@ object IndodaxTradeApiV2 {
         val sign = hmacSha256(secretKey, payloadString)
         val fullUrl = "$V2_BASE_URL$path"
 
-        val request = when (method.uppercase()) {
+        val methodUpper = method.uppercase()
+        if (methodUpper == "POST" || methodUpper == "DELETE" || path.contains("/order")) {
+            agu.analys.util.RateLimiters.privateTrade.waitAndConsume()
+        } else {
+            agu.analys.util.RateLimiters.privateAccount.waitAndConsume()
+        }
+        val request = when (methodUpper) {
             "GET" -> Request.Builder()
                 .url("$fullUrl?$payloadString")
                 .get()
@@ -130,6 +147,13 @@ object IndodaxTradeApiV2 {
                 val responseBody = response.body?.string().orEmpty()
                 val json = try { JSONObject(responseBody) } catch (_: Exception) { null }
                 val hasErrorCode = json != null && json.has("code") && json.optInt("code", 0) != 0
+                if (!response.isSuccessful || hasErrorCode) {
+                    val code = json?.optInt("code", 0) ?: 0
+                    if (code == -1021 || responseBody.contains("Invalid Timestamp") || responseBody.contains("recvWindow")) {
+                        Timber.w("Indodax API V2 Timestamp Invalid, clearing offset. body=$responseBody")
+                        serverTimeOffset = null
+                    }
+                }
                 if (response.isSuccessful && !hasErrorCode) {
                     true to responseBody
                 } else {

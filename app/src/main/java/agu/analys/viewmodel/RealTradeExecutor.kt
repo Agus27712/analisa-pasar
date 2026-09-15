@@ -13,6 +13,7 @@ import timber.log.Timber
 class RealTradeExecutor(
     private val scope: CoroutineScope,
     private val prefs: AppPreferences,
+    private val getLatestTick: (String) -> agu.analys.model.MarketTick?,
     private val onStatusUpdate: (String) -> Unit,
     private val onRateLimit: (String) -> Unit,
     private val isRateLimited: () -> Boolean,
@@ -123,8 +124,20 @@ class RealTradeExecutor(
             return
         }
 
+        var execPrice = price.toDouble()
+        val latestTick = getLatestTick(pair)
+        if (latestTick != null) {
+            val tickAge = System.currentTimeMillis() - latestTick.timestamp
+            val maxAge = if (prefs.isScalpingMode) 400L else 800L
+            if (tickAge > maxAge) {
+                onResult(false, "Data harga terlalu usang (delay ${tickAge}ms > limit ${maxAge}ms). Order dibatalkan untuk menghindari slippage.")
+                return
+            }
+            execPrice = latestTick.price
+        }
+
         val quantity = if (type.equals("buy", ignoreCase = true)) {
-            if (price <= 0L || amountIdr <= 0.0) 0.0 else amountIdr / price.toDouble()
+            if (execPrice <= 0.0 || amountIdr <= 0.0) 0.0 else amountIdr / execPrice
         } else {
             amountIdr
         }
@@ -139,7 +152,7 @@ class RealTradeExecutor(
             val clientOrderId = "agu-${type.lowercase()}-${System.currentTimeMillis()}"
             val buyResult = IndodaxTradeApiV2.createLimitOrderDetailed(
                 apiKey = apiKey, secretKey = secretKey, symbol = pair,
-                side = type, price = price.toDouble(), quantity = quantity, clientOrderId = clientOrderId
+                side = type, price = execPrice, quantity = quantity, clientOrderId = clientOrderId
             )
 
             if (!buyResult.success && looksLikeRateLimit(buyResult.message)) {
@@ -154,7 +167,7 @@ class RealTradeExecutor(
                 prefs.rememberHistoryBase(base)
 
                 val isBuy = type.equals("buy", ignoreCase = true)
-                val execPrice = price.toDouble()
+                // execPrice is already set
                 var finalExecutedQty = quantity
 
                 if (isBuy && autoLimitSellPrice1 > price) {
