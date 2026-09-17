@@ -11,10 +11,11 @@ data class SellTransition(
     val newState: SellSignalState,
     val isNewReadyToSell: Boolean,
     val isNewTrailingTriggered: Boolean,
-    val isNewStopLossHit: Boolean
+    val isNewStopLossHit: Boolean,
+    val isNewRapidDropExit: Boolean = false
 ) {
     val hasTriggeringTransition: Boolean
-        get() = isNewReadyToSell || isNewTrailingTriggered || isNewStopLossHit
+        get() = isNewReadyToSell || isNewTrailingTriggered || isNewStopLossHit || isNewRapidDropExit
 }
 
 object SellSignalLifecycleManager {
@@ -36,13 +37,15 @@ object SellSignalLifecycleManager {
         val isNewReadyToSell = previousState != SellLifecycleState.READY_TO_SELL && newState.state == SellLifecycleState.READY_TO_SELL
         val isNewTrailingTriggered = previousState != SellLifecycleState.TRAILING_TRIGGERED && newState.state == SellLifecycleState.TRAILING_TRIGGERED
         val isNewStopLossHit = previousState != SellLifecycleState.STOP_LOSS_HIT && newState.state == SellLifecycleState.STOP_LOSS_HIT
+        val isNewRapidDropExit = previousState != SellLifecycleState.RAPID_DROP_EXIT && newState.state == SellLifecycleState.RAPID_DROP_EXIT
 
         return SellTransition(
             symbol = symbol,
             newState = newState,
             isNewReadyToSell = isNewReadyToSell,
             isNewTrailingTriggered = isNewTrailingTriggered,
-            isNewStopLossHit = isNewStopLossHit
+            isNewStopLossHit = isNewStopLossHit,
+            isNewRapidDropExit = isNewRapidDropExit
         )
     }
 

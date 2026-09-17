@@ -48,6 +48,8 @@ object ReadySellBadgeEvaluator {
                 ReadySellBadge("🚨 TRAILING", colorOrange, isExitDecisionEvent = true)
             SellLifecycleState.STOP_LOSS_HIT ->
                 ReadySellBadge("⚠️ STOP LOSS", colorRed, isExitDecisionEvent = true)
+            SellLifecycleState.RAPID_DROP_EXIT ->
+                ReadySellBadge("⚡ RAPID DROP", colorRed, isExitDecisionEvent = true)
             SellLifecycleState.READY_TO_SELL -> {
                 when {
                     sellState.reason == "Target TP1 tercapai" ->

@@ -163,7 +163,84 @@ class SellSignalEvaluatorTest {
         val result = SellSignalEvaluator.evaluate(position, tick, null, TradingFeeConfig(sellMakerPct = 0.0))
         
         assertEquals(SellLifecycleState.STOP_LOSS_HIT, result.state)
-        assertEquals("Stop loss terpicu", result.reason)
+        assertEquals("Stop loss aplikasi terpicu", result.reason)
+    }
+
+    @Test
+    fun testRapidDropExit_1mDrop() {
+        val position = SpotPosition(
+            state = SpotPositionState.HOLDING,
+            quantity = 1.0,
+            entryPrice = 95000.0 // SL is 95000 * 0.99 = 94050. Current price 97000 is above SL.
+        )
+        // Current price 97000, 1m ago 101000 -> drop ~3.96% (>= 3.0%)
+        val tick = MarketTick("BTCIDR", 97000.0, 0.0, 0.0, 0.0, 0.0)
+        val snapshot = agu.analys.model.SellRiskSnapshot(
+            currentPrice = 97000.0,
+            price1mAgo = 101000.0
+        )
+        val result = SellSignalEvaluator.evaluate(
+            position = position,
+            tick = tick,
+            indicators = null,
+            tradingFees = TradingFeeConfig(sellMakerPct = 0.0),
+            riskSnapshot = snapshot
+        )
+
+        assertEquals(SellLifecycleState.RAPID_DROP_EXIT, result.state)
+        assertTrue(result.reason.contains("Drop 1m"))
+    }
+
+    @Test
+    fun testRapidDropExit_DrawdownFromPeak() {
+        val position = SpotPosition(
+            state = SpotPositionState.HOLDING,
+            quantity = 1.0,
+            entryPrice = 100000.0,
+            peakPrice = 110000.0
+        )
+        // Current price 105000 (still profit vs entry 100k, but drawdown from peak 110k is ~4.5% >= 4.0%)
+        val tick = MarketTick("BTCIDR", 105000.0, 0.0, 0.0, 0.0, 0.0)
+        val snapshot = agu.analys.model.SellRiskSnapshot(
+            currentPrice = 105000.0,
+            peakPrice = 110000.0
+        )
+        val result = SellSignalEvaluator.evaluate(
+            position = position,
+            tick = tick,
+            indicators = null,
+            tradingFees = TradingFeeConfig(sellMakerPct = 0.0),
+            riskSnapshot = snapshot
+        )
+
+        assertEquals(SellLifecycleState.RAPID_DROP_EXIT, result.state)
+        assertTrue(result.reason.contains("Drawdown Peak"))
+    }
+
+    @Test
+    fun testRapidDropExit_PriorityOverProfit() {
+        val position = SpotPosition(
+            state = SpotPositionState.HOLDING,
+            quantity = 1.0,
+            entryPrice = 100000.0,
+            tp1Price = 105000.0 // target TP1 105000
+        )
+        // Current price is 106000 (above TP1!), but price dropped rapidly from 110000 in 1 minute (-3.6%)
+        val tick = MarketTick("BTCIDR", 106000.0, 0.0, 0.0, 0.0, 0.0)
+        val snapshot = agu.analys.model.SellRiskSnapshot(
+            currentPrice = 106000.0,
+            price1mAgo = 110000.0
+        )
+        val result = SellSignalEvaluator.evaluate(
+            position = position,
+            tick = tick,
+            indicators = null,
+            tradingFees = TradingFeeConfig(sellMakerPct = 0.0),
+            riskSnapshot = snapshot
+        )
+
+        // Rapid Drop Exit MUST take precedence over TP1 to avoid getting dumped on
+        assertEquals(SellLifecycleState.RAPID_DROP_EXIT, result.state)
     }
 
     @Test

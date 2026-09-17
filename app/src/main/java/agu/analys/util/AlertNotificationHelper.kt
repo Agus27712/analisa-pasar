@@ -345,4 +345,85 @@ object AlertNotificationHelper {
             manager.notify(notifId, builder.build())
         } catch (_: SecurityException) {}
     }
+
+    fun sendEmergencyExitNotification(
+        context: Context,
+        symbol: String,
+        state: agu.analys.model.SellSignalState,
+        currentPrice: Double,
+        entryPrice: Double,
+        quantity: Double,
+        isReal: Boolean
+    ) {
+        val prefs = AppPreferences(context)
+        if (!prefs.isNotificationsEnabled) return
+
+        createNotificationChannels(context)
+
+        val notifId = ((symbol.uppercase().hashCode() xor 0x5E11) and 0x3FFFFFFF) + (if (isReal) 300000 else 400000)
+
+        val mainIntent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("EXTRA_SYMBOL", symbol)
+            putExtra("EXTRA_IS_REAL", isReal)
+        }
+        val pendingMainIntent = PendingIntent.getActivity(
+            context,
+            notifId,
+            mainIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        // Action Intent: langsung mengarahkan ke konfirmasi eksekusi jual darurat
+        val actionIntent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            action = "agu.analys.ACTION_EXECUTE_TRAILING_SELL"
+            putExtra("EXTRA_SYMBOL", symbol)
+            putExtra("EXTRA_LIMIT_PRICE", currentPrice)
+            putExtra("EXTRA_QUANTITY", quantity)
+            putExtra("EXTRA_IS_REAL", isReal)
+        }
+        val pendingActionIntent = PendingIntent.getActivity(
+            context,
+            notifId + 1,
+            actionIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val modeTag = if (isReal) "[REAL]" else "[SIM]"
+        val dropReason = state.reason
+        val pnlFormatted = PriceFormatter.formatPercentage(state.netProfitPct, includePlusSign = true)
+        val title = "🚨 $modeTag EXIT DARURAT: ${symbol.uppercase()} ($pnlFormatted)"
+        val priceStr = PriceFormatter.formatPrice(currentPrice, showSymbol = true)
+        val entryStr = if (entryPrice > 0.0) PriceFormatter.formatPrice(entryPrice, showSymbol = true) else "-"
+        val message = "$dropReason\n" +
+                "💵 Harga Sekarang: $priceStr | Beli: $entryStr\n" +
+                "⚠️ Segera periksa posisi dan amankan modal!"
+
+        val action = NotificationCompat.Action.Builder(
+            0,
+            if (isReal) "⚡ EXIT REAL SEKARANG" else "⚡ EXIT SIMULASI",
+            pendingActionIntent
+        ).build()
+
+        val builder = NotificationCompat.Builder(context, CHANNEL_TRAILING_ID)
+            .setSmallIcon(agu.analys.R.drawable.ic_stat_trading)
+            .setColor(0xFFDC2626.toInt()) // Emergency Red
+            .setContentTitle(title)
+            .setContentText("$dropReason ($pnlFormatted)")
+            .setSubText("$modeTag ${symbol.uppercase()} • Exit Darurat")
+            .setStyle(NotificationCompat.BigTextStyle().bigText(message))
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setAutoCancel(true)
+            .setContentIntent(pendingMainIntent)
+            .addAction(action)
+
+        try {
+            val manager = NotificationManagerCompat.from(context)
+            manager.notify(notifId, builder.build())
+        } catch (_: SecurityException) {}
+    }
 }
+

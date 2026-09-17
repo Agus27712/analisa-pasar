@@ -9,21 +9,36 @@ class SwingEvaluatorTest {
 
     @Test
     fun testSwingQualified() {
-        // Bullish trend dengan koreksi sehat untuk swing (mencegah RSI overbought >= 72)
-        val history = TestData.generateCandles(200, 800.0, 0.001).toMutableList()
-        val lastClose = history.last().close
-        val time = history.last().timestamp
-        for (i in 1..5) {
-            val c = lastClose - (i * 1.5)
-            history.add(agu.analys.model.CandleBar(time + (i * 3600000L), c + 1.0, c + 2.0, c - 2.0, c, 5000.0))
+        // Uptrend 150 bar dengan koreksi sehat 4 bar (-2.5%) dan rejection candle di support
+        val baseTime = 1700000000000L
+        val history = mutableListOf<agu.analys.model.CandleBar>()
+        var p = 800.0
+        for (i in 0 until 150) {
+            val step = 1.6
+            val open = p
+            val close = p + step
+            history.add(agu.analys.model.CandleBar(baseTime + i * 3600000L, open, close + 0.5, open - 0.5, close, 2500.0))
+            p = close
         }
-        val price = history.last().close
+        // Peak di sekitar 1040. Koreksi 4 bar ke support ~1012
+        val peak = p
+        val corrections = listOf(peak - 8.0, peak - 16.0, peak - 23.0, peak - 28.0)
+        for ((idx, targetC) in corrections.withIndex()) {
+            val open = p
+            val close = targetC
+            history.add(agu.analys.model.CandleBar(baseTime + (150 + idx) * 3600000L, open, open + 1.0, close - 1.0, close, 2000.0))
+            p = close
+        }
+        // Rejection candle di support: pantulan naik dengan volume tinggi
+        val lastOpen = p
+        val lastClose = p + 6.0 // Naik ke ~1018, masih 2.1% di bawah peak 1040 (aman dari pucuk)
+        history.add(agu.analys.model.CandleBar(baseTime + 154 * 3600000L, lastOpen, lastClose + 0.5, lastOpen - 2.0, lastClose, 12000.0))
+        val currentPrice = lastClose
         
-        val result = SwingEvaluator.evaluate(price, history)
+        val result = SwingEvaluator.evaluate(currentPrice, history)
         
         assertNotNull(result)
-        // Should be bullish or at least holding
-        assertTrue("Confidence should be reasonable (got ${result.signal.confidence})", result.signal.confidence >= 20)
+        assertTrue("Confidence should be reasonable (got ${result.signal.confidence}, reasons: ${result.signal.reasoning})", result.signal.confidence >= 20)
     }
 
     @Test

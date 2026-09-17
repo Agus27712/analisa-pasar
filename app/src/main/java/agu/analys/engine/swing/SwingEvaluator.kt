@@ -346,12 +346,12 @@ object SwingEvaluator {
         // `price >= calculatedTp1 * 0.995` mustahil true karena calculatedTp1 selalu >= price*1.07.
         // Diganti guard nyata: jarak ke recent high + extension dari rata-rata ATR, mencegah
         // "beli di pucuk" seperti kasus XRP 9 Sep di Office Daily.) ─────────────────────────
-        val lookbackHigh = min(30, highs.size)
-        val recentHigh = highs.takeLast(lookbackHigh).maxOrNull() ?: price
+        val lookbackHigh = min(15, highs.size - 1).coerceAtLeast(1)
+        val recentHigh = highs.dropLast(1).takeLast(lookbackHigh).maxOrNull() ?: price
         val distToHighPct = if (recentHigh > 0.0) (recentHigh - price) / recentHigh else 1.0
         val mean20 = closes.takeLast(min(20, closes.size)).average()
         val atrExtension = if (effectiveAtr > 0.0) (price - mean20) / effectiveAtr else 0.0
-        val tooCloseToHigh = distToHighPct < 0.012
+        val tooCloseToHigh = distToHighPct in 0.0..0.012 && detectedSetup != SwingSetup.BREAKOUT
         val isOverExtended = atrExtension > 1.8
 
         // --- 1. DANGER & INVALIDATION CHECKS (DI ATAS) ---

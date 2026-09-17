@@ -3,22 +3,34 @@ package agu.analys.engine.sell
 import agu.analys.config.TradingFeeConfig
 import agu.analys.model.MarketTick
 import agu.analys.model.PositionContext
+import agu.analys.model.RapidDropConfig
 import agu.analys.model.SellLifecycleState
+import agu.analys.model.SellRiskSnapshot
 import agu.analys.model.SellSignalState
 import agu.analys.model.TechnicalIndicators
 import agu.analys.trading.SpotPosition
+import java.util.Locale
 
 object SellSignalEvaluator {
+    private fun percentageDrop(oldPrice: Double, currentPrice: Double): Double {
+        if (oldPrice <= 0.0) return 0.0
+        return ((oldPrice - currentPrice) / oldPrice) * 100.0
+    }
+
     fun evaluate(
         context: PositionContext,
         indicators: TechnicalIndicators? = null,
         tradingFees: TradingFeeConfig = TradingFeeConfig(),
-        high24h: Double = 0.0
+        high24h: Double = 0.0,
+        riskSnapshot: SellRiskSnapshot? = null,
+        rapidDropConfig: RapidDropConfig = RapidDropConfig()
     ): SellSignalState {
+        // 1. Tidak memiliki posisi
         if (!context.hasPosition || (context.quantity ?: 0.0) <= 0.00000001) {
             return SellSignalState(state = SellLifecycleState.NOT_HOLDING)
         }
 
+        // 2. Harga tidak valid
         val currentPrice = context.currentPrice ?: 0.0
         if (currentPrice <= 0.0) return SellSignalState(state = SellLifecycleState.MONITORING)
 
@@ -43,16 +55,49 @@ object SellSignalEvaluator {
         val sl = context.stopLoss ?: if (hasCostBasis && entryPrice != null && entryPrice > 0.0) entryPrice * 0.99 else 0.0
         val rsi = indicators?.rsi14
 
-        // 1. Stop Loss Hit (Harga Beli - 1%)
+        // 3. Stop Loss Berbasis Perhitungan Aplikasi (Evaluasi Darurat #1)
         if (sl > 0.0 && currentPrice <= sl) {
             return SellSignalState(
                 state = SellLifecycleState.STOP_LOSS_HIT,
-                reason = "Stop loss terpicu",
+                reason = "Stop loss aplikasi terpicu",
                 netProfitPct = netProfitPct
             )
         }
 
-        // 2. Trailing Stop Triggered
+        // 4. Rapid Drop Exit (Evaluasi Darurat #2: Deteksi Penurunan Cepat / Flash Dump)
+        val snapshot = riskSnapshot ?: context.riskSnapshot
+        if (snapshot != null && snapshot.currentPrice > 0.0) {
+            val cur = snapshot.currentPrice
+            val drop1m = snapshot.price1mAgo?.let { percentageDrop(it, cur) } ?: 0.0
+            val drop5m = snapshot.price5mAgo?.let { percentageDrop(it, cur) } ?: 0.0
+            val effectivePeak = snapshot.peakPrice ?: context.peakPrice
+            val drawdownFromPeak = effectivePeak?.let { percentageDrop(it, cur) } ?: 0.0
+            val velocity = snapshot.priceVelocityPctPerMinute ?: (if (drop1m > 0.0) drop1m else 0.0)
+            val sellPressure = snapshot.sellPressureRatio ?: 0.0
+
+            val isDrop1mHit = drop1m >= rapidDropConfig.drop1mExitPct
+            val isDrop5mHit = drop5m >= rapidDropConfig.drop5mExitPct
+            val isDrawdownHit = drawdownFromPeak >= rapidDropConfig.drawdownFromPeakPct && (effectivePeak ?: 0.0) > (entryPrice ?: 0.0)
+            val isVelocityHit = velocity >= rapidDropConfig.velocityExitPctPerMinute && drop1m >= 1.0
+            val isSellPressureHigh = sellPressure >= rapidDropConfig.minimumSellPressureRatio && drop1m >= 1.5
+
+            if (isDrop1mHit || isDrop5mHit || isDrawdownHit || isVelocityHit || isSellPressureHigh) {
+                val detailReason = when {
+                    isDrop1mHit -> "Drop 1m (-${String.format(Locale.US, "%.1f", drop1m)}%)"
+                    isDrawdownHit -> "Drawdown Peak (-${String.format(Locale.US, "%.1f", drawdownFromPeak)}%)"
+                    isDrop5mHit -> "Drop 5m (-${String.format(Locale.US, "%.1f", drop5m)}%)"
+                    isVelocityHit -> "Kecepatan drop (-${String.format(Locale.US, "%.1f", velocity)}%/m)"
+                    else -> "Tekanan jual orderbook (${String.format(Locale.US, "%.0f", sellPressure * 100)}%)"
+                }
+                return SellSignalState(
+                    state = SellLifecycleState.RAPID_DROP_EXIT,
+                    reason = "Rapid drop terdeteksi: $detailReason",
+                    netProfitPct = netProfitPct
+                )
+            }
+        }
+
+        // 5. Trailing Stop Triggered
         if (context.isTrailingTriggered) {
             return SellSignalState(
                 state = SellLifecycleState.TRAILING_TRIGGERED,
@@ -61,7 +106,7 @@ object SellSignalEvaluator {
             )
         }
 
-        // 3. Take Profit 2 Target Reached
+        // 6. Take Profit 2 Target Reached
         if (tp2 > 0.0 && currentPrice >= tp2 && (!hasCostBasis || netProfitPct > 0.0)) {
             return SellSignalState(
                 state = SellLifecycleState.READY_TO_SELL,
@@ -70,7 +115,7 @@ object SellSignalEvaluator {
             )
         }
 
-        // 4. Take Profit 1 Target Reached
+        // 7. Take Profit 1 Target Reached
         if (tp1 > 0.0 && currentPrice >= tp1 && (!hasCostBasis || netProfitPct > 0.0)) {
             return SellSignalState(
                 state = SellLifecycleState.READY_TO_SELL,
@@ -79,7 +124,7 @@ object SellSignalEvaluator {
             )
         }
 
-        // 5. Approaching TP1 / TP2 Target
+        // 8. Approaching TP1 / TP2 Target
         if (tp1 > 0.0 && currentPrice >= tp1 * 0.98 && currentPrice < tp1) {
             return SellSignalState(
                 state = SellLifecycleState.APPROACHING_TARGET,
@@ -94,7 +139,7 @@ object SellSignalEvaluator {
             )
         }
 
-        // 5. RSI Overbought (Evaluated before generic profit levels so it remains fully reachable)
+        // 9. RSI Overbought
         if (rsi != null && !rsi.isNaN() && rsi.isFinite() && rsi >= 70.0 && (!hasCostBasis || netProfitPct > 0.0)) {
             return SellSignalState(
                 state = SellLifecycleState.READY_TO_SELL,
@@ -103,7 +148,7 @@ object SellSignalEvaluator {
             )
         }
 
-        // 6. Near 24h High with positive profit
+        // 10. Near 24h High with positive profit
         if (high24h > 0.0 && currentPrice >= high24h * 0.98 && hasCostBasis && netProfitPct >= 1.0) {
             return SellSignalState(
                 state = SellLifecycleState.READY_TO_SELL,
@@ -112,7 +157,7 @@ object SellSignalEvaluator {
             )
         }
 
-        // 7. Significant Net Profit Levels
+        // 11. Significant Net Profit Levels
         if (hasCostBasis && netProfitPct >= 5.0) {
             return SellSignalState(
                 state = SellLifecycleState.READY_TO_SELL,
@@ -137,6 +182,7 @@ object SellSignalEvaluator {
             )
         }
 
+        // 12. Monitoring
         return SellSignalState(
             state = SellLifecycleState.MONITORING,
             reason = "Memantau...",
@@ -151,7 +197,9 @@ object SellSignalEvaluator {
         position: SpotPosition,
         tick: MarketTick?,
         indicators: TechnicalIndicators?,
-        tradingFees: TradingFeeConfig
+        tradingFees: TradingFeeConfig,
+        riskSnapshot: SellRiskSnapshot? = null,
+        rapidDropConfig: RapidDropConfig = RapidDropConfig()
     ): SellSignalState {
         val context = PositionContext.create(
             symbol = tick?.symbol ?: "",
@@ -164,7 +212,9 @@ object SellSignalEvaluator {
             context = context,
             indicators = indicators,
             tradingFees = tradingFees,
-            high24h = tick?.high24h ?: 0.0
+            high24h = tick?.high24h ?: 0.0,
+            riskSnapshot = riskSnapshot,
+            rapidDropConfig = rapidDropConfig
         )
     }
 }

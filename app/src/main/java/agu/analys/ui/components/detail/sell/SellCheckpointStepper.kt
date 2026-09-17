@@ -104,6 +104,12 @@ fun SellCheckpointStepper(
             badge = "Cut Loss",
             description = "Batas risiko terlewati. Amankan sisa modal Anda segera."
         )
+        SellLifecycleState.RAPID_DROP_EXIT -> SellPhaseInfo(
+            title = "FASE DARURAT: RAPID DROP",
+            color = TvRed,
+            badge = "Exit Cepat",
+            description = "Penurunan harga drastis terdeteksi (${sellSignal.reason}). Jual seluruh posisi ke market."
+        )
         SellLifecycleState.MONITORING -> SellPhaseInfo(
             title = "FASE PEMANTAUAN: POSISI TERJAGA",
             color = TvBlue,
@@ -123,6 +129,7 @@ fun SellCheckpointStepper(
         SellLifecycleState.APPROACHING_TARGET -> Icons.Default.Info
         SellLifecycleState.TRAILING_TRIGGERED -> Icons.Default.Warning
         SellLifecycleState.STOP_LOSS_HIT -> Icons.Default.Warning
+        SellLifecycleState.RAPID_DROP_EXIT -> Icons.Default.Warning
         SellLifecycleState.MONITORING -> Icons.Default.Shield
         SellLifecycleState.NOT_HOLDING -> Icons.Default.Info
     }

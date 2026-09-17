@@ -75,11 +75,30 @@ fun SpotPositionCard(
         else -> TvTextSecondary
     }
 
-    val isReadyToSell = sellSignalState?.state == agu.analys.model.SellLifecycleState.READY_TO_SELL || sellSignalState?.state == agu.analys.model.SellLifecycleState.TRAILING_TRIGGERED
-    val cardBorderColor = if (isReadyToSell) TvGreen else TvBorder
-    val buttonLabel = if (isReadyToSell) "🔥 Siap Jual — ${agu.analys.util.PriceFormatter.formatPercentage(sellSignalState?.netProfitPct ?: 0.0, includePlusSign = true)}" else "Ubah Data Pembelian"
-    val buttonColor = if (isReadyToSell) TvGreen.copy(alpha = 0.2f) else TvSurfaceVariant
-    val buttonTextColor = if (isReadyToSell) TvGreen else TvTextPrimary
+    val isEmergencySell = sellSignalState?.state == agu.analys.model.SellLifecycleState.STOP_LOSS_HIT || sellSignalState?.state == agu.analys.model.SellLifecycleState.RAPID_DROP_EXIT
+    val isProfitSell = sellSignalState?.state == agu.analys.model.SellLifecycleState.READY_TO_SELL || sellSignalState?.state == agu.analys.model.SellLifecycleState.TRAILING_TRIGGERED
+    val isReadyToSell = isProfitSell || isEmergencySell
+
+    val cardBorderColor = when {
+        isEmergencySell -> TvRed
+        isProfitSell -> TvGreen
+        else -> TvBorder
+    }
+    val buttonLabel = when {
+        isEmergencySell -> "⚠️ Exit Darurat — ${sellSignalState?.reason ?: "Proteksi Modal"}"
+        isProfitSell -> "🔥 Siap Jual — ${agu.analys.util.PriceFormatter.formatPercentage(sellSignalState?.netProfitPct ?: 0.0, includePlusSign = true)}"
+        else -> "Ubah Data Pembelian"
+    }
+    val buttonColor = when {
+        isEmergencySell -> TvRed.copy(alpha = 0.2f)
+        isProfitSell -> TvGreen.copy(alpha = 0.2f)
+        else -> TvSurfaceVariant
+    }
+    val buttonTextColor = when {
+        isEmergencySell -> TvRed
+        isProfitSell -> TvGreen
+        else -> TvTextPrimary
+    }
 
     if (showDialog) {
         AlertDialog(

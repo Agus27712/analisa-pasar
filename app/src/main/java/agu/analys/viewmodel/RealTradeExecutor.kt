@@ -150,10 +150,30 @@ class RealTradeExecutor(
         scope.launch {
             onStatusUpdate("Mengirim order $type ke INDODAX...")
             val clientOrderId = "agu-${type.lowercase()}-${System.currentTimeMillis()}"
-            val buyResult = IndodaxTradeApiV2.createLimitOrderDetailed(
-                apiKey = apiKey, secretKey = secretKey, symbol = pair,
-                side = type, price = execPrice, quantity = quantity, clientOrderId = clientOrderId
-            )
+            val isBuy = type.equals("buy", ignoreCase = true)
+            val buyResult = if (!isBuy) {
+                // Untuk SELL: Coba kirim MARKET order terlebih dahulu untuk eksekusi instan proteksi modal
+                val marketRes = IndodaxTradeApiV2.createMarketOrderDetailed(
+                    apiKey = apiKey, secretKey = secretKey, symbol = pair,
+                    side = type, quantity = quantity, clientOrderId = clientOrderId
+                )
+                if (marketRes.success) {
+                    marketRes
+                } else if (looksLikeRateLimit(marketRes.message)) {
+                    marketRes
+                } else {
+                    // Fallback ke LIMIT order dengan harga tick terkini
+                    IndodaxTradeApiV2.createLimitOrderDetailed(
+                        apiKey = apiKey, secretKey = secretKey, symbol = pair,
+                        side = type, price = execPrice, quantity = quantity, clientOrderId = clientOrderId
+                    )
+                }
+            } else {
+                IndodaxTradeApiV2.createLimitOrderDetailed(
+                    apiKey = apiKey, secretKey = secretKey, symbol = pair,
+                    side = type, price = execPrice, quantity = quantity, clientOrderId = clientOrderId
+                )
+            }
 
             if (!buyResult.success && looksLikeRateLimit(buyResult.message)) {
                 onRateLimit(buyResult.message)
@@ -166,7 +186,6 @@ class RealTradeExecutor(
                 val base = baseFromPair(pair)
                 prefs.rememberHistoryBase(base)
 
-                val isBuy = type.equals("buy", ignoreCase = true)
                 // execPrice is already set
                 var finalExecutedQty = quantity
 

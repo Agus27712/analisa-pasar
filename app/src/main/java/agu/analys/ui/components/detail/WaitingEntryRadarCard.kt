@@ -213,6 +213,7 @@ fun WaitingEntryRadarCard(
                 SellLifecycleState.APPROACHING_TARGET -> Pair("⏳ DEKAT TP1", TvOrange)
                 SellLifecycleState.TRAILING_TRIGGERED -> Pair("🚨 TRAILING STOP", TvOrange)
                 SellLifecycleState.STOP_LOSS_HIT -> Pair("⚠️ CUT LOSS", TvRed)
+                SellLifecycleState.RAPID_DROP_EXIT -> Pair("⚡ RAPID DROP", TvRed)
                 SellLifecycleState.MONITORING -> Pair("🛡️ POSISI AKTIF", TvBlue)
                 SellLifecycleState.NOT_HOLDING -> Pair("WAITING", TvTextSecondary)
             }

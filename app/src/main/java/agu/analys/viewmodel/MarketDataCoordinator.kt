@@ -136,6 +136,7 @@ class MarketDataCoordinator(
 
     private fun dispatchThrottledTick(tick: MarketTick) {
         _currentTick.value = tick
+        agu.analys.engine.sell.TickHistoryTracker.recordTick(tick.symbol, tick.price, tick.timestamp)
         engine.onTickUpdate(tick)
         updateRecentPrices(tick.price)
         simCoordinator.onPriceTick(tick.symbol, tick.price, tick.high24h, tick.low24h)

@@ -15,16 +15,37 @@ import agu.analys.trading.SimulationTradeStore
 import agu.analys.model.TradingPair
 import agu.analys.util.PriceFormatter
 import agu.analys.util.AppPreferences
+import agu.analys.util.AlertNotificationHelper
+import agu.analys.engine.sell.TickHistoryTracker
+import agu.analys.engine.sell.SellSignalEvaluator
+import agu.analys.engine.sell.SellSignalLifecycleManager
+import agu.analys.model.PositionContext
+import agu.analys.model.SellLifecycleState
+import agu.analys.config.TradingFeeConfig
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 
 class TradingForegroundService : Service() {
+
+    private val serviceJob = SupervisorJob()
+    private val serviceScope = CoroutineScope(Dispatchers.IO + serviceJob)
+    private var monitorJob: Job? = null
+    private val lastEmergencyAlertTimes = ConcurrentHashMap<String, Long>()
+    private val EMERGENCY_ALERT_COOLDOWN_MS = 60_000L
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+        startHoldingsMonitor()
     }
 
     private var lastUpdateTime = 0L
@@ -39,6 +60,8 @@ class TradingForegroundService : Service() {
             return START_NOT_STICKY
         }
 
+        startHoldingsMonitor()
+
         if (action == ACTION_UPDATE) {
             val now = System.currentTimeMillis()
             if (now - lastUpdateTime < 1200L) {
@@ -49,6 +72,132 @@ class TradingForegroundService : Service() {
 
         updateNotification()
         return START_STICKY
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        serviceJob.cancel()
+    }
+
+    private fun startHoldingsMonitor() {
+        if (monitorJob?.isActive == true) return
+        monitorJob = serviceScope.launch {
+            while (isActive) {
+                try {
+                    val (realItems, simItems) = getHoldingsData()
+                    val allHoldings = (realItems + simItems).distinctBy { it.symbol.uppercase() }
+
+                    if (allHoldings.isNotEmpty()) {
+                        // Tarik ticker pasar seluruh koin dari Indodax via summaries API (1 request hemat bandwidth)
+                        val marketTicks = IndodaxMarketService.fetchAllMarketTicks()
+                        val positionStore = SpotPositionStore(applicationContext)
+                        var pricesUpdated = false
+
+                        for (item in allHoldings) {
+                            val sym = item.symbol.uppercase()
+                            val tick = marketTicks[sym] ?: marketTicks[sym.replace("IDR", "_IDR")]
+                            val currentPrice = tick?.price ?: livePrices[sym] ?: 0.0
+
+                            if (currentPrice > 0.0) {
+                                if (livePrices[sym] != currentPrice) {
+                                    livePrices[sym] = currentPrice
+                                    pricesUpdated = true
+                                }
+
+                                // 1. Rekam tick ke TickHistoryTracker agar deteksi drop 1m/5m & velocity bekerja
+                                TickHistoryTracker.recordTick(sym, currentPrice)
+
+                                // 2. Update trailing stop jika di-enable
+                                val pos = positionStore.get(sym, item.isReal)
+                                if (pos.isHolding && pos.isTrailingEnabled) {
+                                    positionStore.updateTrailingPrice(sym, currentPrice, item.isReal)
+                                }
+
+                                // 3. Ambil snapshot risiko
+                                val peak = if (pos.isHolding && pos.peakPrice > 0.0) pos.peakPrice else null
+                                val riskSnapshot = TickHistoryTracker.getSnapshot(
+                                    symbol = sym,
+                                    currentPrice = currentPrice,
+                                    peakPrice = peak
+                                )
+
+                                // 4. Bangun PositionContext
+                                val posContext = PositionContext(
+                                    hasPosition = true,
+                                    symbol = sym,
+                                    entryPrice = if (item.entryPrice > 0.0) item.entryPrice else null,
+                                    quantity = if (item.quantity > 0.0) item.quantity else null,
+                                    costBasis = if (item.entryPrice > 0.0 && item.quantity > 0.0) item.entryPrice * item.quantity else null,
+                                    currentPrice = currentPrice,
+                                    stopLoss = if (pos.isHolding && pos.stopLossPrice > 0.0) pos.stopLossPrice else null,
+                                    tp1 = if (pos.isHolding && pos.tp1Price > 0.0) pos.tp1Price else null,
+                                    tp2 = if (pos.isHolding && pos.tp2Price > 0.0) pos.tp2Price else null,
+                                    trailingActive = pos.isHolding && pos.isTrailingEnabled,
+                                    isTrailingTriggered = pos.isHolding && pos.isTrailingTriggered,
+                                    isReal = item.isReal,
+                                    peakPrice = peak,
+                                    riskSnapshot = riskSnapshot
+                                )
+
+                                // 5. Evaluasi Sinyal Jual (termasuk RAPID_DROP_EXIT dan STOP_LOSS_HIT)
+                                val sellState = SellSignalEvaluator.evaluate(
+                                    context = posContext,
+                                    indicators = null,
+                                    tradingFees = TradingFeeConfig(),
+                                    riskSnapshot = riskSnapshot
+                                )
+
+                                // 6. Proses transisi lifecycle
+                                val transition = SellSignalLifecycleManager.process(
+                                    symbol = sym,
+                                    newState = sellState,
+                                    isReal = item.isReal
+                                )
+
+                                // 7. Emergency Alert Dispatcher (Rapid Drop & Stop Loss)
+                                if (sellState.state == SellLifecycleState.RAPID_DROP_EXIT ||
+                                    sellState.state == SellLifecycleState.STOP_LOSS_HIT) {
+
+                                    val lastAlert = lastEmergencyAlertTimes[sym] ?: 0L
+                                    val now = System.currentTimeMillis()
+                                    if (transition.hasTriggeringTransition || (now - lastAlert > EMERGENCY_ALERT_COOLDOWN_MS)) {
+                                        lastEmergencyAlertTimes[sym] = now
+                                        AlertNotificationHelper.sendEmergencyExitNotification(
+                                            context = applicationContext,
+                                            symbol = sym,
+                                            state = sellState,
+                                            currentPrice = currentPrice,
+                                            entryPrice = item.entryPrice,
+                                            quantity = item.quantity,
+                                            isReal = item.isReal
+                                        )
+                                    }
+                                } else if (sellState.state == SellLifecycleState.TRAILING_TRIGGERED && transition.hasTriggeringTransition) {
+                                    // Trailing Stop Alert
+                                    AlertNotificationHelper.sendTrailingHitNotification(
+                                        context = applicationContext,
+                                        symbol = sym,
+                                        entryPrice = item.entryPrice,
+                                        peakPrice = peak ?: currentPrice,
+                                        currentPrice = currentPrice,
+                                        limitSellPrice = if (pos.trailingStopPrice > 0.0) pos.trailingStopPrice else currentPrice,
+                                        quantity = item.quantity,
+                                        isReal = item.isReal
+                                    )
+                                }
+                            }
+                        }
+
+                        if (pricesUpdated) {
+                            updateNotification()
+                        }
+                    }
+                } catch (e: Exception) {
+                    timber.log.Timber.w(e, "Background holding monitor loop error")
+                }
+                delay(4000L) // Polling interval 4 detik
+            }
+        }
     }
 
     private fun createNotificationChannel() {

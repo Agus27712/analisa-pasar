@@ -47,7 +47,9 @@ data class PositionContext(
     val tp2: Double? = null,
     val trailingActive: Boolean = false,
     val isTrailingTriggered: Boolean = false,
-    val isReal: Boolean = false
+    val isReal: Boolean = false,
+    val peakPrice: Double? = null,
+    val riskSnapshot: agu.analys.model.SellRiskSnapshot? = null
 ) {
     companion object {
         fun create(
@@ -103,6 +105,7 @@ data class PositionContext(
                 entry * 0.99
             } else null
 
+            val peak = if (isSpotHolding && spotPosition!!.peakPrice > 0.0) spotPosition.peakPrice else null
             val trailingActive = if (isSpotHolding) spotPosition!!.isTrailingEnabled else (holdingStatus?.isTrailingEnabled == true)
             val isTrailingTrig = if (isSpotHolding) spotPosition!!.isTrailingTriggered else (holdingStatus?.isTrailingTriggered == true)
             val isReal = targetIsReal
@@ -131,7 +134,8 @@ data class PositionContext(
                 tp2 = tp2,
                 trailingActive = trailingActive,
                 isTrailingTriggered = isTrailingTrig,
-                isReal = isReal
+                isReal = isReal,
+                peakPrice = peak
             )
         }
     }
@@ -205,17 +209,19 @@ object SellCheckpointEvaluator {
             detail = healthDetail
         )
 
-        // 2. Risk Protection (Stop Loss & Trailing Stop)
+        // 2. Risk Protection (Stop Loss, Rapid Drop, & Trailing Stop)
         val isSlHit = (sl != null && sl > 0.0 && current <= sl) || sellSignal.state == SellLifecycleState.STOP_LOSS_HIT
+        val isRapidDropHit = sellSignal.state == SellLifecycleState.RAPID_DROP_EXIT
         val isTrailingHit = context.isTrailingTriggered || sellSignal.state == SellLifecycleState.TRAILING_TRIGGERED
         val riskStatus = when {
-            isSlHit || isTrailingHit -> CheckpointStatus.WARNING
+            isSlHit || isRapidDropHit || isTrailingHit -> CheckpointStatus.WARNING
             context.trailingActive -> CheckpointStatus.COMPLETED
             sl != null && sl > 0.0 -> CheckpointStatus.ACTIVE
             else -> CheckpointStatus.MONITORING
         }
         val riskDetail = when {
             isSlHit -> "Stop Loss Tersentuh di ${PriceFormatter.formatPrice(sl ?: 0.0, quoteAsset = quoteAsset)}! Risiko terpicu."
+            isRapidDropHit -> "Rapid Drop Terdeteksi! ${sellSignal.reason}. Amankan modal segera."
             isTrailingHit -> "Trailing Stop Terpicu! Amankan posisi Anda."
             context.trailingActive -> "Trailing Stop Aktif melindungi keuntungan posisi."
             sl != null && sl > 0.0 -> "Batas Stop Loss terjaga di ${PriceFormatter.formatPrice(sl, quoteAsset = quoteAsset)}."
@@ -261,6 +267,7 @@ object SellCheckpointEvaluator {
         val decisionStatus = when (sellSignal.state) {
             SellLifecycleState.READY_TO_SELL -> CheckpointStatus.READY
             SellLifecycleState.STOP_LOSS_HIT -> CheckpointStatus.WARNING
+            SellLifecycleState.RAPID_DROP_EXIT -> CheckpointStatus.WARNING
             SellLifecycleState.TRAILING_TRIGGERED -> CheckpointStatus.READY
             SellLifecycleState.APPROACHING_TARGET -> CheckpointStatus.ACTIVE
             SellLifecycleState.MONITORING -> CheckpointStatus.MONITORING
@@ -269,6 +276,7 @@ object SellCheckpointEvaluator {
         val decisionDetail = when (sellSignal.state) {
             SellLifecycleState.READY_TO_SELL -> "SIAP JUAL: ${sellSignal.reason} ($pnlFormatted)"
             SellLifecycleState.STOP_LOSS_HIT -> "CUT LOSS: ${sellSignal.reason}"
+            SellLifecycleState.RAPID_DROP_EXIT -> "RAPID DROP EXIT: ${sellSignal.reason}"
             SellLifecycleState.TRAILING_TRIGGERED -> "TRAILING EXIT: ${sellSignal.reason}"
             SellLifecycleState.APPROACHING_TARGET -> "MENDEKATI EXIT: Siapkan rencana jual."
             SellLifecycleState.MONITORING -> "MEMANTAU: Pertahankan posisi sesuai rencana trading."

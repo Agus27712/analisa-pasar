@@ -529,11 +529,22 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         positionContext,
         currentIndicators
     ) { posContext, indicators ->
-        agu.analys.engine.sell.SellSignalEvaluator.evaluate(posContext, indicators, tradingFees.value)
+        val snapshot = agu.analys.engine.sell.TickHistoryTracker.getSnapshot(
+            symbol = posContext.symbol,
+            currentPrice = posContext.currentPrice ?: 0.0,
+            peakPrice = posContext.peakPrice
+        )
+        agu.analys.engine.sell.SellSignalEvaluator.evaluate(
+            context = posContext,
+            indicators = indicators,
+            tradingFees = tradingFees.value,
+            riskSnapshot = snapshot
+        )
     }
     .onEach { state ->
         val symbol = _selectedPair.value.symbol
-        val transition = agu.analys.engine.sell.SellSignalLifecycleManager.process(symbol, state)
+        val isReal = positionContext.value.isReal
+        val transition = agu.analys.engine.sell.SellSignalLifecycleManager.process(symbol, state, isReal = isReal)
         if (transition.hasTriggeringTransition && isNotificationsEnabled.value) {
             agu.analys.util.AlertNotificationHelper.sendPriceAlertNotification(
                 context = getApplication(),
@@ -687,11 +698,13 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
 
     fun updateForegroundServiceState() {
         val hasActive = positionStore.getAllActiveTrailingSymbols().isNotEmpty() ||
-                        positionStore.hasAnyHolding()
+                        positionStore.hasAnyHolding() ||
+                        simulationStore.getWallet().coinBalances.any { it.value > 0.00000001 && it.key.uppercase() != "IDR" } ||
+                        (prefs.hasIndodaxCredentials() && prefs.getSavedRealBalance().any { it.value > 0.00000001 && it.key.uppercase() != "IDR" })
 
         if (hasActive && isNotificationsEnabled.value) {
             agu.analys.service.TradingForegroundService.startService(getApplication())
-        } else {
+        } else if (!hasActive) {
             agu.analys.service.TradingForegroundService.stopService(getApplication())
         }
     }

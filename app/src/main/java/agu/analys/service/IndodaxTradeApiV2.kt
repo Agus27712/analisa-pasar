@@ -375,6 +375,62 @@ object IndodaxTradeApiV2 {
         }
     }
 
+    suspend fun createMarketOrderDetailed(
+        apiKey: String,
+        secretKey: String,
+        symbol: String,
+        side: String,
+        quantity: Double,
+        clientOrderId: String? = null
+    ): OrderResult {
+        if (apiKey.isBlank() || secretKey.isBlank()) {
+            return OrderResult(false, "API Key / Secret Key kosong.")
+        }
+        if (quantity <= 0.0) {
+            return OrderResult(false, "Quantity harus > 0.")
+        }
+
+        val formattedSymbol = toOrderSymbol(symbol)
+        val normalizedSide = side.uppercase()
+        if (normalizedSide != "BUY" && normalizedSide != "SELL") {
+            return OrderResult(false, "Side harus BUY atau SELL.")
+        }
+
+        val params = linkedMapOf(
+            "symbol" to formattedSymbol,
+            "side" to normalizedSide,
+            "type" to "MARKET",
+            "quantity" to decimal(quantity, symbol, false),
+            "timestamp" to serverTimeMs().toString(),
+            "recvWindow" to RECV_WINDOW_MS.toString()
+        )
+        clientOrderId?.takeIf { it.isNotBlank() }?.let { params["newClientOrderId"] = it.take(36) }
+
+        val (ok, raw) = signedV2Request(apiKey, secretKey, "POST", "/api/v2/order", params)
+        if (!ok) return OrderResult(false, raw)
+
+        return try {
+            val json = JSONObject(raw)
+            val orderId = json.optString("orderId", json.optLong("orderId", 0L).toString())
+            val clientId = json.optString("clientOrderId", clientOrderId.orEmpty())
+            val status = json.optString("status", "FILLED").uppercase()
+            val executed = json.optString("executedQty", "0").toDoubleOrNull() ?: 0.0
+            val orig = json.optString("origQty", decimal(quantity, symbol, false)).toDoubleOrNull() ?: quantity
+            OrderResult(
+                success = true,
+                message = "Market Order $normalizedSide $formattedSymbol berhasil. Order ID: $orderId ($clientId)",
+                orderId = orderId,
+                clientOrderId = clientId,
+                executedQty = executed,
+                origQty = orig,
+                status = status
+            )
+        } catch (e: Exception) {
+            Timber.e(e, "Gagal parse market order response")
+            OrderResult(false, "Market Order terkirim tapi parse gagal: ${e.localizedMessage}")
+        }
+    }
+
     suspend fun cancelOrder(
         apiKey: String,
         secretKey: String,
