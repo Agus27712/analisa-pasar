@@ -51,7 +51,8 @@ object SwingEvaluator {
         globalContext: agu.analys.engine.global.GlobalMarketContext = agu.analys.engine.global.GlobalMarketContext(),
         price: Double, 
         history: List<CandleBar>, 
-        fees: TradingFeeConfig = TradingFeeConfig()
+        fees: TradingFeeConfig = TradingFeeConfig(),
+        macroAnomalyResult: agu.analys.engine.regime.MacroAnomalyResult? = null
     ): SwingEvalResult {
         if (price <= 0.0) {
             return SwingEvalResult(AISignalState(), TechnicalIndicators())
@@ -395,6 +396,7 @@ object SwingEvaluator {
             (detectedSetup != SwingSetup.REJECTION || !rejectionAtResistance)
 
         var finalAction = when {
+            globalContext.isVetoActive -> SignalAction.HOLD
             isQualifiedBuy && !isTechnicalDistribution -> SignalAction.BUY
             else -> SignalAction.HOLD
         }
@@ -411,7 +413,7 @@ object SwingEvaluator {
             reasons.add(0, "✅ Setup ${detectedSetup.name.replace('_', ' ')} valid — entry swing siap.")
         }
 
-        val finalScore = when {
+        val finalScoreRaw = when {
             isTechnicalDistribution -> 0
             isQualifiedBuy -> (80 + min(15, (buy * 0.18).toInt())).coerceIn(80, 95)
             step3Ok -> 65
@@ -419,6 +421,15 @@ object SwingEvaluator {
             step1Ok -> 36
             else -> 24
         }
+        
+        // --- SOFT Penalties ---
+        val regimeMultiplier = when {
+            regime.contains("Tinggi") -> 0.7 // High Volatility penalty
+            else -> 1.0
+        }
+        val anomalyPenalty = macroAnomalyResult?.confidencePenalty ?: 0
+        val finalScore = maxOf(0, (finalScoreRaw * regimeMultiplier).toInt() + anomalyPenalty)
+
 
         val step1Detail = when {
             isOverbought -> "Tertahan: Harga koin sedang terlalu tinggi (Jenuh Beli/Overbought)."

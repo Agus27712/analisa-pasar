@@ -27,6 +27,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import agu.analys.ui.theme.*
+import agu.analys.engine.global.RiskBasedPositionSizer
 import agu.analys.util.PriceFormatter
 
 @Composable
@@ -51,6 +52,20 @@ fun RadarBuySection(
     var isAutoLimitSellEnabled by remember { mutableStateOf(false) }
     val defaultTpPrice1 = remember(validPrice, signal) {
         if (signal != null && signal.targetPrice1 > validPrice) signal.targetPrice1 else validPrice * 1.03
+    }
+    
+    val recommendedRiskSize = remember(availableIdr, validPrice, signal) {
+        if (signal != null && signal.stopLoss > 0.0 && signal.stopLoss < validPrice) {
+            val confidenceFactor = (signal.confidence.toDouble() / 100.0).coerceIn(0.1, 1.0)
+            RiskBasedPositionSizer.calculateRecommendedSize(
+                accountBalance = availableIdr,
+                entryPrice = validPrice,
+                stopLossPrice = signal.stopLoss,
+                confidenceMultiplier = confidenceFactor
+            )
+        } else {
+            0.0
+        }
     }
     val defaultTpPrice2 = remember(validPrice, signal) {
         if (signal != null && signal.targetPrice2 > validPrice) signal.targetPrice2 else validPrice * 1.06
@@ -230,6 +245,17 @@ fun RadarBuySection(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            if (recommendedRiskSize >= 10000.0) {
+                QuickNominalChip(
+                    label = "2% Risk",
+                    selected = !isCustomNominalOpen && selectedNominalIdr > 0 && Math.abs(selectedNominalIdr - recommendedRiskSize) < 100,
+                    onClick = {
+                        onNominalIdrChanged(recommendedRiskSize.toLong().toDouble())
+                        isCustomNominalOpen = false
+                    },
+                    modifier = Modifier.weight(1.2f)
+                )
+            }
             val percentages = listOf(25, 50, 75, 100)
             percentages.forEach { pct ->
                 val calculatedAmount = if (availableIdr > 0) (availableIdr * (pct / 100.0)).toLong().toDouble() else 0.0
@@ -418,6 +444,7 @@ fun RadarBuySection(
                 isRealMode = isRealMode,
                 initialTp1 = defaultTpPrice1,
                 initialTp2 = defaultTpPrice2,
+                recommendedRiskSize = recommendedRiskSize,
                 onConfirmBuy = { nominal, targetBuyPrice, tp1, tp2 ->
                     customTargetBuyPrice = targetBuyPrice
                     onNominalIdrChanged(nominal)

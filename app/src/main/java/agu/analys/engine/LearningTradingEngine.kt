@@ -50,6 +50,7 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
     // FIX: buffer terpisah per timeframe — jangan campur M1 ke H1/H4
     private val candlesH1 = mutableListOf<CandleBar>()
     private val candlesH4 = mutableListOf<CandleBar>()
+    private val candles1D = mutableListOf<CandleBar>()
     private var currentTick: MarketTick? = null
     private var mtfRefreshJob: Job? = null
     private var lastMtfRefresh = 0L
@@ -143,6 +144,7 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
         h4Candles = emptyList(); h1Candles = emptyList(); m15Candles = emptyList(); m1Candles = emptyList()
         synchronized(candlesH1) { candlesH1.clear() }
         synchronized(candlesH4) { candlesH4.clear() }
+        synchronized(candles1D) { candles1D.clear() }
         if (preserveState) return
 
         val priceText = if (lastKnownPrice > 0.0) "Rp ${String.format(java.util.Locale.US, "%,.0f", lastKnownPrice)}" else "Terakhir Disimpan"
@@ -219,12 +221,18 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
                 StrategyMode.SWING -> {
                     // H1 closed candles only
                     val h1Job = async { IndodaxMarketService.fetchCandles(symbol, Timeframe.H1, 200) }
+                    val d1Job = async { IndodaxMarketService.fetchCandles(symbol, Timeframe.D1, 100) }
                     val h1 = h1Job.await()
+                    val d1 = d1Job.await()
                     if (h1.isNotEmpty() && currentTick?.symbol == symbol) {
                         val closedH1 = h1.dropLast(1)
                         synchronized(candlesH1) {
                             candlesH1.clear()
                             candlesH1.addAll(closedH1)
+                        }
+                        synchronized(candles1D) {
+                            candles1D.clear()
+                            candles1D.addAll(d1)
                         }
                         runSwing()
                     }
@@ -232,12 +240,18 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
                 StrategyMode.OFFICE_DAILY -> {
                     // FIX: fetch H4 (bukan H1) — sesuai desain low-noise Office Daily
                     val h4Job = async { IndodaxMarketService.fetchCandles(symbol, Timeframe.H4, 200) }
+                    val d1Job = async { IndodaxMarketService.fetchCandles(symbol, Timeframe.D1, 100) }
                     val h4 = h4Job.await()
+                    val d1 = d1Job.await()
                     if (h4.isNotEmpty() && currentTick?.symbol == symbol) {
                         val closedH4 = h4.dropLast(1)
                         synchronized(candlesH4) {
                             candlesH4.clear()
                             candlesH4.addAll(closedH4)
+                        }
+                        synchronized(candles1D) {
+                            candles1D.clear()
+                            candles1D.addAll(d1)
                         }
                         runOfficeDaily()
                     }
@@ -326,12 +340,16 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
         if (strategyMode != StrategyMode.SWING) return
         val tick = currentTick ?: return
         val history = synchronized(candlesH1) { candlesH1.toList() }
+        val dailyHistory = synchronized(candles1D) { candles1D.toList() }
         if (history.isEmpty()) return
-        val result = SwingEvaluator.evaluate(
+
+        val anomalyResult = agu.analys.engine.regime.MacroAnomalyDetector.evaluate(dailyHistory, tick.price)
+        val result = agu.analys.engine.swing.SwingEvaluator.evaluate(
             globalContext = agu.analys.engine.global.GlobalContextManager.context.value,
             price = tick.price,
             history = history,
-            fees = tradingFees
+            fees = tradingFees,
+            macroAnomalyResult = anomalyResult
         )
 
         val tracked = agu.analys.engine.scalping.SignalLifecycleManager.process(tick.symbol, tick.price, result.signal, StrategyMode.SWING)
@@ -354,12 +372,16 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
         val tick = currentTick ?: return
         // FIX: pakai candlesH4 (bukan H1)
         val history = synchronized(candlesH4) { candlesH4.toList() }
+        val dailyHistory = synchronized(candles1D) { candles1D.toList() }
         if (history.isEmpty()) return
+
+        val anomalyResult = agu.analys.engine.regime.MacroAnomalyDetector.evaluate(dailyHistory, tick.price)
         val result = agu.analys.engine.officedaily.OfficeDailyEvaluator.evaluate(
             agu.analys.engine.global.GlobalContextManager.context.value,
             tick.price,
             history,
-            tradingFees
+            tradingFees,
+            anomalyResult
         )
 
         val tracked = agu.analys.engine.scalping.SignalLifecycleManager.process(tick.symbol, tick.price, result.signal, StrategyMode.OFFICE_DAILY)

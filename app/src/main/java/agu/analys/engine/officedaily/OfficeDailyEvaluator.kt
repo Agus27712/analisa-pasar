@@ -53,7 +53,8 @@ object OfficeDailyEvaluator {
         globalContext: agu.analys.engine.global.GlobalMarketContext = agu.analys.engine.global.GlobalMarketContext(),
         price: Double,
         history: List<CandleBar>,
-        fees: TradingFeeConfig = TradingFeeConfig()
+        fees: TradingFeeConfig = TradingFeeConfig(),
+        macroAnomalyResult: agu.analys.engine.regime.MacroAnomalyResult? = null
     ): OfficeDailyEvalResult {
         if (price <= 0.0) {
             return OfficeDailyEvalResult(AISignalState(), TechnicalIndicators())
@@ -216,10 +217,17 @@ object OfficeDailyEvaluator {
         val isRsiOverbought = rsi >= 72.0
         // Jarak ke high lokal terlalu kecil (FIX utama kasus XRP 9 Sep)
         val isNearHighDanger = tooCloseToHigh || isOverExtended
+        
+        // --- Macro Anomaly Filter (HARD for Office Daily) ---
+        val isParabolicUnwind = macroAnomalyResult?.isParabolicUnwind == true
+        if (isParabolicUnwind) {
+            reasons.add(0, "🚨 DITOLAK (HARD): Terdeteksi Parabolic Unwind (Koin baru saja pump ekstrim dan sedang turun). Dilarang beli.")
+        }
+        
         // Distribusi / breakdown
         val isDistribution = sellScore >= 48.0 && sellScore > buyScore * 1.15
         val isBreakdown = isBearishStructure || isDowntrend || (price < supportLevel * 0.965)
-        val isDangerous = isRsiOverbought || isNearHighDanger || isDistribution || isBreakdown
+        val isDangerous = isRsiOverbought || isNearHighDanger || isDistribution || isBreakdown || isParabolicUnwind
 
         if (isNearHighDanger) {
             reasons.add(0, "⚠️ Tertahan: Harga terlalu dekat recent high (Rp ${fmtPrice(recentHigh)}) / overextended. Hindari beli di pucuk.")
@@ -241,7 +249,19 @@ object OfficeDailyEvaluator {
 
         // ── Keputusan akhir ────────────────────────────────
         val isQualified = step4Ok && buyScore >= 58.0 && buyScore > sellScore * 1.35 && !isNearHighDanger
+        
+        // --- Regime Confidence Penalty (SOFT) ---
+        var baseConfidence = if (isQualified) (buyScore).coerceAtMost(90.0).toInt() else (buyScore).coerceAtMost(60.0).toInt()
+        val regimeMultiplier = when {
+            regime.contains("SIDEWAYS") -> 0.7
+            regime.contains("Tinggi") -> 0.6 // Volatilitas Sangat Tinggi
+            else -> 1.0
+        }
+        val confidence = if (isParabolicUnwind) 0 else (baseConfidence * regimeMultiplier).toInt()
+        
         val finalAction = when {
+            globalContext.isVetoActive -> SignalAction.HOLD
+            isParabolicUnwind -> SignalAction.HOLD
             isQualified && !isDangerous -> SignalAction.BUY
             else -> SignalAction.HOLD
         }
@@ -254,7 +274,7 @@ object OfficeDailyEvaluator {
             }
         }
 
-        val finalScore = when {
+        val finalScoreRaw = when {
             isDangerous -> 20
             isQualified -> (82 + min(13, (buyScore * 0.12).toInt())).coerceIn(80, 95)
             step3Ok -> 62
@@ -262,6 +282,7 @@ object OfficeDailyEvaluator {
             step1Ok -> 32
             else -> 18
         }
+        val finalScore = if (isParabolicUnwind) 0 else (finalScoreRaw * regimeMultiplier).toInt()
 
         val biasDetailText = when {
             isRsiOverbought -> "Tertahan: RSI overbought."

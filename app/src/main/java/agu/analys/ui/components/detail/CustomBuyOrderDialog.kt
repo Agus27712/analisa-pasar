@@ -42,6 +42,7 @@ fun CustomBuyOrderDialog(
     isRealMode: Boolean,
     initialTp1: Double = 0.0,
     initialTp2: Double = 0.0,
+    recommendedRiskSize: Double = 0.0,
     onConfirmBuy: (nominalIdr: Double, buyPrice: Double, tp1Price: Double, tp2Price: Double) -> Unit
 ) {
     if (!show) return
@@ -345,6 +346,17 @@ fun CustomBuyOrderDialog(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
+                        if (recommendedRiskSize >= 10000.0) {
+                            QuickPriceChip(
+                                label = "2% Risk",
+                                selected = nominalIdr > 0 && abs(nominalIdr - recommendedRiskSize) < 100,
+                                onClick = {
+                                    nominalInput = formatPriceForInput(recommendedRiskSize)
+                                    focusManager.clearFocus()
+                                },
+                                modifier = Modifier.weight(1.2f)
+                            )
+                        }
                         val percentages = listOf(25, 50, 75, 100)
                         percentages.forEach { pct ->
                             val amount = if (pct == 100) availableIdr else (availableIdr * (pct / 100.0)).toLong().toDouble()

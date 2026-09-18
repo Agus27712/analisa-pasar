@@ -118,7 +118,13 @@ object ScalpingMtfEvaluator {
         }
 
         val ready = step4Ok
-        val strong = ready && (isVSABreakout || buyPressure >= 1.25 || (rsi1M in 45.0..68.0 && price > vwap1M))
+        val isTrendAndMacdAligned = ema20 > ema50 && macd.first > macd.second
+        val strong = ready && (
+            isVSABreakout || 
+            buyPressure >= 1.25 || 
+            (rsi1M in 45.0..68.0 && price > vwap1M) ||
+            isTrendAndMacdAligned
+        )
         val early = !ready && !isDangerous && step2Ok
 
         val reasons = mutableListOf<String>()
