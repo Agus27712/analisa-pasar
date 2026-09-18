@@ -13,6 +13,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -24,12 +25,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import agu.analys.config.StrategyMode
+import agu.analys.model.OrderBookItem
 import agu.analys.model.ScalpingMtfSnapshot
 import agu.analys.ui.theme.*
+import java.util.Locale
+import kotlin.math.roundToInt
 
 data class RadarCheckpointItem(
     val number: Int,
@@ -43,45 +46,47 @@ data class RadarCheckpointItem(
 fun RadarLinearCheckpointStepper(
     mtf: ScalpingMtfSnapshot,
     completed: Int,
-    pulseScale: Float,
+    pulseScale: Float = 1f,
     strategyMode: StrategyMode = StrategyMode.SCALPING,
     confidence: Int = 0,
+    orderBookBids: List<OrderBookItem> = emptyList(),
+    orderBookAsks: List<OrderBookItem> = emptyList(),
     modifier: Modifier = Modifier
 ) {
-    val checkpoints = remember(mtf, strategyMode) {
-        val isStep1Ok = mtf.biasStatus.name == "OK" || mtf.biasOk
-        val isStep2Ok = mtf.setupStatus.name == "OK" || mtf.setupOk
-        val isStep3Ok = mtf.triggerStatus.name == "OK" || mtf.triggerOk
-        val isStep4Ok = mtf.entryPriceStatus.name == "OK" || mtf.entryPriceOk
+    val isStep1Ok = mtf.biasStatus.name == "OK" || mtf.biasOk
+    val isStep2Ok = mtf.setupStatus.name == "OK" || mtf.setupOk
+    val isStep3Ok = mtf.triggerStatus.name == "OK" || mtf.triggerOk
+    val isStep4Ok = mtf.entryPriceStatus.name == "OK" || mtf.entryPriceOk
 
+    val checkpoints = remember(mtf, strategyMode) {
         val (tab1, title1, def1Ok, def1Wait) = when (strategyMode) {
             StrategyMode.SWING -> listOf(
-                "1. Tren Makro",
-                "1. Tren Makro · Keselarasan EMA",
+                "Tren Makro",
+                "Tren Makro · Keselarasan EMA (1D/4H/1H)",
                 "Tren Makro Bullish Kuat (Harga bergerak di atas EMA 20/50).",
                 "Memantau keselarasan tren dan keselarasan EMA makro..."
             )
             StrategyMode.OFFICE_DAILY -> listOf(
-                "1. Tren 1H/4H",
-                "1. Tren 1H/4H · Tren Santai",
+                "Tren 1H/4H",
+                "Tren 1H/4H · Tren Santai",
                 "Tren 1 Jam & 4 Jam Bullish Stabil (Di atas EMA 20/50).",
                 "Memantau kestabilan tren 1 Jam / 4 Jam..."
             )
             StrategyMode.TRENCHING -> listOf(
-                "1. Flow M15",
-                "1. Flow M15 · Persistensi Tekanan",
+                "Flow M15",
+                "Flow M15 · Persistensi Tekanan",
                 "Flow konsisten positif dengan volume akumulasi & persistensi aktif.",
                 "Memantau persistensi flow volume dan order book inflow..."
             )
             StrategyMode.SECOND_WAVE -> listOf(
-                "1. Prior Run",
-                "1. Prior Run · Drawdown Reset",
+                "Prior Run",
+                "Prior Run · Drawdown Reset",
                 "Prior run terkonfirmasi dan koreksi drawdown reset normal.",
                 "Memantau prior run dan siklus reset drawdown 4H/1H..."
             )
             StrategyMode.SCALPING -> listOf(
-                "1. Bias 1H",
-                "1. Bias 1H · Tren Utama",
+                "Bias 1H",
+                "Bias 1H · Tren Utama",
                 "Tren 1 Jam Bullish Kuat (EMA 20/50/200 selaras naik).",
                 "Memantau keselarasan tren pada timeframe 1 Jam..."
             )
@@ -89,32 +94,32 @@ fun RadarLinearCheckpointStepper(
 
         val (tab2, title2, def2Ok, def2Wait) = when (strategyMode) {
             StrategyMode.SWING -> listOf(
-                "2. Struktur",
-                "2. Struktur · Support Lantai",
+                "Struktur",
+                "Struktur · Support Lantai",
                 "Struktur market higher-low & support lantai swing bertahan.",
                 "Menunggu pembentukan konsolidasi atau pantulan support swing..."
             )
             StrategyMode.OFFICE_DAILY -> listOf(
-                "2. Base Lantai",
-                "2. Base Lantai · Akumulasi Sehat",
+                "Base Lantai",
+                "Base Lantai · Akumulasi Sehat",
                 "Base lantai harga terbentuk rapi tanpa dump liar.",
                 "Menunggu konsolidasi base support terbentuk..."
             )
             StrategyMode.TRENCHING -> listOf(
-                "2. Trench Base",
-                "2. Kompresi Trench · Range Ketat",
+                "Trench Base",
+                "Kompresi Trench · Range Ketat",
                 "Harga terkompresi rapi di area support trench tanpa volatilitas liar.",
                 "Menunggu pembentukan batas kompresi trench yang stabil..."
             )
             StrategyMode.SECOND_WAVE -> listOf(
-                "2. Base Support",
-                "2. Base Support · Akumulasi 1H",
+                "Base Support",
+                "Base Support · Akumulasi 1H",
                 "Lantai base support terbentuk dan volume koreksi kering.",
                 "Menunggu konfirmasi pembentukan base support 1H..."
             )
             StrategyMode.SCALPING -> listOf(
-                "2. Setup 15M",
-                "2. Setup 15M · Struktur Pasar",
+                "Setup 15M",
+                "Setup 15M · Struktur Pasar",
                 "Struktur 15M valid (Pullback ke support EMA / Golden Cross).",
                 "Menunggu pembentukan konsolidasi atau pantulan support 15M..."
             )
@@ -122,32 +127,32 @@ fun RadarLinearCheckpointStepper(
 
         val (tab3, title3, def3Ok, def3Wait) = when (strategyMode) {
             StrategyMode.SWING -> listOf(
-                "3. Momentum",
-                "3. Momentum · RSI & MACD Inflow",
+                "Momentum",
+                "Momentum · RSI & MACD Inflow",
                 "Momentum RSI & histogram MACD mendukung arah swing.",
                 "Menunggu trigger momentum RSI dan konfirmasi volume swing..."
             )
             StrategyMode.OFFICE_DAILY -> listOf(
-                "3. RSI & Inflow",
-                "3. Inflow · Smart Accumulation",
+                "RSI & Inflow",
+                "Inflow · Smart Accumulation",
                 "RSI berada di zona aman & volume akumulasi masuk.",
                 "Menunggu konfirmasi momentum RSI & akumulasi santai..."
             )
             StrategyMode.TRENCHING -> listOf(
-                "3. Flow Return",
-                "3. Timing · Pullback & Flow Return",
+                "Flow Return",
+                "Timing · Pullback & Flow Return",
                 "Pullback sehat terlewati & flow beralih menguat kembali (Reclaim).",
                 "Menunggu timing flow return setelah pullback/absorption..."
             )
             StrategyMode.SECOND_WAVE -> listOf(
-                "3. Inflow 15M",
-                "3. Inflow 15M · Smart Money",
+                "Inflow 15M",
+                "Inflow 15M · Smart Money",
                 "Volume beli 15M masuk dan candle konfirmasi terbentuk.",
                 "Menunggu smart inflow dan higher-low 15M..."
             )
             StrategyMode.SCALPING -> listOf(
-                "3. Trigger 1M",
-                "3. Trigger 1M · Momentum Sinyal",
+                "Trigger 1M",
+                "Trigger 1M · Momentum Sinyal",
                 "Breakout volume 1M & momentum RSI/MACD terkonfirmasi aktif.",
                 "Menunggu trigger lonjakan volume beli dan stochastic/MACD 1M..."
             )
@@ -155,32 +160,32 @@ fun RadarLinearCheckpointStepper(
 
         val (tab4, title4, def4Ok, def4Wait) = when (strategyMode) {
             StrategyMode.SWING -> listOf(
-                "4. Risk:Reward",
-                "4. Area Entry · Net R:R >= 1:1.5",
+                "Risk:Reward",
+                "Area Entry · Net R:R >= 1:1.5",
                 "Harga berada di zona entry dengan Net R:R optimal.",
                 "Menunggu harga bergerak masuk ke toleransi zona beli swing..."
             )
             StrategyMode.OFFICE_DAILY -> listOf(
-                "4. Area Entry",
-                "4. Area Entry · TP Santai & Terukur",
+                "Area Entry",
+                "Area Entry · TP Santai & Terukur",
                 "Harga berada di zona beli aman dengan target TP terukur.",
                 "Menunggu harga berada di zona entry yang aman..."
             )
             StrategyMode.TRENCHING -> listOf(
-                "4. Anti-FOMO",
-                "4. Anti-FOMO Guard & Sizing",
+                "Anti-FOMO",
+                "Anti-FOMO Guard & Sizing",
                 "Anti-FOMO Guard lulus, harga tidak extended, alokasi risiko terhitung aman.",
                 "Menunggu validasi Anti-FOMO Guard & toleransi resiko..."
             )
             StrategyMode.SECOND_WAVE -> listOf(
-                "4. Entry Ready",
-                "4. Area Entry · Reclaim / Dip",
+                "Entry Ready",
+                "Area Entry · Reclaim / Dip",
                 "Harga berada di zona ideal beli dengan risk/reward optimal.",
                 "Menunggu harga bergerak masuk ke dalam toleransi zona beli ideal..."
             )
             StrategyMode.SCALPING -> listOf(
-                "4. Area Entry",
-                "4. Area Entry · Konfirmasi Harga",
+                "Area Entry",
+                "Area Entry · Konfirmasi Harga",
                 "Harga saat ini berada di zona ideal beli dengan risk/reward optimal.",
                 "Menunggu harga bergerak masuk ke dalam toleransi zona beli ideal..."
             )
@@ -223,74 +228,103 @@ fun RadarLinearCheckpointStepper(
         val idx = checkpoints.indexOfFirst { !it.isOk }
         if (idx >= 0) idx else 3
     }
-    
-    val effectiveCompleted = completed
 
-    // 1 Linear Progress Bar Global (masing-masing checkpoint = 25%)
-    val targetProgress = (effectiveCompleted.coerceIn(0, 4) / 4f)
-    val animGlobalProgress by animateFloatAsState(
-        targetValue = targetProgress,
+    // Perhitungan Bid & Ask Flow
+    val totalBids = remember(orderBookBids) { orderBookBids.sumOf { it.amount } }
+    val totalAsks = remember(orderBookAsks) { orderBookAsks.sumOf { it.amount } }
+    val totalVolume = totalBids + totalAsks
+    val bidPct = remember(totalBids, totalAsks) {
+        if (totalVolume > 0) (totalBids / totalVolume) * 100.0 else 50.0
+    }
+    val askPct = remember(totalBids, totalAsks) {
+        if (totalVolume > 0) (totalAsks / totalVolume) * 100.0 else 50.0
+    }
+    val ratio = remember(totalBids, totalAsks) {
+        if (totalAsks > 0) totalBids / totalAsks else if (totalBids > 0) 9.99 else 1.0
+    }
+    val ratioSign = if (ratio >= 1.0) ">" else "<"
+    val ratioValueStr = String.format(Locale.US, "%.2f", ratio)
+
+    // Penggabungan Stepper (45%) + Kekuatan Sinyal (35%) + Aliran Bid/Ask (20%) menjadi Persentase Dinamis Sampai Entri
+    val dynamicEntryProgress = remember(completed, confidence, bidPct) {
+        val stepWeight = (completed.coerceIn(0, 4) / 4.0) * 45.0
+        val confWeight = (confidence.coerceIn(0, 100) / 100.0) * 35.0
+        val bidWeight = (bidPct.coerceIn(0.0, 100.0) / 100.0) * 20.0
+        val combined = (stepWeight + confWeight + bidWeight).roundToInt()
+        if (completed == 4 && confidence >= 70) {
+            combined.coerceAtLeast(85).coerceIn(0, 100)
+        } else {
+            combined.coerceIn(0, 100)
+        }
+    }
+
+    val animProgress by animateFloatAsState(
+        targetValue = (dynamicEntryProgress / 100f).coerceIn(0f, 1f),
         animationSpec = tween(600, easing = FastOutSlowInEasing),
-        label = "global_linear_progress"
+        label = "dynamic_entry_progress"
     )
 
-    val progressPercent = (effectiveCompleted.coerceIn(0, 4) * 25)
+    val progressColor = when {
+        dynamicEntryProgress >= 75 -> TvGreen
+        dynamicEntryProgress >= 45 -> TvBlue
+        else -> TvAmber
+    }
 
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        // Baris Header Progres Global (0% -> 25% -> 50% -> 75% -> 100%)
+        // 1. Header Baris Kesiapan Entri
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = "Progres Konfirmasi",
-                    color = TvTextSecondary,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Medium
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    text = "($effectiveCompleted/4 Checkpoint)",
-                    color = TvTextPrimary,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
+            Text(
+                text = "Kesiapan Entri",
+                color = TvTextPrimary,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold
+            )
 
             Text(
-                text = "$progressPercent%",
-                color = if (effectiveCompleted == 4) TvGreen else TvBlue,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.ExtraBold
+                text = "$dynamicEntryProgress%",
+                color = progressColor,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Black
             )
         }
 
-        // 1 Single Global Linear Progress Bar
+        // 2. Loading Bar Dinamis (Penggabungan Stepper + Sinyal + Aliran Bid/Ask)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(7.dp)
-                .clip(RoundedCornerShape(4.dp))
+                .height(12.dp)
+                .clip(RoundedCornerShape(6.dp))
                 .background(TvSurfaceVariant)
         ) {
-            // Fill Bar with smooth gradient animation
+            // Fill Bar dengan Gradient Halus & Dinamis
             Box(
                 modifier = Modifier
                     .fillMaxHeight()
-                    .fillMaxWidth(animGlobalProgress)
-                    .clip(RoundedCornerShape(4.dp))
+                    .fillMaxWidth(animProgress)
+                    .clip(RoundedCornerShape(6.dp))
                     .background(
-                        if (completed == 4) Brush.horizontalGradient(listOf(Color(0xFF00C853), TvGreen))
-                        else Brush.horizontalGradient(listOf(TvBlue.copy(alpha = 0.7f), TvBlue))
+                        when {
+                            dynamicEntryProgress >= 75 -> Brush.horizontalGradient(
+                                listOf(Color(0xFF00B0FF), Color(0xFF00E676), TvGreen)
+                            )
+                            dynamicEntryProgress >= 45 -> Brush.horizontalGradient(
+                                listOf(TvBlue.copy(alpha = 0.8f), Color(0xFF00E5FF))
+                            )
+                            else -> Brush.horizontalGradient(
+                                listOf(TvAmber.copy(alpha = 0.8f), TvBlue.copy(alpha = 0.8f))
+                            )
+                        }
                     )
             )
 
-            // Divider markers for 25%, 50%, 75%
+            // Garis Pembatas Checkpoint (25%, 50%, 75%)
             Row(
                 modifier = Modifier.fillMaxSize(),
                 horizontalArrangement = Arrangement.SpaceEvenly,
@@ -301,37 +335,70 @@ fun RadarLinearCheckpointStepper(
                         modifier = Modifier
                             .width(1.5.dp)
                             .fillMaxHeight()
-                            .background(TvBackground.copy(alpha = 0.7f))
+                            .background(TvBackground.copy(alpha = 0.6f))
                     )
                 }
             }
         }
 
-        if (progressPercent != confidence) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(TvSurfaceVariant.copy(alpha = 0.5f))
-                    .padding(8.dp)
+        // 3. Persentase Aliran Bid & Ask di Bawah Loading Bar
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Text(
-                    text = "Progres $progressPercent% adalah status konfirmasi entry saat ini, sedangkan kekuatan sinyal AI (kondisi setup) adalah $confidence%. Keduanya dapat berbeda karena mengukur hal yang berbeda.",
-                    fontSize = 9.sp,
+                    text = "Bid ${String.format(Locale.US, "%.1f", bidPct)}%",
+                    color = TvGreen,
+                    fontSize = 10.5.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "vs",
                     color = TvTextSecondary,
-                    lineHeight = 12.sp,
-                    maxLines = 1,
-                    modifier = Modifier.basicMarquee()
+                    fontSize = 10.sp
+                )
+                Text(
+                    text = "Ask ${String.format(Locale.US, "%.1f", askPct)}%",
+                    color = TvRed,
+                    fontSize = 10.5.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            // Ratio: (> atau < X.X.x)
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(
+                        if (ratio >= 1.0) TvGreen.copy(alpha = 0.12f) else TvRed.copy(alpha = 0.12f)
+                    )
+                    .border(
+                        0.5.dp,
+                        if (ratio >= 1.0) TvGreen.copy(alpha = 0.35f) else TvRed.copy(alpha = 0.35f),
+                        RoundedCornerShape(4.dp)
+                    )
+                    .padding(horizontal = 6.dp, vertical = 2.dp)
+            ) {
+                Text(
+                    text = "($ratioSign ${ratioValueStr}x)",
+                    color = if (ratio >= 1.0) TvGreen else TvRed,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold
                 )
             }
         }
 
-        // Animated Card: transisi otomatis saat checkpoint terpenuhi & berpindah ke step selanjutnya
+        // 4. Box Keterangan di Bawah Loading Bar
         AnimatedContent(
             targetState = activeCheckpointIndex,
             transitionSpec = {
-                (slideInVertically(animationSpec = tween(350, easing = FastOutSlowInEasing)) { height -> height / 3 } + fadeIn(animationSpec = tween(300)))
-                    .togetherWith(slideOutVertically(animationSpec = tween(250, easing = FastOutSlowInEasing)) { height -> -height / 3 } + fadeOut(animationSpec = tween(250)))
+                (slideInVertically(animationSpec = tween(300, easing = FastOutSlowInEasing)) { height -> height / 3 } + fadeIn(animationSpec = tween(250)))
+                    .togetherWith(slideOutVertically(animationSpec = tween(200, easing = FastOutSlowInEasing)) { height -> -height / 3 } + fadeOut(animationSpec = tween(200)))
             },
             label = "checkpoint_detail_transition"
         ) { targetIdx ->
@@ -341,20 +408,24 @@ fun RadarLinearCheckpointStepper(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
+                    .clip(RoundedCornerShape(10.dp))
                     .background(TvSurface)
                     .border(
                         1.dp,
                         when {
-                            currentItem.isOk -> TvGreen.copy(alpha = 0.4f)
-                            isCurrentScanning -> TvBlue.copy(alpha = 0.4f)
+                            currentItem.isOk -> TvGreen.copy(alpha = 0.35f)
+                            isCurrentScanning -> TvBlue.copy(alpha = 0.35f)
                             else -> TvBorder
                         },
-                        RoundedCornerShape(8.dp)
+                        RoundedCornerShape(10.dp)
                     )
-                    .padding(horizontal = 10.dp, vertical = 8.dp)
+                    .padding(10.dp)
             ) {
-                Column(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    // Header Status dalam Box Keterangan
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -362,6 +433,7 @@ fun RadarLinearCheckpointStepper(
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
                             modifier = Modifier.weight(1f, fill = false)
                         ) {
                             Box(
@@ -374,7 +446,7 @@ fun RadarLinearCheckpointStepper(
                                             else -> TvSurfaceVariant
                                         }
                                     )
-                                    .padding(horizontal = 5.dp, vertical = 2.dp)
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
                             ) {
                                 Text(
                                     text = "STEP ${currentItem.number}/4",
@@ -383,17 +455,16 @@ fun RadarLinearCheckpointStepper(
                                         isCurrentScanning -> TvBlue
                                         else -> TvTextSecondary
                                     },
-                                    fontSize = 9.sp,
+                                    fontSize = 9.5.sp,
                                     fontWeight = FontWeight.ExtraBold,
-                                    letterSpacing = 0.4.sp,
-                                    maxLines = 1
+                                    letterSpacing = 0.4.sp
                                 )
                             }
-                            Spacer(Modifier.width(5.dp))
+
                             Text(
-                                text = currentItem.title.substringAfter("· "),
+                                text = currentItem.title,
                                 color = TvTextPrimary,
-                                fontSize = 11.sp,
+                                fontSize = 11.5.sp,
                                 fontWeight = FontWeight.Bold,
                                 maxLines = 1,
                                 modifier = Modifier.basicMarquee()
@@ -402,7 +473,7 @@ fun RadarLinearCheckpointStepper(
 
                         Spacer(Modifier.width(6.dp))
 
-                        // Status Tag
+                        // Status Badge
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(12.dp))
@@ -422,36 +493,61 @@ fun RadarLinearCheckpointStepper(
                                     },
                                     RoundedCornerShape(12.dp)
                                 )
-                                .padding(horizontal = 7.dp, vertical = 2.dp)
+                                .padding(horizontal = 8.dp, vertical = 2.dp)
                         ) {
                             Text(
-                                text = when {
-                                    currentItem.isOk -> "SIAP"
-                                    isCurrentScanning -> "TUNGGU"
-                                    else -> "TUNGGU"
-                                },
-                                color = when {
-                                    currentItem.isOk -> TvGreen
-                                    isCurrentScanning -> TvBlue
-                                    else -> TvTextSecondary
-                                },
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1
+                                text = if (currentItem.isOk) "SIAP" else "MENUNGGU",
+                                color = if (currentItem.isOk) TvGreen else TvBlue,
+                                fontSize = 9.5.sp,
+                                fontWeight = FontWeight.Bold
                             )
                         }
                     }
 
-                    Spacer(Modifier.height(5.dp))
-
+                    // Teks Keterangan Lengkap & Informatif
                     Text(
                         text = currentItem.detail,
                         color = if (currentItem.isOk) TvTextPrimary else TvTextSecondary,
-                        fontSize = 10.5.sp,
-                        lineHeight = 14.5.sp,
-                        maxLines = 1,
-                        modifier = Modifier.basicMarquee()
+                        fontSize = 11.sp,
+                        lineHeight = 15.sp
                     )
+
+                    // Indikator 4 Checkpoint Mini
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 2.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        checkpoints.forEach { cp ->
+                            Row(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(
+                                        if (cp.isOk) TvGreen.copy(alpha = 0.10f) else TvSurfaceVariant.copy(alpha = 0.5f)
+                                    )
+                                    .padding(vertical = 3.dp, horizontal = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(5.dp)
+                                        .clip(CircleShape)
+                                        .background(if (cp.isOk) TvGreen else TvTextSecondary.copy(alpha = 0.4f))
+                                )
+                                Spacer(Modifier.width(3.dp))
+                                Text(
+                                    text = cp.tabLabel,
+                                    color = if (cp.isOk) TvGreen else TvTextSecondary,
+                                    fontSize = 8.5.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }

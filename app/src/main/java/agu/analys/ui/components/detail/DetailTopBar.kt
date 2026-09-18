@@ -194,8 +194,8 @@ fun DetailPriceHeader(
     activityColor: Color,
     quoteAsset: String = "IDR",
     baseAsset: String = "",
-    symbol: String,
-    isFavorite: Boolean,
+    symbol: String = "",
+    isFavorite: Boolean = false,
     globalContext: GlobalMarketContext? = null,
     orderBookBids: List<OrderBookItem> = emptyList(),
     orderBookAsks: List<OrderBookItem> = emptyList(),
@@ -277,20 +277,6 @@ fun DetailPriceHeader(
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1
-                )
-            }
-
-            if (globalContext != null) {
-                GlobalMarketShieldChip(
-                    context = globalContext,
-                    symbol = symbol,
-                    baseAsset = baseAsset,
-                    isFavorite = isFavorite,
-                    pairChange24h = change24h,
-                    bids = orderBookBids,
-                    asks = orderBookAsks,
-                    strategyMode = strategyMode,
-                    onClick = onOpenShieldInfo
                 )
             }
         }

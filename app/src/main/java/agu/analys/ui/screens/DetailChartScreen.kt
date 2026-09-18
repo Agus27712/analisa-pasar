@@ -107,7 +107,6 @@ fun DetailChartScreen(
 
     var showPriceAlertDialog by remember { mutableStateOf(false) }
     var showAiAssistantDialog by remember { mutableStateOf(false) }
-    var showShieldDialog by remember { mutableStateOf(false) }
     var showLogcatDialog by remember { mutableStateOf(false) }
     val marketStructure = remember(candles) { MarketStructureAnalyzer.analyze(candles) }
     val isFavorite = favorites.contains(pair.symbol.uppercase()) || favorites.contains(pair.symbol)
@@ -124,19 +123,6 @@ fun DetailChartScreen(
         onDispose {
             agu.analys.engine.global.GlobalContextManager.stop()
         }
-    }
-
-    if (showShieldDialog) {
-        GlobalMarketShieldDialog(
-            context = globalContext,
-            symbol = pair.symbol,
-            baseAsset = pair.baseAsset,
-            isFavorite = isFavorite,
-            bids = orderBookBids,
-            asks = orderBookAsks,
-            strategyMode = strategyMode,
-            onDismiss = { showShieldDialog = false }
-        )
     }
 
     var lastKnownLivePrice by remember(pair.symbol) { mutableDoubleStateOf(0.0) }
@@ -277,58 +263,15 @@ fun DetailChartScreen(
 
             Spacer(Modifier.height(8.dp))
 
-            // 2 & 3. Hero Ambient Header (Price & Controls)
-            val totalBids = remember(orderBookBids) { orderBookBids.sumOf { it.amount } }
-            val totalAsks = remember(orderBookAsks) { orderBookAsks.sumOf { it.amount } }
-            val buyRatio = remember(totalBids, totalAsks) {
-                if (totalBids + totalAsks > 0) totalBids / (totalBids + totalAsks) else 0.5
-            }
-
-            val ambientColor: androidx.compose.ui.graphics.Color
-            val watermarkIcon: androidx.compose.ui.graphics.vector.ImageVector
-            when {
-                totalBids + totalAsks == 0.0 -> {
-                    ambientColor = TvBlue
-                    watermarkIcon = Icons.Default.Security
-                }
-                buyRatio >= 0.58 -> {
-                    ambientColor = TvGreen
-                    watermarkIcon = Icons.Default.Security
-                }
-                buyRatio <= 0.42 -> {
-                    ambientColor = TvRed
-                    watermarkIcon = Icons.Default.Warning
-                }
-                else -> {
-                    ambientColor = TvBlue
-                    watermarkIcon = Icons.Default.Security
-                }
-            }
-
+            // 2 & 3. Header Card (Price, Controls & Chart) - Clean Card (Tanpa Aura BG)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
-                    .background(
-                        androidx.compose.ui.graphics.Brush.verticalGradient(
-                            colors = listOf(
-                                ambientColor.copy(alpha = 0.26f),
-                                ambientColor.copy(alpha = 0.12f)
-                            )
-                        )
-                    )
-                    .border(1.dp, ambientColor.copy(alpha = 0.38f), androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(TvCardBackground)
+                    .border(1.dp, TvBorder, RoundedCornerShape(16.dp))
                     .padding(14.dp)
             ) {
-                androidx.compose.material3.Icon(
-                    imageVector = watermarkIcon,
-                    contentDescription = null,
-                    tint = ambientColor.copy(alpha = 0.12f),
-                    modifier = Modifier
-                        .size(110.dp)
-                        .align(Alignment.Center)
-                )
-                
                 Column(modifier = Modifier.fillMaxWidth()) {
                     DetailPriceHeader(
                         price = displayPrice,
@@ -338,12 +281,7 @@ fun DetailChartScreen(
                         quoteAsset = pair.quoteAsset,
                         baseAsset = pair.baseAsset,
                         symbol = pair.symbol,
-                        isFavorite = isFavorite,
-                        globalContext = globalContext,
-                        orderBookBids = orderBookBids,
-                        orderBookAsks = orderBookAsks,
-                        strategyMode = strategyMode,
-                        onOpenShieldInfo = { showShieldDialog = true }
+                        isFavorite = isFavorite
                     )
 
                     Spacer(Modifier.height(14.dp))
@@ -395,6 +333,8 @@ fun DetailChartScreen(
                 isRealBuyMode = isRealBuyMode,
                 isBuyMode = isBuyMode,
                 onBuyModeChanged = { isBuyMode = it },
+                orderBookBids = orderBookBids,
+                orderBookAsks = orderBookAsks,
                 onExecuteBuy = { nominalIdr, customBuyPrice, tp1Price, tp2Price ->
                     val execPrice = if (customBuyPrice > 0.0) customBuyPrice else if (displayPrice > 0.0) displayPrice else signal.entryPrice
                     if (execPrice > 0) {

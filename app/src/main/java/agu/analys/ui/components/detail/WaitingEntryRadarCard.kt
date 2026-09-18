@@ -14,6 +14,7 @@ import androidx.compose.ui.unit.dp
 import agu.analys.config.StrategyMode
 import agu.analys.config.TradingFeeConfig
 import agu.analys.model.AISignalState
+import agu.analys.model.OrderBookItem
 import agu.analys.model.SignalAction
 import agu.analys.model.PositionContext
 import agu.analys.model.SellCheckpointEvaluator
@@ -82,6 +83,8 @@ fun WaitingEntryRadarCard(
     onCancelTrailingOrder: (() -> Unit)? = null,
     isBuyMode: Boolean = true,
     onBuyModeChanged: ((Boolean) -> Unit)? = null,
+    orderBookBids: List<OrderBookItem> = emptyList(),
+    orderBookAsks: List<OrderBookItem> = emptyList(),
     modifier: Modifier = Modifier
 ) {
     val effectivePrice = if (currentPrice > 0.0 && currentPrice.isFinite()) currentPrice else 0.0
@@ -160,11 +163,11 @@ fun WaitingEntryRadarCard(
 
     val isBuyAction = signal.action == SignalAction.BUY
     val buyTitleHeader = when (strategyMode) {
-        StrategyMode.SCALPING -> if (isBuyAction) "⚡ SCALPING BUY (${signal.confidence}%)" else "⚡ SCALPING RADAR (${signal.confidence}%)"
-        StrategyMode.SECOND_WAVE -> if (isBuyAction) "🌊 SECOND-WAVE BUY (${signal.confidence}%)" else "🌊 SECOND-WAVE RADAR (${signal.confidence}%)"
-        StrategyMode.SWING -> if (isBuyAction) "🎯 SWING BUY (${signal.confidence}%)" else "🎯 SWING RADAR (${signal.confidence}%)"
-        StrategyMode.OFFICE_DAILY -> if (isBuyAction) "🏢 OFFICE-DAILY BUY (${signal.confidence}%)" else "🏢 OFFICE-DAILY RADAR (${signal.confidence}%)"
-        StrategyMode.TRENCHING -> if (isBuyAction) "⛏ TRENCHING BUY (${signal.confidence}%)" else "⛏ TRENCHING RADAR (${signal.confidence}%)"
+        StrategyMode.SCALPING -> if (isBuyAction) "⚡ SCALPING BUY" else "⚡ SCALPING RADAR"
+        StrategyMode.SECOND_WAVE -> if (isBuyAction) "🌊 SECOND-WAVE BUY" else "🌊 SECOND-WAVE RADAR"
+        StrategyMode.SWING -> if (isBuyAction) "🎯 SWING BUY" else "🎯 SWING RADAR"
+        StrategyMode.OFFICE_DAILY -> if (isBuyAction) "🏢 OFFICE-DAILY BUY" else "🏢 OFFICE-DAILY RADAR"
+        StrategyMode.TRENCHING -> if (isBuyAction) "⛏ TRENCHING BUY" else "⛏ TRENCHING RADAR"
     }
 
     var isChecklistVisible by remember { mutableStateOf(false) }
@@ -307,13 +310,15 @@ fun WaitingEntryRadarCard(
                 Spacer(Modifier.height(10.dp))
             }
 
-            // Original BUY Linear Checkpoint Stepper
+            // BUY Linear Checkpoint Stepper & Loading Bar Dinamis
             RadarLinearCheckpointStepper(
                 mtf = mtf,
                 completed = completedBuySteps,
                 pulseScale = pulseScale,
                 strategyMode = strategyMode,
-                confidence = signal.confidence
+                confidence = signal.confidence,
+                orderBookBids = orderBookBids,
+                orderBookAsks = orderBookAsks
             )
 
             Spacer(Modifier.height(10.dp))
