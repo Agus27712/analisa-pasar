@@ -375,7 +375,8 @@ fun DetailChartScreen(
                     }
                 },
                 onExecuteSell = { sellQty, isAutoSell, tp1P, tp1Pct, tp2P, tp2Pct ->
-                    val execPrice = if (displayPrice > 0.0) displayPrice else signal.targetPrice1
+                    val topBid = orderBookBids.firstOrNull { it.price > 0.0 }?.price
+                    val execPrice = topBid ?: if (displayPrice > 0.0) displayPrice else signal.targetPrice1
                     if (execPrice > 0) {
                         viewModel.executeSellOrders(
                             pair = pair,

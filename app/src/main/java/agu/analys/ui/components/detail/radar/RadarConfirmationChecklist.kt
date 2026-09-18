@@ -48,10 +48,10 @@ fun RadarConfirmationChecklist(
                 "4. Risk/Reward Optimal & Toleransi Entry"
             )
             StrategyMode.OFFICE_DAILY -> listOf(
-                "1. Tren Stabil 1H/4H & Support EMA 20/50",
-                "2. Struktur Base Sehat (Akumulasi Tanpa Dump)",
-                "3. Smart Inflow & RSI Zona Aman",
-                "4. Area Beli Terukur & Target TP Santai"
+                "1. Sesi Open Pagi (06:00-11:30) & Tren EMA H4",
+                "2. Anti Flash Dump (Base Aman & Tanpa Trauma Dump)",
+                "3. Smart Inflow & RSI Akumulasi (40–58)",
+                "4. Area Beli Terukur, Net R:R >= 1.8 & Close Malam"
             )
             StrategyMode.TRENCHING -> listOf(
                 "1. Flow Persistence & Order Book Inflow (M15)",

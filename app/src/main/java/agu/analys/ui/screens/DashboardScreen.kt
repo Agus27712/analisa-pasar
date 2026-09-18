@@ -147,12 +147,12 @@ fun DashboardScreen(
                 (watchAndFav + swingCandidates + basePopular).distinctBy { it.symbol }
             }
             StrategyMode.OFFICE_DAILY -> {
-                val officeCandidates = allTicks.values
-                    .filter { it.price > 5.0 && it.volume24h >= 1_000_000_000.0 }
+                val intradayCandidates = allTicks.values
+                    .filter { it.price > 5.0 && it.volume24h >= 800_000_000.0 && it.change24h >= -6.0 }
                     .sortedByDescending { it.volume24h }
                     .take(25)
                     .map { TradingPair.fromCustomSymbol(it.symbol, defaultQuote) }
-                (watchAndFav + officeCandidates + basePopular).distinctBy { it.symbol }
+                (watchAndFav + intradayCandidates + basePopular).distinctBy { it.symbol }
             }
             StrategyMode.TRENCHING -> {
                 val trenchCandidates = allTicks.values
@@ -194,8 +194,8 @@ fun DashboardScreen(
             }
             DashboardQuickFilter.HOLDING -> {
                 strategyPairs.filter { pair ->
-                    holdingStatuses[pair.symbol]?.isHolding == true ||
-                    holdingStatuses[pair.baseAsset.lowercase()]?.isHolding == true
+                    val status = holdingStatuses[pair.symbol] ?: holdingStatuses[pair.baseAsset.lowercase()]
+                    status != null && status.isHolding && status.quantity > 0.00000001
                 }
             }
             DashboardQuickFilter.WATCHLIST -> {
@@ -287,7 +287,7 @@ fun DashboardScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 6.dp),
+                    .padding(horizontal = 14.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
@@ -311,8 +311,8 @@ fun DashboardScreen(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),
-                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 if (filteredFocusPairs.isEmpty()) {
                     item {

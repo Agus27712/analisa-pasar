@@ -62,6 +62,8 @@ fun RadarTransactionFeeSection(
     onTp2PriceChanged: (String) -> Unit = {},
     tp2PercentInput: String = "50",
     onTp2PercentChanged: (String) -> Unit = {},
+    orderBookBids: List<agu.analys.model.OrderBookItem> = emptyList(),
+    orderBookAsks: List<agu.analys.model.OrderBookItem> = emptyList(),
     modifier: Modifier = Modifier
 ) {
     var showFeeDetailModal by remember { mutableStateOf(false) }
@@ -265,7 +267,10 @@ fun RadarTransactionFeeSection(
                 tp2PriceInput = tp2PriceInput,
                 onTp2PriceChanged = onTp2PriceChanged,
                 tp2PercentInput = tp2PercentInput,
-                onTp2PercentChanged = onTp2PercentChanged
+                onTp2PercentChanged = onTp2PercentChanged,
+                orderBookBids = orderBookBids,
+                isMakerOrder = isMakerOrder,
+                onOpenFeeDetail = { showFeeDetailModal = true }
             )
         }
     }

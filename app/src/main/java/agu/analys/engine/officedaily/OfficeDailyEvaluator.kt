@@ -27,21 +27,43 @@ data class OfficeDailyEvalResult(
 )
 
 /**
- * OFFICE DAILY TRADING STRATEGY EVALUATOR (FIXED)
+ * INTRADAY TRADING STRATEGY EVALUATOR (OPEN PAGI · CLOSE MALAM)
  *
- * Filosofi: Santai & presisi untuk pekerja kantoran.
- * - Timeframe intended: H4 / 1D Makro (bukan H1 noise)
- * - Trend Following + Base Accumulation
- * - High R:R (>= 1.8:1 net), Low Noise
- * - Hindari entry di pucuk (filter jarak ke recent high + ATR extension)
+ * Filosofi Intraday Disiplin Sesi & Anti Flash Dump:
+ * - Siklus Harian:
+ *   1. Sesi Open Pagi (06:00–11:30 WIB): Jendela pembukaan posisi saat volume & likuiditas pagi terbentuk.
+ *   2. Sesi Hold & Trailing Siang (11:30–19:30 WIB): Mengawal posisi dengan trailing profit, selektif entry.
+ *   3. Sesi Close Malam (19:30–23:30 WIB): Sesi penutupan posisi / exit sebelum tengah malam untuk mengunci kas dan menghindari flash dump overnight.
+ *   4. Sesi Istirahat Malam (23:30–06:00 WIB): Dilarang membuka posisi baru (jam rawan dump pasar global).
  *
- * FIXES (Sep 2026):
- * 1. isOverbought dead-code dihilangkan (price >= price*1.085 mustahil)
- * 2. Tambah filter distance-to-recent-high & ATR extension → cegah "beli di pucuk"
- * 3. R:R minimum dinaikkan ke 1.8 net
- * 4. RSI sweet-spot lebih ketat di zona akumulasi
+ * - Anti Flash Dump Protection:
+ *   1. Memindai histori harga panjang (H4 100–200 candle / D1 100 candle).
+ *   2. Deteksi trauma flash dump (< 72 jam) tanpa base akumulasi kokoh.
+ *   3. Deteksi fake pump rejection wick (upper wick panjang) pencegah jebakan pompa.
+ *   4. Validasi baseline support jangka panjang (EMA100/EMA200).
  */
 object OfficeDailyEvaluator {
+
+    enum class IntradayPhase(val label: String, val isOpenWindow: Boolean, val isCloseWindow: Boolean, val isRestWindow: Boolean) {
+        OPEN_PAGI("Sesi Open Pagi (06:00–11:30 WIB)", true, false, false),
+        HOLD_SIANG("Sesi Hold & Trailing (11:30–19:30 WIB)", false, false, false),
+        CLOSE_MALAM("Sesi Close Malam (19:30–23:30 WIB)", false, true, false),
+        REST_MALAM("Sesi Istirahat (23:30–06:00 WIB)", false, false, true)
+    }
+
+    fun getCurrentIntradayPhase(): IntradayPhase {
+        val wibCal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("Asia/Jakarta"))
+        val hour = wibCal.get(java.util.Calendar.HOUR_OF_DAY)
+        val minute = wibCal.get(java.util.Calendar.MINUTE)
+        val timeMinutes = hour * 60 + minute
+
+        return when {
+            timeMinutes in 360..690 -> IntradayPhase.OPEN_PAGI      // 06:00 - 11:30 WIB
+            timeMinutes in 691..1170 -> IntradayPhase.HOLD_SIANG    // 11:30 - 19:30 WIB
+            timeMinutes in 1171..1410 -> IntradayPhase.CLOSE_MALAM  // 19:30 - 23:30 WIB
+            else -> IntradayPhase.REST_MALAM                        // 23:30 - 06:00 WIB
+        }
+    }
 
     fun evaluate(
         price: Double,
@@ -75,11 +97,11 @@ object OfficeDailyEvaluator {
                 triggerDetail = "Menunggu konfirmasi area beli aman.",
                 entryPriceOk = false,
                 entryPriceStatus = MtfLegStatus.WAITING,
-                entryPriceDetail = "Menunggu riwayat candle pasar untuk memetakan level entry Office Daily.",
+                entryPriceDetail = "Menunggu riwayat candle pasar untuk memetakan level entry Intraday.",
                 path = ScalpingPath.PULLBACK,
                 statusTitle = "MENGUMPULKAN DATA",
                 waitingFor = "Menunggu sinkronisasi candle makro",
-                entryCondition = "Memuat riwayat candle untuk setup Office Daily."
+                entryCondition = "Memuat riwayat candle untuk setup Intraday."
             )
 
             return OfficeDailyEvalResult(
@@ -94,7 +116,7 @@ object OfficeDailyEvaluator {
                     riskRewardRatio = "--",
                     reasoning = listOf(
                         "Data candle sedang disinkronkan (${history.size}/$minCandles candle).",
-                        "Menunggu riwayat candle untuk setup Office Daily."
+                        "Menunggu riwayat candle untuk setup Intraday."
                     ),
                     timestamp = System.currentTimeMillis(),
                     scalpingStage = ScalpingStage.HOLD,
@@ -111,6 +133,8 @@ object OfficeDailyEvaluator {
         val rsi = IndicatorMath.rsi(history, min(14, history.size - 1))
         val ema20 = IndicatorMath.ema(closes, min(20, closes.size))
         val ema50 = IndicatorMath.ema(closes, min(50, closes.size))
+        val ema100 = if (closes.size >= 100) IndicatorMath.ema(closes, 100) else Double.NaN
+        val ema200 = if (closes.size >= 200) IndicatorMath.ema(closes, 200) else Double.NaN
         val macdSeries = IndicatorMath.macdSeries(closes, 12, 26, 9)
         val macd = macdSeries.lastOrNull()?.first ?: 0.0
         val macdSignal = macdSeries.lastOrNull()?.second ?: 0.0
@@ -120,17 +144,52 @@ object OfficeDailyEvaluator {
         val pattern = CandlePatternDetector.detect(history)
         val regime = MarketRegimeDetector.detect(price, ema20, ema50, macdHist, rsi, atr, bb.first, bb.second)
         val structure = MarketStructureAnalyzer.analyze(history)
-        val ema200 = if (closes.size >= 200) IndicatorMath.ema(closes, 200) else Double.NaN
         val momentumBase = closes[closes.lastIndex - min(10, closes.size - 1)]
         val momentum = if (momentumBase > 0.0) (price - momentumBase) / momentumBase else 0.0
         val indicators = TechnicalIndicators(rsi, macd, macdSignal, macdHist, ema20, ema50, ema200, bb.second, bb.first, atr, momentum)
 
+        val intradayPhase = getCurrentIntradayPhase()
         var buyScore = 0.0
         var sellScore = 0.0
         val reasons = mutableListOf<String>()
-        reasons += "Kondisi Pasar: $regime (Office Daily Mode)."
+        reasons += "Kondisi Pasar: $regime · ${intradayPhase.label}"
 
-        // ── Recent high / extension filter (FIX: cegah beli di pucuk) ────────
+        // ── ANTI-FLASH DUMP DETECTOR (Menggunakan Histori Panjang) ──────────
+        // 1. Pindai riwayat dump mendadak dalam 18 candle terakhir (~72 jam H4)
+        var flashDumpTrauma = false
+        var flashDumpDetail = ""
+        val lookbackDump = min(18, history.size)
+        val recentHistory = history.takeLast(lookbackDump)
+        for (i in recentHistory.indices) {
+            val bar = recentHistory[i]
+            val dropFromOpen = if (bar.open > 0.0) (bar.open - bar.close) / bar.open else 0.0
+            val candleRange = if (bar.high > 0.0) (bar.high - bar.low) / bar.high else 0.0
+            if (dropFromOpen >= 0.075 || (candleRange >= 0.12 && bar.close < bar.open)) {
+                val candlesAgo = recentHistory.size - 1 - i
+                if (candlesAgo < 12) {
+                    flashDumpTrauma = true
+                    flashDumpDetail = "Pernah flash dump -${fmt(max(dropFromOpen, candleRange) * 100)}% ($candlesAgo candle lalu). Rawan dump susulan."
+                    break
+                }
+            }
+        }
+
+        // 2. Deteksi Jebakan Pompa (Fake Pump / Long Upper Wick Rejection)
+        var pumpAndDumpTrap = false
+        val last3Candles = history.takeLast(min(4, history.size))
+        for (bar in last3Candles) {
+            val body = abs(bar.close - bar.open)
+            val upperWick = bar.high - max(bar.open, bar.close)
+            if (upperWick > 1.8 * max(body, bar.close * 0.008) && bar.high > price * 1.025) {
+                pumpAndDumpTrap = true
+                break
+            }
+        }
+
+        // 3. Long-term Baseline Downtrend
+        val isMacroDowntrend = (ema100.isFinite() && price < ema100 * 0.97) || (ema200.isFinite() && price < ema200 * 0.96)
+
+        // ── Recent high / extension filter (cegah beli di pucuk) ────────
         val lookbackHigh = min(30, highs.size)
         val recentHigh = highs.takeLast(lookbackHigh).maxOrNull() ?: price
         val effectiveAtr = if (atr.isFinite() && atr > 0.0) atr else (price * 0.04)
@@ -138,9 +197,7 @@ object OfficeDailyEvaluator {
         val mean20 = closes.takeLast(min(20, closes.size)).average()
         val atrExtension = if (effectiveAtr > 0.0) (price - mean20) / effectiveAtr else 0.0
 
-        // Terlalu dekat high lokal (< 1.2% dari recent high) → berbahaya untuk Office Daily
         val tooCloseToHigh = distToHighPct < 0.012
-        // Harga sudah extended > 1.8 ATR di atas mean 20 → overextended
         val isOverExtended = atrExtension > 1.8
 
         // 1. Trend & Moving Average Alignment
@@ -151,13 +208,13 @@ object OfficeDailyEvaluator {
         when {
             isUptrend -> { buyScore += 28; reasons += "Tren makro solid (EMA20 > EMA50, harga di atas support dinamis)." }
             isGoldenCross -> { buyScore += 22; reasons += "Baru terjadi Golden Cross EMA." }
-            isDowntrend -> { sellScore += 30; reasons += "Tren makro bearish (EMA20 < EMA50). Hindari buy santai." }
+            isDowntrend -> { sellScore += 30; reasons += "Tren makro bearish (EMA20 < EMA50). Hindari buy intraday." }
             else -> reasons += "Tren berkonsolidasi, menunggu arah tren tegas."
         }
 
-        // 2. RSI Sweet Spot (lebih ketat: 40-58 ideal untuk akumulasi Office Daily)
+        // 2. RSI Sweet Spot (40-58 ideal untuk akumulasi Intraday)
         when {
-            rsi in 40.0..58.0 -> { buyScore += 26; reasons += "RSI ${fmt(rsi)} di zona akumulasi ideal (Office Daily)." }
+            rsi in 40.0..58.0 -> { buyScore += 26; reasons += "RSI ${fmt(rsi)} di zona akumulasi ideal (Intraday)." }
             rsi in 30.0..40.0 && macdHist > 0 -> { buyScore += 18; reasons += "RSI oversold rebound dengan momentum positif." }
             rsi in 58.0..68.0 -> { buyScore += 8; reasons += "RSI ${fmt(rsi)} masih OK tapi mendekati zona tinggi." }
             rsi > 72.0 -> { sellScore += 28; reasons += "RSI ${fmt(rsi)} overbought (potensi koreksi)." }
@@ -193,7 +250,7 @@ object OfficeDailyEvaluator {
             }
         }
 
-        // 6. Level SL & TP (lebih konservatif)
+        // 6. Level SL & TP
         val supportLevel = structure.support?.takeIf { it > 0.0 && it < price }
             ?: (price - effectiveAtr * 1.6)
 
@@ -203,7 +260,6 @@ object OfficeDailyEvaluator {
             price * 0.93
         ).coerceAtMost(price * 0.982)
 
-        // TP berbasis struktur + ATR, bukan fixed % semata
         val resistanceHint = structure.resistance?.takeIf { it > price } ?: (price + effectiveAtr * 2.8)
         val calculatedTp1 = maxOf(price * 1.09, resistanceHint, price + effectiveAtr * 2.2)
         val calculatedTp2 = maxOf(calculatedTp1 * 1.07, price * 1.18, price + effectiveAtr * 3.6)
@@ -212,30 +268,40 @@ object OfficeDailyEvaluator {
         val netRr = feeResult.netRr.coerceAtLeast(1.8)
         val rrString = "1:${fmt(netRr)}"
 
-        // ── DANGER & INVALIDATION (FIXED) ───────────────────────────────────
-        // RSI overbought nyata
+        // ── DANGER & INVALIDATION ───────────────────────────────────────────
         val isRsiOverbought = rsi >= 72.0
-        // Jarak ke high lokal terlalu kecil (FIX utama kasus XRP 9 Sep)
         val isNearHighDanger = tooCloseToHigh || isOverExtended
         
-        // --- Macro Anomaly Filter (HARD for Office Daily) ---
         val isParabolicUnwind = macroAnomalyResult?.isParabolicUnwind == true
         if (isParabolicUnwind) {
             reasons.add(0, "🚨 DITOLAK (HARD): Terdeteksi Parabolic Unwind (Koin baru saja pump ekstrim dan sedang turun). Dilarang beli.")
+        }
+
+        if (flashDumpTrauma) {
+            reasons.add(0, "🚨 DITOLAK (Anti Flash Dump): $flashDumpDetail")
+        }
+
+        if (pumpAndDumpTrap) {
+            reasons.add(0, "🚨 DITOLAK (Anti Flash Dump): Terdeteksi Upper Wick panjang penolakan pucuk (Fake Pump Trap).")
+        }
+
+        if (isMacroDowntrend) {
+            reasons.add(0, "⚠️ Macro Downtrend: Harga di bawah baseline EMA jangka panjang (Rawan dump).")
+            sellScore += 20
         }
         
         // Distribusi / breakdown
         val isDistribution = sellScore >= 48.0 && sellScore > buyScore * 1.15
         val isBreakdown = isBearishStructure || isDowntrend || (price < supportLevel * 0.965)
-        val isDangerous = isRsiOverbought || isNearHighDanger || isDistribution || isBreakdown || isParabolicUnwind
+        val isDangerous = isRsiOverbought || isNearHighDanger || isDistribution || isBreakdown || isParabolicUnwind || flashDumpTrauma || pumpAndDumpTrap || isMacroDowntrend
 
         if (isNearHighDanger) {
             reasons.add(0, "⚠️ Tertahan: Harga terlalu dekat recent high (Rp ${fmtPrice(recentHigh)}) / overextended. Hindari beli di pucuk.")
         }
 
         // ── WATERFALL CHECKPOINTS ───────────────────────────────────────────
-        val step1Ok = !isDangerous && isUptrend && !isBearishStructure && !isDowntrend
-        val step2Ok = step1Ok && (price >= supportLevel * 0.988) && !tooCloseToHigh
+        val step1Ok = !isDangerous && isUptrend && !isBearishStructure && !isDowntrend && !flashDumpTrauma
+        val step2Ok = step1Ok && (price >= supportLevel * 0.988) && !tooCloseToHigh && !pumpAndDumpTrap
         val step3Ok = step2Ok && (rsi in 36.0..62.0) && macdHist >= -0.002
         val step4Ok = step3Ok && netRr >= 1.8 && buyScore >= 52.0 && !isOverExtended
 
@@ -247,26 +313,34 @@ object OfficeDailyEvaluator {
             else -> 0
         }
 
-        // ── Keputusan akhir ────────────────────────────────
-        val isQualified = step4Ok && buyScore >= 58.0 && buyScore > sellScore * 1.35 && !isNearHighDanger
+        // ── Keputusan akhir Intraday Disiplin Sesi ──────────────────────────
+        // Hanya diizinkan BUY pada Sesi Open Pagi (06:00 - 11:30 WIB)
+        val isQualified = step4Ok && buyScore >= 58.0 && buyScore > sellScore * 1.35 && !isNearHighDanger && !flashDumpTrauma && !pumpAndDumpTrap && intradayPhase.isOpenWindow
         
-        // --- Regime Confidence Penalty (SOFT) ---
         var baseConfidence = if (isQualified) (buyScore).coerceAtMost(90.0).toInt() else (buyScore).coerceAtMost(60.0).toInt()
         val regimeMultiplier = when {
             regime.contains("SIDEWAYS") -> 0.7
-            regime.contains("Tinggi") -> 0.6 // Volatilitas Sangat Tinggi
+            regime.contains("Tinggi") -> 0.6
             else -> 1.0
         }
-        val confidence = if (isParabolicUnwind) 0 else (baseConfidence * regimeMultiplier).toInt()
+        val confidence = if (isParabolicUnwind || flashDumpTrauma) 0 else (baseConfidence * regimeMultiplier).toInt()
         
         val finalAction = when {
             globalContext.isVetoActive -> SignalAction.HOLD
-            isParabolicUnwind -> SignalAction.HOLD
+            isParabolicUnwind || flashDumpTrauma -> SignalAction.HOLD
+            intradayPhase.isCloseWindow -> {
+                reasons.add(0, "🌙 SESI CLOSE MALAM (19:30–23:30 WIB): Amankan profit & tutup posisi sebelum tengah malam untuk hindari overnight dump.")
+                SignalAction.SELL
+            }
+            intradayPhase.isRestWindow -> {
+                reasons.add(0, "💤 SESI ISTIRAHAT (23:30–06:00 WIB): Pasar ditutup untuk posisi baru. Menghindari flash dump dini hari.")
+                SignalAction.HOLD
+            }
             isQualified && !isDangerous -> SignalAction.BUY
             else -> SignalAction.HOLD
         }
 
-        if (isDangerous && !isNearHighDanger) {
+        if (isDangerous && !isNearHighDanger && !flashDumpTrauma && !pumpAndDumpTrap) {
             when {
                 isRsiOverbought -> reasons.add(0, "⚠️ Tertahan: RSI jenuh beli (>= 72).")
                 isBreakdown -> reasons.add(0, "⚠️ Tertahan: Harga breakdown / downtrend menembus support.")
@@ -282,11 +356,13 @@ object OfficeDailyEvaluator {
             step1Ok -> 32
             else -> 18
         }
-        val finalScore = if (isParabolicUnwind) 0 else (finalScoreRaw * regimeMultiplier).toInt()
+        val finalScore = if (isParabolicUnwind || flashDumpTrauma) 0 else (finalScoreRaw * regimeMultiplier).toInt()
 
         val biasDetailText = when {
+            flashDumpTrauma -> "Ditolak: Riwayat flash dump dalam 72 jam."
+            pumpAndDumpTrap -> "Ditolak: Trap upper wick tajam."
             isRsiOverbought -> "Tertahan: RSI overbought."
-            isNearHighDanger -> "Tertahan: Terlalu dekat recent high / overextended (hindari pucuk)."
+            isNearHighDanger -> "Tertahan: Terlalu dekat recent high / overextended."
             isBreakdown -> "Tertahan: Breakdown / downtrend."
             isDistribution -> "Tertahan: Distribusi tinggi."
             step1Ok -> "Tren makro selaras (EMA20 > EMA50)."
@@ -306,6 +382,7 @@ object OfficeDailyEvaluator {
         }
 
         val entryPriceDetailText = when {
+            !intradayPhase.isOpenWindow -> "Sesi entry ditutup (${intradayPhase.label})."
             !step3Ok -> "Menunggu Checkpoint 3 lolos."
             step4Ok -> "Zona Entry: Rp ${fmtPrice(price)} (Net R:R $rrString)."
             else -> "Menunggu R:R optimal (Min 1:1.8) & skor buy."
@@ -331,6 +408,10 @@ object OfficeDailyEvaluator {
 
             path = if (isBullishStructure) ScalpingPath.MOMENTUM_CONTINUATION else ScalpingPath.PULLBACK,
             statusTitle = when {
+                intradayPhase.isCloseWindow -> "CLOSE MALAM (EXIT)"
+                intradayPhase.isRestWindow -> "ISTIRAHAT (NO ENTRY)"
+                flashDumpTrauma -> "FLASH DUMP TRAUMA (HOLD)"
+                pumpAndDumpTrap -> "FAKE PUMP TRAP (HOLD)"
                 isRsiOverbought -> "OVERBOUGHT (HOLD)"
                 isNearHighDanger -> "DEKAT HIGH / OVEREXTENDED (HOLD)"
                 isBreakdown -> "BREAKDOWN / DOWNTREND (HOLD)"
@@ -340,17 +421,21 @@ object OfficeDailyEvaluator {
                 else -> "ANALYZING (0/4)"
             },
             waitingFor = when {
+                intradayPhase.isCloseWindow -> "Sesi Close Malam: Tutup posisi sebelum tengah malam"
+                intradayPhase.isRestWindow -> "Menunggu Sesi Open Pagi (06:00 WIB)"
+                flashDumpTrauma -> "Menunggu kestabilan base konsolidasi pasca-dump"
+                pumpAndDumpTrap -> "Menunggu pullback aman dari rejection upper wick"
                 isRsiOverbought -> "Menunggu koreksi / reset RSI"
-                isNearHighDanger -> "Menunggu pullback dari zona high (jangan entry di pucuk)"
+                isNearHighDanger -> "Menunggu pullback dari zona high"
                 isBreakdown -> "Menunggu pembentukan support baru"
                 isDistribution -> "Menunggu tekanan jual mereda"
-                completedSteps == 4 -> "Siap eksekusi"
+                completedSteps == 4 -> "Siap eksekusi (Open Pagi)"
                 completedSteps == 3 -> "Menunggu konfirmasi zona entry & R:R"
                 completedSteps == 2 -> "Menunggu momentum RSI & MACD"
                 completedSteps == 1 -> "Menunggu pantulan support + jarak aman dari high"
                 else -> "Menunggu konfirmasi setup lengkap"
             },
-            entryCondition = "Setup H4/1D Low Noise · Jauh dari high · High R:R"
+            entryCondition = "Intraday Disiplin Sesi · Anti Flash Dump · High R:R"
         )
 
         return OfficeDailyEvalResult(
@@ -370,7 +455,7 @@ object OfficeDailyEvaluator {
                 reasoning = reasons.take(8),
                 timestamp = System.currentTimeMillis(),
                 patternDetected = pattern,
-                scalpingStage = if (completedSteps == 4) ScalpingStage.ENTRY else if (completedSteps >= 2) ScalpingStage.WAIT_PULLBACK else ScalpingStage.HOLD,
+                scalpingStage = if (completedSteps == 4 && intradayPhase.isOpenWindow) ScalpingStage.ENTRY else if (completedSteps >= 2) ScalpingStage.WAIT_PULLBACK else ScalpingStage.HOLD,
                 mtf = mtfSnapshot
             ),
             indicators = indicators,

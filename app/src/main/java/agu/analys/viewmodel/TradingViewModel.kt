@@ -75,7 +75,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
             syncSimulationTradeToPositionStore(order)
         }
     )
-    internal val realCoordinator = RealTradeCoordinator(
+    internal val realCoordinator: RealTradeCoordinator = RealTradeCoordinator(
         scope = viewModelScope,
         prefs = prefs,
         getLatestTick = { symbol -> marketDataCoordinator.dashboardTicks.value[symbol] },
@@ -83,7 +83,18 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
             syncRealBalancesToPositionStore(balances, avgPrices)
         },
         onRealTradeExecuted = { pair, type, price, quantity, tp1, tp2 ->
+            if (type.equals("sell", ignoreCase = true)) {
+                val symbol = pair.replace("_", "").uppercase()
+                positionStore.markSold(symbol, isReal = true)
+                positionStore.markSold(pair, isReal = true)
+                agu.analys.engine.sell.SellSignalLifecycleManager.reset(symbol, isReal = true)
+                agu.analys.engine.sell.SellSignalLifecycleManager.reset(pair, isReal = true)
+                positionCoordinator.markSoldAndClear(symbol, isReal = true)
+                positionCoordinator.markSoldAndClear(pair, isReal = true)
+            }
             syncRealTradeToSimulation(pair, type, price, quantity, tp1, tp2)
+            positionCoordinator.refreshPosition(_selectedPair.value.symbol)
+            refreshSpotPosition()
         }
     )
     internal val updateCoordinator = AppUpdateCoordinator(viewModelScope)
@@ -238,8 +249,9 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
                 // Saldo real sudah 0 di Indodax → tutup posisi + clear sell signal lifecycle
                 // agar koin hilang dari Ready-to-Sell / Trailing badge
                 if (pos.isHolding && pos.isReal) {
-                    positionStore.markSold(symbol)
-                    agu.analys.engine.sell.SellSignalLifecycleManager.reset(symbol)
+                    positionStore.markSold(symbol, isReal = true)
+                    agu.analys.engine.sell.SellSignalLifecycleManager.reset(symbol, isReal = true)
+                    positionCoordinator.markSoldAndClear(symbol, isReal = true)
                 }
             }
         }
@@ -248,7 +260,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         refreshSpotPosition()
     }
     
-    internal val positionCoordinator = PositionCoordinator(
+    internal val positionCoordinator: PositionCoordinator = PositionCoordinator(
         positionStore = positionStore,
         alertStore = alertStore,
         isRealProvider = { realCoordinator.isRealBuyEnabled.value },

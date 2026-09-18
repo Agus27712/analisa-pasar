@@ -423,27 +423,23 @@ fun TradingViewModel.executeTrailingSellLimitOrder(symbol: String, limitPrice: D
             if (apiKey.isBlank() || secretKey.isBlank()) return@launch
 
             val latestTick = marketDataCoordinator.dashboardTicks.value[symbol]
-            val maxAge = if (prefs.isScalpingMode) 400L else 800L
-            if (latestTick != null && (System.currentTimeMillis() - latestTick.timestamp > maxAge)) {
-                positionStore.resetTrailingTrigger(symbol, isReal = true)
-                AlertNotificationHelper.sendPriceAlertNotification(
-                    context = getApplication(),
-                    title = "❌ [REAL] Gagal Trailing Sell • $symbol",
-                    message = "Data harga terlalu usang (delay > ${maxAge}ms).",
-                    notificationId = (symbol.hashCode() and 0x3FFFFFFF) + 100000 + 3000,
-                    symbol = symbol
-                )
-                return@launch
-            }
-            
-            // Terapkan diskon 5% ke FRESH PRICE agar jaring order laku instan (seperti market sell)
             val execPrice = latestTick?.price ?: limitPrice
             val discountedPrice = execPrice * 0.95
 
-            val res = agu.analys.service.IndodaxTradeApiV2.createLimitOrderDetailed(
-                apiKey = apiKey, secretKey = secretKey, symbol = symbol, side = "sell",
-                price = discountedPrice, quantity = quantity, clientOrderId = "agu-trail-${System.currentTimeMillis()}"
+            // Eksekusi langsung ke bursa tanpa batasan delay: coba market order terlebih dahulu, fallback ke limit order
+            val clientOrderId = "agu-trail-${System.currentTimeMillis()}"
+            val marketRes = agu.analys.service.IndodaxTradeApiV2.createMarketOrderDetailed(
+                apiKey = apiKey, secretKey = secretKey, symbol = symbol,
+                side = "sell", quantity = quantity, clientOrderId = clientOrderId
             )
+            val res = if (marketRes.success) {
+                marketRes
+            } else {
+                agu.analys.service.IndodaxTradeApiV2.createLimitOrderDetailed(
+                    apiKey = apiKey, secretKey = secretKey, symbol = symbol, side = "sell",
+                    price = discountedPrice, quantity = quantity, clientOrderId = clientOrderId
+                )
+            }
             
             if (!res.success) {
                 positionStore.resetTrailingTrigger(symbol, isReal = true)

@@ -177,7 +177,7 @@ object AlertNotificationHelper {
             StrategyMode.SCALPING -> "Scalping"
             StrategyMode.SECOND_WAVE -> "Second-Wave"
             StrategyMode.SWING -> "Swing"
-            StrategyMode.OFFICE_DAILY -> "Office Daily"
+            StrategyMode.OFFICE_DAILY -> "Intraday"
             StrategyMode.TRENCHING -> "Trenching"
         }
 

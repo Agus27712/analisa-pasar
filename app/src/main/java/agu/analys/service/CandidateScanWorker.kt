@@ -77,8 +77,9 @@ class CandidateScanWorker(
                 // Cek ulang holding status
                 if (positionStore.get(cleanSymbol).isHolding) continue
 
-                // Fetch candle H1 untuk SWING & OFFICE_DAILY
+                // Fetch candle H1 untuk SWING & H4 panjang untuk INTRADAY (Anti Flash Dump)
                 val h1Candles = IndodaxMarketService.fetchCandles(cleanSymbol, Timeframe.H1, 45)
+                val h4Candles = IndodaxMarketService.fetchCandles(cleanSymbol, Timeframe.H4, 100)
 
                 if (h1Candles.size >= 20) {
                     val globalCtx = GlobalContextManager.context.value
@@ -107,11 +108,12 @@ class CandidateScanWorker(
                         }
                     }
 
-                    // --- Evaluasi Mode OFFICE_DAILY ---
+                    // --- Evaluasi Mode INTRADAY (OFFICE_DAILY) dengan H4 & Anti Flash Dump ---
+                    val candlesForIntraday = if (h4Candles.size >= 20) h4Candles else h1Candles
                     val officeResult = OfficeDailyEvaluator.evaluate(
                         globalContext = globalCtx,
                         price = tick.price,
-                        history = h1Candles,
+                        history = candlesForIntraday,
                         fees = prefs.tradingFees
                     )
                     val trackedOffice = SignalLifecycleManager.process(

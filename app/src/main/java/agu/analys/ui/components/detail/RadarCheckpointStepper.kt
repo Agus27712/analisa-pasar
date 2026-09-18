@@ -67,10 +67,10 @@ fun RadarLinearCheckpointStepper(
                 "Memantau keselarasan tren dan keselarasan EMA makro..."
             )
             StrategyMode.OFFICE_DAILY -> listOf(
-                "Tren 1H/4H",
-                "Tren 1H/4H · Tren Santai",
-                "Tren 1 Jam & 4 Jam Bullish Stabil (Di atas EMA 20/50).",
-                "Memantau kestabilan tren 1 Jam / 4 Jam..."
+                "Sesi Pagi",
+                "Sesi Pagi · Open & Tren H4",
+                "Sesi Open Pagi (06:00-11:30) & Tren H4 Bullish Stabil.",
+                "Menunggu Sesi Open Pagi / keselarasan tren H4..."
             )
             StrategyMode.TRENCHING -> listOf(
                 "Flow M15",
@@ -100,10 +100,10 @@ fun RadarLinearCheckpointStepper(
                 "Menunggu pembentukan konsolidasi atau pantulan support swing..."
             )
             StrategyMode.OFFICE_DAILY -> listOf(
-                "Base Lantai",
-                "Base Lantai · Akumulasi Sehat",
-                "Base lantai harga terbentuk rapi tanpa dump liar.",
-                "Menunggu konsolidasi base support terbentuk..."
+                "Anti-Dump",
+                "Anti-Dump · Deteksi Trauma & Support",
+                "Lolos filter Anti Flash Dump & support akumulasi kokoh.",
+                "Mengevaluasi riwayat dump & lantai support konsolidasi..."
             )
             StrategyMode.TRENCHING -> listOf(
                 "Trench Base",
@@ -133,10 +133,10 @@ fun RadarLinearCheckpointStepper(
                 "Menunggu trigger momentum RSI dan konfirmasi volume swing..."
             )
             StrategyMode.OFFICE_DAILY -> listOf(
-                "RSI & Inflow",
-                "Inflow · Smart Accumulation",
-                "RSI berada di zona aman & volume akumulasi masuk.",
-                "Menunggu konfirmasi momentum RSI & akumulasi santai..."
+                "RSI Inflow",
+                "Akumulasi · RSI & Momentum Sehat",
+                "RSI di zona akumulasi (40-58) & histogram MACD positif.",
+                "Menunggu reset RSI dan konfirmasi momentum akumulasi..."
             )
             StrategyMode.TRENCHING -> listOf(
                 "Flow Return",
@@ -166,10 +166,10 @@ fun RadarLinearCheckpointStepper(
                 "Menunggu harga bergerak masuk ke toleransi zona beli swing..."
             )
             StrategyMode.OFFICE_DAILY -> listOf(
-                "Area Entry",
-                "Area Entry · TP Santai & Terukur",
-                "Harga berada di zona beli aman dengan target TP terukur.",
-                "Menunggu harga berada di zona entry yang aman..."
+                "Close Malam",
+                "Area Entry · Target R:R & Exit Malam",
+                "Harga berada di zona entry (Net R:R >= 1.8) siap exit sesi malam.",
+                "Menunggu harga di zona entry aman sebelum sesi malam..."
             )
             StrategyMode.TRENCHING -> listOf(
                 "Anti-FOMO",

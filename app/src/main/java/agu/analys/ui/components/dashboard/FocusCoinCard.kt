@@ -72,49 +72,24 @@ fun FocusCoinCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val coroutineScope = rememberCoroutineScope()
     val tick = data.tick
     val price = tick?.price ?: 0.0
     val change24h = tick?.change24h ?: 0.0
     val volume = tick?.volume24h ?: 0.0
+    val high24h = tick?.high24h ?: 0.0
+    val low24h = tick?.low24h ?: 0.0
 
     // Evaluasi Sinyal & Confidence secara real:
-    val (signalType, confidence, rawReasons) = remember(data) {
+    val (signalType, confidence, _) = remember(data) {
         evaluateSignalReal(data)
-    }
-
-    // Ambil atau trigger Orderbook Depth secara real dari Indodax:
-    val depthVersion by OrderBookDepthCache.depthVersion.collectAsState()
-    var pressureValue by remember(data.pair.symbol, depthVersion) {
-        mutableStateOf(OrderBookDepthCache.calculatePressure(data.pair.symbol))
-    }
-
-    LaunchedEffect(data.pair.symbol) {
-        if (pressureValue == null) {
-            coroutineScope.launch {
-                OrderBookDepthCache.fetchIfNeeded(data.pair.effectiveIndodaxPair())
-                pressureValue = OrderBookDepthCache.calculatePressure(data.pair.symbol)
-            }
-        }
-    }
-
-    // Fallback estimasi cerdas sebelum API depth selesai (berdasarkan ticker buy/sell real)
-    val effectivePressure = pressureValue ?: remember(tick, signalType, confidence) {
-        deriveEstimatedPressure(tick, signalType, confidence)
-    }
-
-    // Format alasan teknikal real
-    val technicalReasonText = remember(data.aiSignal, effectivePressure, change24h, signalType, rawReasons) {
-        formatTechnicalReason(data.aiSignal, effectivePressure, change24h, signalType, rawReasons)
     }
 
     // Format Timestamp "xs ago"
     val timestampText = remember(tick?.timestamp) {
         val ts = tick?.timestamp ?: 0L
-        if (ts <= 0L) "12s ago" else formatTimeAgo(ts)
+        if (ts <= 0L) "10s ago" else formatTimeAgo(ts)
     }
 
-    // Sinyal Styling & Segmented Indicator Colors
     val isStrongSignal = signalType == FocusSignalType.BUY && confidence >= 60
 
     val primaryGreen = TvGreen
@@ -123,41 +98,6 @@ fun FocusCoinCard(
     val textSec = TvTextSecondary
     val borderCol = TvBorder
     val cardBg = TvCardBackground
-
-    val (signalColor, badgeBgColor, badgeBorderColor, badgeLabel) = when (signalType) {
-        FocusSignalType.BUY -> {
-            FocusSignalBadgeStyle(
-                primaryGreen,
-                primaryGreen.copy(alpha = 0.12f),
-                primaryGreen.copy(alpha = 0.8f),
-                "BUY"
-            )
-        }
-        FocusSignalType.WATCH -> {
-            FocusSignalBadgeStyle(
-                Color(0xFFFF9800), // Amber oranye presisi sinyal Watch
-                Color(0xFFFF9800).copy(alpha = 0.12f),
-                Color(0xFFFF9800).copy(alpha = 0.8f),
-                "WATCH"
-            )
-        }
-        FocusSignalType.SCANNING -> {
-            FocusSignalBadgeStyle(
-                primaryCyan,
-                primaryCyan.copy(alpha = 0.10f),
-                primaryCyan.copy(alpha = 0.6f),
-                "SCANNING"
-            )
-        }
-        FocusSignalType.HOLD -> {
-            FocusSignalBadgeStyle(
-                textSec,
-                textSec.copy(alpha = 0.10f),
-                textSec.copy(alpha = 0.6f),
-                "HOLD"
-            )
-        }
-    }
 
     // Border: Glow Neon Cyan pada kartu BUY utama, border theme pada lainnya
     val cardBorder = if (isStrongSignal || data.isTopPicked) {
@@ -179,7 +119,7 @@ fun FocusCoinCard(
     }
 
     Surface(
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(12.dp),
         color = cardBg,
         border = cardBorder,
         modifier = modifier
@@ -190,63 +130,46 @@ fun FocusCoinCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp)
+                .padding(horizontal = 12.dp, vertical = 9.dp)
         ) {
-            // ================= Baris 1: Header (Avatar, Symbol, Nama, Pasar Spot | Live Price, Change 24h) =================
+            // ================= Baris 1: Symbol & Nama | Live Price & Change 24h =================
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                // Kiri: Avatar + Symbol & Nama + "● Pasar Spot"
+                // Kiri: Avatar + Symbol & Nama
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.weight(1f, fill = false)
                 ) {
-                    AssetAvatar(baseAsset = data.pair.baseAsset, size = 36.dp)
-                    Spacer(modifier = Modifier.width(10.dp))
+                    AssetAvatar(baseAsset = data.pair.baseAsset, size = 32.dp)
+                    Spacer(modifier = Modifier.width(8.dp))
                     Column {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = "${data.pair.baseAsset.uppercase()}/${data.pair.quoteAsset.uppercase()}",
-                                color = TvTextPrimary,
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = data.pair.displayName.ifBlank { data.pair.baseAsset.uppercase() },
-                                color = textSec,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Normal,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(5.dp)
-                                    .clip(CircleShape)
-                                    .background(primaryGreen)
-                            )
-                            Spacer(modifier = Modifier.width(5.dp))
-                            Text(
-                                text = "Pasar Spot",
-                                color = textSec,
-                                fontSize = 10.5.sp
-                            )
-                        }
+                        Text(
+                            text = "${data.pair.baseAsset.uppercase()}/${data.pair.quoteAsset.uppercase()}",
+                            color = TvTextPrimary,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(1.dp))
+                        Text(
+                            text = data.pair.displayName.ifBlank { data.pair.baseAsset.uppercase() },
+                            color = textSec,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Normal,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
                 }
 
                 // Kanan: Harga Live & Change 24h
                 Column(horizontalAlignment = Alignment.End) {
                     Text(
-                        text = if (price > 0.0) PriceFormatter.formatPrice(price) else "...",
+                        text = if (price > 0.0) PriceFormatter.formatPrice(price, quoteAsset = data.pair.quoteAsset) else "...",
                         color = TvTextPrimary,
-                        fontSize = 16.5.sp,
+                        fontSize = 16.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(modifier = Modifier.height(2.dp))
@@ -259,146 +182,92 @@ fun FocusCoinCard(
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
-            // ================= Baris 2: Technical Reasons (Kiri, marquee jika panjang) | [SIGNAL] XX% + Segmented Blocks (Kanan) =================
+            // ================= Baris 2: High & Low (Kiri) | Volume & Timestamp (Kanan) =================
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(TvSurfaceVariant.copy(alpha = 0.45f), RoundedCornerShape(8.dp))
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                // Kiri: Alasan teknis real dengan basicMarquee agar teks panjang bergulir rapi tidak terpotong kaku
-                Box(
-                    modifier = Modifier
-                        .weight(1f, fill = false)
-                        .basicMarquee()
+                // Kolom Kiri: High & Low 24 Jam
+                Column(
+                    modifier = Modifier.weight(1.3f, fill = false)
                 ) {
-                    Text(
-                        text = technicalReasonText,
-                        color = textSec,
-                        fontSize = 11.sp,
-                        maxLines = 1
-                    )
-                }
-
-                Spacer(modifier = Modifier.width(8.dp))
-
-                // Kanan: [SIGNAL] Confidence% + Segmented Progress Blocks
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    // Badge Sinyal (Contoh: [BUY], [WATCH], [SCANNING])
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(badgeBgColor)
-                            .border(0.9.dp, badgeBorderColor, RoundedCornerShape(4.dp))
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = badgeLabel,
-                            color = signalColor,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold
+                            text = "High: ",
+                            color = textSec,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            text = if (high24h > 0.0) PriceFormatter.formatPrice(high24h, quoteAsset = data.pair.quoteAsset) else "—",
+                            color = primaryGreen,
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1
                         )
                     }
-
-                    // Confidence Percentage
-                    Text(
-                        text = "$confidence%",
-                        color = TvTextPrimary,
-                        fontSize = 11.5.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-
-                    // Segmented Confidence Indicator (8 kotak kecil horizontal)
-                    SegmentedConfidenceIndicator(
-                        confidence = confidence,
-                        activeColor = signalColor,
-                        totalSegments = 8
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // ================= Baris 3: Volume & Mini Histogram | Orderbook Pressure | Timestamp 🕒 =================
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.Bottom,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                // Kolom Kiri: Volume (tanpa IDR) + Mini Volume Histogram Bars (dinamis per pair)
-                Column(modifier = Modifier.weight(1.15f)) {
-                    Text(
-                        text = "Volume",
-                        color = textSec,
-                        fontSize = 9.5.sp,
-                        fontWeight = FontWeight.Medium
-                    )
                     Spacer(modifier = Modifier.height(2.dp))
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "Low:  ",
+                            color = textSec,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            text = if (low24h > 0.0) PriceFormatter.formatPrice(low24h, quoteAsset = data.pair.quoteAsset) else "—",
+                            color = primaryRed,
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1
+                        )
+                    }
+                }
+
+                // Kolom Kanan: Volume & Timestamp 🕒
+                Column(
+                    horizontalAlignment = Alignment.End,
+                    modifier = Modifier.weight(0.9f, fill = false)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "Vol: ",
+                            color = textSec,
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Medium
+                        )
                         Text(
                             text = formatCardVolume(volume),
                             color = TvTextPrimary,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        MiniVolumeHistogram(
-                            symbol = data.pair.symbol,
-                            volume = volume,
-                            maxVolume = data.maxVolume,
-                            color = when (signalType) {
-                                FocusSignalType.BUY -> primaryGreen
-                                FocusSignalType.WATCH -> Color(0xFFFF9800)
-                                FocusSignalType.SCANNING -> primaryCyan
-                                FocusSignalType.HOLD -> textSec
-                            }
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1
                         )
                     }
-                }
-
-                // Kolom Tengah: Orderbook Pressure (Capsule Bar + % Real)
-                Column(
-                    modifier = Modifier.weight(1.25f),
-                    horizontalAlignment = Alignment.Start
-                ) {
-                    Text(
-                        text = "Orderbook Pressure",
-                        color = textSec,
-                        fontSize = 9.5.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Spacer(modifier = Modifier.height(3.dp))
-                    OrderbookPressureCapsule(
-                        pressure = effectivePressure
-                    )
-                }
-
-                // Kolom Kanan: Timestamp "12s ago" + Icon Jam 🕒
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.End,
-                    modifier = Modifier
-                        .weight(0.75f)
-                        .padding(bottom = 1.dp)
-                ) {
-                    Text(
-                        text = timestampText,
-                        color = textSec,
-                        fontSize = 10.5.sp
-                    )
-                    Spacer(modifier = Modifier.width(3.dp))
-                    Icon(
-                        imageVector = Icons.Outlined.Schedule,
-                        contentDescription = null,
-                        tint = textSec,
-                        modifier = Modifier.size(12.dp)
-                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        Text(
+                            text = timestampText,
+                            color = textSec,
+                            fontSize = 10.5.sp
+                        )
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Icon(
+                            imageVector = Icons.Outlined.Schedule,
+                            contentDescription = null,
+                            tint = textSec,
+                            modifier = Modifier.size(11.dp)
+                        )
+                    }
                 }
             }
         }

@@ -131,6 +131,15 @@ fun TradingViewModel.getHoldingStatus(pair: TradingPair, forceIsReal: Boolean? =
             ?: realAvgBuyPrices.value[baseLower]
             ?: if (spotPos.isReal && spotPos.entryPrice > 0.0) spotPos.entryPrice else 0.0
 
+        // Jika saldo koin sudah 0 / debu (koin sudah dijual), pastikan status holding CLEAR
+        if ((realBalances.isNotEmpty() || prefs.hasIndodaxCredentials()) && realQty <= 0.00000001) {
+            if (spotPos.isHolding) {
+                positionStore.markSold(pair.symbol, isReal = true)
+                agu.analys.engine.sell.SellSignalLifecycleManager.reset(pair.symbol, isReal = true)
+            }
+            return CoinHoldingStatus(isHolding = false, isReal = true)
+        }
+
         if (spotPos.isHolding && spotPos.isReal && spotPos.quantity > 0.00000001) {
             val entry = if (realAvg > 0.0) realAvg else spotPos.entryPrice
             val sl = if (spotPos.stopLossPrice > 0.0) spotPos.stopLossPrice else if (entry > 0.0) entry * 0.99 else 0.0
@@ -164,11 +173,23 @@ fun TradingViewModel.getHoldingStatus(pair: TradingPair, forceIsReal: Boolean? =
     } else {
         // STRICTLY SIMULATION MODE: Hanya evaluasi posisi Simulasi / saldo akun Simulasi
         val spotPos = positionStore.get(pair.symbol, isReal = false)
+        val simWallet = simulationWallet.value
+        val simQty = (simWallet.coinBalances[baseLower] ?: simWallet.coinBalances[baseUpper] ?: 0.0) +
+                     (simWallet.lockedCoinBalances[baseLower] ?: simWallet.lockedCoinBalances[baseUpper] ?: 0.0)
+
+        if (simQty <= 0.00000001) {
+            if (spotPos.isHolding) {
+                positionStore.markSold(pair.symbol, isReal = false)
+                agu.analys.engine.sell.SellSignalLifecycleManager.reset(pair.symbol, isReal = false)
+            }
+            return CoinHoldingStatus(isHolding = false, isReal = false)
+        }
+
         if (spotPos.isHolding && !spotPos.isReal && spotPos.quantity > 0.00000001) {
             val sl = if (spotPos.stopLossPrice > 0.0) spotPos.stopLossPrice else if (spotPos.entryPrice > 0.0) spotPos.entryPrice * 0.99 else 0.0
             return CoinHoldingStatus(
                 isHolding = true,
-                quantity = spotPos.quantity,
+                quantity = if (simQty > 0.0) simQty else spotPos.quantity,
                 entryPrice = spotPos.entryPrice,
                 isReal = false,
                 tp1Price = spotPos.tp1Price,
@@ -178,8 +199,6 @@ fun TradingViewModel.getHoldingStatus(pair: TradingPair, forceIsReal: Boolean? =
             )
         }
 
-        val simWallet = simulationWallet.value
-        val simQty = simWallet.coinBalances[baseLower] ?: simWallet.coinBalances[baseUpper] ?: 0.0
         if (simQty > 0.00000001 && baseUpper != "IDR") {
             val simAvg = simWallet.avgBuyPrices[baseLower] ?: simWallet.avgBuyPrices[baseUpper] ?: 0.0
             val sl = if (!spotPos.isReal && spotPos.stopLossPrice > 0.0) spotPos.stopLossPrice else if (simAvg > 0.0) simAvg * 0.99 else 0.0
@@ -355,7 +374,11 @@ fun TradingViewModel.executeSellOrders(
             tp2Percent = tp2Percent,
             onResult = { success, msg ->
                 if (success) {
-                    positionCoordinator.setOwnership(pair.symbol, false)
+                    positionStore.markSold(pair.symbol, isReal = true)
+                    agu.analys.engine.sell.SellSignalLifecycleManager.reset(pair.symbol, isReal = true)
+                    positionCoordinator.setOwnership(pair.symbol, false, isReal = true)
+                    positionCoordinator.refreshPosition(pair.symbol)
+                    refreshSpotPosition()
                 }
                 onResult(success, msg)
             }

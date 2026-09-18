@@ -232,7 +232,7 @@ class SimulationCoordinator(
                 baseAsset = pair.baseAsset,
                 quoteAsset = pair.quoteAsset,
                 side = agu.analys.trading.SimulationOrderSide.SELL,
-                type = agu.analys.trading.SimulationOrderType.LIMIT,
+                type = agu.analys.trading.SimulationOrderType.MARKET,
                 price = marketPrice,
                 stopPrice = 0.0,
                 quantity = sellQty,

@@ -119,7 +119,9 @@ class RealTradeExecutor(
             onResult(false, "API Key atau Secret Key INDODAX belum diisi.")
             return
         }
-        if (isRateLimited()) {
+        val isBuy = type.equals("buy", ignoreCase = true)
+        // Rate-limit check hanya untuk BUY agar order jual/proteksi modal tidak tertahan
+        if (isBuy && isRateLimited()) {
             onResult(false, "Rate-limit aktif.")
             return
         }
@@ -129,7 +131,9 @@ class RealTradeExecutor(
         if (latestTick != null) {
             val tickAge = System.currentTimeMillis() - latestTick.timestamp
             val maxAge = if (prefs.isScalpingMode) 400L else 800L
-            if (tickAge > maxAge) {
+            // Proteksi pembatalan delay/slippage HANYA untuk BUY!
+            // Untuk SELL, jangan pernah batalkan order agar eksekusi langsung terlaksana
+            if (isBuy && tickAge > maxAge) {
                 onResult(false, "Data harga terlalu usang (delay ${tickAge}ms > limit ${maxAge}ms). Order dibatalkan untuk menghindari slippage.")
                 return
             }
@@ -374,28 +378,31 @@ class RealTradeExecutor(
             onResult(false, "API Key/Secret INDODAX belum diisi.")
             return
         }
-        if (isRateLimited()) {
-            onResult(false, "Rate-limit aktif.")
-            return
-        }
+        // Batasan rate-limit dilepas untuk order jual agar proteksi modal / eksekusi jual tidak tertahan
 
         scope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            onStatusUpdate("Mengecek saldo real $pair...")
+            onStatusUpdate("Mengeksekusi order jual $pair...")
             val base = baseFromPair(pair)
-            val (balances, err) = IndodaxTradeApiV2.getAccount(apiKey, secretKey)
-            if (balances == null) {
-                if (looksLikeRateLimit(err)) onRateLimit(err)
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                    onResult(false, "Gagal cek saldo: $err")
+            
+            // Periksa saldo lokal terlebih dahulu agar eksekusi order instan tanpa jeda network
+            val cachedBalances = prefs.getSavedRealBalance()
+            val cachedFree = cachedBalances[base.lowercase()] ?: cachedBalances[base.uppercase()] ?: 0.0
+            var sellQty = if (totalQuantity > 0.0) totalQuantity else cachedFree
+
+            if (sellQty <= 0.00000001) {
+                onStatusUpdate("Mengecek saldo real $pair...")
+                val (balances, err) = IndodaxTradeApiV2.getAccount(apiKey, secretKey)
+                if (balances != null) {
+                    val free = balances.free[base] ?: 0.0
+                    sellQty = if (totalQuantity > 0.0) totalQuantity.coerceAtMost(free) else free
+                } else if (looksLikeRateLimit(err)) {
+                    onRateLimit(err)
                 }
-                return@launch
             }
 
-            val free = balances.free[base] ?: 0.0
-            val sellQty = if (totalQuantity > 0.0) totalQuantity.coerceAtMost(free) else free
             if (sellQty <= 0.00000001) {
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                    onResult(false, "Saldo $base tidak mencukupi.")
+                    onResult(false, "Saldo $base tidak mencukupi atau 0.")
                 }
                 return@launch
             }
@@ -435,8 +442,7 @@ class RealTradeExecutor(
 
                 if (okAll) prefs.rememberHistoryBase(base)
                 onStatusUpdate(if (okAll) "2 Order TP Real Berhasil!" else "Sebagian Order TP Gagal.")
-                delay(INTER_REQUEST_DELAY_MS)
-                refreshBalance()
+                scope.launch { refreshBalance() }
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                     onResult(okAll, if (okAll) "2 Order TP Berhasil (100% tanpa sisa):\n$msg" else msg)
                 }
@@ -447,8 +453,7 @@ class RealTradeExecutor(
                 )
                 if (ok) prefs.rememberHistoryBase(base)
                 if (!ok && looksLikeRateLimit(m)) onRateLimit(m)
-                delay(INTER_REQUEST_DELAY_MS)
-                refreshBalance()
+                scope.launch { refreshBalance() }
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                     onResult(ok, if (ok) "Order TP1 (${agu.analys.util.PriceFormatter.formatCryptoExact(sellQty, 8)} @ Rp ${agu.analys.util.PriceFormatter.formatIdrNumber(tp1Price)}) berhasil terpasang." else "Order TP1 Gagal: $m")
                 }
@@ -459,23 +464,65 @@ class RealTradeExecutor(
                 )
                 if (ok) prefs.rememberHistoryBase(base)
                 if (!ok && looksLikeRateLimit(m)) onRateLimit(m)
-                delay(INTER_REQUEST_DELAY_MS)
-                refreshBalance()
+                scope.launch { refreshBalance() }
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                     onResult(ok, if (ok) "Order TP2 (${agu.analys.util.PriceFormatter.formatCryptoExact(sellQty, 8)} @ Rp ${agu.analys.util.PriceFormatter.formatIdrNumber(tp2Price)}) berhasil terpasang." else "Order TP2 Gagal: $m")
                 }
             } else {
-                // Switch OFF -> 1 limit order at current market price
-                onStatusUpdate("Memasang order jual limit...")
-                val (ok, m) = IndodaxTradeApiV2.createLimitOrder(
-                    apiKey, secretKey, pair, "sell", marketPrice, sellQty, "agu-sell-${System.currentTimeMillis()}"
+                // Switch OFF -> Eksekusi Jual Langsung (Market Order Instan tanpa delay)
+                onStatusUpdate("Mengeksekusi order jual langsung ke bursa...")
+                val clientOrderId = "agu-sell-${System.currentTimeMillis()}"
+                
+                // Prioritaskan MARKET ORDER agar order langsung MATCH tereksekusi tanpa antrean di orderbook
+                val marketRes = IndodaxTradeApiV2.createMarketOrderDetailed(
+                    apiKey = apiKey,
+                    secretKey = secretKey,
+                    symbol = pair,
+                    side = "sell",
+                    quantity = sellQty,
+                    clientOrderId = clientOrderId
                 )
-                if (ok) prefs.rememberHistoryBase(base)
-                if (!ok && looksLikeRateLimit(m)) onRateLimit(m)
-                delay(INTER_REQUEST_DELAY_MS)
-                refreshBalance()
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                    onResult(ok, if (ok) "Order Jual Limit (${agu.analys.util.PriceFormatter.formatCryptoExact(sellQty, 8)} @ Rp ${agu.analys.util.PriceFormatter.formatIdrNumber(marketPrice)}) berhasil terpasang." else "Order Jual Gagal: $m")
+
+                val finalRes = if (marketRes.success) {
+                    marketRes
+                } else {
+                    // Fallback ke LIMIT ORDER jika pair bursa tidak mendukung market order di endpoint API
+                    IndodaxTradeApiV2.createLimitOrderDetailed(
+                        apiKey = apiKey,
+                        secretKey = secretKey,
+                        symbol = pair,
+                        side = "sell",
+                        price = marketPrice,
+                        quantity = sellQty,
+                        clientOrderId = clientOrderId
+                    )
+                }
+
+                if (finalRes.success) {
+                    prefs.rememberHistoryBase(base)
+
+                    // Langsung sinkronkan saldo lokal
+                    runCatching {
+                        val currentBalances = prefs.getSavedRealBalance().toMutableMap()
+                        val curCoin = currentBalances[base.lowercase()] ?: 0.0
+                        val curIdr = currentBalances["idr"] ?: 0.0
+                        currentBalances[base.lowercase()] = (curCoin - sellQty).coerceAtLeast(0.0)
+                        val proceeds = sellQty * marketPrice
+                        currentBalances["idr"] = curIdr + proceeds
+                        prefs.saveRealBalance(currentBalances)
+                    }
+
+                    onRealTradeSuccess?.invoke(pair, "sell", marketPrice, sellQty, 0.0, 0.0)
+
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        onResult(true, "Order Jual (${agu.analys.util.PriceFormatter.formatCryptoExact(sellQty, 8)} $base) berhasil dieksekusi!")
+                    }
+                    scope.launch { refreshBalance() }
+                } else {
+                    if (looksLikeRateLimit(finalRes.message)) onRateLimit(finalRes.message)
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        onResult(false, "Order Jual Gagal: ${finalRes.message}")
+                    }
                 }
             }
         }

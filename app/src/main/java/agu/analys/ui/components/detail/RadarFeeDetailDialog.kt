@@ -48,10 +48,14 @@ fun RadarFeeDetailDialog(
         if (isMakerOrder) fees.sellMakerPct else fees.sellTakerPct
     }
     val totalFeeIdr = orderAmountIdr * (feePct / 100.0)
-    // Proporsi breakdown Indodax: Biaya Layanan (~92.5%) + CFX (~7.5%), Pajak 0/PPh
-    val serviceFeeIdr = (totalFeeIdr * 0.925).coerceAtLeast(0.0)
-    val cfxFeeIdr = (totalFeeIdr * 0.075).coerceAtLeast(0.0)
-    val taxIdr = 0.0
+    // Proporsi breakdown regulasi kripto Indodax & Bappebti:
+    // Pajak: Jual = PPh 22 Final (0.10%), Beli = PPN (0.11%)
+    val taxPct = if (isBuyMode) 0.11 else 0.10
+    val taxIdr = (orderAmountIdr * (taxPct / 100.0)).coerceAtMost(totalFeeIdr)
+    val cfxPct = 0.04
+    val cfxFeeIdr = (orderAmountIdr * (cfxPct / 100.0)).coerceAtMost((totalFeeIdr - taxIdr).coerceAtLeast(0.0))
+    val serviceFeeIdr = (totalFeeIdr - taxIdr - cfxFeeIdr).coerceAtLeast(0.0)
+    val servicePct = (serviceFeeIdr / orderAmountIdr.coerceAtLeast(1.0)) * 100.0
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -114,21 +118,21 @@ fun RadarFeeDetailDialog(
                         .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    // Biaya Layanan
+                    // Biaya Layanan Bursa Indodax
                     FeeRowItem(
-                        label = "Biaya Layanan (${String.format("%.2f", feePct * 0.925)}%)",
+                        label = "Layanan Bursa (${String.format(java.util.Locale.US, "%.2f", servicePct)}%)",
                         value = "${PriceFormatter.formatIdrNumber(serviceFeeIdr)} IDR"
                     )
 
-                    // Pajak
+                    // Pajak Kripto Resmi
                     FeeRowItem(
-                        label = "Pajak",
-                        value = "0 IDR"
+                        label = if (isBuyMode) "Pajak PPN (0.11%)" else "Pajak PPh 22 Final (0.10%)",
+                        value = "${PriceFormatter.formatIdrNumber(taxIdr)} IDR"
                     )
 
-                    // Biaya CFX
+                    // Biaya CFX & Kliring
                     FeeRowItem(
-                        label = "Biaya CFX (${String.format("%.2f", feePct * 0.075)}%)",
+                        label = "Kliring CFX (${String.format(java.util.Locale.US, "%.2f", cfxPct)}%)",
                         value = "${PriceFormatter.formatIdrNumber(cfxFeeIdr)} IDR"
                     )
 

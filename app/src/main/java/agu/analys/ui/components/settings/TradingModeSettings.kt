@@ -142,17 +142,17 @@ fun TradingModeSettings(
         Spacer(Modifier.height(10.dp))
 
         ModeOptionCard(
-            title = "OFFICE DAILY",
-            tag = "DAILY MODE",
+            title = "INTRADAY",
+            tag = "OPEN PAGI · CLOSE MALAM",
             tagBg = Color(0xFFA5B4FC).copy(alpha = 0.18f),
             tagFg = Color(0xFFA5B4FC),
             isSelected = strategyMode == StrategyMode.OFFICE_DAILY,
-            desc = "Setup harian santai & terukur (H4–1D). Cocok buat yang kerja kantoran, entry selektif, risiko lebih longgar.",
+            desc = "Trading harian disiplin sesi (Open Pagi 06:00-11:30 WIB, Close Malam 19:30-23:30 WIB). Menggunakan histori harga panjang & filter anti-flash dump.",
             bullets = listOf(
-                "Timeframe: H4 & 1D",
-                "Fokus: likuiditas + tren positif stabil",
-                "Filter: range sehat, volume cukup, bukan scalp",
-                "Gaya: 1–2 setup/hari, hold intraday–swing pendek"
+                "Siklus: Open Pagi (06:00–11:30) & Close Malam (19:30–23:30 WIB)",
+                "Anti Flash Dump: Analisis histori H4 (200 candle) & D1 (100 candle)",
+                "Deteksi Trap: Memblokir jebakan fake pump wick & drop mendadak",
+                "Kunci Profit: Exit sebelum tengah malam, lindungi kas dari overnight dump"
             ),
             onClick = { onStrategyChange(StrategyMode.OFFICE_DAILY) }
         )
