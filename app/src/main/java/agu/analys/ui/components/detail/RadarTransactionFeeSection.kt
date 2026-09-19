@@ -64,6 +64,9 @@ fun RadarTransactionFeeSection(
     onTp2PercentChanged: (String) -> Unit = {},
     orderBookBids: List<agu.analys.model.OrderBookItem> = emptyList(),
     orderBookAsks: List<agu.analys.model.OrderBookItem> = emptyList(),
+    buyCooldownRemainingMs: Long = 0L,
+    buyCooldownTotalMs: Long = 0L,
+    buyCooldownReason: String? = null,
     modifier: Modifier = Modifier
 ) {
     var showFeeDetailModal by remember { mutableStateOf(false) }
@@ -235,7 +238,10 @@ fun RadarTransactionFeeSection(
                 activeFeePct = activeFeePct,
                 isRealMode = isRealMode,
                 signal = signal,
-                onExecuteBuy = onExecuteBuy
+                onExecuteBuy = onExecuteBuy,
+                buyCooldownRemainingMs = buyCooldownRemainingMs,
+                buyCooldownTotalMs = buyCooldownTotalMs,
+                buyCooldownReason = buyCooldownReason
             )
         } else {
             RadarSellSection(

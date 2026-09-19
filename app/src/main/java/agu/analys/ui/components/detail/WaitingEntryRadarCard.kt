@@ -85,6 +85,9 @@ fun WaitingEntryRadarCard(
     onBuyModeChanged: ((Boolean) -> Unit)? = null,
     orderBookBids: List<OrderBookItem> = emptyList(),
     orderBookAsks: List<OrderBookItem> = emptyList(),
+    buyCooldownRemainingMs: Long = 0L,
+    buyCooldownTotalMs: Long = 0L,
+    buyCooldownReason: String? = null,
     modifier: Modifier = Modifier
 ) {
     val effectivePrice = if (currentPrice > 0.0 && currentPrice.isFinite()) currentPrice else 0.0
@@ -376,7 +379,10 @@ fun WaitingEntryRadarCard(
             tp2PriceInput = tp2PriceInput,
             onTp2PriceChanged = { tp2PriceInput = it },
             tp2PercentInput = tp2PercentInput,
-            onTp2PercentChanged = { tp2PercentInput = it }
+            onTp2PercentChanged = { tp2PercentInput = it },
+            buyCooldownRemainingMs = buyCooldownRemainingMs,
+            buyCooldownTotalMs = buyCooldownTotalMs,
+            buyCooldownReason = buyCooldownReason
         )
 
         Spacer(Modifier.height(10.dp))

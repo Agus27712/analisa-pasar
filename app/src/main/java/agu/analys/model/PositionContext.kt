@@ -111,8 +111,13 @@ data class PositionContext(
             val isReal = targetIsReal
 
             val validPrice = if (currentPrice > 0.0 && currentPrice.isFinite()) currentPrice else null
-            val cost = if (entry != null && entry > 0.0) qty * entry else null
-            val sellFeeRate = (fees.sellMakerPct / 100.0).coerceAtLeast(0.0)
+            val buyFeeRate = if (targetIsReal) (fees.buyMakerPct / 100.0).coerceAtLeast(0.0021) else (fees.buyMakerPct / 100.0).coerceAtLeast(0.0)
+            val cost = if (isSpotHolding && spotPosition!!.investedAmount > 0.0) {
+                spotPosition.investedAmount
+            } else if (entry != null && entry > 0.0) {
+                (qty * entry) * (1.0 + buyFeeRate)
+            } else null
+            val sellFeeRate = if (targetIsReal) (fees.sellMakerPct / 100.0).coerceAtLeast(0.0021) else (fees.sellMakerPct / 100.0).coerceAtLeast(0.0)
             val gross = if (validPrice != null) qty * validPrice else null
             val netVal = if (gross != null) gross * (1.0 - sellFeeRate) else null
             val netPnl = if (cost != null && netVal != null) netVal - cost else null

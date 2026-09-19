@@ -43,6 +43,8 @@ fun CustomBuyOrderDialog(
     initialTp1: Double = 0.0,
     initialTp2: Double = 0.0,
     recommendedRiskSize: Double = 0.0,
+    buyCooldownRemainingMs: Long = 0L,
+    buyCooldownReason: String? = null,
     onConfirmBuy: (nominalIdr: Double, buyPrice: Double, tp1Price: Double, tp2Price: Double) -> Unit
 ) {
     if (!show) return
@@ -559,43 +561,102 @@ fun CustomBuyOrderDialog(
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
+
+                if (buyCooldownRemainingMs > 0) {
+                    Spacer(Modifier.height(6.dp))
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = TvAmber.copy(alpha = 0.12f),
+                        border = BorderStroke(1.dp, TvAmber.copy(alpha = 0.5f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(8.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "⏳ Menunggu kuotasi harga valid...",
+                                    color = TvAmber,
+                                    fontSize = 10.5.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = String.format(Locale.US, "%.2fs", buyCooldownRemainingMs / 1000.0),
+                                    color = TvAmber,
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                                )
+                            }
+                            if (!buyCooldownReason.isNullOrBlank()) {
+                                Spacer(Modifier.height(2.dp))
+                                Text(
+                                    text = buyCooldownReason,
+                                    color = TvTextSecondary,
+                                    fontSize = 9.5.sp
+                                )
+                            }
+                        }
+                    }
+                }
             }
         },
         confirmButton = {
+            val isCoolingDown = buyCooldownRemainingMs > 0
             Button(
                 onClick = {
-                    val tp1 = if (isAutoLimitSellEnabled) PriceFormatter.parseCleanIdrDouble(tp1Input) else 0.0
-                    val tp2 = if (isAutoLimitSellEnabled) PriceFormatter.parseCleanIdrDouble(tp2Input) else 0.0
-                    onConfirmBuy(nominalIdr, targetPrice, tp1, tp2)
-                    onDismiss()
+                    if (!isCoolingDown) {
+                        val tp1 = if (isAutoLimitSellEnabled) PriceFormatter.parseCleanIdrDouble(tp1Input) else 0.0
+                        val tp2 = if (isAutoLimitSellEnabled) PriceFormatter.parseCleanIdrDouble(tp2Input) else 0.0
+                        onConfirmBuy(nominalIdr, targetPrice, tp1, tp2)
+                        onDismiss()
+                    }
                 },
-                enabled = canSubmit,
+                enabled = canSubmit && !isCoolingDown,
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = TvGreen,
-                    contentColor = Color.Black,
-                    disabledContainerColor = TvBorder,
-                    disabledContentColor = TvTextMuted
+                    containerColor = if (isCoolingDown) TvSurfaceVariant else TvGreen,
+                    contentColor = if (isCoolingDown) TvAmber else Color.Black,
+                    disabledContainerColor = if (isCoolingDown) TvSurfaceVariant else TvBorder,
+                    disabledContentColor = if (isCoolingDown) TvAmber else TvTextMuted
                 ),
                 shape = RoundedCornerShape(10.dp),
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(44.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Default.CheckCircle,
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    text = if (isRealMode) {
-                        "[REAL] KIRIM ORDER BELI"
-                    } else {
-                        "[SIM] PASANG BELI"
-                    },
-                    fontWeight = FontWeight.Black,
-                    fontSize = 12.sp
-                )
+                if (isCoolingDown) {
+                    Icon(
+                        imageVector = Icons.Default.Info,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = TvAmber
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = "MENUNGGU KUOTASI (${String.format(Locale.US, "%.2fs", buyCooldownRemainingMs / 1000.0)})",
+                        fontWeight = FontWeight.Black,
+                        fontSize = 11.5.sp,
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.CheckCircle,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = if (isRealMode) {
+                            "[REAL] KIRIM ORDER BELI"
+                        } else {
+                            "[SIM] PASANG BELI"
+                        },
+                        fontWeight = FontWeight.Black,
+                        fontSize = 12.sp
+                    )
+                }
             }
         },
         dismissButton = {

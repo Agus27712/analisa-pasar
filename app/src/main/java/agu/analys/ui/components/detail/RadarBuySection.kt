@@ -5,6 +5,7 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -14,11 +15,13 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
@@ -41,7 +44,10 @@ fun RadarBuySection(
     activeFeePct: Double,
     isRealMode: Boolean,
     signal: agu.analys.model.AISignalState? = null,
-    onExecuteBuy: ((Double, Double, Double, Double) -> Unit)?
+    onExecuteBuy: ((Double, Double, Double, Double) -> Unit)?,
+    buyCooldownRemainingMs: Long = 0L,
+    buyCooldownTotalMs: Long = 0L,
+    buyCooldownReason: String? = null
 ) {
     var customNominalInput by remember { mutableStateOf("") }
     var isCustomNominalOpen by remember { mutableStateOf(false) }
@@ -403,31 +409,189 @@ fun RadarBuySection(
             }
         }
 
+        // Banner Timer Countdown Presisi (Detik & Milidetik)
+        AnimatedVisibility(
+            visible = buyCooldownRemainingMs > 0,
+            enter = fadeIn() + expandVertically(),
+            exit = fadeOut() + shrinkVertically()
+        ) {
+            val remainingSec = buyCooldownRemainingMs / 1000.0
+            val progress = if (buyCooldownTotalMs > 0) (buyCooldownRemainingMs.toFloat() / buyCooldownTotalMs.toFloat()).coerceIn(0f, 1f) else 0f
+            val isEngineReady = signal?.let { it.mtf.entryPriceStatus.name == "OK" || it.mtf.entryPriceOk || it.action == agu.analys.model.SignalAction.BUY } ?: true
+
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = TvAmber.copy(alpha = 0.12f),
+                border = BorderStroke(1.dp, TvAmber.copy(alpha = 0.55f)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp)
+            ) {
+                Column(modifier = Modifier.padding(10.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Info,
+                                contentDescription = null,
+                                tint = TvAmber,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                text = "PENYESUAIAN KUOTASI PASAR",
+                                color = TvAmber,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Black
+                            )
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = TvSurface
+                        ) {
+                            Text(
+                                text = String.format(java.util.Locale.US, "%.2fs", remainingSec),
+                                color = TvAmber,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(6.dp))
+
+                    Text(
+                        text = buyCooldownReason ?: "Harga pasar bergerak atau data harga tertunda. Menunggu kuotasi harga fresh...",
+                        color = TvTextSecondary,
+                        fontSize = 11.sp,
+                        lineHeight = 15.sp
+                    )
+
+                    Spacer(Modifier.height(8.dp))
+
+                    LinearProgressIndicator(
+                        progress = { progress },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(2.dp)),
+                        color = TvAmber,
+                        trackColor = TvSurfaceVariant
+                    )
+
+                    Spacer(Modifier.height(6.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (isEngineReady) "Status Sinyal: READY BUY" else "Status Sinyal: MENUNGGU SETUP",
+                            color = if (isEngineReady) TvGreen else TvTextMuted,
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = if (isEngineReady) "Siap-siap tekan Beli..." else "Menunggu kuotasi baru...",
+                            color = TvTextSecondary,
+                            fontSize = 10.sp
+                        )
+                    }
+                }
+            }
+        }
+
         // Tombol Eksekusi Beli Terintegrasi
         if (onExecuteBuy != null) {
             Spacer(Modifier.height(10.dp))
-            Button(
-                onClick = {
-                    showBuyOrderDialog = true
-                },
-                modifier = Modifier.fillMaxWidth().height(42.dp),
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = TvGreen,
-                    contentColor = Color.Black
-                )
+            val isCoolingDown = buyCooldownRemainingMs > 0
+            val remainingSec = buyCooldownRemainingMs / 1000.0
+            val isEngineReady = signal?.let { it.mtf.entryPriceStatus.name == "OK" || it.mtf.entryPriceOk || it.action == agu.analys.model.SignalAction.BUY } ?: true
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Default.ShoppingCart, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    text = if (isRealMode) {
-                        "[REAL] BELI / PASANG LIMIT (${PriceFormatter.formatIdrNumber(grossBuyOrderAmount)} IDR)"
-                    } else {
-                        "[SIM] BELI / PASANG LIMIT (${PriceFormatter.formatIdrNumber(grossBuyOrderAmount)} IDR)"
+                Button(
+                    onClick = {
+                        if (!isCoolingDown) {
+                            val buyPrice = if (customTargetBuyPrice > 0.0) customTargetBuyPrice else validPrice
+                            val tp1 = if (isAutoLimitSellEnabled) defaultTpPrice1 else 0.0
+                            val tp2 = if (isAutoLimitSellEnabled) defaultTpPrice2 else 0.0
+                            onExecuteBuy.invoke(grossBuyOrderAmount, buyPrice, tp1, tp2)
+                        }
                     },
-                    fontWeight = FontWeight.Black,
-                    fontSize = 12.sp
-                )
+                    enabled = !isCoolingDown,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(44.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isCoolingDown) TvSurfaceVariant else if (isEngineReady) TvGreen else TvBorder,
+                        contentColor = if (isCoolingDown) TvAmber else if (isEngineReady) Color.Black else TvTextSecondary,
+                        disabledContainerColor = TvSurfaceVariant,
+                        disabledContentColor = TvAmber
+                    )
+                ) {
+                    if (isCoolingDown) {
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = TvAmber
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = "MENUNGGU (${String.format(java.util.Locale.US, "%.2fs", remainingSec)})",
+                            fontWeight = FontWeight.Black,
+                            fontSize = 11.5.sp,
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                            maxLines = 1
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.ShoppingCart,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = if (isRealMode) {
+                                "[REAL] BELI (${PriceFormatter.formatIdrNumber(grossBuyOrderAmount)})"
+                            } else {
+                                "[SIM] BELI (${PriceFormatter.formatIdrNumber(grossBuyOrderAmount)})"
+                            },
+                            fontWeight = FontWeight.Black,
+                            fontSize = 12.sp,
+                            maxLines = 1
+                        )
+                    }
+                }
+
+                OutlinedButton(
+                    onClick = { showBuyOrderDialog = true },
+                    modifier = Modifier.height(44.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.dp, TvBorder),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = TvSurfaceVariant,
+                        contentColor = TvTextSecondary
+                    ),
+                    contentPadding = PaddingValues(horizontal = 12.dp)
+                ) {
+                    Text(
+                        text = "Atur Limit",
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
             }
         }
 
@@ -445,6 +609,8 @@ fun RadarBuySection(
                 initialTp1 = defaultTpPrice1,
                 initialTp2 = defaultTpPrice2,
                 recommendedRiskSize = recommendedRiskSize,
+                buyCooldownRemainingMs = buyCooldownRemainingMs,
+                buyCooldownReason = buyCooldownReason,
                 onConfirmBuy = { nominal, targetBuyPrice, tp1, tp2 ->
                     customTargetBuyPrice = targetBuyPrice
                     onNominalIdrChanged(nominal)

@@ -37,9 +37,10 @@ object SellSignalEvaluator {
         val quantity = context.quantity ?: 0.0
         val entryPrice = context.entryPrice
         val hasCostBasis = entryPrice != null && entryPrice > 0.0
-        val costBasis = if (hasCostBasis) quantity * entryPrice!! else 0.0
+        val buyFeeRate = (tradingFees.buyMakerPct / 100.0).coerceAtLeast(0.0021)
+        val costBasis = if (hasCostBasis) quantity * entryPrice!! * (1.0 + buyFeeRate) else 0.0
 
-        val sellFeeRate = (tradingFees.sellMakerPct / 100.0).coerceAtLeast(0.0)
+        val sellFeeRate = (tradingFees.sellMakerPct / 100.0).coerceAtLeast(0.0021)
         val grossSell = quantity * currentPrice
         val netSell = grossSell * (1.0 - sellFeeRate)
 
@@ -157,7 +158,7 @@ object SellSignalEvaluator {
             )
         }
 
-        // 11. Significant Net Profit Levels
+        // 11. Target Net Profit jika TP1 belum diset
         if (hasCostBasis && netProfitPct >= 5.0) {
             return SellSignalState(
                 state = SellLifecycleState.READY_TO_SELL,
@@ -166,26 +167,28 @@ object SellSignalEvaluator {
             )
         }
 
-        if (hasCostBasis && netProfitPct >= 2.0) {
+        if (tp1 <= 0.0 && hasCostBasis && netProfitPct >= 3.5) {
             return SellSignalState(
                 state = SellLifecycleState.READY_TO_SELL,
-                reason = "Profit +2%",
+                reason = "Target Swing +3.5% Tercapai",
                 netProfitPct = netProfitPct
             )
         }
 
-        if (hasCostBasis && netProfitPct > 0.0) {
-            return SellSignalState(
-                state = SellLifecycleState.READY_TO_SELL,
-                reason = "Siap profit",
-                netProfitPct = netProfitPct
-            )
+        // Jika profit positif tapi belum menyentuh target exit (TP1 / Swing Target):
+        // Tetap dalam status MONITORING (bukan READY_TO_SELL prematur)
+        val monitoringReason = if (hasCostBasis && netProfitPct > 0.0) {
+            "Floating Profit +${String.format(Locale.US, "%.2f", netProfitPct)}% (Memantau)"
+        } else if (hasCostBasis && netProfitPct < 0.0) {
+            "Drawdown ${String.format(Locale.US, "%.2f", netProfitPct)}% (Dalam Batas)"
+        } else {
+            "Memantau..."
         }
 
         // 12. Monitoring
         return SellSignalState(
             state = SellLifecycleState.MONITORING,
-            reason = "Memantau...",
+            reason = monitoringReason,
             netProfitPct = netProfitPct
         )
     }
