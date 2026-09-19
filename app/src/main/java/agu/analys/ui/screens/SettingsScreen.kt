@@ -300,6 +300,15 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                         )
                         HorizontalDivider(color = TvBorder.copy(alpha = 0.5f), thickness = 0.5.dp)
                         AndroidPreferenceItem(
+                            icon = Icons.Default.Assessment,
+                            iconTint = TvGreen,
+                            iconBackground = TvGreen.copy(alpha = 0.15f),
+                            title = "Log Sinyal & Evaluasi Reliabilitas (Room DB)",
+                            subtitle = "Rekaman sinyal, skor keyakinan & akurasi performa nyata",
+                            onClick = { viewModel.openSignalLogs() }
+                        )
+                        HorizontalDivider(color = TvBorder.copy(alpha = 0.5f), thickness = 0.5.dp)
+                        AndroidPreferenceItem(
                             icon = Icons.Default.MenuBook,
                             iconTint = Color(0xFF00BCD4),
                             iconBackground = Color(0xFF00BCD4).copy(alpha = 0.15f),

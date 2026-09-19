@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.ElectricBolt
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Terminal
@@ -41,6 +42,7 @@ fun DashboardModernHeader(
     isRefreshing: Boolean = false,
     onRefresh: () -> Unit = {},
     onOpenLogcat: () -> Unit,
+    onOpenSignalLogs: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val statusColor = if (isConnected) TvGreen else TvRed
@@ -136,6 +138,21 @@ fun DashboardModernHeader(
                     modifier = Modifier
                         .size(20.dp)
                         .graphicsLayer(rotationZ = if (isRefreshing) spinningRotation else 0f)
+                )
+            }
+
+            // Tombol Signal Log & Evaluasi Reliabilitas (Room DB)
+            IconButton(
+                onClick = onOpenSignalLogs,
+                modifier = Modifier
+                    .size(36.dp)
+                    .testTag("btn_header_signal_logs")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Assessment,
+                    contentDescription = "Buka Log & Evaluasi Sinyal Room DB",
+                    tint = TvCyan,
+                    modifier = Modifier.size(18.dp)
                 )
             }
 

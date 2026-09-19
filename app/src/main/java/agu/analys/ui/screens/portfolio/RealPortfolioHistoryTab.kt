@@ -109,7 +109,10 @@ fun RealTradeHistoryItemCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier = Modifier.weight(1f, fill = false),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Surface(
                         color = sideColor.copy(alpha = 0.15f),
                         shape = RoundedCornerShape(4.dp)
@@ -165,7 +168,8 @@ fun RealTradeHistoryItemCard(
                         text = "${if (isProfit) "+" else ""}${PriceFormatter.formatPrice(kotlin.math.abs(trade.pnlIdr))} (${String.format(Locale.US, "%.2f", trade.pnlPercent)}%)",
                         color = if (isProfit) TvGreen else TvRed,
                         fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1
                     )
                 }
             }
@@ -174,33 +178,36 @@ fun RealTradeHistoryItemCard(
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Column {
-                    Text(text = "Harga Eksekusi", color = TvTextSecondary, fontSize = 10.sp)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(text = "Harga Eksekusi", color = TvTextSecondary, fontSize = 10.sp, maxLines = 1)
                     Text(
                         text = PriceFormatter.formatPrice(trade.price),
                         color = TvTextPrimary,
                         fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1
                     )
                 }
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(text = "Jumlah", color = TvTextSecondary, fontSize = 10.sp)
+                Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(text = "Jumlah", color = TvTextSecondary, fontSize = 10.sp, maxLines = 1)
                     Text(
                         text = "${PriceFormatter.formatRawDecimal(trade.qty)} $baseAsset",
                         color = TvBlue,
                         fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1
                     )
                 }
-                Column(horizontalAlignment = Alignment.End) {
-                    Text(text = "Total Nominal", color = TvTextSecondary, fontSize = 10.sp)
+                Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
+                    Text(text = "Total Nominal", color = TvTextSecondary, fontSize = 10.sp, maxLines = 1)
                     Text(
                         text = PriceFormatter.formatPrice(trade.amount),
                         color = TvTextPrimary,
                         fontSize = 11.sp,
-                        fontWeight = FontWeight.Black
+                        fontWeight = FontWeight.Black,
+                        maxLines = 1
                     )
                 }
             }

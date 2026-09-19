@@ -46,6 +46,11 @@ import agu.analys.util.GitHubReleaseInfo
 import agu.analys.util.MarketDataCache
 import agu.analys.util.PriceFormatter
 import agu.analys.database.AppDatabase
+import agu.analys.database.SignalLogEntity
+import agu.analys.database.SignalLogRepository
+import agu.analys.database.TradeHistoryRecordEntity
+import agu.analys.database.TradeHistoryRecorder
+import agu.analys.model.SignalReliabilitySummary
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
@@ -83,14 +88,45 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
             syncRealBalancesToPositionStore(balances, avgPrices)
         },
         onRealTradeExecuted = { pair, type, price, quantity, tp1, tp2 ->
+            val symbol = pair.replace("_", "").uppercase()
             if (type.equals("sell", ignoreCase = true)) {
-                val symbol = pair.replace("_", "").uppercase()
                 positionStore.markSold(symbol, isReal = true)
                 positionStore.markSold(pair, isReal = true)
                 agu.analys.engine.sell.SellSignalLifecycleManager.reset(symbol, isReal = true)
                 agu.analys.engine.sell.SellSignalLifecycleManager.reset(pair, isReal = true)
                 positionCoordinator.markSoldAndClear(symbol, isReal = true)
                 positionCoordinator.markSoldAndClear(pair, isReal = true)
+                tradeHistoryRecorder.recordSell(
+                    symbol = symbol,
+                    isReal = true,
+                    sellPrice = price,
+                    sellQuantity = quantity,
+                    sellReason = if (tp1 > 0 || tp2 > 0) "TAKE_PROFIT" else "MARKET_SELL",
+                    strategyMode = _strategyMode.value.name
+                )
+            } else if (type.equals("buy", ignoreCase = true)) {
+                val snapshot = agu.analys.trading.TradeSignalSnapshot.capture(
+                    symbol = symbol,
+                    strategyMode = _strategyMode.value.name,
+                    tick = marketDataCoordinator.dashboardTicks.value[symbol],
+                    indicators = engine.indicators.value,
+                    signal = engine.signalState.value
+                )
+                tradeHistoryRecorder.recordBuy(
+                    symbol = symbol,
+                    isReal = true,
+                    strategyMode = _strategyMode.value.name,
+                    buyPrice = price,
+                    buyQuantity = quantity,
+                    buyTotalIdr = price * quantity,
+                    buyOrderType = "LIMIT",
+                    snapshot = snapshot,
+                    signalPrice = engine.signalState.value.entryPrice.takeIf { it > 0 } ?: price,
+                    signalConfidence = engine.signalState.value.confidence,
+                    targetPrice1 = tp1,
+                    targetPrice2 = tp2,
+                    stopLossPrice = engine.signalState.value.stopLoss
+                )
             }
             syncRealTradeToSimulation(pair, type, price, quantity, tp1, tp2)
             positionCoordinator.refreshPosition(_selectedPair.value.symbol)
@@ -173,10 +209,46 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
                 quantity = order.quantity,
                 isReal = false
             )
+            val snapshot = agu.analys.trading.TradeSignalSnapshot.capture(
+                symbol = symbol,
+                strategyMode = _strategyMode.value.name,
+                tick = marketDataCoordinator.dashboardTicks.value[symbol],
+                indicators = engine.indicators.value,
+                signal = engine.signalState.value
+            )
+            tradeHistoryRecorder.recordBuy(
+                symbol = symbol,
+                isReal = false,
+                strategyMode = _strategyMode.value.name,
+                buyPrice = fillPrice,
+                buyQuantity = order.quantity,
+                buyTotalIdr = fillPrice * order.quantity,
+                buyOrderType = order.type.name,
+                snapshot = snapshot,
+                signalPrice = engine.signalState.value.entryPrice.takeIf { it > 0 } ?: fillPrice,
+                signalConfidence = engine.signalState.value.confidence,
+                targetPrice1 = engine.signalState.value.targetPrice1,
+                targetPrice2 = engine.signalState.value.targetPrice2,
+                stopLossPrice = engine.signalState.value.stopLoss
+            )
         } else if (order.side == agu.analys.trading.SimulationOrderSide.SELL) {
             val currentPos = positionStore.get(symbol)
             val currentQty = currentPos.quantity
             val remainingQty = (currentQty - order.quantity).coerceAtLeast(0.0)
+            val fillPrice = if (order.filledAvgPrice > 0.0) order.filledAvgPrice else order.limitPrice
+            val sellReason = when (order.type) {
+                agu.analys.trading.SimulationOrderType.STOP_LIMIT -> "TRAILING_STOP"
+                agu.analys.trading.SimulationOrderType.MARKET -> "MARKET_SELL"
+                else -> "LIMIT_SELL"
+            }
+            tradeHistoryRecorder.recordSell(
+                symbol = symbol,
+                isReal = false,
+                sellPrice = fillPrice,
+                sellQuantity = order.quantity,
+                sellReason = sellReason,
+                strategyMode = _strategyMode.value.name
+            )
             // Dust-safe full close setelah market/trailing sell di simulasi
             val isDust = remainingQty <= 0.00000001 ||
                 (currentQty > 0.0 && remainingQty / currentQty < 1e-6)
@@ -291,6 +363,16 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         batchSellCoordinator.resetState()
     }
 
+    internal val signalLogRepository: SignalLogRepository = SignalLogRepository(
+        dao = AppDatabase.getInstance().signalLogDao(),
+        scope = viewModelScope
+    )
+
+    val tradeHistoryRecorder: TradeHistoryRecorder = TradeHistoryRecorder(
+        dao = AppDatabase.getInstance().tradeHistoryRecordDao(),
+        scope = viewModelScope
+    )
+
     internal val marketDataCoordinator = MarketDataCoordinator(
         scope = viewModelScope,
         prefs = prefs,
@@ -299,6 +381,8 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         simCoordinator = simCoordinator,
         onPriceUpdate = { symbol, price, rsi -> 
             this@TradingViewModel.checkAlertsAndTrailing(symbol, price, rsi)
+            this@TradingViewModel.signalLogRepository.processPriceTick(symbol, price)
+            this@TradingViewModel.tradeHistoryRecorder.processPriceTick(symbol, price)
             agu.analys.service.TradingForegroundService.updatePrice(getApplication(), symbol, price)
         }
     )
@@ -340,6 +424,15 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
 
     internal val _signalHistory = MutableStateFlow<List<AISignalState>>(emptyList())
     val signalHistory: StateFlow<List<AISignalState>> = _signalHistory.asStateFlow()
+
+    val allSignalLogs: StateFlow<List<SignalLogEntity>> = signalLogRepository.allLogsFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val tradeHistoryRecords: StateFlow<List<TradeHistoryRecordEntity>> = tradeHistoryRecorder.allRecordsFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val signalReliabilitySummary: StateFlow<SignalReliabilitySummary> = signalLogRepository.reliabilitySummaryFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SignalReliabilitySummary())
 
     internal val _auditReportText = MutableStateFlow<String?>(null)
     val auditReportText: StateFlow<String?> = _auditReportText.asStateFlow()
@@ -607,6 +700,21 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
                     )
                 }
             }
+            if (transition.signal.action != SignalAction.HOLD && transition.signal.entryPrice > 0.0) {
+                signalLogRepository.recordSignal(
+                    symbol = transition.symbol,
+                    action = transition.signal.action.name,
+                    strategyMode = transition.mode.name,
+                    confidence = transition.signal.confidence,
+                    sentiment = transition.signal.sentiment.name,
+                    entryPrice = transition.signal.entryPrice,
+                    targetPrice1 = transition.signal.targetPrice1,
+                    targetPrice2 = transition.signal.targetPrice2,
+                    stopLoss = transition.signal.stopLoss,
+                    reasoning = transition.signal.reasoning.joinToString(" • "),
+                    scalpingStage = transition.signal.scalpingStage.name
+                )
+            }
         }
 
                 // Background fetch API pairs metadata
@@ -629,6 +737,10 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         // Sync initial cached real positions on startup immediately
         if (prefs.hasIndodaxCredentials()) {
             syncRealBalancesToPositionStore()
+        }
+
+        viewModelScope.launch {
+            tradeHistoryRecorder.seedSampleTradeJourneysIfEmpty()
         }
 
         viewModelScope.launch {
@@ -919,6 +1031,21 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
                     list.add(0, signal.copy(marketSymbol = _selectedPair.value.symbol))
                     if (list.size > 30) list.removeAt(list.lastIndex)
                     _signalHistory.value = list
+
+                    // Persist to Room Database SignalLogEntity
+                    signalLogRepository.recordSignal(
+                        symbol = _selectedPair.value.symbol,
+                        action = signal.action.name,
+                        strategyMode = _strategyMode.value.name,
+                        confidence = signal.confidence,
+                        sentiment = signal.sentiment.name,
+                        entryPrice = if (signal.entryPrice > 0) signal.entryPrice else (currentTick.value?.price ?: 0.0),
+                        targetPrice1 = signal.targetPrice1,
+                        targetPrice2 = signal.targetPrice2,
+                        stopLoss = signal.stopLoss,
+                        reasoning = signal.reasoning.joinToString(" • "),
+                        scalpingStage = signal.scalpingStage.name
+                    )
                 }
             }
         }
@@ -1012,6 +1139,51 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
                 }
             }
             _coinBadges.value = resultMap
+        }
+    }
+
+    fun getSignalLogsForSymbol(symbol: String): kotlinx.coroutines.flow.Flow<List<SignalLogEntity>> =
+        signalLogRepository.getLogsBySymbolFlow(symbol)
+
+    fun seedSampleSignalLogs() {
+        viewModelScope.launch {
+            signalLogRepository.seedSampleLogsIfEmpty()
+        }
+    }
+
+    fun deleteSignalLog(id: Long) {
+        viewModelScope.launch {
+            signalLogRepository.deleteLog(id)
+        }
+    }
+
+    fun clearAllSignalLogs() {
+        viewModelScope.launch {
+            signalLogRepository.clearAllLogs()
+        }
+    }
+
+    fun resolveSignalLogManually(id: Long, isWin: Boolean, exitPrice: Double? = null, pnlPct: Double? = null, note: String = "") {
+        viewModelScope.launch {
+            signalLogRepository.resolveLogManually(id, isWin, exitPrice, pnlPct, note)
+        }
+    }
+
+    fun seedSampleTradeJourneys() {
+        viewModelScope.launch {
+            tradeHistoryRecorder.seedSampleTradeJourneysIfEmpty()
+        }
+    }
+
+    fun deleteTradeHistoryRecord(id: Long) {
+        viewModelScope.launch {
+            tradeHistoryRecorder.deleteRecord(id)
+        }
+    }
+
+    fun clearAllTradeHistoryRecords() {
+        viewModelScope.launch {
+            tradeHistoryRecorder.clearAllRecords()
         }
     }
 }

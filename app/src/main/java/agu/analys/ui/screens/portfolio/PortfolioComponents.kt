@@ -304,7 +304,10 @@ fun TradeHistoryItemCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier = Modifier.weight(1f, fill = false),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Box(
                         modifier = Modifier
                             .background(sideColor.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
@@ -321,7 +324,7 @@ fun TradeHistoryItemCard(
                     Text(
                         text = "${trade.baseAsset} / ${trade.quoteAsset}",
                         color = TvTextPrimary,
-                        fontSize = 13.sp,
+                        fontSize = 12.5.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(Modifier.width(6.dp))
@@ -353,7 +356,8 @@ fun TradeHistoryItemCard(
                 Text(
                     text = formattedTime,
                     color = TvTextSecondary,
-                    fontSize = 10.sp
+                    fontSize = 10.sp,
+                    maxLines = 1
                 )
             }
 
@@ -361,33 +365,36 @@ fun TradeHistoryItemCard(
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Column {
-                    Text("Harga Eksekusi", color = TvTextSecondary, fontSize = 10.sp)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Harga Eksekusi", color = TvTextSecondary, fontSize = 10.sp, maxLines = 1)
                     Text(
                         PriceFormatter.formatPrice(trade.executionPrice, quoteAsset = trade.quoteAsset),
                         color = TvTextPrimary,
                         fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1
                     )
                 }
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Jumlah", color = TvTextSecondary, fontSize = 10.sp)
+                Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("Jumlah", color = TvTextSecondary, fontSize = 10.sp, maxLines = 1)
                     Text(
                         "${PriceFormatter.formatRawDecimal(trade.quantity)} ${trade.baseAsset}",
                         color = TvBlue,
                         fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1
                     )
                 }
-                Column(horizontalAlignment = Alignment.End) {
-                    Text("Total Rupiah", color = TvTextSecondary, fontSize = 10.sp)
+                Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
+                    Text("Total Rupiah", color = TvTextSecondary, fontSize = 10.sp, maxLines = 1)
                     Text(
                         PriceFormatter.formatPrice(trade.totalIdr, quoteAsset = "IDR"),
                         color = TvTextPrimary,
                         fontSize = 11.sp,
-                        fontWeight = FontWeight.Black
+                        fontWeight = FontWeight.Black,
+                        maxLines = 1
                     )
                 }
             }

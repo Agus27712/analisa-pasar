@@ -148,51 +148,56 @@ fun TradeLogDetailDialog(
 
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                InfoItem("Harga Eksekusi", PriceFormatter.formatPrice(executionPrice, quoteAsset = quote))
-                                InfoItem("Jumlah", "${PriceFormatter.formatRawDecimal(quantity)} $baseAsset")
-                                InfoItem("Total", PriceFormatter.formatPrice(totalIdr, quoteAsset = quote))
+                                InfoItem("Harga Eksekusi", PriceFormatter.formatPrice(executionPrice, quoteAsset = quote), modifier = Modifier.weight(1f))
+                                InfoItem("Jumlah", "${PriceFormatter.formatRawDecimal(quantity)} $baseAsset", modifier = Modifier.weight(1f))
+                                InfoItem("Total", PriceFormatter.formatPrice(totalIdr, quoteAsset = quote), modifier = Modifier.weight(1f))
                             }
 
                             HorizontalDivider(color = TvBorder.copy(alpha = 0.5f))
 
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 InfoItem(
                                     "Durasi Hold",
                                     TradeLogExporter.formatDuration(holdingDurationMs),
-                                    highlightColor = TvBlue
+                                    highlightColor = TvBlue,
+                                    modifier = Modifier.weight(1f)
                                 )
                                 if (entryPrice != null && entryPrice > 0.0) {
-                                    InfoItem("Entry Buy", PriceFormatter.formatPrice(entryPrice, quoteAsset = quote))
+                                    InfoItem("Entry Buy", PriceFormatter.formatPrice(entryPrice, quoteAsset = quote), modifier = Modifier.weight(1f))
+                                } else {
+                                    Spacer(Modifier.weight(1f))
                                 }
-                                if (pnlIdr != null) {
-                                    val isProfit = pnlIdr >= 0
-                                    val pColor = if (isProfit) TvGreen else TvRed
-                                    val prefix = if (isProfit) "+" else ""
-                                    InfoItem(
-                                        "Realized PnL",
-                                        "$prefix${PriceFormatter.formatPrice(pnlIdr, quoteAsset = quote)} ($prefix${String.format(Locale.US, "%.2f", pnlPercent ?: 0.0)}%)",
-                                        highlightColor = pColor
-                                    )
-                                }
+                            }
+
+                            if (pnlIdr != null) {
+                                val isProfit = pnlIdr >= 0
+                                val pColor = if (isProfit) TvGreen else TvRed
+                                val prefix = if (isProfit) "+" else ""
+                                InfoItem(
+                                    "Realized PnL",
+                                    "$prefix${PriceFormatter.formatPrice(pnlIdr, quoteAsset = quote)} ($prefix${String.format(Locale.US, "%.2f", pnlPercent ?: 0.0)}%)",
+                                    highlightColor = pColor,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
                             }
 
                             if (isTrailingUsed) {
                                 HorizontalDivider(color = TvBorder.copy(alpha = 0.5f))
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    InfoItem("Trailing Lock", "AKTIF (${trailingPercent ?: 0.0}%)", highlightColor = TvGreen)
+                                    InfoItem("Trailing Lock", "AKTIF (${trailingPercent ?: 0.0}%)", highlightColor = TvGreen, modifier = Modifier.weight(1f))
                                     trailingPeakPrice?.let {
-                                        InfoItem("Peak Price", PriceFormatter.formatPrice(it, quoteAsset = quote))
+                                        InfoItem("Peak Price", PriceFormatter.formatPrice(it, quoteAsset = quote), modifier = Modifier.weight(1f))
                                     }
                                     trailingLockPrice?.let {
-                                        InfoItem("Lock Stop Price", PriceFormatter.formatPrice(it, quoteAsset = quote))
+                                        InfoItem("Lock Stop Price", PriceFormatter.formatPrice(it, quoteAsset = quote), modifier = Modifier.weight(1f))
                                     }
                                 }
                             }
@@ -401,15 +406,24 @@ fun TradeLogDetailDialog(
 private fun InfoItem(
     label: String,
     value: String,
-    highlightColor: Color? = null
+    highlightColor: Color? = null,
+    modifier: Modifier = Modifier
 ) {
-    Column {
-        Text(text = label, color = TvTextSecondary, fontSize = 10.sp)
+    Column(modifier = modifier) {
+        Text(
+            text = label,
+            color = TvTextSecondary,
+            fontSize = 10.sp,
+            maxLines = 1
+        )
+        Spacer(Modifier.height(2.dp))
         Text(
             text = value,
             color = highlightColor ?: TvTextPrimary,
             fontSize = 11.sp,
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.Bold,
+            maxLines = 2,
+            lineHeight = 14.sp
         )
     }
 }
@@ -431,20 +445,33 @@ private fun CategoryBox(
             fontSize = 10.sp,
             fontWeight = FontWeight.SemiBold
         )
-        Spacer(Modifier.height(4.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items.forEach { (k, v) ->
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(text = k, color = TvTextSecondary.copy(alpha = 0.8f), fontSize = 9.sp)
-                    Text(
-                        text = v,
-                        color = TvTextPrimary,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Medium
-                    )
+        Spacer(Modifier.height(6.dp))
+        val chunks = items.chunked(2)
+        chunks.forEachIndexed { idx, rowItems ->
+            if (idx > 0) Spacer(Modifier.height(6.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                rowItems.forEach { (k, v) ->
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = k,
+                            color = TvTextSecondary.copy(alpha = 0.8f),
+                            fontSize = 9.sp,
+                            maxLines = 1
+                        )
+                        Text(
+                            text = v,
+                            color = TvTextPrimary,
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Medium,
+                            lineHeight = 13.sp
+                        )
+                    }
+                }
+                if (rowItems.size == 1) {
+                    Spacer(Modifier.weight(1f))
                 }
             }
         }

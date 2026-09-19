@@ -212,7 +212,10 @@ fun TradeHistoryItemCard(history: SimulationTradeHistoryItem) {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier = Modifier.weight(1f, fill = false),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(4.dp))
@@ -230,7 +233,7 @@ fun TradeHistoryItemCard(history: SimulationTradeHistoryItem) {
                     Text(
                         text = "${history.baseAsset}/${quote}",
                         color = TvTextPrimary,
-                        fontSize = 13.sp,
+                        fontSize = 12.5.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(Modifier.width(6.dp))
@@ -271,7 +274,8 @@ fun TradeHistoryItemCard(history: SimulationTradeHistoryItem) {
                         text = "${if (isProfit) "+" else ""}${PriceFormatter.formatPrice(kotlin.math.abs(history.pnlIdr), quoteAsset = quote)} (${String.format(Locale.US, "%.2f", history.pnlPercent)}%)",
                         color = if (isProfit) TvGreen else TvRed,
                         fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1
                     )
                 }
             }
@@ -280,35 +284,38 @@ fun TradeHistoryItemCard(history: SimulationTradeHistoryItem) {
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Column {
-                    Text(text = "Harga Eksekusi", color = TvTextSecondary, fontSize = 10.sp)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(text = "Harga Eksekusi", color = TvTextSecondary, fontSize = 10.sp, maxLines = 1)
                     Text(
                         text = PriceFormatter.formatPrice(history.executionPrice, quoteAsset = quote),
                         color = TvTextPrimary,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1
                     )
                 }
 
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(text = "Jumlah Koin", color = TvTextSecondary, fontSize = 10.sp)
+                Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(text = "Jumlah Koin", color = TvTextSecondary, fontSize = 10.sp, maxLines = 1)
                     Text(
                         text = "${PriceFormatter.formatQuantity(history.quantity)} ${history.baseAsset}",
                         color = TvTextPrimary,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1
                     )
                 }
 
-                Column(horizontalAlignment = Alignment.End) {
-                    Text(text = "Total Eksekusi", color = TvTextSecondary, fontSize = 10.sp)
+                Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
+                    Text(text = "Total Eksekusi", color = TvTextSecondary, fontSize = 10.sp, maxLines = 1)
                     Text(
                         text = PriceFormatter.formatPrice(history.totalIdr, quoteAsset = quote),
                         color = TvTextPrimary,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1
                     )
                 }
             }

@@ -10,15 +10,20 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -50,6 +55,7 @@ fun SignalHistoryPanel(
     history: List<AISignalState>,
     currentSymbol: String,
     position: SpotPosition = SpotPosition(),
+    onOpenAllLogs: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val visibleHistory = remember(history, currentSymbol) {
@@ -215,6 +221,28 @@ fun SignalHistoryPanel(
                     Spacer(Modifier.height(5.dp))
                     Text("Menampilkan 30 sinyal terbaru. Riwayat lama tetap tersimpan, tetapi tidak dimuat ke UI sekaligus.", fontSize = 9.sp, color = TvTextSecondary)
                 }
+            }
+
+            Spacer(Modifier.height(10.dp))
+            OutlinedButton(
+                onClick = onOpenAllLogs,
+                modifier = Modifier.fillMaxWidth().height(36.dp),
+                shape = RoundedCornerShape(10.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, TvCyan.copy(alpha = 0.5f))
+            ) {
+                Icon(
+                    Icons.Default.Assessment,
+                    contentDescription = null,
+                    tint = TvCyan,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    "Buka Database & Evaluasi Reliabilitas (Room DB)",
+                    color = TvCyan,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold
+                )
             }
         }
     }

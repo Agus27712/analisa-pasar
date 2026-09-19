@@ -32,6 +32,7 @@ fun TradingViewModel.openLandscapeChart() { navigateTo(AppScreen.LANDSCAPE_CHART
 fun TradingViewModel.closeLandscapeChart() { goBack() }
 fun TradingViewModel.openSettings() { navigateTo(AppScreen.SETTINGS) }
 fun TradingViewModel.openLearning() { navigateTo(AppScreen.LEARNING) }
+fun TradingViewModel.openSignalLogs() { navigateTo(AppScreen.SIGNAL_LOGS) }
 
 fun TradingViewModel.goBack(): Boolean {
     while (navigationStack.isNotEmpty() && navigationStack.last() == _currentScreen.value) {

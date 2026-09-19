@@ -34,6 +34,7 @@ import agu.analys.ui.screens.LandscapeChartScreen
 import agu.analys.ui.screens.LearningPathScreen
 import agu.analys.ui.screens.PortfolioScreen
 import agu.analys.ui.screens.SettingsScreen
+import agu.analys.ui.screens.SignalLogScreen
 import agu.analys.ui.screens.TradeSimulationScreen
 import agu.analys.ui.theme.TradingViewAITheme
 import agu.analys.ui.theme.TvBackground
@@ -161,6 +162,11 @@ class MainActivity : ComponentActivity() {
                             viewModel = tradingViewModel,
                             onOpenSettings = { tradingViewModel.openSettings() },
                             onBack = { tradingViewModel.goBack() }
+                        )
+                        AppScreen.SIGNAL_LOGS -> SignalLogScreen(
+                            viewModel = tradingViewModel,
+                            onBack = { tradingViewModel.goBack() },
+                            onNavigateToDetail = { tradingViewModel.openCoinDetail(it) }
                         )
                     }
                 }

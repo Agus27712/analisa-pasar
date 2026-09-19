@@ -37,6 +37,7 @@ fun DetailControlsRow(
     onOpenAiAssistant: () -> Unit,
     onOpenSimulation: () -> Unit,
     onOpenLearning: () -> Unit,
+    onOpenSignalLogs: () -> Unit = {},
     onToggleFavorite: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -141,6 +142,16 @@ fun DetailControlsRow(
                 borderColor = TvBlue.copy(alpha = 0.4f),
                 contentDescription = "Belajar",
                 onClick = onOpenLearning
+            )
+
+            // 7. Signal Logs & Evaluasi Reliabilitas (Room DB)
+            DetailQuickActionButton(
+                icon = Icons.Default.Assessment,
+                tint = TvCyan,
+                bgColor = TvCyan.copy(alpha = 0.12f),
+                borderColor = TvCyan.copy(alpha = 0.4f),
+                contentDescription = "Log & Evaluasi Sinyal",
+                onClick = onOpenSignalLogs
             )
         }
     }

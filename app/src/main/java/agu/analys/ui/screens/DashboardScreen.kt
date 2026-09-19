@@ -254,12 +254,13 @@ fun DashboardScreen(
                 .fillMaxSize()
                 .background(TvBackground)
         ) {
-            // 1. Modern Header (Clean: Logo + Title + Status + Refresh + Logcat)
+            // 1. Modern Header (Clean: Logo + Title + Status + Refresh + Signal Logs + Logcat)
             DashboardModernHeader(
                 isConnected = isConnected,
                 isRefreshing = isRefreshing,
                 onRefresh = { viewModel.refreshWorthCoinsFromMarket() },
-                onOpenLogcat = { showLogcatDialog = true }
+                onOpenLogcat = { showLogcatDialog = true },
+                onOpenSignalLogs = { viewModel.openSignalLogs() }
             )
 
             // Offline banner jika koneksi terputus

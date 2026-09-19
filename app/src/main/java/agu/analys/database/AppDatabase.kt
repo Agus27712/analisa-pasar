@@ -41,6 +41,34 @@ data class RealOpenOrderEntity(
     val time: Long
 )
 
+@Entity(tableName = "signal_logs")
+data class SignalLogEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0L,
+    val symbol: String,                 // e.g. "BTCIDR"
+    val action: String,                 // "BUY", "SELL", "HOLD"
+    val strategyMode: String = "SCALPING", // "SCALPING", "SWING", "OFFICE_DAILY", "SECOND_WAVE", "TRENCHING"
+    val confidence: Int,                // Confidence score at firing time (0-100)
+    val sentiment: String = "",         // e.g. "BULLISH_REVERSAL"
+    val entryPrice: Double,             // Price at time of firing
+    val targetPrice1: Double = 0.0,
+    val targetPrice2: Double = 0.0,
+    val stopLoss: Double = 0.0,
+    val firedAt: Long = System.currentTimeMillis(),
+    val reasoning: String = "",         // Text explanation at firing
+    val scalpingStage: String = "",     // e.g. "ENTRY", "STRONG_ENTRY"
+    
+    // Performance Outcome Tracking
+    val outcomeStatus: String = "TRACKING", // "TRACKING", "HIT_TP1", "HIT_TP2", "HIT_SL", "INVALIDATED", "EXPIRED", "MANUAL_WIN", "MANUAL_LOSS"
+    val maxProfitPct: Double = 0.0,         // Highest positive % reached during tracking
+    val maxDrawdownPct: Double = 0.0,       // Worst negative % reached during tracking
+    val exitPrice: Double? = null,          // Final price when resolved
+    val realizedPnlPct: Double? = null,     // Realized profit/loss % outcome
+    val peakPrice: Double = 0.0,            // Highest price observed
+    val troughPrice: Double = 0.0,          // Lowest price observed
+    val resolvedAt: Long? = null,           // Timestamp when resolved
+    val resolutionNote: String? = null      // Detail note e.g. "Hit TP1 at Rp 1.520.000.000 (+2.8%)"
+)
+
 @Dao
 interface RealTradeDao {
     @Query("SELECT * FROM real_trades ORDER BY time DESC")
@@ -69,9 +97,57 @@ interface RealTradeDao {
     suspend fun deleteOpenOrderById(orderId: String)
 }
 
-@Database(entities = [RealTradeEntity::class, RealOpenOrderEntity::class], version = 2, exportSchema = false)
+@Dao
+interface SignalLogDao {
+    @Query("SELECT * FROM signal_logs ORDER BY firedAt DESC")
+    fun getAllLogsFlow(): Flow<List<SignalLogEntity>>
+
+    @Query("SELECT * FROM signal_logs WHERE symbol = :symbol ORDER BY firedAt DESC")
+    fun getLogsBySymbolFlow(symbol: String): Flow<List<SignalLogEntity>>
+
+    @Query("SELECT * FROM signal_logs WHERE outcomeStatus = 'TRACKING' ORDER BY firedAt DESC")
+    fun getActiveTrackingLogsFlow(): Flow<List<SignalLogEntity>>
+
+    @Query("SELECT * FROM signal_logs WHERE outcomeStatus = 'TRACKING'")
+    suspend fun getActiveTrackingLogs(): List<SignalLogEntity>
+
+    @Query("SELECT * FROM signal_logs WHERE symbol = :symbol AND outcomeStatus = 'TRACKING'")
+    suspend fun getActiveTrackingLogsForSymbol(symbol: String): List<SignalLogEntity>
+
+    @Query("SELECT * FROM signal_logs WHERE symbol = :symbol ORDER BY firedAt DESC LIMIT 1")
+    suspend fun getLatestLogForSymbol(symbol: String): SignalLogEntity?
+
+    @Query("SELECT * FROM signal_logs WHERE id = :id")
+    suspend fun getLogById(id: Long): SignalLogEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertLog(log: SignalLogEntity): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertLogs(logs: List<SignalLogEntity>)
+
+    @Update
+    suspend fun updateLog(log: SignalLogEntity)
+
+    @Query("DELETE FROM signal_logs WHERE id = :id")
+    suspend fun deleteLogById(id: Long)
+
+    @Query("DELETE FROM signal_logs")
+    suspend fun clearAllLogs()
+
+    @Query("SELECT COUNT(*) FROM signal_logs")
+    suspend fun getLogCount(): Int
+}
+
+@Database(
+    entities = [RealTradeEntity::class, RealOpenOrderEntity::class, SignalLogEntity::class, TradeHistoryRecordEntity::class],
+    version = 5,
+    exportSchema = false
+)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun realTradeDao(): RealTradeDao
+    abstract fun signalLogDao(): SignalLogDao
+    abstract fun tradeHistoryRecordDao(): TradeHistoryRecordDao
 
     companion object {
         @Volatile

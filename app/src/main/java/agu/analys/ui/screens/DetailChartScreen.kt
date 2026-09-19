@@ -50,6 +50,7 @@ import agu.analys.engine.MarketStructureAnalyzer
 import agu.analys.engine.MarketStructureSnapshot
 import agu.analys.model.*
 import agu.analys.ui.components.SimpleComposeChart
+import agu.analys.ui.components.SignalHistoryPanel
 import agu.analys.ui.components.detail.*
 import agu.analys.ui.components.settings.LogcatDiagnosticDialog
 import agu.analys.ui.theme.*
@@ -103,6 +104,7 @@ fun DetailChartScreen(
     val globalContext by viewModel.globalContext.collectAsStateWithLifecycle()
     val orderBookBids by viewModel.orderBookBids.collectAsStateWithLifecycle()
     val orderBookAsks by viewModel.orderBookAsks.collectAsStateWithLifecycle()
+    val signalHistory by viewModel.signalHistory.collectAsStateWithLifecycle()
     val mtfState = remember(mtfStateAll, pair.symbol) { mtfStateAll[pair.symbol] ?: emptyMap() }
 
     var showPriceAlertDialog by remember { mutableStateOf(false) }
@@ -296,6 +298,7 @@ fun DetailChartScreen(
                         onOpenAiAssistant = { showAiAssistantDialog = true },
                         onOpenSimulation = { viewModel.openSimulation(pair) },
                         onOpenLearning = { viewModel.openLearning() },
+                        onOpenSignalLogs = { viewModel.openSignalLogs() },
                         onToggleFavorite = {
                             viewModel.toggleFavorite(pair.symbol)
                             HapticUtil.vibrateTick(context)
@@ -463,6 +466,16 @@ fun DetailChartScreen(
                 signal = signal,
                 price = displayPrice,
                 quoteAsset = pair.quoteAsset
+            )
+
+            Spacer(Modifier.height(10.dp))
+
+            // 6.2 Riwayat & Log Sinyal (Room Database Local Persistence)
+            SignalHistoryPanel(
+                history = signalHistory,
+                currentSymbol = pair.symbol,
+                position = currentPosition,
+                onOpenAllLogs = { viewModel.openSignalLogs() }
             )
 
             Spacer(Modifier.height(14.dp))
