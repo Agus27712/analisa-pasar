@@ -140,13 +140,14 @@ fun TradingViewModel.syncRealBalancesToPositionStore(
     balances: Map<String, Double> = realCoordinator.realIndodaxBalance.value,
     avgPrices: Map<String, Double> = realCoordinator.realAvgBuyPrices.value
 ) {
-    if (!prefs.hasIndodaxCredentials() || !prefs.isRealSimSyncEnabled) return
+    if (!prefs.hasIndodaxCredentials()) return
     val popularAndCustom = (TradingPair.POPULAR_INDODAX_PAIRS.map { it.baseAsset.uppercase() } + balances.keys.map { it.uppercase() }).distinct()
     
     for (baseUpper in popularAndCustom) {
         if (baseUpper == "IDR" || baseUpper == "USDT") continue
         val baseLower = baseUpper.lowercase()
         val symbol = "${baseUpper}IDR"
+        val pairSymbol = "${baseLower}_idr"
         val qty = balances[baseLower] ?: balances[baseUpper] ?: 0.0
         val pos = positionStore.get(symbol, isReal = true)
         
@@ -168,6 +169,13 @@ fun TradingViewModel.syncRealBalancesToPositionStore(
                     invested = totalInvested,
                     isReal = true
                 )
+                positionStore.markBought(
+                    symbol = pairSymbol,
+                    entryPrice = finalEntry,
+                    quantity = qty,
+                    invested = totalInvested,
+                    isReal = true
+                )
             } else {
                 // Update kuantitas dan harga rata-rata secara sinkron
                 positionStore.setHolding(
@@ -177,10 +185,18 @@ fun TradingViewModel.syncRealBalancesToPositionStore(
                     quantity = qty,
                     isReal = true
                 )
+                positionStore.setHolding(
+                    symbol = pairSymbol,
+                    invested = totalInvested,
+                    entry = finalEntry,
+                    quantity = qty,
+                    isReal = true
+                )
             }
         } else {
             if (pos.isHolding) {
                 positionStore.markSold(symbol, isReal = true)
+                positionStore.markSold(pairSymbol, isReal = true)
             }
         }
     }

@@ -178,6 +178,40 @@ fun DetailChartScreen(
         }
     }
 
+    val effectiveDisplayPosition = remember(currentPosition, effectivePositionContext, isRealBuyMode, pair.symbol) {
+        if (effectivePositionContext.hasPosition) {
+            val entryP = effectivePositionContext.entryPrice ?: currentPosition.entryPrice
+            val qty = effectivePositionContext.quantity ?: currentPosition.quantity
+            currentPosition.copy(
+                symbol = pair.symbol,
+                state = agu.analys.trading.SpotPositionState.HOLDING,
+                entryPrice = entryP,
+                quantity = qty,
+                investedAmount = if (currentPosition.investedAmount > 0.0) currentPosition.investedAmount else (entryP * qty),
+                isReal = isRealBuyMode
+            )
+        } else {
+            currentPosition
+        }
+    }
+
+    LaunchedEffect(effectivePositionContext.hasPosition, isRealBuyMode, pair.symbol) {
+        if (effectivePositionContext.hasPosition && !currentPosition.isHolding) {
+            val entryP = effectivePositionContext.entryPrice ?: 0.0
+            val qty = effectivePositionContext.quantity ?: 0.0
+            if (entryP > 0.0 && qty > 0.0) {
+                viewModel.positionStore.markBought(
+                    symbol = pair.symbol,
+                    entryPrice = entryP,
+                    quantity = qty,
+                    invested = entryP * qty,
+                    isReal = isRealBuyMode
+                )
+                viewModel.refreshSpotPosition()
+            }
+        }
+    }
+
     if (showPriceAlertDialog) {
         PriceAlertDialog(
             symbol = pair.symbol,
@@ -513,7 +547,7 @@ fun DetailChartScreen(
             SignalHistoryPanel(
                 history = signalHistory,
                 currentSymbol = pair.symbol,
-                position = currentPosition,
+                position = effectiveDisplayPosition,
                 onOpenAllLogs = { viewModel.openSignalLogs() }
             )
 

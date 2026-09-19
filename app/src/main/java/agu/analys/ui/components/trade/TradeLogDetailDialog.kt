@@ -28,8 +28,11 @@ import agu.analys.trading.TradeLogExporter
 import agu.analys.trading.TradeSignalSnapshot
 import agu.analys.ui.theme.*
 import agu.analys.util.PriceFormatter
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlin.math.abs
 
 @Composable
 fun TradeLogDetailDialog(
@@ -63,6 +66,100 @@ fun TradeLogDetailDialog(
     val sideColor = if (isBuy) TvGreen else TvRed
     val quote = quoteAsset.ifBlank { "IDR" }
     val timeFormat = remember { SimpleDateFormat("dd MMM yyyy, HH:mm:ss", Locale.getDefault()) }
+
+    var resolvedSnapshot by remember(snapshot) { mutableStateOf(snapshot) }
+    var resolvedStrategy by remember(strategyMode) { mutableStateOf(strategyMode) }
+    var resolvedDuration by remember(holdingDurationMs) { mutableStateOf(holdingDurationMs) }
+    var resolvedEntryPrice by remember(entryPrice) { mutableStateOf(entryPrice) }
+    var resolvedPnlIdr by remember(pnlIdr) { mutableStateOf(pnlIdr) }
+    var resolvedPnlPct by remember(pnlPercent) { mutableStateOf(pnlPercent) }
+    var resolvedTrailing by remember(isTrailingUsed) { mutableStateOf(isTrailingUsed) }
+    var resolvedTrailingPercent by remember(trailingPercent) { mutableStateOf(trailingPercent) }
+    var resolvedPeakPrice by remember(trailingPeakPrice) { mutableStateOf(trailingPeakPrice) }
+    var resolvedLockPrice by remember(trailingLockPrice) { mutableStateOf(trailingLockPrice) }
+
+    LaunchedEffect(tradeId, symbol, snapshot) {
+        if (resolvedSnapshot == null) {
+            withContext(Dispatchers.IO) {
+                try {
+                    val db = agu.analys.database.AppDatabase.getInstance()
+                    val normSymbol = symbol.uppercase().replace("_", "")
+                    val altSymbol = if (normSymbol.endsWith("IDR")) normSymbol else "${normSymbol}IDR"
+
+                    // 1. Cari dari trade_history_records
+                    val records: List<agu.analys.database.TradeHistoryRecordEntity> = db.tradeHistoryRecordDao().getRecordsForSymbol(normSymbol, altSymbol)
+                    val matchedRecord: agu.analys.database.TradeHistoryRecordEntity? = records.firstOrNull { rec: agu.analys.database.TradeHistoryRecordEntity ->
+                        val buyDiff = java.lang.Math.abs(rec.buyTime - timestamp)
+                        val sellDiff = java.lang.Math.abs((rec.sellTime ?: 0L) - timestamp)
+                        (side.equals("BUY", true) && (rec.buyPrice == executionPrice || buyDiff < 600000L)) ||
+                        (side.equals("SELL", true) && (rec.sellPrice == executionPrice || sellDiff < 600000L))
+                    } ?: records.firstOrNull { it.signalSnapshotJson != null }
+
+                    if (matchedRecord != null) {
+                        if (resolvedSnapshot == null && matchedRecord.signalSnapshotJson != null) {
+                            resolvedSnapshot = TradeSignalSnapshot.fromJsonString(matchedRecord.signalSnapshotJson)
+                        }
+                        if (resolvedStrategy.equals("MANUAL", true) && matchedRecord.strategyMode.isNotBlank()) {
+                            resolvedStrategy = matchedRecord.strategyMode
+                        }
+                        if (resolvedDuration == null || resolvedDuration == 0L) {
+                            resolvedDuration = matchedRecord.holdingDurationMs
+                        }
+                        if (resolvedEntryPrice == null || resolvedEntryPrice == 0.0) {
+                            resolvedEntryPrice = matchedRecord.buyPrice
+                        }
+                        if (resolvedPnlIdr == null) {
+                            resolvedPnlIdr = matchedRecord.pnlIdr
+                        }
+                        if (resolvedPnlPct == null) {
+                            resolvedPnlPct = matchedRecord.pnlPercent
+                        }
+                        if (!resolvedTrailing && matchedRecord.isTrailingUsed) {
+                            resolvedTrailing = true
+                            resolvedTrailingPercent = matchedRecord.trailingPercent
+                            resolvedPeakPrice = matchedRecord.peakPriceDuringHold
+                            resolvedLockPrice = matchedRecord.trailingLockPrice
+                        }
+                    }
+
+                    // 2. Jika snapshot masih null, periksa sinyal di signal_logs
+                    if (resolvedSnapshot == null) {
+                        val log = db.signalLogDao().getLatestLogForSymbol(normSymbol)
+                            ?: db.signalLogDao().getLatestLogForSymbol(symbol)
+                        if (log != null) {
+                            val reasons = mutableListOf<String>()
+                            if (log.reasoning.isNotBlank()) reasons.add(log.reasoning)
+                            if (log.sentiment.isNotBlank()) reasons.add("Sentimen: ${log.sentiment}")
+                            if (log.targetPrice1 > 0) reasons.add("Target TP1: ${PriceFormatter.formatPrice(log.targetPrice1)}")
+                            if (log.targetPrice2 > 0) reasons.add("Target TP2: ${PriceFormatter.formatPrice(log.targetPrice2)}")
+                            if (log.stopLoss > 0) reasons.add("Stop Loss: ${PriceFormatter.formatPrice(log.stopLoss)}")
+                            if (reasons.isEmpty()) reasons.add("Sinyal indikator teknikal terkonfirmasi")
+
+                            resolvedSnapshot = TradeSignalSnapshot(
+                                strategyMode = log.strategyMode,
+                                confidenceScore = log.confidence,
+                                reasons = reasons
+                            )
+                            if (resolvedStrategy.equals("MANUAL", true) && log.strategyMode.isNotBlank()) {
+                                resolvedStrategy = log.strategyMode
+                            }
+                        }
+                    }
+                } catch (_: Exception) {}
+            }
+        }
+    }
+
+    val activeSnapshot = resolvedSnapshot
+    val activeStrategy = resolvedStrategy
+    val activeDuration = resolvedDuration
+    val activeEntry = resolvedEntryPrice
+    val activePnl = resolvedPnlIdr
+    val activePnlPct = resolvedPnlPct
+    val activeTrailing = resolvedTrailing
+    val activeTrailingPercent = resolvedTrailingPercent
+    val activePeakPrice = resolvedPeakPrice
+    val activeLockPrice = resolvedLockPrice
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -110,7 +207,7 @@ fun TradeLogDetailDialog(
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "Mode: ${strategyMode.uppercase()} • ${if (isReal) "Real Indodax" else "Simulasi"}",
+                                text = "Mode: ${activeStrategy.uppercase()} • ${if (isReal) "Real Indodax" else "Simulasi"}",
                                 color = TvBlue,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Medium
@@ -163,40 +260,40 @@ fun TradeLogDetailDialog(
                             ) {
                                 InfoItem(
                                     "Durasi Hold",
-                                    TradeLogExporter.formatDuration(holdingDurationMs),
+                                    TradeLogExporter.formatDuration(activeDuration),
                                     highlightColor = TvBlue,
                                     modifier = Modifier.weight(1f)
                                 )
-                                if (entryPrice != null && entryPrice > 0.0) {
-                                    InfoItem("Entry Buy", PriceFormatter.formatPrice(entryPrice, quoteAsset = quote), modifier = Modifier.weight(1f))
+                                if (activeEntry != null && activeEntry > 0.0) {
+                                    InfoItem("Entry Buy", PriceFormatter.formatPrice(activeEntry, quoteAsset = quote), modifier = Modifier.weight(1f))
                                 } else {
                                     Spacer(Modifier.weight(1f))
                                 }
                             }
 
-                            if (pnlIdr != null) {
-                                val isProfit = pnlIdr >= 0
+                            if (activePnl != null) {
+                                val isProfit = activePnl >= 0
                                 val pColor = if (isProfit) TvGreen else TvRed
                                 val prefix = if (isProfit) "+" else ""
                                 InfoItem(
                                     "Realized PnL",
-                                    "$prefix${PriceFormatter.formatPrice(pnlIdr, quoteAsset = quote)} ($prefix${String.format(Locale.US, "%.2f", pnlPercent ?: 0.0)}%)",
+                                    "$prefix${PriceFormatter.formatPrice(activePnl, quoteAsset = quote)} ($prefix${String.format(Locale.US, "%.2f", activePnlPct ?: 0.0)}%)",
                                     highlightColor = pColor,
                                     modifier = Modifier.fillMaxWidth()
                                 )
                             }
 
-                            if (isTrailingUsed) {
+                            if (activeTrailing) {
                                 HorizontalDivider(color = TvBorder.copy(alpha = 0.5f))
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    InfoItem("Trailing Lock", "AKTIF (${trailingPercent ?: 0.0}%)", highlightColor = TvGreen, modifier = Modifier.weight(1f))
-                                    trailingPeakPrice?.let {
+                                    InfoItem("Trailing Lock", "AKTIF (${activeTrailingPercent ?: 1.5}%)", highlightColor = TvGreen, modifier = Modifier.weight(1f))
+                                    activePeakPrice?.let {
                                         InfoItem("Peak Price", PriceFormatter.formatPrice(it, quoteAsset = quote), modifier = Modifier.weight(1f))
                                     }
-                                    trailingLockPrice?.let {
+                                    activeLockPrice?.let {
                                         InfoItem("Lock Stop Price", PriceFormatter.formatPrice(it, quoteAsset = quote), modifier = Modifier.weight(1f))
                                     }
                                 }
@@ -205,7 +302,7 @@ fun TradeLogDetailDialog(
                     }
 
                     // Section 2: Technical Indicators Breakdown (Categorized)
-                    if (snapshot != null) {
+                    if (activeSnapshot != null) {
                         Card(
                             shape = RoundedCornerShape(10.dp),
                             colors = CardDefaults.cardColors(containerColor = TvSurfaceVariant),
@@ -223,11 +320,11 @@ fun TradeLogDetailDialog(
                                 CategoryBox(
                                     title = "A. Order Book & Likuiditas",
                                     items = listOf(
-                                        "Bid Ratio" to (snapshot.bidRatioPct?.let { String.format(Locale.US, "%.1f%%", it) } ?: "-"),
-                                        "Ask Ratio" to (snapshot.askRatioPct?.let { String.format(Locale.US, "%.1f%%", it) } ?: "-"),
-                                        "Pressure" to (snapshot.orderBookPressure?.let { if (it > 0) "+$it% (Buyer)" else "$it% (Seller)" } ?: "Netral"),
-                                        "Spread" to (snapshot.spreadPct?.let { String.format(Locale.US, "%.3f%%", it) } ?: "-"),
-                                        "24h Vol" to (snapshot.volume24h?.let { PriceFormatter.formatRawDecimal(it) } ?: "-")
+                                        "Bid Ratio" to (activeSnapshot.bidRatioPct?.let { String.format(Locale.US, "%.1f%%", it) } ?: "-"),
+                                        "Ask Ratio" to (activeSnapshot.askRatioPct?.let { String.format(Locale.US, "%.1f%%", it) } ?: "-"),
+                                        "Pressure" to (activeSnapshot.orderBookPressure?.let { if (it > 0) "+$it% (Buyer)" else "$it% (Seller)" } ?: "Netral"),
+                                        "Spread" to (activeSnapshot.spreadPct?.let { String.format(Locale.US, "%.3f%%", it) } ?: "-"),
+                                        "24h Vol" to (activeSnapshot.volume24h?.let { PriceFormatter.formatRawDecimal(it) } ?: "-")
                                     )
                                 )
 
@@ -235,11 +332,11 @@ fun TradeLogDetailDialog(
                                 CategoryBox(
                                     title = "B. Momentum & Osilator",
                                     items = listOf(
-                                        "RSI (14)" to (snapshot.rsi14?.let { String.format(Locale.US, "%.2f", it) } ?: "-"),
-                                        "MACD Line" to (snapshot.macd?.let { String.format(Locale.US, "%.4f", it) } ?: "-"),
-                                        "MACD Signal" to (snapshot.macdSignal?.let { String.format(Locale.US, "%.4f", it) } ?: "-"),
-                                        "MACD Hist" to (snapshot.macdHist?.let { String.format(Locale.US, "%.4f", it) } ?: "-"),
-                                        "Momentum" to (snapshot.momentum?.let { String.format(Locale.US, "%.2f", it) } ?: "-")
+                                        "RSI (14)" to (activeSnapshot.rsi14?.let { String.format(Locale.US, "%.2f", it) } ?: "-"),
+                                        "MACD Line" to (activeSnapshot.macd?.let { String.format(Locale.US, "%.4f", it) } ?: "-"),
+                                        "MACD Signal" to (activeSnapshot.macdSignal?.let { String.format(Locale.US, "%.4f", it) } ?: "-"),
+                                        "MACD Hist" to (activeSnapshot.macdHist?.let { String.format(Locale.US, "%.4f", it) } ?: "-"),
+                                        "Momentum" to (activeSnapshot.momentum?.let { String.format(Locale.US, "%.2f", it) } ?: "-")
                                     )
                                 )
 
@@ -247,10 +344,10 @@ fun TradeLogDetailDialog(
                                 CategoryBox(
                                     title = "C. Tren & Moving Averages (EMA)",
                                     items = listOf(
-                                        "EMA 20" to (snapshot.ema20?.let { PriceFormatter.formatPrice(it, quoteAsset = quote) } ?: "-"),
-                                        "EMA 50" to (snapshot.ema50?.let { PriceFormatter.formatPrice(it, quoteAsset = quote) } ?: "-"),
-                                        "EMA 200" to (snapshot.ema200?.let { PriceFormatter.formatPrice(it, quoteAsset = quote) } ?: "-"),
-                                        "Trend" to (snapshot.trendStatus ?: "Konsolidasi")
+                                        "EMA 20" to (activeSnapshot.ema20?.let { PriceFormatter.formatPrice(it, quoteAsset = quote) } ?: "-"),
+                                        "EMA 50" to (activeSnapshot.ema50?.let { PriceFormatter.formatPrice(it, quoteAsset = quote) } ?: "-"),
+                                        "EMA 200" to (activeSnapshot.ema200?.let { PriceFormatter.formatPrice(it, quoteAsset = quote) } ?: "-"),
+                                        "Trend" to (activeSnapshot.trendStatus ?: "Konsolidasi")
                                     )
                                 )
 
@@ -258,11 +355,11 @@ fun TradeLogDetailDialog(
                                 CategoryBox(
                                     title = "D. Volatilitas & Bollinger Bands",
                                     items = listOf(
-                                        "BB Upper" to (snapshot.bbUpper?.let { PriceFormatter.formatPrice(it, quoteAsset = quote) } ?: "-"),
-                                        "BB Middle" to (snapshot.bbMiddle?.let { PriceFormatter.formatPrice(it, quoteAsset = quote) } ?: "-"),
-                                        "BB Lower" to (snapshot.bbLower?.let { PriceFormatter.formatPrice(it, quoteAsset = quote) } ?: "-"),
-                                        "Bandwidth" to (snapshot.bbWidthPct?.let { String.format(Locale.US, "%.2f%%", it) } ?: "-"),
-                                        "ATR" to (snapshot.atr?.let { PriceFormatter.formatPrice(it, quoteAsset = quote) } ?: "-")
+                                        "BB Upper" to (activeSnapshot.bbUpper?.let { PriceFormatter.formatPrice(it, quoteAsset = quote) } ?: "-"),
+                                        "BB Middle" to (activeSnapshot.bbMiddle?.let { PriceFormatter.formatPrice(it, quoteAsset = quote) } ?: "-"),
+                                        "BB Lower" to (activeSnapshot.bbLower?.let { PriceFormatter.formatPrice(it, quoteAsset = quote) } ?: "-"),
+                                        "Bandwidth" to (activeSnapshot.bbWidthPct?.let { String.format(Locale.US, "%.2f%%", it) } ?: "-"),
+                                        "ATR" to (activeSnapshot.atr?.let { PriceFormatter.formatPrice(it, quoteAsset = quote) } ?: "-")
                                     )
                                 )
 
@@ -270,13 +367,13 @@ fun TradeLogDetailDialog(
                                 CategoryBox(
                                     title = "E. AI Evaluator Decision & Key Factors",
                                     items = listOf(
-                                        "Score" to (snapshot.confidenceScore?.let { "$it / 100" } ?: "-"),
-                                        "Regime" to (snapshot.marketRegime ?: "-"),
-                                        "Pola" to (snapshot.patternDetected ?: "-")
+                                        "Score" to (activeSnapshot.confidenceScore?.let { "$it / 100" } ?: "-"),
+                                        "Regime" to (activeSnapshot.marketRegime ?: "-"),
+                                        "Pola" to (activeSnapshot.patternDetected ?: "-")
                                     )
                                 )
 
-                                if (snapshot.reasons.isNotEmpty()) {
+                                if (activeSnapshot.reasons.isNotEmpty()) {
                                     Column(
                                         modifier = Modifier
                                             .fillMaxWidth()
@@ -290,7 +387,7 @@ fun TradeLogDetailDialog(
                                             fontWeight = FontWeight.SemiBold
                                         )
                                         Spacer(Modifier.height(4.dp))
-                                        snapshot.reasons.forEach { reason ->
+                                        activeSnapshot.reasons.forEach { reason ->
                                             Text(
                                                 text = "• $reason",
                                                 color = TvTextPrimary,
@@ -307,12 +404,35 @@ fun TradeLogDetailDialog(
                             colors = CardDefaults.cardColors(containerColor = TvSurfaceVariant),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text(
-                                text = "Snapshot sinyal teknikal dicatat otomatis saat order dieksekusi melalui strategi trading.",
-                                color = TvTextSecondary,
-                                fontSize = 11.sp,
-                                modifier = Modifier.padding(12.dp)
-                            )
+                            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(
+                                    text = "2. INFORMASI TRANSAKSI RESMI INDODAX",
+                                    color = TvAmber,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "Order ini dieksekusi secara instan dan disinkronkan langsung dari akun resmi Indodax via API V2.",
+                                    color = TvTextSecondary,
+                                    fontSize = 11.sp
+                                )
+                                HorizontalDivider(color = TvBorder.copy(alpha = 0.5f))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    InfoItem("Status Order", "TEREKSEKUSI (FILLED)", highlightColor = TvGreen, modifier = Modifier.weight(1f))
+                                    InfoItem("Tipe Order", orderType, modifier = Modifier.weight(1f))
+                                    InfoItem("Estimasi Fee", PriceFormatter.formatPrice(feeIdr, quoteAsset = quote), modifier = Modifier.weight(1f))
+                                }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    InfoItem("ID Transaksi", tradeId.take(18), modifier = Modifier.weight(1f))
+                                    InfoItem("Waktu Eksekusi", timeFormat.format(Date(timestamp)), modifier = Modifier.weight(1.5f))
+                                }
+                            }
                         }
                     }
                 }

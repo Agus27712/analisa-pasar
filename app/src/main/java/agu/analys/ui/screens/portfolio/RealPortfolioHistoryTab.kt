@@ -14,12 +14,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import agu.analys.database.AppDatabase
 import agu.analys.database.RealTradeEntity
+import agu.analys.database.TradeHistoryRecordEntity
 import agu.analys.trading.TradeLogExporter
 import agu.analys.trading.TradeSignalSnapshot
 import agu.analys.ui.components.trade.TradeLogDetailDialog
 import agu.analys.ui.theme.*
 import agu.analys.util.PriceFormatter
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -66,6 +70,36 @@ fun RealTradeHistoryItemCard(
         TradeSignalSnapshot.fromJsonString(trade.signalSnapshotJson)
     }
 
+    val matchingRecord by produceState<TradeHistoryRecordEntity?>(initialValue = null, key1 = trade.id) {
+        value = withContext(Dispatchers.IO) {
+            try {
+                val db = AppDatabase.getInstance()
+                val norm = trade.symbol.uppercase().replace("_", "")
+                val alt = if (norm.endsWith("IDR")) norm else "${norm}IDR"
+                val records: List<TradeHistoryRecordEntity> = db.tradeHistoryRecordDao().getRecordsForSymbol(norm, alt)
+                records.firstOrNull { rec: TradeHistoryRecordEntity ->
+                    val buyDiff = java.lang.Math.abs(rec.buyTime - trade.time)
+                    val sellDiff = java.lang.Math.abs((rec.sellTime ?: 0L) - trade.time)
+                    (trade.isBuyer && (rec.buyPrice == trade.price || buyDiff < 600000L)) ||
+                    (!trade.isBuyer && (rec.sellPrice == trade.price || sellDiff < 600000L))
+                } ?: records.firstOrNull { it.signalSnapshotJson != null }
+            } catch (_: Exception) {
+                null
+            }
+        }
+    }
+
+    val effectiveSnapshot = snapshot ?: matchingRecord?.signalSnapshotJson?.let { TradeSignalSnapshot.fromJsonString(it) }
+    val effectiveStrategy = if (trade.strategyMode != "MANUAL") trade.strategyMode else (matchingRecord?.strategyMode ?: "SWING")
+    val effectiveDuration = trade.holdingDurationMs ?: matchingRecord?.holdingDurationMs
+    val effectiveEntry = trade.entryPrice ?: matchingRecord?.buyPrice
+    val effectivePnlIdr = trade.pnlIdr ?: matchingRecord?.pnlIdr
+    val effectivePnlPercent = trade.pnlPercent ?: matchingRecord?.pnlPercent
+    val effectiveTrailing = trade.isTrailingUsed || (matchingRecord?.isTrailingUsed == true)
+    val effectiveTrailingPercent = trade.trailingPercent ?: matchingRecord?.trailingPercent
+    val effectivePeakPrice = trade.trailingPeakPrice ?: matchingRecord?.peakPriceDuringHold
+    val effectiveLockPrice = trade.trailingLockPrice ?: matchingRecord?.trailingLockPrice
+
     if (showDetailDialog) {
         TradeLogDetailDialog(
             tradeId = trade.id,
@@ -80,17 +114,17 @@ fun RealTradeHistoryItemCard(
             feeIdr = trade.amount * 0.003,
             timestamp = trade.time,
             isReal = true,
-            strategyMode = trade.strategyMode,
-            holdingDurationMs = trade.holdingDurationMs,
-            entryPrice = trade.entryPrice,
-            entryTimestamp = trade.entryTimestamp,
-            pnlIdr = trade.pnlIdr,
-            pnlPercent = trade.pnlPercent,
-            isTrailingUsed = trade.isTrailingUsed,
-            trailingPercent = trade.trailingPercent,
-            trailingPeakPrice = trade.trailingPeakPrice,
-            trailingLockPrice = trade.trailingLockPrice,
-            snapshot = snapshot,
+            strategyMode = effectiveStrategy,
+            holdingDurationMs = effectiveDuration,
+            entryPrice = effectiveEntry,
+            entryTimestamp = trade.entryTimestamp ?: matchingRecord?.buyTime,
+            pnlIdr = effectivePnlIdr,
+            pnlPercent = effectivePnlPercent,
+            isTrailingUsed = effectiveTrailing,
+            trailingPercent = effectiveTrailingPercent,
+            trailingPeakPrice = effectivePeakPrice,
+            trailingLockPrice = effectiveLockPrice,
+            snapshot = effectiveSnapshot,
             onDismiss = { showDetailDialog = false }
         )
     }
@@ -140,7 +174,7 @@ fun RealTradeHistoryItemCard(
                             .padding(horizontal = 5.dp, vertical = 1.dp)
                     ) {
                         Text(
-                            text = trade.strategyMode.uppercase(),
+                            text = effectiveStrategy.uppercase(),
                             color = TvBlue,
                             fontSize = 8.sp,
                             fontWeight = FontWeight.Black
@@ -162,10 +196,10 @@ fun RealTradeHistoryItemCard(
                     }
                 }
 
-                if (trade.pnlIdr != null && trade.pnlPercent != null) {
-                    val isProfit = trade.pnlIdr >= 0
+                if (effectivePnlIdr != null && effectivePnlPercent != null) {
+                    val isProfit = effectivePnlIdr >= 0
                     Text(
-                        text = "${if (isProfit) "+" else ""}${PriceFormatter.formatPrice(kotlin.math.abs(trade.pnlIdr))} (${String.format(Locale.US, "%.2f", trade.pnlPercent)}%)",
+                        text = "${if (isProfit) "+" else ""}${PriceFormatter.formatPrice(kotlin.math.abs(effectivePnlIdr))} (${String.format(Locale.US, "%.2f", effectivePnlPercent)}%)",
                         color = if (isProfit) TvGreen else TvRed,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,

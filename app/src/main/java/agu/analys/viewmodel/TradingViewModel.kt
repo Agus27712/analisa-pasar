@@ -3,6 +3,7 @@ package agu.analys.viewmodel
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Dispatchers
 import agu.analys.database.RealOpenOrderEntity
 import agu.analys.database.RealTradeEntity
 import agu.analys.bridge.TradingViewBridge
@@ -112,6 +113,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
                     indicators = engine.indicators.value,
                     signal = engine.signalState.value
                 )
+                val snapshotJson = snapshot.toJson().toString()
                 tradeHistoryRecorder.recordBuy(
                     symbol = symbol,
                     isReal = true,
@@ -127,6 +129,26 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
                     targetPrice2 = tp2,
                     stopLossPrice = engine.signalState.value.stopLoss
                 )
+                viewModelScope.launch(Dispatchers.IO) {
+                    try {
+                        val localEntity = RealTradeEntity(
+                            id = "local_${System.currentTimeMillis()}_${symbol}",
+                            symbol = pair.lowercase().replace("_", ""),
+                            price = price,
+                            qty = quantity,
+                            amount = price * quantity,
+                            time = System.currentTimeMillis(),
+                            side = "BUY",
+                            isBuyer = true,
+                            strategyMode = _strategyMode.value.name,
+                            holdingDurationMs = 0L,
+                            entryPrice = price,
+                            entryTimestamp = System.currentTimeMillis(),
+                            signalSnapshotJson = snapshotJson
+                        )
+                        AppDatabase.getInstance().realTradeDao().insertTrades(listOf(localEntity))
+                    } catch (_: Exception) {}
+                }
             }
             syncRealTradeToSimulation(pair, type, price, quantity, tp1, tp2)
             positionCoordinator.refreshPosition(_selectedPair.value.symbol)

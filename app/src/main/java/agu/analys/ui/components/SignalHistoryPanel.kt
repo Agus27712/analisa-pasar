@@ -119,7 +119,7 @@ fun SignalHistoryPanel(
                 Column(Modifier.weight(1f)) {
                     Text("STATUS POSISI", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = ownershipColor, letterSpacing = 0.6.sp)
                     Text(
-                        if (position.isHolding) "Punya $currentSymbol di Indodax"
+                        if (position.isHolding) "Punya $currentSymbol ${if (position.isReal) "di Indodax" else "di Simulasi"}"
                         else "Belum punya $currentSymbol",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
@@ -157,8 +157,8 @@ fun SignalHistoryPanel(
                         SignalAction.SELL -> "JUAL"
                         SignalAction.HOLD -> "TAHAN"
                     }
-                    val historicalPosition = positionStore.getAt(currentSymbol, signal.timestamp)
-                    val historicalHolding = historicalPosition.isHolding
+                    val historicalPosition = positionStore.getAt(currentSymbol, signal.timestamp, isReal = position.isReal)
+                    val historicalHolding = if (position.isHolding && (historicalPosition.isHolding || position.openedAt == 0L || signal.timestamp >= position.openedAt)) true else historicalPosition.isHolding
                     val historicalOwnershipLabel = if (historicalHolding) "PUNYA" else "TIDAK PUNYA"
                     val historicalOwnershipColor = if (historicalHolding) TvGreen else TvTextSecondary
                     val levelLifecycle = if (hasPositionLevels(signal)) "LEVEL LENGKAP" else "LEVEL TIDAK LENGKAP"

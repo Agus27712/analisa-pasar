@@ -3,6 +3,7 @@ package agu.analys.viewmodel
 import agu.analys.database.AppDatabase
 import agu.analys.database.RealOpenOrderEntity
 import agu.analys.database.RealTradeEntity
+import agu.analys.database.TradeHistoryRecordEntity
 import agu.analys.service.IndodaxTradeApiV2
 import agu.analys.util.AppPreferences
 import agu.analys.util.PriceFormatter
@@ -283,7 +284,44 @@ class RealTradeCoordinator(
                 newPartial[asset] = accBuyQty + 1e-12 < currentQty
             }
         }
-        if (accumulatedEntities.isNotEmpty()) db.insertTrades(accumulatedEntities)
+        if (accumulatedEntities.isNotEmpty()) {
+            val enrichedEntities = mutableListOf<RealTradeEntity>()
+            val historyDao = AppDatabase.getInstance().tradeHistoryRecordDao()
+            for (ent in accumulatedEntities) {
+                val existing = db.getTradesBySymbol(ent.symbol).firstOrNull { it.id == ent.id }
+                if (existing?.signalSnapshotJson != null) {
+                    enrichedEntities.add(existing)
+                    continue
+                }
+                val norm = ent.symbol.uppercase().replace("_", "")
+                val records: List<TradeHistoryRecordEntity> = historyDao.getRecordsForSymbol(norm, "${norm}IDR")
+                val matched: TradeHistoryRecordEntity? = records.firstOrNull { rec: TradeHistoryRecordEntity ->
+                    val timeDiff = java.lang.Math.abs(rec.buyTime - ent.time)
+                    val sellTimeDiff = java.lang.Math.abs((rec.sellTime ?: 0L) - ent.time)
+                    (ent.isBuyer && (rec.buyPrice == ent.price || timeDiff < 600000L)) ||
+                    (!ent.isBuyer && (rec.sellPrice == ent.price || sellTimeDiff < 600000L))
+                } ?: records.firstOrNull()
+
+                if (matched != null) {
+                    enrichedEntities.add(
+                        ent.copy(
+                            strategyMode = if (ent.strategyMode != "MANUAL") ent.strategyMode else matched.strategyMode,
+                            holdingDurationMs = ent.holdingDurationMs ?: matched.holdingDurationMs,
+                            entryPrice = ent.entryPrice ?: matched.buyPrice,
+                            entryTimestamp = ent.entryTimestamp ?: matched.buyTime,
+                            pnlIdr = ent.pnlIdr ?: matched.pnlIdr,
+                            pnlPercent = ent.pnlPercent ?: matched.pnlPercent,
+                            isTrailingUsed = ent.isTrailingUsed || matched.isTrailingUsed,
+                            trailingLockPrice = ent.trailingLockPrice ?: matched.trailingLockPrice,
+                            signalSnapshotJson = ent.signalSnapshotJson ?: matched.signalSnapshotJson
+                        )
+                    )
+                } else {
+                    enrichedEntities.add(ent)
+                }
+            }
+            db.insertTrades(enrichedEntities)
+        }
         _realAvgBuyPrices.value = newAvg
         _realAvgBuyPartial.value = newPartial
         prefs.saveRealAvgBuyPrices(newAvg)

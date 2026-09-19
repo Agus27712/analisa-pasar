@@ -102,6 +102,9 @@ interface TradeHistoryRecordDao {
     @Query("SELECT * FROM trade_history_records WHERE symbol = :symbol ORDER BY buyTime DESC")
     fun getRecordsBySymbolFlow(symbol: String): Flow<List<TradeHistoryRecordEntity>>
 
+    @Query("SELECT * FROM trade_history_records WHERE symbol = :symbol OR symbol = :altSymbol ORDER BY buyTime DESC")
+    suspend fun getRecordsForSymbol(symbol: String, altSymbol: String): List<TradeHistoryRecordEntity>
+
     @Query("SELECT * FROM trade_history_records WHERE status = 'HOLDING' ORDER BY buyTime DESC")
     fun getHoldingRecordsFlow(): Flow<List<TradeHistoryRecordEntity>>
 
