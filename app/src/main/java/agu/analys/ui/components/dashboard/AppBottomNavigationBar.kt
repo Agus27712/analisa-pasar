@@ -32,38 +32,44 @@ fun AppBottomNavigationBar(
     onSelectTab: (NavTab) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(TvSurface)
-            .padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceAround,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        NavItem(
-            icon = Icons.AutoMirrored.Filled.FormatListBulleted,
-            label = "Watchlist",
-            isSelected = currentTab == NavTab.WATCHLIST,
-            onClick = { onSelectTab(NavTab.WATCHLIST) }
+    Column(modifier = modifier.fillMaxWidth()) {
+        androidx.compose.material3.HorizontalDivider(
+            color = TvBorder,
+            thickness = 1.dp
         )
-        NavItem(
-            icon = Icons.Default.AccountBalanceWallet,
-            label = "Portofolio",
-            isSelected = currentTab == NavTab.PORTOFOLIO,
-            onClick = { onSelectTab(NavTab.PORTOFOLIO) }
-        )
-        NavItem(
-            icon = Icons.AutoMirrored.Filled.CompareArrows,
-            label = "Simulasi",
-            isSelected = currentTab == NavTab.SIMULASI,
-            onClick = { onSelectTab(NavTab.SIMULASI) }
-        )
-        NavItem(
-            icon = Icons.Default.Settings,
-            label = "Pengaturan",
-            isSelected = currentTab == NavTab.SETTINGS,
-            onClick = { onSelectTab(NavTab.SETTINGS) }
-        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(TvSurface)
+                .padding(vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceAround,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            NavItem(
+                icon = Icons.AutoMirrored.Filled.FormatListBulleted,
+                label = "Watchlist",
+                isSelected = currentTab == NavTab.WATCHLIST,
+                onClick = { onSelectTab(NavTab.WATCHLIST) }
+            )
+            NavItem(
+                icon = Icons.Default.AccountBalanceWallet,
+                label = "Portofolio",
+                isSelected = currentTab == NavTab.PORTOFOLIO,
+                onClick = { onSelectTab(NavTab.PORTOFOLIO) }
+            )
+            NavItem(
+                icon = Icons.AutoMirrored.Filled.CompareArrows,
+                label = "Simulasi",
+                isSelected = currentTab == NavTab.SIMULASI,
+                onClick = { onSelectTab(NavTab.SIMULASI) }
+            )
+            NavItem(
+                icon = Icons.Default.Settings,
+                label = "Pengaturan",
+                isSelected = currentTab == NavTab.SETTINGS,
+                onClick = { onSelectTab(NavTab.SETTINGS) }
+            )
+        }
     }
 }
 

@@ -123,168 +123,179 @@ fun SignalLogScreen(
             shadowElevation = 2.dp,
             border = BorderStroke(1.dp, TvBorder)
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
                 Row(
-                    modifier = Modifier.weight(1f),
-                    verticalAlignment = Alignment.CenterVertically
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    IconButton(
-                        onClick = onBack,
-                        modifier = Modifier.testTag("signal_logs_back_btn")
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Kembali",
-                            tint = TvTextPrimary,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-                    Spacer(Modifier.width(4.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = if (selectedScreenTab == 0) "HISTORI SIKLUS TRADE" else "LOG & RELIABILITAS SINYAL",
-                            color = TvTextPrimary,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 0.5.sp,
-                            maxLines = 1
-                        )
-                        Text(
-                            text = if (selectedScreenTab == 0) "Database Lokal Room · Siklus Sinyal ➔ Buy ➔ Hold ➔ Sell" else "Database Lokal Room · Evaluasi Skor & Akurasi",
-                            color = TvTextSecondary,
-                            fontSize = 9.5.sp,
-                            maxLines = 1
-                        )
-                    }
-                }
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    // Tombol Refresh: sync log valid dari detail/engine ke halaman Log & Akurasi
-                    IconButton(
-                        onClick = {
-                            viewModel.refreshSignalLogs()
-                            Toast.makeText(context, "Log sinyal di-refresh & dikonsolidasi", Toast.LENGTH_SHORT).show()
-                        },
-                        modifier = Modifier.testTag("signal_logs_refresh_btn")
-                    ) {
-                        Icon(
-                            Icons.Default.Refresh,
-                            contentDescription = "Refresh Log Sinyal",
-                            tint = TvCyan,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-
-                    IconButton(
-                        onClick = {
-                            if (selectedScreenTab == 0) {
-                                viewModel.seedSampleTradeJourneys()
-                                Toast.makeText(context, "Sampel histori siklus trade ditambahkan ke database", Toast.LENGTH_SHORT).show()
-                            } else {
-                                viewModel.seedSampleSignalLogs()
-                                Toast.makeText(context, "Data simulasi sinyal ditambahkan untuk pengujian", Toast.LENGTH_SHORT).show()
-                            }
-                        },
-                        modifier = Modifier.testTag("signal_logs_seed_btn")
-                    ) {
-                        Icon(
-                            Icons.Default.AddChart,
-                            contentDescription = "Muat Data Uji",
-                            tint = TvCyan,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-
-                    val hasItemsToClear = if (selectedScreenTab == 0) tradeHistoryRecords.isNotEmpty() else allLogs.isNotEmpty()
-                    if (hasItemsToClear) {
                         IconButton(
-                            onClick = { showClearDialog = true },
-                            modifier = Modifier.testTag("signal_logs_clear_btn")
+                            onClick = onBack,
+                            modifier = Modifier.testTag("signal_logs_back_btn")
                         ) {
                             Icon(
-                                Icons.Default.DeleteOutline,
-                                contentDescription = "Hapus Semua Log",
-                                tint = TvRed,
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Kembali",
+                                tint = TvTextPrimary,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                        Spacer(Modifier.width(4.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = if (selectedScreenTab == 0) "HISTORI SIKLUS TRADE" else "LOG & RELIABILITAS SINYAL",
+                                color = TvTextPrimary,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 0.5.sp,
+                                maxLines = 1
+                            )
+                            Text(
+                                text = if (selectedScreenTab == 0) "Database Lokal Room · Siklus Sinyal ➔ Buy ➔ Hold ➔ Sell" else "Database Lokal Room · Evaluasi Skor & Akurasi",
+                                color = TvTextSecondary,
+                                fontSize = 9.5.sp,
+                                maxLines = 1
+                            )
+                        }
+                    }
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        // Tombol Refresh: sync log valid dari detail/engine ke halaman Log & Akurasi
+                        FilledTonalIconButton(
+                            onClick = {
+                                viewModel.refreshSignalLogs()
+                                Toast.makeText(context, "Log sinyal di-refresh & dikonsolidasi", Toast.LENGTH_SHORT).show()
+                            },
+                            colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                containerColor = TvCyan.copy(alpha = 0.15f),
+                                contentColor = TvCyan
+                            ),
+                            modifier = Modifier
+                                .size(36.dp)
+                                .testTag("signal_logs_refresh_btn")
+                        ) {
+                            Icon(
+                                Icons.Default.Refresh,
+                                contentDescription = "Refresh Log Sinyal",
+                                tint = TvCyan,
                                 modifier = Modifier.size(20.dp)
                             )
                         }
+
+                        IconButton(
+                            onClick = {
+                                if (selectedScreenTab == 0) {
+                                    viewModel.seedSampleTradeJourneys()
+                                    Toast.makeText(context, "Sampel histori siklus trade ditambahkan ke database", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    viewModel.seedSampleSignalLogs()
+                                    Toast.makeText(context, "Data simulasi sinyal ditambahkan untuk pengujian", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            modifier = Modifier.testTag("signal_logs_seed_btn")
+                        ) {
+                            Icon(
+                                Icons.Default.AddChart,
+                                contentDescription = "Muat Data Uji",
+                                tint = TvCyan,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        val hasItemsToClear = if (selectedScreenTab == 0) tradeHistoryRecords.isNotEmpty() else allLogs.isNotEmpty()
+                        if (hasItemsToClear) {
+                            IconButton(
+                                onClick = { showClearDialog = true },
+                                modifier = Modifier.testTag("signal_logs_clear_btn")
+                            ) {
+                                Icon(
+                                    Icons.Default.DeleteOutline,
+                                    contentDescription = "Hapus Semua Log",
+                                    tint = TvRed,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
                     }
                 }
-            }
 
-            // DUAL TABS: HISTORI SIKLUS TRADE vs EVALUASI SINYAL
-            TabRow(
-                selectedTabIndex = selectedScreenTab,
-                containerColor = TvSurfaceVariant,
-                contentColor = TvTextPrimary,
-                indicator = {},
-                divider = { HorizontalDivider(color = TvBorder.copy(alpha = 0.6f)) }
-            ) {
-                Tab(
-                    selected = selectedScreenTab == 0,
-                    onClick = { selectedScreenTab = 0 },
-                    text = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                "Histori Siklus Trade",
-                                fontSize = 12.sp,
-                                fontWeight = if (selectedScreenTab == 0) FontWeight.Bold else FontWeight.Normal,
-                                color = if (selectedScreenTab == 0) TvCyan else TvTextSecondary
-                            )
-                            if (tradeHistoryRecords.isNotEmpty()) {
-                                Spacer(Modifier.width(6.dp))
-                                Surface(
-                                    color = if (selectedScreenTab == 0) TvCyan.copy(alpha = 0.2f) else TvBorder,
-                                    shape = RoundedCornerShape(10.dp)
-                                ) {
-                                    Text(
-                                        text = "${tradeHistoryRecords.size}",
-                                        color = if (selectedScreenTab == 0) TvCyan else TvTextSecondary,
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                    )
+                // DUAL TABS: HISTORI SIKLUS TRADE vs EVALUASI SINYAL
+                TabRow(
+                    selectedTabIndex = selectedScreenTab,
+                    containerColor = TvSurfaceVariant,
+                    contentColor = TvTextPrimary,
+                    indicator = {},
+                    divider = { HorizontalDivider(color = TvBorder.copy(alpha = 0.6f)) }
+                ) {
+                    Tab(
+                        selected = selectedScreenTab == 0,
+                        onClick = { selectedScreenTab = 0 },
+                        text = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    "Histori Siklus Trade",
+                                    fontSize = 12.sp,
+                                    fontWeight = if (selectedScreenTab == 0) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (selectedScreenTab == 0) TvCyan else TvTextSecondary
+                                )
+                                if (tradeHistoryRecords.isNotEmpty()) {
+                                    Spacer(Modifier.width(6.dp))
+                                    Surface(
+                                        color = if (selectedScreenTab == 0) TvCyan.copy(alpha = 0.2f) else TvBorder,
+                                        shape = RoundedCornerShape(10.dp)
+                                    ) {
+                                        Text(
+                                            text = "${tradeHistoryRecords.size}",
+                                            color = if (selectedScreenTab == 0) TvCyan else TvTextSecondary,
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
                                 }
                             }
                         }
-                    }
-                )
+                    )
 
-                Tab(
-                    selected = selectedScreenTab == 1,
-                    onClick = { selectedScreenTab = 1 },
-                    text = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                "Log & Akurasi Sinyal",
-                                fontSize = 12.sp,
-                                fontWeight = if (selectedScreenTab == 1) FontWeight.Bold else FontWeight.Normal,
-                                color = if (selectedScreenTab == 1) TvCyan else TvTextSecondary
-                            )
-                            if (allLogs.isNotEmpty()) {
-                                Spacer(Modifier.width(6.dp))
-                                Surface(
-                                    color = if (selectedScreenTab == 1) TvCyan.copy(alpha = 0.2f) else TvBorder,
-                                    shape = RoundedCornerShape(10.dp)
-                                ) {
-                                    Text(
-                                        text = "${allLogs.size}",
-                                        color = if (selectedScreenTab == 1) TvCyan else TvTextSecondary,
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                    )
+                    Tab(
+                        selected = selectedScreenTab == 1,
+                        onClick = { selectedScreenTab = 1 },
+                        text = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    "Log & Akurasi Sinyal",
+                                    fontSize = 12.sp,
+                                    fontWeight = if (selectedScreenTab == 1) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (selectedScreenTab == 1) TvCyan else TvTextSecondary
+                                )
+                                if (allLogs.isNotEmpty()) {
+                                    Spacer(Modifier.width(6.dp))
+                                    Surface(
+                                        color = if (selectedScreenTab == 1) TvCyan.copy(alpha = 0.2f) else TvBorder,
+                                        shape = RoundedCornerShape(10.dp)
+                                    ) {
+                                        Text(
+                                            text = "${allLogs.size}",
+                                            color = if (selectedScreenTab == 1) TvCyan else TvTextSecondary,
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
                                 }
                             }
                         }
-                    }
-                )
+                    )
+                }
             }
         }
 
@@ -434,11 +445,30 @@ fun SignalLogScreen(
                             fontWeight = FontWeight.Bold,
                             letterSpacing = 0.8.sp
                         )
-                        Text(
-                            text = "Ketuk item untuk detail lengkap",
-                            color = TvTextSecondary,
-                            fontSize = 9.5.sp
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .clickable {
+                                    viewModel.refreshSignalLogs()
+                                    Toast.makeText(context, "Log sinyal diperbarui & dikonsolidasi", Toast.LENGTH_SHORT).show()
+                                }
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Refresh,
+                                contentDescription = "Segarkan",
+                                tint = TvCyan,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Text(
+                                text = "Segarkan",
+                                color = TvCyan,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                     }
                 }
             }

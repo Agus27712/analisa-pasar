@@ -44,11 +44,18 @@ data class OfficeDailyEvalResult(
  */
 object OfficeDailyEvaluator {
 
-    enum class IntradayPhase(val label: String, val isOpenWindow: Boolean, val isCloseWindow: Boolean, val isRestWindow: Boolean) {
-        OPEN_PAGI("Sesi Open Pagi (06:00–11:30 WIB)", true, false, false),
-        HOLD_SIANG("Sesi Hold & Trailing (11:30–19:30 WIB)", false, false, false),
-        CLOSE_MALAM("Sesi Close Malam (19:30–23:30 WIB)", false, true, false),
-        REST_MALAM("Sesi Istirahat (23:30–06:00 WIB)", false, false, true)
+    enum class IntradayPhase(
+        val label: String,
+        val isOpenWindow: Boolean,
+        val isCloseWindow: Boolean,
+        val isRestWindow: Boolean,
+        val isTrailingWindow: Boolean = false
+    ) {
+        OPEN_PAGI("Sesi Open Pagi (06:00–11:30 WIB)", isOpenWindow = true, isCloseWindow = false, isRestWindow = false),
+        HOLD_SIANG("Sesi Siang Akumulasi (11:30–15:30 WIB)", isOpenWindow = true, isCloseWindow = false, isRestWindow = false),
+        HOLD_SORE("Sesi Sore Trailing (15:30–19:30 WIB)", isOpenWindow = false, isCloseWindow = false, isRestWindow = false, isTrailingWindow = true),
+        CLOSE_MALAM("Sesi Close Malam (19:30–23:30 WIB)", isOpenWindow = false, isCloseWindow = true, isRestWindow = false),
+        REST_MALAM("Sesi Istirahat (23:30–06:00 WIB)", isOpenWindow = false, isCloseWindow = false, isRestWindow = true)
     }
 
     fun getCurrentIntradayPhase(): IntradayPhase {
@@ -58,10 +65,11 @@ object OfficeDailyEvaluator {
         val timeMinutes = hour * 60 + minute
 
         return when {
-            timeMinutes in 360..690 -> IntradayPhase.OPEN_PAGI      // 06:00 - 11:30 WIB
-            timeMinutes in 691..1170 -> IntradayPhase.HOLD_SIANG    // 11:30 - 19:30 WIB
-            timeMinutes in 1171..1410 -> IntradayPhase.CLOSE_MALAM  // 19:30 - 23:30 WIB
-            else -> IntradayPhase.REST_MALAM                        // 23:30 - 06:00 WIB
+            timeMinutes in 360..690 -> IntradayPhase.OPEN_PAGI       // 06:00 - 11:30 WIB (Utama Open Pagi)
+            timeMinutes in 691..930 -> IntradayPhase.HOLD_SIANG     // 11:30 - 15:30 WIB (Siang Akumulasi)
+            timeMinutes in 931..1170 -> IntradayPhase.HOLD_SORE     // 15:30 - 19:30 WIB (Sore Trailing)
+            timeMinutes in 1171..1410 -> IntradayPhase.CLOSE_MALAM // 19:30 - 23:30 WIB (Close Malam Kas IDR)
+            else -> IntradayPhase.REST_MALAM                        // 23:30 - 06:00 WIB (Istirahat Dini Hari)
         }
     }
 
@@ -250,22 +258,30 @@ object OfficeDailyEvaluator {
             }
         }
 
-        // 6. Level SL & TP
+        // 6. Level SL & TP Intraday (Dioptimalkan untuk Trade Harian: Open Pagi, Close Malam)
         val supportLevel = structure.support?.takeIf { it > 0.0 && it < price }
-            ?: (price - effectiveAtr * 1.6)
+            ?: (price - effectiveAtr * 1.2)
 
+        // Intraday ATR dibatasi pada rentang pergerakan harian sehat 1.5% s/d 4.0%
+        val intradayAtr = effectiveAtr.coerceIn(price * 0.015, price * 0.040)
+
+        // Stop Loss harian ketat: di bawah support lokal (risiko terukur -1.5% s/d -2.8%)
         val calculatedSl = maxOf(
-            supportLevel - (effectiveAtr * 0.35),
-            price - (effectiveAtr * 2.0),
-            price * 0.93
-        ).coerceAtMost(price * 0.982)
+            supportLevel - (intradayAtr * 0.3),
+            price * 0.972
+        ).coerceAtMost(price * 0.985)
 
-        val resistanceHint = structure.resistance?.takeIf { it > price } ?: (price + effectiveAtr * 2.8)
-        val calculatedTp1 = maxOf(price * 1.09, resistanceHint, price + effectiveAtr * 2.2)
-        val calculatedTp2 = maxOf(calculatedTp1 * 1.07, price * 1.18, price + effectiveAtr * 3.6)
+        // Target Take Profit 1 realistis harian (+2.8% s/d +4.8% tercapai di siang/sore)
+        val resistanceHint = structure.resistance?.takeIf { it > price }
+        val calculatedTp1 = (price + intradayAtr * 1.25)
+            .coerceIn(price * 1.028, price * 1.050)
+
+        // Target Take Profit 2 ekstensi tren (+5.5% s/d +8.5%)
+        val calculatedTp2 = maxOf(calculatedTp1 + (intradayAtr * 1.4), price * 1.060)
+            .coerceIn(price * 1.055, price * 1.088)
 
         val feeResult = FeeCalculator.roundTrip(price, calculatedSl, calculatedTp2, fees)
-        val netRr = feeResult.netRr.coerceAtLeast(1.8)
+        val netRr = feeResult.netRr.coerceAtLeast(1.6)
         val rrString = "1:${fmt(netRr)}"
 
         // ── DANGER & INVALIDATION ───────────────────────────────────────────
@@ -303,7 +319,7 @@ object OfficeDailyEvaluator {
         val step1Ok = !isDangerous && isUptrend && !isBearishStructure && !isDowntrend && !flashDumpTrauma
         val step2Ok = step1Ok && (price >= supportLevel * 0.988) && !tooCloseToHigh && !pumpAndDumpTrap
         val step3Ok = step2Ok && (rsi in 36.0..62.0) && macdHist >= -0.002
-        val step4Ok = step3Ok && netRr >= 1.8 && buyScore >= 52.0 && !isOverExtended
+        val step4Ok = step3Ok && netRr >= 1.6 && buyScore >= 52.0 && !isOverExtended
 
         val completedSteps = when {
             step4Ok -> 4
@@ -313,9 +329,9 @@ object OfficeDailyEvaluator {
             else -> 0
         }
 
-        // ── Keputusan akhir Intraday Disiplin Sesi ──────────────────────────
-        // Hanya diizinkan BUY pada Sesi Open Pagi (06:00 - 11:30 WIB)
-        val isQualified = step4Ok && buyScore >= 58.0 && buyScore > sellScore * 1.35 && !isNearHighDanger && !flashDumpTrauma && !pumpAndDumpTrap && intradayPhase.isOpenWindow
+        // ── Keputusan akhir Intraday Disiplin Sesi (Open Pagi, Close Malam) ──
+        // Diperbolehkan BUY pada Sesi Open Pagi (06:00–11:30 WIB) atau Sesi Siang Akumulasi jika momentum kuat
+        val isQualified = step4Ok && buyScore >= 55.0 && buyScore > sellScore * 1.25 && !isNearHighDanger && !flashDumpTrauma && !pumpAndDumpTrap && intradayPhase.isOpenWindow
         
         var baseConfidence = if (isQualified) (buyScore).coerceAtMost(90.0).toInt() else (buyScore).coerceAtMost(60.0).toInt()
         val regimeMultiplier = when {
@@ -329,14 +345,25 @@ object OfficeDailyEvaluator {
             globalContext.isVetoActive -> SignalAction.HOLD
             isParabolicUnwind || flashDumpTrauma -> SignalAction.HOLD
             intradayPhase.isCloseWindow -> {
-                reasons.add(0, "🌙 SESI CLOSE MALAM (19:30–23:30 WIB): Amankan profit & tutup posisi sebelum tengah malam untuk hindari overnight dump.")
+                reasons.add(0, "🌙 SESI CLOSE MALAM (19:30–23:30 WIB): Amankan profit harian & tutup posisi menjadi kas IDR sebelum tengah malam (Hindari overnight dump).")
                 SignalAction.SELL
             }
             intradayPhase.isRestWindow -> {
                 reasons.add(0, "💤 SESI ISTIRAHAT (23:30–06:00 WIB): Pasar ditutup untuk posisi baru. Menghindari flash dump dini hari.")
                 SignalAction.HOLD
             }
-            isQualified && !isDangerous -> SignalAction.BUY
+            intradayPhase.isTrailingWindow -> {
+                reasons.add(0, "🛡️ SESI SORE TRAILING (15:30–19:30 WIB): Pasang trailing stop untuk mengunci profit harian. Tidak membuka posisi baru.")
+                SignalAction.HOLD
+            }
+            isQualified && !isDangerous -> {
+                if (intradayPhase == IntradayPhase.OPEN_PAGI) {
+                    reasons.add(0, "⚡ SESI OPEN PAGI (06:00–11:30 WIB): Momentum harian terkonfirmasi. Waktu prima eksekusi posisi.")
+                } else {
+                    reasons.add(0, "☀️ SESI SIANG (11:30–15:30 WIB): Akumulasi tren lanjutan sehat. Siapkan TP/trailing sebelum malam.")
+                }
+                SignalAction.BUY
+            }
             else -> SignalAction.HOLD
         }
 
@@ -410,19 +437,21 @@ object OfficeDailyEvaluator {
             statusTitle = when {
                 intradayPhase.isCloseWindow -> "CLOSE MALAM (EXIT)"
                 intradayPhase.isRestWindow -> "ISTIRAHAT (NO ENTRY)"
+                intradayPhase.isTrailingWindow -> "SORE TRAILING (HOLD)"
                 flashDumpTrauma -> "FLASH DUMP TRAUMA (HOLD)"
                 pumpAndDumpTrap -> "FAKE PUMP TRAP (HOLD)"
                 isRsiOverbought -> "OVERBOUGHT (HOLD)"
                 isNearHighDanger -> "DEKAT HIGH / OVEREXTENDED (HOLD)"
                 isBreakdown -> "BREAKDOWN / DOWNTREND (HOLD)"
                 isDistribution -> "DISTRIBUSI TINGGI (HOLD)"
-                completedSteps == 4 -> "READY"
+                completedSteps == 4 -> if (intradayPhase == IntradayPhase.OPEN_PAGI) "READY (OPEN PAGI)" else "READY (INTRADAY)"
                 completedSteps > 0 -> "ANALYZING ($completedSteps/4)"
                 else -> "ANALYZING (0/4)"
             },
             waitingFor = when {
-                intradayPhase.isCloseWindow -> "Sesi Close Malam: Tutup posisi sebelum tengah malam"
+                intradayPhase.isCloseWindow -> "Sesi Close Malam: Tutup posisi harian menjadi kas sebelum tengah malam"
                 intradayPhase.isRestWindow -> "Menunggu Sesi Open Pagi (06:00 WIB)"
+                intradayPhase.isTrailingWindow -> "Kawal profit dengan trailing stop (15:30–19:30 WIB)"
                 flashDumpTrauma -> "Menunggu kestabilan base konsolidasi pasca-dump"
                 pumpAndDumpTrap -> "Menunggu pullback aman dari rejection upper wick"
                 isRsiOverbought -> "Menunggu koreksi / reset RSI"

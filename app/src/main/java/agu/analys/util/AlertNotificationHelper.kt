@@ -25,9 +25,14 @@ object AlertNotificationHelper {
     // Channel 2: Trailing Stop & Execution
     const val CHANNEL_TRAILING_ID = "channel_trailing_stop_alerts"
     const val CHANNEL_TRAILING_NAME = "Notifikasi Trailing Stop & Eksekusi"
-    const val CHANNEL_TRAILING_DESC = "Sinyal penting trailing profit, stop loss, dan eksekusi jual otomatis"
+    const val CHANNEL_TRAILING_DESC = "Sinyal kenaikan trailing profit dan eksekusi take profit otomatis"
 
-    // Channel 3: General Price Alerts
+    // Channel 3: Emergency Exit & Stop Loss (Rapid Drop / Flash Dump)
+    const val CHANNEL_EMERGENCY_EXIT_ID = "channel_emergency_exit_alerts"
+    const val CHANNEL_EMERGENCY_EXIT_NAME = "Notifikasi Exit Darurat & Stop Loss"
+    const val CHANNEL_EMERGENCY_EXIT_DESC = "Peringatan darurat saat Stop Loss tersentuh atau terjadi Flash Dump / Rapid Drop"
+
+    // Channel 4: General Price Alerts
     const val CHANNEL_PRICE_ALERT_ID = "channel_price_alerts"
     const val CHANNEL_PRICE_ALERT_NAME = "Notifikasi Target Harga & Market"
     const val CHANNEL_PRICE_ALERT_DESC = "Notifikasi perubahan harga target dan indikator teknikal"
@@ -79,6 +84,24 @@ object AlertNotificationHelper {
                 setShowBadge(true)
             }
 
+            // Emergency Exit Channel (High Urgency Alarm Sound & Intense Vibration for Flash Dump / Stop Loss)
+            val emergencySoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+                ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+                ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+
+            val emergencyChannel = NotificationChannel(
+                CHANNEL_EMERGENCY_EXIT_ID,
+                CHANNEL_EMERGENCY_EXIT_NAME,
+                NotificationManager.IMPORTANCE_MAX
+            ).apply {
+                description = CHANNEL_EMERGENCY_EXIT_DESC
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 400, 150, 400, 150, 400)
+                setSound(emergencySoundUri, audioAttributesAlarm)
+                lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+                setShowBadge(true)
+            }
+
             // General Price Alert Channel
             val priceChannel = NotificationChannel(
                 CHANNEL_PRICE_ALERT_ID,
@@ -92,7 +115,7 @@ object AlertNotificationHelper {
                 setShowBadge(true)
             }
 
-            notificationManager.createNotificationChannels(listOf(candidateChannel, trailingChannel, priceChannel))
+            notificationManager.createNotificationChannels(listOf(candidateChannel, trailingChannel, emergencyChannel, priceChannel))
         }
     }
 
@@ -356,7 +379,7 @@ object AlertNotificationHelper {
         isReal: Boolean
     ) {
         val prefs = AppPreferences(context)
-        if (!prefs.isNotificationsEnabled) return
+        if (!prefs.isNotificationsEnabled || !prefs.isNotifyEmergencyExitEnabled) return
 
         createNotificationChannels(context)
 
@@ -406,7 +429,7 @@ object AlertNotificationHelper {
             pendingActionIntent
         ).build()
 
-        val builder = NotificationCompat.Builder(context, CHANNEL_TRAILING_ID)
+        val builder = NotificationCompat.Builder(context, CHANNEL_EMERGENCY_EXIT_ID)
             .setSmallIcon(agu.analys.R.drawable.ic_stat_trading)
             .setColor(0xFFDC2626.toInt()) // Emergency Red
             .setContentTitle(title)

@@ -142,6 +142,11 @@ fun TradingViewModel.setNotifyTrailingStopEnabled(enabled: Boolean) {
     _isNotifyTrailingStopEnabled.value = enabled
 }
 
+fun TradingViewModel.setNotifyEmergencyExitEnabled(enabled: Boolean) {
+    prefs.isNotifyEmergencyExitEnabled = enabled
+    _isNotifyEmergencyExitEnabled.value = enabled
+}
+
 fun TradingViewModel.setRealSimSyncEnabled(enabled: Boolean) {
     prefs.isRealSimSyncEnabled = enabled
     _isRealSimSyncEnabled.value = enabled

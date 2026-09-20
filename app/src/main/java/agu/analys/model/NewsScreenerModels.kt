@@ -5,7 +5,24 @@ data class NewsArticle(
     val source: String,
     val link: String = "",
     val publishedAtMs: Long = System.currentTimeMillis()
-)
+) {
+    fun getRelativeTime(): String {
+        val diff = (System.currentTimeMillis() - publishedAtMs).coerceAtLeast(0L)
+        val minutes = diff / (60 * 1000L)
+        val hours = diff / (60 * 60 * 1000L)
+        return when {
+            minutes < 5 -> "Baru saja"
+            minutes < 60 -> "$minutes mnt lalu"
+            hours < 24 -> "$hours jam lalu"
+            else -> "${hours / 24} hr lalu"
+        }
+    }
+
+    fun isFresh(maxAgeHours: Int = 24): Boolean {
+        val ageMs = System.currentTimeMillis() - publishedAtMs
+        return ageMs <= maxAgeHours * 60 * 60 * 1000L
+    }
+}
 
 data class ScreenerCoinPick(
     val baseSymbol: String, // e.g. "SOL", "SUI", "BTC"

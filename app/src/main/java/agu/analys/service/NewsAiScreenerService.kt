@@ -61,9 +61,15 @@ object NewsAiScreenerService {
             .take(50)
             .joinToString(", ")
 
-        val selectedArticles = articles.take(12)
+        val now = System.currentTimeMillis()
+        val maxAgeMs = 24 * 60 * 60 * 1000L // 24 jam (1 hari)
+        val freshArticles = articles
+            .filter { (now - it.publishedAtMs) <= maxAgeMs }
+            .sortedByDescending { it.publishedAtMs }
+        val selectedArticles = if (freshArticles.isNotEmpty()) freshArticles.take(12) else articles.take(12)
+
         val headlinesText = selectedArticles.mapIndexed { idx, art ->
-            "${idx + 1}. [${art.source}] ${art.title.take(120)}"
+            "${idx + 1}. [${art.source} · ${art.getRelativeTime()}] ${art.title.take(120)}"
         }.joinToString("\n")
 
         var usedProvider = preferredProvider

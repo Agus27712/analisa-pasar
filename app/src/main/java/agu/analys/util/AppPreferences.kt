@@ -259,6 +259,10 @@ class AppPreferences(context: Context) {
         get() = prefs.getBoolean("notify_trailing_stop_v1", true)
         set(value) = prefs.edit().putBoolean("notify_trailing_stop_v1", value).apply()
 
+    var isNotifyEmergencyExitEnabled: Boolean
+        get() = prefs.getBoolean("notify_emergency_exit_v1", true)
+        set(value) = prefs.edit().putBoolean("notify_emergency_exit_v1", value).apply()
+
     var isRealSimSyncEnabled: Boolean
         get() = prefs.getBoolean(KEY_REAL_SIM_SYNC_ENABLED, false)
         set(value) = prefs.edit().putBoolean(KEY_REAL_SIM_SYNC_ENABLED, value).apply()

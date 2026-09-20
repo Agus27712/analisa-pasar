@@ -37,10 +37,9 @@ object SellSignalEvaluator {
         val quantity = context.quantity ?: 0.0
         val entryPrice = context.entryPrice
         val hasCostBasis = entryPrice != null && entryPrice > 0.0
-        val buyFeeRate = (tradingFees.buyMakerPct / 100.0).coerceAtLeast(0.0021)
-        val costBasis = if (hasCostBasis) quantity * entryPrice!! * (1.0 + buyFeeRate) else 0.0
+        val costBasis = if (hasCostBasis) quantity * entryPrice!! else 0.0
 
-        val sellFeeRate = (tradingFees.sellMakerPct / 100.0).coerceAtLeast(0.0021)
+        val sellFeeRate = (tradingFees.sellMakerPct / 100.0).coerceAtLeast(0.0)
         val grossSell = quantity * currentPrice
         val netSell = grossSell * (1.0 - sellFeeRate)
 

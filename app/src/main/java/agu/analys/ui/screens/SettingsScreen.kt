@@ -85,6 +85,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
     val isNotifyCandidateBuyEnabled by viewModel.isNotifyCandidateBuyEnabled.collectAsState()
     val isNotifyPriceAlertsEnabled by viewModel.isNotifyPriceAlertsEnabled.collectAsState()
     val isNotifyTrailingStopEnabled by viewModel.isNotifyTrailingStopEnabled.collectAsState()
+    val isNotifyEmergencyExitEnabled by viewModel.isNotifyEmergencyExitEnabled.collectAsState()
 
     fun saveAllSettings(showToast: Boolean = true) {
         if (selectedSource != prefs.marketDataSource) {
@@ -543,6 +544,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                         isNotifyPriceAlertsEnabled = isNotifyPriceAlertsEnabled,
                         isNotifyCandidateBuyEnabled = isNotifyCandidateBuyEnabled,
                         isNotifyTrailingStopEnabled = isNotifyTrailingStopEnabled,
+                        isNotifyEmergencyExitEnabled = isNotifyEmergencyExitEnabled,
                         cacheCleared = cacheCleared,
                         onClearCache = { cacheCleared = true },
                         updateRepo = updateRepo,

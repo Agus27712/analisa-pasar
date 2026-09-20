@@ -545,6 +545,9 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     internal val _isNotifyTrailingStopEnabled = MutableStateFlow(prefs.isNotifyTrailingStopEnabled)
     val isNotifyTrailingStopEnabled: StateFlow<Boolean> = _isNotifyTrailingStopEnabled.asStateFlow()
 
+    internal val _isNotifyEmergencyExitEnabled = MutableStateFlow(prefs.isNotifyEmergencyExitEnabled)
+    val isNotifyEmergencyExitEnabled: StateFlow<Boolean> = _isNotifyEmergencyExitEnabled.asStateFlow()
+
     internal val _isRealSimSyncEnabled = MutableStateFlow(prefs.isRealSimSyncEnabled)
     val isRealSimSyncEnabled: StateFlow<Boolean> = _isRealSimSyncEnabled.asStateFlow()
 

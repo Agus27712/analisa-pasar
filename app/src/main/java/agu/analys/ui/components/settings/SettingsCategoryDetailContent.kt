@@ -74,6 +74,7 @@ fun SettingsCategoryDetailContent(
     isNotifyPriceAlertsEnabled: Boolean,
     isNotifyCandidateBuyEnabled: Boolean,
     isNotifyTrailingStopEnabled: Boolean,
+    isNotifyEmergencyExitEnabled: Boolean,
     cacheCleared: Boolean,
     onClearCache: () -> Unit,
     updateRepo: String,
@@ -309,13 +310,23 @@ fun SettingsCategoryDetailContent(
                     )
                     HorizontalDivider(color = TvBorder.copy(alpha = 0.5f), thickness = 0.5.dp)
                     AndroidPreferenceSwitchItem(
-                        icon = Icons.Default.NotificationsActive,
+                        icon = Icons.Default.TrendingUp,
                         iconTint = Color(0xFFFF7043),
                         iconBackground = Color(0xFFFF7043).copy(alpha = 0.15f),
                         title = "Notifikasi Trailing Stop & Eksekusi",
-                        subtitle = "Sinyal penting trailing profit, stop loss, dan eksekusi jual otomatis",
+                        subtitle = "Sinyal kenaikan trailing profit dan eksekusi jual otomatis saat reversal",
                         checked = isNotifyTrailingStopEnabled,
                         onCheckedChange = { viewModel.setNotifyTrailingStopEnabled(it) }
+                    )
+                    HorizontalDivider(color = TvBorder.copy(alpha = 0.5f), thickness = 0.5.dp)
+                    AndroidPreferenceSwitchItem(
+                        icon = Icons.Default.WarningAmber,
+                        iconTint = TvRed,
+                        iconBackground = TvRed.copy(alpha = 0.15f),
+                        title = "Notifikasi Exit Darurat & Stop Loss",
+                        subtitle = "Peringatan darurat saat Stop Loss tersentuh atau terjadi Flash Dump / penurunan drastis",
+                        checked = isNotifyEmergencyExitEnabled,
+                        onCheckedChange = { viewModel.setNotifyEmergencyExitEnabled(it) }
                     )
                 }
             }

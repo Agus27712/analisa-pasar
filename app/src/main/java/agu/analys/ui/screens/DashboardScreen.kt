@@ -34,6 +34,7 @@ import agu.analys.model.CoinHoldingStatus
 import agu.analys.model.MarketConnectionState
 import agu.analys.model.SignalAction
 import agu.analys.model.TradingPair
+import agu.analys.engine.officedaily.OfficeDailyScreener
 import agu.analys.ui.components.dashboard.*
 import agu.analys.ui.components.settings.LogcatDiagnosticDialog
 import agu.analys.ui.theme.*
@@ -148,9 +149,12 @@ fun DashboardScreen(
             }
             StrategyMode.OFFICE_DAILY -> {
                 val intradayCandidates = allTicks.values
-                    .filter { it.price > 5.0 && it.volume24h >= 800_000_000.0 && it.change24h >= -6.0 }
-                    .sortedByDescending { it.volume24h }
-                    .take(25)
+                    .filter { it.price > 5.0 && it.volume24h >= 300_000_000.0 && it.change24h >= -3.5 }
+                    .sortedWith(
+                        compareByDescending<agu.analys.model.MarketTick> { OfficeDailyScreener.evaluateFast(it).score }
+                            .thenByDescending { it.volume24h }
+                    )
+                    .take(30)
                     .map { TradingPair.fromCustomSymbol(it.symbol, defaultQuote) }
                 (watchAndFav + intradayCandidates + basePopular).distinctBy { it.symbol }
             }

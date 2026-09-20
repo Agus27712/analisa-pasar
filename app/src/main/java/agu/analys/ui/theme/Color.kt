@@ -131,18 +131,18 @@ fun createCustomAppColors(
             surface = Color(0xFFFFFFFF),
             surfaceVariant = Color(0xFFF1F5F9),
             cardBackground = Color(0xFFFFFFFF),
-            textPrimary = Color(0xFF0F172A),
-            textSecondary = Color(0xFF475569),
-            textMuted = Color(0xFF64748B),
-            border = Color(0xFFE2E8F0),
-            green = green,
-            greenLight = greenLight,
-            red = red,
-            redLight = redLight,
-            blue = blue,
-            blueSoft = blueSoft,
-            amber = Color(0xFFD97706),
-            orange = Color(0xFFEA580C)
+            textPrimary = Color(0xFF0F172A),      // Slate 900 - font gelap pekat sangat terbaca
+            textSecondary = Color(0xFF1E293B),    // Slate 800 - font sekunder kontras tinggi
+            textMuted = Color(0xFF475569),        // Slate 600 - font label gelap terbaca jelas
+            border = Color(0xFF64748B),           // Slate 500 - frame / bingkai kartu tegas dan gelap
+            green = Color(0xFF15803D),            // Dark Green 700 - ikon/indikator hijau gelap kontras
+            greenLight = Color(0xFF16A34A),
+            red = Color(0xFFB91C1C),              // Dark Red 700 - ikon/indikator merah gelap kontras
+            redLight = Color(0xFFDC2626),
+            blue = Color(0xFF1D4ED8),             // Deep Blue 700 - aksen biru gelap kontras
+            blueSoft = Color(0xFF2563EB),
+            amber = Color(0xFFB45309),            // Dark Amber 700 - indikator amber gelap
+            orange = Color(0xFFC2410C)            // Dark Orange 700
         )
         ThemeStyle.CYBERPUNK -> AppColors(
             background = Color(0xFF040A07),
@@ -242,4 +242,9 @@ val TvBlue: Color @Composable get() = LocalAppColors.current.blue
 val TvBlueSoft: Color @Composable get() = LocalAppColors.current.blueSoft
 val TvAmber: Color @Composable get() = LocalAppColors.current.amber
 val TvOrange: Color @Composable get() = LocalAppColors.current.orange
-val TvCyan: Color = Color(0xFF00E5FF)
+val TvCyan: Color
+    @Composable get() = if (LocalAppColors.current.textPrimary == Color(0xFF0F172A) || LocalAppColors.current.background == Color(0xFFF8FAFC)) {
+        Color(0xFF0369A1) // Sky 700 (Deep Cyan / Oceanic Blue) - gelap & terbaca jelas di Light Mode
+    } else {
+        Color(0xFF00E5FF) // Electric Cyan di Dark Mode
+    }

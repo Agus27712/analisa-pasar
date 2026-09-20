@@ -104,13 +104,46 @@ object NewsRssFeedService {
         }
     }
 
+    private const val MAX_NEWS_AGE_MS = 24 * 60 * 60 * 1000L // 24 jam (1 hari) filter fresh
+
+    private val dateFormats = listOf(
+        java.text.SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss Z", java.util.Locale.US),
+        java.text.SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss z", java.util.Locale.US),
+        java.text.SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz", java.util.Locale.US),
+        java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", java.util.Locale.US),
+        java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", java.util.Locale.US),
+        java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.US).apply {
+            timeZone = java.util.TimeZone.getTimeZone("UTC")
+        },
+        java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US),
+        java.text.SimpleDateFormat("dd MMM yyyy HH:mm:ss Z", java.util.Locale.US)
+    )
+
+    private fun parseRssDateToMs(raw: String?): Long? {
+        if (raw.isNullOrBlank()) return null
+        val clean = raw.trim()
+        for (fmt in dateFormats) {
+            try {
+                val parsed = fmt.parse(clean)
+                if (parsed != null) return parsed.time
+            } catch (_: Exception) {}
+        }
+        return null
+    }
+
     private fun parseRssXml(xml: String, sourceName: String): List<NewsArticle> {
         val results = mutableListOf<NewsArticle>()
         val itemRegex = Regex("<item[\\s>]([\\s\\S]*?)</item>", RegexOption.IGNORE_CASE)
         val titleRegex = Regex("<title><!\\[CDATA\\[(.*?)\\]\\]></title>|<title>(.*?)</title>", RegexOption.IGNORE_CASE)
         val linkRegex = Regex("<link><!\\[CDATA\\[(.*?)\\]\\]></link>|<link>(.*?)</link>", RegexOption.IGNORE_CASE)
+        val pubDateRegex = Regex("<pubDate><!\\[CDATA\\[(.*?)\\]\\]></pubDate>|<pubDate>(.*?)</pubDate>", RegexOption.IGNORE_CASE)
+        val dcDateRegex = Regex("<dc:date><!\\[CDATA\\[(.*?)\\]\\]></dc:date>|<dc:date>(.*?)</dc:date>", RegexOption.IGNORE_CASE)
+        val publishedRegex = Regex("<published><!\\[CDATA\\[(.*?)\\]\\]></published>|<published>(.*?)</published>", RegexOption.IGNORE_CASE)
+        val updatedRegex = Regex("<updated><!\\[CDATA\\[(.*?)\\]\\]></updated>|<updated>(.*?)</updated>", RegexOption.IGNORE_CASE)
 
-        itemRegex.findAll(xml).take(8).forEach { match ->
+        val now = System.currentTimeMillis()
+
+        itemRegex.findAll(xml).take(12).forEach { match ->
             val block = match.groupValues.getOrNull(1).orEmpty()
             val tMatch = titleRegex.find(block)
             val lMatch = linkRegex.find(block)
@@ -120,13 +153,41 @@ object NewsRssFeedService {
             val rawLink = lMatch?.groupValues?.getOrNull(1)?.takeIf { it.isNotBlank() }
                 ?: lMatch?.groupValues?.getOrNull(2).orEmpty()
 
+            // Ekstrak tanggal terbit artikel
+            val rawDate = pubDateRegex.find(block)?.groupValues?.getOrNull(1)?.takeIf { it.isNotBlank() }
+                ?: pubDateRegex.find(block)?.groupValues?.getOrNull(2)?.takeIf { it.isNotBlank() }
+                ?: dcDateRegex.find(block)?.groupValues?.getOrNull(1)?.takeIf { it.isNotBlank() }
+                ?: dcDateRegex.find(block)?.groupValues?.getOrNull(2)?.takeIf { it.isNotBlank() }
+                ?: publishedRegex.find(block)?.groupValues?.getOrNull(1)?.takeIf { it.isNotBlank() }
+                ?: publishedRegex.find(block)?.groupValues?.getOrNull(2)?.takeIf { it.isNotBlank() }
+                ?: updatedRegex.find(block)?.groupValues?.getOrNull(1)?.takeIf { it.isNotBlank() }
+                ?: updatedRegex.find(block)?.groupValues?.getOrNull(2).orEmpty()
+
+            val parsedTime = parseRssDateToMs(rawDate)
+            
+            // FILTER KETAT: Jika berita sudah berusia > 24 jam (1 hari), JANGAN dimasukkan ke screener
+            if (parsedTime != null) {
+                val ageMs = now - parsedTime
+                if (ageMs > MAX_NEWS_AGE_MS) {
+                    // Berita basi / lampau (> 1 hari), abaikan demi menjaga kesegaran data screener
+                    return@forEach
+                }
+            }
+
+            val articleTimestamp = when {
+                parsedTime == null -> now // fallback jika feed tidak memuat tanggal
+                parsedTime > now + 300_000L -> now // toleransi skew jam server
+                else -> parsedTime
+            }
+
             val title = cleanTitle(rawTitle)
             if (title.length in 25..220 && !isSpammy(title)) {
                 results.add(
                     NewsArticle(
                         title = title,
                         source = sourceName,
-                        link = rawLink.trim()
+                        link = rawLink.trim(),
+                        publishedAtMs = articleTimestamp
                     )
                 )
             }
@@ -137,8 +198,17 @@ object NewsRssFeedService {
     private fun deduplicateArticles(articles: List<NewsArticle>): List<NewsArticle> {
         val seen = mutableSetOf<String>()
         val output = mutableListOf<NewsArticle>()
+        val now = System.currentTimeMillis()
 
-        for (art in articles) {
+        // Urutkan artikel terbitan paling segar di urutan pertama
+        val sortedByFreshness = articles.sortedByDescending { it.publishedAtMs }
+
+        for (art in sortedByFreshness) {
+            // Filter tambahan: pastikan berita fresh (< 24 jam)
+            if (now - art.publishedAtMs > MAX_NEWS_AGE_MS) {
+                continue
+            }
+
             val key = art.title.lowercase().filter { it.isLetterOrDigit() }.take(40)
             if (key.length >= 15 && seen.add(key)) {
                 output.add(art)

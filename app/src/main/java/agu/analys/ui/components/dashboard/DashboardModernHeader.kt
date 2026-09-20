@@ -89,7 +89,7 @@ fun DashboardModernHeader(
             Spacer(modifier = Modifier.width(8.dp))
             Text(
                 text = "Indodax Reader",
-                color = Color.White,
+                color = TvTextPrimary,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold
             )
