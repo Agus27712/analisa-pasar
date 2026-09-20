@@ -313,6 +313,53 @@ class SignalLogRepository(
         dao.updateLog(updated)
     }
 
+    /**
+     * Expire all active TRACKING logs for a symbol when user has already sold (MarkSold).
+     * Log becomes kadaluarsa so it no longer appears as active tracking.
+     */
+    fun expireTrackingLogsForSymbol(symbol: String, reason: String = "Posisi sudah terjual (MarkSold) — log kadaluarsa") {
+        if (symbol.isBlank()) return
+        val normSymbol = symbol.uppercase().replace("_", "").replace("/", "").trim()
+        scope.launch(Dispatchers.IO) {
+            try {
+                val tracking = dao.getActiveTrackingLogsForSymbol(normSymbol)
+                if (tracking.isEmpty()) return@launch
+                val now = System.currentTimeMillis()
+                for (log in tracking) {
+                    val isBuy = log.action.equals("BUY", ignoreCase = true)
+                    // Keep last known PnL if available via peak/trough
+                    val approxPnl = if (isBuy && log.peakPrice > 0) {
+                        ((log.peakPrice - log.entryPrice) / log.entryPrice) * 100.0
+                    } else if (!isBuy && log.troughPrice > 0) {
+                        ((log.entryPrice - log.troughPrice) / log.entryPrice) * 100.0
+                    } else {
+                        log.realizedPnlPct ?: 0.0
+                    }
+                    val updated = log.copy(
+                        outcomeStatus = "EXPIRED",
+                        resolvedAt = now,
+                        exitPrice = log.exitPrice ?: log.peakPrice.takeIf { it > 0 } ?: log.entryPrice,
+                        realizedPnlPct = log.realizedPnlPct ?: approxPnl,
+                        resolutionNote = reason
+                    )
+                    dao.updateLog(updated)
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
+    /**
+     * Force refresh / consolidate tracking logs (for Refresh button on Log & Akurasi page).
+     * Ensures 1 active TRACKING per symbol and cleans stale state.
+     */
+    fun refreshAndConsolidate() {
+        scope.launch(Dispatchers.IO) {
+            try {
+                consolidateDuplicateTrackingLogs()
+            } catch (_: Exception) {}
+        }
+    }
+
     suspend fun deleteLog(id: Long) = withContext(Dispatchers.IO) {
         dao.deleteLogById(id)
     }

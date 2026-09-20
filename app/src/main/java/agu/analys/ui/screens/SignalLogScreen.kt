@@ -165,6 +165,22 @@ fun SignalLogScreen(
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Tombol Refresh: sync log valid dari detail/engine ke halaman Log & Akurasi
+                    IconButton(
+                        onClick = {
+                            viewModel.refreshSignalLogs()
+                            Toast.makeText(context, "Log sinyal di-refresh & dikonsolidasi", Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier.testTag("signal_logs_refresh_btn")
+                    ) {
+                        Icon(
+                            Icons.Default.Refresh,
+                            contentDescription = "Refresh Log Sinyal",
+                            tint = TvCyan,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
                     IconButton(
                         onClick = {
                             if (selectedScreenTab == 0) {

@@ -97,6 +97,8 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
                 agu.analys.engine.sell.SellSignalLifecycleManager.reset(pair, isReal = true)
                 positionCoordinator.markSoldAndClear(symbol, isReal = true)
                 positionCoordinator.markSoldAndClear(pair, isReal = true)
+                // Expire signal tracking logs for this coin (sudah terjual = log kadaluarsa)
+                signalLogRepository.expireTrackingLogsForSymbol(symbol, "Posisi real sudah terjual (MarkSold)")
                 tradeHistoryRecorder.recordSell(
                     symbol = symbol,
                     isReal = true,
@@ -208,6 +210,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
             if (isDust) {
                 positionStore.markSold(symbol)
                 agu.analys.engine.sell.SellSignalLifecycleManager.reset(symbol)
+                signalLogRepository.expireTrackingLogsForSymbol(symbol, "Posisi real full close (MarkSold)")
             } else {
                 positionStore.setHolding(
                     symbol = symbol,
@@ -277,6 +280,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
             if (isDust) {
                 positionStore.markSold(symbol)
                 agu.analys.engine.sell.SellSignalLifecycleManager.reset(symbol)
+                signalLogRepository.expireTrackingLogsForSymbol(symbol, "Posisi sim full close (MarkSold)")
             } else {
                 positionStore.setHolding(
                     symbol = symbol,
@@ -346,6 +350,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
                     positionStore.markSold(symbol, isReal = true)
                     agu.analys.engine.sell.SellSignalLifecycleManager.reset(symbol, isReal = true)
                     positionCoordinator.markSoldAndClear(symbol, isReal = true)
+                    signalLogRepository.expireTrackingLogsForSymbol(symbol, "Saldo real 0 di Indodax (MarkSold)")
                 }
             }
         }
@@ -772,6 +777,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
                         // Full close path (termasuk trailing profit-lock): clear position + sell lifecycle
                         positionCoordinator.markSoldAndClear(filledOrder.symbol)
                         positionCoordinator.setTrailing(filledOrder.symbol, enabled = false, 0.0, 0.0)
+                        signalLogRepository.expireTrackingLogsForSymbol(filledOrder.symbol, "Simulasi sell filled (MarkSold)")
                         checkAndStopTrailingServiceIfEmpty()
                     }
                 }
@@ -1193,6 +1199,11 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch {
             signalLogRepository.resolveLogManually(id, isWin, exitPrice, pnlPct, note)
         }
+    }
+
+    /** Tombol Refresh di halaman Log & Akurasi Sinyal: konsolidasi duplicate + pastikan state sync */
+    fun refreshSignalLogs() {
+        signalLogRepository.refreshAndConsolidate()
     }
 
     fun seedSampleTradeJourneys() {
