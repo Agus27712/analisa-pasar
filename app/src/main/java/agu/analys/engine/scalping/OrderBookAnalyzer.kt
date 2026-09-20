@@ -1,6 +1,29 @@
 package agu.analys.engine.scalping
 
 import agu.analys.model.OrderBookItem
+import java.util.Locale
+
+enum class EntryExecutionType(val label: String) {
+    MARKET_TAKER("Hajar Kanan (Taker)"),
+    LIMIT_MAKER("Antri Limit (Maker)"),
+    SPREAD_GUARD_VETO("Spread Guard Aktif (Tahan)"),
+    NO_DEPTH("Order Book Kosong")
+}
+
+data class SpreadAnalysis(
+    val bestBid: Double = 0.0,
+    val bestAsk: Double = 0.0,
+    val spreadIdr: Double = 0.0,
+    val spreadPct: Double = 0.0,
+    val tolerancePct: Double = 0.40,
+    val maxGuardPct: Double = 1.20,
+    val executionType: EntryExecutionType = EntryExecutionType.NO_DEPTH,
+    val recommendedEntryPrice: Double = 0.0,
+    val isSpreadGuardActive: Boolean = false,
+    val statusText: String = "",
+    val advice: String = "",
+    val makerSavingsFeePct: Double = 0.30
+)
 
 object OrderBookAnalyzer {
     fun calculateBuyPressure(bids: List<OrderBookItem>, asks: List<OrderBookItem>, levels: Int = 10): Double {
@@ -14,4 +37,86 @@ object OrderBookAnalyzer {
         if (topBids <= 0.0) return 0.5
         return topBids / topAsks
     }
+
+    /**
+     * Menganalisis spread order book untuk memberikan rekomendasi harga entri presisi
+     * dengan toleransi spread dan proteksi Spread Guard anti-slippage.
+     */
+    fun analyzeSpread(
+        bids: List<OrderBookItem>,
+        asks: List<OrderBookItem>,
+        currentPrice: Double = 0.0,
+        tolerancePct: Double = 0.40,
+        maxGuardPct: Double = 1.20
+    ): SpreadAnalysis {
+        val topBid = bids.firstOrNull()?.price ?: 0.0
+        val topAsk = asks.firstOrNull()?.price ?: 0.0
+
+        if (topBid <= 0.0 || topAsk <= 0.0) {
+            val fallbackPrice = if (currentPrice > 0.0) currentPrice else topBid.coerceAtLeast(topAsk)
+            return SpreadAnalysis(
+                bestBid = topBid,
+                bestAsk = topAsk,
+                spreadIdr = 0.0,
+                spreadPct = 0.0,
+                tolerancePct = tolerancePct,
+                maxGuardPct = maxGuardPct,
+                executionType = EntryExecutionType.NO_DEPTH,
+                recommendedEntryPrice = fallbackPrice,
+                isSpreadGuardActive = false,
+                statusText = "Order Book Tidak Tersedia",
+                advice = "Gunakan harga pasar terakhir dengan hati-hati."
+            )
+        }
+
+        val spreadIdr = (topAsk - topBid).coerceAtLeast(0.0)
+        val spreadPct = if (topBid > 0) (spreadIdr / topBid) * 100.0 else 0.0
+        val isGuardActive = spreadPct > maxGuardPct
+
+        val executionType = when {
+            isGuardActive -> EntryExecutionType.SPREAD_GUARD_VETO
+            spreadPct <= tolerancePct -> EntryExecutionType.MARKET_TAKER
+            else -> EntryExecutionType.LIMIT_MAKER
+        }
+
+        val recommendedEntryPrice = when (executionType) {
+            EntryExecutionType.MARKET_TAKER -> topAsk // Beli langsung di Best Ask karena spread tipis
+            EntryExecutionType.LIMIT_MAKER -> topBid // Antri di Best Bid untuk hemat fee & anti slippage
+            EntryExecutionType.SPREAD_GUARD_VETO -> topBid // Proteksi: jangan hajar ask lebar, antri di bid
+            EntryExecutionType.NO_DEPTH -> currentPrice
+        }
+
+        val statusText = when (executionType) {
+            EntryExecutionType.MARKET_TAKER -> "Spread Tipis (${String.format(Locale.US, "%.2f", spreadPct)}%)"
+            EntryExecutionType.LIMIT_MAKER -> "Spread Sedang (${String.format(Locale.US, "%.2f", spreadPct)}%)"
+            EntryExecutionType.SPREAD_GUARD_VETO -> "Spread Terlalu Lebar (${String.format(Locale.US, "%.2f", spreadPct)}%)"
+            EntryExecutionType.NO_DEPTH -> "Order Book Kosong"
+        }
+
+        val advice = when (executionType) {
+            EntryExecutionType.MARKET_TAKER ->
+                "Aman eksekusi instan (Taker/Hajar Kanan @ Rp ${formatPrice(topAsk)}). Slippage rendah."
+            EntryExecutionType.LIMIT_MAKER ->
+                "Disarankan antri Limit Maker @ Rp ${formatPrice(topBid)} di Best Bid. Hemat fee 0.3% dan hindari gap spread Rp ${formatPrice(spreadIdr)}."
+            EntryExecutionType.SPREAD_GUARD_VETO ->
+                "🛡️ SPREAD GUARD AKTIF: Spread ${String.format(Locale.US, "%.2f", spreadPct)}% melebihi toleransi maksimal (${String.format(Locale.US, "%.2f", maxGuardPct)}%). Dilarang Hajar Kanan! Wajib pasang Limit Beli @ Rp ${formatPrice(topBid)}."
+            EntryExecutionType.NO_DEPTH -> "Order book belum sinkron."
+        }
+
+        return SpreadAnalysis(
+            bestBid = topBid,
+            bestAsk = topAsk,
+            spreadIdr = spreadIdr,
+            spreadPct = spreadPct,
+            tolerancePct = tolerancePct,
+            maxGuardPct = maxGuardPct,
+            executionType = executionType,
+            recommendedEntryPrice = recommendedEntryPrice,
+            isSpreadGuardActive = isGuardActive,
+            statusText = statusText,
+            advice = advice
+        )
+    }
+
+    private fun formatPrice(p: Double): String = agu.analys.util.PriceFormatter.formatPrice(p, showSymbol = false)
 }

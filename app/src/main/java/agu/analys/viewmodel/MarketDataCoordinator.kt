@@ -77,6 +77,7 @@ class MarketDataCoordinator(
     }
 
     private var currentActivePair: TradingPair? = null
+    private var currentActiveTimeframe: Timeframe = Timeframe.M15
     private var lastLiveTickAt = 0L
     private var wsLive = false
     private var lastCandleRefresh = 0L
@@ -137,6 +138,13 @@ class MarketDataCoordinator(
     private fun dispatchThrottledTick(tick: MarketTick) {
         _currentTick.value = tick
         agu.analys.engine.sell.TickHistoryTracker.recordTick(tick.symbol, tick.price, tick.timestamp)
+        if (_recentCandles.value.isNotEmpty()) {
+            _recentCandles.value = agu.analys.util.CandleTimeUtil.synthesizeRealtimeCandles(
+                _recentCandles.value,
+                tick,
+                currentActiveTimeframe
+            )
+        }
         engine.onTickUpdate(tick)
         updateRecentPrices(tick.price)
         simCoordinator.onPriceTick(tick.symbol, tick.price, tick.high24h, tick.low24h)
@@ -177,6 +185,7 @@ class MarketDataCoordinator(
 
     fun startMarketPolling(pair: TradingPair, timeframe: Timeframe) {
         currentActivePair = pair
+        currentActiveTimeframe = timeframe
         marketPollJob?.cancel()
         uiPriceThrottler.reset()
 
@@ -279,6 +288,7 @@ class MarketDataCoordinator(
 
     fun switchTimeframe(pair: TradingPair, timeframe: Timeframe) {
         currentActivePair = pair
+        currentActiveTimeframe = timeframe
         // 1. Muat candle snapshot dari cache untuk timeframe baru tanpa menyentuh live ticker
         val (_, cachedCandles) = marketCache.loadPairSnapshot(pair.symbol, timeframe)
         if (cachedCandles.isNotEmpty()) {

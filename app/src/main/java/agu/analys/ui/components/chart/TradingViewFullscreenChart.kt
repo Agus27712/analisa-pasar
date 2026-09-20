@@ -2,7 +2,9 @@ package agu.analys.ui.components.chart
 
 import android.annotation.SuppressLint
 import android.graphics.Color
+import android.view.View
 import android.view.ViewGroup
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
@@ -46,6 +48,8 @@ fun TradingViewFullscreenChart(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT
                 )
+                // Use software layer to prevent MESA GPU / rendernode crash in virtualized environments
+                setLayerType(View.LAYER_TYPE_SOFTWARE, null)
                 setBackgroundColor(Color.BLACK)
                 settings.javaScriptEnabled = true
                 settings.domStorageEnabled = true
@@ -69,6 +73,18 @@ fun TradingViewFullscreenChart(
                             url.contains("tradingview.com") ||
                             url.contains("tvscdn.com") ||
                             url.startsWith("about:"))
+                    }
+
+                    override fun onRenderProcessGone(
+                        view: WebView?,
+                        detail: RenderProcessGoneDetail?
+                    ): Boolean {
+                        // Return true to handle the renderer crash and prevent aw_browser_terminator from crashing the app
+                        view?.let {
+                            (it.parent as? ViewGroup)?.removeView(it)
+                            it.destroy()
+                        }
+                        return true
                     }
                 }
                 loadUrl(chartUrl)

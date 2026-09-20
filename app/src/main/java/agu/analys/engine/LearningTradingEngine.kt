@@ -294,9 +294,14 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
             )
             return
         }
+
+        // Sintesis real-time tick langsung ke candle M1 & M15 aktif (Zero-Lag Indicator Evaluation)
+        val liveM1 = agu.analys.util.CandleTimeUtil.synthesizeRealtimeCandles(m1Candles, tick, Timeframe.M1)
+        val liveM15 = agu.analys.util.CandleTimeUtil.synthesizeRealtimeCandles(m15Candles, tick, Timeframe.M15)
+
         val result = ScalpingMtfEvaluator.evaluate(
             agu.analys.engine.global.GlobalContextManager.context.value,
-            tick.price, h1Candles, m15Candles, m1Candles,
+            tick.price, h1Candles, liveM15, liveM1,
             currentFormingVolume, currentOrderBookBids, currentOrderBookAsks,
             tradingFees, scalpingSensitivity
         ) ?: return
@@ -319,7 +324,8 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
     private fun runSecondWave() {
         val tick = currentTick ?: return
         if (h4Candles.size < 20 || h1Candles.size < 20 || m15Candles.size < 20) return
-        val result = SecondWaveEvaluator.evaluate(agu.analys.engine.global.GlobalContextManager.context.value, tick.price, h4Candles, h1Candles, m15Candles, tradingFees)
+        val liveM15 = agu.analys.util.CandleTimeUtil.synthesizeRealtimeCandles(m15Candles, tick, Timeframe.M15)
+        val result = SecondWaveEvaluator.evaluate(agu.analys.engine.global.GlobalContextManager.context.value, tick.price, h4Candles, h1Candles, liveM15, tradingFees)
 
         val tracked = agu.analys.engine.scalping.SignalLifecycleManager.process(tick.symbol, tick.price, result.signal, StrategyMode.SECOND_WAVE)
         val finalSignal = (tracked.activeSignalState ?: result.signal).copy(

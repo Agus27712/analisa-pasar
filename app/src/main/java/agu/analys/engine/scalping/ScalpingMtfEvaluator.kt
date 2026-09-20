@@ -15,12 +15,18 @@ import agu.analys.model.TechnicalIndicators
 import agu.analys.model.TrendSentiment
 import agu.analys.model.CandleBar
 import agu.analys.model.OrderBookItem
+import agu.analys.model.SignalAudit
 import agu.analys.config.FeeCalculator
+import agu.analys.util.PriceFormatter
 import kotlin.math.abs
 import kotlin.math.max
 
 object ScalpingMtfEvaluator {
-    data class Result(val signal: AISignalState, val indicators: TechnicalIndicators)
+    data class Result(
+        val signal: AISignalState,
+        val indicators: TechnicalIndicators,
+        val audit: SignalAudit = SignalAudit()
+    )
 
     fun evaluate(
         price: Double,
@@ -31,10 +37,26 @@ object ScalpingMtfEvaluator {
         bids: List<OrderBookItem> = emptyList(),
         asks: List<OrderBookItem> = emptyList(),
         fees: TradingFeeConfig = TradingFeeConfig(),
-        sensitivity: ScalpingSensitivity = ScalpingSensitivity.BALANCED
-    ): Result? = evaluate(agu.analys.engine.global.GlobalMarketContext(), price, h1Candles, m15Candles, m1Candles, formingVolume, bids, asks, fees, sensitivity)
+        sensitivity: ScalpingSensitivity = ScalpingSensitivity.BALANCED,
+        symbol: String = "",
+        orderBookAgeMs: Long = 0L
+    ): Result? = evaluate(
+        globalContext = agu.analys.engine.global.GlobalMarketContext(),
+        price = price,
+        h1Candles = h1Candles,
+        m15Candles = m15Candles,
+        m1Candles = m1Candles,
+        formingVolume = formingVolume,
+        bids = bids,
+        asks = asks,
+        fees = fees,
+        sensitivity = sensitivity,
+        symbol = symbol,
+        orderBookAgeMs = orderBookAgeMs
+    )
 
-    fun evaluate(globalContext: agu.analys.engine.global.GlobalMarketContext = agu.analys.engine.global.GlobalMarketContext(),
+    fun evaluate(
+        globalContext: agu.analys.engine.global.GlobalMarketContext = agu.analys.engine.global.GlobalMarketContext(),
         price: Double,
         h1Candles: List<CandleBar>,
         m15Candles: List<CandleBar>,
@@ -43,7 +65,9 @@ object ScalpingMtfEvaluator {
         bids: List<OrderBookItem> = emptyList(),
         asks: List<OrderBookItem> = emptyList(),
         fees: TradingFeeConfig = TradingFeeConfig(),
-        sensitivity: ScalpingSensitivity = ScalpingSensitivity.BALANCED
+        sensitivity: ScalpingSensitivity = ScalpingSensitivity.BALANCED,
+        symbol: String = "",
+        orderBookAgeMs: Long = 0L
     ): Result? {
         if (price <= 0.0 || h1Candles.size < 20 || m15Candles.size < 20 || m1Candles.size < 20) return null
 
@@ -52,7 +76,9 @@ object ScalpingMtfEvaluator {
 
         // 1. Order Book Pressure & VSA (Volume Spread Analysis)
         val isOrderBookEmpty = bids.isEmpty() && asks.isEmpty()
+        val isOrderBookStale = orderBookAgeMs > 30_000L
         val buyPressure = if (!isOrderBookEmpty) OrderBookAnalyzer.calculateBuyPressure(bids, asks, 15) else 1.0
+        val isOrderBookValid = !isOrderBookEmpty && !isOrderBookStale && buyPressure > 1.0
         
         val last1M = m1Candles.last()
         val avgVol1M = m1Candles.takeLast(20).map { it.volume }.average()
@@ -89,13 +115,15 @@ object ScalpingMtfEvaluator {
         val ema50 = IndicatorMath.ema(m1Closes, 50)
         val macd = IndicatorMath.macdSeries(m1Closes, 12, 26, 9).last()
 
-        // 5. Risk / Reward Calculation
-        val stopPct = if (isAggressive) volPct * 1.2 else volPct * 0.8
-        val sl = price * (1.0 - (stopPct.coerceIn(0.5, 3.0) / 100.0))
+        // 5. Risk / Reward Calculation (Fase 6: Aljabar Presisi Net R:R >= 1.05)
+        val stopPct = (if (isAggressive) volPct * 1.2 else volPct * 0.8).coerceIn(0.5, 3.0)
+        val sl = price * (1.0 - (stopPct / 100.0))
         
-        val requiredNetRewardPct = ((price - sl)/price * 100.0 + fees.buyTakerPct + fees.sellTakerPct) * 1.2
-        val tp1 = price * (1.0 + max(0.9, requiredNetRewardPct * 0.6) / 100.0)
-        val tp2 = price * (1.0 + max(1.5, requiredNetRewardPct) / 100.0)
+        val totalCostPct = (fees.buyTakerPct + fees.sellTakerPct) + (2 * 0.08)
+        val targetNetRr = 1.25
+        val requiredGrossRewardPct = (targetNetRr * (stopPct + totalCostPct) + totalCostPct)
+        val tp1 = price * (1.0 + max(0.9, requiredGrossRewardPct * 0.55) / 100.0)
+        val tp2 = price * (1.0 + max(1.5, requiredGrossRewardPct) / 100.0)
         
         val feeResult = FeeCalculator.roundTrip(price, sl, tp2, fees, false, 0.08)
         val rrOk = feeResult.netRr >= 1.05
@@ -105,7 +133,7 @@ object ScalpingMtfEvaluator {
 
         // --- 2. WATERFALL CHECKPOINTS ---
         val step1Ok = !isDangerous && hasRoomToGrow
-        val step2Ok = step1Ok && (buyPressure > 1.0 || isOrderBookEmpty)
+        val step2Ok = step1Ok && isOrderBookValid
         val step3Ok = step2Ok && (price > vwap1M || isVSABreakout)
         val step4Ok = step3Ok && rrOk
 
@@ -159,7 +187,14 @@ object ScalpingMtfEvaluator {
             else -> ScalpingStage.WATCH
         }
         
-        // --- ORDERBOOK DEPTH FILTER (REPLACED GLOBAL VETO) ---
+        // --- ORDERBOOK SPREAD & DEPTH FILTER ---
+        val spreadAnalysis = OrderBookAnalyzer.analyzeSpread(bids, asks, price)
+        if (spreadAnalysis.isSpreadGuardActive) {
+            reasons.add("🛡️ SPREAD GUARD: Spread ${fmt(spreadAnalysis.spreadPct)}% terlalu lebar. Wajib Limit Maker di Rp ${PriceFormatter.formatPrice(spreadAnalysis.recommendedEntryPrice, showSymbol = false)}, hindari Hajar Kanan.")
+        } else if (spreadAnalysis.executionType == EntryExecutionType.LIMIT_MAKER) {
+            reasons.add("💡 Rekomendasi: Antri Limit Maker di Rp ${PriceFormatter.formatPrice(spreadAnalysis.recommendedEntryPrice, showSymbol = false)} untuk hemat fee.")
+        }
+
         if (finalAction == SignalAction.BUY && buyPressure < 0.7) {
             reasons.add("💡 Likuiditas bid/ask order book agak tipis (${fmt(buyPressure)}x), disarankan cicil bertahap.")
         }
@@ -265,9 +300,46 @@ object ScalpingMtfEvaluator {
             regimeDetected = if (isExtremeVol) "Volatile" else "Normal"
         )
 
+        val rejectionReason = when {
+            finalAction == SignalAction.BUY -> null
+            !step1Ok -> when {
+                isDangerousNoise -> "STEP1_DANGEROUS_NOISE"
+                isOverbought -> "STEP1_OVERBOUGHT"
+                !hasRoomToGrow -> "STEP1_NO_ROOM_TO_GROW"
+                else -> "STEP1_BIAS"
+            }
+            !step2Ok -> when {
+                isOrderBookEmpty -> "STEP2_ORDERBOOK_EMPTY"
+                isOrderBookStale -> "STEP2_ORDERBOOK_STALE"
+                else -> "STEP2_BUY_PRESSURE"
+            }
+            !step3Ok -> "STEP3_TRIGGER"
+            !step4Ok -> "STEP4_RR"
+            isDangerous -> "DANGEROUS"
+            else -> "WAITING_CONFIRMATION"
+        }
+
+        val audit = SignalAudit(
+            symbol = symbol,
+            timestamp = System.currentTimeMillis(),
+            price = price,
+            step1 = step1Ok,
+            step2 = step2Ok,
+            step3 = step3Ok,
+            step4 = step4Ok,
+            buyPressure = buyPressure,
+            vwap = vwap1M,
+            rsi = rsi1M,
+            rr = feeResult.netRr,
+            finalAction = finalAction.name,
+            rejectionReason = rejectionReason,
+            isOrderBookEmpty = isOrderBookEmpty,
+            orderBookAgeMs = orderBookAgeMs
+        )
+
         return Result(
-            signal,
-            TechnicalIndicators(
+            signal = signal,
+            indicators = TechnicalIndicators(
                 rsi14 = rsi1M,
                 macd = macd.first,
                 macdHist = macd.first - macd.second,
@@ -275,7 +347,8 @@ object ScalpingMtfEvaluator {
                 ema50 = ema50,
                 atr = atr1M,
                 momentum = buyPressure
-            )
+            ),
+            audit = audit
         )
     }
 

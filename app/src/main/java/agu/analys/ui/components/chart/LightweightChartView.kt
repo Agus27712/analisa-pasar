@@ -2,7 +2,9 @@ package agu.analys.ui.components.chart
 
 import android.annotation.SuppressLint
 import android.graphics.Color
+import android.view.View
 import android.view.ViewGroup
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -115,6 +117,8 @@ fun LightweightChartView(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT
                 )
+                // Use software layer to prevent MESA GPU / rendernode crash in virtualized environments
+                setLayerType(View.LAYER_TYPE_SOFTWARE, null)
                 setBackgroundColor(android.graphics.Color.TRANSPARENT)
                 settings.javaScriptEnabled = true
                 settings.domStorageEnabled = true
@@ -125,6 +129,18 @@ fun LightweightChartView(
                     override fun onPageFinished(view: WebView?, url: String?) {
                         pageReady = true
                         view?.let { pushData(it) }
+                    }
+
+                    override fun onRenderProcessGone(
+                        view: WebView?,
+                        detail: RenderProcessGoneDetail?
+                    ): Boolean {
+                        // Return true to handle renderer exit and prevent aw_browser_terminator from crashing the app
+                        view?.let {
+                            (it.parent as? ViewGroup)?.removeView(it)
+                            it.destroy()
+                        }
+                        return true
                     }
                 }
                 loadUrl("file:///android_asset/chart/lightweight_chart.html")
