@@ -1,0 +1,36 @@
+name: Unit Tests - Chatgpt
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [Chatgpt]
+
+permissions:
+  contents: read
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+      - name: Run unit tests
+        run: ./gradlew test --no-daemon --stacktrace
+
+      - name: Upload JUnit test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-test-reports
+          path: |
+            **/build/test-results/**/TEST-*.xml
+            **/build/reports/tests/**/
+          if-no-files-found: warn
+          retention-days: 7
