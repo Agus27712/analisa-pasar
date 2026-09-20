@@ -112,7 +112,7 @@ class TradeHistoryRecorder(
 
         // Throttle agar tidak membebani database Room
         val lastUpdate = tickThrottleMap[normSymbol] ?: 0L
-        if (now - lastUpdate < 2000L) return
+        if (now - lastUpdate < 1500L) return
         tickThrottleMap[normSymbol] = now
 
         scope.launch(Dispatchers.IO) {
@@ -122,6 +122,50 @@ class TradeHistoryRecorder(
                 if (holdings.isEmpty()) return@launch
 
                 for (record in holdings) {
+                    val duration = (now - record.buyTime).coerceAtLeast(0L)
+                    val rawPnlPct = if (record.buyPrice > 0) {
+                        ((currentPrice - record.buyPrice) / record.buyPrice) * 100.0
+                    } else 0.0
+
+                    val newPeak = if (record.peakPriceDuringHold <= 0.0) currentPrice else max(record.peakPriceDuringHold, currentPrice)
+                    val newTrough = if (record.troughPriceDuringHold <= 0.0) currentPrice else min(record.troughPriceDuringHold, currentPrice)
+                    val newMaxProfit = max(record.maxProfitPctDuringHold, max(0.0, rawPnlPct))
+                    val newMaxDrawdown = min(record.maxDrawdownPctDuringHold, min(0.0, rawPnlPct))
+
+                    val updated = record.copy(
+                        holdingDurationMs = duration,
+                        peakPriceDuringHold = newPeak,
+                        troughPriceDuringHold = newTrough,
+                        maxProfitPctDuringHold = newMaxProfit,
+                        maxDrawdownPctDuringHold = newMaxDrawdown
+                    )
+                    dao.updateRecord(updated)
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
+    /**
+     * Update all holding records from a whole-market batch price update
+     */
+    fun processBatchPriceTicks(priceMap: Map<String, Double>) {
+        if (priceMap.isEmpty()) return
+        val now = System.currentTimeMillis()
+
+        scope.launch(Dispatchers.IO) {
+            try {
+                val holdings = dao.getHoldingRecords()
+                if (holdings.isEmpty()) return@launch
+
+                for (record in holdings) {
+                    val currentPrice = priceMap[record.symbol]
+                        ?: priceMap[record.symbol.lowercase()]
+                        ?: priceMap["${record.symbol.removeSuffix("IDR").removeSuffix("idr")}idr"]
+                        ?: priceMap["${record.symbol.removeSuffix("IDR").removeSuffix("idr")}IDR"]
+                        ?: continue
+
+                    if (currentPrice <= 0.0) continue
+
                     val duration = (now - record.buyTime).coerceAtLeast(0L)
                     val rawPnlPct = if (record.buyPrice > 0) {
                         ((currentPrice - record.buyPrice) / record.buyPrice) * 100.0

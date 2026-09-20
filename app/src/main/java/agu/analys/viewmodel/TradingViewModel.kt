@@ -904,6 +904,8 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
                         for (tick in ticks) {
                             simCoordinator.onPriceTick(tick.symbol, tick.price, tick.high24h, tick.low24h)
                             checkAlertsAndTrailing(tick.symbol, tick.price)
+                            signalLogRepository.processPriceTick(tick.symbol, tick.price)
+                            tradeHistoryRecorder.processPriceTick(tick.symbol, tick.price)
                         }
                         delay(10_000L)          // dari 4 detik → 10 detik
                     } else {
@@ -968,6 +970,8 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
                 try {
                     val priceMap = combinedTicks.mapValues { it.value.price }
                     agu.analys.service.TradingForegroundService.updatePrices(getApplication(), priceMap)
+                    signalLogRepository.processBatchPriceTicks(priceMap)
+                    tradeHistoryRecorder.processBatchPriceTicks(priceMap)
                 } catch (_: Exception) {}
                 lastLiveTickAt = System.currentTimeMillis()
                 _connectionState.value = MarketConnectionState.Connected

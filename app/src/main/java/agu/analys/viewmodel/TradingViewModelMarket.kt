@@ -132,6 +132,8 @@ fun TradingViewModel.refreshWorthCoinsFromMarket() {
             try {
                 val priceMap = combinedTicks.mapValues { it.value.price }
                 agu.analys.service.TradingForegroundService.updatePrices(getApplication(), priceMap)
+                signalLogRepository.processBatchPriceTicks(priceMap)
+                tradeHistoryRecorder.processBatchPriceTicks(priceMap)
             } catch (_: Exception) {}
             lastLiveTickAt = System.currentTimeMillis()
             _connectionState.value = MarketConnectionState.Connected

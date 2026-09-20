@@ -111,7 +111,7 @@ interface SignalLogDao {
     @Query("SELECT * FROM signal_logs WHERE outcomeStatus = 'TRACKING'")
     suspend fun getActiveTrackingLogs(): List<SignalLogEntity>
 
-    @Query("SELECT * FROM signal_logs WHERE symbol = :symbol AND outcomeStatus = 'TRACKING'")
+    @Query("SELECT * FROM signal_logs WHERE symbol = :symbol AND outcomeStatus = 'TRACKING' ORDER BY firedAt DESC")
     suspend fun getActiveTrackingLogsForSymbol(symbol: String): List<SignalLogEntity>
 
     @Query("SELECT * FROM signal_logs WHERE symbol = :symbol ORDER BY firedAt DESC LIMIT 1")
@@ -131,6 +131,9 @@ interface SignalLogDao {
 
     @Query("DELETE FROM signal_logs WHERE id = :id")
     suspend fun deleteLogById(id: Long)
+
+    @Query("DELETE FROM signal_logs WHERE id IN (:ids)")
+    suspend fun deleteLogsByIds(ids: List<Long>)
 
     @Query("DELETE FROM signal_logs")
     suspend fun clearAllLogs()

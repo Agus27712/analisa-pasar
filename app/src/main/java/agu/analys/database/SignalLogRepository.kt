@@ -21,6 +21,15 @@ class SignalLogRepository(
     private val lastLoggedMap = ConcurrentHashMap<String, Long>()
     private val tickThrottleMap = ConcurrentHashMap<String, Long>()
 
+    init {
+        // Automatically consolidate any duplicate tracking logs from past runs
+        scope.launch(Dispatchers.IO) {
+            try {
+                consolidateDuplicateTrackingLogs()
+            } catch (_: Exception) {}
+        }
+    }
+
     val allLogsFlow: Flow<List<SignalLogEntity>> = dao.getAllLogsFlow()
 
     val reliabilitySummaryFlow: Flow<SignalReliabilitySummary> = dao.getAllLogsFlow().map { logs ->
@@ -31,7 +40,9 @@ class SignalLogRepository(
         dao.getLogsBySymbolFlow(symbol)
 
     /**
-     * Record a new signal when it fires
+     * Record or update a signal for a coin.
+     * If the coin is already being tracked in the signal log, updates its parameters (confidence, reasoning, targets, etc.)
+     * instead of creating a duplicate log entry.
      */
     fun recordSignal(
         symbol: String,
@@ -46,33 +57,87 @@ class SignalLogRepository(
         reasoning: String = "",
         scalpingStage: String = ""
     ) {
-        if (entryPrice <= 0.0 || symbol.isBlank() || action == "HOLD") return
+        if (entryPrice <= 0.0 || symbol.isBlank() || action.equals("HOLD", ignoreCase = true)) return
 
-        val normSymbol = symbol.uppercase().replace("_", "")
-        val key = "${normSymbol}_${action}_${strategyMode}"
+        val normSymbol = symbol.uppercase().replace("_", "").replace("/", "").trim()
+        val normAction = action.uppercase().trim()
         val now = System.currentTimeMillis()
-        val lastTime = lastLoggedMap[key] ?: 0L
-
-        // Debounce spam if fired within 30 seconds
-        if (now - lastTime < 30_000L) {
-            return
-        }
-        lastLoggedMap[key] = now
 
         scope.launch(Dispatchers.IO) {
             try {
-                // Check if identical entry price was logged recently
+                // 1. Check if there are already active TRACKING logs for this coin
+                val activeTrackingLogs = dao.getActiveTrackingLogsForSymbol(normSymbol)
+
+                if (activeTrackingLogs.isNotEmpty()) {
+                    // Coin already exists in active signal tracking! UPDATE existing log, do NOT insert new one
+                    val primaryLog = activeTrackingLogs.first()
+
+                    // If there are duplicate tracking entries for this symbol (from past bugs), clean them up
+                    if (activeTrackingLogs.size > 1) {
+                        val extraIds = activeTrackingLogs.drop(1).map { it.id }
+                        dao.deleteLogsByIds(extraIds)
+                    }
+
+                    val isBuy = (if (normAction.isNotBlank()) normAction else primaryLog.action).equals("BUY", ignoreCase = true)
+                    val currentTrackPrice = entryPrice
+                    val rawPnlPct = if (isBuy) {
+                        ((currentTrackPrice - primaryLog.entryPrice) / primaryLog.entryPrice) * 100.0
+                    } else {
+                        ((primaryLog.entryPrice - currentTrackPrice) / primaryLog.entryPrice) * 100.0
+                    }
+
+                    val updatedConfidence = if (confidence > 0) max(confidence, primaryLog.confidence) else primaryLog.confidence
+                    val updatedReasoning = if (reasoning.isNotBlank()) reasoning else primaryLog.reasoning
+                    val updatedSentiment = if (sentiment.isNotBlank()) sentiment else primaryLog.sentiment
+                    val updatedStrategy = if (strategyMode.isNotBlank()) strategyMode else primaryLog.strategyMode
+                    val updatedStage = if (scalpingStage.isNotBlank()) scalpingStage else primaryLog.scalpingStage
+
+                    val updatedTp1 = if (targetPrice1 > 0.0) targetPrice1 else primaryLog.targetPrice1
+                    val updatedTp2 = if (targetPrice2 > 0.0) targetPrice2 else primaryLog.targetPrice2
+                    val updatedSl = if (stopLoss > 0.0) stopLoss else primaryLog.stopLoss
+
+                    val newPeak = if (primaryLog.peakPrice <= 0.0) currentTrackPrice else max(primaryLog.peakPrice, currentTrackPrice)
+                    val newTrough = if (primaryLog.troughPrice <= 0.0) currentTrackPrice else min(primaryLog.troughPrice, currentTrackPrice)
+                    val newMaxProfit = max(primaryLog.maxProfitPct, max(0.0, rawPnlPct))
+                    val newMaxDrawdown = min(primaryLog.maxDrawdownPct, min(0.0, rawPnlPct))
+
+                    val updatedLog = primaryLog.copy(
+                        action = if (normAction.isNotBlank()) normAction else primaryLog.action,
+                        strategyMode = updatedStrategy,
+                        confidence = updatedConfidence,
+                        sentiment = updatedSentiment,
+                        targetPrice1 = updatedTp1,
+                        targetPrice2 = updatedTp2,
+                        stopLoss = updatedSl,
+                        reasoning = updatedReasoning,
+                        scalpingStage = updatedStage,
+                        peakPrice = newPeak,
+                        troughPrice = newTrough,
+                        maxProfitPct = newMaxProfit,
+                        maxDrawdownPct = newMaxDrawdown
+                    )
+
+                    dao.updateLog(updatedLog)
+                    return@launch
+                }
+
+                // 2. Check if coin already has a recent log in DB (e.g. resolved recently) to avoid immediate re-spam
                 val latest = dao.getLatestLogForSymbol(normSymbol)
-                if (latest != null && latest.action == action && now - latest.firedAt < 60_000L) {
-                    val diff = abs(latest.entryPrice - entryPrice) / entryPrice
-                    if (diff < 0.003) {
-                        return@launch
+                if (latest != null) {
+                    // If it was resolved within 3 minutes and price hasn't meaningfully moved (<0.8%), skip creating duplicate
+                    val lastTimestamp = latest.resolvedAt ?: latest.firedAt
+                    if (now - lastTimestamp < 180_000L) {
+                        val diff = abs(latest.entryPrice - entryPrice) / latest.entryPrice
+                        if (diff < 0.008) {
+                            return@launch
+                        }
                     }
                 }
 
+                // 3. Brand new coin entry for tracking
                 val entity = SignalLogEntity(
                     symbol = normSymbol,
-                    action = action,
+                    action = normAction,
                     strategyMode = strategyMode,
                     confidence = confidence,
                     sentiment = sentiment,
@@ -95,16 +160,34 @@ class SignalLogRepository(
     }
 
     /**
+     * Consolidate duplicate tracking logs so that each symbol only has 1 active tracking log
+     */
+    suspend fun consolidateDuplicateTrackingLogs() = withContext(Dispatchers.IO) {
+        val allTracking = dao.getActiveTrackingLogs()
+        val grouped = allTracking.groupBy { it.symbol }
+        for ((_, logs) in grouped) {
+            if (logs.size > 1) {
+                // Keep the primary (latest by firedAt or with best tracked stats)
+                val primary = logs.maxByOrNull { it.firedAt } ?: logs.first()
+                val duplicates = logs.filter { it.id != primary.id }
+                if (duplicates.isNotEmpty()) {
+                    dao.deleteLogsByIds(duplicates.map { it.id })
+                }
+            }
+        }
+    }
+
+    /**
      * Update active tracking signals based on live market tick
      */
     fun processPriceTick(symbol: String, currentPrice: Double) {
         if (currentPrice <= 0.0 || symbol.isBlank()) return
-        val normSymbol = symbol.uppercase().replace("_", "")
+        val normSymbol = symbol.uppercase().replace("_", "").replace("/", "").trim()
         val now = System.currentTimeMillis()
 
-        // Throttle updates per symbol to max 1 update per 1500ms
+        // Throttle updates per symbol to max 1 update per 1000ms
         val lastUpdate = tickThrottleMap[normSymbol] ?: 0L
-        if (now - lastUpdate < 1500L) return
+        if (now - lastUpdate < 1000L) return
         tickThrottleMap[normSymbol] = now
 
         scope.launch(Dispatchers.IO) {
@@ -113,68 +196,98 @@ class SignalLogRepository(
                 if (trackingLogs.isEmpty()) return@launch
 
                 for (log in trackingLogs) {
-                    val isBuy = log.action.equals("BUY", ignoreCase = true)
-                    val rawPnlPct = if (isBuy) {
-                        ((currentPrice - log.entryPrice) / log.entryPrice) * 100.0
-                    } else {
-                        ((log.entryPrice - currentPrice) / log.entryPrice) * 100.0
-                    }
-
-                    val newPeak = if (log.peakPrice <= 0.0) currentPrice else max(log.peakPrice, currentPrice)
-                    val newTrough = if (log.troughPrice <= 0.0) currentPrice else min(log.troughPrice, currentPrice)
-                    val newMaxProfit = max(log.maxProfitPct, max(0.0, rawPnlPct))
-                    val newMaxDrawdown = min(log.maxDrawdownPct, min(0.0, rawPnlPct))
-
-                    // Check for target outcomes
-                    var status = log.outcomeStatus
-                    var exitPrice: Double? = null
-                    var realizedPnl: Double? = null
-                    var resolvedAt: Long? = null
-                    var note: String? = null
-
-                    if (log.targetPrice2 > 0.0 && ((isBuy && currentPrice >= log.targetPrice2) || (!isBuy && currentPrice <= log.targetPrice2))) {
-                        status = "HIT_TP2"
-                        exitPrice = currentPrice
-                        realizedPnl = rawPnlPct
-                        resolvedAt = now
-                        note = "Target TP2 tercapai pada ${PriceFormatter.formatPrice(currentPrice)} (+${String.format(java.util.Locale.US, "%.2f", rawPnlPct)}%)"
-                    } else if (log.targetPrice1 > 0.0 && ((isBuy && currentPrice >= log.targetPrice1) || (!isBuy && currentPrice <= log.targetPrice1))) {
-                        status = "HIT_TP1"
-                        exitPrice = currentPrice
-                        realizedPnl = rawPnlPct
-                        resolvedAt = now
-                        note = "Target TP1 tercapai pada ${PriceFormatter.formatPrice(currentPrice)} (+${String.format(java.util.Locale.US, "%.2f", rawPnlPct)}%)"
-                    } else if (log.stopLoss > 0.0 && ((isBuy && currentPrice <= log.stopLoss) || (!isBuy && currentPrice >= log.stopLoss))) {
-                        status = "HIT_SL"
-                        exitPrice = currentPrice
-                        realizedPnl = rawPnlPct
-                        resolvedAt = now
-                        note = "Stop Loss tersentuh pada ${PriceFormatter.formatPrice(currentPrice)} (${String.format(java.util.Locale.US, "%.2f", rawPnlPct)}%)"
-                    } else if (now - log.firedAt > 86_400_000L * 3) {
-                        // Expire after 3 days
-                        status = "EXPIRED"
-                        exitPrice = currentPrice
-                        realizedPnl = rawPnlPct
-                        resolvedAt = now
-                        note = "Sinyal kedaluwarsa setelah 3 hari. Hasil akhir: ${String.format(java.util.Locale.US, "%.2f", rawPnlPct)}%"
-                    }
-
-                    val updatedLog = log.copy(
-                        peakPrice = newPeak,
-                        troughPrice = newTrough,
-                        maxProfitPct = newMaxProfit,
-                        maxDrawdownPct = newMaxDrawdown,
-                        outcomeStatus = status,
-                        exitPrice = exitPrice ?: log.exitPrice,
-                        realizedPnlPct = realizedPnl ?: log.realizedPnlPct,
-                        resolvedAt = resolvedAt ?: log.resolvedAt,
-                        resolutionNote = note ?: log.resolutionNote
-                    )
-
-                    dao.updateLog(updatedLog)
+                    updateTrackingLogWithPrice(log, currentPrice, now)
                 }
             } catch (_: Exception) {}
         }
+    }
+
+    /**
+     * Batch update all active tracking signals from whole market tickers
+     */
+    fun processBatchPriceTicks(priceMap: Map<String, Double>) {
+        if (priceMap.isEmpty()) return
+        val now = System.currentTimeMillis()
+
+        scope.launch(Dispatchers.IO) {
+            try {
+                val trackingLogs = dao.getActiveTrackingLogs()
+                if (trackingLogs.isEmpty()) return@launch
+
+                for (log in trackingLogs) {
+                    val currentPrice = priceMap[log.symbol]
+                        ?: priceMap[log.symbol.lowercase()]
+                        ?: priceMap["${log.symbol.removeSuffix("IDR").removeSuffix("idr")}idr"]
+                        ?: priceMap["${log.symbol.removeSuffix("IDR").removeSuffix("idr")}IDR"]
+                        ?: continue
+
+                    if (currentPrice <= 0.0) continue
+                    updateTrackingLogWithPrice(log, currentPrice, now)
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
+    private suspend fun updateTrackingLogWithPrice(log: SignalLogEntity, currentPrice: Double, now: Long) {
+        val isBuy = log.action.equals("BUY", ignoreCase = true)
+        val rawPnlPct = if (isBuy) {
+            ((currentPrice - log.entryPrice) / log.entryPrice) * 100.0
+        } else {
+            ((log.entryPrice - currentPrice) / log.entryPrice) * 100.0
+        }
+
+        val newPeak = if (log.peakPrice <= 0.0) currentPrice else max(log.peakPrice, currentPrice)
+        val newTrough = if (log.troughPrice <= 0.0) currentPrice else min(log.troughPrice, currentPrice)
+        val newMaxProfit = max(log.maxProfitPct, max(0.0, rawPnlPct))
+        val newMaxDrawdown = min(log.maxDrawdownPct, min(0.0, rawPnlPct))
+
+        // Check for target outcomes
+        var status = log.outcomeStatus
+        var exitPrice: Double? = null
+        var realizedPnl: Double? = null
+        var resolvedAt: Long? = null
+        var note: String? = null
+
+        if (log.targetPrice2 > 0.0 && ((isBuy && currentPrice >= log.targetPrice2) || (!isBuy && currentPrice <= log.targetPrice2))) {
+            status = "HIT_TP2"
+            exitPrice = currentPrice
+            realizedPnl = rawPnlPct
+            resolvedAt = now
+            note = "Target TP2 tercapai pada ${PriceFormatter.formatPrice(currentPrice)} (+${String.format(java.util.Locale.US, "%.2f", rawPnlPct)}%)"
+        } else if (log.targetPrice1 > 0.0 && ((isBuy && currentPrice >= log.targetPrice1) || (!isBuy && currentPrice <= log.targetPrice1))) {
+            status = "HIT_TP1"
+            exitPrice = currentPrice
+            realizedPnl = rawPnlPct
+            resolvedAt = now
+            note = "Target TP1 tercapai pada ${PriceFormatter.formatPrice(currentPrice)} (+${String.format(java.util.Locale.US, "%.2f", rawPnlPct)}%)"
+        } else if (log.stopLoss > 0.0 && ((isBuy && currentPrice <= log.stopLoss) || (!isBuy && currentPrice >= log.stopLoss))) {
+            status = "HIT_SL"
+            exitPrice = currentPrice
+            realizedPnl = rawPnlPct
+            resolvedAt = now
+            note = "Stop Loss tersentuh pada ${PriceFormatter.formatPrice(currentPrice)} (${String.format(java.util.Locale.US, "%.2f", rawPnlPct)}%)"
+        } else if (now - log.firedAt > 86_400_000L * 3) {
+            // Expire after 3 days
+            status = "EXPIRED"
+            exitPrice = currentPrice
+            realizedPnl = rawPnlPct
+            resolvedAt = now
+            note = "Sinyal kedaluwarsa setelah 3 hari. Hasil akhir: ${String.format(java.util.Locale.US, "%.2f", rawPnlPct)}%"
+        }
+
+        val updatedLog = log.copy(
+            peakPrice = newPeak,
+            troughPrice = newTrough,
+            maxProfitPct = newMaxProfit,
+            maxDrawdownPct = newMaxDrawdown,
+            outcomeStatus = status,
+            exitPrice = exitPrice ?: log.exitPrice,
+            realizedPnlPct = realizedPnl ?: log.realizedPnlPct,
+            resolvedAt = resolvedAt ?: log.resolvedAt,
+            resolutionNote = note ?: log.resolutionNote
+        )
+
+        dao.updateLog(updatedLog)
     }
 
     /**
