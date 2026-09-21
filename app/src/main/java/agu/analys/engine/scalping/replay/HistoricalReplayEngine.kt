@@ -319,7 +319,7 @@ object HistoricalReplayEngine {
 
         val orderBookMode = when {
             anyOrderBookData && diagnosticIgnoreOrderBookWhenUnavailable -> "MIXED"
-            anyOrderBookData -> "HISTORICAL_PROVIDER"
+            anyOrderBookData -> "PROVIDER_SUPPLIED"
             diagnosticIgnoreOrderBookWhenUnavailable -> "UNAVAILABLE_BYPASSED"
             else -> "UNAVAILABLE_BLOCKING"
         }
