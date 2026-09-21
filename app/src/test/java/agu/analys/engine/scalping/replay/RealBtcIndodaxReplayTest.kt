@@ -104,7 +104,7 @@ class RealBtcIndodaxReplayTest {
             appendLine("- Replay orderbook mode: ${report.orderBookMode}")
             appendLine("- Historical orderbook available: ${report.orderBookDataAvailable}")
             appendLine("- Frames without historical orderbook: ${report.bottleneck.unmeasuredOrderBookFrames}")
-            appendLine("- Current live orderbook snapshot available: ${liveBids.isNotEmpty() && liveAsks.isNotEmpty}")
+            appendLine("- Current live orderbook snapshot available: ${liveBids.isNotEmpty() && liveAsks.isNotEmpty()}")
             if (liveBids.isNotEmpty() && liveAsks.isNotEmpty) {
                 val bid = liveBids.first().price
                 val ask = liveAsks.first().price
