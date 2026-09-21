@@ -8,19 +8,19 @@ import agu.analys.model.SignalAction
 import agu.analys.model.SignalAudit
 
 /**
- * FASE 3 — Historical Replay Engine untuk Scalping Evaluator:
- * Menjalankan simulasi data historis candle-by-candle (sliding window) seolah-olah data
- * tiba satu per satu secara real-time.
- *
- * Merekam SignalAudit di setiap candle, lalu menghitung:
- * - FASE 4: Valid Entry, False Signal, Missed BUY Opportunity, dan Avoided Loss.
- * - FASE 5: Bottleneck Checkpoint (Step 1, Step 2, Step 3, atau Step 4).
+ * Historical replay yang causal:
+ * - MTF hanya boleh memakai candle yang sudah CLOSED pada saat evaluasi.
+ * - Tidak membuat synthetic orderbook secara default.
+ * - Outcome memakai TP/SL aktual dari evaluator bila tersedia.
+ * - Menyimpan distribusi rejection dan missed opportunity per checkpoint.
  */
 enum class ReplayTradeOutcome {
-    VALID_ENTRY,     // Sinyal BUY muncul dan berhasil mencapai target profit sebelum SL
-    FALSE_SIGNAL,    // Sinyal BUY muncul tetapi terkena stop loss sebelum target profit
-    MISSED_BUY,      // Sinyal tertolak di salah satu checkpoint padahal harga rally mencapai TP tanpa menyentuh SL
-    AVOIDED_LOSS     // Sinyal tertolak dengan tepat (harga turun/kena SL, modal terlindungi)
+    VALID_ENTRY,
+    FALSE_SIGNAL,
+    MISSED_BUY,
+    AVOIDED_LOSS,
+    UNRESOLVED,
+    AMBIGUOUS
 }
 
 data class ReplayFrame(
@@ -38,9 +38,22 @@ data class BottleneckAnalysis(
     val step2Rejections: Int,
     val step3Rejections: Int,
     val step4Rejections: Int,
+    val missedAfterStep1: Int,
+    val missedAfterStep2: Int,
+    val missedAfterStep3: Int,
+    val missedAfterStep4: Int,
+    val unmeasuredOrderBookFrames: Int,
     val primaryBottleneckStep: Int,
     val primaryBottleneckDescription: String
-)
+) {
+    private fun pct(value: Int): Double =
+        if (totalMomentumOpportunities > 0) value.toDouble() / totalMomentumOpportunities * 100.0 else 0.0
+
+    val step1RejectionPct: Double get() = pct(step1Rejections)
+    val step2RejectionPct: Double get() = pct(step2Rejections)
+    val step3RejectionPct: Double get() = pct(step3Rejections)
+    val step4RejectionPct: Double get() = pct(step4Rejections)
+}
 
 data class HistoricalReplayReport(
     val symbol: String,
@@ -50,24 +63,34 @@ data class HistoricalReplayReport(
     val falseSignals: Int,
     val missedOpportunities: Int,
     val avoidedLosses: Int,
+    val unresolvedOutcomes: Int,
+    val ambiguousOutcomes: Int,
+    val orderBookDataAvailable: Boolean,
+    val orderBookMode: String,
     val bottleneck: BottleneckAnalysis,
     val frames: List<ReplayFrame>
 ) {
+    val resolvedSignalOutcomes: Int
+        get() = validEntries + falseSignals
+
     val winRatePct: Double
-        get() = if (totalSignalsTriggered > 0) (validEntries.toDouble() / totalSignalsTriggered) * 100.0 else 0.0
+        get() = if (resolvedSignalOutcomes > 0) validEntries.toDouble() / resolvedSignalOutcomes * 100.0 else 0.0
 
     val captureRatePct: Double
         get() {
             val totalViable = validEntries + missedOpportunities
-            return if (totalViable > 0) (validEntries.toDouble() / totalViable) * 100.0 else 0.0
+            return if (totalViable > 0) validEntries.toDouble() / totalViable * 100.0 else 0.0
+        }
+
+    val outcomeCoveragePct: Double
+        get() {
+            val total = resolvedSignalOutcomes + unresolvedOutcomes + ambiguousOutcomes
+            return if (total > 0) resolvedSignalOutcomes.toDouble() / total * 100.0 else 0.0
         }
 }
 
 object HistoricalReplayEngine {
 
-    /**
-     * Memproses deretan candle historis satu per satu melalui ScalpingMtfEvaluator.
-     */
     fun replay(
         symbol: String = "BTCIDR",
         m1Candles: List<CandleBar>,
@@ -77,122 +100,155 @@ object HistoricalReplayEngine {
         targetProfitPct: Double = 1.5,
         stopLossPct: Double = 1.0,
         forwardLookaheadBars: Int = 15,
-        feeConfig: TradingFeeConfig = TradingFeeConfig()
+        feeConfig: TradingFeeConfig = TradingFeeConfig(),
+        synthesizeMissingHigherTimeframes: Boolean = true,
+        diagnosticIgnoreOrderBookWhenUnavailable: Boolean = false
     ): HistoricalReplayReport {
-        if (m1Candles.size < 25) {
-            return HistoricalReplayReport(
-                symbol = symbol,
-                totalEvaluations = 0,
-                totalSignalsTriggered = 0,
-                validEntries = 0,
-                falseSignals = 0,
-                missedOpportunities = 0,
-                avoidedLosses = 0,
-                bottleneck = BottleneckAnalysis(0, 0, 0, 0, 0, 0, "Data tidak cukup"),
-                frames = emptyList()
-            )
-        }
+        if (m1Candles.size < 20) return emptyReport(symbol)
 
-        // Siapkan M15 dan H1 pelengkap jika tidak disediakan
-        val effectiveM15 = if (m15Candles.size >= 20) m15Candles else generateSyntheticHigherTimeframe(m1Candles, 15)
-        val effectiveH1 = if (h1Candles.size >= 20) h1Candles else generateSyntheticHigherTimeframe(m1Candles, 60)
+        val sortedM1 = m1Candles.sortedBy { it.timestamp }
+        val sourceM15 = m15Candles.sortedBy { it.timestamp }
+        val sourceH1 = h1Candles.sortedBy { it.timestamp }
+        val endIndex = sortedM1.size - 1
 
         val frames = mutableListOf<ReplayFrame>()
         var step1Rejections = 0
         var step2Rejections = 0
         var step3Rejections = 0
         var step4Rejections = 0
+        var missedAfterStep1 = 0
+        var missedAfterStep2 = 0
+        var missedAfterStep3 = 0
+        var missedAfterStep4 = 0
+        var unmeasuredOrderBookFrames = 0
         var totalMomentumOpportunities = 0
         var validEntries = 0
         var falseSignals = 0
         var missedOpportunities = 0
         var avoidedLosses = 0
+        var unresolvedOutcomes = 0
+        var ambiguousOutcomes = 0
+        var anyOrderBookData = false
 
-        val startIndex = 20
-        val endIndex = m1Candles.size - 1
+        for (i in 19..endIndex) {
+            val currentCandle = sortedM1[i]
+            val evaluationTime = currentCandle.timestamp + 60_000L
+            val window = sortedM1.subList(0, i + 1)
 
-        for (i in startIndex..endIndex) {
-            val window = m1Candles.subList(0, i + 1)
-            val currentCandle = m1Candles[i]
-            val currentPrice = currentCandle.close
-
-            val (bids, asks) = if (orderBookProvider != null) {
-                orderBookProvider(i, currentCandle)
+            val effectiveM15 = if (sourceM15.isNotEmpty()) {
+                sourceM15
+            } else if (synthesizeMissingHigherTimeframes) {
+                generateSyntheticHigherTimeframe(window, 15)
             } else {
-                // Default: jika candle hijau dengan volume tinggi, simulasikan orderbook netral-bullish tipis
-                val isGreen = currentCandle.close > currentCandle.open
-                val bidAmt = if (isGreen) 20.0 else 10.0
-                val askAmt = 10.0
-                Pair(
-                    listOf(OrderBookItem(currentPrice * 0.999, bidAmt, bidAmt * currentPrice, isBid = true)),
-                    listOf(OrderBookItem(currentPrice * 1.001, askAmt, askAmt * currentPrice, isBid = false))
-                )
+                emptyList()
             }
 
-            // Ambil snapshot M15 & H1 yang tersedia hingga timestamp candle saat ini
-            val curTime = currentCandle.timestamp
-            val m15Slice = effectiveM15.filter { it.timestamp <= curTime }.ifEmpty { effectiveM15.take(20) }
-            val h1Slice = effectiveH1.filter { it.timestamp <= curTime }.ifEmpty { effectiveH1.take(20) }
+            val effectiveH1 = if (sourceH1.isNotEmpty()) {
+                sourceH1
+            } else if (synthesizeMissingHigherTimeframes) {
+                generateSyntheticHigherTimeframe(window, 60)
+            } else {
+                emptyList()
+            }
+
+            val m15Slice = effectiveM15.filter { it.timestamp + 15 * 60_000L <= evaluationTime }
+            val h1Slice = effectiveH1.filter { it.timestamp + 60 * 60_000L <= evaluationTime }
+
+            // Tidak boleh memakai fallback future candle. Tunggu sampai 20 candle MTF benar-benar closed.
+            if (m15Slice.size < 20 || h1Slice.size < 20) continue
+
+            val (bids, asks) = orderBookProvider?.invoke(i, currentCandle)
+                ?: (emptyList<OrderBookItem>() to emptyList())
+
+            val orderBookAvailable = bids.isNotEmpty() || asks.isNotEmpty()
+            anyOrderBookData = anyOrderBookData || orderBookAvailable
+            if (!orderBookAvailable && diagnosticIgnoreOrderBookWhenUnavailable) {
+                unmeasuredOrderBookFrames++
+            }
 
             val evalResult = ScalpingMtfEvaluator.evaluate(
-                price = currentPrice,
-                h1Candles = if (h1Slice.size >= 20) h1Slice else effectiveH1.take(20),
-                m15Candles = if (m15Slice.size >= 20) m15Slice else effectiveM15.take(20),
+                price = currentCandle.close,
+                h1Candles = h1Slice,
+                m15Candles = m15Slice,
                 m1Candles = window,
                 bids = bids,
                 asks = asks,
                 fees = feeConfig,
-                symbol = symbol
+                symbol = symbol,
+                diagnosticIgnoreOrderBookWhenUnavailable = diagnosticIgnoreOrderBookWhenUnavailable
             )
 
             val audit = evalResult?.audit ?: SignalAudit(
                 symbol = symbol,
-                timestamp = currentCandle.timestamp,
-                price = currentPrice,
-                finalAction = "HOLD",
+                timestamp = evaluationTime,
+                price = currentCandle.close,
+                finalAction = SignalAction.HOLD.name,
                 rejectionReason = "INSUFFICIENT_DATA"
             )
 
-            // Deteksi momentum kandidat:
-            // Volume > 1.2x rata-rata 20 candle terakhir DAN candle hijau
-            val recent20 = m1Candles.subList(maxOf(0, i - 20), i)
+            val recent20 = sortedM1.subList(maxOf(0, i - 20), i)
             val avgVol = if (recent20.isNotEmpty()) recent20.map { it.volume }.average() else currentCandle.volume
             val isVolumeSurge = currentCandle.volume >= avgVol * 1.2
             val isGreenBreakout = currentCandle.close > currentCandle.open && isVolumeSurge
-            val isMomentumCandidate = isGreenBreakout || (currentCandle.close > (recent20.maxOfOrNull { it.high } ?: currentPrice))
+            val isMomentumCandidate = isGreenBreakout ||
+                (currentCandle.close > (recent20.maxOfOrNull { it.high } ?: currentCandle.close))
 
-            // Evaluasi pergerakan forward (masa depan)
-            val maxLookahead = minOf(m1Candles.size - 1, i + forwardLookaheadBars)
+            val riskTarget = evalResult?.signal?.targetPrice2?.takeIf { it.isFinite() && it > currentCandle.close }
+                ?: currentCandle.close * (1.0 + targetProfitPct / 100.0)
+            val riskStop = evalResult?.signal?.stopLoss?.takeIf { it.isFinite() && it < currentCandle.close }
+                ?: currentCandle.close * (1.0 - stopLossPct / 100.0)
+
+            val maxLookahead = minOf(sortedM1.size - 1, i + forwardLookaheadBars)
             var futureRalliedWithoutSl = false
             var hitSl = false
+            var ambiguous = false
+            var resolved = false
 
-            val tpPrice = currentPrice * (1.0 + targetProfitPct / 100.0)
-            val slPrice = currentPrice * (1.0 - stopLossPct / 100.0)
-
-            if (i < m1Candles.size - 1) {
+            if (i < maxLookahead) {
                 for (f in (i + 1)..maxLookahead) {
-                    val futureBar = m1Candles[f]
-                    if (futureBar.low <= slPrice) {
-                        hitSl = true
-                        break
-                    }
-                    if (futureBar.high >= tpPrice) {
-                        futureRalliedWithoutSl = true
-                        break
+                    val futureBar = sortedM1[f]
+                    val hitTp = futureBar.high >= riskTarget
+                    val hitStop = futureBar.low <= riskStop
+                    when {
+                        hitTp && hitStop -> {
+                            ambiguous = true
+                            resolved = true
+                            break
+                        }
+                        hitStop -> {
+                            hitSl = true
+                            resolved = true
+                            break
+                        }
+                        hitTp -> {
+                            futureRalliedWithoutSl = true
+                            resolved = true
+                            break
+                        }
                     }
                 }
             }
 
-            // Klasifikasi hasil (Outcome)
             val outcome = when {
-                audit.finalAction == "BUY" -> {
-                    if (futureRalliedWithoutSl) {
-                        validEntries++
-                        ReplayTradeOutcome.VALID_ENTRY
-                    } else {
-                        falseSignals++
-                        ReplayTradeOutcome.FALSE_SIGNAL
-                    }
+                ambiguous -> {
+                    ambiguousOutcomes++
+                    ReplayTradeOutcome.AMBIGUOUS
+                }
+                !resolved -> {
+                    unresolvedOutcomes++
+                    ReplayTradeOutcome.UNRESOLVED
+                }
+                audit.finalAction == SignalAction.BUY.name && futureRalliedWithoutSl -> {
+                    validEntries++
+                    ReplayTradeOutcome.VALID_ENTRY
+                }
+                audit.finalAction == SignalAction.BUY.name && hitSl -> {
+                    falseSignals++
+                    ReplayTradeOutcome.FALSE_SIGNAL
+                }
+                audit.finalAction == SignalAction.BUY.name -> {
+                    unresolvedOutcomes++
+                    ReplayTradeOutcome.UNRESOLVED
                 }
                 isMomentumCandidate && futureRalliedWithoutSl -> {
                     missedOpportunities++
@@ -205,103 +261,135 @@ object HistoricalReplayEngine {
                 else -> null
             }
 
-            // Hitung statistik bottleneck jika ini adalah peluang momentum yang gagal buy
-            if (isMomentumCandidate && audit.finalAction != "BUY") {
+            if (isMomentumCandidate) {
                 totalMomentumOpportunities++
                 when {
-                    !audit.step1Ok -> step1Rejections++
-                    !audit.step2Ok -> step2Rejections++
-                    !audit.step3Ok -> step3Rejections++
-                    !audit.step4Ok -> step4Rejections++
+                    audit.step1Ok.not() -> {
+                        step1Rejections++
+                        if (futureRalliedWithoutSl) missedAfterStep1++
+                    }
+                    audit.step2Ok.not() -> {
+                        step2Rejections++
+                        if (futureRalliedWithoutSl) missedAfterStep2++
+                    }
+                    audit.step3Ok.not() -> {
+                        step3Rejections++
+                        if (futureRalliedWithoutSl) missedAfterStep3++
+                    }
+                    audit.step4Ok.not() -> {
+                        step4Rejections++
+                        if (futureRalliedWithoutSl) missedAfterStep4++
+                    }
                 }
-            } else if (isMomentumCandidate && audit.finalAction == "BUY") {
-                totalMomentumOpportunities++
             }
 
-            frames.add(
-                ReplayFrame(
-                    index = i,
-                    candle = currentCandle,
-                    audit = audit,
-                    isMomentumCandidate = isMomentumCandidate,
-                    futureRalliedWithoutSl = futureRalliedWithoutSl,
-                    outcome = outcome
-                )
+            frames += ReplayFrame(
+                index = i,
+                candle = currentCandle,
+                audit = audit,
+                isMomentumCandidate = isMomentumCandidate,
+                futureRalliedWithoutSl = futureRalliedWithoutSl,
+                outcome = outcome
             )
         }
 
-        // Tentukan bottleneck utama
         val maxRejections = maxOf(step1Rejections, step2Rejections, step3Rejections, step4Rejections)
-        val primaryStep = when (maxRejections) {
-            0 -> 0
-            step4Rejections -> 4
-            step2Rejections -> 2
-            step3Rejections -> 3
-            else -> 1
+        val primaryStep = when {
+            maxRejections == 0 -> 0
+            step1Rejections == maxRejections -> 1
+            step2Rejections == maxRejections -> 2
+            step3Rejections == maxRejections -> 3
+            else -> 4
         }
 
         val primaryDesc = when (primaryStep) {
-            4 -> "STEP 4 (Net R:R) menolak $step4Rejections/$totalMomentumOpportunities peluang momentum (Net R:R >= 1.05 tidak tercapai dengan struktur fee saat ini)."
-            2 -> "STEP 2 (Order Book) menolak $step2Rejections/$totalMomentumOpportunities peluang momentum (Buy pressure di bawah threshold atau orderbook kosong)."
-            3 -> "STEP 3 (VWAP/VSA Trigger) menolak $step3Rejections/$totalMomentumOpportunities peluang momentum (Harga di bawah VWAP atau volume breakout belum terpenuhi)."
-            1 -> "STEP 1 (Market Bias / Noise) menolak $step1Rejections/$totalMomentumOpportunities peluang momentum (Terhalang resistance M15 atau volatilitas ekstrim)."
-            else -> "Tidak ada bottleneck yang dominan."
+            1 -> "STEP 1 menolak $step1Rejections/$totalMomentumOpportunities peluang momentum."
+            2 -> "STEP 2 menolak $step2Rejections/$totalMomentumOpportunities peluang momentum."
+            3 -> "STEP 3 menolak $step3Rejections/$totalMomentumOpportunities peluang momentum."
+            4 -> "STEP 4 menolak $step4Rejections/$totalMomentumOpportunities peluang momentum."
+            else -> "Tidak ada bottleneck yang terukur."
         }
 
-        val bottleneck = BottleneckAnalysis(
-            totalMomentumOpportunities = totalMomentumOpportunities,
-            step1Rejections = step1Rejections,
-            step2Rejections = step2Rejections,
-            step3Rejections = step3Rejections,
-            step4Rejections = step4Rejections,
-            primaryBottleneckStep = primaryStep,
-            primaryBottleneckDescription = primaryDesc
-        )
+        val orderBookMode = when {
+            anyOrderBookData && diagnosticIgnoreOrderBookWhenUnavailable -> "MIXED"
+            anyOrderBookData -> "HISTORICAL_PROVIDER"
+            diagnosticIgnoreOrderBookWhenUnavailable -> "UNAVAILABLE_BYPASSED"
+            else -> "UNAVAILABLE_BLOCKING"
+        }
 
         return HistoricalReplayReport(
             symbol = symbol,
             totalEvaluations = frames.size,
-            totalSignalsTriggered = validEntries + falseSignals,
+            totalSignalsTriggered = frames.count { it.audit.finalAction == SignalAction.BUY.name },
             validEntries = validEntries,
             falseSignals = falseSignals,
             missedOpportunities = missedOpportunities,
             avoidedLosses = avoidedLosses,
-            bottleneck = bottleneck,
+            unresolvedOutcomes = unresolvedOutcomes,
+            ambiguousOutcomes = ambiguousOutcomes,
+            orderBookDataAvailable = anyOrderBookData,
+            orderBookMode = orderBookMode,
+            bottleneck = BottleneckAnalysis(
+                totalMomentumOpportunities = totalMomentumOpportunities,
+                step1Rejections = step1Rejections,
+                step2Rejections = step2Rejections,
+                step3Rejections = step3Rejections,
+                step4Rejections = step4Rejections,
+                missedAfterStep1 = missedAfterStep1,
+                missedAfterStep2 = missedAfterStep2,
+                missedAfterStep3 = missedAfterStep3,
+                missedAfterStep4 = missedAfterStep4,
+                unmeasuredOrderBookFrames = unmeasuredOrderBookFrames,
+                primaryBottleneckStep = primaryStep,
+                primaryBottleneckDescription = primaryDesc
+            ),
             frames = frames
         )
     }
 
-    /**
-     * Membangun candle timeframe lebih tinggi (M15 / H1) dari candle M1 untuk pengujian mandiri.
-     */
+    private fun emptyReport(symbol: String) = HistoricalReplayReport(
+        symbol = symbol,
+        totalEvaluations = 0,
+        totalSignalsTriggered = 0,
+        validEntries = 0,
+        falseSignals = 0,
+        missedOpportunities = 0,
+        avoidedLosses = 0,
+        unresolvedOutcomes = 0,
+        ambiguousOutcomes = 0,
+        orderBookDataAvailable = false,
+        orderBookMode = "NO_DATA",
+        bottleneck = BottleneckAnalysis(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "Data tidak cukup"),
+        frames = emptyList()
+    )
+
+    /** Utility test-only: membangun HTF dari window yang tersedia saat ini (causal, bukan full-dataset). */
     fun generateSyntheticHigherTimeframe(m1Candles: List<CandleBar>, intervalMinutes: Int): List<CandleBar> {
+        if (m1Candles.isEmpty()) return emptyList()
         val intervalMs = intervalMinutes * 60_000L
         val grouped = m1Candles.groupBy { it.timestamp / intervalMs }.values.map { group ->
             CandleBar(
-                timestamp = group.first().timestamp,
-                open = group.first().open,
+                timestamp = group.minOf { it.timestamp / intervalMs } * intervalMs,
+                open = group.minBy { it.timestamp }.open,
                 high = group.maxOf { it.high },
                 low = group.minOf { it.low },
-                close = group.last().close,
+                close = group.maxBy { it.timestamp }.close,
                 volume = group.sumOf { it.volume }
             )
         }.sortedBy { it.timestamp }
 
-        // Jika jumlah candle hasil group masih kurang dari 20, tambahkan padding flat candle di masa lalu
         if (grouped.size < 20) {
-            val first = grouped.firstOrNull() ?: m1Candles.first()
+            val first = grouped.firstOrNull() ?: return emptyList()
             val padding = mutableListOf<CandleBar>()
             val needed = 20 - grouped.size
             for (k in needed downTo 1) {
-                padding.add(
-                    CandleBar(
-                        timestamp = first.timestamp - (k * intervalMs),
-                        open = first.open,
-                        high = first.open * 1.002,
-                        low = first.open * 0.998,
-                        close = first.open,
-                        volume = 1000.0
-                    )
+                padding += CandleBar(
+                    timestamp = first.timestamp - (k * intervalMs),
+                    open = first.open,
+                    high = first.open * 1.002,
+                    low = first.open * 0.998,
+                    close = first.open,
+                    volume = 1000.0
                 )
             }
             return padding + grouped
