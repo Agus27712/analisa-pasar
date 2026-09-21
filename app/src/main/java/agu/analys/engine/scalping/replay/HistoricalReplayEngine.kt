@@ -46,13 +46,26 @@ data class BottleneckAnalysis(
     val primaryBottleneckStep: Int,
     val primaryBottleneckDescription: String
 ) {
-    private fun pct(value: Int): Double =
+    val totalRejectedMomentumOpportunities: Int
+        get() = step1Rejections + step2Rejections + step3Rejections + step4Rejections
+
+    private fun pctOfCandidates(value: Int): Double =
         if (totalMomentumOpportunities > 0) value.toDouble() / totalMomentumOpportunities * 100.0 else 0.0
 
-    val step1RejectionPct: Double get() = pct(step1Rejections)
-    val step2RejectionPct: Double get() = pct(step2Rejections)
-    val step3RejectionPct: Double get() = pct(step3Rejections)
-    val step4RejectionPct: Double get() = pct(step4Rejections)
+    private fun pctOfRejections(value: Int): Double =
+        if (totalRejectedMomentumOpportunities > 0) {
+            value.toDouble() / totalRejectedMomentumOpportunities * 100.0
+        } else 0.0
+
+    val step1RejectionPct: Double get() = pctOfCandidates(step1Rejections)
+    val step2RejectionPct: Double get() = pctOfCandidates(step2Rejections)
+    val step3RejectionPct: Double get() = pctOfCandidates(step3Rejections)
+    val step4RejectionPct: Double get() = pctOfCandidates(step4Rejections)
+
+    val step1RejectionSharePct: Double get() = pctOfRejections(step1Rejections)
+    val step2RejectionSharePct: Double get() = pctOfRejections(step2Rejections)
+    val step3RejectionSharePct: Double get() = pctOfRejections(step3Rejections)
+    val step4RejectionSharePct: Double get() = pctOfRejections(step4Rejections)
 }
 
 data class HistoricalReplayReport(
