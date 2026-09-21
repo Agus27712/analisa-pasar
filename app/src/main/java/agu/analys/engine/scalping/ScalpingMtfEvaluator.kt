@@ -39,7 +39,8 @@ object ScalpingMtfEvaluator {
         fees: TradingFeeConfig = TradingFeeConfig(),
         sensitivity: ScalpingSensitivity = ScalpingSensitivity.BALANCED,
         symbol: String = "",
-        orderBookAgeMs: Long = 0L
+        orderBookAgeMs: Long = 0L,
+        diagnosticIgnoreOrderBookWhenUnavailable: Boolean = false
     ): Result? = evaluate(
         globalContext = agu.analys.engine.global.GlobalMarketContext(),
         price = price,
@@ -52,7 +53,8 @@ object ScalpingMtfEvaluator {
         fees = fees,
         sensitivity = sensitivity,
         symbol = symbol,
-        orderBookAgeMs = orderBookAgeMs
+        orderBookAgeMs = orderBookAgeMs,
+        diagnosticIgnoreOrderBookWhenUnavailable = diagnosticIgnoreOrderBookWhenUnavailable
     )
 
     fun evaluate(
@@ -67,7 +69,8 @@ object ScalpingMtfEvaluator {
         fees: TradingFeeConfig = TradingFeeConfig(),
         sensitivity: ScalpingSensitivity = ScalpingSensitivity.BALANCED,
         symbol: String = "",
-        orderBookAgeMs: Long = 0L
+        orderBookAgeMs: Long = 0L,
+        diagnosticIgnoreOrderBookWhenUnavailable: Boolean = false
     ): Result? {
         if (price <= 0.0 || h1Candles.size < 20 || m15Candles.size < 20 || m1Candles.size < 20) return null
 
@@ -78,7 +81,12 @@ object ScalpingMtfEvaluator {
         val isOrderBookEmpty = bids.isEmpty() && asks.isEmpty()
         val isOrderBookStale = orderBookAgeMs > 30_000L
         val buyPressure = if (!isOrderBookEmpty) OrderBookAnalyzer.calculateBuyPressure(bids, asks, 15) else 1.0
-        val isOrderBookValid = !isOrderBookEmpty && !isOrderBookStale && buyPressure > 1.0
+        val orderBookDataAvailable = !isOrderBookEmpty
+        val isOrderBookValid = if (diagnosticIgnoreOrderBookWhenUnavailable && isOrderBookEmpty) {
+            true
+        } else {
+            !isOrderBookEmpty && !isOrderBookStale && buyPressure > 1.0
+        }
         
         val last1M = m1Candles.last()
         val avgVol1M = m1Candles.takeLast(20).map { it.volume }.average()
@@ -334,7 +342,8 @@ object ScalpingMtfEvaluator {
             finalAction = finalAction.name,
             rejectionReason = rejectionReason,
             isOrderBookEmpty = isOrderBookEmpty,
-            orderBookAgeMs = orderBookAgeMs
+            orderBookAgeMs = orderBookAgeMs,
+            orderBookDataAvailable = orderBookDataAvailable
         )
 
         return Result(
