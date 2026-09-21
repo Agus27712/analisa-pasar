@@ -274,7 +274,7 @@ fun SpreadGuardAndEntrySection(
                                 fontWeight = FontWeight.Medium
                             )
                             Text(
-                                text = if (executionType == EntryExecutionType.MARKET_TAKER) "Hajar Kanan" else "Limit di Best Bid",
+                                text = if (executionType == EntryExecutionType.MARKET_TAKER) "Eksekusi Instan" else "Limit di Best Bid",
                                 color = if (executionType == EntryExecutionType.MARKET_TAKER) TvGreen else Color(0xFFFFB300),
                                 fontSize = 10.5.sp,
                                 fontWeight = FontWeight.Bold

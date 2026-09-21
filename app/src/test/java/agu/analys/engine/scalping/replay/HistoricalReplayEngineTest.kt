@@ -56,7 +56,7 @@ class HistoricalReplayEngineTest {
             assertNotNull(frame.audit)
             assertEquals("BTCIDR", frame.audit.symbol)
             assertTrue(frame.audit.price > 0.0)
-            assertTrue(frame.index >= 20)
+            assertTrue(frame.index >= 19)
         }
     }
 

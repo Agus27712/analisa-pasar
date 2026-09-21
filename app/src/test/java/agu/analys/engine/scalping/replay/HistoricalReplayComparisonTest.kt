@@ -53,6 +53,12 @@ class HistoricalReplayComparisonTest {
         val report = HistoricalReplayEngine.replay(
             symbol = "BTCIDR",
             m1Candles = dataset,
+            orderBookProvider = { _, c ->
+                Pair(
+                    listOf(OrderBookItem(c.close, 10.0, 10.0 * c.close, true)),
+                    listOf(OrderBookItem(c.close + 1.0, 2.0, 2.0 * (c.close + 1.0), false))
+                )
+            },
             targetProfitPct = 1.5,
             stopLossPct = 1.0,
             forwardLookaheadBars = 15,
@@ -103,6 +109,6 @@ class HistoricalReplayComparisonTest {
 
         // Dengan perbaikan Fase 6, orderbook kosong tidak boleh memicu BUY
         assertEquals("Orderbook kosong tidak boleh memicu BUY apapun", 0, reportEmpty.totalSignalsTriggered)
-        assertTrue("Semua penolakan orderbook kosong tercatat di Step 2", reportEmpty.bottleneck.step2Rejections > 0)
+        assertTrue("Semua frame mencatat orderbook kosong", reportEmpty.frames.all { it.audit.isOrderBookEmpty })
     }
 }

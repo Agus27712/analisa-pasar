@@ -398,10 +398,10 @@ object HistoricalReplayEngine {
             )
         }.sortedBy { it.timestamp }
 
-        if (grouped.size < 20) {
+        if (grouped.size < 21) {
             val first = grouped.firstOrNull() ?: return emptyList()
             val padding = mutableListOf<CandleBar>()
-            val needed = 20 - grouped.size
+            val needed = 21 - grouped.size
             for (k in needed downTo 1) {
                 padding += CandleBar(
                     timestamp = first.timestamp - (k * intervalMs),
