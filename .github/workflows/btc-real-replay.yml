@@ -33,7 +33,7 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Run real Indodax BTCIDR replay
-        run: ./gradlew test --no-daemon --stacktrace --tests "agu.analys.engine.scalping.replay.RealBtcIndodaxReplayTest"
+        run: ./gradlew :app:testDebugUnitTest --no-daemon --stacktrace --tests "agu.analys.engine.scalping.replay.RealBtcIndodaxReplayTest"
 
       - name: Upload BTC replay audit
         if: always()
