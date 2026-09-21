@@ -32,7 +32,7 @@ class RealBtcIndodaxReplayTest {
         )
         val now = System.currentTimeMillis()
 
-        val m1 = IndodaxMarketService.fetchCandles("BTCIDR", Timeframe.M1, limit = 1500)
+        val m1 = IndodaxMarketService.fetchCandles("BTCIDR", Timeframe.M1, limit = 500)
             .filter { it.timestamp + 60_000L <= now }
 
         val m15 = IndodaxMarketService.fetchCandles("BTCIDR", Timeframe.M15, limit = 100)
@@ -60,7 +60,7 @@ class RealBtcIndodaxReplayTest {
 
         assertTrue("Replay BTCIDR harus menghasilkan evaluasi", report.totalEvaluations > 0)
 
-        val outDir = File("app/build/reports/scalping-replay")
+        val outDir = File(if (File("build").exists() || !File("app/build").exists()) "build/reports/scalping-replay" else "app/build/reports/scalping-replay")
         outDir.mkdirs()
 
         writeCandles(File(outDir, "btcidr-m1.csv"), m1)

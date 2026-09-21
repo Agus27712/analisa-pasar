@@ -110,12 +110,15 @@ object ScalpingMtfEvaluator {
         val safeVwapCandles = if (m1Candles.size >= 60) m1Candles else m1Candles.takeLast(m1Candles.size)
         val vwap1M = IndicatorMath.rollingVwap(safeVwapCandles, minOf(60, safeVwapCandles.size))
         val rsi1M = IndicatorMath.rsi(m1Candles, minOf(14, m1Candles.size - 1))
-        val isOverbought = rsi1M >= 80.0
+        val isOverbought = if (isAggressive) rsi1M >= 85.0 else rsi1M >= 80.0
         
-        // 4. Macro Room to Grow (M15 / H1)
+        // 4. Macro Room to Grow & Breakout Analysis (M15 / H1)
         val struct15M = if (m15Ready) MarketStructureAnalyzer.analyze(m15Candles.takeLast(40)) else null
         val resistance = struct15M?.resistance ?: (price * 1.05)
-        val hasRoomToGrow = price < resistance * 0.995
+        val isBreakoutAboveResistance = price >= resistance
+        val isBreakoutWithVolume = price >= (resistance * 0.995) && isVSABreakout
+        val isRoomClearToResistance = price < (resistance * 0.995)
+        val hasRoomToGrow = isRoomClearToResistance || isBreakoutAboveResistance || isBreakoutWithVolume
 
         // Indicators for state
         val m1Closes = m1Candles.map { it.close }
@@ -142,7 +145,8 @@ object ScalpingMtfEvaluator {
         // --- 2. WATERFALL CHECKPOINTS ---
         val step1Ok = !isDangerous && hasRoomToGrow
         val step2Ok = step1Ok && isOrderBookValid
-        val step3Ok = step2Ok && (price > vwap1M || isVSABreakout)
+        val isVwapOrReclaimValid = price > vwap1M || isVSABreakout || (rsi1M in 38.0..68.0 && last1M.close > last1M.open && last1M.close >= (vwap1M * 0.9985))
+        val step3Ok = step2Ok && isVwapOrReclaimValid
         val step4Ok = step3Ok && rrOk
 
         val completedSteps = when {

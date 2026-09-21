@@ -206,7 +206,7 @@ object HistoricalReplayEngine {
             val isMomentumCandidate = isGreenBreakout ||
                 (currentCandle.close > (recent20.maxOfOrNull { it.high } ?: currentCandle.close))
 
-            val riskTarget = evalResult?.signal?.targetPrice2?.takeIf { it.isFinite() && it > currentCandle.close }
+            val riskTarget = evalResult?.signal?.targetPrice1?.takeIf { it.isFinite() && it > currentCandle.close }
                 ?: currentCandle.close * (1.0 + targetProfitPct / 100.0)
             val riskStop = evalResult?.signal?.stopLoss?.takeIf { it.isFinite() && it < currentCandle.close }
                 ?: currentCandle.close * (1.0 - stopLossPct / 100.0)

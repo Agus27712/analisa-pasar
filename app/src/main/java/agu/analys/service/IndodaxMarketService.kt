@@ -69,8 +69,8 @@ object IndodaxMarketService {
                 val req = Request.Builder()
                     .url(url)
                     .get()
-                    .header("User-Agent", "KryptoAnalysis/1.2.6 (Android)")
-                    .header("Accept", "application/json")
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+                    .header("Accept", "application/json, text/plain, */*")
                     .build()
                 client.newCall(req).execute().use { response ->
                     val code = response.code
@@ -81,10 +81,14 @@ object IndodaxMarketService {
                             val backoff = (300L * (1 shl (attempt - 1))).coerceAtMost(1500L)
                             delay(backoff)
                         }
-                        else -> return@withContext null // 4xx lain: jangan retry
+                        else -> {
+                            println("Indodax HTTP $code for $url (Body: ${body?.take(150)})")
+                            return@withContext null
+                        }
                     }
                 }
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                println("Indodax GET error ($url): ${e.javaClass.name} - ${e.message}")
                 val backoff = (200L * (1 shl (attempt - 1))).coerceAtMost(1000L)
                 delay(backoff)
             }
@@ -503,27 +507,63 @@ object IndodaxMarketService {
             val requestCount = limit.coerceAtLeast(40) + 1
             val fromSec = explicitFromSec ?: (nowSec - (candleSeconds * requestCount))
             val apiTf = if (tf == "D") "1D" else tf
-            val pair = toDepthPairId(symbol).uppercase()
-            val body = get("https://indodax.com/tradingview/history_v2?from=$fromSec&symbol=$pair&tf=$apiTf&to=$nowSec")
-                ?: return@withContext emptyList()
-            val array = JSONArray(body)
-            val result = mutableListOf<CandleBar>()
-            for (i in 0 until array.length()) {
-                val row = array.optJSONObject(i) ?: continue
-                val open = row.optDouble("Open", 0.0)
-                val high = row.optDouble("High", 0.0)
-                val low = row.optDouble("Low", 0.0)
-                val close = row.optDouble("Close", 0.0)
-                if (open <= 0 || high <= 0 || low <= 0 || close <= 0) continue
-                val timeSec = row.optLong("Time", 0L)
-                if (timeSec <= 0) continue
-                result += CandleBar(
-                    timeSec * 1000L, open, high, low, close,
-                    row.optString("Volume", "0").toDoubleOrNull() ?: 0.0
-                )
+            val pairUpper = toDepthPairId(symbol).uppercase()
+            val pairLower = toDepthPairId(symbol).lowercase()
+
+            var body = get("https://indodax.com/tradingview/history_v2?from=$fromSec&symbol=$pairUpper&tf=$apiTf&to=$nowSec")
+            if (body == null || body.trim().isEmpty() || body.trim() == "[]" || body.trim() == "{}") {
+                body = get("https://indodax.com/tradingview/history_v2?from=$fromSec&symbol=$pairLower&tf=$apiTf&to=$nowSec")
             }
+            if (body == null || body.trim().isEmpty() || body.trim() == "[]" || body.trim() == "{}") {
+                body = get("https://indodax.com/tradingview/history?from=$fromSec&symbol=$pairUpper&resolution=$apiTf&to=$nowSec")
+            }
+            if (body == null || body.trim().isEmpty()) return@withContext emptyList()
+
+            val trimmed = body.trim()
+            val result = mutableListOf<CandleBar>()
+
+            if (trimmed.startsWith("[")) {
+                val array = JSONArray(trimmed)
+                for (i in 0 until array.length()) {
+                    val row = array.optJSONObject(i) ?: continue
+                    val open = row.optDouble("Open", 0.0)
+                    val high = row.optDouble("High", 0.0)
+                    val low = row.optDouble("Low", 0.0)
+                    val close = row.optDouble("Close", 0.0)
+                    if (open <= 0 || high <= 0 || low <= 0 || close <= 0) continue
+                    val timeSec = row.optLong("Time", 0L)
+                    if (timeSec <= 0) continue
+                    result += CandleBar(
+                        timeSec * 1000L, open, high, low, close,
+                        row.optString("Volume", "0").toDoubleOrNull() ?: row.optDouble("Volume", 0.0)
+                    )
+                }
+            } else if (trimmed.startsWith("{")) {
+                val obj = JSONObject(trimmed)
+                val tArr = obj.optJSONArray("t")
+                val oArr = obj.optJSONArray("o")
+                val hArr = obj.optJSONArray("h")
+                val lArr = obj.optJSONArray("l")
+                val cArr = obj.optJSONArray("c")
+                val vArr = obj.optJSONArray("v")
+                if (tArr != null && oArr != null && hArr != null && lArr != null && cArr != null) {
+                    val len = minOf(tArr.length(), oArr.length(), hArr.length(), lArr.length(), cArr.length())
+                    for (i in 0 until len) {
+                        val tSec = tArr.optLong(i, 0L)
+                        val o = oArr.optDouble(i, 0.0)
+                        val h = hArr.optDouble(i, 0.0)
+                        val l = lArr.optDouble(i, 0.0)
+                        val c = cArr.optDouble(i, 0.0)
+                        val v = vArr?.optDouble(i, 0.0) ?: 0.0
+                        if (tSec <= 0 || o <= 0 || h <= 0 || l <= 0 || c <= 0) continue
+                        result += CandleBar(tSec * 1000L, o, h, l, c, v)
+                    }
+                }
+            }
+
             result.sortedBy { it.timestamp }.takeLast(limit)
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            println("fetchCandles exception for $symbol ${timeframe.label}: ${e.javaClass.name} - ${e.message}")
             emptyList()
         }
     }

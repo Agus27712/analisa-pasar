@@ -92,6 +92,10 @@ android {
   compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
   buildFeatures { compose = true; buildConfig = true }
   packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
+  testOptions {
+    unitTests.isReturnDefaultValues = true
+    unitTests.isIncludeAndroidResources = true
+  }
 }
 
 kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }
@@ -129,6 +133,7 @@ dependencies {
   implementation(libs.androidx.work.runtime.ktx)
   ksp(libs.androidx.room.compiler)
   testImplementation(libs.junit)
+  testImplementation("org.json:json:20240303")
   testImplementation(libs.mockk)
   testImplementation(libs.mockwebserver)
   testImplementation(libs.robolectric)

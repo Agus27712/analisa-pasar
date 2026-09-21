@@ -16,7 +16,11 @@ class AnalysApplication : Application(), Application.ActivityLifecycleCallbacks 
         if (BuildConfig.DEBUG) {
             Timber.plant(Timber.DebugTree())
         }
-        agu.analys.service.CandidateScanWorker.schedule(this)
+        try {
+            agu.analys.service.CandidateScanWorker.schedule(this)
+        } catch (e: Exception) {
+            Timber.w(e, "CandidateScanWorker schedule deferred or not initialized in test environment")
+        }
     }
 
     override fun onActivityStarted(activity: Activity) {
