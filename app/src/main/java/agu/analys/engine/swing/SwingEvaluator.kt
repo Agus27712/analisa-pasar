@@ -103,14 +103,14 @@ object SwingEvaluator {
         }
 
         // ── Indicators ──────────────────────────────────────────────────────
-        val closes = history.map { it.close }
+        val closes = DoubleArray(history.size) { history[it].close }
         val highs = history.map { it.high }
         val rsi = IndicatorMath.rsi(history, min(14, history.size - 1))
         val ema20 = IndicatorMath.ema(closes, min(20, closes.size))
         val ema50 = IndicatorMath.ema(closes, min(50, closes.size))
-        val macdSeries = IndicatorMath.macdSeries(closes, 12, 26, 9)
-        val macd = macdSeries.lastOrNull()?.first ?: 0.0
-        val macdSignal = macdSeries.lastOrNull()?.second ?: 0.0
+        val macdResult = IndicatorMath.macdSeries(closes, 12, 26, 9)
+        val macd = macdResult.lastMacd
+        val macdSignal = macdResult.lastSignal
         val macdHist = macd - macdSignal
         val bb = IndicatorMath.bollinger(closes, min(20, closes.size))
         val atr = IndicatorMath.atr(history, min(14, history.size - 1))

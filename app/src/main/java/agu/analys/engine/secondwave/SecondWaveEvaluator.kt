@@ -122,7 +122,7 @@ object SecondWaveEvaluator {
         val minOlderLow = olderLows.minOrNull() ?: baseFloor
         val hasHigherLow = minRecentLow >= minOlderLow * 0.985 // Membentuk Higher Low atau Double Bottom
 
-        val closesH1 = h1Candles.map { it.close }
+        val closesH1 = DoubleArray(h1Candles.size) { h1Candles[it].close }
         val ema20H1 = IndicatorMath.ema(closesH1, 20)
         val ema50H1 = IndicatorMath.ema(closesH1, 50)
         val isBaseHolding = price >= baseFloor * 0.995 && (price >= ema20H1 * 0.975 || price >= baseFloor)
@@ -150,8 +150,9 @@ object SecondWaveEvaluator {
         // STAGE 7: Flow & Accumulation (Candlestick absorptions & RSI reset)
         val rsi15m = IndicatorMath.rsi(m15Candles, 14)
         val rsi1h = IndicatorMath.rsi(h1Candles, 14)
-        val macd15m = IndicatorMath.macdSeries(m15Candles.map { it.close }, 12, 26, 9).lastOrNull()
-        val macdHist = (macd15m?.first ?: 0.0) - (macd15m?.second ?: 0.0)
+        val closesM15 = DoubleArray(m15Candles.size) { m15Candles[it].close }
+        val macd15m = IndicatorMath.macdSeries(closesM15, 12, 26, 9)
+        val macdHist = macd15m.lastMacd - macd15m.lastSignal
 
         val flowScore = when {
             rsi1h in 38.0..68.0 && macdHist >= -0.0001 && rsi15m >= 40.0 -> 2

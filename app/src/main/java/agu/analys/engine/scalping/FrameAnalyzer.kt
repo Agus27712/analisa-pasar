@@ -20,13 +20,13 @@ object FrameAnalyzer {
         isAggressive: Boolean = false
     ): FrameSignal? {
         if (history.size < maxOf(30, slowPeriod + 5)) return null
-        val closes = history.map { it.close }
+        val closes = DoubleArray(history.size) { history[it].close }
         val price = closes.last()
         val rsi = IndicatorMath.rsi(history, rsiPeriod)
         val emaFast = IndicatorMath.ema(closes, fastPeriod)
         val emaSlow = IndicatorMath.ema(closes, slowPeriod)
-        val macdSeries = IndicatorMath.macdSeries(closes, macdFast, macdSlow, macdSignal)
-        val macdHist = macdSeries.last().first - macdSeries.last().second
+        val macd = IndicatorMath.macdSeries(closes, macdFast, macdSlow, macdSignal)
+        val macdHist = macd.lastMacd - macd.lastSignal
         val atr = IndicatorMath.atr(history, atrPeriod)
         val structureWindow = min(40, history.size)
         val structure = MarketStructureAnalyzer.analyze(history.takeLast(structureWindow))

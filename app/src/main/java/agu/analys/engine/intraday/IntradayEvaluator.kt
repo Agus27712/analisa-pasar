@@ -148,16 +148,16 @@ object IntradayEvaluator {
             )
         }
 
-        val closes = history.map { it.close }
+        val closes = DoubleArray(history.size) { history[it].close }
         val highs = history.map { it.high }
         val rsi = IndicatorMath.rsi(history, min(14, history.size - 1))
         val ema20 = IndicatorMath.ema(closes, min(20, closes.size))
         val ema50 = IndicatorMath.ema(closes, min(50, closes.size))
         val ema100 = if (closes.size >= 100) IndicatorMath.ema(closes, 100) else Double.NaN
         val ema200 = if (closes.size >= 200) IndicatorMath.ema(closes, 200) else Double.NaN
-        val macdSeries = IndicatorMath.macdSeries(closes, 12, 26, 9)
-        val macd = macdSeries.lastOrNull()?.first ?: 0.0
-        val macdSignal = macdSeries.lastOrNull()?.second ?: 0.0
+        val macdResult = IndicatorMath.macdSeries(closes, 12, 26, 9)
+        val macd = macdResult.lastMacd
+        val macdSignal = macdResult.lastSignal
         val macdHist = macd - macdSignal
         val bb = IndicatorMath.bollinger(closes, min(20, closes.size))
         val atr = IndicatorMath.atr(history, min(14, history.size - 1))
@@ -214,7 +214,12 @@ object IntradayEvaluator {
         val recentHigh = highs.takeLast(lookbackHigh).maxOrNull() ?: price
         val effectiveAtr = if (atr.isFinite() && atr > 0.0) atr else (price * 0.04)
         val distToHighPct = if (recentHigh > 0.0) (recentHigh - price) / recentHigh else 1.0
-        val mean20 = closes.takeLast(min(20, closes.size)).average()
+        val meanCount = min(20, closes.size)
+        val mean20 = if (meanCount > 0) {
+            var sum = 0.0
+            for (i in (closes.size - meanCount) until closes.size) sum += closes[i]
+            sum / meanCount
+        } else price
         val atrExtension = if (effectiveAtr > 0.0) (price - mean20) / effectiveAtr else 0.0
 
         val tooCloseToHigh = distToHighPct < 0.012
@@ -226,7 +231,8 @@ object IntradayEvaluator {
 
         // 1. Trend & Moving Average Alignment
         val isEstablishedUptrend = indicators.ema20.isFinite() && indicators.ema50.isFinite() && (ema20 > ema50) && (price >= ema50 * 0.985)
-        val isGoldenCross = ema20 > ema50 && closes.takeLast(5).firstOrNull()?.let { it <= ema50 } ?: false
+        val candle5Ago = if (closes.size >= 5) closes[closes.size - 5] else (closes.firstOrNull() ?: price)
+        val isGoldenCross = ema20 > ema50 && candle5Ago <= ema50
 
         // Early Reversal Pagi / Reclaim Support:
         // Sesi pagi sering kali memantul dari support dan menembus kembali ke atas EMA20 (reclaim)

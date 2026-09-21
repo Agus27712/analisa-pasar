@@ -121,7 +121,7 @@ object ScalpingMtfEvaluator {
         val hasRoomToGrow = isRoomClearToResistance || isBreakoutAboveResistance || isBreakoutWithVolume
 
         // Indicators for state
-        val m1Closes = m1Candles.map { it.close }
+        val m1Closes = DoubleArray(m1Candles.size) { m1Candles[it].close }
         val ema20 = IndicatorMath.ema(m1Closes, 20)
         val ema50 = IndicatorMath.ema(m1Closes, 50)
         val macd = IndicatorMath.macdSeries(m1Closes, 12, 26, 9).last()
