@@ -32,5 +32,6 @@ jobs:
           path: |
             **/build/test-results/**/TEST-*.xml
             **/build/reports/tests/**/
+            app/build/reports/scalping-replay/**
           if-no-files-found: warn
           retention-days: 7
