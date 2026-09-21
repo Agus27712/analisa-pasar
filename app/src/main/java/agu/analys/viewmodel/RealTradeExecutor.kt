@@ -119,24 +119,9 @@ class RealTradeExecutor(
             onResult(false, "API Key atau Secret Key INDODAX belum diisi.")
             return
         }
-        val isBuy = type.equals("buy", ignoreCase = true)
-        // Rate-limit check hanya untuk BUY agar order jual/proteksi modal tidak tertahan
-        if (isBuy && isRateLimited()) {
-            onResult(false, "Rate-limit aktif.")
-            return
-        }
-
         var execPrice = price.toDouble()
         val latestTick = getLatestTick(pair)
-        if (latestTick != null) {
-            val tickAge = System.currentTimeMillis() - latestTick.timestamp
-            val maxAge = if (prefs.isScalpingMode) 400L else 800L
-            // Proteksi pembatalan delay/slippage HANYA untuk BUY!
-            // Untuk SELL, jangan pernah batalkan order agar eksekusi langsung terlaksana
-            if (isBuy && tickAge > maxAge) {
-                onResult(false, "Data harga terlalu usang (delay ${tickAge}ms > limit ${maxAge}ms). Order dibatalkan untuk menghindari slippage.")
-                return
-            }
+        if (latestTick != null && latestTick.price > 0.0) {
             execPrice = latestTick.price
         }
 
@@ -203,7 +188,6 @@ class RealTradeExecutor(
                     if (executedQty <= MIN_EXECUTED_QTY) {
                         onStatusUpdate("BUY terkirim tapi belum FILLED. TP tidak dipasang.")
                         onResult(true, "BUY berhasil di server, tapi belum FILLED.")
-                        delay(INTER_REQUEST_DELAY_MS)
                         refreshBalance()
                         return@launch
                     }
@@ -211,14 +195,12 @@ class RealTradeExecutor(
 
                     val halfQty = executedQty / 2.0
                     var finalMsg = "BUY filled ${"%.8f".format(executedQty)}. "
-                    delay(INTER_REQUEST_DELAY_MS)
                     onStatusUpdate("Memasang TP1...")
                     val (s1, m1) = IndodaxTradeApiV2.createLimitOrder(apiKey, secretKey, pair, "sell", autoLimitSellPrice1, halfQty, "agu-tp1-${System.currentTimeMillis()}")
                     finalMsg += if (s1) "TP1 OK. " else "TP1 Gagal: $m1. "
                     if (!s1 && looksLikeRateLimit(m1)) onRateLimit(m1)
 
                     val p2 = if (autoLimitSellPrice2 > price) autoLimitSellPrice2 else autoLimitSellPrice1 * 1.03
-                    delay(INTER_REQUEST_DELAY_MS)
                     onStatusUpdate("Memasang TP2...")
                     val (s2, m2) = IndodaxTradeApiV2.createLimitOrder(apiKey, secretKey, pair, "sell", p2, halfQty, "agu-tp2-${System.currentTimeMillis()}")
                     finalMsg += if (s2) "TP2 OK." else "TP2 Gagal: $m2."
@@ -277,7 +259,6 @@ class RealTradeExecutor(
                     if (isBuy) autoLimitSellPrice2 else 0.0
                 )
 
-                delay(INTER_REQUEST_DELAY_MS)
                 refreshBalance()
             } else {
                 onStatusUpdate(buyResult.message)

@@ -388,25 +388,23 @@ fun DetailChartScreen(
                 onBuyModeChanged = { isBuyMode = it },
                 orderBookBids = orderBookBids,
                 orderBookAsks = orderBookAsks,
-                buyCooldownRemainingMs = buyCooldownRemainingMs,
-                buyCooldownTotalMs = buyCooldownTotalMs,
-                buyCooldownReason = buyCooldownReason,
+                buyCooldownRemainingMs = if (isRealBuyMode) 0L else buyCooldownRemainingMs,
+                buyCooldownTotalMs = if (isRealBuyMode) 0L else buyCooldownTotalMs,
+                buyCooldownReason = if (isRealBuyMode) null else buyCooldownReason,
                 onExecuteBuy = { nominalIdr, customBuyPrice, tp1Price, tp2Price ->
                     val execPrice = if (customBuyPrice > 0.0) customBuyPrice else if (displayPrice > 0.0) displayPrice else signal.entryPrice
                     if (execPrice > 0) {
                         if (isRealBuyMode) {
                             viewModel.executeRealTrade(pair.symbol, "buy", execPrice.toLong(), nominalIdr, tp1Price, tp2Price) { success, msg ->
+                                buyCooldownRemainingMs = 0L
+                                buyCooldownTotalMs = 0L
+                                buyCooldownReason = null
                                 if (success) {
                                     HapticUtil.vibrateTradeSuccess(context)
-                                    buyCooldownRemainingMs = 0L
                                     android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
                                 } else {
                                     HapticUtil.vibrateTradeFailure(context)
-                                    // Alih-alih memunculkan Toast, aktifkan countdown presisi (detik & milidetik)
-                                    val durationMs = 3500L
-                                    buyCooldownTotalMs = durationMs
-                                    buyCooldownRemainingMs = durationMs
-                                    buyCooldownReason = msg
+                                    android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
                                 }
                             }
                         } else {
@@ -444,10 +442,17 @@ fun DetailChartScreen(
                         }
                     } else {
                         HapticUtil.vibrateTradeFailure(context)
-                        val durationMs = 3000L
-                        buyCooldownTotalMs = durationMs
-                        buyCooldownRemainingMs = durationMs
-                        buyCooldownReason = "Harga belum tersedia dari pasar. Menunggu tick baru..."
+                        if (isRealBuyMode) {
+                            buyCooldownRemainingMs = 0L
+                            buyCooldownTotalMs = 0L
+                            buyCooldownReason = null
+                            android.widget.Toast.makeText(context, "Harga belum tersedia dari pasar. Coba sesaat lagi.", android.widget.Toast.LENGTH_SHORT).show()
+                        } else {
+                            val durationMs = 3000L
+                            buyCooldownTotalMs = durationMs
+                            buyCooldownRemainingMs = durationMs
+                            buyCooldownReason = "Harga belum tersedia dari pasar. Menunggu tick baru..."
+                        }
                     }
                 },
                 onExecuteSell = { sellQty, isAutoSell, tp1P, tp1Pct, tp2P, tp2Pct ->

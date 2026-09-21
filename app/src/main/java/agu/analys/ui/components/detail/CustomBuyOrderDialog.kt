@@ -562,7 +562,7 @@ fun CustomBuyOrderDialog(
                     )
                 }
 
-                if (buyCooldownRemainingMs > 0) {
+                if (!isRealMode && buyCooldownRemainingMs > 0) {
                     Spacer(Modifier.height(6.dp))
                     Surface(
                         shape = RoundedCornerShape(8.dp),
@@ -604,7 +604,7 @@ fun CustomBuyOrderDialog(
             }
         },
         confirmButton = {
-            val isCoolingDown = buyCooldownRemainingMs > 0
+            val isCoolingDown = !isRealMode && buyCooldownRemainingMs > 0
             Button(
                 onClick = {
                     if (!isCoolingDown) {

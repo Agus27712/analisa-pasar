@@ -426,7 +426,7 @@ fun RadarBuySection(
 
         // Banner Timer Countdown Presisi (Detik & Milidetik)
         AnimatedVisibility(
-            visible = buyCooldownRemainingMs > 0,
+            visible = !isRealMode && buyCooldownRemainingMs > 0,
             enter = fadeIn() + expandVertically(),
             exit = fadeOut() + shrinkVertically()
         ) {
@@ -525,7 +525,7 @@ fun RadarBuySection(
         // Tombol Eksekusi Beli Terintegrasi
         if (onExecuteBuy != null) {
             Spacer(Modifier.height(10.dp))
-            val isCoolingDown = buyCooldownRemainingMs > 0
+            val isCoolingDown = !isRealMode && buyCooldownRemainingMs > 0
             val remainingSec = buyCooldownRemainingMs / 1000.0
             val isEngineReady = signal?.let { it.mtf.entryPriceStatus.name == "OK" || it.mtf.entryPriceOk || it.action == agu.analys.model.SignalAction.BUY } ?: true
 
@@ -624,8 +624,8 @@ fun RadarBuySection(
                 initialTp1 = defaultTpPrice1,
                 initialTp2 = defaultTpPrice2,
                 recommendedRiskSize = recommendedRiskSize,
-                buyCooldownRemainingMs = buyCooldownRemainingMs,
-                buyCooldownReason = buyCooldownReason,
+                buyCooldownRemainingMs = if (isRealMode) 0L else buyCooldownRemainingMs,
+                buyCooldownReason = if (isRealMode) null else buyCooldownReason,
                 onConfirmBuy = { nominal, targetBuyPrice, tp1, tp2 ->
                     customTargetBuyPrice = targetBuyPrice
                     onNominalIdrChanged(nominal)
