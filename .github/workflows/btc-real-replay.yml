@@ -1,0 +1,48 @@
+name: Live BTCIDR Replay Audit
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [Chatgpt]
+    paths:
+      - "app/src/main/java/agu/analys/engine/scalping/replay/**"
+      - "app/src/main/java/agu/analys/engine/scalping/ScalpingMtfEvaluator.kt"
+      - "app/src/main/java/agu/analys/model/SignalAudit.kt"
+      - "app/src/test/java/agu/analys/engine/scalping/replay/RealBtcIndodaxReplayTest.kt"
+      - ".github/workflows/btc-real-replay.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  btc-real-replay:
+    runs-on: ubuntu-latest
+    env:
+      RUN_REAL_BTC_REPLAY: "true"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Run real Indodax BTCIDR replay
+        run: ./gradlew test --no-daemon --stacktrace --tests "agu.analys.engine.scalping.replay.RealBtcIndodaxReplayTest"
+
+      - name: Upload BTC replay audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: btcidr-real-indodax-replay
+          path: |
+            app/build/reports/scalping-replay/**
+            app/build/test-results/**/TEST-*.xml
+            app/build/reports/tests/**
+          if-no-files-found: warn
+          retention-days: 14
