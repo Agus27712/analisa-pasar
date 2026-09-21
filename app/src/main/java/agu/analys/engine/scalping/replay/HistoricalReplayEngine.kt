@@ -229,36 +229,43 @@ object HistoricalReplayEngine {
                 }
             }
 
-            val outcome = when {
-                ambiguous -> {
-                    ambiguousOutcomes++
-                    ReplayTradeOutcome.AMBIGUOUS
+            val hasTradeOutcomeCandidate =
+                audit.finalAction == SignalAction.BUY.name || isMomentumCandidate
+
+            val outcome = if (!hasTradeOutcomeCandidate) {
+                null
+            } else {
+                when {
+                    ambiguous -> {
+                        ambiguousOutcomes++
+                        ReplayTradeOutcome.AMBIGUOUS
+                    }
+                    audit.finalAction == SignalAction.BUY.name && futureRalliedWithoutSl -> {
+                        validEntries++
+                        ReplayTradeOutcome.VALID_ENTRY
+                    }
+                    audit.finalAction == SignalAction.BUY.name && hitSl -> {
+                        falseSignals++
+                        ReplayTradeOutcome.FALSE_SIGNAL
+                    }
+                    audit.finalAction == SignalAction.BUY.name -> {
+                        unresolvedOutcomes++
+                        ReplayTradeOutcome.UNRESOLVED
+                    }
+                    isMomentumCandidate && futureRalliedWithoutSl -> {
+                        missedOpportunities++
+                        ReplayTradeOutcome.MISSED_BUY
+                    }
+                    isMomentumCandidate && hitSl -> {
+                        avoidedLosses++
+                        ReplayTradeOutcome.AVOIDED_LOSS
+                    }
+                    !resolved -> {
+                        unresolvedOutcomes++
+                        ReplayTradeOutcome.UNRESOLVED
+                    }
+                    else -> null
                 }
-                !resolved -> {
-                    unresolvedOutcomes++
-                    ReplayTradeOutcome.UNRESOLVED
-                }
-                audit.finalAction == SignalAction.BUY.name && futureRalliedWithoutSl -> {
-                    validEntries++
-                    ReplayTradeOutcome.VALID_ENTRY
-                }
-                audit.finalAction == SignalAction.BUY.name && hitSl -> {
-                    falseSignals++
-                    ReplayTradeOutcome.FALSE_SIGNAL
-                }
-                audit.finalAction == SignalAction.BUY.name -> {
-                    unresolvedOutcomes++
-                    ReplayTradeOutcome.UNRESOLVED
-                }
-                isMomentumCandidate && futureRalliedWithoutSl -> {
-                    missedOpportunities++
-                    ReplayTradeOutcome.MISSED_BUY
-                }
-                isMomentumCandidate && hitSl -> {
-                    avoidedLosses++
-                    ReplayTradeOutcome.AVOIDED_LOSS
-                }
-                else -> null
             }
 
             if (isMomentumCandidate) {
