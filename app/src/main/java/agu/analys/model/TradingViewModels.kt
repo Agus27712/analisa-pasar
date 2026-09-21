@@ -89,7 +89,15 @@ data class CoinHoldingStatus(
     val isTrailingTriggered: Boolean = false
 )
 data class MarketTick(val symbol: String, val price: Double, val high24h: Double, val low24h: Double, val volume24h: Double, val change24h: Double, val timestamp: Long = System.currentTimeMillis())
-data class CandleBar(val timestamp: Long, val open: Double, val high: Double, val low: Double, val close: Double, val volume: Double)
+data class CandleBar(
+    val timestamp: Long,
+    val open: Double,
+    val high: Double,
+    val low: Double,
+    val close: Double,
+    val volume: Double,
+    val isClosed: Boolean = true
+)
 
 data class IndonesiaCpiData(
     val period: String,

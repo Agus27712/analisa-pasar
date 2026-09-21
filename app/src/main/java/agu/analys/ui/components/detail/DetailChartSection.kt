@@ -70,6 +70,14 @@ fun DetailChartSection(
             }
         }
 
+        Spacer(Modifier.height(8.dp))
+
+        CandleCountdownWidget(
+            timeframe = selectedTimeframe,
+            candles = candles,
+            tick = tick
+        )
+
         AnimatedVisibility(
             visible = chartVisible,
             enter = expandVertically() + fadeIn(),

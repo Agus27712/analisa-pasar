@@ -47,7 +47,9 @@ fun RadarBuySection(
     onExecuteBuy: ((Double, Double, Double, Double) -> Unit)?,
     buyCooldownRemainingMs: Long = 0L,
     buyCooldownTotalMs: Long = 0L,
-    buyCooldownReason: String? = null
+    buyCooldownReason: String? = null,
+    orderBookBids: List<agu.analys.model.OrderBookItem> = emptyList(),
+    orderBookAsks: List<agu.analys.model.OrderBookItem> = emptyList()
 ) {
     var customNominalInput by remember { mutableStateOf("") }
     var isCustomNominalOpen by remember { mutableStateOf(false) }
@@ -93,6 +95,19 @@ fun RadarBuySection(
     val estimatedBuyCoinQty = if (effectiveBuyPrice > 0) netBuyAmountIdr / effectiveBuyPrice else 0.0
 
     Column {
+        if (orderBookBids.isNotEmpty() || orderBookAsks.isNotEmpty()) {
+            SpreadGuardAndEntrySection(
+                bids = orderBookBids,
+                asks = orderBookAsks,
+                currentPrice = validPrice,
+                quoteAsset = quoteAsset,
+                onApplyRecommendedPrice = { recPrice ->
+                    customTargetBuyPrice = recPrice
+                }
+            )
+            Spacer(Modifier.height(8.dp))
+        }
+
         // Header Saldo IDR
         Box(
             modifier = Modifier

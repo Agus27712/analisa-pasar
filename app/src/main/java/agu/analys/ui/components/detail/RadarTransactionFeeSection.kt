@@ -241,7 +241,9 @@ fun RadarTransactionFeeSection(
                 onExecuteBuy = onExecuteBuy,
                 buyCooldownRemainingMs = buyCooldownRemainingMs,
                 buyCooldownTotalMs = buyCooldownTotalMs,
-                buyCooldownReason = buyCooldownReason
+                buyCooldownReason = buyCooldownReason,
+                orderBookBids = orderBookBids,
+                orderBookAsks = orderBookAsks
             )
         } else {
             RadarSellSection(
