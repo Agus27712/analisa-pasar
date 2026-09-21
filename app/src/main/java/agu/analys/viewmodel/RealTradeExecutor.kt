@@ -41,7 +41,7 @@ class RealTradeExecutor(
             return
         }
 
-        scope.launch {
+        scope.launch(kotlinx.coroutines.Dispatchers.IO) {
             onStatusUpdate("Membatalkan order $orderId...")
             val (success, message) = IndodaxTradeApiV2.cancelOrder(apiKey, secretKey, symbol, orderId)
             if (!success && looksLikeRateLimit(message)) {
@@ -151,7 +151,7 @@ class RealTradeExecutor(
             return
         }
 
-        scope.launch {
+        scope.launch(kotlinx.coroutines.Dispatchers.IO) {
             onStatusUpdate("Mengirim order $type ke INDODAX...")
             val clientOrderId = "agu-${type.lowercase()}-${System.currentTimeMillis()}"
             val isBuy = type.equals("buy", ignoreCase = true)

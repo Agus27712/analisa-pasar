@@ -162,7 +162,7 @@ class RealTradeCoordinator(
             _realTradeStatus.value = "Cache aktif (cooldown ${REFRESH_COOLDOWN_MS / 1000}s)."
             return
         }
-        scope.launch {
+        scope.launch(kotlinx.coroutines.Dispatchers.IO) {
             _isFetchingRealBalance.value = true
             lastFetchTimeMs = now
             _realTradeStatus.value = "Memperbarui saldo INDODAX..."

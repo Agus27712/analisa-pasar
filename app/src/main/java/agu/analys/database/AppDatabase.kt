@@ -75,7 +75,7 @@ interface RealTradeDao {
     fun getAllTradesFlow(): Flow<List<RealTradeEntity>>
 
     @Query("SELECT * FROM real_trades WHERE symbol = :symbol ORDER BY time DESC")
-    fun getTradesBySymbol(symbol: String): List<RealTradeEntity>
+    suspend fun getTradesBySymbol(symbol: String): List<RealTradeEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTrades(trades: List<RealTradeEntity>)
@@ -165,6 +165,7 @@ abstract class AppDatabase : RoomDatabase() {
                     "agu_analys_db"
                 )
                 .fallbackToDestructiveMigration()
+                .allowMainThreadQueries()
                 .build()
                 INSTANCE = instance
                 instance
