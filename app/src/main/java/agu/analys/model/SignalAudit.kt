@@ -15,7 +15,9 @@ data class SignalAudit(
     val finalAction: String = "HOLD",
     val rejectionReason: String? = null,
     val isOrderBookEmpty: Boolean = false,
-    val orderBookAgeMs: Long = 0L
+    val orderBookAgeMs: Long = 0L,
+    /** False berarti replay/diagnostic tidak memiliki snapshot historical order book. */
+    val orderBookDataAvailable: Boolean = true
 ) {
     val step1Ok: Boolean get() = step1
     val step2Ok: Boolean get() = step2
