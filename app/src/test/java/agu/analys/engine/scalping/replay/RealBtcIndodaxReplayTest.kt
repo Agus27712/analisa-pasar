@@ -5,6 +5,7 @@ import agu.analys.model.Timeframe
 import agu.analys.service.IndodaxMarketService
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import java.io.File
 import java.time.Instant
@@ -25,6 +26,10 @@ class RealBtcIndodaxReplayTest {
 
     @Test
     fun `real BTCIDR replay produces causal checkpoint audit`() = runBlocking {
+        assumeTrue(
+            "Live Indodax replay dijalankan hanya oleh workflow khusus",
+            System.getenv("RUN_REAL_BTC_REPLAY") == "true"
+        )
         val now = System.currentTimeMillis()
 
         val m1 = IndodaxMarketService.fetchCandles("BTCIDR", Timeframe.M1, limit = 1500)
