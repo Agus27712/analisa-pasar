@@ -1,7 +1,7 @@
 package agu.analys.engine.badge
 
 import agu.analys.config.StrategyMode
-import agu.analys.engine.officedaily.OfficeDailyScreener
+import agu.analys.engine.intraday.IntradayScreener
 import agu.analys.engine.secondwave.SecondWaveEvaluator
 import agu.analys.model.BadgeType
 import agu.analys.model.CoinBadge
@@ -32,8 +32,8 @@ object CoinBadgeEvaluator {
         val volThresholdMin = if (isUsdt) 200_000.0 else 1_000_000_000.0
 
         // Evaluasi kelayakan untuk masing-masing 5 strategi trading:
-        val officeScore = OfficeDailyScreener.evaluateFast(tick)
-        val isOfficeQualified = officeScore.isQualified
+        val intradayScore = IntradayScreener.evaluateFast(tick)
+        val isIntradayQualified = intradayScore.isQualified
 
         val secondWaveScore = SecondWaveEvaluator.evaluateFast(tick, tick.high24h, tick.low24h)
         val isSecondWaveQualified = secondWaveScore.isQualified
@@ -52,16 +52,16 @@ object CoinBadgeEvaluator {
                 CoinBadge(BadgeType.SECONDWAVE, priority = 0, description = secondWaveScore.summary)
             activeStrategy == StrategyMode.SWING && isSwingCandidate ->
                 CoinBadge(BadgeType.SWING, priority = 0, description = "Setup Swing terdeteksi")
-            activeStrategy == StrategyMode.OFFICE_DAILY && isOfficeQualified ->
-                CoinBadge(BadgeType.OFFICEDAILY, priority = 0, description = officeScore.summary)
+            activeStrategy == StrategyMode.OFFICE_DAILY && isIntradayQualified ->
+                CoinBadge(BadgeType.INTRADAY, priority = 0, description = intradayScore.summary)
             activeStrategy == StrategyMode.TRENCHING && isTrenchCandidate ->
                 CoinBadge(BadgeType.TRENCHING, priority = 0, description = "Kompresi Trench terdeteksi")
 
             // 2. Jika mode aktif tidak cocok, pilih mode strategi dengan setup terbaik
             isSecondWaveQualified && secondWaveScore.score >= 6 ->
                 CoinBadge(BadgeType.SECONDWAVE, priority = 1, description = secondWaveScore.summary)
-            isOfficeQualified && officeScore.score >= 6 ->
-                CoinBadge(BadgeType.OFFICEDAILY, priority = 2, description = officeScore.summary)
+            isIntradayQualified && intradayScore.score >= 6 ->
+                CoinBadge(BadgeType.INTRADAY, priority = 2, description = intradayScore.summary)
             isSwingCandidate && change in 0.0..6.0 ->
                 CoinBadge(BadgeType.SWING, priority = 3, description = "Setup Swing terdeteksi")
             isScalpingCandidate ->

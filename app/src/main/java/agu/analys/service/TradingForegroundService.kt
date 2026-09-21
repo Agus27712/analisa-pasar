@@ -184,6 +184,18 @@ class TradingForegroundService : Service() {
                                         quantity = item.quantity,
                                         isReal = item.isReal
                                     )
+                                } else if (sellState.state == SellLifecycleState.READY_TO_SELL && transition.hasTriggeringTransition) {
+                                    // Take Profit 1 / TP2 / Target Reached Alert
+                                    AlertNotificationHelper.sendTakeProfitNotification(
+                                        context = applicationContext,
+                                        symbol = sym,
+                                        targetLabel = sellState.reason,
+                                        entryPrice = item.entryPrice,
+                                        currentPrice = currentPrice,
+                                        netProfitPct = sellState.netProfitPct,
+                                        quantity = item.quantity,
+                                        isReal = item.isReal
+                                    )
                                 }
                             }
                         }

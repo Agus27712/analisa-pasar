@@ -10,7 +10,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import agu.analys.config.StrategyMode
 import agu.analys.engine.global.GlobalContextManager
-import agu.analys.engine.officedaily.OfficeDailyEvaluator
+import agu.analys.engine.intraday.IntradayEvaluator
 import agu.analys.engine.scalping.SignalLifecycleManager
 import agu.analys.engine.secondwave.SecondWaveEvaluator
 import agu.analys.engine.swing.SwingEvaluator
@@ -108,27 +108,27 @@ class CandidateScanWorker(
                         }
                     }
 
-                    // --- Evaluasi Mode INTRADAY (OFFICE_DAILY) dengan H4 & Anti Flash Dump ---
+                    // --- Evaluasi Mode INTRADAY dengan H4 & Anti Flash Dump ---
                     val candlesForIntraday = if (h4Candles.size >= 20) h4Candles else h1Candles
-                    val officeResult = OfficeDailyEvaluator.evaluate(
+                    val intradayResult = IntradayEvaluator.evaluate(
                         globalContext = globalCtx,
                         price = tick.price,
                         history = candlesForIntraday,
                         fees = prefs.tradingFees
                     )
-                    val trackedOffice = SignalLifecycleManager.process(
+                    val trackedIntraday = SignalLifecycleManager.process(
                         symbol = cleanSymbol,
                         currentPrice = tick.price,
-                        rawSignal = officeResult.signal,
+                        rawSignal = intradayResult.signal,
                         mode = StrategyMode.OFFICE_DAILY
                     )
-                    if (trackedOffice.transition?.hasTriggeringTransition == true && prefs.isNotificationsEnabled) {
+                    if (trackedIntraday.transition?.hasTriggeringTransition == true && prefs.isNotificationsEnabled) {
                         if (!positionStore.get(cleanSymbol, isReal = prefs.isRealBuyMode).isHolding) {
                             AlertNotificationHelper.sendCandidateFoundNotification(
                                 context = applicationContext,
                                 symbol = cleanSymbol,
                                 strategyMode = StrategyMode.OFFICE_DAILY,
-                                signal = trackedOffice.activeSignalState ?: officeResult.signal
+                                signal = trackedIntraday.activeSignalState ?: intradayResult.signal
                             )
                         }
                     }

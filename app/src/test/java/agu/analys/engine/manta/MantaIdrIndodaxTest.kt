@@ -6,7 +6,7 @@ import agu.analys.config.StrategyMode
 import agu.analys.config.TradingFeeConfig
 import agu.analys.engine.MarketStructureAnalyzer
 import agu.analys.engine.badge.CoinBadgeEvaluator
-import agu.analys.engine.officedaily.OfficeDailyScreener
+import agu.analys.engine.intraday.IntradayScreener
 import agu.analys.engine.scalping.OrderBookAnalyzer
 import agu.analys.engine.scalping.ScalpingMtfEvaluator
 import agu.analys.engine.scalping.replay.HistoricalReplayEngine
@@ -290,11 +290,11 @@ class MantaIdrIndodaxTest {
         val ticker = MantaIdrTestData.sampleTicker
         val pair = MantaIdrTestData.tradingPair
 
-        // 1. Office Daily Screener
-        val office = OfficeDailyScreener.evaluateFast(ticker)
-        println("Office Daily Screener:")
-        println("  - Lolos Kualifikasi : ${office.isQualified}")
-        println("  - Score Detail      : ${office.summary}")
+        // 1. Intraday Screener
+        val intraday = IntradayScreener.evaluateFast(ticker)
+        println("Intraday Screener:")
+        println("  - Lolos Kualifikasi : ${intraday.isQualified}")
+        println("  - Score Detail      : ${intraday.summary}")
 
         // 2. Second Wave Screener
         val secondWave = SecondWaveEvaluator.evaluateFast(ticker, ticker.high24h, ticker.low24h)
@@ -305,13 +305,13 @@ class MantaIdrIndodaxTest {
         // 3. Coin Badge Evaluator across strategies
         val badgesScalping = CoinBadgeEvaluator.evaluateBadges(pair, ticker, StrategyMode.SCALPING)
         val badgesSwing = CoinBadgeEvaluator.evaluateBadges(pair, ticker, StrategyMode.SWING)
-        val badgesOffice = CoinBadgeEvaluator.evaluateBadges(pair, ticker, StrategyMode.OFFICE_DAILY)
+        val badgesIntraday = CoinBadgeEvaluator.evaluateBadges(pair, ticker, StrategyMode.OFFICE_DAILY)
         val badgesSecondWave = CoinBadgeEvaluator.evaluateBadges(pair, ticker, StrategyMode.SECOND_WAVE)
 
         println("\nEvaluasi Badge Strategi:")
         println("  - Mode Scalping   : ${badgesScalping.firstOrNull()?.type ?: "None"}")
         println("  - Mode Swing      : ${badgesSwing.firstOrNull()?.type ?: "None"}")
-        println("  - Mode Office     : ${badgesOffice.firstOrNull()?.type ?: "None"}")
+        println("  - Mode Intraday   : ${badgesIntraday.firstOrNull()?.type ?: "None"}")
         println("  - Mode SecondWave : ${badgesSecondWave.firstOrNull()?.type ?: "None"}")
 
         // MANTA/IDR dengan volume 1.19 Miliar dan kenaikan +17% memenuhi syarat volume aktif

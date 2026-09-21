@@ -316,6 +316,83 @@ object AlertNotificationHelper {
         } catch (_: SecurityException) {}
     }
 
+    fun sendTakeProfitNotification(
+        context: Context,
+        symbol: String,
+        targetLabel: String,
+        entryPrice: Double,
+        currentPrice: Double,
+        netProfitPct: Double,
+        quantity: Double,
+        isReal: Boolean
+    ) {
+        val prefs = AppPreferences(context)
+        if (!prefs.isNotificationsEnabled || !prefs.isNotifyTrailingStopEnabled) return
+
+        createNotificationChannels(context)
+
+        val modeTag = if (isReal) "[REAL]" else "[SIMULASI]"
+        val notifBaseId = (symbol.hashCode() and 0x3FFFFFFF) + (if (isReal) 150000 else 250000)
+
+        val mainIntent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("EXTRA_SYMBOL", symbol)
+            putExtra("EXTRA_IS_REAL", isReal)
+        }
+        val pendingMainIntent = PendingIntent.getActivity(
+            context,
+            notifBaseId + 1000,
+            mainIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val actionIntent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            action = "agu.analys.ACTION_EXECUTE_TRAILING_SELL"
+            putExtra("EXTRA_SYMBOL", symbol)
+            putExtra("EXTRA_LIMIT_PRICE", currentPrice)
+            putExtra("EXTRA_QUANTITY", quantity)
+            putExtra("EXTRA_IS_REAL", isReal)
+        }
+        val pendingActionIntent = PendingIntent.getActivity(
+            context,
+            notifBaseId + 1001,
+            actionIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val formattedProfit = String.format(java.util.Locale.US, "%.2f%%", netProfitPct)
+        val title = "🎯 $modeTag TAKE PROFIT TERCAPAI • ${symbol.uppercase()}"
+        val message = "$modeTag 💰 $targetLabel: +$formattedProfit\n" +
+                "💵 Harga Realisasi: Rp ${PriceFormatter.formatIdrNumber(currentPrice)}\n" +
+                "📊 Modal Beli: Rp ${PriceFormatter.formatIdrNumber(entryPrice)} | Ketuk tombol di bawah untuk eksekusi langsung."
+
+        val action = NotificationCompat.Action.Builder(
+            0,
+            if (isReal) "⚡ JUAL REAL SEKARANG" else "⚡ JUAL SIMULASI SEKARANG",
+            pendingActionIntent
+        ).build()
+
+        val builder = NotificationCompat.Builder(context, CHANNEL_TRAILING_ID)
+            .setSmallIcon(agu.analys.R.drawable.ic_stat_trading)
+            .setColor(0xFF059669.toInt()) // Emerald Green for profit
+            .setContentTitle(title)
+            .setContentText("$modeTag $targetLabel: +$formattedProfit (Rp ${PriceFormatter.formatIdrNumber(currentPrice)})")
+            .setSubText("$modeTag ${symbol.uppercase()} • Take Profit")
+            .setStyle(NotificationCompat.BigTextStyle().bigText(message))
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setAutoCancel(true)
+            .setContentIntent(pendingMainIntent)
+            .addAction(action)
+
+        try {
+            val manager = NotificationManagerCompat.from(context)
+            manager.notify(notifBaseId + 1000, builder.build())
+        } catch (_: SecurityException) {}
+    }
+
     fun sendTrailingPeakUpdateNotification(
         context: Context,
         symbol: String,

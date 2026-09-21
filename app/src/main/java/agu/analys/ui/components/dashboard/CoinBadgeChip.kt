@@ -71,7 +71,7 @@ fun CoinBadgeRow(
 @Composable
 fun getBadgeColors(type: BadgeType): Triple<Color, Color, Color> {
     return when (type) {
-        BadgeType.OFFICEDAILY -> Triple(
+        BadgeType.INTRADAY -> Triple(
             Color(0xFF4F46E5).copy(alpha = 0.18f),
             Color(0xFF818CF8).copy(alpha = 0.6f),
             Color(0xFFA5B4FC)

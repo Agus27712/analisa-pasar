@@ -1,4 +1,4 @@
-package agu.analys.engine.officedaily
+package agu.analys.engine.intraday
 
 import agu.analys.engine.TestData
 import agu.analys.model.MarketTick
@@ -6,10 +6,10 @@ import agu.analys.model.SignalAction
 import org.junit.Assert.*
 import org.junit.Test
 
-class OfficeDailyEvaluatorTest {
+class IntradayEvaluatorTest {
 
     @Test
-    fun testOfficeDailyEvaluationWithGoodData() {
+    fun testIntradayEvaluationWithGoodData() {
         val history = TestData.generateCandles(200, 800.0, 0.001).toMutableList()
         val lastClose = history.last().close
         val time = history.last().timestamp
@@ -19,7 +19,7 @@ class OfficeDailyEvaluatorTest {
         }
         val price = history.last().close
 
-        val result = OfficeDailyEvaluator.evaluate(price, history)
+        val result = IntradayEvaluator.evaluate(price, history)
 
         assertNotNull(result)
         assertTrue("Confidence should be at least 20 (got ${result.signal.confidence})", result.signal.confidence >= 20)
@@ -27,18 +27,18 @@ class OfficeDailyEvaluatorTest {
     }
 
     @Test
-    fun testOfficeDailyWithLowData() {
+    fun testIntradayWithLowData() {
         val price = 1000.0
         val history = TestData.generateCandles(5, 1000.0)
 
-        val result = OfficeDailyEvaluator.evaluate(price, history)
+        val result = IntradayEvaluator.evaluate(price, history)
 
         assertEquals("Action should be HOLD with low data", SignalAction.HOLD, result.signal.action)
         assertTrue("Reasoning should mention data sync", result.signal.reasoning.any { it.contains("candle", true) || it.contains("data", true) })
     }
 
     @Test
-    fun testOfficeDailyScreenerFast() {
+    fun testIntradayScreenerFast() {
         val goodTick = MarketTick(
             symbol = "BTCIDR",
             price = 1_000_000_000.0,
@@ -48,9 +48,9 @@ class OfficeDailyEvaluatorTest {
             change24h = 3.5
         )
 
-        val score = OfficeDailyScreener.evaluateFast(goodTick)
+        val score = IntradayScreener.evaluateFast(goodTick)
         assertNotNull(score)
-        assertTrue("Good tick should qualify for office daily", score.isQualified)
+        assertTrue("Good tick should qualify for intraday", score.isQualified)
         assertTrue("Score should be >= 7", score.score >= 7)
     }
 }

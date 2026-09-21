@@ -28,9 +28,9 @@ import kotlinx.coroutines.launch
  * Thin orchestrator: realtime buffers + mode routing. Scoring stays in dedicated evaluators.
  *
  * FIXES (Sep 2026):
- * 1. Buffer candle dipisah: candlesH1 (Swing), candlesH4 (Office Daily) — tidak lagi tercampur M1
- * 2. onCandleUpdate dari WebSocket (M1) TIDAK lagi men-trigger runSwing/runOfficeDaily
- * 3. Office Daily fetch H4 (bukan H1) sesuai desain low-noise
+ * 1. Buffer candle dipisah: candlesH1 (Swing), candlesH4 (Intraday) — tidak lagi tercampur M1
+ * 2. onCandleUpdate dari WebSocket (M1) TIDAK lagi men-trigger runSwing/runIntraday
+ * 3. Intraday fetch H4 (bukan H1) sesuai desain low-noise
  * 4. Swing tetap H1; refresh hanya overwrite dengan closed candles dari REST
  */
 class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default)) {
@@ -94,7 +94,7 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
             }
             StrategyMode.OFFICE_DAILY -> {
                 val hasCandles = synchronized(candlesH4) { candlesH4.isNotEmpty() }
-                if (hasCandles) runOfficeDaily()
+                if (hasCandles) runIntraday()
             }
             StrategyMode.TRENCHING -> {
                 if (m15Candles.isNotEmpty()) runTrenching()
@@ -125,7 +125,7 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
                 // Tetap boleh trigger re-eval ringan dari tick (onTickUpdate sudah handle)
             }
             StrategyMode.SWING, StrategyMode.OFFICE_DAILY -> {
-                // FIX INTI: JANGAN panggil runSwing/runOfficeDaily di sini.
+                // FIX INTI: JANGAN panggil runSwing/runIntraday di sini.
                 // Evaluasi makro hanya dari refresh REST (closed H1/H4).
                 // Harga live sudah di-handle di onTickUpdate untuk invalidasi SL.
             }
@@ -167,7 +167,7 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
     private fun refreshScalpingTimeframesIfDue(symbol: String) {
         if (symbol.isBlank()) return
         val now = System.currentTimeMillis()
-        // Office Daily / Swing: refresh lebih jarang (60s) karena low-noise
+        // Intraday / Swing: refresh lebih jarang (60s) karena low-noise
         val intervalMs = when (strategyMode) {
             StrategyMode.SCALPING -> 10_000L
             StrategyMode.OFFICE_DAILY -> 60_000L
@@ -238,7 +238,7 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
                     }
                 }
                 StrategyMode.OFFICE_DAILY -> {
-                    // FIX: fetch H4 (bukan H1) — sesuai desain low-noise Office Daily
+                    // FIX: fetch H4 (bukan H1) — sesuai desain low-noise Intraday
                     val h4Job = async { IndodaxMarketService.fetchCandles(symbol, Timeframe.H4, 200) }
                     val d1Job = async { IndodaxMarketService.fetchCandles(symbol, Timeframe.D1, 100) }
                     val h4 = h4Job.await()
@@ -253,7 +253,7 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
                             candles1D.clear()
                             candles1D.addAll(d1)
                         }
-                        runOfficeDaily()
+                        runIntraday()
                     }
                 }
                 StrategyMode.TRENCHING -> {
@@ -373,7 +373,7 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
         }
     }
 
-    private fun runOfficeDaily() {
+    private fun runIntraday() {
         if (strategyMode != StrategyMode.OFFICE_DAILY) return
         val tick = currentTick ?: return
         // FIX: pakai candlesH4 (bukan H1)
@@ -382,7 +382,7 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
         if (history.isEmpty()) return
 
         val anomalyResult = agu.analys.engine.regime.MacroAnomalyDetector.evaluate(dailyHistory, tick.price)
-        val result = agu.analys.engine.officedaily.OfficeDailyEvaluator.evaluate(
+        val result = agu.analys.engine.intraday.IntradayEvaluator.evaluate(
             agu.analys.engine.global.GlobalContextManager.context.value,
             tick.price,
             history,

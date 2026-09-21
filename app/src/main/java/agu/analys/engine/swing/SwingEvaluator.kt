@@ -343,10 +343,10 @@ object SwingEvaluator {
         val netRr = feeResult.netRr.coerceAtLeast(1.4)
         val rrString = "1:${fmt(netRr)}"
 
-        // ── Recent high / extension filter (FIX: dead-code sama seperti bug lama Office Daily —
+        // ── Recent high / extension filter (FIX: dead-code —
         // `price >= calculatedTp1 * 0.995` mustahil true karena calculatedTp1 selalu >= price*1.07.
         // Diganti guard nyata: jarak ke recent high + extension dari rata-rata ATR, mencegah
-        // "beli di pucuk" seperti kasus XRP 9 Sep di Office Daily.) ─────────────────────────
+        // "beli di pucuk" seperti kasus XRP di Intraday.) ─────────────────────────
         val lookbackHigh = min(15, highs.size - 1).coerceAtLeast(1)
         val recentHigh = highs.dropLast(1).takeLast(lookbackHigh).maxOrNull() ?: price
         val distToHighPct = if (recentHigh > 0.0) (recentHigh - price) / recentHigh else 1.0

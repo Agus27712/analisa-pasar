@@ -1,4 +1,4 @@
-package agu.analys.engine.officedaily
+package agu.analys.engine.intraday
 
 import agu.analys.config.FeeCalculator
 import agu.analys.config.TradingFeeConfig
@@ -19,7 +19,7 @@ import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 
-data class OfficeDailyEvalResult(
+data class IntradayEvalResult(
     val signal: AISignalState,
     val indicators: TechnicalIndicators,
     val isQualified: Boolean = false,
@@ -42,7 +42,7 @@ data class OfficeDailyEvalResult(
  *   3. Deteksi fake pump rejection wick (upper wick panjang) pencegah jebakan pompa.
  *   4. Validasi baseline support jangka panjang (EMA100/EMA200).
  */
-object OfficeDailyEvaluator {
+object IntradayEvaluator {
 
     enum class IntradayPhase(
         val label: String,
@@ -58,8 +58,9 @@ object OfficeDailyEvaluator {
         REST_MALAM("Sesi Istirahat (23:30–06:00 WIB)", isOpenWindow = false, isCloseWindow = false, isRestWindow = true)
     }
 
-    fun getCurrentIntradayPhase(): IntradayPhase {
+    fun getCurrentIntradayPhase(timestamp: Long = System.currentTimeMillis()): IntradayPhase {
         val wibCal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("Asia/Jakarta"))
+        wibCal.timeInMillis = timestamp
         val hour = wibCal.get(java.util.Calendar.HOUR_OF_DAY)
         val minute = wibCal.get(java.util.Calendar.MINUTE)
         val timeMinutes = hour * 60 + minute
@@ -76,19 +77,30 @@ object OfficeDailyEvaluator {
     fun evaluate(
         price: Double,
         history: List<CandleBar>,
-        fees: TradingFeeConfig = TradingFeeConfig()
-    ): OfficeDailyEvalResult = evaluate(agu.analys.engine.global.GlobalMarketContext(), price, history, fees)
+        fees: TradingFeeConfig = TradingFeeConfig(),
+        evaluationTimestamp: Long? = null
+    ): IntradayEvalResult = evaluate(
+        globalContext = agu.analys.engine.global.GlobalMarketContext(),
+        price = price,
+        history = history,
+        fees = fees,
+        macroAnomalyResult = null,
+        evaluationTimestamp = evaluationTimestamp
+    )
 
     fun evaluate(
         globalContext: agu.analys.engine.global.GlobalMarketContext = agu.analys.engine.global.GlobalMarketContext(),
         price: Double,
         history: List<CandleBar>,
         fees: TradingFeeConfig = TradingFeeConfig(),
-        macroAnomalyResult: agu.analys.engine.regime.MacroAnomalyResult? = null
-    ): OfficeDailyEvalResult {
+        macroAnomalyResult: agu.analys.engine.regime.MacroAnomalyResult? = null,
+        evaluationTimestamp: Long? = null
+    ): IntradayEvalResult {
         if (price <= 0.0) {
-            return OfficeDailyEvalResult(AISignalState(), TechnicalIndicators())
+            return IntradayEvalResult(AISignalState(), TechnicalIndicators())
         }
+
+        val evalTime = evaluationTimestamp ?: history.lastOrNull()?.timestamp ?: System.currentTimeMillis()
 
         val minCandles = 20
         if (history.size < minCandles) {
@@ -112,7 +124,7 @@ object OfficeDailyEvaluator {
                 entryCondition = "Memuat riwayat candle untuk setup Intraday."
             )
 
-            return OfficeDailyEvalResult(
+            return IntradayEvalResult(
                 signal = AISignalState(
                     action = SignalAction.HOLD,
                     confidence = 0,
@@ -126,7 +138,7 @@ object OfficeDailyEvaluator {
                         "Data candle sedang disinkronkan (${history.size}/$minCandles candle).",
                         "Menunggu riwayat candle untuk setup Intraday."
                     ),
-                    timestamp = System.currentTimeMillis(),
+                    timestamp = evalTime,
                     scalpingStage = ScalpingStage.HOLD,
                     mtf = mtfSnapshot
                 ),
@@ -156,7 +168,7 @@ object OfficeDailyEvaluator {
         val momentum = if (momentumBase > 0.0) (price - momentumBase) / momentumBase else 0.0
         val indicators = TechnicalIndicators(rsi, macd, macdSignal, macdHist, ema20, ema50, ema200, bb.second, bb.first, atr, momentum)
 
-        val intradayPhase = getCurrentIntradayPhase()
+        val intradayPhase = getCurrentIntradayPhase(evalTime)
         var buyScore = 0.0
         var sellScore = 0.0
         val reasons = mutableListOf<String>()
@@ -208,15 +220,28 @@ object OfficeDailyEvaluator {
         val tooCloseToHigh = distToHighPct < 0.012
         val isOverExtended = atrExtension > 1.8
 
+        // 6. Level SL & TP Intraday (Dioptimalkan untuk Trade Harian: Open Pagi, Close Malam)
+        val supportLevel = structure.support?.takeIf { it > 0.0 && it < price }
+            ?: (price - effectiveAtr * 1.2)
+
         // 1. Trend & Moving Average Alignment
-        val isUptrend = indicators.ema20.isFinite() && indicators.ema50.isFinite() && (ema20 > ema50) && (price >= ema50 * 0.985)
+        val isEstablishedUptrend = indicators.ema20.isFinite() && indicators.ema50.isFinite() && (ema20 > ema50) && (price >= ema50 * 0.985)
         val isGoldenCross = ema20 > ema50 && closes.takeLast(5).firstOrNull()?.let { it <= ema50 } ?: false
-        val isDowntrend = indicators.ema20.isFinite() && indicators.ema50.isFinite() && (ema20 < ema50 && price < ema20)
+
+        // Early Reversal Pagi / Reclaim Support:
+        // Sesi pagi sering kali memantul dari support dan menembus kembali ke atas EMA20 (reclaim)
+        // dengan momentum positif, meski lagging EMA20 belum sempat golden cross di atas EMA50.
+        val isReclaimingEma20 = indicators.ema20.isFinite() && price >= ema20 * 0.995
+        val isEarlyReversal = isReclaimingEma20 && macdHist >= -0.002 && rsi in 35.0..65.0 && (price >= supportLevel * 0.98)
+        val isTrendValidForIntraday = isEstablishedUptrend || isGoldenCross || isEarlyReversal
+
+        val isDowntrend = indicators.ema20.isFinite() && indicators.ema50.isFinite() && (ema20 < ema50 && price < ema20 * 0.995 && !isEarlyReversal)
 
         when {
-            isUptrend -> { buyScore += 28; reasons += "Tren makro solid (EMA20 > EMA50, harga di atas support dinamis)." }
-            isGoldenCross -> { buyScore += 22; reasons += "Baru terjadi Golden Cross EMA." }
-            isDowntrend -> { sellScore += 30; reasons += "Tren makro bearish (EMA20 < EMA50). Hindari buy intraday." }
+            isEstablishedUptrend -> { buyScore += 28; reasons += "Tren makro solid (EMA20 > EMA50, harga di atas support dinamis)." }
+            isGoldenCross -> { buyScore += 24; reasons += "Baru terjadi Golden Cross EMA." }
+            isEarlyReversal -> { buyScore += 24; reasons += "Early Reversal Pagi: Harga reclaim EMA20 (Rp ${fmtPrice(ema20)}) dari support harian." }
+            isDowntrend -> { sellScore += 24; reasons += "Tren makro bearish (EMA20 < EMA50 & harga di bawah EMA20)." }
             else -> reasons += "Tren berkonsolidasi, menunggu arah tren tegas."
         }
 
@@ -241,11 +266,11 @@ object OfficeDailyEvaluator {
 
         // 4. Struktur Higher High / Higher Low
         val isBullishStructure = structure.trend.contains("Bull", true)
-        val isBearishStructure = structure.trend.contains("Bear", true)
+        val isBearishStructure = structure.trend.contains("Bear", true) && !isEarlyReversal
         if (structure.dataEnough) {
             when {
                 isBullishStructure -> { buyScore += 18; reasons += "Struktur chart: Higher-High & Higher-Low stabil." }
-                isBearishStructure -> { sellScore += 20; reasons += "Struktur chart: Lower-Low (Risiko penurunan)." }
+                isBearishStructure -> { sellScore += 16; reasons += "Struktur chart: Lower-Low (Risiko penurunan)." }
             }
         }
 
@@ -257,10 +282,6 @@ object OfficeDailyEvaluator {
                 sellScore += 14; reasons += "Pola Pelemahan: $it."
             }
         }
-
-        // 6. Level SL & TP Intraday (Dioptimalkan untuk Trade Harian: Open Pagi, Close Malam)
-        val supportLevel = structure.support?.takeIf { it > 0.0 && it < price }
-            ?: (price - effectiveAtr * 1.2)
 
         // Intraday ATR dibatasi pada rentang pergerakan harian sehat 1.5% s/d 4.0%
         val intradayAtr = effectiveAtr.coerceIn(price * 0.015, price * 0.040)
@@ -298,7 +319,7 @@ object OfficeDailyEvaluator {
         }
 
         if (pumpAndDumpTrap) {
-            reasons.add(0, "🚨 DITOLAK (Anti Flash Dump): Terdeteksi Upper Wick panjang penolakan pucuk (Fake Pump Trap).")
+            reasons.add(0, "🚨 DITOLAK (Fake Pump Trap): Terdeteksi Upper Wick panjang penolakan pucuk (Fake Pump Trap).")
         }
 
         if (isMacroDowntrend) {
@@ -308,7 +329,7 @@ object OfficeDailyEvaluator {
         
         // Distribusi / breakdown
         val isDistribution = sellScore >= 48.0 && sellScore > buyScore * 1.15
-        val isBreakdown = isBearishStructure || isDowntrend || (price < supportLevel * 0.965)
+        val isBreakdown = (price < supportLevel * 0.965) || (isDowntrend && !isEarlyReversal)
         val isDangerous = isRsiOverbought || isNearHighDanger || isDistribution || isBreakdown || isParabolicUnwind || flashDumpTrauma || pumpAndDumpTrap || isMacroDowntrend
 
         if (isNearHighDanger) {
@@ -316,10 +337,10 @@ object OfficeDailyEvaluator {
         }
 
         // ── WATERFALL CHECKPOINTS ───────────────────────────────────────────
-        val step1Ok = !isDangerous && isUptrend && !isBearishStructure && !isDowntrend && !flashDumpTrauma
+        val step1Ok = !isDangerous && isTrendValidForIntraday && !flashDumpTrauma
         val step2Ok = step1Ok && (price >= supportLevel * 0.988) && !tooCloseToHigh && !pumpAndDumpTrap
-        val step3Ok = step2Ok && (rsi in 36.0..62.0) && macdHist >= -0.002
-        val step4Ok = step3Ok && netRr >= 1.6 && buyScore >= 52.0 && !isOverExtended
+        val step3Ok = step2Ok && (rsi in 35.0..65.0) && macdHist >= -0.002
+        val step4Ok = step3Ok && netRr >= 1.35 && buyScore >= 50.0 && !isOverExtended
 
         val completedSteps = when {
             step4Ok -> 4
@@ -331,7 +352,7 @@ object OfficeDailyEvaluator {
 
         // ── Keputusan akhir Intraday Disiplin Sesi (Open Pagi, Close Malam) ──
         // Diperbolehkan BUY pada Sesi Open Pagi (06:00–11:30 WIB) atau Sesi Siang Akumulasi jika momentum kuat
-        val isQualified = step4Ok && buyScore >= 55.0 && buyScore > sellScore * 1.25 && !isNearHighDanger && !flashDumpTrauma && !pumpAndDumpTrap && intradayPhase.isOpenWindow
+        val isQualified = step4Ok && buyScore >= 52.0 && buyScore > sellScore * 1.15 && !isNearHighDanger && !flashDumpTrauma && !pumpAndDumpTrap && intradayPhase.isOpenWindow
         
         var baseConfidence = if (isQualified) (buyScore).coerceAtMost(90.0).toInt() else (buyScore).coerceAtMost(60.0).toInt()
         val regimeMultiplier = when {
@@ -392,7 +413,10 @@ object OfficeDailyEvaluator {
             isNearHighDanger -> "Tertahan: Terlalu dekat recent high / overextended."
             isBreakdown -> "Tertahan: Breakdown / downtrend."
             isDistribution -> "Tertahan: Distribusi tinggi."
-            step1Ok -> "Tren makro selaras (EMA20 > EMA50)."
+            isEstablishedUptrend -> "Tren makro selaras (EMA20 > EMA50)."
+            isGoldenCross -> "Golden Cross EMA terkonfirmasi."
+            isEarlyReversal -> "Reversal Pagi: Reclaim EMA20 & akumulasi support."
+            step1Ok -> "Struktur tren intraday valid."
             else -> "Menunggu tren makro stabil."
         }
 
@@ -467,7 +491,7 @@ object OfficeDailyEvaluator {
             entryCondition = "Intraday Disiplin Sesi · Anti Flash Dump · High R:R"
         )
 
-        return OfficeDailyEvalResult(
+        return IntradayEvalResult(
             signal = AISignalState(
                 action = finalAction,
                 confidence = finalScore,
@@ -482,7 +506,7 @@ object OfficeDailyEvaluator {
                 stopLoss = calculatedSl,
                 riskRewardRatio = rrString,
                 reasoning = reasons.take(8),
-                timestamp = System.currentTimeMillis(),
+                timestamp = evalTime,
                 patternDetected = pattern,
                 scalpingStage = if (completedSteps == 4 && intradayPhase.isOpenWindow) ScalpingStage.ENTRY else if (completedSteps >= 2) ScalpingStage.WAIT_PULLBACK else ScalpingStage.HOLD,
                 mtf = mtfSnapshot

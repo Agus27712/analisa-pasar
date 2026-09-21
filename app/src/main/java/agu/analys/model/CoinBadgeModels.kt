@@ -9,7 +9,7 @@ enum class BadgeType(
     val label: String,
     val defaultPriority: Int
 ) {
-    OFFICEDAILY("OFFICE DAILY", 1),
+    INTRADAY("INTRADAY", 1),
     SECONDWAVE("2ND WAVE", 2),
     SWING("SWING", 3),
     SCALPING("SCALPING", 4),

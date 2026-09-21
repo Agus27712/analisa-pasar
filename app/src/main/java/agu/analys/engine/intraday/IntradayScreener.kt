@@ -1,10 +1,10 @@
-package agu.analys.engine.officedaily
+package agu.analys.engine.intraday
 
 import agu.analys.model.MarketTick
 import java.util.Calendar
 import java.util.TimeZone
 
-data class FastOfficeDailyScore(
+data class FastIntradayScore(
     val score: Int,
     val isQualified: Boolean,
     val summary: String,
@@ -13,13 +13,13 @@ data class FastOfficeDailyScore(
 )
 
 /**
- * Fast screen Office Daily — diselaraskan strategi "kantoran":
+ * Fast screen Intraday — diselaraskan strategi trading harian:
  * - Screening ideal ~jam 7 pagi WIB (setelah daily close)
  * - Cari koin yang SUDAH dalam tren naik / pullback sehat (bukan recovery dump)
  * - Trigger mindset: lanjut tren + candle bullish (detail di evaluator)
  * - Setup tidak harus ada setiap hari → filter ketat
  */
-object OfficeDailyScreener {
+object IntradayScreener {
 
     /** Jendela screening pagi WIB (setelah daily close crypto ~07:00). */
     fun isMorningScreeningWindow(nowMs: Long = System.currentTimeMillis()): Boolean {
@@ -30,9 +30,9 @@ object OfficeDailyScreener {
         return hour in 6..9
     }
 
-    fun evaluateFast(tick: MarketTick?): FastOfficeDailyScore {
+    fun evaluateFast(tick: MarketTick?): FastIntradayScore {
         if (tick == null || tick.price <= 0.0) {
-            return FastOfficeDailyScore(0, false, "Data tidak valid")
+            return FastIntradayScore(0, false, "Data tidak valid")
         }
 
         val change = if (tick.change24h.isFinite()) tick.change24h else 0.0
@@ -44,28 +44,28 @@ object OfficeDailyScreener {
         val posInRange = if (high > low) ((price - low) / (high - low)).coerceIn(0.0, 1.0) else 0.5
         val inWindow = isMorningScreeningWindow()
 
-        // ── Hard reject (bukan gaya Office Daily video) ─────────────────────
+        // ── Hard reject (bukan gaya Intraday) ─────────────────────
         // Dump tajam / recovery dari panic sell → bukan "yang sudah naik lanjut naik"
         if (change < -4.0) {
-            return FastOfficeDailyScore(
+            return FastIntradayScore(
                 score = 0,
                 isQualified = false,
-                summary = "❌ Bukan Office Daily (tekanan 24h ${fmt(change)}%)",
+                summary = "❌ Bukan Intraday (tekanan 24h ${fmt(change)}%)",
                 inScreeningWindow = inWindow
             )
         }
         // Volume terlalu kering → slippage / sulit dieksekusi santai
         if (volume < 300_000_000.0) {
-            return FastOfficeDailyScore(
+            return FastIntradayScore(
                 score = 0,
                 isQualified = false,
-                summary = "❌ Likuiditas rendah untuk Office Daily",
+                summary = "❌ Likuiditas rendah untuk Intraday",
                 inScreeningWindow = inWindow
             )
         }
         // Range liar (noise ekstrem) → bukan setup santai
         if (rangePct > 28.0) {
-            return FastOfficeDailyScore(
+            return FastIntradayScore(
                 score = 0,
                 isQualified = false,
                 summary = "❌ Range 24h terlalu liar (${fmt(rangePct)}%)",
@@ -84,7 +84,7 @@ object OfficeDailyScreener {
         }
 
         // 2. Karakter pergerakan 24h — prefer tren naik / pullback ringan
-        // Video: "yang sudah naik, akan terus naik" + bukan dump recovery
+        // Filosofi: "yang sudah naik, akan terus naik" + bukan dump recovery
         when {
             change in 2.0..12.0 -> score += 5          // tren naik sehat
             change in 0.0..2.0 -> score += 4           // konsolidasi di atas
@@ -96,7 +96,7 @@ object OfficeDailyScreener {
 
         // 3. Posisi di range 24h
         // Dump recovery = harga nempel low → tolak
-        // Ideal Office Daily: mid–upper setelah strength, atau pullback terkontrol
+        // Ideal Intraday: mid–upper setelah strength, atau pullback terkontrol
         when {
             posInRange >= 0.35 && posInRange <= 0.85 && change >= 0.0 -> score += 3
             posInRange >= 0.25 && posInRange <= 0.70 && change in -2.0..2.0 -> score += 2 // pullback sehat
@@ -120,20 +120,20 @@ object OfficeDailyScreener {
 
         val summary = when {
             isCandidate && score >= 12 && inWindow ->
-                "🏢 Office Daily READY (pagi · skor $score)"
+                "⚡ Intraday READY (pagi · skor $score)"
             isCandidate && score >= 12 ->
-                "🏢 High Conviction Office Daily (skor $score)"
+                "⚡ High Conviction Intraday (skor $score)"
             isCandidate && inWindow ->
-                "🏢 Potensi Office Daily · screening pagi (skor $score)"
+                "⚡ Potensi Intraday · screening pagi (skor $score)"
             isCandidate ->
-                "🏢 Potensi Office Daily (tren sehat · skor $score)"
+                "⚡ Potensi Intraday (tren sehat · skor $score)"
             score >= 7 ->
-                "👀 Pantau Office Daily (belum qualify · skor $score)"
+                "👀 Pantau Intraday (belum qualify · skor $score)"
             else ->
-                "— Belum cocok Office Daily"
+                "— Belum cocok Intraday"
         }
 
-        return FastOfficeDailyScore(
+        return FastIntradayScore(
             score = score,
             isQualified = isCandidate,
             summary = summary,
