@@ -38,7 +38,6 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
     val currentMarketSource by viewModel.marketDataSource.collectAsStateWithLifecycle()
     var selectedSource by remember(currentMarketSource) { mutableStateOf(currentMarketSource) }
     var strategyMode by remember { mutableStateOf(prefs.strategyMode) }
-    var sensitivity by remember { mutableStateOf(prefs.scalpingSensitivity) }
     var provider by remember { mutableStateOf(prefs.aiProvider) }
     var groq by remember { mutableStateOf(prefs.groqApiKey) }
     var gemini by remember { mutableStateOf(prefs.geminiApiKey) }
@@ -93,7 +92,6 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
         }
         prefs.strategyMode = strategyMode
         prefs.isScalpingMode = (strategyMode == StrategyMode.SCALPING)
-        prefs.scalpingSensitivity = sensitivity
         prefs.aiProvider = provider
         prefs.groqApiKey = groq
         prefs.geminiApiKey = gemini
@@ -111,7 +109,6 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
         prefs.tradingFees = updatedFees
         viewModel.updateTradingFees(updatedFees)
         viewModel.setStrategyMode(strategyMode)
-        viewModel.setScalpingSensitivity(sensitivity)
         saved = true
         if (showToast) {
             Toast.makeText(context, "Pengaturan berhasil disimpan", Toast.LENGTH_SHORT).show()
@@ -278,7 +275,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                             iconTint = TvBlue,
                             iconBackground = TvBlue.copy(alpha = 0.15f),
                             title = "Strategi & Analisis Sinyal",
-                            subtitle = "Mode ${strategyMode.name} · Sensitivitas ${sensitivity.name}",
+                            subtitle = "Mode ${strategyMode.name}",
                             onClick = { activeCategory = SettingsCategory.TRADING }
                         )
                         HorizontalDivider(color = TvBorder.copy(alpha = 0.5f), thickness = 0.5.dp)
@@ -476,8 +473,6 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                         viewModel = viewModel,
                         strategyMode = strategyMode,
                         onStrategyModeChange = { strategyMode = it; saved = false },
-                        sensitivity = sensitivity,
-                        onSensitivityChange = { sensitivity = it; saved = false },
                         buyMakerFee = buyMakerFee,
                         onBuyMakerFeeChange = { buyMakerFee = it; saved = false },
                         buyTakerFee = buyTakerFee,

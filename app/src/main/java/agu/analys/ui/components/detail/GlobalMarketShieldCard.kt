@@ -143,10 +143,8 @@ fun GlobalMarketShieldDialog(
     val strategyGuide = remember(strategyMode) {
         when (strategyMode) {
             StrategyMode.SCALPING -> "Scalping sangat sensitif terhadap imbalance jangka pendek. Dukungan buy wall (bid > 55%) memberikan perlindungan instan untuk entri cepat 1-5 menit."
-            StrategyMode.SECOND_WAVE -> "Konfirmasi wave kedua membutuhkan likuiditas tebal untuk menahan retracement. Bid wall yang kuat menyaring sinyal palsu agar entri lebih aman."
             StrategyMode.SWING -> "Aktivitas akumulasi jangka menengah biasanya ditandai dengan dinding bid di level harga psikologis. Hindari fomo jika ask wall terlalu tebal."
             StrategyMode.OFFICE_DAILY -> "Dinding beli (buy walls) tebal bertindak sebagai basis harga yang solid untuk melakukan akumulasi DCA secara teratur."
-            StrategyMode.TRENCHING -> "Trading parit memanfaatkan liquidity pools di bid/ask untuk pasang jaring buy/sell limit secara presisi."
         }
     }
 

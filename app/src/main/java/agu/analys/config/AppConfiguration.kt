@@ -6,10 +6,8 @@ enum class AiProvider(val label: String) { GROQ("Groq"), GEMINI("Gemini") }
 
 enum class StrategyMode(val label: String, val badge: String, val shortDesc: String) {
     SCALPING("Scalping Agresif", "⚡ SCALPING", "Cepat (1M–15M) · Trigger mikro"),
-    SECOND_WAVE("Second-Wave Hunter", "🌊 2ND-WAVE", "Pantulan 50–85% · Reclaim base"),
     SWING("Swing Trad", "📈 SWING", "Jangka menengah (1H–1D)"),
-    OFFICE_DAILY("Intraday", "⚡ INTRADAY", "Open Pagi · Close Malam · Anti Flash Dump"),
-    TRENCHING("Trenching", "⛏ TRENNCHING", "Flow, Pullback & Trench Building (M15-H1)");
+    OFFICE_DAILY("Intraday", "⚡ INTRADAY", "Open Pagi · Close Malam · Anti Flash Dump");
 }
 
 data class TradingFeeConfig(

@@ -72,18 +72,6 @@ fun RadarLinearCheckpointStepper(
                 "Sesi Open Pagi (06:00-11:30) & Tren H4 Bullish Stabil.",
                 "Menunggu Sesi Open Pagi / keselarasan tren H4..."
             )
-            StrategyMode.TRENCHING -> listOf(
-                "Flow M15",
-                "Flow M15 · Persistensi Tekanan",
-                "Flow konsisten positif dengan volume akumulasi & persistensi aktif.",
-                "Memantau persistensi flow volume dan order book inflow..."
-            )
-            StrategyMode.SECOND_WAVE -> listOf(
-                "Prior Run",
-                "Prior Run · Drawdown Reset",
-                "Prior run terkonfirmasi dan koreksi drawdown reset normal.",
-                "Memantau prior run dan siklus reset drawdown 4H/1H..."
-            )
             StrategyMode.SCALPING -> listOf(
                 "Bias 1H",
                 "Bias 1H · Tren Utama",
@@ -104,18 +92,6 @@ fun RadarLinearCheckpointStepper(
                 "Anti-Dump · Deteksi Trauma & Support",
                 "Lolos filter Anti Flash Dump & support akumulasi kokoh.",
                 "Mengevaluasi riwayat dump & lantai support konsolidasi..."
-            )
-            StrategyMode.TRENCHING -> listOf(
-                "Trench Base",
-                "Kompresi Trench · Range Ketat",
-                "Harga terkompresi rapi di area support trench tanpa volatilitas liar.",
-                "Menunggu pembentukan batas kompresi trench yang stabil..."
-            )
-            StrategyMode.SECOND_WAVE -> listOf(
-                "Base Support",
-                "Base Support · Akumulasi 1H",
-                "Lantai base support terbentuk dan volume koreksi kering.",
-                "Menunggu konfirmasi pembentukan base support 1H..."
             )
             StrategyMode.SCALPING -> listOf(
                 "Setup 15M",
@@ -138,18 +114,6 @@ fun RadarLinearCheckpointStepper(
                 "RSI di zona akumulasi (40-58) & histogram MACD positif.",
                 "Menunggu reset RSI dan konfirmasi momentum akumulasi..."
             )
-            StrategyMode.TRENCHING -> listOf(
-                "Flow Return",
-                "Timing · Pullback & Flow Return",
-                "Pullback sehat terlewati & flow beralih menguat kembali (Reclaim).",
-                "Menunggu timing flow return setelah pullback/absorption..."
-            )
-            StrategyMode.SECOND_WAVE -> listOf(
-                "Inflow 15M",
-                "Inflow 15M · Smart Money",
-                "Volume beli 15M masuk dan candle konfirmasi terbentuk.",
-                "Menunggu smart inflow dan higher-low 15M..."
-            )
             StrategyMode.SCALPING -> listOf(
                 "Trigger 1M",
                 "Trigger 1M · Momentum Sinyal",
@@ -170,18 +134,6 @@ fun RadarLinearCheckpointStepper(
                 "Area Entry · Target R:R & Exit Malam",
                 "Harga berada di zona entry (Net R:R >= 1.8) siap exit sesi malam.",
                 "Menunggu harga di zona entry aman sebelum sesi malam..."
-            )
-            StrategyMode.TRENCHING -> listOf(
-                "Anti-FOMO",
-                "Anti-FOMO Guard & Sizing",
-                "Anti-FOMO Guard lulus, harga tidak extended, alokasi risiko terhitung aman.",
-                "Menunggu validasi Anti-FOMO Guard & toleransi resiko..."
-            )
-            StrategyMode.SECOND_WAVE -> listOf(
-                "Entry Ready",
-                "Area Entry · Reclaim / Dip",
-                "Harga berada di zona ideal beli dengan risk/reward optimal.",
-                "Menunggu harga bergerak masuk ke dalam toleransi zona beli ideal..."
             )
             StrategyMode.SCALPING -> listOf(
                 "Area Entry",

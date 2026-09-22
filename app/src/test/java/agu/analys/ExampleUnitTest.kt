@@ -1,6 +1,5 @@
 package agu.analys
 
-import agu.analys.config.ScalpingSensitivity
 import agu.analys.config.TradingFeeConfig
 import agu.analys.engine.scalping.ScalpingMtfEvaluator
 import agu.analys.model.CandleBar
@@ -34,8 +33,7 @@ class ExampleUnitTest {
             h1Candles = h1,
             m15Candles = m15,
             m1Candles = m1,
-            fees = TradingFeeConfig(),
-            sensitivity = ScalpingSensitivity.CONSERVATIVE
+            fees = TradingFeeConfig()
         )
         assertNotNull(resultConservative)
 
@@ -44,8 +42,7 @@ class ExampleUnitTest {
             h1Candles = h1,
             m15Candles = m15,
             m1Candles = m1,
-            fees = TradingFeeConfig(),
-            sensitivity = ScalpingSensitivity.AGGRESSIVE
+            fees = TradingFeeConfig()
         )
         assertNotNull(resultAggressive)
     }

@@ -28,7 +28,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import kotlin.math.roundToInt
-import agu.analys.config.ScalpingSensitivity
 import agu.analys.config.StrategyMode
 import agu.analys.model.CoinHoldingStatus
 import agu.analys.model.MarketConnectionState
@@ -53,7 +52,6 @@ fun DashboardScreen(
     val hotCoins by viewModel.hotCoins.collectAsState()
     val gainersCoins by viewModel.gainersCoins.collectAsState()
     val losersCoins by viewModel.losersCoins.collectAsState()
-    val secondWaveCoins by viewModel.secondWaveCoins.collectAsState()
     val topVolumeCoins by viewModel.topVolumeCoins.collectAsState()
     val usdtIdrRate by viewModel.usdtIdrRate.collectAsState()
     val connectionState by viewModel.connectionState.collectAsState()
@@ -63,7 +61,6 @@ fun DashboardScreen(
     val coinBadges by viewModel.coinBadges.collectAsState()
     val isScalpingMode by viewModel.isScalpingMode.collectAsState()
     val strategyMode by viewModel.strategyMode.collectAsState()
-    val scalpingSensitivity by viewModel.scalpingSensitivity.collectAsState()
     val aiSignalState by viewModel.aiSignalState.collectAsState()
     val recentCandles by viewModel.recentCandles.collectAsState()
     val holdingStatuses by viewModel.holdingStatuses.collectAsState()
@@ -82,12 +79,11 @@ fun DashboardScreen(
     val defaultQuote = "IDR"
 
     // Gabungkan seluruh data ticks real-time (SSOT dengan Detail / WebSocket aktif)
-    val allTicks = remember(dashboardTicks, currentTick, hotCoins, gainersCoins, losersCoins, secondWaveCoins, topVolumeCoins) {
+    val allTicks = remember(dashboardTicks, currentTick, hotCoins, gainersCoins, losersCoins, topVolumeCoins) {
         val base = dashboardTicks +
             hotCoins.associateBy { it.symbol } +
             gainersCoins.associateBy { it.symbol } +
             losersCoins.associateBy { it.symbol } +
-            secondWaveCoins.associateBy { it.symbol } +
             topVolumeCoins.associateBy { it.symbol }
         if (currentTick != null) {
             val ct = currentTick!!
@@ -112,7 +108,6 @@ fun DashboardScreen(
         strategyMode,
         gainersCoins,
         hotCoins,
-        secondWaveCoins,
         topVolumeCoins,
         losersCoins,
         allTicks,
@@ -134,11 +129,6 @@ fun DashboardScreen(
                     hotCoins.map { TradingPair.fromCustomSymbol(it.symbol, defaultQuote) })
                 (watchAndFav + explicit + highVol + basePopular).distinctBy { it.symbol }
             }
-            StrategyMode.SECOND_WAVE -> {
-                val secondWave = secondWaveCoins.map { TradingPair.fromCustomSymbol(it.symbol, defaultQuote) }
-                val dipReversal = losersCoins.take(15).map { TradingPair.fromCustomSymbol(it.symbol, defaultQuote) }
-                (watchAndFav + secondWave + dipReversal + basePopular).distinctBy { it.symbol }
-            }
             StrategyMode.SWING -> {
                 val swingCandidates = allTicks.values
                     .filter { it.price > 5.0 && it.volume24h >= 500_000_000.0 && it.change24h in -3.0..8.0 }
@@ -157,14 +147,6 @@ fun DashboardScreen(
                     .take(30)
                     .map { TradingPair.fromCustomSymbol(it.symbol, defaultQuote) }
                 (watchAndFav + intradayCandidates + basePopular).distinctBy { it.symbol }
-            }
-            StrategyMode.TRENCHING -> {
-                val trenchCandidates = allTicks.values
-                    .filter { it.price > 5.0 && it.volume24h >= 300_000_000.0 && it.change24h in -2.5..4.5 }
-                    .sortedByDescending { it.volume24h }
-                    .take(25)
-                    .map { TradingPair.fromCustomSymbol(it.symbol, defaultQuote) }
-                (watchAndFav + trenchCandidates + basePopular).distinctBy { it.symbol }
             }
         }
     }

@@ -1,10 +1,8 @@
 package agu.analys.engine
 
-import agu.analys.config.ScalpingSensitivity
 import agu.analys.config.StrategyMode
 import agu.analys.config.TradingFeeConfig
 import agu.analys.engine.scalping.ScalpingMtfEvaluator
-import agu.analys.engine.secondwave.SecondWaveEvaluator
 import agu.analys.engine.swing.SwingEvaluator
 import agu.analys.model.AISignalState
 import agu.analys.model.CandleBar
@@ -27,11 +25,7 @@ import kotlinx.coroutines.launch
 /**
  * Thin orchestrator: realtime buffers + mode routing. Scoring stays in dedicated evaluators.
  *
- * FIXES (Sep 2026):
- * 1. Buffer candle dipisah: candlesH1 (Swing), candlesH4 (Intraday) — tidak lagi tercampur M1
- * 2. onCandleUpdate dari WebSocket (M1) TIDAK lagi men-trigger runSwing/runIntraday
- * 3. Intraday fetch H4 (bukan H1) sesuai desain low-noise
- * 4. Swing tetap H1; refresh hanya overwrite dengan closed candles dari REST
+ * Modified to support aggressive scalping, removing second wave and trenching.
  */
 class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default)) {
     var strategyMode: StrategyMode = StrategyMode.SCALPING
@@ -44,10 +38,8 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
                 strategyMode = StrategyMode.SWING
             }
         }
-    var scalpingSensitivity = ScalpingSensitivity.CONSERVATIVE
     var tradingFees = TradingFeeConfig()
 
-    // FIX: buffer terpisah per timeframe — jangan campur M1 ke H1/H4
     private val candlesH1 = mutableListOf<CandleBar>()
     private val candlesH4 = mutableListOf<CandleBar>()
     private val candles1D = mutableListOf<CandleBar>()
@@ -84,11 +76,7 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
             StrategyMode.SCALPING -> {
                 if (m1Candles.isNotEmpty()) runScalping()
             }
-            StrategyMode.SECOND_WAVE -> {
-                if (m15Candles.isNotEmpty()) runSecondWave()
-            }
             StrategyMode.SWING -> {
-                // Hanya re-eval dari tick untuk cek SL real-time; data candle dari refresh REST
                 val hasCandles = synchronized(candlesH1) { candlesH1.isNotEmpty() }
                 if (hasCandles) runSwing()
             }
@@ -96,19 +84,11 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
                 val hasCandles = synchronized(candlesH4) { candlesH4.isNotEmpty() }
                 if (hasCandles) runIntraday()
             }
-            StrategyMode.TRENCHING -> {
-                if (m15Candles.isNotEmpty()) runTrenching()
-            }
         }
 
         refreshScalpingTimeframesIfDue(tick.symbol)
     }
 
-    /**
-     * FIX: onCandleUpdate dari WebSocket = candle 1-MENIT.
-     * Hanya update buffer M1 untuk scalping.
-     * JANGAN masukkan ke candlesH1 / candlesH4 (itu yang bikin flip-flop).
-     */
     fun onCandleUpdate(candle: CandleBar) {
         if (candle.open <= 0.0 || candle.high <= 0.0 || candle.low <= 0.0 || candle.close <= 0.0) return
 
@@ -120,18 +100,7 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
                     runScalping()
                 }
             }
-            StrategyMode.SECOND_WAVE -> {
-                // Second wave pakai MTF cache, bukan buffer M1 langsung
-                // Tetap boleh trigger re-eval ringan dari tick (onTickUpdate sudah handle)
-            }
-            StrategyMode.SWING, StrategyMode.OFFICE_DAILY -> {
-                // FIX INTI: JANGAN panggil runSwing/runIntraday di sini.
-                // Evaluasi makro hanya dari refresh REST (closed H1/H4).
-                // Harga live sudah di-handle di onTickUpdate untuk invalidasi SL.
-            }
-            StrategyMode.TRENCHING -> {
-                // Trenching pakai h1/m15 dari cache
-            }
+            else -> {}
         }
     }
 
@@ -167,37 +136,16 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
     private fun refreshScalpingTimeframesIfDue(symbol: String) {
         if (symbol.isBlank()) return
         val now = System.currentTimeMillis()
-        // Intraday / Swing: refresh lebih jarang (60s) karena low-noise
         val intervalMs = when (strategyMode) {
             StrategyMode.SCALPING -> 10_000L
             StrategyMode.OFFICE_DAILY -> 60_000L
             StrategyMode.SWING -> 30_000L
-            else -> 20_000L
         }
         if (now - lastMtfRefresh < intervalMs && mtfSymbol == symbol) return
         if (mtfRefreshJob?.isActive == true) return
         lastMtfRefresh = now; mtfSymbol = symbol
         mtfRefreshJob = scope.launch {
             when (strategyMode) {
-                StrategyMode.SECOND_WAVE -> {
-                    agu.analys.util.MtfCacheManager.setActiveSymbol(symbol)
-
-                    var h4 = agu.analys.util.MtfCacheManager.getCachedCandles(symbol, Timeframe.H4) ?: emptyList()
-                    var h1 = agu.analys.util.MtfCacheManager.getCachedCandles(symbol, Timeframe.H1) ?: emptyList()
-                    var m15 = agu.analys.util.MtfCacheManager.getCachedCandles(symbol, Timeframe.M15) ?: emptyList()
-
-                    if (h4.size < 20 || h1.size < 20 || m15.size < 20) {
-                        kotlinx.coroutines.delay(500)
-                        h4 = agu.analys.util.MtfCacheManager.getCachedCandles(symbol, Timeframe.H4) ?: emptyList()
-                        h1 = agu.analys.util.MtfCacheManager.getCachedCandles(symbol, Timeframe.H1) ?: emptyList()
-                        m15 = agu.analys.util.MtfCacheManager.getCachedCandles(symbol, Timeframe.M15) ?: emptyList()
-                    }
-
-                    if (h4.size >= 20 && h1.size >= 20 && m15.size >= 20 && currentTick?.symbol == symbol) {
-                        h4Candles = h4.dropLast(1); h1Candles = h1.dropLast(1); m15Candles = m15.dropLast(1)
-                        runSecondWave()
-                    }
-                }
                 StrategyMode.SCALPING -> {
                     agu.analys.util.MtfCacheManager.setActiveSymbol(symbol)
 
@@ -219,7 +167,6 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
                     }
                 }
                 StrategyMode.SWING -> {
-                    // H1 closed candles only
                     val h1Job = async { IndodaxMarketService.fetchCandles(symbol, Timeframe.H1, 200) }
                     val d1Job = async { IndodaxMarketService.fetchCandles(symbol, Timeframe.D1, 100) }
                     val h1 = h1Job.await()
@@ -238,7 +185,6 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
                     }
                 }
                 StrategyMode.OFFICE_DAILY -> {
-                    // FIX: fetch H4 (bukan H1) — sesuai desain low-noise Intraday
                     val h4Job = async { IndodaxMarketService.fetchCandles(symbol, Timeframe.H4, 200) }
                     val d1Job = async { IndodaxMarketService.fetchCandles(symbol, Timeframe.D1, 100) }
                     val h4 = h4Job.await()
@@ -254,24 +200,6 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
                             candles1D.addAll(d1)
                         }
                         runIntraday()
-                    }
-                }
-                StrategyMode.TRENCHING -> {
-                    agu.analys.util.MtfCacheManager.setActiveSymbol(symbol)
-
-                    var h1 = agu.analys.util.MtfCacheManager.getCachedCandles(symbol, Timeframe.H1) ?: emptyList()
-                    var m15 = agu.analys.util.MtfCacheManager.getCachedCandles(symbol, Timeframe.M15) ?: emptyList()
-
-                    if (h1.size < 20 || m15.size < 20) {
-                        kotlinx.coroutines.delay(500)
-                        h1 = agu.analys.util.MtfCacheManager.getCachedCandles(symbol, Timeframe.H1) ?: emptyList()
-                        m15 = agu.analys.util.MtfCacheManager.getCachedCandles(symbol, Timeframe.M15) ?: emptyList()
-                    }
-
-                    if (h1.size >= 20 && m15.size >= 20 && currentTick?.symbol == symbol) {
-                        h1Candles = h1.dropLast(1)
-                        m15Candles = m15.dropLast(1)
-                        runTrenching()
                     }
                 }
             }
@@ -295,39 +223,23 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
             return
         }
 
-        // Sintesis real-time tick langsung ke candle M1 & M15 aktif (Zero-Lag Indicator Evaluation)
         val liveM1 = agu.analys.util.CandleTimeUtil.synthesizeRealtimeCandles(m1Candles, tick, Timeframe.M1)
         val liveM15 = agu.analys.util.CandleTimeUtil.synthesizeRealtimeCandles(m15Candles, tick, Timeframe.M15)
 
         val result = ScalpingMtfEvaluator.evaluate(
-            agu.analys.engine.global.GlobalContextManager.context.value,
-            tick.price, h1Candles, liveM15, liveM1,
-            currentFormingVolume, currentOrderBookBids, currentOrderBookAsks,
-            tradingFees, scalpingSensitivity
+            globalContext = agu.analys.engine.global.GlobalMarketContext(),
+            price = tick.price,
+            h1Candles = h1Candles,
+            m15Candles = liveM15,
+            m1Candles = liveM1,
+            formingVolume = currentFormingVolume,
+            bids = currentOrderBookBids,
+            asks = currentOrderBookAsks,
+            fees = tradingFees,
+            symbol = tick.symbol
         ) ?: return
 
         val tracked = agu.analys.engine.scalping.SignalLifecycleManager.process(tick.symbol, tick.price, result.signal, StrategyMode.SCALPING)
-        val finalSignal = (tracked.activeSignalState ?: result.signal).copy(
-            marketSymbol = tick.symbol,
-            lifecycleState = tracked.state
-        )
-
-        _indicators.value = result.indicators
-        _signalState.value = finalSignal
-        tracked.transition?.let { trans ->
-            if (trans.hasTriggeringTransition) {
-                onCandidateSignalTransition?.invoke(trans)
-            }
-        }
-    }
-
-    private fun runSecondWave() {
-        val tick = currentTick ?: return
-        if (h4Candles.size < 20 || h1Candles.size < 20 || m15Candles.size < 20) return
-        val liveM15 = agu.analys.util.CandleTimeUtil.synthesizeRealtimeCandles(m15Candles, tick, Timeframe.M15)
-        val result = SecondWaveEvaluator.evaluate(agu.analys.engine.global.GlobalContextManager.context.value, tick.price, h4Candles, h1Candles, liveM15, tradingFees)
-
-        val tracked = agu.analys.engine.scalping.SignalLifecycleManager.process(tick.symbol, tick.price, result.signal, StrategyMode.SECOND_WAVE)
         val finalSignal = (tracked.activeSignalState ?: result.signal).copy(
             marketSymbol = tick.symbol,
             lifecycleState = tracked.state
@@ -376,7 +288,6 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
     private fun runIntraday() {
         if (strategyMode != StrategyMode.OFFICE_DAILY) return
         val tick = currentTick ?: return
-        // FIX: pakai candlesH4 (bukan H1)
         val history = synchronized(candlesH4) { candlesH4.toList() }
         val dailyHistory = synchronized(candles1D) { candles1D.toList() }
         if (history.isEmpty()) return
@@ -401,41 +312,6 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
         tracked.transition?.let { trans ->
             if (trans.hasTriggeringTransition) {
                 onCandidateSignalTransition?.invoke(trans)
-            }
-        }
-    }
-
-    private fun runTrenching() {
-        if (strategyMode != StrategyMode.TRENCHING) return
-        val tick = currentTick ?: return
-
-        val store = agu.analys.trading.SpotPositionStore(agu.analys.AppContextProvider.context)
-        val position = store.get(tick.symbol)
-        val hasPosition = position.state != agu.analys.trading.SpotPositionState.NO_POSITION
-        val entryPrice = position.entryPrice
-
-        val result = agu.analys.engine.trenching.TrenchingEvaluator.evaluate(
-            globalContext = agu.analys.engine.global.GlobalContextManager.context.value,
-            currentPrice = tick.price,
-            candles = h1Candles,
-            ltfCandles = m15Candles,
-            bids = currentOrderBookBids,
-            asks = currentOrderBookAsks,
-            hasPosition = hasPosition,
-            entryPrice = entryPrice,
-            tradingFees = tradingFees
-        )
-        if (result != null) {
-            val tracked = agu.analys.engine.scalping.SignalLifecycleManager.process(tick.symbol, tick.price, result, StrategyMode.TRENCHING)
-            val finalSignal = (tracked.activeSignalState ?: result).copy(
-                marketSymbol = tick.symbol,
-                lifecycleState = tracked.state
-            )
-            _signalState.value = finalSignal
-            tracked.transition?.let { trans ->
-                if (trans.hasTriggeringTransition) {
-                    onCandidateSignalTransition?.invoke(trans)
-                }
             }
         }
     }

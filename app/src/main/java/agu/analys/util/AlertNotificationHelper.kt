@@ -198,10 +198,8 @@ object AlertNotificationHelper {
 
         val modeLabel = when (strategyMode) {
             StrategyMode.SCALPING -> "Scalping"
-            StrategyMode.SECOND_WAVE -> "Second-Wave"
             StrategyMode.SWING -> "Swing"
             StrategyMode.OFFICE_DAILY -> "Intraday"
-            StrategyMode.TRENCHING -> "Trenching"
         }
 
         val stateLabel = if (signal.lifecycleState == LifecycleState.READY) "🟢 PAIR SIAP ENTRY (BUY)" else "⚡ KANDIDAT TERDETEKSI"

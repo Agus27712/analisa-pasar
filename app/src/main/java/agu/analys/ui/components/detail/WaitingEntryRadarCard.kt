@@ -167,10 +167,8 @@ fun WaitingEntryRadarCard(
     val isBuyAction = signal.action == SignalAction.BUY
     val buyTitleHeader = when (strategyMode) {
         StrategyMode.SCALPING -> if (isBuyAction) "⚡ SCALPING BUY" else "⚡ SCALPING RADAR"
-        StrategyMode.SECOND_WAVE -> if (isBuyAction) "🌊 SECOND-WAVE BUY" else "🌊 SECOND-WAVE RADAR"
         StrategyMode.SWING -> if (isBuyAction) "🎯 SWING BUY" else "🎯 SWING RADAR"
         StrategyMode.OFFICE_DAILY -> if (isBuyAction) "⚡ INTRADAY BUY" else "⚡ INTRADAY RADAR"
-        StrategyMode.TRENCHING -> if (isBuyAction) "⛏ TRENCHING BUY" else "⛏ TRENCHING RADAR"
     }
 
     var isChecklistVisible by remember { mutableStateOf(false) }

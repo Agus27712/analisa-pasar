@@ -271,10 +271,8 @@ fun DashboardMockupHeader(
         // Compact Unified Stat Strip: 24H VOL | AVG VOL | STRATEGI
         val (modeBg, modeBorder, modeColor, modeLabel) = when (strategyMode) {
             StrategyMode.SCALPING -> listOf(Color(0xFF123D2A), Color(0xFF1B5E38), TvGreen, "SCALPING")
-            StrategyMode.SECOND_WAVE -> listOf(Color(0xFF0F3845), Color(0xFF155060), Color(0xFF00E5FF), "2ND-WAVE")
             StrategyMode.SWING -> listOf(Color(0xFF122840), Color(0xFF1E3A5F), Color(0xFF72B7FF), "SWING")
             StrategyMode.OFFICE_DAILY -> listOf(Color(0xFF1F2448), Color(0xFF3730A3), Color(0xFFA5B4FC), "INTRADAY")
-            StrategyMode.TRENCHING -> listOf(Color(0xFF352005), Color(0xFF78350F), Color(0xFFFCD34D), "TRENCH")
         }
 
         Row(

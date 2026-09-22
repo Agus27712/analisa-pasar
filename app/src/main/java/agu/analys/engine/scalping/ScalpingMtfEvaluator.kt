@@ -1,6 +1,5 @@
 package agu.analys.engine.scalping
 
-import agu.analys.config.ScalpingSensitivity
 import agu.analys.config.TradingFeeConfig
 import agu.analys.engine.MarketStructureAnalyzer
 import agu.analys.engine.backtest.WalkForwardEvaluator
@@ -37,7 +36,6 @@ object ScalpingMtfEvaluator {
         bids: List<OrderBookItem> = emptyList(),
         asks: List<OrderBookItem> = emptyList(),
         fees: TradingFeeConfig = TradingFeeConfig(),
-        sensitivity: ScalpingSensitivity = ScalpingSensitivity.BALANCED,
         symbol: String = "",
         orderBookAgeMs: Long = 0L,
         diagnosticIgnoreOrderBookWhenUnavailable: Boolean = false
@@ -51,7 +49,6 @@ object ScalpingMtfEvaluator {
         bids = bids,
         asks = asks,
         fees = fees,
-        sensitivity = sensitivity,
         symbol = symbol,
         orderBookAgeMs = orderBookAgeMs,
         diagnosticIgnoreOrderBookWhenUnavailable = diagnosticIgnoreOrderBookWhenUnavailable
@@ -67,14 +64,13 @@ object ScalpingMtfEvaluator {
         bids: List<OrderBookItem> = emptyList(),
         asks: List<OrderBookItem> = emptyList(),
         fees: TradingFeeConfig = TradingFeeConfig(),
-        sensitivity: ScalpingSensitivity = ScalpingSensitivity.BALANCED,
         symbol: String = "",
         orderBookAgeMs: Long = 0L,
         diagnosticIgnoreOrderBookWhenUnavailable: Boolean = false
     ): Result? {
         if (price <= 0.0 || h1Candles.size < 20 || m15Candles.size < 20 || m1Candles.size < 20) return null
 
-        val isAggressive = sensitivity == ScalpingSensitivity.AGGRESSIVE || sensitivity == ScalpingSensitivity.DYNAMIC_AUTO
+        val isAggressive = true
         val m15Ready = m15Candles.size >= 40
 
         // 1. Order Book Pressure & VSA (Volume Spread Analysis)

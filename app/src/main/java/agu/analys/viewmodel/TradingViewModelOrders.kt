@@ -10,23 +10,21 @@ import agu.analys.trading.SimulationOrderType
 import kotlinx.coroutines.launch
 
 fun TradingViewModel.executeCancelRealOrder(symbol: String, orderId: String, onResult: (Boolean, String) -> Unit) =
-    realCoordinator.executeCancelRealOrder(symbol, orderId, onResult)
+    orderViewModel.executeCancelRealOrder(symbol, orderId, onResult)
 
-fun TradingViewModel.checkPublicIp() = realCoordinator.checkPublicIp()
+fun TradingViewModel.checkPublicIp() = orderViewModel.checkPublicIp()
 fun TradingViewModel.clearSecurityAlert() { /* handle locally if needed */ }
-fun TradingViewModel.hasSecurityPin(): Boolean = prefs.hasSecurityPin()
-fun TradingViewModel.hasRealCredentialsConfigured(): Boolean = prefs.hasIndodaxCredentials()
-fun TradingViewModel.createSecurityPin(pin: String) { prefs.setSecurityPin(pin) }
-fun TradingViewModel.saveRealCredentialsAndPin(pin: String, apiKey: String, secretKey: String) {
-    prefs.setSecurityPin(pin)
-    prefs.indodaxApiKey = apiKey
-    prefs.indodaxSecretKey = secretKey
-}
-fun TradingViewModel.wipeSecurityCredentials() { prefs.wipeAllRealSecurityData() }
-fun TradingViewModel.verifyPin(pin: String): Boolean = realCoordinator.verifyPin(pin)
-fun TradingViewModel.lockPin() = realCoordinator.lockPin()
-fun TradingViewModel.setRealBuyMode(enabled: Boolean, pin: String? = null): Boolean = realCoordinator.setRealBuyMode(enabled, pin)
-fun TradingViewModel.fetchRealBalance() = realCoordinator.fetchRealBalance()
+fun TradingViewModel.hasSecurityPin(): Boolean = orderViewModel.hasSecurityPin()
+fun TradingViewModel.hasRealCredentialsConfigured(): Boolean = orderViewModel.hasRealCredentialsConfigured()
+fun TradingViewModel.createSecurityPin(pin: String) = orderViewModel.createSecurityPin(pin)
+fun TradingViewModel.saveRealCredentialsAndPin(pin: String, apiKey: String, secretKey: String) =
+    orderViewModel.saveRealCredentialsAndPin(pin, apiKey, secretKey)
+fun TradingViewModel.wipeSecurityCredentials() = orderViewModel.wipeSecurityCredentials()
+fun TradingViewModel.verifyPin(pin: String): Boolean = orderViewModel.verifyPin(pin)
+fun TradingViewModel.lockPin() = orderViewModel.lockPin()
+fun TradingViewModel.setRealBuyMode(enabled: Boolean, pin: String? = null): Boolean =
+    orderViewModel.setRealBuyMode(enabled, pin)
+fun TradingViewModel.fetchRealBalance() = orderViewModel.fetchRealBalance()
 fun TradingViewModel.refreshRealBalance() {
     viewModelScope.launch {
         val allTicks = IndodaxMarketService.fetchAllMarketTicks()
@@ -35,9 +33,9 @@ fun TradingViewModel.refreshRealBalance() {
     fetchRealBalance()
 }
 fun TradingViewModel.executeRealTrade(pair: String, type: String, price: Long, amountIdr: Double, tp1: Double = 0.0, tp2: Double = 0.0, onResult: (Boolean, String) -> Unit) =
-    realCoordinator.executeRealTrade(pair, type, price, amountIdr, tp1, tp2, onResult)
+    orderViewModel.executeRealTrade(pair, type, price, amountIdr, tp1, tp2, onResult)
 
-fun TradingViewModel.refreshSimulationState() = simCoordinator.refresh()
+fun TradingViewModel.refreshSimulationState() = orderViewModel.refreshSimulationState()
 fun TradingViewModel.refreshSpotPosition() {
     val sym = try { _selectedPair.value.symbol } catch (_: Throwable) { null }
     if (sym != null) {
@@ -108,11 +106,11 @@ fun TradingViewModel.submitSimulationOrder(
     )
 }
 
-fun TradingViewModel.cancelSimulationOrder(orderId: String): Boolean = simCoordinator.cancelOrder(orderId)
-fun TradingViewModel.cancelAllSimulationOrders(symbol: String? = null): Int = simCoordinator.cancelAllOrders(symbol)
-fun TradingViewModel.topUpSimulationBalance(amount: Double) = simCoordinator.topUpIdr(amount)
-fun TradingViewModel.setSimulationBalance(amount: Double) = simCoordinator.setBalance(amount)
-fun TradingViewModel.resetSimulationAccount() = simCoordinator.resetAccount()
+fun TradingViewModel.cancelSimulationOrder(orderId: String): Boolean = orderViewModel.cancelSimulationOrder(orderId)
+fun TradingViewModel.cancelAllSimulationOrders(symbol: String? = null): Int = orderViewModel.cancelAllSimulationOrders(symbol)
+fun TradingViewModel.topUpSimulationBalance(amount: Double) = orderViewModel.topUpSimulationBalance(amount)
+fun TradingViewModel.setSimulationBalance(amount: Double) = orderViewModel.setSimulationBalance(amount)
+fun TradingViewModel.resetSimulationAccount() = orderViewModel.resetSimulationAccount()
 
 fun TradingViewModel.getHoldingStatus(pair: TradingPair, forceIsReal: Boolean? = null): CoinHoldingStatus {
     val targetIsReal = forceIsReal ?: isRealBuyMode.value

@@ -36,7 +36,7 @@ fun MarketConditionCard(
     onRetry: (() -> Unit)? = null,
     mtfState: Map<agu.analys.model.Timeframe, agu.analys.util.MtfStatus> = emptyMap()
 ) {
-    if (strategyMode == StrategyMode.SCALPING || (strategyMode == StrategyMode.SECOND_WAVE && scalping)) {
+    if (strategyMode == StrategyMode.SCALPING) {
         val stage = signal.scalpingStage
         val color = when (stage) {
             ScalpingStage.ENTRY, ScalpingStage.STRONG_ENTRY, ScalpingStage.EARLY_ENTRY -> if (signal.action == SignalAction.SELL) TvRed else TvGreen
@@ -56,9 +56,9 @@ fun MarketConditionCard(
         if (mtf.any { it.startsWith("1H:") }) loadedTfs.add("1H")
         if (mtf.any { it.startsWith("15M:") }) loadedTfs.add("15M")
         if (mtf.any { it.startsWith("1M:") }) loadedTfs.add("1M")
-
+ 
         AnalysisCard {
-            SectionTitle(if (strategyMode == StrategyMode.SECOND_WAVE) "KONDISI SECOND-WAVE" else "KONDISI SCALPING", Icons.Default.TrendingUp)
+            SectionTitle("KONDISI SCALPING", Icons.Default.TrendingUp)
             Spacer(Modifier.height(7.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(12.dp).background(color, CircleShape))

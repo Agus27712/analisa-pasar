@@ -15,16 +15,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import agu.analys.config.ScalpingSensitivity
 import agu.analys.config.StrategyMode
 import agu.analys.ui.theme.*
 
 @Composable
 fun TradingModeSettings(
     strategyMode: StrategyMode,
-    sensitivity: ScalpingSensitivity,
-    onStrategyChange: (StrategyMode) -> Unit,
-    onSensitivityChange: (ScalpingSensitivity) -> Unit
+    onStrategyChange: (StrategyMode) -> Unit
 ) {
     Column {
         SectionHeader("MODE ANALISIS TRADING")
@@ -37,93 +34,13 @@ fun TradingModeSettings(
 
         ModeOptionCard(
             title = "SCALPING",
-            tag = "BUY MODE",
+            tag = "AGGRESSIVE SCALPING",
             tagBg = TvGreen.copy(alpha = 0.15f),
             tagFg = TvGreen,
             isSelected = strategyMode == StrategyMode.SCALPING,
-            desc = "Mencari peluang BUY jangka pendek (1M – 15M) dengan eksekusi cepat dan filter MTF.",
+            desc = "Mencari peluang BUY jangka pendek (1M – 15M) secara agresif dengan eksekusi cepat dan filter MTF.",
             bullets = listOf("Bias: 1H (Bullish)", "Setup: 15M", "Trigger: 1M", "Fokus: Quick Entry & Tight SL"),
             onClick = { onStrategyChange(StrategyMode.SCALPING) }
-        )
-
-        if (strategyMode == StrategyMode.SCALPING) {
-            Spacer(Modifier.height(8.dp))
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(10.dp),
-                colors = CardDefaults.cardColors(containerColor = TvCardBackground),
-                border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder)
-            ) {
-                Column(Modifier.padding(12.dp)) {
-                    Text("SENSITIVITAS SCALPING", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TvBlue)
-                    Spacer(Modifier.height(6.dp))
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        SensitivityChoice(
-                            label = "KONSERVATIF",
-                            selected = sensitivity == ScalpingSensitivity.CONSERVATIVE,
-                            activeBg = TvGreen.copy(alpha = 0.15f),
-                            activeFg = TvGreen,
-                            modifier = Modifier.weight(1f)
-                        ) { onSensitivityChange(ScalpingSensitivity.CONSERVATIVE) }
-                        SensitivityChoice(
-                            label = "SEIMBANG",
-                            selected = sensitivity == ScalpingSensitivity.BALANCED,
-                            activeBg = TvBlue.copy(alpha = 0.15f),
-                            activeFg = TvBlue,
-                            modifier = Modifier.weight(1f)
-                        ) { onSensitivityChange(ScalpingSensitivity.BALANCED) }
-                        SensitivityChoice(
-                            label = "AGRESIF",
-                            selected = sensitivity == ScalpingSensitivity.AGGRESSIVE,
-                            activeBg = TvAmber.copy(alpha = 0.15f),
-                            activeFg = TvAmber,
-                            modifier = Modifier.weight(1f)
-                        ) { onSensitivityChange(ScalpingSensitivity.AGGRESSIVE) }
-                        SensitivityChoice(
-                            label = "AUTO (AI)",
-                            selected = sensitivity == ScalpingSensitivity.DYNAMIC_AUTO,
-                            activeBg = TvOrange.copy(alpha = 0.15f),
-                            activeFg = TvOrange,
-                            modifier = Modifier.weight(1f)
-                        ) { onSensitivityChange(ScalpingSensitivity.DYNAMIC_AUTO) }
-                    }
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        when (sensitivity) {
-                            ScalpingSensitivity.CONSERVATIVE -> "Konservatif: Filter ketat MTF 1H+15M+1M, anti-false breakout, Net R:R ≥ 1.25."
-                            ScalpingSensitivity.BALANCED -> "Seimbang (Rekomendasi): RSI 36–64, Walk-Forward, Net R:R ≥ 1.20."
-                            ScalpingSensitivity.AGGRESSIVE -> "Agresif: Peluang lebih sering, RSI 35–68, volume 0.85x, quick pump."
-                            ScalpingSensitivity.DYNAMIC_AUTO -> "Adaptif Otomatis: AI menyesuaikan threshold berdasarkan Rejim Pasar (Sideways/Volatile/Trending)."
-                        },
-                        fontSize = 10.sp,
-                        color = when (sensitivity) {
-                            ScalpingSensitivity.CONSERVATIVE -> TvGreen
-                            ScalpingSensitivity.BALANCED -> TvBlue
-                            ScalpingSensitivity.AGGRESSIVE -> TvAmber
-                            ScalpingSensitivity.DYNAMIC_AUTO -> TvOrange
-                        },
-                        lineHeight = 14.sp
-                    )
-                }
-            }
-        }
-
-        Spacer(Modifier.height(10.dp))
-
-        ModeOptionCard(
-            title = "SECOND-WAVE",
-            tag = "2ND-WAVE HUNTER",
-            tagBg = TvBlue.copy(alpha = 0.15f),
-            tagFg = TvBlue,
-            isSelected = strategyMode == StrategyMode.SECOND_WAVE,
-            desc = "Membidik pantulan gelombang kedua pada koin pasca pump dengan koreksi terukur dan konfirmasi reclaim.",
-            bullets = listOf(
-                "Timeframe: 15M (Eksekusi) & 1H (Struktur)",
-                "Kriteria: Prior Run > 20% & Pullback Drawdown 50–85%",
-                "Sinyal: Base-Dip & Reclaim Entry",
-                "Target: TP1 (+10–15%) & TP2 (+25–50%+)"
-            ),
-            onClick = { onStrategyChange(StrategyMode.SECOND_WAVE) }
         )
 
         Spacer(Modifier.height(10.dp))
@@ -156,24 +73,6 @@ fun TradingModeSettings(
             ),
             onClick = { onStrategyChange(StrategyMode.OFFICE_DAILY) }
         )
-
-        Spacer(Modifier.height(10.dp))
-
-        ModeOptionCard(
-            title = "TRENCHING",
-            tag = "FLOW & TRENCH",
-            tagBg = Color(0xFFFBBF24).copy(alpha = 0.18f),
-            tagFg = Color(0xFFFBBF24),
-            isSelected = strategyMode == StrategyMode.TRENCHING,
-            desc = "Membaca market flow, kompresi trench, dan timing entry saat pullback sehat terkonfirmasi (Anti-FOMO).",
-            bullets = listOf(
-                "Timeframe: M15 (Flow) & H1 (Structure)",
-                "Fokus: Accumulation/Absorption VSA",
-                "Posisi: Dinamis (Sizing berdasarkan kualitas trench)",
-                "Risk: Anti-FOMO VWAP & Flow Failure"
-            ),
-            onClick = { onStrategyChange(StrategyMode.TRENCHING) }
-        )
     }
 }
 
@@ -200,51 +99,42 @@ fun ModeOptionCard(
         )
     ) {
         Column(Modifier.padding(14.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(title, color = TvTextPrimary, fontWeight = FontWeight.Black, fontSize = 14.sp)
-                Spacer(Modifier.width(8.dp))
-                Box(Modifier.background(tagBg, RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 2.dp)) {
-                    Text(tag, color = tagFg, fontSize = 9.sp, fontWeight = FontWeight.Black)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(title, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = if (isSelected) TvTextPrimary else TvTextSecondary)
+                    Spacer(Modifier.width(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .background(tagBg, RoundedCornerShape(4.dp))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(tag, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = tagFg)
+                    }
                 }
-                Spacer(Modifier.weight(1f))
-                if (isSelected) Icon(Icons.Default.CheckCircle, null, tint = tagFg, modifier = Modifier.size(20.dp))
+                if (isSelected) {
+                    Icon(Icons.Filled.CheckCircle, contentDescription = "Terpilih", tint = tagFg, modifier = Modifier.size(18.dp))
+                }
             }
             Spacer(Modifier.height(6.dp))
-            Text(desc, color = TvTextPrimary, fontSize = 11.sp, lineHeight = 15.sp)
+            Text(desc, fontSize = 11.sp, color = TvTextSecondary, lineHeight = 15.sp)
             Spacer(Modifier.height(8.dp))
-            bullets.forEach { b ->
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 2.dp)) {
-                    Box(Modifier.size(4.dp).background(tagFg, RoundedCornerShape(1.dp)))
-                    Spacer(Modifier.width(6.dp))
-                    Text(b, color = TvTextSecondary, fontSize = 10.sp)
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                bullets.forEach { bullet ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            Modifier
+                                .size(4.dp)
+                                .background(if (isSelected) tagFg else TvTextSecondary, RoundedCornerShape(50))
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(bullet, fontSize = 10.sp, color = if (isSelected) TvTextPrimary else TvTextSecondary)
+                    }
                 }
             }
         }
-    }
-}
-
-@Composable
-fun SensitivityChoice(
-    label: String,
-    selected: Boolean,
-    activeBg: Color,
-    activeFg: Color,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    Box(
-        modifier = modifier
-            .background(if (selected) activeBg else TvCardBackground, RoundedCornerShape(6.dp))
-            .border(1.dp, if (selected) activeFg else TvBorder, RoundedCornerShape(6.dp))
-            .clickable { onClick() }
-            .padding(vertical = 8.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            label,
-            color = if (selected) activeFg else TvTextSecondary,
-            fontSize = 9.sp,
-            fontWeight = FontWeight.Bold
-        )
     }
 }

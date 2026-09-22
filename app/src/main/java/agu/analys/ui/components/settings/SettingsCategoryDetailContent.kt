@@ -17,7 +17,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import agu.analys.config.AiProvider
-import agu.analys.config.ScalpingSensitivity
 import agu.analys.config.StrategyMode
 import agu.analys.model.MarketTick
 import agu.analys.ui.animation.PriceAnimationMode
@@ -32,8 +31,6 @@ fun SettingsCategoryDetailContent(
     viewModel: TradingViewModel,
     strategyMode: StrategyMode,
     onStrategyModeChange: (StrategyMode) -> Unit,
-    sensitivity: ScalpingSensitivity,
-    onSensitivityChange: (ScalpingSensitivity) -> Unit,
     buyMakerFee: String,
     onBuyMakerFeeChange: (String) -> Unit,
     buyTakerFee: String,
@@ -90,9 +87,7 @@ fun SettingsCategoryDetailContent(
         SettingsCategory.TRADING -> {
             TradingModeSettings(
                 strategyMode = strategyMode,
-                sensitivity = sensitivity,
-                onStrategyChange = onStrategyModeChange,
-                onSensitivityChange = onSensitivityChange
+                onStrategyChange = onStrategyModeChange
             )
 
             Spacer(Modifier.height(14.dp))

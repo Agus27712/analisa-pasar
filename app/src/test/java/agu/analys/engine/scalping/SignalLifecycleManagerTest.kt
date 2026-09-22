@@ -93,12 +93,12 @@ class SignalLifecycleManagerTest {
         val swingTracked = SignalLifecycleManager.process(symbol, 50_000.0, swingSignal, StrategyMode.SWING)
         assertEquals(LifecycleState.READY, swingTracked.state)
 
-        // Mode SECOND_WAVE with neutral signal remains IDLE
-        val secondWaveSignal = AISignalState(action = SignalAction.HOLD, confidence = 20)
-        val secondWaveTracked = SignalLifecycleManager.process(symbol, 50_000.0, secondWaveSignal, StrategyMode.SECOND_WAVE)
-        assertEquals(LifecycleState.IDLE, secondWaveTracked.state)
+        // Mode INTRADAY with neutral signal remains IDLE
+        val intradaySignal = AISignalState(action = SignalAction.HOLD, confidence = 20)
+        val intradayTracked = SignalLifecycleManager.process(symbol, 50_000.0, intradaySignal, StrategyMode.OFFICE_DAILY)
+        assertEquals(LifecycleState.IDLE, intradayTracked.state)
 
-        // Verify SWING state was not overwritten by SECOND_WAVE
+        // Verify SWING state was not overwritten by INTRADAY
         val recheckSwing = SignalLifecycleManager.process(symbol, 50_100.0, swingSignal, StrategyMode.SWING)
         assertEquals(LifecycleState.READY, recheckSwing.state)
     }

@@ -239,6 +239,45 @@ $headlineBlock
         """.trimIndent()
     }
 
+    suspend fun generateText(
+        apiKey: String,
+        prompt: String
+    ): String = withContext(Dispatchers.IO) {
+        if (apiKey.isBlank()) return@withContext "⚠️ API Key Groq belum di-set di Pengaturan."
+        try {
+            val payload = JSONObject().apply {
+                put("model", MODEL)
+                put("messages", JSONArray().apply {
+                    put(JSONObject().apply {
+                        put("role", "user")
+                        put("content", prompt)
+                    })
+                })
+                put("max_tokens", 512)
+            }
+            val request = Request.Builder()
+                .url(BASE_URL)
+                .addHeader("Content-Type", "application/json")
+                .addHeader("Authorization", "Bearer $apiKey")
+                .post(payload.toString().toRequestBody("application/json".toMediaType()))
+                .build()
+
+            client.newCall(request).execute().use { resp ->
+                val responseBody = resp.body?.string().orEmpty()
+                if (resp.isSuccessful) {
+                    val choice = JSONObject(responseBody)
+                        .getJSONArray("choices")
+                        .getJSONObject(0)
+                    choice.getJSONObject("message").getString("content").trim()
+                } else {
+                    "HTTP Error: ${resp.code}"
+                }
+            }
+        } catch (e: Exception) {
+            "Gagal memproses AI: ${e.message}"
+        }
+    }
+
     private val safeContextReady: Boolean
         get() = try {
             AppContextProvider.context; true

@@ -282,4 +282,49 @@ $noteText
         } catch (_: UninitializedPropertyAccessException) {
             false
         }
+
+    suspend fun generateSimpleText(
+        apiKey: String,
+        prompt: String
+    ): String = withContext(Dispatchers.IO) {
+        if (apiKey.isBlank()) return@withContext "⚠️ API Key Gemini belum di-set di Pengaturan."
+        try {
+            val payload = JSONObject().apply {
+                put("contents", JSONArray().apply {
+                    put(JSONObject().apply {
+                        put("parts", JSONArray().apply {
+                            put(JSONObject().apply { put("text", prompt) })
+                        })
+                    })
+                })
+            }
+            val url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$apiKey"
+            val request = Request.Builder()
+                .url(url)
+                .addHeader("Content-Type", "application/json")
+                .post(payload.toString().toRequestBody("application/json".toMediaType()))
+                .build()
+
+            client.newCall(request).execute().use { resp ->
+                val responseBody = resp.body?.string().orEmpty()
+                if (resp.isSuccessful) {
+                    val candidate = JSONObject(responseBody)
+                        .optJSONArray("candidates")
+                        ?.takeIf { it.length() > 0 }
+                        ?.getJSONObject(0)
+                    val parts = candidate?.optJSONObject("content")?.optJSONArray("parts")
+                    val text = parts?.let { arr ->
+                        (0 until arr.length()).joinToString("\n") { i ->
+                            arr.getJSONObject(i).optString("text").orEmpty()
+                        }
+                    }.orEmpty().trim()
+                    if (text.isNotBlank()) text else "Respon kosong dari AI."
+                } else {
+                    "HTTP Error: ${resp.code}"
+                }
+            }
+        } catch (e: Exception) {
+            "Gagal memproses AI: ${e.message}"
+        }
+    }
 }

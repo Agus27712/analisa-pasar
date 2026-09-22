@@ -12,7 +12,6 @@ import agu.analys.config.StrategyMode
 import agu.analys.engine.global.GlobalContextManager
 import agu.analys.engine.intraday.IntradayEvaluator
 import agu.analys.engine.scalping.SignalLifecycleManager
-import agu.analys.engine.secondwave.SecondWaveEvaluator
 import agu.analys.engine.swing.SwingEvaluator
 import agu.analys.model.Timeframe
 import agu.analys.trading.SpotPositionStore
@@ -130,41 +129,6 @@ class CandidateScanWorker(
                                 strategyMode = StrategyMode.OFFICE_DAILY,
                                 signal = trackedIntraday.activeSignalState ?: intradayResult.signal
                             )
-                        }
-                    }
-                }
-
-                // --- Evaluasi Mode SECOND_WAVE ---
-                // Fast screening berbasis summary tick untuk hemat kuota dan CPU
-                val fastSecondWave = SecondWaveEvaluator.evaluateFast(tick, tick.high24h, tick.low24h)
-                if (fastSecondWave.score >= 5) {
-                    val h4Candles = IndodaxMarketService.fetchCandles(cleanSymbol, Timeframe.H4, 25)
-                    val m15Candles = IndodaxMarketService.fetchCandles(cleanSymbol, Timeframe.M15, 25)
-
-                    if (h4Candles.size >= 20 && m15Candles.size >= 20 && h1Candles.size >= 20) {
-                        val secondWaveResult = SecondWaveEvaluator.evaluate(
-                            globalContext = GlobalContextManager.context.value,
-                            price = tick.price,
-                            macroCandles = h4Candles,
-                            h1Candles = h1Candles,
-                            m15Candles = m15Candles,
-                            fees = prefs.tradingFees
-                        )
-                        val trackedSecond = SignalLifecycleManager.process(
-                            symbol = cleanSymbol,
-                            currentPrice = tick.price,
-                            rawSignal = secondWaveResult.signal,
-                            mode = StrategyMode.SECOND_WAVE
-                        )
-                        if (trackedSecond.transition?.hasTriggeringTransition == true && prefs.isNotificationsEnabled) {
-                            if (!positionStore.get(cleanSymbol, isReal = prefs.isRealBuyMode).isHolding) {
-                                AlertNotificationHelper.sendCandidateFoundNotification(
-                                    context = applicationContext,
-                                    symbol = cleanSymbol,
-                                    strategyMode = StrategyMode.SECOND_WAVE,
-                                    signal = trackedSecond.activeSignalState ?: secondWaveResult.signal
-                                )
-                            }
                         }
                     }
                 }

@@ -5,7 +5,6 @@ import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import agu.analys.config.AiProvider
 import agu.analys.config.MarketDataSource
-import agu.analys.config.ScalpingSensitivity
 import agu.analys.config.StrategyMode
 import agu.analys.config.TradingFeeConfig
 import agu.analys.ui.animation.PriceAnimationMode
@@ -51,7 +50,7 @@ class AppPreferences(context: Context) {
         get() = runCatching {
             val name = prefs.getString(KEY_STRATEGY_MODE, null)
             if (name != null) StrategyMode.valueOf(name)
-            else if (isScalpingMode) StrategyMode.SCALPING else StrategyMode.SECOND_WAVE
+            else if (isScalpingMode) StrategyMode.SCALPING else StrategyMode.SWING
         }.getOrDefault(StrategyMode.SCALPING)
         set(value) {
             prefs.edit().putString(KEY_STRATEGY_MODE, value.name).apply()
@@ -167,10 +166,6 @@ class AppPreferences(context: Context) {
     var isScalpingMode: Boolean
         get() = prefs.getBoolean(KEY_SCALPING_MODE, false)
         set(value) = prefs.edit().putBoolean(KEY_SCALPING_MODE, value).apply()
-
-    var scalpingSensitivity: ScalpingSensitivity
-        get() = runCatching { ScalpingSensitivity.valueOf(prefs.getString(KEY_SCALPING_SENSITIVITY, ScalpingSensitivity.AGGRESSIVE.name).orEmpty()) }.getOrDefault(ScalpingSensitivity.AGGRESSIVE)
-        set(value) = prefs.edit().putString(KEY_SCALPING_SENSITIVITY, value.name).apply()
 
     var tradingFees: TradingFeeConfig
         get() = TradingFeeConfig(

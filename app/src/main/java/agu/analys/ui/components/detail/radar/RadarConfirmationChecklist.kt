@@ -53,18 +53,6 @@ fun RadarConfirmationChecklist(
                 "3. Smart Inflow & RSI Akumulasi (40–58)",
                 "4. Area Beli Terukur, Net R:R >= 1.8 & Close Malam"
             )
-            StrategyMode.TRENCHING -> listOf(
-                "1. Flow Persistence & Order Book Inflow (M15)",
-                "2. Kompresi Trench & Support Lantai (1H/H4)",
-                "3. Healthy Pullback / Absorption & Reclaim",
-                "4. Anti-FOMO Guard Pass & Alokasi Risiko"
-            )
-            StrategyMode.SECOND_WAVE -> listOf(
-                "1. Prior Run & Drawdown Reset (Valid 4H/1H)",
-                "2. Accumulation Base & Drawdown Dry (Valid 1H)",
-                "3. Smart Inflow & Higher Low Terbentuk (15M)",
-                "4. Trigger Reclaim Resistance & Zona Entry Ideal"
-            )
             StrategyMode.SCALPING -> listOf(
                 "1. Trend & Bias 1H Valid (Bullish Alignment)",
                 "2. Base Compression & Volume Kering (Valid 15M)",
