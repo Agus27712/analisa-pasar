@@ -39,7 +39,20 @@ enum class ScalpingPath {
 }
 
 /**
- * Structured MTF snapshot dari ScalpingMtfEvaluator.
+ * 6 Checkpoint Konfluensi Standar Industri Trading Spot.
+ */
+data class ConfluenceCheckpoint(
+    val number: Int,
+    val code: String,              // "MTF", "AOV", "VOL", "TRG", "MOM", "RR"
+    val label: String,             // "Struktur MTF", "Area of Value", "Volume Institusi", "Price Action", "Momentum / Div", "Risk/Reward"
+    val isOk: Boolean = false,
+    val status: MtfLegStatus = MtfLegStatus.WAITING,
+    val metricValue: String = "",  // e.g. "EMA Uptrend", "Support Rp 1.450", "Vol 1.6× MA", "Hammer Candle", "RSI 44 Bull Div", "Net 1:2.4"
+    val detail: String = ""
+)
+
+/**
+ * Structured MTF snapshot dari Evaluator Strategi.
  * UI hanya menampilkan — tidak menghitung ulang threshold.
  */
 data class ScalpingMtfSnapshot(
@@ -61,8 +74,73 @@ data class ScalpingMtfSnapshot(
     val waitingFor: String = "",
     val entryCondition: String = "",
     val extended: Boolean = false,
-    val extremeVolatility: Boolean = false
-)
+    val extremeVolatility: Boolean = false,
+    val checkpoints: List<ConfluenceCheckpoint> = emptyList(),
+    val completedCount: Int = 0
+) {
+    fun resolvedCheckpoints(): List<ConfluenceCheckpoint> {
+        if (checkpoints.isNotEmpty()) return checkpoints
+        return listOf(
+            ConfluenceCheckpoint(
+                number = 1,
+                code = "MTF",
+                label = "Struktur MTF",
+                isOk = biasOk,
+                status = biasStatus,
+                metricValue = if (biasOk) "Uptrend Selaras" else "Konsolidasi",
+                detail = biasDetail.ifEmpty { "Pemeriksaan keselarasan tren timeframe makro dan mikro." }
+            ),
+            ConfluenceCheckpoint(
+                number = 2,
+                code = "AOV",
+                label = "Area of Value",
+                isOk = setupOk,
+                status = setupStatus,
+                metricValue = if (setupOk) "Level Kunci Teruji" else "No Man's Land",
+                detail = setupDetail.ifEmpty { "Harga harus merespons Support, Retest, atau Reclaim level penting." }
+            ),
+            ConfluenceCheckpoint(
+                number = 3,
+                code = "VOL",
+                label = "Volume Validasi",
+                isOk = setupOk && triggerOk,
+                status = if (setupOk && triggerOk) MtfLegStatus.OK else MtfLegStatus.WAITING,
+                metricValue = if (setupOk && triggerOk) "Volume Terkonfirmasi" else "Volume Standar",
+                detail = "Volume transaksi mengonfirmasi validitas (breakout bervolume atau pullback kering)."
+            ),
+            ConfluenceCheckpoint(
+                number = 4,
+                code = "TRG",
+                label = "Price Action",
+                isOk = triggerOk,
+                status = triggerStatus,
+                metricValue = if (triggerOk) "Candle Trigger Siap" else "Menunggu Trigger",
+                detail = triggerDetail.ifEmpty { "Konfirmasi pola candlestick pembalikan atau penerusan arah." }
+            ),
+            ConfluenceCheckpoint(
+                number = 5,
+                code = "MOM",
+                label = "Momentum / Div",
+                isOk = triggerOk,
+                status = if (triggerOk) MtfLegStatus.OK else MtfLegStatus.WAITING,
+                metricValue = if (triggerOk) "Momentum Positif" else "Menunggu RSI/MACD",
+                detail = "Filter osilator sehat dan deteksi potensi Bullish Divergence."
+            ),
+            ConfluenceCheckpoint(
+                number = 6,
+                code = "RR",
+                label = "Risk / Reward",
+                isOk = entryPriceOk,
+                status = entryPriceStatus,
+                metricValue = if (entryPriceOk) "Net R:R >= 1:2.0" else "Menunggu Setup R:R",
+                detail = entryPriceDetail.ifEmpty { "Net Risk to Reward minimal 1:2.0 setelah potongan fee Indodax." }
+            )
+        )
+    }
+
+    val resolvedCompletedCount: Int
+        get() = if (completedCount > 0) completedCount else resolvedCheckpoints().count { it.isOk }
+}
 
 enum class TrendSentiment(val displayName: String) {
     STRONG_BULLISH_CONTINUATION("Kelanjutan Bullish Kuat"),

@@ -12,13 +12,16 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.HourglassEmpty
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -28,158 +31,46 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import agu.analys.config.StrategyMode
+import agu.analys.model.ConfluenceCheckpoint
 import agu.analys.model.OrderBookItem
 import agu.analys.model.ScalpingMtfSnapshot
 import agu.analys.ui.theme.*
 import java.util.Locale
 import kotlin.math.roundToInt
 
-data class RadarCheckpointItem(
-    val number: Int,
-    val tabLabel: String,
-    val title: String,
-    val isOk: Boolean,
-    val detail: String
-)
-
+/**
+ * 6-Checkpoint Confluence Stepper untuk Spot Trading (High-Probability Setup).
+ * Menyajikan 6 pilar konfluensi:
+ * 1. MTF (Market Structure)
+ * 2. AoV (Area of Value)
+ * 3. VOL (Volume Validasi)
+ * 4. TRG (Price Action Trigger)
+ * 5. MOM (Momentum / Div)
+ * 6. RR (Risk to Reward >= 1:2)
+ *
+ * Desain segmented, interaktif, rapi, dan dinamis berdasarkan data pasar real-time.
+ */
 @Composable
 fun RadarLinearCheckpointStepper(
     mtf: ScalpingMtfSnapshot,
     completed: Int,
     pulseScale: Float = 1f,
-    strategyMode: StrategyMode = StrategyMode.SCALPING,
+    strategyMode: StrategyMode = StrategyMode.SWING,
     confidence: Int = 0,
     orderBookBids: List<OrderBookItem> = emptyList(),
     orderBookAsks: List<OrderBookItem> = emptyList(),
     modifier: Modifier = Modifier
 ) {
-    val isStep1Ok = mtf.biasStatus.name == "OK" || mtf.biasOk
-    val isStep2Ok = mtf.setupStatus.name == "OK" || mtf.setupOk
-    val isStep3Ok = mtf.triggerStatus.name == "OK" || mtf.triggerOk
-    val isStep4Ok = mtf.entryPriceStatus.name == "OK" || mtf.entryPriceOk
+    val checkpoints = remember(mtf) { mtf.resolvedCheckpoints() }
+    val totalCount = checkpoints.size.coerceAtLeast(6)
+    val passedCount = remember(checkpoints) { checkpoints.count { it.isOk } }
 
-    val checkpoints = remember(mtf, strategyMode) {
-        val (tab1, title1, def1Ok, def1Wait) = when (strategyMode) {
-            StrategyMode.SWING -> listOf(
-                "Tren Makro",
-                "Tren Makro · Keselarasan EMA (1D/4H/1H)",
-                "Tren Makro Bullish Kuat (Harga bergerak di atas EMA 20/50).",
-                "Memantau keselarasan tren dan keselarasan EMA makro..."
-            )
-            StrategyMode.OFFICE_DAILY -> listOf(
-                "Sesi Pagi",
-                "Sesi Pagi · Open & Tren H4",
-                "Sesi Open Pagi (06:00-11:30) & Tren H4 Bullish Stabil.",
-                "Menunggu Sesi Open Pagi / keselarasan tren H4..."
-            )
-            StrategyMode.SCALPING -> listOf(
-                "Bias 1H",
-                "Bias 1H · Tren Utama",
-                "Tren 1 Jam Bullish Kuat (EMA 20/50/200 selaras naik).",
-                "Memantau keselarasan tren pada timeframe 1 Jam..."
-            )
-        }
-
-        val (tab2, title2, def2Ok, def2Wait) = when (strategyMode) {
-            StrategyMode.SWING -> listOf(
-                "Struktur",
-                "Struktur · Support Lantai",
-                "Struktur market higher-low & support lantai swing bertahan.",
-                "Menunggu pembentukan konsolidasi atau pantulan support swing..."
-            )
-            StrategyMode.OFFICE_DAILY -> listOf(
-                "Anti-Dump",
-                "Anti-Dump · Deteksi Trauma & Support",
-                "Lolos filter Anti Flash Dump & support akumulasi kokoh.",
-                "Mengevaluasi riwayat dump & lantai support konsolidasi..."
-            )
-            StrategyMode.SCALPING -> listOf(
-                "Setup 15M",
-                "Setup 15M · Struktur Pasar",
-                "Struktur 15M valid (Pullback ke support EMA / Golden Cross).",
-                "Menunggu pembentukan konsolidasi atau pantulan support 15M..."
-            )
-        }
-
-        val (tab3, title3, def3Ok, def3Wait) = when (strategyMode) {
-            StrategyMode.SWING -> listOf(
-                "Momentum",
-                "Momentum · RSI & MACD Inflow",
-                "Momentum RSI & histogram MACD mendukung arah swing.",
-                "Menunggu trigger momentum RSI dan konfirmasi volume swing..."
-            )
-            StrategyMode.OFFICE_DAILY -> listOf(
-                "RSI Inflow",
-                "Akumulasi · RSI & Momentum Sehat",
-                "RSI di zona akumulasi (40-58) & histogram MACD positif.",
-                "Menunggu reset RSI dan konfirmasi momentum akumulasi..."
-            )
-            StrategyMode.SCALPING -> listOf(
-                "Trigger 1M",
-                "Trigger 1M · Momentum Sinyal",
-                "Breakout volume 1M & momentum RSI/MACD terkonfirmasi aktif.",
-                "Menunggu trigger lonjakan volume beli dan stochastic/MACD 1M..."
-            )
-        }
-
-        val (tab4, title4, def4Ok, def4Wait) = when (strategyMode) {
-            StrategyMode.SWING -> listOf(
-                "Risk:Reward",
-                "Area Entry · Net R:R >= 1:1.5",
-                "Harga berada di zona entry dengan Net R:R optimal.",
-                "Menunggu harga bergerak masuk ke toleransi zona beli swing..."
-            )
-            StrategyMode.OFFICE_DAILY -> listOf(
-                "Close Malam",
-                "Area Entry · Target R:R & Exit Malam",
-                "Harga berada di zona entry (Net R:R >= 1.8) siap exit sesi malam.",
-                "Menunggu harga di zona entry aman sebelum sesi malam..."
-            )
-            StrategyMode.SCALPING -> listOf(
-                "Area Entry",
-                "Area Entry · Konfirmasi Harga",
-                "Harga saat ini berada di zona ideal beli dengan risk/reward optimal.",
-                "Menunggu harga bergerak masuk ke dalam toleransi zona beli ideal..."
-            )
-        }
-
-        listOf(
-            RadarCheckpointItem(
-                number = 1,
-                tabLabel = tab1,
-                title = title1,
-                isOk = isStep1Ok,
-                detail = if (isStep1Ok) mtf.biasDetail.ifBlank { def1Ok } else mtf.biasDetail.ifBlank { def1Wait }
-            ),
-            RadarCheckpointItem(
-                number = 2,
-                tabLabel = tab2,
-                title = title2,
-                isOk = isStep2Ok,
-                detail = if (isStep2Ok) mtf.setupDetail.ifBlank { def2Ok } else mtf.setupDetail.ifBlank { def2Wait }
-            ),
-            RadarCheckpointItem(
-                number = 3,
-                tabLabel = tab3,
-                title = title3,
-                isOk = isStep3Ok,
-                detail = if (isStep3Ok) mtf.triggerDetail.ifBlank { def3Ok } else mtf.triggerDetail.ifBlank { def3Wait }
-            ),
-            RadarCheckpointItem(
-                number = 4,
-                tabLabel = tab4,
-                title = title4,
-                isOk = isStep4Ok,
-                detail = if (isStep4Ok) mtf.entryPriceDetail.ifBlank { def4Ok } else mtf.entryPriceDetail.ifBlank { def4Wait }
-            )
-        )
-    }
-
-    // Checkpoint aktif saat ini (checkpoint pertama yang belum OK, atau ke-4 jika sudah semua)
-    val activeCheckpointIndex = remember(checkpoints) {
+    // Checkpoint aktif yang sedang dilihat (default ke checkpoint pertama yang belum lolos, atau ke-0 jika semua lolos)
+    val firstUnpassedIdx = remember(checkpoints) {
         val idx = checkpoints.indexOfFirst { !it.isOk }
-        if (idx >= 0) idx else 3
+        if (idx >= 0) idx else 0
     }
+    var selectedIndex by remember(mtf) { mutableIntStateOf(firstUnpassedIdx) }
 
     // Perhitungan Bid & Ask Flow
     val totalBids = remember(orderBookBids) { orderBookBids.sumOf { it.amount } }
@@ -197,103 +88,36 @@ fun RadarLinearCheckpointStepper(
     val ratioSign = if (ratio >= 1.0) ">" else "<"
     val ratioValueStr = String.format(Locale.US, "%.2f", ratio)
 
-    // Penggabungan Stepper (45%) + Kekuatan Sinyal (35%) + Aliran Bid/Ask (20%) menjadi Persentase Dinamis Sampai Entri
-    val dynamicEntryProgress = remember(completed, confidence, bidPct) {
-        val stepWeight = (completed.coerceIn(0, 4) / 4.0) * 45.0
-        val confWeight = (confidence.coerceIn(0, 100) / 100.0) * 35.0
+    // Progress dinamis: 6 checkpoints (50%) + Confidence (30%) + Orderbook Flow (20%)
+    val dynamicEntryProgress = remember(passedCount, confidence, bidPct) {
+        val stepWeight = (passedCount / 6.0) * 50.0
+        val confWeight = (confidence.coerceIn(0, 100) / 100.0) * 30.0
         val bidWeight = (bidPct.coerceIn(0.0, 100.0) / 100.0) * 20.0
         val combined = (stepWeight + confWeight + bidWeight).roundToInt()
-        if (completed == 4 && confidence >= 70) {
-            combined.coerceAtLeast(85).coerceIn(0, 100)
+        if (passedCount == 6) {
+            combined.coerceAtLeast(88).coerceIn(0, 100)
         } else {
-            combined.coerceIn(0, 100)
+            combined.coerceIn(0, 99)
         }
     }
 
     val animProgress by animateFloatAsState(
         targetValue = (dynamicEntryProgress / 100f).coerceIn(0f, 1f),
-        animationSpec = tween(600, easing = FastOutSlowInEasing),
+        animationSpec = tween(500, easing = FastOutSlowInEasing),
         label = "dynamic_entry_progress"
     )
 
     val progressColor = when {
-        dynamicEntryProgress >= 75 -> TvGreen
-        dynamicEntryProgress >= 45 -> TvBlue
+        passedCount == 6 -> TvGreen
+        passedCount >= 4 -> TvBlue
         else -> TvAmber
     }
 
     Column(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        // 1. Header Baris Kesiapan Entri
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "Kesiapan Entri",
-                color = TvTextPrimary,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold
-            )
-
-            Text(
-                text = "$dynamicEntryProgress%",
-                color = progressColor,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Black
-            )
-        }
-
-        // 2. Loading Bar Dinamis (Penggabungan Stepper + Sinyal + Aliran Bid/Ask)
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(12.dp)
-                .clip(RoundedCornerShape(6.dp))
-                .background(TvSurfaceVariant)
-        ) {
-            // Fill Bar dengan Gradient Halus & Dinamis
-            Box(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .fillMaxWidth(animProgress)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(
-                        when {
-                            dynamicEntryProgress >= 75 -> Brush.horizontalGradient(
-                                listOf(Color(0xFF00B0FF), Color(0xFF00E676), TvGreen)
-                            )
-                            dynamicEntryProgress >= 45 -> Brush.horizontalGradient(
-                                listOf(TvBlue.copy(alpha = 0.8f), Color(0xFF00E5FF))
-                            )
-                            else -> Brush.horizontalGradient(
-                                listOf(TvAmber.copy(alpha = 0.8f), TvBlue.copy(alpha = 0.8f))
-                            )
-                        }
-                    )
-            )
-
-            // Garis Pembatas Checkpoint (25%, 50%, 75%)
-            Row(
-                modifier = Modifier.fillMaxSize(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                repeat(3) {
-                    Box(
-                        modifier = Modifier
-                            .width(1.5.dp)
-                            .fillMaxHeight()
-                            .background(TvBackground.copy(alpha = 0.6f))
-                    )
-                }
-            }
-        }
-
-        // 3. Persentase Aliran Bid & Ask di Bawah Loading Bar
+        // ── 1. HEADER: Kesiapan Konfluensi & Persentase ───────────────────────
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -301,75 +125,181 @@ fun RadarLinearCheckpointStepper(
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Text(
-                    text = "Bid ${String.format(Locale.US, "%.1f", bidPct)}%",
-                    color = TvGreen,
-                    fontSize = 10.5.sp,
-                    fontWeight = FontWeight.Bold
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(if (passedCount == 6) TvGreen else TvBlue)
                 )
                 Text(
-                    text = "vs",
-                    color = TvTextSecondary,
-                    fontSize = 10.sp
-                )
-                Text(
-                    text = "Ask ${String.format(Locale.US, "%.1f", askPct)}%",
-                    color = TvRed,
-                    fontSize = 10.5.sp,
+                    text = "Konfluensi ($passedCount/6 Lolos)",
+                    color = TvTextPrimary,
+                    fontSize = 12.sp,
                     fontWeight = FontWeight.Bold
                 )
             }
 
-            // Ratio: (> atau < X.X.x)
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(
-                        if (ratio >= 1.0) TvGreen.copy(alpha = 0.12f) else TvRed.copy(alpha = 0.12f)
-                    )
-                    .border(
-                        0.5.dp,
-                        if (ratio >= 1.0) TvGreen.copy(alpha = 0.35f) else TvRed.copy(alpha = 0.35f),
-                        RoundedCornerShape(4.dp)
-                    )
-                    .padding(horizontal = 6.dp, vertical = 2.dp)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Text(
-                    text = "($ratioSign ${ratioValueStr}x)",
-                    color = if (ratio >= 1.0) TvGreen else TvRed,
+                    text = if (passedCount == 6) "HIGH-PROBABILITY SETUP" else "FILTERING...",
+                    color = if (passedCount == 6) TvGreen else TvTextSecondary,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "$dynamicEntryProgress%",
+                    color = progressColor,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Black
                 )
             }
         }
 
-        // 4. Box Keterangan di Bawah Loading Bar
+        // ── 2. LOADING BAR DENGAN 6 SEGMEN ──────────────────────────────────
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(10.dp)
+                .clip(RoundedCornerShape(5.dp))
+                .background(TvSurfaceVariant)
+        ) {
+            // Fill Bar dengan Gradient Halus & Dinamis
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth(animProgress)
+                    .clip(RoundedCornerShape(5.dp))
+                    .background(
+                        when {
+                            passedCount == 6 -> Brush.horizontalGradient(
+                                listOf(Color(0xFF00B0FF), Color(0xFF00E676), TvGreen)
+                            )
+                            passedCount >= 4 -> Brush.horizontalGradient(
+                                listOf(TvBlue.copy(alpha = 0.85f), Color(0xFF00E5FF))
+                            )
+                            else -> Brush.horizontalGradient(
+                                listOf(TvAmber.copy(alpha = 0.85f), TvBlue.copy(alpha = 0.75f))
+                            )
+                        }
+                    )
+            )
+
+            // 5 Garis Pembatas (Membagi 6 segmen checkpoint yang jelas)
+            Row(
+                modifier = Modifier.fillMaxSize(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                repeat(5) {
+                    Box(
+                        modifier = Modifier
+                            .width(1.5.dp)
+                            .fillMaxHeight()
+                            .background(TvBackground.copy(alpha = 0.75f))
+                    )
+                }
+            }
+        }
+
+        // ── 3. 6 SEGMENTED CHECKPOINT TABS (INTERAKTIF & RESPONSIF) ─────────
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            checkpoints.forEachIndexed { index, cp ->
+                val isSelected = index == selectedIndex
+                val tabBg = when {
+                    isSelected && cp.isOk -> TvGreen.copy(alpha = 0.22f)
+                    isSelected -> TvBlue.copy(alpha = 0.22f)
+                    cp.isOk -> TvGreen.copy(alpha = 0.10f)
+                    else -> TvSurfaceVariant.copy(alpha = 0.45f)
+                }
+                val tabBorder = when {
+                    isSelected && cp.isOk -> TvGreen
+                    isSelected -> TvBlue
+                    cp.isOk -> TvGreen.copy(alpha = 0.40f)
+                    else -> Color.Transparent
+                }
+
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(tabBg)
+                        .border(1.dp, tabBorder, RoundedCornerShape(6.dp))
+                        .clickable { selectedIndex = index }
+                        .padding(vertical = 5.dp, horizontal = 2.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            if (cp.isOk) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = null,
+                                    tint = TvGreen,
+                                    modifier = Modifier.size(9.dp)
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.HourglassEmpty,
+                                    contentDescription = null,
+                                    tint = if (isSelected) TvBlue else TvTextSecondary,
+                                    modifier = Modifier.size(9.dp)
+                                )
+                            }
+                            Spacer(Modifier.width(2.dp))
+                            Text(
+                                text = "${cp.number}",
+                                color = if (cp.isOk) TvGreen else if (isSelected) TvBlue else TvTextSecondary,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Black
+                            )
+                        }
+                        Text(
+                            text = cp.code,
+                            color = if (cp.isOk) TvGreen else if (isSelected) TvTextPrimary else TvTextSecondary,
+                            fontSize = 8.5.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
+        }
+
+        // ── 4. KETERANGAN CHECKPOINT AKTIF YANG DIPILIH (INFORMATIF & DINAMIS) ──
         AnimatedContent(
-            targetState = activeCheckpointIndex,
+            targetState = selectedIndex,
             transitionSpec = {
-                (slideInVertically(animationSpec = tween(300, easing = FastOutSlowInEasing)) { height -> height / 3 } + fadeIn(animationSpec = tween(250)))
-                    .togetherWith(slideOutVertically(animationSpec = tween(200, easing = FastOutSlowInEasing)) { height -> -height / 3 } + fadeOut(animationSpec = tween(200)))
+                (slideInVertically(animationSpec = tween(250, easing = FastOutSlowInEasing)) { height -> height / 4 } + fadeIn(animationSpec = tween(200)))
+                    .togetherWith(slideOutVertically(animationSpec = tween(180, easing = FastOutSlowInEasing)) { height -> -height / 4 } + fadeOut(animationSpec = tween(180)))
             },
-            label = "checkpoint_detail_transition"
+            label = "confluence_checkpoint_detail"
         ) { targetIdx ->
-            val currentItem = checkpoints[targetIdx]
-            val isCurrentScanning = !currentItem.isOk
+            val cp = checkpoints.getOrNull(targetIdx) ?: checkpoints.first()
+            val isCurrentPassed = cp.isOk
 
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp))
+                    .clip(RoundedCornerShape(8.dp))
                     .background(TvSurface)
                     .border(
                         1.dp,
-                        when {
-                            currentItem.isOk -> TvGreen.copy(alpha = 0.35f)
-                            isCurrentScanning -> TvBlue.copy(alpha = 0.35f)
-                            else -> TvBorder
-                        },
-                        RoundedCornerShape(10.dp)
+                        if (isCurrentPassed) TvGreen.copy(alpha = 0.35f) else TvBlue.copy(alpha = 0.30f),
+                        RoundedCornerShape(8.dp)
                     )
                     .padding(10.dp)
             ) {
@@ -377,7 +307,7 @@ fun RadarLinearCheckpointStepper(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    // Header Status dalam Box Keterangan
+                    // Header Baris Detail Checkpoint
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -392,29 +322,21 @@ fun RadarLinearCheckpointStepper(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(4.dp))
                                     .background(
-                                        when {
-                                            currentItem.isOk -> TvGreen.copy(alpha = 0.15f)
-                                            isCurrentScanning -> TvBlue.copy(alpha = 0.15f)
-                                            else -> TvSurfaceVariant
-                                        }
+                                        if (isCurrentPassed) TvGreen.copy(alpha = 0.15f) else TvBlue.copy(alpha = 0.15f)
                                     )
                                     .padding(horizontal = 6.dp, vertical = 2.dp)
                             ) {
                                 Text(
-                                    text = "STEP ${currentItem.number}/4",
-                                    color = when {
-                                        currentItem.isOk -> TvGreen
-                                        isCurrentScanning -> TvBlue
-                                        else -> TvTextSecondary
-                                    },
-                                    fontSize = 9.5.sp,
+                                    text = "CHECKPOINT ${cp.number}/6",
+                                    color = if (isCurrentPassed) TvGreen else TvBlue,
+                                    fontSize = 9.sp,
                                     fontWeight = FontWeight.ExtraBold,
-                                    letterSpacing = 0.4.sp
+                                    letterSpacing = 0.3.sp
                                 )
                             }
 
                             Text(
-                                text = currentItem.title,
+                                text = cp.label,
                                 color = TvTextPrimary,
                                 fontSize = 11.5.sp,
                                 fontWeight = FontWeight.Bold,
@@ -428,79 +350,118 @@ fun RadarLinearCheckpointStepper(
                         // Status Badge
                         Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(12.dp))
+                                .clip(RoundedCornerShape(10.dp))
                                 .background(
-                                    when {
-                                        currentItem.isOk -> TvGreen.copy(alpha = 0.15f)
-                                        isCurrentScanning -> TvBlue.copy(alpha = 0.15f)
-                                        else -> TvSurfaceVariant
-                                    }
+                                    if (isCurrentPassed) TvGreen.copy(alpha = 0.15f) else TvAmber.copy(alpha = 0.15f)
                                 )
                                 .border(
                                     0.5.dp,
-                                    when {
-                                        currentItem.isOk -> TvGreen.copy(alpha = 0.4f)
-                                        isCurrentScanning -> TvBlue.copy(alpha = 0.4f)
-                                        else -> TvBorder
-                                    },
-                                    RoundedCornerShape(12.dp)
+                                    if (isCurrentPassed) TvGreen.copy(alpha = 0.4f) else TvAmber.copy(alpha = 0.4f),
+                                    RoundedCornerShape(10.dp)
                                 )
                                 .padding(horizontal = 8.dp, vertical = 2.dp)
                         ) {
                             Text(
-                                text = if (currentItem.isOk) "SIAP" else "MENUNGGU",
-                                color = if (currentItem.isOk) TvGreen else TvBlue,
-                                fontSize = 9.5.sp,
+                                text = if (isCurrentPassed) "LOLOS ✓" else "MENUNGGU ⏳",
+                                color = if (isCurrentPassed) TvGreen else TvAmber,
+                                fontSize = 9.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         }
                     }
 
-                    // Teks Keterangan Lengkap & Informatif
-                    Text(
-                        text = currentItem.detail,
-                        color = if (currentItem.isOk) TvTextPrimary else TvTextSecondary,
-                        fontSize = 11.sp,
-                        lineHeight = 15.sp
-                    )
-
-                    // Indikator 4 Checkpoint Mini
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 2.dp),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        checkpoints.forEach { cp ->
-                            Row(
+                    // Metric Pill (Data Real-time)
+                    if (cp.metricValue.isNotBlank()) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = "Kalkulasi:",
+                                color = TvTextSecondary,
+                                fontSize = 10.sp
+                            )
+                            Box(
                                 modifier = Modifier
-                                    .weight(1f)
                                     .clip(RoundedCornerShape(4.dp))
-                                    .background(
-                                        if (cp.isOk) TvGreen.copy(alpha = 0.10f) else TvSurfaceVariant.copy(alpha = 0.5f)
-                                    )
-                                    .padding(vertical = 3.dp, horizontal = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Center
+                                    .background(TvSurfaceVariant)
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
                             ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(5.dp)
-                                        .clip(CircleShape)
-                                        .background(if (cp.isOk) TvGreen else TvTextSecondary.copy(alpha = 0.4f))
-                                )
-                                Spacer(Modifier.width(3.dp))
+                                val displayedMetric = if (cp.code == "VOL" && totalVolume > 0 && cp.metricValue.contains("·")) {
+                                    val volPrefix = cp.metricValue.substringBefore("·").trim()
+                                    "$volPrefix · Bid ${String.format(Locale.US, "%.0f", bidPct)}%"
+                                } else {
+                                    cp.metricValue
+                                }
                                 Text(
-                                    text = cp.tabLabel,
-                                    color = if (cp.isOk) TvGreen else TvTextSecondary,
-                                    fontSize = 8.5.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    maxLines = 1
+                                    text = displayedMetric,
+                                    color = if (isCurrentPassed) TvGreen else TvTextPrimary,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.SemiBold
                                 )
                             }
                         }
                     }
+
+                    // Teks Penjelasan Detail
+                    Text(
+                        text = cp.detail,
+                        color = if (isCurrentPassed) TvTextPrimary else TvTextSecondary,
+                        fontSize = 10.5.sp,
+                        lineHeight = 14.5.sp
+                    )
                 }
+            }
+        }
+
+        // ── 5. ALIRAN BID & ASK (ORDERBOOK PRESSURE) ────────────────────────
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = "Bid ${String.format(Locale.US, "%.1f", bidPct)}%",
+                    color = TvGreen,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "vs",
+                    color = TvTextSecondary,
+                    fontSize = 9.5.sp
+                )
+                Text(
+                    text = "Ask ${String.format(Locale.US, "%.1f", askPct)}%",
+                    color = TvRed,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(
+                        if (ratio >= 1.0) TvGreen.copy(alpha = 0.12f) else TvRed.copy(alpha = 0.12f)
+                    )
+                    .border(
+                        0.5.dp,
+                        if (ratio >= 1.0) TvGreen.copy(alpha = 0.35f) else TvRed.copy(alpha = 0.35f),
+                        RoundedCornerShape(4.dp)
+                    )
+                    .padding(horizontal = 6.dp, vertical = 2.dp)
+            ) {
+                Text(
+                    text = "Tekanan: ($ratioSign ${ratioValueStr}x)",
+                    color = if (ratio >= 1.0) TvGreen else TvRed,
+                    fontSize = 9.5.sp,
+                    fontWeight = FontWeight.Bold
+                )
             }
         }
     }

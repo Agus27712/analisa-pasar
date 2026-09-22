@@ -274,4 +274,50 @@ object IndicatorMath {
         
         return if (sumV > 0.0) sumPV / sumV else history.last().close
     }
+
+    data class DivergenceResult(
+        val hasBullishDivergence: Boolean = false,
+        val hasBearishDivergence: Boolean = false,
+        val detail: String = ""
+    )
+
+    /**
+     * Deteksi Bullish Divergence Klasik (Harga membuat Lower/Equal Low, RSI membuat Higher Low).
+     */
+    fun detectDivergence(history: List<CandleBar>, rsiPeriod: Int = 14, lookback: Int = 25): DivergenceResult {
+        if (history.size < lookback + rsiPeriod) return DivergenceResult()
+        val slice = history.takeLast(lookback + rsiPeriod)
+        val rsiValues = mutableListOf<Double>()
+        for (i in rsiPeriod until slice.size) {
+            val sub = slice.subList(0, i + 1)
+            rsiValues.add(rsi(sub, rsiPeriod))
+        }
+        if (rsiValues.size < 8) return DivergenceResult()
+        val priceLows = slice.takeLast(rsiValues.size).map { it.low }
+
+        val currentLow = priceLows.last()
+        val currentRsi = rsiValues.last()
+
+        val half = rsiValues.size / 2
+        var prevLowIdx = -1
+        var minLow = Double.MAX_VALUE
+        for (i in 0 until half) {
+            if (priceLows[i] < minLow) {
+                minLow = priceLows[i]
+                prevLowIdx = i
+            }
+        }
+
+        if (prevLowIdx >= 0) {
+            val prevLow = priceLows[prevLowIdx]
+            val prevRsi = rsiValues[prevLowIdx]
+            if (currentLow <= prevLow * 1.008 && currentRsi > prevRsi + 2.5 && currentRsi < 68.0) {
+                return DivergenceResult(
+                    hasBullishDivergence = true,
+                    detail = "Bullish Divergence: Harga uji low tapi RSI naik dari ${prevRsi.toInt()} ke ${currentRsi.toInt()}"
+                )
+            }
+        }
+        return DivergenceResult()
+    }
 }

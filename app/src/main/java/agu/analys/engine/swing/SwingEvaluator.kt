@@ -377,21 +377,24 @@ object SwingEvaluator {
         val step2Ok = step1Ok && detectedSetup != SwingSetup.NONE && !tooCloseToHigh &&
             (nearSupport || nearResistance || brokeAboveResistance || brokeBelowSupport || micro.hasBullishBOS || micro.hasBullishSweep)
 
+        val confluence = agu.analys.engine.confluence.ConfluenceEvaluator.evaluate(
+            price = price,
+            macroCandles = history,
+            microCandles = history,
+            strategyMode = agu.analys.config.StrategyMode.SWING,
+            fees = fees
+        )
+
         val isRsiBullish = rsi in 35.0..68.0 || (rsi in 28.0..38.0 && macdHist >= 0)
         val step3Ok = step2Ok && (isRsiBullish || macdHist >= 0 || strongVolume) && buy > sell
 
-        val step4Ok = step3Ok && netRr >= 1.4 && buy >= 38.0 && !isOverExtended
+        val isRrValid = netRr >= 2.0
+        val step4Ok = step3Ok && isRrValid && buy >= 38.0 && !isOverExtended
 
-        val completedSteps = when {
-            step4Ok -> 4
-            step3Ok -> 3
-            step2Ok -> 2
-            step1Ok -> 1
-            else -> 0
-        }
+        val completedSteps = confluence.completedCount
 
         // ── Keputusan akhir ────────────────────────────────
-        val isQualifiedBuy = step4Ok && buy >= 42.0 && buy > sell * 1.15 && !isNearHighDanger &&
+        val isQualifiedBuy = step4Ok && isRrValid && buy >= 42.0 && buy > sell * 1.15 && !isNearHighDanger &&
             detectedSetup in listOf(SwingSetup.REJECTION, SwingSetup.BREAKOUT, SwingSetup.RETEST, SwingSetup.RECLAIM_FAILED) &&
             (detectedSetup != SwingSetup.REJECTION || !rejectionAtResistance)
 
@@ -399,6 +402,10 @@ object SwingEvaluator {
             globalContext.isVetoActive -> SignalAction.HOLD
             isQualifiedBuy && !isTechnicalDistribution -> SignalAction.BUY
             else -> SignalAction.HOLD
+        }
+
+        if (!isRrValid && step3Ok) {
+            reasons.add(0, "⚠️ Risk/Reward: Net R:R 1:${fmt(netRr)} < 1:2.0. Ruang menuju resistance terlalu sempit — setup di-skip.")
         }
 
         if (isTechnicalDistribution) {
@@ -475,9 +482,9 @@ object SwingEvaluator {
             isNearHighDanger -> "SWING DEKAT HIGH / OVEREXTENDED (HOLD)"
             isSolidBreakdown -> "SWING BREAKDOWN (HOLD)"
             isTechnicalDistribution -> "SWING PULLBACK / RESISTANCE"
-            completedSteps == 4 -> "SWING ENTRY READY"
-            completedSteps > 0 -> "SWING ANALYZING ($completedSteps/4)"
-            else -> "SWING ANALYZING (0/4)"
+            confluence.isAllPassed -> "SWING ENTRY READY (6/6)"
+            confluence.completedCount > 0 -> "SWING ANALYZING (${confluence.completedCount}/6)"
+            else -> "SWING ANALYZING (0/6)"
         }
 
         val mtfSnapshot = ScalpingMtfSnapshot(
@@ -505,19 +512,18 @@ object SwingEvaluator {
                 isNearHighDanger -> "Menunggu pullback dari zona high (jangan entry di pucuk)"
                 isSolidBreakdown -> "Menunggu pembentukan lantai support baru"
                 isTechnicalDistribution -> "Menunggu lantai support baru (jangan entry)"
-                completedSteps == 4 -> "Siap eksekusi Swing Buy"
-                completedSteps == 3 -> "Menunggu konfirmasi R:R & zona entry"
-                completedSteps == 2 -> "Menunggu momentum RSI & MACD"
-                completedSteps == 1 -> "Menunggu konfirmasi setup S/R"
-                else -> "Menunggu konfirmasi setup lengkap"
+                confluence.isAllPassed -> "Siap eksekusi Swing Buy (6/6 lolos)"
+                else -> confluence.summaryReason
             },
             entryCondition = when (detectedSetup) {
                 SwingSetup.REJECTION -> "Rejection di Support"
                 SwingSetup.BREAKOUT -> "Breakout level penting"
                 SwingSetup.RETEST -> "Retest level setelah break"
                 SwingSetup.RECLAIM_FAILED -> "Reclaim / Failed Break"
-                else -> "Menunggu 1 dari 4 setup di S/R"
-            }
+                else -> "Menunggu 6 Konfluensi di Key Level"
+            },
+            checkpoints = confluence.checkpoints,
+            completedCount = confluence.completedCount
         )
 
         return SwingEvalResult(

@@ -42,7 +42,7 @@ fun RadarHeaderSection(
 
         Spacer(Modifier.width(8.dp))
 
-        val radarLedColor = statusColor ?: if (completed == 4) TvGreen else TvBlue
+        val radarLedColor = statusColor ?: if (completed >= 6) TvGreen else TvBlue
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -68,14 +68,13 @@ fun RadarHeaderSection(
                 )
             }
 
-            if (statusText != null) {
-                Text(
-                    text = statusText,
-                    color = radarLedColor,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
+            val textToShow = statusText ?: "$completed/6 Checkpoint"
+            Text(
+                text = textToShow,
+                color = radarLedColor,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold
+            )
         }
     }
 }

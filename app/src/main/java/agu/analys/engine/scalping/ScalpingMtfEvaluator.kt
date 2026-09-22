@@ -228,6 +228,16 @@ object ScalpingMtfEvaluator {
             else -> "Menunggu harga menembus VWAP 1M."
         }
 
+        val confluence = agu.analys.engine.confluence.ConfluenceEvaluator.evaluate(
+            price = price,
+            macroCandles = m15Candles,
+            microCandles = m1Candles,
+            strategyMode = agu.analys.config.StrategyMode.SCALPING,
+            orderBookBids = bids,
+            orderBookAsks = asks,
+            fees = fees
+        )
+
         val entryDetailText = when {
             !step3Ok -> "Menunggu Checkpoint 3 lolos."
             step4Ok -> "Net RR: 1:${fmt(feeResult.netRr)} (Valid)."
@@ -275,7 +285,9 @@ object ScalpingMtfEvaluator {
             },
             entryCondition = "M1 VSA/VWAP & Orderbook > 1.0",
             extended = rsi1M > 78.0,
-            extremeVolatility = isDangerousNoise
+            extremeVolatility = isDangerousNoise,
+            checkpoints = confluence.checkpoints,
+            completedCount = confluence.completedCount
         )
 
         val finalConfidence = when {

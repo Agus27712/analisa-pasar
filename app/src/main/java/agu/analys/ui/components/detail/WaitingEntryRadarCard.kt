@@ -96,8 +96,7 @@ fun WaitingEntryRadarCard(
 
     val mtf = signal.mtf
     val completedBuySteps = remember(mtf) {
-        listOf(mtf.biasStatus, mtf.setupStatus, mtf.triggerStatus, mtf.entryPriceStatus)
-            .count { it.name == "OK" || it.name == "CONFIRMED" }
+        mtf.resolvedCompletedCount
     }
 
     val completedSellSteps = remember(positionContext, sellSignalState) {

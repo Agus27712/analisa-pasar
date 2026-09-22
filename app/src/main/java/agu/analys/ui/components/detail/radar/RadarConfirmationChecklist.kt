@@ -12,6 +12,7 @@ import androidx.compose.material.icons.filled.HourglassEmpty
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -27,6 +28,8 @@ fun RadarConfirmationChecklist(
     strategyMode: StrategyMode,
     modifier: Modifier = Modifier
 ) {
+    val checkpoints = remember(mtf) { mtf.resolvedCheckpoints() }
+
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -35,36 +38,15 @@ fun RadarConfirmationChecklist(
             .padding(10.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        val isStep1Ok = mtf.biasStatus.name == "OK" || mtf.biasOk
-        val isStep2Ok = mtf.setupStatus.name == "OK" || mtf.setupOk
-        val isStep3Ok = mtf.triggerStatus.name == "OK" || mtf.triggerOk
-        val isStep4Ok = mtf.entryPriceStatus.name == "OK" || mtf.entryPriceOk
-
-        val (step1Text, step2Text, step3Text, step4Text) = when (strategyMode) {
-            StrategyMode.SWING -> listOf(
-                "1. Tren Makro & Alignment EMA (1D/4H/1H)",
-                "2. Struktur Market & Support Lantai (Higher Low)",
-                "3. Momentum & Volume Inflow (RSI/MACD)",
-                "4. Risk/Reward Optimal & Toleransi Entry"
-            )
-            StrategyMode.OFFICE_DAILY -> listOf(
-                "1. Sesi Open Pagi (06:00-11:30) & Tren EMA H4",
-                "2. Anti Flash Dump (Base Aman & Tanpa Trauma Dump)",
-                "3. Smart Inflow & RSI Akumulasi (40–58)",
-                "4. Area Beli Terukur, Net R:R >= 1.8 & Close Malam"
-            )
-            StrategyMode.SCALPING -> listOf(
-                "1. Trend & Bias 1H Valid (Bullish Alignment)",
-                "2. Base Compression & Volume Kering (Valid 15M)",
-                "3. Smart Inflow & Higher Low Terbentuk (1M)",
-                "4. Trigger Reclaim Resistance 15M (Volume Masuk!)"
+        checkpoints.forEach { cp ->
+            RadarChecklistItem(
+                stepNumber = cp.number,
+                label = "${cp.number}. ${cp.label}",
+                metricValue = cp.metricValue,
+                isOk = cp.isOk,
+                detail = cp.detail
             )
         }
-
-        RadarChecklistItem(1, step1Text, isStep1Ok, mtf.biasDetail)
-        RadarChecklistItem(2, step2Text, isStep2Ok, mtf.setupDetail)
-        RadarChecklistItem(3, step3Text, isStep3Ok, mtf.triggerDetail)
-        RadarChecklistItem(4, step4Text, isStep4Ok, mtf.entryPriceDetail)
     }
 }
 
@@ -72,6 +54,7 @@ fun RadarConfirmationChecklist(
 fun RadarChecklistItem(
     stepNumber: Int,
     label: String,
+    metricValue: String = "",
     isOk: Boolean,
     detail: String
 ) {
@@ -113,14 +96,27 @@ fun RadarChecklistItem(
         Spacer(Modifier.width(8.dp))
 
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = label,
-                color = if (isOk) TvGreen else TvTextPrimary,
-                fontSize = 11.sp,
-                fontWeight = if (isOk) FontWeight.Bold else FontWeight.Medium,
-                maxLines = 1,
-                modifier = Modifier.basicMarquee()
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = label,
+                    color = if (isOk) TvGreen else TvTextPrimary,
+                    fontSize = 11.sp,
+                    fontWeight = if (isOk) FontWeight.Bold else FontWeight.Medium,
+                    maxLines = 1,
+                    modifier = Modifier.weight(1f, fill = false).basicMarquee()
+                )
+                if (metricValue.isNotBlank()) {
+                    Text(
+                        text = "· $metricValue",
+                        color = if (isOk) TvGreen else TvAmber,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
             if (detail.isNotBlank()) {
                 Text(
                     text = detail,
@@ -141,7 +137,7 @@ fun RadarChecklistItem(
                 .padding(horizontal = 6.dp, vertical = 2.dp)
         ) {
             Text(
-                text = if (isOk) "[✓] OK" else "[⚡ SCAN]",
+                text = if (isOk) "LOLOS" else "SCAN",
                 color = if (isOk) TvGreen else TvBlue,
                 fontSize = 9.sp,
                 fontWeight = FontWeight.Bold

@@ -343,18 +343,20 @@ object IntradayEvaluator {
         }
 
         // ── WATERFALL CHECKPOINTS ───────────────────────────────────────────
+        val confluence = agu.analys.engine.confluence.ConfluenceEvaluator.evaluate(
+            price = price,
+            macroCandles = history,
+            microCandles = history,
+            strategyMode = agu.analys.config.StrategyMode.OFFICE_DAILY,
+            fees = fees
+        )
+
         val step1Ok = !isDangerous && isTrendValidForIntraday && !flashDumpTrauma
         val step2Ok = step1Ok && (price >= supportLevel * 0.988) && !tooCloseToHigh && !pumpAndDumpTrap
         val step3Ok = step2Ok && (rsi in 35.0..65.0) && macdHist >= -0.002
-        val step4Ok = step3Ok && netRr >= 1.35 && buyScore >= 50.0 && !isOverExtended
+        val step4Ok = step3Ok && netRr >= 1.5 && buyScore >= 50.0 && !isOverExtended
 
-        val completedSteps = when {
-            step4Ok -> 4
-            step3Ok -> 3
-            step2Ok -> 2
-            step1Ok -> 1
-            else -> 0
-        }
+        val completedSteps = confluence.completedCount
 
         // ── Keputusan akhir Intraday Disiplin Sesi (Open Pagi, Close Malam) ──
         // Diperbolehkan BUY pada Sesi Open Pagi (06:00–11:30 WIB) atau Sesi Siang Akumulasi jika momentum kuat
@@ -474,9 +476,9 @@ object IntradayEvaluator {
                 isNearHighDanger -> "DEKAT HIGH / OVEREXTENDED (HOLD)"
                 isBreakdown -> "BREAKDOWN / DOWNTREND (HOLD)"
                 isDistribution -> "DISTRIBUSI TINGGI (HOLD)"
-                completedSteps == 4 -> if (intradayPhase == IntradayPhase.OPEN_PAGI) "READY (OPEN PAGI)" else "READY (INTRADAY)"
-                completedSteps > 0 -> "ANALYZING ($completedSteps/4)"
-                else -> "ANALYZING (0/4)"
+                confluence.isAllPassed -> if (intradayPhase == IntradayPhase.OPEN_PAGI) "READY (OPEN PAGI 6/6)" else "READY (INTRADAY 6/6)"
+                confluence.completedCount > 0 -> "ANALYZING (${confluence.completedCount}/6)"
+                else -> "ANALYZING (0/6)"
             },
             waitingFor = when {
                 intradayPhase.isCloseWindow -> "Sesi Close Malam: Tutup posisi harian menjadi kas sebelum tengah malam"
@@ -488,13 +490,12 @@ object IntradayEvaluator {
                 isNearHighDanger -> "Menunggu pullback dari zona high"
                 isBreakdown -> "Menunggu pembentukan support baru"
                 isDistribution -> "Menunggu tekanan jual mereda"
-                completedSteps == 4 -> "Siap eksekusi (Open Pagi)"
-                completedSteps == 3 -> "Menunggu konfirmasi zona entry & R:R"
-                completedSteps == 2 -> "Menunggu momentum RSI & MACD"
-                completedSteps == 1 -> "Menunggu pantulan support + jarak aman dari high"
-                else -> "Menunggu konfirmasi setup lengkap"
+                confluence.isAllPassed -> "Siap eksekusi (Open Pagi)"
+                else -> confluence.summaryReason
             },
-            entryCondition = "Intraday Disiplin Sesi · Anti Flash Dump · High R:R"
+            entryCondition = "Intraday 6 Konfluensi · Anti Flash Dump · High R:R",
+            checkpoints = confluence.checkpoints,
+            completedCount = confluence.completedCount
         )
 
         return IntradayEvalResult(

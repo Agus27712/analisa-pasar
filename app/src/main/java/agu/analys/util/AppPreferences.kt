@@ -50,8 +50,8 @@ class AppPreferences(context: Context) {
         get() = runCatching {
             val name = prefs.getString(KEY_STRATEGY_MODE, null)
             if (name != null) StrategyMode.valueOf(name)
-            else if (isScalpingMode) StrategyMode.SCALPING else StrategyMode.SWING
-        }.getOrDefault(StrategyMode.SCALPING)
+            else StrategyMode.SWING
+        }.getOrDefault(StrategyMode.SWING)
         set(value) {
             prefs.edit().putString(KEY_STRATEGY_MODE, value.name).apply()
             isScalpingMode = (value == StrategyMode.SCALPING)
