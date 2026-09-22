@@ -46,7 +46,9 @@ class RealTradeExecutor(
             val (success, message) = IndodaxTradeApiV2.cancelOrder(apiKey, secretKey, symbol, orderId)
             if (!success && looksLikeRateLimit(message)) {
                 onRateLimit(message)
-                onResult(false, message)
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    onResult(false, message)
+                }
                 return@launch
             }
             onStatusUpdate(message)
@@ -54,7 +56,9 @@ class RealTradeExecutor(
                 AppDatabase.getInstance().realTradeDao().deleteOpenOrderById(orderId)
                 delay(INTER_REQUEST_DELAY_MS)
             }
-            onResult(success, message)
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                onResult(success, message)
+            }
         }
     }
 
@@ -166,7 +170,9 @@ class RealTradeExecutor(
 
             if (!buyResult.success && looksLikeRateLimit(buyResult.message)) {
                 onRateLimit(buyResult.message)
-                onResult(false, buyResult.message)
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    onResult(false, buyResult.message)
+                }
                 return@launch
             }
 
@@ -187,7 +193,9 @@ class RealTradeExecutor(
 
                     if (executedQty <= MIN_EXECUTED_QTY) {
                         onStatusUpdate("BUY terkirim tapi belum FILLED. TP tidak dipasang.")
-                        onResult(true, "BUY berhasil di server, tapi belum FILLED.")
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                            onResult(true, "BUY berhasil di server, tapi belum FILLED.")
+                        }
                         refreshBalance()
                         return@launch
                     }
@@ -207,13 +215,17 @@ class RealTradeExecutor(
                     if (!s2 && looksLikeRateLimit(m2)) onRateLimit(m2)
 
                     onStatusUpdate("BUY + TP: $finalMsg")
-                    onResult(true, "BUY berhasil!\nAuto Sell: $finalMsg")
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        onResult(true, "BUY berhasil!\nAuto Sell: $finalMsg")
+                    }
                 } else {
                     if (isBuy && buyResult.executedQty > MIN_EXECUTED_QTY) {
                         finalExecutedQty = buyResult.executedQty
                     }
                     onStatusUpdate(buyResult.message)
-                    onResult(true, buyResult.message)
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        onResult(true, buyResult.message)
+                    }
                 }
 
                 // Update cached real balance & average price instantly (agar saat IP berubah di luar rumah, saldo tetap akurat 1:1)
@@ -262,7 +274,9 @@ class RealTradeExecutor(
                 refreshBalance()
             } else {
                 onStatusUpdate(buyResult.message)
-                onResult(false, buyResult.message)
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    onResult(false, buyResult.message)
+                }
             }
         }
     }
