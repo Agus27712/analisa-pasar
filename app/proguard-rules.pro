@@ -48,5 +48,18 @@
 -keep class androidx.compose.** { *; }
 -dontwarn androidx.compose.**
 
+# SLF4J (transitive dependency from ta4j)
+-dontwarn org.slf4j.**
+-dontwarn org.slf4j.impl.**
+
+# Ta4j (Technical Analysis Library)
+-dontwarn org.ta4j.core.**
+-keep class org.ta4j.core.** { *; }
+
+# WorkManager
+-dontwarn androidx.work.**
+-keep class androidx.work.** { *; }
+
 # Prevent stripping of BuildConfig
 -keep class agu.analys.BuildConfig { *; }
+
