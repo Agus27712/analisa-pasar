@@ -372,7 +372,7 @@ private fun formatSignedMoney(value: Double, quoteAsset: String = "IDR"): String
     (if (value >= 0) "+" else "-") + PriceFormatter.formatPrice(abs(value), quoteAsset = quoteAsset)
 
 private fun formatSignedPct(value: Double): String =
-    (if (value >= 0) "+" else "-") + PriceFormatter.formatPercentage(abs(value), includePlusSign = false)
+    PriceFormatter.formatPercentage(value, includePlusSign = true)
 
 private fun normalizeDecimalInput(value: String): String {
     val normalized = value.replace(',', '.')

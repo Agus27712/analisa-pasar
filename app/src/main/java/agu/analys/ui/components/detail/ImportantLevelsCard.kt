@@ -159,11 +159,12 @@ private fun LevelLine(
     quoteAsset: String
 ) {
     val dist = abs(price - level) / price.coerceAtLeast(1e-9) * 100.0
+    val distFormatted = PriceFormatter.formatPercentage(dist, includePlusSign = false)
     val relation = when {
-        !isResistance && price > level -> "${fmtPct(dist)} di bawah harga"
-        !isResistance -> "${fmtPct(dist)} di atas harga"
-        price < level -> "${fmtPct(dist)} di atas harga"
-        else -> "${fmtPct(dist)} di bawah harga (terlewati)"
+        !isResistance && price > level -> "$distFormatted di bawah harga"
+        !isResistance -> "$distFormatted di atas harga"
+        price < level -> "$distFormatted di atas harga"
+        else -> "$distFormatted di bawah harga (terlewati)"
     }
     Column(
         Modifier
@@ -193,5 +194,3 @@ private fun ObservasiLine(title: String, reason: String) {
         Text(reason, fontSize = 12.sp, color = TvTextPrimary, lineHeight = 16.sp)
     }
 }
-
-private fun fmtPct(value: Double): String = String.format("%.2f%%", value)

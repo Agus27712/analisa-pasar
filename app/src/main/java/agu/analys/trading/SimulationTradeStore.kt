@@ -503,11 +503,6 @@ class SimulationTradeStore(context: Context) {
     }
 
     private fun formatMoney(value: Double, quoteAsset: String): String {
-        val isUsdt = quoteAsset.equals("USDT", true) || quoteAsset.equals("USD", true)
-        return if (isUsdt) {
-            String.format("%.4f %s", value, quoteAsset.uppercase())
-        } else {
-            "Rp " + String.format("%,.0f", value).replace(",", ".")
-        }
+        return agu.analys.util.PriceFormatter.formatPrice(value, showSymbol = true, quoteAsset = quoteAsset)
     }
 }

@@ -112,11 +112,11 @@ object TradeLogExporter {
         if (snapshot != null) {
             // Category A: Order Book & Liquidity
             sb.append("**[A. Order Book & Likuiditas Pasar]**\n")
-            sb.append("- Bid vs Ask Ratio: Bid ${snapshot.bidRatioPct?.let { String.format(Locale.US, "%.1f%%", it) } ?: "-"} vs Ask ${snapshot.askRatioPct?.let { String.format(Locale.US, "%.1f%%", it) } ?: "-"}\n")
+            sb.append("- Bid vs Ask Ratio: Bid ${snapshot.bidRatioPct?.let { PriceFormatter.formatPercentage(it, includePlusSign = false, decimals = 1) } ?: "-"} vs Ask ${snapshot.askRatioPct?.let { PriceFormatter.formatPercentage(it, includePlusSign = false, decimals = 1) } ?: "-"}\n")
             sb.append("- Order Book Pressure: ${snapshot.orderBookPressure?.let { if (it > 0) "+$it% (Buyer)" else "$it% (Seller)" } ?: "Netral"}\n")
-            sb.append("- Spread Bid/Ask: ${snapshot.spreadPct?.let { String.format(Locale.US, "%.3f%%", it) } ?: "-"}\n")
+            sb.append("- Spread Bid/Ask: ${snapshot.spreadPct?.let { PriceFormatter.formatPercentage(it, includePlusSign = false, decimals = 3) } ?: "-"}\n")
             sb.append("- Volume 24 Jam: ${snapshot.volume24h?.let { PriceFormatter.formatRawDecimal(it) } ?: "-"} $baseAsset\n")
-            sb.append("- Perubahan Harga 24 Jam: ${snapshot.priceChange24h?.let { String.format(Locale.US, "%+.2f%%", it) } ?: "-"}\n\n")
+            sb.append("- Perubahan Harga 24 Jam: ${snapshot.priceChange24h?.let { PriceFormatter.formatPercentage(it, includePlusSign = true, decimals = 2) } ?: "-"}\n\n")
 
             // Category B: Momentum & Oscillators
             sb.append("**[B. Momentum & Osilator]**\n")
@@ -138,7 +138,7 @@ object TradeLogExporter {
             sb.append("- Bollinger Upper: ${snapshot.bbUpper?.let { PriceFormatter.formatPrice(it, quoteAsset = quote) } ?: "-"}\n")
             sb.append("- Bollinger Middle: ${snapshot.bbMiddle?.let { PriceFormatter.formatPrice(it, quoteAsset = quote) } ?: "-"}\n")
             sb.append("- Bollinger Lower: ${snapshot.bbLower?.let { PriceFormatter.formatPrice(it, quoteAsset = quote) } ?: "-"}\n")
-            sb.append("- Bandwidth %: ${snapshot.bbWidthPct?.let { String.format(Locale.US, "%.2f%%", it) } ?: "-"}\n")
+            sb.append("- Bandwidth %: ${snapshot.bbWidthPct?.let { PriceFormatter.formatPercentage(it, includePlusSign = false, decimals = 2) } ?: "-"}\n")
             sb.append("- Average True Range (ATR): ${snapshot.atr?.let { PriceFormatter.formatPrice(it, quoteAsset = quote) } ?: "-"}\n\n")
 
             // Category E: AI Evaluator Decision & Reasons

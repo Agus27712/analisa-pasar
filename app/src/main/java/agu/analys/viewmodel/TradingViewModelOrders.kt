@@ -67,7 +67,7 @@ fun TradingViewModel.submitSimulationOrder(
     val curBids = marketDataCoordinator.orderBookBids.value
     val curAsks = marketDataCoordinator.orderBookAsks.value
     val mode = strategyMode.value.name
-    val spotPos = positionStore.get(pair.symbol)
+    val spotPos = positionStore.get(pair.symbol, isReal = false)
 
     val snapshot = agu.analys.trading.TradeSignalSnapshot.capture(
         symbol = pair.symbol,
@@ -388,7 +388,7 @@ fun TradingViewModel.executeSellOrders(
         val curBids = marketDataCoordinator.orderBookBids.value
         val curAsks = marketDataCoordinator.orderBookAsks.value
         val mode = strategyMode.value.name
-        val spotPos = positionStore.get(pair.symbol)
+        val spotPos = positionStore.get(pair.symbol, isReal = false)
 
         val snapshot = agu.analys.trading.TradeSignalSnapshot.capture(
             symbol = pair.symbol,

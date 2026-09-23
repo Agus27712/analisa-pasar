@@ -255,10 +255,24 @@ object IndodaxMarketService {
                 val symbol = item.optString("symbol", "")
                 val base = item.optString("base_currency", "")
                 val traded = item.optString("traded_currency", "")
-                val qtyIncrement = item.optDouble("quantity_increment", 1.0)
-                val qtyDecimals = Math.max(0, -Math.log10(qtyIncrement).toInt())
-                val pricePrecision = item.optDouble("price_precision", 1.0)
-                val priceDecimals = if (pricePrecision > 0) Math.max(0, -Math.log10(pricePrecision).toInt()) else 2
+                val isUsdt = traded.equals("usdt", true) || traded.equals("usd", true)
+
+                // Indodax API: price_precision represents decimal places (e.g. 0 for BTCIDR, 2 for USDT pairs, 4-8 for micro coins)
+                // or tick size (e.g. 0.01, 0.0001).
+                val rawPricePrec = item.optDouble("price_precision", if (isUsdt) 2.0 else 0.0)
+                val priceDecimals = when {
+                    rawPricePrec >= 1.0 -> rawPricePrec.toInt().coerceIn(0, 8)
+                    rawPricePrec > 0.0 && rawPricePrec < 1.0 -> Math.max(0, -Math.log10(rawPricePrec).toInt()).coerceIn(0, 8)
+                    else -> if (isUsdt) 2 else 0
+                }
+
+                val rawQtyInc = item.optDouble("quantity_increment", 0.00000001)
+                val qtyDecimals = when {
+                    rawQtyInc > 0.0 && rawQtyInc < 1.0 -> Math.max(0, -Math.log10(rawQtyInc).toInt()).coerceIn(0, 8)
+                    rawQtyInc >= 1.0 -> 0
+                    else -> 8
+                }
+
                 results.add(
                     agu.analys.model.PairPrecision(
                         id = id,

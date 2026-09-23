@@ -45,10 +45,10 @@ class CandidateScanWorker(
 
         val positionStore = SpotPositionStore(applicationContext)
 
-        // 1. Filter koin: lewati koin yang sedang HOLDING
+        // 1. Filter koin: lewati koin yang sedang HOLDING (di akun real maupun simulasi)
         val eligibleSymbols = watchlist.filter { rawSymbol ->
             val clean = rawSymbol.uppercase().replace("/", "").replace("-", "")
-            !positionStore.get(clean).isHolding
+            !positionStore.get(clean, isReal = true).isHolding && !positionStore.get(clean, isReal = false).isHolding
         }
 
         if (eligibleSymbols.isEmpty()) {
@@ -77,7 +77,8 @@ class CandidateScanWorker(
                 if (tick.volume24h < 500_000_000.0) continue
 
                 // Cek ulang holding status
-                if (positionStore.get(cleanSymbol).isHolding) continue
+                val isHolding = positionStore.get(cleanSymbol, isReal = true).isHolding || positionStore.get(cleanSymbol, isReal = false).isHolding
+                if (isHolding) continue
 
                 // Fetch candle H1 untuk SWING & H4 panjang untuk INTRADAY (Anti Flash Dump)
                 val h1Candles = IndodaxMarketService.fetchCandles(cleanSymbol, Timeframe.H1, 45)
@@ -101,7 +102,8 @@ class CandidateScanWorker(
                     )
                     if (trackedSwing.transition?.hasTriggeringTransition == true && prefs.isNotificationsEnabled) {
                         if (!positionStore.get(cleanSymbol, isReal = prefs.isRealBuyMode).isHolding) {
-                            agu.analys.util.AppLogManager.service("CandidateFound", "🔔 [SWING] Kandidat BUY terdeteksi untuk $cleanSymbol @ Rp ${PriceFormatter.formatIdrNumber(tick.price)}! Mengirim notifikasi...")
+                            val priceStr = PriceFormatter.formatPrice(tick.price, showSymbol = true)
+                            agu.analys.util.AppLogManager.service("CandidateFound", "🔔 [SWING] Kandidat BUY terdeteksi untuk $cleanSymbol @ $priceStr! Mengirim notifikasi...")
                             AlertNotificationHelper.sendCandidateFoundNotification(
                                 context = applicationContext,
                                 symbol = cleanSymbol,
@@ -127,7 +129,8 @@ class CandidateScanWorker(
                     )
                     if (trackedIntraday.transition?.hasTriggeringTransition == true && prefs.isNotificationsEnabled) {
                         if (!positionStore.get(cleanSymbol, isReal = prefs.isRealBuyMode).isHolding) {
-                            agu.analys.util.AppLogManager.service("CandidateFound", "🔔 [INTRADAY] Kandidat BUY terdeteksi untuk $cleanSymbol @ Rp ${PriceFormatter.formatIdrNumber(tick.price)}! Mengirim notifikasi...")
+                            val priceStr = PriceFormatter.formatPrice(tick.price, showSymbol = true)
+                            agu.analys.util.AppLogManager.service("CandidateFound", "🔔 [INTRADAY] Kandidat BUY terdeteksi untuk $cleanSymbol @ $priceStr! Mengirim notifikasi...")
                             AlertNotificationHelper.sendCandidateFoundNotification(
                                 context = applicationContext,
                                 symbol = cleanSymbol,

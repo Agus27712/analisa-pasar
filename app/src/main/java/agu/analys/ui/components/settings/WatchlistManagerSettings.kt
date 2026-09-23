@@ -324,7 +324,7 @@ fun WatchlistManagerSettings(
                                             .padding(horizontal = 6.dp, vertical = 2.dp)
                                     ) {
                                         Text(
-                                            text = "%s%.2f%%".format(if (isUp) "+" else "", change24h),
+                                            text = PriceFormatter.formatPercentage(change24h, includePlusSign = true),
                                             color = if (isUp) TvGreen else TvRed,
                                             fontSize = 10.sp,
                                             fontWeight = FontWeight.Bold

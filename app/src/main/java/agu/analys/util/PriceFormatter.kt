@@ -1,34 +1,56 @@
 package agu.analys.util
 
+import java.math.BigDecimal
+import java.math.RoundingMode
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
 import java.util.Locale
 import kotlin.math.abs
 
+/**
+ * Centralized Price & Asset Value Formatter for INDODAX and crypto assets.
+ * 
+ * Complies with Indodax API specifications for:
+ * - IDR quote pairs (Whole Rupiah for standard coins, decimal fractions for micro/meme coins)
+ * - USDT / USD quote pairs (2 decimals for major pairs, high precision for micro pairs)
+ * - Percentage formatting with dynamic precision and sign handling (+ / -)
+ * - Order price & quantity formatting for API payload calculations without precision mismatch
+ * - Volume formatting with localized unit scaling (T/Mil/jt/rb for IDR, B/M/K for USDT)
+ */
 object PriceFormatter {
 
-    /** Format harga dengan simbol mata uang dinamis (IDR / USDT / BIDR / USD) */
-    fun formatPrice(price: Double, showSymbol: Boolean = true, quoteAsset: String = "IDR"): String {
-        if (price.isNaN() || price.isInfinite()) {
-            val isUsdt = quoteAsset.equals("USDT", true) || quoteAsset.equals("USD", true)
+    /**
+     * Format harga dengan simbol mata uang dinamis (IDR / USDT / BIDR / USD)
+     * Mengikuti spesifikasi Indodax API.
+     */
+    fun formatPrice(
+        price: Double,
+        showSymbol: Boolean = true,
+        quoteAsset: String = "IDR",
+        decimals: Int? = null
+    ): String {
+        val isUsdt = isUsdtQuote(quoteAsset)
+        if (price.isNaN() || price.isInfinite() || price == 0.0) {
             return if (!showSymbol) "0" else if (isUsdt) "$0.00" else "Rp 0"
         }
-        if (price == 0.0) {
-            val isUsdt = quoteAsset.equals("USDT", true) || quoteAsset.equals("USD", true)
-            return if (!showSymbol) "0" else if (isUsdt) "$0.00" else "Rp 0"
-        }
+
         val isNegative = price < 0.0
         val absPrice = abs(price)
-        val isUsdt = quoteAsset.equals("USDT", true) || quoteAsset.equals("USD", true)
+
         val formatted = if (isUsdt) {
             val prefix = if (showSymbol) "$" else ""
             val symbols = DecimalFormatSymbols(Locale.US)
-            when {
-                absPrice < 0.00001 -> prefix + DecimalFormat("0.########", symbols).format(absPrice)
-                absPrice < 0.001 -> prefix + DecimalFormat("0.######", symbols).format(absPrice)
-                absPrice < 1.0 -> prefix + DecimalFormat("0.####", symbols).format(absPrice)
-                absPrice < 10.0 -> prefix + DecimalFormat("0.###", symbols).format(absPrice)
-                else -> prefix + DecimalFormat("#,##0.00", symbols).format(absPrice)
+            if (decimals != null) {
+                val pattern = if (decimals <= 0) "#,##0" else "#,##0." + "0".repeat(decimals)
+                prefix + DecimalFormat(pattern, symbols).format(absPrice)
+            } else {
+                when {
+                    absPrice < 0.00001 -> prefix + DecimalFormat("0.########", symbols).format(absPrice)
+                    absPrice < 0.001 -> prefix + DecimalFormat("0.######", symbols).format(absPrice)
+                    absPrice < 1.0 -> prefix + DecimalFormat("0.####", symbols).format(absPrice)
+                    absPrice < 10.0 -> prefix + DecimalFormat("0.###", symbols).format(absPrice)
+                    else -> prefix + DecimalFormat("#,##0.00", symbols).format(absPrice)
+                }
             }
         } else {
             val prefix = if (showSymbol) "Rp " else ""
@@ -36,30 +58,46 @@ object PriceFormatter {
                 groupingSeparator = '.'
                 decimalSeparator = ','
             }
-            when {
-                absPrice < 0.00001 -> prefix + DecimalFormat("0.########", symbols).format(absPrice)
-                absPrice < 0.01 -> prefix + DecimalFormat("0.######", symbols).format(absPrice)
-                absPrice < 1.0 -> prefix + DecimalFormat("0.####", symbols).format(absPrice)
-                absPrice < 100.0 && absPrice % 1.0 != 0.0 -> prefix + DecimalFormat("#,##0.##", symbols).format(absPrice)
-                else -> {
-                    val rounded = kotlin.math.round(absPrice).toLong()
-                    prefix + DecimalFormat("#,##0", symbols).format(rounded)
+            if (decimals != null) {
+                val pattern = if (decimals <= 0) "#,##0" else "#,##0." + "0".repeat(decimals)
+                prefix + DecimalFormat(pattern, symbols).format(absPrice)
+            } else {
+                when {
+                    absPrice < 0.00001 -> prefix + DecimalFormat("0.########", symbols).format(absPrice)
+                    absPrice < 0.01 -> prefix + DecimalFormat("0.######", symbols).format(absPrice)
+                    absPrice < 1.0 -> prefix + DecimalFormat("0.####", symbols).format(absPrice)
+                    absPrice < 100.0 && absPrice % 1.0 != 0.0 -> prefix + DecimalFormat("#,##0.##", symbols).format(absPrice)
+                    else -> {
+                        val rounded = kotlin.math.round(absPrice).toLong()
+                        prefix + DecimalFormat("#,##0", symbols).format(rounded)
+                    }
                 }
             }
         }
         return if (isNegative) "-$formatted" else formatted
     }
 
-    /** Alias — selalu full price untuk level AI */
+    /** Alias — selalu full price dengan quoteAsset sesuai */
     fun formatPriceFull(price: Double, quoteAsset: String = "IDR"): String =
         formatPrice(price, showSymbol = true, quoteAsset = quoteAsset)
 
+    /** Format harga khusus USDT/USD dengan simbol dollar */
+    fun formatUsdtPrice(amount: Double, showSymbol: Boolean = true): String =
+        formatPrice(amount, showSymbol = showSymbol, quoteAsset = "USDT")
+
+    /** Format uang serbaguna berdasarkan quoteAsset */
+    fun formatMoney(value: Double, quoteAsset: String = "IDR", showSymbol: Boolean = true): String =
+        formatPrice(value, showSymbol = showSymbol, quoteAsset = quoteAsset)
+
+    /**
+     * Format volume 24h dengan satuan singkatan sesuai mata uang kuotasi
+     */
     fun formatVolume(volume: Double, quoteAsset: String = "IDR"): String {
         if (volume.isNaN() || volume.isInfinite() || volume == 0.0) {
-            return if (quoteAsset.equals("USDT", true) || quoteAsset.equals("USD", true)) "$0" else "Rp 0"
+            return if (isUsdtQuote(quoteAsset)) "$0" else "Rp 0"
         }
         val absVol = abs(volume)
-        val isUsdt = quoteAsset.equals("USDT", true) || quoteAsset.equals("USD", true)
+        val isUsdt = isUsdtQuote(quoteAsset)
         if (isUsdt) {
             val symbols = DecimalFormatSymbols(Locale.US)
             return when {
@@ -90,15 +128,95 @@ object PriceFormatter {
         }
     }
 
-    fun formatPercentage(change: Double, includePlusSign: Boolean = true): String {
-        if (change.isNaN() || change.isInfinite()) return "0.00%"
-        val symbols = DecimalFormatSymbols(Locale.US)
-        val formatted = DecimalFormat("0.00", symbols).format(abs(change))
-        return when {
-            change > 0 -> if (includePlusSign) "+$formatted%" else "$formatted%"
-            change < 0 -> "-$formatted%"
-            else -> "0.00%"
+    /**
+     * Format persentase standar dengan tanda +/- dan presisi desimal kustom
+     * Cth: +2.45%, -0.80%, 0.00%
+     */
+    fun formatPercentage(
+        change: Double,
+        includePlusSign: Boolean = true,
+        decimals: Int = 2
+    ): String {
+        if (change.isNaN() || change.isInfinite()) {
+            val zeros = if (decimals <= 0) "0" else "0." + "0".repeat(decimals)
+            return "$zeros%"
         }
+        val symbols = DecimalFormatSymbols(Locale.US)
+        val pattern = if (decimals <= 0) "0" else "0." + "0".repeat(decimals)
+        val formatted = DecimalFormat(pattern, symbols).format(abs(change))
+        return when {
+            change > 0.0 -> if (includePlusSign) "+$formatted%" else "$formatted%"
+            change < 0.0 -> "-$formatted%"
+            else -> {
+                val zeros = if (decimals <= 0) "0" else "0." + "0".repeat(decimals)
+                "$zeros%"
+            }
+        }
+    }
+
+    /**
+     * Format harga yang valid untuk API payload order Indodax (tanpa exponential / ribuan separator).
+     * Mencegah kegagalan eksekusi real buy/sell order di Indodax API V2.
+     */
+    fun formatOrderPrice(
+        price: Double,
+        quoteAsset: String = "IDR",
+        priceDecimals: Int? = null
+    ): String {
+        if (price.isNaN() || price.isInfinite() || price <= 0.0) return "0"
+        val dec = priceDecimals ?: determinePriceDecimals(price, quoteAsset)
+        return BigDecimal.valueOf(price)
+            .setScale(dec, RoundingMode.HALF_UP)
+            .toPlainString()
+    }
+
+    /**
+     * Format kuantitas yang valid untuk API payload order Indodax.
+     * Menggunakan pembulatan ke bawah (RoundingMode.DOWN) agar order tidak melebihi saldo akun.
+     */
+    fun formatOrderQuantity(
+        quantity: Double,
+        baseAsset: String = "",
+        qtyDecimals: Int = 8
+    ): String {
+        if (quantity.isNaN() || quantity.isInfinite() || quantity <= 0.0) return "0"
+        val dec = qtyDecimals.coerceIn(0, 8)
+        return BigDecimal.valueOf(quantity)
+            .setScale(dec, RoundingMode.DOWN)
+            .stripTrailingZeros()
+            .toPlainString()
+    }
+
+    /**
+     * Menentukan presisi desimal harga Indodax sesuai aturan pair & nilai harga.
+     */
+    fun determinePriceDecimals(price: Double, quoteAsset: String): Int {
+        val isUsdt = isUsdtQuote(quoteAsset)
+        val absPrice = abs(price)
+        return if (isUsdt) {
+            when {
+                absPrice < 0.00001 -> 8
+                absPrice < 0.001 -> 6
+                absPrice < 1.0 -> 4
+                absPrice < 10.0 -> 3
+                else -> 2
+            }
+        } else {
+            when {
+                absPrice < 0.00001 -> 8
+                absPrice < 0.01 -> 6
+                absPrice < 1.0 -> 4
+                absPrice < 100.0 && absPrice % 1.0 != 0.0 -> 2
+                else -> 0
+            }
+        }
+    }
+
+    fun isUsdtQuote(quoteAsset: String): Boolean {
+        return quoteAsset.equals("USDT", true) ||
+                quoteAsset.equals("USD", true) ||
+                quoteAsset.equals("BUSD", true) ||
+                quoteAsset.equals("USDC", true)
     }
 
     fun formatRsi(rsi: Double): String {
@@ -128,14 +246,15 @@ object PriceFormatter {
         }
     }
 
-    fun formatQuantity(quantity: Double): String {
+    fun formatQuantity(quantity: Double, maxDecimals: Int = 8): String {
         if (quantity.isNaN() || quantity.isInfinite() || quantity <= 0.0) return "0"
         return if (quantity >= 1000.0) {
             String.format(Locale.US, "%,.2f", quantity).replace(",", ".")
         } else if (quantity >= 1.0) {
             String.format(Locale.US, "%.4f", quantity).trimEnd('0').trimEnd('.')
         } else {
-            String.format(Locale.US, "%.6f", quantity).trimEnd('0').trimEnd('.')
+            val pattern = "0." + "#".repeat(maxDecimals.coerceIn(2, 8))
+            DecimalFormat(pattern, DecimalFormatSymbols(Locale.US)).format(quantity)
         }
     }
 
@@ -152,8 +271,7 @@ object PriceFormatter {
 
     /** Format nominal IDR dengan dukungan pecahan desimal koin kecil (cth: 38.028 atau 0,00015 atau -40) */
     fun formatIdrNumber(amount: Double): String {
-        if (amount.isNaN() || amount.isInfinite()) return "0"
-        if (amount == 0.0) return "0"
+        if (amount.isNaN() || amount.isInfinite() || amount == 0.0) return "0"
         val symbols = DecimalFormatSymbols(Locale("id", "ID")).apply {
             groupingSeparator = '.'
             decimalSeparator = ','
@@ -229,6 +347,9 @@ object PriceFormatter {
         return sanitized.filter { it.isDigit() || it == '.' || it == '-' }.toDoubleOrNull() ?: 0.0
     }
 
+    /** Parser serbaguna untuk input nilai numerik */
+    fun parseCleanDouble(input: String): Double = parseCleanIdrDouble(input)
+
     /** Helper umum untuk format angka desimal ringkas di evaluator & sinyal */
     fun fmt(v: Double, decimals: Int = 2): String =
         String.format(Locale.US, "%.${decimals}f", v)
@@ -247,15 +368,15 @@ object PriceFormatter {
     fun fmtPriceInt(v: Double): String =
         String.format(Locale.US, "%,.0f", v)
 
-    fun formatCoinQuantity(quantity: java.math.BigDecimal, baseAsset: String, decimals: Int): String {
-        if (quantity.compareTo(java.math.BigDecimal.ZERO) == 0) return "0 $baseAsset"
-        val formatted = quantity.setScale(decimals, java.math.RoundingMode.DOWN)
+    fun formatCoinQuantity(quantity: BigDecimal, baseAsset: String, decimals: Int = 8): String {
+        if (quantity.compareTo(BigDecimal.ZERO) == 0) return "0 $baseAsset"
+        val formatted = quantity.setScale(decimals, RoundingMode.DOWN)
             .stripTrailingZeros()
             .toPlainString()
         return "$formatted $baseAsset"
     }
 
-    fun formatCoinQuantity(quantity: Double, baseAsset: String, decimals: Int): String {
-        return formatCoinQuantity(java.math.BigDecimal.valueOf(quantity), baseAsset, decimals)
+    fun formatCoinQuantity(quantity: Double, baseAsset: String, decimals: Int = 8): String {
+        return formatCoinQuantity(BigDecimal.valueOf(quantity), baseAsset, decimals)
     }
 }

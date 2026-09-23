@@ -320,10 +320,10 @@ fun TradeLogDetailDialog(
                                 CategoryBox(
                                     title = "A. Order Book & Likuiditas",
                                     items = listOf(
-                                        "Bid Ratio" to (activeSnapshot.bidRatioPct?.let { String.format(Locale.US, "%.1f%%", it) } ?: "-"),
-                                        "Ask Ratio" to (activeSnapshot.askRatioPct?.let { String.format(Locale.US, "%.1f%%", it) } ?: "-"),
+                                        "Bid Ratio" to (activeSnapshot.bidRatioPct?.let { PriceFormatter.formatPercentage(it, includePlusSign = false, decimals = 1) } ?: "-"),
+                                        "Ask Ratio" to (activeSnapshot.askRatioPct?.let { PriceFormatter.formatPercentage(it, includePlusSign = false, decimals = 1) } ?: "-"),
                                         "Pressure" to (activeSnapshot.orderBookPressure?.let { if (it > 0) "+$it% (Buyer)" else "$it% (Seller)" } ?: "Netral"),
-                                        "Spread" to (activeSnapshot.spreadPct?.let { String.format(Locale.US, "%.3f%%", it) } ?: "-"),
+                                        "Spread" to (activeSnapshot.spreadPct?.let { PriceFormatter.formatPercentage(it, includePlusSign = false, decimals = 3) } ?: "-"),
                                         "24h Vol" to (activeSnapshot.volume24h?.let { PriceFormatter.formatRawDecimal(it) } ?: "-")
                                     )
                                 )
@@ -358,7 +358,7 @@ fun TradeLogDetailDialog(
                                         "BB Upper" to (activeSnapshot.bbUpper?.let { PriceFormatter.formatPrice(it, quoteAsset = quote) } ?: "-"),
                                         "BB Middle" to (activeSnapshot.bbMiddle?.let { PriceFormatter.formatPrice(it, quoteAsset = quote) } ?: "-"),
                                         "BB Lower" to (activeSnapshot.bbLower?.let { PriceFormatter.formatPrice(it, quoteAsset = quote) } ?: "-"),
-                                        "Bandwidth" to (activeSnapshot.bbWidthPct?.let { String.format(Locale.US, "%.2f%%", it) } ?: "-"),
+                                        "Bandwidth" to (activeSnapshot.bbWidthPct?.let { PriceFormatter.formatPercentage(it, includePlusSign = false, decimals = 2) } ?: "-"),
                                         "ATR" to (activeSnapshot.atr?.let { PriceFormatter.formatPrice(it, quoteAsset = quote) } ?: "-")
                                     )
                                 )

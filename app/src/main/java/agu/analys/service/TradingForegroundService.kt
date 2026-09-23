@@ -247,16 +247,14 @@ class TradingForegroundService : Service() {
     }
 
     private fun formatHoldingCard(item: HoldingItem): String {
-        val currPriceStr = PriceFormatter.formatPrice(item.currentPrice, showSymbol = true)
+        val pair = TradingPair.fromCustomSymbol(item.symbol)
+        val quoteAsset = pair.quoteAsset
+        val currPriceStr = PriceFormatter.formatPrice(item.currentPrice, showSymbol = true, quoteAsset = quoteAsset)
         val qtyStr = formatCoinQuantity(item.quantity, item.baseAsset)
 
         return if (item.entryPrice > 0.0) {
-            val entryPriceStr = PriceFormatter.formatPrice(item.entryPrice, showSymbol = true)
-            val pctFormatted = if (item.diffPct >= 0.0) {
-                "+${String.format(Locale.US, "%.2f", item.diffPct)}%"
-            } else {
-                "${String.format(Locale.US, "%.2f", item.diffPct)}%"
-            }
+            val entryPriceStr = PriceFormatter.formatPrice(item.entryPrice, showSymbol = true, quoteAsset = quoteAsset)
+            val pctFormatted = PriceFormatter.formatPercentage(item.diffPct, includePlusSign = true)
             val statusTag = if (item.isProfit) "▲ $pctFormatted  [SIAP JUAL]" else "▼ $pctFormatted  [HOLD]"
             "• ${item.baseAsset}  $currPriceStr  $statusTag\n  Beli: $entryPriceStr • Saldo: $qtyStr"
         } else {
@@ -280,13 +278,14 @@ class TradingForegroundService : Service() {
             totalProfitCount > 0 -> {
                 val profitList = (realItems + simItems).filter { it.isProfit }
                 "Siap Jual: " + profitList.joinToString(", ") {
-                    "${it.baseAsset} (+${String.format(Locale.US, "%.2f", it.diffPct)}%)"
+                    "${it.baseAsset} (${PriceFormatter.formatPercentage(it.diffPct, includePlusSign = true)})"
                 }
             }
             totalHoldings > 0 -> {
                 val allList = realItems + simItems
                 "Pantau: " + allList.take(3).joinToString(", ") {
-                    "${it.baseAsset} ${PriceFormatter.formatPrice(it.currentPrice, showSymbol = false)}"
+                    val qAsset = TradingPair.fromCustomSymbol(it.symbol).quoteAsset
+                    "${it.baseAsset} ${PriceFormatter.formatPrice(it.currentPrice, showSymbol = false, quoteAsset = qAsset)}"
                 }
             }
             else -> "Belum ada aset spot yang dipantau"
@@ -393,7 +392,7 @@ class TradingForegroundService : Service() {
             val baseLower = pair.baseAsset.lowercase()
             val baseUpper = pair.baseAsset.uppercase()
             val symUpper = pair.symbol.uppercase()
-            val pos = positionStore.get(pair.symbol)
+            val pos = positionStore.get(pair.symbol, isReal = true)
 
             val realQty = savedRealBalance[baseLower] ?: savedRealBalance[baseUpper] ?: 0.0
             val isHoldingInStore = pos.isHolding && pos.quantity > 0.0
@@ -412,9 +411,9 @@ class TradingForegroundService : Service() {
 
                 // Check jika koin di store sudah habis terjual di real
                 if (savedRealBalance.isNotEmpty() && isHoldingInStore && realQty <= 0.00000001) {
-                    positionStore.markSold(pair.symbol)
+                    positionStore.markSold(pair.symbol, isReal = true)
                     // Clear sell-signal lifecycle agar tidak tetap muncul di Ready-to-Sell
-                    agu.analys.engine.sell.SellSignalLifecycleManager.reset(pair.symbol)
+                    agu.analys.engine.sell.SellSignalLifecycleManager.reset(pair.symbol, isReal = true)
                     continue
                 }
 

@@ -149,7 +149,7 @@ fun TradeSimulationScreen(
                     onClick = {
                         showOptionsMenu = false
                         viewModel.resetSimulationAccount()
-                        Toast.makeText(context, "Akun simulasi direset ke saldo awal 10.000.000", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "Akun simulasi direset ke saldo awal ${PriceFormatter.formatPrice(10_000_000.0, showSymbol = true)}", Toast.LENGTH_SHORT).show()
                     }
                 )
             }
@@ -360,7 +360,7 @@ fun TradeSimulationScreen(
             },
             onReset = {
                 viewModel.resetSimulationAccount()
-                Toast.makeText(context, "Akun simulasi direset ke saldo awal Rp 10.000.000", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "Akun simulasi direset ke saldo awal ${PriceFormatter.formatPrice(10_000_000.0, showSymbol = true)}", Toast.LENGTH_SHORT).show()
             },
             onDismiss = { showTopUpModal = false }
         )

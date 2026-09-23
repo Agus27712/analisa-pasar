@@ -325,11 +325,11 @@ class TradeHistoryRecorder(
             val relation = if (snapshot.ema20 > snapshot.ema50) "EMA20 > EMA50 (Uptrend)" else "EMA20 < EMA50 (Downtrend)"
             parts.add(relation)
         }
-        snapshot.bidRatioPct?.let { parts.add("Bid Depth=${String.format(Locale.US, "%.1f%%", it)}") }
+        snapshot.bidRatioPct?.let { parts.add("Bid Depth=${PriceFormatter.formatPercentage(it, includePlusSign = false, decimals = 1)}") }
         snapshot.orderBookPressure?.let {
             parts.add(if (it > 0) "Pressure=+$it% (Buyer)" else "Pressure=$it% (Seller)")
         }
-        snapshot.bbWidthPct?.let { parts.add("BB Width=${String.format(Locale.US, "%.2f%%", it)}") }
+        snapshot.bbWidthPct?.let { parts.add("BB Width=${PriceFormatter.formatPercentage(it, includePlusSign = false, decimals = 2)}") }
 
         return if (parts.isNotEmpty()) parts.joinToString(" • ") else "Mode ${mode.uppercase()} terverifikasi indikator multi-timeframe."
     }

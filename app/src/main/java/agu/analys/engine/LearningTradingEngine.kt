@@ -116,7 +116,7 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
         synchronized(candles1D) { candles1D.clear() }
         if (preserveState) return
 
-        val priceText = if (lastKnownPrice > 0.0) "Rp ${String.format(java.util.Locale.US, "%,.0f", lastKnownPrice)}" else "Terakhir Disimpan"
+        val priceText = if (lastKnownPrice > 0.0) agu.analys.util.PriceFormatter.formatPrice(lastKnownPrice, showSymbol = true) else "Terakhir Disimpan"
         _indicators.value = TechnicalIndicators()
         _signalState.value = AISignalState(
             action = SignalAction.HOLD,

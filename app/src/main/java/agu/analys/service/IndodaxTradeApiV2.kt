@@ -655,9 +655,13 @@ object IndodaxTradeApiV2 {
         val meta = agu.analys.util.MarketDataCache(agu.analys.AppContextProvider.context)
             .loadPairsMetadata()
             .find { it.symbol.equals(symbol.replace("_", ""), ignoreCase = true) }
-        val decimals = if (isPrice) (meta?.priceDecimals ?: 0) else (meta?.quantityDecimals ?: 8)
-        return java.math.BigDecimal.valueOf(value)
-            .setScale(decimals, java.math.RoundingMode.DOWN)
-            .toPlainString()
+        val pair = agu.analys.model.TradingPair.fromCustomSymbol(symbol)
+        return if (isPrice) {
+            val decimals = meta?.priceDecimals ?: agu.analys.util.PriceFormatter.determinePriceDecimals(value, pair.quoteAsset)
+            agu.analys.util.PriceFormatter.formatOrderPrice(value, quoteAsset = pair.quoteAsset, priceDecimals = decimals)
+        } else {
+            val decimals = meta?.quantityDecimals ?: 8
+            agu.analys.util.PriceFormatter.formatOrderQuantity(value, baseAsset = pair.baseAsset, qtyDecimals = decimals)
+        }
     }
 }

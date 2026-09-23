@@ -302,7 +302,8 @@ fun TradingViewModel.initSubscriptionsAndPolling() {
 
     engine.onCandidateSignalTransition = { transition ->
         if (isNotificationsEnabled.value) {
-            val position = positionStore.get(transition.symbol)
+            val isReal = isRealBuyMode.value
+            val position = positionStore.get(transition.symbol, isReal = isReal)
             if (!position.isHolding) {
                 AlertNotificationHelper.sendCandidateFoundNotification(
                     context = getApplication(),

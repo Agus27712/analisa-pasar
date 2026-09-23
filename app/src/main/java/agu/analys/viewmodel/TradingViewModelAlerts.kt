@@ -47,6 +47,8 @@ fun TradingViewModel.checkAlertsAndTrailing(symbol: String, currentPrice: Double
     val alerts = alertStore.getAlertsForSymbol(symbol)
     for (alert in alerts) {
         if (!alert.isEnabled || alert.isTriggered) continue
+        val pair = TradingPair.fromCustomSymbol(symbol)
+        val quoteAsset = pair.quoteAsset
         var shouldTrigger = false
         var triggerTitle = ""
         var triggerMsg = ""
@@ -56,14 +58,14 @@ fun TradingViewModel.checkAlertsAndTrailing(symbol: String, currentPrice: Double
                 if (currentPrice >= alert.targetPrice) {
                     shouldTrigger = true
                     triggerTitle = "🎯 Target Tercapai • $symbol"
-                    triggerMsg = "Harga naik menyentuh Rp ${PriceFormatter.formatIdrNumber(currentPrice)} (Target: Rp ${PriceFormatter.formatIdrNumber(alert.targetPrice)})."
+                    triggerMsg = "Harga naik menyentuh ${PriceFormatter.formatPrice(currentPrice, showSymbol = true, quoteAsset = quoteAsset)} (Target: ${PriceFormatter.formatPrice(alert.targetPrice, showSymbol = true, quoteAsset = quoteAsset)})."
                 }
             }
             PriceAlertType.PRICE_BELOW -> {
                 if (currentPrice <= alert.targetPrice) {
                     shouldTrigger = true
                     triggerTitle = "📉 Peringatan Turun • $symbol"
-                    triggerMsg = "Harga turun ke Rp ${PriceFormatter.formatIdrNumber(currentPrice)} (Target: Rp ${PriceFormatter.formatIdrNumber(alert.targetPrice)})."
+                    triggerMsg = "Harga turun ke ${PriceFormatter.formatPrice(currentPrice, showSymbol = true, quoteAsset = quoteAsset)} (Target: ${PriceFormatter.formatPrice(alert.targetPrice, showSymbol = true, quoteAsset = quoteAsset)})."
                 }
             }
             PriceAlertType.RSI_OVERSOLD -> {
@@ -84,7 +86,7 @@ fun TradingViewModel.checkAlertsAndTrailing(symbol: String, currentPrice: Double
                 if (currentPrice >= alert.targetPrice && alert.targetPrice > 0.0) {
                     shouldTrigger = true
                     triggerTitle = "🌊 Second-Wave Reclaim • $symbol"
-                    triggerMsg = "Setup Second-Wave terkonfirmasi di harga Rp ${PriceFormatter.formatIdrNumber(currentPrice)}."
+                    triggerMsg = "Setup Second-Wave terkonfirmasi di harga ${PriceFormatter.formatPrice(currentPrice, showSymbol = true, quoteAsset = quoteAsset)}."
                 }
             }
         }
@@ -228,6 +230,9 @@ fun TradingViewModel.executeAutoSellOrder(symbol: String, price: Double, quantit
         "⚡ [$symbol] Eksekusi $triggerLabel ($modeTag) | Qty: $quantity @ Rp ${PriceFormatter.formatIdrNumber(price)}"
     )
 
+    val notifPair = TradingPair.fromCustomSymbol(symbol)
+    val quoteAsset = notifPair.quoteAsset
+
     if (isReal) {
         // Diskon 5% dari harga terkini agar berfungsi 100% layaknya Market Sell instan di orderbook
         val marketSellPrice = price * 0.95
@@ -241,7 +246,8 @@ fun TradingViewModel.executeAutoSellOrder(symbol: String, price: Double, quantit
             } else "❌ [$modeTag] Gagal Jual • $symbol"
 
             val notifMsg = if (success) {
-                "$triggerLabel [$modeTag] aktif! Koin berhasil dieksekusi di kisaran harga Rp ${PriceFormatter.formatIdrNumber(price)}."
+                val formattedPrice = PriceFormatter.formatPrice(price, showSymbol = true, quoteAsset = quoteAsset)
+                "$triggerLabel [$modeTag] aktif! Koin berhasil dieksekusi di kisaran harga $formattedPrice."
             } else {
                 "Sistem gagal mengeksekusi order [$modeTag]: $msg"
             }
@@ -289,7 +295,8 @@ fun TradingViewModel.executeAutoSellOrder(symbol: String, price: Double, quantit
         } else "❌ [$modeTag] Gagal Jual • $symbol"
 
         val notifMsg = if (success) {
-            "$triggerLabel [$modeTag] aktif! Koin terjual di harga Rp ${PriceFormatter.formatIdrNumber(price)}."
+            val formattedPrice = PriceFormatter.formatPrice(price, showSymbol = true, quoteAsset = quoteAsset)
+            "$triggerLabel [$modeTag] aktif! Koin terjual di harga $formattedPrice."
         } else {
             "Gagal (Simulasi): $msg"
         }
@@ -363,11 +370,13 @@ fun TradingViewModel.deployTrailingOrder(symbol: String) {
 
     val initialEffectivePct = if (pos.activeTrailingPercent > 0.0) pos.activeTrailingPercent else effectiveTrailingPct
     val slPrice = positionStore.calculateTrailingLimitPrice(effectivePeak, pos.entryPrice, initialEffectivePct)
+    val notifQuoteAsset = TradingPair.fromCustomSymbol(symbol).quoteAsset
     val notifTitle = if (isReal) "🛡️ [REAL] Trailing Stop Aktif • $symbol" else "🛡️ [SIMULASI] Trailing Stop Aktif • $symbol"
+    val formattedSl = PriceFormatter.formatPrice(slPrice, showSymbol = true, quoteAsset = notifQuoteAsset)
     val notifMsg = if (isReal) {
-        "Aplikasi sedang memantau [REAL]. Koin akan dijual otomatis jika harga turun ke Rp ${PriceFormatter.formatIdrNumber(slPrice)}."
+        "Aplikasi sedang memantau [REAL]. Koin akan dijual otomatis jika harga turun ke $formattedSl."
     } else {
-        "Aplikasi sedang memantau [SIMULASI]. Koin akan dijual otomatis di Rp ${PriceFormatter.formatIdrNumber(slPrice)}."
+        "Aplikasi sedang memantau [SIMULASI]. Koin akan dijual otomatis di $formattedSl."
     }
 
     AlertNotificationHelper.sendPriceAlertNotification(
@@ -410,11 +419,12 @@ fun TradingViewModel.cancelTrailingOrder(symbol: String) {
 }
 
 fun TradingViewModel.updateSimTrailingOrder(symbol: String, pos: SpotPosition, slPrice: Double, quantityToSell: Double) {
+    val quoteAsset = TradingPair.fromCustomSymbol(symbol).quoteAsset
     positionCoordinator.setTrailingOrderIdAndUpdateTime(symbol, "sim-client-trailing", System.currentTimeMillis(), isReal = false)
     AlertNotificationHelper.sendPriceAlertNotification(
         context = getApplication(),
         title = "📈 [SIMULASI] Trailing Stop Naik • $symbol",
-        message = "Batas aman penjualan otomatis naik ke Rp ${PriceFormatter.formatIdrNumber(slPrice)} (Mengikuti kenaikan harga).",
+        message = "Batas aman penjualan otomatis naik ke ${PriceFormatter.formatPrice(slPrice, showSymbol = true, quoteAsset = quoteAsset)} (Mengikuti kenaikan harga).",
         notificationId = (symbol.hashCode() and 0x3FFFFFFF) + 200000 + 1000,
         symbol = symbol,
         onlyWhenBackground = true
@@ -422,12 +432,13 @@ fun TradingViewModel.updateSimTrailingOrder(symbol: String, pos: SpotPosition, s
 }
 
 fun TradingViewModel.updateRealTrailingOrder(symbol: String, pos: SpotPosition, newSlPrice: Double) {
+    val quoteAsset = TradingPair.fromCustomSymbol(symbol).quoteAsset
     // Pure Client-Side update for REAL mode
     positionCoordinator.setTrailingOrderIdAndUpdateTime(symbol, "real-client-trailing", System.currentTimeMillis(), isReal = true)
     AlertNotificationHelper.sendPriceAlertNotification(
         context = getApplication(),
         title = "📈 [REAL] Trailing Stop Naik • $symbol",
-        message = "Batas aman penjualan otomatis naik ke Rp ${PriceFormatter.formatIdrNumber(newSlPrice)}.",
+        message = "Batas aman penjualan otomatis naik ke ${PriceFormatter.formatPrice(newSlPrice, showSymbol = true, quoteAsset = quoteAsset)}.",
         notificationId = (symbol.hashCode() and 0x3FFFFFFF) + 100000 + 1000,
         symbol = symbol,
         onlyWhenBackground = true
@@ -435,6 +446,7 @@ fun TradingViewModel.updateRealTrailingOrder(symbol: String, pos: SpotPosition, 
 }
 
 fun TradingViewModel.executeTrailingSellLimitOrder(symbol: String, limitPrice: Double, quantity: Double, isReal: Boolean) {
+    val quoteAsset = TradingPair.fromCustomSymbol(symbol).quoteAsset
     if (isReal) {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             val apiKey = prefs.indodaxApiKey
@@ -468,7 +480,8 @@ fun TradingViewModel.executeTrailingSellLimitOrder(symbol: String, limitPrice: D
 
             val notifTitle = if (res.success) "✅ [REAL] Trailing Sell Terlaksana • $symbol" else "❌ [REAL] Gagal Trailing Sell • $symbol"
             val notifMsg = if (res.success) {
-                "Profit Lock [REAL] aktif! Koin berhasil dieksekusi di kisaran harga Rp ${PriceFormatter.formatIdrNumber(execPrice)}."
+                val formattedExec = PriceFormatter.formatPrice(execPrice, showSymbol = true, quoteAsset = quoteAsset)
+                "Profit Lock [REAL] aktif! Koin berhasil dieksekusi di kisaran harga $formattedExec."
             } else {
                 "Sistem gagal mengeksekusi order [REAL]: ${res.message}"
             }
@@ -510,7 +523,8 @@ fun TradingViewModel.executeTrailingSellLimitOrder(symbol: String, limitPrice: D
         }
         val notifTitle = if (success) "✅ [SIMULASI] Limit Sell Terpasang • $symbol" else "❌ [SIMULASI] Gagal Limit Sell • $symbol"
         val notifMsg = if (success) {
-            "Profit Lock [SIMULASI] aktif! Limit Sell Order dipasang di Rp ${PriceFormatter.formatIdrNumber(limitPrice)}."
+            val formattedLimit = PriceFormatter.formatPrice(limitPrice, showSymbol = true, quoteAsset = quoteAsset)
+            "Profit Lock [SIMULASI] aktif! Limit Sell Order dipasang di $formattedLimit."
         } else {
             "Gagal (Simulasi): $msg"
         }

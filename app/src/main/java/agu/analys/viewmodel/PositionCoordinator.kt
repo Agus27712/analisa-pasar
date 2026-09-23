@@ -143,9 +143,10 @@ class PositionCoordinator(
         val triggered = alertStore.checkAlerts(symbol, price)
         if (triggered.isNotEmpty()) refreshAlerts(symbol)
         
-        val pos = positionStore.get(symbol)
+        val isReal = isRealProvider()
+        val pos = positionStore.get(symbol, isReal)
         if (pos.isTrailingEnabled) {
-            positionStore.updateTrailingPrice(symbol, price)
+            positionStore.updateTrailingPrice(symbol, price, isReal)
             refreshPosition(symbol)
         }
     }

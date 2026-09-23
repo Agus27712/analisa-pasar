@@ -14,6 +14,7 @@ import agu.analys.MainActivity
 import agu.analys.config.StrategyMode
 import agu.analys.model.AISignalState
 import agu.analys.model.LifecycleState
+import agu.analys.model.TradingPair
 import agu.analys.util.PriceFormatter
 
 object AlertNotificationHelper {
@@ -196,6 +197,9 @@ object AlertNotificationHelper {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        val pair = TradingPair.fromCustomSymbol(symbol)
+        val quoteAsset = pair.quoteAsset
+
         val modeLabel = when (strategyMode) {
             StrategyMode.SCALPING -> "Scalping"
             StrategyMode.SWING -> "Swing"
@@ -205,9 +209,9 @@ object AlertNotificationHelper {
         val stateLabel = if (signal.lifecycleState == LifecycleState.READY) "🟢 PAIR SIAP ENTRY (BUY)" else "⚡ KANDIDAT TERDETEKSI"
         val title = "$stateLabel • ${symbol.uppercase()}"
 
-        val priceStr = if (signal.entryPrice > 0.0) "Rp ${PriceFormatter.formatIdrNumber(signal.entryPrice)}" else "-"
-        val tp1Str = if (signal.targetPrice1 > 0.0) "Rp ${PriceFormatter.formatIdrNumber(signal.targetPrice1)}" else "-"
-        val slStr = if (signal.stopLoss > 0.0) "Rp ${PriceFormatter.formatIdrNumber(signal.stopLoss)}" else "-"
+        val priceStr = if (signal.entryPrice > 0.0) PriceFormatter.formatPrice(signal.entryPrice, showSymbol = true, quoteAsset = quoteAsset) else "-"
+        val tp1Str = if (signal.targetPrice1 > 0.0) PriceFormatter.formatPrice(signal.targetPrice1, showSymbol = true, quoteAsset = quoteAsset) else "-"
+        val slStr = if (signal.stopLoss > 0.0) PriceFormatter.formatPrice(signal.stopLoss, showSymbol = true, quoteAsset = quoteAsset) else "-"
 
         val reasonStr = signal.reasoning.firstOrNull() ?: signal.sentiment.displayName
         val message = "🎯 Strategi: $modeLabel | Confidence: ${signal.confidence}%\n" +
@@ -248,6 +252,8 @@ object AlertNotificationHelper {
 
         createNotificationChannels(context)
 
+        val pair = TradingPair.fromCustomSymbol(symbol)
+        val quoteAsset = pair.quoteAsset
         val modeTag = if (isReal) "[REAL]" else "[SIMULASI]"
         val notifBaseId = (symbol.hashCode() and 0x3FFFFFFF) + (if (isReal) 100000 else 200000)
 
@@ -281,12 +287,15 @@ object AlertNotificationHelper {
         )
 
         val profitPct = if (entryPrice > 0.0) ((limitSellPrice - entryPrice) / entryPrice) * 100.0 else 0.0
-        val formattedProfit = String.format(java.util.Locale.US, "%.2f%%", profitPct)
+        val formattedProfit = PriceFormatter.formatPercentage(profitPct, includePlusSign = true)
+        val stopLimitStr = PriceFormatter.formatPrice(limitSellPrice, showSymbol = true, quoteAsset = quoteAsset)
+        val currentPriceStr = PriceFormatter.formatPrice(currentPrice, showSymbol = true, quoteAsset = quoteAsset)
+        val entryPriceStr = PriceFormatter.formatPrice(entryPrice, showSymbol = true, quoteAsset = quoteAsset)
         
         val title = "🛡️ $modeTag TRAILING PROFIT • ${symbol.uppercase()}"
-        val message = "$modeTag 🚨 Keuntungan Terkunci: +$formattedProfit\n" +
-                "💵 Harga Stop Limit: Rp ${PriceFormatter.formatIdrNumber(limitSellPrice)}\n" +
-                "📊 Harga Running: Rp ${PriceFormatter.formatIdrNumber(currentPrice)} | Modal: Rp ${PriceFormatter.formatIdrNumber(entryPrice)}"
+        val message = "$modeTag 🚨 Keuntungan Terkunci: $formattedProfit\n" +
+                "💵 Harga Stop Limit: $stopLimitStr\n" +
+                "📊 Harga Running: $currentPriceStr | Modal: $entryPriceStr"
 
         val action = NotificationCompat.Action.Builder(
             0,
@@ -298,7 +307,7 @@ object AlertNotificationHelper {
             .setSmallIcon(agu.analys.R.drawable.ic_stat_trading)
             .setColor(if (isReal) 0xFFDC2626.toInt() else 0xFF2563EB.toInt())
             .setContentTitle(title)
-            .setContentText("$modeTag Terkunci: +$formattedProfit (Rp ${PriceFormatter.formatIdrNumber(limitSellPrice)})")
+            .setContentText("$modeTag Terkunci: $formattedProfit ($stopLimitStr)")
             .setSubText("$modeTag ${symbol.uppercase()} • Trailing Stop")
             .setStyle(NotificationCompat.BigTextStyle().bigText(message))
             .setPriority(NotificationCompat.PRIORITY_MAX)
@@ -329,6 +338,8 @@ object AlertNotificationHelper {
 
         createNotificationChannels(context)
 
+        val pair = TradingPair.fromCustomSymbol(symbol)
+        val quoteAsset = pair.quoteAsset
         val modeTag = if (isReal) "[REAL]" else "[SIMULASI]"
         val notifBaseId = (symbol.hashCode() and 0x3FFFFFFF) + (if (isReal) 150000 else 250000)
 
@@ -359,11 +370,14 @@ object AlertNotificationHelper {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val formattedProfit = String.format(java.util.Locale.US, "%.2f%%", netProfitPct)
+        val formattedProfit = PriceFormatter.formatPercentage(netProfitPct, includePlusSign = true)
+        val currentPriceStr = PriceFormatter.formatPrice(currentPrice, showSymbol = true, quoteAsset = quoteAsset)
+        val entryPriceStr = PriceFormatter.formatPrice(entryPrice, showSymbol = true, quoteAsset = quoteAsset)
+
         val title = "🎯 $modeTag TAKE PROFIT TERCAPAI • ${symbol.uppercase()}"
-        val message = "$modeTag 💰 $targetLabel: +$formattedProfit\n" +
-                "💵 Harga Realisasi: Rp ${PriceFormatter.formatIdrNumber(currentPrice)}\n" +
-                "📊 Modal Beli: Rp ${PriceFormatter.formatIdrNumber(entryPrice)} | Ketuk tombol di bawah untuk eksekusi langsung."
+        val message = "$modeTag 💰 $targetLabel: $formattedProfit\n" +
+                "💵 Harga Realisasi: $currentPriceStr\n" +
+                "📊 Modal Beli: $entryPriceStr | Ketuk tombol di bawah untuk eksekusi langsung."
 
         val action = NotificationCompat.Action.Builder(
             0,
@@ -375,7 +389,7 @@ object AlertNotificationHelper {
             .setSmallIcon(agu.analys.R.drawable.ic_stat_trading)
             .setColor(0xFF059669.toInt()) // Emerald Green for profit
             .setContentTitle(title)
-            .setContentText("$modeTag $targetLabel: +$formattedProfit (Rp ${PriceFormatter.formatIdrNumber(currentPrice)})")
+            .setContentText("$modeTag $targetLabel: $formattedProfit ($currentPriceStr)")
             .setSubText("$modeTag ${symbol.uppercase()} • Take Profit")
             .setStyle(NotificationCompat.BigTextStyle().bigText(message))
             .setPriority(NotificationCompat.PRIORITY_MAX)
@@ -405,6 +419,8 @@ object AlertNotificationHelper {
 
         createNotificationChannels(context)
 
+        val pair = TradingPair.fromCustomSymbol(symbol)
+        val quoteAsset = pair.quoteAsset
         val modeTag = if (isReal) "[REAL]" else "[SIMULASI]"
         val notifId = (symbol.hashCode() and 0x3FFFFFFF) + (if (isReal) 100000 else 200000) + 500
 
@@ -421,16 +437,21 @@ object AlertNotificationHelper {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        val newPeakStr = PriceFormatter.formatPrice(newPeak, showSymbol = true, quoteAsset = quoteAsset)
+        val stopLimitStr = PriceFormatter.formatPrice(stopLimitPrice, showSymbol = true, quoteAsset = quoteAsset)
+        val entryPriceStr = PriceFormatter.formatPrice(entryPrice, showSymbol = true, quoteAsset = quoteAsset)
+        val profitPctStr = PriceFormatter.formatPercentage(profitPct, includePlusSign = true)
+
         val title = "🚀 $modeTag TRAILING NAIK • ${symbol.uppercase()}"
-        val message = "$modeTag 📈 Peak baru tercapai: Rp ${PriceFormatter.formatIdrNumber(newPeak)} (+${String.format(java.util.Locale.US, "%.2f", profitPct)}%)\n" +
-                "🛡️ Batas Stop Limit dinaikkan ke: Rp ${PriceFormatter.formatIdrNumber(stopLimitPrice)}\n" +
-                "💰 Modal Beli: Rp ${PriceFormatter.formatIdrNumber(entryPrice)}"
+        val message = "$modeTag 📈 Peak baru: $newPeakStr ($profitPctStr)\n" +
+                "🛡️ Batas Stop Limit dinaikkan ke: $stopLimitStr\n" +
+                "💰 Modal Beli: $entryPriceStr"
 
         val builder = NotificationCompat.Builder(context, CHANNEL_PRICE_ALERT_ID)
             .setSmallIcon(agu.analys.R.drawable.ic_stat_trading)
             .setColor(if (isReal) 0xFF059669.toInt() else 0xFF2563EB.toInt())
             .setContentTitle(title)
-            .setContentText("$modeTag Stop Limit naik: Rp ${PriceFormatter.formatIdrNumber(stopLimitPrice)} (+${String.format(java.util.Locale.US, "%.2f", profitPct)}%)")
+            .setContentText("$modeTag Stop Limit naik: $stopLimitStr ($profitPctStr)")
             .setSubText("$modeTag ${symbol.uppercase()} • Trailing Naik")
             .setStyle(NotificationCompat.BigTextStyle().bigText(message))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -458,6 +479,8 @@ object AlertNotificationHelper {
 
         createNotificationChannels(context)
 
+        val pair = TradingPair.fromCustomSymbol(symbol)
+        val quoteAsset = pair.quoteAsset
         val notifId = ((symbol.uppercase().hashCode() xor 0x5E11) and 0x3FFFFFFF) + (if (isReal) 300000 else 400000)
 
         val mainIntent = Intent(context, MainActivity::class.java).apply {
@@ -492,8 +515,8 @@ object AlertNotificationHelper {
         val dropReason = state.reason
         val pnlFormatted = PriceFormatter.formatPercentage(state.netProfitPct, includePlusSign = true)
         val title = "🚨 $modeTag EXIT DARURAT: ${symbol.uppercase()} ($pnlFormatted)"
-        val priceStr = PriceFormatter.formatPrice(currentPrice, showSymbol = true)
-        val entryStr = if (entryPrice > 0.0) PriceFormatter.formatPrice(entryPrice, showSymbol = true) else "-"
+        val priceStr = PriceFormatter.formatPrice(currentPrice, showSymbol = true, quoteAsset = quoteAsset)
+        val entryStr = if (entryPrice > 0.0) PriceFormatter.formatPrice(entryPrice, showSymbol = true, quoteAsset = quoteAsset) else "-"
         val message = "$dropReason\n" +
                 "💵 Harga Sekarang: $priceStr | Beli: $entryStr\n" +
                 "⚠️ Segera periksa posisi dan amankan modal!"
