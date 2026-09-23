@@ -195,6 +195,23 @@ fun DetailChartScreen(
         }
     }
 
+    val effectiveWorkflow = remember(effectivePositionContext) {
+        resolveWorkflow(effectivePositionContext)
+    }
+
+    val effectiveSellSignal = remember(effectivePositionContext, indicators, tradingFees, displayPrice, sellSignalState) {
+        if (effectivePositionContext.hasPosition) {
+            agu.analys.engine.sell.SellSignalEvaluator.evaluate(
+                context = effectivePositionContext,
+                indicators = indicators,
+                tradingFees = tradingFees,
+                high24h = tick?.high24h ?: 0.0
+            )
+        } else {
+            sellSignalState
+        }
+    }
+
     LaunchedEffect(effectivePositionContext.hasPosition, isRealBuyMode, pair.symbol) {
         if (effectivePositionContext.hasPosition && !currentPosition.isHolding) {
             val entryP = effectivePositionContext.entryPrice ?: 0.0
@@ -292,29 +309,36 @@ fun DetailChartScreen(
     }
 
     val scrollState = rememberScrollState()
-    val isScrolled by remember { derivedStateOf { scrollState.value > 140 } }
 
-    Box(
+    Column(
         modifier = modifier
             .fillMaxSize()
             .background(TvBackground)
+            .statusBarsPadding()
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(scrollState)
-                .padding(horizontal = 12.dp, vertical = 6.dp)
+        // 1. Pinned Top Bar (Always visible, Back button accessible, No floating overlap)
+        Surface(
+            color = TvBackground,
+            modifier = Modifier.fillMaxWidth()
         ) {
-            // 1. Top Bar
             DetailTopBar(
                 pair = pair,
                 onNavigateToDashboard = onNavigateToDashboard,
                 isConnected = isConnected,
-                onOpenLogcat = { showLogcatDialog = true }
+                onOpenLogcat = { showLogcatDialog = true },
+                strategyMode = strategyMode,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
             )
+        }
 
-            Spacer(Modifier.height(8.dp))
-
+        // 2. Scrollable Body
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .verticalScroll(scrollState)
+                .padding(horizontal = 12.dp, vertical = 6.dp)
+        ) {
             // 2 & 3. Header Card (Price, Controls & Chart) - Clean Card (Tanpa Aura BG)
             Box(
                 modifier = Modifier
@@ -480,9 +504,9 @@ fun DetailChartScreen(
                     }
                 },
                 spotPosition = currentPosition,
-                sellSignalState = sellSignalState,
+                sellSignalState = effectiveSellSignal,
                 positionContext = effectivePositionContext,
-                workflow = tradingWorkflow,
+                workflow = effectiveWorkflow,
                 onSetTrailingStop = { enabled, pct ->
                     viewModel.setTrailingStop(pair.symbol, enabled, pct)
                     HapticUtil.vibrateTradeSuccess(context)
@@ -566,24 +590,6 @@ fun DetailChartScreen(
             )
 
             Spacer(Modifier.height(16.dp))
-        }
-
-        // Floating Sticky Status Bar
-        AnimatedVisibility(
-            visible = isScrolled,
-            enter = fadeIn(tween(200)) + slideInVertically(tween(200)) { -it },
-            exit = fadeOut(tween(150)) + slideOutVertically(tween(150)) { -it },
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .fillMaxWidth()
-                .background(TvBackground)
-                .padding(horizontal = 12.dp, vertical = 6.dp)
-        ) {
-            StickyFloatingStatusBar(
-                connection = connection,
-                strategyMode = strategyMode,
-                onRetry = { viewModel.retryConnection() }
-            )
         }
 
         if (showLogcatDialog) {

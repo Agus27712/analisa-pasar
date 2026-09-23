@@ -52,6 +52,7 @@ class RealTradeExecutor(
                 return@launch
             }
             onStatusUpdate(message)
+            agu.analys.util.AppLogManager.trade("RealCancel", "Order INDODAX $orderId untuk $symbol: $message (Sukses=$success)")
             if (success) {
                 AppDatabase.getInstance().realTradeDao().deleteOpenOrderById(orderId)
                 delay(INTER_REQUEST_DELAY_MS)
@@ -143,6 +144,10 @@ class RealTradeExecutor(
         scope.launch(kotlinx.coroutines.Dispatchers.IO) {
             onStatusUpdate("Mengirim order $type ke INDODAX...")
             val clientOrderId = "agu-${type.lowercase()}-${System.currentTimeMillis()}"
+            agu.analys.util.AppLogManager.trade(
+                "RealOrder",
+                "💼 [INDODAX REAL] Mengirim order ${type.uppercase()} $pair | Qty: $quantity @ Rp ${PriceFormatter.formatIdrNumber(execPrice)}"
+            )
             val isBuy = type.equals("buy", ignoreCase = true)
             val buyResult = if (!isBuy) {
                 // Untuk SELL: Coba kirim MARKET order terlebih dahulu untuk eksekusi instan proteksi modal
@@ -215,6 +220,7 @@ class RealTradeExecutor(
                     if (!s2 && looksLikeRateLimit(m2)) onRateLimit(m2)
 
                     onStatusUpdate("BUY + TP: $finalMsg")
+                    agu.analys.util.AppLogManager.trade("RealOrderFilled", "✅ [INDODAX REAL FILLED] $pair: Qty $finalExecutedQty @ Rp ${PriceFormatter.formatIdrNumber(execPrice)}. Auto Sell: $finalMsg")
                     kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                         onResult(true, "BUY berhasil!\nAuto Sell: $finalMsg")
                     }
@@ -223,6 +229,7 @@ class RealTradeExecutor(
                         finalExecutedQty = buyResult.executedQty
                     }
                     onStatusUpdate(buyResult.message)
+                    agu.analys.util.AppLogManager.trade("RealOrderSuccess", "✅ [INDODAX REAL] Order $type $pair berhasil dikirim @ Rp ${PriceFormatter.formatIdrNumber(execPrice)}: ${buyResult.message}")
                     kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                         onResult(true, buyResult.message)
                     }

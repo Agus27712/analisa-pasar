@@ -79,7 +79,13 @@ fun SellCheckpointStepper(
 
     var selectedStep by remember(defaultStep) { mutableStateOf(defaultStep) }
 
-    val phaseInfo = when (sellSignal.state) {
+    val effectiveState = if (context.hasPosition && sellSignal.state == SellLifecycleState.NOT_HOLDING) {
+        SellLifecycleState.MONITORING
+    } else {
+        sellSignal.state
+    }
+
+    val phaseInfo = when (effectiveState) {
         SellLifecycleState.READY_TO_SELL -> SellPhaseInfo(
             title = "FASE EKSEKUSI: SIAP JUAL",
             color = TvGreen,
@@ -113,7 +119,7 @@ fun SellCheckpointStepper(
         SellLifecycleState.MONITORING -> SellPhaseInfo(
             title = "FASE PEMANTAUAN: POSISI TERJAGA",
             color = TvBlue,
-            badge = "Terkendali",
+            badge = if (sellSignal.reason.isNotBlank() && sellSignal.reason != "Belum memegang posisi") sellSignal.reason else "Terkendali",
             description = "Posisi aktif terpantau normal. Parameter risiko dan TP sedang dievaluasi."
         )
         SellLifecycleState.NOT_HOLDING -> SellPhaseInfo(
@@ -124,7 +130,7 @@ fun SellCheckpointStepper(
         )
     }
 
-    val phaseIcon = when (sellSignal.state) {
+    val phaseIcon = when (effectiveState) {
         SellLifecycleState.READY_TO_SELL -> Icons.Default.CheckCircle
         SellLifecycleState.APPROACHING_TARGET -> Icons.Default.Info
         SellLifecycleState.TRAILING_TRIGGERED -> Icons.Default.Warning
@@ -143,57 +149,65 @@ fun SellCheckpointStepper(
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         // Banner Status Semantik Fase Posisi
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(phaseInfo.color.copy(alpha = 0.12f), RoundedCornerShape(8.dp))
                 .border(1.dp, phaseInfo.color.copy(alpha = 0.35f), RoundedCornerShape(8.dp))
-                .padding(horizontal = 9.dp, vertical = 7.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Row(
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Icon(
-                    imageVector = phaseIcon,
-                    contentDescription = null,
-                    tint = phaseInfo.color,
-                    modifier = Modifier.size(15.dp)
-                )
-                Column {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.weight(1f, fill = false)
+                ) {
+                    Icon(
+                        imageVector = phaseIcon,
+                        contentDescription = null,
+                        tint = phaseInfo.color,
+                        modifier = Modifier.size(15.dp)
+                    )
                     Text(
                         text = phaseInfo.title,
                         color = phaseInfo.color,
                         fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
+                }
+
+                Spacer(Modifier.width(8.dp))
+
+                Box(
+                    modifier = Modifier
+                        .background(phaseInfo.color.copy(alpha = 0.2f), RoundedCornerShape(4.dp))
+                        .border(0.8.dp, phaseInfo.color.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                ) {
                     Text(
-                        text = phaseInfo.description,
-                        color = TvTextSecondary,
-                        fontSize = 9.5.sp,
-                        lineHeight = 12.sp
+                        text = phaseInfo.badge,
+                        color = phaseInfo.color,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
 
-            Spacer(Modifier.width(6.dp))
-
-            Box(
-                modifier = Modifier
-                    .background(phaseInfo.color.copy(alpha = 0.2f), RoundedCornerShape(4.dp))
-                    .border(0.8.dp, phaseInfo.color.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
-                    .padding(horizontal = 6.dp, vertical = 2.dp)
-            ) {
-                Text(
-                    text = phaseInfo.badge,
-                    color = phaseInfo.color,
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.ExtraBold
-                )
-            }
+            Text(
+                text = phaseInfo.description,
+                color = TvTextSecondary,
+                fontSize = 10.sp,
+                lineHeight = 13.sp
+            )
         }
 
         // Subheader PILAR EVALUASI

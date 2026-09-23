@@ -97,6 +97,7 @@ class MarketDataCoordinator(
             lastLiveTickAt = System.currentTimeMillis()
             _connectionState.value = MarketConnectionState.Connected
             _isShowingCachedData.value = false
+            agu.analys.util.AppLogManager.market("IndodaxWS", "✅ WebSocket tersambung ke server Indodax untuk ${currentActivePair?.symbol}")
         },
         onDisconnected = {
             wsLive = false
@@ -104,6 +105,7 @@ class MarketDataCoordinator(
             if (!recentRest && _currentTick.value == null) {
                 _connectionState.value = MarketConnectionState.ConnectionLost("Realtime terputus. REST fallback...")
             }
+            agu.analys.util.AppLogManager.warn("IndodaxWS", "⚠️ WebSocket terputus untuk ${currentActivePair?.symbol}. Beralih ke REST fallback.")
         }
     )
 
@@ -188,6 +190,7 @@ class MarketDataCoordinator(
         currentActiveTimeframe = timeframe
         marketPollJob?.cancel()
         uiPriceThrottler.reset()
+        agu.analys.util.AppLogManager.market("MarketFeed", "Mulai streaming feed data untuk ${pair.symbol} [${timeframe.label}]")
 
         // 1. Prime harga instan dari dashboard cache jika ada
         val primeTick = _dashboardTicks.value[pair.symbol] 

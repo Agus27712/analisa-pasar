@@ -234,16 +234,30 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         val storedSymbols = positionStore.getAllStoredSymbols(isReal)
         (w + f + listOf(pos.symbol) + storedSymbols).distinct().associateWith { sym ->
             val p = positionStore.get(sym, isReal)
-            CoinHoldingStatus(p.isHolding, p.entryPrice, p.quantity, p.isReal)
+            CoinHoldingStatus(
+                isHolding = p.isHolding,
+                quantity = p.quantity,
+                entryPrice = p.entryPrice,
+                isReal = p.isReal,
+                tp1Price = p.tp1Price,
+                tp2Price = p.tp2Price,
+                stopLossPrice = p.stopLossPrice,
+                isTrailingEnabled = p.isTrailingEnabled,
+                isTrailingTriggered = p.isTrailingTriggered
+            )
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
     val positionContext: StateFlow<PositionContext> = kotlinx.coroutines.flow.combine(
-        positionCoordinator.spotPosition, marketDataCoordinator.currentTick
-    ) { pos, tick ->
-        PositionContext(
-            hasPosition = pos.isHolding, symbol = pos.symbol, entryPrice = pos.entryPrice,
-            quantity = pos.quantity, currentPrice = tick?.price ?: pos.entryPrice, isReal = pos.isReal
+        positionCoordinator.spotPosition, marketDataCoordinator.currentTick, _tradingFees
+    ) { pos, tick, fees ->
+        PositionContext.create(
+            symbol = pos.symbol,
+            spotPosition = pos,
+            holdingStatus = null,
+            currentPrice = tick?.price ?: pos.entryPrice,
+            fees = fees,
+            currentModeIsReal = pos.isReal
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), PositionContext())
 
@@ -251,16 +265,13 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), TradingWorkflow.BUY)
 
     val sellSignalState: StateFlow<SellSignalState> = kotlinx.coroutines.flow.combine(
-        positionContext, marketDataCoordinator.recentCandles
-    ) { ctx, _ ->
-        val entry = ctx.entryPrice ?: 0.0
-        val current = ctx.currentPrice ?: 0.0
-        val profit = if (entry > 0.0) ((current - entry) / entry) * 100.0 else 0.0
-        SellSignalState(
-            state = if (ctx.hasPosition && profit >= 1.5) SellLifecycleState.READY_TO_SELL else SellLifecycleState.NOT_HOLDING,
-            reason = if (ctx.hasPosition) "Target Profit tercapai!" else "Belum memegang posisi",
-            netProfitPct = profit,
-            updatedAt = System.currentTimeMillis()
+        positionContext, engine.indicators, _tradingFees, marketDataCoordinator.currentTick
+    ) { ctx, ind, fees, tick ->
+        agu.analys.engine.sell.SellSignalEvaluator.evaluate(
+            context = ctx,
+            indicators = ind,
+            tradingFees = fees,
+            high24h = tick?.high24h ?: 0.0
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SellSignalState())
 
@@ -293,6 +304,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         engine.strategyMode = mode
         engine.isScalpingMode = scalpingEnabled
         engine.tradingFees = prefs.tradingFees
+        agu.analys.util.AppLogManager.service("StrategyConfig", "⚙️ Mode strategi sistem dialihkan ke ${mode.name} (Scalping=$scalpingEnabled)")
         
         if (mode == StrategyMode.SCALPING) {
             MtfCacheManager.setActiveSymbol(selectedPair.value.symbol)
@@ -341,6 +353,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
 
     fun selectPair(pair: TradingPair) {
         marketViewModel.selectPair(pair)
+        agu.analys.util.AppLogManager.market("PairSelect", "Pasangan koin aktif: ${pair.symbol} (${pair.baseAsset}/IDR)")
         lastSavedSignalTimestamp = 0L
         positionCoordinator.setSelectedSymbol(pair.symbol)
         if (strategyMode.value == StrategyMode.SCALPING) {

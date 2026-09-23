@@ -396,7 +396,8 @@ object SwingEvaluator {
         // ── Keputusan akhir ────────────────────────────────
         val isQualifiedBuy = step4Ok && isRrValid && buy >= 42.0 && buy > sell * 1.15 && !isNearHighDanger &&
             detectedSetup in listOf(SwingSetup.REJECTION, SwingSetup.BREAKOUT, SwingSetup.RETEST, SwingSetup.RECLAIM_FAILED) &&
-            (detectedSetup != SwingSetup.REJECTION || !rejectionAtResistance)
+            (detectedSetup != SwingSetup.REJECTION || !rejectionAtResistance) &&
+            confluence.completedCount >= 4
 
         var finalAction = when {
             globalContext.isVetoActive -> SignalAction.HOLD

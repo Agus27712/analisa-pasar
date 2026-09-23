@@ -14,7 +14,7 @@ class AnalysApplication : Application(), Application.ActivityLifecycleCallbacks 
         registerActivityLifecycleCallbacks(this)
         Timber.plant(agu.analys.util.AppLogManager.timberTree)
         if (BuildConfig.DEBUG) {
-            Timber.plant(Timber.DebugTree())
+            Timber.plant(agu.analys.util.StructuredDebugTree())
         }
         try {
             agu.analys.service.CandidateScanWorker.schedule(this)

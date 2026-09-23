@@ -22,12 +22,11 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
 
-/** 
- * Pure indicator math:
- * - TA4J Engine: Digunakan untuk perhitungan RSI, ATR, dan Bollinger Bands dengan BarSeries builder
- *   dan fallback matematis zero-allocation untuk stabilitas.
- * - High-Speed Array Engine: Digunakan untuk perhitungan EMA dan MACD streaming zero-allocation
- *   dengan metodologi eksponensial standar yang 100% selaras antara scalar (ema) dan series (emaSeries/macdSeries).
+/**
+ * Pure indicator math — SEMUA indikator (RSI, EMA, MACD, Bollinger Bands, ATR) dihitung lewat
+ * engine TA4J (RSIIndicator, EMAIndicator, MACDIndicator, BollingerBands*Indicator, ATRIndicator).
+ * Rumus manual (mis. emaFallback/emaSeriesFallback/calculateRsiFallback) HANYA dipakai sebagai
+ * fallback kalau TA4J melempar exception atau menghasilkan NaN/Infinite — bukan jalur utama.
  */
 object IndicatorMath {
 
@@ -48,6 +47,25 @@ object IndicatorMath {
             val low = min(c.low, min(open, c.close))
             val volume = max(0.0, c.volume)
             series.addBar(Duration.ofMinutes(1), zdt, open, high, low, c.close, volume)
+        }
+        return series
+    }
+
+    /**
+     * Konversi array harga close mentah (tanpa OHLC/timestamp asli, mis. hasil DoubleArray dari
+     * evaluator) menjadi TA4J BarSeries close-only (O=H=L=C=close, volume=0), supaya EMA/MACD
+     * bisa dihitung lewat EMAIndicator/MACDIndicator TA4J yang sesungguhnya — bukan rumus manual
+     * terpisah. Timestamp sintetis (mundur 1 menit per bar) hanya untuk memenuhi kebutuhan TA4J,
+     * tidak dipakai indikator manapun di sini (semua indikator EMA/MACD murni index-based).
+     */
+    private fun closesToBarSeries(closes: DoubleArray, name: String = "closes"): BarSeries {
+        val series = BaseBarSeriesBuilder().withName(name).build()
+        if (closes.isEmpty()) return series
+        val start = Instant.now().minusSeconds(closes.size.toLong() * 60L)
+        for (i in closes.indices) {
+            val c = closes[i]
+            val zdt = ZonedDateTime.ofInstant(start.plusSeconds(i.toLong() * 60L), ZoneId.of("UTC"))
+            series.addBar(Duration.ofMinutes(1), zdt, c, c, c, c, 0.0)
         }
         return series
     }
@@ -98,24 +116,32 @@ object IndicatorMath {
         return 100.0 - (100.0 / (1.0 + rs))
     }
 
-    // Menggunakan DoubleArray alih-alih List<Double> untuk mencegah overhead Autoboxing
+    /**
+     * EMA via TA4J EMAIndicator (konsisten dengan rsi()/atr()/bollinger() — bukan lagi rumus
+     * manual terpisah). Fallback ke rumus manual (emaFallback) hanya bila TA4J gagal/NaN.
+     */
     fun ema(values: DoubleArray, period: Int): Double {
         if (period <= 0 || values.isEmpty()) return 0.0
-        val multiplier = 2.0 / (period + 1.0)
-        var ema = values[0]
-        
-        for (i in 1 until values.size) {
-            ema = (values[i] - ema) * multiplier + ema
+        return try {
+            val series = closesToBarSeries(values)
+            val emaIndicator = EMAIndicator(ClosePriceIndicator(series), period)
+            val value = emaIndicator.getValue(series.endIndex).doubleValue()
+            if (value.isNaN() || value.isInfinite()) emaFallback(values, period) else value
+        } catch (_: Exception) {
+            emaFallback(values, period)
         }
-        return ema
     }
 
-    fun ema(values: List<Double>, period: Int): Double {
+    fun ema(values: List<Double>, period: Int): Double = ema(values.toDoubleArray(), period)
+
+    /** Rumus EMA manual (windowed, seed = harga mentah) — dipakai HANYA sebagai fallback TA4J. */
+    private fun emaFallback(values: DoubleArray, period: Int): Double {
         if (period <= 0 || values.isEmpty()) return 0.0
+        val start = max(0, values.size - period * 3)
+        var ema = values[start]
         val multiplier = 2.0 / (period + 1.0)
-        var ema = values[0]
-        
-        for (i in 1 until values.size) {
+
+        for (i in start + 1 until values.size) {
             ema = (values[i] - ema) * multiplier + ema
         }
         return ema
@@ -135,29 +161,33 @@ object IndicatorMath {
         }
     }
 
+    /**
+     * Seri EMA per-index via TA4J EMAIndicator (dipakai internal oleh macdSeries()). TA4J
+     * meng-cache nilai secara rekursif, jadi query berurutan 0..n-1 tetap O(n) total, bukan O(n²).
+     */
     fun emaSeries(values: DoubleArray, period: Int): DoubleArray {
         if (period <= 0 || values.isEmpty()) return DoubleArray(0)
-        
-        val result = DoubleArray(values.size)
-        val multiplier = 2.0 / (period + 1.0)
-        var ema = values[0]
-        result[0] = ema
-        
-        for (i in 1 until values.size) {
-            ema = (values[i] - ema) * multiplier + ema
-            result[i] = ema
+        return try {
+            val series = closesToBarSeries(values)
+            val emaIndicator = EMAIndicator(ClosePriceIndicator(series), period)
+            val result = DoubleArray(values.size) { i -> emaIndicator.getValue(i).doubleValue() }
+            if (result.any { it.isNaN() || it.isInfinite() }) emaSeriesFallback(values, period) else result
+        } catch (_: Exception) {
+            emaSeriesFallback(values, period)
         }
-        return result
     }
 
-    fun emaSeries(values: List<Double>, period: Int): DoubleArray {
+    fun emaSeries(values: List<Double>, period: Int): DoubleArray = emaSeries(values.toDoubleArray(), period)
+
+    /** Rumus EMA-series manual (seed = closes[0], rekursif dari index 0) — fallback TA4J saja. */
+    private fun emaSeriesFallback(values: DoubleArray, period: Int): DoubleArray {
         if (period <= 0 || values.isEmpty()) return DoubleArray(0)
-        
+
         val result = DoubleArray(values.size)
         val multiplier = 2.0 / (period + 1.0)
         var ema = values[0]
         result[0] = ema
-        
+
         for (i in 1 until values.size) {
             ema = (values[i] - ema) * multiplier + ema
             result[i] = ema
@@ -191,29 +221,44 @@ object IndicatorMath {
         }
     }
 
+    /**
+     * MACD via TA4J MACDIndicator (garis MACD) + EMAIndicator di atas MACDIndicator (garis
+     * signal) — sesuai definisi standar MACD, dan konsisten dengan EMA yang ditampilkan di UI
+     * (sama-sama TA4J EMAIndicator, bukan lagi dua rumus rekursif berbeda seperti sebelumnya).
+     */
     fun macdSeries(closes: DoubleArray, fastPeriod: Int, slowPeriod: Int, signalPeriod: Int): MacdResult {
         if (closes.isEmpty() || fastPeriod <= 0 || slowPeriod <= 0 || signalPeriod <= 0) {
             return MacdResult(DoubleArray(0), DoubleArray(0))
         }
+        return try {
+            val series = closesToBarSeries(closes)
+            val closePrice = ClosePriceIndicator(series)
+            val macdIndicator = MACDIndicator(closePrice, fastPeriod, slowPeriod)
+            val signalIndicator = EMAIndicator(macdIndicator, signalPeriod)
+            val macdLine = DoubleArray(closes.size) { i -> macdIndicator.getValue(i).doubleValue() }
+            val signalLine = DoubleArray(closes.size) { i -> signalIndicator.getValue(i).doubleValue() }
+            val invalid = macdLine.any { it.isNaN() || it.isInfinite() } || signalLine.any { it.isNaN() || it.isInfinite() }
+            if (invalid) macdSeriesFallback(closes, fastPeriod, slowPeriod, signalPeriod) else MacdResult(macdLine, signalLine)
+        } catch (_: Exception) {
+            macdSeriesFallback(closes, fastPeriod, slowPeriod, signalPeriod)
+        }
+    }
 
-        val emaFast = emaSeries(closes, fastPeriod)
-        val emaSlow = emaSeries(closes, slowPeriod)
-        
+    fun macdSeries(closes: List<Double>, fastPeriod: Int, slowPeriod: Int, signalPeriod: Int): MacdResult =
+        macdSeries(closes.toDoubleArray(), fastPeriod, slowPeriod, signalPeriod)
+
+    /** MACD manual (emaSeriesFallback berjenjang) — fallback TA4J saja. */
+    private fun macdSeriesFallback(closes: DoubleArray, fastPeriod: Int, slowPeriod: Int, signalPeriod: Int): MacdResult {
+        val emaFast = emaSeriesFallback(closes, fastPeriod)
+        val emaSlow = emaSeriesFallback(closes, slowPeriod)
+
         val macdLine = DoubleArray(closes.size)
         for (i in closes.indices) {
             macdLine[i] = emaFast[i] - emaSlow[i]
         }
-        
-        val signalLine = emaSeries(macdLine, signalPeriod)
-        return MacdResult(macdLine, signalLine)
-    }
 
-    fun macdSeries(closes: List<Double>, fastPeriod: Int, slowPeriod: Int, signalPeriod: Int): MacdResult {
-        if (closes.isEmpty() || fastPeriod <= 0 || slowPeriod <= 0 || signalPeriod <= 0) {
-            return MacdResult(DoubleArray(0), DoubleArray(0))
-        }
-        val arr = DoubleArray(closes.size) { closes[it] }
-        return macdSeries(arr, fastPeriod, slowPeriod, signalPeriod)
+        val signalLine = emaSeriesFallback(macdLine, signalPeriod)
+        return MacdResult(macdLine, signalLine)
     }
 
     /** Returns (lower, upper) Bollinger bands. Memory-optimized with TA4J calculation. */

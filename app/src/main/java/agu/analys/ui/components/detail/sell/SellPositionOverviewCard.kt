@@ -191,10 +191,15 @@ private fun DetailValueBox(
             modifier = Modifier.basicMarquee()
         )
         Spacer(Modifier.height(2.dp))
+        val effectiveFontSize = when {
+            value.length > 15 -> 9.5.sp
+            value.length > 12 -> 10.5.sp
+            else -> 11.5.sp
+        }
         Text(
             text = value,
             color = valueColor,
-            fontSize = 11.5.sp,
+            fontSize = effectiveFontSize,
             fontWeight = FontWeight.Bold,
             maxLines = 1,
             modifier = Modifier.basicMarquee()

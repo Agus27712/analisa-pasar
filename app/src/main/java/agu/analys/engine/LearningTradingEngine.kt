@@ -248,6 +248,18 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
         _indicators.value = result.indicators
         _signalState.value = finalSignal
         tracked.transition?.let { trans ->
+            if (trans.previousState != trans.newState || trans.hasTriggeringTransition) {
+                val actEmoji = when (trans.signal.action) {
+                    agu.analys.model.SignalAction.BUY -> "🟢 BUY"
+                    agu.analys.model.SignalAction.SELL -> "🔴 SELL"
+                    agu.analys.model.SignalAction.HOLD -> "⚪ HOLD"
+                }
+                val reason = trans.signal.reasoning.firstOrNull() ?: "-"
+                agu.analys.util.AppLogManager.aiEngine(
+                    "SignalEngine",
+                    "[${trans.symbol}] Transisi SCALPING: ${trans.previousState} ➔ ${trans.newState} | Sinyal: $actEmoji (Confidence: ${trans.signal.confidence}%) | $reason"
+                )
+            }
             if (trans.hasTriggeringTransition) {
                 onCandidateSignalTransition?.invoke(trans)
             }
@@ -279,6 +291,18 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
         _indicators.value = result.indicators
         _signalState.value = finalSignal
         tracked.transition?.let { trans ->
+            if (trans.previousState != trans.newState || trans.hasTriggeringTransition) {
+                val actEmoji = when (trans.signal.action) {
+                    agu.analys.model.SignalAction.BUY -> "🟢 BUY"
+                    agu.analys.model.SignalAction.SELL -> "🔴 SELL"
+                    agu.analys.model.SignalAction.HOLD -> "⚪ HOLD"
+                }
+                val reason = trans.signal.reasoning.firstOrNull() ?: "-"
+                agu.analys.util.AppLogManager.aiEngine(
+                    "SignalEngine",
+                    "[${trans.symbol}] Transisi SWING: ${trans.previousState} ➔ ${trans.newState} | Sinyal: $actEmoji (Confidence: ${trans.signal.confidence}%) | $reason"
+                )
+            }
             if (trans.hasTriggeringTransition) {
                 onCandidateSignalTransition?.invoke(trans)
             }
@@ -310,6 +334,18 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
         _indicators.value = result.indicators
         _signalState.value = finalSignal
         tracked.transition?.let { trans ->
+            if (trans.previousState != trans.newState || trans.hasTriggeringTransition) {
+                val actEmoji = when (trans.signal.action) {
+                    agu.analys.model.SignalAction.BUY -> "🟢 BUY"
+                    agu.analys.model.SignalAction.SELL -> "🔴 SELL"
+                    agu.analys.model.SignalAction.HOLD -> "⚪ HOLD"
+                }
+                val reason = trans.signal.reasoning.firstOrNull() ?: "-"
+                agu.analys.util.AppLogManager.aiEngine(
+                    "SignalEngine",
+                    "[${trans.symbol}] Transisi INTRADAY: ${trans.previousState} ➔ ${trans.newState} | Sinyal: $actEmoji (Confidence: ${trans.signal.confidence}%) | $reason"
+                )
+            }
             if (trans.hasTriggeringTransition) {
                 onCandidateSignalTransition?.invoke(trans)
             }

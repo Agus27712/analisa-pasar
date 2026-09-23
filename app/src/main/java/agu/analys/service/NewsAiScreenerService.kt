@@ -148,6 +148,11 @@ object NewsAiScreenerService {
             providerLabel = "$providerLabel (Heuristik)"
         }
 
+        agu.analys.util.AppLogManager.aiEngine(
+            "NewsAiScreener",
+            "✅ Analisis AI selesai via $providerLabel ($usedModel). Ditemukan ${parsedPicks.size} koin rekomendasi: ${parsedPicks.joinToString { it.baseSymbol }.ifBlank { "None" }}"
+        )
+
         NewsScreenerResult(
             picks = parsedPicks,
             rawAnalysis = rawResponse,

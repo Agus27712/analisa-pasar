@@ -91,6 +91,7 @@ fun TradingViewModel.checkAlertsAndTrailing(symbol: String, currentPrice: Double
         if (shouldTrigger) {
             alertStore.markTriggered(alert.id)
             refreshPriceAlerts()
+            agu.analys.util.AppLogManager.trailing("PriceAlert", "🔔 [$symbol] $triggerTitle: $triggerMsg")
             AlertNotificationHelper.sendPriceAlertNotification(
                 context = getApplication(),
                 title = triggerTitle,
@@ -127,6 +128,11 @@ fun TradingViewModel.checkTrailingForMode(symbol: String, currentPrice: Double, 
             } else simCoordinator.wallet.value.getAvailableCoin(baseKey)
         }
 
+        agu.analys.util.AppLogManager.trailing(
+            "TrailingHit",
+            "🚨 [$symbol] Trailing Stop Terpicu! Harga Rp ${PriceFormatter.formatIdrNumber(currentPrice)} menyentuh Stop Limit Rp ${PriceFormatter.formatIdrNumber(limitSellPrice)} (Peak: Rp ${PriceFormatter.formatIdrNumber(updatedPos.peakPrice)}). Meluncurkan auto-sell $posQty koin (${if (isReal) "REAL" else "SIMULASI"})."
+        )
+
         if (posQty > 0.0) {
             AlertNotificationHelper.sendTrailingHitNotification(
                 context = getApplication(),
@@ -153,10 +159,15 @@ fun TradingViewModel.checkTrailingForMode(symbol: String, currentPrice: Double, 
                 updateSimTrailingOrder(symbol, updatedPos, newSlPrice, updatedPos.quantity)
             }
 
+            val currentProfitPct = if (updatedPos.entryPrice > 0.0) ((updatedPos.peakPrice - updatedPos.entryPrice) / updatedPos.entryPrice) * 100.0 else 0.0
+            agu.analys.util.AppLogManager.trailing(
+                "TrailingAdjust",
+                "🛡️ [$symbol] Peak baru: Rp ${PriceFormatter.formatIdrNumber(updatedPos.peakPrice)} (naik dari Rp ${PriceFormatter.formatIdrNumber(oldPeak)}). Stop limit dinaikkan ke Rp ${PriceFormatter.formatIdrNumber(newSlPrice)} (-${effectivePct}%, Profit Peak: +${String.format(java.util.Locale.US, "%.2f", currentProfitPct)}%)"
+            )
+
             // Notifikasi Trailing Peak Naik: Diberi jeda cerdas (minimal 30 detik antar notifikasi per koin)
             val now = System.currentTimeMillis()
             val lastAlertTime = lastPeakNotificationTimes["${symbol}_$isReal"] ?: 0L
-            val currentProfitPct = if (updatedPos.entryPrice > 0.0) ((updatedPos.peakPrice - updatedPos.entryPrice) / updatedPos.entryPrice) * 100.0 else 0.0
             if (now - lastAlertTime > 30_000L) {
                 lastPeakNotificationTimes["${symbol}_$isReal"] = now
                 AlertNotificationHelper.sendTrailingPeakUpdateNotification(
@@ -180,6 +191,7 @@ fun TradingViewModel.checkTrailingForMode(symbol: String, currentPrice: Double, 
             if (!updatedPos.isTp1Triggered && updatedPos.tp1Price > 0.0 && currentPrice >= updatedPos.tp1Price) {
                 positionStore.markTp1Triggered(symbol, isReal)
                 refreshSpotPosition()
+                agu.analys.util.AppLogManager.trailing("AutoSellTP", "🎯 [$symbol] Target TP1 tercapai di Rp ${PriceFormatter.formatIdrNumber(currentPrice)} (Target: Rp ${PriceFormatter.formatIdrNumber(updatedPos.tp1Price)})")
                 val sellQty = qty * (updatedPos.tp1Percent / 100.0)
                 executeAutoSellOrder(symbol, currentPrice, sellQty, "TP1", isReal, isPartial = updatedPos.tp1Percent < 100.0)
             }
@@ -187,12 +199,14 @@ fun TradingViewModel.checkTrailingForMode(symbol: String, currentPrice: Double, 
             if (!updatedPos.isTp2Triggered && updatedPos.tp2Price > 0.0 && currentPrice >= updatedPos.tp2Price) {
                 positionStore.markTp2Triggered(symbol, isReal)
                 refreshSpotPosition()
+                agu.analys.util.AppLogManager.trailing("AutoSellTP", "🎯 [$symbol] Target TP2 tercapai di Rp ${PriceFormatter.formatIdrNumber(currentPrice)} (Target: Rp ${PriceFormatter.formatIdrNumber(updatedPos.tp2Price)})")
                 val sellQty = qty * (updatedPos.tp2Percent / 100.0)
                 executeAutoSellOrder(symbol, currentPrice, sellQty, "TP2", isReal, isPartial = updatedPos.tp2Percent < 100.0)
             }
             // Check Stop Loss / Cut Loss Terpicu
             if (updatedPos.stopLossPrice > 0.0 && currentPrice <= updatedPos.stopLossPrice) {
                 refreshSpotPosition()
+                agu.analys.util.AppLogManager.trailing("AutoSellSL", "⚠️ [$symbol] Stop Loss tercapai di Rp ${PriceFormatter.formatIdrNumber(currentPrice)} (Batas: Rp ${PriceFormatter.formatIdrNumber(updatedPos.stopLossPrice)})")
                 executeAutoSellOrder(symbol, currentPrice, qty, "STOP_LOSS", isReal, isPartial = false)
             }
         }
@@ -208,6 +222,11 @@ fun TradingViewModel.executeAutoSellOrder(symbol: String, price: Double, quantit
         triggerType.contains("TP2") -> "Target Profit 2 (TP2)"
         else -> "Jual Otomatis"
     }
+
+    agu.analys.util.AppLogManager.trade(
+        "AutoSellExec",
+        "⚡ [$symbol] Eksekusi $triggerLabel ($modeTag) | Qty: $quantity @ Rp ${PriceFormatter.formatIdrNumber(price)}"
+    )
 
     if (isReal) {
         // Diskon 5% dari harga terkini agar berfungsi 100% layaknya Market Sell instan di orderbook

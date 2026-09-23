@@ -55,17 +55,31 @@ data class AppLogEntry(
 }
 
 object AppLogManager {
-    private const val MAX_LOGS = 1200
+    private const val MAX_LOGS = 2000
     private val logBuffer = ConcurrentLinkedDeque<AppLogEntry>()
+    private val _logVersion = kotlinx.coroutines.flow.MutableStateFlow(0L)
+    val logVersion: kotlinx.coroutines.flow.StateFlow<Long> = _logVersion
 
     init {
-        // Record initial system boot logs across all categories
+        // Record authentic system startup diagnostic info
         val bootTime = System.currentTimeMillis()
-        logBuffer.add(AppLogEntry(bootTime, Log.INFO, "SystemInit", "Inisialisasi aplikasi TradingView AI / Analys v${BuildConfig.VERSION_NAME}", category = LogCategory.SERVICE))
-        logBuffer.add(AppLogEntry(bootTime + 1, Log.INFO, "MarketInit", "Koneksi Feed Indodax IDR WebSocket & REST Poller diinisialisasi", category = LogCategory.MARKET))
-        logBuffer.add(AppLogEntry(bootTime + 2, Log.INFO, "TradeInit", "Modul Paper Trading & Real Trade Coordinator aktif", category = LogCategory.TRADE))
-        logBuffer.add(AppLogEntry(bootTime + 3, Log.INFO, "WorkerInit", "Background CandidateScanWorker dijadwalkan secara berkala", category = LogCategory.SERVICE))
-        logBuffer.add(AppLogEntry(bootTime + 4, Log.INFO, "AiInit", "Engine AI Screener Standby (Gemini & Groq API)", category = LogCategory.AI_ENGINE))
+        val runtime = Runtime.getRuntime()
+        val maxMemMb = runtime.maxMemory() / (1024 * 1024)
+        val totalMemMb = runtime.totalMemory() / (1024 * 1024)
+        val freeMemMb = runtime.freeMemory() / (1024 * 1024)
+        val osVersion = android.os.Build.VERSION.RELEASE
+        val sdkInt = android.os.Build.VERSION.SDK_INT
+        val deviceModel = "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}"
+
+        logBuffer.add(
+            AppLogEntry(
+                timestamp = bootTime,
+                priority = Log.INFO,
+                tag = "SystemInit",
+                message = "Analysis Pasar v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) siap. Device: $deviceModel (Android $osVersion, SDK $sdkInt) | RAM: ${freeMemMb}MB free / ${totalMemMb}MB alloc / ${maxMemMb}MB max",
+                category = LogCategory.SERVICE
+            )
+        )
     }
 
     val timberTree = object : Timber.Tree() {
@@ -80,22 +94,27 @@ object AppLogManager {
                 throwable = t,
                 category = category
             )
-            logBuffer.add(entry)
-            while (logBuffer.size > MAX_LOGS) {
-                logBuffer.pollFirst()
-            }
+            appendEntry(entry)
         }
+    }
+
+    private fun appendEntry(entry: AppLogEntry) {
+        logBuffer.add(entry)
+        while (logBuffer.size > MAX_LOGS) {
+            logBuffer.pollFirst()
+        }
+        _logVersion.value++
     }
 
     fun resolveCategory(tag: String, message: String, priority: Int = Log.INFO, throwable: Throwable? = null): LogCategory {
         val lower = "$tag $message".lowercase()
         return when {
-            priority >= Log.WARN || throwable != null || lower.contains("error") || lower.contains("fail") || lower.contains("gagal") || lower.contains("exception") || lower.contains("terjadi kesalahan") || lower.contains("warn") -> LogCategory.ERROR
-            lower.contains("trailing") || lower.contains("peak") || lower.contains("profit-lock") || lower.contains("step-tier") || lower.contains("slprice") || lower.contains("stop-loss") || lower.contains("tp-target") -> LogCategory.TRAILING
-            lower.contains("order") || lower.contains("buy") || lower.contains("sell") || lower.contains("trade") || lower.contains("wallet") || lower.contains("pos") || lower.contains("position") || lower.contains("balance") || lower.contains("execution") || lower.contains("eksekusi") || lower.contains("holding") || lower.contains("profit") -> LogCategory.TRADE
-            lower.contains("gemini") || lower.contains("groq") || lower.contains("prompt") || lower.contains("signal") || lower.contains("ai") || lower.contains("screener") || lower.contains("sentiment") -> LogCategory.AI_ENGINE
+            priority >= Log.WARN || throwable != null || lower.contains("error") || lower.contains("fail") || lower.contains("gagal") || lower.contains("exception") || lower.contains("terjadi kesalahan") -> LogCategory.ERROR
+            lower.contains("trailing") || lower.contains("peak") || lower.contains("profit-lock") || lower.contains("step-tier") || lower.contains("slprice") || lower.contains("stop-loss") || lower.contains("tp-target") || lower.contains("sl-price") || lower.contains("sl_price") -> LogCategory.TRAILING
+            lower.contains("order") || lower.contains("buy") || lower.contains("sell") || lower.contains("trade") || lower.contains("wallet") || lower.contains("pos") || lower.contains("position") || lower.contains("balance") || lower.contains("execution") || lower.contains("eksekusi") || lower.contains("holding") || lower.contains("profit") || lower.contains("pnl") -> LogCategory.TRADE
+            lower.contains("gemini") || lower.contains("groq") || lower.contains("prompt") || lower.contains("signal") || lower.contains("ai") || lower.contains("screener") || lower.contains("sentiment") || lower.contains("evaluator") || lower.contains("indicator") -> LogCategory.AI_ENGINE
             lower.contains("service") || lower.contains("worker") || lower.contains("job") || lower.contains("notification") || lower.contains("schedule") || lower.contains("background") || lower.contains("scan") || lower.contains("boot") || lower.contains("init") -> LogCategory.SERVICE
-            lower.contains("ticker") || lower.contains("candle") || lower.contains("indodax") || lower.contains("market") || lower.contains("poll") || lower.contains("fetch") || lower.contains("api") || lower.contains("http") || lower.contains("connection") || lower.contains("koneksi") || lower.contains("ws") || lower.contains("price") -> LogCategory.MARKET
+            lower.contains("ticker") || lower.contains("candle") || lower.contains("indodax") || lower.contains("market") || lower.contains("poll") || lower.contains("fetch") || lower.contains("api") || lower.contains("http") || lower.contains("connection") || lower.contains("koneksi") || lower.contains("ws") || lower.contains("price") || lower.contains("orderbook") || lower.contains("feed") -> LogCategory.MARKET
             else -> LogCategory.ALL
         }
     }
@@ -109,11 +128,18 @@ object AppLogManager {
             throwable = t,
             category = category
         )
-        logBuffer.add(entry)
-        while (logBuffer.size > MAX_LOGS) {
-            logBuffer.pollFirst()
-        }
+        appendEntry(entry)
     }
+
+    // Typed Convenience Logging APIs
+    fun market(tag: String, message: String) = log(LogCategory.MARKET, Log.INFO, tag, message)
+    fun trade(tag: String, message: String) = log(LogCategory.TRADE, Log.INFO, tag, message)
+    fun trailing(tag: String, message: String) = log(LogCategory.TRAILING, Log.INFO, tag, message)
+    fun aiEngine(tag: String, message: String) = log(LogCategory.AI_ENGINE, Log.INFO, tag, message)
+    fun service(tag: String, message: String) = log(LogCategory.SERVICE, Log.INFO, tag, message)
+    fun error(tag: String, message: String, t: Throwable? = null) = log(LogCategory.ERROR, Log.ERROR, tag, message, t)
+    fun warn(tag: String, message: String, t: Throwable? = null) = log(LogCategory.ERROR, Log.WARN, tag, message, t)
+    fun info(tag: String, message: String, category: LogCategory = LogCategory.ALL) = log(category, Log.INFO, tag, message)
 
     fun getLogs(category: LogCategory = LogCategory.ALL, searchQuery: String = ""): List<AppLogEntry> {
         val all = logBuffer.toList()
@@ -123,7 +149,7 @@ object AppLogManager {
                 LogCategory.ERROR -> entry.priority >= Log.WARN || entry.category == LogCategory.ERROR || entry.throwable != null || entry.message.contains("error", true) || entry.message.contains("gagal", true) || entry.message.contains("fail", true)
                 LogCategory.SYSTEM_LOGCAT -> true
                 else -> {
-                    val resolved = resolveCategory(entry.tag, entry.message, entry.priority, entry.throwable)
+                    val resolved = if (entry.category != LogCategory.ALL) entry.category else resolveCategory(entry.tag, entry.message, entry.priority, entry.throwable)
                     entry.category == category || resolved == category
                 }
             }
@@ -131,7 +157,8 @@ object AppLogManager {
                 true
             } else {
                 entry.message.contains(searchQuery, ignoreCase = true) ||
-                        entry.tag.contains(searchQuery, ignoreCase = true)
+                        entry.tag.contains(searchQuery, ignoreCase = true) ||
+                        entry.levelName.contains(searchQuery, ignoreCase = true)
             }
             matchesCategory && matchesSearch
         }.reversed()
@@ -139,6 +166,7 @@ object AppLogManager {
 
     fun clearLogs() {
         logBuffer.clear()
+        _logVersion.value++
     }
 
     suspend fun fetchNativeLogcat(lines: Int = 400): List<String> = withContext(Dispatchers.IO) {

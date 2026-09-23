@@ -17,6 +17,7 @@ import agu.analys.model.Timeframe
 import agu.analys.trading.SpotPositionStore
 import agu.analys.util.AlertNotificationHelper
 import agu.analys.util.AppPreferences
+import agu.analys.util.PriceFormatter
 import timber.log.Timber
 import java.util.concurrent.TimeUnit
 
@@ -54,6 +55,8 @@ class CandidateScanWorker(
             Timber.d("CandidateScanWorker: Semua koin watchlist sedang HOLDING atau kosong.")
             return Result.success()
         }
+
+        agu.analys.util.AppLogManager.service("CandidateScan", "Memulai pemindaian background untuk ${eligibleSymbols.size} koin watchlist...")
 
         try {
             // 2. Fetch tickers dalam 1 request batch HTTP (REST ringan via api/summaries)
@@ -98,6 +101,7 @@ class CandidateScanWorker(
                     )
                     if (trackedSwing.transition?.hasTriggeringTransition == true && prefs.isNotificationsEnabled) {
                         if (!positionStore.get(cleanSymbol, isReal = prefs.isRealBuyMode).isHolding) {
+                            agu.analys.util.AppLogManager.service("CandidateFound", "🔔 [SWING] Kandidat BUY terdeteksi untuk $cleanSymbol @ Rp ${PriceFormatter.formatIdrNumber(tick.price)}! Mengirim notifikasi...")
                             AlertNotificationHelper.sendCandidateFoundNotification(
                                 context = applicationContext,
                                 symbol = cleanSymbol,
@@ -123,6 +127,7 @@ class CandidateScanWorker(
                     )
                     if (trackedIntraday.transition?.hasTriggeringTransition == true && prefs.isNotificationsEnabled) {
                         if (!positionStore.get(cleanSymbol, isReal = prefs.isRealBuyMode).isHolding) {
+                            agu.analys.util.AppLogManager.service("CandidateFound", "🔔 [INTRADAY] Kandidat BUY terdeteksi untuk $cleanSymbol @ Rp ${PriceFormatter.formatIdrNumber(tick.price)}! Mengirim notifikasi...")
                             AlertNotificationHelper.sendCandidateFoundNotification(
                                 context = applicationContext,
                                 symbol = cleanSymbol,
@@ -134,6 +139,7 @@ class CandidateScanWorker(
                 }
             }
 
+            agu.analys.util.AppLogManager.service("CandidateScan", "Pemindaian background selesai. ${eligibleSymbols.size} koin dievaluasi.")
             return Result.success()
         } catch (e: Exception) {
             Timber.e(e, "CandidateScanWorker: Terjadi kesalahan saat memindai kandidat")

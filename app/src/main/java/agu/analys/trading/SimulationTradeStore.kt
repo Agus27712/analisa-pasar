@@ -165,9 +165,14 @@ class SimulationTradeStore(context: Context) {
                         onSuccess = { res ->
                             saveWallet(res.updatedWallet)
                             addTradeHistory(res.historyItem)
+                            agu.analys.util.AppLogManager.trade(
+                                "SimOrder",
+                                "💼 [SIMULASI BUY] Berhasil beli $quantity $baseKey @ Rp ${formatMoney(execPrice, quote)} | Total: Rp ${formatMoney(quantity * execPrice, quote)} | Sisa Saldo: Rp ${formatMoney(res.updatedWallet.idrBalance, quote)}"
+                            )
                             SimulationOrderResult.Success(res.completedOrder, "Market Buy berhasil @ ${formatMoney(execPrice, quote)}!")
                         },
                         onFailure = { err ->
+                            agu.analys.util.AppLogManager.warn("SimOrder", "Gagal simulasi Buy $symbol: ${err.message}")
                             SimulationOrderResult.Error(err.message ?: "Gagal memproses Market Buy.")
                         }
                     )
@@ -177,9 +182,18 @@ class SimulationTradeStore(context: Context) {
                         onSuccess = { res ->
                             saveWallet(res.updatedWallet)
                             addTradeHistory(res.historyItem)
+                            val pnlStr = if (res.historyItem.pnlIdr != null) {
+                                val sign = if (res.historyItem.pnlIdr!! >= 0) "+" else ""
+                                " | PnL: $sign Rp ${formatMoney(res.historyItem.pnlIdr!!, quote)} (${String.format(java.util.Locale.US, "%.2f", res.historyItem.pnlPercent ?: 0.0)}%)"
+                            } else ""
+                            agu.analys.util.AppLogManager.trade(
+                                "SimOrder",
+                                "💼 [SIMULASI SELL] Berhasil jual $quantity $baseKey @ Rp ${formatMoney(execPrice, quote)} | Hasil: Rp ${formatMoney(quantity * execPrice, quote)}$pnlStr"
+                            )
                             SimulationOrderResult.Success(res.completedOrder, "Market Sell berhasil @ ${formatMoney(execPrice, quote)}!")
                         },
                         onFailure = { err ->
+                            agu.analys.util.AppLogManager.warn("SimOrder", "Gagal simulasi Sell $symbol: ${err.message}")
                             SimulationOrderResult.Error(err.message ?: "Gagal memproses Market Sell.")
                         }
                     )

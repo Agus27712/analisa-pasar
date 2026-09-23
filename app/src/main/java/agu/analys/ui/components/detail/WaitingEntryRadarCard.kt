@@ -99,9 +99,20 @@ fun WaitingEntryRadarCard(
         mtf.resolvedCompletedCount
     }
 
-    val completedSellSteps = remember(positionContext, sellSignalState) {
+    val effectiveSellSignalState = remember(sellSignalState, positionContext, effectivePrice, fees) {
+        if (isHolding && sellSignalState.state == SellLifecycleState.NOT_HOLDING) {
+            agu.analys.engine.sell.SellSignalEvaluator.evaluate(
+                context = positionContext,
+                tradingFees = fees
+            )
+        } else {
+            sellSignalState
+        }
+    }
+
+    val completedSellSteps = remember(positionContext, effectiveSellSignalState, quoteAsset) {
         if (!isHolding) 0 else {
-            SellCheckpointEvaluator.evaluate(positionContext, sellSignalState, quoteAsset)
+            SellCheckpointEvaluator.evaluate(positionContext, effectiveSellSignalState, quoteAsset)
                 .count { it.isOk }
         }
     }
@@ -173,23 +184,26 @@ fun WaitingEntryRadarCard(
     var isChecklistVisible by remember { mutableStateOf(false) }
     var isLevelPlanVisible by remember { mutableStateOf(false) }
 
-    AnalysisCard(modifier = modifier) {
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
         if (!currentBuyMode) {
             // ═════════════════════════════════════════════════════════════════════════
             // WORKFLOW: HOLD & SELL (Asset Active in Portfolio / Profit Target Analysis)
             // ═════════════════════════════════════════════════════════════════════════
             if (isHolding) {
+                // Standalone Position Overview Card (Tanpa border/padding ganda bertumpuk)
                 SellPositionOverviewCard(
                     context = positionContext,
                     quoteAsset = quoteAsset
                 )
-                Spacer(Modifier.height(10.dp))
             } else {
                 Surface(
                     shape = RoundedCornerShape(10.dp),
                     color = TvSurfaceVariant,
                     border = BorderStroke(0.8.dp, TvBorder),
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
                         modifier = Modifier.padding(10.dp),
@@ -211,54 +225,56 @@ fun WaitingEntryRadarCard(
                 }
             }
 
-            val (sellStatusText, sellStatusColor) = when (sellSignalState.state) {
-                SellLifecycleState.READY_TO_SELL -> Pair("🎯 SIAP JUAL", TvGreen)
-                SellLifecycleState.APPROACHING_TARGET -> Pair("⏳ DEKAT TP1", TvOrange)
-                SellLifecycleState.TRAILING_TRIGGERED -> Pair("🚨 TRAILING STOP", TvOrange)
-                SellLifecycleState.STOP_LOSS_HIT -> Pair("⚠️ CUT LOSS", TvRed)
-                SellLifecycleState.RAPID_DROP_EXIT -> Pair("⚡ RAPID DROP", TvRed)
-                SellLifecycleState.MONITORING -> Pair("🛡️ POSISI AKTIF", TvBlue)
-                SellLifecycleState.NOT_HOLDING -> Pair("WAITING", TvTextSecondary)
-            }
+            AnalysisCard {
+                val (sellStatusText, sellStatusColor) = when (effectiveSellSignalState.state) {
+                    SellLifecycleState.READY_TO_SELL -> Pair("🎯 SIAP JUAL", TvGreen)
+                    SellLifecycleState.APPROACHING_TARGET -> Pair("⏳ DEKAT TP1", TvOrange)
+                    SellLifecycleState.TRAILING_TRIGGERED -> Pair("🚨 TRAILING STOP", TvOrange)
+                    SellLifecycleState.STOP_LOSS_HIT -> Pair("⚠️ CUT LOSS", TvRed)
+                    SellLifecycleState.RAPID_DROP_EXIT -> Pair("⚡ RAPID DROP", TvRed)
+                    SellLifecycleState.MONITORING -> Pair("🛡️ POSISI AKTIF", TvBlue)
+                    SellLifecycleState.NOT_HOLDING -> Pair("WAITING", TvTextSecondary)
+                }
 
-            RadarHeaderSection(
-                titleHeader = "RADAR POSISI & SINYAL JUAL",
-                completed = completedSellSteps,
-                onToggleChecklist = { isChecklistVisible = !isChecklistVisible },
-                statusText = sellStatusText,
-                statusColor = sellStatusColor
-            )
+                RadarHeaderSection(
+                    titleHeader = "RADAR POSISI & SINYAL JUAL",
+                    completed = completedSellSteps,
+                    onToggleChecklist = { isChecklistVisible = !isChecklistVisible },
+                    statusText = sellStatusText,
+                    statusColor = sellStatusColor
+                )
 
-            Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(8.dp))
 
-            AnimatedVisibility(visible = isChecklistVisible) {
-                SellConfirmationChecklist(
+                AnimatedVisibility(visible = isChecklistVisible) {
+                    SellConfirmationChecklist(
+                        context = positionContext,
+                        sellSignal = effectiveSellSignalState,
+                        quoteAsset = quoteAsset
+                    )
+                }
+
+                if (isChecklistVisible) {
+                    Spacer(Modifier.height(8.dp))
+                }
+
+                // Stepper Checkpoint SELL yang jujur & berbasis lifecycle nyata
+                SellCheckpointStepper(
                     context = positionContext,
-                    sellSignal = sellSignalState,
+                    sellSignal = effectiveSellSignalState,
                     quoteAsset = quoteAsset
                 )
+
+                Spacer(Modifier.height(10.dp))
+
+                // Target Levels Posisi Aktif
+                SellTargetLevelsSection(
+                    context = positionContext,
+                    fees = fees,
+                    quoteAsset = quoteAsset,
+                    onClick = { showTpSlPopup = true }
+                )
             }
-
-            if (isChecklistVisible) {
-                Spacer(Modifier.height(8.dp))
-            }
-
-            // Stepper Checkpoint SELL yang jujur & berbasis lifecycle nyata
-            SellCheckpointStepper(
-                context = positionContext,
-                sellSignal = sellSignalState,
-                quoteAsset = quoteAsset
-            )
-
-            Spacer(Modifier.height(10.dp))
-
-            // Target Levels Posisi Aktif
-            SellTargetLevelsSection(
-                context = positionContext,
-                fees = fees,
-                quoteAsset = quoteAsset,
-                onClick = { showTpSlPopup = true }
-            )
         } else {
             // ═════════════════════════════════════════════════════════════════════════
             // WORKFLOW: BUY (Searching for Market Entry / DCA Re-entry Opportunity)
@@ -268,7 +284,7 @@ fun WaitingEntryRadarCard(
                     shape = RoundedCornerShape(10.dp),
                     color = TvGreen.copy(alpha = 0.08f),
                     border = BorderStroke(0.8.dp, TvGreen.copy(alpha = 0.35f)),
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
@@ -291,50 +307,50 @@ fun WaitingEntryRadarCard(
                 }
             }
 
-            RadarHeaderSection(
-                titleHeader = buyTitleHeader,
-                completed = completedBuySteps,
-                onToggleChecklist = { isChecklistVisible = !isChecklistVisible }
-            )
+            AnalysisCard {
+                RadarHeaderSection(
+                    titleHeader = buyTitleHeader,
+                    completed = completedBuySteps,
+                    onToggleChecklist = { isChecklistVisible = !isChecklistVisible }
+                )
 
-            Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(10.dp))
 
-            AnimatedVisibility(visible = isChecklistVisible) {
-                RadarConfirmationChecklist(
+                AnimatedVisibility(visible = isChecklistVisible) {
+                    RadarConfirmationChecklist(
+                        mtf = mtf,
+                        strategyMode = strategyMode
+                    )
+                }
+
+                if (isChecklistVisible) {
+                    Spacer(Modifier.height(10.dp))
+                }
+
+                // BUY Linear Checkpoint Stepper & Loading Bar Dinamis
+                RadarLinearCheckpointStepper(
                     mtf = mtf,
-                    strategyMode = strategyMode
+                    completed = completedBuySteps,
+                    pulseScale = pulseScale,
+                    strategyMode = strategyMode,
+                    confidence = signal.confidence,
+                    orderBookBids = orderBookBids,
+                    orderBookAsks = orderBookAsks
+                )
+
+                Spacer(Modifier.height(10.dp))
+
+                // Original BUY Target Levels
+                RadarTargetLevelsSection(
+                    signal = signal,
+                    effectivePrice = effectivePrice,
+                    quoteAsset = quoteAsset,
+                    completed = completedBuySteps,
+                    isLevelPlanVisible = isLevelPlanVisible,
+                    onToggleLevelPlan = { isLevelPlanVisible = !isLevelPlanVisible }
                 )
             }
-
-            if (isChecklistVisible) {
-                Spacer(Modifier.height(10.dp))
-            }
-
-            // BUY Linear Checkpoint Stepper & Loading Bar Dinamis
-            RadarLinearCheckpointStepper(
-                mtf = mtf,
-                completed = completedBuySteps,
-                pulseScale = pulseScale,
-                strategyMode = strategyMode,
-                confidence = signal.confidence,
-                orderBookBids = orderBookBids,
-                orderBookAsks = orderBookAsks
-            )
-
-            Spacer(Modifier.height(10.dp))
-
-            // Original BUY Target Levels
-            RadarTargetLevelsSection(
-                signal = signal,
-                effectivePrice = effectivePrice,
-                quoteAsset = quoteAsset,
-                completed = completedBuySteps,
-                isLevelPlanVisible = isLevelPlanVisible,
-                onToggleLevelPlan = { isLevelPlanVisible = !isLevelPlanVisible }
-            )
         }
-
-        Spacer(Modifier.height(10.dp))
 
         // Estimasi Biaya Transaksi & Eksekusi Buy / Sell
         RadarTransactionFeeSection(

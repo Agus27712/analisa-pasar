@@ -154,10 +154,19 @@ fun ActiveHoldingCard(
     onClick: () -> Unit
 ) {
     val currentPrice = item.tick?.price ?: 0.0
-    val entryPrice = item.holding.entryPrice
+    val entryPrice = when {
+        item.holding.entryPrice > 0.0 && item.position != null && item.position.entryPrice > 0.0 -> {
+            if (item.holding.entryPrice < 1.0 && item.position.entryPrice >= 1.0) item.position.entryPrice
+            else item.holding.entryPrice
+        }
+        item.holding.entryPrice > 0.0 -> item.holding.entryPrice
+        item.position != null && item.position.entryPrice > 0.0 -> item.position.entryPrice
+        else -> 0.0
+    }
     val change24h = item.tick?.change24h ?: 0.0
     val pnlPct = if (entryPrice > 0.0 && currentPrice > 0.0) {
-        ((currentPrice - entryPrice) / entryPrice) * 100.0
+        val calc = ((currentPrice - entryPrice) / entryPrice) * 100.0
+        if (calc.isFinite() && abs(calc) < 100000.0) calc else change24h
     } else change24h
 
     val isProfit = pnlPct >= 0.0

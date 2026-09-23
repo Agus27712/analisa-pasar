@@ -360,7 +360,7 @@ object IntradayEvaluator {
 
         // ── Keputusan akhir Intraday Disiplin Sesi (Open Pagi, Close Malam) ──
         // Diperbolehkan BUY pada Sesi Open Pagi (06:00–11:30 WIB) atau Sesi Siang Akumulasi jika momentum kuat
-        val isQualified = step4Ok && buyScore >= 52.0 && buyScore > sellScore * 1.15 && !isNearHighDanger && !flashDumpTrauma && !pumpAndDumpTrap && intradayPhase.isOpenWindow
+        val isQualified = step4Ok && buyScore >= 52.0 && buyScore > sellScore * 1.15 && !isNearHighDanger && !flashDumpTrauma && !pumpAndDumpTrap && intradayPhase.isOpenWindow && confluence.completedCount >= 4
         
         var baseConfidence = if (isQualified) (buyScore).coerceAtMost(90.0).toInt() else (buyScore).coerceAtMost(60.0).toInt()
         val regimeMultiplier = when {

@@ -51,6 +51,7 @@ fun DetailTopBar(
     onNavigateToDashboard: () -> Unit,
     isConnected: Boolean = true,
     onOpenLogcat: () -> Unit = {},
+    strategyMode: StrategyMode? = null,
     modifier: Modifier = Modifier
 ) {
     // Waktu realtime server/aplikasi berjalan terus setiap detik saat terhubung (LIVE).
@@ -106,18 +107,47 @@ fun DetailTopBar(
         Column(
             modifier = Modifier.weight(1f)
         ) {
-            Text(
-                text = "${pair.baseAsset}/${pair.quoteAsset}",
-                color = TvTextPrimary,
-                fontSize = 17.sp,
-                fontWeight = FontWeight.ExtraBold,
-                maxLines = 1,
-                softWrap = false
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(
+                    text = "${pair.baseAsset}/${pair.quoteAsset}",
+                    color = TvTextPrimary,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    maxLines = 1,
+                    softWrap = false
+                )
+                if (strategyMode != null) {
+                    val modeColor = when (strategyMode) {
+                        StrategyMode.SCALPING -> TvGreen
+                        StrategyMode.SWING -> TvBlue
+                        StrategyMode.OFFICE_DAILY -> TvCyan
+                    }
+                    Box(
+                        modifier = Modifier
+                            .background(modeColor.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
+                            .border(0.8.dp, modeColor.copy(alpha = 0.4f), RoundedCornerShape(4.dp))
+                            .padding(horizontal = 5.dp, vertical = 1.dp)
+                    ) {
+                        Text(
+                            text = when (strategyMode) {
+                                StrategyMode.SCALPING -> "SCALP"
+                                StrategyMode.SWING -> "SWING"
+                                StrategyMode.OFFICE_DAILY -> "INTRADAY"
+                            },
+                            color = modeColor,
+                            fontSize = 8.5.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
             Text(
                 text = getCoinFullName(pair.baseAsset),
                 color = TvTextSecondary,
-                fontSize = 12.sp,
+                fontSize = 11.5.sp,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
                 softWrap = false

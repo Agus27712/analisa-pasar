@@ -44,10 +44,10 @@ jobs:
           VERSION_NAME=$(sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' app/build.gradle.kts | head -n 1)
           VERSION_CODE=$(sed -n 's/.*getOrElse(\([0-9]*\)).*/\1/p' app/build.gradle.kts | head -n 1)
           if [ -z "$VERSION_NAME" ]; then
-            VERSION_NAME="2.0.3"
+            VERSION_NAME="3.3.9"
           fi
           if [ -z "$VERSION_CODE" ]; then
-            VERSION_CODE="22"
+            VERSION_CODE="75"
           fi
           echo "Detected Version Name: $VERSION_NAME"
           echo "Detected Version Code: $VERSION_CODE"
@@ -105,6 +105,7 @@ jobs:
         shell: bash
         run: |
           VERSION="${{ steps.version.outputs.name }}"
+          CODE="${{ steps.version.outputs.code }}"
           TAG="${{ steps.release_tag.outputs.tag }}"
           
           # Fetch remote tags for clean comparison
@@ -113,38 +114,59 @@ jobs:
           PREVIOUS_TAG=$(git tag --sort=-creatordate | grep -E '^v[0-9]+\.[0-9]+' | grep -v "^$TAG$" | head -n 1 || true)
           
           if [ -n "$PREVIOUS_TAG" ] && git rev-parse -q --verify "refs/tags/$PREVIOUS_TAG" >/dev/null 2>&1; then
-            echo "Comparing changes since: $PREVIOUS_TAG..HEAD"
             RANGE="$PREVIOUS_TAG..HEAD"
-            FEATS=$(git log $RANGE --no-merges --pretty=format:'- %s' --grep='^feat' -i || true)
-            FIXES=$(git log $RANGE --no-merges --pretty=format:'- %s' --grep='^fix' -i || true)
-            OTHERS=$(git log $RANGE --no-merges --pretty=format:'- %s' --grep='^\(feat\|fix\)' -i --invert-grep || true)
           else
-            echo "No previous tag found. Getting recent commits (max 10)."
-            FEATS=$(git log -n 10 --no-merges --pretty=format:'- %s' --grep='^feat' -i || true)
-            FIXES=$(git log -n 10 --no-merges --pretty=format:'- %s' --grep='^fix' -i || true)
-            OTHERS=$(git log -n 10 --no-merges --pretty=format:'- %s' --grep='^\(feat\|fix\)' -i --invert-grep || true)
+            RANGE="HEAD~10..HEAD"
+            if ! git rev-parse -q --verify "$RANGE" >/dev/null 2>&1; then
+              RANGE="HEAD"
+            fi
           fi
 
-          [ -n "$FEATS" ] || FEATS="- Pembaruan fitur dan optimasi aplikasi."
-          [ -n "$FIXES" ] || FIXES="- Perbaikan stabilitas dan konsistensi sistem."
-          [ -n "$OTHERS" ] || OTHERS="- Peningkatan performa dan sinkronisasi data."
+          # Extract and clean commit lines (no merge commits, unique, concise)
+          FEATS=$(git log $RANGE --no-merges --pretty=format:'- %s' --grep='^feat' -i 2>/dev/null | sed -E 's/^- [fF]eat(\([^)]+\))?:? /- /g' | sort -u || true)
+          FIXES=$(git log $RANGE --no-merges --pretty=format:'- %s' --grep='^fix' -i 2>/dev/null | sed -E 's/^- [fF]ix(\([^)]+\))?:? /- /g' | sort -u || true)
+          OTHERS=$(git log $RANGE --no-merges --pretty=format:'- %s' --grep='^\(feat\|fix\)' -i --invert-grep 2>/dev/null | sed -E 's/^- [a-zA-Z0-9_-]+(\([^)]+\))?:? /- /g' | grep -v -i -E '(merge|bump version|update version|chore:)' | sort -u || true)
 
+          NOTES_FILE="$RUNNER_TEMP/release-notes.md"
           {
-            echo "## 🚀 Versi Aplikasi"
-            echo "**Analysis Pasar v$VERSION** (Build Code: ${{ steps.version.outputs.code }})"
+            echo "## Analysis Pasar v$VERSION"
             echo ""
-            echo "### ✨ Fitur Baru & Pembaruan"
-            echo "$FEATS"
-            echo ""
-            echo "### 🛠️ Perbaikan Bug"
-            echo "$FIXES"
-            echo ""
-            echo "### ⚡ Peningkatan Sistem & Performa"
-            echo "$OTHERS"
-            echo ""
-            echo "---"
-            echo "*📦 Build otomatis oleh GitHub Actions (Release Workflow).*"
-          } > "$RUNNER_TEMP/release-notes.md"
+
+            HAS_CONTENT=false
+
+            if [ -n "$FEATS" ]; then
+              echo "### ✨ Fitur Baru"
+              echo "$FEATS"
+              echo ""
+              HAS_CONTENT=true
+            fi
+
+            if [ -n "$FIXES" ]; then
+              echo "### 🛠️ Perbaikan Bug"
+              echo "$FIXES"
+              echo ""
+              HAS_CONTENT=true
+            fi
+
+            if [ -n "$OTHERS" ]; then
+              echo "### ⚡ Peningkatan & Perubahan Lainnya"
+              echo "$OTHERS"
+              echo ""
+              HAS_CONTENT=true
+            fi
+
+            if [ "$HAS_CONTENT" = false ]; then
+              RECENT_ALL=$(git log -n 5 --no-merges --pretty=format:'- %s' 2>/dev/null | grep -v -i -E '(merge|bump version)' | sort -u || true)
+              if [ -n "$RECENT_ALL" ]; then
+                echo "### 📝 Ringkasan Perubahan"
+                echo "$RECENT_ALL"
+                echo ""
+              else
+                echo "- Pembaruan dan peningkatan performa rilis v$VERSION."
+                echo ""
+              fi
+            fi
+          } > "$NOTES_FILE"
 
       - name: Create or update GitHub release and upload APK
         env:

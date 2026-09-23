@@ -53,8 +53,9 @@ fun LogcatDiagnosticDialog(
     val posStore = remember { SpotPositionStore(context) }
     val allPositions = remember(refreshTrigger) { posStore.getAllPositions() }
     val activeTrailingSymbols = remember(refreshTrigger) { posStore.getAllActiveTrailingSymbols() }
+    val logVersion by AppLogManager.logVersion.collectAsState()
 
-    val logs = remember(selectedCategory, searchQuery, refreshTrigger) {
+    val logs = remember(selectedCategory, searchQuery, refreshTrigger, logVersion) {
         AppLogManager.getLogs(selectedCategory, searchQuery)
     }
 
@@ -269,11 +270,12 @@ fun LogcatDiagnosticDialog(
 
                 // Content View based on category
                 if (selectedCategory == LogCategory.TRAILING) {
-                    // Trailing Stops Inspector View
+                    // Trailing Stops Inspector View with realtime trailing logs
                     TrailingStateInspectionView(
                         allPositions = allPositions,
                         activeTrailingSymbols = activeTrailingSymbols,
-                        searchQuery = searchQuery
+                        searchQuery = searchQuery,
+                        logs = logs
                     )
                 } else if (selectedCategory == LogCategory.SYSTEM_LOGCAT) {
                     // Native Logcat View
@@ -297,7 +299,8 @@ fun LogcatDiagnosticDialog(
 private fun TrailingStateInspectionView(
     allPositions: Map<String, SpotPosition>,
     activeTrailingSymbols: List<String>,
-    searchQuery: String
+    searchQuery: String,
+    logs: List<AppLogEntry>
 ) {
     val filtered = allPositions.filter { (sym, pos) ->
         searchQuery.isBlank() || sym.contains(searchQuery, ignoreCase = true) ||
@@ -332,20 +335,62 @@ private fun TrailingStateInspectionView(
             }
         }
 
-        if (filtered.isEmpty()) {
+        if (filtered.isNotEmpty()) {
+            items(filtered.entries.toList(), key = { it.key }) { (symbol, pos) ->
+                TrailingCoinCard(symbol = symbol, pos = pos)
+            }
+        }
+
+        item {
+            Spacer(Modifier.height(6.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "📜 Riwayat Log Event Trailing (${logs.size})",
+                    color = TvTextPrimary,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                if (logs.isNotEmpty()) {
+                    Text(
+                        text = "● Realtime Feed",
+                        color = TvGreen,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+        }
+
+        if (logs.isEmpty()) {
             item {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(32.dp),
-                    contentAlignment = Alignment.Center
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = CardDefaults.cardColors(containerColor = TvSurface),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder)
                 ) {
-                    Text("Tidak ada koin yang sesuai dengan filter.", color = TvTextSecondary, fontSize = 12.sp)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(20.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "Belum ada log pergerakan trailing stop. Log tercatat otomatis saat harga koin bergerak, peak naik, atau stop limit diperbarui.",
+                            color = TvTextSecondary,
+                            fontSize = 11.sp,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    }
                 }
             }
         } else {
-            items(filtered.entries.toList(), key = { it.key }) { (symbol, pos) ->
-                TrailingCoinCard(symbol = symbol, pos = pos)
+            items(logs) { entry ->
+                AppLogEntryRow(entry = entry)
             }
         }
     }
