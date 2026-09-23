@@ -29,6 +29,8 @@ class AppPreferences(context: Context) {
         )
     } catch (e: Exception) {
         // Handle corrupt KeyStore / invalid key after app upgrade gracefully
+        timber.log.Timber.w(e, "EncryptedSharedPreferences failed, attempting keystore recovery")
+        isKeyStoreRecoveryOccurred = true
         try {
             context.deleteSharedPreferences(PREFS_NAME)
             val masterKey = MasterKey.Builder(context)
@@ -412,6 +414,7 @@ class AppPreferences(context: Context) {
     }
 
     companion object {
+        @Volatile var isKeyStoreRecoveryOccurred: Boolean = false
         const val DEFAULT_UPDATE_REPO = "Agus27712/analisa-pasar"
         private const val PREFS_NAME = "krypto_analysis_prefs"
         private const val KEY_GROQ = "groq_api_key"

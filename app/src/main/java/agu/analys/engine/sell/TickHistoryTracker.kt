@@ -33,6 +33,18 @@ object TickHistoryTracker {
         while (deque.size > MAX_TICKS_PER_SYMBOL || (deque.peekFirst()?.let { it.timestamp < cutoff } == true)) {
             deque.pollFirst()
         }
+
+        // Jika map terlalu besar (> 100 simbol), bersihkan simbol dorman/stale untuk proteksi memori
+        if (symbolHistory.size > 100) {
+            val iterator = symbolHistory.entries.iterator()
+            while (iterator.hasNext()) {
+                val entry = iterator.next()
+                val newest = entry.value.peekLast()
+                if (newest == null || newest.timestamp < cutoff) {
+                    iterator.remove()
+                }
+            }
+        }
     }
 
     fun getSnapshot(

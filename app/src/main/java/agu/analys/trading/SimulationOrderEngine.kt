@@ -3,8 +3,11 @@ package agu.analys.trading
 import java.util.UUID
 
 object SimulationOrderEngine {
-    const val INDODAX_MAKER_FEE_RATE = 0.001 // 0.1%
-    const val INDODAX_TAKER_FEE_RATE = 0.003 // 0.3%
+    // Sesuai aturan PPN/PPh & tarif Indodax Spot (0.11% Maker, 0.21% Buy Taker, 0.42% Sell Taker)
+    const val INDODAX_MAKER_FEE_RATE = 0.0011 // 0.11%
+    const val INDODAX_BUY_TAKER_FEE_RATE = 0.0021 // 0.21%
+    const val INDODAX_SELL_TAKER_FEE_RATE = 0.0042 // 0.42%
+    const val INDODAX_TAKER_FEE_RATE = 0.0021 // Alias untuk kompatibilitas backward
 
     data class ExecutionResult(
         val updatedWallet: SimulationWallet,
@@ -18,10 +21,11 @@ object SimulationOrderEngine {
         baseKey: String,
         quote: String,
         execPrice: Double,
-        quantity: Double
+        quantity: Double,
+        feeRate: Double = INDODAX_BUY_TAKER_FEE_RATE
     ): Result<ExecutionResult> {
         val totalIdr = quantity * execPrice
-        val feeIdr = totalIdr * INDODAX_TAKER_FEE_RATE
+        val feeIdr = totalIdr * feeRate
         val requiredIdr = totalIdr + feeIdr
 
         if (wallet.getAvailableIdr() < requiredIdr) {
@@ -90,7 +94,8 @@ object SimulationOrderEngine {
         baseKey: String,
         quote: String,
         execPrice: Double,
-        quantity: Double
+        quantity: Double,
+        feeRate: Double = INDODAX_SELL_TAKER_FEE_RATE
     ): Result<ExecutionResult> {
         val available = wallet.getAvailableCoin(baseKey)
         // Toleransi absolut + relatif agar trailing/full-close tidak menyisakan dust
@@ -109,7 +114,7 @@ object SimulationOrderEngine {
         }
 
         val totalIdr = actualQty * execPrice
-        val feeIdr = totalIdr * INDODAX_TAKER_FEE_RATE
+        val feeIdr = totalIdr * feeRate
         val netIdr = (totalIdr - feeIdr).coerceAtLeast(0.0)
         val avgBuy = wallet.avgBuyPrices[baseKey] ?: execPrice
         val costBasis = actualQty * avgBuy

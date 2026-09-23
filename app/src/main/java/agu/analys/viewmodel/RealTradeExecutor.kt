@@ -205,19 +205,34 @@ class RealTradeExecutor(
                         return@launch
                     }
                     finalExecutedQty = executedQty
-
-                    val halfQty = executedQty / 2.0
-                    var finalMsg = "BUY filled ${"%.8f".format(executedQty)}. "
-                    onStatusUpdate("Memasang TP1...")
-                    val (s1, m1) = IndodaxTradeApiV2.createLimitOrder(apiKey, secretKey, pair, "sell", autoLimitSellPrice1, halfQty, "agu-tp1-${System.currentTimeMillis()}")
-                    finalMsg += if (s1) "TP1 OK. " else "TP1 Gagal: $m1. "
-                    if (!s1 && looksLikeRateLimit(m1)) onRateLimit(m1)
-
+                    val minNotional = if (pair.endsWith("usdt", ignoreCase = true) || pair.endsWith("usd", ignoreCase = true)) 1.0 else 10_000.0
                     val p2 = if (autoLimitSellPrice2 > price) autoLimitSellPrice2 else autoLimitSellPrice1 * 1.03
-                    onStatusUpdate("Memasang TP2...")
-                    val (s2, m2) = IndodaxTradeApiV2.createLimitOrder(apiKey, secretKey, pair, "sell", p2, halfQty, "agu-tp2-${System.currentTimeMillis()}")
-                    finalMsg += if (s2) "TP2 OK." else "TP2 Gagal: $m2."
-                    if (!s2 && looksLikeRateLimit(m2)) onRateLimit(m2)
+                    val halfQty = executedQty / 2.0
+                    val canSplit = (halfQty * autoLimitSellPrice1 >= minNotional) && (halfQty * p2 >= minNotional)
+
+                    var finalMsg = if (executedQty < quantity * 0.99) {
+                        "BUY terisi sebagian (${"%.8f".format(executedQty)}). "
+                    } else {
+                        "BUY filled ${"%.8f".format(executedQty)}. "
+                    }
+
+                    if (canSplit) {
+                        onStatusUpdate("Memasang TP1...")
+                        val (s1, m1) = IndodaxTradeApiV2.createLimitOrder(apiKey, secretKey, pair, "sell", autoLimitSellPrice1, halfQty, "agu-tp1-${System.currentTimeMillis()}")
+                        finalMsg += if (s1) "TP1 OK (50%). " else "TP1 Gagal: $m1. "
+                        if (!s1 && looksLikeRateLimit(m1)) onRateLimit(m1)
+
+                        onStatusUpdate("Memasang TP2...")
+                        val (s2, m2) = IndodaxTradeApiV2.createLimitOrder(apiKey, secretKey, pair, "sell", p2, halfQty, "agu-tp2-${System.currentTimeMillis()}")
+                        finalMsg += if (s2) "TP2 OK (50%)." else "TP2 Gagal: $m2."
+                        if (!s2 && looksLikeRateLimit(m2)) onRateLimit(m2)
+                    } else {
+                        // Jika nilai split < min notional (Rp 10.000), pasang 1 order TP 100% agar tidak di-reject exchange
+                        onStatusUpdate("Nilai split < min notional, memasang TP 100%...")
+                        val (s1, m1) = IndodaxTradeApiV2.createLimitOrder(apiKey, secretKey, pair, "sell", autoLimitSellPrice1, executedQty, "agu-tp-full-${System.currentTimeMillis()}")
+                        finalMsg += if (s1) "TP Full OK (100% @ Rp ${PriceFormatter.formatIdrNumber(autoLimitSellPrice1)})." else "TP Gagal: $m1."
+                        if (!s1 && looksLikeRateLimit(m1)) onRateLimit(m1)
+                    }
 
                     onStatusUpdate("BUY + TP: $finalMsg")
                     agu.analys.util.AppLogManager.trade("RealOrderFilled", "✅ [INDODAX REAL FILLED] $pair: Qty $finalExecutedQty @ Rp ${PriceFormatter.formatIdrNumber(execPrice)}. Auto Sell: $finalMsg")

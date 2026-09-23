@@ -15,7 +15,8 @@ object RiskBasedPositionSizer {
         stopLossPrice: Double,
         maxRiskPerTradePct: Double = 0.02, // 2% resiko modal default
         maxSingleAssetAllocationPct: Double = 0.25, // Maks 25% modal dalam 1 koin
-        confidenceMultiplier: Double = 1.0 // 0.0 -> 1.0 untuk scaling
+        confidenceMultiplier: Double = 1.0, // 0.0 -> 1.0 untuk scaling
+        minTradeAmount: Double = 10_000.0 // Batas minimum notional order Indodax Spot
     ): Double {
         if (accountBalance <= 0 || entryPrice <= 0 || stopLossPrice >= entryPrice || stopLossPrice <= 0) {
             return 0.0
@@ -31,7 +32,12 @@ object RiskBasedPositionSizer {
         val maxSingleAssetAllocation = accountBalance * maxSingleAssetAllocationPct
         val finalPositionSize = (rawPositionSize * allocationFactor).coerceAtMost(maxSingleAssetAllocation)
 
-        // Jangan melebihi saldo akun
-        return finalPositionSize.coerceAtMost(accountBalance).coerceAtLeast(0.0)
+        // Validasi ketersediaan saldo dan minimum notional exchange
+        val boundedSize = finalPositionSize.coerceAtMost(accountBalance).coerceAtLeast(0.0)
+        return if (boundedSize > 0.0 && boundedSize < minTradeAmount) {
+            if (accountBalance >= minTradeAmount) minTradeAmount else 0.0
+        } else {
+            boundedSize
+        }
     }
 }

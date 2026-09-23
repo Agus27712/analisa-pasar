@@ -53,7 +53,7 @@ object FeeCalculator {
         val netRr: Double
     )
 
-    /** Round-trip fee is buy + sell plus estimated orderbook slippage. */
+    /** Round-trip fee is buy + sell plus estimated orderbook slippage with accurate multiplicative compounding. */
     fun roundTrip(
         entry: Double,
         stopLoss: Double,
@@ -67,9 +67,14 @@ object FeeCalculator {
         val sellFee = if (useMaker) fees.sellMakerPct else fees.sellTakerPct
         val feePct = buyFee + sellFee
         val totalCostPct = feePct + (2 * slippagePct) // Slippage saat buy & sell
-        val reward = abs(takeProfit - entry) / entry * 100.0 - totalCostPct
-        val risk = abs(entry - stopLoss) / entry * 100.0 + totalCostPct
-        val rr = if (risk > 0.0) (reward / risk).coerceAtLeast(0.0) else 0.0
-        return Result(feePct, slippagePct, totalCostPct, reward, risk, rr)
+
+        // Multiplicative Net Reward & Net Risk
+        val buyCostFactor = 1.0 + (buyFee + slippagePct) / 100.0
+        val sellNetFactor = (1.0 - (sellFee + slippagePct) / 100.0).coerceAtLeast(0.0)
+        val netRewardPct = ((takeProfit / entry * sellNetFactor / buyCostFactor) - 1.0) * 100.0
+        val netRiskPct = (1.0 - (stopLoss / entry * sellNetFactor / buyCostFactor)) * 100.0
+
+        val rr = if (netRiskPct > 0.0) (netRewardPct / netRiskPct).coerceAtLeast(0.0) else 0.0
+        return Result(feePct, slippagePct, totalCostPct, netRewardPct, netRiskPct, rr)
     }
 }
