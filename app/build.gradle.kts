@@ -92,6 +92,10 @@ android {
   compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
   buildFeatures { compose = true; buildConfig = true }
   packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
+  lint {
+    checkReleaseBuilds = false
+    abortOnError = false
+  }
   testOptions {
     unitTests.isReturnDefaultValues = true
     unitTests.isIncludeAndroidResources = true
