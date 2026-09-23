@@ -1,25 +1,20 @@
 package agu.analys.service
 
 import agu.analys.model.NewsArticle
+import agu.analys.network.NetworkClientProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import timber.log.Timber
-import java.util.concurrent.TimeUnit
 
 /**
  * Service agregasi RSS feed berita crypto global & Indonesia
  * Mengumpulkan headline katalis (upgrade, volume spike, partnership, breakout).
  */
 object NewsRssFeedService {
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(6, TimeUnit.SECONDS)
-        .readTimeout(8, TimeUnit.SECONDS)
-        .retryOnConnectionFailure(true)
-        .build()
+    private val client get() = NetworkClientProvider.rssClient
 
     private const val CACHE_TTL_MS = 10 * 60 * 1000L // 10 menit
     private var cachedArticles: List<NewsArticle>? = null

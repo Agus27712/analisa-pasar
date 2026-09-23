@@ -2,12 +2,12 @@ package agu.analys.service
 
 import agu.analys.model.CandleBar
 import agu.analys.model.MarketTick
+import agu.analys.network.NetworkClientProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
@@ -15,7 +15,6 @@ import okhttp3.WebSocketListener
 import org.json.JSONArray
 import org.json.JSONObject
 import timber.log.Timber
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.max
 import kotlin.math.min
@@ -31,12 +30,7 @@ class IndodaxMarketWebSocket(
     private val onConnected: () -> Unit,
     private val onDisconnected: () -> Unit
 ) {
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(12, TimeUnit.SECONDS)
-        .readTimeout(0, TimeUnit.MILLISECONDS)
-        .pingInterval(15, TimeUnit.SECONDS)
-        .retryOnConnectionFailure(true)
-        .build()
+    private val client get() = NetworkClientProvider.webSocketClient
 
     private var socket: WebSocket? = null
     private var reconnectJob: Job? = null

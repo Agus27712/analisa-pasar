@@ -4,26 +4,20 @@ import agu.analys.AppContextProvider
 import agu.analys.model.AISignalState
 import agu.analys.model.MarketTick
 import agu.analys.model.TechnicalIndicators
+import agu.analys.network.NetworkClientProvider
 import agu.analys.util.PriceFormatter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import timber.log.Timber
-import java.util.concurrent.TimeUnit
 
 /** Chart summary Gemini — output wajib Bahasa Indonesia (headline di-translate). */
 object GeminiAiService {
-    // PERBAIKAN 1: Waktu timeout diperpanjang (Read menjadi 60s) untuk merespon AI dengan stabil
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
-        .writeTimeout(30, TimeUnit.SECONDS)
-        .build()
+    private val client get() = NetworkClientProvider.aiClient
 
     // PERBAIKAN 2: Gunakan daftar model yang dijamin ada di Google API publik
     private const val MODEL = "gemini-1.5-flash"

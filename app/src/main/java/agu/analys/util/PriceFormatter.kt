@@ -24,24 +24,27 @@ object PriceFormatter {
             val prefix = if (showSymbol) "$" else ""
             val symbols = DecimalFormatSymbols(Locale.US)
             when {
-                absPrice < 0.0001 -> prefix + DecimalFormat("0.########", symbols).format(absPrice)
-                absPrice < 1.0 -> prefix + DecimalFormat("0.######", symbols).format(absPrice)
-                absPrice < 10.0 -> prefix + DecimalFormat("0.####", symbols).format(absPrice)
+                absPrice < 0.00001 -> prefix + DecimalFormat("0.########", symbols).format(absPrice)
+                absPrice < 0.001 -> prefix + DecimalFormat("0.######", symbols).format(absPrice)
+                absPrice < 1.0 -> prefix + DecimalFormat("0.####", symbols).format(absPrice)
+                absPrice < 10.0 -> prefix + DecimalFormat("0.###", symbols).format(absPrice)
                 else -> prefix + DecimalFormat("#,##0.00", symbols).format(absPrice)
             }
         } else {
             val prefix = if (showSymbol) "Rp " else ""
-            val rounded = kotlin.math.round(absPrice).toLong()
             val symbols = DecimalFormatSymbols(Locale("id", "ID")).apply {
                 groupingSeparator = '.'
                 decimalSeparator = ','
             }
-            if (absPrice < 1.0) {
-                prefix + DecimalFormat("0.########", symbols).format(absPrice)
-            } else if (absPrice < 100.0 && absPrice % 1.0 != 0.0) {
-                prefix + DecimalFormat("#,##0.##", symbols).format(absPrice)
-            } else {
-                prefix + DecimalFormat("#,##0", symbols).format(rounded)
+            when {
+                absPrice < 0.00001 -> prefix + DecimalFormat("0.########", symbols).format(absPrice)
+                absPrice < 0.01 -> prefix + DecimalFormat("0.######", symbols).format(absPrice)
+                absPrice < 1.0 -> prefix + DecimalFormat("0.####", symbols).format(absPrice)
+                absPrice < 100.0 && absPrice % 1.0 != 0.0 -> prefix + DecimalFormat("#,##0.##", symbols).format(absPrice)
+                else -> {
+                    val rounded = kotlin.math.round(absPrice).toLong()
+                    prefix + DecimalFormat("#,##0", symbols).format(rounded)
+                }
             }
         }
         return if (isNegative) "-$formatted" else formatted
@@ -147,15 +150,25 @@ object PriceFormatter {
         return DecimalFormat(pattern, symbols).format(amount)
     }
 
-    /** Format nominal integer IDR tanpa desimal (cth: 38.028 IDR atau - 40 IDR) */
+    /** Format nominal IDR dengan dukungan pecahan desimal koin kecil (cth: 38.028 atau 0,00015 atau -40) */
     fun formatIdrNumber(amount: Double): String {
         if (amount.isNaN() || amount.isInfinite()) return "0"
+        if (amount == 0.0) return "0"
         val symbols = DecimalFormatSymbols(Locale("id", "ID")).apply {
             groupingSeparator = '.'
             decimalSeparator = ','
         }
-        val rounded = kotlin.math.round(abs(amount)).toLong()
-        val formatted = DecimalFormat("#,##0", symbols).format(rounded)
+        val absVal = abs(amount)
+        val formatted = when {
+            absVal < 0.00001 -> DecimalFormat("0.########", symbols).format(absVal)
+            absVal < 0.01 -> DecimalFormat("0.######", symbols).format(absVal)
+            absVal < 1.0 -> DecimalFormat("0.####", symbols).format(absVal)
+            absVal < 100.0 && absVal % 1.0 != 0.0 -> DecimalFormat("#,##0.##", symbols).format(absVal)
+            else -> {
+                val rounded = kotlin.math.round(absVal).toLong()
+                DecimalFormat("#,##0", symbols).format(rounded)
+            }
+        }
         return if (amount < 0) "- $formatted" else formatted
     }
 
@@ -190,15 +203,14 @@ object PriceFormatter {
                 // Multiple dots (cth: "1.367.959.000" atau "2.500.000") -> pemisah ribuan
                 cleaned.replace(".", "")
             } else {
-                // Single dot: cth "41.00", "41.0", "41.25", "0.5", "1.000"
+                // Single dot: cth "41.00", "41.0", "41.25", "0.5", "0.00015", "1.000"
                 val parts = cleaned.split('.')
                 val beforeDot = parts.getOrNull(0).orEmpty().trim()
                 val afterDot = parts.getOrNull(1).orEmpty().trim()
-                if (beforeDot == "0" || afterDot.length != 3) {
-                    // Jelas desimal pecahan: "0.5", "41.00", "41.0", "41.25", "12.5"
+                if (beforeDot == "0" || afterDot.length != 3 || beforeDot.length > 3) {
                     cleaned
                 } else {
-                    // Panjang tepat 3 digit setelah titik & angka >= 1 (cth: "25.000" atau "1.000" di IDR)
+                    // Integer ribuan seperti 1.000, 50.000
                     cleaned.replace(".", "")
                 }
             }
@@ -207,7 +219,7 @@ object PriceFormatter {
             if (commaCount > 1) {
                 cleaned.replace(",", "")
             } else {
-                // Single comma: cth "41,50" atau "0,5" -> koma adalah desimal
+                // Single comma: cth "41,50" atau "0,00015" -> koma adalah desimal
                 cleaned.replace(",", ".")
             }
         } else {
@@ -223,7 +235,13 @@ object PriceFormatter {
 
     /** Helper umum untuk format angka harga ringkas di evaluator & sinyal */
     fun fmtPrice(v: Double): String =
-        if (v >= 1000) String.format(Locale.US, "%,.0f", v) else String.format(Locale.US, "%.2f", v)
+        when {
+            v >= 1000.0 -> String.format(Locale.US, "%,.0f", v)
+            v >= 1.0 -> String.format(Locale.US, "%.2f", v)
+            v >= 0.01 -> String.format(Locale.US, "%.4f", v)
+            v > 0.0 -> String.format(Locale.US, "%.8f", v).trimEnd('0').trimEnd('.')
+            else -> "0"
+        }
 
     /** Helper umum untuk format angka harga bulat integer di evaluator & sinyal */
     fun fmtPriceInt(v: Double): String =

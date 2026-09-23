@@ -339,6 +339,8 @@ fun TradingViewModel.initSubscriptionsAndPolling() {
     marketDataCoordinator.restoreFromCache(MarketDataSource.INDODAX)
     val initialPair = TradingPair.popularPairsForSource(prefs.marketDataSource).first()
     selectPair(initialPair)
+    refreshWorthCoinsFromMarket()
+    startDashboardPolling()
     startTrailingPolling()
     updateForegroundServiceState()
     listenToEngineSignals()

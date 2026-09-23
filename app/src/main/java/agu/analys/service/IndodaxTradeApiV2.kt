@@ -1,16 +1,19 @@
 package agu.analys.service
 
+import agu.analys.network.NetworkClientProvider
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import okhttp3.Dns
 import okhttp3.FormBody
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
 import timber.log.Timber
-import java.net.Inet4Address
-import java.util.concurrent.TimeUnit
+import java.io.IOException
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
@@ -20,7 +23,11 @@ import javax.crypto.spec.SecretKeySpec
  *
  * Arsitektur:
  * - Singleton Object: Untuk akses global yang stateless.
- * - OkHttp: Digunakan untuk request sinkron di dalam withContext(Dispatchers.IO).
+ * - Shared OkHttpClient: Menggunakan NetworkClientProvider.tradeClient untuk efisiensi resource.
+ * - Thread Safety: Mutex & @Volatile pada sinkronisasi server_time offset.
+ * - Robust URL Encoding: Query string di-encode standar RFC 3986/UTF-8.
+ * - Resilient Read Endpoints: Exponential backoff retry pada error transient (429/5xx).
+ * - Safe Write Endpoints: Single-shot tanpa auto-retry untuk mencegah duplicate order.
  * - HMAC-SHA256: Digunakan untuk signing request sesuai standar API V2 Indodax.
  * - Error Mapping: Mengubah kode error API menjadi pesan yang dapat dipahami user.
  */
@@ -31,19 +38,7 @@ object IndodaxTradeApiV2 {
     /** Docs: interval startTime–endTime max 7 hari. */
     private const val MY_TRADES_MAX_RANGE_MS = 7L * 24 * 60 * 60 * 1000
 
-    private val client = OkHttpClient.Builder()
-        .dns(object : Dns {
-            override fun lookup(hostname: String): List<java.net.InetAddress> {
-                val addresses = Dns.SYSTEM.lookup(hostname)
-                val ipv4 = addresses.filterIsInstance<Inet4Address>()
-                return if (ipv4.isNotEmpty()) ipv4 else addresses
-            }
-        })
-        .connectTimeout(12, TimeUnit.SECONDS)
-        .readTimeout(20, TimeUnit.SECONDS)
-        .writeTimeout(15, TimeUnit.SECONDS)
-        .retryOnConnectionFailure(true)
-        .build()
+    private val client get() = NetworkClientProvider.tradeClient
 
     private fun hmacSha256(secret: String, payload: String): String {
         val mac = Mac.getInstance("HmacSHA256")
@@ -52,8 +47,15 @@ object IndodaxTradeApiV2 {
             .joinToString("") { "%02x".format(it) }
     }
 
+    private fun urlEncode(value: String): String =
+        try {
+            URLEncoder.encode(value, StandardCharsets.UTF_8.name())
+        } catch (_: Exception) {
+            value
+        }
+
     private fun encodeQuery(params: LinkedHashMap<String, String>): String =
-        params.entries.joinToString("&") { "${it.key}=${it.value}" }
+        params.entries.joinToString("&") { "${urlEncode(it.key)}=${urlEncode(it.value)}" }
 
     fun toTradeSymbol(symbol: String): String =
         IndodaxMarketService.toPairId(symbol).replace("_", "").lowercase()
@@ -61,7 +63,13 @@ object IndodaxTradeApiV2 {
     fun toOrderSymbol(symbol: String): String =
         IndodaxMarketService.toPairId(symbol).replace("_", "").uppercase()
 
+    @Volatile
     private var serverTimeOffset: Long? = null
+    private val serverTimeMutex = Mutex()
+
+    fun clearServerTimeOffset() {
+        serverTimeOffset = null
+    }
 
     private suspend fun fetchServerTimeOffset(): Long = withContext(Dispatchers.IO) {
         try {
@@ -91,8 +99,19 @@ object IndodaxTradeApiV2 {
     }
 
     private suspend fun serverTimeMs(): Long {
-        val offset = serverTimeOffset ?: fetchServerTimeOffset()
-        return System.currentTimeMillis() + offset
+        val current = serverTimeOffset
+        if (current != null) {
+            return System.currentTimeMillis() + current
+        }
+        return serverTimeMutex.withLock {
+            val existing = serverTimeOffset
+            if (existing != null) {
+                System.currentTimeMillis() + existing
+            } else {
+                val offset = fetchServerTimeOffset()
+                System.currentTimeMillis() + offset
+            }
+        }
     }
 
     private suspend fun signedV2Request(
@@ -100,72 +119,111 @@ object IndodaxTradeApiV2 {
         secretKey: String,
         method: String,
         path: String,
-        params: LinkedHashMap<String, String>
+        params: LinkedHashMap<String, String>,
+        maxRetries: Int = 0
     ): Pair<Boolean, String> = withContext(Dispatchers.IO) {
-        val payloadString = encodeQuery(params)
-        val sign = hmacSha256(secretKey, payloadString)
-        val fullUrl = "$V2_BASE_URL$path"
-
         val methodUpper = method.uppercase()
-        if (methodUpper == "POST" || methodUpper == "DELETE" || path.contains("/order")) {
-            agu.analys.util.RateLimiters.privateTrade.waitAndConsume()
-        } else {
-            agu.analys.util.RateLimiters.privateAccount.waitAndConsume()
-        }
-        val request = when (methodUpper) {
-            "GET" -> Request.Builder()
-                .url("$fullUrl?$payloadString")
-                .get()
-                .header("X-APIKEY", apiKey.trim())
-                .header("Sign", sign)
-                .header("Accept", "application/json")
-                .build()
-            "DELETE" -> Request.Builder()
-                .url("$fullUrl?$payloadString")
-                .delete()
-                .header("X-APIKEY", apiKey.trim())
-                .header("Sign", sign)
-                .header("Accept", "application/json")
-                .build()
-            "POST" -> {
-                val formBody = FormBody.Builder()
-                params.forEach { (key, value) -> formBody.add(key, value) }
-                Request.Builder()
-                    .url(fullUrl)
-                    .post(formBody.build())
+        val isTradeOrWrite = methodUpper == "POST" || methodUpper == "DELETE" || path.contains("/order")
+        
+        var attempt = 0
+        var lastErrorMsg = ""
+
+        while (attempt <= maxRetries) {
+            if (attempt > 0) {
+                val backoffMs = (500L * (1L shl (attempt - 1))).coerceAtMost(3000L)
+                Timber.w("Retrying signed request $path (attempt $attempt/$maxRetries) after ${backoffMs}ms backoff...")
+                delay(backoffMs)
+                // Refresh timestamp jika ada dalam parameter agar tetap valid dalam recvWindow
+                if (params.containsKey("timestamp")) {
+                    params["timestamp"] = serverTimeMs().toString()
+                }
+            }
+
+            if (isTradeOrWrite) {
+                agu.analys.util.RateLimiters.privateTrade.waitAndConsume()
+            } else {
+                agu.analys.util.RateLimiters.privateAccount.waitAndConsume()
+            }
+
+            val payloadString = encodeQuery(params)
+            val sign = hmacSha256(secretKey, payloadString)
+            val fullUrl = "$V2_BASE_URL$path"
+
+            val request = when (methodUpper) {
+                "GET" -> Request.Builder()
+                    .url("$fullUrl?$payloadString")
+                    .get()
                     .header("X-APIKEY", apiKey.trim())
                     .header("Sign", sign)
                     .header("Accept", "application/json")
-                    .header("Content-Type", "application/x-www-form-urlencoded")
                     .build()
+                "DELETE" -> Request.Builder()
+                    .url("$fullUrl?$payloadString")
+                    .delete()
+                    .header("X-APIKEY", apiKey.trim())
+                    .header("Sign", sign)
+                    .header("Accept", "application/json")
+                    .build()
+                "POST" -> {
+                    val formBody = FormBody.Builder()
+                    params.forEach { (key, value) -> formBody.add(key, value) }
+                    Request.Builder()
+                        .url(fullUrl)
+                        .post(formBody.build())
+                        .header("X-APIKEY", apiKey.trim())
+                        .header("Sign", sign)
+                        .header("Accept", "application/json")
+                        .header("Content-Type", "application/x-www-form-urlencoded")
+                        .build()
+                }
+                else -> return@withContext false to "Unsupported HTTP method: $method"
             }
-            else -> return@withContext false to "Unsupported HTTP method: $method"
-        }
 
-        try {
-            client.newCall(request).execute().use { response ->
-                val responseBody = response.body?.string().orEmpty()
-                val json = try { JSONObject(responseBody) } catch (_: Exception) { null }
-                val hasErrorCode = json != null && json.has("code") && json.optInt("code", 0) != 0
-                if (!response.isSuccessful || hasErrorCode) {
+            try {
+                val (isSuccess, resultString, shouldRetry) = client.newCall(request).execute().use { response ->
+                    val responseBody = response.body?.string().orEmpty()
+                    val json = try { JSONObject(responseBody) } catch (_: Exception) { null }
+                    val hasErrorCode = json != null && json.has("code") && json.optInt("code", 0) != 0
                     val code = json?.optInt("code", 0) ?: 0
-                    if (code == -1021 || responseBody.contains("Invalid Timestamp") || responseBody.contains("recvWindow")) {
-                        Timber.w("Indodax API V2 Timestamp Invalid, clearing offset. body=$responseBody")
-                        serverTimeOffset = null
+
+                    if (!response.isSuccessful || hasErrorCode) {
+                        if (code == -1021 || responseBody.contains("Invalid Timestamp") || responseBody.contains("recvWindow")) {
+                            Timber.w("Indodax API V2 Timestamp Invalid, clearing offset. body=$responseBody")
+                            serverTimeOffset = null
+                        }
+                    }
+
+                    if (response.isSuccessful && !hasErrorCode) {
+                        Triple(true, responseBody, false)
+                    } else {
+                        val errorMsg = mapV2Error(json, responseBody.ifBlank { response.message })
+                        val isTransient = response.code in listOf(429, 500, 502, 503, 504) || code == -1003
+                        Timber.w("V2 Request Failed [HTTP ${response.code} / Code $code]: $path | $errorMsg")
+                        Triple(false, errorMsg, isTransient)
                     }
                 }
-                if (response.isSuccessful && !hasErrorCode) {
-                    true to responseBody
+
+                if (isSuccess) {
+                    return@withContext true to resultString
                 } else {
-                    val errorMsg = mapV2Error(json, responseBody.ifBlank { response.message })
-                    Timber.w("V2 Request Failed: $path | $errorMsg")
-                    false to errorMsg
+                    lastErrorMsg = resultString
+                    if (!shouldRetry || attempt >= maxRetries) {
+                        return@withContext false to resultString
+                    }
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "Trade API V2 network error on $path (attempt $attempt/$maxRetries)")
+                lastErrorMsg = "Trade API V2 network error: ${e.localizedMessage}"
+                val isIoException = e is IOException
+                if (!isIoException || attempt >= maxRetries) {
+                    return@withContext false to lastErrorMsg
                 }
             }
-        } catch (e: Exception) {
-            Timber.e(e, "Trade API V2 network error")
-            false to "Trade API V2 network error: ${e.localizedMessage}"
+
+            attempt++
         }
+
+        false to lastErrorMsg
     }
 
     private fun mapV2Error(json: JSONObject?, fallback: String): String {
@@ -207,7 +265,7 @@ object IndodaxTradeApiV2 {
             "timestamp" to timestamp.toString(),
             "recvWindow" to RECV_WINDOW_MS.toString()
         )
-        val (ok, raw) = signedV2Request(apiKey, secretKey, "GET", "/api/v2/account", params)
+        val (ok, raw) = signedV2Request(apiKey, secretKey, "GET", "/api/v2/account", params, maxRetries = 2)
         if (!ok) return null to raw
 
         return try {
@@ -246,7 +304,7 @@ object IndodaxTradeApiV2 {
         }
         params["timestamp"] = serverTimeMs().toString()
         params["recvWindow"] = RECV_WINDOW_MS.toString()
-        return signedV2Request(apiKey, secretKey, "GET", "/api/v2/openOrders", params)
+        return signedV2Request(apiKey, secretKey, "GET", "/api/v2/openOrders", params, maxRetries = 2)
     }
 
     /**
@@ -278,7 +336,7 @@ object IndodaxTradeApiV2 {
             params["origClientOrderId"] = clientOrderId
         }
 
-        val (ok, raw) = signedV2Request(apiKey, secretKey, "GET", "/api/v2/order", params)
+        val (ok, raw) = signedV2Request(apiKey, secretKey, "GET", "/api/v2/order", params, maxRetries = 2)
         if (!ok) return OrderResult(false, raw)
 
         return try {
@@ -350,7 +408,7 @@ object IndodaxTradeApiV2 {
         )
         clientOrderId?.takeIf { it.isNotBlank() }?.let { params["newClientOrderId"] = it.take(36) }
 
-        val (ok, raw) = signedV2Request(apiKey, secretKey, "POST", "/api/v2/order", params)
+        val (ok, raw) = signedV2Request(apiKey, secretKey, "POST", "/api/v2/order", params, maxRetries = 0)
         if (!ok) return OrderResult(false, raw)
 
         return try {
@@ -406,7 +464,7 @@ object IndodaxTradeApiV2 {
         )
         clientOrderId?.takeIf { it.isNotBlank() }?.let { params["newClientOrderId"] = it.take(36) }
 
-        val (ok, raw) = signedV2Request(apiKey, secretKey, "POST", "/api/v2/order", params)
+        val (ok, raw) = signedV2Request(apiKey, secretKey, "POST", "/api/v2/order", params, maxRetries = 0)
         if (!ok) return OrderResult(false, raw)
 
         return try {
@@ -445,7 +503,7 @@ object IndodaxTradeApiV2 {
             "timestamp" to serverTimeMs().toString(),
             "recvWindow" to RECV_WINDOW_MS.toString()
         )
-        val (ok, raw) = signedV2Request(apiKey, secretKey, "DELETE", "/api/v2/order", params)
+        val (ok, raw) = signedV2Request(apiKey, secretKey, "DELETE", "/api/v2/order", params, maxRetries = 0)
         return if (ok) true to "Order $orderId dibatalkan (V2)." else false to raw
     }
 
@@ -471,7 +529,8 @@ object IndodaxTradeApiV2 {
                 "endTime" to end.toString(),
                 "timestamp" to end.toString(),
                 "recvWindow" to RECV_WINDOW_MS.toString()
-            )
+            ),
+            maxRetries = 2
         )
     }
 
@@ -499,7 +558,7 @@ object IndodaxTradeApiV2 {
             "timestamp" to serverTimeMs().toString(),
             "recvWindow" to RECV_WINDOW_MS.toString()
         )
-        return signedV2Request(apiKey, secretKey, "GET", "/api/v2/myTrades", params)
+        return signedV2Request(apiKey, secretKey, "GET", "/api/v2/myTrades", params, maxRetries = 2)
     }
 
     suspend fun myTradesRecent(
@@ -597,7 +656,8 @@ object IndodaxTradeApiV2 {
             .loadPairsMetadata()
             .find { it.symbol.equals(symbol.replace("_", ""), ignoreCase = true) }
         val decimals = if (isPrice) (meta?.priceDecimals ?: 0) else (meta?.quantityDecimals ?: 8)
-        val formatted = java.math.BigDecimal.valueOf(value).setScale(decimals, java.math.RoundingMode.DOWN).stripTrailingZeros().toPlainString()
-        return if (formatted.contains(".")) formatted else "$formatted.0" // Ensure valid format if needed, actually indodax usually accepts plain string, but stripTrailingZeros on 1000 can be 1E+3 which is bad!
+        return java.math.BigDecimal.valueOf(value)
+            .setScale(decimals, java.math.RoundingMode.DOWN)
+            .toPlainString()
     }
 }

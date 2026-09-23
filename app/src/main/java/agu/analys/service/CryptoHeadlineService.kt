@@ -1,15 +1,14 @@
 package agu.analys.service
 
+import agu.analys.network.NetworkClientProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
 import java.net.URLEncoder
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.TimeUnit
 
 /**
  * Headline gratis, tanpa API key.
@@ -17,11 +16,7 @@ import java.util.concurrent.TimeUnit
  * AI wajib menerjemahkan ke Bahasa Indonesia di output.
  */
 object CryptoHeadlineService {
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(8, TimeUnit.SECONDS)
-        .readTimeout(10, TimeUnit.SECONDS)
-        .retryOnConnectionFailure(true)
-        .build()
+    private val client get() = NetworkClientProvider.rssClient
 
     private const val CACHE_TTL_MS = 12 * 60 * 1000L
     private const val MAX_HEADLINES = 3

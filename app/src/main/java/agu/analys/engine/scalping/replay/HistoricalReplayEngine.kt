@@ -146,12 +146,13 @@ object HistoricalReplayEngine {
         for (i in 19..endIndex) {
             val currentCandle = sortedM1[i]
             val evaluationTime = currentCandle.timestamp + 60_000L
-            val window = sortedM1.subList(0, i + 1)
+            val evalWindow = sortedM1.subList(maxOf(0, i - 300), i + 1)
+            val synthWindow = if (synthesizeMissingHigherTimeframes) sortedM1.subList(maxOf(0, i - 1500), i + 1) else evalWindow
 
             val effectiveM15 = if (sourceM15.isNotEmpty()) {
                 sourceM15
             } else if (synthesizeMissingHigherTimeframes) {
-                generateSyntheticHigherTimeframe(window, 15)
+                generateSyntheticHigherTimeframe(synthWindow, 15)
             } else {
                 emptyList()
             }
@@ -159,13 +160,13 @@ object HistoricalReplayEngine {
             val effectiveH1 = if (sourceH1.isNotEmpty()) {
                 sourceH1
             } else if (synthesizeMissingHigherTimeframes) {
-                generateSyntheticHigherTimeframe(window, 60)
+                generateSyntheticHigherTimeframe(synthWindow, 60)
             } else {
                 emptyList()
             }
 
-            val m15Slice = effectiveM15.filter { it.timestamp + 15 * 60_000L <= evaluationTime }
-            val h1Slice = effectiveH1.filter { it.timestamp + 60 * 60_000L <= evaluationTime }
+            val m15Slice = effectiveM15.filter { it.timestamp + 15 * 60_000L <= evaluationTime }.takeLast(300)
+            val h1Slice = effectiveH1.filter { it.timestamp + 60 * 60_000L <= evaluationTime }.takeLast(300)
 
             // Tidak boleh memakai fallback future candle. Tunggu sampai 20 candle MTF benar-benar closed.
             if (m15Slice.size < 20 || h1Slice.size < 20) continue
@@ -183,7 +184,7 @@ object HistoricalReplayEngine {
                 price = currentCandle.close,
                 h1Candles = h1Slice,
                 m15Candles = m15Slice,
-                m1Candles = window,
+                m1Candles = evalWindow,
                 bids = bids,
                 asks = asks,
                 fees = feeConfig,

@@ -211,7 +211,7 @@ fun TradingViewModel.executeAutoSellOrder(symbol: String, price: Double, quantit
 
     if (isReal) {
         // Diskon 5% dari harga terkini agar berfungsi 100% layaknya Market Sell instan di orderbook
-        val marketSellPrice = (price * 0.95).toLong()
+        val marketSellPrice = price * 0.95
         executeRealTrade(symbol, "sell", marketSellPrice, quantity, 0.0, 0.0) { success, msg ->
             if (!success && triggerType.contains("TRAILING")) {
                 positionStore.resetTrailingTrigger(symbol, isReal = true)

@@ -148,12 +148,12 @@ object IntradayReplayEngine {
         for (i in startIndex..endIndex) {
             val currentCandle = sortedCandles[i]
             val evalTime = currentCandle.timestamp
-            val window = sortedCandles.subList(0, i + 1)
+            val window = sortedCandles.subList(maxOf(0, i - 300), i + 1)
 
             val phase = IntradayEvaluator.getCurrentIntradayPhase(evalTime)
             phaseCounts[phase] = (phaseCounts[phase] ?: 0) + 1
 
-            val dailySlice = sortedDaily.filter { it.timestamp <= evalTime }
+            val dailySlice = sortedDaily.filter { it.timestamp <= evalTime }.takeLast(100)
             val anomalyResult = if (dailySlice.size >= 14) {
                 MacroAnomalyDetector.evaluate(dailySlice, currentCandle.close)
             } else null

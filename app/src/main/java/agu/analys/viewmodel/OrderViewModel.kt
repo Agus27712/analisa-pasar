@@ -153,7 +153,7 @@ class OrderViewModel(
     fun executeRealTrade(
         pair: String,
         type: String,
-        price: Long,
+        price: Double,
         amountIdr: Double,
         tp1: Double = 0.0,
         tp2: Double = 0.0,

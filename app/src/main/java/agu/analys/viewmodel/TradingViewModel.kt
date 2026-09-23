@@ -229,10 +229,11 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     val globalContext: StateFlow<agu.analys.engine.global.GlobalMarketContext> = agu.analys.engine.global.GlobalContextManager.context
     
     val holdingStatuses: StateFlow<Map<String, CoinHoldingStatus>> = kotlinx.coroutines.flow.combine(
-        watchlist, favorites, positionCoordinator.spotPosition
-    ) { w, f, pos ->
-        (w + f + listOf(pos.symbol)).distinct().associateWith { sym ->
-            val p = positionStore.get(sym)
+        watchlist, favorites, positionCoordinator.spotPosition, isRealBuyMode, positionCoordinator.positionVersion
+    ) { w, f, pos, isReal, _ ->
+        val storedSymbols = positionStore.getAllStoredSymbols(isReal)
+        (w + f + listOf(pos.symbol) + storedSymbols).distinct().associateWith { sym ->
+            val p = positionStore.get(sym, isReal)
             CoinHoldingStatus(p.isHolding, p.entryPrice, p.quantity, p.isReal)
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
@@ -419,6 +420,28 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
             favoritesSymbols = favorites.value,
             activeStrategy = strategyMode.value
         )
+    }
+
+    fun startDashboardPolling() {
+        marketViewModel.startDashboardPolling(
+            watchlistSymbols = watchlist.value,
+            favoritesSymbols = favorites.value,
+            activeStrategy = strategyMode.value
+        )
+    }
+
+    fun stopDashboardPolling() {
+        marketViewModel.stopDashboardPolling()
+    }
+
+    fun onAppResume() {
+        marketDataCoordinator.startMarketPolling(selectedPair.value, selectedTimeframe.value)
+        refreshWorthCoinsFromMarket()
+        startDashboardPolling()
+        MtfCacheManager.setActiveSymbol(selectedPair.value.symbol)
+        if (prefs.hasIndodaxCredentials()) {
+            syncRealBalancesToPositionStore()
+        }
     }
 
     fun requestDeepAiAudit() {

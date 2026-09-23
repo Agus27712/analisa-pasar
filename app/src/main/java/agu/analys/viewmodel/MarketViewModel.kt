@@ -40,7 +40,7 @@ class MarketViewModel(application: Application) : AndroidViewModel(application) 
     private val _selectedTimeframe = MutableStateFlow(Timeframe.H4)
     val selectedTimeframe: StateFlow<Timeframe> = _selectedTimeframe.asStateFlow()
 
-    private val _connectionState = MutableStateFlow<MarketConnectionState>(MarketConnectionState.ConnectionLost())
+    private val _connectionState = MutableStateFlow<MarketConnectionState>(MarketConnectionState.Loading)
     val connectionState: StateFlow<MarketConnectionState> = _connectionState.asStateFlow()
 
     private val _isShowingCachedData = MutableStateFlow(false)
@@ -87,6 +87,28 @@ class MarketViewModel(application: Application) : AndroidViewModel(application) 
 
     private var dashboardPollJob: Job? = null
     private var lastLiveTickAt = 0L
+
+    init {
+        restoreFromCache(MarketDataSource.INDODAX)
+    }
+
+    fun restoreFromCache(source: MarketDataSource) {
+        val cached = marketCache.loadDashboardTicks(source)
+        if (cached.isNotEmpty()) {
+            _dashboardTicks.value = cached
+            _isShowingCachedData.value = true
+            val valid = cached.values.filter { it.price > 0 }
+            val gainers = valid.filter { it.change24h > 0 }.sortedByDescending { it.change24h }
+            val losers = valid.filter { it.change24h < 0 }.sortedBy { it.change24h }
+            val topVol = valid.sortedByDescending { it.volume24h }
+            if (gainers.isNotEmpty()) {
+                _gainersCoins.value = gainers
+                _hotCoins.value = gainers
+            }
+            if (losers.isNotEmpty()) _losersCoins.value = losers
+            if (topVol.isNotEmpty()) _topVolumeCoins.value = topVol
+        }
+    }
 
     fun selectPair(pair: TradingPair) {
         _selectedPair.value = pair

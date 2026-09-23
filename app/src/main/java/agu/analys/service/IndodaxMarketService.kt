@@ -5,27 +5,22 @@ import agu.analys.model.MarketTick
 import agu.analys.model.OrderBookItem
 import agu.analys.model.Timeframe
 import agu.analys.model.TradeStreamItem
+import agu.analys.network.NetworkClientProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
 object IndodaxMarketService {
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(8, TimeUnit.SECONDS)
-        .readTimeout(8, TimeUnit.SECONDS)
-        .retryOnConnectionFailure(true)
-        .build()
+    private val client get() = NetworkClientProvider.marketClient
 
     private val timeFormat = SimpleDateFormat("HH:mm:ss", Locale("id", "ID"))
     private data class ChangeReference(val close: Double, val fetchedAt: Long)
@@ -673,184 +668,18 @@ object IndodaxMarketService {
         }
     }
 
-    // --- INDODAX TAPI V1 (Classic API: https://indodax.com/tapi) ---
-    private const val TAPI_V1_URL = "https://indodax.com/tapi"
-
-    /** HMAC-SHA512 for TAPI v1 signature */
-    private fun signHmacSha512(data: String, secretKey: String): String {
-        val mac = javax.crypto.Mac.getInstance("HmacSHA512")
-        val secretKeySpec = javax.crypto.spec.SecretKeySpec(secretKey.trim().toByteArray(Charsets.UTF_8), "HmacSHA512")
-        mac.init(secretKeySpec)
-        val hash = mac.doFinal(data.toByteArray(Charsets.UTF_8))
-        return hash.joinToString("") { "%02x".format(it) }
-    }
-
-    /**
-     * Ambil saldo akun — Indodax TAPI V1 (/tapi, method=getInfo)
-     */
-    suspend fun fetchAccountBalanceDetails(apiKey: String, secretKey: String): Pair<Map<String, Double>?, String> = withContext(Dispatchers.IO) {
-        val cleanKey = apiKey.trim()
-        val cleanSecret = secretKey.trim()
-        if (cleanKey.isBlank() || cleanSecret.isBlank()) {
-            return@withContext Pair(null, "API Key atau Secret Key belum diisi.")
-        }
-
-        try {
-            val nonce = System.currentTimeMillis()
-            val postData = "method=getInfo&nonce=$nonce"
-            val sign = signHmacSha512(postData, cleanSecret)
-
-            val requestBody = okhttp3.FormBody.Builder()
-                .add("method", "getInfo")
-                .add("nonce", nonce.toString())
-                .build()
-
-            val request = Request.Builder()
-                .url(TAPI_V1_URL)
-                .post(requestBody)
-                .header("Key", cleanKey)
-                .header("Sign", sign)
-                .header("Accept", "application/json")
-                .build()
-
-            client.newCall(request).execute().use { response ->
-                val body = response.body?.string()
-                if (response.isSuccessful && !body.isNullOrBlank()) {
-                    val json = JSONObject(body)
-                    val success = json.optInt("success", 0)
-                    if (success == 1) {
-                        val ret = json.optJSONObject("return")
-                        val balanceObj = ret?.optJSONObject("balance")
-                        if (balanceObj != null) {
-                            val map = mutableMapOf<String, Double>()
-                            val keys = balanceObj.keys()
-                            while (keys.hasNext()) {
-                                val asset = keys.next().lowercase()
-                                val amount = balanceObj.optString(asset, "0").toDoubleOrNull() ?: 0.0
-                                if (amount > 0.00000001 || asset == "idr") {
-                                    map[asset] = amount
-                                }
-                            }
-                            val coinCount = map.count { it.key != "idr" && it.value > 0.00000001 }
-                            return@withContext Pair(
-                                map,
-                                "Koneksi Indodax TAPI Berhasil (${coinCount} koin terdeteksi)."
-                            )
-                        }
-                        return@withContext Pair(null, "Response OK tapi object balance kosong.")
-                    } else {
-                        val err = json.optString("error", "Unknown error")
-                        return@withContext Pair(null, "TAPI Error: $err")
-                    }
-                }
-
-                val hint = if (response.code == 401) " 401 = API Key atau Secret Key tidak valid / IP belum di-whitelist." else ""
-                return@withContext Pair(
-                    null,
-                    "TAPI HTTP ${response.code}: ${(body?.take(150) ?: response.message)}.$hint"
-                )
-            }
-        } catch (e: Exception) {
-            return@withContext Pair(null, "Gagal terhubung TAPI: ${e.localizedMessage}")
-        }
-    }
-
+    // --- UTILITIES ---
     suspend fun fetchPublicIp(): String = withContext(Dispatchers.IO) {
         try {
-            val request = Request.Builder().url("https://api.ipify.org").build()
+            val request = Request.Builder()
+                .url("https://api.ipify.org")
+                .header("Accept", "text/plain")
+                .build()
             client.newCall(request).execute().use { resp ->
                 resp.body?.string()?.trim() ?: "Gagal mendapatkan IP"
             }
         } catch (_: Exception) {
             "Gagal mengecek IP"
-        }
-    }
-
-    suspend fun fetchAccountBalance(apiKey: String, secretKey: String): Map<String, Double>? {
-        return fetchAccountBalanceDetails(apiKey, secretKey).first
-    }
-
-    /**
-     * Place order — Indodax TAPI V1 (/tapi, method=trade)
-     */
-    suspend fun placeTradeOrder(
-        apiKey: String,
-        secretKey: String,
-        pair: String,
-        type: String, // "buy" or "sell"
-        price: Long,
-        amountIdr: Double
-    ): Pair<Boolean, String> = withContext(Dispatchers.IO) {
-        val cleanKey = apiKey.trim()
-        val cleanSecret = secretKey.trim()
-        if (cleanKey.isBlank() || cleanSecret.isBlank()) {
-            return@withContext false to "API Key atau Secret Key Indodax belum diisi."
-        }
-
-        try {
-            val symbol = pair.lowercase().replace("_", "").replace("/", "")
-            // Indodax TAPI pair format, e.g. btcidr
-            val tapiPair = if (!symbol.endsWith("idr")) "${symbol}idr" else symbol
-            val side = type.lowercase() // "buy" or "sell"
-            val nonce = System.currentTimeMillis()
-
-            val formBuilder = okhttp3.FormBody.Builder()
-                .add("method", "trade")
-                .add("pair", tapiPair)
-                .add("type", side)
-                .add("price", price.toString())
-                .add("nonce", nonce.toString())
-
-            if (side == "buy") {
-                val idrVal = amountIdr.toLong().coerceAtLeast(10000L)
-                formBuilder.add("idr", idrVal.toString())
-            } else {
-                formBuilder.add("amount", amountIdr.toString())
-            }
-
-            // Build postData string for signing exactly matching body params order or sorted
-            val requestBody = formBuilder.build()
-            val postDataParams = mutableMapOf(
-                "method" to "trade",
-                "pair" to tapiPair,
-                "type" to side,
-                "price" to price.toString(),
-                "nonce" to nonce.toString()
-            )
-            if (side == "buy") {
-                postDataParams["idr"] = amountIdr.toLong().coerceAtLeast(10000L).toString()
-            } else {
-                postDataParams["amount"] = amountIdr.toString()
-            }
-            val postData = postDataParams.entries.joinToString("&") { "${it.key}=${it.value}" }
-            val sign = signHmacSha512(postData, cleanSecret)
-
-            val request = Request.Builder()
-                .url(TAPI_V1_URL)
-                .post(requestBody)
-                .header("Key", cleanKey)
-                .header("Sign", sign)
-                .header("Content-Type", "application/x-www-form-urlencoded")
-                .header("Accept", "application/json")
-                .build()
-
-            client.newCall(request).execute().use { response ->
-                val body = response.body?.string()
-                if (response.isSuccessful && !body.isNullOrBlank()) {
-                    val json = JSONObject(body)
-                    val success = json.optInt("success", 0)
-                    if (success == 1) {
-                        val ret = json.optJSONObject("return")
-                        val orderId = ret?.optLong("order_id", 0L) ?: 0L
-                        return@withContext true to "Order $side $tapiPair berhasil! Order ID: $orderId"
-                    }
-                    return@withContext false to "TAPI Error: ${json.optString("error", "Unknown")}"
-                }
-                val hint = if (response.code == 401) " Cek kembali API Key dan Secret Key." else ""
-                return@withContext false to "TAPI HTTP ${response.code}: ${body?.take(150) ?: response.message}.$hint"
-            }
-        } catch (e: Exception) {
-            return@withContext false to "Gagal menghubungi TAPI: ${e.localizedMessage}"
         }
     }
 }

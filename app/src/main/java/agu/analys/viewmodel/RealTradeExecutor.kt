@@ -111,7 +111,7 @@ class RealTradeExecutor(
     fun executeTrade(
         pair: String,
         type: String,
-        price: Long,
+        price: Double,
         amountIdr: Double,
         autoLimitSellPrice1: Double = 0.0,
         autoLimitSellPrice2: Double = 0.0,
@@ -123,9 +123,9 @@ class RealTradeExecutor(
             onResult(false, "API Key atau Secret Key INDODAX belum diisi.")
             return
         }
-        var execPrice = price.toDouble()
+        var execPrice = price
         val latestTick = getLatestTick(pair)
-        if (latestTick != null && latestTick.price > 0.0) {
+        if (latestTick != null && latestTick.price > 0.0 && execPrice <= 0.0) {
             execPrice = latestTick.price
         }
 

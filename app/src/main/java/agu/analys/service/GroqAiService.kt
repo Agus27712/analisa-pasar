@@ -4,24 +4,20 @@ import agu.analys.AppContextProvider
 import agu.analys.model.AISignalState
 import agu.analys.model.MarketTick
 import agu.analys.model.TechnicalIndicators
+import agu.analys.network.NetworkClientProvider
 import agu.analys.util.PriceFormatter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import timber.log.Timber
-import java.util.concurrent.TimeUnit
 
 /** AI insight via Groq — narasi pair + headline (output wajib Bahasa Indonesia). */
 object GroqAiService {
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(12, TimeUnit.SECONDS)
-        .readTimeout(25, TimeUnit.SECONDS)
-        .build()
+    private val client get() = NetworkClientProvider.aiClient
 
     private const val BASE_URL = "https://api.groq.com/openai/v1/chat/completions"
     private const val MODEL = "qwen/qwen3.8-27b"

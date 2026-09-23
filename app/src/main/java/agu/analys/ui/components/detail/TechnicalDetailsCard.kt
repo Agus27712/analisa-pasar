@@ -31,8 +31,8 @@ import agu.analys.util.PriceFormatter
 
 /**
  * Label diselaraskan dengan parameter engine:
- * - Scalping 1M default: RSI(7), EMA fast/slow (5/13), MACD hist, ATR(7)
- * - Field model ema20/ema50 = fast/slow dari FrameAnalyzer (bukan literal EMA 20/50)
+ * - Scalping 1M default: RSI(14), EMA20/EMA50, MACD (12/26/9), ATR(14)
+ * - Swing & Intraday: MTF Confirmation + Trend Alignment
  */
 @Composable
 fun TechnicalDetailsCard(

@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import agu.analys.model.MarketTick
 import agu.analys.ui.theme.*
+import agu.analys.util.PriceFormatter
 
 @Composable
 fun WatchlistManagerSettings(
@@ -267,7 +268,7 @@ fun WatchlistManagerSettings(
                     currentWatchlist.toList().forEachIndexed { index, symbol ->
                         val base = symbol.replace("IDR", "").replace("USDT", "").uppercase()
                         val tick = dashboardTicks[symbol] ?: dashboardTicks[symbol.lowercase()] ?: dashboardTicks[base]
-                        val priceStr = tick?.let { "Rp %,d".format(it.price.toLong()) } ?: "-"
+                        val priceStr = tick?.let { PriceFormatter.formatPrice(it.price) } ?: "-"
                         val change24h = tick?.change24h ?: 0.0
                         val isUp = change24h >= 0
 

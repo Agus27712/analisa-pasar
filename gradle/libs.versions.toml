@@ -39,6 +39,7 @@ detekt = "1.23.6"
 mockk = "1.13.12"
 mockwebserver = "4.12.0"
 workRuntimeKtx = "2.10.0"
+ta4j = "0.15"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -87,6 +88,7 @@ androidx-credentials = { group = "androidx.credentials", name = "credentials", v
 androidx-credentials-play-services = { group = "androidx.credentials", name = "credentials-play-services-auth", version.ref = "credentials" }
 googleid = { group = "com.google.android.libraries.identity.googleid", name = "googleid", version.ref = "googleid" }
 timber = { group = "com.jakewharton.timber", name = "timber", version.ref = "timber" }
+ta4j-core = { group = "org.ta4j", name = "ta4j-core", version.ref = "ta4j" }
 mockk = { group = "io.mockk", name = "mockk", version.ref = "mockk" }
 mockwebserver = { group = "com.squareup.okhttp3", name = "mockwebserver", version.ref = "mockwebserver" }
 androidx-work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "workRuntimeKtx" }

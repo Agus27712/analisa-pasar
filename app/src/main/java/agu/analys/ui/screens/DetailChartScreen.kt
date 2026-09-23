@@ -395,7 +395,7 @@ fun DetailChartScreen(
                     val execPrice = if (customBuyPrice > 0.0) customBuyPrice else if (displayPrice > 0.0) displayPrice else signal.entryPrice
                     if (execPrice > 0) {
                         if (isRealBuyMode) {
-                            viewModel.executeRealTrade(pair.symbol, "buy", execPrice.toLong(), nominalIdr, tp1Price, tp2Price) { success, msg ->
+                            viewModel.executeRealTrade(pair.symbol, "buy", execPrice, nominalIdr, tp1Price, tp2Price) { success, msg ->
                                 buyCooldownRemainingMs = 0L
                                 buyCooldownTotalMs = 0L
                                 buyCooldownReason = null

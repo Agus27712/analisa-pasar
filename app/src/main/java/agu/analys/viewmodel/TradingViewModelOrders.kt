@@ -32,7 +32,7 @@ fun TradingViewModel.refreshRealBalance() {
     }
     fetchRealBalance()
 }
-fun TradingViewModel.executeRealTrade(pair: String, type: String, price: Long, amountIdr: Double, tp1: Double = 0.0, tp2: Double = 0.0, onResult: (Boolean, String) -> Unit) =
+fun TradingViewModel.executeRealTrade(pair: String, type: String, price: Double, amountIdr: Double, tp1: Double = 0.0, tp2: Double = 0.0, onResult: (Boolean, String) -> Unit) =
     orderViewModel.executeRealTrade(pair, type, price, amountIdr, tp1, tp2, onResult)
 
 fun TradingViewModel.refreshSimulationState() = orderViewModel.refreshSimulationState()
