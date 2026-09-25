@@ -1,31 +1,29 @@
 # TradingView AI - Analisis Pasar & Trading Otomatis
 
-Aplikasi Android modern berbasis **Jetpack Compose** dan **Kotlin** yang dirancang untuk analisis teknikal pasar kripto real-time, eksekusi strategi trading cerdas (Scalping, Swing, Intraday), pemindaian sentimen berita berbasis AI (Groq & Gemini Flash), serta otomatisasi trailing stop dan manajemen risiko portofolio.
+Aplikasi Android berbasis **Jetpack Compose** dan **Kotlin** yang dirancang untuk analisis teknikal pasar kripto indodax.
 
 ---
 
 ## 🚀 Fitur Utama
 
 ### 1. Data Pasar Real-Time & Chart Interaktif
-- **Konektivitas Fleksibel**: Streaming WebSocket langsung ke bursa Indodax dengan fallback REST API otomatis yang andal.
+- **Konektivitas Fleksibel**: Streaming WebSocket langsung ke bursa Indodax dengan fallback REST API otomatis.
 - **Multi-Timeframe Candlestick**: Mendukung timeframe 1m, 15m, 1h, 4h, hingga 1d.
-- **Indikator Teknikal Komprehensif**:
+- **Indikator Teknikal menggunakan lib ta4j**:
   - RSI (14) & Stochastic RSI
   - EMA Dinamis (EMA 7, EMA 21, EMA 50, EMA 200)
   - MACD (Moving Average Convergence Divergence)
   - Bollinger Bands & Average True Range (ATR)
   - Order Book Depth & Volume Flow Imbalance Tracker
 
-### 2. Mesin Strategi & Sinyal AI (Learning Trading Engine)
+### 2. Strategi (Learning Trading Engine)
 - **Mode Scalping (M1 - M15)**: Pendeteksian momentum cepat, orderbook wall imbalance, dan lonjakan volume mikro.
 - **Mode Swing (H1)**: Evaluasi 6-Checkpoint Confluence (Tren Makro, Ekspansi Volume, Validasi Pullback, Konfirmasi Breakout, Support/Resistance Dinamis).
 - **Mode Intraday / Office Daily (H4)**: Proteksi Anti-Flash-Dump, filter anomali makro, dan deteksi likuiditas sehat.
-- **Siklus Hidup Sinyal (Signal Lifecycle)**: Status sinyal terstruktur (`WAITING_ENTRY`, `ACTIVE`, `TRIGGERED`, `EXPIRED`) dengan pelacakan transisi otomatis.
 
 ### 3. News AI Screener (Groq & Gemini Flash)
-- Mengurasi berita kripto terkini dari berbagai feed RSS tepercaya (CoinDesk, Cointelegraph, Indodax, dll.).
+- Mengkurasi berita kripto terkini dari berbagai feed RSS tepercaya (CoinDesk, Cointelegraph, Indodax, dll.).
 - Analisis sentimen berbasis LLM (**Groq Qwen/Llama** & **Google Gemini Flash**) untuk menyaring koin berpotensi reli.
-- Dilengkapi sistem **Fallback Heuristik Cerdas** jika kuota API terkena limit/offline.
 
 ### 4. Eksekusi Trading & Manajemen Risiko
 - **Mode Simulasi Realistis**: Virtual wallet dengan simulasi slippage, fee maker/taker, antrean limit order, dan pelacakan PnL historis.
@@ -36,23 +34,23 @@ Aplikasi Android modern berbasis **Jetpack Compose** dan **Kotlin** yang diranca
 ### 5. Layanan Latar Belakang & Notifikasi Pintar
 - **`TradingForegroundService`**: Pemantauan trailing stop dan batas harga 24/7 di latar belakang.
 - **`CandidateScanWorker`**: Pemindaian berkala untuk menemukan koin potensial dari watchlist.
-- **Notifikasi Presisi**: Pemberitahuan saat sinyal beli muncul, peak harga naik, trailing stop terpicu, dan order berhasil dieksekusi.
+- **Notifikasi**: Pemberitahuan saat sinyal beli muncul, flashdump, peak harga naik, trailing stop terpicu.
 
 ### 6. Diagnostik & Logging Internal (`AppLogManager`)
-- Log event internal real-time yang dikategorikan secara terstruktur:
+- Log event internal real-time:
   - 🛡️ **Trailing Stop**: Pergerakan peak, kenaikan stop-limit, dan pemicu auto-sell.
   - 💼 **Trading & Order**: Status order simulasi/real, konfirmasi eksekusi (FILLED), dan realisasi PnL.
   - 📈 **Market Feed**: Status WebSocket, perubahan pair aktif, dan streaming data candle.
   - 🤖 **AI & Signal**: Transisi siklus sinyal teknikal dan hasil analisis screener berita.
   - ⚙️ **Background Service**: Lifecycle worker pemindaian latar belakang.
-- **UI Diagnostik (`LogcatDiagnosticDialog`)**: Pemantauan langsung, pencarian log terfilter, salin dump state diagnostik ke clipboard, dan ekspor berkas log.
+- **UI Diagnostik (`LogcatDiagnosticDialog`)**: Pemantauan langsung, pencarian log, salin dump state diagnostik ke clipboard, dan eksport log.
 
 ---
 
 ## 🛠️ Arsitektur & Teknologi
 
 - **Bahasa**: Kotlin 100%
-- **UI Framework**: Jetpack Compose dengan Material Design 3 (Dark Trading Theme)
+- **UI Framework**: Jetpack Compose dengan Material Design 3
 - **Arsitektur**: MVVM (Model-View-ViewModel) + Clean Architecture berbasis Coordinator & Engine
 - **Asinkron & Reaktif**: Kotlin Coroutines, StateFlow, dan SharedFlow
 - **Penyimpanan Lokal**: Room Database (Entity, DAO, TypeConverters) & Encrypted SharedPreferences
@@ -89,7 +87,7 @@ app/src/main/java/agu/analys/
 │   ├── screens/                 # Layar utama (Dashboard, Chart, Screener, Settings)
 │   ├── components/              # Komponen modular (Chart, Stepper, Orderbook, Logs)
 │   └── theme/                   # Palet warna & tipografi TradingView
-└── util/                         # Utilitas (AppLogManager, Notifikasi, Format Harga)
+└── util/                         # Utilitas (AppLogManager, Notifikasi, Price Formatter)
 ```
 
 ---
@@ -99,10 +97,8 @@ app/src/main/java/agu/analys/
 - **Android SDK**: Min SDK 24, Target SDK 34+
 - **Build System**: Gradle dengan Kotlin DSL (`build.gradle.kts`)
 - **Konfigurasi API Key (Opsional)**:
-  - **Indodax API**: Diatur melalui menu **Pengaturan (Settings)** di dalam aplikasi untuk melakukan trading riil.
-  - **Groq / Gemini API**: Diatur melalui menu **Pengaturan** untuk fitur News AI Screener berkecepatan tinggi.
+  - **Indodax API**: Diatur melalui menu **Pengaturan (Settings)** di dalam aplikasi untuk melakukan trading riil, gunakan TAPIv2 (api key & secret) yang diperoleh dari website terkait.
+  - **Groq / Gemini API**: Diatur melalui menu **Pengaturan** untuk fitur News AI Screener & Analisa Koin.
 
 ---
 
-## 📄 Lisensi
-Hak Cipta © 2026 TradingView AI Engine. Seluruh hak cipta dilindungi undang-undang.

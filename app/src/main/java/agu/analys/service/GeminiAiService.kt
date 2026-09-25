@@ -21,7 +21,7 @@ object GeminiAiService {
 
     // PERBAIKAN 2: Gunakan daftar model yang dijamin ada di Google API publik
     private const val MODEL = "gemini-1.5-flash"
-    private val CANDIDATE_MODELS = listOf("gemini-1.5-flash", "gemini-2.5-flash", "gemini-3.5-flash", "gemini-1.5-pro")
+    private val CANDIDATE_MODELS = listOf("gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro")
 
     suspend fun generateChartSummary24h(
         apiKey: String,
@@ -66,7 +66,7 @@ object GeminiAiService {
         val combinedPrompt = """
 [SYSTEM INSTRUCTION]
 Kamu asisten quantitative & technical analyst spot Indodax.
-SELURUH jawaban WAJIB Bahasa Indonesia (termasuk kutipan berita/headline).
+Sajikan seluruh analisis dalam Bahasa Indonesia (termasuk kutipan atau intisari berita).
 Terjemahkan headline Inggris ke Bahasa Indonesia dulu, lalu bedah dampaknya secara kritis.
 Gunakan format Markdown terstruktur dengan poin-poin bullet (-), penomoran (1, 2, 3), teks tebal (**bold**), dan judul bab (###).
 Fokus insight tajam, kritis, edukatif, dan praktis. Jelaskan jika ada kontradiksi antara kenaikan harga teknikal vs berita buruk fundamental (misal pump lokal vs delisting/warning).
@@ -88,7 +88,7 @@ Fokus insight tajam, kritis, edukatif, dan praktis. Jelaskan jika ada kontradiks
 [FEED BERITA & SENTIMEN TERKINI]
 $headlineBlock
 
-WAJIB SUSUN JAWABAN DALAM FORMAT MARKDOWN BERIKUT:
+Susun jawaban dalam format Markdown berikut:
 
 ### 🔎 1. Profil & Ekosistem Aset
 - **Aset**: ${pairCtx.label} ($base)
@@ -101,9 +101,7 @@ WAJIB SUSUN JAWABAN DALAM FORMAT MARKDOWN BERIKUT:
 
 ### 📰 3. Sentimen Pasar & Alasan Gerakan
 - **Faktor Penggerak**: Bedah headline berita di atas secara detail dan terjemahkan ke Bahasa Indonesia. Evaluasi apakah ada kontradiksi antara aksi harga vs berita:
-  1. "[Terjemahan Headline 1]": [Analisis kritis dampak berita ini terhadap pasar]
-  2. "[Terjemahan Headline 2]": [Analisis kritis dampak berita ini terhadap pasar]
-  3. "[Terjemahan Headline 3]": [Analisis kritis dampak berita ini terhadap pasar]
+  - Untuk setiap headline berita yang tersedia di atas, tuliskan terjemahan singkatnya lalu berikan analisis kritis dampaknya terhadap harga. Jika headline tidak tersedia, uraikan sentimen berdasarkan pergerakan volume dan tren harga.
 
 - **Analisis Kritis**: Hubungkan pergerakan harga ${tick.symbol} (${PriceFormatter.formatPercentage(tick.change24h)}) dengan berita di atas. Apakah kenaikan/penurunan didorong oleh sentimen global yang valid, atau sekadar spekulasi lokal / pump & dump di Indodax?
 

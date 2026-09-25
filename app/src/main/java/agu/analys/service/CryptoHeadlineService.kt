@@ -29,7 +29,7 @@ object CryptoHeadlineService {
         fun promptBlock(): String {
             val lines = buildList {
                 if (headlines.isNotEmpty()) {
-                    add("Headline publik terbaru (boleh campuran EN/ID — WAJIB diterjemahkan ke Bahasa Indonesia di jawaban):")
+                    add("Headline publik terbaru (sajikan intisari terjemahan dalam Bahasa Indonesia di jawaban):")
                     headlines.forEachIndexed { i, h -> add("${i + 1}. $h") }
                 } else {
                     add("Headline: tidak tersedia saat ini.")

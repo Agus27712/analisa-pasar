@@ -21,7 +21,7 @@ object GroqAiService {
 
     private const val BASE_URL = "https://api.groq.com/openai/v1/chat/completions"
     private const val MODEL = "qwen/qwen3.8-27b"
-    private val FALLBACK_MODELS = listOf("qwen/qwen3.8-27b", "openai/gpt-oss-20b", "qwen/qwen3.6-27b")
+    private val FALLBACK_MODELS = listOf("qwen/qwen3.8-27b", "openai/gpt-oss-20b", "llama-3.1-8b-instant")
     private const val MAX_TOKENS = 2048
 
     suspend fun generateDeepMarketAudit(
@@ -68,10 +68,10 @@ object GroqAiService {
 
         val systemPrompt = """
 Kamu asisten quantitative & technical analyst spot Indodax.
-SELURUH jawaban WAJIB Bahasa Indonesia (termasuk kutipan berita/headline).
+Sajikan seluruh analisis dalam Bahasa Indonesia (termasuk kutipan atau intisari berita).
 Terjemahkan headline Inggris ke Bahasa Indonesia dulu, lalu hubungkan ke pergerakan harga.
 Gunakan format Markdown terstruktur dengan poin-poin bullet (-), teks tebal (**bold**), dan judul bab (###).
-Fokus insight tajam, edukatif, dan praktis. Maksimal ~1379 kata.
+Fokus insight tajam, edukatif, dan praktis terstruktur.
         """.trimIndent()
 
         val userPrompt = """
@@ -91,7 +91,7 @@ Status Indikator:
 
 $headlineBlock
 
-Wajib susun jawaban dalam format Markdown berikut:
+Susun jawaban dalam format Markdown berikut:
 ### 🔎 1. Profil & Ekosistem Aset
 - **Aset**: ...
 - **Karakteristik & Korelasi**: ...

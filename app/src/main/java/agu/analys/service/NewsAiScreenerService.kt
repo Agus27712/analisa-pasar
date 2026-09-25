@@ -29,13 +29,12 @@ object NewsAiScreenerService {
         "qwen/qwen3.8-27b",
         "openai/gpt-oss-20b",
         "openai/gpt-oss-120b",
-        "qwen/qwen3.6-27b"
+        "llama-3.1-8b-instant"
     )
     private const val GEMINI_MODEL = "gemini-1.5-flash"
     private val GEMINI_MODELS = listOf(
         "gemini-1.5-flash",
-        "gemini-2.5-flash",
-        "gemini-3.5-flash",
+        "gemini-2.0-flash",
         "gemini-1.5-pro"
     )
     private const val MAX_TOKENS = 750
@@ -48,12 +47,32 @@ object NewsAiScreenerService {
         groqApiKey: String,
         geminiApiKey: String
     ): NewsScreenerResult = withContext(Dispatchers.IO) {
-        // Kompresi token: Ambil maksimal 50 koin teraktif & 12 headline teratas agar tidak menabrak TPM rate limit (6000 TPM)
-        val sampleWhitelist = indodaxValidBases
+        // Prioritaskan koin yang muncul di berita dan koin volume tertinggi, lalu lengkapi hingga 50 koin
+        val validSet = indodaxValidBases
             .map { it.uppercase().trim() }
             .filter { it.isNotBlank() && it.length in 2..10 && it != "IDR" && it != "USDT" }
-            .distinct()
-            .sorted()
+            .toSet()
+
+        val mentionedInNews = linkedSetOf<String>()
+        val articlesContent = articles.take(15).joinToString(" ") { it.title }.uppercase()
+        val words = articlesContent.split(Regex("[^A-Z0-9]")).filter { it.length in 2..10 }
+        for (w in words) {
+            if (validSet.contains(w)) {
+                mentionedInNews.add(w)
+            }
+        }
+
+        val topVolumeBases = liveTicks.values
+            .sortedByDescending { it.volume24h }
+            .map { extractBaseSymbol(it.symbol) }
+            .filter { validSet.contains(it) }
+
+        val prioritizedWhitelist = linkedSetOf<String>()
+        prioritizedWhitelist.addAll(mentionedInNews)
+        prioritizedWhitelist.addAll(topVolumeBases)
+        prioritizedWhitelist.addAll(validSet.sorted())
+
+        val sampleWhitelist = prioritizedWhitelist
             .take(50)
             .joinToString(", ")
 
@@ -223,11 +242,11 @@ object NewsAiScreenerService {
 Anda adalah Quantitative Crypto Screener & News Catalyst Analyst khusus pasar Indodax Spot Exchange.
 Tugas Anda adalah menyeleksi 2 sampai 4 koin calon beli (bullish candidates) berdasarkan ringkasan berita/RSS terbaru.
 
-ATURAN KETAT:
-1. FILTER LISTING INDODAX: Hanya rekomendasikan koin yang valid ada di dalam [DAFTAR KOIN AKTIF INDODAX]. Koin di luar daftar ini wajib diabaikan total.
-2. PURE SPOT MINDSET: Fokus hanya pada potensi kenaikan harga (upside/buy catalyst). Jangan berikan rekomendasi shorting/futures.
-3. OUTPUT PADAT DAN TUNTAS: Berikan analisis padat, tajam, edukatif, dan to the point tanpa basa-basi pembuka/penutup.
-4. FORMAT OUTPUT PER KOIN WAJIB PERSIS SEPERTI INI:
+Panduan Evaluasi:
+1. Filter Listing Indodax: Hanya rekomendasikan koin yang valid ada di dalam [DAFTAR KOIN AKTIF INDODAX]. Koin di luar daftar ini harus diabaikan.
+2. Perspektif Spot: Fokus hanya pada potensi kenaikan harga spot (buy catalyst). Jangan berikan rekomendasi shorting/futures.
+3. Output Padat dan Tuntas: Berikan analisis padat, tajam, edukatif, dan to the point tanpa basa-basi pembuka/penutup.
+4. Format output per koin:
 🔥 [SIMBOL/IDR] (Contoh: SOL/IDR)
 • Narasi/Sektor: [Sektor koin, misal: Layer-1 / DeFi / AI]
 • Potensi Sentimen: [Sangat Kuat / Menengah]
@@ -314,12 +333,12 @@ Pilih 2 sampai 4 koin kandidat bullish terbaik yang ada di daftar Indodax berdas
 Anda adalah Quantitative Research Analyst & Crypto Market Intelligence untuk pasar Spot Indodax.
 Tugas Anda: Membaca tumpukan feed berita crypto global, lalu menyaring hanya koin-koin yang listing di Indodax yang memiliki katalis kenaikan harga (bullish catalyst) terkuat.
 
-ATURAN UTAMA:
-1. FILTER WAJIB INDODAX: Anda HANYA BOLEH menyaring dan menampilkan koin yang terdaftar dalam daftar [DAFTAR VALID KOIN INDODAX SPOT]. Koin di luar daftar ini wajib diabaikan total.
-2. SPOT PERSPECTIVE: Hanya cari katalis akumulasi/kenaikan harga (Spot Buy). Tidak ada shorting/futures.
-3. DETEKSI NARASI & MAKRO: Hubungkan berita mikro koin dengan narasi besar (AI, RWA, Layer-1, aliran dana institusi).
-4. PANJANG OUTPUT: Berikan analisis mendalam, komprehensif, dan lengkap hingga selesai (maksimal 4096 token). Tanpa salam pembuka dan penutup.
-5. FORMAT OUTPUT PER KOIN:
+Panduan Evaluasi:
+1. Filter Indodax: Hanya saring dan tampilkan koin yang terdaftar dalam daftar [DAFTAR VALID KOIN INDODAX SPOT]. Koin di luar daftar ini harus diabaikan.
+2. Perspektif Spot: Hanya cari katalis akumulasi/kenaikan harga (Spot Buy). Tidak ada shorting/futures.
+3. Deteksi Narasi & Makro: Hubungkan berita mikro koin dengan narasi besar (AI, RWA, Layer-1, aliran dana institusi).
+4. Panjang Output: Berikan analisis padat, tajam, dan tuntas hingga selesai tanpa salam pembuka atau penutup.
+5. Format output per koin:
 🔥 [SIMBOL/IDR] (Contoh: SOL/IDR)
 • Narasi/Sektor: [Sektor koin]
 • Potensi Sentimen: [Sangat Kuat / Menengah]
@@ -535,4 +554,12 @@ Saring seluruh berita di atas dan cocokkan dengan daftar koin Indodax. Pilih 2 s
             }
         }
     }
+
+    private fun extractBaseSymbol(symbol: String): String =
+        symbol.uppercase()
+            .removeSuffix("_IDR")
+            .removeSuffix("_USDT")
+            .removeSuffix("IDR")
+            .removeSuffix("USDT")
+            .trim()
 }
