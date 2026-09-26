@@ -19,6 +19,8 @@ import kotlin.math.abs
  */
 object PriceFormatter {
 
+    private val ID_LOCALE = Locale.forLanguageTag("id-ID")
+
     /**
      * Format harga dengan simbol mata uang dinamis (IDR / USDT / BIDR / USD)
      * Mengikuti spesifikasi Indodax API.
@@ -54,7 +56,7 @@ object PriceFormatter {
             }
         } else {
             val prefix = if (showSymbol) "Rp " else ""
-            val symbols = DecimalFormatSymbols(Locale("id", "ID")).apply {
+            val symbols = DecimalFormatSymbols(ID_LOCALE).apply {
                 groupingSeparator = '.'
                 decimalSeparator = ','
             }
@@ -110,7 +112,7 @@ object PriceFormatter {
                 else -> "$" + DecimalFormat("#.##", symbols).format(volume)
             }
         } else {
-            val symbols = DecimalFormatSymbols(Locale("id", "ID")).apply {
+            val symbols = DecimalFormatSymbols(ID_LOCALE).apply {
                 groupingSeparator = '.'
                 decimalSeparator = ','
             }
@@ -261,7 +263,7 @@ object PriceFormatter {
     /** Format desimal koin kripto presisi tinggi (cth: 0,00002774 BTC) */
     fun formatCryptoExact(amount: Double, maxDecimals: Int = 8): String {
         if (amount.isNaN() || amount.isInfinite() || amount <= 0.0) return "0"
-        val symbols = DecimalFormatSymbols(Locale("id", "ID")).apply {
+        val symbols = DecimalFormatSymbols(ID_LOCALE).apply {
             groupingSeparator = '.'
             decimalSeparator = ','
         }
@@ -272,7 +274,7 @@ object PriceFormatter {
     /** Format nominal IDR dengan dukungan pecahan desimal koin kecil (cth: 38.028 atau 0,00015 atau -40) */
     fun formatIdrNumber(amount: Double): String {
         if (amount.isNaN() || amount.isInfinite() || amount == 0.0) return "0"
-        val symbols = DecimalFormatSymbols(Locale("id", "ID")).apply {
+        val symbols = DecimalFormatSymbols(ID_LOCALE).apply {
             groupingSeparator = '.'
             decimalSeparator = ','
         }

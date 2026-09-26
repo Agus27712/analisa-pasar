@@ -67,11 +67,20 @@ object GroqAiService {
         } else "Volatilitas normal"
 
         val systemPrompt = """
-Kamu asisten quantitative & technical analyst spot Indodax.
+Kamu asisten quantitative & technical analyst pasar spot Indodax (Crypto IDR).
 Sajikan seluruh analisis dalam Bahasa Indonesia (termasuk kutipan atau intisari berita).
 Terjemahkan headline Inggris ke Bahasa Indonesia dulu, lalu hubungkan ke pergerakan harga.
 Gunakan format Markdown terstruktur dengan poin-poin bullet (-), teks tebal (**bold**), dan judul bab (###).
 Fokus insight tajam, edukatif, dan praktis terstruktur.
+
+ATURAN SPOT MURNI INDODAX (SANGAT KRUSIAL - WAJIB DIPATUHI):
+1. Pasar Indodax adalah pasar SPOT MURNI (hanya transaksi Beli / Long aset fisik, dan Jual aset yang dimiliki).
+2. DILARANG KERAS menyarankan posisi SHORT, SHORT SELLING, FUTURES, DERIVATIF, atau MARGIN LEVERAGE. Jangan pernah menggunakan kata "short" atau menyarankan sell jika belum punya aset!
+3. ATURAN LEVEL HARGA SPOT:
+   - Area Beli (Entry): Level harga beli spot yang realistis.
+   - Take Profit (TP): Target jual untung, HARUS SELALU LEBIH TINGGI dari harga Entry (TP > Entry).
+   - Stop Loss (SL): Batas proteksi cut loss modal, HARUS SELALU LEBIH RENDAH dari harga Entry (SL < Entry). DILARANG KERAS membuat Stop Loss yang lebih tinggi atau sama dengan harga Entry!
+   - Jika tren sedang bearish atau sinyal HOLD/WAIT: Sarankan "Tahan Posisi / Wait & See", simpan saldo IDR (cash), atau tunggu pantulan di level support yang lebih rendah di bawah. JANGAN PERNAH menyarankan posisi short!
         """.trimIndent()
 
         val userPrompt = """
@@ -104,9 +113,14 @@ Susun jawaban dalam format Markdown berikut:
 ### 📰 3. Sentimen Pasar & Alasan Gerakan
 - **Faktor Penggerak**: [Terjemahan & analisa berita/volume terhadap harga]
 
-### 💡 4. Panduan Strategi & Action Plan
+### 💡 4. Panduan Strategi & Action Plan (Spot Indodax)
 - **Sinyal Engine**: **${signal.action.name}** (Confidence: ${signal.confidence}/100)
-- **Rekomendasi**: [Entry, TP/SL, disiplin limit order maker]
+- **Rekomendasi**: [Tindakan spot: Beli bertahap / Tahan posisi / Tunggu support bawah. DILARANG posisi short!]
+- **Level Acuan Spot**:
+  * Area Beli (Entry): [Level harga beli spot]
+  * Take Profit (TP): [Target jual untung, HARUS > Entry]
+  * Stop Loss (SL): [Batas proteksi risiko modal, HARUS < Entry]
+  * Disiplin Order: Limit order maker 0.21% untuk menghemat fee transaksi
         """.trimIndent()
 
         for (modelName in FALLBACK_MODELS) {

@@ -243,7 +243,7 @@ fun SimulationTopUpModal(
                                 manualInput = amount.toLong().toString()
                             },
                             colors = ButtonDefaults.outlinedButtonColors(containerColor = TvSurfaceVariant),
-                            border = ButtonDefaults.outlinedButtonBorder.copy(brush = androidx.compose.ui.graphics.SolidColor(TvBorder)),
+                            border = ButtonDefaults.outlinedButtonBorder(enabled = true).copy(brush = androidx.compose.ui.graphics.SolidColor(TvBorder)),
                             shape = RoundedCornerShape(6.dp),
                             modifier = Modifier.weight(1f),
                             contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp)
@@ -270,7 +270,7 @@ fun SimulationTopUpModal(
                                 manualInput = amount.toLong().toString()
                             },
                             colors = ButtonDefaults.outlinedButtonColors(containerColor = TvSurfaceVariant),
-                            border = ButtonDefaults.outlinedButtonBorder.copy(brush = androidx.compose.ui.graphics.SolidColor(TvBorder)),
+                            border = ButtonDefaults.outlinedButtonBorder(enabled = true).copy(brush = androidx.compose.ui.graphics.SolidColor(TvBorder)),
                             shape = RoundedCornerShape(6.dp),
                             modifier = Modifier.weight(1f),
                             contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp)
@@ -295,7 +295,7 @@ fun SimulationTopUpModal(
                     },
                     shape = RoundedCornerShape(8.dp),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = TvRed),
-                    border = ButtonDefaults.outlinedButtonBorder.copy(brush = androidx.compose.ui.graphics.SolidColor(TvRed.copy(alpha = 0.5f))),
+                    border = ButtonDefaults.outlinedButtonBorder(enabled = true).copy(brush = androidx.compose.ui.graphics.SolidColor(TvRed.copy(alpha = 0.5f))),
                     modifier = Modifier.fillMaxWidth(),
                     contentPadding = PaddingValues(vertical = 10.dp)
                 ) {

@@ -457,34 +457,6 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun requestDeepAiAudit() {
-        val tick = currentTick.value ?: return
-        if (connectionState.value !is MarketConnectionState.Connected || isAuditLoading.value || isGeminiLoading.value) return
-        aiNewsViewModel.requestDeepAiAudit(
-            tick = tick,
-            indicators = currentIndicators.value,
-            signal = aiSignalState.value
-        )
-    }
-
-    fun clearAuditReport() = aiNewsViewModel.clearAuditReport()
-
-    fun requestGeminiChartSummary() {
-        val tick = currentTick.value ?: return
-        if (connectionState.value !is MarketConnectionState.Connected || isAuditLoading.value || isGeminiLoading.value) return
-        aiNewsViewModel.requestGeminiChartSummary(
-            tick = tick,
-            indicators = currentIndicators.value,
-            signal = aiSignalState.value
-        )
-    }
-
-    fun clearGeminiSummary() = aiNewsViewModel.clearGeminiSummary()
-
-    fun refreshSpotPosition() {
-        positionCoordinator.refreshPosition(selectedPair.value.symbol)
-    }
-
     fun getPositionFor(symbol: String, isReal: Boolean = isRealBuyMode.value): SpotPosition =
         positionCoordinator.getPosition(symbol, isReal)
 

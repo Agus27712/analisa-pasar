@@ -58,7 +58,39 @@ data class SpotPosition(
 }
 
 class SpotPositionStore(context: Context) {
-    private val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val prefs: android.content.SharedPreferences = run {
+        val appContext = context.applicationContext
+        val legacyPrefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        try {
+            val masterKey = androidx.security.crypto.MasterKey.Builder(appContext)
+                .setKeyScheme(androidx.security.crypto.MasterKey.KeyScheme.AES256_GCM)
+                .build()
+            val encPrefs = androidx.security.crypto.EncryptedSharedPreferences.create(
+                appContext,
+                "${PREFS_NAME}_encrypted",
+                masterKey,
+                androidx.security.crypto.EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                androidx.security.crypto.EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+            // Migrasi otomatis data legacy unencrypted bila prefs terenkripsi masih kosong
+            if (encPrefs.all.isEmpty() && legacyPrefs.all.isNotEmpty()) {
+                val editor = encPrefs.edit()
+                legacyPrefs.all.forEach { (k, v) ->
+                    when (v) {
+                        is String -> editor.putString(k, v)
+                        is Boolean -> editor.putBoolean(k, v)
+                        is Int -> editor.putInt(k, v)
+                        is Long -> editor.putLong(k, v)
+                        is Float -> editor.putFloat(k, v)
+                    }
+                }
+                editor.apply()
+            }
+            encPrefs
+        } catch (_: Exception) {
+            legacyPrefs
+        }
+    }
 
     companion object {
         private const val PREFS_NAME = "analysis_ui_spot_positions"

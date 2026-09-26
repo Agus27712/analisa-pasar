@@ -31,11 +31,12 @@ object NewsAiScreenerService {
         "openai/gpt-oss-120b",
         "llama-3.1-8b-instant"
     )
-    private const val GEMINI_MODEL = "gemini-1.5-flash"
+    private const val GEMINI_MODEL = "gemini-2.5-flash"
     private val GEMINI_MODELS = listOf(
-        "gemini-1.5-flash",
-        "gemini-2.0-flash",
-        "gemini-1.5-pro"
+        "gemini-2.5-flash",
+        "gemini-3.5-flash",
+        "gemini-flash-latest",
+        "gemini-3.1-pro-preview"
     )
     private const val MAX_TOKENS = 750
 
@@ -244,7 +245,7 @@ Tugas Anda adalah menyeleksi 2 sampai 4 koin calon beli (bullish candidates) ber
 
 Panduan Evaluasi:
 1. Filter Listing Indodax: Hanya rekomendasikan koin yang valid ada di dalam [DAFTAR KOIN AKTIF INDODAX]. Koin di luar daftar ini harus diabaikan.
-2. Perspektif Spot: Fokus hanya pada potensi kenaikan harga spot (buy catalyst). Jangan berikan rekomendasi shorting/futures.
+2. Perspektif Spot Murni: Fokus hanya pada potensi kenaikan harga spot (buy catalyst). Dilarang keras merekomendasikan shorting, margin, atau futures. Stop Loss harus selalu lebih rendah dari level entry.
 3. Output Padat dan Tuntas: Berikan analisis padat, tajam, edukatif, dan to the point tanpa basa-basi pembuka/penutup.
 4. Format output per koin:
 🔥 [SIMBOL/IDR] (Contoh: SOL/IDR)
@@ -335,7 +336,7 @@ Tugas Anda: Membaca tumpukan feed berita crypto global, lalu menyaring hanya koi
 
 Panduan Evaluasi:
 1. Filter Indodax: Hanya saring dan tampilkan koin yang terdaftar dalam daftar [DAFTAR VALID KOIN INDODAX SPOT]. Koin di luar daftar ini harus diabaikan.
-2. Perspektif Spot: Hanya cari katalis akumulasi/kenaikan harga (Spot Buy). Tidak ada shorting/futures.
+2. Perspektif Spot Murni: Hanya cari katalis akumulasi/kenaikan harga (Spot Buy). Dilarang keras merekomendasikan shorting, margin, atau futures. Stop Loss harus selalu lebih rendah dari level entry.
 3. Deteksi Narasi & Makro: Hubungkan berita mikro koin dengan narasi besar (AI, RWA, Layer-1, aliran dana institusi).
 4. Panjang Output: Berikan analisis padat, tajam, dan tuntas hingga selesai tanpa salam pembuka atau penutup.
 5. Format output per koin:

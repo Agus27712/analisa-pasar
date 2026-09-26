@@ -6,7 +6,7 @@ enum class AiProvider(val label: String) { GROQ("Groq"), GEMINI("Gemini") }
 
 enum class StrategyMode(val label: String, val badge: String, val shortDesc: String) {
     SCALPING("Scalping Agresif", "⚡ SCALPING", "Cepat (1M–15M) · Trigger mikro"),
-    SWING("Swing Trad", "📈 SWING", "Jangka menengah (1H–1D)"),
+    SWING("Swing Trade", "📈 SWING", "Jangka menengah (1H–1D)"),
     OFFICE_DAILY("Intraday", "⚡ INTRADAY", "Open Pagi · Close Malam · Anti Flash Dump");
 }
 

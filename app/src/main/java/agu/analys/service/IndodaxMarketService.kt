@@ -14,15 +14,16 @@ import kotlinx.coroutines.withContext
 import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.concurrent.atomic.AtomicLong
 
 object IndodaxMarketService {
     private val client get() = NetworkClientProvider.marketClient
 
-    private val timeFormat = SimpleDateFormat("HH:mm:ss", Locale("id", "ID"))
+    private val tradeTimeFormatter: DateTimeFormatter =
+        DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneId.of("Asia/Jakarta"))
     private data class ChangeReference(val close: Double, val fetchedAt: Long)
     private val changeReferenceCache = mutableMapOf<String, ChangeReference>()
     private const val CHANGE_REFERENCE_CACHE_MS = 60_000L
@@ -627,7 +628,7 @@ object IndodaxMarketService {
                         t.optString("tid", ts.toString()),
                         t.optString("price", "0").toDoubleOrNull() ?: 0.0,
                         t.optString("amount", "0").toDoubleOrNull() ?: 0.0,
-                        timeFormat.format(Date(ts)),
+                        tradeTimeFormatter.format(Instant.ofEpochMilli(ts)),
                         t.optString("type", "buy").equals("buy", true)
                     )
                 )

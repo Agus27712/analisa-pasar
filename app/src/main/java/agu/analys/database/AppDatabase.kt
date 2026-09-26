@@ -165,7 +165,6 @@ abstract class AppDatabase : RoomDatabase() {
                     "agu_analys_db"
                 )
                 .fallbackToDestructiveMigration()
-                .allowMainThreadQueries()
                 .build()
                 INSTANCE = instance
                 instance
