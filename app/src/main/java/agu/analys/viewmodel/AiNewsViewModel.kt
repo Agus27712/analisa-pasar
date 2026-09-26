@@ -38,7 +38,12 @@ class AiNewsViewModel(application: Application) : AndroidViewModel(application) 
     private val _isGeminiLoading = MutableStateFlow(false)
     val isGeminiLoading: StateFlow<Boolean> = _isGeminiLoading.asStateFlow()
 
-    fun fetchAiNewsScreening(groqKey: String = "", geminiKey: String = "", forceRefresh: Boolean = false) {
+    fun fetchAiNewsScreening(
+        groqKey: String = "",
+        geminiKey: String = "",
+        forceRefresh: Boolean = false,
+        currentLiveTicks: Map<String, MarketTick> = emptyMap()
+    ) {
         viewModelScope.launch {
             _newsScreenerState.value = NewsScreenerUiState.Loading("Mengambil & menganalisa feed berita kripto terbaru...")
             try {
@@ -52,14 +57,45 @@ class AiNewsViewModel(application: Application) : AndroidViewModel(application) 
                     return@launch
                 }
 
-                // Gunakan daftar koin populer Indodax sebagai basis penyaringan
-                val dynamicBases = TradingPair.POPULAR_INDODAX_PAIRS.map { it.baseAsset.uppercase() }.toMutableSet()
-                val liveTicks = emptyMap<String, agu.analys.model.MarketTick>()
+                // 1. Dapatkan live ticks: dari parameter, cache, atau fetch summaries Indodax
+                var ticks = currentLiveTicks
+                if (ticks.isEmpty()) {
+                    val cached = agu.analys.util.MarketDataCache(getApplication()).loadDashboardTicks(agu.analys.config.MarketDataSource.INDODAX)
+                    if (cached.isNotEmpty()) {
+                        ticks = cached
+                    }
+                }
+
+                val dynamicBases = mutableSetOf<String>()
+                dynamicBases.addAll(TradingPair.POPULAR_INDODAX_PAIRS.map { it.baseAsset.uppercase() })
+                val metadata = agu.analys.util.MarketDataCache(getApplication()).loadPairsMetadata()
+                if (metadata.isNotEmpty()) {
+                    dynamicBases.addAll(metadata.map { it.baseCurrency.uppercase() })
+                }
+
+                // Jika ticks masih kosong atau kurang lengkap, fetch ranking & summaries langsung dari Indodax
+                if (ticks.isEmpty() || ticks.size < 10) {
+                    try {
+                        val rankings = agu.analys.service.IndodaxMarketService.fetchMarketRankings(limit = 100, excludeStable = false)
+                        if (rankings.allTicks.isNotEmpty()) {
+                            ticks = ticks + rankings.allTicks
+                            dynamicBases.addAll(rankings.allTicks.values.map {
+                                it.symbol.removeSuffix("IDR").removeSuffix("_idr").uppercase()
+                            })
+                        }
+                    } catch (e: Exception) {
+                        timber.log.Timber.w(e, "Gagal fetch live ticks untuk AI screener")
+                    }
+                } else {
+                    dynamicBases.addAll(ticks.values.map {
+                        it.symbol.removeSuffix("IDR").removeSuffix("_idr").uppercase()
+                    })
+                }
 
                 val result = NewsAiScreenerService.screenCoinsFromNews(
                     articles = articles,
                     indodaxValidBases = dynamicBases,
-                    liveTicks = liveTicks,
+                    liveTicks = ticks,
                     preferredProvider = provider,
                     groqApiKey = effectiveGroq,
                     geminiApiKey = effectiveGemini

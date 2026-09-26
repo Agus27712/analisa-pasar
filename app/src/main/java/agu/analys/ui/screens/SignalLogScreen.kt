@@ -18,6 +18,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -57,16 +58,16 @@ fun SignalLogScreen(
     val reliabilitySummary by viewModel.signalReliabilitySummary.collectAsStateWithLifecycle()
     val tradeHistoryRecords by viewModel.tradeHistoryRecords.collectAsStateWithLifecycle()
 
-    var selectedScreenTab by remember { mutableIntStateOf(0) } // 0 = Siklus Histori Trade, 1 = Log & Evaluasi Sinyal AI
+    var selectedScreenTab by rememberSaveable { mutableIntStateOf(0) } // 0 = Siklus Histori Trade, 1 = Log & Evaluasi Sinyal AI
 
     // Trade History Filters
-    var tradeFilterRealSim by remember { mutableStateOf("ALL") } // ALL, REAL, SIM
-    var tradeFilterStatus by remember { mutableStateOf("ALL") } // ALL, WIN, LOSS, HOLDING
-    var selectedTradeSymbol by remember { mutableStateOf<String?>(null) }
+    var tradeFilterRealSim by rememberSaveable { mutableStateOf("ALL") } // ALL, REAL, SIM
+    var tradeFilterStatus by rememberSaveable { mutableStateOf("ALL") } // ALL, WIN, LOSS, HOLDING
+    var selectedTradeSymbol by rememberSaveable { mutableStateOf<String?>(null) }
 
     // Signal Log Filters
-    var selectedFilter by remember { mutableStateOf(SignalLogFilter.ALL) }
-    var selectedSymbolFilter by remember { mutableStateOf<String?>(null) }
+    var selectedFilter by rememberSaveable { mutableStateOf(SignalLogFilter.ALL) }
+    var selectedSymbolFilter by rememberSaveable { mutableStateOf<String?>(null) }
     var showClearDialog by remember { mutableStateOf(false) }
     var logToResolveManually by remember { mutableStateOf<SignalLogEntity?>(null) }
     var expandedLogId by remember { mutableStateOf<Long?>(null) }

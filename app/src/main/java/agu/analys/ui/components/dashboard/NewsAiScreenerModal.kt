@@ -39,6 +39,7 @@ import androidx.compose.ui.window.DialogProperties
 fun NewsAiScreenerModal(
     state: NewsScreenerUiState,
     provider: AiProvider,
+    liveTicks: Map<String, agu.analys.model.MarketTick> = emptyMap(),
     onDismiss: () -> Unit,
     onRunScreener: (Boolean) -> Unit,
     onSelectCoin: (TradingPair) -> Unit
@@ -173,6 +174,7 @@ fun NewsAiScreenerModal(
                             ScreenerResultsContent(
                                 result = state.result,
                                 providerColor = providerColor,
+                                liveTicks = liveTicks,
                                 showRawAnalysis = showRawAnalysis,
                                 onToggleRaw = { showRawAnalysis = !showRawAnalysis },
                                 onSelectCoin = { pick ->
@@ -210,6 +212,7 @@ fun NewsAiScreenerModal(
 private fun ScreenerResultsContent(
     result: NewsScreenerResult,
     providerColor: Color,
+    liveTicks: Map<String, agu.analys.model.MarketTick> = emptyMap(),
     showRawAnalysis: Boolean,
     onToggleRaw: () -> Unit,
     onSelectCoin: (ScreenerCoinPick) -> Unit
@@ -295,6 +298,7 @@ private fun ScreenerResultsContent(
                 ScreenerCoinCard(
                     pick = pick,
                     providerColor = providerColor,
+                    liveTicks = liveTicks,
                     onSelect = { onSelectCoin(pick) }
                 )
             }
@@ -347,8 +351,18 @@ private fun ScreenerResultsContent(
 private fun ScreenerCoinCard(
     pick: ScreenerCoinPick,
     providerColor: Color,
+    liveTicks: Map<String, agu.analys.model.MarketTick> = emptyMap(),
     onSelect: () -> Unit
 ) {
+    val liveTick = liveTicks[pick.pairSymbol]
+        ?: liveTicks[pick.indodaxPair]
+        ?: liveTicks[pick.baseSymbol]
+        ?: liveTicks["${pick.baseSymbol}IDR"]
+        ?: liveTicks["${pick.baseSymbol.lowercase()}_idr"]
+
+    val effectivePrice = if (liveTick != null && liveTick.price > 0.0) liveTick.price else pick.currentPrice
+    val effectiveChange = if (liveTick != null && !liveTick.change24h.isNaN()) liveTick.change24h else pick.change24h
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -379,15 +393,15 @@ private fun ScreenerCoinCard(
                     )
                 }
                 
-                val priceChangeColor = if (pick.change24h >= 0) Color(0xFF4CAF50) else Color(0xFFF44336)
+                val priceChangeColor = if (effectiveChange >= 0) Color(0xFF4CAF50) else Color(0xFFF44336)
                 Column(horizontalAlignment = Alignment.End) {
                     Text(
-                        text = PriceFormatter.formatPrice(pick.currentPrice),
+                        text = PriceFormatter.formatPrice(effectivePrice),
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.SemiBold
                     )
                     Text(
-                        text = PriceFormatter.formatPercentage(pick.change24h),
+                        text = PriceFormatter.formatPercentage(effectiveChange),
                         style = MaterialTheme.typography.bodySmall,
                         color = priceChangeColor
                     )

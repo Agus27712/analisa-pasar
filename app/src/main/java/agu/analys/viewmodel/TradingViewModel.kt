@@ -159,6 +159,14 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     val currentScreen: StateFlow<AppScreen> = _currentScreen.asStateFlow()
     internal val navigationStack = mutableListOf<AppScreen>()
 
+    // Dashboard Quick Filter Tab Delegation (Preserved across back navigation)
+    private val _dashboardQuickFilter = MutableStateFlow(agu.analys.ui.components.dashboard.DashboardQuickFilter.ALL)
+    val dashboardQuickFilter: StateFlow<agu.analys.ui.components.dashboard.DashboardQuickFilter> = _dashboardQuickFilter.asStateFlow()
+
+    fun setDashboardQuickFilter(filter: agu.analys.ui.components.dashboard.DashboardQuickFilter) {
+        _dashboardQuickFilter.value = filter
+    }
+
     // Market Ticker & Candlestick Delegation
     val selectedPair: StateFlow<TradingPair> = marketViewModel.selectedPair
     val selectedTimeframe: StateFlow<Timeframe> = marketViewModel.selectedTimeframe
@@ -342,7 +350,13 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     fun setNotifyTrailingStopEnabled(enabled: Boolean) = settingsViewModel.setNotifyTrailingStopEnabled(enabled)
     fun setNotifyEmergencyExitEnabled(enabled: Boolean) = settingsViewModel.setNotifyEmergencyExitEnabled(enabled)
 
-    fun runNewsAiScreener(forceRefresh: Boolean = false) = aiNewsViewModel.fetchAiNewsScreening(forceRefresh = forceRefresh)
+    fun runNewsAiScreener(forceRefresh: Boolean = false) {
+        val ticks = dashboardTicks.value
+        aiNewsViewModel.fetchAiNewsScreening(
+            forceRefresh = forceRefresh,
+            currentLiveTicks = ticks
+        )
+    }
     fun clearNewsScreenerState() = aiNewsViewModel.clearNewsScreenerState()
     fun setNotificationsEnabled(enabled: Boolean) = settingsViewModel.setNotificationsEnabled(enabled)
     fun setRealSimSyncEnabled(enabled: Boolean) = settingsViewModel.setRealSimSyncEnabled(enabled)

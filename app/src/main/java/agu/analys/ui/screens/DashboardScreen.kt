@@ -70,7 +70,7 @@ fun DashboardScreen(
     val newsScreenerState by viewModel.newsScreenerState.collectAsState()
     val isRefreshing by viewModel.isRefreshing.collectAsState()
 
-    var selectedQuickFilter by remember { mutableStateOf(DashboardQuickFilter.ALL) }
+    val selectedQuickFilter by viewModel.dashboardQuickFilter.collectAsState()
     var currentTab by remember { mutableStateOf(NavTab.WATCHLIST) }
     var showAddDialog by remember { mutableStateOf(false) }
     var showNewsScreener by remember { mutableStateOf(false) }
@@ -267,7 +267,7 @@ fun DashboardScreen(
             // 3. Quick Filter Chips [Semua] [Signal Kuat ⭐] [💼 Holding] [⭐ Watchlist]
             QuickFilterChips(
                 selectedFilter = selectedQuickFilter,
-                onSelectFilter = { selectedQuickFilter = it }
+                onSelectFilter = { viewModel.setDashboardQuickFilter(it) }
             )
 
             // 4. Focus List Section Header (Dinamis sesuai Strategy Mode)
@@ -338,7 +338,7 @@ fun DashboardScreen(
                                 )
                                 Spacer(modifier = Modifier.height(12.dp))
                                 Button(
-                                    onClick = { selectedQuickFilter = DashboardQuickFilter.ALL },
+                                    onClick = { viewModel.setDashboardQuickFilter(DashboardQuickFilter.ALL) },
                                     colors = ButtonDefaults.buttonColors(containerColor = TvSurfaceVariant),
                                     shape = RoundedCornerShape(8.dp)
                                 ) {
@@ -503,6 +503,7 @@ fun DashboardScreen(
             NewsAiScreenerModal(
                 state = newsScreenerState,
                 provider = viewModel.prefs.aiProvider,
+                liveTicks = allTicks,
                 onDismiss = { showNewsScreener = false },
                 onRunScreener = { force ->
                     viewModel.runNewsAiScreener(forceRefresh = force)

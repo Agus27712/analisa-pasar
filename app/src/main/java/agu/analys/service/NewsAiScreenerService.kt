@@ -414,7 +414,7 @@ Saring seluruh berita di atas dan cocokkan dengan daftar koin Indodax. Pilih 2 s
         return "⚠️ Gagal memanggil Gemini API. Periksa kuota atau Gemini API Key di Settings."
     }
 
-    private fun parseCoinPicks(
+    private suspend fun parseCoinPicks(
         rawText: String,
         indodaxBases: Set<String>,
         liveTicks: Map<String, MarketTick>
@@ -471,7 +471,26 @@ Saring seluruh berita di atas dan cocokkan dengan daftar koin Indodax. Pilih 2 s
             val validity = validityMatch?.groupValues?.getOrNull(1)?.trim() ?: "Tinggi"
 
             // Data Live Market Tick jika ada
-            val tick = liveTicks[pairSymbol] ?: liveTicks[indodaxPair] ?: liveTicks[base]
+            var tick = liveTicks[pairSymbol]
+                ?: liveTicks[indodaxPair]
+                ?: liveTicks[base]
+                ?: liveTicks["${base}IDR"]
+                ?: liveTicks["${base.lowercase()}_idr"]
+                ?: liveTicks[base.lowercase()]
+
+            // Fallback fetch live ticker langsung dari Indodax jika belum ada di ticks map
+            if (tick == null || tick.price <= 0.0) {
+                try {
+                    val fetched = IndodaxMarketService.fetchTicker(indodaxPair) ?: IndodaxMarketService.fetchTicker(pairSymbol)
+                    if (fetched != null && fetched.price > 0.0) {
+                        tick = fetched
+                    }
+                } catch (_: Exception) {}
+            }
+
+            val price = tick?.price ?: 0.0
+            val change = if (tick != null && !tick.change24h.isNaN()) tick.change24h else 0.0
+            val vol = tick?.volume24h ?: 0.0
 
             picks.add(
                 ScreenerCoinPick(
@@ -483,9 +502,9 @@ Saring seluruh berita di atas dan cocokkan dengan daftar koin Indodax. Pilih 2 s
                     mainCatalyst = catalyst,
                     reasons = reasons,
                     validityGrade = validity,
-                    currentPrice = tick?.price ?: 0.0,
-                    change24h = tick?.change24h ?: 0.0,
-                    volume24h = tick?.volume24h ?: 0.0
+                    currentPrice = price,
+                    change24h = change,
+                    volume24h = vol
                 )
             )
         }
@@ -498,7 +517,26 @@ Saring seluruh berita di atas dan cocokkan dengan daftar koin Indodax. Pilih 2 s
                 if (indodaxBases.any { it.equals(candidate, ignoreCase = true) } && picks.none { it.baseSymbol == candidate }) {
                     val pairSymbol = "${candidate}IDR"
                     val indodaxPair = "${candidate.lowercase()}_idr"
-                    val tick = liveTicks[pairSymbol] ?: liveTicks[indodaxPair] ?: liveTicks[candidate]
+                    var tick = liveTicks[pairSymbol]
+                        ?: liveTicks[indodaxPair]
+                        ?: liveTicks[candidate]
+                        ?: liveTicks["${candidate}IDR"]
+                        ?: liveTicks["${candidate.lowercase()}_idr"]
+                        ?: liveTicks[candidate.lowercase()]
+
+                    if (tick == null || tick.price <= 0.0) {
+                        try {
+                            val fetched = IndodaxMarketService.fetchTicker(indodaxPair) ?: IndodaxMarketService.fetchTicker(pairSymbol)
+                            if (fetched != null && fetched.price > 0.0) {
+                                tick = fetched
+                            }
+                        } catch (_: Exception) {}
+                    }
+
+                    val price = tick?.price ?: 0.0
+                    val change = if (tick != null && !tick.change24h.isNaN()) tick.change24h else 0.0
+                    val vol = tick?.volume24h ?: 0.0
+
                     picks.add(
                         ScreenerCoinPick(
                             baseSymbol = candidate,
@@ -509,9 +547,9 @@ Saring seluruh berita di atas dan cocokkan dengan daftar koin Indodax. Pilih 2 s
                             mainCatalyst = "Kandidat katalis bullish berdasarkan analisis narasi berita global.",
                             reasons = listOf("Disebutkan dalam feed berita dengan sentimen positif.", "Likuiditas aktif pada pair Indodax IDR."),
                             validityGrade = "Tinggi",
-                            currentPrice = tick?.price ?: 0.0,
-                            change24h = tick?.change24h ?: 0.0,
-                            volume24h = tick?.volume24h ?: 0.0
+                            currentPrice = price,
+                            change24h = change,
+                            volume24h = vol
                         )
                     )
                     if (picks.size >= 4) break
