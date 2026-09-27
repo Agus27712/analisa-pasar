@@ -10,6 +10,10 @@ import kotlin.math.abs
 /**
  * Centralized Price & Asset Value Formatter for INDODAX and crypto assets.
  * 
+ * Optimized for performance:
+ * - Static cached DecimalFormatSymbols to prevent repeated locale lookup.
+ * - ThreadLocal cached DecimalFormat instances to eliminate object allocation in hot paths.
+ *
  * Complies with Indodax API specifications for:
  * - IDR quote pairs (Whole Rupiah for standard coins, decimal fractions for micro/meme coins)
  * - USDT / USD quote pairs (2 decimals for major pairs, high precision for micro pairs)
@@ -20,6 +24,29 @@ import kotlin.math.abs
 object PriceFormatter {
 
     private val ID_LOCALE = Locale.forLanguageTag("id-ID")
+
+    private val US_SYMBOLS = DecimalFormatSymbols(Locale.US)
+    private val ID_SYMBOLS = DecimalFormatSymbols(ID_LOCALE).apply {
+        groupingSeparator = '.'
+        decimalSeparator = ','
+    }
+
+    private val usFormatters = ThreadLocal.withInitial { HashMap<String, DecimalFormat>() }
+    private val idFormatters = ThreadLocal.withInitial { HashMap<String, DecimalFormat>() }
+
+    private fun getUsFormat(pattern: String): DecimalFormat {
+        val map = usFormatters.get() ?: HashMap<String, DecimalFormat>().also { usFormatters.set(it) }
+        return map.getOrPut(pattern) {
+            DecimalFormat(pattern, US_SYMBOLS)
+        }
+    }
+
+    private fun getIdFormat(pattern: String): DecimalFormat {
+        val map = idFormatters.get() ?: HashMap<String, DecimalFormat>().also { idFormatters.set(it) }
+        return map.getOrPut(pattern) {
+            DecimalFormat(pattern, ID_SYMBOLS)
+        }
+    }
 
     /**
      * Format harga dengan simbol mata uang dinamis (IDR / USDT / BIDR / USD)
@@ -41,37 +68,32 @@ object PriceFormatter {
 
         val formatted = if (isUsdt) {
             val prefix = if (showSymbol) "$" else ""
-            val symbols = DecimalFormatSymbols(Locale.US)
             if (decimals != null) {
                 val pattern = if (decimals <= 0) "#,##0" else "#,##0." + "0".repeat(decimals)
-                prefix + DecimalFormat(pattern, symbols).format(absPrice)
+                prefix + getUsFormat(pattern).format(absPrice)
             } else {
                 when {
-                    absPrice < 0.00001 -> prefix + DecimalFormat("0.########", symbols).format(absPrice)
-                    absPrice < 0.001 -> prefix + DecimalFormat("0.######", symbols).format(absPrice)
-                    absPrice < 1.0 -> prefix + DecimalFormat("0.####", symbols).format(absPrice)
-                    absPrice < 10.0 -> prefix + DecimalFormat("0.###", symbols).format(absPrice)
-                    else -> prefix + DecimalFormat("#,##0.00", symbols).format(absPrice)
+                    absPrice < 0.00001 -> prefix + getUsFormat("0.########").format(absPrice)
+                    absPrice < 0.001 -> prefix + getUsFormat("0.######").format(absPrice)
+                    absPrice < 1.0 -> prefix + getUsFormat("0.####").format(absPrice)
+                    absPrice < 10.0 -> prefix + getUsFormat("0.###").format(absPrice)
+                    else -> prefix + getUsFormat("#,##0.00").format(absPrice)
                 }
             }
         } else {
             val prefix = if (showSymbol) "Rp " else ""
-            val symbols = DecimalFormatSymbols(ID_LOCALE).apply {
-                groupingSeparator = '.'
-                decimalSeparator = ','
-            }
             if (decimals != null) {
                 val pattern = if (decimals <= 0) "#,##0" else "#,##0." + "0".repeat(decimals)
-                prefix + DecimalFormat(pattern, symbols).format(absPrice)
+                prefix + getIdFormat(pattern).format(absPrice)
             } else {
                 when {
-                    absPrice < 0.00001 -> prefix + DecimalFormat("0.########", symbols).format(absPrice)
-                    absPrice < 0.01 -> prefix + DecimalFormat("0.######", symbols).format(absPrice)
-                    absPrice < 1.0 -> prefix + DecimalFormat("0.####", symbols).format(absPrice)
-                    absPrice < 100.0 && absPrice % 1.0 != 0.0 -> prefix + DecimalFormat("#,##0.##", symbols).format(absPrice)
+                    absPrice < 0.00001 -> prefix + getIdFormat("0.########").format(absPrice)
+                    absPrice < 0.01 -> prefix + getIdFormat("0.######").format(absPrice)
+                    absPrice < 1.0 -> prefix + getIdFormat("0.####").format(absPrice)
+                    absPrice < 100.0 && absPrice % 1.0 != 0.0 -> prefix + getIdFormat("#,##0.##").format(absPrice)
                     else -> {
                         val rounded = kotlin.math.round(absPrice).toLong()
-                        prefix + DecimalFormat("#,##0", symbols).format(rounded)
+                        prefix + getIdFormat("#,##0").format(rounded)
                     }
                 }
             }
@@ -101,30 +123,20 @@ object PriceFormatter {
         val absVol = abs(volume)
         val isUsdt = isUsdtQuote(quoteAsset)
         if (isUsdt) {
-            val symbols = DecimalFormatSymbols(Locale.US)
+            val fmt = getUsFormat("#.##")
             return when {
-                absVol >= 1_000_000_000.0 ->
-                    "$" + DecimalFormat("#.##", symbols).format(volume / 1_000_000_000.0) + " B"
-                absVol >= 1_000_000.0 ->
-                    "$" + DecimalFormat("#.##", symbols).format(volume / 1_000_000.0) + " M"
-                absVol >= 1_000.0 ->
-                    "$" + DecimalFormat("#.##", symbols).format(volume / 1_000.0) + " K"
-                else -> "$" + DecimalFormat("#.##", symbols).format(volume)
+                absVol >= 1_000_000_000.0 -> "$" + fmt.format(volume / 1_000_000_000.0) + " B"
+                absVol >= 1_000_000.0 -> "$" + fmt.format(volume / 1_000_000.0) + " M"
+                absVol >= 1_000.0 -> "$" + fmt.format(volume / 1_000.0) + " K"
+                else -> "$" + fmt.format(volume)
             }
         } else {
-            val symbols = DecimalFormatSymbols(ID_LOCALE).apply {
-                groupingSeparator = '.'
-                decimalSeparator = ','
-            }
+            val fmt = getIdFormat("#.##")
             return when {
-                absVol >= 1_000_000_000_000.0 ->
-                    "Rp " + DecimalFormat("#.##", symbols).format(volume / 1_000_000_000_000.0) + " T"
-                absVol >= 1_000_000_000.0 ->
-                    "Rp " + DecimalFormat("#.##", symbols).format(volume / 1_000_000_000.0) + " Mil"
-                absVol >= 1_000_000.0 ->
-                    "Rp " + DecimalFormat("#.##", symbols).format(volume / 1_000_000.0) + " jt"
-                absVol >= 1_000.0 ->
-                    "Rp " + DecimalFormat("#.##", symbols).format(volume / 1_000.0) + " rb"
+                absVol >= 1_000_000_000_000.0 -> "Rp " + fmt.format(volume / 1_000_000_000_000.0) + " T"
+                absVol >= 1_000_000_000.0 -> "Rp " + fmt.format(volume / 1_000_000_000.0) + " Mil"
+                absVol >= 1_000_000.0 -> "Rp " + fmt.format(volume / 1_000_000.0) + " jt"
+                absVol >= 1_000.0 -> "Rp " + fmt.format(volume / 1_000.0) + " rb"
                 else -> formatPrice(volume, showSymbol = true, quoteAsset = quoteAsset)
             }
         }
@@ -143,9 +155,8 @@ object PriceFormatter {
             val zeros = if (decimals <= 0) "0" else "0." + "0".repeat(decimals)
             return "$zeros%"
         }
-        val symbols = DecimalFormatSymbols(Locale.US)
         val pattern = if (decimals <= 0) "0" else "0." + "0".repeat(decimals)
-        val formatted = DecimalFormat(pattern, symbols).format(abs(change))
+        val formatted = getUsFormat(pattern).format(abs(change))
         return when {
             change > 0.0 -> if (includePlusSign) "+$formatted%" else "$formatted%"
             change < 0.0 -> "-$formatted%"
@@ -223,7 +234,7 @@ object PriceFormatter {
 
     fun formatRsi(rsi: Double): String {
         if (rsi.isNaN() || rsi.isInfinite()) return "50.0"
-        return DecimalFormat("0.0", DecimalFormatSymbols(Locale.US)).format(rsi)
+        return getUsFormat("0.0").format(rsi)
     }
 
     fun formatIndicatorVal(value: Double, decimals: Int = 2): String {
@@ -232,7 +243,7 @@ object PriceFormatter {
             append("0.")
             repeat(decimals) { append("0") }
         }
-        return DecimalFormat(pattern, DecimalFormatSymbols(Locale.US)).format(value)
+        return getUsFormat(pattern).format(value)
     }
 
     fun formatRawDecimal(value: Double): String {
@@ -256,37 +267,29 @@ object PriceFormatter {
             String.format(Locale.US, "%.4f", quantity).trimEnd('0').trimEnd('.')
         } else {
             val pattern = "0." + "#".repeat(maxDecimals.coerceIn(2, 8))
-            DecimalFormat(pattern, DecimalFormatSymbols(Locale.US)).format(quantity)
+            getUsFormat(pattern).format(quantity)
         }
     }
 
     /** Format desimal koin kripto presisi tinggi (cth: 0,00002774 BTC) */
     fun formatCryptoExact(amount: Double, maxDecimals: Int = 8): String {
         if (amount.isNaN() || amount.isInfinite() || amount <= 0.0) return "0"
-        val symbols = DecimalFormatSymbols(ID_LOCALE).apply {
-            groupingSeparator = '.'
-            decimalSeparator = ','
-        }
         val pattern = "0." + "#".repeat(maxDecimals.coerceIn(2, 10))
-        return DecimalFormat(pattern, symbols).format(amount)
+        return getIdFormat(pattern).format(amount)
     }
 
     /** Format nominal IDR dengan dukungan pecahan desimal koin kecil (cth: 38.028 atau 0,00015 atau -40) */
     fun formatIdrNumber(amount: Double): String {
         if (amount.isNaN() || amount.isInfinite() || amount == 0.0) return "0"
-        val symbols = DecimalFormatSymbols(ID_LOCALE).apply {
-            groupingSeparator = '.'
-            decimalSeparator = ','
-        }
         val absVal = abs(amount)
         val formatted = when {
-            absVal < 0.00001 -> DecimalFormat("0.########", symbols).format(absVal)
-            absVal < 0.01 -> DecimalFormat("0.######", symbols).format(absVal)
-            absVal < 1.0 -> DecimalFormat("0.####", symbols).format(absVal)
-            absVal < 100.0 && absVal % 1.0 != 0.0 -> DecimalFormat("#,##0.##", symbols).format(absVal)
+            absVal < 0.00001 -> getIdFormat("0.########").format(absVal)
+            absVal < 0.01 -> getIdFormat("0.######").format(absVal)
+            absVal < 1.0 -> getIdFormat("0.####").format(absVal)
+            absVal < 100.0 && absVal % 1.0 != 0.0 -> getIdFormat("#,##0.##").format(absVal)
             else -> {
                 val rounded = kotlin.math.round(absVal).toLong()
-                DecimalFormat("#,##0", symbols).format(rounded)
+                getIdFormat("#,##0").format(rounded)
             }
         }
         return if (amount < 0) "- $formatted" else formatted
