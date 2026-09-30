@@ -14,17 +14,23 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+import agu.analys.util.AppPreferences
+import kotlinx.coroutines.flow.flatMapLatest
+
 class SignalLogViewModel(application: Application) : AndroidViewModel(application) {
 
+    private val prefs = AppPreferences(application)
     private val signalLogRepository = SignalLogRepository(
         dao = AppDatabase.getInstance().signalLogDao(),
         scope = viewModelScope
     )
 
-    val allSignalLogs: StateFlow<List<SignalLogEntity>> = signalLogRepository.allLogsFlow
+    val currentExchange: String get() = prefs.marketDataSource.name
+
+    val allSignalLogs: StateFlow<List<SignalLogEntity>> = signalLogRepository.getLogsByExchangeFlow(currentExchange)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val signalReliabilitySummary: StateFlow<SignalReliabilitySummary> = signalLogRepository.reliabilitySummaryFlow
+    val signalReliabilitySummary: StateFlow<SignalReliabilitySummary> = signalLogRepository.getReliabilitySummaryByExchangeFlow(currentExchange)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SignalReliabilitySummary())
 
     private val _auditReportText = MutableStateFlow<String?>(null)

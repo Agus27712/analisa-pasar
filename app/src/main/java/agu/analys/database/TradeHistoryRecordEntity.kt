@@ -15,8 +15,9 @@ data class TradeHistoryRecordEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0L,
     val tradeUuid: String, // UUID unik untuk melacak siklus trade dari buy hingga sell
     val symbol: String, // e.g. "BTCIDR", "ETHIDR"
-    val isRealTrade: Boolean = false, // true = Real Indodax, false = Simulasi
+    val isRealTrade: Boolean = false, // true = Real, false = Simulasi
     val strategyMode: String = "SCALPING", // SCALPING, SWING, OFFICE_DAILY, SECOND_WAVE, TRENCHING, MANUAL
+    val exchange: String = "TOKOCRYPTO", // "TOKOCRYPTO" or "INDODAX"
 
     // TAHAP 1: PENGELUARAN SINYAL BUY (MODE & PERHITUNGAN TEKNIKAL)
     val signalTime: Long = System.currentTimeMillis(), // Waktu sinyal buy dikeluarkan oleh sistem
@@ -99,20 +100,38 @@ interface TradeHistoryRecordDao {
     @Query("SELECT * FROM trade_history_records ORDER BY buyTime DESC")
     fun getAllRecordsFlow(): Flow<List<TradeHistoryRecordEntity>>
 
+    @Query("SELECT * FROM trade_history_records WHERE exchange = :exchange ORDER BY buyTime DESC")
+    fun getRecordsByExchangeFlow(exchange: String): Flow<List<TradeHistoryRecordEntity>>
+
     @Query("SELECT * FROM trade_history_records WHERE symbol = :symbol ORDER BY buyTime DESC")
     fun getRecordsBySymbolFlow(symbol: String): Flow<List<TradeHistoryRecordEntity>>
+
+    @Query("SELECT * FROM trade_history_records WHERE exchange = :exchange AND symbol = :symbol ORDER BY buyTime DESC")
+    fun getRecordsBySymbolAndExchangeFlow(symbol: String, exchange: String): Flow<List<TradeHistoryRecordEntity>>
 
     @Query("SELECT * FROM trade_history_records WHERE symbol = :symbol OR symbol = :altSymbol ORDER BY buyTime DESC")
     suspend fun getRecordsForSymbol(symbol: String, altSymbol: String): List<TradeHistoryRecordEntity>
 
+    @Query("SELECT * FROM trade_history_records WHERE exchange = :exchange AND (symbol = :symbol OR symbol = :altSymbol) ORDER BY buyTime DESC")
+    suspend fun getRecordsForSymbolAndExchange(symbol: String, altSymbol: String, exchange: String): List<TradeHistoryRecordEntity>
+
     @Query("SELECT * FROM trade_history_records WHERE status = 'HOLDING' ORDER BY buyTime DESC")
     fun getHoldingRecordsFlow(): Flow<List<TradeHistoryRecordEntity>>
+
+    @Query("SELECT * FROM trade_history_records WHERE exchange = :exchange AND status = 'HOLDING' ORDER BY buyTime DESC")
+    fun getHoldingRecordsByExchangeFlow(exchange: String): Flow<List<TradeHistoryRecordEntity>>
 
     @Query("SELECT * FROM trade_history_records WHERE status = 'HOLDING'")
     suspend fun getHoldingRecords(): List<TradeHistoryRecordEntity>
 
+    @Query("SELECT * FROM trade_history_records WHERE exchange = :exchange AND status = 'HOLDING'")
+    suspend fun getHoldingRecordsByExchange(exchange: String): List<TradeHistoryRecordEntity>
+
     @Query("SELECT * FROM trade_history_records WHERE symbol = :symbol AND isRealTrade = :isReal AND status = 'HOLDING' ORDER BY buyTime DESC LIMIT 1")
     suspend fun getActiveHoldingForSymbol(symbol: String, isReal: Boolean): TradeHistoryRecordEntity?
+
+    @Query("SELECT * FROM trade_history_records WHERE symbol = :symbol AND exchange = :exchange AND isRealTrade = :isReal AND status = 'HOLDING' ORDER BY buyTime DESC LIMIT 1")
+    suspend fun getActiveHoldingForSymbolAndExchange(symbol: String, isReal: Boolean, exchange: String): TradeHistoryRecordEntity?
 
     @Query("SELECT * FROM trade_history_records WHERE tradeUuid = :uuid LIMIT 1")
     suspend fun getRecordByUuid(uuid: String): TradeHistoryRecordEntity?
@@ -135,6 +154,12 @@ interface TradeHistoryRecordDao {
     @Query("DELETE FROM trade_history_records")
     suspend fun clearAllRecords()
 
+    @Query("DELETE FROM trade_history_records WHERE exchange = :exchange")
+    suspend fun clearRecordsByExchange(exchange: String)
+
     @Query("SELECT COUNT(*) FROM trade_history_records")
     suspend fun getRecordCount(): Int
+
+    @Query("SELECT COUNT(*) FROM trade_history_records WHERE exchange = :exchange")
+    suspend fun getRecordCountByExchange(exchange: String): Int
 }

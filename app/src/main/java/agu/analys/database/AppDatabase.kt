@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.Flow
 @Entity(tableName = "real_trades")
 data class RealTradeEntity(
     @PrimaryKey val id: String, // trade_id or order_id
-    val symbol: String,         // e.g. "btcidr"
+    val symbol: String,         // e.g. "BTCIDR" or "btcidr"
     val price: Double,
     val qty: Double,
     val amount: Double,         // price * qty
@@ -25,7 +25,8 @@ data class RealTradeEntity(
     val trailingPercent: Double? = null,
     val trailingPeakPrice: Double? = null,
     val trailingLockPrice: Double? = null,
-    val signalSnapshotJson: String? = null
+    val signalSnapshotJson: String? = null,
+    val exchange: String = "TOKOCRYPTO" // "TOKOCRYPTO" or "INDODAX"
 )
 
 @Entity(tableName = "real_open_orders")
@@ -38,7 +39,8 @@ data class RealOpenOrderEntity(
     val quantity: Double,
     val executedQty: Double,
     val status: String,
-    val time: Long
+    val time: Long,
+    val exchange: String = "TOKOCRYPTO" // "TOKOCRYPTO" or "INDODAX"
 )
 
 @Entity(tableName = "signal_logs")
@@ -56,6 +58,7 @@ data class SignalLogEntity(
     val firedAt: Long = System.currentTimeMillis(),
     val reasoning: String = "",         // Text explanation at firing
     val scalpingStage: String = "",     // e.g. "ENTRY", "STRONG_ENTRY"
+    val exchange: String = "TOKOCRYPTO", // "TOKOCRYPTO" or "INDODAX"
     
     // Performance Outcome Tracking
     val outcomeStatus: String = "TRACKING", // "TRACKING", "HIT_TP1", "HIT_TP2", "HIT_SL", "INVALIDATED", "EXPIRED", "MANUAL_WIN", "MANUAL_LOSS"
@@ -74,8 +77,14 @@ interface RealTradeDao {
     @Query("SELECT * FROM real_trades ORDER BY time DESC")
     fun getAllTradesFlow(): Flow<List<RealTradeEntity>>
 
+    @Query("SELECT * FROM real_trades WHERE exchange = :exchange ORDER BY time DESC")
+    fun getTradesByExchangeFlow(exchange: String): Flow<List<RealTradeEntity>>
+
     @Query("SELECT * FROM real_trades WHERE symbol = :symbol ORDER BY time DESC")
     suspend fun getTradesBySymbol(symbol: String): List<RealTradeEntity>
+
+    @Query("SELECT * FROM real_trades WHERE symbol = :symbol AND exchange = :exchange ORDER BY time DESC")
+    suspend fun getTradesBySymbolAndExchange(symbol: String, exchange: String): List<RealTradeEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTrades(trades: List<RealTradeEntity>)
@@ -83,15 +92,24 @@ interface RealTradeDao {
     @Query("DELETE FROM real_trades")
     suspend fun clearAllTrades()
 
+    @Query("DELETE FROM real_trades WHERE exchange = :exchange")
+    suspend fun clearTradesByExchange(exchange: String)
+
     // Real Open Orders Cache (Offline/Caching Support)
     @Query("SELECT * FROM real_open_orders ORDER BY time DESC")
     fun getOpenOrdersFlow(): Flow<List<RealOpenOrderEntity>>
+
+    @Query("SELECT * FROM real_open_orders WHERE exchange = :exchange ORDER BY time DESC")
+    fun getOpenOrdersByExchangeFlow(exchange: String): Flow<List<RealOpenOrderEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOpenOrders(orders: List<RealOpenOrderEntity>)
 
     @Query("DELETE FROM real_open_orders")
     suspend fun clearOpenOrders()
+
+    @Query("DELETE FROM real_open_orders WHERE exchange = :exchange")
+    suspend fun clearOpenOrdersByExchange(exchange: String)
 
     @Query("DELETE FROM real_open_orders WHERE orderId = :orderId")
     suspend fun deleteOpenOrderById(orderId: String)
@@ -102,20 +120,38 @@ interface SignalLogDao {
     @Query("SELECT * FROM signal_logs ORDER BY firedAt DESC")
     fun getAllLogsFlow(): Flow<List<SignalLogEntity>>
 
+    @Query("SELECT * FROM signal_logs WHERE exchange = :exchange ORDER BY firedAt DESC")
+    fun getLogsByExchangeFlow(exchange: String): Flow<List<SignalLogEntity>>
+
     @Query("SELECT * FROM signal_logs WHERE symbol = :symbol ORDER BY firedAt DESC")
     fun getLogsBySymbolFlow(symbol: String): Flow<List<SignalLogEntity>>
+
+    @Query("SELECT * FROM signal_logs WHERE symbol = :symbol AND exchange = :exchange ORDER BY firedAt DESC")
+    fun getLogsBySymbolAndExchangeFlow(symbol: String, exchange: String): Flow<List<SignalLogEntity>>
 
     @Query("SELECT * FROM signal_logs WHERE outcomeStatus = 'TRACKING' ORDER BY firedAt DESC")
     fun getActiveTrackingLogsFlow(): Flow<List<SignalLogEntity>>
 
+    @Query("SELECT * FROM signal_logs WHERE exchange = :exchange AND outcomeStatus = 'TRACKING' ORDER BY firedAt DESC")
+    fun getActiveTrackingLogsByExchangeFlow(exchange: String): Flow<List<SignalLogEntity>>
+
     @Query("SELECT * FROM signal_logs WHERE outcomeStatus = 'TRACKING'")
     suspend fun getActiveTrackingLogs(): List<SignalLogEntity>
+
+    @Query("SELECT * FROM signal_logs WHERE exchange = :exchange AND outcomeStatus = 'TRACKING'")
+    suspend fun getActiveTrackingLogsForExchange(exchange: String): List<SignalLogEntity>
 
     @Query("SELECT * FROM signal_logs WHERE symbol = :symbol AND outcomeStatus = 'TRACKING' ORDER BY firedAt DESC")
     suspend fun getActiveTrackingLogsForSymbol(symbol: String): List<SignalLogEntity>
 
+    @Query("SELECT * FROM signal_logs WHERE symbol = :symbol AND exchange = :exchange AND outcomeStatus = 'TRACKING' ORDER BY firedAt DESC")
+    suspend fun getActiveTrackingLogsForSymbolAndExchange(symbol: String, exchange: String): List<SignalLogEntity>
+
     @Query("SELECT * FROM signal_logs WHERE symbol = :symbol ORDER BY firedAt DESC LIMIT 1")
     suspend fun getLatestLogForSymbol(symbol: String): SignalLogEntity?
+
+    @Query("SELECT * FROM signal_logs WHERE symbol = :symbol AND exchange = :exchange ORDER BY firedAt DESC LIMIT 1")
+    suspend fun getLatestLogForSymbolAndExchange(symbol: String, exchange: String): SignalLogEntity?
 
     @Query("SELECT * FROM signal_logs WHERE id = :id")
     suspend fun getLogById(id: Long): SignalLogEntity?
@@ -138,13 +174,19 @@ interface SignalLogDao {
     @Query("DELETE FROM signal_logs")
     suspend fun clearAllLogs()
 
+    @Query("DELETE FROM signal_logs WHERE exchange = :exchange")
+    suspend fun clearLogsByExchange(exchange: String)
+
     @Query("SELECT COUNT(*) FROM signal_logs")
     suspend fun getLogCount(): Int
+
+    @Query("SELECT COUNT(*) FROM signal_logs WHERE exchange = :exchange")
+    suspend fun getLogCountByExchange(exchange: String): Int
 }
 
 @Database(
     entities = [RealTradeEntity::class, RealOpenOrderEntity::class, SignalLogEntity::class, TradeHistoryRecordEntity::class],
-    version = 5,
+    version = 7,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

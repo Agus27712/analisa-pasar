@@ -10,6 +10,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -42,6 +47,7 @@ fun LandscapeChartScreen(
     val pair by viewModel.selectedPair.collectAsState()
     val timeframe by viewModel.selectedTimeframe.collectAsState()
     val connectionState by viewModel.connectionState.collectAsState()
+    val marketDataSource by viewModel.marketDataSource.collectAsState()
 
     // Force landscape + hide System UI (status bar + nav bar)
     DisposableEffect(Unit) {
@@ -93,9 +99,25 @@ fun LandscapeChartScreen(
             is MarketConnectionState.Connected -> {
                 TradingViewFullscreenChart(
                     pair = pair,
+                    marketDataSource = marketDataSource,
                     modifier = Modifier.fillMaxSize()
                 )
             }
+        }
+
+        // Floating Back Button Overlay
+        androidx.compose.material3.IconButton(
+            onClick = onBackToDetail,
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(12.dp)
+                .background(Color.Black.copy(alpha = 0.65f), androidx.compose.foundation.shape.CircleShape)
+        ) {
+            androidx.compose.material3.Icon(
+                imageVector = androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = "Kembali ke Detail",
+                tint = Color.White
+            )
         }
     }
 }

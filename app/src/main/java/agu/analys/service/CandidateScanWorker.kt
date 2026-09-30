@@ -14,6 +14,7 @@ import agu.analys.engine.intraday.IntradayEvaluator
 import agu.analys.engine.scalping.SignalLifecycleManager
 import agu.analys.engine.swing.SwingEvaluator
 import agu.analys.model.Timeframe
+import agu.analys.service.TokocryptoMarketService
 import agu.analys.trading.SpotPositionStore
 import agu.analys.util.AlertNotificationHelper
 import agu.analys.util.AppPreferences
@@ -23,8 +24,8 @@ import java.util.concurrent.TimeUnit
 
 /**
  * Background worker untuk memindai kandidat sinyal BUY secara periodik.
- * Menjalankan mode makro (SECOND_WAVE, SWING, OFFICE_DAILY).
- * SCALPING dan TRENCHING secara sengaja dikecualikan demi efisiensi baterai dan relevansi time-to-live sinyal.
+ * Menjalankan mode makro (SWING, OFFICE_DAILY).
+ * SCALPING secara sengaja dikecualikan demi efisiensi baterai dan relevansi time-to-live sinyal.
  */
 class CandidateScanWorker(
     appContext: Context,
@@ -59,9 +60,8 @@ class CandidateScanWorker(
         agu.analys.util.AppLogManager.service("CandidateScan", "Memulai pemindaian background untuk ${eligibleSymbols.size} koin watchlist...")
 
         try {
-            // 2. Fetch tickers dalam 1 request batch HTTP (REST ringan via api/summaries)
-            val pairIds = eligibleSymbols.map { IndodaxMarketService.toPairId(it) }
-            val ticks = IndodaxMarketService.fetchTickers(pairIds)
+            // 2. Fetch tickers dalam 1 request batch HTTP Tokocrypto
+            val ticks = TokocryptoMarketService.fetchTickers(eligibleSymbols)
             if (ticks.isEmpty()) {
                 return Result.success()
             }
@@ -70,19 +70,17 @@ class CandidateScanWorker(
 
             for (rawSymbol in eligibleSymbols) {
                 val cleanSymbol = rawSymbol.uppercase().replace("/", "").replace("-", "")
-                val tick = tickMap[cleanSymbol] ?: continue
+                val binanceSym = TokocryptoMarketService.toBinanceSymbol(cleanSymbol)
+                val tick = tickMap[cleanSymbol] ?: tickMap[binanceSym] ?: continue
                 if (tick.price <= 0.0) continue
-
-                // Lewati koin volume 24j yang tidak likuid (< Rp 500.000.000)
-                if (tick.volume24h < 500_000_000.0) continue
 
                 // Cek ulang holding status
                 val isHolding = positionStore.get(cleanSymbol, isReal = true).isHolding || positionStore.get(cleanSymbol, isReal = false).isHolding
                 if (isHolding) continue
 
-                // Fetch candle H1 untuk SWING & H4 panjang untuk INTRADAY (Anti Flash Dump)
-                val h1Candles = IndodaxMarketService.fetchCandles(cleanSymbol, Timeframe.H1, 45)
-                val h4Candles = IndodaxMarketService.fetchCandles(cleanSymbol, Timeframe.H4, 100)
+                // Fetch candle H1 untuk SWING & H4 panjang untuk INTRADAY
+                val h1Candles = TokocryptoMarketService.fetchCandles(cleanSymbol, Timeframe.H1, 45)
+                val h4Candles = TokocryptoMarketService.fetchCandles(cleanSymbol, Timeframe.H4, 100)
 
                 if (h1Candles.size >= 20) {
                     val globalCtx = GlobalContextManager.context.value
@@ -113,7 +111,7 @@ class CandidateScanWorker(
                         }
                     }
 
-                    // --- Evaluasi Mode INTRADAY dengan H4 & Anti Flash Dump ---
+                    // --- Evaluasi Mode INTRADAY dengan H4 ---
                     val candlesForIntraday = if (h4Candles.size >= 20) h4Candles else h1Candles
                     val intradayResult = IntradayEvaluator.evaluate(
                         globalContext = globalCtx,

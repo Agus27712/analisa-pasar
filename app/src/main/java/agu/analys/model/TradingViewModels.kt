@@ -336,6 +336,16 @@ data class TradingPair(
     fun effectiveIndodaxPair(): String = if (indodaxPair.isNotBlank()) indodaxPair else "${baseAsset.lowercase()}_idr"
     fun effectiveTokocryptoPair(): String = if (tokocryptoPair.isNotBlank()) tokocryptoPair else "${baseAsset.uppercase()}_${quoteAsset.uppercase()}"
     fun effectiveBinanceSymbol(): String = effectiveTokocryptoPair().replace("_", "").uppercase()
+    fun effectiveTradingViewSymbol(): String {
+        val base = baseAsset.uppercase()
+        val quote = quoteAsset.uppercase()
+        return when {
+            quote == "BIDR" || quote == "IDR" -> "BINANCE:${base}IDR"
+            quote == "USDT" -> "BINANCE:${base}USDT"
+            quote == "BTC" -> "BINANCE:${base}BTC"
+            else -> "BINANCE:${base}IDR"
+        }
+    }
 }
 
 enum class Timeframe(val code: String, val label: String) {

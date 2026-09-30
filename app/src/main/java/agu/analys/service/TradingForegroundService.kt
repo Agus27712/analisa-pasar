@@ -88,14 +88,17 @@ class TradingForegroundService : Service() {
                     val allHoldings = (realItems + simItems).distinctBy { it.symbol.uppercase() }
 
                     if (allHoldings.isNotEmpty()) {
-                        // Tarik ticker pasar seluruh koin dari Indodax via summaries API (1 request hemat bandwidth)
-                        val marketTicks = IndodaxMarketService.fetchAllMarketTicks()
+                        // Tarik ticker pasar seluruh koin dari Tokocrypto / Binance
+                        val symbolsToFetch = allHoldings.map { it.symbol }
+                        val fetchedTicks = TokocryptoMarketService.fetchTickers(symbolsToFetch)
+                        val marketTicks = fetchedTicks.associateBy { it.symbol.uppercase() }
                         val positionStore = SpotPositionStore(applicationContext)
                         var pricesUpdated = false
 
                         for (item in allHoldings) {
                             val sym = item.symbol.uppercase()
-                            val tick = marketTicks[sym] ?: marketTicks[sym.replace("IDR", "_IDR")]
+                            val binanceSym = TokocryptoMarketService.toBinanceSymbol(sym)
+                            val tick = marketTicks[sym] ?: marketTicks[binanceSym]
                             val currentPrice = tick?.price ?: livePrices[sym] ?: 0.0
 
                             if (currentPrice > 0.0) {
@@ -343,7 +346,7 @@ class TradingForegroundService : Service() {
             .setSmallIcon(agu.analys.R.drawable.ic_stat_trading)
             .setContentTitle(title)
             .setContentText(collapsedText)
-            .setSubText("Indodax Spot")
+            .setSubText("Tokocrypto Spot")
             .setStyle(NotificationCompat.BigTextStyle().bigText(bigText))
             .setContentIntent(pendingIntent)
             .addAction(0, "Buka Portofolio", pendingIntent)
@@ -366,25 +369,26 @@ class TradingForegroundService : Service() {
         val realItems = mutableListOf<HoldingItem>()
 
         val prefs = AppPreferences(context)
-        val savedRealBalance = if (prefs.hasIndodaxCredentials()) prefs.getSavedRealBalance() else emptyMap()
-        val savedAvgPrices = if (prefs.hasIndodaxCredentials()) prefs.getSavedRealAvgBuyPrices() else emptyMap()
+        val hasCreds = prefs.hasTokocryptoCredentials() || prefs.hasIndodaxCredentials()
+        val savedRealBalance = if (hasCreds) prefs.getSavedRealBalance() else emptyMap()
+        val savedAvgPrices = if (hasCreds) prefs.getSavedRealAvgBuyPrices() else emptyMap()
         
         // Scan semua kemungkinan pair: daftar populer + koin yang ada saldo di akun real
         val processedBases = mutableSetOf<String>()
         val realCandidatePairs = mutableListOf<TradingPair>()
 
-        for (pair in TradingPair.POPULAR_INDODAX_PAIRS) {
+        for (pair in TradingPair.POPULAR_TOKOCRYPTO_PAIRS) {
             val base = pair.baseAsset.uppercase()
-            if (base != "IDR" && base != "USDT") {
+            if (base != "IDR" && base != "BIDR" && base != "USDT") {
                 processedBases.add(base)
                 realCandidatePairs.add(pair)
             }
         }
         for ((baseKey, qty) in savedRealBalance) {
             val base = baseKey.uppercase()
-            if (qty > 0.00000001 && base != "IDR" && base != "USDT" && !processedBases.contains(base)) {
+            if (qty > 0.00000001 && base != "IDR" && base != "BIDR" && base != "USDT" && !processedBases.contains(base)) {
                 processedBases.add(base)
-                realCandidatePairs.add(TradingPair.fromCustomSymbol("${base}IDR"))
+                realCandidatePairs.add(TradingPair.fromCustomSymbol("${base}_BIDR"))
             }
         }
         

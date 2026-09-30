@@ -1,14 +1,11 @@
-# Checkpoint: Implementasi Arsitektur Resmi Tokocrypto API (Dynamic Symbols & Symbol Type Routing)
+# Checkpoint: Pemisahan Mutlak Chart Fullscreen Berdasarkan Exchange (Indodax vs Tokocrypto)
 
 - **Tanggal / Waktu:** 2026-09-30
 - **Status:** Selesai (Completed & Verified)
-- **Fitur:** Implementasi Resmi Tokocrypto API (No Hardcoded Pairs, Dynamic Symbol Discovery, Type 1 MBX vs Type 3 NextMe Routing, 3-Layer Architecture)
+- **Fitur:** Pemisahan Mutlak Charting Fullscreen Sesuai Exchange Aktif (Indodax Asli vs Tokocrypto/Binance)
 - **Komponen Terdampak:**
-  1. `TokocryptoModels.kt`: Data model lengkap untuk SymbolInfo, Filters, Execution Rules, Orders, dan User Token.
-  2. `TokocryptoSymbolRepository.kt`: Repository discovery symbol dinamis dari `GET /open/v1/common/symbols` dengan in-memory cache dan filter validator.
-  3. `TokocryptoMarketService.kt`: REST Market Data dengan routing cerdas Type 1 (`tokocrypto.site/api/v3`) vs Type 3 (`cloudme-toko.2meta.app/api/v1` & `/open/v1/market/trades`) dan fallback Binance Cloud.
-  4. `TokocryptoMarketWebSocket.kt`: WebSocket multi-stream (Kline dengan deteksi `k.x`, Trade, Depth) via stream Tokocrypto & Binance.
-  5. `TokocryptoUserWebSocket.kt`: Real-time user data stream menggunakan `user-listen-token`.
-  6. `TokocryptoTradeApi.kt`: Integrasi signed HMAC-SHA256 untuk Create Order, Cancel Order, Order Status, Spot Account Asset, dan Order Trades.
-  7. `MarketDataCoordinator.kt` & `MarketViewModel.kt`: Integrasi dynamic symbol discovery tanpa pair hardcode.
-  8. `AddAssetDialog.kt`: Pencarian & filter pair dinamis dari Tokocrypto.
+  1. `TradingViewFullscreenChart.kt`: Mengisolasi pemuatan chart berdasarkan `marketDataSource`:
+     - **Mode INDODAX**: Memuat halaman chart resmi Indodax (`https://indodax.com/chart/<SYMBOL>`) dengan data orderbook & transaksi asli dari bursa Indodax.
+     - **Mode TOKOCRYPTO**: Memuat widget resmi TradingView untuk Binance/Tokocrypto (`BINANCE:<BASE>IDR`, `BINANCE:<BASE>USDT`, `BINANCE:<BASE>BTC`).
+  2. `LandscapeChartScreen.kt`: Mengalirkan `marketDataSource` secara reaktif dari `TradingViewModel` ke `TradingViewFullscreenChart`.
+  3. `TradingViewModels.kt`: Helper `effectiveTradingViewSymbol()` untuk pemetaan simbol Binance/Tokocrypto.

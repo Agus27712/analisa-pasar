@@ -7,6 +7,7 @@ import agu.analys.config.MarketDataSource
 import agu.analys.model.SignalAction
 import agu.analys.model.TradingPair
 import agu.analys.service.IndodaxMarketService
+import agu.analys.service.TokocryptoMarketService
 import agu.analys.trading.SimulationOrder
 import agu.analys.trading.SimulationOrderSide
 import agu.analys.trading.TradeSignalSnapshot
@@ -30,10 +31,11 @@ fun TradingViewModel.handleRealTradeExecution(
     tp1: Double,
     tp2: Double
 ) {
+    val currentEx = prefs.marketDataSource.name
     val symbol = pair.replace("_", "").uppercase()
     if (type.equals("sell", ignoreCase = true)) {
-        positionStore.markSold(symbol, isReal = true)
-        positionStore.markSold(pair, isReal = true)
+        positionStore.markSold(symbol, isReal = true, exchange = currentEx)
+        positionStore.markSold(pair, isReal = true, exchange = currentEx)
         agu.analys.engine.sell.SellSignalLifecycleManager.reset(symbol, isReal = true)
         agu.analys.engine.sell.SellSignalLifecycleManager.reset(pair, isReal = true)
         positionCoordinator.markSoldAndClear(symbol, isReal = true)
@@ -42,7 +44,8 @@ fun TradingViewModel.handleRealTradeExecution(
         tradeHistoryRecorder.recordSell(
             symbol = symbol, isReal = true, sellPrice = price, sellQuantity = quantity,
             sellReason = if (tp1 > 0 || tp2 > 0) "TAKE_PROFIT" else "MARKET_SELL",
-            strategyMode = strategyMode.value.name
+            strategyMode = strategyMode.value.name,
+            exchange = currentEx
         )
     } else if (type.equals("buy", ignoreCase = true)) {
         val snapshot = TradeSignalSnapshot.capture(
@@ -57,7 +60,8 @@ fun TradingViewModel.handleRealTradeExecution(
             buyOrderType = "LIMIT", snapshot = snapshot,
             signalPrice = engine.signalState.value.entryPrice.takeIf { it > 0 } ?: price,
             signalConfidence = engine.signalState.value.confidence, targetPrice1 = tp1, targetPrice2 = tp2,
-            stopLossPrice = engine.signalState.value.stopLoss
+            stopLossPrice = engine.signalState.value.stopLoss,
+            exchange = currentEx
         )
         viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -68,7 +72,8 @@ fun TradingViewModel.handleRealTradeExecution(
                     time = System.currentTimeMillis(), side = "BUY", isBuyer = true,
                     strategyMode = strategyMode.value.name,
                     holdingDurationMs = 0L, entryPrice = price, entryTimestamp = System.currentTimeMillis(),
-                    signalSnapshotJson = snapshotJson
+                    signalSnapshotJson = snapshotJson,
+                    exchange = currentEx
                 )
                 AppDatabase.getInstance().realTradeDao().insertTrades(listOf(localEntity))
             } catch (_: Exception) {}
@@ -210,11 +215,17 @@ fun TradingViewModel.syncRealBalancesToPositionStore(
     balances: Map<String, Double> = realCoordinator.realIndodaxBalance.value,
     avgPrices: Map<String, Double> = realCoordinator.realAvgBuyPrices.value
 ) {
-    if (!prefs.hasIndodaxCredentials()) return
-    val popularAndCustom = (TradingPair.POPULAR_INDODAX_PAIRS.map { it.baseAsset.uppercase() } + balances.keys.map { it.uppercase() }).distinct()
+    val hasCreds = prefs.hasTokocryptoCredentials() || prefs.hasIndodaxCredentials()
+    if (!hasCreds) return
+    val basePairs = if (prefs.marketDataSource == MarketDataSource.TOKOCRYPTO) {
+        TradingPair.POPULAR_TOKOCRYPTO_PAIRS.map { it.baseAsset.uppercase() }
+    } else {
+        TradingPair.POPULAR_INDODAX_PAIRS.map { it.baseAsset.uppercase() }
+    }
+    val popularAndCustom = (basePairs + balances.keys.map { it.uppercase() }).distinct()
     
     for (baseUpper in popularAndCustom) {
-        if (baseUpper == "IDR" || baseUpper == "USDT") continue
+        if (baseUpper == "IDR" || baseUpper == "BIDR" || baseUpper == "USDT") continue
         val baseLower = baseUpper.lowercase()
         val symbol = "${baseUpper}IDR"
         val pairSymbol = "${baseLower}_idr"
@@ -325,7 +336,8 @@ fun TradingViewModel.initSubscriptionsAndPolling() {
                 targetPrice2 = transition.signal.targetPrice2,
                 stopLoss = transition.signal.stopLoss,
                 reasoning = transition.signal.reasoning.joinToString(" • "),
-                scalpingStage = transition.signal.scalpingStage.name
+                scalpingStage = transition.signal.scalpingStage.name,
+                exchange = prefs.marketDataSource.name
             )
         }
     }
@@ -376,10 +388,15 @@ fun TradingViewModel.startTrailingPolling() {
             try {
                 val activeSymbols = positionStore.getAllActiveTrailingSymbols()
                 if (activeSymbols.isNotEmpty()) {
-                    val pairs = activeSymbols.map {
-                        TradingPair.fromCustomSymbol(it, "IDR").effectiveIndodaxPair()
+                    val isToko = prefs.marketDataSource == MarketDataSource.TOKOCRYPTO
+                    val ticks = if (isToko) {
+                        TokocryptoMarketService.fetchTickers(activeSymbols)
+                    } else {
+                        val pairs = activeSymbols.map {
+                            TradingPair.fromCustomSymbol(it, "IDR").effectiveIndodaxPair()
+                        }
+                        IndodaxMarketService.fetchTickers(pairs)
                     }
-                    val ticks = IndodaxMarketService.fetchTickers(pairs)
                     for (tick in ticks) {
                         simCoordinator.onPriceTick(tick.symbol, tick.price, tick.high24h, tick.low24h)
                         checkAlertsAndTrailing(tick.symbol, tick.price)
@@ -422,7 +439,8 @@ fun TradingViewModel.listenToEngineSignals() {
                     strategyMode = strategyMode.value.name, confidence = signal.confidence,
                     sentiment = signal.sentiment.name, entryPrice = if (signal.entryPrice > 0) signal.entryPrice else (currentTick.value?.price ?: 0.0),
                     targetPrice1 = signal.targetPrice1, targetPrice2 = signal.targetPrice2, stopLoss = signal.stopLoss,
-                    reasoning = signal.reasoning.joinToString(" • "), scalpingStage = signal.scalpingStage.name
+                    reasoning = signal.reasoning.joinToString(" • "), scalpingStage = signal.scalpingStage.name,
+                    exchange = prefs.marketDataSource.name
                 )
             }
         }

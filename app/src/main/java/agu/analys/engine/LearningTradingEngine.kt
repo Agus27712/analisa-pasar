@@ -12,7 +12,7 @@ import agu.analys.model.SignalAction
 import agu.analys.model.TechnicalIndicators
 import agu.analys.model.Timeframe
 import agu.analys.model.TrendSentiment
-import agu.analys.service.IndodaxMarketService
+import agu.analys.service.TokocryptoMarketService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -123,7 +123,7 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
             confidence = 0,
             sentiment = TrendSentiment.NEUTRAL_CONSOLIDATION,
             reasoning = listOf(
-                "MODE OFFLINE: Terputus dari Server Indodax.",
+                "MODE OFFLINE: Terputus dari Server Tokocrypto/Binance.",
                 "Snapshot Harga Terakhir: $priceText",
                 "Sinyal LIVE ditangguhkan untuk keamanan modal."
             ),
@@ -167,8 +167,8 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
                     }
                 }
                 StrategyMode.SWING -> {
-                    val h1Job = async { IndodaxMarketService.fetchCandles(symbol, Timeframe.H1, 200) }
-                    val d1Job = async { IndodaxMarketService.fetchCandles(symbol, Timeframe.D1, 100) }
+                    val h1Job = async { TokocryptoMarketService.fetchCandles(symbol, Timeframe.H1, 200) }
+                    val d1Job = async { TokocryptoMarketService.fetchCandles(symbol, Timeframe.D1, 100) }
                     val h1 = h1Job.await()
                     val d1 = d1Job.await()
                     if (h1.isNotEmpty() && currentTick?.symbol == symbol) {
@@ -185,8 +185,8 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
                     }
                 }
                 StrategyMode.OFFICE_DAILY -> {
-                    val h4Job = async { IndodaxMarketService.fetchCandles(symbol, Timeframe.H4, 200) }
-                    val d1Job = async { IndodaxMarketService.fetchCandles(symbol, Timeframe.D1, 100) }
+                    val h4Job = async { TokocryptoMarketService.fetchCandles(symbol, Timeframe.H4, 200) }
+                    val d1Job = async { TokocryptoMarketService.fetchCandles(symbol, Timeframe.D1, 100) }
                     val h4 = h4Job.await()
                     val d1 = d1Job.await()
                     if (h4.isNotEmpty() && currentTick?.symbol == symbol) {

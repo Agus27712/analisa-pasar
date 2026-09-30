@@ -2,6 +2,7 @@ package agu.analys.data
 
 import agu.analys.model.OrderBookItem
 import agu.analys.service.IndodaxMarketService
+import agu.analys.service.TokocryptoMarketService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -11,7 +12,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Cache depth / orderbook real-time untuk menghitung rasio Orderbook Pressure (Bids vs Asks).
- * Menghindari duplicate fetch dan menjaga rate limit Indodax.
+ * Terisolasi per exchange (Tokocrypto vs Indodax) untuk mencegah kontaminasi kedalaman pasar.
  */
 object OrderBookDepthCache {
 
@@ -22,48 +23,64 @@ object OrderBookDepthCache {
     private val _depthVersion = MutableStateFlow(0L)
     val depthVersion: StateFlow<Long> = _depthVersion.asStateFlow()
 
-    fun getOrderBook(symbol: String): Pair<List<OrderBookItem>, List<OrderBookItem>>? {
-        val norm = normalizeSymbol(symbol)
-        return cache[norm]
+    private fun buildKey(symbol: String, exchange: String): String {
+        return "${exchange.trim().uppercase()}_${normalizeSymbol(symbol)}"
     }
 
-    fun updateOrderBook(symbol: String, bids: List<OrderBookItem>, asks: List<OrderBookItem>) {
+    fun getOrderBook(symbol: String, exchange: String = "TOKOCRYPTO"): Pair<List<OrderBookItem>, List<OrderBookItem>>? {
+        val key = buildKey(symbol, exchange)
+        return cache[key] ?: cache[normalizeSymbol(symbol)]
+    }
+
+    fun updateOrderBook(
+        symbol: String,
+        bids: List<OrderBookItem>,
+        asks: List<OrderBookItem>,
+        exchange: String = "TOKOCRYPTO"
+    ) {
         if (bids.isEmpty() && asks.isEmpty()) return
-        val norm = normalizeSymbol(symbol)
-        cache[norm] = bids to asks
-        lastFetchTime[norm] = System.currentTimeMillis()
+        val key = buildKey(symbol, exchange)
+        cache[key] = bids to asks
+        cache[normalizeSymbol(symbol)] = bids to asks // legacy compatibility
+        lastFetchTime[key] = System.currentTimeMillis()
         _depthVersion.value = System.currentTimeMillis()
     }
 
-    suspend fun fetchIfNeeded(symbol: String, force: Boolean = false) {
+    suspend fun fetchIfNeeded(symbol: String, exchange: String = "TOKOCRYPTO", force: Boolean = false) {
+        val key = buildKey(symbol, exchange)
         val norm = normalizeSymbol(symbol)
         val now = System.currentTimeMillis()
-        val last = lastFetchTime[norm] ?: 0L
+        val last = lastFetchTime[key] ?: 0L
 
-        if (!force && cache.containsKey(norm) && (now - last < 30_000L)) {
+        if (!force && cache.containsKey(key) && (now - last < 30_000L)) {
             return
         }
 
-        if (!inFlight.add(norm)) return
+        if (!inFlight.add(key)) return
 
         try {
             withContext(Dispatchers.IO) {
-                val depth = IndodaxMarketService.fetchOrderBook(norm, limit = 12)
+                val depth = if (exchange.equals("INDODAX", true)) {
+                    IndodaxMarketService.fetchOrderBook(norm, limit = 12)
+                } else {
+                    TokocryptoMarketService.fetchOrderBook(norm, limit = 20)
+                }
+
                 if (depth.first.isNotEmpty() || depth.second.isNotEmpty()) {
+                    cache[key] = depth
                     cache[norm] = depth
-                    lastFetchTime[norm] = System.currentTimeMillis()
+                    lastFetchTime[key] = System.currentTimeMillis()
                     _depthVersion.value = System.currentTimeMillis()
                 }
             }
         } catch (_: Exception) {
         } finally {
-            inFlight.remove(norm)
+            inFlight.remove(key)
         }
     }
 
-    fun calculatePressure(symbol: String): Int? {
-        val norm = normalizeSymbol(symbol)
-        val pair = cache[norm] ?: return null
+    fun calculatePressure(symbol: String, exchange: String = "TOKOCRYPTO"): Int? {
+        val pair = getOrderBook(symbol, exchange) ?: return null
         val bids = pair.first
         val asks = pair.second
         if (bids.isEmpty() && asks.isEmpty()) return null

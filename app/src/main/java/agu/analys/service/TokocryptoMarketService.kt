@@ -291,7 +291,7 @@ object TokocryptoMarketService {
                     if (openTime > 0 && close > 0) {
                         candles.add(
                             CandleBar(
-                                timestamp = openTime / 1000L,
+                                timestamp = openTime,
                                 open = open,
                                 high = high,
                                 low = low,

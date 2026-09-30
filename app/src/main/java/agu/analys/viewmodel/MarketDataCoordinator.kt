@@ -198,7 +198,7 @@ class MarketDataCoordinator(
     }
 
     fun loadPairCache(symbol: String, timeframe: Timeframe): Boolean {
-        val (cachedTick, cachedCandles) = marketCache.loadPairSnapshot(symbol, timeframe)
+        val (cachedTick, cachedCandles) = marketCache.loadPairSnapshot(symbol, timeframe, prefs.marketDataSource)
         if (cachedTick != null || cachedCandles.isNotEmpty()) {
             // Hanya isi _currentTick jika belum ada live ticker untuk pair ini
             if (cachedTick != null && (_currentTick.value == null || _currentTick.value?.symbol != symbol)) {
@@ -264,6 +264,21 @@ class MarketDataCoordinator(
                     val normalizedTick = tick.copy(symbol = pair.symbol)
                     _dashboardTicks.value = _dashboardTicks.value.toMutableMap().apply { put(pair.symbol, normalizedTick) }
                     uiPriceThrottler.emitImmediate(normalizedTick)
+                }
+            }
+
+            launch {
+                val candles = if (isToko) {
+                    TokocryptoMarketService.fetchCandles(pair.effectiveTokocryptoPair(), timeframe, 300)
+                } else {
+                    IndodaxMarketService.fetchCandles(pair.effectiveIndodaxPair(), timeframe, 300)
+                }
+                if (candles.isNotEmpty() && currentActivePair?.symbol == pair.symbol) {
+                    _recentCandles.value = candles
+                    engine.resetForOffline(preserveState = true)
+                    _currentTick.value?.let { engine.onTickUpdate(it) }
+                    lastCandleRefresh = System.currentTimeMillis()
+                    marketCache.savePairSnapshot(pair.symbol, timeframe, _currentTick.value, candles, prefs.marketDataSource)
                 }
             }
 
@@ -357,7 +372,7 @@ class MarketDataCoordinator(
         currentActivePair = pair
         currentActiveTimeframe = timeframe
         // 1. Muat candle snapshot dari cache untuk timeframe baru tanpa menyentuh live ticker
-        val (_, cachedCandles) = marketCache.loadPairSnapshot(pair.symbol, timeframe)
+        val (_, cachedCandles) = marketCache.loadPairSnapshot(pair.symbol, timeframe, prefs.marketDataSource)
         if (cachedCandles.isNotEmpty()) {
             _recentCandles.value = cachedCandles
             engine.resetForOffline(preserveState = true)
@@ -378,7 +393,7 @@ class MarketDataCoordinator(
                 _currentTick.value?.let { engine.onTickUpdate(it) }
                 lastCandleRefresh = System.currentTimeMillis()
                 // Update snapshot cache untuk timeframe ini dengan ticker aktif saat ini
-                marketCache.savePairSnapshot(pair.symbol, timeframe, _currentTick.value, candles)
+                marketCache.savePairSnapshot(pair.symbol, timeframe, _currentTick.value, candles, prefs.marketDataSource)
             }
         }
     }

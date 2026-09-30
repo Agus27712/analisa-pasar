@@ -126,7 +126,7 @@ fun RealBuyModeAndSecurityCard(
                             )
                             Spacer(Modifier.width(8.dp))
                             Text(
-                                "Kredensial API Indodax Belum Diatur",
+                                "Kredensial API Exchange Belum Diatur",
                                 color = TvAmber,
                                 fontSize = 11.5.sp,
                                 fontWeight = FontWeight.Bold

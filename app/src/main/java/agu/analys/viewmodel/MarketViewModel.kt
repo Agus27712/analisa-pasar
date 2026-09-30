@@ -179,8 +179,13 @@ class MarketViewModel(application: Application) : AndroidViewModel(application) 
             val (_, cached) = marketCache.loadPairSnapshot(symbol, Timeframe.H1)
             if (cached.isEmpty()) {
                 try {
-                    val pairObj = TradingPair.fromCustomSymbol(symbol, "IDR")
-                    val candles = IndodaxMarketService.fetchCandles(pairObj.effectiveIndodaxPair(), Timeframe.H1, 100)
+                    val isToko = prefs.marketDataSource == MarketDataSource.TOKOCRYPTO
+                    val pairObj = TradingPair.fromCustomSymbol(symbol, prefs.marketDataSource.defaultQuoteAsset)
+                    val candles = if (isToko) {
+                        TokocryptoMarketService.fetchCandles(pairObj.effectiveTokocryptoPair(), Timeframe.H1, 100)
+                    } else {
+                        IndodaxMarketService.fetchCandles(pairObj.effectiveIndodaxPair(), Timeframe.H1, 100)
+                    }
                     if (candles.isNotEmpty()) {
                         marketCache.savePairSnapshot(symbol, Timeframe.H1, null, candles)
                     }

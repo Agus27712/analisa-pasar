@@ -100,9 +100,10 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         engine = engine,
         simCoordinator = simCoordinator,
         onPriceUpdate = { symbol, price, rsi ->
+            val currentEx = prefs.marketDataSource.name
             checkAlertsAndTrailing(symbol, price, rsi ?: 0.0)
-            signalLogRepository.processPriceTick(symbol, price)
-            tradeHistoryRecorder.processPriceTick(symbol, price)
+            signalLogRepository.processPriceTick(symbol, price, currentEx)
+            tradeHistoryRecorder.processPriceTick(symbol, price, currentEx)
         }
     )
 
@@ -480,7 +481,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         refreshWorthCoinsFromMarket()
         startDashboardPolling()
         MtfCacheManager.setActiveSymbol(selectedPair.value.symbol)
-        if (prefs.hasIndodaxCredentials()) {
+        if (prefs.hasTokocryptoCredentials() || prefs.hasIndodaxCredentials()) {
             syncRealBalancesToPositionStore()
         }
     }

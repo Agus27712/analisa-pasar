@@ -75,6 +75,12 @@
       chart.applyOptions({ width: el.clientWidth, height: el.clientHeight });
     }
 
+    function normalizeTime(t) {
+      const n = Number(t);
+      if (!n || isNaN(n)) return 0;
+      return n > 10000000000 ? Math.floor(n / 1000) : Math.floor(n);
+    }
+
     function calculateIndicators(data) {
         if (!data || data.length === 0) return;
         
@@ -95,7 +101,7 @@
         let gains = 0, losses = 0;
         
         for (let i = 0; i < data.length; i++) {
-            const time = Math.floor(Number(data[i].t) / 1000);
+            const time = normalizeTime(data[i].t);
             if (!time) continue;
             
             // EMA
@@ -226,7 +232,7 @@
         const volumes = [];
         for (let i = 0; i < raw.length; i++) {
           const c = raw[i];
-          const t = Math.floor(Number(c.t) / 1000);
+          const t = normalizeTime(c.t);
           if (!t || c.o <= 0) continue;
           candles.push({ time: t, open: c.o, high: c.h, low: c.l, close: c.c });
           const up = c.c >= c.o;
@@ -255,7 +261,7 @@
       if (!ready || currentRaw.length === 0) return;
       try {
         const c = JSON.parse(jsonStr);
-        const t = Math.floor(Number(c.t) / 1000);
+        const t = normalizeTime(c.t);
         if (!t || c.o <= 0) return;
         candleSeries.update({ time: t, open: c.o, high: c.h, low: c.l, close: c.c });
         volumeSeries.update({
@@ -264,11 +270,8 @@
           color: c.c >= c.o ? 'rgba(38,166,154,0.45)' : 'rgba(239,83,80,0.45)'
         });
         
-        // update indicators is tricky for live tick without full recalc,
-        // for performance we just recalc the whole array if it's not huge
-        // Or simpler: replace last item in currentRaw and recalc
         let lastRaw = currentRaw[currentRaw.length - 1];
-        if (Math.floor(Number(lastRaw.t)/1000) === t) {
+        if (normalizeTime(lastRaw.t) === t) {
              currentRaw[currentRaw.length - 1] = c;
              if (!window._lastIndCalc || Date.now() - window._lastIndCalc > 1500) {
                  window._lastIndCalc = Date.now();

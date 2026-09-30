@@ -211,24 +211,27 @@ class SpotPositionStore(context: Context) {
         }
     }
 
-    fun buildKey(symbol: String, isReal: Boolean): String {
+    fun buildKey(symbol: String, isReal: Boolean, exchange: String = "TOKOCRYPTO"): String {
         val norm = normalize(symbol)
-        return if (isReal) "real_${norm}" else "sim_${norm}"
+        val ex = exchange.trim().lowercase()
+        return "${ex}_${if (isReal) "real" else "sim"}_${norm}"
     }
 
-    fun get(symbol: String, isReal: Boolean = false): SpotPosition {
+    fun get(symbol: String, isReal: Boolean = false, exchange: String = "TOKOCRYPTO"): SpotPosition {
         val norm = normalize(symbol)
-        val pKey = buildKey(symbol, isReal)
+        val exKey = buildKey(symbol, isReal, exchange)
+        val legacyKey = if (isReal) "real_${norm}" else "sim_${norm}"
         
-        // Cek storage ber-prefix (sim_ / real_) terlebih dahulu
-        val hasPrefixedState = prefs.contains("${pKey}_state")
-        val key = if (hasPrefixedState) {
-            pKey
-        } else {
-            // Fallback backward compatibility ke legacy key tanpa prefix jika flag is_real cocok
-            val legacyHasState = prefs.contains("${norm}_state")
-            val legacyIsReal = getSafeBoolean("${norm}_is_real", false)
-            if (legacyHasState && legacyIsReal == isReal) norm else pKey
+        // Cek storage ber-prefix exchange (${ex}_sim_ / ${ex}_real_) terlebih dahulu
+        val key = when {
+            prefs.contains("${exKey}_state") -> exKey
+            prefs.contains("${legacyKey}_state") -> legacyKey
+            else -> {
+                // Fallback backward compatibility ke legacy key tanpa prefix jika flag is_real cocok
+                val legacyHasState = prefs.contains("${norm}_state")
+                val legacyIsReal = getSafeBoolean("${norm}_is_real", false)
+                if (legacyHasState && legacyIsReal == isReal) norm else exKey
+            }
         }
 
         val state = getSafeString("${key}_state")
@@ -284,11 +287,11 @@ class SpotPositionStore(context: Context) {
     }
 
     /** Reconstruct the position state at a historical timestamp. */
-    fun getAt(symbol: String, timestamp: Long, isReal: Boolean = false): SpotPosition {
-        val key = buildKey(symbol, isReal)
+    fun getAt(symbol: String, timestamp: Long, isReal: Boolean = false, exchange: String = "TOKOCRYPTO"): SpotPosition {
+        val key = buildKey(symbol, isReal, exchange)
         val history = readHistory(key)
         if (history.length() == 0) {
-            val current = get(symbol, isReal)
+            val current = get(symbol, isReal, exchange)
             if (current.isHolding && current.openedAt > 0L && current.openedAt <= timestamp) return current
             return SpotPosition(symbol = normalize(symbol), isReal = isReal)
         }
@@ -315,11 +318,11 @@ class SpotPositionStore(context: Context) {
         )
     }
 
-    fun setHolding(symbol: String, invested: Double, entry: Double, quantity: Double, isReal: Boolean = false) {
+    fun setHolding(symbol: String, invested: Double, entry: Double, quantity: Double, isReal: Boolean = false, exchange: String = "TOKOCRYPTO") {
         val norm = normalize(symbol)
-        val key = buildKey(symbol, isReal)
+        val key = buildKey(symbol, isReal, exchange)
         val changedAt = System.currentTimeMillis()
-        val current = get(symbol, isReal)
+        val current = get(symbol, isReal, exchange)
         val openedAt = if (current.isHolding && current.openedAt > 0L) current.openedAt else changedAt
         val peak = if (current.isHolding && current.peakPrice > 0.0) current.peakPrice.coerceAtLeast(entry) else entry
         val stopLossPrice = if (current.stopLossPrice > 0.0) current.stopLossPrice else if (entry > 0.0) entry * 0.99 else 0.0
@@ -357,26 +360,26 @@ class SpotPositionStore(context: Context) {
             .apply()
     }
 
-    fun markBought(symbol: String, entryPrice: Double, invested: Double = 0.0, quantity: Double = 0.0, isReal: Boolean = false) {
+    fun markBought(symbol: String, entryPrice: Double, invested: Double = 0.0, quantity: Double = 0.0, isReal: Boolean = false, exchange: String = "TOKOCRYPTO") {
         val finalInvested = if (invested > 0.0) invested else (if (quantity > 0.0 && entryPrice > 0.0) quantity * entryPrice else entryPrice)
         val finalQty = if (quantity > 0.0) quantity else (if (entryPrice > 0.0 && finalInvested > 0.0) finalInvested / entryPrice else (if (entryPrice > 0.0) 1.0 else 0.0))
-        setHolding(symbol, invested = finalInvested, entry = entryPrice, quantity = finalQty, isReal = isReal)
+        setHolding(symbol, invested = finalInvested, entry = entryPrice, quantity = finalQty, isReal = isReal, exchange = exchange)
     }
 
-    fun markBought(symbol: String, invested: Double, entry: Double, isReal: Boolean = false) {
+    fun markBought(symbol: String, invested: Double, entry: Double, isReal: Boolean = false, exchange: String = "TOKOCRYPTO") {
         val qty = if (entry > 0.0) invested / entry else 0.0
-        setHolding(symbol, invested = invested, entry = entry, quantity = qty, isReal = isReal)
+        setHolding(symbol, invested = invested, entry = entry, quantity = qty, isReal = isReal, exchange = exchange)
     }
 
-    fun setManualEntryPrice(symbol: String, price: Double, amount: Double = 0.0, isReal: Boolean = false) {
+    fun setManualEntryPrice(symbol: String, price: Double, amount: Double = 0.0, isReal: Boolean = false, exchange: String = "TOKOCRYPTO") {
         val qty = if (price > 0.0 && amount > 0.0) amount / price else (if (price > 0.0) 1.0 else 0.0)
-        setHolding(symbol, invested = if (amount > 0.0) amount else price, entry = price, quantity = qty, isReal = isReal)
+        setHolding(symbol, invested = if (amount > 0.0) amount else price, entry = price, quantity = qty, isReal = isReal, exchange = exchange)
     }
 
-    fun markSold(symbol: String, isReal: Boolean = false) {
+    fun markSold(symbol: String, isReal: Boolean = false, exchange: String = "TOKOCRYPTO") {
         val norm = normalize(symbol)
-        val key = buildKey(symbol, isReal)
-        val current = get(symbol, isReal)
+        val key = buildKey(symbol, isReal, exchange)
+        val current = get(symbol, isReal, exchange)
         if (!current.isHolding && current.entryPrice == 0.0 && current.investedAmount == 0.0 && current.quantity == 0.0) return
         val changedAt = System.currentTimeMillis()
         val position = SpotPosition(symbol = norm, state = SpotPositionState.NO_POSITION, openedAt = changedAt, isReal = isReal)
@@ -408,6 +411,12 @@ class SpotPositionStore(context: Context) {
             .putString("${key}_history", appendHistoryEvent(key, position))
 
         // Bersihkan juga legacy key jika legacy mode is_real cocok
+        val legacyKey = if (isReal) "real_${norm}" else "sim_${norm}"
+        editor.remove("${legacyKey}_state")
+            .remove("${legacyKey}_invested")
+            .remove("${legacyKey}_entry")
+            .remove("${legacyKey}_quantity")
+
         if (prefs.contains("${norm}_state") && getSafeBoolean("${norm}_is_real", false) == isReal) {
             editor.remove("${norm}_state")
                 .remove("${norm}_invested")
@@ -438,8 +447,8 @@ class SpotPositionStore(context: Context) {
         editor.apply()
     }
 
-    fun setTrailingOrderIdAndUpdateTime(symbol: String, orderId: String?, updateTime: Long, isReal: Boolean = false) {
-        val key = buildKey(symbol, isReal)
+    fun setTrailingOrderIdAndUpdateTime(symbol: String, orderId: String?, updateTime: Long, isReal: Boolean = false, exchange: String = "TOKOCRYPTO") {
+        val key = buildKey(symbol, isReal, exchange)
         prefs.edit()
             .putString("${key}_last_trailing_order_id", orderId)
             .putLong("${key}_last_order_update_time", updateTime)
@@ -453,9 +462,10 @@ class SpotPositionStore(context: Context) {
         referencePrice: Double = 0.0,
         isTieredEnabled: Boolean = true,
         customTiersJson: String? = null,
-        isReal: Boolean = false
+        isReal: Boolean = false,
+        exchange: String = "TOKOCRYPTO"
     ) {
-        val key = buildKey(symbol, isReal)
+        val key = buildKey(symbol, isReal, exchange)
         if (!enabled) {
             prefs.edit()
                 .putBoolean("${key}_trailing_enabled", false)
@@ -465,7 +475,7 @@ class SpotPositionStore(context: Context) {
                 .apply()
             return
         }
-        val current = get(symbol, isReal)
+        val current = get(symbol, isReal, exchange)
         val peak = when {
             referencePrice > 0.0 -> referencePrice
             current.entryPrice > 0.0 -> current.entryPrice
@@ -490,13 +500,13 @@ class SpotPositionStore(context: Context) {
      * Updates peak price and checks if trailing stop is triggered.
      * Returns Pair<SpotPosition, Boolean(justTriggered)>
      */
-    fun updateTrailingPrice(symbol: String, currentPrice: Double, isReal: Boolean = false): Pair<SpotPosition, Boolean> {
-        val current = get(symbol, isReal)
+    fun updateTrailingPrice(symbol: String, currentPrice: Double, isReal: Boolean = false, exchange: String = "TOKOCRYPTO"): Pair<SpotPosition, Boolean> {
+        val current = get(symbol, isReal, exchange)
         if (!current.isHolding || !current.isTrailingEnabled || currentPrice <= 0.0) {
             return Pair(current, false)
         }
 
-        val key = buildKey(symbol, isReal)
+        val key = buildKey(symbol, isReal, exchange)
         var newPeak = current.peakPrice.coerceAtLeast(current.entryPrice)
         var justTriggered = false
 
@@ -539,12 +549,12 @@ class SpotPositionStore(context: Context) {
             prefs.edit().putInt("${key}_trailing_ticks_below", 0).apply()
         }
 
-        val updated = get(symbol, isReal)
+        val updated = get(symbol, isReal, exchange)
         return Pair(updated, justTriggered)
     }
 
-    fun resetTrailingTrigger(symbol: String, isReal: Boolean = false) {
-        val key = buildKey(symbol, isReal)
+    fun resetTrailingTrigger(symbol: String, isReal: Boolean = false, exchange: String = "TOKOCRYPTO") {
+        val key = buildKey(symbol, isReal, exchange)
         prefs.edit().putBoolean("${key}_trailing_triggered", false).apply()
     }
 
@@ -555,9 +565,10 @@ class SpotPositionStore(context: Context) {
         tp1Percent: Double,
         tp2Price: Double,
         tp2Percent: Double,
-        isReal: Boolean = false
+        isReal: Boolean = false,
+        exchange: String = "TOKOCRYPTO"
     ) {
-        val key = buildKey(symbol, isReal)
+        val key = buildKey(symbol, isReal, exchange)
         prefs.edit()
             .putBoolean("${key}_auto_sell_enabled", enabled)
             .putString("${key}_tp1_price", tp1Price.toString())
@@ -569,28 +580,38 @@ class SpotPositionStore(context: Context) {
             .apply()
     }
 
-    fun markTp1Triggered(symbol: String, isReal: Boolean = false) {
-        prefs.edit().putBoolean("${buildKey(symbol, isReal)}_tp1_triggered", true).apply()
+    fun markTp1Triggered(symbol: String, isReal: Boolean = false, exchange: String = "TOKOCRYPTO") {
+        prefs.edit().putBoolean("${buildKey(symbol, isReal, exchange)}_tp1_triggered", true).apply()
     }
 
-    fun markTp2Triggered(symbol: String, isReal: Boolean = false) {
-        prefs.edit().putBoolean("${buildKey(symbol, isReal)}_tp2_triggered", true).apply()
+    fun markTp2Triggered(symbol: String, isReal: Boolean = false, exchange: String = "TOKOCRYPTO") {
+        prefs.edit().putBoolean("${buildKey(symbol, isReal, exchange)}_tp2_triggered", true).apply()
     }
 
-    fun getAllActiveTrailingSymbols(isReal: Boolean? = null): List<String> {
+    fun getAllActiveTrailingSymbols(isReal: Boolean? = null, exchange: String? = null): List<String> {
         val result = mutableSetOf<String>()
         val all = prefs.all
+        val targetEx = exchange?.trim()?.lowercase()
         for ((k, _) in all) {
             if (!k.endsWith("_state")) continue
             val rawPrefix = k.removeSuffix("_state")
             val isKeyReal = when {
-                rawPrefix.startsWith("real_") -> true
-                rawPrefix.startsWith("sim_") -> false
+                rawPrefix.contains("_real_") || rawPrefix.startsWith("real_") -> true
+                rawPrefix.contains("_sim_") || rawPrefix.startsWith("sim_") -> false
                 else -> getSafeBoolean("${rawPrefix}_is_real", false)
             }
             if (isReal != null && isKeyReal != isReal) continue
 
-            val cleanSymbol = rawPrefix.removePrefix("real_").removePrefix("sim_")
+            if (targetEx != null) {
+                val keyMatchesExchange = rawPrefix.startsWith("${targetEx}_")
+                if (!keyMatchesExchange && (rawPrefix.startsWith("tokocrypto_") || rawPrefix.startsWith("indodax_"))) {
+                    continue
+                }
+            }
+
+            val cleanSymbol = rawPrefix
+                .removePrefix("tokocrypto_").removePrefix("indodax_")
+                .removePrefix("real_").removePrefix("sim_")
             val canonical = normalize(cleanSymbol)
             val stateStr = prefs.getString(k, null) ?: continue
             val isTrailing = getSafeBoolean("${rawPrefix}_trailing_enabled", false)
@@ -601,19 +622,27 @@ class SpotPositionStore(context: Context) {
         return result.toList().sorted()
     }
 
-    fun hasAnyHolding(isReal: Boolean? = null): Boolean {
+    fun hasAnyHolding(isReal: Boolean? = null, exchange: String? = null): Boolean {
         val all = prefs.all
+        val targetEx = exchange?.trim()?.lowercase()
         for ((k, _) in all) {
             if (!k.endsWith("_state")) continue
             val stateStr = prefs.getString(k, null) ?: continue
             if (stateStr == SpotPositionState.HOLDING.name) {
                 val rawPrefix = k.removeSuffix("_state")
                 val isKeyReal = when {
-                    rawPrefix.startsWith("real_") -> true
-                    rawPrefix.startsWith("sim_") -> false
+                    rawPrefix.contains("_real_") || rawPrefix.startsWith("real_") -> true
+                    rawPrefix.contains("_sim_") || rawPrefix.startsWith("sim_") -> false
                     else -> getSafeBoolean("${rawPrefix}_is_real", false)
                 }
                 if (isReal != null && isKeyReal != isReal) continue
+
+                if (targetEx != null) {
+                    val keyMatchesExchange = rawPrefix.startsWith("${targetEx}_")
+                    if (!keyMatchesExchange && (rawPrefix.startsWith("tokocrypto_") || rawPrefix.startsWith("indodax_"))) {
+                        continue
+                    }
+                }
 
                 val qty = getSafeString("${rawPrefix}_quantity")?.toDoubleOrNull()
                     ?: getSafeString("${rawPrefix}_qty")?.toDoubleOrNull()
@@ -655,26 +684,37 @@ class SpotPositionStore(context: Context) {
         }
     }
 
-    fun getAllStoredSymbols(isReal: Boolean? = null): List<String> {
+    fun getAllStoredSymbols(isReal: Boolean? = null, exchange: String? = null): List<String> {
         val symbols = mutableSetOf<String>()
+        val targetEx = exchange?.trim()?.lowercase()
         for ((k, _) in prefs.all) {
             if (k.endsWith("_state")) {
                 val raw = k.removeSuffix("_state")
                 val isKeyReal = when {
-                    raw.startsWith("real_") -> true
-                    raw.startsWith("sim_") -> false
+                    raw.contains("_real_") || raw.startsWith("real_") -> true
+                    raw.contains("_sim_") || raw.startsWith("sim_") -> false
                     else -> getSafeBoolean("${raw}_is_real", false)
                 }
                 if (isReal != null && isKeyReal != isReal) continue
-                val clean = raw.removePrefix("real_").removePrefix("sim_")
+
+                if (targetEx != null) {
+                    val keyMatchesExchange = raw.startsWith("${targetEx}_")
+                    if (!keyMatchesExchange && (raw.startsWith("tokocrypto_") || raw.startsWith("indodax_"))) {
+                        continue
+                    }
+                }
+
+                val clean = raw
+                    .removePrefix("tokocrypto_").removePrefix("indodax_")
+                    .removePrefix("real_").removePrefix("sim_")
                 symbols.add(normalize(clean))
             }
         }
         return symbols.toList().sorted()
     }
 
-    fun getAllPositions(isReal: Boolean = false): Map<String, SpotPosition> {
-        return getAllStoredSymbols(isReal).associateWith { get(it, isReal) }
+    fun getAllPositions(isReal: Boolean = false, exchange: String = "TOKOCRYPTO"): Map<String, SpotPosition> {
+        return getAllStoredSymbols(isReal, exchange).associateWith { get(it, isReal, exchange) }
     }
 
     fun dumpRawPrefs(): Map<String, Any?> {

@@ -18,5 +18,6 @@ data class PriceAlert(
     val isEnabled: Boolean = true,
     val isTriggered: Boolean = false,
     val triggeredAt: Long = 0L,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    val exchange: String = "TOKOCRYPTO"
 )

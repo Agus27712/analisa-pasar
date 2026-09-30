@@ -43,12 +43,29 @@ class MarketDataCache(context: Context) {
         val raw = prefs.getString(key, null) ?: return emptyList()
         return try { val arr = JSONArray(raw); buildList { for (i in 0 until arr.length()) { val o = arr.getJSONObject(i); val symbol = o.optString("symbol", ""); if (symbol.isNotBlank()) add(WorthCoinInfo(TradingPair.fromCustomSymbol(symbol), o.optInt("score", 0), o.optBoolean("isWorth", false), o.optString("rec", ""), o.optDouble("potential", 0.0), o.optString("rationale", ""))) } } } catch (_: Exception) { emptyList() }
     }
-    fun savePairSnapshot(symbol: String, timeframe: Timeframe, tick: MarketTick?, candles: List<CandleBar>) {
+    fun savePairSnapshot(
+        symbol: String,
+        timeframe: Timeframe,
+        tick: MarketTick?,
+        candles: List<CandleBar>,
+        source: agu.analys.config.MarketDataSource = agu.analys.config.MarketDataSource.TOKOCRYPTO
+    ) {
         if (tick == null && candles.isEmpty()) return
-        val normalized = symbol.uppercase(); val timeframeKey = timeframeCacheKey(timeframe); val key = KEY_PAIR_PREFIX + normalized + "_" + timeframeKey; val now = System.currentTimeMillis()
+        val normalized = symbol.uppercase()
+        val timeframeKey = timeframeCacheKey(timeframe)
+        val key = "${source.name.lowercase()}_pair_${normalized}_${timeframeKey}"
+        val legacyKey = KEY_PAIR_PREFIX + normalized + "_" + timeframeKey
+        val now = System.currentTimeMillis()
         if (now - (lastPairWriteAt[key] ?: 0L) < PAIR_WRITE_INTERVAL_MS) return
-        val root = JSONObject(); if (tick != null) root.put("tick", tickToJson(tick)); val cArr = JSONArray(); candles.takeLast(500).forEach { c -> cArr.put(JSONObject().put("t", c.timestamp).put("o", c.open).put("h", c.high).put("l", c.low).put("c", c.close).put("v", c.volume)) }
-        root.put("candles", cArr).put("savedAt", now).put("timeframe", timeframeKey); prefs.edit().putString(key, root.toString()).apply(); lastPairWriteAt[key] = now
+        val root = JSONObject()
+        if (tick != null) root.put("tick", tickToJson(tick))
+        val cArr = JSONArray()
+        candles.takeLast(500).forEach { c ->
+            cArr.put(JSONObject().put("t", c.timestamp).put("o", c.open).put("h", c.high).put("l", c.low).put("c", c.close).put("v", c.volume))
+        }
+        root.put("candles", cArr).put("savedAt", now).put("timeframe", timeframeKey).put("source", source.name)
+        prefs.edit().putString(key, root.toString()).putString(legacyKey, root.toString()).apply()
+        lastPairWriteAt[key] = now
     }
 
     /**
@@ -92,12 +109,41 @@ class MarketDataCache(context: Context) {
             (candles + newBar).takeLast(500)
         }
     }
-    fun savePairSnapshot(symbol: String, tick: MarketTick?, candles: List<CandleBar>) { if (candles.isNotEmpty()) savePairSnapshot(symbol, inferTimeframe(candles), tick, candles) }
-    fun loadPairSnapshot(symbol: String, timeframe: Timeframe): Pair<MarketTick?, List<CandleBar>> {
-        val raw = prefs.getString(KEY_PAIR_PREFIX + symbol.uppercase() + "_" + timeframeCacheKey(timeframe), null) ?: return null to emptyList(); val snapshot = parseSnapshot(raw) ?: return null to emptyList(); if (!isFreshEnough(snapshot, timeframe)) return null to emptyList(); return snapshot.tick to snapshot.candles
+
+    fun savePairSnapshot(
+        symbol: String,
+        tick: MarketTick?,
+        candles: List<CandleBar>,
+        source: agu.analys.config.MarketDataSource = agu.analys.config.MarketDataSource.TOKOCRYPTO
+    ) {
+        if (candles.isNotEmpty()) savePairSnapshot(symbol, inferTimeframe(candles), tick, candles, source)
     }
-    fun loadPairSnapshot(symbol: String): Pair<MarketTick?, List<CandleBar>> {
-        val prefix = KEY_PAIR_PREFIX + symbol.uppercase() + "_"; val candidates = prefs.all.keys.filter { it.startsWith(prefix) }.mapNotNull { prefs.getString(it, null)?.let(::parseSnapshot) }.sortedByDescending { it.savedAt }; val chosen = candidates.firstOrNull { isFreshEnough(it, null) } ?: return null to emptyList(); return chosen.tick to chosen.candles
+
+    fun loadPairSnapshot(
+        symbol: String,
+        timeframe: Timeframe,
+        source: agu.analys.config.MarketDataSource = agu.analys.config.MarketDataSource.TOKOCRYPTO
+    ): Pair<MarketTick?, List<CandleBar>> {
+        val timeframeKey = timeframeCacheKey(timeframe)
+        val key = "${source.name.lowercase()}_pair_${symbol.uppercase()}_${timeframeKey}"
+        val legacyKey = KEY_PAIR_PREFIX + symbol.uppercase() + "_" + timeframeKey
+        val raw = prefs.getString(key, null) ?: prefs.getString(legacyKey, null) ?: return null to emptyList()
+        val snapshot = parseSnapshot(raw) ?: return null to emptyList()
+        if (!isFreshEnough(snapshot, timeframe)) return null to emptyList()
+        return snapshot.tick to snapshot.candles
+    }
+
+    fun loadPairSnapshot(
+        symbol: String,
+        source: agu.analys.config.MarketDataSource = agu.analys.config.MarketDataSource.TOKOCRYPTO
+    ): Pair<MarketTick?, List<CandleBar>> {
+        val prefix = "${source.name.lowercase()}_pair_${symbol.uppercase()}_"
+        val legacyPrefix = KEY_PAIR_PREFIX + symbol.uppercase() + "_"
+        val candidates = prefs.all.keys.filter { it.startsWith(prefix) || it.startsWith(legacyPrefix) }
+            .mapNotNull { prefs.getString(it, null)?.let(::parseSnapshot) }
+            .sortedByDescending { it.savedAt }
+        val chosen = candidates.firstOrNull { isFreshEnough(it, null) } ?: return null to emptyList()
+        return chosen.tick to chosen.candles
     }
     fun dashboardCacheAgeMs(): Long { val at = prefs.getLong(KEY_DASHBOARD_SAVED_AT, 0L); return if (at <= 0) -1L else System.currentTimeMillis() - at }
     fun worthCacheAgeMs(): Long { val at = prefs.getLong(KEY_WORTH_SAVED_AT, 0L); return if (at <= 0) -1L else System.currentTimeMillis() - at }
@@ -113,7 +159,10 @@ class MarketDataCache(context: Context) {
     private const val KEY_PAIRS_METADATA = "pairs_metadata_json"
  private const val PREFS_NAME = "krypto_market_cache"; private const val KEY_DASHBOARD_TICKS = "dashboard_ticks_json"; private const val KEY_DASHBOARD_SAVED_AT = "dashboard_saved_at"; private const val KEY_WORTH_COINS = "worth_coins_json"; private const val KEY_WORTH_SAVED_AT = "worth_coins_saved_at"; private const val KEY_PAIR_PREFIX = "pair_"; private const val DASHBOARD_WRITE_INTERVAL_MS = 15_000L; private const val PAIR_WRITE_INTERVAL_MS = 15_000L; private const val DAY_MS = 24L * 60L * 60L * 1000L }
 
-    fun savePairsMetadata(metadata: List<agu.analys.model.PairPrecision>) {
+    fun savePairsMetadata(
+        metadata: List<agu.analys.model.PairPrecision>,
+        source: agu.analys.config.MarketDataSource = agu.analys.config.MarketDataSource.TOKOCRYPTO
+    ) {
         val arr = org.json.JSONArray()
         metadata.forEach { m ->
             val obj = org.json.JSONObject()
@@ -125,11 +174,15 @@ class MarketDataCache(context: Context) {
             obj.put("qtyDec", m.quantityDecimals)
             arr.put(obj)
         }
-        prefs.edit().putString(KEY_PAIRS_METADATA, arr.toString()).apply()
+        val key = KEY_PAIRS_METADATA + "_" + source.name.lowercase()
+        prefs.edit().putString(key, arr.toString()).putString(KEY_PAIRS_METADATA, arr.toString()).apply()
     }
 
-    fun loadPairsMetadata(): List<agu.analys.model.PairPrecision> {
-        val raw = prefs.getString(KEY_PAIRS_METADATA, null) ?: return emptyList()
+    fun loadPairsMetadata(
+        source: agu.analys.config.MarketDataSource = agu.analys.config.MarketDataSource.TOKOCRYPTO
+    ): List<agu.analys.model.PairPrecision> {
+        val key = KEY_PAIRS_METADATA + "_" + source.name.lowercase()
+        val raw = prefs.getString(key, null) ?: prefs.getString(KEY_PAIRS_METADATA, null) ?: return emptyList()
         return try {
             val arr = org.json.JSONArray(raw)
             val list = mutableListOf<agu.analys.model.PairPrecision>()

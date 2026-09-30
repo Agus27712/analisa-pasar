@@ -170,7 +170,7 @@ class TokocryptoMarketWebSocket(
 
                             if (openTime > 0 && close > 0) {
                                 val candle = CandleBar(
-                                    timestamp = openTime / 1000L,
+                                    timestamp = openTime,
                                     open = open,
                                     high = high,
                                     low = low,

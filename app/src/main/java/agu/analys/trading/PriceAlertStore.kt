@@ -9,19 +9,29 @@ import org.json.JSONObject
 class PriceAlertStore(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
-    fun getAllAlerts(): List<PriceAlert> {
+    fun getAllAlerts(exchange: String? = null): List<PriceAlert> {
         val raw = prefs.getString(KEY_ALERTS, "[]") ?: "[]"
-        return parseAlerts(raw)
+        val all = parseAlerts(raw)
+        if (exchange == null) return all
+        val targetEx = exchange.trim().uppercase()
+        return all.filter { it.exchange.uppercase() == targetEx }
     }
 
-    fun getAlertsForSymbol(symbol: String): List<PriceAlert> {
+    fun getAlertsForSymbol(symbol: String, exchange: String = "TOKOCRYPTO"): List<PriceAlert> {
         val normalized = normalize(symbol)
-        return getAllAlerts().filter { normalize(it.symbol) == normalized }
+        val targetEx = exchange.trim().uppercase()
+        return getAllAlerts().filter { normalize(it.symbol) == normalized && (it.exchange.uppercase() == targetEx || it.exchange.isBlank()) }
     }
 
-    fun getActiveAlertsForSymbol(symbol: String): List<PriceAlert> {
+    fun getActiveAlertsForSymbol(symbol: String, exchange: String = "TOKOCRYPTO"): List<PriceAlert> {
         val normalized = normalize(symbol)
-        return getAllAlerts().filter { normalize(it.symbol) == normalized && it.isEnabled && !it.isTriggered }
+        val targetEx = exchange.trim().uppercase()
+        return getAllAlerts().filter {
+            normalize(it.symbol) == normalized &&
+            it.isEnabled &&
+            !it.isTriggered &&
+            (it.exchange.uppercase() == targetEx || it.exchange.isBlank())
+        }
     }
 
     fun addAlert(alert: PriceAlert) {
@@ -51,8 +61,8 @@ class PriceAlertStore(context: Context) {
         saveAlerts(list)
     }
 
-    fun checkAlerts(symbol: String, currentPrice: Double): List<PriceAlert> {
-        val active = getActiveAlertsForSymbol(symbol)
+    fun checkAlerts(symbol: String, currentPrice: Double, exchange: String = "TOKOCRYPTO"): List<PriceAlert> {
+        val active = getActiveAlertsForSymbol(symbol, exchange)
         val triggered = mutableListOf<PriceAlert>()
         active.forEach { alert ->
             val isTriggered = when (alert.type) {
@@ -89,6 +99,7 @@ class PriceAlertStore(context: Context) {
                 put("isTriggered", alert.isTriggered)
                 put("triggeredAt", alert.triggeredAt)
                 put("createdAt", alert.createdAt)
+                put("exchange", alert.exchange)
             }
             array.put(obj)
         }
@@ -114,7 +125,8 @@ class PriceAlertStore(context: Context) {
                         isEnabled = obj.optBoolean("isEnabled", true),
                         isTriggered = obj.optBoolean("isTriggered", false),
                         triggeredAt = obj.optLong("triggeredAt", 0L),
-                        createdAt = obj.optLong("createdAt", System.currentTimeMillis())
+                        createdAt = obj.optLong("createdAt", System.currentTimeMillis()),
+                        exchange = obj.optString("exchange", "TOKOCRYPTO")
                     )
                 )
             }

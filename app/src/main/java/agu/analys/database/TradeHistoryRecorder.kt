@@ -27,11 +27,20 @@ class TradeHistoryRecorder(
 
     val allRecordsFlow: Flow<List<TradeHistoryRecordEntity>> = dao.getAllRecordsFlow()
 
+    fun getRecordsByExchangeFlow(exchange: String): Flow<List<TradeHistoryRecordEntity>> =
+        dao.getRecordsByExchangeFlow(exchange)
+
     fun getRecordsBySymbolFlow(symbol: String): Flow<List<TradeHistoryRecordEntity>> =
         dao.getRecordsBySymbolFlow(symbol)
 
+    fun getRecordsBySymbolAndExchangeFlow(symbol: String, exchange: String): Flow<List<TradeHistoryRecordEntity>> =
+        dao.getRecordsBySymbolAndExchangeFlow(symbol, exchange)
+
     fun getHoldingRecordsFlow(): Flow<List<TradeHistoryRecordEntity>> =
         dao.getHoldingRecordsFlow()
+
+    fun getHoldingRecordsByExchangeFlow(exchange: String): Flow<List<TradeHistoryRecordEntity>> =
+        dao.getHoldingRecordsByExchangeFlow(exchange)
 
     /**
      * Tahap 1 & 2: Catat pengeluaran sinyal buy + eksekusi pembelian pengguna.
@@ -50,7 +59,8 @@ class TradeHistoryRecorder(
         targetPrice1: Double = 0.0,
         targetPrice2: Double = 0.0,
         stopLossPrice: Double = 0.0,
-        customUuid: String? = null
+        customUuid: String? = null,
+        exchange: String = "TOKOCRYPTO"
     ): String {
         val tradeUuid = customUuid ?: UUID.randomUUID().toString()
         val now = System.currentTimeMillis()
@@ -72,6 +82,7 @@ class TradeHistoryRecorder(
                     symbol = normSymbol,
                     isRealTrade = isReal,
                     strategyMode = strategyMode.uppercase(),
+                    exchange = exchange.uppercase(),
                     signalTime = now,
                     signalPrice = if (signalPrice > 0) signalPrice else buyPrice,
                     signalConfidence = signalConfidence,
@@ -105,19 +116,21 @@ class TradeHistoryRecorder(
     /**
      * Tahap 3: Update durasi hold dan evolusi harga (peak & drawdown) saat market tick berjalan.
      */
-    fun processPriceTick(symbol: String, currentPrice: Double) {
+    fun processPriceTick(symbol: String, currentPrice: Double, exchange: String = "TOKOCRYPTO") {
         if (currentPrice <= 0.0 || symbol.isBlank()) return
         val normSymbol = symbol.uppercase().replace("_", "")
+        val normExchange = exchange.uppercase()
         val now = System.currentTimeMillis()
 
         // Throttle agar tidak membebani database Room
-        val lastUpdate = tickThrottleMap[normSymbol] ?: 0L
+        val throttleKey = "${normExchange}_${normSymbol}"
+        val lastUpdate = tickThrottleMap[throttleKey] ?: 0L
         if (now - lastUpdate < 1500L) return
-        tickThrottleMap[normSymbol] = now
+        tickThrottleMap[throttleKey] = now
 
         scope.launch(Dispatchers.IO) {
             try {
-                val holdings = dao.getHoldingRecords()
+                val holdings = dao.getHoldingRecordsByExchange(normExchange)
                     .filter { it.symbol.equals(normSymbol, ignoreCase = true) }
                 if (holdings.isEmpty()) return@launch
 
@@ -148,13 +161,14 @@ class TradeHistoryRecorder(
     /**
      * Update all holding records from a whole-market batch price update
      */
-    fun processBatchPriceTicks(priceMap: Map<String, Double>) {
+    fun processBatchPriceTicks(priceMap: Map<String, Double>, exchange: String = "TOKOCRYPTO") {
         if (priceMap.isEmpty()) return
+        val normExchange = exchange.uppercase()
         val now = System.currentTimeMillis()
 
         scope.launch(Dispatchers.IO) {
             try {
-                val holdings = dao.getHoldingRecords()
+                val holdings = dao.getHoldingRecordsByExchange(normExchange)
                 if (holdings.isEmpty()) return@launch
 
                 for (record in holdings) {
@@ -203,10 +217,12 @@ class TradeHistoryRecorder(
         customPnlPercent: Double? = null,
         tradeUuid: String? = null,
         isTrailingUsed: Boolean = false,
-        trailingLockPrice: Double? = null
+        trailingLockPrice: Double? = null,
+        exchange: String = "TOKOCRYPTO"
     ) {
         if (sellPrice <= 0.0 || sellQuantity <= 0.0) return
         val normSymbol = symbol.uppercase().replace("_", "")
+        val normExchange = exchange.uppercase()
         val now = System.currentTimeMillis()
 
         scope.launch(Dispatchers.IO) {
@@ -215,7 +231,8 @@ class TradeHistoryRecorder(
                 val targetRecord = if (tradeUuid != null) {
                     dao.getRecordByUuid(tradeUuid)
                 } else {
-                    dao.getActiveHoldingForSymbol(normSymbol, isReal)
+                    dao.getActiveHoldingForSymbolAndExchange(normSymbol, isReal, normExchange)
+                        ?: dao.getActiveHoldingForSymbol(normSymbol, isReal)
                 }
 
                 val feeRate = if (isReal) 0.003 else 0.003
@@ -264,6 +281,7 @@ class TradeHistoryRecorder(
                         symbol = normSymbol,
                         isRealTrade = isReal,
                         strategyMode = (strategyMode ?: "SCALPING").uppercase(),
+                        exchange = normExchange,
                         signalTime = now - 900_000L,
                         signalPrice = estBuyPrice,
                         signalConfidence = 80,

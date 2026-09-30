@@ -36,8 +36,19 @@ class SignalLogRepository(
         calculateReliabilitySummary(logs)
     }
 
+    fun getLogsByExchangeFlow(exchange: String): Flow<List<SignalLogEntity>> =
+        dao.getLogsByExchangeFlow(exchange.uppercase())
+
+    fun getReliabilitySummaryByExchangeFlow(exchange: String): Flow<SignalReliabilitySummary> =
+        dao.getLogsByExchangeFlow(exchange.uppercase()).map { logs ->
+            calculateReliabilitySummary(logs)
+        }
+
     fun getLogsBySymbolFlow(symbol: String): Flow<List<SignalLogEntity>> =
         dao.getLogsBySymbolFlow(symbol)
+
+    fun getLogsBySymbolAndExchangeFlow(symbol: String, exchange: String): Flow<List<SignalLogEntity>> =
+        dao.getLogsBySymbolAndExchangeFlow(symbol, exchange.uppercase())
 
     /**
      * Record or update a signal for a coin.
@@ -55,18 +66,20 @@ class SignalLogRepository(
         targetPrice2: Double = 0.0,
         stopLoss: Double = 0.0,
         reasoning: String = "",
-        scalpingStage: String = ""
+        scalpingStage: String = "",
+        exchange: String = "TOKOCRYPTO"
     ) {
         if (entryPrice <= 0.0 || symbol.isBlank() || action.equals("HOLD", ignoreCase = true)) return
 
         val normSymbol = symbol.uppercase().replace("_", "").replace("/", "").trim()
         val normAction = action.uppercase().trim()
+        val normExchange = exchange.uppercase()
         val now = System.currentTimeMillis()
 
         scope.launch(Dispatchers.IO) {
             try {
-                // 1. Check if there are already active TRACKING logs for this coin
-                val activeTrackingLogs = dao.getActiveTrackingLogsForSymbol(normSymbol)
+                // 1. Check if there are already active TRACKING logs for this coin under this exchange
+                val activeTrackingLogs = dao.getActiveTrackingLogsForSymbolAndExchange(normSymbol, normExchange)
 
                 if (activeTrackingLogs.isNotEmpty()) {
                     // Coin already exists in active signal tracking! UPDATE existing log, do NOT insert new one
@@ -114,7 +127,8 @@ class SignalLogRepository(
                         peakPrice = newPeak,
                         troughPrice = newTrough,
                         maxProfitPct = newMaxProfit,
-                        maxDrawdownPct = newMaxDrawdown
+                        maxDrawdownPct = newMaxDrawdown,
+                        exchange = normExchange
                     )
 
                     dao.updateLog(updatedLog)
@@ -122,7 +136,7 @@ class SignalLogRepository(
                 }
 
                 // 2. Check if coin already has a recent log in DB (e.g. resolved recently) to avoid immediate re-spam
-                val latest = dao.getLatestLogForSymbol(normSymbol)
+                val latest = dao.getLatestLogForSymbolAndExchange(normSymbol, normExchange) ?: dao.getLatestLogForSymbol(normSymbol)
                 if (latest != null) {
                     // If it was resolved within 3 minutes and price hasn't meaningfully moved (<0.8%), skip creating duplicate
                     val lastTimestamp = latest.resolvedAt ?: latest.firedAt
@@ -148,6 +162,7 @@ class SignalLogRepository(
                     firedAt = now,
                     reasoning = reasoning,
                     scalpingStage = scalpingStage,
+                    exchange = normExchange,
                     outcomeStatus = "TRACKING",
                     peakPrice = entryPrice,
                     troughPrice = entryPrice,
@@ -160,11 +175,11 @@ class SignalLogRepository(
     }
 
     /**
-     * Consolidate duplicate tracking logs so that each symbol only has 1 active tracking log
+     * Consolidate duplicate tracking logs so that each symbol only has 1 active tracking log per exchange
      */
     suspend fun consolidateDuplicateTrackingLogs() = withContext(Dispatchers.IO) {
         val allTracking = dao.getActiveTrackingLogs()
-        val grouped = allTracking.groupBy { it.symbol }
+        val grouped = allTracking.groupBy { "${it.exchange}_${it.symbol}" }
         for ((_, logs) in grouped) {
             if (logs.size > 1) {
                 // Keep the primary (latest by firedAt or with best tracked stats)
@@ -180,19 +195,22 @@ class SignalLogRepository(
     /**
      * Update active tracking signals based on live market tick
      */
-    fun processPriceTick(symbol: String, currentPrice: Double) {
+    fun processPriceTick(symbol: String, currentPrice: Double, exchange: String = "TOKOCRYPTO") {
         if (currentPrice <= 0.0 || symbol.isBlank()) return
         val normSymbol = symbol.uppercase().replace("_", "").replace("/", "").trim()
+        val normExchange = exchange.uppercase()
         val now = System.currentTimeMillis()
 
         // Throttle updates per symbol to max 1 update per 1000ms
-        val lastUpdate = tickThrottleMap[normSymbol] ?: 0L
+        val throttleKey = "${normExchange}_${normSymbol}"
+        val lastUpdate = tickThrottleMap[throttleKey] ?: 0L
         if (now - lastUpdate < 1000L) return
-        tickThrottleMap[normSymbol] = now
+        tickThrottleMap[throttleKey] = now
 
         scope.launch(Dispatchers.IO) {
             try {
-                val trackingLogs = dao.getActiveTrackingLogsForSymbol(normSymbol)
+                val trackingLogs = dao.getActiveTrackingLogsForSymbolAndExchange(normSymbol, normExchange)
+                    .ifEmpty { dao.getActiveTrackingLogsForSymbol(normSymbol) }
                 if (trackingLogs.isEmpty()) return@launch
 
                 for (log in trackingLogs) {
@@ -205,13 +223,15 @@ class SignalLogRepository(
     /**
      * Batch update all active tracking signals from whole market tickers
      */
-    fun processBatchPriceTicks(priceMap: Map<String, Double>) {
+    fun processBatchPriceTicks(priceMap: Map<String, Double>, exchange: String = "TOKOCRYPTO") {
         if (priceMap.isEmpty()) return
+        val normExchange = exchange.uppercase()
         val now = System.currentTimeMillis()
 
         scope.launch(Dispatchers.IO) {
             try {
-                val trackingLogs = dao.getActiveTrackingLogs()
+                val trackingLogs = dao.getActiveTrackingLogsForExchange(normExchange)
+                    .ifEmpty { dao.getActiveTrackingLogs() }
                 if (trackingLogs.isEmpty()) return@launch
 
                 for (log in trackingLogs) {

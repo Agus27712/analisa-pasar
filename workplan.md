@@ -1,8 +1,8 @@
-# Workplan: Implementasi Lengkap Arsitektur Tokocrypto Official API (Dynamic Symbols & Symbol Type Routing)
+# Workplan: Implementasi Lengkap Arsitektur Tokocrypto Official API & Isolasi Data Multi-Exchange
 
 ## Objective
-Mengintegrasikan arsitektur resmi Tokocrypto sesuai dokumentasi:
-1. **Dynamic Symbol Discovery**: Menghilangkan hardcoded pair dan mengambil daftar symbol, filter trading (LOT_SIZE, PRICE_FILTER, MIN_NOTIONAL), dan precision secara dinamis dari `GET /open/v1/common/symbols`.
+Mengintegrasikan arsitektur resmi Tokocrypto sesuai dokumentasi dan mengisolasi penuh data pasar, cache in-memory, storage, serta Room database antara Tokocrypto dan Indodax:
+1. **Dynamic Symbol Discovery**: Mengambil daftar symbol, filter trading (LOT_SIZE, PRICE_FILTER, MIN_NOTIONAL), dan precision secara dinamis dari `GET /open/v1/common/symbols`.
 2. **Symbol Type Routing (Type 1 MBX vs Type 3 NextMe)**:
    - Type 1: REST market data via `https://www.tokocrypto.site/api/v3` (klines, depth, trades, aggTrades, executionRules)
    - Type 3: REST market data via `https://cloudme-toko.2meta.app/api/v1` (klines, depth, aggTrades) & `https://www.tokocrypto.com/open/v1/market/trades`
@@ -13,8 +13,8 @@ Mengintegrasikan arsitektur resmi Tokocrypto sesuai dokumentasi:
    - **Jalur 3: User WebSocket & Signed REST**: `POST /open/v1/user-listen-token` untuk user WebSocket, orders (`POST /open/v1/orders`), saldo spot (`GET /open/v1/account/spot` & `/account/spot/asset`), dan trade history (`GET /open/v1/orders/trades`).
 4. **Order Engine & Filter Validation**:
    - Validasi LOT_SIZE (`stepSize`, `minQty`, `maxQty`), PRICE_FILTER (`tickSize`), MIN_NOTIONAL, dan PRICE_RANGE execution rules.
-5. **UI & State Ingestion**:
-   - Sinkronisasi dynamic symbol repository ke Dashboard, Watchlist, Search, Screener, Dialog Tambah Koin, dan Trading Detail.
+5. **Isolasi Mutlak Cache & Database (Exchange Isolation)**:
+   - Pemisahan total data cache in-memory, SharedPreferences storage, dan Room database antara Tokocrypto dan Indodax dengan wrapper prefix & query filtering.
 
 ## Tahapan Implementasi:
 
@@ -50,3 +50,20 @@ Mengintegrasikan arsitektur resmi Tokocrypto sesuai dokumentasi:
 - [x] Update `AddAssetDialog.kt` agar menampilkan dynamic pairs dari Tokocrypto dengan filter BIDR, USDT, BTC dan pencarian instan.
 - [x] Update `RealTradeCoordinator.kt` untuk eksekusi order Tokocrypto dengan order validation.
 - [x] Verifikasi `compile_applet` dan unit test.
+
+### Tahap 6: Perbaikan Charting, MTF Engine, & Fullscreen Chart Zero-404
+- [x] Refactor `MtfCacheManager.kt` untuk memanggil `TokocryptoMarketService.fetchCandles` secara eksklusif (SSOT Tokocrypto/Binance).
+- [x] Standarisasi `CandleBar.timestamp` ke milidetik di seluruh service dan websocket agar sinkron dengan `CandleTimeUtil`, `MtfCacheManager`, dan `lightweight_chart.html`.
+- [x] Perbaiki `TradingViewFullscreenChart.kt` dengan pemisahan mutlak berdasarkan exchange: Indodax memuat halaman chart resmi Indodax (`indodax.com/chart`), sedangkan Tokocrypto memuat widget TradingView Binance (`BINANCE:<BASE>IDR`/`USDT`).
+- [x] Tambahkan overlay back button di `LandscapeChartScreen.kt` untuk navigasi layar penuh.
+- [x] Bersihkan pemanggilan feed pasar Indodax di `LearningTradingEngine.kt`, `CandidateScanWorker.kt`, dan `TradingForegroundService.kt`.
+
+### Tahap 7: Isolasi Total Cache & Room Database (Exchange Isolation)
+- [x] Tambahkan kolom `exchange` pada seluruh entitas Room (`RealTradeEntity`, `RealOpenOrderEntity`, `SignalLogEntity`, `TradeHistoryRecordEntity`) dan naikkan versi DB ke 7 (angka ganjil).
+- [x] Tambahkan kueri DAO berparameter `exchange` di `RealTradeDao`, `SignalLogDao`, dan `TradeHistoryRecordDao`.
+- [x] Isolasi `SignalLogRepository.kt` dan `TradeHistoryRecorder.kt` agar sinyal dan rekaman eksekusi buy/sell terpisah per exchange.
+- [x] Update `SpotPositionStore.kt` dengan prefix kunci `${exchange}_${real/sim}_${symbol}` untuk isolasi posisi spot dan trailing stop.
+- [x] Update `SimulationTradeStore.kt` dengan prefix kunci `${exchange}_sim_*` untuk isolasi wallet saldo, orderbook, dan trade history simulasi.
+- [x] Update `OrderBookDepthCache.kt` dan `MtfCacheManager.kt` dengan pemisahan kunci komposit in-memory `${exchange}_${symbol}`.
+- [x] Partisi snapshot pair candles dan pairs metadata di `MarketDataCache.kt` serta filter exchange di `PriceAlertStore.kt`.
+- [x] Verifikasi build via `compile_applet`.

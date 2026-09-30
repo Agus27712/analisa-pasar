@@ -15,13 +15,18 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+import agu.analys.util.AppPreferences
+
 class PortfolioViewModel(application: Application) : AndroidViewModel(application) {
 
+    private val prefs = AppPreferences(application)
     private val positionStore = SpotPositionStore(application)
     private val tradeHistoryRecorder = TradeHistoryRecorder(
         dao = AppDatabase.getInstance().tradeHistoryRecordDao(),
         scope = viewModelScope
     )
+
+    val currentExchange: String get() = prefs.marketDataSource.name
 
     private val _spotPosition = MutableStateFlow(SpotPosition())
     val spotPosition: StateFlow<SpotPosition> = _spotPosition.asStateFlow()
@@ -29,7 +34,7 @@ class PortfolioViewModel(application: Application) : AndroidViewModel(applicatio
     private val _positionVersion = MutableStateFlow(0L)
     val positionVersion: StateFlow<Long> = _positionVersion.asStateFlow()
 
-    val tradeHistoryRecords: StateFlow<List<TradeHistoryRecordEntity>> = tradeHistoryRecorder.allRecordsFlow
+    val tradeHistoryRecords: StateFlow<List<TradeHistoryRecordEntity>> = tradeHistoryRecorder.getRecordsByExchangeFlow(currentExchange)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     init {
@@ -38,7 +43,7 @@ class PortfolioViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun loadSpotPositions(symbol: String = "BTCIDR", isReal: Boolean = false) {
         viewModelScope.launch {
-            _spotPosition.value = positionStore.get(symbol, isReal)
+            _spotPosition.value = positionStore.get(symbol, isReal, currentExchange)
             _positionVersion.value = System.currentTimeMillis()
         }
     }
