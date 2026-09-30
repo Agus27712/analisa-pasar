@@ -245,44 +245,44 @@ data class TradingPair(
 ) {
     companion object {
         val POPULAR_TOKOCRYPTO_PAIRS = listOf(
-            TradingPair("BTCBIDR", "BTC", "BIDR", "Bitcoin / BIDR", indodaxPair = "btc_idr", tokocryptoPair = "BTC_BIDR"),
-            TradingPair("ETHBIDR", "ETH", "BIDR", "Ethereum / BIDR", indodaxPair = "eth_idr", tokocryptoPair = "ETH_BIDR"),
-            TradingPair("SOLBIDR", "SOL", "BIDR", "Solana / BIDR", indodaxPair = "sol_idr", tokocryptoPair = "SOL_BIDR"),
-            TradingPair("BNBBIDR", "BNB", "BIDR", "BNB / BIDR", indodaxPair = "bnb_idr", tokocryptoPair = "BNB_BIDR"),
-            TradingPair("XRPBIDR", "XRP", "BIDR", "XRP / BIDR", indodaxPair = "xrp_idr", tokocryptoPair = "XRP_BIDR"),
-            TradingPair("DOGEBIDR", "DOGE", "BIDR", "Dogecoin / BIDR", indodaxPair = "doge_idr", tokocryptoPair = "DOGE_BIDR"),
-            TradingPair("PEPEBIDR", "PEPE", "BIDR", "Pepe / BIDR", indodaxPair = "pepe_idr", tokocryptoPair = "PEPE_BIDR"),
-            TradingPair("ADABIDR", "ADA", "BIDR", "Cardano / BIDR", indodaxPair = "ada_idr", tokocryptoPair = "ADA_BIDR"),
-            TradingPair("AVAXBIDR", "AVAX", "BIDR", "Avalanche / BIDR", indodaxPair = "avax_idr", tokocryptoPair = "AVAX_BIDR"),
-            TradingPair("SHIBBIDR", "SHIB", "BIDR", "Shiba Inu / BIDR", indodaxPair = "shib_idr", tokocryptoPair = "SHIB_BIDR"),
-            TradingPair("NEARBIDR", "NEAR", "BIDR", "NEAR / BIDR", indodaxPair = "near_idr", tokocryptoPair = "NEAR_BIDR"),
-            TradingPair("SUIBIDR", "SUI", "BIDR", "Sui / BIDR", indodaxPair = "sui_idr", tokocryptoPair = "SUI_BIDR"),
-            TradingPair("DOTBIDR", "DOT", "BIDR", "Polkadot / BIDR", indodaxPair = "dot_idr", tokocryptoPair = "DOT_BIDR"),
-            TradingPair("LTCBIDR", "LTC", "BIDR", "Litecoin / BIDR", indodaxPair = "ltc_idr", tokocryptoPair = "LTC_BIDR"),
-            TradingPair("LINKBIDR", "LINK", "BIDR", "Chainlink / BIDR", indodaxPair = "link_idr", tokocryptoPair = "LINK_BIDR"),
-            TradingPair("USDTBIDR", "USDT", "BIDR", "Tether / BIDR", indodaxPair = "usdt_idr", tokocryptoPair = "USDT_BIDR"),
+            TradingPair("BTCIDR", "BTC", "IDR", "Bitcoin / IDR", indodaxPair = "btc_idr", tokocryptoPair = "BTC_IDR"),
+            TradingPair("ETHIDR", "ETH", "IDR", "Ethereum / IDR", indodaxPair = "eth_idr", tokocryptoPair = "ETH_IDR"),
+            TradingPair("SOLIDR", "SOL", "IDR", "Solana / IDR", indodaxPair = "sol_idr", tokocryptoPair = "SOL_IDR"),
+            TradingPair("BNBIDR", "BNB", "IDR", "BNB / IDR", indodaxPair = "bnb_idr", tokocryptoPair = "BNB_IDR"),
+            TradingPair("XRPIDR", "XRP", "IDR", "XRP / IDR", indodaxPair = "xrp_idr", tokocryptoPair = "XRP_IDR"),
+            TradingPair("DOGEIDR", "DOGE", "IDR", "Dogecoin / IDR", indodaxPair = "doge_idr", tokocryptoPair = "DOGE_IDR"),
+            TradingPair("PEPEIDR", "PEPE", "IDR", "Pepe / IDR", indodaxPair = "pepe_idr", tokocryptoPair = "PEPE_IDR"),
+            TradingPair("ADAIDR", "ADA", "IDR", "Cardano / IDR", indodaxPair = "ada_idr", tokocryptoPair = "ADA_IDR"),
+            TradingPair("AVAXIDR", "AVAX", "IDR", "Avalanche / IDR", indodaxPair = "avax_idr", tokocryptoPair = "AVAX_IDR"),
+            TradingPair("SHIBIDR", "SHIB", "IDR", "Shiba Inu / IDR", indodaxPair = "shib_idr", tokocryptoPair = "SHIB_IDR"),
+            TradingPair("NEARIDR", "NEAR", "IDR", "NEAR / IDR", indodaxPair = "near_idr", tokocryptoPair = "NEAR_IDR"),
+            TradingPair("SUIIDR", "SUI", "IDR", "Sui / IDR", indodaxPair = "sui_idr", tokocryptoPair = "SUI_IDR"),
+            TradingPair("DOTIDR", "DOT", "IDR", "Polkadot / IDR", indodaxPair = "dot_idr", tokocryptoPair = "DOT_IDR"),
+            TradingPair("LTCIDR", "LTC", "IDR", "Litecoin / IDR", indodaxPair = "ltc_idr", tokocryptoPair = "LTC_IDR"),
+            TradingPair("LINKIDR", "LINK", "IDR", "Chainlink / IDR", indodaxPair = "link_idr", tokocryptoPair = "LINK_IDR"),
+            TradingPair("USDTIDR", "USDT", "IDR", "Tether / IDR", indodaxPair = "usdt_idr", tokocryptoPair = "USDT_IDR"),
             TradingPair("BTCUSDT", "BTC", "USDT", "Bitcoin / USDT", indodaxPair = "btc_usdt", tokocryptoPair = "BTC_USDT"),
             TradingPair("ETHUSDT", "ETH", "USDT", "Ethereum / USDT", indodaxPair = "eth_usdt", tokocryptoPair = "ETH_USDT"),
             TradingPair("SOLUSDT", "SOL", "USDT", "Solana / USDT", indodaxPair = "sol_usdt", tokocryptoPair = "SOL_USDT")
         )
 
         val POPULAR_INDODAX_PAIRS = listOf(
-            TradingPair("BTCIDR", "BTC", "IDR", "Bitcoin / IDR", indodaxPair = "btc_idr", tokocryptoPair = "BTC_BIDR"),
-            TradingPair("ETHIDR", "ETH", "IDR", "Ethereum / IDR", indodaxPair = "eth_idr", tokocryptoPair = "ETH_BIDR"),
-            TradingPair("SOLIDR", "SOL", "IDR", "Solana / IDR", indodaxPair = "sol_idr", tokocryptoPair = "SOL_BIDR"),
-            TradingPair("BNBIDR", "BNB", "IDR", "BNB / IDR", indodaxPair = "bnb_idr", tokocryptoPair = "BNB_BIDR"),
-            TradingPair("XRPIDR", "XRP", "IDR", "XRP / IDR", indodaxPair = "xrp_idr", tokocryptoPair = "XRP_BIDR"),
-            TradingPair("DOGEIDR", "DOGE", "IDR", "Dogecoin / IDR", indodaxPair = "doge_idr", tokocryptoPair = "DOGE_BIDR"),
-            TradingPair("PEPEIDR", "PEPE", "IDR", "Pepe / IDR", indodaxPair = "pepe_idr", tokocryptoPair = "PEPE_BIDR"),
-            TradingPair("ADAIDR", "ADA", "IDR", "Cardano / IDR", indodaxPair = "ada_idr", tokocryptoPair = "ADA_BIDR"),
-            TradingPair("AVAXIDR", "AVAX", "IDR", "Avalanche / IDR", indodaxPair = "avax_idr", tokocryptoPair = "AVAX_BIDR"),
-            TradingPair("SHIBIDR", "SHIB", "IDR", "Shiba Inu / IDR", indodaxPair = "shib_idr", tokocryptoPair = "SHIB_BIDR"),
-            TradingPair("NEARIDR", "NEAR", "IDR", "NEAR / IDR", indodaxPair = "near_idr", tokocryptoPair = "NEAR_BIDR"),
-            TradingPair("SUIIDR", "SUI", "IDR", "Sui / IDR", indodaxPair = "sui_idr", tokocryptoPair = "SUI_BIDR"),
-            TradingPair("DOTIDR", "DOT", "IDR", "Polkadot / IDR", indodaxPair = "dot_idr", tokocryptoPair = "DOT_BIDR"),
-            TradingPair("LTCIDR", "LTC", "IDR", "Litecoin / IDR", indodaxPair = "ltc_idr", tokocryptoPair = "LTC_BIDR"),
-            TradingPair("LINKIDR", "LINK", "IDR", "Chainlink / IDR", indodaxPair = "link_idr", tokocryptoPair = "LINK_BIDR"),
-            TradingPair("MYXIDR", "MYX", "IDR", "MYX Finance / IDR", indodaxPair = "myx_idr", tokocryptoPair = "MYX_BIDR")
+            TradingPair("BTCIDR", "BTC", "IDR", "Bitcoin / IDR", indodaxPair = "btc_idr", tokocryptoPair = "BTC_IDR"),
+            TradingPair("ETHIDR", "ETH", "IDR", "Ethereum / IDR", indodaxPair = "eth_idr", tokocryptoPair = "ETH_IDR"),
+            TradingPair("SOLIDR", "SOL", "IDR", "Solana / IDR", indodaxPair = "sol_idr", tokocryptoPair = "SOL_IDR"),
+            TradingPair("BNBIDR", "BNB", "IDR", "BNB / IDR", indodaxPair = "bnb_idr", tokocryptoPair = "BNB_IDR"),
+            TradingPair("XRPIDR", "XRP", "IDR", "XRP / IDR", indodaxPair = "xrp_idr", tokocryptoPair = "XRP_IDR"),
+            TradingPair("DOGEIDR", "DOGE", "IDR", "Dogecoin / IDR", indodaxPair = "doge_idr", tokocryptoPair = "DOGE_IDR"),
+            TradingPair("PEPEIDR", "PEPE", "IDR", "Pepe / IDR", indodaxPair = "pepe_idr", tokocryptoPair = "PEPE_IDR"),
+            TradingPair("ADAIDR", "ADA", "IDR", "Cardano / IDR", indodaxPair = "ada_idr", tokocryptoPair = "ADA_IDR"),
+            TradingPair("AVAXIDR", "AVAX", "IDR", "Avalanche / IDR", indodaxPair = "avax_idr", tokocryptoPair = "AVAX_IDR"),
+            TradingPair("SHIBIDR", "SHIB", "IDR", "Shiba Inu / IDR", indodaxPair = "shib_idr", tokocryptoPair = "SHIB_IDR"),
+            TradingPair("NEARIDR", "NEAR", "IDR", "NEAR / IDR", indodaxPair = "near_idr", tokocryptoPair = "NEAR_IDR"),
+            TradingPair("SUIIDR", "SUI", "IDR", "Sui / IDR", indodaxPair = "sui_idr", tokocryptoPair = "SUI_IDR"),
+            TradingPair("DOTIDR", "DOT", "IDR", "Polkadot / IDR", indodaxPair = "dot_idr", tokocryptoPair = "DOT_IDR"),
+            TradingPair("LTCIDR", "LTC", "IDR", "Litecoin / IDR", indodaxPair = "ltc_idr", tokocryptoPair = "LTC_IDR"),
+            TradingPair("LINKIDR", "LINK", "IDR", "Chainlink / IDR", indodaxPair = "link_idr", tokocryptoPair = "LINK_IDR"),
+            TradingPair("MYXIDR", "MYX", "IDR", "MYX Finance / IDR", indodaxPair = "myx_idr", tokocryptoPair = "MYX_IDR")
         )
 
         val POPULAR_PAIRS = POPULAR_TOKOCRYPTO_PAIRS
@@ -303,44 +303,52 @@ data class TradingPair(
         ): TradingPair {
             val cleaned = raw.trim().uppercase().replace(" ", "").replace("/", "").replace("-", "").replace("_", "")
             val (base, quote) = when {
-                cleaned.endsWith("BIDR") -> cleaned.removeSuffix("BIDR") to "BIDR"
-                cleaned.endsWith("IDR") -> cleaned.removeSuffix("IDR") to "IDR"
                 cleaned.endsWith("USDT") -> cleaned.removeSuffix("USDT") to "USDT"
-                cleaned.endsWith("USD") -> cleaned.removeSuffix("USD") to "USD"
-                else -> cleaned to defaultQuote
+                cleaned.endsWith("IDR") -> cleaned.removeSuffix("IDR") to "IDR"
+                cleaned.endsWith("BIDR") -> cleaned.removeSuffix("BIDR") to "IDR"
+                cleaned.endsWith("USD") -> cleaned.removeSuffix("USD") to "USDT"
+                else -> cleaned to (if (defaultQuote.equals("BIDR", true)) "IDR" else defaultQuote)
             }
             val finalBase = base.ifEmpty { "BTC" }
-            val symbol = "$finalBase$quote"
+            val finalQuote = if (quote == "BIDR") "IDR" else quote
+            val symbol = "$finalBase$finalQuote"
 
             // 1. Coba cari di Dynamic Tokocrypto Repository
             val dynamicInfo = agu.analys.data.TokocryptoSymbolRepository.getSymbolInfo(symbol)
-                ?: agu.analys.data.TokocryptoSymbolRepository.getSymbolInfo("${finalBase}_$quote")
+                ?: agu.analys.data.TokocryptoSymbolRepository.getSymbolInfo("${finalBase}_$finalQuote")
             if (dynamicInfo != null) {
                 return dynamicInfo.toTradingPair()
             }
 
             val allPopular = POPULAR_TOKOCRYPTO_PAIRS + POPULAR_INDODAX_PAIRS
-            val known = allPopular.find { it.symbol == symbol || (it.baseAsset == finalBase && it.quoteAsset == quote) }
+            val known = allPopular.find { it.symbol == symbol || (it.baseAsset == finalBase && it.quoteAsset == finalQuote) }
             if (known != null) return known
             return TradingPair(
                 symbol = symbol,
                 baseAsset = finalBase,
-                quoteAsset = quote,
-                displayName = "$finalBase / $quote",
-                indodaxPair = "${finalBase.lowercase()}_${quote.lowercase()}",
-                tokocryptoPair = "${finalBase.uppercase()}_${quote.uppercase()}"
+                quoteAsset = finalQuote,
+                displayName = "$finalBase / $finalQuote",
+                indodaxPair = "${finalBase.lowercase()}_${finalQuote.lowercase()}",
+                tokocryptoPair = "${finalBase.uppercase()}_${finalQuote.uppercase()}"
             )
         }
     }
 
     fun effectiveIndodaxPair(): String = if (indodaxPair.isNotBlank()) indodaxPair else "${baseAsset.lowercase()}_idr"
-    fun effectiveTokocryptoPair(): String = if (tokocryptoPair.isNotBlank()) tokocryptoPair else "${baseAsset.uppercase()}_${quoteAsset.uppercase()}"
+    fun effectiveTokocryptoPair(): String {
+        return if (tokocryptoPair.isNotBlank()) {
+            tokocryptoPair.replace("_BIDR", "_IDR").replace("BIDR_", "IDR_")
+        } else {
+            val q = quoteAsset.uppercase().replace("BIDR", "IDR")
+            "${baseAsset.uppercase()}_$q"
+        }
+    }
     fun effectiveBinanceSymbol(): String = effectiveTokocryptoPair().replace("_", "").uppercase()
     fun effectiveTradingViewSymbol(): String {
-        val base = baseAsset.uppercase()
-        val quote = quoteAsset.uppercase()
+        val base = baseAsset.uppercase().replace("BIDR", "IDR")
+        val quote = quoteAsset.uppercase().replace("BIDR", "IDR")
         return when {
-            quote == "BIDR" || quote == "IDR" -> "BINANCE:${base}IDR"
+            quote == "IDR" -> "BINANCE:${base}IDR"
             quote == "USDT" -> "BINANCE:${base}USDT"
             quote == "BTC" -> "BINANCE:${base}BTC"
             else -> "BINANCE:${base}IDR"

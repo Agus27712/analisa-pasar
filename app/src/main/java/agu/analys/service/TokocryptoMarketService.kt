@@ -53,21 +53,45 @@ object TokocryptoMarketService {
         "https://data-api.binance.vision"
     )
 
+    fun isBidrSymbol(sym: String): Boolean {
+        val s = sym.uppercase().trim()
+        if (s == "BIDR") return true
+        if (s.startsWith("BIDR_") || s.startsWith("BIDRUSDT") || s.startsWith("BIDRIDR") || s.startsWith("BIDRBTC")) return true
+        if (s.contains("_BIDR")) return true
+        if (s.endsWith("BIDR")) {
+            // Pengecualian koin yang berakhiran huruf 'B' dipasangkan dengan 'IDR'
+            if (s == "BNBIDR" || s == "SHIBIDR") return false
+            return true
+        }
+        return false
+    }
+
+    fun isIdrOrUsdtPair(sym: String): Boolean {
+        if (isBidrSymbol(sym)) return false
+        val s = sym.uppercase().trim().replace("_", "")
+        return s.endsWith("IDR") || s.endsWith("USDT")
+    }
+
     fun toTokocryptoPair(symbol: String): String {
         val s = symbol.trim().uppercase().replace("/", "").replace("-", "")
+        if (s.contains("_")) {
+            return s.replace("_BIDR", "_IDR").replace("BIDR_", "IDR_")
+        }
         return when {
-            s.contains("_") -> s
-            s.endsWith("BIDR") -> s.removeSuffix("BIDR") + "_BIDR"
-            s.endsWith("IDR") -> s.removeSuffix("IDR") + "_BIDR"
             s.endsWith("USDT") -> s.removeSuffix("USDT") + "_USDT"
-            else -> "${s}_BIDR"
+            s == "BNBIDR" -> "BNB_IDR"
+            s == "SHIBIDR" -> "SHIB_IDR"
+            s.endsWith("BIDR") -> s.removeSuffix("BIDR") + "_IDR"
+            s.endsWith("IDR") -> s.removeSuffix("IDR") + "_IDR"
+            else -> "${s}_IDR"
         }
     }
 
     fun toBinanceSymbol(symbol: String): String {
         val s = symbol.trim().uppercase().replace("/", "").replace("-", "").replace("_", "")
         return when {
-            s.endsWith("IDR") && !s.endsWith("BIDR") -> s.removeSuffix("IDR") + "BIDR"
+            s == "BNBIDR" || s == "SHIBIDR" -> s
+            s.endsWith("BIDR") -> s.removeSuffix("BIDR") + "IDR"
             else -> s
         }
     }
@@ -493,10 +517,10 @@ object TokocryptoMarketService {
             for (i in 0 until array.length()) {
                 val obj = array.optJSONObject(i) ?: continue
                 val sym = obj.optString("symbol", "").uppercase()
-                val isBidr = sym.endsWith("BIDR")
+                // Eliminasi koin/pair dengan prefix atau nama BIDR; hanya pair IDR dan USDT saja
+                if (!isIdrOrUsdtPair(sym)) continue
                 val isUsdt = sym.endsWith("USDT")
-                val isIdr = sym.endsWith("IDR")
-                if (!isBidr && !isUsdt && !isIdr) continue
+                val isIdr = !isUsdt && sym.endsWith("IDR")
 
                 val last = obj.optString("lastPrice", "0").toDoubleOrNull() ?: 0.0
                 if (last <= 0.0) continue
@@ -517,12 +541,8 @@ object TokocryptoMarketService {
                 )
 
                 allTicks[sym] = tick
-                if (sym.endsWith("BIDR")) {
-                    val idrAlias = sym.removeSuffix("BIDR") + "IDR"
-                    allTicks[idrAlias] = tick.copy(symbol = idrAlias)
-                }
 
-                if (isSafeTradableAsset(price = last, volume24h = quoteVol, high24h = high, low24h = low, isBidrPair = isBidr || isIdr)) {
+                if (isSafeTradableAsset(price = last, volume24h = quoteVol, high24h = high, low24h = low, isIdrPair = isIdr)) {
                     candidates.add(tick)
                 }
             }
@@ -548,13 +568,13 @@ object TokocryptoMarketService {
         volume24h: Double,
         high24h: Double = 0.0,
         low24h: Double = 0.0,
-        isBidrPair: Boolean = true,
+        isIdrPair: Boolean = true,
         isExplicitlyFavored: Boolean = false
     ): Boolean {
         if (isExplicitlyFavored) return true
         if (!price.isFinite() || price <= 0.0) return false
 
-        return if (isBidrPair) {
+        return if (isIdrPair) {
             if (price <= 5.0) return false
             if (price < 25.0 && volume24h < 1_000_000_000.0) return false
             if (volume24h < 100_000_000.0) return false

@@ -38,8 +38,8 @@ fun AddAssetDialog(
     onAddPair: (TradingPair) -> Unit
 ) {
     var searchQuery by remember { mutableStateOf("") }
-    var selectedTab by remember { mutableStateOf("BIDR") }
-    val tabs = listOf("BIDR", "USDT", "SEMUA")
+    var selectedTab by remember { mutableStateOf("IDR") }
+    val tabs = listOf("IDR", "USDT", "SEMUA")
 
     // Ambil daftar pair dari dynamic symbol repository Tokocrypto
     val availablePairs = remember(searchQuery, selectedTab) {
@@ -132,7 +132,7 @@ fun AddAssetDialog(
 
                 Spacer(Modifier.height(10.dp))
 
-                // Quote Tabs (BIDR / USDT / SEMUA)
+                // Quote Tabs (IDR / USDT / SEMUA)
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxWidth()

@@ -24,7 +24,7 @@ import agu.analys.ui.theme.*
 
 /**
  * Modal dialog modern untuk memilih sumber data pasar (Exchange Data Source):
- * - Tokocrypto: SSOT Utama (Pair BIDR/USDT) dengan fallback Binance Cloud API & WebSocket.
+ * - Tokocrypto: SSOT Utama (Pair IDR/USDT) dengan fallback Binance Cloud API & WebSocket.
  * - Indodax: Pasar IDR alternatif.
  */
 @Composable

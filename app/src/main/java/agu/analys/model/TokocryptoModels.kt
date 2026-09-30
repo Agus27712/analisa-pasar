@@ -34,9 +34,9 @@ data class TokocryptoExecutionRules(
 )
 
 data class TokocryptoSymbolInfo(
-    val symbol: String,                          // e.g. "BTCBIDR", "BTCUSDT"
+    val symbol: String,                          // e.g. "BTCIDR", "BTCUSDT"
     val baseAsset: String,                      // "BTC"
-    val quoteAsset: String,                     // "BIDR", "USDT", "IDR"
+    val quoteAsset: String,                     // "IDR", "USDT"
     val symbolType: Int = 1,                    // 1 = MBX, 3 = NextMe
     val basePrecision: Int = 8,
     val quotePrecision: Int = 8,
@@ -52,14 +52,16 @@ data class TokocryptoSymbolInfo(
      * Konversi ke model TradingPair aplikasi
      */
     fun toTradingPair(): TradingPair {
-        val displayQuote = if (quoteAsset.equals("BIDR", true)) "BIDR" else quoteAsset.uppercase()
+        val cleanQuote = if (quoteAsset.equals("BIDR", true)) "IDR" else quoteAsset.uppercase()
+        val cleanBase = baseAsset.uppercase().replace("BIDR", "IDR")
+        val cleanSymbol = symbol.uppercase().replace("BIDR", "IDR")
         return TradingPair(
-            symbol = symbol.uppercase(),
-            baseAsset = baseAsset.uppercase(),
-            quoteAsset = displayQuote,
-            displayName = "${baseAsset.uppercase()} / $displayQuote",
-            indodaxPair = "${baseAsset.lowercase()}_${quoteAsset.lowercase()}",
-            tokocryptoPair = "${baseAsset.uppercase()}_${quoteAsset.uppercase()}"
+            symbol = cleanSymbol,
+            baseAsset = cleanBase,
+            quoteAsset = cleanQuote,
+            displayName = "$cleanBase / $cleanQuote",
+            indodaxPair = "${cleanBase.lowercase()}_${cleanQuote.lowercase()}",
+            tokocryptoPair = "${cleanBase}_$cleanQuote"
         )
     }
 

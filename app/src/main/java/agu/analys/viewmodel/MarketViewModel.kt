@@ -271,8 +271,8 @@ class MarketViewModel(application: Application) : AndroidViewModel(application) 
                 _dashboardTicks.value = combinedTicks
 
                 try {
-                    val btcTick = combinedTicks["BTCBIDR"] ?: combinedTicks["BTCIDR"] ?: combinedTicks["btc_idr"] ?: combinedTicks["BTC"]
-                    val usdtTick = combinedTicks["USDTBIDR"] ?: combinedTicks["USDTIDR"] ?: combinedTicks["usdt_idr"] ?: combinedTicks["USDT"]
+                    val btcTick = combinedTicks["BTCIDR"] ?: combinedTicks["BTCUSDT"] ?: combinedTicks["btc_idr"] ?: combinedTicks["BTC"]
+                    val usdtTick = combinedTicks["USDTIDR"] ?: combinedTicks["usdt_idr"] ?: combinedTicks["USDT"]
                     if (btcTick != null && btcTick.price > 0) {
                         agu.analys.engine.global.GlobalContextManager.updateFallbackFromIndodax(
                             priceIdr = btcTick.price,
@@ -309,7 +309,7 @@ class MarketViewModel(application: Application) : AndroidViewModel(application) 
                             volume24h = tick.volume24h,
                             high24h = tick.high24h,
                             low24h = tick.low24h,
-                            isBidrPair = pair.quoteAsset.equals("BIDR", ignoreCase = true) || pair.quoteAsset.equals("IDR", ignoreCase = true),
+                            isIdrPair = pair.quoteAsset.equals("IDR", ignoreCase = true),
                             isExplicitlyFavored = isUserExplicit
                         )
                     } else {

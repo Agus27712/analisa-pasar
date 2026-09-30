@@ -26,15 +26,15 @@ enum class MarketDataSource(
 ) {
     TOKOCRYPTO(
         label = "Tokocrypto",
-        shortCode = "BIDR",
-        defaultQuoteAsset = "BIDR",
+        shortCode = "IDR",
+        defaultQuoteAsset = "IDR",
         defaultFeeConfig = TradingFeeConfig(
             buyMakerPct = 0.10,
             buyTakerPct = 0.10,
             sellMakerPct = 0.10,
             sellTakerPct = 0.10
         ),
-        description = "SSOT Utama: Data market Tokocrypto (Pair BIDR/USDT) dengan real-time REST & WebSocket serta fallback Binance."
+        description = "SSOT Utama: Data market Tokocrypto (Pair IDR/USDT) dengan real-time REST & WebSocket serta fallback Binance."
     ),
     INDODAX(
         label = "Indodax",

@@ -67,3 +67,12 @@ Mengintegrasikan arsitektur resmi Tokocrypto sesuai dokumentasi dan mengisolasi 
 - [x] Update `OrderBookDepthCache.kt` dan `MtfCacheManager.kt` dengan pemisahan kunci komposit in-memory `${exchange}_${symbol}`.
 - [x] Partisi snapshot pair candles dan pairs metadata di `MarketDataCache.kt` serta filter exchange di `PriceAlertStore.kt`.
 - [x] Verifikasi build via `compile_applet`.
+
+### Tahap 8: Eliminasi Pasangan Koin Berbasis BIDR & Pembatasan Pair IDR/USDT Saja
+- [x] Bersihkan `POPULAR_TOKOCRYPTO_PAIRS` dan `POPULAR_INDODAX_PAIRS` dari `BIDR` menjadi `IDR` dan `USDT` murni.
+- [x] Konfigurasi `MarketDataSource.TOKOCRYPTO` defaultQuoteAsset dan shortCode menjadi `IDR`.
+- [x] Terapkan filter ketat di `TokocryptoSymbolRepository.kt` agar hanya memuat pair dengan quote `IDR` dan `USDT`.
+- [x] Eliminasi koin berbasis token BIDR (`BIDRUSDT`, `BIDRIDR`, dsb.) dan quote BIDR dengan proteksi nama koin asli seperti `BNBIDR` dan `SHIBIDR`.
+- [x] Standarisasi resolver pair `toTokocryptoPair()` dan `toBinanceSymbol()` ke format IDR (`_IDR` / `IDR`).
+- [x] Perbarui tab default di `AddAssetDialog.kt` dari BIDR menjadi IDR (`IDR`, `USDT`, `SEMUA`).
+- [x] Verifikasi kelulusan kompilasi `compile_applet` dan unit tests.

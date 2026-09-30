@@ -114,6 +114,11 @@ object TokocryptoSymbolRepository {
 
             val baseAsset = item.optString("baseAsset", "").trim().uppercase()
             val quoteAsset = item.optString("quoteAsset", "").trim().uppercase()
+
+            // Eliminasi BIDR: hanya pair IDR dan USDT saja
+            if (quoteAsset != "IDR" && quoteAsset != "USDT") continue
+            if (baseAsset == "BIDR" || symbol.startsWith("BIDR") || symbol.contains("BIDR_") || symbol.contains("_BIDR")) continue
+
             val symbolType = item.optInt("symbolType", 1) // 1 = MBX, 3 = NextMe
             val basePrecision = item.optInt("basePrecision", 8)
             val quotePrecision = item.optInt("quotePrecision", 8)
@@ -215,8 +220,9 @@ object TokocryptoSymbolRepository {
                         val baseAsset = item.optString("baseAsset", "").trim().uppercase()
                         val quoteAsset = item.optString("quoteAsset", "").trim().uppercase()
 
-                        // Hanya simpan pair yang relevan untuk Tokocrypto (BIDR, IDR, USDT, BTC)
-                        if (quoteAsset !in listOf("BIDR", "IDR", "USDT", "BTC", "FDUSD")) continue
+                        // Hanya simpan pair yang relevan untuk Tokocrypto (IDR dan USDT saja, eliminasi BIDR)
+                        if (quoteAsset != "IDR" && quoteAsset != "USDT") continue
+                        if (baseAsset == "BIDR" || symbol.startsWith("BIDR") || symbol.contains("BIDR_") || symbol.contains("_BIDR")) continue
 
                         val basePrecision = item.optInt("baseAssetPrecision", 8)
                         val quotePrecision = item.optInt("quotePrecision", 8)
@@ -318,10 +324,10 @@ object TokocryptoSymbolRepository {
         val directNoUnder = symbolsMap[noUnderscore]
         if (directNoUnder != null) return directNoUnder
 
-        // Coba cocokkan dengan BIDR / USDT / IDR
-        if (noUnderscore.endsWith("IDR") && !noUnderscore.endsWith("BIDR")) {
-            val bidrKey = noUnderscore.removeSuffix("IDR") + "BIDR"
-            return symbolsMap[bidrKey]
+        // Jika ada input lama dengan BIDR, mapping ke IDR
+        if (noUnderscore.endsWith("BIDR")) {
+            val idrKey = noUnderscore.removeSuffix("BIDR") + "IDR"
+            return symbolsMap[idrKey] ?: symbolsMap["${noUnderscore.removeSuffix("BIDR")}_IDR"]
         }
         return null
     }
@@ -331,11 +337,20 @@ object TokocryptoSymbolRepository {
     }
 
     fun getAllTradingPairs(quoteFilter: String? = null): List<TradingPair> {
-        val uniqueSymbols = symbolsMap.values.distinctBy { it.symbol }
+        val uniqueSymbols = symbolsMap.values
+            .filter {
+                (it.quoteAsset == "IDR" || it.quoteAsset == "USDT") &&
+                    it.baseAsset != "BIDR" &&
+                    !it.symbol.startsWith("BIDR") &&
+                    !it.symbol.contains("_BIDR") &&
+                    !it.symbol.contains("BIDR_")
+            }
+            .distinctBy { it.symbol }
         val filtered = if (quoteFilter.isNullOrBlank() || quoteFilter.equals("ALL", true)) {
             uniqueSymbols
         } else {
-            uniqueSymbols.filter { it.quoteAsset.equals(quoteFilter, true) }
+            val q = quoteFilter.uppercase().replace("BIDR", "IDR")
+            uniqueSymbols.filter { it.quoteAsset.equals(q, true) }
         }
         return filtered.map { it.toTradingPair() }
     }

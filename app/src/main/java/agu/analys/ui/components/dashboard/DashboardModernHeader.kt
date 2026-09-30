@@ -112,7 +112,7 @@ fun DashboardModernHeader(
                     )
                 }
                 Text(
-                    text = if (marketDataSource == MarketDataSource.TOKOCRYPTO) "SSOT · Pair BIDR/USDT" else "Pasar IDR Spot",
+                    text = if (marketDataSource == MarketDataSource.TOKOCRYPTO) "SSOT · Pair IDR/USDT" else "Pasar IDR Spot",
                     color = TvTextSecondary,
                     fontSize = 9.5.sp
                 )

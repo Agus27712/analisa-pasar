@@ -388,7 +388,7 @@ class TradingForegroundService : Service() {
             val base = baseKey.uppercase()
             if (qty > 0.00000001 && base != "IDR" && base != "BIDR" && base != "USDT" && !processedBases.contains(base)) {
                 processedBases.add(base)
-                realCandidatePairs.add(TradingPair.fromCustomSymbol("${base}_BIDR"))
+                realCandidatePairs.add(TradingPair.fromCustomSymbol("${base}_IDR"))
             }
         }
         
