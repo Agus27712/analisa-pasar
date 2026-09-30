@@ -1,28 +1,14 @@
-# Checkpoint: Implementasi Pemilihan Sumber Data Tokocrypto
+# Checkpoint: Implementasi Arsitektur Resmi Tokocrypto API (Dynamic Symbols & Symbol Type Routing)
 
 - **Tanggal / Waktu:** 2026-09-30
 - **Status:** Selesai (Completed & Verified)
-- **Fitur:** Pemilihan Sumber Data Pasar dari Tokocrypto (SSOT dengan fallback Binance)
-- **Komponen & Arsitektur yang Diimplementasikan:**
-  1. `AppConfiguration.kt`:
-     - Penambahan enum `MarketDataSource.TOKOCRYPTO` lengkap dengan properti default (Quote BIDR, fee 0.10%, deskripsi SSOT).
-  2. `TradingViewModels.kt`:
-     - Koleksi `POPULAR_TOKOCRYPTO_PAIRS` (BTCBIDR, ETHBIDR, SOLBIDR, BNBBIDR, XRPBIDR, PEPEBIDR, USDTBIDR, dsb).
-     - Helper dinamis `popularPairsForSource(source)` dan resolver simbol exchange (`effectiveTokocryptoPair()`, `effectiveBinanceSymbol()`).
-  3. `TokocryptoMarketService.kt`:
-     - Service REST API publik Tokocrypto Open API v1 dengan fallback otomatis ke Binance Cloud API (`/api/v3/ticker/24hr`, `/api/v3/klines`, `/api/v3/depth`, `/api/v3/trades`).
-     - Pemeringkatan pasar otomatis (Top Gainers, Losers, 24H Volume) untuk pair BIDR & USDT.
-     - Filter likuiditas & keamanan aset (`isSafeTradableAsset`).
-  4. `TokocryptoMarketWebSocket.kt`:
-     - WebSocket streaming live ticker & kline real-time via Binance Cloud/Tokocrypto stream dengan reconnect otomatis & heartbeat monitoring.
-  5. `TokocryptoTradeApi.kt`:
-     - Fetch Saldo Riil Spot Account via Tokocrypto HMAC-SHA256 signature API dengan fallback Binance Cloud.
-  6. `AppPreferences.kt`:
-     - Konfigurasi `tokocryptoApiKey` dan `tokocryptoSecretKey` terenkripsi dengan AES-256 GCM.
-     - Default `marketDataSource` disetel ke `MarketDataSource.TOKOCRYPTO` (SSOT Utama).
-  7. `MarketDataCoordinator.kt` & `MarketViewModel.kt`:
-     - Routing otomatis polling dan live WebSocket feed ke service Tokocrypto atau Indodax sesuai pilihan pengguna.
-  8. `DataSourceSelectionDialog.kt` & `DashboardModernHeader.kt`:
-     - UI dropdown switcher di header Dashboard yang memudahkan pengguna memilih sumber data secara langsung dengan 1 tap.
-  9. `SettingsCategoryDetailContent.kt` & `SettingsScreen.kt`:
-     - Kartu interaktif pilihan sumber pasar (Tokocrypto vs Indodax) dengan status badge dan deskripsi lengkap di menu Pengaturan.
+- **Fitur:** Implementasi Resmi Tokocrypto API (No Hardcoded Pairs, Dynamic Symbol Discovery, Type 1 MBX vs Type 3 NextMe Routing, 3-Layer Architecture)
+- **Komponen Terdampak:**
+  1. `TokocryptoModels.kt`: Data model lengkap untuk SymbolInfo, Filters, Execution Rules, Orders, dan User Token.
+  2. `TokocryptoSymbolRepository.kt`: Repository discovery symbol dinamis dari `GET /open/v1/common/symbols` dengan in-memory cache dan filter validator.
+  3. `TokocryptoMarketService.kt`: REST Market Data dengan routing cerdas Type 1 (`tokocrypto.site/api/v3`) vs Type 3 (`cloudme-toko.2meta.app/api/v1` & `/open/v1/market/trades`) dan fallback Binance Cloud.
+  4. `TokocryptoMarketWebSocket.kt`: WebSocket multi-stream (Kline dengan deteksi `k.x`, Trade, Depth) via stream Tokocrypto & Binance.
+  5. `TokocryptoUserWebSocket.kt`: Real-time user data stream menggunakan `user-listen-token`.
+  6. `TokocryptoTradeApi.kt`: Integrasi signed HMAC-SHA256 untuk Create Order, Cancel Order, Order Status, Spot Account Asset, dan Order Trades.
+  7. `MarketDataCoordinator.kt` & `MarketViewModel.kt`: Integrasi dynamic symbol discovery tanpa pair hardcode.
+  8. `AddAssetDialog.kt`: Pencarian & filter pair dinamis dari Tokocrypto.

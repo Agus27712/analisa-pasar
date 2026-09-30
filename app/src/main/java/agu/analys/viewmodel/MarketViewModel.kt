@@ -91,6 +91,24 @@ class MarketViewModel(application: Application) : AndroidViewModel(application) 
 
     init {
         restoreFromCache(prefs.marketDataSource)
+        viewModelScope.launch(Dispatchers.IO) {
+            agu.analys.data.TokocryptoSymbolRepository.ensureSymbolsLoaded(false)
+        }
+    }
+
+    fun setMarketDataSource(source: MarketDataSource) {
+        prefs.marketDataSource = source
+        viewModelScope.launch(Dispatchers.IO) {
+            if (source == MarketDataSource.TOKOCRYPTO) {
+                agu.analys.data.TokocryptoSymbolRepository.ensureSymbolsLoaded(false)
+            }
+            val pairs = TradingPair.popularPairsForSource(source)
+            if (pairs.isNotEmpty()) {
+                _selectedPair.value = pairs.first()
+            }
+            restoreFromCache(source)
+            refreshWorthCoinsFromMarket()
+        }
     }
 
     fun restoreFromCache(source: MarketDataSource) {

@@ -30,10 +30,12 @@ class RealTradeExecutor(
         orderId: String,
         onResult: (Boolean, String) -> Unit
     ) {
-        val apiKey = prefs.indodaxApiKey
-        val secretKey = prefs.indodaxSecretKey
+        val isToko = prefs.marketDataSource == agu.analys.config.MarketDataSource.TOKOCRYPTO
+        val apiKey = if (isToko) prefs.tokocryptoApiKey else prefs.indodaxApiKey
+        val secretKey = if (isToko) prefs.tokocryptoSecretKey else prefs.indodaxSecretKey
+        val sourceLabel = prefs.marketDataSource.label
         if (apiKey.isBlank() || secretKey.isBlank()) {
-            onResult(false, "API Key atau Secret Key INDODAX belum diisi.")
+            onResult(false, "API Key atau Secret Key $sourceLabel belum diisi.")
             return
         }
         if (isRateLimited()) {
@@ -52,7 +54,7 @@ class RealTradeExecutor(
                 return@launch
             }
             onStatusUpdate(message)
-            agu.analys.util.AppLogManager.trade("RealCancel", "Order INDODAX $orderId untuk $symbol: $message (Sukses=$success)")
+            agu.analys.util.AppLogManager.trade("RealCancel", "Order $sourceLabel $orderId untuk $symbol: $message (Sukses=$success)")
             if (success) {
                 AppDatabase.getInstance().realTradeDao().deleteOpenOrderById(orderId)
                 delay(INTER_REQUEST_DELAY_MS)
@@ -118,10 +120,12 @@ class RealTradeExecutor(
         autoLimitSellPrice2: Double = 0.0,
         onResult: (Boolean, String) -> Unit
     ) {
-        val apiKey = prefs.indodaxApiKey
-        val secretKey = prefs.indodaxSecretKey
+        val isToko = prefs.marketDataSource == agu.analys.config.MarketDataSource.TOKOCRYPTO
+        val apiKey = if (isToko) prefs.tokocryptoApiKey else prefs.indodaxApiKey
+        val secretKey = if (isToko) prefs.tokocryptoSecretKey else prefs.indodaxSecretKey
+        val sourceLabel = prefs.marketDataSource.label
         if (apiKey.isBlank() || secretKey.isBlank()) {
-            onResult(false, "API Key atau Secret Key INDODAX belum diisi.")
+            onResult(false, "API Key atau Secret Key $sourceLabel belum diisi.")
             return
         }
         var execPrice = price
@@ -142,14 +146,33 @@ class RealTradeExecutor(
         }
 
         scope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            onStatusUpdate("Mengirim order $type ke INDODAX...")
+            onStatusUpdate("Mengirim order $type ke $sourceLabel...")
             val clientOrderId = "agu-${type.lowercase()}-${System.currentTimeMillis()}"
             agu.analys.util.AppLogManager.trade(
                 "RealOrder",
-                "💼 [INDODAX REAL] Mengirim order ${type.uppercase()} $pair | Qty: $quantity @ Rp ${PriceFormatter.formatIdrNumber(execPrice)}"
+                "💼 [$sourceLabel REAL] Mengirim order ${type.uppercase()} $pair | Qty: $quantity @ Rp ${PriceFormatter.formatIdrNumber(execPrice)}"
             )
             val isBuy = type.equals("buy", ignoreCase = true)
-            val buyResult = if (!isBuy) {
+            val buyResult = if (isToko) {
+                val req = agu.analys.model.TokocryptoOrderRequest(
+                    symbol = agu.analys.service.TokocryptoMarketService.toBinanceSymbol(pair),
+                    side = if (isBuy) agu.analys.model.TokocryptoOrderSide.BUY else agu.analys.model.TokocryptoOrderSide.SELL,
+                    type = if (isBuy) agu.analys.model.TokocryptoOrderType.LIMIT else agu.analys.model.TokocryptoOrderType.MARKET,
+                    quantity = quantity,
+                    price = execPrice,
+                    clientId = clientOrderId
+                )
+                val res = agu.analys.service.TokocryptoTradeApi.createOrder(apiKey, secretKey, req, execPrice)
+                IndodaxTradeApiV2.OrderResult(
+                    success = res.success,
+                    message = res.errorMessage ?: res.rawMessage,
+                    orderId = res.orderId,
+                    clientOrderId = res.clientId,
+                    executedQty = res.executedQty,
+                    origQty = quantity,
+                    status = res.status
+                )
+            } else if (!isBuy) {
                 // Untuk SELL: Coba kirim MARKET order terlebih dahulu untuk eksekusi instan proteksi modal
                 val marketRes = IndodaxTradeApiV2.createMarketOrderDetailed(
                     apiKey = apiKey, secretKey = secretKey, symbol = pair,

@@ -290,7 +290,10 @@ data class TradingPair(
         fun popularPairsForSource(source: agu.analys.config.MarketDataSource? = null): List<TradingPair> {
             return when (source) {
                 agu.analys.config.MarketDataSource.INDODAX -> POPULAR_INDODAX_PAIRS
-                else -> POPULAR_TOKOCRYPTO_PAIRS
+                else -> {
+                    val dynamic = agu.analys.data.TokocryptoSymbolRepository.getAllTradingPairs()
+                    if (dynamic.isNotEmpty()) dynamic else POPULAR_TOKOCRYPTO_PAIRS
+                }
             }
         }
 
@@ -308,6 +311,14 @@ data class TradingPair(
             }
             val finalBase = base.ifEmpty { "BTC" }
             val symbol = "$finalBase$quote"
+
+            // 1. Coba cari di Dynamic Tokocrypto Repository
+            val dynamicInfo = agu.analys.data.TokocryptoSymbolRepository.getSymbolInfo(symbol)
+                ?: agu.analys.data.TokocryptoSymbolRepository.getSymbolInfo("${finalBase}_$quote")
+            if (dynamicInfo != null) {
+                return dynamicInfo.toTradingPair()
+            }
+
             val allPopular = POPULAR_TOKOCRYPTO_PAIRS + POPULAR_INDODAX_PAIRS
             val known = allPopular.find { it.symbol == symbol || (it.baseAsset == finalBase && it.quoteAsset == quote) }
             if (known != null) return known

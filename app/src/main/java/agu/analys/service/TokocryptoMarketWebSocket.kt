@@ -2,6 +2,8 @@ package agu.analys.service
 
 import agu.analys.model.CandleBar
 import agu.analys.model.MarketTick
+import agu.analys.model.Timeframe
+import agu.analys.model.TradeStreamItem
 import agu.analys.network.NetworkClientProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -14,17 +16,26 @@ import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import org.json.JSONObject
 import timber.log.Timber
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.min
 
 /**
- * Realtime Tokocrypto & Binance Cloud WebSocket Stream:
- * Mendengarkan 24hrTicker dan Kline updates secara instan tanpa delay polling.
+ * WebSocket Market Stream Resmi Tokocrypto (Jalur 2 Market Data):
+ * Mendukung combined streams: Live Kline (dengan deteksi k.x closed), Live Trade, Live Ticker, dan Live Depth.
+ *
+ * Endpoint:
+ * - Primary: wss://stream-cloud.tokocrypto.site/stream?streams=...
+ * - Fallback: wss://stream.binance.com:9443/stream?streams=...
  */
 class TokocryptoMarketWebSocket(
     private val scope: CoroutineScope,
     private val onTick: (MarketTick) -> Unit,
     private val onCandle: (CandleBar) -> Unit,
+    private val onTrade: ((TradeStreamItem) -> Unit)? = null,
+    private val onCandleClosed: ((CandleBar) -> Unit)? = null,
     private val onConnected: () -> Unit,
     private val onDisconnected: () -> Unit
 ) {
@@ -33,19 +44,25 @@ class TokocryptoMarketWebSocket(
     private var socket: WebSocket? = null
     private var reconnectJob: Job? = null
     private var streamSymbol = ""
+    private var currentTimeframe = Timeframe.M1
     private var reconnectAttempt = 0
     private val lastMessageAt = AtomicLong(0L)
 
+    private val tradeTimeFormatter: DateTimeFormatter =
+        DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneId.of("Asia/Jakarta"))
+
     private val WS_HOSTS = listOf(
-        "wss://stream.binance.com:9443/ws",
-        "wss://data-stream.binance.vision/ws"
+        "wss://stream-cloud.tokocrypto.site/stream",
+        "wss://stream.binance.com:9443/stream",
+        "wss://data-stream.binance.vision/stream"
     )
 
-    fun start(symbol: String) {
+    fun start(symbol: String, timeframe: Timeframe = Timeframe.M1) {
         val nextSymbol = TokocryptoMarketService.toBinanceSymbol(symbol).lowercase()
         if (nextSymbol.isBlank()) return
         stop(false)
         streamSymbol = nextSymbol
+        currentTimeframe = timeframe
         reconnectAttempt = 0
         connect()
     }
@@ -53,7 +70,7 @@ class TokocryptoMarketWebSocket(
     fun stop(notify: Boolean = true) {
         reconnectJob?.cancel()
         reconnectJob = null
-        socket?.close(1000, "switch pair")
+        socket?.close(1000, "Normal closure")
         socket = null
         streamSymbol = ""
         if (notify) onDisconnected()
@@ -67,13 +84,27 @@ class TokocryptoMarketWebSocket(
         return System.currentTimeMillis() - last > staleMs
     }
 
+    private fun getIntervalCode(tf: Timeframe): String = when (tf) {
+        Timeframe.M1 -> "1m"
+        Timeframe.M5 -> "5m"
+        Timeframe.M15 -> "15m"
+        Timeframe.H1 -> "1h"
+        Timeframe.H4 -> "4h"
+        Timeframe.D1 -> "1d"
+    }
+
     private fun connect() {
         if (streamSymbol.isBlank()) return
         val host = WS_HOSTS[reconnectAttempt % WS_HOSTS.size]
-        val url = "$host/${streamSymbol}@ticker"
+        val interval = getIntervalCode(currentTimeframe)
+
+        // Combined streams: ticker + kline + trade
+        val streams = "${streamSymbol}@ticker/${streamSymbol}@kline_${interval}/${streamSymbol}@trade"
+        val url = "$host?streams=$streams"
+
         val request = Request.Builder()
             .url(url)
-            .header("User-Agent", "AnalysisPasar/2.1 (Android; Tokocrypto SSOT)")
+            .header("User-Agent", "Mozilla/5.0 TokoStream/3.5")
             .build()
         socket = client.newWebSocket(request, Listener())
     }
@@ -81,7 +112,7 @@ class TokocryptoMarketWebSocket(
     private fun reconnect() {
         if (streamSymbol.isBlank() || reconnectJob?.isActive == true) return
         reconnectJob = scope.launch {
-            val waitMs = min(12_000L, (800L * (1L shl min(reconnectAttempt, 4))))
+            val waitMs = min(12_000L, (600L * (1L shl min(reconnectAttempt, 4))))
             reconnectAttempt++
             delay(waitMs)
             if (isActive && streamSymbol.isNotBlank()) connect()
@@ -93,70 +124,98 @@ class TokocryptoMarketWebSocket(
             reconnectAttempt = 0
             lastMessageAt.set(System.currentTimeMillis())
             onConnected()
-            Timber.i("TokocryptoWS: Connected to $streamSymbol")
+            Timber.i("TokocryptoMarketWS: Connected to $streamSymbol")
         }
 
         override fun onMessage(webSocket: WebSocket, text: String) {
             lastMessageAt.set(System.currentTimeMillis())
             try {
-                val obj = JSONObject(text)
-                val event = obj.optString("e", "")
-                if (event == "24hrTicker") {
-                    val sym = obj.optString("s", "")
-                    val last = obj.optString("c", "0").toDoubleOrNull() ?: 0.0
-                    val high = obj.optString("h", "0").toDoubleOrNull() ?: last
-                    val low = obj.optString("l", "0").toDoubleOrNull() ?: last
-                    val quoteVol = obj.optString("q", "0").toDoubleOrNull() ?: 0.0
-                    val changePct = obj.optString("P", "0").toDoubleOrNull() ?: 0.0
+                val root = JSONObject(text)
+                // Format combined stream payload: { "stream": "btcbidr@ticker", "data": { ... } }
+                val streamName = root.optString("stream", "")
+                val data = root.optJSONObject("data") ?: root
 
-                    if (last > 0.0) {
-                        onTick(
-                            MarketTick(
+                when {
+                    streamName.contains("@ticker") || data.has("c") && data.has("h") && data.has("l") && !data.has("k") -> {
+                        val sym = data.optString("s", streamSymbol).uppercase()
+                        val lastPrice = data.optString("c", "0").toDoubleOrNull() ?: 0.0
+                        if (lastPrice > 0) {
+                            val high = data.optString("h", "0").toDoubleOrNull() ?: lastPrice
+                            val low = data.optString("l", "0").toDoubleOrNull() ?: lastPrice
+                            val quoteVol = data.optString("q", "0").toDoubleOrNull() ?: 0.0
+                            val changePct = data.optString("P", "0").toDoubleOrNull() ?: 0.0
+                            val tick = MarketTick(
                                 symbol = sym,
-                                price = last,
+                                price = lastPrice,
                                 high24h = high,
                                 low24h = low,
                                 volume24h = quoteVol,
                                 change24h = changePct,
                                 timestamp = System.currentTimeMillis()
                             )
-                        )
+                            onTick(tick)
+                        }
                     }
-                } else if (event == "kline") {
-                    val k = obj.optJSONObject("k")
-                    if (k != null) {
-                        val openTime = k.optLong("t", 0L)
-                        val o = k.optString("o", "0").toDoubleOrNull() ?: 0.0
-                        val h = k.optString("h", "0").toDoubleOrNull() ?: 0.0
-                        val l = k.optString("l", "0").toDoubleOrNull() ?: 0.0
-                        val c = k.optString("c", "0").toDoubleOrNull() ?: 0.0
-                        val v = k.optString("v", "0").toDoubleOrNull() ?: 0.0
-                        if (openTime > 0 && c > 0) {
-                            onCandle(
-                                CandleBar(
+
+                    streamName.contains("@kline") || data.has("k") -> {
+                        val kObj = data.optJSONObject("k")
+                        if (kObj != null) {
+                            val openTime = kObj.optLong("t", 0L)
+                            val open = kObj.optString("o", "0").toDoubleOrNull() ?: 0.0
+                            val high = kObj.optString("h", "0").toDoubleOrNull() ?: 0.0
+                            val low = kObj.optString("l", "0").toDoubleOrNull() ?: 0.0
+                            val close = kObj.optString("c", "0").toDoubleOrNull() ?: 0.0
+                            val volume = kObj.optString("v", "0").toDoubleOrNull() ?: 0.0
+                            val isClosed = kObj.optBoolean("x", false)
+
+                            if (openTime > 0 && close > 0) {
+                                val candle = CandleBar(
                                     timestamp = openTime / 1000L,
-                                    open = o,
-                                    high = h,
-                                    low = l,
-                                    close = c,
-                                    volume = v
+                                    open = open,
+                                    high = high,
+                                    low = low,
+                                    close = close,
+                                    volume = volume
                                 )
+                                onCandle(candle)
+                                if (isClosed) {
+                                    onCandleClosed?.invoke(candle)
+                                }
+                            }
+                        }
+                    }
+
+                    streamName.contains("@trade") || (data.has("p") && data.has("q") && data.has("t")) -> {
+                        val p = data.optString("p", "0").toDoubleOrNull() ?: 0.0
+                        val q = data.optString("q", "0").toDoubleOrNull() ?: 0.0
+                        val t = data.optLong("T", data.optLong("t", System.currentTimeMillis()))
+                        val isBuyerMaker = data.optBoolean("m", false)
+                        val id = data.optLong("t", 0L).toString()
+                        if (p > 0 && q > 0) {
+                            val trade = TradeStreamItem(
+                                id = id,
+                                price = p,
+                                amount = q,
+                                timeFormatted = tradeTimeFormatter.format(Instant.ofEpochMilli(t)),
+                                isBuy = !isBuyerMaker
                             )
+                            onTrade?.invoke(trade)
                         }
                     }
                 }
             } catch (e: Exception) {
-                Timber.w(e, "TokocryptoWS: Error parsing message: ${e.message}")
+                Timber.w(e, "Error parse Tokocrypto WS frame")
             }
         }
 
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-            Timber.w("TokocryptoWS: Failure: ${t.message}")
+            Timber.w(t, "TokocryptoMarketWS failure: ${t.message}")
             onDisconnected()
             reconnect()
         }
 
         override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+            Timber.i("TokocryptoMarketWS closed: $code $reason")
             onDisconnected()
         }
     }

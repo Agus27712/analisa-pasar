@@ -1,13 +1,16 @@
 package agu.analys.ui.components.dashboard
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -19,8 +22,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import agu.analys.data.TokocryptoSymbolRepository
 import agu.analys.model.TradingPair
 import agu.analys.ui.theme.TvAmber
+import agu.analys.ui.theme.TvBlue
+import agu.analys.ui.theme.TvCyan
 import agu.analys.ui.theme.TvGreen
 import agu.analys.ui.theme.TvTextPrimary
 import agu.analys.ui.theme.TvTextSecondary
@@ -31,14 +37,26 @@ fun AddAssetDialog(
     onDismiss: () -> Unit,
     onAddPair: (TradingPair) -> Unit
 ) {
-    val popularPairs = TradingPair.POPULAR_PAIRS
-    var manualInput by remember { mutableStateOf("") }
+    var searchQuery by remember { mutableStateOf("") }
+    var selectedTab by remember { mutableStateOf("BIDR") }
+    val tabs = listOf("BIDR", "USDT", "SEMUA")
+
+    // Ambil daftar pair dari dynamic symbol repository Tokocrypto
+    val availablePairs = remember(searchQuery, selectedTab) {
+        val quoteFilter = if (selectedTab == "SEMUA") null else selectedTab
+        val results = if (searchQuery.isNotBlank()) {
+            TokocryptoSymbolRepository.searchSymbols(searchQuery, quoteFilter)
+        } else {
+            TokocryptoSymbolRepository.getAllTradingPairs(quoteFilter)
+        }
+        if (results.isNotEmpty()) results else TradingPair.popularPairsForSource()
+    }
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .fillMaxHeight(0.82f),
+                .fillMaxHeight(0.85f),
             shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.cardColors(containerColor = DashboardColors.Surface),
             border = BorderStroke(1.dp, DashboardColors.Border)
@@ -48,6 +66,7 @@ fun AddAssetDialog(
                     .fillMaxSize()
                     .padding(16.dp)
             ) {
+                // Header
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -57,84 +76,94 @@ fun AddAssetDialog(
                         Icon(
                             imageVector = Icons.Default.Star,
                             contentDescription = null,
-                            tint = TvAmber,
-                            modifier = Modifier.size(20.dp)
+                            tint = TvCyan,
+                            modifier = Modifier.size(22.dp)
                         )
-                        Spacer(Modifier.width(6.dp))
-                        Text(
-                            "Tambah Koin ke Favorit",
-                            color = TvTextPrimary,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.ExtraBold
-                        )
+                        Spacer(Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                "Tambah Pasar Tokocrypto",
+                                color = TvTextPrimary,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Black
+                            )
+                            Text(
+                                "Ditemukan ${availablePairs.size} pair aktif",
+                                color = TvTextSecondary,
+                                fontSize = 10.5.sp
+                            )
+                        }
                     }
                     IconButton(onClick = onDismiss, modifier = Modifier.size(36.dp)) {
                         Icon(Icons.Default.Close, "Close", tint = TvTextSecondary)
                     }
                 }
+
                 Spacer(Modifier.height(10.dp))
 
-                Text(
-                    "Masukkan simbol pair manual (IDR/USDT):",
-                    color = TvTextSecondary,
-                    fontSize = 11.5.sp,
-                    fontWeight = FontWeight.Medium
-                )
-                Spacer(Modifier.height(6.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedTextField(
-                        value = manualInput,
-                        onValueChange = { manualInput = it },
-                        placeholder = { Text("cth: DOGEIDR, SOLIDR, SOLUSDT", color = TvTextSecondary, fontSize = 12.sp) },
-                        singleLine = true,
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("manual_asset_input"),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = TvAmber,
-                            unfocusedBorderColor = DashboardColors.Border,
-                            focusedTextColor = TvTextPrimary,
-                            unfocusedTextColor = TvTextPrimary,
-                            cursorColor = TvAmber
-                        ),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                    Button(
-                        onClick = {
-                            val trimmed = manualInput.trim().uppercase()
-                            if (trimmed.isNotEmpty()) {
-                                onAddPair(TradingPair.fromCustomSymbol(trimmed))
-                                manualInput = ""
+                // Search input
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = { Text("Cari simbol pasar (cth: BTC, SOL, PEPE, ETH...)", color = TvTextSecondary, fontSize = 12.sp) },
+                    leadingIcon = {
+                        Icon(Icons.Default.Search, contentDescription = null, tint = TvCyan, modifier = Modifier.size(18.dp))
+                    },
+                    trailingIcon = {
+                        if (searchQuery.isNotBlank()) {
+                            IconButton(onClick = { searchQuery = "" }) {
+                                Icon(Icons.Default.Close, contentDescription = "Clear", tint = TvTextSecondary, modifier = Modifier.size(16.dp))
                             }
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = TvAmber),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .height(50.dp)
-                            .testTag("manual_add_button")
-                    ) {
-                        Text("+ Favorit", color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    },
+                    singleLine = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("manual_asset_input"),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = TvCyan,
+                        unfocusedBorderColor = DashboardColors.Border,
+                        focusedTextColor = TvTextPrimary,
+                        unfocusedTextColor = TvTextPrimary,
+                        cursorColor = TvCyan
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                )
+
+                Spacer(Modifier.height(10.dp))
+
+                // Quote Tabs (BIDR / USDT / SEMUA)
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    items(tabs) { tab ->
+                        val isSelected = selectedTab == tab
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (isSelected) TvCyan else DashboardColors.Card,
+                            border = BorderStroke(1.dp, if (isSelected) TvCyan else DashboardColors.Border),
+                            modifier = Modifier.clickable { selectedTab = tab }
+                        ) {
+                            Text(
+                                text = tab,
+                                color = if (isSelected) Color.Black else TvTextSecondary,
+                                fontSize = 11.5.sp,
+                                fontWeight = if (isSelected) FontWeight.Black else FontWeight.Medium,
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                            )
+                        }
                     }
                 }
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    "Atau pilih dari daftar populer Indodax:",
-                    color = TvTextSecondary,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(Modifier.height(8.dp))
 
+                Spacer(Modifier.height(12.dp))
+
+                // List of pairs
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(popularPairs, key = { it.symbol }) { pair ->
+                    items(availablePairs, key = { it.symbol }) { pair ->
                         val isAdded = currentFavorites.contains(pair.symbol)
                         Card(
                             modifier = Modifier
@@ -142,7 +171,7 @@ fun AddAssetDialog(
                                 .clickable { onAddPair(pair) },
                             shape = RoundedCornerShape(12.dp),
                             colors = CardDefaults.cardColors(containerColor = DashboardColors.Card),
-                            border = BorderStroke(1.dp, if (isAdded) TvAmber.copy(alpha = 0.6f) else DashboardColors.Border)
+                            border = BorderStroke(1.dp, if (isAdded) TvCyan.copy(alpha = 0.5f) else DashboardColors.Border)
                         ) {
                             Row(
                                 modifier = Modifier
@@ -150,16 +179,25 @@ fun AddAssetDialog(
                                     .padding(12.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                AssetBadge(pair.baseAsset, if (isAdded) TvAmber else TvGreen)
+                                AssetBadge(pair.baseAsset, if (isAdded) TvCyan else TvGreen)
                                 Spacer(Modifier.width(10.dp))
                                 Column(Modifier.weight(1f)) {
-                                    Text(
-                                        pair.displayName,
-                                        color = TvTextPrimary,
-                                        fontSize = 14.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Text(pair.symbol, color = TvTextSecondary, fontSize = 10.sp)
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            pair.baseAsset,
+                                            color = TvTextPrimary,
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Spacer(Modifier.width(4.dp))
+                                        Text(
+                                            "/${pair.quoteAsset}",
+                                            color = TvCyan,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
+                                    Text(pair.displayName, color = TvTextSecondary, fontSize = 10.sp)
                                 }
                                 if (isAdded) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -180,16 +218,16 @@ fun AddAssetDialog(
                                 } else {
                                     Button(
                                         onClick = { onAddPair(pair) },
-                                        colors = ButtonDefaults.buttonColors(containerColor = TvAmber),
+                                        colors = ButtonDefaults.buttonColors(containerColor = TvCyan),
                                         shape = RoundedCornerShape(8.dp),
-                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
                                         modifier = Modifier.height(30.dp)
                                     ) {
                                         Text(
-                                            "+ Favorit",
+                                            "+ Tambah",
                                             color = Color.Black,
-                                            fontSize = 10.sp,
-                                            fontWeight = FontWeight.Bold
+                                            fontSize = 10.5.sp,
+                                            fontWeight = FontWeight.ExtraBold
                                         )
                                     }
                                 }
