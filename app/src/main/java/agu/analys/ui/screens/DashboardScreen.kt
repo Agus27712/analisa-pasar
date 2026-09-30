@@ -75,8 +75,9 @@ fun DashboardScreen(
     var showAddDialog by remember { mutableStateOf(false) }
     var showNewsScreener by remember { mutableStateOf(false) }
     var showLogcatDialog by remember { mutableStateOf(false) }
+    var showDataSourceDialog by remember { mutableStateOf(false) }
 
-    val defaultQuote = "IDR"
+    val defaultQuote = marketDataSource.defaultQuoteAsset
 
     // Gabungkan seluruh data ticks real-time (SSOT dengan Detail / WebSocket aktif)
     val allTicks = remember(dashboardTicks, currentTick, hotCoins, gainersCoins, losersCoins, topVolumeCoins) {
@@ -242,9 +243,11 @@ fun DashboardScreen(
         ) {
             // 1. Modern Header (Clean: Logo + Title + Status + Refresh + Signal Logs + Logcat)
             DashboardModernHeader(
+                marketDataSource = marketDataSource,
                 isConnected = isConnected,
                 isRefreshing = isRefreshing,
                 onRefresh = { viewModel.refreshWorthCoinsFromMarket() },
+                onSelectDataSource = { showDataSourceDialog = true },
                 onOpenLogcat = { showLogcatDialog = true },
                 onOpenSignalLogs = { viewModel.openSignalLogs() }
             )
@@ -518,6 +521,16 @@ fun DashboardScreen(
         if (showLogcatDialog) {
             LogcatDiagnosticDialog(
                 onDismissRequest = { showLogcatDialog = false }
+            )
+        }
+
+        if (showDataSourceDialog) {
+            DataSourceSelectionDialog(
+                currentSource = marketDataSource,
+                onSelectSource = { source ->
+                    viewModel.setMarketDataSource(source)
+                },
+                onDismiss = { showDataSourceDialog = false }
             )
         }
     }

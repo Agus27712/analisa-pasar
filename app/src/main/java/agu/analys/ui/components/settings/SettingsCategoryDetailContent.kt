@@ -2,6 +2,7 @@ package agu.analys.ui.components.settings
 
 import android.content.Context
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -17,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import agu.analys.config.AiProvider
+import agu.analys.config.MarketDataSource
 import agu.analys.config.StrategyMode
 import agu.analys.model.MarketTick
 import agu.analys.ui.animation.PriceAnimationMode
@@ -31,6 +33,8 @@ fun SettingsCategoryDetailContent(
     viewModel: TradingViewModel,
     strategyMode: StrategyMode,
     onStrategyModeChange: (StrategyMode) -> Unit,
+    selectedSource: MarketDataSource,
+    onSourceChange: (MarketDataSource) -> Unit,
     buyMakerFee: String,
     onBuyMakerFeeChange: (String) -> Unit,
     buyTakerFee: String,
@@ -92,47 +96,87 @@ fun SettingsCategoryDetailContent(
 
             Spacer(Modifier.height(14.dp))
 
-            SectionHeader("SUMBER PASAR (EXCHANGE)")
-            Card(
+            SectionHeader("PILIH SUMBER DATA PASAR (EXCHANGE)")
+            Column(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(10.dp),
-                colors = CardDefaults.cardColors(containerColor = TvBlue.copy(alpha = 0.12f)),
-                border = androidx.compose.foundation.BorderStroke(1.dp, TvBlue)
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Column(Modifier.padding(12.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = "INDODAX",
-                                color = TvBlue,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Black
-                            )
-                            Spacer(Modifier.width(6.dp))
-                            Box(
-                                modifier = Modifier
-                                    .background(TvGreen.copy(alpha = 0.2f), RoundedCornerShape(4.dp))
-                                    .padding(horizontal = 6.dp, vertical = 2.dp)
-                            ) {
-                                Text("LIVE API", color = TvGreen, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                            }
-                        }
-                        Box(
-                            modifier = Modifier
-                                .size(10.dp)
-                                .background(TvGreen, CircleShape)
+                MarketDataSource.values().forEach { source ->
+                    val isSelected = source == selectedSource
+                    val isToko = source == MarketDataSource.TOKOCRYPTO
+                    val accent = if (isToko) TvCyan else TvBlue
+
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSourceChange(source) },
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (isSelected) accent.copy(alpha = 0.12f) else TvCardBackground
+                        ),
+                        border = androidx.compose.foundation.BorderStroke(
+                            width = if (isSelected) 1.5.dp else 1.dp,
+                            color = if (isSelected) accent else TvBorder
                         )
+                    ) {
+                        Column(Modifier.padding(12.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = source.label.uppercase(),
+                                        color = if (isSelected) TvTextPrimary else TvTextSecondary,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Black
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    if (isToko) {
+                                        Box(
+                                            modifier = Modifier
+                                                .background(TvGreen.copy(alpha = 0.2f), RoundedCornerShape(4.dp))
+                                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                        ) {
+                                            Text("SSOT UTAMA", color = TvGreen, fontSize = 9.sp, fontWeight = FontWeight.Black)
+                                        }
+                                    } else {
+                                        Box(
+                                            modifier = Modifier
+                                                .background(TvBlue.copy(alpha = 0.2f), RoundedCornerShape(4.dp))
+                                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                        ) {
+                                            Text("IDR SPOT", color = TvBlue, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .size(18.dp)
+                                        .background(if (isSelected) accent else Color.Transparent, CircleShape)
+                                        .border(1.5.dp, if (isSelected) accent else TvTextSecondary.copy(alpha = 0.5f), CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (isSelected) {
+                                        Icon(
+                                            imageVector = Icons.Default.Check,
+                                            contentDescription = null,
+                                            tint = Color.Black,
+                                            modifier = Modifier.size(12.dp)
+                                        )
+                                    }
+                                }
+                            }
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                text = source.description,
+                                color = TvTextSecondary,
+                                fontSize = 10.sp,
+                                lineHeight = 14.sp
+                            )
+                        }
                     }
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = "Indodax Public API · Kline WebSocket · Pasar Kripto Indonesia (Pair IDR)",
-                        color = TvTextSecondary,
-                        fontSize = 10.sp
-                    )
                 }
             }
 

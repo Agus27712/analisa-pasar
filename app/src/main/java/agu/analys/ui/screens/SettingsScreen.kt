@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import agu.analys.config.AiProvider
+import agu.analys.config.MarketDataSource
 import agu.analys.config.StrategyMode
 import agu.analys.ui.components.security.SecurityPinDialog
 import agu.analys.ui.components.security.SetupRealApiDialog
@@ -274,8 +275,8 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                             icon = Icons.Default.TrendingUp,
                             iconTint = TvBlue,
                             iconBackground = TvBlue.copy(alpha = 0.15f),
-                            title = "Strategi & Analisis Sinyal",
-                            subtitle = "Mode ${strategyMode.name}",
+                            title = "Strategi & Sumber Pasar",
+                            subtitle = "Sumber: ${selectedSource.label} · Mode ${strategyMode.name}",
                             onClick = { activeCategory = SettingsCategory.TRADING }
                         )
                         HorizontalDivider(color = TvBorder.copy(alpha = 0.5f), thickness = 0.5.dp)
@@ -473,6 +474,8 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                         viewModel = viewModel,
                         strategyMode = strategyMode,
                         onStrategyModeChange = { strategyMode = it; saved = false },
+                        selectedSource = selectedSource,
+                        onSourceChange = { selectedSource = it; saved = false },
                         buyMakerFee = buyMakerFee,
                         onBuyMakerFeeChange = { buyMakerFee = it; saved = false },
                         buyTakerFee = buyTakerFee,
@@ -500,13 +503,14 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                         },
                         isRealBuyMode = isRealBuyMode,
                         hasPin = hasPin,
-                        hasApiCredentials = prefs.hasIndodaxCredentials(),
+                        hasApiCredentials = if (selectedSource == MarketDataSource.TOKOCRYPTO) prefs.hasTokocryptoCredentials() else prefs.hasIndodaxCredentials(),
                         isPinUnlocked = isPinUnlocked,
                         userPublicIp = userPublicIp ?: "Detecting...",
                         failedPinAttempts = failedPinAttempts,
                         onToggleRealBuyMode = {
+                            val hasCreds = if (selectedSource == MarketDataSource.TOKOCRYPTO) prefs.hasTokocryptoCredentials() else prefs.hasIndodaxCredentials()
                             if (!isRealBuyMode) {
-                                if (!hasPin || !prefs.hasIndodaxCredentials()) {
+                                if (!hasPin || !hasCreds) {
                                     showSetupRealApiDialog = true
                                 } else {
                                     pinDialogAction = PinDialogAction.TOGGLE_REAL_BUY
@@ -595,8 +599,9 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
     // DIALOGS
     if (showSetupRealApiDialog) {
         SetupRealApiDialog(
-            initialApiKey = prefs.indodaxApiKey,
-            initialSecretKey = prefs.indodaxSecretKey,
+            targetExchange = selectedSource,
+            initialApiKey = if (selectedSource == MarketDataSource.TOKOCRYPTO) prefs.tokocryptoApiKey else prefs.indodaxApiKey,
+            initialSecretKey = if (selectedSource == MarketDataSource.TOKOCRYPTO) prefs.tokocryptoSecretKey else prefs.indodaxSecretKey,
             userPublicIp = userPublicIp ?: "Detecting...",
             onCheckPublicIp = { viewModel.checkPublicIp() },
             onSaveAndActivate = { pin, apiKey, secretKey ->

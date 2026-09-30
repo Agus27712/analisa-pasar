@@ -11,6 +11,8 @@ import agu.analys.model.TradeStreamItem
 import agu.analys.model.TradingPair
 import agu.analys.service.IndodaxMarketService
 import agu.analys.service.IndodaxMarketWebSocket
+import agu.analys.service.TokocryptoMarketService
+import agu.analys.service.TokocryptoMarketWebSocket
 import agu.analys.util.AppPreferences
 import agu.analys.util.MarketDataCache
 import kotlinx.coroutines.CoroutineScope
@@ -109,15 +111,43 @@ class MarketDataCoordinator(
         }
     )
 
+    private val tokocryptoWebSocket = TokocryptoMarketWebSocket(
+        scope = scope,
+        onTick = { handleWebSocketTick(it) },
+        onCandle = { candle ->
+            engine.currentFormingVolume = candle.volume
+            engine.onCandleUpdate(candle)
+        },
+        onConnected = {
+            wsLive = true
+            lastLiveTickAt = System.currentTimeMillis()
+            _connectionState.value = MarketConnectionState.Connected
+            _isShowingCachedData.value = false
+            agu.analys.util.AppLogManager.market("TokocryptoWS", "✅ WebSocket tersambung ke server Tokocrypto/Binance untuk ${currentActivePair?.symbol}")
+        },
+        onDisconnected = {
+            wsLive = false
+            val recentRest = System.currentTimeMillis() - lastLiveTickAt < 12_000L
+            if (!recentRest && _currentTick.value == null) {
+                _connectionState.value = MarketConnectionState.ConnectionLost("Realtime Tokocrypto terputus. REST fallback...")
+            }
+            agu.analys.util.AppLogManager.warn("TokocryptoWS", "⚠️ WebSocket Tokocrypto terputus untuk ${currentActivePair?.symbol}. Beralih ke REST fallback.")
+        }
+    )
+
     private fun handleWebSocketTick(tick: MarketTick) {
         val currentPair = currentActivePair ?: return
         val selected = currentPair.symbol
         val cleanTick = tick.symbol.replace("/", "").replace("_", "").trim()
         val cleanSelected = selected.replace("/", "").replace("_", "").trim()
         val cleanIndodax = currentPair.effectiveIndodaxPair().replace("/", "").replace("_", "").trim()
+        val cleanTokocrypto = currentPair.effectiveTokocryptoPair().replace("/", "").replace("_", "").trim()
+        val cleanBinance = currentPair.effectiveBinanceSymbol().replace("/", "").replace("_", "").trim()
 
         if (!cleanTick.equals(cleanSelected, true) && 
-            !cleanTick.equals(cleanIndodax, true)) return
+            !cleanTick.equals(cleanIndodax, true) &&
+            !cleanTick.equals(cleanTokocrypto, true) &&
+            !cleanTick.equals(cleanBinance, true)) return
 
         lastLiveTickAt = System.currentTimeMillis()
         wsLive = true
@@ -190,11 +220,14 @@ class MarketDataCoordinator(
         currentActiveTimeframe = timeframe
         marketPollJob?.cancel()
         uiPriceThrottler.reset()
-        agu.analys.util.AppLogManager.market("MarketFeed", "Mulai streaming feed data untuk ${pair.symbol} [${timeframe.label}]")
+        val isToko = prefs.marketDataSource == MarketDataSource.TOKOCRYPTO
+        agu.analys.util.AppLogManager.market("MarketFeed", "Mulai streaming feed data untuk ${pair.symbol} [${timeframe.label}] via ${prefs.marketDataSource.label}")
 
         // 1. Prime harga instan dari dashboard cache jika ada
         val primeTick = _dashboardTicks.value[pair.symbol] 
             ?: _dashboardTicks.value[pair.effectiveIndodaxPair()]
+            ?: _dashboardTicks.value[pair.effectiveTokocryptoPair()]
+            ?: _dashboardTicks.value[pair.effectiveBinanceSymbol()]
             ?: _dashboardTicks.value[pair.symbol.uppercase()]
         if (primeTick != null && (_currentTick.value == null || _currentTick.value?.symbol != pair.symbol)) {
             val primed = primeTick.copy(symbol = pair.symbol)
@@ -202,7 +235,14 @@ class MarketDataCoordinator(
             uiPriceThrottler.emitImmediate(primed)
         }
 
-        indodaxWebSocket.start(pair.symbol)
+        if (isToko) {
+            indodaxWebSocket.stop(false)
+            tokocryptoWebSocket.start(pair.effectiveTokocryptoPair())
+        } else {
+            tokocryptoWebSocket.stop(false)
+            indodaxWebSocket.start(pair.symbol)
+        }
+
         marketPollJob = scope.launch {
             if (_currentTick.value == null) _connectionState.value = MarketConnectionState.Loading
             var failCount = 0
@@ -212,7 +252,11 @@ class MarketDataCoordinator(
             // 2. Immediate Parallel Bootstrap (REST Ticker & Candles Langsung dieksekusi detik pertama)
             launch {
                 val prev = _currentTick.value?.price ?: 0.0
-                val tick = IndodaxMarketService.fetchTicker(pair.effectiveIndodaxPair(), prevPrice = prev)
+                val tick = if (isToko) {
+                    TokocryptoMarketService.fetchTicker(pair.effectiveTokocryptoPair(), prevPrice = prev)
+                } else {
+                    IndodaxMarketService.fetchTicker(pair.effectiveIndodaxPair(), prevPrice = prev)
+                }
                 if (tick != null && tick.price > 0 && currentActivePair?.symbol == pair.symbol) {
                     lastLiveTickAt = System.currentTimeMillis()
                     _connectionState.value = MarketConnectionState.Connected
@@ -225,8 +269,14 @@ class MarketDataCoordinator(
 
             while (isActive) {
                 // Reconnect WS hanya jika benar-benar stale
-                if (indodaxWebSocket.isStale(30_000L)) {
-                    indodaxWebSocket.start(pair.symbol)
+                if (isToko) {
+                    if (tokocryptoWebSocket.isStale(30_000L)) {
+                        tokocryptoWebSocket.start(pair.effectiveTokocryptoPair())
+                    }
+                } else {
+                    if (indodaxWebSocket.isStale(30_000L)) {
+                        indodaxWebSocket.start(pair.symbol)
+                    }
                 }
 
                 val now = System.currentTimeMillis()
@@ -235,7 +285,11 @@ class MarketDataCoordinator(
                 // REST ticker hanya sebagai fallback jika WS tidak fresh
                 if (!wsFresh) {
                     val prev = _currentTick.value?.price ?: 0.0
-                    val tick = IndodaxMarketService.fetchTicker(pair.effectiveIndodaxPair(), prevPrice = prev)
+                    val tick = if (isToko) {
+                        TokocryptoMarketService.fetchTicker(pair.effectiveTokocryptoPair(), prevPrice = prev)
+                    } else {
+                        IndodaxMarketService.fetchTicker(pair.effectiveIndodaxPair(), prevPrice = prev)
+                    }
                     if (tick != null && tick.price > 0 && currentActivePair?.symbol == pair.symbol) {
                         failCount = 0
                         lastLiveTickAt = now
@@ -248,15 +302,19 @@ class MarketDataCoordinator(
                         failCount++
                         if (failCount >= 4 && now - lastLiveTickAt > 25_000L) {
                             _isShowingCachedData.value = true
-                            _connectionState.value = MarketConnectionState.ConnectionLost("Koneksi Indodax lemah. Pakai cache.")
+                            _connectionState.value = MarketConnectionState.ConnectionLost("Koneksi ${prefs.marketDataSource.label} lemah. Pakai cache.")
                         }
                     }
                 }
 
                 // Candle: 30 detik (cukup untuk chart)
                 if (now - lastCandleRefresh >= 30_000L) {
-                    val candles = IndodaxMarketService.fetchCandles(pair.effectiveIndodaxPair(), timeframe, 300)
-                    if (candles.size >= 30 && currentActivePair?.symbol == pair.symbol) {
+                    val candles = if (isToko) {
+                        TokocryptoMarketService.fetchCandles(pair.effectiveTokocryptoPair(), timeframe, 300)
+                    } else {
+                        IndodaxMarketService.fetchCandles(pair.effectiveIndodaxPair(), timeframe, 300)
+                    }
+                    if (candles.size >= 10 && currentActivePair?.symbol == pair.symbol) {
                         _recentCandles.value = candles
                         engine.resetForOffline(preserveState = true)
                         _currentTick.value?.let { engine.onTickUpdate(it) }
@@ -267,8 +325,14 @@ class MarketDataCoordinator(
 
                 // Orderbook + trades: 20 detik
                 if (now - lastDepthRefresh >= 20_000L) {
-                    val depth = async { IndodaxMarketService.fetchOrderBook(pair.effectiveIndodaxPair()) }
-                    val trades = async { IndodaxMarketService.fetchRecentTrades(pair.effectiveIndodaxPair()) }
+                    val depth = async {
+                        if (isToko) TokocryptoMarketService.fetchOrderBook(pair.effectiveTokocryptoPair())
+                        else IndodaxMarketService.fetchOrderBook(pair.effectiveIndodaxPair())
+                    }
+                    val trades = async {
+                        if (isToko) TokocryptoMarketService.fetchRecentTrades(pair.effectiveTokocryptoPair())
+                        else IndodaxMarketService.fetchRecentTrades(pair.effectiveIndodaxPair())
+                    }
                     val (bids, asks) = depth.await()
                     val newTrades = trades.await()
                     if (currentActivePair?.symbol == pair.symbol) {
@@ -302,7 +366,12 @@ class MarketDataCoordinator(
 
         // 2. Fetch candle terbaru untuk timeframe baru secara asynchronous
         scope.launch {
-            val candles = IndodaxMarketService.fetchCandles(pair.effectiveIndodaxPair(), timeframe, 300)
+            val isToko = prefs.marketDataSource == MarketDataSource.TOKOCRYPTO
+            val candles = if (isToko) {
+                TokocryptoMarketService.fetchCandles(pair.effectiveTokocryptoPair(), timeframe, 300)
+            } else {
+                IndodaxMarketService.fetchCandles(pair.effectiveIndodaxPair(), timeframe, 300)
+            }
             if (candles.isNotEmpty() && currentActivePair?.symbol == pair.symbol) {
                 _recentCandles.value = candles
                 engine.resetForOffline(preserveState = true)
@@ -317,6 +386,7 @@ class MarketDataCoordinator(
     fun stopPolling() {
         marketPollJob?.cancel()
         indodaxWebSocket.stop(false)
+        tokocryptoWebSocket.stop(false)
         uiPriceThrottler.reset()
     }
 

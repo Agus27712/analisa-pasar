@@ -17,7 +17,19 @@ data class MarketStructureSnapshot(
     val supportDistancePct: Double?,
     val resistanceDistancePct: Double?,
     val structureExplanation: String,
-    val dataEnough: Boolean
+    val dataEnough: Boolean,
+    val hasHigherHighsHigherLows: Boolean = false,
+    val hasLowerHighsLowerLows: Boolean = false,
+    val isSidewaysRanging: Boolean = false,
+    val supportTouchesCount: Int = 1,
+    val resistanceTouchesCount: Int = 1,
+    val breakoutAndRetestStatus: String = "Belum Ada Breakout",
+    val isBreakoutAndRetestValid: Boolean = false,
+    val liquiditySweepDetected: Boolean = false,
+    val ema13Value: Double = 0.0,
+    val ema21Value: Double = 0.0,
+    val isEmaBounceValid: Boolean = false,
+    val akademiCryptoScalpingGrade: String = "Neutral"
 )
 
 data class MicroStructureSnapshot(
@@ -138,16 +150,17 @@ object MarketStructureAnalyzer {
         val last = recent.last().close
         val highs = swingHighs.takeLast(2)
         val lows = swingLows.takeLast(2)
+
+        val hasHHHL = highs.size >= 2 && lows.size >= 2 && highs[1] > highs[0] && lows[1] > lows[0]
+        val hasLHLL = highs.size >= 2 && lows.size >= 2 && highs[1] < highs[0] && lows[1] < lows[0]
+        val isSideways = !hasHHHL && !hasLHLL
+
         val trend = when {
-            highs.size >= 2 && lows.size >= 2 && highs[1] > highs[0] && lows[1] > lows[0] -> "Bullish structure"
-            highs.size >= 2 && lows.size >= 2 && highs[1] < highs[0] && lows[1] < lows[0] -> "Bearish structure"
-            else -> "Range / transition"
+            hasHHHL -> "Uptrend (HH + HL)"
+            hasLHLL -> "Downtrend (LH + LL)"
+            else -> "Sideways / Ranging"
         }
 
-        // Prefer genuine 5-candle swings. If one side has no swing yet, use the
-        // nearest observed extreme from the same real candle window as an area
-        // of observation. This avoids a useless "level unavailable" card while
-        // never inventing a price.
         val support = swingLows.filter { it <= last }.maxOrNull()
             ?: swingLows.minOrNull()
             ?: recent.dropLast(1).minOfOrNull { it.low }
@@ -158,16 +171,62 @@ object MarketStructureAnalyzer {
         val supportDistance = support?.let { abs(last - it) / last * 100.0 }
         val resistanceDistance = resistance?.let { abs(it - last) / last * 100.0 }
 
-        val trendExplanation = when (trend) {
-            "Bullish structure" -> "Higher High + Higher Low: pembeli sedang mempertahankan struktur naik. Ini bukan sinyal BUY otomatis."
-            "Bearish structure" -> "Lower High + Lower Low: penjual sedang mempertahankan struktur turun. Ini bukan sinyal SELL otomatis."
-            else -> "Swing belum membentuk rangkaian HH/HL atau LH/LL yang konsisten. Anggap sebagai area transisi/range."
+        val supportTouches = support?.let { sup ->
+            recent.count { abs(it.low - sup) / sup <= 0.008 }
+        } ?: 1
+
+        val resistanceTouches = resistance?.let { res ->
+            recent.count { abs(it.high - res) / res <= 0.008 }
+        } ?: 1
+
+        // EMA 13 & 21 calculation
+        val closes = DoubleArray(candles.size) { candles[it].close }
+        val ema13 = agu.analys.engine.indicators.IndicatorMath.ema(closes, minOf(13, closes.size))
+        val ema21 = agu.analys.engine.indicators.IndicatorMath.ema(closes, minOf(21, closes.size))
+        val isEmaBounce = last >= ema13 * 0.995 && ema13 >= ema21 * 0.998
+
+        // Liquidity Sweep Check: recent wick pierced below support/swing low but closed above
+        val checkWindow = recent.takeLast(4)
+        val liquiditySweep = support?.let { sup ->
+            checkWindow.any { it.low < sup * 0.998 && it.close >= sup }
+        } ?: false
+
+        // Breakout & Retest Check
+        val hadPreviousBreakout = resistance?.let { res ->
+            recent.dropLast(3).any { it.high > res }
+        } ?: false
+        val isRetestingNow = resistance?.let { res ->
+            abs(last - res) / res <= 0.015 && last >= res * 0.993
+        } ?: false
+        val isBreakoutRetestValid = hadPreviousBreakout && isRetestingNow && isEmaBounce
+
+        val breakoutStatus = when {
+            isBreakoutRetestValid -> "Breakout & Retest Valid (S/R Flip + EMA Bounce)"
+            hadPreviousBreakout && isRetestingNow -> "Sedang Retest Resistance (Tunggu Konfirmasi EMA)"
+            isSideways -> "Sideways Range (Hati-hati False Breakout)"
+            else -> "Belum Ada Breakout"
         }
+
+        val scalpingGrade = when {
+            isBreakoutRetestValid && liquiditySweep -> "SANGAT PRESIFIK (Sweep + Retest)"
+            isBreakoutRetestValid -> "TINNGI (Breakout & Retest EMA)"
+            hasHHHL && isEmaBounce -> "SEDANG (Uptrend EMA Bounce)"
+            isSideways -> "WASPADA (Sideways / False Breakout)"
+            hasLHLL -> "BAHAYA (Downtrend Structure)"
+            else -> "NETRAL"
+        }
+
+        val trendExplanation = when {
+            hasHHHL -> "Uptrend (Higher High + Higher Low): Pembeli memegang kendali. Cari entry saat Breakout & Retest atau Pantulan EMA 13/21."
+            hasLHLL -> "Downtrend (Lower High + Lower Low): Penjual memegang kendali. Hindari posisi BUY spot kecuali terjadi Liquidity Sweep kuat."
+            else -> "Sideways / Ranging: Harga bergerak datar. Menurut Akademi Crypto, area ini sangat rawan False Breakout untuk breakout trader. Disarankan Range Trading atau tunggu Breakout & Retest valid."
+        }
+
         val usedFallback = swingLows.isEmpty() || swingHighs.isEmpty()
         val structureExplanation = if (usedFallback) {
-            "Swing lengkap belum terbentuk di semua sisi; level memakai ekstrem candle terbaru sebagai area observasi."
+            "Swing belum lengkap; S/R menggunakan harga ekstrem candle terbaru."
         } else {
-            "Support/resistance diambil dari swing candle terbaru. Level adalah area observasi, bukan garis harga yang pasti."
+            "Support (Disentuh ${supportTouches}x) & Resistance (Disentuh ${resistanceTouches}x). Pembelian di Support (Supply/Demand) memiliki Risk-to-Reward optimal."
         }
 
         return MarketStructureSnapshot(
@@ -180,7 +239,19 @@ object MarketStructureAnalyzer {
             supportDistancePct = supportDistance,
             resistanceDistancePct = resistanceDistance,
             structureExplanation = structureExplanation,
-            dataEnough = true
+            dataEnough = true,
+            hasHigherHighsHigherLows = hasHHHL,
+            hasLowerHighsLowerLows = hasLHLL,
+            isSidewaysRanging = isSideways,
+            supportTouchesCount = supportTouches,
+            resistanceTouchesCount = resistanceTouches,
+            breakoutAndRetestStatus = breakoutStatus,
+            isBreakoutAndRetestValid = isBreakoutRetestValid,
+            liquiditySweepDetected = liquiditySweep,
+            ema13Value = ema13,
+            ema21Value = ema21,
+            isEmaBounceValid = isEmaBounce,
+            akademiCryptoScalpingGrade = scalpingGrade
         )
     }
 }

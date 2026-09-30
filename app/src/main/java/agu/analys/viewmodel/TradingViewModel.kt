@@ -301,7 +301,21 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     // 4. MAIN DELEGATED LOGIC METHODS
     // ═════════════════════════════════════════════════════════════════════════
 
-    fun setMarketDataSource(source: MarketDataSource) = settingsViewModel.setMarketDataSource(source)
+    fun setMarketDataSource(source: MarketDataSource) {
+        settingsViewModel.setMarketDataSource(source)
+        marketDataCoordinator.restoreFromCache(source)
+        marketViewModel.restoreFromCache(source)
+        val popular = TradingPair.popularPairsForSource(source)
+        val first = popular.firstOrNull() ?: TradingPair.fromCustomSymbol("BTC", source.defaultQuoteAsset)
+        selectPair(first)
+        refreshWorthCoinsFromMarket()
+        marketDataCoordinator.startMarketPolling(first, selectedTimeframe.value)
+        if (source == MarketDataSource.TOKOCRYPTO && prefs.hasTokocryptoCredentials()) {
+            fetchRealBalance()
+        } else if (source == MarketDataSource.INDODAX && prefs.hasIndodaxCredentials()) {
+            fetchRealBalance()
+        }
+    }
 
     fun setStrategyMode(mode: StrategyMode) {
         _strategyMode.value = mode

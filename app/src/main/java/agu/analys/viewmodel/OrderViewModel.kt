@@ -127,8 +127,13 @@ class OrderViewModel(
 
     fun saveRealCredentialsAndPin(pin: String, apiKey: String, secretKey: String) {
         prefs.setSecurityPin(pin)
-        prefs.indodaxApiKey = apiKey
-        prefs.indodaxSecretKey = secretKey
+        if (prefs.marketDataSource == agu.analys.config.MarketDataSource.TOKOCRYPTO) {
+            prefs.tokocryptoApiKey = apiKey
+            prefs.tokocryptoSecretKey = secretKey
+        } else {
+            prefs.indodaxApiKey = apiKey
+            prefs.indodaxSecretKey = secretKey
+        }
         prefs.isRealBuyMode = true
         realCoordinator.verifyPin(pin)
         realCoordinator.fetchRealBalance()

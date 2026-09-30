@@ -100,12 +100,15 @@ class AppPreferences(context: Context) {
     fun hasSecurityPin(): Boolean = securityPinHash.isNotBlank()
 
     fun hasIndodaxCredentials(): Boolean = indodaxApiKey.isNotBlank() && indodaxSecretKey.isNotBlank()
+    fun hasTokocryptoCredentials(): Boolean = tokocryptoApiKey.isNotBlank() && tokocryptoSecretKey.isNotBlank()
 
     fun wipeAllRealSecurityData() {
         prefs.edit()
             .remove(KEY_SECURITY_PIN_HASH)
             .remove(KEY_INDODAX_API_KEY)
             .remove(KEY_INDODAX_SECRET_KEY)
+            .remove(KEY_TOKOCRYPTO_API_KEY)
+            .remove(KEY_TOKOCRYPTO_SECRET_KEY)
             .remove(KEY_RECENT_HISTORY_BASES)
             .remove(KEY_PIN_RESET_REQUIRED)
             .putBoolean(KEY_REAL_BUY_MODE, false)
@@ -124,6 +127,14 @@ class AppPreferences(context: Context) {
     var indodaxSecretKey: String
         get() = prefs.getString(KEY_INDODAX_SECRET_KEY, "").orEmpty()
         set(value) = prefs.edit().putString(KEY_INDODAX_SECRET_KEY, value.trim()).apply()
+
+    var tokocryptoApiKey: String
+        get() = prefs.getString(KEY_TOKOCRYPTO_API_KEY, "").orEmpty()
+        set(value) = prefs.edit().putString(KEY_TOKOCRYPTO_API_KEY, value.trim()).apply()
+
+    var tokocryptoSecretKey: String
+        get() = prefs.getString(KEY_TOKOCRYPTO_SECRET_KEY, "").orEmpty()
+        set(value) = prefs.edit().putString(KEY_TOKOCRYPTO_SECRET_KEY, value.trim()).apply()
 
     /**
      * Base asset (btc, sol, xrp, …) yang pernah punya saldo / di-trade.
@@ -162,7 +173,7 @@ class AppPreferences(context: Context) {
         set(value) = prefs.edit().putString(KEY_AI_PROVIDER, value.name).apply()
 
     var marketDataSource: MarketDataSource
-        get() = runCatching { MarketDataSource.valueOf(prefs.getString(KEY_MARKET_SOURCE, MarketDataSource.INDODAX.name).orEmpty()) }.getOrDefault(MarketDataSource.INDODAX)
+        get() = runCatching { MarketDataSource.valueOf(prefs.getString(KEY_MARKET_SOURCE, MarketDataSource.TOKOCRYPTO.name).orEmpty()) }.getOrDefault(MarketDataSource.TOKOCRYPTO)
         set(value) = prefs.edit().putString(KEY_MARKET_SOURCE, value.name).apply()
 
     var isScalpingMode: Boolean
@@ -274,6 +285,8 @@ class AppPreferences(context: Context) {
             .remove(KEY_GEMINI)
             .remove(KEY_INDODAX_API_KEY)
             .remove(KEY_INDODAX_SECRET_KEY)
+            .remove(KEY_TOKOCRYPTO_API_KEY)
+            .remove(KEY_TOKOCRYPTO_SECRET_KEY)
             .remove(KEY_UPDATE_GH_TOKEN)
             .apply()
     }
@@ -440,6 +453,8 @@ class AppPreferences(context: Context) {
         private const val KEY_FAILED_PIN_ATTEMPTS = "failed_pin_attempts_count"
         private const val KEY_INDODAX_API_KEY = "indodax_encrypted_api_key"
         private const val KEY_INDODAX_SECRET_KEY = "indodax_encrypted_secret_key"
+        private const val KEY_TOKOCRYPTO_API_KEY = "tokocrypto_encrypted_api_key"
+        private const val KEY_TOKOCRYPTO_SECRET_KEY = "tokocrypto_encrypted_secret_key"
         private const val KEY_RECENT_HISTORY_BASES = "recent_history_bases_v1"
         private const val KEY_INSTALLATION_SALT = "sec_installation_salt_v2"
         private const val KEY_PIN_RESET_REQUIRED = "sec_pin_reset_required"

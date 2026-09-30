@@ -31,10 +31,12 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import agu.analys.config.MarketDataSource
 import agu.analys.ui.theme.*
 
 @Composable
 fun SetupRealApiDialog(
+    targetExchange: MarketDataSource = MarketDataSource.TOKOCRYPTO,
     initialApiKey: String = "",
     initialSecretKey: String = "",
     userPublicIp: String = "",
@@ -75,7 +77,7 @@ fun SetupRealApiDialog(
                 }
                 Spacer(Modifier.height(10.dp))
                 Text(
-                    text = "AKTIVASI MODE REAL (INDODAX)",
+                    text = "AKTIVASI MODE REAL (${targetExchange.label.uppercase()})",
                     color = TvTextPrimary,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Black,
@@ -83,7 +85,7 @@ fun SetupRealApiDialog(
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = "Atur PIN keamanan dan masukkan kredensial API Indodax. Setelah disimpan, form ini otomatis disembunyikan demi privasi Anda.",
+                    text = "Atur PIN keamanan dan masukkan kredensial API ${targetExchange.label}. Setelah disimpan, form ini otomatis disembunyikan demi privasi Anda.",
                     color = TvTextSecondary,
                     fontSize = 11.sp,
                     lineHeight = 15.sp

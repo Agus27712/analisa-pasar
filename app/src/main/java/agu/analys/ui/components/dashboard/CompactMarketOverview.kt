@@ -147,7 +147,7 @@ fun DashboardMockupHeader(
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Text(
-                    text = "Watchlist Indodax IDR",
+                    text = "Watchlist ${marketDataSource.label} ${marketDataSource.defaultQuoteAsset}",
                     color = TvTextPrimary,
                     fontSize = 16.5.sp,
                     fontWeight = FontWeight.Black,

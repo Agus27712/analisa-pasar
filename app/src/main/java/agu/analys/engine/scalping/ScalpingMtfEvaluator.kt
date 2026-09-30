@@ -118,11 +118,16 @@ object ScalpingMtfEvaluator {
 
         // Indicators for state
         val m1Closes = DoubleArray(m1Candles.size) { m1Candles[it].close }
-        val ema20 = IndicatorMath.ema(m1Closes, 20)
-        val ema50 = IndicatorMath.ema(m1Closes, 50)
+        val ema13 = IndicatorMath.ema(m1Closes, minOf(13, m1Closes.size))
+        val ema21 = IndicatorMath.ema(m1Closes, minOf(21, m1Closes.size))
+        val ema20 = IndicatorMath.ema(m1Closes, minOf(20, m1Closes.size))
+        val ema50 = IndicatorMath.ema(m1Closes, minOf(50, m1Closes.size))
         val macd = IndicatorMath.macdSeries(m1Closes, 12, 26, 9).last()
 
-        // 5. Risk / Reward Calculation (Fase 6: Aljabar Presisi Net R:R >= 1.05)
+        val isEma13And21Aligned = ema13 >= ema21 * 0.998
+        val isEma13Bounce = price >= ema13 * 0.995 && price <= ema13 * 1.015
+
+        // 5. Risk / Reward Calculation (Min Net R:R 1:2.0 according to Akademi Crypto Strategy)
         val stopPct = (if (isAggressive) volPct * 1.2 else volPct * 0.8).coerceIn(0.5, 3.0)
         val sl = price * (1.0 - (stopPct / 100.0))
         
@@ -141,7 +146,7 @@ object ScalpingMtfEvaluator {
         // --- 2. WATERFALL CHECKPOINTS ---
         val step1Ok = !isDangerous && hasRoomToGrow
         val step2Ok = step1Ok && isOrderBookValid
-        val isVwapOrReclaimValid = price > vwap1M || isVSABreakout || (rsi1M in 38.0..68.0 && last1M.close > last1M.open && last1M.close >= (vwap1M * 0.9985))
+        val isVwapOrReclaimValid = price > vwap1M || isVSABreakout || (rsi1M in 38.0..68.0 && last1M.close > last1M.open && last1M.close >= (vwap1M * 0.9985)) || isEma13Bounce
         val step3Ok = step2Ok && isVwapOrReclaimValid
         val step4Ok = step3Ok && rrOk
 
@@ -154,7 +159,7 @@ object ScalpingMtfEvaluator {
         }
 
         val ready = step4Ok
-        val isTrendAndMacdAligned = ema20 > ema50 && macd.first > macd.second
+        val isTrendAndMacdAligned = ema13 > ema21 && macd.first > macd.second
         val strong = ready && (
             isVSABreakout || 
             buyPressure >= 1.25 || 
@@ -167,6 +172,7 @@ object ScalpingMtfEvaluator {
         if (isDangerousNoise) reasons.add("⚠️ Tertahan: Volatilitas pasar sedang liar (Noise tinggi).")
         if (isOverbought) reasons.add("⚠️ Tertahan: Harga koin sedang terlalu tinggi (Jenuh Beli/Overbought RSI 1M ${fmt(rsi1M)}).")
         if (!hasRoomToGrow) reasons.add("⚠️ Tertahan: Harga koin terlalu dekat resistance M15 (Ruang naik sempit).")
+        reasons.add("EMA 13/21: ${if (isEma13And21Aligned) "Uptrend Bounce (EMA13 > EMA21)" else "Cross / Neutral"}")
         reasons.add("VWAP 1M: ${fmt(vwap1M)}")
         if (isOrderBookEmpty) {
             reasons.add("Tekanan Beli: Diabaikan (Orderbook Kosong)")
@@ -174,6 +180,7 @@ object ScalpingMtfEvaluator {
             reasons.add("Tekanan Beli (Orderbook): ${fmt(buyPressure)}x")
         }
         if (isVSABreakout) reasons.add("VSA Breakout Terdeteksi! (Vol: ${fmt(formingVolValid / avgVol1M)}x)")
+        reasons.add("Risk Management: Gunakan alokasi 3-5% dari modal portofolio (Aturan Akademi Crypto).")
 
         when {
             strong -> reasons.add(0, "STRONG ENTRY: VSA/OB kuat + Net R:R 1:${fmt(feeResult.netRr)}")

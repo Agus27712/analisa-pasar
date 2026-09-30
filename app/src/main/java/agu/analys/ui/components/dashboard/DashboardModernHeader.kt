@@ -8,10 +8,12 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.ElectricBolt
 import androidx.compose.material.icons.filled.Refresh
@@ -28,19 +30,21 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import agu.analys.config.MarketDataSource
 import agu.analys.ui.theme.*
 
 /**
  * Modern Header Dashboard:
- * - Kiri: Logo petir cyan + "Indodax Reader"
+ * - Kiri: Exchange Selector (Tokocrypto SSOT / Indodax) dengan dropdown switcher
  * - Kanan: Indikator status Live/Offline + Tombol Refresh + Tombol Diagnostik Log (Terminal)
- * Pilihan Mode Strategi dan Sensitivitas dipusatkan di menu Settings.
  */
 @Composable
 fun DashboardModernHeader(
+    marketDataSource: MarketDataSource = MarketDataSource.TOKOCRYPTO,
     isConnected: Boolean,
     isRefreshing: Boolean = false,
     onRefresh: () -> Unit = {},
+    onSelectDataSource: () -> Unit = {},
     onOpenLogcat: () -> Unit,
     onOpenSignalLogs: () -> Unit = {},
     modifier: Modifier = Modifier
@@ -67,32 +71,52 @@ fun DashboardModernHeader(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        // Sisi Kiri: Logo + Judul
+        // Sisi Kiri: Selector Sumber Pasar (Tokocrypto / Indodax)
         Row(
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .clickable { onSelectDataSource() }
+                .padding(vertical = 2.dp)
         ) {
             Box(
                 modifier = Modifier
-                    .size(28.dp)
+                    .size(30.dp)
                     .clip(RoundedCornerShape(8.dp))
-                    .background(TvCyan.copy(alpha = 0.15f))
-                    .border(1.dp, TvCyan.copy(alpha = 0.4f), RoundedCornerShape(8.dp)),
+                    .background((if (marketDataSource == MarketDataSource.TOKOCRYPTO) TvCyan else TvBlue).copy(alpha = 0.15f))
+                    .border(1.dp, (if (marketDataSource == MarketDataSource.TOKOCRYPTO) TvCyan else TvBlue).copy(alpha = 0.4f), RoundedCornerShape(8.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = Icons.Default.ElectricBolt,
                     contentDescription = null,
-                    tint = TvCyan,
+                    tint = if (marketDataSource == MarketDataSource.TOKOCRYPTO) TvCyan else TvBlue,
                     modifier = Modifier.size(16.dp)
                 )
             }
             Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = "Indodax Reader",
-                color = TvTextPrimary,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold
-            )
+            Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = marketDataSource.label,
+                        color = TvTextPrimary,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Black
+                    )
+                    Spacer(Modifier.width(2.dp))
+                    Icon(
+                        imageVector = Icons.Default.ArrowDropDown,
+                        contentDescription = "Pilih Sumber Pasar",
+                        tint = TvCyan,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                Text(
+                    text = if (marketDataSource == MarketDataSource.TOKOCRYPTO) "SSOT · Pair BIDR/USDT" else "Pasar IDR Spot",
+                    color = TvTextSecondary,
+                    fontSize = 9.5.sp
+                )
+            }
         }
 
         // Sisi Kanan: Status Live + Tombol Refresh + Tombol Logcat Diagnostik

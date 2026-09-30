@@ -337,7 +337,7 @@ fun TradingViewModel.initSubscriptionsAndPolling() {
         }
     }
 
-    marketDataCoordinator.restoreFromCache(MarketDataSource.INDODAX)
+    marketDataCoordinator.restoreFromCache(prefs.marketDataSource)
     val initialPair = TradingPair.popularPairsForSource(prefs.marketDataSource).first()
     selectPair(initialPair)
     refreshWorthCoinsFromMarket()
@@ -347,7 +347,7 @@ fun TradingViewModel.initSubscriptionsAndPolling() {
     listenToEngineSignals()
     checkPublicIp()
 
-    if (prefs.hasIndodaxCredentials()) {
+    if (prefs.hasIndodaxCredentials() || prefs.hasTokocryptoCredentials()) {
         syncRealBalancesToPositionStore()
     }
 

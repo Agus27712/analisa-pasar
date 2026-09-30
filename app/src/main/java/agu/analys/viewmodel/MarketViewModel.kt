@@ -14,6 +14,7 @@ import agu.analys.model.Timeframe
 import agu.analys.model.TradingPair
 import agu.analys.model.WorthCoinInfo
 import agu.analys.service.IndodaxMarketService
+import agu.analys.service.TokocryptoMarketService
 import agu.analys.util.AppPreferences
 import agu.analys.util.MarketDataCache
 import agu.analys.util.PriceFormatter
@@ -89,7 +90,7 @@ class MarketViewModel(application: Application) : AndroidViewModel(application) 
     private var lastLiveTickAt = 0L
 
     init {
-        restoreFromCache(MarketDataSource.INDODAX)
+        restoreFromCache(prefs.marketDataSource)
     }
 
     fun restoreFromCache(source: MarketDataSource) {
@@ -193,20 +194,36 @@ class MarketViewModel(application: Application) : AndroidViewModel(application) 
     fun refreshWorthCoinsFromMarket(watchlistSymbols: Set<String> = emptySet(), favoritesSymbols: Set<String> = emptySet(), activeStrategy: StrategyMode = StrategyMode.SCALPING) {
         viewModelScope.launch {
             _isRefreshing.value = true
+            val currentSource = prefs.marketDataSource
+            val isToko = currentSource == MarketDataSource.TOKOCRYPTO
+            val defaultQuote = currentSource.defaultQuoteAsset
             try {
                 val scalpingMode = activeStrategy == StrategyMode.SCALPING
-                val rankingsJob = async { IndodaxMarketService.fetchMarketRankings(35, true) }
-                val pairs = (TradingPair.POPULAR_INDODAX_PAIRS + watchlistSymbols.map {
-                    TradingPair.fromCustomSymbol(it, "IDR")
+                val popular = TradingPair.popularPairsForSource(currentSource)
+                val pairs = (popular + watchlistSymbols.map {
+                    TradingPair.fromCustomSymbol(it, defaultQuote)
                 }).distinctBy { it.symbol }
-                val ticksJob = async { IndodaxMarketService.fetchTickers(pairs.map { it.effectiveIndodaxPair() }) }
 
-                val rankings = rankingsJob.await()
-                val ticks = ticksJob.await()
-
-                val gainers = rankings.gainers
-                val losers = rankings.losers
-                val topVol = rankings.topVolume
+                val (gainers, losers, topVol, allScanned, combinedTicks) = if (isToko) {
+                    val rankingsJob = async { TokocryptoMarketService.fetchMarketRankings(35) }
+                    val ticksJob = async { TokocryptoMarketService.fetchTickers(pairs.map { it.effectiveTokocryptoPair() }) }
+                    val rankings = rankingsJob.await()
+                    val ticks = ticksJob.await()
+                    val scanned = (rankings.gainers + rankings.losers + rankings.topVolume).distinctBy { it.symbol }
+                    val ticksMap = ticks.associateBy { it.symbol } + rankings.allTicks
+                    val g = rankings.gainers
+                    val l = rankings.losers
+                    val tv = rankings.topVolume
+                    Tuple5(g, l, tv, scanned, ticksMap)
+                } else {
+                    val rankingsJob = async { IndodaxMarketService.fetchMarketRankings(35, true) }
+                    val ticksJob = async { IndodaxMarketService.fetchTickers(pairs.map { it.effectiveIndodaxPair() }) }
+                    val rankings = rankingsJob.await()
+                    val ticks = ticksJob.await()
+                    val scanned = (rankings.gainers + rankings.losers + rankings.topVolume).distinctBy { it.symbol }
+                    val ticksMap = ticks.associateBy { it.symbol } + rankings.allTicks
+                    Tuple5(rankings.gainers, rankings.losers, rankings.topVolume, scanned, ticksMap)
+                }
 
                 if (gainers.isNotEmpty()) {
                     _gainersCoins.value = gainers
@@ -219,22 +236,20 @@ class MarketViewModel(application: Application) : AndroidViewModel(application) 
                     _topVolumeCoins.value = topVol
                 }
 
-                if (ticks.isEmpty() && rankings.allTicks.isEmpty()) {
+                if (combinedTicks.isEmpty()) {
                     if (_dashboardTicks.value.isEmpty() && _hotCoins.value.isEmpty()) {
-                        markMarketOffline("Tidak ada respons market dari Indodax.")
+                        markMarketOffline("Tidak ada respons market dari ${currentSource.label}.")
                     } else {
                         _isShowingCachedData.value = true
                     }
                     return@launch
                 }
 
-                val allScanned = (gainers + losers + topVol).distinctBy { it.symbol }
-                val combinedTicks = ticks.associateBy { it.symbol } + rankings.allTicks
                 _dashboardTicks.value = combinedTicks
 
                 try {
-                    val btcTick = combinedTicks["BTCIDR"] ?: combinedTicks["btc_idr"] ?: combinedTicks["BTC"]
-                    val usdtTick = combinedTicks["USDTIDR"] ?: combinedTicks["usdt_idr"] ?: combinedTicks["USDT"]
+                    val btcTick = combinedTicks["BTCBIDR"] ?: combinedTicks["BTCIDR"] ?: combinedTicks["btc_idr"] ?: combinedTicks["BTC"]
+                    val usdtTick = combinedTicks["USDTBIDR"] ?: combinedTicks["USDTIDR"] ?: combinedTicks["usdt_idr"] ?: combinedTicks["USDT"]
                     if (btcTick != null && btcTick.price > 0) {
                         agu.analys.engine.global.GlobalContextManager.updateFallbackFromIndodax(
                             priceIdr = btcTick.price,
@@ -255,20 +270,36 @@ class MarketViewModel(application: Application) : AndroidViewModel(application) 
                 lastLiveTickAt = System.currentTimeMillis()
                 _connectionState.value = MarketConnectionState.Connected
                 _isShowingCachedData.value = false
-                marketCache.saveDashboardTicks(MarketDataSource.INDODAX, combinedTicks)
+                marketCache.saveDashboardTicks(currentSource, combinedTicks)
 
-                val evaluatedPairs = (allScanned.map { TradingPair.fromCustomSymbol(it.symbol, "IDR") } + pairs).distinctBy { it.symbol }
+                val evaluatedPairs = (allScanned.map { TradingPair.fromCustomSymbol(it.symbol, defaultQuote) } + pairs).distinctBy { it.symbol }
                 val worth = evaluatedPairs.mapNotNull { pair ->
-                    val tick = combinedTicks[pair.symbol] ?: return@mapNotNull null
+                    val tick = combinedTicks[pair.symbol] 
+                        ?: combinedTicks[pair.effectiveTokocryptoPair()]
+                        ?: combinedTicks[pair.effectiveBinanceSymbol()]
+                        ?: combinedTicks[pair.effectiveIndodaxPair()]
+                        ?: return@mapNotNull null
                     val isUserExplicit = favoritesSymbols.contains(pair.symbol) || watchlistSymbols.contains(pair.symbol)
-                    if (!IndodaxMarketService.isSafeTradableAsset(
-                        price = tick.price,
-                        volume24h = tick.volume24h,
-                        high24h = tick.high24h,
-                        low24h = tick.low24h,
-                        isIdrPair = pair.quoteAsset.equals("IDR", ignoreCase = true),
-                        isExplicitlyFavored = isUserExplicit
-                    )) {
+                    val isSafe = if (isToko) {
+                        TokocryptoMarketService.isSafeTradableAsset(
+                            price = tick.price,
+                            volume24h = tick.volume24h,
+                            high24h = tick.high24h,
+                            low24h = tick.low24h,
+                            isBidrPair = pair.quoteAsset.equals("BIDR", ignoreCase = true) || pair.quoteAsset.equals("IDR", ignoreCase = true),
+                            isExplicitlyFavored = isUserExplicit
+                        )
+                    } else {
+                        IndodaxMarketService.isSafeTradableAsset(
+                            price = tick.price,
+                            volume24h = tick.volume24h,
+                            high24h = tick.high24h,
+                            low24h = tick.low24h,
+                            isIdrPair = pair.quoteAsset.equals("IDR", ignoreCase = true),
+                            isExplicitlyFavored = isUserExplicit
+                        )
+                    }
+                    if (!isSafe) {
                         return@mapNotNull null
                     }
                     val rangePct = if (tick.low24h > 0) ((tick.high24h - tick.low24h) / tick.low24h) * 100.0 else 0.0
@@ -304,13 +335,16 @@ class MarketViewModel(application: Application) : AndroidViewModel(application) 
                     else compareByDescending { it.worthScore }
                 )
                 _worthCoins.value = worth
-                marketCache.saveWorthCoins(MarketDataSource.INDODAX, worth)
+                marketCache.saveWorthCoins(currentSource, worth)
                 recalculateDashboardBadges(watchlistSymbols, favoritesSymbols, activeStrategy)
             } finally {
                 _isRefreshing.value = false
             }
         }
     }
+
+    private data class Tuple5<A, B, C, D, E>(val a: A, val b: B, val c: C, val d: D, val e: E)
+
 
     fun recalculateDashboardBadges(watchlistSymbols: Set<String> = emptySet(), favoritesSymbols: Set<String> = emptySet(), activeStrategy: StrategyMode = StrategyMode.SCALPING) {
         viewModelScope.launch(Dispatchers.Default) {

@@ -1,10 +1,12 @@
 package agu.analys.viewmodel
 
+import agu.analys.config.MarketDataSource
 import agu.analys.database.AppDatabase
 import agu.analys.database.RealOpenOrderEntity
 import agu.analys.database.RealTradeEntity
 import agu.analys.database.TradeHistoryRecordEntity
 import agu.analys.service.IndodaxTradeApiV2
+import agu.analys.service.TokocryptoTradeApi
 import agu.analys.util.AppPreferences
 import agu.analys.util.PriceFormatter
 import kotlinx.coroutines.CoroutineScope
@@ -145,10 +147,13 @@ class RealTradeCoordinator(
     }
 
     fun fetchRealBalance() {
-        val apiKey = prefs.indodaxApiKey
-        val secretKey = prefs.indodaxSecretKey
+        val isToko = prefs.marketDataSource == MarketDataSource.TOKOCRYPTO
+        val apiKey = if (isToko) prefs.tokocryptoApiKey else prefs.indodaxApiKey
+        val secretKey = if (isToko) prefs.tokocryptoSecretKey else prefs.indodaxSecretKey
+        val sourceLabel = prefs.marketDataSource.label
+
         if (apiKey.isBlank() || secretKey.isBlank()) {
-            _realTradeStatus.value = "Kredensial API INDODAX belum diisi."
+            _realTradeStatus.value = "Kredensial API $sourceLabel belum diisi."
             return
         }
         if (_isFetchingRealBalance.value) return
@@ -165,8 +170,12 @@ class RealTradeCoordinator(
         scope.launch(kotlinx.coroutines.Dispatchers.IO) {
             _isFetchingRealBalance.value = true
             lastFetchTimeMs = now
-            _realTradeStatus.value = "Memperbarui saldo INDODAX..."
-            val (balances, message) = IndodaxTradeApiV2.getAccount(apiKey, secretKey)
+            _realTradeStatus.value = "Memperbarui saldo $sourceLabel..."
+            val (balances, message) = if (isToko) {
+                TokocryptoTradeApi.getAccount(apiKey, secretKey)
+            } else {
+                IndodaxTradeApiV2.getAccount(apiKey, secretKey)
+            }
             if (looksLikeRateLimit(message)) {
                 markRateLimited(message); _isFetchingRealBalance.value = false; return@launch
             }
@@ -176,10 +185,12 @@ class RealTradeCoordinator(
                 _realFreeBalance.value = balances.free
                 _realLockedBalance.value = balances.locked
                 prefs.saveRealBalance(balances.total)
-                delay(INTER_REQUEST_DELAY_MS)
-                if (fetchRealOpenOrdersSafe(apiKey, secretKey, balances)) {
+                if (!isToko) {
                     delay(INTER_REQUEST_DELAY_MS)
-                    fetchTradesAndAvgSafe(apiKey, secretKey, balances.total)
+                    if (fetchRealOpenOrdersSafe(apiKey, secretKey, balances)) {
+                        delay(INTER_REQUEST_DELAY_MS)
+                        fetchTradesAndAvgSafe(apiKey, secretKey, balances.total)
+                    }
                 }
             }
             _isFetchingRealBalance.value = false
