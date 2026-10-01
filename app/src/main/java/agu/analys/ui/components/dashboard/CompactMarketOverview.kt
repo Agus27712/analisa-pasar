@@ -342,7 +342,10 @@ fun DashboardMockupHeader(
                     agu.analys.engine.global.GlobalContextManager.updateFallbackFromIndodax(
                         priceIdr = btcTick.price,
                         changePct = btcTick.change24h,
-                        usdtRate = usdtTick?.price ?: 16200.0
+                        // Fallback berantai: tick USDT/IDR live → rate ter-cache di
+                        // ExchangeRateManager → 0.0 (pembaruan dibatalkan, tanpa hardcode).
+                        usdtRate = usdtTick?.price
+                            ?: agu.analys.util.ExchangeRateManager.currentRate()
                     )
                 }
             }

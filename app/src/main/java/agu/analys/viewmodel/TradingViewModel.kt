@@ -215,6 +215,9 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     val realTrades: StateFlow<List<RealTradeEntity>> = orderViewModel.realTrades
     val realAvgBuyPrices: StateFlow<Map<String, Double>> = orderViewModel.realAvgBuyPrices
     val isFetchingRealBalance: StateFlow<Boolean> = orderViewModel.isFetchingRealBalance
+
+    /** Rate konversi USDT/IDR live dari exchange (0.0 = belum tersedia). */
+    val usdtIdrRateState: StateFlow<Double> = agu.analys.util.ExchangeRateManager.usdtIdrRate
     val realTradeStatus: StateFlow<String> = orderViewModel.realTradeStatus
     val userPublicIp: StateFlow<String?> = orderViewModel.userPublicIp
     val failedPinAttempts: StateFlow<Int> = orderViewModel.failedPinAttempts
@@ -375,6 +378,26 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     fun clearNewsScreenerState() = aiNewsViewModel.clearNewsScreenerState()
     fun setNotificationsEnabled(enabled: Boolean) = settingsViewModel.setNotificationsEnabled(enabled)
     fun setRealSimSyncEnabled(enabled: Boolean) = settingsViewModel.setRealSimSyncEnabled(enabled)
+
+    // ── Konversi saldo simulasi (IDR <-> USDT) berbasis rate exchange real-time ──
+
+    fun convertSimulationIdrToUsdt(amountIdr: Double): SimulationTradeStore.ConversionResult =
+        orderViewModel.convertSimulationIdrToUsdt(amountIdr)
+
+    fun convertSimulationUsdtToIdr(amountUsdt: Double): SimulationTradeStore.ConversionResult =
+        orderViewModel.convertSimulationUsdtToIdr(amountUsdt)
+
+    fun topUpSimulationUsdt(amount: Double) = orderViewModel.topUpSimulationUsdt(amount)
+
+    /** Paksa refresh rate USDT/IDR dari exchange aktif. */
+    fun refreshUsdtIdrRate() {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            agu.analys.util.ExchangeRateManager.refresh(prefs.marketDataSource)
+        }
+    }
+
+    /** Saldo real pada mata uang kuotasi pair tertentu (USDT -> saldo USDT, IDR -> saldo IDR). */
+    fun realBalanceForQuote(quoteAsset: String): Double = orderViewModel.realBalanceForQuote(quoteAsset)
 
     fun getH1Candles(symbol: String): List<CandleBar> = marketViewModel.getH1Candles(symbol)
 

@@ -1,7 +1,18 @@
 package agu.analys.trading
 
+import agu.analys.util.PriceFormatter
 import java.util.UUID
 
+/**
+ * Mesin eksekusi order simulasi.
+ *
+ * Semua nominal diproses dalam **mata uang kuotasi pair** (`quote`), bukan selalu Rupiah:
+ * - pair ber-kuotasi IDR  -> saldo kas Rupiah (`idrBalance` / `lockedIdr`)
+ * - pair ber-kuotasi USDT -> saldo kas USDT (`usdtBalance` / `lockedUsdt`)
+ *
+ * Nama field `totalIdr` / `feeIdr` / `pnlIdr` dipertahankan demi kompatibilitas penyimpanan Room/JSON lama,
+ * tetapi nilainya selalu dalam `quoteAsset` milik order yang bersangkutan.
+ */
 object SimulationOrderEngine {
     // Sesuai aturan PPN/PPh & tarif Indodax Spot (0.11% Maker, 0.21% Buy Taker, 0.42% Sell Taker)
     const val INDODAX_MAKER_FEE_RATE = 0.0011 // 0.11%
@@ -15,6 +26,11 @@ object SimulationOrderEngine {
         val completedOrder: SimulationOrder
     )
 
+    fun isUsdt(quote: String): Boolean = PriceFormatter.isUsdtQuote(quote)
+
+    private fun withQuoteBalance(wallet: SimulationWallet, quote: String, newValue: Double): SimulationWallet =
+        if (isUsdt(quote)) wallet.copy(usdtBalance = newValue) else wallet.copy(idrBalance = newValue)
+
     fun executeMarketBuy(
         wallet: SimulationWallet,
         symbol: String,
@@ -24,33 +40,40 @@ object SimulationOrderEngine {
         quantity: Double,
         feeRate: Double = INDODAX_BUY_TAKER_FEE_RATE
     ): Result<ExecutionResult> {
-        val totalIdr = quantity * execPrice
-        val feeIdr = totalIdr * feeRate
-        val requiredIdr = totalIdr + feeIdr
+        val totalQuote = quantity * execPrice
+        val feeQuote = totalQuote * feeRate
+        val requiredQuote = totalQuote + feeQuote
 
-        if (wallet.getAvailableIdr() < requiredIdr) {
+        val availableQuote = wallet.getAvailableQuote(quote)
+        if (availableQuote < requiredQuote) {
             return Result.failure(
                 IllegalArgumentException(
-                    "Saldo $quote tidak cukup. Dibutuhkan ${formatMoney(requiredIdr, quote)}, saldo ${formatMoney(wallet.getAvailableIdr(), quote)}."
+                    "Saldo $quote tidak cukup. Dibutuhkan ${formatMoney(requiredQuote, quote)}, saldo ${formatMoney(availableQuote, quote)}."
                 )
             )
         }
 
         val newCoinBalances = wallet.coinBalances.toMutableMap()
         val currentCoin = newCoinBalances[baseKey] ?: 0.0
-        val currentAvg = wallet.avgBuyPrices[baseKey] ?: 0.0
+        val prevQuote = wallet.quoteForCoin(baseKey)
+        val currentAvg = if (prevQuote.equals(quote, true)) (wallet.avgBuyPrices[baseKey] ?: 0.0) else 0.0
         val newTotalCoin = currentCoin + quantity
         val newAvgPrice = if (newTotalCoin > 0.0) {
-            ((currentCoin * currentAvg) + totalIdr) / newTotalCoin
+            ((currentCoin * currentAvg) + totalQuote) / newTotalCoin
         } else execPrice
 
         newCoinBalances[baseKey] = newTotalCoin
         val newAvgMap = wallet.avgBuyPrices.toMutableMap().apply { put(baseKey, newAvgPrice) }
+        val newQuoteMap = wallet.coinQuoteAssets.toMutableMap().apply { put(baseKey, quote.uppercase()) }
 
-        val updatedWallet = wallet.copy(
-            idrBalance = (wallet.idrBalance - requiredIdr).coerceAtLeast(0.0),
-            coinBalances = newCoinBalances,
-            avgBuyPrices = newAvgMap
+        val updatedWallet = withQuoteBalance(
+            wallet.copy(
+                coinBalances = newCoinBalances,
+                avgBuyPrices = newAvgMap,
+                coinQuoteAssets = newQuoteMap
+            ),
+            quote,
+            (wallet.getTotalQuote(quote) - requiredQuote).coerceAtLeast(0.0)
         )
 
         val history = SimulationTradeHistoryItem(
@@ -63,8 +86,8 @@ object SimulationOrderEngine {
             type = SimulationOrderType.MARKET,
             executionPrice = execPrice,
             quantity = quantity,
-            totalIdr = totalIdr,
-            feeIdr = feeIdr,
+            totalIdr = totalQuote,
+            feeIdr = feeQuote,
             timestamp = System.currentTimeMillis()
         )
 
@@ -77,10 +100,10 @@ object SimulationOrderEngine {
             type = SimulationOrderType.MARKET,
             limitPrice = execPrice,
             quantity = quantity,
-            totalIdr = totalIdr,
+            totalIdr = totalQuote,
             filledQuantity = quantity,
             filledAvgPrice = execPrice,
-            feeIdr = feeIdr,
+            feeIdr = feeQuote,
             status = SimulationOrderStatus.FILLED,
             filledAt = System.currentTimeMillis()
         )
@@ -113,16 +136,18 @@ object SimulationOrderEngine {
             )
         }
 
-        val totalIdr = actualQty * execPrice
-        val feeIdr = totalIdr * feeRate
-        val netIdr = (totalIdr - feeIdr).coerceAtLeast(0.0)
-        val avgBuy = wallet.avgBuyPrices[baseKey] ?: execPrice
+        val totalQuote = actualQty * execPrice
+        val feeQuote = totalQuote * feeRate
+        val netQuote = (totalQuote - feeQuote).coerceAtLeast(0.0)
+        val prevQuote = wallet.quoteForCoin(baseKey)
+        val avgBuy = if (prevQuote.equals(quote, true)) (wallet.avgBuyPrices[baseKey] ?: execPrice) else execPrice
         val costBasis = actualQty * avgBuy
-        val pnlIdr = totalIdr - costBasis - feeIdr
-        val pnlPercent = if (costBasis > 0.0) (pnlIdr / costBasis) * 100.0 else 0.0
+        val pnlQuote = totalQuote - costBasis - feeQuote
+        val pnlPercent = if (costBasis > 0.0) (pnlQuote / costBasis) * 100.0 else 0.0
 
         val newCoinBalances = wallet.coinBalances.toMutableMap()
         val newAvgMap = wallet.avgBuyPrices.toMutableMap()
+        val newQuoteMap = wallet.coinQuoteAssets.toMutableMap()
         val remaining = (newCoinBalances[baseKey] ?: 0.0) - actualQty
         // Full close jika sisa dust (absolut atau relatif)
         val isDustRemaining = remaining <= 0.00000001 ||
@@ -130,14 +155,19 @@ object SimulationOrderEngine {
         if (isDustRemaining) {
             newCoinBalances.remove(baseKey)
             newAvgMap.remove(baseKey)
+            newQuoteMap.remove(baseKey)
         } else {
             newCoinBalances[baseKey] = remaining
         }
 
-        val updatedWallet = wallet.copy(
-            idrBalance = wallet.idrBalance + netIdr,
-            coinBalances = newCoinBalances,
-            avgBuyPrices = newAvgMap
+        val updatedWallet = withQuoteBalance(
+            wallet.copy(
+                coinBalances = newCoinBalances,
+                avgBuyPrices = newAvgMap,
+                coinQuoteAssets = newQuoteMap
+            ),
+            quote,
+            wallet.getTotalQuote(quote) + netQuote
         )
 
         val history = SimulationTradeHistoryItem(
@@ -150,10 +180,10 @@ object SimulationOrderEngine {
             type = SimulationOrderType.MARKET,
             executionPrice = execPrice,
             quantity = actualQty,
-            totalIdr = totalIdr,
-            feeIdr = feeIdr,
+            totalIdr = totalQuote,
+            feeIdr = feeQuote,
             timestamp = System.currentTimeMillis(),
-            pnlIdr = pnlIdr,
+            pnlIdr = pnlQuote,
             pnlPercent = pnlPercent
         )
 
@@ -166,10 +196,10 @@ object SimulationOrderEngine {
             type = SimulationOrderType.MARKET,
             limitPrice = execPrice,
             quantity = actualQty,
-            totalIdr = totalIdr,
+            totalIdr = totalQuote,
             filledQuantity = actualQty,
             filledAvgPrice = execPrice,
-            feeIdr = feeIdr,
+            feeIdr = feeQuote,
             status = SimulationOrderStatus.FILLED,
             filledAt = System.currentTimeMillis()
         )
@@ -178,6 +208,6 @@ object SimulationOrderEngine {
     }
 
     fun formatMoney(value: Double, quoteAsset: String): String {
-        return agu.analys.util.PriceFormatter.formatPrice(value, showSymbol = true, quoteAsset = quoteAsset)
+        return PriceFormatter.formatPrice(value, showSymbol = true, quoteAsset = quoteAsset)
     }
 }

@@ -53,7 +53,8 @@ fun WatchlistCoinCard(
     isScalping: Boolean,
     isFavorite: Boolean = true,
     badges: List<agu.analys.model.CoinBadge> = emptyList(),
-    usdtIdrRate: Double = 16450.0,
+    // 0.0 = rate belum tersedia dari exchange (bukan nilai hardcode)
+    usdtIdrRate: Double = 0.0,
     recentCandles: List<CandleBar> = emptyList(),
     holdingStatus: CoinHoldingStatus? = null,
     tradingFees: agu.analys.config.TradingFeeConfig = agu.analys.config.TradingFeeConfig(),

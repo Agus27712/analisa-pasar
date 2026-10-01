@@ -52,12 +52,27 @@ fun SimulationOrderForm(
     onOpenTopUp: () -> Unit,
     isRealMode: Boolean = false,
     realIdrBalance: Double = 0.0,
+    /**
+     * Saldo USDT riil di exchange. Untuk pair berkuotasi USDT, saldo inilah yang
+     * dipakai (bukan saldo Rupiah) supaya `$` dan `Rp` tidak tercampur.
+     */
+    realUsdtBalance: Double = 0.0,
     modifier: Modifier = Modifier
 ) {
     var showTypeMenu by remember { mutableStateOf(false) }
     val isBuy = selectedSide == SimulationOrderSide.BUY
     val themeColor = if (isBuy) TvGreen else TvRed
     val quote = pair.quoteAsset
+
+    // Saldo yang relevan dipilih berdasarkan kuotasi pair:
+    //  - pair USDT → saldo USDT ($)   (real: realUsdtBalance | simulasi: wallet.getAvailableUsdt())
+    //  - pair IDR  → saldo Rupiah (Rp) (real: realIdrBalance  | simulasi: wallet.getAvailableIdr())
+    val isUsdtQuote = agu.analys.util.PriceFormatter.isUsdtQuote(quote)
+    val availableQuoteBalance = if (isUsdtQuote) {
+        if (isRealMode && realUsdtBalance > 0.0) realUsdtBalance else wallet.getAvailableUsdt()
+    } else {
+        if (isRealMode && realIdrBalance > 0.0) realIdrBalance else wallet.getAvailableIdr()
+    }
 
     Column(
         modifier = modifier
@@ -257,8 +272,8 @@ fun SimulationOrderForm(
                         .border(1.dp, TvBorder, RoundedCornerShape(4.dp))
                         .clickable {
                             if (isBuy) {
-                                val availQuote = if (isRealMode && realIdrBalance > 0.0) realIdrBalance else wallet.getAvailableIdr()
-                                val targetQuote = availQuote * (pct / 100.0)
+                                // Persentase dihitung dari saldo kuotasi pair (USDT atau IDR).
+                                val targetQuote = availableQuoteBalance * (pct / 100.0)
                                 val price = if (selectedType == SimulationOrderType.MARKET) currentPrice else (parseSimulationDecimal(inputPrice) ?: currentPrice)
                                 if (price > 0.0) {
                                     val coin = targetQuote / price
@@ -377,6 +392,8 @@ fun SimulationOrderForm(
                 text = if (isBuy) {
                     val avail = if (isRealMode && realIdrBalance > 0.0) realIdrBalance else wallet.getAvailableIdr()
                     PriceFormatter.formatPrice(avail, quoteAsset = quote)
+                    // Prefix mengikuti kuotasi pair: `$` untuk USDT, `Rp` untuk IDR.
+                    PriceFormatter.formatPrice(availableQuoteBalance, quoteAsset = quote)
                 } else {
                     "${formatCoinDecimals(wallet.getAvailableCoin(pair.baseAsset))} ${pair.baseAsset}"
                 },

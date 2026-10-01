@@ -1,17 +1,23 @@
-# Checkpoint: Eliminasi Pasangan Koin Berbasis BIDR, Pembatasan Pair IDR/USDT, dan Pembersihan Fallback Binance
+# Checkpoint: Pemisahan Mutlak Prefix Mata Uang ($ & Rp), Konversi Real-Time Portofolio, dan Dual Harga Detail Chart
 
-- **Tanggal / Waktu:** 2026-09-30
+- **Tanggal / Waktu:** 2026-10-01
 - **Status:** Selesai (Completed & Verified Build Clean)
-- **Fitur:** Eliminasi Menyeluruh Koin/Pair BIDR, Pembatasan Pasangan Pasar Eksklusif IDR dan USDT, Serta Pembersihan Mutlak Network Fallback ke Binance
+- **Fitur:** Pemisahan Mutlak Mata Uang Kuotasi USDT ($) dan IDR (Rp), Auto-Konversi Order Simulasi, Fitur Konversi Saldo Live Exchange di Portofolio, Pemisahan Saldo Real per Kuotasi, dan Dual Harga di Topbar Detail Chart
 - **Komponen Terdampak & Perubahan:**
-  1. **Konfigurasi Sumber Data (`AppConfiguration.kt`, `DataSourceSelectionDialog.kt`)**:
-     - Memperbarui `MarketDataSource.TOKOCRYPTO`: `shortCode = "IDR"`, `defaultQuoteAsset = "IDR"`.
-     - Memperbarui deskripsi Tokocrypto: "Data market Tokocrypto (Pair IDR/USDT) dengan real-time REST & WebSocket".
-  2. **Daftar Pasangan & Model Simbol (`TradingViewModels.kt`, `TokocryptoModels.kt`)**:
-     - `POPULAR_TOKOCRYPTO_PAIRS`: Mengganti semua pasangan lama berakhiran BIDR (`BTCBIDR`, `ETHBIDR`, dsb.) menjadi IDR (`BTCIDR`, `ETHIDR`, dsb.) dan `tokocryptoPair` menjadi format IDR (`BTC_IDR`, `ETH_IDR`, `USDT_IDR`, dsb.).
-     - `effectiveTokocryptoPair()`, `effectiveBinanceSymbol()`, & `effectiveTradingViewSymbol()`: Menyediakan pembentuk nama simbol tanpa panggilan network ke Binance.
-  3. **Repository & Service (`TokocryptoSymbolRepository.kt`, `TokocryptoMarketService.kt`, `TokocryptoTradeApi.kt`, `TokocryptoMarketWebSocket.kt`, `TokocryptoUserWebSocket.kt`)**:
-     - Menghapus fungsi fallback network Binance (`fetchFromBinanceFallback`, `BINANCE_HOSTS`, `BINANCE_BASE_URL`, dan endpoint `stream.binance.com`).
-     - Mengarahkan seluruh kueri REST dan WebSocket secara murni ke server Tokocrypto resmi (`tokocrypto.site`, `cloudme-toko.2meta.app`, `stream-cloud.tokocrypto.site`, `tokocrypto.com`).
-     - Mempertahankan helper fungsi presisi `isBidrSymbol()`, `isIdrOrUsdtPair()`, `toTokocryptoPair()`, dan `toBinanceSymbol()` sebagai utility string formatting internal.
+  1. **Pemisahan Prefix & Model Data (`PortfolioModels.kt`, `SimulationTradeModels.kt`, `SimulationTradeJson.kt`)**:
+     - `HoldingItem`: Menyimpan `quoteAsset` ("IDR" / "USDT") dan menghitung `pnlInQuote` & `totalValueInQuote` dalam mata uang kuotasi posisi sehingga tidak pernah tercampur antara `$` dan `Rp`.
+     - `SimulationWallet`: Menambahkan `usdtBalance`, `lockedUsdt`, dan `coinQuoteAssets` yang dipersistensikan secara isolatif ke JSON storage.
+     - `PriceFormatter`: Menyediakan helper presisi `isUsdtQuote()`, `formatIdrEquivalent()`, `minOrderNominal()`, dan `defaultOrderNominal()` berbasis kurs live tanpa hardcode.
+  2. **Single Source of Truth Kurs Exchange (`ExchangeRateManager.kt`, `MarketViewModel.kt`, `TradingViewModel.kt`)**:
+     - `ExchangeRateManager`: Mengambil rate live pair `USDTIDR` / `usdt_idr` dari exchange aktif (dengan fallback cross-BTC) dan auto-refresh setiap 60 detik. Mengembalikan `0.0` bila belum ada data (tidak memakai tebakan hardcode).
+     - Menyatukan akses rate ke `ExchangeRateManager.usdtIdrRate` di seluruh ViewModel dan UI.
+  3. **Auto-Konversi & Konversi Portofolio (`SimulationTradeStore.kt`, `SimulationCoordinator.kt`, `CurrencyConversionDialog.kt`)**:
+     - `SimulationTradeStore.ensureQuoteBalance()`: Mengonversi otomatis saldo IDR ke USDT saat pengguna mengeksekusi order simulasi pada pair USDT jika saldo USDT kurang.
+     - Fitur dialog konversi manual di tab Portofolio (`CurrencyConversionDialog.kt`) dengan rate live exchange dan proteksi anti-hardcode.
+  4. **Pemisahan Saldo Real per Kuotasi (`RealTradeCoordinator.kt`, `OrderViewModel.kt`, `RealPortfolioSummaryCard.kt`)**:
+     - Saldo real dipisahkan: pair USDT mengambil saldo USDT di exchange, pair IDR mengambil saldo IDR.
+     - Kartu portofolio real menampilkan sub-saldo USDT terpisah dengan prefix `$` dan estimasi ekuivalen Rupiahnya.
+  5. **Tampilan Dual Harga di Topbar Detail Chart (`DetailTopBar.kt`, `DetailChartScreen.kt`)**:
+     - Menampilkan harga koin USDT dalam `$` dan secara bersamaan memunculkan harga ekuivalen Rupiah (`≈ Rp ...`) di bawahnya yang dihitung secara real-time dari exchange rate.
+     - Perbaikan error duplikasi deklarasi dan kompilasi pada `SimulationOrderForm.kt`, `DetailChartScreen.kt`, `PortfolioScreen.kt`, `PortfolioComponents.kt`, dan `SimulationCoordinator.kt`.
 

@@ -75,3 +75,22 @@ Mengintegrasikan arsitektur resmi Tokocrypto sesuai dokumentasi dan mengisolasi 
 - [x] Eliminasi koin berbasis token BIDR (`BIDRUSDT`, `BIDRIDR`, dsb.) dan quote BIDR dengan proteksi nama koin asli seperti `BNBIDR` dan `SHIBIDR`.
 - [x] Eliminasi pasangan koin BIDR dan pembersihan mutlak network fallback Binance pada `TokocryptoSymbolRepository`, `TokocryptoMarketService`, `TokocryptoTradeApi`, `TokocryptoMarketWebSocket`, dan `TokocryptoUserWebSocket`.
 - [x] Verifikasi sukses `compile_applet`.
+
+### Tahap 9: Pemisahan Mutlak Prefix Mata Uang ($ vs Rp), Dual Harga di Chart, dan Konversi Portofolio Live Exchange
+- [x] **Pemisahan Prefix Kuotasi**:
+  - Pasangan berkuotasi USDT selalu menampilkan dan memakai harga dalam `$` (baik di simulasi maupun portofolio).
+  - Model `HoldingItem` diproteksi dengan `quoteAsset`, `totalValueInQuote`, dan `pnlInQuote` sehingga angka dollar tidak tercampur dengan Rupiah.
+- [x] **State Portofolio & Konversi Otomatis**:
+  - Saldo USDT ditambahkan pada `SimulationWallet` terpisah dari saldo IDR.
+  - Implementasi auto-konversi: order simulasi koin USDT otomatis mengonversi saldo IDR jika saldo USDT tidak mencukupi berdasarkan kurs live exchange.
+- [x] **Fitur Konversi di Portofolio**:
+  - Pembuatan komponen `CurrencyConversionDialog.kt` dan kartu saldo USDT di `SimulationPortfolioView.kt` untuk konversi manual 2 arah (Rp ⇄ $).
+  - Rate diambil murni dari exchange aktif (`USDTIDR` / `usdt_idr`) via `ExchangeRateManager` tanpa hardcode angka tetap.
+- [x] **Pemisahan Saldo Real per Kuotasi**:
+  - Real balance coordinator membedakan `realBalanceForQuote`: pair USDT mengambil saldo USDT exchange, pair IDR mengambil saldo IDR.
+- [x] **Tampilan Dual Harga di Topbar Detail Chart**:
+  - Pada `DetailTopBar.kt` dan `DetailPriceHeader`, pair berkuotasi USDT menampilkan harga `$` dan ekuivalen Rupiah (`≈ Rp ...`) di bawahnya berbasis kurs exchange real-time.
+- [x] **Perbaikan & Audit Kode Error**:
+  - Mengatasi konflik deklarasi dan sintaks unclosed lambda pada `SimulationOrderForm.kt`, `DetailChartScreen.kt`, `PortfolioScreen.kt`, `PortfolioComponents.kt`, `RealPortfolioView.kt`, `RealPortfolioSummaryCard.kt`, `MarketViewModel.kt`, dan `SimulationCoordinator.kt`.
+- [x] **Verifikasi Build**:
+  - `compile_applet` berhasil (Build succeeded).

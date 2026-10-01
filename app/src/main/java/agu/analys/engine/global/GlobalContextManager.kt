@@ -34,12 +34,28 @@ object GlobalContextManager {
 
     /**
      * Memperbarui status pasar global / BTC menggunakan data BTC dari Indodax.
+     *
+     * [usdtRate] adalah kurs USDT→IDR. Ketika tidak diberikan (atau tidak valid),
+     * nilai diambil dari [agu.analys.util.ExchangeRateManager] (rate real-time/cache).
+     * Bila rate sama sekali belum tersedia, pembaruan dibatalkan — **tidak pernah**
+     * memakai konstanta hardcode supaya harga $ tidak tercampur dengan asumsi kurs lama.
+     *
+     * @return `true` bila konteks berhasil diperbarui.
      */
-    fun updateFallbackFromIndodax(priceIdr: Double, changePct: Double, usdtRate: Double = 16200.0) {
+    fun updateFallbackFromIndodax(priceIdr: Double, changePct: Double, usdtRate: Double = 0.0): Boolean {
         val now = System.currentTimeMillis()
-        if (priceIdr <= 0) return
+        if (priceIdr <= 0) return false
 
-        val effectiveUsdtRate = if (usdtRate > 0) usdtRate else 16200.0
+        // Sumber rate tunggal: parameter valid → exchange rate manager (real-time/cache).
+        val effectiveUsdtRate = if (usdtRate > 0.0) {
+            usdtRate
+        } else {
+            agu.analys.util.ExchangeRateManager.currentRate()
+        }
+
+        // Rate belum tersedia dari exchange → jangan mengarang nilai, lewati pembaruan.
+        if (effectiveUsdtRate <= 0.0) return false
+
         val priceUsdt = priceIdr / effectiveUsdtRate
 
         priceHistory.add(PriceTick(priceUsdt, now))
@@ -51,6 +67,7 @@ object GlobalContextManager {
             dataSource = "Indodax"
         )
         _context.value = currentContext
+        return true
     }
 
     private fun evaluateGlobalContext(ticker: BtcTickerData, now: Long): GlobalMarketContext {

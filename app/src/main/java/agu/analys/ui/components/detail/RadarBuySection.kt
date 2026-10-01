@@ -51,6 +51,12 @@ fun RadarBuySection(
     orderBookBids: List<agu.analys.model.OrderBookItem> = emptyList(),
     orderBookAsks: List<agu.analys.model.OrderBookItem> = emptyList()
 ) {
+    // Kurs live (bukan hardcode) — dipakai untuk batas nominal minimum pair USDT.
+    val usdtIdrRate by agu.analys.util.ExchangeRateManager.usdtIdrRate.collectAsState()
+    val isUsdtQuote = agu.analys.util.PriceFormatter.isUsdtQuote(quoteAsset)
+    // Batas nominal minimum mengikuti kuotasi pair: Rp 10.000 atau ekuivalennya dalam USDT.
+    val minNominalQuote = agu.analys.util.PriceFormatter.minOrderNominal(quoteAsset, usdtIdrRate)
+
     var customNominalInput by remember { mutableStateOf("") }
     var isCustomNominalOpen by remember { mutableStateOf(false) }
     var showBuyOrderDialog by remember { mutableStateOf(false) }
@@ -87,7 +93,8 @@ fun RadarBuySection(
     val focusManager = LocalFocusManager.current
 
     val effectiveBuyPrice = if (customTargetBuyPrice > 0.0) customTargetBuyPrice else validPrice
-    val grossBuyOrderAmount = selectedNominalIdr.coerceAtLeast(10000.0)
+    // Batas bawah mengikuti kuotasi: pair IDR → Rp 10.000, pair USDT → ekuivalennya.
+    val grossBuyOrderAmount = selectedNominalIdr.coerceAtLeast(minNominalQuote)
     val isMakerOrder = validPrice > 0 && effectiveBuyPrice < validPrice
     val effectiveFeePct = if (isMakerOrder) 0.0 else activeFeePct
     val buyFeeIdr = grossBuyOrderAmount * (effectiveFeePct / 100.0)
@@ -108,7 +115,7 @@ fun RadarBuySection(
             Spacer(Modifier.height(8.dp))
         }
 
-        // Header Saldo IDR
+        // Header Saldo (mengikuti kuotasi pair: IDR → Rp, USDT → $)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -130,7 +137,7 @@ fun RadarBuySection(
                     )
                     Spacer(Modifier.width(6.dp))
                     Text(
-                        text = "Saldo IDR (${if (isRealMode) "Real Indodax" else "Simulasi"}):",
+                        text = "Saldo ${quoteAsset.uppercase()} (${if (isRealMode) "Real Indodax" else "Simulasi"}):",
                         color = TvTextSecondary,
                         fontSize = 10.5.sp,
                         fontWeight = FontWeight.Bold
@@ -138,7 +145,8 @@ fun RadarBuySection(
                 }
 
                 Text(
-                    text = "${PriceFormatter.formatIdrNumber(availableIdr)} $quoteAsset",
+                    // Prefix Rp/$ mengikuti kuotasi, bukan selalu Rupiah.
+                    text = PriceFormatter.formatPrice(availableIdr, quoteAsset = quoteAsset),
                     color = if (availableIdr > 0) TvGreen else TvTextSecondary,
                     fontSize = 11.5.sp,
                     fontWeight = FontWeight.Black
@@ -318,8 +326,8 @@ fun RadarBuySection(
                             onNominalIdrChanged(parsed)
                         }
                     },
-                    label = { Text("Masukkan Nominal Pembelian (IDR)", fontSize = 11.sp) },
-                    placeholder = { Text("Contoh: 250000", fontSize = 11.sp) },
+                    label = { Text("Masukkan Nominal Pembelian", fontSize = 11.sp) },
+                    placeholder = { Text("Contoh: Rp 250.000 / 10$ )", fontSize = 11.sp) },
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Number,
                         imeAction = ImeAction.Done

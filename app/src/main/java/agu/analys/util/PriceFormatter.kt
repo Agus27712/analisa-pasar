@@ -105,6 +105,68 @@ object PriceFormatter {
     fun formatPriceFull(price: Double, quoteAsset: String = "IDR"): String =
         formatPrice(price, showSymbol = true, quoteAsset = quoteAsset)
 
+    /**
+     * Format harga Rupiah **ekuivalen** untuk pair yang berkuotasi USDT (dua harga: `$` + `Rp`).
+     *
+     * Nilai Rupiah dihitung dari kurs USDT/IDR **real-time** yang diteruskan pemanggil
+     * (dari [ExchangeRateManager]). Tidak ada konstanta hardcode di sini.
+     *
+     * @param usdtPrice harga dalam USDT (kuotasi `$`)
+     * @param usdtIdrRate kurs USDT→IDR; `<= 0.0` berarti rate belum tersedia
+     * @return teks `≈ Rp 1.234.567`, atau `null` bila harga/rate tidak valid.
+     *         Pemanggil **wajib menyembunyikan** baris harga Rp saat hasilnya `null`
+     *         daripada menampilkan angka hasil tebakan.
+     */
+    fun formatIdrEquivalent(
+        usdtPrice: Double,
+        usdtIdrRate: Double,
+        withApproxPrefix: Boolean = true
+    ): String? {
+        if (usdtPrice.isNaN() || usdtPrice.isInfinite() || usdtPrice <= 0.0) return null
+        if (usdtIdrRate.isNaN() || usdtIdrRate.isInfinite() || usdtIdrRate <= 0.0) return null
+        val idrValue = usdtPrice * usdtIdrRate
+        if (idrValue.isNaN() || idrValue.isInfinite()) return null
+        val text = formatPrice(idrValue, showSymbol = true, quoteAsset = "IDR", decimals = 0)
+        return if (withApproxPrefix) "≈ $text" else text
+    }
+
+    /**
+     * Nominal minimum order **dalam mata uang kuotasi pair**.
+     *
+     * Exchange mewajibkan notional minimum ≈ Rp 10.000. Untuk pair berkuotasi USDT
+     * nilainya diturunkan dari kurs live; bila kurs belum tersedia dikembalikan `0.0`
+     * yang berarti "lewati validasi batas nominal" (bukan memakai kurs tebakan).
+     */
+    fun minOrderNominal(quoteAsset: String, usdtIdrRate: Double): Double {
+        val minIdr = 10_000.0
+        if (!isUsdtQuote(quoteAsset)) return minIdr
+        if (usdtIdrRate.isNaN() || usdtIdrRate.isInfinite() || usdtIdrRate <= 0.0) return 0.0
+        return minIdr / usdtIdrRate
+    }
+
+    /**
+     * Nominal default order **dalam mata uang kuotasi pair** (setara Rp 50.000).
+     * Mengembalikan `0.0` bila kurs belum tersedia — pemanggil lalu memakai nominal
+     * yang sudah dipilih pengguna.
+     */
+    fun defaultOrderNominal(quoteAsset: String, usdtIdrRate: Double): Double {
+        val defaultIdr = 50_000.0
+        if (!isUsdtQuote(quoteAsset)) return defaultIdr
+        if (usdtIdrRate.isNaN() || usdtIdrRate.isInfinite() || usdtIdrRate <= 0.0) return 0.0
+        return defaultIdr / usdtIdrRate
+    }
+
+    /**
+     * Konversi USDT → IDR berbasis rate yang diberikan (bukan hardcode).
+     * Mengembalikan `null` bila rate belum tersedia supaya pemanggil bisa menahan tampilan.
+     */
+    fun usdtToIdrOrNull(usdtAmount: Double, usdtIdrRate: Double): Double? {
+        if (usdtAmount.isNaN() || usdtAmount.isInfinite()) return null
+        if (usdtIdrRate.isNaN() || usdtIdrRate.isInfinite() || usdtIdrRate <= 0.0) return null
+        val v = usdtAmount * usdtIdrRate
+        return if (v.isNaN() || v.isInfinite()) null else v
+    }
+
     /** Format harga khusus USDT/USD dengan simbol dollar */
     fun formatUsdtPrice(amount: Double, showSymbol: Boolean = true): String =
         formatPrice(amount, showSymbol = showSymbol, quoteAsset = "USDT")

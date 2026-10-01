@@ -296,7 +296,25 @@ fun DetailChartScreen(
     }
 
     // Balances Calculation
-    val availableIdr = if (isRealBuyMode) (realBalance["idr"] ?: 0.0) else wallet.getAvailableIdr()
+    //
+    // Saldo dipilih mengikuti kuotasi pair: pair USDT → saldo USDT ($),
+    // pair IDR → saldo Rupiah (Rp). Ini mencegah tercampurnya data $ dan Rp.
+    val isUsdtQuote = agu.analys.util.PriceFormatter.isUsdtQuote(pair.quoteAsset)
+    val availableQuote = if (isUsdtQuote) {
+        if (isRealBuyMode) {
+            // Saldo USDT riil dari exchange (kunci respons bisa "usdt"/"usd"/"usdc"/"busd").
+            realBalance.entries.firstOrNull { (k, _) ->
+                val key = k.lowercase()
+                key == "usdt" || key == "usd" || key == "usdc" || key == "busd"
+            }?.value ?: 0.0
+        } else {
+            wallet.getAvailableUsdt()
+        }
+    } else {
+        if (isRealBuyMode) (realBalance["idr"] ?: 0.0) else wallet.getAvailableIdr()
+    }
+    // Nama variabel lama dipertahankan agar pemanggil di bawah tidak berubah.
+    val availableIdr = availableQuote
     val availableCoin = if (isRealBuyMode) {
         realBalance[pair.baseAsset.lowercase()] ?: realBalance[pair.baseAsset.uppercase()] ?: 0.0
     } else wallet.getAvailableCoin(pair.baseAsset)
@@ -327,6 +345,7 @@ fun DetailChartScreen(
                 isConnected = isConnected,
                 onOpenLogcat = { showLogcatDialog = true },
                 strategyMode = strategyMode,
+                currentPrice = displayPrice,
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
             )
         }
@@ -599,4 +618,3 @@ fun DetailChartScreen(
         }
     }
 }
-

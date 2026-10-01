@@ -71,8 +71,8 @@ class MarketViewModel(application: Application) : AndroidViewModel(application) 
     private val _coinBadges = MutableStateFlow<Map<String, List<CoinBadge>>>(emptyMap())
     val coinBadges: StateFlow<Map<String, List<CoinBadge>>> = _coinBadges.asStateFlow()
 
-    private val _usdtIdrRate = MutableStateFlow(16450.0)
-    val usdtIdrRate: StateFlow<Double> = _usdtIdrRate.asStateFlow()
+    // Rate USDT/IDR: SSOT ada di ExchangeRateManager (selalu dari data exchange, tanpa hardcode).
+    val usdtIdrRate: StateFlow<Double> = agu.analys.util.ExchangeRateManager.usdtIdrRate
 
     private val _useSimpleChart = MutableStateFlow(false)
     val useSimpleChart: StateFlow<Boolean> = _useSimpleChart.asStateFlow()
@@ -270,6 +270,9 @@ class MarketViewModel(application: Application) : AndroidViewModel(application) 
 
                 _dashboardTicks.value = combinedTicks
 
+                // Rate USDT/IDR disinkronkan dari tick exchange yang sudah ter-fetch.
+                agu.analys.util.ExchangeRateManager.updateFromTicks(combinedTicks)
+
                 try {
                     val btcTick = combinedTicks["BTCIDR"] ?: combinedTicks["BTCUSDT"] ?: combinedTicks["btc_idr"] ?: combinedTicks["BTC"]
                     val usdtTick = combinedTicks["USDTIDR"] ?: combinedTicks["usdt_idr"] ?: combinedTicks["USDT"]
@@ -277,11 +280,8 @@ class MarketViewModel(application: Application) : AndroidViewModel(application) 
                         agu.analys.engine.global.GlobalContextManager.updateFallbackFromIndodax(
                             priceIdr = btcTick.price,
                             changePct = btcTick.change24h,
-                            usdtRate = usdtTick?.price ?: 16200.0
+                            usdtRate = usdtTick?.price ?: agu.analys.util.ExchangeRateManager.currentRate()
                         )
-                    }
-                    if (usdtTick != null && usdtTick.price > 0) {
-                        _usdtIdrRate.value = usdtTick.price
                     }
                 } catch (_: Exception) {}
 

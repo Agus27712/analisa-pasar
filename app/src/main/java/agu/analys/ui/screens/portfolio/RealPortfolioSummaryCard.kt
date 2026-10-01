@@ -28,6 +28,15 @@ fun RealPortfolioSummaryCard(
     estTotalCryptoIdr: Double,
     isFetchingRealBalance: Boolean,
     onRefreshRealBalance: () -> Unit,
+    /**
+     * Saldo USDT riil di exchange — ditampilkan terpisah dengan prefix `$`
+     * supaya tidak tercampur dengan saldo Rupiah.
+     */
+    realUsdt: Double = 0.0,
+    freeUsdt: Double = realUsdt,
+    lockedUsdt: Double = 0.0,
+    /** Kurs USDT→IDR live; `0.0` = belum tersedia (ekuivalen Rp disembunyikan). */
+    usdtIdrRate: Double = 0.0,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -79,7 +88,7 @@ fun RealPortfolioSummaryCard(
                 fontWeight = FontWeight.Black
             )
             Text(
-                text = "Estimasi Total Aset (Cash IDR + Koin Kripto)",
+                text = "Estimasi Total Aset (Cash IDR + USDT + Koin Kripto)",
                 color = TvTextSecondary,
                 fontSize = 10.sp
             )
@@ -92,7 +101,7 @@ fun RealPortfolioSummaryCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text("SALDO CASH IDR", color = TvTextSecondary, fontSize = 9.5.sp, fontWeight = FontWeight.Bold)
                     Text(PriceFormatter.formatPrice(realIdr), color = TvGreen, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(4.dp))
@@ -107,6 +116,70 @@ fun RealPortfolioSummaryCard(
                 Column(horizontalAlignment = Alignment.End) {
                     Text("ESTIMASI KOIN", color = TvTextSecondary, fontSize = 9.5.sp, fontWeight = FontWeight.Bold)
                     Text(PriceFormatter.formatPrice(estTotalCryptoIdr), color = TvBlue, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+
+            // ── Sub-saldo USDT (prefix `$`) — dipisah total dari Rupiah ──
+            if (realUsdt > 0.00000001 || lockedUsdt > 0.0) {
+                Spacer(Modifier.height(10.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(TvSurfaceVariant, RoundedCornerShape(8.dp))
+                        .border(1.dp, TvGreen.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "SALDO USDT ($)",
+                            color = TvTextSecondary,
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            PriceFormatter.formatPrice(realUsdt, quoteAsset = "USDT"),
+                            color = TvGreen,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Row {
+                            Text("Tersedia: ", color = TvTextSecondary, fontSize = 9.sp)
+                            Text(
+                                PriceFormatter.formatPrice(freeUsdt, quoteAsset = "USDT"),
+                                color = TvGreen,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text("Terkunci: ", color = TvTextSecondary, fontSize = 9.sp)
+                            Text(
+                                PriceFormatter.formatPrice(lockedUsdt, quoteAsset = "USDT"),
+                                color = TvRed,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text("≈ RUPIAH", color = TvTextSecondary, fontSize = 9.5.sp, fontWeight = FontWeight.Bold)
+                        if (usdtIdrRate > 0.0) {
+                            Text(
+                                PriceFormatter.formatPrice(realUsdt * usdtIdrRate, quoteAsset = "IDR"),
+                                color = TvTextPrimary,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                "kurs ${PriceFormatter.formatPrice(usdtIdrRate, quoteAsset = "IDR", decimals = 0)}/USDT",
+                                color = TvTextSecondary,
+                                fontSize = 8.5.sp
+                            )
+                        } else {
+                            Text("kurs —", color = TvAmber, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
                 }
             }
         }

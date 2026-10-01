@@ -73,6 +73,46 @@ class RealTradeCoordinator(
     private var lastFetchTimeMs = 0L
     private var rateLimitedUntilMs = 0L
 
+    /**
+     * Saldo real sesuai mata uang kuotasi pair yang sedang diperdagangkan.
+     * - Pair USDT (BTCUSDT, ETHUSDT, ...) -> saldo USDT di exchange.
+     * - Pair IDR  (BTCIDR, ETHIDR, ...)   -> saldo IDR di exchange.
+     *
+     * Mengembalikan 0.0 bila aset tersebut tidak ada di akun.
+     */
+    fun realBalanceForQuote(quoteAsset: String): Double {
+        val map = _realIndodaxBalance.value
+        return balanceOfQuote(map, quoteAsset)
+    }
+
+    /** Saldo real bebas (free) untuk kuotasi tertentu. */
+    fun realFreeBalanceForQuote(quoteAsset: String): Double {
+        val map = if (_realFreeBalance.value.isNotEmpty()) _realFreeBalance.value else _realIndodaxBalance.value
+        return balanceOfQuote(map, quoteAsset)
+    }
+
+    /** Saldo real terkunci (locked) untuk kuotasi tertentu. */
+    fun realLockedBalanceForQuote(quoteAsset: String): Double {
+        val map = _realLockedBalance.value
+        return balanceOfQuote(map, quoteAsset)
+    }
+
+    private fun balanceOfQuote(map: Map<String, Double>, quoteAsset: String): Double {
+        if (map.isEmpty()) return 0.0
+        val q = quoteAsset.trim().uppercase()
+        val isUsdt = q == "USDT" || q == "USD" || q == "USDC" || q == "BUSD"
+        val keys = if (isUsdt) listOf("usdt", "usd", "usdc", "busd") else listOf("idr", "idrt", "bidr")
+        for (k in keys) {
+            val v = map[k]
+            if (v != null && v > 0.0) return v
+        }
+        // Fallback: cari tidak case-sensitive
+        for ((k, v) in map) {
+            if (k.equals(quoteAsset, ignoreCase = true) && v > 0.0) return v
+        }
+        return 0.0
+    }
+
     fun updateAvgBuyPrice(coin: String, newAvgPrice: Double) {
         val asset = baseFromPair(coin)
         val current = _realAvgBuyPrices.value.toMutableMap()

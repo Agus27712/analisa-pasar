@@ -21,6 +21,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -52,6 +53,7 @@ fun DetailTopBar(
     isConnected: Boolean = true,
     onOpenLogcat: () -> Unit = {},
     strategyMode: StrategyMode? = null,
+    currentPrice: Double = 0.0,
     modifier: Modifier = Modifier
 ) {
     // Waktu realtime server/aplikasi berjalan terus setiap detik saat terhubung (LIVE).
@@ -152,6 +154,21 @@ fun DetailTopBar(
                 maxLines = 1,
                 softWrap = false
             )
+            val isUsdtQuote = agu.analys.util.PriceFormatter.isUsdtQuote(pair.quoteAsset)
+            if (isUsdtQuote && currentPrice > 0.0) {
+                val liveRate by agu.analys.util.ExchangeRateManager.usdtIdrRate.collectAsState()
+                val idrEq = agu.analys.util.PriceFormatter.formatIdrEquivalent(currentPrice, liveRate)
+                if (idrEq != null) {
+                    Text(
+                        text = idrEq,
+                        color = TvGreen,
+                        fontSize = 10.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        softWrap = false
+                    )
+                }
+            }
         }
 
         // Widget Waktu dengan Dot LED Merah/Hijau yang Kaku (tanpa pulse) di sebelah kiri
@@ -226,6 +243,12 @@ fun DetailPriceHeader(
     baseAsset: String = "",
     symbol: String = "",
     isFavorite: Boolean = false,
+    /**
+     * Kurs USDT→IDR real-time. Nilai `0.0` (default) berarti "ambil sendiri dari
+     * [agu.analys.util.ExchangeRateManager]" — sehingga pemanggil tidak pernah
+     * perlu mengoper konstanta hardcode.
+     */
+    usdtIdrRate: Double = 0.0,
     globalContext: GlobalMarketContext? = null,
     orderBookBids: List<OrderBookItem> = emptyList(),
     orderBookAsks: List<OrderBookItem> = emptyList(),
@@ -236,6 +259,17 @@ fun DetailPriceHeader(
     val greenColor = TvGreen
     val redColor = TvRed
 
+    // Rate real-time dari ExchangeRateManager (satu-satunya sumber kurs).
+    // Dipakai bila pemanggil tidak mengoper [usdtIdrRate] secara eksplisit.
+    val liveRate by agu.analys.util.ExchangeRateManager.usdtIdrRate.collectAsState()
+    val effectiveRate = if (usdtIdrRate > 0.0) usdtIdrRate else liveRate
+    val isUsdtQuote = agu.analys.util.PriceFormatter.isUsdtQuote(quoteAsset)
+    val idrEquivalentText = if (isUsdtQuote) {
+        agu.analys.util.PriceFormatter.formatIdrEquivalent(price, effectiveRate)
+    } else {
+        null
+    }
+
     var previousPrice by remember { mutableStateOf(price) }
     var priceTickColor by remember(textPrimaryColor) { mutableStateOf(textPrimaryColor) }
 
@@ -243,15 +277,15 @@ fun DetailPriceHeader(
         if (!price.isFinite() || price <= 0.0) return@LaunchedEffect
         if (previousPrice > 0.0 && price != previousPrice) {
             priceTickColor = if (price > previousPrice) greenColor else redColor
-            delay(1000L)
+            kotlinx.coroutines.delay(1000L)
             priceTickColor = textPrimaryColor
         }
         previousPrice = price
     }
 
-    val animatedColor by animateColorAsState(
+    val animatedColor by androidx.compose.animation.animateColorAsState(
         targetValue = priceTickColor,
-        animationSpec = tween(durationMillis = 300),
+        animationSpec = androidx.compose.animation.core.tween(durationMillis = 300),
         label = "price_color_anim"
     )
 
@@ -283,6 +317,30 @@ fun DetailPriceHeader(
                     percentage = change24h,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold
+                )
+            }
+        }
+
+        // Dual price: pair berkuotasi USDT menampilkan ekuivalen Rupiah di bawah harga $.
+        // Nilai Rp dihitung dari kurs real-time; bila rate belum tersedia baris disembunyikan
+        // (bukan ditampilkan dengan kurs tebakan).
+        if (idrEquivalentText != null) {
+            Spacer(Modifier.height(2.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = idrEquivalentText,
+                    color = TvTextSecondary,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = "kurs ${agu.analys.util.PriceFormatter.formatPrice(effectiveRate, showSymbol = true, quoteAsset = "IDR", decimals = 0)}/USDT",
+                    color = TvTextSecondary.copy(alpha = 0.65f),
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Normal,
+                    maxLines = 1
                 )
             }
         }
@@ -409,4 +467,3 @@ fun openExchange(context: Context, source: MarketDataSource = MarketDataSource.T
 }
 
 fun openIndodax(context: Context) = openExchange(context, MarketDataSource.INDODAX)
-

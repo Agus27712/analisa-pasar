@@ -38,11 +38,32 @@ fun HoldingCoinCard(
     onViewChart: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val isProfit = item.pnlIdr >= 0
+    // Prefix `$` vs `Rp` ditentukan oleh kuotasi posisi, bukan asumsi.
+    val quoteAsset = item.quoteAsset
+    val isUsdt = item.isUsdtPosition
+    val quoteColor = if (isUsdt) TvGreen else TvBlue
+
+    // PnL ditampilkan dalam kuotasi posisi: posisi USDT → `$`, posisi IDR → `Rp`.
+    val pnlDisplayValue = if (isUsdt) item.pnlInQuote else item.pnlIdr
+    val pnlDisplayQuote = if (isUsdt) quoteAsset else "IDR"
+
+    val isProfit = pnlDisplayValue >= 0
     val pnlColor = if (isProfit) TvGreen else TvRed
     val pnlBg = if (isProfit) TvGreen.copy(alpha = 0.15f) else TvRed.copy(alpha = 0.15f)
     val pnlBorder = if (isProfit) TvGreen.copy(alpha = 0.4f) else TvRed.copy(alpha = 0.4f)
     val pnlPrefix = if (isProfit) "+" else ""
+
+    // Ekuivalen Rupiah hanya ditampilkan bila kurs tersedia (tanpa hardcode).
+    val valueRpText = if (isUsdt) {
+        agu.analys.util.PriceFormatter.formatIdrEquivalent(item.totalValueInQuote, item.usdtIdrRate)
+    } else {
+        null
+    }
+    val pnlRpText = if (isUsdt) {
+        agu.analys.util.PriceFormatter.formatIdrEquivalent(item.pnlInQuote, item.usdtIdrRate)
+    } else {
+        null
+    }
 
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -66,7 +87,7 @@ fun HoldingCoinCard(
                     Column {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = "${item.baseAsset} / IDR",
+                                text = "${item.baseAsset} / ${quoteAsset.uppercase()}",
                                 color = TvTextPrimary,
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.Bold
@@ -101,14 +122,26 @@ fun HoldingCoinCard(
                     }
                 }
 
-                // Total Nilai Aset Rp
+                // Total Nilai Aset — dalam kuotasi posisi ($ atau Rp), plus ekuivalen Rp bila USDT.
                 Column(horizontalAlignment = Alignment.End) {
                     Text(
-                        text = PriceFormatter.formatPrice(item.totalValueIdr, quoteAsset = "IDR"),
+                        text = if (isUsdt) {
+                            PriceFormatter.formatPrice(item.totalValueInQuote, quoteAsset = quoteAsset)
+                        } else {
+                            PriceFormatter.formatPrice(item.totalValueIdr, quoteAsset = "IDR")
+                        },
                         color = TvTextPrimary,
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Black
                     )
+                    if (valueRpText != null) {
+                        Text(
+                            text = valueRpText,
+                            color = TvTextSecondary,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
                     Text(
                         text = "Total Nilai Aset",
                         color = TvTextSecondary,
@@ -140,8 +173,8 @@ fun HoldingCoinCard(
                         )
                         Spacer(Modifier.height(2.dp))
                         Text(
-                            text = PriceFormatter.formatPrice(item.avgBuyPrice, quoteAsset = "IDR"),
-                            color = TvBlue,
+                            text = PriceFormatter.formatPrice(item.avgBuyPrice, quoteAsset = quoteAsset),
+                            color = quoteColor,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -156,11 +189,18 @@ fun HoldingCoinCard(
                         )
                         Spacer(Modifier.height(2.dp))
                         Text(
-                            text = PriceFormatter.formatPrice(item.currentPrice, quoteAsset = "IDR"),
+                            text = PriceFormatter.formatPrice(item.currentPrice, quoteAsset = quoteAsset),
                             color = TvTextPrimary,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold
                         )
+                        if (isUsdt) {
+                            Text(
+                                text = "pair ${item.baseAsset}/USDT",
+                                color = TvTextSecondary,
+                                fontSize = 8.sp
+                            )
+                        }
                     }
                 }
 
@@ -193,12 +233,22 @@ fun HoldingCoinCard(
                         )
                     }
 
-                    Text(
-                        text = "$pnlPrefix${PriceFormatter.formatPrice(item.pnlIdr, quoteAsset = "IDR")} ($pnlPrefix${String.format(Locale.US, "%.2f", item.pnlPercent)}%)",
-                        color = pnlColor,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Black
-                    )
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text(
+                            text = "$pnlPrefix${PriceFormatter.formatPrice(pnlDisplayValue, quoteAsset = pnlDisplayQuote)} ($pnlPrefix${String.format(Locale.US, "%.2f", item.pnlPercent)}%)",
+                            color = pnlColor,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Black
+                        )
+                        if (pnlRpText != null) {
+                            Text(
+                                text = pnlRpText,
+                                color = pnlColor.copy(alpha = 0.75f),
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
                 }
             }
 

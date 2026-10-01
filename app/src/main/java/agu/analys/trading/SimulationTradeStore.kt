@@ -47,11 +47,162 @@ class SimulationTradeStore(context: Context) {
     }
 
     @Synchronized
+    fun topUpUsdt(amount: Double, exchange: String = "TOKOCRYPTO") {
+        val w = getWallet(exchange)
+        val updated = w.copy(usdtBalance = w.usdtBalance + amount.coerceAtLeast(0.0))
+        saveWallet(updated, exchange)
+    }
+
+    @Synchronized
     fun resetWallet(initialIdr: Double = 10_000_000.0, exchange: String = "TOKOCRYPTO") {
-        saveWallet(SimulationWallet(idrBalance = initialIdr), exchange)
+        saveWallet(SimulationWallet(idrBalance = initialIdr, usdtBalance = 0.0), exchange)
         val ordersKey = getOrdersKey(exchange)
         val historyKey = getHistoryKey(exchange)
         prefs.edit().remove(ordersKey).remove(historyKey).apply()
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // KONVERSI SALDO (IDR <-> USDT) BERBASIS RATE EXCHANGE REAL-TIME
+    // ═══════════════════════════════════════════════════════════════════════
+
+    data class ConversionResult(
+        val success: Boolean,
+        val message: String,
+        val rate: Double = 0.0,
+        val fromAmount: Double = 0.0,
+        val toAmount: Double = 0.0
+    )
+
+    /**
+     * Konversi saldo Rupiah -> USDT memakai rate USDT/IDR live dari exchange.
+     * Rate tidak pernah di-hardcode: bila exchange belum memberi data, konversi ditolak.
+     */
+    @Synchronized
+    fun convertIdrToUsdt(amountIdr: Double, exchange: String = "TOKOCRYPTO"): ConversionResult {
+        val rate = agu.analys.util.ExchangeRateManager.currentRate()
+        if (rate <= 0.0) {
+            return ConversionResult(false, "Rate USDT/IDR belum tersedia dari exchange. Coba lagi sebentar.")
+        }
+        val amount = amountIdr.coerceAtLeast(0.0)
+        if (amount <= 0.0) return ConversionResult(false, "Nominal konversi harus lebih besar dari 0.")
+
+        val w = getWallet(exchange)
+        if (w.getAvailableIdr() < amount) {
+            return ConversionResult(
+                false,
+                "Saldo Rupiah tidak cukup. Tersedia: ${formatMoney(w.getAvailableIdr(), "IDR")}"
+            )
+        }
+        val usdtReceived = amount / rate
+        saveWallet(
+            w.copy(
+                idrBalance = (w.idrBalance - amount).coerceAtLeast(0.0),
+                usdtBalance = w.usdtBalance + usdtReceived
+            ),
+            exchange
+        )
+        agu.analys.util.AppLogManager.trade(
+            "SimConvert",
+            "💱 [KONVERSI] Rp ${formatMoney(amount, "IDR")} -> ${formatMoney(usdtReceived, "USDT")} (rate ${sourceLabel()})"
+        )
+        return ConversionResult(
+            true,
+            "✅ ${formatMoney(amount, "IDR")} → ${formatMoney(usdtReceived, "USDT")}  •  kurs ${sourceLabel()}/USDT",
+            rate,
+            amount,
+            usdtReceived
+        )
+    }
+
+    /** Konversi saldo USDT -> Rupiah memakai rate USDT/IDR live dari exchange. */
+    @Synchronized
+    fun convertUsdtToIdr(amountUsdt: Double, exchange: String = "TOKOCRYPTO"): ConversionResult {
+        val rate = agu.analys.util.ExchangeRateManager.currentRate()
+        if (rate <= 0.0) {
+            return ConversionResult(false, "Rate USDT/IDR belum tersedia dari exchange. Coba lagi sebentar.")
+        }
+        val amount = amountUsdt.coerceAtLeast(0.0)
+        if (amount <= 0.0) return ConversionResult(false, "Nominal konversi harus lebih besar dari 0.")
+
+        val w = getWallet(exchange)
+        if (w.getAvailableUsdt() < amount) {
+            return ConversionResult(
+                false,
+                "Saldo USDT tidak cukup. Tersedia: ${formatMoney(w.getAvailableUsdt(), "USDT")}"
+            )
+        }
+        val idrReceived = amount * rate
+        saveWallet(
+            w.copy(
+                usdtBalance = (w.usdtBalance - amount).coerceAtLeast(0.0),
+                idrBalance = w.idrBalance + idrReceived
+            ),
+            exchange
+        )
+        agu.analys.util.AppLogManager.trade(
+            "SimConvert",
+            "💱 [KONVERSI] ${formatMoney(amount, "USDT")} -> Rp ${formatMoney(idrReceived, "IDR")} (rate ${sourceLabel()})"
+        )
+        return ConversionResult(
+            true,
+            "✅ ${formatMoney(amount, "USDT")} → ${formatMoney(idrReceived, "IDR")}  •  kurs ${sourceLabel()}/USDT",
+            rate,
+            amount,
+            idrReceived
+        )
+    }
+
+    private fun sourceLabel(): String {
+        val r = agu.analys.util.ExchangeRateManager.currentRate()
+        return if (r > 0.0) agu.analys.util.PriceFormatter.formatPrice(r, quoteAsset = "IDR") else "-"
+    }
+
+    /**
+     * Pastikan saldo kuotasi [quote] mencukupi [required].
+     * Untuk pair USDT: bila saldo USDT kurang, saldo Rupiah dikonversi otomatis
+     * pada rate exchange live (sesuai permintaan: order pair USDT memakai saldo IDR
+     * yang dikonversi ke USDT).
+     */
+    @Synchronized
+    private fun ensureQuoteBalance(
+        wallet: SimulationWallet,
+        quote: String,
+        required: Double,
+        exchange: String
+    ): Pair<SimulationWallet, String?> {
+        val available = wallet.getAvailableQuote(quote)
+        if (available >= required) return wallet to null
+
+        if (!agu.analys.util.PriceFormatter.isUsdtQuote(quote)) {
+            return wallet to "Saldo $quote tidak cukup. Tersedia: ${formatMoney(available, quote)}"
+        }
+
+        val rate = agu.analys.util.ExchangeRateManager.currentRate()
+        if (rate <= 0.0) {
+            return wallet to "Saldo $quote tidak cukup dan rate USDT/IDR belum tersedia. Tersedia: ${formatMoney(available, quote)}"
+        }
+
+        val shortfallUsdt = required - available
+        val neededIdr = shortfallUsdt * rate
+        val availableIdr = wallet.getAvailableIdr()
+        if (availableIdr < neededIdr) {
+            return wallet to (
+                "Saldo tidak cukup. Dibutuhkan ${formatMoney(required, quote)} " +
+                    "(≈ ${formatMoney(neededIdr, "IDR")} dari Rupiah). " +
+                    "USDT: ${formatMoney(available, quote)} · IDR: ${formatMoney(availableIdr, "IDR")}"
+                )
+        }
+
+        val converted = (availableIdr.coerceAtMost(neededIdr))
+        val usdtReceived = converted / rate
+        val updated = wallet.copy(
+            idrBalance = (wallet.idrBalance - converted).coerceAtLeast(0.0),
+            usdtBalance = wallet.usdtBalance + usdtReceived
+        )
+        saveWallet(updated, exchange)
+        val note = "Auto-konversi ${formatMoney(converted, "IDR")} → ${formatMoney(usdtReceived, "USDT")} (rate Rp ${agu.analys.util.PriceFormatter.formatIdrNumber(rate)})"
+        agu.analys.util.AppLogManager.trade("SimConvert", "💱 [AUTO KONVERSI ORDER] $note")
+        return updated to note
     }
 
     @Synchronized
@@ -180,9 +331,10 @@ class SimulationTradeStore(context: Context) {
         exchange: String = "TOKOCRYPTO"
     ): SimulationOrderResult {
         if (quantity <= 0.0) return SimulationOrderResult.Error("Jumlah koin harus lebih besar dari 0.")
-        val wallet = getWallet(exchange)
+        var wallet = getWallet(exchange)
         val baseKey = baseAsset.uppercase()
         val quote = quoteAsset.ifBlank { "IDR" }
+        val isUsdt = agu.analys.util.PriceFormatter.isUsdtQuote(quote)
 
         when (type) {
             SimulationOrderType.MARKET -> {
@@ -190,16 +342,24 @@ class SimulationTradeStore(context: Context) {
                 if (execPrice <= 0.0) return SimulationOrderResult.Error("Harga pasar realtime belum tersedia.")
 
                 if (side == SimulationOrderSide.BUY) {
+                    val feeRate = if (exchange.equals("INDODAX", true)) INDODAX_TAKER_FEE_RATE else TOKOCRYPTO_TAKER_FEE_RATE
+                    val required = quantity * execPrice * (1.0 + feeRate)
+                    // Pair USDT: saldo Rupiah dikonversi otomatis bila saldo USDT kurang.
+                    val (toppedWallet, convNote) = ensureQuoteBalance(wallet, quote, required, exchange)
+                    wallet = toppedWallet
+
                     val result = SimulationOrderEngine.executeMarketBuy(wallet, symbol, baseKey, quote, execPrice, quantity)
                     return result.fold(
                         onSuccess = { res ->
                             saveWallet(res.updatedWallet, exchange)
                             addTradeHistory(res.historyItem, exchange)
+                            val sisa = res.updatedWallet.getTotalQuote(quote)
                             agu.analys.util.AppLogManager.trade(
                                 "SimOrder",
-                                "💼 [SIMULASI BUY] Berhasil beli $quantity $baseKey @ Rp ${formatMoney(execPrice, quote)} | Total: Rp ${formatMoney(quantity * execPrice, quote)} | Sisa Saldo: Rp ${formatMoney(res.updatedWallet.idrBalance, quote)}"
+                                "💼 [SIMULASI BUY] Berhasil beli $quantity $baseKey @ ${formatMoney(execPrice, quote)} | Total: ${formatMoney(quantity * execPrice, quote)} | Sisa Saldo $quote: ${formatMoney(sisa, quote)}"
                             )
-                            SimulationOrderResult.Success(res.completedOrder, "Market Buy berhasil @ ${formatMoney(execPrice, quote)}!")
+                            val noteSuffix = if (convNote != null) "\n$convNote" else ""
+                            SimulationOrderResult.Success(res.completedOrder, "Market Buy berhasil @ ${formatMoney(execPrice, quote)}!$noteSuffix")
                         },
                         onFailure = { err ->
                             agu.analys.util.AppLogManager.warn("SimOrder", "Gagal simulasi Buy $symbol: ${err.message}")
@@ -214,11 +374,11 @@ class SimulationTradeStore(context: Context) {
                             addTradeHistory(res.historyItem, exchange)
                             val pnlStr = if (res.historyItem.pnlIdr != null) {
                                 val sign = if (res.historyItem.pnlIdr!! >= 0) "+" else ""
-                                " | PnL: $sign Rp ${formatMoney(res.historyItem.pnlIdr!!, quote)} (${String.format(java.util.Locale.US, "%.2f", res.historyItem.pnlPercent ?: 0.0)}%)"
+                                " | PnL: $sign${formatMoney(res.historyItem.pnlIdr!!, quote)} (${String.format(java.util.Locale.US, "%.2f", res.historyItem.pnlPercent ?: 0.0)}%)"
                             } else ""
                             agu.analys.util.AppLogManager.trade(
                                 "SimOrder",
-                                "💼 [SIMULASI SELL] Berhasil jual $quantity $baseKey @ Rp ${formatMoney(execPrice, quote)} | Hasil: Rp ${formatMoney(quantity * execPrice, quote)}$pnlStr"
+                                "💼 [SIMULASI SELL] Berhasil jual ${res.historyItem.quantity} $baseKey @ ${formatMoney(execPrice, quote)} | Hasil: ${formatMoney(res.historyItem.totalIdr, quote)}$pnlStr"
                             )
                             SimulationOrderResult.Success(res.completedOrder, "Market Sell berhasil @ ${formatMoney(execPrice, quote)}!")
                         },
@@ -232,21 +392,26 @@ class SimulationTradeStore(context: Context) {
 
             SimulationOrderType.LIMIT, SimulationOrderType.STOP_LIMIT -> {
                 if (price <= 0.0) return SimulationOrderResult.Error("Harga Limit harus lebih besar dari 0.")
-                val totalIdr = quantity * price
+                val totalQuote = quantity * price
                 val feeRate = if (exchange.equals("INDODAX", true)) INDODAX_MAKER_FEE_RATE else TOKOCRYPTO_MAKER_FEE_RATE
-                val feeIdr = totalIdr * feeRate
+                val feeQuote = totalQuote * feeRate
 
                 if (side == SimulationOrderSide.BUY) {
-                    val requiredIdr = totalIdr + feeIdr
-                    if (wallet.getAvailableIdr() < requiredIdr) {
+                    val requiredQuote = totalQuote + feeQuote
+                    val (toppedWallet, convNote) = ensureQuoteBalance(wallet, quote, requiredQuote, exchange)
+                    wallet = toppedWallet
+                    if (wallet.getAvailableQuote(quote) < requiredQuote) {
                         return SimulationOrderResult.Error(
-                            "Saldo $quote tidak cukup untuk limit order. Tersedia: ${formatMoney(wallet.getAvailableIdr(), quote)}"
+                            "Saldo $quote tidak cukup untuk limit order. Tersedia: ${formatMoney(wallet.getAvailableQuote(quote), quote)}" +
+                                (if (isUsdt) " (saldo IDR juga tidak mencukupi untuk auto-konversi)." else ".")
                         )
                     }
 
-                    val updatedWallet = wallet.copy(
-                        lockedIdr = wallet.lockedIdr + requiredIdr
-                    )
+                    val updatedWallet = if (isUsdt) {
+                        wallet.copy(lockedUsdt = wallet.lockedUsdt + requiredQuote)
+                    } else {
+                        wallet.copy(lockedIdr = wallet.lockedIdr + requiredQuote)
+                    }
                     saveWallet(updatedWallet, exchange)
 
                     val order = SimulationOrder(
@@ -259,8 +424,8 @@ class SimulationTradeStore(context: Context) {
                         limitPrice = price,
                         stopPrice = stopPrice,
                         quantity = quantity,
-                        totalIdr = totalIdr,
-                        feeIdr = feeIdr,
+                        totalIdr = totalQuote,
+                        feeIdr = feeQuote,
                         status = SimulationOrderStatus.OPEN,
                         isStopTriggered = type == SimulationOrderType.LIMIT
                     )
@@ -271,7 +436,8 @@ class SimulationTradeStore(context: Context) {
 
                     processPriceTick(symbol, currentMarketPrice, currentMarketPrice, currentMarketPrice, exchange)
 
-                    return SimulationOrderResult.Success(order, "Order ${type.displayName} Beli dipasang @ ${formatMoney(price, quote)}.")
+                    val noteSuffix = if (convNote != null) "\n$convNote" else ""
+                    return SimulationOrderResult.Success(order, "Order ${type.displayName} Beli dipasang @ ${formatMoney(price, quote)}.$noteSuffix")
                 } else {
                     val availableCoin = wallet.getAvailableCoin(baseKey)
                     val actualQuantity = if (quantity > availableCoin && (quantity - availableCoin < 0.001 || (quantity - availableCoin) / availableCoin.coerceAtLeast(0.0001) < 0.001)) {
@@ -299,8 +465,8 @@ class SimulationTradeStore(context: Context) {
                         limitPrice = price,
                         stopPrice = stopPrice,
                         quantity = actualQuantity,
-                        totalIdr = totalIdr,
-                        feeIdr = feeIdr,
+                        totalIdr = totalQuote,
+                        feeIdr = feeQuote,
                         status = SimulationOrderStatus.OPEN,
                         isStopTriggered = type == SimulationOrderType.LIMIT
                     )
@@ -329,7 +495,11 @@ class SimulationTradeStore(context: Context) {
 
         val updatedWallet = if (order.side == SimulationOrderSide.BUY) {
             val lockedTotal = order.totalIdr + order.feeIdr
-            wallet.copy(lockedIdr = (wallet.lockedIdr - lockedTotal).coerceAtLeast(0.0))
+            if (agu.analys.util.PriceFormatter.isUsdtQuote(order.quoteAsset)) {
+                wallet.copy(lockedUsdt = (wallet.lockedUsdt - lockedTotal).coerceAtLeast(0.0))
+            } else {
+                wallet.copy(lockedIdr = (wallet.lockedIdr - lockedTotal).coerceAtLeast(0.0))
+            }
         } else {
             val lockedMap = wallet.lockedCoinBalances.toMutableMap()
             val currentLocked = lockedMap[baseKey] ?: 0.0
@@ -408,44 +578,59 @@ class SimulationTradeStore(context: Context) {
                 } else {
                     order.limitPrice
                 }
-                val totalIdr = order.quantity * execPrice
-                val feeIdr = totalIdr * feeRate
+                val orderQuote = order.quoteAsset.ifBlank { "IDR" }
+                val isUsdtOrder = agu.analys.util.PriceFormatter.isUsdtQuote(orderQuote)
+                val totalQuoteVal = order.quantity * execPrice
+                val feeQuoteVal = totalQuoteVal * feeRate
 
                 if (order.side == SimulationOrderSide.BUY) {
                     val lockedToRelease = order.totalIdr + order.feeIdr
-                    val newLockedIdr = (wallet.lockedIdr - lockedToRelease).coerceAtLeast(0.0)
-                    val newIdrBalance = (wallet.idrBalance - (totalIdr + feeIdr)).coerceAtLeast(0.0)
+                    val newLocked = (wallet.getLockedQuote(orderQuote) - lockedToRelease).coerceAtLeast(0.0)
+                    val newBalance = (wallet.getTotalQuote(orderQuote) - (totalQuoteVal + feeQuoteVal)).coerceAtLeast(0.0)
 
                     val newCoinBalances = wallet.coinBalances.toMutableMap()
                     val currentCoin = newCoinBalances[baseKey] ?: 0.0
-                    val currentAvg = wallet.avgBuyPrices[baseKey] ?: 0.0
+                    val prevQuote = wallet.quoteForCoin(baseKey)
+                    val currentAvg = if (prevQuote.equals(orderQuote, true)) (wallet.avgBuyPrices[baseKey] ?: 0.0) else 0.0
                     val newTotalCoin = currentCoin + order.quantity
                     val newAvgPrice = if (newTotalCoin > 0.0) {
-                        ((currentCoin * currentAvg) + totalIdr) / newTotalCoin
+                        ((currentCoin * currentAvg) + totalQuoteVal) / newTotalCoin
                     } else execPrice
 
                     newCoinBalances[baseKey] = newTotalCoin
                     val newAvgMap = wallet.avgBuyPrices.toMutableMap().apply { put(baseKey, newAvgPrice) }
+                    val newQuoteMap = wallet.coinQuoteAssets.toMutableMap().apply { put(baseKey, orderQuote.uppercase()) }
 
-                    wallet = wallet.copy(
-                        idrBalance = newIdrBalance,
-                        lockedIdr = newLockedIdr,
-                        coinBalances = newCoinBalances,
-                        avgBuyPrices = newAvgMap
-                    )
+                    wallet = if (isUsdtOrder) {
+                        wallet.copy(
+                            usdtBalance = newBalance,
+                            lockedUsdt = newLocked,
+                            coinBalances = newCoinBalances,
+                            avgBuyPrices = newAvgMap,
+                            coinQuoteAssets = newQuoteMap
+                        )
+                    } else {
+                        wallet.copy(
+                            idrBalance = newBalance,
+                            lockedIdr = newLocked,
+                            coinBalances = newCoinBalances,
+                            avgBuyPrices = newAvgMap,
+                            coinQuoteAssets = newQuoteMap
+                        )
+                    }
 
                     val history = SimulationTradeHistoryItem(
                         id = UUID.randomUUID().toString(),
                         orderId = order.id,
                         symbol = order.symbol,
                         baseAsset = baseKey,
-                        quoteAsset = order.quoteAsset,
+                        quoteAsset = orderQuote,
                         side = order.side,
                         type = order.type,
                         executionPrice = execPrice,
                         quantity = order.quantity,
-                        totalIdr = totalIdr,
-                        feeIdr = feeIdr,
+                        totalIdr = totalQuoteVal,
+                        feeIdr = feeQuoteVal,
                         timestamp = System.currentTimeMillis()
                     )
                     addTradeHistory(history, exchange)
@@ -457,6 +642,7 @@ class SimulationTradeStore(context: Context) {
 
                     val newCoinBalances = wallet.coinBalances.toMutableMap()
                     val newAvgMap = wallet.avgBuyPrices.toMutableMap()
+                    val newQuoteMap = wallet.coinQuoteAssets.toMutableMap()
                     val curCoin = newCoinBalances[baseKey] ?: 0.0
                     val sellQty = when {
                         order.quantity <= 0.0 -> 0.0
@@ -471,39 +657,52 @@ class SimulationTradeStore(context: Context) {
                     if (isDustRemaining) {
                         newCoinBalances.remove(baseKey)
                         newAvgMap.remove(baseKey)
+                        newQuoteMap.remove(baseKey)
                     } else {
                         newCoinBalances[baseKey] = remCoin
                     }
 
-                    val fillTotalIdr = sellQty * execPrice
-                    val fillFeeIdr = fillTotalIdr * feeRate
-                    val avgBuy = wallet.avgBuyPrices[baseKey] ?: execPrice
+                    val fillTotal = sellQty * execPrice
+                    val fillFee = fillTotal * feeRate
+                    val prevQuote = wallet.quoteForCoin(baseKey)
+                    val avgBuy = if (prevQuote.equals(orderQuote, true)) (wallet.avgBuyPrices[baseKey] ?: execPrice) else execPrice
                     val costBasis = sellQty * avgBuy
-                    val netIdr = fillTotalIdr - fillFeeIdr
-                    val pnlIdr = fillTotalIdr - costBasis - fillFeeIdr
-                    val pnlPercent = if (costBasis > 0.0) (pnlIdr / costBasis) * 100.0 else 0.0
+                    val netQuote = (fillTotal - fillFee).coerceAtLeast(0.0)
+                    val pnlQuote = fillTotal - costBasis - fillFee
+                    val pnlPercent = if (costBasis > 0.0) (pnlQuote / costBasis) * 100.0 else 0.0
 
-                    wallet = wallet.copy(
-                        idrBalance = wallet.idrBalance + netIdr,
-                        coinBalances = newCoinBalances,
-                        avgBuyPrices = newAvgMap,
-                        lockedCoinBalances = lockedMap
-                    )
+                    wallet = if (isUsdtOrder) {
+                        wallet.copy(
+                            usdtBalance = wallet.usdtBalance + netQuote,
+                            coinBalances = newCoinBalances,
+                            avgBuyPrices = newAvgMap,
+                            coinQuoteAssets = newQuoteMap,
+                            lockedCoinBalances = lockedMap
+                        )
+                    } else {
+                        wallet.copy(
+                            idrBalance = wallet.idrBalance + netQuote,
+                            coinBalances = newCoinBalances,
+                            avgBuyPrices = newAvgMap,
+                            coinQuoteAssets = newQuoteMap,
+                            lockedCoinBalances = lockedMap
+                        )
+                    }
 
                     val history = SimulationTradeHistoryItem(
                         id = UUID.randomUUID().toString(),
                         orderId = order.id,
                         symbol = order.symbol,
                         baseAsset = baseKey,
-                        quoteAsset = order.quoteAsset,
+                        quoteAsset = orderQuote,
                         side = order.side,
                         type = order.type,
                         executionPrice = execPrice,
                         quantity = sellQty,
-                        totalIdr = fillTotalIdr,
-                        feeIdr = fillFeeIdr,
+                        totalIdr = fillTotal,
+                        feeIdr = fillFee,
                         timestamp = System.currentTimeMillis(),
-                        pnlIdr = pnlIdr,
+                        pnlIdr = pnlQuote,
                         pnlPercent = pnlPercent
                     )
                     addTradeHistory(history, exchange)
@@ -514,7 +713,7 @@ class SimulationTradeStore(context: Context) {
                     status = SimulationOrderStatus.FILLED,
                     filledQuantity = order.quantity,
                     filledAvgPrice = execPrice,
-                    feeIdr = feeIdr,
+                    feeIdr = feeQuoteVal,
                     filledAt = System.currentTimeMillis()
                 )
                 filledOrders.add(completed)

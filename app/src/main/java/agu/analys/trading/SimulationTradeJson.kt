@@ -126,6 +126,8 @@ object SimulationTradeJson {
         val json = JSONObject()
         json.put("idrBalance", wallet.idrBalance)
         json.put("lockedIdr", wallet.lockedIdr)
+        json.put("usdtBalance", wallet.usdtBalance)
+        json.put("lockedUsdt", wallet.lockedUsdt)
 
         val coinObj = JSONObject()
         wallet.coinBalances.forEach { (k, v) -> if (v > 0.0) coinObj.put(k.uppercase(), v) }
@@ -139,6 +141,10 @@ object SimulationTradeJson {
         wallet.avgBuyPrices.forEach { (k, v) -> if (v > 0.0) avgBuyObj.put(k.uppercase(), v) }
         json.put("avgBuyPrices", avgBuyObj)
 
+        val quoteObj = JSONObject()
+        wallet.coinQuoteAssets.forEach { (k, v) -> if (v.isNotBlank()) quoteObj.put(k.uppercase(), v.uppercase()) }
+        json.put("coinQuoteAssets", quoteObj)
+
         return json
     }
 
@@ -148,6 +154,8 @@ object SimulationTradeJson {
             val json = JSONObject(raw)
             val idr = json.optDouble("idrBalance", 10_000_000.0)
             val lockedIdr = json.optDouble("lockedIdr", 0.0)
+            val usdt = json.optDouble("usdtBalance", 0.0)
+            val lockedUsdt = json.optDouble("lockedUsdt", 0.0)
 
             val coinObj = json.optJSONObject("coinBalances")
             val coinMap = mutableMapOf<String, Double>()
@@ -167,12 +175,22 @@ object SimulationTradeJson {
                 avgBuyMap[k.uppercase()] = avgBuyObj.optDouble(k, 0.0)
             }
 
+            val quoteObj = json.optJSONObject("coinQuoteAssets")
+            val quoteMap = mutableMapOf<String, String>()
+            quoteObj?.keys()?.forEach { k ->
+                val v = quoteObj.optString(k, "IDR")
+                if (v.isNotBlank()) quoteMap[k.uppercase()] = v.uppercase()
+            }
+
             SimulationWallet(
                 idrBalance = idr,
                 lockedIdr = lockedIdr,
+                usdtBalance = usdt,
+                lockedUsdt = lockedUsdt,
                 coinBalances = coinMap,
                 lockedCoinBalances = lockedCoinMap,
-                avgBuyPrices = avgBuyMap
+                avgBuyPrices = avgBuyMap,
+                coinQuoteAssets = quoteMap
             )
         } catch (_: Exception) {
             SimulationWallet()

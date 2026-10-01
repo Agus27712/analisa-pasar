@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -49,8 +50,30 @@ fun RealPortfolioView(
     val freeIdr = realFreeBalance["idr"] ?: realIdr
     val lockedIdr = realLockedBalance["idr"] ?: 0.0
 
+    // Sub-saldo USDT riil: dipakai untuk order di pair berkuotasi USDT.
+    // Kunci saldo mengikuti respons Indodax ("usdt"), dengan toleransi ejaan lain.
+    val realUsdt = realBalance.entries.firstOrNull { (k, _) ->
+        val key = k.lowercase()
+        key == "usdt" || key == "usd" || key == "usdc" || key == "busd"
+    }?.value ?: 0.0
+    val freeUsdt = realFreeBalance.entries.firstOrNull { (k, _) ->
+        val key = k.lowercase()
+        key == "usdt" || key == "usd" || key == "usdc" || key == "busd"
+    }?.value ?: realUsdt
+    val lockedUsdt = realLockedBalance.entries.firstOrNull { (k, _) ->
+        val key = k.lowercase()
+        key == "usdt" || key == "usd" || key == "usdc" || key == "busd"
+    }?.value ?: 0.0
+
+    // Kurs live (bukan hardcode) untuk ekuivalen Rupiah saldo USDT.
+    val usdtIdrRate by agu.analys.util.ExchangeRateManager.usdtIdrRate.collectAsState()
+    val realUsdtIdr = if (usdtIdrRate > 0.0) realUsdt * usdtIdrRate else 0.0
+
     val realCoinItemsList = remember(realBalance, realFreeBalance, realLockedBalance, realAvgBuyPrices, dashboardTicks, currentTick) {
-        realBalance.filter { it.key != "idr" && it.value > 0.00000001 }.entries.map { (coin, qty) ->
+        realBalance.filter {
+            val key = it.key.lowercase()
+            key != "idr" && key != "usdt" && key != "usd" && key != "usdc" && key != "busd" && it.value > 0.00000001
+        }.entries.map { (coin, qty) ->
             val coinUpper = coin.uppercase()
             val coinLower = coin.lowercase()
             val symbol = "${coinUpper}IDR"
@@ -79,7 +102,7 @@ fun RealPortfolioView(
     }
     
     val estTotalCryptoIdr = remember(realCoinItemsList) { realCoinItemsList.sumOf { it.second.first } }
-    val totalRealPortfolioIdr = realIdr + estTotalCryptoIdr
+    val totalRealPortfolioIdr = realIdr + realUsdtIdr + estTotalCryptoIdr
 
     LazyColumn(
         modifier = modifier
@@ -109,7 +132,11 @@ fun RealPortfolioView(
                     lockedIdr = lockedIdr,
                     estTotalCryptoIdr = estTotalCryptoIdr,
                     isFetchingRealBalance = isFetchingRealBalance,
-                    onRefreshRealBalance = onRefreshRealBalance
+                    onRefreshRealBalance = onRefreshRealBalance,
+                    realUsdt = realUsdt,
+                    freeUsdt = freeUsdt,
+                    lockedUsdt = lockedUsdt,
+                    usdtIdrRate = usdtIdrRate
                 )
             }
 

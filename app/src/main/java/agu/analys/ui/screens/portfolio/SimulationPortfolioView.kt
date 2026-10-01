@@ -13,6 +13,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -33,7 +34,7 @@ import java.util.Locale
 
 /**
  * Tampilan khusus Portofolio Simulasi:
- * Menampilkan ringkasan portofolio virtual, kas Rupiah simulasi,
+ * Menampilkan ringkasan portofolio virtual, kas Rupiah & USDT simulasi,
  * daftar koin virtual yang dimiliki, antrean open orders, serta riwayat eksekusi.
  */
 @Composable
@@ -54,9 +55,14 @@ fun SimulationPortfolioView(
     onCancelAllOrders: (String?) -> Unit,
     realIdrBalance: Double = 0.0,
     isRealSimSyncEnabled: Boolean = true,
+    /** Kurs USDT→IDR live. `0.0` = belum tersedia dari exchange (bukan nilai hardcode). */
+    usdtIdrRate: Double = 0.0,
+    /** Buka dialog konversi Rupiah ⇄ USDT di halaman Portofolio. */
+    onOpenConvert: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val totalKasCombinedIdr = if (isRealSimSyncEnabled) realIdrBalance + wallet.idrBalance else wallet.idrBalance
+    val usdtBalanceIdr = if (usdtIdrRate > 0.0) wallet.usdtBalance * usdtIdrRate else 0.0
 
     LazyColumn(
         modifier = modifier
@@ -436,6 +442,160 @@ fun SimulationPortfolioView(
                                 lineHeight = 12.sp
                             )
                         }
+                    }
+                }
+            }
+        }
+
+        // CARD 2B: SALDO USDT & KONVERSI (Rp ⇄ $)
+        // Saldo dollar dipisah total dari saldo Rupiah supaya harga $ dan Rp tidak tercampur.
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = TvCardBackground),
+                border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder)
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .clip(RoundedCornerShape(5.dp))
+                                    .background(TvGreen.copy(alpha = 0.18f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "$",
+                                    color = TvGreen,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Black
+                                )
+                            }
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                text = "SALDO USDT ($)",
+                                color = TvGreen,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        // Tombol fitur konversi — masuk ke halaman Portofolio.
+                        Button(
+                            onClick = onOpenConvert,
+                            modifier = Modifier.height(28.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                            shape = RoundedCornerShape(6.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = TvGreen)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.SwapVert,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text("Konversi", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    Spacer(Modifier.height(10.dp))
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(TvSurfaceVariant, RoundedCornerShape(8.dp))
+                            .padding(12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Saldo USDT tersedia",
+                                color = TvTextSecondary,
+                                fontSize = 11.sp
+                            )
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                text = PriceFormatter.formatPrice(wallet.getAvailableUsdt(), quoteAsset = "USDT"),
+                                color = Color.White,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Black
+                            )
+                            if (usdtIdrRate > 0.0 && wallet.usdtBalance > 0.0) {
+                                Spacer(Modifier.height(2.dp))
+                                Text(
+                                    text = "≈ ${PriceFormatter.formatPrice(usdtBalanceIdr, quoteAsset = "IDR", decimals = 0)}",
+                                    color = TvTextSecondary,
+                                    fontSize = 10.sp
+                                )
+                            }
+                        }
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(
+                                text = "Kurs",
+                                color = TvTextSecondary,
+                                fontSize = 9.sp
+                            )
+                            Text(
+                                text = if (usdtIdrRate > 0.0) {
+                                    PriceFormatter.formatPrice(usdtIdrRate, quoteAsset = "IDR", decimals = 0)
+                                } else {
+                                    "—"
+                                },
+                                color = if (usdtIdrRate > 0.0) TvGreen else TvAmber,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    if (wallet.lockedUsdt > 0.0) {
+                        Spacer(Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Terkunci di antrean order USDT:", color = TvTextSecondary, fontSize = 10.sp)
+                            Text(
+                                PriceFormatter.formatPrice(wallet.lockedUsdt, quoteAsset = "USDT"),
+                                color = TvAmber,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(TvSurfaceVariant.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
+                            .padding(horizontal = 8.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = null,
+                            tint = TvGreen,
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = if (usdtIdrRate > 0.0) {
+                                "Saldo $ dipakai otomatis untuk order di pair berkuotasi USDT. Konversi memakai kurs live ${PriceFormatter.formatPrice(usdtIdrRate, quoteAsset = "IDR", decimals = 0)}/USDT, bukan angka tetap."
+                            } else {
+                                "Kurs USDT/IDR belum tersedia dari exchange. Konversi dan order pair USDT ditahan sampai kurs berhasil diambil."
+                            },
+                            color = if (usdtIdrRate > 0.0) TvTextSecondary else TvAmber,
+                            fontSize = 9.sp,
+                            lineHeight = 12.sp
+                        )
                     }
                 }
             }

@@ -22,6 +22,7 @@ import agu.analys.model.TradingPair
 import agu.analys.ui.components.dashboard.AppBottomNavigationBar
 import agu.analys.ui.components.dashboard.NavTab
 import agu.analys.ui.components.security.SecurityPinDialog
+import agu.analys.ui.components.simulation.CurrencyConversionDialog
 import agu.analys.ui.components.simulation.SimulationTopUpModal
 import agu.analys.ui.screens.portfolio.HoldingItem
 import agu.analys.ui.screens.portfolio.PortfolioTab
@@ -64,6 +65,9 @@ fun PortfolioScreen(
     val realTradeStatus by viewModel.realTradeStatus.collectAsStateWithLifecycle()
     val isRealSimSyncEnabled by viewModel.isRealSimSyncEnabled.collectAsStateWithLifecycle()
 
+    // Kurs USDT/IDR real-time dari ExchangeRateManager (satu-satunya sumber kurs, tanpa hardcode).
+    val usdtIdrRate by viewModel.usdtIdrRateState.collectAsStateWithLifecycle()
+
     // Refresh saldo HANYA saat PIN baru unlock + belum ada cache saldo.
     // Jangan spam API tiap buka tab Real / recompose.
     LaunchedEffect(isPinUnlocked) {
@@ -78,42 +82,66 @@ fun PortfolioScreen(
 
     var selectedTab by remember { mutableStateOf(PortfolioTab.HOLDINGS) }
     var showTopUpModal by remember { mutableStateOf(false) }
+    // Dialog konversi Rupiah ⇄ USDT (fitur konversi di halaman Portofolio).
+    var showConvertDialog by remember { mutableStateOf(false) }
 
     val realIdr = realBalance["idr"] ?: viewModel.prefs.getSavedRealBalance()["idr"] ?: 0.0
 
     // Hitung Koin Dimiliki & Metrik Khusus Portofolio Simulasi (Murni Simulasi, Tidak Tercampur Real)
-    val holdings = remember(wallet, dashboardTicks, currentTick) {
+    //
+    // PENTING: kuotasi posisi dibaca dari wallet (coinQuoteAssets) — posisi yang dibeli di
+    // pair USDT dihitung dalam `$` (BTCUSDT), posisi di pair IDR dalam `Rp` (BTCIDR).
+    // Hanya saat perlu agregasi total portofolio nilainya dinormalisasi ke Rupiah
+    // memakai kurs live, sehingga tampilan per-koin tidak pernah salah prefix.
+    val holdings = remember(wallet, dashboardTicks, currentTick, usdtIdrRate) {
         wallet.coinBalances.filter { it.value > 0.00000001 }.map { (baseAsset, qty) ->
-            val symbol = "${baseAsset}IDR"
+            val quoteAsset = wallet.quoteForCoin(baseAsset)
+            val isUsdt = agu.analys.util.PriceFormatter.isUsdtQuote(quoteAsset)
+            val symbol = if (isUsdt) "${baseAsset}USDT" else "${baseAsset}IDR"
+
+            // Harga pasar diambil dari pair yang SESUAI kuotasi posisi.
             val price = when {
                 symbol.equals(currentTick?.symbol, ignoreCase = true) -> currentTick?.price ?: 0.0
                 dashboardTicks.containsKey(symbol) -> dashboardTicks[symbol]?.price ?: 0.0
                 else -> 0.0
             }
+            // Harga rata-rata beli tersimpan dalam mata uang kuotasi posisi.
             val avgPrice = wallet.avgBuyPrices[baseAsset] ?: 0.0
             val effectivePrice = if (price > 0.0) price else avgPrice
-            val totalValue = qty * effectivePrice
-            val pnl = if (avgPrice > 0.0) (effectivePrice - avgPrice) * qty else 0.0
+
+            // Normalisasi ke Rupiah hanya untuk agregasi.
+            val rate = if (isUsdt) usdtIdrRate else 1.0
+            val toIdr = { v: Double -> if (isUsdt && rate <= 0.0) 0.0 else v * rate }
+            val totalValueIdr = toIdr(qty * effectivePrice)
+            val pnlIdr = if (avgPrice > 0.0) toIdr((effectivePrice - avgPrice) * qty) else 0.0
             val pnlPct = if (avgPrice > 0.0) ((effectivePrice - avgPrice) / avgPrice) * 100.0 else 0.0
 
-            val pair = TradingPair.fromCustomSymbol(symbol, "IDR")
+            val pair = TradingPair.fromCustomSymbol(symbol, quoteAsset)
             HoldingItem(
                 baseAsset = baseAsset,
                 quantity = qty,
                 avgBuyPrice = avgPrice,
                 currentPrice = effectivePrice,
-                totalValueIdr = totalValue,
-                pnlIdr = pnl,
+                totalValueIdr = totalValueIdr,
+                pnlIdr = pnlIdr,
                 pnlPercent = pnlPct,
                 tradingPair = pair,
-                isRealMirror = false
+                isRealMirror = false,
+                quoteAsset = quoteAsset,
+                usdtIdrRate = if (isUsdt) rate else 0.0
             )
         }.sortedByDescending { it.totalValueIdr }
     }
 
     val totalCoinValueIdr = remember(holdings) { holdings.sumOf { it.totalValueIdr } }
     val totalKasSimulasi = wallet.idrBalance
-    val totalPortfolioValueIdr = remember(totalKasSimulasi, totalCoinValueIdr) { totalKasSimulasi + totalCoinValueIdr }
+    // Kas USDT ikut dihitung sebagai aset (dikonversi ke Rupiah dengan kurs live).
+    val totalKasUsdtIdr = remember(wallet.idrBalance, wallet.usdtBalance, usdtIdrRate) {
+        if (usdtIdrRate > 0.0) wallet.usdtBalance * usdtIdrRate else 0.0
+    }
+    val totalPortfolioValueIdr = remember(totalKasSimulasi, totalKasUsdtIdr, totalCoinValueIdr) {
+        totalKasSimulasi + totalKasUsdtIdr + totalCoinValueIdr
+    }
     val totalUnrealizedPnlIdr = remember(holdings) { holdings.sumOf { it.pnlIdr } }
     val totalCostBasis = remember(holdings) { holdings.sumOf { it.quantity * it.avgBuyPrice } }
     val totalUnrealizedPnlPct = remember(totalCostBasis, totalUnrealizedPnlIdr) {
@@ -314,6 +342,8 @@ fun PortfolioScreen(
                 onCancelAllOrders = { symbol -> viewModel.cancelAllSimulationOrders(symbol) },
                 realIdrBalance = 0.0,
                 isRealSimSyncEnabled = false,
+                usdtIdrRate = usdtIdrRate,
+                onOpenConvert = { showConvertDialog = true },
                 modifier = Modifier.weight(1f)
             )
         }
@@ -348,6 +378,16 @@ fun PortfolioScreen(
                 showTopUpModal = false
             },
             onDismiss = { showTopUpModal = false }
+        )
+    }
+
+    if (showConvertDialog) {
+        CurrencyConversionDialog(
+            wallet = wallet,
+            onConvertIdrToUsdt = { amount -> viewModel.convertSimulationIdrToUsdt(amount).message },
+            onConvertUsdtToIdr = { amount -> viewModel.convertSimulationUsdtToIdr(amount).message },
+            onRefreshRate = { viewModel.refreshUsdtIdrRate() },
+            onDismiss = { showConvertDialog = false }
         )
     }
 

@@ -161,7 +161,7 @@ class SimulationCoordinator(
                 )
                 if (r1 is agu.analys.trading.SimulationOrderResult.Success) {
                     okCount++
-                    msg += "TP1: ${agu.analys.util.PriceFormatter.formatCryptoExact(qty1, 8)} @ Rp ${agu.analys.util.PriceFormatter.formatIdrNumber(tp1Price)} (OK). "
+                    msg += "TP1: ${agu.analys.util.PriceFormatter.formatCryptoExact(qty1, 8)} @ ${agu.analys.util.PriceFormatter.formatPrice(tp1Price, quoteAsset = pair.quoteAsset)} (OK). "
                 } else if (r1 is agu.analys.trading.SimulationOrderResult.Error) {
                     msg += "TP1 Gagal: ${r1.message}. "
                 }
@@ -180,13 +180,13 @@ class SimulationCoordinator(
                 )
                 if (r2 is agu.analys.trading.SimulationOrderResult.Success) {
                     okCount++
-                    msg += "TP2: ${agu.analys.util.PriceFormatter.formatCryptoExact(qty2, 8)} @ Rp ${agu.analys.util.PriceFormatter.formatIdrNumber(tp2Price)} (OK)."
+                    msg += "TP2: ${agu.analys.util.PriceFormatter.formatCryptoExact(qty2, 8)} @ ${agu.analys.util.PriceFormatter.formatPrice(tp2Price, quoteAsset = pair.quoteAsset)} (OK)."
                 } else if (r2 is agu.analys.trading.SimulationOrderResult.Error) {
                     msg += "TP2 Gagal: ${r2.message}."
                 }
             }
             refresh()
-            onResult(okCount > 0, if (okCount > 0) "2 Order TP Simulasi terpasang (100% tanpa sisa):\n$msg" else "Gagal pasang order TP: $msg")
+            onResult(okCount > 0, msg.trim())
         } else if (isAutoTpEnabled && tp1Price > 0.0) {
             val r = store.placeOrder(
                 symbol = pair.symbol,
@@ -202,7 +202,7 @@ class SimulationCoordinator(
             refresh()
             val ok = r is agu.analys.trading.SimulationOrderResult.Success
             val m = when (r) {
-                is agu.analys.trading.SimulationOrderResult.Success -> "Order Limit TP1 ${agu.analys.util.PriceFormatter.formatCryptoExact(sellQty, 8)} @ Rp ${agu.analys.util.PriceFormatter.formatIdrNumber(tp1Price)} terpasang."
+                is agu.analys.trading.SimulationOrderResult.Success -> "Order Limit TP1 ${agu.analys.util.PriceFormatter.formatCryptoExact(sellQty, 8)} @ ${agu.analys.util.PriceFormatter.formatPrice(tp1Price, quoteAsset = pair.quoteAsset)} terpasang."
                 is agu.analys.trading.SimulationOrderResult.Error -> r.message
             }
             onResult(ok, m)
@@ -221,12 +221,11 @@ class SimulationCoordinator(
             refresh()
             val ok = r is agu.analys.trading.SimulationOrderResult.Success
             val m = when (r) {
-                is agu.analys.trading.SimulationOrderResult.Success -> "Order Limit TP2 ${agu.analys.util.PriceFormatter.formatCryptoExact(sellQty, 8)} @ Rp ${agu.analys.util.PriceFormatter.formatIdrNumber(tp2Price)} terpasang."
+                is agu.analys.trading.SimulationOrderResult.Success -> "Order Limit TP2 ${agu.analys.util.PriceFormatter.formatCryptoExact(sellQty, 8)} @ ${agu.analys.util.PriceFormatter.formatPrice(tp2Price, quoteAsset = pair.quoteAsset)} terpasang."
                 is agu.analys.trading.SimulationOrderResult.Error -> r.message
             }
             onResult(ok, m)
         } else {
-            // Switch OFF -> 1 limit order at current market price
             val r = store.placeOrder(
                 symbol = pair.symbol,
                 baseAsset = pair.baseAsset,
@@ -239,94 +238,40 @@ class SimulationCoordinator(
                 currentMarketPrice = marketPrice
             )
             refresh()
-            val ok = r is agu.analys.trading.SimulationOrderResult.Success
-            if (ok && (r as agu.analys.trading.SimulationOrderResult.Success).order.status == agu.analys.trading.SimulationOrderStatus.FILLED) {
+            if (r is agu.analys.trading.SimulationOrderResult.Success) {
                 _lastFilledOrder.value = r.order
                 onOrderFilled?.invoke(r.order)
             }
             val m = when (r) {
-                is agu.analys.trading.SimulationOrderResult.Success -> "Order Jual Limit ${agu.analys.util.PriceFormatter.formatCryptoExact(sellQty, 8)} @ Rp ${agu.analys.util.PriceFormatter.formatIdrNumber(marketPrice)} berhasil."
+                is agu.analys.trading.SimulationOrderResult.Success -> "Order Jual Pasar ${agu.analys.util.PriceFormatter.formatCryptoExact(sellQty, 8)} @ ${agu.analys.util.PriceFormatter.formatPrice(marketPrice, quoteAsset = pair.quoteAsset)} berhasil."
                 is agu.analys.trading.SimulationOrderResult.Error -> r.message
             }
-            onResult(ok, m)
+            onResult(r is agu.analys.trading.SimulationOrderResult.Success, m)
         }
-    }
-
-    fun placeSimulationAutoSellOrders(
-        pair: agu.analys.model.TradingPair,
-        tp1Price: Double,
-        tp1Percent: Double,
-        tp2Price: Double,
-        tp2Percent: Double,
-        onResult: (Boolean, String) -> Unit
-    ) {
-        val wallet = store.getWallet()
-        val availableCoin = wallet.getAvailableCoin(pair.baseAsset)
-        if (availableCoin <= 0.0) {
-            onResult(false, "Saldo koin ${pair.baseAsset} kosong, tidak dapat pasang limit sell TP.")
-            return
-        }
-        val qty1 = availableCoin * (tp1Percent / 100.0)
-        val qty2 = availableCoin * (tp2Percent / 100.0)
-
-        var successCount = 0
-        var msg = ""
-
-        if (tp1Price > 0.0 && qty1 > 0.0) {
-            val res = store.placeOrder(
-                symbol = pair.symbol,
-                baseAsset = pair.baseAsset,
-                quoteAsset = pair.quoteAsset,
-                side = agu.analys.trading.SimulationOrderSide.SELL,
-                type = agu.analys.trading.SimulationOrderType.LIMIT,
-                price = tp1Price,
-                stopPrice = 0.0,
-                quantity = qty1,
-                currentMarketPrice = 0.0
-            )
-            if (res is agu.analys.trading.SimulationOrderResult.Success) {
-                successCount++
-                msg += "TP1 OK. "
-                if (res.order.status == agu.analys.trading.SimulationOrderStatus.FILLED) {
-                    _lastFilledOrder.value = res.order
-                    onOrderFilled?.invoke(res.order)
-                }
-            } else if (res is agu.analys.trading.SimulationOrderResult.Error) {
-                msg += "TP1 Gagal: ${res.message}. "
-            }
-        }
-
-        if (tp2Price > 0.0 && qty2 > 0.0) {
-            val res = store.placeOrder(
-                symbol = pair.symbol,
-                baseAsset = pair.baseAsset,
-                quoteAsset = pair.quoteAsset,
-                side = agu.analys.trading.SimulationOrderSide.SELL,
-                type = agu.analys.trading.SimulationOrderType.LIMIT,
-                price = tp2Price,
-                stopPrice = 0.0,
-                quantity = qty2,
-                currentMarketPrice = 0.0
-            )
-            if (res is agu.analys.trading.SimulationOrderResult.Success) {
-                successCount++
-                msg += "TP2 OK."
-                if (res.order.status == agu.analys.trading.SimulationOrderStatus.FILLED) {
-                    _lastFilledOrder.value = res.order
-                    onOrderFilled?.invoke(res.order)
-                }
-            } else if (res is agu.analys.trading.SimulationOrderResult.Error) {
-                msg += "TP2 Gagal: ${res.message}."
-            }
-        }
-
-        refresh()
-        onResult(successCount > 0, if (successCount > 0) "Order TP Berhasil dipasang! $msg" else "Gagal pasang order TP: $msg")
     }
 
     fun topUpIdr(amount: Double) {
         store.topUpIdr(amount)
         refresh()
+    }
+
+    fun topUpUsdt(amount: Double) {
+        store.topUpUsdt(amount)
+        refresh()
+    }
+
+    /** Konversi saldo Rupiah -> USDT pada rate exchange live. */
+    fun convertIdrToUsdt(amountIdr: Double): SimulationTradeStore.ConversionResult {
+        val result = store.convertIdrToUsdt(amountIdr)
+        if (result.success) refresh()
+        return result
+    }
+
+    /** Konversi saldo USDT -> Rupiah pada rate exchange live. */
+    fun convertUsdtToIdr(amountUsdt: Double): SimulationTradeStore.ConversionResult {
+        val result = store.convertUsdtToIdr(amountUsdt)
+        if (result.success) refresh()
+        return result
     }
 
     fun setBalance(amount: Double) {

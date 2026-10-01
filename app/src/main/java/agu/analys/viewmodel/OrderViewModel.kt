@@ -107,6 +107,16 @@ class OrderViewModel(
 
     fun topUpSimulationBalance(amount: Double) = simCoordinator.topUpIdr(amount)
 
+    fun topUpSimulationUsdt(amount: Double) = simCoordinator.topUpUsdt(amount)
+
+    /** Konversi saldo Rupiah -> USDT (rate live exchange). */
+    fun convertSimulationIdrToUsdt(amountIdr: Double): SimulationTradeStore.ConversionResult =
+        simCoordinator.convertIdrToUsdt(amountIdr)
+
+    /** Konversi saldo USDT -> Rupiah (rate live exchange). */
+    fun convertSimulationUsdtToIdr(amountUsdt: Double): SimulationTradeStore.ConversionResult =
+        simCoordinator.convertUsdtToIdr(amountUsdt)
+
     fun setSimulationBalance(amount: Double) = simCoordinator.setBalance(amount)
 
     fun resetSimulationAccount() = simCoordinator.resetAccount()
@@ -152,6 +162,18 @@ class OrderViewModel(
     fun setRealBuyMode(enabled: Boolean, pin: String? = null): Boolean = realCoordinator.setRealBuyMode(enabled, pin)
 
     fun fetchRealBalance() = realCoordinator.fetchRealBalance()
+
+    /**
+     * Saldo real untuk mata uang kuotasi tertentu.
+     * Pair USDT -> saldo USDT, pair IDR -> saldo IDR (sesuai ketersediaan di exchange).
+     */
+    fun realBalanceForQuote(quoteAsset: String): Double = realCoordinator.realBalanceForQuote(quoteAsset)
+
+    /** Saldo real Rupiah (IDR). */
+    fun realIdrBalance(): Double = realCoordinator.realBalanceForQuote("IDR")
+
+    /** Saldo real USDT. */
+    fun realUsdtBalance(): Double = realCoordinator.realBalanceForQuote("USDT")
 
     fun checkPublicIp() = realCoordinator.checkPublicIp()
 
