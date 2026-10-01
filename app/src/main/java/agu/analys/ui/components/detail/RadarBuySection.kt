@@ -84,11 +84,15 @@ fun RadarBuySection(
     val defaultTpPrice2 = remember(validPrice, signal) {
         if (signal != null && signal.targetPrice2 > validPrice) signal.targetPrice2 else validPrice * 1.06
     }
-    var tp1PriceInput by remember(defaultTpPrice1) { mutableStateOf(String.format("%.0f", defaultTpPrice1)) }
-    var tp2PriceInput by remember(defaultTpPrice2) { mutableStateOf(String.format("%.0f", defaultTpPrice2)) }
+    var tp1PriceInput by remember(defaultTpPrice1, quoteAsset) {
+        mutableStateOf(PriceFormatter.formatPrice(defaultTpPrice1, showSymbol = false, quoteAsset = quoteAsset))
+    }
+    var tp2PriceInput by remember(defaultTpPrice2, quoteAsset) {
+        mutableStateOf(PriceFormatter.formatPrice(defaultTpPrice2, showSymbol = false, quoteAsset = quoteAsset))
+    }
     
-    val tp1Price = tp1PriceInput.toDoubleOrNull() ?: defaultTpPrice1
-    val tp2Price = tp2PriceInput.toDoubleOrNull() ?: defaultTpPrice2
+    val tp1Price = PriceFormatter.parseCleanIdrDouble(tp1PriceInput).takeIf { it > 0 } ?: defaultTpPrice1
+    val tp2Price = PriceFormatter.parseCleanIdrDouble(tp2PriceInput).takeIf { it > 0 } ?: defaultTpPrice2
 
     val focusManager = LocalFocusManager.current
 
@@ -137,7 +141,7 @@ fun RadarBuySection(
                     )
                     Spacer(Modifier.width(6.dp))
                     Text(
-                        text = "Saldo ${quoteAsset.uppercase()} (${if (isRealMode) "Real Indodax" else "Simulasi"}):",
+                        text = "Saldo ${quoteAsset.uppercase()} (${if (isRealMode) "Real" else "Simulasi"}):",
                         color = TvTextSecondary,
                         fontSize = 10.5.sp,
                         fontWeight = FontWeight.Bold
@@ -257,10 +261,6 @@ fun RadarBuySection(
         Spacer(Modifier.height(8.dp))
 
         // Quick Nominal Selector
-
-        Spacer(Modifier.height(8.dp))
-
-        // Quick Nominal Selector
         Text(
             text = "PILIH JUMLAH SALDO DIGUNAKAN:",
             color = TvTextSecondary,
@@ -274,12 +274,13 @@ fun RadarBuySection(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            if (recommendedRiskSize >= 10000.0) {
+            if (recommendedRiskSize >= minNominalQuote) {
                 QuickNominalChip(
                     label = "2% Risk",
-                    selected = !isCustomNominalOpen && selectedNominalIdr > 0 && Math.abs(selectedNominalIdr - recommendedRiskSize) < 100,
+                    selected = !isCustomNominalOpen && selectedNominalIdr > 0 && Math.abs(selectedNominalIdr - recommendedRiskSize) < (if (isUsdtQuote) 0.1 else 100.0),
                     onClick = {
-                        onNominalIdrChanged(recommendedRiskSize.toLong().toDouble())
+                        val amt = if (isUsdtQuote) recommendedRiskSize else recommendedRiskSize.toLong().toDouble()
+                        onNominalIdrChanged(amt)
                         isCustomNominalOpen = false
                     },
                     modifier = Modifier.weight(1.2f)
@@ -287,14 +288,17 @@ fun RadarBuySection(
             }
             val percentages = listOf(25, 50, 75, 100)
             percentages.forEach { pct ->
-                val calculatedAmount = if (availableIdr > 0) (availableIdr * (pct / 100.0)).toLong().toDouble() else 0.0
+                val calculatedAmount = if (availableIdr > 0) {
+                    if (isUsdtQuote) (availableIdr * (pct / 100.0) * 100.0).toLong() / 100.0
+                    else (availableIdr * (pct / 100.0)).toLong().toDouble()
+                } else 0.0
                 QuickNominalChip(
                     label = "$pct%",
                     selected = !isCustomNominalOpen && selectedNominalIdr > 0 && 
-                              (Math.abs(selectedNominalIdr - calculatedAmount) < 100 || (pct == 100 && selectedNominalIdr == availableIdr)),
+                              (Math.abs(selectedNominalIdr - calculatedAmount) < (if (isUsdtQuote) 0.1 else 100.0) || (pct == 100 && selectedNominalIdr == availableIdr)),
                     onClick = {
                         val amount = if (pct == 100) availableIdr else calculatedAmount
-                        onNominalIdrChanged(amount.toLong().toDouble()) // Ensure integer for IDR
+                        onNominalIdrChanged(amount)
                         isCustomNominalOpen = false
                     },
                     modifier = Modifier.weight(1f)
@@ -319,15 +323,15 @@ fun RadarBuySection(
                 OutlinedTextField(
                     value = customNominalInput,
                     onValueChange = { input ->
-                        val filtered = input.filter { it.isDigit() }
+                        val filtered = input.filter { it.isDigit() || (isUsdtQuote && (it == '.' || it == ',')) }
                         customNominalInput = filtered
-                        val parsed = filtered.toDoubleOrNull()
-                        if (parsed != null && parsed > 0) {
+                        val parsed = PriceFormatter.parseCleanIdrDouble(filtered)
+                        if (parsed > 0) {
                             onNominalIdrChanged(parsed)
                         }
                     },
-                    label = { Text("Masukkan Nominal Pembelian", fontSize = 11.sp) },
-                    placeholder = { Text("Contoh: Rp 250.000 / 10$ )", fontSize = 11.sp) },
+                    label = { Text("Masukkan Nominal Pembelian ($quoteAsset)", fontSize = 11.sp) },
+                    placeholder = { Text(if (isUsdtQuote) "Contoh: 10 / 50 USDT" else "Contoh: Rp 250.000 / Rp 1.000.000", fontSize = 11.sp) },
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Number,
                         imeAction = ImeAction.Done
@@ -386,7 +390,7 @@ fun RadarBuySection(
                     }
                 }
                 Text(
-                    text = "${PriceFormatter.formatIdrNumber(effectiveBuyPrice)} $quoteAsset",
+                    text = PriceFormatter.formatPrice(effectiveBuyPrice, quoteAsset = quoteAsset),
                     color = if (customTargetBuyPrice > 0.0 && customTargetBuyPrice != validPrice) TvGreen else TvTextPrimary,
                     fontSize = 11.5.sp,
                     fontWeight = FontWeight.Bold
@@ -394,11 +398,11 @@ fun RadarBuySection(
             }
             TransactionDetailRow(
                 label = "Nominal Order",
-                value = "${PriceFormatter.formatIdrNumber(grossBuyOrderAmount)} $quoteAsset"
+                value = PriceFormatter.formatPrice(grossBuyOrderAmount, quoteAsset = quoteAsset)
             )
             TransactionDetailRow(
                 label = "Biaya Fee (${String.format("%.2f", effectiveFeePct)}%)",
-                value = if (isMakerOrder) "Rp 0 (Maker)" else "- ${PriceFormatter.formatIdrNumber(buyFeeIdr)} $quoteAsset",
+                value = if (isMakerOrder) "${if (isUsdtQuote) "$0" else "Rp 0"} (Maker)" else "- ${PriceFormatter.formatPrice(buyFeeIdr, quoteAsset = quoteAsset)}",
                 valueColor = if (isMakerOrder) TvGreen else TvRed
             )
 
@@ -424,7 +428,7 @@ fun RadarBuySection(
                         fontWeight = FontWeight.ExtraBold
                     )
                     Text(
-                        text = "= ${PriceFormatter.formatIdrNumber(netBuyAmountIdr)} $quoteAsset Net",
+                        text = "= ${PriceFormatter.formatPrice(netBuyAmountIdr, quoteAsset = quoteAsset)} Net",
                         color = TvTextSecondary,
                         fontSize = 10.sp
                     )
@@ -587,9 +591,9 @@ fun RadarBuySection(
                         Spacer(Modifier.width(6.dp))
                         Text(
                             text = if (isRealMode) {
-                                "[REAL] BELI (${PriceFormatter.formatIdrNumber(grossBuyOrderAmount)})"
+                                "[REAL] BELI (${PriceFormatter.formatPrice(grossBuyOrderAmount, quoteAsset = quoteAsset)})"
                             } else {
-                                "[SIM] BELI (${PriceFormatter.formatIdrNumber(grossBuyOrderAmount)})"
+                                "[SIM] BELI (${PriceFormatter.formatPrice(grossBuyOrderAmount, quoteAsset = quoteAsset)})"
                             },
                             fontWeight = FontWeight.Black,
                             fontSize = 12.sp,

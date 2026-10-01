@@ -60,16 +60,19 @@ fun CustomBuyOrderDialog(
         } else if (p < 1000.0) {
             String.format(Locale.US, "%.4f", p).trimEnd('0').trimEnd('.')
         } else {
-            PriceFormatter.formatIdrNumber(p)
+            PriceFormatter.formatPrice(p, showSymbol = false, quoteAsset = quoteAsset)
         }
     }
+
+    val isUsdtQuote = PriceFormatter.isUsdtQuote(quoteAsset)
+    val minNominal = if (isUsdtQuote) 1.0 else 10000.0
 
     var buyPriceInput by remember(show, validPrice) {
         mutableStateOf(formatPriceForInput(if (validPrice > 0) validPrice else 0.0))
     }
     var nominalInput by remember(show, initialNominalIdr) {
-        val initAmount = if (initialNominalIdr >= 10000.0) initialNominalIdr else 50000.0
-        mutableStateOf(PriceFormatter.formatIdrNumber(initAmount))
+        val initAmount = if (initialNominalIdr >= minNominal) initialNominalIdr else if (isUsdtQuote) 10.0 else 50000.0
+        mutableStateOf(formatPriceForInput(initAmount))
     }
 
     var isAutoLimitSellEnabled by remember(show) { mutableStateOf(false) }
@@ -98,7 +101,7 @@ fun CustomBuyOrderDialog(
     }
 
     val isPriceValid = targetPrice > 0
-    val isNominalValid = nominalIdr >= 10000.0
+    val isNominalValid = nominalIdr >= minNominal
     val isBalanceSufficient = availableIdr <= 0 || nominalIdr <= availableIdr
     val canSubmit = isPriceValid && isNominalValid && isBalanceSufficient
 
@@ -141,7 +144,7 @@ fun CustomBuyOrderDialog(
                             color = TvTextPrimary
                         )
                         Text(
-                            text = if (isRealMode) "Real Indodax TAPI v2" else "Simulasi Trading Spot",
+                            text = if (isRealMode) "Mode Real Trading Spot" else "Simulasi Trading Spot",
                             fontSize = 10.sp,
                             color = if (isRealMode) TvAmber else TvBlue,
                             fontWeight = FontWeight.SemiBold
@@ -180,7 +183,7 @@ fun CustomBuyOrderDialog(
                                 color = TvTextSecondary
                             )
                             Text(
-                                text = "${PriceFormatter.formatIdrNumber(validPrice)} $quoteAsset",
+                                text = PriceFormatter.formatPrice(validPrice, quoteAsset = quoteAsset),
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = TvTextPrimary
@@ -189,12 +192,12 @@ fun CustomBuyOrderDialog(
 
                         Column(horizontalAlignment = Alignment.End) {
                             Text(
-                                text = "Saldo IDR Tersedia:",
+                                text = "Saldo $quoteAsset Tersedia:",
                                 fontSize = 10.sp,
                                 color = TvTextSecondary
                             )
                             Text(
-                                text = "${PriceFormatter.formatIdrNumber(availableIdr)} $quoteAsset",
+                                text = PriceFormatter.formatPrice(availableIdr, quoteAsset = quoteAsset),
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = if (availableIdr > 0) TvGreen else TvTextSecondary
@@ -241,7 +244,7 @@ fun CustomBuyOrderDialog(
                         onValueChange = { input ->
                             buyPriceInput = input.filter { it.isDigit() || it == '.' || it == ',' }
                         },
-                        placeholder = { Text("Contoh: 13950", fontSize = 12.sp) },
+                        placeholder = { Text(if (isUsdtQuote) "Contoh: 1.25" else "Contoh: 13950", fontSize = 12.sp) },
                         keyboardOptions = KeyboardOptions(
                             keyboardType = KeyboardType.Number,
                             imeAction = ImeAction.Next
@@ -311,7 +314,7 @@ fun CustomBuyOrderDialog(
                     }
                 }
 
-                // 2. INPUT NOMINAL MODAL (IDR)
+                // 2. INPUT NOMINAL MODAL
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
                         text = "MODAL PEMBELIAN ($quoteAsset):",
@@ -323,9 +326,9 @@ fun CustomBuyOrderDialog(
                     OutlinedTextField(
                         value = nominalInput,
                         onValueChange = { input ->
-                            nominalInput = input.filter { it.isDigit() }
+                            nominalInput = input.filter { it.isDigit() || (isUsdtQuote && (it == '.' || it == ',')) }
                         },
-                        placeholder = { Text("Min. 10.000 (Cth: 80000)", fontSize = 12.sp) },
+                        placeholder = { Text(if (isUsdtQuote) "Min. 1 (Cth: 10)" else "Min. 10.000 (Cth: 80000)", fontSize = 12.sp) },
                         keyboardOptions = KeyboardOptions(
                             keyboardType = KeyboardType.Number,
                             imeAction = ImeAction.Done
@@ -348,10 +351,10 @@ fun CustomBuyOrderDialog(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        if (recommendedRiskSize >= 10000.0) {
+                        if (recommendedRiskSize >= minNominal) {
                             QuickPriceChip(
                                 label = "2% Risk",
-                                selected = nominalIdr > 0 && abs(nominalIdr - recommendedRiskSize) < 100,
+                                selected = nominalIdr > 0 && abs(nominalIdr - recommendedRiskSize) < (if (isUsdtQuote) 0.1 else 100.0),
                                 onClick = {
                                     nominalInput = formatPriceForInput(recommendedRiskSize)
                                     focusManager.clearFocus()
@@ -361,15 +364,15 @@ fun CustomBuyOrderDialog(
                         }
                         val percentages = listOf(25, 50, 75, 100)
                         percentages.forEach { pct ->
-                            val amount = if (pct == 100) availableIdr else (availableIdr * (pct / 100.0)).toLong().toDouble()
+                            val amount = if (pct == 100) availableIdr else if (isUsdtQuote) (availableIdr * (pct / 100.0) * 100.0).toLong() / 100.0 else (availableIdr * (pct / 100.0)).toLong().toDouble()
                             QuickPriceChip(
                                 label = "$pct%",
-                                selected = nominalIdr > 0 && abs(nominalIdr - amount) < 100,
+                                selected = nominalIdr > 0 && abs(nominalIdr - amount) < (if (isUsdtQuote) 0.1 else 100.0),
                                 onClick = {
-                                    if (amount >= 10000.0) {
-                                        nominalInput = PriceFormatter.formatIdrNumber(amount)
-                                    } else if (availableIdr >= 10000.0) {
-                                        nominalInput = PriceFormatter.formatIdrNumber(10000.0)
+                                    if (amount >= minNominal) {
+                                        nominalInput = formatPriceForInput(amount)
+                                    } else if (availableIdr >= minNominal) {
+                                        nominalInput = formatPriceForInput(minNominal)
                                     }
                                     focusManager.clearFocus()
                                 },
@@ -432,7 +435,7 @@ fun CustomBuyOrderDialog(
                     ) {
                         Text("Total Modal", fontSize = 11.sp, color = TvTextSecondary)
                         Text(
-                            "${PriceFormatter.formatIdrNumber(nominalIdr)} $quoteAsset",
+                            PriceFormatter.formatPrice(nominalIdr, quoteAsset = quoteAsset),
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = TvTextPrimary
@@ -445,7 +448,7 @@ fun CustomBuyOrderDialog(
                     ) {
                         Text("Biaya Fee (${String.format(Locale.US, "%.2f", effectiveFeePct)}%)", fontSize = 11.sp, color = TvTextSecondary)
                         Text(
-                            if (isMakerOrder) "Rp 0 (Maker)" else "- ${PriceFormatter.formatIdrNumber(feeIdr)} $quoteAsset",
+                            if (isMakerOrder) "${if (isUsdtQuote) "$0" else "Rp 0"} (Maker)" else "- ${PriceFormatter.formatPrice(feeIdr, quoteAsset = quoteAsset)}",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = if (isMakerOrder) TvGreen else TvRed
@@ -546,7 +549,7 @@ fun CustomBuyOrderDialog(
                 // Error validation warning
                 if (!isNominalValid && nominalInput.isNotBlank()) {
                     Text(
-                        text = "Minimal modal pembelian adalah Rp 10.000 (aturan Indodax).",
+                        text = "Minimal modal pembelian adalah ${if (isUsdtQuote) "$1 USDT" else "Rp 10.000"}.",
                         color = TvRed,
                         fontSize = 10.sp,
                         textAlign = TextAlign.Center,
@@ -554,7 +557,7 @@ fun CustomBuyOrderDialog(
                     )
                 } else if (!isBalanceSufficient) {
                     Text(
-                        text = "Saldo IDR tidak mencukupi untuk nominal ini.",
+                        text = "Saldo $quoteAsset tidak mencukupi untuk nominal ini.",
                         color = TvRed,
                         fontSize = 10.sp,
                         textAlign = TextAlign.Center,

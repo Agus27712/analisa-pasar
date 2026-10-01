@@ -39,8 +39,8 @@ fun PriceAlertDialog(
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
     var selectedType by remember { mutableStateOf(PriceAlertType.PRICE_ABOVE) }
-    var targetPriceInput by remember {
-        mutableStateOf(if (currentPrice > 0) PriceFormatter.formatIdrNumber(currentPrice * 1.03) else "")
+    var targetPriceInput by remember(currentPrice, quoteAsset) {
+        mutableStateOf(if (currentPrice > 0) PriceFormatter.formatPrice(currentPrice * 1.03, showSymbol = false, quoteAsset = quoteAsset) else "")
     }
     var noteInput by remember { mutableStateOf("") }
     val focusManager = LocalFocusManager.current

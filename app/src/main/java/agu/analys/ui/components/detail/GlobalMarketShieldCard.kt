@@ -102,6 +102,7 @@ fun GlobalMarketShieldDialog(
     bids: List<OrderBookItem> = emptyList(),
     asks: List<OrderBookItem> = emptyList(),
     strategyMode: StrategyMode = StrategyMode.SCALPING,
+    quoteAsset: String = "IDR",
     onDismiss: () -> Unit
 ) {
     val totalBids = remember(bids) { bids.sumOf { it.amount } }
@@ -115,7 +116,7 @@ fun GlobalMarketShieldDialog(
             Icons.Default.Info,
             TvTextSecondary,
             "LIKUIDITAS DATA KOSONG",
-            "Menunggu data order book / depth terisi oleh server Indodax."
+            "Menunggu data order book / depth terisi oleh server pasar."
         )
         buyRatio >= 0.58 -> listOf(
             Icons.Default.Security,
@@ -270,7 +271,7 @@ fun GlobalMarketShieldDialog(
                         ) {
                             Text("Dinding Beli Terbesar", color = TvTextSecondary, fontSize = 11.sp)
                             Text(
-                                "${String.format(Locale.US, "%.3f", maxBid.amount)} @ ${PriceFormatter.formatPrice(maxBid.price)}",
+                                "${String.format(Locale.US, "%.3f", maxBid.amount)} @ ${PriceFormatter.formatPrice(maxBid.price, quoteAsset = quoteAsset)}",
                                 color = TvGreen,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold
@@ -285,7 +286,7 @@ fun GlobalMarketShieldDialog(
                         ) {
                             Text("Dinding Jual Terbesar", color = TvTextSecondary, fontSize = 11.sp)
                             Text(
-                                "${String.format(Locale.US, "%.3f", maxAsk.amount)} @ ${PriceFormatter.formatPrice(maxAsk.price)}",
+                                "${String.format(Locale.US, "%.3f", maxAsk.amount)} @ ${PriceFormatter.formatPrice(maxAsk.price, quoteAsset = quoteAsset)}",
                                 color = TvRed,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold

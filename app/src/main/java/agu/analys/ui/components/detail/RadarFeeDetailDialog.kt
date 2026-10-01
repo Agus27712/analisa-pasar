@@ -27,7 +27,7 @@ import agu.analys.ui.theme.TvTextSecondary
 import agu.analys.util.PriceFormatter
 
 /**
- * Dialog rincian Biaya Transaksi identik dengan tampilan modal Indodax
+ * Dialog rincian Biaya Transaksi
  * yang bersumber dari konfigurasi fee di Settings pengguna.
  */
 @Composable
@@ -38,6 +38,7 @@ fun RadarFeeDetailDialog(
     orderAmountIdr: Double,
     isMakerOrder: Boolean,
     coinSymbol: String,
+    quoteAsset: String = "IDR",
     isBuyMode: Boolean = true
 ) {
     if (!isOpen) return
@@ -48,7 +49,7 @@ fun RadarFeeDetailDialog(
         if (isMakerOrder) fees.sellMakerPct else fees.sellTakerPct
     }
     val totalFeeIdr = orderAmountIdr * (feePct / 100.0)
-    // Proporsi breakdown regulasi kripto Indodax & Bappebti:
+    // Proporsi breakdown regulasi kripto & Bappebti:
     // Pajak: Jual = PPh 22 Final (0.10%), Beli = PPN (0.11%)
     val taxPct = if (isBuyMode) 0.11 else 0.10
     val taxIdr = (orderAmountIdr * (taxPct / 100.0)).coerceAtMost(totalFeeIdr)
@@ -58,41 +59,45 @@ fun RadarFeeDetailDialog(
     val servicePct = (serviceFeeIdr / orderAmountIdr.coerceAtLeast(1.0)) * 100.0
 
     Dialog(onDismissRequest = onDismiss) {
-        Card(
+        Surface(
+            shape = RoundedCornerShape(24.dp),
+            color = Color(0xFF0D1826),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E3247)),
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 16.dp),
-            shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF0F1722))
+                .padding(horizontal = 8.dp)
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(20.dp)
+                    .padding(20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Header: Title & Close Button
+                // Header Bar: Judul + Tombol Tutup
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Biaya Transaksi",
+                        text = "Rincian Biaya Transaksi",
                         color = Color.White,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 0.2.sp
                     )
+
                     IconButton(
                         onClick = onDismiss,
                         modifier = Modifier
-                            .size(32.dp)
-                            .background(Color(0xFF1B2838), CircleShape)
+                            .size(28.dp)
+                            .background(Color(0xFF1A2B3D), CircleShape)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
                             contentDescription = "Tutup",
-                            tint = Color.White,
-                            modifier = Modifier.size(18.dp)
+                            tint = Color(0xFFB0BEC5),
+                            modifier = Modifier.size(16.dp)
                         )
                     }
                 }
@@ -118,22 +123,22 @@ fun RadarFeeDetailDialog(
                         .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    // Biaya Layanan Bursa Indodax
+                    // Biaya Layanan Bursa
                     FeeRowItem(
                         label = "Layanan Bursa (${String.format(java.util.Locale.US, "%.2f", servicePct)}%)",
-                        value = "${PriceFormatter.formatIdrNumber(serviceFeeIdr)} IDR"
+                        value = PriceFormatter.formatPrice(serviceFeeIdr, quoteAsset = quoteAsset)
                     )
 
                     // Pajak Kripto Resmi
                     FeeRowItem(
                         label = if (isBuyMode) "Pajak PPN (0.11%)" else "Pajak PPh 22 Final (0.10%)",
-                        value = "${PriceFormatter.formatIdrNumber(taxIdr)} IDR"
+                        value = PriceFormatter.formatPrice(taxIdr, quoteAsset = quoteAsset)
                     )
 
                     // Biaya CFX & Kliring
                     FeeRowItem(
                         label = "Kliring CFX (${String.format(java.util.Locale.US, "%.2f", cfxPct)}%)",
-                        value = "${PriceFormatter.formatIdrNumber(cfxFeeIdr)} IDR"
+                        value = PriceFormatter.formatPrice(cfxFeeIdr, quoteAsset = quoteAsset)
                     )
 
                     HorizontalDivider(
@@ -155,7 +160,7 @@ fun RadarFeeDetailDialog(
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "${PriceFormatter.formatIdrNumber(totalFeeIdr)} IDR",
+                            text = PriceFormatter.formatPrice(totalFeeIdr, quoteAsset = quoteAsset),
                             color = Color.White,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.ExtraBold
@@ -178,37 +183,33 @@ fun RadarFeeDetailDialog(
                         imageVector = Icons.Default.Info,
                         contentDescription = null,
                         tint = Color(0xFF00E5FF),
-                        modifier = Modifier.size(15.dp)
+                        modifier = Modifier.size(14.dp)
                     )
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.width(6.dp))
                     Text(
-                        text = "Dihitung dari Setting: ${
-                            if (isBuyMode) {
-                                if (isMakerOrder) "Limit Beli (Maker) ${fees.buyMakerPct}%" else "Instant Beli (Taker) ${fees.buyTakerPct}%"
-                            } else {
-                                if (isMakerOrder) "Limit Jual (Maker) ${fees.sellMakerPct}%" else "Instant Jual (Taker) ${fees.sellTakerPct}%"
-                            }
-                        }",
-                        color = Color(0xFFB0BEC5),
-                        fontSize = 11.sp
+                        text = "Persentase fee (${String.format(java.util.Locale.US, "%.2f", feePct)}%) disinkronkan dari menu Pengaturan (Settings > Fee Bursa).",
+                        color = Color(0xFF81D4FA),
+                        fontSize = 10.sp,
+                        lineHeight = 13.sp
                     )
                 }
 
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(18.dp))
 
+                // Tombol Mengerti / Selesai
                 Button(
                     onClick = onDismiss,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00B0FF)),
+                    shape = RoundedCornerShape(12.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(44.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E3A5A))
+                        .height(44.dp)
                 ) {
                     Text(
                         text = "Mengerti",
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp
+                        color = Color(0xFF0B141E),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.ExtraBold
                     )
                 }
             }
@@ -229,11 +230,12 @@ private fun FeeRowItem(
         Text(
             text = label,
             color = Color(0xFFB0BEC5),
-            fontSize = 12.sp
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Normal
         )
         Text(
             text = value,
-            color = Color.White,
+            color = Color(0xFFECEFF1),
             fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold
         )

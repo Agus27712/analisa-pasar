@@ -63,7 +63,8 @@ fun DetailTechnicalDetailsSection(
                         indicators = indicators,
                         structure = structure,
                         volume24h = volume24h,
-                        scalping = scalping
+                        scalping = scalping,
+                        quoteAsset = quoteAsset
                     )
                     Spacer(Modifier.height(8.dp))
                     MonitorCard(

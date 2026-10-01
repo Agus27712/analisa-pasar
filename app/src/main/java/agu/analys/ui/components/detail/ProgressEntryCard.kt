@@ -114,7 +114,7 @@ fun ProgressEntryCard(signal: AISignalState, scalping: Boolean) {
                 0 -> "Engine memantau, belum ada tahap terpenuhi"
                 1 -> "1 tahap terpenuhi (1H Bias)"
                 2 -> "2 tahap terpenuhi (1H Bias + 15M Setup)"
-                3 -> "3 tahap terpenuhi (1M Trigger Aktif · Siapkan Indodax)"
+                3 -> "3 tahap terpenuhi (1M Trigger Aktif · Siapkan Order)"
                 else -> "4/4 Kondisi terpenuhi · Siap eksekusi BUY"
             }, fontSize = 11.sp, color = TvTextSecondary
         )
@@ -129,7 +129,7 @@ fun ProgressEntryCard(signal: AISignalState, scalping: Boolean) {
         MtfRow("1. 1H Bias", mtf.biasStatus, mtf.biasDetail.ifBlank { "Menunggu data 1H" })
         MtfRow("2. 15M Setup", mtf.setupStatus, mtf.setupDetail.ifBlank { "Menunggu data 15M" })
         MtfRow("3. 1M Trigger", mtf.triggerStatus, mtf.triggerDetail.ifBlank { "Menunggu data 1M" })
-        MtfRow("4. Area Entry", mtf.entryPriceStatus, mtf.entryPriceDetail.ifBlank { "Siapkan harga entri di Indodax" })
+        MtfRow("4. Area Entry", mtf.entryPriceStatus, mtf.entryPriceDetail.ifBlank { "Siapkan harga entri order beli" })
 
         Spacer(Modifier.height(9.dp))
         AnalysisDivider()

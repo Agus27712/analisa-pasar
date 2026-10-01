@@ -284,7 +284,7 @@ fun SpreadGuardAndEntrySection(
                         Text(
                             text = if (spreadAnalysis.recommendedEntryPrice > 0) {
                                 PriceFormatter.formatPrice(spreadAnalysis.recommendedEntryPrice, showSymbol = true, quoteAsset = quoteAsset)
-                            } else "Rp —",
+                            } else if (PriceFormatter.isUsdtQuote(quoteAsset)) "$ —" else "Rp —",
                             color = TvTextPrimary,
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Black,

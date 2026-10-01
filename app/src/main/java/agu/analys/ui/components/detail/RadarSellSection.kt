@@ -279,7 +279,7 @@ fun RadarSellSection(
         val sellButtonLabel = when {
             hasTwoTpOrders -> "${if (isRealMode) "[REAL] " else "[SIMULASI] "}PASANG 2 ORDER TP ($formattedSellQty $baseAsset)"
             hasSingleTpOrder -> "${if (isRealMode) "[REAL] " else "[SIMULASI] "}PASANG ORDER TP ($formattedSellQty $baseAsset)"
-            !isMakerOrder && bestBidPrice != null && bestBidPrice > 0.0 -> "${if (isRealMode) "[REAL] " else "[SIMULASI] "}JUAL INSTAN · Rp ${PriceFormatter.formatIdrNumber(bestBidPrice)}"
+            !isMakerOrder && bestBidPrice != null && bestBidPrice > 0.0 -> "${if (isRealMode) "[REAL] " else "[SIMULASI] "}JUAL INSTAN · ${PriceFormatter.formatPrice(bestBidPrice, quoteAsset = quoteAsset)}"
             else -> "${if (isRealMode) "[REAL] " else "[SIMULASI] "}JUAL $formattedSellQty $baseAsset"
         }
 

@@ -283,13 +283,17 @@ fun RadarTransactionFeeSection(
         }
     }
 
+    val isUsdtQuote = agu.analys.util.PriceFormatter.isUsdtQuote(quoteAsset)
+    val minNominal = if (isUsdtQuote) 1.0 else 10000.0
+
     RadarFeeDetailDialog(
         isOpen = showFeeDetailModal,
         onDismiss = { showFeeDetailModal = false },
         fees = fees,
-        orderAmountIdr = if (isBuyMode) selectedNominalIdr.coerceAtLeast(10000.0) else grossSellValueIdr,
+        orderAmountIdr = if (isBuyMode) selectedNominalIdr.coerceAtLeast(minNominal) else grossSellValueIdr,
         isMakerOrder = isMakerOrder,
         coinSymbol = baseAsset,
+        quoteAsset = quoteAsset,
         isBuyMode = isBuyMode
     )
 }

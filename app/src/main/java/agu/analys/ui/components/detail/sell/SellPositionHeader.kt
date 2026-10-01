@@ -50,7 +50,7 @@ fun SellPositionHeader(
                     )
                     Spacer(Modifier.width(6.dp))
                     Text(
-                        text = "Koin Dimiliki (${if (isRealMode) "Real Indodax" else "Simulasi"}):",
+                        text = "Koin Dimiliki (${if (isRealMode) "Real" else "Simulasi"}):",
                         color = TvTextSecondary,
                         fontSize = 10.5.sp,
                         fontWeight = FontWeight.Bold,
@@ -86,7 +86,7 @@ fun SellPositionHeader(
                 )
 
                 Text(
-                    text = if (effectiveBuyPrice > 0.0) "${PriceFormatter.formatIdrNumber(effectiveBuyPrice)} $quoteAsset" else "Belum Ada Posisi",
+                    text = if (effectiveBuyPrice > 0.0) PriceFormatter.formatPrice(effectiveBuyPrice, quoteAsset = quoteAsset) else "Belum Ada Posisi",
                     color = if (effectiveBuyPrice > 0.0) TvAmber else TvTextSecondary,
                     fontSize = 10.5.sp,
                     fontWeight = FontWeight.SemiBold,

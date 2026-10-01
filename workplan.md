@@ -147,3 +147,21 @@ Mengintegrasikan arsitektur resmi Tokocrypto sesuai dokumentasi dan mengisolasi 
   - `TokocryptoMarketService.fetchTickers()` mendukung multi-cluster fetching untuk simbol Type 1 (MBX Cloud) dan Type 3 (NextMe) secara seamless.
 - [x] **Verifikasi Kompilasi & Unit Tests**:
   - `compile_applet` & `gradle :app:testDebugUnitTest` berhasil (Build succeeded & All tests pass).
+
+### Tahap 13: Audit Halaman Detail Koin & Standardisasi Penanganan Prefix/Mata Uang (`ui/components/detail/`)
+- [x] **Auditing & Standardisasi `TechnicalDetailsCard.kt` & `DetailTechnicalDetailsSection.kt`**:
+  - Dukungan parameter `quoteAsset` dan pemformatan volume dinamis `PriceFormatter.formatVolume(..., quoteAsset = quoteAsset)` serta label `"volume 24 jam ($quoteAsset)"`.
+- [x] **Auditing `GlobalMarketShieldCard.kt`**:
+  - Format harga dinding beli/jual terbesar berbasis `quoteAsset` dan netralisasi teks bursa.
+- [x] **Auditing `SpreadGuardAndEntrySection.kt`**:
+  - Placeholder harga fallback adaptif `$ —` vs `Rp —`.
+- [x] **Auditing `CustomBuyOrderDialog.kt` & `RadarBuySection.kt`**:
+  - Dukungan input desimal untuk order pair USDT, format TP1/TP2 adaptif desimal, dan label mode trading dinamis.
+- [x] **Auditing `RadarTransactionFeeSection.kt` & `RadarFeeDetailDialog.kt`**:
+  - Penerusan `quoteAsset` dan batas minimal order kuotasi dinamis.
+- [x] **Auditing `SellPositionHeader.kt` & `SellManualBuyDialog.kt`**:
+  - Pembersihan hardcoded bursa dan format harga rata-rata beli dinamis.
+- [x] **Auditing `WaitingEntryRadarCard.kt`, `CreateAlertTabContent.kt`, `ActiveAlertsTabContent.kt`, & `PriceAlertDialog.kt`**:
+  - Standardisasi seluruh dialog alert dan target level TP1/TP2 menggunakan `PriceFormatter.formatPrice` berbasis `quoteAsset`.
+- [x] **Verifikasi Kompilasi**:
+  - `compile_applet` berhasil (Build succeeded).

@@ -39,7 +39,8 @@ fun TechnicalDetailsCard(
     indicators: TechnicalIndicators,
     structure: MarketStructureSnapshot,
     volume24h: Double,
-    scalping: Boolean = false
+    scalping: Boolean = false,
+    quoteAsset: String = "IDR"
 ) {
     var expanded by remember { mutableStateOf(true) }
     AnalysisCard {
@@ -103,9 +104,9 @@ fun TechnicalDetailsCard(
         val volColor: Color
         val volSub: String
         if (volume24h > 0) {
-            volStatus = PriceFormatter.formatPrice(volume24h)
+            volStatus = PriceFormatter.formatVolume(volume24h, quoteAsset = quoteAsset)
             volColor = TvTextPrimary
-            volSub = "volume 24 jam (IDR)"
+            volSub = "volume 24 jam ($quoteAsset)"
         } else if (indicators.momentum.isFinite()) {
             volStatus = "—"
             volColor = TvTextSecondary

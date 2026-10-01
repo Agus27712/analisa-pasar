@@ -31,8 +31,8 @@ fun SellManualBuyDialog(
 ) {
     if (!show) return
 
-    var manualAvgBuyInput by remember { mutableStateOf(if (initialAvgBuy > 0) PriceFormatter.formatIdrNumber(initialAvgBuy) else "") }
-    var manualTotalCostInput by remember { mutableStateOf(if (initialTotalCost > 0) PriceFormatter.formatIdrNumber(initialTotalCost) else "") }
+    var manualAvgBuyInput by remember { mutableStateOf(if (initialAvgBuy > 0) PriceFormatter.formatPrice(initialAvgBuy, showSymbol = false, quoteAsset = quoteAsset) else "") }
+    var manualTotalCostInput by remember { mutableStateOf(if (initialTotalCost > 0) PriceFormatter.formatPrice(initialTotalCost, showSymbol = false, quoteAsset = quoteAsset) else "") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -59,7 +59,7 @@ fun SellManualBuyDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    text = "Gunakan ini untuk koin $baseAsset yang dibeli >7 hari lalu di Indodax. Isikan salah satu nilai di bawah dari nota Indodax Anda:",
+                    text = "Gunakan ini untuk koin $baseAsset yang dibeli >7 hari lalu di bursa. Isikan salah satu nilai di bawah dari riwayat transaksi Anda:",
                     color = TvTextSecondary,
                     fontSize = 11.sp,
                     lineHeight = 15.sp
@@ -72,7 +72,7 @@ fun SellManualBuyDialog(
                         val p = PriceFormatter.parseCleanIdrDouble(input)
                         if (p > 0.0 && availableCoin > 0.0) {
                             val calcTotal = p * availableCoin
-                            manualTotalCostInput = PriceFormatter.formatIdrNumber(calcTotal)
+                            manualTotalCostInput = PriceFormatter.formatPrice(calcTotal, showSymbol = false, quoteAsset = quoteAsset)
                         }
                     },
                     label = { Text("Harga Rata-rata Beli ($quoteAsset)", fontSize = 11.sp) },
@@ -97,7 +97,7 @@ fun SellManualBuyDialog(
                         val total = PriceFormatter.parseCleanIdrDouble(input)
                         if (total > 0.0 && availableCoin > 0.0) {
                             val calcPrice = total / availableCoin
-                            manualAvgBuyInput = PriceFormatter.formatIdrNumber(calcPrice)
+                            manualAvgBuyInput = PriceFormatter.formatPrice(calcPrice, showSymbol = false, quoteAsset = quoteAsset)
                         }
                     },
                     label = { Text("Total Order Terisi / Modal ($quoteAsset)", fontSize = 11.sp) },

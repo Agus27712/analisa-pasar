@@ -51,6 +51,7 @@ fun SellCalculationCard(
     onOpenFeeDetail: (() -> Unit)? = null
 ) {
     val displayBestPrice = bestBidPrice?.takeIf { it > 0.0 } ?: validPrice
+    val isUsdtQuote = PriceFormatter.isUsdtQuote(quoteAsset)
 
     Column(
         modifier = Modifier
@@ -60,7 +61,7 @@ fun SellCalculationCard(
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        // 1. KARTU HARGA TERBAIK INDODAX (BEST MARKET ORDER / BEST BID)
+        // 1. KARTU HARGA TERBAIK ORDERBOOK (BEST MARKET ORDER / BEST BID)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -87,7 +88,7 @@ fun SellCalculationCard(
                         )
                         Spacer(Modifier.width(4.dp))
                         Text(
-                            text = "BEST BID INDODAX",
+                            text = "BEST BID $quoteAsset",
                             color = Color(0xFF00E5FF),
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Black,
@@ -121,7 +122,7 @@ fun SellCalculationCard(
                 ) {
                     Column {
                         Text(
-                            text = "Rp ${PriceFormatter.formatIdrNumber(displayBestPrice)}",
+                            text = PriceFormatter.formatPrice(displayBestPrice, quoteAsset = quoteAsset),
                             color = Color.White,
                             fontSize = 17.sp,
                             fontWeight = FontWeight.ExtraBold
@@ -137,7 +138,7 @@ fun SellCalculationCard(
 
                     if (validPrice > 0.0 && validPrice != displayBestPrice) {
                         Text(
-                            text = "Last: Rp ${PriceFormatter.formatIdrNumber(validPrice)}",
+                            text = "Last: ${PriceFormatter.formatPrice(validPrice, quoteAsset = quoteAsset)}",
                             color = TvTextMuted,
                             fontSize = 10.5.sp
                         )
@@ -160,12 +161,12 @@ fun SellCalculationCard(
         // 2. RINCIAN PERHITUNGAN TRANSAKSI (HARGA TERJUAL, KOIN, GROSS)
         TransactionDetailRow(
             label = "Harga Eksekusi Terjual",
-            value = "Rp ${PriceFormatter.formatIdrNumber(displayBestPrice)} / $baseAsset"
+            value = "${PriceFormatter.formatPrice(displayBestPrice, quoteAsset = quoteAsset)} / $baseAsset"
         )
         TransactionDetailRow(
             label = "Jumlah Koin Dijual",
             value = "${PriceFormatter.formatCryptoExact(activeSellQty, 8)} $baseAsset",
-            subValue = "= Rp ${PriceFormatter.formatIdrNumber(grossSellValueIdr)} (Kotor)"
+            subValue = "= ${PriceFormatter.formatPrice(grossSellValueIdr, quoteAsset = quoteAsset)} (Kotor)"
         )
 
         // POTONGAN FEE & PAJAK
@@ -179,29 +180,29 @@ fun SellCalculationCard(
                     Text(
                         text = "Potongan Biaya & Pajak (${String.format(Locale.US, "%.2f", activeFeePct)}%)",
                         color = TvTextSecondary,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold
                     )
                     if (onOpenFeeDetail != null) {
                         Spacer(Modifier.width(4.dp))
                         Icon(
                             imageVector = Icons.Default.Info,
-                            contentDescription = "Rincian Biaya & Pajak",
+                            contentDescription = "Detail Biaya",
                             tint = TvBlue,
                             modifier = Modifier
-                                .size(14.dp)
+                                .size(13.dp)
                                 .clickable { onOpenFeeDetail() }
                         )
                     }
                 }
                 Text(
-                    text = "PPh 22 Final (0.10%), CFX Kliring & Fee Bursa",
+                    text = if (isMakerOrder) "Maker Fee + Pajak PPh/PPN" else "Taker Fee + Pajak PPh/PPN",
                     color = TvTextMuted,
                     fontSize = 9.5.sp
                 )
             }
             Text(
-                text = "- Rp ${PriceFormatter.formatIdrNumber(sellFeeIdr)}",
+                text = "- ${PriceFormatter.formatPrice(sellFeeIdr, quoteAsset = quoteAsset)}",
                 color = TvRed,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold
@@ -232,13 +233,13 @@ fun SellCalculationCard(
                         fontWeight = FontWeight.Black
                     )
                     Text(
-                        text = "Kas IDR bersih yang langsung masuk dompet",
+                        text = "Kas $quoteAsset bersih yang langsung masuk dompet",
                         color = TvTextSecondary,
                         fontSize = 10.sp
                     )
                 }
                 Text(
-                    text = "Rp ${PriceFormatter.formatIdrNumber(netReceivedSellIdr)}",
+                    text = PriceFormatter.formatPrice(netReceivedSellIdr, quoteAsset = quoteAsset),
                     color = Color.White,
                     fontSize = 17.sp,
                     fontWeight = FontWeight.Black
@@ -250,8 +251,8 @@ fun SellCalculationCard(
         if (effectiveBuyPrice > 0.0) {
             TransactionDetailRow(
                 label = "Total Modal Pembelian",
-                value = "Rp ${PriceFormatter.formatIdrNumber(costBasisIdr)}",
-                subValue = "(@ Rp ${PriceFormatter.formatIdrNumber(effectiveBuyPrice)} / koin)"
+                value = PriceFormatter.formatPrice(costBasisIdr, quoteAsset = quoteAsset),
+                subValue = "(@ ${PriceFormatter.formatPrice(effectiveBuyPrice, quoteAsset = quoteAsset)} / koin)"
             )
 
             Box(
@@ -305,7 +306,7 @@ fun SellCalculationCard(
 
                     Column(horizontalAlignment = Alignment.End) {
                         Text(
-                            text = "${if (isProfitable) "+" else ""}Rp ${PriceFormatter.formatIdrNumber(netProfitIdr)}",
+                            text = "${if (isProfitable) "+" else ""}${PriceFormatter.formatPrice(netProfitIdr, quoteAsset = quoteAsset)}",
                             color = if (isProfitable) TvGreen else TvRed,
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Black
@@ -348,7 +349,7 @@ fun SellCalculationCard(
                     )
                 }
                 Text(
-                    text = "Masukkan harga beli/modal koin Anda untuk melihat estimasi profit/rugi bersih penjualan:",
+                    text = "Masukkan harga beli/modal koin Anda ($quoteAsset) untuk melihat estimasi profit/rugi bersih penjualan:",
                     color = TvTextSecondary,
                     fontSize = 10.sp,
                     lineHeight = 13.sp
@@ -356,7 +357,10 @@ fun SellCalculationCard(
                 OutlinedTextField(
                     value = customBuyPriceInput,
                     onValueChange = onCustomBuyPriceInputChange,
-                    placeholder = { Text("Contoh: 50000000 (Harga beli per koin)", fontSize = 11.sp, color = TvTextMuted) },
+                    placeholder = { 
+                        val ex = if (isUsdtQuote) "Contoh: 1.25 / 50000" else "Contoh: 50000000"
+                        Text(ex, fontSize = 11.sp, color = TvTextMuted) 
+                    },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
@@ -373,4 +377,3 @@ fun SellCalculationCard(
         }
     }
 }
-

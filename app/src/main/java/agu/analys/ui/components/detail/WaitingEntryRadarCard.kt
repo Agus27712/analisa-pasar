@@ -141,12 +141,12 @@ fun WaitingEntryRadarCard(
     LaunchedEffect(spotPosition, signal, currentPositionId) {
         if (spotPosition != null && !hasInitializedAutoSell) {
             isAutoSellActive = spotPosition.isAutoSellEnabled
-            tp1PriceInput = if (spotPosition.tp1Price > 0.0) String.format(Locale.US, "%.0f", spotPosition.tp1Price) 
-                            else if (signal.targetPrice1 > 0.0) String.format(Locale.US, "%.0f", signal.targetPrice1) 
+            tp1PriceInput = if (spotPosition.tp1Price > 0.0) PriceFormatter.formatPrice(spotPosition.tp1Price, showSymbol = false, quoteAsset = quoteAsset)
+                            else if (signal.targetPrice1 > 0.0) PriceFormatter.formatPrice(signal.targetPrice1, showSymbol = false, quoteAsset = quoteAsset)
                             else ""
             
-            tp2PriceInput = if (spotPosition.tp2Price > 0.0) String.format(Locale.US, "%.0f", spotPosition.tp2Price)
-                            else if (signal.targetPrice2 > 0.0) String.format(Locale.US, "%.0f", signal.targetPrice2)
+            tp2PriceInput = if (spotPosition.tp2Price > 0.0) PriceFormatter.formatPrice(spotPosition.tp2Price, showSymbol = false, quoteAsset = quoteAsset)
+                            else if (signal.targetPrice2 > 0.0) PriceFormatter.formatPrice(signal.targetPrice2, showSymbol = false, quoteAsset = quoteAsset)
                             else ""
 
             tp1PercentInput = if (spotPosition.tp1Percent > 0) String.format(Locale.US, "%.0f", spotPosition.tp1Percent) else "50"

@@ -145,7 +145,7 @@ fun AlertItemCard(
 
                 if (alert.targetPrice > 0.0) {
                     Text(
-                        text = "Target: ${PriceFormatter.formatIdrNumber(alert.targetPrice)} $quoteAsset",
+                        text = "Target: ${PriceFormatter.formatPrice(alert.targetPrice, quoteAsset = quoteAsset)}",
                         color = Color.White,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold

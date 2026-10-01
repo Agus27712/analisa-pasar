@@ -163,7 +163,7 @@ fun AiAssistantDialog(
                         )
                     } else {
                         Text(
-                            text = "Tekan tombol di bawah untuk meminta analisis AI berdasarkan data real-time, volume, dan indikator Indodax.",
+                            text = "Tekan tombol di bawah untuk meminta analisis AI berdasarkan data real-time, volume, dan indikator pasar.",
                             color = TvTextSecondary,
                             fontSize = 11.5.sp,
                             lineHeight = 16.sp

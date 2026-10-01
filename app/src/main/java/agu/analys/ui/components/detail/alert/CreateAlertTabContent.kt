@@ -53,10 +53,11 @@ fun CreateAlertTabContent(
         item {
             QuickPresetsSection(
                 currentPrice = currentPrice,
+                quoteAsset = quoteAsset,
                 onPresetSelected = { type, targetPrice, note ->
                     onTypeChange(type)
                     if (targetPrice != null) {
-                        onTargetPriceChange(PriceFormatter.formatIdrNumber(targetPrice))
+                        onTargetPriceChange(PriceFormatter.formatPrice(targetPrice, showSymbol = false, quoteAsset = quoteAsset))
                     }
                     onNoteChange(note)
                 }
@@ -151,7 +152,7 @@ fun MarketPriceInfoCard(
     ) {
         Text("Market Price:", color = TvTextSecondary, fontSize = 10.5.sp)
         Text(
-            text = "${PriceFormatter.formatIdrNumber(currentPrice)} $quoteAsset",
+            text = PriceFormatter.formatPrice(currentPrice, quoteAsset = quoteAsset),
             color = Color.White,
             fontSize = 11.5.sp,
             fontWeight = FontWeight.Bold
@@ -162,6 +163,7 @@ fun MarketPriceInfoCard(
 @Composable
 fun QuickPresetsSection(
     currentPrice: Double,
+    quoteAsset: String = "IDR",
     onPresetSelected: (PriceAlertType, Double?, String) -> Unit
 ) {
     Text(

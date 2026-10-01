@@ -413,7 +413,7 @@ fun SellTrailingSection(
                     ) {
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text("Harga Peak baru:", color = TvTextSecondary, fontSize = 9.5.sp)
-                            Text("${PriceFormatter.formatIdrNumber(peakPrice)} $quoteAsset", color = TvAmber, fontSize = 10.5.sp, fontWeight = FontWeight.Bold)
+                            Text(PriceFormatter.formatPrice(peakPrice, quoteAsset = quoteAsset), color = TvAmber, fontSize = 10.5.sp, fontWeight = FontWeight.Bold)
                         }
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text("Jarak Trailing Aktif:", color = TvTextSecondary, fontSize = 9.5.sp)
@@ -427,7 +427,7 @@ fun SellTrailingSection(
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text("Titik Jual Otomatis:", color = TvBlue, fontSize = 9.5.sp, fontWeight = FontWeight.Bold)
                             Text(
-                                text = "${PriceFormatter.formatIdrNumber(trailingStopPrice)} $quoteAsset",
+                                text = PriceFormatter.formatPrice(trailingStopPrice, quoteAsset = quoteAsset),
                                 color = if (isTrailingTriggered) TvRed else TvBlue,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Black
@@ -435,7 +435,7 @@ fun SellTrailingSection(
                         }
                         if (entryPrice > 0.0 && trailingStopPrice <= entryPrice) {
                             Text(
-                                text = "🛡️ Anti Cut-Loss: Trailing hanya lock profit di atas modal (Rp ${PriceFormatter.formatIdrNumber(entryPrice)})",
+                                text = "🛡️ Anti Cut-Loss: Trailing hanya lock profit di atas modal (${PriceFormatter.formatPrice(entryPrice, quoteAsset = quoteAsset)})",
                                 color = TvTextSecondary,
                                 fontSize = 8.5.sp
                             )
