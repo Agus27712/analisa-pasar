@@ -35,8 +35,7 @@ class TokocryptoUserWebSocket(
     private val lastMessageAt = AtomicLong(0L)
 
     private val WS_HOSTS = listOf(
-        "wss://stream-cloud.tokocrypto.site/ws",
-        "wss://stream.binance.com:9443/ws"
+        "wss://stream-cloud.tokocrypto.site/ws"
     )
 
     fun start(listenKey: String) {

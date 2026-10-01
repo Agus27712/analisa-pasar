@@ -22,7 +22,6 @@ import java.util.concurrent.atomic.AtomicLong
  * Mengambil daftar symbol, filter trading (LOT_SIZE, PRICE_FILTER, MIN_NOTIONAL),
  * dan precision secara dinamis dari API resmi:
  * GET https://www.tokocrypto.com/open/v1/common/symbols
- * Fallback: Binance Cloud Exchange Info.
  *
  * Mencegah hardcoding pasangan koin dan mendukung deteksi Symbol Type 1 vs Type 3.
  */
@@ -42,7 +41,6 @@ object TokocryptoSymbolRepository {
 
     private const val TOKOCRYPTO_COMMON_SYMBOLS_URL = "https://www.tokocrypto.com/open/v1/common/symbols"
     private const val TOKOCRYPTO_EXECUTION_RULES_URL = "https://www.tokocrypto.site/api/v3/executionRules"
-    private const val BINANCE_EXCHANGE_INFO_URL = "https://api.binance.com/api/v3/exchangeInfo"
 
     fun isReady(): Boolean = isInitialized.get() && symbolsMap.isNotEmpty()
 
@@ -57,11 +55,10 @@ object TokocryptoSymbolRepository {
                 return@withLock true
             }
 
-            // 1. Coba fetch dari Tokocrypto /open/v1/common/symbols
-            var success = fetchFromTokocrypto()
+            // 1. Fetch dari Tokocrypto /open/v1/common/symbols
+            val success = fetchFromTokocrypto()
             if (!success) {
-                Timber.w("Tokocrypto common symbols gagal, mencoba Binance Exchange Info fallback...")
-                success = fetchFromBinanceFallback()
+                Timber.w("Tokocrypto common symbols gagal di-fetch.")
             }
 
             if (success) {
@@ -195,93 +192,6 @@ object TokocryptoSymbolRepository {
         }
     }
 
-    private suspend fun fetchFromBinanceFallback(): Boolean {
-        try {
-            val req = Request.Builder()
-                .url(BINANCE_EXCHANGE_INFO_URL)
-                .get()
-                .header("User-Agent", "Mozilla/5.0")
-                .build()
-
-            client.newCall(req).execute().use { resp ->
-                val body = resp.body?.string().orEmpty()
-                if (!resp.isSuccessful || body.isBlank()) return false
-
-                val root = JSONObject(body)
-                val symbols = root.optJSONArray("symbols")
-                if (symbols != null && symbols.length() > 0) {
-                    val newMap = mutableMapOf<String, TokocryptoSymbolInfo>()
-                    for (i in 0 until symbols.length()) {
-                        val item = symbols.optJSONObject(i) ?: continue
-                        val status = item.optString("status", "")
-                        if (status != "TRADING") continue
-
-                        val symbol = item.optString("symbol", "").trim().uppercase()
-                        val baseAsset = item.optString("baseAsset", "").trim().uppercase()
-                        val quoteAsset = item.optString("quoteAsset", "").trim().uppercase()
-
-                        // Hanya simpan pair yang relevan untuk Tokocrypto (IDR dan USDT saja, eliminasi BIDR)
-                        if (quoteAsset != "IDR" && quoteAsset != "USDT") continue
-                        if (baseAsset == "BIDR" || symbol.startsWith("BIDR") || symbol.contains("BIDR_") || symbol.contains("_BIDR")) continue
-
-                        val basePrecision = item.optInt("baseAssetPrecision", 8)
-                        val quotePrecision = item.optInt("quotePrecision", 8)
-
-                        var priceFilter: TokocryptoPriceFilter? = null
-                        var lotSizeFilter: TokocryptoLotSizeFilter? = null
-                        var minNotionalFilter: TokocryptoMinNotionalFilter? = null
-
-                        val filters = item.optJSONArray("filters")
-                        if (filters != null) {
-                            for (f in 0 until filters.length()) {
-                                val fObj = filters.optJSONObject(f) ?: continue
-                                when (fObj.optString("filterType")) {
-                                    "PRICE_FILTER" -> priceFilter = TokocryptoPriceFilter(
-                                        minPrice = fObj.optString("minPrice", "0").toDoubleOrNull() ?: 0.0,
-                                        maxPrice = fObj.optString("maxPrice", "0").toDoubleOrNull() ?: Double.MAX_VALUE,
-                                        tickSize = fObj.optString("tickSize", "0").toDoubleOrNull() ?: 0.0
-                                    )
-                                    "LOT_SIZE" -> lotSizeFilter = TokocryptoLotSizeFilter(
-                                        minQty = fObj.optString("minQty", "0").toDoubleOrNull() ?: 0.0,
-                                        maxQty = fObj.optString("maxQty", "0").toDoubleOrNull() ?: Double.MAX_VALUE,
-                                        stepSize = fObj.optString("stepSize", "0").toDoubleOrNull() ?: 0.0
-                                    )
-                                    "NOTIONAL", "MIN_NOTIONAL" -> minNotionalFilter = TokocryptoMinNotionalFilter(
-                                        minNotional = fObj.optString("minNotional", "0").toDoubleOrNull() ?: 0.0
-                                    )
-                                }
-                            }
-                        }
-
-                        val info = TokocryptoSymbolInfo(
-                            symbol = symbol,
-                            baseAsset = baseAsset,
-                            quoteAsset = quoteAsset,
-                            symbolType = 1,
-                            basePrecision = basePrecision,
-                            quotePrecision = quotePrecision,
-                            spotTradingEnable = true,
-                            priceFilter = priceFilter,
-                            lotSizeFilter = lotSizeFilter,
-                            minNotionalFilter = minNotionalFilter
-                        )
-                        newMap[symbol] = info
-                        newMap["${baseAsset}_$quoteAsset"] = info
-                    }
-
-                    if (newMap.isNotEmpty()) {
-                        symbolsMap.clear()
-                        symbolsMap.putAll(newMap)
-                        Timber.i("TokocryptoSymbolRepository: Fallback Binance loaded ${symbolsMap.size} symbols")
-                        return true
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            Timber.w(e, "Gagal fetch fallback Binance symbols: ${e.message}")
-        }
-        return false
-    }
 
     private suspend fun fetchExecutionRulesQuietly() {
         try {

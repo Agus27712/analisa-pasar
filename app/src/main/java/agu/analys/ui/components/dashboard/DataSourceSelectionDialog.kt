@@ -24,8 +24,8 @@ import agu.analys.ui.theme.*
 
 /**
  * Modal dialog modern untuk memilih sumber data pasar (Exchange Data Source):
- * - Tokocrypto: SSOT Utama (Pair IDR/USDT) dengan fallback Binance Cloud API & WebSocket.
- * - Indodax: Pasar IDR alternatif.
+ * - Tokocrypto
+ * - Indodax
  */
 @Composable
 fun DataSourceSelectionDialog(
@@ -118,7 +118,7 @@ fun DataSourceSelectionDialog(
                                                 .background(TvGreen.copy(alpha = 0.2f), RoundedCornerShape(4.dp))
                                                 .padding(horizontal = 6.dp, vertical = 2.dp)
                                         ) {
-                                            Text("SSOT UTAMA", color = TvGreen, fontSize = 9.sp, fontWeight = FontWeight.Black)
+                                            Text("TOKOCRYPTO", color = TvGreen, fontSize = 9.sp, fontWeight = FontWeight.Black)
                                         }
                                     } else {
                                         Box(
@@ -126,7 +126,7 @@ fun DataSourceSelectionDialog(
                                                 .background(TvBlue.copy(alpha = 0.2f), RoundedCornerShape(4.dp))
                                                 .padding(horizontal = 6.dp, vertical = 2.dp)
                                         ) {
-                                            Text("IDR SPOT", color = TvBlue, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                            Text("INDODAX", color = TvBlue, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                                         }
                                     }
                                 }
@@ -170,7 +170,7 @@ fun DataSourceSelectionDialog(
                                     )
                                     Spacer(Modifier.width(4.dp))
                                     Text(
-                                        text = if (isToko) "REST + WS Live (Binance Cloud)" else "REST + WS Live",
+                                        text = if (isToko) "REST + WS Live" else "REST + WS Live",
                                         color = TvTextSecondary,
                                         fontSize = 10.sp
                                     )

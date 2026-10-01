@@ -29,7 +29,6 @@ import javax.crypto.spec.SecretKeySpec
  */
 object TokocryptoTradeApi {
     private const val TOKOCRYPTO_BASE_URL = "https://www.tokocrypto.com"
-    private const val BINANCE_BASE_URL = "https://api.binance.com"
     private val client get() = NetworkClientProvider.tradeClient
 
     private fun hmacSha256(secret: String, payload: String): String {
@@ -104,36 +103,7 @@ object TokocryptoTradeApi {
             Timber.w(e, "Tokocrypto spot API gagal, mencoba fallback Binance Cloud...")
         }
 
-        // 3. Fallback: Binance Cloud Account API
-        try {
-            val url = "$BINANCE_BASE_URL/api/v3/account?$queryParam&signature=$signature"
-            val req = Request.Builder()
-                .url(url)
-                .get()
-                .header("X-MBX-APIKEY", apiKey.trim())
-                .header("Accept", "application/json")
-                .build()
-
-            client.newCall(req).execute().use { resp ->
-                val body = resp.body?.string().orEmpty()
-                if (resp.isSuccessful && body.isNotBlank()) {
-                    val root = JSONObject(body)
-                    val balances = root.optJSONArray("balances")
-                    if (balances != null) {
-                        val parsed = parseBalances(balances)
-                        return@withContext parsed to "Saldo Tokocrypto/Binance berhasil diperbarui."
-                    }
-                } else if (resp.code == 401 || resp.code == 400) {
-                    val root = runCatching { JSONObject(body) }.getOrNull()
-                    val msg = root?.optString("msg", "Kredensial API tidak valid.") ?: "Kredensial API tidak valid."
-                    return@withContext null to "Error Tokocrypto/Binance: $msg"
-                }
-            }
-        } catch (e: Exception) {
-            Timber.w(e, "Error getAccount Binance Cloud fallback: ${e.message}")
-        }
-
-        null to "Gagal terhubung ke server Tokocrypto/Binance."
+        null to "Gagal terhubung ke server Tokocrypto."
     }
 
     private fun parseBalances(array: JSONArray): IndodaxBalances {
@@ -274,46 +244,9 @@ object TokocryptoTradeApi {
             Timber.w(e, "Gagal create order Tokocrypto: ${e.message}")
         }
 
-        // 2. Fallback: Binance Cloud POST /api/v3/order
-        try {
-            val binanceUrl = "$BINANCE_BASE_URL/api/v3/order?$queryString&signature=$signature"
-            val req = Request.Builder()
-                .url(binanceUrl)
-                .post(FormBody.Builder().build())
-                .header("X-MBX-APIKEY", apiKey.trim())
-                .header("Accept", "application/json")
-                .build()
-
-            client.newCall(req).execute().use { resp ->
-                val body = resp.body?.string().orEmpty()
-                if (resp.isSuccessful && body.isNotBlank()) {
-                    val root = JSONObject(body)
-                    return@withContext TokocryptoOrderResult(
-                        success = true,
-                        orderId = root.optString("orderId", ""),
-                        clientId = root.optString("clientOrderId", ""),
-                        symbol = root.optString("symbol", request.symbol),
-                        status = root.optString("status", "NEW"),
-                        executedQty = root.optString("executedQty", "0").toDoubleOrNull() ?: 0.0,
-                        cumulativeQuoteQty = root.optString("cummulativeQuoteQty", "0").toDoubleOrNull() ?: 0.0,
-                        rawMessage = "Order Binance Cloud berhasil dibuat."
-                    )
-                } else {
-                    val root = runCatching { JSONObject(body) }.getOrNull()
-                    val msg = root?.optString("msg", "Error order exchange.") ?: "Gagal submit order."
-                    return@withContext TokocryptoOrderResult(
-                        success = false,
-                        errorMessage = "Exchange Order Error: $msg"
-                    )
-                }
-            }
-        } catch (e: Exception) {
-            Timber.w(e, "Gagal create order Binance fallback: ${e.message}")
-        }
-
         TokocryptoOrderResult(
             success = false,
-            errorMessage = "Tidak dapat terhubung ke server order Tokocrypto/Binance."
+            errorMessage = "Tidak dapat terhubung ke server order Tokocrypto."
         )
     }
 

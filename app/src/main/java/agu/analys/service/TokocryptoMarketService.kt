@@ -23,13 +23,11 @@ import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Service REST API Resmi Tokocrypto dengan Routing Symbol Type 1 (MBX) & Type 3 (NextMe)
- * serta fallback ke Binance Cloud API.
  *
  * Endpoint Resmi:
  * - General / Symbols: https://www.tokocrypto.com
  * - Type 1 Market Data: https://www.tokocrypto.site/api/v3
  * - Type 3 Market Data: https://cloudme-toko.2meta.app/api/v1 & /open/v1/market/trades
- * - Fallback: https://api.binance.com/api/v3
  */
 object TokocryptoMarketService {
     private val client get() = NetworkClientProvider.marketClient
@@ -47,11 +45,6 @@ object TokocryptoMarketService {
     private const val TOKOCRYPTO_TYPE1_MARKET_URL = "https://www.tokocrypto.site/api/v3"
     private const val TOKOCRYPTO_TYPE3_MARKET_URL = "https://cloudme-toko.2meta.app/api/v1"
 
-    private val BINANCE_HOSTS = listOf(
-        "https://api.binance.com",
-        "https://api.binance.me",
-        "https://data-api.binance.vision"
-    )
 
     fun isBidrSymbol(sym: String): Boolean {
         val s = sym.uppercase().trim()
@@ -59,7 +52,6 @@ object TokocryptoMarketService {
         if (s.startsWith("BIDR_") || s.startsWith("BIDRUSDT") || s.startsWith("BIDRIDR") || s.startsWith("BIDRBTC")) return true
         if (s.contains("_BIDR")) return true
         if (s.endsWith("BIDR")) {
-            // Pengecualian koin yang berakhiran huruf 'B' dipasangkan dengan 'IDR'
             if (s == "BNBIDR" || s == "SHIBIDR") return false
             return true
         }
@@ -95,6 +87,7 @@ object TokocryptoMarketService {
             else -> s
         }
     }
+
 
     private suspend fun throttle() {
         rateMutex.withLock {
@@ -145,13 +138,11 @@ object TokocryptoMarketService {
             return primaryRes
         }
 
-        // Coba fallback paths pada Binance hosts
+        // Fallback ke Tokocrypto Type 1 endpoint
         for (path in fallbackPaths) {
-            for (host in BINANCE_HOSTS) {
-                val fb = get("$host$path")
-                if (!fb.isNullOrBlank()) {
-                    return fb
-                }
+            val fb = get("$TOKOCRYPTO_TYPE1_MARKET_URL$path")
+            if (!fb.isNullOrBlank()) {
+                return fb
             }
         }
         return null

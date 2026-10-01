@@ -123,7 +123,7 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
             confidence = 0,
             sentiment = TrendSentiment.NEUTRAL_CONSOLIDATION,
             reasoning = listOf(
-                "MODE OFFLINE: Terputus dari Server Tokocrypto/Binance.",
+                "MODE OFFLINE: Terputus dari Server Tokocrypto.",
                 "Snapshot Harga Terakhir: $priceText",
                 "Sinyal LIVE ditangguhkan untuk keamanan modal."
             ),

@@ -368,7 +368,7 @@ fun getCoinFullName(symbol: String): String = when (symbol.uppercase()) {
 
 fun openExchange(context: Context, source: MarketDataSource = MarketDataSource.TOKOCRYPTO) {
     val packageCandidates = if (source == MarketDataSource.TOKOCRYPTO) {
-        listOf("com.tokocrypto.mobile", "com.binance.dev")
+        listOf("com.tokocrypto.mobile")
     } else {
         listOf("id.co.bitcoin")
     }

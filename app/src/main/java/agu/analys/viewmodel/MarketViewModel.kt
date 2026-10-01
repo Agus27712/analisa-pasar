@@ -299,7 +299,6 @@ class MarketViewModel(application: Application) : AndroidViewModel(application) 
                 val worth = evaluatedPairs.mapNotNull { pair ->
                     val tick = combinedTicks[pair.symbol] 
                         ?: combinedTicks[pair.effectiveTokocryptoPair()]
-                        ?: combinedTicks[pair.effectiveBinanceSymbol()]
                         ?: combinedTicks[pair.effectiveIndodaxPair()]
                         ?: return@mapNotNull null
                     val isUserExplicit = favoritesSymbols.contains(pair.symbol) || watchlistSymbols.contains(pair.symbol)

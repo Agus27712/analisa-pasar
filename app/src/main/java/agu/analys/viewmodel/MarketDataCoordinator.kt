@@ -123,7 +123,7 @@ class MarketDataCoordinator(
             lastLiveTickAt = System.currentTimeMillis()
             _connectionState.value = MarketConnectionState.Connected
             _isShowingCachedData.value = false
-            agu.analys.util.AppLogManager.market("TokocryptoWS", "✅ WebSocket tersambung ke server Tokocrypto/Binance untuk ${currentActivePair?.symbol}")
+            agu.analys.util.AppLogManager.market("TokocryptoWS", "✅ WebSocket tersambung ke server Tokocrypto untuk ${currentActivePair?.symbol}")
         },
         onDisconnected = {
             wsLive = false
@@ -131,7 +131,7 @@ class MarketDataCoordinator(
             if (!recentRest && _currentTick.value == null) {
                 _connectionState.value = MarketConnectionState.ConnectionLost("Realtime Tokocrypto terputus. REST fallback...")
             }
-            agu.analys.util.AppLogManager.warn("TokocryptoWS", "⚠️ WebSocket Tokocrypto terputus untuk ${currentActivePair?.symbol}. Beralih ke REST fallback.")
+            agu.analys.util.AppLogManager.warn("TokocryptoWS", "⚠️ WebSocket Tokocrypto terputus untuk ${currentActivePair?.symbol}.")
         }
     )
 

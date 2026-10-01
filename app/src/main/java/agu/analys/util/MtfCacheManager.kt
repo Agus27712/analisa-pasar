@@ -17,7 +17,7 @@ enum class MtfStatus {
 /**
  * Multi-Timeframe Cache Manager:
  * Mengelola prefetch dan cache in-memory untuk kline (M1, M15, H1, H4) secara terisolasi per exchange
- * dari Tokocrypto / Binance API resmi (Single Source of Truth) atau Indodax API secara terpisah.
+ * dari Tokocrypto / Indodax API secara terpisah.
  */
 object MtfCacheManager {
     // In-memory cache for fast lookup. Map<ExchangeScopedKey, Map<Timeframe, List<CandleBar>>>

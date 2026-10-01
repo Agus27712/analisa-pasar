@@ -73,6 +73,5 @@ Mengintegrasikan arsitektur resmi Tokocrypto sesuai dokumentasi dan mengisolasi 
 - [x] Konfigurasi `MarketDataSource.TOKOCRYPTO` defaultQuoteAsset dan shortCode menjadi `IDR`.
 - [x] Terapkan filter ketat di `TokocryptoSymbolRepository.kt` agar hanya memuat pair dengan quote `IDR` dan `USDT`.
 - [x] Eliminasi koin berbasis token BIDR (`BIDRUSDT`, `BIDRIDR`, dsb.) dan quote BIDR dengan proteksi nama koin asli seperti `BNBIDR` dan `SHIBIDR`.
-- [x] Standarisasi resolver pair `toTokocryptoPair()` dan `toBinanceSymbol()` ke format IDR (`_IDR` / `IDR`).
-- [x] Perbarui tab default di `AddAssetDialog.kt` dari BIDR menjadi IDR (`IDR`, `USDT`, `SEMUA`).
-- [x] Verifikasi kelulusan kompilasi `compile_applet` dan unit tests.
+- [x] Eliminasi pasangan koin BIDR dan pembersihan mutlak network fallback Binance pada `TokocryptoSymbolRepository`, `TokocryptoMarketService`, `TokocryptoTradeApi`, `TokocryptoMarketWebSocket`, dan `TokocryptoUserWebSocket`.
+- [x] Verifikasi sukses `compile_applet`.

@@ -28,7 +28,6 @@ import kotlin.math.min
  *
  * Endpoint:
  * - Primary: wss://stream-cloud.tokocrypto.site/stream?streams=...
- * - Fallback: wss://stream.binance.com:9443/stream?streams=...
  */
 class TokocryptoMarketWebSocket(
     private val scope: CoroutineScope,
@@ -53,8 +52,8 @@ class TokocryptoMarketWebSocket(
 
     private val WS_HOSTS = listOf(
         "wss://stream-cloud.tokocrypto.site/stream",
-        "wss://stream.binance.com:9443/stream",
-        "wss://data-stream.binance.vision/stream"
+        "wss://www.tokocrypto.com",
+        "wss://stream-toko.2meta.app"
     )
 
     fun start(symbol: String, timeframe: Timeframe = Timeframe.M1) {

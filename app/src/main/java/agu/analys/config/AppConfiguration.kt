@@ -34,7 +34,7 @@ enum class MarketDataSource(
             sellMakerPct = 0.10,
             sellTakerPct = 0.10
         ),
-        description = "SSOT Utama: Data market Tokocrypto (Pair IDR/USDT) dengan real-time REST & WebSocket serta fallback Binance."
+        description = "Data market Tokocrypto (Pair IDR/USDT) dengan real-time REST & WebSocket"
     ),
     INDODAX(
         label = "Indodax",
