@@ -244,46 +244,58 @@ data class TradingPair(
     val tokocryptoPair: String = ""
 ) {
     companion object {
-        val POPULAR_TOKOCRYPTO_PAIRS = listOf(
-            TradingPair("BTCIDR", "BTC", "IDR", "Bitcoin / IDR", indodaxPair = "btc_idr", tokocryptoPair = "BTC_IDR"),
-            TradingPair("ETHIDR", "ETH", "IDR", "Ethereum / IDR", indodaxPair = "eth_idr", tokocryptoPair = "ETH_IDR"),
-            TradingPair("SOLIDR", "SOL", "IDR", "Solana / IDR", indodaxPair = "sol_idr", tokocryptoPair = "SOL_IDR"),
-            TradingPair("BNBIDR", "BNB", "IDR", "BNB / IDR", indodaxPair = "bnb_idr", tokocryptoPair = "BNB_IDR"),
-            TradingPair("XRPIDR", "XRP", "IDR", "XRP / IDR", indodaxPair = "xrp_idr", tokocryptoPair = "XRP_IDR"),
-            TradingPair("DOGEIDR", "DOGE", "IDR", "Dogecoin / IDR", indodaxPair = "doge_idr", tokocryptoPair = "DOGE_IDR"),
-            TradingPair("PEPEIDR", "PEPE", "IDR", "Pepe / IDR", indodaxPair = "pepe_idr", tokocryptoPair = "PEPE_IDR"),
-            TradingPair("ADAIDR", "ADA", "IDR", "Cardano / IDR", indodaxPair = "ada_idr", tokocryptoPair = "ADA_IDR"),
-            TradingPair("AVAXIDR", "AVAX", "IDR", "Avalanche / IDR", indodaxPair = "avax_idr", tokocryptoPair = "AVAX_IDR"),
-            TradingPair("SHIBIDR", "SHIB", "IDR", "Shiba Inu / IDR", indodaxPair = "shib_idr", tokocryptoPair = "SHIB_IDR"),
-            TradingPair("NEARIDR", "NEAR", "IDR", "NEAR / IDR", indodaxPair = "near_idr", tokocryptoPair = "NEAR_IDR"),
-            TradingPair("SUIIDR", "SUI", "IDR", "Sui / IDR", indodaxPair = "sui_idr", tokocryptoPair = "SUI_IDR"),
-            TradingPair("DOTIDR", "DOT", "IDR", "Polkadot / IDR", indodaxPair = "dot_idr", tokocryptoPair = "DOT_IDR"),
-            TradingPair("LTCIDR", "LTC", "IDR", "Litecoin / IDR", indodaxPair = "ltc_idr", tokocryptoPair = "LTC_IDR"),
-            TradingPair("LINKIDR", "LINK", "IDR", "Chainlink / IDR", indodaxPair = "link_idr", tokocryptoPair = "LINK_IDR"),
-            TradingPair("USDTIDR", "USDT", "IDR", "Tether / IDR", indodaxPair = "usdt_idr", tokocryptoPair = "USDT_IDR"),
-            TradingPair("BTCUSDT", "BTC", "USDT", "Bitcoin / USDT", indodaxPair = "btc_usdt", tokocryptoPair = "BTC_USDT"),
-            TradingPair("ETHUSDT", "ETH", "USDT", "Ethereum / USDT", indodaxPair = "eth_usdt", tokocryptoPair = "ETH_USDT"),
-            TradingPair("SOLUSDT", "SOL", "USDT", "Solana / USDT", indodaxPair = "sol_usdt", tokocryptoPair = "SOL_USDT")
-        )
+// 1. List Khusus Tokocrypto (Hanya menggunakan parameter tokocryptoPair)
+val POPULAR_TOKOCRYPTO_PAIRS = listOf(
+    // ==================== USDT PAIRS ====================
+    TradingPair("BTCUSDT", "BTC", "USDT", "Bitcoin / USDT", tokocryptoPair = "BTC_USDT"),
+    TradingPair("ETHUSDT", "ETH", "USDT", "Ethereum / USDT", tokocryptoPair = "ETH_USDT"),
+    TradingPair("BNBUSDT", "BNB", "USDT", "BNB / USDT", tokocryptoPair = "BNB_USDT"),
+    TradingPair("SOLUSDT", "SOL", "USDT", "Solana / USDT", tokocryptoPair = "SOL_USDT"),
+    TradingPair("XRPUSDT", "XRP", "USDT", "XRP / USDT", tokocryptoPair = "XRP_USDT"),
+    TradingPair("DOGEUSDT", "DOGE", "USDT", "Dogecoin / USDT", tokocryptoPair = "DOGE_USDT"),
+    TradingPair("PEPEUSDT", "PEPE", "USDT", "Pepe / USDT", tokocryptoPair = "PEPE_USDT"),
+    TradingPair("SHIBUSDT", "SHIB", "USDT", "Shiba Inu / USDT", tokocryptoPair = "SHIB_USDT"),
+    TradingPair("TONUSDT", "TON", "USDT", "Toncoin / USDT", tokocryptoPair = "TON_USDT"),
+    TradingPair("ADAUSDT", "ADA", "USDT", "Cardano / USDT", tokocryptoPair = "ADA_USDT"),
+    TradingPair("AVAXUSDT", "AVAX", "USDT", "Avalanche / USDT", tokocryptoPair = "AVAX_USDT"),
+    TradingPair("NEARUSDT", "NEAR", "USDT", "NEAR / USDT", tokocryptoPair = "NEAR_USDT"),
+    TradingPair("SUIUSDT", "SUI", "USDT", "Sui / USDT", tokocryptoPair = "SUI_USDT"),
+    TradingPair("LINKUSDT", "LINK", "USDT", "Chainlink / USDT", tokocryptoPair = "LINK_USDT"),
+    TradingPair("DOTUSDT", "DOT", "USDT", "Polkadot / USDT", tokocryptoPair = "DOT_USDT"),
+    TradingPair("LTCUSDT", "LTC", "USDT", "Litecoin / USDT", tokocryptoPair = "LTC_USDT"),
+    TradingPair("WLDUSDT", "WLD", "USDT", "Worldcoin / USDT", tokocryptoPair = "WLD_USDT"),
+    TradingPair("ONDOUSDT", "ONDO", "USDT", "Ondo / USDT", tokocryptoPair = "ONDO_USDT"),
 
-        val POPULAR_INDODAX_PAIRS = listOf(
-            TradingPair("BTCIDR", "BTC", "IDR", "Bitcoin / IDR", indodaxPair = "btc_idr", tokocryptoPair = "BTC_IDR"),
-            TradingPair("ETHIDR", "ETH", "IDR", "Ethereum / IDR", indodaxPair = "eth_idr", tokocryptoPair = "ETH_IDR"),
-            TradingPair("SOLIDR", "SOL", "IDR", "Solana / IDR", indodaxPair = "sol_idr", tokocryptoPair = "SOL_IDR"),
-            TradingPair("BNBIDR", "BNB", "IDR", "BNB / IDR", indodaxPair = "bnb_idr", tokocryptoPair = "BNB_IDR"),
-            TradingPair("XRPIDR", "XRP", "IDR", "XRP / IDR", indodaxPair = "xrp_idr", tokocryptoPair = "XRP_IDR"),
-            TradingPair("DOGEIDR", "DOGE", "IDR", "Dogecoin / IDR", indodaxPair = "doge_idr", tokocryptoPair = "DOGE_IDR"),
-            TradingPair("PEPEIDR", "PEPE", "IDR", "Pepe / IDR", indodaxPair = "pepe_idr", tokocryptoPair = "PEPE_IDR"),
-            TradingPair("ADAIDR", "ADA", "IDR", "Cardano / IDR", indodaxPair = "ada_idr", tokocryptoPair = "ADA_IDR"),
-            TradingPair("AVAXIDR", "AVAX", "IDR", "Avalanche / IDR", indodaxPair = "avax_idr", tokocryptoPair = "AVAX_IDR"),
-            TradingPair("SHIBIDR", "SHIB", "IDR", "Shiba Inu / IDR", indodaxPair = "shib_idr", tokocryptoPair = "SHIB_IDR"),
-            TradingPair("NEARIDR", "NEAR", "IDR", "NEAR / IDR", indodaxPair = "near_idr", tokocryptoPair = "NEAR_IDR"),
-            TradingPair("SUIIDR", "SUI", "IDR", "Sui / IDR", indodaxPair = "sui_idr", tokocryptoPair = "SUI_IDR"),
-            TradingPair("DOTIDR", "DOT", "IDR", "Polkadot / IDR", indodaxPair = "dot_idr", tokocryptoPair = "DOT_IDR"),
-            TradingPair("LTCIDR", "LTC", "IDR", "Litecoin / IDR", indodaxPair = "ltc_idr", tokocryptoPair = "LTC_IDR"),
-            TradingPair("LINKIDR", "LINK", "IDR", "Chainlink / IDR", indodaxPair = "link_idr", tokocryptoPair = "LINK_IDR"),
-            TradingPair("MYXIDR", "MYX", "IDR", "MYX Finance / IDR", indodaxPair = "myx_idr", tokocryptoPair = "MYX_IDR")
-        )
+    // ==================== IDR PAIRS ====================
+    TradingPair("BTCIDR", "BTC", "IDR", "Bitcoin / IDR", tokocryptoPair = "BTC_IDR"),
+    TradingPair("ETHIDR", "ETH", "IDR", "Ethereum / IDR", tokocryptoPair = "ETH_IDR"),
+    TradingPair("USDTIDR", "USDT", "IDR", "Tether / IDR", tokocryptoPair = "USDT_IDR"),
+    TradingPair("BNBIDR", "BNB", "IDR", "BNB / IDR", tokocryptoPair = "BNB_IDR"),
+    TradingPair("SOLIDR", "SOL", "IDR", "Solana / IDR", tokocryptoPair = "SOL_IDR"),
+    TradingPair("XRPIDR", "XRP", "IDR", "XRP / IDR", tokocryptoPair = "XRP_IDR"),
+    TradingPair("DOGEIDR", "DOGE", "IDR", "Dogecoin / IDR", tokocryptoPair = "DOGE_IDR")
+)
+
+// 2. List Khusus Indodax (Hanya menggunakan parameter indodaxPair)
+val POPULAR_INDODAX_PAIRS = listOf(
+    TradingPair("BTCIDR", "BTC", "IDR", "Bitcoin / IDR", indodaxPair = "btc_idr"),
+    TradingPair("ETHIDR", "ETH", "IDR", "Ethereum / IDR", indodaxPair = "eth_idr"),
+    TradingPair("USDTIDR", "USDT", "IDR", "Tether / IDR", indodaxPair = "usdt_idr"), 
+    TradingPair("SOLIDR", "SOL", "IDR", "Solana / IDR", indodaxPair = "sol_idr"),
+    TradingPair("BNBIDR", "BNB", "IDR", "BNB / IDR", indodaxPair = "bnb_idr"),
+    TradingPair("XRPIDR", "XRP", "IDR", "XRP / IDR", indodaxPair = "xrp_idr"),
+    TradingPair("DOGEIDR", "DOGE", "IDR", "Dogecoin / IDR", indodaxPair = "doge_idr"),
+    TradingPair("PEPEIDR", "PEPE", "IDR", "Pepe / IDR", indodaxPair = "pepe_idr"),
+    TradingPair("ADAIDR", "ADA", "IDR", "Cardano / IDR", indodaxPair = "ada_idr"),
+    TradingPair("AVAXIDR", "AVAX", "IDR", "Avalanche / IDR", indodaxPair = "avax_idr"),
+    TradingPair("SHIBIDR", "SHIB", "IDR", "Shiba Inu / IDR", indodaxPair = "shib_idr"),
+    TradingPair("NEARIDR", "NEAR", "IDR", "NEAR / IDR", indodaxPair = "near_idr"),
+    TradingPair("SUIIDR", "SUI", "IDR", "Sui / IDR", indodaxPair = "sui_idr"),
+    TradingPair("DOTIDR", "DOT", "IDR", "Polkadot / IDR", indodaxPair = "dot_idr"),
+    TradingPair("LTCIDR", "LTC", "IDR", "Litecoin / IDR", indodaxPair = "ltc_idr"),
+    TradingPair("LINKIDR", "LINK", "IDR", "Chainlink / IDR", indodaxPair = "link_idr"),
+    TradingPair("MYXIDR", "MYX", "IDR", "MYX Finance / IDR", indodaxPair = "myx_idr")
+)
 
         val POPULAR_PAIRS = POPULAR_TOKOCRYPTO_PAIRS
 
