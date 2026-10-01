@@ -12,7 +12,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Cache depth / orderbook real-time untuk menghitung rasio Orderbook Pressure (Bids vs Asks).
- * Terisolasi per exchange (Tokocrypto vs Indodax) untuk mencegah kontaminasi kedalaman pasar.
+ * Terisolasi 100% per exchange (Tokocrypto vs Indodax) tanpa unscoped fallback.
  */
 object OrderBookDepthCache {
 
@@ -36,7 +36,7 @@ object OrderBookDepthCache {
 
     fun getOrderBook(symbol: String, exchange: String = "TOKOCRYPTO"): Pair<List<OrderBookItem>, List<OrderBookItem>>? {
         val key = buildKey(symbol, exchange)
-        return cache[key] ?: cache[normalizeSymbol(symbol)]
+        return cache[key]
     }
 
     fun updateOrderBook(
@@ -48,7 +48,6 @@ object OrderBookDepthCache {
         if (bids.isEmpty() && asks.isEmpty()) return
         val key = buildKey(symbol, exchange)
         cache[key] = bids to asks
-        cache[normalizeSymbol(symbol)] = bids to asks // legacy compatibility
         lastFetchTime[key] = System.currentTimeMillis()
         _depthVersion.value = System.currentTimeMillis()
     }
@@ -75,7 +74,6 @@ object OrderBookDepthCache {
 
                 if (depth.first.isNotEmpty() || depth.second.isNotEmpty()) {
                     cache[key] = depth
-                    cache[norm] = depth
                     lastFetchTime[key] = System.currentTimeMillis()
                     _depthVersion.value = System.currentTimeMillis()
                 }

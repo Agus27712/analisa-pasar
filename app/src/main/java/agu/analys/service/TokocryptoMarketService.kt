@@ -223,37 +223,80 @@ object TokocryptoMarketService {
     }
 
     /**
-     * Fetch multiple Tickers
+     * Fetch multiple Tickers dengan routing Symbol Type 1 vs Type 3
      */
     suspend fun fetchTickers(symbols: List<String>): List<MarketTick> = withContext(Dispatchers.IO) {
         try {
-            val primaryUrl = "$TOKOCRYPTO_TYPE1_MARKET_URL/ticker/24hr"
-            val fallbackPaths = listOf("/api/v3/ticker/24hr")
-            val jsonStr = getWithFallback(primaryUrl, fallbackPaths) ?: return@withContext emptyList()
-            val array = if (jsonStr.trim().startsWith("[")) JSONArray(jsonStr) else JSONArray()
-            val symbolSet = symbols.map { toBinanceSymbol(it) }.toSet()
+            val symbolSet = symbols.map { toTokocryptoSymbol(it) }.toSet()
             val results = mutableListOf<MarketTick>()
+            val foundSymbols = mutableSetOf<String>()
 
-            for (i in 0 until array.length()) {
-                val item = array.optJSONObject(i) ?: continue
-                val sym = item.optString("symbol", "").uppercase()
-                if (symbolSet.contains(sym)) {
-                    val last = item.optString("lastPrice", "0").toDoubleOrNull() ?: 0.0
-                    if (last > 0) {
-                        results.add(
-                            MarketTick(
-                                symbol = sym,
-                                price = last,
-                                high24h = item.optString("highPrice", "0").toDoubleOrNull() ?: last,
-                                low24h = item.optString("lowPrice", "0").toDoubleOrNull() ?: last,
-                                volume24h = item.optString("quoteVolume", "0").toDoubleOrNull() ?: 0.0,
-                                change24h = item.optString("priceChangePercent", "0").toDoubleOrNull() ?: 0.0,
-                                timestamp = System.currentTimeMillis()
+            // 1. Fetch Tickers Type 1 (MBX Broker / Cloud)
+            val primaryUrl1 = "$TOKOCRYPTO_TYPE1_MARKET_URL/ticker/24hr"
+            val fallbackPaths1 = listOf("/api/v3/ticker/24hr")
+            val jsonStr1 = getWithFallback(primaryUrl1, fallbackPaths1)
+            if (!jsonStr1.isNullOrBlank()) {
+                val array1 = if (jsonStr1.trim().startsWith("[")) JSONArray(jsonStr1) else JSONArray()
+                for (i in 0 until array1.length()) {
+                    val item = array1.optJSONObject(i) ?: continue
+                    val sym = item.optString("symbol", "").uppercase()
+                    if (symbolSet.contains(sym)) {
+                        val last = item.optString("lastPrice", "0").toDoubleOrNull() ?: 0.0
+                        if (last > 0) {
+                            results.add(
+                                MarketTick(
+                                    symbol = sym,
+                                    price = last,
+                                    high24h = item.optString("highPrice", "0").toDoubleOrNull() ?: last,
+                                    low24h = item.optString("lowPrice", "0").toDoubleOrNull() ?: last,
+                                    volume24h = item.optString("quoteVolume", "0").toDoubleOrNull() ?: 0.0,
+                                    change24h = item.optString("priceChangePercent", "0").toDoubleOrNull() ?: 0.0,
+                                    timestamp = System.currentTimeMillis()
+                                )
                             )
-                        )
+                            foundSymbols.add(sym)
+                        }
                     }
                 }
             }
+
+            // 2. Fetch Tickers Type 3 (NextMe) jika ada simbol yang belum ditemukan atau bertipe 3
+            val remainingSymbols = symbolSet.filterNot { foundSymbols.contains(it) }
+            val hasType3 = remainingSymbols.any { TokocryptoSymbolRepository.getSymbolType(it) == 3 }
+            if (hasType3 || remainingSymbols.isNotEmpty()) {
+                val primaryUrl3 = "$TOKOCRYPTO_TYPE3_MARKET_URL/ticker/24hr"
+                val fallbackPaths3 = listOf("/open/v1/ticker/24hr", "/api/v3/ticker/24hr")
+                val jsonStr3 = getWithFallback(primaryUrl3, fallbackPaths3)
+                if (!jsonStr3.isNullOrBlank()) {
+                    val array3 = if (jsonStr3.trim().startsWith("[")) {
+                        JSONArray(jsonStr3)
+                    } else {
+                        JSONObject(jsonStr3).optJSONArray("data") ?: JSONArray()
+                    }
+                    for (i in 0 until array3.length()) {
+                        val item = array3.optJSONObject(i) ?: continue
+                        val rawSym = item.optString("symbol", "").uppercase().replace("_", "")
+                        if (symbolSet.contains(rawSym) && !foundSymbols.contains(rawSym)) {
+                            val last = item.optString("lastPrice", "0").toDoubleOrNull() ?: 0.0
+                            if (last > 0) {
+                                results.add(
+                                    MarketTick(
+                                        symbol = rawSym,
+                                        price = last,
+                                        high24h = item.optString("highPrice", "0").toDoubleOrNull() ?: last,
+                                        low24h = item.optString("lowPrice", "0").toDoubleOrNull() ?: last,
+                                        volume24h = item.optString("quoteVolume", "0").toDoubleOrNull() ?: 0.0,
+                                        change24h = item.optString("priceChangePercent", "0").toDoubleOrNull() ?: 0.0,
+                                        timestamp = System.currentTimeMillis()
+                                    )
+                                )
+                                foundSymbols.add(rawSym)
+                            }
+                        }
+                    }
+                }
+            }
+
             results
         } catch (_: Exception) {
             emptyList()

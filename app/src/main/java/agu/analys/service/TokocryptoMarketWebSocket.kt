@@ -1,8 +1,10 @@
 package agu.analys.service
 
+import agu.analys.data.OrderBookDepthCache
 import agu.analys.data.TokocryptoSymbolRepository
 import agu.analys.model.CandleBar
 import agu.analys.model.MarketTick
+import agu.analys.model.OrderBookItem
 import agu.analys.model.Timeframe
 import agu.analys.model.TradeStreamItem
 import agu.analys.network.NetworkClientProvider
@@ -15,6 +17,7 @@ import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
+import org.json.JSONArray
 import org.json.JSONObject
 import timber.log.Timber
 import java.time.Instant
@@ -25,7 +28,7 @@ import kotlin.math.min
 
 /**
  * WebSocket Market Stream Resmi Tokocrypto:
- * Mendukung combined streams: Live Kline (dengan deteksi k.x closed), Live Trade, dan Live Mini Ticker.
+ * Mendukung combined streams: Live Mini Ticker, Live Kline, Live Trade, AggTrade, dan Depth (Order Book).
  *
  * Host dipilih menurut symbol type (sesuai dokumentasi resmi Tokocrypto):
  * - Type 1 (MBX)    : wss://stream-cloud.tokocrypto.site/stream
@@ -40,6 +43,7 @@ class TokocryptoMarketWebSocket(
     private val onTick: (MarketTick) -> Unit,
     private val onCandle: (CandleBar) -> Unit,
     private val onTrade: ((TradeStreamItem) -> Unit)? = null,
+    private val onDepth: ((bids: List<OrderBookItem>, asks: List<OrderBookItem>) -> Unit)? = null,
     private val onCandleClosed: ((CandleBar) -> Unit)? = null,
     private val onConnected: () -> Unit,
     private val onDisconnected: () -> Unit
@@ -113,8 +117,8 @@ class TokocryptoMarketWebSocket(
         if (streamSymbol.isBlank() || streamHost.isBlank()) return
         val interval = getIntervalCode(currentTimeframe)
 
-        // Combined streams: miniTicker + kline + trade
-        val streams = "${streamSymbol}@miniTicker/${streamSymbol}@kline_${interval}/${streamSymbol}@trade"
+        // Combined streams: miniTicker + kline + trade + aggTrade + depth20
+        val streams = "${streamSymbol}@miniTicker/${streamSymbol}@kline_${interval}/${streamSymbol}@trade/${streamSymbol}@aggTrade/${streamSymbol}@depth20@100ms"
         val url = "$streamHost?streams=$streams"
 
         val request = Request.Builder()
@@ -157,15 +161,15 @@ class TokocryptoMarketWebSocket(
                 val data = root.optJSONObject("data") ?: root
 
                 when {
+                    // 1. TICKER / MINI-TICKER
                     streamName.contains("@miniTicker") || streamName.contains("@ticker") ||
-                        (data.has("c") && data.has("h") && data.has("l") && !data.has("k")) -> {
+                        (data.has("c") && data.has("h") && data.has("l") && !data.has("k") && !data.has("bids")) -> {
                         val sym = data.optString("s", streamSymbol).uppercase()
                         val lastPrice = data.optString("c", "0").toDoubleOrNull() ?: 0.0
                         if (lastPrice > 0) {
                             val high = data.optString("h", "0").toDoubleOrNull() ?: lastPrice
                             val low = data.optString("l", "0").toDoubleOrNull() ?: lastPrice
                             val quoteVol = data.optString("q", "0").toDoubleOrNull() ?: 0.0
-                            // miniTicker tidak punya "P"; hitung dari harga open (o) jika ada
                             val open24 = data.optString("o", "0").toDoubleOrNull() ?: 0.0
                             val changePct = data.optString("P", "").toDoubleOrNull()
                                 ?: if (open24 > 0) (lastPrice - open24) / open24 * 100.0 else 0.0
@@ -182,6 +186,7 @@ class TokocryptoMarketWebSocket(
                         }
                     }
 
+                    // 2. KLINE / CANDLESTICK
                     streamName.contains("@kline") || data.has("k") -> {
                         val kObj = data.optJSONObject("k")
                         if (kObj != null) {
@@ -210,15 +215,17 @@ class TokocryptoMarketWebSocket(
                         }
                     }
 
-                    streamName.contains("@trade") || (data.has("p") && data.has("q") && data.has("t")) -> {
+                    // 3. AGGREGATE TRADE & STANDARD TRADE
+                    streamName.contains("@aggTrade") || streamName.contains("@trade") ||
+                        (data.has("p") && data.has("q") && (data.has("t") || data.has("T") || data.has("a"))) -> {
                         val p = data.optString("p", "0").toDoubleOrNull() ?: 0.0
                         val q = data.optString("q", "0").toDoubleOrNull() ?: 0.0
-                        val t = data.optLong("T", data.optLong("t", System.currentTimeMillis()))
+                        val t = data.optLong("T", data.optLong("E", data.optLong("t", System.currentTimeMillis())))
                         val isBuyerMaker = data.optBoolean("m", false)
-                        val id = data.optLong("t", 0L).toString()
+                        val id = (data.optLong("a", 0L).takeIf { it > 0 } ?: data.optLong("t", 0L)).toString()
                         if (p > 0 && q > 0) {
                             val trade = TradeStreamItem(
-                                id = id,
+                                id = id.ifBlank { System.currentTimeMillis().toString() },
                                 price = p,
                                 amount = q,
                                 timeFormatted = tradeTimeFormatter.format(Instant.ofEpochMilli(t)),
@@ -227,10 +234,39 @@ class TokocryptoMarketWebSocket(
                             onTrade?.invoke(trade)
                         }
                     }
+
+                    // 4. ORDER BOOK DEPTH
+                    streamName.contains("@depth") || data.has("bids") || data.has("b") -> {
+                        val bidsArr = data.optJSONArray("bids") ?: data.optJSONArray("b")
+                        val asksArr = data.optJSONArray("asks") ?: data.optJSONArray("a")
+                        if (bidsArr != null || asksArr != null) {
+                            val bids = parseDepthItems(bidsArr, isBid = true)
+                            val asks = parseDepthItems(asksArr, isBid = false)
+                            if (bids.isNotEmpty() || asks.isNotEmpty()) {
+                                onDepth?.invoke(bids, asks)
+                            }
+                        }
+                    }
                 }
             } catch (e: Exception) {
                 Timber.w(e, "Error parse Tokocrypto WS frame")
             }
+        }
+
+        private fun parseDepthItems(arr: JSONArray?, isBid: Boolean): List<OrderBookItem> {
+            if (arr == null) return emptyList()
+            val list = mutableListOf<OrderBookItem>()
+            var runningTotal = 0.0
+            for (i in 0 until arr.length()) {
+                val row = arr.optJSONArray(i) ?: continue
+                val price = row.optString(0, "0").toDoubleOrNull() ?: continue
+                val amount = row.optString(1, "0").toDoubleOrNull() ?: continue
+                if (price > 0 && amount > 0) {
+                    runningTotal += (price * amount)
+                    list.add(OrderBookItem(price = price, amount = amount, total = runningTotal, isBid = isBid))
+                }
+            }
+            return list
         }
 
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
@@ -241,7 +277,6 @@ class TokocryptoMarketWebSocket(
         }
 
         override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
-            // Server memulai penutupan (mis. batas 24 jam): balas close agar handshake selesai
             webSocket.close(code, reason)
         }
 
@@ -249,7 +284,6 @@ class TokocryptoMarketWebSocket(
             if (!isCurrent()) return
             Timber.i("TokocryptoMarketWS closed: $code $reason")
             onDisconnected()
-            // Koneksi ditutup server (batas 24 jam) dan bukan oleh stop(): sambung ulang
             reconnect()
         }
     }

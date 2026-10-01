@@ -43,13 +43,13 @@ class RealTradeCoordinator(
             fetchRealBalance()
         },
         onRealTradeSuccess = { pair, type, price, qty, tp1, tp2 ->
-            _realIndodaxBalance.value = prefs.getSavedRealBalance()
-            _realAvgBuyPrices.value = prefs.getSavedRealAvgBuyPrices()
+            _realIndodaxBalance.value = prefs.getSavedRealBalance(prefs.marketDataSource.name)
+            _realAvgBuyPrices.value = prefs.getSavedRealAvgBuyPrices(prefs.marketDataSource.name)
             onRealTradeExecuted?.invoke(pair, type, price, qty, tp1, tp2)
         }
     )
 
-    private val _realIndodaxBalance = MutableStateFlow<Map<String, Double>>(prefs.getSavedRealBalance())
+    private val _realIndodaxBalance = MutableStateFlow<Map<String, Double>>(prefs.getSavedRealBalance(prefs.marketDataSource.name))
     val realIndodaxBalance: StateFlow<Map<String, Double>> = _realIndodaxBalance.asStateFlow()
 
     private val _realFreeBalance = MutableStateFlow<Map<String, Double>>(emptyMap())
@@ -58,13 +58,13 @@ class RealTradeCoordinator(
     private val _realLockedBalance = MutableStateFlow<Map<String, Double>>(emptyMap())
     val realLockedBalance: StateFlow<Map<String, Double>> = _realLockedBalance.asStateFlow()
 
-    private val _realAvgBuyPrices = MutableStateFlow<Map<String, Double>>(prefs.getSavedRealAvgBuyPrices())
+    private val _realAvgBuyPrices = MutableStateFlow<Map<String, Double>>(prefs.getSavedRealAvgBuyPrices(prefs.marketDataSource.name))
     val realAvgBuyPrices: StateFlow<Map<String, Double>> = _realAvgBuyPrices.asStateFlow()
 
     private val _realAvgBuyPartial = MutableStateFlow<Map<String, Boolean>>(emptyMap())
     val realAvgBuyPartial: StateFlow<Map<String, Boolean>> = _realAvgBuyPartial.asStateFlow()
 
-    private val _realTradeStatus = MutableStateFlow("Siap (Indodax V2 API)")
+    private val _realTradeStatus = MutableStateFlow("Siap (${prefs.marketDataSource.label} API)")
     val realTradeStatus: StateFlow<String> = _realTradeStatus.asStateFlow()
 
     private val _isFetchingRealBalance = MutableStateFlow(false)
@@ -121,7 +121,7 @@ class RealTradeCoordinator(
         current["${asset.lowercase()}idr"] = newAvgPrice
         current["${asset.uppercase()}IDR"] = newAvgPrice
         _realAvgBuyPrices.value = current
-        prefs.saveRealAvgBuyPrices(current)
+        prefs.saveRealAvgBuyPrices(current, prefs.marketDataSource.name)
     }
 
     // Security delegation
@@ -224,7 +224,7 @@ class RealTradeCoordinator(
                 _realIndodaxBalance.value = balances.total
                 _realFreeBalance.value = balances.free
                 _realLockedBalance.value = balances.locked
-                prefs.saveRealBalance(balances.total)
+                prefs.saveRealBalance(balances.total, prefs.marketDataSource.name)
                 if (!isToko) {
                     delay(INTER_REQUEST_DELAY_MS)
                     if (fetchRealOpenOrdersSafe(apiKey, secretKey, balances)) {

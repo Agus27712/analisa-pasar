@@ -283,6 +283,117 @@ object TokocryptoTradeApi {
     }
 
     /**
+     * Membatalkan order Tokocrypto (POST /open/v1/orders/cancel)
+     */
+    suspend fun cancelOrder(
+        apiKey: String,
+        secretKey: String,
+        symbol: String,
+        orderId: String
+    ): Pair<Boolean, String> = withContext(Dispatchers.IO) {
+        if (apiKey.isBlank() || secretKey.isBlank()) {
+            return@withContext false to "API Key atau Secret Key Tokocrypto belum diisi."
+        }
+        val tokoSymbol = TokocryptoSymbolRepository.getSymbolInfo(symbol)
+            ?.let { "${it.baseAsset}_${it.quoteAsset}" }
+            ?: TokocryptoMarketService.toTokocryptoPair(symbol)
+
+        val timestamp = System.currentTimeMillis().toString()
+        val queryParam = "orderId=$orderId&recvWindow=10000&symbol=$tokoSymbol&timestamp=$timestamp"
+        val signature = hmacSha256(secretKey, queryParam)
+
+        try {
+            val url = "$TOKOCRYPTO_BASE_URL/open/v1/orders/cancel?$queryParam&signature=$signature"
+            val req = Request.Builder()
+                .url(url)
+                .post(FormBody.Builder().build())
+                .header("X-MBX-APIKEY", apiKey.trim())
+                .header("Accept", "application/json")
+                .build()
+
+            client.newCall(req).execute().use { resp ->
+                val body = resp.body?.string().orEmpty()
+                val root = runCatching { JSONObject(body) }.getOrNull()
+                val code = root?.optInt("code", -1) ?: -1
+                if (resp.isSuccessful && code == 0) {
+                    return@withContext true to "Order $orderId berhasil dibatalkan."
+                }
+                val detail = describeError(resp.code, root)
+                return@withContext false to "Gagal batal order Tokocrypto: $detail"
+            }
+        } catch (e: Exception) {
+            return@withContext false to "Error koneksi Tokocrypto: ${e.message}"
+        }
+    }
+
+    /**
+     * Mengambil detail status order Tokocrypto (GET /open/v1/orders/detail)
+     */
+    suspend fun getOrder(
+        apiKey: String,
+        secretKey: String,
+        symbol: String,
+        orderId: String?,
+        clientOrderId: String?
+    ): IndodaxTradeApiV2.OrderResult = withContext(Dispatchers.IO) {
+        if (apiKey.isBlank() || secretKey.isBlank()) {
+            return@withContext IndodaxTradeApiV2.OrderResult(false, "API Key / Secret Tokocrypto kosong")
+        }
+        val tokoSymbol = TokocryptoSymbolRepository.getSymbolInfo(symbol)
+            ?.let { "${it.baseAsset}_${it.quoteAsset}" }
+            ?: TokocryptoMarketService.toTokocryptoPair(symbol)
+
+        val timestamp = System.currentTimeMillis().toString()
+        val params = mutableListOf<String>()
+        if (!orderId.isNullOrBlank() && orderId != "0") params.add("orderId=$orderId")
+        if (!clientOrderId.isNullOrBlank()) params.add("clientId=$clientOrderId")
+        params.add("recvWindow=10000")
+        params.add("symbol=$tokoSymbol")
+        params.add("timestamp=$timestamp")
+        params.sort()
+        val queryParam = params.joinToString("&")
+        val signature = hmacSha256(secretKey, queryParam)
+
+        try {
+            val url = "$TOKOCRYPTO_BASE_URL/open/v1/orders/detail?$queryParam&signature=$signature"
+            val req = Request.Builder()
+                .url(url)
+                .get()
+                .header("X-MBX-APIKEY", apiKey.trim())
+                .header("Accept", "application/json")
+                .build()
+
+            client.newCall(req).execute().use { resp ->
+                val body = resp.body?.string().orEmpty()
+                val root = runCatching { JSONObject(body) }.getOrNull()
+                val code = root?.optInt("code", -1) ?: -1
+                val data = root?.optJSONObject("data")
+
+                if (resp.isSuccessful && code == 0 && data != null) {
+                    val status = data.optString("status", "NEW")
+                    val executedQty = data.optString("executedQty", "0").toDoubleOrNull() ?: 0.0
+                    val origQty = data.optString("origQty", "0").toDoubleOrNull() ?: 0.0
+                    val oId = data.optString("orderId", orderId.orEmpty())
+                    val cId = data.optString("clientId", clientOrderId.orEmpty())
+                    return@withContext IndodaxTradeApiV2.OrderResult(
+                        success = true,
+                        message = "Status: $status",
+                        orderId = oId,
+                        clientOrderId = cId,
+                        executedQty = executedQty,
+                        origQty = origQty,
+                        status = status
+                    )
+                }
+                val detail = describeError(resp.code, root)
+                return@withContext IndodaxTradeApiV2.OrderResult(false, "Query Order Gagal: $detail")
+            }
+        } catch (e: Exception) {
+            return@withContext IndodaxTradeApiV2.OrderResult(false, "Error: ${e.message}")
+        }
+    }
+
+    /**
      * Request User Listen Token untuk User WebSocket stream (POST /open/v1/user-listen-token)
      */
     suspend fun requestUserListenToken(apiKey: String): String? = withContext(Dispatchers.IO) {

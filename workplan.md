@@ -112,3 +112,38 @@ Mengintegrasikan arsitektur resmi Tokocrypto sesuai dokumentasi dan mengisolasi 
   - Bersihkan URL whitelist di `TradingViewFullscreenChart.kt`.
 - [x] **Verifikasi Kompilasi**:
   - `compile_applet` berhasil (Build succeeded).
+
+### Tahap 11: Sinkronisasi API Key/Secret & Routing Eksekusi Order Real Tokocrypto (Buy, Sell TP1/TP2, Direct Sell, Cancel, Query) di RealTradeExecutor
+- [x] **Routing Dinamis Real Trade ke Tokocrypto**:
+  - `RealTradeExecutor.executeRealSellOrders`: Mendeteksi bursa aktif via `prefs.marketDataSource`. Membaca kredensial Tokocrypto (`prefs.tokocryptoApiKey` & `prefs.tokocryptoSecretKey`), memeriksa saldo koin via `TokocryptoTradeApi.getAccount()`, dan mengeksekusi order sell (TP1, TP2, TP Full, ataupun Direct Sell) langsung ke `TokocryptoTradeApi.createOrder()`.
+  - `RealTradeExecutor.executeAutoSellOnServer`: Mendukung routing eksekusi server TP Tokocrypto secara otomatis.
+  - `RealTradeExecutor.executeCancelOrder`: Memanggil `TokocryptoTradeApi.cancelOrder()` saat bursa aktif adalah Tokocrypto.
+  - `RealTradeExecutor.waitForBuyFill`: Memanggil `TokocryptoTradeApi.getOrder()` untuk polling status eksekusi BUY order Tokocrypto.
+  - Sinkronisasi saldo lokal multi-quote IDR vs USDT setelah order filled/diekskusi.
+- [x] **Penambahan Endpoint di `TokocryptoTradeApi.kt`**:
+  - Implementasi fungsi `cancelOrder(apiKey, secretKey, symbol, orderId)` ke `POST /open/v1/orders/cancel`.
+  - Implementasi fungsi `getOrder(apiKey, secretKey, symbol, orderId, clientOrderId)` ke `GET /open/v1/orders/detail`.
+- [x] **Sinkronisasi ViewModel & UI**:
+  - `OrderViewModel.hasRealCredentialsConfigured()` memeriksa `hasTokocryptoCredentials()` saat di mode Tokocrypto.
+  - `TradingViewModelOrders.kt`: Evaluasi status koin holding dan penyimpanan posisi menyertakan partisi `exchange` yang aktif.
+  - `SettingsScreen.kt`: Menyelaraskan teks banner, judul dialog PIN, dan toast pesan agar menampilkan bursa yang dipilih (`MODE REAL TOKOCRYPTO` / `MODE REAL INDODAX`).
+- [x] **Verifikasi Kompilasi**:
+  - `compile_applet` berhasil (Build succeeded).
+
+### Tahap 12: Resolusi 7 Temuan Audit Codebase & Penegakan 100% Strict Exchange Isolation
+- [x] **WebSocket AggTrade & Depth Stream**:
+  - Implementasi combined stream `@aggTrade` dan `@depth20@100ms` di `TokocryptoMarketWebSocket.kt`.
+  - Parsing frame `@aggTrade` dan orderbook `@depth` dan integrasi langsung ke StateFlow `tradeStream`, `orderBookBids`, `orderBookAsks`, dan `OrderBookDepthCache` di `MarketDataCoordinator.kt`.
+- [x] **Eliminasi Total Unscoped Fallback di Cache**:
+  - `OrderBookDepthCache.kt`: Menghapus semua fallback `cache[norm]`. Kueri dan pembaruan mewajibkan key `${exchange}_${symbol}`.
+  - `MtfCacheManager.kt`: Menghapus fallback `cache[norm]` dan mirror unpartitioned.
+  - `MarketDataCache.kt`: Menghapus penyimpanan dan pembacaan `pair_*` dan `pairs_metadata_json` tanpa namespace. Seluruh cache persisten dipartisi oleh `source.name.lowercase()`.
+- [x] **Scoping Database Room & Partisi DAO**:
+  - Menyelaraskan `OrderViewModel.kt` (`realOpenOrders`, `realTrades`), `SignalLogRepository.kt`, dan `TradeHistoryRecorder.kt` untuk memfilter data Room secara eksklusif berdasar `exchange`.
+- [x] **Isolasi Storage Saldo Real & Average Price**:
+  - `AppPreferences.kt`: `getSavedRealBalance()`, `saveRealBalance()`, `getSavedRealAvgBuyPrices()`, dan `saveRealAvgBuyPrices()` dipartisi per bursa (`"${exchange.lowercase()}_real_balance"` dan `"${exchange.lowercase()}_real_avg_prices"`).
+  - `RealTradeCoordinator.kt`: StateFlow saldo dan harga rata-rata disinkronkan secara independen sesuai exchange aktif.
+- [x] **Routing Bulk Ticker Type 1 vs Type 3**:
+  - `TokocryptoMarketService.fetchTickers()` mendukung multi-cluster fetching untuk simbol Type 1 (MBX Cloud) dan Type 3 (NextMe) secara seamless.
+- [x] **Verifikasi Kompilasi & Unit Tests**:
+  - `compile_applet` & `gradle :app:testDebugUnitTest` berhasil (Build succeeded & All tests pass).

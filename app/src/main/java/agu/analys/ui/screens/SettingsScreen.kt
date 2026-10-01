@@ -255,7 +255,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                                     )
                                     Spacer(Modifier.width(6.dp))
                                     Text(
-                                        text = if (isRealBuyMode) "MODE REAL INDODAX" else "MODE SIMULASI MURNI",
+                                        text = if (isRealBuyMode) "MODE REAL ${selectedSource.label.uppercase()}" else "MODE SIMULASI MURNI",
                                         color = if (isRealBuyMode) TvRed else TvGreen,
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Black
@@ -370,14 +370,14 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                     Spacer(Modifier.height(14.dp))
 
                     // GROUP 3: KEAMANAN & AKUN
-                    AndroidSettingsGroup(title = "KEAMANAN & API INDODAX") {
+                    AndroidSettingsGroup(title = "KEAMANAN & API ${selectedSource.label.uppercase()}") {
                         AndroidPreferenceItem(
                             icon = Icons.Default.Shield,
                             iconTint = if (isRealBuyMode) TvRed else TvGreen,
                             iconBackground = (if (isRealBuyMode) TvRed else TvGreen).copy(alpha = 0.15f),
                             title = "Mode Beli Real & PIN Keamanan",
                             subtitle = if (isRealBuyMode)
-                                "Mode Real Indodax Aktif · PIN Terpasang"
+                                "Mode Real ${selectedSource.label} Aktif · PIN Terpasang"
                             else
                                 "Mode Simulasi Aktif · ${if (hasPin) "PIN Terproteksi" else "PIN Belum Dibuat"}",
                             onClick = { activeCategory = SettingsCategory.SECURITY }
@@ -623,7 +623,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
 
     if (showPinDialog) {
         SecurityPinDialog(
-            title = if (pinDialogAction == PinDialogAction.TOGGLE_REAL_BUY) "AKTIVASI MODE REAL INDODAX" else "BUKA SESI KEAMANAN",
+            title = if (pinDialogAction == PinDialogAction.TOGGLE_REAL_BUY) "AKTIVASI MODE REAL ${selectedSource.label.uppercase()}" else "BUKA SESI KEAMANAN",
             subtitle = "Masukkan 6-digit PIN Keamanan Anda.",
             errorMessage = pinDialogError,
             failedAttempts = failedPinAttempts,
@@ -635,7 +635,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                     if (pinDialogAction == PinDialogAction.TOGGLE_REAL_BUY && pendingRealBuyToggle) {
                         viewModel.setRealBuyMode(true, pin)
                         pendingRealBuyToggle = false
-                        Toast.makeText(context, "Mode REAL INDODAX AKTIF!", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "Mode REAL ${selectedSource.label.uppercase()} AKTIF!", Toast.LENGTH_SHORT).show()
                     } else {
                         Toast.makeText(context, "PIN Terverifikasi", Toast.LENGTH_SHORT).show()
                     }

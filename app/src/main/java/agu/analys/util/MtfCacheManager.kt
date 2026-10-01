@@ -16,8 +16,8 @@ enum class MtfStatus {
 
 /**
  * Multi-Timeframe Cache Manager:
- * Mengelola prefetch dan cache in-memory untuk kline (M1, M15, H1, H4) secara terisolasi per exchange
- * dari Tokocrypto / Indodax API secara terpisah.
+ * Mengelola prefetch dan cache in-memory untuk kline (M1, M15, H1, H4) secara terisolasi 100% per exchange
+ * dari Tokocrypto / Indodax API secara terpisah tanpa unscoped fallback.
  */
 object MtfCacheManager {
     // In-memory cache for fast lookup. Map<ExchangeScopedKey, Map<Timeframe, List<CandleBar>>>
@@ -87,7 +87,6 @@ object MtfCacheManager {
         return cache[scopedKey]?.get(timeframe)
             ?: cache[buildKey(compactSym, ex)]?.get(timeframe)
             ?: cache[buildKey(tokoPair, ex)]?.get(timeframe)
-            ?: cache[normalized]?.get(timeframe) // fallback
     }
 
     fun isCacheValid(timeframe: Timeframe, candles: List<CandleBar>?): Boolean {
@@ -139,7 +138,7 @@ object MtfCacheManager {
     private fun needsRefresh(symbol: String, exchange: String): Boolean {
         val norm = symbol.trim().uppercase()
         val scopedKey = buildKey(norm, exchange)
-        val symbolCache = cache[scopedKey] ?: cache[norm] ?: return true
+        val symbolCache = cache[scopedKey] ?: return true
         val tfs = listOf(Timeframe.H4, Timeframe.H1, Timeframe.M15, Timeframe.M1)
         for (tf in tfs) {
             if (!isCacheValid(tf, symbolCache[tf])) return true
@@ -189,8 +188,6 @@ object MtfCacheManager {
         if (fetched.isNotEmpty()) {
             val symbolMap = cache.getOrPut(scopedKey) { mutableMapOf() }
             symbolMap[tf] = fetched
-            // Legacy mirror
-            cache.getOrPut(norm) { mutableMapOf() }[tf] = fetched
 
             // Also alias under clean compact Tokocrypto symbol and pair for fast retrieval
             val compactSym = TokocryptoMarketService.toTokocryptoSymbol(norm)

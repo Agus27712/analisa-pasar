@@ -118,9 +118,16 @@ fun TradingViewModel.getHoldingStatus(pair: TradingPair, forceIsReal: Boolean? =
     val baseUpper = pair.baseAsset.uppercase()
     val symbolNorm = pair.symbol.replace("_", "").uppercase()
 
+    val currentEx = prefs.marketDataSource.name
+    val hasCreds = if (prefs.marketDataSource == agu.analys.config.MarketDataSource.TOKOCRYPTO) {
+        prefs.hasTokocryptoCredentials()
+    } else {
+        prefs.hasIndodaxCredentials()
+    }
+
     if (targetIsReal) {
-        // STRICTLY REAL MODE: Hanya evaluasi posisi Real / saldo akun Real Indodax
-        val spotPos = positionStore.get(pair.symbol, isReal = true)
+        // STRICTLY REAL MODE: Hanya evaluasi posisi Real / saldo akun Real bursa aktif
+        val spotPos = positionStore.get(pair.symbol, isReal = true, exchange = currentEx)
         val realBalances = realIndodaxBalance.value
         val realQty = realBalances[baseLower] ?: realBalances[baseUpper] ?: 0.0
         val realAvg = realAvgBuyPrices.value[symbolNorm]
@@ -130,9 +137,9 @@ fun TradingViewModel.getHoldingStatus(pair: TradingPair, forceIsReal: Boolean? =
             ?: if (spotPos.isReal && spotPos.entryPrice > 0.0) spotPos.entryPrice else 0.0
 
         // Jika saldo koin sudah 0 / debu (koin sudah dijual), pastikan status holding CLEAR
-        if ((realBalances.isNotEmpty() || prefs.hasIndodaxCredentials()) && realQty <= 0.00000001) {
+        if ((realBalances.isNotEmpty() || hasCreds) && realQty <= 0.00000001) {
             if (spotPos.isHolding) {
-                positionStore.markSold(pair.symbol, isReal = true)
+                positionStore.markSold(pair.symbol, isReal = true, exchange = currentEx)
                 agu.analys.engine.sell.SellSignalLifecycleManager.reset(pair.symbol, isReal = true)
             }
             return CoinHoldingStatus(isHolding = false, isReal = true)
@@ -153,7 +160,7 @@ fun TradingViewModel.getHoldingStatus(pair: TradingPair, forceIsReal: Boolean? =
             )
         }
 
-        if (realQty > 0.00000001 && baseUpper != "IDR" && prefs.hasIndodaxCredentials()) {
+        if (realQty > 0.00000001 && baseUpper != "IDR" && hasCreds) {
             val sl = if (spotPos.isReal && spotPos.stopLossPrice > 0.0) spotPos.stopLossPrice else if (realAvg > 0.0) realAvg * 0.99 else 0.0
             return CoinHoldingStatus(
                 isHolding = true,
@@ -170,7 +177,7 @@ fun TradingViewModel.getHoldingStatus(pair: TradingPair, forceIsReal: Boolean? =
         return CoinHoldingStatus(isHolding = false, isReal = true)
     } else {
         // STRICTLY SIMULATION MODE: Hanya evaluasi posisi Simulasi / saldo akun Simulasi
-        val spotPos = positionStore.get(pair.symbol, isReal = false)
+        val spotPos = positionStore.get(pair.symbol, isReal = false, exchange = currentEx)
         val simWallet = simulationWallet.value
         val simQty = (simWallet.coinBalances[baseLower] ?: simWallet.coinBalances[baseUpper] ?: 0.0) +
                      (simWallet.lockedCoinBalances[baseLower] ?: simWallet.lockedCoinBalances[baseUpper] ?: 0.0)
@@ -372,7 +379,8 @@ fun TradingViewModel.executeSellOrders(
             tp2Percent = tp2Percent,
             onResult = { success, msg ->
                 if (success) {
-                    positionStore.markSold(pair.symbol, isReal = true)
+                    val currentEx = prefs.marketDataSource.name
+                    positionStore.markSold(pair.symbol, isReal = true, exchange = currentEx)
                     agu.analys.engine.sell.SellSignalLifecycleManager.reset(pair.symbol, isReal = true)
                     positionCoordinator.setOwnership(pair.symbol, false, isReal = true)
                     positionCoordinator.refreshPosition(pair.symbol)
@@ -388,7 +396,7 @@ fun TradingViewModel.executeSellOrders(
         val curBids = marketDataCoordinator.orderBookBids.value
         val curAsks = marketDataCoordinator.orderBookAsks.value
         val mode = strategyMode.value.name
-        val spotPos = positionStore.get(pair.symbol, isReal = false)
+        val spotPos = positionStore.get(pair.symbol, isReal = false, exchange = prefs.marketDataSource.name)
 
         val snapshot = agu.analys.trading.TradeSignalSnapshot.capture(
             symbol = pair.symbol,

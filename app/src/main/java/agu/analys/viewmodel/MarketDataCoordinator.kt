@@ -1,6 +1,7 @@
 package agu.analys.viewmodel
 
 import agu.analys.config.MarketDataSource
+import agu.analys.data.OrderBookDepthCache
 import agu.analys.engine.LearningTradingEngine
 import agu.analys.model.CandleBar
 import agu.analys.model.MarketConnectionState
@@ -117,6 +118,20 @@ class MarketDataCoordinator(
         onCandle = { candle ->
             engine.currentFormingVolume = candle.volume
             engine.onCandleUpdate(candle)
+        },
+        onTrade = { trade ->
+            val cur = _tradeStream.value
+            _tradeStream.value = (listOf(trade) + cur).take(50)
+        },
+        onDepth = { bids, asks ->
+            if (bids.isNotEmpty() || asks.isNotEmpty()) {
+                _orderBookBids.value = bids
+                _orderBookAsks.value = asks
+                val active = currentActivePair?.symbol
+                if (!active.isNullOrBlank()) {
+                    OrderBookDepthCache.updateOrderBook(active, bids, asks, "TOKOCRYPTO")
+                }
+            }
         },
         onConnected = {
             wsLive = true

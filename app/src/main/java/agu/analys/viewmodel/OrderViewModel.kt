@@ -49,9 +49,9 @@ class OrderViewModel(
     val userPublicIp: StateFlow<String?> = realCoordinator.publicIp
     val failedPinAttempts: StateFlow<Int> = MutableStateFlow(prefs.failedPinAttempts).asStateFlow()
 
-    val realOpenOrders: StateFlow<List<RealOpenOrderEntity>> = AppDatabase.getInstance().realTradeDao().getOpenOrdersFlow()
+    val realOpenOrders: StateFlow<List<RealOpenOrderEntity>> = AppDatabase.getInstance().realTradeDao().getOpenOrdersByExchangeFlow(prefs.marketDataSource.name)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-    val realTrades: StateFlow<List<RealTradeEntity>> = AppDatabase.getInstance().realTradeDao().getAllTradesFlow()
+    val realTrades: StateFlow<List<RealTradeEntity>> = AppDatabase.getInstance().realTradeDao().getTradesByExchangeFlow(prefs.marketDataSource.name)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val simulationWallet: StateFlow<SimulationWallet> = simCoordinator.wallet
@@ -129,7 +129,12 @@ class OrderViewModel(
 
     fun hasSecurityPin(): Boolean = prefs.hasSecurityPin()
 
-    fun hasRealCredentialsConfigured(): Boolean = prefs.hasIndodaxCredentials()
+    fun hasRealCredentialsConfigured(): Boolean =
+        if (prefs.marketDataSource == agu.analys.config.MarketDataSource.TOKOCRYPTO) {
+            prefs.hasTokocryptoCredentials()
+        } else {
+            prefs.hasIndodaxCredentials()
+        }
 
     fun createSecurityPin(pin: String) {
         prefs.setSecurityPin(pin)

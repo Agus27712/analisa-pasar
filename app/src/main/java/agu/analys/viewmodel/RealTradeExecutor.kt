@@ -1,13 +1,20 @@
 package agu.analys.viewmodel
 
+import agu.analys.config.MarketDataSource
 import agu.analys.database.AppDatabase
+import agu.analys.model.TokocryptoOrderRequest
+import agu.analys.model.TokocryptoOrderSide
+import agu.analys.model.TokocryptoOrderType
 import agu.analys.service.IndodaxTradeApiV2
+import agu.analys.service.TokocryptoMarketService
+import agu.analys.service.TokocryptoTradeApi
 import agu.analys.util.AppPreferences
 import agu.analys.util.PriceFormatter
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import org.json.JSONArray
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 
 class RealTradeExecutor(
@@ -30,7 +37,7 @@ class RealTradeExecutor(
         orderId: String,
         onResult: (Boolean, String) -> Unit
     ) {
-        val isToko = prefs.marketDataSource == agu.analys.config.MarketDataSource.TOKOCRYPTO
+        val isToko = prefs.marketDataSource == MarketDataSource.TOKOCRYPTO
         val apiKey = if (isToko) prefs.tokocryptoApiKey else prefs.indodaxApiKey
         val secretKey = if (isToko) prefs.tokocryptoSecretKey else prefs.indodaxSecretKey
         val sourceLabel = prefs.marketDataSource.label
@@ -43,12 +50,16 @@ class RealTradeExecutor(
             return
         }
 
-        scope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            onStatusUpdate("Membatalkan order $orderId...")
-            val (success, message) = IndodaxTradeApiV2.cancelOrder(apiKey, secretKey, symbol, orderId)
+        scope.launch(Dispatchers.IO) {
+            onStatusUpdate("Membatalkan order $orderId di $sourceLabel...")
+            val (success, message) = if (isToko) {
+                TokocryptoTradeApi.cancelOrder(apiKey, secretKey, symbol, orderId)
+            } else {
+                IndodaxTradeApiV2.cancelOrder(apiKey, secretKey, symbol, orderId)
+            }
             if (!success && looksLikeRateLimit(message)) {
                 onRateLimit(message)
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                withContext(Dispatchers.Main) {
                     onResult(false, message)
                 }
                 return@launch
@@ -59,7 +70,7 @@ class RealTradeExecutor(
                 AppDatabase.getInstance().realTradeDao().deleteOpenOrderById(orderId)
                 delay(INTER_REQUEST_DELAY_MS)
             }
-            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+            withContext(Dispatchers.Main) {
                 onResult(success, message)
             }
         }
@@ -74,19 +85,29 @@ class RealTradeExecutor(
         requestedQty: Double
     ): Double {
         var lastExecuted = 0.0
-        var lastStatus = "NEW"
+        val isToko = prefs.marketDataSource == MarketDataSource.TOKOCRYPTO
 
         for (attempt in 1..BUY_POLL_MAX_ATTEMPTS) {
             delay(BUY_POLL_INTERVAL_MS)
             onStatusUpdate("Menunggu BUY terisi... ($attempt/$BUY_POLL_MAX_ATTEMPTS)")
 
-            val result = IndodaxTradeApiV2.getOrder(
-                apiKey = apiKey,
-                secretKey = secretKey,
-                symbol = pair,
-                orderId = orderId.takeIf { it.isNotBlank() && it != "0" },
-                clientOrderId = clientOrderId.takeIf { it.isNotBlank() }
-            )
+            val result = if (isToko) {
+                TokocryptoTradeApi.getOrder(
+                    apiKey = apiKey,
+                    secretKey = secretKey,
+                    symbol = pair,
+                    orderId = orderId.takeIf { it.isNotBlank() && it != "0" },
+                    clientOrderId = clientOrderId.takeIf { it.isNotBlank() }
+                )
+            } else {
+                IndodaxTradeApiV2.getOrder(
+                    apiKey = apiKey,
+                    secretKey = secretKey,
+                    symbol = pair,
+                    orderId = orderId.takeIf { it.isNotBlank() && it != "0" },
+                    clientOrderId = clientOrderId.takeIf { it.isNotBlank() }
+                )
+            }
 
             if (!result.success) {
                 if (looksLikeRateLimit(result.message)) {
@@ -97,7 +118,6 @@ class RealTradeExecutor(
                 continue
             }
 
-            lastStatus = result.status
             lastExecuted = result.executedQty
 
             when (result.status) {
@@ -120,7 +140,7 @@ class RealTradeExecutor(
         autoLimitSellPrice2: Double = 0.0,
         onResult: (Boolean, String) -> Unit
     ) {
-        val isToko = prefs.marketDataSource == agu.analys.config.MarketDataSource.TOKOCRYPTO
+        val isToko = prefs.marketDataSource == MarketDataSource.TOKOCRYPTO
         val apiKey = if (isToko) prefs.tokocryptoApiKey else prefs.indodaxApiKey
         val secretKey = if (isToko) prefs.tokocryptoSecretKey else prefs.indodaxSecretKey
         val sourceLabel = prefs.marketDataSource.label
@@ -145,24 +165,26 @@ class RealTradeExecutor(
             return
         }
 
-        scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+        scope.launch(Dispatchers.IO) {
             onStatusUpdate("Mengirim order $type ke $sourceLabel...")
             val clientOrderId = "agu-${type.lowercase()}-${System.currentTimeMillis()}"
+            val quote = quoteFromPair(pair)
+            val priceFmt = if (quote == "usdt") "$$execPrice" else "Rp ${PriceFormatter.formatIdrNumber(execPrice)}"
             agu.analys.util.AppLogManager.trade(
                 "RealOrder",
-                "💼 [$sourceLabel REAL] Mengirim order ${type.uppercase()} $pair | Qty: $quantity @ Rp ${PriceFormatter.formatIdrNumber(execPrice)}"
+                "💼 [$sourceLabel REAL] Mengirim order ${type.uppercase()} $pair | Qty: $quantity @ $priceFmt"
             )
             val isBuy = type.equals("buy", ignoreCase = true)
             val buyResult = if (isToko) {
-                val req = agu.analys.model.TokocryptoOrderRequest(
-                    symbol = agu.analys.service.TokocryptoMarketService.toTokocryptoSymbol(pair),
-                    side = if (isBuy) agu.analys.model.TokocryptoOrderSide.BUY else agu.analys.model.TokocryptoOrderSide.SELL,
-                    type = if (isBuy) agu.analys.model.TokocryptoOrderType.LIMIT else agu.analys.model.TokocryptoOrderType.MARKET,
+                val req = TokocryptoOrderRequest(
+                    symbol = TokocryptoMarketService.toTokocryptoSymbol(pair),
+                    side = if (isBuy) TokocryptoOrderSide.BUY else TokocryptoOrderSide.SELL,
+                    type = if (isBuy) TokocryptoOrderType.LIMIT else TokocryptoOrderType.MARKET,
                     quantity = quantity,
                     price = execPrice,
                     clientId = clientOrderId
                 )
-                val res = agu.analys.service.TokocryptoTradeApi.createOrder(apiKey, secretKey, req, execPrice)
+                val res = TokocryptoTradeApi.createOrder(apiKey, secretKey, req, execPrice)
                 IndodaxTradeApiV2.OrderResult(
                     success = res.success,
                     message = res.errorMessage ?: res.rawMessage,
@@ -173,7 +195,7 @@ class RealTradeExecutor(
                     status = res.status
                 )
             } else if (!isBuy) {
-                // Untuk SELL: Coba kirim MARKET order terlebih dahulu untuk eksekusi instan proteksi modal
+                // Untuk SELL di Indodax: coba MARKET order lalu fallback LIMIT
                 val marketRes = IndodaxTradeApiV2.createMarketOrderDetailed(
                     apiKey = apiKey, secretKey = secretKey, symbol = pair,
                     side = type, quantity = quantity, clientOrderId = clientOrderId
@@ -183,7 +205,6 @@ class RealTradeExecutor(
                 } else if (looksLikeRateLimit(marketRes.message)) {
                     marketRes
                 } else {
-                    // Fallback ke LIMIT order dengan harga tick terkini
                     IndodaxTradeApiV2.createLimitOrderDetailed(
                         apiKey = apiKey, secretKey = secretKey, symbol = pair,
                         side = type, price = execPrice, quantity = quantity, clientOrderId = clientOrderId
@@ -198,7 +219,7 @@ class RealTradeExecutor(
 
             if (!buyResult.success && looksLikeRateLimit(buyResult.message)) {
                 onRateLimit(buyResult.message)
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                withContext(Dispatchers.Main) {
                     onResult(false, buyResult.message)
                 }
                 return@launch
@@ -209,7 +230,6 @@ class RealTradeExecutor(
                 val base = baseFromPair(pair)
                 prefs.rememberHistoryBase(base)
 
-                // execPrice is already set
                 var finalExecutedQty = quantity
 
                 if (isBuy && autoLimitSellPrice1 > price) {
@@ -221,14 +241,14 @@ class RealTradeExecutor(
 
                     if (executedQty <= MIN_EXECUTED_QTY) {
                         onStatusUpdate("BUY terkirim tapi belum FILLED. TP tidak dipasang.")
-                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                            onResult(true, "BUY berhasil di server, tapi belum FILLED.")
+                        withContext(Dispatchers.Main) {
+                            onResult(true, "BUY berhasil di server $sourceLabel, tapi belum FILLED.")
                         }
                         refreshBalance()
                         return@launch
                     }
                     finalExecutedQty = executedQty
-                    val minNotional = if (pair.endsWith("usdt", ignoreCase = true) || pair.endsWith("usd", ignoreCase = true)) 1.0 else 10_000.0
+                    val minNotional = if (quote == "usdt") 1.0 else 10_000.0
                     val p2 = if (autoLimitSellPrice2 > price) autoLimitSellPrice2 else autoLimitSellPrice1 * 1.03
                     val halfQty = executedQty / 2.0
                     val canSplit = (halfQty * autoLimitSellPrice1 >= minNotional) && (halfQty * p2 >= minNotional)
@@ -240,26 +260,64 @@ class RealTradeExecutor(
                     }
 
                     if (canSplit) {
-                        onStatusUpdate("Memasang TP1...")
-                        val (s1, m1) = IndodaxTradeApiV2.createLimitOrder(apiKey, secretKey, pair, "sell", autoLimitSellPrice1, halfQty, "agu-tp1-${System.currentTimeMillis()}")
+                        onStatusUpdate("Memasang TP1 di $sourceLabel...")
+                        val (s1, m1) = if (isToko) {
+                            val req = TokocryptoOrderRequest(
+                                symbol = TokocryptoMarketService.toTokocryptoSymbol(pair),
+                                side = TokocryptoOrderSide.SELL,
+                                type = TokocryptoOrderType.LIMIT,
+                                price = autoLimitSellPrice1,
+                                quantity = halfQty,
+                                clientId = "agu-tp1-${System.currentTimeMillis()}"
+                            )
+                            val res = TokocryptoTradeApi.createOrder(apiKey, secretKey, req, autoLimitSellPrice1)
+                            res.success to (res.errorMessage ?: res.rawMessage)
+                        } else {
+                            IndodaxTradeApiV2.createLimitOrder(apiKey, secretKey, pair, "sell", autoLimitSellPrice1, halfQty, "agu-tp1-${System.currentTimeMillis()}")
+                        }
                         finalMsg += if (s1) "TP1 OK (50%). " else "TP1 Gagal: $m1. "
                         if (!s1 && looksLikeRateLimit(m1)) onRateLimit(m1)
 
-                        onStatusUpdate("Memasang TP2...")
-                        val (s2, m2) = IndodaxTradeApiV2.createLimitOrder(apiKey, secretKey, pair, "sell", p2, halfQty, "agu-tp2-${System.currentTimeMillis()}")
+                        onStatusUpdate("Memasang TP2 di $sourceLabel...")
+                        val (s2, m2) = if (isToko) {
+                            val req = TokocryptoOrderRequest(
+                                symbol = TokocryptoMarketService.toTokocryptoSymbol(pair),
+                                side = TokocryptoOrderSide.SELL,
+                                type = TokocryptoOrderType.LIMIT,
+                                price = p2,
+                                quantity = halfQty,
+                                clientId = "agu-tp2-${System.currentTimeMillis()}"
+                            )
+                            val res = TokocryptoTradeApi.createOrder(apiKey, secretKey, req, p2)
+                            res.success to (res.errorMessage ?: res.rawMessage)
+                        } else {
+                            IndodaxTradeApiV2.createLimitOrder(apiKey, secretKey, pair, "sell", p2, halfQty, "agu-tp2-${System.currentTimeMillis()}")
+                        }
                         finalMsg += if (s2) "TP2 OK (50%)." else "TP2 Gagal: $m2."
                         if (!s2 && looksLikeRateLimit(m2)) onRateLimit(m2)
                     } else {
-                        // Jika nilai split < min notional (Rp 10.000), pasang 1 order TP 100% agar tidak di-reject exchange
-                        onStatusUpdate("Nilai split < min notional, memasang TP 100%...")
-                        val (s1, m1) = IndodaxTradeApiV2.createLimitOrder(apiKey, secretKey, pair, "sell", autoLimitSellPrice1, executedQty, "agu-tp-full-${System.currentTimeMillis()}")
-                        finalMsg += if (s1) "TP Full OK (100% @ Rp ${PriceFormatter.formatIdrNumber(autoLimitSellPrice1)})." else "TP Gagal: $m1."
+                        onStatusUpdate("Memasang TP 100% di $sourceLabel...")
+                        val (s1, m1) = if (isToko) {
+                            val req = TokocryptoOrderRequest(
+                                symbol = TokocryptoMarketService.toTokocryptoSymbol(pair),
+                                side = TokocryptoOrderSide.SELL,
+                                type = TokocryptoOrderType.LIMIT,
+                                price = autoLimitSellPrice1,
+                                quantity = executedQty,
+                                clientId = "agu-tp-full-${System.currentTimeMillis()}"
+                            )
+                            val res = TokocryptoTradeApi.createOrder(apiKey, secretKey, req, autoLimitSellPrice1)
+                            res.success to (res.errorMessage ?: res.rawMessage)
+                        } else {
+                            IndodaxTradeApiV2.createLimitOrder(apiKey, secretKey, pair, "sell", autoLimitSellPrice1, executedQty, "agu-tp-full-${System.currentTimeMillis()}")
+                        }
+                        finalMsg += if (s1) "TP Full OK (100%)." else "TP Gagal: $m1."
                         if (!s1 && looksLikeRateLimit(m1)) onRateLimit(m1)
                     }
 
                     onStatusUpdate("BUY + TP: $finalMsg")
-                    agu.analys.util.AppLogManager.trade("RealOrderFilled", "✅ [INDODAX REAL FILLED] $pair: Qty $finalExecutedQty @ Rp ${PriceFormatter.formatIdrNumber(execPrice)}. Auto Sell: $finalMsg")
-                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    agu.analys.util.AppLogManager.trade("RealOrderFilled", "✅ [$sourceLabel REAL FILLED] $pair: Qty $finalExecutedQty @ $priceFmt. Auto Sell: $finalMsg")
+                    withContext(Dispatchers.Main) {
                         onResult(true, "BUY berhasil!\nAuto Sell: $finalMsg")
                     }
                 } else {
@@ -267,22 +325,23 @@ class RealTradeExecutor(
                         finalExecutedQty = buyResult.executedQty
                     }
                     onStatusUpdate(buyResult.message)
-                    agu.analys.util.AppLogManager.trade("RealOrderSuccess", "✅ [INDODAX REAL] Order $type $pair berhasil dikirim @ Rp ${PriceFormatter.formatIdrNumber(execPrice)}: ${buyResult.message}")
-                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    agu.analys.util.AppLogManager.trade("RealOrderSuccess", "✅ [$sourceLabel REAL] Order $type $pair berhasil dikirim @ $priceFmt: ${buyResult.message}")
+                    withContext(Dispatchers.Main) {
                         onResult(true, buyResult.message)
                     }
                 }
 
-                // Update cached real balance & average price instantly (agar saat IP berubah di luar rumah, saldo tetap akurat 1:1)
+                // Update saldo lokal
                 runCatching {
                     val cachedBalances = prefs.getSavedRealBalance().toMutableMap()
-                    val currentIdr = cachedBalances["idr"] ?: 0.0
+                    val quoteKey = if (quote == "usdt") "usdt" else "idr"
+                    val currentQuote = cachedBalances[quoteKey] ?: 0.0
                     val baseLower = base.lowercase()
                     val curCoin = cachedBalances[baseLower] ?: 0.0
                     if (isBuy) {
                         val cost = finalExecutedQty * execPrice
                         val newTotalCoin = curCoin + finalExecutedQty
-                        cachedBalances["idr"] = (currentIdr - cost).coerceAtLeast(0.0)
+                        cachedBalances[quoteKey] = (currentQuote - cost).coerceAtLeast(0.0)
                         cachedBalances[baseLower] = newTotalCoin
                         prefs.saveRealBalance(cachedBalances)
 
@@ -300,13 +359,12 @@ class RealTradeExecutor(
                         prefs.saveRealAvgBuyPrices(cachedAvg)
                     } else {
                         val proceeds = finalExecutedQty * execPrice
-                        cachedBalances["idr"] = currentIdr + proceeds
+                        cachedBalances[quoteKey] = currentQuote + proceeds
                         cachedBalances[baseLower] = (curCoin - finalExecutedQty).coerceAtLeast(0.0)
                         prefs.saveRealBalance(cachedBalances)
                     }
                 }
 
-                // Shadow Mirror: Sinkronkan langsung ke simulasi & SpotPosition
                 onRealTradeSuccess?.invoke(
                     pair,
                     type,
@@ -319,7 +377,7 @@ class RealTradeExecutor(
                 refreshBalance()
             } else {
                 onStatusUpdate(buyResult.message)
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                withContext(Dispatchers.Main) {
                     onResult(false, buyResult.message)
                 }
             }
@@ -334,10 +392,12 @@ class RealTradeExecutor(
         tp2Percent: Double,
         onResult: (Boolean, String) -> Unit
     ) {
-        val apiKey = prefs.indodaxApiKey
-        val secretKey = prefs.indodaxSecretKey
-        if (apiKey.isEmpty() || secretKey.isEmpty()) {
-            onResult(false, "API Key/Secret kosong.")
+        val isToko = prefs.marketDataSource == MarketDataSource.TOKOCRYPTO
+        val apiKey = if (isToko) prefs.tokocryptoApiKey else prefs.indodaxApiKey
+        val secretKey = if (isToko) prefs.tokocryptoSecretKey else prefs.indodaxSecretKey
+        val sourceLabel = prefs.marketDataSource.label
+        if (apiKey.isBlank() || secretKey.isBlank()) {
+            onResult(false, "API Key/Secret $sourceLabel kosong.")
             return
         }
         if (isRateLimited()) {
@@ -345,22 +405,26 @@ class RealTradeExecutor(
             return
         }
 
-        scope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            onStatusUpdate("Mengecek saldo $pair...")
+        scope.launch(Dispatchers.IO) {
+            onStatusUpdate("Mengecek saldo $pair di $sourceLabel...")
             val base = baseFromPair(pair)
-            val (balances, err) = IndodaxTradeApiV2.getAccount(apiKey, secretKey)
+            val (balances, err) = if (isToko) {
+                TokocryptoTradeApi.getAccount(apiKey, secretKey)
+            } else {
+                IndodaxTradeApiV2.getAccount(apiKey, secretKey)
+            }
             if (balances == null) {
                 if (looksLikeRateLimit(err)) onRateLimit(err)
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                withContext(Dispatchers.Main) {
                     onResult(false, "Gagal saldo: $err")
                 }
                 return@launch
             }
 
-            val free = balances.free[base] ?: 0.0
+            val free = balances.free[base] ?: balances.free[base.lowercase()] ?: balances.free[base.uppercase()] ?: 0.0
             if (free <= 0.00000001) {
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                    onResult(false, "Saldo $base 0.")
+                withContext(Dispatchers.Main) {
+                    onResult(false, "Saldo $base di $sourceLabel 0.")
                 }
                 return@launch
             }
@@ -371,13 +435,26 @@ class RealTradeExecutor(
             var okAll = true
 
             if (tp1Price > 0.0 && qty1 > 0.0) {
-                val (ok, m) = IndodaxTradeApiV2.createLimitOrder(apiKey, secretKey, pair, "sell", tp1Price, qty1, "agu-manualtp1-${System.currentTimeMillis()}")
+                val (ok, m) = if (isToko) {
+                    val req = TokocryptoOrderRequest(
+                        symbol = TokocryptoMarketService.toTokocryptoSymbol(pair),
+                        side = TokocryptoOrderSide.SELL,
+                        type = TokocryptoOrderType.LIMIT,
+                        price = tp1Price,
+                        quantity = qty1,
+                        clientId = "agu-manualtp1-${System.currentTimeMillis()}"
+                    )
+                    val res = TokocryptoTradeApi.createOrder(apiKey, secretKey, req, tp1Price)
+                    res.success to (res.errorMessage ?: res.rawMessage)
+                } else {
+                    IndodaxTradeApiV2.createLimitOrder(apiKey, secretKey, pair, "sell", tp1Price, qty1, "agu-manualtp1-${System.currentTimeMillis()}")
+                }
                 msg += if (ok) "TP1 OK. " else "TP1 Gagal: $m. "
                 if (!ok) {
                     okAll = false
                     if (looksLikeRateLimit(m)) {
                         onRateLimit(m)
-                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        withContext(Dispatchers.Main) {
                             onResult(false, msg)
                         }
                         return@launch
@@ -386,7 +463,20 @@ class RealTradeExecutor(
                 delay(INTER_REQUEST_DELAY_MS)
             }
             if (tp2Price > 0.0 && qty2 > 0.0) {
-                val (ok, m) = IndodaxTradeApiV2.createLimitOrder(apiKey, secretKey, pair, "sell", tp2Price, qty2, "agu-manualtp2-${System.currentTimeMillis()}")
+                val (ok, m) = if (isToko) {
+                    val req = TokocryptoOrderRequest(
+                        symbol = TokocryptoMarketService.toTokocryptoSymbol(pair),
+                        side = TokocryptoOrderSide.SELL,
+                        type = TokocryptoOrderType.LIMIT,
+                        price = tp2Price,
+                        quantity = qty2,
+                        clientId = "agu-manualtp2-${System.currentTimeMillis()}"
+                    )
+                    val res = TokocryptoTradeApi.createOrder(apiKey, secretKey, req, tp2Price)
+                    res.success to (res.errorMessage ?: res.rawMessage)
+                } else {
+                    IndodaxTradeApiV2.createLimitOrder(apiKey, secretKey, pair, "sell", tp2Price, qty2, "agu-manualtp2-${System.currentTimeMillis()}")
+                }
                 msg += if (ok) "TP2 OK." else "TP2 Gagal: $m."
                 if (!ok) {
                     okAll = false
@@ -395,7 +485,7 @@ class RealTradeExecutor(
             }
             if (okAll) prefs.rememberHistoryBase(base)
             onStatusUpdate(if (okAll) "TP Berhasil!" else "Sebagian TP Gagal.")
-            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+            withContext(Dispatchers.Main) {
                 onResult(okAll, msg)
             }
         }
@@ -412,17 +502,19 @@ class RealTradeExecutor(
         tp2Percent: Double,
         onResult: (Boolean, String) -> Unit
     ) {
-        val apiKey = prefs.indodaxApiKey
-        val secretKey = prefs.indodaxSecretKey
-        if (apiKey.isEmpty() || secretKey.isEmpty()) {
-            onResult(false, "API Key/Secret INDODAX belum diisi.")
+        val isToko = prefs.marketDataSource == MarketDataSource.TOKOCRYPTO
+        val apiKey = if (isToko) prefs.tokocryptoApiKey else prefs.indodaxApiKey
+        val secretKey = if (isToko) prefs.tokocryptoSecretKey else prefs.indodaxSecretKey
+        val sourceLabel = prefs.marketDataSource.label
+        if (apiKey.isBlank() || secretKey.isBlank()) {
+            onResult(false, "API Key/Secret $sourceLabel belum diisi.")
             return
         }
-        // Batasan rate-limit dilepas untuk order jual agar proteksi modal / eksekusi jual tidak tertahan
 
-        scope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            onStatusUpdate("Mengeksekusi order jual $pair...")
+        scope.launch(Dispatchers.IO) {
+            onStatusUpdate("Mengeksekusi order jual $pair di $sourceLabel...")
             val base = baseFromPair(pair)
+            val quote = quoteFromPair(pair)
             
             // Periksa saldo lokal terlebih dahulu agar eksekusi order instan tanpa jeda network
             val cachedBalances = prefs.getSavedRealBalance()
@@ -430,10 +522,14 @@ class RealTradeExecutor(
             var sellQty = if (totalQuantity > 0.0) totalQuantity else cachedFree
 
             if (sellQty <= 0.00000001) {
-                onStatusUpdate("Mengecek saldo real $pair...")
-                val (balances, err) = IndodaxTradeApiV2.getAccount(apiKey, secretKey)
+                onStatusUpdate("Mengecek saldo real $pair di $sourceLabel...")
+                val (balances, err) = if (isToko) {
+                    TokocryptoTradeApi.getAccount(apiKey, secretKey)
+                } else {
+                    IndodaxTradeApiV2.getAccount(apiKey, secretKey)
+                }
                 if (balances != null) {
-                    val free = balances.free[base] ?: 0.0
+                    val free = balances.free[base] ?: balances.free[base.lowercase()] ?: balances.free[base.uppercase()] ?: 0.0
                     sellQty = if (totalQuantity > 0.0) totalQuantity.coerceAtMost(free) else free
                 } else if (looksLikeRateLimit(err)) {
                     onRateLimit(err)
@@ -441,8 +537,8 @@ class RealTradeExecutor(
             }
 
             if (sellQty <= 0.00000001) {
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                    onResult(false, "Saldo $base tidak mencukupi atau 0.")
+                withContext(Dispatchers.Main) {
+                    onResult(false, "Saldo $base di $sourceLabel tidak mencukupi atau 0.")
                 }
                 return@launch
             }
@@ -456,11 +552,25 @@ class RealTradeExecutor(
                 var okAll = true
 
                 if (qty1 > 0.0) {
-                    onStatusUpdate("Memasang order jual TP1...")
-                    val (ok1, m1) = IndodaxTradeApiV2.createLimitOrder(
-                        apiKey, secretKey, pair, "sell", tp1Price, qty1, "agu-tp1-${System.currentTimeMillis()}"
-                    )
-                    msg += if (ok1) "TP1 (${agu.analys.util.PriceFormatter.formatCryptoExact(qty1, 8)} @ Rp ${agu.analys.util.PriceFormatter.formatIdrNumber(tp1Price)}) OK. " else "TP1 Gagal: $m1. "
+                    onStatusUpdate("Memasang order jual TP1 di $sourceLabel...")
+                    val (ok1, m1) = if (isToko) {
+                        val req = TokocryptoOrderRequest(
+                            symbol = TokocryptoMarketService.toTokocryptoSymbol(pair),
+                            side = TokocryptoOrderSide.SELL,
+                            type = TokocryptoOrderType.LIMIT,
+                            price = tp1Price,
+                            quantity = qty1,
+                            clientId = "agu-tp1-${System.currentTimeMillis()}"
+                        )
+                        val res = TokocryptoTradeApi.createOrder(apiKey, secretKey, req, tp1Price)
+                        res.success to (res.errorMessage ?: res.rawMessage)
+                    } else {
+                        IndodaxTradeApiV2.createLimitOrder(
+                            apiKey, secretKey, pair, "sell", tp1Price, qty1, "agu-tp1-${System.currentTimeMillis()}"
+                        )
+                    }
+                    val formattedP1 = if (quote == "usdt") "$$tp1Price" else "Rp ${PriceFormatter.formatIdrNumber(tp1Price)}"
+                    msg += if (ok1) "TP1 (${PriceFormatter.formatCryptoExact(qty1, 8)} @ $formattedP1) OK. " else "TP1 Gagal: $m1. "
                     if (!ok1) {
                         okAll = false
                         if (looksLikeRateLimit(m1)) onRateLimit(m1)
@@ -469,11 +579,25 @@ class RealTradeExecutor(
                 }
 
                 if (qty2 > 0.0) {
-                    onStatusUpdate("Memasang order jual TP2...")
-                    val (ok2, m2) = IndodaxTradeApiV2.createLimitOrder(
-                        apiKey, secretKey, pair, "sell", tp2Price, qty2, "agu-tp2-${System.currentTimeMillis()}"
-                    )
-                    msg += if (ok2) "TP2 (${agu.analys.util.PriceFormatter.formatCryptoExact(qty2, 8)} @ Rp ${agu.analys.util.PriceFormatter.formatIdrNumber(tp2Price)}) OK." else "TP2 Gagal: $m2."
+                    onStatusUpdate("Memasang order jual TP2 di $sourceLabel...")
+                    val (ok2, m2) = if (isToko) {
+                        val req = TokocryptoOrderRequest(
+                            symbol = TokocryptoMarketService.toTokocryptoSymbol(pair),
+                            side = TokocryptoOrderSide.SELL,
+                            type = TokocryptoOrderType.LIMIT,
+                            price = tp2Price,
+                            quantity = qty2,
+                            clientId = "agu-tp2-${System.currentTimeMillis()}"
+                        )
+                        val res = TokocryptoTradeApi.createOrder(apiKey, secretKey, req, tp2Price)
+                        res.success to (res.errorMessage ?: res.rawMessage)
+                    } else {
+                        IndodaxTradeApiV2.createLimitOrder(
+                            apiKey, secretKey, pair, "sell", tp2Price, qty2, "agu-tp2-${System.currentTimeMillis()}"
+                        )
+                    }
+                    val formattedP2 = if (quote == "usdt") "$$tp2Price" else "Rp ${PriceFormatter.formatIdrNumber(tp2Price)}"
+                    msg += if (ok2) "TP2 (${PriceFormatter.formatCryptoExact(qty2, 8)} @ $formattedP2) OK." else "TP2 Gagal: $m2."
                     if (!ok2) {
                         okAll = false
                         if (looksLikeRateLimit(m2)) onRateLimit(m2)
@@ -483,85 +607,142 @@ class RealTradeExecutor(
                 if (okAll) prefs.rememberHistoryBase(base)
                 onStatusUpdate(if (okAll) "2 Order TP Real Berhasil!" else "Sebagian Order TP Gagal.")
                 scope.launch { refreshBalance() }
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                withContext(Dispatchers.Main) {
                     onResult(okAll, if (okAll) "2 Order TP Berhasil (100% tanpa sisa):\n$msg" else msg)
                 }
             } else if (isAutoTpEnabled && tp1Price > 0.0) {
-                onStatusUpdate("Memasang order jual TP1...")
-                val (ok, m) = IndodaxTradeApiV2.createLimitOrder(
-                    apiKey, secretKey, pair, "sell", tp1Price, sellQty, "agu-tp1-${System.currentTimeMillis()}"
-                )
+                onStatusUpdate("Memasang order jual TP1 di $sourceLabel...")
+                val (ok, m) = if (isToko) {
+                    val req = TokocryptoOrderRequest(
+                        symbol = TokocryptoMarketService.toTokocryptoSymbol(pair),
+                        side = TokocryptoOrderSide.SELL,
+                        type = TokocryptoOrderType.LIMIT,
+                        price = tp1Price,
+                        quantity = sellQty,
+                        clientId = "agu-tp1-${System.currentTimeMillis()}"
+                    )
+                    val res = TokocryptoTradeApi.createOrder(apiKey, secretKey, req, tp1Price)
+                    res.success to (res.errorMessage ?: res.rawMessage)
+                } else {
+                    IndodaxTradeApiV2.createLimitOrder(
+                        apiKey, secretKey, pair, "sell", tp1Price, sellQty, "agu-tp1-${System.currentTimeMillis()}"
+                    )
+                }
+                val formattedP1 = if (quote == "usdt") "$$tp1Price" else "Rp ${PriceFormatter.formatIdrNumber(tp1Price)}"
                 if (ok) prefs.rememberHistoryBase(base)
                 if (!ok && looksLikeRateLimit(m)) onRateLimit(m)
                 scope.launch { refreshBalance() }
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                    onResult(ok, if (ok) "Order TP1 (${agu.analys.util.PriceFormatter.formatCryptoExact(sellQty, 8)} @ Rp ${agu.analys.util.PriceFormatter.formatIdrNumber(tp1Price)}) berhasil terpasang." else "Order TP1 Gagal: $m")
+                withContext(Dispatchers.Main) {
+                    onResult(ok, if (ok) "Order TP1 (${PriceFormatter.formatCryptoExact(sellQty, 8)} @ $formattedP1) berhasil terpasang di $sourceLabel." else "Order TP1 Gagal: $m")
                 }
             } else if (isAutoTpEnabled && tp2Price > 0.0) {
-                onStatusUpdate("Memasang order jual TP2...")
-                val (ok, m) = IndodaxTradeApiV2.createLimitOrder(
-                    apiKey, secretKey, pair, "sell", tp2Price, sellQty, "agu-tp2-${System.currentTimeMillis()}"
-                )
+                onStatusUpdate("Memasang order jual TP2 di $sourceLabel...")
+                val (ok, m) = if (isToko) {
+                    val req = TokocryptoOrderRequest(
+                        symbol = TokocryptoMarketService.toTokocryptoSymbol(pair),
+                        side = TokocryptoOrderSide.SELL,
+                        type = TokocryptoOrderType.LIMIT,
+                        price = tp2Price,
+                        quantity = sellQty,
+                        clientId = "agu-tp2-${System.currentTimeMillis()}"
+                    )
+                    val res = TokocryptoTradeApi.createOrder(apiKey, secretKey, req, tp2Price)
+                    res.success to (res.errorMessage ?: res.rawMessage)
+                } else {
+                    IndodaxTradeApiV2.createLimitOrder(
+                        apiKey, secretKey, pair, "sell", tp2Price, sellQty, "agu-tp2-${System.currentTimeMillis()}"
+                    )
+                }
+                val formattedP2 = if (quote == "usdt") "$$tp2Price" else "Rp ${PriceFormatter.formatIdrNumber(tp2Price)}"
                 if (ok) prefs.rememberHistoryBase(base)
                 if (!ok && looksLikeRateLimit(m)) onRateLimit(m)
                 scope.launch { refreshBalance() }
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                    onResult(ok, if (ok) "Order TP2 (${agu.analys.util.PriceFormatter.formatCryptoExact(sellQty, 8)} @ Rp ${agu.analys.util.PriceFormatter.formatIdrNumber(tp2Price)}) berhasil terpasang." else "Order TP2 Gagal: $m")
+                withContext(Dispatchers.Main) {
+                    onResult(ok, if (ok) "Order TP2 (${PriceFormatter.formatCryptoExact(sellQty, 8)} @ $formattedP2) berhasil terpasang di $sourceLabel." else "Order TP2 Gagal: $m")
                 }
             } else {
-                // Switch OFF -> Eksekusi Jual Langsung (Market Order Instan tanpa delay)
-                onStatusUpdate("Mengeksekusi order jual langsung ke bursa...")
+                // Switch OFF -> Eksekusi Jual Langsung (Market Order Instan)
+                onStatusUpdate("Mengeksekusi order jual langsung ke $sourceLabel...")
                 val clientOrderId = "agu-sell-${System.currentTimeMillis()}"
                 
-                // Prioritaskan MARKET ORDER agar order langsung MATCH tereksekusi tanpa antrean di orderbook
-                val marketRes = IndodaxTradeApiV2.createMarketOrderDetailed(
-                    apiKey = apiKey,
-                    secretKey = secretKey,
-                    symbol = pair,
-                    side = "sell",
-                    quantity = sellQty,
-                    clientOrderId = clientOrderId
-                )
-
-                val finalRes = if (marketRes.success) {
-                    marketRes
+                val finalRes = if (isToko) {
+                    val marketReq = TokocryptoOrderRequest(
+                        symbol = TokocryptoMarketService.toTokocryptoSymbol(pair),
+                        side = TokocryptoOrderSide.SELL,
+                        type = TokocryptoOrderType.MARKET,
+                        quantity = sellQty,
+                        clientId = clientOrderId
+                    )
+                    var res = TokocryptoTradeApi.createOrder(apiKey, secretKey, marketReq, marketPrice)
+                    if (!res.success) {
+                        val limitReq = TokocryptoOrderRequest(
+                            symbol = TokocryptoMarketService.toTokocryptoSymbol(pair),
+                            side = TokocryptoOrderSide.SELL,
+                            type = TokocryptoOrderType.LIMIT,
+                            price = marketPrice,
+                            quantity = sellQty,
+                            clientId = clientOrderId
+                        )
+                        res = TokocryptoTradeApi.createOrder(apiKey, secretKey, limitReq, marketPrice)
+                    }
+                    IndodaxTradeApiV2.OrderResult(
+                        success = res.success,
+                        message = res.errorMessage ?: res.rawMessage,
+                        orderId = res.orderId,
+                        clientOrderId = res.clientId,
+                        executedQty = res.executedQty,
+                        origQty = sellQty,
+                        status = res.status
+                    )
                 } else {
-                    // Fallback ke LIMIT ORDER jika pair bursa tidak mendukung market order di endpoint API
-                    IndodaxTradeApiV2.createLimitOrderDetailed(
+                    val marketRes = IndodaxTradeApiV2.createMarketOrderDetailed(
                         apiKey = apiKey,
                         secretKey = secretKey,
                         symbol = pair,
                         side = "sell",
-                        price = marketPrice,
                         quantity = sellQty,
                         clientOrderId = clientOrderId
                     )
+                    if (marketRes.success) {
+                        marketRes
+                    } else {
+                        IndodaxTradeApiV2.createLimitOrderDetailed(
+                            apiKey = apiKey,
+                            secretKey = secretKey,
+                            symbol = pair,
+                            side = "sell",
+                            price = marketPrice,
+                            quantity = sellQty,
+                            clientOrderId = clientOrderId
+                        )
+                    }
                 }
 
                 if (finalRes.success) {
                     prefs.rememberHistoryBase(base)
 
-                    // Langsung sinkronkan saldo lokal
+                    // Sinkronkan saldo lokal
                     runCatching {
                         val currentBalances = prefs.getSavedRealBalance().toMutableMap()
+                        val quoteKey = if (quote == "usdt") "usdt" else "idr"
+                        val curQuote = currentBalances[quoteKey] ?: 0.0
                         val curCoin = currentBalances[base.lowercase()] ?: 0.0
-                        val curIdr = currentBalances["idr"] ?: 0.0
                         currentBalances[base.lowercase()] = (curCoin - sellQty).coerceAtLeast(0.0)
                         val proceeds = sellQty * marketPrice
-                        currentBalances["idr"] = curIdr + proceeds
+                        currentBalances[quoteKey] = curQuote + proceeds
                         prefs.saveRealBalance(currentBalances)
                     }
 
                     onRealTradeSuccess?.invoke(pair, "sell", marketPrice, sellQty, 0.0, 0.0)
 
-                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                        onResult(true, "Order Jual (${agu.analys.util.PriceFormatter.formatCryptoExact(sellQty, 8)} $base) berhasil dieksekusi!")
+                    withContext(Dispatchers.Main) {
+                        onResult(true, "Order Jual $sourceLabel (${PriceFormatter.formatCryptoExact(sellQty, 8)} $base) berhasil dieksekusi!")
                     }
                     scope.launch { refreshBalance() }
                 } else {
                     if (looksLikeRateLimit(finalRes.message)) onRateLimit(finalRes.message)
-                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                        onResult(false, "Order Jual Gagal: ${finalRes.message}")
+                    withContext(Dispatchers.Main) {
+                        onResult(false, "Order Jual $sourceLabel Gagal: ${finalRes.message}")
                     }
                 }
             }
@@ -579,5 +760,10 @@ class RealTradeExecutor(
             s.endsWith("usdt") -> s.removeSuffix("usdt")
             else -> s
         }
+    }
+
+    private fun quoteFromPair(pair: String): String {
+        val s = pair.lowercase().replace("_", "")
+        return if (s.endsWith("usdt")) "usdt" else "idr"
     }
 }

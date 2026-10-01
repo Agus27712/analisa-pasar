@@ -376,8 +376,10 @@ class AppPreferences(context: Context) {
         prefs.edit().putStringSet(KEY_LEARNING_COMPLETED, set.map(Int::toString).toSet()).apply()
     }
 
-    fun getSavedRealBalance(): Map<String, Double> {
-        val jsonStr = prefs.getString("saved_real_balance", "") ?: ""
+    fun getSavedRealBalance(exchange: String = marketDataSource.name): Map<String, Double> {
+        val exKey = "${exchange.lowercase()}_real_balance"
+        val jsonStr = prefs.getString(exKey, null) 
+            ?: if (exchange.equals("INDODAX", true)) prefs.getString("saved_real_balance", "") ?: "" else ""
         if (jsonStr.isBlank()) return emptyMap()
         return try {
             val json = JSONObject(jsonStr)
@@ -391,18 +393,21 @@ class AppPreferences(context: Context) {
         }
     }
 
-    fun saveRealBalance(balances: Map<String, Double>) {
+    fun saveRealBalance(balances: Map<String, Double>, exchange: String = marketDataSource.name) {
         try {
             val json = JSONObject()
             balances.forEach { (k, v) ->
                 json.put(k.lowercase(), v)
             }
-            prefs.edit().putString("saved_real_balance", json.toString()).apply()
+            val exKey = "${exchange.lowercase()}_real_balance"
+            prefs.edit().putString(exKey, json.toString()).apply()
         } catch (_: Exception) {}
     }
 
-    fun getSavedRealAvgBuyPrices(): Map<String, Double> {
-        val jsonStr = prefs.getString("saved_real_avg_buy_prices", "") ?: ""
+    fun getSavedRealAvgBuyPrices(exchange: String = marketDataSource.name): Map<String, Double> {
+        val exKey = "${exchange.lowercase()}_real_avg_prices"
+        val jsonStr = prefs.getString(exKey, null)
+            ?: if (exchange.equals("INDODAX", true)) prefs.getString("saved_real_avg_buy_prices", "") ?: "" else ""
         if (jsonStr.isBlank()) return emptyMap()
         return try {
             val json = JSONObject(jsonStr)
@@ -416,13 +421,14 @@ class AppPreferences(context: Context) {
         }
     }
 
-    fun saveRealAvgBuyPrices(avgMap: Map<String, Double>) {
+    fun saveRealAvgBuyPrices(avgMap: Map<String, Double>, exchange: String = marketDataSource.name) {
         try {
             val json = JSONObject()
             avgMap.forEach { (k, v) ->
                 json.put(k.uppercase(), v)
             }
-            prefs.edit().putString("saved_real_avg_buy_prices", json.toString()).apply()
+            val exKey = "${exchange.lowercase()}_real_avg_prices"
+            prefs.edit().putString(exKey, json.toString()).apply()
         } catch (_: Exception) {}
     }
 
