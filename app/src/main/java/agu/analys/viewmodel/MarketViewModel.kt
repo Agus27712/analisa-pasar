@@ -129,6 +129,18 @@ class MarketViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun clearAllState() {
+        _dashboardTicks.value = emptyMap()
+        _hotCoins.value = emptyList()
+        _gainersCoins.value = emptyList()
+        _losersCoins.value = emptyList()
+        _topVolumeCoins.value = emptyList()
+        _worthCoins.value = emptyList()
+        _coinBadges.value = emptyMap()
+        _isShowingCachedData.value = false
+        _connectionState.value = MarketConnectionState.Loading
+    }
+
     fun selectPair(pair: TradingPair) {
         _selectedPair.value = pair
     }

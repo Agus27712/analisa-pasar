@@ -22,7 +22,7 @@ import agu.analys.model.TradingPair
 /**
  * Fullscreen chart: Memuat grafik resmi sesuai dengan exchange aktif (Murni Terpisah):
  * 1. INDODAX: Memuat halaman chart resmi Indodax TradingView (https://indodax.com/chart/<SYMBOL>).
- * 2. TOKOCRYPTO: Memuat TradingView Advanced Real-Time Chart widget untuk Binance/Tokocrypto (BINANCE:<BASE>IDR / BINANCE:<BASE>USDT).
+ * 2. TOKOCRYPTO: Memuat TradingView Advanced Real-Time Chart widget untuk Tokocrypto (Pair IDR / USDT).
  */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
@@ -148,7 +148,6 @@ fun TradingViewFullscreenChart(
                             url.contains("tradingview.com") ||
                             url.contains("tvscdn.com") ||
                             url.contains("tokocrypto.com") ||
-                            url.contains("binance.com") ||
                             url.startsWith("about:") ||
                             url.startsWith("data:"))
                     }

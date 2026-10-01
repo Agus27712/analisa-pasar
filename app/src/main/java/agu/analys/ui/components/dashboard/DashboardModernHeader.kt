@@ -44,7 +44,6 @@ fun DashboardModernHeader(
     isConnected: Boolean,
     isRefreshing: Boolean = false,
     onRefresh: () -> Unit = {},
-    onSelectDataSource: () -> Unit = {},
     onOpenLogcat: () -> Unit,
     onOpenSignalLogs: () -> Unit = {},
     modifier: Modifier = Modifier
@@ -71,13 +70,10 @@ fun DashboardModernHeader(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        // Sisi Kiri: Selector Sumber Pasar (Tokocrypto / Indodax)
+        // Sisi Kiri: Indikator Exchange Aktif (Pengaturan exchange dipusatkan di Settings)
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .clip(RoundedCornerShape(8.dp))
-                .clickable { onSelectDataSource() }
-                .padding(vertical = 2.dp)
+            modifier = Modifier.padding(vertical = 2.dp)
         ) {
             Box(
                 modifier = Modifier
@@ -96,21 +92,12 @@ fun DashboardModernHeader(
             }
             Spacer(modifier = Modifier.width(8.dp))
             Column {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = marketDataSource.label,
-                        color = TvTextPrimary,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Black
-                    )
-                    Spacer(Modifier.width(2.dp))
-                    Icon(
-                        imageVector = Icons.Default.ArrowDropDown,
-                        contentDescription = "Pilih Sumber Pasar",
-                        tint = TvCyan,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
+                Text(
+                    text = marketDataSource.label,
+                    color = TvTextPrimary,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Black
+                )
                 Text(
                     text = if (marketDataSource == MarketDataSource.TOKOCRYPTO) "SSOT · Pair IDR/USDT" else "Pasar IDR Spot",
                     color = TvTextSecondary,

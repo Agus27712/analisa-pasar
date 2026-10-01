@@ -155,7 +155,7 @@ class RealTradeExecutor(
             val isBuy = type.equals("buy", ignoreCase = true)
             val buyResult = if (isToko) {
                 val req = agu.analys.model.TokocryptoOrderRequest(
-                    symbol = agu.analys.service.TokocryptoMarketService.toBinanceSymbol(pair),
+                    symbol = agu.analys.service.TokocryptoMarketService.toTokocryptoSymbol(pair),
                     side = if (isBuy) agu.analys.model.TokocryptoOrderSide.BUY else agu.analys.model.TokocryptoOrderSide.SELL,
                     type = if (isBuy) agu.analys.model.TokocryptoOrderType.LIMIT else agu.analys.model.TokocryptoOrderType.MARKET,
                     quantity = quantity,

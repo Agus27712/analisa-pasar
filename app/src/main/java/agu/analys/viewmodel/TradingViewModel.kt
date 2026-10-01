@@ -305,15 +305,36 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     // 4. MAIN DELEGATED LOGIC METHODS
     // ═════════════════════════════════════════════════════════════════════════
 
-    fun setMarketDataSource(source: MarketDataSource) {
+    fun setMarketDataSource(source: MarketDataSource, forceHardStop: Boolean = true) {
+        val previousSource = prefs.marketDataSource
+
+        // 1. Eksekusi Hard Stop otomatis jika berganti bursa atau di-force
+        if (forceHardStop || previousSource != source) {
+            marketDataCoordinator.hardStopAndPurgeAll(previousSource)
+            marketViewModel.clearAllState()
+        }
+
+        // 2. Simpan dan alihkan bursa
         settingsViewModel.setMarketDataSource(source)
-        marketDataCoordinator.restoreFromCache(source)
-        marketViewModel.restoreFromCache(source)
+        prefs.marketDataSource = source
+
+        // 3. Muat dynamic symbols Tokocrypto jika beralih ke Tokocrypto
+        if (source == MarketDataSource.TOKOCRYPTO) {
+            viewModelScope.launch(Dispatchers.IO) {
+                agu.analys.data.TokocryptoSymbolRepository.ensureSymbolsLoaded(false)
+            }
+        }
+
+        // 4. Pilih pair default bursa baru
         val popular = TradingPair.popularPairsForSource(source)
         val first = popular.firstOrNull() ?: TradingPair.fromCustomSymbol("BTC", source.defaultQuoteAsset)
         selectPair(first)
+
+        // 5. Hubungkan kembali stream & polling secara bersih HANYA untuk bursa baru
         refreshWorthCoinsFromMarket()
         marketDataCoordinator.startMarketPolling(first, selectedTimeframe.value)
+
+        // 6. Tarik saldo real sesuai bursa baru jika kredensial tersedia
         if (source == MarketDataSource.TOKOCRYPTO && prefs.hasTokocryptoCredentials()) {
             fetchRealBalance()
         } else if (source == MarketDataSource.INDODAX && prefs.hasIndodaxCredentials()) {

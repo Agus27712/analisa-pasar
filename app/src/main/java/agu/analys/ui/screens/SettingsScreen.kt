@@ -88,8 +88,9 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
     val isNotifyEmergencyExitEnabled by viewModel.isNotifyEmergencyExitEnabled.collectAsState()
 
     fun saveAllSettings(showToast: Boolean = true) {
-        if (selectedSource != prefs.marketDataSource) {
-            viewModel.setMarketDataSource(selectedSource)
+        val isSourceChanged = selectedSource != prefs.marketDataSource
+        if (isSourceChanged) {
+            viewModel.setMarketDataSource(selectedSource, forceHardStop = true)
         }
         prefs.strategyMode = strategyMode
         prefs.isScalpingMode = (strategyMode == StrategyMode.SCALPING)
@@ -112,7 +113,12 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
         viewModel.setStrategyMode(strategyMode)
         saved = true
         if (showToast) {
-            Toast.makeText(context, "Pengaturan berhasil disimpan", Toast.LENGTH_SHORT).show()
+            val msg = if (isSourceChanged) {
+                "Pengaturan disimpan. Jalur koneksi di-reset & cache dibersihkan untuk ${selectedSource.label}."
+            } else {
+                "Pengaturan berhasil disimpan"
+            }
+            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
         }
     }
 

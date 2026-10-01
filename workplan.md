@@ -94,3 +94,21 @@ Mengintegrasikan arsitektur resmi Tokocrypto sesuai dokumentasi dan mengisolasi 
   - Mengatasi konflik deklarasi dan sintaks unclosed lambda pada `SimulationOrderForm.kt`, `DetailChartScreen.kt`, `PortfolioScreen.kt`, `PortfolioComponents.kt`, `RealPortfolioView.kt`, `RealPortfolioSummaryCard.kt`, `MarketViewModel.kt`, dan `SimulationCoordinator.kt`.
 - [x] **Verifikasi Build**:
   - `compile_applet` berhasil (Build succeeded).
+
+### Tahap 10: Pemusatan Pemilihan Exchange di Settings, Hard Stop Otomatis & Pembersihan Total Cache saat Simpan, serta Eliminasi Mutlak Fallback ke Binance
+- [x] **Pemusatan Pemilihan Tunggal di Settings**:
+  - Hapus dialog pemilihan exchange di dashboard (`DataSourceSelectionDialog.kt` dihapus permanen).
+  - Jadikan `DashboardModernHeader` sebagai indikator statis/informatif tanpa tombol dropdown.
+  - Pusatkan satu-satunya pemilihan bursa di menu Settings (`SettingsCategory.TRADING`).
+- [x] **Pemicu Hard-Stop & Pembersihan Total Cache saat Tap Simpan**:
+  - Saat pengguna menekan "Simpan Perubahan" di Settings dan exchange berubah (atau dieksekusi), sistem memanggil `setMarketDataSource(selectedSource, forceHardStop = true)`.
+  - Putus seketika WebSocket Tokocrypto & Indodax, matikan polling background jobs, dan reset price throttler.
+  - Kosongkan in-memory StateFlow (`dashboardTicks`, `currentTick`, `recentCandles`, `orderBookBids/Asks`, dsb.).
+  - Purge menyeluruh cache: `OrderBookDepthCache.clear()`, `MtfCacheManager.clear()`, `TickHistoryTracker.clear()`, dan `MarketDataCache.clearCacheForSource()`.
+  - Hubungkan kembali koneksi baru HANYA ke bursa terpilih.
+- [x] **Eliminasi Mutlak Fallback ke Binance**:
+  - Pastikan tidak ada satupun request REST atau WebSocket yang mengarah ke `binance.com` atau `stream.binance.com`.
+  - Ubah method helper `toBinanceSymbol` menjadi `toTokocryptoSymbol` dan `effectiveCompactSymbol`.
+  - Bersihkan URL whitelist di `TradingViewFullscreenChart.kt`.
+- [x] **Verifikasi Kompilasi**:
+  - `compile_applet` berhasil (Build succeeded).

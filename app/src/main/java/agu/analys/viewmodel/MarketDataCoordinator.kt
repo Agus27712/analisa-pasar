@@ -142,12 +142,12 @@ class MarketDataCoordinator(
         val cleanSelected = selected.replace("/", "").replace("_", "").trim()
         val cleanIndodax = currentPair.effectiveIndodaxPair().replace("/", "").replace("_", "").trim()
         val cleanTokocrypto = currentPair.effectiveTokocryptoPair().replace("/", "").replace("_", "").trim()
-        val cleanBinance = currentPair.effectiveBinanceSymbol().replace("/", "").replace("_", "").trim()
+        val cleanCompact = currentPair.effectiveCompactSymbol().replace("/", "").replace("_", "").trim()
 
         if (!cleanTick.equals(cleanSelected, true) && 
             !cleanTick.equals(cleanIndodax, true) &&
             !cleanTick.equals(cleanTokocrypto, true) &&
-            !cleanTick.equals(cleanBinance, true)) return
+            !cleanTick.equals(cleanCompact, true)) return
 
         lastLiveTickAt = System.currentTimeMillis()
         wsLive = true
@@ -227,7 +227,7 @@ class MarketDataCoordinator(
         val primeTick = _dashboardTicks.value[pair.symbol] 
             ?: _dashboardTicks.value[pair.effectiveIndodaxPair()]
             ?: _dashboardTicks.value[pair.effectiveTokocryptoPair()]
-            ?: _dashboardTicks.value[pair.effectiveBinanceSymbol()]
+            ?: _dashboardTicks.value[pair.effectiveCompactSymbol()]
             ?: _dashboardTicks.value[pair.symbol.uppercase()]
         if (primeTick != null && (_currentTick.value == null || _currentTick.value?.symbol != pair.symbol)) {
             val primed = primeTick.copy(symbol = pair.symbol)
@@ -403,6 +403,43 @@ class MarketDataCoordinator(
         indodaxWebSocket.stop(false)
         tokocryptoWebSocket.stop(false)
         uiPriceThrottler.reset()
+    }
+
+    /**
+     * Memutus total seluruh koneksi (WebSocket & Polling) dan membersihkan seluruh cache pasar
+     * saat pengguna mengganti exchange di Settings dan menekan tombol Simpan.
+     */
+    fun hardStopAndPurgeAll(source: MarketDataSource) {
+        // 1. Hard stop seluruh job dan socket kedua bursa
+        marketPollJob?.cancel()
+        marketPollJob = null
+        dashboardPollJob?.cancel()
+        dashboardPollJob = null
+        indodaxWebSocket.stop(false)
+        tokocryptoWebSocket.stop(false)
+        uiPriceThrottler.reset()
+        currentActivePair = null
+        wsLive = false
+        lastLiveTickAt = 0L
+
+        // 2. Kosongkan semua data in-memory StateFlow
+        _dashboardTicks.value = emptyMap()
+        _currentTick.value = null
+        _recentPrices.value = emptyList()
+        _recentCandles.value = emptyList()
+        _orderBookBids.value = emptyList()
+        _orderBookAsks.value = emptyList()
+        _tradeStream.value = emptyList()
+        _connectionState.value = MarketConnectionState.Loading
+        _isShowingCachedData.value = false
+
+        // 3. Reset engine dan purge seluruh cache bursa
+        engine.resetForOffline()
+        agu.analys.data.OrderBookDepthCache.clear()
+        agu.analys.util.MtfCacheManager.clear()
+        agu.analys.engine.sell.TickHistoryTracker.clear()
+        marketCache.clearCacheForSource(source)
+        agu.analys.util.AppLogManager.market("HardStop", "🛑 HARD STOP: Seluruh koneksi diputus & cache dibersihkan untuk ${source.label}.")
     }
 
     fun startDashboardPolling(onDashboardUpdate: (Map<String, MarketTick>) -> Unit) {

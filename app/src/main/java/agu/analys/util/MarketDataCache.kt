@@ -17,6 +17,24 @@ class MarketDataCache(context: Context) {
 
     fun clearAll() { prefs.edit().clear().apply(); lastDashboardWriteAt = 0L; lastPairWriteAt.clear() }
 
+    fun clearCacheForSource(source: agu.analys.config.MarketDataSource) {
+        val s = source.name.lowercase()
+        val editor = prefs.edit()
+        prefs.all.keys.filter { it.startsWith(s) || it.contains("_$s") }.forEach {
+            editor.remove(it)
+        }
+        editor.apply()
+        lastDashboardWriteAt = 0L
+        lastPairWriteAt.clear()
+    }
+
+    fun clearDashboardTicks(source: agu.analys.config.MarketDataSource) {
+        val key = KEY_DASHBOARD_TICKS + "_" + source.name.lowercase()
+        val keySavedAt = KEY_DASHBOARD_SAVED_AT + "_" + source.name.lowercase()
+        prefs.edit().remove(key).remove(keySavedAt).apply()
+        lastDashboardWriteAt = 0L
+    }
+
     fun saveDashboardTicks(source: agu.analys.config.MarketDataSource, ticks: Map<String, MarketTick>) {
         if (ticks.isEmpty()) return
         val now = System.currentTimeMillis()

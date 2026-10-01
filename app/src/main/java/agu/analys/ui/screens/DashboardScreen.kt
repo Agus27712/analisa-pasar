@@ -75,7 +75,6 @@ fun DashboardScreen(
     var showAddDialog by remember { mutableStateOf(false) }
     var showNewsScreener by remember { mutableStateOf(false) }
     var showLogcatDialog by remember { mutableStateOf(false) }
-    var showDataSourceDialog by remember { mutableStateOf(false) }
 
     val defaultQuote = marketDataSource.defaultQuoteAsset
 
@@ -247,7 +246,6 @@ fun DashboardScreen(
                 isConnected = isConnected,
                 isRefreshing = isRefreshing,
                 onRefresh = { viewModel.refreshWorthCoinsFromMarket() },
-                onSelectDataSource = { showDataSourceDialog = true },
                 onOpenLogcat = { showLogcatDialog = true },
                 onOpenSignalLogs = { viewModel.openSignalLogs() }
             )
@@ -521,16 +519,6 @@ fun DashboardScreen(
         if (showLogcatDialog) {
             LogcatDiagnosticDialog(
                 onDismissRequest = { showLogcatDialog = false }
-            )
-        }
-
-        if (showDataSourceDialog) {
-            DataSourceSelectionDialog(
-                currentSource = marketDataSource,
-                onSelectSource = { source ->
-                    viewModel.setMarketDataSource(source)
-                },
-                onDismiss = { showDataSourceDialog = false }
             )
         }
     }

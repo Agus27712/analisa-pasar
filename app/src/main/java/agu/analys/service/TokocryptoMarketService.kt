@@ -79,7 +79,7 @@ object TokocryptoMarketService {
         }
     }
 
-    fun toBinanceSymbol(symbol: String): String {
+    fun toTokocryptoSymbol(symbol: String): String {
         val s = symbol.trim().uppercase().replace("/", "").replace("-", "").replace("_", "")
         return when {
             s == "BNBIDR" || s == "SHIBIDR" -> s
@@ -87,6 +87,9 @@ object TokocryptoMarketService {
             else -> s
         }
     }
+
+    @Deprecated("Gunakan toTokocryptoSymbol", ReplaceWith("toTokocryptoSymbol(symbol)"))
+    fun toBinanceSymbol(symbol: String): String = toTokocryptoSymbol(symbol)
 
 
     private suspend fun throttle() {

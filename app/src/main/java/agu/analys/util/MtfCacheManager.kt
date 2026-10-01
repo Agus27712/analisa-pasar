@@ -81,11 +81,11 @@ object MtfCacheManager {
         val normalized = symbol.trim().uppercase()
         val ex = exchange.trim().uppercase()
         val scopedKey = buildKey(normalized, ex)
-        val binanceSym = TokocryptoMarketService.toBinanceSymbol(normalized)
+        val compactSym = TokocryptoMarketService.toTokocryptoSymbol(normalized)
         val tokoPair = TokocryptoMarketService.toTokocryptoPair(normalized)
 
         return cache[scopedKey]?.get(timeframe)
-            ?: cache[buildKey(binanceSym, ex)]?.get(timeframe)
+            ?: cache[buildKey(compactSym, ex)]?.get(timeframe)
             ?: cache[buildKey(tokoPair, ex)]?.get(timeframe)
             ?: cache[normalized]?.get(timeframe) // fallback
     }
@@ -192,10 +192,10 @@ object MtfCacheManager {
             // Legacy mirror
             cache.getOrPut(norm) { mutableMapOf() }[tf] = fetched
 
-            // Also alias under clean Binance symbol and Tokocrypto pair for fast retrieval
-            val binanceSym = TokocryptoMarketService.toBinanceSymbol(norm)
-            if (binanceSym != norm) {
-                cache.getOrPut(buildKey(binanceSym, exchange)) { mutableMapOf() }[tf] = fetched
+            // Also alias under clean compact Tokocrypto symbol and pair for fast retrieval
+            val compactSym = TokocryptoMarketService.toTokocryptoSymbol(norm)
+            if (compactSym != norm) {
+                cache.getOrPut(buildKey(compactSym, exchange)) { mutableMapOf() }[tf] = fetched
             }
             updateStatus(norm, tf, if (isCacheValid(tf, fetched)) MtfStatus.READY else MtfStatus.SYNCING, exchange)
         } else {
@@ -204,6 +204,16 @@ object MtfCacheManager {
                 updateStatus(norm, tf, MtfStatus.ERROR, exchange)
             }
         }
+    }
+
+    fun clear() {
+        tier1Job?.cancel()
+        tier1Job = null
+        backgroundJob?.cancel()
+        backgroundJob = null
+        activeTier1Symbol = null
+        cache.clear()
+        _mtfState.value = emptyMap()
     }
 
     private fun updateStatus(symbol: String, tf: Timeframe, status: MtfStatus, exchange: String = "TOKOCRYPTO") {

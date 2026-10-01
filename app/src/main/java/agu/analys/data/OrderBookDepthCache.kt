@@ -27,6 +27,13 @@ object OrderBookDepthCache {
         return "${exchange.trim().uppercase()}_${normalizeSymbol(symbol)}"
     }
 
+    fun clear() {
+        cache.clear()
+        lastFetchTime.clear()
+        inFlight.clear()
+        _depthVersion.value = System.currentTimeMillis()
+    }
+
     fun getOrderBook(symbol: String, exchange: String = "TOKOCRYPTO"): Pair<List<OrderBookItem>, List<OrderBookItem>>? {
         val key = buildKey(symbol, exchange)
         return cache[key] ?: cache[normalizeSymbol(symbol)]

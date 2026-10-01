@@ -70,8 +70,8 @@ class CandidateScanWorker(
 
             for (rawSymbol in eligibleSymbols) {
                 val cleanSymbol = rawSymbol.uppercase().replace("/", "").replace("-", "")
-                val binanceSym = TokocryptoMarketService.toBinanceSymbol(cleanSymbol)
-                val tick = tickMap[cleanSymbol] ?: tickMap[binanceSym] ?: continue
+                val compactSym = TokocryptoMarketService.toTokocryptoSymbol(cleanSymbol)
+                val tick = tickMap[cleanSymbol] ?: tickMap[compactSym] ?: continue
                 if (tick.price <= 0.0) continue
 
                 // Cek ulang holding status

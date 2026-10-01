@@ -15,6 +15,10 @@ object TickHistoryTracker {
 
     private val symbolHistory = ConcurrentHashMap<String, ConcurrentLinkedDeque<TickPoint>>()
 
+    fun clear() {
+        symbolHistory.clear()
+    }
+
     fun recordTick(symbol: String, price: Double, timestamp: Long = System.currentTimeMillis()) {
         if (price <= 0.0 || symbol.isBlank()) return
         val key = symbol.uppercase().trim()

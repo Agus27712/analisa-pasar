@@ -97,6 +97,12 @@ fun SettingsCategoryDetailContent(
             Spacer(Modifier.height(14.dp))
 
             SectionHeader("PILIH SUMBER DATA PASAR (EXCHANGE)")
+            Text(
+                "Satu-satunya kontrol pemilihan bursa pasar. Ketika Anda beralih bursa dan menekan tombol 'Simpan Perubahan' di bawah, seluruh jalur koneksi bursa aktif akan diputus secara otomatis (hard-stop) dan cache dibersihkan secara total.",
+                color = TvTextSecondary,
+                fontSize = 11.sp
+            )
+            Spacer(Modifier.height(8.dp))
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)

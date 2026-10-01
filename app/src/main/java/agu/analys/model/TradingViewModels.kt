@@ -355,7 +355,9 @@ val POPULAR_INDODAX_PAIRS = listOf(
             "${baseAsset.uppercase()}_$q"
         }
     }
-    fun effectiveBinanceSymbol(): String = effectiveTokocryptoPair().replace("_", "").uppercase()
+    fun effectiveCompactSymbol(): String = effectiveTokocryptoPair().replace("_", "").uppercase()
+    @Deprecated("Gunakan effectiveCompactSymbol", ReplaceWith("effectiveCompactSymbol()"))
+    fun effectiveBinanceSymbol(): String = effectiveCompactSymbol()
     fun effectiveTradingViewSymbol(): String {
         val base = baseAsset.uppercase().replace("BIDR", "IDR")
         val quote = quoteAsset.uppercase().replace("BIDR", "IDR")

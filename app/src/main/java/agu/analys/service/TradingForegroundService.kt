@@ -88,7 +88,7 @@ class TradingForegroundService : Service() {
                     val allHoldings = (realItems + simItems).distinctBy { it.symbol.uppercase() }
 
                     if (allHoldings.isNotEmpty()) {
-                        // Tarik ticker pasar seluruh koin dari Tokocrypto / Binance
+                        // Tarik ticker pasar seluruh koin dari Tokocrypto
                         val symbolsToFetch = allHoldings.map { it.symbol }
                         val fetchedTicks = TokocryptoMarketService.fetchTickers(symbolsToFetch)
                         val marketTicks = fetchedTicks.associateBy { it.symbol.uppercase() }
@@ -97,8 +97,8 @@ class TradingForegroundService : Service() {
 
                         for (item in allHoldings) {
                             val sym = item.symbol.uppercase()
-                            val binanceSym = TokocryptoMarketService.toBinanceSymbol(sym)
-                            val tick = marketTicks[sym] ?: marketTicks[binanceSym]
+                            val compactSym = TokocryptoMarketService.toTokocryptoSymbol(sym)
+                            val tick = marketTicks[sym] ?: marketTicks[compactSym]
                             val currentPrice = tick?.price ?: livePrices[sym] ?: 0.0
 
                             if (currentPrice > 0.0) {
