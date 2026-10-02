@@ -1,46 +1,32 @@
-# Checkpoint: Audit & Perbaikan Penanganan Mata Uang & Prefix Kuotasi di Halaman Detail Koin (`ui/components/detail/`)
+# Checkpoint: Audit & Perbaikan Jalur Perdagangan Real Tokocrypto & Metadata Discovery (`TokocryptoSymbolRepository.kt` & `TokocryptoTradeApi.kt`)
 
-- **Tanggal / Waktu:** 2026-10-01
+- **Tanggal / Waktu:** 2026-10-02
 - **Status:** Selesai (Completed & Verified Build Clean)
 - **Komponen Terdampak:**
-  1. `TechnicalDetailsCard.kt` & `DetailTechnicalDetailsSection.kt`
-  2. `GlobalMarketShieldCard.kt`
-  3. `SpreadGuardAndEntrySection.kt`
-  4. `CustomBuyOrderDialog.kt`
-  5. `RadarTransactionFeeSection.kt`
-  6. `RadarBuySection.kt`
-  7. `SellPositionHeader.kt`
-  8. `SellManualBuyDialog.kt`
-  9. `WaitingEntryRadarCard.kt`
-  10. `CreateAlertTabContent.kt`, `ActiveAlertsTabContent.kt`, & `PriceAlertDialog.kt`
-  11. `AiAssistantCard.kt` & `ProgressEntryCard.kt`
-- **Perbaikan yang Dilakukan:**
-  1. **Volume 24H Dinamis (`TechnicalDetailsCard.kt`)**:
-     - Menambahkan parameter `quoteAsset: String = "IDR"` pada `TechnicalDetailsCard` dan meneruskannya dari `DetailTechnicalDetailsSection`.
-     - Mengubah formatting volume dari `formatPrice` statis menjadi `PriceFormatter.formatVolume(volume24h, quoteAsset = quoteAsset)` dan label menjadi `"volume 24 jam ($quoteAsset)"`.
-  2. **OrderBook Shield Dinding Beli/Jual (`GlobalMarketShieldCard.kt`)**:
-     - Menambahkan parameter `quoteAsset` pada `GlobalMarketShieldDialog`.
-     - Format harga dinding beli dan jual terbesar kini menggunakan `PriceFormatter.formatPrice(maxBid.price, quoteAsset = quoteAsset)`.
-     - Netralisasi teks `"server Indodax"` menjadi `"server pasar"`.
-  3. **Spread Guard Placeholder (`SpreadGuardAndEntrySection.kt`)**:
-     - Memperbaiki fallback tampilan rekomendasi harga entri saat nilai 0 agar menampilkan `"$ —"` jika pair USDT dan `"Rp —"` jika pair IDR.
-  4. **Dialog Beli Kustom (`CustomBuyOrderDialog.kt`)**:
-     - Menghapus label statis `"Real Indodax TAPI v2"` menjadi `"Mode Real Trading Spot"`.
-     - Mengizinkan input angka desimal (titik/koma) pada modal pembelian pair USDT (`input.filter { it.isDigit() || (isUsdtQuote && (it == '.' || it == ',')) }`).
-     - Menggunakan `PriceFormatter.formatPrice(p, showSymbol = false, quoteAsset = quoteAsset)` pada `formatPriceForInput`.
-  5. **Dialog Rincian Fee Transaksi (`RadarTransactionFeeSection.kt`)**:
-     - Meneruskan parameter `quoteAsset = quoteAsset` ke `RadarFeeDetailDialog`.
-     - Mengganti pembatasan nominal minimal order yang sebelumnya hardcoded 10.000 menjadi dinamis ($1 USDT untuk pair USDT dan Rp 10.000 untuk pair IDR).
-  6. **Seksi Pembelian Radar (`RadarBuySection.kt`)**:
-     - Format input default TP1 dan TP2 menggunakan `PriceFormatter.formatPrice(..., showSymbol = false, quoteAsset = quoteAsset)` agar presisi desimal koin USDT atau koin kecil tidak terpotong (sebelumnya `%.0f`).
-     - Batas tombol `2% Risk` disesuaikan dengan `minNominalQuote` bukan hardcoded `>= 10000.0`.
-     - Tombol nominal persentase (25%, 50%, 75%, 100%) dan custom nominal mengizinkan nilai desimal pada pair USDT.
-  7. **Header dan Dialog Jual Manual (`SellPositionHeader.kt` & `SellManualBuyDialog.kt`)**:
-     - Menghapus teks statis `"Real Indodax"` dan `"nota Indodax Anda"`.
-     - Format harga rata-rata beli menggunakan `PriceFormatter.formatPrice(..., quoteAsset = quoteAsset)`.
-  8. **Inisialisasi TP1/TP2 di `WaitingEntryRadarCard.kt`**:
-     - Memformat nilai awal TP1 dan TP2 berdasarkan presisi `quoteAsset` koin (menghindari pembulatan integer nol desimal).
-  9. **Alert & Notifikasi Pasar (`CreateAlertTabContent.kt`, `ActiveAlertsTabContent.kt`, `PriceAlertDialog.kt`)**:
-     - Mengganti `formatIdrNumber` dengan `PriceFormatter.formatPrice(..., quoteAsset = quoteAsset)`.
-  10. **Kompilasi & Verifikasi**:
-      - `compile_applet` berhasil tanpa error.
+  1. `TokocryptoSymbolRepository.kt`
+  2. `TokocryptoTradeApi.kt`
+  3. `RealTradeExecutor.kt`
+- **Akar Masalah & Resolusi:**
+  1. **Atasi Toast Error "Metadata trading Tokocrypto gagal dimuat"**:
+     - Sebelumnya, `ensureSymbolsLoaded(force = true)` hanya mencoba 1 endpoint tunggal (`/open/v1/common/symbols`). Jika endpoint tersebut lambat, terblokir Cloudflare, atau mengembalikan struktur non-zero code, `fetchFromTokocrypto()` gagal dan order langsung dibatalkan dengan toast error.
+     - **Fix**: Menambahkan *Fallback Chain Multi-Endpoint* resmi Tokocrypto pada `fetchFromTokocrypto()`:
+       1) `https://www.tokocrypto.com/open/v1/common/symbols` (Open API Tokocrypto)
+       2) `https://www.tokocrypto.site/api/v3/exchangeInfo` (Type 1 MBX Cloud Tokocrypto)
+       3) `https://cloudme-toko.2meta.app/api/v1/exchangeInfo` (Type 3 NextMe Tokocrypto)
+       *(Tanpa endpoint Binance sama sekali agar 100% kompatibel dan dapat diakses bebas tanpa terblokir di Indonesia)*
+  2. **Inisialisasi Standard Default Metadata Pair Populer**:
+     - Menambahkan fungsi `populateDefaultSymbols()` saat inisialisasi `TokocryptoSymbolRepository`.
+     - Seluruh pair utama IDR & USDT (BTC, ETH, SOL, DOGE, XRP, SUI, ADA, BNB, SHIB, NEAR, AVAX, PEPE, TRX, LINK, RENDER, FET, FLOKI, BONK) memiliki metadata trading bawaan dengan precision, stepSize, minQty, dan minNotional yang valid.
+     - Mengubah `ensureSymbolsLoaded()` agar tidak pernah membatalkan order jika `symbolsMap` sudah terisi dengan metadata bawaan/cache, melainkan memperbarui parameter live dari network di background.
+  3. **Penyesuaian HMAC SHA-256 Signature Query Ordering (`TokocryptoTradeApi.kt`)**:
+     - Mengurutkan `formParams` secara alfabetis berdasarkan kunci (`formParams.sortedBy { it.first }`) sebelum membentuk `queryString` dan menghitung HMAC SHA-256 signature pada `createOrder`. Hal ini mencegah penolakan signature invalid oleh server Tokocrypto.
+  4. **Pembersihan Parameter Order & timeInForce**:
+     - Menghilangkan pengiriman `clientId` kustom agar tidak memicu error `3703: Invalid client ID`. Tokocrypto akan menutupi ID secara internal dan mengembalikannya pada respons.
+     - Memastikan `timeInForce` dikonversi ke format numeric code Tokocrypto (1=GTC, 2=IOC, 3=FOK, 4=GTX).
+  5. **Debug Output Lengkap dari Server Tokocrypto saat Order Ditolak**:
+     - Menambahkan field `httpCode`, `serverCode`, `serverBody`, dan `requestDebug` pada model `TokocryptoOrderResult`.
+     - Logging otomatis ke `AppLogManager.trade("TokocryptoOrderRejected", ...)` yang mencatat secara mendetail: Simbol, Side, Type, Status HTTP, Kode Error Server, Pesan Error, Parameter Query Terkirim, dan Respons Raw JSON Server Tokocrypto.
+     - Logging pada `RealTradeExecutor.kt` (`RealOrderRejected`, `RealSellRejected`, `TokocryptoCancelRejected`, `TokocryptoQueryFailed`) sehingga pengguna dapat membaca log diagnosa lengkap langsung dari dialog diagnostik logcat di aplikasi.
+  6. **Verifikasi Kompilasi & Unit Tests**:
+     - `compile_applet` berhasil tanpa error.
+     - `gradle :app:testDebugUnitTest` berhasil (BUILD SUCCESSFUL, semua 32 actionable tasks sukses).

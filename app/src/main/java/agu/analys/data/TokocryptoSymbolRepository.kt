@@ -41,10 +41,98 @@ object TokocryptoSymbolRepository {
     private val lastSyncTime = AtomicLong(0L)
     private const val SYNC_TTL_MS = 30 * 60 * 1000L // 30 menit refresh interval
 
-    private const val TOKOCRYPTO_COMMON_SYMBOLS_URL = "https://www.tokocrypto.com/open/v1/common/symbols"
+    private val SYMBOLS_ENDPOINTS = listOf(
+        "https://www.tokocrypto.com/open/v1/common/symbols",
+        "https://www.tokocrypto.site/api/v3/exchangeInfo",
+        "https://cloudme-toko.2meta.app/api/v1/exchangeInfo"
+    )
     private const val TOKOCRYPTO_EXECUTION_RULES_URL = "https://www.tokocrypto.site/api/v3/executionRules"
 
-    fun isReady(): Boolean = isInitialized.get() && symbolsMap.isNotEmpty()
+    init {
+        populateDefaultSymbols()
+    }
+
+    private fun populateDefaultSymbols() {
+        val defaults = listOf(
+            Triple("BTC", "IDR", Pair(1.0, 0.00001)),
+            Triple("ETH", "IDR", Pair(1.0, 0.0001)),
+            Triple("SOL", "IDR", Pair(1.0, 0.001)),
+            Triple("DOGE", "IDR", Pair(1.0, 1.0)),
+            Triple("XRP", "IDR", Pair(1.0, 0.1)),
+            Triple("SUI", "IDR", Pair(1.0, 0.1)),
+            Triple("ADA", "IDR", Pair(1.0, 0.1)),
+            Triple("BNB", "IDR", Pair(1.0, 0.001)),
+            Triple("SHIB", "IDR", Pair(1.0, 1.0)),
+            Triple("NEAR", "IDR", Pair(1.0, 0.01)),
+            Triple("AVAX", "IDR", Pair(1.0, 0.01)),
+            Triple("PEPE", "IDR", Pair(1.0, 1.0)),
+            Triple("TRX", "IDR", Pair(1.0, 0.1)),
+            Triple("LINK", "IDR", Pair(1.0, 0.01)),
+            Triple("RENDER", "IDR", Pair(1.0, 0.01)),
+            Triple("FET", "IDR", Pair(1.0, 0.01)),
+            Triple("FLOKI", "IDR", Pair(1.0, 1.0)),
+            Triple("BONK", "IDR", Pair(1.0, 1.0)),
+
+            Triple("BTC", "USDT", Pair(0.01, 0.00001)),
+            Triple("ETH", "USDT", Pair(0.01, 0.0001)),
+            Triple("SOL", "USDT", Pair(0.01, 0.01)),
+            Triple("DOGE", "USDT", Pair(0.0001, 0.1)),
+            Triple("XRP", "USDT", Pair(0.0001, 0.1)),
+            Triple("SUI", "USDT", Pair(0.0001, 0.1)),
+            Triple("ADA", "USDT", Pair(0.0001, 0.1)),
+            Triple("BNB", "USDT", Pair(0.01, 0.001)),
+            Triple("SHIB", "USDT", Pair(0.00000001, 1.0)),
+            Triple("PEPE", "USDT", Pair(0.00000001, 1.0))
+        )
+
+        val minNotionalIdr = 20_000.0
+        val minNotionalUsdt = 1.0
+
+        for ((base, quote, precisions) in defaults) {
+            val tickSize = precisions.first
+            val stepSize = precisions.second
+            val minNotional = if (quote == "IDR") minNotionalIdr else minNotionalUsdt
+
+            val info = TokocryptoSymbolInfo(
+                symbol = "${base}_$quote",
+                baseAsset = base,
+                quoteAsset = quote,
+                symbolType = 1,
+                basePrecision = 8,
+                quotePrecision = 8,
+                spotTradingEnable = true,
+                defaultSelfTradePreventionMode = "NONE",
+                priceFilter = TokocryptoPriceFilter(
+                    minPrice = tickSize,
+                    maxPrice = 1_000_000_000_000.0,
+                    tickSize = tickSize
+                ),
+                lotSizeFilter = TokocryptoLotSizeFilter(
+                    minQty = stepSize,
+                    maxQty = 1_000_000_000.0,
+                    stepSize = stepSize
+                ),
+                marketLotSizeFilter = TokocryptoLotSizeFilter(
+                    minQty = stepSize,
+                    maxQty = 1_000_000_000.0,
+                    stepSize = stepSize
+                ),
+                minNotionalFilter = TokocryptoMinNotionalFilter(
+                    minNotional = minNotional,
+                    applyToMarket = true,
+                    avgPriceMins = 5
+                )
+            )
+
+            val rawSymbol = "${base}$quote"
+            val underscore = "${base}_$quote"
+            symbolsMap[rawSymbol] = info
+            symbolsMap[underscore] = info
+        }
+        _symbolsState.value = symbolsMap.values.toList()
+    }
+
+    fun isReady(): Boolean = symbolsMap.isNotEmpty()
 
     suspend fun ensureSymbolsLoaded(force: Boolean = false): Boolean = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
@@ -57,49 +145,51 @@ object TokocryptoSymbolRepository {
                 return@withLock true
             }
 
-            // 1. Fetch dari Tokocrypto /open/v1/common/symbols
+            // Fetch dari endpoint Tokocrypto / Binance
             val success = fetchFromTokocrypto()
             if (!success) {
-                Timber.w("Tokocrypto common symbols gagal di-fetch.")
+                Timber.w("Tokocrypto symbol online discovery gagal, menggunakan metadata bawaan.")
             }
 
-            if (success) {
-                isInitialized.set(true)
-                lastSyncTime.set(System.currentTimeMillis())
-                _symbolsState.value = symbolsMap.values.toList()
+            isInitialized.set(true)
+            lastSyncTime.set(System.currentTimeMillis())
+            _symbolsState.value = symbolsMap.values.toList()
 
-                // Fetch execution rules di background untuk price range guard
-                fetchExecutionRulesQuietly()
-            }
-            success
+            // Fetch execution rules di background untuk price range guard
+            fetchExecutionRulesQuietly()
+
+            // Sukses jika symbolsMap tidak kosong (baik dari network maupun fallback defaults)
+            symbolsMap.isNotEmpty()
         }
     }
 
     private suspend fun fetchFromTokocrypto(): Boolean {
-        try {
-            val req = Request.Builder()
-                .url(TOKOCRYPTO_COMMON_SYMBOLS_URL)
-                .get()
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) TokoClient/3.5")
-                .header("Accept", "application/json")
-                .build()
+        for (endpointUrl in SYMBOLS_ENDPOINTS) {
+            try {
+                val req = Request.Builder()
+                    .url(endpointUrl)
+                    .get()
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) TokoClient/3.5")
+                    .header("Accept", "application/json")
+                    .build()
 
-            client.newCall(req).execute().use { resp ->
-                val body = resp.body?.string().orEmpty()
-                if (!resp.isSuccessful || body.isBlank()) return false
+                client.newCall(req).execute().use { resp ->
+                    val body = resp.body?.string().orEmpty()
+                    if (!resp.isSuccessful || body.isBlank()) return@use
 
-                val root = JSONObject(body)
-                val code = root.optInt("code", -1)
-                val data = root.optJSONArray("data") ?: root.optJSONArray("symbols")
+                    val root = JSONObject(body)
+                    val code = root.optInt("code", 0)
+                    val data = root.optJSONArray("data") ?: root.optJSONArray("symbols")
 
-                if (code == 0 && data != null && data.length() > 0) {
-                    parseTokocryptoSymbols(data)
-                    Timber.i("TokocryptoSymbolRepository: Berhasil load ${symbolsMap.size} symbols dari Tokocrypto")
-                    return true
+                    if ((code == 0 || resp.isSuccessful) && data != null && data.length() > 0) {
+                        parseTokocryptoSymbols(data)
+                        Timber.i("TokocryptoSymbolRepository: Berhasil load ${symbolsMap.size} symbols dari $endpointUrl")
+                        return true
+                    }
                 }
+            } catch (e: Exception) {
+                Timber.w("Gagal fetch Tokocrypto symbols dari $endpointUrl: ${e.message}")
             }
-        } catch (e: Exception) {
-            Timber.w(e, "Gagal fetch Tokocrypto symbols: ${e.message}")
         }
         return false
     }
@@ -108,20 +198,36 @@ object TokocryptoSymbolRepository {
         val newMap = mutableMapOf<String, TokocryptoSymbolInfo>()
         for (i in 0 until dataArray.length()) {
             val item = dataArray.optJSONObject(i) ?: continue
-            val symbol = item.optString("symbol", "").trim().uppercase()
-            if (symbol.isBlank()) continue
+            val rawSymbol = item.optString("symbol", "").trim().uppercase()
+            if (rawSymbol.isBlank()) continue
 
-            val baseAsset = item.optString("baseAsset", "").trim().uppercase()
-            val quoteAsset = item.optString("quoteAsset", "").trim().uppercase()
+            var baseAsset = item.optString("baseAsset", "").trim().uppercase()
+            var quoteAsset = item.optString("quoteAsset", "").trim().uppercase()
+
+            if (baseAsset.isBlank() || quoteAsset.isBlank()) {
+                val cleanSym = rawSymbol.replace("_", "").replace("-", "").replace("/", "")
+                when {
+                    cleanSym.endsWith("IDR") -> {
+                        baseAsset = cleanSym.removeSuffix("IDR")
+                        quoteAsset = "IDR"
+                    }
+                    cleanSym.endsWith("USDT") -> {
+                        baseAsset = cleanSym.removeSuffix("USDT")
+                        quoteAsset = "USDT"
+                    }
+                }
+            }
 
             // Eliminasi BIDR: hanya pair IDR dan USDT saja
             if (quoteAsset != "IDR" && quoteAsset != "USDT") continue
-            if (baseAsset == "BIDR" || symbol.startsWith("BIDR") || symbol.contains("BIDR_") || symbol.contains("_BIDR")) continue
+            if (baseAsset == "BIDR" || rawSymbol.startsWith("BIDR") || rawSymbol.contains("BIDR_") || rawSymbol.contains("_BIDR")) continue
 
             val symbolType = item.optInt("symbolType", 1) // 1 = MBX, 3 = NextMe
-            val basePrecision = item.optInt("basePrecision", 8)
-            val quotePrecision = item.optInt("quotePrecision", 8)
-            val spotTradingEnable = item.optBoolean("spotTradingEnable", true)
+            val basePrecision = item.optInt("basePrecision", item.optInt("baseAssetPrecision", 8))
+            val quotePrecision = item.optInt("quotePrecision", item.optInt("quoteAssetPrecision", 8))
+            
+            val status = item.optString("status", "")
+            val spotTradingEnable = if (status.isNotBlank()) status == "TRADING" else item.optBoolean("spotTradingEnable", true)
             val defaultStp = item.optString("defaultSelfTradePreventionMode", "NONE")
 
             var priceFilter: TokocryptoPriceFilter? = null
@@ -168,7 +274,7 @@ object TokocryptoSymbolRepository {
             }
 
             val info = TokocryptoSymbolInfo(
-                symbol = symbol,
+                symbol = rawSymbol,
                 baseAsset = baseAsset,
                 quoteAsset = quoteAsset,
                 symbolType = symbolType,
@@ -182,14 +288,15 @@ object TokocryptoSymbolRepository {
                 minNotionalFilter = minNotionalFilter
             )
 
-            newMap[symbol] = info
-            // Masukkan variasi underscore e.g. BTC_BIDR
-            val underscoreKey = "${baseAsset}_$quoteAsset"
-            newMap[underscoreKey] = info
+            val noUnderscore = rawSymbol.replace("_", "").replace("-", "")
+            val underscore = "${baseAsset}_$quoteAsset"
+
+            newMap[rawSymbol] = info
+            newMap[noUnderscore] = info
+            newMap[underscore] = info
         }
 
         if (newMap.isNotEmpty()) {
-            symbolsMap.clear()
             symbolsMap.putAll(newMap)
         }
     }

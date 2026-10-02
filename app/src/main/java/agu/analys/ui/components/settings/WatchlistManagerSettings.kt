@@ -40,7 +40,9 @@ fun WatchlistManagerSettings(
     val popularSuggestions = listOf(
         "BTCIDR", "ETHIDR", "SOLIDR", "DOGEIDR", "XRPIDR", "PEPEIDR",
         "SUIIDR", "ADAIDR", "BNBIDR", "SHIBIDR", "NEARIDR", "AVAXIDR",
-        "RENDERIDR", "FETIDR", "TRXIDR", "LINKIDR", "FLOKIIDR", "BONKIDR"
+        "SUIUSDT", "ADAUSDT", "BNBUSDT", "SHIBUSDT", "NEARUSDT", "AVAXUSDT",
+        "RENDERIDR", "FETIDR", "TRXIDR", "LINKIDR", "FLOKIIDR", "BONKIDR",
+        "BTCUSDT", "ETHUSDT", "SOLUSDT", "DOGEUSDT", "XRPUSDT", "PEPEUSDT"
     )
 
     Column(modifier = Modifier.fillMaxWidth()) {

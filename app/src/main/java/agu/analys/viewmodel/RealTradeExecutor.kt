@@ -376,6 +376,10 @@ class RealTradeExecutor(
 
                 refreshBalance()
             } else {
+                agu.analys.util.AppLogManager.trade(
+                    "RealOrderRejected",
+                    "❌ [$sourceLabel REAL ORDER DITOLAK] $pair ${type.uppercase()}: ${buyResult.message}"
+                )
                 onStatusUpdate(buyResult.message)
                 withContext(Dispatchers.Main) {
                     onResult(false, buyResult.message)
@@ -740,6 +744,10 @@ class RealTradeExecutor(
                     }
                     scope.launch { refreshBalance() }
                 } else {
+                    agu.analys.util.AppLogManager.trade(
+                        "RealSellRejected",
+                        "❌ [$sourceLabel REAL SELL DITOLAK] $pair: ${finalRes.message}"
+                    )
                     if (looksLikeRateLimit(finalRes.message)) onRateLimit(finalRes.message)
                     withContext(Dispatchers.Main) {
                         onResult(false, "Order Jual $sourceLabel Gagal: ${finalRes.message}")

@@ -148,20 +148,18 @@ Mengintegrasikan arsitektur resmi Tokocrypto sesuai dokumentasi dan mengisolasi 
 - [x] **Verifikasi Kompilasi & Unit Tests**:
   - `compile_applet` & `gradle :app:testDebugUnitTest` berhasil (Build succeeded & All tests pass).
 
-### Tahap 13: Audit Halaman Detail Koin & Standardisasi Penanganan Prefix/Mata Uang (`ui/components/detail/`)
-- [x] **Auditing & Standardisasi `TechnicalDetailsCard.kt` & `DetailTechnicalDetailsSection.kt`**:
-  - Dukungan parameter `quoteAsset` dan pemformatan volume dinamis `PriceFormatter.formatVolume(..., quoteAsset = quoteAsset)` serta label `"volume 24 jam ($quoteAsset)"`.
-- [x] **Auditing `GlobalMarketShieldCard.kt`**:
-  - Format harga dinding beli/jual terbesar berbasis `quoteAsset` dan netralisasi teks bursa.
-- [x] **Auditing `SpreadGuardAndEntrySection.kt`**:
-  - Placeholder harga fallback adaptif `$ —` vs `Rp —`.
-- [x] **Auditing `CustomBuyOrderDialog.kt` & `RadarBuySection.kt`**:
-  - Dukungan input desimal untuk order pair USDT, format TP1/TP2 adaptif desimal, dan label mode trading dinamis.
-- [x] **Auditing `RadarTransactionFeeSection.kt` & `RadarFeeDetailDialog.kt`**:
-  - Penerusan `quoteAsset` dan batas minimal order kuotasi dinamis.
-- [x] **Auditing `SellPositionHeader.kt` & `SellManualBuyDialog.kt`**:
-  - Pembersihan hardcoded bursa dan format harga rata-rata beli dinamis.
-- [x] **Auditing `WaitingEntryRadarCard.kt`, `CreateAlertTabContent.kt`, `ActiveAlertsTabContent.kt`, & `PriceAlertDialog.kt`**:
-  - Standardisasi seluruh dialog alert dan target level TP1/TP2 menggunakan `PriceFormatter.formatPrice` berbasis `quoteAsset`.
-- [x] **Verifikasi Kompilasi**:
+### Tahap 14: Audit & Perbaikan Real Trade Pipeline Tokocrypto (Multi-Endpoint Symbol Discovery, Parameter Sorting, & Default Fallback)
+- [x] **Multi-Endpoint Symbol Discovery (`TokocryptoSymbolRepository.kt`)**:
+  - Menambahkan rantai fallback 3 endpoint resmi Tokocrypto (`/open/v1/common/symbols`, `/api/v3/exchangeInfo` Tokocrypto site, `/api/v1/exchangeInfo` CloudMe) tanpa endpoint Binance sama sekali agar dapat diakses bebas dan lancar di Indonesia.
+  - Parsing dinamis yang mendukung format Tokocrypto Open API maupun ExchangeInfo Tokocrypto.
+- [x] **Static Default Symbol Metadata**:
+  - Menambahkan `populateDefaultSymbols()` untuk pra-mengisi metadata trading bawaan seluruh pair populer (BTC, ETH, SOL, DOGE, XRP, SUI, ADA, BNB, SHIB, NEAR, AVAX, PEPE, TRX, LINK, RENDER, FET, FLOKI, BONK di IDR & USDT).
+  - Menjamin order real tidak pernah tertahan oleh toast `"Metadata trading Tokocrypto gagal dimuat"` meskipun koneksi ke salah satu server metadata discovery mengalami keterlambatan.
+- [x] **Alphabetical Query Parameter Sorting (`TokocryptoTradeApi.kt`)**:
+  - Mengurutkan `formParams.sortedBy { it.first }` sebelum pembentukan `queryString` dan kalkulasi signature HMAC SHA-256.
+- [x] **Debug Output Server Tokocrypto**:
+  - Penambahan field diagnostik `httpCode`, `serverCode`, `serverBody`, `requestDebug` di `TokocryptoOrderResult`.
+  - Logging terstruktur ke `AppLogManager.trade("TokocryptoOrderRejected", ...)` dan `RealTradeExecutor.kt` agar seluruh alasan penolakan dan raw response dari server Tokocrypto terekam di logcat/diagnostik in-app.
+- [x] **Verifikasi Kompilasi & Unit Tests**:
   - `compile_applet` berhasil (Build succeeded).
+  - `gradle :app:testDebugUnitTest` berhasil (BUILD SUCCESSFUL).

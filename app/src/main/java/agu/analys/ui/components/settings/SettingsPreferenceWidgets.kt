@@ -44,7 +44,7 @@ enum class SettingsCategory(
     ),
     SECURITY(
         title = "Keamanan & Kredensial API",
-        subtitle = "Mode Beli Real Indodax, PIN keamanan, API Key/Secret & IP Whitelist",
+        subtitle = "Mode Beli Real, PIN keamanan, API Key/Secret & IP Whitelist",
         icon = Icons.Default.Shield,
         accentColor = Color(0xFFEF4444)
     ),

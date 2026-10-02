@@ -4,6 +4,7 @@ import agu.analys.data.TokocryptoSymbolRepository
 import agu.analys.model.*
 import agu.analys.network.NetworkClientProvider
 import agu.analys.service.IndodaxTradeApiV2.IndodaxBalances
+import agu.analys.util.AppLogManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.FormBody
@@ -60,10 +61,15 @@ object TokocryptoTradeApi {
      * misal "HTTP 400, kode -1022: Signature for this request is not valid".
      * Teks "HTTP 429" dipertahankan agar deteksi rate-limit di coordinator tetap jalan.
      */
-    private fun describeError(httpCode: Int, root: JSONObject?): String {
+    private fun describeError(httpCode: Int, root: JSONObject?, rawBody: String = ""): String {
         val code = if (root != null && root.has("code")) root.optInt("code") else null
         val msg = root?.optString("msg", "")?.takeIf { it.isNotBlank() }
             ?: root?.optString("message", "")?.takeIf { it.isNotBlank() }
+            ?: root?.optString("error", "")?.takeIf { it.isNotBlank() }
+            ?: root?.optString("error_description", "")?.takeIf { it.isNotBlank() }
+            ?: root?.optString("data", "")?.takeIf { it.isNotBlank() && !it.startsWith("{") && !it.startsWith("[") }
+            ?: if (rawBody.isNotBlank() && rawBody.length < 200) rawBody.trim() else null
+
         return buildString {
             append("HTTP $httpCode")
             if (code != null) append(", kode $code")
@@ -203,35 +209,18 @@ val hasRequiredLotFilter =
 
 /*
  * Jika metadata belum lengkap:
- * force refresh sekali dari /open/v1/common/symbols.
+ * force refresh dari Tokocrypto/Binance discovery.
  */
 if (!hasRequiredLotFilter) {
-    val loaded =
-        TokocryptoSymbolRepository.ensureSymbolsLoaded(
-            force = true
-        )
-
-    if (!loaded) {
-        return@withContext TokocryptoOrderResult(
-            success = false,
-            errorMessage =
-                "Metadata trading Tokocrypto gagal dimuat. " +
-                "Order dibatalkan agar quantity mentah tidak dikirim."
-        )
-    }
-
-    symbolInfo =
-        TokocryptoSymbolRepository.getSymbolInfo(
-            request.symbol
-        )
+    TokocryptoSymbolRepository.ensureSymbolsLoaded(force = true)
+    symbolInfo = TokocryptoSymbolRepository.getSymbolInfo(request.symbol)
 }
 
 if (symbolInfo == null) {
     return@withContext TokocryptoOrderResult(
         success = false,
         errorMessage =
-            "Symbol ${request.symbol} tidak ditemukan " +
-            "di metadata Tokocrypto."
+            "Symbol ${request.symbol} tidak ditemukan di metadata Tokocrypto."
     )
 }
 
@@ -318,7 +307,10 @@ if (!valResult.isValid) {
         formParams.add("recvWindow" to request.recvWindow.toString())
         formParams.add("timestamp" to timestamp)
 
-        val queryString = formParams.joinToString("&") { "${it.first}=${it.second}" }
+        // Urutkan parameter secara alfabetis sebelum menghitung HMAC signature
+        val queryString = formParams
+            .sortedBy { it.first }
+            .joinToString("&") { "${it.first}=${it.second}" }
         val signature = hmacSha256(secretKey, queryString)
 
         // 3. Submit ke Tokocrypto REST POST /open/v1/orders (satu-satunya jalur, tanpa fallback)
@@ -352,32 +344,80 @@ if (!valResult.isValid) {
                 val data = root?.optJSONObject("data")
 
                 if (resp.isSuccessful && code == 0 && data != null) {
+                    val orderId = data.optString("orderId", "")
+                    val returnedClientId = data.optString("clientId", "")
+                    val status = data.optString("status", "NEW")
+                    val executedQty = data.optString("executedQty", "0").toDoubleOrNull() ?: 0.0
+                    val cumQuote = data.optString("cummulativeQuoteQty", "0").toDoubleOrNull() ?: 0.0
+
+                    AppLogManager.trade(
+                        "TokocryptoOrderSuccess",
+                        "✅ [ORDER TOKOCRYPTO BERHASIL] $tokoSymbol (${request.side} ${request.type})\n" +
+                            "▶ Order ID: $orderId | Client ID: $returnedClientId | Status: $status\n" +
+                            "▶ Executed Qty: $executedQty | Total Quote: $cumQuote"
+                    )
+
                     return@withContext TokocryptoOrderResult(
                         success = true,
-                        orderId = data.optString("orderId", ""),
-                        clientId = data.optString("clientId", ""),
+                        orderId = orderId,
+                        clientId = returnedClientId,
                         symbol = data.optString("symbol", tokoSymbol),
-                        status = data.optString("status", "NEW"),
-                        executedQty = data.optString("executedQty", "0").toDoubleOrNull() ?: 0.0,
-                        cumulativeQuoteQty = data.optString("cummulativeQuoteQty", "0").toDoubleOrNull() ?: 0.0,
-                        rawMessage = "Order Tokocrypto berhasil dibuat."
+                        status = status,
+                        executedQty = executedQty,
+                        cumulativeQuoteQty = cumQuote,
+                        rawMessage = "Order Tokocrypto berhasil dibuat.",
+                        httpCode = resp.code,
+                        serverCode = code,
+                        serverBody = body,
+                        requestDebug = "symbol=$tokoSymbol | side=${request.side} | type=${request.type} | qty=$finalQuantity | price=${valResult.adjustedPrice}"
                     )
                 }
 
                 // Gagal: teruskan pesan error asli Tokocrypto (HTTP error maupun code != 0)
-                val detail = describeError(resp.code, root)
-                Timber.w("Order Tokocrypto ditolak ($tokoSymbol): $detail")
+                val detail = describeError(resp.code, root, body)
+                val serverMsg = root?.optString("msg")?.ifBlank { root.optString("message") } ?: detail
+                val serverCodeVal = if (code != -1) code else null
+
+                Timber.w("Order Tokocrypto ditolak ($tokoSymbol): $detail | Raw Body: $body")
+                AppLogManager.trade(
+                    "TokocryptoOrderRejected",
+                    "⚠️ [ORDER TOKOCRYPTO DITOLAK SERVER]\n" +
+                        "▶ Simbol: $tokoSymbol | Side: ${request.side} | Type: ${request.type}\n" +
+                        "▶ Status HTTP: ${resp.code} | Kode Server: ${serverCodeVal ?: "N/A"}\n" +
+                        "▶ Pesan Server: $serverMsg\n" +
+                        "▶ Parameter Terkirim: $queryString\n" +
+                        "▶ Respons Lengkap Server Tokocrypto: $body"
+                )
+                AppLogManager.error(
+                    "TokocryptoTrade",
+                    "Order ditolak server Tokocrypto ($tokoSymbol): HTTP ${resp.code}, kode $serverCodeVal: $serverMsg | $body"
+                )
+
                 return@withContext TokocryptoOrderResult(
                     success = false,
-                    errorMessage = "Tokocrypto Order Error ($detail)"
+                    errorMessage = "Order ditolak Tokocrypto ($detail)",
+                    httpCode = resp.code,
+                    serverCode = serverCodeVal,
+                    serverBody = body,
+                    requestDebug = "symbol=$tokoSymbol | side=${request.side} | type=${request.type} | qty=$finalQuantity | price=${valResult.adjustedPrice} | query=$queryString"
                 )
             }
         } catch (e: Exception) {
-            Timber.w(e, "Gagal create order Tokocrypto: ${e.message}")
+            val exMessage = e.message ?: e.javaClass.simpleName
+            Timber.w(e, "Gagal create order Tokocrypto: $exMessage")
+            AppLogManager.trade(
+                "TokocryptoOrderException",
+                "🚨 [KONEKSI ORDER TOKOCRYPTO GAGAL] $tokoSymbol | Error: $exMessage | URL: $TOKOCRYPTO_BASE_URL/open/v1/orders | Query: $queryString"
+            )
+            AppLogManager.error("TokocryptoTrade", "Koneksi order Tokocrypto gagal ($tokoSymbol): $exMessage", e)
+
             return@withContext TokocryptoOrderResult(
                 success = false,
-                errorMessage = "Tidak dapat terhubung ke server order Tokocrypto (${e.message ?: e.javaClass.simpleName}). " +
-                    "Status order tidak pasti, cek di Tokocrypto sebelum mengulang."
+                errorMessage = "Gagal terhubung ke server order Tokocrypto ($exMessage). Status order tidak pasti, periksa di Tokocrypto.",
+                httpCode = 0,
+                serverCode = null,
+                serverBody = exMessage,
+                requestDebug = "query=$queryString"
             )
         }
     }
@@ -416,13 +456,20 @@ if (!valResult.isValid) {
                 val root = runCatching { JSONObject(body) }.getOrNull()
                 val code = root?.optInt("code", -1) ?: -1
                 if (resp.isSuccessful && code == 0) {
+                    AppLogManager.trade("TokocryptoCancelSuccess", "✅ [BATAL ORDER TOKOCRYPTO BERHASIL] Order $orderId ($tokoSymbol)")
                     return@withContext true to "Order $orderId berhasil dibatalkan."
                 }
-                val detail = describeError(resp.code, root)
+                val detail = describeError(resp.code, root, body)
+                AppLogManager.trade(
+                    "TokocryptoCancelRejected",
+                    "⚠️ [BATAL ORDER TOKOCRYPTO DITOLAK] Order $orderId ($tokoSymbol)\n▶ Status HTTP: ${resp.code}\n▶ Respons Server: $body\n▶ Detail: $detail"
+                )
                 return@withContext false to "Gagal batal order Tokocrypto: $detail"
             }
         } catch (e: Exception) {
-            return@withContext false to "Error koneksi Tokocrypto: ${e.message}"
+            val exMsg = e.message ?: e.javaClass.simpleName
+            AppLogManager.trade("TokocryptoCancelException", "🚨 [KONEKSI BATAL ORDER GAGAL] Order $orderId ($tokoSymbol): $exMsg")
+            return@withContext false to "Error koneksi Tokocrypto: $exMsg"
         }
     }
 
@@ -487,11 +534,17 @@ if (!valResult.isValid) {
                         status = status
                     )
                 }
-                val detail = describeError(resp.code, root)
+                val detail = describeError(resp.code, root, body)
+                AppLogManager.trade(
+                    "TokocryptoQueryFailed",
+                    "⚠️ [QUERY ORDER TOKOCRYPTO GAGAL] Order $orderId ($tokoSymbol)\n▶ HTTP: ${resp.code} | Detail: $detail | Respons: $body"
+                )
                 return@withContext IndodaxTradeApiV2.OrderResult(false, "Query Order Gagal: $detail")
             }
         } catch (e: Exception) {
-            return@withContext IndodaxTradeApiV2.OrderResult(false, "Error: ${e.message}")
+            val ex = e.message ?: e.javaClass.simpleName
+            AppLogManager.trade("TokocryptoQueryException", "🚨 [QUERY ORDER EXCEPTION] Order $orderId ($tokoSymbol): $ex")
+            return@withContext IndodaxTradeApiV2.OrderResult(false, "Error: $ex")
         }
     }
 

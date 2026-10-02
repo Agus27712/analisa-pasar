@@ -71,7 +71,7 @@ fun RealBuyModeAndSecurityCard(
                                 .padding(horizontal = 6.dp, vertical = 2.dp)
                         ) {
                             Text(
-                                if (isRealBuyMode) "REAL (INDODAX)" else "SIMULASI",
+                                if (isRealBuyMode) "REAL" else "SIMULASI",
                                 color = if (isRealBuyMode) TvGreen else TvTextSecondary,
                                 fontSize = 9.sp,
                                 fontWeight = FontWeight.Bold
@@ -81,9 +81,9 @@ fun RealBuyModeAndSecurityCard(
                     Spacer(Modifier.height(4.dp))
                     Text(
                         if (isRealBuyMode)
-                            "Sistem akan mengeksekusi order Beli & Jual langsung ke Indodax via API."
+                            "Sistem akan mengeksekusi order Beli & Jual langsung ke Bursa via API."
                         else
-                            "Mode Beli & Jual dialihkan ke SIMULASI (Saldo Virtual IDR).",
+                            "Mode Beli & Jual dialihkan ke SIMULASI (Saldo Virtual).",
                         color = TvTextSecondary,
                         fontSize = 10.sp,
                         lineHeight = 14.sp
@@ -199,7 +199,7 @@ fun RealBuyModeAndSecurityCard(
 
                         Spacer(Modifier.height(6.dp))
                         Text(
-                            "API Key & Secret Key Indodax tersimpan aman di memori lokal. Mode Real dapat dipicu kapan saja tanpa perlu input ulang kunci API.",
+                            "API Key & Secret Key tersimpan aman di memori lokal. Mode Real dapat dipicu kapan saja tanpa perlu input ulang kunci API.",
                             color = TvTextSecondary,
                             fontSize = 10.sp,
                             lineHeight = 14.sp

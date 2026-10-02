@@ -125,7 +125,11 @@ data class TokocryptoOrderResult(
     val cumulativeQuoteQty: Double = 0.0,
     val avgPrice: Double = 0.0,
     val rawMessage: String = "",
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val httpCode: Int = 0,
+    val serverCode: Int? = null,
+    val serverBody: String = "",
+    val requestDebug: String = ""
 )
 
 data class TokocryptoAssetBalance(
