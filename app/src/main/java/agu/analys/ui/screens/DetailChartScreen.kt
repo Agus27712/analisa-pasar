@@ -143,6 +143,13 @@ fun DetailChartScreen(
         }
     }
 
+    // Refresh saldo real di background saat membuka koin di Mode Real
+    LaunchedEffect(isRealBuyMode, pair.symbol) {
+        if (isRealBuyMode && viewModel.hasRealCredentialsConfigured()) {
+            viewModel.fetchRealBalance(force = true)
+        }
+    }
+
     var lastKnownLivePrice by remember(pair.symbol) { mutableDoubleStateOf(0.0) }
     LaunchedEffect(tick?.price) {
         val p = tick?.price ?: 0.0
@@ -302,16 +309,45 @@ fun DetailChartScreen(
     val isUsdtQuote = agu.analys.util.PriceFormatter.isUsdtQuote(pair.quoteAsset)
     val availableQuote = if (isUsdtQuote) {
         if (isRealBuyMode) {
-            // Saldo USDT riil dari exchange (kunci respons bisa "usdt"/"usd"/"usdc"/"busd").
-            realBalance.entries.firstOrNull { (k, _) ->
+            // Saldo USDT riil: periksa saldo bebas real-time, saldo total, StateFlow, dan cache disk
+            val freeCoord = viewModel.realFreeBalanceForQuote("USDT")
+            val totalCoord = viewModel.realBalanceForQuote("USDT")
+            val fromRealMap = realBalance.entries.firstOrNull { (k, _) ->
                 val key = k.lowercase()
                 key == "usdt" || key == "usd" || key == "usdc" || key == "busd"
             }?.value ?: 0.0
+            val fromSaved = viewModel.prefs.getSavedRealBalance().entries.firstOrNull { (k, _) ->
+                val key = k.lowercase()
+                key == "usdt" || key == "usd" || key == "usdc" || key == "busd"
+            }?.value ?: 0.0
+
+            when {
+                freeCoord > 0.0 -> freeCoord
+                totalCoord > 0.0 -> totalCoord
+                fromRealMap > 0.0 -> fromRealMap
+                fromSaved > 0.0 -> fromSaved
+                else -> 0.0
+            }
         } else {
             wallet.getAvailableUsdt()
         }
     } else {
-        if (isRealBuyMode) (realBalance["idr"] ?: 0.0) else wallet.getAvailableIdr()
+        if (isRealBuyMode) {
+            val freeCoord = viewModel.realFreeBalanceForQuote("IDR")
+            val totalCoord = viewModel.realBalanceForQuote("IDR")
+            val fromRealMap = realBalance["idr"] ?: realBalance["IDR"] ?: 0.0
+            val fromSaved = viewModel.prefs.getSavedRealBalance()["idr"] ?: viewModel.prefs.getSavedRealBalance()["IDR"] ?: 0.0
+
+            when {
+                freeCoord > 0.0 -> freeCoord
+                totalCoord > 0.0 -> totalCoord
+                fromRealMap > 0.0 -> fromRealMap
+                fromSaved > 0.0 -> fromSaved
+                else -> 0.0
+            }
+        } else {
+            wallet.getAvailableIdr()
+        }
     }
     // Nama variabel lama dipertahankan agar pemanggil di bawah tidak berubah.
     val availableIdr = availableQuote

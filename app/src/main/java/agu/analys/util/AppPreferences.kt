@@ -385,7 +385,9 @@ class AppPreferences(context: Context) {
             val json = JSONObject(jsonStr)
             val map = mutableMapOf<String, Double>()
             json.keys().forEach { key ->
-                map[key.lowercase()] = json.optDouble(key, 0.0)
+                val v = json.optDouble(key, 0.0)
+                map[key.lowercase()] = v
+                map[key.uppercase()] = v
             }
             map
         } catch (_: Exception) {

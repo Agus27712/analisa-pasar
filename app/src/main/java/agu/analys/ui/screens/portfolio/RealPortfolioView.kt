@@ -36,6 +36,7 @@ fun RealPortfolioView(
     dashboardTicks: Map<String, MarketTick>,
     currentTick: MarketTick?,
     realTradeStatus: String? = null,
+    isTokocrypto: Boolean = false,
     onUnlockPin: () -> Unit,
     onRefreshRealBalance: () -> Unit,
     onEditAvgBuyPrice: (coin: String, newAvgPrice: Double, newInvested: Double) -> Unit = { _, _, _ -> },
@@ -44,18 +45,26 @@ fun RealPortfolioView(
     onSelectPair: (TradingPair) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     var selectedRealTab by remember { mutableStateOf(RealPortfolioTab.ASSETS) }
 
-    val realIdr = realBalance["idr"] ?: 0.0
-    val freeIdr = realFreeBalance["idr"] ?: realIdr
-    val lockedIdr = realLockedBalance["idr"] ?: 0.0
+    val savedBalances = remember { agu.analys.util.AppPreferences(context).getSavedRealBalance() }
+
+    val realIdr = realBalance["idr"] ?: realBalance["IDR"] ?: savedBalances["idr"] ?: savedBalances["IDR"] ?: 0.0
+    val freeIdr = realFreeBalance["idr"] ?: realFreeBalance["IDR"] ?: realIdr
+    val lockedIdr = realLockedBalance["idr"] ?: realLockedBalance["IDR"] ?: 0.0
 
     // Sub-saldo USDT riil: dipakai untuk order di pair berkuotasi USDT.
-    // Kunci saldo mengikuti respons Indodax ("usdt"), dengan toleransi ejaan lain.
+    // Kunci saldo mengikuti respons Tokocrypto/Indodax ("usdt"), dengan toleransi ejaan lain.
     val realUsdt = realBalance.entries.firstOrNull { (k, _) ->
         val key = k.lowercase()
         key == "usdt" || key == "usd" || key == "usdc" || key == "busd"
-    }?.value ?: 0.0
+    }?.value
+        ?: savedBalances.entries.firstOrNull { (k, _) ->
+            val key = k.lowercase()
+            key == "usdt" || key == "usd" || key == "usdc" || key == "busd"
+        }?.value ?: 0.0
+
     val freeUsdt = realFreeBalance.entries.firstOrNull { (k, _) ->
         val key = k.lowercase()
         key == "usdt" || key == "usd" || key == "usdc" || key == "busd"
@@ -136,7 +145,8 @@ fun RealPortfolioView(
                     realUsdt = realUsdt,
                     freeUsdt = freeUsdt,
                     lockedUsdt = lockedUsdt,
-                    usdtIdrRate = usdtIdrRate
+                    usdtIdrRate = usdtIdrRate,
+                    isTokocrypto = isTokocrypto
                 )
             }
 

@@ -37,6 +37,7 @@ fun RealPortfolioSummaryCard(
     lockedUsdt: Double = 0.0,
     /** Kurs USDT→IDR live; `0.0` = belum tersedia (ekuivalen Rp disembunyikan). */
     usdtIdrRate: Double = 0.0,
+    isTokocrypto: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -102,7 +103,7 @@ fun RealPortfolioSummaryCard(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("SALDO CASH IDR", color = TvTextSecondary, fontSize = 9.5.sp, fontWeight = FontWeight.Bold)
+                    Text(if (isTokocrypto) "SALDO BIDR / IDR" else "SALDO CASH IDR", color = TvTextSecondary, fontSize = 9.5.sp, fontWeight = FontWeight.Bold)
                     Text(PriceFormatter.formatPrice(realIdr), color = TvGreen, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(4.dp))
                     Row {
@@ -120,7 +121,7 @@ fun RealPortfolioSummaryCard(
             }
 
             // ── Sub-saldo USDT (prefix `$`) — dipisah total dari Rupiah ──
-            if (realUsdt > 0.00000001 || lockedUsdt > 0.0) {
+            if (isTokocrypto || realUsdt > 0.00000001 || lockedUsdt > 0.0) {
                 Spacer(Modifier.height(10.dp))
                 Row(
                     modifier = Modifier

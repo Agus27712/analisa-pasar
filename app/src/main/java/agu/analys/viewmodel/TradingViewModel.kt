@@ -420,6 +420,9 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     /** Saldo real pada mata uang kuotasi pair tertentu (USDT -> saldo USDT, IDR -> saldo IDR). */
     fun realBalanceForQuote(quoteAsset: String): Double = orderViewModel.realBalanceForQuote(quoteAsset)
 
+    /** Saldo real bebas (free) pada mata uang kuotasi pair tertentu. */
+    fun realFreeBalanceForQuote(quoteAsset: String): Double = orderViewModel.realFreeBalanceForQuote(quoteAsset)
+
     fun getH1Candles(symbol: String): List<CandleBar> = marketViewModel.getH1Candles(symbol)
 
     fun ensureH1Candles(symbol: String) = marketViewModel.ensureH1Candles(symbol)

@@ -68,17 +68,16 @@ fun PortfolioScreen(
     // Kurs USDT/IDR real-time dari ExchangeRateManager (satu-satunya sumber kurs, tanpa hardcode).
     val usdtIdrRate by viewModel.usdtIdrRateState.collectAsStateWithLifecycle()
 
-    // Refresh saldo HANYA saat PIN baru unlock + belum ada cache saldo.
-    // Jangan spam API tiap buka tab Real / recompose.
-    LaunchedEffect(isPinUnlocked) {
-        if (isPinUnlocked && viewModel.hasRealCredentialsConfigured() && realBalance.isEmpty()) {
-            viewModel.fetchRealBalance()
-        }
-    }
-
     var showRealPortfolioMode by remember(isRealBuyMode) { mutableStateOf(isRealBuyMode) }
     var showPinDialog by remember { mutableStateOf(false) }
     var pinDialogError by remember { mutableStateOf<String?>(null) }
+
+    // Refresh saldo saat PIN unlock atau saat tab Real dibuka
+    LaunchedEffect(isPinUnlocked, showRealPortfolioMode) {
+        if (isPinUnlocked && showRealPortfolioMode && viewModel.hasRealCredentialsConfigured()) {
+            viewModel.fetchRealBalance(force = true)
+        }
+    }
 
     var selectedTab by remember { mutableStateOf(PortfolioTab.HOLDINGS) }
     var showTopUpModal by remember { mutableStateOf(false) }
@@ -183,7 +182,7 @@ fun PortfolioScreen(
                         fontWeight = FontWeight.Black
                     )
                     Text(
-                        text = if (showRealPortfolioMode) "Aset Riil Indodax Terhubung" else "Simulasi Akun & Manajemen Aset",
+                        text = if (showRealPortfolioMode) "Aset Riil ${viewModel.prefs.marketDataSource.label} Terhubung" else "Simulasi Akun & Manajemen Aset",
                         color = TvTextSecondary,
                         fontSize = 11.sp
                     )
@@ -305,6 +304,7 @@ fun PortfolioScreen(
                 dashboardTicks = dashboardTicks,
                 currentTick = currentTick,
                 realTradeStatus = realTradeStatus,
+                isTokocrypto = viewModel.prefs.marketDataSource == agu.analys.config.MarketDataSource.TOKOCRYPTO,
                 onUnlockPin = {
                     if (!viewModel.hasSecurityPin()) {
                         onOpenSettings()
@@ -313,7 +313,7 @@ fun PortfolioScreen(
                         showPinDialog = true
                     }
                 },
-                onRefreshRealBalance = { viewModel.fetchRealBalance() },
+                onRefreshRealBalance = { viewModel.fetchRealBalance(force = true) },
                 onEditAvgBuyPrice = { coin, newAvg, newInv ->
                     viewModel.updateRealAvgBuyPrice(coin, newAvg, newInv)
                 },

@@ -24,7 +24,7 @@ fun TradingViewModel.verifyPin(pin: String): Boolean = orderViewModel.verifyPin(
 fun TradingViewModel.lockPin() = orderViewModel.lockPin()
 fun TradingViewModel.setRealBuyMode(enabled: Boolean, pin: String? = null): Boolean =
     orderViewModel.setRealBuyMode(enabled, pin)
-fun TradingViewModel.fetchRealBalance() = orderViewModel.fetchRealBalance()
+fun TradingViewModel.fetchRealBalance(force: Boolean = false) = orderViewModel.fetchRealBalance(force)
 fun TradingViewModel.refreshRealBalance() {
     viewModelScope.launch {
         val allTicks = IndodaxMarketService.fetchAllMarketTicks()

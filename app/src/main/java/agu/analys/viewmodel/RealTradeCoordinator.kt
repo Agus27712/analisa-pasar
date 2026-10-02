@@ -10,6 +10,7 @@ import agu.analys.service.TokocryptoTradeApi
 import agu.analys.util.AppPreferences
 import agu.analys.util.PriceFormatter
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -73,6 +74,16 @@ class RealTradeCoordinator(
     private var lastFetchTimeMs = 0L
     private var rateLimitedUntilMs = 0L
 
+    init {
+        scope.launch(Dispatchers.IO) {
+            val isToko = prefs.marketDataSource == MarketDataSource.TOKOCRYPTO
+            val hasCreds = if (isToko) prefs.hasTokocryptoCredentials() else prefs.hasIndodaxCredentials()
+            if (hasCreds) {
+                fetchRealBalance(force = true)
+            }
+        }
+    }
+
     /**
      * Saldo real sesuai mata uang kuotasi pair yang sedang diperdagangkan.
      * - Pair USDT (BTCUSDT, ETHUSDT, ...) -> saldo USDT di exchange.
@@ -98,16 +109,17 @@ class RealTradeCoordinator(
     }
 
     private fun balanceOfQuote(map: Map<String, Double>, quoteAsset: String): Double {
-        if (map.isEmpty()) return 0.0
+        val effectiveMap = if (map.isNotEmpty()) map else prefs.getSavedRealBalance(prefs.marketDataSource.name)
+        if (effectiveMap.isEmpty()) return 0.0
         val q = quoteAsset.trim().uppercase()
         val isUsdt = q == "USDT" || q == "USD" || q == "USDC" || q == "BUSD"
-        val keys = if (isUsdt) listOf("usdt", "usd", "usdc", "busd") else listOf("idr", "idrt", "bidr")
+        val keys = if (isUsdt) listOf("usdt", "USDT", "usd", "USD", "usdc", "USDC", "busd", "BUSD") else listOf("idr", "IDR", "idrt", "IDRT", "bidr", "BIDR")
         for (k in keys) {
-            val v = map[k]
+            val v = effectiveMap[k]
             if (v != null && v > 0.0) return v
         }
         // Fallback: cari tidak case-sensitive
-        for ((k, v) in map) {
+        for ((k, v) in effectiveMap) {
             if (k.equals(quoteAsset, ignoreCase = true) && v > 0.0) return v
         }
         return 0.0
@@ -186,7 +198,7 @@ class RealTradeCoordinator(
         return ordered.take(MAX_HISTORY_ASSETS).map { it to (balance[it] ?: 0.0) }
     }
 
-    fun fetchRealBalance() {
+    fun fetchRealBalance(force: Boolean = false) {
         val isToko = prefs.marketDataSource == MarketDataSource.TOKOCRYPTO
         val apiKey = if (isToko) prefs.tokocryptoApiKey else prefs.indodaxApiKey
         val secretKey = if (isToko) prefs.tokocryptoSecretKey else prefs.indodaxSecretKey
@@ -203,7 +215,7 @@ class RealTradeCoordinator(
             _realTradeStatus.value = "Rate-limit aktif. Tunggu ~${waitSec}s lagi."
             return
         }
-        if (now - lastFetchTimeMs < REFRESH_COOLDOWN_MS && _realIndodaxBalance.value.isNotEmpty()) {
+        if (!force && now - lastFetchTimeMs < REFRESH_COOLDOWN_MS && _realIndodaxBalance.value.isNotEmpty()) {
             _realTradeStatus.value = "Cache aktif (cooldown ${REFRESH_COOLDOWN_MS / 1000}s)."
             return
         }
@@ -225,6 +237,7 @@ class RealTradeCoordinator(
                 _realFreeBalance.value = balances.free
                 _realLockedBalance.value = balances.locked
                 prefs.saveRealBalance(balances.total, prefs.marketDataSource.name)
+                onBalanceAndAvgUpdated?.invoke(balances.total, _realAvgBuyPrices.value)
                 if (!isToko) {
                     delay(INTER_REQUEST_DELAY_MS)
                     if (fetchRealOpenOrdersSafe(apiKey, secretKey, balances)) {

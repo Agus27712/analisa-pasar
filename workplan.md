@@ -163,3 +163,20 @@ Mengintegrasikan arsitektur resmi Tokocrypto sesuai dokumentasi dan mengisolasi 
 - [x] **Verifikasi Kompilasi & Unit Tests**:
   - `compile_applet` berhasil (Build succeeded).
   - `gradle :app:testDebugUnitTest` berhasil (BUILD SUCCESSFUL).
+
+### Tahap 15: Perbaikan & Pembacaan Saldo Riil USDT Tokocrypto & Indodax Multi-Casing & Targeted Fallback
+- [x] **Sinkronisasi Waktu Server Tokocrypto (`syncServerTime`)**:
+  - Sinkronisasi selisih waktu (`serverTimeOffsetMs`) via `GET /open/v1/common/time` untuk mencegah error `-1021: Timestamp for this request is outside of recvWindow`.
+- [x] **Ekstraksi Aset Fleksibel & Multiformat (`TokocryptoTradeApi.kt`)**:
+  - `extractAssets` mendukung `accountAssets`, `balances`, `assets`, `userAssets`, root array, serta Map object aset dinamis.
+- [x] **Dual-Casing Key Mapping (`parseBalances` & `AppPreferences.kt`)**:
+  - Menyimpan aset ke `freeMap`, `holdMap`, `totalMap`, dan cache disk dengan key lowercase (`usdt`) dan uppercase (`USDT`) sekaligus.
+- [x] **Targeted Fallback Saldo USDT (`/open/v1/account/spot/asset?asset=USDT`)**:
+  - Query langsung saldo aset USDT sebagai proteksi ganda jika endpoint umum spot belum merespons atau bernilai 0.
+- [x] **Force Refresh & Auto-Fetch Saldo Real (`RealTradeCoordinator.kt`)**:
+  - Opsi `force: Boolean` pada `fetchRealBalance()` untuk melewati cooldown 30 detik saat refresh manual, dan auto-fetch saat inisialisasi.
+- [x] **Penyelarasan UI Portofolio & Detail Chart**:
+  - `PortfolioScreen.kt` & `RealPortfolioView.kt`: Menampilkan bursa aktif dinamis, serta kartu `SALDO USDT ($)` selalu tampil di mode Tokocrypto.
+  - `DetailChartScreen.kt`: Resolusi bertingkat `availableQuote` (free balance -> total balance -> in-memory map -> disk cache) dan refresh saldo otomatis saat membuka layar koin.
+- [x] **Verifikasi Kompilasi**:
+  - `compile_applet` berhasil (BUILD SUCCESSFUL).

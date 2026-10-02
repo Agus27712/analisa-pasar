@@ -40,6 +40,42 @@ object TokocryptoTradeApi {
     )
     private val client get() = NetworkClientProvider.tradeClient
 
+    private var serverTimeOffsetMs = 0L
+    private var lastTimeSyncMs = 0L
+
+    /**
+     * Sinkronisasi selisih waktu antara jam perangkat lokal dengan server Tokocrypto.
+     * Mencegah penolakan request dengan error "-1021: Timestamp for this request is outside of recvWindow".
+     */
+    suspend fun syncServerTime() = withContext(Dispatchers.IO) {
+        val now = System.currentTimeMillis()
+        if (now - lastTimeSyncMs < 300_000L && lastTimeSyncMs > 0L) return@withContext
+        try {
+            val req = Request.Builder()
+                .url("$TOKOCRYPTO_BASE_URL/open/v1/common/time")
+                .get()
+                .header("Accept", "application/json")
+                .build()
+            client.newCall(req).execute().use { resp ->
+                if (resp.isSuccessful) {
+                    val root = JSONObject(resp.body?.string().orEmpty())
+                    val serverTime = root.optLong("timestamp", 0L)
+                    if (serverTime > 0L) {
+                        serverTimeOffsetMs = serverTime - System.currentTimeMillis()
+                        lastTimeSyncMs = System.currentTimeMillis()
+                        Timber.d("Tokocrypto server time offset synchronized: ${serverTimeOffsetMs}ms")
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Timber.w("Gagal sinkronisasi waktu server Tokocrypto: ${e.message}")
+        }
+    }
+
+    private fun getAdjustedTimestamp(): String {
+        return (System.currentTimeMillis() + serverTimeOffsetMs).toString()
+    }
+
     private fun hmacSha256(secret: String, payload: String): String {
         val mac = Mac.getInstance("HmacSHA256")
         mac.init(SecretKeySpec(secret.trim().toByteArray(Charsets.UTF_8), "HmacSHA256"))
@@ -77,32 +113,74 @@ object TokocryptoTradeApi {
         }
     }
 
-    /** data bisa berupa array (spot/asset) atau object berisi accountAssets (account/spot). */
+    /**
+     * Ekstraksi aset dari berbagai variasi respons JSON Tokocrypto:
+     * - root.accountAssets
+     * - root.balances
+     * - data is JSONArray
+     * - data.accountAssets
+     * - data.balances
+     * - data.assets / data.userAssets
+     * - data sebagai Map aset
+     */
     private fun extractAssets(root: JSONObject): JSONArray? {
+        root.optJSONArray("accountAssets")?.let { return it }
+        root.optJSONArray("balances")?.let { return it }
+        root.optJSONArray("assets")?.let { return it }
+
         return when (val data = root.opt("data")) {
             is JSONArray -> data
-            is JSONObject -> data.optJSONArray("accountAssets")
+            is JSONObject -> {
+                data.optJSONArray("accountAssets")
+                    ?: data.optJSONArray("balances")
+                    ?: data.optJSONArray("assets")
+                    ?: data.optJSONArray("userAssets")
+                    ?: run {
+                        // Jika data berupa Map objek aset (contoh: {"USDT": {"free": "10", "locked": "0"}})
+                        val synthesized = JSONArray()
+                        val keys = data.keys()
+                        while (keys.hasNext()) {
+                            val key = keys.next()
+                            val assetObj = data.optJSONObject(key)
+                            if (assetObj != null) {
+                                val item = JSONObject()
+                                item.put("asset", key)
+                                item.put("free", assetObj.opt("free") ?: assetObj.opt("available") ?: "0")
+                                item.put("locked", assetObj.opt("locked") ?: assetObj.opt("freeze") ?: "0")
+                                synthesized.put(item)
+                            }
+                        }
+                        if (synthesized.length() > 0) synthesized else null
+                    }
+            }
             else -> null
         }
     }
 
     /**
-     * Mengambil saldo riil spot Tokocrypto.
-     * Mencoba /open/v1/account/spot/asset lalu /open/v1/account/spot (keduanya Tokocrypto).
-     * Jika gagal, pesan error asli dari Tokocrypto ikut dikembalikan.
+     * Mengambil saldo riil spot Tokocrypto dengan pemindaian menyeluruh:
+     * 1. GET /open/v1/account/spot (mengambil seluruh saldo akun spot).
+     * 2. Targeted query ke /open/v1/account/spot/asset?asset=USDT jika saldo USDT perlu verifikasi ekstra.
+     * 3. Dukungan multi-casing (usdt & USDT) agar UI dan ViewModel selalu membaca nilai akurat.
      */
     suspend fun getAccount(apiKey: String, secretKey: String): Pair<IndodaxBalances?, String> = withContext(Dispatchers.IO) {
         if (apiKey.isBlank() || secretKey.isBlank()) {
             return@withContext null to "API Key atau Secret Key Tokocrypto belum diisi."
         }
 
-        val timestamp = System.currentTimeMillis().toString()
+        syncServerTime()
+        val timestamp = getAdjustedTimestamp()
         val recvWindow = "10000"
-        val queryParam = "recvWindow=$recvWindow&timestamp=$timestamp"
+        val params = listOf(
+            "recvWindow=$recvWindow",
+            "timestamp=$timestamp"
+        ).sorted()
+        val queryParam = params.joinToString("&")
         val signature = hmacSha256(secretKey, queryParam)
 
         var apiError: String? = null
         var networkError: String? = null
+        var parsedBalances: IndodaxBalances? = null
 
         for (path in ACCOUNT_ENDPOINTS) {
             try {
@@ -111,6 +189,7 @@ object TokocryptoTradeApi {
                     .get()
                     .header("X-MBX-APIKEY", apiKey.trim())
                     .header("Accept", "application/json")
+                    .header("User-Agent", "AnalysApp/1.0 (Android; Tokocrypto Trade)")
                     .build()
 
                 client.newCall(req).execute().use { resp ->
@@ -118,16 +197,90 @@ object TokocryptoTradeApi {
                     val root = runCatching { JSONObject(body) }.getOrNull()
                     val assets = root?.let { extractAssets(it) }
                     if (resp.isSuccessful && root != null && root.optInt("code", 0) == 0 && assets != null) {
-                        return@withContext parseBalances(assets) to "Saldo Tokocrypto berhasil diperbarui."
+                        parsedBalances = parseBalances(assets)
+                        Timber.i("Tokocrypto $path berhasil: ${parsedBalances?.total?.size} aset terbaca.")
+                    } else {
+                        if (apiError == null) apiError = describeError(resp.code, root, body)
+                        Timber.w("Tokocrypto $path gagal: $apiError | body: ${body.take(200)}")
                     }
-                    // Simpan error endpoint pertama (paling relevan), jangan ditimpa endpoint berikutnya
-                    if (apiError == null) apiError = describeError(resp.code, root)
-                    Timber.w("Tokocrypto $path gagal: $apiError")
                 }
             } catch (e: Exception) {
                 Timber.w(e, "Tokocrypto $path error koneksi: ${e.message}")
                 networkError = e.message ?: e.javaClass.simpleName
             }
+        }
+
+        // Targeted query khusus untuk aset USDT bila belum terbaca atau bernilai 0 dari endpoint umum
+        val hasUsdt = parsedBalances?.total?.get("usdt") != null && (parsedBalances?.total?.get("usdt") ?: 0.0) > 0.0
+        if (parsedBalances == null || !hasUsdt) {
+            try {
+                val assetTimestamp = getAdjustedTimestamp()
+                val assetParams = listOf(
+                    "asset=USDT",
+                    "recvWindow=$recvWindow",
+                    "timestamp=$assetTimestamp"
+                ).sorted()
+                val assetQuery = assetParams.joinToString("&")
+                val assetSig = hmacSha256(secretKey, assetQuery)
+                val assetReq = Request.Builder()
+                    .url("$TOKOCRYPTO_BASE_URL/open/v1/account/spot/asset?$assetQuery&signature=$assetSig")
+                    .get()
+                    .header("X-MBX-APIKEY", apiKey.trim())
+                    .header("Accept", "application/json")
+                    .header("User-Agent", "AnalysApp/1.0 (Android; Tokocrypto Trade)")
+                    .build()
+
+                client.newCall(assetReq).execute().use { assetResp ->
+                    val assetBody = assetResp.body?.string().orEmpty()
+                    val assetRoot = runCatching { JSONObject(assetBody) }.getOrNull()
+                    if (assetResp.isSuccessful && assetRoot != null && assetRoot.optInt("code", 0) == 0) {
+                        val assetData = assetRoot.opt("data")
+                        val usdtItem = when (assetData) {
+                            is JSONObject -> assetData
+                            is JSONArray -> assetData.optJSONObject(0)
+                            else -> null
+                        }
+                        if (usdtItem != null) {
+                            val free = usdtItem.optString("free", "").toDoubleOrNull()
+                                ?: usdtItem.optDouble("free", Double.NaN).takeIf { !it.isNaN() }
+                                ?: usdtItem.optString("available", "").toDoubleOrNull()
+                                ?: usdtItem.optDouble("available", 0.0)
+
+                            val locked = usdtItem.optString("locked", "").toDoubleOrNull()
+                                ?: usdtItem.optDouble("locked", Double.NaN).takeIf { !it.isNaN() }
+                                ?: usdtItem.optString("freeze", "").toDoubleOrNull()
+                                ?: usdtItem.optString("frozen", "").toDoubleOrNull()
+                                ?: usdtItem.optDouble("locked", 0.0)
+
+                            val total = free + locked
+
+                            val currentFree = parsedBalances?.free?.toMutableMap() ?: mutableMapOf()
+                            val currentLocked = parsedBalances?.locked?.toMutableMap() ?: mutableMapOf()
+                            val currentTotal = parsedBalances?.total?.toMutableMap() ?: mutableMapOf()
+
+                            currentFree["usdt"] = free
+                            currentFree["USDT"] = free
+                            currentLocked["usdt"] = locked
+                            currentLocked["USDT"] = locked
+                            currentTotal["usdt"] = total
+                            currentTotal["USDT"] = total
+
+                            parsedBalances = IndodaxBalances(
+                                total = currentTotal,
+                                free = currentFree,
+                                locked = currentLocked
+                            )
+                            Timber.i("Tokocrypto spot/asset targeted USDT berhasil: free=$free, locked=$locked, total=$total")
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Timber.w("Tokocrypto targeted spot/asset USDT check error: ${e.message}")
+            }
+        }
+
+        if (parsedBalances != null) {
+            return@withContext parsedBalances to "Saldo Tokocrypto berhasil diperbarui."
         }
 
         val failure = when {
@@ -145,22 +298,44 @@ object TokocryptoTradeApi {
 
         for (i in 0 until array.length()) {
             val item = array.optJSONObject(i) ?: continue
-            val asset = item.optString("asset", "").lowercase()
-            if (asset.isBlank()) continue
+            val assetRaw = (item.optString("asset").takeIf { it.isNotBlank() }
+                ?: item.optString("assetName").takeIf { it.isNotBlank() }
+                ?: item.optString("coin").takeIf { it.isNotBlank() }
+                ?: item.optString("currency", "")).trim()
+            if (assetRaw.isBlank()) continue
 
-            val free = item.optString("free", "0").toDoubleOrNull() ?: 0.0
-            val locked = item.optString("locked", "0").toDoubleOrNull() ?: 0.0
+            val assetLower = assetRaw.lowercase()
+            val assetUpper = assetRaw.uppercase()
+
+            val free = item.optString("free", "").toDoubleOrNull()
+                ?: item.optDouble("free", Double.NaN).takeIf { !it.isNaN() }
+                ?: item.optString("available", "").toDoubleOrNull()
+                ?: item.optDouble("available", 0.0)
+
+            val locked = item.optString("locked", "").toDoubleOrNull()
+                ?: item.optDouble("locked", Double.NaN).takeIf { !it.isNaN() }
+                ?: item.optString("freeze", "").toDoubleOrNull()
+                ?: item.optString("frozen", "").toDoubleOrNull()
+                ?: item.optDouble("locked", 0.0)
+
             val total = free + locked
 
-            freeMap[asset] = free
-            holdMap[asset] = locked
-            totalMap[asset] = total
+            // Simpan baik huruf kecil maupun huruf besar untuk kompatibilitas mutlak
+            freeMap[assetLower] = free
+            freeMap[assetUpper] = free
+            holdMap[assetLower] = locked
+            holdMap[assetUpper] = locked
+            totalMap[assetLower] = total
+            totalMap[assetUpper] = total
 
             // Alias bidr ke idr untuk keseragaman UI
-            if (asset == "bidr") {
+            if (assetLower == "bidr") {
                 freeMap["idr"] = free
+                freeMap["IDR"] = free
                 holdMap["idr"] = locked
+                holdMap["IDR"] = locked
                 totalMap["idr"] = total
+                totalMap["IDR"] = total
             }
         }
 
@@ -268,7 +443,8 @@ if (!valResult.isValid) {
             ?.let { "${it.baseAsset}_${it.quoteAsset}" }
             ?: TokocryptoMarketService.toTokocryptoPair(request.symbol)
 
-        val timestamp = System.currentTimeMillis().toString()
+        syncServerTime()
+        val timestamp = getAdjustedTimestamp()
         val formParams = mutableListOf<Pair<String, String>>()
         val finalQuantity = BigDecimal.valueOf(valResult.adjustedQty)
         .stripTrailingZeros()

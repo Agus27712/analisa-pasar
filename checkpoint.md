@@ -1,32 +1,32 @@
-# Checkpoint: Audit & Perbaikan Jalur Perdagangan Real Tokocrypto & Metadata Discovery (`TokocryptoSymbolRepository.kt` & `TokocryptoTradeApi.kt`)
+# Checkpoint: Perbaikan & Pembacaan Saldo Riil USDT Tokocrypto & Indodax (`TokocryptoTradeApi.kt`, `RealTradeCoordinator.kt`, `PortfolioScreen.kt`, `DetailChartScreen.kt`)
 
 - **Tanggal / Waktu:** 2026-10-02
 - **Status:** Selesai (Completed & Verified Build Clean)
 - **Komponen Terdampak:**
-  1. `TokocryptoSymbolRepository.kt`
-  2. `TokocryptoTradeApi.kt`
-  3. `RealTradeExecutor.kt`
+  1. `TokocryptoTradeApi.kt`
+  2. `RealTradeCoordinator.kt`
+  3. `OrderViewModel.kt` & `TradingViewModel.kt` & `TradingViewModelOrders.kt`
+  4. `PortfolioScreen.kt` & `RealPortfolioView.kt` & `RealPortfolioSummaryCard.kt`
+  5. `DetailChartScreen.kt`
+  6. `AppPreferences.kt`
 - **Akar Masalah & Resolusi:**
-  1. **Atasi Toast Error "Metadata trading Tokocrypto gagal dimuat"**:
-     - Sebelumnya, `ensureSymbolsLoaded(force = true)` hanya mencoba 1 endpoint tunggal (`/open/v1/common/symbols`). Jika endpoint tersebut lambat, terblokir Cloudflare, atau mengembalikan struktur non-zero code, `fetchFromTokocrypto()` gagal dan order langsung dibatalkan dengan toast error.
-     - **Fix**: Menambahkan *Fallback Chain Multi-Endpoint* resmi Tokocrypto pada `fetchFromTokocrypto()`:
-       1) `https://www.tokocrypto.com/open/v1/common/symbols` (Open API Tokocrypto)
-       2) `https://www.tokocrypto.site/api/v3/exchangeInfo` (Type 1 MBX Cloud Tokocrypto)
-       3) `https://cloudme-toko.2meta.app/api/v1/exchangeInfo` (Type 3 NextMe Tokocrypto)
-       *(Tanpa endpoint Binance sama sekali agar 100% kompatibel dan dapat diakses bebas tanpa terblokir di Indonesia)*
-  2. **Inisialisasi Standard Default Metadata Pair Populer**:
-     - Menambahkan fungsi `populateDefaultSymbols()` saat inisialisasi `TokocryptoSymbolRepository`.
-     - Seluruh pair utama IDR & USDT (BTC, ETH, SOL, DOGE, XRP, SUI, ADA, BNB, SHIB, NEAR, AVAX, PEPE, TRX, LINK, RENDER, FET, FLOKI, BONK) memiliki metadata trading bawaan dengan precision, stepSize, minQty, dan minNotional yang valid.
-     - Mengubah `ensureSymbolsLoaded()` agar tidak pernah membatalkan order jika `symbolsMap` sudah terisi dengan metadata bawaan/cache, melainkan memperbarui parameter live dari network di background.
-  3. **Penyesuaian HMAC SHA-256 Signature Query Ordering (`TokocryptoTradeApi.kt`)**:
-     - Mengurutkan `formParams` secara alfabetis berdasarkan kunci (`formParams.sortedBy { it.first }`) sebelum membentuk `queryString` dan menghitung HMAC SHA-256 signature pada `createOrder`. Hal ini mencegah penolakan signature invalid oleh server Tokocrypto.
-  4. **Pembersihan Parameter Order & timeInForce**:
-     - Menghilangkan pengiriman `clientId` kustom agar tidak memicu error `3703: Invalid client ID`. Tokocrypto akan menutupi ID secara internal dan mengembalikannya pada respons.
-     - Memastikan `timeInForce` dikonversi ke format numeric code Tokocrypto (1=GTC, 2=IOC, 3=FOK, 4=GTX).
-  5. **Debug Output Lengkap dari Server Tokocrypto saat Order Ditolak**:
-     - Menambahkan field `httpCode`, `serverCode`, `serverBody`, dan `requestDebug` pada model `TokocryptoOrderResult`.
-     - Logging otomatis ke `AppLogManager.trade("TokocryptoOrderRejected", ...)` yang mencatat secara mendetail: Simbol, Side, Type, Status HTTP, Kode Error Server, Pesan Error, Parameter Query Terkirim, dan Respons Raw JSON Server Tokocrypto.
-     - Logging pada `RealTradeExecutor.kt` (`RealOrderRejected`, `RealSellRejected`, `TokocryptoCancelRejected`, `TokocryptoQueryFailed`) sehingga pengguna dapat membaca log diagnosa lengkap langsung dari dialog diagnostik logcat di aplikasi.
-  6. **Verifikasi Kompilasi & Unit Tests**:
-     - `compile_applet` berhasil tanpa error.
-     - `gradle :app:testDebugUnitTest` berhasil (BUILD SUCCESSFUL, semua 32 actionable tasks sukses).
+  1. **Akar Masalah Saldo Riil USDT Tidak Terbaca**:
+     - *Parsing JSON Response Token/Assets*: `extractAssets()` sebelumnya hanya mencari `data.accountAssets`. Jika server Tokocrypto merespons struktur array langsung, `balances`, atau `assets`, aset tidak terdeteksi dan parsing saldo spot gagal.
+     - *Ketiadaan Sinkronisasi Waktu Server*: Selisih jam perangkat (device clock drift) memicu error `-1021: Timestamp for this request is outside of recvWindow`.
+     - *Case-Sensitivity Kunci Aset*: Kunci saldo hanya tersimpan dalam huruf kecil (`usdt`), sementara beberapa komponen ViewModel dan UI melakukan lookup huruf kapital (`USDT`).
+     - *Ketiadaan Fallback Targeted Aset*: Jika endpoint umum `/open/v1/account/spot` gagal atau mengembalikan daftar koin tanpa baris USDT, saldo USDT tidak diperbarui.
+     - *UI Summary Card Menyembunyikan Kartu USDT*: `RealPortfolioSummaryCard.kt` sebelumnya hanya menampilkan bagian USDT jika `realUsdt > 0.00000001 || lockedUsdt > 0.0`. Pada Tokocrypto (yang berbasis USDT), pengguna melihat seolah saldo USDT tidak terbaca sama sekali jika saldo awal masih belum termuat atau bernilai 0.
+     - *DetailChartScreen Tidak Memiliki Fallback Resolusi*: `availableQuote` untuk pair USDT hanya memeriksa `realBalance` StateFlow tanpa memeriksa `realFreeBalanceForQuote("USDT")`, `realBalanceForQuote("USDT")`, atau disk cache `prefs.getSavedRealBalance()`.
+  2. **Implementasi Solusi & Peningkatan**:
+     - **Sinkronisasi Jam Server Tokocrypto (`syncServerTime`)**: Mengambil waktu resmi dari `https://www.tokocrypto.com/open/v1/common/time` dan menghitung offset milidetik agar query `timestamp` selalu selaras dengan server exchange (menghindari error `-1021`).
+     - **Ekstraksi Aset Multiformat (`extractAssets`)**: Mendukung `accountAssets`, `balances`, `assets`, `userAssets`, array root, dan Map object aset sintetis.
+     - **Penyimpanan Dual-Casing (`parseBalances`)**: Menyimpan semua aset ke `freeMap`, `holdMap`, dan `totalMap` baik dalam huruf kecil (`usdt`, `idr`) maupun huruf besar (`USDT`, `IDR`).
+     - **Targeted Fallback USDT (`/open/v1/account/spot/asset?asset=USDT`)**: Jika endpoint umum tidak memuat USDT, sistem otomatis mengeksekusi request targeted ke `/open/v1/account/spot/asset?asset=USDT` dengan query param terurut dan signature HMAC-SHA256 yang valid.
+     - **Penyimpanan Cache Disk Dual-Casing (`AppPreferences.kt`)**: Memastikan `getSavedRealBalance()` mengembalikan key lowercase dan uppercase.
+     - **Dukungan Force Refresh & Auto-Fetch (`RealTradeCoordinator.kt`)**: Menambahkan parameter `force: Boolean = false` agar pengguna bisa melakukan refresh instan tanpa terhalang cooldown, dan trigger auto-fetch saat inisialisasi jika API key tersedia.
+     - **Penyelarasan Tampilan Portofolio & Detail (`PortfolioScreen.kt` & `DetailChartScreen.kt`)**:
+       - `PortfolioScreen.kt` menyegarkan saldo saat PIN di-unlock atau mode Real dibuka, serta menampilkan label bursa yang dinamis ("Aset Riil Tokocrypto Terhubung").
+       - `RealPortfolioSummaryCard.kt` selalu menampilkan kartu "SALDO USDT ($)" secara transparan dan jelas jika bursa aktif adalah Tokocrypto.
+       - `DetailChartScreen.kt` menyegarkan saldo real di background saat membuka koin di Mode Real dan melakukan resolusi bertingkat (free balance -> total balance -> in-memory map -> disk cache) untuk mencegah nominal 0 palsu.
+  3. **Verifikasi Kompilasi**:
+     - `compile_applet` berhasil (BUILD SUCCESSFUL).

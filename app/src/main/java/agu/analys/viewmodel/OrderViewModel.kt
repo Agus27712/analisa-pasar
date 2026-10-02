@@ -166,13 +166,16 @@ class OrderViewModel(
 
     fun setRealBuyMode(enabled: Boolean, pin: String? = null): Boolean = realCoordinator.setRealBuyMode(enabled, pin)
 
-    fun fetchRealBalance() = realCoordinator.fetchRealBalance()
+    fun fetchRealBalance(force: Boolean = false) = realCoordinator.fetchRealBalance(force)
 
     /**
      * Saldo real untuk mata uang kuotasi tertentu.
      * Pair USDT -> saldo USDT, pair IDR -> saldo IDR (sesuai ketersediaan di exchange).
      */
     fun realBalanceForQuote(quoteAsset: String): Double = realCoordinator.realBalanceForQuote(quoteAsset)
+
+    /** Saldo real bebas (free) untuk mata uang kuotasi tertentu. */
+    fun realFreeBalanceForQuote(quoteAsset: String): Double = realCoordinator.realFreeBalanceForQuote(quoteAsset)
 
     /** Saldo real Rupiah (IDR). */
     fun realIdrBalance(): Double = realCoordinator.realBalanceForQuote("IDR")
