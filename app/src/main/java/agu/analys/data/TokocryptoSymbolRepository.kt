@@ -16,6 +16,8 @@ import timber.log.Timber
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
+import java.math.BigDecimal
+import java.math.RoundingMode
 
 /**
  * Repository Single Source of Truth (SSOT) untuk Dynamic Symbol Discovery Tokocrypto.
@@ -274,86 +276,325 @@ object TokocryptoSymbolRepository {
         }
     }
 
-    /**
-     * Memvalidasi order spot Tokocrypto berdasarkan filter trading resmi
-     * (LOT_SIZE, PRICE_FILTER, MIN_NOTIONAL, dan PRICE_RANGE execution rules).
-     */
-    fun validateOrder(
-        symbol: String,
-        price: Double,
-        quantity: Double,
-        isMarket: Boolean = false,
-        isBuy: Boolean = true,
-        referenceMarketPrice: Double = 0.0
-    ): TokocryptoValidationResult {
-        val info = getSymbolInfo(symbol)
-        if (info == null) {
+/**
+ * Memvalidasi order spot Tokocrypto berdasarkan filter trading resmi:
+ * - LOT_SIZE
+ * - MARKET_LOT_SIZE
+ * - PRICE_FILTER
+ * - MIN_NOTIONAL / NOTIONAL
+ * - PRICE_RANGE execution rules
+ *
+ * PENTING:
+ * Untuk real trading, metadata symbol wajib tersedia.
+ * Tidak boleh fail-open menggunakan quantity mentah.
+ */
+fun validateOrder(
+    symbol: String,
+    price: Double,
+    quantity: Double,
+    isMarket: Boolean = false,
+    isBuy: Boolean = true,
+    referenceMarketPrice: Double = 0.0
+): TokocryptoValidationResult {
+
+    val info = getSymbolInfo(symbol)
+
+    // Real order tidak boleh lolos tanpa metadata exchange.
+    if (info == null) {
+        return TokocryptoValidationResult(
+            isValid = false,
+            adjustedPrice = price,
+            adjustedQty = quantity,
+            reason = "Metadata symbol Tokocrypto belum tersedia untuk $symbol."
+        )
+    }
+
+    if (!info.spotTradingEnable) {
+        return TokocryptoValidationResult(
+            isValid = false,
+            adjustedPrice = price,
+            adjustedQty = quantity,
+            reason = "Spot trading untuk $symbol sedang tidak tersedia di Tokocrypto."
+        )
+    }
+
+    if (!price.isFinite() || price <= 0.0) {
+        return TokocryptoValidationResult(
+            isValid = false,
+            adjustedPrice = price,
+            adjustedQty = quantity,
+            reason = "Harga order tidak valid."
+        )
+    }
+
+    if (!quantity.isFinite() || quantity <= 0.0) {
+        return TokocryptoValidationResult(
+            isValid = false,
+            adjustedPrice = price,
+            adjustedQty = quantity,
+            reason = "Quantity order tidak valid."
+        )
+    }
+
+    // =========================================================
+    // 1. PRICE FILTER
+    // =========================================================
+    var adjPrice = price
+
+    if (!isMarket) {
+        val pf = info.priceFilter
+
+        if (pf == null) {
             return TokocryptoValidationResult(
-                isValid = price > 0 && quantity > 0,
+                isValid = false,
                 adjustedPrice = price,
                 adjustedQty = quantity,
-                reason = if (price > 0 && quantity > 0) "Symbol metadata belum termuat, lolos validasi dasar." else "Harga dan jumlah harus positif."
+                reason = "PRICE_FILTER $symbol belum tersedia."
             )
         }
 
-        // 1. Validasi & Penyesuaian Harga (PRICE_FILTER)
-        var adjPrice = price
-        if (!isMarket) {
-            val pf = info.priceFilter
-            if (pf != null) {
-                if (adjPrice < pf.minPrice) {
-                    return TokocryptoValidationResult(false, adjPrice, quantity, "Harga di bawah batas minimum exchange: ${pf.minPrice}")
-                }
-                if (adjPrice > pf.maxPrice) {
-                    return TokocryptoValidationResult(false, adjPrice, quantity, "Harga di atas batas maksimum exchange: ${pf.maxPrice}")
-                }
-                adjPrice = info.formatPrice(adjPrice)
-            }
+        if (adjPrice < pf.minPrice) {
+            return TokocryptoValidationResult(
+                isValid = false,
+                adjustedPrice = adjPrice,
+                adjustedQty = quantity,
+                reason = "Harga di bawah minimum Tokocrypto: ${pf.minPrice}"
+            )
+        }
 
-            // Validasi Execution Rule (Price Range Multiplier)
-            val exec = info.executionRules
-            if (exec != null && referenceMarketPrice > 0.0) {
-                if (isBuy) {
-                    val maxBuy = referenceMarketPrice * exec.bidLimitMultUp
-                    val minBuy = referenceMarketPrice * exec.bidLimitMultDown
-                    if (adjPrice > maxBuy) {
-                        return TokocryptoValidationResult(false, adjPrice, quantity, "Harga BELI melebihi batas guard exchange (Maks: ${maxBuy.toLong()})")
-                    }
-                } else {
-                    val maxSell = referenceMarketPrice * exec.askLimitMultUp
-                    val minSell = referenceMarketPrice * exec.askLimitMultDown
-                    if (adjPrice < minSell) {
-                        return TokocryptoValidationResult(false, adjPrice, quantity, "Harga JUAL di bawah batas guard exchange (Min: ${minSell.toLong()})")
-                    }
+        if (adjPrice > pf.maxPrice) {
+            return TokocryptoValidationResult(
+                isValid = false,
+                adjustedPrice = adjPrice,
+                adjustedQty = quantity,
+                reason = "Harga di atas maksimum Tokocrypto: ${pf.maxPrice}"
+            )
+        }
+
+        adjPrice = info.formatPrice(adjPrice)
+
+        // Pastikan harga hasil pembulatan masih berada di range.
+        if (adjPrice < pf.minPrice || adjPrice > pf.maxPrice) {
+            return TokocryptoValidationResult(
+                isValid = false,
+                adjustedPrice = adjPrice,
+                adjustedQty = quantity,
+                reason = "Harga setelah normalisasi PRICE_FILTER tidak valid."
+            )
+        }
+
+        // =====================================================
+        // PRICE RANGE / EXECUTION RULE
+        // =====================================================
+        val exec = info.executionRules
+
+        if (exec != null && referenceMarketPrice > 0.0) {
+            if (isBuy) {
+                val maxBuy =
+                    referenceMarketPrice * exec.bidLimitMultUp
+
+                val minBuy =
+                    referenceMarketPrice * exec.bidLimitMultDown
+
+                if (adjPrice > maxBuy) {
+                    return TokocryptoValidationResult(
+                        isValid = false,
+                        adjustedPrice = adjPrice,
+                        adjustedQty = quantity,
+                        reason =
+                            "Harga BELI melebihi guard exchange " +
+                            "(maksimum: $maxBuy)."
+                    )
+                }
+
+                if (adjPrice < minBuy) {
+                    return TokocryptoValidationResult(
+                        isValid = false,
+                        adjustedPrice = adjPrice,
+                        adjustedQty = quantity,
+                        reason =
+                            "Harga BELI di bawah guard exchange " +
+                            "(minimum: $minBuy)."
+                    )
+                }
+            } else {
+                val maxSell =
+                    referenceMarketPrice * exec.askLimitMultUp
+
+                val minSell =
+                    referenceMarketPrice * exec.askLimitMultDown
+
+                if (adjPrice > maxSell) {
+                    return TokocryptoValidationResult(
+                        isValid = false,
+                        adjustedPrice = adjPrice,
+                        adjustedQty = quantity,
+                        reason =
+                            "Harga JUAL melebihi guard exchange " +
+                            "(maksimum: $maxSell)."
+                    )
+                }
+
+                if (adjPrice < minSell) {
+                    return TokocryptoValidationResult(
+                        isValid = false,
+                        adjustedPrice = adjPrice,
+                        adjustedQty = quantity,
+                        reason =
+                            "Harga JUAL di bawah guard exchange " +
+                            "(minimum: $minSell)."
+                    )
                 }
             }
         }
+    }
 
-        // 2. Validasi & Penyesuaian Kuantitas (LOT_SIZE & MARKET_LOT_SIZE)
-        var adjQty = quantity
-        val lot = if (isMarket) (info.marketLotSizeFilter ?: info.lotSizeFilter) else info.lotSizeFilter
-        if (lot != null) {
-            if (adjQty < lot.minQty) {
-                return TokocryptoValidationResult(false, adjPrice, adjQty, "Kuantitas di bawah minimum order LOT_SIZE: ${lot.minQty}")
-            }
-            if (adjQty > lot.maxQty) {
-                return TokocryptoValidationResult(false, adjPrice, adjQty, "Kuantitas melebihi batas maksimum LOT_SIZE: ${lot.maxQty}")
-            }
-            adjQty = info.formatQuantity(adjQty)
-        }
+    // =========================================================
+    // 2. LOT SIZE / MARKET LOT SIZE
+    // =========================================================
+    val lot = if (isMarket) {
+        info.marketLotSizeFilter ?: info.lotSizeFilter
+    } else {
+        info.lotSizeFilter
+    }
 
-        // 3. Validasi Min Notional (Nilai Transaksi Minimum)
-        val notional = if (isMarket && referenceMarketPrice > 0) referenceMarketPrice * adjQty else adjPrice * adjQty
-        val minNotional = info.minNotionalFilter?.minNotional ?: 0.0
-        if (minNotional > 0.0 && notional < minNotional) {
-            return TokocryptoValidationResult(false, adjPrice, adjQty, "Nilai total order (${notional.toLong()}) di bawah Notional Minimum exchange: ${minNotional.toLong()}")
-        }
-
+    if (lot == null) {
         return TokocryptoValidationResult(
-            isValid = true,
+            isValid = false,
             adjustedPrice = adjPrice,
-            adjustedQty = adjQty,
-            reason = "Lolos validasi aturan exchange Tokocrypto."
+            adjustedQty = quantity,
+            reason =
+                "Filter quantity Tokocrypto belum tersedia " +
+                "untuk $symbol."
         )
     }
+
+    if (lot.stepSize <= 0.0) {
+        return TokocryptoValidationResult(
+            isValid = false,
+            adjustedPrice = adjPrice,
+            adjustedQty = quantity,
+            reason =
+                "stepSize quantity Tokocrypto tidak valid untuk $symbol."
+        )
+    }
+
+    if (quantity < lot.minQty) {
+        return TokocryptoValidationResult(
+            isValid = false,
+            adjustedPrice = adjPrice,
+            adjustedQty = quantity,
+            reason =
+                "Quantity $quantity di bawah minimum " +
+                "${lot.minQty}."
+        )
+    }
+
+    if (quantity > lot.maxQty) {
+        return TokocryptoValidationResult(
+            isValid = false,
+            adjustedPrice = adjPrice,
+            adjustedQty = quantity,
+            reason =
+                "Quantity $quantity melebihi maksimum " +
+                "${lot.maxQty}."
+        )
+    }
+
+    /*
+     * Normalisasi quantity memakai BigDecimal.
+     *
+     * Contoh:
+     * quantity = 1.2330456226880395
+     * stepSize = 0.0001
+     *
+     * hasil:
+     * 1.2330
+     */
+    val rawQty = BigDecimal.valueOf(quantity)
+    val step = BigDecimal.valueOf(lot.stepSize)
+
+    val steps = rawQty
+        .divide(step, 0, RoundingMode.FLOOR)
+
+    val normalizedQty = steps
+        .multiply(step)
+        .stripTrailingZeros()
+
+    val normalizedQtyDouble =
+        normalizedQty.toDouble()
+
+    // Setelah rounding ke bawah, cek lagi minimum.
+    if (normalizedQtyDouble < lot.minQty) {
+        return TokocryptoValidationResult(
+            isValid = false,
+            adjustedPrice = adjPrice,
+            adjustedQty = normalizedQtyDouble,
+            reason =
+                "Quantity setelah normalisasi ($normalizedQty) " +
+                "menjadi di bawah minimum ${lot.minQty}."
+        )
+    }
+
+    if (normalizedQtyDouble > lot.maxQty) {
+        return TokocryptoValidationResult(
+            isValid = false,
+            adjustedPrice = adjPrice,
+            adjustedQty = normalizedQtyDouble,
+            reason =
+                "Quantity setelah normalisasi ($normalizedQty) " +
+                "melebihi maksimum ${lot.maxQty}."
+        )
+    }
+
+    // Pastikan benar-benar kelipatan stepSize.
+    val remainder = normalizedQty.remainder(step)
+
+    if (remainder.compareTo(BigDecimal.ZERO) != 0) {
+        return TokocryptoValidationResult(
+            isValid = false,
+            adjustedPrice = adjPrice,
+            adjustedQty = normalizedQtyDouble,
+            reason =
+                "Quantity hasil normalisasi tidak sesuai stepSize " +
+                "${lot.stepSize}."
+        )
+    }
+
+    // =========================================================
+    // 3. MIN NOTIONAL
+    // =========================================================
+    val effectivePrice =
+        if (isMarket && referenceMarketPrice > 0.0) {
+            referenceMarketPrice
+        } else {
+            adjPrice
+        }
+
+    val notional =
+        effectivePrice * normalizedQtyDouble
+
+    val minNotional =
+        info.minNotionalFilter?.minNotional ?: 0.0
+
+    if (minNotional > 0.0 && notional < minNotional) {
+        return TokocryptoValidationResult(
+            isValid = false,
+            adjustedPrice = adjPrice,
+            adjustedQty = normalizedQtyDouble,
+            reason =
+                "Nilai order setelah normalisasi ($notional) " +
+                "di bawah minimum notional $minNotional."
+        )
+    }
+
+    return TokocryptoValidationResult(
+        isValid = true,
+        adjustedPrice = adjPrice,
+        adjustedQty = normalizedQtyDouble,
+        reason =
+            "Order valid. Quantity dinormalisasi terhadap " +
+            "stepSize=${lot.stepSize}."
+    )
+}
 }

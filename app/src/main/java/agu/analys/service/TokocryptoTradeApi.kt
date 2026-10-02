@@ -181,26 +181,99 @@ object TokocryptoTradeApi {
                 errorMessage = "API Key atau Secret Key Tokocrypto belum diisi."
             )
         }
+// =========================================================
+// 1. Pastikan metadata symbol tersedia sebelum real order
+// =========================================================
+val isBuy = request.side == TokocryptoOrderSide.BUY
+val isMarket = request.type == TokocryptoOrderType.MARKET
 
-        // 1. Validasi Aturan Exchange (LOT_SIZE, PRICE_FILTER, MIN_NOTIONAL, EXECUTION_RULES)
-        val isBuy = request.side == TokocryptoOrderSide.BUY
-        val isMarket = request.type == TokocryptoOrderType.MARKET
-        val valResult = TokocryptoSymbolRepository.validateOrder(
-            symbol = request.symbol,
-            price = request.price ?: referenceMarketPrice,
-            quantity = request.quantity ?: 0.0,
-            isMarket = isMarket,
-            isBuy = isBuy,
-            referenceMarketPrice = referenceMarketPrice
+var symbolInfo =
+    TokocryptoSymbolRepository.getSymbolInfo(request.symbol)
+
+val hasRequiredLotFilter =
+    symbolInfo != null &&
+        (
+            if (isMarket) {
+                symbolInfo.marketLotSizeFilter != null ||
+                    symbolInfo.lotSizeFilter != null
+            } else {
+                symbolInfo.lotSizeFilter != null
+            }
         )
 
-        if (!valResult.isValid && !isMarket) {
-            return@withContext TokocryptoOrderResult(
-                success = false,
-                errorMessage = "Validasi Order Exchange Gagal: ${valResult.reason}"
-            )
-        }
+/*
+ * Jika metadata belum lengkap:
+ * force refresh sekali dari /open/v1/common/symbols.
+ */
+if (!hasRequiredLotFilter) {
+    val loaded =
+        TokocryptoSymbolRepository.ensureSymbolsLoaded(
+            force = true
+        )
 
+    if (!loaded) {
+        return@withContext TokocryptoOrderResult(
+            success = false,
+            errorMessage =
+                "Metadata trading Tokocrypto gagal dimuat. " +
+                "Order dibatalkan agar quantity mentah tidak dikirim."
+        )
+    }
+
+    symbolInfo =
+        TokocryptoSymbolRepository.getSymbolInfo(
+            request.symbol
+        )
+}
+
+if (symbolInfo == null) {
+    return@withContext TokocryptoOrderResult(
+        success = false,
+        errorMessage =
+            "Symbol ${request.symbol} tidak ditemukan " +
+            "di metadata Tokocrypto."
+    )
+}
+
+val lotFilter =
+    if (isMarket) {
+        symbolInfo.marketLotSizeFilter
+            ?: symbolInfo.lotSizeFilter
+    } else {
+        symbolInfo.lotSizeFilter
+    }
+
+if (lotFilter == null) {
+    return@withContext TokocryptoOrderResult(
+        success = false,
+        errorMessage =
+            "Filter quantity untuk ${request.symbol} " +
+            "tidak tersedia di Tokocrypto."
+    )
+}
+
+// =========================================================
+// 2. Validasi order
+// =========================================================
+val valResult =
+    TokocryptoSymbolRepository.validateOrder(
+        symbol = request.symbol,
+        price = request.price
+            ?: referenceMarketPrice,
+        quantity = request.quantity ?: 0.0,
+        isMarket = isMarket,
+        isBuy = isBuy,
+        referenceMarketPrice = referenceMarketPrice
+    )
+
+if (!valResult.isValid) {
+    return@withContext TokocryptoOrderResult(
+        success = false,
+        errorMessage =
+            "Validasi Order Tokocrypto Gagal: " +
+            valResult.reason
+    )
+}
         // 2. Symbol format Tokocrypto: BASE_QUOTE (contoh BTC_USDT), bukan BTCUSDT
         val tokoSymbol = TokocryptoSymbolRepository.getSymbolInfo(request.symbol)
             ?.let { "${it.baseAsset}_${it.quoteAsset}" }
@@ -208,12 +281,16 @@ object TokocryptoTradeApi {
 
         val timestamp = System.currentTimeMillis().toString()
         val formParams = mutableListOf<Pair<String, String>>()
+        val finalQuantity = BigDecimal.valueOf(valResult.adjustedQty)
+        .stripTrailingZeros()
+        .toPlainString()
+
         formParams.add("symbol" to tokoSymbol)
         formParams.add("side" to request.side.code.toString())
         formParams.add("type" to request.type.code.toString())
 
         if (request.quantity != null && request.quantity > 0) {
-            formParams.add("quantity" to formatParam(valResult.adjustedQty, 8, RoundingMode.DOWN))
+            formParams.add("quantity" to finalQuantity)
         }
         if (request.quoteOrderQty != null && request.quoteOrderQty > 0) {
             formParams.add("quoteOrderQty" to formatParam(request.quoteOrderQty, 2, RoundingMode.DOWN))
@@ -254,6 +331,20 @@ object TokocryptoTradeApi {
                 .header("Accept", "application/json")
                 .build()
 
+        Timber.i(
+                "Tokocrypto REAL ORDER | " +
+                "symbol=$tokoSymbol | " +
+                "side=${request.side} | " +
+                "type=${request.type} | " +
+                "requestedQty=${request.quantity} | " +
+                "stepSize=${lotFilter.stepSize} | " +
+                "minQty=${lotFilter.minQty} | " +
+                "maxQty=${lotFilter.maxQty} | " +
+                "adjustedQty=${valResult.adjustedQty} | " +
+                "sentQuantity=$finalQuantity | " +
+                "price=${valResult.adjustedPrice}"
+                )
+                
             client.newCall(req).execute().use { resp ->
                 val body = resp.body?.string().orEmpty()
                 val root = runCatching { JSONObject(body) }.getOrNull()
