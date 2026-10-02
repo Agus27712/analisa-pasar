@@ -29,6 +29,7 @@ fun RealBuyModeAndSecurityCard(
     isPinUnlocked: Boolean,
     userPublicIp: String = "",
     failedPinAttempts: Int = 0,
+    marketDataSource: agu.analys.config.MarketDataSource = agu.analys.config.MarketDataSource.TOKOCRYPTO,
     onToggleRealBuyMode: () -> Unit,
     onOpenSetupDialog: () -> Unit,
     onRequirePinUnlock: () -> Unit,
@@ -302,8 +303,13 @@ fun RealBuyModeAndSecurityCard(
                     }
 
                     Spacer(Modifier.height(6.dp))
+                    val isToko = marketDataSource == agu.analys.config.MarketDataSource.TOKOCRYPTO
                     Text(
-                        "⚠️ PENTING UNTUK USER INDODAX:\nIndodax MEWAJIBKAN mengisi IP Whitelist saat membuat API Key. Masukkan IP Publik di atas ke dalam kolom IP Whitelist Indodax.",
+                        if (isToko) {
+                            "💡 INFORMASI IP WHITELIST TOKOCRYPTO:\nJika Anda mengaktifkan pembatasan IP pada API Key Tokocrypto/Binance, masukkan IP Publik di atas ke whitelist exchange Anda."
+                        } else {
+                            "⚠️ PENTING UNTUK USER INDODAX:\nIndodax MEWAJIBKAN mengisi IP Whitelist saat membuat API Key. Masukkan IP Publik di atas ke dalam kolom IP Whitelist Indodax."
+                        },
                         color = TvTextSecondary,
                         fontSize = 9.5.sp,
                         lineHeight = 13.5.sp

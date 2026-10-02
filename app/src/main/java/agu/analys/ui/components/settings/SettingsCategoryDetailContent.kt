@@ -259,10 +259,11 @@ fun SettingsCategoryDetailContent(
             WatchlistManagerSettings(
                 currentWatchlist = watchlistPairs,
                 dashboardTicks = dashboardTicks,
+                marketDataSource = selectedSource,
                 onAddPair = { sym -> viewModel.addToWatchlist(sym) },
                 onRemovePair = { sym -> viewModel.removeFromWatchlist(sym) },
-                onApplyPreset = { preset -> viewModel.applyWatchlistPreset(preset) },
-                onClearAll = { viewModel.setCustomWatchlist(listOf("BTCIDR")) }
+                onApplyPreset = { preset -> viewModel.applyWatchlistPreset(preset, selectedSource) },
+                onClearAll = { viewModel.setCustomWatchlist(listOf(if (selectedSource == MarketDataSource.TOKOCRYPTO) "BTCUSDT" else "BTCIDR")) }
             )
         }
 
@@ -290,7 +291,7 @@ fun SettingsCategoryDetailContent(
         }
 
         SettingsCategory.SECURITY -> {
-            SectionHeader("KEAMANAN & EKSEKUSI INDODAX")
+            SectionHeader("KEAMANAN & EKSEKUSI ${selectedSource.label.uppercase()}")
             RealBuyModeAndSecurityCard(
                 isRealBuyMode = isRealBuyMode,
                 hasPin = hasPin,
@@ -298,6 +299,7 @@ fun SettingsCategoryDetailContent(
                 isPinUnlocked = isPinUnlocked,
                 userPublicIp = userPublicIp,
                 failedPinAttempts = failedPinAttempts,
+                marketDataSource = selectedSource,
                 onToggleRealBuyMode = onToggleRealBuyMode,
                 onOpenSetupDialog = onOpenSetupDialog,
                 onRequirePinUnlock = onRequirePinUnlock,

@@ -645,7 +645,7 @@ fun SimulationPortfolioView(
                         )
                     }
                 } else {
-                    items(holdings, key = { it.baseAsset }) { item ->
+                    items(holdings, key = { "sim_holding_${it.baseAsset}_${it.quoteAsset}" }) { item ->
                         HoldingCoinCard(
                             item = item,
                             onTrade = { onNavigateToSimulation(item.tradingPair) },
@@ -701,7 +701,7 @@ fun SimulationPortfolioView(
                             }
                         }
                     }
-                    items(openOrders, key = { it.id }) { order ->
+                    items(openOrders, key = { "sim_order_${it.id}" }) { order ->
                         OpenOrderItemCard(
                             order = order,
                             onCancel = { onCancelOrder(order.id) }
@@ -716,7 +716,7 @@ fun SimulationPortfolioView(
                         EmptyHistoryCard()
                     }
                 } else {
-                    items(history, key = { it.id }) { trade ->
+                    items(history, key = { "sim_history_${it.id}" }) { trade ->
                         TradeHistoryItemCard(trade = trade)
                     }
                 }

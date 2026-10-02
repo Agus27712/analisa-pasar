@@ -93,43 +93,55 @@ fun PortfolioScreen(
     // Hanya saat perlu agregasi total portofolio nilainya dinormalisasi ke Rupiah
     // memakai kurs live, sehingga tampilan per-koin tidak pernah salah prefix.
     val holdings = remember(wallet, dashboardTicks, currentTick, usdtIdrRate) {
-        wallet.coinBalances.filter { it.value > 0.00000001 }.map { (baseAsset, qty) ->
-            val quoteAsset = wallet.quoteForCoin(baseAsset)
-            val isUsdt = agu.analys.util.PriceFormatter.isUsdtQuote(quoteAsset)
-            val symbol = if (isUsdt) "${baseAsset}USDT" else "${baseAsset}IDR"
+        wallet.coinBalances.filter { it.value > 0.00000001 }
+            .entries
+            .groupBy { it.key.uppercase() }
+            .map { (baseAssetUpper, entries) ->
+                val totalQty = entries.sumOf { it.value }
+                val quoteAsset = wallet.quoteForCoin(baseAssetUpper)
+                val isUsdt = agu.analys.util.PriceFormatter.isUsdtQuote(quoteAsset)
+                val symbol = if (isUsdt) "${baseAssetUpper}USDT" else "${baseAssetUpper}IDR"
+                val altSymbol = if (isUsdt) "${baseAssetUpper}BIDR" else "${baseAssetUpper}USDT"
 
-            // Harga pasar diambil dari pair yang SESUAI kuotasi posisi.
-            val price = when {
-                symbol.equals(currentTick?.symbol, ignoreCase = true) -> currentTick?.price ?: 0.0
-                dashboardTicks.containsKey(symbol) -> dashboardTicks[symbol]?.price ?: 0.0
-                else -> 0.0
-            }
-            // Harga rata-rata beli tersimpan dalam mata uang kuotasi posisi.
-            val avgPrice = wallet.avgBuyPrices[baseAsset] ?: 0.0
-            val effectivePrice = if (price > 0.0) price else avgPrice
+                // Harga pasar diambil dari pair yang SESUAI kuotasi posisi.
+                val price = when {
+                    symbol.equals(currentTick?.symbol, ignoreCase = true) -> currentTick?.price ?: 0.0
+                    altSymbol.equals(currentTick?.symbol, ignoreCase = true) -> currentTick?.price ?: 0.0
+                    dashboardTicks.containsKey(symbol) -> dashboardTicks[symbol]?.price ?: 0.0
+                    dashboardTicks.containsKey(altSymbol) -> dashboardTicks[altSymbol]?.price ?: 0.0
+                    dashboardTicks.containsKey("${baseAssetUpper.lowercase()}_idr") -> dashboardTicks["${baseAssetUpper.lowercase()}_idr"]?.price ?: 0.0
+                    dashboardTicks.containsKey("${baseAssetUpper.lowercase()}_usdt") -> dashboardTicks["${baseAssetUpper.lowercase()}_usdt"]?.price ?: 0.0
+                    dashboardTicks.containsKey(baseAssetUpper) -> dashboardTicks[baseAssetUpper]?.price ?: 0.0
+                    else -> 0.0
+                }
+                // Harga rata-rata beli tersimpan dalam mata uang kuotasi posisi.
+                val avgPrice = wallet.avgBuyPrices[baseAssetUpper]
+                    ?: wallet.avgBuyPrices[baseAssetUpper.lowercase()]
+                    ?: 0.0
+                val effectivePrice = if (price > 0.0) price else avgPrice
 
-            // Normalisasi ke Rupiah hanya untuk agregasi.
-            val rate = if (isUsdt) usdtIdrRate else 1.0
-            val toIdr = { v: Double -> if (isUsdt && rate <= 0.0) 0.0 else v * rate }
-            val totalValueIdr = toIdr(qty * effectivePrice)
-            val pnlIdr = if (avgPrice > 0.0) toIdr((effectivePrice - avgPrice) * qty) else 0.0
-            val pnlPct = if (avgPrice > 0.0) ((effectivePrice - avgPrice) / avgPrice) * 100.0 else 0.0
+                // Normalisasi ke Rupiah hanya untuk agregasi.
+                val rate = if (isUsdt) usdtIdrRate else 1.0
+                val toIdr = { v: Double -> if (isUsdt && rate <= 0.0) 0.0 else v * rate }
+                val totalValueIdr = toIdr(totalQty * effectivePrice)
+                val pnlIdr = if (avgPrice > 0.0) toIdr((effectivePrice - avgPrice) * totalQty) else 0.0
+                val pnlPct = if (avgPrice > 0.0) ((effectivePrice - avgPrice) / avgPrice) * 100.0 else 0.0
 
-            val pair = TradingPair.fromCustomSymbol(symbol, quoteAsset)
-            HoldingItem(
-                baseAsset = baseAsset,
-                quantity = qty,
-                avgBuyPrice = avgPrice,
-                currentPrice = effectivePrice,
-                totalValueIdr = totalValueIdr,
-                pnlIdr = pnlIdr,
-                pnlPercent = pnlPct,
-                tradingPair = pair,
-                isRealMirror = false,
-                quoteAsset = quoteAsset,
-                usdtIdrRate = if (isUsdt) rate else 0.0
-            )
-        }.sortedByDescending { it.totalValueIdr }
+                val pair = TradingPair.fromCustomSymbol(symbol, quoteAsset)
+                HoldingItem(
+                    baseAsset = baseAssetUpper,
+                    quantity = totalQty,
+                    avgBuyPrice = avgPrice,
+                    currentPrice = effectivePrice,
+                    totalValueIdr = totalValueIdr,
+                    pnlIdr = pnlIdr,
+                    pnlPercent = pnlPct,
+                    tradingPair = pair,
+                    isRealMirror = false,
+                    quoteAsset = quoteAsset,
+                    usdtIdrRate = if (isUsdt) rate else 0.0
+                )
+            }.sortedByDescending { it.totalValueIdr }
     }
 
     val totalCoinValueIdr = remember(holdings) { holdings.sumOf { it.totalValueIdr } }

@@ -233,8 +233,8 @@ fun SetupRealApiDialog(
                         errorMessage = null
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Indodax API Key (Trade Permission)", fontSize = 11.sp) },
-                    placeholder = { Text("Paste Indodax API Key...", color = TvTextSecondary, fontSize = 11.sp) },
+                    label = { Text("${targetExchange.label} API Key (Trade Permission)", fontSize = 11.sp) },
+                    placeholder = { Text("Paste ${targetExchange.label} API Key...", color = TvTextSecondary, fontSize = 11.sp) },
                     singleLine = true,
                     leadingIcon = {
                         Icon(Icons.Default.Key, null, tint = TvBlue, modifier = Modifier.size(18.dp))
@@ -255,8 +255,8 @@ fun SetupRealApiDialog(
                         errorMessage = null
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Indodax Secret Key (Trade Permission)", fontSize = 11.sp) },
-                    placeholder = { Text("Paste Indodax Secret Key...", color = TvTextSecondary, fontSize = 11.sp) },
+                    label = { Text("${targetExchange.label} Secret Key (Trade Permission)", fontSize = 11.sp) },
+                    placeholder = { Text("Paste ${targetExchange.label} Secret Key...", color = TvTextSecondary, fontSize = 11.sp) },
                     singleLine = true,
                     visualTransformation = if (showSecret) VisualTransformation.None else PasswordVisualTransformation(),
                     trailingIcon = {
@@ -304,11 +304,11 @@ fun SetupRealApiDialog(
                         return@Button
                     }
                     if (cleanApi.isBlank()) {
-                        errorMessage = "Indodax API Key wajib diisi."
+                        errorMessage = "${targetExchange.label} API Key wajib diisi."
                         return@Button
                     }
                     if (cleanSecret.isBlank()) {
-                        errorMessage = "Indodax Secret Key wajib diisi."
+                        errorMessage = "${targetExchange.label} Secret Key wajib diisi."
                         return@Button
                     }
 

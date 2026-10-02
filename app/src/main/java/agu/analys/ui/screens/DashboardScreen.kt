@@ -215,7 +215,7 @@ fun DashboardScreen(
                 tick = tick,
                 candles1h = candles1h
             )
-        }
+        }.distinctBy { it.pair.symbol }
     }
 
     // Prefetch/sync candle 1H untuk semua holding aktif secara background agar chart sparkline selalu ready
@@ -349,7 +349,7 @@ fun DashboardScreen(
                         }
                     }
                 } else {
-                    items(filteredFocusPairs, key = { it.symbol }) { pair ->
+                    items(filteredFocusPairs, key = { "focus_pair_${it.symbol}" }) { pair ->
                         val tick = allTicks[pair.symbol]
                         val effectiveBadges = remember(coinBadges, pair.symbol, tick, strategyMode) {
                             val fromState = coinBadges[pair.symbol]
@@ -490,6 +490,7 @@ fun DashboardScreen(
         if (showAddDialog) {
             AddAssetDialog(
                 currentFavorites = favorites,
+                marketDataSource = marketDataSource,
                 onDismiss = { showAddDialog = false },
                 onAddPair = { pair ->
                     if (!favorites.contains(pair.symbol)) {

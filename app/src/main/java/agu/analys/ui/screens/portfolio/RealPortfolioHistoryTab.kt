@@ -49,7 +49,7 @@ fun LazyListScope.realPortfolioHistorySection(
             }
         }
     } else {
-        items(realTrades, key = { it.id }) { trade ->
+        items(realTrades, key = { "real_trade_${it.id}_${it.symbol}" }) { trade ->
             RealTradeHistoryItemCard(trade = trade)
         }
     }

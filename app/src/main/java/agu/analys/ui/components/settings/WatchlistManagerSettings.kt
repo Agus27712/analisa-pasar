@@ -21,7 +21,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import agu.analys.config.MarketDataSource
 import agu.analys.model.MarketTick
+import agu.analys.model.TradingPair
 import agu.analys.ui.theme.*
 import agu.analys.util.PriceFormatter
 
@@ -29,6 +31,7 @@ import agu.analys.util.PriceFormatter
 fun WatchlistManagerSettings(
     currentWatchlist: Set<String>,
     dashboardTicks: Map<String, MarketTick>,
+    marketDataSource: MarketDataSource = MarketDataSource.TOKOCRYPTO,
     onAddPair: (String) -> Unit,
     onRemovePair: (String) -> Unit,
     onApplyPreset: (String) -> Unit,
@@ -36,18 +39,20 @@ fun WatchlistManagerSettings(
 ) {
     val context = LocalContext.current
     var searchQuery by remember { mutableStateOf("") }
+    val isToko = marketDataSource == MarketDataSource.TOKOCRYPTO
+    var selectedQuote by remember(marketDataSource) { 
+        mutableStateOf(if (isToko) "USDT" else "IDR") 
+    }
 
-    val popularSuggestions = listOf(
-        "BTCIDR", "ETHIDR", "SOLIDR", "DOGEIDR", "XRPIDR", "PEPEIDR",
-        "SUIIDR", "ADAIDR", "BNBIDR", "SHIBIDR", "NEARIDR", "AVAXIDR",
-        "SUIUSDT", "ADAUSDT", "BNBUSDT", "SHIBUSDT", "NEARUSDT", "AVAXUSDT",
-        "RENDERIDR", "FETIDR", "TRXIDR", "LINKIDR", "FLOKIIDR", "BONKIDR",
-        "BTCUSDT", "ETHUSDT", "SOLUSDT", "DOGEUSDT", "XRPUSDT", "PEPEUSDT"
+    val popularBases = listOf(
+        "BTC", "ETH", "SOL", "DOGE", "XRP", "PEPE",
+        "SUI", "ADA", "BNB", "SHIB", "NEAR", "AVAX",
+        "TKO", "RENDER", "FET", "TRX", "LINK", "FLOKI", "BONK"
     )
 
     Column(modifier = Modifier.fillMaxWidth()) {
         // 1. WATCHLIST SUMMARY & PRESETS
-        SectionHeader("PAKET PRESET WATCHLIST CEPAT")
+        SectionHeader("PAKET PRESET WATCHLIST CEPAT (${marketDataSource.label.uppercase()})")
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp),
@@ -81,7 +86,7 @@ fun WatchlistManagerSettings(
 
                 Spacer(Modifier.height(10.dp))
                 Text(
-                    "Pilih paket preset instan:",
+                    "Pilih paket preset instan (${if (isToko) "Pair USDT" else "Pair IDR"}):",
                     color = TvTextSecondary,
                     fontSize = 10.5.sp
                 )
@@ -92,7 +97,7 @@ fun WatchlistManagerSettings(
                     Triple("scalp", "⚡ Scalping Gems", TvGreen),
                     Triple("ai", "🤖 AI & Web3", Color(0xFFAB47BC)),
                     Triple("layer1", "🧱 Layer-1 Top", TvBlue),
-                    Triple("default", "🔄 Reset Default (BTC)", TvTextSecondary)
+                    Triple("default", "🔄 Reset Default (${if (isToko) "BTC/USDT" else "BTC/IDR"})", TvTextSecondary)
                 )
 
                 Row(
@@ -123,7 +128,7 @@ fun WatchlistManagerSettings(
         Spacer(Modifier.height(14.dp))
 
         // 2. TAMBAH PAIR MANUAL / CARI KOIN
-        SectionHeader("TAMBAH PAIR MANUAL / CARI KOIN")
+        SectionHeader("TAMBAH PAIR MANUAL (${marketDataSource.label.uppercase()})")
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp),
@@ -131,6 +136,42 @@ fun WatchlistManagerSettings(
             border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder)
         ) {
             Column(modifier = Modifier.padding(12.dp)) {
+                // Selector Kuotasi Aktif (USDT / IDR / BIDR)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("Pilih Kuotasi Pasar:", color = TvTextSecondary, fontSize = 10.5.sp, fontWeight = FontWeight.Medium)
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        listOf("USDT", "IDR", "BIDR").forEach { q ->
+                            val isSelected = selectedQuote == q
+                            val qColor = when (q) {
+                                "USDT" -> TvCyan
+                                "IDR" -> TvBlue
+                                else -> TvAmber
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(if (isSelected) qColor.copy(alpha = 0.25f) else TvSurface)
+                                    .border(1.dp, if (isSelected) qColor else TvBorder, RoundedCornerShape(6.dp))
+                                    .clickable { selectedQuote = q }
+                                    .padding(horizontal = 8.dp, vertical = 3.dp)
+                            ) {
+                                Text(
+                                    text = q,
+                                    color = if (isSelected) qColor else TvTextSecondary,
+                                    fontSize = 10.sp,
+                                    fontWeight = if (isSelected) FontWeight.Black else FontWeight.Normal
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(10.dp))
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
@@ -138,10 +179,10 @@ fun WatchlistManagerSettings(
                     OutlinedTextField(
                         value = searchQuery,
                         onValueChange = { searchQuery = it.uppercase() },
-                        placeholder = { Text("Ketik simbol (contoh: SOL, PEPE, SUI)", fontSize = 11.sp, color = TvTextSecondary) },
+                        placeholder = { Text("Ketik simbol (contoh: SOL, TKO, BTC)", fontSize = 11.sp, color = TvTextSecondary) },
                         singleLine = true,
                         leadingIcon = {
-                            Icon(Icons.Default.Search, null, tint = TvBlue, modifier = Modifier.size(18.dp))
+                            Icon(Icons.Default.Search, null, tint = TvCyan, modifier = Modifier.size(18.dp))
                         },
                         trailingIcon = {
                             if (searchQuery.isNotEmpty()) {
@@ -151,11 +192,11 @@ fun WatchlistManagerSettings(
                             }
                         },
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = TvBlue,
+                            focusedBorderColor = TvCyan,
                             unfocusedBorderColor = TvBorder,
                             focusedTextColor = TvTextPrimary,
                             unfocusedTextColor = TvTextPrimary,
-                            cursorColor = TvBlue
+                            cursorColor = TvCyan
                         ),
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier
@@ -167,12 +208,11 @@ fun WatchlistManagerSettings(
 
                     Button(
                         onClick = {
-                            val clean = searchQuery.trim().replace("/", "").replace("_", "")
+                            val clean = searchQuery.trim().uppercase().replace("/", "").replace("_", "").replace(" ", "")
                             if (clean.isNotBlank()) {
-                                val symbolWithQuote = if (clean.endsWith("IDR", true) || clean.endsWith("USDT", true)) {
-                                    clean
-                                } else {
-                                    "${clean}IDR"
+                                val symbolWithQuote = when {
+                                    clean.endsWith("USDT") || clean.endsWith("IDR") || clean.endsWith("BIDR") || clean.endsWith("USDC") || clean.endsWith("BUSD") -> clean
+                                    else -> "$clean$selectedQuote"
                                 }
                                 onAddPair(symbolWithQuote)
                                 searchQuery = ""
@@ -180,31 +220,31 @@ fun WatchlistManagerSettings(
                             }
                         },
                         enabled = searchQuery.isNotBlank(),
-                        colors = ButtonDefaults.buttonColors(containerColor = TvBlue),
+                        colors = ButtonDefaults.buttonColors(containerColor = TvCyan),
                         shape = RoundedCornerShape(8.dp),
                         contentPadding = PaddingValues(horizontal = 12.dp),
                         modifier = Modifier.height(48.dp)
                     ) {
-                        Icon(Icons.Default.Add, null, modifier = Modifier.size(18.dp), tint = Color.White)
+                        Icon(Icons.Default.Add, null, modifier = Modifier.size(18.dp), tint = Color.Black)
                         Spacer(Modifier.width(4.dp))
-                        Text("Tambah", color = Color.White, fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                        Text("Tambah", color = Color.Black, fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
                     }
                 }
 
                 Spacer(Modifier.height(10.dp))
-                Text("Koin Populer Siap Tambah:", color = TvTextSecondary, fontSize = 10.sp)
+                Text("Koin Populer Siap Tambah (${selectedQuote}):", color = TvTextSecondary, fontSize = 10.sp)
                 Spacer(Modifier.height(6.dp))
 
-                // Popular suggestions chips
+                // Popular suggestions chips with selectedQuote
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    popularSuggestions.forEach { sym ->
+                    popularBases.forEach { base ->
+                        val sym = "$base$selectedQuote"
                         val isTracked = currentWatchlist.any { it.equals(sym, ignoreCase = true) }
-                        val base = sym.replace("IDR", "").replace("USDT", "")
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(6.dp))
@@ -227,9 +267,9 @@ fun WatchlistManagerSettings(
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
-                                    text = base,
+                                    text = "$base/$selectedQuote",
                                     color = if (isTracked) TvGreen else TvTextPrimary,
-                                    fontSize = 11.sp,
+                                    fontSize = 10.5.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                                 Spacer(Modifier.width(4.dp))
@@ -267,12 +307,14 @@ fun WatchlistManagerSettings(
                         Text("Watchlist kosong. Tambahkan pair di atas.", color = TvTextSecondary, fontSize = 11.5.sp)
                     }
                 } else {
-                    currentWatchlist.toList().forEachIndexed { index, symbol ->
-                        val base = symbol.replace("IDR", "").replace("USDT", "").uppercase()
-                        val tick = dashboardTicks[symbol] ?: dashboardTicks[symbol.lowercase()] ?: dashboardTicks[base]
-                        val priceStr = tick?.let { PriceFormatter.formatPrice(it.price) } ?: "-"
+                    currentWatchlist.toList().forEach { symbol ->
+                        val pair = TradingPair.fromCustomSymbol(symbol, defaultQuote = marketDataSource.defaultQuoteAsset)
+                        val tick = dashboardTicks[symbol] ?: dashboardTicks[pair.symbol] ?: dashboardTicks[symbol.lowercase()] ?: dashboardTicks[pair.baseAsset]
+                        val priceStr = tick?.let { PriceFormatter.formatPrice(it.price, quoteAsset = pair.quoteAsset) } ?: "-"
                         val change24h = tick?.change24h ?: 0.0
                         val isUp = change24h >= 0
+                        val isUsdt = PriceFormatter.isUsdtQuote(pair.quoteAsset)
+                        val quoteBadgeColor = if (isUsdt) TvCyan else if (pair.quoteAsset.equals("BIDR", true)) TvAmber else TvBlue
 
                         Row(
                             modifier = Modifier
@@ -289,28 +331,39 @@ fun WatchlistManagerSettings(
                                 Box(
                                     modifier = Modifier
                                         .size(28.dp)
-                                        .background(TvBlue.copy(alpha = 0.15f), CircleShape),
+                                        .background(quoteBadgeColor.copy(alpha = 0.15f), CircleShape),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
-                                        text = base.take(3),
-                                        color = TvBlue,
+                                        text = pair.baseAsset.take(3),
+                                        color = quoteBadgeColor,
                                         fontSize = 9.5.sp,
                                         fontWeight = FontWeight.Black
                                     )
                                 }
                                 Spacer(Modifier.width(10.dp))
                                 Column {
-                                    Text(
-                                        text = "$base/IDR",
-                                        color = TvTextPrimary,
-                                        fontSize = 12.5.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            text = "${pair.baseAsset} / ${pair.quoteAsset}",
+                                            color = TvTextPrimary,
+                                            fontSize = 12.5.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Spacer(Modifier.width(5.dp))
+                                        Box(
+                                            modifier = Modifier
+                                                .background(quoteBadgeColor.copy(alpha = 0.2f), RoundedCornerShape(3.dp))
+                                                .padding(horizontal = 4.dp, vertical = 1.dp)
+                                        ) {
+                                            Text(pair.quoteAsset, color = quoteBadgeColor, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
                                     Text(
                                         text = priceStr,
-                                        color = TvTextSecondary,
-                                        fontSize = 10.5.sp
+                                        color = if (isUsdt) TvGreen else TvTextSecondary,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold
                                     )
                                 }
                             }

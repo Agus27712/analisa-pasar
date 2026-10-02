@@ -130,7 +130,7 @@ fun ActiveHoldingSection(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                items(items, key = { it.pair.symbol }) { item ->
+                items(items, key = { "active_holding_${it.pair.symbol}" }) { item ->
                     ActiveHoldingCard(
                         item = item,
                         onClick = { onCoinClick(item.pair) }

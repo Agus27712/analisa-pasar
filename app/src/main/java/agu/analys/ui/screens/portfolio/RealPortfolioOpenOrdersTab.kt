@@ -40,7 +40,7 @@ fun LazyListScope.realPortfolioOpenOrdersSection(
             }
         }
     } else {
-        items(realOpenOrders, key = { it.orderId }) { order ->
+        items(realOpenOrders, key = { "real_order_${it.orderId}_${it.symbol}" }) { order ->
             RealOpenOrderItemCard(
                 order = order,
                 onCancel = { onCancelRealOrder(order.symbol, order.orderId) }

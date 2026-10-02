@@ -34,22 +34,34 @@ import agu.analys.ui.theme.TvTextSecondary
 @Composable
 fun AddAssetDialog(
     currentFavorites: Set<String> = emptySet(),
+    marketDataSource: agu.analys.config.MarketDataSource = agu.analys.config.MarketDataSource.TOKOCRYPTO,
     onDismiss: () -> Unit,
     onAddPair: (TradingPair) -> Unit
 ) {
+    val isToko = marketDataSource == agu.analys.config.MarketDataSource.TOKOCRYPTO
     var searchQuery by remember { mutableStateOf("") }
-    var selectedTab by remember { mutableStateOf("IDR") }
-    val tabs = listOf("IDR", "USDT", "SEMUA")
+    var selectedTab by remember(marketDataSource) { mutableStateOf(if (isToko) "USDT" else "IDR") }
+    val tabs = if (isToko) listOf("USDT", "BIDR", "IDR", "SEMUA") else listOf("IDR", "USDT", "SEMUA")
 
-    // Ambil daftar pair dari dynamic symbol repository Tokocrypto
-    val availablePairs = remember(searchQuery, selectedTab) {
+    // Ambil daftar pair dari dynamic symbol repository Tokocrypto / Indodax
+    val availablePairs = remember(searchQuery, selectedTab, marketDataSource) {
         val quoteFilter = if (selectedTab == "SEMUA") null else selectedTab
         val results = if (searchQuery.isNotBlank()) {
-            TokocryptoSymbolRepository.searchSymbols(searchQuery, quoteFilter)
+            val dynamicMatches = TokocryptoSymbolRepository.searchSymbols(searchQuery, quoteFilter)
+            val indodaxMatches = TradingPair.POPULAR_INDODAX_PAIRS.filter { 
+                (it.baseAsset.contains(searchQuery, ignoreCase = true) || it.symbol.contains(searchQuery, ignoreCase = true)) &&
+                (quoteFilter == null || it.quoteAsset.equals(quoteFilter, ignoreCase = true))
+            }
+            if (isToko) (dynamicMatches + indodaxMatches).distinctBy { it.symbol }
+            else (indodaxMatches + dynamicMatches).distinctBy { it.symbol }
         } else {
-            TokocryptoSymbolRepository.getAllTradingPairs(quoteFilter)
+            if (isToko) {
+                TokocryptoSymbolRepository.getAllTradingPairs(quoteFilter)
+            } else {
+                TradingPair.popularPairsForSource(marketDataSource).filter { quoteFilter == null || it.quoteAsset.equals(quoteFilter, ignoreCase = true) }
+            }
         }
-        if (results.isNotEmpty()) results else TradingPair.popularPairsForSource()
+        if (results.isNotEmpty()) results else TradingPair.popularPairsForSource(marketDataSource)
     }
 
     Dialog(onDismissRequest = onDismiss) {
@@ -82,7 +94,7 @@ fun AddAssetDialog(
                         Spacer(Modifier.width(8.dp))
                         Column {
                             Text(
-                                "Tambah Pasar Tokocrypto",
+                                "Tambah Pasar ${marketDataSource.label}",
                                 color = TvTextPrimary,
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Black

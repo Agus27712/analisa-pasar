@@ -318,47 +318,56 @@ class AppPreferences(context: Context) {
         return hash.joinToString("") { "%02x".format(it) }
     }
 
-    fun getWatchlist(): Set<String> {
-        val saved = prefs.getStringSet(KEY_WATCHLIST_INDODAX, null)
+    fun getDefaultWatchlistSymbol(source: MarketDataSource = marketDataSource): String =
+        if (source == MarketDataSource.TOKOCRYPTO) "BTCUSDT" else "BTCIDR"
+
+    fun getWatchlist(source: MarketDataSource = marketDataSource): Set<String> {
+        val key = if (source == MarketDataSource.TOKOCRYPTO) "watchlist_tokocrypto" else KEY_WATCHLIST_INDODAX
+        val saved = prefs.getStringSet(key, null)
         if (saved != null && saved.isNotEmpty()) return saved.toSet()
         val legacy = prefs.getStringSet(KEY_WATCHLIST_LEGACY, null)
         if (legacy != null && legacy.isNotEmpty()) return legacy.toSet()
-        return setOf("BTCIDR")
+        return setOf(getDefaultWatchlistSymbol(source))
     }
 
-    fun setWatchlist(symbols: Collection<String>) {
+    fun setWatchlist(symbols: Collection<String>, source: MarketDataSource = marketDataSource) {
+        val defaultSym = getDefaultWatchlistSymbol(source)
         val upperSet = symbols.map { it.uppercase().trim() }.filter { it.isNotBlank() }.toSet()
-        val finalSet = if (upperSet.isEmpty()) setOf("BTCIDR") else upperSet
-        prefs.edit().putStringSet(KEY_WATCHLIST_INDODAX, finalSet).apply()
+        val finalSet = if (upperSet.isEmpty()) setOf(defaultSym) else upperSet
+        val key = if (source == MarketDataSource.TOKOCRYPTO) "watchlist_tokocrypto" else KEY_WATCHLIST_INDODAX
+        prefs.edit().putStringSet(key, finalSet).apply()
     }
 
-    fun toggleWatchlist(symbol: String): Boolean {
-        val set = getWatchlist().toMutableSet()
+    fun toggleWatchlist(symbol: String, source: MarketDataSource = marketDataSource): Boolean {
+        val set = getWatchlist(source).toMutableSet()
         val upper = symbol.uppercase()
         val added = if (set.remove(upper)) false else { set.add(upper); true }
-        prefs.edit().putStringSet(KEY_WATCHLIST_INDODAX, set).apply()
+        val key = if (source == MarketDataSource.TOKOCRYPTO) "watchlist_tokocrypto" else KEY_WATCHLIST_INDODAX
+        prefs.edit().putStringSet(key, set).apply()
         return added
     }
 
-    fun isInWatchlist(symbol: String): Boolean =
-        getWatchlist().contains(symbol.uppercase())
+    fun isInWatchlist(symbol: String, source: MarketDataSource = marketDataSource): Boolean =
+        getWatchlist(source).contains(symbol.uppercase())
 
-    fun getFavorites(): Set<String> {
-        val saved = prefs.getStringSet(KEY_FAVORITES_INDODAX, null)
+    fun getFavorites(source: MarketDataSource = marketDataSource): Set<String> {
+        val key = if (source == MarketDataSource.TOKOCRYPTO) "favorites_tokocrypto" else KEY_FAVORITES_INDODAX
+        val saved = prefs.getStringSet(key, null)
         if (saved != null && saved.isNotEmpty()) return saved.toSet()
-        return setOf("BTCIDR")
+        return setOf(getDefaultWatchlistSymbol(source))
     }
 
-    fun toggleFavorite(symbol: String): Boolean {
-        val set = getFavorites().toMutableSet()
+    fun toggleFavorite(symbol: String, source: MarketDataSource = marketDataSource): Boolean {
+        val set = getFavorites(source).toMutableSet()
         val upper = symbol.uppercase()
         val added = if (set.remove(upper)) false else { set.add(upper); true }
-        prefs.edit().putStringSet(KEY_FAVORITES_INDODAX, set).apply()
+        val key = if (source == MarketDataSource.TOKOCRYPTO) "favorites_tokocrypto" else KEY_FAVORITES_INDODAX
+        prefs.edit().putStringSet(key, set).apply()
         return added
     }
 
-    fun isFavorite(symbol: String): Boolean =
-        getFavorites().contains(symbol.uppercase())
+    fun isFavorite(symbol: String, source: MarketDataSource = marketDataSource): Boolean =
+        getFavorites(source).contains(symbol.uppercase())
 
     fun setFavorite(symbol: String, isFav: Boolean) {
         val set = getFavorites().toMutableSet()

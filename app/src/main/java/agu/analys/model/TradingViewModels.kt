@@ -316,13 +316,15 @@ val POPULAR_INDODAX_PAIRS = listOf(
             val cleaned = raw.trim().uppercase().replace(" ", "").replace("/", "").replace("-", "").replace("_", "")
             val (base, quote) = when {
                 cleaned.endsWith("USDT") -> cleaned.removeSuffix("USDT") to "USDT"
+                cleaned.endsWith("BIDR") -> cleaned.removeSuffix("BIDR") to "BIDR"
                 cleaned.endsWith("IDR") -> cleaned.removeSuffix("IDR") to "IDR"
-                cleaned.endsWith("BIDR") -> cleaned.removeSuffix("BIDR") to "IDR"
+                cleaned.endsWith("USDC") -> cleaned.removeSuffix("USDC") to "USDC"
+                cleaned.endsWith("BUSD") -> cleaned.removeSuffix("BUSD") to "BUSD"
                 cleaned.endsWith("USD") -> cleaned.removeSuffix("USD") to "USDT"
-                else -> cleaned to (if (defaultQuote.equals("BIDR", true)) "IDR" else defaultQuote)
+                else -> cleaned to defaultQuote
             }
             val finalBase = base.ifEmpty { "BTC" }
-            val finalQuote = if (quote == "BIDR") "IDR" else quote
+            val finalQuote = quote.ifEmpty { defaultQuote }
             val symbol = "$finalBase$finalQuote"
 
             // 1. Coba cari di Dynamic Tokocrypto Repository
@@ -333,7 +335,7 @@ val POPULAR_INDODAX_PAIRS = listOf(
             }
 
             val allPopular = POPULAR_TOKOCRYPTO_PAIRS + POPULAR_INDODAX_PAIRS
-            val known = allPopular.find { it.symbol == symbol || (it.baseAsset == finalBase && it.quoteAsset == finalQuote) }
+            val known = allPopular.find { it.symbol.equals(symbol, ignoreCase = true) || (it.baseAsset.equals(finalBase, ignoreCase = true) && it.quoteAsset.equals(finalQuote, ignoreCase = true)) }
             if (known != null) return known
             return TradingPair(
                 symbol = symbol,

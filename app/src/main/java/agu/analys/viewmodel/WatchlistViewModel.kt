@@ -2,6 +2,7 @@ package agu.analys.viewmodel
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
+import agu.analys.config.MarketDataSource
 import agu.analys.util.AppPreferences
 import agu.analys.util.MtfCacheManager
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,14 +22,29 @@ class WatchlistViewModel(application: Application) : AndroidViewModel(applicatio
     var onWatchlistUpdated: (() -> Unit)? = null
 
     init {
+        val defaultSym = getDefaultSymbol()
         val initialWatchlist = prefs.getWatchlist().ifEmpty {
-            val defaultSymbol = "BTCIDR"
-            prefs.toggleWatchlist(defaultSymbol)
-            setOf(defaultSymbol)
+            prefs.toggleWatchlist(defaultSym)
+            setOf(defaultSym)
         }
         _watchlist.value = initialWatchlist
         _favorites.value = prefs.getFavorites()
         MtfCacheManager.updateQueues(initialWatchlist.toList(), emptyList())
+    }
+
+    fun getDefaultSymbol(source: MarketDataSource = prefs.marketDataSource): String {
+        return if (source == MarketDataSource.TOKOCRYPTO) "BTCUSDT" else "BTCIDR"
+    }
+
+    fun reloadForDataSource(source: MarketDataSource) {
+        val current = prefs.getWatchlist(source).ifEmpty {
+            val def = getDefaultSymbol(source)
+            setOf(def)
+        }
+        _watchlist.value = current
+        _favorites.value = prefs.getFavorites(source)
+        MtfCacheManager.updateQueues(current.toList(), emptyList())
+        onWatchlistUpdated?.invoke()
     }
 
     private fun normalize(symbol: String): String =
@@ -38,7 +54,8 @@ class WatchlistViewModel(application: Application) : AndroidViewModel(applicatio
         val upper = normalize(symbol)
         if (upper.isBlank()) return
         prefs.toggleWatchlist(upper)
-        val current = prefs.getWatchlist().ifEmpty { setOf("BTCIDR") }
+        val defaultSym = getDefaultSymbol()
+        val current = prefs.getWatchlist().ifEmpty { setOf(defaultSym) }
         _watchlist.value = current
         MtfCacheManager.updateQueues(current.toList(), emptyList())
         onWatchlistUpdated?.invoke()
@@ -59,7 +76,8 @@ class WatchlistViewModel(application: Application) : AndroidViewModel(applicatio
         val upper = normalize(symbol)
         val current = _watchlist.value.toMutableSet()
         current.remove(upper)
-        val finalSet = if (current.isEmpty()) setOf("BTCIDR") else current
+        val defaultSym = getDefaultSymbol()
+        val finalSet = if (current.isEmpty()) setOf(defaultSym) else current
         prefs.setWatchlist(finalSet)
         _watchlist.value = finalSet
         MtfCacheManager.updateQueues(finalSet.toList(), emptyList())
@@ -68,20 +86,22 @@ class WatchlistViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun setCustomWatchlist(symbols: Collection<String>) {
         val upper = symbols.map { normalize(it) }.filter { it.isNotBlank() }.toSet()
-        val finalSet = if (upper.isEmpty()) setOf("BTCIDR") else upper
+        val defaultSym = getDefaultSymbol()
+        val finalSet = if (upper.isEmpty()) setOf(defaultSym) else upper
         prefs.setWatchlist(finalSet)
         _watchlist.value = finalSet
         MtfCacheManager.updateQueues(finalSet.toList(), emptyList())
         onWatchlistUpdated?.invoke()
     }
 
-    fun applyWatchlistPreset(presetType: String) {
+    fun applyWatchlistPreset(presetType: String, source: MarketDataSource = prefs.marketDataSource) {
+        val quote = if (source == MarketDataSource.TOKOCRYPTO) "USDT" else "IDR"
         val pairs = when (presetType.lowercase()) {
-            "top10", "top_10" -> listOf("BTCIDR", "ETHIDR", "SOLIDR", "BNBIDR", "XRPIDR", "ADAIDR", "DOGEIDR", "AVAXIDR", "SUIIDR", "NEARIDR")
-            "scalp", "scalping", "gems" -> listOf("PEPEIDR", "DOGEIDR", "SHIBIDR", "SUIIDR", "SOLIDR", "FLOKIIDR", "BONKIDR")
-            "ai", "web3" -> listOf("NEARIDR", "RENDERIDR", "FETIDR", "GRTIDR", "ICICPDR", "FILIDR")
-            "layer1", "l1" -> listOf("BTCIDR", "ETHIDR", "SOLIDR", "ADAIDR", "AVAXIDR", "DOTIDR", "SUIIDR", "ATOMIDR")
-            else -> listOf("BTCIDR", "ETHIDR", "SOLIDR", "DOGEIDR")
+            "top10", "top_10" -> listOf("BTC", "ETH", "SOL", "BNB", "XRP", "ADA", "DOGE", "AVAX", "SUI", "NEAR").map { "$it$quote" }
+            "scalp", "scalping", "gems" -> listOf("PEPE", "DOGE", "SHIB", "SUI", "SOL", "FLOKI", "BONK").map { "$it$quote" }
+            "ai", "web3" -> listOf("NEAR", "RENDER", "FET", "GRT", "ICP", "FIL").map { "$it$quote" }
+            "layer1", "l1" -> listOf("BTC", "ETH", "SOL", "ADA", "AVAX", "DOT", "SUI", "ATOM").map { "$it$quote" }
+            else -> listOf("BTC", "ETH", "SOL", "DOGE").map { "$it$quote" }
         }
         setCustomWatchlist(pairs)
     }

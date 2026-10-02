@@ -317,6 +317,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         // 2. Simpan dan alihkan bursa
         settingsViewModel.setMarketDataSource(source)
         prefs.marketDataSource = source
+        watchlistViewModel.reloadForDataSource(source)
 
         // 3. Muat dynamic symbols Tokocrypto jika beralih ke Tokocrypto
         if (source == MarketDataSource.TOKOCRYPTO) {
@@ -476,7 +477,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
 
     fun setCustomWatchlist(symbols: Collection<String>) = watchlistViewModel.setCustomWatchlist(symbols)
 
-    fun applyWatchlistPreset(presetType: String) = watchlistViewModel.applyWatchlistPreset(presetType)
+    fun applyWatchlistPreset(presetType: String, source: MarketDataSource = prefs.marketDataSource) = watchlistViewModel.applyWatchlistPreset(presetType, source)
 
     fun toggleFavorite(symbol: String) = watchlistViewModel.toggleFavorite(symbol)
 

@@ -78,36 +78,43 @@ fun RealPortfolioView(
     val usdtIdrRate by agu.analys.util.ExchangeRateManager.usdtIdrRate.collectAsState()
     val realUsdtIdr = if (usdtIdrRate > 0.0) realUsdt * usdtIdrRate else 0.0
 
-    val realCoinItemsList = remember(realBalance, realFreeBalance, realLockedBalance, realAvgBuyPrices, dashboardTicks, currentTick) {
-        realBalance.filter {
-            val key = it.key.lowercase()
-            key != "idr" && key != "usdt" && key != "usd" && key != "usdc" && key != "busd" && it.value > 0.00000001
-        }.entries.map { (coin, qty) ->
-            val coinUpper = coin.uppercase()
-            val coinLower = coin.lowercase()
-            val symbol = "${coinUpper}IDR"
-            val price = when {
-                symbol.equals(currentTick?.symbol, ignoreCase = true) -> currentTick?.price ?: 0.0
-                dashboardTicks.containsKey(symbol) -> dashboardTicks[symbol]?.price ?: 0.0
-                dashboardTicks.containsKey("${coinLower}_idr") -> dashboardTicks["${coinLower}_idr"]?.price ?: 0.0
-                dashboardTicks.containsKey(coinUpper) -> dashboardTicks[coinUpper]?.price ?: 0.0
-                else -> 0.0
+    val realCoinItemsList = remember(realBalance, realFreeBalance, realLockedBalance, realAvgBuyPrices, dashboardTicks, currentTick, isTokocrypto) {
+        realBalance.entries
+            .filter { (key, value) ->
+                val k = key.lowercase()
+                k != "idr" && k != "usdt" && k != "usd" && k != "usdc" && k != "busd" && k != "bidr" && value > 0.00000001
             }
-            val avgPrice = realAvgBuyPrices[coin]
-                ?: realAvgBuyPrices[coinLower]
-                ?: realAvgBuyPrices[coinUpper]
-                ?: realAvgBuyPrices[symbol]
-                ?: 0.0
-            val effectivePrice = if (price > 0.0) price else avgPrice
-            val estVal = qty * effectivePrice
-            val pnlIdr = if (avgPrice > 0.0) (effectivePrice - avgPrice) * qty else 0.0
-            val pnlPct = if (avgPrice > 0.0) ((effectivePrice - avgPrice) / avgPrice) * 100.0 else 0.0
+            .groupBy { it.key.uppercase() }
+            .map { (coinUpper, entries) ->
+                val coinLower = coinUpper.lowercase()
+                val qty = entries.maxOf { it.value }
+                val symbol = if (isTokocrypto) "${coinUpper}USDT" else "${coinUpper}IDR"
+                val altSymbol = if (isTokocrypto) "${coinUpper}BIDR" else "${coinUpper}USDT"
+                val price = when {
+                    symbol.equals(currentTick?.symbol, ignoreCase = true) -> currentTick?.price ?: 0.0
+                    altSymbol.equals(currentTick?.symbol, ignoreCase = true) -> currentTick?.price ?: 0.0
+                    dashboardTicks.containsKey(symbol) -> dashboardTicks[symbol]?.price ?: 0.0
+                    dashboardTicks.containsKey(altSymbol) -> dashboardTicks[altSymbol]?.price ?: 0.0
+                    dashboardTicks.containsKey("${coinLower}_idr") -> dashboardTicks["${coinLower}_idr"]?.price ?: 0.0
+                    dashboardTicks.containsKey("${coinLower}_usdt") -> dashboardTicks["${coinLower}_usdt"]?.price ?: 0.0
+                    dashboardTicks.containsKey(coinUpper) -> dashboardTicks[coinUpper]?.price ?: 0.0
+                    else -> 0.0
+                }
+                val avgPrice = realAvgBuyPrices[coinUpper]
+                    ?: realAvgBuyPrices[coinLower]
+                    ?: realAvgBuyPrices[symbol]
+                    ?: realAvgBuyPrices[altSymbol]
+                    ?: 0.0
+                val effectivePrice = if (price > 0.0) price else avgPrice
+                val estVal = qty * effectivePrice
+                val pnlIdr = if (avgPrice > 0.0) (effectivePrice - avgPrice) * qty else 0.0
+                val pnlPct = if (avgPrice > 0.0) ((effectivePrice - avgPrice) / avgPrice) * 100.0 else 0.0
 
-            val freeQty = realFreeBalance[coinLower] ?: qty
-            val lockedQty = realLockedBalance[coinLower] ?: 0.0
+                val freeQty = realFreeBalance[coinLower] ?: realFreeBalance[coinUpper] ?: qty
+                val lockedQty = realLockedBalance[coinLower] ?: realLockedBalance[coinUpper] ?: 0.0
 
-            Pair(coinUpper, Triple(qty, freeQty, lockedQty)) to Pair(estVal, Triple(price, avgPrice, Pair(pnlIdr, pnlPct)))
-        }.sortedByDescending { it.second.first }
+                Pair(coinUpper, Triple(qty, freeQty, lockedQty)) to Pair(estVal, Triple(price, avgPrice, Pair(pnlIdr, pnlPct)))
+            }.sortedByDescending { it.second.first }
     }
     
     val estTotalCryptoIdr = remember(realCoinItemsList) { realCoinItemsList.sumOf { it.second.first } }
@@ -181,7 +188,7 @@ fun RealPortfolioView(
                             }
                         }
                     } else {
-                        items(realCoinItemsList, key = { it.first.first }) { itemData ->
+                        items(realCoinItemsList, key = { "real_coin_${it.first.first}" }) { itemData ->
                             val (coinUpper, qtyTriple) = itemData.first
                             val (qty, freeQty, lockedQty) = qtyTriple
                             val (estVal, details) = itemData.second
