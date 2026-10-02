@@ -56,7 +56,7 @@ fun RealPortfolioSummaryCard(
                     Icon(Icons.Default.VerifiedUser, null, tint = TvGreen, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
                     Text(
-                        text = "SALDO REAL INDODAX",
+                        text = if (isTokocrypto) "SALDO REAL TOKOCRYPTO" else "SALDO REAL INDODAX",
                         color = TvGreen,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Black

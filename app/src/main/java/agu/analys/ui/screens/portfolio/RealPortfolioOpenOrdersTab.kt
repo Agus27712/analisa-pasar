@@ -33,7 +33,7 @@ fun LazyListScope.realPortfolioOpenOrdersSection(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    "Tidak ada antrean order aktif di Indodax.",
+                    "Tidak ada antrean order aktif.",
                     color = TvTextSecondary,
                     fontSize = 11.sp
                 )
@@ -57,6 +57,18 @@ fun RealOpenOrderItemCard(
 ) {
     val orderSymbolUpper = order.symbol.uppercase()
     val orderSideColor = if (order.side.equals("BUY", true)) TvGreen else TvRed
+    val quoteAsset = when {
+        orderSymbolUpper.endsWith("USDT") || orderSymbolUpper.contains("_USDT") -> "USDT"
+        orderSymbolUpper.endsWith("BIDR") || orderSymbolUpper.contains("_BIDR") -> "BIDR"
+        else -> "IDR"
+    }
+    val baseAsset = orderSymbolUpper
+        .replace("USDT", "")
+        .replace("BIDR", "")
+        .replace("IDR", "")
+        .replace("_", "")
+        .replace("/", "")
+        .ifEmpty { orderSymbolUpper }
 
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -85,7 +97,7 @@ fun RealOpenOrderItemCard(
                     }
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        text = orderSymbolUpper.replace("IDR", "/IDR"),
+                        text = "$baseAsset / $quoteAsset",
                         color = TvTextPrimary,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold
@@ -93,12 +105,12 @@ fun RealOpenOrderItemCard(
                 }
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = "Harga: ${PriceFormatter.formatPrice(order.price)}",
+                    text = "Harga: ${PriceFormatter.formatPrice(order.price, quoteAsset = quoteAsset)}",
                     color = TvTextSecondary,
                     fontSize = 11.sp
                 )
                 Text(
-                    text = "Jumlah: ${order.quantity} | Executed: ${order.executedQty}",
+                    text = "Jumlah: ${PriceFormatter.formatRawDecimal(order.quantity)} $baseAsset | Executed: ${PriceFormatter.formatRawDecimal(order.executedQty)}",
                     color = TvTextSecondary,
                     fontSize = 10.sp
                 )

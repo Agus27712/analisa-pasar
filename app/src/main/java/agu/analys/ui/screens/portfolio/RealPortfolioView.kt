@@ -48,7 +48,7 @@ fun RealPortfolioView(
     val context = androidx.compose.ui.platform.LocalContext.current
     var selectedRealTab by remember { mutableStateOf(RealPortfolioTab.ASSETS) }
 
-    val savedBalances = remember { agu.analys.util.AppPreferences(context).getSavedRealBalance() }
+    val savedBalances = remember { agu.analys.util.AppPreferences(context).getSavedRealBalance(if (isTokocrypto) "TOKOCRYPTO" else "INDODAX") }
 
     val realIdr = realBalance["idr"] ?: realBalance["IDR"] ?: savedBalances["idr"] ?: savedBalances["IDR"] ?: 0.0
     val freeIdr = realFreeBalance["idr"] ?: realFreeBalance["IDR"] ?: realIdr
@@ -56,29 +56,34 @@ fun RealPortfolioView(
 
     // Sub-saldo USDT riil: dipakai untuk order di pair berkuotasi USDT.
     // Kunci saldo mengikuti respons Tokocrypto/Indodax ("usdt"), dengan toleransi ejaan lain.
-    val realUsdt = realBalance.entries.firstOrNull { (k, _) ->
-        val key = k.lowercase()
-        key == "usdt" || key == "usd" || key == "usdc" || key == "busd"
-    }?.value
+    val realUsdt = realBalance["usdt"] ?: realBalance["USDT"]
+        ?: realBalance.entries.firstOrNull { (k, _) ->
+            val key = k.lowercase()
+            key == "usdt" || key == "usd" || key == "usdc" || key == "busd"
+        }?.value
+        ?: savedBalances["usdt"] ?: savedBalances["USDT"]
         ?: savedBalances.entries.firstOrNull { (k, _) ->
             val key = k.lowercase()
             key == "usdt" || key == "usd" || key == "usdc" || key == "busd"
         }?.value ?: 0.0
 
-    val freeUsdt = realFreeBalance.entries.firstOrNull { (k, _) ->
-        val key = k.lowercase()
-        key == "usdt" || key == "usd" || key == "usdc" || key == "busd"
-    }?.value ?: realUsdt
-    val lockedUsdt = realLockedBalance.entries.firstOrNull { (k, _) ->
-        val key = k.lowercase()
-        key == "usdt" || key == "usd" || key == "usdc" || key == "busd"
-    }?.value ?: 0.0
+    val freeUsdt = realFreeBalance["usdt"] ?: realFreeBalance["USDT"]
+        ?: realFreeBalance.entries.firstOrNull { (k, _) ->
+            val key = k.lowercase()
+            key == "usdt" || key == "usd" || key == "usdc" || key == "busd"
+        }?.value ?: realUsdt
+
+    val lockedUsdt = realLockedBalance["usdt"] ?: realLockedBalance["USDT"]
+        ?: realLockedBalance.entries.firstOrNull { (k, _) ->
+            val key = k.lowercase()
+            key == "usdt" || key == "usd" || key == "usdc" || key == "busd"
+        }?.value ?: 0.0
 
     // Kurs live (bukan hardcode) untuk ekuivalen Rupiah saldo USDT.
     val usdtIdrRate by agu.analys.util.ExchangeRateManager.usdtIdrRate.collectAsState()
     val realUsdtIdr = if (usdtIdrRate > 0.0) realUsdt * usdtIdrRate else 0.0
 
-    val realCoinItemsList = remember(realBalance, realFreeBalance, realLockedBalance, realAvgBuyPrices, dashboardTicks, currentTick, isTokocrypto) {
+    val realCoinItemsList = remember(realBalance, realFreeBalance, realLockedBalance, realAvgBuyPrices, dashboardTicks, currentTick, isTokocrypto, usdtIdrRate) {
         realBalance.entries
             .filter { (key, value) ->
                 val k = key.lowercase()
@@ -88,32 +93,49 @@ fun RealPortfolioView(
             .map { (coinUpper, entries) ->
                 val coinLower = coinUpper.lowercase()
                 val qty = entries.maxOf { it.value }
-                val symbol = if (isTokocrypto) "${coinUpper}USDT" else "${coinUpper}IDR"
-                val altSymbol = if (isTokocrypto) "${coinUpper}BIDR" else "${coinUpper}USDT"
+                val symbolUsdt = "${coinUpper}USDT"
+                val symbolIdr = "${coinUpper}IDR"
+                val symbolBidr = "${coinUpper}BIDR"
+
+                val isQuoteUsdt = isTokocrypto || dashboardTicks.containsKey(symbolUsdt) || (currentTick?.symbol?.equals(symbolUsdt, true) == true)
+                val primarySymbol = if (isQuoteUsdt) symbolUsdt else symbolIdr
+                val altSymbol = if (isQuoteUsdt) symbolBidr else symbolUsdt
+
                 val price = when {
-                    symbol.equals(currentTick?.symbol, ignoreCase = true) -> currentTick?.price ?: 0.0
+                    primarySymbol.equals(currentTick?.symbol, ignoreCase = true) -> currentTick?.price ?: 0.0
                     altSymbol.equals(currentTick?.symbol, ignoreCase = true) -> currentTick?.price ?: 0.0
-                    dashboardTicks.containsKey(symbol) -> dashboardTicks[symbol]?.price ?: 0.0
+                    dashboardTicks.containsKey(primarySymbol) -> dashboardTicks[primarySymbol]?.price ?: 0.0
                     dashboardTicks.containsKey(altSymbol) -> dashboardTicks[altSymbol]?.price ?: 0.0
-                    dashboardTicks.containsKey("${coinLower}_idr") -> dashboardTicks["${coinLower}_idr"]?.price ?: 0.0
                     dashboardTicks.containsKey("${coinLower}_usdt") -> dashboardTicks["${coinLower}_usdt"]?.price ?: 0.0
+                    dashboardTicks.containsKey("${coinLower}_idr") -> dashboardTicks["${coinLower}_idr"]?.price ?: 0.0
                     dashboardTicks.containsKey(coinUpper) -> dashboardTicks[coinUpper]?.price ?: 0.0
                     else -> 0.0
                 }
+
                 val avgPrice = realAvgBuyPrices[coinUpper]
                     ?: realAvgBuyPrices[coinLower]
-                    ?: realAvgBuyPrices[symbol]
+                    ?: realAvgBuyPrices[primarySymbol]
                     ?: realAvgBuyPrices[altSymbol]
                     ?: 0.0
                 val effectivePrice = if (price > 0.0) price else avgPrice
-                val estVal = qty * effectivePrice
-                val pnlIdr = if (avgPrice > 0.0) (effectivePrice - avgPrice) * qty else 0.0
+
+                // Normalisasi nilai estimasi & PnL ke Rupiah (IDR)
+                val rate = if (isQuoteUsdt && usdtIdrRate > 0.0) usdtIdrRate else 1.0
+                val estValIdr = qty * effectivePrice * rate
+                val pnlIdr = if (avgPrice > 0.0) (effectivePrice - avgPrice) * qty * rate else 0.0
                 val pnlPct = if (avgPrice > 0.0) ((effectivePrice - avgPrice) / avgPrice) * 100.0 else 0.0
 
                 val freeQty = realFreeBalance[coinLower] ?: realFreeBalance[coinUpper] ?: qty
                 val lockedQty = realLockedBalance[coinLower] ?: realLockedBalance[coinUpper] ?: 0.0
 
-                Pair(coinUpper, Triple(qty, freeQty, lockedQty)) to Pair(estVal, Triple(price, avgPrice, Pair(pnlIdr, pnlPct)))
+                val quoteAsset = if (isQuoteUsdt) "USDT" else "IDR"
+                val pair = TradingPair.fromCustomSymbol(primarySymbol, quoteAsset)
+
+                Triple(
+                    Pair(coinUpper, Triple(qty, freeQty, lockedQty)),
+                    Pair(estValIdr, Triple(price, avgPrice, Pair(pnlIdr, pnlPct))),
+                    Pair(quoteAsset, pair)
+                )
             }.sortedByDescending { it.second.first }
     }
     
@@ -181,7 +203,7 @@ fun RealPortfolioView(
                                 contentAlignment = androidx.compose.ui.Alignment.Center
                             ) {
                                 androidx.compose.material3.Text(
-                                    "Belum ada aset koin kripto terdeteksi di akun Indodax.",
+                                    if (isTokocrypto) "Belum ada aset koin kripto terdeteksi di akun Tokocrypto." else "Belum ada aset koin kripto terdeteksi di akun Indodax.",
                                     color = TvTextSecondary,
                                     fontSize = 11.sp
                                 )
@@ -191,20 +213,24 @@ fun RealPortfolioView(
                         items(realCoinItemsList, key = { "real_coin_${it.first.first}" }) { itemData ->
                             val (coinUpper, qtyTriple) = itemData.first
                             val (qty, freeQty, lockedQty) = qtyTriple
-                            val (estVal, details) = itemData.second
+                            val (estValIdr, details) = itemData.second
                             val (price, avgPrice, pnlPair) = details
                             val (pnlIdr, pnlPct) = pnlPair
+                            val (quoteAsset, pair) = itemData.third
 
                             RealPortfolioAssetItem(
                                 coinUpper = coinUpper,
                                 qty = qty,
                                 freeQty = freeQty,
                                 lockedQty = lockedQty,
-                                estVal = estVal,
+                                estVal = estValIdr,
                                 price = price,
                                 avgPrice = avgPrice,
                                 pnlIdr = pnlIdr,
                                 pnlPct = pnlPct,
+                                quoteAsset = quoteAsset,
+                                isTokocrypto = isTokocrypto,
+                                tradingPair = pair,
                                 onEditAvgBuyPrice = onEditAvgBuyPrice,
                                 onSelectPair = onSelectPair,
                                 onNavigateToDetail = onNavigateToDetail
@@ -229,7 +255,7 @@ fun RealPortfolioView(
 
             // TOP-UP & WITHDRAW NOTICE CARD FOR REAL MODE
             item {
-                RealPortfolioNoticeCard()
+                RealPortfolioNoticeCard(isTokocrypto = isTokocrypto)
             }
         }
     }

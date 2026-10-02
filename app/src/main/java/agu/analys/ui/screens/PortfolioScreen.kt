@@ -292,7 +292,7 @@ fun PortfolioScreen(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "Portofolio Real (Indodax)",
+                            text = if (viewModel.prefs.marketDataSource == agu.analys.config.MarketDataSource.TOKOCRYPTO) "Portofolio Real (Tokocrypto)" else "Portofolio Real (Indodax)",
                             color = if (showRealPortfolioMode) TvGreen else if (!isRealBuyMode) TvTextSecondary.copy(alpha = 0.5f) else TvTextSecondary,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold
@@ -404,9 +404,10 @@ fun PortfolioScreen(
     }
 
     if (showPinDialog) {
+        val exchangeLabel = viewModel.prefs.marketDataSource.label
         SecurityPinDialog(
             title = "VERIFIKASI PIN PORTOFOLIO REAL",
-            subtitle = "Masukkan 6-digit PIN untuk membuka akses Portofolio Indodax.",
+            subtitle = "Masukkan 6-digit PIN untuk membuka akses Portofolio $exchangeLabel.",
             isSetupMode = false,
             errorMessage = pinDialogError,
             onPinSubmitted = { enteredPin ->

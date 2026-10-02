@@ -15,8 +15,10 @@ import agu.analys.ui.theme.*
 
 @Composable
 fun RealPortfolioNoticeCard(
+    isTokocrypto: Boolean = false,
     modifier: Modifier = Modifier
 ) {
+    val exchangeName = if (isTokocrypto) "Tokocrypto" else "Indodax"
     Card(
         modifier = modifier.fillMaxWidth().padding(top = 8.dp),
         shape = RoundedCornerShape(10.dp),
@@ -31,7 +33,7 @@ fun RealPortfolioNoticeCard(
             }
             Spacer(Modifier.height(4.dp))
             Text(
-                "Akses API Indodax dikhususkan untuk Mode Trade saja. Untuk melakukan Top-Up Rupiah atau Penarikan Dana (Withdraw), silakan gunakan aplikasi atau website resmi Indodax.",
+                "Akses API $exchangeName dikhususkan untuk Mode Trade saja. Untuk melakukan Top-Up / Deposit atau Penarikan Dana (Withdraw), silakan gunakan aplikasi atau website resmi $exchangeName.",
                 color = TvTextSecondary,
                 fontSize = 10.sp,
                 lineHeight = 14.sp

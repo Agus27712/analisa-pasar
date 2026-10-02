@@ -63,8 +63,18 @@ fun RealTradeHistoryItemCard(
     var showDetailDialog by remember { mutableStateOf(false) }
     val symbolUpper = trade.symbol.uppercase()
     val sideColor = if (trade.isBuyer) TvGreen else TvRed
-    val baseAsset = symbolUpper.replace("IDR", "").replace("_IDR", "").replace("/", "")
-    val quoteAsset = "IDR"
+    val quoteAsset = when {
+        symbolUpper.endsWith("USDT") || symbolUpper.contains("_USDT") -> "USDT"
+        symbolUpper.endsWith("BIDR") || symbolUpper.contains("_BIDR") -> "BIDR"
+        else -> "IDR"
+    }
+    val baseAsset = symbolUpper
+        .replace("USDT", "")
+        .replace("BIDR", "")
+        .replace("IDR", "")
+        .replace("_", "")
+        .replace("/", "")
+        .ifEmpty { symbolUpper }
 
     val snapshot = remember(trade.signalSnapshotJson) {
         TradeSignalSnapshot.fromJsonString(trade.signalSnapshotJson)
@@ -217,7 +227,7 @@ fun RealTradeHistoryItemCard(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(text = "Harga Eksekusi", color = TvTextSecondary, fontSize = 10.sp, maxLines = 1)
                     Text(
-                        text = PriceFormatter.formatPrice(trade.price),
+                        text = PriceFormatter.formatPrice(trade.price, quoteAsset = quoteAsset),
                         color = TvTextPrimary,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold,
@@ -237,7 +247,7 @@ fun RealTradeHistoryItemCard(
                 Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
                     Text(text = "Total Nominal", color = TvTextSecondary, fontSize = 10.sp, maxLines = 1)
                     Text(
-                        text = PriceFormatter.formatPrice(trade.amount),
+                        text = PriceFormatter.formatPrice(trade.amount, quoteAsset = quoteAsset),
                         color = TvTextPrimary,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Black,

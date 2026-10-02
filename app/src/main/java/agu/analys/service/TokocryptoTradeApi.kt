@@ -117,16 +117,18 @@ object TokocryptoTradeApi {
      * Ekstraksi aset dari berbagai variasi respons JSON Tokocrypto:
      * - root.accountAssets
      * - root.balances
+     * - root.assets
      * - data is JSONArray
      * - data.accountAssets
      * - data.balances
-     * - data.assets / data.userAssets
+     * - data.assets / data.userAssets / data.spotAssets / data.list
      * - data sebagai Map aset
      */
     private fun extractAssets(root: JSONObject): JSONArray? {
         root.optJSONArray("accountAssets")?.let { return it }
         root.optJSONArray("balances")?.let { return it }
         root.optJSONArray("assets")?.let { return it }
+        root.optJSONArray("data")?.let { return it }
 
         return when (val data = root.opt("data")) {
             is JSONArray -> data
@@ -135,6 +137,8 @@ object TokocryptoTradeApi {
                     ?: data.optJSONArray("balances")
                     ?: data.optJSONArray("assets")
                     ?: data.optJSONArray("userAssets")
+                    ?: data.optJSONArray("spotAssets")
+                    ?: data.optJSONArray("list")
                     ?: run {
                         // Jika data berupa Map objek aset (contoh: {"USDT": {"free": "10", "locked": "0"}})
                         val synthesized = JSONArray()
@@ -145,8 +149,8 @@ object TokocryptoTradeApi {
                             if (assetObj != null) {
                                 val item = JSONObject()
                                 item.put("asset", key)
-                                item.put("free", assetObj.opt("free") ?: assetObj.opt("available") ?: "0")
-                                item.put("locked", assetObj.opt("locked") ?: assetObj.opt("freeze") ?: "0")
+                                item.put("free", assetObj.opt("free") ?: assetObj.opt("available") ?: assetObj.opt("freeAmount") ?: "0")
+                                item.put("locked", assetObj.opt("locked") ?: assetObj.opt("freeze") ?: assetObj.opt("frozen") ?: "0")
                                 synthesized.put(item)
                             }
                         }
@@ -211,71 +215,77 @@ object TokocryptoTradeApi {
         }
 
         // Targeted query khusus untuk aset USDT bila belum terbaca atau bernilai 0 dari endpoint umum
-        val hasUsdt = parsedBalances?.total?.get("usdt") != null && (parsedBalances?.total?.get("usdt") ?: 0.0) > 0.0
+        val hasUsdt = (parsedBalances?.total?.get("usdt") ?: 0.0) > 0.0 || (parsedBalances?.total?.get("USDT") ?: 0.0) > 0.0
         if (parsedBalances == null || !hasUsdt) {
-            try {
-                val assetTimestamp = getAdjustedTimestamp()
-                val assetParams = listOf(
-                    "asset=USDT",
-                    "recvWindow=$recvWindow",
-                    "timestamp=$assetTimestamp"
-                ).sorted()
-                val assetQuery = assetParams.joinToString("&")
-                val assetSig = hmacSha256(secretKey, assetQuery)
-                val assetReq = Request.Builder()
-                    .url("$TOKOCRYPTO_BASE_URL/open/v1/account/spot/asset?$assetQuery&signature=$assetSig")
-                    .get()
-                    .header("X-MBX-APIKEY", apiKey.trim())
-                    .header("Accept", "application/json")
-                    .header("User-Agent", "AnalysApp/1.0 (Android; Tokocrypto Trade)")
-                    .build()
+            for (assetSymbol in listOf("USDT", "usdt")) {
+                try {
+                    val assetTimestamp = getAdjustedTimestamp()
+                    val assetParams = listOf(
+                        "asset=$assetSymbol",
+                        "recvWindow=$recvWindow",
+                        "timestamp=$assetTimestamp"
+                    ).sorted()
+                    val assetQuery = assetParams.joinToString("&")
+                    val assetSig = hmacSha256(secretKey, assetQuery)
+                    val assetReq = Request.Builder()
+                        .url("$TOKOCRYPTO_BASE_URL/open/v1/account/spot/asset?$assetQuery&signature=$assetSig")
+                        .get()
+                        .header("X-MBX-APIKEY", apiKey.trim())
+                        .header("Accept", "application/json")
+                        .header("User-Agent", "AnalysApp/1.0 (Android; Tokocrypto Trade)")
+                        .build()
 
-                client.newCall(assetReq).execute().use { assetResp ->
-                    val assetBody = assetResp.body?.string().orEmpty()
-                    val assetRoot = runCatching { JSONObject(assetBody) }.getOrNull()
-                    if (assetResp.isSuccessful && assetRoot != null && assetRoot.optInt("code", 0) == 0) {
-                        val assetData = assetRoot.opt("data")
-                        val usdtItem = when (assetData) {
-                            is JSONObject -> assetData
-                            is JSONArray -> assetData.optJSONObject(0)
-                            else -> null
-                        }
-                        if (usdtItem != null) {
-                            val free = usdtItem.optString("free", "").toDoubleOrNull()
-                                ?: usdtItem.optDouble("free", Double.NaN).takeIf { !it.isNaN() }
-                                ?: usdtItem.optString("available", "").toDoubleOrNull()
-                                ?: usdtItem.optDouble("available", 0.0)
+                    client.newCall(assetReq).execute().use { assetResp ->
+                        val assetBody = assetResp.body?.string().orEmpty()
+                        val assetRoot = runCatching { JSONObject(assetBody) }.getOrNull()
+                        if (assetResp.isSuccessful && assetRoot != null && assetRoot.optInt("code", 0) == 0) {
+                            val assetData = assetRoot.opt("data")
+                            val usdtItem = when (assetData) {
+                                is JSONObject -> assetData
+                                is JSONArray -> assetData.optJSONObject(0)
+                                else -> null
+                            }
+                            if (usdtItem != null) {
+                                val free = usdtItem.optString("free", "").toDoubleOrNull()
+                                    ?: usdtItem.optDouble("free", Double.NaN).takeIf { !it.isNaN() }
+                                    ?: usdtItem.optString("available", "").toDoubleOrNull()
+                                    ?: usdtItem.optDouble("available", Double.NaN).takeIf { !it.isNaN() }
+                                    ?: usdtItem.optString("freeAmount", "").toDoubleOrNull()
+                                    ?: usdtItem.optDouble("freeAmount", 0.0)
 
-                            val locked = usdtItem.optString("locked", "").toDoubleOrNull()
-                                ?: usdtItem.optDouble("locked", Double.NaN).takeIf { !it.isNaN() }
-                                ?: usdtItem.optString("freeze", "").toDoubleOrNull()
-                                ?: usdtItem.optString("frozen", "").toDoubleOrNull()
-                                ?: usdtItem.optDouble("locked", 0.0)
+                                val locked = usdtItem.optString("locked", "").toDoubleOrNull()
+                                    ?: usdtItem.optDouble("locked", Double.NaN).takeIf { !it.isNaN() }
+                                    ?: usdtItem.optString("freeze", "").toDoubleOrNull()
+                                    ?: usdtItem.optString("frozen", "").toDoubleOrNull()
+                                    ?: usdtItem.optDouble("locked", 0.0)
 
-                            val total = free + locked
+                                val total = free + locked
 
-                            val currentFree = parsedBalances?.free?.toMutableMap() ?: mutableMapOf()
-                            val currentLocked = parsedBalances?.locked?.toMutableMap() ?: mutableMapOf()
-                            val currentTotal = parsedBalances?.total?.toMutableMap() ?: mutableMapOf()
+                                if (total > 0.0 || free > 0.0) {
+                                    val currentFree = parsedBalances?.free?.toMutableMap() ?: mutableMapOf()
+                                    val currentLocked = parsedBalances?.locked?.toMutableMap() ?: mutableMapOf()
+                                    val currentTotal = parsedBalances?.total?.toMutableMap() ?: mutableMapOf()
 
-                            currentFree["usdt"] = free
-                            currentFree["USDT"] = free
-                            currentLocked["usdt"] = locked
-                            currentLocked["USDT"] = locked
-                            currentTotal["usdt"] = total
-                            currentTotal["USDT"] = total
+                                    currentFree["usdt"] = free
+                                    currentFree["USDT"] = free
+                                    currentLocked["usdt"] = locked
+                                    currentLocked["USDT"] = locked
+                                    currentTotal["usdt"] = total
+                                    currentTotal["USDT"] = total
 
-                            parsedBalances = IndodaxBalances(
-                                total = currentTotal,
-                                free = currentFree,
-                                locked = currentLocked
-                            )
-                            Timber.i("Tokocrypto spot/asset targeted USDT berhasil: free=$free, locked=$locked, total=$total")
+                                    parsedBalances = IndodaxBalances(
+                                        total = currentTotal,
+                                        free = currentFree,
+                                        locked = currentLocked
+                                    )
+                                    Timber.i("Tokocrypto spot/asset targeted USDT berhasil: free=$free, locked=$locked, total=$total")
+                                }
+                            }
                         }
                     }
+                } catch (e: Exception) {
+                    Timber.w("Tokocrypto targeted spot/asset USDT check error: ${e.message}")
                 }
-            } catch (e: Exception) {
-                Timber.w("Tokocrypto targeted spot/asset USDT check error: ${e.message}")
             }
         }
 
@@ -301,6 +311,8 @@ object TokocryptoTradeApi {
             val assetRaw = (item.optString("asset").takeIf { it.isNotBlank() }
                 ?: item.optString("assetName").takeIf { it.isNotBlank() }
                 ?: item.optString("coin").takeIf { it.isNotBlank() }
+                ?: item.optString("name").takeIf { it.isNotBlank() }
+                ?: item.optString("symbol").takeIf { it.isNotBlank() }
                 ?: item.optString("currency", "")).trim()
             if (assetRaw.isBlank()) continue
 
@@ -310,12 +322,21 @@ object TokocryptoTradeApi {
             val free = item.optString("free", "").toDoubleOrNull()
                 ?: item.optDouble("free", Double.NaN).takeIf { !it.isNaN() }
                 ?: item.optString("available", "").toDoubleOrNull()
-                ?: item.optDouble("available", 0.0)
+                ?: item.optDouble("available", Double.NaN).takeIf { !it.isNaN() }
+                ?: item.optString("freeAmount", "").toDoubleOrNull()
+                ?: item.optDouble("freeAmount", Double.NaN).takeIf { !it.isNaN() }
+                ?: item.optString("unfreeze", "").toDoubleOrNull()
+                ?: item.optDouble("unfreeze", Double.NaN).takeIf { !it.isNaN() }
+                ?: item.optString("balance", "").toDoubleOrNull()
+                ?: item.optDouble("balance", 0.0)
 
             val locked = item.optString("locked", "").toDoubleOrNull()
                 ?: item.optDouble("locked", Double.NaN).takeIf { !it.isNaN() }
                 ?: item.optString("freeze", "").toDoubleOrNull()
+                ?: item.optDouble("freeze", Double.NaN).takeIf { !it.isNaN() }
                 ?: item.optString("frozen", "").toDoubleOrNull()
+                ?: item.optDouble("frozen", Double.NaN).takeIf { !it.isNaN() }
+                ?: item.optString("lockedAmount", "").toDoubleOrNull()
                 ?: item.optDouble("locked", 0.0)
 
             val total = free + locked
@@ -723,6 +744,202 @@ if (!valResult.isValid) {
             return@withContext IndodaxTradeApiV2.OrderResult(false, "Error: $ex")
         }
     }
+
+    /**
+     * Mengambil daftar order aktif (open orders) dari Tokocrypto (GET /open/v1/orders/open)
+     */
+    suspend fun openOrders(
+        apiKey: String,
+        secretKey: String,
+        symbol: String? = null
+    ): Pair<Boolean, String> = withContext(Dispatchers.IO) {
+        if (apiKey.isBlank() || secretKey.isBlank()) {
+            return@withContext false to "API Key atau Secret Key Tokocrypto belum diisi."
+        }
+        syncServerTime()
+        val timestamp = getAdjustedTimestamp()
+        val params = mutableListOf(
+            "recvWindow=10000",
+            "timestamp=$timestamp"
+        )
+        if (!symbol.isNullOrBlank()) {
+            val tokoSymbol = TokocryptoSymbolRepository.getSymbolInfo(symbol)
+                ?.let { "${it.baseAsset}_${it.quoteAsset}" }
+                ?: TokocryptoMarketService.toTokocryptoPair(symbol)
+            params.add("symbol=$tokoSymbol")
+        }
+        val queryString = params.sorted().joinToString("&")
+        val signature = hmacSha256(secretKey, queryString)
+
+        try {
+            val url = "$TOKOCRYPTO_BASE_URL/open/v1/orders/open?$queryString&signature=$signature"
+            val req = Request.Builder()
+                .url(url)
+                .get()
+                .header("X-MBX-APIKEY", apiKey.trim())
+                .header("Accept", "application/json")
+                .header("User-Agent", "AnalysApp/1.0 (Android; Tokocrypto Trade)")
+                .build()
+
+            client.newCall(req).execute().use { resp ->
+                val body = resp.body?.string().orEmpty()
+                val root = runCatching { JSONObject(body) }.getOrNull()
+                val code = root?.optInt("code", -1) ?: -1
+                if (resp.isSuccessful && code == 0) {
+                    val data = root?.opt("data")
+                    val list = when (data) {
+                        is JSONArray -> data
+                        is JSONObject -> data.optJSONArray("list") ?: JSONArray()
+                        else -> JSONArray()
+                    }
+                    return@withContext true to list.toString()
+                }
+                val detail = describeError(resp.code, root, body)
+                return@withContext false to detail
+            }
+        } catch (e: Exception) {
+            val ex = e.message ?: e.javaClass.simpleName
+            return@withContext false to "Error koneksi Tokocrypto open orders: $ex"
+        }
+    }
+
+    /**
+     * Mengambil riwayat eksekusi perdagangan (trades) dari Tokocrypto (GET /open/v1/orders/trades)
+     */
+    suspend fun myTrades(
+        apiKey: String,
+        secretKey: String,
+        symbol: String,
+        limit: Int = 100
+    ): Pair<Boolean, String> = withContext(Dispatchers.IO) {
+        if (apiKey.isBlank() || secretKey.isBlank()) {
+            return@withContext false to "API Key atau Secret Key Tokocrypto belum diisi."
+        }
+        val tokoSymbol = TokocryptoSymbolRepository.getSymbolInfo(symbol)
+            ?.let { "${it.baseAsset}_${it.quoteAsset}" }
+            ?: TokocryptoMarketService.toTokocryptoPair(symbol)
+
+        syncServerTime()
+        val timestamp = getAdjustedTimestamp()
+        val params = listOf(
+            "limit=$limit",
+            "recvWindow=10000",
+            "symbol=$tokoSymbol",
+            "timestamp=$timestamp"
+        ).sorted()
+        val queryString = params.joinToString("&")
+        val signature = hmacSha256(secretKey, queryString)
+
+        // Jalur 1: GET /open/v1/orders/trades
+        try {
+            val url = "$TOKOCRYPTO_BASE_URL/open/v1/orders/trades?$queryString&signature=$signature"
+            val req = Request.Builder()
+                .url(url)
+                .get()
+                .header("X-MBX-APIKEY", apiKey.trim())
+                .header("Accept", "application/json")
+                .header("User-Agent", "AnalysApp/1.0 (Android; Tokocrypto Trade)")
+                .build()
+
+            client.newCall(req).execute().use { resp ->
+                val body = resp.body?.string().orEmpty()
+                val root = runCatching { JSONObject(body) }.getOrNull()
+                val code = root?.optInt("code", -1) ?: -1
+                if (resp.isSuccessful && code == 0) {
+                    val data = root?.opt("data")
+                    val list = when (data) {
+                        is JSONArray -> data
+                        is JSONObject -> data.optJSONArray("list") ?: JSONArray()
+                        else -> JSONArray()
+                    }
+                    if (list.length() > 0) {
+                        return@withContext true to list.toString()
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Timber.w("myTrades /orders/trades error for $tokoSymbol: ${e.message}")
+        }
+
+        // Jalur 2 (Fallback): GET /open/v1/orders (ambil order terisi / filled)
+        try {
+            val urlOrders = "$TOKOCRYPTO_BASE_URL/open/v1/orders?$queryString&signature=$signature"
+            val reqOrders = Request.Builder()
+                .url(urlOrders)
+                .get()
+                .header("X-MBX-APIKEY", apiKey.trim())
+                .header("Accept", "application/json")
+                .header("User-Agent", "AnalysApp/1.0 (Android; Tokocrypto Trade)")
+                .build()
+
+            client.newCall(reqOrders).execute().use { resp ->
+                val body = resp.body?.string().orEmpty()
+                val root = runCatching { JSONObject(body) }.getOrNull()
+                val code = root?.optInt("code", -1) ?: -1
+                if (resp.isSuccessful && code == 0) {
+                    val data = root?.opt("data")
+                    val list = when (data) {
+                        is JSONArray -> data
+                        is JSONObject -> data.optJSONArray("list") ?: JSONArray()
+                        else -> JSONArray()
+                    }
+                    return@withContext true to list.toString()
+                }
+                val detail = describeError(resp.code, root, body)
+                return@withContext false to detail
+            }
+        } catch (e: Exception) {
+            val ex = e.message ?: e.javaClass.simpleName
+            return@withContext false to "Error myTrades Tokocrypto: $ex"
+        }
+    }
+
+    fun parseTradesList(raw: String): List<JSONObject> {
+        return try {
+            val arr = JSONArray(raw)
+            val list = mutableListOf<JSONObject>()
+            for (i in 0 until arr.length()) {
+                val obj = arr.optJSONObject(i) ?: continue
+                list.add(obj)
+            }
+            list
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    fun tradeIdOf(trade: JSONObject): String =
+        trade.optString("id").takeIf { it.isNotBlank() }
+            ?: trade.optString("tradeId").takeIf { it.isNotBlank() }
+            ?: trade.optString("orderId", "")
+
+    fun isBuyerOf(trade: JSONObject): Boolean {
+        if (trade.has("isBuyer")) return trade.optBoolean("isBuyer", true)
+        val side = trade.optString("side", "")
+        if (side.equals("BUY", true) || side == "0") return true
+        if (side.equals("SELL", true) || side == "1") return false
+        val sideInt = trade.optInt("side", 0)
+        return sideInt == 0
+    }
+
+    fun tradePriceOf(trade: JSONObject): Double =
+        trade.optString("price", "").toDoubleOrNull()
+            ?: trade.optDouble("price", Double.NaN).takeIf { !it.isNaN() }
+            ?: trade.optString("avgPrice", "").toDoubleOrNull()
+            ?: trade.optDouble("avgPrice", 0.0)
+
+    fun tradeQtyOf(trade: JSONObject): Double =
+        trade.optString("qty", "").toDoubleOrNull()
+            ?: trade.optDouble("qty", Double.NaN).takeIf { !it.isNaN() }
+            ?: trade.optString("executedQty", "").toDoubleOrNull()
+            ?: trade.optDouble("executedQty", Double.NaN).takeIf { !it.isNaN() }
+            ?: trade.optString("origQty", "").toDoubleOrNull()
+            ?: trade.optDouble("origQty", 0.0)
+
+    fun tradeTimeMs(trade: JSONObject): Long =
+        trade.optLong("time", 0L).takeIf { it > 0L }
+            ?: trade.optLong("createTime", 0L).takeIf { it > 0L }
+            ?: trade.optLong("updateTime", System.currentTimeMillis())
 
     /**
      * Request User Listen Token untuk User WebSocket stream (POST /open/v1/user-listen-token)

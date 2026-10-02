@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 class OrderViewModel(
@@ -49,9 +50,11 @@ class OrderViewModel(
     val userPublicIp: StateFlow<String?> = realCoordinator.publicIp
     val failedPinAttempts: StateFlow<Int> = MutableStateFlow(prefs.failedPinAttempts).asStateFlow()
 
-    val realOpenOrders: StateFlow<List<RealOpenOrderEntity>> = AppDatabase.getInstance().realTradeDao().getOpenOrdersByExchangeFlow(prefs.marketDataSource.name)
+    val realOpenOrders: StateFlow<List<RealOpenOrderEntity>> = AppDatabase.getInstance().realTradeDao().getOpenOrdersFlow()
+        .map { list -> list.filter { it.exchange.equals(prefs.marketDataSource.name, ignoreCase = true) } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-    val realTrades: StateFlow<List<RealTradeEntity>> = AppDatabase.getInstance().realTradeDao().getTradesByExchangeFlow(prefs.marketDataSource.name)
+    val realTrades: StateFlow<List<RealTradeEntity>> = AppDatabase.getInstance().realTradeDao().getAllTradesFlow()
+        .map { list -> list.filter { it.exchange.equals(prefs.marketDataSource.name, ignoreCase = true) } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val simulationWallet: StateFlow<SimulationWallet> = simCoordinator.wallet

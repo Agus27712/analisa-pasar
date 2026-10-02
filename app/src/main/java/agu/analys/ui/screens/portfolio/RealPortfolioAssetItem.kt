@@ -31,14 +31,19 @@ fun RealPortfolioAssetItem(
     avgPrice: Double,
     pnlIdr: Double,
     pnlPct: Double,
+    quoteAsset: String = "IDR",
+    isTokocrypto: Boolean = false,
+    tradingPair: TradingPair? = null,
     onEditAvgBuyPrice: (coin: String, newAvgPrice: Double, newInvested: Double) -> Unit,
     onSelectPair: (TradingPair) -> Unit,
     onNavigateToDetail: (TradingPair) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var showEditDialog by remember { mutableStateOf(false) }
-    val symbol = "${coinUpper}IDR"
-    val pair = TradingPair.fromCustomSymbol(symbol, "IDR")
+    val effectivePair = tradingPair ?: TradingPair.fromCustomSymbol(
+        if (isTokocrypto || quoteAsset == "USDT") "${coinUpper}USDT" else "${coinUpper}IDR",
+        quoteAsset
+    )
     val pnlColor = if (pnlIdr > 0) TvGreen else if (pnlIdr < 0) TvRed else TvTextSecondary
     val pnlPrefix = if (pnlIdr > 0) "+" else ""
 
@@ -70,21 +75,21 @@ fun RealPortfolioAssetItem(
 
                 Column(horizontalAlignment = Alignment.End) {
                     Text(
-                        PriceFormatter.formatPrice(estVal),
+                        PriceFormatter.formatPrice(estVal, quoteAsset = "IDR"),
                         color = TvTextPrimary,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold
                     )
                     if (avgPrice > 0.0) {
                         Text(
-                            "$pnlPrefix${PriceFormatter.formatPrice(pnlIdr)} ($pnlPrefix${String.format("%.2f", pnlPct)}%)",
+                            "$pnlPrefix${PriceFormatter.formatPrice(pnlIdr, quoteAsset = "IDR")} ($pnlPrefix${String.format("%.2f", pnlPct)}%)",
                             color = pnlColor,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold
                         )
                     } else {
                         Text(
-                            if (price > 0) "@ ${PriceFormatter.formatPrice(price)}" else "Ticker Menunggu",
+                            if (price > 0) "@ ${PriceFormatter.formatPrice(price, quoteAsset = quoteAsset)}" else "Ticker Menunggu",
                             color = TvBlue,
                             fontSize = 10.sp
                         )
@@ -104,7 +109,7 @@ fun RealPortfolioAssetItem(
                 Column {
                     Text("Rata-rata Harga Beli", color = TvTextSecondary, fontSize = 9.sp)
                     Text(
-                        if (avgPrice > 0.0) PriceFormatter.formatPrice(avgPrice) else "Belum Diset",
+                        if (avgPrice > 0.0) PriceFormatter.formatPrice(avgPrice, quoteAsset = quoteAsset) else "Belum Diset",
                         color = if (avgPrice > 0.0) TvTextPrimary else TvAmber,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold
@@ -114,7 +119,12 @@ fun RealPortfolioAssetItem(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(horizontalAlignment = Alignment.End) {
                         Text("Harga Live", color = TvTextSecondary, fontSize = 9.sp)
-                        Text(if (price > 0) PriceFormatter.formatPrice(price) else "-", color = TvBlue, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            if (price > 0) PriceFormatter.formatPrice(price, quoteAsset = quoteAsset) else "-",
+                            color = TvBlue,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
                     }
                     Spacer(Modifier.width(8.dp))
                     IconButton(
@@ -140,8 +150,8 @@ fun RealPortfolioAssetItem(
             ) {
                 OutlinedButton(
                     onClick = {
-                        onSelectPair(pair)
-                        onNavigateToDetail(pair)
+                        onSelectPair(effectivePair)
+                        onNavigateToDetail(effectivePair)
                     },
                     modifier = Modifier.weight(1f).height(32.dp),
                     shape = RoundedCornerShape(6.dp),
@@ -156,8 +166,8 @@ fun RealPortfolioAssetItem(
 
                 Button(
                     onClick = {
-                        onSelectPair(pair)
-                        onNavigateToDetail(pair)
+                        onSelectPair(effectivePair)
+                        onNavigateToDetail(effectivePair)
                     },
                     modifier = Modifier.weight(1f).height(32.dp),
                     shape = RoundedCornerShape(6.dp),

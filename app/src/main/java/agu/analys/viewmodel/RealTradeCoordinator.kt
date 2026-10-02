@@ -238,67 +238,105 @@ class RealTradeCoordinator(
                 _realLockedBalance.value = balances.locked
                 prefs.saveRealBalance(balances.total, prefs.marketDataSource.name)
                 onBalanceAndAvgUpdated?.invoke(balances.total, _realAvgBuyPrices.value)
-                if (!isToko) {
+                delay(INTER_REQUEST_DELAY_MS)
+                if (fetchRealOpenOrdersSafe(apiKey, secretKey, balances, isToko)) {
                     delay(INTER_REQUEST_DELAY_MS)
-                    if (fetchRealOpenOrdersSafe(apiKey, secretKey, balances)) {
-                        delay(INTER_REQUEST_DELAY_MS)
-                        fetchTradesAndAvgSafe(apiKey, secretKey, balances.total)
-                    }
+                    fetchTradesAndAvgSafe(apiKey, secretKey, balances.total, isToko)
                 }
             }
             _isFetchingRealBalance.value = false
         }
     }
 
-    private suspend fun fetchRealOpenOrdersSafe(apiKey: String, secretKey: String, balances: IndodaxTradeApiV2.IndodaxBalances): Boolean {
+    private suspend fun fetchRealOpenOrdersSafe(
+        apiKey: String,
+        secretKey: String,
+        balances: IndodaxTradeApiV2.IndodaxBalances,
+        isToko: Boolean
+    ): Boolean {
         return try {
             val db = AppDatabase.getInstance().realTradeDao()
+            val exchangeName = if (isToko) "TOKOCRYPTO" else "INDODAX"
             val entityMap = mutableMapOf<String, RealOpenOrderEntity>()
-            val (okAll, rawAll) = IndodaxTradeApiV2.openOrders(apiKey, secretKey)
-            if (!okAll && looksLikeRateLimit(rawAll)) { markRateLimited(rawAll); return false }
-            if (okAll) parseOrdersToMap(rawAll, entityMap)
+
+            if (!isToko) {
+                val (okAll, rawAll) = IndodaxTradeApiV2.openOrders(apiKey, secretKey)
+                if (!okAll && looksLikeRateLimit(rawAll)) { markRateLimited(rawAll); return false }
+                if (okAll) parseOrdersToMap(rawAll, entityMap, exchangeName)
+            } else {
+                val (okAll, rawAll) = TokocryptoTradeApi.openOrders(apiKey, secretKey)
+                if (!okAll && looksLikeRateLimit(rawAll)) { markRateLimited(rawAll); return false }
+                if (okAll) parseOrdersToMap(rawAll, entityMap, exchangeName)
+            }
+
             val candidates = linkedSetOf<String>()
-            balances.locked.filter { it.key != "idr" && it.value > 0.0 }.keys.forEach { candidates.add(it) }
+            balances.locked.filter { it.key != "idr" && it.key != "usdt" && it.value > 0.0 }.keys.forEach { candidates.add(it) }
             prefs.getRecentHistoryBases().forEach { candidates.add(it) }
             prefs.getWatchlist().forEach { candidates.add(baseFromPair(it)) }
+
             for (base in candidates.take(15)) {
                 if (base.isBlank()) continue
                 delay(300)
-                val (okSym, rawSym) = IndodaxTradeApiV2.openOrders(apiKey, secretKey, "${base}idr")
-                if (!okSym && looksLikeRateLimit(rawSym)) { markRateLimited(rawSym); return false }
-                if (okSym) parseOrdersToMap(rawSym, entityMap)
+                if (!isToko) {
+                    val (okSym, rawSym) = IndodaxTradeApiV2.openOrders(apiKey, secretKey, "${base}idr")
+                    if (!okSym && looksLikeRateLimit(rawSym)) { markRateLimited(rawSym); return false }
+                    if (okSym) parseOrdersToMap(rawSym, entityMap, exchangeName)
+                } else {
+                    val symUsdt = "${base}_USDT".uppercase()
+                    val (okSym, rawSym) = TokocryptoTradeApi.openOrders(apiKey, secretKey, symUsdt)
+                    if (!okSym && looksLikeRateLimit(rawSym)) { markRateLimited(rawSym); return false }
+                    if (okSym) parseOrdersToMap(rawSym, entityMap, exchangeName)
+                }
             }
-            db.clearOpenOrders()
-            if (entityMap.isNotEmpty()) db.insertOpenOrders(entityMap.values.toList())
+
+            db.clearOpenOrdersByExchange(exchangeName)
+            if (entityMap.isNotEmpty()) {
+                db.insertOpenOrders(entityMap.values.toList())
+            }
             true
         } catch (e: Exception) {
-            _realTradeStatus.value = "Gagal open orders: ${e.localizedMessage}"; true
+            _realTradeStatus.value = "Gagal open orders: ${e.localizedMessage}"
+            true
         }
     }
 
-    private fun parseOrdersToMap(raw: String, map: MutableMap<String, RealOpenOrderEntity>) {
+    private fun parseOrdersToMap(raw: String, map: MutableMap<String, RealOpenOrderEntity>, exchange: String) {
         try {
             val arr = JSONArray(raw)
             for (i in 0 until arr.length()) {
                 val obj = arr.optJSONObject(i) ?: continue
-                val oId = obj.optString("orderId", "")
+                val oId = obj.optString("orderId", "").ifBlank { obj.optString("id", "") }
                 if (oId.isNotBlank()) {
+                    val sideRaw = obj.optString("side", "")
+                    val side = if (sideRaw == "0" || sideRaw.equals("BUY", true)) "BUY" else "SELL"
+                    val typeRaw = obj.optString("type", "LIMIT")
+                    val type = if (typeRaw == "1" || typeRaw.equals("LIMIT", true)) "LIMIT" else if (typeRaw == "2" || typeRaw.equals("MARKET", true)) "MARKET" else typeRaw.uppercase()
+                    
                     map[oId] = RealOpenOrderEntity(
-                        orderId = oId, symbol = obj.optString("symbol", "").lowercase(),
-                        side = obj.optString("side", "").uppercase(), type = obj.optString("type", "LIMIT").uppercase(),
-                        price = obj.optString("price", "0").toDoubleOrNull() ?: 0.0,
-                        quantity = obj.optString("origQty", "0").toDoubleOrNull() ?: 0.0,
-                        executedQty = obj.optString("executedQty", "0").toDoubleOrNull() ?: 0.0,
+                        orderId = oId,
+                        symbol = obj.optString("symbol", "").lowercase(),
+                        side = side,
+                        type = type,
+                        price = obj.optString("price", "0").toDoubleOrNull() ?: obj.optDouble("price", 0.0),
+                        quantity = obj.optString("origQty", "0").toDoubleOrNull() ?: obj.optDouble("origQty", 0.0),
+                        executedQty = obj.optString("executedQty", "0").toDoubleOrNull() ?: obj.optDouble("executedQty", 0.0),
                         status = obj.optString("status", "OPEN").uppercase(),
-                        time = obj.optLong("time", System.currentTimeMillis())
+                        time = obj.optLong("time", 0L).takeIf { it > 0L } ?: obj.optLong("createTime", System.currentTimeMillis()),
+                        exchange = exchange
                     )
                 }
             }
         } catch (_: Exception) {}
     }
 
-    private suspend fun fetchTradesAndAvgSafe(apiKey: String, secretKey: String, balance: Map<String, Double>) {
+    private suspend fun fetchTradesAndAvgSafe(
+        apiKey: String,
+        secretKey: String,
+        balance: Map<String, Double>,
+        isToko: Boolean
+    ) {
         val candidates = buildHistoryCandidates(balance)
+        val exchangeName = if (isToko) "TOKOCRYPTO" else "INDODAX"
         if (candidates.isEmpty()) {
             _realTradeStatus.value = "Saldo diperbarui. Tidak ada pair untuk histori."
             onBalanceAndAvgUpdated?.invoke(balance, _realAvgBuyPrices.value)
@@ -311,54 +349,119 @@ class RealTradeCoordinator(
         var rateLimited = false
         var fetchErrors = 0
         var assetsWithTrades = 0
+
         for ((index, entry) in candidates.withIndex()) {
             if (index > 0) delay(INTER_REQUEST_DELAY_MS)
             val asset = entry.first
             val currentQty = entry.second
-            val (ok, raw) = try {
-                IndodaxTradeApiV2.myTrades(apiKey, secretKey, "${asset}idr", limit = 200)
-            } catch (e: Exception) { fetchErrors++; continue }
-            if (!ok) {
-                if (looksLikeRateLimit(raw)) { markRateLimited(raw); rateLimited = true; break }
-                fetchErrors++; continue
-            }
-            prefs.rememberHistoryBase(asset)
-            val trades = IndodaxTradeApiV2.parseTradesList(raw)
-            if (trades.isEmpty()) continue
-            assetsWithTrades++
-            var accBuyQty = 0.0; var accBuyCost = 0.0
-            for (trade in trades) {
-                val id = IndodaxTradeApiV2.tradeIdOf(trade)
-                val isBuyer = IndodaxTradeApiV2.isBuyerOf(trade)
-                val tP = IndodaxTradeApiV2.tradePriceOf(trade)
-                val tQ = IndodaxTradeApiV2.tradeQtyOf(trade)
-                if (id.isBlank() || tP <= 0.0 || tQ <= 0.0) continue
-                accumulatedEntities.add(RealTradeEntity(id, "${asset}idr", tP, tQ, tP * tQ, IndodaxTradeApiV2.tradeTimeMs(trade), if (isBuyer) "BUY" else "SELL", isBuyer))
-                if (isBuyer && currentQty > 0.0 && accBuyQty < currentQty) {
-                    val qtyToUse = minOf(tQ, currentQty - accBuyQty)
-                    accBuyQty += qtyToUse; accBuyCost += qtyToUse * tP
+
+            if (!isToko) {
+                val (ok, raw) = try {
+                    IndodaxTradeApiV2.myTrades(apiKey, secretKey, "${asset}idr", limit = 200)
+                } catch (e: Exception) { fetchErrors++; continue }
+                if (!ok) {
+                    if (looksLikeRateLimit(raw)) { markRateLimited(raw); rateLimited = true; break }
+                    fetchErrors++; continue
+                }
+                prefs.rememberHistoryBase(asset)
+                val trades = IndodaxTradeApiV2.parseTradesList(raw)
+                if (trades.isEmpty()) continue
+                assetsWithTrades++
+                var accBuyQty = 0.0; var accBuyCost = 0.0
+                for (trade in trades) {
+                    val id = IndodaxTradeApiV2.tradeIdOf(trade)
+                    val isBuyer = IndodaxTradeApiV2.isBuyerOf(trade)
+                    val tP = IndodaxTradeApiV2.tradePriceOf(trade)
+                    val tQ = IndodaxTradeApiV2.tradeQtyOf(trade)
+                    if (id.isBlank() || tP <= 0.0 || tQ <= 0.0) continue
+                    accumulatedEntities.add(
+                        RealTradeEntity(
+                            id = id,
+                            symbol = "${asset}idr",
+                            price = tP,
+                            qty = tQ,
+                            amount = tP * tQ,
+                            time = IndodaxTradeApiV2.tradeTimeMs(trade),
+                            side = if (isBuyer) "BUY" else "SELL",
+                            isBuyer = isBuyer,
+                            exchange = exchangeName
+                        )
+                    )
+                    if (isBuyer && currentQty > 0.0 && accBuyQty < currentQty) {
+                        val qtyToUse = minOf(tQ, currentQty - accBuyQty)
+                        accBuyQty += qtyToUse; accBuyCost += qtyToUse * tP
+                    }
+                }
+                if (accBuyQty > 0.0) {
+                    val avgP = accBuyCost / accBuyQty
+                    newAvg[asset.lowercase()] = avgP
+                    newAvg[asset.uppercase()] = avgP
+                    newAvg["${asset.lowercase()}idr"] = avgP
+                    newAvg["${asset.uppercase()}IDR"] = avgP
+                    newPartial[asset] = accBuyQty + 1e-12 < currentQty
+                }
+            } else {
+                // Tokocrypto: prioritaskan USDT pair, lalu BIDR pair
+                val tokoSymbol = "${asset}_USDT".uppercase()
+                val (ok, raw) = try {
+                    TokocryptoTradeApi.myTrades(apiKey, secretKey, tokoSymbol, limit = 100)
+                } catch (e: Exception) { fetchErrors++; continue }
+                if (!ok) {
+                    if (looksLikeRateLimit(raw)) { markRateLimited(raw); rateLimited = true; break }
+                    fetchErrors++; continue
+                }
+                prefs.rememberHistoryBase(asset)
+                val trades = TokocryptoTradeApi.parseTradesList(raw)
+                if (trades.isEmpty()) continue
+                assetsWithTrades++
+                var accBuyQty = 0.0; var accBuyCost = 0.0
+                for (trade in trades) {
+                    val id = TokocryptoTradeApi.tradeIdOf(trade)
+                    val isBuyer = TokocryptoTradeApi.isBuyerOf(trade)
+                    val tP = TokocryptoTradeApi.tradePriceOf(trade)
+                    val tQ = TokocryptoTradeApi.tradeQtyOf(trade)
+                    if (id.isBlank() || tP <= 0.0 || tQ <= 0.0) continue
+                    accumulatedEntities.add(
+                        RealTradeEntity(
+                            id = id,
+                            symbol = "${asset.uppercase()}USDT",
+                            price = tP,
+                            qty = tQ,
+                            amount = tP * tQ,
+                            time = TokocryptoTradeApi.tradeTimeMs(trade),
+                            side = if (isBuyer) "BUY" else "SELL",
+                            isBuyer = isBuyer,
+                            exchange = exchangeName
+                        )
+                    )
+                    if (isBuyer && currentQty > 0.0 && accBuyQty < currentQty) {
+                        val qtyToUse = minOf(tQ, currentQty - accBuyQty)
+                        accBuyQty += qtyToUse; accBuyCost += qtyToUse * tP
+                    }
+                }
+                if (accBuyQty > 0.0) {
+                    val avgP = accBuyCost / accBuyQty
+                    newAvg[asset.lowercase()] = avgP
+                    newAvg[asset.uppercase()] = avgP
+                    newAvg["${asset.lowercase()}usdt"] = avgP
+                    newAvg["${asset.uppercase()}USDT"] = avgP
+                    newPartial[asset] = accBuyQty + 1e-12 < currentQty
                 }
             }
-            if (accBuyQty > 0.0) {
-                val avgP = accBuyCost / accBuyQty
-                newAvg[asset.lowercase()] = avgP
-                newAvg[asset.uppercase()] = avgP
-                newAvg["${asset.lowercase()}idr"] = avgP
-                newAvg["${asset.uppercase()}IDR"] = avgP
-                newPartial[asset] = accBuyQty + 1e-12 < currentQty
-            }
         }
+
         if (accumulatedEntities.isNotEmpty()) {
             val enrichedEntities = mutableListOf<RealTradeEntity>()
             val historyDao = AppDatabase.getInstance().tradeHistoryRecordDao()
             for (ent in accumulatedEntities) {
-                val existing = db.getTradesBySymbol(ent.symbol).firstOrNull { it.id == ent.id }
+                val existing = db.getTradesBySymbolAndExchange(ent.symbol, exchangeName).firstOrNull { it.id == ent.id }
                 if (existing?.signalSnapshotJson != null) {
                     enrichedEntities.add(existing)
                     continue
                 }
                 val norm = ent.symbol.uppercase().replace("_", "")
-                val records: List<TradeHistoryRecordEntity> = historyDao.getRecordsForSymbol(norm, "${norm}IDR")
+                val alt = if (isToko) "${norm}USDT" else "${norm}IDR"
+                val records: List<TradeHistoryRecordEntity> = historyDao.getRecordsForSymbolAndExchange(norm, alt, exchangeName)
                 val matched: TradeHistoryRecordEntity? = records.firstOrNull { rec: TradeHistoryRecordEntity ->
                     val timeDiff = java.lang.Math.abs(rec.buyTime - ent.time)
                     val sellTimeDiff = java.lang.Math.abs((rec.sellTime ?: 0L) - ent.time)
@@ -388,7 +491,7 @@ class RealTradeCoordinator(
         }
         _realAvgBuyPrices.value = newAvg
         _realAvgBuyPartial.value = newPartial
-        prefs.saveRealAvgBuyPrices(newAvg)
+        prefs.saveRealAvgBuyPrices(newAvg, prefs.marketDataSource.name)
         onBalanceAndAvgUpdated?.invoke(balance, newAvg)
         if (!rateLimited) _realTradeStatus.value = "Saldo diperbarui. ${accumulatedEntities.size} trade dari $assetsWithTrades pair."
     }
