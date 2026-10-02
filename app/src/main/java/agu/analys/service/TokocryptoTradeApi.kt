@@ -32,8 +32,9 @@ import javax.crypto.spec.SecretKeySpec
  */
 object TokocryptoTradeApi {
     private const val TOKOCRYPTO_BASE_URL = "https://www.tokocrypto.com"
+    // /open/v1/account/spot/asset sengaja TIDAK dipakai: endpoint itu mewajibkan parameter `asset`
+    // (saldo satu aset saja), sedangkan getAccount() butuh semua aset sekaligus.
     private val ACCOUNT_ENDPOINTS = listOf(
-        "/open/v1/account/spot/asset",
         "/open/v1/account/spot"
     )
     private val client get() = NetworkClientProvider.tradeClient
@@ -224,11 +225,19 @@ object TokocryptoTradeApi {
             formParams.add("stopPrice" to formatParam(request.stopPrice, 8, RoundingMode.HALF_UP))
         }
         if (!request.timeInForce.isNullOrBlank() && !isMarket) {
-            formParams.add("timeInForce" to request.timeInForce)
+            // Dokumentasi Tokocrypto: timeInForce berupa kode angka (1=GTC, 2=IOC, 3=FOK, 4=GTX), bukan teks "GTC"
+            val tifCode = when (request.timeInForce.trim().uppercase()) {
+                "GTC" -> "1"
+                "IOC" -> "2"
+                "FOK" -> "3"
+                "GTX" -> "4"
+                else -> request.timeInForce.trim()
+            }
+            formParams.add("timeInForce" to tifCode)
         }
-        if (!request.clientId.isNullOrBlank()) {
-            formParams.add("clientId" to request.clientId)
-        }
+        // clientId kustom SENGAJA tidak dikirim: ID berformat teks ("agu-buy-1759...") ditolak Tokocrypto
+        // dengan kode 3703 "Invalid client ID". Jika dikosongkan, Tokocrypto membuat ID sendiri dan
+        // mengembalikannya di respons (data.clientId) beserta orderId.
         formParams.add("recvWindow" to request.recvWindow.toString())
         formParams.add("timestamp" to timestamp)
 
@@ -346,7 +355,9 @@ object TokocryptoTradeApi {
         val timestamp = System.currentTimeMillis().toString()
         val params = mutableListOf<String>()
         if (!orderId.isNullOrBlank() && orderId != "0") params.add("orderId=$orderId")
-        if (!clientOrderId.isNullOrBlank()) params.add("clientId=$clientOrderId")
+        // clientId dari Tokocrypto hanya dipakai jika orderId tidak ada (ID buatan aplikasi tidak dikenali)
+        val hasOrderId = !orderId.isNullOrBlank() && orderId != "0"
+        if (!hasOrderId && !clientOrderId.isNullOrBlank()) params.add("clientId=$clientOrderId")
         params.add("recvWindow=10000")
         params.add("symbol=$tokoSymbol")
         params.add("timestamp=$timestamp")
