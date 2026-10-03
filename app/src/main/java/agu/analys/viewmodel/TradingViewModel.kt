@@ -164,8 +164,21 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     private val _dashboardQuickFilter = MutableStateFlow(agu.analys.ui.components.dashboard.DashboardQuickFilter.ALL)
     val dashboardQuickFilter: StateFlow<agu.analys.ui.components.dashboard.DashboardQuickFilter> = _dashboardQuickFilter.asStateFlow()
 
+    val dashboardAllLimit: StateFlow<Int> = marketViewModel.dashboardAllLimit
+
+    fun loadMoreDashboardPairs() {
+        marketViewModel.loadMoreDashboardPairs()
+    }
+
+    fun resetDashboardPagination() {
+        marketViewModel.resetDashboardPagination()
+    }
+
     fun setDashboardQuickFilter(filter: agu.analys.ui.components.dashboard.DashboardQuickFilter) {
         _dashboardQuickFilter.value = filter
+        if (filter == agu.analys.ui.components.dashboard.DashboardQuickFilter.ALL) {
+            marketViewModel.resetDashboardPagination()
+        }
     }
 
     // Market Ticker & Candlestick Delegation
@@ -365,7 +378,8 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
             engine.resetForOffline()
             engine.onTickUpdate(tick)
         }
-        refreshWorthCoinsFromMarket()
+        marketViewModel.resetDashboardPagination()
+        refreshWorthCoinsFromMarket(resetPagination = true)
     }
 
     fun setScalpingMode(enabled: Boolean) {
@@ -505,11 +519,15 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         )
     }
 
-    fun refreshWorthCoinsFromMarket() {
+    fun refreshWorthCoinsFromMarket(resetPagination: Boolean = true) {
+        if (resetPagination) {
+            marketViewModel.resetDashboardPagination()
+        }
         marketViewModel.refreshWorthCoinsFromMarket(
             watchlistSymbols = watchlist.value,
             favoritesSymbols = favorites.value,
-            activeStrategy = strategyMode.value
+            activeStrategy = strategyMode.value,
+            resetPagination = resetPagination
         )
     }
 

@@ -86,6 +86,17 @@ class MarketViewModel(application: Application) : AndroidViewModel(application) 
     private val _uiPriceThrottleMs = MutableStateFlow(prefs.priceFeedThrottleMs)
     val uiPriceThrottleMs: StateFlow<Long> = _uiPriceThrottleMs.asStateFlow()
 
+    private val _dashboardAllLimit = MutableStateFlow(15)
+    val dashboardAllLimit: StateFlow<Int> = _dashboardAllLimit.asStateFlow()
+
+    fun loadMoreDashboardPairs() {
+        _dashboardAllLimit.value += 15
+    }
+
+    fun resetDashboardPagination() {
+        _dashboardAllLimit.value = 15
+    }
+
     private var dashboardPollJob: Job? = null
     private var lastLiveTickAt = 0L
 
@@ -107,6 +118,7 @@ class MarketViewModel(application: Application) : AndroidViewModel(application) 
                 _selectedPair.value = pairs.first()
             }
             restoreFromCache(source)
+            resetDashboardPagination()
             refreshWorthCoinsFromMarket()
         }
     }
@@ -138,6 +150,7 @@ class MarketViewModel(application: Application) : AndroidViewModel(application) 
         _worthCoins.value = emptyList()
         _coinBadges.value = emptyMap()
         _isShowingCachedData.value = false
+        resetDashboardPagination()
         _connectionState.value = MarketConnectionState.Loading
     }
 
@@ -210,7 +223,7 @@ class MarketViewModel(application: Application) : AndroidViewModel(application) 
         dashboardPollJob?.cancel()
         dashboardPollJob = viewModelScope.launch {
             while (isActive) {
-                refreshWorthCoinsFromMarket(watchlistSymbols, favoritesSymbols, activeStrategy)
+                refreshWorthCoinsFromMarket(watchlistSymbols, favoritesSymbols, activeStrategy, resetPagination = false)
                 delay(30_000L)
             }
         }
@@ -226,7 +239,15 @@ class MarketViewModel(application: Application) : AndroidViewModel(application) 
         _isShowingCachedData.value = true
     }
 
-    fun refreshWorthCoinsFromMarket(watchlistSymbols: Set<String> = emptySet(), favoritesSymbols: Set<String> = emptySet(), activeStrategy: StrategyMode = StrategyMode.SCALPING) {
+    fun refreshWorthCoinsFromMarket(
+        watchlistSymbols: Set<String> = emptySet(),
+        favoritesSymbols: Set<String> = emptySet(),
+        activeStrategy: StrategyMode = StrategyMode.SCALPING,
+        resetPagination: Boolean = false
+    ) {
+        if (resetPagination) {
+            resetDashboardPagination()
+        }
         viewModelScope.launch {
             _isRefreshing.value = true
             val currentSource = prefs.marketDataSource

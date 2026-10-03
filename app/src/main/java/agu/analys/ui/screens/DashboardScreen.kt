@@ -8,6 +8,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
@@ -28,12 +29,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import kotlin.math.roundToInt
+import agu.analys.config.MarketDataSource
 import agu.analys.config.StrategyMode
 import agu.analys.model.CoinHoldingStatus
 import agu.analys.model.MarketConnectionState
 import agu.analys.model.SignalAction
 import agu.analys.model.TradingPair
 import agu.analys.engine.intraday.IntradayScreener
+import agu.analys.service.IndodaxMarketService
+import agu.analys.service.TokocryptoMarketService
 import agu.analys.ui.components.dashboard.*
 import agu.analys.ui.components.settings.LogcatDiagnosticDialog
 import agu.analys.ui.theme.*
@@ -69,6 +73,7 @@ fun DashboardScreen(
     val mtfState by viewModel.mtfState.collectAsState()
     val newsScreenerState by viewModel.newsScreenerState.collectAsState()
     val isRefreshing by viewModel.isRefreshing.collectAsState()
+    val dashboardAllLimit by viewModel.dashboardAllLimit.collectAsState()
 
     val selectedQuickFilter by viewModel.dashboardQuickFilter.collectAsState()
     var currentTab by remember { mutableStateOf(NavTab.WATCHLIST) }
@@ -253,13 +258,117 @@ fun DashboardScreen(
         }
     }
 
-    // Maksimal volume untuk rasio mini volume bar
-    val maxVolume = remember(filteredFocusPairs, allTicks) {
-        filteredFocusPairs.maxOfOrNull { allTicks[it.symbol]?.volume24h ?: 0.0 }?.takeIf { it > 0 } ?: 1.0
+    // 1. Kumpulan seluruh aset bursa aktif yang diurutkan murni berdasarkan Volume 24H Tertinggi (USDT dinormalisasi ke IDR)
+    val allVolumeSortedPairs = remember(
+        allTicks,
+        marketDataSource,
+        defaultQuote,
+        usdtIdrRate,
+        basePopular
+    ) {
+        val rate = if (usdtIdrRate > 1000.0) usdtIdrRate else 16000.0
+        val isToko = marketDataSource == MarketDataSource.TOKOCRYPTO
+
+        val sortedList = allTicks.values
+            .filter { tick ->
+                val sym = tick.symbol.uppercase().replace("_", "")
+                if (isToko) {
+                    TokocryptoMarketService.isIdrOrUsdtPair(sym) &&
+                        tick.price > 0.0 &&
+                        TokocryptoMarketService.isSafeTradableAsset(
+                            price = tick.price,
+                            volume24h = tick.volume24h,
+                            high24h = tick.high24h,
+                            low24h = tick.low24h,
+                            isIdrPair = sym.endsWith("IDR")
+                        )
+                } else {
+                    !sym.contains("USDC") && !sym.contains("DAI") &&
+                        tick.price > 0.0 &&
+                        IndodaxMarketService.isSafeTradableAsset(
+                            price = tick.price,
+                            volume24h = tick.volume24h,
+                            high24h = tick.high24h,
+                            low24h = tick.low24h,
+                            isIdrPair = sym.endsWith("IDR")
+                        )
+                }
+            }
+            .sortedByDescending { tick ->
+                val sym = tick.symbol.uppercase().replace("_", "")
+                if (sym.endsWith("USDT")) {
+                    tick.volume24h * rate
+                } else {
+                    tick.volume24h
+                }
+            }
+            .map { TradingPair.fromCustomSymbol(it.symbol, defaultQuote) }
+            .distinctBy { it.symbol }
+
+        if (sortedList.isNotEmpty()) sortedList else basePopular
     }
 
-    val focusListTitle = remember(strategyMode) {
-        "FOCUS LIST — ${strategyMode.name.replace('_', ' ')} MODE"
+    // 2. Pasangan koin yang ditampilkan (Tab SEMUA dipaginasi 15 chunk bertahap, tab filter lain tanpa perubahan)
+    val totalAvailablePairs = remember(selectedQuickFilter, allVolumeSortedPairs.size, filteredFocusPairs.size) {
+        if (selectedQuickFilter == DashboardQuickFilter.ALL) {
+            allVolumeSortedPairs.size
+        } else {
+            filteredFocusPairs.size
+        }
+    }
+
+    val displayedPairs = remember(
+        selectedQuickFilter,
+        allVolumeSortedPairs,
+        filteredFocusPairs,
+        dashboardAllLimit
+    ) {
+        when (selectedQuickFilter) {
+            DashboardQuickFilter.ALL -> allVolumeSortedPairs.take(dashboardAllLimit)
+            DashboardQuickFilter.STRONG_SIGNAL,
+            DashboardQuickFilter.HOLDING,
+            DashboardQuickFilter.WATCHLIST -> filteredFocusPairs
+        }
+    }
+
+    // Maksimal volume untuk rasio mini volume bar
+    val maxVolume = remember(displayedPairs, allTicks) {
+        displayedPairs.maxOfOrNull { allTicks[it.symbol]?.volume24h ?: 0.0 }?.takeIf { it > 0 } ?: 1.0
+    }
+
+    val focusListTitle = remember(strategyMode, selectedQuickFilter) {
+        if (selectedQuickFilter == DashboardQuickFilter.ALL) {
+            "TOP VOLUME 24H SPOT — ${strategyMode.name.replace('_', ' ')}"
+        } else {
+            "FOCUS LIST — ${strategyMode.name.replace('_', ' ')} MODE"
+        }
+    }
+
+    val listState = rememberLazyListState()
+
+    // Infinite scroll listener: saat user scroll up (melihat ke bawah) mendekati akhir list, muat 15 aset lagi
+    val shouldLoadMore by remember(selectedQuickFilter, displayedPairs.size, totalAvailablePairs) {
+        derivedStateOf {
+            if (selectedQuickFilter != DashboardQuickFilter.ALL) return@derivedStateOf false
+            if (displayedPairs.size >= totalAvailablePairs) return@derivedStateOf false
+            val layoutInfo = listState.layoutInfo
+            val totalItems = layoutInfo.totalItemsCount
+            if (totalItems == 0) return@derivedStateOf false
+            val lastVisible = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            lastVisible >= totalItems - 2
+        }
+    }
+
+    LaunchedEffect(shouldLoadMore) {
+        if (shouldLoadMore) {
+            viewModel.loadMoreDashboardPairs()
+        }
+    }
+
+    LaunchedEffect(selectedQuickFilter) {
+        if (selectedQuickFilter == DashboardQuickFilter.ALL) {
+            listState.scrollToItem(0)
+        }
     }
 
     Box(modifier = modifier.fillMaxSize()) {
@@ -273,7 +382,7 @@ fun DashboardScreen(
                 marketDataSource = marketDataSource,
                 isConnected = isConnected,
                 isRefreshing = isRefreshing,
-                onRefresh = { viewModel.refreshWorthCoinsFromMarket() },
+                onRefresh = { viewModel.refreshWorthCoinsFromMarket(resetPagination = true) },
                 onOpenLogcat = { showLogcatDialog = true },
                 onOpenSignalLogs = { viewModel.openSignalLogs() }
             )
@@ -315,7 +424,11 @@ fun DashboardScreen(
                     letterSpacing = 0.8.sp
                 )
                 Text(
-                    text = "${filteredFocusPairs.size} aset",
+                    text = if (selectedQuickFilter == DashboardQuickFilter.ALL) {
+                        "${displayedPairs.size} dari $totalAvailablePairs aset"
+                    } else {
+                        "${displayedPairs.size} aset"
+                    },
                     color = TvTextSecondary,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Medium
@@ -324,13 +437,14 @@ fun DashboardScreen(
 
             // 5. LazyColumn Focus List
             LazyColumn(
+                state = listState,
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                if (filteredFocusPairs.isEmpty()) {
+                if (displayedPairs.isEmpty()) {
                     item {
                         Surface(
                             shape = RoundedCornerShape(12.dp),
@@ -377,7 +491,7 @@ fun DashboardScreen(
                         }
                     }
                 } else {
-                    items(filteredFocusPairs, key = { "focus_pair_${it.symbol}" }) { pair ->
+                    items(displayedPairs, key = { "focus_pair_${it.symbol}" }) { pair ->
                         val tick = allTicks[pair.symbol]
                         val effectiveBadges = remember(coinBadges, pair.symbol, tick, strategyMode) {
                             val fromState = coinBadges[pair.symbol]
@@ -404,7 +518,7 @@ fun DashboardScreen(
                                 badges = effectiveBadges,
                                 isFavorite = favorites.contains(pair.symbol),
                                 maxVolume = maxVolume,
-                                isTopPicked = (pair.symbol == filteredFocusPairs.firstOrNull()?.symbol)
+                                isTopPicked = (pair.symbol == displayedPairs.firstOrNull()?.symbol)
                             ),
                             onToggleFavorite = { viewModel.toggleFavorite(pair.symbol) },
                             onClick = {
@@ -412,6 +526,50 @@ fun DashboardScreen(
                                 onNavigateToDetail(pair)
                             }
                         )
+                    }
+
+                    // Indikator Paginasi Infinite Scroll (Khusus tab ALL)
+                    if (selectedQuickFilter == DashboardQuickFilter.ALL) {
+                        if (displayedPairs.size < totalAvailablePairs) {
+                            item(key = "load_more_indicator") {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 12.dp)
+                                        .testTag("load_more_indicator"),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        strokeWidth = 2.dp,
+                                        color = TvCyan
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "Memuat 15 aset berikutnya (${displayedPairs.size} dari $totalAvailablePairs)...",
+                                        color = TvTextSecondary,
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+                            }
+                        } else if (totalAvailablePairs > 15) {
+                            item(key = "all_loaded_indicator") {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 10.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "✓ Seluruh $totalAvailablePairs aset bervolume tinggi telah dimuat",
+                                        color = TvTextSecondary,
+                                        fontSize = 11.sp
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
 
