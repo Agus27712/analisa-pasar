@@ -8,6 +8,7 @@ import org.ta4j.core.indicators.EMAIndicator
 import org.ta4j.core.indicators.MACDIndicator
 import org.ta4j.core.indicators.RSIIndicator
 import org.ta4j.core.indicators.SMAIndicator
+import org.ta4j.core.indicators.adx.ADXIndicator
 import org.ta4j.core.indicators.bollinger.BollingerBandsLowerIndicator
 import org.ta4j.core.indicators.bollinger.BollingerBandsMiddleIndicator
 import org.ta4j.core.indicators.bollinger.BollingerBandsUpperIndicator
@@ -18,6 +19,7 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import kotlin.math.abs
+import kotlin.math.log10
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
@@ -27,6 +29,8 @@ import kotlin.math.sqrt
  * engine TA4J (RSIIndicator, EMAIndicator, MACDIndicator, BollingerBands*Indicator, ATRIndicator).
  * Rumus manual (mis. emaFallback/emaSeriesFallback/calculateRsiFallback) HANYA dipakai sebagai
  * fallback kalau TA4J melempar exception atau menghasilkan NaN/Infinite — bukan jalur utama.
+ *
+ * Scalping extensions (P0): relativeVolume, choppiness, adx — exchange-agnostic (IDR/USDT).
  */
 object IndicatorMath {
 
@@ -51,13 +55,6 @@ object IndicatorMath {
         return series
     }
 
-    /**
-     * Konversi array harga close mentah (tanpa OHLC/timestamp asli, mis. hasil DoubleArray dari
-     * evaluator) menjadi TA4J BarSeries close-only (O=H=L=C=close, volume=0), supaya EMA/MACD
-     * bisa dihitung lewat EMAIndicator/MACDIndicator TA4J yang sesungguhnya — bukan rumus manual
-     * terpisah. Timestamp sintetis (mundur 1 menit per bar) hanya untuk memenuhi kebutuhan TA4J,
-     * tidak dipakai indikator manapun di sini (semua indikator EMA/MACD murni index-based).
-     */
     private fun closesToBarSeries(closes: DoubleArray, name: String = "closes"): BarSeries {
         val series = BaseBarSeriesBuilder().withName(name).build()
         if (closes.isEmpty()) return series
@@ -70,9 +67,6 @@ object IndicatorMath {
         return series
     }
 
-    /**
-     * Perhitungan RSI dengan TA4J RSIIndicator untuk akurasi maksimal.
-     */
     fun rsi(history: List<CandleBar>, period: Int): Double {
         if (period <= 0 || history.size <= period) return 50.0
         return try {
@@ -116,10 +110,6 @@ object IndicatorMath {
         return 100.0 - (100.0 / (1.0 + rs))
     }
 
-    /**
-     * EMA via TA4J EMAIndicator (konsisten dengan rsi()/atr()/bollinger() — bukan lagi rumus
-     * manual terpisah). Fallback ke rumus manual (emaFallback) hanya bila TA4J gagal/NaN.
-     */
     fun ema(values: DoubleArray, period: Int): Double {
         if (period <= 0 || values.isEmpty()) return 0.0
         return try {
@@ -134,7 +124,6 @@ object IndicatorMath {
 
     fun ema(values: List<Double>, period: Int): Double = ema(values.toDoubleArray(), period)
 
-    /** Rumus EMA manual (windowed, seed = harga mentah) — dipakai HANYA sebagai fallback TA4J. */
     private fun emaFallback(values: DoubleArray, period: Int): Double {
         if (period <= 0 || values.isEmpty()) return 0.0
         val start = max(0, values.size - period * 3)
@@ -161,10 +150,6 @@ object IndicatorMath {
         }
     }
 
-    /**
-     * Seri EMA per-index via TA4J EMAIndicator (dipakai internal oleh macdSeries()). TA4J
-     * meng-cache nilai secara rekursif, jadi query berurutan 0..n-1 tetap O(n) total, bukan O(n²).
-     */
     fun emaSeries(values: DoubleArray, period: Int): DoubleArray {
         if (period <= 0 || values.isEmpty()) return DoubleArray(0)
         return try {
@@ -179,7 +164,6 @@ object IndicatorMath {
 
     fun emaSeries(values: List<Double>, period: Int): DoubleArray = emaSeries(values.toDoubleArray(), period)
 
-    /** Rumus EMA-series manual (seed = closes[0], rekursif dari index 0) — fallback TA4J saja. */
     private fun emaSeriesFallback(values: DoubleArray, period: Int): DoubleArray {
         if (period <= 0 || values.isEmpty()) return DoubleArray(0)
 
@@ -195,10 +179,6 @@ object IndicatorMath {
         return result
     }
 
-    /** 
-     * Memakai custom class alih-alih List<Pair> untuk mencegah
-     * membanjirnya objek Pair di Heap Memory saat backtesting & screening.
-     */
     data class MacdResult(val macd: DoubleArray, val signal: DoubleArray) {
         val size: Int get() = min(macd.size, signal.size)
         val isEmpty: Boolean get() = size == 0
@@ -221,11 +201,6 @@ object IndicatorMath {
         }
     }
 
-    /**
-     * MACD via TA4J MACDIndicator (garis MACD) + EMAIndicator di atas MACDIndicator (garis
-     * signal) — sesuai definisi standar MACD, dan konsisten dengan EMA yang ditampilkan di UI
-     * (sama-sama TA4J EMAIndicator, bukan lagi dua rumus rekursif berbeda seperti sebelumnya).
-     */
     fun macdSeries(closes: DoubleArray, fastPeriod: Int, slowPeriod: Int, signalPeriod: Int): MacdResult {
         if (closes.isEmpty() || fastPeriod <= 0 || slowPeriod <= 0 || signalPeriod <= 0) {
             return MacdResult(DoubleArray(0), DoubleArray(0))
@@ -247,7 +222,6 @@ object IndicatorMath {
     fun macdSeries(closes: List<Double>, fastPeriod: Int, slowPeriod: Int, signalPeriod: Int): MacdResult =
         macdSeries(closes.toDoubleArray(), fastPeriod, slowPeriod, signalPeriod)
 
-    /** MACD manual (emaSeriesFallback berjenjang) — fallback TA4J saja. */
     private fun macdSeriesFallback(closes: DoubleArray, fastPeriod: Int, slowPeriod: Int, signalPeriod: Int): MacdResult {
         val emaFast = emaSeriesFallback(closes, fastPeriod)
         val emaSlow = emaSeriesFallback(closes, slowPeriod)
@@ -261,7 +235,6 @@ object IndicatorMath {
         return MacdResult(macdLine, signalLine)
     }
 
-    /** Returns (lower, upper) Bollinger bands. Memory-optimized with TA4J calculation. */
     @JvmName("bollingerCandles")
     fun bollinger(history: List<CandleBar>, period: Int): Pair<Double, Double> {
         if (period <= 0 || history.size < period) return 0.0 to 0.0
@@ -282,49 +255,46 @@ object IndicatorMath {
 
     fun bollinger(closes: DoubleArray, period: Int): Pair<Double, Double> {
         if (period <= 0 || closes.size < period) return 0.0 to 0.0
-        
+
         val start = closes.size - period
         var sum = 0.0
-        
+
         for (i in start until closes.size) {
             sum += closes[i]
         }
         val mean = sum / period
-        
+
         var varianceSum = 0.0
         for (i in start until closes.size) {
             val diff = closes[i] - mean
             varianceSum += diff * diff
         }
-        
+
         val deviation = sqrt(varianceSum / period)
         return (mean - (2 * deviation)) to (mean + (2 * deviation))
     }
 
     fun bollinger(closes: List<Double>, period: Int): Pair<Double, Double> {
         if (period <= 0 || closes.size < period) return 0.0 to 0.0
-        
+
         val start = closes.size - period
         var sum = 0.0
-        
+
         for (i in start until closes.size) {
             sum += closes[i]
         }
         val mean = sum / period
-        
+
         var varianceSum = 0.0
         for (i in start until closes.size) {
             val diff = closes[i] - mean
             varianceSum += diff * diff
         }
-        
+
         val deviation = sqrt(varianceSum / period)
         return (mean - (2 * deviation)) to (mean + (2 * deviation))
     }
 
-    /** 
-     * MATEMATIKA TA4J ATR: Menggunakan TA4J ATRIndicator (Wilder's Smoothing).
-     */
     fun atr(history: List<CandleBar>, period: Int): Double {
         if (period <= 0 || history.size <= 1) return 0.0
         return try {
@@ -359,7 +329,7 @@ object IndicatorMath {
             val tr = max(high - low, max(abs(high - prevClose), abs(low - prevClose)))
             sumTr += tr
         }
-        
+
         var currentAtr = sumTr / period
 
         for (i in period + 1 until history.size) {
@@ -369,25 +339,24 @@ object IndicatorMath {
             val tr = max(high - low, max(abs(high - prevClose), abs(low - prevClose)))
             currentAtr = ((currentAtr * (period - 1)) + tr) / period
         }
-        
+
         return currentAtr
     }
 
-    /** Dioptimasi tanpa menggunakan .takeLast() dan iterasi .sum() berulang */
     fun rollingVwap(history: List<CandleBar>, period: Int): Double {
         if (period <= 0 || history.isEmpty()) return 0.0
-        
+
         val start = max(0, history.size - period)
         var sumPV = 0.0
         var sumV = 0.0
-        
+
         for (i in start until history.size) {
             val candle = history[i]
             val typical = (candle.high + candle.low + candle.close) / 3.0
             sumPV += typical * candle.volume
             sumV += candle.volume
         }
-        
+
         return if (sumV > 0.0) sumPV / sumV else history.last().close
     }
 
@@ -397,9 +366,6 @@ object IndicatorMath {
         val detail: String = ""
     )
 
-    /**
-     * Deteksi Bullish Divergence Klasik (Harga membuat Lower/Equal Low, RSI membuat Higher Low).
-     */
     fun detectDivergence(history: List<CandleBar>, rsiPeriod: Int = 14, lookback: Int = 25): DivergenceResult {
         if (history.size < lookback + rsiPeriod) return DivergenceResult()
         val slice = history.takeLast(lookback + rsiPeriod)
@@ -435,5 +401,109 @@ object IndicatorMath {
             }
         }
         return DivergenceResult()
+    }
+
+    // -------------------------------------------------------------------------
+    // Scalping P0 extensions — RVOL / CHOP / ADX (exchange-agnostic)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Relative Volume: volume candle terakhir / rata-rata volume [period] candle sebelumnya.
+     * Default 1.0 jika data kurang.
+     */
+    fun relativeVolume(candles: List<CandleBar>, period: Int = 20): Double {
+        if (period <= 0 || candles.size < 2) return 1.0
+        val current = candles.last().volume.coerceAtLeast(0.0)
+        val hist = candles.dropLast(1)
+        if (hist.isEmpty()) return 1.0
+        val window = hist.takeLast(min(period, hist.size))
+        val avg = window.map { it.volume.coerceAtLeast(0.0) }.average()
+        if (avg <= 0.0) return 1.0
+        return current / avg
+    }
+
+    /**
+     * Choppiness Index (classic):
+     * 100 * log10( sum(ATR1 over n) / (highestHigh - lowestLow) ) / log10(n)
+     * Range tipikal ~0–100; tinggi = ranging/choppy, rendah = trending.
+     */
+    fun choppiness(candles: List<CandleBar>, period: Int = 14): Double {
+        if (period < 2 || candles.size < period + 1) return 50.0
+        val slice = candles.takeLast(period + 1)
+        var sumTr = 0.0
+        var highest = Double.NEGATIVE_INFINITY
+        var lowest = Double.POSITIVE_INFINITY
+        for (i in 1 until slice.size) {
+            val c = slice[i]
+            val prevClose = slice[i - 1].close
+            val tr = max(c.high - c.low, max(abs(c.high - prevClose), abs(c.low - prevClose)))
+            sumTr += tr
+            if (c.high > highest) highest = c.high
+            if (c.low < lowest) lowest = c.low
+        }
+        val range = highest - lowest
+        if (range <= 0.0 || sumTr <= 0.0) return 50.0
+        val raw = 100.0 * log10(sumTr / range) / log10(period.toDouble())
+        return raw.coerceIn(0.0, 100.0)
+    }
+
+    /**
+     * ADX via TA4J ADXIndicator; fallback manual Wilder-style jika TA4J gagal.
+     */
+    fun adx(history: List<CandleBar>, period: Int = 14): Double {
+        if (period <= 0 || history.size < period * 2) return 0.0
+        return try {
+            val series = toBarSeries(history)
+            if (series.barCount < period * 2) return calculateAdxFallback(history, period)
+            val adxIndicator = ADXIndicator(series, period)
+            val value = adxIndicator.getValue(series.endIndex).doubleValue()
+            if (value.isNaN() || value.isInfinite()) calculateAdxFallback(history, period) else value.coerceIn(0.0, 100.0)
+        } catch (_: Exception) {
+            calculateAdxFallback(history, period)
+        }
+    }
+
+    /** Manual ADX (simplified Wilder) — fallback only. */
+    private fun calculateAdxFallback(history: List<CandleBar>, period: Int): Double {
+        if (history.size < period + 2) return 0.0
+        val plusDm = DoubleArray(history.size)
+        val minusDm = DoubleArray(history.size)
+        val tr = DoubleArray(history.size)
+        for (i in 1 until history.size) {
+            val up = history[i].high - history[i - 1].high
+            val down = history[i - 1].low - history[i].low
+            plusDm[i] = if (up > down && up > 0) up else 0.0
+            minusDm[i] = if (down > up && down > 0) down else 0.0
+            val high = history[i].high
+            val low = history[i].low
+            val prevClose = history[i - 1].close
+            tr[i] = max(high - low, max(abs(high - prevClose), abs(low - prevClose)))
+        }
+        if (history.size <= period) return 0.0
+
+        var smoothTr = 0.0
+        var smoothPlus = 0.0
+        var smoothMinus = 0.0
+        for (i in 1..period) {
+            smoothTr += tr[i]
+            smoothPlus += plusDm[i]
+            smoothMinus += minusDm[i]
+        }
+
+        val dxList = mutableListOf<Double>()
+        for (i in period + 1 until history.size) {
+            smoothTr = smoothTr - (smoothTr / period) + tr[i]
+            smoothPlus = smoothPlus - (smoothPlus / period) + plusDm[i]
+            smoothMinus = smoothMinus - (smoothMinus / period) + minusDm[i]
+            val plusDi = if (smoothTr > 0) 100.0 * smoothPlus / smoothTr else 0.0
+            val minusDi = if (smoothTr > 0) 100.0 * smoothMinus / smoothTr else 0.0
+            val diSum = plusDi + minusDi
+            val dx = if (diSum > 0) 100.0 * abs(plusDi - minusDi) / diSum else 0.0
+            dxList += dx
+        }
+        if (dxList.isEmpty()) return 0.0
+        // Smoothed ADX: average of last `period` DX if available
+        val adxWindow = dxList.takeLast(min(period, dxList.size))
+        return adxWindow.average().coerceIn(0.0, 100.0)
     }
 }
