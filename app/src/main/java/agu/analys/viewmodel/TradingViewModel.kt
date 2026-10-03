@@ -64,7 +64,8 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
 
     internal val simCoordinator = SimulationCoordinator(
         store = simulationStore,
-        onOrderFilled = { order -> syncSimulationTradeToPositionStore(order) }
+        onOrderFilled = { order -> syncSimulationTradeToPositionStore(order) },
+        exchangeProvider = { prefs.marketDataSource.name }
     )
     internal val realCoordinator = RealTradeCoordinator(
         scope = viewModelScope,
@@ -111,6 +112,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         positionStore = positionStore,
         alertStore = alertStore,
         isRealProvider = { isRealBuyMode.value },
+        exchangeProvider = { prefs.marketDataSource.name },
         onPositionChanged = { updateForegroundServiceState() }
     )
 
@@ -257,17 +259,40 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         watchlist, favorites, positionCoordinator.spotPosition, isRealBuyMode, positionCoordinator.positionVersion
     ) { w, f, pos, isReal, _ ->
         val currentEx = prefs.marketDataSource.name
-        val storedSymbols = positionStore.getAllStoredSymbols(isReal, currentEx)
+        val simWallet = simCoordinator.wallet.value
+        val storedSymbols = positionStore.getAllStoredSymbols(isReal, currentEx).toMutableList()
+        if (!isReal) {
+            simWallet.coinBalances.forEach { (coin, qty) ->
+                if (qty > 0.00000001 && !coin.equals("IDR", true) && !coin.equals("USDT", true)) {
+                    val q = simWallet.quoteForCoin(coin).ifBlank { "IDR" }
+                    val sym = "${coin.uppercase()}${q.uppercase()}"
+                    if (!storedSymbols.contains(sym)) storedSymbols.add(sym)
+                }
+            }
+        }
         (w + f + listOf(pos.symbol) + storedSymbols).distinct().associateWith { sym ->
             val p = positionStore.get(sym, isReal, currentEx)
+            val baseUpper = baseFromSymbolOrPair(sym).uppercase()
+            val simQty = if (!isReal) {
+                (simWallet.coinBalances[baseUpper] ?: simWallet.coinBalances[baseUpper.lowercase()] ?: 0.0) +
+                (simWallet.lockedCoinBalances[baseUpper] ?: simWallet.lockedCoinBalances[baseUpper.lowercase()] ?: 0.0)
+            } else 0.0
+            val coinQuote = if (!isReal) simWallet.quoteForCoin(baseUpper).ifBlank { "IDR" } else ""
+            val pairQuote = if (sym.endsWith("USDT", true)) "USDT" else "IDR"
+            val isSimQuoteMatch = !isReal && pairQuote.equals(coinQuote, true) && simQty > 0.00000001
+
+            val isHolding = if (p.isHolding) true else isSimQuoteMatch
+            val finalQty = if (p.quantity > 0.00000001) p.quantity else if (isSimQuoteMatch) simQty else 0.0
+            val finalEntry = if (p.entryPrice > 0.0) p.entryPrice else if (isSimQuoteMatch) (simWallet.avgBuyPrices[baseUpper] ?: 0.0) else 0.0
+
             CoinHoldingStatus(
-                isHolding = p.isHolding,
-                quantity = p.quantity,
-                entryPrice = p.entryPrice,
+                isHolding = isHolding,
+                quantity = finalQty,
+                entryPrice = finalEntry,
                 isReal = p.isReal,
                 tp1Price = p.tp1Price,
                 tp2Price = p.tp2Price,
-                stopLossPrice = p.stopLossPrice,
+                stopLossPrice = if (p.stopLossPrice > 0.0) p.stopLossPrice else if (finalEntry > 0.0) finalEntry * 0.99 else 0.0,
                 isTrailingEnabled = p.isTrailingEnabled,
                 isTrailingTriggered = p.isTrailingTriggered
             )

@@ -184,13 +184,14 @@ fun DashboardScreen(
                 }
             }
             DashboardQuickFilter.HOLDING -> {
-                strategyPairs.filter { pair ->
-                    val status = holdingStatuses[pair.symbol] 
-                        ?: holdingStatuses[pair.baseAsset.lowercase()] 
-                        ?: holdingStatuses[pair.baseAsset.uppercase()] 
-                        ?: holdingStatuses["${pair.baseAsset.uppercase()}${defaultQuote.uppercase()}"]
+                val holdingPairs = holdingStatuses.filter { it.value.isHolding && it.value.quantity > 0.00000001 }
+                    .keys
+                    .map { TradingPair.fromCustomSymbol(it) }
+                val matchedStrategyPairs = strategyPairs.filter { pair ->
+                    val status = holdingStatuses[pair.symbol]
                     status != null && status.isHolding && status.quantity > 0.00000001
                 }
+                (holdingPairs + matchedStrategyPairs).distinctBy { it.symbol }
             }
             DashboardQuickFilter.WATCHLIST -> {
                 val watchListPairs = (watchlist.map { TradingPair.fromCustomSymbol(it, defaultQuote) } +
@@ -205,34 +206,13 @@ fun DashboardScreen(
     }
 
     // Data posisi holding aktif real (SSOT: posisi spot realtime + chart sparkline 1 jam yang mencerminkan detail)
-    val activeHoldingList = remember(holdingStatuses, allTicks, spotPosition, strategyPairs, mtfState, recentCandles, defaultQuote) {
+    val activeHoldingList = remember(holdingStatuses, allTicks, spotPosition, strategyPairs, mtfState, recentCandles) {
         val holdingEntries = holdingStatuses.filter { it.value.isHolding && it.value.quantity > 0.00000001 }
 
-        // Kelompokkan berdasarkan baseAsset agar 1 koin tidak pernah muncul ganda (USDT vs IDR) di Dashboard
-        val groupedByBase = holdingEntries.entries.groupBy { (symbol, _) ->
-            val clean = symbol.uppercase().replace("_", "").replace("-", "").replace("/", "")
-            when {
-                clean.endsWith("USDT") -> clean.removeSuffix("USDT")
-                clean.endsWith("BIDR") -> clean.removeSuffix("BIDR")
-                clean.endsWith("IDR") -> clean.removeSuffix("IDR")
-                clean.endsWith("USDC") -> clean.removeSuffix("USDC")
-                clean.endsWith("BUSD") -> clean.removeSuffix("BUSD")
-                else -> clean
-            }
-        }
-
-        groupedByBase.mapNotNull { (baseAsset, entries) ->
-            if (baseAsset.isBlank()) return@mapNotNull null
-            // Prioritaskan pasangan koin yang sesuai kuotasi aktif (cth: USDT di Tokocrypto, IDR di Indodax)
-            val selectedEntry = entries.firstOrNull { (sym, _) ->
-                val upper = sym.uppercase().replace("_", "")
-                upper.endsWith(defaultQuote.uppercase())
-            } ?: entries.firstOrNull { it.value.entryPrice > 0.0 } ?: entries.first()
-
-            val (symbol, status) = selectedEntry
-            val pair = strategyPairs.find { it.symbol.equals(symbol, ignoreCase = true) }
-                ?: strategyPairs.find { it.baseAsset.equals(baseAsset, ignoreCase = true) && it.quoteAsset.equals(defaultQuote, ignoreCase = true) }
-                ?: TradingPair.fromCustomSymbol(symbol, defaultQuote)
+        holdingEntries.mapNotNull { (symbol, status) ->
+            if (symbol.isBlank()) return@mapNotNull null
+            // Dapatkan TradingPair asli dari symbol holding tanpa mutasi ke defaultQuote (cth: BTCUSDT tetap BTCUSDT, BTCIDR tetap BTCIDR)
+            val pair = TradingPair.fromCustomSymbol(symbol)
 
             val pos = if (viewModel.isMatchingSymbol(symbol, spotPosition.symbol) || viewModel.isMatchingSymbol(pair.symbol, spotPosition.symbol)) {
                 spotPosition
@@ -248,7 +228,7 @@ fun DashboardScreen(
                 tick = tick,
                 candles1h = candles1h
             )
-        }.distinctBy { it.pair.baseAsset.uppercase() }
+        }.distinctBy { it.pair.symbol }
     }
 
     // Prefetch/sync candle 1H untuk semua holding aktif secara background agar chart sparkline selalu ready
@@ -262,50 +242,53 @@ fun DashboardScreen(
     val allVolumeSortedPairs = remember(
         allTicks,
         marketDataSource,
-        defaultQuote,
         usdtIdrRate,
         basePopular
     ) {
         val rate = if (usdtIdrRate > 1000.0) usdtIdrRate else 16000.0
         val isToko = marketDataSource == MarketDataSource.TOKOCRYPTO
 
-        val sortedList = allTicks.values
-            .filter { tick ->
-                val sym = tick.symbol.uppercase().replace("_", "")
-                if (isToko) {
-                    TokocryptoMarketService.isIdrOrUsdtPair(sym) &&
-                        tick.price > 0.0 &&
-                        TokocryptoMarketService.isSafeTradableAsset(
-                            price = tick.price,
-                            volume24h = tick.volume24h,
-                            high24h = tick.high24h,
-                            low24h = tick.low24h,
-                            isIdrPair = sym.endsWith("IDR")
-                        )
-                } else {
-                    !sym.contains("USDC") && !sym.contains("DAI") &&
-                        tick.price > 0.0 &&
-                        IndodaxMarketService.isSafeTradableAsset(
-                            price = tick.price,
-                            volume24h = tick.volume24h,
-                            high24h = tick.high24h,
-                            low24h = tick.low24h,
-                            isIdrPair = sym.endsWith("IDR")
-                        )
-                }
+        val validTicks = allTicks.values.filter { tick ->
+            val sym = tick.symbol.uppercase().replace("_", "")
+            if (isToko) {
+                TokocryptoMarketService.isIdrOrUsdtPair(sym) &&
+                    tick.price > 0.0 &&
+                    TokocryptoMarketService.isSafeTradableAsset(
+                        price = tick.price,
+                        volume24h = tick.volume24h,
+                        high24h = tick.high24h,
+                        low24h = tick.low24h,
+                        isIdrPair = sym.endsWith("IDR")
+                    )
+            } else {
+                !sym.contains("USDC") && !sym.contains("DAI") &&
+                    tick.price > 0.0 &&
+                    IndodaxMarketService.isSafeTradableAsset(
+                        price = tick.price,
+                        volume24h = tick.volume24h,
+                        high24h = tick.high24h,
+                        low24h = tick.low24h,
+                        isIdrPair = sym.endsWith("IDR")
+                    )
             }
-            .sortedByDescending { tick ->
-                val sym = tick.symbol.uppercase().replace("_", "")
-                if (sym.endsWith("USDT")) {
-                    tick.volume24h * rate
-                } else {
-                    tick.volume24h
-                }
-            }
-            .map { TradingPair.fromCustomSymbol(it.symbol, defaultQuote) }
-            .distinctBy { it.symbol }
+        }
 
-        if (sortedList.isNotEmpty()) sortedList else basePopular
+        if (validTicks.isNotEmpty()) {
+            validTicks
+                .distinctBy { it.symbol.uppercase().replace("_", "") }
+                .sortedByDescending { tick ->
+                    val sym = tick.symbol.uppercase().replace("_", "")
+                    if (sym.endsWith("USDT")) {
+                        tick.volume24h * rate
+                    } else {
+                        tick.volume24h
+                    }
+                }
+                .map { TradingPair.fromCustomSymbol(it.symbol) }
+                .distinctBy { it.symbol }
+        } else {
+            basePopular
+        }
     }
 
     // 2. Pasangan koin yang ditampilkan (Tab SEMUA dipaginasi 15 chunk bertahap, tab filter lain tanpa perubahan)
@@ -336,9 +319,9 @@ fun DashboardScreen(
         displayedPairs.maxOfOrNull { allTicks[it.symbol]?.volume24h ?: 0.0 }?.takeIf { it > 0 } ?: 1.0
     }
 
-    val focusListTitle = remember(strategyMode, selectedQuickFilter) {
+    val focusListTitle = remember(marketDataSource, strategyMode, selectedQuickFilter) {
         if (selectedQuickFilter == DashboardQuickFilter.ALL) {
-            "TOP VOLUME 24H SPOT — ${strategyMode.name.replace('_', ' ')}"
+            "TOP VOLUME 24H SPOT — ${marketDataSource.label.uppercase()}"
         } else {
             "FOCUS LIST — ${strategyMode.name.replace('_', ' ')} MODE"
         }

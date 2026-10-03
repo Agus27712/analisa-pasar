@@ -30,3 +30,44 @@
        - `DetailChartScreen.kt` menyegarkan saldo real di background saat membuka koin di Mode Real dan melakukan resolusi bertingkat (free balance -> total balance -> in-memory map -> disk cache) untuk mencegah nominal 0 palsu.
   3. **Verifikasi Kompilasi**:
      - `compile_applet` berhasil (BUILD SUCCESSFUL).
+
+---
+
+# Checkpoint: Perbaikan Bug Order Simulasi BTCUSDT Tokocrypto, Isolasi Kuotasi Holding Status ($ vs Rp), Akselerasi Loading Dashboard & Paging 15 Aset Volume 24H
+
+- **Tanggal / Waktu:** 2026-10-03
+- **Status:** Selesai (Completed, Build Clean, All Tests Passed)
+- **Komponen Terdampak:**
+  1. `TradingViewModelOrders.kt`
+  2. `TradingViewModel.kt`
+  3. `DashboardScreen.kt`
+  4. `SimulationCoordinator.kt`
+  5. `TokocryptoMarketService.kt`
+  6. `workplan.md` & `checkpoint.md`
+- **Akar Masalah & Resolusi:**
+  1. **Akar Masalah Order BTCUSDT Jadi BTCIDR di Dashboard**:
+     - *Validasi Kuotasi pada `getHoldingStatus`*: `getHoldingStatus(pair)` dalam mode simulasi memeriksa `simQty = simWallet.coinBalances[base]` tanpa memverifikasi apakah `pair.quoteAsset` cocok dengan kuotasi koin yang dibeli (`simWallet.quoteForCoin(base)`). Sehingga ketika `BTCUSDT` dibeli, `getHoldingStatus(TradingPair("BTCIDR"))` ikut mengembalikan `isHolding = true` dengan harga beli $65.000 dibandingkan harga IDR Rp 1 Miliar.
+     - *Fallback Resolusi Simbol di `ActiveHoldingSection` & Quick Filter*: `DashboardScreen.kt` sebelumnya melakukan lookup `strategyPairs.find { ... }` yang berisi koin dengan `defaultQuote` (IDR). Jika `BTCUSDT` tidak ada di `strategyPairs`, terjadi fallback salah kuotasi. Pada tab `[💼 Holding]`, sistem memfilter `strategyPairs` IDR sehingga pair `BTCUSDT` tidak muncul.
+     - *Ketiadaan Partisi Exchange di `SimulationCoordinator`*: `SimulationCoordinator` memanggil `store.getWallet()` dan `store.placeOrder()` dengan exchange default tanpa menyertakan exchange aktif yang sedang dipilih pengguna.
+  2. **Akar Masalah Dashboard Loading Lambat & Paging Volume 24 Jam**:
+     - *Endpoint Fallback yang Menggantung*: `TokocryptoMarketService.fetchMarketRankings` memuat daftar fallback ke domain Binance (`api.binance.me`, `data-api.binance.vision`) yang terblokir di Indonesia, menyebabkan timeout 15-30 detik sebelum data pasar termuat.
+     - *Threshold Volume Terlalu Ketat*: `isSafeTradableAsset` mematok threshold 100 Juta IDR dan 10.000 USDT sehingga banyak pair liquid tereliminasi sebelum diurutkan.
+     - *Redundant Duplicate Ticks*: `allTicks` memuat entitas berulang untuk key underscore dan non-underscore (`btc_idr`, `BTC_IDR`, `BTCIDR`) yang memperlambat sorting.
+  3. **Implementasi Solusi & Peningkatan**:
+     - **Pencocokan Kuotasi Ketat (`getHoldingStatus` & `holdingStatuses`)**:
+       - Memeriksa kesesuaian `pair.quoteAsset.equals(simWallet.quoteForCoin(base), ignoreCase = true)` sebelum menetapkan status holding pada pair koin simulasi.
+       - Mengalirkan `simCoordinator.wallet` ke dalam StateFlow `holdingStatuses` sehingga pembelian koin USDT (cth: `BTCUSDT`) secara reaktif hanya memberi tanda holding pada pair USDT.
+     - **Resolusi Pasangan Holding Mandiri (`DashboardScreen.kt`)**:
+       - `activeHoldingList` langsung menggunakan `TradingPair.fromCustomSymbol(symbol)` untuk setiap entri holding aktif, mempertahankan kuotasi asli (`BTCUSDT` tetap `BTCUSDT`).
+       - Tab filter `[💼 Holding]` mengumpulkan pasangan koin langsung dari kunci `holdingStatuses` yang aktif, memastikan semua aset yang sedang di-hold (baik USDT maupun IDR) tampil sempurna.
+     - **Isolasi Exchange di `SimulationCoordinator.kt`**:
+       - Meneruskan `exchangeProvider = { prefs.marketDataSource.name }` ke `SimulationCoordinator`, `placeOrder`, `getWallet`, `getOpenOrders`, `getTradeHistory`, dan `executeSimulationSellOrders`.
+     - **Akselerasi Jaringan & Fast Ticker Discovery (`TokocryptoMarketService.kt`)**:
+       - Menghapus semua fallback domain Binance yang terblokir; hanya menggunakan endpoint resmi Tokocrypto Type 1, Type 3 (`cloudme-toko.2meta.app`), dan Open API.
+       - Mengurangi threshold filter volume agar semua aset liquid Tokocrypto IDR/USDT masuk dalam ranking 24h.
+     - **Sorting & Paging 15 Pasangan Koin Volume 24H**:
+       - Tab `[Semua]` secara tegas mengurutkan aset bursa aktif murni berdasarkan Volume 24 Jam Tertinggi (USDT dinormalisasi ke IDR via live rate `ExchangeRateManager`).
+       - Menampilkan 15 aset pertama, dan memuat 15 aset berikutnya secara seamless saat pengguna melakukan scroll mendekati bagian bawah list. Tab filter lainnya (`Signal Kuat`, `Holding`, `Watchlist`) tetap tampil utuh tanpa paginasi.
+  4. **Verifikasi**:
+     - `compile_applet` berhasil (BUILD SUCCESSFUL).
+     - `gradle :app:testDebugUnitTest` berhasil (BUILD SUCCESSFUL, semua unit tests lulus).

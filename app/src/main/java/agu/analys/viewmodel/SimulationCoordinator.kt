@@ -15,24 +15,28 @@ import kotlinx.coroutines.flow.asStateFlow
 
 class SimulationCoordinator(
     private val store: SimulationTradeStore,
-    private val onOrderFilled: ((SimulationOrder) -> Unit)? = null
+    private val onOrderFilled: ((SimulationOrder) -> Unit)? = null,
+    private val exchangeProvider: () -> String = { "TOKOCRYPTO" }
 ) {
-    private val _wallet = MutableStateFlow(store.getWallet())
+    private val currentEx get() = exchangeProvider()
+
+    private val _wallet = MutableStateFlow(store.getWallet(exchangeProvider()))
     val wallet: StateFlow<SimulationWallet> = _wallet.asStateFlow()
 
-    private val _openOrders = MutableStateFlow(store.getOpenOrders())
+    private val _openOrders = MutableStateFlow(store.getOpenOrders(exchangeProvider()))
     val openOrders: StateFlow<List<SimulationOrder>> = _openOrders.asStateFlow()
 
-    private val _history = MutableStateFlow(store.getTradeHistory())
+    private val _history = MutableStateFlow(store.getTradeHistory(exchangeProvider()))
     val history: StateFlow<List<SimulationTradeHistoryItem>> = _history.asStateFlow()
 
     private val _lastFilledOrder = MutableStateFlow<SimulationOrder?>(null)
     val lastFilledOrder: StateFlow<SimulationOrder?> = _lastFilledOrder.asStateFlow()
 
     fun refresh() {
-        _wallet.value = store.getWallet()
-        _openOrders.value = store.getOpenOrders()
-        _history.value = store.getTradeHistory()
+        val ex = currentEx
+        _wallet.value = store.getWallet(ex)
+        _openOrders.value = store.getOpenOrders(ex)
+        _history.value = store.getTradeHistory(ex)
     }
 
     fun recordMirroredRealTrade(
@@ -53,7 +57,8 @@ class SimulationCoordinator(
             price = price,
             quantity = quantity,
             pnlIdr = pnlIdr,
-            pnlPercent = pnlPercent
+            pnlPercent = pnlPercent,
+            exchange = currentEx
         )
         refresh()
     }
@@ -86,7 +91,8 @@ class SimulationCoordinator(
             price = price,
             stopPrice = stopPrice,
             quantity = quantity,
-            currentMarketPrice = execPrice
+            currentMarketPrice = execPrice,
+            exchange = currentEx
         )
         refresh()
         // P2.2 Lifecycle
@@ -101,13 +107,13 @@ class SimulationCoordinator(
     }
 
     fun cancelOrder(orderId: String): Boolean {
-        val ok = store.cancelOrder(orderId)
+        val ok = store.cancelOrder(orderId, currentEx)
         if (ok) refresh()
         return ok
     }
 
     fun cancelAllOrders(symbol: String? = null): Int {
-        val count = store.cancelAllOrders(symbol)
+        val count = store.cancelAllOrders(symbol, currentEx)
         if (count > 0) refresh()
         return count
     }
@@ -132,7 +138,7 @@ class SimulationCoordinator(
         signalSnapshot: TradeSignalSnapshot? = null,
         onResult: (Boolean, String) -> Unit
     ) {
-        val wallet = store.getWallet()
+        val wallet = store.getWallet(currentEx)
         val availableCoin = wallet.getAvailableCoin(pair.baseAsset)
         val sellQty = if (totalQuantity > 0.0) totalQuantity.coerceAtMost(availableCoin) else availableCoin
         if (sellQty <= 0.0) {
@@ -157,7 +163,8 @@ class SimulationCoordinator(
                     price = tp1Price,
                     stopPrice = 0.0,
                     quantity = qty1,
-                    currentMarketPrice = marketPrice
+                    currentMarketPrice = marketPrice,
+                    exchange = currentEx
                 )
                 if (r1 is agu.analys.trading.SimulationOrderResult.Success) {
                     okCount++
@@ -176,7 +183,8 @@ class SimulationCoordinator(
                     price = tp2Price,
                     stopPrice = 0.0,
                     quantity = qty2,
-                    currentMarketPrice = marketPrice
+                    currentMarketPrice = marketPrice,
+                    exchange = currentEx
                 )
                 if (r2 is agu.analys.trading.SimulationOrderResult.Success) {
                     okCount++
@@ -197,7 +205,8 @@ class SimulationCoordinator(
                 price = tp1Price,
                 stopPrice = 0.0,
                 quantity = sellQty,
-                currentMarketPrice = marketPrice
+                currentMarketPrice = marketPrice,
+                exchange = currentEx
             )
             refresh()
             val ok = r is agu.analys.trading.SimulationOrderResult.Success
@@ -216,7 +225,8 @@ class SimulationCoordinator(
                 price = tp2Price,
                 stopPrice = 0.0,
                 quantity = sellQty,
-                currentMarketPrice = marketPrice
+                currentMarketPrice = marketPrice,
+                exchange = currentEx
             )
             refresh()
             val ok = r is agu.analys.trading.SimulationOrderResult.Success

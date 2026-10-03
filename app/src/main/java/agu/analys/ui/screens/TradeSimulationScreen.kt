@@ -77,7 +77,7 @@ fun TradeSimulationScreen(
     val currentPrice = currentTick?.price ?: 0.0
     val isPriceUp = (currentTick?.change24h ?: 0.0) >= 0
     val quote = selectedPair.quoteAsset
-    val exchangeLabel = "Indodax"
+    val exchangeLabel = marketSource.label
 
     LaunchedEffect(selectedPair, currentTick?.price) {
         if (inputPrice.isEmpty() && currentPrice > 0.0) {
@@ -104,12 +104,11 @@ fun TradeSimulationScreen(
         }
     }
 
-    val defaultQuote = "IDR"
     val availablePairs = remember(watchlist, hotCoins, marketSource) {
         val list = mutableListOf<TradingPair>()
         list.addAll(TradingPair.popularPairsForSource(marketSource))
-        list.addAll(watchlist.map { TradingPair.fromCustomSymbol(it, defaultQuote) })
-        list.addAll(hotCoins.map { TradingPair.fromCustomSymbol(it.symbol, defaultQuote) })
+        list.addAll(watchlist.map { TradingPair.fromCustomSymbol(it) })
+        list.addAll(hotCoins.map { TradingPair.fromCustomSymbol(it.symbol) })
         list.distinctBy { it.symbol }
     }
 

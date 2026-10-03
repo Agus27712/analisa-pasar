@@ -131,7 +131,10 @@ class MarketViewModel(application: Application) : AndroidViewModel(application) 
             val valid = cached.values.filter { it.price > 0 }
             val gainers = valid.filter { it.change24h > 0 }.sortedByDescending { it.change24h }
             val losers = valid.filter { it.change24h < 0 }.sortedBy { it.change24h }
-            val topVol = valid.sortedByDescending { it.volume24h }
+            val rate = agu.analys.util.ExchangeRateManager.currentRate().takeIf { it > 1000.0 } ?: 16000.0
+            val topVol = valid.sortedByDescending { tick ->
+                if (tick.symbol.uppercase().endsWith("USDT")) tick.volume24h * rate else tick.volume24h
+            }
             if (gainers.isNotEmpty()) {
                 _gainersCoins.value = gainers
                 _hotCoins.value = gainers
@@ -223,8 +226,8 @@ class MarketViewModel(application: Application) : AndroidViewModel(application) 
         dashboardPollJob?.cancel()
         dashboardPollJob = viewModelScope.launch {
             while (isActive) {
-                refreshWorthCoinsFromMarket(watchlistSymbols, favoritesSymbols, activeStrategy, resetPagination = false)
                 delay(30_000L)
+                refreshWorthCoinsFromMarket(watchlistSymbols, favoritesSymbols, activeStrategy, resetPagination = false)
             }
         }
     }
@@ -261,24 +264,13 @@ class MarketViewModel(application: Application) : AndroidViewModel(application) 
                 }).distinctBy { it.symbol }
 
                 val (gainers, losers, topVol, allScanned, combinedTicks) = if (isToko) {
-                    val rankingsJob = async { TokocryptoMarketService.fetchMarketRankings(35) }
-                    val ticksJob = async { TokocryptoMarketService.fetchTickers(pairs.map { it.effectiveTokocryptoPair() }) }
-                    val rankings = rankingsJob.await()
-                    val ticks = ticksJob.await()
+                    val rankings = TokocryptoMarketService.fetchMarketRankings(35)
                     val scanned = (rankings.gainers + rankings.losers + rankings.topVolume).distinctBy { it.symbol }
-                    val ticksMap = ticks.associateBy { it.symbol } + rankings.allTicks
-                    val g = rankings.gainers
-                    val l = rankings.losers
-                    val tv = rankings.topVolume
-                    Tuple5(g, l, tv, scanned, ticksMap)
+                    Tuple5(rankings.gainers, rankings.losers, rankings.topVolume, scanned, rankings.allTicks)
                 } else {
-                    val rankingsJob = async { IndodaxMarketService.fetchMarketRankings(35, true) }
-                    val ticksJob = async { IndodaxMarketService.fetchTickers(pairs.map { it.effectiveIndodaxPair() }) }
-                    val rankings = rankingsJob.await()
-                    val ticks = ticksJob.await()
+                    val rankings = IndodaxMarketService.fetchMarketRankings(35, true)
                     val scanned = (rankings.gainers + rankings.losers + rankings.topVolume).distinctBy { it.symbol }
-                    val ticksMap = ticks.associateBy { it.symbol } + rankings.allTicks
-                    Tuple5(rankings.gainers, rankings.losers, rankings.topVolume, scanned, ticksMap)
+                    Tuple5(rankings.gainers, rankings.losers, rankings.topVolume, scanned, rankings.allTicks)
                 }
 
                 if (gainers.isNotEmpty()) {

@@ -42,8 +42,9 @@ object TokocryptoSymbolRepository {
     private const val SYNC_TTL_MS = 30 * 60 * 1000L // 30 menit refresh interval
 
     private val SYMBOLS_ENDPOINTS = listOf(
-        "https://www.tokocrypto.com/open/v1/common/symbols",
         "https://www.tokocrypto.site/api/v3/exchangeInfo",
+        "https://api.binance.me/api/v3/exchangeInfo",
+        "https://www.tokocrypto.com/open/v1/common/symbols",
         "https://cloudme-toko.2meta.app/api/v1/exchangeInfo"
     )
     private const val TOKOCRYPTO_EXECUTION_RULES_URL = "https://www.tokocrypto.site/api/v3/executionRules"

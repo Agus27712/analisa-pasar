@@ -12,6 +12,7 @@ class PositionCoordinator(
     private val positionStore: SpotPositionStore,
     private val alertStore: PriceAlertStore,
     private val isRealProvider: () -> Boolean = { false },
+    private val exchangeProvider: () -> String = { "TOKOCRYPTO" },
     private val onPositionChanged: () -> Unit = {}
 ) {
     private val _positionVersion = MutableStateFlow(0L)
@@ -35,13 +36,14 @@ class PositionCoordinator(
     fun setSelectedSymbol(symbol: String) {
         currentSelectedSymbol = symbol
         val isReal = isRealProvider()
-        _spotPosition.value = positionStore.get(symbol, isReal)
+        val currentEx = exchangeProvider()
+        _spotPosition.value = positionStore.get(symbol, isReal, exchange = currentEx)
         _priceAlerts.value = alertStore.getAlertsForSymbol(symbol)
         notifyPositionChange()
     }
 
     fun getPosition(symbol: String, isReal: Boolean = isRealProvider()): SpotPosition {
-        return positionStore.get(symbol, isReal)
+        return positionStore.get(symbol, isReal, exchange = exchangeProvider())
     }
 
     private fun notifyPositionChange() {
@@ -52,9 +54,10 @@ class PositionCoordinator(
     fun refreshPosition(symbol: String = currentSelectedSymbol) {
         val target = if (symbol.isNotBlank()) symbol else currentSelectedSymbol
         val isReal = isRealProvider()
+        val currentEx = exchangeProvider()
         if (target.isNotBlank()) {
             if (currentSelectedSymbol.isBlank() || isSameSymbol(target, currentSelectedSymbol)) {
-                _spotPosition.value = positionStore.get(target, isReal)
+                _spotPosition.value = positionStore.get(target, isReal, exchange = currentEx)
             }
         }
         notifyPositionChange()
@@ -70,8 +73,9 @@ class PositionCoordinator(
     }
 
     fun setOwnership(symbol: String, owned: Boolean, entryPrice: Double = 0.0, quantity: Double = 0.0, invested: Double = 0.0, isReal: Boolean = isRealProvider()) {
+        val currentEx = exchangeProvider()
         if (owned) {
-            positionStore.markBought(symbol, entryPrice, invested, quantity, isReal)
+            positionStore.markBought(symbol, entryPrice, invested, quantity, isReal, exchange = currentEx)
         } else {
             markSoldAndClear(symbol, isReal)
             return
@@ -86,13 +90,15 @@ class PositionCoordinator(
      * - bump positionVersion agar holdingStatuses & UI recompose
      */
     fun markSoldAndClear(symbol: String, isReal: Boolean = isRealProvider()) {
-        positionStore.markSold(symbol, isReal)
+        val currentEx = exchangeProvider()
+        positionStore.markSold(symbol, isReal, exchange = currentEx)
         agu.analys.engine.sell.SellSignalLifecycleManager.reset(symbol, isReal)
         refreshPosition(symbol)
     }
 
     fun setManualEntry(symbol: String, price: Double, amount: Double, isReal: Boolean = isRealProvider()) {
-        positionStore.setManualEntryPrice(symbol, price, amount, isReal)
+        val currentEx = exchangeProvider()
+        positionStore.setManualEntryPrice(symbol, price, amount, isReal, exchange = currentEx)
         refreshPosition(symbol)
     }
 

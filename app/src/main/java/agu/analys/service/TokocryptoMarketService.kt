@@ -144,9 +144,10 @@ object TokocryptoMarketService {
             return primaryRes
         }
 
-        // Fallback ke Tokocrypto Type 1 endpoint
+        // Fallback ke relative paths atau absolute URLs
         for (path in fallbackPaths) {
-            val fb = get("$TOKOCRYPTO_TYPE1_MARKET_URL$path")
+            val url = if (path.startsWith("http")) path else "$TOKOCRYPTO_TYPE1_MARKET_URL$path"
+            val fb = get(url)
             if (!fb.isNullOrBlank()) {
                 return fb
             }
@@ -557,11 +558,11 @@ object TokocryptoMarketService {
      */
     suspend fun fetchMarketRankings(limit: Int = 35): TokoRankingsResult = withContext(Dispatchers.IO) {
         try {
-            // Pastikan dynamic symbols ter-load
-            TokocryptoSymbolRepository.ensureSymbolsLoaded(false)
-
             val primaryUrl = "$TOKOCRYPTO_TYPE1_MARKET_URL/ticker/24hr"
-            val fallbackPaths = listOf("/api/v3/ticker/24hr")
+            val fallbackPaths = listOf(
+                "$TOKOCRYPTO_TYPE3_MARKET_URL/ticker/24hr",
+                "$TOKOCRYPTO_GENERAL_URL/open/v1/market/ticker"
+            )
             val jsonStr = getWithFallback(primaryUrl, fallbackPaths) ?: return@withContext TokoRankingsResult()
 
             val array = if (jsonStr.trim().startsWith("[")) JSONArray(jsonStr) else JSONArray()
@@ -601,9 +602,12 @@ object TokocryptoMarketService {
                 }
             }
 
+            val rate = agu.analys.util.ExchangeRateManager.currentRate().takeIf { it > 1000.0 } ?: 16000.0
             val gainers = candidates.filter { it.change24h > 0 }.sortedByDescending { it.change24h }.take(limit)
             val losers = candidates.filter { it.change24h < 0 }.sortedBy { it.change24h }.take(limit)
-            val topVol = candidates.sortedByDescending { it.volume24h }.take(limit)
+            val topVol = candidates.sortedByDescending { tick ->
+                if (tick.symbol.uppercase().endsWith("USDT")) tick.volume24h * rate else tick.volume24h
+            }.take(limit)
 
             TokoRankingsResult(
                 gainers = gainers,
@@ -632,11 +636,10 @@ object TokocryptoMarketService {
 
         return if (isIdrPair) {
             if (price <= 5.0) return false
-            if (price < 25.0 && volume24h < 1_000_000_000.0) return false
-            if (volume24h < 100_000_000.0) return false
+            if (volume24h < 1_000_000.0) return false
             true
         } else {
-            volume24h >= 10_000.0
+            volume24h >= 100.0
         }
     }
 }

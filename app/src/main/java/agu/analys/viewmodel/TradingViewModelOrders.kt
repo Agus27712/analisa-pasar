@@ -67,7 +67,8 @@ fun TradingViewModel.submitSimulationOrder(
     val curBids = marketDataCoordinator.orderBookBids.value
     val curAsks = marketDataCoordinator.orderBookAsks.value
     val mode = strategyMode.value.name
-    val spotPos = positionStore.get(pair.symbol, isReal = false)
+    val currentEx = prefs.marketDataSource.name
+    val spotPos = positionStore.get(pair.symbol, isReal = false, exchange = currentEx)
 
     val snapshot = agu.analys.trading.TradeSignalSnapshot.capture(
         symbol = pair.symbol,
@@ -182,9 +183,12 @@ fun TradingViewModel.getHoldingStatus(pair: TradingPair, forceIsReal: Boolean? =
         val simQty = (simWallet.coinBalances[baseLower] ?: simWallet.coinBalances[baseUpper] ?: 0.0) +
                      (simWallet.lockedCoinBalances[baseLower] ?: simWallet.lockedCoinBalances[baseUpper] ?: 0.0)
 
+        val coinQuote = simWallet.quoteForCoin(baseUpper).ifBlank { simWallet.quoteForCoin(baseLower) }.ifBlank { "IDR" }
+        val isQuoteMatched = pair.quoteAsset.equals(coinQuote, ignoreCase = true)
+
         if (simQty <= 0.00000001) {
             if (spotPos.isHolding) {
-                positionStore.markSold(pair.symbol, isReal = false)
+                positionStore.markSold(pair.symbol, isReal = false, exchange = currentEx)
                 agu.analys.engine.sell.SellSignalLifecycleManager.reset(pair.symbol, isReal = false)
             }
             return CoinHoldingStatus(isHolding = false, isReal = false)
@@ -204,7 +208,7 @@ fun TradingViewModel.getHoldingStatus(pair: TradingPair, forceIsReal: Boolean? =
             )
         }
 
-        if (simQty > 0.00000001 && baseUpper != "IDR") {
+        if (simQty > 0.00000001 && isQuoteMatched && baseUpper != "IDR" && baseUpper != "USDT") {
             val simAvg = simWallet.avgBuyPrices[baseLower] ?: simWallet.avgBuyPrices[baseUpper] ?: 0.0
             val sl = if (!spotPos.isReal && spotPos.stopLossPrice > 0.0) spotPos.stopLossPrice else if (simAvg > 0.0) simAvg * 0.99 else 0.0
             return CoinHoldingStatus(

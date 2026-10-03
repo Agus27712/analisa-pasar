@@ -167,9 +167,10 @@ fun TradingViewModel.syncRealTradeToSimulation(
 
 fun TradingViewModel.syncSimulationTradeToPositionStore(order: SimulationOrder) {
     val symbol = order.symbol
+    val currentEx = prefs.marketDataSource.name
     if (order.side == SimulationOrderSide.BUY) {
         val fillPrice = if (order.filledAvgPrice > 0.0) order.filledAvgPrice else order.limitPrice
-        val currentPos = positionStore.get(symbol, isReal = false)
+        val currentPos = positionStore.get(symbol, isReal = false, exchange = currentEx)
         if (currentPos.isHolding && currentPos.quantity > 0.00000001 && currentPos.entryPrice > 0.0) {
             val totalQty = currentPos.quantity + order.quantity
             val totalCost = (currentPos.entryPrice * currentPos.quantity) + (fillPrice * order.quantity)
@@ -179,29 +180,32 @@ fun TradingViewModel.syncSimulationTradeToPositionStore(order: SimulationOrder) 
                 invested = totalCost,
                 entry = weightedAvg,
                 quantity = totalQty,
-                isReal = false
+                isReal = false,
+                exchange = currentEx
             )
         } else {
             positionStore.markBought(
                 symbol = symbol,
                 entryPrice = fillPrice,
                 quantity = order.quantity,
-                isReal = false
+                isReal = false,
+                exchange = currentEx
             )
         }
     } else if (order.side == SimulationOrderSide.SELL) {
-        val currentPos = positionStore.get(symbol, isReal = false)
+        val currentPos = positionStore.get(symbol, isReal = false, exchange = currentEx)
         val currentQty = currentPos.quantity
         val remainingQty = (currentQty - order.quantity).coerceAtLeast(0.0)
         if (remainingQty <= 0.00000001) {
-            positionStore.markSold(symbol, isReal = false)
+            positionStore.markSold(symbol, isReal = false, exchange = currentEx)
         } else {
             positionStore.setHolding(
                 symbol = symbol,
                 invested = currentPos.entryPrice * remainingQty,
                 entry = currentPos.entryPrice,
                 quantity = remainingQty,
-                isReal = false
+                isReal = false,
+                exchange = currentEx
             )
         }
     }

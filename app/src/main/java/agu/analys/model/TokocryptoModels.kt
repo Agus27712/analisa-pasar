@@ -54,7 +54,7 @@ data class TokocryptoSymbolInfo(
     fun toTradingPair(): TradingPair {
         val cleanQuote = if (quoteAsset.equals("BIDR", true)) "IDR" else quoteAsset.uppercase()
         val cleanBase = baseAsset.uppercase().replace("BIDR", "IDR")
-        val cleanSymbol = symbol.uppercase().replace("BIDR", "IDR")
+        val cleanSymbol = symbol.uppercase().replace("BIDR", "IDR").replace("_", "")
         return TradingPair(
             symbol = cleanSymbol,
             baseAsset = cleanBase,

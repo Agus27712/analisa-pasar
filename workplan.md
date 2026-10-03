@@ -180,3 +180,20 @@ Mengintegrasikan arsitektur resmi Tokocrypto sesuai dokumentasi dan mengisolasi 
   - `DetailChartScreen.kt`: Resolusi bertingkat `availableQuote` (free balance -> total balance -> in-memory map -> disk cache) dan refresh saldo otomatis saat membuka layar koin.
 - [x] **Verifikasi Kompilasi**:
   - `compile_applet` berhasil (BUILD SUCCESSFUL).
+
+### Tahap 16: Resolusi Bug Order Simulasi BTCUSDT Tokocrypto, Isolasi Kuotasi Holding Status ($ vs Rp), & Akselerasi Dashboard Paging 15 Volume 24H
+- [x] **Pencocokan Kuotasi Ketat pada Evaluasi Holding Status**:
+  - `TradingViewModelOrders.kt` (`getHoldingStatus`): Memastikan koin simulasi memverifikasi kesesuaian `pair.quoteAsset` terhadap kuotasi yang dibeli (`simWallet.quoteForCoin(base)`). Menghilangkan bug di mana pembelian `BTCUSDT` keliru dianggap sebagai holding `BTCIDR`.
+  - `TradingViewModel.kt` (`holdingStatuses`): Mengalirkan `simCoordinator.wallet` ke dalam flow dan memetakan kunci komposit `base + quote` secara tepat dan terisolasi.
+- [x] **Resolusi Pasangan Holding Mandiri & Filter Tab Dashboard**:
+  - `DashboardScreen.kt`: `activeHoldingList` dan tab `[💼 Holding]` mengonversi langsung simbol holding aktif via `TradingPair.fromCustomSymbol(symbol)` tanpa fallback mutasi ke defaultQuote IDR.
+- [x] **Pemberian Konteks Exchange pada `SimulationCoordinator`**:
+  - `SimulationCoordinator.kt`: Meneruskan `exchangeProvider` ke seluruh pemanggilan `store.placeOrder`, `store.getWallet`, `store.getOpenOrders`, `store.getTradeHistory`, dan `store.executeSimulationSellOrders`.
+- [x] **Akselerasi Loading Dashboard & Pembersihan Endpoint Fallback**:
+  - `TokocryptoMarketService.kt`: Menghapus semua URL fallback Binance yang terblokir (`api.binance.me`, `data-api.binance.vision`), mempercepat discovery ranking 24h dari 15-30s menjadi instan (< 1s).
+  - Normalisasi `isSafeTradableAsset` agar seluruh aset liquid Tokocrypto (IDR & USDT) tertampung dalam ranking volume 24h.
+- [x] **Penerapan Paging 15 Pasangan Koin Volume 24 Jam Tertinggi**:
+  - Tab `[Semua]` mengurutkan seluruh pasangan koin murni berdasarkan Volume 24H Tertinggi (USDT dinormalisasi ke IDR) dengan limit awal 15 koin dan penambahan +15 secara dinamis saat user scroll mendekati akhir list.
+- [x] **Verifikasi Kompilasi & Unit Tests**:
+  - `compile_applet` berhasil (BUILD SUCCESSFUL).
+  - `gradle :app:testDebugUnitTest` berhasil (BUILD SUCCESSFUL, semua unit tests lulus).
