@@ -7,6 +7,7 @@ import agu.analys.model.OrderBookItem
 import agu.analys.model.Timeframe
 import agu.analys.model.TradeStreamItem
 import agu.analys.network.NetworkClientProvider
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
@@ -127,6 +128,8 @@ object TokocryptoMarketService {
                         }
                     }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: Exception) {
                 val backoff = (150L * (1 shl (attempt - 1))).coerceAtMost(800L)
                 delay(backoff)
@@ -167,6 +170,8 @@ object TokocryptoMarketService {
                     if (st > 0) return@withContext st
                 }
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {}
         System.currentTimeMillis()
     }
@@ -218,6 +223,8 @@ object TokocryptoMarketService {
                     }
                 }
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {}
         null
     }
@@ -298,6 +305,8 @@ object TokocryptoMarketService {
             }
 
             results
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {
             emptyList()
         }
@@ -364,6 +373,8 @@ object TokocryptoMarketService {
                 }
                 return@withContext candles
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {}
         emptyList()
     }
@@ -418,6 +429,8 @@ object TokocryptoMarketService {
                 }
                 return@withContext Pair(bids, asks)
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {}
         Pair(emptyList(), emptyList())
     }
@@ -474,6 +487,8 @@ object TokocryptoMarketService {
                 }
                 return@withContext trades.reversed()
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {}
         emptyList()
     }
@@ -524,6 +539,8 @@ object TokocryptoMarketService {
                 }
                 return@withContext trades.reversed()
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {}
         emptyList()
     }
@@ -594,6 +611,8 @@ object TokocryptoMarketService {
                 topVolume = topVol,
                 allTicks = allTicks
             )
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Timber.w(e, "Error fetchMarketRankings Tokocrypto")
             TokoRankingsResult()

@@ -674,21 +674,28 @@ class SpotPositionStore(context: Context) {
         return history.toString()
     }
 
-    fun normalize(symbol: String): String {
+    fun normalize(symbol: String, defaultQuote: String = "IDR"): String {
         val s = symbol.trim().uppercase().replace("/", "").replace("-", "").replace(" ", "").replace("_", "")
         return when {
             s.endsWith("IDR") -> s
             s.endsWith("USDT") -> s
+            s.endsWith("BIDR") -> s
             s.endsWith("USD") -> s
-            else -> "${s}IDR"
+            s.endsWith("USDC") -> s
+            s.endsWith("BUSD") -> s
+            else -> "${s}${defaultQuote.uppercase()}"
         }
     }
 
     fun getAllStoredSymbols(isReal: Boolean? = null, exchange: String? = null): List<String> {
         val symbols = mutableSetOf<String>()
         val targetEx = exchange?.trim()?.lowercase()
-        for ((k, _) in prefs.all) {
+        val defaultQuote = if (targetEx == "tokocrypto") "USDT" else "IDR"
+        for ((k, v) in prefs.all) {
             if (k.endsWith("_state")) {
+                val stateStr = v?.toString() ?: continue
+                if (stateStr != SpotPositionState.HOLDING.name) continue
+
                 val raw = k.removeSuffix("_state")
                 val isKeyReal = when {
                     raw.contains("_real_") || raw.startsWith("real_") -> true
@@ -707,7 +714,7 @@ class SpotPositionStore(context: Context) {
                 val clean = raw
                     .removePrefix("tokocrypto_").removePrefix("indodax_")
                     .removePrefix("real_").removePrefix("sim_")
-                symbols.add(normalize(clean))
+                symbols.add(normalize(clean, defaultQuote))
             }
         }
         return symbols.toList().sorted()

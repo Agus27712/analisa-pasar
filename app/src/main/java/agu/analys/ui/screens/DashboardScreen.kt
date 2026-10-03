@@ -180,7 +180,10 @@ fun DashboardScreen(
             }
             DashboardQuickFilter.HOLDING -> {
                 strategyPairs.filter { pair ->
-                    val status = holdingStatuses[pair.symbol] ?: holdingStatuses[pair.baseAsset.lowercase()]
+                    val status = holdingStatuses[pair.symbol] 
+                        ?: holdingStatuses[pair.baseAsset.lowercase()] 
+                        ?: holdingStatuses[pair.baseAsset.uppercase()] 
+                        ?: holdingStatuses["${pair.baseAsset.uppercase()}${defaultQuote.uppercase()}"]
                     status != null && status.isHolding && status.quantity > 0.00000001
                 }
             }
@@ -197,16 +200,41 @@ fun DashboardScreen(
     }
 
     // Data posisi holding aktif real (SSOT: posisi spot realtime + chart sparkline 1 jam yang mencerminkan detail)
-    val activeHoldingList = remember(holdingStatuses, allTicks, spotPosition, strategyPairs, mtfState, recentCandles) {
-        holdingStatuses.filter { it.value.isHolding && it.value.quantity > 0.00000001 }.map { (symbol, status) ->
+    val activeHoldingList = remember(holdingStatuses, allTicks, spotPosition, strategyPairs, mtfState, recentCandles, defaultQuote) {
+        val holdingEntries = holdingStatuses.filter { it.value.isHolding && it.value.quantity > 0.00000001 }
+
+        // Kelompokkan berdasarkan baseAsset agar 1 koin tidak pernah muncul ganda (USDT vs IDR) di Dashboard
+        val groupedByBase = holdingEntries.entries.groupBy { (symbol, _) ->
+            val clean = symbol.uppercase().replace("_", "").replace("-", "").replace("/", "")
+            when {
+                clean.endsWith("USDT") -> clean.removeSuffix("USDT")
+                clean.endsWith("BIDR") -> clean.removeSuffix("BIDR")
+                clean.endsWith("IDR") -> clean.removeSuffix("IDR")
+                clean.endsWith("USDC") -> clean.removeSuffix("USDC")
+                clean.endsWith("BUSD") -> clean.removeSuffix("BUSD")
+                else -> clean
+            }
+        }
+
+        groupedByBase.mapNotNull { (baseAsset, entries) ->
+            if (baseAsset.isBlank()) return@mapNotNull null
+            // Prioritaskan pasangan koin yang sesuai kuotasi aktif (cth: USDT di Tokocrypto, IDR di Indodax)
+            val selectedEntry = entries.firstOrNull { (sym, _) ->
+                val upper = sym.uppercase().replace("_", "")
+                upper.endsWith(defaultQuote.uppercase())
+            } ?: entries.firstOrNull { it.value.entryPrice > 0.0 } ?: entries.first()
+
+            val (symbol, status) = selectedEntry
             val pair = strategyPairs.find { it.symbol.equals(symbol, ignoreCase = true) }
+                ?: strategyPairs.find { it.baseAsset.equals(baseAsset, ignoreCase = true) && it.quoteAsset.equals(defaultQuote, ignoreCase = true) }
                 ?: TradingPair.fromCustomSymbol(symbol, defaultQuote)
-            val pos = if (viewModel.isMatchingSymbol(symbol, spotPosition.symbol)) {
+
+            val pos = if (viewModel.isMatchingSymbol(symbol, spotPosition.symbol) || viewModel.isMatchingSymbol(pair.symbol, spotPosition.symbol)) {
                 spotPosition
             } else {
-                viewModel.positionCoordinator.getPosition(symbol)
+                viewModel.positionCoordinator.getPosition(pair.symbol)
             }
-            val tick = allTicks[symbol] ?: allTicks[pair.symbol]
+            val tick = allTicks[pair.symbol] ?: allTicks[symbol] ?: allTicks[pair.baseAsset.uppercase()]
             val candles1h = viewModel.getH1Candles(pair.symbol)
             ActiveHoldingItemData(
                 pair = pair,
@@ -215,7 +243,7 @@ fun DashboardScreen(
                 tick = tick,
                 candles1h = candles1h
             )
-        }.distinctBy { it.pair.symbol }
+        }.distinctBy { it.pair.baseAsset.uppercase() }
     }
 
     // Prefetch/sync candle 1H untuk semua holding aktif secara background agar chart sparkline selalu ready

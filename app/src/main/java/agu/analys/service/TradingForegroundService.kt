@@ -22,6 +22,7 @@ import agu.analys.engine.sell.SellSignalLifecycleManager
 import agu.analys.model.PositionContext
 import agu.analys.model.SellLifecycleState
 import agu.analys.config.TradingFeeConfig
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -34,8 +35,8 @@ import java.util.concurrent.ConcurrentHashMap
 
 class TradingForegroundService : Service() {
 
-    private val serviceJob = SupervisorJob()
-    private val serviceScope = CoroutineScope(Dispatchers.IO + serviceJob)
+    private var serviceJob = SupervisorJob()
+    private var serviceScope = CoroutineScope(Dispatchers.IO + serviceJob)
     private var monitorJob: Job? = null
     private val lastEmergencyAlertTimes = ConcurrentHashMap<String, Long>()
     private val EMERGENCY_ALERT_COOLDOWN_MS = 60_000L
@@ -44,6 +45,7 @@ class TradingForegroundService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        ensureActiveScope()
         createNotificationChannel()
         startHoldingsMonitor()
     }
@@ -53,6 +55,7 @@ class TradingForegroundService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action
         if (action == ACTION_STOP) {
+            monitorJob?.cancel()
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.cancel(NOTIFICATION_ID)
             stopForeground(true)
@@ -60,6 +63,7 @@ class TradingForegroundService : Service() {
             return START_NOT_STICKY
         }
 
+        ensureActiveScope()
         startHoldingsMonitor()
 
         if (action == ACTION_UPDATE) {
@@ -76,7 +80,15 @@ class TradingForegroundService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        monitorJob?.cancel()
         serviceJob.cancel()
+    }
+
+    private fun ensureActiveScope() {
+        if (!serviceJob.isActive) {
+            serviceJob = SupervisorJob()
+            serviceScope = CoroutineScope(Dispatchers.IO + serviceJob)
+        }
     }
 
     private fun startHoldingsMonitor() {
@@ -207,6 +219,8 @@ class TradingForegroundService : Service() {
                             updateNotification()
                         }
                     }
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     timber.log.Timber.w(e, "Background holding monitor loop error")
                 }

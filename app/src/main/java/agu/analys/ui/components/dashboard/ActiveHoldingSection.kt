@@ -156,7 +156,7 @@ fun ActiveHoldingCard(
     val currentPrice = item.tick?.price ?: 0.0
     val entryPrice = when {
         item.holding.entryPrice > 0.0 && item.position != null && item.position.entryPrice > 0.0 -> {
-            if (item.holding.entryPrice < 1.0 && item.position.entryPrice >= 1.0) item.position.entryPrice
+            if (item.pair.quoteAsset.equals("IDR", ignoreCase = true) && item.holding.entryPrice < 1.0 && item.position.entryPrice >= 1.0) item.position.entryPrice
             else item.holding.entryPrice
         }
         item.holding.entryPrice > 0.0 -> item.holding.entryPrice
@@ -212,7 +212,7 @@ fun ActiveHoldingCard(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = item.pair.displayName.ifBlank { item.pair.baseAsset.uppercase() },
+                        text = "${item.pair.baseAsset.uppercase()} / ${item.pair.quoteAsset.uppercase()}",
                         color = TvTextSecondary,
                         fontSize = 11.sp,
                         maxLines = 1,
@@ -230,7 +230,7 @@ fun ActiveHoldingCard(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = if (currentPrice > 0.0) PriceFormatter.formatPrice(currentPrice) else "...",
+                    text = if (currentPrice > 0.0) PriceFormatter.formatPrice(currentPrice, quoteAsset = item.pair.quoteAsset) else "...",
                     color = TvTextPrimary,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold

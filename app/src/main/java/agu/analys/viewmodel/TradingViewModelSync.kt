@@ -93,15 +93,17 @@ fun TradingViewModel.syncRealTradeToSimulation(
     tp2: Double = 0.0
 ) {
     if (!prefs.isRealSimSyncEnabled) return
-    val base = baseFromSymbolOrPair(pair)
-    val symbol = "${base.uppercase()}IDR"
+    val defaultQuote = prefs.marketDataSource.defaultQuoteAsset
+    val tradingPair = TradingPair.fromCustomSymbol(pair, defaultQuote)
+    val symbol = tradingPair.symbol
     val isBuy = type.equals("buy", ignoreCase = true)
+    val currentEx = prefs.marketDataSource.name
 
     // 1. Mirror ke Riwayat Transaksi Simulasi dengan flag isRealMirror = true
     simCoordinator.recordMirroredRealTrade(
         symbol = symbol,
-        baseAsset = base,
-        quoteAsset = "IDR",
+        baseAsset = tradingPair.baseAsset,
+        quoteAsset = tradingPair.quoteAsset,
         side = if (isBuy) SimulationOrderSide.BUY else SimulationOrderSide.SELL,
         price = price,
         quantity = quantity
@@ -109,7 +111,7 @@ fun TradingViewModel.syncRealTradeToSimulation(
 
     // 2. Sinkronkan ke SpotPositionStore agar engine tracking (Trailing Stop / TP / SL / Alert) aktif
     if (isBuy) {
-        val currentPos = positionStore.get(symbol, isReal = true)
+        val currentPos = positionStore.get(symbol, isReal = true, exchange = currentEx)
         if (currentPos.isHolding && currentPos.quantity > 0.00000001 && currentPos.entryPrice > 0.0) {
             val totalQty = currentPos.quantity + quantity
             val totalCost = (currentPos.entryPrice * currentPos.quantity) + (price * quantity)
@@ -119,18 +121,20 @@ fun TradingViewModel.syncRealTradeToSimulation(
                 invested = totalCost,
                 entry = weightedAvgPrice,
                 quantity = totalQty,
-                isReal = true
+                isReal = true,
+                exchange = currentEx
             )
         } else {
             positionStore.markBought(
                 symbol = symbol,
                 entryPrice = price,
                 quantity = quantity,
-                isReal = true
+                isReal = true,
+                exchange = currentEx
             )
         }
         if (tp1 > price || tp2 > price) {
-            val currentPos = positionStore.get(symbol, isReal = true)
+            val currentPos = positionStore.get(symbol, isReal = true, exchange = currentEx)
             positionStore.setAutoSellParams(
                 symbol = symbol,
                 enabled = true,
@@ -138,21 +142,23 @@ fun TradingViewModel.syncRealTradeToSimulation(
                 tp1Percent = 50.0,
                 tp2Price = if (tp2 > 0.0) tp2 else currentPos.tp2Price,
                 tp2Percent = 50.0,
-                isReal = true
+                isReal = true,
+                exchange = currentEx
             )
         }
     } else {
-        val currentPos = positionStore.get(symbol, isReal = true)
+        val currentPos = positionStore.get(symbol, isReal = true, exchange = currentEx)
         val remainingQty = (currentPos.quantity - quantity).coerceAtLeast(0.0)
         if (remainingQty <= 0.00000001) {
-            positionStore.markSold(symbol, isReal = true)
+            positionStore.markSold(symbol, isReal = true, exchange = currentEx)
         } else {
             positionStore.setHolding(
                 symbol = symbol,
                 invested = currentPos.entryPrice * remainingQty,
                 entry = currentPos.entryPrice,
                 quantity = remainingQty,
-                isReal = true
+                isReal = true,
+                exchange = currentEx
             )
         }
     }
@@ -207,6 +213,8 @@ fun TradingViewModel.baseFromSymbolOrPair(pair: String): String {
     return when {
         s.endsWith("idr") -> s.removeSuffix("idr")
         s.endsWith("usdt") -> s.removeSuffix("usdt")
+        s.endsWith("bidr") -> s.removeSuffix("bidr")
+        s.endsWith("usd") -> s.removeSuffix("usd")
         else -> s
     }
 }
@@ -217,7 +225,12 @@ fun TradingViewModel.syncRealBalancesToPositionStore(
 ) {
     val hasCreds = prefs.hasTokocryptoCredentials() || prefs.hasIndodaxCredentials()
     if (!hasCreds) return
-    val basePairs = if (prefs.marketDataSource == MarketDataSource.TOKOCRYPTO) {
+    val currentEx = prefs.marketDataSource.name
+    val isToko = prefs.marketDataSource == MarketDataSource.TOKOCRYPTO
+    val defaultQuote = if (isToko) "USDT" else "IDR"
+    val staleQuote = if (isToko) "IDR" else "USDT"
+    
+    val basePairs = if (isToko) {
         TradingPair.POPULAR_TOKOCRYPTO_PAIRS.map { it.baseAsset.uppercase() }
     } else {
         TradingPair.POPULAR_INDODAX_PAIRS.map { it.baseAsset.uppercase() }
@@ -225,17 +238,20 @@ fun TradingViewModel.syncRealBalancesToPositionStore(
     val popularAndCustom = (basePairs + balances.keys.map { it.uppercase() }).distinct()
     
     for (baseUpper in popularAndCustom) {
-        if (baseUpper == "IDR" || baseUpper == "BIDR" || baseUpper == "USDT") continue
+        if (baseUpper == "IDR" || baseUpper == "BIDR" || baseUpper == "USDT" || baseUpper == "USDC" || baseUpper == "USD") continue
         val baseLower = baseUpper.lowercase()
-        val symbol = "${baseUpper}IDR"
-        val pairSymbol = "${baseLower}_idr"
+        val symbol = "${baseUpper}${defaultQuote}"
+        val pairSymbol = "${baseLower}_${defaultQuote.lowercase()}"
+        val staleSymbol = "${baseUpper}${staleQuote}"
+        val stalePairSymbol = "${baseLower}_${staleQuote.lowercase()}"
+        
         val qty = balances[baseLower] ?: balances[baseUpper] ?: 0.0
-        val pos = positionStore.get(symbol, isReal = true)
+        val pos = positionStore.get(symbol, isReal = true, exchange = currentEx)
         
         val avgPrice = avgPrices[symbol]
+            ?: avgPrices["${baseLower}${defaultQuote.lowercase()}"]
             ?: avgPrices[baseUpper]
             ?: avgPrices[baseLower]
-            ?: avgPrices["${baseLower}idr"]
             ?: 0.0
         
         if (qty > 0.00000001) {
@@ -247,14 +263,16 @@ fun TradingViewModel.syncRealBalancesToPositionStore(
                     entryPrice = finalEntry,
                     quantity = qty,
                     invested = totalInvested,
-                    isReal = true
+                    isReal = true,
+                    exchange = currentEx
                 )
                 positionStore.markBought(
                     symbol = pairSymbol,
                     entryPrice = finalEntry,
                     quantity = qty,
                     invested = totalInvested,
-                    isReal = true
+                    isReal = true,
+                    exchange = currentEx
                 )
             } else {
                 positionStore.setHolding(
@@ -262,21 +280,28 @@ fun TradingViewModel.syncRealBalancesToPositionStore(
                     invested = totalInvested,
                     entry = finalEntry,
                     quantity = qty,
-                    isReal = true
+                    isReal = true,
+                    exchange = currentEx
                 )
                 positionStore.setHolding(
                     symbol = pairSymbol,
                     invested = totalInvested,
                     entry = finalEntry,
                     quantity = qty,
-                    isReal = true
+                    isReal = true,
+                    exchange = currentEx
                 )
             }
+            // Bersihkan posisi duplikat kuotasi yang tidak aktif untuk koin ini pada exchange ini
+            positionStore.markSold(staleSymbol, isReal = true, exchange = currentEx)
+            positionStore.markSold(stalePairSymbol, isReal = true, exchange = currentEx)
         } else {
             if (pos.isHolding) {
-                positionStore.markSold(symbol, isReal = true)
-                positionStore.markSold(pairSymbol, isReal = true)
+                positionStore.markSold(symbol, isReal = true, exchange = currentEx)
+                positionStore.markSold(pairSymbol, isReal = true, exchange = currentEx)
             }
+            positionStore.markSold(staleSymbol, isReal = true, exchange = currentEx)
+            positionStore.markSold(stalePairSymbol, isReal = true, exchange = currentEx)
         }
     }
     refreshSpotPosition()

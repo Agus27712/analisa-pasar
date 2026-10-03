@@ -243,9 +243,10 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     val holdingStatuses: StateFlow<Map<String, CoinHoldingStatus>> = kotlinx.coroutines.flow.combine(
         watchlist, favorites, positionCoordinator.spotPosition, isRealBuyMode, positionCoordinator.positionVersion
     ) { w, f, pos, isReal, _ ->
-        val storedSymbols = positionStore.getAllStoredSymbols(isReal)
+        val currentEx = prefs.marketDataSource.name
+        val storedSymbols = positionStore.getAllStoredSymbols(isReal, currentEx)
         (w + f + listOf(pos.symbol) + storedSymbols).distinct().associateWith { sym ->
-            val p = positionStore.get(sym, isReal)
+            val p = positionStore.get(sym, isReal, currentEx)
             CoinHoldingStatus(
                 isHolding = p.isHolding,
                 quantity = p.quantity,
