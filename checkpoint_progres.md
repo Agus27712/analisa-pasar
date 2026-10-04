@@ -27,7 +27,7 @@
 | Phase | Status | Catatan |
 |-------|--------|---------|
 | P0    | ✅ DONE | Models + IndicatorMath + Regime + Structure |
-| P1    | 🔄 IN PROGRESS | P1.1–P1.2 done → lanjut P1.3 Risk/Entry Zone |
+| P1    | 🔄 IN PROGRESS | P1.1–P1.3 done → lanjut P1.4 refactor evaluator |
 | P2    | ⬜ TODO | Historical edge stub, MTF penuh, short |
 | Tests | 🔄 PARTIAL | Unit test files ada; jalankan manual nanti |
 
@@ -68,12 +68,12 @@
   - Output `ScoreBreakdown` + reasons (Bahasa Indonesia)
 - [x] Unit test: total = sum komponen; kategori NO_TRADE/WEAK/WATCH/STRONG/VERY_STRONG → `SignalScoringEngineTest.kt`
 
-### P1.3 Risk / Entry Zone  ← **KERJAKAN INI SEKARANG**
-- [ ] Helper (mis. `ScalpingRiskEngine.kt`): Entry Zone + Dynamic SL/TP + Net R:R via `FeeCalculator`
-- [ ] Min Net R:R default **1.15**
-- [ ] Unit test entry zone low ≤ high; netRr calculation
+### P1.3 Risk / Entry Zone
+- [x] Helper (`engine/scalping/ScalpingRiskEngine.kt`): Entry Zone + Dynamic SL/TP + Net R:R via `FeeCalculator`
+- [x] Min Net R:R default **1.15**
+- [x] Unit test entry zone low ≤ high; netRr calculation → `ScalpingRiskEngineTest.kt`
 
-### P1.4 Refactor `ScalpingMtfEvaluator`
+### P1.4 Refactor `ScalpingMtfEvaluator`  ← **KERJAKAN INI SEKARANG**
 - [ ] Orchestrator: Indicators → Structure → Regime → Setup → Score → Risk → Direction
 - [ ] Map ke `AISignalState` (BUY←LONG, HOLD←WAIT/SHORT sementara)
 - [ ] Pertahankan `SignalAudit`
@@ -102,6 +102,7 @@
 | `regime/MarketRegimeEngineTest.kt` | Regime synthetic | ✅ |
 | `scalping/ScalpSetupDetectorTest.kt` | Setup types | ✅ |
 | `scalping/SignalScoringEngineTest.kt` | Score breakdown | ✅ |
+| `scalping/ScalpingRiskEngineTest.kt` | Entry zone, SL/TP, net R:R | ✅ |
 | `scalping/ScalpingMtfEvaluatorTest.kt` | existing | existing |
 | `scalping/ScalpingMtfEvaluatorAuditTest.kt` | existing | existing |
 
@@ -117,6 +118,7 @@
 | 2026-10-04 | P0.1–P0.4 | Models, indicators, regime, structure |
 | 2026-10-04 | P1.1 | `ScalpSetupDetector` + test |
 | 2026-10-04 | P1.2 | `SignalScoringEngine` + test |
+| 2026-10-04 | P1.3 | `ScalpingRiskEngine` + test |
 
 ---
 
@@ -128,11 +130,11 @@
 - [x] ≥3 setup type terdeteksi (detector + tests)
 - [x] Score 0–100 + reasons
 - [ ] Direction LONG / WAIT / SHORT
-- [ ] Entry zone + dynamic SL/TP + net R:R
+- [x] Entry zone + dynamic SL/TP + net R:R
 - [ ] Backward compatible `AISignalState`
 - [x] Unit test file ada (manual run nanti)
 - [x] Tidak ada workflow CI test baru
 
 ---
 
-**Agent berikutnya:** kerjakan **P1.3 ScalpingRiskEngine** saja. Jangan loncat ke P1.4 refactor evaluator sebelum Risk (P1.3) selesai.
+**Agent berikutnya:** kerjakan **P1.4 refactor `ScalpingMtfEvaluator`** (orchestrator Indicators → Structure → Regime → Setup → Score → Risk → Direction).
