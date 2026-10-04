@@ -26,63 +26,50 @@
 
 | Phase | Status | Catatan |
 |-------|--------|---------|
-| P0    | ✅ DONE (pending structure unit test opsional) | Models + IndicatorMath + Regime + Structure |
-| P1    | ⬜ NEXT | Setup + Score + Risk + Refactor evaluator |
+| P0    | ✅ DONE | Models + IndicatorMath + Regime + Structure |
+| P1    | 🔄 IN PROGRESS | P1.1 done → lanjut P1.2 Scoring |
 | P2    | ⬜ TODO | Historical edge stub, MTF penuh, short |
-| Tests | 🔄 PARTIAL | Indicator + Regime unit tests ada; jalankan manual nanti |
+| Tests | 🔄 PARTIAL | Unit test files ada; jalankan manual nanti |
 
 ---
 
-## P0 — Fondasi (wajib selesai dulu)
+## P0 — Fondasi
 
 ### P0.1 Data models
-- [x] Buat `app/src/main/java/agu/analys/model/ScalpingEngineModels.kt`
-  - `MarketRegime`, `RegimeSnapshot`
-  - `StructureBias`, `StructureSnapshot`
-  - `ScalpSetupType`, `SignalDirection`
-  - `ScoreBreakdown`, `EntryZone`, `RiskLevels`, `ScalpingSignal`
-- [x] Model **exchange-agnostic** (IDR/USDT OK)
+- [x] `ScalpingEngineModels.kt`
 
 ### P0.2 IndicatorMath extensions
-- [x] Tambah `relativeVolume(candles, period = 20): Double`
-- [x] Tambah `choppiness(candles, period = 14): Double`
-- [x] Tambah `adx(candles, period = 14): Double` (TA4J ADXIndicator + fallback)
-- [x] Unit test: `IndicatorMathScalpingExtTest.kt`
+- [x] `relativeVolume` / `choppiness` / `adx` + `IndicatorMathScalpingExtTest.kt`
 
 ### P0.3 Market Regime Engine
-- [x] `engine/regime/MarketRegimeEngine.kt` (API lama `MarketRegimeDetector` tidak dipecah)
-- [x] Output: `RegimeSnapshot`
-- [x] Logic: CHOP + ADX + ATR% + structure bias + EMA alignment + breakout volume
-- [x] Unit test: `MarketRegimeEngineTest.kt`
+- [x] `MarketRegimeEngine.kt` + `MarketRegimeEngineTest.kt`
 
 ### P0.4 Structure enhancement
-- [x] Extend `MarketStructureAnalyzer`:
-  - CHoCH detection (`hasChoCH`, `chochDirection`)
-  - `structureStrength` 0–100
-  - `toStructureSnapshot()` mapper
-  - BOS flags di snapshot
-- [ ] Unit test structure strength + CHoCH (opsional sebelum P1; boleh dikerjakan paralel)
+- [x] CHoCH + `structureStrength` + `toStructureSnapshot()`
+- [ ] Unit test structure (opsional)
 
-**Gate P0:** ✅ Fondasi kode P0 selesai. Agent boleh mulai **P1.1 Setup Detector**.
+**Gate P0:** ✅
 
 ---
 
-## P1 — Scalping Engine Core  ← **KERJAKAN INI SEKARANG**
+## P1 — Scalping Engine Core
 
 ### P1.1 Setup Detector
-- [ ] `engine/scalping/ScalpSetupDetector.kt`
+- [x] `engine/scalping/ScalpSetupDetector.kt`
   - Types: `BREAKOUT`, `BREAKOUT_RETEST`, `LIQUIDITY_SWEEP`, `TREND_PULLBACK`, `NONE`
-  - Input: price, StructureSnapshot, RegimeSnapshot, rvol, buyPressure, candles
-- [ ] Unit test minimal 1 case per setup type → `ScalpSetupDetectorTest.kt`
+  - Prioritas: Sweep → Retest → Breakout → Pullback → None
+  - Ranging keras (CHOP≥65) hanya izinkan sweep/retest
+  - Exchange-agnostic (% / ratio)
+- [x] Unit test: `ScalpSetupDetectorTest.kt` (1+ case per type + IDR scale + ranging NONE)
 
-### P1.2 Signal Scoring Engine
+### P1.2 Signal Scoring Engine  ← **KERJAKAN INI SEKARANG**
 - [ ] `engine/scalping/SignalScoringEngine.kt`
   - Bobot: Structure 25 | MTF 15 | Price Action 20 | Volume 15 | Momentum 10 | Order Flow 10 | Volatility 5
   - Output `ScoreBreakdown` + reasons (Bahasa Indonesia)
-- [ ] Unit test: total = sum komponen; kategori NO_TRADE/WEAK/WATCH/STRONG/VERY_STRONG
+- [ ] Unit test: total = sum komponen; kategori NO_TRADE/WEAK/WATCH/STRONG/VERY_STRONG → `SignalScoringEngineTest.kt`
 
 ### P1.3 Risk / Entry Zone
-- [ ] Helper di package scalping (mis. `ScalpingRiskEngine.kt`): Entry Zone + Dynamic SL/TP + Net R:R via `FeeCalculator`
+- [ ] Helper (mis. `ScalpingRiskEngine.kt`): Entry Zone + Dynamic SL/TP + Net R:R via `FeeCalculator`
 - [ ] Min Net R:R default **1.15**
 - [ ] Unit test entry zone low ≤ high; netRr calculation
 
@@ -99,11 +86,11 @@
 
 ## P2 — Pelengkap (setelah P1 stabil)
 
-- [ ] Historical Edge **stub** (jangan angka palsu)
-- [ ] MTF matrix lebih lengkap (H1/M15/M1 dulu)
-- [ ] Order imbalance formal di `OrderBookAnalyzer` jika belum
+- [ ] Historical Edge **stub**
+- [ ] MTF matrix lebih lengkap
+- [ ] Order imbalance formal
 - [ ] Short side penuh (opsional)
-- [ ] `ScalpingConfig` object kumpulkan threshold
+- [ ] `ScalpingConfig` thresholds
 
 ---
 
@@ -111,12 +98,12 @@
 
 | Test file | Scope | Status |
 |-----------|--------|--------|
-| `indicators/IndicatorMathScalpingExtTest.kt` | RVOL, CHOP, ADX | ✅ added |
-| `regime/MarketRegimeEngineTest.kt` | Regime synthetic + IDR scale | ✅ added |
-| `scalping/ScalpSetupDetectorTest.kt` | Setup types | ⬜ P1 |
-| `scalping/SignalScoringEngineTest.kt` | Score breakdown | ⬜ P1 |
-| `scalping/ScalpingMtfEvaluatorTest.kt` | Update jika perlu | existing |
-| `scalping/ScalpingMtfEvaluatorAuditTest.kt` | Update jika perlu | existing |
+| `indicators/IndicatorMathScalpingExtTest.kt` | RVOL, CHOP, ADX | ✅ |
+| `regime/MarketRegimeEngineTest.kt` | Regime synthetic | ✅ |
+| `scalping/ScalpSetupDetectorTest.kt` | Setup types | ✅ |
+| `scalping/SignalScoringEngineTest.kt` | Score breakdown | ⬜ P1.2 |
+| `scalping/ScalpingMtfEvaluatorTest.kt` | existing | existing |
+| `scalping/ScalpingMtfEvaluatorAuditTest.kt` | existing | existing |
 
 **Jangan** menambah `.github/workflows/*` di branch ini untuk test.
 
@@ -127,26 +114,24 @@
 | Tanggal (WIB) | Item | Commit / catatan |
 |---------------|------|------------------|
 | 2026-10-04 | Branch + checkpoint | `engine_scalping_update` dari main |
-| 2026-10-04 | P0.1 | `ScalpingEngineModels.kt` |
-| 2026-10-04 | P0.2 | `IndicatorMath` + RVOL/CHOP/ADX + test |
-| 2026-10-04 | P0.3 | `MarketRegimeEngine` + test |
-| 2026-10-04 | P0.4 | CHoCH + strength + `toStructureSnapshot` |
+| 2026-10-04 | P0.1–P0.4 | Models, indicators, regime, structure |
+| 2026-10-04 | P1.1 | `ScalpSetupDetector` + test |
 
 ---
 
 ## Definisi Selesai (MVP branch ini)
 
-- [x] Regime formal (TRENDING_UP/DOWN, RANGING, HIGH_VOL, …)
+- [x] Regime formal
 - [x] Structure strength + CHoCH
-- [x] RVOL + ADX + CHOP di IndicatorMath
-- [ ] ≥3 setup type terdeteksi
+- [x] RVOL + ADX + CHOP
+- [x] ≥3 setup type terdeteksi (detector + tests)
 - [ ] Score 0–100 + reasons
 - [ ] Direction LONG / WAIT / SHORT
 - [ ] Entry zone + dynamic SL/TP + net R:R
 - [ ] Backward compatible `AISignalState`
-- [x] Unit test file ada (dijalankan manual nanti)
+- [x] Unit test file ada (manual run nanti)
 - [x] Tidak ada workflow CI test baru
 
 ---
 
-**Agent berikutnya:** mulai **P1.1 ScalpSetupDetector** → jangan refactor `ScalpingMtfEvaluator` dulu sebelum Setup + Score + Risk siap. Baca spek setup di prompt update. Jangan kerjakan P2.
+**Agent berikutnya:** kerjakan **P1.2 SignalScoringEngine** saja. Jangan loncat ke P1.4 refactor evaluator sebelum Score + Risk (P1.3) selesai.
