@@ -12,28 +12,19 @@ import java.util.Locale
 /**
  * Risk engine scalping KriptoYoi (P1.3) — sisi LONG.
  *
- * Menghasilkan Entry Zone + SL/TP dinamis (berbasis ATR + struktur) + Net R:R
- * lewat [FeeCalculator] (fee exchange + slippage).
- *
- * Exchange-agnostic: semua jarak dihitung dari ATR% / persen, bukan angka absolut IDR/USDT.
- *
- * TP dinamis: TP2 (target akhir) dihitung agar Net R:R mencapai [Input.targetNetRr] setelah fee + slippage
- * exchange (Tokocrypto fee kecil → target dekat; Indodax fee besar → target lebih jauh). TP1 = ±55% jalan
- * (partial). Net R:R dihitung pada TP2 dengan entry di sisi atas zona (fill terburuk).
- * Plan ditolak jika target terlalu jauh ([Input.maxTp2R]) atau resistance terlalu dekat (TP1 < 1R).
+ * Threshold default di [ScalpingConfig] (P2).
+ * Net R:R lewat [FeeCalculator] (fee exchange + slippage).
+ * Exchange-agnostic: jarak dari ATR% / persen.
  */
 object ScalpingRiskEngine {
 
-    const val DEFAULT_MIN_NET_RR = 1.15
-    const val DEFAULT_TARGET_NET_RR = 1.25
-    const val DEFAULT_MIN_RISK_PCT = 0.5
-    const val DEFAULT_MAX_TP2_R = 5.0
-    const val DEFAULT_SLIPPAGE_PCT = 0.08
+    const val DEFAULT_MIN_NET_RR = ScalpingConfig.MIN_NET_RR
+    const val DEFAULT_TARGET_NET_RR = ScalpingConfig.TARGET_NET_RR
+    const val DEFAULT_MIN_RISK_PCT = ScalpingConfig.MIN_RISK_PCT
+    const val DEFAULT_MAX_TP2_R = ScalpingConfig.MAX_TP2_R
+    const val DEFAULT_SLIPPAGE_PCT = ScalpingConfig.DEFAULT_SLIPPAGE_PCT
 
-    /** Dipakai jika ATR belum tersedia (candle kurang). */
     private const val FALLBACK_ATR_PCT = 0.5
-
-    // Pengali ATR
     private const val MIN_RISK_ATR = 0.8
     private const val MAX_RISK_ATR = 2.0
     private const val DEFAULT_SL_ATR = 1.0
@@ -51,18 +42,13 @@ object ScalpingRiskEngine {
         val useMaker: Boolean = false,
         val slippagePct: Double = DEFAULT_SLIPPAGE_PCT,
         val minNetRr: Double = DEFAULT_MIN_NET_RR,
-        /** Net R:R yang dibidik saat menentukan TP2. */
         val targetNetRr: Double = DEFAULT_TARGET_NET_RR,
-        /** Lantai jarak SL (persen dari entry) agar tidak terlalu rapat. */
         val minRiskPct: Double = DEFAULT_MIN_RISK_PCT,
-        /** Batas target TP2 dalam kelipatan risk (R); lebih jauh dianggap tidak realistis. */
         val maxTp2R: Double = DEFAULT_MAX_TP2_R
     )
 
     data class Result(
-        /** null jika input tidak valid (harga <= 0 atau setup NONE). */
         val levels: RiskLevels?,
-        /** true jika level masuk akal dan Net R:R >= minNetRr. */
         val valid: Boolean,
         val reasons: List<String>
     )
@@ -85,16 +71,14 @@ object ScalpingRiskEngine {
         }
         val atr = price * atrPct / 100.0
 
-        // --- Entry zone ---
         val (lowK, highK) = when (input.setup) {
             ScalpSetupType.BREAKOUT -> 0.1 to 0.2
             else -> 0.3 to 0.1
         }
         val zoneLow = price - lowK * atr
         val zoneHigh = price + highK * atr
-        val entry = zoneHigh // konservatif: fill terburuk
+        val entry = zoneHigh
 
-        // --- Stop loss ---
         val structural = when (input.setup) {
             ScalpSetupType.LIQUIDITY_SWEEP -> s.lastSwingLow ?: s.support
             else -> s.support ?: s.lastSwingLow
@@ -121,7 +105,6 @@ object ScalpingRiskEngine {
             else -> reasons += "SL berbasis ${fmt(DEFAULT_SL_ATR)}x ATR (struktur tidak tersedia)."
         }
 
-        // --- Take profit (dinamis, sadar fee exchange) ---
         val risk = entry - sl
         val riskPctForTp = risk / entry * 100.0
         val buyFee = if (input.useMaker) input.fees.buyMakerPct else input.fees.buyTakerPct
@@ -141,7 +124,6 @@ object ScalpingRiskEngine {
         val tp2 = maxOf(entry * (1.0 + tp2Pct / 100.0), tp1 + 0.5 * risk)
         val tp2R = (tp2 - entry) / risk
 
-        // --- Net R:R (fee + slippage) pada TP2 ---
         val fee = FeeCalculator.roundTrip(
             entry = entry,
             stopLoss = sl,
