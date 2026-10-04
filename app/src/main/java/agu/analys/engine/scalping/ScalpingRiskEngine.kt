@@ -16,11 +16,18 @@ import java.util.Locale
  * lewat [FeeCalculator] (fee exchange + slippage).
  *
  * Exchange-agnostic: semua jarak dihitung dari ATR% / persen, bukan angka absolut IDR/USDT.
- * Net R:R dihitung pada TP1 (target konservatif) dengan entry di sisi atas zona (fill terburuk).
+ *
+ * TP dinamis: TP2 (target akhir) dihitung agar Net R:R mencapai [Input.targetNetRr] setelah fee + slippage
+ * exchange (Tokocrypto fee kecil → target dekat; Indodax fee besar → target lebih jauh). TP1 = ±55% jalan
+ * (partial). Net R:R dihitung pada TP2 dengan entry di sisi atas zona (fill terburuk).
+ * Plan ditolak jika target terlalu jauh ([Input.maxTp2R]) atau resistance terlalu dekat (TP1 < 1R).
  */
 object ScalpingRiskEngine {
 
     const val DEFAULT_MIN_NET_RR = 1.15
+    const val DEFAULT_TARGET_NET_RR = 1.25
+    const val DEFAULT_MIN_RISK_PCT = 0.5
+    const val DEFAULT_MAX_TP2_R = 5.0
     const val DEFAULT_SLIPPAGE_PCT = 0.08
 
     /** Dipakai jika ATR belum tersedia (candle kurang). */
@@ -31,8 +38,9 @@ object ScalpingRiskEngine {
     private const val MAX_RISK_ATR = 2.0
     private const val DEFAULT_SL_ATR = 1.0
     private const val SL_BUFFER_ATR = 0.2
-    private const val TP1_R = 2.0
-    private const val TP2_R = 3.0
+    private const val MIN_TP2_R = 1.5
+    private const val TP1_SHARE = 0.55
+    private const val MIN_TP1_R = 1.0
 
     data class Input(
         val price: Double,
@@ -42,7 +50,13 @@ object ScalpingRiskEngine {
         val fees: TradingFeeConfig = TradingFeeConfig(),
         val useMaker: Boolean = false,
         val slippagePct: Double = DEFAULT_SLIPPAGE_PCT,
-        val minNetRr: Double = DEFAULT_MIN_NET_RR
+        val minNetRr: Double = DEFAULT_MIN_NET_RR,
+        /** Net R:R yang dibidik saat menentukan TP2. */
+        val targetNetRr: Double = DEFAULT_TARGET_NET_RR,
+        /** Lantai jarak SL (persen dari entry) agar tidak terlalu rapat. */
+        val minRiskPct: Double = DEFAULT_MIN_RISK_PCT,
+        /** Batas target TP2 dalam kelipatan risk (R); lebih jauh dianggap tidak realistis. */
+        val maxTp2R: Double = DEFAULT_MAX_TP2_R
     )
 
     data class Result(
@@ -89,52 +103,68 @@ object ScalpingRiskEngine {
             ?.takeIf { it > 0.0 && it < zoneLow }
             ?.let { it - SL_BUFFER_ATR * atr }
 
+        val minRiskAbs = maxOf(MIN_RISK_ATR * atr, input.minRiskPct / 100.0 * entry)
+        val maxRiskAbs = maxOf(MAX_RISK_ATR * atr, minRiskAbs)
+
         var sl = structuralSl ?: (entry - DEFAULT_SL_ATR * atr)
         val rawRisk = entry - sl
         when {
-            rawRisk > MAX_RISK_ATR * atr -> {
-                sl = entry - MAX_RISK_ATR * atr
+            rawRisk > maxRiskAbs -> {
+                sl = entry - maxRiskAbs
                 reasons += "SL struktur terlalu jauh — dibatasi ${fmt(MAX_RISK_ATR)}x ATR."
             }
-            rawRisk < MIN_RISK_ATR * atr -> {
-                sl = entry - MIN_RISK_ATR * atr
-                reasons += "SL terlalu rapat — dilebarkan ke ${fmt(MIN_RISK_ATR)}x ATR."
+            rawRisk < minRiskAbs -> {
+                sl = entry - minRiskAbs
+                reasons += "SL terlalu rapat — dilebarkan ke batas minimum (${fmt(input.minRiskPct)}% / ${fmt(MIN_RISK_ATR)}x ATR)."
             }
             structuralSl != null -> reasons += "SL di bawah struktur (support/swing low) + buffer ATR."
             else -> reasons += "SL berbasis ${fmt(DEFAULT_SL_ATR)}x ATR (struktur tidak tersedia)."
         }
 
-        // --- Take profit ---
+        // --- Take profit (dinamis, sadar fee exchange) ---
         val risk = entry - sl
-        var tp1 = entry + TP1_R * risk
+        val riskPctForTp = risk / entry * 100.0
+        val buyFee = if (input.useMaker) input.fees.buyMakerPct else input.fees.buyTakerPct
+        val sellFee = if (input.useMaker) input.fees.sellMakerPct else input.fees.sellTakerPct
+        val costPct = buyFee + sellFee + 2.0 * input.slippagePct
+        val requiredGrossPct = input.targetNetRr * (riskPctForTp + costPct) + costPct
+        val tp2Pct = maxOf(requiredGrossPct, MIN_TP2_R * riskPctForTp)
+
+        var tp1 = entry * (1.0 + tp2Pct * TP1_SHARE / 100.0)
+        var resistanceTooClose = false
         val resistance = s.resistance?.takeIf { it > entry }
         if (resistance != null && resistance * 0.9995 < tp1) {
             tp1 = resistance * 0.9995
             reasons += "Resistance dekat — TP1 dibatasi tepat di bawah resistance."
+            if ((tp1 - entry) < MIN_TP1_R * risk) resistanceTooClose = true
         }
-        val tp2 = maxOf(entry + TP2_R * risk, tp1 + 0.5 * risk)
+        val tp2 = maxOf(entry * (1.0 + tp2Pct / 100.0), tp1 + 0.5 * risk)
+        val tp2R = (tp2 - entry) / risk
 
-        // --- Net R:R (fee + slippage) ---
+        // --- Net R:R (fee + slippage) pada TP2 ---
         val fee = FeeCalculator.roundTrip(
             entry = entry,
             stopLoss = sl,
-            takeProfit = tp1,
+            takeProfit = tp2,
             fees = input.fees,
             useMaker = input.useMaker,
             slippagePct = input.slippagePct
         )
 
         val riskPct = (entry - sl) / entry * 100.0
-        val rewardPct = (tp1 - entry) / entry * 100.0
+        val rewardPct = (tp2 - entry) / entry * 100.0
 
-        val levelsOk = sl > 0.0 && sl < zoneLow && tp1 > entry
+        val levelsOk = sl > 0.0 && sl < zoneLow && tp1 > entry && !resistanceTooClose
+        val targetOk = tp2R <= input.maxTp2R
         val rrOk = fee.netRr >= input.minNetRr
-        val valid = levelsOk && rrOk
+        val valid = levelsOk && targetOk && rrOk
 
         reasons += when {
+            resistanceTooClose -> "Resistance terlalu dekat (TP1 < ${fmt(MIN_TP1_R)}R) — WAIT."
             !levelsOk -> "Level SL/TP tidak masuk akal — WAIT."
-            rrOk -> "Net R:R ${fmt(fee.netRr)} ≥ ${fmt(input.minNetRr)} (setelah fee & slippage)."
-            else -> "Net R:R ${fmt(fee.netRr)} < ${fmt(input.minNetRr)} — fee/slippage terlalu besar atau target dekat, WAIT."
+            !targetOk -> "Target TP2 ${fmt(tp2R)}R terlalu jauh (maks ${fmt(input.maxTp2R)}R) — fee/slippage terlalu besar, WAIT."
+            rrOk -> "Net R:R ${fmt(fee.netRr)} ≥ ${fmt(input.minNetRr)} di TP2 (setelah fee & slippage)."
+            else -> "Net R:R ${fmt(fee.netRr)} < ${fmt(input.minNetRr)} — WAIT."
         }
 
         val levels = RiskLevels(

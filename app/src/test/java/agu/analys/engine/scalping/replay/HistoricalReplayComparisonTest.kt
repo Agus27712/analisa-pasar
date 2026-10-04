@@ -10,6 +10,11 @@ import org.junit.Test
  * FASE 7 & 8 — Re-Backtest & Komparasi Sebelum vs Sesudah:
  * Menjalankan Historical Replay pada dataset tren intraday,
  * membandingkan performa sinyal, bottleneck, valid entries, dan false signals.
+ *
+ * P1.4: evaluator memakai pipeline KriptoYoi (butuh setup valid + skor >= 60 + Net R:R >= 1.15),
+ * jadi dataset komparasi memakai tren naik bertahap (leg naik + pullback) dengan >= 600 candle M1
+ * agar struktur M15 terbentuk. Ini test mekanik pipeline (sinyal BUY muncul & terselesaikan),
+ * BUKAN bukti edge — dataset sintetis dibuat searah tren.
  */
 class HistoricalReplayComparisonTest {
 
@@ -45,9 +50,28 @@ class HistoricalReplayComparisonTest {
         return candles
     }
 
+    /** Tangga naik deterministik: [up] candle naik, [dn] candle pullback, diulang. */
+    private fun generateStaircaseUptrendDataset(
+        count: Int, up: Int = 6, dn: Int = 3, upStep: Double = 2.0, dnStep: Double = 1.2
+    ): List<CandleBar> {
+        var price = 1000.0
+        var time = 1_700_000_000_000L
+        return (0 until count).map { i ->
+            time += 60_000L
+            val isUp = i % (up + dn) < up
+            val open = price
+            price += if (isUp) upStep else -dnStep
+            CandleBar(
+                time, open,
+                maxOf(open, price) + 0.6, minOf(open, price) - 0.6,
+                price, if (isUp) 2500.0 else 900.0
+            )
+        }
+    }
+
     @Test
     fun `FASE 7 & 8 - Komparasi performa sinyal dan eliminasi bottleneck Net RR`() {
-        val dataset = generateMultiBreakoutDataset(100)
+        val dataset = generateStaircaseUptrendDataset(800)
 
         // Jalankan Historical Replay dengan feed order book sehat (Fase 7)
         val report = HistoricalReplayEngine.replay(

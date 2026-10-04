@@ -2,29 +2,59 @@ package agu.analys.engine.scalping
 
 import agu.analys.config.TradingFeeConfig
 import agu.analys.engine.MarketStructureAnalyzer
-import agu.analys.engine.backtest.WalkForwardEvaluator
 import agu.analys.engine.indicators.IndicatorMath
+import agu.analys.engine.regime.MarketRegimeEngine
 import agu.analys.model.AISignalState
+import agu.analys.model.CandleBar
 import agu.analys.model.MtfLegStatus
+import agu.analys.model.OrderBookItem
+import agu.analys.model.ScalpSetupType
 import agu.analys.model.ScalpingMtfSnapshot
 import agu.analys.model.ScalpingPath
+import agu.analys.model.ScalpingSignal
 import agu.analys.model.ScalpingStage
 import agu.analys.model.SignalAction
+import agu.analys.model.SignalAudit
+import agu.analys.model.SignalDirection
+import agu.analys.model.StructureSnapshot
 import agu.analys.model.TechnicalIndicators
 import agu.analys.model.TrendSentiment
-import agu.analys.model.CandleBar
-import agu.analys.model.OrderBookItem
-import agu.analys.model.SignalAudit
-import agu.analys.config.FeeCalculator
 import agu.analys.util.PriceFormatter
 import kotlin.math.abs
-import kotlin.math.max
 
+/**
+ * Orchestrator scalping KriptoYoi (P1.4).
+ *
+ * Pipeline: Indicators → Structure → Regime → Setup → Score → Risk → Direction.
+ * Dipetakan ke [AISignalState] (BUY ← LONG, HOLD ← WAIT / SHORT sementara) dan [SignalAudit]
+ * (step1..step4 dipertahankan untuk kompatibilitas UI/replay).
+ *
+ * Mapping checkpoint:
+ *  - step1: tidak berbahaya (noise/overbought) + ruang naik ke resistance M15
+ *  - step2: order book valid (tidak kosong, tidak basi, buy pressure > 1.0)
+ *  - step3: setup scalping terdeteksi + trigger VWAP/reclaim M1
+ *  - step4: risk plan valid (Net R:R ≥ 1.15 via FeeCalculator) + skor ≥ [MIN_SCORE_LONG]
+ *
+ * WAIT adalah output sah. Data kurang / orderbook kosong → tidak crash, arah WAIT.
+ * Exchange-agnostic: semua threshold pakai persen / ratio (IDR & USDT).
+ */
 object ScalpingMtfEvaluator {
+
+    /** Skor minimal untuk arah LONG (kategori WATCH ke atas). */
+    const val MIN_SCORE_LONG = 60
+
+    /** Skor untuk stage STRONG_ENTRY (kategori STRONG ke atas). */
+    const val STRONG_SCORE = 75
+
+    private const val ORDERBOOK_STALE_MS = 30_000L
+    private const val MTF_TOTAL = 3
+
     data class Result(
         val signal: AISignalState,
         val indicators: TechnicalIndicators,
-        val audit: SignalAudit = SignalAudit()
+        val audit: SignalAudit = SignalAudit(),
+        /** Output pipeline lengkap (direction, setup, score breakdown, risk). */
+        val scalping: ScalpingSignal = ScalpingSignal()
     )
 
     fun evaluate(
@@ -70,53 +100,43 @@ object ScalpingMtfEvaluator {
     ): Result? {
         if (price <= 0.0 || h1Candles.size < 20 || m15Candles.size < 20 || m1Candles.size < 20) return null
 
-        val isAggressive = true
         val m15Ready = m15Candles.size >= 40
+        val currency = if (symbol.uppercase().contains("USDT")) "$" else "Rp "
 
-        // 1. Order Book Pressure & VSA (Volume Spread Analysis)
+        // ------------------------------------------------------------------
+        // 1. INDICATORS (M1) + order book
+        // ------------------------------------------------------------------
         val isOrderBookEmpty = bids.isEmpty() && asks.isEmpty()
-        val isOrderBookStale = orderBookAgeMs > 30_000L
+        val isOrderBookStale = orderBookAgeMs > ORDERBOOK_STALE_MS
         val buyPressure = if (!isOrderBookEmpty) OrderBookAnalyzer.calculateBuyPressure(bids, asks, 15) else 1.0
-        val orderBookDataAvailable = !isOrderBookEmpty
+        val orderImbalance = if (!isOrderBookEmpty) orderImbalance(bids, asks, 15) else 0.0
         val isOrderBookValid = if (diagnosticIgnoreOrderBookWhenUnavailable && isOrderBookEmpty) {
             true
         } else {
             !isOrderBookEmpty && !isOrderBookStale && buyPressure > 1.0
         }
-        
+
         val last1M = m1Candles.last()
         val avgVol1M = m1Candles.takeLast(20).map { it.volume }.average()
         val formingVolValid = if (formingVolume > 0) formingVolume else last1M.volume
-        
+
         val candleRange = last1M.high - last1M.low
         val candleBody = abs(last1M.close - last1M.open)
         val candleWick = candleRange - candleBody
         val closeInTopThird = (last1M.high - last1M.close) <= candleRange / 3.0
-        
-        val isVSABreakout = formingVolValid > avgVol1M * (if (isAggressive) 1.2 else 1.5) && closeInTopThird
-        
-        // 2. Volatility Check (Differentiate Momentum vs Noise)
+        val isVSABreakout = formingVolValid > avgVol1M * 1.2 && closeInTopThird
+
         val atr1M = IndicatorMath.atr(m1Candles, 14)
         val volPct = (atr1M / price) * 100.0
         val isExtremeVol = volPct >= 4.0
         val isMomentum = candleBody > candleWick && last1M.close > last1M.open
         val isDangerousNoise = isExtremeVol && !isMomentum
 
-        // 3. VWAP & RSI Trigger (M1)
         val safeVwapCandles = if (m1Candles.size >= 60) m1Candles else m1Candles.takeLast(m1Candles.size)
         val vwap1M = IndicatorMath.rollingVwap(safeVwapCandles, minOf(60, safeVwapCandles.size))
         val rsi1M = IndicatorMath.rsi(m1Candles, minOf(14, m1Candles.size - 1))
-        val isOverbought = if (isAggressive) rsi1M >= 85.0 else rsi1M >= 80.0
-        
-        // 4. Macro Room to Grow & Breakout Analysis (M15 / H1)
-        val struct15M = if (m15Ready) MarketStructureAnalyzer.analyze(m15Candles.takeLast(40)) else null
-        val resistance = struct15M?.resistance ?: (price * 1.05)
-        val isBreakoutAboveResistance = price >= resistance
-        val isBreakoutWithVolume = price >= (resistance * 0.995) && isVSABreakout
-        val isRoomClearToResistance = price < (resistance * 0.995)
-        val hasRoomToGrow = isRoomClearToResistance || isBreakoutAboveResistance || isBreakoutWithVolume
+        val isOverbought = rsi1M >= 85.0
 
-        // Indicators for state
         val m1Closes = DoubleArray(m1Candles.size) { m1Candles[it].close }
         val ema13 = IndicatorMath.ema(m1Closes, minOf(13, m1Closes.size))
         val ema21 = IndicatorMath.ema(m1Closes, minOf(21, m1Closes.size))
@@ -126,52 +146,124 @@ object ScalpingMtfEvaluator {
 
         val isEma13And21Aligned = ema13 >= ema21 * 0.998
         val isEma13Bounce = price >= ema13 * 0.995 && price <= ema13 * 1.015
+        val rvol = IndicatorMath.relativeVolume(m1Candles, 20)
 
-        // 5. Risk / Reward Calculation (Min Net R:R 1:2.0 according to Akademi Crypto Strategy)
-        val stopPct = (if (isAggressive) volPct * 1.2 else volPct * 0.8).coerceIn(0.5, 3.0)
-        val sl = price * (1.0 - (stopPct / 100.0))
-        
-        val totalCostPct = (fees.buyTakerPct + fees.sellTakerPct) + (2 * 0.08)
-        val targetNetRr = 1.25
-        val requiredGrossRewardPct = (targetNetRr * (stopPct + totalCostPct) + totalCostPct)
-        val tp1 = price * (1.0 + max(0.9, requiredGrossRewardPct * 0.55) / 100.0)
-        val tp2 = price * (1.0 + max(1.5, requiredGrossRewardPct) / 100.0)
-        
-        val feeResult = FeeCalculator.roundTrip(price, sl, tp2, fees, false, 0.08)
-        val rrOk = feeResult.netRr >= 1.05
+        // ------------------------------------------------------------------
+        // 2. STRUCTURE (M15) + room to grow
+        // ------------------------------------------------------------------
+        val struct15M = if (m15Ready) MarketStructureAnalyzer.analyze(m15Candles.takeLast(40)) else null
+        val structure: StructureSnapshot = struct15M
+            ?.let { MarketStructureAnalyzer.toStructureSnapshot(it) }
+            ?: StructureSnapshot()
 
-        // --- 1. DANGER & INVALIDATION CHECKS (DI ATAS) ---
+        val resistance = struct15M?.resistance ?: (price * 1.05)
+        val isBreakoutAboveResistance = price >= resistance
+        val isBreakoutWithVolume = price >= (resistance * 0.995) && isVSABreakout
+        val isRoomClearToResistance = price < (resistance * 0.995)
+        val hasRoomToGrow = isRoomClearToResistance || isBreakoutAboveResistance || isBreakoutWithVolume
+
+        // ------------------------------------------------------------------
+        // 3. REGIME (M1)
+        // ------------------------------------------------------------------
+        val regime = MarketRegimeEngine.detect(
+            candles = m1Candles,
+            price = price,
+            structureBias = structure.bias,
+            rvol = rvol,
+            resistanceBroken = m15Ready && isBreakoutAboveResistance
+        )
+
+        // ------------------------------------------------------------------
+        // 4. SETUP
+        // ------------------------------------------------------------------
+        val setupResult = ScalpSetupDetector.detect(
+            price = price,
+            structure = structure,
+            regime = regime,
+            rvol = rvol,
+            buyPressure = buyPressure,
+            m1Candles = m1Candles
+        )
+        val setup = setupResult.setup
+
+        // ------------------------------------------------------------------
+        // 5. SCORE
+        // ------------------------------------------------------------------
+        val mtfAligned = listOf(m1Candles, m15Candles, h1Candles).count { isUptrend(it) }
+        val score = SignalScoringEngine.score(
+            SignalScoringEngine.Input(
+                price = price,
+                structure = structure,
+                regime = regime,
+                setup = setup,
+                rvol = rvol,
+                buyPressure = buyPressure,
+                orderImbalance = orderImbalance,
+                hasOrderBook = !isOrderBookEmpty,
+                mtfAligned = mtfAligned,
+                mtfTotal = MTF_TOTAL,
+                m1Candles = m1Candles
+            )
+        )
+
+        // ------------------------------------------------------------------
+        // 6. RISK (entry zone, SL/TP dinamis, Net R:R via FeeCalculator)
+        // ------------------------------------------------------------------
+        val riskResult = ScalpingRiskEngine.evaluate(
+            ScalpingRiskEngine.Input(
+                price = price,
+                setup = if (setup != ScalpSetupType.NONE) setup else ScalpSetupType.TREND_PULLBACK,
+                structure = structure,
+                regime = regime,
+                fees = fees
+            )
+        )
+        val riskLevels = riskResult.levels
+        val riskValid = setup != ScalpSetupType.NONE && riskResult.valid
+        val netRr = riskLevels?.netRr ?: 0.0
+
+        // ------------------------------------------------------------------
+        // 7. DIRECTION (waterfall checkpoint)
+        // ------------------------------------------------------------------
         val isDangerous = isDangerousNoise || isOverbought
 
-        // --- 2. WATERFALL CHECKPOINTS ---
         val step1Ok = !isDangerous && hasRoomToGrow
         val step2Ok = step1Ok && isOrderBookValid
-        val isVwapOrReclaimValid = price > vwap1M || isVSABreakout || (rsi1M in 38.0..68.0 && last1M.close > last1M.open && last1M.close >= (vwap1M * 0.9985)) || isEma13Bounce
-        val step3Ok = step2Ok && isVwapOrReclaimValid
-        val step4Ok = step3Ok && rrOk
-
-        val completedSteps = when {
-            step4Ok -> 4
-            step3Ok -> 3
-            step2Ok -> 2
-            step1Ok -> 1
-            else -> 0
-        }
+        val isVwapOrReclaimValid = price > vwap1M || isVSABreakout ||
+            (rsi1M in 38.0..68.0 && last1M.close > last1M.open && last1M.close >= (vwap1M * 0.9985)) ||
+            isEma13Bounce
+        val step3Ok = step2Ok && setup != ScalpSetupType.NONE && isVwapOrReclaimValid
+        val step4Ok = step3Ok && riskValid && score.total >= MIN_SCORE_LONG
 
         val ready = step4Ok
-        val isTrendAndMacdAligned = ema13 > ema21 && macd.first > macd.second
-        val strong = ready && (
-            isVSABreakout || 
-            buyPressure >= 1.25 || 
-            (rsi1M in 45.0..68.0 && price > vwap1M) ||
-            isTrendAndMacdAligned
-        )
+        val strong = ready && score.total >= STRONG_SCORE
         val early = !ready && !isDangerous && step2Ok
 
+        // SHORT belum dibuat (P2) → LONG atau WAIT.
+        val direction = if (ready) SignalDirection.LONG else SignalDirection.WAIT
+        val finalAction = if (direction == SignalDirection.LONG) SignalAction.BUY else SignalAction.HOLD
+
+        // ------------------------------------------------------------------
+        // Reasoning (Bahasa Indonesia)
+        // ------------------------------------------------------------------
         val reasons = mutableListOf<String>()
         if (isDangerousNoise) reasons.add("⚠️ Tertahan: Volatilitas pasar sedang liar (Noise tinggi).")
         if (isOverbought) reasons.add("⚠️ Tertahan: Harga koin sedang terlalu tinggi (Jenuh Beli/Overbought RSI 1M ${fmt(rsi1M)}).")
         if (!hasRoomToGrow) reasons.add("⚠️ Tertahan: Harga koin terlalu dekat resistance M15 (Ruang naik sempit).")
+        reasons.add(
+            if (setup == ScalpSetupType.NONE) "Setup: belum ada. ${setupResult.explanation}"
+            else "Setup ${setup.name}: ${setupResult.explanation}"
+        )
+        reasons.add("Skor ${score.total}/100 (${score.category}) · MTF searah $mtfAligned/$MTF_TOTAL · RVOL ${fmt(rvol)}x.")
+        riskResult.reasons.lastOrNull()?.let { reasons.add(it) }
+
+        val spreadAnalysis = OrderBookAnalyzer.analyzeSpread(bids, asks, price)
+        if (spreadAnalysis.isSpreadGuardActive) {
+            reasons.add("🛡️ SPREAD GUARD: Spread ${fmt(spreadAnalysis.spreadPct)}% terlalu lebar. Wajib Limit Maker di $currency${PriceFormatter.formatPrice(spreadAnalysis.recommendedEntryPrice, showSymbol = false)}, hindari Hajar Kanan.")
+        } else if (spreadAnalysis.executionType == EntryExecutionType.LIMIT_MAKER) {
+            reasons.add("💡 Rekomendasi: Antri Limit Maker di $currency${PriceFormatter.formatPrice(spreadAnalysis.recommendedEntryPrice, showSymbol = false)} untuk hemat fee.")
+        }
+
         reasons.add("EMA 13/21: ${if (isEma13And21Aligned) "Uptrend Bounce (EMA13 > EMA21)" else "Cross / Neutral"}")
         reasons.add("VWAP 1M: ${fmt(vwap1M)}")
         if (isOrderBookEmpty) {
@@ -180,59 +272,53 @@ object ScalpingMtfEvaluator {
             reasons.add("Tekanan Beli (Orderbook): ${fmt(buyPressure)}x")
         }
         if (isVSABreakout) reasons.add("VSA Breakout Terdeteksi! (Vol: ${fmt(formingVolValid / avgVol1M)}x)")
+        if (finalAction == SignalAction.BUY && buyPressure < 0.7) {
+            reasons.add("💡 Likuiditas bid/ask order book agak tipis (${fmt(buyPressure)}x), disarankan cicil bertahap.")
+        }
         reasons.add("Risk Management: Gunakan alokasi 3-5% dari modal portofolio (Aturan Akademi Crypto).")
 
         when {
-            strong -> reasons.add(0, "STRONG ENTRY: VSA/OB kuat + Net R:R 1:${fmt(feeResult.netRr)}")
-            ready -> reasons.add(0, "BUY READY: Kondisi scalping valid (Net R:R 1:${fmt(feeResult.netRr)}).")
-            early -> reasons.add(0, "EARLY: setup terbentuk, tunggu konfirmasi penuh.")
+            strong -> reasons.add(0, "STRONG ENTRY: Skor ${score.total} + Net R:R 1:${fmt(netRr)}")
+            ready -> reasons.add(0, "BUY READY: Skor ${score.total} + Net R:R 1:${fmt(netRr)}.")
+            early -> reasons.add(0, "EARLY: kondisi awal terbentuk, tunggu setup & konfirmasi penuh.")
             isDangerous -> {}
-            else -> reasons.add("Menunggu momentum VWAP & Orderbook.")
+            else -> reasons.add(0, "WAIT: belum ada setup valid. Menunggu momentum & orderbook.")
         }
 
-        val finalAction = when {
-            ready && !isDangerous -> SignalAction.BUY
-            else -> SignalAction.HOLD
-        }
         val stage = when {
             strong -> ScalpingStage.STRONG_ENTRY
             ready -> ScalpingStage.ENTRY
             early -> ScalpingStage.EARLY_ENTRY
-            isDangerousNoise || isDangerous -> ScalpingStage.HOLD
+            isDangerous -> ScalpingStage.HOLD
             else -> ScalpingStage.WATCH
         }
-        
-        // --- ORDERBOOK SPREAD & DEPTH FILTER ---
-        val spreadAnalysis = OrderBookAnalyzer.analyzeSpread(bids, asks, price)
-        if (spreadAnalysis.isSpreadGuardActive) {
-            reasons.add("🛡️ SPREAD GUARD: Spread ${fmt(spreadAnalysis.spreadPct)}% terlalu lebar. Wajib Limit Maker di Rp ${PriceFormatter.formatPrice(spreadAnalysis.recommendedEntryPrice, showSymbol = false)}, hindari Hajar Kanan.")
-        } else if (spreadAnalysis.executionType == EntryExecutionType.LIMIT_MAKER) {
-            reasons.add("💡 Rekomendasi: Antri Limit Maker di Rp ${PriceFormatter.formatPrice(spreadAnalysis.recommendedEntryPrice, showSymbol = false)} untuk hemat fee.")
-        }
 
-        if (finalAction == SignalAction.BUY && buyPressure < 0.7) {
-            reasons.add("💡 Likuiditas bid/ask order book agak tipis (${fmt(buyPressure)}x), disarankan cicil bertahap.")
-        }
-        // -----------------------------------------------------
-
+        // ------------------------------------------------------------------
+        // MTF snapshot (backward compatible)
+        // ------------------------------------------------------------------
         val biasDetailText = when {
             isDangerousNoise -> "Tertahan: Volatilitas pasar sedang liar (Noise tinggi)."
             isOverbought -> "Tertahan: Harga koin sedang terlalu tinggi (Jenuh Beli/Overbought)."
             !hasRoomToGrow -> "Tertahan: Harga koin terlalu dekat resistance M15 (Ruang naik sempit)."
-            step1Ok -> "Target H1/M15 aman (Ruang naik terbuka)."
+            step1Ok -> "Target H1/M15 aman (Ruang naik terbuka). MTF searah $mtfAligned/$MTF_TOTAL."
             else -> "Memantau ruang gerak M15/H1."
         }
-
         val setupDetailText = when {
             !step1Ok -> "Menunggu Checkpoint 1 lolos."
             step2Ok -> "Orderbook Bid/Ask ratio ${fmt(buyPressure)}x."
             else -> "Menunggu tekanan beli (Bid/Ask > 1.0x)."
         }
-
         val triggerDetailText = when {
             !step2Ok -> "Menunggu Checkpoint 2 lolos."
-            step3Ok -> "Price > VWAP 1M (${fmt(vwap1M)}) & VSA terkonfirmasi."
+            step3Ok -> "Setup ${setup.name} terdeteksi & trigger VWAP 1M (${fmt(vwap1M)}) terkonfirmasi."
+            setup == ScalpSetupType.NONE -> "Menunggu setup scalping valid (sweep/retest/breakout/pullback)."
             else -> "Menunggu harga menembus VWAP 1M."
+        }
+        val entryDetailText = when {
+            !step3Ok -> "Menunggu Checkpoint 3 lolos."
+            step4Ok -> "Net RR: 1:${fmt(netRr)} (Valid), skor ${score.total}."
+            !riskValid -> "Menunggu Net RR optimal (Min 1:${fmt(ScalpingRiskEngine.DEFAULT_MIN_NET_RR)})."
+            else -> "Menunggu skor sinyal ≥ $MIN_SCORE_LONG (sekarang ${score.total})."
         }
 
         val confluence = agu.analys.engine.confluence.ConfluenceEvaluator.evaluate(
@@ -244,12 +330,6 @@ object ScalpingMtfEvaluator {
             orderBookAsks = asks,
             fees = fees
         )
-
-        val entryDetailText = when {
-            !step3Ok -> "Menunggu Checkpoint 3 lolos."
-            step4Ok -> "Net RR: 1:${fmt(feeResult.netRr)} (Valid)."
-            else -> "Menunggu Net RR optimal (Min 1:1.05)."
-        }
 
         val mtf = ScalpingMtfSnapshot(
             biasOk = step1Ok,
@@ -285,37 +365,44 @@ object ScalpingMtfEvaluator {
                 isOverbought -> "Menunggu koreksi / reset RSI 1M"
                 !hasRoomToGrow -> "Menunggu breakout resistance M15"
                 ready -> "Eksekusi"
-                step3Ok -> "Konfirmasi Net R:R"
-                step2Ok -> "Momentum VWAP & VSA"
+                step3Ok -> "Konfirmasi Net R:R & skor"
+                step2Ok -> "Setup scalping valid & VWAP"
                 step1Ok -> "Tekanan Beli Orderbook"
                 else -> "Menunggu setup lengkap"
             },
-            entryCondition = "M1 VSA/VWAP & Orderbook > 1.0",
+            entryCondition = "Setup valid · VWAP/VSA M1 · Orderbook > 1.0 · Skor ≥ $MIN_SCORE_LONG",
             extended = rsi1M > 78.0,
             extremeVolatility = isDangerousNoise,
             checkpoints = confluence.checkpoints,
             completedCount = confluence.completedCount
         )
 
-        val finalConfidence = when {
+        // ------------------------------------------------------------------
+        // Confidence: bobot skor, dibatasi sesuai checkpoint yang lolos
+        // ------------------------------------------------------------------
+        val confidence = when {
             isDangerous -> 0
-            strong -> 92
-            ready -> 85
-            step3Ok -> 65
-            early || step2Ok -> 50
-            step1Ok -> 35
-            else -> 20
+            ready -> score.total
+            else -> minOf(
+                score.total,
+                when {
+                    step3Ok -> 59
+                    step2Ok -> 49
+                    step1Ok -> 39
+                    else -> 29
+                }
+            ).coerceAtLeast(10)
         }
 
         val signal = AISignalState(
             action = finalAction,
-            confidence = finalConfidence,
+            confidence = confidence,
             sentiment = TrendSentiment.NEUTRAL_CONSOLIDATION,
             entryPrice = price,
-            targetPrice1 = tp1,
-            targetPrice2 = tp2,
-            stopLoss = sl,
-            riskRewardRatio = "1:${fmt(feeResult.netRr)}",
+            targetPrice1 = riskLevels?.takeProfit1 ?: 0.0,
+            targetPrice2 = riskLevels?.takeProfit2 ?: 0.0,
+            stopLoss = riskLevels?.stopLoss ?: 0.0,
+            riskRewardRatio = "1:${fmt(netRr)}",
             reasoning = reasons.take(6),
             timestamp = System.currentTimeMillis(),
             scalpingStage = stage,
@@ -340,15 +427,16 @@ object ScalpingMtfEvaluator {
                 isOrderBookStale -> "STEP2_ORDERBOOK_STALE"
                 else -> "STEP2_BUY_PRESSURE"
             }
-            !step3Ok -> "STEP3_TRIGGER"
-            !step4Ok -> "STEP4_RR"
+            !step3Ok -> if (setup == ScalpSetupType.NONE) "STEP3_NO_SETUP" else "STEP3_TRIGGER"
+            !step4Ok -> if (!riskValid) "STEP4_RR" else "STEP4_SCORE"
             isDangerous -> "DANGEROUS"
             else -> "WAITING_CONFIRMATION"
         }
 
+        val now = System.currentTimeMillis()
         val audit = SignalAudit(
             symbol = symbol,
-            timestamp = System.currentTimeMillis(),
+            timestamp = now,
             price = price,
             step1 = step1Ok,
             step2 = step2Ok,
@@ -357,12 +445,33 @@ object ScalpingMtfEvaluator {
             buyPressure = buyPressure,
             vwap = vwap1M,
             rsi = rsi1M,
-            rr = feeResult.netRr,
+            rr = netRr,
             finalAction = finalAction.name,
             rejectionReason = rejectionReason,
             isOrderBookEmpty = isOrderBookEmpty,
             orderBookAgeMs = orderBookAgeMs,
-            orderBookDataAvailable = orderBookDataAvailable
+            orderBookDataAvailable = !isOrderBookEmpty,
+            score = score.total,
+            scoreCategory = score.category,
+            setup = setup.name,
+            direction = direction.name,
+            regime = regime.regime.name
+        )
+
+        val scalping = ScalpingSignal(
+            direction = direction,
+            setup = setup,
+            score = score,
+            regime = regime,
+            structure = structure,
+            risk = if (setup != ScalpSetupType.NONE) riskLevels else null,
+            mtfAlignment = "$mtfAligned/$MTF_TOTAL",
+            rvol = rvol,
+            buyPressure = buyPressure,
+            orderImbalance = orderImbalance,
+            reasoning = reasons.toList(),
+            historicalEdgeStub = null,
+            timestamp = now
         )
 
         return Result(
@@ -376,9 +485,25 @@ object ScalpingMtfEvaluator {
                 atr = atr1M,
                 momentum = buyPressure
             ),
-            audit = audit
+            audit = audit,
+            scalping = scalping
         )
     }
 
-    private fun fmt(v: Double) = agu.analys.util.PriceFormatter.fmt(v)
+    /** Timeframe dianggap searah jika EMA9 > EMA21 (min 21 candle). */
+    private fun isUptrend(candles: List<CandleBar>): Boolean {
+        if (candles.size < 21) return false
+        val closes = candles.map { it.close }
+        return IndicatorMath.ema(closes, 9) > IndicatorMath.ema(closes, 21)
+    }
+
+    /** Imbalance bid vs ask, rentang -1.0 .. +1.0 (0 = seimbang). */
+    private fun orderImbalance(bids: List<OrderBookItem>, asks: List<OrderBookItem>, levels: Int): Double {
+        val b = bids.take(levels).sumOf { it.amount }
+        val a = asks.take(levels).sumOf { it.amount }
+        val total = b + a
+        return if (total <= 0.0) 0.0 else (b - a) / total
+    }
+
+    private fun fmt(v: Double) = PriceFormatter.fmt(v)
 }

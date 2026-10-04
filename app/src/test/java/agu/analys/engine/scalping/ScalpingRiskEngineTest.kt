@@ -70,7 +70,7 @@ class ScalpingRiskEngineTest {
         val expected = FeeCalculator.roundTrip(
             entry = l.entryZone.high,
             stopLoss = l.stopLoss,
-            takeProfit = l.takeProfit1,
+            takeProfit = l.takeProfit2,
             fees = tokoFees,
             useMaker = false,
             slippagePct = ScalpingRiskEngine.DEFAULT_SLIPPAGE_PCT
@@ -92,16 +92,31 @@ class ScalpingRiskEngineTest {
     }
 
     @Test
-    fun highIndodaxFees_failMinNetRr_onSmallAtr() {
-        val r = ScalpingRiskEngine.evaluate(input(fees = indodaxFees, atrPct = 1.0))
-        assertNotNull(r.levels)
-        assertFalse(r.valid)
-        assertTrue(r.levels!!.netRr < 1.15)
-        assertTrue(r.reasons.any { it.contains("WAIT") })
+    fun highFees_pushTargetFurther_butStillValid() {
+        val toko = ScalpingRiskEngine.evaluate(input(fees = tokoFees)).levels!!
+        val indodax = ScalpingRiskEngine.evaluate(input(fees = indodaxFees)).levels!!
+        // Fee lebih mahal → TP2 lebih jauh agar Net R:R tetap tercapai
+        assertTrue(indodax.rewardPct > toko.rewardPct)
+        assertTrue(indodax.netRr >= 1.15)
     }
 
     @Test
-    fun resistanceClose_capsTp1_andFailsRr() {
+    fun extremeFees_targetTooFar_invalid() {
+        val extreme = TradingFeeConfig(0.5, 0.5, 0.5, 0.5)
+        val r = ScalpingRiskEngine.evaluate(input(fees = extreme, atrPct = 0.2))
+        assertNotNull(r.levels)
+        assertFalse(r.valid)
+        assertTrue(r.reasons.any { it.contains("terlalu jauh") })
+    }
+
+    @Test
+    fun riskFloor_minRiskPct_applied() {
+        val l = ScalpingRiskEngine.evaluate(input(atrPct = 0.1)).levels!!
+        assertTrue(l.riskPct >= 0.5 - 1e-9)
+    }
+
+    @Test
+    fun resistanceClose_capsTp1_andInvalid() {
         val price = 1_000_000.0
         val s = structure(price).copy(resistance = price * 1.004)
         val r = ScalpingRiskEngine.evaluate(input(price = price, structure = s))
