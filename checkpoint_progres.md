@@ -2,23 +2,18 @@
 
 **Branch:** `engine_scalping_update`  
 **Base:** `main` @ `e06b12eb`  
-**Spek:** `KriptoYoi_Scalping_Engine_Update_Prompt.md` + `KriptoYoi_Scalping_Analyzer_Specification.md`  
-**Exchange context:** Indodax + **Tokocrypto** (quote **IDR** dan **USDT**). Engine scalping harus exchange-agnostic (harga/volume relatif, bukan hardcode IDR).
+**Exchange:** Indodax + Tokocrypto (IDR & USDT) — threshold %/ratio only.
 
 ---
 
-## ATURAN WAJIB UNTUK SEMUA AGENT
+## ATURAN WAJIB
 
-1. **Ikuti urutan P0 → P1 → P2.** Jangan loncat.
-2. **Jangan “ngide”** di luar scope checkpoint ini / spek KriptoYoi.
-3. **Jangan ubah UI Compose / ViewModel** kecuali mapping backward-compatible ke `AISignalState`.
-4. **Jangan buat GitHub Actions / CI workflow** untuk test di tahap ini. Unit test file saja; dijalankan manual nanti.
-5. **Fee + slippage** tetap lewat `FeeCalculator` / `TradingFeeConfig` yang sudah ada.
-6. **WAIT** adalah output sah. Jangan memaksa BUY/LONG.
-7. Setiap selesai satu item: **update status di file ini** (`[ ]` → `[x]`) + commit message jelas.
-8. Harga bisa IDR (juta–miliar) atau USDT (desimal). Semua threshold pakai **persen / ratio**, bukan absolute price.
-9. Reuse file existing: `MarketStructureAnalyzer`, `OrderBookAnalyzer`, `IndicatorMath`, `ConfluenceEvaluator`, `ScalpingMtfEvaluator`.
-10. Bahasa reasoning signal: **Bahasa Indonesia**.
+1. Ikuti urutan phase. Jangan loncat / ngide di luar spek KriptoYoi.
+2. Jangan ubah UI kecuali mapping `AISignalState` backward-compatible.
+3. **Jangan** buat CI workflow test.
+4. Fee+slippage lewat `FeeCalculator` / `TradingFeeConfig`.
+5. WAIT sah. Jangan angka Historical Edge palsu.
+6. Bahasa reasoning: Indonesia.
 
 ---
 
@@ -26,104 +21,86 @@
 
 | Phase | Status | Catatan |
 |-------|--------|---------|
-| P0    | ✅ DONE | Models + IndicatorMath + Regime + Structure |
-| P1    | ✅ DONE | Setup + Score + Risk + Evaluator pipeline |
-| P2    | ✅ DONE (short opsional belum) | Config, Historical Edge stub, imbalance, MTF matrix |
-| Tests | 🔄 PARTIAL | Unit test files ada; jalankan manual di Android Studio |
+| P0–P1 | ✅ | Models → pipeline |
+| P2 | ✅ | Config, edge stub, imbalance, MTF matrix |
+| **Wiring P2→Evaluator** | ✅ | Config, OrderFlow, MTF, EdgeStub, falling-knife |
+| P3 | ✅ | Backtest adapter + fee/slippage config |
+| P4 | ✅ | Market scanner engine (no UI) |
+| P5 | ✅ DEFERRED | ML **tidak** dikerjakan (spek: setelah edge terbukti) |
+| Tests | 🔄 | File ada; jalankan di Android Studio |
 
 ---
 
-## P0 — Fondasi ✅
+## Wiring residual (selesai)
 
-- [x] Models, RVOL/CHOP/ADX, MarketRegimeEngine, CHoCH + strength
+`ScalpingMtfEvaluator` sekarang memakai:
 
----
+- [x] `ScalpingConfig` (MIN_SCORE_LONG, STRONG, ORDERBOOK_STALE_MS)
+- [x] `OrderBookAnalyzer.analyzeOrderFlow` (buy pressure + imbalance formal)
+- [x] `MtfConfluenceMatrix.buildPartial` → `mtfAlignment` label
+- [x] `HistoricalEdgeStub.stubMessage` → `ScalpingSignal.historicalEdgeStub`
+- [x] Falling-knife guard → `STEP1_FALLING_KNIFE`
+- [x] `regimeDetected` = `regime.regime.name`
 
-## P1 — Scalping Engine Core ✅
-
-- [x] ScalpSetupDetector + test
-- [x] SignalScoringEngine + test
-- [x] ScalpingRiskEngine + test
-- [x] ScalpingMtfEvaluator pipeline + audit tests
-
----
-
-## P2 — Pelengkap
-
-- [x] **`ScalpingConfig`** thresholds terpusat (`engine/scalping/ScalpingConfig.kt`)
-  - Score gate, R:R, RVOL, order flow, CHOP/ADX/ATR%, spread, MTF keys, pesan historical edge
-  - Risk engine default mengarah ke config ini
-  - Test: `ScalpingConfigTest.kt`
-- [x] **Historical Edge stub** (`HistoricalEdgeStub.kt`)
-  - Selalu `INSUFFICIENT` — **tidak ada** win-rate / probabilitas palsu
-  - Test: `HistoricalEdgeStubTest.kt`
-- [x] **Order imbalance formal** (`OrderBookAnalyzer`)
-  - `calculateOrderImbalance` = (bid−ask)/(bid+ask)
-  - `analyzeOrderFlow` → `OrderFlowSnapshot`
-  - Spread defaults dari `ScalpingConfig`
-  - Test: `OrderImbalanceTest.kt`
-- [x] **MTF matrix** (`MtfConfluenceMatrix.kt`)
-  - Slot 1D / 4H / 1H / 15M / 5M / 1M
-  - Partial feed (H1/M15/M1) didukung; TF kosong = UNKNOWN
-  - Label alignment contoh `4/6 bullish`
-  - Test: `MtfConfluenceMatrixTest.kt`
-- [ ] **Short side penuh** (opsional — belum dikerjakan; mapping SHORT masih HOLD di evaluator)
-
-**Gate P2 (inti):** ✅ Config + stub edge + imbalance + MTF helper siap. Short boleh menyusul.
+**Review wiring:** Integrasi bersih, tanpa fake probability. SHORT masih HOLD (opsional). Duplikasi `orderImbalance` privat dihapus.
 
 ---
 
-## Unit Test (tanpa CI workflow)
+## P3 — Backtesting / Expectancy (engine)
 
-| Test file | Scope | Status |
-|-----------|--------|--------|
-| `indicators/IndicatorMathScalpingExtTest.kt` | RVOL, CHOP, ADX | ✅ |
-| `regime/MarketRegimeEngineTest.kt` | Regime | ✅ |
-| `scalping/ScalpSetupDetectorTest.kt` | Setup | ✅ |
-| `scalping/SignalScoringEngineTest.kt` | Score | ✅ |
-| `scalping/ScalpingRiskEngineTest.kt` | Risk | ✅ |
-| `scalping/ScalpingConfigTest.kt` | Config constants | ✅ P2 |
-| `scalping/HistoricalEdgeStubTest.kt` | No fake stats | ✅ P2 |
-| `scalping/OrderImbalanceTest.kt` | Imbalance | ✅ P2 |
-| `scalping/MtfConfluenceMatrixTest.kt` | MTF matrix | ✅ P2 |
-| `scalping/ScalpingMtfEvaluator*Test.kt` | Pipeline | existing |
+- [x] `ScalpingBacktestAdapter` — bungkus `BacktestEngine` + `ScalpingConfig.MIN_NET_RR` / slippage
+- [x] Catatan eksplisit: **bukan** Historical Edge setup-spesifik
+- [x] Test smoke: `ScalpingBacktestAdapterTest.kt`
+- Fee+slippage sudah di risk engine + backtest engine existing
 
-**Jangan** menambah `.github/workflows/*` di branch ini untuk test.
+**Review P3:** Baseline backtest deterministik OK untuk regresi. Trigger internal masih EMA sederhana (bukan full pipeline per-bar — mahal di mobile). Jangan pakai win-rate backtest ini sebagai klaim edge produksi tanpa data exchange nyata.
 
 ---
 
-## Log Commit / Progress
+## P4 — Scanner (engine only)
 
-| Tanggal (WIB) | Item | Catatan |
-|---------------|------|---------|
-| 2026-10-04 | P0–P1 | Models → pipeline evaluator |
-| 2026-10-04 | P2 | ScalpingConfig, HistoricalEdgeStub, OrderImbalance, MtfConfluenceMatrix + tests |
+- [x] `MarketScannerEngine` — scan multi-pair via `ScalpingMtfEvaluator`, rank LONG/score/R:R
+- [x] Tanpa UI / ViewModel
+- [x] Test smoke: `MarketScannerEngineTest.kt`
 
----
-
-## Definisi Selesai (MVP branch ini)
-
-- [x] Regime formal
-- [x] Structure strength + CHoCH
-- [x] RVOL + ADX + CHOP
-- [x] ≥3 setup type
-- [x] Score 0–100 + reasons
-- [x] Direction LONG / WAIT (SHORT opsional)
-- [x] Entry zone + dynamic SL/TP + net R:R
-- [x] Backward compatible `AISignalState`
-- [x] Historical Edge stub (tanpa angka palsu)
-- [x] Order imbalance formal
-- [x] MTF matrix helper
-- [x] ScalpingConfig thresholds
-- [x] Unit test file ada (manual run)
-- [x] Tidak ada workflow CI test baru
-- [ ] Short side penuh (opsional)
+**Review P4:** Cukup untuk fondasi screener Tokocrypto/Indodax. UI bisa consume `ScanResult` nanti. `onlyLongReady` filter opsional. Performa: O(n pairs × evaluate) — batasi batch di layer pemanggil.
 
 ---
 
-**Catatan residual:**
-- Validasi edge pakai data historis **nyata** Tokocrypto/Indodax, bukan replay sintetis.
-- Falling-knife guard (M15 lag di dump cepat) masih kandidat perbaikan terpisah.
-- Wire opsional: evaluator bisa memanggil `HistoricalEdgeStub.stubMessage()` ke `ScalpingSignal.historicalEdgeStub` dan `MtfConfluenceMatrix.buildPartial` untuk `mtfAlignment` jika belum fully wired di P1.4.
+## P5 — Machine Learning
 
-**Agent berikutnya (jika ada):** short side opsional, atau wire MTF matrix + historical edge stub ke `ScalpingMtfEvaluator` bila belum, atau PR review + jalankan unit test di Android Studio. Jangan tambah CI workflow.
+- [x] **DEFERRED (sengaja)** sesuai spek KriptoYoi §31/§Phase 7:
+  - Baseline strategy + backtest stabil dulu
+  - Data historis cukup + out-of-sample
+  - Overfitting dikontrol
+- Jangan implement ML di branch ini.
+
+**Review P5:** Menunda ML adalah keputusan benar. Fokus validasi data nyata + journal dulu.
+
+---
+
+## Unit Test (tanpa CI)
+
+| File | Phase |
+|------|-------|
+| IndicatorMathScalpingExtTest | P0 |
+| MarketRegimeEngineTest | P0 |
+| ScalpSetupDetectorTest | P1 |
+| SignalScoringEngineTest | P1 |
+| ScalpingRiskEngineTest | P1 |
+| ScalpingConfigTest / HistoricalEdgeStubTest / OrderImbalanceTest / MtfConfluenceMatrixTest | P2 |
+| ScalpingBacktestAdapterTest | P3 |
+| MarketScannerEngineTest | P4 |
+| ScalpingMtfEvaluator*Test | existing — re-run setelah wiring |
+
+---
+
+## Residual / next (opsional)
+
+1. Jalankan unit test di Android Studio; perbaiki regresi audit test jika ada.
+2. Short side penuh (masih opsional).
+3. Wire scanner ke UI screener Tokocrypto (di luar scope engine branch jika UI frozen).
+4. Historical Edge nyata dari `trade_journal` / backtest per-setup (Phase 5 spek) — **setelah** data cukup.
+5. PR review + merge ke main bila test hijau.
+
+**Jangan:** CI workflow, ML model, angka edge palsu, hardcode harga IDR absolut.
