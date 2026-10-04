@@ -25,6 +25,21 @@ data class SpreadAnalysis(
     val makerSavingsFeePct: Double = 0.30
 )
 
+/**
+ * Snapshot order flow ringkas (P2) — buy pressure + imbalance formal.
+ *
+ * Imbalance = (bidVol - askVol) / (bidVol + askVol), range -1.0 .. +1.0.
+ * Positif = tekanan beli di buku; negatif = tekanan jual.
+ */
+data class OrderFlowSnapshot(
+    val buyPressure: Double = 1.0,
+    val orderImbalance: Double = 0.0,
+    val bidVolume: Double = 0.0,
+    val askVolume: Double = 0.0,
+    val levelsUsed: Int = 0,
+    val hasDepth: Boolean = false
+)
+
 object OrderBookAnalyzer {
     fun calculateBuyPressure(bids: List<OrderBookItem>, asks: List<OrderBookItem>, levels: Int = 10): Double {
         val topBids = bids.take(levels).sumOf { it.amount }
@@ -39,15 +54,54 @@ object OrderBookAnalyzer {
     }
 
     /**
-     * Menganalisis spread order book untuk memberikan rekomendasi harga entri presisi
+     * Order book imbalance formal (spek KriptoYoi):
+     * `(Bid Volume - Ask Volume) / (Bid Volume + Ask Volume)`
+     *
+     * @return nilai di [-1.0, 1.0]; 0.0 jika depth kosong.
+     */
+    fun calculateOrderImbalance(
+        bids: List<OrderBookItem>,
+        asks: List<OrderBookItem>,
+        levels: Int = 10
+    ): Double {
+        val bidVol = bids.take(levels).sumOf { it.amount.coerceAtLeast(0.0) }
+        val askVol = asks.take(levels).sumOf { it.amount.coerceAtLeast(0.0) }
+        val total = bidVol + askVol
+        if (total <= 0.0) return 0.0
+        return ((bidVol - askVol) / total).coerceIn(-1.0, 1.0)
+    }
+
+    /**
+     * Gabungan buy pressure + imbalance untuk scoring / pipeline.
+     */
+    fun analyzeOrderFlow(
+        bids: List<OrderBookItem>,
+        asks: List<OrderBookItem>,
+        levels: Int = 10
+    ): OrderFlowSnapshot {
+        val bidVol = bids.take(levels).sumOf { it.amount.coerceAtLeast(0.0) }
+        val askVol = asks.take(levels).sumOf { it.amount.coerceAtLeast(0.0) }
+        val hasDepth = bidVol > 0.0 || askVol > 0.0
+        return OrderFlowSnapshot(
+            buyPressure = calculateBuyPressure(bids, asks, levels),
+            orderImbalance = calculateOrderImbalance(bids, asks, levels),
+            bidVolume = bidVol,
+            askVolume = askVol,
+            levelsUsed = levels,
+            hasDepth = hasDepth
+        )
+    }
+
+    /**
+     * Menganalisis spread order book untuk rekomendasi harga entri presisi
      * dengan toleransi spread dan proteksi Spread Guard anti-slippage.
      */
     fun analyzeSpread(
         bids: List<OrderBookItem>,
         asks: List<OrderBookItem>,
         currentPrice: Double = 0.0,
-        tolerancePct: Double = 0.40,
-        maxGuardPct: Double = 1.20
+        tolerancePct: Double = ScalpingConfig.SPREAD_TOLERANCE_PCT,
+        maxGuardPct: Double = ScalpingConfig.SPREAD_GUARD_MAX_PCT
     ): SpreadAnalysis {
         val topBid = bids.firstOrNull()?.price ?: 0.0
         val topAsk = asks.firstOrNull()?.price ?: 0.0
@@ -80,9 +134,9 @@ object OrderBookAnalyzer {
         }
 
         val recommendedEntryPrice = when (executionType) {
-            EntryExecutionType.MARKET_TAKER -> topAsk // Beli langsung di Best Ask karena spread tipis
-            EntryExecutionType.LIMIT_MAKER -> topBid // Antri di Best Bid untuk hemat fee & anti slippage
-            EntryExecutionType.SPREAD_GUARD_VETO -> topBid // Proteksi: ask lebar, antri di bid
+            EntryExecutionType.MARKET_TAKER -> topAsk
+            EntryExecutionType.LIMIT_MAKER -> topBid
+            EntryExecutionType.SPREAD_GUARD_VETO -> topBid
             EntryExecutionType.NO_DEPTH -> currentPrice
         }
 
