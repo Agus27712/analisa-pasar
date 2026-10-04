@@ -27,7 +27,7 @@
 | Phase | Status | Catatan |
 |-------|--------|---------|
 | P0    | ✅ DONE | Models + IndicatorMath + Regime + Structure |
-| P1    | 🔄 IN PROGRESS | P1.1 done → lanjut P1.2 Scoring |
+| P1    | 🔄 IN PROGRESS | P1.1–P1.2 done → lanjut P1.3 Risk/Entry Zone |
 | P2    | ⬜ TODO | Historical edge stub, MTF penuh, short |
 | Tests | 🔄 PARTIAL | Unit test files ada; jalankan manual nanti |
 
@@ -62,13 +62,13 @@
   - Exchange-agnostic (% / ratio)
 - [x] Unit test: `ScalpSetupDetectorTest.kt` (1+ case per type + IDR scale + ranging NONE)
 
-### P1.2 Signal Scoring Engine  ← **KERJAKAN INI SEKARANG**
-- [ ] `engine/scalping/SignalScoringEngine.kt`
+### P1.2 Signal Scoring Engine
+- [x] `engine/scalping/SignalScoringEngine.kt`
   - Bobot: Structure 25 | MTF 15 | Price Action 20 | Volume 15 | Momentum 10 | Order Flow 10 | Volatility 5
   - Output `ScoreBreakdown` + reasons (Bahasa Indonesia)
-- [ ] Unit test: total = sum komponen; kategori NO_TRADE/WEAK/WATCH/STRONG/VERY_STRONG → `SignalScoringEngineTest.kt`
+- [x] Unit test: total = sum komponen; kategori NO_TRADE/WEAK/WATCH/STRONG/VERY_STRONG → `SignalScoringEngineTest.kt`
 
-### P1.3 Risk / Entry Zone
+### P1.3 Risk / Entry Zone  ← **KERJAKAN INI SEKARANG**
 - [ ] Helper (mis. `ScalpingRiskEngine.kt`): Entry Zone + Dynamic SL/TP + Net R:R via `FeeCalculator`
 - [ ] Min Net R:R default **1.15**
 - [ ] Unit test entry zone low ≤ high; netRr calculation
@@ -101,7 +101,7 @@
 | `indicators/IndicatorMathScalpingExtTest.kt` | RVOL, CHOP, ADX | ✅ |
 | `regime/MarketRegimeEngineTest.kt` | Regime synthetic | ✅ |
 | `scalping/ScalpSetupDetectorTest.kt` | Setup types | ✅ |
-| `scalping/SignalScoringEngineTest.kt` | Score breakdown | ⬜ P1.2 |
+| `scalping/SignalScoringEngineTest.kt` | Score breakdown | ✅ |
 | `scalping/ScalpingMtfEvaluatorTest.kt` | existing | existing |
 | `scalping/ScalpingMtfEvaluatorAuditTest.kt` | existing | existing |
 
@@ -116,6 +116,7 @@
 | 2026-10-04 | Branch + checkpoint | `engine_scalping_update` dari main |
 | 2026-10-04 | P0.1–P0.4 | Models, indicators, regime, structure |
 | 2026-10-04 | P1.1 | `ScalpSetupDetector` + test |
+| 2026-10-04 | P1.2 | `SignalScoringEngine` + test |
 
 ---
 
@@ -125,7 +126,7 @@
 - [x] Structure strength + CHoCH
 - [x] RVOL + ADX + CHOP
 - [x] ≥3 setup type terdeteksi (detector + tests)
-- [ ] Score 0–100 + reasons
+- [x] Score 0–100 + reasons
 - [ ] Direction LONG / WAIT / SHORT
 - [ ] Entry zone + dynamic SL/TP + net R:R
 - [ ] Backward compatible `AISignalState`
@@ -134,4 +135,4 @@
 
 ---
 
-**Agent berikutnya:** kerjakan **P1.2 SignalScoringEngine** saja. Jangan loncat ke P1.4 refactor evaluator sebelum Score + Risk (P1.3) selesai.
+**Agent berikutnya:** kerjakan **P1.3 ScalpingRiskEngine** saja. Jangan loncat ke P1.4 refactor evaluator sebelum Risk (P1.3) selesai.
