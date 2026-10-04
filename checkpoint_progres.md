@@ -10,7 +10,7 @@
 
 1. Ikuti urutan phase. Jangan loncat / ngide di luar spek KriptoYoi.
 2. Jangan ubah UI kecuali mapping `AISignalState` backward-compatible.
-3. **Jangan** buat CI workflow test.
+3. **Jangan** buat CI workflow test otomatis. Pengecualian atas permintaan pemilik repo: `.github/workflows/unit-tests-manual.yml` (hanya `workflow_dispatch`, tanpa trigger push/PR).
 4. Fee+slippage lewat `FeeCalculator` / `TradingFeeConfig`.
 5. WAIT sah. Jangan angka Historical Edge palsu.
 6. Bahasa reasoning: Indonesia.
@@ -103,4 +103,4 @@
 4. Historical Edge nyata dari `trade_journal` / backtest per-setup (Phase 5 spek) — **setelah** data cukup.
 5. PR review + merge ke main bila test hijau.
 
-**Jangan:** CI workflow, ML model, angka edge palsu, hardcode harga IDR absolut.
+**Jangan:** CI workflow otomatis (push/PR), ML model, angka edge palsu, hardcode harga IDR absolut.
