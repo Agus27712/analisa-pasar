@@ -85,6 +85,8 @@ Cara jalan: tab Actions → **Unit Tests (Manual)** → Run workflow (pilih scop
 
 Scope `real-tokocrypto-replay`: replay kausal pada candle NYATA Tokocrypto (`RealTokocryptoReplayTest` + `RealDataReplayAnalyzer`). Laporan di branch `real-data-reports` (`real-tokocrypto-report.md`). Orderbook historis tidak ada → Step 2 di-bypass, hasil provisional; ada pembanding baseline.
 
+**Temuan:** Tokocrypto memblokir runner GitHub (IP AS) dengan HTTP 451 di semua domain utama. Solusi: unduh candle dari jaringan Indonesia dengan `python tools/fetch_tokocrypto_klines.py` → taruh CSV di `data/tokocrypto/` → jalankan scope `real-tokocrypto-replay` dengan `data_dir=data/tokocrypto`. Scope `probe-tokocrypto` mengecek akses domain dari runner.
+
 
 | File | Phase |
 |------|-------|

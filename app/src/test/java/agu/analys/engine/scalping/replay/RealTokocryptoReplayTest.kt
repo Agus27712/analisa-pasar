@@ -19,6 +19,9 @@ import java.net.URL
  * - REAL_PAIRS      : daftar pair dipisah koma, format BTCUSDT (default: 8 pair USDT utama)
  * - REAL_M1_PAGES   : jumlah halaman M1 @1000 candle (default 5 ≈ 3,5 hari)
  * - REAL_LOOKAHEAD  : time stop (bar M1) (default 30)
+ * - REAL_DATA_DIR   : folder CSV hasil tools/fetch_tokocrypto_klines.py (mode OFFLINE, tanpa internet).
+ *                     Dipakai karena Tokocrypto memblokir IP luar negeri (HTTP 451) termasuk runner GitHub.
+ *                     Path relatif dihitung dari root repo.
  *
  * Laporan ditulis ke app/build/real-data/real-tokocrypto-report.md
  */
@@ -40,6 +43,8 @@ class RealTokocryptoReplayTest {
         val m1Pages = System.getenv("REAL_M1_PAGES")?.toIntOrNull()?.coerceIn(1, 20) ?: 5
         val lookahead = System.getenv("REAL_LOOKAHEAD")?.toIntOrNull()?.coerceIn(5, 120) ?: 30
         val fees = MarketDataSource.TOKOCRYPTO.defaultFeeConfig
+        val dataDir = System.getenv("REAL_DATA_DIR")?.takeIf { it.isNotBlank() }?.let { resolveDir(it) }
+        if (dataDir != null) notes += "Mode OFFLINE: candle dibaca dari ${dataDir.path} (hasil unduhan dari jaringan Indonesia)."
 
         val analyzer = RealDataReplayAnalyzer(fees = fees, lookaheadBars = lookahead)
         val results = mutableListOf<RealDataReplayAnalyzer.PairResult>()
@@ -49,9 +54,19 @@ class RealTokocryptoReplayTest {
         try {
             val now = System.currentTimeMillis()
             for (sym in pairs) {
-                val m1 = fetchKlines(sym, "1m", 60_000L, m1Pages, now)
-                val m15 = fetchKlines(sym, "15m", 15 * 60_000L, 1, now)
-                val h1 = fetchKlines(sym, "1h", 60 * 60_000L, 1, now)
+                val m1: List<CandleBar>
+                val m15: List<CandleBar>
+                val h1: List<CandleBar>
+                if (dataDir != null) {
+                    m1 = loadCsv(File(dataDir, "${sym}_1m.csv"))
+                    val ref = (m1.lastOrNull()?.timestamp ?: 0L) + 60_000L
+                    m15 = loadCsv(File(dataDir, "${sym}_15m.csv")).filter { it.timestamp + 15 * 60_000L <= ref }
+                    h1 = loadCsv(File(dataDir, "${sym}_1h.csv")).filter { it.timestamp + 60 * 60_000L <= ref }
+                } else {
+                    m1 = fetchKlines(sym, "1m", 60_000L, m1Pages, now)
+                    m15 = fetchKlines(sym, "15m", 15 * 60_000L, 1, now)
+                    h1 = fetchKlines(sym, "1h", 60 * 60_000L, 1, now)
+                }
                 println("[$sym] M1=${m1.size} M15=${m15.size} H1=${h1.size}")
                 if (m1.size < 300 || m15.size < 20 || h1.size < 20) {
                     notes += "$sym dilewati: data kurang (M1=${m1.size}, M15=${m15.size}, H1=${h1.size})."
@@ -66,7 +81,8 @@ class RealTokocryptoReplayTest {
             val report = analyzer.buildReport(
                 title = "Replay data nyata Tokocrypto — engine scalping (provisional)",
                 params = mapOf(
-                    "Sumber" to "Tokocrypto (type 1 market data), tanpa fallback Binance",
+                    "Sumber" to (if (dataDir != null) "CSV hasil unduhan Tokocrypto (type 1), tanpa fallback Binance"
+                        else "Tokocrypto (type 1 market data), tanpa fallback Binance"),
                     "Pair" to pairs.joinToString(", "),
                     "Halaman M1 (x1000)" to m1Pages.toString(),
                     "Time stop (bar M1)" to lookahead.toString(),
@@ -156,6 +172,33 @@ class RealTokocryptoReplayTest {
             val v = g[6].toDoubleOrNull() ?: return@mapNotNull null
             if (c <= 0.0) null else CandleBar(timestamp = ts, open = o, high = h, low = l, close = c, volume = v)
         }.toList()
+
+    private fun resolveDir(path: String): File {
+        val f = File(path)
+        if (f.isAbsolute) return f
+        val root = System.getenv("GITHUB_WORKSPACE")?.let { File(it) }
+            ?: File(System.getProperty("user.dir")).parentFile
+        return File(root, path)
+    }
+
+    /** CSV: open_time_ms,open,high,low,close,volume (header di baris pertama). */
+    private fun loadCsv(file: File): List<CandleBar> {
+        if (!file.exists()) {
+            notes += "File tidak ada: ${file.name}"
+            return emptyList()
+        }
+        return file.readLines().drop(1).mapNotNull { line ->
+            val p = line.split(",")
+            if (p.size < 6) return@mapNotNull null
+            val ts = p[0].trim().toLongOrNull() ?: return@mapNotNull null
+            val o = p[1].toDoubleOrNull() ?: return@mapNotNull null
+            val h = p[2].toDoubleOrNull() ?: return@mapNotNull null
+            val l = p[3].toDoubleOrNull() ?: return@mapNotNull null
+            val c = p[4].toDoubleOrNull() ?: return@mapNotNull null
+            val v = p[5].toDoubleOrNull() ?: return@mapNotNull null
+            if (c <= 0.0) null else CandleBar(timestamp = ts, open = o, high = h, low = l, close = c, volume = v)
+        }.sortedBy { it.timestamp }
+    }
 
     private fun reportPath() = File(System.getProperty("user.dir"), "build/real-data/real-tokocrypto-report.md").path
 

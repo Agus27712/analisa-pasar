@@ -31,6 +31,11 @@ on:
         type: string
         required: false
         default: '5'
+      data_dir:
+        description: 'Khusus scope=real-tokocrypto-replay. Folder CSV di repo (mode offline), mis. data/tokocrypto. Kosong = ambil langsung dari internet (diblokir 451 dari GitHub).'
+        type: string
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -166,6 +171,7 @@ jobs:
           RUN_REAL_TOKOCRYPTO_REPLAY: 'true'
           REAL_PAIRS: ${{ inputs.pairs }}
           REAL_M1_PAGES: ${{ inputs.m1_pages }}
+          REAL_DATA_DIR: ${{ inputs.data_dir }}
         run: |
           ./gradlew :app:testDebugUnitTest \
             --tests "agu.analys.engine.scalping.replay.RealTokocryptoReplayTest" \
