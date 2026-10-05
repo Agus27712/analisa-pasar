@@ -120,18 +120,23 @@ Temuan: hasil **konsisten dengan run #8–#11** pada rentang 4× lebih panjang. 
 
 ---
 
-## Status wiring ke aplikasi (dicek pada `main` @ `dc73b0a`)
+## Status wiring ke aplikasi
 
-**Sudah tersambung (jalur sinyal live, mode SCALPING saja):**
-`LearningTradingEngine.runScalping()` → `ScalpingMtfEvaluator` (pipeline baru) → `AISignalState` → `SignalLifecycleManager` → UI yang sudah ada (kartu radar / checkpoint / SL-TP / reasoning). Fee mengikuti `tradingFees` exchange aktif. Mode swing & intraday memakai evaluator sendiri (tidak berubah).
+**Tersambung (jalur sinyal live, mode SCALPING saja):**
+`LearningTradingEngine.runScalping()` → `ScalpingMtfEvaluator` (pipeline) → `AISignalState` → `SignalLifecycleManager` → UI. Fee mengikuti `tradingFees` exchange aktif. Mode swing & intraday memakai evaluator sendiri.
+
+**Disambungkan pada commit "sambungkan output pipeline" (diverifikasi compile + 160+ unit test di GitHub Actions):**
+- `AISignalState` membawa `scalpingSetup`, `scalpingScore`, `scalpingScoreCategory`, `scalpingScoreDetail`, `scalpingRegime`, `scalpingDirection`, `entryZoneLow/High`. `entryPrice` tetap harga saat sinyal (zona entry terpisah, agar alur order lama tidak berubah).
+- **Log sinyal** (`signal_logs`): kolom baru `scalpingSetup`, `scalpingScore`, `scalpingScoreCategory`, `scalpingRegime`, dicatat saat sinyal pertama terpicu (tidak ditimpa saat update). **Migrasi Room 7→8 nyata** (ALTER TABLE) — data lama tidak terhapus. SQL migrasi sudah dicek pada skema sqlite (kolom identik, baris lama utuh); belum diuji di perangkat → **backup/cek sebelum update di HP**.
+- **Trade journal**: `TradeSignalSnapshot` (JSON di `signalSnapshotJson`) mencatat setup, skor, rincian skor, regime engine, zona entry. Tanpa perubahan skema DB.
+- **UI**: kartu sinyal (zona entry, label TP/SL dinamis, baris "Setup Scalping" & "Rincian Skor"), dialog detail jurnal (kategori E), kartu log sinyal (baris setup + skor).
 
 **Belum tersambung:**
-- `MarketScannerEngine` — **belum dipanggil siapa pun** (tidak ada scanner di aplikasi).
-- Output baru pipeline **belum dibaca UI maupun log**: `Result.scalping` (`ScalpingSignal`: setup, rincian skor, entry zone, regime, direction) dan field baru `SignalAudit` (`score`, `scoreCategory`, `setup`, `direction`, `regime`). Tidak ada konsumen selain test/replay.
-- `AISignalState.entryPrice` = harga saat ini, **bukan** entry zone.
-- **Trade journal & log akurasi sinyal belum mencatat setup dan skor** tiap sinyal/trade. Akibatnya uji live (simulasi/real) belum bisa dipecah per setup atau per skor. Catat setup + skor (+ regime) ke log sinyal / journal dulu sebelum membandingkan setup mana yang bekerja di data live.
+- `MarketScannerEngine` — belum dipanggil siapa pun. Dashboard hanya punya sinyal untuk pair yang sedang dipilih (`getEngineSignal`), jadi scanner butuh fetch candle M1/M15/H1 per pair (≥3 request/pair) + UI hasil. Belum dibangun karena beban API/rate limit belum bisa diuji; usulan: tombol "Scan Scalping" manual (bukan polling otomatis) dengan jeda antar request.
+- Statistik akurasi per setup/skor (agregat di layar log) — data sudah tercatat, tampilan agregat belum ada.
+- Sinyal lama (sebelum update) tidak punya setup/skor (kolom kosong).
 
-> Catatan: pemilik repo akan menguji dengan data live (simulasi & trade nyata) lewat aplikasi di branch `main`.
+> Catatan: pemilik repo menguji dengan data live (simulasi & trade nyata) lewat aplikasi di branch `main`.
 
 ---
 
@@ -177,7 +182,7 @@ File test utama: IndicatorMath*, MarketRegime*, ScalpSetupDetector*, SignalScori
 2. Evaluasi geometri risk / time stop **setelah** gate setup (jangan dulu ubah risk tanpa baseline replay baru).
 3. Short side penuh — opsional, jangan prioritas.
 4. Wire scanner ke UI screener — di luar scope engine murni jika UI frozen. (Lihat § Status wiring ke aplikasi.)
-4b. Catat setup + skor + regime ke log sinyal / trade journal (tanpa ubah tampilan UI) — prasyarat analisis uji live per setup.
+4b. ✅ Catat setup + skor + regime ke log sinyal / trade journal (selesai; lihat § Status wiring).
 5. Historical Edge nyata dari journal / per-setup — **setelah** data cukup + edge terindikasi.
 6. PR → main hanya jika pemilik setuju; test hijau saja **bukan** bukti edge trading.
 
