@@ -31,7 +31,7 @@
 | P4 | ✅ | Market scanner engine (no UI) |
 | P5 | ✅ DEFERRED | ML **tidak** dikerjakan sampai edge terbukti |
 | Unit tests | ✅ | Hijau via Actions manual; 1 skip live Indodax |
-| Real-data replay | ✅ dijalankan | **Belum ada bukti edge** (lihat § Replay) |
+| Real-data replay | ✅ dijalankan (8 hari data total, 14 hari terpanjang) | **Belum ada bukti edge** (lihat § Replay, run #12–#13) |
 | Filter retest | ✅ | Gate skor 75 + RVOL 1.5 + no hard-range |
 
 ---
@@ -82,6 +82,21 @@ Input workflow baru: `lookahead`, `slippage_pct`, `label` (laporan di branch `re
 Temuan: semua varian **masih negatif** dan **tidak lebih baik dari baseline** (engine justru sedikit di bawah baseline di A dan C). Biaya eksekusi menggeser seluruh hasil (≈ +0.12% dari slippage), tetapi selisih engine vs baseline tidak membaik. Time stop 120 menaikkan win rate tapi jumlah trade turun (posisi menahan lebih lama → sinyal tumpang tindih diblok). Skor tidak membedakan hasil antar setup. **Belum ada bukti edge; jangan ML; jangan klaim.**
 
 Implikasi: urutan tuning "ketatkan pullback dulu" tidak didukung data; gate skor/setup tidak mengangkat expectancy di sample ini. Perpanjang data (rezim berbeda) sebelum ubah engine lebih lanjut.
+
+### Run #12–#13 — data 14 hari (`data/tokocrypto_v2`, 21 Sep → 5 Okt 2026, 8 pair USDT, fee 0.1%/0.1%, slippage 0.08%)
+
+Data v2 pertama (5 halaman) ternyata ±97% tumpang tindih dengan data awal, lalu diganti dengan 20 halaman (M1 19.999 candle/pair). Replay jauh lebih besar dan lebih independen dari run #8–#11.
+
+| Run | Time stop | Trade | Win% | Avg net% (CI95) | PF | Baseline avg net% (CI95) |
+|-----|-----------|------:|-----:|-----------------|---:|--------------------------|
+| #12 v2-base | 30 | 1634 | 16.6 | −0.366 (±0.020) | 0.13 | −0.357 (±0.004) |
+| #13 v2-t120 | 120 | 1008 | 25.1 | −0.353 (±0.035) | 0.26 | −0.349 (±0.006) |
+
+Per setup (time stop 120): LIQUIDITY_SWEEP −0.297 (n=284), TREND_PULLBACK −0.338 (n=522), BREAKOUT_RETEST **−0.455** (n=125, skor rata-rata 76.8), BREAKOUT −0.503 (n=77). Time stop 30: semua setup −0.34 s/d −0.40.
+
+Temuan: hasil **konsisten dengan run #8–#11** pada rentang 4× lebih panjang. Engine ≈ baseline entry berkala (selisih < 0.01% vs CI ±0.02%), rata-rata net negatif secara statistik jelas, mendekati biaya round-trip ~0.36%. Skor tinggi (retest, ~77) **tidak** lebih baik; di time stop 120 cenderung lebih buruk. Win% per pair sangat beda (BTC 3.4%, ADA 29%, TRX 0%) = efek volatilitas pair terhadap SL/TP tetap ±0.5%, bukan keunggulan sinyal.
+
+**Kesimpulan: belum ada bukti edge pada scalping M1 + geometri SL~0.5%/TP~0.8–1.45% dengan fee Tokocrypto.** Jangan klaim, jangan ML, jangan tuning gate setup lebih lanjut. Arah yang belum diuji (butuh persetujuan pemilik): target/stop lebih lebar relatif terhadap biaya (timeframe lebih tinggi), order maker, atau memakai engine hanya sebagai filter WAIT.
 
 ### Implikasi tuning (urutan wajib)
 
