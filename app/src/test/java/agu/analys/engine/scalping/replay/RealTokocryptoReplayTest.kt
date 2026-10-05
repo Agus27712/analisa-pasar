@@ -19,6 +19,8 @@ import java.net.URL
  * - REAL_PAIRS      : daftar pair dipisah koma, format BTCUSDT (default: 8 pair USDT utama)
  * - REAL_M1_PAGES   : jumlah halaman M1 @1000 candle (default 5 ≈ 3,5 hari)
  * - REAL_LOOKAHEAD  : time stop (bar M1) (default 30)
+ * - REAL_SLIPPAGE_PCT : slippage per sisi pada SIMULASI biaya (default 0.08). Geometri SL/TP engine
+ *                     tetap dihitung dengan slippage default engine (0.08) — ini uji sensitivitas biaya eksekusi.
  * - REAL_DATA_DIR   : folder CSV hasil tools/fetch_tokocrypto_klines.py (mode OFFLINE, tanpa internet).
  *                     Dipakai karena Tokocrypto memblokir IP luar negeri (HTTP 451) termasuk runner GitHub.
  *                     Path relatif dihitung dari root repo.
@@ -46,7 +48,9 @@ class RealTokocryptoReplayTest {
         val dataDir = System.getenv("REAL_DATA_DIR")?.takeIf { it.isNotBlank() }?.let { resolveDir(it) }
         if (dataDir != null) notes += "Mode OFFLINE: candle dibaca dari ${dataDir.path} (hasil unduhan dari jaringan Indonesia)."
 
-        val analyzer = RealDataReplayAnalyzer(fees = fees, lookaheadBars = lookahead)
+        val slippage = System.getenv("REAL_SLIPPAGE_PCT")?.toDoubleOrNull()?.coerceIn(0.0, 1.0)
+            ?: agu.analys.engine.scalping.ScalpingRiskEngine.DEFAULT_SLIPPAGE_PCT
+        val analyzer = RealDataReplayAnalyzer(fees = fees, slippagePct = slippage, lookaheadBars = lookahead)
         val results = mutableListOf<RealDataReplayAnalyzer.PairResult>()
         val m1ByPair = linkedMapOf<String, List<CandleBar>>()
         var failure: Throwable? = null
@@ -87,7 +91,8 @@ class RealTokocryptoReplayTest {
                     "Halaman M1 (x1000)" to m1Pages.toString(),
                     "Time stop (bar M1)" to lookahead.toString(),
                     "Fee Tokocrypto (buy/sell taker)" to "${fees.buyTakerPct}% / ${fees.sellTakerPct}%",
-                    "Slippage per sisi" to "${agu.analys.engine.scalping.ScalpingRiskEngine.DEFAULT_SLIPPAGE_PCT}%"
+                    "Slippage per sisi (simulasi biaya)" to "$slippage%",
+                    "Slippage geometri engine" to "${agu.analys.engine.scalping.ScalpingRiskEngine.DEFAULT_SLIPPAGE_PCT}% (tetap)"
                 ),
                 pairs = results,
                 baselineNet = baseline,

@@ -14,7 +14,7 @@ on:
           - all-engine        # seluruh agu.analys.engine.* (termasuk test live API Manta)
           - all-unit-tests    # semua unit test di app/
           - custom            # pakai kolom custom_filter
-          - real-tokocrypto-replay  # uji engine pada candle NYATA Tokocrypto (butuh internet; hasil di branch real-data-reports)
+          - real-tokocrypto-replay  # uji engine pada candle NYATA Tokocrypto (butuh internet; hasil di branch real-data-reports-<label>)
           - probe-tokocrypto  # cek domain Tokocrypto mana yang bisa diakses dari runner GitHub (hasil di branch real-data-probe)
       custom_filter:
         description: 'Khusus scope=custom. Pola Gradle --tests, pisahkan koma. Contoh: agu.analys.engine.scalping.ScalpingRiskEngineTest'
@@ -31,6 +31,21 @@ on:
         type: string
         required: false
         default: '5'
+      lookahead:
+        description: 'Khusus scope=real-tokocrypto-replay. Time stop dalam bar M1 (default 30, maks 120).'
+        type: string
+        required: false
+        default: '30'
+      slippage_pct:
+        description: 'Khusus scope=real-tokocrypto-replay. Slippage per sisi (%) pada simulasi biaya (default 0.08).'
+        type: string
+        required: false
+        default: '0.08'
+      label:
+        description: 'Khusus scope=real-tokocrypto-replay. Nama run; laporan masuk branch real-data-reports-<label>.'
+        type: string
+        required: false
+        default: 'base'
       data_dir:
         description: 'Khusus scope=real-tokocrypto-replay. Folder CSV di repo (mode offline), mis. data/tokocrypto. Kosong = ambil langsung dari internet (diblokir 451 dari GitHub).'
         type: string
@@ -41,7 +56,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: unit-tests-${{ github.ref }}
+  group: unit-tests-${{ github.ref }}-${{ inputs.scope }}-${{ inputs.label }}
   cancel-in-progress: true
 
 jobs:
@@ -172,6 +187,8 @@ jobs:
           REAL_PAIRS: ${{ inputs.pairs }}
           REAL_M1_PAGES: ${{ inputs.m1_pages }}
           REAL_DATA_DIR: ${{ inputs.data_dir }}
+          REAL_LOOKAHEAD: ${{ inputs.lookahead }}
+          REAL_SLIPPAGE_PCT: ${{ inputs.slippage_pct }}
         run: |
           ./gradlew :app:testDebugUnitTest \
             --tests "agu.analys.engine.scalping.replay.RealTokocryptoReplayTest" \
@@ -182,7 +199,10 @@ jobs:
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LABEL: ${{ inputs.label }}
         run: |
+          SAFE_LABEL="${LABEL//[^a-zA-Z0-9_-]/_}"
+          BRANCH="real-data-reports-${SAFE_LABEL:-base}"
           REPORT="app/build/real-data/real-tokocrypto-report.md"
           if [ ! -f "$REPORT" ]; then
             echo "Laporan tidak ditemukan." >> "$GITHUB_STEP_SUMMARY"
@@ -191,12 +211,12 @@ jobs:
           cat "$REPORT" >> "$GITHUB_STEP_SUMMARY"
           mkdir -p /tmp/rep && cp "$REPORT" /tmp/rep/real-tokocrypto-report.md
           cd /tmp/rep
-          git init -q -b real-data-reports
+          git init -q -b "$BRANCH"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           git commit -q -m "report: real Tokocrypto replay (run ${GITHUB_RUN_ID})"
-          git push -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" real-data-reports
+          git push -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$BRANCH"
 
       - name: Upload report
         if: always()
