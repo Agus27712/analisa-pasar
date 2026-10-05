@@ -20,3 +20,4 @@ debug.keystore
 *.keystore
 .build-outputs/
 audit/
+AGENTS.md

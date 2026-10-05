@@ -14,40 +14,8 @@ on:
           - all-engine        # seluruh agu.analys.engine.* (termasuk test live API Manta)
           - all-unit-tests    # semua unit test di app/
           - custom            # pakai kolom custom_filter
-          - real-tokocrypto-replay  # uji engine pada candle NYATA Tokocrypto (butuh internet; hasil di branch real-data-reports-<label>)
-          - probe-tokocrypto  # cek domain Tokocrypto mana yang bisa diakses dari runner GitHub (hasil di branch real-data-probe)
       custom_filter:
         description: 'Khusus scope=custom. Pola Gradle --tests, pisahkan koma. Contoh: agu.analys.engine.scalping.ScalpingRiskEngineTest'
-        type: string
-        required: false
-        default: ''
-      pairs:
-        description: 'Khusus scope=real-tokocrypto-replay. Pair dipisah koma (format BTCUSDT).'
-        type: string
-        required: false
-        default: 'BTCUSDT,ETHUSDT,BNBUSDT,SOLUSDT,XRPUSDT,DOGEUSDT,ADAUSDT,TRXUSDT'
-      m1_pages:
-        description: 'Khusus scope=real-tokocrypto-replay. Halaman M1 x1000 candle (5 = sekitar 3,5 hari).'
-        type: string
-        required: false
-        default: '5'
-      lookahead:
-        description: 'Khusus scope=real-tokocrypto-replay. Time stop dalam bar M1 (default 30, maks 120).'
-        type: string
-        required: false
-        default: '30'
-      slippage_pct:
-        description: 'Khusus scope=real-tokocrypto-replay. Slippage per sisi (%) pada simulasi biaya (default 0.08).'
-        type: string
-        required: false
-        default: '0.08'
-      label:
-        description: 'Khusus scope=real-tokocrypto-replay. Nama run; laporan masuk branch real-data-reports-<label>.'
-        type: string
-        required: false
-        default: 'base'
-      data_dir:
-        description: 'Khusus scope=real-tokocrypto-replay. Folder CSV di repo (mode offline), mis. data/tokocrypto. Kosong = ambil langsung dari internet (diblokir 451 dari GitHub).'
         type: string
         required: false
         default: ''
@@ -56,13 +24,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: unit-tests-${{ github.ref }}-${{ inputs.scope }}-${{ inputs.label }}
+  group: unit-tests-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   unit-tests:
     name: Run unit tests
-    if: ${{ inputs.scope != 'real-tokocrypto-replay' && inputs.scope != 'probe-tokocrypto' }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
 
@@ -158,118 +125,3 @@ jobs:
             app/build/test-results/testDebugUnitTest/
           if-no-files-found: warn
           retention-days: 14
-
-  real-tokocrypto-replay:
-    name: Real-data replay (Tokocrypto)
-    if: ${{ inputs.scope == 'real-tokocrypto-replay' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    permissions:
-      contents: write   # hanya untuk mendorong laporan ke branch real-data-reports
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Make Gradle wrapper executable
-        run: chmod +x ./gradlew
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-          cache: 'gradle'
-
-      - name: Run real-data replay test
-        env:
-          RUN_REAL_TOKOCRYPTO_REPLAY: 'true'
-          REAL_PAIRS: ${{ inputs.pairs }}
-          REAL_M1_PAGES: ${{ inputs.m1_pages }}
-          REAL_DATA_DIR: ${{ inputs.data_dir }}
-          REAL_LOOKAHEAD: ${{ inputs.lookahead }}
-          REAL_SLIPPAGE_PCT: ${{ inputs.slippage_pct }}
-        run: |
-          ./gradlew :app:testDebugUnitTest \
-            --tests "agu.analys.engine.scalping.replay.RealTokocryptoReplayTest" \
-            --stacktrace --console=plain
-
-      - name: Publish report
-        if: always()
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          LABEL: ${{ inputs.label }}
-        run: |
-          SAFE_LABEL="${LABEL//[^a-zA-Z0-9_-]/_}"
-          BRANCH="real-data-reports-${SAFE_LABEL:-base}"
-          REPORT="app/build/real-data/real-tokocrypto-report.md"
-          if [ ! -f "$REPORT" ]; then
-            echo "Laporan tidak ditemukan." >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          cat "$REPORT" >> "$GITHUB_STEP_SUMMARY"
-          mkdir -p /tmp/rep && cp "$REPORT" /tmp/rep/real-tokocrypto-report.md
-          cd /tmp/rep
-          git init -q -b "$BRANCH"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -q -m "report: real Tokocrypto replay (run ${GITHUB_RUN_ID})"
-          git push -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$BRANCH"
-
-      - name: Upload report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: real-tokocrypto-report
-          path: app/build/real-data/
-          if-no-files-found: warn
-          retention-days: 14
-
-  probe-tokocrypto:
-    name: Probe akses Tokocrypto
-    if: ${{ inputs.scope == 'probe-tokocrypto' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: write
-
-    steps:
-      - name: Probe endpoints
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          mkdir -p /tmp/probe && cd /tmp/probe
-          {
-            echo "# Probe akses Tokocrypto dari runner GitHub"
-            echo
-            echo "IP runner: $(curl -sS -m 10 https://ipinfo.io/json | tr -d '\n' | head -c 300)"
-            echo
-            echo "| Endpoint | HTTP | Ukuran | Awal body |"
-            echo "|---|---|---:|---|"
-          } > probe.md
-          probe() {
-            local url="$1"
-            local out; out=$(curl -sS -m 20 -A "Mozilla/5.0 TokoClient/3.5" -o body.tmp -w "%{http_code} %{size_download}" "$url" 2>&1 || true)
-            local code="${out%% *}"; local size="${out##* }"
-            local head; head=$(head -c 110 body.tmp 2>/dev/null | tr -d '\n|' )
-            echo "| \`${url}\` | ${code} | ${size} | ${head} |" >> probe.md
-          }
-          probe "https://www.tokocrypto.com/open/v1/common/time"
-          probe "https://www.tokocrypto.com/open/v1/common/symbols"
-          probe "https://www.tokocrypto.com/open/v1/market/klines?symbol=BTC_USDT&interval=1m&limit=2"
-          probe "https://www.tokocrypto.com/api/v3/klines?symbol=BTCUSDT&interval=1m&limit=2"
-          probe "https://www.tokocrypto.site/api/v3/klines?symbol=BTCUSDT&interval=1m&limit=2"
-          probe "https://www.tokocrypto.site/api/v3/time"
-          probe "https://cloudme-toko.2meta.app/api/v1/klines?symbol=BTCUSDT&interval=1m&limit=2"
-          probe "https://cloudme-toko.2meta.app/api/v1/time"
-          cat probe.md >> "$GITHUB_STEP_SUMMARY"
-          rm -f body.tmp
-          git init -q -b real-data-probe
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -q -m "probe: akses Tokocrypto dari runner (run ${GITHUB_RUN_ID})"
-          git push -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" real-data-probe
