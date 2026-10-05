@@ -299,9 +299,12 @@ class RealDataReplayAnalyzer(
             val reasons = all.groupingBy { it.exitReason }.eachCount().entries.sortedByDescending { it.value }
             sb.appendLine("- Alasan keluar: " + reasons.joinToString(", ") { "${it.key}=${it.value}" })
             val setups = all.groupingBy { it.setup }.eachCount().entries.sortedByDescending { it.value }
-            sb.appendLine("- Setup: " + setups.joinToString(", ") { "${it.key}=${it.value}" })
+            sb.appendLine("- Setup (count): " + setups.joinToString(", ") { "${it.key}=${it.value}" })
         }
         sb.appendLine()
+
+        // ---- Per-setup breakdown (utama untuk tuning) ----
+        appendPerSetupSection(sb, all)
 
         sb.appendLine("## Baseline (entry berkala di semua bar, geometri SL/TP rata-rata yang sama)")
         if (b.n > 0) {
@@ -313,6 +316,10 @@ class RealDataReplayAnalyzer(
 
         sb.appendLine("## Kesimpulan otomatis")
         sb.appendLine(verdict(s, b))
+        if (all.isNotEmpty()) {
+            sb.appendLine()
+            sb.appendLine(perSetupVerdict(all))
+        }
         sb.appendLine()
 
         sb.appendLine("## Penolakan sinyal (semua pair)")
@@ -336,6 +343,107 @@ class RealDataReplayAnalyzer(
             fetchNotes.forEach { sb.appendLine("- $it") }
         }
         return sb.toString()
+    }
+
+    /**
+     * Tabel statistik per [Trade.setup] + mix exit + note sampel kecil.
+     */
+    private fun appendPerSetupSection(sb: StringBuilder, all: List<Trade>) {
+        sb.appendLine("## Per setup (breakdown)")
+        if (all.isEmpty()) {
+            sb.appendLine("- Tidak ada trade.")
+            sb.appendLine()
+            return
+        }
+
+        val total = all.size.toDouble()
+        val bySetup = all.groupBy { it.setup.ifBlank { "UNKNOWN" } }
+            .entries
+            .sortedByDescending { it.value.size }
+
+        sb.appendLine("Statistik dihitung dari field `Trade.setup` / skor / exitReason. " +
+            "n < 30 = indikasi saja, jangan dipakai untuk klaim edge.")
+        sb.appendLine()
+        sb.appendLine("| Setup | n | % total | Win% | Avg net% | CI95 | Avg R | PF | Sum net% | Avg skor | Avg bar | % TIME* | % SL* | % TP* |")
+        sb.appendLine("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
+
+        for ((setup, trades) in bySetup) {
+            val st = stats(trades)
+            val pct = trades.size * 100.0 / total
+            val avgScore = trades.map { it.score }.average()
+            val avgBars = trades.map { it.barsHeld }.average()
+            val exits = trades.groupingBy { it.exitReason }.eachCount()
+            val timePct = exitShare(exits, trades.size) { it.startsWith("TIME_STOP") }
+            val slPct = exitShare(exits, trades.size) { it.startsWith("SL") }
+            val tpPct = exitShare(exits, trades.size) { it == "TP2" || it.contains("TP1") }
+            val pfStr = when {
+                st.profitFactor.isInfinite() -> "∞"
+                st.n == 0 -> "-"
+                else -> f2(st.profitFactor)
+            }
+            val noteN = if (st.n < 30) "†" else ""
+            sb.appendLine(
+                "| $setup$noteN | ${st.n} | ${f1(pct)} | ${f1(st.winRatePct)} | ${f3(st.avgNetPct)} | " +
+                    "±${f3(st.ci95Pct)} | ${f2(st.avgR)} | $pfStr | ${f2(st.sumNetPct)} | " +
+                    "${f1(avgScore)} | ${f1(avgBars)} | ${f1(timePct)} | ${f1(slPct)} | ${f1(tpPct)} |"
+            )
+        }
+        sb.appendLine()
+        sb.appendLine("† = n < 30 (sampel kecil). % TIME* = TIME_STOP + TIME_STOP_SETELAH_TP1. " +
+            "% SL* = SL + SL_SETELAH_TP1. % TP* = TP2 + exit yang menyentuh TP1 (termasuk time/SL setelah TP1).")
+        sb.appendLine()
+
+        sb.appendLine("### Exit mix per setup")
+        for ((setup, trades) in bySetup) {
+            val exits = trades.groupingBy { it.exitReason }.eachCount()
+                .entries.sortedByDescending { it.value }
+            val detail = exits.joinToString(", ") { "${it.key}=${it.value}" }
+            sb.appendLine("- **$setup** (n=${trades.size}): $detail")
+        }
+        sb.appendLine()
+
+        sb.appendLine("### Geometri rata-rata per setup (sebelum fee di path simulasi)")
+        sb.appendLine("| Setup | Avg SL% | Avg TP1% | Avg TP2% |")
+        sb.appendLine("|---|---:|---:|---:|")
+        for ((setup, trades) in bySetup) {
+            sb.appendLine(
+                "| $setup | ${f2(trades.map { it.slPct }.average())} | " +
+                    "${f2(trades.map { it.tp1Pct }.average())} | " +
+                    "${f2(trades.map { it.tp2Pct }.average())} |"
+            )
+        }
+        sb.appendLine()
+    }
+
+    private fun exitShare(exits: Map<String, Int>, n: Int, pred: (String) -> Boolean): Double {
+        if (n <= 0) return 0.0
+        val c = exits.entries.filter { pred(it.key) }.sumOf { it.value }
+        return c * 100.0 / n
+    }
+
+    /** Ringkas setup mana yang mendominasi hasil jelek/baik (teks, bukan klaim edge). */
+    private fun perSetupVerdict(all: List<Trade>): String {
+        val bySetup = all.groupBy { it.setup.ifBlank { "UNKNOWN" } }
+        if (bySetup.size <= 1) {
+            val only = bySetup.keys.firstOrNull() ?: "UNKNOWN"
+            return "Hampir semua trade bertipe **$only** — hasil aggregate ≈ kualitas setup ini saja."
+        }
+        val ranked = bySetup.map { (name, trades) -> name to stats(trades) }
+            .sortedBy { it.second.avgNetPct }
+        val worst = ranked.first()
+        val best = ranked.last()
+        val dominant = bySetup.maxByOrNull { it.value.size }!!
+        val domShare = dominant.value.size * 100.0 / all.size
+        return buildString {
+            append("Setup dominan: **${dominant.key}** (${f1(domShare)}% trade). ")
+            append("Avg net terendah: **${worst.first}** (${f3(worst.second.avgNetPct)}%, n=${worst.second.n}). ")
+            append("Avg net tertinggi: **${best.first}** (${f3(best.second.avgNetPct)}%, n=${best.second.n}). ")
+            if (dominant.value.size >= all.size * 0.5) {
+                append("Tuning sebaiknya fokus ke setup dominan dulu.")
+            } else {
+                append("Tidak ada setup >50% — bandingkan baris tabel per setup sebelum mematikan salah satu.")
+            }
+        }
     }
 
     fun verdict(s: Stats, b: Stats): String {
