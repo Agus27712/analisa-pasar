@@ -75,7 +75,7 @@ def fetch(base, symbol, interval, pages):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--pairs", default=DEFAULT_PAIRS, help="Dipisah koma, format BTCUSDT")
-    ap.add_argument("--pages", type=int, default=5, help="Halaman M1 @1000 candle (5 = sekitar 3,5 hari)")
+    ap.add_argument("--pages", type=int, default=5, help="Halaman M1 @1000 candle (5 = sekitar 3,5 hari, 10 = sekitar 7 hari)")
     ap.add_argument("--out", default="data/tokocrypto")
     ap.add_argument("--base", default=DEFAULT_BASE)
     args = ap.parse_args()
@@ -84,7 +84,11 @@ def main():
     ok = 0
     for sym in [p.strip().upper() for p in args.pairs.split(",") if p.strip()]:
         try:
-            for interval, pages in (("1m", args.pages), ("15m", 1), ("1h", 1)):
+            # Halaman M15/H1 ikut menyesuaikan agar cakupan waktunya sama dengan M1 (+60 candle pemanasan).
+            m1_minutes = args.pages * 1000
+            p15 = max(1, -(-(m1_minutes // 15 + 60) // 1000))
+            p1h = max(1, -(-(m1_minutes // 60 + 60) // 1000))
+            for interval, pages in (("1m", args.pages), ("15m", p15), ("1h", p1h)):
                 rows = fetch(args.base, sym, interval, pages)
                 path = os.path.join(args.out, f"{sym}_{interval}.csv")
                 with open(path, "w", newline="") as f:
