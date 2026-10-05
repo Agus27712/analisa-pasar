@@ -12,10 +12,16 @@ package agu.analys.engine.scalping
 object ScalpingConfig {
 
     // --- Score gate (mapping ke LONG) ---
-    /** Skor minimum agar step4 / arah LONG dipertimbangkan. */
+    /** Skor minimum agar step4 / arah LONG dipertimbangkan (setup non-retest). */
     const val MIN_SCORE_LONG = 60
     /** Skor minimum untuk stage STRONG_ENTRY. */
     const val MIN_SCORE_STRONG = 75
+    /**
+     * Skor minimum khusus [BREAKOUT_RETEST].
+     * Replay Tokocrypto: retest ~80% trade dengan avg skor ~67 tapi expectancy jelek.
+     * Gate lebih tinggi dari MIN_SCORE_LONG agar hanya retest konfluensi kuat yang lolos.
+     */
+    const val MIN_SCORE_BREAKOUT_RETEST = 75
 
     // --- Risk / R:R ---
     const val MIN_NET_RR = 1.15
@@ -33,12 +39,16 @@ object ScalpingConfig {
     const val RVOL_BREAKOUT_MIN = 1.5
     /** Minimum RVOL untuk sweep / pullback recovery. */
     const val RVOL_SETUP_MIN = 1.2
+    /** Minimum RVOL untuk BREAKOUT_RETEST (ketat — replay: retest longgar = −EV). */
+    const val RVOL_RETEST_MIN = 1.5
 
     // --- Order flow ---
     /** Buy pressure (bid/ask volume ratio) minimum breakout. */
     const val BUY_PRESSURE_BREAKOUT = 1.15
     const val BUY_PRESSURE_SUPPORTIVE = 1.05
     const val BUY_PRESSURE_STRONG = 1.25
+    /** Buy pressure minimum saat orderbook ada, untuk retest. */
+    const val BUY_PRESSURE_RETEST = 1.15
     /** Order imbalance (bid-ask)/(bid+ask), range -1..+1. */
     const val IMBALANCE_MILD = 0.10
     const val IMBALANCE_STRONG = 0.28
@@ -56,9 +66,13 @@ object ScalpingConfig {
 
     // --- Structure / setup jarak (%) ---
     /** Jarak maksimum ke level untuk dianggap "retest". */
-    const val RETEST_MAX_DIST_PCT = 1.5
+    const val RETEST_MAX_DIST_PCT = 1.2
     /** Harga masih di atas level breakout (toleransi kecil). */
     const val BREAKOUT_ABOVE_FACTOR = 0.998
+    /** Faktor minimum harga di atas level retest (0.995 = -0.5%). */
+    const val RETEST_ABOVE_FACTOR = 0.995
+    /** Kekuatan struktur minimum untuk retest heuristik. */
+    const val RETEST_MIN_STRUCTURE_STRENGTH = 60
     const val PULLBACK_SUPPORT_MAX_DIST_PCT = 1.2
 
     // --- Order book / spread (selaras OrderBookAnalyzer defaults) ---
@@ -73,4 +87,10 @@ object ScalpingConfig {
     // --- Historical edge stub ---
     const val HISTORICAL_EDGE_INSUFFICIENT =
         "Belum cukup data historis untuk Historical Edge. Jangan menampilkan probabilitas palsu."
+
+    /** Skor minimum step4 tergantung setup. */
+    fun minScoreForSetup(setupName: String): Int = when (setupName) {
+        "BREAKOUT_RETEST" -> MIN_SCORE_BREAKOUT_RETEST
+        else -> MIN_SCORE_LONG
+    }
 }
