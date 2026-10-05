@@ -31,35 +31,58 @@ object MtfCacheManager {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     
     private var activeTier1Symbol: String? = null
-    private var activeExchange: String = "TOKOCRYPTO"
+    var activeExchange: String = "TOKOCRYPTO"
+        private set
     private var tier1Job: Job? = null
     private var backgroundJob: Job? = null
 
     private var watchlist = listOf<String>()
     private var historyList = listOf<String>()
 
+    fun updateExchange(exchange: String) {
+        val ex = exchange.trim().uppercase()
+        if (activeExchange != ex) {
+            activeExchange = ex
+            clear()
+        }
+    }
+
     private fun buildKey(symbol: String, exchange: String): String {
         return "${exchange.trim().uppercase()}_${symbol.trim().uppercase()}"
     }
 
-    fun updateQueues(newWatchlist: List<String>, newHistory: List<String>, exchange: String = "TOKOCRYPTO") {
+    fun updateQueues(newWatchlist: List<String>, newHistory: List<String>, exchange: String? = null) {
         watchlist = newWatchlist
         historyList = newHistory
-        activeExchange = exchange.uppercase()
+        if (exchange != null) {
+            activeExchange = exchange.trim().uppercase()
+        }
         startBackgroundWorkerIfNeeded()
     }
 
     /**
      * Set active symbol (Tier 1). Cancels any ongoing Tier 1 fetch for a different symbol.
      */
-    fun setActiveSymbol(symbol: String, exchange: String = "TOKOCRYPTO") {
+    fun setActiveSymbol(symbol: String, exchange: String? = null) {
         if (symbol.isBlank()) return
         val normalized = symbol.trim().uppercase()
-        val ex = exchange.trim().uppercase()
+        val ex = exchange?.trim()?.uppercase() ?: activeExchange
         activeExchange = ex
         val scopedKey = buildKey(normalized, ex)
-        if (activeTier1Symbol == scopedKey) return
+        if (activeTier1Symbol == scopedKey && tier1Job?.isActive == true) return
         activeTier1Symbol = scopedKey
+
+        // Segera beri status SYNCING/READY untuk semua timeframe agar UI tidak error/stale
+        val tfs = listOf(Timeframe.H1, Timeframe.M15, Timeframe.M1, Timeframe.H4)
+        tfs.forEach { tf ->
+            val cached = getCachedCandles(normalized, tf, ex)
+            if (!isCacheValid(tf, cached)) {
+                updateStatus(normalized, tf, if (cached?.isNotEmpty() == true) MtfStatus.UPDATING else MtfStatus.SYNCING, ex)
+            } else {
+                updateStatus(normalized, tf, MtfStatus.READY, ex)
+            }
+        }
+
         tier1Job?.cancel()
         tier1Job = scope.launch {
             prefetchSymbol(normalized, ex, isTier1 = true)
@@ -67,26 +90,53 @@ object MtfCacheManager {
     }
 
     /**
+     * Force retry all MTF timeframes for symbol (e.g. from Retry button).
+     */
+    fun retryAllTimeframes(symbol: String, exchange: String? = null) {
+        if (symbol.isBlank()) return
+        val normalized = symbol.trim().uppercase()
+        val ex = exchange?.trim()?.uppercase() ?: activeExchange
+        activeExchange = ex
+        val scopedKey = buildKey(normalized, ex)
+        activeTier1Symbol = scopedKey
+        val tfs = listOf(Timeframe.H1, Timeframe.M15, Timeframe.M1, Timeframe.H4)
+        tfs.forEach { updateStatus(normalized, it, MtfStatus.SYNCING, ex) }
+        tier1Job?.cancel()
+        tier1Job = scope.launch {
+            for (tf in tfs) {
+                if (!isActive) break
+                safeFetch(normalized, tf, ex, isTier1 = true)
+            }
+        }
+    }
+
+    /**
      * Request specific timeframe retry.
      */
-    fun retryTimeframe(symbol: String, tf: Timeframe, exchange: String = "TOKOCRYPTO") {
+    fun retryTimeframe(symbol: String, tf: Timeframe, exchange: String? = null) {
         val normalized = symbol.trim().uppercase()
-        val ex = exchange.trim().uppercase()
+        val ex = exchange?.trim()?.uppercase() ?: activeExchange
+        activeExchange = ex
         scope.launch {
+            updateStatus(normalized, tf, MtfStatus.SYNCING, ex)
             safeFetch(normalized, tf, ex, isTier1 = true)
         }
     }
 
-    fun getCachedCandles(symbol: String, timeframe: Timeframe, exchange: String = "TOKOCRYPTO"): List<CandleBar>? {
+    fun getCachedCandles(symbol: String, timeframe: Timeframe, exchange: String? = null): List<CandleBar>? {
         val normalized = symbol.trim().uppercase()
-        val ex = exchange.trim().uppercase()
+        val ex = exchange?.trim()?.uppercase() ?: activeExchange
         val scopedKey = buildKey(normalized, ex)
         val compactSym = TokocryptoMarketService.toTokocryptoSymbol(normalized)
         val tokoPair = TokocryptoMarketService.toTokocryptoPair(normalized)
+        val indodaxPair = IndodaxMarketService.toPairId(normalized).uppercase()
+        val indodaxClean = IndodaxMarketService.toDepthPairId(normalized).uppercase()
 
         return cache[scopedKey]?.get(timeframe)
             ?: cache[buildKey(compactSym, ex)]?.get(timeframe)
             ?: cache[buildKey(tokoPair, ex)]?.get(timeframe)
+            ?: cache[buildKey(indodaxPair, ex)]?.get(timeframe)
+            ?: cache[buildKey(indodaxClean, ex)]?.get(timeframe)
     }
 
     fun isCacheValid(timeframe: Timeframe, candles: List<CandleBar>?): Boolean {
@@ -179,10 +229,26 @@ object MtfCacheManager {
         }
 
         // Fetch exclusively from respective market data service
-        val fetched = if (exchange.equals("INDODAX", true)) {
-            IndodaxMarketService.fetchCandles(norm, tf, limit = limit)
+        var fetched = if (exchange.equals("INDODAX", true)) {
+            val res = IndodaxMarketService.fetchCandles(norm, tf, limit = limit)
+            if (res.isEmpty() && (norm.contains("_") || norm.contains("/"))) {
+                IndodaxMarketService.fetchCandles(norm.replace("/", "").replace("_", ""), tf, limit = limit)
+            } else res
         } else {
-            TokocryptoMarketService.fetchCandles(norm, tf, limit = limit)
+            val res = TokocryptoMarketService.fetchCandles(norm, tf, limit = limit)
+            if (res.isEmpty() && (norm.contains("_") || norm.contains("/"))) {
+                TokocryptoMarketService.fetchCandles(norm.replace("/", "").replace("_", ""), tf, limit = limit)
+            } else res
+        }
+
+        // Quick retry if transient failure occurs during exchange switch
+        if (fetched.isEmpty()) {
+            delay(200L)
+            fetched = if (exchange.equals("INDODAX", true)) {
+                IndodaxMarketService.fetchCandles(norm, tf, limit = limit)
+            } else {
+                TokocryptoMarketService.fetchCandles(norm, tf, limit = limit)
+            }
         }
 
         if (fetched.isNotEmpty()) {
@@ -190,9 +256,21 @@ object MtfCacheManager {
             symbolMap[tf] = fetched
 
             // Also alias under clean compact Tokocrypto symbol and pair for fast retrieval
+            val clean = norm.replace("_", "").replace("/", "").replace("-", "")
+            if (clean != norm) {
+                cache.getOrPut(buildKey(clean, exchange)) { mutableMapOf() }[tf] = fetched
+            }
             val compactSym = TokocryptoMarketService.toTokocryptoSymbol(norm)
-            if (compactSym != norm) {
+            if (compactSym != norm && compactSym != clean) {
                 cache.getOrPut(buildKey(compactSym, exchange)) { mutableMapOf() }[tf] = fetched
+            }
+            val tokoPair = TokocryptoMarketService.toTokocryptoPair(norm)
+            if (tokoPair != norm && tokoPair != clean) {
+                cache.getOrPut(buildKey(tokoPair, exchange)) { mutableMapOf() }[tf] = fetched
+            }
+            val indodaxClean = IndodaxMarketService.toDepthPairId(norm).uppercase()
+            if (indodaxClean != norm && indodaxClean != clean) {
+                cache.getOrPut(buildKey(indodaxClean, exchange)) { mutableMapOf() }[tf] = fetched
             }
             updateStatus(norm, tf, if (isCacheValid(tf, fetched)) MtfStatus.READY else MtfStatus.SYNCING, exchange)
         } else {
@@ -213,12 +291,28 @@ object MtfCacheManager {
         _mtfState.value = emptyMap()
     }
 
-    private fun updateStatus(symbol: String, tf: Timeframe, status: MtfStatus, exchange: String = "TOKOCRYPTO") {
+    private fun updateStatus(symbol: String, tf: Timeframe, status: MtfStatus, exchange: String = activeExchange) {
         val norm = symbol.trim().uppercase()
         val current = _mtfState.value.toMutableMap()
-        val symbolStatuses = current.getOrPut(norm) { mutableMapOf() }.toMutableMap()
-        symbolStatuses[tf] = status
-        current[norm] = symbolStatuses
+        
+        fun applyStatus(key: String) {
+            val symbolStatuses = current.getOrPut(key) { mutableMapOf() }.toMutableMap()
+            symbolStatuses[tf] = status
+            current[key] = symbolStatuses
+        }
+
+        applyStatus(norm)
+        val clean = norm.replace("_", "").replace("/", "").replace("-", "")
+        if (clean != norm) applyStatus(clean)
+        val compact = TokocryptoMarketService.toTokocryptoSymbol(norm)
+        if (compact != norm && compact != clean) applyStatus(compact)
+        val tokoPair = TokocryptoMarketService.toTokocryptoPair(norm)
+        if (tokoPair != norm && tokoPair != clean) applyStatus(tokoPair)
+        val indoPair = IndodaxMarketService.toPairId(norm).uppercase()
+        if (indoPair != norm && indoPair != clean) applyStatus(indoPair)
+        val indoClean = IndodaxMarketService.toDepthPairId(norm).uppercase()
+        if (indoClean != norm && indoClean != clean && indoClean != indoPair) applyStatus(indoClean)
+
         _mtfState.value = current
     }
 }

@@ -79,6 +79,17 @@ fun AISignalCard(
 ) {
     val context = LocalContext.current
     var detailsExpanded by remember { mutableStateOf(false) }
+    val quoteAsset = remember(signal.marketSymbol) {
+        val clean = signal.marketSymbol.uppercase().replace("_", "").trim()
+        when {
+            clean.endsWith("USDT") -> "USDT"
+            clean.endsWith("USDC") -> "USDC"
+            clean.endsWith("BUSD") -> "BUSD"
+            clean.endsWith("BIDR") -> "BIDR"
+            clean.endsWith("IDR") -> "IDR"
+            else -> "IDR"
+        }
+    }
     val actionColor by animateColorAsState(targetValue = when (signal.action) { SignalAction.BUY -> TvGreen; SignalAction.SELL -> TvRed; SignalAction.HOLD -> TvAmber }, label = "actionColorAnimation")
     val actionNameIndo = when (signal.action) { SignalAction.BUY -> "BELI"; SignalAction.SELL -> "JUAL"; SignalAction.HOLD -> "TAHAN" }
     val scoreLabel = if (signal.action == SignalAction.HOLD) "SETUP BELUM KUAT • ${signal.confidence}/100" else "SETUP ${signal.confidence}/100"
@@ -171,10 +182,10 @@ fun AISignalCard(
             LinearProgressIndicator(progress = { (signal.confidence / 100.0f).coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(3.dp)), color = actionColor, trackColor = TvBorder)
             Spacer(Modifier.height(14.dp))
             Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                LevelRow("ENTRY / MASUK", formatLevel(signal.entryPrice), TvTextPrimary)
-                LevelRow("TP1 • 2× ATR", formatLevel(signal.targetPrice1), TvGreen)
-                LevelRow("TP2 • 3,5× ATR", formatLevel(signal.targetPrice2), TvGreen)
-                LevelRow("STOP LOSS • 1,5× ATR", formatLevel(signal.stopLoss), TvRed)
+                LevelRow("ENTRY / MASUK", formatLevel(signal.entryPrice, quoteAsset), TvTextPrimary)
+                LevelRow("TP1 • 2× ATR", formatLevel(signal.targetPrice1, quoteAsset), TvGreen)
+                LevelRow("TP2 • 3,5× ATR", formatLevel(signal.targetPrice2, quoteAsset), TvGreen)
+                LevelRow("STOP LOSS • 1,5× ATR", formatLevel(signal.stopLoss, quoteAsset), TvRed)
                 LevelRow("R:R MATEMATIS", signal.riskRewardRatio, TvTextPrimary)
             }
             Spacer(Modifier.height(10.dp))
@@ -244,7 +255,7 @@ private fun LearningFactorRow(title: String, value: String, lesson: String) {
     }
 }
 
-private fun formatLevel(value: Double): String = if (value > 0.0 && value.isFinite()) PriceFormatter.formatPriceFull(value) else "Belum tersedia"
+private fun formatLevel(value: Double, quoteAsset: String = "IDR"): String = if (value > 0.0 && value.isFinite()) PriceFormatter.formatPriceFull(value, quoteAsset = quoteAsset) else "Belum tersedia"
 
 @Composable
 private fun LevelRow(label: String, value: String, color: Color) {

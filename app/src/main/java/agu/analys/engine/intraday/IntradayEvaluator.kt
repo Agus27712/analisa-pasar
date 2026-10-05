@@ -15,6 +15,7 @@ import agu.analys.model.ScalpingStage
 import agu.analys.model.SignalAction
 import agu.analys.model.TechnicalIndicators
 import agu.analys.model.TrendSentiment
+import agu.analys.util.PriceFormatter
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
@@ -78,14 +79,16 @@ object IntradayEvaluator {
         price: Double,
         history: List<CandleBar>,
         fees: TradingFeeConfig = TradingFeeConfig(),
-        evaluationTimestamp: Long? = null
+        evaluationTimestamp: Long? = null,
+        symbol: String = ""
     ): IntradayEvalResult = evaluate(
         globalContext = agu.analys.engine.global.GlobalMarketContext(),
         price = price,
         history = history,
         fees = fees,
         macroAnomalyResult = null,
-        evaluationTimestamp = evaluationTimestamp
+        evaluationTimestamp = evaluationTimestamp,
+        symbol = symbol
     )
 
     fun evaluate(
@@ -94,11 +97,14 @@ object IntradayEvaluator {
         history: List<CandleBar>,
         fees: TradingFeeConfig = TradingFeeConfig(),
         macroAnomalyResult: agu.analys.engine.regime.MacroAnomalyResult? = null,
-        evaluationTimestamp: Long? = null
+        evaluationTimestamp: Long? = null,
+        symbol: String = ""
     ): IntradayEvalResult {
         if (price <= 0.0) {
             return IntradayEvalResult(AISignalState(), TechnicalIndicators())
         }
+
+        val quoteAsset = if (symbol.isNotBlank()) agu.analys.util.PriceFormatter.extractQuote(symbol) else "IDR"
 
         val evalTime = evaluationTimestamp ?: history.lastOrNull()?.timestamp ?: System.currentTimeMillis()
 
@@ -246,7 +252,7 @@ object IntradayEvaluator {
         when {
             isEstablishedUptrend -> { buyScore += 28; reasons += "Tren makro solid (EMA20 > EMA50, harga di atas support dinamis)." }
             isGoldenCross -> { buyScore += 24; reasons += "Baru terjadi Golden Cross EMA." }
-            isEarlyReversal -> { buyScore += 24; reasons += "Early Reversal Pagi: Harga reclaim EMA20 (Rp ${fmtPrice(ema20)}) dari support harian." }
+            isEarlyReversal -> { buyScore += 24; reasons += "Early Reversal Pagi: Harga reclaim EMA20 (${PriceFormatter.formatPrice(ema20, quoteAsset = quoteAsset)}) dari support harian." }
             isDowntrend -> { sellScore += 24; reasons += "Tren makro bearish (EMA20 < EMA50 & harga di bawah EMA20)." }
             else -> reasons += "Tren berkonsolidasi, menunggu arah tren tegas."
         }
@@ -339,7 +345,7 @@ object IntradayEvaluator {
         val isDangerous = isRsiOverbought || isNearHighDanger || isDistribution || isBreakdown || isParabolicUnwind || flashDumpTrauma || pumpAndDumpTrap || isMacroDowntrend
 
         if (isNearHighDanger) {
-            reasons.add(0, "⚠️ Tertahan: Harga terlalu dekat recent high (Rp ${fmtPrice(recentHigh)}) / overextended. Hindari beli di pucuk.")
+            reasons.add(0, "⚠️ Tertahan: Harga terlalu dekat recent high (${PriceFormatter.formatPrice(recentHigh, quoteAsset = quoteAsset)}) / overextended. Hindari beli di pucuk.")
         }
 
         // ── WATERFALL CHECKPOINTS ───────────────────────────────────────────
@@ -348,7 +354,8 @@ object IntradayEvaluator {
             macroCandles = history,
             microCandles = history,
             strategyMode = agu.analys.config.StrategyMode.OFFICE_DAILY,
-            fees = fees
+            fees = fees,
+            quoteAsset = quoteAsset
         )
 
         val step1Ok = !isDangerous && isTrendValidForIntraday && !flashDumpTrauma
@@ -430,7 +437,7 @@ object IntradayEvaluator {
 
         val setupDetailText = when {
             !step1Ok -> "Menunggu Checkpoint 1 lolos."
-            step2Ok -> "Support aman di Rp ${fmtPrice(supportLevel)} · Jarak ke high ${fmt(distToHighPct * 100)}%."
+            step2Ok -> "Support aman di ${PriceFormatter.formatPrice(supportLevel, quoteAsset = quoteAsset)} · Jarak ke high ${fmt(distToHighPct * 100)}%."
             else -> "Memantau lantai support / jarak ke high."
         }
 
@@ -443,7 +450,7 @@ object IntradayEvaluator {
         val entryPriceDetailText = when {
             !intradayPhase.isOpenWindow -> "Sesi entry ditutup (${intradayPhase.label})."
             !step3Ok -> "Menunggu Checkpoint 3 lolos."
-            step4Ok -> "Zona Entry: Rp ${fmtPrice(price)} (Net R:R $rrString)."
+            step4Ok -> "Zona Entry: ${PriceFormatter.formatPrice(price, quoteAsset = quoteAsset)} (Net R:R $rrString)."
             else -> "Menunggu R:R optimal (Min 1:1.8) & skor buy."
         }
 

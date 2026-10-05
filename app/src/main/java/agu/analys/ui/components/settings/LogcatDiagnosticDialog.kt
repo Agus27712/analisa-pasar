@@ -450,19 +450,21 @@ private fun TrailingCoinCard(symbol: String, pos: SpotPosition) {
 
             Spacer(Modifier.height(6.dp))
 
+            val quoteAsset = PriceFormatter.extractQuote(symbol)
+
             SelectionContainer {
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text("Harga Beli (Entry):", color = TvTextSecondary, fontSize = 11.sp)
-                        Text(PriceFormatter.formatPrice(pos.entryPrice, showSymbol = true), color = TvTextPrimary, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                        Text(PriceFormatter.formatPrice(pos.entryPrice, showSymbol = true, quoteAsset = quoteAsset), color = TvTextPrimary, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text("Harga Tertinggi (Peak):", color = TvTextSecondary, fontSize = 11.sp)
-                        Text(PriceFormatter.formatPrice(pos.peakPrice, showSymbol = true), color = TvGreen, fontSize = 11.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                        Text(PriceFormatter.formatPrice(pos.peakPrice, showSymbol = true, quoteAsset = quoteAsset), color = TvGreen, fontSize = 11.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text("Trailing Stop Limit Price:", color = TvTextSecondary, fontSize = 11.sp)
-                        Text(PriceFormatter.formatPrice(pos.trailingStopPrice, showSymbol = true), color = TvAmber, fontSize = 11.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                        Text(PriceFormatter.formatPrice(pos.trailingStopPrice, showSymbol = true, quoteAsset = quoteAsset), color = TvAmber, fontSize = 11.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text("Persentase Trailing:", color = TvTextSecondary, fontSize = 11.sp)
@@ -470,12 +472,12 @@ private fun TrailingCoinCard(symbol: String, pos: SpotPosition) {
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text("Jumlah Aset / Kuantitas:", color = TvTextSecondary, fontSize = 11.sp)
-                        Text("${pos.quantity} (Modal: ${PriceFormatter.formatPrice(pos.investedAmount, showSymbol = true)})", color = TvTextPrimary, fontSize = 11.sp)
+                        Text("${pos.quantity} (Modal: ${PriceFormatter.formatPrice(pos.investedAmount, showSymbol = true, quoteAsset = quoteAsset)})", color = TvTextPrimary, fontSize = 11.sp)
                     }
                     if (pos.isAutoSellEnabled) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text("Target Auto-Sell TP:", color = TvTextSecondary, fontSize = 11.sp)
-                            Text("TP1: ${PriceFormatter.formatPrice(pos.tp1Price, showSymbol = true)} (${pos.tp1Percent}%) | TP2: ${PriceFormatter.formatPrice(pos.tp2Price, showSymbol = true)} (${pos.tp2Percent}%)", color = TvBlueSoft, fontSize = 10.sp)
+                            Text("TP1: ${PriceFormatter.formatPrice(pos.tp1Price, showSymbol = true, quoteAsset = quoteAsset)} (${pos.tp1Percent}%) | TP2: ${PriceFormatter.formatPrice(pos.tp2Price, showSymbol = true, quoteAsset = quoteAsset)} (${pos.tp2Percent}%)", color = TvBlueSoft, fontSize = 10.sp)
                         }
                     }
                 }

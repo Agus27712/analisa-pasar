@@ -29,7 +29,7 @@ class WatchlistViewModel(application: Application) : AndroidViewModel(applicatio
         }
         _watchlist.value = initialWatchlist
         _favorites.value = prefs.getFavorites()
-        MtfCacheManager.updateQueues(initialWatchlist.toList(), emptyList())
+        MtfCacheManager.updateQueues(initialWatchlist.toList(), emptyList(), prefs.marketDataSource.name)
     }
 
     fun getDefaultSymbol(source: MarketDataSource = prefs.marketDataSource): String {
@@ -43,7 +43,7 @@ class WatchlistViewModel(application: Application) : AndroidViewModel(applicatio
         }
         _watchlist.value = current
         _favorites.value = prefs.getFavorites(source)
-        MtfCacheManager.updateQueues(current.toList(), emptyList())
+        MtfCacheManager.updateQueues(current.toList(), emptyList(), source.name)
         onWatchlistUpdated?.invoke()
     }
 
@@ -57,7 +57,7 @@ class WatchlistViewModel(application: Application) : AndroidViewModel(applicatio
         val defaultSym = getDefaultSymbol()
         val current = prefs.getWatchlist().ifEmpty { setOf(defaultSym) }
         _watchlist.value = current
-        MtfCacheManager.updateQueues(current.toList(), emptyList())
+        MtfCacheManager.updateQueues(current.toList(), emptyList(), prefs.marketDataSource.name)
         onWatchlistUpdated?.invoke()
     }
 
@@ -68,7 +68,7 @@ class WatchlistViewModel(application: Application) : AndroidViewModel(applicatio
         current.add(upper)
         prefs.setWatchlist(current)
         _watchlist.value = current
-        MtfCacheManager.updateQueues(current.toList(), emptyList())
+        MtfCacheManager.updateQueues(current.toList(), emptyList(), prefs.marketDataSource.name)
         onWatchlistUpdated?.invoke()
     }
 
@@ -80,7 +80,7 @@ class WatchlistViewModel(application: Application) : AndroidViewModel(applicatio
         val finalSet = if (current.isEmpty()) setOf(defaultSym) else current
         prefs.setWatchlist(finalSet)
         _watchlist.value = finalSet
-        MtfCacheManager.updateQueues(finalSet.toList(), emptyList())
+        MtfCacheManager.updateQueues(finalSet.toList(), emptyList(), prefs.marketDataSource.name)
         onWatchlistUpdated?.invoke()
     }
 
@@ -90,7 +90,7 @@ class WatchlistViewModel(application: Application) : AndroidViewModel(applicatio
         val finalSet = if (upper.isEmpty()) setOf(defaultSym) else upper
         prefs.setWatchlist(finalSet)
         _watchlist.value = finalSet
-        MtfCacheManager.updateQueues(finalSet.toList(), emptyList())
+        MtfCacheManager.updateQueues(finalSet.toList(), emptyList(), prefs.marketDataSource.name)
         onWatchlistUpdated?.invoke()
     }
 

@@ -71,3 +71,91 @@
   4. **Verifikasi**:
      - `compile_applet` berhasil (BUILD SUCCESSFUL).
      - `gradle :app:testDebugUnitTest` berhasil (BUILD SUCCESSFUL, semua unit tests lulus).
+
+---
+
+# Checkpoint: Audit & Perbaikan Format Kuotasi Multi-Mata Uang ($ vs Rp) pada Riwayat & Log Sinyal AI, Confluence Evaluator, Histori Siklus Trade, dan Tab Real Portfolio
+
+- **Tanggal / Waktu:** 2026-10-05
+- **Status:** Selesai (Completed, Build Clean, All Tests Passed)
+- **Komponen Terdampak:**
+  1. `TradeHistoryRecordEntity.kt`
+  2. `SignalLogRepository.kt` & `TradeHistoryRecorder.kt`
+  3. `RealPortfolioHistoryTab.kt` & `SimulationOrderCards.kt`
+  4. `ConfluenceEvaluator.kt` & `ScalpingMtfEvaluator.kt` & `OrderBookAnalyzer.kt`
+  5. `IntradayEvaluator.kt` & `SwingEvaluator.kt` & `LearningTradingEngine.kt`
+  6. `OrderBookAndTradesPanel.kt` & `IndicatorDashboard.kt` & `LogcatDiagnosticDialog.kt`
+  7. `MarketViewModel.kt` & `CandidateScanWorker.kt`
+  8. `TradeLogDetailDialog.kt` & `TradeLogExporter.kt`
+  9. `PriceFormatter.kt`
+  10. `README.md` & `workplan.md` & `checkpoint.md`
+- **Akar Masalah & Resolusi:**
+  1. **Akar Masalah Masih Ada Kuotasi "Rp" pada Nilai Dollar ($)**:
+     - *Default Fallback di PriceFormatter*: `PriceFormatter.formatPrice` menggunakan parameter bawaan `quoteAsset = "IDR"`. Pemanggilan `formatPrice(price)` tanpa menyertakan `quoteAsset` pada pasangan USDT (cth: `BTCUSDT`, `ETHUSDT`) secara otomatis memformat harga dengan prefix `"Rp "`.
+     - *Hardcoded Prefix "Rp" di Engine Evaluator*:
+       - `ConfluenceEvaluator.kt`: String pesan `AOV` dan `RR` menuliskan `"Rp ${PriceFormatter.formatPrice(supportLevel, showSymbol = false)}"`, `"SL di Rp ... TP1 di Rp ..."`.
+       - `OrderBookAnalyzer.kt`: Advice orderbook spread menuliskan `"Taker @ Rp ..."` dan `"gap spread Rp ..."`.
+       - `SwingEvaluator.kt` & `IntradayEvaluator.kt`: String alasan analisa menuliskan `"Level penting → Support Rp ... | Resistance Rp ..."`, `"REJECTION di Support: candle pantul naik dari Rp ..."`, `"BREAKOUT di Resistance Rp ..."`, `"Recent high Rp ..."`.
+     - *Omission quoteAsset di UI Component*:
+       - `RealPortfolioHistoryTab.kt`: PnL calculation line 212 memanggil `PriceFormatter.formatPrice(kotlin.math.abs(effectivePnlIdr))` tanpa `quoteAsset`, menampilkan `+Rp 12.50` untuk trade USDT.
+       - `SimulationOrderCards.kt`: PnL nilai negatif kehilangan tanda minus saat di-abs tanpa sign handler eksplisit.
+       - `MarketViewModel.kt`: `aiRationale` memanggil `PriceFormatter.formatPrice(tick.price)` tanpa `pair.quoteAsset`.
+       - `CandidateScanWorker.kt`: Notifikasi scanner memanggil `PriceFormatter.formatPrice` tanpa `quoteAsset`.
+       - `OrderBookAndTradesPanel.kt` & `IndicatorDashboard.kt`: Header tab dan label indikator mengasumsikan kuotasi IDR.
+       - `TradeHistoryRecordEntity.kt`: Getter `quoteAsset` sebelumnya hanya memeriksa `endsWith("USDT")` tanpa menangani token lain seperti `USDC`, `BUSD`, `BIDR`, atau simbol berafiks underscore (`BTC_USDT`).
+  2. **Implementasi Solusi & Peningkatan**:
+     - **Penyempurnaan Parser Kuotasi (`PriceFormatter.extractQuote`)**:
+       - Menambahkan helper terpusat `PriceFormatter.extractQuote(symbol)` yang secara presisi mengidentifikasi `USDT`, `USDC`, `BUSD`, `BIDR`, atau `IDR` dari berbagai format penulisan simbol.
+       - Memperbarui getter `baseAsset` dan `quoteAsset` pada `TradeHistoryRecordEntity` agar konsisten di seluruh lapisan database dan UI.
+     - **Pembersihan Hardcoded "Rp" pada Seluruh Engine Evaluator**:
+       - `ConfluenceEvaluator.kt`: Menambahkan parameter `quoteAsset: String = "IDR"` dan mengganti seluruh teks `"Rp "` menjadi interpolasi dinamis `${PriceFormatter.formatPrice(level, quoteAsset = quoteAsset)}`.
+       - `OrderBookAnalyzer.kt`: `analyzeSpread` menerima `quoteAsset` dan menghasilkan advice orderbook dengan format mata uang sesuai ($ untuk USDT, Rp untuk IDR).
+       - `ScalpingMtfEvaluator.kt`, `IntradayEvaluator.kt`, `SwingEvaluator.kt`: Mengambil `quoteAsset` dari `symbol` dan menyuntikkannya ke dalam string alasan sinyal teknikal dan checkpoint waterfall.
+       - `LearningTradingEngine.kt` & `CandidateScanWorker.kt`: Meneruskan `symbol = tick.symbol` saat memicu evaluasi swing dan intraday.
+     - **Penyelarasan Seluruh Komponen Tampilan UI**:
+       - `RealPortfolioHistoryTab.kt`: Mengirimkan `quoteAsset = quoteAsset` dan format sign `+`/`-` pada kartu riwayat trade real.
+       - `SimulationOrderCards.kt`: Memperbaiki tampilan sign PnL dan kuotasi dollar pada kartu order simulasi.
+       - `MarketViewModel.kt`: Menyertakan `pair.quoteAsset` pada `aiRationale` dan format volume.
+       - `OrderBookAndTradesPanel.kt`: Header kolom berubah dinamis `"HARGA ($quoteAsset)"` dan baris harga pasar diformat sesuai kuotasi aktif.
+       - `IndicatorDashboard.kt`: Menerima `quoteAsset` untuk format EMA20, EMA50, dan ATR.
+       - `LogcatDiagnosticDialog.kt`: Menggunakan `quoteAsset` dinamis dari simbol posisi aktif.
+       - `TradeLogDetailDialog.kt` & `TradeLogExporter.kt`: Menampilkan nama exchange dinamis (`Tokocrypto` untuk pasangan USDT, `Indodax` untuk IDR) dan mengekspor laporan markdown audit terstruktur untuk verifikasi LLM.
+  3. **Verifikasi Kompilasi & Pengujian**:
+     - `compile_applet` berhasil (BUILD SUCCESSFUL).
+
+---
+
+# Checkpoint: Resolusi Bug Sinkronisasi Data MTF & Error Saat Berganti Bursa (`MtfCacheManager.kt`, `TokocryptoMarketService.kt`, `LearningTradingEngine.kt`, `TradingViewModel.kt`)
+
+- **Tanggal / Waktu:** 2026-10-05
+- **Status:** Selesai (Completed & Verified Build Clean)
+- **Komponen Terdampak:**
+  1. `TokocryptoMarketService.kt`
+  2. `MtfCacheManager.kt`
+  3. `LearningTradingEngine.kt`
+  4. `TradingViewModel.kt`
+  5. `checkpoint.md` & `workplan.md`
+- **Akar Masalah & Resolusi:**
+  1. **Akar Masalah Error Data MTF Saat Ganti Bursa**:
+     - *URL Fallback Bug pada TokocryptoMarketService*: Pemanggilan `getWithFallback` sebelumnya menghasilkan URL dengan duplikasi `/api/v3/api/v3` pada path relatif, menyebabkan HTTP 404 pada fallback Kline. Selain itu, bila deteksi `symbolType` belum sinkron (defaulting ke Type 1 untuk koin Type 3 atau sebaliknya), endpoint cadangan (Type 3 / Open API / Binance) tidak dicoba secara komprehensif, sehingga Kline kosong dan MTF status langsung ditandai `ERROR`.
+     - *Kegagalan Transisi Cepat Status MTF pada MtfCacheManager*: Saat beralih bursa, pembersihan cache tanpa pemberian status awal `SYNCING` menyebabkan UI membaca status null/error sementara prefetch jaringan sedang berlangsung. Ketiadaan retry ringan pada `safeFetch` membuat gangguan soket sekejap saat pergantian bursa langsung memicu status `MtfStatus.ERROR`.
+     - *Stuck Cooldown 10s & Symbol Mismatch di LearningTradingEngine*: `refreshScalpingTimeframesIfDue` sebelumnya mencatat `lastMtfRefresh = now` meskipun candle yang termuat `< 20` (masih dalam antrean fetch), sehingga engine terkunci selama 10 detik dan menampilkan status `"DATA MTF: Sinkronisasi candle (H1 0/20 · M15 0/20 · M1 0/20)"`. Perbandingan simbol `currentTick?.symbol == symbol` juga sensitif format/underscore.
+     - *Kondisi Bersih Engine & Aktivasi MTF Tak Bersyarat di TradingViewModel*: `selectPair` sebelumnya hanya mengaktifkan MTF cache jika `strategyMode == SCALPING`, dan `setMarketDataSource` tidak mereset buffer candle engine saat hard stop bursa dilakukan.
+  2. **Implementasi Solusi & Peningkatan**:
+     - **Robust URL Routing & Multi-Fallback Kline (`TokocryptoMarketService.kt`)**:
+       - Memperbaiki `getWithFallback` agar resolusi path relatif maupun absolut URL bebas dari duplikasi `/api/v3`.
+       - Menyusun fallback rantai lengkap: Type 1 URL, Type 3 URL (`cloudme-toko.2meta.app`), Tokocrypto Open API (`/open/v1/market/klines`), dan Binance Kline.
+     - **Transisi Status Responsif & Multi-Alias Caching (`MtfCacheManager.kt`)**:
+       - `setActiveSymbol` segera memetakan status `SYNCING`/`READY` ke StateFlow `_mtfState` untuk mencegah kedipan badge `ERROR` di UI saat perpindahan bursa.
+       - `safeFetch` menyertakan retry backoff otomatis 200ms jika request pertama kosong.
+       - Caching multi-alias mencakup format scoped, stripped/clean, compact symbol, dan pair underscore.
+     - **Polling Sinkronisasi & Resiliensi Simbol (`LearningTradingEngine.kt`)**:
+       - Menambahkan helper normalisasi simbol `isMatchingSymbol` yang kebal terhadap variasi underscore/casing.
+       - Menambahkan loop polling cepat (delay 250ms hingga 5 percobaan) saat candle MTF sedang di-fetch, sehingga engine langsung terisi dan mengeksekusi analisis tanpa menunggu tick berikutnya.
+       - Jika candle belum lengkap setelah polling, `lastMtfRefresh` direset ke `0L` agar siklus berikutnya dapat langsung mencoba lagi tanpa penalti cooldown 10 detik.
+     - **Penyelarasan Siklus Hidup Bursa di ViewModel (`TradingViewModel.kt`)**:
+       - `setMarketDataSource` membersihkan dan mereset buffer engine (`engine.resetForOffline()`).
+       - `selectPair` mengaktifkan `MtfCacheManager.setActiveSymbol` secara tanpa syarat di semua mode strategi.
+  3. **Verifikasi Kompilasi & Pengujian**:
+     - `compile_applet` berhasil (BUILD SUCCESSFUL).
+     - `gradle :app:testDebugUnitTest` berhasil (BUILD SUCCESSFUL, seluruh unit tests lulus).

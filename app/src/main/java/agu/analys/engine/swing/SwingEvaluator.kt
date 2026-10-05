@@ -15,6 +15,7 @@ import agu.analys.model.ScalpingStage
 import agu.analys.model.SignalAction
 import agu.analys.model.TechnicalIndicators
 import agu.analys.model.TrendSentiment
+import agu.analys.util.PriceFormatter
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
@@ -52,11 +53,14 @@ object SwingEvaluator {
         price: Double, 
         history: List<CandleBar>, 
         fees: TradingFeeConfig = TradingFeeConfig(),
-        macroAnomalyResult: agu.analys.engine.regime.MacroAnomalyResult? = null
+        macroAnomalyResult: agu.analys.engine.regime.MacroAnomalyResult? = null,
+        symbol: String = ""
     ): SwingEvalResult {
         if (price <= 0.0) {
             return SwingEvalResult(AISignalState(), TechnicalIndicators())
         }
+
+        val quoteAsset = if (symbol.isNotBlank()) agu.analys.util.PriceFormatter.extractQuote(symbol) else "IDR"
 
         val minCandles = 20
         if (history.size < minCandles) {
@@ -155,7 +159,7 @@ object SwingEvaluator {
         var setupScore = 0.0
         val reasons = mutableListOf<String>()
         reasons += "Kondisi Pasar: $regime."
-        reasons += "Level penting → Support Rp ${fmtPrice(supportLevel)} | Resistance Rp ${fmtPrice(resistanceLevel)}."
+        reasons += "Level penting → Support ${PriceFormatter.formatPrice(supportLevel, quoteAsset = quoteAsset)} | Resistance ${PriceFormatter.formatPrice(resistanceLevel, quoteAsset = quoteAsset)}."
 
         // 1. REJECTION
         // Candle besar yang pantul dari level, minim wick ke arah pantulan, volume bagus
@@ -171,11 +175,11 @@ object SwingEvaluator {
         if (rejectionAtSupport || sweepRejectionUp) {
             detectedSetup = SwingSetup.REJECTION
             setupScore = if (strongVolume || sweepRejectionUp) 28.0 else 20.0
-            reasons += "REJECTION di Support: candle pantul naik dari Rp ${fmtPrice(supportLevel)}${if (strongVolume) " + volume ${fmt(volumeRatio)}×" else ""}."
+            reasons += "REJECTION di Support: candle pantul naik dari ${PriceFormatter.formatPrice(supportLevel, quoteAsset = quoteAsset)}${if (strongVolume) " + volume ${fmt(volumeRatio)}×" else ""}."
         } else if (rejectionAtResistance || sweepRejectionDown) {
             detectedSetup = SwingSetup.REJECTION
             setupScore = if (strongVolume || sweepRejectionDown) 26.0 else 18.0
-            reasons += "REJECTION di Resistance: candle pantul turun dari Rp ${fmtPrice(resistanceLevel)}${if (strongVolume) " + volume ${fmt(volumeRatio)}×" else ""}."
+            reasons += "REJECTION di Resistance: candle pantul turun dari ${PriceFormatter.formatPrice(resistanceLevel, quoteAsset = quoteAsset)}${if (strongVolume) " + volume ${fmt(volumeRatio)}×" else ""}."
         }
 
         // 2. BREAKOUT / BREAKDOWN
@@ -190,11 +194,11 @@ object SwingEvaluator {
                 detectedSetup = SwingSetup.BREAKOUT
                 // FIX: skor breakout instan diturunkan; prefer retest (win-rate lebih tinggi)
                 setupScore = if (strongVolume) 24.0 else 16.0
-                reasons += "BREAKOUT: harga tembus Resistance Rp ${fmtPrice(resistanceLevel)} dengan candle solid${if (strongVolume) " + volume ${fmt(volumeRatio)}×" else ""} (lebih aman tunggu retest)."
+                reasons += "BREAKOUT: harga tembus Resistance ${PriceFormatter.formatPrice(resistanceLevel, quoteAsset = quoteAsset)} dengan candle solid${if (strongVolume) " + volume ${fmt(volumeRatio)}×" else ""} (lebih aman tunggu retest)."
             } else if (solidBreakdown || bosBreakdown) {
                 detectedSetup = SwingSetup.BREAKOUT
                 setupScore = if (strongVolume) 22.0 else 14.0
-                reasons += "BREAKDOWN: harga tembus Support Rp ${fmtPrice(supportLevel)} dengan candle solid${if (strongVolume) " + volume ${fmt(volumeRatio)}×" else ""}."
+                reasons += "BREAKDOWN: harga tembus Support ${PriceFormatter.formatPrice(supportLevel, quoteAsset = quoteAsset)} dengan candle solid${if (strongVolume) " + volume ${fmt(volumeRatio)}×" else ""}."
             }
         }
 
@@ -211,16 +215,16 @@ object SwingEvaluator {
                 // Ini sebenarnya failed retest / distribution — treat as rejection setelah break
                 detectedSetup = SwingSetup.RETEST
                 setupScore = 18.0
-                reasons += "RETEST Resistance gagal: level Rp ${fmtPrice(resistanceLevel)} ditolak lagi setelah pernah tembus."
+                reasons += "RETEST Resistance gagal: level ${PriceFormatter.formatPrice(resistanceLevel, quoteAsset = quoteAsset)} ditolak lagi setelah pernah tembus."
             } else if (hadBreakBelow && nearSupport && (rejectionAtSupport || (isBullCandle && bodyRatio >= 0.35))) {
                 detectedSetup = SwingSetup.RETEST
                 setupScore = 28.0
-                reasons += "RETEST Support: harga balik ngetes Rp ${fmtPrice(supportLevel)} setelah breakdown lalu ditolak (support hold)."
+                reasons += "RETEST Support: harga balik ngetes ${PriceFormatter.formatPrice(supportLevel, quoteAsset = quoteAsset)} setelah breakdown lalu ditolak (support hold)."
             } else if (price > resistanceLevel * 0.995 && price < resistanceLevel * 1.025 && isBullCandle && strongVolume) {
                 // Retest dari atas (resistance become support)
                 detectedSetup = SwingSetup.RETEST
                 setupScore = 30.0
-                reasons += "RETEST: Resistance lama jadi Support. Harga ditolak naik dari area Rp ${fmtPrice(resistanceLevel)}."
+                reasons += "RETEST: Resistance lama jadi Support. Harga ditolak naik dari area ${PriceFormatter.formatPrice(resistanceLevel, quoteAsset = quoteAsset)}."
             }
         }
 
@@ -366,7 +370,7 @@ object SwingEvaluator {
 
         val isTechnicalDistribution = isOverbought || isNearHighDanger || isResistanceRejection || isSolidBreakdown || isHeavySelling
         if (isNearHighDanger) {
-            reasons.add(0, "⚠️ Tertahan: Harga terlalu dekat recent high (Rp ${fmtPrice(recentHigh)}) / overextended. Hindari beli di pucuk.")
+            reasons.add(0, "⚠️ Tertahan: Harga terlalu dekat recent high (${PriceFormatter.formatPrice(recentHigh, quoteAsset = quoteAsset)}) / overextended. Hindari beli di pucuk.")
         }
 
         // --- 2. WATERFALL CHECKPOINTS ---
@@ -382,7 +386,8 @@ object SwingEvaluator {
             macroCandles = history,
             microCandles = history,
             strategyMode = agu.analys.config.StrategyMode.SWING,
-            fees = fees
+            fees = fees,
+            quoteAsset = quoteAsset
         )
 
         val isRsiBullish = rsi in 35.0..68.0 || (rsi in 28.0..38.0 && macdHist >= 0)
@@ -445,9 +450,9 @@ object SwingEvaluator {
             isResistanceRejection -> "Tertahan: Terjadi penolakan harga di resistance."
             step1Ok && detectedSetup == SwingSetup.BREAKOUT -> "Bias bullish via Breakout level penting."
             step1Ok && detectedSetup == SwingSetup.RECLAIM_FAILED -> "Bias bullish via Reclaim / Failed Breakdown."
-            step1Ok -> "Tren makro selaras positif (EMA20 > EMA50 di Rp ${fmtPrice(ema20)})."
+            step1Ok -> "Tren makro selaras positif (EMA20 > EMA50 di ${PriceFormatter.formatPrice(ema20, quoteAsset = quoteAsset)})."
             isBearishTrend -> "Tren makro downtrend (EMA20 < EMA50). Menunggu Reclaim EMA20."
-            else -> "Memantau keselarasan tren EMA (harga menguji area Rp ${fmtPrice(ema20)})."
+            else -> "Memantau keselarasan tren EMA (harga menguji area ${PriceFormatter.formatPrice(ema20, quoteAsset = quoteAsset)})."
         }
 
         val step2Detail = when {

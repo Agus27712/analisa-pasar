@@ -294,6 +294,21 @@ object PriceFormatter {
                 quoteAsset.equals("USDC", true)
     }
 
+    /**
+     * Ekstraksi quote asset dari symbol pasangan trading (misal BTCUSDT -> USDT, ETHIDR -> IDR)
+     */
+    fun extractQuote(symbol: String): String {
+        val clean = symbol.uppercase().replace("_", "").trim()
+        return when {
+            clean.endsWith("USDT") -> "USDT"
+            clean.endsWith("USDC") -> "USDC"
+            clean.endsWith("BUSD") -> "BUSD"
+            clean.endsWith("BIDR") -> "BIDR"
+            clean.endsWith("IDR") -> "IDR"
+            else -> "IDR"
+        }
+    }
+
     fun formatRsi(rsi: Double): String {
         if (rsi.isNaN() || rsi.isInfinite()) return "50.0"
         return getUsFormat("0.0").format(rsi)

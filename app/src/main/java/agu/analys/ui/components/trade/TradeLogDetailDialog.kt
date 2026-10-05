@@ -130,9 +130,9 @@ fun TradeLogDetailDialog(
                             val reasons = mutableListOf<String>()
                             if (log.reasoning.isNotBlank()) reasons.add(log.reasoning)
                             if (log.sentiment.isNotBlank()) reasons.add("Sentimen: ${log.sentiment}")
-                            if (log.targetPrice1 > 0) reasons.add("Target TP1: ${PriceFormatter.formatPrice(log.targetPrice1)}")
-                            if (log.targetPrice2 > 0) reasons.add("Target TP2: ${PriceFormatter.formatPrice(log.targetPrice2)}")
-                            if (log.stopLoss > 0) reasons.add("Stop Loss: ${PriceFormatter.formatPrice(log.stopLoss)}")
+                            if (log.targetPrice1 > 0) reasons.add("Target TP1: ${PriceFormatter.formatPrice(log.targetPrice1, quoteAsset = quote)}")
+                            if (log.targetPrice2 > 0) reasons.add("Target TP2: ${PriceFormatter.formatPrice(log.targetPrice2, quoteAsset = quote)}")
+                            if (log.stopLoss > 0) reasons.add("Stop Loss: ${PriceFormatter.formatPrice(log.stopLoss, quoteAsset = quote)}")
                             if (reasons.isEmpty()) reasons.add("Sinyal indikator teknikal terkonfirmasi")
 
                             resolvedSnapshot = TradeSignalSnapshot(
@@ -206,8 +206,9 @@ fun TradeLogDetailDialog(
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold
                             )
+                            val exchangeName = if (agu.analys.util.PriceFormatter.isUsdtQuote(quote)) "Tokocrypto" else "Indodax"
                             Text(
-                                text = "Mode: ${activeStrategy.uppercase()} • ${if (isReal) "Real Indodax" else "Simulasi"}",
+                                text = "Mode: ${activeStrategy.uppercase()} • ${if (isReal) "Real $exchangeName" else "Simulasi"}",
                                 color = TvBlue,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Medium
@@ -404,15 +405,17 @@ fun TradeLogDetailDialog(
                             colors = CardDefaults.cardColors(containerColor = TvSurfaceVariant),
                             modifier = Modifier.fillMaxWidth()
                         ) {
+                            val exchangeNameUpper = if (agu.analys.util.PriceFormatter.isUsdtQuote(quote)) "TOKOCRYPTO" else "INDODAX"
+                            val exchangeName = if (agu.analys.util.PriceFormatter.isUsdtQuote(quote)) "Tokocrypto" else "Indodax"
                             Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Text(
-                                    text = "2. INFORMASI TRANSAKSI RESMI INDODAX",
+                                    text = "2. INFORMASI TRANSAKSI RESMI $exchangeNameUpper",
                                     color = TvAmber,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    text = "Order ini dieksekusi secara instan dan disinkronkan langsung dari akun resmi Indodax via API V2.",
+                                    text = "Order ini dieksekusi secara instan dan disinkronkan langsung dari akun resmi $exchangeName via API resmi.",
                                     color = TvTextSecondary,
                                     fontSize = 11.sp
                                 )

@@ -49,7 +49,8 @@ object ConfluenceEvaluator {
         strategyMode: StrategyMode = StrategyMode.SWING,
         orderBookBids: List<OrderBookItem> = emptyList(),
         orderBookAsks: List<OrderBookItem> = emptyList(),
-        fees: TradingFeeConfig = TradingFeeConfig()
+        fees: TradingFeeConfig = TradingFeeConfig(),
+        quoteAsset: String = "IDR"
     ): ConfluenceResult {
         if (price <= 0.0 || microCandles.size < 5) {
             val emptyList = (1..6).map { idx ->
@@ -157,16 +158,16 @@ object ConfluenceEvaluator {
 
         val isAovValid = isNearSupport || isReclaimSupport || isRetestKeyLevel
         val aovMetric = when {
-            isReclaimSupport -> "Reclaim Support Rp ${PriceFormatter.formatPrice(supportLevel, showSymbol = false)}"
-            isRetestKeyLevel -> "Retest Key Level Rp ${PriceFormatter.formatPrice(supportLevel, showSymbol = false)}"
-            isNearSupport -> "Support Rp ${PriceFormatter.formatPrice(supportLevel, showSymbol = false)} (${String.format(Locale.US, "%.1f", distToSupportPct * 100)}%)"
+            isReclaimSupport -> "Reclaim Support ${PriceFormatter.formatPrice(supportLevel, quoteAsset = quoteAsset)}"
+            isRetestKeyLevel -> "Retest Key Level ${PriceFormatter.formatPrice(supportLevel, quoteAsset = quoteAsset)}"
+            isNearSupport -> "Support ${PriceFormatter.formatPrice(supportLevel, quoteAsset = quoteAsset)} (${String.format(Locale.US, "%.1f", distToSupportPct * 100)}%)"
             else -> "No Man's Land (+${String.format(Locale.US, "%.1f", distToSupportPct * 100)}%)"
         }
         val aovDetail = when {
-            isReclaimSupport -> "False breakdown teratasi! Buyer merebut kembali level Support Rp ${PriceFormatter.formatPrice(supportLevel, showSymbol = false)}."
+            isReclaimSupport -> "False breakdown teratasi! Buyer merebut kembali level Support ${PriceFormatter.formatPrice(supportLevel, quoteAsset = quoteAsset)}."
             isRetestKeyLevel -> "Harga melakukan retest sehat pada resistance yang kini menjadi support baru."
-            isNearSupport -> "Harga berada tepat di Area of Value Support Rp ${PriceFormatter.formatPrice(supportLevel, showSymbol = false)} (tidak beli di pucuk)."
-            else -> "Harga berada di 'no man's land' (terlalu jauh dari support Rp ${PriceFormatter.formatPrice(supportLevel, showSymbol = false)}). Tunggu pullback."
+            isNearSupport -> "Harga berada tepat di Area of Value Support ${PriceFormatter.formatPrice(supportLevel, quoteAsset = quoteAsset)} (tidak beli di pucuk)."
+            else -> "Harga berada di 'no man's land' (terlalu jauh dari support ${PriceFormatter.formatPrice(supportLevel, quoteAsset = quoteAsset)}). Tunggu pullback."
         }
         val step2 = ConfluenceCheckpoint(
             number = 2,
@@ -359,9 +360,9 @@ object ConfluenceEvaluator {
 
         val rrMetric = "Net 1:${String.format(Locale.US, "%.2f", netRr)}"
         val rrDetail = if (isRiskRewardValid) {
-            "Rasio Risk:Reward istimewa (Net 1:${String.format(Locale.US, "%.2f", netRr)} >= 1:2.0). SL di Rp ${PriceFormatter.formatPrice(calculatedSl, showSymbol = false)}, TP1 di Rp ${PriceFormatter.formatPrice(calculatedTp1, showSymbol = false)}."
+            "Rasio Risk:Reward istimewa (Net 1:${String.format(Locale.US, "%.2f", netRr)} >= 1:2.0). SL di ${PriceFormatter.formatPrice(calculatedSl, quoteAsset = quoteAsset)}, TP1 di ${PriceFormatter.formatPrice(calculatedTp1, quoteAsset = quoteAsset)}."
         } else {
-            "Net R:R 1:${String.format(Locale.US, "%.2f", netRr)} < 1:2.0. Ruang menuju resistance terlalu sempit. Tunggu harga mendekati support Rp ${PriceFormatter.formatPrice(supportLevel, showSymbol = false)} untuk validasi R:R."
+            "Net R:R 1:${String.format(Locale.US, "%.2f", netRr)} < 1:2.0. Ruang menuju resistance terlalu sempit. Tunggu harga mendekati support ${PriceFormatter.formatPrice(supportLevel, quoteAsset = quoteAsset)} untuk validasi R:R."
         }
         val step6 = ConfluenceCheckpoint(
             number = 6,

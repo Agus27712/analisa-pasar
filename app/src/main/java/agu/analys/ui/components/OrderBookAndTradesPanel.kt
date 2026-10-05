@@ -45,6 +45,7 @@ fun OrderBookAndTradesPanel(
     bids: List<OrderBookItem>,
     asks: List<OrderBookItem>,
     tradeStream: List<TradeStreamItem>,
+    quoteAsset: String = "IDR",
     modifier: Modifier = Modifier
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
@@ -94,23 +95,23 @@ fun OrderBookAndTradesPanel(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text("HARGA (IDR)", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TvTextSecondary)
+                    Text("HARGA ($quoteAsset)", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TvTextSecondary)
                     Text("JUMLAH COIN", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TvTextSecondary)
                     Text("TOTAL QTY", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TvTextSecondary)
                 }
 
                 Spacer(modifier = Modifier.height(4.dp))
-                Text("Harga = Rupiah · Jumlah/Total = jumlah coin", fontSize = 9.sp, color = TvTextSecondary)
+                Text("Harga = $quoteAsset · Jumlah/Total = kuantitas coin", fontSize = 9.sp, color = TvTextSecondary)
                 Spacer(modifier = Modifier.height(8.dp))
 
                 asks.take(4).asReversed().forEach { ask ->
-                    OrderBookRow(item = ask, color = TvRed)
+                    OrderBookRow(item = ask, color = TvRed, quoteAsset = quoteAsset)
                 }
 
                 Spacer(modifier = Modifier.height(6.dp))
 
                 bids.take(4).forEach { bid ->
-                    OrderBookRow(item = bid, color = TvGreen)
+                    OrderBookRow(item = bid, color = TvGreen, quoteAsset = quoteAsset)
                 }
             } else {
                 Row(
@@ -118,12 +119,12 @@ fun OrderBookAndTradesPanel(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text("WAKTU", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TvTextSecondary)
-                    Text("HARGA (IDR)", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TvTextSecondary)
+                    Text("HARGA ($quoteAsset)", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TvTextSecondary)
                     Text("JUMLAH COIN", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TvTextSecondary)
                 }
 
                 Spacer(modifier = Modifier.height(4.dp))
-                Text("Harga transaksi berasal dari market INDODAX", fontSize = 9.sp, color = TvTextSecondary)
+                Text("Harga transaksi berasal dari pasar live", fontSize = 9.sp, color = TvTextSecondary)
                 Spacer(modifier = Modifier.height(8.dp))
 
                 tradeStream.take(8).forEach { trade ->
@@ -135,7 +136,7 @@ fun OrderBookAndTradesPanel(
                     ) {
                         Text(trade.timeFormatted, fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = TvTextSecondary)
                         Text(
-                            text = PriceFormatter.formatPrice(trade.price),
+                            text = PriceFormatter.formatPrice(trade.price, quoteAsset = quoteAsset),
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             fontFamily = FontFamily.Monospace,
@@ -155,7 +156,7 @@ fun OrderBookAndTradesPanel(
 }
 
 @Composable
-private fun OrderBookRow(item: OrderBookItem, color: Color) {
+private fun OrderBookRow(item: OrderBookItem, color: Color, quoteAsset: String = "IDR") {
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -181,7 +182,7 @@ private fun OrderBookRow(item: OrderBookItem, color: Color) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = PriceFormatter.formatPrice(item.price),
+                text = PriceFormatter.formatPrice(item.price, quoteAsset = quoteAsset),
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 fontFamily = FontFamily.Monospace,

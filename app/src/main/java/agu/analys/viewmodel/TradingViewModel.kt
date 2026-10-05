@@ -351,11 +351,13 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         if (forceHardStop || previousSource != source) {
             marketDataCoordinator.hardStopAndPurgeAll(previousSource)
             marketViewModel.clearAllState()
+            engine.resetForOffline()
         }
 
         // 2. Simpan dan alihkan bursa
         settingsViewModel.setMarketDataSource(source)
         prefs.marketDataSource = source
+        MtfCacheManager.updateExchange(source.name)
         watchlistViewModel.reloadForDataSource(source)
 
         // 3. Muat dynamic symbols Tokocrypto jika beralih ke Tokocrypto
@@ -394,7 +396,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         agu.analys.util.AppLogManager.service("StrategyConfig", "⚙️ Mode strategi sistem dialihkan ke ${mode.name} (Scalping=$scalpingEnabled)")
         
         if (mode == StrategyMode.SCALPING) {
-            MtfCacheManager.setActiveSymbol(selectedPair.value.symbol)
+            MtfCacheManager.setActiveSymbol(selectedPair.value.symbol, prefs.marketDataSource.name)
         }
         
         marketDataCoordinator.startMarketPolling(selectedPair.value, selectedTimeframe.value)
@@ -470,12 +472,11 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
 
     fun selectPair(pair: TradingPair) {
         marketViewModel.selectPair(pair)
-        agu.analys.util.AppLogManager.market("PairSelect", "Pasangan koin aktif: ${pair.symbol} (${pair.baseAsset}/IDR)")
+        agu.analys.util.AppLogManager.market("PairSelect", "Pasangan koin aktif: ${pair.symbol} (${pair.baseAsset}/${pair.quoteAsset})")
         lastSavedSignalTimestamp = 0L
         positionCoordinator.setSelectedSymbol(pair.symbol)
-        if (strategyMode.value == StrategyMode.SCALPING) {
-            MtfCacheManager.setActiveSymbol(pair.symbol)
-        }
+        engine.resetForOffline()
+        MtfCacheManager.setActiveSymbol(pair.symbol, prefs.marketDataSource.name)
         val loaded = marketDataCoordinator.loadPairCache(pair.symbol, selectedTimeframe.value)
         if (!loaded) marketDataCoordinator.clearPairData(pair.symbol)
         marketDataCoordinator.startMarketPolling(pair, selectedTimeframe.value)
@@ -502,7 +503,11 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     fun retryConnection() {
         marketDataCoordinator.startMarketPolling(selectedPair.value, selectedTimeframe.value)
         refreshWorthCoinsFromMarket()
-        MtfCacheManager.setActiveSymbol(selectedPair.value.symbol)
+        MtfCacheManager.retryAllTimeframes(selectedPair.value.symbol, prefs.marketDataSource.name)
+    }
+
+    fun refreshMtfForActiveSymbol() {
+        MtfCacheManager.retryAllTimeframes(selectedPair.value.symbol, prefs.marketDataSource.name)
     }
 
     fun simulateDisconnect() = marketDataCoordinator.markOffline("Mode offline manual.")
@@ -572,7 +577,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         marketDataCoordinator.startMarketPolling(selectedPair.value, selectedTimeframe.value)
         refreshWorthCoinsFromMarket()
         startDashboardPolling()
-        MtfCacheManager.setActiveSymbol(selectedPair.value.symbol)
+        MtfCacheManager.setActiveSymbol(selectedPair.value.symbol, prefs.marketDataSource.name)
         if (prefs.hasTokocryptoCredentials() || prefs.hasIndodaxCredentials()) {
             syncRealBalancesToPositionStore()
         }

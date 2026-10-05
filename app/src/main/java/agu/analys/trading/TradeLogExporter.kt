@@ -79,16 +79,17 @@ object TradeLogExporter {
         }
 
         val holdStr = formatDuration(holdingDurationMs)
+        val exchangeName = if (PriceFormatter.isUsdtQuote(quote)) "TOKOCRYPTO" else "INDODAX"
 
         val sb = StringBuilder()
-        sb.append("### INDODAX TRADING LOG & SIGNAL AUDIT REPORT\n")
+        sb.append("### $exchangeName TRADING LOG & SIGNAL AUDIT REPORT\n")
         sb.append("Generated for LLM Verification (Gemini, Claude, Grok, ChatGPT)\n\n")
 
         sb.append("#### 📌 1. INFORMASI EKSEKUSI & STRATEGI\n")
         sb.append("- **ID Transaksi**: $tradeId\n")
         sb.append("- **Pasangan Aset**: $baseAsset/$quote ($symbol)\n")
         sb.append("- **Mode Trading**: ${strategyMode.uppercase()}\n")
-        sb.append("- **Tipe Akun**: ${if (isReal) "REAL INDODAX" else "SIMULASI VIRTUAL"}\n")
+        sb.append("- **Tipe Akun**: ${if (isReal) "REAL $exchangeName" else "SIMULASI VIRTUAL"}\n")
         sb.append("- **Tindakan**: ${side.uppercase()} (${orderType.uppercase()})\n")
         sb.append("- **Waktu Eksekusi**: $execTimeStr\n")
         sb.append("- **Harga Eksekusi**: ${PriceFormatter.formatPrice(executionPrice, quoteAsset = quote)}\n")

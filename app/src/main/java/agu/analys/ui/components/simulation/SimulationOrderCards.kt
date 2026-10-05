@@ -270,8 +270,9 @@ fun TradeHistoryItemCard(history: SimulationTradeHistoryItem) {
 
                 if (history.pnlIdr != null && history.pnlPercent != null) {
                     val isProfit = history.pnlIdr >= 0
+                    val pnlSign = if (isProfit) "+" else "-"
                     Text(
-                        text = "${if (isProfit) "+" else ""}${PriceFormatter.formatPrice(kotlin.math.abs(history.pnlIdr), quoteAsset = quote)} (${String.format(Locale.US, "%.2f", history.pnlPercent)}%)",
+                        text = "$pnlSign${PriceFormatter.formatPrice(kotlin.math.abs(history.pnlIdr), quoteAsset = quote)} (${String.format(Locale.US, "%.2f", history.pnlPercent)}%)",
                         color = if (isProfit) TvGreen else TvRed,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,

@@ -197,3 +197,38 @@ Mengintegrasikan arsitektur resmi Tokocrypto sesuai dokumentasi dan mengisolasi 
 - [x] **Verifikasi Kompilasi & Unit Tests**:
   - `compile_applet` berhasil (BUILD SUCCESSFUL).
   - `gradle :app:testDebugUnitTest` berhasil (BUILD SUCCESSFUL, semua unit tests lulus).
+
+### Tahap 17: Audit Riwayat & Log Sinyal AI, Histori Siklus Trade, dan Penyelarasan Kuotasi ($ vs Rp)
+- [x] **Penyempurnaan Parser Kuotasi & Base Asset (`PriceFormatter.extractQuote` & `TradeHistoryRecordEntity`)**:
+  - Dukungan token multiformat (`USDT`, `USDC`, `BUSD`, `BIDR`, `IDR`, dan simbol berafiks underscore).
+- [x] **Pembersihan Hardcoded "Rp" pada Seluruh Engine Sinyal & Evaluator**:
+  - `ConfluenceEvaluator.kt`: Parameter `quoteAsset` dan interpolasi dinamis mata uang pada AOV & Risk/Reward checkpoint.
+  - `OrderBookAnalyzer.kt`: Advice orderbook spread dengan mata uang sesuai kuotasi aktif ($ vs Rp).
+  - `ScalpingMtfEvaluator.kt`, `IntradayEvaluator.kt`, `SwingEvaluator.kt`: Integrasi `quoteAsset` pada seluruh string alasan analisa teknikal.
+  - `LearningTradingEngine.kt` & `CandidateScanWorker.kt`: Meneruskan `symbol = tick.symbol` pada seluruh pemicu evaluasi.
+- [x] **Penyelarasan Komponen UI & Dialog Audit**:
+  - `RealPortfolioHistoryTab.kt`: Format PnL sign `+`/`-` dan kuotasi dollar akurat pada histori trade real.
+  - `SimulationOrderCards.kt`: Format PnL sign dan kuotasi dollar pada kartu order simulasi.
+  - `MarketViewModel.kt`: Format harga dan volume pada `aiRationale` sesuai `pair.quoteAsset`.
+  - `OrderBookAndTradesPanel.kt` & `IndicatorDashboard.kt`: Header dinamis dan format harga indikator sesuai kuotasi aktif.
+  - `LogcatDiagnosticDialog.kt`: Format trailing stop, peak, dan modal posisi aktif sesuai quoteAsset.
+  - `TradeLogDetailDialog.kt` & `TradeLogExporter.kt`: Nama bursa dinamis (Tokocrypto / Indodax) dan ekspor laporan markdown audit terstruktur untuk verifikasi model LLM.
+- [x] **Penyelarasan Dokumentasi**:
+  - Update `README.md`, `checkpoint.md`, dan `workplan.md`.
+- [x] **Verifikasi Kompilasi**:
+  - `compile_applet` berhasil (BUILD SUCCESSFUL).
+
+### Tahap 18: Resolusi Bug Sinkronisasi Data MTF & Penanganan Pergantian Bursa Dinamis
+- [x] **Perbaikan Routing URL & Multi-Fallback Kline (`TokocryptoMarketService.kt`)**:
+  - Menghilangkan duplikasi path `/api/v3/api/v3` pada fallback dan melengkapi routing Type 1, Type 3 (`cloudme-toko.2meta.app`), Open API Tokocrypto, dan Binance.
+- [x] **Responsivitas Status MTF & Multi-Alias Caching (`MtfCacheManager.kt`)**:
+  - `setActiveSymbol` langsung mengalirkan status `SYNCING` untuk mencegah kedipan badge error saat berganti bursa.
+  - Retry backoff 200ms pada `safeFetch` untuk mengatasi transient network glitches saat switch bursa.
+- [x] **Polling Sinkronisasi & Resiliensi Simbol (`LearningTradingEngine.kt`)**:
+  - Helper `isMatchingSymbol` agar perbandingan simbol tidak sensitif underscore/casing.
+  - Polling loop 5x (delay 250ms) saat MTF sedang prefetch, dan reset `lastMtfRefresh = 0L` jika candle belum lengkap agar tidak tertahan cooldown 10 detik.
+- [x] **Penyelarasan Siklus Hidup Bursa (`TradingViewModel.kt`)**:
+  - Reset engine saat `setMarketDataSource` dan aktivasi MTF cache tanpa syarat pada `selectPair`.
+- [x] **Verifikasi Kompilasi & Pengujian**:
+  - `compile_applet` berhasil (BUILD SUCCESSFUL).
+  - `gradle :app:testDebugUnitTest` berhasil (BUILD SUCCESSFUL, seluruh unit tests lulus).

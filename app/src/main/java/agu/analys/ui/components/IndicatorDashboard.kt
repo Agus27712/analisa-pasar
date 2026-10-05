@@ -30,7 +30,11 @@ import agu.analys.ui.theme.*
 import agu.analys.util.PriceFormatter
 
 @Composable
-fun IndicatorDashboard(indicators: TechnicalIndicators, modifier: Modifier = Modifier) {
+fun IndicatorDashboard(
+    indicators: TechnicalIndicators,
+    quoteAsset: String = "IDR",
+    modifier: Modifier = Modifier
+) {
     val available = indicators.rsi14.isFinite() && indicators.ema20.isFinite() && indicators.ema50.isFinite() && indicators.atr.isFinite()
     Card(modifier = modifier.fillMaxWidth().border(1.dp, Color(0x1AFFFFFF), RoundedCornerShape(20.dp)), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = TvCardBackground)) {
         Column(modifier = Modifier.padding(18.dp).fillMaxWidth()) {
@@ -66,9 +70,9 @@ fun IndicatorDashboard(indicators: TechnicalIndicators, modifier: Modifier = Mod
             }
             Spacer(Modifier.height(14.dp))
             Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                IndicatorRow("EMA 20", PriceFormatter.formatPrice(indicators.ema20))
-                IndicatorRow("EMA 50", PriceFormatter.formatPrice(indicators.ema50))
-                IndicatorRow("ATR VOL", PriceFormatter.formatPrice(indicators.atr))
+                IndicatorRow("EMA 20", PriceFormatter.formatPrice(indicators.ema20, quoteAsset = quoteAsset))
+                IndicatorRow("EMA 50", PriceFormatter.formatPrice(indicators.ema50, quoteAsset = quoteAsset))
+                IndicatorRow("ATR VOL", PriceFormatter.formatPrice(indicators.atr, quoteAsset = quoteAsset))
             }
         }
     }

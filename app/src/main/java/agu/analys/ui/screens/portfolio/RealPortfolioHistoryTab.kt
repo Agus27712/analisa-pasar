@@ -208,8 +208,9 @@ fun RealTradeHistoryItemCard(
 
                 if (effectivePnlIdr != null && effectivePnlPercent != null) {
                     val isProfit = effectivePnlIdr >= 0
+                    val pnlSign = if (isProfit) "+" else "-"
                     Text(
-                        text = "${if (isProfit) "+" else ""}${PriceFormatter.formatPrice(kotlin.math.abs(effectivePnlIdr))} (${String.format(Locale.US, "%.2f", effectivePnlPercent)}%)",
+                        text = "$pnlSign${PriceFormatter.formatPrice(kotlin.math.abs(effectivePnlIdr), quoteAsset = quoteAsset)} (${String.format(Locale.US, "%.2f", effectivePnlPercent)}%)",
                         color = if (isProfit) TvGreen else TvRed,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,

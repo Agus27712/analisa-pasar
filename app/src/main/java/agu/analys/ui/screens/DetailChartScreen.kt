@@ -105,7 +105,21 @@ fun DetailChartScreen(
     val orderBookBids by viewModel.orderBookBids.collectAsStateWithLifecycle()
     val orderBookAsks by viewModel.orderBookAsks.collectAsStateWithLifecycle()
     val signalHistory by viewModel.signalHistory.collectAsStateWithLifecycle()
-    val mtfState = remember(mtfStateAll, pair.symbol) { mtfStateAll[pair.symbol] ?: emptyMap() }
+    val mtfState = remember(mtfStateAll, pair.symbol, pair.indodaxPair, pair.tokocryptoPair) {
+        val raw = pair.symbol
+        val upper = raw.trim().uppercase()
+        val clean = upper.replace("_", "").replace("/", "").replace("-", "")
+        mtfStateAll[raw]
+            ?: mtfStateAll[upper]
+            ?: mtfStateAll[clean]
+            ?: mtfStateAll[pair.indodaxPair.uppercase()]
+            ?: mtfStateAll[pair.tokocryptoPair.uppercase()]
+            ?: emptyMap()
+    }
+
+    LaunchedEffect(pair.symbol, marketDataSource) {
+        viewModel.selectPair(pair)
+    }
 
     var showPriceAlertDialog by remember { mutableStateOf(false) }
     var showAiAssistantDialog by remember { mutableStateOf(false) }
@@ -608,7 +622,7 @@ fun DetailChartScreen(
                 signal = signal,
                 strategyMode = strategyMode,
                 scalping = isScalping,
-                onRetry = { viewModel.retryConnection() },
+                onRetry = { viewModel.refreshMtfForActiveSymbol() },
                 mtfState = mtfState
             )
 

@@ -335,7 +335,7 @@ fun TradingViewModel.initSubscriptionsAndPolling() {
     watchlistViewModel.onWatchlistUpdated = {
         recalculateDashboardBadges()
     }
-    agu.analys.util.MtfCacheManager.updateQueues(watchlist.value.toList(), emptyList())
+    agu.analys.util.MtfCacheManager.updateQueues(watchlist.value.toList(), emptyList(), prefs.marketDataSource.name)
     engine.strategyMode = prefs.strategyMode
     engine.isScalpingMode = prefs.isScalpingMode
     engine.tradingFees = prefs.tradingFees

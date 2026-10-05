@@ -261,6 +261,16 @@ class SignalLogRepository(
         val newMaxProfit = max(log.maxProfitPct, max(0.0, rawPnlPct))
         val newMaxDrawdown = min(log.maxDrawdownPct, min(0.0, rawPnlPct))
 
+        // Determine quoteAsset from symbol
+        val quoteAsset = when {
+            log.symbol.uppercase().endsWith("USDT") -> "USDT"
+            log.symbol.uppercase().endsWith("USDC") -> "USDC"
+            log.symbol.uppercase().endsWith("BUSD") -> "BUSD"
+            log.symbol.uppercase().endsWith("BIDR") -> "BIDR"
+            log.symbol.uppercase().endsWith("IDR") -> "IDR"
+            else -> "IDR"
+        }
+
         // Check for target outcomes
         var status = log.outcomeStatus
         var exitPrice: Double? = null
@@ -273,19 +283,19 @@ class SignalLogRepository(
             exitPrice = currentPrice
             realizedPnl = rawPnlPct
             resolvedAt = now
-            note = "Target TP2 tercapai pada ${PriceFormatter.formatPrice(currentPrice)} (+${String.format(java.util.Locale.US, "%.2f", rawPnlPct)}%)"
+            note = "Target TP2 tercapai pada ${PriceFormatter.formatPrice(currentPrice, quoteAsset = quoteAsset)} (+${String.format(java.util.Locale.US, "%.2f", rawPnlPct)}%)"
         } else if (log.targetPrice1 > 0.0 && ((isBuy && currentPrice >= log.targetPrice1) || (!isBuy && currentPrice <= log.targetPrice1))) {
             status = "HIT_TP1"
             exitPrice = currentPrice
             realizedPnl = rawPnlPct
             resolvedAt = now
-            note = "Target TP1 tercapai pada ${PriceFormatter.formatPrice(currentPrice)} (+${String.format(java.util.Locale.US, "%.2f", rawPnlPct)}%)"
+            note = "Target TP1 tercapai pada ${PriceFormatter.formatPrice(currentPrice, quoteAsset = quoteAsset)} (+${String.format(java.util.Locale.US, "%.2f", rawPnlPct)}%)"
         } else if (log.stopLoss > 0.0 && ((isBuy && currentPrice <= log.stopLoss) || (!isBuy && currentPrice >= log.stopLoss))) {
             status = "HIT_SL"
             exitPrice = currentPrice
             realizedPnl = rawPnlPct
             resolvedAt = now
-            note = "Stop Loss tersentuh pada ${PriceFormatter.formatPrice(currentPrice)} (${String.format(java.util.Locale.US, "%.2f", rawPnlPct)}%)"
+            note = "Stop Loss tersentuh pada ${PriceFormatter.formatPrice(currentPrice, quoteAsset = quoteAsset)} (${String.format(java.util.Locale.US, "%.2f", rawPnlPct)}%)"
         } else if (now - log.firedAt > 86_400_000L * 3) {
             // Expire after 3 days
             status = "EXPIRED"
@@ -552,6 +562,54 @@ class SignalLogRepository(
                 maxDrawdownPct = -0.35,
                 peakPrice = 87000.0,
                 troughPrice = 84700.0
+            ),
+            SignalLogEntity(
+                symbol = "BTCUSDT",
+                action = "BUY",
+                strategyMode = "SCALPING",
+                confidence = 89,
+                sentiment = "BULLISH_REVERSAL",
+                entryPrice = 64800.0,
+                targetPrice1 = 66500.0,
+                targetPrice2 = 67800.0,
+                stopLoss = 63800.0,
+                firedAt = now - 3600_000L * 5,
+                reasoning = "Breakout resistance H1 + lonjakan volume Tokocrypto dan MACD Golden Cross.",
+                scalpingStage = "STRONG_ENTRY",
+                exchange = "TOKOCRYPTO",
+                outcomeStatus = "HIT_TP2",
+                maxProfitPct = 4.63,
+                maxDrawdownPct = -0.31,
+                exitPrice = 67800.0,
+                realizedPnlPct = 4.63,
+                peakPrice = 67950.0,
+                troughPrice = 64600.0,
+                resolvedAt = now - 3600_000L * 3,
+                resolutionNote = "Target TP2 tercapai pada $67,800.00 (+4.63%)"
+            ),
+            SignalLogEntity(
+                symbol = "ETHUSDT",
+                action = "BUY",
+                strategyMode = "SCALPING",
+                confidence = 84,
+                sentiment = "STRONG_BULLISH_CONTINUATION",
+                entryPrice = 3450.0,
+                targetPrice1 = 3560.0,
+                targetPrice2 = 3650.0,
+                stopLoss = 3380.0,
+                firedAt = now - 3600_000L * 10,
+                reasoning = "Volume Spike 3x rata-rata + RSI 56 crossing 50.",
+                scalpingStage = "ENTRY",
+                exchange = "TOKOCRYPTO",
+                outcomeStatus = "HIT_TP1",
+                maxProfitPct = 3.19,
+                maxDrawdownPct = -0.58,
+                exitPrice = 3560.0,
+                realizedPnlPct = 3.19,
+                peakPrice = 3580.0,
+                troughPrice = 3430.0,
+                resolvedAt = now - 3600_000L * 7,
+                resolutionNote = "Target TP1 tercapai pada $3,560.00 (+3.19%)"
             )
         )
         dao.insertLogs(sampleLogs)

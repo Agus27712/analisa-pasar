@@ -438,9 +438,10 @@ fun TradeHistoryItemCard(
                     )
                 }
                 Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
-                    Text("Total Rupiah", color = TvTextSecondary, fontSize = 10.sp, maxLines = 1)
+                    val isUsdt = PriceFormatter.isUsdtQuote(trade.quoteAsset)
+                    Text(if (isUsdt) "Total (${trade.quoteAsset})" else "Total Rupiah", color = TvTextSecondary, fontSize = 10.sp, maxLines = 1)
                     Text(
-                        PriceFormatter.formatPrice(trade.totalIdr, quoteAsset = "IDR"),
+                        PriceFormatter.formatPrice(trade.totalIdr, quoteAsset = trade.quoteAsset),
                         color = TvTextPrimary,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Black,
@@ -454,7 +455,7 @@ fun TradeHistoryItemCard(
                 val pnlColor = if (trade.pnlIdr >= 0) TvGreen else TvRed
                 val pnlPrefix = if (trade.pnlIdr >= 0) "+" else ""
                 Text(
-                    text = "Realized PnL: $pnlPrefix${PriceFormatter.formatPrice(trade.pnlIdr, quoteAsset = "IDR")} (${pnlPrefix}${String.format(Locale.US, "%.2f", trade.pnlPercent ?: 0.0)}%)",
+                    text = "Realized PnL: $pnlPrefix${PriceFormatter.formatPrice(trade.pnlIdr, quoteAsset = trade.quoteAsset)} (${pnlPrefix}${String.format(Locale.US, "%.2f", trade.pnlPercent ?: 0.0)}%)",
                     color = pnlColor,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold

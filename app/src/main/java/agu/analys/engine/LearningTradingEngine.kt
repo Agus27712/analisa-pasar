@@ -12,6 +12,7 @@ import agu.analys.model.SignalAction
 import agu.analys.model.TechnicalIndicators
 import agu.analys.model.Timeframe
 import agu.analys.model.TrendSentiment
+import agu.analys.service.IndodaxMarketService
 import agu.analys.service.TokocryptoMarketService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -20,6 +21,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
@@ -133,6 +135,12 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
         )
     }
 
+    private fun isMatchingSymbol(symA: String, symB: String): Boolean {
+        val a = symA.trim().uppercase().replace("_", "").replace("/", "").replace("-", "")
+        val b = symB.trim().uppercase().replace("_", "").replace("/", "").replace("-", "")
+        return a.isNotBlank() && a == b
+    }
+
     private fun refreshScalpingTimeframesIfDue(symbol: String) {
         if (symbol.isBlank()) return
         val now = System.currentTimeMillis()
@@ -141,37 +149,49 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
             StrategyMode.OFFICE_DAILY -> 60_000L
             StrategyMode.SWING -> 30_000L
         }
-        if (now - lastMtfRefresh < intervalMs && mtfSymbol == symbol) return
+        if (now - lastMtfRefresh < intervalMs && isMatchingSymbol(mtfSymbol, symbol)) return
         if (mtfRefreshJob?.isActive == true) return
         lastMtfRefresh = now; mtfSymbol = symbol
         mtfRefreshJob = scope.launch {
             when (strategyMode) {
                 StrategyMode.SCALPING -> {
-                    agu.analys.util.MtfCacheManager.setActiveSymbol(symbol)
+                    val activeEx = agu.analys.util.MtfCacheManager.activeExchange
+                    agu.analys.util.MtfCacheManager.setActiveSymbol(symbol, activeEx)
 
-                    var h1 = agu.analys.util.MtfCacheManager.getCachedCandles(symbol, Timeframe.H1) ?: emptyList()
-                    var m15 = agu.analys.util.MtfCacheManager.getCachedCandles(symbol, Timeframe.M15) ?: emptyList()
-                    var m1 = agu.analys.util.MtfCacheManager.getCachedCandles(symbol, Timeframe.M1) ?: emptyList()
+                    var h1 = agu.analys.util.MtfCacheManager.getCachedCandles(symbol, Timeframe.H1, activeEx) ?: emptyList()
+                    var m15 = agu.analys.util.MtfCacheManager.getCachedCandles(symbol, Timeframe.M15, activeEx) ?: emptyList()
+                    var m1 = agu.analys.util.MtfCacheManager.getCachedCandles(symbol, Timeframe.M1, activeEx) ?: emptyList()
 
-                    if (h1.size < 20 || m15.size < 20 || m1.size < 20) {
-                        kotlinx.coroutines.delay(500)
-                        h1 = agu.analys.util.MtfCacheManager.getCachedCandles(symbol, Timeframe.H1) ?: emptyList()
-                        m15 = agu.analys.util.MtfCacheManager.getCachedCandles(symbol, Timeframe.M15) ?: emptyList()
-                        m1 = agu.analys.util.MtfCacheManager.getCachedCandles(symbol, Timeframe.M1) ?: emptyList()
+                    var attempts = 0
+                    while ((h1.size < 20 || m15.size < 20 || m1.size < 20) && attempts < 5 && isActive) {
+                        attempts++
+                        kotlinx.coroutines.delay(250)
+                        h1 = agu.analys.util.MtfCacheManager.getCachedCandles(symbol, Timeframe.H1, activeEx) ?: emptyList()
+                        m15 = agu.analys.util.MtfCacheManager.getCachedCandles(symbol, Timeframe.M15, activeEx) ?: emptyList()
+                        m1 = agu.analys.util.MtfCacheManager.getCachedCandles(symbol, Timeframe.M1, activeEx) ?: emptyList()
                     }
 
-                    if (h1.size >= 20 && m15.size >= 20 && m1.size >= 20 && currentTick?.symbol == symbol) {
+                    if (h1.size >= 20 && m15.size >= 20 && m1.size >= 20 && isMatchingSymbol(currentTick?.symbol ?: "", symbol)) {
                         h1Candles = h1.dropLast(1); m15Candles = m15.dropLast(1)
                         m1Candles = m1.dropLast(1)
                         runScalping()
+                    } else if (h1.size < 20 || m15.size < 20 || m1.size < 20) {
+                        lastMtfRefresh = 0L
                     }
                 }
                 StrategyMode.SWING -> {
-                    val h1Job = async { TokocryptoMarketService.fetchCandles(symbol, Timeframe.H1, 200) }
-                    val d1Job = async { TokocryptoMarketService.fetchCandles(symbol, Timeframe.D1, 100) }
+                    val activeEx = agu.analys.util.MtfCacheManager.activeExchange
+                    val h1Job = async {
+                        if (activeEx.equals("INDODAX", true)) IndodaxMarketService.fetchCandles(symbol, Timeframe.H1, 200)
+                        else TokocryptoMarketService.fetchCandles(symbol, Timeframe.H1, 200)
+                    }
+                    val d1Job = async {
+                        if (activeEx.equals("INDODAX", true)) IndodaxMarketService.fetchCandles(symbol, Timeframe.D1, 100)
+                        else TokocryptoMarketService.fetchCandles(symbol, Timeframe.D1, 100)
+                    }
                     val h1 = h1Job.await()
                     val d1 = d1Job.await()
-                    if (h1.isNotEmpty() && currentTick?.symbol == symbol) {
+                    if (h1.isNotEmpty() && isMatchingSymbol(currentTick?.symbol ?: "", symbol)) {
                         val closedH1 = h1.dropLast(1)
                         synchronized(candlesH1) {
                             candlesH1.clear()
@@ -185,11 +205,18 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
                     }
                 }
                 StrategyMode.OFFICE_DAILY -> {
-                    val h4Job = async { TokocryptoMarketService.fetchCandles(symbol, Timeframe.H4, 200) }
-                    val d1Job = async { TokocryptoMarketService.fetchCandles(symbol, Timeframe.D1, 100) }
+                    val activeEx = agu.analys.util.MtfCacheManager.activeExchange
+                    val h4Job = async {
+                        if (activeEx.equals("INDODAX", true)) IndodaxMarketService.fetchCandles(symbol, Timeframe.H4, 200)
+                        else TokocryptoMarketService.fetchCandles(symbol, Timeframe.H4, 200)
+                    }
+                    val d1Job = async {
+                        if (activeEx.equals("INDODAX", true)) IndodaxMarketService.fetchCandles(symbol, Timeframe.D1, 100)
+                        else TokocryptoMarketService.fetchCandles(symbol, Timeframe.D1, 100)
+                    }
                     val h4 = h4Job.await()
                     val d1 = d1Job.await()
-                    if (h4.isNotEmpty() && currentTick?.symbol == symbol) {
+                    if (h4.isNotEmpty() && isMatchingSymbol(currentTick?.symbol ?: "", symbol)) {
                         val closedH4 = h4.dropLast(1)
                         synchronized(candlesH4) {
                             candlesH4.clear()
@@ -279,7 +306,8 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
             price = tick.price,
             history = history,
             fees = tradingFees,
-            macroAnomalyResult = anomalyResult
+            macroAnomalyResult = anomalyResult,
+            symbol = tick.symbol
         )
 
         val tracked = agu.analys.engine.scalping.SignalLifecycleManager.process(tick.symbol, tick.price, result.signal, StrategyMode.SWING)
@@ -322,7 +350,8 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
             tick.price,
             history,
             tradingFees,
-            anomalyResult
+            anomalyResult,
+            symbol = tick.symbol
         )
 
         val tracked = agu.analys.engine.scalping.SignalLifecycleManager.process(tick.symbol, tick.price, result.signal, StrategyMode.OFFICE_DAILY)

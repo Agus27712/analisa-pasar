@@ -373,7 +373,7 @@ class MarketViewModel(application: Application) : AndroidViewModel(application) 
                         pair = pair, worthScore = score,
                         isWorthIt = score >= 50 && change24h > 0,
                         recommendation = rec, potentialProfitPct = abs(change24h),
-                        aiRationale = "${PriceFormatter.formatPrice(tick.price)} · Vol ${PriceFormatter.formatVolume(tick.volume24h)}"
+                        aiRationale = "${PriceFormatter.formatPrice(tick.price, quoteAsset = pair.quoteAsset)} · Vol ${PriceFormatter.formatVolume(tick.volume24h, quoteAsset = pair.quoteAsset)}"
                     )
                 }.sortedWith(
                     if (scalpingMode) compareByDescending<WorthCoinInfo> {

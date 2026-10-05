@@ -59,8 +59,26 @@ data class TradeHistoryRecordEntity(
     val pnlPercent: Double? = null, // Persentase untung / rugi bersih (%)
     val isProfit: Boolean? = null // true jika pnlIdr >= 0, false jika minus
 ) {
-    val baseAsset: String get() = symbol.removeSuffix("IDR").removeSuffix("USDT").ifEmpty { symbol }
-    val quoteAsset: String get() = if (symbol.endsWith("USDT")) "USDT" else "IDR"
+    val baseAsset: String get() {
+        val clean = symbol.uppercase().replace("_", "").trim()
+        return clean.removeSuffix("USDT")
+            .removeSuffix("USDC")
+            .removeSuffix("BUSD")
+            .removeSuffix("BIDR")
+            .removeSuffix("IDR")
+            .ifEmpty { symbol }
+    }
+    val quoteAsset: String get() {
+        val clean = symbol.uppercase().replace("_", "").trim()
+        return when {
+            clean.endsWith("USDT") -> "USDT"
+            clean.endsWith("USDC") -> "USDC"
+            clean.endsWith("BUSD") -> "BUSD"
+            clean.endsWith("BIDR") -> "BIDR"
+            clean.endsWith("IDR") -> "IDR"
+            else -> "IDR"
+        }
+    }
     val isReal: Boolean get() = isRealTrade
     val isWin: Boolean? get() = isProfit
     val buyTimestamp: Long get() = buyTime

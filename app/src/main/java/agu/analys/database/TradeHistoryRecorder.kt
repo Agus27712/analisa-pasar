@@ -531,6 +531,72 @@ class TradeHistoryRecorder(
                 maxProfitPctDuringHold = 2.58,
                 maxDrawdownPctDuringHold = -0.35,
                 isTrailingUsed = false
+            ),
+            TradeHistoryRecordEntity(
+                tradeUuid = "seed-trade-btcusdt-06",
+                symbol = "BTCUSDT",
+                isRealTrade = false,
+                strategyMode = "SCALPING",
+                exchange = "TOKOCRYPTO",
+                signalTime = now - 3600_000L * 4,
+                signalPrice = 64500.0,
+                signalConfidence = 89,
+                signalCalculationSummary = "RSI(14)=35.2 • MACD=Golden Cross • EMA20 > EMA50 • Bid Depth=67.5% • Pressure=+28% (Buyer)",
+                signalReasons = "Breakout resistance H1 + konfirmasi volume Tokocrypto dan order book buyer tebal.",
+                targetPrice1 = 66500.0,
+                targetPrice2 = 67800.0,
+                stopLossPrice = 63500.0,
+                buyTime = now - 3600_000L * 4 + 10_000L,
+                buyPrice = 64600.0,
+                buyQuantity = 0.015,
+                buyTotalIdr = 969.0, // 969.0 USDT
+                buyFeeIdr = 2.91, // 2.91 USDT
+                buyOrderType = "LIMIT",
+                status = "CLOSED",
+                holdingDurationMs = 1840_000L, // ~30 menit 40 detik
+                peakPriceDuringHold = 67500.0,
+                troughPriceDuringHold = 64400.0,
+                maxProfitPctDuringHold = 4.49,
+                maxDrawdownPctDuringHold = -0.31,
+                isTrailingUsed = true,
+                trailingLockPrice = 67200.0,
+                sellTime = now - 3600_000L * 4 + 1850_000L,
+                sellPrice = 67200.0,
+                sellQuantity = 0.015,
+                sellTotalIdr = 1008.0, // 1008.0 USDT
+                sellFeeIdr = 3.02,
+                sellReason = "TRAILING_STOP",
+                pnlIdr = 33.07, // +$33.07 USDT
+                pnlPercent = 3.41,
+                isProfit = true
+            ),
+            TradeHistoryRecordEntity(
+                tradeUuid = "seed-trade-ethusdt-07",
+                symbol = "ETHUSDT",
+                isRealTrade = true,
+                strategyMode = "SCALPING",
+                exchange = "TOKOCRYPTO",
+                signalTime = now - 1200_000L,
+                signalPrice = 3450.0,
+                signalConfidence = 86,
+                signalCalculationSummary = "RSI(14)=44.8 • MACD Line Crossing Signal • EMA20 > EMA50 • Bid Depth=64.0%",
+                signalReasons = "Momentum expansion RSI crossing 40 + konfirmasi volume buy Tokocrypto.",
+                targetPrice1 = 3560.0,
+                targetPrice2 = 3650.0,
+                stopLossPrice = 3380.0,
+                buyTime = now - 1200_000L + 8_000L,
+                buyPrice = 3455.0,
+                buyQuantity = 0.35,
+                buyTotalIdr = 1209.25, // 1209.25 USDT
+                buyFeeIdr = 3.63,
+                buyOrderType = "LIMIT",
+                status = "HOLDING",
+                holdingDurationMs = 1190_000L, // ~19 menit
+                peakPriceDuringHold = 3530.0,
+                troughPriceDuringHold = 3440.0,
+                maxProfitPctDuringHold = 2.17,
+                maxDrawdownPctDuringHold = -0.43,
+                isTrailingUsed = false
             )
         )
         dao.insertRecords(samples)

@@ -38,9 +38,13 @@ object IndodaxMarketService {
         val s = symbol.trim().lowercase().replace("/", "_").replace("-", "_").replace(" ", "")
         return when {
             s.contains("_") -> s
-            s.endsWith("idr") -> s.dropLast(3) + "_idr"
-            s.endsWith("usdt") -> s.dropLast(4) + "_idr"
-            else -> s + "_idr"
+            s == "usdtidr" -> "usdt_idr"
+            s == "btcidr" -> "btc_idr"
+            s == "ethidr" -> "eth_idr"
+            s == "usdt" -> "usdt_idr"
+            s.endsWith("idr") && s.length > 3 -> "${s.dropLast(3)}_idr"
+            s.endsWith("usdt") && s.length > 4 -> "${s.dropLast(4)}_usdt"
+            else -> "${s}_idr"
         }
     }
 
@@ -517,15 +521,27 @@ object IndodaxMarketService {
             val requestCount = limit.coerceAtLeast(40) + 1
             val fromSec = explicitFromSec ?: (nowSec - (candleSeconds * requestCount))
             val apiTf = if (tf == "D") "1D" else tf
+            val pairId = toPairId(symbol)
             val pairUpper = toDepthPairId(symbol).uppercase()
             val pairLower = toDepthPairId(symbol).lowercase()
+            val pairUnderLower = pairId.lowercase()
+            val pairUnderUpper = pairId.uppercase()
 
             var body = get("https://indodax.com/tradingview/history_v2?from=$fromSec&symbol=$pairUpper&tf=$apiTf&to=$nowSec")
             if (body == null || body.trim().isEmpty() || body.trim() == "[]" || body.trim() == "{}") {
                 body = get("https://indodax.com/tradingview/history_v2?from=$fromSec&symbol=$pairLower&tf=$apiTf&to=$nowSec")
             }
             if (body == null || body.trim().isEmpty() || body.trim() == "[]" || body.trim() == "{}") {
+                body = get("https://indodax.com/tradingview/history_v2?from=$fromSec&symbol=$pairUnderLower&tf=$apiTf&to=$nowSec")
+            }
+            if (body == null || body.trim().isEmpty() || body.trim() == "[]" || body.trim() == "{}") {
+                body = get("https://indodax.com/tradingview/history_v2?from=$fromSec&symbol=$pairUnderUpper&tf=$apiTf&to=$nowSec")
+            }
+            if (body == null || body.trim().isEmpty() || body.trim() == "[]" || body.trim() == "{}") {
                 body = get("https://indodax.com/tradingview/history?from=$fromSec&symbol=$pairUpper&resolution=$apiTf&to=$nowSec")
+            }
+            if (body == null || body.trim().isEmpty() || body.trim() == "[]" || body.trim() == "{}") {
+                body = get("https://indodax.com/tradingview/history?from=$fromSec&symbol=$pairUnderLower&resolution=$apiTf&to=$nowSec")
             }
             if (body == null || body.trim().isEmpty()) return@withContext emptyList()
 

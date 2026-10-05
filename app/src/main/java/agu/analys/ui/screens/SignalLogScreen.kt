@@ -830,10 +830,33 @@ private fun TradeHistorySummaryCard(records: List<TradeHistoryRecordEntity>) {
     val winTrades = closedTrades.filter { it.isWin == true || (it.pnlIdr ?: 0.0) > 0.0 }
     val lossTrades = closedTrades.filter { it.isWin == false && (it.pnlIdr ?: 0.0) < 0.0 }
     val winRatePct = if (closedTrades.isNotEmpty()) (winTrades.size.toDouble() / closedTrades.size) * 100.0 else 0.0
-    val totalPnlIdr = closedTrades.mapNotNull { it.pnlIdr }.sum()
-    val isOverallProfit = totalPnlIdr >= 0.0
+
+    val idrTrades = closedTrades.filter { !PriceFormatter.isUsdtQuote(it.quoteAsset) }
+    val usdtTrades = closedTrades.filter { PriceFormatter.isUsdtQuote(it.quoteAsset) }
+    val totalIdr = idrTrades.mapNotNull { it.pnlIdr }.sum()
+    val totalUsdt = usdtTrades.mapNotNull { it.pnlIdr }.sum()
+
+    val isOverallProfit: Boolean
+    val pnlDisplayText: String
+    if (usdtTrades.isNotEmpty() && idrTrades.isEmpty()) {
+        isOverallProfit = totalUsdt >= 0.0
+        val prefix = if (isOverallProfit) "+" else ""
+        pnlDisplayText = "$prefix${PriceFormatter.formatPrice(totalUsdt, quoteAsset = "USDT")}"
+    } else if (idrTrades.isNotEmpty() && usdtTrades.isEmpty()) {
+        isOverallProfit = totalIdr >= 0.0
+        val prefix = if (isOverallProfit) "+" else ""
+        pnlDisplayText = "$prefix${PriceFormatter.formatPrice(totalIdr, quoteAsset = "IDR")}"
+    } else if (usdtTrades.isNotEmpty() && idrTrades.isNotEmpty()) {
+        isOverallProfit = (totalIdr + (totalUsdt * 16000.0)) >= 0.0
+        val idrPrefix = if (totalIdr >= 0.0) "+" else ""
+        val usdtPrefix = if (totalUsdt >= 0.0) "+" else ""
+        pnlDisplayText = "$idrPrefix${PriceFormatter.formatPrice(totalIdr, quoteAsset = "IDR")} • $usdtPrefix${PriceFormatter.formatPrice(totalUsdt, quoteAsset = "USDT")}"
+    } else {
+        isOverallProfit = true
+        pnlDisplayText = if (records.any { PriceFormatter.isUsdtQuote(it.quoteAsset) }) "$0.00" else "Rp 0"
+    }
+
     val pnlColor = if (isOverallProfit) TvGreen else TvRed
-    val pnlPrefix = if (isOverallProfit) "+" else ""
     val avgHoldMs = if (closedTrades.isNotEmpty()) closedTrades.map { it.holdingDurationMs }.average().toLong() else 0L
 
     Surface(
@@ -956,7 +979,7 @@ private fun TradeHistorySummaryCard(records: List<TradeHistoryRecordEntity>) {
                         )
                         Spacer(Modifier.height(2.dp))
                         Text(
-                            text = "$pnlPrefix${PriceFormatter.formatPrice(totalPnlIdr, quoteAsset = "IDR")}",
+                            text = pnlDisplayText,
                             color = pnlColor,
                             fontSize = 13.5.sp,
                             fontWeight = FontWeight.Black,
@@ -1360,6 +1383,18 @@ private fun SignalLogItemCard(
         else -> tvAmber
     }
 
+    val quoteAsset = remember(log.symbol) {
+        val clean = log.symbol.uppercase().replace("_", "").trim()
+        when {
+            clean.endsWith("USDT") -> "USDT"
+            clean.endsWith("USDC") -> "USDC"
+            clean.endsWith("BUSD") -> "BUSD"
+            clean.endsWith("BIDR") -> "BIDR"
+            clean.endsWith("IDR") -> "IDR"
+            else -> "IDR"
+        }
+    }
+
     Surface(
         shape = RoundedCornerShape(12.dp),
         color = TvSurface,
@@ -1439,7 +1474,7 @@ private fun SignalLogItemCard(
                 Column {
                     Text("Harga Saat Sinyal:", color = TvTextSecondary, fontSize = 8.5.sp)
                     Text(
-                        text = PriceFormatter.formatPrice(log.entryPrice),
+                        text = PriceFormatter.formatPrice(log.entryPrice, quoteAsset = quoteAsset),
                         color = TvTextPrimary,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
@@ -1496,9 +1531,9 @@ private fun SignalLogItemCard(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    TargetLevelPill("TP1", log.targetPrice1, TvGreen, Modifier.weight(1f))
-                    TargetLevelPill("TP2", log.targetPrice2, TvGreen, Modifier.weight(1f))
-                    TargetLevelPill("SL", log.stopLoss, TvRed, Modifier.weight(1f))
+                    TargetLevelPill("TP1", log.targetPrice1, TvGreen, quoteAsset = quoteAsset, Modifier.weight(1f))
+                    TargetLevelPill("TP2", log.targetPrice2, TvGreen, quoteAsset = quoteAsset, Modifier.weight(1f))
+                    TargetLevelPill("SL", log.stopLoss, TvRed, quoteAsset = quoteAsset, Modifier.weight(1f))
                 }
             }
 
@@ -1542,7 +1577,7 @@ private fun SignalLogItemCard(
                     Column {
                         Text("Harga Puncak Tertinggi:", color = TvTextSecondary, fontSize = 8.5.sp)
                         Text(
-                            text = if (log.peakPrice > 0) "${PriceFormatter.formatPrice(log.peakPrice)} (+${String.format(Locale.US, "%.2f", log.maxProfitPct)}%)" else "-",
+                            text = if (log.peakPrice > 0) "${PriceFormatter.formatPrice(log.peakPrice, quoteAsset = quoteAsset)} (+${String.format(Locale.US, "%.2f", log.maxProfitPct)}%)" else "-",
                             color = TvGreen,
                             fontSize = 9.5.sp,
                             fontWeight = FontWeight.Bold,
@@ -1553,7 +1588,7 @@ private fun SignalLogItemCard(
                     Column(horizontalAlignment = Alignment.End) {
                         Text("Drawdown Terendah:", color = TvTextSecondary, fontSize = 8.5.sp)
                         Text(
-                            text = if (log.troughPrice > 0) "${PriceFormatter.formatPrice(log.troughPrice)} (${String.format(Locale.US, "%.2f", log.maxDrawdownPct)}%)" else "-",
+                            text = if (log.troughPrice > 0) "${PriceFormatter.formatPrice(log.troughPrice, quoteAsset = quoteAsset)} (${String.format(Locale.US, "%.2f", log.maxDrawdownPct)}%)" else "-",
                             color = TvRed,
                             fontSize = 9.5.sp,
                             fontWeight = FontWeight.Bold,
@@ -1606,7 +1641,13 @@ private fun SignalLogItemCard(
 }
 
 @Composable
-private fun TargetLevelPill(label: String, price: Double, color: Color, modifier: Modifier = Modifier) {
+private fun TargetLevelPill(
+    label: String,
+    price: Double,
+    color: Color,
+    quoteAsset: String = "IDR",
+    modifier: Modifier = Modifier
+) {
     Surface(
         shape = RoundedCornerShape(6.dp),
         color = color.copy(alpha = 0.08f),
@@ -1619,7 +1660,7 @@ private fun TargetLevelPill(label: String, price: Double, color: Color, modifier
         ) {
             Text(label, color = color, fontSize = 7.5.sp, fontWeight = FontWeight.Bold)
             Text(
-                text = if (price > 0) PriceFormatter.formatPrice(price) else "-",
+                text = if (price > 0) PriceFormatter.formatPrice(price, quoteAsset = quoteAsset) else "-",
                 color = TvTextPrimary,
                 fontSize = 8.5.sp,
                 fontFamily = FontFamily.Monospace,

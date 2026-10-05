@@ -146,7 +146,11 @@ object TokocryptoMarketService {
 
         // Fallback ke relative paths atau absolute URLs
         for (path in fallbackPaths) {
-            val url = if (path.startsWith("http")) path else "$TOKOCRYPTO_TYPE1_MARKET_URL$path"
+            val url = when {
+                path.startsWith("http://") || path.startsWith("https://") -> path
+                path.startsWith("/") -> "$TOKOCRYPTO_TYPE1_MARKET_URL$path".replace("/api/v3/api/v3", "/api/v3")
+                else -> "$TOKOCRYPTO_TYPE1_MARKET_URL/$path".replace("/api/v3/api/v3", "/api/v3")
+            }
             val fb = get(url)
             if (!fb.isNullOrBlank()) {
                 return fb
@@ -314,10 +318,11 @@ object TokocryptoMarketService {
     }
 
     /**
-     * Fetch Kline / Candlestick dengan routing Symbol Type 1 vs Type 3
+     * Fetch Kline / Candlestick dengan routing Symbol Type 1 vs Type 3 dan comprehensive fallbacks
      */
     suspend fun fetchCandles(symbol: String, timeframe: Timeframe, limit: Int = 300): List<CandleBar> = withContext(Dispatchers.IO) {
         val binanceSym = toBinanceSymbol(symbol)
+        val tokoPair = toTokocryptoPair(symbol)
         val symbolType = TokocryptoSymbolRepository.getSymbolType(binanceSym)
         val interval = when (timeframe) {
             Timeframe.M1 -> "1m"
@@ -329,15 +334,18 @@ object TokocryptoMarketService {
         }
         val safeLimit = limit.coerceIn(10, 1000)
 
-        val primaryUrl = if (symbolType == 3) {
-            "$TOKOCRYPTO_TYPE3_MARKET_URL/klines?symbol=$binanceSym&interval=$interval&limit=$safeLimit"
-        } else {
-            "$TOKOCRYPTO_TYPE1_MARKET_URL/klines?symbol=$binanceSym&interval=$interval&limit=$safeLimit"
-        }
+        val type1Url = "$TOKOCRYPTO_TYPE1_MARKET_URL/klines?symbol=$binanceSym&interval=$interval&limit=$safeLimit"
+        val type3Url = "$TOKOCRYPTO_TYPE3_MARKET_URL/klines?symbol=$binanceSym&interval=$interval&limit=$safeLimit"
+        val openApiUrl = "$TOKOCRYPTO_GENERAL_URL/open/v1/market/klines?symbol=$tokoPair&interval=$interval&limit=$safeLimit"
+        val binanceUrl = "https://api.binance.me/api/v3/klines?symbol=$binanceSym&interval=$interval&limit=$safeLimit"
+        val binanceVisionUrl = "https://data-api.binance.vision/api/v3/klines?symbol=$binanceSym&interval=$interval&limit=$safeLimit"
 
-        val fallbackPaths = listOf(
-            "/api/v3/klines?symbol=$binanceSym&interval=$interval&limit=$safeLimit"
-        )
+        val primaryUrl = if (symbolType == 3) type3Url else type1Url
+        val fallbackPaths = if (symbolType == 3) {
+            listOf(type1Url, openApiUrl, binanceUrl, binanceVisionUrl)
+        } else {
+            listOf(type3Url, openApiUrl, binanceUrl, binanceVisionUrl)
+        }
 
         try {
             val jsonStr = getWithFallback(primaryUrl, fallbackPaths)
