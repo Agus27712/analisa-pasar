@@ -15,7 +15,7 @@ import kotlin.math.abs
  *
  * Prioritas (pertama yang match):
  * 1. LIQUIDITY_SWEEP
- * 2. BREAKOUT_RETEST
+ * 2. BREAKOUT_RETEST (ketat — RVOL/strength/regime; replay Tokocrypto 2026-10)
  * 3. BREAKOUT
  * 4. TREND_PULLBACK
  * 5. NONE
@@ -45,12 +45,15 @@ object ScalpSetupDetector {
             return Result(ScalpSetupType.NONE, "Harga tidak valid.")
         }
 
-        // Hindari trend-following murni di ranging keras (kecuali sweep / retest valid)
-        val rangingHard = input.regime.regime == MarketRegime.RANGING && input.regime.chop >= 65.0
+        // Hindari trend-following murni di ranging keras (kecuali sweep)
+        val rangingHard =
+            input.regime.regime == MarketRegime.RANGING &&
+                input.regime.chop >= ScalpingConfig.CHOP_HARD_RANGING
 
         detectLiquiditySweep(input)?.let { return it }
-        detectBreakoutRetest(input)?.let { return it }
+        // Retest tidak diizinkan di ranging keras (replay: retest di chop = −EV)
         if (!rangingHard) {
+            detectBreakoutRetest(input)?.let { return it }
             detectBreakout(input)?.let { return it }
             detectTrendPullback(input)?.let { return it }
         }
@@ -58,7 +61,7 @@ object ScalpSetupDetector {
         return Result(
             setup = ScalpSetupType.NONE,
             explanation = when {
-                rangingHard -> "Regime ranging/choppy — tidak ada setup sweep/retest valid."
+                rangingHard -> "Regime ranging/choppy — hanya sweep yang diizinkan; retest/breakout/pullback ditahan."
                 else -> "Tidak ada setup scalping yang memenuhi konfluensi."
             }
         )
@@ -78,18 +81,16 @@ object ScalpSetupDetector {
 
     // --------------------------------------------------------------------------
     // LIQUIDITY_SWEEP
-    // Liquidity taken + rejection + volume + structure reversal (CHoCH/BOS)
     // -------------------------------------------------------------------------
     private fun detectLiquiditySweep(input: Input): Result? {
         val s = input.structure
         if (!s.liquiditySweepDetected && !s.choch) return null
 
         val hasRejection = hasRejectionCandle(input.m1Candles, bullish = input.preferLong)
-        val volumeOk = input.rvol >= 1.2 || input.m1Candles.isEmpty()
+        val volumeOk = input.rvol >= ScalpingConfig.RVOL_SETUP_MIN || input.m1Candles.isEmpty()
         val structureReversal = s.choch || s.bos || s.liquiditySweepDetected
 
         if (!structureReversal) return null
-        // Minimal: sweep flag atau CHoCH; prefer rejection jika candle tersedia
         if (input.m1Candles.isNotEmpty() && !hasRejection && !s.choch) return null
         if (!volumeOk && !s.choch) return null
 
@@ -108,7 +109,7 @@ object ScalpSetupDetector {
                 append("Liquidity sweep")
                 if (s.choch) append(" + CHoCH")
                 if (hasRejection) append(" + rejection candle")
-                if (input.rvol >= 1.2) append(" + RVOL ${fmt(input.rvol)}x")
+                if (input.rvol >= ScalpingConfig.RVOL_SETUP_MIN) append(" + RVOL ${fmt(input.rvol)}x")
                 append(".")
             },
             isLongBiased = longBias
@@ -116,44 +117,64 @@ object ScalpSetupDetector {
     }
 
     // --------------------------------------------------------------------------
-    // BREAKOUT_RETEST
-    // Sudah breakout → pullback ke level → konfirmasi
+    // BREAKOUT_RETEST — ketat (RVOL, strength, BOS, bias, momentum)
     // -------------------------------------------------------------------------
     private fun detectBreakoutRetest(input: Input): Result? {
         val s = input.structure
+
+        // Jangan long retest saat struktur bearish
+        if (s.bias == StructureBias.BEARISH) return null
+
+        val rvolOk = input.rvol >= ScalpingConfig.RVOL_RETEST_MIN
+        // Orderbook kosong → buyPressure netral 1.0; jangan wajibkan flow tinggi offline.
+        // Jika depth ada (pressure jauh dari 1.0), minta supportive/retest threshold.
+        val hasDepthHint = abs(input.buyPressure - 1.0) > 0.02
+        val flowOk = !hasDepthHint || input.buyPressure >= ScalpingConfig.BUY_PRESSURE_RETEST
+
         if (s.isBreakoutRetestValid) {
+            if (!rvolOk) return null
+            if (!flowOk) return null
+            if (s.strength > 0 && s.strength < ScalpingConfig.RETEST_MIN_STRUCTURE_STRENGTH) return null
             return Result(
                 setup = ScalpSetupType.BREAKOUT_RETEST,
-                explanation = "Breakout & retest valid di level struktur + konfirmasi.",
-                isLongBiased = s.bias != StructureBias.BEARISH
+                explanation = "Breakout & retest valid + RVOL ${fmt(input.rvol)}x" +
+                    if (hasDepthHint) " + buy pressure ${fmt(input.buyPressure)}x." else ".",
+                isLongBiased = true
             )
         }
 
         val res = s.resistance ?: return null
         if (res <= 0.0 || input.price <= 0.0) return null
 
-        // Harga di zona retest resistance yang sudah di-break (dekat level, masih di atas)
         val distPct = abs(input.price - res) / res * 100.0
-        val aboveLevel = input.price >= res * 0.993
-        val nearLevel = distPct <= 1.5
-        val flowOk = input.buyPressure >= 1.05 || input.rvol >= 1.2
+        val aboveLevel = input.price >= res * ScalpingConfig.RETEST_ABOVE_FACTOR
+        val nearLevel = distPct <= ScalpingConfig.RETEST_MAX_DIST_PCT
 
-        // Butuh indikasi bahwa level pernah di-break: BOS / pattern BOS / strength tinggi
-        val hadBreakContext = s.bos || s.pattern == "BOS" || s.strength >= 55
+        // Wajib konteks break nyata: BOS / pattern BOS (bukan hanya strength)
+        val hadBreakContext = s.bos || s.pattern == "BOS" || s.pattern == "HH_HL" && s.bos
+        val strengthOk = s.strength >= ScalpingConfig.RETEST_MIN_STRUCTURE_STRENGTH
+        val momentumOk = momentumBullish(input.m1Candles, input.price)
 
-        if (aboveLevel && nearLevel && hadBreakContext && flowOk) {
-            return Result(
-                setup = ScalpSetupType.BREAKOUT_RETEST,
-                explanation = "Retest level breakout (jarak ${fmt(distPct)}%) + order flow/volume support.",
-                isLongBiased = true
-            )
-        }
-        return null
+        // RVOL wajib; strength + (momentum ATAU flow depth)
+        if (!aboveLevel || !nearLevel || !hadBreakContext || !rvolOk || !strengthOk) return null
+        if (!momentumOk && !flowOk) return null
+
+        return Result(
+            setup = ScalpSetupType.BREAKOUT_RETEST,
+            explanation = buildString {
+                append("Retest level breakout (jarak ${fmt(distPct)}%)")
+                append(" + RVOL ${fmt(input.rvol)}x")
+                append(" + strength ${s.strength}")
+                if (momentumOk) append(" + momentum")
+                if (hasDepthHint && flowOk) append(" + buy pressure ${fmt(input.buyPressure)}x")
+                append(".")
+            },
+            isLongBiased = true
+        )
     }
 
     // --------------------------------------------------------------------------
     // BREAKOUT
-    // Resistance broken + RVOL high + momentum + order flow
     // -------------------------------------------------------------------------
     private fun detectBreakout(input: Input): Result? {
         val s = input.structure
@@ -161,18 +182,17 @@ object ScalpSetupDetector {
         val price = input.price
 
         val broken = when {
-            res != null && res > 0.0 -> price >= res * 0.998
+            res != null && res > 0.0 -> price >= res * ScalpingConfig.BREAKOUT_ABOVE_FACTOR
             s.bos && s.bias == StructureBias.BULLISH -> true
             input.regime.regime == MarketRegime.BREAKOUT -> true
             else -> false
         }
         if (!broken) return null
 
-        val rvolOk = input.rvol >= 1.5
-        val flowOk = input.buyPressure >= 1.15
+        val rvolOk = input.rvol >= ScalpingConfig.RVOL_BREAKOUT_MIN
+        val flowOk = input.buyPressure >= ScalpingConfig.BUY_PRESSURE_BREAKOUT
         val momentumOk = momentumBullish(input.m1Candles, price)
 
-        // Minimal 2 dari 3 konfirmasi (volume / flow / momentum), atau regime BREAKOUT + 1
         val confirms = listOf(rvolOk, flowOk, momentumOk).count { it }
         val regimeBreak = input.regime.regime == MarketRegime.BREAKOUT
         if (confirms < 2 && !(regimeBreak && confirms >= 1)) return null
@@ -193,7 +213,6 @@ object ScalpSetupDetector {
 
     // --------------------------------------------------------------------------
     // TREND_PULLBACK
-    // Trend clear + pullback ke support/EMA + recovery momentum
     // -------------------------------------------------------------------------
     private fun detectTrendPullback(input: Input): Result? {
         val regime = input.regime.regime
@@ -209,7 +228,7 @@ object ScalpSetupDetector {
         val price = input.price
         val support = input.structure.support
         val nearSupport = support != null && support > 0.0 &&
-            abs(price - support) / support * 100.0 <= 1.2 &&
+            abs(price - support) / support * 100.0 <= ScalpingConfig.PULLBACK_SUPPORT_MAX_DIST_PCT &&
             price >= support * 0.995
 
         val nearEma = nearEmaPullback(input.m1Candles, price)
@@ -248,7 +267,6 @@ object ScalpSetupDetector {
         val lowerWick = minOf(c.open, c.close) - c.low
         val upperWick = c.high - maxOf(c.open, c.close)
         return if (bullish) {
-            // Hammer-ish: lower wick dominan, close di setengah atas
             lowerWick >= range * 0.4 && c.close >= c.low + range * 0.5 && body <= range * 0.5
         } else {
             upperWick >= range * 0.4 && c.close <= c.high - range * 0.5 && body <= range * 0.5
