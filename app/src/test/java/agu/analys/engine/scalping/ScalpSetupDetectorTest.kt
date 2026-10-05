@@ -7,6 +7,7 @@ import agu.analys.model.ScalpSetupType
 import agu.analys.model.StructureBias
 import agu.analys.model.StructureSnapshot
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -77,12 +78,11 @@ class ScalpSetupDetectorTest {
             resistance = 110.0,
             liquiditySweepDetected = true
         )
-        // Rejection hammer on last candle
         val m1 = m1Near(102.0) + candle(
             close = 102.5,
             open = 101.5,
             high = 102.8,
-            low = 99.5, // long lower wick
+            low = 99.5,
             volume = 2000.0,
             t = 99_000L
         )
@@ -100,7 +100,7 @@ class ScalpSetupDetectorTest {
     }
 
     @Test
-    fun breakoutRetest_whenFlagValid() {
+    fun breakoutRetest_whenFlagValid_andRvolHigh() {
         val structure = StructureSnapshot(
             bias = StructureBias.BULLISH,
             pattern = "BOS",
@@ -114,30 +114,78 @@ class ScalpSetupDetectorTest {
             price = 100.5,
             structure = structure,
             regime = trendingRegime(),
-            rvol = 1.3,
+            rvol = 1.6,
             buyPressure = 1.2
         )
         assertEquals(ScalpSetupType.BREAKOUT_RETEST, r.setup)
     }
 
     @Test
-    fun breakoutRetest_whenNearBrokenResistance() {
+    fun breakoutRetest_rejected_whenRvolLow() {
         val structure = StructureSnapshot(
             bias = StructureBias.BULLISH,
             pattern = "BOS",
             bos = true,
-            strength = 60,
+            strength = 65,
+            resistance = 100.0,
+            support = 95.0,
+            isBreakoutRetestValid = true
+        )
+        val r = ScalpSetupDetector.detect(
+            price = 100.5,
+            structure = structure,
+            regime = trendingRegime(),
+            rvol = 1.1,
+            buyPressure = 1.2
+        )
+        assertNotEquals(ScalpSetupType.BREAKOUT_RETEST, r.setup)
+    }
+
+    @Test
+    fun breakoutRetest_whenNearBrokenResistance_withRvolAndStrength() {
+        val structure = StructureSnapshot(
+            bias = StructureBias.BULLISH,
+            pattern = "BOS",
+            bos = true,
+            strength = 65,
             resistance = 100.0,
             support = 94.0
         )
+        val m1 = m1Near(100.3)
         val r = ScalpSetupDetector.detect(
             price = 100.3,
             structure = structure,
             regime = trendingRegime(),
-            rvol = 1.4,
-            buyPressure = 1.2
+            rvol = 1.6,
+            buyPressure = 1.2,
+            m1Candles = m1
         )
         assertEquals(ScalpSetupType.BREAKOUT_RETEST, r.setup)
+    }
+
+    @Test
+    fun breakoutRetest_rejected_onHardRanging() {
+        val structure = StructureSnapshot(
+            bias = StructureBias.BULLISH,
+            pattern = "BOS",
+            bos = true,
+            strength = 70,
+            resistance = 100.0,
+            support = 95.0,
+            isBreakoutRetestValid = true
+        )
+        val r = ScalpSetupDetector.detect(
+            price = 100.5,
+            structure = structure,
+            regime = rangingRegime(),
+            rvol = 2.0,
+            buyPressure = 1.3
+        )
+        assertNotEquals(
+            "Retest must not fire on hard ranging", 
+            ScalpSetupType.BREAKOUT_RETEST, 
+            r.setup
+        )
     }
 
     @Test
@@ -231,5 +279,12 @@ class ScalpSetupDetectorTest {
             "IDR scale should yield pullback or none, got ${r.setup}",
             r.setup == ScalpSetupType.TREND_PULLBACK || r.setup == ScalpSetupType.NONE
         )
+    }
+
+    @Test
+    fun minScoreForSetup_retestIs75() {
+        assertEquals(75, ScalpingConfig.minScoreForSetup("BREAKOUT_RETEST"))
+        assertEquals(60, ScalpingConfig.minScoreForSetup("TREND_PULLBACK"))
+        assertEquals(60, ScalpingConfig.minScoreForSetup("LIQUIDITY_SWEEP"))
     }
 }
