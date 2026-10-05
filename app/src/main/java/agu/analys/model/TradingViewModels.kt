@@ -230,7 +230,18 @@ data class AISignalState(
     val backtestWinRatePct: Double = 0.0,
     val backtestScore: Int = 0,
     val walkForwardEfficiencyPct: Double = 0.0,
-    val regimeDetected: String = ""
+    val regimeDetected: String = "",
+    /** Output pipeline scalping KriptoYoi (kosong untuk swing/intraday/offline). */
+    val scalpingSetup: String = "",
+    val scalpingScore: Int = 0,
+    val scalpingScoreCategory: String = "",
+    /** Rincian skor, mis. "Struktur 18/25 · MTF 10/15 · ...". */
+    val scalpingScoreDetail: String = "",
+    val scalpingRegime: String = "",
+    val scalpingDirection: String = "",
+    /** Zona entry dari ScalpingRiskEngine. [entryPrice] tetap harga saat sinyal. */
+    val entryZoneLow: Double = 0.0,
+    val entryZoneHigh: Double = 0.0
 )
 
 data class TradingPair(

@@ -1465,6 +1465,15 @@ private fun SignalLogItemCard(
 
             Spacer(Modifier.height(8.dp))
 
+            if (log.scalpingSetup.isNotBlank()) {
+                Text(
+                    text = "Setup: ${agu.analys.util.ScalpingLabels.setup(log.scalpingSetup)} • Skor engine ${log.scalpingScore}/100 (${log.scalpingScoreCategory})",
+                    color = TvTextSecondary,
+                    fontSize = 9.sp
+                )
+                Spacer(Modifier.height(6.dp))
+            }
+
             // MIDDLE ROW: Entry Price, Confidence Score at Firing, Performance Chip
             Row(
                 modifier = Modifier.fillMaxWidth(),

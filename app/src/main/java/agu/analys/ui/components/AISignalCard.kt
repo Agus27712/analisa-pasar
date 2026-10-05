@@ -183,9 +183,12 @@ fun AISignalCard(
             Spacer(Modifier.height(14.dp))
             Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 LevelRow("ENTRY / MASUK", formatLevel(signal.entryPrice, quoteAsset), TvTextPrimary)
-                LevelRow("TP1 • 2× ATR", formatLevel(signal.targetPrice1, quoteAsset), TvGreen)
-                LevelRow("TP2 • 3,5× ATR", formatLevel(signal.targetPrice2, quoteAsset), TvGreen)
-                LevelRow("STOP LOSS • 1,5× ATR", formatLevel(signal.stopLoss, quoteAsset), TvRed)
+                if (signal.scalpingSetup.isNotBlank() && signal.entryZoneHigh > 0.0) {
+                    LevelRow("ZONA ENTRY", "${formatLevel(signal.entryZoneLow, quoteAsset)} – ${formatLevel(signal.entryZoneHigh, quoteAsset)}", TvTextPrimary)
+                }
+                LevelRow(if (signal.scalpingSetup.isNotBlank()) "TP1 • dinamis (fee + ATR)" else "TP1 • 2× ATR", formatLevel(signal.targetPrice1, quoteAsset), TvGreen)
+                LevelRow(if (signal.scalpingSetup.isNotBlank()) "TP2 • dinamis (fee + ATR)" else "TP2 • 3,5× ATR", formatLevel(signal.targetPrice2, quoteAsset), TvGreen)
+                LevelRow(if (signal.scalpingSetup.isNotBlank()) "STOP LOSS • struktur + ATR" else "STOP LOSS • 1,5× ATR", formatLevel(signal.stopLoss, quoteAsset), TvRed)
                 LevelRow("R:R MATEMATIS", signal.riskRewardRatio, TvTextPrimary)
             }
             Spacer(Modifier.height(10.dp))
@@ -198,6 +201,12 @@ fun AISignalCard(
                 }
                 if (detailsExpanded) {
                     Column(modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                        if (signal.scalpingSetup.isNotBlank()) {
+                            LearningFactorRow("Setup Scalping", "${agu.analys.util.ScalpingLabels.setup(signal.scalpingSetup)} • Skor ${signal.scalpingScore}/100 (${signal.scalpingScoreCategory})", "Setup adalah pola masuk yang terdeteksi engine (breakout, retest, liquidity sweep, atau pullback). Tanpa setup valid, sinyal tetap WAIT.")
+                            if (signal.scalpingScoreDetail.isNotBlank()) {
+                                LearningFactorRow("Rincian Skor", signal.scalpingScoreDetail, "Skor 0–100 dijumlah dari 7 komponen berbobot. Skor tinggi menunjukkan setup kuat, bukan jaminan profit.")
+                            }
+                        }
                         LearningFactorRow("Market Regime", findReason(signal, "Market regime"), "Kondisi umum pasar: trending, sideways, transisi, atau volatilitas tinggi.")
                         LearningFactorRow("RSI (14)", findReason(signal, "RSI"), "RSI mengukur momentum. Di atas 70 disebut Jenuh Beli (Overbought, rawan koreksi), di bawah 30 Jenuh Jual (Oversold, potensi rebound).")
                         LearningFactorRow("EMA 20 / EMA 50", findReason(signal, "EMA20"), "EMA membaca struktur tren. Harga & EMA20 di atas EMA50 menandakan Bullish, sedangkan di bawahnya menandakan Bearish.")

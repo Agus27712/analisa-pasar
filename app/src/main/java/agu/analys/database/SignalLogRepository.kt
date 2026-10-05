@@ -67,7 +67,11 @@ class SignalLogRepository(
         stopLoss: Double = 0.0,
         reasoning: String = "",
         scalpingStage: String = "",
-        exchange: String = "TOKOCRYPTO"
+        exchange: String = "TOKOCRYPTO",
+        scalpingSetup: String = "",
+        scalpingScore: Int = 0,
+        scalpingScoreCategory: String = "",
+        scalpingRegime: String = ""
     ) {
         if (entryPrice <= 0.0 || symbol.isBlank() || action.equals("HOLD", ignoreCase = true)) return
 
@@ -128,7 +132,12 @@ class SignalLogRepository(
                         troughPrice = newTrough,
                         maxProfitPct = newMaxProfit,
                         maxDrawdownPct = newMaxDrawdown,
-                        exchange = normExchange
+                        exchange = normExchange,
+                        // Setup/skor dicatat saat sinyal pertama terpicu; hanya diisi bila sebelumnya kosong.
+                        scalpingSetup = primaryLog.scalpingSetup.ifBlank { scalpingSetup },
+                        scalpingScore = if (primaryLog.scalpingSetup.isBlank()) scalpingScore else primaryLog.scalpingScore,
+                        scalpingScoreCategory = primaryLog.scalpingScoreCategory.ifBlank { scalpingScoreCategory },
+                        scalpingRegime = primaryLog.scalpingRegime.ifBlank { scalpingRegime }
                     )
 
                     dao.updateLog(updatedLog)
@@ -167,7 +176,11 @@ class SignalLogRepository(
                     peakPrice = entryPrice,
                     troughPrice = entryPrice,
                     maxProfitPct = 0.0,
-                    maxDrawdownPct = 0.0
+                    maxDrawdownPct = 0.0,
+                    scalpingSetup = scalpingSetup,
+                    scalpingScore = scalpingScore,
+                    scalpingScoreCategory = scalpingScoreCategory,
+                    scalpingRegime = scalpingRegime
                 )
                 dao.insertLog(entity)
             } catch (_: Exception) {}

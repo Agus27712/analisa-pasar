@@ -2,6 +2,8 @@ package agu.analys.database
 
 import android.content.Context
 import androidx.room.*
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import agu.analys.AppContextProvider
 import kotlinx.coroutines.flow.Flow
 
@@ -69,7 +71,13 @@ data class SignalLogEntity(
     val peakPrice: Double = 0.0,            // Highest price observed
     val troughPrice: Double = 0.0,          // Lowest price observed
     val resolvedAt: Long? = null,           // Timestamp when resolved
-    val resolutionNote: String? = null      // Detail note e.g. "Hit TP1 at Rp 1.520.000.000 (+2.8%)"
+    val resolutionNote: String? = null,     // Detail note e.g. "Hit TP1 at Rp 1.520.000.000 (+2.8%)"
+
+    // Pipeline scalping KriptoYoi — dicatat saat sinyal pertama kali terpicu (untuk analisis akurasi per setup/skor)
+    val scalpingSetup: String = "",         // BREAKOUT, BREAKOUT_RETEST, LIQUIDITY_SWEEP, TREND_PULLBACK
+    val scalpingScore: Int = 0,             // Skor engine 0-100
+    val scalpingScoreCategory: String = "", // NO_TRADE, WEAK, WATCH, STRONG, VERY_STRONG
+    val scalpingRegime: String = ""         // Regime pasar dari MarketRegimeEngine
 )
 
 @Dao
@@ -186,7 +194,7 @@ interface SignalLogDao {
 
 @Database(
     entities = [RealTradeEntity::class, RealOpenOrderEntity::class, SignalLogEntity::class, TradeHistoryRecordEntity::class],
-    version = 7,
+    version = 8,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -198,6 +206,19 @@ abstract class AppDatabase : RoomDatabase() {
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
+        /**
+         * 7 -> 8: tambah kolom setup/skor/regime engine scalping ke signal_logs.
+         * Migrasi nyata (bukan destruktif) agar riwayat trade, log sinyal, dan jurnal tidak terhapus.
+         */
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE signal_logs ADD COLUMN scalpingSetup TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE signal_logs ADD COLUMN scalpingScore INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE signal_logs ADD COLUMN scalpingScoreCategory TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE signal_logs ADD COLUMN scalpingRegime TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         fun getInstance(): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val context = AppContextProvider.context
@@ -206,6 +227,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "agu_analys_db"
                 )
+                .addMigrations(MIGRATION_7_8)
                 .fallbackToDestructiveMigration()
                 .build()
                 INSTANCE = instance

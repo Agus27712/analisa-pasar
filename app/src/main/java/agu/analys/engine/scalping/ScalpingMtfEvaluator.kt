@@ -402,7 +402,21 @@ object ScalpingMtfEvaluator {
             backtestWinRatePct = 0.0,
             backtestScore = 0,
             walkForwardEfficiencyPct = 0.0,
-            regimeDetected = regime.regime.name
+            regimeDetected = regime.regime.name,
+            scalpingSetup = setup.name,
+            scalpingScore = score.total,
+            scalpingScoreCategory = score.category,
+            scalpingScoreDetail = "Struktur ${score.structure}/${SignalScoringEngine.MAX_STRUCTURE} · " +
+                "MTF ${score.mtf}/${SignalScoringEngine.MAX_MTF} · " +
+                "Price Action ${score.priceAction}/${SignalScoringEngine.MAX_PRICE_ACTION} · " +
+                "Volume ${score.volume}/${SignalScoringEngine.MAX_VOLUME} · " +
+                "Momentum ${score.momentum}/${SignalScoringEngine.MAX_MOMENTUM} · " +
+                "Order Flow ${score.orderFlow}/${SignalScoringEngine.MAX_ORDER_FLOW} · " +
+                "Volatilitas ${score.volatility}/${SignalScoringEngine.MAX_VOLATILITY}",
+            scalpingRegime = regime.regime.name,
+            scalpingDirection = direction.name,
+            entryZoneLow = if (setup != ScalpSetupType.NONE) riskLevels?.entryZone?.low ?: 0.0 else 0.0,
+            entryZoneHigh = if (setup != ScalpSetupType.NONE) riskLevels?.entryZone?.high ?: 0.0 else 0.0
         )
 
         val rejectionReason = when {

@@ -367,11 +367,22 @@ fun TradeLogDetailDialog(
                                 // Cat E: AI Decision Reasoning
                                 CategoryBox(
                                     title = "E. AI Evaluator Decision & Key Factors",
-                                    items = listOf(
-                                        "Score" to (activeSnapshot.confidenceScore?.let { "$it / 100" } ?: "-"),
-                                        "Regime" to (activeSnapshot.marketRegime ?: "-"),
-                                        "Pola" to (activeSnapshot.patternDetected ?: "-")
-                                    )
+                                    items = buildList {
+                                        add("Score" to (activeSnapshot.confidenceScore?.let { "$it / 100" } ?: "-"))
+                                        add("Regime" to (activeSnapshot.marketRegime ?: "-"))
+                                        add("Pola" to (activeSnapshot.patternDetected ?: "-"))
+                                        activeSnapshot.scalpingSetup?.let { setupName ->
+                                            add("Setup Scalping" to agu.analys.util.ScalpingLabels.setup(setupName))
+                                            add("Skor Engine" to "${activeSnapshot.scalpingScore ?: "-"} / 100 (${activeSnapshot.scalpingScoreCategory ?: "-"})")
+                                            activeSnapshot.scalpingScoreDetail?.let { add("Rincian Skor" to it) }
+                                            activeSnapshot.scalpingRegime?.let { add("Regime Engine" to it) }
+                                            val zl = activeSnapshot.entryZoneLow
+                                            val zh = activeSnapshot.entryZoneHigh
+                                            if (zl != null && zh != null) {
+                                                add("Zona Entry" to "${PriceFormatter.formatPrice(zl, quoteAsset = quote)} – ${PriceFormatter.formatPrice(zh, quoteAsset = quote)}")
+                                            }
+                                        }
+                                    }
                                 )
 
                                 if (activeSnapshot.reasons.isNotEmpty()) {

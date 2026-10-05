@@ -47,7 +47,16 @@ data class TradeSignalSnapshot(
     val confidenceScore: Int? = null,
     val marketRegime: String? = null,
     val patternDetected: String? = null,
-    val reasons: List<String> = emptyList()
+    val reasons: List<String> = emptyList(),
+
+    // 6. Pipeline scalping KriptoYoi (setup, skor, regime engine, zona entry)
+    val scalpingSetup: String? = null,
+    val scalpingScore: Int? = null,
+    val scalpingScoreCategory: String? = null,
+    val scalpingScoreDetail: String? = null,
+    val scalpingRegime: String? = null,
+    val entryZoneLow: Double? = null,
+    val entryZoneHigh: Double? = null
 ) {
     fun toJson(): JSONObject {
         val obj = JSONObject()
@@ -85,6 +94,15 @@ data class TradeSignalSnapshot(
         confidenceScore?.let { obj.put("confidenceScore", it) }
         marketRegime?.let { obj.put("marketRegime", it) }
         patternDetected?.let { obj.put("patternDetected", it) }
+
+        // Category 6
+        scalpingSetup?.let { obj.put("scalpingSetup", it) }
+        scalpingScore?.let { obj.put("scalpingScore", it) }
+        scalpingScoreCategory?.let { obj.put("scalpingScoreCategory", it) }
+        scalpingScoreDetail?.let { obj.put("scalpingScoreDetail", it) }
+        scalpingRegime?.let { obj.put("scalpingRegime", it) }
+        entryZoneLow?.let { obj.put("entryZoneLow", it) }
+        entryZoneHigh?.let { obj.put("entryZoneHigh", it) }
 
         if (reasons.isNotEmpty()) {
             val arr = JSONArray()
@@ -131,7 +149,14 @@ data class TradeSignalSnapshot(
                 confidenceScore = if (json.has("confidenceScore")) json.optInt("confidenceScore") else null,
                 marketRegime = json.optString("marketRegime").takeIf { it.isNotBlank() },
                 patternDetected = json.optString("patternDetected").takeIf { it.isNotBlank() },
-                reasons = reasonsList
+                reasons = reasonsList,
+                scalpingSetup = json.optString("scalpingSetup").takeIf { it.isNotBlank() },
+                scalpingScore = if (json.has("scalpingScore")) json.optInt("scalpingScore") else null,
+                scalpingScoreCategory = json.optString("scalpingScoreCategory").takeIf { it.isNotBlank() },
+                scalpingScoreDetail = json.optString("scalpingScoreDetail").takeIf { it.isNotBlank() },
+                scalpingRegime = json.optString("scalpingRegime").takeIf { it.isNotBlank() },
+                entryZoneLow = if (json.has("entryZoneLow")) json.optDouble("entryZoneLow") else null,
+                entryZoneHigh = if (json.has("entryZoneHigh")) json.optDouble("entryZoneHigh") else null
             )
         }
 
@@ -219,7 +244,14 @@ data class TradeSignalSnapshot(
                 confidenceScore = signal?.confidence?.takeIf { it > 0 },
                 marketRegime = signal?.regimeDetected?.takeIf { it.isNotBlank() } ?: "NORMAL_LIQUIDITY",
                 patternDetected = signal?.patternDetected?.takeIf { it.isNotBlank() },
-                reasons = signal?.reasoning?.ifEmpty { listOf("Technical signal match strategy mode $strategyMode") } ?: emptyList()
+                reasons = signal?.reasoning?.ifEmpty { listOf("Technical signal match strategy mode $strategyMode") } ?: emptyList(),
+                scalpingSetup = signal?.scalpingSetup?.takeIf { it.isNotBlank() },
+                scalpingScore = signal?.scalpingScore?.takeIf { signal.scalpingSetup.isNotBlank() },
+                scalpingScoreCategory = signal?.scalpingScoreCategory?.takeIf { it.isNotBlank() },
+                scalpingScoreDetail = signal?.scalpingScoreDetail?.takeIf { it.isNotBlank() },
+                scalpingRegime = signal?.scalpingRegime?.takeIf { it.isNotBlank() },
+                entryZoneLow = signal?.entryZoneLow?.takeIf { it > 0.0 },
+                entryZoneHigh = signal?.entryZoneHigh?.takeIf { it > 0.0 }
             )
         }
     }

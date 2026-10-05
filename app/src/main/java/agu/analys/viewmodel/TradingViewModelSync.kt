@@ -366,7 +366,11 @@ fun TradingViewModel.initSubscriptionsAndPolling() {
                 stopLoss = transition.signal.stopLoss,
                 reasoning = transition.signal.reasoning.joinToString(" • "),
                 scalpingStage = transition.signal.scalpingStage.name,
-                exchange = prefs.marketDataSource.name
+                exchange = prefs.marketDataSource.name,
+                scalpingSetup = transition.signal.scalpingSetup,
+                scalpingScore = transition.signal.scalpingScore,
+                scalpingScoreCategory = transition.signal.scalpingScoreCategory,
+                scalpingRegime = transition.signal.scalpingRegime
             )
         }
     }
@@ -469,7 +473,9 @@ fun TradingViewModel.listenToEngineSignals() {
                     sentiment = signal.sentiment.name, entryPrice = if (signal.entryPrice > 0) signal.entryPrice else (currentTick.value?.price ?: 0.0),
                     targetPrice1 = signal.targetPrice1, targetPrice2 = signal.targetPrice2, stopLoss = signal.stopLoss,
                     reasoning = signal.reasoning.joinToString(" • "), scalpingStage = signal.scalpingStage.name,
-                    exchange = prefs.marketDataSource.name
+                    exchange = prefs.marketDataSource.name,
+                    scalpingSetup = signal.scalpingSetup, scalpingScore = signal.scalpingScore,
+                    scalpingScoreCategory = signal.scalpingScoreCategory, scalpingRegime = signal.scalpingRegime
                 )
             }
         }
