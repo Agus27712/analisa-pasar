@@ -120,6 +120,21 @@ Temuan: hasil **konsisten dengan run #8–#11** pada rentang 4× lebih panjang. 
 
 ---
 
+## Status wiring ke aplikasi (dicek pada `main` @ `dc73b0a`)
+
+**Sudah tersambung (jalur sinyal live, mode SCALPING saja):**
+`LearningTradingEngine.runScalping()` → `ScalpingMtfEvaluator` (pipeline baru) → `AISignalState` → `SignalLifecycleManager` → UI yang sudah ada (kartu radar / checkpoint / SL-TP / reasoning). Fee mengikuti `tradingFees` exchange aktif. Mode swing & intraday memakai evaluator sendiri (tidak berubah).
+
+**Belum tersambung:**
+- `MarketScannerEngine` — **belum dipanggil siapa pun** (tidak ada scanner di aplikasi).
+- Output baru pipeline **belum dibaca UI maupun log**: `Result.scalping` (`ScalpingSignal`: setup, rincian skor, entry zone, regime, direction) dan field baru `SignalAudit` (`score`, `scoreCategory`, `setup`, `direction`, `regime`). Tidak ada konsumen selain test/replay.
+- `AISignalState.entryPrice` = harga saat ini, **bukan** entry zone.
+- **Trade journal & log akurasi sinyal belum mencatat setup dan skor** tiap sinyal/trade. Akibatnya uji live (simulasi/real) belum bisa dipecah per setup atau per skor. Catat setup + skor (+ regime) ke log sinyal / journal dulu sebelum membandingkan setup mana yang bekerja di data live.
+
+> Catatan: pemilik repo akan menguji dengan data live (simulasi & trade nyata) lewat aplikasi di branch `main`.
+
+---
+
 ## Wiring residual (selesai)
 
 `ScalpingMtfEvaluator` memakai:
@@ -161,7 +176,8 @@ File test utama: IndicatorMath*, MarketRegime*, ScalpSetupDetector*, SignalScori
 1. **(Disarankan next)** Ketatkan **TREND_PULLBACK** mirror retest: skor min 70 dan/atau RVOL/MTF lebih ketat — lalu **rerun** `real-tokocrypto-replay` bandingkan tabel per setup.
 2. Evaluasi geometri risk / time stop **setelah** gate setup (jangan dulu ubah risk tanpa baseline replay baru).
 3. Short side penuh — opsional, jangan prioritas.
-4. Wire scanner ke UI screener — di luar scope engine murni jika UI frozen.
+4. Wire scanner ke UI screener — di luar scope engine murni jika UI frozen. (Lihat § Status wiring ke aplikasi.)
+4b. Catat setup + skor + regime ke log sinyal / trade journal (tanpa ubah tampilan UI) — prasyarat analisis uji live per setup.
 5. Historical Edge nyata dari journal / per-setup — **setelah** data cukup + edge terindikasi.
 6. PR → main hanya jika pemilik setuju; test hijau saja **bukan** bukti edge trading.
 
