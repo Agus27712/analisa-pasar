@@ -1,11 +1,13 @@
 package agu.analys.engine
 
 import agu.analys.model.CandleBar
+import agu.analys.model.StructureBias
+import agu.analys.model.StructureSnapshot
 import kotlin.math.abs
 
 /**
- * Learning-only market structure derived from real candles supplied by INDODAX.
- * It never creates or substitutes market values.
+ * Market structure dari candle exchange (Indodax / Tokocrypto).
+ * Tidak mengarang level; exchange-agnostic (IDR & USDT).
  */
 data class MarketStructureSnapshot(
     val trend: String,
@@ -29,7 +31,14 @@ data class MarketStructureSnapshot(
     val ema13Value: Double = 0.0,
     val ema21Value: Double = 0.0,
     val isEmaBounceValid: Boolean = false,
-    val akademiCryptoScalpingGrade: String = "Neutral"
+    val akademiCryptoScalpingGrade: String = "Neutral",
+    /** P0.4 — Change of Character */
+    val hasChoCH: Boolean = false,
+    val chochDirection: String = "", // bullish | bearish | ""
+    /** P0.4 — 0–100 structure quality */
+    val structureStrength: Int = 0,
+    val hasBullishBOS: Boolean = false,
+    val hasBearishBOS: Boolean = false
 )
 
 data class MicroStructureSnapshot(
@@ -53,45 +62,44 @@ object MarketStructureAnalyzer {
                 explanation = "Data kurang untuk micro-structure"
             )
         }
-        
+
         val recent = candles.takeLast(40)
         val swingHighs = mutableListOf<Double>()
         val swingLows = mutableListOf<Double>()
-        
-        // 3-candle swing detection
+
         for (i in 1 until recent.lastIndex) {
             val c = recent[i]
             val prev = recent[i - 1]
             val next = recent[i + 1]
-            
+
             if (c.high > prev.high && c.high > next.high) swingHighs += c.high
             if (c.low < prev.low && c.low < next.low) swingLows += c.low
         }
-        
+
         val lastSwingHigh = swingHighs.lastOrNull()
         val lastSwingLow = swingLows.lastOrNull()
-        
+
         var hasBullishBOS = false
         var hasBearishBOS = false
         var hasBullishSweep = false
         var hasBearishSweep = false
-        
+
         val checkWindow = recent.takeLast(3)
-        
+
         if (lastSwingHigh != null) {
             hasBullishBOS = checkWindow.any { it.close > lastSwingHigh }
             if (!hasBullishBOS) {
                 hasBearishSweep = checkWindow.any { it.high > lastSwingHigh && it.close <= lastSwingHigh }
             }
         }
-        
+
         if (lastSwingLow != null) {
             hasBearishBOS = checkWindow.any { it.close < lastSwingLow }
             if (!hasBearishBOS) {
                 hasBullishSweep = checkWindow.any { it.low < lastSwingLow && it.close >= lastSwingLow }
             }
         }
-        
+
         val trend = when {
             hasBullishBOS -> "Bullish Micro"
             hasBearishBOS -> "Bearish Micro"
@@ -99,7 +107,7 @@ object MarketStructureAnalyzer {
             hasBearishSweep -> "Sweep High (Reversal Down)"
             else -> "Ranging Micro"
         }
-        
+
         val explanation = when (trend) {
             "Bullish Micro" -> "Harga close menembus micro resistance (BOS). Tren naik jangka pendek."
             "Bearish Micro" -> "Harga close menembus micro support (BOS). Tren turun jangka pendek."
@@ -107,7 +115,7 @@ object MarketStructureAnalyzer {
             "Sweep High (Reversal Down)" -> "Jebakan ekor di resistance (Liquidity Sweep). Potensi pantulan turun."
             else -> "Konsolidasi di dalam micro-swing."
         }
-        
+
         return MicroStructureSnapshot(
             trend = trend,
             lastSwingHigh = lastSwingHigh,
@@ -179,19 +187,16 @@ object MarketStructureAnalyzer {
             recent.count { abs(it.high - res) / res <= 0.008 }
         } ?: 1
 
-        // EMA 13 & 21 calculation
         val closes = DoubleArray(candles.size) { candles[it].close }
         val ema13 = agu.analys.engine.indicators.IndicatorMath.ema(closes, minOf(13, closes.size))
         val ema21 = agu.analys.engine.indicators.IndicatorMath.ema(closes, minOf(21, closes.size))
         val isEmaBounce = last >= ema13 * 0.995 && ema13 >= ema21 * 0.998
 
-        // Liquidity Sweep Check: recent wick pierced below support/swing low but closed above
         val checkWindow = recent.takeLast(4)
         val liquiditySweep = support?.let { sup ->
             checkWindow.any { it.low < sup * 0.998 && it.close >= sup }
         } ?: false
 
-        // Breakout & Retest Check
         val hadPreviousBreakout = resistance?.let { res ->
             recent.dropLast(3).any { it.high > res }
         } ?: false
@@ -199,6 +204,38 @@ object MarketStructureAnalyzer {
             abs(last - res) / res <= 0.015 && last >= res * 0.993
         } ?: false
         val isBreakoutRetestValid = hadPreviousBreakout && isRetestingNow && isEmaBounce
+
+        // BOS on last swing
+        val lastSh = swingHighs.lastOrNull()
+        val lastSl = swingLows.lastOrNull()
+        val hasBullishBOS = lastSh != null && checkWindow.any { it.close > lastSh }
+        val hasBearishBOS = lastSl != null && checkWindow.any { it.close < lastSl }
+
+        // CHoCH: after opposing structure, price breaks the other way
+        // Bullish CHoCH: was making LH/LL then breaks last swing high
+        // Bearish CHoCH: was making HH/HL then breaks last swing low
+        val hasBullishChoCH = hasLHLL && hasBullishBOS
+        val hasBearishChoCH = hasHHHL && hasBearishBOS
+        val hasChoCH = hasBullishChoCH || hasBearishChoCH
+        val chochDirection = when {
+            hasBullishChoCH -> "bullish"
+            hasBearishChoCH -> "bearish"
+            else -> ""
+        }
+
+        val structureStrength = computeStrength(
+            hasHHHL = hasHHHL,
+            hasLHLL = hasLHLL,
+            swingHighCount = swingHighs.size,
+            swingLowCount = swingLows.size,
+            supportTouches = supportTouches,
+            resistanceTouches = resistanceTouches,
+            isEmaBounce = isEmaBounce,
+            hasChoCH = hasChoCH,
+            hasBOS = hasBullishBOS || hasBearishBOS,
+            liquiditySweep = liquiditySweep,
+            isBreakoutRetest = isBreakoutRetestValid
+        )
 
         val breakoutStatus = when {
             isBreakoutRetestValid -> "Breakout & Retest Valid (S/R Flip + EMA Bounce)"
@@ -217,16 +254,18 @@ object MarketStructureAnalyzer {
         }
 
         val trendExplanation = when {
+            hasBullishChoCH -> "CHoCH Bullish: struktur turun putus; potensi ganti karakter ke naik."
+            hasBearishChoCH -> "CHoCH Bearish: struktur naik putus; potensi ganti karakter ke turun."
             hasHHHL -> "Uptrend (Higher High + Higher Low): Pembeli memegang kendali. Cari entry saat Breakout & Retest atau Pantulan EMA 13/21."
             hasLHLL -> "Downtrend (Lower High + Lower Low): Penjual memegang kendali. Hindari posisi BUY spot kecuali terjadi Liquidity Sweep kuat."
-            else -> "Sideways / Ranging: Harga bergerak datar. Menurut Akademi Crypto, area ini sangat rawan False Breakout untuk breakout trader. Disarankan Range Trading atau tunggu Breakout & Retest valid."
+            else -> "Sideways / Ranging: Harga bergerak datar. Area rawan False Breakout. Tunggu Breakout & Retest valid."
         }
 
         val usedFallback = swingLows.isEmpty() || swingHighs.isEmpty()
         val structureExplanation = if (usedFallback) {
             "Swing belum lengkap; S/R menggunakan harga ekstrem candle terbaru."
         } else {
-            "Support (Disentuh ${supportTouches}x) & Resistance (Disentuh ${resistanceTouches}x). Pembelian di Support (Supply/Demand) memiliki Risk-to-Reward optimal."
+            "Support (Disentuh ${supportTouches}x) & Resistance (Disentuh ${resistanceTouches}x). Strength $structureStrength/100."
         }
 
         return MarketStructureSnapshot(
@@ -251,7 +290,72 @@ object MarketStructureAnalyzer {
             ema13Value = ema13,
             ema21Value = ema21,
             isEmaBounceValid = isEmaBounce,
-            akademiCryptoScalpingGrade = scalpingGrade
+            akademiCryptoScalpingGrade = scalpingGrade,
+            hasChoCH = hasChoCH,
+            chochDirection = chochDirection,
+            structureStrength = structureStrength,
+            hasBullishBOS = hasBullishBOS,
+            hasBearishBOS = hasBearishBOS
         )
+    }
+
+    /**
+     * Mapping ke [StructureSnapshot] untuk pipeline scalping KriptoYoi.
+     */
+    fun toStructureSnapshot(snap: MarketStructureSnapshot): StructureSnapshot {
+        if (!snap.dataEnough) {
+            return StructureSnapshot(explanation = "Data struktur belum cukup.")
+        }
+        val bias = when {
+            snap.hasHigherHighsHigherLows || snap.chochDirection == "bullish" -> StructureBias.BULLISH
+            snap.hasLowerHighsLowerLows || snap.chochDirection == "bearish" -> StructureBias.BEARISH
+            else -> StructureBias.NEUTRAL
+        }
+        val pattern = when {
+            snap.hasChoCH -> "CHOCH"
+            snap.hasBullishBOS || snap.hasBearishBOS -> "BOS"
+            snap.hasHigherHighsHigherLows -> "HH_HL"
+            snap.hasLowerHighsLowerLows -> "LH_LL"
+            else -> "RANGING"
+        }
+        return StructureSnapshot(
+            bias = bias,
+            pattern = pattern,
+            bos = snap.hasBullishBOS || snap.hasBearishBOS,
+            choch = snap.hasChoCH,
+            strength = snap.structureStrength,
+            lastSwingHigh = snap.lastSwingHigh,
+            lastSwingLow = snap.lastSwingLow,
+            support = snap.support,
+            resistance = snap.resistance,
+            liquiditySweepDetected = snap.liquiditySweepDetected,
+            isBreakoutRetestValid = snap.isBreakoutAndRetestValid,
+            explanation = snap.trendExplanation
+        )
+    }
+
+    private fun computeStrength(
+        hasHHHL: Boolean,
+        hasLHLL: Boolean,
+        swingHighCount: Int,
+        swingLowCount: Int,
+        supportTouches: Int,
+        resistanceTouches: Int,
+        isEmaBounce: Boolean,
+        hasChoCH: Boolean,
+        hasBOS: Boolean,
+        liquiditySweep: Boolean,
+        isBreakoutRetest: Boolean
+    ): Int {
+        var s = 35
+        if (hasHHHL || hasLHLL) s += 18
+        if (swingHighCount >= 3 && swingLowCount >= 3) s += 10
+        if (supportTouches >= 2 || resistanceTouches >= 2) s += 8
+        if (isEmaBounce) s += 8
+        if (hasBOS) s += 10
+        if (hasChoCH) s += 12
+        if (liquiditySweep) s += 6
+        if (isBreakoutRetest) s += 10
+        return s.coerceIn(0, 100)
     }
 }

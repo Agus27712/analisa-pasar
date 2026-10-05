@@ -9,11 +9,12 @@ import org.junit.Assert.*
 import org.junit.Test
 
 /**
- * FASE 2 & 7 — Unit test untuk kasus edge yang diaudit dan perbaikannya di Fase 6:
+ * FASE 2 & 7 + P1.4 — Unit test kasus edge evaluator scalping (pipeline KriptoYoi):
  *  1. Orderbook kosong -> ditahan sebagai HOLD (STEP2_ORDERBOOK_EMPTY), bukan lolos semu.
  *  2. Orderbook stale (>30s) -> ditolak sebagai HOLD (STEP2_ORDERBOOK_STALE).
  *  3. Momentum T0 vs T1 -> T0 ditahan (menunggu orderbook), T1 terpicu BUY setelah konfirmasi.
  *  4. Checkpoint 4 (Net R:R) -> terbukti secara aljabar mencapai Net R:R >= 1.05 dengan fee default.
+ *  5. P1.4: tanpa setup valid -> WAIT (STEP3_NO_SETUP); audit membawa skor, setup, dan arah.
  */
 class ScalpingMtfEvaluatorAuditTest {
 
@@ -30,37 +31,35 @@ class ScalpingMtfEvaluatorAuditTest {
     }
 
     /**
-     * 17 candle zigzag (naik-turun tipis di sekitar 1000) + 2 candle konsolidasi
-     * + 1 candle breakout volume besar. Dipilih supaya:
-     *  - RSI 1M ~64 (sehat, tidak overbought >=80)
-     *  - volatilitas rendah (~0.43%) -> tidak dianggap noise berbahaya
-     *  - price > VWAP DAN VSA breakout terdeteksi (step3 lolos dari dua sisi)
-     *  - m15 sengaja HANYA 20 candle (<40) supaya MarketStructureAnalyzer tidak
-     *    dipakai dan hasRoomToGrow otomatis true (resistance = price*1.05 fallback)
+     * Skenario tren naik deterministik (BUKAN random): drift + gelombang sinus, dengan candle
+     * breakout bervolume besar di akhir. Memberi struktur M15 (>= 40 candle) sehingga pipeline
+     * mendeteksi setup valid, skor >= 60, dan risk plan dengan Net R:R >= 1.15 (Tokocrypto).
      */
-    private fun bullishM1Candles(): List<CandleBar> {
-        val zigzag = listOf(1000.0, 999.0, 1001.0, 999.0, 1001.0, 999.0, 1001.0, 999.0, 1001.0, 999.0, 1001.0, 999.0, 1001.0, 999.0, 1001.0, 999.0, 1000.0)
-        val candles = mutableListOf<CandleBar>()
-        var t = 0L
-        var prevClose = 1000.0
-        for (c in zigzag) {
-            t += 60_000L
-            candles.add(CandleBar(t, prevClose, c + 2.0, c - 2.0, c, 1000.0))
-            prevClose = c
+    private fun series(
+        n: Int, base: Double, drift: Double, amp: Double, freq: Double, step: Long
+    ): List<CandleBar> {
+        var prev = base
+        return (0 until n).map { i ->
+            val c = base + i * drift + amp * kotlin.math.sin(i * freq)
+            val o = prev
+            prev = c
+            CandleBar((i + 1) * step, o, maxOf(o, c) + base * 0.0015, minOf(o, c) - base * 0.0015, c, 1000.0)
         }
-        t += 60_000L
-        candles.add(CandleBar(t, 1000.0, 1001.0, 998.0, 999.0, 1500.0))       // konsolidasi 1
-        t += 60_000L
-        candles.add(CandleBar(t, 999.0, 1001.0, 998.0, 999.5, 1600.0))        // konsolidasi 2
-        t += 60_000L
-        candles.add(CandleBar(t, 999.5, 1010.0, 999.0, 1009.0, 6000.0))       // breakout volume besar
-        return candles
     }
 
-    private val h1 = flatCandles(20, 1000.0)
-    private val m15 = flatCandles(20, 1000.0) // fallback resistance, hasRoomToGrow selalu true
-    private val bullishBids = listOf(OrderBookItem(price = 1008.5, amount = 20.0, total = 20.0 * 1008.5, isBid = true))
-    private val bullishAsks = listOf(OrderBookItem(price = 1009.5, amount = 10.0, total = 10.0 * 1009.5, isBid = false))
+    private fun bullishM1Candles(): List<CandleBar> {
+        val m1 = series(90, 1000.0, 0.3, 4.0, 0.8, 60_000L).toMutableList()
+        val l = m1.last()
+        m1.add(CandleBar(l.timestamp + 60_000, l.close, l.close + 4.0, l.close - 0.5, l.close + 3.5, 4500.0))
+        return m1
+    }
+
+    private val h1 = series(60, 900.0, 0.9, 12.0, 0.5, 3_600_000L)
+    private val m15 = series(60, 950.0, 0.6, 8.0, 0.7, 900_000L)
+    private val flatH1 = flatCandles(20, 1000.0)
+    private val flatM15 = flatCandles(20, 1000.0)
+    private val bullishBids = listOf(OrderBookItem(price = 1000.0, amount = 30.0, total = 30.0 * 1000.0, isBid = true))
+    private val bullishAsks = listOf(OrderBookItem(price = 1001.0, amount = 10.0, total = 10.0 * 1001.0, isBid = false))
 
     // ---------------------------------------------------------------------
     // VERIFIKASI FASE 6: Checkpoint 4 (Net R:R >= 1.05) tercapai dengan fee default
@@ -183,5 +182,83 @@ class ScalpingMtfEvaluatorAuditTest {
         assertTrue("T1 dengan orderbook bullish harus lolos step2", t1!!.audit.step2Ok)
         assertEquals(SignalAction.HOLD, t0.signal.action)
         assertEquals(SignalAction.BUY, t1.signal.action)
+    }
+
+    // ---------------------------------------------------------------------
+    // P1.4 — pipeline: setup, skor, arah, risk plan
+    // ---------------------------------------------------------------------
+
+    @Test
+    fun `P1_4 - tanpa struktur M15 dan setup, arah WAIT dengan alasan STEP3_NO_SETUP`() {
+        val price = bullishM1Candles().last().close
+        val result = ScalpingMtfEvaluator.evaluate(
+            price = price, h1Candles = flatH1, m15Candles = flatM15, m1Candles = bullishM1Candles(),
+            bids = bullishBids, asks = bullishAsks, symbol = "BTCIDR"
+        )
+
+        assertNotNull(result)
+        assertEquals(SignalAction.HOLD, result!!.signal.action)
+        assertEquals("STEP3_NO_SETUP", result.audit.rejectionReason)
+        assertEquals("NONE", result.audit.setup)
+        assertEquals("WAIT", result.audit.direction)
+        assertFalse(result.audit.step3Ok)
+    }
+
+    @Test
+    fun `P1_4 - audit dan scalping signal membawa skor, setup, dan arah LONG`() {
+        val price = bullishM1Candles().last().close
+        val result = ScalpingMtfEvaluator.evaluate(
+            price = price, h1Candles = h1, m15Candles = m15, m1Candles = bullishM1Candles(),
+            bids = bullishBids, asks = bullishAsks, symbol = "BTCIDR"
+        )
+
+        assertNotNull(result)
+        val r = result!!
+        assertEquals(SignalAction.BUY, r.signal.action)
+        assertEquals("LONG", r.audit.direction)
+        assertTrue("skor >= ${ScalpingMtfEvaluator.MIN_SCORE_LONG}", r.audit.score >= ScalpingMtfEvaluator.MIN_SCORE_LONG)
+        assertNotEquals("NONE", r.audit.setup)
+        assertEquals(agu.analys.model.SignalDirection.LONG, r.scalping.direction)
+        assertNotNull(r.scalping.risk)
+        assertEquals(r.audit.score, r.scalping.score.total)
+        assertEquals(r.audit.score, r.signal.confidence)
+        assertTrue(r.scalping.reasoning.isNotEmpty())
+    }
+
+    @Test
+    fun `P1_4 - SL di bawah harga, TP1 dan TP2 di atas harga, Net RR minimal 1_15`() {
+        val price = bullishM1Candles().last().close
+        val r = ScalpingMtfEvaluator.evaluate(
+            price = price, h1Candles = h1, m15Candles = m15, m1Candles = bullishM1Candles(),
+            bids = bullishBids, asks = bullishAsks, symbol = "BTCIDR"
+        )!!
+
+        assertTrue(r.signal.stopLoss < price)
+        assertTrue(r.signal.targetPrice1 > price)
+        assertTrue(r.signal.targetPrice2 > r.signal.targetPrice1)
+        assertTrue("netRr=${r.audit.rr}", r.audit.rr >= 1.15)
+    }
+
+    @Test
+    fun `P1_4 - fee Indodax lebih mahal menggeser TP2 lebih jauh dibanding Tokocrypto`() {
+        val price = bullishM1Candles().last().close
+        val toko = ScalpingMtfEvaluator.evaluate(
+            price = price, h1Candles = h1, m15Candles = m15, m1Candles = bullishM1Candles(),
+            bids = bullishBids, asks = bullishAsks, fees = TradingFeeConfig(0.10, 0.10, 0.10, 0.10)
+        )!!
+        val indodax = ScalpingMtfEvaluator.evaluate(
+            price = price, h1Candles = h1, m15Candles = m15, m1Candles = bullishM1Candles(),
+            bids = bullishBids, asks = bullishAsks, fees = TradingFeeConfig(0.11, 0.21, 0.32, 0.42)
+        )!!
+
+        assertTrue(indodax.signal.targetPrice2 >= toko.signal.targetPrice2)
+    }
+
+    @Test
+    fun `P1_4 - data M1 kurang dari 20 candle tidak crash dan hasilnya null`() {
+        val result = ScalpingMtfEvaluator.evaluate(
+            price = 1000.0, h1Candles = h1, m15Candles = m15, m1Candles = bullishM1Candles().take(10)
+        )
+        assertNull(result)
     }
 }

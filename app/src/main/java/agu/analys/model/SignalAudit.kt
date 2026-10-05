@@ -17,7 +17,13 @@ data class SignalAudit(
     val isOrderBookEmpty: Boolean = false,
     val orderBookAgeMs: Long = 0L,
     /** False berarti replay/diagnostic tidak memiliki snapshot historical order book. */
-    val orderBookDataAvailable: Boolean = false
+    val orderBookDataAvailable: Boolean = false,
+    /** Pipeline KriptoYoi (P1.4) — default aman agar backward compatible. */
+    val score: Int = 0,
+    val scoreCategory: String = "NO_TRADE",
+    val setup: String = "NONE",
+    val direction: String = "WAIT",
+    val regime: String = ""
 ) {
     val step1Ok: Boolean get() = step1
     val step2Ok: Boolean get() = step2
