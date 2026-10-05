@@ -15,6 +15,7 @@ on:
           - all-unit-tests    # semua unit test di app/
           - custom            # pakai kolom custom_filter
           - real-tokocrypto-replay  # uji engine pada candle NYATA Tokocrypto (butuh internet; hasil di branch real-data-reports)
+          - probe-tokocrypto  # cek domain Tokocrypto mana yang bisa diakses dari runner GitHub (hasil di branch real-data-probe)
       custom_filter:
         description: 'Khusus scope=custom. Pola Gradle --tests, pisahkan koma. Contoh: agu.analys.engine.scalping.ScalpingRiskEngineTest'
         type: string
@@ -41,7 +42,7 @@ concurrency:
 jobs:
   unit-tests:
     name: Run unit tests
-    if: ${{ inputs.scope != 'real-tokocrypto-replay' }}
+    if: ${{ inputs.scope != 'real-tokocrypto-replay' && inputs.scope != 'probe-tokocrypto' }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
 
@@ -199,3 +200,50 @@ jobs:
           path: app/build/real-data/
           if-no-files-found: warn
           retention-days: 14
+
+  probe-tokocrypto:
+    name: Probe akses Tokocrypto
+    if: ${{ inputs.scope == 'probe-tokocrypto' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+
+    steps:
+      - name: Probe endpoints
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p /tmp/probe && cd /tmp/probe
+          {
+            echo "# Probe akses Tokocrypto dari runner GitHub"
+            echo
+            echo "IP runner: $(curl -sS -m 10 https://ipinfo.io/json | tr -d '\n' | head -c 300)"
+            echo
+            echo "| Endpoint | HTTP | Ukuran | Awal body |"
+            echo "|---|---|---:|---|"
+          } > probe.md
+          probe() {
+            local url="$1"
+            local out; out=$(curl -sS -m 20 -A "Mozilla/5.0 TokoClient/3.5" -o body.tmp -w "%{http_code} %{size_download}" "$url" 2>&1 || true)
+            local code="${out%% *}"; local size="${out##* }"
+            local head; head=$(head -c 110 body.tmp 2>/dev/null | tr -d '\n|' )
+            echo "| \`${url}\` | ${code} | ${size} | ${head} |" >> probe.md
+          }
+          probe "https://www.tokocrypto.com/open/v1/common/time"
+          probe "https://www.tokocrypto.com/open/v1/common/symbols"
+          probe "https://www.tokocrypto.com/open/v1/market/klines?symbol=BTC_USDT&interval=1m&limit=2"
+          probe "https://www.tokocrypto.com/api/v3/klines?symbol=BTCUSDT&interval=1m&limit=2"
+          probe "https://www.tokocrypto.site/api/v3/klines?symbol=BTCUSDT&interval=1m&limit=2"
+          probe "https://www.tokocrypto.site/api/v3/time"
+          probe "https://cloudme-toko.2meta.app/api/v1/klines?symbol=BTCUSDT&interval=1m&limit=2"
+          probe "https://cloudme-toko.2meta.app/api/v1/time"
+          cat probe.md >> "$GITHUB_STEP_SUMMARY"
+          rm -f body.tmp
+          git init -q -b real-data-probe
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "probe: akses Tokocrypto dari runner (run ${GITHUB_RUN_ID})"
+          git push -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" real-data-probe
