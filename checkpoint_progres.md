@@ -27,7 +27,7 @@
 | P3 | ✅ | Backtest adapter + fee/slippage config |
 | P4 | ✅ | Market scanner engine (no UI) |
 | P5 | ✅ DEFERRED | ML **tidak** dikerjakan (spek: setelah edge terbukti) |
-| Tests | 🔄 | File ada; jalankan di Android Studio |
+| Tests | ✅ | 161 test hijau via GitHub Actions (`Unit Tests (Manual)`); 1 skip disengaja (`RealBtcIndodaxReplayTest`, live API) |
 
 ---
 
@@ -79,7 +79,12 @@
 
 ---
 
-## Unit Test (tanpa CI)
+## Unit Test (manual via GitHub Actions)
+
+Cara jalan: tab Actions → **Unit Tests (Manual)** → Run workflow (pilih scope). Tidak ada trigger otomatis.
+
+Scope `real-tokocrypto-replay`: replay kausal pada candle NYATA Tokocrypto (`RealTokocryptoReplayTest` + `RealDataReplayAnalyzer`). Laporan di branch `real-data-reports` (`real-tokocrypto-report.md`). Orderbook historis tidak ada → Step 2 di-bypass, hasil provisional; ada pembanding baseline.
+
 
 | File | Phase |
 |------|-------|
@@ -91,13 +96,13 @@
 | ScalpingConfigTest / HistoricalEdgeStubTest / OrderImbalanceTest / MtfConfluenceMatrixTest | P2 |
 | ScalpingBacktestAdapterTest | P3 |
 | MarketScannerEngineTest | P4 |
-| ScalpingMtfEvaluator*Test | existing — re-run setelah wiring |
+| ScalpingMtfEvaluator*Test | existing — sudah dijalankan ulang setelah wiring (hijau) |
 
 ---
 
 ## Residual / next (opsional)
 
-1. Jalankan unit test di Android Studio; perbaiki regresi audit test jika ada.
+1. ~~Jalankan unit test~~ ✅ selesai lewat GitHub Actions (tanpa Android Studio — PC pemilik repo tidak memadai). Semua test hijau.
 2. Short side penuh (masih opsional).
 3. Wire scanner ke UI screener Tokocrypto (di luar scope engine branch jika UI frozen).
 4. Historical Edge nyata dari `trade_journal` / backtest per-setup (Phase 5 spek) — **setelah** data cukup.

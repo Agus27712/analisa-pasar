@@ -14,11 +14,22 @@ on:
           - all-engine        # seluruh agu.analys.engine.* (termasuk test live API Manta)
           - all-unit-tests    # semua unit test di app/
           - custom            # pakai kolom custom_filter
+          - real-tokocrypto-replay  # uji engine pada candle NYATA Tokocrypto (butuh internet; hasil di branch real-data-reports)
       custom_filter:
         description: 'Khusus scope=custom. Pola Gradle --tests, pisahkan koma. Contoh: agu.analys.engine.scalping.ScalpingRiskEngineTest'
         type: string
         required: false
         default: ''
+      pairs:
+        description: 'Khusus scope=real-tokocrypto-replay. Pair dipisah koma (format BTCUSDT).'
+        type: string
+        required: false
+        default: 'BTCUSDT,ETHUSDT,BNBUSDT,SOLUSDT,XRPUSDT,DOGEUSDT,ADAUSDT,TRXUSDT'
+      m1_pages:
+        description: 'Khusus scope=real-tokocrypto-replay. Halaman M1 x1000 candle (5 = sekitar 3,5 hari).'
+        type: string
+        required: false
+        default: '5'
 
 permissions:
   contents: read
@@ -30,6 +41,7 @@ concurrency:
 jobs:
   unit-tests:
     name: Run unit tests
+    if: ${{ inputs.scope != 'real-tokocrypto-replay' }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
 
@@ -123,5 +135,67 @@ jobs:
           path: |
             app/build/reports/tests/testDebugUnitTest/
             app/build/test-results/testDebugUnitTest/
+          if-no-files-found: warn
+          retention-days: 14
+
+  real-tokocrypto-replay:
+    name: Real-data replay (Tokocrypto)
+    if: ${{ inputs.scope == 'real-tokocrypto-replay' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write   # hanya untuk mendorong laporan ke branch real-data-reports
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x ./gradlew
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: 'gradle'
+
+      - name: Run real-data replay test
+        env:
+          RUN_REAL_TOKOCRYPTO_REPLAY: 'true'
+          REAL_PAIRS: ${{ inputs.pairs }}
+          REAL_M1_PAGES: ${{ inputs.m1_pages }}
+        run: |
+          ./gradlew :app:testDebugUnitTest \
+            --tests "agu.analys.engine.scalping.replay.RealTokocryptoReplayTest" \
+            --stacktrace --console=plain
+
+      - name: Publish report
+        if: always()
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          REPORT="app/build/real-data/real-tokocrypto-report.md"
+          if [ ! -f "$REPORT" ]; then
+            echo "Laporan tidak ditemukan." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          cat "$REPORT" >> "$GITHUB_STEP_SUMMARY"
+          mkdir -p /tmp/rep && cp "$REPORT" /tmp/rep/real-tokocrypto-report.md
+          cd /tmp/rep
+          git init -q -b real-data-reports
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "report: real Tokocrypto replay (run ${GITHUB_RUN_ID})"
+          git push -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" real-data-reports
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-tokocrypto-report
+          path: app/build/real-data/
           if-no-files-found: warn
           retention-days: 14
