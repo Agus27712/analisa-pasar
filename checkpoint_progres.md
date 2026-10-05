@@ -67,6 +67,22 @@ Report analyzer sudah punya **tabel per setup** (`RealDataReplayAnalyzer.buildRe
 **Efek filter:** volume retest −86% (482→65) — seleksi berhasil.  
 **Belum berhasil:** expectancy aggregate tidak naik; pullback mengambil alih dengan skor tipis (~63) dan avg net serupa (−0.35%). TIME_STOP tetap ~80%+.
 
+
+### Run #9–#11 — sensitivitas time stop & slippage (commit workflow `94f2266`, data sama 1–5 Okt 2026)
+
+Input workflow baru: `lookahead`, `slippage_pct`, `label` (laporan di branch `real-data-reports-<label>`). Slippage hanya mengubah **biaya simulasi**; geometri SL/TP engine tetap memakai slippage 0.08%.
+
+| Run | Time stop | Slippage/sisi | Trade | Win% | Avg net% (CI95) | PF | Baseline avg net% |
+|-----|-----------|---------------|------:|-----:|-----------------|---:|------------------:|
+| #8 (acuan) | 30 | 0.08 | 412 | 11.4 | −0.357 (±0.032) | 0.10 | −0.347 |
+| #9 A | **120** | 0.08 | 234 | 21.4 | −0.340 (±0.065) | 0.22 | −0.297 |
+| #10 B | 30 | **0.02** | 412 | 15.0 | −0.237 (±0.032) | 0.19 | −0.228 |
+| #11 C | **120** | **0.02** | 234 | 25.2 | −0.221 (±0.065) | 0.36 | −0.177 |
+
+Temuan: semua varian **masih negatif** dan **tidak lebih baik dari baseline** (engine justru sedikit di bawah baseline di A dan C). Biaya eksekusi menggeser seluruh hasil (≈ +0.12% dari slippage), tetapi selisih engine vs baseline tidak membaik. Time stop 120 menaikkan win rate tapi jumlah trade turun (posisi menahan lebih lama → sinyal tumpang tindih diblok). Skor tidak membedakan hasil antar setup. **Belum ada bukti edge; jangan ML; jangan klaim.**
+
+Implikasi: urutan tuning "ketatkan pullback dulu" tidak didukung data; gate skor/setup tidak mengangkat expectancy di sample ini. Perpanjang data (rezim berbeda) sebelum ubah engine lebih lanjut.
+
 ### Implikasi tuning (urutan wajib)
 
 1. **Jangan** klaim edge / jangan ML.
