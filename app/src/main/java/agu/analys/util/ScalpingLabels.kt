@@ -10,4 +10,13 @@ object ScalpingLabels {
         "NONE", "" -> "Belum ada setup"
         else -> name.lowercase().replace('_', ' ').replaceFirstChar { it.uppercase() }
     }
+
+    fun scoreCategory(name: String): String = when (name.uppercase()) {
+        "VERY_STRONG" -> "Sangat Kuat (90+)"
+        "STRONG" -> "Kuat (75-89)"
+        "WATCH" -> "Pantau (60-74)"
+        "WEAK" -> "Lemah (40-59)"
+        "NO_TRADE" -> "Jangan Trade (<40)"
+        else -> name.lowercase().replace('_', ' ').replaceFirstChar { it.uppercase() }
+    }
 }

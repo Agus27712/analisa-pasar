@@ -1,6 +1,7 @@
 package agu.analys.database
 
 import agu.analys.model.ConfidenceTierStats
+import agu.analys.model.SetupStats
 import agu.analys.model.SignalReliabilitySummary
 import agu.analys.util.PriceFormatter
 import kotlinx.coroutines.CoroutineScope
@@ -698,7 +699,69 @@ class SignalLogRepository(
                 mediumConfidenceStats = medTier,
                 lowConfidenceStats = lowTier,
                 bestPerformingSymbol = bestSymbol,
-                bestStrategyMode = bestStrategy
+                bestStrategyMode = bestStrategy,
+                setupStats = calculateSetupStats(logs),
+                scoreCategoryStats = calculateScoreCategoryStats(logs),
+                legacySignalCount = logs.count { it.scalpingSetup.isBlank() }
+            )
+        }
+
+        private val SETUP_ORDER = listOf("LIQUIDITY_SWEEP", "BREAKOUT_RETEST", "BREAKOUT", "TREND_PULLBACK")
+        private val CATEGORY_ORDER = listOf("VERY_STRONG", "STRONG", "WATCH", "WEAK", "NO_TRADE")
+
+        /** Akurasi per setup. Sinyal lama tanpa setup dilewati (lihat legacySignalCount). */
+        fun calculateSetupStats(logs: List<SignalLogEntity>): List<SetupStats> =
+            groupStats(logs, SETUP_ORDER) { it.scalpingSetup }
+
+        /** Akurasi per kategori skor engine. Sinyal lama tanpa kategori dilewati. */
+        fun calculateScoreCategoryStats(logs: List<SignalLogEntity>): List<SetupStats> =
+            groupStats(logs, CATEGORY_ORDER) { it.scalpingScoreCategory }
+
+        private fun groupStats(
+            logs: List<SignalLogEntity>,
+            order: List<String>,
+            keyOf: (SignalLogEntity) -> String
+        ): List<SetupStats> {
+            val groups = logs
+                .filter { keyOf(it).isNotBlank() }
+                .groupBy { keyOf(it).uppercase() }
+            if (groups.isEmpty()) return emptyList()
+            val sortedKeys = groups.keys.sortedWith(
+                compareBy({ order.indexOf(it).let { i -> if (i < 0) Int.MAX_VALUE else i } }, { it })
+            )
+            return sortedKeys.map { key -> buildGroupStats(key, groups.getValue(key)) }
+        }
+
+        private fun buildGroupStats(key: String, group: List<SignalLogEntity>): SetupStats {
+            val winStatuses = setOf("HIT_TP1", "HIT_TP2", "MANUAL_WIN")
+            val lossStatuses = setOf("HIT_SL", "MANUAL_LOSS")
+            val tracking = group.count { it.outcomeStatus == "TRACKING" }
+            val resolved = group.filter { it.outcomeStatus != "TRACKING" }
+
+            fun pnl(l: SignalLogEntity) = l.realizedPnlPct ?: 0.0
+            val wins = resolved.filter {
+                it.outcomeStatus in winStatuses || (it.outcomeStatus !in lossStatuses && pnl(it) > 0.0)
+            }
+            val losses = resolved.filter {
+                it.outcomeStatus in lossStatuses || (it !in wins && pnl(it) < 0.0)
+            }
+
+            val winRate = if (resolved.isNotEmpty()) wins.size * 100.0 / resolved.size else 0.0
+            val avgReturn = if (resolved.isNotEmpty()) resolved.sumOf { pnl(it) } / resolved.size else 0.0
+            val gain = resolved.sumOf { pnl(it).coerceAtLeast(0.0) }
+            val loss = resolved.sumOf { abs(pnl(it).coerceAtMost(0.0)) }
+            val pf = if (loss > 0.0) gain / loss else if (gain > 0.0) 9.99 else 0.0
+
+            return SetupStats(
+                key = key,
+                totalSignals = group.size,
+                trackingCount = tracking,
+                resolvedCount = resolved.size,
+                winCount = wins.size,
+                lossCount = losses.size,
+                winRatePct = winRate,
+                avgReturnPct = avgReturn,
+                profitFactor = pf
             )
         }
 

@@ -34,6 +34,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import agu.analys.database.SignalLogEntity
 import agu.analys.database.TradeHistoryRecordEntity
 import agu.analys.model.ConfidenceTierStats
+import agu.analys.model.SetupStats
 import agu.analys.model.SignalLogFilter
 import agu.analys.model.SignalReliabilitySummary
 import agu.analys.model.TradingPair
@@ -333,6 +334,11 @@ fun SignalLogScreen(
             // 2. CONFIDENCE TIER PERFORMANCE COMPARISON
             item(key = "confidence_tier_section") {
                 ConfidenceReliabilityBreakdownCard(summary = reliabilitySummary)
+            }
+
+            // 2b. AKURASI PER SETUP & KATEGORI SKOR (pipeline scalping)
+            item(key = "setup_accuracy_section") {
+                SetupAccuracyCard(summary = reliabilitySummary)
             }
 
             // 3. FILTER CHIPS & SYMBOL FILTER ROW
@@ -1281,6 +1287,151 @@ private fun ConfidenceReliabilityBreakdownCard(summary: SignalReliabilitySummary
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun SetupAccuracyCard(summary: SignalReliabilitySummary) {
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = TvCardBackground,
+        border = BorderStroke(1.dp, TvBorder),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
+            Text(
+                text = "AKURASI PER SETUP",
+                color = TvCyan,
+                fontSize = 10.5.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 0.5.sp
+            )
+            Text(
+                text = "Hasil sinyal dikelompokkan per setup & skor engine",
+                color = TvTextSecondary,
+                fontSize = 8.5.sp
+            )
+            Spacer(Modifier.height(10.dp))
+
+            if (summary.setupStats.isEmpty()) {
+                Text(
+                    text = "Belum ada sinyal dengan data setup. Data muncul setelah sinyal baru terpicu dan selesai.",
+                    color = TvTextSecondary,
+                    fontSize = 9.sp,
+                    lineHeight = 12.sp
+                )
+            } else {
+                summary.setupStats.forEachIndexed { i, st ->
+                    if (i > 0) Spacer(Modifier.height(10.dp))
+                    SetupStatsRow(label = agu.analys.util.ScalpingLabels.setup(st.key), stats = st)
+                }
+            }
+
+            if (summary.scoreCategoryStats.isNotEmpty()) {
+                Spacer(Modifier.height(12.dp))
+                HorizontalDivider(color = TvBorder)
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    text = "PER KATEGORI SKOR",
+                    color = TvCyan,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.5.sp
+                )
+                Spacer(Modifier.height(8.dp))
+                summary.scoreCategoryStats.forEachIndexed { i, st ->
+                    if (i > 0) Spacer(Modifier.height(10.dp))
+                    SetupStatsRow(label = agu.analys.util.ScalpingLabels.scoreCategory(st.key), stats = st)
+                }
+            }
+
+            Spacer(Modifier.height(10.dp))
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = TvBackground.copy(alpha = 0.6f),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.Top) {
+                    Icon(
+                        Icons.Default.Info,
+                        contentDescription = null,
+                        tint = TvCyan,
+                        modifier = Modifier.size(13.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    val legacy = if (summary.legacySignalCount > 0)
+                        " ${summary.legacySignalCount} sinyal lama (sebelum update) tidak punya data setup, tidak dihitung di sini."
+                    else ""
+                    Text(
+                        text = "PnL dihitung sebelum fee. Sampel < ${SetupStats.MIN_RELIABLE_SAMPLE} sinyal selesai belum bisa dipercaya.$legacy",
+                        color = TvTextSecondary,
+                        fontSize = 8.5.sp,
+                        lineHeight = 11.sp
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SetupStatsRow(label: String, stats: SetupStats) {
+    val hasData = stats.resolvedCount > 0
+    val color = when {
+        !hasData -> TvTextSecondary
+        stats.isSmallSample -> TvAmber
+        stats.winRatePct >= 55.0 && stats.avgReturnPct > 0.0 -> TvGreen
+        stats.winRatePct >= 45.0 -> TvCyan
+        else -> TvRed
+    }
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = label,
+                color = TvTextPrimary,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f),
+                maxLines = 1
+            )
+            Text(
+                text = if (hasData) "${String.format(Locale.US, "%.1f", stats.winRatePct)}% Win" else "Belum selesai",
+                color = color,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Black,
+                fontFamily = FontFamily.Monospace
+            )
+        }
+        Spacer(Modifier.height(3.dp))
+        val progress = (stats.winRatePct / 100.0).toFloat().coerceIn(0f, 1f)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(5.dp)
+                .clip(RoundedCornerShape(3.dp))
+                .background(TvBackground)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(if (progress > 0f) progress else 0.02f)
+                    .fillMaxHeight()
+                    .background(color)
+            )
+        }
+        Spacer(Modifier.height(3.dp))
+        val avg = String.format(Locale.US, "%+.2f", stats.avgReturnPct)
+        val pf = String.format(Locale.US, "%.2f", stats.profitFactor)
+        val sampleNote = if (hasData && stats.isSmallSample) " • sampel kecil" else ""
+        Text(
+            text = "${stats.winCount}W / ${stats.lossCount}L • ${stats.trackingCount} aktif • rata² $avg% • PF $pf$sampleNote",
+            color = TvTextSecondary,
+            fontSize = 8.5.sp,
+            fontFamily = FontFamily.Monospace
+        )
     }
 }
 
