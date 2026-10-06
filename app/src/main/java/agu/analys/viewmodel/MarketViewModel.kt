@@ -86,19 +86,27 @@ class MarketViewModel(application: Application) : AndroidViewModel(application) 
     private val _uiPriceThrottleMs = MutableStateFlow(prefs.priceFeedThrottleMs)
     val uiPriceThrottleMs: StateFlow<Long> = _uiPriceThrottleMs.asStateFlow()
 
-    private val _dashboardAllLimit = MutableStateFlow(15)
+    private val _dashboardAllLimit = MutableStateFlow(agu.analys.util.DashboardRanking.PAGE_SIZE)
     val dashboardAllLimit: StateFlow<Int> = _dashboardAllLimit.asStateFlow()
 
     fun loadMoreDashboardPairs() {
-        _dashboardAllLimit.value += 15
+        _dashboardAllLimit.value += agu.analys.util.DashboardRanking.PAGE_SIZE
+        // Evaluasi 15 pair berikutnya dari data yang sudah ada (tanpa request jaringan baru)
+        if (latestTicks.isNotEmpty()) evaluateVisibleWorth()
     }
 
     fun resetDashboardPagination() {
-        _dashboardAllLimit.value = 15
+        _dashboardAllLimit.value = agu.analys.util.DashboardRanking.PAGE_SIZE
     }
 
     private var dashboardPollJob: Job? = null
     private var lastLiveTickAt = 0L
+
+    // Snapshot ticker terakhir untuk evaluasi bertahap (15 pair per halaman)
+    private var latestTicks: Map<String, MarketTick> = emptyMap()
+    private var lastWatchlist: Set<String> = emptySet()
+    private var lastFavorites: Set<String> = emptySet()
+    private var lastStrategy: StrategyMode = StrategyMode.SCALPING
 
     init {
         restoreFromCache(prefs.marketDataSource)
@@ -257,12 +265,6 @@ class MarketViewModel(application: Application) : AndroidViewModel(application) 
             val isToko = currentSource == MarketDataSource.TOKOCRYPTO
             val defaultQuote = currentSource.defaultQuoteAsset
             try {
-                val scalpingMode = activeStrategy == StrategyMode.SCALPING
-                val popular = TradingPair.popularPairsForSource(currentSource)
-                val pairs = (popular + watchlistSymbols.map {
-                    TradingPair.fromCustomSymbol(it, defaultQuote)
-                }).distinctBy { it.symbol }
-
                 val (gainers, losers, topVol, allScanned, combinedTicks) = if (isToko) {
                     val rankings = TokocryptoMarketService.fetchMarketRankings(35)
                     val scanned = (rankings.gainers + rankings.losers + rankings.topVolume).distinctBy { it.symbol }
@@ -320,73 +322,105 @@ class MarketViewModel(application: Application) : AndroidViewModel(application) 
                 _isShowingCachedData.value = false
                 marketCache.saveDashboardTicks(currentSource, combinedTicks)
 
-                val evaluatedPairs = (allScanned.map { TradingPair.fromCustomSymbol(it.symbol, defaultQuote) } + pairs).distinctBy { it.symbol }
-                val worth = evaluatedPairs.mapNotNull { pair ->
-                    val tick = combinedTicks[pair.symbol] 
-                        ?: combinedTicks[pair.effectiveTokocryptoPair()]
-                        ?: combinedTicks[pair.effectiveIndodaxPair()]
-                        ?: return@mapNotNull null
-                    val isUserExplicit = favoritesSymbols.contains(pair.symbol) || watchlistSymbols.contains(pair.symbol)
-                    val isSafe = if (isToko) {
-                        TokocryptoMarketService.isSafeTradableAsset(
-                            price = tick.price,
-                            volume24h = tick.volume24h,
-                            high24h = tick.high24h,
-                            low24h = tick.low24h,
-                            isIdrPair = pair.quoteAsset.equals("IDR", ignoreCase = true),
-                            isExplicitlyFavored = isUserExplicit
-                        )
-                    } else {
-                        IndodaxMarketService.isSafeTradableAsset(
-                            price = tick.price,
-                            volume24h = tick.volume24h,
-                            high24h = tick.high24h,
-                            low24h = tick.low24h,
-                            isIdrPair = pair.quoteAsset.equals("IDR", ignoreCase = true),
-                            isExplicitlyFavored = isUserExplicit
-                        )
-                    }
-                    if (!isSafe) {
-                        return@mapNotNull null
-                    }
-                    val rangePct = if (tick.low24h > 0) ((tick.high24h - tick.low24h) / tick.low24h) * 100.0 else 0.0
-                    val volScore = when {
-                        tick.volume24h >= 100_000_000_000 -> 30
-                        tick.volume24h >= 10_000_000_000 -> 22
-                        tick.volume24h >= 1_000_000_000 -> 14
-                        else -> 6
-                    }
-                    val change24h = tick.change24h.takeIf { it.isFinite() } ?: 0.0
-                    val momentumScore = when {
-                        change24h >= 8 -> 40; change24h >= 3 -> 32; change24h > 0 -> 25
-                        change24h >= -3 -> 12; change24h >= -8 -> 6; else -> 2
-                    }
-                    val score = (volScore + momentumScore + min(20, (rangePct * 1.5).toInt())).coerceIn(1, 99)
-                    val rec = when {
-                        change24h >= 5.0 -> "PUMP / MOMENTUM NAIK"
-                        change24h > 0.0 -> "BERGERAK NAIK"
-                        change24h >= -2.0 -> "LAYAK DIPANTAU"
-                        change24h <= -8.0 -> "TEKANAN JUAL"
-                        else -> "NETRAL / VOLATIL"
-                    }
-                    WorthCoinInfo(
-                        pair = pair, worthScore = score,
-                        isWorthIt = score >= 50 && change24h > 0,
-                        recommendation = rec, potentialProfitPct = abs(change24h),
-                        aiRationale = "${PriceFormatter.formatPrice(tick.price, quoteAsset = pair.quoteAsset)} · Vol ${PriceFormatter.formatVolume(tick.volume24h, quoteAsset = pair.quoteAsset)}"
-                    )
-                }.sortedWith(
-                    if (scalpingMode) compareByDescending<WorthCoinInfo> {
-                        combinedTicks[it.pair.symbol]?.change24h?.takeIf { c -> c.isFinite() } ?: -999.0
-                    }.thenByDescending { it.worthScore }
-                    else compareByDescending { it.worthScore }
-                )
-                _worthCoins.value = worth
-                marketCache.saveWorthCoins(currentSource, worth)
-                recalculateDashboardBadges(watchlistSymbols, favoritesSymbols, activeStrategy)
+                latestTicks = combinedTicks
+                lastWatchlist = watchlistSymbols
+                lastFavorites = favoritesSymbols
+                lastStrategy = activeStrategy
+                // Hanya 15 pair pertama (+15 tiap scroll) yang dievaluasi, bukan seluruh pasar sekaligus.
+                evaluateVisibleWorth()
             } finally {
                 _isRefreshing.value = false
             }
+        }
+    }
+
+    /**
+     * Hitung worth score hanya untuk pair yang terlihat: halaman dashboard aktif (15 per halaman),
+     * top gainer/volume, watchlist dan favorit. Murni CPU dari snapshot ticker, tanpa request jaringan.
+     */
+    private fun evaluateVisibleWorth() {
+        viewModelScope.launch(Dispatchers.Default) {
+            val ticks = latestTicks
+            if (ticks.isEmpty()) return@launch
+            val source = prefs.marketDataSource
+            val isToko = source == MarketDataSource.TOKOCRYPTO
+            val defaultQuote = source.defaultQuoteAsset
+            val scalpingMode = lastStrategy == StrategyMode.SCALPING
+            val watchlistSymbols = lastWatchlist
+            val favoritesSymbols = lastFavorites
+            val pageSize = agu.analys.util.DashboardRanking.PAGE_SIZE
+            val rate = agu.analys.util.ExchangeRateManager.currentRate()
+
+            val ranked = agu.analys.util.DashboardRanking.rankByVolume(ticks.values, rate) {
+                agu.analys.util.DashboardRanking.isRankable(source, it)
+            }
+            val symbols = LinkedHashSet<String>()
+            ranked.take(_dashboardAllLimit.value).forEach { symbols.add(it.symbol) }
+            _gainersCoins.value.take(pageSize).forEach { symbols.add(it.symbol) }
+            _topVolumeCoins.value.take(pageSize).forEach { symbols.add(it.symbol) }
+            symbols.addAll(watchlistSymbols)
+            symbols.addAll(favoritesSymbols)
+
+            val evaluatedPairs = symbols.map { TradingPair.fromCustomSymbol(it, defaultQuote) }.distinctBy { it.symbol }
+            val worth = evaluatedPairs.mapNotNull { pair ->
+                val tick = ticks[pair.symbol]
+                    ?: ticks[pair.effectiveTokocryptoPair()]
+                    ?: ticks[pair.effectiveIndodaxPair()]
+                    ?: return@mapNotNull null
+                val isUserExplicit = favoritesSymbols.contains(pair.symbol) || watchlistSymbols.contains(pair.symbol)
+                val isIdrPair = pair.quoteAsset.equals("IDR", ignoreCase = true)
+                val isSafe = if (isToko) {
+                    TokocryptoMarketService.isSafeTradableAsset(
+                        price = tick.price, volume24h = tick.volume24h,
+                        high24h = tick.high24h, low24h = tick.low24h,
+                        isIdrPair = isIdrPair, isExplicitlyFavored = isUserExplicit
+                    )
+                } else {
+                    IndodaxMarketService.isSafeTradableAsset(
+                        price = tick.price, volume24h = tick.volume24h,
+                        high24h = tick.high24h, low24h = tick.low24h,
+                        isIdrPair = isIdrPair, isExplicitlyFavored = isUserExplicit
+                    )
+                }
+                if (!isSafe) return@mapNotNull null
+
+                val rangePct = if (tick.low24h > 0) ((tick.high24h - tick.low24h) / tick.low24h) * 100.0 else 0.0
+                // Volume dinormalisasi ke IDR agar pair USDT dinilai setara dengan pair IDR
+                val volIdr = agu.analys.util.DashboardRanking.volumeInIdr(tick.symbol, tick.volume24h, rate)
+                val volScore = when {
+                    volIdr >= 100_000_000_000 -> 30
+                    volIdr >= 10_000_000_000 -> 22
+                    volIdr >= 1_000_000_000 -> 14
+                    else -> 6
+                }
+                val change24h = tick.change24h.takeIf { it.isFinite() } ?: 0.0
+                val momentumScore = when {
+                    change24h >= 8 -> 40; change24h >= 3 -> 32; change24h > 0 -> 25
+                    change24h >= -3 -> 12; change24h >= -8 -> 6; else -> 2
+                }
+                val score = (volScore + momentumScore + min(20, (rangePct * 1.5).toInt())).coerceIn(1, 99)
+                val rec = when {
+                    change24h >= 5.0 -> "PUMP / MOMENTUM NAIK"
+                    change24h > 0.0 -> "BERGERAK NAIK"
+                    change24h >= -2.0 -> "LAYAK DIPANTAU"
+                    change24h <= -8.0 -> "TEKANAN JUAL"
+                    else -> "NETRAL / VOLATIL"
+                }
+                WorthCoinInfo(
+                    pair = pair, worthScore = score,
+                    isWorthIt = score >= 50 && change24h > 0,
+                    recommendation = rec, potentialProfitPct = abs(change24h),
+                    aiRationale = "${PriceFormatter.formatPrice(tick.price, quoteAsset = pair.quoteAsset)} · Vol ${PriceFormatter.formatVolume(tick.volume24h, quoteAsset = pair.quoteAsset)}"
+                )
+            }.sortedWith(
+                if (scalpingMode) compareByDescending<WorthCoinInfo> {
+                    ticks[it.pair.symbol]?.change24h?.takeIf { c -> c.isFinite() } ?: -999.0
+                }.thenByDescending { it.worthScore }
+                else compareByDescending { it.worthScore }
+            )
+            _worthCoins.value = worth
+            marketCache.saveWorthCoins(source, worth)
+            recalculateDashboardBadges(watchlistSymbols, favoritesSymbols, lastStrategy)
         }
     }
 
@@ -401,8 +435,17 @@ class MarketViewModel(application: Application) : AndroidViewModel(application) 
             val favPairs = favoritesSymbols.map { TradingPair.fromCustomSymbol(it, defaultQuote) }
             val marketPairs = (_gainersCoins.value + _hotCoins.value + _topVolumeCoins.value)
                 .map { TradingPair.fromCustomSymbol(it.symbol, defaultQuote) }
-            val allPairs = (marketPairs + basePairs + watchPairs + favPairs).distinctBy { it.symbol }.take(40)
             val ticks = _dashboardTicks.value
+            val source = prefs.marketDataSource
+            val rate = agu.analys.util.ExchangeRateManager.currentRate()
+            val limit = _dashboardAllLimit.value
+            val visiblePairs = agu.analys.util.DashboardRanking.rankByVolume(ticks.values, rate) {
+                agu.analys.util.DashboardRanking.isRankable(source, it)
+            }.take(limit).map { TradingPair.fromCustomSymbol(it.symbol, defaultQuote) }
+            val allPairs = (visiblePairs + watchPairs + favPairs + marketPairs +
+                basePairs.take(agu.analys.util.DashboardRanking.PAGE_SIZE))
+                .distinctBy { it.symbol }
+                .take(maxOf(40, limit + 25))
 
             val resultMap = mutableMapOf<String, List<CoinBadge>>()
             for (pair in allPairs) {

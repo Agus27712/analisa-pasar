@@ -97,11 +97,24 @@ fun LandscapeChartScreen(
                 modifier = Modifier.fillMaxSize()
             )
             is MarketConnectionState.Connected -> {
-                TradingViewFullscreenChart(
-                    pair = pair,
-                    marketDataSource = marketDataSource,
-                    modifier = Modifier.fillMaxSize()
-                )
+                if (marketDataSource == agu.analys.config.MarketDataSource.INDODAX) {
+                    TradingViewFullscreenChart(
+                        pair = pair,
+                        marketDataSource = marketDataSource,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    // Tokocrypto: chart dari candle server Tokocrypto (tanpa widget pihak ketiga / Binance)
+                    val candles by viewModel.recentCandles.collectAsState()
+                    val tick by viewModel.currentTick.collectAsState()
+                    agu.analys.ui.components.chart.LightweightChartView(
+                        candles = candles,
+                        currentPrice = tick?.price ?: 0.0,
+                        showVolume = true,
+                        showEma = true,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
             }
         }
 

@@ -157,15 +157,7 @@ object ExchangeRateManager {
         val direct = tick?.price?.takeIf { it > 0.0 }
         if (direct != null) return direct
 
-        // Fallback 1: pair USDT/IDR di exchange satunya (tetap data exchange, bukan hardcode).
-        val cross = if (source == MarketDataSource.INDODAX) {
-            TokocryptoMarketService.fetchTicker(TOKO_USDT_IDR)?.price
-        } else {
-            IndodaxMarketService.fetchTicker(INDO_USDT_IDR)?.price
-        }?.takeIf { it > 0.0 }
-        if (cross != null) return cross
-
-        // Fallback 2: derivasi silang BTC/IDR dibagi BTC/USDT dari exchange aktif.
+        // Fallback: derivasi BTC/IDR dibagi BTC/USDT dari exchange aktif saja dibagi BTC/USDT dari exchange aktif.
         return deriveFromBtc(source)
     }
 

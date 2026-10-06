@@ -405,7 +405,7 @@ val hasRequiredLotFilter =
 
 /*
  * Jika metadata belum lengkap:
- * force refresh dari Tokocrypto/Binance discovery.
+ * force refresh dari discovery Tokocrypto.
  */
 if (!hasRequiredLotFilter) {
     TokocryptoSymbolRepository.ensureSymbolsLoaded(force = true)

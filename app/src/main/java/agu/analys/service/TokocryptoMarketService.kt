@@ -9,6 +9,8 @@ import agu.analys.model.TradeStreamItem
 import agu.analys.network.NetworkClientProvider
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -88,9 +90,6 @@ object TokocryptoMarketService {
             else -> s
         }
     }
-
-    @Deprecated("Gunakan toTokocryptoSymbol", ReplaceWith("toTokocryptoSymbol(symbol)"))
-    fun toBinanceSymbol(symbol: String): String = toTokocryptoSymbol(symbol)
 
 
     private suspend fun throttle() {
@@ -185,20 +184,20 @@ object TokocryptoMarketService {
      * Fetch Ticker 24 Jam dengan pemisahan symbolType (Type 1 vs Type 3)
      */
     suspend fun fetchTicker(symbol: String, prevPrice: Double = 0.0): MarketTick? = withContext(Dispatchers.IO) {
-        val binanceSym = toBinanceSymbol(symbol)
+        val marketSym = toTokocryptoSymbol(symbol)
         val tokoPair = toTokocryptoPair(symbol)
-        val symbolType = TokocryptoSymbolRepository.getSymbolType(binanceSym)
+        val symbolType = TokocryptoSymbolRepository.getSymbolType(marketSym)
 
         try {
             // 1. Primary: Ticker sesuai Type
             val primaryUrl = if (symbolType == 3) {
-                "$TOKOCRYPTO_TYPE3_MARKET_URL/ticker/24hr?symbol=$binanceSym"
+                "$TOKOCRYPTO_TYPE3_MARKET_URL/ticker/24hr?symbol=$marketSym"
             } else {
-                "$TOKOCRYPTO_TYPE1_MARKET_URL/ticker/24hr?symbol=$binanceSym"
+                "$TOKOCRYPTO_TYPE1_MARKET_URL/ticker/24hr?symbol=$marketSym"
             }
 
             val fallbackPaths = listOf(
-                "/api/v3/ticker/24hr?symbol=$binanceSym",
+                "/api/v3/ticker/24hr?symbol=$marketSym",
                 "/open/v1/market/ticker?symbol=$tokoPair"
             )
 
@@ -217,7 +216,7 @@ object TokocryptoMarketService {
                         val quoteVol = obj.optString("quoteVolume", "0").toDoubleOrNull() ?: 0.0
                         val changePct = obj.optString("priceChangePercent", "0").toDoubleOrNull() ?: 0.0
                         return@withContext MarketTick(
-                            symbol = binanceSym,
+                            symbol = marketSym,
                             price = lastPrice,
                             high24h = high,
                             low24h = low,
@@ -318,12 +317,12 @@ object TokocryptoMarketService {
     }
 
     /**
-     * Fetch Kline / Candlestick dengan routing Symbol Type 1 vs Type 3 dan comprehensive fallbacks
+     * Fetch Kline / Candlestick dengan routing Symbol Type 1 vs Type 3 (hanya server Tokocrypto, tanpa Binance)
      */
     suspend fun fetchCandles(symbol: String, timeframe: Timeframe, limit: Int = 300): List<CandleBar> = withContext(Dispatchers.IO) {
-        val binanceSym = toBinanceSymbol(symbol)
+        val marketSym = toTokocryptoSymbol(symbol)
         val tokoPair = toTokocryptoPair(symbol)
-        val symbolType = TokocryptoSymbolRepository.getSymbolType(binanceSym)
+        val symbolType = TokocryptoSymbolRepository.getSymbolType(marketSym)
         val interval = when (timeframe) {
             Timeframe.M1 -> "1m"
             Timeframe.M5 -> "5m"
@@ -334,17 +333,15 @@ object TokocryptoMarketService {
         }
         val safeLimit = limit.coerceIn(10, 1000)
 
-        val type1Url = "$TOKOCRYPTO_TYPE1_MARKET_URL/klines?symbol=$binanceSym&interval=$interval&limit=$safeLimit"
-        val type3Url = "$TOKOCRYPTO_TYPE3_MARKET_URL/klines?symbol=$binanceSym&interval=$interval&limit=$safeLimit"
+        val type1Url = "$TOKOCRYPTO_TYPE1_MARKET_URL/klines?symbol=$marketSym&interval=$interval&limit=$safeLimit"
+        val type3Url = "$TOKOCRYPTO_TYPE3_MARKET_URL/klines?symbol=$marketSym&interval=$interval&limit=$safeLimit"
         val openApiUrl = "$TOKOCRYPTO_GENERAL_URL/open/v1/market/klines?symbol=$tokoPair&interval=$interval&limit=$safeLimit"
-        val binanceUrl = "https://api.binance.me/api/v3/klines?symbol=$binanceSym&interval=$interval&limit=$safeLimit"
-        val binanceVisionUrl = "https://data-api.binance.vision/api/v3/klines?symbol=$binanceSym&interval=$interval&limit=$safeLimit"
 
         val primaryUrl = if (symbolType == 3) type3Url else type1Url
         val fallbackPaths = if (symbolType == 3) {
-            listOf(type1Url, openApiUrl, binanceUrl, binanceVisionUrl)
+            listOf(type1Url, openApiUrl)
         } else {
-            listOf(type3Url, openApiUrl, binanceUrl, binanceVisionUrl)
+            listOf(type3Url, openApiUrl)
         }
 
         try {
@@ -392,18 +389,18 @@ object TokocryptoMarketService {
      * Fetch Order Book Depth dengan routing Type 1 vs Type 3
      */
     suspend fun fetchOrderBook(symbol: String, limit: Int = 20): Pair<List<OrderBookItem>, List<OrderBookItem>> = withContext(Dispatchers.IO) {
-        val binanceSym = toBinanceSymbol(symbol)
-        val symbolType = TokocryptoSymbolRepository.getSymbolType(binanceSym)
+        val marketSym = toTokocryptoSymbol(symbol)
+        val symbolType = TokocryptoSymbolRepository.getSymbolType(marketSym)
         val safeLimit = limit.coerceIn(5, 100)
 
         val primaryUrl = if (symbolType == 3) {
-            "$TOKOCRYPTO_TYPE3_MARKET_URL/depth?symbol=$binanceSym&limit=$safeLimit"
+            "$TOKOCRYPTO_TYPE3_MARKET_URL/depth?symbol=$marketSym&limit=$safeLimit"
         } else {
-            "$TOKOCRYPTO_TYPE1_MARKET_URL/depth?symbol=$binanceSym&limit=$safeLimit"
+            "$TOKOCRYPTO_TYPE1_MARKET_URL/depth?symbol=$marketSym&limit=$safeLimit"
         }
 
         val fallbackPaths = listOf(
-            "/api/v3/depth?symbol=$binanceSym&limit=$safeLimit"
+            "/api/v3/depth?symbol=$marketSym&limit=$safeLimit"
         )
 
         try {
@@ -448,18 +445,18 @@ object TokocryptoMarketService {
      * Fetch Recent Trades dengan routing Type 1 vs Type 3
      */
     suspend fun fetchRecentTrades(symbol: String, limit: Int = 25): List<TradeStreamItem> = withContext(Dispatchers.IO) {
-        val binanceSym = toBinanceSymbol(symbol)
-        val symbolType = TokocryptoSymbolRepository.getSymbolType(binanceSym)
+        val marketSym = toTokocryptoSymbol(symbol)
+        val symbolType = TokocryptoSymbolRepository.getSymbolType(marketSym)
         val safeLimit = limit.coerceIn(5, 100)
 
         val primaryUrl = if (symbolType == 3) {
             "$TOKOCRYPTO_GENERAL_URL/open/v1/market/trades?symbol=${toTokocryptoPair(symbol)}&limit=$safeLimit"
         } else {
-            "$TOKOCRYPTO_TYPE1_MARKET_URL/trades?symbol=$binanceSym&limit=$safeLimit"
+            "$TOKOCRYPTO_TYPE1_MARKET_URL/trades?symbol=$marketSym&limit=$safeLimit"
         }
 
         val fallbackPaths = listOf(
-            "/api/v3/trades?symbol=$binanceSym&limit=$safeLimit"
+            "/api/v3/trades?symbol=$marketSym&limit=$safeLimit"
         )
 
         try {
@@ -506,18 +503,18 @@ object TokocryptoMarketService {
      * Fetch Aggregate Trades (AggTrades)
      */
     suspend fun fetchAggTrades(symbol: String, limit: Int = 50): List<TradeStreamItem> = withContext(Dispatchers.IO) {
-        val binanceSym = toBinanceSymbol(symbol)
-        val symbolType = TokocryptoSymbolRepository.getSymbolType(binanceSym)
+        val marketSym = toTokocryptoSymbol(symbol)
+        val symbolType = TokocryptoSymbolRepository.getSymbolType(marketSym)
         val safeLimit = limit.coerceIn(5, 500)
 
         val primaryUrl = if (symbolType == 3) {
-            "$TOKOCRYPTO_TYPE3_MARKET_URL/aggTrades?symbol=$binanceSym&limit=$safeLimit"
+            "$TOKOCRYPTO_TYPE3_MARKET_URL/aggTrades?symbol=$marketSym&limit=$safeLimit"
         } else {
-            "$TOKOCRYPTO_TYPE1_MARKET_URL/aggTrades?symbol=$binanceSym&limit=$safeLimit"
+            "$TOKOCRYPTO_TYPE1_MARKET_URL/aggTrades?symbol=$marketSym&limit=$safeLimit"
         }
 
         val fallbackPaths = listOf(
-            "/api/v3/aggTrades?symbol=$binanceSym&limit=$safeLimit"
+            "/api/v3/aggTrades?symbol=$marketSym&limit=$safeLimit"
         )
 
         try {
@@ -561,61 +558,69 @@ object TokocryptoMarketService {
         val allTicks: Map<String, MarketTick> = emptyMap()
     )
 
+    /** Ambil array ticker dari respons berformat `[...]` atau `{"data":[...]}`. */
+    private fun parseTickerArray(json: String?): JSONArray {
+        if (json.isNullOrBlank()) return JSONArray()
+        return try {
+            val t = json.trim()
+            if (t.startsWith("[")) JSONArray(t) else JSONObject(t).optJSONArray("data") ?: JSONArray()
+        } catch (_: Exception) {
+            JSONArray()
+        }
+    }
+
     /**
-     * Fetch market rankings dari seluruh pair aktif yang didaftarkan oleh Dynamic Symbol Discovery
+     * Fetch ranking dari seluruh pair aktif Tokocrypto.
+     * Type 1 (MBX) dan Type 3 (NextMe) diambil paralel lalu digabung (Type 1 diprioritaskan).
+     * Hanya server Tokocrypto yang dipakai.
      */
     suspend fun fetchMarketRankings(limit: Int = 35): TokoRankingsResult = withContext(Dispatchers.IO) {
         try {
-            val primaryUrl = "$TOKOCRYPTO_TYPE1_MARKET_URL/ticker/24hr"
-            val fallbackPaths = listOf(
-                "$TOKOCRYPTO_TYPE3_MARKET_URL/ticker/24hr",
-                "$TOKOCRYPTO_GENERAL_URL/open/v1/market/ticker"
-            )
-            val jsonStr = getWithFallback(primaryUrl, fallbackPaths) ?: return@withContext TokoRankingsResult()
+            val (json1, json3) = coroutineScope {
+                val a = async { get("$TOKOCRYPTO_TYPE1_MARKET_URL/ticker/24hr") }
+                val b = async { get("$TOKOCRYPTO_TYPE3_MARKET_URL/ticker/24hr") }
+                a.await() to b.await()
+            }
+            if (json1.isNullOrBlank() && json3.isNullOrBlank()) return@withContext TokoRankingsResult()
 
-            val array = if (jsonStr.trim().startsWith("[")) JSONArray(jsonStr) else JSONArray()
             val allTicks = mutableMapOf<String, MarketTick>()
             val candidates = mutableListOf<MarketTick>()
 
-            for (i in 0 until array.length()) {
-                val obj = array.optJSONObject(i) ?: continue
-                val sym = obj.optString("symbol", "").uppercase()
-                // Eliminasi koin/pair dengan prefix atau nama BIDR; hanya pair IDR dan USDT saja
-                if (!isIdrOrUsdtPair(sym)) continue
-                val isUsdt = sym.endsWith("USDT")
-                val isIdr = !isUsdt && sym.endsWith("IDR")
+            for (array in listOf(parseTickerArray(json1), parseTickerArray(json3))) {
+                for (i in 0 until array.length()) {
+                    val obj = array.optJSONObject(i) ?: continue
+                    val sym = toTokocryptoSymbol(obj.optString("symbol", ""))
+                    if (sym.isEmpty() || allTicks.containsKey(sym)) continue
+                    // Hanya pair IDR dan USDT, tanpa BIDR
+                    if (!isIdrOrUsdtPair(sym)) continue
+                    val isIdr = !sym.endsWith("USDT") && sym.endsWith("IDR")
 
-                val last = obj.optString("lastPrice", "0").toDoubleOrNull() ?: 0.0
-                if (last <= 0.0) continue
+                    val last = obj.optString("lastPrice", "0").toDoubleOrNull() ?: 0.0
+                    if (last <= 0.0) continue
 
-                val high = obj.optString("highPrice", "0").toDoubleOrNull() ?: last
-                val low = obj.optString("lowPrice", "0").toDoubleOrNull() ?: last
-                val quoteVol = obj.optString("quoteVolume", "0").toDoubleOrNull() ?: 0.0
-                val change = obj.optString("priceChangePercent", "0").toDoubleOrNull() ?: 0.0
+                    val high = obj.optString("highPrice", "0").toDoubleOrNull() ?: last
+                    val low = obj.optString("lowPrice", "0").toDoubleOrNull() ?: last
+                    val quoteVol = obj.optString("quoteVolume", "0").toDoubleOrNull() ?: 0.0
+                    val change = obj.optString("priceChangePercent", "0").toDoubleOrNull() ?: 0.0
 
-                val tick = MarketTick(
-                    symbol = sym,
-                    price = last,
-                    high24h = high,
-                    low24h = low,
-                    volume24h = quoteVol,
-                    change24h = change,
-                    timestamp = System.currentTimeMillis()
-                )
-
-                allTicks[sym] = tick
-
-                if (isSafeTradableAsset(price = last, volume24h = quoteVol, high24h = high, low24h = low, isIdrPair = isIdr)) {
-                    candidates.add(tick)
+                    val tick = MarketTick(
+                        symbol = sym,
+                        price = last,
+                        high24h = high,
+                        low24h = low,
+                        volume24h = quoteVol,
+                        change24h = change,
+                        timestamp = System.currentTimeMillis()
+                    )
+                    allTicks[sym] = tick
+                    if (isSafeTradableAsset(last, quoteVol, high, low, isIdr)) candidates.add(tick)
                 }
             }
 
-            val rate = agu.analys.util.ExchangeRateManager.currentRate().takeIf { it > 1000.0 } ?: 16000.0
+            val rate = agu.analys.util.ExchangeRateManager.currentRate()
             val gainers = candidates.filter { it.change24h > 0 }.sortedByDescending { it.change24h }.take(limit)
             val losers = candidates.filter { it.change24h < 0 }.sortedBy { it.change24h }.take(limit)
-            val topVol = candidates.sortedByDescending { tick ->
-                if (tick.symbol.uppercase().endsWith("USDT")) tick.volume24h * rate else tick.volume24h
-            }.take(limit)
+            val topVol = agu.analys.util.DashboardRanking.rankByVolume(candidates, rate).take(limit)
 
             TokoRankingsResult(
                 gainers = gainers,

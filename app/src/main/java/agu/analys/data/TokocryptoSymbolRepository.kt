@@ -43,7 +43,6 @@ object TokocryptoSymbolRepository {
 
     private val SYMBOLS_ENDPOINTS = listOf(
         "https://www.tokocrypto.site/api/v3/exchangeInfo",
-        "https://api.binance.me/api/v3/exchangeInfo",
         "https://www.tokocrypto.com/open/v1/common/symbols",
         "https://cloudme-toko.2meta.app/api/v1/exchangeInfo"
     )
@@ -146,7 +145,7 @@ object TokocryptoSymbolRepository {
                 return@withLock true
             }
 
-            // Fetch dari endpoint Tokocrypto / Binance
+            // Fetch hanya dari endpoint resmi Tokocrypto
             val success = fetchFromTokocrypto()
             if (!success) {
                 Timber.w("Tokocrypto symbol online discovery gagal, menggunakan metadata bawaan.")

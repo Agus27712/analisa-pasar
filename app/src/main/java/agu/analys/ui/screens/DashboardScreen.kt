@@ -118,40 +118,51 @@ fun DashboardScreen(
         allTicks,
         watchlist,
         favorites,
-        basePopular
+        basePopular,
+        usdtIdrRate,
+        marketDataSource
     ) {
+        // Volume dibandingkan dalam IDR (USDT dikonversi). Tanpa floor harga absolut untuk pair USDT.
+        fun volIdr(t: agu.analys.model.MarketTick) =
+            agu.analys.util.DashboardRanking.volumeInIdr(t.symbol, t.volume24h, usdtIdrRate)
+        fun priceOk(t: agu.analys.model.MarketTick) =
+            agu.analys.util.DashboardRanking.passesPriceFloor(t)
+        // Tokocrypto: daftar discovery berisi semua pair, jadi hanya ambil 15 teratas sebagai cadangan
+        val popularHead = if (marketDataSource == MarketDataSource.TOKOCRYPTO) {
+            basePopular.take(agu.analys.util.DashboardRanking.PAGE_SIZE)
+        } else basePopular
         val watchAndFav = (watchlist.map { TradingPair.fromCustomSymbol(it, defaultQuote) } +
             favorites.map { TradingPair.fromCustomSymbol(it, defaultQuote) })
 
         when (strategyMode) {
             StrategyMode.SCALPING -> {
                 val highVol = allTicks.values
-                    .filter { it.price > 5.0 && it.volume24h >= 200_000_000.0 }
-                    .sortedWith(compareByDescending<agu.analys.model.MarketTick> { it.change24h > 0 }.thenByDescending { it.volume24h })
+                    .filter { priceOk(it) && volIdr(it) >= 200_000_000.0 }
+                    .sortedWith(compareByDescending<agu.analys.model.MarketTick> { it.change24h > 0 }.thenByDescending { volIdr(it) })
                     .take(30)
                     .map { TradingPair.fromCustomSymbol(it.symbol, defaultQuote) }
                 val explicit = (gainersCoins.map { TradingPair.fromCustomSymbol(it.symbol, defaultQuote) } +
                     hotCoins.map { TradingPair.fromCustomSymbol(it.symbol, defaultQuote) })
-                (watchAndFav + explicit + highVol + basePopular).distinctBy { it.symbol }
+                (watchAndFav + explicit + highVol + popularHead).distinctBy { it.symbol }
             }
             StrategyMode.SWING -> {
                 val swingCandidates = allTicks.values
-                    .filter { it.price > 5.0 && it.volume24h >= 500_000_000.0 && it.change24h in -3.0..8.0 }
-                    .sortedByDescending { it.volume24h }
+                    .filter { priceOk(it) && volIdr(it) >= 500_000_000.0 && it.change24h in -3.0..8.0 }
+                    .sortedByDescending { volIdr(it) }
                     .take(25)
                     .map { TradingPair.fromCustomSymbol(it.symbol, defaultQuote) }
-                (watchAndFav + swingCandidates + basePopular).distinctBy { it.symbol }
+                (watchAndFav + swingCandidates + popularHead).distinctBy { it.symbol }
             }
             StrategyMode.OFFICE_DAILY -> {
                 val intradayCandidates = allTicks.values
-                    .filter { it.price > 5.0 && it.volume24h >= 300_000_000.0 && it.change24h >= -3.5 }
+                    .filter { priceOk(it) && volIdr(it) >= 300_000_000.0 && it.change24h >= -3.5 }
                     .sortedWith(
                         compareByDescending<agu.analys.model.MarketTick> { IntradayScreener.evaluateFast(it).score }
-                            .thenByDescending { it.volume24h }
+                            .thenByDescending { volIdr(it) }
                     )
                     .take(30)
                     .map { TradingPair.fromCustomSymbol(it.symbol, defaultQuote) }
-                (watchAndFav + intradayCandidates + basePopular).distinctBy { it.symbol }
+                (watchAndFav + intradayCandidates + popularHead).distinctBy { it.symbol }
             }
         }
     }
@@ -245,49 +256,15 @@ fun DashboardScreen(
         usdtIdrRate,
         basePopular
     ) {
-        val rate = if (usdtIdrRate > 1000.0) usdtIdrRate else 16000.0
-        val isToko = marketDataSource == MarketDataSource.TOKOCRYPTO
-
-        val validTicks = allTicks.values.filter { tick ->
-            val sym = tick.symbol.uppercase().replace("_", "")
-            if (isToko) {
-                TokocryptoMarketService.isIdrOrUsdtPair(sym) &&
-                    tick.price > 0.0 &&
-                    TokocryptoMarketService.isSafeTradableAsset(
-                        price = tick.price,
-                        volume24h = tick.volume24h,
-                        high24h = tick.high24h,
-                        low24h = tick.low24h,
-                        isIdrPair = sym.endsWith("IDR")
-                    )
-            } else {
-                !sym.contains("USDC") && !sym.contains("DAI") &&
-                    tick.price > 0.0 &&
-                    IndodaxMarketService.isSafeTradableAsset(
-                        price = tick.price,
-                        volume24h = tick.volume24h,
-                        high24h = tick.high24h,
-                        low24h = tick.low24h,
-                        isIdrPair = sym.endsWith("IDR")
-                    )
-            }
+        val validTicks = agu.analys.util.DashboardRanking.rankByVolume(allTicks.values, usdtIdrRate) {
+            agu.analys.util.DashboardRanking.isRankable(marketDataSource, it)
         }
-
         if (validTicks.isNotEmpty()) {
             validTicks
-                .distinctBy { it.symbol.uppercase().replace("_", "") }
-                .sortedByDescending { tick ->
-                    val sym = tick.symbol.uppercase().replace("_", "")
-                    if (sym.endsWith("USDT")) {
-                        tick.volume24h * rate
-                    } else {
-                        tick.volume24h
-                    }
-                }
                 .map { TradingPair.fromCustomSymbol(it.symbol) }
                 .distinctBy { it.symbol }
         } else {
-            basePopular
+            basePopular.take(agu.analys.util.DashboardRanking.PAGE_SIZE)
         }
     }
 
@@ -315,8 +292,12 @@ fun DashboardScreen(
     }
 
     // Maksimal volume untuk rasio mini volume bar
-    val maxVolume = remember(displayedPairs, allTicks) {
-        displayedPairs.maxOfOrNull { allTicks[it.symbol]?.volume24h ?: 0.0 }?.takeIf { it > 0 } ?: 1.0
+    val maxVolume = remember(displayedPairs, allTicks, usdtIdrRate) {
+        displayedPairs.maxOfOrNull {
+            allTicks[it.symbol]?.let { t ->
+                agu.analys.util.DashboardRanking.volumeInIdr(t.symbol, t.volume24h, usdtIdrRate)
+            } ?: 0.0
+        }?.takeIf { it > 0 } ?: 1.0
     }
 
     val focusListTitle = remember(marketDataSource, strategyMode, selectedQuickFilter) {
