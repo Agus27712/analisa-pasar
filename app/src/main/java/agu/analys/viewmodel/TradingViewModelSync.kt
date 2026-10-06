@@ -168,8 +168,8 @@ fun TradingViewModel.syncRealTradeToSimulation(
 fun TradingViewModel.syncSimulationTradeToPositionStore(order: SimulationOrder) {
     val symbol = order.symbol
     val currentEx = prefs.marketDataSource.name
+    val fillPrice = if (order.filledAvgPrice > 0.0) order.filledAvgPrice else order.limitPrice
     if (order.side == SimulationOrderSide.BUY) {
-        val fillPrice = if (order.filledAvgPrice > 0.0) order.filledAvgPrice else order.limitPrice
         val currentPos = positionStore.get(symbol, isReal = false, exchange = currentEx)
         if (currentPos.isHolding && currentPos.quantity > 0.00000001 && currentPos.entryPrice > 0.0) {
             val totalQty = currentPos.quantity + order.quantity
@@ -192,6 +192,27 @@ fun TradingViewModel.syncSimulationTradeToPositionStore(order: SimulationOrder) 
                 exchange = currentEx
             )
         }
+        val snapshot = TradeSignalSnapshot.capture(
+            symbol = symbol, strategyMode = strategyMode.value.name,
+            tick = marketDataCoordinator.dashboardTicks.value[symbol],
+            indicators = engine.indicators.value, signal = engine.signalState.value
+        )
+        tradeHistoryRecorder.recordBuy(
+            symbol = symbol,
+            isReal = false,
+            strategyMode = strategyMode.value.name,
+            buyPrice = fillPrice,
+            buyQuantity = order.quantity,
+            buyTotalIdr = fillPrice * order.quantity,
+            buyOrderType = order.type.name,
+            snapshot = snapshot,
+            signalPrice = engine.signalState.value.entryPrice.takeIf { it > 0 } ?: fillPrice,
+            signalConfidence = engine.signalState.value.confidence,
+            targetPrice1 = engine.signalState.value.targetPrice1,
+            targetPrice2 = engine.signalState.value.targetPrice2,
+            stopLossPrice = engine.signalState.value.stopLoss,
+            exchange = currentEx
+        )
     } else if (order.side == SimulationOrderSide.SELL) {
         val currentPos = positionStore.get(symbol, isReal = false, exchange = currentEx)
         val currentQty = currentPos.quantity
@@ -208,6 +229,15 @@ fun TradingViewModel.syncSimulationTradeToPositionStore(order: SimulationOrder) 
                 exchange = currentEx
             )
         }
+        tradeHistoryRecorder.recordSell(
+            symbol = symbol,
+            isReal = false,
+            sellPrice = fillPrice,
+            sellQuantity = order.quantity,
+            sellReason = "SIMULATION_SELL",
+            strategyMode = strategyMode.value.name,
+            exchange = currentEx
+        )
     }
     refreshSpotPosition()
 }

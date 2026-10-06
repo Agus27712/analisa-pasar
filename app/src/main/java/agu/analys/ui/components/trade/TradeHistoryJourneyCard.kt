@@ -197,6 +197,23 @@ fun TradeHistoryJourneyCard(
                         )
                     }
 
+                    // Exchange Badge
+                    Surface(
+                        color = TvBlueSoft.copy(alpha = 0.15f),
+                        shape = RoundedCornerShape(4.dp),
+                        border = BorderStroke(0.5.dp, TvBlueSoft.copy(alpha = 0.35f))
+                    ) {
+                        Text(
+                            text = record.exchange.uppercase(),
+                            color = TvBlueSoft,
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Bold,
+                            softWrap = false,
+                            maxLines = 1,
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                        )
+                    }
+
                     // Order Type (LIMIT / MARKET)
                     Surface(
                         color = TvSurfaceVariant,

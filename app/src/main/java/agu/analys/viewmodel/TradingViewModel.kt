@@ -602,7 +602,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     }
     fun refreshSignalLogs() = signalLogViewModel.refreshSignalLogs()
 
-    fun seedSampleTradeJourneys() = portfolioViewModel.seedSampleTradeJourneys()
+    fun seedSampleTradeJourneys(force: Boolean = true) = portfolioViewModel.seedSampleTradeJourneys(force)
     fun deleteTradeHistoryRecord(id: Long) = portfolioViewModel.deleteTradeHistoryRecord(id)
     fun clearAllTradeHistoryRecords() = portfolioViewModel.clearAllTradeHistoryRecords()
 

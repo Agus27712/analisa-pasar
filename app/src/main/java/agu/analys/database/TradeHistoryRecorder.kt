@@ -132,6 +132,9 @@ class TradeHistoryRecorder(
             try {
                 val holdings = dao.getHoldingRecordsByExchange(normExchange)
                     .filter { it.symbol.equals(normSymbol, ignoreCase = true) }
+                    .ifEmpty {
+                        dao.getHoldingRecords().filter { it.symbol.equals(normSymbol, ignoreCase = true) }
+                    }
                 if (holdings.isEmpty()) return@launch
 
                 for (record in holdings) {
@@ -353,18 +356,21 @@ class TradeHistoryRecorder(
     }
 
     /**
-     * Muat data sampel daur hidup trade jika database kosong, agar user dapat menguji fitur secara langsung.
+     * Muat data sampel daur hidup trade agar user dapat menguji dan melihat visualisasi siklus trade secara langsung.
+     * @param force jika true, sampel baru ditambahkan meskipun database sudah memiliki record.
      */
-    suspend fun seedSampleTradeJourneysIfEmpty() = withContext(Dispatchers.IO) {
-        if (dao.getRecordCount() > 0) return@withContext
+    suspend fun seedSampleTradeJourneys(force: Boolean = false) = withContext(Dispatchers.IO) {
+        if (!force && dao.getRecordCount() > 0) return@withContext
 
         val now = System.currentTimeMillis()
+        val uidSuffix = if (force) "-${(System.currentTimeMillis() % 100000)}" else ""
         val samples = listOf(
             TradeHistoryRecordEntity(
-                tradeUuid = "seed-trade-btc-01",
+                tradeUuid = "seed-trade-btc-01$uidSuffix",
                 symbol = "BTCIDR",
                 isRealTrade = true,
                 strategyMode = "SCALPING",
+                exchange = "TOKOCRYPTO",
                 signalTime = now - 3600_000L * 3,
                 signalPrice = 1450000000.0,
                 signalConfidence = 88,
@@ -397,10 +403,11 @@ class TradeHistoryRecorder(
                 isProfit = true
             ),
             TradeHistoryRecordEntity(
-                tradeUuid = "seed-trade-eth-02",
+                tradeUuid = "seed-trade-eth-02$uidSuffix",
                 symbol = "ETHIDR",
                 isRealTrade = false,
                 strategyMode = "SCALPING",
+                exchange = "INDODAX",
                 signalTime = now - 3600_000L * 6,
                 signalPrice = 52000000.0,
                 signalConfidence = 84,
@@ -434,10 +441,11 @@ class TradeHistoryRecorder(
                 isProfit = true
             ),
             TradeHistoryRecordEntity(
-                tradeUuid = "seed-trade-sol-03",
+                tradeUuid = "seed-trade-sol-03$uidSuffix",
                 symbol = "SOLIDR",
                 isRealTrade = false,
                 strategyMode = "SECOND_WAVE",
+                exchange = "TOKOCRYPTO",
                 signalTime = now - 3600_000L * 12,
                 signalPrice = 2850000.0,
                 signalConfidence = 76,
@@ -470,10 +478,11 @@ class TradeHistoryRecorder(
                 isProfit = true
             ),
             TradeHistoryRecordEntity(
-                tradeUuid = "seed-trade-pepe-04",
+                tradeUuid = "seed-trade-pepe-04$uidSuffix",
                 symbol = "PEPEIDR",
                 isRealTrade = false,
                 strategyMode = "SCALPING",
+                exchange = "INDODAX",
                 signalTime = now - 3600_000L * 16,
                 signalPrice = 0.185,
                 signalConfidence = 64,
@@ -506,10 +515,11 @@ class TradeHistoryRecorder(
                 isProfit = false
             ),
             TradeHistoryRecordEntity(
-                tradeUuid = "seed-trade-near-05",
+                tradeUuid = "seed-trade-near-05$uidSuffix",
                 symbol = "NEARIDR",
                 isRealTrade = true,
                 strategyMode = "SCALPING",
+                exchange = "INDODAX",
                 signalTime = now - 1800_000L,
                 signalPrice = 85000.0,
                 signalConfidence = 90,
@@ -533,7 +543,7 @@ class TradeHistoryRecorder(
                 isTrailingUsed = false
             ),
             TradeHistoryRecordEntity(
-                tradeUuid = "seed-trade-btcusdt-06",
+                tradeUuid = "seed-trade-btcusdt-06$uidSuffix",
                 symbol = "BTCUSDT",
                 isRealTrade = false,
                 strategyMode = "SCALPING",
@@ -571,7 +581,7 @@ class TradeHistoryRecorder(
                 isProfit = true
             ),
             TradeHistoryRecordEntity(
-                tradeUuid = "seed-trade-ethusdt-07",
+                tradeUuid = "seed-trade-ethusdt-07$uidSuffix",
                 symbol = "ETHUSDT",
                 isRealTrade = true,
                 strategyMode = "SCALPING",
@@ -601,4 +611,6 @@ class TradeHistoryRecorder(
         )
         dao.insertRecords(samples)
     }
+
+    suspend fun seedSampleTradeJourneysIfEmpty() = seedSampleTradeJourneys(force = false)
 }

@@ -34,7 +34,7 @@ class PortfolioViewModel(application: Application) : AndroidViewModel(applicatio
     private val _positionVersion = MutableStateFlow(0L)
     val positionVersion: StateFlow<Long> = _positionVersion.asStateFlow()
 
-    val tradeHistoryRecords: StateFlow<List<TradeHistoryRecordEntity>> = tradeHistoryRecorder.getRecordsByExchangeFlow(currentExchange)
+    val tradeHistoryRecords: StateFlow<List<TradeHistoryRecordEntity>> = tradeHistoryRecorder.allRecordsFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     init {
@@ -48,8 +48,8 @@ class PortfolioViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    fun seedSampleTradeJourneys() {
-        viewModelScope.launch { tradeHistoryRecorder.seedSampleTradeJourneysIfEmpty() }
+    fun seedSampleTradeJourneys(force: Boolean = true) {
+        viewModelScope.launch { tradeHistoryRecorder.seedSampleTradeJourneys(force) }
     }
 
     fun deleteTradeHistoryRecord(id: Long) {

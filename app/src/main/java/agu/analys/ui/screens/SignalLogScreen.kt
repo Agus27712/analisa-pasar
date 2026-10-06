@@ -64,6 +64,7 @@ fun SignalLogScreen(
     // Trade History Filters
     var tradeFilterRealSim by rememberSaveable { mutableStateOf("ALL") } // ALL, REAL, SIM
     var tradeFilterStatus by rememberSaveable { mutableStateOf("ALL") } // ALL, WIN, LOSS, HOLDING
+    var tradeFilterExchange by rememberSaveable { mutableStateOf("ALL") } // ALL, TOKOCRYPTO, INDODAX
     var selectedTradeSymbol by rememberSaveable { mutableStateOf<String?>(null) }
 
     // Signal Log Filters
@@ -77,7 +78,7 @@ fun SignalLogScreen(
         tradeHistoryRecords.map { it.symbol }.distinct().sorted()
     }
 
-    val filteredTradeRecords = remember(tradeHistoryRecords, tradeFilterRealSim, tradeFilterStatus, selectedTradeSymbol) {
+    val filteredTradeRecords = remember(tradeHistoryRecords, tradeFilterRealSim, tradeFilterStatus, tradeFilterExchange, selectedTradeSymbol) {
         tradeHistoryRecords.filter { item ->
             val matchSymbol = selectedTradeSymbol == null || item.symbol.equals(selectedTradeSymbol, ignoreCase = true)
             val matchMode = when (tradeFilterRealSim) {
@@ -91,7 +92,12 @@ fun SignalLogScreen(
                 "HOLDING" -> item.status == "HOLDING"
                 else -> true
             }
-            matchSymbol && matchMode && matchStatus
+            val matchExchange = when (tradeFilterExchange) {
+                "TOKOCRYPTO" -> item.exchange.equals("TOKOCRYPTO", ignoreCase = true)
+                "INDODAX" -> item.exchange.equals("INDODAX", ignoreCase = true)
+                else -> true
+            }
+            matchSymbol && matchMode && matchStatus && matchExchange
         }
     }
 
@@ -196,7 +202,7 @@ fun SignalLogScreen(
                         IconButton(
                             onClick = {
                                 if (selectedScreenTab == 0) {
-                                    viewModel.seedSampleTradeJourneys()
+                                    viewModel.seedSampleTradeJourneys(true)
                                     Toast.makeText(context, "Sampel histori siklus trade ditambahkan ke database", Toast.LENGTH_SHORT).show()
                                 } else {
                                     viewModel.seedSampleSignalLogs()
@@ -310,11 +316,13 @@ fun SignalLogScreen(
                 onFilterRealSimChange = { tradeFilterRealSim = it },
                 tradeFilterStatus = tradeFilterStatus,
                 onFilterStatusChange = { tradeFilterStatus = it },
+                tradeFilterExchange = tradeFilterExchange,
+                onFilterExchangeChange = { tradeFilterExchange = it },
                 distinctSymbols = distinctTradeSymbols,
                 selectedSymbol = selectedTradeSymbol,
                 onSelectSymbol = { selectedTradeSymbol = it },
                 onDeleteRecord = { viewModel.deleteTradeHistoryRecord(it) },
-                onSeedSamples = { viewModel.seedSampleTradeJourneys() },
+                onSeedSamples = { viewModel.seedSampleTradeJourneys(true) },
                 modifier = Modifier.weight(1f)
             )
         } else {
@@ -624,6 +632,8 @@ private fun TradeHistoryTabContent(
     onFilterRealSimChange: (String) -> Unit,
     tradeFilterStatus: String,
     onFilterStatusChange: (String) -> Unit,
+    tradeFilterExchange: String,
+    onFilterExchangeChange: (String) -> Unit,
     distinctSymbols: List<String>,
     selectedSymbol: String?,
     onSelectSymbol: (String?) -> Unit,
@@ -641,12 +651,46 @@ private fun TradeHistoryTabContent(
             TradeHistorySummaryCard(records = records)
         }
 
-        // 2. FILTERS (REAL/SIMULASI, STATUS HASIL, PAIR)
+        // 2. FILTERS (BURSA, REAL/SIMULASI, STATUS HASIL, PAIR)
         item(key = "trade_history_filters") {
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                // Filter Bursa (Semua, Tokocrypto, Indodax)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    listOf(
+                        "ALL" to "Semua Bursa",
+                        "TOKOCRYPTO" to "Tokocrypto",
+                        "INDODAX" to "Indodax"
+                    ).forEach { (key, label) ->
+                        val isSelected = tradeFilterExchange == key
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (isSelected) TvBlueSoft.copy(alpha = 0.2f) else TvSurface,
+                            border = BorderStroke(1.dp, if (isSelected) TvBlueSoft else TvBorder),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { onFilterExchangeChange(key) }
+                        ) {
+                            Text(
+                                text = label,
+                                color = if (isSelected) TvBlueSoft else TvTextSecondary,
+                                fontSize = 10.5.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                softWrap = false,
+                                maxLines = 1,
+                                modifier = Modifier
+                                    .padding(vertical = 6.dp)
+                                    .wrapContentWidth(Alignment.CenterHorizontally)
+                            )
+                        }
+                    }
+                }
+
                 // Filter Mode (Semua, Real, Simulasi)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
