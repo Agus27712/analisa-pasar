@@ -491,8 +491,8 @@ fun TradingViewModel.startTrailingPolling() {
                     for (tick in ticks) {
                         simCoordinator.onPriceTick(tick.symbol, tick.price, tick.high24h, tick.low24h)
                         checkAlertsAndTrailing(tick.symbol, tick.price, exchange = currentEx)
-                        signalLogRepository.processPriceTick(tick.symbol, tick.price)
-                        tradeHistoryRecorder.processPriceTick(tick.symbol, tick.price)
+                        signalLogRepository.processPriceTick(tick.symbol, tick.price, currentEx)
+                        tradeHistoryRecorder.processPriceTick(tick.symbol, tick.price, currentEx)
                     }
                     delay(10_000L)
                 } else {

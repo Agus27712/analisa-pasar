@@ -102,7 +102,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         simCoordinator = simCoordinator,
         onPriceUpdate = { symbol, price, rsi ->
             val currentEx = prefs.marketDataSource.name
-            checkAlertsAndTrailing(symbol, price, rsi ?: 0.0)
+            checkAlertsAndTrailing(symbol, price, rsi)
             signalLogRepository.processPriceTick(symbol, price, currentEx)
             tradeHistoryRecorder.processPriceTick(symbol, price, currentEx)
         }

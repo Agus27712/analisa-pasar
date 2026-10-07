@@ -295,7 +295,7 @@ class SimulationCoordinator(
     }
 
     fun onPriceTick(symbol: String, price: Double, high24h: Double, low24h: Double) {
-        val filled = store.processPriceTick(symbol, price, high24h, low24h)
+        val filled = store.processPriceTick(symbol, price, high24h, low24h, exchange = currentEx)
         if (filled.isNotEmpty()) {
             _lastFilledOrder.value = filled.lastOrNull()
             refresh()
