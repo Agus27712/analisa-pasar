@@ -318,6 +318,42 @@ class SimulationTradeStore(context: Context) {
     }
 
     @Synchronized
+    private fun sameQuoteClass(a: String, b: String): Boolean =
+        agu.analys.util.PriceFormatter.isUsdtQuote(a) == agu.analys.util.PriceFormatter.isUsdtQuote(b)
+
+    /** Pesan error bila order memakai kuotasi berbeda dari posisi/order beli yang sudah ada; null bila aman. */
+    private fun findQuoteConflict(
+        wallet: SimulationWallet,
+        baseKey: String,
+        quote: String,
+        side: SimulationOrderSide,
+        exchange: String
+    ): String? {
+        val held = (wallet.coinBalances[baseKey] ?: 0.0) + (wallet.lockedCoinBalances[baseKey] ?: 0.0)
+        if (held > 0.00000001) {
+            val heldQuote = wallet.quoteForCoin(baseKey)
+            if (!sameQuoteClass(heldQuote, quote)) {
+                return if (side == SimulationOrderSide.BUY) {
+                    "Posisi $baseKey sudah ada di kuotasi $heldQuote. Jual dulu sebelum beli lewat pair $quote."
+                } else {
+                    "Posisi $baseKey dibeli di kuotasi $heldQuote. Jual lewat pair $heldQuote, bukan $quote."
+                }
+            }
+        }
+        if (side == SimulationOrderSide.BUY) {
+            val pending = getOpenOrders(exchange = exchange, symbolFilter = null).firstOrNull {
+                it.side == SimulationOrderSide.BUY &&
+                    it.status == SimulationOrderStatus.OPEN &&
+                    it.baseAsset.equals(baseKey, ignoreCase = true) &&
+                    !sameQuoteClass(it.quoteAsset, quote)
+            }
+            if (pending != null) {
+                return "Masih ada order beli $baseKey terbuka di kuotasi ${pending.quoteAsset}. Batalkan dulu sebelum beli lewat pair $quote."
+            }
+        }
+        return null
+    }
+
     fun placeOrder(
         symbol: String,
         baseAsset: String,
@@ -335,6 +371,12 @@ class SimulationTradeStore(context: Context) {
         val baseKey = baseAsset.uppercase()
         val quote = quoteAsset.ifBlank { "IDR" }
         val isUsdt = agu.analys.util.PriceFormatter.isUsdtQuote(quote)
+
+        // Wallet menyimpan satu kuotasi per koin. Tolak order yang mencampur IDR dan USDT
+        // pada koin yang sama agar rata-rata harga dan kas tidak rusak.
+        findQuoteConflict(wallet, baseKey, quote, side, exchange)?.let {
+            return SimulationOrderResult.Error(it)
+        }
 
         when (type) {
             SimulationOrderType.MARKET -> {

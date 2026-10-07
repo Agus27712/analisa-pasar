@@ -274,7 +274,7 @@ fun TradingViewModel.executeAutoSellOrder(
     if (isReal) {
         // Diskon 5% dari harga terkini agar berfungsi layaknya Market Sell di orderbook
         val marketSellPrice = price * 0.95
-        executeRealTrade(symbol, "sell", marketSellPrice, quantity, 0.0, 0.0) { success, msg ->
+        executeRealTrade(symbol, "sell", marketSellPrice, quantity, 0.0, 0.0, exchange = exchange) { success, msg ->
             if (!success && triggerType.contains("TRAILING")) {
                 positionStore.resetTrailingTrigger(symbol, isReal = true, exchange = exchange)
             }
@@ -512,7 +512,7 @@ fun TradingViewModel.executeTrailingSellLimitOrder(
             val discountedPrice = execPrice * 0.95
 
             // Eksekusi rute bursa yang benar melalui executeRealTrade (otomatis menangani Tokocrypto vs Indodax)
-            executeRealTrade(symbol, "sell", discountedPrice, quantity, 0.0, 0.0) { success, msg ->
+            executeRealTrade(symbol, "sell", discountedPrice, quantity, 0.0, 0.0, exchange = exchange) { success, msg ->
                 if (!success) {
                     positionStore.resetTrailingTrigger(symbol, isReal = true, exchange = exchange)
                 } else {
@@ -536,6 +536,18 @@ fun TradingViewModel.executeTrailingSellLimitOrder(
             }
         }
     } else {
+        // Wallet simulasi dipegang per bursa dan coordinator hanya melayani bursa aktif.
+        if (!exchange.equals(prefs.marketDataSource.name, ignoreCase = true)) {
+            AlertNotificationHelper.sendPriceAlertNotification(
+                context = getApplication(),
+                title = "⚠️ [SIMULASI] Jual dibatalkan • ${marketKey.formattedPair()}",
+                message = "Dompet simulasi ${marketKey.displayExchange} sedang tidak aktif. " +
+                    "Pindah ke ${marketKey.displayExchange} di Pengaturan, lalu jual dari Portofolio.",
+                notificationId = marketKey.toNotificationId(false, 3000),
+                marketKey = marketKey
+            )
+            return
+        }
         val pair = TradingPair.fromCustomSymbol(raw = symbol, exchange = exchange)
         val simBal = simCoordinator.wallet.value.getAvailableCoin(pair.baseAsset)
         val finalSellQty = quantity.coerceAtMost(if (simBal > 0.0) simBal else quantity)

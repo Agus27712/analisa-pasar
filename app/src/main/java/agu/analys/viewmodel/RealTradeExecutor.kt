@@ -32,6 +32,17 @@ class RealTradeExecutor(
     private val BUY_POLL_MAX_ATTEMPTS = 15
     private val MIN_EXECUTED_QTY = 1e-12
 
+    /**
+     * Bursa tujuan order. Bila [exchange] kosong dipakai bursa aktif di pengaturan.
+     * Bursa yang tidak dikenal mengembalikan null (order ditolak, tidak ditebak).
+     */
+    private fun resolveSource(exchange: String?): MarketDataSource? = when {
+        exchange.isNullOrBlank() -> prefs.marketDataSource
+        exchange.trim().equals("TOKOCRYPTO", true) -> MarketDataSource.TOKOCRYPTO
+        exchange.trim().equals("INDODAX", true) -> MarketDataSource.INDODAX
+        else -> null
+    }
+
     fun executeCancelOrder(
         symbol: String,
         orderId: String,
@@ -82,10 +93,10 @@ class RealTradeExecutor(
         pair: String,
         orderId: String,
         clientOrderId: String,
-        requestedQty: Double
+        requestedQty: Double,
+        isToko: Boolean
     ): Double {
         var lastExecuted = 0.0
-        val isToko = prefs.marketDataSource == MarketDataSource.TOKOCRYPTO
 
         for (attempt in 1..BUY_POLL_MAX_ATTEMPTS) {
             delay(BUY_POLL_INTERVAL_MS)
@@ -138,12 +149,19 @@ class RealTradeExecutor(
         amountIdr: Double,
         autoLimitSellPrice1: Double = 0.0,
         autoLimitSellPrice2: Double = 0.0,
+        exchange: String? = null,
         onResult: (Boolean, String) -> Unit
     ) {
-        val isToko = prefs.marketDataSource == MarketDataSource.TOKOCRYPTO
+        val source = resolveSource(exchange)
+        if (source == null) {
+            onResult(false, "Bursa '$exchange' tidak dikenal. Order dibatalkan.")
+            return
+        }
+        val exchangeName = source.name
+        val isToko = source == MarketDataSource.TOKOCRYPTO
         val apiKey = if (isToko) prefs.tokocryptoApiKey else prefs.indodaxApiKey
         val secretKey = if (isToko) prefs.tokocryptoSecretKey else prefs.indodaxSecretKey
-        val sourceLabel = prefs.marketDataSource.label
+        val sourceLabel = source.label
         if (apiKey.isBlank() || secretKey.isBlank()) {
             onResult(false, "API Key atau Secret Key $sourceLabel belum diisi.")
             return
@@ -236,7 +254,7 @@ class RealTradeExecutor(
                     val executedQty = if (buyResult.executedQty > MIN_EXECUTED_QTY && buyResult.status == "FILLED") {
                         buyResult.executedQty
                     } else {
-                        waitForBuyFill(apiKey, secretKey, pair, buyResult.orderId, buyResult.clientOrderId.ifBlank { clientOrderId }, quantity)
+                        waitForBuyFill(apiKey, secretKey, pair, buyResult.orderId, buyResult.clientOrderId.ifBlank { clientOrderId }, quantity, isToko)
                     }
 
                     if (executedQty <= MIN_EXECUTED_QTY) {
@@ -333,7 +351,7 @@ class RealTradeExecutor(
 
                 // Update saldo lokal
                 runCatching {
-                    val cachedBalances = prefs.getSavedRealBalance().toMutableMap()
+                    val cachedBalances = prefs.getSavedRealBalance(exchangeName).toMutableMap()
                     val quoteKey = if (quote == "usdt") "usdt" else "idr"
                     val currentQuote = cachedBalances[quoteKey] ?: 0.0
                     val baseLower = base.lowercase()
@@ -343,9 +361,9 @@ class RealTradeExecutor(
                         val newTotalCoin = curCoin + finalExecutedQty
                         cachedBalances[quoteKey] = (currentQuote - cost).coerceAtLeast(0.0)
                         cachedBalances[baseLower] = newTotalCoin
-                        prefs.saveRealBalance(cachedBalances)
+                        prefs.saveRealBalance(cachedBalances, exchangeName)
 
-                        val cachedAvg = prefs.getSavedRealAvgBuyPrices().toMutableMap()
+                        val cachedAvg = prefs.getSavedRealAvgBuyPrices(exchangeName).toMutableMap()
                         val prevAvg = cachedAvg[baseLower] ?: cachedAvg[base.uppercase()] ?: 0.0
                         val newAvgPrice = if (curCoin > 0.0 && prevAvg > 0.0 && newTotalCoin > 0.0) {
                             ((prevAvg * curCoin) + (execPrice * finalExecutedQty)) / newTotalCoin
@@ -354,14 +372,16 @@ class RealTradeExecutor(
                         }
                         cachedAvg[baseLower] = newAvgPrice
                         cachedAvg[base.uppercase()] = newAvgPrice
-                        cachedAvg["${baseLower}idr"] = newAvgPrice
-                        cachedAvg["${base.uppercase()}IDR"] = newAvgPrice
-                        prefs.saveRealAvgBuyPrices(cachedAvg)
+                        // Kunci avg per pair sebenarnya (BTCUSDT / BTCIDR), bukan selalu IDR
+                        val pairKeyLower = pair.lowercase().replace("_", "")
+                        cachedAvg[pairKeyLower] = newAvgPrice
+                        cachedAvg[pairKeyLower.uppercase()] = newAvgPrice
+                        prefs.saveRealAvgBuyPrices(cachedAvg, exchangeName)
                     } else {
                         val proceeds = finalExecutedQty * execPrice
                         cachedBalances[quoteKey] = currentQuote + proceeds
                         cachedBalances[baseLower] = (curCoin - finalExecutedQty).coerceAtLeast(0.0)
-                        prefs.saveRealBalance(cachedBalances)
+                        prefs.saveRealBalance(cachedBalances, exchangeName)
                     }
                 }
 
@@ -761,17 +781,17 @@ class RealTradeExecutor(
         return msg.contains("429") || msg.lowercase().contains("rate limit") || msg.lowercase().contains("too many requests")
     }
 
+    private val KNOWN_QUOTES = listOf("usdt", "usdc", "busd", "bidr", "idrt", "idr")
+
     private fun baseFromPair(pair: String): String {
         val s = pair.lowercase().replace("_", "")
-        return when {
-            s.endsWith("idr") -> s.removeSuffix("idr")
-            s.endsWith("usdt") -> s.removeSuffix("usdt")
-            else -> s
-        }
+        val q = KNOWN_QUOTES.firstOrNull { s.endsWith(it) } ?: return s
+        return s.removeSuffix(q)
     }
 
+    /** Kunci kas lokal: "usdt" untuk kuotasi dolar (USDT/USDC/BUSD), selain itu "idr". */
     private fun quoteFromPair(pair: String): String {
         val s = pair.lowercase().replace("_", "")
-        return if (s.endsWith("usdt")) "usdt" else "idr"
+        return if (s.endsWith("usdt") || s.endsWith("usdc") || s.endsWith("busd")) "usdt" else "idr"
     }
 }

@@ -203,22 +203,15 @@ class MainActivity : ComponentActivity() {
             val qty = intent.getDoubleExtra("EXTRA_QUANTITY", 0.0)
             val isReal = intent.getBooleanExtra("EXTRA_IS_REAL", false)
             if (symbol != null && limitPrice > 0.0 && qty > 0.0) {
-                tradingViewModel.executeTrailingSellLimitOrder(
-                    symbol = symbol,
-                    limitPrice = limitPrice,
-                    quantity = qty,
-                    isReal = isReal,
-                    exchange = exchange
-                )
+                // Konsumsi aksi lebih dulu agar tidak terpicu ulang saat rotasi layar
+                intent.action = null
                 val pair = agu.analys.model.TradingPair.fromCustomSymbol(
                     raw = symbol,
                     defaultQuote = if (quote.isNotBlank()) quote else "IDR",
                     exchange = exchange
                 )
                 tradingViewModel.openCoinDetail(pair)
-                
-                // Clear action so it doesn't re-trigger on rotation
-                intent.action = null
+                confirmNotificationSell(symbol, exchange, quote, limitPrice, qty, isReal)
             }
         } else if (!symbol.isNullOrEmpty()) {
             val pair = agu.analys.model.TradingPair.fromCustomSymbol(
@@ -230,5 +223,42 @@ class MainActivity : ComponentActivity() {
             intent.removeExtra("EXTRA_SYMBOL")
             intent.removeExtra(agu.analys.util.AlertNotificationHelper.EXTRA_SYMBOL)
         }
+    }
+
+    /**
+     * Jual dari tombol notifikasi. Mode REAL wajib konfirmasi dulu (order asli ke bursa),
+     * dan dikirim ke bursa yang tertera di notifikasi — bukan bursa yang sedang aktif.
+     */
+    private fun confirmNotificationSell(
+        symbol: String,
+        exchange: String,
+        quote: String,
+        limitPrice: Double,
+        qty: Double,
+        isReal: Boolean
+    ) {
+        if (!isReal) {
+            tradingViewModel.executeTrailingSellLimitOrder(
+                symbol = symbol, limitPrice = limitPrice, quantity = qty, isReal = false, exchange = exchange
+            )
+            return
+        }
+        val key = agu.analys.model.MarketKey.resolve(symbol, exchange, quote.ifBlank { null })
+        val priceStr = agu.analys.util.PriceFormatter.formatPrice(limitPrice, showSymbol = true, quoteAsset = key.quote)
+        val qtyStr = java.math.BigDecimal(qty).setScale(8, java.math.RoundingMode.DOWN).stripTrailingZeros().toPlainString()
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Konfirmasi JUAL REAL")
+            .setMessage(
+                "Jual $qtyStr ${key.base} (${key.formattedPair()}) di ${key.displayExchange}.\n" +
+                    "Harga acuan: $priceStr\n\n" +
+                    "Order asli akan dikirim ke bursa."
+            )
+            .setPositiveButton("JUAL SEKARANG") { _, _ ->
+                tradingViewModel.executeTrailingSellLimitOrder(
+                    symbol = symbol, limitPrice = limitPrice, quantity = qty, isReal = true, exchange = exchange
+                )
+            }
+            .setNegativeButton("Batal", null)
+            .show()
     }
 }

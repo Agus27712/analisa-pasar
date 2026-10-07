@@ -145,12 +145,11 @@ class TradingForegroundService : Service() {
                             val globalLiveKey = "${ex}_$sym"
 
                             val fetchedPrice = marketTicks[tickKey] ?: marketTicks[compactKey]
-                            val currentPrice = fetchedPrice ?: livePrices[globalLiveKey] ?: livePrices[sym] ?: 0.0
+                            val currentPrice = fetchedPrice ?: livePrices[globalLiveKey] ?: 0.0
 
                             if (currentPrice > 0.0) {
                                 if (livePrices[globalLiveKey] != currentPrice) {
                                     livePrices[globalLiveKey] = currentPrice
-                                    livePrices[sym] = currentPrice
                                     pricesUpdated = true
                                 }
 
@@ -418,74 +417,90 @@ class TradingForegroundService : Service() {
         manager.notify(NOTIFICATION_ID, notification)
     }
 
+    // Aset kas/stablecoin kuotasi: bukan koin yang diperdagangkan
+    private val cashAssets = setOf("IDR", "BIDR", "IDRT", "USDT", "USD", "BUSD", "USDC")
+    private val ambiguousLogged: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+
+    private fun livePriceOf(exchange: String, symbol: String): Double? {
+        val s = symbol.uppercase()
+        return livePrices["${exchange}_$s"] ?: livePrices["${exchange}_${s.replace("_", "")}"]
+    }
+
+    /**
+     * Pair tunggal untuk sebuah base di bursa. Saldo bursa hanya mencatat base (bukan kuotasi
+     * pembelian), jadi bila ada lebih dari satu pair (mis. BTCUSDT dan BTCIDR) hasilnya null:
+     * lebih baik dilewati daripada menebak kuotasi.
+     */
+    private fun uniquePairForBase(base: String, exchange: String): TradingPair? {
+        val source = if (exchange.equals("INDODAX", true)) MarketDataSource.INDODAX else MarketDataSource.TOKOCRYPTO
+        return TradingPair.popularPairsForSource(source)
+            .filter { it.baseAsset.equals(base, ignoreCase = true) }
+            .singleOrNull()
+    }
+
     private fun getHoldingsData(): Pair<List<HoldingItem>, List<HoldingItem>> {
         val context = applicationContext
         val positionStore = SpotPositionStore(context)
         val simulationStore = SimulationTradeStore(context)
-        val wallet = simulationStore.getWallet()
-
-        val realItems = mutableListOf<HoldingItem>()
-
         val prefs = AppPreferences(context)
-        val activeExchange = prefs.marketDataSource.name
+        val ex = prefs.marketDataSource.name.uppercase()
 
-        // Muat saldo real yang tersimpan
-        val savedRealBalance = if (prefs.hasTokocryptoCredentials() || prefs.hasIndodaxCredentials()) {
-            prefs.getSavedRealBalance(activeExchange)
-        } else emptyMap()
-        val savedAvgPrices = if (prefs.hasTokocryptoCredentials() || prefs.hasIndodaxCredentials()) {
-            prefs.getSavedRealAvgBuyPrices(activeExchange)
-        } else emptyMap()
-        
-        // 1. Ambil semua posisi REAL yang aktif dari SpotPositionStore
-        val activeRealPositions = positionStore.getAllActivePositions(exchange = activeExchange, isReal = true)
-        val processedSymbols = mutableSetOf<String>()
+        val hasCreds = prefs.hasTokocryptoCredentials() || prefs.hasIndodaxCredentials()
+        val savedRealBalance = if (hasCreds) prefs.getSavedRealBalance(ex) else emptyMap()
+        val savedAvgPrices = if (hasCreds) prefs.getSavedRealAvgBuyPrices(ex) else emptyMap()
 
-        for (pos in activeRealPositions) {
-            if (pos.isHolding && pos.quantity > 0.0) {
-                val mKey = MarketKey.resolve(pos.symbol, pos.exchange)
-                processedSymbols.add(mKey.key)
-                val currentPrice = livePrices["${pos.exchange}_${pos.symbol}"] ?: livePrices[pos.symbol] ?: pos.entryPrice
-                realItems.add(
-                    HoldingItem(
-                        symbol = pos.symbol,
-                        baseAsset = mKey.base.uppercase(),
-                        quoteAsset = mKey.quote,
-                        exchange = pos.exchange,
-                        quantity = pos.quantity,
-                        entryPrice = pos.entryPrice,
-                        currentPrice = currentPrice,
-                        isReal = true
-                    )
+        // ===== REAL =====
+        val realItems = mutableListOf<HoldingItem>()
+        val realBases = mutableSetOf<String>()
+
+        // 1. Posisi dari store: simbol sudah memuat kuotasi (BTCUSDT / BTCIDR)
+        for (pos in positionStore.getAllActivePositions(exchange = ex, isReal = true)) {
+            if (!pos.isHolding || pos.quantity <= 0.0) continue
+            val mKey = MarketKey.resolve(pos.symbol, ex)
+            realBases.add(mKey.base.uppercase())
+            realItems.add(
+                HoldingItem(
+                    symbol = mKey.symbol,
+                    baseAsset = mKey.base.uppercase(),
+                    quoteAsset = mKey.quote,
+                    exchange = ex,
+                    quantity = pos.quantity,
+                    entryPrice = pos.entryPrice,
+                    currentPrice = livePriceOf(ex, mKey.symbol) ?: pos.entryPrice,
+                    isReal = true
                 )
-            }
+            )
         }
 
-        // 2. Periksa saldo real tersimpan yang belum terdaftar di SpotPositionStore
+        // 2. Saldo bursa tanpa posisi di store: hanya bila pair-nya tunggal di bursa
         for ((baseKey, qty) in savedRealBalance) {
             val base = baseKey.uppercase()
-            if (qty > 0.00000001 && base != "IDR" && base != "BIDR" && base != "USDT" && base != "USD" && base != "BUSD" && base != "USDC") {
-                val mKey = MarketKey.resolve(base, activeExchange)
-                if (!processedSymbols.contains(mKey.key)) {
-                    processedSymbols.add(mKey.key)
-                    val baseLower = base.lowercase()
-                    val entryPrice = savedAvgPrices[base] ?: savedAvgPrices[baseLower] ?: savedAvgPrices[mKey.symbol] ?: 0.0
-                    val currentPrice = livePrices["${activeExchange}_${mKey.symbol}"] ?: livePrices[mKey.symbol] ?: entryPrice
-
-                    realItems.add(
-                        HoldingItem(
-                            symbol = mKey.symbol,
-                            baseAsset = base,
-                            quoteAsset = mKey.quote,
-                            exchange = activeExchange,
-                            quantity = qty,
-                            entryPrice = entryPrice,
-                            currentPrice = currentPrice,
-                            isReal = true
-                        )
+            if (qty <= 0.00000001 || base in cashAssets || base in realBases) continue
+            val pair = uniquePairForBase(base, ex)
+            if (pair == null) {
+                if (ambiguousLogged.add("$ex:$base")) {
+                    agu.analys.util.AppLogManager.service(
+                        "HoldingsMonitor",
+                        "⚠️ [$ex] Saldo $base dilewati: kuotasi tidak bisa dipastikan (lebih dari satu pair). Buka posisi lewat aplikasi agar terpantau."
                     )
                 }
+                continue
             }
+            realBases.add(base)
+            val symUpper = pair.symbol.uppercase()
+            val entryPrice = savedAvgPrices[symUpper] ?: savedAvgPrices[base] ?: savedAvgPrices[base.lowercase()] ?: 0.0
+            realItems.add(
+                HoldingItem(
+                    symbol = symUpper,
+                    baseAsset = base,
+                    quoteAsset = pair.quoteAsset.uppercase(),
+                    exchange = ex,
+                    quantity = qty,
+                    entryPrice = entryPrice,
+                    currentPrice = livePriceOf(ex, symUpper) ?: entryPrice,
+                    isReal = true
+                )
+            )
         }
 
         val sortedReal = realItems.sortedWith(
@@ -494,29 +509,31 @@ class TradingForegroundService : Service() {
                 .thenBy { it.baseAsset }
         )
 
-        // 3. Ambil posisi Simulasi
+        // ===== SIMULASI =====
+        // Wallet simulasi dipegang per bursa dan menyimpan kuotasi tiap koin (coinQuoteAssets)
+        val wallet = simulationStore.getWallet(ex)
         val simItems = mutableListOf<HoldingItem>()
         for ((baseAsset, qty) in wallet.coinBalances) {
-            val baseAssetUpper = baseAsset.uppercase()
-            if (qty > 0.00000001 && baseAssetUpper != "IDR" && baseAssetUpper != "USDT" && baseAssetUpper != "BIDR") {
-                val mKey = MarketKey.resolve(baseAssetUpper, activeExchange)
-                val avgPrice = wallet.avgBuyPrices[baseAsset] ?: wallet.avgBuyPrices[baseAssetUpper] ?: 0.0
-                val currentPrice = livePrices["${activeExchange}_${mKey.symbol}"] ?: livePrices[mKey.symbol] ?: avgPrice
-                if (currentPrice <= 0.0 && avgPrice <= 0.0) continue
+            val base = baseAsset.uppercase()
+            if (qty <= 0.00000001 || base in cashAssets) continue
+            val quote = wallet.quoteForCoin(base).uppercase()
+            val symbol = "$base$quote"
+            val avgPrice = wallet.avgBuyPrices[baseAsset] ?: wallet.avgBuyPrices[base] ?: 0.0
+            val currentPrice = livePriceOf(ex, symbol) ?: avgPrice
+            if (currentPrice <= 0.0 && avgPrice <= 0.0) continue
 
-                simItems.add(
-                    HoldingItem(
-                        symbol = mKey.symbol,
-                        baseAsset = baseAssetUpper,
-                        quoteAsset = mKey.quote,
-                        exchange = activeExchange,
-                        quantity = qty,
-                        entryPrice = avgPrice,
-                        currentPrice = currentPrice,
-                        isReal = false
-                    )
+            simItems.add(
+                HoldingItem(
+                    symbol = symbol,
+                    baseAsset = base,
+                    quoteAsset = quote,
+                    exchange = ex,
+                    quantity = qty,
+                    entryPrice = avgPrice,
+                    currentPrice = currentPrice,
+                    isReal = false
                 )
-            }
+            )
         }
 
         val sortedSim = simItems.sortedWith(

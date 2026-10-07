@@ -149,8 +149,8 @@ class RealTradeCoordinator(
     // Executor delegation
     fun executeCancelRealOrder(symbol: String, orderId: String, onResult: (Boolean, String) -> Unit) =
         executor.executeCancelOrder(symbol, orderId, onResult)
-    fun executeRealTrade(p: String, t: String, pr: Double, a: Double, tp1: Double, tp2: Double, cb: (Boolean, String) -> Unit) =
-        executor.executeTrade(p, t, pr, a, tp1, tp2, cb)
+    fun executeRealTrade(p: String, t: String, pr: Double, a: Double, tp1: Double, tp2: Double, exchange: String? = null, cb: (Boolean, String) -> Unit) =
+        executor.executeTrade(p, t, pr, a, tp1, tp2, exchange, cb)
     fun executeRealSellOrders(
         pair: String,
         totalQuantity: Double,

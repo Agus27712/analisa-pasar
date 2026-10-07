@@ -195,9 +195,10 @@ class OrderViewModel(
         amountIdr: Double,
         tp1: Double = 0.0,
         tp2: Double = 0.0,
+        exchange: String? = null,
         onResult: (Boolean, String) -> Unit
     ) {
-        realCoordinator.executeRealTrade(pair, type, price, amountIdr, tp1, tp2, onResult)
+        realCoordinator.executeRealTrade(pair, type, price, amountIdr, tp1, tp2, exchange, onResult)
     }
 
     fun executeCancelRealOrder(
