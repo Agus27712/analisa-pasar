@@ -1,17 +1,21 @@
 package agu.analys.viewmodel
 
 import android.content.Context
+import agu.analys.config.MarketDataSource
 import agu.analys.model.BatchExecutionState
 import agu.analys.model.BatchResultSummary
 import agu.analys.model.BatchSellItemResult
+import agu.analys.model.MarketKey
 import agu.analys.model.ReadySellCoinSummary
 import agu.analys.service.IndodaxTradeApiV2
+import agu.analys.service.TokocryptoTradeApi
 import agu.analys.trading.SimulationOrderSide
 import agu.analys.trading.SimulationOrderType
 import agu.analys.trading.SpotPositionStore
 import agu.analys.util.AlertNotificationHelper
 import agu.analys.util.AppPreferences
 import agu.analys.util.PriceFormatter
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -24,8 +28,8 @@ import timber.log.Timber
 
 /**
  * Koordinator eksekusi batch sell ('Sell All Ready Assets').
- * Memisahkan dan mengisolasi secara ketat eksekusi antara mode Simulasi dan Real Order (Indodax V2 API)
- * berdasarkan preferensi dan mode trading yang sedang aktif.
+ * Memisahkan dan mengisolasi secara ketat eksekusi antara mode Simulasi dan Real Order
+ * berdasarkan preferensi dan bursa yang sedang aktif.
  */
 class BatchSellCoordinator(
     private val context: Context,
@@ -100,11 +104,10 @@ class BatchSellCoordinator(
                             quantity = 0.0,
                             price = item.currentPrice,
                             success = false,
-                            message = "Saldo koin di simulasi tidak mencukupi",
+                            message = "Saldo koin di wallet tidak mencukupi",
                             profitIdr = 0.0
                         )
                     )
-                    positionCoordinator.setOwnership(symbol, false, item.currentPrice)
                 } else {
                     val orderResult = simCoordinator.submitOrder(
                         pair = item.pair,
@@ -202,11 +205,13 @@ class BatchSellCoordinator(
         pin: String?,
         onCompleted: ((BatchResultSummary) -> Unit)?
     ) = withContext(Dispatchers.IO) {
-        val apiKey = prefs.indodaxApiKey
-        val secretKey = prefs.indodaxSecretKey
+        val currentExchange = prefs.marketDataSource
+        val isToko = currentExchange == MarketDataSource.TOKOCRYPTO
+        val exchangeName = if (isToko) "TOKOCRYPTO" else "INDODAX"
 
-        if (apiKey.isBlank() || secretKey.isBlank()) {
-            _executionState.value = BatchExecutionState.Error("Kredensial API Key & Secret Key INDODAX belum diisi.")
+        val hasCreds = if (isToko) prefs.hasTokocryptoCredentials() else prefs.hasIndodaxCredentials()
+        if (!hasCreds) {
+            _executionState.value = BatchExecutionState.Error("Kredensial API Key & Secret Key $exchangeName belum diisi.")
             return@withContext
         }
 
@@ -230,32 +235,35 @@ class BatchSellCoordinator(
                 currentSymbol = item.pair.baseAsset,
                 successCount = successCount,
                 failedCount = failedCount,
-                message = "Mengirim order jual riil ${item.pair.baseAsset} ke INDODAX (${index + 1}/$totalItems)..."
+                message = "Mengirim order jual riil ${item.pair.baseAsset} ke $exchangeName (${index + 1}/$totalItems)..."
             )
 
             try {
                 // Gunakan harga diskon market sell 4-5% di bawah harga live agar 100% matched instan pada order book
-                val isUsdt = item.pair.quoteAsset.equals("USDT", true) || item.pair.quoteAsset.equals("USD", true)
+                val isUsdt = PriceFormatter.isUsdtQuote(item.pair.quoteAsset)
                 val marketSellPrice = if (isUsdt) {
                     item.currentPrice * 0.95
                 } else {
                     (item.currentPrice * 0.95).toLong().coerceAtLeast(1L).toDouble()
                 }
-                val clientOrderId = "agu-batch-${item.pair.baseAsset.lowercase()}-${System.currentTimeMillis()}"
 
-                val orderRes = IndodaxTradeApiV2.createLimitOrderDetailed(
-                    apiKey = apiKey,
-                    secretKey = secretKey,
-                    symbol = symbol,
-                    side = "sell",
-                    price = marketSellPrice,
-                    quantity = item.quantity,
-                    clientOrderId = clientOrderId
-                )
+                val deferred = CompletableDeferred<Pair<Boolean, String>>()
+                realCoordinator.executeRealTrade(
+                    p = symbol,
+                    t = "sell",
+                    pr = marketSellPrice,
+                    a = item.quantity,
+                    tp1 = 0.0,
+                    tp2 = 0.0
+                ) { success, msg ->
+                    deferred.complete(Pair(success, msg))
+                }
 
-                if (orderRes.success) {
+                val (isSuccess, resMsg) = deferred.await()
+
+                if (isSuccess) {
                     successCount++
-                    positionCoordinator.setOwnership(symbol, false, item.currentPrice)
+                    positionCoordinator.setOwnership(symbol, false, item.currentPrice, isReal = true)
                     results.add(
                         BatchSellItemResult(
                             symbol = symbol,
@@ -263,7 +271,7 @@ class BatchSellCoordinator(
                             quantity = item.quantity,
                             price = item.currentPrice,
                             success = true,
-                            message = orderRes.message.ifBlank { "Order jual terkirim (ID: ${orderRes.orderId})" },
+                            message = resMsg.ifBlank { "Order jual terkirim" },
                             profitIdr = item.profitIdr
                         )
                     )
@@ -276,13 +284,13 @@ class BatchSellCoordinator(
                             quantity = item.quantity,
                             price = item.currentPrice,
                             success = false,
-                            message = orderRes.message,
+                            message = resMsg,
                             profitIdr = 0.0
                         )
                     )
                 }
             } catch (e: Exception) {
-                Timber.e(e, "Gagal batch sell real INDODAX untuk ${item.pair.baseAsset}")
+                Timber.e(e, "Gagal batch sell real $exchangeName untuk ${item.pair.baseAsset}")
                 failedCount++
                 results.add(
                     BatchSellItemResult(
@@ -297,7 +305,6 @@ class BatchSellCoordinator(
                 )
             }
 
-            // Jeda rate-limit INDODAX V2 API
             if (index < totalItems - 1) {
                 delay(800L)
             }
@@ -326,8 +333,8 @@ class BatchSellCoordinator(
         AlertNotificationHelper.sendPriceAlertNotification(
             context = context,
             notificationId = 9802,
-            title = "✅ BATCH SELL INDODAX SELESAI",
-            message = "$successCount dari $totalItems order berhasil dieksekusi di Indodax. Estimasi Kas: ${PriceFormatter.formatPrice(totalCashOut, showSymbol = true, quoteAsset = "IDR")}."
+            title = "✅ BATCH SELL $exchangeName SELESAI",
+            message = "$successCount dari $totalItems order berhasil dieksekusi di $exchangeName. Estimasi Kas: ${PriceFormatter.formatPrice(totalCashOut, showSymbol = true, quoteAsset = "IDR")}."
         )
 
         onCompleted?.invoke(summary)

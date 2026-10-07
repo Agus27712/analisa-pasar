@@ -343,8 +343,9 @@ fun TradingViewModel.syncRealBalancesToPositionStore(
 
 fun TradingViewModel.updateForegroundServiceState() {
     val isReal = isRealBuyMode.value
-    val hasActive = positionStore.getAllActiveTrailingSymbols(isReal = isReal).isNotEmpty() ||
-                    positionStore.hasAnyHolding(isReal = isReal) ||
+    val currentEx = prefs.marketDataSource.name
+    val hasActive = positionStore.getAllActiveTrailingSymbols(isReal = isReal, exchange = currentEx).isNotEmpty() ||
+                    positionStore.hasAnyHolding(isReal = isReal, exchange = currentEx) ||
                     (!isReal && simCoordinator.wallet.value.coinBalances.any { it.value > 0.00000001 && !it.key.equals("IDR", true) && !it.key.equals("USDT", true) }) ||
                     (isReal && realCoordinator.realIndodaxBalance.value.any { it.value > 0.00000001 && !it.key.equals("IDR", true) && !it.key.equals("USDT", true) })
 
@@ -373,13 +374,15 @@ fun TradingViewModel.initSubscriptionsAndPolling() {
     engine.onCandidateSignalTransition = { transition ->
         if (isNotificationsEnabled.value) {
             val isReal = isRealBuyMode.value
-            val position = positionStore.get(transition.symbol, isReal = isReal)
+            val currentEx = prefs.marketDataSource.name
+            val position = positionStore.get(transition.symbol, isReal = isReal, exchange = currentEx)
             if (!position.isHolding) {
                 AlertNotificationHelper.sendCandidateFoundNotification(
                     context = getApplication(),
                     symbol = transition.symbol,
                     strategyMode = transition.mode,
-                    signal = transition.signal
+                    signal = transition.signal,
+                    exchange = currentEx
                 )
             }
         }
@@ -449,20 +452,22 @@ fun TradingViewModel.startTrailingPolling() {
     trailingPollJob = viewModelScope.launch {
         while (isActive) {
             try {
-                val activeSymbols = positionStore.getAllActiveTrailingSymbols()
+                val currentEx = prefs.marketDataSource.name
+                val isReal = isRealBuyMode.value
+                val activeSymbols = positionStore.getAllActiveTrailingSymbols(isReal = isReal, exchange = currentEx)
                 if (activeSymbols.isNotEmpty()) {
                     val isToko = prefs.marketDataSource == MarketDataSource.TOKOCRYPTO
                     val ticks = if (isToko) {
                         TokocryptoMarketService.fetchTickers(activeSymbols)
                     } else {
                         val pairs = activeSymbols.map {
-                            TradingPair.fromCustomSymbol(it, "IDR").effectiveIndodaxPair()
+                            TradingPair.fromCustomSymbol(it, "IDR", exchange = currentEx).effectiveIndodaxPair()
                         }
                         IndodaxMarketService.fetchTickers(pairs)
                     }
                     for (tick in ticks) {
                         simCoordinator.onPriceTick(tick.symbol, tick.price, tick.high24h, tick.low24h)
-                        checkAlertsAndTrailing(tick.symbol, tick.price)
+                        checkAlertsAndTrailing(tick.symbol, tick.price, exchange = currentEx)
                         signalLogRepository.processPriceTick(tick.symbol, tick.price)
                         tradeHistoryRecorder.processPriceTick(tick.symbol, tick.price)
                     }
@@ -480,7 +485,9 @@ fun TradingViewModel.startTrailingPolling() {
 
 fun TradingViewModel.checkAndStopTrailingServiceIfEmpty() {
     updateForegroundServiceState()
-    if (positionStore.getAllActiveTrailingSymbols().isEmpty()) {
+    val currentEx = prefs.marketDataSource.name
+    val isReal = isRealBuyMode.value
+    if (positionStore.getAllActiveTrailingSymbols(isReal = isReal, exchange = currentEx).isEmpty()) {
         trailingPollJob?.cancel()
         trailingPollJob = null
     }

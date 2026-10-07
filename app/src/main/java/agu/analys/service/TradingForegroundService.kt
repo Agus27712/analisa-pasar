@@ -13,6 +13,8 @@ import agu.analys.MainActivity
 import agu.analys.trading.SpotPositionStore
 import agu.analys.trading.SimulationTradeStore
 import agu.analys.model.TradingPair
+import agu.analys.model.MarketKey
+import agu.analys.config.MarketDataSource
 import agu.analys.util.PriceFormatter
 import agu.analys.util.AppPreferences
 import agu.analys.util.AlertNotificationHelper
@@ -30,7 +32,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 
 class TradingForegroundService : Service() {
@@ -97,35 +98,69 @@ class TradingForegroundService : Service() {
             while (isActive) {
                 try {
                     val (realItems, simItems) = getHoldingsData()
-                    val allHoldings = (realItems + simItems).distinctBy { it.symbol.uppercase() }
+                    // Pantau koin REAL dan SIMULASI secara terpisah tanpa menimpa salah satunya
+                    val allHoldings = realItems + simItems
 
                     if (allHoldings.isNotEmpty()) {
-                        // Tarik ticker pasar seluruh koin dari Tokocrypto
-                        val symbolsToFetch = allHoldings.map { it.symbol }
-                        val fetchedTicks = TokocryptoMarketService.fetchTickers(symbolsToFetch)
-                        val marketTicks = fetchedTicks.associateBy { it.symbol.uppercase() }
                         val positionStore = SpotPositionStore(applicationContext)
                         var pricesUpdated = false
 
+                        // Kelompokkan per bursa untuk efisiensi request API
+                        val tokoHoldings = allHoldings.filter { it.exchange.equals("TOKOCRYPTO", ignoreCase = true) }
+                        val indodaxHoldings = allHoldings.filter { it.exchange.equals("INDODAX", ignoreCase = true) }
+
+                        val marketTicks = mutableMapOf<String, Double>()
+
+                        if (tokoHoldings.isNotEmpty()) {
+                            try {
+                                val symbolsToFetch = tokoHoldings.map { it.symbol }
+                                val fetched = TokocryptoMarketService.fetchTickers(symbolsToFetch)
+                                for (t in fetched) {
+                                    marketTicks["TOKOCRYPTO_${t.symbol.uppercase()}"] = t.price
+                                }
+                            } catch (e: Exception) {
+                                timber.log.Timber.w(e, "Tokocrypto ticker fetch failed in service")
+                            }
+                        }
+
+                        if (indodaxHoldings.isNotEmpty()) {
+                            try {
+                                val allIndodax = IndodaxMarketService.fetchAllMarketTicks()
+                                for ((sym, tick) in allIndodax) {
+                                    val symUpper = sym.uppercase()
+                                    marketTicks["INDODAX_$symUpper"] = tick.price
+                                    marketTicks["INDODAX_${symUpper.replace("/", "").replace("_", "")}"] = tick.price
+                                }
+                            } catch (e: Exception) {
+                                timber.log.Timber.w(e, "Indodax ticker fetch failed in service")
+                            }
+                        }
+
                         for (item in allHoldings) {
+                            val ex = item.exchange.uppercase().trim()
                             val sym = item.symbol.uppercase()
-                            val compactSym = TokocryptoMarketService.toTokocryptoSymbol(sym)
-                            val tick = marketTicks[sym] ?: marketTicks[compactSym]
-                            val currentPrice = tick?.price ?: livePrices[sym] ?: 0.0
+                            val compactSym = if (ex == "TOKOCRYPTO") TokocryptoMarketService.toTokocryptoSymbol(sym) else sym
+                            val tickKey = "${ex}_$sym"
+                            val compactKey = "${ex}_$compactSym"
+                            val globalLiveKey = "${ex}_$sym"
+
+                            val fetchedPrice = marketTicks[tickKey] ?: marketTicks[compactKey]
+                            val currentPrice = fetchedPrice ?: livePrices[globalLiveKey] ?: livePrices[sym] ?: 0.0
 
                             if (currentPrice > 0.0) {
-                                if (livePrices[sym] != currentPrice) {
+                                if (livePrices[globalLiveKey] != currentPrice) {
+                                    livePrices[globalLiveKey] = currentPrice
                                     livePrices[sym] = currentPrice
                                     pricesUpdated = true
                                 }
 
-                                // 1. Rekam tick ke TickHistoryTracker agar deteksi drop 1m/5m & velocity bekerja
-                                TickHistoryTracker.recordTick(sym, currentPrice)
+                                // 1. Rekam tick ke TickHistoryTracker dengan exchange key
+                                TickHistoryTracker.recordTick(sym, currentPrice, exchange = ex)
 
-                                // 2. Update trailing stop jika di-enable
-                                val pos = positionStore.get(sym, item.isReal)
+                                // 2. Update trailing stop jika di-enable dengan exchange key
+                                val pos = positionStore.get(sym, item.isReal, exchange = ex)
                                 if (pos.isHolding && pos.isTrailingEnabled) {
-                                    positionStore.updateTrailingPrice(sym, currentPrice, item.isReal)
+                                    positionStore.updateTrailingPrice(sym, currentPrice, item.isReal, exchange = ex)
                                 }
 
                                 // 3. Ambil snapshot risiko
@@ -133,7 +168,8 @@ class TradingForegroundService : Service() {
                                 val riskSnapshot = TickHistoryTracker.getSnapshot(
                                     symbol = sym,
                                     currentPrice = currentPrice,
-                                    peakPrice = peak
+                                    peakPrice = peak,
+                                    exchange = ex
                                 )
 
                                 // 4. Bangun PositionContext
@@ -154,7 +190,7 @@ class TradingForegroundService : Service() {
                                     riskSnapshot = riskSnapshot
                                 )
 
-                                // 5. Evaluasi Sinyal Jual (termasuk RAPID_DROP_EXIT dan STOP_LOSS_HIT)
+                                // 5. Evaluasi Sinyal Jual
                                 val sellState = SellSignalEvaluator.evaluate(
                                     context = posContext,
                                     indicators = null,
@@ -162,24 +198,28 @@ class TradingForegroundService : Service() {
                                     riskSnapshot = riskSnapshot
                                 )
 
-                                // 6. Proses transisi lifecycle
+                                // 6. Proses transisi lifecycle dengan exchange key
                                 val transition = SellSignalLifecycleManager.process(
                                     symbol = sym,
                                     newState = sellState,
-                                    isReal = item.isReal
+                                    isReal = item.isReal,
+                                    exchange = ex
                                 )
+
+                                val marketKey = MarketKey.resolve(sym, ex, item.quoteAsset)
 
                                 // 7. Emergency Alert Dispatcher (Rapid Drop & Stop Loss)
                                 if (sellState.state == SellLifecycleState.RAPID_DROP_EXIT ||
                                     sellState.state == SellLifecycleState.STOP_LOSS_HIT) {
 
-                                    val lastAlert = lastEmergencyAlertTimes[sym] ?: 0L
+                                    val alertKey = "${ex}_${sym}_${item.isReal}"
+                                    val lastAlert = lastEmergencyAlertTimes[alertKey] ?: 0L
                                     val now = System.currentTimeMillis()
                                     if (transition.hasTriggeringTransition || (now - lastAlert > EMERGENCY_ALERT_COOLDOWN_MS)) {
-                                        lastEmergencyAlertTimes[sym] = now
+                                        lastEmergencyAlertTimes[alertKey] = now
                                         AlertNotificationHelper.sendEmergencyExitNotification(
                                             context = applicationContext,
-                                            symbol = sym,
+                                            marketKey = marketKey,
                                             state = sellState,
                                             currentPrice = currentPrice,
                                             entryPrice = item.entryPrice,
@@ -191,7 +231,7 @@ class TradingForegroundService : Service() {
                                     // Trailing Stop Alert
                                     AlertNotificationHelper.sendTrailingHitNotification(
                                         context = applicationContext,
-                                        symbol = sym,
+                                        marketKey = marketKey,
                                         entryPrice = item.entryPrice,
                                         peakPrice = peak ?: currentPrice,
                                         currentPrice = currentPrice,
@@ -203,7 +243,7 @@ class TradingForegroundService : Service() {
                                     // Take Profit 1 / TP2 / Target Reached Alert
                                     AlertNotificationHelper.sendTakeProfitNotification(
                                         context = applicationContext,
-                                        symbol = sym,
+                                        marketKey = marketKey,
                                         targetLabel = sellState.reason,
                                         entryPrice = item.entryPrice,
                                         currentPrice = currentPrice,
@@ -246,6 +286,8 @@ class TradingForegroundService : Service() {
     private data class HoldingItem(
         val symbol: String,
         val baseAsset: String,
+        val quoteAsset: String,
+        val exchange: String,
         val quantity: Double,
         val entryPrice: Double,
         val currentPrice: Double,
@@ -264,23 +306,24 @@ class TradingForegroundService : Service() {
     }
 
     private fun formatHoldingCard(item: HoldingItem): String {
-        val pair = TradingPair.fromCustomSymbol(item.symbol)
-        val quoteAsset = pair.quoteAsset
-        val currPriceStr = PriceFormatter.formatPrice(item.currentPrice, showSymbol = true, quoteAsset = quoteAsset)
+        val currPriceStr = PriceFormatter.formatPrice(item.currentPrice, showSymbol = true, quoteAsset = item.quoteAsset)
         val qtyStr = formatCoinQuantity(item.quantity, item.baseAsset)
+        val exBadge = "[${item.exchange}]"
 
         return if (item.entryPrice > 0.0) {
-            val entryPriceStr = PriceFormatter.formatPrice(item.entryPrice, showSymbol = true, quoteAsset = quoteAsset)
+            val entryPriceStr = PriceFormatter.formatPrice(item.entryPrice, showSymbol = true, quoteAsset = item.quoteAsset)
             val pctFormatted = PriceFormatter.formatPercentage(item.diffPct, includePlusSign = true)
             val statusTag = if (item.isProfit) "▲ $pctFormatted  [SIAP JUAL]" else "▼ $pctFormatted  [HOLD]"
-            "• ${item.baseAsset}  $currPriceStr  $statusTag\n  Beli: $entryPriceStr • Saldo: $qtyStr"
+            "• ${item.baseAsset} $exBadge $currPriceStr  $statusTag\n  Beli: $entryPriceStr • Saldo: $qtyStr"
         } else {
-            "• ${item.baseAsset}  $currPriceStr  [HOLD]\n  Saldo: $qtyStr"
+            "• ${item.baseAsset} $exBadge $currPriceStr  [HOLD]\n  Saldo: $qtyStr"
         }
     }
 
     private fun updateNotification() {
         lastUpdateTime = System.currentTimeMillis()
+        val prefs = AppPreferences(this)
+        val currentDataSource = prefs.marketDataSource
         val (realItems, simItems) = getHoldingsData()
         val totalProfitCount = realItems.count { it.isProfit } + simItems.count { it.isProfit }
         val totalHoldings = realItems.size + simItems.size
@@ -301,8 +344,7 @@ class TradingForegroundService : Service() {
             totalHoldings > 0 -> {
                 val allList = realItems + simItems
                 "Pantau: " + allList.take(3).joinToString(", ") {
-                    val qAsset = TradingPair.fromCustomSymbol(it.symbol).quoteAsset
-                    "${it.baseAsset} ${PriceFormatter.formatPrice(it.currentPrice, showSymbol = false, quoteAsset = qAsset)}"
+                    "${it.baseAsset} ${PriceFormatter.formatPrice(it.currentPrice, showSymbol = false, quoteAsset = it.quoteAsset)}"
                 }
             }
             else -> "Belum ada aset spot yang dipantau"
@@ -356,11 +398,13 @@ class TradingForegroundService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        val subTextLabel = "Spot Monitor (${currentDataSource.label})"
+
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(agu.analys.R.drawable.ic_stat_trading)
             .setContentTitle(title)
             .setContentText(collapsedText)
-            .setSubText("Tokocrypto Spot")
+            .setSubText(subTextLabel)
             .setStyle(NotificationCompat.BigTextStyle().bigText(bigText))
             .setContentIntent(pendingIntent)
             .addAction(0, "Buka Portofolio", pendingIntent)
@@ -383,68 +427,64 @@ class TradingForegroundService : Service() {
         val realItems = mutableListOf<HoldingItem>()
 
         val prefs = AppPreferences(context)
-        val hasCreds = prefs.hasTokocryptoCredentials() || prefs.hasIndodaxCredentials()
-        val savedRealBalance = if (hasCreds) prefs.getSavedRealBalance() else emptyMap()
-        val savedAvgPrices = if (hasCreds) prefs.getSavedRealAvgBuyPrices() else emptyMap()
+        val activeExchange = prefs.marketDataSource.name
+
+        // Muat saldo real yang tersimpan
+        val savedRealBalance = if (prefs.hasTokocryptoCredentials() || prefs.hasIndodaxCredentials()) {
+            prefs.getSavedRealBalance(activeExchange)
+        } else emptyMap()
+        val savedAvgPrices = if (prefs.hasTokocryptoCredentials() || prefs.hasIndodaxCredentials()) {
+            prefs.getSavedRealAvgBuyPrices(activeExchange)
+        } else emptyMap()
         
-        // Scan semua kemungkinan pair: daftar populer + koin yang ada saldo di akun real
-        val processedBases = mutableSetOf<String>()
-        val realCandidatePairs = mutableListOf<TradingPair>()
+        // 1. Ambil semua posisi REAL yang aktif dari SpotPositionStore
+        val activeRealPositions = positionStore.getAllActivePositions(exchange = activeExchange, isReal = true)
+        val processedSymbols = mutableSetOf<String>()
 
-        for (pair in TradingPair.POPULAR_TOKOCRYPTO_PAIRS) {
-            val base = pair.baseAsset.uppercase()
-            if (base != "IDR" && base != "BIDR" && base != "USDT") {
-                processedBases.add(base)
-                realCandidatePairs.add(pair)
-            }
-        }
-        for ((baseKey, qty) in savedRealBalance) {
-            val base = baseKey.uppercase()
-            if (qty > 0.00000001 && base != "IDR" && base != "BIDR" && base != "USDT" && !processedBases.contains(base)) {
-                processedBases.add(base)
-                realCandidatePairs.add(TradingPair.fromCustomSymbol("${base}_IDR"))
-            }
-        }
-        
-        for (pair in realCandidatePairs) {
-            val baseLower = pair.baseAsset.lowercase()
-            val baseUpper = pair.baseAsset.uppercase()
-            val symUpper = pair.symbol.uppercase()
-            val pos = positionStore.get(pair.symbol, isReal = true)
-
-            val realQty = savedRealBalance[baseLower] ?: savedRealBalance[baseUpper] ?: 0.0
-            val isHoldingInStore = pos.isHolding && pos.quantity > 0.0
-            val isHoldingInReal = realQty > 0.00000001
-
-            if (isHoldingInStore || isHoldingInReal) {
-                val qty = if (isHoldingInStore && pos.quantity > 0.0) pos.quantity else realQty
-                val entryPrice = if (isHoldingInStore && pos.entryPrice > 0.0) {
-                    pos.entryPrice
-                } else {
-                    savedAvgPrices[baseUpper] ?: savedAvgPrices[symUpper] ?: savedAvgPrices[baseLower] ?: 0.0
-                }
-
-                val currentPrice = livePrices[symUpper] ?: (if (entryPrice > 0.0) entryPrice else 0.0)
-                if (currentPrice <= 0.0 && entryPrice <= 0.0) continue
-
-                // Check jika koin di store sudah habis terjual di real
-                if (savedRealBalance.isNotEmpty() && isHoldingInStore && realQty <= 0.00000001) {
-                    positionStore.markSold(pair.symbol, isReal = true)
-                    // Clear sell-signal lifecycle agar tidak tetap muncul di Ready-to-Sell
-                    agu.analys.engine.sell.SellSignalLifecycleManager.reset(pair.symbol, isReal = true)
-                    continue
-                }
-
+        for (pos in activeRealPositions) {
+            if (pos.isHolding && pos.quantity > 0.0) {
+                val mKey = MarketKey.resolve(pos.symbol, pos.exchange)
+                processedSymbols.add(mKey.key)
+                val currentPrice = livePrices["${pos.exchange}_${pos.symbol}"] ?: livePrices[pos.symbol] ?: pos.entryPrice
                 realItems.add(
                     HoldingItem(
-                        symbol = pair.symbol,
-                        baseAsset = baseUpper,
-                        quantity = qty,
-                        entryPrice = entryPrice,
+                        symbol = pos.symbol,
+                        baseAsset = mKey.base.uppercase(),
+                        quoteAsset = mKey.quote,
+                        exchange = pos.exchange,
+                        quantity = pos.quantity,
+                        entryPrice = pos.entryPrice,
                         currentPrice = currentPrice,
                         isReal = true
                     )
                 )
+            }
+        }
+
+        // 2. Periksa saldo real tersimpan yang belum terdaftar di SpotPositionStore
+        for ((baseKey, qty) in savedRealBalance) {
+            val base = baseKey.uppercase()
+            if (qty > 0.00000001 && base != "IDR" && base != "BIDR" && base != "USDT" && base != "USD" && base != "BUSD" && base != "USDC") {
+                val mKey = MarketKey.resolve(base, activeExchange)
+                if (!processedSymbols.contains(mKey.key)) {
+                    processedSymbols.add(mKey.key)
+                    val baseLower = base.lowercase()
+                    val entryPrice = savedAvgPrices[base] ?: savedAvgPrices[baseLower] ?: savedAvgPrices[mKey.symbol] ?: 0.0
+                    val currentPrice = livePrices["${activeExchange}_${mKey.symbol}"] ?: livePrices[mKey.symbol] ?: entryPrice
+
+                    realItems.add(
+                        HoldingItem(
+                            symbol = mKey.symbol,
+                            baseAsset = base,
+                            quoteAsset = mKey.quote,
+                            exchange = activeExchange,
+                            quantity = qty,
+                            entryPrice = entryPrice,
+                            currentPrice = currentPrice,
+                            isReal = true
+                        )
+                    )
+                }
             }
         }
 
@@ -454,20 +494,22 @@ class TradingForegroundService : Service() {
                 .thenBy { it.baseAsset }
         )
 
-        // 2. Check Simulated positions (Simulation Wallet / SimulationTradeStore)
+        // 3. Ambil posisi Simulasi
         val simItems = mutableListOf<HoldingItem>()
         for ((baseAsset, qty) in wallet.coinBalances) {
             val baseAssetUpper = baseAsset.uppercase()
-            if (qty > 0.00000001 && baseAssetUpper != "IDR") {
-                val symbol = "${baseAssetUpper}IDR"
-                val avgPrice = wallet.avgBuyPrices[baseAsset] ?: 0.0
-                val currentPrice = livePrices[symbol] ?: avgPrice
+            if (qty > 0.00000001 && baseAssetUpper != "IDR" && baseAssetUpper != "USDT" && baseAssetUpper != "BIDR") {
+                val mKey = MarketKey.resolve(baseAssetUpper, activeExchange)
+                val avgPrice = wallet.avgBuyPrices[baseAsset] ?: wallet.avgBuyPrices[baseAssetUpper] ?: 0.0
+                val currentPrice = livePrices["${activeExchange}_${mKey.symbol}"] ?: livePrices[mKey.symbol] ?: avgPrice
                 if (currentPrice <= 0.0 && avgPrice <= 0.0) continue
 
                 simItems.add(
                     HoldingItem(
-                        symbol = symbol,
+                        symbol = mKey.symbol,
                         baseAsset = baseAssetUpper,
+                        quoteAsset = mKey.quote,
+                        exchange = activeExchange,
                         quantity = qty,
                         entryPrice = avgPrice,
                         currentPrice = currentPrice,
@@ -532,13 +574,16 @@ class TradingForegroundService : Service() {
             } catch (_: Exception) {}
         }
 
-        fun updatePrice(context: Context, symbol: String, price: Double) {
+        fun updatePrice(context: Context, symbol: String, price: Double, exchange: String? = null) {
             val prefs = AppPreferences(context)
             if (!prefs.isNotificationsEnabled) return
             val symUpper = symbol.uppercase()
-            val oldPrice = livePrices[symUpper]
-            if (oldPrice == price) return // Avoid redundant notification redraw updates if price hasn't changed
+            val ex = exchange ?: prefs.marketDataSource.name
+            val key = "${ex.uppercase()}_$symUpper"
+            val oldPrice = livePrices[key] ?: livePrices[symUpper]
+            if (oldPrice == price) return
 
+            livePrices[key] = price
             livePrices[symUpper] = price
             val intent = Intent(context, TradingForegroundService::class.java).apply {
                 action = ACTION_UPDATE
@@ -548,13 +593,16 @@ class TradingForegroundService : Service() {
             } catch (_: Exception) {}
         }
 
-        fun updatePrices(context: Context, prices: Map<String, Double>) {
+        fun updatePrices(context: Context, prices: Map<String, Double>, exchange: String? = null) {
             val prefs = AppPreferences(context)
             if (!prefs.isNotificationsEnabled) return
+            val ex = (exchange ?: prefs.marketDataSource.name).uppercase()
             var changed = false
             for ((sym, price) in prices) {
                 val symUpper = sym.uppercase()
-                if (livePrices[symUpper] != price) {
+                val key = "${ex}_$symUpper"
+                if (livePrices[key] != price || livePrices[symUpper] != price) {
+                    livePrices[key] = price
                     livePrices[symUpper] = price
                     changed = true
                 }

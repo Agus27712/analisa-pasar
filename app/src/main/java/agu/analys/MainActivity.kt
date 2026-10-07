@@ -189,22 +189,46 @@ class MainActivity : ComponentActivity() {
     private fun handleIntent(intent: Intent?) {
         if (intent == null) return
         val action = intent.action
-        val symbol = intent.getStringExtra("EXTRA_SYMBOL")
+        val symbol = intent.getStringExtra(agu.analys.util.AlertNotificationHelper.EXTRA_SYMBOL)
+            ?: intent.getStringExtra("EXTRA_SYMBOL")
+        val exchange = intent.getStringExtra(agu.analys.util.AlertNotificationHelper.EXTRA_EXCHANGE)
+            ?: intent.getStringExtra("EXTRA_EXCHANGE")
+            ?: "TOKOCRYPTO"
+        val quote = intent.getStringExtra(agu.analys.util.AlertNotificationHelper.EXTRA_QUOTE)
+            ?: intent.getStringExtra("EXTRA_QUOTE")
+            ?: ""
         
         if (action == "agu.analys.ACTION_EXECUTE_TRAILING_SELL") {
             val limitPrice = intent.getDoubleExtra("EXTRA_LIMIT_PRICE", 0.0)
             val qty = intent.getDoubleExtra("EXTRA_QUANTITY", 0.0)
             val isReal = intent.getBooleanExtra("EXTRA_IS_REAL", false)
             if (symbol != null && limitPrice > 0.0 && qty > 0.0) {
-                tradingViewModel.executeTrailingSellLimitOrder(symbol, limitPrice, qty, isReal)
-                tradingViewModel.openCoinDetail(agu.analys.model.TradingPair.fromCustomSymbol(symbol))
+                tradingViewModel.executeTrailingSellLimitOrder(
+                    symbol = symbol,
+                    limitPrice = limitPrice,
+                    quantity = qty,
+                    isReal = isReal,
+                    exchange = exchange
+                )
+                val pair = agu.analys.model.TradingPair.fromCustomSymbol(
+                    raw = symbol,
+                    defaultQuote = if (quote.isNotBlank()) quote else "IDR",
+                    exchange = exchange
+                )
+                tradingViewModel.openCoinDetail(pair)
                 
                 // Clear action so it doesn't re-trigger on rotation
                 intent.action = null
             }
         } else if (!symbol.isNullOrEmpty()) {
-            tradingViewModel.openCoinDetail(agu.analys.model.TradingPair.fromCustomSymbol(symbol))
-            intent.removeExtra("EXTRA_SYMBOL") // Consume
+            val pair = agu.analys.model.TradingPair.fromCustomSymbol(
+                raw = symbol,
+                defaultQuote = if (quote.isNotBlank()) quote else "IDR",
+                exchange = exchange
+            )
+            tradingViewModel.openCoinDetail(pair)
+            intent.removeExtra("EXTRA_SYMBOL")
+            intent.removeExtra(agu.analys.util.AlertNotificationHelper.EXTRA_SYMBOL)
         }
     }
 }

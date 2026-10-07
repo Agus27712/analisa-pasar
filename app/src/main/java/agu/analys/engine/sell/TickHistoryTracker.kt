@@ -15,13 +15,22 @@ object TickHistoryTracker {
 
     private val symbolHistory = ConcurrentHashMap<String, ConcurrentLinkedDeque<TickPoint>>()
 
+    private fun makeKey(symbol: String, exchange: String): String {
+        return "${exchange.uppercase().trim()}_${symbol.uppercase().trim()}"
+    }
+
     fun clear() {
         symbolHistory.clear()
     }
 
-    fun recordTick(symbol: String, price: Double, timestamp: Long = System.currentTimeMillis()) {
+    fun recordTick(
+        symbol: String,
+        price: Double,
+        timestamp: Long = System.currentTimeMillis(),
+        exchange: String = "TOKOCRYPTO"
+    ) {
         if (price <= 0.0 || symbol.isBlank()) return
-        val key = symbol.uppercase().trim()
+        val key = makeKey(symbol, exchange)
         val deque = symbolHistory.computeIfAbsent(key) { ConcurrentLinkedDeque() }
 
         val last = deque.peekLast()
@@ -56,13 +65,14 @@ object TickHistoryTracker {
         currentPrice: Double,
         peakPrice: Double? = null,
         sellPressureRatio: Double? = null,
-        now: Long = System.currentTimeMillis()
+        now: Long = System.currentTimeMillis(),
+        exchange: String = "TOKOCRYPTO"
     ): SellRiskSnapshot {
         if (currentPrice <= 0.0) {
             return SellRiskSnapshot(currentPrice = currentPrice, timestamp = now)
         }
 
-        val key = symbol.uppercase().trim()
+        val key = makeKey(symbol, exchange)
         val deque = symbolHistory[key]
         if (deque == null || deque.isEmpty()) {
             return SellRiskSnapshot(
@@ -116,9 +126,16 @@ object TickHistoryTracker {
         )
     }
 
-    fun clear(symbol: String? = null) {
+    fun clear(symbol: String? = null, exchange: String? = null) {
         if (symbol != null) {
-            symbolHistory.remove(symbol.uppercase().trim())
+            val s = symbol.uppercase().trim()
+            if (exchange != null) {
+                symbolHistory.remove(makeKey(s, exchange))
+            } else {
+                symbolHistory.remove(makeKey(s, "TOKOCRYPTO"))
+                symbolHistory.remove(makeKey(s, "INDODAX"))
+                symbolHistory.remove(s)
+            }
         } else {
             symbolHistory.clear()
         }

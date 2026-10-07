@@ -294,10 +294,16 @@ object PriceFormatter {
                 quoteAsset.equals("USDC", true)
     }
 
+    fun isIdrQuote(quoteAsset: String): Boolean {
+        return quoteAsset.equals("IDR", true) ||
+                quoteAsset.equals("BIDR", true) ||
+                quoteAsset.equals("IDRT", true)
+    }
+
     /**
      * Ekstraksi quote asset dari symbol pasangan trading (misal BTCUSDT -> USDT, ETHIDR -> IDR)
      */
-    fun extractQuote(symbol: String): String {
+    fun extractQuote(symbol: String, defaultQuote: String = "IDR"): String {
         val clean = symbol.uppercase().replace("_", "").trim()
         return when {
             clean.endsWith("USDT") -> "USDT"
@@ -305,7 +311,9 @@ object PriceFormatter {
             clean.endsWith("BUSD") -> "BUSD"
             clean.endsWith("BIDR") -> "BIDR"
             clean.endsWith("IDR") -> "IDR"
-            else -> "IDR"
+            clean.endsWith("IDRT") -> "IDRT"
+            clean.endsWith("USD") -> "USDT"
+            else -> defaultQuote
         }
     }
 

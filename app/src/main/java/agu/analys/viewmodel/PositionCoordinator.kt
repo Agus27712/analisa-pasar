@@ -92,7 +92,7 @@ class PositionCoordinator(
     fun markSoldAndClear(symbol: String, isReal: Boolean = isRealProvider()) {
         val currentEx = exchangeProvider()
         positionStore.markSold(symbol, isReal, exchange = currentEx)
-        agu.analys.engine.sell.SellSignalLifecycleManager.reset(symbol, isReal)
+        agu.analys.engine.sell.SellSignalLifecycleManager.reset(symbol, isReal, exchange = currentEx)
         refreshPosition(symbol)
     }
 
@@ -111,27 +111,32 @@ class PositionCoordinator(
         customTiersJson: String? = null,
         isReal: Boolean = isRealProvider()
     ) {
-        positionStore.setTrailingStop(symbol, enabled, pct, refPrice, isTieredEnabled, customTiersJson, isReal)
+        val currentEx = exchangeProvider()
+        positionStore.setTrailingStop(symbol, enabled, pct, refPrice, isTieredEnabled, customTiersJson, isReal, exchange = currentEx)
         refreshPosition(symbol)
     }
 
     fun setTrailingOrderIdAndUpdateTime(symbol: String, orderId: String?, updateTime: Long, isReal: Boolean = isRealProvider()) {
-        positionStore.setTrailingOrderIdAndUpdateTime(symbol, orderId, updateTime, isReal)
+        val currentEx = exchangeProvider()
+        positionStore.setTrailingOrderIdAndUpdateTime(symbol, orderId, updateTime, isReal, exchange = currentEx)
         refreshPosition(symbol)
     }
 
     fun setAutoSell(symbol: String, enabled: Boolean, tp1: Double, tp1P: Double, tp2: Double, tp2P: Double, isReal: Boolean = isRealProvider()) {
-        positionStore.setAutoSellParams(symbol, enabled, tp1, tp1P, tp2, tp2P, isReal)
+        val currentEx = exchangeProvider()
+        positionStore.setAutoSellParams(symbol, enabled, tp1, tp1P, tp2, tp2P, isReal, exchange = currentEx)
         refreshPosition(symbol)
     }
 
     fun resetTrailing(symbol: String, isReal: Boolean = isRealProvider()) {
-        positionStore.resetTrailingTrigger(symbol, isReal)
+        val currentEx = exchangeProvider()
+        positionStore.resetTrailingTrigger(symbol, isReal, exchange = currentEx)
         refreshPosition(symbol)
     }
 
     fun addAlert(alert: PriceAlert, symbol: String) {
-        alertStore.addAlert(alert)
+        val currentEx = exchangeProvider()
+        alertStore.addAlert(if (alert.exchange.isBlank()) alert.copy(exchange = currentEx) else alert)
         refreshAlerts(symbol)
     }
 
@@ -146,13 +151,14 @@ class PositionCoordinator(
     }
 
     fun checkAlertsAndTrailing(symbol: String, price: Double, rsi: Double?) {
-        val triggered = alertStore.checkAlerts(symbol, price)
+        val currentEx = exchangeProvider()
+        val triggered = alertStore.checkAlerts(symbol, price, exchange = currentEx)
         if (triggered.isNotEmpty()) refreshAlerts(symbol)
         
         val isReal = isRealProvider()
-        val pos = positionStore.get(symbol, isReal)
+        val pos = positionStore.get(symbol, isReal, exchange = currentEx)
         if (pos.isTrailingEnabled) {
-            positionStore.updateTrailingPrice(symbol, price, isReal)
+            positionStore.updateTrailingPrice(symbol, price, isReal, exchange = currentEx)
             refreshPosition(symbol)
         }
     }

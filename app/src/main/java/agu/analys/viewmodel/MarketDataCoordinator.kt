@@ -184,7 +184,8 @@ class MarketDataCoordinator(
 
     private fun dispatchThrottledTick(tick: MarketTick) {
         _currentTick.value = tick
-        agu.analys.engine.sell.TickHistoryTracker.recordTick(tick.symbol, tick.price, tick.timestamp)
+        val ex = prefs.marketDataSource.name
+        agu.analys.engine.sell.TickHistoryTracker.recordTick(tick.symbol, tick.price, tick.timestamp, exchange = ex)
         if (_recentCandles.value.isNotEmpty()) {
             _recentCandles.value = agu.analys.util.CandleTimeUtil.synthesizeRealtimeCandles(
                 _recentCandles.value,

@@ -322,21 +322,43 @@ val POPULAR_INDODAX_PAIRS = listOf(
 
         fun fromCustomSymbol(
             raw: String,
-            defaultQuote: String = "IDR"
+            defaultQuote: String = "IDR",
+            exchange: String? = null
         ): TradingPair {
             val cleaned = raw.trim().uppercase().replace(" ", "").replace("/", "").replace("-", "").replace("_", "")
+            val isIndodax = exchange?.equals("INDODAX", true) == true
+
+            if (isIndodax) {
+                val indodaxMatch = POPULAR_INDODAX_PAIRS.find { it.symbol.equals(cleaned, ignoreCase = true) }
+                if (indodaxMatch != null) return indodaxMatch
+            }
+
             val (base, quote) = when {
                 cleaned.endsWith("USDT") -> cleaned.removeSuffix("USDT") to "USDT"
-                cleaned.endsWith("BIDR") -> cleaned.removeSuffix("BIDR") to "BIDR"
-                cleaned.endsWith("IDR") -> cleaned.removeSuffix("IDR") to "IDR"
                 cleaned.endsWith("USDC") -> cleaned.removeSuffix("USDC") to "USDC"
                 cleaned.endsWith("BUSD") -> cleaned.removeSuffix("BUSD") to "BUSD"
+                cleaned.endsWith("BIDR") -> cleaned.removeSuffix("BIDR") to "BIDR"
+                cleaned.endsWith("IDR") -> cleaned.removeSuffix("IDR") to "IDR"
+                cleaned.endsWith("IDRT") -> cleaned.removeSuffix("IDRT") to "IDRT"
                 cleaned.endsWith("USD") -> cleaned.removeSuffix("USD") to "USDT"
                 else -> cleaned to defaultQuote
             }
             val finalBase = base.ifEmpty { "BTC" }
             val finalQuote = quote.ifEmpty { defaultQuote }
             val symbol = "$finalBase$finalQuote"
+
+            if (isIndodax) {
+                val indodaxKnown = POPULAR_INDODAX_PAIRS.find { it.symbol.equals(symbol, ignoreCase = true) || (it.baseAsset.equals(finalBase, ignoreCase = true) && it.quoteAsset.equals(finalQuote, ignoreCase = true)) }
+                if (indodaxKnown != null) return indodaxKnown
+                return TradingPair(
+                    symbol = symbol,
+                    baseAsset = finalBase,
+                    quoteAsset = finalQuote,
+                    displayName = "$finalBase / $finalQuote",
+                    indodaxPair = "${finalBase.lowercase()}_${finalQuote.lowercase()}",
+                    tokocryptoPair = "${finalBase.uppercase()}_${finalQuote.uppercase()}"
+                )
+            }
 
             // 1. Coba cari di Dynamic Tokocrypto Repository
             val dynamicInfo = agu.analys.data.TokocryptoSymbolRepository.getSymbolInfo(symbol)

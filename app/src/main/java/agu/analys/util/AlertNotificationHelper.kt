@@ -14,8 +14,9 @@ import agu.analys.MainActivity
 import agu.analys.config.StrategyMode
 import agu.analys.model.AISignalState
 import agu.analys.model.LifecycleState
+import agu.analys.model.MarketKey
+import agu.analys.model.SellSignalState
 import agu.analys.model.TradingPair
-import agu.analys.util.PriceFormatter
 
 object AlertNotificationHelper {
     // Channel 1: Candidate / Pair Ready to Buy
@@ -38,6 +39,15 @@ object AlertNotificationHelper {
     const val CHANNEL_PRICE_ALERT_NAME = "Notifikasi Target Harga & Market"
     const val CHANNEL_PRICE_ALERT_DESC = "Notifikasi perubahan harga target dan indikator teknikal"
 
+    // Extra Constants for Intent routing
+    const val EXTRA_SYMBOL = "EXTRA_SYMBOL"
+    const val EXTRA_EXCHANGE = "EXTRA_EXCHANGE"
+    const val EXTRA_QUOTE = "EXTRA_QUOTE"
+    const val EXTRA_IS_REAL = "EXTRA_IS_REAL"
+    const val EXTRA_LIMIT_PRICE = "EXTRA_LIMIT_PRICE"
+    const val EXTRA_QUANTITY = "EXTRA_QUANTITY"
+    const val ACTION_EXECUTE_TRAILING_SELL = "agu.analys.ACTION_EXECUTE_TRAILING_SELL"
+
     fun createNotificationChannels(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -52,7 +62,7 @@ object AlertNotificationHelper {
                 .setUsage(AudioAttributes.USAGE_ALARM)
                 .build()
 
-            // Candidate Buy Channel (Distinct Sound: Notification Sound)
+            // Candidate Buy Channel
             val candidateSoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
             val candidateChannel = NotificationChannel(
                 CHANNEL_CANDIDATE_ID,
@@ -61,182 +71,227 @@ object AlertNotificationHelper {
             ).apply {
                 description = CHANNEL_CANDIDATE_DESC
                 enableVibration(true)
-                vibrationPattern = longArrayOf(0, 150, 100, 150)
+                vibrationPattern = longArrayOf(0, 250, 150, 250)
                 setSound(candidateSoundUri, audioAttributesNotification)
-                lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
-                setShowBadge(true)
             }
 
-            // Trailing Stop Channel (Distinct Sound: Alarm / High Alert Sound)
-            val trailingSoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-                ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
-                ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-
+            // Trailing Stop Channel
+            val trailingSoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
             val trailingChannel = NotificationChannel(
                 CHANNEL_TRAILING_ID,
                 CHANNEL_TRAILING_NAME,
-                NotificationManager.IMPORTANCE_MAX
+                NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = CHANNEL_TRAILING_DESC
                 enableVibration(true)
-                vibrationPattern = longArrayOf(0, 300, 100, 300, 100, 300)
-                setSound(trailingSoundUri, audioAttributesAlarm)
-                lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
-                setShowBadge(true)
+                vibrationPattern = longArrayOf(0, 200, 100, 200)
+                setSound(trailingSoundUri, audioAttributesNotification)
             }
 
-            // Emergency Exit Channel (High Urgency Alarm Sound & Intense Vibration for Flash Dump / Stop Loss)
+            // Emergency Exit Channel (High priority / Alarm feel)
             val emergencySoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
                 ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
-                ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-
             val emergencyChannel = NotificationChannel(
                 CHANNEL_EMERGENCY_EXIT_ID,
                 CHANNEL_EMERGENCY_EXIT_NAME,
-                NotificationManager.IMPORTANCE_MAX
+                NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = CHANNEL_EMERGENCY_EXIT_DESC
                 enableVibration(true)
-                vibrationPattern = longArrayOf(0, 400, 150, 400, 150, 400)
+                vibrationPattern = longArrayOf(0, 500, 200, 500, 200, 500)
                 setSound(emergencySoundUri, audioAttributesAlarm)
-                lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
-                setShowBadge(true)
             }
 
             // General Price Alert Channel
-            val priceChannel = NotificationChannel(
+            val priceAlertSoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+            val priceAlertChannel = NotificationChannel(
                 CHANNEL_PRICE_ALERT_ID,
                 CHANNEL_PRICE_ALERT_NAME,
-                NotificationManager.IMPORTANCE_HIGH
+                NotificationManager.IMPORTANCE_DEFAULT
             ).apply {
                 description = CHANNEL_PRICE_ALERT_DESC
                 enableVibration(true)
-                vibrationPattern = longArrayOf(0, 200, 100, 200)
-                lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
-                setShowBadge(true)
+                vibrationPattern = longArrayOf(0, 150, 100, 150)
+                setSound(priceAlertSoundUri, audioAttributesNotification)
             }
 
-            notificationManager.createNotificationChannels(listOf(candidateChannel, trailingChannel, emergencyChannel, priceChannel))
+            notificationManager.createNotificationChannels(
+                listOf(candidateChannel, trailingChannel, emergencyChannel, priceAlertChannel)
+            )
         }
     }
 
-    fun sendPriceAlertNotification(
-        context: Context,
-        notificationId: Int,
-        title: String,
-        message: String,
-        symbol: String = "",
-        onlyWhenBackground: Boolean = false
-    ) {
-        if (onlyWhenBackground && agu.analys.AppContextProvider.isAppInForeground) {
-            timber.log.Timber.d("sendPriceAlertNotification: Diabaikan karena aplikasi aktif di foreground: $title")
-            return
+    private fun hasNotificationPermission(context: Context): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            androidx.core.content.ContextCompat.checkSelfPermission(
+                context,
+                android.Manifest.permission.POST_NOTIFICATIONS
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        } else {
+            NotificationManagerCompat.from(context).areNotificationsEnabled()
         }
-        val prefs = AppPreferences(context)
-        if (!prefs.isNotificationsEnabled || !prefs.isNotifyPriceAlertsEnabled) return
-
-        createNotificationChannels(context)
-
-        val intent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            putExtra("EXTRA_SYMBOL", symbol)
-        }
-
-        val pendingIntent = PendingIntent.getActivity(
-            context,
-            notificationId,
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        val builder = NotificationCompat.Builder(context, CHANNEL_PRICE_ALERT_ID)
-            .setSmallIcon(agu.analys.R.drawable.ic_stat_trading)
-            .setColor(0xFF2563EB.toInt()) // Professional Royal Blue
-            .setContentTitle(title)
-            .setContentText(message.substringBefore("\n"))
-            .setSubText(if (symbol.isNotBlank()) symbol.uppercase() else "Indodax")
-            .setStyle(NotificationCompat.BigTextStyle().bigText(message))
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setAutoCancel(true)
-            .setContentIntent(pendingIntent)
-            .setDefaults(NotificationCompat.DEFAULT_ALL)
-
-        try {
-            val manager = NotificationManagerCompat.from(context)
-            manager.notify(notificationId, builder.build())
-        } catch (_: SecurityException) {}
     }
 
+    // 1. Candidate Buy Notification
     fun sendCandidateFoundNotification(
         context: Context,
         symbol: String,
         strategyMode: StrategyMode,
+        signal: AISignalState,
+        exchange: String = "TOKOCRYPTO",
+        quote: String? = null
+    ) {
+        val marketKey = MarketKey.resolve(symbol, exchange, quote)
+        sendCandidateFoundNotification(context, marketKey, strategyMode, signal)
+    }
+
+    fun sendCandidateFoundNotification(
+        context: Context,
+        marketKey: MarketKey,
+        strategyMode: StrategyMode,
         signal: AISignalState
     ) {
-        if (agu.analys.AppContextProvider.isAppInForeground) {
-            timber.log.Timber.d("sendCandidateFoundNotification: Diabaikan karena aplikasi aktif di foreground: $symbol")
-            return
-        }
-        val prefs = AppPreferences(context)
-        if (!prefs.isNotificationsEnabled || !prefs.isNotifyCandidateBuyEnabled) return
+        if (!hasNotificationPermission(context)) return
 
-        createNotificationChannels(context)
+        val strategyLabel = when (strategyMode) {
+            StrategyMode.SCALPING -> "SCALPING M15/M5"
+            StrategyMode.OFFICE_DAILY -> "INTRADAY H1"
+            StrategyMode.SWING -> "SWING H4/D1"
+        }
+
+        val pairFormatted = marketKey.formattedPair()
+        val quoteAsset = marketKey.quote
+
+        val title = "🚀 Sinyal Entry Siap • $pairFormatted ($strategyLabel)"
+        val entryFormatted = PriceFormatter.formatPrice(signal.entryPrice, showSymbol = true, quoteAsset = quoteAsset)
+        val tp1Formatted = PriceFormatter.formatPrice(signal.targetPrice1, showSymbol = true, quoteAsset = quoteAsset)
+        val slFormatted = PriceFormatter.formatPrice(signal.stopLoss, showSymbol = true, quoteAsset = quoteAsset)
+
+        val message = "Kandidat BUY terkonfirmasi [${marketKey.displayExchange}]:\n" +
+                "• Entry: $entryFormatted\n" +
+                "• Target 1: $tp1Formatted\n" +
+                "• Stop Loss: $slFormatted\n" +
+                "• Skor Keyakinan: ${(signal.confidence * 100).toInt()}%"
 
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            putExtra("EXTRA_SYMBOL", symbol)
+            putExtra(EXTRA_SYMBOL, marketKey.symbol)
+            putExtra(EXTRA_EXCHANGE, marketKey.exchange)
+            putExtra(EXTRA_QUOTE, marketKey.quote)
         }
-
-        val notificationId = (symbol.uppercase().hashCode() xor (strategyMode.name.hashCode() * 31)) and 0x7FFFFFFF
-
         val pendingIntent = PendingIntent.getActivity(
             context,
-            notificationId,
+            marketKey.toNotificationId(false, 100),
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val pair = TradingPair.fromCustomSymbol(symbol)
-        val quoteAsset = pair.quoteAsset
-
-        val modeLabel = when (strategyMode) {
-            StrategyMode.SCALPING -> "Scalping"
-            StrategyMode.SWING -> "Swing"
-            StrategyMode.OFFICE_DAILY -> "Intraday"
-        }
-
-        val stateLabel = if (signal.lifecycleState == LifecycleState.READY) "🟢 PAIR SIAP ENTRY (BUY)" else "⚡ KANDIDAT TERDETEKSI"
-        val title = "$stateLabel • ${symbol.uppercase()}"
-
-        val priceStr = if (signal.entryPrice > 0.0) PriceFormatter.formatPrice(signal.entryPrice, showSymbol = true, quoteAsset = quoteAsset) else "-"
-        val tp1Str = if (signal.targetPrice1 > 0.0) PriceFormatter.formatPrice(signal.targetPrice1, showSymbol = true, quoteAsset = quoteAsset) else "-"
-        val slStr = if (signal.stopLoss > 0.0) PriceFormatter.formatPrice(signal.stopLoss, showSymbol = true, quoteAsset = quoteAsset) else "-"
-
-        val reasonStr = signal.reasoning.firstOrNull() ?: signal.sentiment.displayName
-        val message = "🎯 Strategi: $modeLabel | Confidence: ${signal.confidence}%\n" +
-                "💰 Harga Entry: $priceStr\n" +
-                "📈 Target TP1: $tp1Str | 🛡️ Cut Loss: $slStr\n" +
-                "💡 Analisa: $reasonStr"
-
-        val builder = NotificationCompat.Builder(context, CHANNEL_CANDIDATE_ID)
+        val notification = NotificationCompat.Builder(context, CHANNEL_CANDIDATE_ID)
             .setSmallIcon(agu.analys.R.drawable.ic_stat_trading)
-            .setColor(0xFF059669.toInt()) // Professional Emerald Green
             .setContentTitle(title)
-            .setContentText("Entry: $priceStr • TP1: $tp1Str • Conf: ${signal.confidence}%")
-            .setSubText("${symbol.uppercase()} • $modeLabel")
+            .setContentText("Kandidat BUY terdeteksi di $entryFormatted")
             .setStyle(NotificationCompat.BigTextStyle().bigText(message))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
+            .addAction(0, "Lihat Chart", pendingIntent)
+            .build()
 
-        try {
-            val manager = NotificationManagerCompat.from(context)
-            manager.notify(notificationId, builder.build())
-        } catch (_: SecurityException) {}
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.notify(marketKey.toNotificationId(false, 100), notification)
     }
 
+    // 2. Emergency Exit Notification
+    fun sendEmergencyExitNotification(
+        context: Context,
+        symbol: String,
+        state: SellSignalState,
+        currentPrice: Double,
+        entryPrice: Double,
+        quantity: Double,
+        isReal: Boolean,
+        exchange: String = "TOKOCRYPTO",
+        quote: String? = null
+    ) {
+        val marketKey = MarketKey.resolve(symbol, exchange, quote)
+        sendEmergencyExitNotification(context, marketKey, state, currentPrice, entryPrice, quantity, isReal)
+    }
+
+    fun sendEmergencyExitNotification(
+        context: Context,
+        marketKey: MarketKey,
+        state: SellSignalState,
+        currentPrice: Double,
+        entryPrice: Double,
+        quantity: Double,
+        isReal: Boolean
+    ) {
+        if (!hasNotificationPermission(context)) return
+
+        val pairFormatted = marketKey.formattedPair()
+        val quoteAsset = marketKey.quote
+        val modeTag = if (isReal) "REAL" else "SIMULASI"
+
+        val currFormatted = PriceFormatter.formatPrice(currentPrice, showSymbol = true, quoteAsset = quoteAsset)
+        val entryFormatted = PriceFormatter.formatPrice(entryPrice, showSymbol = true, quoteAsset = quoteAsset)
+
+        val title = "🚨 EXIT DARURAT [$modeTag] • $pairFormatted"
+        val message = "PERINGATAN: ${state.reason}\n" +
+                "• Harga Terkini: $currFormatted\n" +
+                "• Harga Beli: $entryFormatted\n" +
+                "• Estimasi PnL: ${String.format(java.util.Locale.US, "%.2f", state.netProfitPct)}%\n" +
+                "Segera periksa posisi Anda di [${marketKey.displayExchange}]."
+
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(EXTRA_SYMBOL, marketKey.symbol)
+            putExtra(EXTRA_EXCHANGE, marketKey.exchange)
+            putExtra(EXTRA_QUOTE, marketKey.quote)
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            marketKey.toNotificationId(isReal, 200),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val sellIntent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            action = ACTION_EXECUTE_TRAILING_SELL
+            putExtra(EXTRA_SYMBOL, marketKey.symbol)
+            putExtra(EXTRA_EXCHANGE, marketKey.exchange)
+            putExtra(EXTRA_QUOTE, marketKey.quote)
+            putExtra(EXTRA_LIMIT_PRICE, currentPrice)
+            putExtra(EXTRA_QUANTITY, quantity)
+            putExtra(EXTRA_IS_REAL, isReal)
+        }
+        val sellPendingIntent = PendingIntent.getActivity(
+            context,
+            marketKey.toNotificationId(isReal, 201),
+            sellIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val actionLabel = if (isReal) "JUAL REAL SEKARANG" else "JUAL SEKARANG"
+
+        val notification = NotificationCompat.Builder(context, CHANNEL_EMERGENCY_EXIT_ID)
+            .setSmallIcon(agu.analys.R.drawable.ic_stat_trading)
+            .setContentTitle(title)
+            .setContentText("Bahaya: ${state.reason}")
+            .setStyle(NotificationCompat.BigTextStyle().bigText(message))
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
+            .addAction(0, actionLabel, sellPendingIntent)
+            .addAction(0, "Buka Chart", pendingIntent)
+            .build()
+
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.notify(marketKey.toNotificationId(isReal, 200), notification)
+    }
+
+    // 3. Trailing Hit Notification
     fun sendTrailingHitNotification(
         context: Context,
         symbol: String,
@@ -245,84 +300,140 @@ object AlertNotificationHelper {
         currentPrice: Double,
         limitSellPrice: Double,
         quantity: Double,
-        isReal: Boolean
+        isReal: Boolean,
+        exchange: String = "TOKOCRYPTO",
+        quote: String? = null
     ) {
-        val prefs = AppPreferences(context)
-        if (!prefs.isNotificationsEnabled || !prefs.isNotifyTrailingStopEnabled) return
-
-        createNotificationChannels(context)
-
-        val pair = TradingPair.fromCustomSymbol(symbol)
-        val quoteAsset = pair.quoteAsset
-        val modeTag = if (isReal) "[REAL]" else "[SIMULASI]"
-        val notifBaseId = (symbol.hashCode() and 0x3FFFFFFF) + (if (isReal) 100000 else 200000)
-
-        // Main Intent (when tapped)
-        val mainIntent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            putExtra("EXTRA_SYMBOL", symbol)
-            putExtra("EXTRA_IS_REAL", isReal)
-        }
-        val pendingMainIntent = PendingIntent.getActivity(
-            context,
-            notifBaseId + 1000,
-            mainIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        // Action Intent (JUAL SEKARANG)
-        val actionIntent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            action = "agu.analys.ACTION_EXECUTE_TRAILING_SELL"
-            putExtra("EXTRA_SYMBOL", symbol)
-            putExtra("EXTRA_LIMIT_PRICE", limitSellPrice)
-            putExtra("EXTRA_QUANTITY", quantity)
-            putExtra("EXTRA_IS_REAL", isReal)
-        }
-        val pendingActionIntent = PendingIntent.getActivity(
-            context,
-            notifBaseId + 1001,
-            actionIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        val profitPct = if (entryPrice > 0.0) ((limitSellPrice - entryPrice) / entryPrice) * 100.0 else 0.0
-        val formattedProfit = PriceFormatter.formatPercentage(profitPct, includePlusSign = true)
-        val stopLimitStr = PriceFormatter.formatPrice(limitSellPrice, showSymbol = true, quoteAsset = quoteAsset)
-        val currentPriceStr = PriceFormatter.formatPrice(currentPrice, showSymbol = true, quoteAsset = quoteAsset)
-        val entryPriceStr = PriceFormatter.formatPrice(entryPrice, showSymbol = true, quoteAsset = quoteAsset)
-        
-        val title = "🛡️ $modeTag TRAILING PROFIT • ${symbol.uppercase()}"
-        val message = "$modeTag 🚨 Keuntungan Terkunci: $formattedProfit\n" +
-                "💵 Harga Stop Limit: $stopLimitStr\n" +
-                "📊 Harga Running: $currentPriceStr | Modal: $entryPriceStr"
-
-        val action = NotificationCompat.Action.Builder(
-            0,
-            if (isReal) "⚡ JUAL REAL SEKARANG" else "⚡ JUAL SIMULASI SEKARANG",
-            pendingActionIntent
-        ).build()
-
-        val builder = NotificationCompat.Builder(context, CHANNEL_TRAILING_ID)
-            .setSmallIcon(agu.analys.R.drawable.ic_stat_trading)
-            .setColor(if (isReal) 0xFFDC2626.toInt() else 0xFF2563EB.toInt())
-            .setContentTitle(title)
-            .setContentText("$modeTag Terkunci: $formattedProfit ($stopLimitStr)")
-            .setSubText("$modeTag ${symbol.uppercase()} • Trailing Stop")
-            .setStyle(NotificationCompat.BigTextStyle().bigText(message))
-            .setPriority(NotificationCompat.PRIORITY_MAX)
-            .setCategory(NotificationCompat.CATEGORY_ALARM)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setAutoCancel(true)
-            .setContentIntent(pendingMainIntent)
-            .addAction(action)
-
-        try {
-            val manager = NotificationManagerCompat.from(context)
-            manager.notify(notifBaseId + 1000, builder.build())
-        } catch (_: SecurityException) {}
+        val marketKey = MarketKey.resolve(symbol, exchange, quote)
+        sendTrailingHitNotification(context, marketKey, entryPrice, peakPrice, currentPrice, limitSellPrice, quantity, isReal)
     }
 
+    fun sendTrailingHitNotification(
+        context: Context,
+        marketKey: MarketKey,
+        entryPrice: Double,
+        peakPrice: Double,
+        currentPrice: Double,
+        limitSellPrice: Double,
+        quantity: Double,
+        isReal: Boolean
+    ) {
+        if (!hasNotificationPermission(context)) return
+
+        val pairFormatted = marketKey.formattedPair()
+        val quoteAsset = marketKey.quote
+        val modeTag = if (isReal) "REAL" else "SIMULASI"
+
+        val profitPct = if (entryPrice > 0.0) ((limitSellPrice - entryPrice) / entryPrice) * 100.0 else 0.0
+        val profitStr = String.format(java.util.Locale.US, "%.2f", profitPct)
+
+        val title = "⚡ Trailing Stop Terpicu [$modeTag] • $pairFormatted"
+        val limitFormatted = PriceFormatter.formatPrice(limitSellPrice, showSymbol = true, quoteAsset = quoteAsset)
+        val peakFormatted = PriceFormatter.formatPrice(peakPrice, showSymbol = true, quoteAsset = quoteAsset)
+        val currFormatted = PriceFormatter.formatPrice(currentPrice, showSymbol = true, quoteAsset = quoteAsset)
+
+        val message = "Batas pengaman trailing tercapai [${marketKey.displayExchange}]:\n" +
+                "• Harga Eksekusi: $limitFormatted\n" +
+                "• Harga Puncak: $peakFormatted\n" +
+                "• Harga Terkini: $currFormatted\n" +
+                "• Estimasi Profit: +$profitStr%\n" +
+                "Auto-sell otomatis diluncurkan untuk mengamankan profit."
+
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(EXTRA_SYMBOL, marketKey.symbol)
+            putExtra(EXTRA_EXCHANGE, marketKey.exchange)
+            putExtra(EXTRA_QUOTE, marketKey.quote)
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            marketKey.toNotificationId(isReal, 300),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val notification = NotificationCompat.Builder(context, CHANNEL_TRAILING_ID)
+            .setSmallIcon(agu.analys.R.drawable.ic_stat_trading)
+            .setContentTitle(title)
+            .setContentText("Trailing stop tersentuh di $limitFormatted (+$profitStr%)")
+            .setStyle(NotificationCompat.BigTextStyle().bigText(message))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
+            .addAction(0, "Cek Portofolio", pendingIntent)
+            .build()
+
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.notify(marketKey.toNotificationId(isReal, 300), notification)
+    }
+
+    // 4. Trailing Peak Update Notification
+    fun sendTrailingPeakUpdateNotification(
+        context: Context,
+        symbol: String,
+        newPeak: Double,
+        stopLimitPrice: Double,
+        entryPrice: Double,
+        profitPct: Double,
+        isReal: Boolean,
+        exchange: String = "TOKOCRYPTO",
+        quote: String? = null
+    ) {
+        val marketKey = MarketKey.resolve(symbol, exchange, quote)
+        sendTrailingPeakUpdateNotification(context, marketKey, newPeak, stopLimitPrice, entryPrice, profitPct, isReal)
+    }
+
+    fun sendTrailingPeakUpdateNotification(
+        context: Context,
+        marketKey: MarketKey,
+        newPeak: Double,
+        stopLimitPrice: Double,
+        entryPrice: Double,
+        profitPct: Double,
+        isReal: Boolean
+    ) {
+        if (!hasNotificationPermission(context)) return
+
+        val pairFormatted = marketKey.formattedPair()
+        val quoteAsset = marketKey.quote
+        val modeTag = if (isReal) "REAL" else "SIMULASI"
+
+        val profitStr = String.format(java.util.Locale.US, "%.2f", profitPct)
+        val peakFormatted = PriceFormatter.formatPrice(newPeak, showSymbol = true, quoteAsset = quoteAsset)
+        val stopFormatted = PriceFormatter.formatPrice(stopLimitPrice, showSymbol = true, quoteAsset = quoteAsset)
+
+        val title = "📈 Trailing Peak Naik [$modeTag] • $pairFormatted"
+        val message = "Puncak harga naik ke $peakFormatted [${marketKey.displayExchange}] (Profit Puncak: +$profitStr%).\n" +
+                "Batas stop limit otomatis dinaikkan ke $stopFormatted untuk mengunci profit."
+
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(EXTRA_SYMBOL, marketKey.symbol)
+            putExtra(EXTRA_EXCHANGE, marketKey.exchange)
+            putExtra(EXTRA_QUOTE, marketKey.quote)
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            marketKey.toNotificationId(isReal, 400),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val notification = NotificationCompat.Builder(context, CHANNEL_TRAILING_ID)
+            .setSmallIcon(agu.analys.R.drawable.ic_stat_trading)
+            .setContentTitle(title)
+            .setContentText("Stop limit dinaikkan ke $stopFormatted (+$profitStr%)")
+            .setStyle(NotificationCompat.BigTextStyle().bigText(message))
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
+            .build()
+
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.notify(marketKey.toNotificationId(isReal, 400), notification)
+    }
+
+    // 5. Take Profit Reached Notification
     fun sendTakeProfitNotification(
         context: Context,
         symbol: String,
@@ -331,220 +442,139 @@ object AlertNotificationHelper {
         currentPrice: Double,
         netProfitPct: Double,
         quantity: Double,
-        isReal: Boolean
+        isReal: Boolean,
+        exchange: String = "TOKOCRYPTO",
+        quote: String? = null
     ) {
-        val prefs = AppPreferences(context)
-        if (!prefs.isNotificationsEnabled || !prefs.isNotifyTrailingStopEnabled) return
-
-        createNotificationChannels(context)
-
-        val pair = TradingPair.fromCustomSymbol(symbol)
-        val quoteAsset = pair.quoteAsset
-        val modeTag = if (isReal) "[REAL]" else "[SIMULASI]"
-        val notifBaseId = (symbol.hashCode() and 0x3FFFFFFF) + (if (isReal) 150000 else 250000)
-
-        val mainIntent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            putExtra("EXTRA_SYMBOL", symbol)
-            putExtra("EXTRA_IS_REAL", isReal)
-        }
-        val pendingMainIntent = PendingIntent.getActivity(
-            context,
-            notifBaseId + 1000,
-            mainIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        val actionIntent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            action = "agu.analys.ACTION_EXECUTE_TRAILING_SELL"
-            putExtra("EXTRA_SYMBOL", symbol)
-            putExtra("EXTRA_LIMIT_PRICE", currentPrice)
-            putExtra("EXTRA_QUANTITY", quantity)
-            putExtra("EXTRA_IS_REAL", isReal)
-        }
-        val pendingActionIntent = PendingIntent.getActivity(
-            context,
-            notifBaseId + 1001,
-            actionIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        val formattedProfit = PriceFormatter.formatPercentage(netProfitPct, includePlusSign = true)
-        val currentPriceStr = PriceFormatter.formatPrice(currentPrice, showSymbol = true, quoteAsset = quoteAsset)
-        val entryPriceStr = PriceFormatter.formatPrice(entryPrice, showSymbol = true, quoteAsset = quoteAsset)
-
-        val title = "🎯 $modeTag TAKE PROFIT TERCAPAI • ${symbol.uppercase()}"
-        val message = "$modeTag 💰 $targetLabel: $formattedProfit\n" +
-                "💵 Harga Realisasi: $currentPriceStr\n" +
-                "📊 Modal Beli: $entryPriceStr | Ketuk tombol di bawah untuk eksekusi langsung."
-
-        val action = NotificationCompat.Action.Builder(
-            0,
-            if (isReal) "⚡ JUAL REAL SEKARANG" else "⚡ JUAL SIMULASI SEKARANG",
-            pendingActionIntent
-        ).build()
-
-        val builder = NotificationCompat.Builder(context, CHANNEL_TRAILING_ID)
-            .setSmallIcon(agu.analys.R.drawable.ic_stat_trading)
-            .setColor(0xFF059669.toInt()) // Emerald Green for profit
-            .setContentTitle(title)
-            .setContentText("$modeTag $targetLabel: $formattedProfit ($currentPriceStr)")
-            .setSubText("$modeTag ${symbol.uppercase()} • Take Profit")
-            .setStyle(NotificationCompat.BigTextStyle().bigText(message))
-            .setPriority(NotificationCompat.PRIORITY_MAX)
-            .setCategory(NotificationCompat.CATEGORY_ALARM)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setAutoCancel(true)
-            .setContentIntent(pendingMainIntent)
-            .addAction(action)
-
-        try {
-            val manager = NotificationManagerCompat.from(context)
-            manager.notify(notifBaseId + 1000, builder.build())
-        } catch (_: SecurityException) {}
+        val marketKey = MarketKey.resolve(symbol, exchange, quote)
+        sendTakeProfitNotification(context, marketKey, targetLabel, entryPrice, currentPrice, netProfitPct, quantity, isReal)
     }
 
-    fun sendTrailingPeakUpdateNotification(
+    fun sendTakeProfitNotification(
         context: Context,
-        symbol: String,
-        newPeak: Double,
-        stopLimitPrice: Double,
+        marketKey: MarketKey,
+        targetLabel: String,
         entryPrice: Double,
-        profitPct: Double,
+        currentPrice: Double,
+        netProfitPct: Double,
+        quantity: Double,
         isReal: Boolean
     ) {
-        val prefs = AppPreferences(context)
-        if (!prefs.isNotificationsEnabled || !prefs.isNotifyTrailingStopEnabled) return
+        if (!hasNotificationPermission(context)) return
 
-        createNotificationChannels(context)
+        val pairFormatted = marketKey.formattedPair()
+        val quoteAsset = marketKey.quote
+        val modeTag = if (isReal) "REAL" else "SIMULASI"
 
-        val pair = TradingPair.fromCustomSymbol(symbol)
-        val quoteAsset = pair.quoteAsset
-        val modeTag = if (isReal) "[REAL]" else "[SIMULASI]"
-        val notifId = (symbol.hashCode() and 0x3FFFFFFF) + (if (isReal) 100000 else 200000) + 500
+        val profitStr = String.format(java.util.Locale.US, "%.2f", netProfitPct)
+        val currFormatted = PriceFormatter.formatPrice(currentPrice, showSymbol = true, quoteAsset = quoteAsset)
+        val entryFormatted = PriceFormatter.formatPrice(entryPrice, showSymbol = true, quoteAsset = quoteAsset)
+
+        val title = "🎯 Target Tercapai ($targetLabel) [$modeTag] • $pairFormatted"
+        val message = "Posisi $pairFormatted di [${marketKey.displayExchange}] mencapai target:\n" +
+                "• Harga Jual: $currFormatted\n" +
+                "• Harga Beli: $entryFormatted\n" +
+                "• Net Profit: +$profitStr%\n" +
+                "Koin siap untuk direalisasikan."
 
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            putExtra("EXTRA_SYMBOL", symbol)
-            putExtra("EXTRA_IS_REAL", isReal)
+            putExtra(EXTRA_SYMBOL, marketKey.symbol)
+            putExtra(EXTRA_EXCHANGE, marketKey.exchange)
+            putExtra(EXTRA_QUOTE, marketKey.quote)
         }
-
         val pendingIntent = PendingIntent.getActivity(
             context,
-            notifId,
+            marketKey.toNotificationId(isReal, 500),
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val newPeakStr = PriceFormatter.formatPrice(newPeak, showSymbol = true, quoteAsset = quoteAsset)
-        val stopLimitStr = PriceFormatter.formatPrice(stopLimitPrice, showSymbol = true, quoteAsset = quoteAsset)
-        val entryPriceStr = PriceFormatter.formatPrice(entryPrice, showSymbol = true, quoteAsset = quoteAsset)
-        val profitPctStr = PriceFormatter.formatPercentage(profitPct, includePlusSign = true)
+        val sellIntent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            action = ACTION_EXECUTE_TRAILING_SELL
+            putExtra(EXTRA_SYMBOL, marketKey.symbol)
+            putExtra(EXTRA_EXCHANGE, marketKey.exchange)
+            putExtra(EXTRA_QUOTE, marketKey.quote)
+            putExtra(EXTRA_LIMIT_PRICE, currentPrice)
+            putExtra(EXTRA_QUANTITY, quantity)
+            putExtra(EXTRA_IS_REAL, isReal)
+        }
+        val sellPendingIntent = PendingIntent.getActivity(
+            context,
+            marketKey.toNotificationId(isReal, 501),
+            sellIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
 
-        val title = "🚀 $modeTag TRAILING NAIK • ${symbol.uppercase()}"
-        val message = "$modeTag 📈 Peak baru: $newPeakStr ($profitPctStr)\n" +
-                "🛡️ Batas Stop Limit dinaikkan ke: $stopLimitStr\n" +
-                "💰 Modal Beli: $entryPriceStr"
+        val actionLabel = if (isReal) "JUAL REAL SEKARANG" else "JUAL SEKARANG"
+
+        val notification = NotificationCompat.Builder(context, CHANNEL_TRAILING_ID)
+            .setSmallIcon(agu.analys.R.drawable.ic_stat_trading)
+            .setContentTitle(title)
+            .setContentText("Target tercapai di $currFormatted (+$profitStr%)")
+            .setStyle(NotificationCompat.BigTextStyle().bigText(message))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
+            .addAction(0, actionLabel, sellPendingIntent)
+            .addAction(0, "Cek Portofolio", pendingIntent)
+            .build()
+
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.notify(marketKey.toNotificationId(isReal, 500), notification)
+    }
+
+    // 6. Generic Price Alert Notification
+    fun sendPriceAlertNotification(
+        context: Context,
+        title: String,
+        message: String,
+        notificationId: Int = 9999,
+        symbol: String = "",
+        exchange: String = "TOKOCRYPTO",
+        quote: String? = null,
+        onlyWhenBackground: Boolean = false
+    ) {
+        val marketKey = if (symbol.isNotBlank()) MarketKey.resolve(symbol, exchange, quote) else null
+        sendPriceAlertNotification(context, title, message, notificationId, marketKey, onlyWhenBackground)
+    }
+
+    fun sendPriceAlertNotification(
+        context: Context,
+        title: String,
+        message: String,
+        notificationId: Int = 9999,
+        marketKey: MarketKey? = null,
+        onlyWhenBackground: Boolean = false
+    ) {
+        if (!hasNotificationPermission(context)) return
+
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            if (marketKey != null) {
+                putExtra(EXTRA_SYMBOL, marketKey.symbol)
+                putExtra(EXTRA_EXCHANGE, marketKey.exchange)
+                putExtra(EXTRA_QUOTE, marketKey.quote)
+            }
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            notificationId,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
 
         val builder = NotificationCompat.Builder(context, CHANNEL_PRICE_ALERT_ID)
             .setSmallIcon(agu.analys.R.drawable.ic_stat_trading)
-            .setColor(if (isReal) 0xFF059669.toInt() else 0xFF2563EB.toInt())
             .setContentTitle(title)
-            .setContentText("$modeTag Stop Limit naik: $stopLimitStr ($profitPctStr)")
-            .setSubText("$modeTag ${symbol.uppercase()} • Trailing Naik")
+            .setContentText(message)
             .setStyle(NotificationCompat.BigTextStyle().bigText(message))
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
 
-        try {
-            val manager = NotificationManagerCompat.from(context)
-            manager.notify(notifId, builder.build())
-        } catch (_: SecurityException) {}
-    }
-
-    fun sendEmergencyExitNotification(
-        context: Context,
-        symbol: String,
-        state: agu.analys.model.SellSignalState,
-        currentPrice: Double,
-        entryPrice: Double,
-        quantity: Double,
-        isReal: Boolean
-    ) {
-        val prefs = AppPreferences(context)
-        if (!prefs.isNotificationsEnabled || !prefs.isNotifyEmergencyExitEnabled) return
-
-        createNotificationChannels(context)
-
-        val pair = TradingPair.fromCustomSymbol(symbol)
-        val quoteAsset = pair.quoteAsset
-        val notifId = ((symbol.uppercase().hashCode() xor 0x5E11) and 0x3FFFFFFF) + (if (isReal) 300000 else 400000)
-
-        val mainIntent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            putExtra("EXTRA_SYMBOL", symbol)
-            putExtra("EXTRA_IS_REAL", isReal)
-        }
-        val pendingMainIntent = PendingIntent.getActivity(
-            context,
-            notifId,
-            mainIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        // Action Intent: langsung mengarahkan ke konfirmasi eksekusi jual darurat
-        val actionIntent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            action = "agu.analys.ACTION_EXECUTE_TRAILING_SELL"
-            putExtra("EXTRA_SYMBOL", symbol)
-            putExtra("EXTRA_LIMIT_PRICE", currentPrice)
-            putExtra("EXTRA_QUANTITY", quantity)
-            putExtra("EXTRA_IS_REAL", isReal)
-        }
-        val pendingActionIntent = PendingIntent.getActivity(
-            context,
-            notifId + 1,
-            actionIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        val modeTag = if (isReal) "[REAL]" else "[SIM]"
-        val dropReason = state.reason
-        val pnlFormatted = PriceFormatter.formatPercentage(state.netProfitPct, includePlusSign = true)
-        val title = "🚨 $modeTag EXIT DARURAT: ${symbol.uppercase()} ($pnlFormatted)"
-        val priceStr = PriceFormatter.formatPrice(currentPrice, showSymbol = true, quoteAsset = quoteAsset)
-        val entryStr = if (entryPrice > 0.0) PriceFormatter.formatPrice(entryPrice, showSymbol = true, quoteAsset = quoteAsset) else "-"
-        val message = "$dropReason\n" +
-                "💵 Harga Sekarang: $priceStr | Beli: $entryStr\n" +
-                "⚠️ Segera periksa posisi dan amankan modal!"
-
-        val action = NotificationCompat.Action.Builder(
-            0,
-            if (isReal) "⚡ EXIT REAL SEKARANG" else "⚡ EXIT SIMULASI",
-            pendingActionIntent
-        ).build()
-
-        val builder = NotificationCompat.Builder(context, CHANNEL_EMERGENCY_EXIT_ID)
-            .setSmallIcon(agu.analys.R.drawable.ic_stat_trading)
-            .setColor(0xFFDC2626.toInt()) // Emergency Red
-            .setContentTitle(title)
-            .setContentText("$dropReason ($pnlFormatted)")
-            .setSubText("$modeTag ${symbol.uppercase()} • Exit Darurat")
-            .setStyle(NotificationCompat.BigTextStyle().bigText(message))
-            .setPriority(NotificationCompat.PRIORITY_MAX)
-            .setCategory(NotificationCompat.CATEGORY_ALARM)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setAutoCancel(true)
-            .setContentIntent(pendingMainIntent)
-            .addAction(action)
-
-        try {
-            val manager = NotificationManagerCompat.from(context)
-            manager.notify(notifId, builder.build())
-        } catch (_: SecurityException) {}
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.notify(notificationId, builder.build())
     }
 }
-

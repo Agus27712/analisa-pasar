@@ -23,13 +23,19 @@ object SellSignalLifecycleManager {
     private val activeStates = ConcurrentHashMap<String, SellLifecycleState>()
     private val lock = ReentrantLock()
 
-    private fun buildKey(symbol: String, isReal: Boolean): String {
-        return "${if (isReal) "real" else "sim"}_${symbol.uppercase().trim()}"
+    private fun buildKey(symbol: String, isReal: Boolean, exchange: String = "TOKOCRYPTO"): String {
+        val ex = exchange.uppercase().trim()
+        return "${ex}_${if (isReal) "real" else "sim"}_${symbol.uppercase().trim()}"
     }
 
-    fun process(symbol: String, newState: SellSignalState, isReal: Boolean = false): SellTransition = lock.withLock {
-        val key = buildKey(symbol, isReal)
-        val previousState = activeStates[key] ?: SellLifecycleState.NOT_HOLDING
+    fun process(
+        symbol: String,
+        newState: SellSignalState,
+        isReal: Boolean = false,
+        exchange: String = "TOKOCRYPTO"
+    ): SellTransition = lock.withLock {
+        val key = buildKey(symbol, isReal, exchange)
+        val previousState = activeStates[key] ?: activeStates["${if (isReal) "real" else "sim"}_${symbol.uppercase().trim()}"] ?: SellLifecycleState.NOT_HOLDING
         
         // Simpan state baru
         activeStates[key] = newState.state
@@ -49,7 +55,8 @@ object SellSignalLifecycleManager {
         )
     }
 
-    fun reset(symbol: String, isReal: Boolean = false) = lock.withLock {
-        activeStates.remove(buildKey(symbol, isReal))
+    fun reset(symbol: String, isReal: Boolean = false, exchange: String = "TOKOCRYPTO") = lock.withLock {
+        activeStates.remove(buildKey(symbol, isReal, exchange))
+        activeStates.remove("${if (isReal) "real" else "sim"}_${symbol.uppercase().trim()}")
     }
 }
