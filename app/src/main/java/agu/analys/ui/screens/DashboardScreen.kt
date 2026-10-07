@@ -108,6 +108,19 @@ fun DashboardScreen(
         TradingPair.popularPairsForSource(marketDataSource)
     }
 
+    // Satu entri per simbol: peta tick Indodax menyimpan 1 koin di beberapa kunci (BTCIDR, BTC_IDR, btc_idr)
+    val uniqueTicks = remember(allTicks) {
+        allTicks.values.distinctBy { it.symbol.uppercase().replace("_", "").replace("/", "") }
+    }
+
+    // Watchlist/favorit dicocokkan per simbol penuh (BTCIDR != BTCUSDT), konsisten dengan cara daftar dibangun
+    val watchSymbols = remember(watchlist, favorites, defaultQuote) {
+        (watchlist + favorites).map { TradingPair.fromCustomSymbol(it, defaultQuote).symbol }.toSet()
+    }
+    val favSymbols = remember(favorites, defaultQuote) {
+        favorites.map { TradingPair.fromCustomSymbol(it, defaultQuote).symbol }.toSet()
+    }
+
     // Prioritaskan daftar koin fokus sesuai Mode Strategi yang aktif (Focus Mode)
     val strategyPairs = remember(
         strategyMode,
@@ -115,7 +128,7 @@ fun DashboardScreen(
         hotCoins,
         topVolumeCoins,
         losersCoins,
-        allTicks,
+        uniqueTicks,
         watchlist,
         favorites,
         basePopular,
@@ -126,7 +139,8 @@ fun DashboardScreen(
         fun volIdr(t: agu.analys.model.MarketTick) =
             agu.analys.util.DashboardRanking.volumeInIdr(t.symbol, t.volume24h, usdtIdrRate)
         fun priceOk(t: agu.analys.model.MarketTick) =
-            agu.analys.util.DashboardRanking.passesPriceFloor(t)
+            agu.analys.util.DashboardRanking.passesPriceFloor(t) &&
+                agu.analys.util.DashboardRanking.isRankable(marketDataSource, t)
         // Tokocrypto: daftar discovery berisi semua pair, jadi hanya ambil 15 teratas sebagai cadangan
         val popularHead = if (marketDataSource == MarketDataSource.TOKOCRYPTO) {
             basePopular.take(agu.analys.util.DashboardRanking.PAGE_SIZE)
@@ -136,7 +150,7 @@ fun DashboardScreen(
 
         when (strategyMode) {
             StrategyMode.SCALPING -> {
-                val highVol = allTicks.values
+                val highVol = uniqueTicks
                     .filter { priceOk(it) && volIdr(it) >= 200_000_000.0 }
                     .sortedWith(compareByDescending<agu.analys.model.MarketTick> { it.change24h > 0 }.thenByDescending { volIdr(it) })
                     .take(30)
@@ -146,7 +160,7 @@ fun DashboardScreen(
                 (watchAndFav + explicit + highVol + popularHead).distinctBy { it.symbol }
             }
             StrategyMode.SWING -> {
-                val swingCandidates = allTicks.values
+                val swingCandidates = uniqueTicks
                     .filter { priceOk(it) && volIdr(it) >= 500_000_000.0 && it.change24h in -3.0..8.0 }
                     .sortedByDescending { volIdr(it) }
                     .take(25)
@@ -154,7 +168,7 @@ fun DashboardScreen(
                 (watchAndFav + swingCandidates + popularHead).distinctBy { it.symbol }
             }
             StrategyMode.OFFICE_DAILY -> {
-                val intradayCandidates = allTicks.values
+                val intradayCandidates = uniqueTicks
                     .filter { priceOk(it) && volIdr(it) >= 300_000_000.0 && it.change24h >= -3.5 }
                     .sortedWith(
                         compareByDescending<agu.analys.model.MarketTick> { IntradayScreener.evaluateFast(it).score }
@@ -164,6 +178,25 @@ fun DashboardScreen(
                     .map { TradingPair.fromCustomSymbol(it.symbol, defaultQuote) }
                 (watchAndFav + intradayCandidates + popularHead).distinctBy { it.symbol }
             }
+        }
+    }
+
+    // 1. Kumpulan seluruh aset bursa aktif yang diurutkan murni berdasarkan Volume 24H Tertinggi (USDT dinormalisasi ke IDR)
+    val allVolumeSortedPairs = remember(
+        allTicks,
+        marketDataSource,
+        usdtIdrRate,
+        basePopular
+    ) {
+        val validTicks = agu.analys.util.DashboardRanking.rankByVolume(allTicks.values, usdtIdrRate) {
+            agu.analys.util.DashboardRanking.isRankable(marketDataSource, it)
+        }
+        if (validTicks.isNotEmpty()) {
+            validTicks
+                .map { TradingPair.fromCustomSymbol(it.symbol) }
+                .distinctBy { it.symbol }
+        } else {
+            basePopular.take(agu.analys.util.DashboardRanking.PAGE_SIZE)
         }
     }
 
@@ -177,21 +210,21 @@ fun DashboardScreen(
         worthBySymbol,
         coinBadges,
         aiSignalState,
-        allTicks
+        allVolumeSortedPairs,
+        watchSymbols
     ) {
         when (selectedQuickFilter) {
             DashboardQuickFilter.ALL -> strategyPairs
             DashboardQuickFilter.STRONG_SIGNAL -> {
-                strategyPairs.filter { pair ->
-                    val tick = allTicks[pair.symbol]
+                // Cari di daftar fokus + seluruh aset terurut volume; kenaikan harga saja bukan sinyal.
+                (strategyPairs + allVolumeSortedPairs).distinctBy { it.symbol }.filter { pair ->
                     val worth = worthBySymbol[pair.symbol]
                     val badges = coinBadges[pair.symbol] ?: emptyList()
                     val engineSignal = viewModel.getEngineSignal(pair.symbol)
                     val isAiBuy = engineSignal != null && engineSignal.action == SignalAction.BUY && engineSignal.confidence >= 55
-                    val isWorth = worth != null && (worth.isWorthIt || worth.worthScore >= 65)
+                    val isWorth = worth != null && worth.isWorthIt && worth.worthScore >= 70
                     val isBreakout = badges.any { it.label == "BREAKOUT" || it.label == "MOMENTUM" }
-                    val isHighGain = tick != null && tick.change24h >= 3.0
-                    isAiBuy || isWorth || isBreakout || isHighGain
+                    isAiBuy || isWorth || isBreakout
                 }
             }
             DashboardQuickFilter.HOLDING -> {
@@ -207,10 +240,7 @@ fun DashboardScreen(
             DashboardQuickFilter.WATCHLIST -> {
                 val watchListPairs = (watchlist.map { TradingPair.fromCustomSymbol(it, defaultQuote) } +
                     favorites.map { TradingPair.fromCustomSymbol(it, defaultQuote) })
-                val matchedStrategyPairs = strategyPairs.filter { pair ->
-                    watchlist.any { it.equals(pair.symbol, ignoreCase = true) || it.equals(pair.baseAsset, ignoreCase = true) } ||
-                    favorites.any { it.equals(pair.symbol, ignoreCase = true) || it.equals(pair.baseAsset, ignoreCase = true) }
-                }
+                val matchedStrategyPairs = strategyPairs.filter { pair -> pair.symbol in watchSymbols }
                 (watchListPairs + matchedStrategyPairs).distinctBy { it.symbol }
             }
         }
@@ -244,27 +274,11 @@ fun DashboardScreen(
 
     // Prefetch/sync candle 1H untuk semua holding aktif secara background agar chart sparkline selalu ready
     LaunchedEffect(activeHoldingList.map { it.pair.symbol }) {
-        activeHoldingList.forEach { item ->
-            viewModel.ensureH1Candles(item.pair.symbol)
-        }
-    }
-
-    // 1. Kumpulan seluruh aset bursa aktif yang diurutkan murni berdasarkan Volume 24H Tertinggi (USDT dinormalisasi ke IDR)
-    val allVolumeSortedPairs = remember(
-        allTicks,
-        marketDataSource,
-        usdtIdrRate,
-        basePopular
-    ) {
-        val validTicks = agu.analys.util.DashboardRanking.rankByVolume(allTicks.values, usdtIdrRate) {
-            agu.analys.util.DashboardRanking.isRankable(marketDataSource, it)
-        }
-        if (validTicks.isNotEmpty()) {
-            validTicks
-                .map { TradingPair.fromCustomSymbol(it.symbol) }
-                .distinctBy { it.symbol }
-        } else {
-            basePopular.take(agu.analys.util.DashboardRanking.PAGE_SIZE)
+        while (true) {
+            activeHoldingList.forEach { item ->
+                viewModel.ensureH1Candles(item.pair.symbol)
+            }
+            kotlinx.coroutines.delay(10 * 60 * 1000L) // ensureH1Candles hanya fetch bila data > 2 jam
         }
     }
 
@@ -323,7 +337,7 @@ fun DashboardScreen(
         }
     }
 
-    LaunchedEffect(shouldLoadMore) {
+    LaunchedEffect(shouldLoadMore, displayedPairs.size) {
         if (shouldLoadMore) {
             viewModel.loadMoreDashboardPairs()
         }
@@ -480,7 +494,7 @@ fun DashboardScreen(
                                 worth = worthBySymbol[pair.symbol],
                                 aiSignal = viewModel.getEngineSignal(pair.symbol),
                                 badges = effectiveBadges,
-                                isFavorite = favorites.contains(pair.symbol),
+                                isFavorite = favSymbols.contains(pair.symbol),
                                 maxVolume = maxVolume,
                                 isTopPicked = (pair.symbol == displayedPairs.firstOrNull()?.symbol)
                             ),
