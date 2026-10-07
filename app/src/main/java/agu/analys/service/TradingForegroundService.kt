@@ -299,7 +299,7 @@ class TradingForegroundService : Service() {
     private fun formatCoinQuantity(quantity: Double, baseAsset: String): String {
         if (quantity <= 0.0) return "0 $baseAsset"
         val cache = agu.analys.util.MarketDataCache(this)
-        val meta = cache.loadPairsMetadata().find { it.baseCurrency.equals(baseAsset, ignoreCase = true) || it.tradedCurrency.equals(baseAsset, ignoreCase = true) }
+        val meta = cache.loadPairsMetadata(AppPreferences(this).marketDataSource).find { it.baseCurrency.equals(baseAsset, ignoreCase = true) || it.tradedCurrency.equals(baseAsset, ignoreCase = true) }
         val decimals = meta?.quantityDecimals ?: if (quantity >= 1000.0) 2 else if (quantity >= 1.0) 4 else 8
         return agu.analys.util.PriceFormatter.formatCoinQuantity(quantity, baseAsset, decimals)
     }

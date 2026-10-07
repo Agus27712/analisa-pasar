@@ -653,7 +653,7 @@ object IndodaxTradeApiV2 {
 
     private fun decimal(value: Double, symbol: String, isPrice: Boolean): String {
         val meta = agu.analys.util.MarketDataCache(agu.analys.AppContextProvider.context)
-            .loadPairsMetadata()
+            .loadPairsMetadata(agu.analys.config.MarketDataSource.INDODAX)
             .find { it.symbol.equals(symbol.replace("_", ""), ignoreCase = true) }
         val pair = agu.analys.model.TradingPair.fromCustomSymbol(symbol)
         return if (isPrice) {

@@ -68,7 +68,7 @@ class AiNewsViewModel(application: Application) : AndroidViewModel(application) 
 
                 val dynamicBases = mutableSetOf<String>()
                 dynamicBases.addAll(TradingPair.POPULAR_INDODAX_PAIRS.map { it.baseAsset.uppercase() })
-                val metadata = agu.analys.util.MarketDataCache(getApplication()).loadPairsMetadata()
+                val metadata = agu.analys.util.MarketDataCache(getApplication()).loadPairsMetadata(agu.analys.config.MarketDataSource.INDODAX)
                 if (metadata.isNotEmpty()) {
                     dynamicBases.addAll(metadata.map { it.baseCurrency.uppercase() })
                 }

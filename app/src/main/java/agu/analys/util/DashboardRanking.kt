@@ -13,9 +13,11 @@ object DashboardRanking {
     /** Jumlah pair per halaman dashboard (load bertahap saat scroll). */
     const val PAGE_SIZE = 15
 
-    private const val FALLBACK_USDT_IDR = 16000.0
-
-    fun safeRate(rate: Double): Double = if (rate > 1000.0) rate else FALLBACK_USDT_IDR
+    /**
+     * Kurs USDT/IDR hanya dari exchange (ExchangeRateManager). Tanpa kurs valid hasilnya 0,
+     * artinya volume pair USDT belum bisa dibandingkan dengan pair IDR (bukan ditebak).
+     */
+    fun safeRate(rate: Double): Double = if (rate > 1000.0) rate else 0.0
 
     fun isUsdtQuote(symbol: String): Boolean =
         symbol.uppercase().replace("_", "").replace("/", "").endsWith("USDT")

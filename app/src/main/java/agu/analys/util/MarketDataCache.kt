@@ -16,6 +16,21 @@ class MarketDataCache(context: Context) {
     private var lastDashboardWriteAt = 0L
     private val lastPairWriteAt = mutableMapOf<String, Long>()
 
+    init { migrateLegacyPairsMetadata() }
+
+    /**
+     * Dulu metadata pair Indodax ikut tersimpan di kunci Tokocrypto (parameter source terlewat).
+     * Tidak ada yang menyimpan metadata Tokocrypto, jadi kunci itu dibuang sekali supaya
+     * sisa data Indodax tidak terbaca di mode Tokocrypto.
+     */
+    private fun migrateLegacyPairsMetadata() {
+        if (prefs.getBoolean(KEY_META_MIGRATED_V2, false)) return
+        prefs.edit()
+            .remove(KEY_PAIRS_METADATA + "_" + agu.analys.config.MarketDataSource.TOKOCRYPTO.name.lowercase())
+            .putBoolean(KEY_META_MIGRATED_V2, true)
+            .apply()
+    }
+
     fun clearAll() { prefs.edit().clear().apply(); lastDashboardWriteAt = 0L; lastPairWriteAt.clear() }
 
     fun clearCacheForSource(source: agu.analys.config.MarketDataSource) {
@@ -186,6 +201,7 @@ class MarketDataCache(context: Context) {
     private fun jsonToTick(o: JSONObject): MarketTick? { val price = o.optDouble("price", 0.0); if (price <= 0) return null; val raw = o.opt("change"); val change = when (raw) { null, JSONObject.NULL -> Double.NaN; is Number -> raw.toDouble(); else -> o.optDouble("change", Double.NaN) }; return MarketTick(o.optString("symbol", ""), price, o.optDouble("high", price), o.optDouble("low", price), o.optDouble("vol", 0.0), change, o.optLong("ts", System.currentTimeMillis())) }
     companion object {
         private const val KEY_PAIRS_METADATA = "pairs_metadata_json"
+        private const val KEY_META_MIGRATED_V2 = "pairs_metadata_migrated_v2"
         private const val PREFS_NAME = "krypto_market_cache"
         private const val KEY_DASHBOARD_TICKS = "dashboard_ticks_json"
         private const val KEY_DASHBOARD_SAVED_AT = "dashboard_saved_at"
@@ -194,6 +210,9 @@ class MarketDataCache(context: Context) {
         private const val DASHBOARD_WRITE_INTERVAL_MS = 15_000L
         private const val PAIR_WRITE_INTERVAL_MS = 15_000L
         private const val DAY_MS = 24L * 60L * 60L * 1000L
+
+        /** Cache dashboard yang lebih tua dari ini tidak dipulihkan (harga basi menyesatkan). */
+        const val MAX_DASHBOARD_CACHE_AGE_MS = 6L * 60L * 60L * 1000L
     }
 
     fun savePairsMetadata(

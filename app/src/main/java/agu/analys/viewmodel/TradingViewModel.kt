@@ -365,6 +365,14 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
             viewModelScope.launch(Dispatchers.IO) {
                 agu.analys.data.TokocryptoSymbolRepository.ensureSymbolsLoaded(false)
             }
+        } else {
+            // Presisi order Indodax: metadata pair harus ada sebelum order pertama
+            viewModelScope.launch(Dispatchers.IO) {
+                val meta = agu.analys.service.IndodaxMarketService.fetchPairsMetadata()
+                if (meta.isNotEmpty()) {
+                    marketCache.savePairsMetadata(meta, MarketDataSource.INDODAX)
+                }
+            }
         }
 
         // 4. Pilih pair default bursa baru

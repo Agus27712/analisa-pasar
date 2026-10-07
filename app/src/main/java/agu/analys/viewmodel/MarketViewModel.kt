@@ -132,6 +132,8 @@ class MarketViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun restoreFromCache(source: MarketDataSource) {
+        val cacheAge = marketCache.dashboardCacheAgeMs(source)
+        if (cacheAge < 0L || cacheAge > MarketDataCache.MAX_DASHBOARD_CACHE_AGE_MS) return
         val cached = marketCache.loadDashboardTicks(source)
         if (cached.isNotEmpty()) {
             _dashboardTicks.value = cached
@@ -139,9 +141,10 @@ class MarketViewModel(application: Application) : AndroidViewModel(application) 
             val valid = cached.values.filter { it.price > 0 }
             val gainers = valid.filter { it.change24h > 0 }.sortedByDescending { it.change24h }
             val losers = valid.filter { it.change24h < 0 }.sortedBy { it.change24h }
-            val rate = agu.analys.util.ExchangeRateManager.currentRate().takeIf { it > 1000.0 } ?: 16000.0
+            // Kurs murni dari exchange (ExchangeRateManager); tanpa tebakan angka.
+            val rate = agu.analys.util.ExchangeRateManager.currentRate()
             val topVol = valid.sortedByDescending { tick ->
-                if (tick.symbol.uppercase().endsWith("USDT")) tick.volume24h * rate else tick.volume24h
+                agu.analys.util.DashboardRanking.volumeInIdr(tick.symbol, tick.volume24h, rate)
             }
             if (gainers.isNotEmpty()) {
                 _gainersCoins.value = gainers
@@ -202,7 +205,7 @@ class MarketViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun updateDashboardTicks(ticks: Map<String, MarketTick>) {
-        _dashboardTicks.value = _dashboardTicks.value + ticks
+        _dashboardTicks.value = agu.analys.util.MarketTickMerge.newest(_dashboardTicks.value, ticks)
     }
 
     fun getH1Candles(symbol: String): List<CandleBar> {
@@ -214,7 +217,10 @@ class MarketViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch(Dispatchers.IO) {
             val currentSource = prefs.marketDataSource
             val (_, cached) = marketCache.loadPairSnapshot(symbol, Timeframe.H1, source = currentSource)
-            if (cached.isEmpty()) {
+            // Ambil ulang bila belum ada, atau candle terakhir lebih tua dari 2 jam (sparkline basi)
+            val lastCandleAt = cached.lastOrNull()?.timestamp ?: 0L
+            val isStale = cached.isEmpty() || System.currentTimeMillis() - lastCandleAt > 2L * 60L * 60L * 1000L
+            if (isStale) {
                 try {
                     val isToko = currentSource == MarketDataSource.TOKOCRYPTO
                     val pairObj = TradingPair.fromCustomSymbol(symbol, currentSource.defaultQuoteAsset)

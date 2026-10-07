@@ -619,6 +619,8 @@ object TokocryptoMarketService {
                 }
             }
 
+            // Pastikan kurs USDT/IDR dari snapshot ini dipakai untuk peringkat (bukan tebakan)
+            agu.analys.util.ExchangeRateManager.updateFromTicks(allTicks)
             val rate = agu.analys.util.ExchangeRateManager.currentRate()
             val gainers = candidates.filter { it.change24h > 0 }.sortedByDescending { it.change24h }.take(limit)
             val losers = candidates.filter { it.change24h < 0 }.sortedBy { it.change24h }.take(limit)
@@ -654,7 +656,7 @@ object TokocryptoMarketService {
             if (volume24h < 1_000_000.0) return false
             true
         } else {
-            volume24h >= 100.0
+            volume24h >= 10_000.0 // setara batas Indodax ($10.000); 100 USDT terlalu receh
         }
     }
 }

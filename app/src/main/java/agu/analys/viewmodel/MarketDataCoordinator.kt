@@ -184,7 +184,7 @@ class MarketDataCoordinator(
 
     private fun dispatchThrottledTick(tick: MarketTick) {
         _currentTick.value = tick
-        _dashboardTicks.value = _dashboardTicks.value + (tick.symbol to tick)
+        mergeLiveTickIntoDashboard(tick)
         val ex = prefs.marketDataSource.name
         agu.analys.engine.sell.TickHistoryTracker.recordTick(tick.symbol, tick.price, tick.timestamp, exchange = ex)
         if (_recentCandles.value.isNotEmpty()) {
@@ -200,6 +200,28 @@ class MarketDataCoordinator(
         onPriceUpdate(tick.symbol, tick.price, engine.indicators.value.rsi14.takeIf { it.isFinite() })
     }
 
+    /**
+     * Tick live (WebSocket) hanya membawa harga. Volume, high, low, dan basis perubahan 24 jam
+     * berasal dari REST, jadi digabung ke entri dashboard yang sudah ada (tidak menimpa dengan 0).
+     * Bila pair belum ada di dashboard, tidak ditulis.
+     */
+    private fun mergeLiveTickIntoDashboard(tick: MarketTick) {
+        val existing = _dashboardTicks.value[tick.symbol] ?: return
+        if (existing.volume24h <= 0.0 || tick.price <= 0.0) return
+        val openRef = if (existing.price > 0.0 && existing.change24h.isFinite() && existing.change24h > -99.0) {
+            existing.price / (1.0 + existing.change24h / 100.0)
+        } else 0.0
+        val newChange = if (openRef > 0.0) ((tick.price - openRef) / openRef) * 100.0 else existing.change24h
+        val merged = existing.copy(
+            price = tick.price,
+            high24h = maxOf(existing.high24h, tick.price),
+            low24h = if (existing.low24h > 0.0) minOf(existing.low24h, tick.price) else tick.price,
+            change24h = newChange,
+            timestamp = tick.timestamp
+        )
+        _dashboardTicks.value = _dashboardTicks.value + (tick.symbol to merged)
+    }
+
     private fun updateRecentPrices(price: Double) {
         val prices = _recentPrices.value.toMutableList().apply { add(price) }
         if (prices.size > 50) prices.removeAt(0)
@@ -207,6 +229,8 @@ class MarketDataCoordinator(
     }
 
     fun restoreFromCache(source: MarketDataSource) {
+        val age = marketCache.dashboardCacheAgeMs(source)
+        if (age < 0L || age > MarketDataCache.MAX_DASHBOARD_CACHE_AGE_MS) return
         val ticks = marketCache.loadDashboardTicks(source)
         if (ticks.isNotEmpty()) {
             _dashboardTicks.value = ticks
@@ -470,7 +494,7 @@ class MarketDataCoordinator(
     }
 
     fun updateDashboardTicks(ticks: Map<String, MarketTick>) {
-        _dashboardTicks.value = _dashboardTicks.value + ticks
+        _dashboardTicks.value = agu.analys.util.MarketTickMerge.newest(_dashboardTicks.value, ticks)
     }
 
     fun markOffline(reason: String) {

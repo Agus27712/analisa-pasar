@@ -415,7 +415,7 @@ fun TradingViewModel.initSubscriptionsAndPolling() {
         } else {
             val meta = IndodaxMarketService.fetchPairsMetadata()
             if (meta.isNotEmpty()) {
-                marketCache.savePairsMetadata(meta)
+                marketCache.savePairsMetadata(meta, agu.analys.config.MarketDataSource.INDODAX)
             }
         }
     }
@@ -426,6 +426,7 @@ fun TradingViewModel.initSubscriptionsAndPolling() {
             if (ticks.isNotEmpty()) {
                 marketViewModel.updateDashboardTicks(ticks)
             }
+            delay(500L) // batasi maks 2x/detik; nilai terbaru tetap terkirim (StateFlow conflated)
         }
     }
     viewModelScope.launch {
@@ -433,6 +434,7 @@ fun TradingViewModel.initSubscriptionsAndPolling() {
             if (ticks.isNotEmpty()) {
                 marketDataCoordinator.updateDashboardTicks(ticks)
             }
+            delay(500L)
         }
     }
 
