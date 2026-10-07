@@ -4,6 +4,7 @@ import androidx.lifecycle.viewModelScope
 import agu.analys.model.CoinHoldingStatus
 import agu.analys.model.TradingPair
 import agu.analys.service.IndodaxMarketService
+import agu.analys.service.TokocryptoMarketService
 import agu.analys.trading.SimulationOrderResult
 import agu.analys.trading.SimulationOrderSide
 import agu.analys.trading.SimulationOrderType
@@ -27,8 +28,16 @@ fun TradingViewModel.setRealBuyMode(enabled: Boolean, pin: String? = null): Bool
 fun TradingViewModel.fetchRealBalance(force: Boolean = false) = orderViewModel.fetchRealBalance(force)
 fun TradingViewModel.refreshRealBalance() {
     viewModelScope.launch {
-        val allTicks = IndodaxMarketService.fetchAllMarketTicks()
-        if (allTicks.isNotEmpty()) marketDataCoordinator.updateDashboardTicks(allTicks)
+        val isToko = prefs.marketDataSource == agu.analys.config.MarketDataSource.TOKOCRYPTO
+        val allTicks = if (isToko) {
+            TokocryptoMarketService.fetchMarketRankings(limit = 100).allTicks
+        } else {
+            IndodaxMarketService.fetchAllMarketTicks()
+        }
+        if (allTicks.isNotEmpty()) {
+            marketDataCoordinator.updateDashboardTicks(allTicks)
+            marketViewModel.updateDashboardTicks(allTicks)
+        }
     }
     fetchRealBalance()
 }

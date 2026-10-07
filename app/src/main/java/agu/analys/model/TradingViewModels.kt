@@ -280,7 +280,6 @@ val POPULAR_TOKOCRYPTO_PAIRS = listOf(
     // ==================== IDR PAIRS ====================
     TradingPair("BTCIDR", "BTC", "IDR", "Bitcoin / IDR", tokocryptoPair = "BTC_IDR"),
     TradingPair("ETHIDR", "ETH", "IDR", "Ethereum / IDR", tokocryptoPair = "ETH_IDR"),
-    TradingPair("USDTIDR", "USDT", "IDR", "Tether / IDR", tokocryptoPair = "USDT_IDR"),
     TradingPair("BNBIDR", "BNB", "IDR", "BNB / IDR", tokocryptoPair = "BNB_IDR"),
     TradingPair("SOLIDR", "SOL", "IDR", "Solana / IDR", tokocryptoPair = "SOL_IDR"),
     TradingPair("XRPIDR", "XRP", "IDR", "XRP / IDR", tokocryptoPair = "XRP_IDR"),
@@ -291,7 +290,6 @@ val POPULAR_TOKOCRYPTO_PAIRS = listOf(
 val POPULAR_INDODAX_PAIRS = listOf(
     TradingPair("BTCIDR", "BTC", "IDR", "Bitcoin / IDR", indodaxPair = "btc_idr"),
     TradingPair("ETHIDR", "ETH", "IDR", "Ethereum / IDR", indodaxPair = "eth_idr"),
-    TradingPair("USDTIDR", "USDT", "IDR", "Tether / IDR", indodaxPair = "usdt_idr"), 
     TradingPair("SOLIDR", "SOL", "IDR", "Solana / IDR", indodaxPair = "sol_idr"),
     TradingPair("BNBIDR", "BNB", "IDR", "BNB / IDR", indodaxPair = "bnb_idr"),
     TradingPair("XRPIDR", "XRP", "IDR", "XRP / IDR", indodaxPair = "xrp_idr"),

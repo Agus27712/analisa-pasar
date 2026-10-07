@@ -40,10 +40,21 @@ object DashboardRanking {
         .sortedByDescending { volumeInIdr(it.symbol, it.volume24h, usdtIdrRate) }
         .toList()
 
-    /** Pair layak tampil di dashboard untuk bursa aktif. */
+    private val EXCLUDED_STABLE_FIAT_SYMBOLS = setOf(
+        "USDTIDR", "USDCIDR", "USDCUSDT", "USDTUSDC", "BUSDIDR", "BUSDUSDT",
+        "TUSDUSDT", "TUSDIDR", "FDUSDUSDT", "FDUSDIDR", "EURUSDT", "GBPUSDT", "AUDUSDT",
+        "DAIIDR", "DAIUSDT", "IDRTIDR", "IDRTUSDT"
+    )
+
+    /** Pair layak tampil di dashboard untuk bursa aktif (bukan stablecoin/fiat). */
     fun isRankable(source: MarketDataSource, tick: MarketTick): Boolean {
-        val sym = tick.symbol.uppercase().replace("_", "")
+        val sym = tick.symbol.uppercase().replace("_", "").replace("/", "").replace("-", "")
         if (tick.price <= 0.0) return false
+        if (EXCLUDED_STABLE_FIAT_SYMBOLS.contains(sym)) return false
+        if (sym.startsWith("USDT") && sym.endsWith("IDR")) return false
+        if (sym.startsWith("USDC") || sym.startsWith("DAI") || sym.startsWith("BUSD") || sym.startsWith("TUSD") || sym.startsWith("FDUSD")) {
+            if (sym.endsWith("IDR") || sym.endsWith("USDT")) return false
+        }
         return if (source == MarketDataSource.TOKOCRYPTO) {
             TokocryptoMarketService.isIdrOrUsdtPair(sym) &&
                 TokocryptoMarketService.isSafeTradableAsset(

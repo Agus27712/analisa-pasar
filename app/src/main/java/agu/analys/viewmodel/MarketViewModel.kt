@@ -206,24 +206,25 @@ class MarketViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun getH1Candles(symbol: String): List<CandleBar> {
-        val (_, candles) = marketCache.loadPairSnapshot(symbol, Timeframe.H1)
+        val (_, candles) = marketCache.loadPairSnapshot(symbol, Timeframe.H1, source = prefs.marketDataSource)
         return candles
     }
 
     fun ensureH1Candles(symbol: String) {
         viewModelScope.launch(Dispatchers.IO) {
-            val (_, cached) = marketCache.loadPairSnapshot(symbol, Timeframe.H1)
+            val currentSource = prefs.marketDataSource
+            val (_, cached) = marketCache.loadPairSnapshot(symbol, Timeframe.H1, source = currentSource)
             if (cached.isEmpty()) {
                 try {
-                    val isToko = prefs.marketDataSource == MarketDataSource.TOKOCRYPTO
-                    val pairObj = TradingPair.fromCustomSymbol(symbol, prefs.marketDataSource.defaultQuoteAsset)
+                    val isToko = currentSource == MarketDataSource.TOKOCRYPTO
+                    val pairObj = TradingPair.fromCustomSymbol(symbol, currentSource.defaultQuoteAsset)
                     val candles = if (isToko) {
                         TokocryptoMarketService.fetchCandles(pairObj.effectiveTokocryptoPair(), Timeframe.H1, 100)
                     } else {
                         IndodaxMarketService.fetchCandles(pairObj.effectiveIndodaxPair(), Timeframe.H1, 100)
                     }
                     if (candles.isNotEmpty()) {
-                        marketCache.savePairSnapshot(symbol, Timeframe.H1, null, candles)
+                        marketCache.savePairSnapshot(symbol, Timeframe.H1, null, candles, source = currentSource)
                     }
                 } catch (_: Exception) {}
             }

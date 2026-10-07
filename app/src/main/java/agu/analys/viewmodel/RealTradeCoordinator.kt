@@ -401,7 +401,7 @@ class RealTradeCoordinator(
                     newPartial[asset] = accBuyQty + 1e-12 < currentQty
                 }
             } else {
-                // Tokocrypto: prioritaskan USDT pair, lalu BIDR pair
+                // Tokocrypto: pair USDT
                 val tokoSymbol = "${asset}_USDT".uppercase()
                 val (ok, raw) = try {
                     TokocryptoTradeApi.myTrades(apiKey, secretKey, tokoSymbol, limit = 100)

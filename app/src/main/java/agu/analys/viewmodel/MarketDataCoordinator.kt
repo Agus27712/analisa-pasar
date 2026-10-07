@@ -184,6 +184,7 @@ class MarketDataCoordinator(
 
     private fun dispatchThrottledTick(tick: MarketTick) {
         _currentTick.value = tick
+        _dashboardTicks.value = _dashboardTicks.value + (tick.symbol to tick)
         val ex = prefs.marketDataSource.name
         agu.analys.engine.sell.TickHistoryTracker.recordTick(tick.symbol, tick.price, tick.timestamp, exchange = ex)
         if (_recentCandles.value.isNotEmpty()) {
@@ -350,7 +351,7 @@ class MarketDataCoordinator(
                         engine.resetForOffline(preserveState = true)
                         _currentTick.value?.let { engine.onTickUpdate(it) }
                         lastCandleRefresh = now
-                        marketCache.savePairSnapshot(pair.symbol, timeframe, _currentTick.value, candles)
+                        marketCache.savePairSnapshot(pair.symbol, timeframe, _currentTick.value, candles, prefs.marketDataSource)
                     }
                 }
 

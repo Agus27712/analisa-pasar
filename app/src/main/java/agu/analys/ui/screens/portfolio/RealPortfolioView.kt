@@ -95,17 +95,13 @@ fun RealPortfolioView(
                 val qty = entries.maxOf { it.value }
                 val symbolUsdt = "${coinUpper}USDT"
                 val symbolIdr = "${coinUpper}IDR"
-                val symbolBidr = "${coinUpper}BIDR"
 
                 val isQuoteUsdt = isTokocrypto || dashboardTicks.containsKey(symbolUsdt) || (currentTick?.symbol?.equals(symbolUsdt, true) == true)
                 val primarySymbol = if (isQuoteUsdt) symbolUsdt else symbolIdr
-                val altSymbol = if (isQuoteUsdt) symbolBidr else symbolUsdt
 
                 val price = when {
                     primarySymbol.equals(currentTick?.symbol, ignoreCase = true) -> currentTick?.price ?: 0.0
-                    altSymbol.equals(currentTick?.symbol, ignoreCase = true) -> currentTick?.price ?: 0.0
                     dashboardTicks.containsKey(primarySymbol) -> dashboardTicks[primarySymbol]?.price ?: 0.0
-                    dashboardTicks.containsKey(altSymbol) -> dashboardTicks[altSymbol]?.price ?: 0.0
                     dashboardTicks.containsKey("${coinLower}_usdt") -> dashboardTicks["${coinLower}_usdt"]?.price ?: 0.0
                     dashboardTicks.containsKey("${coinLower}_idr") -> dashboardTicks["${coinLower}_idr"]?.price ?: 0.0
                     dashboardTicks.containsKey(coinUpper) -> dashboardTicks[coinUpper]?.price ?: 0.0
@@ -115,7 +111,6 @@ fun RealPortfolioView(
                 val avgPrice = realAvgBuyPrices[coinUpper]
                     ?: realAvgBuyPrices[coinLower]
                     ?: realAvgBuyPrices[primarySymbol]
-                    ?: realAvgBuyPrices[altSymbol]
                     ?: 0.0
                 val effectivePrice = if (price > 0.0) price else avgPrice
 

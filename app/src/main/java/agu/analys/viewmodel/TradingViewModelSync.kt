@@ -408,10 +408,31 @@ fun TradingViewModel.initSubscriptionsAndPolling() {
         }
     }
 
+    viewModelScope.launch(Dispatchers.IO) {
+        val isToko = prefs.marketDataSource == agu.analys.config.MarketDataSource.TOKOCRYPTO
+        if (isToko) {
+            agu.analys.data.TokocryptoSymbolRepository.ensureSymbolsLoaded(false)
+        } else {
+            val meta = IndodaxMarketService.fetchPairsMetadata()
+            if (meta.isNotEmpty()) {
+                marketCache.savePairsMetadata(meta)
+            }
+        }
+    }
+
+    // Sinkronisasi satu sumber data harga antara MarketDataCoordinator dan MarketViewModel
     viewModelScope.launch {
-        val meta = IndodaxMarketService.fetchPairsMetadata()
-        if (meta.isNotEmpty()) {
-            marketCache.savePairsMetadata(meta)
+        marketDataCoordinator.dashboardTicks.collect { ticks ->
+            if (ticks.isNotEmpty()) {
+                marketViewModel.updateDashboardTicks(ticks)
+            }
+        }
+    }
+    viewModelScope.launch {
+        marketViewModel.dashboardTicks.collect { ticks ->
+            if (ticks.isNotEmpty()) {
+                marketDataCoordinator.updateDashboardTicks(ticks)
+            }
         }
     }
 

@@ -613,7 +613,9 @@ object TokocryptoMarketService {
                         timestamp = System.currentTimeMillis()
                     )
                     allTicks[sym] = tick
-                    if (isSafeTradableAsset(last, quoteVol, high, low, isIdr)) candidates.add(tick)
+                    if (agu.analys.util.DashboardRanking.isRankable(agu.analys.config.MarketDataSource.TOKOCRYPTO, tick)) {
+                        candidates.add(tick)
+                    }
                 }
             }
 

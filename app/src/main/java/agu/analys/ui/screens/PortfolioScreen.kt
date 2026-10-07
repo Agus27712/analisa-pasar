@@ -101,14 +101,11 @@ fun PortfolioScreen(
                 val quoteAsset = wallet.quoteForCoin(baseAssetUpper)
                 val isUsdt = agu.analys.util.PriceFormatter.isUsdtQuote(quoteAsset)
                 val symbol = if (isUsdt) "${baseAssetUpper}USDT" else "${baseAssetUpper}IDR"
-                val altSymbol = if (isUsdt) "${baseAssetUpper}BIDR" else "${baseAssetUpper}USDT"
 
                 // Harga pasar diambil dari pair yang SESUAI kuotasi posisi.
                 val price = when {
                     symbol.equals(currentTick?.symbol, ignoreCase = true) -> currentTick?.price ?: 0.0
-                    altSymbol.equals(currentTick?.symbol, ignoreCase = true) -> currentTick?.price ?: 0.0
                     dashboardTicks.containsKey(symbol) -> dashboardTicks[symbol]?.price ?: 0.0
-                    dashboardTicks.containsKey(altSymbol) -> dashboardTicks[altSymbol]?.price ?: 0.0
                     dashboardTicks.containsKey("${baseAssetUpper.lowercase()}_idr") -> dashboardTicks["${baseAssetUpper.lowercase()}_idr"]?.price ?: 0.0
                     dashboardTicks.containsKey("${baseAssetUpper.lowercase()}_usdt") -> dashboardTicks["${baseAssetUpper.lowercase()}_usdt"]?.price ?: 0.0
                     dashboardTicks.containsKey(baseAssetUpper) -> dashboardTicks[baseAssetUpper]?.price ?: 0.0

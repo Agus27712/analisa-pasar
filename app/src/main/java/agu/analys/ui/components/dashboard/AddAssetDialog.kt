@@ -41,7 +41,7 @@ fun AddAssetDialog(
     val isToko = marketDataSource == agu.analys.config.MarketDataSource.TOKOCRYPTO
     var searchQuery by remember { mutableStateOf("") }
     var selectedTab by remember(marketDataSource) { mutableStateOf(if (isToko) "USDT" else "IDR") }
-    val tabs = if (isToko) listOf("USDT", "BIDR", "IDR", "SEMUA") else listOf("IDR", "USDT", "SEMUA")
+    val tabs = if (isToko) listOf("USDT", "IDR", "SEMUA") else listOf("IDR", "USDT", "SEMUA")
 
     // Ambil daftar pair dari dynamic symbol repository Tokocrypto / Indodax
     val availablePairs = remember(searchQuery, selectedTab, marketDataSource) {

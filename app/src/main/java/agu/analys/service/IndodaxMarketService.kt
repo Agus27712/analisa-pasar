@@ -303,7 +303,7 @@ object IndodaxMarketService {
             val root = JSONObject(body)
             val tickers = root.optJSONObject("tickers") ?: return@withContext MarketRankingsResult()
             val prices24h = root.optJSONObject("prices_24h")
-            val stableBases = setOf("usdt", "usdc", "dai", "busd", "tusd", "idrt")
+            val stableBases = setOf("usdt", "usdc", "dai", "busd", "tusd", "idrt", "fdusd")
             val now = System.currentTimeMillis()
             val allTicksMap = mutableMapOf<String, MarketTick>()
             val tradableList = mutableListOf<MarketTick>()
@@ -353,7 +353,7 @@ object IndodaxMarketService {
                 val baseLower = base.lowercase()
                 if (excludeStable && baseLower in stableBases) continue
 
-                if (isIdr && isSafeTradableAsset(price = last, volume24h = volIdr, high24h = high, low24h = low, isIdrPair = true)) {
+                if (isIdr && agu.analys.util.DashboardRanking.isRankable(agu.analys.config.MarketDataSource.INDODAX, tick)) {
                     tradableList += tick
                 }
             }

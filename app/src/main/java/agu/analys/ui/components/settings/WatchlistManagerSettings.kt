@@ -136,7 +136,7 @@ fun WatchlistManagerSettings(
             border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder)
         ) {
             Column(modifier = Modifier.padding(12.dp)) {
-                // Selector Kuotasi Aktif (USDT / IDR / BIDR)
+                // Selector Kuotasi Aktif (USDT / IDR)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -144,13 +144,9 @@ fun WatchlistManagerSettings(
                 ) {
                     Text("Pilih Kuotasi Pasar:", color = TvTextSecondary, fontSize = 10.5.sp, fontWeight = FontWeight.Medium)
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        listOf("USDT", "IDR", "BIDR").forEach { q ->
+                        listOf("USDT", "IDR").forEach { q ->
                             val isSelected = selectedQuote == q
-                            val qColor = when (q) {
-                                "USDT" -> TvCyan
-                                "IDR" -> TvBlue
-                                else -> TvAmber
-                            }
+                            val qColor = if (q == "USDT") TvCyan else TvBlue
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(6.dp))
