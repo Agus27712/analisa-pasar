@@ -103,6 +103,13 @@ interface RealTradeDao {
     @Query("DELETE FROM real_trades WHERE exchange = :exchange")
     suspend fun clearTradesByExchange(exchange: String)
 
+    /** Baris BUY yang dicatat lokal saat order dikirim (id "local_..."), belum digabung dengan trade server. */
+    @Query("SELECT * FROM real_trades WHERE id LIKE 'local_%' AND exchange = :exchange")
+    suspend fun getLocalTradesByExchange(exchange: String): List<RealTradeEntity>
+
+    @Query("DELETE FROM real_trades WHERE id IN (:ids)")
+    suspend fun deleteTradesByIds(ids: List<String>)
+
     // Real Open Orders Cache (Offline/Caching Support)
     @Query("SELECT * FROM real_open_orders ORDER BY time DESC")
     fun getOpenOrdersFlow(): Flow<List<RealOpenOrderEntity>>

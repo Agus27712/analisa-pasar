@@ -771,36 +771,41 @@ if (!valResult.isValid) {
         val queryString = params.sorted().joinToString("&")
         val signature = hmacSha256(secretKey, queryString)
 
-        try {
-            val url = "$TOKOCRYPTO_BASE_URL/open/v1/orders/open?$queryString&signature=$signature"
-            val req = Request.Builder()
-                .url(url)
-                .get()
-                .header("X-MBX-APIKEY", apiKey.trim())
-                .header("Accept", "application/json")
-                .header("User-Agent", "AnalysApp/1.0 (Android; Tokocrypto Trade)")
-                .build()
+        // Jalur 1: GET open/v1/orders (sesuai dokumentasi). Jalur 2: path lama, cadangan bila jalur 1 gagal.
+        val paths = listOf("open/v1/orders", "open/v1/orders/open")
+        var lastDetail = ""
+        for (path in paths) {
+            try {
+                val url = "$TOKOCRYPTO_BASE_URL/$path?$queryString&signature=$signature"
+                val req = Request.Builder()
+                    .url(url)
+                    .get()
+                    .header("X-MBX-APIKEY", apiKey.trim())
+                    .header("Accept", "application/json")
+                    .header("User-Agent", "AnalysApp/1.0 (Android; Tokocrypto Trade)")
+                    .build()
 
-            client.newCall(req).execute().use { resp ->
-                val body = resp.body?.string().orEmpty()
-                val root = runCatching { JSONObject(body) }.getOrNull()
-                val code = root?.optInt("code", -1) ?: -1
-                if (resp.isSuccessful && code == 0) {
-                    val data = root?.opt("data")
-                    val list = when (data) {
-                        is JSONArray -> data
-                        is JSONObject -> data.optJSONArray("list") ?: JSONArray()
-                        else -> JSONArray()
+                client.newCall(req).execute().use { resp ->
+                    val body = resp.body?.string().orEmpty()
+                    val root = runCatching { JSONObject(body) }.getOrNull()
+                    val code = root?.optInt("code", -1) ?: -1
+                    if (resp.isSuccessful && code == 0) {
+                        val data = root?.opt("data")
+                        val list = when (data) {
+                            is JSONArray -> data
+                            is JSONObject -> data.optJSONArray("list") ?: JSONArray()
+                            else -> JSONArray()
+                        }
+                        return@withContext true to list.toString()
                     }
-                    return@withContext true to list.toString()
+                    lastDetail = "$path: " + describeError(resp.code, root, body)
                 }
-                val detail = describeError(resp.code, root, body)
-                return@withContext false to detail
+            } catch (e: Exception) {
+                lastDetail = "$path: Error koneksi: ${e.message ?: e.javaClass.simpleName}"
             }
-        } catch (e: Exception) {
-            val ex = e.message ?: e.javaClass.simpleName
-            return@withContext false to "Error koneksi Tokocrypto open orders: $ex"
+            Timber.w("Tokocrypto open orders gagal -> $lastDetail")
         }
+        return@withContext false to lastDetail.ifBlank { "Gagal membaca open orders Tokocrypto." }
     }
 
     /**

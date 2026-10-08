@@ -258,37 +258,47 @@ class RealTradeCoordinator(
             val db = AppDatabase.getInstance().realTradeDao()
             val exchangeName = if (isToko) "TOKOCRYPTO" else "INDODAX"
             val entityMap = mutableMapOf<String, RealOpenOrderEntity>()
+            var anyOk = false
+            var lastError = ""
 
+            // Daftar semua order aktif (satu panggilan). Bila gagal, cek per pair.
             if (!isToko) {
                 val (okAll, rawAll) = IndodaxTradeApiV2.openOrders(apiKey, secretKey)
                 if (!okAll && looksLikeRateLimit(rawAll)) { markRateLimited(rawAll); return false }
-                if (okAll) parseOrdersToMap(rawAll, entityMap, exchangeName)
+                if (okAll) { anyOk = true; parseOrdersToMap(rawAll, entityMap, exchangeName) } else lastError = rawAll
             } else {
                 val (okAll, rawAll) = TokocryptoTradeApi.openOrders(apiKey, secretKey)
                 if (!okAll && looksLikeRateLimit(rawAll)) { markRateLimited(rawAll); return false }
-                if (okAll) parseOrdersToMap(rawAll, entityMap, exchangeName)
+                if (okAll) { anyOk = true; parseOrdersToMap(rawAll, entityMap, exchangeName) } else lastError = rawAll
             }
 
-            val candidates = linkedSetOf<String>()
-            balances.locked.filter { it.key != "idr" && it.key != "usdt" && it.value > 0.0 }.keys.forEach { candidates.add(it) }
-            prefs.getRecentHistoryBases().forEach { candidates.add(it) }
-            prefs.getWatchlist().forEach { candidates.add(baseFromPair(it)) }
+            if (!anyOk) {
+                val candidates = linkedSetOf<String>()
+                balances.locked.filter { it.key != "idr" && it.key != "usdt" && it.value > 0.0 }.keys.forEach { candidates.add(it) }
+                prefs.getRecentHistoryBases().forEach { candidates.add(it) }
+                prefs.getWatchlist().forEach { candidates.add(baseFromPair(it)) }
 
-            for (base in candidates.take(15)) {
-                if (base.isBlank()) continue
-                delay(300)
-                if (!isToko) {
-                    val (okSym, rawSym) = IndodaxTradeApiV2.openOrders(apiKey, secretKey, "${base}idr")
-                    if (!okSym && looksLikeRateLimit(rawSym)) { markRateLimited(rawSym); return false }
-                    if (okSym) parseOrdersToMap(rawSym, entityMap, exchangeName)
-                } else {
-                    val symUsdt = "${base}_USDT".uppercase()
-                    val (okSym, rawSym) = TokocryptoTradeApi.openOrders(apiKey, secretKey, symUsdt)
-                    if (!okSym && looksLikeRateLimit(rawSym)) { markRateLimited(rawSym); return false }
-                    if (okSym) parseOrdersToMap(rawSym, entityMap, exchangeName)
+                for (base in candidates.take(15)) {
+                    if (base.isBlank()) continue
+                    delay(300)
+                    if (!isToko) {
+                        val (okSym, rawSym) = IndodaxTradeApiV2.openOrders(apiKey, secretKey, "${base}idr")
+                        if (!okSym && looksLikeRateLimit(rawSym)) { markRateLimited(rawSym); return false }
+                        if (okSym) { anyOk = true; parseOrdersToMap(rawSym, entityMap, exchangeName) } else lastError = rawSym
+                    } else {
+                        val symUsdt = "${base}_USDT".uppercase()
+                        val (okSym, rawSym) = TokocryptoTradeApi.openOrders(apiKey, secretKey, symUsdt)
+                        if (!okSym && looksLikeRateLimit(rawSym)) { markRateLimited(rawSym); return false }
+                        if (okSym) { anyOk = true; parseOrdersToMap(rawSym, entityMap, exchangeName) } else lastError = rawSym
+                    }
                 }
             }
 
+            // Jika tidak ada satu pun pengambilan yang berhasil, data lama DIPERTAHANKAN (jangan dikosongkan).
+            if (!anyOk) {
+                _realTradeStatus.value = "Antrean order $exchangeName belum terbaca: ${lastError.take(160)}"
+                return true
+            }
             db.clearOpenOrdersByExchange(exchangeName)
             if (entityMap.isNotEmpty()) {
                 db.insertOpenOrders(entityMap.values.toList())
@@ -451,6 +461,33 @@ class RealTradeCoordinator(
         }
 
         if (accumulatedEntities.isNotEmpty()) {
+            // Gabungkan baris BUY lokal (id "local_...", dicatat saat order dikirim) dengan trade server yang sama.
+            // Dicocokkan satu-satu: pair sama, BUY, selisih waktu terdekat dalam 24 jam. Snapshot sinyal ikut dipindah.
+            val mergeWindowMs = 24L * 60L * 60L * 1000L
+            val localRows = db.getLocalTradesByExchange(exchangeName).toMutableList()
+            val consumedLocalIds = mutableListOf<String>()
+            for (i in accumulatedEntities.indices) {
+                val ent = accumulatedEntities[i]
+                if (!ent.isBuyer || localRows.isEmpty()) continue
+                val entNorm = ent.symbol.uppercase().replace("_", "")
+                val match = localRows
+                    .filter { loc ->
+                        loc.isBuyer &&
+                            loc.symbol.uppercase().replace("_", "") == entNorm &&
+                            kotlin.math.abs(loc.time - ent.time) < mergeWindowMs
+                    }
+                    .minByOrNull { kotlin.math.abs(it.time - ent.time) } ?: continue
+                localRows.remove(match)
+                consumedLocalIds.add(match.id)
+                accumulatedEntities[i] = ent.copy(
+                    strategyMode = if (match.strategyMode != "MANUAL") match.strategyMode else ent.strategyMode,
+                    signalSnapshotJson = match.signalSnapshotJson ?: ent.signalSnapshotJson,
+                    entryPrice = ent.entryPrice ?: match.entryPrice,
+                    entryTimestamp = ent.entryTimestamp ?: match.entryTimestamp,
+                    isTrailingUsed = ent.isTrailingUsed || match.isTrailingUsed
+                )
+            }
+
             val enrichedEntities = mutableListOf<RealTradeEntity>()
             val historyDao = AppDatabase.getInstance().tradeHistoryRecordDao()
             for (ent in accumulatedEntities) {
@@ -488,6 +525,7 @@ class RealTradeCoordinator(
                 }
             }
             db.insertTrades(enrichedEntities)
+            if (consumedLocalIds.isNotEmpty()) db.deleteTradesByIds(consumedLocalIds)
         }
         _realAvgBuyPrices.value = newAvg
         _realAvgBuyPartial.value = newPartial
