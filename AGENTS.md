@@ -25,7 +25,7 @@ Aplikasi Android Kotlin 100% (Jetpack Compose M3) untuk analisis & trading kript
 
 ## Isolasi exchange & kuotasi (sumber bug terbanyak)
 
-- Semua cache in-memory, SharedPreferences, dan Room wajib terpartisi per exchange: kunci `${exchange}_...`, kolom Room `exchange` (DB v7). Query DAO wajib filter `exchange`. Jangan tambah fallback cache tanpa namespace.
+- Semua cache in-memory, SharedPreferences, dan Room wajib terpartisi per exchange: kunci `${exchange}_...`, kolom Room `exchange` (DB v8). Query DAO wajib filter `exchange`. Jangan tambah fallback cache tanpa namespace.
 - Ganti bursa hanya lewat Settings (`setMarketDataSource(..., forceHardStop = true)`): putus WebSocket, matikan polling, kosongkan StateFlow, purge `OrderBookDepthCache`/`MtfCacheManager`/`MarketDataCache`, baru konek ke bursa baru.
 - USDT tampil `$` + ekuivalen `≈ Rp ...` (kurs live `ExchangeRateManager`), IDR tampil `Rp`. Jangan panggil `PriceFormatter.formatPrice()` tanpa `quoteAsset` (gunakan `PriceFormatter.extractQuote(symbol)`); cek `quoteForCoin(base)` agar `BTCUSDT` tidak terbaca sebagai holding `BTCIDR`.
 - Fee + slippage selalu lewat `FeeCalculator` / `TradingFeeConfig`.
