@@ -67,22 +67,22 @@ fun CustomBuyOrderDialog(
     val isUsdtQuote = PriceFormatter.isUsdtQuote(quoteAsset)
     val minNominal = if (isUsdtQuote) 1.0 else 10000.0
 
-    var buyPriceInput by remember(show, validPrice) {
-        mutableStateOf(formatPriceForInput(if (validPrice > 0) validPrice else 0.0))
+    var buyPriceInput by remember(show) {
+        mutableStateOf("")
     }
-    var nominalInput by remember(show, initialNominalIdr) {
+    var nominalInput by remember(show) {
         val initAmount = if (initialNominalIdr >= minNominal) initialNominalIdr else if (isUsdtQuote) 10.0 else 50000.0
         mutableStateOf(formatPriceForInput(initAmount))
     }
 
     var isAutoLimitSellEnabled by remember(show) { mutableStateOf(false) }
-    var tp1Input by remember(show, initialTp1, validPrice) {
-        val tp1 = if (initialTp1 > validPrice) initialTp1 else validPrice * 1.03
-        mutableStateOf(formatPriceForInput(tp1))
+    var tp1Input by remember(show) {
+        val tp1 = if (initialTp1 > validPrice) initialTp1 else if (validPrice > 0) validPrice * 1.03 else 0.0
+        mutableStateOf(if (tp1 > 0) formatPriceForInput(tp1) else "")
     }
-    var tp2Input by remember(show, initialTp2, validPrice) {
-        val tp2 = if (initialTp2 > validPrice) initialTp2 else validPrice * 1.06
-        mutableStateOf(formatPriceForInput(tp2))
+    var tp2Input by remember(show) {
+        val tp2 = if (initialTp2 > validPrice) initialTp2 else if (validPrice > 0) validPrice * 1.06 else 0.0
+        mutableStateOf(if (tp2 > 0) formatPriceForInput(tp2) else "")
     }
 
     val targetPrice = PriceFormatter.parseCleanIdrDouble(buyPriceInput)
@@ -244,7 +244,7 @@ fun CustomBuyOrderDialog(
                         onValueChange = { input ->
                             buyPriceInput = input.filter { it.isDigit() || it == '.' || it == ',' }
                         },
-                        placeholder = { Text(if (isUsdtQuote) "Contoh: 1.25" else "Contoh: 13950", fontSize = 12.sp) },
+                        placeholder = { Text(if (isUsdtQuote) "Masukkan harga (Cth: 1.25)" else "Masukkan harga (Cth: 13950)", fontSize = 12.sp) },
                         keyboardOptions = KeyboardOptions(
                             keyboardType = KeyboardType.Number,
                             imeAction = ImeAction.Next

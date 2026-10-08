@@ -56,15 +56,6 @@ data class FocusCoinCardData(
     val isTopPicked: Boolean = false
 )
 
-/**
- * Kartu Koin Focus List sesuai gambar mockup (grok_1789269415548.jpg):
- * - Baris 1: Symbol & Nama + "● Pasar Spot" | Harga Live besar + Change 24h %
- * - Baris 2: Technical Reasons (MTF aligned • OB buy pressure • RSI reclaim) | [BUY/WATCH/SCANNING] XX% + Segmented Blocks
- * - Baris 3:
- *     - Volume (24.81B IDR) + Mini Volume Histogram Bars
- *     - Orderbook Pressure (+62% / -38%) + Capsule Bar
- *     - Timestamp "12s ago" + Clock Icon 🕒
- */
 @Composable
 fun FocusCoinCard(
     data: FocusCoinCardData,
