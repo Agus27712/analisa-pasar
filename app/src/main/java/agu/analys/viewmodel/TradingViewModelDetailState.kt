@@ -18,7 +18,6 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.transformLatest
 
@@ -29,6 +28,7 @@ import kotlinx.coroutines.flow.transformLatest
  * UI-layer throttling (on top of PriceFeedThrottler):
  *  - Tick leading-edge throttle 300ms — Tokocrypto WS can flood 10–50 ticks/sec
  *  - Order book throttle 400ms — depth updates hotter than ticks
+ *  - Candles throttle 300ms — chart still moves, but not every WS frame
  *  - Market structure cached on last CLOSED candle only (forming candle ignored)
  *
  * First emission is always immediate (leading edge); subsequent floods are capped.
@@ -51,13 +51,8 @@ internal fun TradingViewModel.createDetailUiState(): StateFlow<DetailUiState> {
         .throttleLeading(DETAIL_DEPTH_SAMPLE_MS)
         .distinctUntilChanged()
 
-    // Candles: only propagate when closed-candle fingerprint changes.
-    // SynthesizeRealtime still updates _recentCandles every tick for the chart engine,
-    // but DetailUiState should not recompute structure on every forming-candle twitch.
-    val candlesForUi = recentCandles
-        .map { candles -> candles to closedCandleFingerprint(candles) }
-        .distinctUntilChanged { a, b -> a.second == b.second }
-        .map { it.first }
+    // Chart needs forming-candle motion, but not 50Hz — same 300ms gate as tick.
+    val candlesForUi = recentCandles.throttleLeading(DETAIL_TICK_SAMPLE_MS)
 
     val marketSlice = combine(
         selectedPair,
