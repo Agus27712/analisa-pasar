@@ -115,7 +115,8 @@ fun RealPortfolioView(
                 val effectivePrice = if (price > 0.0) price else avgPrice
 
                 // Normalisasi nilai estimasi & PnL ke Rupiah (IDR)
-                val rate = if (isQuoteUsdt && usdtIdrRate > 0.0) usdtIdrRate else 1.0
+                // Kurs belum ada => nilai Rp 0 (tidak menganggap $ sebagai Rp)
+                val rate = if (isQuoteUsdt) usdtIdrRate else 1.0
                 val estValIdr = qty * effectivePrice * rate
                 val pnlIdr = if (avgPrice > 0.0) (effectivePrice - avgPrice) * qty * rate else 0.0
                 val pnlPct = if (avgPrice > 0.0) ((effectivePrice - avgPrice) / avgPrice) * 100.0 else 0.0

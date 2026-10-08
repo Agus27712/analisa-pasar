@@ -22,9 +22,9 @@ class AnalysApplication : Application(), Application.ActivityLifecycleCallbacks 
         if (BuildConfig.DEBUG) {
             Timber.plant(agu.analys.util.StructuredDebugTree())
         }
-        // Rate konversi USDT/IDR diambil langsung dari exchange yang sedang aktif.
+        // Kurs USDT/IDR: sumber tunggal orderbook Tokocrypto (USDT hanya diperdagangkan di Tokocrypto).
         ExchangeRateManager.init(this)
-        ExchangeRateManager.startAutoRefresh(appScope) { AppPreferences(this).marketDataSource }
+        ExchangeRateManager.startAutoRefresh(appScope)
         try {
             agu.analys.service.CandidateScanWorker.schedule(this)
         } catch (e: Exception) {

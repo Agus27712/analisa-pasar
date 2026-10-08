@@ -304,9 +304,6 @@ class MarketViewModel(application: Application) : AndroidViewModel(application) 
 
                 _dashboardTicks.value = combinedTicks
 
-                // Rate USDT/IDR disinkronkan dari tick exchange yang sudah ter-fetch.
-                agu.analys.util.ExchangeRateManager.updateFromTicks(combinedTicks)
-
                 try {
                     val btcTick = combinedTicks["BTCIDR"] ?: combinedTicks["BTCUSDT"] ?: combinedTicks["btc_idr"] ?: combinedTicks["BTC"]
                     val usdtTick = combinedTicks["USDTIDR"] ?: combinedTicks["usdt_idr"] ?: combinedTicks["USDT"]

@@ -461,10 +461,10 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
 
     fun topUpSimulationUsdt(amount: Double) = orderViewModel.topUpSimulationUsdt(amount)
 
-    /** Paksa refresh rate USDT/IDR dari exchange aktif. */
+    /** Paksa refresh kurs USDT/IDR dari Tokocrypto (mengabaikan jeda anti-spam). */
     fun refreshUsdtIdrRate() {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            agu.analys.util.ExchangeRateManager.refresh(prefs.marketDataSource)
+            agu.analys.util.ExchangeRateManager.refresh(force = true)
         }
     }
 

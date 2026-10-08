@@ -619,8 +619,10 @@ object TokocryptoMarketService {
                 }
             }
 
-            // Pastikan kurs USDT/IDR dari snapshot ini dipakai untuk peringkat (bukan tebakan)
-            agu.analys.util.ExchangeRateManager.updateFromTicks(allTicks)
+            // Kurs hanya dari ExchangeRateManager (orderbook Tokocrypto). Bila belum ada, ambil dulu.
+            if (!agu.analys.util.ExchangeRateManager.isRateAvailable()) {
+                agu.analys.util.ExchangeRateManager.refresh()
+            }
             val rate = agu.analys.util.ExchangeRateManager.currentRate()
             val gainers = candidates.filter { it.change24h > 0 }.sortedByDescending { it.change24h }.take(limit)
             val losers = candidates.filter { it.change24h < 0 }.sortedBy { it.change24h }.take(limit)
