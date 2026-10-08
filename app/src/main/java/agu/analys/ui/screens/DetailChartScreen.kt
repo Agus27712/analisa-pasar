@@ -17,7 +17,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import agu.analys.config.AiProvider
 import agu.analys.config.MarketDataSource
-import agu.analys.engine.MarketStructureAnalyzer
 import agu.analys.model.*
 import agu.analys.ui.components.SignalHistoryPanel
 import agu.analys.ui.components.detail.*
@@ -25,115 +24,20 @@ import agu.analys.ui.components.settings.LogcatDiagnosticDialog
 import agu.analys.ui.theme.*
 import agu.analys.util.AppPreferences
 import agu.analys.util.HapticUtil
-import agu.analys.util.PriceFormatter
 import agu.analys.viewmodel.*
 
 /**
- * REFACTOR NOTES (Lag Fix) — 2026-10-08
+ * REFACTOR NOTES (Lag Fix) — 2026-10-08 → DetailUiState migration
  *
- * Root cause lag:
- *  1. ~25 collectAsStateWithLifecycle in one Composable → every price tick recomposes full tree.
- *  2. Balance resolution + position math ran in composition scope.
- *  3. MarketStructureAnalyzer.analyze() called without stable key.
- *  4. Large onExecuteBuy/Sell lambdas recreated every frame.
- *
- * Changes:
- *  - Derived values use derivedStateOf (recalc only when deps change).
- *  - Balance resolution moved to pure function (no alloc in composition).
- *  - Callbacks stabilized with rememberUpdatedState.
- *  - Removed unused watchlist collect from this screen.
+ * Phase 1: derivedStateOf + pure helpers in composition.
+ * Phase 2 (this): screen collects ONE [DetailUiState] from ViewModel.
+ *   - ~25 collectAsStateWithLifecycle → 1 (+ optional mtf)
+ *   - Price/position/balance math runs in ViewModel combine, not composition.
  *
  * Trading context:
  *  - Tokocrypto: USDT + IDR
  *  - Indodax: IDR only
  */
-
-// ── Pure helpers (outside Composable = zero allocation in composition) ────
-
-private fun resolveAvailableQuote(
-    quoteAsset: String,
-    isReal: Boolean,
-    realFreeForQuote: (String) -> Double,
-    realTotalForQuote: (String) -> Double,
-    realBalanceMap: Map<String, Double>,
-    savedBalanceMap: Map<String, Double>,
-    simUsdt: Double,
-    simIdr: Double
-): Double {
-    val isUsdt = PriceFormatter.isUsdtQuote(quoteAsset)
-    return if (isUsdt) {
-        if (isReal) {
-            val free = realFreeForQuote("USDT")
-            val total = realTotalForQuote("USDT")
-            val fromMap = realBalanceMap.entries.firstOrNull { (k, _) ->
-                val key = k.lowercase()
-                key == "usdt" || key == "usd" || key == "usdc" || key == "busd"
-            }?.value ?: 0.0
-            val fromSaved = savedBalanceMap.entries.firstOrNull { (k, _) ->
-                val key = k.lowercase()
-                key == "usdt" || key == "usd" || key == "usdc" || key == "busd"
-            }?.value ?: 0.0
-            when {
-                free > 0.0 -> free
-                total > 0.0 -> total
-                fromMap > 0.0 -> fromMap
-                fromSaved > 0.0 -> fromSaved
-                else -> 0.0
-            }
-        } else simUsdt
-    } else {
-        if (isReal) {
-            val free = realFreeForQuote("IDR")
-            val total = realTotalForQuote("IDR")
-            val fromMap = realBalanceMap["idr"] ?: realBalanceMap["IDR"] ?: 0.0
-            val fromSaved = savedBalanceMap["idr"] ?: savedBalanceMap["IDR"] ?: 0.0
-            when {
-                free > 0.0 -> free
-                total > 0.0 -> total
-                fromMap > 0.0 -> fromMap
-                fromSaved > 0.0 -> fromSaved
-                else -> 0.0
-            }
-        } else simIdr
-    }
-}
-
-private fun resolveActivityLabel(
-    isUsdtQuote: Boolean,
-    volume24h: Double,
-    change24h: Double
-): String {
-    return if (isUsdtQuote) {
-        when {
-            volume24h >= 100_000_000.0 || change24h >= 3.0 -> "Aktivitas tinggi"
-            volume24h >= 5_000_000.0 || change24h >= 0.0 -> "Aktivitas sedang"
-            else -> "Aktivitas rendah"
-        }
-    } else {
-        when {
-            volume24h >= 50_000_000_000 || change24h >= 3.0 -> "Aktivitas tinggi"
-            volume24h >= 1_000_000_000 || change24h >= 0.0 -> "Aktivitas sedang"
-            else -> "Aktivitas rendah"
-        }
-    }
-}
-
-private fun <T> resolveMtfForPair(
-    mtfAll: Map<String, Map<Timeframe, T>>,
-    pair: TradingPair
-): Map<Timeframe, T> {
-    val raw = pair.symbol
-    val upper = raw.trim().uppercase()
-    val clean = upper.replace("_", "").replace("/", "").replace("-", "")
-    return mtfAll[raw]
-        ?: mtfAll[upper]
-        ?: mtfAll[clean]
-        ?: mtfAll[pair.indodaxPair.uppercase()]
-        ?: mtfAll[pair.tokocryptoPair.uppercase()]
-        ?: emptyMap()
-}
-
-// ── Screen ────────────────────────────────────────────────────────────────
 
 @Composable
 fun DetailChartScreen(
@@ -144,249 +48,63 @@ fun DetailChartScreen(
 ) {
     val context = LocalContext.current
 
-    // ── 1. Collect only states actually used ──────────────────────────────
-    val pair by viewModel.selectedPair.collectAsStateWithLifecycle()
-    val tick by viewModel.currentTick.collectAsStateWithLifecycle()
-    val candles by viewModel.recentCandles.collectAsStateWithLifecycle()
-    val indicators by viewModel.currentIndicators.collectAsStateWithLifecycle()
-    val signal by viewModel.aiSignalState.collectAsStateWithLifecycle()
-    val selectedTimeframe by viewModel.selectedTimeframe.collectAsStateWithLifecycle()
-    val connection by viewModel.connectionState.collectAsStateWithLifecycle()
-    val orderBookBids by viewModel.orderBookBids.collectAsStateWithLifecycle()
-    val orderBookAsks by viewModel.orderBookAsks.collectAsStateWithLifecycle()
+    // ── 1. Single aggregated UI state ─────────────────────────────────────
+    val ui by viewModel.detailUiState.collectAsStateWithLifecycle()
 
-    val marketDataSource by viewModel.marketDataSource.collectAsStateWithLifecycle()
-    val isScalping by viewModel.isScalpingMode.collectAsStateWithLifecycle()
-    val strategyMode by viewModel.strategyMode.collectAsStateWithLifecycle()
-    val tradingFees by viewModel.tradingFees.collectAsStateWithLifecycle()
-    val isRealBuyMode by viewModel.isRealBuyMode.collectAsStateWithLifecycle()
-
-    val favorites by viewModel.favorites.collectAsStateWithLifecycle()
-    val spotPosition by viewModel.spotPosition.collectAsStateWithLifecycle()
-    val positionVersion by viewModel.positionVersion.collectAsStateWithLifecycle()
-    val positionContext by viewModel.positionContext.collectAsStateWithLifecycle()
-    val sellSignalState by viewModel.sellSignalState.collectAsStateWithLifecycle()
-    val wallet by viewModel.simulationWallet.collectAsStateWithLifecycle()
-    val realBalance by viewModel.realIndodaxBalance.collectAsStateWithLifecycle()
-    val realAvgBuyPrices by viewModel.realAvgBuyPrices.collectAsStateWithLifecycle()
-    val priceAlerts by viewModel.priceAlerts.collectAsStateWithLifecycle()
-    val signalHistory by viewModel.signalHistory.collectAsStateWithLifecycle()
+    // MTF still separate (not yet folded into DetailUiState)
     val mtfStateAll by viewModel.mtfState.collectAsStateWithLifecycle()
-
-    val aiGroq by viewModel.auditReportText.collectAsStateWithLifecycle()
-    val aiGemini by viewModel.geminiSummaryText.collectAsStateWithLifecycle()
-    val aiLoadingGroq by viewModel.isAuditLoading.collectAsStateWithLifecycle()
-    val aiLoadingGemini by viewModel.isGeminiLoading.collectAsStateWithLifecycle()
-
-    // ── 2. Derived state (recalc ONLY when deps change) ───────────────────
-    val currentPosition by remember {
+    val mtfState by remember(mtfStateAll, ui.pair.symbol) {
         derivedStateOf {
-            @Suppress("UNUSED_EXPRESSION")
-            positionVersion
-            if (viewModel.isMatchingSymbol(spotPosition.symbol, pair.symbol) &&
-                spotPosition.isReal == isRealBuyMode
-            ) {
-                spotPosition
-            } else {
-                viewModel.getPositionFor(pair.symbol, isRealBuyMode)
-            }
+            DetailUiStateFactory.resolveMtfForPair(mtfStateAll, ui.pair)
         }
     }
 
-    val mtfState by remember {
-        derivedStateOf { resolveMtfForPair(mtfStateAll, pair) }
-    }
-
-    val isFavorite by remember {
-        derivedStateOf {
-            favorites.contains(pair.symbol.uppercase()) || favorites.contains(pair.symbol)
-        }
-    }
-
-    val isConnected = connection is MarketConnectionState.Connected
-
-    var lastKnownLivePrice by remember(pair.symbol) { mutableDoubleStateOf(0.0) }
-    LaunchedEffect(tick?.price) {
-        val p = tick?.price ?: 0.0
-        if (p > 0.0 && p.isFinite()) lastKnownLivePrice = p
-    }
-
-    val displayPrice by remember {
-        derivedStateOf {
-            val live = tick?.price?.takeIf { it > 0.0 && it.isFinite() }
-                ?: lastKnownLivePrice.takeIf { it > 0.0 }
-            if (live != null && live > 0.0) live
-            else candles.lastOrNull()?.close?.takeIf { it > 0.0 && it.isFinite() } ?: 0.0
-        }
-    }
-
-    val change24h by remember {
-        derivedStateOf {
-            val tc = tick?.change24h ?: 0.0
-            if (!tc.isNaN()) tc else 0.0
-        }
-    }
-
-    val volume24h by remember {
-        derivedStateOf { tick?.volume24h ?: 0.0 }
-    }
-
-    val activityText = remember(volume24h, change24h, pair.quoteAsset) {
-        resolveActivityLabel(
-            isUsdtQuote = PriceFormatter.isUsdtQuote(pair.quoteAsset),
-            volume24h = volume24h,
-            change24h = change24h
-        )
-    }
+    // Unpack for readability (stable references when ui identity changes)
+    val pair = ui.pair
+    val tick = ui.tick
+    val candles = ui.candles
+    val indicators = ui.indicators
+    val signal = ui.signal
+    val selectedTimeframe = ui.selectedTimeframe
+    val marketDataSource = ui.marketDataSource
+    val isScalping = ui.isScalping
+    val strategyMode = ui.strategyMode
+    val tradingFees = ui.tradingFees
+    val isRealBuyMode = ui.isRealBuyMode
+    val orderBookBids = ui.orderBookBids
+    val orderBookAsks = ui.orderBookAsks
+    val displayPrice = ui.displayPrice
+    val change24h = ui.change24h
+    val volume24h = ui.volume24h
+    val activityText = ui.activityText
     val activityColor = when (activityText) {
         "Aktivitas tinggi" -> TvGreen
         "Aktivitas sedang" -> TvAmber
         else -> TvTextSecondary
     }
+    val availableIdr = ui.availableIdr
+    val availableCoin = ui.availableCoin
+    val avgBuyPrice = ui.avgBuyPrice
+    val isFavorite = ui.isFavorite
+    val isConnected = ui.isConnected
+    val priceAlerts = ui.priceAlerts
+    val signalHistory = ui.signalHistory
+    val currentPosition = ui.currentPosition
+    val effectivePositionContext = ui.effectivePositionContext
+    val effectiveDisplayPosition = ui.effectiveDisplayPosition
+    val effectiveSellSignal = ui.effectiveSellSignal
+    val effectiveWorkflow = ui.workflow
+    val marketStructure = ui.marketStructure
+        ?: agu.analys.engine.MarketStructureAnalyzer.analyze(emptyList())
+    val isHolding = ui.isHolding
 
-    val availableQuote by remember {
-        derivedStateOf {
-            resolveAvailableQuote(
-                quoteAsset = pair.quoteAsset,
-                isReal = isRealBuyMode,
-                realFreeForQuote = { viewModel.realFreeBalanceForQuote(it) },
-                realTotalForQuote = { viewModel.realBalanceForQuote(it) },
-                realBalanceMap = realBalance,
-                savedBalanceMap = viewModel.prefs.getSavedRealBalance(),
-                simUsdt = wallet.getAvailableUsdt(),
-                simIdr = wallet.getAvailableIdr()
-            )
-        }
-    }
-    val availableIdr = availableQuote
-
-    val availableCoin by remember {
-        derivedStateOf {
-            if (isRealBuyMode) {
-                realBalance[pair.baseAsset.lowercase()]
-                    ?: realBalance[pair.baseAsset.uppercase()]
-                    ?: 0.0
-            } else {
-                wallet.getAvailableCoin(pair.baseAsset)
-            }
-        }
-    }
-
-    val avgBuyPrice by remember {
-        derivedStateOf {
-            if (isRealBuyMode) {
-                val api = realAvgBuyPrices[pair.baseAsset.lowercase()]
-                    ?: realAvgBuyPrices[pair.baseAsset.uppercase()]
-                    ?: 0.0
-                if (api > 0.0) api else spotPosition.entryPrice
-            } else {
-                val api = wallet.avgBuyPrices[pair.baseAsset.uppercase()] ?: 0.0
-                if (api > 0.0) api else spotPosition.entryPrice
-            }
-        }
-    }
-
-    val effectivePositionContext by remember {
-        derivedStateOf {
-            if (displayPrice > 0.0) {
-                val holding = viewModel.getHoldingStatus(pair, isRealBuyMode)
-                PositionContext.create(
-                    symbol = pair.symbol,
-                    spotPosition = currentPosition,
-                    holdingStatus = holding,
-                    currentPrice = displayPrice,
-                    fees = tradingFees
-                )
-            } else {
-                positionContext
-            }
-        }
-    }
-
-    val effectiveDisplayPosition by remember {
-        derivedStateOf {
-            if (effectivePositionContext.hasPosition) {
-                val entryP = effectivePositionContext.entryPrice ?: currentPosition.entryPrice
-                val qty = effectivePositionContext.quantity ?: currentPosition.quantity
-                currentPosition.copy(
-                    symbol = pair.symbol,
-                    state = agu.analys.trading.SpotPositionState.HOLDING,
-                    entryPrice = entryP,
-                    quantity = qty,
-                    investedAmount = if (currentPosition.investedAmount > 0.0)
-                        currentPosition.investedAmount else (entryP * qty),
-                    isReal = isRealBuyMode
-                )
-            } else currentPosition
-        }
-    }
-
-    val effectiveSellSignal by remember {
-        derivedStateOf {
-            if (effectivePositionContext.hasPosition) {
-                agu.analys.engine.sell.SellSignalEvaluator.evaluate(
-                    context = effectivePositionContext,
-                    indicators = indicators,
-                    tradingFees = tradingFees,
-                    high24h = tick?.high24h ?: 0.0
-                )
-            } else sellSignalState
-        }
-    }
-
-    val effectiveWorkflow by remember {
-        derivedStateOf { resolveWorkflow(effectivePositionContext) }
-    }
-
-    val isHolding = effectivePositionContext.hasPosition || currentPosition.isHolding
+    // ── 2. Local UI-only state ────────────────────────────────────────────
     var isBuyMode by remember(pair.symbol) { mutableStateOf(!isHolding) }
-
-    val marketStructure by remember {
-        derivedStateOf {
-            if (candles.isEmpty()) {
-                MarketStructureAnalyzer.analyze(emptyList())
-            } else {
-                MarketStructureAnalyzer.analyze(candles)
-            }
-        }
+    LaunchedEffect(isHolding) {
+        // Sync tab when position appears/disappears for this pair
+        if (isHolding) isBuyMode = false
     }
 
-    // ── 3. Side-effects ──────────────────────────────────────────────────
-    LaunchedEffect(pair.symbol, marketDataSource) {
-        viewModel.selectPair(pair)
-    }
-
-    DisposableEffect(pair.baseAsset) {
-        if (pair.baseAsset.isNotBlank()) {
-            agu.analys.engine.global.GlobalContextManager.subscribeCoin(pair.baseAsset)
-        }
-        onDispose { agu.analys.engine.global.GlobalContextManager.stop() }
-    }
-
-    LaunchedEffect(isRealBuyMode, pair.symbol) {
-        if (isRealBuyMode && viewModel.hasRealCredentialsConfigured()) {
-            viewModel.fetchRealBalance(force = true)
-        }
-    }
-
-    LaunchedEffect(effectivePositionContext.hasPosition, isRealBuyMode, pair.symbol) {
-        if (effectivePositionContext.hasPosition && !currentPosition.isHolding) {
-            val entryP = effectivePositionContext.entryPrice ?: 0.0
-            val qty = effectivePositionContext.quantity ?: 0.0
-            if (entryP > 0.0 && qty > 0.0) {
-                viewModel.positionStore.markBought(
-                    symbol = pair.symbol,
-                    entryPrice = entryP,
-                    quantity = qty,
-                    invested = entryP * qty,
-                    isReal = isRealBuyMode
-                )
-                viewModel.refreshSpotPosition()
-            }
-        }
-    }
-
-    // ── 4. Local UI state ────────────────────────────────────────────────
     var showPriceAlertDialog by remember { mutableStateOf(false) }
     var showAiAssistantDialog by remember { mutableStateOf(false) }
     var showLogcatDialog by remember { mutableStateOf(false) }
@@ -415,7 +133,42 @@ fun DetailChartScreen(
     val latestIsReal by rememberUpdatedState(isRealBuyMode)
     val latestBids by rememberUpdatedState(orderBookBids)
 
-    // ── 5. Dialogs ───────────────────────────────────────────────────────
+    // ── 3. Side-effects ──────────────────────────────────────────────────
+    LaunchedEffect(pair.symbol, marketDataSource) {
+        if (pair.symbol.isNotBlank()) viewModel.selectPair(pair)
+    }
+
+    DisposableEffect(pair.baseAsset) {
+        if (pair.baseAsset.isNotBlank()) {
+            agu.analys.engine.global.GlobalContextManager.subscribeCoin(pair.baseAsset)
+        }
+        onDispose { agu.analys.engine.global.GlobalContextManager.stop() }
+    }
+
+    LaunchedEffect(isRealBuyMode, pair.symbol) {
+        if (isRealBuyMode && viewModel.hasRealCredentialsConfigured()) {
+            viewModel.fetchRealBalance(force = true)
+        }
+    }
+
+    LaunchedEffect(effectivePositionContext.hasPosition, isRealBuyMode, pair.symbol) {
+        if (effectivePositionContext.hasPosition && !currentPosition.isHolding) {
+            val entryP = effectivePositionContext.entryPrice ?: 0.0
+            val qty = effectivePositionContext.quantity ?: 0.0
+            if (entryP > 0.0 && qty > 0.0 && pair.symbol.isNotBlank()) {
+                viewModel.positionStore.markBought(
+                    symbol = pair.symbol,
+                    entryPrice = entryP,
+                    quantity = qty,
+                    invested = entryP * qty,
+                    isReal = isRealBuyMode
+                )
+                viewModel.refreshSpotPosition()
+            }
+        }
+    }
+
+    // ── 4. Dialogs ───────────────────────────────────────────────────────
     if (showPriceAlertDialog) {
         PriceAlertDialog(
             symbol = pair.symbol,
@@ -437,11 +190,9 @@ fun DetailChartScreen(
     }
 
     if (showAiAssistantDialog) {
-        val isAiLoading = aiLoadingGroq || aiLoadingGemini
-        val aiSignalText = if (provider == AiProvider.GROQ) aiGroq.orEmpty() else aiGemini.orEmpty()
         AiAssistantDialog(
-            aiSignal = aiSignalText,
-            isLoading = isAiLoading,
+            aiSignal = ui.aiReportText,
+            isLoading = ui.isAiLoading,
             provider = provider,
             onDismiss = { showAiAssistantDialog = false },
             onAnalyze = {
@@ -451,7 +202,7 @@ fun DetailChartScreen(
         )
     }
 
-    // ── 6. UI Tree ───────────────────────────────────────────────────────
+    // ── 5. UI Tree ───────────────────────────────────────────────────────
     Column(
         modifier = modifier
             .fillMaxSize()
