@@ -12,28 +12,30 @@ import agu.analys.model.resolveWorkflow
 import agu.analys.trading.SpotPosition
 import agu.analys.trading.SpotPositionState
 import agu.analys.util.PriceFormatter
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.transformLatest
 
 /**
  * Builds aggregated [DetailUiState] so DetailChartScreen can collect ONE flow
  * instead of 25+ collectAsStateWithLifecycle calls.
  *
  * UI-layer throttling (on top of PriceFeedThrottler):
- *  - Tick sampled ~300ms — Tokocrypto WS can flood 10–50 ticks/sec
- *  - Order book sampled ~400ms — depth updates are even hotter than ticks
+ *  - Tick leading-edge throttle 300ms — Tokocrypto WS can flood 10–50 ticks/sec
+ *  - Order book throttle 400ms — depth updates hotter than ticks
  *  - Market structure cached on last CLOSED candle only (forming candle ignored)
+ *
+ * First emission is always immediate (leading edge); subsequent floods are capped.
  */
 internal fun TradingViewModel.createDetailUiState(): StateFlow<DetailUiState> {
-    // Extra UI gate beyond PriceFeedThrottler (default 100ms).
-    // Detail screen does not need sub-100ms redraws; 300ms still feels live.
     val tickForUi = currentTick
-        .sample(DETAIL_TICK_SAMPLE_MS)
+        .throttleLeading(DETAIL_TICK_SAMPLE_MS)
         .distinctUntilChanged { old, new ->
             old?.price == new?.price &&
                 old?.change24h == new?.change24h &&
@@ -42,11 +44,11 @@ internal fun TradingViewModel.createDetailUiState(): StateFlow<DetailUiState> {
         }
 
     val bidsForUi = orderBookBids
-        .sample(DETAIL_DEPTH_SAMPLE_MS)
+        .throttleLeading(DETAIL_DEPTH_SAMPLE_MS)
         .distinctUntilChanged()
 
     val asksForUi = orderBookAsks
-        .sample(DETAIL_DEPTH_SAMPLE_MS)
+        .throttleLeading(DETAIL_DEPTH_SAMPLE_MS)
         .distinctUntilChanged()
 
     // Candles: only propagate when closed-candle fingerprint changes.
@@ -129,6 +131,16 @@ internal fun TradingViewModel.createDetailUiState(): StateFlow<DetailUiState> {
 
 private const val DETAIL_TICK_SAMPLE_MS = 300L
 private const val DETAIL_DEPTH_SAMPLE_MS = 400L
+
+/**
+ * Leading-edge throttle: emit immediately, then ignore upstream for [periodMs].
+ * Guarantees instant first paint while capping rebuild rate during Tokocrypto floods.
+ */
+private fun <T> Flow<T>.throttleLeading(periodMs: Long): Flow<T> =
+    transformLatest { value ->
+        emit(value)
+        delay(periodMs)
+    }
 
 /** Fingerprint based on last *closed* candle so forming-candle price noise is ignored. */
 private fun closedCandleFingerprint(candles: List<agu.analys.model.CandleBar>): String {
