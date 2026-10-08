@@ -2,8 +2,10 @@ package agu.analys.ui.components.chart
 
 import android.annotation.SuppressLint
 import android.graphics.Color
+import android.util.Log
 import android.view.View
 import android.view.ViewGroup
+import android.webkit.JavascriptInterface
 import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebSettings
 import android.webkit.WebView
@@ -11,6 +13,7 @@ import android.webkit.WebViewClient
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -20,11 +23,23 @@ import agu.analys.model.CandleBar
 import org.json.JSONArray
 import org.json.JSONObject
 
+private const val CHART_TAG = "LwcChart"
+private const val CHART_URL = "file:///android_asset/chart/lightweight_chart.html"
+
+/** Jembatan JS -> Android. Error dari halaman chart dicatat ke Logcat. */
+internal class ChartBridge {
+    @JavascriptInterface
+    fun onError(message: String) {
+        Log.w(CHART_TAG, message)
+    }
+}
+
 /**
- * Lightweight Charts (TradingView open-source) — data murni dari Indodax candles.
- * Dipakai di detail non-fullscreen.
+ * Lightweight Charts 5.2.1 (Apache-2.0) — data murni dari candle Tokocrypto.
+ * Library di-bundle lokal di assets, tidak memakai CDN.
+ * Dipakai di detail (portrait) dan layar penuh (landscape).
  */
-@SuppressLint("SetJavaScriptEnabled")
+@SuppressLint("SetJavaScriptEnabled", "JavascriptInterface")
 @Composable
 fun LightweightChartView(
     candles: List<CandleBar>,
@@ -41,6 +56,8 @@ fun LightweightChartView(
 ) {
     var webView by remember { mutableStateOf<WebView?>(null) }
     var pageReady by remember { mutableStateOf(false) }
+    // Naik setiap kali WebView mati (render process crash) → Compose membuat WebView baru.
+    var generation by remember { mutableStateOf(0) }
 
     fun candlesToJson(list: List<CandleBar>): String {
         val arr = JSONArray()
@@ -69,18 +86,18 @@ fun LightweightChartView(
 
     fun pushData(wv: WebView) {
         val json = candlesToJson(candles)
-        // JSON as JS object literal — no string escaping issues
+        // JSON sebagai object literal — tidak ada masalah escaping string
         wv.evaluateJavascript("setCandles($json)", null)
         wv.evaluateJavascript("setLevels(${levelsJson()})", null)
     }
 
-    LaunchedEffect(candles, entryPrice, targetPrice1, targetPrice2, stopLoss, pageReady) {
+    LaunchedEffect(candles, entryPrice, targetPrice1, targetPrice2, stopLoss, pageReady, generation) {
         val wv = webView ?: return@LaunchedEffect
         if (!pageReady) return@LaunchedEffect
         pushData(wv)
     }
 
-    LaunchedEffect(showVolume, showEma, showBb, showStochRsi, pageReady) {
+    LaunchedEffect(showVolume, showEma, showBb, showStochRsi, pageReady, generation) {
         val wv = webView ?: return@LaunchedEffect
         if (!pageReady) return@LaunchedEffect
         val json = JSONObject()
@@ -92,7 +109,7 @@ fun LightweightChartView(
         wv.evaluateJavascript("setIndicators($json)", null)
     }
 
-    LaunchedEffect(currentPrice, pageReady) {
+    LaunchedEffect(currentPrice, pageReady, generation) {
         val wv = webView ?: return@LaunchedEffect
         if (!pageReady || currentPrice <= 0.0 || candles.isEmpty()) return@LaunchedEffect
         val last = candles.last()
@@ -109,47 +126,53 @@ fun LightweightChartView(
         wv.evaluateJavascript("updateLast($json)", null)
     }
 
-    AndroidView(
-        modifier = modifier,
-        factory = { ctx ->
-            WebView(ctx).apply {
-                layoutParams = ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT
-                )
-                // Use software layer to prevent MESA GPU / rendernode crash in virtualized environments
-                setLayerType(View.LAYER_TYPE_SOFTWARE, null)
-                setBackgroundColor(android.graphics.Color.TRANSPARENT)
-                settings.javaScriptEnabled = true
-                settings.domStorageEnabled = true
-                settings.cacheMode = WebSettings.LOAD_DEFAULT
-                settings.allowFileAccess = true
-                settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-                webViewClient = object : WebViewClient() {
-                    override fun onPageFinished(view: WebView?, url: String?) {
-                        pageReady = true
-                        view?.let { pushData(it) }
-                    }
-
-                    override fun onRenderProcessGone(
-                        view: WebView?,
-                        detail: RenderProcessGoneDetail?
-                    ): Boolean {
-                        // Return true to handle renderer exit and prevent aw_browser_terminator from crashing the app
-                        view?.let {
-                            (it.parent as? ViewGroup)?.removeView(it)
-                            it.destroy()
+    key(generation) {
+        AndroidView(
+            modifier = modifier,
+            factory = { ctx ->
+                WebView(ctx).apply {
+                    layoutParams = ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT
+                    )
+                    // Software layer mencegah crash MESA GPU di emulator. Di HP asli bisa dilepas nanti.
+                    setLayerType(View.LAYER_TYPE_SOFTWARE, null)
+                    setBackgroundColor(Color.TRANSPARENT)
+                    settings.javaScriptEnabled = true
+                    settings.domStorageEnabled = true
+                    settings.cacheMode = WebSettings.LOAD_DEFAULT
+                    settings.allowFileAccess = true
+                    settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                    addJavascriptInterface(ChartBridge(), "ChartBridge")
+                    webViewClient = object : WebViewClient() {
+                        override fun onPageFinished(view: WebView?, url: String?) {
+                            pageReady = true
+                            view?.let { pushData(it) }
                         }
-                        return true
+
+                        override fun onRenderProcessGone(
+                            view: WebView?,
+                            detail: RenderProcessGoneDetail?
+                        ): Boolean {
+                            // Return true supaya app tidak crash. WebView dilepas lalu dibuat ulang.
+                            view?.let {
+                                (it.parent as? ViewGroup)?.removeView(it)
+                                it.destroy()
+                            }
+                            webView = null
+                            pageReady = false
+                            generation++
+                            return true
+                        }
                     }
+                    loadUrl(CHART_URL)
+                    webView = this
                 }
-                loadUrl("file:///android_asset/chart/lightweight_chart.html")
-                webView = this
+            },
+            update = { wv ->
+                webView = wv
+                if (pageReady) pushData(wv)
             }
-        },
-        update = { wv ->
-            webView = wv
-            if (pageReady) pushData(wv)
-        }
-    )
+        )
+    }
 }
