@@ -138,7 +138,10 @@ class MarketViewModel(application: Application) : AndroidViewModel(application) 
         if (cached.isNotEmpty()) {
             _dashboardTicks.value = cached
             _isShowingCachedData.value = true
-            val valid = cached.values.filter { it.price > 0 }
+            // Fail-closed: cache lama bisa menyimpan koin yang kini delisted — saring dulu.
+            val valid = cached.values.filter {
+                it.price > 0 && agu.analys.util.DashboardRanking.isRankable(source, it)
+            }
             val gainers = valid.filter { it.change24h > 0 }.sortedByDescending { it.change24h }
             val losers = valid.filter { it.change24h < 0 }.sortedBy { it.change24h }
             // Kurs murni dari exchange (ExchangeRateManager); tanpa tebakan angka.

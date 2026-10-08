@@ -356,6 +356,23 @@ object TokocryptoSymbolRepository {
         return getSymbolInfo(symbol)?.symbolType ?: 1
     }
 
+    /**
+     * Gate listing fail-closed untuk tampilan dashboard.
+     * True hanya bila simbol dikenal DAN spot trading aktif (status TRADING).
+     * Simbol tak dikenal (belum pernah sync sukses) dianggap tidak layak tampil.
+     * Aplikasi diasumsikan selalu online dan jalur discovery symbol aman.
+     */
+    fun isSpotTradingEnabled(rawSymbol: String): Boolean =
+        getSymbolInfo(rawSymbol)?.spotTradingEnable == true
+
+    /** Helper pengujian: ubah flag listing satu entri tanpa menghapus metadata lain. */
+    internal fun setSpotTradingForTest(rawSymbol: String, enabled: Boolean): Boolean {
+        val key = rawSymbol.trim().uppercase()
+        val existing = symbolsMap[key] ?: return false
+        symbolsMap[key] = existing.copy(spotTradingEnable = enabled)
+        return true
+    }
+
     fun getAllTradingPairs(quoteFilter: String? = null): List<TradingPair> {
         val uniqueSymbols = symbolsMap.values
             .filter {

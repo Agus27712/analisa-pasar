@@ -1,5 +1,7 @@
 package agu.analys.util
 
+import agu.analys.config.MarketDataSource
+import agu.analys.data.TokocryptoSymbolRepository
 import agu.analys.model.MarketTick
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -46,5 +48,39 @@ class DashboardRankingTest {
         assertFalse(DashboardRanking.passesPriceFloor(tick("XYZIDR", 3.0, 1.0)))
         assertTrue(DashboardRanking.passesPriceFloor(tick("XYZIDR", 300.0, 1.0)))
         assertFalse(DashboardRanking.passesPriceFloor(tick("ABCUSDT", 0.0, 1.0)))
+    }
+
+    @Test
+    fun toko_unknownSymbol_notRankable_failClosed() {
+        // TONUSDT lolos threshold harga/volume USDT, tapi tak dikenal discovery -> gugur.
+        assertFalse(
+            DashboardRanking.isRankable(
+                MarketDataSource.TOKOCRYPTO, tick("TONUSDT", 10.0, 50_000.0)
+            )
+        )
+    }
+
+    @Test
+    fun toko_knownActiveSymbol_rankable() {
+        // BTCIDR ada di metadata bawaan dengan spotTradingEnable=true.
+        assertTrue(
+            DashboardRanking.isRankable(
+                MarketDataSource.TOKOCRYPTO, tick("BTCIDR", 1_700_000_000.0, 5_000_000_000.0)
+            )
+        )
+    }
+
+    @Test
+    fun toko_disabledSymbol_notRankable() {
+        assertTrue(TokocryptoSymbolRepository.setSpotTradingForTest("BTCIDR", false))
+        try {
+            assertFalse(
+                DashboardRanking.isRankable(
+                    MarketDataSource.TOKOCRYPTO, tick("BTCIDR", 1_700_000_000.0, 5_000_000_000.0)
+                )
+            )
+        } finally {
+            assertTrue(TokocryptoSymbolRepository.setSpotTradingForTest("BTCIDR", true))
+        }
     }
 }

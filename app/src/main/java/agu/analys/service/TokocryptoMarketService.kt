@@ -576,6 +576,9 @@ object TokocryptoMarketService {
      */
     suspend fun fetchMarketRankings(limit: Int = 35): TokoRankingsResult = withContext(Dispatchers.IO) {
         try {
+            // Fail-closed: pastikan metadata listing terbaru sebelum memfilter.
+            // Dijatah TTL 30 menit di repository, jadi murah bila sudah sinkron.
+            TokocryptoSymbolRepository.ensureSymbolsLoaded(false)
             val (json1, json3) = coroutineScope {
                 val a = async { get("$TOKOCRYPTO_TYPE1_MARKET_URL/ticker/24hr") }
                 val b = async { get("$TOKOCRYPTO_TYPE3_MARKET_URL/ticker/24hr") }

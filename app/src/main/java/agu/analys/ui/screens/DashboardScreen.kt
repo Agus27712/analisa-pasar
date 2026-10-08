@@ -141,12 +141,17 @@ fun DashboardScreen(
         fun priceOk(t: agu.analys.model.MarketTick) =
             agu.analys.util.DashboardRanking.passesPriceFloor(t) &&
                 agu.analys.util.DashboardRanking.isRankable(marketDataSource, t)
+        // Fail-closed khusus Tokocrypto: pair yang tidak berstatus TRADING di discovery
+        // resmi (delisted / tak dikenal) tidak boleh bocor lewat jalur statis maupun gainers.
+        fun pairListed(p: TradingPair) =
+            marketDataSource != MarketDataSource.TOKOCRYPTO ||
+                agu.analys.data.TokocryptoSymbolRepository.isSpotTradingEnabled(p.symbol)
         // Tokocrypto: daftar discovery berisi semua pair, jadi hanya ambil 15 teratas sebagai cadangan
         val popularHead = if (marketDataSource == MarketDataSource.TOKOCRYPTO) {
-            basePopular.take(agu.analys.util.DashboardRanking.PAGE_SIZE)
+            basePopular.filter { pairListed(it) }.take(agu.analys.util.DashboardRanking.PAGE_SIZE)
         } else basePopular
         val watchAndFav = (watchlist.map { TradingPair.fromCustomSymbol(it, defaultQuote) } +
-            favorites.map { TradingPair.fromCustomSymbol(it, defaultQuote) })
+            favorites.map { TradingPair.fromCustomSymbol(it, defaultQuote) }).filter { pairListed(it) }
 
         when (strategyMode) {
             StrategyMode.SCALPING -> {
@@ -156,7 +161,7 @@ fun DashboardScreen(
                     .take(30)
                     .map { TradingPair.fromCustomSymbol(it.symbol, defaultQuote) }
                 val explicit = (gainersCoins.map { TradingPair.fromCustomSymbol(it.symbol, defaultQuote) } +
-                    hotCoins.map { TradingPair.fromCustomSymbol(it.symbol, defaultQuote) })
+                    hotCoins.map { TradingPair.fromCustomSymbol(it.symbol, defaultQuote) }).filter { pairListed(it) }
                 (watchAndFav + explicit + highVol + popularHead).distinctBy { it.symbol }
             }
             StrategyMode.SWING -> {
@@ -196,7 +201,11 @@ fun DashboardScreen(
                 .map { TradingPair.fromCustomSymbol(it.symbol) }
                 .distinctBy { it.symbol }
         } else {
-            basePopular.take(agu.analys.util.DashboardRanking.PAGE_SIZE)
+            // Fail-closed: fallback statis pun wajib lolos status listing Tokocrypto.
+            basePopular.filter {
+                marketDataSource != MarketDataSource.TOKOCRYPTO ||
+                    agu.analys.data.TokocryptoSymbolRepository.isSpotTradingEnabled(it.symbol)
+            }.take(agu.analys.util.DashboardRanking.PAGE_SIZE)
         }
     }
 

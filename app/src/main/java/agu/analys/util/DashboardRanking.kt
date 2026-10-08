@@ -1,6 +1,7 @@
 package agu.analys.util
 
 import agu.analys.config.MarketDataSource
+import agu.analys.data.TokocryptoSymbolRepository
 import agu.analys.model.MarketTick
 import agu.analys.service.IndodaxMarketService
 import agu.analys.service.TokocryptoMarketService
@@ -59,6 +60,9 @@ object DashboardRanking {
         }
         return if (source == MarketDataSource.TOKOCRYPTO) {
             TokocryptoMarketService.isIdrOrUsdtPair(sym) &&
+                // Fail-closed: hanya simbol berstatus TRADING di discovery resmi yang boleh tampil.
+                // Simbol delisted / tak dikenal (getSymbolInfo == null) langsung gugur di sini.
+                TokocryptoSymbolRepository.isSpotTradingEnabled(sym) &&
                 TokocryptoMarketService.isSafeTradableAsset(
                     price = tick.price,
                     volume24h = tick.volume24h,
