@@ -21,8 +21,11 @@ class DashboardRankingTest {
     }
 
     @Test
-    fun invalidRate_usesFallback() {
-        assertEquals(DashboardRanking.safeRate(0.0), DashboardRanking.safeRate(10.0), 0.0)
+    fun invalidRate_returnsZero_noHardcodedFallback() {
+        // Tanpa kurs valid hasilnya 0 (bukan tebakan 16.000)
+        assertEquals(0.0, DashboardRanking.safeRate(0.0), 0.0)
+        assertEquals(0.0, DashboardRanking.safeRate(10.0), 0.0)
+        assertEquals(16_100.0, DashboardRanking.safeRate(16_100.0), 0.0)
     }
 
     @Test
