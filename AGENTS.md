@@ -44,6 +44,9 @@ Aplikasi Android Kotlin 100% (Jetpack Compose M3) untuk analisis & trading kript
 - Replay Tokocrypto: `REAL_DATA_DIR=data/tokocrypto ./gradlew :app:testDebugUnitTest --tests "agu.analys.engine.scalping.replay.RealTokocryptoReplayTest"`.
 
 ## CI & rilis
-
 - CI unit-test hanya manual (`Actions → Unit Tests (Manual) → Run workflow`); jangan tambah trigger push/PR otomatis.
 - Rilis otomatis saat push `main`/`master`/`v*` dan butuh secrets `RELEASE_KEYSTORE_BASE64`, `RELEASE_STORE_PASSWORD`, `RELEASE_KEY_ALIAS`, `RELEASE_KEY_PASSWORD`. Versi dibaca dari `app/build.gradle.kts` (`versionName`/`VERSION_CODE`, kini 3.5.7/83).
+
+## Aturan pencarian web
+
+- Jangan lakukan pencarian web atas inisiatif sendiri — hanya bila pengguna memintanya secara eksplisit (biasanya untuk verifikasi API/endpoint bursa: WebSocket, order, dsb.).
