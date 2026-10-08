@@ -41,9 +41,11 @@ object TokocryptoSymbolRepository {
     private val lastSyncTime = AtomicLong(0L)
     private const val SYNC_TTL_MS = 30 * 60 * 1000L // 30 menit refresh interval
 
+    // Sumber utama: endpoint resmi Tokocrypto yang mengembalikan seluruh supported trading symbols.
+    // MBX dan NextMe dipakai sebagai fallback resmi sesuai dokumentasi migrasi Tokocrypto.
     private val SYMBOLS_ENDPOINTS = listOf(
-        "https://www.tokocrypto.site/api/v3/exchangeInfo",
         "https://www.tokocrypto.com/open/v1/common/symbols",
+        "https://www.tokocrypto.site/api/v3/exchangeInfo",
         "https://cloudme-toko.2meta.app/api/v1/exchangeInfo"
     )
     private const val TOKOCRYPTO_EXECUTION_RULES_URL = "https://www.tokocrypto.site/api/v3/executionRules"
@@ -182,9 +184,16 @@ object TokocryptoSymbolRepository {
                     val data = root.optJSONArray("data") ?: root.optJSONArray("symbols")
 
                     if ((code == 0 || resp.isSuccessful) && data != null && data.length() > 0) {
-                        parseTokocryptoSymbols(data)
-                        Timber.i("TokocryptoSymbolRepository: Berhasil load ${symbolsMap.size} symbols dari $endpointUrl")
-                        return true
+                        val newMap = parseTokocryptoSymbols(data)
+
+                        // Replace saat sync berhasil agar symbol yang sudah delisting
+                        // tidak tertinggal dari hasil sync sebelumnya.
+                        if (newMap.isNotEmpty()) {
+                            symbolsMap.clear()
+                            symbolsMap.putAll(newMap)
+                            Timber.i("TokocryptoSymbolRepository: Berhasil load ${newMap.size} aliases dari $endpointUrl")
+                            return true
+                        }
                     }
                 }
             } catch (e: Exception) {
@@ -194,7 +203,7 @@ object TokocryptoSymbolRepository {
         return false
     }
 
-    private fun parseTokocryptoSymbols(dataArray: JSONArray) {
+    private fun parseTokocryptoSymbols(dataArray: JSONArray): Map<String, TokocryptoSymbolInfo> {
         val newMap = mutableMapOf<String, TokocryptoSymbolInfo>()
         for (i in 0 until dataArray.length()) {
             val item = dataArray.optJSONObject(i) ?: continue
@@ -218,9 +227,8 @@ object TokocryptoSymbolRepository {
                 }
             }
 
-            // Eliminasi BIDR: hanya pair IDR dan USDT saja
+            // Tokocrypto yang digunakan aplikasi ini hanya memakai quote USDT dan IDR.
             if (quoteAsset != "IDR" && quoteAsset != "USDT") continue
-            if (baseAsset == "BIDR" || rawSymbol.startsWith("BIDR") || rawSymbol.contains("BIDR_") || rawSymbol.contains("_BIDR")) continue
 
             val symbolType = item.optInt("symbolType", 1) // 1 = MBX, 3 = NextMe
             val basePrecision = item.optInt("basePrecision", item.optInt("baseAssetPrecision", 8))
@@ -296,9 +304,7 @@ object TokocryptoSymbolRepository {
             newMap[underscore] = info
         }
 
-        if (newMap.isNotEmpty()) {
-            symbolsMap.putAll(newMap)
-        }
+        return newMap
     }
 
 
@@ -343,11 +349,6 @@ object TokocryptoSymbolRepository {
         val directNoUnder = symbolsMap[noUnderscore]
         if (directNoUnder != null) return directNoUnder
 
-        // Jika ada input lama dengan BIDR, mapping ke IDR
-        if (noUnderscore.endsWith("BIDR")) {
-            val idrKey = noUnderscore.removeSuffix("BIDR") + "IDR"
-            return symbolsMap[idrKey] ?: symbolsMap["${noUnderscore.removeSuffix("BIDR")}_IDR"]
-        }
         return null
     }
 
@@ -358,17 +359,14 @@ object TokocryptoSymbolRepository {
     fun getAllTradingPairs(quoteFilter: String? = null): List<TradingPair> {
         val uniqueSymbols = symbolsMap.values
             .filter {
-                (it.quoteAsset == "IDR" || it.quoteAsset == "USDT") &&
-                    it.baseAsset != "BIDR" &&
-                    !it.symbol.startsWith("BIDR") &&
-                    !it.symbol.contains("_BIDR") &&
-                    !it.symbol.contains("BIDR_")
+                it.spotTradingEnable &&
+                    (it.quoteAsset == "IDR" || it.quoteAsset == "USDT")
             }
             .distinctBy { it.symbol }
         val filtered = if (quoteFilter.isNullOrBlank() || quoteFilter.equals("ALL", true)) {
             uniqueSymbols
         } else {
-            val q = quoteFilter.uppercase().replace("BIDR", "IDR")
+            val q = quoteFilter.uppercase()
             uniqueSymbols.filter { it.quoteAsset.equals(q, true) }
         }
         return filtered.map { it.toTradingPair() }
