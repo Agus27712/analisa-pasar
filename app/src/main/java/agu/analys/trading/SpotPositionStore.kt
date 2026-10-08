@@ -592,6 +592,15 @@ class SpotPositionStore(context: Context) {
         prefs.edit().putBoolean("${buildKey(symbol, isReal, exchange)}_tp2_triggered", true).apply()
     }
 
+    /** Dipakai bila order jual TP gagal terkirim, supaya TP bisa dicoba lagi. */
+    fun resetTp1Trigger(symbol: String, isReal: Boolean = false, exchange: String = "TOKOCRYPTO") {
+        prefs.edit().putBoolean("${buildKey(symbol, isReal, exchange)}_tp1_triggered", false).apply()
+    }
+
+    fun resetTp2Trigger(symbol: String, isReal: Boolean = false, exchange: String = "TOKOCRYPTO") {
+        prefs.edit().putBoolean("${buildKey(symbol, isReal, exchange)}_tp2_triggered", false).apply()
+    }
+
     fun getAllActiveTrailingSymbols(isReal: Boolean? = null, exchange: String? = null): List<String> {
         val result = mutableSetOf<String>()
         val all = prefs.all

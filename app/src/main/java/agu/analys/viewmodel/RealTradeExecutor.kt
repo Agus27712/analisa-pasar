@@ -94,13 +94,14 @@ class RealTradeExecutor(
         orderId: String,
         clientOrderId: String,
         requestedQty: Double,
-        isToko: Boolean
+        isToko: Boolean,
+        maxAttempts: Int = BUY_POLL_MAX_ATTEMPTS
     ): Double {
         var lastExecuted = 0.0
 
-        for (attempt in 1..BUY_POLL_MAX_ATTEMPTS) {
+        for (attempt in 1..maxAttempts) {
             delay(BUY_POLL_INTERVAL_MS)
-            onStatusUpdate("Menunggu BUY terisi... ($attempt/$BUY_POLL_MAX_ATTEMPTS)")
+            onStatusUpdate("Menunggu BUY terisi... ($attempt/$maxAttempts)")
 
             val result = if (isToko) {
                 TokocryptoTradeApi.getOrder(
@@ -339,8 +340,23 @@ class RealTradeExecutor(
                         onResult(true, "BUY berhasil!\nAuto Sell: $finalMsg")
                     }
                 } else {
-                    if (isBuy && buyResult.executedQty > MIN_EXECUTED_QTY) {
-                        finalExecutedQty = buyResult.executedQty
+                    if (isBuy) {
+                        val filledQty = if (buyResult.executedQty > MIN_EXECUTED_QTY) {
+                            buyResult.executedQty
+                        } else {
+                            waitForBuyFill(apiKey, secretKey, pair, buyResult.orderId, buyResult.clientOrderId.ifBlank { clientOrderId }, quantity, isToko, maxAttempts = 4)
+                        }
+                        if (filledQty <= MIN_EXECUTED_QTY) {
+                            // Order baru terpasang di orderbook: jangan catat saldo/posisi/jurnal seolah sudah terisi
+                            onStatusUpdate("BUY terkirim tapi belum terisi.")
+                            agu.analys.util.AppLogManager.trade("RealOrderPending", "⏳ [$sourceLabel REAL] BUY $pair terkirim, belum terisi. Posisi tidak dicatat.")
+                            withContext(Dispatchers.Main) {
+                                onResult(true, "BUY terkirim di server $sourceLabel, tapi belum terisi (posisi belum dicatat).")
+                            }
+                            refreshBalance()
+                            return@launch
+                        }
+                        finalExecutedQty = filledQty
                     }
                     onStatusUpdate(buyResult.message)
                     agu.analys.util.AppLogManager.trade("RealOrderSuccess", "✅ [$sourceLabel REAL] Order $type $pair berhasil dikirim @ $priceFmt: ${buyResult.message}")

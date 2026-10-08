@@ -20,6 +20,22 @@ import java.util.concurrent.ConcurrentHashMap
 
 private val lastPeakNotificationTimes = ConcurrentHashMap<String, Long>()
 
+/** Jeda minimal antar order jual otomatis real per pair + jenis pemicu (cegah order ganda tiap tick). */
+private val autoSellDispatchTimes = ConcurrentHashMap<String, Long>()
+private const val AUTO_SELL_COOLDOWN_MS = 30_000L
+
+/** Alasan keluar & harga acuan jual otomatis; dibaca saat order real sukses agar jurnal akurat. */
+internal data class PendingAutoSell(val reason: String, val refPrice: Double, val createdAt: Long)
+internal val pendingAutoSells = ConcurrentHashMap<String, PendingAutoSell>()
+
+private fun tryAcquireAutoSell(key: String): Boolean {
+    val now = System.currentTimeMillis()
+    val last = autoSellDispatchTimes[key]
+    if (last != null && now - last < AUTO_SELL_COOLDOWN_MS) return false
+    autoSellDispatchTimes[key] = now
+    return true
+}
+
 fun TradingViewModel.printTrailingDiagnostics(
     symbol: String,
     currentPrice: Double,
@@ -138,6 +154,7 @@ fun TradingViewModel.checkTrailingForMode(
     printTrailingDiagnostics(symbol, currentPrice, posBeforeUpdate, exchange)
     val (updatedPos, justTriggered) = positionStore.updateTrailingPrice(symbol, currentPrice, isReal, exchange = exchange)
 
+    var fullExitDispatched = false
     if (justTriggered) {
         refreshSpotPosition()
         val effectivePct = if (updatedPos.activeTrailingPercent > 0.0) updatedPos.activeTrailingPercent else updatedPos.trailingPercent
@@ -176,7 +193,7 @@ fun TradingViewModel.checkTrailingForMode(
                 isReal = isReal
             )
             // Eksekusi auto-sell jaring pengaman otomatis
-            executeAutoSellOrder(symbol, limitSellPrice, posQty, "TRAILING", isReal, isPartial = false, exchange = exchange)
+            fullExitDispatched = executeAutoSellOrder(symbol, limitSellPrice, posQty, "TRAILING", isReal, isPartial = false, exchange = exchange)
         }
     } else if (updatedPos.isHolding && updatedPos.isTrailingEnabled && updatedPos.peakPrice > oldPeak) {
         val effectivePct = if (updatedPos.activeTrailingPercent > 0.0) updatedPos.activeTrailingPercent else updatedPos.trailingPercent
@@ -216,30 +233,39 @@ fun TradingViewModel.checkTrailingForMode(
     }
 
     // Auto Take Profit / Stop Loss Check
-    if (updatedPos.isHolding && updatedPos.isAutoSellEnabled) {
-        val qty = updatedPos.quantity
-        if (qty > 0.0) {
-            // Check TP1
-            if (!updatedPos.isTp1Triggered && updatedPos.tp1Price > 0.0 && currentPrice >= updatedPos.tp1Price) {
+    // Lewati bila trailing baru saja menjual semua (hindari jual ganda di tick yang sama).
+    if (!fullExitDispatched && updatedPos.isHolding && updatedPos.isAutoSellEnabled) {
+        var remainingQty = updatedPos.quantity
+        // TP1 (flag baru ditandai setelah order benar-benar dikirim)
+        if (remainingQty > 0.0 && !updatedPos.isTp1Triggered && updatedPos.tp1Price > 0.0 && currentPrice >= updatedPos.tp1Price) {
+            val sellQty = remainingQty * (updatedPos.tp1Percent / 100.0)
+            val dispatched = sellQty > 0.0 &&
+                executeAutoSellOrder(symbol, currentPrice, sellQty, "TP1", isReal, isPartial = updatedPos.tp1Percent < 100.0, exchange = exchange)
+            if (dispatched) {
                 positionStore.markTp1Triggered(symbol, isReal, exchange = exchange)
                 refreshSpotPosition()
                 agu.analys.util.AppLogManager.trailing("AutoSellTP", "🎯 [${marketKey.formattedPair()}] Target TP1 tercapai di ${PriceFormatter.formatPrice(currentPrice, quoteAsset = quoteAsset)} (Target: ${PriceFormatter.formatPrice(updatedPos.tp1Price, quoteAsset = quoteAsset)})")
-                val sellQty = qty * (updatedPos.tp1Percent / 100.0)
-                executeAutoSellOrder(symbol, currentPrice, sellQty, "TP1", isReal, isPartial = updatedPos.tp1Percent < 100.0, exchange = exchange)
+                remainingQty -= sellQty
             }
-            // Check TP2
-            if (!updatedPos.isTp2Triggered && updatedPos.tp2Price > 0.0 && currentPrice >= updatedPos.tp2Price) {
+        }
+        // TP2: dihitung dari sisa setelah TP1 di tick yang sama
+        if (remainingQty > 0.0 && !updatedPos.isTp2Triggered && updatedPos.tp2Price > 0.0 && currentPrice >= updatedPos.tp2Price) {
+            val sellQty = remainingQty * (updatedPos.tp2Percent / 100.0)
+            val dispatched = sellQty > 0.0 &&
+                executeAutoSellOrder(symbol, currentPrice, sellQty, "TP2", isReal, isPartial = updatedPos.tp2Percent < 100.0, exchange = exchange)
+            if (dispatched) {
                 positionStore.markTp2Triggered(symbol, isReal, exchange = exchange)
                 refreshSpotPosition()
                 agu.analys.util.AppLogManager.trailing("AutoSellTP", "🎯 [${marketKey.formattedPair()}] Target TP2 tercapai di ${PriceFormatter.formatPrice(currentPrice, quoteAsset = quoteAsset)} (Target: ${PriceFormatter.formatPrice(updatedPos.tp2Price, quoteAsset = quoteAsset)})")
-                val sellQty = qty * (updatedPos.tp2Percent / 100.0)
-                executeAutoSellOrder(symbol, currentPrice, sellQty, "TP2", isReal, isPartial = updatedPos.tp2Percent < 100.0, exchange = exchange)
+                remainingQty -= sellQty
             }
-            // Check Stop Loss / Cut Loss Terpicu
-            if (updatedPos.stopLossPrice > 0.0 && currentPrice <= updatedPos.stopLossPrice) {
+        }
+        // Stop Loss: dijaga cooldown di executeAutoSellOrder (tidak menembak order tiap tick)
+        if (remainingQty > 0.0 && updatedPos.stopLossPrice > 0.0 && currentPrice <= updatedPos.stopLossPrice) {
+            val dispatched = executeAutoSellOrder(symbol, currentPrice, remainingQty, "STOP_LOSS", isReal, isPartial = false, exchange = exchange)
+            if (dispatched) {
                 refreshSpotPosition()
                 agu.analys.util.AppLogManager.trailing("AutoSellSL", "⚠️ [${marketKey.formattedPair()}] Stop Loss tercapai di ${PriceFormatter.formatPrice(currentPrice, quoteAsset = quoteAsset)} (Batas: ${PriceFormatter.formatPrice(updatedPos.stopLossPrice, quoteAsset = quoteAsset)})")
-                executeAutoSellOrder(symbol, currentPrice, qty, "STOP_LOSS", isReal, isPartial = false, exchange = exchange)
             }
         }
     }
@@ -253,7 +279,19 @@ fun TradingViewModel.executeAutoSellOrder(
     isReal: Boolean,
     isPartial: Boolean = false,
     exchange: String = prefs.marketDataSource.name
-) {
+): Boolean {
+    // Penjaga order ganda (real): TP1 dan TP2 punya kunci sendiri; Trailing & Stop Loss berbagi kunci "FULL_EXIT".
+    val normSym = symbol.uppercase().replace("_", "")
+    val isTpTrigger = triggerType == "TP1" || triggerType == "TP2"
+    val guardKey = "${exchange.uppercase()}_${normSym}_${if (isTpTrigger) triggerType else "FULL_EXIT"}"
+    if (isReal && !tryAcquireAutoSell(guardKey)) {
+        // Ditolak karena baru saja ada order jual sejenis; trailing harus bisa dicoba lagi nanti.
+        if (triggerType.contains("TRAILING")) {
+            positionStore.resetTrailingTrigger(symbol, isReal = true, exchange = exchange)
+        }
+        return false
+    }
+
     val modeTag = if (isReal) "REAL" else "SIMULASI"
     val triggerLabel = when {
         triggerType.contains("TRAILING") -> "Trailing Stop Terpicu"
@@ -274,9 +312,27 @@ fun TradingViewModel.executeAutoSellOrder(
     if (isReal) {
         // Diskon 5% dari harga terkini agar berfungsi layaknya Market Sell di orderbook
         val marketSellPrice = price * 0.95
+        // Simpan alasan & harga acuan agar jurnal mencatat pemicu yang benar (bukan harga diskon 95%)
+        val pendingKey = "${exchange.uppercase()}_$normSym"
+        pendingAutoSells[pendingKey] = PendingAutoSell(
+            reason = when {
+                triggerType.contains("TRAILING") -> "TRAILING_STOP"
+                triggerType.contains("STOP_LOSS") -> "STOP_LOSS"
+                triggerType == "TP1" -> "HIT_TP1"
+                triggerType == "TP2" -> "HIT_TP2"
+                else -> "AUTO_SELL"
+            },
+            refPrice = price,
+            createdAt = System.currentTimeMillis()
+        )
         executeRealTrade(symbol, "sell", marketSellPrice, quantity, 0.0, 0.0, exchange = exchange) { success, msg ->
-            if (!success && triggerType.contains("TRAILING")) {
-                positionStore.resetTrailingTrigger(symbol, isReal = true, exchange = exchange)
+            if (!success) {
+                pendingAutoSells.remove(pendingKey)
+                when {
+                    triggerType.contains("TRAILING") -> positionStore.resetTrailingTrigger(symbol, isReal = true, exchange = exchange)
+                    triggerType == "TP1" -> positionStore.resetTp1Trigger(symbol, isReal = true, exchange = exchange)
+                    triggerType == "TP2" -> positionStore.resetTp2Trigger(symbol, isReal = true, exchange = exchange)
+                }
             }
             val notifTitle = if (success) {
                 if (triggerType.contains("STOP_LOSS")) "🛡️ [$modeTag] Cut Loss Terlaksana • ${marketKey.formattedPair()}"
@@ -303,7 +359,7 @@ fun TradingViewModel.executeAutoSellOrder(
         val finalSellQty = if (!isPartial) (if (simBal > 0.0) simBal else quantity) else quantity.coerceAtMost(simBal)
         if (finalSellQty <= 0.0) {
             positionCoordinator.setOwnership(symbol, false, price, isReal = false)
-            return
+            return false
         }
         val res = simCoordinator.submitOrder(
             pair = pair,
@@ -346,6 +402,7 @@ fun TradingViewModel.executeAutoSellOrder(
             marketKey = marketKey
         )
     }
+    return true
 }
 
 fun TradingViewModel.deployTrailingOrder(symbol: String, exchange: String = prefs.marketDataSource.name) {

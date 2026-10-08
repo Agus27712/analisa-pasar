@@ -33,18 +33,56 @@ fun TradingViewModel.handleRealTradeExecution(
 ) {
     val currentEx = prefs.marketDataSource.name
     val symbol = pair.replace("_", "").uppercase()
+    var isPartialSell = false
+    var effectivePrice = price
     if (type.equals("sell", ignoreCase = true)) {
-        positionStore.markSold(symbol, isReal = true, exchange = currentEx)
-        positionStore.markSold(pair, isReal = true, exchange = currentEx)
-        agu.analys.engine.sell.SellSignalLifecycleManager.reset(symbol, isReal = true)
-        agu.analys.engine.sell.SellSignalLifecycleManager.reset(pair, isReal = true)
-        positionCoordinator.markSoldAndClear(symbol, isReal = true)
-        positionCoordinator.markSoldAndClear(pair, isReal = true)
-        signalLogRepository.expireTrackingLogsForSymbol(symbol, "Posisi real sudah terjual (MarkSold)")
+        // Baca posisi SEBELUM diubah: dipakai untuk deteksi jual sebagian dan PnL dari harga masuk.
+        val before = positionStore.get(symbol, isReal = true, exchange = currentEx)
+        val heldQty = before.quantity
+        isPartialSell = before.isHolding && heldQty > 0.0 && (heldQty - quantity) / heldQty > 0.02
+
+        val pending = pendingAutoSells.remove("${currentEx.uppercase()}_$symbol")
+            ?.takeIf { System.currentTimeMillis() - it.createdAt < 120_000L }
+        effectivePrice = pending?.refPrice?.takeIf { it > 0.0 } ?: price
+        val exitReason = pending?.reason ?: if (tp1 > 0 || tp2 > 0) "TAKE_PROFIT" else "MARKET_SELL"
+
+        // PnL bagian yang dijual vs harga masuk posisi (jurnal tidak boleh membandingkan jual sebagian dengan total modal)
+        var customPnlIdr: Double? = null
+        var customPnlPct: Double? = null
+        if (before.entryPrice > 0.0 && effectivePrice > 0.0 && quantity > 0.0) {
+            val feeRate = 0.003
+            val netSell = effectivePrice * (1.0 - feeRate)
+            val cost = before.entryPrice * (1.0 + feeRate)
+            customPnlPct = (netSell / cost - 1.0) * 100.0
+            customPnlIdr = (netSell - cost) * quantity
+        }
+
+        if (isPartialSell) {
+            // Sisa koin tetap dipantau (trailing, TP2, SL tetap aktif)
+            val remaining = heldQty - quantity
+            positionStore.setHolding(
+                symbol = symbol,
+                invested = before.entryPrice * remaining,
+                entry = before.entryPrice,
+                quantity = remaining,
+                isReal = true,
+                exchange = currentEx
+            )
+        } else {
+            positionStore.markSold(symbol, isReal = true, exchange = currentEx)
+            positionStore.markSold(pair, isReal = true, exchange = currentEx)
+            agu.analys.engine.sell.SellSignalLifecycleManager.reset(symbol, isReal = true)
+            agu.analys.engine.sell.SellSignalLifecycleManager.reset(pair, isReal = true)
+            positionCoordinator.markSoldAndClear(symbol, isReal = true)
+            positionCoordinator.markSoldAndClear(pair, isReal = true)
+            signalLogRepository.expireTrackingLogsForSymbol(symbol, "Posisi real sudah terjual (MarkSold)")
+        }
         tradeHistoryRecorder.recordSell(
-            symbol = symbol, isReal = true, sellPrice = price, sellQuantity = quantity,
-            sellReason = if (tp1 > 0 || tp2 > 0) "TAKE_PROFIT" else "MARKET_SELL",
+            symbol = symbol, isReal = true, sellPrice = effectivePrice, sellQuantity = quantity,
+            sellReason = exitReason,
             strategyMode = strategyMode.value.name,
+            customPnlIdr = customPnlIdr,
+            customPnlPercent = customPnlPct,
             exchange = currentEx
         )
     } else if (type.equals("buy", ignoreCase = true)) {
@@ -79,7 +117,7 @@ fun TradingViewModel.handleRealTradeExecution(
             } catch (_: Exception) {}
         }
     }
-    syncRealTradeToSimulation(pair, type, price, quantity, tp1, tp2)
+    syncRealTradeToSimulation(pair, type, effectivePrice, quantity, tp1, tp2, skipPositionUpdate = isPartialSell)
     positionCoordinator.refreshPosition(selectedPair.value.symbol)
     refreshSpotPosition()
 }
@@ -90,7 +128,8 @@ fun TradingViewModel.syncRealTradeToSimulation(
     price: Double,
     quantity: Double,
     tp1: Double = 0.0,
-    tp2: Double = 0.0
+    tp2: Double = 0.0,
+    skipPositionUpdate: Boolean = false
 ) {
     if (!prefs.isRealSimSyncEnabled) return
     val defaultQuote = prefs.marketDataSource.defaultQuoteAsset
@@ -146,7 +185,7 @@ fun TradingViewModel.syncRealTradeToSimulation(
                 exchange = currentEx
             )
         }
-    } else {
+    } else if (!skipPositionUpdate) {
         val currentPos = positionStore.get(symbol, isReal = true, exchange = currentEx)
         val remainingQty = (currentPos.quantity - quantity).coerceAtLeast(0.0)
         if (remainingQty <= 0.00000001) {

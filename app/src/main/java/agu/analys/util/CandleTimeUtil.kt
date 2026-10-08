@@ -112,10 +112,11 @@ object CandleTimeUtil {
 
         val duration = timeframeDurationMs(timeframe)
         val tickTime = if (liveTick.timestamp > 0) liveTick.timestamp else nowMs
-        val currentWindowStart = (tickTime / duration) * duration
+        val lastCandle = baseCandles.last()
+        // Jangkar ke grid candle bursa (mis. D1 Indodax mulai 00:00 WIB), bukan kelipatan UTC
+        val currentWindowStart = lastCandle.timestamp + Math.floorDiv(tickTime - lastCandle.timestamp, duration) * duration
 
         val result = ArrayList<CandleBar>(baseCandles.size + 1)
-        val lastCandle = baseCandles.last()
 
         if (lastCandle.timestamp == currentWindowStart) {
             // Update the forming candle in-place

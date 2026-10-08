@@ -171,13 +171,28 @@ class MarketDataCoordinator(
             _isShowingCachedData.value = false
         }
         val previous = _currentTick.value
-        val normalized = tick.copy(
-            symbol = selected,
-            high24h = if (previous?.high24h != null && previous.high24h > 0) previous.high24h else tick.price,
-            low24h = if (previous?.low24h != null && previous.low24h > 0) previous.low24h else tick.price,
-            volume24h = previous?.volume24h ?: 0.0,
-            change24h = previous?.change24h ?: 0.0
-        )
+        val normalized = if (tick.volume24h > 0.0) {
+            // WS Tokocrypto membawa statistik 24 jam asli: pakai langsung (high/low minimal mencakup harga kini)
+            tick.copy(
+                symbol = selected,
+                high24h = if (tick.high24h > 0.0) maxOf(tick.high24h, tick.price) else maxOf(previous?.high24h ?: 0.0, tick.price),
+                low24h = if (tick.low24h > 0.0) minOf(tick.low24h, tick.price) else previous?.low24h?.takeIf { it > 0.0 }?.let { minOf(it, tick.price) } ?: tick.price,
+                change24h = if (tick.change24h.isFinite()) tick.change24h else (previous?.change24h ?: 0.0)
+            )
+        } else {
+            // WS tanpa statistik (Indodax): high/low diperluas oleh harga, persen ubah digeser dari basis 24 jam
+            val prevChange = previous?.change24h
+            val openRef = if (previous != null && previous.price > 0.0 && prevChange != null && prevChange.isFinite() && prevChange > -99.0) {
+                previous.price / (1.0 + prevChange / 100.0)
+            } else 0.0
+            tick.copy(
+                symbol = selected,
+                high24h = maxOf(previous?.high24h ?: 0.0, tick.price),
+                low24h = previous?.low24h?.takeIf { it > 0.0 }?.let { minOf(it, tick.price) } ?: tick.price,
+                volume24h = previous?.volume24h ?: 0.0,
+                change24h = if (openRef > 0.0) ((tick.price / openRef) - 1.0) * 100.0 else (prevChange ?: 0.0)
+            )
+        }
         // Pass through configurable UI throttler to prevent main thread bottlenecks during volatility spikes
         uiPriceThrottler.submit(normalized)
     }
