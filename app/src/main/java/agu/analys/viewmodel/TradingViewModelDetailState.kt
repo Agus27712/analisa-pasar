@@ -1,7 +1,9 @@
 package agu.analys.viewmodel
 
 import androidx.lifecycle.viewModelScope
+import agu.analys.config.MarketDataSource
 import agu.analys.engine.MarketStructureAnalyzer
+import agu.analys.engine.MarketStructureSnapshot
 import agu.analys.model.DetailUiState
 import agu.analys.model.DetailUiStateFactory
 import agu.analys.model.MarketConnectionState
@@ -13,20 +15,52 @@ import agu.analys.util.PriceFormatter
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.flow.stateIn
 
 /**
  * Builds aggregated [DetailUiState] so DetailChartScreen can collect ONE flow
  * instead of 25+ collectAsStateWithLifecycle calls.
  *
- * Nested combine keeps each transform under the 5-arg limit and isolates
- * price ticks from slower-changing config/wallet slices.
+ * UI-layer throttling (on top of PriceFeedThrottler):
+ *  - Tick sampled ~300ms — Tokocrypto WS can flood 10–50 ticks/sec
+ *  - Order book sampled ~400ms — depth updates are even hotter than ticks
+ *  - Market structure cached on last CLOSED candle only (forming candle ignored)
  */
 internal fun TradingViewModel.createDetailUiState(): StateFlow<DetailUiState> {
+    // Extra UI gate beyond PriceFeedThrottler (default 100ms).
+    // Detail screen does not need sub-100ms redraws; 300ms still feels live.
+    val tickForUi = currentTick
+        .sample(DETAIL_TICK_SAMPLE_MS)
+        .distinctUntilChanged { old, new ->
+            old?.price == new?.price &&
+                old?.change24h == new?.change24h &&
+                old?.volume24h == new?.volume24h &&
+                old?.symbol == new?.symbol
+        }
+
+    val bidsForUi = orderBookBids
+        .sample(DETAIL_DEPTH_SAMPLE_MS)
+        .distinctUntilChanged()
+
+    val asksForUi = orderBookAsks
+        .sample(DETAIL_DEPTH_SAMPLE_MS)
+        .distinctUntilChanged()
+
+    // Candles: only propagate when closed-candle fingerprint changes.
+    // SynthesizeRealtime still updates _recentCandles every tick for the chart engine,
+    // but DetailUiState should not recompute structure on every forming-candle twitch.
+    val candlesForUi = recentCandles
+        .map { candles -> candles to closedCandleFingerprint(candles) }
+        .distinctUntilChanged { a, b -> a.second == b.second }
+        .map { it.first }
+
     val marketSlice = combine(
         selectedPair,
-        currentTick,
-        recentCandles,
+        tickForUi,
+        candlesForUi,
         currentIndicators,
         aiSignalState
     ) { pair, tick, candles, indicators, signal ->
@@ -66,8 +100,8 @@ internal fun TradingViewModel.createDetailUiState(): StateFlow<DetailUiState> {
     val modeSlice = combine(
         isScalpingMode,
         strategyMode,
-        orderBookBids,
-        orderBookAsks
+        bidsForUi,
+        asksForUi
     ) { scalping, mode, bids, asks ->
         ModeSlice(scalping, mode, bids, asks)
     }
@@ -93,6 +127,36 @@ internal fun TradingViewModel.createDetailUiState(): StateFlow<DetailUiState> {
     )
 }
 
+private const val DETAIL_TICK_SAMPLE_MS = 300L
+private const val DETAIL_DEPTH_SAMPLE_MS = 400L
+
+/** Fingerprint based on last *closed* candle so forming-candle price noise is ignored. */
+private fun closedCandleFingerprint(candles: List<agu.analys.model.CandleBar>): String {
+    if (candles.isEmpty()) return "0"
+    val lastClosed = candles.asReversed().firstOrNull { it.isClosed } ?: candles.last()
+    return "${candles.size}|${lastClosed.timestamp}|${lastClosed.close}|${lastClosed.volume}"
+}
+
+/** Module-level structure cache — avoids MarketStructureAnalyzer on every UI sample. */
+private object StructureCache {
+    @Volatile var key: String = ""
+    @Volatile var value: MarketStructureSnapshot? = null
+
+    fun getOrAnalyze(candles: List<agu.analys.model.CandleBar>): MarketStructureSnapshot {
+        val key = closedCandleFingerprint(candles)
+        val hit = value
+        if (key == this.key && hit != null) return hit
+        val snap = if (candles.isEmpty()) {
+            MarketStructureAnalyzer.analyze(emptyList())
+        } else {
+            MarketStructureAnalyzer.analyze(candles)
+        }
+        this.key = key
+        this.value = snap
+        return snap
+    }
+}
+
 private data class MarketSlice(
     val pair: agu.analys.model.TradingPair,
     val tick: agu.analys.model.MarketTick?,
@@ -114,7 +178,7 @@ private data class BalanceSlice(
     val realBal: Map<String, Double>,
     val avgPrices: Map<String, Double>,
     val fees: agu.analys.config.TradingFeeConfig,
-    val source: agu.analys.config.MarketDataSource
+    val source: MarketDataSource
 )
 
 private data class MetaSlice(
@@ -235,11 +299,7 @@ private fun TradingViewModel.buildDetailUiState(
         if (api > 0.0) api else currentPosition.entryPrice
     }
 
-    val marketStructure = if (market.candles.isEmpty()) {
-        MarketStructureAnalyzer.analyze(emptyList())
-    } else {
-        MarketStructureAnalyzer.analyze(market.candles)
-    }
+    val marketStructure = StructureCache.getOrAnalyze(market.candles)
 
     val providerUsesGroq = try {
         prefs.aiProvider == agu.analys.config.AiProvider.GROQ
