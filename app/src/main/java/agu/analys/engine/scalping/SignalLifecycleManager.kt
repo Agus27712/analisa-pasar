@@ -46,6 +46,9 @@ object SignalLifecycleManager {
     private const val EXPIRY_SCALPING_MS = 10 * 60 * 1000L
     // Expire swing / macro signals older than 4 hours (dinaikkan dari 2 jam)
     private const val EXPIRY_MACRO_MS = 4 * 60 * 60 * 1000L
+    // TRIGGERED ikut kedaluwarsa agar sinyal baru bisa diproses lagi (sebelumnya macet permanen).
+    private const val EXPIRY_TRIGGERED_SCALPING_MS = 10 * 60 * 1000L
+    private const val EXPIRY_TRIGGERED_MACRO_MS = 4 * 60 * 60 * 1000L
     // Hysteresis: butuh 3 tick berturut-turut conf lemah sebelum drop dari READY
     private const val WEAK_TICK_THRESHOLD = 3
 
@@ -62,8 +65,19 @@ object SignalLifecycleManager {
     ): TrackedSignal = lock.withLock {
         val now = System.currentTimeMillis()
         val key = cacheKey(symbol, mode)
-        val tracked = activeSignals.getOrPut(key) {
+        var tracked = activeSignals.getOrPut(key) {
             TrackedSignal(symbol = symbol, mode = mode)
+        }
+
+        // TRIGGERED yang sudah lama → reset agar siklus sinyal baru bisa berjalan lagi.
+        // Jangkar: lastUpdatedAt di-set saat markTriggered().
+        if (tracked.state == LifecycleState.TRIGGERED) {
+            val trigExpiry = if (mode == StrategyMode.SCALPING) EXPIRY_TRIGGERED_SCALPING_MS else EXPIRY_TRIGGERED_MACRO_MS
+            if (now - tracked.lastUpdatedAt > trigExpiry) {
+                activeSignals.remove(key)
+                tracked = TrackedSignal(symbol = symbol, mode = mode)
+                activeSignals[key] = tracked
+            }
         }
 
         val previousState = tracked.state
@@ -172,7 +186,7 @@ object SignalLifecycleManager {
                     }
                 }
                 LifecycleState.TRIGGERED -> {
-                    // Kept as triggered until UI/execution resets
+                    // Dipertahankan sampai kedaluwarsa (reset di awal process) atau reset eksplisit.
                 }
             }
         } else {
@@ -281,7 +295,7 @@ object SignalLifecycleManager {
                     }
                 }
                 LifecycleState.TRIGGERED -> {
-                    // Kept as triggered
+                    // Dipertahankan sampai kedaluwarsa (reset di awal process) atau reset eksplisit.
                 }
             }
         }

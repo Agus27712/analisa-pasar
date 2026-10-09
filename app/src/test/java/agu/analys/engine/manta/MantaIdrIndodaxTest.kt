@@ -8,7 +8,6 @@ import agu.analys.engine.badge.CoinBadgeEvaluator
 import agu.analys.engine.intraday.IntradayScreener
 import agu.analys.engine.scalping.OrderBookAnalyzer
 import agu.analys.engine.scalping.ScalpingMtfEvaluator
-import agu.analys.engine.scalping.replay.HistoricalReplayEngine
 import agu.analys.model.Timeframe
 import agu.analys.service.IndodaxMarketService
 import kotlinx.coroutines.runBlocking
@@ -239,46 +238,6 @@ class MantaIdrIndodaxTest {
 
         assertTrue("Data structure M15 harus mencukupi", structure.dataEnough)
         assertNotNull("Trend structure tidak boleh null", structure.trend)
-    }
-
-    @Test
-    fun test06_MantaIdr_HistoricalReplaySimulation() {
-        println("=== 6. SIMULASI HISTORICAL REPLAY PADA DATA CANDLE MANTA/IDR ===")
-        val m1 = MantaIdrTestData.sampleM1
-        val m15 = MantaIdrTestData.sampleM15
-        val h1 = MantaIdrTestData.sampleH1
-        val bids = MantaIdrTestData.sampleBids
-        val asks = MantaIdrTestData.sampleAsks
-
-        val report = HistoricalReplayEngine.replay(
-            symbol = "MANTAIDR",
-            m1Candles = m1,
-            m15Candles = m15,
-            h1Candles = h1,
-            orderBookProvider = { _, _ -> Pair(bids, asks) },
-            targetProfitPct = 1.5,
-            stopLossPct = 1.0,
-            forwardLookaheadBars = 10,
-            feeConfig = TradingFeeConfig()
-        )
-
-        println("Hasil Simulasi Historical Replay MANTA/IDR:")
-        println("  - Total Frame Evaluasi : ${report.totalEvaluations}")
-        println("  - Total Sinyal Muncul  : ${report.totalSignalsTriggered}")
-        println("  - Valid Entries        : ${report.validEntries}")
-        println("  - False Signals        : ${report.falseSignals}")
-        println("  - Missed Opportunities : ${report.missedOpportunities}")
-        println("  - Avoided Losses       : ${report.avoidedLosses}")
-        println("  - Win Rate Sinyal      : ${String.format("%.2f", report.winRatePct)}%")
-        println("  - Bottleneck Utama     : Step ${report.bottleneck.primaryBottleneckStep} - ${report.bottleneck.primaryBottleneckDescription}")
-        println("  - Rejeksi Step 1 (Tren): ${report.bottleneck.step1Rejections}")
-        println("  - Rejeksi Step 2 (OB)  : ${report.bottleneck.step2Rejections}")
-        println("  - Rejeksi Step 3 (Trig): ${report.bottleneck.step3Rejections}")
-        println("  - Rejeksi Step 4 (RR)  : ${report.bottleneck.step4Rejections}")
-
-        assertTrue("Evaluasi harus berjalan pada dataset historis", report.totalEvaluations > 0)
-        assertEquals("Symbol report harus MANTAIDR", "MANTAIDR", report.symbol)
-        assertTrue("Primary bottleneck step valid (0..4)", report.bottleneck.primaryBottleneckStep in 0..4)
     }
 
     @Test

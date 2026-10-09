@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import agu.analys.ui.theme.*
 import agu.analys.engine.global.RiskBasedPositionSizer
+import agu.analys.model.LifecycleState
 import agu.analys.util.PriceFormatter
 
 @Composable
@@ -540,6 +541,13 @@ fun RadarBuySection(
             val isCoolingDown = !isRealMode && buyCooldownRemainingMs > 0
             val remainingSec = buyCooldownRemainingMs / 1000.0
             val isEngineReady = signal?.let { it.mtf.entryPriceStatus.name == "OK" || it.mtf.entryPriceOk || it.action == agu.analys.model.SignalAction.BUY } ?: true
+            // Guard lifecycle: sinyal basi/batal tidak boleh dieksekusi dari tombol cepat.
+            val lifecycleBlockedReason = when (signal?.lifecycleState) {
+                LifecycleState.EXPIRED -> "SINYAL KEDALUWARSA — tunggu setup baru"
+                LifecycleState.INVALIDATED -> "SINYAL BATAL — tunggu setup baru"
+                else -> null
+            }
+            val isBuyBlocked = isCoolingDown || lifecycleBlockedReason != null
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -548,14 +556,14 @@ fun RadarBuySection(
             ) {
                 Button(
                     onClick = {
-                        if (!isCoolingDown) {
+                        if (!isBuyBlocked) {
                             val buyPrice = if (customTargetBuyPrice > 0.0) customTargetBuyPrice else validPrice
                             val tp1 = if (isAutoLimitSellEnabled) defaultTpPrice1 else 0.0
                             val tp2 = if (isAutoLimitSellEnabled) defaultTpPrice2 else 0.0
                             onExecuteBuy.invoke(grossBuyOrderAmount, buyPrice, tp1, tp2)
                         }
                     },
-                    enabled = !isCoolingDown,
+                    enabled = !isBuyBlocked,
                     modifier = Modifier
                         .weight(1f)
                         .height(44.dp),
@@ -580,6 +588,19 @@ fun RadarBuySection(
                             fontWeight = FontWeight.Black,
                             fontSize = 11.5.sp,
                             fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                            maxLines = 1
+                        )
+                    } else if (lifecycleBlockedReason != null) {
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = lifecycleBlockedReason,
+                            fontWeight = FontWeight.Black,
+                            fontSize = 11.5.sp,
                             maxLines = 1
                         )
                     } else {

@@ -307,7 +307,8 @@ app/src/main/java/agu/analys/
 │   ├── indicators/                      # Penghitung RSI, MACD, Bollinger Bands, ATR, dll.
 │   ├── scalping/                        # Logika Scalp M1/M5, MTF Confluence Matrix, OrderBook Analyzer
 │   │   (ScalpSetupDetector, ScalpingMtfEvaluator, SignalScoringEngine,
-│   │    ScalpingRiskEngine, MarketScannerEngine, HistoricalEdgeStub, replay)
+│   │    ScalpingRiskEngine, HistoricalEdgeStub; MarketScannerEngine &
+│   │    HistoricalReplayEngine dihapus 2026-10 — validasi via tools/scalp_replay.py)
 │   ├── swing/                           # Logika Swing H1, 6-Checkpoint Confluence Evaluator
 │   ├── intraday/                        # Logika Intraday, IntradayScreener, 4-Sesi Disiplin Waktu, Anomaly Detector
 │   ├── regime/                          # MarketRegimeEngine/Detector, MacroAnomalyDetector

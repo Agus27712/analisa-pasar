@@ -49,6 +49,7 @@ Aplikasi Android Kotlin 100% (Jetpack Compose M3) untuk analisis & trading kript
 - CSV candle ada di `data/tokocrypto` (dan `data/tokocrypto_v2`); format `<PAIR>_1m.csv` (`open_time_ms,open,high,low,close,volume`, hanya candle CLOSED).
 - Unduh ulang hanya dari jaringan Indonesia: `python tools/fetch_tokocrypto_klines.py` (runner luar negeri kena HTTP 451 dari Tokocrypto).
 - Replay Tokocrypto: `REAL_DATA_DIR=data/tokocrypto ./gradlew :app:testDebugUnitTest --tests "agu.analys.engine.scalping.replay.RealTokocryptoReplayTest"`.
+- Validasi setting engine di luar aplikasi (tanpa orderbook): `python tools/scalp_replay.py --pair BTCUSDT --data data/tokocrypto --assume-orderbook-ok --out hasil.json` (port Python dari `ScalpingMtfEvaluator` + threshold `tools/scalp_config.json`, output JSON saja). Tanpa flag, Step2 gagal seperti aplikasi tanpa depth — itu ekspektasi, bukan bug tool.
 
 ## CI & rilis
 - CI unit-test hanya manual (`Actions → Unit Tests (Manual) → Run workflow`); jangan tambah trigger push/PR otomatis.

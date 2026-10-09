@@ -12,6 +12,7 @@ import agu.analys.config.MarketDataSource
 import agu.analys.config.StrategyMode
 import agu.analys.engine.global.GlobalContextManager
 import agu.analys.engine.intraday.IntradayEvaluator
+import agu.analys.engine.scalping.ScalpingMtfEvaluator
 import agu.analys.engine.scalping.SignalLifecycleManager
 import agu.analys.engine.swing.SwingEvaluator
 import agu.analys.model.MarketKey
@@ -90,6 +91,7 @@ class CandidateScanWorker(
                 return Result.success()
             }
 
+            var scalpEvaluated = 0
             for (rawSymbol in eligibleSymbols) {
                 val cleanSymbol = rawSymbol.uppercase().replace("/", "").replace("-", "")
                 val compactSym = if (!isIndodax) TokocryptoMarketService.toTokocryptoSymbol(cleanSymbol) else cleanSymbol
@@ -180,6 +182,64 @@ class CandidateScanWorker(
                             )
                         }
                     }
+
+                    // --- Evaluasi Mode SCALPING (background, dibatasi) ---
+                    // Tanpa depth orderbook di worker → diagnosticIgnore=true (Step2 dilewati),
+                    // notifikasi hanya untuk transisi READY (skor STRONG). Dibatasi N simbol pertama.
+                    if (scalpEvaluated < MAX_SCALP_BACKGROUND_SYMBOLS) {
+                        scalpEvaluated++
+                        try {
+                            val m1Candles = if (isIndodax) {
+                                IndodaxMarketService.fetchCandles(cleanSymbol, Timeframe.M1, 60)
+                            } else {
+                                TokocryptoMarketService.fetchCandles(cleanSymbol, Timeframe.M1, 60)
+                            }
+                            val m15Candles = if (isIndodax) {
+                                IndodaxMarketService.fetchCandles(cleanSymbol, Timeframe.M15, 60)
+                            } else {
+                                TokocryptoMarketService.fetchCandles(cleanSymbol, Timeframe.M15, 60)
+                            }
+                            if (m1Candles.size >= 20 && m15Candles.size >= 20) {
+                                val scalpResult = ScalpingMtfEvaluator.evaluate(
+                                    price = price,
+                                    h1Candles = h1Candles,
+                                    m15Candles = m15Candles,
+                                    m1Candles = m1Candles,
+                                    formingVolume = 0.0,
+                                    bids = emptyList(),
+                                    asks = emptyList(),
+                                    fees = prefs.tradingFees,
+                                    symbol = cleanSymbol,
+                                    diagnosticIgnoreOrderBookWhenUnavailable = true
+                                )
+                                if (scalpResult != null) {
+                                    val trackedScalp = SignalLifecycleManager.process(
+                                        symbol = cleanSymbol,
+                                        currentPrice = price,
+                                        rawSignal = scalpResult.signal,
+                                        mode = StrategyMode.SCALPING
+                                    )
+                                    if (trackedScalp.transition?.hasTriggeringTransition == true && prefs.isNotificationsEnabled) {
+                                        if (!positionStore.get(cleanSymbol, isReal = prefs.isRealBuyMode, exchange = currentExchange).isHolding) {
+                                            val priceStr = PriceFormatter.formatPrice(price, showSymbol = true, quoteAsset = quoteAsset)
+                                            agu.analys.util.AppLogManager.service(
+                                                "CandidateFound",
+                                                "🔔 [SCALPING - $currentExchange] Kandidat BUY terdeteksi untuk ${marketKey.formattedPair()} @ $priceStr! Mengirim notifikasi..."
+                                            )
+                                            AlertNotificationHelper.sendCandidateFoundNotification(
+                                                context = applicationContext,
+                                                marketKey = marketKey,
+                                                strategyMode = StrategyMode.SCALPING,
+                                                signal = trackedScalp.activeSignalState ?: scalpResult.signal
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        } catch (e: Exception) {
+                            Timber.w(e, "CandidateScanWorker: Evaluasi scalping background gagal untuk $cleanSymbol")
+                        }
+                    }
                 }
             }
 
@@ -196,6 +256,8 @@ class CandidateScanWorker(
 
     companion object {
         const val WORK_NAME = "CandidateScanPeriodicWork"
+        /** Batas simbol untuk evaluasi scalping background (hemat baterai/API). */
+        const val MAX_SCALP_BACKGROUND_SYMBOLS = 10
 
         fun schedule(context: Context) {
             val constraints = Constraints.Builder()

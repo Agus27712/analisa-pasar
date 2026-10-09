@@ -110,6 +110,64 @@ fun RadarTargetLevelsSection(
                         fontWeight = FontWeight.Bold
                     )
                 }
+
+                // ── Skor & setup engine (dulu hanya ada di kartu mati / log) ──
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = "SKOR & SETUP ENGINE",
+                    color = TvBlue,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Black
+                )
+                Spacer(Modifier.height(3.dp))
+                if (signal.scalpingSetup.isNotBlank()) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("• Setup", color = TvTextSecondary, fontSize = 11.sp)
+                        Text(signal.scalpingSetup, color = TvTextPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(Modifier.height(3.dp))
+                }
+                if (signal.scalpingScore > 0) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("• Skor", color = TvTextSecondary, fontSize = 11.sp)
+                        Text(
+                            text = "${signal.scalpingScore}/100" + (signal.scalpingScoreCategory.takeIf { it.isNotBlank() }?.let { " ($it)" } ?: ""),
+                            color = TvTextPrimary,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(Modifier.height(3.dp))
+                }
+                if (signal.scalpingScoreDetail.isNotBlank()) {
+                    Text(signal.scalpingScoreDetail, color = TvTextSecondary, fontSize = 10.sp, lineHeight = 14.sp)
+                    Spacer(Modifier.height(3.dp))
+                }
+                if (signal.scalpingDirection.isNotBlank()) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("• Arah", color = TvTextSecondary, fontSize = 11.sp)
+                        Text(signal.scalpingDirection, color = TvTextPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(Modifier.height(3.dp))
+                }
+                if (signal.regimeDetected.isNotBlank()) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("• Rejim", color = TvTextSecondary, fontSize = 11.sp)
+                        Text(signal.regimeDetected, color = TvTextPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(Modifier.height(3.dp))
+                }
+                if (signal.entryZoneLow > 0.0 && signal.entryZoneHigh > 0.0) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("• Zona entry", color = TvTextSecondary, fontSize = 11.sp)
+                        Text(
+                            "${PriceFormatter.formatPrice(signal.entryZoneLow, quoteAsset = quoteAsset)} – ${PriceFormatter.formatPrice(signal.entryZoneHigh, quoteAsset = quoteAsset)}",
+                            color = TvTextPrimary,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
             }
         }
     }

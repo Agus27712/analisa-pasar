@@ -272,11 +272,9 @@ fun evaluateSignalReal(data: FocusCoinCardData): Triple<FocusSignalType, Int, St
 
     val change = tick?.change24h ?: 0.0
 
-    val signalType = when {
-        score >= 65 && change > 0.0 -> FocusSignalType.WATCH
-        score >= 45 -> FocusSignalType.SCANNING
-        else -> FocusSignalType.SCANNING
-    }
+    // Jujur: tanpa sinyal engine (pair tidak sedang dipilih), jangan tampilkan WATCH/BUY
+    // seolah-olah sinyal engine. SCANNING = heuristik momentum, bukan sinyal.
+    val signalType = FocusSignalType.SCANNING
 
     val tagList = mutableListOf<String>()
     badges.firstOrNull()?.let { tagList.add(it.description) }
@@ -286,6 +284,6 @@ fun evaluateSignalReal(data: FocusCoinCardData): Triple<FocusSignalType, Int, St
         tagList.add(if (change >= 0.0) "Trend positif" else "Tekanan pasar")
     }
 
-    val reasons = tagList.take(3).joinToString(" • ")
+    val reasons = "Estimasi • " + tagList.take(3).joinToString(" • ")
     return Triple(signalType, score, reasons)
 }

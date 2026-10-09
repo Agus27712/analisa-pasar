@@ -14,6 +14,7 @@ import androidx.compose.ui.unit.dp
 import agu.analys.config.StrategyMode
 import agu.analys.config.TradingFeeConfig
 import agu.analys.model.AISignalState
+import agu.analys.model.LifecycleState
 import agu.analys.model.OrderBookItem
 import agu.analys.model.SignalAction
 import agu.analys.model.PositionContext
@@ -308,10 +309,21 @@ fun WaitingEntryRadarCard(
             }
 
             AnalysisCard {
+                val (lifecycleText, lifecycleColor) = when (signal.lifecycleState) {
+                    LifecycleState.READY -> Pair("🎯 READY", TvGreen)
+                    LifecycleState.TRIGGERED -> Pair("✅ TRIGGERED", TvGreen)
+                    LifecycleState.CONFIRMING -> Pair("⏳ KONFIRMASI", TvOrange)
+                    LifecycleState.DETECTED -> Pair("👁 TERDETEKSI", TvBlue)
+                    LifecycleState.EXPIRED -> Pair("⌛ KEDALUWARSA", TvTextMuted)
+                    LifecycleState.INVALIDATED -> Pair("🚫 BATAL", TvRed)
+                    LifecycleState.IDLE -> Pair(null, TvBlue)
+                }
                 RadarHeaderSection(
                     titleHeader = buyTitleHeader,
                     completed = completedBuySteps,
-                    onToggleChecklist = { isChecklistVisible = !isChecklistVisible }
+                    onToggleChecklist = { isChecklistVisible = !isChecklistVisible },
+                    statusText = lifecycleText,
+                    statusColor = lifecycleColor
                 )
 
                 Spacer(Modifier.height(10.dp))
@@ -348,6 +360,14 @@ fun WaitingEntryRadarCard(
                     completed = completedBuySteps,
                     isLevelPlanVisible = isLevelPlanVisible,
                     onToggleLevelPlan = { isLevelPlanVisible = !isLevelPlanVisible }
+                )
+
+                Spacer(Modifier.height(10.dp))
+
+                // Backtest baseline di cache M1 (integrasi ScalpingBacktestAdapter)
+                agu.analys.ui.components.detail.radar.BacktestSection(
+                    symbol = signal.marketSymbol.ifBlank { "$baseAsset$quoteAsset" },
+                    fees = fees
                 )
             }
         }
