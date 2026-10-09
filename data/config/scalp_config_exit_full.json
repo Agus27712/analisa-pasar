@@ -20,11 +20,18 @@
   "retest_min_structure_strength": 60,
   "pullback_support_max_dist_pct": 1.2,
   "fee": {
-    "_comment": "Preset tokocrypto = taker 0.10/0.10 (AppConfiguration). Indodax = 0.21/0.42",
-    "buy_taker_pct": 0.1,
-    "sell_taker_pct": 0.1,
-    "buy_maker_pct": 0.1,
-    "sell_maker_pct": 0.1
+    "_comment": "Tokocrypto ALL-IN regular (efektif 2026-06-18): trading+PPh+ICEx. USDT/crypto = 0.4044% per sisi. IDR: buy taker 0.2222 / sell taker 0.4322. Preset default = USDT (data tokocrypto_v2/v3). Tanpa diskon TKO/VIP.",
+    "quote": "USDT",
+    "buy_taker_pct": 0.4044,
+    "sell_taker_pct": 0.4044,
+    "buy_maker_pct": 0.4044,
+    "sell_maker_pct": 0.4044,
+    "idr_reference": {
+      "buy_taker_pct": 0.2222,
+      "sell_taker_pct": 0.4322,
+      "buy_maker_pct": 0.1222,
+      "sell_maker_pct": 0.3322
+    }
   },
   "replay": {
     "lookahead_bars": 120,

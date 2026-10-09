@@ -20,21 +20,25 @@
   "retest_min_structure_strength": 60,
   "pullback_support_max_dist_pct": 1.2,
   "fee": {
-    "_comment": "Preset tokocrypto = taker 0.10/0.10 (AppConfiguration). Indodax = 0.21/0.42",
-    "buy_taker_pct": 0.1,
-    "sell_taker_pct": 0.1,
-    "buy_maker_pct": 0.1,
-    "sell_maker_pct": 0.1
+    "_comment": "Tokocrypto ALL-IN regular (efektif 2026-06-18): trading+PPh+ICEx. USDT = 0.4044% per sisi.",
+    "quote": "USDT",
+    "buy_taker_pct": 0.4044,
+    "sell_taker_pct": 0.4044,
+    "buy_maker_pct": 0.4044,
+    "sell_maker_pct": 0.4044
   },
   "replay": {
     "lookahead_bars": 120,
     "m1_window": 250,
     "m15_min_bars": 20,
     "h1_min_bars": 20,
-    "htf_source": "synthesize",
-    "_htf_comment": "synthesize = rakit M15/H1 kausal dari M1 (grid UTC). csv = pakai <PAIR>_15m.csv/_1h.csv bila ada"
+    "htf_source": "synthesize"
   },
   "exit": {
-    "mode": "classic"
+    "mode": "classic",
+    "min_early_profit_net_pct": 0.45,
+    "breakeven_trigger_net_pct": 0.40,
+    "trail_pct": 0.35,
+    "max_hold_bars_m1": 90
   }
 }
