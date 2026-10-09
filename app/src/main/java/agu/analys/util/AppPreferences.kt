@@ -33,6 +33,14 @@ class AppPreferences(context: Context) {
         isKeyStoreRecoveryOccurred = true
         try {
             context.deleteSharedPreferences(PREFS_NAME)
+            // Hapus MasterKey corrupt dari AndroidKeyStore agar retry tidak gagal dengan key yang sama.
+            try {
+                val ks = java.security.KeyStore.getInstance("AndroidKeyStore")
+                ks.load(null)
+                ks.deleteEntry(MasterKey.DEFAULT_MASTER_KEY_ALIAS)
+            } catch (delErr: Exception) {
+                timber.log.Timber.w(delErr, "Gagal hapus MasterKey corrupt dari AndroidKeyStore")
+            }
             val masterKey = MasterKey.Builder(context)
                 .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
                 .build()
@@ -44,6 +52,9 @@ class AppPreferences(context: Context) {
                 EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
             )
         } catch (_: Exception) {
+            // Fallback terakhir ke plaintext: fungsional tapi TIDAK aman untuk API key/secret.
+            // Ditandai via isKeyStoreRecoveryOccurred agar UI bisa memperingatkan pengguna.
+            timber.log.Timber.e("EncryptedSharedPreferences recovery gagal total — fallback ke plaintext (kredensial tidak terenkripsi!)")
             context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         }
     }

@@ -67,6 +67,12 @@ object IndodaxTradeApiV2 {
     private var serverTimeOffset: Long? = null
     private val serverTimeMutex = Mutex()
 
+    @Volatile
+    private var cachedPairsMeta: List<agu.analys.model.PairPrecision>? = null
+    @Volatile
+    private var cachedPairsMetaAt = 0L
+    private const val PAIRS_META_TTL_MS = 30L * 60L * 1000L
+
     fun clearServerTimeOffset() {
         serverTimeOffset = null
     }
@@ -651,9 +657,26 @@ object IndodaxTradeApiV2 {
         return 0.0
     }
 
+    private fun loadPairsMetaSafe(): List<agu.analys.model.PairPrecision> {
+        val now = System.currentTimeMillis()
+        cachedPairsMeta?.let { if (now - cachedPairsMetaAt < PAIRS_META_TTL_MS) return it }
+        val meta = try {
+            val ctx = runCatching { agu.analys.AppContextProvider.context }.getOrNull()
+                ?: return cachedPairsMeta ?: emptyList()
+            agu.analys.util.MarketDataCache(ctx)
+                .loadPairsMetadata(agu.analys.config.MarketDataSource.INDODAX)
+        } catch (_: Exception) {
+            return cachedPairsMeta ?: emptyList()
+        }
+        if (meta.isNotEmpty()) {
+            cachedPairsMeta = meta
+            cachedPairsMetaAt = now
+        }
+        return meta
+    }
+
     private fun decimal(value: Double, symbol: String, isPrice: Boolean): String {
-        val meta = agu.analys.util.MarketDataCache(agu.analys.AppContextProvider.context)
-            .loadPairsMetadata(agu.analys.config.MarketDataSource.INDODAX)
+        val meta = loadPairsMetaSafe()
             .find { it.symbol.equals(symbol.replace("_", ""), ignoreCase = true) }
         val pair = agu.analys.model.TradingPair.fromCustomSymbol(symbol)
         return if (isPrice) {

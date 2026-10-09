@@ -122,13 +122,7 @@ class MarketDataCache(context: Context) {
         }
 
         val last = candles.last()
-        val candleMs = when (timeframe) {
-            Timeframe.M1 -> 60_000L
-            Timeframe.M5 -> 300_000L
-            Timeframe.M15 -> 900_000L
-            Timeframe.H1 -> 3_600_000L
-            else -> 60_000L
-        }
+        val candleMs = CandleTimeUtil.timeframeDurationMs(timeframe)
 
         val now = System.currentTimeMillis()
         val isSameBar = (now - last.timestamp) < candleMs

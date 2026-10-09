@@ -440,6 +440,13 @@ if (lotFilter == null) {
 // =========================================================
 // 2. Validasi order
 // =========================================================
+// LIMIT wajib bawa price eksplisit: validasi pakai reference lalu kirim tanpa price pasti ditolak exchange.
+if (!isMarket && (request.price == null || request.price <= 0.0)) {
+    return@withContext TokocryptoOrderResult(
+        success = false,
+        errorMessage = "Validasi Order Tokocrypto Gagal: Harga LIMIT wajib diisi."
+    )
+}
 val valResult =
     TokocryptoSymbolRepository.validateOrder(
         symbol = request.symbol,

@@ -186,16 +186,19 @@ class RealTradeCoordinator(
     }
 
     private fun buildHistoryCandidates(balance: Map<String, Double>): List<Pair<String, Double>> {
-        val active = balance.filter { it.key != "idr" && it.value > 0.00000001 }
+        val quoteKeys = setOf("idr", "idrt", "bidr", "usdt", "usdc", "busd", "usd")
+        val active = balance.filter { it.key.lowercase() !in quoteKeys && it.value > 0.00000001 }
         prefs.rememberHistoryBases(active.keys)
         val ordered = linkedSetOf<String>()
-        active.keys.forEach { ordered.add(it) }
-        prefs.getRecentHistoryBases().forEach { ordered.add(it) }
+        active.keys.forEach { ordered.add(it.lowercase()) }
+        prefs.getRecentHistoryBases().forEach { ordered.add(it.lowercase()) }
         prefs.getWatchlist().forEach { sym ->
             val b = baseFromPair(sym)
-            if (b.isNotBlank()) ordered.add(b)
+            if (b.isNotBlank()) ordered.add(b.lowercase())
         }
-        return ordered.take(MAX_HISTORY_ASSETS).map { it to (balance[it] ?: 0.0) }
+        return ordered.take(MAX_HISTORY_ASSETS).map { base ->
+            base to (balance[base] ?: balance[base.lowercase()] ?: balance[base.uppercase()] ?: 0.0)
+        }
     }
 
     fun fetchRealBalance(force: Boolean = false) {
@@ -274,9 +277,10 @@ class RealTradeCoordinator(
 
             if (!anyOk) {
                 val candidates = linkedSetOf<String>()
-                balances.locked.filter { it.key != "idr" && it.key != "usdt" && it.value > 0.0 }.keys.forEach { candidates.add(it) }
-                prefs.getRecentHistoryBases().forEach { candidates.add(it) }
-                prefs.getWatchlist().forEach { candidates.add(baseFromPair(it)) }
+                val lockedQuoteKeys = setOf("idr", "idrt", "bidr", "usdt", "usdc", "busd", "usd")
+                balances.locked.filter { it.key.lowercase() !in lockedQuoteKeys && it.value > 0.0 }.keys.forEach { candidates.add(it.lowercase()) }
+                prefs.getRecentHistoryBases().forEach { candidates.add(it.lowercase()) }
+                prefs.getWatchlist().forEach { candidates.add(baseFromPair(it).lowercase()) }
 
                 for (base in candidates.take(15)) {
                     if (base.isBlank()) continue
@@ -286,10 +290,18 @@ class RealTradeCoordinator(
                         if (!okSym && looksLikeRateLimit(rawSym)) { markRateLimited(rawSym); return false }
                         if (okSym) { anyOk = true; parseOrdersToMap(rawSym, entityMap, exchangeName) } else lastError = rawSym
                     } else {
+                        // Tokocrypto mendukung USDT + IDR: cek dua-duanya agar order IDR tidak hilang.
                         val symUsdt = "${base}_USDT".uppercase()
-                        val (okSym, rawSym) = TokocryptoTradeApi.openOrders(apiKey, secretKey, symUsdt)
-                        if (!okSym && looksLikeRateLimit(rawSym)) { markRateLimited(rawSym); return false }
-                        if (okSym) { anyOk = true; parseOrdersToMap(rawSym, entityMap, exchangeName) } else lastError = rawSym
+                        val symIdr = "${base}_IDR".uppercase()
+                        var symOk = false
+                        val (okUsdt, rawUsdt) = TokocryptoTradeApi.openOrders(apiKey, secretKey, symUsdt)
+                        if (!okUsdt && looksLikeRateLimit(rawUsdt)) { markRateLimited(rawUsdt); return false }
+                        if (okUsdt) { symOk = true; parseOrdersToMap(rawUsdt, entityMap, exchangeName) }
+                        delay(300)
+                        val (okIdr, rawIdr) = TokocryptoTradeApi.openOrders(apiKey, secretKey, symIdr)
+                        if (!okIdr && looksLikeRateLimit(rawIdr)) { markRateLimited(rawIdr); return false }
+                        if (okIdr) { symOk = true; parseOrdersToMap(rawIdr, entityMap, exchangeName) }
+                        if (symOk) { anyOk = true } else lastError = rawIdr.ifBlank { rawUsdt }
                     }
                 }
             }
@@ -411,51 +423,80 @@ class RealTradeCoordinator(
                     newPartial[asset] = accBuyQty + 1e-12 < currentQty
                 }
             } else {
-                // Tokocrypto: pair USDT
-                val tokoSymbol = "${asset}_USDT".uppercase()
-                val (ok, raw) = try {
-                    TokocryptoTradeApi.myTrades(apiKey, secretKey, tokoSymbol, limit = 100)
-                } catch (e: Exception) { fetchErrors++; continue }
-                if (!ok) {
-                    if (looksLikeRateLimit(raw)) { markRateLimited(raw); rateLimited = true; break }
-                    fetchErrors++; continue
-                }
-                prefs.rememberHistoryBase(asset)
-                val trades = TokocryptoTradeApi.parseTradesList(raw)
-                if (trades.isEmpty()) continue
-                assetsWithTrades++
-                var accBuyQty = 0.0; var accBuyCost = 0.0
-                for (trade in trades) {
-                    val id = TokocryptoTradeApi.tradeIdOf(trade)
-                    val isBuyer = TokocryptoTradeApi.isBuyerOf(trade)
-                    val tP = TokocryptoTradeApi.tradePriceOf(trade)
-                    val tQ = TokocryptoTradeApi.tradeQtyOf(trade)
-                    if (id.isBlank() || tP <= 0.0 || tQ <= 0.0) continue
-                    accumulatedEntities.add(
-                        RealTradeEntity(
-                            id = id,
-                            symbol = "${asset.uppercase()}USDT",
-                            price = tP,
-                            qty = tQ,
-                            amount = tP * tQ,
-                            time = TokocryptoTradeApi.tradeTimeMs(trade),
-                            side = if (isBuyer) "BUY" else "SELL",
-                            isBuyer = isBuyer,
-                            exchange = exchangeName
+                // Tokocrypto mendukung USDT + IDR: ambil dua-duanya agar histori IDR tidak hilang.
+                // Avg dihitung per kuotasi (tidak dicampur karena beda mata uang).
+                var accBuyQtyUsdt = 0.0; var accBuyCostUsdt = 0.0
+                var accBuyQtyIdr = 0.0; var accBuyCostIdr = 0.0
+                var anyTokoTrades = false
+                for ((tokoSymbol, quoteSuffix, avgSuffix) in listOf(
+                    Triple("${asset}_USDT".uppercase(), "USDT", "usdt"),
+                    Triple("${asset}_IDR".uppercase(), "IDR", "idr")
+                )) {
+                    if (index > 0 || quoteSuffix == "IDR") delay(300)
+                    val (ok, raw) = try {
+                        TokocryptoTradeApi.myTrades(apiKey, secretKey, tokoSymbol, limit = 100)
+                    } catch (e: Exception) { fetchErrors++; continue }
+                    if (!ok) {
+                        if (looksLikeRateLimit(raw)) { markRateLimited(raw); rateLimited = true; break }
+                        fetchErrors++; continue
+                    }
+                    val trades = TokocryptoTradeApi.parseTradesList(raw)
+                    if (trades.isEmpty()) continue
+                    anyTokoTrades = true
+                    for (trade in trades) {
+                        val id = TokocryptoTradeApi.tradeIdOf(trade)
+                        val isBuyer = TokocryptoTradeApi.isBuyerOf(trade)
+                        val tP = TokocryptoTradeApi.tradePriceOf(trade)
+                        val tQ = TokocryptoTradeApi.tradeQtyOf(trade)
+                        if (id.isBlank() || tP <= 0.0 || tQ <= 0.0) continue
+                        accumulatedEntities.add(
+                            RealTradeEntity(
+                                id = id,
+                                symbol = "${asset.uppercase()}$quoteSuffix",
+                                price = tP,
+                                qty = tQ,
+                                amount = tP * tQ,
+                                time = TokocryptoTradeApi.tradeTimeMs(trade),
+                                side = if (isBuyer) "BUY" else "SELL",
+                                isBuyer = isBuyer,
+                                exchange = exchangeName
+                            )
                         )
-                    )
-                    if (isBuyer && currentQty > 0.0 && accBuyQty < currentQty) {
-                        val qtyToUse = minOf(tQ, currentQty - accBuyQty)
-                        accBuyQty += qtyToUse; accBuyCost += qtyToUse * tP
+                        if (isBuyer && currentQty > 0.0) {
+                            if (quoteSuffix == "USDT" && accBuyQtyUsdt < currentQty) {
+                                val qtyToUse = minOf(tQ, currentQty - accBuyQtyUsdt)
+                                accBuyQtyUsdt += qtyToUse; accBuyCostUsdt += qtyToUse * tP
+                            } else if (quoteSuffix == "IDR" && accBuyQtyIdr < currentQty) {
+                                val qtyToUse = minOf(tQ, currentQty - accBuyQtyIdr)
+                                accBuyQtyIdr += qtyToUse; accBuyCostIdr += qtyToUse * tP
+                            }
+                        }
                     }
                 }
-                if (accBuyQty > 0.0) {
-                    val avgP = accBuyCost / accBuyQty
-                    newAvg[asset.lowercase()] = avgP
-                    newAvg[asset.uppercase()] = avgP
+                if (!anyTokoTrades && !rateLimited) continue
+                if (anyTokoTrades) {
+                    prefs.rememberHistoryBase(asset)
+                    assetsWithTrades++
+                }
+                if (accBuyQtyUsdt > 0.0) {
+                    val avgP = accBuyCostUsdt / accBuyQtyUsdt
                     newAvg["${asset.lowercase()}usdt"] = avgP
                     newAvg["${asset.uppercase()}USDT"] = avgP
-                    newPartial[asset] = accBuyQty + 1e-12 < currentQty
+                    // Kompatibilitas: avg bare-asset default ke USDT bila ada.
+                    newAvg[asset.lowercase()] = avgP
+                    newAvg[asset.uppercase()] = avgP
+                    newPartial[asset] = accBuyQtyUsdt + 1e-12 < currentQty
+                }
+                if (accBuyQtyIdr > 0.0) {
+                    val avgP = accBuyCostIdr / accBuyQtyIdr
+                    newAvg["${asset.lowercase()}idr"] = avgP
+                    newAvg["${asset.uppercase()}IDR"] = avgP
+                    // Bila tidak ada avg USDT, bare-asset pakai IDR.
+                    if (accBuyQtyUsdt <= 0.0) {
+                        newAvg[asset.lowercase()] = avgP
+                        newAvg[asset.uppercase()] = avgP
+                        newPartial[asset] = accBuyQtyIdr + 1e-12 < currentQty
+                    }
                 }
             }
         }

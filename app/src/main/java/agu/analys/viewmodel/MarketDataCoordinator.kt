@@ -411,7 +411,8 @@ class MarketDataCoordinator(
                         if (asks.isNotEmpty()) _orderBookAsks.value = asks
                         if (bids.isNotEmpty() || asks.isNotEmpty()) {
                             engine.onOrderBookUpdate(bids, asks)
-                            agu.analys.data.OrderBookDepthCache.updateOrderBook(pair.symbol, bids, asks)
+                            val depthExchange = if (isToko) "TOKOCRYPTO" else "INDODAX"
+                            agu.analys.data.OrderBookDepthCache.updateOrderBook(pair.symbol, bids, asks, depthExchange)
                         }
                         if (newTrades.isNotEmpty()) _tradeStream.value = newTrades
                         lastDepthRefresh = now
