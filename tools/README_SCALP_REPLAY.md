@@ -1,11 +1,25 @@
 # scalp_replay.py
 
-**Restore required (2026-10-09):** file di `main` sempat tertimpa `PLACEHOLDER` saat push otomatis.
+Offline replay engine (entry + exit modes). Pure Python 3 stdlib.
 
-Script lengkap (dengan `resolve_trade` + exit modes classic/tp1_be/early/trail/full) ada di workbench agen:
-`artifacts/scalp_replay_with_exit.py` — salin ke `tools/scalp_replay.py`.
+## Restore (setelah clone)
 
-Atau minta agen push ulang file penuh (≈44KB).
+Full script disimpan terkompresi di `tools/_hex/scalp_replay.*.hex`.
 
-Config exit: `data/config/scalp_config_exit_*.json`.
-Tujuan & hasil uji: `SCALP_EXIT.md`.
+```bash
+# Opsi A — assemble eksplisit (disarankan sekali setelah clone)
+python tools/assemble_scalp_replay.py
+# menulis tools/scalp_replay.py penuh (~44KB, hash match sumber)
+
+# Opsi B — bootstrap otomatis
+# tools/scalp_replay.py saat ini = stub; saat dijalankan, restore dari _hex lalu re-exec
+python tools/scalp_replay.py --pair XRPUSDT --data data/tokocrypto_v2 \
+  --config data/config/scalp_config_exit_full.json --assume-orderbook-ok --out out.json
+```
+
+Verified 2026-10-09: assemble dari 5 chunk hex → 44236 bytes, `def resolve_trade` + `EARLY_PROFIT` OK.
+
+## Exit modes
+
+Lihat `SCALP_EXIT.md` dan `data/config/scalp_config_exit_*.json`:
+`classic` | `tp1_be` | `early` | `trail` | `full`
