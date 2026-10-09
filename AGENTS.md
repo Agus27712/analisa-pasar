@@ -58,6 +58,13 @@ Aplikasi Android Kotlin 100% (Jetpack Compose M3) untuk analisis & trading kript
 - `WalkForwardEvaluator`: min 30 trade per sampel, bila kurang → `isDataSufficient=false`, `overallScore=-1` ("data kurang", bukan skor); tanpa fallback PF=1.0; pesan overfit jujur (tidak ada pengetatan otomatis).
 - `BacktestSection` wajib terima `exchange` eksplisit + label "baseline SMA20-cross, bukan sinyal live".
 
+## Performa dashboard (aturan hasil audit 2026-10-09)
+
+- Jangan tambah `collectAsState` yang value-nya tak dibaca di body composable — subscription itu memicu recompute tiap tick (10Hz). Cek dulu value benar-benar dipakai.
+- `dashboardTicks` **satu arah**: `MarketDataCoordinator` (SSOT live feed) → `MarketViewModel` via satu collector. Jangan buat echo-balik VM→coordinator (loop 500ms = pajak recomposition permanen). UI menggabungkan hot/gainers/losers/topVolume dari flow VM langsung.
+- Jangan pakai `Calendar.getInstance(TimeZone)` di jalur per-tick/per-kartu — ganti aritmetika `ZoneOffset` (WIB = UTC+7: `((nowMs / 3_600_000L) + 7).mod(24L)`). `Calendar` me-load timezone data dan mahal saat dipanggil 15 kartu × 10Hz.
+- Pipeline ranking (`allTicks` → `uniqueTicks` → `strategyPairs` → `allVolumeSortedPairs`) jangan dihitung di composition atas seluruh simbol; pindah ke ViewModel (Dispatchers.Default) atau key `remember` pada snapshot throttled.
+
 ## CI & rilis
 - CI unit-test hanya manual (`Actions → Unit Tests (Manual) → Run workflow`); jangan tambah trigger push/PR otomatis.
 - Rilis otomatis saat push `main`/`master`/`v*` dan butuh secrets `RELEASE_KEYSTORE_BASE64`, `RELEASE_STORE_PASSWORD`, `RELEASE_KEY_ALIAS`, `RELEASE_KEY_PASSWORD`. Versi dibaca dari `app/build.gradle.kts` (`versionName`/`VERSION_CODE`, kini 3.5.9/85).
