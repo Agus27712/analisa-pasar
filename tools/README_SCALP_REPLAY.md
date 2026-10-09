@@ -1,23 +1,27 @@
 # scalp_replay.py
 
-Offline replay engine (entry + exit modes). Pure Python 3 stdlib.
+Offline replay engine (entry + exit modes). Pure Python 3 stdlib, tanpa dependensi.
 
-## Restore (setelah clone)
-
-Full script disimpan terkompresi di `tools/_hex/scalp_replay.*.hex`.
+Source sudah terbaca langsung (tidak perlu restore/assemble). Jalankan dari root repo:
 
 ```bash
-# Opsi A — assemble eksplisit (disarankan sekali setelah clone)
-python tools/assemble_scalp_replay.py
-# menulis tools/scalp_replay.py penuh (~44KB, hash match sumber)
-
-# Opsi B — bootstrap otomatis
-# tools/scalp_replay.py saat ini = stub; saat dijalankan, restore dari _hex lalu re-exec
-python tools/scalp_replay.py --pair XRPUSDT --data data/tokocrypto_v2 \
-  --config data/config/scalp_config_exit_full.json --assume-orderbook-ok --out out.json
+python3 tools/scalp_replay.py --pair XRPUSDT --data data/tokocrypto_v2 \
+  --config data/config/scalp_config_exit_full.json --assume-orderbook-ok \
+  --out data/hasil/hasil_xrp_exit_full.json
 ```
 
-Verified 2026-10-09: assemble dari 5 chunk hex → 44236 bytes, `def resolve_trade` + `EARLY_PROFIT` OK.
+stdout = ringkasan (summary + exit_reasons). Trade lengkap ditulis ke `--out`.
+
+## Satuan R (sejak fix 2026-10-09)
+
+`R = profit_net% / risiko_kotor%`. Profit net = setelah buy+sell fee dan 2x slippage.
+Semua exit (SL, BE, trail, TP1 partial, TP2, early) memakai satuan yang sama.
+SL kena = -1R ditambah biaya, bukan -1R flat.
+
+Break-even = harga impas net (profit net 0), bukan setengah biaya.
+
+Catatan: hasil sebelum 2026-10-09 terlalu optimis (SL dihitung -1R tanpa fee).
+Angka di `SCALP_EXIT.md` harus dihitung ulang dengan tool ini.
 
 ## Exit modes
 
