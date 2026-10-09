@@ -21,10 +21,15 @@ class ScalpParityEntryTest {
     private val count = 2000
 
     @Test
-    fun dumpEntryDecisionsXrpV3() {
+    fun dumpEntryDecisionsXrpV3() = dump("data/tokocrypto_v3")
+
+    @Test
+    fun dumpEntryDecisionsXrpV2() = dump("data/tokocrypto_v2")
+
+    private fun dump(dataPath: String) {
         val root = System.getenv("GITHUB_WORKSPACE")?.let { File(it) }
             ?: File(System.getProperty("user.dir")).parentFile
-        val dir = File(root, "data/tokocrypto_v3")
+        val dir = File(root, dataPath)
         val m1 = loadCsv(File(dir, "XRPUSDT_1m.csv"))
         val m15 = loadCsv(File(dir, "XRPUSDT_15m.csv"))
         val h1 = loadCsv(File(dir, "XRPUSDT_1h.csv"))
