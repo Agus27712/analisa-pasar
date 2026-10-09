@@ -63,14 +63,10 @@ fun DashboardScreen(
     val watchlist by viewModel.watchlist.collectAsState()
     val favorites by viewModel.favorites.collectAsState()
     val coinBadges by viewModel.coinBadges.collectAsState()
-    val isScalpingMode by viewModel.isScalpingMode.collectAsState()
     val strategyMode by viewModel.strategyMode.collectAsState()
-    val aiSignalState by viewModel.aiSignalState.collectAsState()
-    val recentCandles by viewModel.recentCandles.collectAsState()
     val holdingStatuses by viewModel.holdingStatuses.collectAsState()
     val spotPosition by viewModel.spotPosition.collectAsState()
     val currentTick by viewModel.currentTick.collectAsState()
-    val mtfState by viewModel.mtfState.collectAsState()
     val newsScreenerState by viewModel.newsScreenerState.collectAsState()
     val isRefreshing by viewModel.isRefreshing.collectAsState()
     val dashboardAllLimit by viewModel.dashboardAllLimit.collectAsState()
@@ -218,7 +214,6 @@ fun DashboardScreen(
         favorites,
         worthBySymbol,
         coinBadges,
-        aiSignalState,
         allVolumeSortedPairs,
         watchSymbols
     ) {
@@ -256,7 +251,7 @@ fun DashboardScreen(
     }
 
     // Data posisi holding aktif real (SSOT: posisi spot realtime + chart sparkline 1 jam yang mencerminkan detail)
-    val activeHoldingList = remember(holdingStatuses, allTicks, spotPosition, strategyPairs, mtfState, recentCandles) {
+    val activeHoldingList = remember(holdingStatuses, allTicks, spotPosition, strategyPairs) {
         val holdingEntries = holdingStatuses.filter { it.value.isHolding && it.value.quantity > 0.00000001 }
 
         holdingEntries.mapNotNull { (symbol, status) ->

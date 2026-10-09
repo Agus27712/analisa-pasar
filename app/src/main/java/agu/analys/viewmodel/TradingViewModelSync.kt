@@ -461,21 +461,16 @@ fun TradingViewModel.initSubscriptionsAndPolling() {
         }
     }
 
-    // Sinkronisasi satu sumber data harga antara MarketDataCoordinator dan MarketViewModel
+    // Sinkronisasi SATU ARAH: MarketDataCoordinator (SSOT live feed) → MarketViewModel.
+    // Echo-balik VM→coordinator dihapus: memutus loop 500ms yang memicu recomposition
+    // berulang. VM tetap menulis cache restore & combinedTicks ke copy-nya sendiri;
+    // UI menggabungkan hot/gainers/losers/topVolume dari flow VM langsung.
     viewModelScope.launch {
         marketDataCoordinator.dashboardTicks.collect { ticks ->
             if (ticks.isNotEmpty()) {
                 marketViewModel.updateDashboardTicks(ticks)
             }
             delay(500L) // batasi maks 2x/detik; nilai terbaru tetap terkirim (StateFlow conflated)
-        }
-    }
-    viewModelScope.launch {
-        marketViewModel.dashboardTicks.collect { ticks ->
-            if (ticks.isNotEmpty()) {
-                marketDataCoordinator.updateDashboardTicks(ticks)
-            }
-            delay(500L)
         }
     }
 

@@ -1,8 +1,8 @@
 package agu.analys.engine.intraday
 
 import agu.analys.model.MarketTick
-import java.util.Calendar
-import java.util.TimeZone
+import java.time.Instant
+import java.time.ZoneOffset
 
 data class FastIntradayScore(
     val score: Int,
@@ -21,13 +21,18 @@ data class FastIntradayScore(
  */
 object IntradayScreener {
 
-    /** Jendela screening pagi WIB (setelah daily close crypto ~07:00). */
+    /** Offset WIB (UTC+7) — konstan, tanpa DST. */
+    private val WIB_OFFSET: ZoneOffset = ZoneOffset.ofHours(7)
+
+    /**
+     * Jendela screening pagi WIB (setelah daily close crypto ~07:00).
+     * Aritmetika ZoneOffset — jauh lebih murah dari Calendar.getInstance
+     * (yang me-load timezone data) dan dipanggil per kartu per tick.
+     */
     fun isMorningScreeningWindow(nowMs: Long = System.currentTimeMillis()): Boolean {
-        val cal = Calendar.getInstance(TimeZone.getTimeZone("Asia/Jakarta"))
-        cal.timeInMillis = nowMs
-        val hour = cal.get(Calendar.HOUR_OF_DAY)
+        val hourWib = ((nowMs / 3_600_000L) + 7).mod(24L).toInt()
         // 06:00–09:30 WIB = zona screening utama
-        return hour in 6..9
+        return hourWib in 6..9
     }
 
     fun evaluateFast(tick: MarketTick?): FastIntradayScore {
