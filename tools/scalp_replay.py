@@ -858,7 +858,7 @@ def run_replay(m1, m15, h1, cfg, fee, assume_ob, lookahead):
         if exit_r is None:
             trades.append({"setup": r["setup"], "score": r["score"], "result": "UNRESOLVED",
                            "r": 0.0, "t": t, "ambiguous": False,
-                           "entry": entry, "sl": sl, "tp2": tp2})
+                           "entry": entry, "sl": sl, "tp1": r["tp1"], "tp2": tp2})
             i += lookahead
             continue
         cum += exit_r
@@ -868,7 +868,7 @@ def run_replay(m1, m15, h1, cfg, fee, assume_ob, lookahead):
         trades.append({"setup": r["setup"], "score": r["score"],
                        "result": "WIN" if exit_r > 0 else "LOSS", "r": round(exit_r, 4),
                        "t": t, "ambiguous": ambiguous,
-                       "entry": entry, "sl": sl, "tp2": tp2,
+                       "entry": entry, "sl": sl, "tp1": r["tp1"], "tp2": tp2,
                        "exit_bar": m1[exit_idx]["t"]})
         i = exit_idx + 1
     return {"evals": evals, "bottleneck": bott, "setup_hits": setup_hits,
@@ -914,7 +914,7 @@ def main():
     ap = argparse.ArgumentParser(description="Replay offline engine scalping (output JSON saja).")
     ap.add_argument("--pair", required=True, help="cth BTCUSDT")
     ap.add_argument("--data", default="data/tokocrypto", help="direktori CSV")
-    ap.add_argument("--config", default="tools/scalp_config.json")
+    ap.add_argument("--config", default="data/config/scalp_config.json")
     ap.add_argument("--assume-orderbook-ok", action="store_true",
                     help="Aktifkan cabang diagnosticIgnore (Step2 lolos tanpa depth)")
     ap.add_argument("--out", default="", help="tulis JSON ke file (selain stdout)")

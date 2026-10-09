@@ -143,6 +143,8 @@ Komponen utama: `LearningTradingEngine.kt`.
 1. **SCALPING (Timeframe 1M – 15M)**:
    - Didesain untuk eksekusi cepat momentum mikro.
    - Menggunakan deteksi *OrderBook Analyzer* (tekanan bid-ask wall), lonjakan volume transaksional (*Micro Volume Spike*), *VWAP Reclaim*, dan *Spread Guard* (mencegah order saat spread bid-ask terlalu lebar).
+   - **Wiring UI (2026-10-09)**: badge `lifecycleState` (READY/TRIGGERED/EXPIRED/…) di header radar + tombol buy diblokir saat EXPIRED/INVALIDATED; section skor & setup di level plan; `TRIGGERED` kedaluwarsa (10 mnt scalping / 4 jam makro) agar siklus sinyal baru jalan lagi; dashboard jujur (pair non-selected = SCANNING estimasi, bukan sinyal); `CandidateScanWorker` punya cabang SCALPING background (maks 10 simbol, notifikasi hanya transisi READY).
+   - **Status validasi**: replay offline 30 run (5 pair × 6 config, data 14 hari downtrend `data/tokocrypto_v3`, via `tools/scalp_replay.py`) menunjukkan long scalping **−EV struktural** (22W/217L ≈ 9%, expectancy ≈ −0,79R; skor/setup/regime tak membedakan hasil). Sinyal scalping = eksperimental; tuning pending (regime-gate Step1 / entry konfirmasi / strategi TP1+trailing), lihat `data/hasil/v3_*.json`.
 2. **SWING (Timeframe H1, label 1H–1D)**:
    - Menggunakan evaluasi **6-Checkpoint Confluence Matrix**:
      1. `TREND`: Arah tren makro (EMA 20/50/200).
@@ -362,4 +364,4 @@ app/src/main/java/agu/analys/
 ```
 
 ---
-*Disinkronkan dengan `main` pada 2026-10-09: eliminasi fallback Binance, kuotasi Tokocrypto USDT+IDR / Indodax IDR saja (tanpa BIDR), filter listing fail-closed dashboard, format order `BTC_USDT`, histori/open-order Tokocrypto dual-kuotasi (avg per kuotasi), isolasi exchange depth cache, dan koreksi path komponen. Dokumen ini diperbarui secara berkala mengikuti iterasi pengembangan sistem.*
+*Disinkronkan dengan `main` pada 2026-10-09: eliminasi fallback Binance, kuotasi Tokocrypto USDT+IDR / Indodax IDR saja (tanpa BIDR), filter listing fail-closed dashboard, format order `BTC_USDT`, histori/open-order Tokocrypto dual-kuotasi (avg per kuotasi), isolasi exchange depth cache, koreksi path komponen, wiring lifecycle+skor scalping ke UI, arsip engine mati (`MarketScannerEngine`, `HistoricalReplayEngine`, kartu UI mati), tool replay `tools/scalp_replay.py` + config `data/config/` + hasil `data/hasil/`, dan vonis −EV struktural scalping long (tuning pending). Dokumen ini diperbarui secara berkala mengikuti iterasi pengembangan sistem.*

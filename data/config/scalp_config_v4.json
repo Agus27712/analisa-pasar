@@ -1,0 +1,35 @@
+{
+  "_comment": "Varian V4: RR ringan (min_net_rr 1.0, target_net_rr 1.0 -> TP2 lebih dekat), sisanya = baseline",
+  "min_score_long": 60,
+  "min_score_strong": 75,
+  "min_score_breakout_retest": 75,
+  "min_net_rr": 1.0,
+  "target_net_rr": 1.0,
+  "min_risk_pct": 0.5,
+  "max_tp2_r": 5.0,
+  "slippage_pct": 0.08,
+  "rvol_breakout_min": 1.5,
+  "rvol_setup_min": 1.2,
+  "rvol_retest_min": 1.5,
+  "buy_pressure_breakout": 1.15,
+  "buy_pressure_retest": 1.15,
+  "chop_hard_ranging": 65.0,
+  "retest_max_dist_pct": 1.2,
+  "breakout_above_factor": 0.998,
+  "retest_above_factor": 0.995,
+  "retest_min_structure_strength": 60,
+  "pullback_support_max_dist_pct": 1.2,
+  "fee": {
+    "buy_taker_pct": 0.10,
+    "sell_taker_pct": 0.10,
+    "buy_maker_pct": 0.10,
+    "sell_maker_pct": 0.10
+  },
+  "replay": {
+    "lookahead_bars": 120,
+    "m1_window": 250,
+    "m15_min_bars": 20,
+    "h1_min_bars": 20,
+    "htf_source": "synthesize"
+  }
+}
