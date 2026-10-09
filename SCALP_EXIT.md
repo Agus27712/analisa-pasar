@@ -78,12 +78,37 @@ Hasil lama (SL = -1R tanpa fee, BE setengah biaya) terlalu optimis dan tidak dip
 - TRX hampir tidak menghasilkan trade (0 hingga 2 resolved). Jangan dipakai sebagai bukti.
 - Pair yang dicoba berbeda dengan `tokocrypto_v3` (14 hari, 5 pair) di app. Angka belum tentu sama.
 
+## Pemetaan tujuan ke kode app (2026-10-09)
+
+| Tujuan | Ada di app? | Lokasi | Gap |
+|---|---|---|---|
+| 1. Hard SL | Ya | `stopLossPrice`, default entry × 0,99 | Tidak fee-aware |
+| 2. TP1 partial + BE | Sebagian | `markTp1Triggered` | Hanya set flag, SL tidak digeser ke BE |
+| 3. TP2 | Ya | Auto-sell TP2 | Pakai harga kotor |
+| 4. Trailing dari peak | Ya | `calculateTrailingLimitPrice` | Aktif begitu di-enable, belum menunggu net ≥ trigger |
+| 5. Early profit SELL | Tidak | — | Belum ada, termasuk cek momentum (EMA/RSI) |
+| 6. Time-stop | Tidak | — | Belum ada |
+
+Fee harus memakai `TradingFeeConfig` per bursa. Tokocrypto (0,10/0,10) dan Indodax (0,21/0,42) tidak boleh memakai satu angka yang sama.
+
 ## Port ke app (langkah berikutnya)
 
-1. Samakan perilaku `resolve_trade` di replay dengan monitor posisi di app (`SignalLifecycleManager` / `PositionCoordinator` / trailing di foreground service).
+1. Samakan perilaku `resolve_trade` di replay dengan monitor posisi di app. Lokasi yang benar: `TradingViewModelAlerts.kt` (fungsi auto-sell, sekitar baris 236–290), `PositionCoordinator`, dan trailing di `TradingForegroundService`. `SignalLifecycleManager` hanya mengurus sinyal BUY, jadi bukan tempat exit.
 2. Early profit harus cek profit **net** + momentum (EMA/RSI), bukan sekadar “hijau di chart”.
 3. Output `SignalAction.SELL` dengan `exit_reason` jelas untuk UI/notifikasi.
 4. Entry tetap long-only sampai ada desain short terpisah; fokus dulu exit long.
+
+## Gerbang sebelum port ke app
+
+Setting exit tidak boleh di-port ke engine app sebelum lolos semua syarat berikut:
+
+- Diuji di kedua dataset: `tokocrypto_v2` (naik) dan `tokocrypto_v3` (turun), per pair.
+- avg R positif setelah fee dan slippage.
+- Profit factor minimal 1,2.
+- Minimal 30 trade resolved.
+- Trade TIMEOUT tidak boleh dibuang diam-diam. Harus dihitung ke statistik atau dilaporkan terpisah.
+
+Kalau belum lolos, setting tidak di-port.
 
 ## Catatan tool
 
