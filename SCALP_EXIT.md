@@ -48,18 +48,35 @@ python tools/scalp_replay.py --pair XRPUSDT --data data/tokocrypto_v2 \
 Summary JSON menambah `exit_reasons_count` dan `by_exit_reason`:
 `SL`, `TP2`, `BE_SL`, `TRAIL_SL`, `EARLY_PROFIT`, `TIMEOUT`.
 
-## Hasil uji data tokocrypto_v2 (baseline entry thresholds + exit modes)
+## Hasil uji data tokocrypto_v2 (R seragam net, 2026-10-09)
 
-| Pair | Mode | WR% | Avg R | PF |
-|------|------|-----|-------|-----|
-| XRP | classic | 21.4 | -0.52 | 0.34 |
-| XRP | full | 38.9 | -0.09 | 0.85 |
-| SOL | classic | 14.6 | -0.67 | 0.21 |
-| SOL | full | 32.7 | -0.22 | 0.67 |
-| BTC | classic | 3.7 | -0.92 | 0.05 |
-| BTC | full | 25.0 | -0.44 | 0.42 |
+Dihitung ulang setelah fix satuan R (lihat `tools/README_SCALP_REPLAY.md`).
+Isi sel: **avg R / profit factor**. Data: 8 pair, mode exit 5 varian, entry threshold baseline.
 
-**Kesimpulan:** exit BE/trail/early **memperbaiki** WR & expectancy vs classic, tetapi long-only entry di data ini masih −EV. Jangan hanya menaikkan `min_score_long` (uji score70 justru memperburuk).
+| Pair | classic | tp1_be | early | trail | full |
+|------|------|------|------|------|------|
+| ADA | -0.85 / 0.36 | -0.74 / 0.29 | -0.71 / 0.31 | -0.67 / 0.35 | -0.71 / 0.31 |
+| BNB | -1.42 / 0.10 | -0.97 / 0.15 | -0.96 / 0.21 | -0.87 / 0.23 | -0.91 / 0.20 |
+| BTC | -1.57 / 0.05 | -1.20 / 0.09 | -1.21 / 0.10 | -1.13 / 0.14 | -1.15 / 0.11 |
+| DOGE | -1.12 / 0.22 | -0.86 / 0.23 | -0.79 / 0.25 | -0.79 / 0.27 | -0.75 / 0.28 |
+| ETH | -1.52 / 0.07 | -1.16 / 0.10 | -1.24 / 0.09 | -1.11 / 0.12 | -1.23 / 0.10 |
+| SOL | -1.15 / 0.21 | -0.97 / 0.18 | -0.94 / 0.22 | -0.89 / 0.23 | -0.90 / 0.22 |
+| TRX | -1.72 / 0.00 | -1.72 / 0.00 | +0.00 / 0.00 | -1.72 / 0.00 | +0.00 / 0.00 |
+| XRP | -0.89 / 0.34 | -0.72 / 0.31 | -0.70 / 0.33 | -0.71 / 0.31 | -0.71 / 0.30 |
+
+Hasil lama (SL = -1R tanpa fee, BE setengah biaya) terlalu optimis dan tidak dipakai lagi.
+
+**Kesimpulan:**
+- Semua pair dan semua mode masih **negatif** (avg R < 0). Exit saja belum membuat profit.
+- Di dalam tiap pair, exit modes tetap memperbaiki (lebih sedikit rugi) dibanding `classic`.
+- `trail` paling konsisten terbaik. `early` tanpa refinement momentum sering memperburuk (ADA, DOGE, SOL tidak lebih baik dari `trail`).
+- Entry long-only tetap -EV. Jangan naikkan `min_score_long` sebagai solusi (sudah terbukti memperburuk).
+
+**Keterbatasan (wajib dibaca sebelum memakai angka ini):**
+- Banyak trade `TIMEOUT` dikeluarkan dari statistik. Contoh XRP full: 28 dari 155. BNB, BTC, ETH bahkan lebih dari separuh. Ini bias seleksi, angkanya bisa terlalu baik atau terlalu buruk.
+- Win rate kurang akurat untuk mode `early` dan `tp1_be`. Exit BE di r = 0 dihitung LOSS, karena klasifikasi memakai `r > 0`. Perlu label BREAKEVEN terpisah.
+- TRX hampir tidak menghasilkan trade (0 hingga 2 resolved). Jangan dipakai sebagai bukti.
+- Pair yang dicoba berbeda dengan `tokocrypto_v3` (14 hari, 5 pair) di app. Angka belum tentu sama.
 
 ## Port ke app (langkah berikutnya)
 
