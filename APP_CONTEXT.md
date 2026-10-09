@@ -44,7 +44,7 @@ Aplikasi ini menerapkan pola **Clean Architecture + Reactive MVVM (Model-View-Vi
 │                  ViewModel & Coordinators Layer                        │
 │                                                                        │
 │   TradingViewModel (Orchestrator Utama)                                │
-│   ├── MarketDataCoordinator   (WebSocket, Ticker, Chart, Candles)      │
+│   ├── MarketDataCoordinator   (WebSocket, Ticker, Chart, Candles; depth cache per exchange) │
 │   ├── PositionCoordinator     (Spot Positions, Trailing, Alerts)       │
 │   ├── SimulationCoordinator   (Virtual Wallet, Order Engine)           │
 │   ├── RealTradeCoordinator    (Live Balances, PIN Guard, Execution)    │
@@ -131,6 +131,8 @@ Aplikasi mengimplementasikan isolasi ketat (*Zero Cross-Contamination*) antar bu
 | **Autentikasi Order** | HMAC-SHA256 signature + API-Key header + Server time synchronization (param di-sort alfabetis sebelum signature) | HMAC-SHA512 signature + `Key` & `Sign` headers |
 | **Format Simbol Order** | `BTC_USDT` (underscore) | `btc_idr` (lowercase underscore) |
 
+Catatan koreksi 2026-10-09: histori (`myTrades`) & fallback open-order Tokocrypto mengambil **USDT + IDR** (`${base}_USDT` dan `${base}_IDR`) dengan avg-buy **per kuotasi** (harga USDT/IDR tidak dicampur); kandidat base dinormalisasi lowercase dengan filter kuotasi case-insensitive. Update depth polling `OrderBookDepthCache` selalu membawa exchange eksplisit agar data Indodax tidak tertulis ke key Tokocrypto.
+
 ---
 
 ## 5. Mesin Analisis Teknikal & AI Trading Engine
@@ -186,7 +188,8 @@ User / Trailing Trigger ──► executeRealTrade()
                      ├── Verifikasi Keberadaan Kredensial (API Key & Secret Key)
                      ├── Validasi PIN Keamanan (Bila diaktifkan)
                      ├── Resolusi Bursa Tujuan (resolveSource: TOKOCRYPTO vs INDODAX)
-                     ├── Pengambilan Precision & Aturan Lot Size (LOT_SIZE, MIN_NOTIONAL)
+                      ├── Pengambilan Precision & Aturan Lot Size (LOT_SIZE, MIN_NOTIONAL; metadata pair Indodax di-cache in-memory 30 menit)
+                      ├── Validasi Harga (order LIMIT Tokocrypto wajib bawa `price` eksplisit — ditolak bila kosong)
                      ├── Penyelarasan Server Time (Tokocrypto timestamp sync)
                      ├── Pembuatan Payload & Hashing HMAC Signature
                      └── Dispatch HTTP Request
@@ -267,6 +270,7 @@ Fitur **Export Laporan Markdown** (`TradeLogExporter.kt`) memungkinkan pengguna 
 1. **Penyimpanan Kredensial Terenkripsi**:
    - Kredensial API Key dan Secret Key disimpan secara terisolasi per bursa di `AppPreferences`.
    - Tidak pernah di-hardcode di kode sumber atau diekspor ke file log publik.
+   - Bila KeyStore corrupt, entri `MasterKey` corrupt dihapus dari AndroidKeyStore sebelum retry; fallback plaintext hanya jalan terakhir dan dilog sebagai error.
 2. **PIN Keamanan**:
    - Melindungi aktivasi mode Real Trading, eksekusi order manual, eksekusi trailing sell, dan tindakan batch sell.
    - Kegagalan input dicatat di penghitung `failedPinAttempts`; bila bermasalah, flag `isPinResetRequired` mewajibkan reset PIN.
@@ -357,4 +361,4 @@ app/src/main/java/agu/analys/
 ```
 
 ---
-*Disinkronkan dengan `main` pada 2026-10-08: eliminasi fallback Binance, kuotasi Tokocrypto USDT+IDR / Indodax IDR saja (tanpa BIDR), filter listing fail-closed dashboard, format order `BTC_USDT`, dan koreksi path komponen. Dokumen ini diperbarui secara berkala mengikuti iterasi pengembangan sistem.*
+*Disinkronkan dengan `main` pada 2026-10-09: eliminasi fallback Binance, kuotasi Tokocrypto USDT+IDR / Indodax IDR saja (tanpa BIDR), filter listing fail-closed dashboard, format order `BTC_USDT`, histori/open-order Tokocrypto dual-kuotasi (avg per kuotasi), isolasi exchange depth cache, dan koreksi path komponen. Dokumen ini diperbarui secara berkala mengikuti iterasi pengembangan sistem.*
