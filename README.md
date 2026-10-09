@@ -14,7 +14,7 @@ Aplikasi Android berbasis **Jetpack Compose** dan **Kotlin** mutakhir yang diran
   - *Live Multi-Stream WebSockets*: Kline (`<symbol>@kline_<interval>`), Trade (`<symbol>@trade`), AggTrade, dan Depth live feed.
   - *Signed Trade API*: Pembuatan order spot (`POST /open/v1/orders`), pembatalan, query status detail, sinkronisasi selisih waktu server (`syncServerTime`), dan pembacaan saldo multi-format.
 - **Indodax API Integration**:
-  - Streaming pasar real-time, depth orderbook, recent trades, candlestick historical, dan Trade API V2 (TAPIv2) ber-signature HMAC-SHA512.
+  - Streaming pasar real-time, depth orderbook, recent trades, candlestick historical, dan Trade API V2 (TAPIv2) ber-signature HMAC-SHA256 (header `X-APIKEY` + `Sign`).
 - **Isolasi Penuh (Zero Cross-Contamination)**:
   - Partisi namespace Room Database, SharedPreferences, in-memory cache, dan StateFlow per exchange (`tokocrypto_*` vs `indodax_*`).
 

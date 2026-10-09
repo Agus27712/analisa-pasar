@@ -13,7 +13,7 @@ object GlobalContextManager {
     private val _context = MutableStateFlow(GlobalMarketContext())
     val context: StateFlow<GlobalMarketContext> = _context.asStateFlow()
 
-    private val priceHistory = mutableListOf<PriceTick>()
+    private val priceHistory = java.util.Collections.synchronizedList(mutableListOf<PriceTick>())
     private val HISTORY_WINDOW_MS = 3 * 60 * 1000L // 3 minutes window for crash detection
 
     private var isStarted = false

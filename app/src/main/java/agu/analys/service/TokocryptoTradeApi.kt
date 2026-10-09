@@ -59,7 +59,10 @@ object TokocryptoTradeApi {
             client.newCall(req).execute().use { resp ->
                 if (resp.isSuccessful) {
                     val root = JSONObject(resp.body?.string().orEmpty())
-                    val serverTime = root.optLong("timestamp", 0L)
+                    var serverTime = root.optLong("serverTime", 0L)
+                    if (serverTime <= 0L) {
+                        serverTime = root.optJSONObject("data")?.optLong("serverTime", 0L) ?: 0L
+                    }
                     if (serverTime > 0L) {
                         serverTimeOffsetMs = serverTime - System.currentTimeMillis()
                         lastTimeSyncMs = System.currentTimeMillis()
@@ -642,8 +645,15 @@ if (!valResult.isValid) {
             ?.let { "${it.baseAsset}_${it.quoteAsset}" }
             ?: TokocryptoMarketService.toTokocryptoPair(symbol)
 
-        val timestamp = System.currentTimeMillis().toString()
-        val queryParam = "orderId=$orderId&recvWindow=10000&symbol=$tokoSymbol&timestamp=$timestamp"
+        syncServerTime()
+        val timestamp = getAdjustedTimestamp()
+        val params = listOf(
+            "orderId=$orderId",
+            "recvWindow=10000",
+            "symbol=$tokoSymbol",
+            "timestamp=$timestamp"
+        ).sorted()
+        val queryParam = params.joinToString("&")
         val signature = hmacSha256(secretKey, queryParam)
 
         try {
@@ -694,7 +704,8 @@ if (!valResult.isValid) {
             ?.let { "${it.baseAsset}_${it.quoteAsset}" }
             ?: TokocryptoMarketService.toTokocryptoPair(symbol)
 
-        val timestamp = System.currentTimeMillis().toString()
+        syncServerTime()
+        val timestamp = getAdjustedTimestamp()
         val params = mutableListOf<String>()
         if (!orderId.isNullOrBlank() && orderId != "0") params.add("orderId=$orderId")
         // clientId dari Tokocrypto hanya dipakai jika orderId tidak ada (ID buatan aplikasi tidak dikenali)

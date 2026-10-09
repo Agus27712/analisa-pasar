@@ -86,7 +86,8 @@ fun TradingViewModel.submitSimulationOrder(
         indicators = curIndicators,
         signal = curSignal,
         bids = curBids,
-        asks = curAsks
+        asks = curAsks,
+        exchange = currentEx
     )
 
     val isHolding = spotPos.isHolding && !spotPos.isReal
@@ -418,7 +419,8 @@ fun TradingViewModel.executeSellOrders(
             indicators = curIndicators,
             signal = curSignal,
             bids = curBids,
-            asks = curAsks
+            asks = curAsks,
+            exchange = prefs.marketDataSource.name
         )
 
         val isHolding = spotPos.isHolding && !spotPos.isReal

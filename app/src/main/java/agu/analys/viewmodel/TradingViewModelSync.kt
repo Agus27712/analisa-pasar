@@ -89,7 +89,8 @@ fun TradingViewModel.handleRealTradeExecution(
         val snapshot = TradeSignalSnapshot.capture(
             symbol = symbol, strategyMode = strategyMode.value.name,
             tick = marketDataCoordinator.dashboardTicks.value[symbol],
-            indicators = engine.indicators.value, signal = engine.signalState.value
+            indicators = engine.indicators.value, signal = engine.signalState.value,
+            exchange = currentEx
         )
         val snapshotJson = snapshot.toJson().toString()
         tradeHistoryRecorder.recordBuy(
@@ -234,7 +235,8 @@ fun TradingViewModel.syncSimulationTradeToPositionStore(order: SimulationOrder) 
         val snapshot = TradeSignalSnapshot.capture(
             symbol = symbol, strategyMode = strategyMode.value.name,
             tick = marketDataCoordinator.dashboardTicks.value[symbol],
-            indicators = engine.indicators.value, signal = engine.signalState.value
+            indicators = engine.indicators.value, signal = engine.signalState.value,
+            exchange = currentEx
         )
         tradeHistoryRecorder.recordBuy(
             symbol = symbol,

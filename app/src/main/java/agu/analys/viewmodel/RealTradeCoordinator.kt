@@ -39,6 +39,7 @@ class RealTradeCoordinator(
         onStatusUpdate = { _realTradeStatus.value = it },
         onRateLimit = { markRateLimited(it) },
         isRateLimited = { isRateLimitedNow() },
+        isPinSessionValid = { !prefs.hasSecurityPin() || securityManager.isPinUnlocked.value },
         refreshBalance = { 
             lastFetchTimeMs = 0L
             fetchRealBalance()
@@ -132,6 +133,8 @@ class RealTradeCoordinator(
         current[asset.uppercase()] = newAvgPrice
         current["${asset.lowercase()}idr"] = newAvgPrice
         current["${asset.uppercase()}IDR"] = newAvgPrice
+        current["${asset.lowercase()}usdt"] = newAvgPrice
+        current["${asset.uppercase()}USDT"] = newAvgPrice
         _realAvgBuyPrices.value = current
         prefs.saveRealAvgBuyPrices(current, prefs.marketDataSource.name)
     }

@@ -128,8 +128,8 @@ Aplikasi mengimplementasikan isolasi ketat (*Zero Cross-Contamination*) antar bu
 | **Filter listing dashboard** | Fail-closed: hanya simbol `spotTradingEnable` (status TRADING) yang tampil; simbol delisted/tak dikenal disembunyikan dari ranking, dashboard, dan cache | Filter anti-zombi/delisting berbasis harga & volume (`isSafeTradableAsset`) |
 | **Symbol Type Handling** | Type 1 (MBX Broker / Cloud) vs Type 3 (NextMe Cloud) | Tipe seragam, berkuotasi IDR |
 | **Trade API** | `TokocryptoTradeApi` (`POST /open/v1/orders`) | `IndodaxTradeApiV2` (REST TAPIv2) |
-| **Autentikasi Order** | HMAC-SHA256 signature + API-Key header + Server time synchronization (param di-sort alfabetis sebelum signature) | HMAC-SHA512 signature + `Key` & `Sign` headers |
-| **Format Simbol Order** | `BTC_USDT` (underscore) | `btc_idr` (lowercase underscore) |
+| **Autentikasi Order** | HMAC-SHA256 signature + API-Key header + Server time synchronization (param di-sort alfabetis sebelum signature) | HMAC-SHA256 signature + `X-APIKEY` & `Sign` headers (Trade API V2 di `api.indodax.com/api/v2`; `Key`+SHA512 hanya TAPI lama) |
+| **Format Simbol Order** | `BTC_USDT` (underscore) | `BTCIDR` (order) / `btcidr` (myTrades/histories), tanpa underscore (Trade API V2; `btc_idr` hanya format TAPI lama) |
 
 Catatan koreksi 2026-10-09: histori (`myTrades`) & fallback open-order Tokocrypto mengambil **USDT + IDR** (`${base}_USDT` dan `${base}_IDR`) dengan avg-buy **per kuotasi** (harga USDT/IDR tidak dicampur); kandidat base dinormalisasi lowercase dengan filter kuotasi case-insensitive. Update depth polling `OrderBookDepthCache` selalu membawa exchange eksplisit agar data Indodax tidak tertulis ke key Tokocrypto.
 
@@ -324,7 +324,7 @@ app/src/main/java/agu/analys/
 │   ├── TokocryptoTradeApi.kt            # Signed trade API Tokocrypto
 │   ├── IndodaxMarketService.kt          # REST API market data Indodax
 │   ├── IndodaxMarketWebSocket.kt        # Live streaming market Indodax
-│   ├── IndodaxTradeApiV2.kt             # HMAC-SHA512 Trade API Indodax
+│   ├── IndodaxTradeApiV2.kt             # HMAC-SHA256 Trade API V2 Indodax (`X-APIKEY`+`Sign`, simbol `BTCIDR`/`btcidr`)
 │   ├── TradingForegroundService.kt      # Layanan pemantauan latar belakang 24/7 multi-bursa
 │   ├── CandidateScanWorker.kt           # Periodic background scanning (WorkManager)
 │   ├── NewsAiScreenerService.kt         # Orkestrasi screening berita + skor AI

@@ -176,10 +176,11 @@ data class TradeSignalSnapshot(
             indicators: TechnicalIndicators?,
             signal: AISignalState?,
             bids: List<OrderBookItem> = emptyList(),
-            asks: List<OrderBookItem> = emptyList()
+            asks: List<OrderBookItem> = emptyList(),
+            exchange: String = "TOKOCRYPTO"
         ): TradeSignalSnapshot {
             // Calculate Order Book Ratio
-            val obPair = OrderBookDepthCache.getOrderBook(symbol)
+            val obPair = OrderBookDepthCache.getOrderBook(symbol, exchange)
             val effectiveBids = if (bids.isNotEmpty()) bids else (obPair?.first ?: emptyList())
             val effectiveAsks = if (asks.isNotEmpty()) asks else (obPair?.second ?: emptyList())
 
@@ -189,7 +190,7 @@ data class TradeSignalSnapshot(
 
             val bidRatio = if (totalVol > 0.0) (totalBidVol / totalVol) * 100.0 else null
             val askRatio = if (totalVol > 0.0) (totalAskVol / totalVol) * 100.0 else null
-            val obPressure = OrderBookDepthCache.calculatePressure(symbol)
+            val obPressure = OrderBookDepthCache.calculatePressure(symbol, exchange)
 
             val spread = if (effectiveBids.isNotEmpty() && effectiveAsks.isNotEmpty()) {
                 val bestBid = effectiveBids.first().price

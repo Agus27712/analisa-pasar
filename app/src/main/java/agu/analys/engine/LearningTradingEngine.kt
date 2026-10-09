@@ -50,9 +50,12 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
     private var lastMtfRefresh = 0L
     private var mtfSymbol = ""
     private var h4Candles: List<CandleBar> = emptyList()
-    private var h1Candles: List<CandleBar> = emptyList()
-    private var m15Candles: List<CandleBar> = emptyList()
-    private var m1Candles: List<CandleBar> = emptyList()
+    // Ditulis dari coroutine IO (refresh) dan dibaca dari thread tick — @Volatile agar
+    // penugasan antar-thread selalu terlihat; pembaca wajib snapshot sekali per evaluasi
+    // supaya triple (h1/m15/m1) yang dipakai konsisten dalam satu run.
+    @Volatile private var h1Candles: List<CandleBar> = emptyList()
+    @Volatile private var m15Candles: List<CandleBar> = emptyList()
+    @Volatile private var m1Candles: List<CandleBar> = emptyList()
     private val _signalState = MutableStateFlow(AISignalState())
     val signalState: StateFlow<AISignalState> = _signalState.asStateFlow()
     private val _indicators = MutableStateFlow(TechnicalIndicators())
@@ -235,8 +238,12 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
 
     private fun runScalping() {
         val tick = currentTick ?: return
-        if (h1Candles.size < 20 || m15Candles.size < 20 || m1Candles.size < 20) {
-            val need = "H1 ${h1Candles.size}/20 · M15 ${m15Candles.size}/20 · M1 ${m1Candles.size}/20"
+        // Snapshot sekali: cegah writer IO mengganti list di tengah evaluasi.
+        val h1 = h1Candles
+        val m15 = m15Candles
+        val m1 = m1Candles
+        if (h1.size < 20 || m15.size < 20 || m1.size < 20) {
+            val need = "H1 ${h1.size}/20 · M15 ${m15.size}/20 · M1 ${m1.size}/20"
             _signalState.value = AISignalState(
                 action = SignalAction.HOLD,
                 confidence = 15,
@@ -250,13 +257,13 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
             return
         }
 
-        val liveM1 = agu.analys.util.CandleTimeUtil.synthesizeRealtimeCandles(m1Candles, tick, Timeframe.M1)
-        val liveM15 = agu.analys.util.CandleTimeUtil.synthesizeRealtimeCandles(m15Candles, tick, Timeframe.M15)
+        val liveM1 = agu.analys.util.CandleTimeUtil.synthesizeRealtimeCandles(m1, tick, Timeframe.M1)
+        val liveM15 = agu.analys.util.CandleTimeUtil.synthesizeRealtimeCandles(m15, tick, Timeframe.M15)
 
         val result = ScalpingMtfEvaluator.evaluate(
             globalContext = agu.analys.engine.global.GlobalMarketContext(),
             price = tick.price,
-            h1Candles = h1Candles,
+            h1Candles = h1,
             m15Candles = liveM15,
             m1Candles = liveM1,
             formingVolume = currentFormingVolume,

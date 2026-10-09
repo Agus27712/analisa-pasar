@@ -21,7 +21,10 @@ enum class MtfStatus {
  */
 object MtfCacheManager {
     // In-memory cache for fast lookup. Map<ExchangeScopedKey, Map<Timeframe, List<CandleBar>>>
-    private val cache = mutableMapOf<String, MutableMap<Timeframe, List<CandleBar>>>()
+    // ConcurrentHashMap: dibaca thread UI/tick sementara ditulis coroutine IO — tanpa ini
+    // berisiko ConcurrentModificationException / lost update.
+    private val cache = java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.ConcurrentHashMap<Timeframe, List<CandleBar>>>()
+    private val cacheLock = Any()
 
     // Observable status for UI
     private val _mtfState = MutableStateFlow<Map<String, Map<Timeframe, MtfStatus>>>(emptyMap())
@@ -252,25 +255,28 @@ object MtfCacheManager {
         }
 
         if (fetched.isNotEmpty()) {
-            val symbolMap = cache.getOrPut(scopedKey) { mutableMapOf() }
-            symbolMap[tf] = fetched
+            // Satu batch atomik: cegah pembaca melihat alias terisi sebagian.
+            synchronized(cacheLock) {
+                val symbolMap = cache.getOrPut(scopedKey) { java.util.concurrent.ConcurrentHashMap() }
+                symbolMap[tf] = fetched
 
-            // Also alias under clean compact Tokocrypto symbol and pair for fast retrieval
-            val clean = norm.replace("_", "").replace("/", "").replace("-", "")
-            if (clean != norm) {
-                cache.getOrPut(buildKey(clean, exchange)) { mutableMapOf() }[tf] = fetched
-            }
-            val compactSym = TokocryptoMarketService.toTokocryptoSymbol(norm)
-            if (compactSym != norm && compactSym != clean) {
-                cache.getOrPut(buildKey(compactSym, exchange)) { mutableMapOf() }[tf] = fetched
-            }
-            val tokoPair = TokocryptoMarketService.toTokocryptoPair(norm)
-            if (tokoPair != norm && tokoPair != clean) {
-                cache.getOrPut(buildKey(tokoPair, exchange)) { mutableMapOf() }[tf] = fetched
-            }
-            val indodaxClean = IndodaxMarketService.toDepthPairId(norm).uppercase()
-            if (indodaxClean != norm && indodaxClean != clean) {
-                cache.getOrPut(buildKey(indodaxClean, exchange)) { mutableMapOf() }[tf] = fetched
+                // Also alias under clean compact Tokocrypto symbol and pair for fast retrieval
+                val clean = norm.replace("_", "").replace("/", "").replace("-", "")
+                if (clean != norm) {
+                    cache.getOrPut(buildKey(clean, exchange)) { java.util.concurrent.ConcurrentHashMap() }[tf] = fetched
+                }
+                val compactSym = TokocryptoMarketService.toTokocryptoSymbol(norm)
+                if (compactSym != norm && compactSym != clean) {
+                    cache.getOrPut(buildKey(compactSym, exchange)) { java.util.concurrent.ConcurrentHashMap() }[tf] = fetched
+                }
+                val tokoPair = TokocryptoMarketService.toTokocryptoPair(norm)
+                if (tokoPair != norm && tokoPair != clean) {
+                    cache.getOrPut(buildKey(tokoPair, exchange)) { java.util.concurrent.ConcurrentHashMap() }[tf] = fetched
+                }
+                val indodaxClean = IndodaxMarketService.toDepthPairId(norm).uppercase()
+                if (indodaxClean != norm && indodaxClean != clean) {
+                    cache.getOrPut(buildKey(indodaxClean, exchange)) { java.util.concurrent.ConcurrentHashMap() }[tf] = fetched
+                }
             }
             updateStatus(norm, tf, if (isCacheValid(tf, fetched)) MtfStatus.READY else MtfStatus.SYNCING, exchange)
         } else {
@@ -287,7 +293,7 @@ object MtfCacheManager {
         backgroundJob?.cancel()
         backgroundJob = null
         activeTier1Symbol = null
-        cache.clear()
+        synchronized(cacheLock) { cache.clear() }
         _mtfState.value = emptyMap()
     }
 

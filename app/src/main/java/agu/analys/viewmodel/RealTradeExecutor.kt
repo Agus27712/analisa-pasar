@@ -25,7 +25,8 @@ class RealTradeExecutor(
     private val onRateLimit: (String) -> Unit,
     private val isRateLimited: () -> Boolean,
     private val refreshBalance: () -> Unit,
-    private val onRealTradeSuccess: ((pair: String, type: String, price: Double, quantity: Double, tp1: Double, tp2: Double) -> Unit)? = null
+    private val onRealTradeSuccess: ((pair: String, type: String, price: Double, quantity: Double, tp1: Double, tp2: Double) -> Unit)? = null,
+    private val isPinSessionValid: () -> Boolean = { true }
 ) {
     private val INTER_REQUEST_DELAY_MS = 1500L
     private val BUY_POLL_INTERVAL_MS = 2500L
@@ -41,6 +42,22 @@ class RealTradeExecutor(
         exchange.trim().equals("TOKOCRYPTO", true) -> MarketDataSource.TOKOCRYPTO
         exchange.trim().equals("INDODAX", true) -> MarketDataSource.INDODAX
         else -> null
+    }
+
+    /**
+     * PIN guard: bila PIN keamanan dikonfigurasi, order riil hanya boleh jalan
+     * saat sesi PIN sedang terbuka (unlock). Mengembalikan true bila boleh lanjut.
+     */
+    private fun requirePinSession(onResult: (Boolean, String) -> Unit): Boolean {
+        if (prefs.hasSecurityPin() && !isPinSessionValid()) {
+            onResult(false, "Sesi PIN Keamanan terkunci. Verifikasi PIN dulu sebelum order riil.")
+            agu.analys.util.AppLogManager.trade(
+                "RealPinBlocked",
+                "⛔ [ORDER RIIL DITOLAK: PIN TERKUNCI] Eksekusi dibatalkan karena sesi PIN belum terbuka."
+            )
+            return false
+        }
+        return true
     }
 
     fun executeCancelOrder(
@@ -167,6 +184,7 @@ class RealTradeExecutor(
             onResult(false, "API Key atau Secret Key $sourceLabel belum diisi.")
             return
         }
+        if (!requirePinSession(onResult)) return
         var execPrice = price
         val latestTick = getLatestTick(pair)
         if (latestTick != null && latestTick.price > 0.0 && execPrice <= 0.0) {
@@ -368,35 +386,47 @@ class RealTradeExecutor(
                 // Update saldo lokal
                 runCatching {
                     val cachedBalances = prefs.getSavedRealBalance(exchangeName).toMutableMap()
-                    val quoteKey = if (quote == "usdt") "usdt" else "idr"
-                    val currentQuote = cachedBalances[quoteKey] ?: 0.0
+                    val quoteLower = if (quote == "usdt") "usdt" else "idr"
+                    val quoteUpper = quoteLower.uppercase()
+                    val currentQuote = cachedBalances[quoteLower] ?: cachedBalances[quoteUpper] ?: 0.0
                     val baseLower = base.lowercase()
-                    val curCoin = cachedBalances[baseLower] ?: 0.0
+                    val baseUpper = base.uppercase()
+                    val curCoin = cachedBalances[baseLower] ?: cachedBalances[baseUpper] ?: 0.0
                     if (isBuy) {
                         val cost = finalExecutedQty * execPrice
                         val newTotalCoin = curCoin + finalExecutedQty
-                        cachedBalances[quoteKey] = (currentQuote - cost).coerceAtLeast(0.0)
+                        val newQuote = (currentQuote - cost).coerceAtLeast(0.0)
+                        cachedBalances[quoteLower] = newQuote
+                        cachedBalances[quoteUpper] = newQuote
                         cachedBalances[baseLower] = newTotalCoin
+                        cachedBalances[baseUpper] = newTotalCoin
                         prefs.saveRealBalance(cachedBalances, exchangeName)
 
+                        // Avg-buy dibaca dari kunci per-pair dulu agar harga USDT & IDR tidak tercampur.
+                        // Kunci aset telanjang hanya fallback untuk data lama.
+                        val pairKeyLower = pair.lowercase().replace("_", "")
+                        val pairKeyUpper = pairKeyLower.uppercase()
                         val cachedAvg = prefs.getSavedRealAvgBuyPrices(exchangeName).toMutableMap()
-                        val prevAvg = cachedAvg[baseLower] ?: cachedAvg[base.uppercase()] ?: 0.0
+                        val prevAvg = cachedAvg[pairKeyLower] ?: cachedAvg[pairKeyUpper]
+                            ?: cachedAvg[baseLower] ?: cachedAvg[baseUpper] ?: 0.0
                         val newAvgPrice = if (curCoin > 0.0 && prevAvg > 0.0 && newTotalCoin > 0.0) {
                             ((prevAvg * curCoin) + (execPrice * finalExecutedQty)) / newTotalCoin
                         } else {
                             execPrice
                         }
                         cachedAvg[baseLower] = newAvgPrice
-                        cachedAvg[base.uppercase()] = newAvgPrice
+                        cachedAvg[baseUpper] = newAvgPrice
                         // Kunci avg per pair sebenarnya (BTCUSDT / BTCIDR), bukan selalu IDR
-                        val pairKeyLower = pair.lowercase().replace("_", "")
                         cachedAvg[pairKeyLower] = newAvgPrice
-                        cachedAvg[pairKeyLower.uppercase()] = newAvgPrice
+                        cachedAvg[pairKeyUpper] = newAvgPrice
                         prefs.saveRealAvgBuyPrices(cachedAvg, exchangeName)
                     } else {
                         val proceeds = finalExecutedQty * execPrice
-                        cachedBalances[quoteKey] = currentQuote + proceeds
+                        val newQuote = currentQuote + proceeds
+                        cachedBalances[quoteLower] = newQuote
+                        cachedBalances[quoteUpper] = newQuote
                         cachedBalances[baseLower] = (curCoin - finalExecutedQty).coerceAtLeast(0.0)
+                        cachedBalances[baseUpper] = (curCoin - finalExecutedQty).coerceAtLeast(0.0)
                         prefs.saveRealBalance(cachedBalances, exchangeName)
                     }
                 }
@@ -550,6 +580,7 @@ class RealTradeExecutor(
             onResult(false, "API Key/Secret $sourceLabel belum diisi.")
             return
         }
+        if (!requirePinSession(onResult)) return
 
         scope.launch(Dispatchers.IO) {
             onStatusUpdate("Mengeksekusi order jual $pair di $sourceLabel...")
@@ -557,7 +588,8 @@ class RealTradeExecutor(
             val quote = quoteFromPair(pair)
             
             // Periksa saldo lokal terlebih dahulu agar eksekusi order instan tanpa jeda network
-            val cachedBalances = prefs.getSavedRealBalance()
+            val exchangeName = prefs.marketDataSource.name
+            val cachedBalances = prefs.getSavedRealBalance(exchangeName)
             val cachedFree = cachedBalances[base.lowercase()] ?: cachedBalances[base.uppercase()] ?: 0.0
             var sellQty = if (totalQuantity > 0.0) totalQuantity else cachedFree
 
@@ -763,14 +795,21 @@ class RealTradeExecutor(
 
                     // Sinkronkan saldo lokal
                     runCatching {
-                        val currentBalances = prefs.getSavedRealBalance().toMutableMap()
-                        val quoteKey = if (quote == "usdt") "usdt" else "idr"
-                        val curQuote = currentBalances[quoteKey] ?: 0.0
-                        val curCoin = currentBalances[base.lowercase()] ?: 0.0
-                        currentBalances[base.lowercase()] = (curCoin - sellQty).coerceAtLeast(0.0)
+                        val currentBalances = prefs.getSavedRealBalance(prefs.marketDataSource.name).toMutableMap()
+                        val quoteLower = if (quote == "usdt") "usdt" else "idr"
+                        val quoteUpper = quoteLower.uppercase()
+                        val curQuote = currentBalances[quoteLower] ?: currentBalances[quoteUpper] ?: 0.0
+                        val baseLower = base.lowercase()
+                        val baseUpper = base.uppercase()
+                        val curCoin = currentBalances[baseLower] ?: currentBalances[baseUpper] ?: 0.0
+                        val newCoin = (curCoin - sellQty).coerceAtLeast(0.0)
+                        currentBalances[baseLower] = newCoin
+                        currentBalances[baseUpper] = newCoin
                         val proceeds = sellQty * marketPrice
-                        currentBalances[quoteKey] = curQuote + proceeds
-                        prefs.saveRealBalance(currentBalances)
+                        val newQuote = curQuote + proceeds
+                        currentBalances[quoteLower] = newQuote
+                        currentBalances[quoteUpper] = newQuote
+                        prefs.saveRealBalance(currentBalances, prefs.marketDataSource.name)
                     }
 
                     onRealTradeSuccess?.invoke(pair, "sell", marketPrice, sellQty, 0.0, 0.0)

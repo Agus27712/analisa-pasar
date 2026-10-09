@@ -245,7 +245,8 @@ class SimulationCoordinator(
                 price = marketPrice,
                 stopPrice = 0.0,
                 quantity = sellQty,
-                currentMarketPrice = marketPrice
+                currentMarketPrice = marketPrice,
+                exchange = currentEx
             )
             refresh()
             if (r is agu.analys.trading.SimulationOrderResult.Success) {
@@ -261,36 +262,36 @@ class SimulationCoordinator(
     }
 
     fun topUpIdr(amount: Double) {
-        store.topUpIdr(amount)
+        store.topUpIdr(amount, exchange = currentEx)
         refresh()
     }
 
     fun topUpUsdt(amount: Double) {
-        store.topUpUsdt(amount)
+        store.topUpUsdt(amount, exchange = currentEx)
         refresh()
     }
 
     /** Konversi saldo Rupiah -> USDT pada rate exchange live. */
     fun convertIdrToUsdt(amountIdr: Double): SimulationTradeStore.ConversionResult {
-        val result = store.convertIdrToUsdt(amountIdr)
+        val result = store.convertIdrToUsdt(amountIdr, exchange = currentEx)
         if (result.success) refresh()
         return result
     }
 
     /** Konversi saldo USDT -> Rupiah pada rate exchange live. */
     fun convertUsdtToIdr(amountUsdt: Double): SimulationTradeStore.ConversionResult {
-        val result = store.convertUsdtToIdr(amountUsdt)
+        val result = store.convertUsdtToIdr(amountUsdt, exchange = currentEx)
         if (result.success) refresh()
         return result
     }
 
     fun setBalance(amount: Double) {
-        store.setBalance(amount)
+        store.setBalance(amount, exchange = currentEx)
         refresh()
     }
 
     fun resetAccount() {
-        store.resetWallet()
+        store.resetWallet(exchange = currentEx)
         refresh()
     }
 
