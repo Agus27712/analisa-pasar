@@ -54,6 +54,9 @@ Aplikasi Android Kotlin 100% (Jetpack Compose M3) untuk analisis & trading kript
 - Engine yang dihapus total 2026-10-09 (jangan hidupkan lagi): `MarketScannerEngine` (+test), `HistoricalReplayEngine` (+`replay/`, +test replay), kartu UI mati `AISignalCard`/`IndicatorDashboard`/`ProgressEntryCard`. Replay CSV tetap lewat `RealTokocryptoReplayTest` + `RealDataReplayAnalyzer`.
 - `CandidateScanWorker` kini punya cabang SCALPING background (maks 10 simbol, `diagnosticIgnoreOrderBookWhenUnavailable=true`, notifikasi hanya transisi READY).
 - Status 2026-10-09: matriks 30 run (5 pair × 6 config, data 14 hari downtrend) menunjukkan long scalping **−EV struktural** (22W/217L ≈ 9%, expectancy ≈ −0,79R; skor/setup/regime tak membedakan hasil). Tuning lanjutan: regime-gate Step1 / entry konfirmasi / strategi TP1+trailing — pending, lihat `data/hasil/v3_*.json`.
+- `BacktestEngine` (baseline SMA20-cross, bukan sinyal live): entry di close mentah, fee+slippage single-count via `FeeCalculator`, exit gap-aware (`GAP_SL`/`GAP_TP` di open), same-bar SL-dulu, PF all-win = `∞` (format via `formatProfitFactor`), `averageRr` guard bagi-nol.
+- `WalkForwardEvaluator`: min 30 trade per sampel, bila kurang → `isDataSufficient=false`, `overallScore=-1` ("data kurang", bukan skor); tanpa fallback PF=1.0; pesan overfit jujur (tidak ada pengetatan otomatis).
+- `BacktestSection` wajib terima `exchange` eksplisit + label "baseline SMA20-cross, bukan sinyal live".
 
 ## CI & rilis
 - CI unit-test hanya manual (`Actions → Unit Tests (Manual) → Run workflow`); jangan tambah trigger push/PR otomatis.

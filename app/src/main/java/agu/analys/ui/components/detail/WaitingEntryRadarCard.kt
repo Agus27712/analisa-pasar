@@ -89,6 +89,7 @@ fun WaitingEntryRadarCard(
     buyCooldownRemainingMs: Long = 0L,
     buyCooldownTotalMs: Long = 0L,
     buyCooldownReason: String? = null,
+    exchange: String = "TOKOCRYPTO",
     modifier: Modifier = Modifier
 ) {
     val effectivePrice = if (currentPrice > 0.0 && currentPrice.isFinite()) currentPrice else 0.0
@@ -364,9 +365,10 @@ fun WaitingEntryRadarCard(
 
                 Spacer(Modifier.height(10.dp))
 
-                // Backtest baseline di cache M1 (integrasi ScalpingBacktestAdapter)
+                // Backtest baseline di cache M1 bursa aktif (integrasi ScalpingBacktestAdapter)
                 agu.analys.ui.components.detail.radar.BacktestSection(
                     symbol = signal.marketSymbol.ifBlank { "$baseAsset$quoteAsset" },
+                    exchange = exchange,
                     fees = fees
                 )
             }

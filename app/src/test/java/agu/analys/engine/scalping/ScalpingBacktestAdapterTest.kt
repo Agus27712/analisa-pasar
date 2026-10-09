@@ -1,6 +1,7 @@
 package agu.analys.engine.scalping
 
 import agu.analys.model.CandleBar
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -21,6 +22,12 @@ class ScalpingBacktestAdapterTest {
         assertTrue(report.note.isNotBlank())
         assertTrue(report.minNetRrUsed >= 1.0)
         assertTrue(report.result.sampleSizeBars >= 80)
+        // Konsistensi metrik, bukan cuma note non-kosong.
+        val r = report.result
+        assertEquals(r.winningTrades + r.losingTrades, r.totalTrades)
+        assertTrue(r.expectancyPct.isFinite())
+        assertTrue(r.profitFactor.isFinite() || r.profitFactor.isInfinite())
+        assertTrue(r.maxDrawdownPct >= 0.0)
     }
 
     @Test

@@ -33,12 +33,17 @@ import kotlinx.coroutines.withContext
 import java.util.Locale
 
 /**
- * Integrasi [ScalpingBacktestAdapter] ke UI: backtest baseline (EMA trigger)
- * di atas cache candle M1 pair aktif. Bukan klaim edge — untuk kewarasan setting.
+ * Integrasi [ScalpingBacktestAdapter] ke UI: backtest baseline (SMA20 cross)
+ * di atas cache candle M1 pair aktif pada [exchange] yang sedang dibuka.
+ *
+ * BUKAN sinyal scalping live: tidak memakai setup/MTF/orderbook/VWAP.
+ * Untuk validasi engine nyata: replay data bursa (RealDataReplayAnalyzer /
+ * tools/scalp_replay.py).
  */
 @Composable
 fun BacktestSection(
     symbol: String,
+    exchange: String,
     fees: TradingFeeConfig = TradingFeeConfig(),
     modifier: Modifier = Modifier
 ) {
@@ -63,7 +68,7 @@ fun BacktestSection(
                     if (running) return@Button
                     running = true
                     scope.launch(Dispatchers.Default) {
-                        val candles = MtfCacheManager.getCachedCandles(symbol, Timeframe.M1)
+                        val candles = MtfCacheManager.getCachedCandles(symbol, Timeframe.M1, exchange)
                             ?: emptyList()
                         val r = ScalpingBacktestAdapter.run(candles = candles, fees = fees)
                         withContext(Dispatchers.Main) {
@@ -92,7 +97,7 @@ fun BacktestSection(
             BacktestRow("Trades", "${res.totalTrades} (W${res.winningTrades}/L${res.losingTrades})")
             BacktestRow("Win rate", "${fmt(res.winRatePct)}%")
             BacktestRow("Expectancy", "${fmt(res.expectancyPct)}%/trade")
-            BacktestRow("Profit factor", fmt(res.profitFactor))
+            BacktestRow("Profit factor", agu.analys.engine.backtest.BacktestEngine.formatProfitFactor(res.profitFactor))
             BacktestRow("Avg R:R", fmt(res.averageRr))
             BacktestRow("Max DD", "${fmt(res.maxDrawdownPct)}%")
             Spacer(Modifier.height(6.dp))
@@ -100,7 +105,8 @@ fun BacktestSection(
         } ?: run {
             Spacer(Modifier.height(6.dp))
             Text(
-                "Uji baseline EMA di cache M1 (${symbol.ifBlank { "-" }}). Hasil hanya metrik sample — bukan edge.",
+                "Baseline SMA20-cross di cache M1 $exchange (${symbol.ifBlank { "-" }}). " +
+                    "Bukan sinyal scalping live — hasil hanya metrik sample, bukan edge.",
                 color = TvTextSecondary,
                 fontSize = 10.5.sp,
                 lineHeight = 15.sp

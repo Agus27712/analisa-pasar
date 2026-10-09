@@ -290,6 +290,7 @@ fun DetailChartScreen(
                 currentPrice = displayPrice,
                 baseAsset = pair.baseAsset,
                 quoteAsset = pair.quoteAsset,
+                exchange = marketDataSource.name,
                 availableIdr = availableIdr,
                 availableCoin = availableCoin,
                 avgBuyPrice = avgBuyPrice,
