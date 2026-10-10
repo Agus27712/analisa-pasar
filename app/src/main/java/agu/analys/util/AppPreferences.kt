@@ -108,6 +108,13 @@ class AppPreferences(context: Context) {
         return current == hashPin(pin)
     }
 
+    init {
+        try {
+            val cfg = scalpingRuntimeConfig
+            agu.analys.engine.scalping.ScalpingRuntimeConfig.current = cfg
+        } catch (_: Exception) {}
+    }
+
     fun hasSecurityPin(): Boolean = securityPinHash.isNotBlank()
 
     fun hasIndodaxCredentials(): Boolean = indodaxApiKey.isNotBlank() && indodaxSecretKey.isNotBlank()
@@ -204,6 +211,27 @@ class AppPreferences(context: Context) {
             .putString(KEY_SELL_MAKER, value.sellMakerPct.toString())
             .putString(KEY_SELL_TAKER, value.sellTakerPct.toString())
             .apply()
+
+    var scalpingRuntimeConfig: agu.analys.engine.scalping.ScalpingRuntimeConfig
+        get() {
+            val jsonStr = prefs.getString(KEY_SCALPING_RUNTIME_CONFIG, null)
+            val config = if (!jsonStr.isNullOrBlank()) {
+                agu.analys.engine.scalping.ScalpingRuntimeConfig.fromJsonString(jsonStr)
+                    ?: agu.analys.engine.scalping.ScalpingRuntimeConfig.DEFAULT
+            } else {
+                agu.analys.engine.scalping.ScalpingRuntimeConfig.DEFAULT
+            }
+            agu.analys.engine.scalping.ScalpingRuntimeConfig.current = config
+            return config
+        }
+        set(value) {
+            agu.analys.engine.scalping.ScalpingRuntimeConfig.current = value
+            prefs.edit().putString(KEY_SCALPING_RUNTIME_CONFIG, value.toJson().toString()).apply()
+        }
+
+    var scalpingSensitivityPreset: String
+        get() = prefs.getString(KEY_SCALPING_PRESET, "DEFAULT") ?: "DEFAULT"
+        set(value) = prefs.edit().putString(KEY_SCALPING_PRESET, value).apply()
 
     var updateRepo: String
         get() = DEFAULT_UPDATE_REPO
@@ -465,6 +493,8 @@ class AppPreferences(context: Context) {
         private const val KEY_STRATEGY_MODE = "strategy_mode"
         private const val KEY_SCALPING_MODE = "scalping_mode"
         private const val KEY_SCALPING_SENSITIVITY = "scalping_sensitivity"
+        private const val KEY_SCALPING_RUNTIME_CONFIG = "scalping_runtime_config_json_v1"
+        private const val KEY_SCALPING_PRESET = "scalping_sensitivity_preset_v1"
         private const val KEY_WATCHLIST_LEGACY = "watchlist_symbols"
         private const val KEY_WATCHLIST_INDODAX = "watchlist_symbols_indodax"
         private const val KEY_FAVORITES_INDODAX = "favorites_symbols_indodax"

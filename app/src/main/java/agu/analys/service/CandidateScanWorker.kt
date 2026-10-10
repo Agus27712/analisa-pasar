@@ -210,7 +210,8 @@ class CandidateScanWorker(
                                     asks = emptyList(),
                                     fees = prefs.tradingFees,
                                     symbol = cleanSymbol,
-                                    diagnosticIgnoreOrderBookWhenUnavailable = true
+                                    diagnosticIgnoreOrderBookWhenUnavailable = true,
+                                    config = prefs.scalpingRuntimeConfig
                                 )
                                 if (scalpResult != null) {
                                     val trackedScalp = SignalLifecycleManager.process(

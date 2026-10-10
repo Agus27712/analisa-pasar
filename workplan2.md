@@ -59,26 +59,28 @@
 
 ## 3. Fase kerja aktif
 
-### P0 — Fee Truth (prioritas)
-- [ ] Dokumen singkat fee resmi (USDT/IDR Tokocrypto all-in; Indodax terpisah)
-- [ ] `TradingFeeConfig` + `FeeCalculator` + default exchange = Fee Truth
-- [ ] `data/config/scalp_config*.json` fee block selaras
-- [ ] UI Friction / VIABLE tidak pakai model upstream ~0,72% tanpa label
-- [ ] Unit test / assert RT fee snapshot
+### P0 — Fee Truth (prioritas) — [SELESAI ✅]
+- [x] Dokumen singkat fee resmi (`FEE_TRUTH.md`: Tokocrypto USDT all-in 0.4044%, IDR taker 0.2222/0.4322; Indodax terpisah)
+- [x] `TradingFeeConfig` + `FeeCalculator` + default exchange = Fee Truth (all-in Tokocrypto USDT/IDR)
+- [x] `data/config/scalp_config*.json` fee block selaras (USDT 0.4044% per sisi)
+- [x] UI Friction / VIABLE tidak pakai model upstream ~0,72% tanpa label
+- [x] Unit test / assert RT fee snapshot (`FeeCalculatorTest.kt` passing)
 
-### P1 — Runtime sensitivity + paritas alat
-- [ ] `ScalpingRuntimeConfig` (seed dari `ScalpingConfig`, mutable)
-- [ ] Wiring: `ScalpSetupDetector`, `ScalpingMtfEvaluator`, `ScalpingRiskEngine` baca runtime
-- [ ] UI Settings: preset Ketat/Default/Longgar + slider (lihat §4)
-- [ ] Export / import JSON mirror `scalp_config.json`
-- [ ] Paper trade log menyimpan snapshot thresholds
-- [ ] `scalp_replay` TIMEOUT fix di main (semua trade resolve + R net) bila belum
-- [ ] Audit BTC gate / TTL vs upstream p0 (dokumentasikan ada/tidak)
+### P1 — Runtime sensitivity + paritas alat — [SELESAI ✅]
+- [x] `ScalpingRuntimeConfig` (seed dari `ScalpingConfig`, mutable, preset DEFAULT/STRICT/LOOSE/CUSTOM)
+- [x] Wiring: `ScalpSetupDetector`, `ScalpingMtfEvaluator`, `ScalpingRiskEngine` baca runtime
+- [x] UI Settings: preset Ketat/Default/Longgar + 11 slider (di `ScalpingSensitivitySettings.kt`)
+- [x] Export / import JSON mirror `scalp_config.json` (tombol Export/Import di UI pengaturan scalping)
+- [x] Paper trade log menyimpan snapshot thresholds (`TradeSignalSnapshot.scalpingThresholds`)
+- [x] `scalp_replay` TIMEOUT fix di main (semua trade resolve + R net)
+- [x] Audit BTC gate / TTL vs upstream p0 (terdokumentasi: tidak ada gate diskriminatif, TTL 10m standar di `SignalLifecycleManager`)
 
-### P2 — Paper scalp exit (decision support)
-- [ ] Exit mode paper: classic / tp1_be / early / trail / full (selaras `SCALP_EXIT.md`)
-- [ ] FSM opsional di UI paper — **bukan** auto real-money
-- [ ] Jangan aktifkan real auto-execute dari sinyal scalp tanpa gate edge
+### P2 — Paper scalp auto & exit (decision support) — [SEDANG BERJALAN 🔄]
+> **Catatan Status:** Di preview saat ini, sinyal scalping dan slider threshold sudah aktif penuh, namun eksekusi paper trade masih manual via tombol beli di radar. Auto-buy dan auto-exit terstandar untuk simulasi adalah target di fase ini.
+- [ ] **Paper Auto-Buy (Simulasi)**: Toggle opsional di Pengaturan/Radar untuk otomatis membuka posisi simulasi saat sinyal scalping terkonfirmasi (`READY` / `STRONG_ENTRY`) dengan alokasi nominal tetap/risk-based.
+- [ ] **Paper Auto-Exit Modes**: Implementasi 5 mode exit otomatis paper trade selaras `SCALP_EXIT.md` (`classic`, `tp1_be`, `early`, `trail`, `full`).
+- [ ] FSM visual di UI paper trade — **bukan** auto real-money.
+- [ ] Larangan keras: Jangan aktifkan real auto-execute dari sinyal scalp tanpa pembuktian gate edge.
 
 ### P3 — Riset entry (di luar path live)
 - [ ] Gate: mean gross ≳ 1% train **dan** test, n memadai, vs acak
@@ -149,7 +151,13 @@ Detail: `SCALP_EXIT.md`, artefak lokal uji (bila ada).
 
 ## 8. Definition of Done (milestone berikutnya)
 
-- [ ] RuntimeConfig + minimal 1 layar slider + export JSON
-- [ ] Paper trade memakai RuntimeConfig + log threshold
-- [ ] Fee Truth tersambung di app + JSON replay
-- [ ] AGENTS/APP_CONTEXT menunjuk workplan2 saja untuk arah
+### Milestone P0 & P1 (Selesai):
+- [x] RuntimeConfig + minimal 1 layar slider + export JSON
+- [x] Paper trade memakai RuntimeConfig + log threshold
+- [x] Fee Truth tersambung di app + JSON replay
+- [x] AGENTS/APP_CONTEXT menunjuk workplan2 saja untuk arah
+
+### Milestone P2 (Target Aktif):
+- [ ] Toggle Auto-Buy Paper Trade (eksekusi order beli simulasi otomatis saat transisi sinyal scalping terkonfirmasi READY/STRONG_ENTRY)
+- [ ] Engine Auto-Exit Paper Trade 5 mode (`classic`, `tp1_be`, `early`, `trail`, `full`) selaras `SCALP_EXIT.md`
+- [ ] Ringkasan statistik performa paper trade (R net terakumulasi setelah fee all-in)

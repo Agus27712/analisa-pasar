@@ -41,6 +41,7 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
             }
         }
     var tradingFees = TradingFeeConfig()
+    var scalpingRuntimeConfig: agu.analys.engine.scalping.ScalpingRuntimeConfig = agu.analys.engine.scalping.ScalpingRuntimeConfig.current
 
     private val candlesH1 = mutableListOf<CandleBar>()
     private val candlesH4 = mutableListOf<CandleBar>()
@@ -270,7 +271,8 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
             bids = currentOrderBookBids,
             asks = currentOrderBookAsks,
             fees = tradingFees,
-            symbol = tick.symbol
+            symbol = tick.symbol,
+            config = scalpingRuntimeConfig
         ) ?: return
 
         val tracked = agu.analys.engine.scalping.SignalLifecycleManager.process(tick.symbol, tick.price, result.signal, StrategyMode.SCALPING)

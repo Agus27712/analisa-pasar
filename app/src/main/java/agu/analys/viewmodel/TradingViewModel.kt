@@ -151,6 +151,12 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     private val _isScalpingMode = MutableStateFlow(prefs.isScalpingMode)
     val isScalpingMode: StateFlow<Boolean> = _isScalpingMode.asStateFlow()
 
+    private val _scalpingRuntimeConfig = MutableStateFlow(prefs.scalpingRuntimeConfig)
+    val scalpingRuntimeConfig: StateFlow<agu.analys.engine.scalping.ScalpingRuntimeConfig> = _scalpingRuntimeConfig.asStateFlow()
+
+    private val _scalpingSensitivityPreset = MutableStateFlow(prefs.scalpingSensitivityPreset)
+    val scalpingSensitivityPreset: StateFlow<String> = _scalpingSensitivityPreset.asStateFlow()
+
     private val _tradingFees = MutableStateFlow(prefs.tradingFees)
     val tradingFees: StateFlow<TradingFeeConfig> = _tradingFees.asStateFlow()
 
@@ -422,6 +428,31 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
 
     fun setScalpingMode(enabled: Boolean) {
         setStrategyMode(if (enabled) StrategyMode.SCALPING else StrategyMode.SWING)
+    }
+
+    fun updateScalpingRuntimeConfig(
+        config: agu.analys.engine.scalping.ScalpingRuntimeConfig,
+        preset: String = "CUSTOM"
+    ) {
+        prefs.scalpingRuntimeConfig = config
+        prefs.scalpingSensitivityPreset = preset
+        engine.scalpingRuntimeConfig = config
+        _scalpingRuntimeConfig.value = config
+        _scalpingSensitivityPreset.value = preset
+        agu.analys.util.AppLogManager.service(
+            "ScalpingConfig",
+            "⚙️ Scalping runtime config updated (Preset: $preset) | ${config.toSummaryString()}"
+        )
+    }
+
+    fun applyScalpingPreset(preset: agu.analys.engine.scalping.SensitivityPreset) {
+        val config = when (preset) {
+            agu.analys.engine.scalping.SensitivityPreset.DEFAULT -> agu.analys.engine.scalping.ScalpingRuntimeConfig.DEFAULT
+            agu.analys.engine.scalping.SensitivityPreset.STRICT -> agu.analys.engine.scalping.ScalpingRuntimeConfig.STRICT
+            agu.analys.engine.scalping.SensitivityPreset.LOOSE -> agu.analys.engine.scalping.ScalpingRuntimeConfig.LOOSE
+            agu.analys.engine.scalping.SensitivityPreset.CUSTOM -> prefs.scalpingRuntimeConfig
+        }
+        updateScalpingRuntimeConfig(config, preset.name)
     }
 
     fun updateTradingFees(fees: TradingFeeConfig) {

@@ -30,7 +30,8 @@ object ScalpSetupDetector {
         val buyPressure: Double = 1.0,
         val m1Candles: List<CandleBar> = emptyList(),
         /** Arah bias long/short untuk filter setup. Default long-focused. */
-        val preferLong: Boolean = true
+        val preferLong: Boolean = true,
+        val config: ScalpingRuntimeConfig = ScalpingRuntimeConfig.current
     )
 
     data class Result(
@@ -48,7 +49,7 @@ object ScalpSetupDetector {
         // Hindari trend-following murni di ranging keras (kecuali sweep)
         val rangingHard =
             input.regime.regime == MarketRegime.RANGING &&
-                input.regime.chop >= ScalpingConfig.CHOP_HARD_RANGING
+                input.regime.chop >= input.config.chopHardRanging
 
         detectLiquiditySweep(input)?.let { return it }
         // Retest tidak diizinkan di ranging keras (replay: retest di chop = −EV)
@@ -74,9 +75,10 @@ object ScalpSetupDetector {
         rvol: Double = 1.0,
         buyPressure: Double = 1.0,
         m1Candles: List<CandleBar> = emptyList(),
-        preferLong: Boolean = true
+        preferLong: Boolean = true,
+        config: ScalpingRuntimeConfig = ScalpingRuntimeConfig.current
     ): Result = detect(
-        Input(price, structure, regime, rvol, buyPressure, m1Candles, preferLong)
+        Input(price, structure, regime, rvol, buyPressure, m1Candles, preferLong, config)
     )
 
     // --------------------------------------------------------------------------
@@ -87,7 +89,7 @@ object ScalpSetupDetector {
         if (!s.liquiditySweepDetected && !s.choch) return null
 
         val hasRejection = hasRejectionCandle(input.m1Candles, bullish = input.preferLong)
-        val volumeOk = input.rvol >= ScalpingConfig.RVOL_SETUP_MIN || input.m1Candles.isEmpty()
+        val volumeOk = input.rvol >= input.config.rvolSetupMin || input.m1Candles.isEmpty()
         val structureReversal = s.choch || s.bos || s.liquiditySweepDetected
 
         if (!structureReversal) return null
@@ -109,7 +111,7 @@ object ScalpSetupDetector {
                 append("Liquidity sweep")
                 if (s.choch) append(" + CHoCH")
                 if (hasRejection) append(" + rejection candle")
-                if (input.rvol >= ScalpingConfig.RVOL_SETUP_MIN) append(" + RVOL ${fmt(input.rvol)}x")
+                if (input.rvol >= input.config.rvolSetupMin) append(" + RVOL ${fmt(input.rvol)}x")
                 append(".")
             },
             isLongBiased = longBias
@@ -125,16 +127,16 @@ object ScalpSetupDetector {
         // Jangan long retest saat struktur bearish
         if (s.bias == StructureBias.BEARISH) return null
 
-        val rvolOk = input.rvol >= ScalpingConfig.RVOL_RETEST_MIN
+        val rvolOk = input.rvol >= input.config.rvolRetestMin
         // Orderbook kosong → buyPressure netral 1.0; jangan wajibkan flow tinggi offline.
         // Jika depth ada (pressure jauh dari 1.0), minta supportive/retest threshold.
         val hasDepthHint = abs(input.buyPressure - 1.0) > 0.02
-        val flowOk = !hasDepthHint || input.buyPressure >= ScalpingConfig.BUY_PRESSURE_RETEST
+        val flowOk = !hasDepthHint || input.buyPressure >= input.config.buyPressureRetest
 
         if (s.isBreakoutRetestValid) {
             if (!rvolOk) return null
             if (!flowOk) return null
-            if (s.strength > 0 && s.strength < ScalpingConfig.RETEST_MIN_STRUCTURE_STRENGTH) return null
+            if (s.strength > 0 && s.strength < input.config.retestMinStructureStrength) return null
             return Result(
                 setup = ScalpSetupType.BREAKOUT_RETEST,
                 explanation = "Breakout & retest valid + RVOL ${fmt(input.rvol)}x" +
@@ -147,12 +149,12 @@ object ScalpSetupDetector {
         if (res <= 0.0 || input.price <= 0.0) return null
 
         val distPct = abs(input.price - res) / res * 100.0
-        val aboveLevel = input.price >= res * ScalpingConfig.RETEST_ABOVE_FACTOR
-        val nearLevel = distPct <= ScalpingConfig.RETEST_MAX_DIST_PCT
+        val aboveLevel = input.price >= res * input.config.retestAboveFactor
+        val nearLevel = distPct <= input.config.retestMaxDistPct
 
         // Wajib konteks break nyata: BOS / pattern BOS (bukan hanya strength)
         val hadBreakContext = s.bos || s.pattern == "BOS" || s.pattern == "HH_HL" && s.bos
-        val strengthOk = s.strength >= ScalpingConfig.RETEST_MIN_STRUCTURE_STRENGTH
+        val strengthOk = s.strength >= input.config.retestMinStructureStrength
         val momentumOk = momentumBullish(input.m1Candles, input.price)
 
         // RVOL wajib; strength + (momentum ATAU flow depth)
@@ -182,15 +184,15 @@ object ScalpSetupDetector {
         val price = input.price
 
         val broken = when {
-            res != null && res > 0.0 -> price >= res * ScalpingConfig.BREAKOUT_ABOVE_FACTOR
+            res != null && res > 0.0 -> price >= res * input.config.breakoutAboveFactor
             s.bos && s.bias == StructureBias.BULLISH -> true
             input.regime.regime == MarketRegime.BREAKOUT -> true
             else -> false
         }
         if (!broken) return null
 
-        val rvolOk = input.rvol >= ScalpingConfig.RVOL_BREAKOUT_MIN
-        val flowOk = input.buyPressure >= ScalpingConfig.BUY_PRESSURE_BREAKOUT
+        val rvolOk = input.rvol >= input.config.rvolBreakoutMin
+        val flowOk = input.buyPressure >= input.config.buyPressureBreakout
         val momentumOk = momentumBullish(input.m1Candles, price)
 
         val confirms = listOf(rvolOk, flowOk, momentumOk).count { it }
@@ -228,7 +230,7 @@ object ScalpSetupDetector {
         val price = input.price
         val support = input.structure.support
         val nearSupport = support != null && support > 0.0 &&
-            abs(price - support) / support * 100.0 <= ScalpingConfig.PULLBACK_SUPPORT_MAX_DIST_PCT &&
+            abs(price - support) / support * 100.0 <= input.config.pullbackSupportMaxDistPct &&
             price >= support * 0.995
 
         val nearEma = nearEmaPullback(input.m1Candles, price)
@@ -236,7 +238,7 @@ object ScalpSetupDetector {
 
         val recovery = momentumBullish(input.m1Candles, price) ||
             input.buyPressure >= 1.1 ||
-            input.rvol >= 1.15
+            input.rvol >= input.config.rvolSetupMin
 
         if (!recovery && input.m1Candles.size >= 15) return null
 

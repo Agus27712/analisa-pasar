@@ -72,7 +72,8 @@ object ScalpingMtfEvaluator {
         fees: TradingFeeConfig = TradingFeeConfig(),
         symbol: String = "",
         orderBookAgeMs: Long = 0L,
-        diagnosticIgnoreOrderBookWhenUnavailable: Boolean = false
+        diagnosticIgnoreOrderBookWhenUnavailable: Boolean = false,
+        config: ScalpingRuntimeConfig = ScalpingRuntimeConfig.current
     ): Result? = evaluate(
         globalContext = agu.analys.engine.global.GlobalMarketContext(),
         price = price,
@@ -85,7 +86,8 @@ object ScalpingMtfEvaluator {
         fees = fees,
         symbol = symbol,
         orderBookAgeMs = orderBookAgeMs,
-        diagnosticIgnoreOrderBookWhenUnavailable = diagnosticIgnoreOrderBookWhenUnavailable
+        diagnosticIgnoreOrderBookWhenUnavailable = diagnosticIgnoreOrderBookWhenUnavailable,
+        config = config
     )
 
     fun evaluate(
@@ -100,7 +102,8 @@ object ScalpingMtfEvaluator {
         fees: TradingFeeConfig = TradingFeeConfig(),
         symbol: String = "",
         orderBookAgeMs: Long = 0L,
-        diagnosticIgnoreOrderBookWhenUnavailable: Boolean = false
+        diagnosticIgnoreOrderBookWhenUnavailable: Boolean = false,
+        config: ScalpingRuntimeConfig = ScalpingRuntimeConfig.current
     ): Result? {
         if (price <= 0.0 || h1Candles.size < 20 || m15Candles.size < 20 || m1Candles.size < 20) return null
 
@@ -179,7 +182,8 @@ object ScalpingMtfEvaluator {
             regime = regime,
             rvol = rvol,
             buyPressure = buyPressure,
-            m1Candles = m1Candles
+            m1Candles = m1Candles,
+            config = config
         )
         val setup = setupResult.setup
 
@@ -213,7 +217,8 @@ object ScalpingMtfEvaluator {
                 setup = if (setup != ScalpSetupType.NONE) setup else ScalpSetupType.TREND_PULLBACK,
                 structure = structure,
                 regime = regime,
-                fees = fees
+                fees = fees,
+                config = config
             )
         )
         val riskLevels = riskResult.levels
@@ -232,12 +237,12 @@ object ScalpingMtfEvaluator {
             (rsi1M in 38.0..68.0 && last1M.close > last1M.open && last1M.close >= (vwap1M * 0.9985)) ||
             isEma13Bounce
         val step3Ok = step2Ok && setup != ScalpSetupType.NONE && isVwapOrReclaimValid
-        // Gate skor per setup: BREAKOUT_RETEST butuh skor lebih tinggi (replay −EV di 60–74)
-        val minScoreForLong = ScalpingConfig.minScoreForSetup(setup.name)
+        // Gate skor per setup: baca runtime config (bisa diubah via slider/preset)
+        val minScoreForLong = config.minScoreForSetup(setup.name)
         val step4Ok = step3Ok && riskValid && score.total >= minScoreForLong
 
         val ready = step4Ok
-        val strong = ready && score.total >= STRONG_SCORE
+        val strong = ready && score.total >= config.minScoreStrong
         val early = !ready && !isDangerous && step2Ok
 
         val direction = if (ready) SignalDirection.LONG else SignalDirection.WAIT

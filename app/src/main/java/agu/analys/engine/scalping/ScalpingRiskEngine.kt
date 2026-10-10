@@ -40,11 +40,12 @@ object ScalpingRiskEngine {
         val regime: RegimeSnapshot,
         val fees: TradingFeeConfig = TradingFeeConfig(),
         val useMaker: Boolean = false,
-        val slippagePct: Double = DEFAULT_SLIPPAGE_PCT,
-        val minNetRr: Double = DEFAULT_MIN_NET_RR,
-        val targetNetRr: Double = DEFAULT_TARGET_NET_RR,
-        val minRiskPct: Double = DEFAULT_MIN_RISK_PCT,
-        val maxTp2R: Double = DEFAULT_MAX_TP2_R
+        val config: ScalpingRuntimeConfig = ScalpingRuntimeConfig.current,
+        val slippagePct: Double = config.slippagePct,
+        val minNetRr: Double = config.minNetRr,
+        val targetNetRr: Double = config.targetNetRr,
+        val minRiskPct: Double = config.minRiskPct,
+        val maxTp2R: Double = config.maxTp2R
     )
 
     data class Result(

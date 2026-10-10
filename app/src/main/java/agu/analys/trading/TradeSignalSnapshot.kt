@@ -56,7 +56,8 @@ data class TradeSignalSnapshot(
     val scalpingScoreDetail: String? = null,
     val scalpingRegime: String? = null,
     val entryZoneLow: Double? = null,
-    val entryZoneHigh: Double? = null
+    val entryZoneHigh: Double? = null,
+    val scalpingThresholds: String? = null
 ) {
     fun toJson(): JSONObject {
         val obj = JSONObject()
@@ -103,6 +104,7 @@ data class TradeSignalSnapshot(
         scalpingRegime?.let { obj.put("scalpingRegime", it) }
         entryZoneLow?.let { obj.put("entryZoneLow", it) }
         entryZoneHigh?.let { obj.put("entryZoneHigh", it) }
+        scalpingThresholds?.let { obj.put("scalpingThresholds", it) }
 
         if (reasons.isNotEmpty()) {
             val arr = JSONArray()
@@ -156,7 +158,8 @@ data class TradeSignalSnapshot(
                 scalpingScoreDetail = json.optString("scalpingScoreDetail").takeIf { it.isNotBlank() },
                 scalpingRegime = json.optString("scalpingRegime").takeIf { it.isNotBlank() },
                 entryZoneLow = if (json.has("entryZoneLow")) json.optDouble("entryZoneLow") else null,
-                entryZoneHigh = if (json.has("entryZoneHigh")) json.optDouble("entryZoneHigh") else null
+                entryZoneHigh = if (json.has("entryZoneHigh")) json.optDouble("entryZoneHigh") else null,
+                scalpingThresholds = json.optString("scalpingThresholds").takeIf { it.isNotBlank() }
             )
         }
 
@@ -252,7 +255,8 @@ data class TradeSignalSnapshot(
                 scalpingScoreDetail = signal?.scalpingScoreDetail?.takeIf { it.isNotBlank() },
                 scalpingRegime = signal?.scalpingRegime?.takeIf { it.isNotBlank() },
                 entryZoneLow = signal?.entryZoneLow?.takeIf { it > 0.0 },
-                entryZoneHigh = signal?.entryZoneHigh?.takeIf { it > 0.0 }
+                entryZoneHigh = signal?.entryZoneHigh?.takeIf { it > 0.0 },
+                scalpingThresholds = agu.analys.engine.scalping.ScalpingRuntimeConfig.current.toSummaryString()
             )
         }
     }

@@ -411,6 +411,7 @@ fun TradingViewModel.initSubscriptionsAndPolling() {
     engine.strategyMode = prefs.strategyMode
     engine.isScalpingMode = prefs.isScalpingMode
     engine.tradingFees = prefs.tradingFees
+    engine.scalpingRuntimeConfig = prefs.scalpingRuntimeConfig
 
     engine.onCandidateSignalTransition = { transition ->
         if (isNotificationsEnabled.value) {
