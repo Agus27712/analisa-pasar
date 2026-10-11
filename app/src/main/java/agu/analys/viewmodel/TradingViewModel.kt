@@ -57,6 +57,15 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     val bridge = TradingViewBridge(viewModelScope)
     internal val engine = LearningTradingEngine(viewModelScope)
     internal val prefs = AppPreferences(application)
+
+    // Hydrate the engine from persisted values before market ticks can be evaluated.
+    init {
+        val savedScalpingConfig = prefs.scalpingRuntimeConfig
+        engine.scalpingRuntimeConfig = savedScalpingConfig
+        engine.strategyMode = prefs.strategyMode
+        engine.isScalpingMode = prefs.isScalpingMode
+        engine.tradingFees = prefs.tradingFees
+    }
     internal val marketCache = MarketDataCache(application)
     internal val positionStore = SpotPositionStore(application)
     internal val alertStore = PriceAlertStore(application)
