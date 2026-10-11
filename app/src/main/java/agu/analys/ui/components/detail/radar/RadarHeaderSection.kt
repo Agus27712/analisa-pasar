@@ -26,7 +26,8 @@ fun RadarHeaderSection(
     onToggleChecklist: () -> Unit,
     modifier: Modifier = Modifier,
     statusText: String? = null,
-    statusColor: Color? = null
+    statusColor: Color? = null,
+    showChecklistToggle: Boolean = true
 ) {
     Row(
         modifier = modifier.fillMaxWidth(),
@@ -49,7 +50,7 @@ fun RadarHeaderSection(
             modifier = Modifier
                 .background(TvSurfaceVariant, RoundedCornerShape(20.dp))
                 .border(1.dp, TvBorder, RoundedCornerShape(20.dp))
-                .clickable(onClick = onToggleChecklist)
+                .then(if (showChecklistToggle) Modifier.clickable(onClick = onToggleChecklist) else Modifier)
                 .padding(horizontal = 10.dp, vertical = 5.dp)
         ) {
             Box(
