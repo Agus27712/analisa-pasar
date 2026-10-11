@@ -16,11 +16,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import agu.analys.config.StrategyMode
+import agu.analys.engine.scalping.ScalpingRuntimeConfig
 import agu.analys.ui.theme.*
 
 @Composable
 fun TradingModeSettings(
     strategyMode: StrategyMode,
+    scalpingConfig: ScalpingRuntimeConfig,
     onStrategyChange: (StrategyMode) -> Unit
 ) {
     Column {
@@ -39,7 +41,12 @@ fun TradingModeSettings(
             tagFg = TvGreen,
             isSelected = strategyMode == StrategyMode.SCALPING,
             desc = "Mencari peluang BUY jangka pendek (1M – 15M) secara agresif dengan eksekusi cepat dan filter MTF.",
-            bullets = listOf("Bias: 1H (Bullish)", "Setup: 15M", "Trigger: 1M", "Fokus: Quick Entry & Tight SL"),
+            bullets = listOf(
+                "Bias: 1H · Setup: 15M · Trigger: 1M",
+                "Skor LONG: ${scalpingConfig.minScoreLong} · STRONG: ${scalpingConfig.minScoreStrong}",
+                "Skor Retest: ${scalpingConfig.minScoreBreakoutRetest} · Net R:R: ${String.format(java.util.Locale.US, "%.2f", scalpingConfig.minNetRr)}",
+                "RVOL breakout: ${String.format(java.util.Locale.US, "%.1f", scalpingConfig.rvolBreakoutMin)}x · CHOP: ${String.format(java.util.Locale.US, "%.0f", scalpingConfig.chopHardRanging)}"
+            ),
             onClick = { onStrategyChange(StrategyMode.SCALPING) }
         )
 
