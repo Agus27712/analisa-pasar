@@ -76,11 +76,23 @@
 - [x] Audit BTC gate / TTL vs upstream p0 (terdokumentasi: tidak ada gate diskriminatif, TTL 10m standar di `SignalLifecycleManager`)
 
 ### P2 — Paper scalp auto & exit (decision support) — [SEDANG BERJALAN 🔄]
-> **Catatan Status:** Di preview saat ini, sinyal scalping dan slider threshold sudah aktif penuh, namun eksekusi paper trade masih manual via tombol beli di radar. Auto-buy dan auto-exit terstandar untuk simulasi adalah target di fase ini.
-- [ ] **Paper Auto-Buy (Simulasi)**: Toggle opsional di Pengaturan/Radar untuk otomatis membuka posisi simulasi saat sinyal scalping terkonfirmasi (`READY` / `STRONG_ENTRY`) dengan alokasi nominal tetap/risk-based.
-- [ ] **Paper Auto-Exit Modes**: Implementasi 5 mode exit otomatis paper trade selaras `SCALP_EXIT.md` (`classic`, `tp1_be`, `early`, `trail`, `full`).
-- [ ] FSM visual di UI paper trade — **bukan** auto real-money.
-- [ ] Larangan keras: Jangan aktifkan real auto-execute dari sinyal scalp tanpa pembuktian gate edge.
+> **Catatan Status:** Sinyal scalping + slider threshold aktif penuh. Auto-buy paper, engine exit 5 mode,
+> dan paritas replay sudah masuk (lihat centang di bawah). Sisa: visual FSM + kartu statistik di layar paper trade.
+- [x] **Paper Auto-Buy (Simulasi)**: Toggle di Pengaturan → Engine Scalping. Membuka posisi simulasi saat sinyal
+      `BUY` dengan `scalpingStage` ≥ ambang terpilih (`ENTRY` / `STRONG_ENTRY`). Alokasi **nominal tetap** atau
+      **berbasis risiko** (`PaperAutoTradeConfig`). Tidak pernah memicu order uang riil.
+- [x] **Paper Auto-Exit Modes**: `PaperExitResolver` + `PaperExitStateMachine` meniru `resolve_trade()` di
+      `tools/scalp_replay.py` untuk 5 mode (`classic`, `tp1_be`, `early`, `trail`, `full`), termasuk R seragam
+      net setelah fee all-in + slippage. Parameter exit masuk `ScalpingRuntimeConfig.exit` dan ikut ter-ekspor
+      sebagai blok `exit` di JSON (dibaca replay).
+- [x] Paritas diuji: `PaperExitResolverParityTest` — angka harapan dihasilkan langsung dari Python
+      `tools/scalp_replay.py`, bukan dihitung manual.
+- [x] `PaperTradeStats` menutup 2 keterbatasan yang dicatat di `SCALP_EXIT.md`: TIMEOUT **tidak** dibuang
+      diam-diam, dan exit breakeven (r = 0) berlabel BREAKEVEN (bukan LOSS).
+- [ ] FSM visual di UI paper trade — `PaperExitPhase` + state machine sudah tersedia; kartu visualnya belum dibangun.
+- [ ] Kartu ringkasan statistik (R net terakumulasi) di layar paper trade — mesinnya (`PaperTradeStats`) sudah ada,
+      UI + persistensi hasil per trade belum.
+- [x] Larangan keras: **tidak ada** jalur real auto-execute dari sinyal scalp di kode yang ditambahkan.
 
 ### P3 — Riset entry (di luar path live)
 - [ ] Gate: mean gross ≳ 1% train **dan** test, n memadai, vs acak
@@ -158,6 +170,8 @@ Detail: `SCALP_EXIT.md`, artefak lokal uji (bila ada).
 - [x] AGENTS/APP_CONTEXT menunjuk workplan2 saja untuk arah
 
 ### Milestone P2 (Target Aktif):
-- [ ] Toggle Auto-Buy Paper Trade (eksekusi order beli simulasi otomatis saat transisi sinyal scalping terkonfirmasi READY/STRONG_ENTRY)
-- [ ] Engine Auto-Exit Paper Trade 5 mode (`classic`, `tp1_be`, `early`, `trail`, `full`) selaras `SCALP_EXIT.md`
-- [ ] Ringkasan statistik performa paper trade (R net terakumulasi setelah fee all-in)
+- [x] Toggle Auto-Buy Paper Trade (eksekusi order beli simulasi otomatis saat transisi sinyal scalping terkonfirmasi READY/STRONG_ENTRY)
+- [x] Engine Auto-Exit Paper Trade 5 mode (`classic`, `tp1_be`, `early`, `trail`, `full`) selaras `SCALP_EXIT.md`
+- [x] Parameter exit tersambung ke `ScalpingRuntimeConfig` + ekspor JSON (blok `exit`) untuk paritas replay
+- [x] Statistik performa paper trade (R net terakumulasi setelah fee all-in) — mesin `PaperTradeStats` + unit test
+- [ ] FSM visual + kartu statistik di UI layar paper trade (sisa pekerjaan)

@@ -166,6 +166,11 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     private val _scalpingSensitivityPreset = MutableStateFlow(prefs.scalpingSensitivityPreset)
     val scalpingSensitivityPreset: StateFlow<String> = _scalpingSensitivityPreset.asStateFlow()
 
+    /** Pengaturan auto-buy / auto-exit paper trade (P2). Simulasi saja. */
+    private val _paperAutoTradeConfig = MutableStateFlow(prefs.paperAutoTradeConfig)
+    val paperAutoTradeConfig: StateFlow<agu.analys.engine.scalping.PaperAutoTradeConfig> =
+        _paperAutoTradeConfig.asStateFlow()
+
     private val _tradingFees = MutableStateFlow(prefs.tradingFees)
     val tradingFees: StateFlow<TradingFeeConfig> = _tradingFees.asStateFlow()
 
@@ -454,14 +459,33 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         )
     }
 
-    fun applyScalpingPreset(preset: agu.analys.engine.scalping.SensitivityPreset) {
-        val config = when (preset) {
+    fun applyScalpingPreset(preset: agu.analys.engine.scalping.SensitivityPreset) {        val config = when (preset) {
             agu.analys.engine.scalping.SensitivityPreset.DEFAULT -> agu.analys.engine.scalping.ScalpingRuntimeConfig.DEFAULT
             agu.analys.engine.scalping.SensitivityPreset.STRICT -> agu.analys.engine.scalping.ScalpingRuntimeConfig.STRICT
             agu.analys.engine.scalping.SensitivityPreset.LOOSE -> agu.analys.engine.scalping.ScalpingRuntimeConfig.LOOSE
             agu.analys.engine.scalping.SensitivityPreset.CUSTOM -> prefs.scalpingRuntimeConfig
         }
         updateScalpingRuntimeConfig(config, preset.name)
+    }
+
+    /**
+     * Simpan pengaturan auto-buy / auto-exit **paper trade** (P2).
+     *
+     * Murni simulasi — tidak ada efek ke mode uang riil.
+     */
+    fun updatePaperAutoTradeConfig(config: agu.analys.engine.scalping.PaperAutoTradeConfig) {
+        prefs.paperAutoTradeConfig = config
+        _paperAutoTradeConfig.value = config
+        if (!config.autoBuyEnabled) {
+            // Pastikan tidak ada state machine exit yang tertinggal saat fitur dimatikan.
+            agu.analys.viewmodel.PaperAutoTradeRuntime.clearAll()
+        }
+        agu.analys.util.AppLogManager.service(
+            "PaperAuto",
+            "⚙️ Auto-buy paper: ${if (config.autoBuyEnabled) "AKTIF" else "nonaktif"} | " +
+                "Auto-exit: ${if (config.autoExitEnabled) "AKTIF" else "nonaktif"} | " +
+                "Alokasi: ${config.allocation.label} | Stage min: ${config.minStage.name}"
+        )
     }
 
     fun updateTradingFees(fees: TradingFeeConfig) {

@@ -233,6 +233,38 @@ class AppPreferences(context: Context) {
         get() = prefs.getString(KEY_SCALPING_PRESET, "DEFAULT") ?: "DEFAULT"
         set(value) = prefs.edit().putString(KEY_SCALPING_PRESET, value).apply()
 
+    /**
+     * Pengaturan auto-buy / auto-exit **paper trade** (P2).
+     *
+     * Selalu simulasi — tidak ada jalur ke eksekusi uang riil di sini.
+     */
+    var paperAutoTradeConfig: agu.analys.engine.scalping.PaperAutoTradeConfig
+        get() = agu.analys.engine.scalping.PaperAutoTradeConfig(
+            autoBuyEnabled = prefs.getBoolean(KEY_PAPER_AUTO_BUY_ENABLED, false),
+            autoExitEnabled = prefs.getBoolean(KEY_PAPER_AUTO_EXIT_ENABLED, true),
+            allocation = agu.analys.engine.scalping.PaperAutoBuyAllocation.fromKey(
+                prefs.getString(KEY_PAPER_AUTO_BUY_ALLOCATION, null)
+            ),
+            fixedQuoteAmount = prefs.getString(KEY_PAPER_AUTO_BUY_FIXED_QUOTE, null)
+                ?.toDoubleOrNull() ?: 100_000.0,
+            riskPctPerTrade = prefs.getString(KEY_PAPER_AUTO_BUY_RISK_PCT, null)
+                ?.toDoubleOrNull() ?: 1.0,
+            minStage = runCatching {
+                agu.analys.model.ScalpingStage.valueOf(
+                    prefs.getString(KEY_PAPER_AUTO_BUY_MIN_STAGE, null)
+                        ?: agu.analys.model.ScalpingStage.ENTRY.name
+                )
+            }.getOrDefault(agu.analys.model.ScalpingStage.ENTRY)
+        )
+        set(value) = prefs.edit()
+            .putBoolean(KEY_PAPER_AUTO_BUY_ENABLED, value.autoBuyEnabled)
+            .putBoolean(KEY_PAPER_AUTO_EXIT_ENABLED, value.autoExitEnabled)
+            .putString(KEY_PAPER_AUTO_BUY_ALLOCATION, value.allocation.key)
+            .putString(KEY_PAPER_AUTO_BUY_FIXED_QUOTE, value.fixedQuoteAmount.toString())
+            .putString(KEY_PAPER_AUTO_BUY_RISK_PCT, value.riskPctPerTrade.toString())
+            .putString(KEY_PAPER_AUTO_BUY_MIN_STAGE, value.minStage.name)
+            .apply()
+
     var updateRepo: String
         get() = DEFAULT_UPDATE_REPO
         set(_) { /* hardcoded to Agus27712/analisa-pasar */ }
@@ -495,6 +527,12 @@ class AppPreferences(context: Context) {
         private const val KEY_SCALPING_SENSITIVITY = "scalping_sensitivity"
         private const val KEY_SCALPING_RUNTIME_CONFIG = "scalping_runtime_config_json_v1"
         private const val KEY_SCALPING_PRESET = "scalping_sensitivity_preset_v1"
+        private const val KEY_PAPER_AUTO_BUY_ENABLED = "paper_auto_buy_enabled_v1"
+        private const val KEY_PAPER_AUTO_EXIT_ENABLED = "paper_auto_exit_enabled_v1"
+        private const val KEY_PAPER_AUTO_BUY_ALLOCATION = "paper_auto_buy_allocation_v1"
+        private const val KEY_PAPER_AUTO_BUY_FIXED_QUOTE = "paper_auto_buy_fixed_quote_v1"
+        private const val KEY_PAPER_AUTO_BUY_RISK_PCT = "paper_auto_buy_risk_pct_v1"
+        private const val KEY_PAPER_AUTO_BUY_MIN_STAGE = "paper_auto_buy_min_stage_v1"
         private const val KEY_WATCHLIST_LEGACY = "watchlist_symbols"
         private const val KEY_WATCHLIST_INDODAX = "watchlist_symbols_indodax"
         private const val KEY_FAVORITES_INDODAX = "favorites_symbols_indodax"

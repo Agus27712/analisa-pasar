@@ -448,6 +448,19 @@ fun TradingViewModel.initSubscriptionsAndPolling() {
                 scalpingRegime = transition.signal.scalpingRegime
             )
         }
+
+        // P2 — Auto-buy PAPER (simulasi). Tidak pernah memicu order uang riil.
+        // Hanya saat transisi baru siap/di-trigger agar tidak membuka posisi berulang.
+        if (transition.isNewReady || transition.isNewDetected) {
+            runCatching {
+                tryPaperAutoBuy(transition, prefs.marketDataSource.name)
+            }.onFailure {
+                agu.analys.util.AppLogManager.service(
+                    "PaperAutoBuy",
+                    "⚠️ Auto-buy paper gagal diproses untuk ${transition.symbol}: ${it.message}"
+                )
+            }
+        }
     }
 
     viewModelScope.launch(Dispatchers.IO) {

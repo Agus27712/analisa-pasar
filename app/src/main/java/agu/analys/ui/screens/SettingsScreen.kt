@@ -72,6 +72,8 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
     var showScalpingEngineSettings by remember { mutableStateOf(false) }
     var draftScalpingConfig by remember { mutableStateOf(activeScalpingConfig) }
     var draftScalpingPreset by remember { mutableStateOf(activeScalpingPreset) }
+    // P2 — draft pengaturan auto-buy / auto-exit paper trade
+    var draftPaperAuto by remember { mutableStateOf(viewModel.paperAutoTradeConfig.value) }
 
     var showSetupRealApiDialog by remember { mutableStateOf(false) }
     var showPinDialog by remember { mutableStateOf(false) }
@@ -134,6 +136,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
     fun saveScalpingEngineSettings() {
         // Commit the draft first so the engine receives the exact values shown in the sliders.
         viewModel.updateScalpingRuntimeConfig(draftScalpingConfig, draftScalpingPreset)
+        viewModel.updatePaperAutoTradeConfig(draftPaperAuto)
         viewModel.setStrategyMode(StrategyMode.SCALPING)
         strategyMode = StrategyMode.SCALPING
         showScalpingEngineSettings = false
@@ -509,6 +512,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                                 // Open configuration first; do not activate scalping before Save.
                                 draftScalpingConfig = activeScalpingConfig
                                 draftScalpingPreset = activeScalpingPreset
+                                draftPaperAuto = viewModel.paperAutoTradeConfig.value
                                 showScalpingEngineSettings = true
                             } else {
                                 strategyMode = mode
@@ -734,6 +738,11 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                                     SensitivityPreset.CUSTOM -> draftScalpingConfig
                                 }
                             }
+                        )
+                        Spacer(Modifier.height(14.dp))
+                        PaperAutoTradeSettings(
+                            config = draftPaperAuto,
+                            onChange = { draftPaperAuto = it }
                         )
                         Spacer(Modifier.height(12.dp))
                         OutlinedButton(

@@ -212,6 +212,14 @@ fun ScalpingSensitivitySettings(
 
         Spacer(Modifier.height(14.dp))
 
+        // P2 — Mode exit paper trade (paritas dengan tools/scalp_replay.py)
+        ExitModeSection(
+            params = config.exit,
+            onChange = { onConfigChange(config.withExit(it), "CUSTOM") }
+        )
+
+        Spacer(Modifier.height(14.dp))
+
         // Sliders List Card
         Card(
             shape = RoundedCornerShape(12.dp),
@@ -803,6 +811,229 @@ private fun SensitivitySliderItem(
                         modifier = Modifier.size(16.dp)
                     )
                 }
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// P2 — Pemilih mode exit paper trade
+// ---------------------------------------------------------------------------
+
+/**
+ * Pemilih mode exit paper trade (P2).
+ *
+ * Mode di sini memakai kunci yang sama dengan `cfg["exit"]["mode"]` di
+ * `tools/scalp_replay.py`, sehingga hasil paper di app bisa dibandingkan langsung
+ * dengan replay offline. Lihat `SCALP_EXIT.md`.
+ */
+@Composable
+private fun ExitModeSection(
+    params: agu.analys.engine.scalping.ScalpExitParams,
+    onChange: (agu.analys.engine.scalping.ScalpExitParams) -> Unit
+) {
+    var showInfo by remember { mutableStateOf(false) }
+
+    Card(
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = TvSurfaceVariant),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "MODE EXIT PAPER TRADE",
+                    color = TvTextPrimary,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f)
+                )
+                Icon(
+                    Icons.Default.Info,
+                    contentDescription = "Penjelasan mode exit",
+                    tint = TvTextSecondary,
+                    modifier = Modifier
+                        .size(18.dp)
+                        .clickable { showInfo = !showInfo }
+                )
+            }
+
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Menentukan bagaimana posisi simulasi ditutup. Mode ini hanya berlaku untuk paper trade.",
+                color = TvTextSecondary,
+                fontSize = 11.sp,
+                lineHeight = 15.sp
+            )
+
+            AnimatedVisibility(visible = showInfo) {
+                Column {
+                    Spacer(Modifier.height(8.dp))
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = TvSurface,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Text(
+                                "Catatan penting: replay historis dengan fee all-in belum menunjukkan edge stabil pada semua mode. " +
+                                    "Mode exit hanya memperbaiki besarnya kerugian, belum terbukti menghasilkan expectancy positif. " +
+                                    "Jangan aktifkan eksekusi uang riil dari sinyal scalp.",
+                                color = TvOrange,
+                                fontSize = 10.sp,
+                                lineHeight = 14.sp
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(10.dp))
+
+            agu.analys.engine.scalping.ScalpExitMode.entries.forEach { mode ->
+                val isSelected = params.mode == mode
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = if (isSelected) TvGreen.copy(alpha = 0.2f) else TvSurface,
+                    border = if (isSelected) androidx.compose.foundation.BorderStroke(1.dp, TvGreen) else null,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 6.dp)
+                        .clickable { onChange(params.copy(mode = mode)) }
+                ) {
+                    Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+                        Text(
+                            mode.label,
+                            color = if (isSelected) TvGreen else TvTextPrimary,
+                            fontSize = 11.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                        )
+                        Text(
+                            mode.description,
+                            color = TvTextSecondary,
+                            fontSize = 10.sp,
+                            lineHeight = 13.sp
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(6.dp))
+
+            // Parameter yang hanya relevan untuk mode terkait
+            if (params.mode.usesTp1Partial || params.mode.usesEarlyProfit) {
+                ExitParamRow(
+                    label = "Profit net minimum early exit",
+                    value = params.minEarlyProfitNetPct,
+                    step = 0.05,
+                    range = 0.10..2.00,
+                    suffix = "%",
+                    enabled = params.mode.usesEarlyProfit,
+                    onValueChange = { onChange(params.copy(minEarlyProfitNetPct = it)) }
+                )
+            }
+            if (params.mode.usesBreakeven) {
+                ExitParamRow(
+                    label = "Trigger breakeven (net)",
+                    value = params.breakevenTriggerNetPct,
+                    step = 0.05,
+                    range = 0.10..2.00,
+                    suffix = "%",
+                    enabled = true,
+                    onValueChange = { onChange(params.copy(breakevenTriggerNetPct = it)) }
+                )
+            }
+            if (params.mode.usesTrailing) {
+                ExitParamRow(
+                    label = "Jarak trailing dari peak",
+                    value = params.trailPct,
+                    step = 0.05,
+                    range = 0.10..2.00,
+                    suffix = "%",
+                    enabled = true,
+                    onValueChange = { onChange(params.copy(trailPct = it)) }
+                )
+            }
+            ExitParamRow(
+                label = "Time-stop (bar M1, 0 = nonaktif)",
+                value = params.maxHoldBarsM1.toDouble(),
+                step = 5.0,
+                range = 0.0..240.0,
+                suffix = " bar",
+                enabled = true,
+                onValueChange = { onChange(params.copy(maxHoldBarsM1 = it.roundToInt())) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun ExitParamRow(
+    label: String,
+    value: Double,
+    step: Double,
+    range: ClosedFloatingPointRange<Double>,
+    suffix: String,
+    enabled: Boolean,
+    onValueChange: (Double) -> Unit
+) {
+    val alpha = if (enabled) 1f else 0.4f
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            label,
+            color = TvTextSecondary.copy(alpha = alpha),
+            fontSize = 10.sp,
+            modifier = Modifier.weight(1f)
+        )
+        Surface(
+            shape = CircleShape,
+            color = TvSurface,
+            modifier = Modifier
+                .size(28.dp)
+                .clickable(enabled = enabled) {
+                    onValueChange((value - step).coerceIn(range.start, range.endInclusive))
+                }
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    Icons.Default.Remove,
+                    contentDescription = "Kurangi $label",
+                    tint = TvTextPrimary.copy(alpha = alpha),
+                    modifier = Modifier.size(14.dp)
+                )
+            }
+        }
+        Text(
+            if (step >= 1.0) "${value.roundToInt()}$suffix"
+            else String.format(Locale.US, "%.2f", value) + suffix,
+            color = TvTextPrimary.copy(alpha = alpha),
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier
+                .padding(horizontal = 8.dp)
+                .widthIn(min = 52.dp)
+        )
+        Surface(
+            shape = CircleShape,
+            color = TvSurface,
+            modifier = Modifier
+                .size(28.dp)
+                .clickable(enabled = enabled) {
+                    onValueChange((value + step).coerceIn(range.start, range.endInclusive))
+                }
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    Icons.Default.Add,
+                    contentDescription = "Tambah $label",
+                    tint = TvTextPrimary.copy(alpha = alpha),
+                    modifier = Modifier.size(14.dp)
+                )
             }
         }
     }

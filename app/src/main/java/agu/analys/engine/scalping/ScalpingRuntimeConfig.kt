@@ -31,7 +31,9 @@ data class ScalpingRuntimeConfig(
     val breakoutAboveFactor: Double = ScalpingConfig.BREAKOUT_ABOVE_FACTOR,
     val retestAboveFactor: Double = ScalpingConfig.RETEST_ABOVE_FACTOR,
     val retestMinStructureStrength: Int = ScalpingConfig.RETEST_MIN_STRUCTURE_STRENGTH,
-    val pullbackSupportMaxDistPct: Double = ScalpingConfig.PULLBACK_SUPPORT_MAX_DIST_PCT
+    val pullbackSupportMaxDistPct: Double = ScalpingConfig.PULLBACK_SUPPORT_MAX_DIST_PCT,
+    /** Parameter exit paper trade (P2) — mirror blok `exit` di `scalp_config_exit_*.json`. */
+    val exit: ScalpExitParams = ScalpExitParams.DEFAULT
 ) {
 
     fun minScoreForSetup(setupName: String): Int = when (setupName) {
@@ -65,6 +67,9 @@ data class ScalpingRuntimeConfig(
         json.put("retest_min_structure_strength", retestMinStructureStrength)
         json.put("pullback_support_max_dist_pct", pullbackSupportMaxDistPct)
 
+        // Blok exit (P2) — dibaca `tools/scalp_replay.py` sebagai cfg["exit"]
+        json.put("exit", exit.toJson())
+
         // Include Fee Truth snapshot block for offline replay parity
         val feeObj = JSONObject()
         feeObj.put("_comment", "Tokocrypto ALL-IN regular: USDT 0.4044% per sisi. IDR: buy taker 0.2222 / sell taker 0.4322")
@@ -91,8 +96,12 @@ data class ScalpingRuntimeConfig(
     /** Short human-readable summary of primary gates */
     fun toSummaryString(): String {
         return "MinScore: $minScoreLong (Retest: $minScoreBreakoutRetest, Strong: $minScoreStrong) | " +
-            "MinNetRR: ${minNetRr}x | RVOL Breakout: ${rvolBreakoutMin}x | CHOP: $chopHardRanging"
+            "MinNetRR: ${minNetRr}x | RVOL Breakout: ${rvolBreakoutMin}x | CHOP: $chopHardRanging | " +
+            "Exit: ${exit.mode.label}"
     }
+
+    /** Salinan dengan parameter exit paper trade diganti. */
+    fun withExit(params: ScalpExitParams): ScalpingRuntimeConfig = copy(exit = params)
 
     companion object {
         val DEFAULT = ScalpingRuntimeConfig()
@@ -161,7 +170,8 @@ data class ScalpingRuntimeConfig(
                 breakoutAboveFactor = json.optDouble("breakout_above_factor", ScalpingConfig.BREAKOUT_ABOVE_FACTOR),
                 retestAboveFactor = json.optDouble("retest_above_factor", ScalpingConfig.RETEST_ABOVE_FACTOR),
                 retestMinStructureStrength = json.optInt("retest_min_structure_strength", ScalpingConfig.RETEST_MIN_STRUCTURE_STRENGTH),
-                pullbackSupportMaxDistPct = json.optDouble("pullback_support_max_dist_pct", ScalpingConfig.PULLBACK_SUPPORT_MAX_DIST_PCT)
+                pullbackSupportMaxDistPct = json.optDouble("pullback_support_max_dist_pct", ScalpingConfig.PULLBACK_SUPPORT_MAX_DIST_PCT),
+                exit = ScalpExitParams.fromJson(json.optJSONObject("exit"))
             )
         }
 
