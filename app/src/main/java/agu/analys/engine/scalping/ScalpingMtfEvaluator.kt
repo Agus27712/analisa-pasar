@@ -322,15 +322,7 @@ object ScalpingMtfEvaluator {
             else -> "Menunggu skor sinyal ≥ $minScoreForLong (${setup.name}, sekarang ${score.total})."
         }
 
-        val confluence = agu.analys.engine.confluence.ConfluenceEvaluator.evaluate(
-            price = price,
-            macroCandles = m15Candles,
-            microCandles = m1Candles,
-            strategyMode = agu.analys.config.StrategyMode.SCALPING,
-            orderBookBids = bids,
-            orderBookAsks = asks,
-            fees = fees
-        )
+        // Scalping uses its own runtime-configured gates; Swing/Intraday confluence is intentionally not evaluated here.
 
         val mtf = ScalpingMtfSnapshot(
             biasOk = step1Ok,
@@ -372,8 +364,8 @@ object ScalpingMtfEvaluator {
             entryCondition = "Setup valid · VWAP/VSA M1 · Orderbook > 1.0 · Skor ≥ gate setup",
             extended = rsi1M > 78.0,
             extremeVolatility = isDangerousNoise,
-            checkpoints = confluence.checkpoints,
-            completedCount = confluence.completedCount
+            checkpoints = emptyList(),
+            completedCount = 0
         )
 
         val confidence = when {
