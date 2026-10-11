@@ -89,28 +89,15 @@ fun SettingsCategoryDetailContent(
     updateStatus: String?,
     downloadProgress: Int?
 ) {
+    val scalpingConfig by viewModel.scalpingRuntimeConfig.collectAsStateWithLifecycle()
+
     when (category) {
         SettingsCategory.TRADING -> {
             TradingModeSettings(
                 strategyMode = strategyMode,
+                scalpingConfig = scalpingConfig,
                 onStrategyChange = onStrategyModeChange
             )
-
-            if (strategyMode == StrategyMode.SCALPING) {
-                Spacer(Modifier.height(14.dp))
-                val scalpingConfig by viewModel.scalpingRuntimeConfig.collectAsStateWithLifecycle()
-                val scalpingPreset by viewModel.scalpingSensitivityPreset.collectAsStateWithLifecycle()
-                ScalpingSensitivitySettings(
-                    config = scalpingConfig,
-                    activePreset = scalpingPreset,
-                    onConfigChange = { newConfig, preset ->
-                        viewModel.updateScalpingRuntimeConfig(newConfig, preset)
-                    },
-                    onPresetChange = { preset ->
-                        viewModel.applyScalpingPreset(preset)
-                    }
-                )
-            }
 
             Spacer(Modifier.height(14.dp))
 
