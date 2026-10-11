@@ -80,6 +80,47 @@ fun TradingModeSettings(
             ),
             onClick = { onStrategyChange(StrategyMode.OFFICE_DAILY) }
         )
+
+        if (strategyMode == StrategyMode.SCALPING) {
+            Spacer(Modifier.height(10.dp))
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = TvSurfaceVariant),
+                border = androidx.compose.foundation.BorderStroke(1.dp, TvGreen.copy(alpha = 0.5f))
+            ) {
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    Text("PARAMETER ENGINE SCALPING AKTIF", color = TvGreen, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        "Skor: LONG ${scalpingConfig.minScoreLong} · STRONG ${scalpingConfig.minScoreStrong} · RETEST ${scalpingConfig.minScoreBreakoutRetest}",
+                        color = TvTextPrimary, fontSize = 11.sp
+                    )
+                    Text(
+                        "Risiko: Min Net R:R ${String.format(java.util.Locale.US, "%.2f", scalpingConfig.minNetRr)} · Target R:R ${String.format(java.util.Locale.US, "%.2f", scalpingConfig.targetNetRr)} · Min Risk ${String.format(java.util.Locale.US, "%.2f", scalpingConfig.minRiskPct)}% · Max TP2 ${String.format(java.util.Locale.US, "%.1f", scalpingConfig.maxTp2R)}R",
+                        color = TvTextPrimary, fontSize = 11.sp
+                    )
+                    Text(
+                        "Volume: RVOL breakout ${String.format(java.util.Locale.US, "%.1f", scalpingConfig.rvolBreakoutMin)}x · setup ${String.format(java.util.Locale.US, "%.1f", scalpingConfig.rvolSetupMin)}x · retest ${String.format(java.util.Locale.US, "%.1f", scalpingConfig.rvolRetestMin)}x",
+                        color = TvTextPrimary, fontSize = 11.sp
+                    )
+                    Text(
+                        "Orderbook: breakout ${String.format(java.util.Locale.US, "%.2f", scalpingConfig.buyPressureBreakout)}x · retest ${String.format(java.util.Locale.US, "%.2f", scalpingConfig.buyPressureRetest)}x · Slippage ${String.format(java.util.Locale.US, "%.2f", scalpingConfig.slippagePct)}%",
+                        color = TvTextPrimary, fontSize = 11.sp
+                    )
+                    Text(
+                        "Struktur: CHOP ${String.format(java.util.Locale.US, "%.0f", scalpingConfig.chopHardRanging)} · Retest jarak ${String.format(java.util.Locale.US, "%.1f", scalpingConfig.retestMaxDistPct)}% · Breakout factor ${String.format(java.util.Locale.US, "%.3f", scalpingConfig.breakoutAboveFactor)} · Retest factor ${String.format(java.util.Locale.US, "%.3f", scalpingConfig.retestAboveFactor)}",
+                        color = TvTextPrimary, fontSize = 11.sp
+                    )
+                    Text(
+                        "Strength retest ${scalpingConfig.retestMinStructureStrength} · Pullback support ${String.format(java.util.Locale.US, "%.1f", scalpingConfig.pullbackSupportMaxDistPct)}%",
+                        color = TvTextPrimary, fontSize = 11.sp
+                    )
+                }
+            }
+        }
     }
 }
 
