@@ -527,7 +527,12 @@ fun TradingViewModel.startTrailingPolling() {
             try {
                 val currentEx = prefs.marketDataSource.name
                 val isReal = isRealBuyMode.value
-                val activeSymbols = positionStore.getAllActiveTrailingSymbols(isReal = isReal, exchange = currentEx)
+                // P2: posisi paper juga ikut dipantau, walau bukan pair yang sedang dibuka,
+                // supaya auto-exit tetap berjalan di latar belakang.
+                val activeSymbols = (
+                    positionStore.getAllActiveTrailingSymbols(isReal = isReal, exchange = currentEx) +
+                        PaperAutoTradeRuntime.activeSymbols(currentEx)
+                    ).distinct()
                 if (activeSymbols.isNotEmpty()) {
                     val isToko = prefs.marketDataSource == MarketDataSource.TOKOCRYPTO
                     val ticks = if (isToko) {
@@ -541,6 +546,10 @@ fun TradingViewModel.startTrailingPolling() {
                     for (tick in ticks) {
                         simCoordinator.onPriceTick(tick.symbol, tick.price, tick.high24h, tick.low24h)
                         checkAlertsAndTrailing(tick.symbol, tick.price, exchange = currentEx)
+                        // P2: pemeriksaan level exit untuk posisi paper. Jendela M1 tidak
+                        // tersedia di jalur latar ini, jadi early-profit sengaja dilewati —
+                        // hanya SL / TP / BE / trailing yang dievaluasi.
+                        runCatching { evaluatePaperAutoExit(tick.symbol, currentEx, tick.price) }
                         signalLogRepository.processPriceTick(tick.symbol, tick.price, currentEx)
                         tradeHistoryRecorder.processPriceTick(tick.symbol, tick.price, currentEx)
                     }
@@ -560,7 +569,10 @@ fun TradingViewModel.checkAndStopTrailingServiceIfEmpty() {
     updateForegroundServiceState()
     val currentEx = prefs.marketDataSource.name
     val isReal = isRealBuyMode.value
-    if (positionStore.getAllActiveTrailingSymbols(isReal = isReal, exchange = currentEx).isEmpty()) {
+    val hasTrailing = positionStore.getAllActiveTrailingSymbols(isReal = isReal, exchange = currentEx).isNotEmpty()
+    // P2: jangan hentikan polling selama masih ada posisi paper yang perlu diawasi exit-nya.
+    val hasPaper = PaperAutoTradeRuntime.activeSymbols(currentEx).isNotEmpty()
+    if (!hasTrailing && !hasPaper) {
         trailingPollJob?.cancel()
         trailingPollJob = null
     }

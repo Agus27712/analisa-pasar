@@ -53,6 +53,13 @@ fun TradeSimulationScreen(
     val lastFilledOrder by viewModel.lastFilledSimulationOrder.collectAsState()
     val marketSource by viewModel.marketDataSource.collectAsState()
 
+    // P2 — status FSM exit & statistik paper trade (murni simulasi).
+    val paperExitSnapshot by viewModel.paperExitSnapshot.collectAsState()
+    val paperTradeStats by viewModel.paperTradeStats.collectAsState()
+    val paperTradeJournal by viewModel.paperTradeJournal.collectAsState()
+    val paperAutoTradeConfig by viewModel.paperAutoTradeConfig.collectAsState()
+    val scalpingRuntimeConfig by viewModel.scalpingRuntimeConfig.collectAsState()
+
     val isRealBuyMode by viewModel.isRealBuyMode.collectAsState()
     val isPinUnlocked by viewModel.isPinUnlocked.collectAsState()
     val realTradeStatus by viewModel.realTradeStatus.collectAsState()
@@ -300,6 +307,16 @@ fun TradeSimulationScreen(
             }
 
             item {
+                PaperExitFsmCard(
+                    snapshot = paperExitSnapshot,
+                    autoTradeConfig = paperAutoTradeConfig,
+                    exitParams = scalpingRuntimeConfig.exit,
+                    quoteAsset = quote,
+                    onOpenSettings = onOpenSettings
+                )
+            }
+
+            item {
                 SimulationOpenOrdersList(
                     openOrders = openOrders,
                     tradeHistory = tradeHistory,
@@ -311,6 +328,17 @@ fun TradeSimulationScreen(
                     onCancelAllOrders = { symbol ->
                         val count = viewModel.cancelAllSimulationOrders(symbol)
                         Toast.makeText(context, "$count order simulasi berhasil dibatalkan", Toast.LENGTH_SHORT).show()
+                    }
+                )
+            }
+
+            item {
+                PaperTradeStatsCard(
+                    stats = paperTradeStats,
+                    records = paperTradeJournal,
+                    onReset = {
+                        viewModel.resetPaperTradeJournal()
+                        Toast.makeText(context, "Jurnal paper trade dikosongkan.", Toast.LENGTH_SHORT).show()
                     }
                 )
             }

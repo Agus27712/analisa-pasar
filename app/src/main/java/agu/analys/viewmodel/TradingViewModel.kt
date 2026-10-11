@@ -71,6 +71,46 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     internal val alertStore = PriceAlertStore(application)
     internal val simulationStore = SimulationTradeStore(application)
 
+    // ═════════════════════════════════════════════════════════════════════════
+    // 2b. P2 — JURNAL & FSM PAPER TRADE
+    //
+    // Sengaja dideklarasikan SEBELUM coordinator di bawah: callback tick dapat
+    // dipanggil dari init block, sehingga properti ini harus sudah siap lebih dulu.
+    // ═════════════════════════════════════════════════════════════════════════
+    internal val paperJournalStore = PaperTradeJournalStore(prefs)
+
+    private val _paperTradeJournal =
+        MutableStateFlow(paperJournalStore.load())
+    val paperTradeJournal: StateFlow<List<agu.analys.engine.scalping.PaperTradeRecord>> =
+        _paperTradeJournal.asStateFlow()
+
+    private val _paperTradeStats =
+        MutableStateFlow(agu.analys.engine.scalping.PaperTradeStats.computeFromRecords(_paperTradeJournal.value))
+    val paperTradeStats: StateFlow<agu.analys.engine.scalping.PaperTradeStats> =
+        _paperTradeStats.asStateFlow()
+
+    /** Potret FSM exit untuk pair yang sedang dipantau; `null` bila tidak ada posisi paper terbuka. */
+    private val _paperExitSnapshot = MutableStateFlow<agu.analys.engine.scalping.PaperExitSnapshot?>(null)
+    val paperExitSnapshot: StateFlow<agu.analys.engine.scalping.PaperExitSnapshot?> =
+        _paperExitSnapshot.asStateFlow()
+
+    internal fun publishPaperExitSnapshot(snapshot: agu.analys.engine.scalping.PaperExitSnapshot?) {
+        _paperExitSnapshot.value = snapshot
+    }
+
+    internal fun appendPaperTradeRecord(record: agu.analys.engine.scalping.PaperTradeRecord) {
+        val updated = paperJournalStore.append(record)
+        _paperTradeJournal.value = updated
+        _paperTradeStats.value = agu.analys.engine.scalping.PaperTradeStats.computeFromRecords(updated)
+    }
+
+    /** Kosongkan jurnal paper trade (P2). Tidak menyentuh saldo simulasi. */
+    fun resetPaperTradeJournal() {
+        paperJournalStore.clear()
+        _paperTradeJournal.value = emptyList()
+        _paperTradeStats.value = agu.analys.engine.scalping.PaperTradeStats.EMPTY
+    }
+
     internal val simCoordinator = SimulationCoordinator(
         store = simulationStore,
         onOrderFilled = { order -> syncSimulationTradeToPositionStore(order) },
@@ -109,9 +149,12 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         marketCache = marketCache,
         engine = engine,
         simCoordinator = simCoordinator,
-        onPriceUpdate = { symbol, price, rsi ->
+        onPriceUpdate = { symbol, price, rsi, recentCandles ->
             val currentEx = prefs.marketDataSource.name
             checkAlertsAndTrailing(symbol, price, rsi)
+            // P2 — evaluasi exit paper trade (level check tiap tick, hitungan bar per menit).
+            // Dibungkus runCatching agar kegagalan exit paper tidak pernah menghentikan tick harga.
+            runCatching { evaluatePaperAutoExit(symbol, currentEx, price, recentCandles.takeLast(15)) }
             signalLogRepository.processPriceTick(symbol, price, currentEx)
             tradeHistoryRecorder.processPriceTick(symbol, price, currentEx)
         }

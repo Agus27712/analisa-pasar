@@ -100,6 +100,15 @@ data class PaperTradeStats(
             )
         }
 
+        /**
+         * Hitung statistik dari baris jurnal.
+         *
+         * Nama berbeda dari `compute(List<PaperExitDecision>)` karena kedua parameter
+         * terhapus ke `List` di JVM (platform declaration clash).
+         */
+        fun computeFromRecords(records: List<PaperTradeRecord>): PaperTradeStats =
+            compute(records.map { it.toDecision() })
+
         private fun round4(v: Double): Double = Math.round(v * 10_000.0) / 10_000.0
     }
 }

@@ -75,9 +75,10 @@
 - [x] `scalp_replay` TIMEOUT fix di main (semua trade resolve + R net)
 - [x] Audit BTC gate / TTL vs upstream p0 (terdokumentasi: tidak ada gate diskriminatif, TTL 10m standar di `SignalLifecycleManager`)
 
-### P2 — Paper scalp auto & exit (decision support) — [SEDANG BERJALAN 🔄]
+### P2 — Paper scalp auto & exit (decision support) — [SELESAI ✅]
 > **Catatan Status:** Sinyal scalping + slider threshold aktif penuh. Auto-buy paper, engine exit 5 mode,
-> dan paritas replay sudah masuk (lihat centang di bawah). Sisa: visual FSM + kartu statistik di layar paper trade.
+> paritas replay, visual FSM, dan kartu statistik sudah masuk. Seluruhnya **paper trade** — tidak ada
+> jalur ke eksekusi uang riil dari sinyal scalp.
 - [x] **Paper Auto-Buy (Simulasi)**: Toggle di Pengaturan → Engine Scalping. Membuka posisi simulasi saat sinyal
       `BUY` dengan `scalpingStage` ≥ ambang terpilih (`ENTRY` / `STRONG_ENTRY`). Alokasi **nominal tetap** atau
       **berbasis risiko** (`PaperAutoTradeConfig`). Tidak pernah memicu order uang riil.
@@ -89,9 +90,19 @@
       `tools/scalp_replay.py`, bukan dihitung manual.
 - [x] `PaperTradeStats` menutup 2 keterbatasan yang dicatat di `SCALP_EXIT.md`: TIMEOUT **tidak** dibuang
       diam-diam, dan exit breakeven (r = 0) berlabel BREAKEVEN (bukan LOSS).
-- [ ] FSM visual di UI paper trade — `PaperExitPhase` + state machine sudah tersedia; kartu visualnya belum dibangun.
-- [ ] Kartu ringkasan statistik (R net terakumulasi) di layar paper trade — mesinnya (`PaperTradeStats`) sudah ada,
-      UI + persistensi hasil per trade belum.
+- [x] **FSM visual di UI paper trade** — `PaperExitFsmCard`: stepper fase (`HOLDING` → `TP1 50%` → `BE` → `TRAIL`),
+      tangga level (entry / SL awal / SL aktif / BE net / peak / TP1 / TP2), bar posisi SL↔TP2, dan metrik
+      berjalan (net %, R, jumlah bar M1, jarak ke SL). Angka diambil dari `PaperExitSnapshot` — mesin yang sama
+      dengan yang memutuskan exit, jadi tidak ada dua sumber kebenaran.
+- [x] **Kartu statistik R net terakumulasi** — `PaperTradeStatsCard`: total R, rata-rata R, win rate, profit
+      factor, hitungan menang/kalah/breakeven/timeout, rincian per alasan exit, dan 4 baris jurnal terakhir.
+      Hasil tiap trade dipersistensikan lewat `PaperTradeJournalStore` (maks 500 baris), jadi akurat lintas restart.
+- [x] **Kepemilikan exit tunggal** — saat engine P2 aktif untuk sebuah pair, jalur auto-sell lama
+      (`checkTrailingForMode` → TP1/TP2/SL dari `positionStore`) dimatikan untuk pair itu, sehingga tidak ada
+      dua mesin yang menjual posisi yang sama.
+- [x] Evaluasi per-tick aman: pemeriksaan level (SL/TP/BE/trailing) jalan tiap tick, sedangkan hitungan bar M1
+      dan time-stop hanya maju sekali per menit. Early-profit sengaja dilewati bila jendela momentum M1 belum
+      tersedia — lebih baik menahan posisi daripada keluar dari data yang tidak terukur.
 - [x] Larangan keras: **tidak ada** jalur real auto-execute dari sinyal scalp di kode yang ditambahkan.
 
 ### P3 — Riset entry (di luar path live)
@@ -174,4 +185,5 @@ Detail: `SCALP_EXIT.md`, artefak lokal uji (bila ada).
 - [x] Engine Auto-Exit Paper Trade 5 mode (`classic`, `tp1_be`, `early`, `trail`, `full`) selaras `SCALP_EXIT.md`
 - [x] Parameter exit tersambung ke `ScalpingRuntimeConfig` + ekspor JSON (blok `exit`) untuk paritas replay
 - [x] Statistik performa paper trade (R net terakumulasi setelah fee all-in) — mesin `PaperTradeStats` + unit test
-- [ ] FSM visual + kartu statistik di UI layar paper trade (sisa pekerjaan)
+- [x] FSM visual + kartu statistik di UI layar paper trade (`PaperExitFsmCard` + `PaperTradeStatsCard`),
+      hasil per trade dipersistensikan di `PaperTradeJournalStore`

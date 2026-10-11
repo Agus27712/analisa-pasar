@@ -32,7 +32,11 @@ class MarketDataCoordinator(
     private val marketCache: MarketDataCache,
     private val engine: LearningTradingEngine,
     private val simCoordinator: SimulationCoordinator,
-    private val onPriceUpdate: (String, Double, Double?) -> Unit
+    /**
+     * @param recentCandles bar terbaru (sudah termasuk candle yang sedang berjalan) —
+     *   dipakai konsumen untuk evaluasi momentum paper exit P2.
+     */
+    private val onPriceUpdate: (String, Double, Double?, List<CandleBar>) -> Unit
 ) {
     private val _connectionState = MutableStateFlow<MarketConnectionState>(MarketConnectionState.Loading)
     val connectionState: StateFlow<MarketConnectionState> = _connectionState.asStateFlow()
@@ -212,7 +216,12 @@ class MarketDataCoordinator(
         engine.onTickUpdate(tick)
         updateRecentPrices(tick.price)
         simCoordinator.onPriceTick(tick.symbol, tick.price, tick.high24h, tick.low24h)
-        onPriceUpdate(tick.symbol, tick.price, engine.indicators.value.rsi14.takeIf { it.isFinite() })
+        onPriceUpdate(
+            tick.symbol,
+            tick.price,
+            engine.indicators.value.rsi14.takeIf { it.isFinite() },
+            _recentCandles.value
+        )
     }
 
     /**

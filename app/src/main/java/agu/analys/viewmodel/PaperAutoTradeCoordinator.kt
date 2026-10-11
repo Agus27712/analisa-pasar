@@ -3,7 +3,9 @@ package agu.analys.viewmodel
 import agu.analys.engine.scalping.PaperExitDecision
 import agu.analys.engine.scalping.PaperExitPhase
 import agu.analys.engine.scalping.PaperExitReason
+import agu.analys.engine.scalping.PaperExitSnapshot
 import agu.analys.engine.scalping.PaperExitStateMachine
+import agu.analys.engine.scalping.PaperTradeRecord
 import agu.analys.engine.scalping.ScalpExitParams
 import agu.analys.engine.scalping.SignalTransition
 import agu.analys.model.CandleBar
@@ -26,10 +28,24 @@ import java.util.concurrent.ConcurrentHashMap
  *   tidak pernah melebihi daya beli saldo kas simulasi.
  * - Exit memakai parameter `exit` dari [agu.analys.engine.scalping.ScalpingRuntimeConfig],
  *   yang sama dengan yang diekspor ke `tools/scalp_replay.py`.
+ *
+ * **Kepemilikan exit.** Saat engine P2 aktif untuk sebuah pair, jalur auto-sell lama
+ * (`checkTrailingForMode` → TP1/TP2/SL dari `positionStore`) sengaja **dimatikan** untuk
+ * pair itu, supaya tidak terjadi jual ganda dan supaya satu-satunya sumber kebenaran exit
+ * adalah mesin yang sudah diuji paritas terhadap replay.
  */
 object PaperAutoTradeRuntime {
     /** State machine exit per `exchange|symbol` untuk posisi paper yang sedang berjalan. */
     private val machines = ConcurrentHashMap<String, PaperExitStateMachine>()
+
+    /** Waktu buka posisi per key — dipakai untuk mengisi `openedAt` di jurnal. */
+    private val openedAtMap = ConcurrentHashMap<String, Long>()
+
+    /** Bucket menit terakhir yang sudah dihitung sebagai satu bar M1, per key. */
+    private val lastBarBucketMap = ConcurrentHashMap<String, Long>()
+
+    /** Simbol asli (apa adanya) per key — key sendiri menormalkan simbol sehingga lossy. */
+    private val rawSymbolMap = ConcurrentHashMap<String, String>()
 
     fun key(exchange: String, symbol: String): String =
         "${exchange.uppercase()}|${symbol.uppercase().replace("_", "")}"
@@ -40,15 +56,61 @@ object PaperAutoTradeRuntime {
     fun phaseFor(exchange: String, symbol: String): PaperExitPhase? =
         machines[key(exchange, symbol)]?.phase
 
+    fun hasActivePosition(exchange: String, symbol: String): Boolean =
+        machines.containsKey(key(exchange, symbol))
+
+    /**
+     * Simbol asli yang punya posisi paper terbuka di bursa ini.
+     *
+     * Dipakai `startTrailingPolling` agar posisi paper tetap dievaluasi walau bukan pair
+     * yang sedang dibuka di layar.
+     */
+    fun activeSymbols(exchange: String): List<String> {
+        val prefix = "${exchange.uppercase()}|"
+        return machines.keys
+            .filter { it.startsWith(prefix) }
+            .mapNotNull { rawSymbolMap[it] }
+    }
+
     fun put(exchange: String, symbol: String, machine: PaperExitStateMachine) {
-        machines[key(exchange, symbol)] = machine
+        val k = key(exchange, symbol)
+        machines[k] = machine
+        rawSymbolMap[k] = symbol
+        openedAtMap[k] = System.currentTimeMillis()
+        lastBarBucketMap[k] = System.currentTimeMillis() / 60_000L
+    }
+
+    fun openedAt(exchange: String, symbol: String): Long =
+        openedAtMap[key(exchange, symbol)] ?: 0L
+
+    /**
+     * Tandai bucket menit untuk evaluasi per-tick.
+     *
+     * @return `true` bila ini tick pertama di menit berjalan, artinya satu bar M1 baru
+     *   terbentuk dan `barsHeld` boleh ditambah.
+     */
+    fun markBarBucket(exchange: String, symbol: String, now: Long): Boolean {
+        val k = key(exchange, symbol)
+        val bucket = now / 60_000L
+        val last = lastBarBucketMap[k]
+        lastBarBucketMap[k] = bucket
+        return last == null || last != bucket
     }
 
     fun clear(exchange: String, symbol: String) {
-        machines.remove(key(exchange, symbol))
+        val k = key(exchange, symbol)
+        machines.remove(k)
+        openedAtMap.remove(k)
+        lastBarBucketMap.remove(k)
+        rawSymbolMap.remove(k)
     }
 
-    fun clearAll() = machines.clear()
+    fun clearAll() {
+        machines.clear()
+        openedAtMap.clear()
+        lastBarBucketMap.clear()
+        rawSymbolMap.clear()
+    }
 }
 
 /**
@@ -118,10 +180,15 @@ fun TradingViewModel.tryPaperAutoBuy(transition: SignalTransition, exchange: Str
         exchange = exchangeKey
     )
 
+    // Engine P2 hanya boleh mengambil alih exit bila risikonya valid (SL di bawah entry).
+    val p2OwnsExit = cfg.autoExitEnabled && signal.stopLoss > 0.0 && signal.stopLoss < price
+
     val tp1Percent = 50.0
     positionStore.setAutoSellParams(
         symbol = pair.symbol,
-        enabled = true,
+        // Bila engine P2 yang memegang exit, jalur auto-sell lama dimatikan untuk pair ini
+        // agar tidak ada dua mesin yang menjual posisi yang sama.
+        enabled = !p2OwnsExit,
         tp1Price = signal.targetPrice1,
         tp1Percent = tp1Percent,
         tp2Price = signal.targetPrice2,
@@ -130,8 +197,7 @@ fun TradingViewModel.tryPaperAutoBuy(transition: SignalTransition, exchange: Str
         exchange = exchangeKey
     )
 
-    // Siapkan state machine exit sesuai mode yang dipilih di runtime config.
-    if (cfg.autoExitEnabled && signal.stopLoss > 0.0 && signal.stopLoss < price) {
+    if (p2OwnsExit) {
         val runtime = prefs.scalpingRuntimeConfig
         val fees = prefs.tradingFees
         val machine = PaperExitStateMachine(
@@ -145,6 +211,9 @@ fun TradingViewModel.tryPaperAutoBuy(transition: SignalTransition, exchange: Str
             params = runtime.exit
         )
         PaperAutoTradeRuntime.put(exchangeKey, pair.symbol, machine)
+        // Pastikan loop polling harga hidup; posisi paper perlu diawasi exit-nya bahkan
+        // ketika pair-nya tidak sedang dibuka di layar.
+        startTrailingPolling()
     }
 
     positionCoordinator.refreshPosition(pair.symbol)
@@ -153,18 +222,22 @@ fun TradingViewModel.tryPaperAutoBuy(transition: SignalTransition, exchange: Str
     AppLogManager.trade(
         "PaperAutoBuy",
         "🤖 [${pair.symbol}] Auto-buy SIMULASI ${String.format(java.util.Locale.US, "%.8f", qty)} ${pair.baseAsset} @ " +
-            "${PriceFormatter.formatPrice(price, quoteAsset = pair.quoteAsset)} | Stage ${signal.scalpingStage.name} | Exit: $modeLabel"
+            "${PriceFormatter.formatPrice(price, quoteAsset = pair.quoteAsset)} | Stage ${signal.scalpingStage.name} | Exit: " +
+            if (p2OwnsExit) modeLabel else "auto-sell bawaan"
     )
 
     return true
 }
 
 /**
- * Evaluasi exit paper untuk satu bar/tick pada posisi simulasi yang sedang berjalan.
+ * Evaluasi exit paper untuk satu tick harga pada posisi simulasi yang sedang berjalan.
  *
- * @param currentPrice harga terakhir.
- * @param window bar terakhir (maks 15) untuk uji momentum early profit; boleh kosong.
- * @return keputusan exit bila posisi harus ditutup, atau `null`.
+ * Pemeriksaan level (SL / TP2 / TP1 partial / BE / trailing / early) dijalankan tiap tick
+ * supaya proteksi tidak menunggu akhir bar. Hitungan bar M1 dan time-stop hanya maju sekali
+ * per menit, lihat [PaperExitStateMachine.onBar] parameter `isNewBar`.
+ *
+ * @param window bar M1 terakhir (maks 15) untuk uji momentum early profit; boleh kosong.
+ * @return keputusan exit bila posisi baru saja ditutup, atau `null`.
  */
 fun TradingViewModel.evaluatePaperAutoExit(
     symbol: String,
@@ -172,13 +245,25 @@ fun TradingViewModel.evaluatePaperAutoExit(
     currentPrice: Double,
     window: List<CandleBar> = emptyList()
 ): PaperExitDecision? {
-    val cfg = prefs.paperAutoTradeConfig
-    if (!cfg.autoExitEnabled) return null
-    if (currentPrice <= 0.0) return null
+    val machine = PaperAutoTradeRuntime.machineFor(exchange, symbol)
+    if (machine == null) {
+        // Tidak ada posisi paper berjalan -> pastikan kartu FSM kosong.
+        publishPaperExitSnapshot(null)
+        return null
+    }
 
-    val machine = PaperAutoTradeRuntime.machineFor(exchange, symbol) ?: return null
+    if (currentPrice <= 0.0) {
+        publishPaperExitSnapshot(PaperExitSnapshot.of(machine, symbol, exchange, currentPrice))
+        return null
+    }
+
+    if (!prefs.paperAutoTradeConfig.autoExitEnabled) {
+        publishPaperExitSnapshot(PaperExitSnapshot.of(machine, symbol, exchange, currentPrice))
+        return null
+    }
 
     val now = System.currentTimeMillis()
+    val isNewBar = PaperAutoTradeRuntime.markBarBucket(exchange, symbol, now)
     val bar = CandleBar(
         timestamp = now,
         open = currentPrice,
@@ -187,13 +272,103 @@ fun TradingViewModel.evaluatePaperAutoExit(
         close = currentPrice,
         volume = 0.0
     )
-    val effectiveWindow = if (window.isNotEmpty()) window else listOf(bar)
-    return machine.onBar(bar, effectiveWindow)
+    // Jendela momentum diteruskan apa adanya: bila kosong, engine menahan diri dari
+    // early-profit (lihat PaperExitStateMachine.onBar).
+    val decision = machine.onBar(bar, window, isNewBar = isNewBar)
+    if (decision == null) {
+        publishPaperExitSnapshot(PaperExitSnapshot.of(machine, symbol, exchange, currentPrice))
+        return null
+    }
+
+    finalizePaperExit(symbol, exchange, machine, decision)
+    publishPaperExitSnapshot(null)
+    return decision
+}
+
+/**
+ * Tutup posisi paper: kirim SELL simulasi, catat jurnal, lalu lepas state machine.
+ *
+ * Hanya menyentuh akun simulasi (`isReal = false`).
+ */
+fun TradingViewModel.finalizePaperExit(
+    symbol: String,
+    exchange: String,
+    machine: PaperExitStateMachine,
+    decision: PaperExitDecision
+): Boolean {
+    val pair = TradingPair.fromCustomSymbol(raw = symbol, exchange = exchange)
+    val posQty = positionStore.get(pair.symbol, isReal = false, exchange = exchange).quantity
+    val heldQty = if (posQty > 0.0) posQty else simCoordinator.wallet.value.getAvailableCoin(pair.baseAsset)
+
+    val triggerType = when (decision.reason) {
+        PaperExitReason.SL -> "STOP_LOSS"
+        PaperExitReason.BE_SL -> "BE_STOP"
+        PaperExitReason.TRAIL_SL -> "TRAILING"
+        PaperExitReason.TP2 -> "TP2"
+        PaperExitReason.EARLY_PROFIT -> "EARLY_PROFIT"
+        PaperExitReason.TIMEOUT -> "TIME_STOP"
+        PaperExitReason.BAD_RISK -> "BAD_RISK"
+    }
+
+    val exitPrice = if (decision.exitPrice > 0.0) decision.exitPrice else machine.entry
+
+    val dispatched = heldQty > 0.0 && executeAutoSellOrder(
+        symbol = pair.symbol,
+        price = exitPrice,
+        quantity = heldQty,
+        triggerType = triggerType,
+        isReal = false,
+        isPartial = false,
+        exchange = exchange
+    )
+
+    // Catat ke jurnal hanya bila exit benar-benar tereksekusi di akun simulasi.
+    if (dispatched) {
+        val now = System.currentTimeMillis()
+        appendPaperTradeRecord(
+            PaperTradeRecord(
+                id = now,
+                symbol = pair.symbol,
+                exchange = exchange.uppercase(),
+                mode = machine.params.mode,
+                reason = decision.reason,
+                result = decision.result,
+                entry = machine.entry,
+                exitPrice = exitPrice,
+                stopLoss = machine.stopLoss,
+                tp1 = machine.tp1,
+                tp2 = machine.tp2,
+                r = decision.r,
+                ambiguous = decision.ambiguous,
+                barsHeld = machine.barsHeld,
+                openedAt = PaperAutoTradeRuntime.openedAt(exchange, symbol),
+                closedAt = now
+            )
+        )
+
+        AppLogManager.trade(
+            "PaperAutoExit",
+            "🏁 [${pair.symbol}] Paper exit ${decision.reason.displayLabel()} " +
+                "(${machine.params.mode.label}) | R net ${String.format(java.util.Locale.US, "%.2f", decision.r)} " +
+                "@ ${PriceFormatter.formatPrice(exitPrice, quoteAsset = pair.quoteAsset)}" +
+                if (decision.ambiguous) " | ⚠️ bar ambigu (SL & TP2 satu bar)" else ""
+        )
+    } else {
+        AppLogManager.service(
+            "PaperAutoExit",
+            "⚠️ [${pair.symbol}] Sinyal exit ${decision.reason.displayLabel()} tidak tereksekusi (qty simulasi 0)."
+        )
+    }
+
+    PaperAutoTradeRuntime.clear(exchange, symbol)
+    positionCoordinator.refreshPosition(pair.symbol)
+    return dispatched
 }
 
 /** Hapus state machine exit setelah posisi paper ditutup. */
 fun TradingViewModel.clearPaperExitState(symbol: String, exchange: String) {
     PaperAutoTradeRuntime.clear(exchange, symbol)
+    publishPaperExitSnapshot(null)
 }
 
 /** Ringkas parameter exit yang sedang aktif, untuk ditampilkan di UI. */

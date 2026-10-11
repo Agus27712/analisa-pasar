@@ -265,6 +265,15 @@ class AppPreferences(context: Context) {
             .putString(KEY_PAPER_AUTO_BUY_MIN_STAGE, value.minStage.name)
             .apply()
 
+    /**
+     * Jurnal paper trade (P2) — JSON array berisi [agu.analys.engine.scalping.PaperTradeRecord].
+     *
+     * Disimpan di prefs terenkripsi supaya kartu statistik tetap akurat setelah app ditutup.
+     */
+    var paperTradeJournalJson: String
+        get() = prefs.getString(KEY_PAPER_TRADE_JOURNAL, null) ?: "[]"
+        set(value) = prefs.edit().putString(KEY_PAPER_TRADE_JOURNAL, value).apply()
+
     var updateRepo: String
         get() = DEFAULT_UPDATE_REPO
         set(_) { /* hardcoded to Agus27712/analisa-pasar */ }
@@ -533,6 +542,7 @@ class AppPreferences(context: Context) {
         private const val KEY_PAPER_AUTO_BUY_FIXED_QUOTE = "paper_auto_buy_fixed_quote_v1"
         private const val KEY_PAPER_AUTO_BUY_RISK_PCT = "paper_auto_buy_risk_pct_v1"
         private const val KEY_PAPER_AUTO_BUY_MIN_STAGE = "paper_auto_buy_min_stage_v1"
+        private const val KEY_PAPER_TRADE_JOURNAL = "paper_trade_journal_v1"
         private const val KEY_WATCHLIST_LEGACY = "watchlist_symbols"
         private const val KEY_WATCHLIST_INDODAX = "watchlist_symbols_indodax"
         private const val KEY_FAVORITES_INDODAX = "favorites_symbols_indodax"
