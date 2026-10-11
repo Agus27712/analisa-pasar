@@ -21,10 +21,14 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import agu.analys.config.AiProvider
 import agu.analys.config.MarketDataSource
 import agu.analys.config.StrategyMode
+import agu.analys.engine.scalping.ScalpingRuntimeConfig
+import agu.analys.engine.scalping.SensitivityPreset
 import agu.analys.ui.components.security.SecurityPinDialog
 import agu.analys.ui.components.security.SetupRealApiDialog
 import agu.analys.ui.components.settings.*
@@ -63,6 +67,11 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
     val dashboardTicks by viewModel.dashboardTicks.collectAsStateWithLifecycle()
 
     var activeCategory by remember { mutableStateOf<SettingsCategory?>(null) }
+    val activeScalpingConfig by viewModel.scalpingRuntimeConfig.collectAsStateWithLifecycle()
+    val activeScalpingPreset by viewModel.scalpingSensitivityPreset.collectAsStateWithLifecycle()
+    var showScalpingEngineSettings by remember { mutableStateOf(false) }
+    var draftScalpingConfig by remember { mutableStateOf(activeScalpingConfig) }
+    var draftScalpingPreset by remember { mutableStateOf(activeScalpingPreset) }
 
     var showSetupRealApiDialog by remember { mutableStateOf(false) }
     var showPinDialog by remember { mutableStateOf(false) }
@@ -122,8 +131,22 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
         }
     }
 
-    BackHandler(enabled = activeCategory != null) {
-        activeCategory = null
+    fun saveScalpingEngineSettings() {
+        // Commit the draft first so the engine receives the exact values shown in the sliders.
+        viewModel.updateScalpingRuntimeConfig(draftScalpingConfig, draftScalpingPreset)
+        viewModel.setStrategyMode(StrategyMode.SCALPING)
+        strategyMode = StrategyMode.SCALPING
+        showScalpingEngineSettings = false
+        saved = true
+        Toast.makeText(context, "Konfigurasi Engine Scalping disimpan dan diaktifkan.", Toast.LENGTH_SHORT).show()
+    }
+
+    BackHandler(enabled = showScalpingEngineSettings || activeCategory != null) {
+        if (showScalpingEngineSettings) {
+            showScalpingEngineSettings = false
+        } else {
+            activeCategory = null
+        }
     }
 
     Column(
@@ -146,7 +169,9 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = {
-                        if (activeCategory != null) {
+                        if (showScalpingEngineSettings) {
+                            showScalpingEngineSettings = false
+                        } else if (activeCategory != null) {
                             activeCategory = null
                         } else {
                             onBack()
@@ -479,7 +504,17 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                         context = context,
                         viewModel = viewModel,
                         strategyMode = strategyMode,
-                        onStrategyModeChange = { strategyMode = it; saved = false },
+                        onStrategyModeChange = { mode ->
+                            if (mode == StrategyMode.SCALPING) {
+                                // Open configuration first; do not activate scalping before Save.
+                                draftScalpingConfig = activeScalpingConfig
+                                draftScalpingPreset = activeScalpingPreset
+                                showScalpingEngineSettings = true
+                            } else {
+                                strategyMode = mode
+                                saved = false
+                            }
+                        },
                         selectedSource = selectedSource,
                         onSourceChange = { selectedSource = it; saved = false },
                         buyMakerFee = buyMakerFee,
@@ -597,6 +632,120 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                     }
 
                     Spacer(Modifier.height(18.dp))
+                }
+            }
+        }
+    }
+
+
+    if (showScalpingEngineSettings) {
+        Dialog(
+            onDismissRequest = { showScalpingEngineSettings = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                color = TvBackground
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(TvBackground)
+                ) {
+                    Surface(
+                        color = TvSurface,
+                        shadowElevation = 2.dp,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 10.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                IconButton(onClick = { showScalpingEngineSettings = false }) {
+                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Kembali", tint = TvTextPrimary)
+                                }
+                                Column {
+                                    Text("ENGINE SCALPING", color = TvTextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                                    Text("Atur parameter sebelum mengaktifkan mode", color = TvTextSecondary, fontSize = 10.sp)
+                                }
+                            }
+                            Button(
+                                onClick = { saveScalpingEngineSettings() },
+                                colors = ButtonDefaults.buttonColors(containerColor = TvGreen),
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                            ) {
+                                Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Simpan & Aktifkan", color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState())
+                            .padding(horizontal = 14.dp, vertical = 12.dp)
+                    ) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(containerColor = TvSurfaceVariant),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder)
+                        ) {
+                            Column(Modifier.padding(12.dp)) {
+                                Text("KONFIGURASI YANG AKAN DI-INJECT", color = TvGreen, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    "Nilai slider di bawah masih berupa draft. Engine Scalping baru menerima nilai ini setelah tombol Simpan & Aktifkan ditekan.",
+                                    color = TvTextSecondary,
+                                    fontSize = 11.sp,
+                                    lineHeight = 15.sp
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    "LONG ${draftScalpingConfig.minScoreLong} · STRONG ${draftScalpingConfig.minScoreStrong} · RETEST ${draftScalpingConfig.minScoreBreakoutRetest} · Net R:R ${String.format(java.util.Locale.US, "%.2f", draftScalpingConfig.minNetRr)} · RVOL breakout ${String.format(java.util.Locale.US, "%.1f", draftScalpingConfig.rvolBreakoutMin)}x",
+                                    color = TvTextPrimary,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(10.dp))
+                        ScalpingSensitivitySettings(
+                            config = draftScalpingConfig,
+                            activePreset = draftScalpingPreset,
+                            onConfigChange = { newConfig, preset ->
+                                draftScalpingConfig = newConfig
+                                draftScalpingPreset = preset
+                            },
+                            onPresetChange = { preset ->
+                                draftScalpingPreset = preset.name
+                                draftScalpingConfig = when (preset) {
+                                    SensitivityPreset.DEFAULT -> ScalpingRuntimeConfig.DEFAULT
+                                    SensitivityPreset.STRICT -> ScalpingRuntimeConfig.STRICT
+                                    SensitivityPreset.LOOSE -> ScalpingRuntimeConfig.LOOSE
+                                    SensitivityPreset.CUSTOM -> draftScalpingConfig
+                                }
+                            }
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        OutlinedButton(
+                            onClick = { showScalpingEngineSettings = false },
+                            modifier = Modifier.fillMaxWidth().height(44.dp),
+                            shape = RoundedCornerShape(10.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder)
+                        ) {
+                            Text("Batal — Kembali tanpa mengaktifkan", color = TvTextSecondary, fontSize = 12.sp)
+                        }
+                        Spacer(Modifier.height(16.dp))
+                    }
                 }
             }
         }
