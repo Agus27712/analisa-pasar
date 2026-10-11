@@ -324,34 +324,37 @@ fun WaitingEntryRadarCard(
                     completed = completedBuySteps,
                     onToggleChecklist = { isChecklistVisible = !isChecklistVisible },
                     statusText = lifecycleText,
-                    statusColor = lifecycleColor
+                    statusColor = lifecycleColor,
+                    showChecklistToggle = strategyMode != StrategyMode.SCALPING
                 )
 
-                Spacer(Modifier.height(10.dp))
+                if (strategyMode != StrategyMode.SCALPING) {
+                    Spacer(Modifier.height(10.dp))
 
-                AnimatedVisibility(visible = isChecklistVisible) {
-                    RadarConfirmationChecklist(
+                    AnimatedVisibility(visible = isChecklistVisible) {
+                        RadarConfirmationChecklist(
+                            mtf = mtf,
+                            strategyMode = strategyMode
+                        )
+                    }
+
+                    if (isChecklistVisible) {
+                        Spacer(Modifier.height(10.dp))
+                    }
+
+                    // Konfluensi enam checkpoint hanya untuk Swing/Intraday.
+                    RadarLinearCheckpointStepper(
                         mtf = mtf,
-                        strategyMode = strategyMode
+                        completed = completedBuySteps,
+                        pulseScale = pulseScale,
+                        strategyMode = strategyMode,
+                        confidence = signal.confidence,
+                        orderBookBids = orderBookBids,
+                        orderBookAsks = orderBookAsks
                     )
-                }
 
-                if (isChecklistVisible) {
                     Spacer(Modifier.height(10.dp))
                 }
-
-                // BUY Linear Checkpoint Stepper & Loading Bar Dinamis
-                RadarLinearCheckpointStepper(
-                    mtf = mtf,
-                    completed = completedBuySteps,
-                    pulseScale = pulseScale,
-                    strategyMode = strategyMode,
-                    confidence = signal.confidence,
-                    orderBookBids = orderBookBids,
-                    orderBookAsks = orderBookAsks
-                )
-
-                Spacer(Modifier.height(10.dp))
 
                 // Original BUY Target Levels
                 RadarTargetLevelsSection(
