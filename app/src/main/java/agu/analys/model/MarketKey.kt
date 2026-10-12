@@ -69,18 +69,21 @@ data class MarketKey(
 
         fun create(exchange: String, symbol: String, quote: String? = null): MarketKey {
             val ex = exchange.uppercase().trim().ifBlank { "TOKOCRYPTO" }
-            val sym = symbol.uppercase().replace("/", "").replace("-", "").replace("_", "").trim()
-            val q = if (!quote.isNullOrBlank()) {
+            // Eliminasi kuotasi BIDR (XXXBIDR → XXXIDR), kecuali BNBIDR/SHIBIDR.
+            val sym = PairRules.normalizeBidr(symbol)
+            val qRaw = if (!quote.isNullOrBlank()) {
                 quote.uppercase().trim()
             } else {
                 resolveQuote(sym, ex)
             }
+            // Indodax hanya IDR — kuotasi kripto tidak sah di sini.
+            val q = if (PairRules.isIndodax(ex) && PairRules.isUsdtFamily(qRaw)) "IDR" else qRaw
             return MarketKey(exchange = ex, symbol = sym, quote = q)
         }
 
         fun fromPair(pair: TradingPair, exchange: String = "TOKOCRYPTO"): MarketKey {
             val ex = exchange.uppercase().trim().ifBlank { "TOKOCRYPTO" }
-            val sym = pair.symbol.uppercase().replace("/", "").replace("-", "").replace("_", "").trim()
+            val sym = PairRules.normalizeBidr(pair.symbol)
             val q = pair.quoteAsset.uppercase().trim().ifBlank { resolveQuote(sym, ex) }
             return MarketKey(exchange = ex, symbol = sym, quote = q)
         }
@@ -92,11 +95,8 @@ data class MarketKey(
             if (ex == "INDODAX") {
                 val indodaxMatch = TradingPair.POPULAR_INDODAX_PAIRS.find { it.symbol.equals(s, ignoreCase = true) }
                 if (indodaxMatch != null) return indodaxMatch.quoteAsset
-                return when {
-                    s.endsWith("USDT") -> "USDT"
-                    s.endsWith("IDR") -> "IDR"
-                    else -> "IDR"
-                }
+                // Indodax hanya memiliki pasar IDR — USDT/BIDR tidak pernah sah di sini.
+                return "IDR"
             } else {
                 val tokoInfo = agu.analys.data.TokocryptoSymbolRepository.getSymbolInfo(s)
                 if (tokoInfo != null) return tokoInfo.quoteAsset
@@ -106,7 +106,8 @@ data class MarketKey(
                     s.endsWith("USDT") -> "USDT"
                     s.endsWith("USDC") -> "USDC"
                     s.endsWith("BUSD") -> "BUSD"
-                    s.endsWith("BIDR") -> "BIDR"
+                    // BIDR hanya dipertahankan untuk koin yang memang bernama …BIDR.
+                    s.endsWith("BIDR") -> if (s in PairRules.BIDR_KEEP) "BIDR" else "IDR"
                     s.endsWith("IDR") -> "IDR"
                     else -> "USDT"
                 }

@@ -47,8 +47,28 @@ object PaperAutoTradeRuntime {
     /** Simbol asli (apa adanya) per key — key sendiri menormalkan simbol sehingga lossy. */
     private val rawSymbolMap = ConcurrentHashMap<String, String>()
 
+    /**
+     * Key posisi yang sedang dievaluasi exit.
+     *
+     * [evaluatePaperAutoExit] dipanggil dari dua tempat sekaligus (thread latar price-feed dan
+     * thread utama). Tanpa penjaga, dua pemeriksaan bisa sama-sama lolos lalu menutup posisi
+     * dua kali. Set ini memastikan hanya satu evaluasi berjalan per posisi.
+     */
+    private val evaluatingKeys = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
     fun key(exchange: String, symbol: String): String =
         "${exchange.uppercase()}|${symbol.uppercase().replace("_", "")}"
+
+    /**
+     * Klaim hak evaluasi untuk satu posisi.
+     * @return `true` bila berhasil diklaim — pemanggil **wajib** memanggil [endEvaluation].
+     */
+    fun beginEvaluation(exchange: String, symbol: String): Boolean =
+        evaluatingKeys.add(key(exchange, symbol))
+
+    fun endEvaluation(exchange: String, symbol: String) {
+        evaluatingKeys.remove(key(exchange, symbol))
+    }
 
     fun machineFor(exchange: String, symbol: String): PaperExitStateMachine? =
         machines[key(exchange, symbol)]
@@ -110,6 +130,7 @@ object PaperAutoTradeRuntime {
         openedAtMap.clear()
         lastBarBucketMap.clear()
         rawSymbolMap.clear()
+        evaluatingKeys.clear()
     }
 }
 
@@ -199,7 +220,9 @@ fun TradingViewModel.tryPaperAutoBuy(transition: SignalTransition, exchange: Str
 
     if (p2OwnsExit) {
         val runtime = prefs.scalpingRuntimeConfig
-        val fees = prefs.tradingFees
+        // Biaya per-simbol: pair USDT memakai tarif USDT, pair IDR memakai tarif IDR.
+        // Sebelumnya selalu memakai satu nilai global (preset Indodax) untuk semua pair.
+        val fees = prefs.feeConfigFor(pair.symbol)
         val machine = PaperExitStateMachine(
             entry = price,
             stopLoss = signal.stopLoss,
@@ -244,6 +267,22 @@ fun TradingViewModel.evaluatePaperAutoExit(
     exchange: String,
     currentPrice: Double,
     window: List<CandleBar> = emptyList()
+): PaperExitDecision? {
+    // Kunci per posisi: cegah dua pemanggil (thread utama & latar) mengevaluasi bersamaan
+    // sehingga posisi tertutup dua kali atau jurnalnya hilang.
+    if (!PaperAutoTradeRuntime.beginEvaluation(exchange, symbol)) return null
+    try {
+        return evaluatePaperAutoExitLocked(symbol, exchange, currentPrice, window)
+    } finally {
+        PaperAutoTradeRuntime.endEvaluation(exchange, symbol)
+    }
+}
+
+private fun TradingViewModel.evaluatePaperAutoExitLocked(
+    symbol: String,
+    exchange: String,
+    currentPrice: Double,
+    window: List<CandleBar>
 ): PaperExitDecision? {
     val machine = PaperAutoTradeRuntime.machineFor(exchange, symbol)
     if (machine == null) {

@@ -206,10 +206,13 @@ fun WatchlistManagerSettings(
                         onClick = {
                             val clean = searchQuery.trim().uppercase().replace("/", "").replace("_", "").replace(" ", "")
                             if (clean.isNotBlank()) {
-                                val symbolWithQuote = when {
+                                val typed = when {
                                     clean.endsWith("USDT") || clean.endsWith("IDR") || clean.endsWith("BIDR") || clean.endsWith("USDC") || clean.endsWith("BUSD") -> clean
                                     else -> "$clean$selectedQuote"
                                 }
+                                // Eliminasi BIDR + tolak kuotasi kripto di Indodax (lihat PairRules).
+                                val symbolWithQuote = agu.analys.model.PairRules
+                                    .sanitizeSymbolForExchange(typed, marketDataSource.name) ?: typed
                                 onAddPair(symbolWithQuote)
                                 searchQuery = ""
                                 Toast.makeText(context, "$symbolWithQuote ditambahkan ke Watchlist", Toast.LENGTH_SHORT).show()

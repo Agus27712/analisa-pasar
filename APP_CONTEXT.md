@@ -30,17 +30,12 @@ Replay historis dengan fee all-in belum menunjukkan edge stabil pada kelas sinya
 ## 📑 Daftar Isi
 0. [Arah produk & alur scalp](#0-arah-produk--alur-scalp-ssot-singkat)
 1. [Ringkasan Eksekutif & Identitas Aplikasi](#1-ringkasan-eksekutif--identitas-aplikasi)
-2. [Arsitektur Sistem Tingkat Tinggi](#2-arsitektur-sistem-tingkat-tinggi)
-3. [Model Data Inti & Single Source of Truth (SSOT)](#3-model-data-inti--single-source-of-truth-ssot)
-4. [Integrasi Bursa: Tokocrypto vs Indodax](#4-integrasi-bursa-tokocrypto-vs-indodax)
-5. [Mesin Analisis Teknikal & AI Trading Engine](#5-mesin-analisis-teknikal--ai-trading-engine)
-6. [Simulasi Trading & Real Execution Flow](#6-simulasi-trading--real-execution-flow)
-7. [Jalur Notifikasi, Background Service, & Safety Guardrails](#7-jalur-notifikasi-background-service--safety-guardrails)
-8. [Pencatatan Siklus Trade (Trade Journey Lifecycle 4-Stage)](#8-pencatatan-siklus-trade-trade-journey-lifecycle-4-stage)
-9. [Keamanan, Kredensial, & PIN Protection](#9-keamanan-kredensial--pin-protection)
-10. [Struktur Direktori & Kamus Komponen Utama](#10-struktur-direktori--kamus-komponen-utama)
+2. [Fakta teknis kunci (SSOT cepat)](#fakta-teknis-kunci-ssot-cepat)
+3. [Referensi cepat file](#referensi-cepat-file)
 
-> **Catatan agen:** Body arsitektur detail (§1–10) di bawah ini masih valid untuk struktur kode. Untuk **prioritas kerja & larangan**, ikuti `workplan2.md` + `AGENTS.md`, bukan checklist `checkpoint*.md`.
+> **Catatan agen:** Dokumen ini **sengaja ringkas** dan berfokus pada arah produk. Untuk detail arsitektur, struktur direktori, Room, dan pipeline order, lihat **`README.md`**. Untuk **prioritas kerja & larangan**, ikuti `workplan2.md` + `AGENTS.md`, bukan checklist `checkpoint*.md`.
+>
+> Perubahan besar yang belum tercermin di bagian lain: **Paper Auto-Trade** kini jalur utama validasi scalp (exit FSM 5 mode, paritas replay), **`FeeSchedule`** menjadi satu-satunya sumber kebenaran biaya bursa, dan **`PairRules`** menegakkan batasan kuotasi per bursa (Indodax = IDR saja).
 
 ---
 
@@ -52,9 +47,20 @@ Replay historis dengan fee all-in belum menunjukkan edge stabil pada kelas sinya
 3. **Dual Execution Mode**:
    - **Paper / simulasi**: saldo virtual terisolasi per bursa & kuotasi — **jalur utama validasi scalp**.
    - **Real trading**: API resmi + PIN — eksekusi sadar user, bukan klaim auto-edge.
-4. **Pengaman latar**: trailing, TP berjenjang, notifikasi (lihat §7).
+4. **Pengaman latar**: trailing, TP berjenjang, notifikasi (lihat `README.md` §8 *Manajemen Risiko & Eksekusi Otomatis*).
 
-Detail komponen, isolasi exchange, Room, dan pipeline order: lanjutkan §2–10 di riwayat dokumen arsitektur repo (isi penuh dipertahankan di commit sebelumnya bila diperlukan). Untuk pekerjaan baru, **mulai dari workplan2.md**.
+Detail komponen, isolasi exchange, Room, dan pipeline order: **lihat `README.md`** (bagian *Arsitektur & Teknologi* dan *Struktur Direktori Utama*) sebagai rujukan struktur kode terkini. Dokumen ini sengaja diringkas ke arah produk; tidak ada versi panjang lama yang disimpan di commit lain. Untuk pekerjaan baru, **mulai dari workplan2.md**.
+
+### Fakta teknis kunci (SSOT cepat)
+| Aspek | Nilai terkini |
+|---|---|
+| Room Database | **versi 8** — 4 entitas: `RealTradeEntity`, `RealOpenOrderEntity`, `SignalLogEntity`, `TradeHistoryRecordEntity` |
+| DAO | `realTradeDao` (termasuk query `real_open_orders`), `signalLogDao`, `tradeHistoryRecordDao` — **tidak ada** DAO terpisah bernama `OpenOrderDao` |
+| Android SDK | minSdk 24, targetSdk **35**, compileSdk 36 |
+| Jaringan | OkHttp (REST + WebSocket) — **tanpa Ktor** |
+| Bursa didukung | Tokocrypto (USDT + IDR), Indodax (IDR saja) — Binance **dilarang** di runtime |
+| Model biaya | `object FeeSchedule` di `config/AppConfiguration.kt` = satu-satunya sumber kebenaran fee |
+| Sesi intraday | **5 sesi** (Open Pagi, Hold Siang, Sore Trailing, Close Malam, Rest Malam) |
 
 ### Referensi cepat file
 | File | Isi |

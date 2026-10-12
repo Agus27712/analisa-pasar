@@ -310,7 +310,12 @@ val POPULAR_INDODAX_PAIRS = listOf(
 
         fun popularPairsForSource(source: agu.analys.config.MarketDataSource? = null): List<TradingPair> {
             return when (source) {
-                agu.analys.config.MarketDataSource.INDODAX -> POPULAR_INDODAX_PAIRS
+                agu.analys.config.MarketDataSource.INDODAX -> {
+                    // Discovery dinamis dari endpoint resmi Indodax. Daftar bawaan hanya
+                    // dipakai sebagai fallback bila discovery belum pernah berhasil.
+                    val dynamic = agu.analys.data.IndodaxSymbolRepository.getAllTradingPairs()
+                    if (dynamic.isNotEmpty()) dynamic else POPULAR_INDODAX_PAIRS
+                }
                 else -> {
                     val dynamic = agu.analys.data.TokocryptoSymbolRepository.getAllTradingPairs()
                     if (dynamic.isNotEmpty()) dynamic else POPULAR_TOKOCRYPTO_PAIRS
@@ -323,7 +328,7 @@ val POPULAR_INDODAX_PAIRS = listOf(
             defaultQuote: String = "IDR",
             exchange: String? = null
         ): TradingPair {
-            val cleaned = raw.trim().uppercase().replace(" ", "").replace("/", "").replace("-", "").replace("_", "")
+            val cleaned = PairRules.normalizeBidr(raw)
             val isIndodax = exchange?.equals("INDODAX", true) == true
 
             if (isIndodax) {
@@ -342,7 +347,10 @@ val POPULAR_INDODAX_PAIRS = listOf(
                 else -> cleaned to defaultQuote
             }
             val finalBase = base.ifEmpty { "BTC" }
-            val finalQuote = quote.ifEmpty { defaultQuote }
+            // Indodax hanya punya pasar IDR: kuotasi kripto (USDT/USDC/BUSD/USD) tidak sah,
+            // jadi dipetakan ke pasar IDR koin yang sama (lihat PairRules).
+            val parsedQuote = quote.ifEmpty { defaultQuote }
+            val finalQuote = if (isIndodax && PairRules.isUsdtFamily(parsedQuote)) "IDR" else parsedQuote
             val symbol = "$finalBase$finalQuote"
 
             if (isIndodax) {

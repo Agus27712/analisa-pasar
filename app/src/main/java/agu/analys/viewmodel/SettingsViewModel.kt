@@ -154,8 +154,16 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun setMarketDataSource(source: MarketDataSource) {
+        val previous = _marketDataSource.value
         _marketDataSource.value = source
         prefs.marketDataSource = source
+        // Biaya berbeda per bursa. Bila pengguna belum menimpa biaya sendiri, lepas nilai lama
+        // agar default bursa baru langsung berlaku — kalau tidak, preset Indodax akan terbawa
+        // ke Tokocrypto (atau sebaliknya) dan seluruh perhitungan Net R:R jadi salah.
+        if (previous != source && !prefs.hasCustomTradingFees) {
+            prefs.resetTradingFeesToDefault()
+        }
+        _tradingFees.value = prefs.tradingFees
     }
 
     fun setGroqApiKey(key: String) {

@@ -86,7 +86,14 @@ data class ScalpExitParams(
         const val DEFAULT_MIN_EARLY_PROFIT_NET_PCT = 0.45
         const val DEFAULT_BREAKEVEN_TRIGGER_NET_PCT = 0.40
         const val DEFAULT_TRAIL_PCT = 0.35
-        const val DEFAULT_MAX_HOLD_BARS_M1 = 0
+
+        /**
+         * Time-stop default (bar M1) — **disamakan dengan blok `exit.max_hold_bars_m1`
+         * di `data/config/scalp_config_exit_*.json` dan replay offline** (`tools/scalp_replay.py`),
+         * yaitu 90 bar. Sebelumnya 0 (tanpa time-stop), yang membuat hasil paper trade
+         * berbeda dari replay untuk deret bar yang sama.
+         */
+        const val DEFAULT_MAX_HOLD_BARS_M1 = 90
 
         val DEFAULT = ScalpExitParams()
 

@@ -112,6 +112,7 @@ class MarketViewModel(application: Application) : AndroidViewModel(application) 
         restoreFromCache(prefs.marketDataSource)
         viewModelScope.launch(Dispatchers.IO) {
             agu.analys.data.TokocryptoSymbolRepository.ensureSymbolsLoaded(false)
+            agu.analys.data.IndodaxSymbolRepository.ensurePairsLoaded(false)
         }
     }
 
@@ -120,6 +121,9 @@ class MarketViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch(Dispatchers.IO) {
             if (source == MarketDataSource.TOKOCRYPTO) {
                 agu.analys.data.TokocryptoSymbolRepository.ensureSymbolsLoaded(false)
+            } else {
+                // Discovery dinamis pair Indodax — tanpa ini daftar pair terbatas 16 bawaan.
+                agu.analys.data.IndodaxSymbolRepository.ensurePairsLoaded(false)
             }
             val pairs = TradingPair.popularPairsForSource(source)
             if (pairs.isNotEmpty()) {

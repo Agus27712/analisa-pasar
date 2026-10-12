@@ -151,7 +151,9 @@ object OrderBookAnalyzer {
             EntryExecutionType.MARKET_TAKER ->
                 "Eksekusi instan (Taker @ Rp ${formatPrice(topAsk)}). Slippage rendah tapi perhatikan Fee."
             EntryExecutionType.LIMIT_MAKER ->
-                "Disarankan antri Limit Maker @ Rp ${formatPrice(topBid)} di Best Bid. Hemat fee 0.3% dan hindari gap spread Rp ${formatPrice(spreadIdr)}."
+                "Disarankan antri Limit Maker @ Rp ${formatPrice(topBid)} di Best Bid. " +
+                    "Pada pair IDR tarif maker menghemat ~0,1% per sisi; pada pair USDT tarif maker = taker. " +
+                    "Menghindari gap spread Rp ${formatPrice(spreadIdr)}."
             EntryExecutionType.SPREAD_GUARD_VETO ->
                 "🛡️ SPREAD GUARD AKTIF: Spread ${String.format(Locale.US, "%.2f", spreadPct)}% melebihi toleransi maksimal (${String.format(Locale.US, "%.2f", maxGuardPct)}%). Dilarang Eksekusi Taker! Wajib pasang Limit Beli @ Rp ${formatPrice(topBid)}."
             EntryExecutionType.NO_DEPTH -> "Order book belum sinkron."

@@ -145,8 +145,9 @@ class SignalLogRepository(
                     return@launch
                 }
 
-                // 2. Check if coin already has a recent log in DB (e.g. resolved recently) to avoid immediate re-spam
-                val latest = dao.getLatestLogForSymbolAndExchange(normSymbol, normExchange) ?: dao.getLatestLogForSymbol(normSymbol)
+                // 2. Check if coin already has a recent log in DB (e.g. resolved recently) to avoid immediate re-spam.
+                //    Hanya dalam bursa yang sama — jangan pakai log bursa lain sebagai acuan anti-spam.
+                val latest = dao.getLatestLogForSymbolAndExchange(normSymbol, normExchange)
                 if (latest != null) {
                     // If it was resolved within 3 minutes and price hasn't meaningfully moved (<0.8%), skip creating duplicate
                     val lastTimestamp = latest.resolvedAt ?: latest.firedAt
@@ -223,8 +224,9 @@ class SignalLogRepository(
 
         scope.launch(Dispatchers.IO) {
             try {
+                // Hanya perbarui log pelacakan milik bursa ini. Jangan pernah jatuh ke log
+                // semua bursa, agar harga dari satu bursa tidak mengubah sinyal bursa lain.
                 val trackingLogs = dao.getActiveTrackingLogsForSymbolAndExchange(normSymbol, normExchange)
-                    .ifEmpty { dao.getActiveTrackingLogsForSymbol(normSymbol) }
                 if (trackingLogs.isEmpty()) return@launch
 
                 for (log in trackingLogs) {
@@ -244,8 +246,8 @@ class SignalLogRepository(
 
         scope.launch(Dispatchers.IO) {
             try {
+                // Hanya perbarui log pelacakan bursa ini — tanpa fallback ke semua bursa.
                 val trackingLogs = dao.getActiveTrackingLogsForExchange(normExchange)
-                    .ifEmpty { dao.getActiveTrackingLogs() }
                 if (trackingLogs.isEmpty()) return@launch
 
                 for (log in trackingLogs) {
@@ -360,13 +362,25 @@ class SignalLogRepository(
     /**
      * Expire all active TRACKING logs for a symbol when user has already sold (MarkSold).
      * Log becomes kadaluarsa so it no longer appears as active tracking.
+     *
+     * @param exchange bila diisi, hanya log bursa tersebut yang dikadaluarsakan (mencegah
+     *                 penjualan di satu bursa mematikan pelacakan bursa lain).
      */
-    fun expireTrackingLogsForSymbol(symbol: String, reason: String = "Posisi sudah terjual (MarkSold) — log kadaluarsa") {
+    fun expireTrackingLogsForSymbol(
+        symbol: String,
+        reason: String = "Posisi sudah terjual (MarkSold) — log kadaluarsa",
+        exchange: String? = null
+    ) {
         if (symbol.isBlank()) return
         val normSymbol = symbol.uppercase().replace("_", "").replace("/", "").trim()
+        val normExchange = exchange?.uppercase()?.trim()
         scope.launch(Dispatchers.IO) {
             try {
-                val tracking = dao.getActiveTrackingLogsForSymbol(normSymbol)
+                val tracking = if (normExchange.isNullOrBlank()) {
+                    dao.getActiveTrackingLogsForSymbol(normSymbol)
+                } else {
+                    dao.getActiveTrackingLogsForSymbolAndExchange(normSymbol, normExchange)
+                }
                 if (tracking.isEmpty()) return@launch
                 val now = System.currentTimeMillis()
                 for (log in tracking) {
@@ -625,11 +639,21 @@ class SignalLogRepository(
                 resolvedAt = now - 3600_000L * 7,
                 resolutionNote = "Target TP1 tercapai pada $3,560.00 (+3.19%)"
             )
-        )
+        ).map { log ->
+            // Tandai jelas bahwa ini data CONTOH, bukan sinyal nyata, agar pengguna
+            // tidak salah mengira sinyal buatan ini berasal dari pasar sungguhan.
+            log.copy(
+                reasoning = SAMPLE_MARKER + log.reasoning,
+                resolutionNote = log.resolutionNote?.let { SAMPLE_MARKER + it }
+            )
+        }
         dao.insertLogs(sampleLogs)
     }
 
     companion object {
+        /** Penanda tegas bahwa sebuah log adalah data contoh, bukan sinyal pasar nyata. */
+        const val SAMPLE_MARKER = "[SAMPEL] "
+
         fun calculateReliabilitySummary(logs: List<SignalLogEntity>): SignalReliabilitySummary {
             if (logs.isEmpty()) return SignalReliabilitySummary()
 

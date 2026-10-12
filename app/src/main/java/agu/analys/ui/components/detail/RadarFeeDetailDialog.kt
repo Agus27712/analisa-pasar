@@ -49,13 +49,46 @@ fun RadarFeeDetailDialog(
         if (isMakerOrder) fees.sellMakerPct else fees.sellTakerPct
     }
     val totalFeeIdr = orderAmountIdr * (feePct / 100.0)
-    // Proporsi breakdown regulasi kripto & Bappebti:
-    // Pajak: Jual = PPh 22 Final (0.10%), Beli = PPN (0.11%)
-    val taxPct = if (isBuyMode) 0.11 else 0.10
-    val taxIdr = (orderAmountIdr * (taxPct / 100.0)).coerceAtMost(totalFeeIdr)
-    val cfxPct = 0.04
-    val cfxFeeIdr = (orderAmountIdr * (cfxPct / 100.0)).coerceAtMost((totalFeeIdr - taxIdr).coerceAtLeast(0.0))
-    val serviceFeeIdr = (totalFeeIdr - taxIdr - cfxFeeIdr).coerceAtLeast(0.0)
+
+    // Rincian komponen mengikuti FEE_TRUTH.md.
+    //
+    // Sebelumnya dialog ini memakai angka tetap "PPN 0,11% (beli) / PPh 0,10% (jual)" yang
+    // tidak cocok dengan struktur biaya Tokocrypto. Yang benar:
+    //  - Tokocrypto USDT : trading 0,15% + PPh 22 Final 0,21% + ICEx 0,0444% (maker = taker)
+    //  - Tokocrypto IDR  : beli bebas PPh; jual kena PPh 0,21%; ICEx 0,0222%;
+    //                      trading 0,10% maker / 0,20% taker
+    // Bila strukturnya tidak dikenali (mis. Indodax), tampilkan satu baris "Biaya Bursa (all-in)"
+    // daripada menampilkan angka pajak yang tidak sesuai kenyataan.
+    val isUsdt = PriceFormatter.isUsdtQuote(quoteAsset)
+    val isTokoIdr = !isUsdt && (
+        kotlin.math.abs(fees.buyTakerPct - 0.2222) < 0.0005 ||
+            kotlin.math.abs(fees.sellTakerPct - 0.4322) < 0.0005 ||
+            kotlin.math.abs(fees.buyMakerPct - 0.1222) < 0.0005
+        )
+    val breakdownKnown = isUsdt || isTokoIdr
+
+    val tradingFeePct = when {
+        isUsdt -> 0.15
+        isTokoIdr -> if (isMakerOrder) 0.10 else 0.20
+        else -> 0.0
+    }
+    val taxPct = when {
+        isUsdt -> 0.21
+        isTokoIdr -> if (isBuyMode) 0.0 else 0.21
+        else -> 0.0
+    }
+    val icexPct = when {
+        isUsdt -> 0.0444
+        isTokoIdr -> 0.0222
+        else -> 0.0
+    }
+
+    val tradingFeeIdr = (orderAmountIdr * (tradingFeePct / 100.0)).coerceAtMost(totalFeeIdr)
+    val taxIdr = (orderAmountIdr * (taxPct / 100.0))
+        .coerceAtMost((totalFeeIdr - tradingFeeIdr).coerceAtLeast(0.0))
+    val icexFeeIdr = (orderAmountIdr * (icexPct / 100.0))
+        .coerceAtMost((totalFeeIdr - tradingFeeIdr - taxIdr).coerceAtLeast(0.0))
+    val serviceFeeIdr = (totalFeeIdr - tradingFeeIdr - taxIdr - icexFeeIdr).coerceAtLeast(0.0)
     val servicePct = (serviceFeeIdr / orderAmountIdr.coerceAtLeast(1.0)) * 100.0
 
     Dialog(onDismissRequest = onDismiss) {
@@ -123,23 +156,39 @@ fun RadarFeeDetailDialog(
                         .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    // Biaya Layanan Bursa
-                    FeeRowItem(
-                        label = "Layanan Bursa (${String.format(java.util.Locale.US, "%.2f", servicePct)}%)",
-                        value = PriceFormatter.formatPrice(serviceFeeIdr, quoteAsset = quoteAsset)
-                    )
+                    if (breakdownKnown) {
+                        // Biaya Layanan Bursa (trading fee murni)
+                        FeeRowItem(
+                            label = "Layanan Bursa (${fmtPct(tradingFeePct)})",
+                            value = PriceFormatter.formatPrice(tradingFeeIdr, quoteAsset = quoteAsset)
+                        )
 
-                    // Pajak Kripto Resmi
-                    FeeRowItem(
-                        label = if (isBuyMode) "Pajak PPN (0.11%)" else "Pajak PPh 22 Final (0.10%)",
-                        value = PriceFormatter.formatPrice(taxIdr, quoteAsset = quoteAsset)
-                    )
+                        // Pajak Kripto Resmi (PPh 22 Final; pada pembelian IDR nilainya 0)
+                        FeeRowItem(
+                            label = "Pajak PPh 22 Final (${fmtPct(taxPct)})",
+                            value = PriceFormatter.formatPrice(taxIdr, quoteAsset = quoteAsset)
+                        )
 
-                    // Biaya CFX & Kliring
-                    FeeRowItem(
-                        label = "Kliring CFX (${String.format(java.util.Locale.US, "%.2f", cfxPct)}%)",
-                        value = PriceFormatter.formatPrice(cfxFeeIdr, quoteAsset = quoteAsset)
-                    )
+                        // Pungutan bursa kripto (ICEx)
+                        FeeRowItem(
+                            label = "Pungutan ICEx (${fmtPct(icexPct)})",
+                            value = PriceFormatter.formatPrice(icexFeeIdr, quoteAsset = quoteAsset)
+                        )
+
+                        // Sisa pembulatan / komponen lain yang tidak terklasifikasi
+                        if (serviceFeeIdr > 0.0000001) {
+                            FeeRowItem(
+                                label = "Komponen Lain (${fmtPct(servicePct)})",
+                                value = PriceFormatter.formatPrice(serviceFeeIdr, quoteAsset = quoteAsset)
+                            )
+                        }
+                    } else {
+                        // Struktur bursa tidak dikenali — jangan tampilkan angka pajak yang dikarang.
+                        FeeRowItem(
+                            label = "Biaya Bursa (all-in ${fmtPct(feePct)})",
+                            value = PriceFormatter.formatPrice(totalFeeIdr, quoteAsset = quoteAsset)
+                        )
+                    }
 
                     HorizontalDivider(
                         color = Color(0xFF22364E),
@@ -217,9 +266,16 @@ fun RadarFeeDetailDialog(
     }
 }
 
+/** Format persen: 4 desimal untuk nilai sangat kecil (mis. 0,0444%), 2 desimal untuk sisanya. */
+private fun fmtPct(v: Double): String =
+    if (v >= 0.1) {
+        String.format(java.util.Locale.US, "%.2f%%", v)
+    } else {
+        String.format(java.util.Locale.US, "%.4f%%", v)
+    }
+
 @Composable
-private fun FeeRowItem(
-    label: String,
+private fun FeeRowItem(    label: String,
     value: String
 ) {
     Row(

@@ -59,6 +59,7 @@ fun TradeLogDetailDialog(
     trailingPeakPrice: Double?,
     trailingLockPrice: Double?,
     snapshot: TradeSignalSnapshot?,
+    exchange: String = "TOKOCRYPTO",
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
@@ -78,16 +79,18 @@ fun TradeLogDetailDialog(
     var resolvedPeakPrice by remember(trailingPeakPrice) { mutableStateOf(trailingPeakPrice) }
     var resolvedLockPrice by remember(trailingLockPrice) { mutableStateOf(trailingLockPrice) }
 
-    LaunchedEffect(tradeId, symbol, snapshot) {
+    LaunchedEffect(tradeId, symbol, snapshot, exchange) {
         if (resolvedSnapshot == null) {
             withContext(Dispatchers.IO) {
                 try {
                     val db = agu.analys.database.AppDatabase.getInstance()
                     val normSymbol = symbol.uppercase().replace("_", "")
                     val altSymbol = if (normSymbol.endsWith("IDR")) normSymbol else "${normSymbol}IDR"
+                    val normExchange = exchange.uppercase().trim().ifBlank { "TOKOCRYPTO" }
 
-                    // 1. Cari dari trade_history_records
-                    val records: List<agu.analys.database.TradeHistoryRecordEntity> = db.tradeHistoryRecordDao().getRecordsForSymbol(normSymbol, altSymbol)
+                    // 1. Cari dari trade_history_records (hanya bursa yang sama)
+                    val records: List<agu.analys.database.TradeHistoryRecordEntity> =
+                        db.tradeHistoryRecordDao().getRecordsForSymbolAndExchange(normSymbol, altSymbol, normExchange)
                     val matchedRecord: agu.analys.database.TradeHistoryRecordEntity? = records.firstOrNull { rec: agu.analys.database.TradeHistoryRecordEntity ->
                         val buyDiff = java.lang.Math.abs(rec.buyTime - timestamp)
                         val sellDiff = java.lang.Math.abs((rec.sellTime ?: 0L) - timestamp)
@@ -122,10 +125,9 @@ fun TradeLogDetailDialog(
                         }
                     }
 
-                    // 2. Jika snapshot masih null, periksa sinyal di signal_logs
+                    // 2. Jika snapshot masih null, periksa sinyal di signal_logs (hanya bursa yang sama)
                     if (resolvedSnapshot == null) {
-                        val log = db.signalLogDao().getLatestLogForSymbol(normSymbol)
-                            ?: db.signalLogDao().getLatestLogForSymbol(symbol)
+                        val log = db.signalLogDao().getLatestLogForSymbolAndExchange(normSymbol, normExchange)
                         if (log != null) {
                             val reasons = mutableListOf<String>()
                             if (log.reasoning.isNotBlank()) reasons.add(log.reasoning)

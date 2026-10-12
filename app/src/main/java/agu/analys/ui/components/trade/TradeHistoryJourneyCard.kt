@@ -46,6 +46,12 @@ fun TradeHistoryJourneyCard(
     val snapshot = remember(record.signalSnapshotJson) {
         TradeSignalSnapshot.fromJsonString(record.signalSnapshotJson)
     }
+    // Estimasi biaya memakai tarif bursa + kuotasi yang benar (bukan angka tetap 0,3%).
+    val estimatedFeeRate = if (isClosed) {
+        agu.analys.config.FeeSchedule.sellRate(record.exchange, record.quoteAsset)
+    } else {
+        agu.analys.config.FeeSchedule.buyRate(record.exchange, record.quoteAsset)
+    }
 
     if (showDetailDialog) {
         TradeLogDetailDialog(
@@ -58,7 +64,7 @@ fun TradeHistoryJourneyCard(
             executionPrice = if (isClosed) (record.sellPrice ?: record.buyPrice) else record.buyPrice,
             quantity = record.buyQuantity,
             totalIdr = if (isClosed) (record.sellTotalIdr ?: record.buyTotalIdr) else record.buyTotalIdr,
-            feeIdr = record.buyTotalIdr * 0.003,
+            feeIdr = record.buyTotalIdr * estimatedFeeRate,
             timestamp = if (isClosed) (record.sellTimestamp ?: record.buyTimestamp) else record.buyTimestamp,
             isReal = record.isReal,
             strategyMode = record.strategyMode,
@@ -72,6 +78,7 @@ fun TradeHistoryJourneyCard(
             trailingPeakPrice = record.peakPrice,
             trailingLockPrice = record.trailingLockPrice,
             snapshot = snapshot,
+            exchange = record.exchange,
             onDismiss = { showDetailDialog = false }
         )
     }
