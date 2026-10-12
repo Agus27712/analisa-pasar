@@ -17,7 +17,11 @@ class ScalpingConfigTest {
     fun riskRr_sensible() {
         assertTrue(ScalpingConfig.MIN_NET_RR < ScalpingConfig.TARGET_NET_RR)
         assertEquals(1.15, ScalpingConfig.MIN_NET_RR, 1e-9)
-        assertEquals(1.25, ScalpingConfig.TARGET_NET_RR, 1e-9)
+        // Target dinaikkan 1.25 -> 2.0 (2026-10-12) agar win-rate minimum impas turun.
+        assertEquals(2.0, ScalpingConfig.TARGET_NET_RR, 1e-9)
+        // Lantai risiko berbasis friksi: risk >= 6x friksi round-trip.
+        assertEquals(6.0, ScalpingConfig.MIN_FRICTION_MULTIPLE, 1e-9)
+        assertEquals(0.5, ScalpingConfig.MIN_RISK_PCT, 1e-9)
     }
 
     @Test

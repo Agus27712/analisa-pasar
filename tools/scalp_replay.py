@@ -600,7 +600,15 @@ def risk_levels(price, setup, st, rg, fee, cfg):
     if setup != "LIQUIDITY_SWEEP" and struct is None:
         struct = st["last_swing_low"]
     ssl = (struct - 0.2 * atr) if (struct and struct > 0 and struct < zl) else None
-    min_risk = max(0.8 * atr, cfg["min_risk_pct"] / 100.0 * entry)
+    slip = cfg["slippage_pct"]
+    cost = fee["buy_taker_pct"] + fee["sell_taker_pct"] + 2.0 * slip
+    # --- Lantai risiko berbasis friksi (2026-10-12) ------------------------------
+    # Friksi round-trip adalah kerugian wajib tiap trade. Bila jarak SL lebih kecil dari
+    # beberapa kali friksi, satu kali SL menelan banyak "R" sekaligus dan matematikanya
+    # mustahil. Lantai ini memaksa risk >= min_friction_multiple x friksi.
+    # Bukti (30 hari, 40 pair Tokocrypto): min_risk 0.5% -> avg R -1.8 ; 3.0% -> ~0.
+    friction_floor = cfg.get("min_friction_multiple", 0.0) * cost / 100.0 * entry
+    min_risk = max(0.8 * atr, cfg["min_risk_pct"] / 100.0 * entry, friction_floor)
     max_risk = max(2.0 * atr, min_risk)
     sl = ssl if ssl is not None else entry - 1.0 * atr
     raw = entry - sl
@@ -610,8 +618,6 @@ def risk_levels(price, setup, st, rg, fee, cfg):
         sl = entry - min_risk
     risk = entry - sl
     risk_pct_tp = risk / entry * 100.0
-    slip = cfg["slippage_pct"]
-    cost = fee["buy_taker_pct"] + fee["sell_taker_pct"] + 2.0 * slip
     req = cfg["target_net_rr"] * (risk_pct_tp + cost) + cost
     tp2_pct = max(req, 1.5 * risk_pct_tp)
     tp1 = entry * (1.0 + tp2_pct * 0.55 / 100.0)

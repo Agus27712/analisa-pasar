@@ -101,18 +101,49 @@ class ScalpingRiskEngineTest {
     }
 
     @Test
-    fun extremeFees_targetTooFar_invalid() {
+    fun extremeFees_widenSlToFrictionFloor_planStaysConsistent() {
+        // Sebelum 2026-10-12 engine menolak ("target terlalu jauh") saat fee ekstrem.
+        // Sekarang engine justru melebarkan SL ke lantai friksi, lalu target tetap konsisten.
         val extreme = TradingFeeConfig(0.5, 0.5, 0.5, 0.5)
         val r = ScalpingRiskEngine.evaluate(input(fees = extreme, atrPct = 0.2))
         assertNotNull(r.levels)
-        assertFalse(r.valid)
-        assertTrue(r.reasons.any { it.contains("terlalu jauh") })
+        // friksi = 0.5+0.5+2*0.08 = 1.16% ; lantai 6x = 6.96%
+        assertTrue("riskPct=${r.levels!!.riskPct}", r.levels!!.riskPct >= 6.96 - 0.05)
+        assertTrue(r.levels!!.netRr >= ScalpingRiskEngine.DEFAULT_MIN_NET_RR)
+        assertTrue(r.valid)
+        // Engine harus jujur memberi tahu ini bukan scalp cepat.
+        assertTrue(r.reasons.any { it.contains("friksi") })
     }
 
     @Test
     fun riskFloor_minRiskPct_applied() {
         val l = ScalpingRiskEngine.evaluate(input(atrPct = 0.1)).levels!!
         assertTrue(l.riskPct >= 0.5 - 1e-9)
+    }
+
+    @Test
+    fun frictionFloor_raisesRiskAboveAbsoluteAndAtrFloor() {
+        // Fee riil Tokocrypto USDT: 0.4044%/sisi -> friksi 0.9688%, lantai 6x = 5.81%
+        val real = TradingFeeConfig(0.4044, 0.4044, 0.4044, 0.4044)
+        val l = ScalpingRiskEngine.evaluate(input(fees = real, atrPct = 0.3)).levels!!
+        assertTrue("riskPct=${l.riskPct}", l.riskPct >= 5.81 - 0.05)
+    }
+
+    @Test
+    fun frictionFloor_zero_revertsToLegacyBehaviour() {
+        val real = TradingFeeConfig(0.4044, 0.4044, 0.4044, 0.4044)
+        val r = ScalpingRiskEngine.evaluate(
+            ScalpingRiskEngine.Input(
+                price = 1_000_000.0,
+                setup = ScalpSetupType.BREAKOUT_RETEST,
+                structure = structure(1_000_000.0),
+                regime = regime(0.3),
+                fees = real,
+                minFrictionMultiple = 0.0
+            )
+        )
+        // Tanpa lantai friksi, risk kembali ke orde < 1% (perilaku lama yang terbukti -EV).
+        assertTrue("riskPct=${r.levels!!.riskPct}", r.levels!!.riskPct < 1.0)
     }
 
     @Test
@@ -135,18 +166,37 @@ class ScalpingRiskEngineTest {
     }
 
     @Test
-    fun slDistance_clampedToAtrBounds() {
+    fun slDistance_clampedToAtrBounds_whenFrictionFloorDisabled() {
         val price = 1_000_000.0
-        // Support sangat jauh -> SL dibatasi 2x ATR
+        fun noFloor(atrPct: Double, st: StructureSnapshot) = ScalpingRiskEngine.evaluate(
+            ScalpingRiskEngine.Input(
+                price = price,
+                setup = ScalpSetupType.BREAKOUT_RETEST,
+                structure = st,
+                regime = regime(atrPct),
+                fees = tokoFees,
+                minFrictionMultiple = 0.0
+            )
+        )
+        // Support sangat jauh -> SL dibatasi 2x ATR (saat lantai friksi dimatikan)
         val far = structure(price).copy(support = price * 0.80, lastSwingLow = price * 0.80)
-        val l = ScalpingRiskEngine.evaluate(input(price = price, structure = far)).levels!!
+        val l = noFloor(1.0, far).levels!!
         val atr = price * 0.01
         assertTrue(l.entryZone.high - l.stopLoss <= 2.0 * atr + 1e-6)
 
         // Tanpa struktur -> pakai ATR default
-        val none = StructureSnapshot()
-        val l2 = ScalpingRiskEngine.evaluate(input(price = price, structure = none)).levels!!
+        val l2 = noFloor(1.0, StructureSnapshot()).levels!!
         assertTrue(l2.entryZone.high - l2.stopLoss >= 0.8 * atr - 1e-6)
+    }
+
+    @Test
+    fun slDistance_mayExceedAtrCap_whenFrictionFloorDominates() {
+        // Dengan lantai friksi aktif, SL boleh lebih lebar dari 2x ATR — itu memang tujuannya:
+        // risiko harus menutup friksi, bukan mengikuti volatilitas semata.
+        val real = TradingFeeConfig(0.4044, 0.4044, 0.4044, 0.4044)
+        val l = ScalpingRiskEngine.evaluate(input(fees = real, atrPct = 0.3)).levels!!
+        val atr = l.entryZone.high * 0.003
+        assertTrue(l.entryZone.high - l.stopLoss > 2.0 * atr)
     }
 
     @Test

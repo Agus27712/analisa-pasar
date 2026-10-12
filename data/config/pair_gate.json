@@ -1,0 +1,514 @@
+{
+  "min_ratio": 2.0,
+  "horizon_bars_m1": 420,
+  "quotes": {
+    "USDT": {
+      "label": "Tokocrypto USDT",
+      "source": "data/tokocrypto_live_usdt",
+      "friction_roundtrip_pct": 0.9688,
+      "min_ratio": 2.0,
+      "pairs_total": 40,
+      "pairs_eligible": 14,
+      "pairs_ineligible": 26,
+      "pairs": [
+        {
+          "pair": "ZROUSDT",
+          "median_mfe_7h_pct": 3.2242,
+          "friction_pct": 0.9688,
+          "ratio": 3.328,
+          "eligible": true,
+          "trades_resolved": 158,
+          "avg_r": 0.0434
+        },
+        {
+          "pair": "NEARUSDT",
+          "median_mfe_7h_pct": 2.8948,
+          "friction_pct": 0.9688,
+          "ratio": 2.988,
+          "eligible": true,
+          "trades_resolved": 155,
+          "avg_r": 0.0371
+        },
+        {
+          "pair": "MUBARAKUSDT",
+          "median_mfe_7h_pct": 2.7257,
+          "friction_pct": 0.9688,
+          "ratio": 2.8135,
+          "eligible": true,
+          "trades_resolved": 222,
+          "avg_r": -0.0173
+        },
+        {
+          "pair": "PUMPUSDT",
+          "median_mfe_7h_pct": 2.7227,
+          "friction_pct": 0.9688,
+          "ratio": 2.8104,
+          "eligible": true,
+          "trades_resolved": 118,
+          "avg_r": 0.062
+        },
+        {
+          "pair": "WUSDT",
+          "median_mfe_7h_pct": 2.6396,
+          "friction_pct": 0.9688,
+          "ratio": 2.7246,
+          "eligible": true,
+          "trades_resolved": 134,
+          "avg_r": 0.0424
+        },
+        {
+          "pair": "STRKUSDT",
+          "median_mfe_7h_pct": 2.6087,
+          "friction_pct": 0.9688,
+          "ratio": 2.6927,
+          "eligible": true,
+          "trades_resolved": 181,
+          "avg_r": 0.0021
+        },
+        {
+          "pair": "ENAUSDT",
+          "median_mfe_7h_pct": 2.2496,
+          "friction_pct": 0.9688,
+          "ratio": 2.322,
+          "eligible": true,
+          "trades_resolved": 107,
+          "avg_r": 0.0462
+        },
+        {
+          "pair": "QNTUSDT",
+          "median_mfe_7h_pct": 2.2353,
+          "friction_pct": 0.9688,
+          "ratio": 2.3073,
+          "eligible": true,
+          "trades_resolved": 192,
+          "avg_r": -0.0211
+        },
+        {
+          "pair": "PLUMEUSDT",
+          "median_mfe_7h_pct": 2.2246,
+          "friction_pct": 0.9688,
+          "ratio": 2.2962,
+          "eligible": true,
+          "trades_resolved": 89,
+          "avg_r": 0.0174
+        },
+        {
+          "pair": "APTUSDT",
+          "median_mfe_7h_pct": 2.1407,
+          "friction_pct": 0.9688,
+          "ratio": 2.2096,
+          "eligible": true,
+          "trades_resolved": 101,
+          "avg_r": 0.0468
+        },
+        {
+          "pair": "SUSDT",
+          "median_mfe_7h_pct": 2.1284,
+          "friction_pct": 0.9688,
+          "ratio": 2.1969,
+          "eligible": true,
+          "trades_resolved": 122,
+          "avg_r": 0.0269
+        },
+        {
+          "pair": "FETUSDT",
+          "median_mfe_7h_pct": 2.0468,
+          "friction_pct": 0.9688,
+          "ratio": 2.1127,
+          "eligible": true,
+          "trades_resolved": 79,
+          "avg_r": 0.0572
+        },
+        {
+          "pair": "WLDUSDT",
+          "median_mfe_7h_pct": 2.0143,
+          "friction_pct": 0.9688,
+          "ratio": 2.0792,
+          "eligible": true,
+          "trades_resolved": 85,
+          "avg_r": 0.0949
+        },
+        {
+          "pair": "FILUSDT",
+          "median_mfe_7h_pct": 1.9915,
+          "friction_pct": 0.9688,
+          "ratio": 2.0556,
+          "eligible": true,
+          "trades_resolved": 95,
+          "avg_r": 0.0221
+        },
+        {
+          "pair": "ONDOUSDT",
+          "median_mfe_7h_pct": 1.8883,
+          "friction_pct": 0.9688,
+          "ratio": 1.9491,
+          "eligible": false,
+          "trades_resolved": 74,
+          "avg_r": 0.0457
+        },
+        {
+          "pair": "ZECUSDT",
+          "median_mfe_7h_pct": 1.8132,
+          "friction_pct": 0.9688,
+          "ratio": 1.8716,
+          "eligible": false,
+          "trades_resolved": 60,
+          "avg_r": 0.0718
+        },
+        {
+          "pair": "UNIUSDT",
+          "median_mfe_7h_pct": 1.799,
+          "friction_pct": 0.9688,
+          "ratio": 1.8569,
+          "eligible": false,
+          "trades_resolved": 80,
+          "avg_r": 0.0642
+        },
+        {
+          "pair": "SUIUSDT",
+          "median_mfe_7h_pct": 1.7408,
+          "friction_pct": 0.9688,
+          "ratio": 1.7969,
+          "eligible": false,
+          "trades_resolved": 68,
+          "avg_r": 0.0677
+        },
+        {
+          "pair": "TAOUSDT",
+          "median_mfe_7h_pct": 1.7313,
+          "friction_pct": 0.9688,
+          "ratio": 1.7871,
+          "eligible": false,
+          "trades_resolved": 50,
+          "avg_r": 0.0532
+        },
+        {
+          "pair": "ICPUSDT",
+          "median_mfe_7h_pct": 1.6801,
+          "friction_pct": 0.9688,
+          "ratio": 1.7342,
+          "eligible": false,
+          "trades_resolved": 62,
+          "avg_r": 0.0444
+        },
+        {
+          "pair": "RSRUSDT",
+          "median_mfe_7h_pct": 1.611,
+          "friction_pct": 0.9688,
+          "ratio": 1.6629,
+          "eligible": false,
+          "trades_resolved": 41,
+          "avg_r": 0.0162
+        },
+        {
+          "pair": "ADAUSDT",
+          "median_mfe_7h_pct": 1.5867,
+          "friction_pct": 0.9688,
+          "ratio": 1.6378,
+          "eligible": false,
+          "trades_resolved": 51,
+          "avg_r": 0.0638
+        },
+        {
+          "pair": "AVAXUSDT",
+          "median_mfe_7h_pct": 1.5555,
+          "friction_pct": 0.9688,
+          "ratio": 1.6056,
+          "eligible": false,
+          "trades_resolved": 60,
+          "avg_r": 0.0692
+        },
+        {
+          "pair": "CFXUSDT",
+          "median_mfe_7h_pct": 1.3819,
+          "friction_pct": 0.9688,
+          "ratio": 1.4264,
+          "eligible": false,
+          "trades_resolved": 47,
+          "avg_r": -0.0012
+        },
+        {
+          "pair": "LINKUSDT",
+          "median_mfe_7h_pct": 1.0981,
+          "friction_pct": 0.9688,
+          "ratio": 1.1335,
+          "eligible": false,
+          "trades_resolved": 27,
+          "avg_r": 0.0666
+        },
+        {
+          "pair": "DOGEUSDT",
+          "median_mfe_7h_pct": 1.0012,
+          "friction_pct": 0.9688,
+          "ratio": 1.0334,
+          "eligible": false,
+          "trades_resolved": 21,
+          "avg_r": -0.0889
+        },
+        {
+          "pair": "XRPUSDT",
+          "median_mfe_7h_pct": 0.9643,
+          "friction_pct": 0.9688,
+          "ratio": 0.9954,
+          "eligible": false,
+          "trades_resolved": 31,
+          "avg_r": 0.0455
+        },
+        {
+          "pair": "SOLUSDT",
+          "median_mfe_7h_pct": 0.8773,
+          "friction_pct": 0.9688,
+          "ratio": 0.9056,
+          "eligible": false,
+          "trades_resolved": 17,
+          "avg_r": 0.0865
+        },
+        {
+          "pair": "HYPEUSDT",
+          "median_mfe_7h_pct": 0.8624,
+          "friction_pct": 0.9688,
+          "ratio": 0.8902,
+          "eligible": false,
+          "trades_resolved": 8,
+          "avg_r": 0.0857
+        },
+        {
+          "pair": "BNBUSDT",
+          "median_mfe_7h_pct": 0.6348,
+          "friction_pct": 0.9688,
+          "ratio": 0.6552,
+          "eligible": false,
+          "trades_resolved": 5,
+          "avg_r": 0.0485
+        },
+        {
+          "pair": "ETHUSDT",
+          "median_mfe_7h_pct": 0.6273,
+          "friction_pct": 0.9688,
+          "ratio": 0.6475,
+          "eligible": false,
+          "trades_resolved": 7,
+          "avg_r": 0.0685
+        },
+        {
+          "pair": "BTCUSDT",
+          "median_mfe_7h_pct": 0.5016,
+          "friction_pct": 0.9688,
+          "ratio": 0.5178,
+          "eligible": false,
+          "trades_resolved": 3,
+          "avg_r": 0.1695
+        },
+        {
+          "pair": "TRXUSDT",
+          "median_mfe_7h_pct": 0.2347,
+          "friction_pct": 0.9688,
+          "ratio": 0.2423,
+          "eligible": false,
+          "trades_resolved": 0,
+          "avg_r": 0.0
+        },
+        {
+          "pair": "PAXGUSDT",
+          "median_mfe_7h_pct": 0.208,
+          "friction_pct": 0.9688,
+          "ratio": 0.2147,
+          "eligible": false,
+          "trades_resolved": 0,
+          "avg_r": 0.0
+        },
+        {
+          "pair": "XAUTUSDT",
+          "median_mfe_7h_pct": 0.1978,
+          "friction_pct": 0.9688,
+          "ratio": 0.2042,
+          "eligible": false,
+          "trades_resolved": 0,
+          "avg_r": 0.0
+        },
+        {
+          "pair": "FDUSDUSDT",
+          "median_mfe_7h_pct": 0.02,
+          "friction_pct": 0.9688,
+          "ratio": 0.0206,
+          "eligible": false,
+          "trades_resolved": 0,
+          "avg_r": 0.0
+        },
+        {
+          "pair": "RLUSDUSDT",
+          "median_mfe_7h_pct": 0.01,
+          "friction_pct": 0.9688,
+          "ratio": 0.0103,
+          "eligible": false,
+          "trades_resolved": 0,
+          "avg_r": 0.0
+        },
+        {
+          "pair": "USD1USDT",
+          "median_mfe_7h_pct": 0.01,
+          "friction_pct": 0.9688,
+          "ratio": 0.0103,
+          "eligible": false,
+          "trades_resolved": 0,
+          "avg_r": 0.0
+        },
+        {
+          "pair": "USDCUSDT",
+          "median_mfe_7h_pct": 0.01,
+          "friction_pct": 0.9688,
+          "ratio": 0.0103,
+          "eligible": false,
+          "trades_resolved": 0,
+          "avg_r": 0.0
+        },
+        {
+          "pair": "UUSDT",
+          "median_mfe_7h_pct": 0.01,
+          "friction_pct": 0.9688,
+          "ratio": 0.0103,
+          "eligible": false,
+          "trades_resolved": 0,
+          "avg_r": 0.0
+        }
+      ]
+    },
+    "IDR": {
+      "label": "Tokocrypto IDR (taker)",
+      "source": "data/tokocrypto_live_idr",
+      "friction_roundtrip_pct": 0.8144,
+      "min_ratio": 2.0,
+      "pairs_total": 14,
+      "pairs_eligible": 0,
+      "pairs_ineligible": 14,
+      "pairs": [
+        {
+          "pair": "SUIIDR",
+          "median_mfe_7h_pct": 1.5538,
+          "friction_pct": 0.8144,
+          "ratio": 1.9079,
+          "eligible": false,
+          "trades_resolved": 18,
+          "avg_r": 0.1557
+        },
+        {
+          "pair": "TKOIDR",
+          "median_mfe_7h_pct": 1.4507,
+          "friction_pct": 0.8144,
+          "ratio": 1.7813,
+          "eligible": false,
+          "trades_resolved": 13,
+          "avg_r": -0.1415
+        },
+        {
+          "pair": "ONDOIDR",
+          "median_mfe_7h_pct": 1.4432,
+          "friction_pct": 0.8144,
+          "ratio": 1.7721,
+          "eligible": false,
+          "trades_resolved": 11,
+          "avg_r": 0.1538
+        },
+        {
+          "pair": "WLDIDR",
+          "median_mfe_7h_pct": 1.4365,
+          "friction_pct": 0.8144,
+          "ratio": 1.7639,
+          "eligible": false,
+          "trades_resolved": 10,
+          "avg_r": 0.4202
+        },
+        {
+          "pair": "ADAIDR",
+          "median_mfe_7h_pct": 1.3799,
+          "friction_pct": 0.8144,
+          "ratio": 1.6944,
+          "eligible": false,
+          "trades_resolved": 9,
+          "avg_r": 0.153
+        },
+        {
+          "pair": "TAOIDR",
+          "median_mfe_7h_pct": 1.1963,
+          "friction_pct": 0.8144,
+          "ratio": 1.4689,
+          "eligible": false,
+          "trades_resolved": 0,
+          "avg_r": 0.0
+        },
+        {
+          "pair": "ASTERIDR",
+          "median_mfe_7h_pct": 0.9154,
+          "friction_pct": 0.8144,
+          "ratio": 1.124,
+          "eligible": false,
+          "trades_resolved": 1,
+          "avg_r": 0.1962
+        },
+        {
+          "pair": "SOLIDR",
+          "median_mfe_7h_pct": 0.8662,
+          "friction_pct": 0.8144,
+          "ratio": 1.0636,
+          "eligible": false,
+          "trades_resolved": 12,
+          "avg_r": 0.0788
+        },
+        {
+          "pair": "XRPIDR",
+          "median_mfe_7h_pct": 0.8538,
+          "friction_pct": 0.8144,
+          "ratio": 1.0484,
+          "eligible": false,
+          "trades_resolved": 13,
+          "avg_r": 0.1471
+        },
+        {
+          "pair": "BNBIDR",
+          "median_mfe_7h_pct": 0.6103,
+          "friction_pct": 0.8144,
+          "ratio": 0.7494,
+          "eligible": false,
+          "trades_resolved": 0,
+          "avg_r": 0.0
+        },
+        {
+          "pair": "ETHIDR",
+          "median_mfe_7h_pct": 0.5883,
+          "friction_pct": 0.8144,
+          "ratio": 0.7224,
+          "eligible": false,
+          "trades_resolved": 4,
+          "avg_r": 0.0869
+        },
+        {
+          "pair": "BTCIDR",
+          "median_mfe_7h_pct": 0.5142,
+          "friction_pct": 0.8144,
+          "ratio": 0.6314,
+          "eligible": false,
+          "trades_resolved": 5,
+          "avg_r": 0.1491
+        },
+        {
+          "pair": "USDCIDR",
+          "median_mfe_7h_pct": 0.1629,
+          "friction_pct": 0.8144,
+          "ratio": 0.2,
+          "eligible": false,
+          "trades_resolved": 0,
+          "avg_r": 0.0
+        },
+        {
+          "pair": "USDTIDR",
+          "median_mfe_7h_pct": 0.1168,
+          "friction_pct": 0.8144,
+          "ratio": 0.1434,
+          "eligible": false,
+          "trades_resolved": 0,
+          "avg_r": 0.0
+        }
+      ]
+    }
+  }
+}

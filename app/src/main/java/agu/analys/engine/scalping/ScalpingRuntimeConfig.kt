@@ -20,6 +20,11 @@ data class ScalpingRuntimeConfig(
     val targetNetRr: Double = ScalpingConfig.TARGET_NET_RR,
     val minRiskPct: Double = ScalpingConfig.MIN_RISK_PCT,
     val maxTp2R: Double = ScalpingConfig.MAX_TP2_R,
+    /**
+     * Kelipatan minimum jarak SL terhadap friksi round-trip (fee all-in + 2× slippage).
+     * 0 = matikan lantai friksi (perilaku lama). Lihat [ScalpingConfig.MIN_FRICTION_MULTIPLE].
+     */
+    val minFrictionMultiple: Double = ScalpingConfig.MIN_FRICTION_MULTIPLE,
     val slippagePct: Double = ScalpingConfig.DEFAULT_SLIPPAGE_PCT,
     val rvolBreakoutMin: Double = ScalpingConfig.RVOL_BREAKOUT_MIN,
     val rvolSetupMin: Double = ScalpingConfig.RVOL_SETUP_MIN,
@@ -54,6 +59,7 @@ data class ScalpingRuntimeConfig(
         json.put("target_net_rr", targetNetRr)
         json.put("min_risk_pct", minRiskPct)
         json.put("max_tp2_r", maxTp2R)
+        json.put("min_friction_multiple", minFrictionMultiple)
         json.put("slippage_pct", slippagePct)
         json.put("rvol_breakout_min", rvolBreakoutMin)
         json.put("rvol_setup_min", rvolSetupMin)
@@ -96,7 +102,8 @@ data class ScalpingRuntimeConfig(
     /** Short human-readable summary of primary gates */
     fun toSummaryString(): String {
         return "MinScore: $minScoreLong (Retest: $minScoreBreakoutRetest, Strong: $minScoreStrong) | " +
-            "MinNetRR: ${minNetRr}x | RVOL Breakout: ${rvolBreakoutMin}x | CHOP: $chopHardRanging | " +
+            "MinNetRR: ${minNetRr}x | TargetRR: ${targetNetRr}x | Lantai friksi: ${minFrictionMultiple}x | " +
+            "RVOL Breakout: ${rvolBreakoutMin}x | CHOP: $chopHardRanging | " +
             "Exit: ${exit.mode.label}"
     }
 
@@ -111,9 +118,10 @@ data class ScalpingRuntimeConfig(
             minScoreStrong = 80,
             minScoreBreakoutRetest = 80,
             minNetRr = 1.30,
-            targetNetRr = 1.50,
+            targetNetRr = 2.50,
             minRiskPct = 0.5,
             maxTp2R = 4.0,
+            minFrictionMultiple = 8.0,
             slippagePct = 0.08,
             rvolBreakoutMin = 1.8,
             rvolSetupMin = 1.4,
@@ -133,9 +141,10 @@ data class ScalpingRuntimeConfig(
             minScoreStrong = 65,
             minScoreBreakoutRetest = 65,
             minNetRr = 1.00,
-            targetNetRr = 1.15,
+            targetNetRr = 1.75,
             minRiskPct = 0.4,
-            maxTp2R = 5.0,
+            maxTp2R = 6.0,
+            minFrictionMultiple = 4.0,
             slippagePct = 0.08,
             rvolBreakoutMin = 1.2,
             rvolSetupMin = 1.0,
@@ -159,6 +168,7 @@ data class ScalpingRuntimeConfig(
                 targetNetRr = json.optDouble("target_net_rr", ScalpingConfig.TARGET_NET_RR),
                 minRiskPct = json.optDouble("min_risk_pct", ScalpingConfig.MIN_RISK_PCT),
                 maxTp2R = json.optDouble("max_tp2_r", ScalpingConfig.MAX_TP2_R),
+                minFrictionMultiple = json.optDouble("min_friction_multiple", ScalpingConfig.MIN_FRICTION_MULTIPLE),
                 slippagePct = json.optDouble("slippage_pct", ScalpingConfig.DEFAULT_SLIPPAGE_PCT),
                 rvolBreakoutMin = json.optDouble("rvol_breakout_min", ScalpingConfig.RVOL_BREAKOUT_MIN),
                 rvolSetupMin = json.optDouble("rvol_setup_min", ScalpingConfig.RVOL_SETUP_MIN),

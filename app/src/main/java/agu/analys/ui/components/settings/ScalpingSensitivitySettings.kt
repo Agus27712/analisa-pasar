@@ -33,6 +33,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import agu.analys.config.FeeSchedule
+import agu.analys.engine.scalping.PairEdgeGate
 import agu.analys.engine.scalping.ScalpingRuntimeConfig
 import agu.analys.engine.scalping.SensitivityPreset
 import agu.analys.ui.theme.*
@@ -85,9 +87,21 @@ private val SLIDER_GUIDES = mapOf(
         title = "Target Profit Bersih Ideal",
         jsonKey = "target_net_rr",
         summary = "Target keuntungan ideal yang dibidik untuk level Take Profit (TP2 / trailing baseline) di atas total friksi transaksi.",
-        plusEffect = "Membidik target keuntungan lebih tebal per transaksi, membutuhkan pergerakan harga yang lebih panjang.",
-        minusEffect = "Target keuntungan lebih cepat tersentuh, cocok untuk kondisi pergerakan harga yang pendek-pendek.",
-        defaultVal = "1.25x (Setara 1:1.25)"
+        plusEffect = "Membidik target keuntungan lebih tebal per transaksi, membutuhkan pergerakan harga yang lebih panjang. Menurunkan win-rate minimum agar impas (w* = 1/(1+target)).",
+        minusEffect = "Target keuntungan lebih cepat tersentuh, cocok untuk kondisi pergerakan harga yang pendek-pendek — tetapi win-rate minimum agar impas naik.",
+        defaultVal = "2.0x (Setara 1:2.0)"
+    ),
+    "min_friction_multiple" to SliderGuideInfo(
+        title = "Lantai Risiko vs Friksi Bursa",
+        jsonKey = "min_friction_multiple",
+        summary = "Jarak stop-loss minimal sebagai kelipatan biaya transaksi pulang-pergi (fee all-in + slippage). " +
+            "Ini penjaga paling penting: bila jarak SL lebih kecil dari beberapa kali biaya, satu kali cut-loss " +
+            "menelan banyak unit risiko sekaligus dan matematikanya mustahil untung.",
+        plusEffect = "Stop-loss dipaksa lebih lebar dari biaya (mis. 6x friksi ≈ 5,8% di Tokocrypto USDT). " +
+            "Trade yang lolos jauh lebih sedikit, tapi win-rate naik drastis dan rata-rata R mendekati/menembus nol.",
+        minusEffect = "Stop-loss boleh sangat rapat. Sinyal lebih banyak, tetapi tiap kena SL rugi ~2-3R hanya karena biaya — " +
+            "inilah penyebab utama hasil historis negatif.",
+        defaultVal = "6.0x friksi (Disarankan, plateau 5–10x) · 0 = nonaktif"
     ),
     "rvol_breakout_min" to SliderGuideInfo(
         title = "Lonjakan Volume Breakout (RVOL)",
@@ -220,6 +234,19 @@ fun ScalpingSensitivitySettings(
 
         Spacer(Modifier.height(14.dp))
 
+        // P4.3 — Gerbang kelayakan pair berbasis edge (MFE horizon vs friksi)
+        PairEdgeGateCard(
+            quote = "USDT",
+            frictionPct = FeeSchedule.roundTripRate(
+                exchange = "TOKOCRYPTO",
+                quoteAsset = "USDT",
+                useMaker = false,
+                slippagePct = config.slippagePct
+            ) * 100.0
+        )
+
+        Spacer(Modifier.height(14.dp))
+
         // Sliders List Card
         Card(
             shape = RoundedCornerShape(12.dp),
@@ -305,6 +332,24 @@ fun ScalpingSensitivitySettings(
                         onConfigChange(config.copy(targetNetRr = rounded), "CUSTOM")
                     },
                     onShowInfo = { activeGuideKey = "target_net_rr" }
+                )
+
+                HorizontalDivider(color = Color.White.copy(alpha = 0.05f), modifier = Modifier.padding(vertical = 8.dp))
+
+                // 5b. Lantai risiko vs friksi (2026-10-12)
+                SensitivitySliderItem(
+                    label = "Lantai Risiko vs Friksi",
+                    jsonKey = "min_friction_multiple",
+                    value = config.minFrictionMultiple.toFloat(),
+                    range = 0f..10f,
+                    step = 0.5f,
+                    displayValue = if (config.minFrictionMultiple <= 0.0) "Nonaktif"
+                    else String.format(Locale.US, "%.1fx friksi", config.minFrictionMultiple),
+                    onValueChange = { newVal ->
+                        val rounded = (newVal * 10.0).roundToInt() / 10.0
+                        onConfigChange(config.copy(minFrictionMultiple = rounded), "CUSTOM")
+                    },
+                    onShowInfo = { activeGuideKey = "min_friction_multiple" }
                 )
 
                 HorizontalDivider(color = Color.White.copy(alpha = 0.05f), modifier = Modifier.padding(vertical = 8.dp))

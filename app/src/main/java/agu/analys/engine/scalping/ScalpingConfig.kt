@@ -25,10 +25,42 @@ object ScalpingConfig {
 
     // --- Risk / R:R ---
     const val MIN_NET_RR = 1.15
-    const val TARGET_NET_RR = 1.25
+    /**
+     * Target net R:R default.
+     *
+     * Dinaikkan 1.25 → **2.0** (2026-10-12) berdasar uji data riil 30 hari, 40 pair Tokocrypto:
+     * dengan target 1.25 win-rate minimum agar impas adalah `w* = 1/(1+1.25) ≈ 44%`, sedangkan
+     * engine hanya mencapai ~22–34%. Menaikkan target menurunkan `w*` dan, digabung lantai risiko
+     * berbasis friksi ([MIN_FRICTION_MULTIPLE]), mengubah avg R dari negatif menjadi sedikit positif.
+     */
+    const val TARGET_NET_RR = 2.0
+    /**
+     * Lantai risiko **absolut** (persen harga) — cadangan bila friksi sangat kecil.
+     *
+     * Tetap 0,5 karena penjaga utama adalah [MIN_FRICTION_MULTIPLE] yang adaptif per bursa.
+     * Uji 2026-10-12: lantai absolut 3,0% dikombinasikan dengan penjaga relatif memberi hasil
+     * **lebih buruk** di pair IDR berbiaya rendah (penjaga relatif jadi tidak berperan).
+     */
     const val MIN_RISK_PCT = 0.5
     const val MAX_TP2_R = 5.0
     const val DEFAULT_SLIPPAGE_PCT = 0.08
+    /**
+     * **Lantai risiko berbasis friksi** — kelipatan minimum jarak stop loss terhadap biaya
+     * round-trip (fee all-in + 2× slippage).
+     *
+     * Alasan (uji 2026-10-12): dengan `minRiskPct` 0,5% dan friksi Tokocrypto USDT 0,9688%,
+     * satu kali kena SL kehilangan `0,5% + 0,97% = 1,47%` ≈ **2,9R** — unit risiko kalah besar
+     * dari biaya. Baseline 30 hari × 28 pair: **0 dari 28 pair** punya avg R positif (avg R −1,22).
+     *
+     * Nilai **6,0** dipilih dari uji sweep 2026-10-12 (30 hari, 40 pair Tokocrypto):
+     * terdapat **plateau lebar 5–10×**, dengan 6× memberi hasil terbaik untuk pair USDT
+     * (avg R +0,0695, **6 dari 6 pair positif**) dan masih baik untuk IDR maker (+0,0430).
+     * Di bawah 5× hasilnya belum konsisten positif; di atas 10× jumlah trade menyusut
+     * tanpa perbaikan berarti. Lihat `workplan2.md` §9.
+     *
+     * Efek lantai: USDT 0,9688% → ≈5,81% · IDR taker 0,8144% → ≈4,89% · IDR maker 0,6144% → ≈3,69%.
+     */
+    const val MIN_FRICTION_MULTIPLE = 6.0
 
     // --- Volume (RVOL) ---
     const val RVOL_LOW = 0.7

@@ -23,6 +23,7 @@ object ScalpingRiskEngine {
     const val DEFAULT_MIN_RISK_PCT = ScalpingConfig.MIN_RISK_PCT
     const val DEFAULT_MAX_TP2_R = ScalpingConfig.MAX_TP2_R
     const val DEFAULT_SLIPPAGE_PCT = ScalpingConfig.DEFAULT_SLIPPAGE_PCT
+    const val DEFAULT_MIN_FRICTION_MULTIPLE = ScalpingConfig.MIN_FRICTION_MULTIPLE
 
     private const val FALLBACK_ATR_PCT = 0.5
     private const val MIN_RISK_ATR = 0.8
@@ -45,7 +46,9 @@ object ScalpingRiskEngine {
         val minNetRr: Double = config.minNetRr,
         val targetNetRr: Double = config.targetNetRr,
         val minRiskPct: Double = config.minRiskPct,
-        val maxTp2R: Double = config.maxTp2R
+        val maxTp2R: Double = config.maxTp2R,
+        /** Kelipatan minimum jarak SL terhadap friksi round-trip (0 = matikan lantai friksi). */
+        val minFrictionMultiple: Double = config.minFrictionMultiple
     )
 
     data class Result(
@@ -88,7 +91,26 @@ object ScalpingRiskEngine {
             ?.takeIf { it > 0.0 && it < zoneLow }
             ?.let { it - SL_BUFFER_ATR * atr }
 
-        val minRiskAbs = maxOf(MIN_RISK_ATR * atr, input.minRiskPct / 100.0 * entry)
+        val buyFee = if (input.useMaker) input.fees.buyMakerPct else input.fees.buyTakerPct
+        val sellFee = if (input.useMaker) input.fees.sellMakerPct else input.fees.sellTakerPct
+        val costPct = buyFee + sellFee + 2.0 * input.slippagePct
+
+        // --- Lantai risiko berbasis friksi (2026-10-12) -------------------------------
+        // Friksi round-trip adalah kerugian yang tak bisa dihindari tiap trade. Bila jarak SL
+        // lebih kecil dari beberapa kali friksi, satu kali SL menelan banyak "R" sekaligus dan
+        // matematikanya mustahil. Lantai ini memaksa risk ≥ minFrictionMultiple × friksi.
+        val frictionFloorPct = input.minFrictionMultiple * costPct
+        val atrCapPct = MAX_RISK_ATR * atr / entry * 100.0
+        if (input.minFrictionMultiple > 0.0 && frictionFloorPct > atrCapPct) {
+            reasons += "SL dipaksa ${fmt(frictionFloorPct)}% (${fmt(input.minFrictionMultiple)}x friksi) — " +
+                "di atas ${fmt(MAX_RISK_ATR)}x ATR (${fmt(atrCapPct)}%). Ini bukan scalp cepat; " +
+                "horizon realistis 1–8 jam."
+        }
+        val minRiskAbs = maxOf(
+            MIN_RISK_ATR * atr,
+            input.minRiskPct / 100.0 * entry,
+            frictionFloorPct / 100.0 * entry
+        )
         val maxRiskAbs = maxOf(MAX_RISK_ATR * atr, minRiskAbs)
 
         var sl = structuralSl ?: (entry - DEFAULT_SL_ATR * atr)
@@ -100,7 +122,12 @@ object ScalpingRiskEngine {
             }
             rawRisk < minRiskAbs -> {
                 sl = entry - minRiskAbs
-                reasons += "SL terlalu rapat — dilebarkan ke batas minimum (${fmt(input.minRiskPct)}% / ${fmt(MIN_RISK_ATR)}x ATR)."
+                if (frictionFloorPct > input.minRiskPct && frictionFloorPct > MIN_RISK_ATR * atr / entry * 100.0) {
+                    reasons += "SL terlalu rapat untuk friksi ${fmt(costPct)}% — dilebarkan ke " +
+                        "${fmt(input.minFrictionMultiple)}x friksi (${fmt(frictionFloorPct)}%)."
+                } else {
+                    reasons += "SL terlalu rapat — dilebarkan ke batas minimum (${fmt(input.minRiskPct)}% / ${fmt(MIN_RISK_ATR)}x ATR)."
+                }
             }
             structuralSl != null -> reasons += "SL di bawah struktur (support/swing low) + buffer ATR."
             else -> reasons += "SL berbasis ${fmt(DEFAULT_SL_ATR)}x ATR (struktur tidak tersedia)."
@@ -108,9 +135,6 @@ object ScalpingRiskEngine {
 
         val risk = entry - sl
         val riskPctForTp = risk / entry * 100.0
-        val buyFee = if (input.useMaker) input.fees.buyMakerPct else input.fees.buyTakerPct
-        val sellFee = if (input.useMaker) input.fees.sellMakerPct else input.fees.sellTakerPct
-        val costPct = buyFee + sellFee + 2.0 * input.slippagePct
         val requiredGrossPct = input.targetNetRr * (riskPctForTp + costPct) + costPct
         val tp2Pct = maxOf(requiredGrossPct, MIN_TP2_R * riskPctForTp)
 

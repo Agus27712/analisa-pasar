@@ -4,9 +4,10 @@
   "min_score_strong": 75,
   "min_score_breakout_retest": 75,
   "min_net_rr": 1.15,
-  "target_net_rr": 1.25,
+  "target_net_rr": 2.0,
   "min_risk_pct": 0.5,
   "max_tp2_r": 5.0,
+  "min_friction_multiple": 6.0,
   "slippage_pct": 0.08,
   "rvol_breakout_min": 1.5,
   "rvol_setup_min": 1.2,
@@ -37,7 +38,7 @@
   "exit": {
     "mode": "classic",
     "min_early_profit_net_pct": 0.45,
-    "breakeven_trigger_net_pct": 0.40,
+    "breakeven_trigger_net_pct": 0.4,
     "trail_pct": 0.35,
     "max_hold_bars_m1": 90
   }
