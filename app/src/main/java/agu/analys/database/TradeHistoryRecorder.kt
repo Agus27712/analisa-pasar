@@ -72,7 +72,10 @@ class TradeHistoryRecorder(
             ?: "Sinyal indikator teknikal terkonfirmasi pada mode ${strategyMode.uppercase()}"
         val snapshotJson = snapshot?.toJson()?.toString()
 
-        val feeRate = if (isReal) 0.003 else 0.003
+        // Biaya dari FeeSchedule (satu sumber kebenaran), bukan angka flat 0,3% yang salah
+        // untuk Tokocrypto USDT (seharusnya 0,4044%) maupun Tokocrypto IDR.
+        val quoteAsset = agu.analys.util.PriceFormatter.extractQuote(normSymbol)
+        val feeRate = agu.analys.config.FeeSchedule.buyRate(exchange, quoteAsset)
         val feeIdr = buyTotalIdr * feeRate
 
         scope.launch(Dispatchers.IO) {
@@ -238,7 +241,11 @@ class TradeHistoryRecorder(
                         ?: dao.getActiveHoldingForSymbol(normSymbol, isReal)
                 }
 
-                val feeRate = if (isReal) 0.003 else 0.003
+                // Biaya jual & beli dari FeeSchedule — sisi jual lebih mahal dari sisi beli
+                // pada pair IDR, dan biaya beli tetap dipakai untuk estimasi harga pokok.
+                val quoteAsset = agu.analys.util.PriceFormatter.extractQuote(normSymbol)
+                val feeRate = agu.analys.config.FeeSchedule.sellRate(normExchange, quoteAsset)
+                val buyFeeRate = agu.analys.config.FeeSchedule.buyRate(normExchange, quoteAsset)
                 val sellTotalIdr = sellPrice * sellQuantity
                 val sellFeeIdr = sellTotalIdr * feeRate
 
@@ -274,7 +281,7 @@ class TradeHistoryRecorder(
                     } else sellPrice * 0.98
 
                     val estBuyTotal = estBuyPrice * sellQuantity
-                    val estBuyFee = estBuyTotal * feeRate
+                    val estBuyFee = estBuyTotal * buyFeeRate
                     val computedPnlIdr = customPnlIdr ?: (sellTotalIdr - sellFeeIdr - estBuyTotal - estBuyFee)
                     val computedPnlPct = customPnlPercent ?: if (estBuyTotal > 0) ((computedPnlIdr / estBuyTotal) * 100.0) else 0.0
                     val isWin = computedPnlIdr >= 0.0

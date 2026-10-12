@@ -30,7 +30,6 @@ class AppPreferences(context: Context) {
     } catch (e: Exception) {
         // Handle corrupt KeyStore / invalid key after app upgrade gracefully
         timber.log.Timber.w(e, "EncryptedSharedPreferences failed, attempting keystore recovery")
-        isKeyStoreRecoveryOccurred = true
         try {
             context.deleteSharedPreferences(PREFS_NAME)
             // Hapus MasterKey corrupt dari AndroidKeyStore agar retry tidak gagal dengan key yang sama.
@@ -53,8 +52,12 @@ class AppPreferences(context: Context) {
             )
         } catch (_: Exception) {
             // Fallback terakhir ke plaintext: fungsional tapi TIDAK aman untuk API key/secret.
-            // Ditandai via isKeyStoreRecoveryOccurred agar UI bisa memperingatkan pengguna.
+            //
+            // Penanda `isKeyStoreRecoveryOccurred` HANYA di-set di sini (bukan saat recovery
+            // berhasil) supaya artinya tepat: "kredensial sedang tersimpan tanpa enkripsi".
+            // UI memakai penanda ini untuk memperingatkan pengguna dan memblokir trading riil.
             timber.log.Timber.e("EncryptedSharedPreferences recovery gagal total — fallback ke plaintext (kredensial tidak terenkripsi!)")
+            isKeyStoreRecoveryOccurred = true
             context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         }
     }
@@ -198,19 +201,62 @@ class AppPreferences(context: Context) {
         get() = prefs.getBoolean(KEY_SCALPING_MODE, false)
         set(value) = prefs.edit().putBoolean(KEY_SCALPING_MODE, value).apply()
 
+    /** True bila pengguna sudah menyimpan biaya sendiri (menimpa default bursa). */
+    val hasCustomTradingFees: Boolean
+        get() = prefs.getBoolean(KEY_FEES_CUSTOM, false)
+
+    /**
+     * Biaya trading yang dipakai mesin.
+     *
+     * Bila pengguna belum pernah mengubahnya, nilai diambil dari **default bursa yang sedang
+     * aktif** ([MarketDataSource.defaultFeeConfig]).
+     *
+     * Sebelum perbaikan ini, getter selalu memakai preset Indodax (0,21%/0,42%) untuk **semua**
+     * bursa — sehingga di Tokocrypto USDT mesin menghitung biaya kurang dari separuh nilai
+     * sebenarnya (0,4044%/sisi), dan setiap Net R:R / gate RR / perkiraan untung jadi terlalu
+     * optimistis.
+     */
     var tradingFees: TradingFeeConfig
-        get() = TradingFeeConfig(
-            buyMakerPct = prefs.getString(KEY_BUY_MAKER, "0.11")?.toDoubleOrNull() ?: 0.11,
-            buyTakerPct = prefs.getString(KEY_BUY_TAKER, "0.21")?.toDoubleOrNull() ?: 0.21,
-            sellMakerPct = prefs.getString(KEY_SELL_MAKER, "0.32")?.toDoubleOrNull() ?: 0.32,
-            sellTakerPct = prefs.getString(KEY_SELL_TAKER, "0.42")?.toDoubleOrNull() ?: 0.42
-        )
+        get() {
+            val fallback = marketDataSource.defaultFeeConfig
+            if (!hasCustomTradingFees) return fallback
+            return TradingFeeConfig(
+                buyMakerPct = prefs.getString(KEY_BUY_MAKER, null)?.toDoubleOrNull() ?: fallback.buyMakerPct,
+                buyTakerPct = prefs.getString(KEY_BUY_TAKER, null)?.toDoubleOrNull() ?: fallback.buyTakerPct,
+                sellMakerPct = prefs.getString(KEY_SELL_MAKER, null)?.toDoubleOrNull() ?: fallback.sellMakerPct,
+                sellTakerPct = prefs.getString(KEY_SELL_TAKER, null)?.toDoubleOrNull() ?: fallback.sellTakerPct
+            )
+        }
         set(value) = prefs.edit()
             .putString(KEY_BUY_MAKER, value.buyMakerPct.toString())
             .putString(KEY_BUY_TAKER, value.buyTakerPct.toString())
             .putString(KEY_SELL_MAKER, value.sellMakerPct.toString())
             .putString(KEY_SELL_TAKER, value.sellTakerPct.toString())
+            .putBoolean(KEY_FEES_CUSTOM, true)
             .apply()
+
+    /**
+     * Biaya yang **tepat** untuk satu simbol pada bursa aktif.
+     *
+     * Berbeda dari [tradingFees] yang hanya satu nilai global, fungsi ini memilih tarif menurut
+     * kuotasi pair (USDT vs IDR) mengikuti `FEE_TRUTH.md`. Pakai ini bila simbolnya sudah diketahui.
+     */
+    fun feeConfigFor(symbol: String): TradingFeeConfig {
+        if (hasCustomTradingFees) return tradingFees
+        val quote = agu.analys.util.PriceFormatter.extractQuote(symbol)
+        return agu.analys.config.FeeSchedule.configFor(marketDataSource.name, quote)
+    }
+
+    /** Kembalikan biaya ke default bursa aktif. Dipanggil saat pengguna berganti bursa. */
+    fun resetTradingFeesToDefault() {
+        prefs.edit()
+            .remove(KEY_BUY_MAKER)
+            .remove(KEY_BUY_TAKER)
+            .remove(KEY_SELL_MAKER)
+            .remove(KEY_SELL_TAKER)
+            .putBoolean(KEY_FEES_CUSTOM, false)
+            .apply()
+    }
 
     var scalpingRuntimeConfig: agu.analys.engine.scalping.ScalpingRuntimeConfig
         get() {
@@ -401,12 +447,43 @@ class AppPreferences(context: Context) {
     fun getDefaultWatchlistSymbol(source: MarketDataSource = marketDataSource): String =
         if (source == MarketDataSource.TOKOCRYPTO) "BTCUSDT" else "BTCIDR"
 
+    private fun watchlistKey(source: MarketDataSource): String =
+        if (source == MarketDataSource.TOKOCRYPTO) KEY_WATCHLIST_TOKOCRYPTO else KEY_WATCHLIST_INDODAX
+
+    /**
+     * Memeriksa apakah [symbol] memang diperdagangkan di bursa [source] berdasarkan kuotasinya.
+     * Mencegah simbol dari satu bursa bocor ke bursa lain (mis. BTCUSDT muncul di Indodax).
+     */
+    private fun symbolBelongsToExchange(symbol: String, source: MarketDataSource): Boolean {
+        val quote = PriceFormatter.extractQuote(symbol)
+        return when (source) {
+            // Tokocrypto: USDT/USDC/BUSD (kuotasi kripto) + IDR/BIDR (kuotasi rupiah).
+            MarketDataSource.TOKOCRYPTO -> quote == "USDT" || quote == "USDC" ||
+                    quote == "BUSD" || quote == "IDR" || quote == "BIDR"
+            // Indodax: hanya kuotasi rupiah (IDR/IDRT). USDT dilarang di Indodax.
+            MarketDataSource.INDODAX -> quote == "IDR" || quote == "IDRT"
+        }
+    }
+
     fun getWatchlist(source: MarketDataSource = marketDataSource): Set<String> {
-        val key = if (source == MarketDataSource.TOKOCRYPTO) "watchlist_tokocrypto" else KEY_WATCHLIST_INDODAX
+        val key = watchlistKey(source)
         val saved = prefs.getStringSet(key, null)
         if (saved != null && saved.isNotEmpty()) return saved.toSet()
+
+        // Migrasi satu kali dari daftar lama tanpa partisi bursa (KEY_WATCHLIST_LEGACY).
+        // Hanya simbol yang benar-benar milik bursa ini yang diadopsi, lalu disimpan ke
+        // key per-bursa. Dengan begitu daftar lama tidak bocor ke bursa lain.
         val legacy = prefs.getStringSet(KEY_WATCHLIST_LEGACY, null)
-        if (legacy != null && legacy.isNotEmpty()) return legacy.toSet()
+        if (legacy != null && legacy.isNotEmpty()) {
+            val migrated = legacy
+                .map { it.uppercase().trim() }
+                .filter { it.isNotBlank() && symbolBelongsToExchange(it, source) }
+                .toSet()
+            if (migrated.isNotEmpty()) {
+                prefs.edit().putStringSet(key, migrated).apply()
+                return migrated
+            }
+        }
         return setOf(getDefaultWatchlistSymbol(source))
     }
 
@@ -414,16 +491,14 @@ class AppPreferences(context: Context) {
         val defaultSym = getDefaultWatchlistSymbol(source)
         val upperSet = symbols.map { it.uppercase().trim() }.filter { it.isNotBlank() }.toSet()
         val finalSet = if (upperSet.isEmpty()) setOf(defaultSym) else upperSet
-        val key = if (source == MarketDataSource.TOKOCRYPTO) "watchlist_tokocrypto" else KEY_WATCHLIST_INDODAX
-        prefs.edit().putStringSet(key, finalSet).apply()
+        prefs.edit().putStringSet(watchlistKey(source), finalSet).apply()
     }
 
     fun toggleWatchlist(symbol: String, source: MarketDataSource = marketDataSource): Boolean {
         val set = getWatchlist(source).toMutableSet()
         val upper = symbol.uppercase()
         val added = if (set.remove(upper)) false else { set.add(upper); true }
-        val key = if (source == MarketDataSource.TOKOCRYPTO) "watchlist_tokocrypto" else KEY_WATCHLIST_INDODAX
-        prefs.edit().putStringSet(key, set).apply()
+        prefs.edit().putStringSet(watchlistKey(source), set).apply()
         return added
     }
 
@@ -544,6 +619,7 @@ class AppPreferences(context: Context) {
         private const val KEY_PAPER_AUTO_BUY_MIN_STAGE = "paper_auto_buy_min_stage_v1"
         private const val KEY_PAPER_TRADE_JOURNAL = "paper_trade_journal_v1"
         private const val KEY_WATCHLIST_LEGACY = "watchlist_symbols"
+        private const val KEY_WATCHLIST_TOKOCRYPTO = "watchlist_tokocrypto"
         private const val KEY_WATCHLIST_INDODAX = "watchlist_symbols_indodax"
         private const val KEY_FAVORITES_INDODAX = "favorites_symbols_indodax"
         private const val KEY_LEARNING_COMPLETED = "learning_completed_lessons"
@@ -551,6 +627,9 @@ class AppPreferences(context: Context) {
         private const val KEY_BUY_TAKER = "fee_buy_taker"
         private const val KEY_SELL_MAKER = "fee_sell_maker"
         private const val KEY_SELL_TAKER = "fee_sell_taker"
+
+        /** Penanda apakah pengguna pernah menimpa biaya; bila false → pakai default bursa. */
+        private const val KEY_FEES_CUSTOM = "fee_is_custom"
         private const val KEY_UPDATE_REPO = "github_update_repo"
         private const val KEY_UPDATE_GH_TOKEN = "github_update_token"
         private const val KEY_COMPACT_UI = "compact_ui"

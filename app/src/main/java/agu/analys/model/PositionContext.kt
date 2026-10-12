@@ -111,13 +111,19 @@ data class PositionContext(
             val isReal = targetIsReal
 
             val validPrice = if (currentPrice > 0.0 && currentPrice.isFinite()) currentPrice else null
-            val buyFeeRate = if (targetIsReal) (fees.buyMakerPct / 100.0).coerceAtLeast(0.0021) else (fees.buyMakerPct / 100.0).coerceAtLeast(0.0)
+            // Lantai biaya memakai tarif taker yang benar untuk bursa + kuotasi ini,
+            // bukan angka tetap 0,21% (yang hanya benar untuk Indodax).
+            val resolvedExchange = spotPosition?.exchange?.takeIf { it.isNotBlank() } ?: "TOKOCRYPTO"
+            val quoteAsset = PriceFormatter.extractQuote(symbol)
+            val buyFloor = agu.analys.config.FeeSchedule.buyRate(resolvedExchange, quoteAsset)
+            val sellFloor = agu.analys.config.FeeSchedule.sellRate(resolvedExchange, quoteAsset)
+            val buyFeeRate = if (targetIsReal) (fees.buyMakerPct / 100.0).coerceAtLeast(buyFloor) else (fees.buyMakerPct / 100.0).coerceAtLeast(0.0)
             val cost = if (isSpotHolding && spotPosition!!.investedAmount > 0.0) {
                 spotPosition.investedAmount
             } else if (entry != null && entry > 0.0) {
                 (qty * entry) * (1.0 + buyFeeRate)
             } else null
-            val sellFeeRate = if (targetIsReal) (fees.sellMakerPct / 100.0).coerceAtLeast(0.0021) else (fees.sellMakerPct / 100.0).coerceAtLeast(0.0)
+            val sellFeeRate = if (targetIsReal) (fees.sellMakerPct / 100.0).coerceAtLeast(sellFloor) else (fees.sellMakerPct / 100.0).coerceAtLeast(0.0)
             val gross = if (validPrice != null) qty * validPrice else null
             val netVal = if (gross != null) gross * (1.0 - sellFeeRate) else null
             val netPnl = if (cost != null && netVal != null) netVal - cost else null

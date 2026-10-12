@@ -8,10 +8,18 @@ class SimulationTradeStore(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences("simulation_trade_prefs", Context.MODE_PRIVATE)
 
     companion object {
-        const val INDODAX_MAKER_FEE_RATE = 0.001 // 0.1%
-        const val INDODAX_TAKER_FEE_RATE = 0.003 // 0.3%
-        const val TOKOCRYPTO_MAKER_FEE_RATE = 0.001 // 0.1%
-        const val TOKOCRYPTO_TAKER_FEE_RATE = 0.001 // 0.1%
+        /**
+         * Tarif biaya simulasi diambil dari `agu.analys.config.FeeSchedule` — satu sumber
+         * kebenaran untuk seluruh aplikasi.
+         *
+         * Konstanta lama (0,1% / 0,3%) dihapus karena bertentangan dengan `FEE_TRUTH.md` dan
+         * membuat biaya yang dicek di awal berbeda dari yang benar-benar dipotong.
+         */
+        private fun buyRate(exchange: String, quote: String, useMaker: Boolean = false): Double =
+            agu.analys.config.FeeSchedule.buyRate(exchange, quote, useMaker)
+
+        private fun sellRate(exchange: String, quote: String, useMaker: Boolean = false): Double =
+            agu.analys.config.FeeSchedule.sellRate(exchange, quote, useMaker)
     }
 
     private fun getWalletKey(exchange: String): String = "${exchange.trim().lowercase()}_sim_wallet"
@@ -295,7 +303,7 @@ class SimulationTradeStore(context: Context) {
         exchange: String = "TOKOCRYPTO"
     ) {
         val totalIdr = quantity * price
-        val feeRate = if (exchange.equals("INDODAX", true)) INDODAX_TAKER_FEE_RATE else TOKOCRYPTO_TAKER_FEE_RATE
+        val feeRate = sellRate(exchange, quoteAsset)
         val feeIdr = totalIdr * feeRate
         val item = SimulationTradeHistoryItem(
             id = UUID.randomUUID().toString(),
@@ -384,13 +392,17 @@ class SimulationTradeStore(context: Context) {
                 if (execPrice <= 0.0) return SimulationOrderResult.Error("Harga pasar realtime belum tersedia.")
 
                 if (side == SimulationOrderSide.BUY) {
-                    val feeRate = if (exchange.equals("INDODAX", true)) INDODAX_TAKER_FEE_RATE else TOKOCRYPTO_TAKER_FEE_RATE
+                    // Biaya pre-check WAJIB sama dengan biaya yang dipakai eksekusi,
+                    // kalau tidak saldo bisa terpotong berbeda dari yang dicek.
+                    val feeRate = buyRate(exchange, quote)
                     val required = quantity * execPrice * (1.0 + feeRate)
                     // Pair USDT: saldo Rupiah dikonversi otomatis bila saldo USDT kurang.
                     val (toppedWallet, convNote) = ensureQuoteBalance(wallet, quote, required, exchange)
                     wallet = toppedWallet
 
-                    val result = SimulationOrderEngine.executeMarketBuy(wallet, symbol, baseKey, quote, execPrice, quantity)
+                    val result = SimulationOrderEngine.executeMarketBuy(
+                        wallet, symbol, baseKey, quote, execPrice, quantity, feeRate
+                    )
                     return result.fold(
                         onSuccess = { res ->
                             saveWallet(res.updatedWallet, exchange)
@@ -409,7 +421,11 @@ class SimulationTradeStore(context: Context) {
                         }
                     )
                 } else {
-                    val result = SimulationOrderEngine.executeMarketSell(wallet, symbol, baseKey, quote, execPrice, quantity)
+                    val result = SimulationOrderEngine.executeMarketSell(
+                        wallet, symbol, baseKey, quote, execPrice, quantity,
+                        feeRate = sellRate(exchange, quote),
+                        buyFeeRate = buyRate(exchange, quote)
+                    )
                     return result.fold(
                         onSuccess = { res ->
                             saveWallet(res.updatedWallet, exchange)
@@ -435,7 +451,13 @@ class SimulationTradeStore(context: Context) {
             SimulationOrderType.LIMIT, SimulationOrderType.STOP_LIMIT -> {
                 if (price <= 0.0) return SimulationOrderResult.Error("Harga Limit harus lebih besar dari 0.")
                 val totalQuote = quantity * price
-                val feeRate = if (exchange.equals("INDODAX", true)) INDODAX_MAKER_FEE_RATE else TOKOCRYPTO_MAKER_FEE_RATE
+                // Limit order = maker, dan tarifnya berbeda untuk beli vs jual
+                // (mis. Tokocrypto IDR: beli maker 0,1222% vs jual maker 0,3322%).
+                val feeRate = if (side == SimulationOrderSide.BUY) {
+                    buyRate(exchange, quote, useMaker = true)
+                } else {
+                    sellRate(exchange, quote, useMaker = true)
+                }
                 val feeQuote = totalQuote * feeRate
 
                 if (side == SimulationOrderSide.BUY) {
@@ -581,7 +603,6 @@ class SimulationTradeStore(context: Context) {
 
         val filledOrders = mutableListOf<SimulationOrder>()
         var wallet = getWallet(exchange)
-        val feeRate = if (exchange.equals("INDODAX", true)) INDODAX_MAKER_FEE_RATE else TOKOCRYPTO_MAKER_FEE_RATE
 
         relevant.forEach { order ->
             var shouldFill = false
@@ -622,6 +643,12 @@ class SimulationTradeStore(context: Context) {
                 }
                 val orderQuote = order.quoteAsset.ifBlank { "IDR" }
                 val isUsdtOrder = agu.analys.util.PriceFormatter.isUsdtQuote(orderQuote)
+                // Tarif per sisi — limit order = maker, dan tarif beli ≠ tarif jual.
+                val feeRate = if (order.side == SimulationOrderSide.BUY) {
+                    buyRate(exchange, orderQuote, useMaker = true)
+                } else {
+                    sellRate(exchange, orderQuote, useMaker = true)
+                }
                 val totalQuoteVal = order.quantity * execPrice
                 val feeQuoteVal = totalQuoteVal * feeRate
 
@@ -708,7 +735,8 @@ class SimulationTradeStore(context: Context) {
                     val fillFee = fillTotal * feeRate
                     val prevQuote = wallet.quoteForCoin(baseKey)
                     val avgBuy = if (prevQuote.equals(orderQuote, true)) (wallet.avgBuyPrices[baseKey] ?: execPrice) else execPrice
-                    val costBasis = sellQty * avgBuy
+                    // Harga pokok termasuk biaya beli (maker) supaya PnL bersih menghitung KEDUA sisi biaya.
+                    val costBasis = sellQty * avgBuy * (1.0 + buyRate(exchange, orderQuote, useMaker = true))
                     val netQuote = (fillTotal - fillFee).coerceAtLeast(0.0)
                     val pnlQuote = fillTotal - costBasis - fillFee
                     val pnlPercent = if (costBasis > 0.0) (pnlQuote / costBasis) * 100.0 else 0.0

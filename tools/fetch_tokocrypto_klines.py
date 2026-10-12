@@ -23,7 +23,14 @@ import urllib.request
 
 DEFAULT_BASE = "https://www.tokocrypto.site/api/v3"
 DEFAULT_PAIRS = "BTCUSDT,ETHUSDT,BNBUSDT,SOLUSDT,XRPUSDT,DOGEUSDT,ADAUSDT,TRXUSDT"
-INTERVALS = {"1m": 60_000, "15m": 15 * 60_000, "1h": 60 * 60_000}
+INTERVALS = {
+    "1m": 60_000,
+    "15m": 15 * 60_000,
+    "1h": 60 * 60_000,
+    "4h": 4 * 60 * 60_000,
+    "1d": 24 * 60 * 60_000,
+    "1w": 7 * 24 * 60 * 60_000,
+}
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) TokoClient/3.5"
 
 
@@ -75,7 +82,8 @@ def fetch(base, symbol, interval, pages):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--pairs", default=DEFAULT_PAIRS, help="Dipisah koma, format BTCUSDT")
-    ap.add_argument("--pages", type=int, default=5, help="Halaman M1 @1000 candle (5 = sekitar 3,5 hari, 10 = sekitar 7 hari)")
+    ap.add_argument("--pages", type=int, default=5, help="Halaman @1000 candle. Untuk M1: 5 = sekitar 3,5 hari. Untuk 1d: 4 = sekitar 11 tahun.")
+    ap.add_argument("--intervals", default="", help="Daftar interval dipisah koma (1m,15m,1h,4h,1d,1w). Kosong = perilaku lama (1m,15m,1h dengan rentang waktu sama).")
     ap.add_argument("--out", default="data/tokocrypto")
     ap.add_argument("--base", default=DEFAULT_BASE)
     args = ap.parse_args()
@@ -84,11 +92,15 @@ def main():
     ok = 0
     for sym in [p.strip().upper() for p in args.pairs.split(",") if p.strip()]:
         try:
-            # Halaman M15/H1 ikut menyesuaikan agar cakupan waktunya sama dengan M1 (+60 candle pemanasan).
-            m1_minutes = args.pages * 1000
-            p15 = max(1, -(-(m1_minutes // 15 + 60) // 1000))
-            p1h = max(1, -(-(m1_minutes // 60 + 60) // 1000))
-            for interval, pages in (("1m", args.pages), ("15m", p15), ("1h", p1h)):
+            if args.intervals:
+                plan = [(iv.strip(), args.pages) for iv in args.intervals.split(",") if iv.strip()]
+            else:
+                # Perilaku lama: halaman M15/H1 menyesuaikan agar cakupan waktunya sama dengan M1 (+60 candle pemanasan).
+                m1_minutes = args.pages * 1000
+                p15 = max(1, -(-(m1_minutes // 15 + 60) // 1000))
+                p1h = max(1, -(-(m1_minutes // 60 + 60) // 1000))
+                plan = [("1m", args.pages), ("15m", p15), ("1h", p1h)]
+            for interval, pages in plan:
                 rows = fetch(args.base, sym, interval, pages)
                 path = os.path.join(args.out, f"{sym}_{interval}.csv")
                 with open(path, "w", newline="") as f:

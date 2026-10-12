@@ -14,10 +14,20 @@ import java.util.UUID
  * tetapi nilainya selalu dalam `quoteAsset` milik order yang bersangkutan.
  */
 object SimulationOrderEngine {
-    // Sesuai aturan PPN/PPh & tarif Indodax Spot (0.11% Maker, 0.21% Buy Taker, 0.42% Sell Taker)
+    /**
+     * Konstanta lama dipertahankan hanya sebagai alias historis.
+     *
+     * **Jangan dipakai untuk perhitungan baru** — gunakan
+     * `agu.analys.config.FeeSchedule` yang memilih tarif menurut bursa + kuotasi pair.
+     * Nilai di sini hanya berlaku untuk Indodax IDR.
+     */
+    @Deprecated("Gunakan FeeSchedule", ReplaceWith("FeeSchedule.INDODAX_IDR_BUY_MAKER"))
     const val INDODAX_MAKER_FEE_RATE = 0.0011 // 0.11%
+    @Deprecated("Gunakan FeeSchedule", ReplaceWith("FeeSchedule.INDODAX_IDR_BUY_TAKER"))
     const val INDODAX_BUY_TAKER_FEE_RATE = 0.0021 // 0.21%
+    @Deprecated("Gunakan FeeSchedule", ReplaceWith("FeeSchedule.INDODAX_IDR_SELL_TAKER"))
     const val INDODAX_SELL_TAKER_FEE_RATE = 0.0042 // 0.42%
+    @Deprecated("Gunakan FeeSchedule", ReplaceWith("FeeSchedule.INDODAX_IDR_BUY_TAKER"))
     const val INDODAX_TAKER_FEE_RATE = 0.0021 // Alias untuk kompatibilitas backward
 
     data class ExecutionResult(
@@ -31,6 +41,14 @@ object SimulationOrderEngine {
     private fun withQuoteBalance(wallet: SimulationWallet, quote: String, newValue: Double): SimulationWallet =
         if (isUsdt(quote)) wallet.copy(usdtBalance = newValue) else wallet.copy(idrBalance = newValue)
 
+    /**
+     * Eksekusi beli pasar.
+     *
+     * `feeRate` **wajib** diberikan eksplisit (pecahan, mis. `FeeSchedule.buyRate(...)`).
+     * Sebelumnya parameter ini punya nilai default preset Indodax, sehingga order Tokocrypto
+     * USDT memakai biaya 0,21% padahal seharusnya 0,4044% — dan biaya yang dicek di awal
+     * berbeda dari yang benar-benar dipotong.
+     */
     fun executeMarketBuy(
         wallet: SimulationWallet,
         symbol: String,
@@ -38,7 +56,7 @@ object SimulationOrderEngine {
         quote: String,
         execPrice: Double,
         quantity: Double,
-        feeRate: Double = INDODAX_BUY_TAKER_FEE_RATE
+        feeRate: Double
     ): Result<ExecutionResult> {
         val totalQuote = quantity * execPrice
         val feeQuote = totalQuote * feeRate
@@ -111,6 +129,14 @@ object SimulationOrderEngine {
         return Result.success(ExecutionResult(updatedWallet, history, order))
     }
 
+    /**
+     * Eksekusi jual pasar.
+     *
+     * `feeRate` (biaya jual) **wajib** eksplisit. `buyFeeRate` adalah biaya yang dulu dibayar
+     * saat posisi ini dibeli — dipakai agar PnL bersih benar-benar memperhitungkan **kedua sisi**.
+     * Sebelumnya biaya beli tidak pernah masuk harga pokok, sehingga PnL dilaporkan lebih
+     * optimistis sebesar biaya beli.
+     */
     fun executeMarketSell(
         wallet: SimulationWallet,
         symbol: String,
@@ -118,7 +144,8 @@ object SimulationOrderEngine {
         quote: String,
         execPrice: Double,
         quantity: Double,
-        feeRate: Double = INDODAX_SELL_TAKER_FEE_RATE
+        feeRate: Double,
+        buyFeeRate: Double = feeRate
     ): Result<ExecutionResult> {
         val available = wallet.getAvailableCoin(baseKey)
         // Toleransi absolut + relatif agar trailing/full-close tidak menyisakan dust
@@ -141,7 +168,9 @@ object SimulationOrderEngine {
         val netQuote = (totalQuote - feeQuote).coerceAtLeast(0.0)
         val prevQuote = wallet.quoteForCoin(baseKey)
         val avgBuy = if (prevQuote.equals(quote, true)) (wallet.avgBuyPrices[baseKey] ?: execPrice) else execPrice
-        val costBasis = actualQty * avgBuy
+        // Harga pokok mencakup biaya beli yang dulu dibayar, supaya PnL bersih = hasil jual −
+        // (modal + biaya beli) − biaya jual. Tanpa ini PnL terlalu optimistis sebesar biaya beli.
+        val costBasis = actualQty * avgBuy * (1.0 + buyFeeRate)
         val pnlQuote = totalQuote - costBasis - feeQuote
         val pnlPercent = if (costBasis > 0.0) (pnlQuote / costBasis) * 100.0 else 0.0
 

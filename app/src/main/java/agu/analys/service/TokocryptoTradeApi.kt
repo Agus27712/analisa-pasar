@@ -47,9 +47,9 @@ object TokocryptoTradeApi {
      * Sinkronisasi selisih waktu antara jam perangkat lokal dengan server Tokocrypto.
      * Mencegah penolakan request dengan error "-1021: Timestamp for this request is outside of recvWindow".
      */
-    suspend fun syncServerTime() = withContext(Dispatchers.IO) {
+    suspend fun syncServerTime(force: Boolean = false) = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
-        if (now - lastTimeSyncMs < 300_000L && lastTimeSyncMs > 0L) return@withContext
+        if (!force && now - lastTimeSyncMs < 300_000L && lastTimeSyncMs > 0L) return@withContext
         try {
             val req = Request.Builder()
                 .url("$TOKOCRYPTO_BASE_URL/open/v1/common/time")
@@ -77,6 +77,28 @@ object TokocryptoTradeApi {
 
     private fun getAdjustedTimestamp(): String {
         return (System.currentTimeMillis() + serverTimeOffsetMs).toString()
+    }
+
+    /**
+     * M16 — Apakah offset waktu server sudah pernah berhasil disinkronkan.
+     * Bila false, jam perangkat dipakai apa adanya (berisiko error -1021 pada order riil).
+     */
+    fun isTimeSynced(): Boolean = lastTimeSyncMs > 0L
+
+    /**
+     * M16 — Pastikan offset waktu tersedia sebelum menandatangani order riil.
+     * Memaksa sinkron ulang bila belum pernah berhasil; log peringatan eksplisit bila gagal,
+     * sehingga order riil tidak diam-diam memakai jam perangkat yang bisa meleset.
+     */
+    suspend fun ensureTimeSynced() {
+        if (!isTimeSynced()) {
+            syncServerTime(force = true)
+            if (!isTimeSynced()) {
+                Timber.w("Waktu server Tokocrypto BELUM tersinkron — order riil memakai jam perangkat (risiko -1021).")
+            }
+        } else {
+            syncServerTime()
+        }
     }
 
     private fun hmacSha256(secret: String, payload: String): String {
@@ -175,7 +197,7 @@ object TokocryptoTradeApi {
             return@withContext null to "API Key atau Secret Key Tokocrypto belum diisi."
         }
 
-        syncServerTime()
+        ensureTimeSynced()
         val timestamp = getAdjustedTimestamp()
         val recvWindow = "10000"
         val params = listOf(
@@ -474,7 +496,7 @@ if (!valResult.isValid) {
             ?.let { "${it.baseAsset}_${it.quoteAsset}" }
             ?: TokocryptoMarketService.toTokocryptoPair(request.symbol)
 
-        syncServerTime()
+        ensureTimeSynced()
         val timestamp = getAdjustedTimestamp()
         val formParams = mutableListOf<Pair<String, String>>()
         val finalQuantity = BigDecimal.valueOf(valResult.adjustedQty)
@@ -645,7 +667,7 @@ if (!valResult.isValid) {
             ?.let { "${it.baseAsset}_${it.quoteAsset}" }
             ?: TokocryptoMarketService.toTokocryptoPair(symbol)
 
-        syncServerTime()
+        ensureTimeSynced()
         val timestamp = getAdjustedTimestamp()
         val params = listOf(
             "orderId=$orderId",
@@ -704,7 +726,7 @@ if (!valResult.isValid) {
             ?.let { "${it.baseAsset}_${it.quoteAsset}" }
             ?: TokocryptoMarketService.toTokocryptoPair(symbol)
 
-        syncServerTime()
+        ensureTimeSynced()
         val timestamp = getAdjustedTimestamp()
         val params = mutableListOf<String>()
         if (!orderId.isNullOrBlank() && orderId != "0") params.add("orderId=$orderId")
@@ -774,7 +796,7 @@ if (!valResult.isValid) {
         if (apiKey.isBlank() || secretKey.isBlank()) {
             return@withContext false to "API Key atau Secret Key Tokocrypto belum diisi."
         }
-        syncServerTime()
+        ensureTimeSynced()
         val timestamp = getAdjustedTimestamp()
         val params = mutableListOf(
             "recvWindow=10000",
@@ -842,7 +864,7 @@ if (!valResult.isValid) {
             ?.let { "${it.baseAsset}_${it.quoteAsset}" }
             ?: TokocryptoMarketService.toTokocryptoPair(symbol)
 
-        syncServerTime()
+        ensureTimeSynced()
         val timestamp = getAdjustedTimestamp()
         val params = listOf(
             "limit=$limit",

@@ -100,9 +100,16 @@ object IndodaxTradeApiV2 {
             }
         } catch (e: Exception) {
             Timber.e(e, "Gagal fetch server_time Indodax")
+            Timber.w("M16: offset waktu Indodax BELUM tersinkron — request bertanda tangan akan memakai jam perangkat (risiko Invalid Timestamp).")
             0L
         }
     }
+
+    /**
+     * M16 — Apakah offset waktu server Indodax sudah berhasil diambil.
+     * `null` berarti belum/tidak tersinkron (offset dihapus saat error -1021 agar dicoba ulang).
+     */
+    fun isTimeSynced(): Boolean = serverTimeOffset != null
 
     private suspend fun serverTimeMs(): Long {
         val current = serverTimeOffset
@@ -403,12 +410,16 @@ object IndodaxTradeApiV2 {
             return OrderResult(false, "Side harus BUY atau SELL.")
         }
 
+        val fmtPrice = decimal(price, symbol, true)
+        val fmtQty = decimal(quantity, symbol, false)
+        validateRoundedShape(symbol, fmtPrice, fmtQty)?.let { return it }
+
         val params = linkedMapOf(
             "symbol" to formattedSymbol,
             "side" to normalizedSide,
             "type" to "LIMIT",
-            "price" to decimal(price, symbol, true),
-            "quantity" to decimal(quantity, symbol, false),
+            "price" to fmtPrice,
+            "quantity" to fmtQty,
             "timestamp" to serverTimeMs().toString(),
             "recvWindow" to RECV_WINDOW_MS.toString()
         )
@@ -460,11 +471,14 @@ object IndodaxTradeApiV2 {
             return OrderResult(false, "Side harus BUY atau SELL.")
         }
 
+        val fmtQty = decimal(quantity, symbol, false)
+        validateRoundedShape(symbol, priceText = null, qtyText = fmtQty)?.let { return it }
+
         val params = linkedMapOf(
             "symbol" to formattedSymbol,
             "side" to normalizedSide,
             "type" to "MARKET",
-            "quantity" to decimal(quantity, symbol, false),
+            "quantity" to fmtQty,
             "timestamp" to serverTimeMs().toString(),
             "recvWindow" to RECV_WINDOW_MS.toString()
         )
@@ -673,6 +687,31 @@ object IndodaxTradeApiV2 {
             cachedPairsMetaAt = now
         }
         return meta
+    }
+
+    /**
+     * M14 — Guard pembulatan: pastikan nilai yang sudah diformat ke presisi pair TIDAK menjadi 0
+     * (mis. kuantitas sangat kecil yang dibulatkan ke 0 pada pair berharga besar) dan tidak negatif.
+     * Mengembalikan [OrderResult] gagal bila bentuk order tidak valid, atau null bila aman dikirim.
+     */
+    private fun validateRoundedShape(symbol: String, priceText: String?, qtyText: String): OrderResult? {
+        val q = qtyText.toDoubleOrNull()
+        if (q == null || !q.isFinite() || q <= 0.0) {
+            return OrderResult(
+                false,
+                "Kuantitas $symbol setelah pembulatan presisi bursa menjadi 0 — order dibatalkan agar tidak terkirim sebagai 0."
+            )
+        }
+        if (priceText != null) {
+            val p = priceText.toDoubleOrNull()
+            if (p == null || !p.isFinite() || p <= 0.0) {
+                return OrderResult(
+                    false,
+                    "Harga $symbol setelah pembulatan presisi bursa menjadi 0 — order dibatalkan."
+                )
+            }
+        }
+        return null
     }
 
     private fun decimal(value: Double, symbol: String, isPrice: Boolean): String {

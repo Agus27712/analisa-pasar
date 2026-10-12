@@ -96,6 +96,101 @@ object MarketDataConfiguration {
     val transports = listOf(MarketDataTransport.REST, MarketDataTransport.WEBSOCKET)
 }
 
+/**
+ * **Sumber kebenaran tunggal** untuk tarif biaya, dinyatakan sebagai **pecahan**
+ * (`0.004044` = 0,4044%). Angka mengikuti `FEE_TRUTH.md`.
+ *
+ * Sebelum ini setiap modul punya angkanya sendiri-sendiri: mesin simulasi memakai 0,1%,
+ * pencatat riwayat memakai 0,3%, dan `AppPreferences` memakai preset Indodax untuk semua
+ * bursa — sehingga biaya yang dicek di awal berbeda dari yang benar-benar dipotong.
+ *
+ * Semua modul **wajib** mengambil tarif dari sini, bukan menulis angka sendiri.
+ */
+object FeeSchedule {
+    // --- Tokocrypto USDT/crypto: maker = taker, all-in 0,4044% per sisi ---
+    const val TOKOCRYPTO_USDT_BUY_TAKER = 0.004044
+    const val TOKOCRYPTO_USDT_SELL_TAKER = 0.004044
+
+    // --- Tokocrypto IDR (beli bebas PPh; jual kena PPh 0,21% + ICEx) ---
+    const val TOKOCRYPTO_IDR_BUY_TAKER = 0.002222
+    const val TOKOCRYPTO_IDR_BUY_MAKER = 0.001222
+    const val TOKOCRYPTO_IDR_SELL_TAKER = 0.004322
+    const val TOKOCRYPTO_IDR_SELL_MAKER = 0.003322
+
+    // --- Indodax IDR ---
+    const val INDODAX_IDR_BUY_TAKER = 0.0021
+    const val INDODAX_IDR_BUY_MAKER = 0.0011
+    const val INDODAX_IDR_SELL_TAKER = 0.0042
+    const val INDODAX_IDR_SELL_MAKER = 0.0032
+
+    /** Estimasi slippage default per sisi (%), selaras `ScalpingConfig` & `scalp_config.json`. */
+    const val DEFAULT_SLIPPAGE_PCT = 0.08
+
+    fun isUsdtQuote(quoteAsset: String): Boolean =
+        quoteAsset.trim().uppercase() in setOf("USDT", "USDC", "BUSD", "USD")
+
+    fun isIndodax(exchange: String): Boolean =
+        exchange.trim().equals("INDODAX", ignoreCase = true)
+
+    /** Tarif biaya **beli** per sisi (pecahan) untuk bursa + kuotasi tertentu. */
+    fun buyRate(exchange: String, quoteAsset: String, useMaker: Boolean = false): Double =
+        if (isIndodax(exchange)) {
+            if (useMaker) INDODAX_IDR_BUY_MAKER else INDODAX_IDR_BUY_TAKER
+        } else if (isUsdtQuote(quoteAsset)) {
+            TOKOCRYPTO_USDT_BUY_TAKER
+        } else {
+            if (useMaker) TOKOCRYPTO_IDR_BUY_MAKER else TOKOCRYPTO_IDR_BUY_TAKER
+        }
+
+    /** Tarif biaya **jual** per sisi (pecahan) untuk bursa + kuotasi tertentu. */
+    fun sellRate(exchange: String, quoteAsset: String, useMaker: Boolean = false): Double =
+        if (isIndodax(exchange)) {
+            if (useMaker) INDODAX_IDR_SELL_MAKER else INDODAX_IDR_SELL_TAKER
+        } else if (isUsdtQuote(quoteAsset)) {
+            TOKOCRYPTO_USDT_SELL_TAKER
+        } else {
+            if (useMaker) TOKOCRYPTO_IDR_SELL_MAKER else TOKOCRYPTO_IDR_SELL_TAKER
+        }
+
+    /** Total biaya round-trip sebagai pecahan, termasuk slippage dua sisi. */
+    fun roundTripRate(
+        exchange: String,
+        quoteAsset: String,
+        useMaker: Boolean = false,
+        slippagePct: Double = DEFAULT_SLIPPAGE_PCT
+    ): Double = buyRate(exchange, quoteAsset, useMaker) +
+        sellRate(exchange, quoteAsset, useMaker) +
+        2.0 * slippagePct / 100.0
+
+    /**
+     * Round-trip dalam persen, cara **multiplikatif** (fee dibebankan berurutan,
+     * bukan dijumlahkan) — dipakai saat butuh angka biaya riil, bukan perkiraan.
+     */
+    fun roundTripPctMultiplicative(
+        exchange: String,
+        quoteAsset: String,
+        useMaker: Boolean = false,
+        slippagePct: Double = DEFAULT_SLIPPAGE_PCT
+    ): Double {
+        val buy = buyRate(exchange, quoteAsset, useMaker) + slippagePct / 100.0
+        val sell = sellRate(exchange, quoteAsset, useMaker) + slippagePct / 100.0
+        return ((1.0 + buy) / (1.0 - sell) - 1.0) * 100.0
+    }
+
+    /** Konfigurasi berbentuk persen untuk mesin yang memakai [TradingFeeConfig]. */
+    fun configFor(exchange: String, quoteAsset: String): TradingFeeConfig =
+        if (isIndodax(exchange)) {
+            TradingFeeConfig(
+                buyMakerPct = INDODAX_IDR_BUY_MAKER * 100.0,
+                buyTakerPct = INDODAX_IDR_BUY_TAKER * 100.0,
+                sellMakerPct = INDODAX_IDR_SELL_MAKER * 100.0,
+                sellTakerPct = INDODAX_IDR_SELL_TAKER * 100.0
+            )
+        } else {
+            TradingFeeConfig.forTokocrypto(quoteAsset)
+        }
+}
+
 object FeeCalculator {
     data class Result(
         val feePct: Double,

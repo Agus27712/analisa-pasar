@@ -60,12 +60,19 @@ object NetworkClientProvider {
     /**
      * Client untuk Trading API V2 Indodax (Account, Orders, Mutasi, History).
      * Timeout membaca lebih longgar (20s) untuk memastikan order tercatat dengan aman.
+     *
+     * **`retryOnConnectionFailure(false)` disengaja.** Order adalah permintaan POST yang
+     * **tidak idempoten**: kalau respons hilang padahal bursa sudah menerima order, pengiriman
+     * ulang otomatis akan membuat **order kedua yang nyata**. Lebih baik gagal dengan pesan
+     * "status tidak pasti" dan menyuruh pengguna memeriksa riwayat order, daripada diam-diam
+     * membeli dua kali.
      */
     val tradeClient: OkHttpClient by lazy {
         baseClient.newBuilder()
             .connectTimeout(12, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)
             .writeTimeout(15, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(false)
             .build()
     }
 

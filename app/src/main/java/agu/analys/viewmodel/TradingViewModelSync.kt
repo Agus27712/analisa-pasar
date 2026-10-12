@@ -50,9 +50,13 @@ fun TradingViewModel.handleRealTradeExecution(
         var customPnlIdr: Double? = null
         var customPnlPct: Double? = null
         if (before.entryPrice > 0.0 && effectivePrice > 0.0 && quantity > 0.0) {
-            val feeRate = 0.003
-            val netSell = effectivePrice * (1.0 - feeRate)
-            val cost = before.entryPrice * (1.0 + feeRate)
+            // Biaya dari FeeSchedule — angka flat 0,3% terlalu kecil untuk Tokocrypto USDT
+            // (0,4044%/sisi) dan salah untuk pair IDR (sisi jual lebih mahal dari sisi beli).
+            val quoteAsset = agu.analys.util.PriceFormatter.extractQuote(symbol)
+            val buyRate = agu.analys.config.FeeSchedule.buyRate(currentEx, quoteAsset)
+            val sellRate = agu.analys.config.FeeSchedule.sellRate(currentEx, quoteAsset)
+            val netSell = effectivePrice * (1.0 - sellRate)
+            val cost = before.entryPrice * (1.0 + buyRate)
             customPnlPct = (netSell / cost - 1.0) * 100.0
             customPnlIdr = (netSell - cost) * quantity
         }
@@ -75,7 +79,7 @@ fun TradingViewModel.handleRealTradeExecution(
             agu.analys.engine.sell.SellSignalLifecycleManager.reset(pair, isReal = true)
             positionCoordinator.markSoldAndClear(symbol, isReal = true)
             positionCoordinator.markSoldAndClear(pair, isReal = true)
-            signalLogRepository.expireTrackingLogsForSymbol(symbol, "Posisi real sudah terjual (MarkSold)")
+            signalLogRepository.expireTrackingLogsForSymbol(symbol, "Posisi real sudah terjual (MarkSold)", currentEx)
         }
         tradeHistoryRecorder.recordSell(
             symbol = symbol, isReal = true, sellPrice = effectivePrice, sellQuantity = quantity,
@@ -512,7 +516,11 @@ fun TradingViewModel.initSubscriptionsAndPolling() {
                 if (filledOrder.side == SimulationOrderSide.SELL) {
                     positionCoordinator.markSoldAndClear(filledOrder.symbol)
                     positionCoordinator.setTrailing(filledOrder.symbol, enabled = false, 0.0, 0.0)
-                    signalLogRepository.expireTrackingLogsForSymbol(filledOrder.symbol, "Simulasi sell filled (MarkSold)")
+                    signalLogRepository.expireTrackingLogsForSymbol(
+                        filledOrder.symbol,
+                        "Simulasi sell filled (MarkSold)",
+                        prefs.marketDataSource.name
+                    )
                     checkAndStopTrailingServiceIfEmpty()
                 }
             }

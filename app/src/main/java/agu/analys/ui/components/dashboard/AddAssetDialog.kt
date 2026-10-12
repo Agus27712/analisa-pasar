@@ -41,24 +41,24 @@ fun AddAssetDialog(
     val isToko = marketDataSource == agu.analys.config.MarketDataSource.TOKOCRYPTO
     var searchQuery by remember { mutableStateOf("") }
     var selectedTab by remember(marketDataSource) { mutableStateOf(if (isToko) "USDT" else "IDR") }
-    val tabs = if (isToko) listOf("USDT", "IDR", "SEMUA") else listOf("IDR", "USDT", "SEMUA")
+    // Indodax hanya menerima pasangan IDR (lihat AGENTS.md), jadi tab USDT dihapus —
+    // sebelumnya tab itu selalu kosong dan membingungkan pengguna.
+    val tabs = if (isToko) listOf("USDT", "IDR", "SEMUA") else listOf("IDR", "SEMUA")
 
     // Ambil daftar pair dari dynamic symbol repository Tokocrypto / Indodax
     val availablePairs = remember(searchQuery, selectedTab, marketDataSource) {
         val quoteFilter = if (selectedTab == "SEMUA") null else selectedTab
         val results = if (searchQuery.isNotBlank()) {
-            val dynamicMatches = TokocryptoSymbolRepository.searchSymbols(searchQuery, quoteFilter)
-            val indodaxMatches = TradingPair.POPULAR_INDODAX_PAIRS.filter { 
-                (it.baseAsset.contains(searchQuery, ignoreCase = true) || it.symbol.contains(searchQuery, ignoreCase = true)) &&
-                (quoteFilter == null || it.quoteAsset.equals(quoteFilter, ignoreCase = true))
+            if (isToko) {
+                TokocryptoSymbolRepository.searchSymbols(searchQuery, quoteFilter)
+            } else {
+                agu.analys.data.IndodaxSymbolRepository.searchPairs(searchQuery, quoteFilter)
             }
-            if (isToko) (dynamicMatches + indodaxMatches).distinctBy { it.symbol }
-            else (indodaxMatches + dynamicMatches).distinctBy { it.symbol }
         } else {
             if (isToko) {
                 TokocryptoSymbolRepository.getAllTradingPairs(quoteFilter)
             } else {
-                TradingPair.popularPairsForSource(marketDataSource).filter { quoteFilter == null || it.quoteAsset.equals(quoteFilter, ignoreCase = true) }
+                agu.analys.data.IndodaxSymbolRepository.getAllTradingPairs(quoteFilter)
             }
         }
         if (results.isNotEmpty()) results else TradingPair.popularPairsForSource(marketDataSource)

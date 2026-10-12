@@ -86,7 +86,9 @@ fun RealTradeHistoryItemCard(
                 val db = AppDatabase.getInstance()
                 val norm = trade.symbol.uppercase().replace("_", "")
                 val alt = if (norm.endsWith("IDR")) norm else "${norm}IDR"
-                val records: List<TradeHistoryRecordEntity> = db.tradeHistoryRecordDao().getRecordsForSymbol(norm, alt)
+                // Batasi pada bursa yang sama agar catatan bursa lain tidak tertukar.
+                val records: List<TradeHistoryRecordEntity> =
+                    db.tradeHistoryRecordDao().getRecordsForSymbolAndExchange(norm, alt, trade.exchange)
                 records.firstOrNull { rec: TradeHistoryRecordEntity ->
                     val buyDiff = java.lang.Math.abs(rec.buyTime - trade.time)
                     val sellDiff = java.lang.Math.abs((rec.sellTime ?: 0L) - trade.time)
@@ -109,6 +111,12 @@ fun RealTradeHistoryItemCard(
     val effectiveTrailingPercent = trade.trailingPercent ?: matchingRecord?.trailingPercent
     val effectivePeakPrice = trade.trailingPeakPrice ?: matchingRecord?.peakPriceDuringHold
     val effectiveLockPrice = trade.trailingLockPrice ?: matchingRecord?.trailingLockPrice
+    // Estimasi biaya memakai tarif bursa + kuotasi yang benar (bukan angka tetap 0,3%).
+    val estimatedFeeRate = if (trade.isBuyer) {
+        agu.analys.config.FeeSchedule.buyRate(trade.exchange, quoteAsset)
+    } else {
+        agu.analys.config.FeeSchedule.sellRate(trade.exchange, quoteAsset)
+    }
 
     if (showDetailDialog) {
         TradeLogDetailDialog(
@@ -121,7 +129,7 @@ fun RealTradeHistoryItemCard(
             executionPrice = trade.price,
             quantity = trade.qty,
             totalIdr = trade.amount,
-            feeIdr = trade.amount * 0.003,
+            feeIdr = trade.amount * estimatedFeeRate,
             timestamp = trade.time,
             isReal = true,
             strategyMode = effectiveStrategy,
@@ -135,6 +143,7 @@ fun RealTradeHistoryItemCard(
             trailingPeakPrice = effectivePeakPrice,
             trailingLockPrice = effectiveLockPrice,
             snapshot = effectiveSnapshot,
+            exchange = trade.exchange,
             onDismiss = { showDetailDialog = false }
         )
     }

@@ -48,16 +48,38 @@ class RealTradeExecutor(
      * PIN guard: bila PIN keamanan dikonfigurasi, order riil hanya boleh jalan
      * saat sesi PIN sedang terbuka (unlock). Mengembalikan true bila boleh lanjut.
      */
-    private fun requirePinSession(onResult: (Boolean, String) -> Unit): Boolean {
-        if (prefs.hasSecurityPin() && !isPinSessionValid()) {
-            onResult(false, "Sesi PIN Keamanan terkunci. Verifikasi PIN dulu sebelum order riil.")
+    /**
+     * Gerbang PIN sebelum order riil.
+     *
+     * `protectiveExit = true` dipakai untuk **order yang melindungi modal** (stop-loss /
+     * trailing stop pada posisi yang sudah ada). Tanpa pengecualian ini, setelah aplikasi
+     * di-restart sesi PIN terkunci dan **stop-loss riil ikut terblokir diam-diam** — justru
+     * saat pasar jatuh dan perlindungan paling dibutuhkan.
+     *
+     * Pengecualian hanya berlaku bila pengguna memang sudah pernah mengaktifkan Mode Real
+     * (`isRealBuyModeEnabled`), jadi aplikasi tidak bisa menjual atas nama pengguna yang
+     * belum pernah mengaktifkan trading riil.
+     */
+    private fun requirePinSession(
+        onResult: (Boolean, String) -> Unit,
+        protectiveExit: Boolean = false
+    ): Boolean {
+        if (!prefs.hasSecurityPin()) return true
+        if (isPinSessionValid()) return true
+        if (protectiveExit && prefs.isRealBuyModeEnabled) {
             agu.analys.util.AppLogManager.trade(
-                "RealPinBlocked",
-                "⛔ [ORDER RIIL DITOLAK: PIN TERKUNCI] Eksekusi dibatalkan karena sesi PIN belum terbuka."
+                "RealPinProtective",
+                "🛡️ [EXIT PROTEKTIF TANPA PIN] Sesi PIN terkunci, tapi order ini melindungi posisi " +
+                    "yang sudah ada (stop-loss/trailing). Eksekusi diizinkan."
             )
-            return false
+            return true
         }
-        return true
+        onResult(false, "Sesi PIN Keamanan terkunci. Verifikasi PIN dulu sebelum order riil.")
+        agu.analys.util.AppLogManager.trade(
+            "RealPinBlocked",
+            "⛔ [ORDER RIIL DITOLAK: PIN TERKUNCI] Eksekusi dibatalkan karena sesi PIN belum terbuka."
+        )
+        return false
     }
 
     fun executeCancelOrder(
@@ -160,6 +182,19 @@ class RealTradeExecutor(
         return if (lastExecuted > MIN_EXECUTED_QTY) lastExecuted else 0.0
     }
 
+    /**
+     * Kunci **anti order ganda**.
+     *
+     * Sebelumnya setiap tekanan tombol Beli/Jual langsung membuat coroutine baru tanpa
+     * penguncian apa pun — dua tekanan cepat menghasilkan **dua order nyata** di bursa.
+     * Tokocrypto tidak menerima client order ID kustom, jadi bursa juga tidak bisa
+     * mendeteksi dan membuang duplikatnya.
+     */
+    private val tradeInFlight = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /** True bila masih ada order riil yang sedang diproses. Dipakai UI untuk menonaktifkan tombol. */
+    fun isTradeInFlight(): Boolean = tradeInFlight.get()
+
     fun executeTrade(
         pair: String,
         type: String,
@@ -184,6 +219,21 @@ class RealTradeExecutor(
             onResult(false, "API Key atau Secret Key $sourceLabel belum diisi.")
             return
         }
+        // Bila KeyStore rusak, kredensial tersimpan tanpa enkripsi. Jangan biarkan pengguna
+        // memasang order baru dari kondisi itu — minta dia memperbaiki penyimpanan aman dulu.
+        if (AppPreferences.isKeyStoreRecoveryOccurred) {
+            onResult(
+                false,
+                "Penyimpanan aman (KeyStore) sedang bermasalah, sehingga API Key tersimpan " +
+                    "TANPA enkripsi. Order riil diblokir demi keamanan. " +
+                    "Hapus lalu masukkan ulang API Key di Pengaturan, atau restart perangkat."
+            )
+            agu.analys.util.AppLogManager.trade(
+                "RealKeyStoreBlocked",
+                "⛔ [ORDER RIIL DIBLOKIR] KeyStore bermasalah — kredensial tidak terenkripsi."
+            )
+            return
+        }
         if (!requirePinSession(onResult)) return
         var execPrice = price
         val latestTick = getLatestTick(pair)
@@ -202,7 +252,14 @@ class RealTradeExecutor(
             return
         }
 
+        // Tolak order baru selama order sebelumnya belum selesai (anti double-tap).
+        if (!tradeInFlight.compareAndSet(false, true)) {
+            onResult(false, "Order sebelumnya masih diproses. Tunggu sampai selesai sebelum mengirim order baru.")
+            return
+        }
+
         scope.launch(Dispatchers.IO) {
+          try {
             onStatusUpdate("Mengirim order $type ke $sourceLabel...")
             val clientOrderId = "agu-${type.lowercase()}-${System.currentTimeMillis()}"
             val quote = quoteFromPair(pair)
@@ -451,6 +508,11 @@ class RealTradeExecutor(
                     onResult(false, buyResult.message)
                 }
             }
+          } finally {
+            // Lepaskan kunci apa pun hasilnya (sukses, ditolak, atau exception) supaya
+            // pengguna tidak terkunci selamanya.
+            tradeInFlight.set(false)
+          }
         }
     }
 
@@ -470,6 +532,11 @@ class RealTradeExecutor(
             onResult(false, "API Key/Secret $sourceLabel kosong.")
             return
         }
+        // Auto-sell TP/SL pada posisi yang sudah ada = exit protektif.
+        // Sebelumnya jalur ini TIDAK memeriksa PIN sama sekali — tidak konsisten dengan
+        // executeTrade yang memeriksanya. Sekarang diperiksa, tapi dengan pengecualian
+        // protektif supaya stop-loss tetap bisa jalan setelah restart.
+        if (!requirePinSession(onResult, protectiveExit = true)) return
         if (isRateLimited()) {
             onResult(false, "Rate-limit aktif.")
             return
