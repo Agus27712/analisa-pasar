@@ -9,7 +9,7 @@ Aplikasi Android berbasis **Jetpack Compose** dan **Kotlin** mutakhir yang diran
 ### 1. Arsitektur Multi-Exchange Terisolasi (Tokocrypto & Indodax)
 - **Pemusatan Pilihan Bursa**: Pemilihan bursa terpusat melalui menu *Pengaturan (Settings)* dengan mekanisme *hard-stop*, pemutusan WebSocket seketika, dan pembersihan total cache saat bursa beralih.
 - **Tokocrypto Official API Integration**:
-  - *Dynamic Symbol Discovery*: Menemukan daftar pair, filter LOT_SIZE, PRICE_FILTER, dan MIN_NOTIONAL secara dinamis dari endpoint resmi tanpa ketergantungan domain pihak ketiga yang terblokir.
+  - *Dynamic Symbol Discovery*: Menemukan daftar pair, filter LOT_SIZE, PRICE_FILTER, dan MIN_NOTIONAL secara dinamis dari endpoint pasar Tokocrypto (routing **Type 1 MBX Broker** dan **Type 3 NextMe**) sesuai tipe simbol.
   - *Symbol Type Routing*: Otomatisasi perutean pasar Type 1 (MBX Broker / Cloud) dan Type 3 (NextMe Cloud).
   - *Live Multi-Stream WebSockets*: Kline (`<symbol>@kline_<interval>`), Trade (`<symbol>@trade`), AggTrade, dan Depth live feed.
   - *Signed Trade API*: Pembuatan order spot (`POST /open/v1/orders`), pembatalan, query status detail, sinkronisasi selisih waktu server (`syncServerTime`), dan pembacaan saldo multi-format.

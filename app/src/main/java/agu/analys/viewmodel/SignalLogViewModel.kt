@@ -59,7 +59,13 @@ class SignalLogViewModel(application: Application) : AndroidViewModel(applicatio
                 val losses = logs.count { it.outcomeStatus in listOf("HIT_SL", "MANUAL_LOSS") }
                 val other = total - tracking - wins - losses
 
-                val winRate = if ((wins + losses) > 0) (wins.toDouble() / (wins + losses)) * 100.0 else 0.0
+                val resolvedCount = wins + losses
+                // M20 — jangan tampilkan win-rate bila belum ada sinyal terselesaikan (sampel 0 menyesatkan).
+                val winRateLine = if (resolvedCount > 0) {
+                    "- **Akurasi Win-Rate**: ${String.format(java.util.Locale.US, "%.1f", (wins.toDouble() / resolvedCount) * 100.0)}% *(dari $resolvedCount sinyal terselesaikan)*"
+                } else {
+                    "- **Akurasi Win-Rate**: — *(belum ada sinyal terselesaikan; win-rate baru bermakna setelah ada sampel > 0)*"
+                }
                 val avgProfit = logs.mapNotNull { it.realizedPnlPct }.filter { it > 0 }.average().let { if (it.isNaN()) 0.0 else it }
                 val avgLoss = logs.mapNotNull { it.realizedPnlPct }.filter { it < 0 }.average().let { if (it.isNaN()) 0.0 else it }
 
@@ -77,7 +83,7 @@ class SignalLogViewModel(application: Application) : AndroidViewModel(applicatio
                     ---
                     
                     ### 📊 METRIK AKURASI & PROBABILITAS
-                    - **Akurasi Win-Rate**: ${String.format(java.util.Locale.US, "%.1f", winRate)}% *(dari ${wins + losses} sinyal terselesaikan)*
+                    $winRateLine
                     - **Rata-rata Keuntungan (Profit)**: +${String.format(java.util.Locale.US, "%.2f", avgProfit)}%
                     - **Rata-rata Kerugian (Loss)**: ${String.format(java.util.Locale.US, "%.2f", avgLoss)}%
                     
