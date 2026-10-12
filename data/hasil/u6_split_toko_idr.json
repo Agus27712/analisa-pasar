@@ -1,0 +1,323 @@
+{
+  "summary": {
+    "data_dir": "data/tokocrypto_live_idr",
+    "config": "data/config/scalp_config_exit_full_idr.json",
+    "train_frac": 0.7,
+    "warmup_bars": 300,
+    "cost_roundtrip_pct": 0.8144,
+    "pairs_scanned": 14,
+    "train": {
+      "pairs": 10,
+      "trades": 88,
+      "avg_r_weighted": 0.1323,
+      "wr_weighted": 95.46,
+      "pairs_positive": 9,
+      "pairs_positive_min_trades": 0
+    },
+    "test": {
+      "pairs": 4,
+      "trades": 6,
+      "avg_r_weighted": -0.0558,
+      "wr_weighted": 83.33,
+      "pairs_positive": 3,
+      "pairs_positive_min_trades": 0
+    },
+    "test_pairs_eligible_min_trades": 0,
+    "test_positive_ratio": 0.0,
+    "sign_flips": 0,
+    "verdict": "TIDAK LOLOS"
+  },
+  "pairs": [
+    {
+      "pair": "ADAIDR",
+      "bars": 44999,
+      "split_bar": 31499,
+      "train": {
+        "n": 7,
+        "wr": 100.0,
+        "avg_r": 0.1291,
+        "pf": Infinity
+      },
+      "test": {
+        "n": 2,
+        "wr": 100.0,
+        "avg_r": 0.2365,
+        "pf": Infinity
+      },
+      "exit_reasons_test": {
+        "TRAIL_SL": {
+          "trades": 2,
+          "wins": 2,
+          "gross_r": 0.473,
+          "win_rate": 100.0,
+          "avg_r": 0.2365
+        }
+      }
+    },
+    {
+      "pair": "ASTERIDR",
+      "bars": 45000,
+      "split_bar": 31499,
+      "train": {
+        "n": 1,
+        "wr": 100.0,
+        "avg_r": 0.1962,
+        "pf": Infinity
+      },
+      "test": {
+        "n": 0,
+        "wr": 0.0,
+        "avg_r": 0.0,
+        "pf": 0.0
+      },
+      "exit_reasons_test": {}
+    },
+    {
+      "pair": "BNBIDR",
+      "bars": 44999,
+      "split_bar": 31499,
+      "train": {
+        "n": 0,
+        "wr": 0.0,
+        "avg_r": 0.0,
+        "pf": 0.0
+      },
+      "test": {
+        "n": 0,
+        "wr": 0.0,
+        "avg_r": 0.0,
+        "pf": 0.0
+      },
+      "exit_reasons_test": {}
+    },
+    {
+      "pair": "BTCIDR",
+      "bars": 44999,
+      "split_bar": 31499,
+      "train": {
+        "n": 5,
+        "wr": 100.0,
+        "avg_r": 0.1491,
+        "pf": Infinity
+      },
+      "test": {
+        "n": 0,
+        "wr": 0.0,
+        "avg_r": 0.0,
+        "pf": 0.0
+      },
+      "exit_reasons_test": {}
+    },
+    {
+      "pair": "ETHIDR",
+      "bars": 44999,
+      "split_bar": 31499,
+      "train": {
+        "n": 4,
+        "wr": 100.0,
+        "avg_r": 0.0869,
+        "pf": Infinity
+      },
+      "test": {
+        "n": 0,
+        "wr": 0.0,
+        "avg_r": 0.0,
+        "pf": 0.0
+      },
+      "exit_reasons_test": {}
+    },
+    {
+      "pair": "ONDOIDR",
+      "bars": 44999,
+      "split_bar": 31499,
+      "train": {
+        "n": 11,
+        "wr": 90.91,
+        "avg_r": 0.1538,
+        "pf": 2.4605
+      },
+      "test": {
+        "n": 0,
+        "wr": 0.0,
+        "avg_r": 0.0,
+        "pf": 0.0
+      },
+      "exit_reasons_test": {}
+    },
+    {
+      "pair": "SOLIDR",
+      "bars": 45000,
+      "split_bar": 31499,
+      "train": {
+        "n": 11,
+        "wr": 100.0,
+        "avg_r": 0.0788,
+        "pf": Infinity
+      },
+      "test": {
+        "n": 1,
+        "wr": 100.0,
+        "avg_r": 0.0782,
+        "pf": Infinity
+      },
+      "exit_reasons_test": {
+        "TRAIL_SL": {
+          "trades": 1,
+          "wins": 1,
+          "gross_r": 0.0782,
+          "win_rate": 100.0,
+          "avg_r": 0.0782
+        }
+      }
+    },
+    {
+      "pair": "SUIIDR",
+      "bars": 45000,
+      "split_bar": 31499,
+      "train": {
+        "n": 17,
+        "wr": 100.0,
+        "avg_r": 0.1534,
+        "pf": Infinity
+      },
+      "test": {
+        "n": 1,
+        "wr": 100.0,
+        "avg_r": 0.1963,
+        "pf": Infinity
+      },
+      "exit_reasons_test": {
+        "TRAIL_SL": {
+          "trades": 1,
+          "wins": 1,
+          "gross_r": 0.1963,
+          "win_rate": 100.0,
+          "avg_r": 0.1963
+        }
+      }
+    },
+    {
+      "pair": "TAOIDR",
+      "bars": 45000,
+      "split_bar": 31499,
+      "train": {
+        "n": 0,
+        "wr": 0.0,
+        "avg_r": 0.0,
+        "pf": 0.0
+      },
+      "test": {
+        "n": 0,
+        "wr": 0.0,
+        "avg_r": 0.0,
+        "pf": 0.0
+      },
+      "exit_reasons_test": {}
+    },
+    {
+      "pair": "TKOIDR",
+      "bars": 45000,
+      "split_bar": 31499,
+      "train": {
+        "n": 11,
+        "wr": 72.73,
+        "avg_r": -0.0689,
+        "pf": 0.7818
+      },
+      "test": {
+        "n": 2,
+        "wr": 50.0,
+        "avg_r": -0.541,
+        "pf": 0.0656
+      },
+      "exit_reasons_test": {
+        "SL": {
+          "trades": 1,
+          "wins": 0,
+          "gross_r": -1.158,
+          "win_rate": 0.0,
+          "avg_r": -1.158
+        },
+        "TRAIL_SL": {
+          "trades": 1,
+          "wins": 1,
+          "gross_r": 0.076,
+          "win_rate": 100.0,
+          "avg_r": 0.076
+        }
+      }
+    },
+    {
+      "pair": "USDCIDR",
+      "bars": 44999,
+      "split_bar": 31499,
+      "train": {
+        "n": 0,
+        "wr": 0.0,
+        "avg_r": 0.0,
+        "pf": 0.0
+      },
+      "test": {
+        "n": 0,
+        "wr": 0.0,
+        "avg_r": 0.0,
+        "pf": 0.0
+      },
+      "exit_reasons_test": {}
+    },
+    {
+      "pair": "USDTIDR",
+      "bars": 45000,
+      "split_bar": 31499,
+      "train": {
+        "n": 0,
+        "wr": 0.0,
+        "avg_r": 0.0,
+        "pf": 0.0
+      },
+      "test": {
+        "n": 0,
+        "wr": 0.0,
+        "avg_r": 0.0,
+        "pf": 0.0
+      },
+      "exit_reasons_test": {}
+    },
+    {
+      "pair": "WLDIDR",
+      "bars": 45000,
+      "split_bar": 31499,
+      "train": {
+        "n": 8,
+        "wr": 100.0,
+        "avg_r": 0.3915,
+        "pf": Infinity
+      },
+      "test": {
+        "n": 0,
+        "wr": 0.0,
+        "avg_r": 0.0,
+        "pf": 0.0
+      },
+      "exit_reasons_test": {}
+    },
+    {
+      "pair": "XRPIDR",
+      "bars": 45000,
+      "split_bar": 31499,
+      "train": {
+        "n": 13,
+        "wr": 100.0,
+        "avg_r": 0.1471,
+        "pf": Infinity
+      },
+      "test": {
+        "n": 0,
+        "wr": 0.0,
+        "avg_r": 0.0,
+        "pf": 0.0
+      },
+      "exit_reasons_test": {}
+    }
+  ]
+}

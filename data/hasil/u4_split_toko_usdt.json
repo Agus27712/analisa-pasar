@@ -1,0 +1,1251 @@
+{
+  "summary": {
+    "data_dir": "data/tokocrypto_live_usdt",
+    "config": "data/config/scalp_config_exit_full.json",
+    "train_frac": 0.7,
+    "warmup_bars": 300,
+    "cost_roundtrip_pct": 0.9688,
+    "pairs_scanned": 40,
+    "train": {
+      "pairs": 32,
+      "trades": 1835,
+      "avg_r_weighted": 0.035,
+      "wr_weighted": 95.42,
+      "pairs_positive": 28,
+      "pairs_positive_min_trades": 22
+    },
+    "test": {
+      "pairs": 30,
+      "trades": 669,
+      "avg_r_weighted": 0.0216,
+      "wr_weighted": 94.02,
+      "pairs_positive": 23,
+      "pairs_positive_min_trades": 11
+    },
+    "test_pairs_eligible_min_trades": 13,
+    "test_positive_ratio": 0.846,
+    "sign_flips": 5,
+    "verdict": "LOLOS"
+  },
+  "pairs": [
+    {
+      "pair": "ADAUSDT",
+      "bars": 44999,
+      "split_bar": 31499,
+      "train": {
+        "n": 32,
+        "wr": 100.0,
+        "avg_r": 0.0533,
+        "pf": Infinity
+      },
+      "test": {
+        "n": 19,
+        "wr": 100.0,
+        "avg_r": 0.0814,
+        "pf": Infinity
+      },
+      "exit_reasons_test": {
+        "TRAIL_SL": {
+          "trades": 17,
+          "wins": 17,
+          "gross_r": 1.3694,
+          "win_rate": 100.0,
+          "avg_r": 0.0806
+        },
+        "EARLY_PROFIT": {
+          "trades": 2,
+          "wins": 2,
+          "gross_r": 0.1778,
+          "win_rate": 100.0,
+          "avg_r": 0.0889
+        }
+      }
+    },
+    {
+      "pair": "APTUSDT",
+      "bars": 44999,
+      "split_bar": 31499,
+      "train": {
+        "n": 66,
+        "wr": 96.97,
+        "avg_r": 0.0456,
+        "pf": 2.3005
+      },
+      "test": {
+        "n": 34,
+        "wr": 97.06,
+        "avg_r": 0.0496,
+        "pf": 2.4593
+      },
+      "exit_reasons_test": {
+        "TRAIL_SL": {
+          "trades": 29,
+          "wins": 29,
+          "gross_r": 1.9522,
+          "win_rate": 100.0,
+          "avg_r": 0.0673
+        },
+        "EARLY_PROFIT": {
+          "trades": 4,
+          "wins": 4,
+          "gross_r": 0.8912,
+          "win_rate": 100.0,
+          "avg_r": 0.2228
+        },
+        "SL": {
+          "trades": 1,
+          "wins": 0,
+          "gross_r": -1.1562,
+          "win_rate": 0.0,
+          "avg_r": -1.1562
+        }
+      }
+    },
+    {
+      "pair": "AVAXUSDT",
+      "bars": 45000,
+      "split_bar": 31499,
+      "train": {
+        "n": 53,
+        "wr": 98.11,
+        "avg_r": 0.0685,
+        "pf": 4.141
+      },
+      "test": {
+        "n": 6,
+        "wr": 100.0,
+        "avg_r": 0.0835,
+        "pf": Infinity
+      },
+      "exit_reasons_test": {
+        "TRAIL_SL": {
+          "trades": 5,
+          "wins": 5,
+          "gross_r": 0.382,
+          "win_rate": 100.0,
+          "avg_r": 0.0764
+        },
+        "EARLY_PROFIT": {
+          "trades": 1,
+          "wins": 1,
+          "gross_r": 0.1192,
+          "win_rate": 100.0,
+          "avg_r": 0.1192
+        }
+      }
+    },
+    {
+      "pair": "BNBUSDT",
+      "bars": 44999,
+      "split_bar": 31499,
+      "train": {
+        "n": 3,
+        "wr": 100.0,
+        "avg_r": 0.0458,
+        "pf": Infinity
+      },
+      "test": {
+        "n": 2,
+        "wr": 100.0,
+        "avg_r": 0.0483,
+        "pf": Infinity
+      },
+      "exit_reasons_test": {
+        "TRAIL_SL": {
+          "trades": 1,
+          "wins": 1,
+          "gross_r": 0.0131,
+          "win_rate": 100.0,
+          "avg_r": 0.0131
+        },
+        "EARLY_PROFIT": {
+          "trades": 1,
+          "wins": 1,
+          "gross_r": 0.0835,
+          "win_rate": 100.0,
+          "avg_r": 0.0835
+        }
+      }
+    },
+    {
+      "pair": "BTCUSDT",
+      "bars": 44999,
+      "split_bar": 31499,
+      "train": {
+        "n": 3,
+        "wr": 100.0,
+        "avg_r": 0.1695,
+        "pf": Infinity
+      },
+      "test": {
+        "n": 0,
+        "wr": 0.0,
+        "avg_r": 0.0,
+        "pf": 0.0
+      },
+      "exit_reasons_test": {}
+    },
+    {
+      "pair": "CFXUSDT",
+      "bars": 44999,
+      "split_bar": 31499,
+      "train": {
+        "n": 18,
+        "wr": 100.0,
+        "avg_r": 0.0788,
+        "pf": Infinity
+      },
+      "test": {
+        "n": 29,
+        "wr": 86.21,
+        "avg_r": -0.0509,
+        "pf": 0.6809
+      },
+      "exit_reasons_test": {
+        "SL": {
+          "trades": 4,
+          "wins": 0,
+          "gross_r": -4.6248,
+          "win_rate": 0.0,
+          "avg_r": -1.1562
+        },
+        "TRAIL_SL": {
+          "trades": 25,
+          "wins": 25,
+          "gross_r": 3.1488,
+          "win_rate": 100.0,
+          "avg_r": 0.126
+        }
+      }
+    },
+    {
+      "pair": "DOGEUSDT",
+      "bars": 44999,
+      "split_bar": 31499,
+      "train": {
+        "n": 18,
+        "wr": 88.89,
+        "avg_r": -0.0459,
+        "pf": 0.6431
+      },
+      "test": {
+        "n": 3,
+        "wr": 66.67,
+        "avg_r": -0.347,
+        "pf": 0.0996
+      },
+      "exit_reasons_test": {
+        "TRAIL_SL": {
+          "trades": 2,
+          "wins": 2,
+          "gross_r": 0.1152,
+          "win_rate": 100.0,
+          "avg_r": 0.0576
+        },
+        "SL": {
+          "trades": 1,
+          "wins": 0,
+          "gross_r": -1.1562,
+          "win_rate": 0.0,
+          "avg_r": -1.1562
+        }
+      }
+    },
+    {
+      "pair": "ENAUSDT",
+      "bars": 44999,
+      "split_bar": 31499,
+      "train": {
+        "n": 94,
+        "wr": 96.81,
+        "avg_r": 0.0403,
+        "pf": 2.0916
+      },
+      "test": {
+        "n": 13,
+        "wr": 100.0,
+        "avg_r": 0.0888,
+        "pf": Infinity
+      },
+      "exit_reasons_test": {
+        "TRAIL_SL": {
+          "trades": 11,
+          "wins": 11,
+          "gross_r": 0.9715,
+          "win_rate": 100.0,
+          "avg_r": 0.0883
+        },
+        "EARLY_PROFIT": {
+          "trades": 2,
+          "wins": 2,
+          "gross_r": 0.183,
+          "win_rate": 100.0,
+          "avg_r": 0.0915
+        }
+      }
+    },
+    {
+      "pair": "ETHUSDT",
+      "bars": 44999,
+      "split_bar": 31499,
+      "train": {
+        "n": 7,
+        "wr": 100.0,
+        "avg_r": 0.0685,
+        "pf": Infinity
+      },
+      "test": {
+        "n": 0,
+        "wr": 0.0,
+        "avg_r": 0.0,
+        "pf": 0.0
+      },
+      "exit_reasons_test": {}
+    },
+    {
+      "pair": "FDUSDUSDT",
+      "bars": 44999,
+      "split_bar": 31499,
+      "train": {
+        "n": 0,
+        "wr": 0.0,
+        "avg_r": 0.0,
+        "pf": 0.0
+      },
+      "test": {
+        "n": 0,
+        "wr": 0.0,
+        "avg_r": 0.0,
+        "pf": 0.0
+      },
+      "exit_reasons_test": {}
+    },
+    {
+      "pair": "FETUSDT",
+      "bars": 44999,
+      "split_bar": 31499,
+      "train": {
+        "n": 55,
+        "wr": 100.0,
+        "avg_r": 0.0751,
+        "pf": Infinity
+      },
+      "test": {
+        "n": 20,
+        "wr": 95.0,
+        "avg_r": 0.004,
+        "pf": 1.07
+      },
+      "exit_reasons_test": {
+        "TRAIL_SL": {
+          "trades": 19,
+          "wins": 19,
+          "gross_r": 1.2371,
+          "win_rate": 100.0,
+          "avg_r": 0.0651
+        },
+        "SL": {
+          "trades": 1,
+          "wins": 0,
+          "gross_r": -1.1562,
+          "win_rate": 0.0,
+          "avg_r": -1.1562
+        }
+      }
+    },
+    {
+      "pair": "FILUSDT",
+      "bars": 44999,
+      "split_bar": 31499,
+      "train": {
+        "n": 67,
+        "wr": 94.03,
+        "avg_r": 0.0075,
+        "pf": 1.108
+      },
+      "test": {
+        "n": 26,
+        "wr": 96.15,
+        "avg_r": 0.0583,
+        "pf": 2.3121
+      },
+      "exit_reasons_test": {
+        "TRAIL_SL": {
+          "trades": 22,
+          "wins": 22,
+          "gross_r": 2.0119,
+          "win_rate": 100.0,
+          "avg_r": 0.0914
+        },
+        "EARLY_PROFIT": {
+          "trades": 3,
+          "wins": 3,
+          "gross_r": 0.6613,
+          "win_rate": 100.0,
+          "avg_r": 0.2204
+        },
+        "SL": {
+          "trades": 1,
+          "wins": 0,
+          "gross_r": -1.1562,
+          "win_rate": 0.0,
+          "avg_r": -1.1562
+        }
+      }
+    },
+    {
+      "pair": "HYPEUSDT",
+      "bars": 25953,
+      "split_bar": 18167,
+      "train": {
+        "n": 6,
+        "wr": 100.0,
+        "avg_r": 0.1096,
+        "pf": Infinity
+      },
+      "test": {
+        "n": 2,
+        "wr": 100.0,
+        "avg_r": 0.014,
+        "pf": Infinity
+      },
+      "exit_reasons_test": {
+        "TRAIL_SL": {
+          "trades": 2,
+          "wins": 2,
+          "gross_r": 0.0281,
+          "win_rate": 100.0,
+          "avg_r": 0.014
+        }
+      }
+    },
+    {
+      "pair": "ICPUSDT",
+      "bars": 45000,
+      "split_bar": 31499,
+      "train": {
+        "n": 49,
+        "wr": 97.96,
+        "avg_r": 0.063,
+        "pf": 3.6718
+      },
+      "test": {
+        "n": 13,
+        "wr": 92.31,
+        "avg_r": -0.0259,
+        "pf": 0.7085
+      },
+      "exit_reasons_test": {
+        "TRAIL_SL": {
+          "trades": 11,
+          "wins": 11,
+          "gross_r": 0.7173,
+          "win_rate": 100.0,
+          "avg_r": 0.0652
+        },
+        "SL": {
+          "trades": 1,
+          "wins": 0,
+          "gross_r": -1.1562,
+          "win_rate": 0.0,
+          "avg_r": -1.1562
+        },
+        "EARLY_PROFIT": {
+          "trades": 1,
+          "wins": 1,
+          "gross_r": 0.1019,
+          "win_rate": 100.0,
+          "avg_r": 0.1019
+        }
+      }
+    },
+    {
+      "pair": "LINKUSDT",
+      "bars": 44999,
+      "split_bar": 31499,
+      "train": {
+        "n": 26,
+        "wr": 100.0,
+        "avg_r": 0.0684,
+        "pf": Infinity
+      },
+      "test": {
+        "n": 1,
+        "wr": 100.0,
+        "avg_r": 0.021,
+        "pf": Infinity
+      },
+      "exit_reasons_test": {
+        "TRAIL_SL": {
+          "trades": 1,
+          "wins": 1,
+          "gross_r": 0.021,
+          "win_rate": 100.0,
+          "avg_r": 0.021
+        }
+      }
+    },
+    {
+      "pair": "MUBARAKUSDT",
+      "bars": 44999,
+      "split_bar": 31499,
+      "train": {
+        "n": 169,
+        "wr": 88.76,
+        "avg_r": -0.0262,
+        "pf": 0.7987
+      },
+      "test": {
+        "n": 50,
+        "wr": 92.0,
+        "avg_r": 0.0094,
+        "pf": 1.1015
+      },
+      "exit_reasons_test": {
+        "TRAIL_SL": {
+          "trades": 45,
+          "wins": 45,
+          "gross_r": 4.989,
+          "win_rate": 100.0,
+          "avg_r": 0.1109
+        },
+        "SL": {
+          "trades": 4,
+          "wins": 0,
+          "gross_r": -4.6248,
+          "win_rate": 0.0,
+          "avg_r": -1.1562
+        },
+        "EARLY_PROFIT": {
+          "trades": 1,
+          "wins": 1,
+          "gross_r": 0.105,
+          "win_rate": 100.0,
+          "avg_r": 0.105
+        }
+      }
+    },
+    {
+      "pair": "NEARUSDT",
+      "bars": 44999,
+      "split_bar": 31499,
+      "train": {
+        "n": 119,
+        "wr": 95.8,
+        "avg_r": 0.0273,
+        "pf": 1.5619
+      },
+      "test": {
+        "n": 36,
+        "wr": 100.0,
+        "avg_r": 0.0694,
+        "pf": Infinity
+      },
+      "exit_reasons_test": {
+        "TRAIL_SL": {
+          "trades": 36,
+          "wins": 36,
+          "gross_r": 2.4983,
+          "win_rate": 100.0,
+          "avg_r": 0.0694
+        }
+      }
+    },
+    {
+      "pair": "ONDOUSDT",
+      "bars": 44999,
+      "split_bar": 31499,
+      "train": {
+        "n": 58,
+        "wr": 98.28,
+        "avg_r": 0.0598,
+        "pf": 4.0007
+      },
+      "test": {
+        "n": 15,
+        "wr": 93.33,
+        "avg_r": -0.0067,
+        "pf": 0.9126
+      },
+      "exit_reasons_test": {
+        "TRAIL_SL": {
+          "trades": 10,
+          "wins": 10,
+          "gross_r": 0.5715,
+          "win_rate": 100.0,
+          "avg_r": 0.0571
+        },
+        "SL": {
+          "trades": 1,
+          "wins": 0,
+          "gross_r": -1.1562,
+          "win_rate": 0.0,
+          "avg_r": -1.1562
+        },
+        "EARLY_PROFIT": {
+          "trades": 4,
+          "wins": 4,
+          "gross_r": 0.4837,
+          "win_rate": 100.0,
+          "avg_r": 0.1209
+        }
+      }
+    },
+    {
+      "pair": "PAXGUSDT",
+      "bars": 44999,
+      "split_bar": 31499,
+      "train": {
+        "n": 0,
+        "wr": 0.0,
+        "avg_r": 0.0,
+        "pf": 0.0
+      },
+      "test": {
+        "n": 0,
+        "wr": 0.0,
+        "avg_r": 0.0,
+        "pf": 0.0
+      },
+      "exit_reasons_test": {}
+    },
+    {
+      "pair": "PLUMEUSDT",
+      "bars": 44999,
+      "split_bar": 31499,
+      "train": {
+        "n": 59,
+        "wr": 100.0,
+        "avg_r": 0.0651,
+        "pf": Infinity
+      },
+      "test": {
+        "n": 30,
+        "wr": 86.67,
+        "avg_r": -0.0763,
+        "pf": 0.5047
+      },
+      "exit_reasons_test": {
+        "TRAIL_SL": {
+          "trades": 22,
+          "wins": 22,
+          "gross_r": 1.4518,
+          "win_rate": 100.0,
+          "avg_r": 0.066
+        },
+        "EARLY_PROFIT": {
+          "trades": 4,
+          "wins": 4,
+          "gross_r": 0.8825,
+          "win_rate": 100.0,
+          "avg_r": 0.2206
+        },
+        "SL": {
+          "trades": 4,
+          "wins": 0,
+          "gross_r": -4.6248,
+          "win_rate": 0.0,
+          "avg_r": -1.1562
+        }
+      }
+    },
+    {
+      "pair": "PUMPUSDT",
+      "bars": 44999,
+      "split_bar": 31499,
+      "train": {
+        "n": 90,
+        "wr": 97.78,
+        "avg_r": 0.0628,
+        "pf": 3.4426
+      },
+      "test": {
+        "n": 22,
+        "wr": 95.45,
+        "avg_r": 0.0413,
+        "pf": 1.785
+      },
+      "exit_reasons_test": {
+        "TRAIL_SL": {
+          "trades": 19,
+          "wins": 19,
+          "gross_r": 1.768,
+          "win_rate": 100.0,
+          "avg_r": 0.0931
+        },
+        "EARLY_PROFIT": {
+          "trades": 2,
+          "wins": 2,
+          "gross_r": 0.2958,
+          "win_rate": 100.0,
+          "avg_r": 0.1479
+        },
+        "SL": {
+          "trades": 1,
+          "wins": 0,
+          "gross_r": -1.1562,
+          "win_rate": 0.0,
+          "avg_r": -1.1562
+        }
+      }
+    },
+    {
+      "pair": "QNTUSDT",
+      "bars": 45000,
+      "split_bar": 31499,
+      "train": {
+        "n": 167,
+        "wr": 87.43,
+        "avg_r": -0.027,
+        "pf": 0.8141
+      },
+      "test": {
+        "n": 23,
+        "wr": 95.65,
+        "avg_r": 0.0152,
+        "pf": 1.3028
+      },
+      "exit_reasons_test": {
+        "TRAIL_SL": {
+          "trades": 21,
+          "wins": 21,
+          "gross_r": 1.4165,
+          "win_rate": 100.0,
+          "avg_r": 0.0675
+        },
+        "SL": {
+          "trades": 1,
+          "wins": 0,
+          "gross_r": -1.1562,
+          "win_rate": 0.0,
+          "avg_r": -1.1562
+        },
+        "EARLY_PROFIT": {
+          "trades": 1,
+          "wins": 1,
+          "gross_r": 0.0898,
+          "win_rate": 100.0,
+          "avg_r": 0.0898
+        }
+      }
+    },
+    {
+      "pair": "RLUSDUSDT",
+      "bars": 44999,
+      "split_bar": 31499,
+      "train": {
+        "n": 0,
+        "wr": 0.0,
+        "avg_r": 0.0,
+        "pf": 0.0
+      },
+      "test": {
+        "n": 0,
+        "wr": 0.0,
+        "avg_r": 0.0,
+        "pf": 0.0
+      },
+      "exit_reasons_test": {}
+    },
+    {
+      "pair": "RSRUSDT",
+      "bars": 45000,
+      "split_bar": 31499,
+      "train": {
+        "n": 27,
+        "wr": 100.0,
+        "avg_r": 0.0773,
+        "pf": Infinity
+      },
+      "test": {
+        "n": 14,
+        "wr": 85.71,
+        "avg_r": -0.1017,
+        "pf": 0.3844
+      },
+      "exit_reasons_test": {
+        "TRAIL_SL": {
+          "trades": 11,
+          "wins": 11,
+          "gross_r": 0.7678,
+          "win_rate": 100.0,
+          "avg_r": 0.0698
+        },
+        "EARLY_PROFIT": {
+          "trades": 1,
+          "wins": 1,
+          "gross_r": 0.1212,
+          "win_rate": 100.0,
+          "avg_r": 0.1212
+        },
+        "SL": {
+          "trades": 2,
+          "wins": 0,
+          "gross_r": -2.3124,
+          "win_rate": 0.0,
+          "avg_r": -1.1562
+        }
+      }
+    },
+    {
+      "pair": "SOLUSDT",
+      "bars": 44999,
+      "split_bar": 31499,
+      "train": {
+        "n": 15,
+        "wr": 100.0,
+        "avg_r": 0.0855,
+        "pf": Infinity
+      },
+      "test": {
+        "n": 2,
+        "wr": 100.0,
+        "avg_r": 0.0938,
+        "pf": Infinity
+      },
+      "exit_reasons_test": {
+        "EARLY_PROFIT": {
+          "trades": 1,
+          "wins": 1,
+          "gross_r": 0.1682,
+          "win_rate": 100.0,
+          "avg_r": 0.1682
+        },
+        "TRAIL_SL": {
+          "trades": 1,
+          "wins": 1,
+          "gross_r": 0.0195,
+          "win_rate": 100.0,
+          "avg_r": 0.0195
+        }
+      }
+    },
+    {
+      "pair": "STRKUSDT",
+      "bars": 44999,
+      "split_bar": 31499,
+      "train": {
+        "n": 82,
+        "wr": 90.24,
+        "avg_r": -0.022,
+        "pf": 0.8053
+      },
+      "test": {
+        "n": 90,
+        "wr": 92.22,
+        "avg_r": 0.0138,
+        "pf": 1.154
+      },
+      "exit_reasons_test": {
+        "TRAIL_SL": {
+          "trades": 83,
+          "wins": 83,
+          "gross_r": 9.3398,
+          "win_rate": 100.0,
+          "avg_r": 0.1125
+        },
+        "SL": {
+          "trades": 7,
+          "wins": 0,
+          "gross_r": -8.0934,
+          "win_rate": 0.0,
+          "avg_r": -1.1562
+        }
+      }
+    },
+    {
+      "pair": "SUIUSDT",
+      "bars": 45000,
+      "split_bar": 31499,
+      "train": {
+        "n": 58,
+        "wr": 98.28,
+        "avg_r": 0.0642,
+        "pf": 4.2223
+      },
+      "test": {
+        "n": 9,
+        "wr": 100.0,
+        "avg_r": 0.0828,
+        "pf": Infinity
+      },
+      "exit_reasons_test": {
+        "TRAIL_SL": {
+          "trades": 9,
+          "wins": 9,
+          "gross_r": 0.7456,
+          "win_rate": 100.0,
+          "avg_r": 0.0828
+        }
+      }
+    },
+    {
+      "pair": "SUSDT",
+      "bars": 45000,
+      "split_bar": 31499,
+      "train": {
+        "n": 64,
+        "wr": 95.31,
+        "avg_r": 0.0318,
+        "pf": 1.5876
+      },
+      "test": {
+        "n": 58,
+        "wr": 93.1,
+        "avg_r": 0.0215,
+        "pf": 1.2696
+      },
+      "exit_reasons_test": {
+        "TRAIL_SL": {
+          "trades": 50,
+          "wins": 50,
+          "gross_r": 5.2486,
+          "win_rate": 100.0,
+          "avg_r": 0.105
+        },
+        "SL": {
+          "trades": 4,
+          "wins": 0,
+          "gross_r": -4.6248,
+          "win_rate": 0.0,
+          "avg_r": -1.1562
+        },
+        "EARLY_PROFIT": {
+          "trades": 4,
+          "wins": 4,
+          "gross_r": 0.6231,
+          "win_rate": 100.0,
+          "avg_r": 0.1558
+        }
+      }
+    },
+    {
+      "pair": "TAOUSDT",
+      "bars": 45000,
+      "split_bar": 31499,
+      "train": {
+        "n": 44,
+        "wr": 100.0,
+        "avg_r": 0.0801,
+        "pf": Infinity
+      },
+      "test": {
+        "n": 8,
+        "wr": 87.5,
+        "avg_r": -0.0937,
+        "pf": 0.3514
+      },
+      "exit_reasons_test": {
+        "TRAIL_SL": {
+          "trades": 5,
+          "wins": 5,
+          "gross_r": 0.1946,
+          "win_rate": 100.0,
+          "avg_r": 0.0389
+        },
+        "EARLY_PROFIT": {
+          "trades": 2,
+          "wins": 2,
+          "gross_r": 0.2117,
+          "win_rate": 100.0,
+          "avg_r": 0.1058
+        },
+        "SL": {
+          "trades": 1,
+          "wins": 0,
+          "gross_r": -1.1562,
+          "win_rate": 0.0,
+          "avg_r": -1.1562
+        }
+      }
+    },
+    {
+      "pair": "TRXUSDT",
+      "bars": 45000,
+      "split_bar": 31499,
+      "train": {
+        "n": 0,
+        "wr": 0.0,
+        "avg_r": 0.0,
+        "pf": 0.0
+      },
+      "test": {
+        "n": 0,
+        "wr": 0.0,
+        "avg_r": 0.0,
+        "pf": 0.0
+      },
+      "exit_reasons_test": {}
+    },
+    {
+      "pair": "UNIUSDT",
+      "bars": 44999,
+      "split_bar": 31499,
+      "train": {
+        "n": 76,
+        "wr": 97.37,
+        "avg_r": 0.0647,
+        "pf": 3.1271
+      },
+      "test": {
+        "n": 4,
+        "wr": 100.0,
+        "avg_r": 0.0539,
+        "pf": Infinity
+      },
+      "exit_reasons_test": {
+        "TRAIL_SL": {
+          "trades": 4,
+          "wins": 4,
+          "gross_r": 0.2156,
+          "win_rate": 100.0,
+          "avg_r": 0.0539
+        }
+      }
+    },
+    {
+      "pair": "USD1USDT",
+      "bars": 44999,
+      "split_bar": 31499,
+      "train": {
+        "n": 0,
+        "wr": 0.0,
+        "avg_r": 0.0,
+        "pf": 0.0
+      },
+      "test": {
+        "n": 0,
+        "wr": 0.0,
+        "avg_r": 0.0,
+        "pf": 0.0
+      },
+      "exit_reasons_test": {}
+    },
+    {
+      "pair": "USDCUSDT",
+      "bars": 45000,
+      "split_bar": 31499,
+      "train": {
+        "n": 0,
+        "wr": 0.0,
+        "avg_r": 0.0,
+        "pf": 0.0
+      },
+      "test": {
+        "n": 0,
+        "wr": 0.0,
+        "avg_r": 0.0,
+        "pf": 0.0
+      },
+      "exit_reasons_test": {}
+    },
+    {
+      "pair": "UUSDT",
+      "bars": 44999,
+      "split_bar": 31499,
+      "train": {
+        "n": 0,
+        "wr": 0.0,
+        "avg_r": 0.0,
+        "pf": 0.0
+      },
+      "test": {
+        "n": 0,
+        "wr": 0.0,
+        "avg_r": 0.0,
+        "pf": 0.0
+      },
+      "exit_reasons_test": {}
+    },
+    {
+      "pair": "WLDUSDT",
+      "bars": 44999,
+      "split_bar": 31499,
+      "train": {
+        "n": 66,
+        "wr": 100.0,
+        "avg_r": 0.095,
+        "pf": Infinity
+      },
+      "test": {
+        "n": 14,
+        "wr": 100.0,
+        "avg_r": 0.109,
+        "pf": Infinity
+      },
+      "exit_reasons_test": {
+        "TRAIL_SL": {
+          "trades": 12,
+          "wins": 12,
+          "gross_r": 1.0256,
+          "win_rate": 100.0,
+          "avg_r": 0.0855
+        },
+        "EARLY_PROFIT": {
+          "trades": 2,
+          "wins": 2,
+          "gross_r": 0.4998,
+          "win_rate": 100.0,
+          "avg_r": 0.2499
+        }
+      }
+    },
+    {
+      "pair": "WUSDT",
+      "bars": 44999,
+      "split_bar": 31499,
+      "train": {
+        "n": 52,
+        "wr": 96.15,
+        "avg_r": 0.0448,
+        "pf": 2.007
+      },
+      "test": {
+        "n": 82,
+        "wr": 95.12,
+        "avg_r": 0.0408,
+        "pf": 1.7236
+      },
+      "exit_reasons_test": {
+        "TRAIL_SL": {
+          "trades": 76,
+          "wins": 76,
+          "gross_r": 7.6377,
+          "win_rate": 100.0,
+          "avg_r": 0.1005
+        },
+        "SL": {
+          "trades": 4,
+          "wins": 0,
+          "gross_r": -4.6248,
+          "win_rate": 0.0,
+          "avg_r": -1.1562
+        },
+        "EARLY_PROFIT": {
+          "trades": 2,
+          "wins": 2,
+          "gross_r": 0.3337,
+          "win_rate": 100.0,
+          "avg_r": 0.1668
+        }
+      }
+    },
+    {
+      "pair": "XAUTUSDT",
+      "bars": 44999,
+      "split_bar": 31499,
+      "train": {
+        "n": 0,
+        "wr": 0.0,
+        "avg_r": 0.0,
+        "pf": 0.0
+      },
+      "test": {
+        "n": 0,
+        "wr": 0.0,
+        "avg_r": 0.0,
+        "pf": 0.0
+      },
+      "exit_reasons_test": {}
+    },
+    {
+      "pair": "XRPUSDT",
+      "bars": 45000,
+      "split_bar": 31499,
+      "train": {
+        "n": 30,
+        "wr": 96.67,
+        "avg_r": 0.0462,
+        "pf": 2.1996
+      },
+      "test": {
+        "n": 1,
+        "wr": 100.0,
+        "avg_r": 0.0248,
+        "pf": Infinity
+      },
+      "exit_reasons_test": {
+        "TRAIL_SL": {
+          "trades": 1,
+          "wins": 1,
+          "gross_r": 0.0248,
+          "win_rate": 100.0,
+          "avg_r": 0.0248
+        }
+      }
+    },
+    {
+      "pair": "ZECUSDT",
+      "bars": 44999,
+      "split_bar": 31499,
+      "train": {
+        "n": 48,
+        "wr": 97.92,
+        "avg_r": 0.0713,
+        "pf": 3.9614
+      },
+      "test": {
+        "n": 12,
+        "wr": 100.0,
+        "avg_r": 0.0738,
+        "pf": Infinity
+      },
+      "exit_reasons_test": {
+        "TRAIL_SL": {
+          "trades": 11,
+          "wins": 11,
+          "gross_r": 0.7992,
+          "win_rate": 100.0,
+          "avg_r": 0.0727
+        },
+        "EARLY_PROFIT": {
+          "trades": 1,
+          "wins": 1,
+          "gross_r": 0.0859,
+          "win_rate": 100.0,
+          "avg_r": 0.0859
+        }
+      }
+    },
+    {
+      "pair": "ZROUSDT",
+      "bars": 44999,
+      "split_bar": 31499,
+      "train": {
+        "n": 114,
+        "wr": 95.61,
+        "avg_r": 0.0336,
+        "pf": 1.6633
+      },
+      "test": {
+        "n": 31,
+        "wr": 93.55,
+        "avg_r": 0.052,
+        "pf": 1.6977
+      },
+      "exit_reasons_test": {
+        "TRAIL_SL": {
+          "trades": 26,
+          "wins": 26,
+          "gross_r": 3.1348,
+          "win_rate": 100.0,
+          "avg_r": 0.1206
+        },
+        "EARLY_PROFIT": {
+          "trades": 3,
+          "wins": 3,
+          "gross_r": 0.791,
+          "win_rate": 100.0,
+          "avg_r": 0.2637
+        },
+        "SL": {
+          "trades": 2,
+          "wins": 0,
+          "gross_r": -2.3124,
+          "win_rate": 0.0,
+          "avg_r": -1.1562
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,4443 @@
+{
+  "summary": {
+    "data_dir": "data/tokocrypto_live_usdt",
+    "config": "data/config/scalp_config_exit_full.json",
+    "cost_roundtrip_pct": 0.9688,
+    "pairs_scanned": 40,
+    "aggregate": {
+      "pairs_with_trades": 32,
+      "pairs_total": 40,
+      "trades_total": 2550,
+      "avg_r_weighted": 0.0325,
+      "pairs_positive": 28,
+      "pairs_positive_min30": 22
+    },
+    "best_pairs": [
+      {
+        "pair": "BTCUSDT",
+        "bars_m1": 44999,
+        "evaluations": 24957,
+        "ready_signals": 160,
+        "trades_resolved": 3,
+        "unresolved": 157,
+        "win_rate_pct": 100.0,
+        "avg_r": 0.1695,
+        "profit_factor": Infinity,
+        "max_drawdown_r": 0.0,
+        "mfe_7h_median_pct": 0.5016,
+        "capture_required_7h_pct": 193.1,
+        "by_exit_reason": {
+          "TRAIL_SL": {
+            "trades": 2,
+            "wins": 2,
+            "gross_r": 0.4262,
+            "win_rate": 100.0,
+            "avg_r": 0.2131
+          },
+          "EARLY_PROFIT": {
+            "trades": 1,
+            "wins": 1,
+            "gross_r": 0.0823,
+            "win_rate": 100.0,
+            "avg_r": 0.0823
+          }
+        },
+        "by_setup": {
+          "TREND_PULLBACK": {
+            "trades": 3,
+            "wins": 3,
+            "gross_r": 0.5085,
+            "win_rate": 100.0,
+            "avg_r": 0.1695
+          }
+        }
+      },
+      {
+        "pair": "WLDUSDT",
+        "bars_m1": 44999,
+        "evaluations": 25319,
+        "ready_signals": 216,
+        "trades_resolved": 85,
+        "unresolved": 131,
+        "win_rate_pct": 100.0,
+        "avg_r": 0.0949,
+        "profit_factor": Infinity,
+        "max_drawdown_r": 0.0,
+        "mfe_7h_median_pct": 2.0143,
+        "capture_required_7h_pct": 48.1,
+        "by_exit_reason": {
+          "TRAIL_SL": {
+            "trades": 77,
+            "wins": 77,
+            "gross_r": 6.6488,
+            "win_rate": 100.0,
+            "avg_r": 0.0863
+          },
+          "EARLY_PROFIT": {
+            "trades": 8,
+            "wins": 8,
+            "gross_r": 1.418,
+            "win_rate": 100.0,
+            "avg_r": 0.1772
+          }
+        },
+        "by_setup": {
+          "BREAKOUT": {
+            "trades": 13,
+            "wins": 13,
+            "gross_r": 1.3075,
+            "win_rate": 100.0,
+            "avg_r": 0.1006
+          },
+          "LIQUIDITY_SWEEP": {
+            "trades": 22,
+            "wins": 22,
+            "gross_r": 2.3322,
+            "win_rate": 100.0,
+            "avg_r": 0.106
+          },
+          "BREAKOUT_RETEST": {
+            "trades": 11,
+            "wins": 11,
+            "gross_r": 0.7919,
+            "win_rate": 100.0,
+            "avg_r": 0.072
+          },
+          "TREND_PULLBACK": {
+            "trades": 39,
+            "wins": 39,
+            "gross_r": 3.6352,
+            "win_rate": 100.0,
+            "avg_r": 0.0932
+          }
+        }
+      },
+      {
+        "pair": "SOLUSDT",
+        "bars_m1": 44999,
+        "evaluations": 26173,
+        "ready_signals": 158,
+        "trades_resolved": 17,
+        "unresolved": 141,
+        "win_rate_pct": 100.0,
+        "avg_r": 0.0865,
+        "profit_factor": Infinity,
+        "max_drawdown_r": 0.0,
+        "mfe_7h_median_pct": 0.8773,
+        "capture_required_7h_pct": 110.4,
+        "by_exit_reason": {
+          "TRAIL_SL": {
+            "trades": 12,
+            "wins": 12,
+            "gross_r": 0.8757,
+            "win_rate": 100.0,
+            "avg_r": 0.073
+          },
+          "EARLY_PROFIT": {
+            "trades": 5,
+            "wins": 5,
+            "gross_r": 0.5947,
+            "win_rate": 100.0,
+            "avg_r": 0.1189
+          }
+        },
+        "by_setup": {
+          "LIQUIDITY_SWEEP": {
+            "trades": 4,
+            "wins": 4,
+            "gross_r": 0.2189,
+            "win_rate": 100.0,
+            "avg_r": 0.0547
+          },
+          "BREAKOUT": {
+            "trades": 2,
+            "wins": 2,
+            "gross_r": 0.238,
+            "win_rate": 100.0,
+            "avg_r": 0.119
+          },
+          "TREND_PULLBACK": {
+            "trades": 9,
+            "wins": 9,
+            "gross_r": 0.7194,
+            "win_rate": 100.0,
+            "avg_r": 0.0799
+          },
+          "BREAKOUT_RETEST": {
+            "trades": 2,
+            "wins": 2,
+            "gross_r": 0.2941,
+            "win_rate": 100.0,
+            "avg_r": 0.1471
+          }
+        }
+      },
+      {
+        "pair": "HYPEUSDT",
+        "bars_m1": 25953,
+        "evaluations": 15053,
+        "ready_signals": 86,
+        "trades_resolved": 8,
+        "unresolved": 78,
+        "win_rate_pct": 100.0,
+        "avg_r": 0.0857,
+        "profit_factor": Infinity,
+        "max_drawdown_r": 0.0,
+        "mfe_7h_median_pct": 0.8624,
+        "capture_required_7h_pct": 112.3,
+        "by_exit_reason": {
+          "TRAIL_SL": {
+            "trades": 7,
+            "wins": 7,
+            "gross_r": 0.5067,
+            "win_rate": 100.0,
+            "avg_r": 0.0724
+          },
+          "EARLY_PROFIT": {
+            "trades": 1,
+            "wins": 1,
+            "gross_r": 0.1792,
+            "win_rate": 100.0,
+            "avg_r": 0.1792
+          }
+        },
+        "by_setup": {
+          "BREAKOUT_RETEST": {
+            "trades": 1,
+            "wins": 1,
+            "gross_r": 0.0103,
+            "win_rate": 100.0,
+            "avg_r": 0.0103
+          },
+          "BREAKOUT": {
+            "trades": 4,
+            "wins": 4,
+            "gross_r": 0.6036,
+            "win_rate": 100.0,
+            "avg_r": 0.1509
+          },
+          "TREND_PULLBACK": {
+            "trades": 3,
+            "wins": 3,
+            "gross_r": 0.072,
+            "win_rate": 100.0,
+            "avg_r": 0.024
+          }
+        }
+      },
+      {
+        "pair": "ZECUSDT",
+        "bars_m1": 44999,
+        "evaluations": 27849,
+        "ready_signals": 175,
+        "trades_resolved": 60,
+        "unresolved": 115,
+        "win_rate_pct": 98.33,
+        "avg_r": 0.0718,
+        "profit_factor": 4.727,
+        "max_drawdown_r": 1.1562,
+        "mfe_7h_median_pct": 1.8132,
+        "capture_required_7h_pct": 53.4,
+        "by_exit_reason": {
+          "TRAIL_SL": {
+            "trades": 57,
+            "wins": 57,
+            "gross_r": 5.2488,
+            "win_rate": 100.0,
+            "avg_r": 0.0921
+          },
+          "SL": {
+            "trades": 1,
+            "wins": 0,
+            "gross_r": -1.1562,
+            "win_rate": 0.0,
+            "avg_r": -1.1562
+          },
+          "EARLY_PROFIT": {
+            "trades": 2,
+            "wins": 2,
+            "gross_r": 0.2165,
+            "win_rate": 100.0,
+            "avg_r": 0.1082
+          }
+        },
+        "by_setup": {
+          "TREND_PULLBACK": {
+            "trades": 30,
+            "wins": 30,
+            "gross_r": 2.7836,
+            "win_rate": 100.0,
+            "avg_r": 0.0928
+          },
+          "LIQUIDITY_SWEEP": {
+            "trades": 11,
+            "wins": 11,
+            "gross_r": 0.7373,
+            "win_rate": 100.0,
+            "avg_r": 0.067
+          },
+          "BREAKOUT": {
+            "trades": 10,
+            "wins": 9,
+            "gross_r": -0.1306,
+            "win_rate": 90.0,
+            "avg_r": -0.0131
+          },
+          "BREAKOUT_RETEST": {
+            "trades": 9,
+            "wins": 9,
+            "gross_r": 0.9188,
+            "win_rate": 100.0,
+            "avg_r": 0.1021
+          }
+        }
+      },
+      {
+        "pair": "AVAXUSDT",
+        "bars_m1": 45000,
+        "evaluations": 26452,
+        "ready_signals": 186,
+        "trades_resolved": 60,
+        "unresolved": 126,
+        "win_rate_pct": 98.33,
+        "avg_r": 0.0692,
+        "profit_factor": 4.59,
+        "max_drawdown_r": 1.1562,
+        "mfe_7h_median_pct": 1.5555,
+        "capture_required_7h_pct": 62.3,
+        "by_exit_reason": {
+          "EARLY_PROFIT": {
+            "trades": 7,
+            "wins": 7,
+            "gross_r": 0.9704,
+            "win_rate": 100.0,
+            "avg_r": 0.1386
+          },
+          "TRAIL_SL": {
+            "trades": 52,
+            "wins": 52,
+            "gross_r": 4.3366,
+            "win_rate": 100.0,
+            "avg_r": 0.0834
+          },
+          "SL": {
+            "trades": 1,
+            "wins": 0,
+            "gross_r": -1.1562,
+            "win_rate": 0.0,
+            "avg_r": -1.1562
+          }
+        },
+        "by_setup": {
+          "TREND_PULLBACK": {
+            "trades": 30,
+            "wins": 30,
+            "gross_r": 3.0951,
+            "win_rate": 100.0,
+            "avg_r": 0.1032
+          },
+          "BREAKOUT_RETEST": {
+            "trades": 11,
+            "wins": 11,
+            "gross_r": 0.6726,
+            "win_rate": 100.0,
+            "avg_r": 0.0611
+          },
+          "BREAKOUT": {
+            "trades": 12,
+            "wins": 11,
+            "gross_r": -0.0864,
+            "win_rate": 91.67,
+            "avg_r": -0.0072
+          },
+          "LIQUIDITY_SWEEP": {
+            "trades": 7,
+            "wins": 7,
+            "gross_r": 0.4695,
+            "win_rate": 100.0,
+            "avg_r": 0.0671
+          }
+        }
+      },
+      {
+        "pair": "ETHUSDT",
+        "bars_m1": 44999,
+        "evaluations": 25511,
+        "ready_signals": 158,
+        "trades_resolved": 7,
+        "unresolved": 151,
+        "win_rate_pct": 100.0,
+        "avg_r": 0.0685,
+        "profit_factor": Infinity,
+        "max_drawdown_r": 0.0,
+        "mfe_7h_median_pct": 0.6273,
+        "capture_required_7h_pct": 154.4,
+        "by_exit_reason": {
+          "TRAIL_SL": {
+            "trades": 6,
+            "wins": 6,
+            "gross_r": 0.2587,
+            "win_rate": 100.0,
+            "avg_r": 0.0431
+          },
+          "EARLY_PROFIT": {
+            "trades": 1,
+            "wins": 1,
+            "gross_r": 0.2209,
+            "win_rate": 100.0,
+            "avg_r": 0.2209
+          }
+        },
+        "by_setup": {
+          "TREND_PULLBACK": {
+            "trades": 4,
+            "wins": 4,
+            "gross_r": 0.2059,
+            "win_rate": 100.0,
+            "avg_r": 0.0515
+          },
+          "BREAKOUT_RETEST": {
+            "trades": 2,
+            "wins": 2,
+            "gross_r": 0.2587,
+            "win_rate": 100.0,
+            "avg_r": 0.1294
+          },
+          "LIQUIDITY_SWEEP": {
+            "trades": 1,
+            "wins": 1,
+            "gross_r": 0.015,
+            "win_rate": 100.0,
+            "avg_r": 0.015
+          }
+        }
+      },
+      {
+        "pair": "SUIUSDT",
+        "bars_m1": 45000,
+        "evaluations": 25400,
+        "ready_signals": 203,
+        "trades_resolved": 68,
+        "unresolved": 135,
+        "win_rate_pct": 98.53,
+        "avg_r": 0.0677,
+        "profit_factor": 4.9796,
+        "max_drawdown_r": 1.1562,
+        "mfe_7h_median_pct": 1.7408,
+        "capture_required_7h_pct": 55.7,
+        "by_exit_reason": {
+          "TRAIL_SL": {
+            "trades": 57,
+            "wins": 57,
+            "gross_r": 4.4473,
+            "win_rate": 100.0,
+            "avg_r": 0.078
+          },
+          "EARLY_PROFIT": {
+            "trades": 10,
+            "wins": 10,
+            "gross_r": 1.3101,
+            "win_rate": 100.0,
+            "avg_r": 0.131
+          },
+          "SL": {
+            "trades": 1,
+            "wins": 0,
+            "gross_r": -1.1562,
+            "win_rate": 0.0,
+            "avg_r": -1.1562
+          }
+        },
+        "by_setup": {
+          "TREND_PULLBACK": {
+            "trades": 31,
+            "wins": 31,
+            "gross_r": 1.9064,
+            "win_rate": 100.0,
+            "avg_r": 0.0615
+          },
+          "BREAKOUT": {
+            "trades": 12,
+            "wins": 12,
+            "gross_r": 1.2049,
+            "win_rate": 100.0,
+            "avg_r": 0.1004
+          },
+          "BREAKOUT_RETEST": {
+            "trades": 9,
+            "wins": 9,
+            "gross_r": 0.9157,
+            "win_rate": 100.0,
+            "avg_r": 0.1017
+          },
+          "LIQUIDITY_SWEEP": {
+            "trades": 16,
+            "wins": 15,
+            "gross_r": 0.5742,
+            "win_rate": 93.75,
+            "avg_r": 0.0359
+          }
+        }
+      },
+      {
+        "pair": "LINKUSDT",
+        "bars_m1": 44999,
+        "evaluations": 26837,
+        "ready_signals": 160,
+        "trades_resolved": 27,
+        "unresolved": 133,
+        "win_rate_pct": 100.0,
+        "avg_r": 0.0666,
+        "profit_factor": Infinity,
+        "max_drawdown_r": 0.0,
+        "mfe_7h_median_pct": 1.0981,
+        "capture_required_7h_pct": 88.2,
+        "by_exit_reason": {
+          "TRAIL_SL": {
+            "trades": 24,
+            "wins": 24,
+            "gross_r": 1.4353,
+            "win_rate": 100.0,
+            "avg_r": 0.0598
+          },
+          "EARLY_PROFIT": {
+            "trades": 3,
+            "wins": 3,
+            "gross_r": 0.3637,
+            "win_rate": 100.0,
+            "avg_r": 0.1212
+          }
+        },
+        "by_setup": {
+          "LIQUIDITY_SWEEP": {
+            "trades": 10,
+            "wins": 10,
+            "gross_r": 0.9521,
+            "win_rate": 100.0,
+            "avg_r": 0.0952
+          },
+          "TREND_PULLBACK": {
+            "trades": 10,
+            "wins": 10,
+            "gross_r": 0.371,
+            "win_rate": 100.0,
+            "avg_r": 0.0371
+          },
+          "BREAKOUT_RETEST": {
+            "trades": 4,
+            "wins": 4,
+            "gross_r": 0.306,
+            "win_rate": 100.0,
+            "avg_r": 0.0765
+          },
+          "BREAKOUT": {
+            "trades": 3,
+            "wins": 3,
+            "gross_r": 0.1699,
+            "win_rate": 100.0,
+            "avg_r": 0.0566
+          }
+        }
+      },
+      {
+        "pair": "UNIUSDT",
+        "bars_m1": 44999,
+        "evaluations": 26685,
+        "ready_signals": 202,
+        "trades_resolved": 80,
+        "unresolved": 122,
+        "win_rate_pct": 97.5,
+        "avg_r": 0.0642,
+        "profit_factor": 3.2203,
+        "max_drawdown_r": 1.1562,
+        "mfe_7h_median_pct": 1.799,
+        "capture_required_7h_pct": 53.9,
+        "by_exit_reason": {
+          "TRAIL_SL": {
+            "trades": 77,
+            "wins": 77,
+            "gross_r": 7.2324,
+            "win_rate": 100.0,
+            "avg_r": 0.0939
+          },
+          "EARLY_PROFIT": {
+            "trades": 1,
+            "wins": 1,
+            "gross_r": 0.2143,
+            "win_rate": 100.0,
+            "avg_r": 0.2143
+          },
+          "SL": {
+            "trades": 2,
+            "wins": 0,
+            "gross_r": -2.3124,
+            "win_rate": 0.0,
+            "avg_r": -1.1562
+          }
+        },
+        "by_setup": {
+          "BREAKOUT": {
+            "trades": 16,
+            "wins": 16,
+            "gross_r": 2.1735,
+            "win_rate": 100.0,
+            "avg_r": 0.1358
+          },
+          "TREND_PULLBACK": {
+            "trades": 37,
+            "wins": 36,
+            "gross_r": 2.4544,
+            "win_rate": 97.3,
+            "avg_r": 0.0663
+          },
+          "BREAKOUT_RETEST": {
+            "trades": 11,
+            "wins": 11,
+            "gross_r": 0.7549,
+            "win_rate": 100.0,
+            "avg_r": 0.0686
+          },
+          "LIQUIDITY_SWEEP": {
+            "trades": 16,
+            "wins": 15,
+            "gross_r": -0.2485,
+            "win_rate": 93.75,
+            "avg_r": -0.0155
+          }
+        }
+      },
+      {
+        "pair": "ADAUSDT",
+        "bars_m1": 44999,
+        "evaluations": 24489,
+        "ready_signals": 193,
+        "trades_resolved": 51,
+        "unresolved": 142,
+        "win_rate_pct": 100.0,
+        "avg_r": 0.0638,
+        "profit_factor": Infinity,
+        "max_drawdown_r": 0.0,
+        "mfe_7h_median_pct": 1.5867,
+        "capture_required_7h_pct": 61.1,
+        "by_exit_reason": {
+          "TRAIL_SL": {
+            "trades": 46,
+            "wins": 46,
+            "gross_r": 2.7532,
+            "win_rate": 100.0,
+            "avg_r": 0.0599
+          },
+          "EARLY_PROFIT": {
+            "trades": 5,
+            "wins": 5,
+            "gross_r": 0.5003,
+            "win_rate": 100.0,
+            "avg_r": 0.1001
+          }
+        },
+        "by_setup": {
+          "TREND_PULLBACK": {
+            "trades": 29,
+            "wins": 29,
+            "gross_r": 1.5662,
+            "win_rate": 100.0,
+            "avg_r": 0.054
+          },
+          "BREAKOUT": {
+            "trades": 11,
+            "wins": 11,
+            "gross_r": 0.7205,
+            "win_rate": 100.0,
+            "avg_r": 0.0655
+          },
+          "BREAKOUT_RETEST": {
+            "trades": 9,
+            "wins": 9,
+            "gross_r": 0.9161,
+            "win_rate": 100.0,
+            "avg_r": 0.1018
+          },
+          "LIQUIDITY_SWEEP": {
+            "trades": 2,
+            "wins": 2,
+            "gross_r": 0.0507,
+            "win_rate": 100.0,
+            "avg_r": 0.0253
+          }
+        }
+      },
+      {
+        "pair": "PUMPUSDT",
+        "bars_m1": 44999,
+        "evaluations": 24097,
+        "ready_signals": 254,
+        "trades_resolved": 118,
+        "unresolved": 136,
+        "win_rate_pct": 97.46,
+        "avg_r": 0.062,
+        "profit_factor": 3.1078,
+        "max_drawdown_r": 1.1562,
+        "mfe_7h_median_pct": 2.7227,
+        "capture_required_7h_pct": 35.6,
+        "by_exit_reason": {
+          "EARLY_PROFIT": {
+            "trades": 9,
+            "wins": 9,
+            "gross_r": 1.021,
+            "win_rate": 100.0,
+            "avg_r": 0.1134
+          },
+          "TRAIL_SL": {
+            "trades": 106,
+            "wins": 106,
+            "gross_r": 9.7587,
+            "win_rate": 100.0,
+            "avg_r": 0.0921
+          },
+          "SL": {
+            "trades": 3,
+            "wins": 0,
+            "gross_r": -3.4686,
+            "win_rate": 0.0,
+            "avg_r": -1.1562
+          }
+        },
+        "by_setup": {
+          "LIQUIDITY_SWEEP": {
+            "trades": 24,
+            "wins": 23,
+            "gross_r": 1.6448,
+            "win_rate": 95.83,
+            "avg_r": 0.0685
+          },
+          "TREND_PULLBACK": {
+            "trades": 43,
+            "wins": 43,
+            "gross_r": 3.5945,
+            "win_rate": 100.0,
+            "avg_r": 0.0836
+          },
+          "BREAKOUT_RETEST": {
+            "trades": 19,
+            "wins": 17,
+            "gross_r": -0.6429,
+            "win_rate": 89.47,
+            "avg_r": -0.0338
+          },
+          "BREAKOUT": {
+            "trades": 32,
+            "wins": 32,
+            "gross_r": 2.7147,
+            "win_rate": 100.0,
+            "avg_r": 0.0848
+          }
+        }
+      },
+      {
+        "pair": "FETUSDT",
+        "bars_m1": 44999,
+        "evaluations": 25328,
+        "ready_signals": 207,
+        "trades_resolved": 79,
+        "unresolved": 128,
+        "win_rate_pct": 98.73,
+        "avg_r": 0.0572,
+        "profit_factor": 4.9056,
+        "max_drawdown_r": 1.1562,
+        "mfe_7h_median_pct": 2.0468,
+        "capture_required_7h_pct": 47.3,
+        "by_exit_reason": {
+          "TRAIL_SL": {
+            "trades": 69,
+            "wins": 69,
+            "gross_r": 4.705,
+            "win_rate": 100.0,
+            "avg_r": 0.0682
+          },
+          "EARLY_PROFIT": {
+            "trades": 9,
+            "wins": 9,
+            "gross_r": 0.9669,
+            "win_rate": 100.0,
+            "avg_r": 0.1074
+          },
+          "SL": {
+            "trades": 1,
+            "wins": 0,
+            "gross_r": -1.1562,
+            "win_rate": 0.0,
+            "avg_r": -1.1562
+          }
+        },
+        "by_setup": {
+          "BREAKOUT": {
+            "trades": 16,
+            "wins": 16,
+            "gross_r": 1.2943,
+            "win_rate": 100.0,
+            "avg_r": 0.0809
+          },
+          "TREND_PULLBACK": {
+            "trades": 36,
+            "wins": 36,
+            "gross_r": 2.74,
+            "win_rate": 100.0,
+            "avg_r": 0.0761
+          },
+          "LIQUIDITY_SWEEP": {
+            "trades": 11,
+            "wins": 11,
+            "gross_r": 0.629,
+            "win_rate": 100.0,
+            "avg_r": 0.0572
+          },
+          "BREAKOUT_RETEST": {
+            "trades": 16,
+            "wins": 15,
+            "gross_r": -0.1476,
+            "win_rate": 93.75,
+            "avg_r": -0.0092
+          }
+        }
+      },
+      {
+        "pair": "TAOUSDT",
+        "bars_m1": 45000,
+        "evaluations": 22712,
+        "ready_signals": 208,
+        "trades_resolved": 50,
+        "unresolved": 158,
+        "win_rate_pct": 98.0,
+        "avg_r": 0.0532,
+        "profit_factor": 3.3014,
+        "max_drawdown_r": 1.1562,
+        "mfe_7h_median_pct": 1.7313,
+        "capture_required_7h_pct": 56.0,
+        "by_exit_reason": {
+          "TRAIL_SL": {
+            "trades": 44,
+            "wins": 44,
+            "gross_r": 3.2429,
+            "win_rate": 100.0,
+            "avg_r": 0.0737
+          },
+          "EARLY_PROFIT": {
+            "trades": 5,
+            "wins": 5,
+            "gross_r": 0.5742,
+            "win_rate": 100.0,
+            "avg_r": 0.1148
+          },
+          "SL": {
+            "trades": 1,
+            "wins": 0,
+            "gross_r": -1.1562,
+            "win_rate": 0.0,
+            "avg_r": -1.1562
+          }
+        },
+        "by_setup": {
+          "BREAKOUT": {
+            "trades": 11,
+            "wins": 11,
+            "gross_r": 0.6207,
+            "win_rate": 100.0,
+            "avg_r": 0.0564
+          },
+          "TREND_PULLBACK": {
+            "trades": 21,
+            "wins": 20,
+            "gross_r": 1.064,
+            "win_rate": 95.24,
+            "avg_r": 0.0507
+          },
+          "BREAKOUT_RETEST": {
+            "trades": 12,
+            "wins": 12,
+            "gross_r": 0.548,
+            "win_rate": 100.0,
+            "avg_r": 0.0457
+          },
+          "LIQUIDITY_SWEEP": {
+            "trades": 6,
+            "wins": 6,
+            "gross_r": 0.4282,
+            "win_rate": 100.0,
+            "avg_r": 0.0714
+          }
+        }
+      },
+      {
+        "pair": "BNBUSDT",
+        "bars_m1": 44999,
+        "evaluations": 27307,
+        "ready_signals": 141,
+        "trades_resolved": 5,
+        "unresolved": 136,
+        "win_rate_pct": 100.0,
+        "avg_r": 0.0485,
+        "profit_factor": Infinity,
+        "max_drawdown_r": 0.0,
+        "mfe_7h_median_pct": 0.6348,
+        "capture_required_7h_pct": 152.6,
+        "by_exit_reason": {
+          "EARLY_PROFIT": {
+            "trades": 2,
+            "wins": 2,
+            "gross_r": 0.1685,
+            "win_rate": 100.0,
+            "avg_r": 0.0843
+          },
+          "TRAIL_SL": {
+            "trades": 3,
+            "wins": 3,
+            "gross_r": 0.0741,
+            "win_rate": 100.0,
+            "avg_r": 0.0247
+          }
+        },
+        "by_setup": {
+          "BREAKOUT": {
+            "trades": 2,
+            "wins": 2,
+            "gross_r": 0.1067,
+            "win_rate": 100.0,
+            "avg_r": 0.0534
+          },
+          "LIQUIDITY_SWEEP": {
+            "trades": 1,
+            "wins": 1,
+            "gross_r": 0.029,
+            "win_rate": 100.0,
+            "avg_r": 0.029
+          },
+          "BREAKOUT_RETEST": {
+            "trades": 2,
+            "wins": 2,
+            "gross_r": 0.1069,
+            "win_rate": 100.0,
+            "avg_r": 0.0535
+          }
+        }
+      },
+      {
+        "pair": "APTUSDT",
+        "bars_m1": 44999,
+        "evaluations": 25604,
+        "ready_signals": 225,
+        "trades_resolved": 101,
+        "unresolved": 124,
+        "win_rate_pct": 97.03,
+        "avg_r": 0.0468,
+        "profit_factor": 2.3621,
+        "max_drawdown_r": 1.7398,
+        "mfe_7h_median_pct": 2.1407,
+        "capture_required_7h_pct": 45.3,
+        "by_exit_reason": {
+          "TRAIL_SL": {
+            "trades": 87,
+            "wins": 87,
+            "gross_r": 6.4563,
+            "win_rate": 100.0,
+            "avg_r": 0.0742
+          },
+          "EARLY_PROFIT": {
+            "trades": 11,
+            "wins": 11,
+            "gross_r": 1.737,
+            "win_rate": 100.0,
+            "avg_r": 0.1579
+          },
+          "SL": {
+            "trades": 3,
+            "wins": 0,
+            "gross_r": -3.4686,
+            "win_rate": 0.0,
+            "avg_r": -1.1562
+          }
+        },
+        "by_setup": {
+          "TREND_PULLBACK": {
+            "trades": 39,
+            "wins": 38,
+            "gross_r": 1.9104,
+            "win_rate": 97.44,
+            "avg_r": 0.049
+          },
+          "LIQUIDITY_SWEEP": {
+            "trades": 14,
+            "wins": 14,
+            "gross_r": 0.9934,
+            "win_rate": 100.0,
+            "avg_r": 0.071
+          },
+          "BREAKOUT_RETEST": {
+            "trades": 22,
+            "wins": 21,
+            "gross_r": 0.8194,
+            "win_rate": 95.45,
+            "avg_r": 0.0372
+          },
+          "BREAKOUT": {
+            "trades": 26,
+            "wins": 25,
+            "gross_r": 1.0015,
+            "win_rate": 96.15,
+            "avg_r": 0.0385
+          }
+        }
+      },
+      {
+        "pair": "ENAUSDT",
+        "bars_m1": 44999,
+        "evaluations": 23061,
+        "ready_signals": 251,
+        "trades_resolved": 107,
+        "unresolved": 144,
+        "win_rate_pct": 97.2,
+        "avg_r": 0.0462,
+        "profit_factor": 2.4244,
+        "max_drawdown_r": 1.4001,
+        "mfe_7h_median_pct": 2.2496,
+        "capture_required_7h_pct": 43.1,
+        "by_exit_reason": {
+          "TRAIL_SL": {
+            "trades": 99,
+            "wins": 99,
+            "gross_r": 7.6398,
+            "win_rate": 100.0,
+            "avg_r": 0.0772
+          },
+          "EARLY_PROFIT": {
+            "trades": 5,
+            "wins": 5,
+            "gross_r": 0.7696,
+            "win_rate": 100.0,
+            "avg_r": 0.1539
+          },
+          "SL": {
+            "trades": 3,
+            "wins": 0,
+            "gross_r": -3.4686,
+            "win_rate": 0.0,
+            "avg_r": -1.1562
+          }
+        },
+        "by_setup": {
+          "BREAKOUT": {
+            "trades": 40,
+            "wins": 38,
+            "gross_r": 0.322,
+            "win_rate": 95.0,
+            "avg_r": 0.0081
+          },
+          "TREND_PULLBACK": {
+            "trades": 35,
+            "wins": 35,
+            "gross_r": 2.6418,
+            "win_rate": 100.0,
+            "avg_r": 0.0755
+          },
+          "BREAKOUT_RETEST": {
+            "trades": 19,
+            "wins": 18,
+            "gross_r": 0.6989,
+            "win_rate": 94.74,
+            "avg_r": 0.0368
+          },
+          "LIQUIDITY_SWEEP": {
+            "trades": 13,
+            "wins": 13,
+            "gross_r": 1.2781,
+            "win_rate": 100.0,
+            "avg_r": 0.0983
+          }
+        }
+      },
+      {
+        "pair": "ONDOUSDT",
+        "bars_m1": 44999,
+        "evaluations": 24133,
+        "ready_signals": 213,
+        "trades_resolved": 74,
+        "unresolved": 139,
+        "win_rate_pct": 97.3,
+        "avg_r": 0.0457,
+        "profit_factor": 2.4626,
+        "max_drawdown_r": 1.7502,
+        "mfe_7h_median_pct": 1.8883,
+        "capture_required_7h_pct": 51.3,
+        "by_exit_reason": {
+          "TRAIL_SL": {
+            "trades": 65,
+            "wins": 65,
+            "gross_r": 4.8065,
+            "win_rate": 100.0,
+            "avg_r": 0.0739
+          },
+          "EARLY_PROFIT": {
+            "trades": 7,
+            "wins": 7,
+            "gross_r": 0.888,
+            "win_rate": 100.0,
+            "avg_r": 0.1269
+          },
+          "SL": {
+            "trades": 2,
+            "wins": 0,
+            "gross_r": -2.3124,
+            "win_rate": 0.0,
+            "avg_r": -1.1562
+          }
+        },
+        "by_setup": {
+          "LIQUIDITY_SWEEP": {
+            "trades": 22,
+            "wins": 21,
+            "gross_r": 1.3071,
+            "win_rate": 95.45,
+            "avg_r": 0.0594
+          },
+          "TREND_PULLBACK": {
+            "trades": 28,
+            "wins": 28,
+            "gross_r": 1.4378,
+            "win_rate": 100.0,
+            "avg_r": 0.0513
+          },
+          "BREAKOUT_RETEST": {
+            "trades": 11,
+            "wins": 11,
+            "gross_r": 0.8338,
+            "win_rate": 100.0,
+            "avg_r": 0.0758
+          },
+          "BREAKOUT": {
+            "trades": 13,
+            "wins": 12,
+            "gross_r": -0.1966,
+            "win_rate": 92.31,
+            "avg_r": -0.0151
+          }
+        }
+      },
+      {
+        "pair": "XRPUSDT",
+        "bars_m1": 45000,
+        "evaluations": 26050,
+        "ready_signals": 168,
+        "trades_resolved": 31,
+        "unresolved": 137,
+        "win_rate_pct": 96.77,
+        "avg_r": 0.0455,
+        "profit_factor": 2.2211,
+        "max_drawdown_r": 1.1562,
+        "mfe_7h_median_pct": 0.9643,
+        "capture_required_7h_pct": 100.5,
+        "by_exit_reason": {
+          "TRAIL_SL": {
+            "trades": 25,
+            "wins": 25,
+            "gross_r": 1.8978,
+            "win_rate": 100.0,
+            "avg_r": 0.0759
+          },
+          "SL": {
+            "trades": 1,
+            "wins": 0,
+            "gross_r": -1.1562,
+            "win_rate": 0.0,
+            "avg_r": -1.1562
+          },
+          "EARLY_PROFIT": {
+            "trades": 5,
+            "wins": 5,
+            "gross_r": 0.6702,
+            "win_rate": 100.0,
+            "avg_r": 0.134
+          }
+        },
+        "by_setup": {
+          "TREND_PULLBACK": {
+            "trades": 20,
+            "wins": 20,
+            "gross_r": 1.9049,
+            "win_rate": 100.0,
+            "avg_r": 0.0952
+          },
+          "BREAKOUT": {
+            "trades": 3,
+            "wins": 2,
+            "gross_r": -0.854,
+            "win_rate": 66.67,
+            "avg_r": -0.2847
+          },
+          "LIQUIDITY_SWEEP": {
+            "trades": 2,
+            "wins": 2,
+            "gross_r": 0.0834,
+            "win_rate": 100.0,
+            "avg_r": 0.0417
+          },
+          "BREAKOUT_RETEST": {
+            "trades": 6,
+            "wins": 6,
+            "gross_r": 0.2775,
+            "win_rate": 100.0,
+            "avg_r": 0.0462
+          }
+        }
+      },
+      {
+        "pair": "ICPUSDT",
+        "bars_m1": 45000,
+        "evaluations": 25100,
+        "ready_signals": 200,
+        "trades_resolved": 62,
+        "unresolved": 138,
+        "win_rate_pct": 96.77,
+        "avg_r": 0.0444,
+        "profit_factor": 2.1901,
+        "max_drawdown_r": 1.1562,
+        "mfe_7h_median_pct": 1.6801,
+        "capture_required_7h_pct": 57.7,
+        "by_exit_reason": {
+          "TRAIL_SL": {
+            "trades": 51,
+            "wins": 51,
+            "gross_r": 3.6329,
+            "win_rate": 100.0,
+            "avg_r": 0.0712
+          },
+          "EARLY_PROFIT": {
+            "trades": 9,
+            "wins": 9,
+            "gross_r": 1.4316,
+            "win_rate": 100.0,
+            "avg_r": 0.1591
+          },
+          "SL": {
+            "trades": 2,
+            "wins": 0,
+            "gross_r": -2.3124,
+            "win_rate": 0.0,
+            "avg_r": -1.1562
+          }
+        },
+        "by_setup": {
+          "BREAKOUT_RETEST": {
+            "trades": 8,
+            "wins": 8,
+            "gross_r": 0.7392,
+            "win_rate": 100.0,
+            "avg_r": 0.0924
+          },
+          "TREND_PULLBACK": {
+            "trades": 22,
+            "wins": 21,
+            "gross_r": 0.7027,
+            "win_rate": 95.45,
+            "avg_r": 0.0319
+          },
+          "LIQUIDITY_SWEEP": {
+            "trades": 15,
+            "wins": 14,
+            "gross_r": -0.417,
+            "win_rate": 93.33,
+            "avg_r": -0.0278
+          },
+          "BREAKOUT": {
+            "trades": 17,
+            "wins": 17,
+            "gross_r": 1.7272,
+            "win_rate": 100.0,
+            "avg_r": 0.1016
+          }
+        }
+      },
+      {
+        "pair": "ZROUSDT",
+        "bars_m1": 44999,
+        "evaluations": 22159,
+        "ready_signals": 291,
+        "trades_resolved": 158,
+        "unresolved": 133,
+        "win_rate_pct": 95.57,
+        "avg_r": 0.0434,
+        "profit_factor": 1.8467,
+        "max_drawdown_r": 1.9147,
+        "mfe_7h_median_pct": 3.2242,
+        "capture_required_7h_pct": 30.0,
+        "by_exit_reason": {
+          "TRAIL_SL": {
+            "trades": 140,
+            "wins": 140,
+            "gross_r": 12.6711,
+            "win_rate": 100.0,
+            "avg_r": 0.0905
+          },
+          "EARLY_PROFIT": {
+            "trades": 11,
+            "wins": 11,
+            "gross_r": 2.2746,
+            "win_rate": 100.0,
+            "avg_r": 0.2068
+          },
+          "SL": {
+            "trades": 7,
+            "wins": 0,
+            "gross_r": -8.0934,
+            "win_rate": 0.0,
+            "avg_r": -1.1562
+          }
+        },
+        "by_setup": {
+          "TREND_PULLBACK": {
+            "trades": 58,
+            "wins": 55,
+            "gross_r": 2.3266,
+            "win_rate": 94.83,
+            "avg_r": 0.0401
+          },
+          "BREAKOUT": {
+            "trades": 35,
+            "wins": 34,
+            "gross_r": 1.4134,
+            "win_rate": 97.14,
+            "avg_r": 0.0404
+          },
+          "LIQUIDITY_SWEEP": {
+            "trades": 42,
+            "wins": 39,
+            "gross_r": 1.2279,
+            "win_rate": 92.86,
+            "avg_r": 0.0292
+          },
+          "BREAKOUT_RETEST": {
+            "trades": 23,
+            "wins": 23,
+            "gross_r": 1.8844,
+            "win_rate": 100.0,
+            "avg_r": 0.0819
+          }
+        }
+      },
+      {
+        "pair": "WUSDT",
+        "bars_m1": 44999,
+        "evaluations": 22835,
+        "ready_signals": 275,
+        "trades_resolved": 134,
+        "unresolved": 141,
+        "win_rate_pct": 95.52,
+        "avg_r": 0.0424,
+        "profit_factor": 1.8181,
+        "max_drawdown_r": 2.1245,
+        "mfe_7h_median_pct": 2.6396,
+        "capture_required_7h_pct": 36.7,
+        "by_exit_reason": {
+          "TRAIL_SL": {
+            "trades": 126,
+            "wins": 126,
+            "gross_r": 12.2787,
+            "win_rate": 100.0,
+            "avg_r": 0.0975
+          },
+          "SL": {
+            "trades": 6,
+            "wins": 0,
+            "gross_r": -6.9372,
+            "win_rate": 0.0,
+            "avg_r": -1.1562
+          },
+          "EARLY_PROFIT": {
+            "trades": 2,
+            "wins": 2,
+            "gross_r": 0.3337,
+            "win_rate": 100.0,
+            "avg_r": 0.1668
+          }
+        },
+        "by_setup": {
+          "BREAKOUT_RETEST": {
+            "trades": 10,
+            "wins": 10,
+            "gross_r": 1.1789,
+            "win_rate": 100.0,
+            "avg_r": 0.1179
+          },
+          "TREND_PULLBACK": {
+            "trades": 63,
+            "wins": 60,
+            "gross_r": 2.7877,
+            "win_rate": 95.24,
+            "avg_r": 0.0442
+          },
+          "BREAKOUT": {
+            "trades": 46,
+            "wins": 45,
+            "gross_r": 2.9333,
+            "win_rate": 97.83,
+            "avg_r": 0.0638
+          },
+          "LIQUIDITY_SWEEP": {
+            "trades": 15,
+            "wins": 13,
+            "gross_r": -1.2247,
+            "win_rate": 86.67,
+            "avg_r": -0.0816
+          }
+        }
+      },
+      {
+        "pair": "NEARUSDT",
+        "bars_m1": 44999,
+        "evaluations": 23495,
+        "ready_signals": 286,
+        "trades_resolved": 155,
+        "unresolved": 131,
+        "win_rate_pct": 96.77,
+        "avg_r": 0.0371,
+        "profit_factor": 1.994,
+        "max_drawdown_r": 2.8626,
+        "mfe_7h_median_pct": 2.8948,
+        "capture_required_7h_pct": 33.5,
+        "by_exit_reason": {
+          "TRAIL_SL": {
+            "trades": 147,
+            "wins": 147,
+            "gross_r": 11.1872,
+            "win_rate": 100.0,
+            "avg_r": 0.0761
+          },
+          "EARLY_PROFIT": {
+            "trades": 3,
+            "wins": 3,
+            "gross_r": 0.3403,
+            "win_rate": 100.0,
+            "avg_r": 0.1134
+          },
+          "SL": {
+            "trades": 5,
+            "wins": 0,
+            "gross_r": -5.781,
+            "win_rate": 0.0,
+            "avg_r": -1.1562
+          }
+        },
+        "by_setup": {
+          "LIQUIDITY_SWEEP": {
+            "trades": 33,
+            "wins": 32,
+            "gross_r": 1.5381,
+            "win_rate": 96.97,
+            "avg_r": 0.0466
+          },
+          "TREND_PULLBACK": {
+            "trades": 67,
+            "wins": 65,
+            "gross_r": 2.0132,
+            "win_rate": 97.01,
+            "avg_r": 0.03
+          },
+          "BREAKOUT": {
+            "trades": 35,
+            "wins": 33,
+            "gross_r": 0.9962,
+            "win_rate": 94.29,
+            "avg_r": 0.0285
+          },
+          "BREAKOUT_RETEST": {
+            "trades": 20,
+            "wins": 20,
+            "gross_r": 1.199,
+            "win_rate": 100.0,
+            "avg_r": 0.06
+          }
+        }
+      },
+      {
+        "pair": "SUSDT",
+        "bars_m1": 45000,
+        "evaluations": 24683,
+        "ready_signals": 252,
+        "trades_resolved": 122,
+        "unresolved": 130,
+        "win_rate_pct": 94.26,
+        "avg_r": 0.0269,
+        "profit_factor": 1.4059,
+        "max_drawdown_r": 3.2578,
+        "mfe_7h_median_pct": 2.1284,
+        "capture_required_7h_pct": 45.5,
+        "by_exit_reason": {
+          "TRAIL_SL": {
+            "trades": 109,
+            "wins": 109,
+            "gross_r": 10.4925,
+            "win_rate": 100.0,
+            "avg_r": 0.0963
+          },
+          "SL": {
+            "trades": 7,
+            "wins": 0,
+            "gross_r": -8.0934,
+            "win_rate": 0.0,
+            "avg_r": -1.1562
+          },
+          "EARLY_PROFIT": {
+            "trades": 6,
+            "wins": 6,
+            "gross_r": 0.886,
+            "win_rate": 100.0,
+            "avg_r": 0.1477
+          }
+        },
+        "by_setup": {
+          "TREND_PULLBACK": {
+            "trades": 32,
+            "wins": 30,
+            "gross_r": 0.5253,
+            "win_rate": 93.75,
+            "avg_r": 0.0164
+          },
+          "BREAKOUT": {
+            "trades": 53,
+            "wins": 50,
+            "gross_r": 2.2431,
+            "win_rate": 94.34,
+            "avg_r": 0.0423
+          },
+          "BREAKOUT_RETEST": {
+            "trades": 13,
+            "wins": 13,
+            "gross_r": 0.99,
+            "win_rate": 100.0,
+            "avg_r": 0.0762
+          },
+          "LIQUIDITY_SWEEP": {
+            "trades": 24,
+            "wins": 22,
+            "gross_r": -0.4733,
+            "win_rate": 91.67,
+            "avg_r": -0.0197
+          }
+        }
+      },
+      {
+        "pair": "FILUSDT",
+        "bars_m1": 44999,
+        "evaluations": 24616,
+        "ready_signals": 231,
+        "trades_resolved": 95,
+        "unresolved": 136,
+        "win_rate_pct": 94.74,
+        "avg_r": 0.0221,
+        "profit_factor": 1.3634,
+        "max_drawdown_r": 3.3626,
+        "mfe_7h_median_pct": 1.9915,
+        "capture_required_7h_pct": 48.6,
+        "by_exit_reason": {
+          "TRAIL_SL": {
+            "trades": 83,
+            "wins": 83,
+            "gross_r": 6.8337,
+            "win_rate": 100.0,
+            "avg_r": 0.0823
+          },
+          "SL": {
+            "trades": 5,
+            "wins": 0,
+            "gross_r": -5.781,
+            "win_rate": 0.0,
+            "avg_r": -1.1562
+          },
+          "EARLY_PROFIT": {
+            "trades": 7,
+            "wins": 7,
+            "gross_r": 1.0479,
+            "win_rate": 100.0,
+            "avg_r": 0.1497
+          }
+        },
+        "by_setup": {
+          "TREND_PULLBACK": {
+            "trades": 41,
+            "wins": 38,
+            "gross_r": -0.2176,
+            "win_rate": 92.68,
+            "avg_r": -0.0053
+          },
+          "BREAKOUT": {
+            "trades": 25,
+            "wins": 24,
+            "gross_r": 1.3605,
+            "win_rate": 96.0,
+            "avg_r": 0.0544
+          },
+          "BREAKOUT_RETEST": {
+            "trades": 12,
+            "wins": 11,
+            "gross_r": -0.5043,
+            "win_rate": 91.67,
+            "avg_r": -0.042
+          },
+          "LIQUIDITY_SWEEP": {
+            "trades": 17,
+            "wins": 17,
+            "gross_r": 1.462,
+            "win_rate": 100.0,
+            "avg_r": 0.086
+          }
+        }
+      }
+    ],
+    "worst_pairs": [
+      {
+        "pair": "DOGEUSDT",
+        "bars_m1": 44999,
+        "evaluations": 27597,
+        "ready_signals": 151,
+        "trades_resolved": 21,
+        "unresolved": 130,
+        "win_rate_pct": 85.71,
+        "avg_r": -0.0889,
+        "profit_factor": 0.4619,
+        "max_drawdown_r": 3.0535,
+        "mfe_7h_median_pct": 1.0012,
+        "capture_required_7h_pct": 96.8,
+        "by_exit_reason": {
+          "TRAIL_SL": {
+            "trades": 17,
+            "wins": 17,
+            "gross_r": 1.4256,
+            "win_rate": 100.0,
+            "avg_r": 0.0839
+          },
+          "SL": {
+            "trades": 3,
+            "wins": 0,
+            "gross_r": -3.4686,
+            "win_rate": 0.0,
+            "avg_r": -1.1562
+          },
+          "EARLY_PROFIT": {
+            "trades": 1,
+            "wins": 1,
+            "gross_r": 0.1766,
+            "win_rate": 100.0,
+            "avg_r": 0.1766
+          }
+        },
+        "by_setup": {
+          "TREND_PULLBACK": {
+            "trades": 12,
+            "wins": 11,
+            "gross_r": -0.2679,
+            "win_rate": 91.67,
+            "avg_r": -0.0223
+          },
+          "BREAKOUT_RETEST": {
+            "trades": 3,
+            "wins": 3,
+            "gross_r": 0.4438,
+            "win_rate": 100.0,
+            "avg_r": 0.1479
+          },
+          "BREAKOUT": {
+            "trades": 3,
+            "wins": 2,
+            "gross_r": -1.0985,
+            "win_rate": 66.67,
+            "avg_r": -0.3662
+          },
+          "LIQUIDITY_SWEEP": {
+            "trades": 3,
+            "wins": 2,
+            "gross_r": -0.9438,
+            "win_rate": 66.67,
+            "avg_r": -0.3146
+          }
+        }
+      },
+      {
+        "pair": "QNTUSDT",
+        "bars_m1": 45000,
+        "evaluations": 24986,
+        "ready_signals": 314,
+        "trades_resolved": 192,
+        "unresolved": 122,
+        "win_rate_pct": 88.54,
+        "avg_r": -0.0211,
+        "profit_factor": 0.8406,
+        "max_drawdown_r": 11.8756,
+        "mfe_7h_median_pct": 2.2353,
+        "capture_required_7h_pct": 43.3,
+        "by_exit_reason": {
+          "TRAIL_SL": {
+            "trades": 166,
+            "wins": 166,
+            "gross_r": 20.8018,
+            "win_rate": 100.0,
+            "avg_r": 0.1253
+          },
+          "EARLY_PROFIT": {
+            "trades": 4,
+            "wins": 4,
+            "gross_r": 0.5809,
+            "win_rate": 100.0,
+            "avg_r": 0.1452
+          },
+          "SL": {
+            "trades": 22,
+            "wins": 0,
+            "gross_r": -25.4364,
+            "win_rate": 0.0,
+            "avg_r": -1.1562
+          }
+        },
+        "by_setup": {
+          "BREAKOUT_RETEST": {
+            "trades": 17,
+            "wins": 17,
+            "gross_r": 1.6093,
+            "win_rate": 100.0,
+            "avg_r": 0.0947
+          },
+          "LIQUIDITY_SWEEP": {
+            "trades": 36,
+            "wins": 32,
+            "gross_r": -1.0952,
+            "win_rate": 88.89,
+            "avg_r": -0.0304
+          },
+          "TREND_PULLBACK": {
+            "trades": 65,
+            "wins": 57,
+            "gross_r": -3.1997,
+            "win_rate": 87.69,
+            "avg_r": -0.0492
+          },
+          "BREAKOUT": {
+            "trades": 74,
+            "wins": 64,
+            "gross_r": -1.3681,
+            "win_rate": 86.49,
+            "avg_r": -0.0185
+          }
+        }
+      },
+      {
+        "pair": "MUBARAKUSDT",
+        "bars_m1": 44999,
+        "evaluations": 26011,
+        "ready_signals": 327,
+        "trades_resolved": 222,
+        "unresolved": 105,
+        "win_rate_pct": 89.64,
+        "avg_r": -0.0173,
+        "profit_factor": 0.856,
+        "max_drawdown_r": 10.5005,
+        "mfe_7h_median_pct": 2.7257,
+        "capture_required_7h_pct": 35.5,
+        "by_exit_reason": {
+          "TRAIL_SL": {
+            "trades": 194,
+            "wins": 194,
+            "gross_r": 22.1629,
+            "win_rate": 100.0,
+            "avg_r": 0.1142
+          },
+          "EARLY_PROFIT": {
+            "trades": 5,
+            "wins": 5,
+            "gross_r": 0.5991,
+            "win_rate": 100.0,
+            "avg_r": 0.1198
+          },
+          "SL": {
+            "trades": 23,
+            "wins": 0,
+            "gross_r": -26.5926,
+            "win_rate": 0.0,
+            "avg_r": -1.1562
+          }
+        },
+        "by_setup": {
+          "LIQUIDITY_SWEEP": {
+            "trades": 53,
+            "wins": 51,
+            "gross_r": 4.4994,
+            "win_rate": 96.23,
+            "avg_r": 0.0849
+          },
+          "TREND_PULLBACK": {
+            "trades": 76,
+            "wins": 71,
+            "gross_r": 1.2599,
+            "win_rate": 93.42,
+            "avg_r": 0.0166
+          },
+          "BREAKOUT_RETEST": {
+            "trades": 18,
+            "wins": 17,
+            "gross_r": 0.2511,
+            "win_rate": 94.44,
+            "avg_r": 0.0139
+          },
+          "BREAKOUT": {
+            "trades": 75,
+            "wins": 60,
+            "gross_r": -9.841,
+            "win_rate": 80.0,
+            "avg_r": -0.1312
+          }
+        }
+      },
+      {
+        "pair": "CFXUSDT",
+        "bars_m1": 44999,
+        "evaluations": 25557,
+        "ready_signals": 186,
+        "trades_resolved": 47,
+        "unresolved": 139,
+        "win_rate_pct": 91.49,
+        "avg_r": -0.0012,
+        "profit_factor": 0.9877,
+        "max_drawdown_r": 2.3408,
+        "mfe_7h_median_pct": 1.3819,
+        "capture_required_7h_pct": 70.1,
+        "by_exit_reason": {
+          "TRAIL_SL": {
+            "trades": 40,
+            "wins": 40,
+            "gross_r": 3.9706,
+            "win_rate": 100.0,
+            "avg_r": 0.0993
+          },
+          "EARLY_PROFIT": {
+            "trades": 3,
+            "wins": 3,
+            "gross_r": 0.5973,
+            "win_rate": 100.0,
+            "avg_r": 0.1991
+          },
+          "SL": {
+            "trades": 4,
+            "wins": 0,
+            "gross_r": -4.6248,
+            "win_rate": 0.0,
+            "avg_r": -1.1562
+          }
+        },
+        "by_setup": {
+          "TREND_PULLBACK": {
+            "trades": 21,
+            "wins": 19,
+            "gross_r": -0.0685,
+            "win_rate": 90.48,
+            "avg_r": -0.0033
+          },
+          "BREAKOUT": {
+            "trades": 15,
+            "wins": 15,
+            "gross_r": 1.4833,
+            "win_rate": 100.0,
+            "avg_r": 0.0989
+          },
+          "LIQUIDITY_SWEEP": {
+            "trades": 6,
+            "wins": 5,
+            "gross_r": -0.8377,
+            "win_rate": 83.33,
+            "avg_r": -0.1396
+          },
+          "BREAKOUT_RETEST": {
+            "trades": 5,
+            "wins": 4,
+            "gross_r": -0.634,
+            "win_rate": 80.0,
+            "avg_r": -0.1268
+          }
+        }
+      },
+      {
+        "pair": "STRKUSDT",
+        "bars_m1": 44999,
+        "evaluations": 23606,
+        "ready_signals": 309,
+        "trades_resolved": 181,
+        "unresolved": 128,
+        "win_rate_pct": 91.71,
+        "avg_r": 0.0021,
+        "profit_factor": 1.0215,
+        "max_drawdown_r": 4.3174,
+        "mfe_7h_median_pct": 2.6087,
+        "capture_required_7h_pct": 37.1,
+        "by_exit_reason": {
+          "TRAIL_SL": {
+            "trades": 163,
+            "wins": 163,
+            "gross_r": 17.2905,
+            "win_rate": 100.0,
+            "avg_r": 0.1061
+          },
+          "SL": {
+            "trades": 15,
+            "wins": 0,
+            "gross_r": -17.343,
+            "win_rate": 0.0,
+            "avg_r": -1.1562
+          },
+          "EARLY_PROFIT": {
+            "trades": 3,
+            "wins": 3,
+            "gross_r": 0.426,
+            "win_rate": 100.0,
+            "avg_r": 0.142
+          }
+        },
+        "by_setup": {
+          "LIQUIDITY_SWEEP": {
+            "trades": 25,
+            "wins": 23,
+            "gross_r": -0.335,
+            "win_rate": 92.0,
+            "avg_r": -0.0134
+          },
+          "BREAKOUT": {
+            "trades": 77,
+            "wins": 74,
+            "gross_r": 4.9933,
+            "win_rate": 96.1,
+            "avg_r": 0.0648
+          },
+          "TREND_PULLBACK": {
+            "trades": 58,
+            "wins": 50,
+            "gross_r": -3.5946,
+            "win_rate": 86.21,
+            "avg_r": -0.062
+          },
+          "BREAKOUT_RETEST": {
+            "trades": 21,
+            "wins": 19,
+            "gross_r": -0.6902,
+            "win_rate": 90.48,
+            "avg_r": -0.0329
+          }
+        }
+      },
+      {
+        "pair": "RSRUSDT",
+        "bars_m1": 45000,
+        "evaluations": 27148,
+        "ready_signals": 169,
+        "trades_resolved": 41,
+        "unresolved": 128,
+        "win_rate_pct": 95.12,
+        "avg_r": 0.0162,
+        "profit_factor": 1.2873,
+        "max_drawdown_r": 1.927,
+        "mfe_7h_median_pct": 1.611,
+        "capture_required_7h_pct": 60.1,
+        "by_exit_reason": {
+          "TRAIL_SL": {
+            "trades": 36,
+            "wins": 36,
+            "gross_r": 2.6938,
+            "win_rate": 100.0,
+            "avg_r": 0.0748
+          },
+          "EARLY_PROFIT": {
+            "trades": 3,
+            "wins": 3,
+            "gross_r": 0.2829,
+            "win_rate": 100.0,
+            "avg_r": 0.0943
+          },
+          "SL": {
+            "trades": 2,
+            "wins": 0,
+            "gross_r": -2.3124,
+            "win_rate": 0.0,
+            "avg_r": -1.1562
+          }
+        },
+        "by_setup": {
+          "LIQUIDITY_SWEEP": {
+            "trades": 13,
+            "wins": 12,
+            "gross_r": -0.2539,
+            "win_rate": 92.31,
+            "avg_r": -0.0195
+          },
+          "BREAKOUT_RETEST": {
+            "trades": 9,
+            "wins": 9,
+            "gross_r": 0.8724,
+            "win_rate": 100.0,
+            "avg_r": 0.0969
+          },
+          "TREND_PULLBACK": {
+            "trades": 12,
+            "wins": 11,
+            "gross_r": -0.479,
+            "win_rate": 91.67,
+            "avg_r": -0.0399
+          },
+          "BREAKOUT": {
+            "trades": 7,
+            "wins": 7,
+            "gross_r": 0.5248,
+            "win_rate": 100.0,
+            "avg_r": 0.075
+          }
+        }
+      },
+      {
+        "pair": "PLUMEUSDT",
+        "bars_m1": 44999,
+        "evaluations": 24334,
+        "ready_signals": 227,
+        "trades_resolved": 89,
+        "unresolved": 138,
+        "win_rate_pct": 95.51,
+        "avg_r": 0.0174,
+        "profit_factor": 1.3356,
+        "max_drawdown_r": 3.3522,
+        "mfe_7h_median_pct": 2.2246,
+        "capture_required_7h_pct": 43.5,
+        "by_exit_reason": {
+          "TRAIL_SL": {
+            "trades": 76,
+            "wins": 76,
+            "gross_r": 4.6147,
+            "win_rate": 100.0,
+            "avg_r": 0.0607
+          },
+          "EARLY_PROFIT": {
+            "trades": 9,
+            "wins": 9,
+            "gross_r": 1.5622,
+            "win_rate": 100.0,
+            "avg_r": 0.1736
+          },
+          "SL": {
+            "trades": 4,
+            "wins": 0,
+            "gross_r": -4.6248,
+            "win_rate": 0.0,
+            "avg_r": -1.1562
+          }
+        },
+        "by_setup": {
+          "LIQUIDITY_SWEEP": {
+            "trades": 10,
+            "wins": 10,
+            "gross_r": 0.5142,
+            "win_rate": 100.0,
+            "avg_r": 0.0514
+          },
+          "BREAKOUT": {
+            "trades": 24,
+            "wins": 24,
+            "gross_r": 1.6769,
+            "win_rate": 100.0,
+            "avg_r": 0.0699
+          },
+          "BREAKOUT_RETEST": {
+            "trades": 19,
+            "wins": 18,
+            "gross_r": 0.2812,
+            "win_rate": 94.74,
+            "avg_r": 0.0148
+          },
+          "TREND_PULLBACK": {
+            "trades": 36,
+            "wins": 33,
+            "gross_r": -0.9202,
+            "win_rate": 91.67,
+            "avg_r": -0.0256
+          }
+        }
+      },
+      {
+        "pair": "FILUSDT",
+        "bars_m1": 44999,
+        "evaluations": 24616,
+        "ready_signals": 231,
+        "trades_resolved": 95,
+        "unresolved": 136,
+        "win_rate_pct": 94.74,
+        "avg_r": 0.0221,
+        "profit_factor": 1.3634,
+        "max_drawdown_r": 3.3626,
+        "mfe_7h_median_pct": 1.9915,
+        "capture_required_7h_pct": 48.6,
+        "by_exit_reason": {
+          "TRAIL_SL": {
+            "trades": 83,
+            "wins": 83,
+            "gross_r": 6.8337,
+            "win_rate": 100.0,
+            "avg_r": 0.0823
+          },
+          "SL": {
+            "trades": 5,
+            "wins": 0,
+            "gross_r": -5.781,
+            "win_rate": 0.0,
+            "avg_r": -1.1562
+          },
+          "EARLY_PROFIT": {
+            "trades": 7,
+            "wins": 7,
+            "gross_r": 1.0479,
+            "win_rate": 100.0,
+            "avg_r": 0.1497
+          }
+        },
+        "by_setup": {
+          "TREND_PULLBACK": {
+            "trades": 41,
+            "wins": 38,
+            "gross_r": -0.2176,
+            "win_rate": 92.68,
+            "avg_r": -0.0053
+          },
+          "BREAKOUT": {
+            "trades": 25,
+            "wins": 24,
+            "gross_r": 1.3605,
+            "win_rate": 96.0,
+            "avg_r": 0.0544
+          },
+          "BREAKOUT_RETEST": {
+            "trades": 12,
+            "wins": 11,
+            "gross_r": -0.5043,
+            "win_rate": 91.67,
+            "avg_r": -0.042
+          },
+          "LIQUIDITY_SWEEP": {
+            "trades": 17,
+            "wins": 17,
+            "gross_r": 1.462,
+            "win_rate": 100.0,
+            "avg_r": 0.086
+          }
+        }
+      },
+      {
+        "pair": "SUSDT",
+        "bars_m1": 45000,
+        "evaluations": 24683,
+        "ready_signals": 252,
+        "trades_resolved": 122,
+        "unresolved": 130,
+        "win_rate_pct": 94.26,
+        "avg_r": 0.0269,
+        "profit_factor": 1.4059,
+        "max_drawdown_r": 3.2578,
+        "mfe_7h_median_pct": 2.1284,
+        "capture_required_7h_pct": 45.5,
+        "by_exit_reason": {
+          "TRAIL_SL": {
+            "trades": 109,
+            "wins": 109,
+            "gross_r": 10.4925,
+            "win_rate": 100.0,
+            "avg_r": 0.0963
+          },
+          "SL": {
+            "trades": 7,
+            "wins": 0,
+            "gross_r": -8.0934,
+            "win_rate": 0.0,
+            "avg_r": -1.1562
+          },
+          "EARLY_PROFIT": {
+            "trades": 6,
+            "wins": 6,
+            "gross_r": 0.886,
+            "win_rate": 100.0,
+            "avg_r": 0.1477
+          }
+        },
+        "by_setup": {
+          "TREND_PULLBACK": {
+            "trades": 32,
+            "wins": 30,
+            "gross_r": 0.5253,
+            "win_rate": 93.75,
+            "avg_r": 0.0164
+          },
+          "BREAKOUT": {
+            "trades": 53,
+            "wins": 50,
+            "gross_r": 2.2431,
+            "win_rate": 94.34,
+            "avg_r": 0.0423
+          },
+          "BREAKOUT_RETEST": {
+            "trades": 13,
+            "wins": 13,
+            "gross_r": 0.99,
+            "win_rate": 100.0,
+            "avg_r": 0.0762
+          },
+          "LIQUIDITY_SWEEP": {
+            "trades": 24,
+            "wins": 22,
+            "gross_r": -0.4733,
+            "win_rate": 91.67,
+            "avg_r": -0.0197
+          }
+        }
+      },
+      {
+        "pair": "NEARUSDT",
+        "bars_m1": 44999,
+        "evaluations": 23495,
+        "ready_signals": 286,
+        "trades_resolved": 155,
+        "unresolved": 131,
+        "win_rate_pct": 96.77,
+        "avg_r": 0.0371,
+        "profit_factor": 1.994,
+        "max_drawdown_r": 2.8626,
+        "mfe_7h_median_pct": 2.8948,
+        "capture_required_7h_pct": 33.5,
+        "by_exit_reason": {
+          "TRAIL_SL": {
+            "trades": 147,
+            "wins": 147,
+            "gross_r": 11.1872,
+            "win_rate": 100.0,
+            "avg_r": 0.0761
+          },
+          "EARLY_PROFIT": {
+            "trades": 3,
+            "wins": 3,
+            "gross_r": 0.3403,
+            "win_rate": 100.0,
+            "avg_r": 0.1134
+          },
+          "SL": {
+            "trades": 5,
+            "wins": 0,
+            "gross_r": -5.781,
+            "win_rate": 0.0,
+            "avg_r": -1.1562
+          }
+        },
+        "by_setup": {
+          "LIQUIDITY_SWEEP": {
+            "trades": 33,
+            "wins": 32,
+            "gross_r": 1.5381,
+            "win_rate": 96.97,
+            "avg_r": 0.0466
+          },
+          "TREND_PULLBACK": {
+            "trades": 67,
+            "wins": 65,
+            "gross_r": 2.0132,
+            "win_rate": 97.01,
+            "avg_r": 0.03
+          },
+          "BREAKOUT": {
+            "trades": 35,
+            "wins": 33,
+            "gross_r": 0.9962,
+            "win_rate": 94.29,
+            "avg_r": 0.0285
+          },
+          "BREAKOUT_RETEST": {
+            "trades": 20,
+            "wins": 20,
+            "gross_r": 1.199,
+            "win_rate": 100.0,
+            "avg_r": 0.06
+          }
+        }
+      }
+    ]
+  },
+  "pairs": [
+    {
+      "pair": "ADAUSDT",
+      "bars_m1": 44999,
+      "evaluations": 24489,
+      "ready_signals": 193,
+      "trades_resolved": 51,
+      "unresolved": 142,
+      "win_rate_pct": 100.0,
+      "avg_r": 0.0638,
+      "profit_factor": Infinity,
+      "max_drawdown_r": 0.0,
+      "mfe_7h_median_pct": 1.5867,
+      "capture_required_7h_pct": 61.1,
+      "by_exit_reason": {
+        "TRAIL_SL": {
+          "trades": 46,
+          "wins": 46,
+          "gross_r": 2.7532,
+          "win_rate": 100.0,
+          "avg_r": 0.0599
+        },
+        "EARLY_PROFIT": {
+          "trades": 5,
+          "wins": 5,
+          "gross_r": 0.5003,
+          "win_rate": 100.0,
+          "avg_r": 0.1001
+        }
+      },
+      "by_setup": {
+        "TREND_PULLBACK": {
+          "trades": 29,
+          "wins": 29,
+          "gross_r": 1.5662,
+          "win_rate": 100.0,
+          "avg_r": 0.054
+        },
+        "BREAKOUT": {
+          "trades": 11,
+          "wins": 11,
+          "gross_r": 0.7205,
+          "win_rate": 100.0,
+          "avg_r": 0.0655
+        },
+        "BREAKOUT_RETEST": {
+          "trades": 9,
+          "wins": 9,
+          "gross_r": 0.9161,
+          "win_rate": 100.0,
+          "avg_r": 0.1018
+        },
+        "LIQUIDITY_SWEEP": {
+          "trades": 2,
+          "wins": 2,
+          "gross_r": 0.0507,
+          "win_rate": 100.0,
+          "avg_r": 0.0253
+        }
+      }
+    },
+    {
+      "pair": "APTUSDT",
+      "bars_m1": 44999,
+      "evaluations": 25604,
+      "ready_signals": 225,
+      "trades_resolved": 101,
+      "unresolved": 124,
+      "win_rate_pct": 97.03,
+      "avg_r": 0.0468,
+      "profit_factor": 2.3621,
+      "max_drawdown_r": 1.7398,
+      "mfe_7h_median_pct": 2.1407,
+      "capture_required_7h_pct": 45.3,
+      "by_exit_reason": {
+        "TRAIL_SL": {
+          "trades": 87,
+          "wins": 87,
+          "gross_r": 6.4563,
+          "win_rate": 100.0,
+          "avg_r": 0.0742
+        },
+        "EARLY_PROFIT": {
+          "trades": 11,
+          "wins": 11,
+          "gross_r": 1.737,
+          "win_rate": 100.0,
+          "avg_r": 0.1579
+        },
+        "SL": {
+          "trades": 3,
+          "wins": 0,
+          "gross_r": -3.4686,
+          "win_rate": 0.0,
+          "avg_r": -1.1562
+        }
+      },
+      "by_setup": {
+        "TREND_PULLBACK": {
+          "trades": 39,
+          "wins": 38,
+          "gross_r": 1.9104,
+          "win_rate": 97.44,
+          "avg_r": 0.049
+        },
+        "LIQUIDITY_SWEEP": {
+          "trades": 14,
+          "wins": 14,
+          "gross_r": 0.9934,
+          "win_rate": 100.0,
+          "avg_r": 0.071
+        },
+        "BREAKOUT_RETEST": {
+          "trades": 22,
+          "wins": 21,
+          "gross_r": 0.8194,
+          "win_rate": 95.45,
+          "avg_r": 0.0372
+        },
+        "BREAKOUT": {
+          "trades": 26,
+          "wins": 25,
+          "gross_r": 1.0015,
+          "win_rate": 96.15,
+          "avg_r": 0.0385
+        }
+      }
+    },
+    {
+      "pair": "AVAXUSDT",
+      "bars_m1": 45000,
+      "evaluations": 26452,
+      "ready_signals": 186,
+      "trades_resolved": 60,
+      "unresolved": 126,
+      "win_rate_pct": 98.33,
+      "avg_r": 0.0692,
+      "profit_factor": 4.59,
+      "max_drawdown_r": 1.1562,
+      "mfe_7h_median_pct": 1.5555,
+      "capture_required_7h_pct": 62.3,
+      "by_exit_reason": {
+        "EARLY_PROFIT": {
+          "trades": 7,
+          "wins": 7,
+          "gross_r": 0.9704,
+          "win_rate": 100.0,
+          "avg_r": 0.1386
+        },
+        "TRAIL_SL": {
+          "trades": 52,
+          "wins": 52,
+          "gross_r": 4.3366,
+          "win_rate": 100.0,
+          "avg_r": 0.0834
+        },
+        "SL": {
+          "trades": 1,
+          "wins": 0,
+          "gross_r": -1.1562,
+          "win_rate": 0.0,
+          "avg_r": -1.1562
+        }
+      },
+      "by_setup": {
+        "TREND_PULLBACK": {
+          "trades": 30,
+          "wins": 30,
+          "gross_r": 3.0951,
+          "win_rate": 100.0,
+          "avg_r": 0.1032
+        },
+        "BREAKOUT_RETEST": {
+          "trades": 11,
+          "wins": 11,
+          "gross_r": 0.6726,
+          "win_rate": 100.0,
+          "avg_r": 0.0611
+        },
+        "BREAKOUT": {
+          "trades": 12,
+          "wins": 11,
+          "gross_r": -0.0864,
+          "win_rate": 91.67,
+          "avg_r": -0.0072
+        },
+        "LIQUIDITY_SWEEP": {
+          "trades": 7,
+          "wins": 7,
+          "gross_r": 0.4695,
+          "win_rate": 100.0,
+          "avg_r": 0.0671
+        }
+      }
+    },
+    {
+      "pair": "BNBUSDT",
+      "bars_m1": 44999,
+      "evaluations": 27307,
+      "ready_signals": 141,
+      "trades_resolved": 5,
+      "unresolved": 136,
+      "win_rate_pct": 100.0,
+      "avg_r": 0.0485,
+      "profit_factor": Infinity,
+      "max_drawdown_r": 0.0,
+      "mfe_7h_median_pct": 0.6348,
+      "capture_required_7h_pct": 152.6,
+      "by_exit_reason": {
+        "EARLY_PROFIT": {
+          "trades": 2,
+          "wins": 2,
+          "gross_r": 0.1685,
+          "win_rate": 100.0,
+          "avg_r": 0.0843
+        },
+        "TRAIL_SL": {
+          "trades": 3,
+          "wins": 3,
+          "gross_r": 0.0741,
+          "win_rate": 100.0,
+          "avg_r": 0.0247
+        }
+      },
+      "by_setup": {
+        "BREAKOUT": {
+          "trades": 2,
+          "wins": 2,
+          "gross_r": 0.1067,
+          "win_rate": 100.0,
+          "avg_r": 0.0534
+        },
+        "LIQUIDITY_SWEEP": {
+          "trades": 1,
+          "wins": 1,
+          "gross_r": 0.029,
+          "win_rate": 100.0,
+          "avg_r": 0.029
+        },
+        "BREAKOUT_RETEST": {
+          "trades": 2,
+          "wins": 2,
+          "gross_r": 0.1069,
+          "win_rate": 100.0,
+          "avg_r": 0.0535
+        }
+      }
+    },
+    {
+      "pair": "BTCUSDT",
+      "bars_m1": 44999,
+      "evaluations": 24957,
+      "ready_signals": 160,
+      "trades_resolved": 3,
+      "unresolved": 157,
+      "win_rate_pct": 100.0,
+      "avg_r": 0.1695,
+      "profit_factor": Infinity,
+      "max_drawdown_r": 0.0,
+      "mfe_7h_median_pct": 0.5016,
+      "capture_required_7h_pct": 193.1,
+      "by_exit_reason": {
+        "TRAIL_SL": {
+          "trades": 2,
+          "wins": 2,
+          "gross_r": 0.4262,
+          "win_rate": 100.0,
+          "avg_r": 0.2131
+        },
+        "EARLY_PROFIT": {
+          "trades": 1,
+          "wins": 1,
+          "gross_r": 0.0823,
+          "win_rate": 100.0,
+          "avg_r": 0.0823
+        }
+      },
+      "by_setup": {
+        "TREND_PULLBACK": {
+          "trades": 3,
+          "wins": 3,
+          "gross_r": 0.5085,
+          "win_rate": 100.0,
+          "avg_r": 0.1695
+        }
+      }
+    },
+    {
+      "pair": "CFXUSDT",
+      "bars_m1": 44999,
+      "evaluations": 25557,
+      "ready_signals": 186,
+      "trades_resolved": 47,
+      "unresolved": 139,
+      "win_rate_pct": 91.49,
+      "avg_r": -0.0012,
+      "profit_factor": 0.9877,
+      "max_drawdown_r": 2.3408,
+      "mfe_7h_median_pct": 1.3819,
+      "capture_required_7h_pct": 70.1,
+      "by_exit_reason": {
+        "TRAIL_SL": {
+          "trades": 40,
+          "wins": 40,
+          "gross_r": 3.9706,
+          "win_rate": 100.0,
+          "avg_r": 0.0993
+        },
+        "EARLY_PROFIT": {
+          "trades": 3,
+          "wins": 3,
+          "gross_r": 0.5973,
+          "win_rate": 100.0,
+          "avg_r": 0.1991
+        },
+        "SL": {
+          "trades": 4,
+          "wins": 0,
+          "gross_r": -4.6248,
+          "win_rate": 0.0,
+          "avg_r": -1.1562
+        }
+      },
+      "by_setup": {
+        "TREND_PULLBACK": {
+          "trades": 21,
+          "wins": 19,
+          "gross_r": -0.0685,
+          "win_rate": 90.48,
+          "avg_r": -0.0033
+        },
+        "BREAKOUT": {
+          "trades": 15,
+          "wins": 15,
+          "gross_r": 1.4833,
+          "win_rate": 100.0,
+          "avg_r": 0.0989
+        },
+        "LIQUIDITY_SWEEP": {
+          "trades": 6,
+          "wins": 5,
+          "gross_r": -0.8377,
+          "win_rate": 83.33,
+          "avg_r": -0.1396
+        },
+        "BREAKOUT_RETEST": {
+          "trades": 5,
+          "wins": 4,
+          "gross_r": -0.634,
+          "win_rate": 80.0,
+          "avg_r": -0.1268
+        }
+      }
+    },
+    {
+      "pair": "DOGEUSDT",
+      "bars_m1": 44999,
+      "evaluations": 27597,
+      "ready_signals": 151,
+      "trades_resolved": 21,
+      "unresolved": 130,
+      "win_rate_pct": 85.71,
+      "avg_r": -0.0889,
+      "profit_factor": 0.4619,
+      "max_drawdown_r": 3.0535,
+      "mfe_7h_median_pct": 1.0012,
+      "capture_required_7h_pct": 96.8,
+      "by_exit_reason": {
+        "TRAIL_SL": {
+          "trades": 17,
+          "wins": 17,
+          "gross_r": 1.4256,
+          "win_rate": 100.0,
+          "avg_r": 0.0839
+        },
+        "SL": {
+          "trades": 3,
+          "wins": 0,
+          "gross_r": -3.4686,
+          "win_rate": 0.0,
+          "avg_r": -1.1562
+        },
+        "EARLY_PROFIT": {
+          "trades": 1,
+          "wins": 1,
+          "gross_r": 0.1766,
+          "win_rate": 100.0,
+          "avg_r": 0.1766
+        }
+      },
+      "by_setup": {
+        "TREND_PULLBACK": {
+          "trades": 12,
+          "wins": 11,
+          "gross_r": -0.2679,
+          "win_rate": 91.67,
+          "avg_r": -0.0223
+        },
+        "BREAKOUT_RETEST": {
+          "trades": 3,
+          "wins": 3,
+          "gross_r": 0.4438,
+          "win_rate": 100.0,
+          "avg_r": 0.1479
+        },
+        "BREAKOUT": {
+          "trades": 3,
+          "wins": 2,
+          "gross_r": -1.0985,
+          "win_rate": 66.67,
+          "avg_r": -0.3662
+        },
+        "LIQUIDITY_SWEEP": {
+          "trades": 3,
+          "wins": 2,
+          "gross_r": -0.9438,
+          "win_rate": 66.67,
+          "avg_r": -0.3146
+        }
+      }
+    },
+    {
+      "pair": "ENAUSDT",
+      "bars_m1": 44999,
+      "evaluations": 23061,
+      "ready_signals": 251,
+      "trades_resolved": 107,
+      "unresolved": 144,
+      "win_rate_pct": 97.2,
+      "avg_r": 0.0462,
+      "profit_factor": 2.4244,
+      "max_drawdown_r": 1.4001,
+      "mfe_7h_median_pct": 2.2496,
+      "capture_required_7h_pct": 43.1,
+      "by_exit_reason": {
+        "TRAIL_SL": {
+          "trades": 99,
+          "wins": 99,
+          "gross_r": 7.6398,
+          "win_rate": 100.0,
+          "avg_r": 0.0772
+        },
+        "EARLY_PROFIT": {
+          "trades": 5,
+          "wins": 5,
+          "gross_r": 0.7696,
+          "win_rate": 100.0,
+          "avg_r": 0.1539
+        },
+        "SL": {
+          "trades": 3,
+          "wins": 0,
+          "gross_r": -3.4686,
+          "win_rate": 0.0,
+          "avg_r": -1.1562
+        }
+      },
+      "by_setup": {
+        "BREAKOUT": {
+          "trades": 40,
+          "wins": 38,
+          "gross_r": 0.322,
+          "win_rate": 95.0,
+          "avg_r": 0.0081
+        },
+        "TREND_PULLBACK": {
+          "trades": 35,
+          "wins": 35,
+          "gross_r": 2.6418,
+          "win_rate": 100.0,
+          "avg_r": 0.0755
+        },
+        "BREAKOUT_RETEST": {
+          "trades": 19,
+          "wins": 18,
+          "gross_r": 0.6989,
+          "win_rate": 94.74,
+          "avg_r": 0.0368
+        },
+        "LIQUIDITY_SWEEP": {
+          "trades": 13,
+          "wins": 13,
+          "gross_r": 1.2781,
+          "win_rate": 100.0,
+          "avg_r": 0.0983
+        }
+      }
+    },
+    {
+      "pair": "ETHUSDT",
+      "bars_m1": 44999,
+      "evaluations": 25511,
+      "ready_signals": 158,
+      "trades_resolved": 7,
+      "unresolved": 151,
+      "win_rate_pct": 100.0,
+      "avg_r": 0.0685,
+      "profit_factor": Infinity,
+      "max_drawdown_r": 0.0,
+      "mfe_7h_median_pct": 0.6273,
+      "capture_required_7h_pct": 154.4,
+      "by_exit_reason": {
+        "TRAIL_SL": {
+          "trades": 6,
+          "wins": 6,
+          "gross_r": 0.2587,
+          "win_rate": 100.0,
+          "avg_r": 0.0431
+        },
+        "EARLY_PROFIT": {
+          "trades": 1,
+          "wins": 1,
+          "gross_r": 0.2209,
+          "win_rate": 100.0,
+          "avg_r": 0.2209
+        }
+      },
+      "by_setup": {
+        "TREND_PULLBACK": {
+          "trades": 4,
+          "wins": 4,
+          "gross_r": 0.2059,
+          "win_rate": 100.0,
+          "avg_r": 0.0515
+        },
+        "BREAKOUT_RETEST": {
+          "trades": 2,
+          "wins": 2,
+          "gross_r": 0.2587,
+          "win_rate": 100.0,
+          "avg_r": 0.1294
+        },
+        "LIQUIDITY_SWEEP": {
+          "trades": 1,
+          "wins": 1,
+          "gross_r": 0.015,
+          "win_rate": 100.0,
+          "avg_r": 0.015
+        }
+      }
+    },
+    {
+      "pair": "FDUSDUSDT",
+      "bars_m1": 44999,
+      "evaluations": 21429,
+      "ready_signals": 189,
+      "trades_resolved": 0,
+      "unresolved": 189,
+      "win_rate_pct": 0.0,
+      "avg_r": 0.0,
+      "profit_factor": 0.0,
+      "max_drawdown_r": 0.0,
+      "mfe_7h_median_pct": 0.02,
+      "capture_required_7h_pct": 4838.2,
+      "by_exit_reason": {},
+      "by_setup": {}
+    },
+    {
+      "pair": "FETUSDT",
+      "bars_m1": 44999,
+      "evaluations": 25328,
+      "ready_signals": 207,
+      "trades_resolved": 79,
+      "unresolved": 128,
+      "win_rate_pct": 98.73,
+      "avg_r": 0.0572,
+      "profit_factor": 4.9056,
+      "max_drawdown_r": 1.1562,
+      "mfe_7h_median_pct": 2.0468,
+      "capture_required_7h_pct": 47.3,
+      "by_exit_reason": {
+        "TRAIL_SL": {
+          "trades": 69,
+          "wins": 69,
+          "gross_r": 4.705,
+          "win_rate": 100.0,
+          "avg_r": 0.0682
+        },
+        "EARLY_PROFIT": {
+          "trades": 9,
+          "wins": 9,
+          "gross_r": 0.9669,
+          "win_rate": 100.0,
+          "avg_r": 0.1074
+        },
+        "SL": {
+          "trades": 1,
+          "wins": 0,
+          "gross_r": -1.1562,
+          "win_rate": 0.0,
+          "avg_r": -1.1562
+        }
+      },
+      "by_setup": {
+        "BREAKOUT": {
+          "trades": 16,
+          "wins": 16,
+          "gross_r": 1.2943,
+          "win_rate": 100.0,
+          "avg_r": 0.0809
+        },
+        "TREND_PULLBACK": {
+          "trades": 36,
+          "wins": 36,
+          "gross_r": 2.74,
+          "win_rate": 100.0,
+          "avg_r": 0.0761
+        },
+        "LIQUIDITY_SWEEP": {
+          "trades": 11,
+          "wins": 11,
+          "gross_r": 0.629,
+          "win_rate": 100.0,
+          "avg_r": 0.0572
+        },
+        "BREAKOUT_RETEST": {
+          "trades": 16,
+          "wins": 15,
+          "gross_r": -0.1476,
+          "win_rate": 93.75,
+          "avg_r": -0.0092
+        }
+      }
+    },
+    {
+      "pair": "FILUSDT",
+      "bars_m1": 44999,
+      "evaluations": 24616,
+      "ready_signals": 231,
+      "trades_resolved": 95,
+      "unresolved": 136,
+      "win_rate_pct": 94.74,
+      "avg_r": 0.0221,
+      "profit_factor": 1.3634,
+      "max_drawdown_r": 3.3626,
+      "mfe_7h_median_pct": 1.9915,
+      "capture_required_7h_pct": 48.6,
+      "by_exit_reason": {
+        "TRAIL_SL": {
+          "trades": 83,
+          "wins": 83,
+          "gross_r": 6.8337,
+          "win_rate": 100.0,
+          "avg_r": 0.0823
+        },
+        "SL": {
+          "trades": 5,
+          "wins": 0,
+          "gross_r": -5.781,
+          "win_rate": 0.0,
+          "avg_r": -1.1562
+        },
+        "EARLY_PROFIT": {
+          "trades": 7,
+          "wins": 7,
+          "gross_r": 1.0479,
+          "win_rate": 100.0,
+          "avg_r": 0.1497
+        }
+      },
+      "by_setup": {
+        "TREND_PULLBACK": {
+          "trades": 41,
+          "wins": 38,
+          "gross_r": -0.2176,
+          "win_rate": 92.68,
+          "avg_r": -0.0053
+        },
+        "BREAKOUT": {
+          "trades": 25,
+          "wins": 24,
+          "gross_r": 1.3605,
+          "win_rate": 96.0,
+          "avg_r": 0.0544
+        },
+        "BREAKOUT_RETEST": {
+          "trades": 12,
+          "wins": 11,
+          "gross_r": -0.5043,
+          "win_rate": 91.67,
+          "avg_r": -0.042
+        },
+        "LIQUIDITY_SWEEP": {
+          "trades": 17,
+          "wins": 17,
+          "gross_r": 1.462,
+          "win_rate": 100.0,
+          "avg_r": 0.086
+        }
+      }
+    },
+    {
+      "pair": "HYPEUSDT",
+      "bars_m1": 25953,
+      "evaluations": 15053,
+      "ready_signals": 86,
+      "trades_resolved": 8,
+      "unresolved": 78,
+      "win_rate_pct": 100.0,
+      "avg_r": 0.0857,
+      "profit_factor": Infinity,
+      "max_drawdown_r": 0.0,
+      "mfe_7h_median_pct": 0.8624,
+      "capture_required_7h_pct": 112.3,
+      "by_exit_reason": {
+        "TRAIL_SL": {
+          "trades": 7,
+          "wins": 7,
+          "gross_r": 0.5067,
+          "win_rate": 100.0,
+          "avg_r": 0.0724
+        },
+        "EARLY_PROFIT": {
+          "trades": 1,
+          "wins": 1,
+          "gross_r": 0.1792,
+          "win_rate": 100.0,
+          "avg_r": 0.1792
+        }
+      },
+      "by_setup": {
+        "BREAKOUT_RETEST": {
+          "trades": 1,
+          "wins": 1,
+          "gross_r": 0.0103,
+          "win_rate": 100.0,
+          "avg_r": 0.0103
+        },
+        "BREAKOUT": {
+          "trades": 4,
+          "wins": 4,
+          "gross_r": 0.6036,
+          "win_rate": 100.0,
+          "avg_r": 0.1509
+        },
+        "TREND_PULLBACK": {
+          "trades": 3,
+          "wins": 3,
+          "gross_r": 0.072,
+          "win_rate": 100.0,
+          "avg_r": 0.024
+        }
+      }
+    },
+    {
+      "pair": "ICPUSDT",
+      "bars_m1": 45000,
+      "evaluations": 25100,
+      "ready_signals": 200,
+      "trades_resolved": 62,
+      "unresolved": 138,
+      "win_rate_pct": 96.77,
+      "avg_r": 0.0444,
+      "profit_factor": 2.1901,
+      "max_drawdown_r": 1.1562,
+      "mfe_7h_median_pct": 1.6801,
+      "capture_required_7h_pct": 57.7,
+      "by_exit_reason": {
+        "TRAIL_SL": {
+          "trades": 51,
+          "wins": 51,
+          "gross_r": 3.6329,
+          "win_rate": 100.0,
+          "avg_r": 0.0712
+        },
+        "EARLY_PROFIT": {
+          "trades": 9,
+          "wins": 9,
+          "gross_r": 1.4316,
+          "win_rate": 100.0,
+          "avg_r": 0.1591
+        },
+        "SL": {
+          "trades": 2,
+          "wins": 0,
+          "gross_r": -2.3124,
+          "win_rate": 0.0,
+          "avg_r": -1.1562
+        }
+      },
+      "by_setup": {
+        "BREAKOUT_RETEST": {
+          "trades": 8,
+          "wins": 8,
+          "gross_r": 0.7392,
+          "win_rate": 100.0,
+          "avg_r": 0.0924
+        },
+        "TREND_PULLBACK": {
+          "trades": 22,
+          "wins": 21,
+          "gross_r": 0.7027,
+          "win_rate": 95.45,
+          "avg_r": 0.0319
+        },
+        "LIQUIDITY_SWEEP": {
+          "trades": 15,
+          "wins": 14,
+          "gross_r": -0.417,
+          "win_rate": 93.33,
+          "avg_r": -0.0278
+        },
+        "BREAKOUT": {
+          "trades": 17,
+          "wins": 17,
+          "gross_r": 1.7272,
+          "win_rate": 100.0,
+          "avg_r": 0.1016
+        }
+      }
+    },
+    {
+      "pair": "LINKUSDT",
+      "bars_m1": 44999,
+      "evaluations": 26837,
+      "ready_signals": 160,
+      "trades_resolved": 27,
+      "unresolved": 133,
+      "win_rate_pct": 100.0,
+      "avg_r": 0.0666,
+      "profit_factor": Infinity,
+      "max_drawdown_r": 0.0,
+      "mfe_7h_median_pct": 1.0981,
+      "capture_required_7h_pct": 88.2,
+      "by_exit_reason": {
+        "TRAIL_SL": {
+          "trades": 24,
+          "wins": 24,
+          "gross_r": 1.4353,
+          "win_rate": 100.0,
+          "avg_r": 0.0598
+        },
+        "EARLY_PROFIT": {
+          "trades": 3,
+          "wins": 3,
+          "gross_r": 0.3637,
+          "win_rate": 100.0,
+          "avg_r": 0.1212
+        }
+      },
+      "by_setup": {
+        "LIQUIDITY_SWEEP": {
+          "trades": 10,
+          "wins": 10,
+          "gross_r": 0.9521,
+          "win_rate": 100.0,
+          "avg_r": 0.0952
+        },
+        "TREND_PULLBACK": {
+          "trades": 10,
+          "wins": 10,
+          "gross_r": 0.371,
+          "win_rate": 100.0,
+          "avg_r": 0.0371
+        },
+        "BREAKOUT_RETEST": {
+          "trades": 4,
+          "wins": 4,
+          "gross_r": 0.306,
+          "win_rate": 100.0,
+          "avg_r": 0.0765
+        },
+        "BREAKOUT": {
+          "trades": 3,
+          "wins": 3,
+          "gross_r": 0.1699,
+          "win_rate": 100.0,
+          "avg_r": 0.0566
+        }
+      }
+    },
+    {
+      "pair": "MUBARAKUSDT",
+      "bars_m1": 44999,
+      "evaluations": 26011,
+      "ready_signals": 327,
+      "trades_resolved": 222,
+      "unresolved": 105,
+      "win_rate_pct": 89.64,
+      "avg_r": -0.0173,
+      "profit_factor": 0.856,
+      "max_drawdown_r": 10.5005,
+      "mfe_7h_median_pct": 2.7257,
+      "capture_required_7h_pct": 35.5,
+      "by_exit_reason": {
+        "TRAIL_SL": {
+          "trades": 194,
+          "wins": 194,
+          "gross_r": 22.1629,
+          "win_rate": 100.0,
+          "avg_r": 0.1142
+        },
+        "EARLY_PROFIT": {
+          "trades": 5,
+          "wins": 5,
+          "gross_r": 0.5991,
+          "win_rate": 100.0,
+          "avg_r": 0.1198
+        },
+        "SL": {
+          "trades": 23,
+          "wins": 0,
+          "gross_r": -26.5926,
+          "win_rate": 0.0,
+          "avg_r": -1.1562
+        }
+      },
+      "by_setup": {
+        "LIQUIDITY_SWEEP": {
+          "trades": 53,
+          "wins": 51,
+          "gross_r": 4.4994,
+          "win_rate": 96.23,
+          "avg_r": 0.0849
+        },
+        "TREND_PULLBACK": {
+          "trades": 76,
+          "wins": 71,
+          "gross_r": 1.2599,
+          "win_rate": 93.42,
+          "avg_r": 0.0166
+        },
+        "BREAKOUT_RETEST": {
+          "trades": 18,
+          "wins": 17,
+          "gross_r": 0.2511,
+          "win_rate": 94.44,
+          "avg_r": 0.0139
+        },
+        "BREAKOUT": {
+          "trades": 75,
+          "wins": 60,
+          "gross_r": -9.841,
+          "win_rate": 80.0,
+          "avg_r": -0.1312
+        }
+      }
+    },
+    {
+      "pair": "NEARUSDT",
+      "bars_m1": 44999,
+      "evaluations": 23495,
+      "ready_signals": 286,
+      "trades_resolved": 155,
+      "unresolved": 131,
+      "win_rate_pct": 96.77,
+      "avg_r": 0.0371,
+      "profit_factor": 1.994,
+      "max_drawdown_r": 2.8626,
+      "mfe_7h_median_pct": 2.8948,
+      "capture_required_7h_pct": 33.5,
+      "by_exit_reason": {
+        "TRAIL_SL": {
+          "trades": 147,
+          "wins": 147,
+          "gross_r": 11.1872,
+          "win_rate": 100.0,
+          "avg_r": 0.0761
+        },
+        "EARLY_PROFIT": {
+          "trades": 3,
+          "wins": 3,
+          "gross_r": 0.3403,
+          "win_rate": 100.0,
+          "avg_r": 0.1134
+        },
+        "SL": {
+          "trades": 5,
+          "wins": 0,
+          "gross_r": -5.781,
+          "win_rate": 0.0,
+          "avg_r": -1.1562
+        }
+      },
+      "by_setup": {
+        "LIQUIDITY_SWEEP": {
+          "trades": 33,
+          "wins": 32,
+          "gross_r": 1.5381,
+          "win_rate": 96.97,
+          "avg_r": 0.0466
+        },
+        "TREND_PULLBACK": {
+          "trades": 67,
+          "wins": 65,
+          "gross_r": 2.0132,
+          "win_rate": 97.01,
+          "avg_r": 0.03
+        },
+        "BREAKOUT": {
+          "trades": 35,
+          "wins": 33,
+          "gross_r": 0.9962,
+          "win_rate": 94.29,
+          "avg_r": 0.0285
+        },
+        "BREAKOUT_RETEST": {
+          "trades": 20,
+          "wins": 20,
+          "gross_r": 1.199,
+          "win_rate": 100.0,
+          "avg_r": 0.06
+        }
+      }
+    },
+    {
+      "pair": "ONDOUSDT",
+      "bars_m1": 44999,
+      "evaluations": 24133,
+      "ready_signals": 213,
+      "trades_resolved": 74,
+      "unresolved": 139,
+      "win_rate_pct": 97.3,
+      "avg_r": 0.0457,
+      "profit_factor": 2.4626,
+      "max_drawdown_r": 1.7502,
+      "mfe_7h_median_pct": 1.8883,
+      "capture_required_7h_pct": 51.3,
+      "by_exit_reason": {
+        "TRAIL_SL": {
+          "trades": 65,
+          "wins": 65,
+          "gross_r": 4.8065,
+          "win_rate": 100.0,
+          "avg_r": 0.0739
+        },
+        "EARLY_PROFIT": {
+          "trades": 7,
+          "wins": 7,
+          "gross_r": 0.888,
+          "win_rate": 100.0,
+          "avg_r": 0.1269
+        },
+        "SL": {
+          "trades": 2,
+          "wins": 0,
+          "gross_r": -2.3124,
+          "win_rate": 0.0,
+          "avg_r": -1.1562
+        }
+      },
+      "by_setup": {
+        "LIQUIDITY_SWEEP": {
+          "trades": 22,
+          "wins": 21,
+          "gross_r": 1.3071,
+          "win_rate": 95.45,
+          "avg_r": 0.0594
+        },
+        "TREND_PULLBACK": {
+          "trades": 28,
+          "wins": 28,
+          "gross_r": 1.4378,
+          "win_rate": 100.0,
+          "avg_r": 0.0513
+        },
+        "BREAKOUT_RETEST": {
+          "trades": 11,
+          "wins": 11,
+          "gross_r": 0.8338,
+          "win_rate": 100.0,
+          "avg_r": 0.0758
+        },
+        "BREAKOUT": {
+          "trades": 13,
+          "wins": 12,
+          "gross_r": -0.1966,
+          "win_rate": 92.31,
+          "avg_r": -0.0151
+        }
+      }
+    },
+    {
+      "pair": "PAXGUSDT",
+      "bars_m1": 44999,
+      "evaluations": 31338,
+      "ready_signals": 105,
+      "trades_resolved": 0,
+      "unresolved": 105,
+      "win_rate_pct": 0.0,
+      "avg_r": 0.0,
+      "profit_factor": 0.0,
+      "max_drawdown_r": 0.0,
+      "mfe_7h_median_pct": 0.208,
+      "capture_required_7h_pct": 465.8,
+      "by_exit_reason": {},
+      "by_setup": {}
+    },
+    {
+      "pair": "PLUMEUSDT",
+      "bars_m1": 44999,
+      "evaluations": 24334,
+      "ready_signals": 227,
+      "trades_resolved": 89,
+      "unresolved": 138,
+      "win_rate_pct": 95.51,
+      "avg_r": 0.0174,
+      "profit_factor": 1.3356,
+      "max_drawdown_r": 3.3522,
+      "mfe_7h_median_pct": 2.2246,
+      "capture_required_7h_pct": 43.5,
+      "by_exit_reason": {
+        "TRAIL_SL": {
+          "trades": 76,
+          "wins": 76,
+          "gross_r": 4.6147,
+          "win_rate": 100.0,
+          "avg_r": 0.0607
+        },
+        "EARLY_PROFIT": {
+          "trades": 9,
+          "wins": 9,
+          "gross_r": 1.5622,
+          "win_rate": 100.0,
+          "avg_r": 0.1736
+        },
+        "SL": {
+          "trades": 4,
+          "wins": 0,
+          "gross_r": -4.6248,
+          "win_rate": 0.0,
+          "avg_r": -1.1562
+        }
+      },
+      "by_setup": {
+        "LIQUIDITY_SWEEP": {
+          "trades": 10,
+          "wins": 10,
+          "gross_r": 0.5142,
+          "win_rate": 100.0,
+          "avg_r": 0.0514
+        },
+        "BREAKOUT": {
+          "trades": 24,
+          "wins": 24,
+          "gross_r": 1.6769,
+          "win_rate": 100.0,
+          "avg_r": 0.0699
+        },
+        "BREAKOUT_RETEST": {
+          "trades": 19,
+          "wins": 18,
+          "gross_r": 0.2812,
+          "win_rate": 94.74,
+          "avg_r": 0.0148
+        },
+        "TREND_PULLBACK": {
+          "trades": 36,
+          "wins": 33,
+          "gross_r": -0.9202,
+          "win_rate": 91.67,
+          "avg_r": -0.0256
+        }
+      }
+    },
+    {
+      "pair": "PUMPUSDT",
+      "bars_m1": 44999,
+      "evaluations": 24097,
+      "ready_signals": 254,
+      "trades_resolved": 118,
+      "unresolved": 136,
+      "win_rate_pct": 97.46,
+      "avg_r": 0.062,
+      "profit_factor": 3.1078,
+      "max_drawdown_r": 1.1562,
+      "mfe_7h_median_pct": 2.7227,
+      "capture_required_7h_pct": 35.6,
+      "by_exit_reason": {
+        "EARLY_PROFIT": {
+          "trades": 9,
+          "wins": 9,
+          "gross_r": 1.021,
+          "win_rate": 100.0,
+          "avg_r": 0.1134
+        },
+        "TRAIL_SL": {
+          "trades": 106,
+          "wins": 106,
+          "gross_r": 9.7587,
+          "win_rate": 100.0,
+          "avg_r": 0.0921
+        },
+        "SL": {
+          "trades": 3,
+          "wins": 0,
+          "gross_r": -3.4686,
+          "win_rate": 0.0,
+          "avg_r": -1.1562
+        }
+      },
+      "by_setup": {
+        "LIQUIDITY_SWEEP": {
+          "trades": 24,
+          "wins": 23,
+          "gross_r": 1.6448,
+          "win_rate": 95.83,
+          "avg_r": 0.0685
+        },
+        "TREND_PULLBACK": {
+          "trades": 43,
+          "wins": 43,
+          "gross_r": 3.5945,
+          "win_rate": 100.0,
+          "avg_r": 0.0836
+        },
+        "BREAKOUT_RETEST": {
+          "trades": 19,
+          "wins": 17,
+          "gross_r": -0.6429,
+          "win_rate": 89.47,
+          "avg_r": -0.0338
+        },
+        "BREAKOUT": {
+          "trades": 32,
+          "wins": 32,
+          "gross_r": 2.7147,
+          "win_rate": 100.0,
+          "avg_r": 0.0848
+        }
+      }
+    },
+    {
+      "pair": "QNTUSDT",
+      "bars_m1": 45000,
+      "evaluations": 24986,
+      "ready_signals": 314,
+      "trades_resolved": 192,
+      "unresolved": 122,
+      "win_rate_pct": 88.54,
+      "avg_r": -0.0211,
+      "profit_factor": 0.8406,
+      "max_drawdown_r": 11.8756,
+      "mfe_7h_median_pct": 2.2353,
+      "capture_required_7h_pct": 43.3,
+      "by_exit_reason": {
+        "TRAIL_SL": {
+          "trades": 166,
+          "wins": 166,
+          "gross_r": 20.8018,
+          "win_rate": 100.0,
+          "avg_r": 0.1253
+        },
+        "EARLY_PROFIT": {
+          "trades": 4,
+          "wins": 4,
+          "gross_r": 0.5809,
+          "win_rate": 100.0,
+          "avg_r": 0.1452
+        },
+        "SL": {
+          "trades": 22,
+          "wins": 0,
+          "gross_r": -25.4364,
+          "win_rate": 0.0,
+          "avg_r": -1.1562
+        }
+      },
+      "by_setup": {
+        "BREAKOUT_RETEST": {
+          "trades": 17,
+          "wins": 17,
+          "gross_r": 1.6093,
+          "win_rate": 100.0,
+          "avg_r": 0.0947
+        },
+        "LIQUIDITY_SWEEP": {
+          "trades": 36,
+          "wins": 32,
+          "gross_r": -1.0952,
+          "win_rate": 88.89,
+          "avg_r": -0.0304
+        },
+        "TREND_PULLBACK": {
+          "trades": 65,
+          "wins": 57,
+          "gross_r": -3.1997,
+          "win_rate": 87.69,
+          "avg_r": -0.0492
+        },
+        "BREAKOUT": {
+          "trades": 74,
+          "wins": 64,
+          "gross_r": -1.3681,
+          "win_rate": 86.49,
+          "avg_r": -0.0185
+        }
+      }
+    },
+    {
+      "pair": "RLUSDUSDT",
+      "bars_m1": 44999,
+      "evaluations": 27407,
+      "ready_signals": 138,
+      "trades_resolved": 0,
+      "unresolved": 138,
+      "win_rate_pct": 0.0,
+      "avg_r": 0.0,
+      "profit_factor": 0.0,
+      "max_drawdown_r": 0.0,
+      "mfe_7h_median_pct": 0.01,
+      "capture_required_7h_pct": 9689.0,
+      "by_exit_reason": {},
+      "by_setup": {}
+    },
+    {
+      "pair": "RSRUSDT",
+      "bars_m1": 45000,
+      "evaluations": 27148,
+      "ready_signals": 169,
+      "trades_resolved": 41,
+      "unresolved": 128,
+      "win_rate_pct": 95.12,
+      "avg_r": 0.0162,
+      "profit_factor": 1.2873,
+      "max_drawdown_r": 1.927,
+      "mfe_7h_median_pct": 1.611,
+      "capture_required_7h_pct": 60.1,
+      "by_exit_reason": {
+        "TRAIL_SL": {
+          "trades": 36,
+          "wins": 36,
+          "gross_r": 2.6938,
+          "win_rate": 100.0,
+          "avg_r": 0.0748
+        },
+        "EARLY_PROFIT": {
+          "trades": 3,
+          "wins": 3,
+          "gross_r": 0.2829,
+          "win_rate": 100.0,
+          "avg_r": 0.0943
+        },
+        "SL": {
+          "trades": 2,
+          "wins": 0,
+          "gross_r": -2.3124,
+          "win_rate": 0.0,
+          "avg_r": -1.1562
+        }
+      },
+      "by_setup": {
+        "LIQUIDITY_SWEEP": {
+          "trades": 13,
+          "wins": 12,
+          "gross_r": -0.2539,
+          "win_rate": 92.31,
+          "avg_r": -0.0195
+        },
+        "BREAKOUT_RETEST": {
+          "trades": 9,
+          "wins": 9,
+          "gross_r": 0.8724,
+          "win_rate": 100.0,
+          "avg_r": 0.0969
+        },
+        "TREND_PULLBACK": {
+          "trades": 12,
+          "wins": 11,
+          "gross_r": -0.479,
+          "win_rate": 91.67,
+          "avg_r": -0.0399
+        },
+        "BREAKOUT": {
+          "trades": 7,
+          "wins": 7,
+          "gross_r": 0.5248,
+          "win_rate": 100.0,
+          "avg_r": 0.075
+        }
+      }
+    },
+    {
+      "pair": "SOLUSDT",
+      "bars_m1": 44999,
+      "evaluations": 26173,
+      "ready_signals": 158,
+      "trades_resolved": 17,
+      "unresolved": 141,
+      "win_rate_pct": 100.0,
+      "avg_r": 0.0865,
+      "profit_factor": Infinity,
+      "max_drawdown_r": 0.0,
+      "mfe_7h_median_pct": 0.8773,
+      "capture_required_7h_pct": 110.4,
+      "by_exit_reason": {
+        "TRAIL_SL": {
+          "trades": 12,
+          "wins": 12,
+          "gross_r": 0.8757,
+          "win_rate": 100.0,
+          "avg_r": 0.073
+        },
+        "EARLY_PROFIT": {
+          "trades": 5,
+          "wins": 5,
+          "gross_r": 0.5947,
+          "win_rate": 100.0,
+          "avg_r": 0.1189
+        }
+      },
+      "by_setup": {
+        "LIQUIDITY_SWEEP": {
+          "trades": 4,
+          "wins": 4,
+          "gross_r": 0.2189,
+          "win_rate": 100.0,
+          "avg_r": 0.0547
+        },
+        "BREAKOUT": {
+          "trades": 2,
+          "wins": 2,
+          "gross_r": 0.238,
+          "win_rate": 100.0,
+          "avg_r": 0.119
+        },
+        "TREND_PULLBACK": {
+          "trades": 9,
+          "wins": 9,
+          "gross_r": 0.7194,
+          "win_rate": 100.0,
+          "avg_r": 0.0799
+        },
+        "BREAKOUT_RETEST": {
+          "trades": 2,
+          "wins": 2,
+          "gross_r": 0.2941,
+          "win_rate": 100.0,
+          "avg_r": 0.1471
+        }
+      }
+    },
+    {
+      "pair": "STRKUSDT",
+      "bars_m1": 44999,
+      "evaluations": 23606,
+      "ready_signals": 309,
+      "trades_resolved": 181,
+      "unresolved": 128,
+      "win_rate_pct": 91.71,
+      "avg_r": 0.0021,
+      "profit_factor": 1.0215,
+      "max_drawdown_r": 4.3174,
+      "mfe_7h_median_pct": 2.6087,
+      "capture_required_7h_pct": 37.1,
+      "by_exit_reason": {
+        "TRAIL_SL": {
+          "trades": 163,
+          "wins": 163,
+          "gross_r": 17.2905,
+          "win_rate": 100.0,
+          "avg_r": 0.1061
+        },
+        "SL": {
+          "trades": 15,
+          "wins": 0,
+          "gross_r": -17.343,
+          "win_rate": 0.0,
+          "avg_r": -1.1562
+        },
+        "EARLY_PROFIT": {
+          "trades": 3,
+          "wins": 3,
+          "gross_r": 0.426,
+          "win_rate": 100.0,
+          "avg_r": 0.142
+        }
+      },
+      "by_setup": {
+        "LIQUIDITY_SWEEP": {
+          "trades": 25,
+          "wins": 23,
+          "gross_r": -0.335,
+          "win_rate": 92.0,
+          "avg_r": -0.0134
+        },
+        "BREAKOUT": {
+          "trades": 77,
+          "wins": 74,
+          "gross_r": 4.9933,
+          "win_rate": 96.1,
+          "avg_r": 0.0648
+        },
+        "TREND_PULLBACK": {
+          "trades": 58,
+          "wins": 50,
+          "gross_r": -3.5946,
+          "win_rate": 86.21,
+          "avg_r": -0.062
+        },
+        "BREAKOUT_RETEST": {
+          "trades": 21,
+          "wins": 19,
+          "gross_r": -0.6902,
+          "win_rate": 90.48,
+          "avg_r": -0.0329
+        }
+      }
+    },
+    {
+      "pair": "SUIUSDT",
+      "bars_m1": 45000,
+      "evaluations": 25400,
+      "ready_signals": 203,
+      "trades_resolved": 68,
+      "unresolved": 135,
+      "win_rate_pct": 98.53,
+      "avg_r": 0.0677,
+      "profit_factor": 4.9796,
+      "max_drawdown_r": 1.1562,
+      "mfe_7h_median_pct": 1.7408,
+      "capture_required_7h_pct": 55.7,
+      "by_exit_reason": {
+        "TRAIL_SL": {
+          "trades": 57,
+          "wins": 57,
+          "gross_r": 4.4473,
+          "win_rate": 100.0,
+          "avg_r": 0.078
+        },
+        "EARLY_PROFIT": {
+          "trades": 10,
+          "wins": 10,
+          "gross_r": 1.3101,
+          "win_rate": 100.0,
+          "avg_r": 0.131
+        },
+        "SL": {
+          "trades": 1,
+          "wins": 0,
+          "gross_r": -1.1562,
+          "win_rate": 0.0,
+          "avg_r": -1.1562
+        }
+      },
+      "by_setup": {
+        "TREND_PULLBACK": {
+          "trades": 31,
+          "wins": 31,
+          "gross_r": 1.9064,
+          "win_rate": 100.0,
+          "avg_r": 0.0615
+        },
+        "BREAKOUT": {
+          "trades": 12,
+          "wins": 12,
+          "gross_r": 1.2049,
+          "win_rate": 100.0,
+          "avg_r": 0.1004
+        },
+        "BREAKOUT_RETEST": {
+          "trades": 9,
+          "wins": 9,
+          "gross_r": 0.9157,
+          "win_rate": 100.0,
+          "avg_r": 0.1017
+        },
+        "LIQUIDITY_SWEEP": {
+          "trades": 16,
+          "wins": 15,
+          "gross_r": 0.5742,
+          "win_rate": 93.75,
+          "avg_r": 0.0359
+        }
+      }
+    },
+    {
+      "pair": "SUSDT",
+      "bars_m1": 45000,
+      "evaluations": 24683,
+      "ready_signals": 252,
+      "trades_resolved": 122,
+      "unresolved": 130,
+      "win_rate_pct": 94.26,
+      "avg_r": 0.0269,
+      "profit_factor": 1.4059,
+      "max_drawdown_r": 3.2578,
+      "mfe_7h_median_pct": 2.1284,
+      "capture_required_7h_pct": 45.5,
+      "by_exit_reason": {
+        "TRAIL_SL": {
+          "trades": 109,
+          "wins": 109,
+          "gross_r": 10.4925,
+          "win_rate": 100.0,
+          "avg_r": 0.0963
+        },
+        "SL": {
+          "trades": 7,
+          "wins": 0,
+          "gross_r": -8.0934,
+          "win_rate": 0.0,
+          "avg_r": -1.1562
+        },
+        "EARLY_PROFIT": {
+          "trades": 6,
+          "wins": 6,
+          "gross_r": 0.886,
+          "win_rate": 100.0,
+          "avg_r": 0.1477
+        }
+      },
+      "by_setup": {
+        "TREND_PULLBACK": {
+          "trades": 32,
+          "wins": 30,
+          "gross_r": 0.5253,
+          "win_rate": 93.75,
+          "avg_r": 0.0164
+        },
+        "BREAKOUT": {
+          "trades": 53,
+          "wins": 50,
+          "gross_r": 2.2431,
+          "win_rate": 94.34,
+          "avg_r": 0.0423
+        },
+        "BREAKOUT_RETEST": {
+          "trades": 13,
+          "wins": 13,
+          "gross_r": 0.99,
+          "win_rate": 100.0,
+          "avg_r": 0.0762
+        },
+        "LIQUIDITY_SWEEP": {
+          "trades": 24,
+          "wins": 22,
+          "gross_r": -0.4733,
+          "win_rate": 91.67,
+          "avg_r": -0.0197
+        }
+      }
+    },
+    {
+      "pair": "TAOUSDT",
+      "bars_m1": 45000,
+      "evaluations": 22712,
+      "ready_signals": 208,
+      "trades_resolved": 50,
+      "unresolved": 158,
+      "win_rate_pct": 98.0,
+      "avg_r": 0.0532,
+      "profit_factor": 3.3014,
+      "max_drawdown_r": 1.1562,
+      "mfe_7h_median_pct": 1.7313,
+      "capture_required_7h_pct": 56.0,
+      "by_exit_reason": {
+        "TRAIL_SL": {
+          "trades": 44,
+          "wins": 44,
+          "gross_r": 3.2429,
+          "win_rate": 100.0,
+          "avg_r": 0.0737
+        },
+        "EARLY_PROFIT": {
+          "trades": 5,
+          "wins": 5,
+          "gross_r": 0.5742,
+          "win_rate": 100.0,
+          "avg_r": 0.1148
+        },
+        "SL": {
+          "trades": 1,
+          "wins": 0,
+          "gross_r": -1.1562,
+          "win_rate": 0.0,
+          "avg_r": -1.1562
+        }
+      },
+      "by_setup": {
+        "BREAKOUT": {
+          "trades": 11,
+          "wins": 11,
+          "gross_r": 0.6207,
+          "win_rate": 100.0,
+          "avg_r": 0.0564
+        },
+        "TREND_PULLBACK": {
+          "trades": 21,
+          "wins": 20,
+          "gross_r": 1.064,
+          "win_rate": 95.24,
+          "avg_r": 0.0507
+        },
+        "BREAKOUT_RETEST": {
+          "trades": 12,
+          "wins": 12,
+          "gross_r": 0.548,
+          "win_rate": 100.0,
+          "avg_r": 0.0457
+        },
+        "LIQUIDITY_SWEEP": {
+          "trades": 6,
+          "wins": 6,
+          "gross_r": 0.4282,
+          "win_rate": 100.0,
+          "avg_r": 0.0714
+        }
+      }
+    },
+    {
+      "pair": "TRXUSDT",
+      "bars_m1": 45000,
+      "evaluations": 26187,
+      "ready_signals": 149,
+      "trades_resolved": 0,
+      "unresolved": 149,
+      "win_rate_pct": 0.0,
+      "avg_r": 0.0,
+      "profit_factor": 0.0,
+      "max_drawdown_r": 0.0,
+      "mfe_7h_median_pct": 0.2347,
+      "capture_required_7h_pct": 412.7,
+      "by_exit_reason": {},
+      "by_setup": {}
+    },
+    {
+      "pair": "UNIUSDT",
+      "bars_m1": 44999,
+      "evaluations": 26685,
+      "ready_signals": 202,
+      "trades_resolved": 80,
+      "unresolved": 122,
+      "win_rate_pct": 97.5,
+      "avg_r": 0.0642,
+      "profit_factor": 3.2203,
+      "max_drawdown_r": 1.1562,
+      "mfe_7h_median_pct": 1.799,
+      "capture_required_7h_pct": 53.9,
+      "by_exit_reason": {
+        "TRAIL_SL": {
+          "trades": 77,
+          "wins": 77,
+          "gross_r": 7.2324,
+          "win_rate": 100.0,
+          "avg_r": 0.0939
+        },
+        "EARLY_PROFIT": {
+          "trades": 1,
+          "wins": 1,
+          "gross_r": 0.2143,
+          "win_rate": 100.0,
+          "avg_r": 0.2143
+        },
+        "SL": {
+          "trades": 2,
+          "wins": 0,
+          "gross_r": -2.3124,
+          "win_rate": 0.0,
+          "avg_r": -1.1562
+        }
+      },
+      "by_setup": {
+        "BREAKOUT": {
+          "trades": 16,
+          "wins": 16,
+          "gross_r": 2.1735,
+          "win_rate": 100.0,
+          "avg_r": 0.1358
+        },
+        "TREND_PULLBACK": {
+          "trades": 37,
+          "wins": 36,
+          "gross_r": 2.4544,
+          "win_rate": 97.3,
+          "avg_r": 0.0663
+        },
+        "BREAKOUT_RETEST": {
+          "trades": 11,
+          "wins": 11,
+          "gross_r": 0.7549,
+          "win_rate": 100.0,
+          "avg_r": 0.0686
+        },
+        "LIQUIDITY_SWEEP": {
+          "trades": 16,
+          "wins": 15,
+          "gross_r": -0.2485,
+          "win_rate": 93.75,
+          "avg_r": -0.0155
+        }
+      }
+    },
+    {
+      "pair": "USD1USDT",
+      "bars_m1": 44999,
+      "evaluations": 23356,
+      "ready_signals": 172,
+      "trades_resolved": 0,
+      "unresolved": 172,
+      "win_rate_pct": 0.0,
+      "avg_r": 0.0,
+      "profit_factor": 0.0,
+      "max_drawdown_r": 0.0,
+      "mfe_7h_median_pct": 0.01,
+      "capture_required_7h_pct": 9688.1,
+      "by_exit_reason": {},
+      "by_setup": {}
+    },
+    {
+      "pair": "USDCUSDT",
+      "bars_m1": 45000,
+      "evaluations": 25259,
+      "ready_signals": 156,
+      "trades_resolved": 0,
+      "unresolved": 156,
+      "win_rate_pct": 0.0,
+      "avg_r": 0.0,
+      "profit_factor": 0.0,
+      "max_drawdown_r": 0.0,
+      "mfe_7h_median_pct": 0.01,
+      "capture_required_7h_pct": 9695.4,
+      "by_exit_reason": {},
+      "by_setup": {}
+    },
+    {
+      "pair": "UUSDT",
+      "bars_m1": 44999,
+      "evaluations": 14559,
+      "ready_signals": 246,
+      "trades_resolved": 0,
+      "unresolved": 246,
+      "win_rate_pct": 0.0,
+      "avg_r": 0.0,
+      "profit_factor": 0.0,
+      "max_drawdown_r": 0.0,
+      "mfe_7h_median_pct": 0.01,
+      "capture_required_7h_pct": 9685.1,
+      "by_exit_reason": {},
+      "by_setup": {}
+    },
+    {
+      "pair": "WLDUSDT",
+      "bars_m1": 44999,
+      "evaluations": 25319,
+      "ready_signals": 216,
+      "trades_resolved": 85,
+      "unresolved": 131,
+      "win_rate_pct": 100.0,
+      "avg_r": 0.0949,
+      "profit_factor": Infinity,
+      "max_drawdown_r": 0.0,
+      "mfe_7h_median_pct": 2.0143,
+      "capture_required_7h_pct": 48.1,
+      "by_exit_reason": {
+        "TRAIL_SL": {
+          "trades": 77,
+          "wins": 77,
+          "gross_r": 6.6488,
+          "win_rate": 100.0,
+          "avg_r": 0.0863
+        },
+        "EARLY_PROFIT": {
+          "trades": 8,
+          "wins": 8,
+          "gross_r": 1.418,
+          "win_rate": 100.0,
+          "avg_r": 0.1772
+        }
+      },
+      "by_setup": {
+        "BREAKOUT": {
+          "trades": 13,
+          "wins": 13,
+          "gross_r": 1.3075,
+          "win_rate": 100.0,
+          "avg_r": 0.1006
+        },
+        "LIQUIDITY_SWEEP": {
+          "trades": 22,
+          "wins": 22,
+          "gross_r": 2.3322,
+          "win_rate": 100.0,
+          "avg_r": 0.106
+        },
+        "BREAKOUT_RETEST": {
+          "trades": 11,
+          "wins": 11,
+          "gross_r": 0.7919,
+          "win_rate": 100.0,
+          "avg_r": 0.072
+        },
+        "TREND_PULLBACK": {
+          "trades": 39,
+          "wins": 39,
+          "gross_r": 3.6352,
+          "win_rate": 100.0,
+          "avg_r": 0.0932
+        }
+      }
+    },
+    {
+      "pair": "WUSDT",
+      "bars_m1": 44999,
+      "evaluations": 22835,
+      "ready_signals": 275,
+      "trades_resolved": 134,
+      "unresolved": 141,
+      "win_rate_pct": 95.52,
+      "avg_r": 0.0424,
+      "profit_factor": 1.8181,
+      "max_drawdown_r": 2.1245,
+      "mfe_7h_median_pct": 2.6396,
+      "capture_required_7h_pct": 36.7,
+      "by_exit_reason": {
+        "TRAIL_SL": {
+          "trades": 126,
+          "wins": 126,
+          "gross_r": 12.2787,
+          "win_rate": 100.0,
+          "avg_r": 0.0975
+        },
+        "SL": {
+          "trades": 6,
+          "wins": 0,
+          "gross_r": -6.9372,
+          "win_rate": 0.0,
+          "avg_r": -1.1562
+        },
+        "EARLY_PROFIT": {
+          "trades": 2,
+          "wins": 2,
+          "gross_r": 0.3337,
+          "win_rate": 100.0,
+          "avg_r": 0.1668
+        }
+      },
+      "by_setup": {
+        "BREAKOUT_RETEST": {
+          "trades": 10,
+          "wins": 10,
+          "gross_r": 1.1789,
+          "win_rate": 100.0,
+          "avg_r": 0.1179
+        },
+        "TREND_PULLBACK": {
+          "trades": 63,
+          "wins": 60,
+          "gross_r": 2.7877,
+          "win_rate": 95.24,
+          "avg_r": 0.0442
+        },
+        "BREAKOUT": {
+          "trades": 46,
+          "wins": 45,
+          "gross_r": 2.9333,
+          "win_rate": 97.83,
+          "avg_r": 0.0638
+        },
+        "LIQUIDITY_SWEEP": {
+          "trades": 15,
+          "wins": 13,
+          "gross_r": -1.2247,
+          "win_rate": 86.67,
+          "avg_r": -0.0816
+        }
+      }
+    },
+    {
+      "pair": "XAUTUSDT",
+      "bars_m1": 44999,
+      "evaluations": 31815,
+      "ready_signals": 101,
+      "trades_resolved": 0,
+      "unresolved": 101,
+      "win_rate_pct": 0.0,
+      "avg_r": 0.0,
+      "profit_factor": 0.0,
+      "max_drawdown_r": 0.0,
+      "mfe_7h_median_pct": 0.1978,
+      "capture_required_7h_pct": 489.7,
+      "by_exit_reason": {},
+      "by_setup": {}
+    },
+    {
+      "pair": "XRPUSDT",
+      "bars_m1": 45000,
+      "evaluations": 26050,
+      "ready_signals": 168,
+      "trades_resolved": 31,
+      "unresolved": 137,
+      "win_rate_pct": 96.77,
+      "avg_r": 0.0455,
+      "profit_factor": 2.2211,
+      "max_drawdown_r": 1.1562,
+      "mfe_7h_median_pct": 0.9643,
+      "capture_required_7h_pct": 100.5,
+      "by_exit_reason": {
+        "TRAIL_SL": {
+          "trades": 25,
+          "wins": 25,
+          "gross_r": 1.8978,
+          "win_rate": 100.0,
+          "avg_r": 0.0759
+        },
+        "SL": {
+          "trades": 1,
+          "wins": 0,
+          "gross_r": -1.1562,
+          "win_rate": 0.0,
+          "avg_r": -1.1562
+        },
+        "EARLY_PROFIT": {
+          "trades": 5,
+          "wins": 5,
+          "gross_r": 0.6702,
+          "win_rate": 100.0,
+          "avg_r": 0.134
+        }
+      },
+      "by_setup": {
+        "TREND_PULLBACK": {
+          "trades": 20,
+          "wins": 20,
+          "gross_r": 1.9049,
+          "win_rate": 100.0,
+          "avg_r": 0.0952
+        },
+        "BREAKOUT": {
+          "trades": 3,
+          "wins": 2,
+          "gross_r": -0.854,
+          "win_rate": 66.67,
+          "avg_r": -0.2847
+        },
+        "LIQUIDITY_SWEEP": {
+          "trades": 2,
+          "wins": 2,
+          "gross_r": 0.0834,
+          "win_rate": 100.0,
+          "avg_r": 0.0417
+        },
+        "BREAKOUT_RETEST": {
+          "trades": 6,
+          "wins": 6,
+          "gross_r": 0.2775,
+          "win_rate": 100.0,
+          "avg_r": 0.0462
+        }
+      }
+    },
+    {
+      "pair": "ZECUSDT",
+      "bars_m1": 44999,
+      "evaluations": 27849,
+      "ready_signals": 175,
+      "trades_resolved": 60,
+      "unresolved": 115,
+      "win_rate_pct": 98.33,
+      "avg_r": 0.0718,
+      "profit_factor": 4.727,
+      "max_drawdown_r": 1.1562,
+      "mfe_7h_median_pct": 1.8132,
+      "capture_required_7h_pct": 53.4,
+      "by_exit_reason": {
+        "TRAIL_SL": {
+          "trades": 57,
+          "wins": 57,
+          "gross_r": 5.2488,
+          "win_rate": 100.0,
+          "avg_r": 0.0921
+        },
+        "SL": {
+          "trades": 1,
+          "wins": 0,
+          "gross_r": -1.1562,
+          "win_rate": 0.0,
+          "avg_r": -1.1562
+        },
+        "EARLY_PROFIT": {
+          "trades": 2,
+          "wins": 2,
+          "gross_r": 0.2165,
+          "win_rate": 100.0,
+          "avg_r": 0.1082
+        }
+      },
+      "by_setup": {
+        "TREND_PULLBACK": {
+          "trades": 30,
+          "wins": 30,
+          "gross_r": 2.7836,
+          "win_rate": 100.0,
+          "avg_r": 0.0928
+        },
+        "LIQUIDITY_SWEEP": {
+          "trades": 11,
+          "wins": 11,
+          "gross_r": 0.7373,
+          "win_rate": 100.0,
+          "avg_r": 0.067
+        },
+        "BREAKOUT": {
+          "trades": 10,
+          "wins": 9,
+          "gross_r": -0.1306,
+          "win_rate": 90.0,
+          "avg_r": -0.0131
+        },
+        "BREAKOUT_RETEST": {
+          "trades": 9,
+          "wins": 9,
+          "gross_r": 0.9188,
+          "win_rate": 100.0,
+          "avg_r": 0.1021
+        }
+      }
+    },
+    {
+      "pair": "ZROUSDT",
+      "bars_m1": 44999,
+      "evaluations": 22159,
+      "ready_signals": 291,
+      "trades_resolved": 158,
+      "unresolved": 133,
+      "win_rate_pct": 95.57,
+      "avg_r": 0.0434,
+      "profit_factor": 1.8467,
+      "max_drawdown_r": 1.9147,
+      "mfe_7h_median_pct": 3.2242,
+      "capture_required_7h_pct": 30.0,
+      "by_exit_reason": {
+        "TRAIL_SL": {
+          "trades": 140,
+          "wins": 140,
+          "gross_r": 12.6711,
+          "win_rate": 100.0,
+          "avg_r": 0.0905
+        },
+        "EARLY_PROFIT": {
+          "trades": 11,
+          "wins": 11,
+          "gross_r": 2.2746,
+          "win_rate": 100.0,
+          "avg_r": 0.2068
+        },
+        "SL": {
+          "trades": 7,
+          "wins": 0,
+          "gross_r": -8.0934,
+          "win_rate": 0.0,
+          "avg_r": -1.1562
+        }
+      },
+      "by_setup": {
+        "TREND_PULLBACK": {
+          "trades": 58,
+          "wins": 55,
+          "gross_r": 2.3266,
+          "win_rate": 94.83,
+          "avg_r": 0.0401
+        },
+        "BREAKOUT": {
+          "trades": 35,
+          "wins": 34,
+          "gross_r": 1.4134,
+          "win_rate": 97.14,
+          "avg_r": 0.0404
+        },
+        "LIQUIDITY_SWEEP": {
+          "trades": 42,
+          "wins": 39,
+          "gross_r": 1.2279,
+          "win_rate": 92.86,
+          "avg_r": 0.0292
+        },
+        "BREAKOUT_RETEST": {
+          "trades": 23,
+          "wins": 23,
+          "gross_r": 1.8844,
+          "win_rate": 100.0,
+          "avg_r": 0.0819
+        }
+      }
+    }
+  ]
+}
