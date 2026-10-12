@@ -459,6 +459,25 @@ fun TradingViewModel.clearPaperExitState(symbol: String, exchange: String) {
 /** Ringkas parameter exit yang sedang aktif, untuk ditampilkan di UI. */
 fun TradingViewModel.currentExitParams(): ScalpExitParams = prefs.scalpingRuntimeConfig.exit
 
+/**
+ * Potret posisi paper untuk **pair tertentu**.
+ *
+ * [TradingViewModel.paperExitSnapshot] sengaja tidak dipakai di halaman detail: StateFlow itu
+ * di-`publish` dari tick pair mana pun (`MarketDataCoordinator.onPriceUpdate` memanggil
+ * [evaluatePaperAutoExit] untuk semua simbol yang diperbarui), sehingga isinya bisa milik pair
+ * lain. Kartu detail harus selalu membaca posisi pair yang sedang dibuka.
+ *
+ * @return `null` bila pair ini tidak punya posisi simulasi terbuka.
+ */
+fun TradingViewModel.paperSnapshotFor(
+    exchange: String,
+    symbol: String,
+    currentPrice: Double
+): PaperExitSnapshot? {
+    val machine = PaperAutoTradeRuntime.machineFor(exchange, symbol) ?: return null
+    return PaperExitSnapshot.of(machine, symbol, exchange, currentPrice)
+}
+
 /** Label alasan exit untuk notifikasi/jurnal. */
 fun PaperExitReason.displayLabel(): String = when (this) {
     PaperExitReason.SL -> "Stop Loss"

@@ -90,6 +90,15 @@ fun WaitingEntryRadarCard(
     buyCooldownTotalMs: Long = 0L,
     buyCooldownReason: String? = null,
     exchange: String = "TOKOCRYPTO",
+    /**
+     * Lewati blok analisa (header radar + target level + backtest) di cabang BUY.
+     *
+     * Dipakai mode scalping: blok itu digantikan `ScalpDeskCard`, dan status
+     * `lifecycleState` di dalamnya bisa berkata "TERDETEKSI" padahal
+     * `scalpingSetup == "NONE"` (lihat `ScalpReadiness`). Zona eksekusi manual
+     * (`RadarTransactionFeeSection`) tetap ditampilkan.
+     */
+    hideAnalysis: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val effectivePrice = if (currentPrice > 0.0 && currentPrice.isFinite()) currentPrice else 0.0
@@ -309,7 +318,9 @@ fun WaitingEntryRadarCard(
                 }
             }
 
-            AnalysisCard {
+            // Mode scalping memakai ScalpDeskCard sebagai sumber status; blok ini dilewati
+            // supaya entry/SL/TP tidak tampil dua kali dan status tidak saling bertentangan.
+            if (!hideAnalysis) AnalysisCard {
                 val (lifecycleText, lifecycleColor) = when (signal.lifecycleState) {
                     LifecycleState.READY -> Pair("🎯 READY", TvGreen)
                     LifecycleState.TRIGGERED -> Pair("✅ TRIGGERED", TvGreen)

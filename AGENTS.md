@@ -65,6 +65,21 @@ Aplikasi Android Kotlin 100% (Jetpack Compose M3) untuk analisis & **scalp mode*
   `ui/components/settings/PairEdgeGateCard.kt` (UI), `tools/pair_gate.py` (regenerasi tabel
   dari data → `data/config/pair_gate.json`). Sumber tabel: `data/hasil/u3_toko_usdt_after.json`.
   **Jangan** melemahkan/menghapus gerbang ini hanya untuk menambah jumlah sinyal.
+- **Status UI scalping = `ScalpReadiness` (2026-10-12, WAJIB):** seluruh permukaan UI mode
+  scalping harus menyimpulkan status dari `engine/scalping/ScalpReadiness.kt`, **bukan** dari
+  `signal.lifecycleState` / `signal.scalpingStage` mentah.
+  Invarian yang tidak boleh dilanggar: bila `scalpingSetup` kosong atau `"NONE"`, status
+  **tidak boleh** READY/CONFIRMING/"TERDETEKSI" — meski `lifecycleState == DETECTED` atau
+  `scalpingStage == EARLY_ENTRY`. Penyebab kelas bug ini ada di engine
+  (`ScalpingMtfEvaluator.kt:246` menghitung `early` tanpa memeriksa setup, lalu
+  `SignalLifecycleManager.kt:112` memetakan `EARLY_ENTRY → DETECTED`); karena perbaikan engine
+  mengubah statistik log sinyal + pemicu alert, penyelesaiannya sengaja dilakukan di lapisan UI
+  dengan model bersama ini. Permukaan yang sudah memakainya: `ScalpDeskCard.kt`,
+  `PaperTradeDeskCard.kt`, `MarketConditionCard.kt` (cabang scalping). Bukti: `ScalpReadinessTest.kt`.
+- **Snapshot posisi paper per pair:** di halaman detail **jangan** pakai
+  `TradingViewModel.paperExitSnapshot` (StateFlow tunggal yang di-`publish` dari tick pair mana
+  pun). Pakai `TradingViewModel.paperSnapshotFor(exchange, symbol, price)` supaya yang tampil
+  selalu posisi pair yang sedang dibuka.
 - Profil exit yang benar saat ini **skew negatif** (menang ≈ +0,09R, kalah ≈ −1,16R, WR ≈ 95%).
   Margin impas hanya ~2,3 poin persentase — jangan promosikan ke uang riil. Bukti: `workplan2.md` §9.5b.
 - Ubah parameter untuk eksperimen: export JSON → replay; jangan mengarang “edge” dari satu window data.

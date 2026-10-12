@@ -20,6 +20,8 @@ import agu.analys.config.MarketDataSource
 import agu.analys.model.*
 import agu.analys.ui.components.SignalHistoryPanel
 import agu.analys.ui.components.detail.*
+import agu.analys.ui.components.detail.scalp.PaperTradeDeskCard
+import agu.analys.ui.components.detail.scalp.ScalpDeskCard
 import agu.analys.ui.components.settings.LogcatDiagnosticDialog
 import agu.analys.ui.theme.*
 import agu.analys.util.AppPreferences
@@ -97,6 +99,33 @@ fun DetailChartScreen(
     val marketStructure = ui.marketStructure
         ?: agu.analys.engine.MarketStructureAnalyzer.analyze(emptyList())
     val isHolding = ui.isHolding
+
+    // ── 1b. Paper trade (P2) — dipakai panel scalping ─────────────────────
+    val paperConfig by viewModel.paperAutoTradeConfig.collectAsStateWithLifecycle()
+    val paperSnapshotFlow by viewModel.paperExitSnapshot.collectAsStateWithLifecycle()
+    val scalpingRuntime by viewModel.scalpingRuntimeConfig.collectAsStateWithLifecycle()
+
+    // Simbol kanonik untuk key runtime paper: `signal.marketSymbol` bisa kosong sebelum
+    // sinyal dilacak `SignalLifecycleManager`, jadi jatuh ke `pair.symbol`.
+    val scalpSymbol = signal.marketSymbol.ifBlank { pair.symbol }
+
+    // PENTING: `viewModel.paperExitSnapshot` adalah snapshot global dari tick pair mana pun
+    // (`evaluatePaperAutoExit` dipanggil untuk semua simbol). Halaman detail wajib membaca
+    // posisi pair yang sedang dibuka saja, jadi lewat `paperSnapshotFor`.
+    val paperSnapshot = remember(paperSnapshotFlow, displayPrice, scalpSymbol, marketDataSource) {
+        viewModel.paperSnapshotFor(
+            exchange = marketDataSource.name,
+            symbol = scalpSymbol,
+            currentPrice = displayPrice
+        )
+    }
+    val scalpReadiness = remember(signal, paperSnapshot, paperConfig.minStage) {
+        agu.analys.engine.scalping.ScalpReadiness.resolve(
+            signal = signal,
+            hasPaperPosition = paperSnapshot != null,
+            minStage = paperConfig.minStage
+        )
+    }
 
     // ── 2. Local UI-only state ────────────────────────────────────────────
     var isBuyMode by remember(pair.symbol) { mutableStateOf(!isHolding) }
@@ -282,10 +311,41 @@ fun DetailChartScreen(
 
             Spacer(Modifier.height(10.dp))
 
+            // ── Mode scalping: Scalp Desk + Paper Trade Desk ──────────────
+            // Blok analisa radar lama dilewati (hideAnalysis) supaya status, entry, SL, dan TP
+            // tidak tampil dua kali dan tidak saling bertentangan.
+            if (isScalping) {
+                ScalpDeskCard(
+                    symbol = scalpSymbol,
+                    signal = signal,
+                    currentPrice = displayPrice,
+                    quoteAsset = pair.quoteAsset,
+                    exchange = marketDataSource.name,
+                    fees = tradingFees,
+                    runtimeConfig = scalpingRuntime,
+                    hasPaperPosition = paperSnapshot != null
+                )
+
+                Spacer(Modifier.height(10.dp))
+
+                PaperTradeDeskCard(
+                    snapshot = paperSnapshot,
+                    config = paperConfig,
+                    exitParams = scalpingRuntime.exit,
+                    quoteAsset = pair.quoteAsset,
+                    canAutoBuy = scalpReadiness.canAutoBuy,
+                    onConfigChange = { viewModel.updatePaperAutoTradeConfig(it) },
+                    onOpenSettings = { viewModel.openSettings() }
+                )
+
+                Spacer(Modifier.height(10.dp))
+            }
+
             WaitingEntryRadarCard(
                 signal = signal,
                 strategyMode = strategyMode,
                 scalping = isScalping,
+                hideAnalysis = isScalping,
                 fees = tradingFees,
                 currentPrice = displayPrice,
                 baseAsset = pair.baseAsset,

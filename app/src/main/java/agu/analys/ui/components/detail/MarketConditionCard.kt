@@ -15,12 +15,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import agu.analys.config.StrategyMode
 import agu.analys.engine.MarketStructureSnapshot
+import agu.analys.engine.scalping.ScalpReadiness
+import agu.analys.engine.scalping.ScalpReadinessState
 import agu.analys.model.AISignalState
-import agu.analys.model.ScalpingStage
-import agu.analys.model.SignalAction
 import agu.analys.model.TechnicalIndicators
 import agu.analys.model.Timeframe
 import agu.analys.util.MtfStatus
+import agu.analys.ui.theme.TvBlue
 import agu.analys.ui.theme.TvGreen
 import agu.analys.ui.theme.TvRed
 import agu.analys.ui.theme.TvTextPrimary
@@ -37,20 +38,19 @@ fun MarketConditionCard(
     mtfState: Map<agu.analys.model.Timeframe, agu.analys.util.MtfStatus> = emptyMap()
 ) {
     if (strategyMode == StrategyMode.SCALPING) {
-        val stage = signal.scalpingStage
-        val color = when (stage) {
-            ScalpingStage.ENTRY, ScalpingStage.STRONG_ENTRY, ScalpingStage.EARLY_ENTRY -> if (signal.action == SignalAction.SELL) TvRed else TvGreen
-            ScalpingStage.WAIT_PULLBACK, ScalpingStage.WATCH -> WarningAmber
-            ScalpingStage.HOLD -> TvTextSecondary
+        // Status diambil dari ScalpReadiness (satu sumber kebenaran), bukan dari
+        // `scalpingStage` mentah. Alasannya: `EARLY_ENTRY` di engine muncul saat tekanan
+        // orderbook sudah ada TANPA mensyaratkan pola (`ScalpingMtfEvaluator.kt:246`), dan
+        // versi lama kartu ini lalu salah mengklaim "Breakout 1M terdeteksi lebih awal"
+        // padahal `scalpingSetup == "NONE"`.
+        val readiness = ScalpReadiness.resolve(signal)
+        val color = when (readiness.state) {
+            ScalpReadinessState.READY, ScalpReadinessState.HOLDING -> TvGreen
+            ScalpReadinessState.CONFIRMING -> WarningAmber
+            ScalpReadinessState.WATCHING -> TvBlue
+            ScalpReadinessState.BLOCKED -> TvRed
         }
-        val title = when (stage) {
-            ScalpingStage.ENTRY -> if (signal.action == SignalAction.SELL) "SHORT ENTRY" else "LONG ENTRY"
-            ScalpingStage.STRONG_ENTRY -> if (signal.action == SignalAction.SELL) "SHORT ENTRY KUAT" else "LONG ENTRY KUAT"
-            ScalpingStage.EARLY_ENTRY -> if (signal.action == SignalAction.SELL) "EARLY SHORT" else "EARLY BUY"
-            ScalpingStage.WAIT_PULLBACK -> "MOMENTUM / PULLBACK"
-            ScalpingStage.WATCH -> "WATCH"
-            ScalpingStage.HOLD -> "TAHAN / TUNGGU"
-        }
+        val title = readiness.state.label
         val mtf = signal.reasoning.filter { it.startsWith("1H:") || it.startsWith("15M:") || it.startsWith("1M:") }
         val loadedTfs = mutableListOf<String>()
         if (mtf.any { it.startsWith("1H:") }) loadedTfs.add("1H")
@@ -67,18 +67,7 @@ fun MarketConditionCard(
             }
             Spacer(Modifier.height(7.dp))
             Text(
-                when (stage) {
-                    ScalpingStage.ENTRY, ScalpingStage.STRONG_ENTRY ->
-                        "Bias 1H, setup 15M, dan trigger 1M sudah searah."
-                    ScalpingStage.EARLY_ENTRY ->
-                        "Breakout 1M terdeteksi lebih awal."
-                    ScalpingStage.WAIT_PULLBACK ->
-                        "Bias masih mendukung. Ada dua jalur: tunggu pullback bersih, atau konfirmasi momentum continuation di 1M."
-                    ScalpingStage.WATCH ->
-                        "Setup mulai terbentuk, tetapi trigger entry belum cukup kuat."
-                    ScalpingStage.HOLD ->
-                        "Belum ada setup scalping yang cukup jelas."
-                },
+                readiness.headline,
                 color = TvTextPrimary, fontSize = 14.sp, lineHeight = 20.sp
             )
             Spacer(Modifier.height(9.dp))

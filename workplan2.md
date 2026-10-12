@@ -458,3 +458,72 @@ python3 tools/split_validate.py --data data/tokocrypto_live_idr --jobs 14 \
 python3 tools/pair_gate.py --usdt data/hasil/u3_toko_usdt_after.json \
   --idr data/hasil/u5_toko_idr.json --out data/config/pair_gate.json
 ```
+
+## 11. P4.5 — UI scalping baru di halaman detail (2026-10-12)
+
+**Laporan pengguna:** *"radar menyatakan terdeteksi tapi setup menyatakan none, jadi tidak
+sinkron"*. Ini bug nyata, bukan sekadar tampilan.
+
+### 11.1 Akar masalah (terverifikasi)
+
+```
+ScalpingMtfEvaluator.kt:246   early = !ready && !isDangerous && step2Ok
+                              ^^^ step2Ok = step1Ok && isOrderBookValid → TIDAK memeriksa setup
+ScalpingMtfEvaluator.kt:294   early -> ScalpingStage.EARLY_ENTRY
+SignalLifecycleManager.kt:112 EARLY_ENTRY, WAIT_PULLBACK -> LifecycleState.DETECTED
+WaitingEntryRadarCard.kt:317  DETECTED -> "TERDETEKSI"
+```
+
+`ScalpingMtfEvaluator.kt:403` mengisi `scalpingSetup = setup.name`, dan `setup` tetap
+`ScalpSetupType.NONE` bila tidak ada pola valid. Jadi radar berkata "terdeteksi" sementara
+setup berkata "NONE".
+
+Satu kelas bug ini muncul di **tiga** permukaan:
+
+| # | Tempat | Klaim salah saat `setup == NONE` |
+|---|---|---|
+| 1 | `WaitingEntryRadarCard.kt:313-321` | `DETECTED` → "TERDETEKSI" (biru) |
+| 2 | `MarketConditionCard.kt:42,49,73` | `EARLY_ENTRY` → "EARLY BUY" hijau + "Breakout 1M terdeteksi lebih awal." |
+| 3 | Log sinyal / `MonitorCard` | lewat `lifecycleState` yang sama |
+
+Catatan semantik yang penting: `ScalpingMtfSnapshot.setupOk` **bukan** "setup terdeteksi" —
+ia diisi `step2Ok` (tekanan orderbook). Yang benar-benar menuntut pola adalah `triggerOk`
+(= `step3Ok`). Di mode scalping, `WaitingEntryRadarCard.kt:328,331` melewati checklist dan
+stepper 4 checkpoint, sehingga **tidak ada satu pun** tempat yang menampilkan `statusTitle`,
+`waitingFor`, atau `step1..step4`.
+
+### 11.2 Perbaikan
+
+Lapisan UI saja (engine tidak disentuh, jadi baseline replay & statistik log sinyal tidak
+berubah), memakai satu model bersama:
+
+- **`engine/scalping/ScalpReadiness.kt`** — model murni + invarian:
+  `scalpingSetup` kosong/`"NONE"` ⟹ status **tidak boleh** READY/CONFIRMING, meski
+  `lifecycleState == DETECTED`. Juga menyediakan 5 checkpoint dengan label jujur (baris
+  "Setup Scalping" dipisah dari "Tekanan Orderbook").
+- **`ui/components/detail/scalp/ScalpDeskCard.kt`** — meja analisa scalping: status terpadu,
+  5 checkpoint, penghalang, rencana risiko (entry zone/SL/TP1/TP2/netRR/lantai friksi),
+  chip kelayakan `PairEdgeGate`, baseline backtest, skor & regime.
+- **`ui/components/detail/scalp/PaperTradeDeskCard.kt`** — panel auto buy/sell simulasi:
+  status posisi hidup, kontrol (auto-buy/auto-exit/stage minimum), peringatan gerbang uang riil.
+  Rincian FSM direuse dari `PaperExitFsmCard` — tidak ada presentasi yang terduplikasi.
+- **`MarketConditionCard.kt`** (cabang scalping) — status diambil dari `ScalpReadiness`.
+- **`WaitingEntryRadarCard.kt`** — parameter baru `hideAnalysis`; mode scalping melewati blok
+  analisa lama (header radar + target level + backtest) agar entry/SL/TP tidak tampil dua kali.
+  Zona eksekusi manual tetap tampil.
+- **`viewmodel/PaperAutoTradeCoordinator.kt`** — `paperSnapshotFor(exchange, symbol, price)`.
+  Wajib: `TradingViewModel.paperExitSnapshot` adalah StateFlow tunggal dari tick pair mana pun
+  (`TradingViewModel.kt:157`), jadi tidak boleh dipakai langsung di halaman detail.
+
+### 11.3 Uji
+
+`app/src/test/java/agu/analys/engine/scalping/ScalpReadinessTest.kt` — 14 test, termasuk
+matriks 6 `lifecycleState` × 6 `scalpingStage` dengan `setup = NONE` yang menegaskan hasil
+bukan READY/CONFIRMING, dan kasus persis yang dilaporkan (`DETECTED` + `NONE` → MEMANTAU).
+
+### 11.4 Yang sengaja belum dilakukan
+
+Perbaikan akar di engine (`ScalpingMtfEvaluator.kt:246` dan `SignalLifecycleManager.kt:112`)
+**belum** dikerjakan: keduanya mengubah statistik log sinyal, pemicu alert (`isNewDetected`),
+dan `MonitorCard`, sehingga butuh regresi penuh. UI kini sudah menampilkan kebenaran yang sama
+apa pun keputusan itu nanti.
