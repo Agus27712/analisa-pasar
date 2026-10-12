@@ -105,10 +105,19 @@
       tersedia — lebih baik menahan posisi daripada keluar dari data yang tidak terukur.
 - [x] Larangan keras: **tidak ada** jalur real auto-execute dari sinyal scalp di kode yang ditambahkan.
 
-### P3 — Riset entry (di luar path live)
-- [ ] Gate: mean gross ≳ 1% train **dan** test, n memadai, vs acak
-- [ ] Tool hipotesis terpisah; label HIPOTESIS
-- [ ] Hanya promote ke RuntimeConfig default jika lolos gate
+### P3 — Riset entry (di luar path live) — [SELESAI ✅ — gate TIDAK lolos]
+> **Hasil:** 8 hipotesis entry diuji pada 60 hari data Tokocrypto (12 Agu – 11 Okt 2026, 8 pair,
+> 87.000 bar M1/pair, tanpa celah). **0 dari 8 lolos gate.** Gross mean terbaik di TEST hanya
+> +0,03% terhadap ambang 1%; semua NET berada di −0,94%..−1,05%, yaitu praktis sama dengan
+> friksi round-trip 0,97%. **Tidak ada yang dipromosikan ke config live** — dan memang tidak boleh.
+- [x] Tool hipotesis terpisah + label HIPOTESIS: `tools/entry_hypothesis_lab.py`
+- [x] Gate dijalankan: mean GROSS ≥ 1% di **TRAIN dan TEST**, n ≥ 30 per split,
+      mengalahkan baseline acak (500 permutasi, ambang Bonferroni 0,05/8)
+- [x] Harness divalidasi peka: `tools/selftest_entry_lab.py` — pada data sintetis ber-edge
+      tanam +2% gate **lolos** (p = 0,0033), pada hipotesis kontrol gate **gagal**.
+      Jadi hasil 0/8 adalah temuan, bukan alat yang buta.
+- [x] Hasil lengkap tersimpan: `data/hasil/p3_entry_hypothesis_lab.json` + `.md`
+- [ ] Promote ke RuntimeConfig default — **tidak dilakukan**, tidak ada kandidat yang lolos gate
 
 ---
 
@@ -143,8 +152,15 @@ Advanced (opsional): `buy_pressure_*`, `min_risk_pct`, `max_tp2_r`, `slippage_pc
 - Binance vision ~45 hari (XRP/SOL/BTC): full exit tetap −EV orde besar; BTC sering 0 sinyal.
 - 5 hipotesis entry baru di 45d: tidak lolos gate gross ≥1% train+test.
 - Upstream p0 friction ~0,72% RT vs all-in riset ~0,97% → UI “VIABLE” bisa terlalu optimis.
+- **P3 — 60 hari Tokocrypto (12 Agu – 11 Okt 2026), 8 pair, 8 hipotesis entry: 0/8 lolos gate.**
+  Gross mean TEST terbaik hanya +0,03% (ambang 1%); semua NET −0,94%..−1,05%, yaitu ≈ friksi
+  round-trip 0,97%. Artinya pada periode ini **timing entry tidak menyumbang apa pun** — rugi
+  bersih praktis seluruhnya berasal dari biaya. MFE rata-rata hanya +0,33%..+0,58% dalam 1 jam,
+  jadi bahkan gerakan 1% pun jarang tersedia untuk diambil.
+  Satu hipotesis (`sweep reclaim`) **signifikan di train (p=0,002) lalu hilang di test (p=0,35)** —
+  contoh langsung kenapa gate wajib diuji di dua periode, bukan satu.
 
-Detail: `SCALP_EXIT.md`, artefak lokal uji (bila ada).
+Detail: `SCALP_EXIT.md`, `data/hasil/p3_entry_hypothesis_lab.md`, artefak lokal uji (bila ada).
 
 ---
 
@@ -167,6 +183,9 @@ Detail: `SCALP_EXIT.md`, artefak lokal uji (bila ada).
 | SCALP_EXIT.md | Exit paper / R net |
 | data/config/scalp_config.json | Mirror threshold + fee untuk replay |
 | tools/scalp_replay.py | Offline paritas engine |
+| tools/entry_hypothesis_lab.py | Lab hipotesis entry (P3) — offline, berlabel HIPOTESIS, tidak menyentuh config live |
+| tools/selftest_entry_lab.py | Uji daya-deteksi lab (data sintetis ber-edge tanam) |
+| data/hasil/p3_entry_hypothesis_lab.md | Hasil P3: 0/8 hipotesis lolos gate |
 
 **Jangan baca sebagai instruksi aktif:** `workplan.md`, `checkpoint.md`, `checkpoint_progres.md` (legacy checklist tahap lama).
 

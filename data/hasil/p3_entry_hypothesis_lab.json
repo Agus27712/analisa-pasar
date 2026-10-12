@@ -1,0 +1,431 @@
+{
+  "_label": "HIPOTESIS \u2014 bahan uji offline, BUKAN rekomendasi dan BUKAN default live",
+  "_warning": "Gate P3 belum tentu lolos. Jangan promosikan hipotesis mana pun ke ScalpingRuntimeConfig/ScalpingConfig tanpa gate lolos di train DAN test.",
+  "meta": {
+    "data_dir": "data/tokocrypto_v4",
+    "pairs": [
+      "ADAUSDT",
+      "BNBUSDT",
+      "BTCUSDT",
+      "DOGEUSDT",
+      "ETHUSDT",
+      "SOLUSDT",
+      "TRXUSDT",
+      "XRPUSDT"
+    ],
+    "bars_m1": {
+      "ADAUSDT": 87000,
+      "BNBUSDT": 86999,
+      "BTCUSDT": 87000,
+      "DOGEUSDT": 86999,
+      "ETHUSDT": 86999,
+      "SOLUSDT": 87000,
+      "TRXUSDT": 86999,
+      "XRPUSDT": 86999
+    },
+    "horizon_bars_m1": 60,
+    "train_frac": 0.6,
+    "train_range": [
+      "2026-08-12 18:16",
+      "2026-09-17 21:35"
+    ],
+    "test_range": [
+      "2026-09-17 21:35",
+      "2026-10-11 23:49"
+    ],
+    "fee": {
+      "_comment": "Tokocrypto ALL-IN regular (efektif 2026-06-18): trading+PPh+ICEx. USDT/crypto = 0.4044% per sisi. IDR: buy taker 0.2222 / sell taker 0.4322. Preset default = USDT (data tokocrypto_v2/v3). Tanpa diskon TKO/VIP.",
+      "quote": "USDT",
+      "buy_taker_pct": 0.4044,
+      "sell_taker_pct": 0.4044,
+      "buy_maker_pct": 0.4044,
+      "sell_maker_pct": 0.4044,
+      "idr_reference": {
+        "buy_taker_pct": 0.2222,
+        "sell_taker_pct": 0.4322,
+        "buy_maker_pct": 0.1222,
+        "sell_maker_pct": 0.3322
+      }
+    },
+    "slippage_pct": 0.08,
+    "roundtrip_friction_pct": 0.9688,
+    "exit_mode": "full",
+    "risk_proxy": {
+      "min_risk_pct": 0.5,
+      "target_net_rr": 1.25
+    },
+    "gate": {
+      "gross_min_pct": 1.0,
+      "min_n_per_split": 30,
+      "alpha": 0.05,
+      "bonferroni_alpha": 0.00625,
+      "n_hypotheses": 8
+    },
+    "baseline_reps": 500,
+    "seed": 20261012
+  },
+  "hypotheses": [
+    {
+      "key": "h01_m15_oversold_uptrend",
+      "title": "M15 RSI<30 di dalam tren naik (beli dip)",
+      "rationale": "Mean reversion: tekanan jual jangka pendek di pasar yang trennya masih naik (close M15 > EMA200 M15).",
+      "label": "HIPOTESIS",
+      "gate_passed": false,
+      "gate_fail_reasons": [
+        "n_train 24 < 30",
+        "n_test 17 < 30",
+        "gross_train -0.09% < 1.0%",
+        "gross_test -0.03% < 1.0%",
+        "p_train 0.88224 >= 0.00625",
+        "p_test 0.62874 >= 0.00625"
+      ],
+      "train": {
+        "n": 24,
+        "gross_mean": -0.0866,
+        "gross_median": -0.0759,
+        "gross_sd": 0.4081,
+        "net_mean": -1.0499,
+        "net_median": -1.0393,
+        "mfe_mean": 0.2698,
+        "mae_mean": -0.416,
+        "win_rate_gross": 33.33,
+        "r_mean": -2.9186,
+        "r_n": 8,
+        "p_value": 0.8822355289421158,
+        "baseline_gross_mean": 0.0081,
+        "baseline_reps": 500
+      },
+      "test": {
+        "n": 17,
+        "gross_mean": -0.0252,
+        "gross_median": -0.0373,
+        "gross_sd": 0.4473,
+        "net_mean": -0.9891,
+        "net_median": -1.0011,
+        "mfe_mean": 0.3137,
+        "mae_mean": -0.3949,
+        "win_rate_gross": 47.06,
+        "r_mean": -2.9186,
+        "r_n": 6,
+        "p_value": 0.6287425149700598,
+        "baseline_gross_mean": 0.0182,
+        "baseline_reps": 500
+      }
+    },
+    {
+      "key": "h02_m1_bb_reclaim",
+      "title": "Close M1 kembali ke atas lower Bollinger(20,2)",
+      "rationale": "Reclaim: bar sebelumnya menembus bawah lower band, bar ini ditutup naik \u2014 asumsi jual berlebih jangka sangat pendek.",
+      "label": "HIPOTESIS",
+      "gate_passed": false,
+      "gate_fail_reasons": [
+        "gross_train 0.03% < 1.0%",
+        "gross_test 0.02% < 1.0%",
+        "p_train 0.12575 >= 0.00625",
+        "p_test 0.48703 >= 0.00625"
+      ],
+      "train": {
+        "n": 4153,
+        "gross_mean": 0.0335,
+        "gross_median": 0.0062,
+        "gross_sd": 0.6447,
+        "net_mean": -0.931,
+        "net_median": -0.958,
+        "mfe_mean": 0.4019,
+        "mae_mean": -0.4133,
+        "win_rate_gross": 50.37,
+        "r_mean": -2.4842,
+        "r_n": 1249,
+        "p_value": 0.12574850299401197,
+        "baseline_gross_mean": 0.0221,
+        "baseline_reps": 500
+      },
+      "test": {
+        "n": 2695,
+        "gross_mean": 0.0159,
+        "gross_median": 0.0143,
+        "gross_sd": 0.596,
+        "net_mean": -0.9484,
+        "net_median": -0.9499,
+        "mfe_mean": 0.3935,
+        "mae_mean": -0.3975,
+        "win_rate_gross": 51.43,
+        "r_mean": -2.4885,
+        "r_n": 778,
+        "p_value": 0.4870259481037924,
+        "baseline_gross_mean": 0.0152,
+        "baseline_reps": 500
+      }
+    },
+    {
+      "key": "h03_vol_spike_bull",
+      "title": "Lonjakan volume >3x MA20 + candle M1 hijau",
+      "rationale": "Partisipasi: volume ekstrem menandakan minat agresif; candle hijau mengonfirmasi arah.",
+      "label": "HIPOTESIS",
+      "gate_passed": false,
+      "gate_fail_reasons": [
+        "gross_train 0.02% < 1.0%",
+        "gross_test 0.01% < 1.0%",
+        "p_train 0.64072 >= 0.00625",
+        "p_test 0.57485 >= 0.00625"
+      ],
+      "train": {
+        "n": 4114,
+        "gross_mean": 0.0175,
+        "gross_median": 0.0,
+        "gross_sd": 0.6842,
+        "net_mean": -0.9468,
+        "net_median": -0.9641,
+        "mfe_mean": 0.4008,
+        "mae_mean": -0.3912,
+        "win_rate_gross": 47.72,
+        "r_mean": -2.422,
+        "r_n": 1122,
+        "p_value": 0.6407185628742516,
+        "baseline_gross_mean": 0.0217,
+        "baseline_reps": 500
+      },
+      "test": {
+        "n": 2566,
+        "gross_mean": 0.0141,
+        "gross_median": 0.0,
+        "gross_sd": 0.5938,
+        "net_mean": -0.9502,
+        "net_median": -0.9641,
+        "mfe_mean": 0.391,
+        "mae_mean": -0.3788,
+        "win_rate_gross": 48.95,
+        "r_mean": -2.4303,
+        "r_n": 705,
+        "p_value": 0.5748502994011976,
+        "baseline_gross_mean": 0.0161,
+        "baseline_reps": 500
+      }
+    },
+    {
+      "key": "h04_donchian_break_60",
+      "title": "Tembus high 60 bar M1 (Donchian)",
+      "rationale": "Breakout: penembusan tertinggi 1 jam terakhir, klasik momentum harian pendek.",
+      "label": "HIPOTESIS",
+      "gate_passed": false,
+      "gate_fail_reasons": [
+        "gross_train 0.01% < 1.0%",
+        "gross_test 0.00% < 1.0%",
+        "p_train 0.79641 >= 0.00625",
+        "p_test 0.84830 >= 0.00625"
+      ],
+      "train": {
+        "n": 2914,
+        "gross_mean": 0.0126,
+        "gross_median": -0.0205,
+        "gross_sd": 0.7499,
+        "net_mean": -0.9517,
+        "net_median": -0.9844,
+        "mfe_mean": 0.4424,
+        "mae_mean": -0.4091,
+        "win_rate_gross": 46.47,
+        "r_mean": -2.2925,
+        "r_n": 830,
+        "p_value": 0.7964071856287425,
+        "baseline_gross_mean": 0.0236,
+        "baseline_reps": 500
+      },
+      "test": {
+        "n": 1978,
+        "gross_mean": 0.0017,
+        "gross_median": -0.0083,
+        "gross_sd": 0.6157,
+        "net_mean": -0.9625,
+        "net_median": -0.9723,
+        "mfe_mean": 0.4124,
+        "mae_mean": -0.3954,
+        "win_rate_gross": 48.18,
+        "r_mean": -2.3302,
+        "r_n": 598,
+        "p_value": 0.8483033932135728,
+        "baseline_gross_mean": 0.0162,
+        "baseline_reps": 500
+      }
+    },
+    {
+      "key": "h05_lowvol_ignition",
+      "title": "3 candle M1 hijau saat ATR sedang rendah",
+      "rationale": "Ignition: dorongan naik beruntun dari kondisi volatilitas rendah (ATR < 0,7x rata-rata 200).",
+      "label": "HIPOTESIS",
+      "gate_passed": false,
+      "gate_fail_reasons": [
+        "gross_train -0.03% < 1.0%",
+        "gross_test 0.03% < 1.0%",
+        "p_train 0.99800 >= 0.00625",
+        "p_test 0.29741 >= 0.00625"
+      ],
+      "train": {
+        "n": 1270,
+        "gross_mean": -0.0345,
+        "gross_median": -0.0153,
+        "gross_sd": 0.5569,
+        "net_mean": -0.9983,
+        "net_median": -0.9793,
+        "mfe_mean": 0.3335,
+        "mae_mean": -0.3609,
+        "win_rate_gross": 47.01,
+        "r_mean": -2.5812,
+        "r_n": 308,
+        "p_value": 0.998003992015968,
+        "baseline_gross_mean": 0.0276,
+        "baseline_reps": 500
+      },
+      "test": {
+        "n": 876,
+        "gross_mean": 0.026,
+        "gross_median": 0.0242,
+        "gross_sd": 0.4841,
+        "net_mean": -0.9384,
+        "net_median": -0.9401,
+        "mfe_mean": 0.3272,
+        "mae_mean": -0.3073,
+        "win_rate_gross": 53.65,
+        "r_mean": -2.6719,
+        "r_n": 167,
+        "p_value": 0.29740518962075846,
+        "baseline_gross_mean": 0.0153,
+        "baseline_reps": 500
+      }
+    },
+    {
+      "key": "h06_sweep_reclaim",
+      "title": "Sapu low 60 bar lalu ditutup kembali di atasnya",
+      "rationale": "Failed breakdown: low baru dibuat tapi tidak bertahan, harga ditutup kembali di atas low lama.",
+      "label": "HIPOTESIS",
+      "gate_passed": false,
+      "gate_fail_reasons": [
+        "gross_train 0.07% < 1.0%",
+        "gross_test 0.02% < 1.0%",
+        "p_test 0.34930 >= 0.00625"
+      ],
+      "train": {
+        "n": 2358,
+        "gross_mean": 0.0693,
+        "gross_median": 0.0577,
+        "gross_sd": 0.6344,
+        "net_mean": -0.8955,
+        "net_median": -0.907,
+        "mfe_mean": 0.4641,
+        "mae_mean": -0.4488,
+        "win_rate_gross": 55.43,
+        "r_mean": -2.4634,
+        "r_n": 774,
+        "p_value": 0.001996007984031936,
+        "baseline_gross_mean": 0.0244,
+        "baseline_reps": 500
+      },
+      "test": {
+        "n": 1572,
+        "gross_mean": 0.0211,
+        "gross_median": 0.0395,
+        "gross_sd": 0.6504,
+        "net_mean": -0.9432,
+        "net_median": -0.925,
+        "mfe_mean": 0.4351,
+        "mae_mean": -0.4605,
+        "win_rate_gross": 53.37,
+        "r_mean": -2.5482,
+        "r_n": 518,
+        "p_value": 0.34930139720558884,
+        "baseline_gross_mean": 0.0169,
+        "baseline_reps": 500
+      }
+    },
+    {
+      "key": "h07_m15_ema_cross_trend",
+      "title": "EMA9 menembus EMA21 di M15, filter EMA50>EMA200 M15",
+      "rationale": "Momentum berlapis: sinyal cross jangka menengah yang hanya diambil bila tren besar masih naik.",
+      "label": "HIPOTESIS",
+      "gate_passed": false,
+      "gate_fail_reasons": [
+        "gross_train -0.04% < 1.0%",
+        "gross_test 0.02% < 1.0%",
+        "p_train 0.92615 >= 0.00625",
+        "p_test 0.41916 >= 0.00625"
+      ],
+      "train": {
+        "n": 292,
+        "gross_mean": -0.0356,
+        "gross_median": -0.0202,
+        "gross_sd": 0.6197,
+        "net_mean": -0.9994,
+        "net_median": -0.9841,
+        "mfe_mean": 0.3781,
+        "mae_mean": -0.3877,
+        "win_rate_gross": 44.18,
+        "r_mean": -2.1963,
+        "r_n": 80,
+        "p_value": 0.9261477045908184,
+        "baseline_gross_mean": 0.0181,
+        "baseline_reps": 500
+      },
+      "test": {
+        "n": 154,
+        "gross_mean": 0.0247,
+        "gross_median": -0.0251,
+        "gross_sd": 0.5675,
+        "net_mean": -0.9396,
+        "net_median": -0.989,
+        "mfe_mean": 0.3945,
+        "mae_mean": -0.3292,
+        "win_rate_gross": 42.86,
+        "r_mean": -2.2758,
+        "r_n": 40,
+        "p_value": 0.41916167664670656,
+        "baseline_gross_mean": 0.0156,
+        "baseline_reps": 500
+      }
+    },
+    {
+      "key": "h08_us_session_uptrend",
+      "title": "Jam sesi AS (13-16 UTC) + H1 EMA50 > EMA200",
+      "rationale": "Waktu: likuiditas global memuncak saat sesi AS; ambil hanya bila tren H1 naik.",
+      "label": "HIPOTESIS",
+      "gate_passed": false,
+      "gate_fail_reasons": [
+        "gross_train 0.06% < 1.0%",
+        "gross_test -0.09% < 1.0%",
+        "p_train 0.07784 >= 0.00625",
+        "p_test 0.99800 >= 0.00625"
+      ],
+      "train": {
+        "n": 688,
+        "gross_mean": 0.0586,
+        "gross_median": 0.0465,
+        "gross_sd": 0.8509,
+        "net_mean": -0.9061,
+        "net_median": -0.9181,
+        "mfe_mean": 0.5804,
+        "mae_mean": -0.5836,
+        "win_rate_gross": 54.22,
+        "r_mean": -2.2235,
+        "r_n": 309,
+        "p_value": 0.07784431137724551,
+        "baseline_gross_mean": 0.0232,
+        "baseline_reps": 500
+      },
+      "test": {
+        "n": 520,
+        "gross_mean": -0.0876,
+        "gross_median": -0.0088,
+        "gross_sd": 0.8066,
+        "net_mean": -1.0509,
+        "net_median": -0.9729,
+        "mfe_mean": 0.5318,
+        "mae_mean": -0.666,
+        "win_rate_gross": 48.27,
+        "r_mean": -2.4589,
+        "r_n": 259,
+        "p_value": 0.998003992015968,
+        "baseline_gross_mean": 0.0161,
+        "baseline_reps": 500
+      }
+    }
+  ],
+  "no_live_promotion": true
+}
