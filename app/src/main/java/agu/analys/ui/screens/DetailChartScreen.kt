@@ -434,9 +434,17 @@ fun DetailChartScreen(
                     HapticUtil.vibrateTradeSuccess(context)
                 },
                 onDeployTrailingOrder = {
-                    viewModel.deployTrailingOrder(pair.symbol)
-                    HapticUtil.vibrateTradeSuccess(context)
-                    android.widget.Toast.makeText(context, "Trailing Aktif!", android.widget.Toast.LENGTH_SHORT).show()
+                    val deployed = viewModel.deployTrailingOrder(pair.symbol)
+                    if (deployed) {
+                        HapticUtil.vibrateTradeSuccess(context)
+                        android.widget.Toast.makeText(context, "Trailing Aktif!", android.widget.Toast.LENGTH_SHORT).show()
+                    } else {
+                        android.widget.Toast.makeText(
+                            context,
+                            "Trailing tidak diaktifkan: exit pair ini sedang dipegang engine paper (P2).",
+                            android.widget.Toast.LENGTH_LONG
+                        ).show()
+                    }
                 },
                 onCancelTrailingOrder = {
                     viewModel.cancelTrailingOrder(pair.symbol)

@@ -142,6 +142,13 @@ fun TradingViewModel.checkTrailingForMode(
     isReal: Boolean,
     exchange: String = prefs.marketDataSource.name
 ) {
+    // Kepemilikan exit tunggal (P2). Saat engine paper memegang exit pair ini, jalur
+    // auto-sell lama tidak boleh ikut menjual — kalau tidak, posisi bisa dijual dua kali
+    // dan trade-nya hilang dari jurnal paper. Perlu dijaga di sini, bukan hanya lewat
+    // `isAutoSellEnabled`: pemeriksaan trailing di bawah dipicu `updateTrailingPrice`,
+    // yang hanya melihat `isTrailingEnabled`.
+    if (!isReal && paperEngineOwnsExit(exchange, symbol)) return
+
     val posBeforeUpdate = positionStore.get(symbol, isReal, exchange = exchange)
     if (!posBeforeUpdate.isHolding) return
 
@@ -405,8 +412,22 @@ fun TradingViewModel.executeAutoSellOrder(
     return true
 }
 
-fun TradingViewModel.deployTrailingOrder(symbol: String, exchange: String = prefs.marketDataSource.name) {
+fun TradingViewModel.deployTrailingOrder(symbol: String, exchange: String = prefs.marketDataSource.name): Boolean {
     val isReal = isRealBuyMode.value
+
+    // Kepemilikan exit tunggal (P2). Trailing lama dijalankan `checkTrailingForMode` tanpa
+    // melihat `isAutoSellEnabled`, jadi mengaktifkannya untuk pair yang exit-nya dipegang
+    // engine paper akan menghasilkan dua mesin penjual untuk satu posisi. Tolak dengan jujur
+    // supaya pemanggil bisa memberi tahu pengguna, bukan diam-diam gagal.
+    if (!isReal && paperEngineOwnsExit(exchange, symbol)) {
+        agu.analys.util.AppLogManager.trade(
+            "PaperAutoExit",
+            "⛔ [${symbol}] Trailing manual ditolak: exit pair ini dipegang engine paper (P2). " +
+                "Ubah mode exit di Pengaturan → Engine Scalping, atau matikan auto-exit paper."
+        )
+        return false
+    }
+
     var pos = positionStore.get(symbol, isReal, exchange = exchange)
     val marketKey = MarketKey.resolve(symbol, exchange)
     val baseKey = marketKey.base.uppercase()
@@ -487,6 +508,7 @@ fun TradingViewModel.deployTrailingOrder(symbol: String, exchange: String = pref
         marketKey = marketKey
     )
     Timber.d("[$exchange:$symbol] Trailing order deployed successfully ($trailingOrderId) @ peak=$effectivePeak, stop=$slPrice (isReal=$isReal)")
+    return true
 }
 
 fun TradingViewModel.cancelTrailingOrder(symbol: String, exchange: String = prefs.marketDataSource.name) {

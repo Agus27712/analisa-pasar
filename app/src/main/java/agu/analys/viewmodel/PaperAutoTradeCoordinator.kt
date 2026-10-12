@@ -80,6 +80,21 @@ object PaperAutoTradeRuntime {
         machines.containsKey(key(exchange, symbol))
 
     /**
+     * Apakah engine paper (P2) yang memegang hak exit untuk pair ini.
+     *
+     * Jalur auto-sell lama (`checkTrailingForMode`, `deployTrailingOrder`) wajib memakai
+     * predikat ini supaya tidak ada dua mesin yang menjual posisi simulasi yang sama.
+     * Mematikan `auto_sell_enabled` saja **tidak cukup**: pemeriksaan trailing lama
+     * (`updateTrailingPrice`) hanya melihat `isTrailingEnabled`, bukan flag itu.
+     *
+     * `autoExitEnabled = false` berarti pengguna mematikan auto-exit paper — kepemilikan
+     * **dikembalikan** ke jalur lama, karena kalau tidak, posisi akan menggantung tanpa
+     * mesin yang menjualnya ([TradingViewModel.evaluatePaperAutoExit] berhenti lebih awal).
+     */
+    fun ownsExit(exchange: String, symbol: String, autoExitEnabled: Boolean): Boolean =
+        autoExitEnabled && hasActivePosition(exchange, symbol)
+
+    /**
      * Simbol asli yang punya posisi paper terbuka di bursa ini.
      *
      * Dipakai `startTrailingPolling` agar posisi paper tetap dievaluasi walau bukan pair
@@ -133,6 +148,15 @@ object PaperAutoTradeRuntime {
         evaluatingKeys.clear()
     }
 }
+
+/**
+ * Apakah engine paper (P2) yang memegang hak exit untuk pair ini.
+ *
+ * Dipakai jalur auto-sell lama (`checkTrailingForMode`, `deployTrailingOrder`) untuk
+ * menyerahkan kepemilikan exit sepenuhnya ke [PaperExitStateMachine] selama engine aktif.
+ */
+fun TradingViewModel.paperEngineOwnsExit(exchange: String, symbol: String): Boolean =
+    PaperAutoTradeRuntime.ownsExit(exchange, symbol, prefs.paperAutoTradeConfig.autoExitEnabled)
 
 /**
  * Buka posisi **simulasi** otomatis saat sinyal scalp terkonfirmasi.
@@ -234,6 +258,18 @@ fun TradingViewModel.tryPaperAutoBuy(transition: SignalTransition, exchange: Str
             params = runtime.exit
         )
         PaperAutoTradeRuntime.put(exchangeKey, pair.symbol, machine)
+
+        // `setHolding` mempertahankan `isTrailingEnabled` dari posisi sebelumnya, jadi
+        // bendera trailing lama bisa terbawa ke posisi paper baru. Bersihkan supaya
+        // kepemilikan exit benar-benar tunggal sejak tick pertama.
+        positionStore.setTrailingStop(
+            symbol = pair.symbol,
+            enabled = false,
+            trailingPercent = 0.0,
+            isReal = false,
+            exchange = exchangeKey
+        )
+
         // Pastikan loop polling harga hidup; posisi paper perlu diawasi exit-nya bahkan
         // ketika pair-nya tidak sedang dibuka di layar.
         startTrailingPolling()
@@ -287,6 +323,16 @@ private fun TradingViewModel.evaluatePaperAutoExitLocked(
     val machine = PaperAutoTradeRuntime.machineFor(exchange, symbol)
     if (machine == null) {
         // Tidak ada posisi paper berjalan -> pastikan kartu FSM kosong.
+        publishPaperExitSnapshot(null)
+        return null
+    }
+
+    // Posisi simulasi sudah tidak ada (mis. dijual manual dari layar lain) -> lepas state
+    // machine supaya kartu FSM tidak menampilkan posisi hantu, dan supaya kepemilikan exit
+    // tidak terkunci selamanya oleh mesin yang sudah tidak punya posisi.
+    val pair = TradingPair.fromCustomSymbol(raw = symbol, exchange = exchange)
+    if (!positionStore.get(pair.symbol, isReal = false, exchange = exchange).isHolding) {
+        PaperAutoTradeRuntime.clear(exchange, symbol)
         publishPaperExitSnapshot(null)
         return null
     }

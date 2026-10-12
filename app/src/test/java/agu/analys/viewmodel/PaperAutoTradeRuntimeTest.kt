@@ -61,6 +61,45 @@ class PaperAutoTradeRuntimeTest {
         assertEquals(listOf("ETH_IDR"), PaperAutoTradeRuntime.activeSymbols("INDODAX"))
     }
 
+    /**
+     * Kepemilikan exit tunggal (P2): selama engine paper aktif, jalur auto-sell lama harus
+     * mundur supaya tidak ada dua mesin yang menjual posisi simulasi yang sama.
+     */
+    @Test
+    fun `engine paper memegang exit hanya saat auto-exit aktif dan posisinya ada`() {
+        PaperAutoTradeRuntime.put("TOKOCRYPTO", "BTC_IDR", machine())
+
+        assertTrue(
+            "auto-exit aktif + posisi paper terbuka -> jalur lama mundur",
+            PaperAutoTradeRuntime.ownsExit("TOKOCRYPTO", "btc_idr", autoExitEnabled = true)
+        )
+        assertFalse(
+            "auto-exit dimatikan -> kepemilikan kembali ke jalur lama, posisi tidak boleh menggantung",
+            PaperAutoTradeRuntime.ownsExit("TOKOCRYPTO", "btc_idr", autoExitEnabled = false)
+        )
+        assertFalse(
+            "pair lain tanpa posisi paper tidak boleh ikut terkunci",
+            PaperAutoTradeRuntime.ownsExit("TOKOCRYPTO", "ETH_IDR", autoExitEnabled = true)
+        )
+        assertFalse(
+            "bursa lain tidak ikut terkunci",
+            PaperAutoTradeRuntime.ownsExit("INDODAX", "BTC_IDR", autoExitEnabled = true)
+        )
+    }
+
+    @Test
+    fun `kepemilikan exit dilepas setelah posisi paper ditutup`() {
+        PaperAutoTradeRuntime.put("TOKOCRYPTO", "BTC_IDR", machine())
+        assertTrue(PaperAutoTradeRuntime.ownsExit("TOKOCRYPTO", "BTC_IDR", autoExitEnabled = true))
+
+        PaperAutoTradeRuntime.clear("TOKOCRYPTO", "BTC_IDR")
+
+        assertFalse(
+            "setelah mesin dilepas, jalur auto-sell lama harus bisa jalan lagi",
+            PaperAutoTradeRuntime.ownsExit("TOKOCRYPTO", "BTC_IDR", autoExitEnabled = true)
+        )
+    }
+
     @Test
     fun `hanya tick pertama di menit baru yang dihitung sebagai bar M1`() {
         val minuteStart = (System.currentTimeMillis() / 60_000L) * 60_000L
