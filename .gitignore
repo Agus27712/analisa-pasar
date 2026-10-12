@@ -20,3 +20,8 @@ debug.keystore
 *.keystore
 .build-outputs/
 audit/
+__pycache__/
+*.pyc
+# Data riset mentah (regenerasi: tools/fetch_universe.py) — 100 MB+, jangan di-commit
+/data/tokocrypto_live_usdt/
+/data/tokocrypto_live_idr/

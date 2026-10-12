@@ -60,3 +60,35 @@ Tokocrypto menerapkan tarif all-in mencakup *Trading Fee*, *Pajak PPh Final*, da
 3. **Larangan Model Asumsi Palsu**:
    - Dilarang memakai model upstream lama $\approx 0,72\%$ atau nominal $0,10\%$ tanpa mencantumkan label all-in bursa.
    - Replay offline dan kalkulator in-app wajib menggunakan konstanta all-in di atas.
+
+---
+
+## 4. Status implementasi lantai friksi (2026-10-12)
+
+Peringatan §3 poin 1 di atas **sudah diimplementasikan** di engine, bukan lagi sekadar catatan.
+
+- Parameter baru `min_friction_multiple` (default **6,0**, plateau optimum 5–10×) di `ScalpingConfig.kt` →
+  `ScalpingRuntimeConfig` → `ScalpingRiskEngine.kt` dan mirror `tools/scalp_replay.py`.
+- Efek: jarak stop loss dipaksa `≥ min_friction_multiple × (buy fee + sell fee + 2 × slippage)`.
+  Untuk Tokocrypto USDT (friksi 0,9688%) lantai ≈ **5,81%**; IDR taker (0,8144%) ≈ 4,89%;
+  IDR maker (0,6144%) ≈ 3,69%.
+- Tambahan: `target_net_rr` default 1,25 → **2,0** (win-rate minimum agar impas turun dari
+  ≈44% ke ≈33%).
+
+**Bukti (30 hari data M1 riil, 40 pair Tokocrypto):**
+
+| Konfigurasi | Trade | Win-rate | avg R |
+|---|---:|---:|---:|
+| Lama (`min_risk_pct` 0,5%, tanpa lantai, USDT) | 1.258 | 22,1% | **−1,8192** |
+| Lantai friksi 3× (USDT) | 224 | 86,6% | −0,0300 |
+| **Lantai friksi 6× (USDT, default)** | **186** | **98,9%** | **+0,0695** |
+| Lantai friksi 6× + IDR maker | 297 | 93,9% | +0,0430 |
+
+Artinya: **friksi adalah penyebab utama hasil negatif**, dan hasilnya baru "tidak rugi lagi",
+belum terbukti untung. Lihat `workplan2.md` §9.4–9.5 untuk batasan lengkap.
+
+**Konsekuensi praktis:** pada tarif Tokocrypto, stop loss 0,5–1% secara matematis tidak bisa
+menghasilkan profit bersih apa pun strateginya — unit risiko harus beberapa kali friksi
+(≈5,8% untuk USDT, ≈3,7–4,9% untuk IDR). Ini berarti **scalping 1–5 menit bukan kendaraan yang
+layak di bursa ini**; horizon realistis adalah 1–8 jam.
+

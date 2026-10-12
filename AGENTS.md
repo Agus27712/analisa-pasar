@@ -50,7 +50,23 @@ Aplikasi Android Kotlin 100% (Jetpack Compose M3) untuk analisis & **scalp mode*
 ## Engine scalping — aturan agen
 
 - Threshold keputusan: pusat di `ScalpingConfig` (default) → target **`ScalpingRuntimeConfig`** (slider/JSON). Jangan hardcode angka gate di banyak file.
-- Mirror offline: `data/config/scalp_config.json` + `tools/scalp_replay.py`.
+- **Lantai risiko berbasis friksi (2026-10-12, WAJIB):** jarak stop loss harus
+  `≥ min_friction_multiple × (buyFee + sellFee + 2×slippage)`. Default **6,0**. Jangan turunkan
+  di bawah 5 tanpa bukti replay baru — lantai 0,5% (perilaku lama) membuat satu kali SL menelan
+  ~2,9R dan hasilnya **−1,8R/trade di 28/28 pair**. Bukti: `workplan2.md` §9.
+- Mirror offline: `data/config/scalp_config.json` + `tools/scalp_replay.py` (keduanya sudah punya
+  `min_friction_multiple`; kalau ubah satu, ubah yang lain).
+- **Gerbang edge pair (2026-10-12, WAJIB):** pair hanya layak di-scalp bila median MFE horizon
+  (7 jam ≈ 420 bar M1) `≥ MIN_MFE_FRICTION_RATIO × friksi round-trip`, default **2,0**.
+  Dua garis berbeda: rasio **< 1,0** berarti pergerakan median lebih kecil daripada biaya →
+  **mustahil** profit (BTC 0,52×, XAUT 0,20×); rasio **1,0–2,0** secara teori mungkin tetapi
+  marginnya terlalu tipis untuk diandalkan (ADA 1,64×) — ditolak sebagai *buffer*.
+  Implementasi: `engine/scalping/PairEdgeGate.kt` (logika + tabel data),
+  `ui/components/settings/PairEdgeGateCard.kt` (UI), `tools/pair_gate.py` (regenerasi tabel
+  dari data → `data/config/pair_gate.json`). Sumber tabel: `data/hasil/u3_toko_usdt_after.json`.
+  **Jangan** melemahkan/menghapus gerbang ini hanya untuk menambah jumlah sinyal.
+- Profil exit yang benar saat ini **skew negatif** (menang ≈ +0,09R, kalah ≈ −1,16R, WR ≈ 95%).
+  Margin impas hanya ~2,3 poin persentase — jangan promosikan ke uang riil. Bukti: `workplan2.md` §9.5b.
 - Ubah parameter untuk eksperimen: export JSON → replay; jangan mengarang “edge” dari satu window data.
 - Historical Edge palsu dilarang (`HistoricalEdgeStub` / pesan insufficient).
 - Exit scalp paper: lihat `SCALP_EXIT.md`; real auto-execute dari sinyal scalp **bukan** prioritas sampai gate edge terpenuhi.
