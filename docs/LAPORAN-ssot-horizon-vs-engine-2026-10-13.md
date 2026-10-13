@@ -1,5 +1,25 @@
 # LAPORAN — SSOT: horizon kesiapan vs engine yang aktif
 
+> ## ⛔ DIHAPUS — 2026-10-13. JANGAN DIBANGUN ULANG.
+>
+> **Perbaikan SSOT di laporan ini sudah tidak ada di kode**, karena seluruh fitur horizon yang
+> diperbaikinya ikut dihapus.
+>
+> **Alasan:** laporan ini memperbaiki kontradiksi "3/5 vs 1/5" dengan menyatukan sumber. Tetapi
+> akar persoalannya lebih dalam: **permukaannya sendiri memang berlebih.** Selama masih ada dua
+> kartu yang menampilkan status kesiapan, akan selalu ada cara bagi keduanya untuk berbeda. Owner
+> memutuskan menghapus permukaan keduanya, bukan menyinkronkannya.
+>
+> **Pelajaran yang tetap berlaku dan sudah dipindahkan ke `AGENTS.md`:** jangan pernah menampilkan
+> `N/5` dari daftar syarat berbeda untuk koin yang sama di dua kartu berbeda; status engine boleh
+> dipetakan, angkanya tidak boleh dihitung ulang.
+>
+> Laporan ini disimpan hanya sebagai riwayat keputusan.
+
+---
+
+
+
 **Tanggal:** 2026-10-13
 **Branch:** `patch`
 **Pemicu:** review owner langsung di HP (3 tangkapan layar)

@@ -1,5 +1,28 @@
 # LAPORAN — Kesiapan Multi-Horizon (TEAM 1 + TEAM 2)
 
+> ## ⛔ DIHAPUS — 2026-10-13. JANGAN DIBANGUN ULANG.
+>
+> **Fitur kesiapan multi-horizon (scalp/intraday/swing) sudah dihapus dari kode.** Laporan ini
+> disimpan hanya sebagai riwayat keputusan.
+>
+> **Alasan pembatalan:** fitur ini menghasilkan informasi yang sama dengan kartu engine di
+> permukaan berbeda — halaman detail koin menampilkan `KESIAPAN HORIZON 3/5 syarat lolos`
+> sementara kartu `SCALP DESK` tepat di bawahnya menampilkan `1/5 lolos`. Dua daftar syarat
+> berbeda untuk satu pertanyaan, keduanya menulis `N/5`, tanpa cara bagi pembaca untuk tahu mana
+> yang harus dipercaya. Owner menilai datanya dobel dan memutuskan membatalkan.
+>
+> **Yang dihapus:** `engine/readiness/*`, `ui/components/readiness/*`, `ReadinessBoardScreen.kt`,
+> `TradingViewModelReadiness.kt`, `AppScreen.READINESS`, kartu `SIAP TRADING` (dashboard), kartu
+> `KESIAPAN HORIZON` (detail koin), dan 4 berkas tes.
+>
+> **Yang tidak boleh diulang:** membuat evaluator kedua di luar engine yang sedang aktif, atau
+> menampilkan `N/5` dari daftar syarat berbeda untuk koin yang sama di dua kartu berbeda.
+> Lihat `AGENTS.md` → kotak "JANGAN BANGUN ULANG".
+
+---
+
+
+
 **Tanggal:** 2026-10-13 · **Branch:** `patch` · **Basis:** `main` @ `9e892fc`
 
 ---

@@ -217,48 +217,6 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     private val _tradingFees = MutableStateFlow(prefs.tradingFees)
     val tradingFees: StateFlow<TradingFeeConfig> = _tradingFees.asStateFlow()
 
-    // ═════════════════════════════════════════════════════════════════════════
-    // 3b. PAPAN KESIAPAN MULTI-HORIZON (TEAM 1)
-    //
-    // Dihitung dari cache candle (`MtfCacheManager`) — **tanpa** jaringan tambahan.
-    // Logika ada di `TradingViewModelReadiness.kt`; properti dideklarasikan di sini
-    // karena extension tidak bisa menyimpan state.
-    // ═════════════════════════════════════════════════════════════════════════
-    internal val _readinessBoard =
-        MutableStateFlow(agu.analys.engine.readiness.ReadinessBoard.EMPTY)
-    val readinessBoard: StateFlow<agu.analys.engine.readiness.ReadinessBoard> =
-        _readinessBoard.asStateFlow()
-
-    internal val _readinessLoading = MutableStateFlow(false)
-    val readinessLoading: StateFlow<Boolean> = _readinessLoading.asStateFlow()
-
-    /**
-     * Horizon yang sedang dibuka di papan kesiapan.
-     *
-     * Nilai awalnya mengikuti engine yang aktif ([strategyMode]), bukan selalu SCALP: pengguna
-     * yang menyimpan preferensi INTRADAY di Pengaturan tidak boleh mendarat di papan SCALP.
-     */
-    internal val _readinessHorizon = MutableStateFlow(
-        agu.analys.engine.readiness.TradeHorizon.of(prefs.strategyMode)
-    )
-    val readinessHorizon: StateFlow<agu.analys.engine.readiness.TradeHorizon> =
-        _readinessHorizon.asStateFlow()
-
-    /** Pekerjaan pemindaian yang sedang berjalan; dipakai untuk membatalkan pemindaian lama. */
-    internal var readinessRefreshJob: kotlinx.coroutines.Job? = null
-
-    /**
-     * Hasil pemindaian terakhir **sebelum** ditimpa keputusan engine.
-     *
-     * Disimpan supaya lapisan keputusan engine bisa dihitung ulang setiap sinyal berubah tanpa
-     * memindai ulang ratusan kombinasi koin × horizon (pemindaian tetap 60 detik sekali).
-     */
-    internal var readinessScanBoard: agu.analys.engine.readiness.ReadinessBoard =
-        agu.analys.engine.readiness.ReadinessBoard.EMPTY
-
-    /** Pekerjaan reaktif yang memperbarui lapisan engine saat sinyal/posisi berubah. */
-    internal var readinessEngineJob: kotlinx.coroutines.Job? = null
-
     val useSimpleChart: StateFlow<Boolean> = marketViewModel.useSimpleChart
     val selectedChartStyle: StateFlow<ChartStyle> = marketViewModel.selectedChartStyle
 
@@ -510,14 +468,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         engine.isScalpingMode = scalpingEnabled
         engine.tradingFees = prefs.tradingFees
         agu.analys.util.AppLogManager.service("StrategyConfig", "⚙️ Mode strategi sistem dialihkan ke ${mode.name} (Scalping=$scalpingEnabled)")
-
-        // SSOT: horizon yang dibuka di papan mengikuti engine yang baru dipilih, dan lapisan
-        // keputusan engine dihitung ulang supaya baris horizon aktif tidak tertinggal sebagai
-        // pra-saring milik mode sebelumnya.
-        val activeHorizon = agu.analys.engine.readiness.TradeHorizon.of(mode)
-        _readinessHorizon.value = activeHorizon
-        publishReadinessBoard()
-
+        
         if (mode == StrategyMode.SCALPING) {
             MtfCacheManager.setActiveSymbol(selectedPair.value.symbol, prefs.marketDataSource.name)
         }

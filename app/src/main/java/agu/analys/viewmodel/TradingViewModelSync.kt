@@ -427,15 +427,6 @@ fun TradingViewModel.initSubscriptionsAndPolling() {
         )
     }
 
-    // TEAM 1 — papan kesiapan multi-horizon (scalp/intraday/swing). Murni membaca cache candle,
-    // jadi tidak menambah beban bursa. Lihat [TradingViewModelReadiness].
-    runCatching { startReadinessPolling() }.onFailure {
-        agu.analys.util.AppLogManager.service(
-            "ReadinessBoard",
-            "⚠️ Pemindaian kesiapan gagal dimulai: ${it.message}"
-        )
-    }
-
     engine.onCandidateSignalTransition = { transition ->
         if (isNotificationsEnabled.value) {
             val isReal = isRealBuyMode.value

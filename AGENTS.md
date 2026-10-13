@@ -11,12 +11,14 @@ Aplikasi Android Kotlin 100% (Jetpack Compose M3) untuk analisis & **scalp mode*
 1. **Berkas ini** sampai habis — terutama bagian "Yang tidak boleh dilakukan agen".
 2. **`docs/PANDUAN-LANJUT-AGEN.md`** — status terkini, apa yang sudah selesai, apa yang berikutnya,
    dan perangkap yang sudah pernah ditemukan. **Ini titik masuk utama.**
-3. **`workplan2.md` § 15** — pekerjaan terakhir (SSOT: horizon kesiapan vs engine aktif), lalu
-   **§ 14** (kesiapan multi-horizon). Seksi sebelumnya (§9 lantai friksi, §11 UI scalping,
-   §12 rehidrasi paper, §13 akar `EARLY_ENTRY`) menjelaskan **kenapa** kode hari ini berbentuk
-   seperti sekarang. Jangan mengubahnya tanpa membacanya.
-4. `SCALP_EXIT.md` bila menyentuh exit.
-5. Baru buka kode.
+3. **`workplan2.md` § 13** — pekerjaan terakhir yang **masih berlaku**. Seksi sebelumnya
+   (§9 lantai friksi, §11 UI scalping, §12 rehidrasi paper) menjelaskan **kenapa** kode hari ini
+   berbentuk seperti sekarang. Jangan mengubahnya tanpa membacanya.
+4. **`workplan2.md` § 14 dan § 15 — DIBATALKAN, jangan dibangun ulang.** Lihat kotak merah di
+   awal kedua seksi itu. Keduanya mendokumentasikan fitur kesiapan multi-horizon yang sudah
+   **dihapus dari kode** pada 2026-10-13. Dibaca hanya sebagai riwayat keputusan.
+5. `SCALP_EXIT.md` bila menyentuh exit.
+6. Baru buka kode.
 
 **Aturan kerja yang berlaku di repo ini:**
 
@@ -32,28 +34,30 @@ Aplikasi Android Kotlin 100% (Jetpack Compose M3) untuk analisis & **scalp mode*
 - **Bila ragu, eksekusi keputusan terbaik dan catat alasannya** di dokumen — jangan berhenti
   menunggu jawaban.
 
-**Aturan SSOT (dari §15 — jangan dilanggar):**
+**⛔ JANGAN BANGUN ULANG FITUR KESIAPAN MULTI-HORIZON (§14/§15 — DIBATALKAN 2026-10-13):**
 
-1. **`StrategyMode` menentukan siapa yang berhak menyimpulkan.** `StrategyMode` → `TradeHorizon.of(mode)`
-   = horizon aktif. Setiap permukaan yang menilai koin harus memakai penaut ini, bukan memilih
-   horizon sendiri.
-2. **Hanya `EngineVerdict` yang boleh menandai sebuah baris `ReadinessSource.ENGINE`.**
-   `HorizonReadinessEngine` adalah **pra-saring** — ia menyaring daftar dari cache, bukan menjadi
-   pendapat kedua atas horizon yang sudah dijawab engine.
-3. **Jangan pernah menampilkan `N/5` dari dua daftar syarat berbeda untuk koin yang sama.**
-   Format yang sama akan dibaca sebagai satu kebenaran. Ini akar bug "3/5 vs 1/5".
-4. **Status engine boleh dipetakan, angka engine tidak boleh dihitung ulang.** Pakai
-   `HorizonReadinessEngine.weightedScore`/`exitRule`/`roundTripCostPct` yang sudah dipublikasikan —
-   jangan menyalinnya.
+Fitur itu pernah dibangun, lalu **dihapus dari kode** karena menghasilkan informasi yang sama
+dengan kartu engine di permukaan berbeda — dua angka (`N/5`) untuk satu pertanyaan, tanpa cara
+bagi pembaca untuk tahu mana yang harus dipercaya. Owner memutuskan membatalkannya.
 
-**Titik masuk kode yang paling sering dibutuhkan:**
+Yang **tidak boleh** dilakukan lagi tanpa instruksi eksplisit owner:
+
+- Membuat paket/kelas baru yang menilai kesiapan koin **di luar** engine yang sedang aktif
+  (`engine/readiness/*`, `HorizonReadinessEngine`, `ReadinessScanner`, `EngineVerdict`,
+  `TradeHorizon`, `ReadinessBoard`, `ReadinessState`, `ReadinessSource` — semuanya sudah dihapus).
+- Menambah kartu ringkasan lintas-horizon di dashboard atau halaman detail.
+- Menampilkan `N/5` dari daftar syarat yang **berbeda** untuk koin yang sama di dua kartu berbeda.
+  Format yang sama akan dibaca sebagai satu kebenaran; ini akar bug yang membuat fitur itu dibuang.
+- Menambah `AppScreen` baru untuk daftar kesiapan.
+
+**Yang berlaku sekarang (dan sudah cukup):**
 
 | Butuh | Berkas |
 |---|---|
 | Status/kesiapan scalping satu sinyal | `engine/scalping/ScalpReadiness.kt` |
-| Kesiapan multi-horizon (scalp/intraday/swing) | `engine/readiness/*` |
-| **Keputusan engine → baris papan (SSOT)** | `engine/readiness/EngineVerdict.kt` |
-| **Engine mana yang aktif** | `config/StrategyMode` → `TradeHorizon.of(mode)` |
+| Kartu status di halaman detail | `ui/components/detail/scalp/ScalpDeskCard.kt`, `WaitingEntryRadarCard.kt` |
+| Engine mana yang aktif | `config/StrategyMode` (`TradingViewModel.strategyMode`) |
+| Exit paper (beli → tahan → keluar) | `engine/scalping/PaperExitResolver.kt`, `SCALP_EXIT.md` |
 | Threshold & lantai friksi | `engine/scalping/ScalpingConfig.kt` + `ScalpingRuntimeConfig.kt` |
 | Exit paper (beli → tahan → keluar) | `engine/scalping/PaperExitResolver.kt`, `SCALP_EXIT.md` |
 | Wiring state ke UI | `viewmodel/TradingViewModel*.kt` (banyak berkas, per fitur) |
@@ -145,21 +149,13 @@ Aplikasi Android Kotlin 100% (Jetpack Compose M3) untuk analisis & **scalp mode*
   "DETECTED" untuk sinyal tanpa pola. Aman dilakukan karena `EARLY_ENTRY` selalu ber-`action = HOLD`,
   sehingga `tryPaperAutoBuy` dan alert (keduanya mensyaratkan `action == BUY`) tidak terpengaruh.
   Bukti: `workplan2.md` §13, `ScalpingMtfEvaluatorTest`, `SignalLifecycleManagerTest`.
-- **Kesiapan multi-horizon (2026-10-13, WAJIB):** `engine/readiness/*` menilai tiap koin untuk
-  **SCALP / INTRADAY / SWING secara terpisah**. Jangan menggabungkannya menjadi satu "skor koin" —
-  koin ber-ATR kecil tidak layak scalp tetapi layak swing, dan sebaliknya. Aturan:
-  1. Ambang diambil dari `ScalpingConfig` / `ScalpingRuntimeConfig`; **jangan** menyalin angka gate
-     ke `HorizonReadinessEngine`.
-  2. Gate ekonomi memakai kriteria **`PairEdgeGate`** (pergerakan ≥ 2× biaya round-trip, estimasi
-     `ATR × √bar`). **Jangan** menggantinya dengan "ATR harus melebihi lantai friksi" — perhitungan
-     itu membuat syaratnya mustahil dipenuhi (butuh ATR ≥ 7,26%) dan papan akan selalu kosong.
-     Lihat `workplan2.md` §14.3 untuk kesalahan desain yang sudah dibuang.
-  3. `TradeHorizon.validatedOutOfSample` **hanya `true` untuk SCALP**. Jangan mengubah INTRADAY/
-     SWING menjadi `true` tanpa uji keluar-sampel dengan data riil.
-  4. Papan membaca **cache** (`MtfCacheManager.getCachedCandles`), bukan jaringan. Jangan menambah
-     fetch otomatis di jalur pemindaian.
-- **Status SIAP bukan ajakan beli.** Setiap permukaan yang menampilkan `ReadinessState.READY` wajib
-  menyertakan konteks bahwa eksekusi uang riil masih diblokir.
+- **~~Kesiapan multi-horizon~~ (DIBATALKAN 2026-10-13).** Aturan lama di sini sudah tidak berlaku
+  karena fiturnya dihapus dari kode — lihat kotak "JANGAN BANGUN ULANG" di atas. Yang tersisa dan
+  tetap dipakai: gate ekonomi berbasis `PairEdgeGate` (pergerakan ≥ 2× biaya round-trip, estimasi
+  `ATR × √bar`) tetap menjadi kriteria yang diuji data untuk menyaring pair — lihat
+  `workplan2.md` §9, bukan §14.
+- **Status SIAP bukan ajakan beli.** Setiap permukaan yang menampilkan status siap
+  (`ScalpReadinessState.READY`) wajib menyertakan konteks bahwa eksekusi uang riil masih diblokir.
 - **Snapshot posisi paper per pair:** di halaman detail **jangan** pakai
   `TradingViewModel.paperExitSnapshot` (StateFlow tunggal yang di-`publish` dari tick pair mana
   pun). Pakai `TradingViewModel.paperSnapshotFor(exchange, symbol, price)` supaya yang tampil
