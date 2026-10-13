@@ -65,17 +65,27 @@ Aplikasi Android Kotlin 100% (Jetpack Compose M3) untuk analisis & **scalp mode*
   `ui/components/settings/PairEdgeGateCard.kt` (UI), `tools/pair_gate.py` (regenerasi tabel
   dari data → `data/config/pair_gate.json`). Sumber tabel: `data/hasil/u3_toko_usdt_after.json`.
   **Jangan** melemahkan/menghapus gerbang ini hanya untuk menambah jumlah sinyal.
-- **Status UI scalping = `ScalpReadiness` (2026-10-12, WAJIB):** seluruh permukaan UI mode
+- **Status scalping = `ScalpReadiness` (2026-10-12, WAJIB):** seluruh permukaan UI mode
   scalping harus menyimpulkan status dari `engine/scalping/ScalpReadiness.kt`, **bukan** dari
   `signal.lifecycleState` / `signal.scalpingStage` mentah.
   Invarian yang tidak boleh dilanggar: bila `scalpingSetup` kosong atau `"NONE"`, status
   **tidak boleh** READY/CONFIRMING/"TERDETEKSI" — meski `lifecycleState == DETECTED` atau
-  `scalpingStage == EARLY_ENTRY`. Penyebab kelas bug ini ada di engine
-  (`ScalpingMtfEvaluator.kt:246` menghitung `early` tanpa memeriksa setup, lalu
-  `SignalLifecycleManager.kt:112` memetakan `EARLY_ENTRY → DETECTED`); karena perbaikan engine
-  mengubah statistik log sinyal + pemicu alert, penyelesaiannya sengaja dilakukan di lapisan UI
-  dengan model bersama ini. Permukaan yang sudah memakainya: `ScalpDeskCard.kt`,
+  `scalpingStage == EARLY_ENTRY`. Permukaan yang sudah memakainya: `ScalpDeskCard.kt`,
   `PaperTradeDeskCard.kt`, `MarketConditionCard.kt` (cabang scalping). Bukti: `ScalpReadinessTest.kt`.
+- **Invarian pola di engine (2026-10-13, WAJIB) — `EARLY_ENTRY` mensyaratkan setup.** Sejak
+  perbaikan P1, invarian di atas **juga ditegakkan di engine**, bukan hanya di UI:
+  1. `ScalpingMtfEvaluator` — `early` wajib disertai `setup != ScalpSetupType.NONE`; tanpa pola,
+     stage turun ke `WATCH`. **Jangan** melemahkan syarat ini: `step2Ok` hanya berarti tekanan
+     orderbook, bukan pola.
+  2. `SignalLifecycleManager` (cabang `SCALPING`) — stage tanpa pola dinormalisasi ke `WATCH`
+     (kecuali `HOLD`, yang tetap diturunkan) sehingga **tidak ada** jalur promosi ke
+     DETECTED/CONFIRMING/READY tanpa pola. Predikatnya memakai `ScalpReadiness.hasSetup()` —
+     satu sumber kebenaran dengan UI.
+  Alasan historis: `EARLY_ENTRY` dulu dipromosikan ke `DETECTED` hanya berdasar tekanan orderbook
+  (`ScalpingMtfEvaluator.kt:246` → `SignalLifecycleManager.kt:112`), sehingga log sinyal mencatat
+  "DETECTED" untuk sinyal tanpa pola. Aman dilakukan karena `EARLY_ENTRY` selalu ber-`action = HOLD`,
+  sehingga `tryPaperAutoBuy` dan alert (keduanya mensyaratkan `action == BUY`) tidak terpengaruh.
+  Bukti: `workplan2.md` §13, `ScalpingMtfEvaluatorTest`, `SignalLifecycleManagerTest`.
 - **Snapshot posisi paper per pair:** di halaman detail **jangan** pakai
   `TradingViewModel.paperExitSnapshot` (StateFlow tunggal yang di-`publish` dari tick pair mana
   pun). Pakai `TradingViewModel.paperSnapshotFor(exchange, symbol, price)` supaya yang tampil

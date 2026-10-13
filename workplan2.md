@@ -521,12 +521,11 @@ berubah), memakai satu model bersama:
 matriks 6 `lifecycleState` × 6 `scalpingStage` dengan `setup = NONE` yang menegaskan hasil
 bukan READY/CONFIRMING, dan kasus persis yang dilaporkan (`DETECTED` + `NONE` → MEMANTAU).
 
-### 11.4 Yang sengaja belum dilakukan
+### 11.4 Perbaikan akar di engine — **SELESAI** (2026-10-13)
 
-Perbaikan akar di engine (`ScalpingMtfEvaluator.kt:246` dan `SignalLifecycleManager.kt:112`)
-**belum** dikerjakan: keduanya mengubah statistik log sinyal, pemicu alert (`isNewDetected`),
-dan `MonitorCard`, sehingga butuh regresi penuh. UI kini sudah menampilkan kebenaran yang sama
-apa pun keputusan itu nanti.
+Semula ditunda karena mengubah statistik log sinyal dan pemicu alert (`isNewDetected`).
+Perbaikan akar sudah dikerjakan sebagai perubahan tersendiri dengan regresi penuh —
+lihat **§13**.
 
 ---
 
@@ -595,3 +594,104 @@ mengotori jurnal paper. Lebih buruk daripada tidak melakukan apa-apa.
   (Robolectric): SL asli menimpa SL sintetis, `stopLossPrice = 0` mempertahankan perilaku lama,
   penanda bertahan, enumerasi hanya posisi bertanda + `HOLDING`, isolasi antar-bursa.
 
+
+---
+
+## 13. P1-fix — Akar `EARLY_ENTRY` di engine (2026-10-13)
+
+**Temuan audit:** perbaikan §11 hanya melindungi lapisan UI. Engine masih bisa memancarkan
+rantai `step2Ok (orderbook) → EARLY_ENTRY → DETECTED` tanpa pola valid, sehingga statistik log
+sinyal dan pemicu alert tetap "kotor". Sekarang akarnya ditutup di dua lapis.
+
+### 13.1 Akar masalah (terverifikasi)
+
+```
+ScalpingMtfEvaluator.kt:246   early = !ready && !isDangerous && step2Ok
+                              ^^^ step2Ok = step1Ok && isOrderBookValid → TIDAK memeriksa setup
+ScalpingMtfEvaluator.kt:294   early -> ScalpingStage.EARLY_ENTRY
+SignalLifecycleManager.kt:112 EARLY_ENTRY, WAIT_PULLBACK -> LifecycleState.DETECTED
+```
+
+`step2Ok` hanya menuntut **tekanan orderbook** (`buyPressure > 1.0`). Jadi saat orderbook sudah
+mendukung tetapi `ScalpSetupDetector` belum menemukan pola apa pun (`scalpingSetup == "NONE"`),
+engine tetap melabeli sinyal sebagai `EARLY_ENTRY`, dan state machine menaikkannya ke `DETECTED`.
+
+Dampak yang benar-benar terjadi di produksi (bukan sekadar kosmetik):
+
+| Jalur | Dampak |
+|---|---|
+| `AppLogManager.aiEngine("SignalEngine", "… IDLE ➔ DETECTED \| Sinyal: ⚪ HOLD …")` | log transisi mencatat "DETECTED" untuk sinyal tanpa pola → statistik log sinyal menyesatkan |
+| `TradingViewModelSync.kt:468` | `isNewDetected` dianggap transisi layak → memanggil `tryPaperAutoBuy` |
+| `WaitingEntryRadarCard.kt:328` | `DETECTED` → "👁 TERDETEKSI" |
+
+Catatan penting yang membatasi blast radius: `tryPaperAutoBuy` **tetap aman** karena mensyaratkan
+`signal.action == BUY` (`PaperAutoTradeCoordinator.kt:186`), sedangkan `EARLY_ENTRY` selalu
+dikirim dengan `action = HOLD` (`ready == false → direction = WAIT → HOLD`). Begitu juga
+`AlertNotificationHelper` — hanya dipanggil saat `hasTriggeringTransition`, yang juga
+mensyaratkan `action == BUY`. Jadi yang benar-benar rusak adalah **kejujuran status & log**,
+bukan eksekusi. Ini yang membuat perbaikan ini aman dilakukan.
+
+### 13.2 Perbaikan — dua lapis
+
+**Lapis 1 (akar) — `ScalpingMtfEvaluator.kt`.** `EARLY_ENTRY` sekarang mensyaratkan pola:
+
+```kotlin
+val early = !ready && !isDangerous && step2Ok && setup != ScalpSetupType.NONE
+```
+
+Efeknya stage menjadi jujur: tanpa pola, stage turun ke `WATCH`, bukan `EARLY_ENTRY`. Label ikut
+disinkronkan agar tidak ada klaim palsu tersisa:
+
+| Tempat | Sebelum | Sesudah |
+|---|---|---|
+| `reasons[0]` saat early | "EARLY: kondisi awal terbentuk, tunggu setup & konfirmasi penuh." | "EARLY: setup X terbentuk, menunggu trigger & konfirmasi penuh." |
+| `reasons[0]` saat `step2Ok` tanpa pola | "WAIT: belum ada setup valid. Menunggu momentum & orderbook." | "WAIT: tekanan orderbook sudah mendukung, tetapi belum ada setup scalping valid." |
+| `statusTitle` | `step2Ok` → jatuh ke "BIAS OK (1/4)" (menghitung salah) | cabang baru "ORDERBOOK OK (2/4) · SETUP BELUM ADA" |
+| `waitingFor` | `step2Ok` → "Setup scalping valid & VWAP" (berlaku untuk dua keadaan berbeda) | dipisah: `early` → "Trigger VWAP/VSA & gate Net R:R"; `step2Ok` → "Setup scalping valid (sweep/retest/breakout/pullback)" |
+
+**Lapis 2 (jaring pengaman) — `SignalLifecycleManager.kt`.** Di cabang `SCALPING`, stage yang
+tidak didukung pola dinormalisasi sebelum dipakai mesin transisi:
+
+```kotlin
+val stage = when {
+    ScalpReadiness.hasSetup(rawSignal) -> rawSignal.scalpingStage
+    rawSignal.scalpingStage == ScalpingStage.HOLD -> ScalpingStage.HOLD
+    else -> ScalpingStage.WATCH
+}
+```
+
+Alasan memilih normalisasi (satu titik) daripada menambal tiap cabang: invarian jadi berlaku untuk
+**semua** jalur promosi, termasuk cabang yang ditambahkan orang lain di masa depan. Penyesuaian
+`HOLD` dipertahankan eksplisit supaya **jalur invalidasi tidak ikut berubah** — kondisi berbahaya
+tetap membatalkan sinyal yang sudah `DETECTED`/`READY`, walaupun polanya tidak terbaca.
+
+Perilaku untuk sinyal yang sah **tidak berubah**: `WATCH` dan `HOLD` sudah punya transisi yang
+benar di mesin ini (`IDLE` tetap `IDLE`, `DETECTED` turun ke `IDLE`, `READY` dibatalkan).
+
+Predikat "punya pola" memakai `ScalpReadiness.hasSetup()` — satu sumber kebenaran yang sama dengan
+lapisan UI, jadi kedua lapis tidak bisa berbeda pendapat.
+
+### 13.3 Uji
+
+- `ScalpingMtfEvaluatorTest.testInvariant_EarlyEntryRequiresSetup` — pasar datar (tanpa pola) dengan
+  orderbook dianggap memadai: menegaskan `setup == "NONE"`, **`setupOk == true`** (prasyarat agar
+  test tidak hampa — inilah kondisi yang dulu memicu bug), lalu `scalpingStage == WATCH` dan
+  `statusTitle == "ORDERBOOK OK (2/4) · SETUP BELUM ADA"`. Data dibuat deterministik (bukan
+  `Math.random()`), jadi hasilnya stabil.
+- `SignalLifecycleManagerTest.testScalping_NoSetupNeverPromoted` — `EARLY_ENTRY`, `WAIT_PULLBACK`,
+  `ENTRY`, dan `STRONG_ENTRY` tanpa setup semuanya berhenti di `IDLE`; begitu pola valid muncul,
+  `DETECTED` kembali sah.
+- `SignalLifecycleManagerTest.testScalping_DangerousHoldStillInvalidatesEvenWithoutSetup` —
+  memastikan jalur invalidasi tidak ikut ternormalisasi.
+- `SignalLifecycleManagerTest.testScalping_BackwardsCompatibility` — diperbarui: sinyal scalping
+  kini wajib menyertakan `scalpingSetup` valid.
+
+### 13.4 Yang tetap belum dikerjakan
+
+- **Kesiapan uang riil tetap BELUM.** Ini memperbaiki kejujuran status, bukan menambah edge.
+  Profil exit masih skew negatif (§9.5b), gate ketat out-of-sample hanya 5 pair.
+- Angka `confidence` untuk keadaan pra-pola tetap 49 (setara "2/4 checkpoint"). Nilainya konsisten
+  dengan hitungan checkpoint, tetapi tidak berarti "hampir siap entry" — UI scalping tidak
+  memakainya untuk menyimpulkan status.
+- `P4.1` walk-forward antar-bulan, `P4.2` preferensi maker IDR, `P5` data Indodax + replay
+  TAPI v2 — belum tersentuh.
