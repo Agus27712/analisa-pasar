@@ -202,7 +202,18 @@ data class TechnicalIndicators(
     val bbUpper: Double = Double.NaN,
     val bbLower: Double = Double.NaN,
     val atr: Double = Double.NaN,
-    val momentum: Double = Double.NaN
+    val momentum: Double = Double.NaN,
+    /**
+     * Basis bar untuk seluruh indikator di atas (P0-2).
+     * Tanpa ini, angka RSI/MACD/RVOL tidak bisa direproduksi oleh pihak ketiga —
+     * tidak diketahui apakah dihitung dari bar yang sudah tutup atau bar yang masih berjalan.
+     */
+    val barTimestamp: Long = 0L,
+    val barClosed: Boolean = true,
+    /** Relative Volume yang sudah dinormalisasi ke basis bar penuh (bukan volume sebagian menit). */
+    val rvol: Double = Double.NaN,
+    /** VWAP M1 pada saat evaluasi; `0.0` berarti tidak tersedia. */
+    val vwap: Double = Double.NaN
 )
 
 data class AISignalState(

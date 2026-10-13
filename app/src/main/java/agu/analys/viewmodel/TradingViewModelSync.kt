@@ -10,12 +10,14 @@ import agu.analys.service.IndodaxMarketService
 import agu.analys.service.TokocryptoMarketService
 import agu.analys.trading.SimulationOrder
 import agu.analys.trading.SimulationOrderSide
+import agu.analys.trading.SpotPosition
 import agu.analys.trading.TradeSignalSnapshot
 import agu.analys.util.AlertNotificationHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 
 /**
  * Extension for TradingViewModel dealing with synchronizing real balances,
@@ -87,7 +89,12 @@ fun TradingViewModel.handleRealTradeExecution(
             strategyMode = strategyMode.value.name,
             customPnlIdr = customPnlIdr,
             customPnlPercent = customPnlPct,
-            exchange = currentEx
+            exchange = currentEx,
+            // P0-5 — status trailing nyata dari posisi sebelum ditutup.
+            isTrailingUsed = before.isTrailingEnabled,
+            trailingPercent = before.trailingPercent.takeIf { it > 0.0 },
+            trailingPeakPrice = before.peakPrice.takeIf { it > 0.0 },
+            trailingLockPrice = before.trailingStopPrice.takeIf { it > 0.0 }
         )
     } else if (type.equals("buy", ignoreCase = true)) {
         val snapshot = TradeSignalSnapshot.capture(
@@ -97,6 +104,8 @@ fun TradingViewModel.handleRealTradeExecution(
             exchange = currentEx
         )
         val snapshotJson = snapshot.toJson().toString()
+        // P0-5 — status trailing nyata untuk posisi ini (dibaca sebelum posisi diperbarui).
+        val beforeBuy = positionStore.get(symbol, isReal = true, exchange = currentEx)
         tradeHistoryRecorder.recordBuy(
             symbol = symbol, isReal = true, strategyMode = strategyMode.value.name,
             buyPrice = price, buyQuantity = quantity, buyTotalIdr = price * quantity,
@@ -104,7 +113,12 @@ fun TradingViewModel.handleRealTradeExecution(
             signalPrice = engine.signalState.value.entryPrice.takeIf { it > 0 } ?: price,
             signalConfidence = engine.signalState.value.confidence, targetPrice1 = tp1, targetPrice2 = tp2,
             stopLossPrice = engine.signalState.value.stopLoss,
-            exchange = currentEx
+            exchange = currentEx,
+            // P0-3 — waktu sinyal dari engine, bukan waktu klik order.
+            signalTime = engine.signalState.value.timestamp,
+            isTrailingUsed = beforeBuy.isTrailingEnabled,
+            trailingPercent = beforeBuy.trailingPercent.takeIf { it > 0.0 },
+            trailingPeakPrice = beforeBuy.peakPrice.takeIf { it > 0.0 }
         )
         viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -242,6 +256,9 @@ fun TradingViewModel.syncSimulationTradeToPositionStore(order: SimulationOrder) 
             indicators = engine.indicators.value, signal = engine.signalState.value,
             exchange = currentEx
         )
+        // P0-5 — state posisi setelah entry (bukan sebelum), supaya status trailing yang tercatat
+        // adalah yang benar-benar berlaku untuk posisi ini.
+        val posAfterBuy = positionStore.get(symbol, isReal = false, exchange = currentEx)
         tradeHistoryRecorder.recordBuy(
             symbol = symbol,
             isReal = false,
@@ -256,7 +273,12 @@ fun TradingViewModel.syncSimulationTradeToPositionStore(order: SimulationOrder) 
             targetPrice1 = engine.signalState.value.targetPrice1,
             targetPrice2 = engine.signalState.value.targetPrice2,
             stopLossPrice = engine.signalState.value.stopLoss,
-            exchange = currentEx
+            exchange = currentEx,
+            // P0-3 — waktu sinyal dari engine, bukan waktu klik order.
+            signalTime = engine.signalState.value.timestamp,
+            isTrailingUsed = posAfterBuy.isTrailingEnabled,
+            trailingPercent = posAfterBuy.trailingPercent.takeIf { it > 0.0 },
+            trailingPeakPrice = posAfterBuy.peakPrice.takeIf { it > 0.0 }
         )
     } else if (order.side == SimulationOrderSide.SELL) {
         val currentPos = positionStore.get(symbol, isReal = false, exchange = currentEx)
@@ -279,12 +301,39 @@ fun TradingViewModel.syncSimulationTradeToPositionStore(order: SimulationOrder) 
             isReal = false,
             sellPrice = fillPrice,
             sellQuantity = order.quantity,
-            sellReason = "SIMULATION_SELL",
+            // P0-4 — alasan jual sebenarnya, bukan konstanta "SIMULATION_SELL".
+            sellReason = resolveSimulationSellReason(order, currentPos),
             strategyMode = strategyMode.value.name,
-            exchange = currentEx
+            exchange = currentEx,
+            // P0-5 — status trailing nyata saat posisi ditutup (dibaca sebelum markSold).
+            isTrailingUsed = currentPos.isTrailingEnabled,
+            trailingPercent = currentPos.trailingPercent.takeIf { it > 0.0 },
+            trailingPeakPrice = currentPos.peakPrice.takeIf { it > 0.0 },
+            trailingLockPrice = currentPos.trailingStopPrice.takeIf { it > 0.0 }
         )
     }
     refreshSpotPosition()
+}
+
+/**
+ * P0-4 — Tentukan alasan jual yang sebenarnya dari jalur simulasi.
+ *
+ * Sebelumnya jalur ini selalu menulis `"SIMULATION_SELL"` (konstan), sehingga jurnal tidak bisa
+ * membedakan exit manual, TP1/TP2, stop loss, dan trailing stop — padahal itu variabel paling
+ * penting untuk mengevaluasi strategi.
+ */
+private fun resolveSimulationSellReason(order: SimulationOrder, pos: SpotPosition): String {
+    val fill = if (order.filledAvgPrice > 0.0) order.filledAvgPrice else order.limitPrice
+    val near = { target: Double -> target > 0.0 && fill > 0.0 && abs(fill - target) / target <= 0.0015 }
+
+    return when {
+        order.isStopTriggered && pos.isTrailingEnabled && pos.isTrailingTriggered -> "TRAILING_STOP"
+        order.isStopTriggered -> "STOP_LOSS"
+        near(pos.tp2Price) -> "HIT_TP2"
+        near(pos.tp1Price) -> "HIT_TP1"
+        pos.stopLossPrice > 0.0 && fill > 0.0 && fill <= pos.stopLossPrice * 1.001 -> "STOP_LOSS"
+        else -> "MANUAL_SELL"
+    }
 }
 
 fun TradingViewModel.baseFromSymbolOrPair(pair: String): String {

@@ -587,7 +587,11 @@ object IndodaxMarketService {
                 }
             }
 
-            result.sortedBy { it.timestamp }.takeLast(limit)
+            // P0-1 — bar terakhir dari REST adalah candle yang masih berjalan; tandai terbuka.
+            agu.analys.util.CandleTimeUtil.markLastCandleOpenIfForming(
+                result.sortedBy { it.timestamp }.takeLast(limit),
+                timeframe
+            )
         } catch (e: Exception) {
             println("fetchCandles exception for $symbol ${timeframe.label}: ${e.javaClass.name} - ${e.message}")
             emptyList()

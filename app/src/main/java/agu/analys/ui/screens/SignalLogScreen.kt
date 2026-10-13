@@ -874,9 +874,14 @@ private fun TradeHistoryTabContent(
 
 @Composable
 private fun TradeHistorySummaryCard(records: List<TradeHistoryRecordEntity>) {
-    val totalTrades = records.size
-    val closedTrades = records.filter { it.status == "CLOSED" }
-    val holdingTrades = records.filter { it.status == "HOLDING" }
+    // P2-11 — record contoh (seed) TIDAK boleh ikut membentuk statistik. Sebelumnya 7 trade
+    // contoh otomatis ikut terhitung di win rate / PnL sehingga angka ringkasan menyesatkan.
+    val sampleCount = records.count { it.isSample }
+    val stats = records.filterNot { it.isSample }
+
+    val totalTrades = stats.size
+    val closedTrades = stats.filter { it.status == "CLOSED" }
+    val holdingTrades = stats.filter { it.status == "HOLDING" }
     val winTrades = closedTrades.filter { it.isWin == true || (it.pnlIdr ?: 0.0) > 0.0 }
     val lossTrades = closedTrades.filter { it.isWin == false && (it.pnlIdr ?: 0.0) < 0.0 }
     val winRatePct = if (closedTrades.isNotEmpty()) (winTrades.size.toDouble() / closedTrades.size) * 100.0 else 0.0
@@ -903,7 +908,7 @@ private fun TradeHistorySummaryCard(records: List<TradeHistoryRecordEntity>) {
         pnlDisplayText = "$idrPrefix${PriceFormatter.formatPrice(totalIdr, quoteAsset = "IDR")} • $usdtPrefix${PriceFormatter.formatPrice(totalUsdt, quoteAsset = "USDT")}"
     } else {
         isOverallProfit = true
-        pnlDisplayText = if (records.any { PriceFormatter.isUsdtQuote(it.quoteAsset) }) "$0.00" else "Rp 0"
+        pnlDisplayText = if (stats.any { PriceFormatter.isUsdtQuote(it.quoteAsset) }) "$0.00" else "Rp 0"
     }
 
     val pnlColor = if (isOverallProfit) TvGreen else TvRed
@@ -957,18 +962,37 @@ private fun TradeHistorySummaryCard(records: List<TradeHistoryRecordEntity>) {
                     }
                 }
 
-                Surface(
-                    shape = RoundedCornerShape(6.dp),
-                    color = TvSurface,
-                    border = BorderStroke(0.5.dp, TvBorder)
-                ) {
-                    Text(
-                        text = "$totalTrades Trade",
-                        color = TvTextPrimary,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
-                    )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (sampleCount > 0) {
+                        // P2-11 — beri tahu bahwa ada record contoh yang sengaja tidak dihitung.
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = TvAmber.copy(alpha = 0.15f),
+                            border = BorderStroke(0.5.dp, TvAmber.copy(alpha = 0.5f))
+                        ) {
+                            Text(
+                                text = "$sampleCount SAMPEL DIABAIKAN",
+                                color = TvAmber,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                            )
+                        }
+                        Spacer(Modifier.width(6.dp))
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = TvSurface,
+                        border = BorderStroke(0.5.dp, TvBorder)
+                    ) {
+                        Text(
+                            text = "$totalTrades Trade",
+                            color = TvTextPrimary,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                        )
+                    }
                 }
             }
 

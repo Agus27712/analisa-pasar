@@ -54,6 +54,9 @@ object ScalpingMtfEvaluator {
 
     private const val ORDERBOOK_STALE_MS = ScalpingConfig.ORDERBOOK_STALE_MS
 
+    /** Durasi satu bar M1 — dipakai untuk memproyeksikan volume bar yang belum tutup. */
+    private const val M1_BAR_DURATION_MS = 60_000L
+
     data class Result(
         val signal: AISignalState,
         val indicators: TechnicalIndicators,
@@ -73,7 +76,8 @@ object ScalpingMtfEvaluator {
         symbol: String = "",
         orderBookAgeMs: Long = 0L,
         diagnosticIgnoreOrderBookWhenUnavailable: Boolean = false,
-        config: ScalpingRuntimeConfig = ScalpingRuntimeConfig.current
+        config: ScalpingRuntimeConfig = ScalpingRuntimeConfig.current,
+        nowMs: Long = 0L
     ): Result? = evaluate(
         globalContext = agu.analys.engine.global.GlobalMarketContext(),
         price = price,
@@ -87,7 +91,8 @@ object ScalpingMtfEvaluator {
         symbol = symbol,
         orderBookAgeMs = orderBookAgeMs,
         diagnosticIgnoreOrderBookWhenUnavailable = diagnosticIgnoreOrderBookWhenUnavailable,
-        config = config
+        config = config,
+        nowMs = nowMs
     )
 
     fun evaluate(
@@ -103,7 +108,9 @@ object ScalpingMtfEvaluator {
         symbol: String = "",
         orderBookAgeMs: Long = 0L,
         diagnosticIgnoreOrderBookWhenUnavailable: Boolean = false,
-        config: ScalpingRuntimeConfig = ScalpingRuntimeConfig.current
+        config: ScalpingRuntimeConfig = ScalpingRuntimeConfig.current,
+        // Waktu evaluasi (ms). `<= 0` = pakai jam sistem. Dipakai untuk memproyeksikan volume bar berjalan.
+        nowMs: Long = 0L
     ): Result? {
         if (price <= 0.0 || h1Candles.size < 20 || m15Candles.size < 20 || m1Candles.size < 20) return null
 
@@ -125,9 +132,26 @@ object ScalpingMtfEvaluator {
             !isOrderBookEmpty && !isOrderBookStale && buyPressure > 1.0
         }
 
+        val evalNowMs = if (nowMs > 0L) nowMs else System.currentTimeMillis()
         val last1M = m1Candles.last()
-        val avgVol1M = m1Candles.takeLast(20).map { it.volume }.average()
-        val formingVolValid = if (formingVolume > 0) formingVolume else last1M.volume
+
+        // P0-1 — Basis volume harus setara bar penuh.
+        // Sebelumnya pembilang memakai volume bar yang BARU BERJALAN (sebagian menit) sementara
+        // penyebut memakai rata-rata bar penuh, sehingga RVOL/VSA selalu terlihat rendah.
+        // Sekarang: (a) rata-rata HANYA dari bar yang sudah tutup, (b) bar berjalan diproyeksikan
+        // ke setara bar penuh lewat fraksi waktu yang sudah berjalan.
+        val closedForAvg = m1Candles.dropLast(1).filter { it.isClosed }.takeLast(20)
+        val avgVol1M = closedForAvg.map { it.volume }
+            .filter { it > 0.0 }
+            .let { if (it.isNotEmpty()) it.average() else last1M.volume }
+
+        val elapsedFraction = if (last1M.isClosed) 1.0 else {
+            IndicatorMath.elapsedFraction(last1M.timestamp, M1_BAR_DURATION_MS, evalNowMs)
+        }
+        val rawFormingVol = if (formingVolume > 0) formingVolume else last1M.volume
+        val formingVolValid = if (last1M.isClosed) rawFormingVol else {
+            IndicatorMath.projectVolumeToFullBar(rawFormingVol, elapsedFraction)
+        }
 
         val candleRange = last1M.high - last1M.low
         val candleBody = abs(last1M.close - last1M.open)
@@ -155,7 +179,7 @@ object ScalpingMtfEvaluator {
 
         val isEma13And21Aligned = ema13 >= ema21 * 0.998
         val isEma13Bounce = price >= ema13 * 0.995 && price <= ema13 * 1.015
-        val rvol = IndicatorMath.relativeVolume(m1Candles, 20)
+        val rvol = IndicatorMath.relativeVolume(m1Candles, 20, M1_BAR_DURATION_MS, evalNowMs)
 
         val struct15M = if (m15Ready) MarketStructureAnalyzer.analyze(m15Candles.takeLast(40)) else null
         val structure: StructureSnapshot = struct15M
@@ -263,7 +287,9 @@ object ScalpingMtfEvaluator {
             if (setup == ScalpSetupType.NONE) "Setup: belum ada. ${setupResult.explanation}"
             else "Setup ${setup.name}: ${setupResult.explanation}"
         )
-        reasons.add("Skor ${score.total}/100 (${score.category}) · MTF $mtfLabel · RVOL ${fmt(rvol)}x.")
+        // P1-10 — bedakan tegas antara TAHAP (stage) dan KATEGORI SKOR (band), supaya tidak
+        // tertukar di satu kartu ("STRONG ENTRY" = tahap; "WATCH" = band skor 60–74).
+        reasons.add("Skor ${score.total}/100 (kategori ${score.category}) · MTF $mtfLabel · RVOL ${fmt(rvol)}x.")
         riskResult.reasons.lastOrNull()?.let { reasons.add(it) }
 
         val spreadAnalysis = OrderBookAnalyzer.analyzeSpread(bids, asks, price)
@@ -274,7 +300,8 @@ object ScalpingMtfEvaluator {
         }
 
         reasons.add("EMA 13/21: ${if (isEma13And21Aligned) "Uptrend Bounce (EMA13 > EMA21)" else "Cross / Neutral"}")
-        reasons.add("VWAP 1M: ${fmt(vwap1M)}")
+        // P1-9 — VWAP yang tidak tersedia jangan dirender sebagai "0.00" (terlihat seperti harga nol).
+        reasons.add("VWAP 1M: ${if (vwap1M > 0.0) fmt(vwap1M) else "-"}")
         if (isOrderBookEmpty) {
             reasons.add("Tekanan Beli: Diabaikan (Orderbook Kosong)")
         } else {
@@ -287,9 +314,9 @@ object ScalpingMtfEvaluator {
         reasons.add("Risk Management: Gunakan alokasi 3-5% dari modal portofolio (Aturan Akademi Crypto).")
 
         when {
-            strong -> reasons.add(0, "STRONG ENTRY: Skor ${score.total} + Net R:R 1:${fmt(netRr)}")
-            ready -> reasons.add(0, "BUY READY: Skor ${score.total} + Net R:R 1:${fmt(netRr)}.")
-            early -> reasons.add(0, "EARLY: setup ${setup.name} terbentuk, menunggu trigger & konfirmasi penuh.")
+            strong -> reasons.add(0, "TAHAP STRONG ENTRY — Skor ${score.total}/100 + Net R:R 1:${fmt(netRr)}")
+            ready -> reasons.add(0, "TAHAP BUY READY — Skor ${score.total}/100 + Net R:R 1:${fmt(netRr)}.")
+            early -> reasons.add(0, "TAHAP EARLY — setup ${setup.name} terbentuk, menunggu trigger & konfirmasi penuh.")
             isDangerous -> {}
             step2Ok -> reasons.add(0, "WAIT: tekanan orderbook sudah mendukung, tetapi belum ada setup scalping valid.")
             else -> reasons.add(0, "WAIT: belum ada setup valid. Menunggu momentum & orderbook.")
@@ -492,11 +519,17 @@ object ScalpingMtfEvaluator {
             indicators = TechnicalIndicators(
                 rsi14 = rsi1M,
                 macd = macd.first,
+                macdSignal = macd.second,
                 macdHist = macd.first - macd.second,
                 ema20 = ema20,
                 ema50 = ema50,
                 atr = atr1M,
-                momentum = buyPressure
+                momentum = buyPressure,
+                // P0-2 — rekam basis bar supaya nilai indikator bisa direproduksi dari candle bursa.
+                barTimestamp = last1M.timestamp,
+                barClosed = last1M.isClosed,
+                rvol = rvol,
+                vwap = vwap1M
             ),
             audit = audit,
             scalping = scalping

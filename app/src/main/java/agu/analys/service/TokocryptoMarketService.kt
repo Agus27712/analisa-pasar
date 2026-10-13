@@ -377,7 +377,8 @@ object TokocryptoMarketService {
                         )
                     }
                 }
-                return@withContext candles
+                // P0-1 — bar terakhir dari REST adalah candle yang masih berjalan; tandai terbuka.
+                return@withContext agu.analys.util.CandleTimeUtil.markLastCandleOpenIfForming(candles, timeframe)
             }
         } catch (e: CancellationException) {
             throw e

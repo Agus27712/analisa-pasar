@@ -205,7 +205,11 @@ class TokocryptoMarketWebSocket(
                                     high = high,
                                     low = low,
                                     close = close,
-                                    volume = volume
+                                    volume = volume,
+                                    // P0-1 — teruskan flag `x` dari stream kline. Sebelumnya dibuang
+                                    // sehingga bar yang masih berjalan ikut dianggap sudah tutup,
+                                    // dan volume sebagian menit dibandingkan dengan rata-rata menit penuh.
+                                    isClosed = isClosed
                                 )
                                 onCandle(candle)
                                 if (isClosed) {

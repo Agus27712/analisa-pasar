@@ -408,15 +408,65 @@ object IndicatorMath {
     // -------------------------------------------------------------------------
 
     /**
-     * Relative Volume: volume candle terakhir / rata-rata volume [period] candle sebelumnya.
-     * Default 1.0 jika data kurang.
+     * Fraksi waktu yang sudah berjalan pada sebuah bar (0..1].
+     *
+     * Bar yang sedang berjalan baru mengumpulkan **sebagian** volume menit. Tanpa normalisasi,
+     * angka itu dibandingkan dengan rata-rata bar penuh → RVOL selalu terlihat rendah
+     * (mis. 0,76x padahal sebenarnya 1,46x).
+     *
+     * @return 1.0 bila timestamp/durasi tidak valid (anggap bar sudah penuh)
      */
-    fun relativeVolume(candles: List<CandleBar>, period: Int = 20): Double {
+    fun elapsedFraction(barStartMs: Long, barDurationMs: Long, nowMs: Long): Double {
+        if (barStartMs <= 0L || barDurationMs <= 0L) return 1.0
+        val elapsed = (nowMs - barStartMs).toDouble()
+        if (elapsed <= 0.0) return MIN_ELAPSED_FRACTION
+        return (elapsed / barDurationMs.toDouble()).coerceIn(MIN_ELAPSED_FRACTION, 1.0)
+    }
+
+    /**
+     * Proyeksikan volume bar yang belum tutup ke setara bar penuh (`volume / fraksiWaktu`).
+     * Bila bar sudah tutup (fraksi = 1.0) nilainya tidak berubah.
+     */
+    fun projectVolumeToFullBar(volume: Double, elapsedFraction: Double): Double {
+        if (volume <= 0.0) return 0.0
+        val f = elapsedFraction.coerceIn(MIN_ELAPSED_FRACTION, 1.0)
+        return volume / f
+    }
+
+    /** Batas bawah fraksi waktu — cegah pembagian dengan angka mendekati nol di awal bar. */
+    private const val MIN_ELAPSED_FRACTION = 0.05
+
+    /**
+     * Relative Volume: volume bar terakhir / rata-rata volume [period] bar **yang sudah tutup**.
+     *
+     * Bar yang masih berjalan diproyeksikan dulu ke setara bar penuh supaya pembilang dan
+     * penyebut berada pada basis waktu yang sama. Default 1.0 jika data kurang.
+     *
+     * @param barDurationMs durasi satu bar (M1 = 60_000). Dipakai untuk proyeksi bar berjalan.
+     * @param nowMs waktu acuan; `<= 0` berarti pakai `System.currentTimeMillis()`.
+     */
+    fun relativeVolume(
+        candles: List<CandleBar>,
+        period: Int = 20,
+        barDurationMs: Long = 60_000L,
+        nowMs: Long = 0L
+    ): Double {
         if (period <= 0 || candles.size < 2) return 1.0
-        val current = candles.last().volume.coerceAtLeast(0.0)
-        val hist = candles.dropLast(1)
-        if (hist.isEmpty()) return 1.0
-        val window = hist.takeLast(min(period, hist.size))
+        val last = candles.last()
+        val rawCurrent = last.volume.coerceAtLeast(0.0)
+        val current = if (last.isClosed) {
+            rawCurrent
+        } else {
+            val ref = if (nowMs > 0L) nowMs else System.currentTimeMillis()
+            projectVolumeToFullBar(rawCurrent, elapsedFraction(last.timestamp, barDurationMs, ref))
+        }
+
+        // Penyebut HANYA dari bar yang sudah tutup, dan tidak boleh ikut memuat bar terakhir.
+        val closed = candles.filter { it.isClosed }
+        val hist = if (last.isClosed) closed.dropLast(1) else closed
+        val pool = hist.ifEmpty { candles.dropLast(1) }
+        if (pool.isEmpty()) return 1.0
+        val window = pool.takeLast(min(period, pool.size))
         val avg = window.map { it.volume.coerceAtLeast(0.0) }.average()
         if (avg <= 0.0) return 1.0
         return current / avg

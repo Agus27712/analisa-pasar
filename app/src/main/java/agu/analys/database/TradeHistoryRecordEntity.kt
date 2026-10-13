@@ -45,8 +45,28 @@ data class TradeHistoryRecordEntity(
     val troughPriceDuringHold: Double = 0.0, // Harga terendah yang sempat tersentuh saat hold
     val maxProfitPctDuringHold: Double = 0.0, // Persentase profit tertinggi sementara (%)
     val maxDrawdownPctDuringHold: Double = 0.0, // Persentase drawdown terendah sementara (%)
+    /**
+     * P0-6 — sumber Peak/Trough.
+     * `true`  = diambil dari high/low candle bursa (akurat, tidak bergantung sampling tick).
+     * `false` = hanya dari harga tick yang tersampling (nilai bisa understate).
+     */
+    val peakTrackedFromCandle: Boolean = false,
     val isTrailingUsed: Boolean = false,
     val trailingLockPrice: Double? = null,
+    /**
+     * P0-5 — persentase trailing yang BENAR-BENAR dipakai mesin exit.
+     * Sebelumnya nilai ini tidak pernah disimpan dan getter `trailingPercent` mengembalikan
+     * konstanta 1,5 sehingga laporan bisa salah 10x (config nyata: 0,15).
+     */
+    val trailingPercentUsed: Double? = null,
+    /** P0-5 — harga puncak yang menjadi acuan trailing saat posisi ditutup. */
+    val trailingPeakPriceUsed: Double? = null,
+
+    /**
+     * P2-11 — penanda record contoh (seed) agar bisa dibedakan dari trade nyata dan
+     * dikeluarkan dari statistik agregat (win rate, PnL, rata-rata hold).
+     */
+    val isSample: Boolean = false,
 
     // TAHAP 4: SELL & REALISASI PROFIT / LOSS
     val sellTime: Long? = null, // Waktu user sell / eksekusi keluar
@@ -90,7 +110,11 @@ data class TradeHistoryRecordEntity(
     val troughPrice: Double get() = troughPriceDuringHold
     val maxProfitPercent: Double get() = maxProfitPctDuringHold
     val maxDrawdownPercent: Double get() = maxDrawdownPctDuringHold
-    val trailingPercent: Double? get() = if (isTrailingUsed) 1.5 else null
+    /**
+     * P0-5 — persentase trailing sebenarnya. `null` bila trailing memang tidak dipakai
+     * (bukan lagi konstanta 1,5 yang tidak mencerminkan konfigurasi).
+     */
+    val trailingPercent: Double? get() = if (isTrailingUsed) trailingPercentUsed else null
 
     fun getFormattedDuration(): String = formatDuration(holdingDurationMs)
 

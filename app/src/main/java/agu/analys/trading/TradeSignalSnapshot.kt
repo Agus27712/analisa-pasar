@@ -30,6 +30,16 @@ data class TradeSignalSnapshot(
     val macdHist: Double? = null,
     val momentum: Double? = null,
 
+    // 2b. Basis & volume (P0-1/P0-2) — agar angka di atas dapat direproduksi dari candle bursa
+    /** Relative Volume pada basis bar penuh (bukan volume sebagian menit). */
+    val rvol: Double? = null,
+    /** VWAP M1 saat evaluasi; `null` berarti tidak tersedia. */
+    val vwap: Double? = null,
+    /** Timestamp (open time) bar M1 yang dipakai menghitung indikator di atas. */
+    val indicatorBarTime: Long? = null,
+    /** `true` = indikator dihitung dari bar yang sudah tutup; `false` = bar masih berjalan. */
+    val indicatorBarClosed: Boolean? = null,
+
     // 3. Kategori Tren & Rata-rata Bergerak
     val ema20: Double? = null,
     val ema50: Double? = null,
@@ -77,6 +87,12 @@ data class TradeSignalSnapshot(
         macdSignal?.let { obj.put("macdSignal", it) }
         macdHist?.let { obj.put("macdHist", it) }
         momentum?.let { obj.put("momentum", it) }
+
+        // Category 2b — basis & volume
+        rvol?.let { obj.put("rvol", it) }
+        vwap?.let { obj.put("vwap", it) }
+        indicatorBarTime?.let { obj.put("indicatorBarTime", it) }
+        indicatorBarClosed?.let { obj.put("indicatorBarClosed", it) }
 
         // Category 3
         ema20?.let { obj.put("ema20", it) }
@@ -139,6 +155,10 @@ data class TradeSignalSnapshot(
                 macdSignal = if (json.has("macdSignal")) json.optDouble("macdSignal") else null,
                 macdHist = if (json.has("macdHist")) json.optDouble("macdHist") else null,
                 momentum = if (json.has("momentum")) json.optDouble("momentum") else null,
+                rvol = if (json.has("rvol")) json.optDouble("rvol") else null,
+                vwap = if (json.has("vwap")) json.optDouble("vwap") else null,
+                indicatorBarTime = if (json.has("indicatorBarTime")) json.optLong("indicatorBarTime") else null,
+                indicatorBarClosed = if (json.has("indicatorBarClosed")) json.optBoolean("indicatorBarClosed") else null,
                 ema20 = if (json.has("ema20")) json.optDouble("ema20") else null,
                 ema50 = if (json.has("ema50")) json.optDouble("ema50") else null,
                 ema200 = if (json.has("ema200")) json.optDouble("ema200") else null,
@@ -236,6 +256,10 @@ data class TradeSignalSnapshot(
                 macdSignal = indicators?.macdSignal?.takeIf { !it.isNaN() },
                 macdHist = indicators?.macdHist?.takeIf { !it.isNaN() },
                 momentum = indicators?.momentum?.takeIf { !it.isNaN() },
+                rvol = indicators?.rvol?.takeIf { !it.isNaN() },
+                vwap = indicators?.vwap?.takeIf { !it.isNaN() && it > 0.0 },
+                indicatorBarTime = indicators?.barTimestamp?.takeIf { it > 0L },
+                indicatorBarClosed = indicators?.barClosed,
                 ema20 = ema20,
                 ema50 = ema50,
                 ema200 = ema200,

@@ -126,6 +126,24 @@ fun TradeHistoryJourneyCard(
                         softWrap = false,
                         maxLines = 1
                     )
+                    // P2-11 — penanda visual record contoh, supaya tidak tertukar dengan trade nyata.
+                    if (record.isSample) {
+                        Surface(
+                            color = TvAmber.copy(alpha = 0.2f),
+                            shape = RoundedCornerShape(4.dp),
+                            border = BorderStroke(0.5.dp, TvAmber.copy(alpha = 0.6f))
+                        ) {
+                            Text(
+                                text = "SAMPEL",
+                                color = TvAmber,
+                                fontSize = 8.sp,
+                                fontWeight = FontWeight.Black,
+                                softWrap = false,
+                                maxLines = 1,
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
                 }
 
                 Spacer(Modifier.width(8.dp))
@@ -325,7 +343,10 @@ fun TradeHistoryJourneyCard(
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Text(
-                                    text = record.technicalBreakdown.ifBlank { "RSI(14)=38.2 • MACD Golden Cross • EMA20 > EMA50 • Order Book Bid Depth 68.5%" },
+                                    // P1-7/P1-8 — dulu ada string contoh yang di-hardcode
+                                    // ("RSI(14)=38.2 • MACD Golden Cross …") sehingga record tanpa
+                                    // perhitungan tampak punya angka teknikal palsu. Sekarang jujur "-".
+                                    text = record.technicalBreakdown.ifBlank { "-" },
                                     color = TvTextPrimary,
                                     fontSize = 10.sp,
                                     lineHeight = 14.sp,
@@ -372,7 +393,12 @@ fun TradeHistoryJourneyCard(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 MiniField("Durasi Menahan", TradeLogExporter.formatDuration(record.holdingDurationMs), highlightColor = TvBlue, modifier = Modifier.weight(1f))
-                                MiniField("Peak (Harga Tertinggi)", PriceFormatter.formatPrice(record.peakPrice, quoteAsset = record.quoteAsset), modifier = Modifier.weight(1f))
+                                // P0-6 — sebutkan sumber Peak/Trough agar tidak dikira selalu akurat.
+                                MiniField(
+                                    if (record.peakTrackedFromCandle) "Peak (candle)" else "Peak (dari tick)",
+                                    PriceFormatter.formatPrice(record.peakPrice, quoteAsset = record.quoteAsset),
+                                    modifier = Modifier.weight(1f)
+                                )
                                 MiniField("Drawdown Terendah", "-${String.format(Locale.US, "%.2f", kotlin.math.abs(record.maxDrawdownPercent))}%", highlightColor = TvRed, modifier = Modifier.weight(1f))
                             }
                             Row(

@@ -7,7 +7,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.abs
@@ -60,7 +63,14 @@ class TradeHistoryRecorder(
         targetPrice2: Double = 0.0,
         stopLossPrice: Double = 0.0,
         customUuid: String? = null,
-        exchange: String = "TOKOCRYPTO"
+        exchange: String = "TOKOCRYPTO",
+        // P0-3 — waktu sinyal benar-benar terbit (dari engine), bukan waktu klik order.
+        // Bila null/kosong, jatuh ke waktu beli supaya tidak ada regresi pada pemanggil lama.
+        signalTime: Long? = null,
+        // P0-5 — status trailing nyata saat posisi dibuka (dari SpotPositionStore).
+        isTrailingUsed: Boolean = false,
+        trailingPercent: Double? = null,
+        trailingPeakPrice: Double? = null
     ): String {
         val tradeUuid = customUuid ?: UUID.randomUUID().toString()
         val now = System.currentTimeMillis()
@@ -86,7 +96,7 @@ class TradeHistoryRecorder(
                     isRealTrade = isReal,
                     strategyMode = strategyMode.uppercase(),
                     exchange = exchange.uppercase(),
-                    signalTime = now,
+                    signalTime = signalTime?.takeIf { it > 0L } ?: now,
                     signalPrice = if (signalPrice > 0) signalPrice else buyPrice,
                     signalConfidence = signalConfidence,
                     signalCalculationSummary = calculationSummary,
@@ -107,8 +117,11 @@ class TradeHistoryRecorder(
                     troughPriceDuringHold = buyPrice,
                     maxProfitPctDuringHold = 0.0,
                     maxDrawdownPctDuringHold = 0.0,
-                    isTrailingUsed = false,
-                    trailingLockPrice = null
+                    // P0-5 — ambil dari state nyata, bukan hardcode false.
+                    isTrailingUsed = isTrailingUsed,
+                    trailingLockPrice = null,
+                    trailingPercentUsed = trailingPercent,
+                    trailingPeakPriceUsed = trailingPeakPrice
                 )
                 dao.insertRecord(entity)
             } catch (_: Exception) {}
@@ -119,7 +132,15 @@ class TradeHistoryRecorder(
     /**
      * Tahap 3: Update durasi hold dan evolusi harga (peak & drawdown) saat market tick berjalan.
      */
-    fun processPriceTick(symbol: String, currentPrice: Double, exchange: String = "TOKOCRYPTO") {
+    fun processPriceTick(
+        symbol: String,
+        currentPrice: Double,
+        exchange: String = "TOKOCRYPTO",
+        // P0-6 — high/low candle terakhir bila tersedia. Tanpa ini Peak/Drawdown hanya mengikuti
+        // harga yang kebetulan tersampling (throttle 1,5 s) sehingga selalu understate.
+        candleHigh: Double = 0.0,
+        candleLow: Double = 0.0
+    ) {
         if (currentPrice <= 0.0 || symbol.isBlank()) return
         val normSymbol = symbol.uppercase().replace("_", "")
         val normExchange = exchange.uppercase()
@@ -140,23 +161,28 @@ class TradeHistoryRecorder(
                     }
                 if (holdings.isEmpty()) return@launch
 
+                val usedCandle = candleHigh > 0.0 || candleLow > 0.0
                 for (record in holdings) {
                     val duration = (now - record.buyTime).coerceAtLeast(0L)
-                    val rawPnlPct = if (record.buyPrice > 0) {
-                        ((currentPrice - record.buyPrice) / record.buyPrice) * 100.0
-                    } else 0.0
+                    // P0-6 — pakai ekstrem candle bila tersedia, kalau tidak jatuh ke harga tick.
+                    val highRef = if (candleHigh > 0.0) max(candleHigh, currentPrice) else currentPrice
+                    val lowRef = if (candleLow > 0.0) min(candleLow, currentPrice) else currentPrice
 
-                    val newPeak = if (record.peakPriceDuringHold <= 0.0) currentPrice else max(record.peakPriceDuringHold, currentPrice)
-                    val newTrough = if (record.troughPriceDuringHold <= 0.0) currentPrice else min(record.troughPriceDuringHold, currentPrice)
-                    val newMaxProfit = max(record.maxProfitPctDuringHold, max(0.0, rawPnlPct))
-                    val newMaxDrawdown = min(record.maxDrawdownPctDuringHold, min(0.0, rawPnlPct))
+                    val highPnlPct = if (record.buyPrice > 0) ((highRef - record.buyPrice) / record.buyPrice) * 100.0 else 0.0
+                    val lowPnlPct = if (record.buyPrice > 0) ((lowRef - record.buyPrice) / record.buyPrice) * 100.0 else 0.0
+
+                    val newPeak = if (record.peakPriceDuringHold <= 0.0) highRef else max(record.peakPriceDuringHold, highRef)
+                    val newTrough = if (record.troughPriceDuringHold <= 0.0) lowRef else min(record.troughPriceDuringHold, lowRef)
+                    val newMaxProfit = max(record.maxProfitPctDuringHold, max(0.0, highPnlPct))
+                    val newMaxDrawdown = min(record.maxDrawdownPctDuringHold, min(0.0, lowPnlPct))
 
                     val updated = record.copy(
                         holdingDurationMs = duration,
                         peakPriceDuringHold = newPeak,
                         troughPriceDuringHold = newTrough,
                         maxProfitPctDuringHold = newMaxProfit,
-                        maxDrawdownPctDuringHold = newMaxDrawdown
+                        maxDrawdownPctDuringHold = newMaxDrawdown,
+                        peakTrackedFromCandle = record.peakTrackedFromCandle || usedCandle
                     )
                     dao.updateRecord(updated)
                 }
@@ -224,7 +250,10 @@ class TradeHistoryRecorder(
         tradeUuid: String? = null,
         isTrailingUsed: Boolean = false,
         trailingLockPrice: Double? = null,
-        exchange: String = "TOKOCRYPTO"
+        exchange: String = "TOKOCRYPTO",
+        // P0-5 — persentase & puncak trailing nyata; sebelumnya tidak pernah tersimpan.
+        trailingPercent: Double? = null,
+        trailingPeakPrice: Double? = null
     ) {
         if (sellPrice <= 0.0 || sellQuantity <= 0.0) return
         val normSymbol = symbol.uppercase().replace("_", "")
@@ -270,7 +299,9 @@ class TradeHistoryRecorder(
                         pnlPercent = computedPnlPct,
                         isProfit = isWin,
                         isTrailingUsed = isTrailingUsed || targetRecord.isTrailingUsed,
-                        trailingLockPrice = trailingLockPrice ?: targetRecord.trailingLockPrice
+                        trailingLockPrice = trailingLockPrice ?: targetRecord.trailingLockPrice,
+                        trailingPercentUsed = trailingPercent ?: targetRecord.trailingPercentUsed,
+                        trailingPeakPriceUsed = trailingPeakPrice ?: targetRecord.trailingPeakPriceUsed
                     )
                     dao.updateRecord(closedRecord)
                 } else {
@@ -311,6 +342,8 @@ class TradeHistoryRecorder(
                         maxDrawdownPctDuringHold = min(0.0, computedPnlPct),
                         isTrailingUsed = isTrailingUsed,
                         trailingLockPrice = trailingLockPrice,
+                        trailingPercentUsed = trailingPercent,
+                        trailingPeakPriceUsed = trailingPeakPrice,
                         sellTime = now,
                         sellPrice = sellPrice,
                         sellQuantity = sellQuantity,
@@ -345,9 +378,12 @@ class TradeHistoryRecorder(
         val parts = mutableListOf<String>()
 
         snapshot.rsi14?.let { parts.add("RSI(14)=${String.format(Locale.US, "%.1f", it)}") }
+        // P1-7 — histogram MACD bukan persilangan. Label "Golden/Death Cross" menyesatkan
+        // (nilai ≈ 0 pun dicap "cross"); sekarang menyebut histogram dan tandanya secara eksplisit.
+        // P1-8 — cetak dengan digit signifikan, bukan Double.toString() (mis. 9.010876114987423E-4).
         snapshot.macdHist?.let {
-            val type = if (it >= 0) "Golden Cross (+$it)" else "Death Cross ($it)"
-            parts.add("MACD=$type")
+            val sign = if (it >= 0.0) "> 0" else "< 0"
+            parts.add("MACD Histogram $sign (${String.format(Locale.US, "%.4g", it)})")
         }
         if (snapshot.ema20 != null && snapshot.ema50 != null) {
             val relation = if (snapshot.ema20 > snapshot.ema50) "EMA20 > EMA50 (Uptrend)" else "EMA20 < EMA50 (Downtrend)"
@@ -358,6 +394,15 @@ class TradeHistoryRecorder(
             parts.add(if (it > 0) "Pressure=+$it% (Buyer)" else "Pressure=$it% (Seller)")
         }
         snapshot.bbWidthPct?.let { parts.add("BB Width=${PriceFormatter.formatPercentage(it, includePlusSign = false, decimals = 2)}") }
+        snapshot.rvol?.let { parts.add("RVOL=${String.format(Locale.US, "%.2f", it)}x") }
+        // P0-2 — basis bar dicantumkan agar nilai indikator di atas bisa direproduksi dari candle bursa.
+        snapshot.indicatorBarTime?.takeIf { it > 0L }?.let {
+            val state = if (snapshot.indicatorBarClosed == true) "tutup" else "berjalan"
+            val barClock = SimpleDateFormat("HH:mm", Locale.US)
+                .apply { timeZone = TimeZone.getTimeZone("Asia/Jakarta") }
+                .format(Date(it))
+            parts.add("Basis bar M1 $barClock WIB ($state)")
+        }
 
         return if (parts.isNotEmpty()) parts.joinToString(" • ") else "Mode ${mode.uppercase()} terverifikasi indikator multi-timeframe."
     }
@@ -374,6 +419,7 @@ class TradeHistoryRecorder(
         val samples = listOf(
             TradeHistoryRecordEntity(
                 tradeUuid = "seed-trade-btc-01$uidSuffix",
+                isSample = true,
                 symbol = "BTCIDR",
                 isRealTrade = true,
                 strategyMode = "SCALPING",
@@ -411,6 +457,7 @@ class TradeHistoryRecorder(
             ),
             TradeHistoryRecordEntity(
                 tradeUuid = "seed-trade-eth-02$uidSuffix",
+                isSample = true,
                 symbol = "ETHIDR",
                 isRealTrade = false,
                 strategyMode = "SCALPING",
@@ -449,6 +496,7 @@ class TradeHistoryRecorder(
             ),
             TradeHistoryRecordEntity(
                 tradeUuid = "seed-trade-sol-03$uidSuffix",
+                isSample = true,
                 symbol = "SOLIDR",
                 isRealTrade = false,
                 strategyMode = "SECOND_WAVE",
@@ -486,6 +534,7 @@ class TradeHistoryRecorder(
             ),
             TradeHistoryRecordEntity(
                 tradeUuid = "seed-trade-pepe-04$uidSuffix",
+                isSample = true,
                 symbol = "PEPEIDR",
                 isRealTrade = false,
                 strategyMode = "SCALPING",
@@ -523,6 +572,7 @@ class TradeHistoryRecorder(
             ),
             TradeHistoryRecordEntity(
                 tradeUuid = "seed-trade-near-05$uidSuffix",
+                isSample = true,
                 symbol = "NEARIDR",
                 isRealTrade = true,
                 strategyMode = "SCALPING",
@@ -551,6 +601,7 @@ class TradeHistoryRecorder(
             ),
             TradeHistoryRecordEntity(
                 tradeUuid = "seed-trade-btcusdt-06$uidSuffix",
+                isSample = true,
                 symbol = "BTCUSDT",
                 isRealTrade = false,
                 strategyMode = "SCALPING",
@@ -589,6 +640,7 @@ class TradeHistoryRecorder(
             ),
             TradeHistoryRecordEntity(
                 tradeUuid = "seed-trade-ethusdt-07$uidSuffix",
+                isSample = true,
                 symbol = "ETHUSDT",
                 isRealTrade = true,
                 strategyMode = "SCALPING",

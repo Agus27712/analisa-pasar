@@ -19,6 +19,25 @@ import java.util.Locale
  */
 object TradeLogExporter {
 
+    /**
+     * P1-8 — Format angka indikator dengan 4–6 digit signifikan.
+     *
+     * Sebelumnya nilai mentah `Double.toString()` ikut tercetak (mis. `+9.010876114987423E-4`),
+     * yang membuat laporan sulit dibaca dan sulit dibandingkan. `%g` menjaga presisi relatif
+     * untuk nilai kecil maupun besar.
+     */
+    private fun fmtMetric(value: Double?, sigDigits: Int = 4): String {
+        if (value == null || value.isNaN() || value.isInfinite()) return "-"
+        if (value == 0.0) return "0"
+        return String.format(Locale.US, "%.${sigDigits}g", value)
+    }
+
+    /** Format timestamp bar menjadi jam:menit:detik WIB agar basis indikator mudah diverifikasi. */
+    private fun fmtBarTime(ms: Long?): String {
+        if (ms == null || ms <= 0L) return "-"
+        return SimpleDateFormat("dd MMM HH:mm", Locale("id", "ID")).format(Date(ms))
+    }
+
     fun formatDuration(durationMs: Long?): String {
         if (durationMs == null || durationMs <= 0L) return "Baru Entry (0m)"
         val seconds = (durationMs / 1000) % 60
@@ -122,10 +141,14 @@ object TradeLogExporter {
             // Category B: Momentum & Oscillators
             sb.append("**[B. Momentum & Osilator]**\n")
             sb.append("- RSI (14): ${snapshot.rsi14?.let { String.format(Locale.US, "%.2f", it) } ?: "-"}\n")
-            sb.append("- MACD Line: ${snapshot.macd?.let { String.format(Locale.US, "%.4f", it) } ?: "-"}\n")
-            sb.append("- MACD Signal: ${snapshot.macdSignal?.let { String.format(Locale.US, "%.4f", it) } ?: "-"}\n")
-            sb.append("- MACD Histogram: ${snapshot.macdHist?.let { String.format(Locale.US, "%.4f", it) } ?: "-"}\n")
-            sb.append("- Momentum Score: ${snapshot.momentum?.let { String.format(Locale.US, "%.2f", it) } ?: "-"}\n\n")
+            sb.append("- MACD Line: ${fmtMetric(snapshot.macd, 5)}\n")
+            sb.append("- MACD Signal: ${fmtMetric(snapshot.macdSignal, 5)}\n")
+            sb.append("- MACD Histogram: ${fmtMetric(snapshot.macdHist, 5)}\n")
+            sb.append("- Momentum Score: ${snapshot.momentum?.let { String.format(Locale.US, "%.2f", it) } ?: "-"}\n")
+            sb.append("- Relative Volume (RVOL): ${snapshot.rvol?.let { String.format(Locale.US, "%.3f", it) + "x" } ?: "-"}\n")
+            sb.append("- VWAP 1M: ${snapshot.vwap?.let { fmtMetric(it, 6) } ?: "-"}\n")
+            // P0-2 — basis bar indikator supaya pihak ketiga bisa mereproduksi angka di atas.
+            sb.append("- Basis Bar Indikator: ${fmtBarTime(snapshot.indicatorBarTime)} (${if (snapshot.indicatorBarClosed == true) "bar sudah tutup" else if (snapshot.indicatorBarClosed == false) "bar masih berjalan" else "tidak diketahui"})\n\n")
 
             // Category C: Trend & Moving Averages
             sb.append("**[C. Tren & Exponential Moving Averages]**\n")

@@ -201,7 +201,7 @@ interface SignalLogDao {
 
 @Database(
     entities = [RealTradeEntity::class, RealOpenOrderEntity::class, SignalLogEntity::class, TradeHistoryRecordEntity::class],
-    version = 8,
+    version = 9,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -226,6 +226,25 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * 8 -> 9: integritas audit trade_history_records.
+         * - `trailingPercentUsed` / `trailingPeakPriceUsed`: nilai trailing yang sebenarnya
+         *   (sebelumnya konstanta 1,5 di getter → laporan bisa salah 10x).
+         * - `isSample`: penanda record contoh (seed) agar bisa dikeluarkan dari statistik.
+         * Migrasi nyata agar jurnal pengguna tidak terhapus.
+         */
+        val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE trade_history_records ADD COLUMN trailingPercentUsed REAL")
+                db.execSQL("ALTER TABLE trade_history_records ADD COLUMN trailingPeakPriceUsed REAL")
+                db.execSQL("ALTER TABLE trade_history_records ADD COLUMN isSample INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE trade_history_records ADD COLUMN peakTrackedFromCandle INTEGER NOT NULL DEFAULT 0")
+                // Record lama yang menandai trailing aktif dianggap contoh/kontaminasi lama:
+                // nilainya tidak dapat dipercaya lagi karena persentase sebenarnya tidak pernah disimpan.
+                db.execSQL("UPDATE trade_history_records SET isSample = 1 WHERE tradeUuid LIKE 'seed-trade-%'")
+            }
+        }
+
         fun getInstance(): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val context = AppContextProvider.context
@@ -234,7 +253,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "agu_analys_db"
                 )
-                .addMigrations(MIGRATION_7_8)
+                .addMigrations(MIGRATION_7_8, MIGRATION_8_9)
                 .fallbackToDestructiveMigration()
                 .build()
                 INSTANCE = instance

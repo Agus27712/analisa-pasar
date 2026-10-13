@@ -82,6 +82,28 @@ object CandleTimeUtil {
     }
 
     /**
+     * Tandai bar terakhir sebagai **belum tutup** bila masih berada di dalam window waktunya.
+     *
+     * REST klines bursa selalu menyertakan candle yang sedang berjalan, tetapi model [CandleBar]
+     * memberi `isClosed = true` secara default. Akibatnya saat tidak ada tick live (mode REST-only
+     * atau WebSocket terputus), bar sebagian menit diperlakukan sebagai bar penuh dan RVOL/VSA
+     * menjadi bias rendah (P0-1).
+     */
+    fun markLastCandleOpenIfForming(
+        candles: List<CandleBar>,
+        timeframe: Timeframe,
+        nowMs: Long = System.currentTimeMillis()
+    ): List<CandleBar> {
+        if (candles.isEmpty()) return candles
+        val duration = timeframeDurationMs(timeframe)
+        val last = candles.last()
+        if (last.isClosed && last.timestamp + duration > nowMs) {
+            return candles.dropLast(1) + last.copy(isClosed = false)
+        }
+        return candles
+    }
+
+    /**
      * Menggabungkan (sintesis) candle historis dengan tick harga realtime aktif.
      * Mengeliminasi delay REST API, sehingga indikator dan chart langsung update per-tick.
      */

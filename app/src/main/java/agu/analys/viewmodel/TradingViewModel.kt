@@ -156,7 +156,15 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
             // Dibungkus runCatching agar kegagalan exit paper tidak pernah menghentikan tick harga.
             runCatching { evaluatePaperAutoExit(symbol, currentEx, price, recentCandles.takeLast(15)) }
             signalLogRepository.processPriceTick(symbol, price, currentEx)
-            tradeHistoryRecorder.processPriceTick(symbol, price, currentEx)
+            // P0-6 — teruskan ekstrem candle supaya Peak/Drawdown jurnal tidak understate.
+            val lastCandle = recentCandles.lastOrNull()
+            tradeHistoryRecorder.processPriceTick(
+                symbol = symbol,
+                currentPrice = price,
+                exchange = currentEx,
+                candleHigh = lastCandle?.high ?: 0.0,
+                candleLow = lastCandle?.low ?: 0.0
+            )
         }
     )
 
