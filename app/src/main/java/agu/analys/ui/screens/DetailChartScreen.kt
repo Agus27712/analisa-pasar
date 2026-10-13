@@ -22,9 +22,6 @@ import agu.analys.ui.components.SignalHistoryPanel
 import agu.analys.ui.components.detail.*
 import agu.analys.ui.components.detail.scalp.PaperTradeDeskCard
 import agu.analys.ui.components.detail.scalp.ScalpDeskCard
-import agu.analys.engine.readiness.EngineVerdict
-import agu.analys.engine.readiness.TradeHorizon
-import agu.analys.ui.components.readiness.SymbolReadinessCard
 import agu.analys.ui.components.settings.LogcatDiagnosticDialog
 import agu.analys.ui.theme.*
 import agu.analys.util.AppPreferences
@@ -58,11 +55,6 @@ fun DetailChartScreen(
 
     // MTF still separate (not yet folded into DetailUiState)
     val mtfStateAll by viewModel.mtfState.collectAsStateWithLifecycle()
-
-    // Papan kesiapan multi-horizon (TEAM 1/2) — diambil dari papan global supaya kartu di sini
-    // menampilkan angka yang sama dengan yang ada di papan, bukan hitungan kedua.
-    val readinessBoard by viewModel.readinessBoard.collectAsStateWithLifecycle()
-    val readinessLoading by viewModel.readinessLoading.collectAsStateWithLifecycle()
     val mtfState by remember(mtfStateAll, ui.pair.symbol) {
         derivedStateOf {
             DetailUiStateFactory.resolveMtfForPair(mtfStateAll, ui.pair)
@@ -71,13 +63,6 @@ fun DetailChartScreen(
 
     // Unpack for readability (stable references when ui identity changes)
     val pair = ui.pair
-
-    // Pastikan pair yang sedang dibuka ikut dinilai begitu halaman dibuka. Pemindaian berkala
-    // (60 detik) saja tidak cukup: pair yang baru dipilih bisa belum ada di papan.
-    LaunchedEffect(pair.symbol) {
-        viewModel.refreshReadinessBoard()
-    }
-
     val tick = ui.tick
     val candles = ui.candles
     val indicators = ui.indicators
@@ -325,50 +310,6 @@ fun DetailChartScreen(
             }
 
             Spacer(Modifier.height(10.dp))
-
-            // ── Kesiapan horizon (scalp / intraday / swing) ───────────────
-            //
-            // SSOT: baris horizon yang engine-nya sedang aktif diambil dari **keputusan engine**
-            // (`EngineVerdict`), memakai objek checkpoint yang sama dengan kartu SCALP DESK/radar
-            // di halaman ini. Sebelumnya baris itu dihitung ulang oleh pra-saring dengan daftar
-            // syarat berbeda, sehingga SCALPING bisa terbaca "3/5" di sini sementara SCALP DESK
-            // menampilkan "1/5" — dua angka untuk satu pertanyaan.
-            //
-            // Dihitung di sini (bukan hanya dari papan) supaya pair yang baru dibuka langsung
-            // benar walau pemindaian 60 detik belum sempat berjalan.
-            val symbolReadiness = remember(
-                readinessBoard, pair.symbol, signal, scalpReadiness, paperSnapshot,
-                strategyMode, displayPrice, tradingFees, scalpingRuntime
-            ) {
-                val engineRow = EngineVerdict.of(
-                    mode = strategyMode,
-                    symbol = pair.symbol,
-                    signal = signal,
-                    readiness = scalpReadiness,
-                    price = displayPrice,
-                    fees = tradingFees,
-                    exitParams = scalpingRuntime.exit,
-                    // Di mode scalping kartu SCALP DESK tepat di bawah sudah memuat entry/SL/TP;
-                    // menyalinnya lagi akan mengembalikan duplikasi yang sedang dihapus.
-                    planInCardElsewhere = isScalping
-                )
-                val boardRows = readinessBoard.forSymbol(pair.symbol)
-                TradeHorizon.entries.mapNotNull { h ->
-                    if (h == engineRow.horizon) engineRow
-                    else boardRows.firstOrNull { it.horizon == h }
-                }
-            }
-            if (symbolReadiness.isNotEmpty()) {
-                SymbolReadinessCard(
-                    symbol = pair.symbol,
-                    rows = symbolReadiness,
-                    quoteAsset = pair.quoteAsset,
-                    activeHorizon = TradeHorizon.of(strategyMode),
-                    loading = readinessLoading,
-                    onRequestData = { viewModel.requestReadinessData() }
-                )
-                Spacer(Modifier.height(10.dp))
-            }
 
             // ── Mode scalping: Scalp Desk + Paper Trade Desk ──────────────
             // Blok analisa radar lama dilewati (hideAnalysis) supaya status, entry, SL, dan TP
