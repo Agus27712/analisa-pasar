@@ -490,7 +490,7 @@ object HorizonReadinessEngine {
      * Untuk SCALP teksnya dibangun dari [ScalpExitParams] yang **sedang aktif**, sehingga UI tidak
      * pernah menampilkan aturan exit yang berbeda dari yang benar-benar dijalankan engine paper.
      */
-    private fun exitRule(horizon: TradeHorizon, exitParams: ScalpExitParams): String =
+    fun exitRule(horizon: TradeHorizon, exitParams: ScalpExitParams): String =
         when (horizon) {
             TradeHorizon.SCALP -> buildString {
                 append("Beli di area entry, tahan, keluar saat profit net mencapai target (TP2) atau kena SL.")
@@ -582,7 +582,8 @@ object HorizonReadinessEngine {
         return if (worst <= FLASH_DUMP_PCT) worst else null
     }
 
-    private fun roundTripCostPct(
+    /** Biaya round-trip all-in (fee beli + fee jual + 2× slippage), persen harga. */
+    fun roundTripCostPct(
         fees: TradingFeeConfig,
         useMaker: Boolean,
         slippagePct: Double
@@ -592,8 +593,14 @@ object HorizonReadinessEngine {
         return buyFee + sellFee + 2.0 * slippagePct
     }
 
-    /** Skor berbobot: gate ekonomi dihitung [ECONOMY_WEIGHT] kali. */
-    private fun weightedScore(checks: List<ReadinessCheck>): Int {
+    /**
+     * Skor berbobot: gate ekonomi dihitung [ECONOMY_WEIGHT] kali.
+     *
+     * Publik supaya [EngineVerdict] memakai **penghitung skor yang sama** saat mengubah keputusan
+     * engine menjadi baris papan. Dua penghitung skor yang berbeda akan membuat angka papan dan
+     * angka kartu engine berbeda meski syaratnya identik.
+     */
+    fun weightedScore(checks: List<ReadinessCheck>): Int {
         if (checks.isEmpty()) return 0
         var earned = 0
         var total = 0
@@ -613,6 +620,9 @@ object HorizonReadinessEngine {
         economyOk: Boolean,
         blocker: String?
     ): String = when (state) {
+        // Tidak pernah dihasilkan pra-saring (lihat `EngineVerdict`); dicantumkan supaya
+        // penambahan status baru tidak bisa diam-diam menghasilkan teks kosong.
+        ReadinessState.HOLDING -> "Posisi simulasi terbuka — exit dipegang engine paper."
         ReadinessState.NO_DATA -> "Menunggu data candle ${horizon.label.lowercase()}."
         ReadinessState.BLOCKED -> blocker ?: "Tertahan kondisi pasar."
         ReadinessState.READY -> "Siap ${horizon.label.lowercase()} — $passed/$total syarat lolos."

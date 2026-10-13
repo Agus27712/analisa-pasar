@@ -1,15 +1,18 @@
 package agu.analys.viewmodel
 
 import agu.analys.engine.readiness.CandleSource
+import agu.analys.engine.readiness.EngineVerdict
 import agu.analys.engine.readiness.ReadinessBoard
 import agu.analys.engine.readiness.ReadinessScanner
 import agu.analys.engine.readiness.ReadinessState
 import agu.analys.engine.readiness.TradeHorizon
+import agu.analys.engine.scalping.ScalpReadiness
 import agu.analys.model.Timeframe
 import agu.analys.util.MtfCacheManager
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -54,7 +57,8 @@ fun TradingViewModel.readinessSymbols(): List<String> {
 fun TradingViewModel.refreshReadinessBoard() {
     val symbols = readinessSymbols()
     if (symbols.isEmpty()) {
-        _readinessBoard.value = ReadinessBoard.EMPTY
+        readinessScanBoard = ReadinessBoard.EMPTY
+        publishReadinessBoard()
         return
     }
 
@@ -76,11 +80,77 @@ fun TradingViewModel.refreshReadinessBoard() {
                     priceOf = { s -> ticks[s]?.price?.takeIf { p -> p > 0.0 } }
                 )
             }
-            _readinessBoard.value = board
+            readinessScanBoard = board
+            publishReadinessBoard()
         } finally {
             _readinessLoading.value = false
         }
     }
+}
+
+/**
+ * Horizon yang engine-nya sedang aktif — **penentu mana baris yang boleh disebut keputusan engine**.
+ *
+ * Berasal dari preferensi yang disimpan pengguna lewat tombol simpan di Pengaturan
+ * ([agu.analys.config.StrategyMode]), bukan dari horizon yang kebetulan sedang dibuka di papan.
+ */
+fun TradingViewModel.readinessActiveHorizon(): TradeHorizon = TradeHorizon.of(strategyMode.value)
+
+/**
+ * Publikasikan papan = hasil pemindaian + lapisan keputusan engine.
+ *
+ * Dipisah dari [refreshReadinessBoard] supaya sinyal yang berubah setiap tick bisa memperbarui
+ * baris engine tanpa memicu pemindaian ulang ratusan kombinasi koin × horizon.
+ */
+fun TradingViewModel.publishReadinessBoard() {
+    _readinessBoard.value = readinessScanBoard.withEngineRows(engineVerdictRows())
+}
+
+/**
+ * Baris keputusan engine untuk **horizon aktif × pair yang sedang dibuka**.
+ *
+ * Hanya pair aktif yang punya sinyal engine hidup; koin lain di daftar pantau belum dinilai engine
+ * (mesinnya bekerja per simbol yang sedang diulas). Untuk koin itu barisnya tetap pra-saring dan
+ * UI wajib menyebutnya begitu — lebih baik mengaku "belum dinilai engine" daripada menampilkan
+ * angka pra-saring seolah keputusan engine.
+ *
+ * @param planInCardElsewhere sembunyikan entry/SL/TP bila kartu engine tampil di layar yang sama
+ */
+fun TradingViewModel.engineVerdictRows(planInCardElsewhere: Boolean = false): List<agu.analys.engine.readiness.HorizonReadiness> {
+    val signal = engine.signalState.value
+    val symbol = selectedPair.value.symbol.trim()
+    if (symbol.isEmpty()) return emptyList()
+
+    val exchange = marketDataSource.value.name
+    // Harga acuan: tick pair yang sedang dibuka lebih dulu (paling segar), lalu peta dashboard.
+    // `0.0` berarti "belum ada harga" — bukan harga nol; `EngineVerdict` yang memutuskan jatuh ke
+    // harga sinyal.
+    val liveTick = currentTick.value
+        ?.takeIf { isMatchingSymbol(it.symbol, symbol) }
+        ?.price?.takeIf { it > 0.0 }
+    val price = liveTick
+        ?: dashboardTicks.value[symbol]?.price?.takeIf { it > 0.0 }
+        ?: 0.0
+
+    val hasPaperPosition = paperSnapshotFor(exchange, symbol, price) != null
+    val readiness = ScalpReadiness.resolve(
+        signal = signal,
+        hasPaperPosition = hasPaperPosition,
+        minStage = paperAutoTradeConfig.value.minStage
+    )
+
+    return listOf(
+        EngineVerdict.of(
+            mode = strategyMode.value,
+            symbol = symbol,
+            signal = signal,
+            readiness = readiness,
+            price = price,
+            fees = tradingFees.value,
+            exitParams = scalpingRuntimeConfig.value.exit,
+            planInCardElsewhere = planInCardElsewhere
+        )
+    )
 }
 
 /** Ganti horizon yang sedang dilihat di papan. */
@@ -131,6 +201,32 @@ fun TradingViewModel.startReadinessPolling() {
         while (true) {
             refreshReadinessBoard()
             delay(READINESS_REFRESH_MS)
+        }
+    }
+    startReadinessEngineLayer()
+}
+
+/**
+ * Lapisan keputusan engine yang **reaktif**.
+ *
+ * Pemindaian pra-saring berjalan 60 detik sekali, tetapi sinyal engine berubah setiap tick dan
+ * posisi paper bisa dibuka/ditutup kapan saja. Tanpa langganan ini, baris "ENGINE AKTIF" akan
+ * tertinggal beberapa detik dari kartu SCALP DESK — dan keterlambatan itu sendiri sudah cukup
+ * untuk memunculkan kembali kontradiksi yang sedang diperbaiki.
+ *
+ * Biayanya kecil: [publishReadinessBoard] hanya menyusun ulang satu baris dari hasil pemindaian
+ * yang sudah ada, tanpa menyentuh cache candle.
+ */
+private fun TradingViewModel.startReadinessEngineLayer() {
+    readinessEngineJob?.cancel()
+    readinessEngineJob = viewModelScope.launch {
+        combine(
+            engine.signalState,
+            paperExitSnapshot,
+            _readinessHorizon,
+            selectedPair
+        ) { _, _, _, _ -> Unit }.collect {
+            publishReadinessBoard()
         }
     }
 }

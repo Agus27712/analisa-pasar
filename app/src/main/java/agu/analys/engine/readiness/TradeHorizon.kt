@@ -1,5 +1,6 @@
 package agu.analys.engine.readiness
 
+import agu.analys.config.StrategyMode
 import agu.analys.engine.scalping.ScalpingConfig
 import agu.analys.model.Timeframe
 
@@ -32,6 +33,7 @@ import agu.analys.model.Timeframe
  * @param targetNetRr target net R:R setelah fee & slippage
  * @param minFrictionMultiple kelipatan minimum jarak SL terhadap friksi round-trip
  * @param validatedOutOfSample sudah diuji keluar-sampel dengan data riil?
+ * @param strategyMode mode engine yang memakai horizon ini — **penaut ke SSOT**
  */
 enum class TradeHorizon(
     val label: String,
@@ -42,7 +44,8 @@ enum class TradeHorizon(
     val triggerTimeframe: Timeframe,
     val targetNetRr: Double,
     val minFrictionMultiple: Double,
-    val validatedOutOfSample: Boolean
+    val validatedOutOfSample: Boolean,
+    val strategyMode: StrategyMode
 ) {
     /** Scalping: menit–jam. Ambang & lantai friksi **sama** dengan engine scalping (SSOT §9). */
     SCALP(
@@ -54,7 +57,8 @@ enum class TradeHorizon(
         triggerTimeframe = Timeframe.M1,
         targetNetRr = ScalpingConfig.TARGET_NET_RR,
         minFrictionMultiple = ScalpingConfig.MIN_FRICTION_MULTIPLE,
-        validatedOutOfSample = true
+        validatedOutOfSample = true,
+        strategyMode = StrategyMode.SCALPING
     ),
 
     /**
@@ -73,7 +77,8 @@ enum class TradeHorizon(
         triggerTimeframe = Timeframe.M15,
         targetNetRr = 1.5,
         minFrictionMultiple = 4.0,
-        validatedOutOfSample = false
+        validatedOutOfSample = false,
+        strategyMode = StrategyMode.OFFICE_DAILY
     ),
 
     /**
@@ -90,7 +95,8 @@ enum class TradeHorizon(
         triggerTimeframe = Timeframe.H4,
         targetNetRr = 2.0,
         minFrictionMultiple = 3.0,
-        validatedOutOfSample = false
+        validatedOutOfSample = false,
+        strategyMode = StrategyMode.SWING
     );
 
     /** Timeframe perantara (selain bias & trigger) — dipakai untuk konfirmasi momentum. */
@@ -100,5 +106,16 @@ enum class TradeHorizon(
     companion object {
         fun fromKey(key: String?): TradeHorizon? =
             entries.firstOrNull { it.name.equals(key?.trim(), ignoreCase = true) }
+
+        /**
+         * Horizon yang engine-nya sedang aktif.
+         *
+         * **Ini penaut SSOT.** Preferensi engine disimpan pengguna lewat tombol simpan di
+         * Pengaturan ([StrategyMode]); fungsi ini memastikan papan kesiapan tidak pernah
+         * menampilkan kesimpulan untuk horizon yang engine-nya tidak dipilih — kecuali
+         * ditandai tegas sebagai pra-saring.
+         */
+        fun of(mode: StrategyMode): TradeHorizon =
+            entries.first { it.strategyMode == mode }
     }
 }
