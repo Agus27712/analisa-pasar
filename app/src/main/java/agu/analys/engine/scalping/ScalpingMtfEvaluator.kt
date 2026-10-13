@@ -77,7 +77,8 @@ object ScalpingMtfEvaluator {
         orderBookAgeMs: Long = 0L,
         diagnosticIgnoreOrderBookWhenUnavailable: Boolean = false,
         config: ScalpingRuntimeConfig = ScalpingRuntimeConfig.current,
-        nowMs: Long = 0L
+        nowMs: Long = 0L,
+        change24h: Double = 0.0
     ): Result? = evaluate(
         globalContext = agu.analys.engine.global.GlobalMarketContext(),
         price = price,
@@ -92,7 +93,8 @@ object ScalpingMtfEvaluator {
         orderBookAgeMs = orderBookAgeMs,
         diagnosticIgnoreOrderBookWhenUnavailable = diagnosticIgnoreOrderBookWhenUnavailable,
         config = config,
-        nowMs = nowMs
+        nowMs = nowMs,
+        change24h = change24h
     )
 
     fun evaluate(
@@ -110,7 +112,9 @@ object ScalpingMtfEvaluator {
         diagnosticIgnoreOrderBookWhenUnavailable: Boolean = false,
         config: ScalpingRuntimeConfig = ScalpingRuntimeConfig.current,
         // Waktu evaluasi (ms). `<= 0` = pakai jam sistem. Dipakai untuk memproyeksikan volume bar berjalan.
-        nowMs: Long = 0L
+        nowMs: Long = 0L,
+        // S9 — perubahan harga 24 jam (%) dari tick bursa. `0` = tidak diketahui → gerbang dilewati.
+        change24h: Double = 0.0
     ): Result? {
         if (price <= 0.0 || h1Candles.size < 20 || m15Candles.size < 20 || m1Candles.size < 20) return null
 
@@ -253,6 +257,12 @@ object ScalpingMtfEvaluator {
             m1Candles.size >= 5 &&
             m1Candles.last().close < m1Candles[m1Candles.size - 5].close * 0.992
 
+        // S9 — gerbang extended move: koin yang sudah naik ekstrem dalam 24 jam ditahan.
+        // `change24h` = 0.0 berarti tidak diketahui (mis. jalur offline/replay) → gerbang dilewati
+        // supaya tidak memblokir sinyal karena data yang memang tidak ada.
+        val isExtendedMove = config.maxChange24hPct > 0.0 &&
+            change24h >= config.maxChange24hPct
+
         val isDangerous = isDangerousNoise || isOverbought || isFallingKnife
 
         val step1Ok = !isDangerous && hasRoomToGrow
@@ -265,7 +275,10 @@ object ScalpingMtfEvaluator {
         val minScoreForLong = config.minScoreForSetup(setup.name)
         val step4Ok = step3Ok && riskValid && score.total >= minScoreForLong
 
-        val ready = step4Ok
+        // S9 — extended move memblokir eksekusi, bukan menandai "berbahaya" (kualitas sinyal
+        // tetap sah, hanya waktunya yang salah). Karena itu ia memblokir `ready`/`early`
+        // secara terpisah dari `isDangerous`.
+        val ready = step4Ok && !isExtendedMove
         val strong = ready && score.total >= config.minScoreStrong
         // P1 — `EARLY_ENTRY` WAJIB mensyaratkan pola scalping yang benar-benar ada.
         // Sebelumnya `early` hanya butuh `step2Ok` (= `step1Ok && isOrderBookValid`), yang sama
@@ -273,7 +286,7 @@ object ScalpingMtfEvaluator {
         // tetap dipancarkan sebagai `ScalpingStage.EARLY_ENTRY`, lalu `SignalLifecycleManager`
         // menaikkannya ke `LifecycleState.DETECTED` — radar berkata "TERDETEKSI" sementara
         // kartu setup berkata "NONE". Sekarang keduanya tidak bisa lagi bertentangan.
-        val early = !ready && !isDangerous && step2Ok && setup != ScalpSetupType.NONE
+        val early = !ready && !isDangerous && !isExtendedMove && step2Ok && setup != ScalpSetupType.NONE
 
         val direction = if (ready) SignalDirection.LONG else SignalDirection.WAIT
         val finalAction = if (direction == SignalDirection.LONG) SignalAction.BUY else SignalAction.HOLD
@@ -282,7 +295,16 @@ object ScalpingMtfEvaluator {
         if (isDangerousNoise) reasons.add("⚠️ Tertahan: Volatilitas pasar sedang liar (Noise tinggi).")
         if (isOverbought) reasons.add("⚠️ Tertahan: Harga koin sedang terlalu tinggi (Jenuh Beli/Overbought RSI 1M ${fmt(rsi1M)}).")
         if (isFallingKnife) reasons.add("⚠️ Tertahan: Falling knife (struktur M15 bearish + M1 turun tajam).")
+        if (isExtendedMove) reasons.add("⚠️ Tertahan: Koin sudah naik ${fmt(change24h)}% dalam 24 jam (batas ${fmt(config.maxChange24hPct)}%) — hindari mengejar ekor kenaikan.")
         if (!hasRoomToGrow) reasons.add("⚠️ Tertahan: Harga koin terlalu dekat resistance M15 (Ruang naik sempit).")
+        // S4 — ATR di luar band scalp ideal: terlalu tenang (friksi menggerus) atau terlalu liar
+        // (stop rapat mudah tersapu wick). Konstanta ATR_PCT_* sebelumnya tidak pernah dipakai.
+        if (volPct > 0.0 && !ScalpingConfig.isAtrInScalpSweetBand(volPct)) {
+            reasons.add(
+                "ℹ️ ATR 1M ${fmt(volPct)}% (${ScalpingConfig.atrBandLabel(volPct)}) — " +
+                    "band scalp ideal ${fmt(ScalpingConfig.ATR_PCT_SCALP_SWEET_LOW)}–${fmt(ScalpingConfig.ATR_PCT_SCALP_SWEET_HIGH)}%."
+            )
+        }
         reasons.add(
             if (setup == ScalpSetupType.NONE) "Setup: belum ada. ${setupResult.explanation}"
             else "Setup ${setup.name}: ${setupResult.explanation}"
@@ -317,6 +339,7 @@ object ScalpingMtfEvaluator {
             strong -> reasons.add(0, "TAHAP STRONG ENTRY — Skor ${score.total}/100 + Net R:R 1:${fmt(netRr)}")
             ready -> reasons.add(0, "TAHAP BUY READY — Skor ${score.total}/100 + Net R:R 1:${fmt(netRr)}.")
             early -> reasons.add(0, "TAHAP EARLY — setup ${setup.name} terbentuk, menunggu trigger & konfirmasi penuh.")
+            isExtendedMove -> reasons.add(0, "TAHAP HOLD — koin sudah naik ekstrem 24 jam; sinyal ditahan sampai konsolidasi.")
             isDangerous -> {}
             step2Ok -> reasons.add(0, "WAIT: tekanan orderbook sudah mendukung, tetapi belum ada setup scalping valid.")
             else -> reasons.add(0, "WAIT: belum ada setup valid. Menunggu momentum & orderbook.")
@@ -326,6 +349,7 @@ object ScalpingMtfEvaluator {
             strong -> ScalpingStage.STRONG_ENTRY
             ready -> ScalpingStage.ENTRY
             early -> ScalpingStage.EARLY_ENTRY
+            isExtendedMove -> ScalpingStage.HOLD
             isDangerous -> ScalpingStage.HOLD
             else -> ScalpingStage.WATCH
         }
@@ -351,6 +375,7 @@ object ScalpingMtfEvaluator {
         }
         val entryDetailText = when {
             !step3Ok -> "Menunggu Checkpoint 3 lolos."
+            isExtendedMove -> "Koin sudah naik ${fmt(change24h)}% / 24 jam — menunggu konsolidasi."
             step4Ok -> "Net RR: 1:${fmt(netRr)} (Valid), skor ${score.total}."
             !riskValid -> "Menunggu Net RR optimal (Min 1:${fmt(ScalpingRiskEngine.DEFAULT_MIN_NET_RR)})."
             else -> "Menunggu skor sinyal ≥ $minScoreForLong (${setup.name}, sekarang ${score.total})."
@@ -377,6 +402,7 @@ object ScalpingMtfEvaluator {
                 isDangerousNoise -> "NOISE TINGGI (HOLD)"
                 isFallingKnife -> "FALLING KNIFE (HOLD)"
                 isOverbought -> "OVERBOUGHT (HOLD)"
+                isExtendedMove -> "EXTENDED MOVE (HOLD)"
                 strong -> "STRONG ENTRY"
                 ready -> "BUY READY"
                 step3Ok -> "TRIGGER READY (3/4)"
@@ -389,6 +415,7 @@ object ScalpingMtfEvaluator {
                 isDangerousNoise -> "Menunggu volatilitas stabil"
                 isFallingKnife -> "Menunggu stabilisasi setelah dump"
                 isOverbought -> "Menunggu koreksi / reset RSI 1M"
+                isExtendedMove -> "Menunggu konsolidasi setelah kenaikan 24 jam yang ekstrem"
                 !hasRoomToGrow -> "Menunggu breakout resistance M15"
                 ready -> "Eksekusi"
                 step3Ok -> "Konfirmasi Net R:R & skor"
@@ -454,6 +481,7 @@ object ScalpingMtfEvaluator {
 
         val rejectionReason = when {
             finalAction == SignalAction.BUY -> null
+            isExtendedMove -> "STEP0_EXTENDED_MOVE"
             !step1Ok -> when {
                 isDangerousNoise -> "STEP1_DANGEROUS_NOISE"
                 isOverbought -> "STEP1_OVERBOUGHT"

@@ -42,6 +42,19 @@ object ScalpingConfig {
      * **lebih buruk** di pair IDR berbiaya rendah (penjaga relatif jadi tidak berperan).
      */
     const val MIN_RISK_PCT = 0.5
+    /**
+     * S3 — **batas keras jarak stop loss** sebagai kelipatan ATR.
+     *
+     * Ini lantai keselamatan sisi lain: [MIN_FRICTION_MULTIPLE] memaksa SL cukup lebar agar
+     * satu kali stop tidak menelan banyak R, sedangkan konstanta ini memastikan SL tidak
+     * pernah lebih jauh dari N× ATR. Untuk AMP (ATR 2,03%) nilainya ≈ 4% — cukup untuk
+     * menahan noise normal, tapi tetap ada lantai kalau harga lanjut turun.
+     *
+     * PENTING: bila lantai friksi menghasilkan jarak **lebih lebar** dari batas ini,
+     * lantai friksi yang menang (lihat `ScalpingRiskEngine`: `maxRiskAbs` dinaikkan ke
+     * `minRiskAbs`). Jadi batas ini tidak pernah mempersempit SL di bawah lantai friksi.
+     */
+    const val MAX_RISK_ATR = 2.0
     const val MAX_TP2_R = 5.0
     const val DEFAULT_SLIPPAGE_PCT = 0.08
     /**
@@ -61,6 +74,27 @@ object ScalpingConfig {
      * Efek lantai: USDT 0,9688% → ≈5,81% · IDR taker 0,8144% → ≈4,89% · IDR maker 0,6144% → ≈3,69%.
      */
     const val MIN_FRICTION_MULTIPLE = 6.0
+
+    // --- Extended move (S9) ---
+    /**
+     * S9 — gerbang *extended move*: koin yang sudah naik ≥ nilai ini (%) dalam 24 jam
+     * ditahan dari sinyal BUY.
+     *
+     * Kasus nyata (AMP/USDT): masuk saat koin sudah **+28,09%** dalam 24 jam, yaitu tepat di
+     * dekat puncak harian, dengan MACD mendatar dan volume mengering — lalu harga turun
+     * −2,76% selama 9 menit sebelum berbalik. Membeli *pullback* di ekor kenaikan ekstrem
+     * bukan breakout segar; itu mengejar sisa gerakan yang sebagian besar sudah terjadi.
+     *
+     * **Default 0 = gerbang NONAKTIF**, dan ini disengaja. Bukti replay GNS/USDT
+     * (2000 bar M1, 2026-10): dengan ambang 25% sinyal ready turun 20 → 10 dan seluruh
+     * trade yang tersisa **tidak pernah resolve** — padahal tanpa gerbang trade-trade itu
+     * **4/4 menang, avg R +0,178, tanpa drawdown**. Artinya ambang 25% memotong justru
+     * fase tren yang sehat. Satu pair bukan dasar untuk mengubah perilaku entry, maka
+     * gerbang diserahkan ke pengguna sampai ada walk-forward multi-pair (lihat P4.1).
+     *
+     * Dapat diubah dari Pengaturan (`max_change_24h_pct`).
+     */
+    const val MAX_CHANGE_24H_PCT = 0.0
 
     // --- Volume (RVOL) ---
     const val RVOL_LOW = 0.7
@@ -95,6 +129,24 @@ object ScalpingConfig {
     const val ATR_PCT_LOW = 0.8
     const val ATR_PCT_SCALP_SWEET_LOW = 0.3
     const val ATR_PCT_SCALP_SWEET_HIGH = 1.5
+
+    /**
+     * S4 — apakah ATR% berada di band yang ideal untuk scalping.
+     *
+     * Di bawah [ATR_PCT_SCALP_SWEET_LOW] pergerakan terlalu tipis untuk menutup friksi;
+     * di atas [ATR_PCT_SCALP_SWEET_HIGH] stop rapat mudah tersapu wick (kasus AMP: ATR 2,03%).
+     * Konstanta ini sebelumnya dideklarasikan tetapi tidak pernah dipakai.
+     */
+    fun isAtrInScalpSweetBand(atrPct: Double): Boolean =
+        atrPct >= ATR_PCT_SCALP_SWEET_LOW && atrPct <= ATR_PCT_SCALP_SWEET_HIGH
+
+    /** Label singkat posisi ATR% relatif terhadap band scalp ideal. */
+    fun atrBandLabel(atrPct: Double): String = when {
+        atrPct <= 0.0 -> "tidak diketahui"
+        atrPct < ATR_PCT_SCALP_SWEET_LOW -> "terlalu tenang"
+        atrPct > ATR_PCT_SCALP_SWEET_HIGH -> "terlalu liar"
+        else -> "ideal"
+    }
 
     // --- Structure / setup jarak (%) ---
     /** Jarak maksimum ke level untuk dianggap "retest". */

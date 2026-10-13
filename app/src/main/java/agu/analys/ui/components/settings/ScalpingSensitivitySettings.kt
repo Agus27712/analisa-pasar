@@ -150,6 +150,20 @@ private val SLIDER_GUIDES = mapOf(
         plusEffect = "Hanya mempercayai level-level penting yang sudah berkali-kali teruji kuat oleh pasar.",
         minusEffect = "Level support/resisten yang baru terbentuk sebentar pun dapat dijadikan patokan pantulan.",
         defaultVal = "60 (Struktur solid)"
+    ),
+    "max_change_24h_pct" to SliderGuideInfo(
+        title = "Batas Kenaikan 24 Jam (Extended Move)",
+        jsonKey = "max_change_24h_pct",
+        summary = "Bila koin sudah naik melebihi persentase ini dalam 24 jam, sistem menahan sinyal beli. " +
+            "Membeli di ekor kenaikan ekstrem berarti mengejar sisa gerakan yang sebagian besar sudah terjadi, " +
+            "dan biasanya justru tepat di dekat puncak harian.",
+        plusEffect = "Koin yang sudah naik banyak tetap boleh dibeli — lebih banyak sinyal, tetapi risiko " +
+            "masuk di puncak dan langsung terkoreksi ikut naik.",
+        minusEffect = "Lebih banyak koin ditahan. Contoh nyata: AMP/USDT masuk saat sudah +28% dalam 24 jam, " +
+            "lalu menahan drawdown −2,76% selama 9 menit.",
+        // Default 0: replay GNS menunjukkan ambang 25% memotong justru fase tren yang sehat
+        // (4/4 menang, avg R +0,178) — jadi gerbang diserahkan ke pengguna.
+        defaultVal = "0 = nonaktif (default)"
     )
 )
 
@@ -450,6 +464,23 @@ fun ScalpingSensitivitySettings(
                         onConfigChange(config.copy(retestMinStructureStrength = newVal.roundToInt()), "CUSTOM")
                     },
                     onShowInfo = { activeGuideKey = "retest_min_structure_strength" }
+                )
+
+                HorizontalDivider(color = Color.White.copy(alpha = 0.05f), modifier = Modifier.padding(vertical = 8.dp))
+
+                // 12. S9 — Batas kenaikan 24 jam (extended move)
+                SensitivitySliderItem(
+                    label = "Batas Kenaikan 24 Jam",
+                    jsonKey = "max_change_24h_pct",
+                    value = config.maxChange24hPct.toFloat(),
+                    range = 0f..60f,
+                    step = 5f,
+                    displayValue = if (config.maxChange24hPct <= 0.0) "Nonaktif"
+                    else String.format(Locale.US, "%.0f%%", config.maxChange24hPct),
+                    onValueChange = { newVal ->
+                        onConfigChange(config.copy(maxChange24hPct = newVal.toDouble()), "CUSTOM")
+                    },
+                    onShowInfo = { activeGuideKey = "max_change_24h_pct" }
                 )
             }
         }
@@ -997,6 +1028,41 @@ private fun ExitModeSection(
                     suffix = "%",
                     enabled = true,
                     onValueChange = { onChange(params.copy(trailPct = it)) }
+                )
+            }
+
+            // S2 — lantai profit: exit profit sukarela minimal sekian kali friksi round-trip.
+            ExitParamRow(
+                label = "Lantai profit (x friksi)",
+                value = params.minProfitFrictionMultiple,
+                step = 0.5,
+                range = 0.0..5.0,
+                suffix = "x",
+                enabled = params.mode != agu.analys.engine.scalping.ScalpExitMode.CLASSIC,
+                onValueChange = { onChange(params.copy(minProfitFrictionMultiple = it)) }
+            )
+            // S8 — trigger BE proporsional ATR (menang atas nilai persen bila ATR tersedia).
+            if (params.mode.usesBreakeven) {
+                ExitParamRow(
+                    label = "Trigger BE (x ATR)",
+                    value = params.beTriggerAtrFraction,
+                    step = 0.1,
+                    range = 0.0..2.0,
+                    suffix = "x ATR",
+                    enabled = true,
+                    onValueChange = { onChange(params.copy(beTriggerAtrFraction = it)) }
+                )
+            }
+            // S8 — jarak trailing proporsional ATR.
+            if (params.mode.usesTrailing) {
+                ExitParamRow(
+                    label = "Trailing (x ATR)",
+                    value = params.trailAtrFraction,
+                    step = 0.1,
+                    range = 0.0..2.0,
+                    suffix = "x ATR",
+                    enabled = true,
+                    onValueChange = { onChange(params.copy(trailAtrFraction = it)) }
                 )
             }
             ExitParamRow(

@@ -7,6 +7,21 @@ import java.util.UUID
 class SimulationTradeStore(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences("simulation_trade_prefs", Context.MODE_PRIVATE)
 
+    /**
+     * S5 — asumsi slippage **per sisi** (%) untuk order MARKET simulasi.
+     *
+     * Sebelumnya laporan audit memakai PnL **fee-only** sementara mesin exit memakai
+     * **fee + 2× slippage** — beda 0,16 pp per trade di Tokocrypto USDT (AMP: +0,6889% di
+     * laporan vs +0,5289% versi engine). Dua angka untuk satu trade membuat log tidak bisa
+     * diaudit. Slippage kini diterapkan ke **harga isi efektif** order MARKET, sehingga saldo
+     * kas, PnL yang dilaporkan, dan basis mesin exit memakai satu angka yang sama.
+     *
+     * Order LIMIT sengaja **tidak** dikenai slippage: limit tidak "slip", ia hanya bisa gagal terisi.
+     *
+     * `0.0` = tanpa slippage (perilaku lama; nilai default untuk unit test).
+     */
+    var slippagePct: Double = 0.0
+
     companion object {
         /**
          * Tarif biaya simulasi diambil dari `agu.analys.config.FeeSchedule` — satu sumber
@@ -388,8 +403,17 @@ class SimulationTradeStore(context: Context) {
 
         when (type) {
             SimulationOrderType.MARKET -> {
-                val execPrice = if (currentMarketPrice > 0.0) currentMarketPrice else price
-                if (execPrice <= 0.0) return SimulationOrderResult.Error("Harga pasar realtime belum tersedia.")
+                val rawExecPrice = if (currentMarketPrice > 0.0) currentMarketPrice else price
+                if (rawExecPrice <= 0.0) return SimulationOrderResult.Error("Harga pasar realtime belum tersedia.")
+                // S5 — slippage per sisi untuk order MARKET supaya PnL simulasi memakai basis
+                // yang sama dengan mesin exit (fee + 2x slippage), bukan fee-only.
+                val slipFrac = if (slippagePct > 0.0) slippagePct / 100.0 else 0.0
+                val execPrice = if (slipFrac > 0.0) {
+                    if (side == SimulationOrderSide.BUY) rawExecPrice * (1.0 + slipFrac)
+                    else rawExecPrice * (1.0 - slipFrac)
+                } else {
+                    rawExecPrice
+                }
 
                 if (side == SimulationOrderSide.BUY) {
                     // Biaya pre-check WAJIB sama dengan biaya yang dipakai eksekusi,
@@ -636,10 +660,19 @@ class SimulationTradeStore(context: Context) {
 
             if (shouldFill) {
                 val baseKey = order.baseAsset.uppercase()
-                val execPrice = if (order.type == SimulationOrderType.STOP_LIMIT && order.side == SimulationOrderSide.SELL) {
+                val rawExecPrice = if (order.type == SimulationOrderType.STOP_LIMIT && order.side == SimulationOrderSide.SELL) {
                     currentPrice
                 } else {
                     order.limitPrice
+                }
+                // S5 — order MARKET dikenai slippage supaya PnL simulasi = basis mesin exit
+                // (fee + 2x slippage). Order LIMIT tidak, karena limit tidak "slip".
+                val slipFrac = if (slippagePct > 0.0) slippagePct / 100.0 else 0.0
+                val execPrice = if (slipFrac > 0.0 && order.type == SimulationOrderType.MARKET) {
+                    if (order.side == SimulationOrderSide.BUY) rawExecPrice * (1.0 + slipFrac)
+                    else rawExecPrice * (1.0 - slipFrac)
+                } else {
+                    rawExecPrice
                 }
                 val orderQuote = order.quoteAsset.ifBlank { "IDR" }
                 val isUsdtOrder = agu.analys.util.PriceFormatter.isUsdtQuote(orderQuote)

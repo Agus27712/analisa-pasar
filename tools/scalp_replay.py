@@ -316,9 +316,13 @@ def detect_regime(candles, price, bias, rvol, res_broken, cfg):
         ema = "bearish"
     else:
         ema = "mixed"
-    if atr_pct >= 3.5:
+    # S4 — ambang volatilitas dibaca dari config (default = ScalpingConfig.ATR_PCT_HIGH/LOW).
+    # Ubah di sini **dan** di ScalpingConfig.kt bila band volatilitas perlu digeser.
+    atr_high = float(cfg.get("atr_pct_high", 3.5))
+    atr_low = float(cfg.get("atr_pct_low", 0.8))
+    if atr_pct >= atr_high:
         reg = "HIGH_VOLATILITY"
-    elif 0.0 < atr_pct < 0.8 and adx < 18.0:
+    elif 0.0 < atr_pct < atr_low and adx < 18.0:
         reg = "LOW_VOLATILITY"
     elif res_broken and rvol >= 1.5:
         reg = "BREAKOUT"
@@ -422,8 +426,12 @@ def detect_setup(price, st, rg, rvol, bp, m1, cfg):
             rvol_ok = rvol >= cfg["rvol_breakout_min"]
             flow_ok = bp >= cfg["buy_pressure_breakout"]
             mom_ok = momentum_bullish(m1, price)
-            conf = sum([rvol_ok, flow_ok, mom_ok])
-            if conf >= 2 or (rg["regime"] == "BREAKOUT" and conf >= 1):
+            # S1 — RVOL WAJIB untuk BREAKOUT (mirror ScalpSetupDetector.detectBreakout).
+            # Dulu `conf >= 2`, dan pada regime BREAKOUT cukup `conf >= 1` — sehingga breakout
+            # dengan volume mengering tetap lolos (kasus AMP/USDT: RVOL 0,20x vs gate 1,2x).
+            if not rvol_ok:
+                pass
+            elif sum([flow_ok, mom_ok]) >= 1:
                 return "BREAKOUT"
         # 4. pullback
         trending = rg["regime"] == "TRENDING_UP" or \
@@ -609,7 +617,9 @@ def risk_levels(price, setup, st, rg, fee, cfg):
     # Bukti (30 hari, 40 pair Tokocrypto): min_risk 0.5% -> avg R -1.8 ; 3.0% -> ~0.
     friction_floor = cfg.get("min_friction_multiple", 0.0) * cost / 100.0 * entry
     min_risk = max(0.8 * atr, cfg["min_risk_pct"] / 100.0 * entry, friction_floor)
-    max_risk = max(2.0 * atr, min_risk)
+    # S3 — batas keras SL kini bisa dikonfigurasi (`max_risk_atr`), sama dengan Kotlin.
+    # Default 2.0 dipertahankan agar replay lama tidak berubah.
+    max_risk = max(float(cfg.get("max_risk_atr", 2.0)) * atr, min_risk)
     sl = ssl if ssl is not None else entry - 1.0 * atr
     raw = entry - sl
     if raw > max_risk:
@@ -644,7 +654,7 @@ def min_score_for_setup(setup, cfg):
     return cfg["min_score_breakout_retest"] if setup == "BREAKOUT_RETEST" else cfg["min_score_long"]
 
 
-def evaluate_bar(price, m1w, m15w, h1w, cfg, fee, assume_ob):
+def evaluate_bar(price, m1w, m15w, h1w, cfg, fee, assume_ob, change24h=0.0):
     if price <= 0 or len(h1w) < 20 or len(m15w) < 20 or len(m1w) < 20:
         return None
     last = m1w[-1]
@@ -721,11 +731,14 @@ def evaluate_bar(price, m1w, m15w, h1w, cfg, fee, assume_ob):
     min_sc = min_score_for_setup(setup, cfg)
     s4 = s3 and risk_valid and sc["total"] >= min_sc
 
-    ready = s4
+    # S9 — gerbang extended move (mirror ScalpingMtfEvaluator).
+    # `change24h` dihitung pemanggil dari jendela 1440 bar M1; 0.0 = tidak diketahui.
+    extended = cfg.get("max_change_24h_pct", 0.0) > 0.0 and change24h >= cfg.get("max_change_24h_pct", 0.0)
+    ready = s4 and not extended
     strong = ready and sc["total"] >= cfg["min_score_strong"]
-    early = (not ready) and (not dangerous) and s2
+    early = (not ready) and (not dangerous) and (not extended) and s2
     stage = "STRONG_ENTRY" if strong else "ENTRY" if ready else \
-            "EARLY_ENTRY" if early else "HOLD" if dangerous else "WATCH"
+            "EARLY_ENTRY" if early else "HOLD" if (dangerous or extended) else "WATCH"
     if dangerous:
         conf = 0
     elif ready:
@@ -744,6 +757,8 @@ def evaluate_bar(price, m1w, m15w, h1w, cfg, fee, assume_ob):
         "tp1": rl["tp1"] if rl else 0.0,
         "tp2": rl["tp2"] if rl else 0.0,
         "net_risk_pct": rl["net_risk_pct"] if rl else 0.0,
+        # S8 — ATR% diperlukan resolve_trade untuk trigger BE / jarak trailing proporsional.
+        "atr_pct": rg["atr_pct"] if rg["atr_pct"] > 0 else 0.0,
     }
 
 
@@ -827,7 +842,19 @@ def _momentum_weak(m1_slice):
     return ema_weak or (rsi_weak and bear_candle) or (bear_candle and e9 < e21)
 
 
-def resolve_trade(m1, i, entry, sl, tp1, tp2, fee, cfg, lookahead):
+def _round_trip_cost_pct(fee, slip):
+    """Friksi round-trip (%) = buy fee + sell fee + 2x slippage (satu sisi slippage tiap transaksi)."""
+    return (fee.get("buy_taker_pct", 0.1) + fee.get("sell_taker_pct", 0.1) + 2.0 * slip)
+
+
+def _gross_pct(entry, price):
+    """Profit kotor (%) berbasis harga — dasar perbandingan lantai profit (S2)."""
+    if entry <= 0 or price <= 0:
+        return 0.0
+    return (price / entry - 1.0) * 100.0
+
+
+def resolve_trade(m1, i, entry, sl, tp1, tp2, fee, cfg, lookahead, atr_pct=0.0):
     """
     Resolve forward dari bar i+1.
     Satuan R seragam untuk SEMUA exit:
@@ -840,6 +867,11 @@ def resolve_trade(m1, i, entry, sl, tp1, tp2, fee, cfg, lookahead):
       trail   — trailing dari peak setelah net >= be_trigger
       early   — early SELL jika net_close >= min_early dan momentum lemah
       full    — tp1_be + trail + early (prioritas: SL > early > trail > TP2)
+
+    S2 — `min_profit_friction_multiple`: exit profit sukarela (early) dan peng-arm-an
+    BE/trailing hanya boleh setelah profit KOTOR >= kelipatan ini x friksi round-trip.
+    S8 — `be_trigger_atr_fraction` / `trail_atr_fraction`: bila `atr_pct > 0`, trigger BE
+    dan jarak trailing dihitung sebagai fraksi ATR (menang atas nilai persen tetap).
     Return dict: result, r, exit_idx, ambiguous, exit_reason
     """
     ex = cfg.get("exit", {})
@@ -849,6 +881,16 @@ def resolve_trade(m1, i, entry, sl, tp1, tp2, fee, cfg, lookahead):
     be_trigger = float(ex.get("breakeven_trigger_net_pct", 0.40))
     trail_pct = float(ex.get("trail_pct", 0.35))  # jarak % dari peak
     max_hold = int(ex.get("max_hold_bars_m1", 0))  # 0 = pakai lookahead saja
+
+    # S2 / S8 — ambang efektif (paritas dengan ScalpExitParams di app Kotlin).
+    min_profit_mult = float(ex.get("min_profit_friction_multiple", 2.0))
+    be_atr_frac = float(ex.get("be_trigger_atr_fraction", 0.5))
+    trail_atr_frac = float(ex.get("trail_atr_fraction", 0.6))
+    floor_gross = min_profit_mult * _round_trip_cost_pct(fee, slip) if min_profit_mult > 0 else 0.0
+    if be_atr_frac > 0 and atr_pct > 0:
+        be_trigger = max(be_trigger, be_atr_frac * atr_pct)
+    trail_dist = trail_atr_frac * atr_pct if (trail_atr_frac > 0 and atr_pct > 0) else trail_pct
+
     risk = entry - sl
     if risk <= 0 or entry <= 0:
         return {"result": "UNRESOLVED", "r": 0.0, "exit_idx": None, "ambiguous": False, "exit_reason": "bad_risk"}
@@ -918,18 +960,23 @@ def resolve_trade(m1, i, entry, sl, tp1, tp2, fee, cfg, lookahead):
                 be_armed = True
 
             # BE tanpa partial (trail/early)
-            if mode in ("trail", "early", "full") and (not be_armed) and net_hi >= be_trigger:
+            # S2/S8 — selain trigger net, wajib sudah melewati lantai profit kotor (S2);
+            # trigger net sendiri sudah dinaikkan bila ATR tersedia (S8).
+            if (mode in ("trail", "early", "full") and (not be_armed)
+                    and net_hi >= be_trigger and _gross_pct(entry, hi) >= floor_gross):
                 active_sl = max(active_sl, be_px)
                 be_armed = True
 
             # Trailing dari peak
-            if mode in ("trail", "full") and net_hi >= be_trigger:
+            if (mode in ("trail", "full") and net_hi >= be_trigger
+                    and _gross_pct(entry, hi) >= floor_gross):
                 trail_armed = True
-                trail_sl = peak * (1.0 - trail_pct / 100.0)
+                trail_sl = peak * (1.0 - trail_dist / 100.0)
                 active_sl = max(active_sl, trail_sl)
 
-            # Early profit: net di close >= min_early + momentum lemah
-            if mode in ("early", "full") and net_cl >= min_early:
+            # Early profit: net di close >= min_early + momentum lemah + lantai profit (S2)
+            if (mode in ("early", "full") and net_cl >= min_early
+                    and _gross_pct(entry, cl) >= floor_gross):
                 window = m1[max(0, j - 14):j + 1]
                 if _momentum_weak(window):
                     rem = r_at(cl)
@@ -969,7 +1016,11 @@ def run_replay(m1, m15, h1, cfg, fee, assume_ob, lookahead):
         if len(m1w) < 20 or len(m15w) < m15_min or len(h1w) < h1_min:
             i += 1
             continue
-        r = evaluate_bar(c["c"], m1w, m15w, h1w, cfg, fee, assume_ob)
+        # S9 — perubahan harga 24 jam (1440 bar M1) untuk gerbang extended move.
+        chg24 = 0.0
+        if i >= 1440 and m1[i - 1440]["c"] > 0:
+            chg24 = (c["c"] / m1[i - 1440]["c"] - 1.0) * 100.0
+        r = evaluate_bar(c["c"], m1w, m15w, h1w, cfg, fee, assume_ob, change24h=chg24)
         if r is None:
             i += 1
             continue
@@ -988,7 +1039,8 @@ def run_replay(m1, m15, h1, cfg, fee, assume_ob, lookahead):
             continue
         setup_hits[r["setup"]] = setup_hits.get(r["setup"], 0) + 1
         entry, sl, tp1, tp2 = r["entry"], r["sl"], r["tp1"], r["tp2"]
-        resolved = resolve_trade(m1, i, entry, sl, tp1, tp2, fee, cfg, lookahead)
+        resolved = resolve_trade(m1, i, entry, sl, tp1, tp2, fee, cfg, lookahead,
+                                 atr_pct=r.get("atr_pct", 0.0))
         reason = resolved.get("exit_reason", "")
         exit_reasons[reason] = exit_reasons.get(reason, 0) + 1
         if resolved["result"] == "UNRESOLVED":

@@ -31,7 +31,13 @@ class PaperTradeJournalTest {
         entry: Double = 100.0,
         sl: Double = 99.0,
         tp1: Double = 101.0,
-        tp2: Double = 102.0
+        tp2: Double = 102.0,
+        /**
+         * Skenario di bawah bergerak kecil (+1…1,6% kotor), **sengaja** di bawah lantai
+         * profit 2× friksi (≈1,94%). Lantai dimatikan eksplisit agar yang diuji adalah
+         * logika mode exit murni; perilaku lantai sendiri diuji di [ScalpStrategyFixTest].
+         */
+        minProfitFrictionMultiple: Double = 0.0
     ) = PaperExitStateMachine(
         entry = entry,
         stopLoss = sl,
@@ -40,7 +46,11 @@ class PaperTradeJournalTest {
         buyFeePct = buyFee,
         sellFeePct = sellFee,
         slippagePct = slip,
-        params = ScalpExitParams(mode = mode, maxHoldBarsM1 = maxHold)
+        params = ScalpExitParams(
+            mode = mode,
+            maxHoldBarsM1 = maxHold,
+            minProfitFrictionMultiple = minProfitFrictionMultiple
+        )
     )
 
     // ── Jurnal ────────────────────────────────────────────────────────────────
@@ -261,7 +271,9 @@ class PaperTradeJournalTest {
         )
 
         for (mode in ScalpExitMode.entries) {
-            val params = ScalpExitParams(mode = mode)
+            // Lantai profit dimatikan agar resolver dan state machine memakai basis sama
+            // pada skenario +2,3% yang kecil ini (lihat [machine]).
+            val params = ScalpExitParams(mode = mode, minProfitFrictionMultiple = 0.0)
 
             val expected = PaperExitResolver.resolve(
                 bars = series,

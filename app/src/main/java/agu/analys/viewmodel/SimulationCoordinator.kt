@@ -39,6 +39,16 @@ class SimulationCoordinator(
         _history.value = store.getTradeHistory(ex)
     }
 
+    /**
+     * S5 — tetapkan asumsi slippage per sisi (%) untuk order MARKET simulasi.
+     *
+     * Dipakai supaya PnL yang dilaporkan di log audit memakai basis yang sama dengan mesin exit
+     * (fee + 2× slippage), bukan fee-only. Lihat [SimulationTradeStore.slippagePct].
+     */
+    fun setSlippagePct(pct: Double) {
+        store.slippagePct = if (pct.isFinite() && pct > 0.0) pct else 0.0
+    }
+
     fun recordMirroredRealTrade(
         symbol: String,
         baseAsset: String,

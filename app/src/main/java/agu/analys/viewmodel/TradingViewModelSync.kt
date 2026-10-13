@@ -280,6 +280,20 @@ fun TradingViewModel.syncSimulationTradeToPositionStore(order: SimulationOrder) 
             trailingPercent = posAfterBuy.trailingPercent.takeIf { it > 0.0 },
             trailingPeakPrice = posAfterBuy.peakPrice.takeIf { it > 0.0 }
         )
+
+        // S7 — posisi paper yang dibeli **manual** kini juga mendapat mesin exit.
+        // Sebelumnya mesin exit hanya dibuat untuk auto-buy ([tryPaperAutoBuy]), sehingga beli
+        // manual berjalan tanpa SL/BE/trailing terkelola — kasus AMP/USDT menahan −2,76%
+        // selama 9 menit tanpa stop apa pun. Bila mesin sudah ada (jalur auto-buy), pemanggilan
+        // ini tidak menimpa apa pun.
+        armPaperExitEngine(
+            symbol = symbol,
+            exchange = currentEx,
+            entryPrice = fillPrice,
+            stopLoss = engine.signalState.value.stopLoss,
+            tp1 = engine.signalState.value.targetPrice1,
+            tp2 = engine.signalState.value.targetPrice2
+        )
     } else if (order.side == SimulationOrderSide.SELL) {
         val currentPos = positionStore.get(symbol, isReal = false, exchange = currentEx)
         val currentQty = currentPos.quantity
@@ -465,6 +479,8 @@ fun TradingViewModel.initSubscriptionsAndPolling() {
     engine.isScalpingMode = prefs.isScalpingMode
     engine.tradingFees = prefs.tradingFees
     engine.scalpingRuntimeConfig = prefs.scalpingRuntimeConfig
+    // S5 — samakan basis PnL simulasi dengan mesin exit (fee + 2x slippage).
+    simCoordinator.setSlippagePct(prefs.scalpingRuntimeConfig.slippagePct)
 
     // P2 — bangun ulang state machine exit paper setelah restart. Tanpa ini posisi simulasi
     // menggantung: `PaperAutoTradeRuntime` hanya hidup di memori, sedangkan `auto_sell_enabled`

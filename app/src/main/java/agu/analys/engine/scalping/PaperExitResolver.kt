@@ -168,7 +168,9 @@ object PaperExitResolver {
         sellFeePct: Double,
         slippagePct: Double,
         params: ScalpExitParams,
-        lookaheadBars: Int = DEFAULT_LOOKAHEAD_BARS
+        lookaheadBars: Int = DEFAULT_LOOKAHEAD_BARS,
+        // S8 — ATR% bar M1 saat entry. `<= 0` = tidak diketahui → jatuh ke nilai persen tetap.
+        atrPct: Double = 0.0
     ): PaperExitDecision {
         val risk = entry - stopLoss
         if (risk <= 0.0 || entry <= 0.0) {
@@ -179,6 +181,12 @@ object PaperExitResolver {
         val riskPct = risk / entry * 100.0
         fun rAt(price: Double): Double =
             netProfitPct(entry, price, buyFeePct, sellFeePct, slippagePct) / riskPct
+        // S2/S8 — ambang efektif. Lihat [ScalpExitParams] untuk alasan tiap nilai.
+        fun grossAt(price: Double): Double =
+            if (entry > 0.0 && price > 0.0) (price / entry - 1.0) * 100.0 else 0.0
+        val floorGrossPct = params.minProfitFloorGrossPct(buyFeePct, sellFeePct, slippagePct)
+        val beTriggerNetPct = params.effectiveBreakevenTriggerNetPct(atrPct)
+        val trailDistancePct = params.effectiveTrailDistancePct(atrPct)
 
         val bePx = breakevenPrice(entry, buyFeePct, sellFeePct, slippagePct)
 
@@ -251,20 +259,28 @@ object PaperExitResolver {
                 }
 
                 // BE tanpa partial (mode trail / early / full)
-                if (params.mode.usesBreakeven && !beArmed && netHi >= params.breakevenTriggerNetPct) {
+                // S2/S8 — selain trigger net, wajib sudah melewati lantai profit kotor (S2);
+                // trigger net itu sendiri sudah dinaikkan bila ATR tersedia (S8).
+                if (params.mode.usesBreakeven && !beArmed && netHi >= beTriggerNetPct &&
+                    grossAt(hi) >= floorGrossPct
+                ) {
                     activeSl = max(activeSl, bePx)
                     beArmed = true
                 }
 
                 // Trailing dari peak
-                if (params.mode.usesTrailing && netHi >= params.breakevenTriggerNetPct) {
+                if (params.mode.usesTrailing && netHi >= beTriggerNetPct &&
+                    grossAt(hi) >= floorGrossPct
+                ) {
                     trailArmed = true
-                    val trailSl = peak * (1.0 - params.trailPct / 100.0)
+                    val trailSl = peak * (1.0 - trailDistancePct / 100.0)
                     activeSl = max(activeSl, trailSl)
                 }
 
-                // Early profit: net di close >= min_early DAN momentum lemah
-                if (params.mode.usesEarlyProfit && netCl >= params.minEarlyProfitNetPct) {
+                // Early profit: net di close >= min_early DAN momentum lemah DAN lantai profit (S2)
+                if (params.mode.usesEarlyProfit && netCl >= params.minEarlyProfitNetPct &&
+                    grossAt(cl) >= floorGrossPct
+                ) {
                     val window = bars.subList(max(0, j - 14), j + 1)
                     if (isMomentumWeak(window)) {
                         val rem = rAt(cl)
@@ -300,10 +316,29 @@ class PaperExitStateMachine(
     val buyFeePct: Double,
     val sellFeePct: Double,
     val slippagePct: Double,
-    val params: ScalpExitParams
+    val params: ScalpExitParams,
+    /**
+     * S8 — ATR% bar M1 saat entry (mis. 3,31 untuk GNS). `<= 0` = tidak diketahui, dan
+     * trigger BE / jarak trailing jatuh ke nilai persen tetap di [ScalpExitParams].
+     */
+    val atrPct: Double = 0.0
 ) {
     private val riskPct: Double = if (entry > 0.0) (entry - stopLoss) / entry * 100.0 else 0.0
     private val bePx: Double = PaperExitResolver.breakevenPrice(entry, buyFeePct, sellFeePct, slippagePct)
+
+    /** S2 — lantai profit kotor (%). Exit profit sukarela tidak boleh di bawah ini. */
+    private val floorGrossPct: Double =
+        params.minProfitFloorGrossPct(buyFeePct, sellFeePct, slippagePct)
+
+    /** S8 — trigger BE efektif (net %) setelah memperhitungkan ATR. */
+    val effectiveBreakevenTriggerNetPct: Double = params.effectiveBreakevenTriggerNetPct(atrPct)
+
+    /** S8 — jarak trailing efektif (% kotor dari peak) setelah memperhitungkan ATR. */
+    val effectiveTrailDistancePct: Double = params.effectiveTrailDistancePct(atrPct)
+
+    /** Profit kotor (%) pada harga tertentu — dasar perbandingan lantai profit (S2). */
+    fun grossProfitPct(price: Double): Double =
+        if (entry > 0.0 && price > 0.0) (price / entry - 1.0) * 100.0 else 0.0
 
     var activeStopLoss: Double = stopLoss
         private set
@@ -389,21 +424,27 @@ class PaperExitStateMachine(
                 isBeArmed = true
             }
 
-            if (params.mode.usesBreakeven && !isBeArmed && netHi >= params.breakevenTriggerNetPct) {
+            if (params.mode.usesBreakeven && !isBeArmed && netHi >= effectiveBreakevenTriggerNetPct &&
+                grossProfitPct(bar.high) >= floorGrossPct
+            ) {
                 activeStopLoss = max(activeStopLoss, bePx)
                 isBeArmed = true
             }
 
-            if (params.mode.usesTrailing && netHi >= params.breakevenTriggerNetPct) {
+            if (params.mode.usesTrailing && netHi >= effectiveBreakevenTriggerNetPct &&
+                grossProfitPct(bar.high) >= floorGrossPct
+            ) {
                 isTrailArmed = true
-                val trailSl = peak * (1.0 - params.trailPct / 100.0)
+                val trailSl = peak * (1.0 - effectiveTrailDistancePct / 100.0)
                 activeStopLoss = max(activeStopLoss, trailSl)
             }
 
             // Early profit hanya dievaluasi bila data momentum benar-benar tersedia. Pada
             // jalur live di mana jendela M1 belum terbentuk, lebih baik menahan posisi
             // daripada keluar berdasarkan momentum yang tidak terukur.
-            if (params.mode.usesEarlyProfit && window14.isNotEmpty() && netCl >= params.minEarlyProfitNetPct) {
+            if (params.mode.usesEarlyProfit && window14.isNotEmpty() &&
+                netCl >= params.minEarlyProfitNetPct && grossProfitPct(bar.close) >= floorGrossPct
+            ) {
                 if (PaperExitResolver.isMomentumWeak(window14)) {
                     val rem = rAt(bar.close)
                     val totalR = if (isPartialDone) partialR + 0.5 * rem else rem

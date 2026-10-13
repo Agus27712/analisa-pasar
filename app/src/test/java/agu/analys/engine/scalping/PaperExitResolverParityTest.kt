@@ -29,19 +29,33 @@ class PaperExitResolverParityTest {
     private fun b(i: Long, o: Double, h: Double, l: Double, c: Double) =
         CandleBar(timestamp = i * 60_000L, open = o, high = h, low = l, close = c, volume = 100.0)
 
-    private fun resolve(bars: List<CandleBar>, mode: ScalpExitMode, maxHold: Int = 0) =
-        PaperExitResolver.resolve(
-            bars = bars,
-            entryIndex = 0,
-            entry = entry,
-            stopLoss = stopLoss,
-            tp1 = tp1,
-            tp2 = tp2,
-            buyFeePct = buyFee,
-            sellFeePct = sellFee,
-            slippagePct = slippage,
-            params = ScalpExitParams(mode = mode, maxHoldBarsM1 = maxHold)
+    /**
+     * Skenario bawah ini bergerak di kisaran +1…2,5% kotor dan angka harapannya dihasilkan
+     * sebelum **S2 (lantai profit)** ada, jadi lantai dimatikan eksplisit.
+     * Perilaku lantai sendiri diuji di [ScalpStrategyFixTest] dan pada
+     * [paritas lantaiProfit menahanEarlyProfit] di bawah.
+     */
+    private fun resolve(
+        bars: List<CandleBar>,
+        mode: ScalpExitMode,
+        maxHold: Int = 0,
+        minProfitFrictionMultiple: Double = 0.0
+    ) = PaperExitResolver.resolve(
+        bars = bars,
+        entryIndex = 0,
+        entry = entry,
+        stopLoss = stopLoss,
+        tp1 = tp1,
+        tp2 = tp2,
+        buyFeePct = buyFee,
+        sellFeePct = sellFee,
+        slippagePct = slippage,
+        params = ScalpExitParams(
+            mode = mode,
+            maxHoldBarsM1 = maxHold,
+            minProfitFrictionMultiple = minProfitFrictionMultiple
         )
+    )
 
     // ---------- skenario: tp2_hit ----------
     private fun barsTp2Hit(): List<CandleBar> = listOf(
@@ -652,5 +666,38 @@ class PaperExitResolverParityTest {
         assertEquals(PaperExitReason.TIMEOUT, d.reason)
         assertFalse(d.isResolved)
         assertNull(d.exitIndex)
+    }
+
+    // ---------- S2: lantai profit (min_profit_friction_multiple) ----------
+
+    /**
+     * Deret [barsTrailHit] menyentuh +2,0% kotor, yaitu **di atas** lantai 2× friksi
+     * (1,9376%), sehingga trailing tetap boleh di-arm — lantai tidak mematikan exit,
+     * hanya memastikan profitnya layak dibawa pulang.
+     *
+     * Angka harapan dihasilkan dari `resolve_trade()` Python dengan
+     * `min_profit_friction_multiple = 2.0`.
+     */
+    @Test
+    fun `paritas lantaiProfit trailingTetapArmKarenaGrossDiAtasLantai`() {
+        val d = resolve(barsTrailHit(), ScalpExitMode.TRAIL, minProfitFrictionMultiple = 2.0)
+        assertEquals(PaperExitResult.WIN, d.result)
+        assertEquals(0.663, d.r, 0.0001)
+        assertEquals(2, d.exitIndex)
+        assertEquals(PaperExitReason.TRAIL_SL, d.reason)
+    }
+
+    /**
+     * Mode FULL pada deret yang sama: tanpa lantai (lihat `paritas trail_hit_full`) early
+     * profit mengambil +1,9% kotor di bar 1 — dengan lantai aktif early diblokir dan posisi
+     * ditutup trailing di bar 2 dengan R lebih kecil namun **profit kotor ≥ 2× friksi**.
+     */
+    @Test
+    fun `paritas lantaiProfit menahanEarlyProfit`() {
+        val d = resolve(barsTrailHit(), ScalpExitMode.FULL, minProfitFrictionMultiple = 2.0)
+        assertEquals(PaperExitResult.WIN, d.result)
+        assertEquals(0.6417, d.r, 0.0001)
+        assertEquals(2, d.exitIndex)
+        assertEquals(PaperExitReason.TRAIL_SL, d.reason)
     }
 }

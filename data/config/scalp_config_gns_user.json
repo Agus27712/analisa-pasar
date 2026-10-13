@@ -1,0 +1,44 @@
+{
+  "_comment": "Config EXACT dari export user (LOOSE entry + exit mode=full custom) — untuk audit GNS/USDT 2026-10-13",
+  "min_score_long": 50,
+  "min_score_strong": 65,
+  "min_score_breakout_retest": 65,
+  "min_net_rr": 1,
+  "target_net_rr": 1.75,
+  "min_risk_pct": 0.4,
+  "max_tp2_r": 6,
+  "min_friction_multiple": 4,
+  "slippage_pct": 0.08,
+  "rvol_breakout_min": 1.2,
+  "rvol_setup_min": 1,
+  "rvol_retest_min": 1.2,
+  "buy_pressure_breakout": 1.05,
+  "buy_pressure_retest": 1.05,
+  "chop_hard_ranging": 70,
+  "retest_max_dist_pct": 1.5,
+  "breakout_above_factor": 0.995,
+  "retest_above_factor": 0.99,
+  "retest_min_structure_strength": 50,
+  "pullback_support_max_dist_pct": 1.5,
+  "exit": {
+    "mode": "full",
+    "min_early_profit_net_pct": 0.3,
+    "breakeven_trigger_net_pct": 0.35,
+    "trail_pct": 0.15,
+    "max_hold_bars_m1": 10
+  },
+  "fee": {
+    "quote": "USDT",
+    "buy_taker_pct": 0.4044,
+    "sell_taker_pct": 0.4044,
+    "buy_maker_pct": 0.4044,
+    "sell_maker_pct": 0.4044
+  },
+  "replay": {
+    "lookahead_bars": 120,
+    "m1_window": 250,
+    "m15_min_bars": 20,
+    "h1_min_bars": 20,
+    "htf_source": "synthesize"
+  }
+}

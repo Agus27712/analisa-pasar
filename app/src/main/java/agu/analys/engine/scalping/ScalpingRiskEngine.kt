@@ -27,7 +27,6 @@ object ScalpingRiskEngine {
 
     private const val FALLBACK_ATR_PCT = 0.5
     private const val MIN_RISK_ATR = 0.8
-    private const val MAX_RISK_ATR = 2.0
     private const val DEFAULT_SL_ATR = 1.0
     private const val SL_BUFFER_ATR = 0.2
     private const val MIN_TP2_R = 1.5
@@ -46,6 +45,8 @@ object ScalpingRiskEngine {
         val minNetRr: Double = config.minNetRr,
         val targetNetRr: Double = config.targetNetRr,
         val minRiskPct: Double = config.minRiskPct,
+        /** S3 — batas keras jarak SL sebagai kelipatan ATR. Lihat [ScalpingConfig.MAX_RISK_ATR]. */
+        val maxRiskAtr: Double = config.maxRiskAtr,
         val maxTp2R: Double = config.maxTp2R,
         /** Kelipatan minimum jarak SL terhadap friksi round-trip (0 = matikan lantai friksi). */
         val minFrictionMultiple: Double = config.minFrictionMultiple
@@ -100,10 +101,10 @@ object ScalpingRiskEngine {
         // lebih kecil dari beberapa kali friksi, satu kali SL menelan banyak "R" sekaligus dan
         // matematikanya mustahil. Lantai ini memaksa risk ≥ minFrictionMultiple × friksi.
         val frictionFloorPct = input.minFrictionMultiple * costPct
-        val atrCapPct = MAX_RISK_ATR * atr / entry * 100.0
+        val atrCapPct = input.maxRiskAtr * atr / entry * 100.0
         if (input.minFrictionMultiple > 0.0 && frictionFloorPct > atrCapPct) {
             reasons += "SL dipaksa ${fmt(frictionFloorPct)}% (${fmt(input.minFrictionMultiple)}x friksi) — " +
-                "di atas ${fmt(MAX_RISK_ATR)}x ATR (${fmt(atrCapPct)}%). Ini bukan scalp cepat; " +
+                "di atas ${fmt(input.maxRiskAtr)}x ATR (${fmt(atrCapPct)}%). Ini bukan scalp cepat; " +
                 "horizon realistis 1–8 jam."
         }
         val minRiskAbs = maxOf(
@@ -111,14 +112,14 @@ object ScalpingRiskEngine {
             input.minRiskPct / 100.0 * entry,
             frictionFloorPct / 100.0 * entry
         )
-        val maxRiskAbs = maxOf(MAX_RISK_ATR * atr, minRiskAbs)
+        val maxRiskAbs = maxOf(input.maxRiskAtr * atr, minRiskAbs)
 
         var sl = structuralSl ?: (entry - DEFAULT_SL_ATR * atr)
         val rawRisk = entry - sl
         when {
             rawRisk > maxRiskAbs -> {
                 sl = entry - maxRiskAbs
-                reasons += "SL struktur terlalu jauh — dibatasi ${fmt(MAX_RISK_ATR)}x ATR."
+                reasons += "SL struktur terlalu jauh — dibatasi ${fmt(input.maxRiskAtr)}x ATR."
             }
             rawRisk < minRiskAbs -> {
                 sl = entry - minRiskAbs

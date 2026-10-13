@@ -274,7 +274,9 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
             symbol = tick.symbol,
             config = scalpingRuntimeConfig,
             // P0-1 — waktu tick dipakai untuk memproyeksikan volume bar M1 yang belum tutup.
-            nowMs = tick.timestamp
+            nowMs = tick.timestamp,
+            // S9 — perubahan harga 24 jam untuk gerbang extended move.
+            change24h = tick.change24h
         ) ?: return
 
         val tracked = agu.analys.engine.scalping.SignalLifecycleManager.process(tick.symbol, tick.price, result.signal, StrategyMode.SCALPING)

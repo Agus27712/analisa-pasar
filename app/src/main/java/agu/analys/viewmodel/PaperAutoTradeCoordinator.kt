@@ -167,6 +167,129 @@ fun TradingViewModel.paperEngineOwnsExit(exchange: String, symbol: String): Bool
     PaperAutoTradeRuntime.ownsExit(exchange, symbol, prefs.paperAutoTradeConfig.autoExitEnabled)
 
 /**
+ * ATR% bar M1 terhadap harga acuan — dipakai mesin exit untuk S8 (BE/trailing proporsional ATR).
+ *
+ * @return 0.0 bila ATR belum tersedia, sehingga mesin exit jatuh ke nilai persen tetap.
+ */
+private fun TradingViewModel.atrPctAt(referencePrice: Double): Double {
+    if (referencePrice <= 0.0) return 0.0
+    val atr = engine.indicators.value.atr
+    return if (atr > 0.0) atr / referencePrice * 100.0 else 0.0
+}
+
+/**
+ * Bangun & pasang state machine exit paper untuk satu posisi simulasi.
+ *
+ * Dipakai bersama oleh **auto-buy** ([tryPaperAutoBuy]) dan **beli manual**
+ * ([syncSimulationTradeToPositionStore]) supaya semua posisi paper memakai mesin exit yang sama.
+ *
+ * Sebelumnya mesin ini hanya dibuat untuk auto-buy, sehingga posisi yang dibeli manual berjalan
+ * **tanpa SL/BE/trailing terkelola** — persis kasus AMP/USDT: menahan −2,76% selama 9 menit
+ * tanpa stop apa pun.
+ *
+ * **S3 — SL keras wajib.** Bila tidak ada SL valid dari sinyal (`0 < SL < entry`), SL dihitung
+ * dari **lantai friksi** (`minFrictionMultiple × friksi round-trip`) supaya posisi tidak pernah
+ * menggantung tanpa lantai risiko. Bila `minFrictionMultiple = 0` dan sinyal tidak punya SL,
+ * posisi sengaja dibiarkan tanpa mesin (perilaku lama) dan dicatat di log.
+ *
+ * @param force `true` menimpa mesin yang sudah ada (dipakai auto-buy yang nilainya otoritatif
+ *   dari sinyal transisi). `false` tidak menimpa — pemanggil manual aman dipanggil berulang.
+ * @return `true` bila mesin terpasang (atau sudah ada).
+ */
+fun TradingViewModel.armPaperExitEngine(
+    symbol: String,
+    exchange: String,
+    entryPrice: Double,
+    stopLoss: Double,
+    tp1: Double,
+    tp2: Double,
+    atrPct: Double = 0.0,
+    force: Boolean = false
+): Boolean {
+    val exchangeKey = exchange.uppercase()
+    if (!prefs.paperAutoTradeConfig.autoExitEnabled) return false
+    if (entryPrice <= 0.0 || !entryPrice.isFinite()) return false
+
+    val pair = TradingPair.fromCustomSymbol(raw = symbol, exchange = exchange)
+    if (!force && PaperAutoTradeRuntime.machineFor(exchangeKey, pair.symbol) != null) return true
+
+    val runtime = prefs.scalpingRuntimeConfig
+    val fees = prefs.feeConfigFor(pair.symbol)
+
+    // S3 — SL keras: pakai SL sinyal bila valid, jika tidak turunkan dari lantai friksi.
+    val signalSlValid = stopLoss > 0.0 && stopLoss.isFinite() && stopLoss < entryPrice
+    val effectiveSl = if (signalSlValid) {
+        stopLoss
+    } else {
+        val costPct = fees.buyTakerPct + fees.sellTakerPct + 2.0 * runtime.slippagePct
+        val floorPct = runtime.minFrictionMultiple * costPct
+        if (runtime.minFrictionMultiple > 0.0 && floorPct > 0.0) {
+            AppLogManager.service(
+                "PaperAutoExit",
+                "🛡️ [${pair.symbol}] Tidak ada SL dari sinyal — SL keras dipasang dari lantai friksi " +
+                    "${String.format(java.util.Locale.US, "%.2f", floorPct)}% " +
+                    "(harga ${PriceFormatter.formatPrice(entryPrice * (1.0 - floorPct / 100.0), quoteAsset = pair.quoteAsset)})."
+            )
+            entryPrice * (1.0 - floorPct / 100.0)
+        } else {
+            AppLogManager.service(
+                "PaperAutoExit",
+                "⏭️ [${pair.symbol}] Beli manual tanpa SL & lantai friksi nonaktif — posisi dibiarkan tanpa mesin exit."
+            )
+            0.0
+        }
+    }
+    if (effectiveSl <= 0.0 || effectiveSl >= entryPrice) return false
+
+    val tp1v = if (tp1 > 0.0) tp1 else entryPrice
+    val tp2v = if (tp2 > 0.0) tp2 else entryPrice * 1.02
+
+    val machine = PaperExitStateMachine(
+        entry = entryPrice,
+        stopLoss = effectiveSl,
+        tp1 = tp1v,
+        tp2 = tp2v,
+        buyFeePct = fees.buyTakerPct,
+        sellFeePct = fees.sellTakerPct,
+        slippagePct = runtime.slippagePct,
+        params = runtime.exit,
+        atrPct = atrPct
+    )
+    PaperAutoTradeRuntime.put(exchangeKey, pair.symbol, machine)
+    // Penanda persisten: satu-satunya jejak bahwa exit pair ini dipegang engine paper.
+    // Tanpa ini posisi menggantung setelah restart (lihat [PaperRehydrate]).
+    positionStore.setPaperEngineOwned(
+        symbol = pair.symbol, isReal = false, exchange = exchangeKey, owned = true
+    )
+
+    // Kepemilikan exit tunggal: matikan jalur auto-sell lama untuk pair ini supaya tidak ada
+    // dua mesin yang menjual posisi yang sama.
+    positionStore.setAutoSellParams(
+        symbol = pair.symbol,
+        enabled = false,
+        tp1Price = tp1v,
+        tp1Percent = 50.0,
+        tp2Price = tp2v,
+        tp2Percent = 50.0,
+        isReal = false,
+        exchange = exchangeKey,
+        stopLossPrice = effectiveSl
+    )
+    // `setHolding` mempertahankan `isTrailingEnabled` dari posisi sebelumnya, jadi bendera
+    // trailing lama bisa terbawa ke posisi paper baru. Bersihkan sejak tick pertama.
+    positionStore.setTrailingStop(
+        symbol = pair.symbol,
+        enabled = false,
+        trailingPercent = 0.0,
+        isReal = false,
+        exchange = exchangeKey
+    )
+
+    startTrailingPolling()
+    return true
+}
+
+/**
  * Buka posisi **simulasi** otomatis saat sinyal scalp terkonfirmasi.
  *
  * Syarat (semua harus terpenuhi):
@@ -255,41 +378,18 @@ fun TradingViewModel.tryPaperAutoBuy(transition: SignalTransition, exchange: Str
     )
 
     if (p2OwnsExit) {
-        val runtime = prefs.scalpingRuntimeConfig
-        // Biaya per-simbol: pair USDT memakai tarif USDT, pair IDR memakai tarif IDR.
-        // Sebelumnya selalu memakai satu nilai global (preset Indodax) untuk semua pair.
-        val fees = prefs.feeConfigFor(pair.symbol)
-        val machine = PaperExitStateMachine(
-            entry = price,
-            stopLoss = signal.stopLoss,
-            tp1 = if (signal.targetPrice1 > 0.0) signal.targetPrice1 else price,
-            tp2 = if (signal.targetPrice2 > 0.0) signal.targetPrice2 else price * 1.02,
-            buyFeePct = fees.buyTakerPct,
-            sellFeePct = fees.sellTakerPct,
-            slippagePct = runtime.slippagePct,
-            params = runtime.exit
-        )
-        PaperAutoTradeRuntime.put(exchangeKey, pair.symbol, machine)
-        // Penanda persisten: satu-satunya jejak bahwa exit pair ini dipegang engine paper.
-        // Tanpa ini posisi menggantung setelah restart (lihat [PaperRehydrate]).
-        positionStore.setPaperEngineOwned(
-            symbol = pair.symbol, isReal = false, exchange = exchangeKey, owned = true
-        )
-
-        // `setHolding` mempertahankan `isTrailingEnabled` dari posisi sebelumnya, jadi
-        // bendera trailing lama bisa terbawa ke posisi paper baru. Bersihkan supaya
-        // kepemilikan exit benar-benar tunggal sejak tick pertama.
-        positionStore.setTrailingStop(
+        // Mesin exit dibangun lewat helper bersama (S7) supaya beli manual & auto-buy memakai
+        // jalur yang sama. `force = true` karena SL/TP sinyal transisi di sini otoritatif.
+        armPaperExitEngine(
             symbol = pair.symbol,
-            enabled = false,
-            trailingPercent = 0.0,
-            isReal = false,
-            exchange = exchangeKey
+            exchange = exchangeKey,
+            entryPrice = price,
+            stopLoss = signal.stopLoss,
+            tp1 = signal.targetPrice1,
+            tp2 = signal.targetPrice2,
+            atrPct = atrPctAt(price),
+            force = true
         )
-
-        // Pastikan loop polling harga hidup; posisi paper perlu diawasi exit-nya bahkan
-        // ketika pair-nya tidak sedang dibuka di layar.
-        startTrailingPolling()
     }
 
     positionCoordinator.refreshPosition(pair.symbol)

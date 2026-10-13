@@ -2,7 +2,7 @@
 
 > **Baca ini dulu.** Dokumen ini adalah titik masuk untuk agen/engineer berikutnya: status terkini,
 > apa yang sudah selesai, apa berikutnya, dan **perangkap yang sudah pernah ditemukan** supaya tidak
-> diulang. Terakhir diperbarui: **2026-10-13**.
+> diulang. Terakhir diperbarui: **2026-10-14** (S1–S9).
 
 ---
 
@@ -12,7 +12,7 @@
 |---|---|
 | Branch kerja | **`patch`** (owner me-review di sini dulu; `main` hanya menerima merge) |
 | Titik masuk kode | package `agu.analys`, modul tunggal `:app` |
-| Unit test | **344 lulus · 0 gagal · 1 dilewati** (48 kelas) |
+| Unit test | **358 lulus · 0 gagal · 1 dilewati** (50 kelas) |
 | APK debug | 27,8 MB (`app/build/outputs/apk/debug/app-debug.apk`) |
 | Kesiapan uang riil | **BELUM** — lihat §5 |
 
@@ -53,6 +53,7 @@ git stash pop                 # kembalikan pekerjaan
 | §12 | **Rehidrasi state machine exit paper** setelah restart | `PaperRehydrate.kt`, `SpotPositionStore.kt` | `PaperRehydrateTest.kt` |
 | §13 | **Akar `EARLY_ENTRY`** — stage tinggi wajib punya pola | `ScalpingMtfEvaluator.kt`, `SignalLifecycleManager.kt` | `workplan2.md` §13 |
 | §16 | **Integritas log audit P0–P2** — basis volume RVOL, basis bar indikator, `signalTime`, `sellReason`, trailing nyata, Peak/Drawdown dari candle, label & format, flag `isSample` | `IndicatorMath.kt`, `ScalpingMtfEvaluator.kt`, `TradeHistoryRecorder.kt`, `TradeSignalSnapshot.kt`, `TradeLogExporter.kt`, `AppDatabase.kt` (v9) | `docs/LAPORAN-verifikasi-ui-vs-candle-2026-10-14.md`, `docs/LAPORAN-eksekusi-p0p2-2026-10-14.md`, `IndicatorMathScalpingExtTest.kt` |
+| §17 | **Perbaikan strategi S1–S9** — RVOL wajib breakout, lantai profit, SL keras configurable, konstanta ATR dipakai, basis PnL seragam, label volume, exit engine untuk beli manual, BE/trail proporsional ATR, gerbang extended-move (default nonaktif) | `ScalpSetupDetector.kt`, `ScalpExitConfig.kt`, `PaperExitResolver.kt`, `ScalpingRiskEngine.kt`, `ScalpingRuntimeConfig.kt`, `MarketRegimeEngine.kt`, `SimulationTradeStore.kt`, `TradeLogExporter.kt`, `PaperAutoTradeCoordinator.kt`, `tools/scalp_replay.py` | `docs/LAPORAN-eksekusi-s1s9-2026-10-14.md`, `ScalpStrategyFixTest.kt`, `SimulationSlippageParityTest.kt` |
 | ~~§14~~ | ~~Kesiapan multi-horizon (scalp/intraday/swing) + papan UI~~ | — | ⛔ **DIBATALKAN** — lihat §3b |
 | ~~§15~~ | ~~SSOT: horizon vs engine aktif~~ | — | ⛔ **DIBATALKAN** — lihat §3b |
 
@@ -253,6 +254,21 @@ Aturan yang sudah berlaku dan **jangan dilonggarkan**:
     `isTrailingUsed = false`, `signalTime = now`, dan `trailingPercent = 1.5` semuanya membuat
     jurnal tidak dapat diaudit — dan `trailingPercent = 1.5` bahkan bisa salah 10× dari nilai
     konfigurasi nyata (0,15). Setiap kolom harus berasal dari state nyata atau `null`.
+
+18. **Ambang yang berasal dari SATU kasus nyata jangan dijadikan default.** Gerbang
+    extended-move (S9) direkomendasikan dari AMP (+28,09%/24 jam) dengan ambang 25%.
+    Diuji pada GNS: ambang itu menghapus **seluruh** trade — padahal tanpa gerbang trade
+    tersebut 4/4 menang, avg R +0,178, tanpa drawdown. Ambang tetap dikirim, tetapi
+    default 0 (nonaktif) sampai ada walk-forward multi-pair.
+19. **Mengubah default parameter exit mengubah hasil replay lama, bukan hanya kode.**
+    `min_profit_friction_multiple` default 2,0 memblokir lantai profit di bawah 1,94% kotor,
+    sehingga uji paritas lama gagal meski tidak ada yang rusak. Bila skenario uji bergerak
+    kecil, **matikan lantai secara eksplisit** dan tulis alasannya; jangan sekadar
+    memperbarui angka harapan.
+20. **Satu exit = satu pemilik.** `PaperExitStateMachine` dulu hanya dibuat untuk auto-buy,
+    jadi beli manual berjalan tanpa SL/BE/trailing (AMP menahan −2,76% selama 9 menit).
+    Saat menambah jalur entry baru, pastikan ia ikut memanggil `armPaperExitEngine()`
+    **dan** mematikan jalur auto-sell/trailing lama untuk pair yang sama.
 
 ---
 

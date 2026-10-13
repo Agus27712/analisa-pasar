@@ -1,6 +1,7 @@
 package agu.analys.engine.regime
 
 import agu.analys.engine.indicators.IndicatorMath
+import agu.analys.engine.scalping.ScalpingConfig
 import agu.analys.model.CandleBar
 import agu.analys.model.MarketRegime
 import agu.analys.model.RegimeSnapshot
@@ -101,9 +102,12 @@ object MarketRegimeEngine {
         resistanceBroken: Boolean,
         supportBroken: Boolean
     ): MarketRegime {
-        // Volatility extremes first
-        if (atrPct >= 3.5) return MarketRegime.HIGH_VOLATILITY
-        if (atrPct > 0.0 && atrPct < 0.8 && adx < 18.0) return MarketRegime.LOW_VOLATILITY
+        // Volatility extremes first.
+        // S4 — ambang ini dulu literal (3.5 / 0.8) yang kebetulan sama dengan
+        // ScalpingConfig.ATR_PCT_HIGH / ATR_PCT_LOW. Memakai konstanta membuat satu sumber
+        // kebenaran: mengubah band volatilitas tidak lagi menuntut sunting dua tempat.
+        if (atrPct >= ScalpingConfig.ATR_PCT_HIGH) return MarketRegime.HIGH_VOLATILITY
+        if (atrPct > 0.0 && atrPct < ScalpingConfig.ATR_PCT_LOW && adx < 18.0) return MarketRegime.LOW_VOLATILITY
 
         // Breakout: level broken + participation
         if ((resistanceBroken || supportBroken) && rvol >= 1.5) {

@@ -502,6 +502,8 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         prefs.scalpingRuntimeConfig = config
         prefs.scalpingSensitivityPreset = preset
         engine.scalpingRuntimeConfig = config
+        // S5 — slippage bisa berubah lewat slider; jaga basis PnL simulasi tetap sinkron.
+        simCoordinator.setSlippagePct(config.slippagePct)
         _scalpingRuntimeConfig.value = config
         _scalpingSensitivityPreset.value = preset
         agu.analys.util.AppLogManager.service(

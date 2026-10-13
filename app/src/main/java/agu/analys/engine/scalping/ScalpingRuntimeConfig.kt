@@ -19,6 +19,11 @@ data class ScalpingRuntimeConfig(
     val minNetRr: Double = ScalpingConfig.MIN_NET_RR,
     val targetNetRr: Double = ScalpingConfig.TARGET_NET_RR,
     val minRiskPct: Double = ScalpingConfig.MIN_RISK_PCT,
+    /**
+     * S3 — batas keras jarak SL sebagai kelipatan ATR. Lihat [ScalpingConfig.MAX_RISK_ATR].
+     * Tidak pernah mempersempit SL di bawah lantai friksi.
+     */
+    val maxRiskAtr: Double = ScalpingConfig.MAX_RISK_ATR,
     val maxTp2R: Double = ScalpingConfig.MAX_TP2_R,
     /**
      * Kelipatan minimum jarak SL terhadap friksi round-trip (fee all-in + 2× slippage).
@@ -27,6 +32,11 @@ data class ScalpingRuntimeConfig(
     val minFrictionMultiple: Double = ScalpingConfig.MIN_FRICTION_MULTIPLE,
     val slippagePct: Double = ScalpingConfig.DEFAULT_SLIPPAGE_PCT,
     val rvolBreakoutMin: Double = ScalpingConfig.RVOL_BREAKOUT_MIN,
+    /**
+     * S9 — gerbang extended move: tahan sinyal BUY bila koin sudah naik ≥ ini (%) dalam 24 jam.
+     * `0` = nonaktif. Lihat [ScalpingConfig.MAX_CHANGE_24H_PCT].
+     */
+    val maxChange24hPct: Double = ScalpingConfig.MAX_CHANGE_24H_PCT,
     val rvolSetupMin: Double = ScalpingConfig.RVOL_SETUP_MIN,
     val rvolRetestMin: Double = ScalpingConfig.RVOL_RETEST_MIN,
     val buyPressureBreakout: Double = ScalpingConfig.BUY_PRESSURE_BREAKOUT,
@@ -58,10 +68,12 @@ data class ScalpingRuntimeConfig(
         json.put("min_net_rr", minNetRr)
         json.put("target_net_rr", targetNetRr)
         json.put("min_risk_pct", minRiskPct)
+        json.put("max_risk_atr", maxRiskAtr)
         json.put("max_tp2_r", maxTp2R)
         json.put("min_friction_multiple", minFrictionMultiple)
         json.put("slippage_pct", slippagePct)
         json.put("rvol_breakout_min", rvolBreakoutMin)
+        json.put("max_change_24h_pct", maxChange24hPct)
         json.put("rvol_setup_min", rvolSetupMin)
         json.put("rvol_retest_min", rvolRetestMin)
         json.put("buy_pressure_breakout", buyPressureBreakout)
@@ -120,12 +132,14 @@ data class ScalpingRuntimeConfig(
             minNetRr = 1.30,
             targetNetRr = 2.50,
             minRiskPct = 0.5,
+            maxRiskAtr = 1.5,
             maxTp2R = 4.0,
             minFrictionMultiple = 8.0,
             slippagePct = 0.08,
             rvolBreakoutMin = 1.8,
             rvolSetupMin = 1.4,
             rvolRetestMin = 1.8,
+            maxChange24hPct = 0.0, // S9 default nonaktif — lihat ScalpingConfig.MAX_CHANGE_24H_PCT
             buyPressureBreakout = 1.25,
             buyPressureRetest = 1.25,
             chopHardRanging = 60.0,
@@ -143,12 +157,14 @@ data class ScalpingRuntimeConfig(
             minNetRr = 1.00,
             targetNetRr = 1.75,
             minRiskPct = 0.4,
+            maxRiskAtr = 2.5,
             maxTp2R = 6.0,
             minFrictionMultiple = 4.0,
             slippagePct = 0.08,
             rvolBreakoutMin = 1.2,
             rvolSetupMin = 1.0,
             rvolRetestMin = 1.2,
+            maxChange24hPct = 0.0, // S9 default nonaktif — lihat ScalpingConfig.MAX_CHANGE_24H_PCT
             buyPressureBreakout = 1.05,
             buyPressureRetest = 1.05,
             chopHardRanging = 70.0,
@@ -167,10 +183,12 @@ data class ScalpingRuntimeConfig(
                 minNetRr = json.optDouble("min_net_rr", ScalpingConfig.MIN_NET_RR),
                 targetNetRr = json.optDouble("target_net_rr", ScalpingConfig.TARGET_NET_RR),
                 minRiskPct = json.optDouble("min_risk_pct", ScalpingConfig.MIN_RISK_PCT),
+                maxRiskAtr = json.optDouble("max_risk_atr", ScalpingConfig.MAX_RISK_ATR),
                 maxTp2R = json.optDouble("max_tp2_r", ScalpingConfig.MAX_TP2_R),
                 minFrictionMultiple = json.optDouble("min_friction_multiple", ScalpingConfig.MIN_FRICTION_MULTIPLE),
                 slippagePct = json.optDouble("slippage_pct", ScalpingConfig.DEFAULT_SLIPPAGE_PCT),
                 rvolBreakoutMin = json.optDouble("rvol_breakout_min", ScalpingConfig.RVOL_BREAKOUT_MIN),
+                maxChange24hPct = json.optDouble("max_change_24h_pct", ScalpingConfig.MAX_CHANGE_24H_PCT),
                 rvolSetupMin = json.optDouble("rvol_setup_min", ScalpingConfig.RVOL_SETUP_MIN),
                 rvolRetestMin = json.optDouble("rvol_retest_min", ScalpingConfig.RVOL_RETEST_MIN),
                 buyPressureBreakout = json.optDouble("buy_pressure_breakout", ScalpingConfig.BUY_PRESSURE_BREAKOUT),

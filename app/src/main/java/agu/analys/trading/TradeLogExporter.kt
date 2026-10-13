@@ -135,7 +135,10 @@ object TradeLogExporter {
             sb.append("- Bid vs Ask Ratio: Bid ${snapshot.bidRatioPct?.let { PriceFormatter.formatPercentage(it, includePlusSign = false, decimals = 1) } ?: "-"} vs Ask ${snapshot.askRatioPct?.let { PriceFormatter.formatPercentage(it, includePlusSign = false, decimals = 1) } ?: "-"}\n")
             sb.append("- Order Book Pressure: ${snapshot.orderBookPressure?.let { if (it > 0) "+$it% (Buyer)" else "$it% (Seller)" } ?: "Netral"}\n")
             sb.append("- Spread Bid/Ask: ${snapshot.spreadPct?.let { PriceFormatter.formatPercentage(it, includePlusSign = false, decimals = 3) } ?: "-"}\n")
-            sb.append("- Volume 24 Jam: ${snapshot.volume24h?.let { PriceFormatter.formatRawDecimal(it) } ?: "-"} $baseAsset\n")
+            // S6 — `volume24h` berasal dari `quoteVolume` bursa (denominasi QUOTE, bukan base).
+            // Sebelumnya dilabeli `$baseAsset` sehingga likuiditas terbaca salah ~1.467x
+            // (kasus AMP: 8,32 juta "AMP" padahal 12,2 miliar AMP ≈ $9,74 juta USDT).
+            sb.append("- Volume 24 Jam (quote): ${snapshot.volume24h?.let { PriceFormatter.formatRawDecimal(it) } ?: "-"} $quote\n")
             sb.append("- Perubahan Harga 24 Jam: ${snapshot.priceChange24h?.let { PriceFormatter.formatPercentage(it, includePlusSign = true, decimals = 2) } ?: "-"}\n\n")
 
             // Category B: Momentum & Oscillators

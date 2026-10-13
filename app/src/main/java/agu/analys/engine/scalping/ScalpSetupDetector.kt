@@ -195,9 +195,17 @@ object ScalpSetupDetector {
         val flowOk = input.buyPressure >= input.config.buyPressureBreakout
         val momentumOk = momentumBullish(input.m1Candles, price)
 
-        val confirms = listOf(rvolOk, flowOk, momentumOk).count { it }
-        val regimeBreak = input.regime.regime == MarketRegime.BREAKOUT
-        if (confirms < 2 && !(regimeBreak && confirms >= 1)) return null
+        // S1 — RVOL WAJIB untuk BREAKOUT.
+        // Sebelumnya kelulusan dihitung "2 dari 3 konfirmasi", dan pada regime BREAKOUT cukup
+        // "1 dari 3" — sehingga breakout dengan volume hampir nol tetap lolos. Kasus nyata:
+        // AMP/USDT lolos BREAKOUT dengan RVOL 0,07x (hitung ulang 0,20x) padahal gate 1,2x,
+        // yaitu partisipasi mengering di puncak — pola *exhaustion*, bukan breakout segar.
+        // Breakout tanpa lonjakan volume bukan breakout; itu harga yang bergerak di pasar sepi.
+        if (!rvolOk) return null
+
+        // Setelah RVOL lolos, masih wajib ada satu konfirmasi tambahan (arus beli atau momentum).
+        val confirms = listOf(flowOk, momentumOk).count { it }
+        if (confirms < 1) return null
 
         return Result(
             setup = ScalpSetupType.BREAKOUT,
