@@ -821,3 +821,100 @@ Keputusan UI:
 - **Belum ada eksekusi otomatis dari papan.** Papan hanya menilai; auto-buy paper tetap lewat
   `PaperAutoTradeCoordinator` dan tetap mensyaratkan `action == BUY`.
 - Kesiapan uang riil tetap **BELUM** (§9.5b, §13.4).
+
+---
+
+## 15. SSOT — horizon kesiapan vs engine yang aktif (2026-10-13)
+
+**Laporan owner setelah review di HP:**
+
+> "menambahkan horizon scalp, intraday, swing ke dashboard dan detail koin aplikasi menjadi rancu,
+> terutama di halaman detail koin, kesiapan horizon 3/5 tapi penilaian engine scalping masih 1 gate
+> yang lolos … preferensi pemilihan engine itu kan ada di tombol simpan di setting, berarti
+> kesimpulan saya engine horizon dan engine scalping/intraday/swing itu berbeda (tidak SSOT)"
+
+Kesimpulan owner **benar**, dan §14 di atas adalah penyebabnya.
+
+### 15.1 Akar masalah (terverifikasi di kode)
+
+§14 menambahkan `HorizonReadinessEngine` yang menilai **semua** horizon, termasuk horizon yang
+engine-nya sedang aktif. Dua daftar syarat berbeda untuk satu pertanyaan yang sama:
+
+| Permukaan | Sumber | 5 syaratnya |
+|---|---|---|
+| `SCALP DESK` | `ScalpReadiness.checkpoints()` | Bias & Ruang Naik · Setup Scalping · Tekanan Orderbook · Trigger VWAP/VSA · Net R:R & Skor |
+| `KESIAPAN HORIZON` | `HorizonReadinessEngine.scalpChecks()` | Tren H1 · Momentum M15 · Dorongan M1 · Volatilitas sehat · Ekonomi trade |
+
+Keduanya menulis `N/5`. Koin yang sama lolos 1 syarat menurut engine dan 3 syarat menurut
+pra-saring — dan keduanya "benar" menurut daftarnya masing-masing. Yang salah bukan angkanya,
+melainkan **mandat** pra-saring: ia dibuat untuk menyaring ratusan koin, bukan menjadi pendapat
+kedua atas horizon yang sudah dijawab engine.
+
+Di dashboard bentuknya berbeda tetapi akarnya sama: kartu `SIAP TRADING` meringkas **tiga** horizon
+seolah setara, sementara preferensi engine disimpan pengguna lewat tombol simpan di Pengaturan.
+
+### 15.2 Perbaikan — satu aturan
+
+```
+StrategyMode (preferensi pengguna, tombol simpan di Pengaturan)   ← SSOT
+    └── TradeHorizon.of(mode)                                     ← horizon aktif
+            ├── horizon aktif → EngineVerdict → ReadinessSource.ENGINE
+            └── horizon lain  → pra-saring    → ReadinessSource.PRESCREEN
+```
+
+| Berkas | Perubahan |
+|---|---|
+| `engine/readiness/EngineVerdict.kt` **(baru)** | `AISignalState` + `ScalpReadinessSnapshot` → `HorizonReadiness`. Memakai objek checkpoint yang **sama** dengan kartu engine; tidak ada angka dihitung ulang. Rencana trade diambil dari level milik sinyal (`entryPrice`/`stopLoss`/`targetPrice1/2`). |
+| `HorizonReadiness.kt` | +`ReadinessState.HOLDING`, +`ReadinessSource`, +`HorizonReadiness.source`/`sourceNote`, +`ReadinessBoard.withEngineRows()`/`engineRows()`/`prescreenRows()` |
+| `TradeHorizon.kt` | +`strategyMode`, +`TradeHorizon.of(mode)` |
+| `HorizonReadinessEngine.kt` | `weightedScore`/`exitRule`/`roundTripCostPct` dipublikasikan supaya dipakai bersama, bukan disalin |
+| `TradingViewModel.kt` | +`readinessScanBoard`, +`readinessEngineJob`; `_readinessHorizon` default = horizon aktif; `setStrategyMode` memindahkan horizon + publikasi ulang |
+| `TradingViewModelReadiness.kt` | +`readinessActiveHorizon()`, `publishReadinessBoard()`, `engineVerdictRows()`, `startReadinessEngineLayer()` (reaktif, tanpa memindai ulang) |
+| `ui/components/readiness/*`, `ui/screens/*` | badge `ENGINE AKTIF`/`PRA-SARING`, legenda, tile engine ditandai; kartu dashboard menyatakan engine aktif |
+
+### 15.3 Keputusan desain yang diambil
+
+| Keputusan | Alasan |
+|---|---|
+| Pra-saring **tetap ada** | Ia menyaring ratusan koin dari cache dengan murah. Yang salah mandatnya, bukan keberadaannya. |
+| `HOLDING` jadi status tersendiri | Menerjemahkan "posisi terbuka" ke `SIAP` akan mengulang kontradiksi di layar yang sama (kartu engine menulis `POSISI AKTIF`). |
+| Satu resolver (`ScalpReadiness.resolve`) untuk ketiga mode | Ketiga engine mengisi `ScalpingMtfSnapshot` yang sama; satu resolver = satu aturan kesimpulan. |
+| Rencana disembunyikan di kartu kesiapan saat mode scalping | `SCALP DESK` tepat di bawah sudah memuat entry/SL/TP. |
+| Detail menghitung baris engine sendiri | Pair yang baru dibuka langsung benar, tanpa menunggu pemindaian 60 detik. |
+| Baris engine selalu di atas di papan | Bila engine sudah menilai, itu jawaban yang dicari — bukan hasil saringan. |
+
+### 15.4 Batasan yang diakui di UI
+
+Engine menilai **satu simbol** (yang sedang diulas). Koin lain di daftar pantau belum punya sinyal
+engine hidup, jadi barisnya tetap `PRA-SARING` — dan itu **ditulis di layar**, bukan disembunyikan.
+
+### 15.5 Uji
+
+Baseline 364 → **385** (+21). `385 lulus · 0 gagal · 1 dilewati`.
+
+- `EngineVerdictTest` (12): identitas checkpoint dengan `ScalpReadiness` (label, urutan, nilai `ok`,
+  detail), **1/5 tetap 1/5**, skor memakai penghitung yang sama, pemetaan status termasuk `HOLDING`,
+  `READY` tanpa level engine tidak actionable, horizon mengikuti mode.
+- `ReadinessBoardOverlayTest` (8): baris engine **mengganti** (bukan menambah) baris pra-saring,
+  simbol/horizon lain tidak tersentuh, pencocokan simbol tanpa peduli huruf besar-kecil, pemetaan
+  `StrategyMode` ↔ `TradeHorizon` satu-ke-satu.
+- `HorizonReadinessEngineTest` (+1): pra-saring **tidak pernah** menandai barisnya `ENGINE`.
+
+**Kontrol negatif** (wajib, lihat `AGENTS.md`):
+
+| NC | Perubahan sementara | Hasil |
+|---|---|---|
+| NC-3 | `EngineVerdict` kembali menilai ulang dengan daftar syarat sendiri | 2 tes GAGAL |
+| NC-1 | `withEngineRows` dimatikan | 3 tes GAGAL |
+| NC-2 | `HOLDING` dipetakan ke `READY` | 1 tes GAGAL |
+
+Ketiganya dipulihkan dan suite kembali hijau (`grep -c "NEGATIVE CONTROL"` = 0).
+
+### 15.6 Yang belum dikerjakan
+
+- **INTRADAY/SWING belum divalidasi keluar-sampel** — §15 menyamakan *siapa yang menjawab*, bukan
+  menambah bukti edge.
+- **Sinyal engine per-simbol belum tersedia untuk seluruh daftar pantau.** Kalau nanti
+  `LearningTradingEngine` menilai banyak simbol sekaligus, `engineVerdictRows()` bisa diperluas
+  menjadi per-simbol dan seluruh papan bisa berhenti memakai pra-saring untuk horizon aktif.
+- Kesiapan uang riil tetap **BELUM** (§9.5b, §13.4).

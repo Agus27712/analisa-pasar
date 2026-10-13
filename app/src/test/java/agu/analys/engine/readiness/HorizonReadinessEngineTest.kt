@@ -6,6 +6,7 @@ import agu.analys.model.CandleBar
 import agu.analys.model.Timeframe
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -327,6 +328,27 @@ class HorizonReadinessEngineTest {
         assertTrue(TradeHorizon.SCALP.validatedOutOfSample)
         assertFalse(TradeHorizon.INTRADAY.validatedOutOfSample)
         assertFalse(TradeHorizon.SWING.validatedOutOfSample)
+    }
+
+    /**
+     * Pra-saring tidak boleh mengaku sebagai engine.
+     *
+     * Hanya `EngineVerdict` yang berhak menandai sebuah baris `ENGINE`. Bila engine ini suatu saat
+     * ikut menandainya, pengguna akan melihat dua baris sama-sama berlabel "ENGINE AKTIF" dengan
+     * angka berbeda — kembali ke kontradiksi yang baru saja diperbaiki.
+     */
+    @Test
+    fun `pra-saring tidak pernah mengaku sebagai keputusan engine`() {
+        TradeHorizon.entries.forEach { horizon ->
+            val r = evaluate(horizon, scalpCandles())
+            assertEquals(
+                "baris pra-saring horizon $horizon tidak boleh berlabel ENGINE",
+                ReadinessSource.PRESCREEN,
+                r.source
+            )
+            assertFalse(r.fromEngine)
+            assertNotEquals(ReadinessState.HOLDING, r.state)
+        }
     }
 
     /** Lantai friksi sebagai persen harga, dihitung dari tarif. */

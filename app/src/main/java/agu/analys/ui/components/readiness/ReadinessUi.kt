@@ -32,9 +32,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import agu.analys.engine.readiness.ReadinessCheck
+import agu.analys.engine.readiness.ReadinessSource
 import agu.analys.engine.readiness.ReadinessState
 import agu.analys.engine.readiness.TradeHorizon
 import agu.analys.ui.theme.TvAmber
+import agu.analys.ui.theme.TvBlue
 import agu.analys.ui.theme.TvBorder
 import agu.analys.ui.theme.TvCyan
 import agu.analys.ui.theme.TvGreen
@@ -53,11 +55,45 @@ import agu.analys.ui.theme.TvTextSecondary
 
 @Composable
 fun readinessStateColor(state: ReadinessState): Color = when (state) {
+    ReadinessState.HOLDING -> TvBlue
     ReadinessState.READY -> TvGreen
     ReadinessState.WARMING -> TvCyan
     ReadinessState.WATCH -> TvAmber
     ReadinessState.BLOCKED -> TvRed
     ReadinessState.NO_DATA -> TvTextMuted
+}
+
+/**
+ * Penanda **dari mana** sebuah baris kesiapan berasal.
+ *
+ * Ini bukan hiasan. Tanpa penanda ini, pembaca tidak punya cara membedakan "engine yang sedang
+ * dipakai sudah menilai dan bilang begini" dari "saringan biaya sedang menduga begini" — dan
+ * itulah yang membuat papan terasa bertentangan dengan kartu engine (laporan 13 Okt).
+ */
+@Composable
+fun ReadinessSourceBadge(
+    source: ReadinessSource,
+    modifier: Modifier = Modifier
+) {
+    val color = when (source) {
+        ReadinessSource.ENGINE -> TvGreen
+        ReadinessSource.PRESCREEN -> TvTextMuted
+    }
+    Box(
+        modifier
+            .clip(RoundedCornerShape(4.dp))
+            .background(color.copy(alpha = 0.14f))
+            .border(1.dp, color.copy(alpha = 0.4f), RoundedCornerShape(4.dp))
+            .padding(horizontal = 6.dp, vertical = 2.dp)
+    ) {
+        Text(
+            text = source.label,
+            color = color,
+            fontSize = 9.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 0.3.sp
+        )
+    }
 }
 
 fun horizonIcon(horizon: TradeHorizon): ImageVector = when (horizon) {

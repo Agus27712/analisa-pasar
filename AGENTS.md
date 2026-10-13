@@ -11,9 +11,10 @@ Aplikasi Android Kotlin 100% (Jetpack Compose M3) untuk analisis & **scalp mode*
 1. **Berkas ini** sampai habis — terutama bagian "Yang tidak boleh dilakukan agen".
 2. **`docs/PANDUAN-LANJUT-AGEN.md`** — status terkini, apa yang sudah selesai, apa yang berikutnya,
    dan perangkap yang sudah pernah ditemukan. **Ini titik masuk utama.**
-3. **`workplan2.md` § 14** — pekerjaan terakhir (kesiapan multi-horizon). Seksi sebelumnya
-   (§9 lantai friksi, §11 UI scalping, §12 rehidrasi paper, §13 akar `EARLY_ENTRY`) menjelaskan
-   **kenapa** kode hari ini berbentuk seperti sekarang. Jangan mengubahnya tanpa membacanya.
+3. **`workplan2.md` § 15** — pekerjaan terakhir (SSOT: horizon kesiapan vs engine aktif), lalu
+   **§ 14** (kesiapan multi-horizon). Seksi sebelumnya (§9 lantai friksi, §11 UI scalping,
+   §12 rehidrasi paper, §13 akar `EARLY_ENTRY`) menjelaskan **kenapa** kode hari ini berbentuk
+   seperti sekarang. Jangan mengubahnya tanpa membacanya.
 4. `SCALP_EXIT.md` bila menyentuh exit.
 5. Baru buka kode.
 
@@ -31,12 +32,28 @@ Aplikasi Android Kotlin 100% (Jetpack Compose M3) untuk analisis & **scalp mode*
 - **Bila ragu, eksekusi keputusan terbaik dan catat alasannya** di dokumen — jangan berhenti
   menunggu jawaban.
 
+**Aturan SSOT (dari §15 — jangan dilanggar):**
+
+1. **`StrategyMode` menentukan siapa yang berhak menyimpulkan.** `StrategyMode` → `TradeHorizon.of(mode)`
+   = horizon aktif. Setiap permukaan yang menilai koin harus memakai penaut ini, bukan memilih
+   horizon sendiri.
+2. **Hanya `EngineVerdict` yang boleh menandai sebuah baris `ReadinessSource.ENGINE`.**
+   `HorizonReadinessEngine` adalah **pra-saring** — ia menyaring daftar dari cache, bukan menjadi
+   pendapat kedua atas horizon yang sudah dijawab engine.
+3. **Jangan pernah menampilkan `N/5` dari dua daftar syarat berbeda untuk koin yang sama.**
+   Format yang sama akan dibaca sebagai satu kebenaran. Ini akar bug "3/5 vs 1/5".
+4. **Status engine boleh dipetakan, angka engine tidak boleh dihitung ulang.** Pakai
+   `HorizonReadinessEngine.weightedScore`/`exitRule`/`roundTripCostPct` yang sudah dipublikasikan —
+   jangan menyalinnya.
+
 **Titik masuk kode yang paling sering dibutuhkan:**
 
 | Butuh | Berkas |
 |---|---|
 | Status/kesiapan scalping satu sinyal | `engine/scalping/ScalpReadiness.kt` |
 | Kesiapan multi-horizon (scalp/intraday/swing) | `engine/readiness/*` |
+| **Keputusan engine → baris papan (SSOT)** | `engine/readiness/EngineVerdict.kt` |
+| **Engine mana yang aktif** | `config/StrategyMode` → `TradeHorizon.of(mode)` |
 | Threshold & lantai friksi | `engine/scalping/ScalpingConfig.kt` + `ScalpingRuntimeConfig.kt` |
 | Exit paper (beli → tahan → keluar) | `engine/scalping/PaperExitResolver.kt`, `SCALP_EXIT.md` |
 | Wiring state ke UI | `viewmodel/TradingViewModel*.kt` (banyak berkas, per fitur) |

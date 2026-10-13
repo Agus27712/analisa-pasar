@@ -74,6 +74,13 @@ fun DashboardScreen(
     val readinessBoard by viewModel.readinessBoard.collectAsState()
     val readinessLoading by viewModel.readinessLoading.collectAsState()
 
+    // SSOT: horizon yang engine-nya aktif ditentukan preferensi tersimpan, bukan horizon yang
+    // kebetulan sedang dibuka di papan. Kartu "SIAP TRADING" harus bicara tentang engine yang
+    // benar-benar dipakai pengguna.
+    val activeReadinessHorizon = remember(strategyMode) {
+        agu.analys.engine.readiness.TradeHorizon.of(strategyMode)
+    }
+
     val selectedQuickFilter by viewModel.dashboardQuickFilter.collectAsState()
     var currentTab by remember { mutableStateOf(NavTab.WATCHLIST) }
     var showAddDialog by remember { mutableStateOf(false) }
@@ -391,6 +398,7 @@ fun DashboardScreen(
             // Menjawab "mana yang siap masuk?" sebelum pengguna menelusuri daftar panjang.
             ReadinessBoardCard(
                 board = readinessBoard,
+                activeHorizon = activeReadinessHorizon,
                 loading = readinessLoading,
                 onOpenBoard = { viewModel.openReadiness() },
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)

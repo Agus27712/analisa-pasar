@@ -12,7 +12,7 @@
 |---|---|
 | Branch kerja | **`patch`** (owner me-review di sini dulu; `main` hanya menerima merge) |
 | Titik masuk kode | package `agu.analys`, modul tunggal `:app` |
-| Unit test | **364 lulus · 0 gagal · 1 dilewati** (50 kelas) |
+| Unit test | **385 lulus · 0 gagal · 1 dilewati** (52 kelas) |
 | APK debug | 26,5 MB (`app/build/outputs/apk/debug/app-debug.apk`) |
 | Kesiapan uang riil | **BELUM** — lihat §5 |
 
@@ -53,14 +53,19 @@ git stash pop                 # kembalikan pekerjaan
 | §12 | **Rehidrasi state machine exit paper** setelah restart | `PaperRehydrate.kt`, `SpotPositionStore.kt` | `PaperRehydrateTest.kt` |
 | §13 | **Akar `EARLY_ENTRY`** — stage tinggi wajib punya pola | `ScalpingMtfEvaluator.kt`, `SignalLifecycleManager.kt` | `workplan2.md` §13 |
 | §14 | **Kesiapan multi-horizon** (scalp/intraday/swing) + papan UI | `engine/readiness/*`, `ui/components/readiness/*` | `HorizonReadinessEngineTest.kt` |
+| §15 | **SSOT: horizon vs engine aktif** — papan berhenti menjadi pendapat kedua | `engine/readiness/EngineVerdict.kt`, `TradingViewModelReadiness.kt` | `EngineVerdictTest.kt`, `ReadinessBoardOverlayTest.kt` |
 
-Semua di atas **sudah masuk `main`** kecuali §14 (ada di `patch`).
+Semua di atas **sudah masuk `main`** kecuali §14 dan §15 (ada di `patch`).
 
 ---
 
 ## 3. Arsitektur ringkas (yang perlu diketahui sebelum mengubah apa pun)
 
 ```
+StrategyMode (pilihan pengguna di Pengaturan)  ← SSOT siapa yang berhak menyimpulkan
+        │
+        └──► TradeHorizon.of(mode) = horizon aktif
+                    │
 MarketTick/Candle  ──►  LearningTradingEngine  ──►  ScalpingMtfEvaluator ─┐
    (per exchange)          (routing per              SwingEvaluator       ├─► AISignalState
                             StrategyMode)             IntradayEvaluator   ─┘        │
@@ -69,14 +74,22 @@ MarketTick/Candle  ──►  LearningTradingEngine  ──►  ScalpingMtfEvalu
                                                                      (IDLE→DETECTED→…)
                                                                                     │
    MtfCacheManager (cache memori) ──► HorizonReadinessEngine ──► ReadinessBoard      │
-             │                                                        │              │
-             └────────────► PaperAutoTradeCoordinator ────────────────┘              │
+             │                          (PRA-SARING saja)            ▲              │
+             │                                                       │              │
+             │                        EngineVerdict ◄── ScalpReadiness.resolve ◄─────┘
+             │                        (ENGINE AKTIF,                 │
+             │                         checkpoint identik)           │
+             └────────────► PaperAutoTradeCoordinator ───────────────┘              │
                               (auto buy/sell paper)                                  │
                                                                                      ▼
                                                               TradingViewModel (Facade, banyak berkas)
                                                                                      │
                                                                             Compose screens
 ```
+
+**Aturan SSOT yang tidak boleh dilanggar:** hanya `EngineVerdict` yang boleh menandai sebuah baris
+kesiapan `ENGINE`. `HorizonReadinessEngine` adalah **pra-saring** — ia menyaring daftar, bukan
+menggantikan engine. Melanggarnya akan memunculkan kembali kontradiksi "3/5 vs 1/5" (§15).
 
 - **`TradingViewModel` adalah facade** yang dipecah ke banyak berkas (`TradingViewModelSync.kt`,
   `TradingViewModelAlerts.kt`, `TradingViewModelReadiness.kt`, …). Menambah state berarti menambah
@@ -197,7 +210,14 @@ Aturan yang sudah berlaku dan **jangan dilonggarkan**:
     paksa bar terakhir naik (lihat `finalBarUpPct` di `HorizonReadinessEngineTest`), kalau tidak uji
     momentum akan gagal karena alasan yang salah.
 12. **Uji yang selalu hijau tidak membuktikan apa pun.** Untuk setiap perbaikan bug, matikan
-    perbaikannya, buktikan test GAGAL, lalu kembalikan. Pola ini dipakai di §12 dan §13.
+    perbaikannya, buktikan test GAGAL, lalu kembalikan. Pola ini dipakai di §12, §13, dan §15.
+13. **Dua permukaan yang menampilkan format sama (`N/5`) akan dibaca sebagai satu kebenaran.**
+    Ini akar masalah §15: kartu kesiapan dan kartu engine sama-sama menulis `N/5` dari daftar
+    syarat yang berbeda. Kalau menambah permukaan baru, pastikan pembaca tahu **siapa** yang
+    menjawab — atau jangan tampilkan angkanya sama sekali.
+14. **Preferensi pengguna (`StrategyMode`) mengikat seluruh aplikasi.** Setiap fitur yang menilai
+    koin harus bertanya "engine mana yang sedang aktif?" lewat `TradeHorizon.of(mode)`, bukan
+    memilih horizon sendiri. Mengabaikannya membuat dashboard terlihat memantau engine lain.
 
 ---
 
