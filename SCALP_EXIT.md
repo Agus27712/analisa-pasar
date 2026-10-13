@@ -132,6 +132,14 @@ Keempat langkah port sudah dikerjakan dan masuk P2:
 3. ✅ `exit_reason` jelas (`SL`, `TP2`, `BE_SL`, `TRAIL_SL`, `EARLY_PROFIT`, `TIMEOUT`) dipakai
    untuk UI (FSM + kartu statistik) dan jurnal.
 4. ✅ Entry tetap long-only; fokus exit long.
+5. ✅ **Rehidrasi setelah restart (2026-10-13).** State machine exit paper hidup di memori
+   (`PaperAutoTradeRuntime`), sedangkan posisi + `auto_sell_enabled` persisten di
+   `SpotPositionStore`. Sebelumnya posisi **menggantung** setelah app di-kill: engine paper
+   kosong, jalur auto-sell lama juga mati. Sekarang penanda persisten `_paper_engine` +
+   `PaperRehydrate` membangun ulang mesin saat startup. SL asli sinyal kini ikut dipersistenkan
+   lewat `setAutoSellParams(stopLossPrice = ...)` — tanpa itu rehidrasi akan memakai SL sintetis
+   `entry * 0.99` dan **memalsukan stop-out**. Batasan: `barsHeld`/`isBeArmed`/`isPartialDone`/`peak`
+   reset, dan posisi yang dibeli sebelum penanda ada sengaja tidak disentuh. Rincian: `workplan2.md` §12.
 
 **Yang belum di-port dan sengaja ditahan:** auto-execute **uang riil** dari sinyal scalp.
 Itu menunggu gate di bawah terpenuhi.

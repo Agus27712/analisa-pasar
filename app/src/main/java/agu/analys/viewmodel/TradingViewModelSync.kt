@@ -417,6 +417,16 @@ fun TradingViewModel.initSubscriptionsAndPolling() {
     engine.tradingFees = prefs.tradingFees
     engine.scalpingRuntimeConfig = prefs.scalpingRuntimeConfig
 
+    // P2 — bangun ulang state machine exit paper setelah restart. Tanpa ini posisi simulasi
+    // menggantung: `PaperAutoTradeRuntime` hanya hidup di memori, sedangkan `auto_sell_enabled`
+    // sudah dimatikan saat engine mengambil alih exit. Lihat [PaperRehydrate].
+    runCatching { rehydratePaperAutoExit() }.onFailure {
+        agu.analys.util.AppLogManager.service(
+            "PaperAutoExit",
+            "⚠️ Rehidrasi posisi paper gagal: ${it.message}"
+        )
+    }
+
     engine.onCandidateSignalTransition = { transition ->
         if (isNotificationsEnabled.value) {
             val isReal = isRealBuyMode.value

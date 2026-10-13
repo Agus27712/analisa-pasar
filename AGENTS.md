@@ -80,6 +80,19 @@ Aplikasi Android Kotlin 100% (Jetpack Compose M3) untuk analisis & **scalp mode*
   `TradingViewModel.paperExitSnapshot` (StateFlow tunggal yang di-`publish` dari tick pair mana
   pun). Pakai `TradingViewModel.paperSnapshotFor(exchange, symbol, price)` supaya yang tampil
   selalu posisi pair yang sedang dibuka.
+- **Rehidrasi state machine paper (2026-10-13, WAJIB):** `PaperAutoTradeRuntime` **hanya hidup di
+  memori**, sedangkan posisi & `auto_sell_enabled` persisten di `SpotPositionStore`. Setiap
+  perubahan pada siklus hidup posisi paper wajib menjaga tiga hal ini tetap sinkron:
+  1. penanda `_paper_engine` ditulis saat engine mengambil alih exit dan dilepas saat posisi
+     ditutup (`markSold` / `finalizePaperExit` / `clearPaperExitState` / posisi hilang);
+  2. SL asli sinyal ditulis lewat `setAutoSellParams(stopLossPrice = ...)`. **Jangan** andalkan
+     `_stop_loss` dari `setHolding` — nilainya sintetis `entry * 0.99` (≈1%), sedangkan SL engine
+     minimal sebesar lantai friksi (≥ 5,8% USDT). Rehidrasi dengan SL sintetis akan **memalsukan
+     stop-out** di jurnal;
+  3. keputusan rehidrasi lewat `engine/scalping/PaperRehydrate.kt` (murni, teruji), dijalankan
+     sekali dari `initSubscriptionsAndPolling()`.
+  Posisi yang dibeli **sebelum** penanda ini ada sengaja tidak disentuh — SL-nya tersimpan salah.
+  Batasan yang diterima: `barsHeld`/`isBeArmed`/`isPartialDone`/`peak` reset. Bukti: `workplan2.md` §12.
 - Profil exit yang benar saat ini **skew negatif** (menang ≈ +0,09R, kalah ≈ −1,16R, WR ≈ 95%).
   Margin impas hanya ~2,3 poin persentase — jangan promosikan ke uang riil. Bukti: `workplan2.md` §9.5b.
 - Ubah parameter untuk eksperimen: export JSON → replay; jangan mengarang “edge” dari satu window data.
