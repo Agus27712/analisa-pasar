@@ -243,7 +243,13 @@ object ScalpingMtfEvaluator {
 
         val ready = step4Ok
         val strong = ready && score.total >= config.minScoreStrong
-        val early = !ready && !isDangerous && step2Ok
+        // P1 — `EARLY_ENTRY` WAJIB mensyaratkan pola scalping yang benar-benar ada.
+        // Sebelumnya `early` hanya butuh `step2Ok` (= `step1Ok && isOrderBookValid`), yang sama
+        // sekali tidak memeriksa setup. Akibatnya sinyal tanpa pola apa pun (`setup == NONE`)
+        // tetap dipancarkan sebagai `ScalpingStage.EARLY_ENTRY`, lalu `SignalLifecycleManager`
+        // menaikkannya ke `LifecycleState.DETECTED` — radar berkata "TERDETEKSI" sementara
+        // kartu setup berkata "NONE". Sekarang keduanya tidak bisa lagi bertentangan.
+        val early = !ready && !isDangerous && step2Ok && setup != ScalpSetupType.NONE
 
         val direction = if (ready) SignalDirection.LONG else SignalDirection.WAIT
         val finalAction = if (direction == SignalDirection.LONG) SignalAction.BUY else SignalAction.HOLD
@@ -283,8 +289,9 @@ object ScalpingMtfEvaluator {
         when {
             strong -> reasons.add(0, "STRONG ENTRY: Skor ${score.total} + Net R:R 1:${fmt(netRr)}")
             ready -> reasons.add(0, "BUY READY: Skor ${score.total} + Net R:R 1:${fmt(netRr)}.")
-            early -> reasons.add(0, "EARLY: kondisi awal terbentuk, tunggu setup & konfirmasi penuh.")
+            early -> reasons.add(0, "EARLY: setup ${setup.name} terbentuk, menunggu trigger & konfirmasi penuh.")
             isDangerous -> {}
+            step2Ok -> reasons.add(0, "WAIT: tekanan orderbook sudah mendukung, tetapi belum ada setup scalping valid.")
             else -> reasons.add(0, "WAIT: belum ada setup valid. Menunggu momentum & orderbook.")
         }
 
@@ -347,6 +354,7 @@ object ScalpingMtfEvaluator {
                 ready -> "BUY READY"
                 step3Ok -> "TRIGGER READY (3/4)"
                 early -> "EARLY SETUP (2/4)"
+                step2Ok -> "ORDERBOOK OK (2/4) · SETUP BELUM ADA"
                 step1Ok -> "BIAS OK (1/4)"
                 else -> "WATCHING (0/4)"
             },
@@ -357,7 +365,8 @@ object ScalpingMtfEvaluator {
                 !hasRoomToGrow -> "Menunggu breakout resistance M15"
                 ready -> "Eksekusi"
                 step3Ok -> "Konfirmasi Net R:R & skor"
-                step2Ok -> "Setup scalping valid & VWAP"
+                early -> "Trigger VWAP/VSA & gate Net R:R"
+                step2Ok -> "Setup scalping valid (sweep/retest/breakout/pullback)"
                 step1Ok -> "Tekanan Beli Orderbook"
                 else -> "Menunggu setup lengkap"
             },

@@ -106,9 +106,29 @@ object SignalLifecycleManager {
             updateSignalData(tracked, rawSignal, now)
         } else if (mode == StrategyMode.SCALPING) {
             // Mode SCALPING: rule spesifik berbasis scalpingStage
+            //
+            // Invarian P1: tanpa pola scalping yang valid (`scalpingSetup` kosong/`"NONE"`), tidak
+            // ada stage yang boleh **menaikkan** siklus hidup ke DETECTED / CONFIRMING / READY.
+            // Stage semacam itu dinormalisasi menjadi `WATCH` — kecuali `HOLD` (kondisi berbahaya)
+            // yang tetap diturunkan sebagai `HOLD`.
+            //
+            // Sebelumnya `EARLY_ENTRY` & `WAIT_PULLBACK` dipromosikan ke DETECTED hanya berdasar
+            // tekanan orderbook, sehingga radar menampilkan "TERDETEKSI" padahal
+            // `scalpingSetup == "NONE"`.
+            //
+            // Normalisasi ini tidak mengubah perilaku sinyal yang sah: `WATCH` dan `HOLD` sudah
+            // punya transisi yang benar di mesin ini (IDLE tetap IDLE, DETECTED turun ke IDLE,
+            // READY dibatalkan), dan producer sungguhan (`ScalpingMtfEvaluator`) sudah tidak
+            // pernah lagi memancarkan stage lebih tinggi tanpa pola. Jadi ini jaring pengaman —
+            // termasuk untuk producer sinyal di masa depan.
+            val stage = when {
+                ScalpReadiness.hasSetup(rawSignal) -> rawSignal.scalpingStage
+                rawSignal.scalpingStage == ScalpingStage.HOLD -> ScalpingStage.HOLD
+                else -> ScalpingStage.WATCH
+            }
             when (tracked.state) {
                 LifecycleState.IDLE, LifecycleState.EXPIRED, LifecycleState.INVALIDATED -> {
-                    when (rawSignal.scalpingStage) {
+                    when (stage) {
                         ScalpingStage.EARLY_ENTRY, ScalpingStage.WAIT_PULLBACK -> {
                             tracked.state = LifecycleState.DETECTED
                             tracked.detectedAt = now
@@ -133,7 +153,7 @@ object SignalLifecycleManager {
                     }
                 }
                 LifecycleState.DETECTED -> {
-                    when (rawSignal.scalpingStage) {
+                    when (stage) {
                         ScalpingStage.ENTRY -> {
                             tracked.state = LifecycleState.CONFIRMING
                             tracked.weakTickCount = 0
@@ -158,7 +178,7 @@ object SignalLifecycleManager {
                     }
                 }
                 LifecycleState.CONFIRMING -> {
-                    when (rawSignal.scalpingStage) {
+                    when (stage) {
                         ScalpingStage.ENTRY, ScalpingStage.STRONG_ENTRY -> {
                             tracked.state = LifecycleState.READY
                             tracked.weakTickCount = 0
@@ -176,7 +196,7 @@ object SignalLifecycleManager {
                     }
                 }
                 LifecycleState.READY -> {
-                    when (rawSignal.scalpingStage) {
+                    when (stage) {
                         ScalpingStage.HOLD, ScalpingStage.WATCH -> {
                             tracked.state = LifecycleState.INVALIDATED
                             tracked.weakTickCount = 0

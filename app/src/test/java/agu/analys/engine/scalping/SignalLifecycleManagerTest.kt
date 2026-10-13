@@ -107,10 +107,13 @@ class SignalLifecycleManagerTest {
     fun testScalping_BackwardsCompatibility() {
         SignalLifecycleManager.reset(symbol, StrategyMode.SCALPING)
 
-        // Scalping uses scalpingStage
+        // Scalping uses scalpingStage — dan sejak perbaikan P1 wajib disertai pola yang valid
+        // (`scalpingSetup != "NONE"`), karena tanpa pola tidak ada stage yang boleh menaikkan
+        // siklus hidup.
         val scalpingEarly = AISignalState(
             action = SignalAction.BUY,
             scalpingStage = ScalpingStage.EARLY_ENTRY,
+            scalpingSetup = "LIQUIDITY_SWEEP",
             confidence = 60
         )
         val t1 = SignalLifecycleManager.process(symbol, 10_000.0, scalpingEarly, StrategyMode.SCALPING)
@@ -120,11 +123,87 @@ class SignalLifecycleManagerTest {
         val scalpingStrong = AISignalState(
             action = SignalAction.BUY,
             scalpingStage = ScalpingStage.STRONG_ENTRY,
+            scalpingSetup = "BREAKOUT",
             confidence = 90
         )
         val t2 = SignalLifecycleManager.process(symbol, 10_100.0, scalpingStrong, StrategyMode.SCALPING)
         assertEquals(LifecycleState.READY, t2.state)
         assertTrue(t2.transition?.hasTriggeringTransition == true)
+    }
+
+    /**
+     * Invarian P1: tanpa pola scalping valid, siklus hidup **tidak boleh** naik ke
+     * DETECTED / CONFIRMING / READY — apa pun stage yang dikirim engine.
+     *
+     * Ini reproduksi persis keluhan pengguna: radar berkata "TERDETEKSI" sementara kartu setup
+     * berkata "NONE", karena `EARLY_ENTRY` dipromosikan hanya berdasar tekanan orderbook.
+     */
+    @Test
+    fun testScalping_NoSetupNeverPromoted() {
+        SignalLifecycleManager.reset(symbol, StrategyMode.SCALPING)
+
+        val noSetup = AISignalState(
+            action = SignalAction.HOLD,
+            scalpingStage = ScalpingStage.EARLY_ENTRY,
+            scalpingSetup = "NONE",
+            confidence = 49
+        )
+
+        // 1. Persis kasus yang dilaporkan: EARLY_ENTRY + setup NONE -> tetap IDLE.
+        val t1 = SignalLifecycleManager.process(symbol, 10_000.0, noSetup, StrategyMode.SCALPING)
+        assertEquals(LifecycleState.IDLE, t1.state)
+        assertFalse(t1.transition?.isNewDetected == true)
+
+        // 2. Setup kosong (default `""`) juga tidak boleh lolos.
+        val t2 = SignalLifecycleManager.process(symbol, 10_010.0, noSetup.copy(scalpingSetup = ""), StrategyMode.SCALPING)
+        assertEquals(LifecycleState.IDLE, t2.state)
+
+        // 3. WAIT_PULLBACK tanpa setup ditahan juga.
+        val t3 = SignalLifecycleManager.process(
+            symbol, 10_020.0, noSetup.copy(scalpingStage = ScalpingStage.WAIT_PULLBACK), StrategyMode.SCALPING
+        )
+        assertEquals(LifecycleState.IDLE, t3.state)
+
+        // 4. ENTRY & STRONG_ENTRY tanpa setup pun tidak boleh menaikkan status (jaring pengaman).
+        val t4 = SignalLifecycleManager.process(
+            symbol, 10_030.0, noSetup.copy(scalpingStage = ScalpingStage.ENTRY), StrategyMode.SCALPING
+        )
+        assertEquals(LifecycleState.IDLE, t4.state)
+
+        val t5 = SignalLifecycleManager.process(
+            symbol, 10_040.0, noSetup.copy(scalpingStage = ScalpingStage.STRONG_ENTRY), StrategyMode.SCALPING
+        )
+        assertEquals(LifecycleState.IDLE, t5.state)
+
+        // 5. Begitu pola valid muncul, DETECTED menjadi sah kembali.
+        val t6 = SignalLifecycleManager.process(
+            symbol, 10_050.0, noSetup.copy(scalpingSetup = "LIQUIDITY_SWEEP"), StrategyMode.SCALPING
+        )
+        assertEquals(LifecycleState.DETECTED, t6.state)
+        assertTrue(t6.transition?.isNewDetected == true)
+    }
+
+    /**
+     * Jalur invalidasi **tidak** boleh ikut terpengaruh normalisasi P1: kondisi berbahaya
+     * (`HOLD`) harus tetap membatalkan sinyal yang sudah DETECTED, walaupun pola tidak terbaca.
+     */
+    @Test
+    fun testScalping_DangerousHoldStillInvalidatesEvenWithoutSetup() {
+        SignalLifecycleManager.reset(symbol, StrategyMode.SCALPING)
+
+        val detected = AISignalState(
+            action = SignalAction.BUY,
+            scalpingStage = ScalpingStage.EARLY_ENTRY,
+            scalpingSetup = "LIQUIDITY_SWEEP",
+            confidence = 60
+        )
+        val t1 = SignalLifecycleManager.process(symbol, 10_000.0, detected, StrategyMode.SCALPING)
+        assertEquals(LifecycleState.DETECTED, t1.state)
+
+        // Kondisi berbahaya + pola hilang -> tetap INVALIDATED (bukan berhenti di DETECTED).
+        val dangerous = detected.copy(scalpingStage = ScalpingStage.HOLD, scalpingSetup = "NONE")
+        val t2 = SignalLifecycleManager.process(symbol, 10_050.0, dangerous, StrategyMode.SCALPING)
+        assertEquals(LifecycleState.INVALIDATED, t2.state)
     }
 
     @Test
