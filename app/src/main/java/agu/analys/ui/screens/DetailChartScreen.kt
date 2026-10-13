@@ -22,6 +22,8 @@ import agu.analys.ui.components.SignalHistoryPanel
 import agu.analys.ui.components.detail.*
 import agu.analys.ui.components.detail.scalp.PaperTradeDeskCard
 import agu.analys.ui.components.detail.scalp.ScalpDeskCard
+import agu.analys.engine.readiness.EngineVerdict
+import agu.analys.engine.readiness.TradeHorizon
 import agu.analys.ui.components.readiness.SymbolReadinessCard
 import agu.analys.ui.components.settings.LogcatDiagnosticDialog
 import agu.analys.ui.theme.*
@@ -325,16 +327,43 @@ fun DetailChartScreen(
             Spacer(Modifier.height(10.dp))
 
             // ── Kesiapan horizon (scalp / intraday / swing) ───────────────
-            // Selalu tampil, termasuk di mode non-scalping: jawabannya berbeda per horizon, dan
-            // itulah informasi yang sebelumnya tidak pernah ditampilkan aplikasi.
-            val symbolReadiness = remember(readinessBoard, pair.symbol) {
-                readinessBoard.forSymbol(pair.symbol)
+            //
+            // SSOT: baris horizon yang engine-nya sedang aktif diambil dari **keputusan engine**
+            // (`EngineVerdict`), memakai objek checkpoint yang sama dengan kartu SCALP DESK/radar
+            // di halaman ini. Sebelumnya baris itu dihitung ulang oleh pra-saring dengan daftar
+            // syarat berbeda, sehingga SCALPING bisa terbaca "3/5" di sini sementara SCALP DESK
+            // menampilkan "1/5" — dua angka untuk satu pertanyaan.
+            //
+            // Dihitung di sini (bukan hanya dari papan) supaya pair yang baru dibuka langsung
+            // benar walau pemindaian 60 detik belum sempat berjalan.
+            val symbolReadiness = remember(
+                readinessBoard, pair.symbol, signal, scalpReadiness, paperSnapshot,
+                strategyMode, displayPrice, tradingFees, scalpingRuntime
+            ) {
+                val engineRow = EngineVerdict.of(
+                    mode = strategyMode,
+                    symbol = pair.symbol,
+                    signal = signal,
+                    readiness = scalpReadiness,
+                    price = displayPrice,
+                    fees = tradingFees,
+                    exitParams = scalpingRuntime.exit,
+                    // Di mode scalping kartu SCALP DESK tepat di bawah sudah memuat entry/SL/TP;
+                    // menyalinnya lagi akan mengembalikan duplikasi yang sedang dihapus.
+                    planInCardElsewhere = isScalping
+                )
+                val boardRows = readinessBoard.forSymbol(pair.symbol)
+                TradeHorizon.entries.mapNotNull { h ->
+                    if (h == engineRow.horizon) engineRow
+                    else boardRows.firstOrNull { it.horizon == h }
+                }
             }
             if (symbolReadiness.isNotEmpty()) {
                 SymbolReadinessCard(
                     symbol = pair.symbol,
                     rows = symbolReadiness,
                     quoteAsset = pair.quoteAsset,
+                    activeHorizon = TradeHorizon.of(strategyMode),
                     loading = readinessLoading,
                     onRequestData = { viewModel.requestReadinessData() }
                 )

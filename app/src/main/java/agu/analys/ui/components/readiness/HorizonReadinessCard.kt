@@ -32,6 +32,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import agu.analys.engine.readiness.HorizonReadiness
+import agu.analys.engine.readiness.ReadinessSource
 import agu.analys.engine.readiness.ReadinessState
 import agu.analys.engine.readiness.TradeHorizon
 import agu.analys.ui.components.detail.AnalysisCard
@@ -49,12 +50,20 @@ import agu.analys.util.PriceFormatter
 /**
  * **KESIAPAN HORIZON** — kartu untuk halaman detail koin.
  *
- * Menjawab langsung pertanyaan "koin ini siap untuk apa?" dengan menampilkan tiga horizon
- * berdampingan. Ditempatkan berdampingan (bukan bertumpuk) supaya pengguna bisa membandingkan:
- * koin yang sama bisa `SIAP` untuk swing tetapi `PANTAU` untuk scalp, dan itu memang informasi
- * yang berguna, bukan kontradiksi.
+ * Menjawab "koin ini siap untuk apa?" untuk tiga horizon sekaligus, dengan satu aturan yang tidak
+ * bisa dilanggar:
+ *
+ * > **Horizon yang engine-nya sedang aktif dinilai engine itu sendiri** — daftar syarat, angka,
+ * > dan statusnya identik dengan kartu engine di halaman yang sama. Horizon lain tampil sebagai
+ * > `PRA-SARING` dan menyebut dirinya begitu.
+ *
+ * Aturan ini menggantikan perilaku sebelumnya, di mana kartu ini menghitung sendiri horizon yang
+ * sama dengan engine memakai daftar syarat berbeda — sehingga SCALPING bisa terbaca "3/5" di sini
+ * sementara SCALP DESK tepat di bawahnya menampilkan "1/5". Dua angka, satu pertanyaan, tidak ada
+ * cara bagi pembaca untuk tahu mana yang harus dipercaya.
  *
  * @param rows baris kesiapan untuk koin ini (biasanya 3: scalp/intraday/swing)
+ * @param activeHorizon horizon yang engine-nya aktif — barisnya berasal dari engine
  * @param loading sedang menghitung
  * @param onRequestData minta pengambilan candle untuk timeframe yang belum ada
  */
@@ -63,6 +72,7 @@ fun SymbolReadinessCard(
     symbol: String,
     rows: List<HorizonReadiness>,
     quoteAsset: String = "IDR",
+    activeHorizon: TradeHorizon? = null,
     loading: Boolean = false,
     onRequestData: (() -> Unit)? = null,
     modifier: Modifier = Modifier
@@ -91,6 +101,10 @@ fun SymbolReadinessCard(
             fontSize = 11.sp,
             lineHeight = 15.sp
         )
+        if (activeHorizon != null) {
+            Spacer(Modifier.height(6.dp))
+            ReadinessSourceLegend(activeHorizon = activeHorizon)
+        }
         Spacer(Modifier.height(10.dp))
 
         if (ordered.isEmpty()) {
@@ -104,7 +118,11 @@ fun SymbolReadinessCard(
 
         ordered.forEachIndexed { index, row ->
             if (index > 0) Spacer(Modifier.height(8.dp))
-            HorizonReadinessRow(row = row, quoteAsset = quoteAsset)
+            HorizonReadinessRow(
+                row = row,
+                quoteAsset = quoteAsset,
+                isActiveHorizon = row.horizon == activeHorizon
+            )
         }
 
         if (missing.isNotEmpty() && onRequestData != null) {
@@ -123,7 +141,7 @@ fun SymbolReadinessCard(
                 Icon(Icons.Default.Sync, null, tint = TvTextSecondary, modifier = Modifier.size(14.dp))
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    text = "Ambil data candle untuk ${missing.size} horizon yang belum siap",
+                    text = "Ambil data candle untuk ${missing.size} horizon yang datanya belum ada",
                     color = TvTextSecondary,
                     fontSize = 11.sp
                 )
@@ -132,23 +150,78 @@ fun SymbolReadinessCard(
     }
 }
 
-/** Satu horizon: status, skor, kesimpulan, dan (bila dibuka) syarat + rencana trade. */
+/**
+ * Legenda dua jenis baris.
+ *
+ * Ditulis eksplisit karena inilah inti perbaikan: pengguna harus tahu bahwa `PRA-SARING` bukan
+ * keputusan engine, dan bahwa `ENGINE AKTIF` adalah satu-satunya baris yang angkanya sama dengan
+ * kartu engine.
+ */
+@Composable
+fun ReadinessSourceLegend(
+    activeHorizon: TradeHorizon,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(TvSurfaceVariant.copy(alpha = 0.5f))
+            .padding(horizontal = 8.dp, vertical = 6.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            ReadinessSourceBadge(ReadinessSource.ENGINE)
+            Spacer(Modifier.width(6.dp))
+            Text(
+                text = "dinilai engine ${activeHorizon.label.uppercase()} yang aktif — sama dengan kartu engine",
+                color = TvTextSecondary,
+                fontSize = 10.sp,
+                lineHeight = 14.sp
+            )
+        }
+        Spacer(Modifier.height(4.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            ReadinessSourceBadge(ReadinessSource.PRESCREEN)
+            Spacer(Modifier.width(6.dp))
+            Text(
+                text = "saringan biaya & tren — bukan keputusan engine, hanya penyaring daftar",
+                color = TvTextSecondary,
+                fontSize = 10.sp,
+                lineHeight = 14.sp
+            )
+        }
+    }
+}
+
+/**
+ * Satu horizon: sumber, status, skor, kesimpulan, dan (bila dibuka) syarat + rencana trade.
+ *
+ * @param isActiveHorizon horizon ini milik engine yang sedang aktif? Hanya dipakai untuk menandai
+ *   barisnya secara visual — kebenaran "dari engine" tetap dibaca dari [HorizonReadiness.source],
+ *   bukan dari parameter ini.
+ */
 @Composable
 fun HorizonReadinessRow(
     row: HorizonReadiness,
     quoteAsset: String = "IDR",
+    isActiveHorizon: Boolean = false,
     modifier: Modifier = Modifier,
     initiallyExpanded: Boolean = false
 ) {
-    var expanded by remember(row.symbol, row.horizon, row.state) { mutableStateOf(initiallyExpanded) }
+    // Baris engine dibuka otomatis: pengguna datang ke halaman ini untuk melihat keputusan engine,
+    // bukan untuk membuka lipatan satu per satu.
+    var expanded by remember(row.symbol, row.horizon, row.state, row.source) {
+        mutableStateOf(initiallyExpanded || row.fromEngine)
+    }
     val color = readinessStateColor(row.state)
+    val borderAlpha = if (isActiveHorizon) 0.55f else 0.25f
 
     Column(
         modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
-            .background(color.copy(alpha = 0.06f))
-            .border(1.dp, color.copy(alpha = 0.25f), RoundedCornerShape(10.dp))
+            .background(color.copy(alpha = if (isActiveHorizon) 0.09f else 0.05f))
+            .border(1.dp, color.copy(alpha = borderAlpha), RoundedCornerShape(10.dp))
             .clickable { expanded = !expanded }
             .padding(10.dp)
     ) {
@@ -166,6 +239,19 @@ fun HorizonReadinessRow(
             Text(row.horizon.holdingWindow, color = TvTextMuted, fontSize = 10.sp)
             Spacer(Modifier.weight(1f))
             ReadinessStateChip(row.state)
+        }
+
+        Spacer(Modifier.height(5.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            ReadinessSourceBadge(row.source)
+            if (isActiveHorizon && row.fromEngine) {
+                Spacer(Modifier.width(5.dp))
+                Text(
+                    text = "horizon engine aktif",
+                    color = TvTextMuted,
+                    fontSize = 9.sp
+                )
+            }
         }
 
         Spacer(Modifier.height(6.dp))
@@ -241,6 +327,11 @@ fun HorizonReadinessRow(
                             lineHeight = 15.sp
                         )
                     }
+                }
+
+                row.sourceNote?.let { note ->
+                    Spacer(Modifier.height(6.dp))
+                    Text(note, color = TvTextMuted, fontSize = 10.sp, lineHeight = 14.sp)
                 }
 
                 if (row.state == ReadinessState.NO_DATA && row.blocker != null) {

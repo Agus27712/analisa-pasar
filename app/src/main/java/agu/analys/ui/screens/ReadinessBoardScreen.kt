@@ -39,11 +39,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import agu.analys.engine.readiness.HorizonReadiness
+import agu.analys.engine.readiness.ReadinessSource
 import agu.analys.engine.readiness.ReadinessState
 import agu.analys.engine.readiness.TradeHorizon
 import agu.analys.ui.components.readiness.PlanRow
 import agu.analys.ui.components.readiness.ReadinessCheckRow
 import agu.analys.ui.components.readiness.ReadinessScoreBar
+import agu.analys.ui.components.readiness.ReadinessSourceBadge
 import agu.analys.ui.components.readiness.ReadinessStateChip
 import agu.analys.ui.components.readiness.UnvalidatedBadge
 import agu.analys.ui.components.readiness.horizonIcon
@@ -51,6 +53,7 @@ import agu.analys.ui.components.readiness.readinessStateColor
 import agu.analys.ui.theme.TvAmber
 import agu.analys.ui.theme.TvBackground
 import agu.analys.ui.theme.TvBorder
+import agu.analys.ui.theme.TvCyan
 import agu.analys.ui.theme.TvGreen
 import agu.analys.ui.theme.TvRed
 import agu.analys.ui.theme.TvSurface
@@ -81,6 +84,9 @@ import agu.analys.viewmodel.setReadinessHorizon
  *    hanya berkata "belum siap" tanpa alasan tidak bisa ditindaklanjuti.
  * 4. **`BELUM DIVALIDASI` ditampilkan pada horizon yang belum diuji data.** Pengguna berhak tahu
  *    bahwa INTRADAY/SWING masih heuristik.
+ * 5. **`ENGINE AKTIF` dan `PRA-SARING` dipisah tegas.** Baris horizon yang engine-nya sedang
+ *    dipakai berasal dari engine itu sendiri; sisanya saringan daftar. Tanpa pemisahan ini papan
+ *    tampak membantah kartu engine (laporan lapangan 13 Okt).
  */
 @Composable
 fun ReadinessBoardScreen(
@@ -91,12 +97,18 @@ fun ReadinessBoardScreen(
     val board by viewModel.readinessBoard.collectAsStateWithLifecycle()
     val loading by viewModel.readinessLoading.collectAsStateWithLifecycle()
     val horizon by viewModel.readinessHorizon.collectAsStateWithLifecycle()
+    val strategyMode by viewModel.strategyMode.collectAsStateWithLifecycle()
+    val activeHorizon = remember(strategyMode) { TradeHorizon.of(strategyMode) }
 
     var filter by remember { mutableStateOf(BoardFilter.SEMUA) }
     var expandedSymbol by remember { mutableStateOf<String?>(null) }
 
+    // Baris engine selalu di atas: bila engine sudah menilai koin ini, itu jawaban yang dicari
+    // pengguna — bukan hasil saringan.
     val rows = remember(board, horizon, filter) {
-        board.forHorizon(horizon).filter { filter.matches(it.state) }
+        board.forHorizon(horizon)
+            .filter { filter.matches(it.state) }
+            .sortedWith(compareByDescending<HorizonReadiness> { it.fromEngine }.thenByDescending { it.score })
     }
     val quoteAsset = remember { PriceFormatter.extractQuote(viewModel.selectedPair.value.symbol) }
 
@@ -107,6 +119,7 @@ fun ReadinessBoardScreen(
     ) {
         BoardHeader(
             loading = loading,
+            activeHorizon = activeHorizon,
             onBack = onBack,
             onRefresh = { viewModel.refreshReadinessBoard() },
             onRequestData = { viewModel.requestReadinessData() }
@@ -114,11 +127,14 @@ fun ReadinessBoardScreen(
 
         HorizonSelector(
             selected = horizon,
+            activeHorizon = activeHorizon,
             board = board,
             onSelect = { viewModel.setReadinessHorizon(it) }
         )
 
         FilterRow(selected = filter, onSelect = { filter = it })
+
+        BoardLegend(activeHorizon = activeHorizon)
 
         if (rows.isEmpty()) {
             EmptyBoardState(
@@ -172,6 +188,7 @@ fun ReadinessBoardScreen(
 @Composable
 private fun BoardHeader(
     loading: Boolean,
+    activeHorizon: TradeHorizon,
     onBack: () -> Unit,
     onRefresh: () -> Unit,
     onRequestData: () -> Unit
@@ -205,7 +222,7 @@ private fun BoardHeader(
                 letterSpacing = 0.5.sp
             )
             Text(
-                "Scalp · Intraday · Swing",
+                "Engine aktif: ${activeHorizon.label.uppercase()} · sisanya pra-saring",
                 color = TvTextMuted,
                 fontSize = 10.sp
             )
@@ -246,6 +263,7 @@ private fun BoardHeader(
 @Composable
 private fun HorizonSelector(
     selected: TradeHorizon,
+    activeHorizon: TradeHorizon,
     board: agu.analys.engine.readiness.ReadinessBoard,
     onSelect: (TradeHorizon) -> Unit
 ) {
@@ -258,6 +276,7 @@ private fun HorizonSelector(
     ) {
         TradeHorizon.entries.forEach { horizon ->
             val active = horizon == selected
+            val isEngineHorizon = horizon == activeHorizon
             val ready = board.countOf(horizon, ReadinessState.READY)
             val accent = if (active) TvGreen else TvTextSecondary
             Column(
@@ -266,15 +285,24 @@ private fun HorizonSelector(
                     .clip(RoundedCornerShape(10.dp))
                     .background(if (active) TvGreen.copy(alpha = 0.10f) else TvSurfaceVariant.copy(alpha = 0.5f))
                     .border(
-                        1.dp,
-                        if (active) TvGreen.copy(alpha = 0.5f) else TvBorder,
+                        if (isEngineHorizon) 1.5.dp else 1.dp,
+                        when {
+                            isEngineHorizon -> TvCyan.copy(alpha = 0.6f)
+                            active -> TvGreen.copy(alpha = 0.5f)
+                            else -> TvBorder
+                        },
                         RoundedCornerShape(10.dp)
                     )
                     .clickable { onSelect(horizon) }
                     .padding(horizontal = 10.dp, vertical = 8.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(horizonIcon(horizon), null, tint = accent, modifier = Modifier.size(14.dp))
+                    Icon(
+                        horizonIcon(horizon),
+                        null,
+                        tint = if (isEngineHorizon) TvCyan else accent,
+                        modifier = Modifier.size(14.dp)
+                    )
                     Spacer(Modifier.width(5.dp))
                     Text(
                         horizon.shortLabel,
@@ -285,7 +313,12 @@ private fun HorizonSelector(
                 }
                 Spacer(Modifier.height(2.dp))
                 Text("$ready siap", color = if (active) TvGreen else TvTextMuted, fontSize = 11.sp)
-                Text(horizon.holdingWindow, color = TvTextMuted, fontSize = 9.sp)
+                Text(
+                    text = if (isEngineHorizon) "ENGINE AKTIF" else horizon.holdingWindow,
+                    color = if (isEngineHorizon) TvCyan else TvTextMuted,
+                    fontSize = 9.sp,
+                    fontWeight = if (isEngineHorizon) FontWeight.Bold else FontWeight.Normal
+                )
             }
         }
     }
@@ -302,7 +335,7 @@ private enum class BoardFilter(val label: String) {
         SIAP -> state == ReadinessState.READY
         MEMANAS -> state == ReadinessState.WARMING
         PANTAU -> state == ReadinessState.WATCH || state == ReadinessState.BLOCKED ||
-            state == ReadinessState.NO_DATA
+            state == ReadinessState.NO_DATA || state == ReadinessState.HOLDING
     }
 }
 
@@ -338,6 +371,42 @@ private fun FilterRow(
                     fontWeight = if (active) FontWeight.Bold else FontWeight.Normal
                 )
             }
+        }
+    }
+}
+
+/**
+ * Legenda dua jenis baris.
+ *
+ * Selalu terlihat (bukan disembunyikan di dialog bantuan) karena inilah satu-satunya cara pembaca
+ * tahu mengapa sebuah koin bisa berstatus `PANTAU` di papan sementara kartu engine-nya berkata
+ * lain: keduanya menjawab pertanyaan yang berbeda, dan sekarang hal itu tertulis di layar.
+ */
+@Composable
+private fun BoardLegend(activeHorizon: TradeHorizon) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 2.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            ReadinessSourceBadge(ReadinessSource.ENGINE)
+            Spacer(Modifier.width(6.dp))
+            Text(
+                text = "penilaian engine ${activeHorizon.label.uppercase()} (pilihan Anda di Pengaturan)",
+                color = TvTextSecondary,
+                fontSize = 10.sp
+            )
+        }
+        Spacer(Modifier.height(3.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            ReadinessSourceBadge(ReadinessSource.PRESCREEN)
+            Spacer(Modifier.width(6.dp))
+            Text(
+                text = "saringan biaya & tren — bukan keputusan engine",
+                color = TvTextSecondary,
+                fontSize = 10.sp
+            )
         }
     }
 }
@@ -419,6 +488,9 @@ private fun BoardItem(
             ReadinessStateChip(row.state)
         }
 
+        Spacer(Modifier.height(5.dp))
+        ReadinessSourceBadge(row.source)
+
         Spacer(Modifier.height(6.dp))
         ReadinessScoreBar(score = row.score, color = color)
         Spacer(Modifier.height(6.dp))
@@ -481,6 +553,11 @@ private fun BoardItem(
                     )
                 }
 
+                row.sourceNote?.let { note ->
+                    Spacer(Modifier.height(6.dp))
+                    Text(note, color = TvTextMuted, fontSize = 10.sp, lineHeight = 14.sp)
+                }
+
                 if (row.state == ReadinessState.READY) {
                     Spacer(Modifier.height(8.dp))
                     Box(
@@ -491,8 +568,13 @@ private fun BoardItem(
                             .padding(horizontal = 8.dp, vertical = 6.dp)
                     ) {
                         Text(
-                            text = "Status SIAP adalah hasil saringan, bukan ajakan beli. " +
-                                "Eksekusi uang riil masih diblokir (lihat SCALP_EXIT.md).",
+                            text = if (row.fromEngine) {
+                                "Status ini keputusan engine yang sedang aktif, bukan ajakan beli. " +
+                                    "Eksekusi uang riil masih diblokir (lihat SCALP_EXIT.md)."
+                            } else {
+                                "Status SIAP adalah hasil saringan, bukan ajakan beli. " +
+                                    "Eksekusi uang riil masih diblokir (lihat SCALP_EXIT.md)."
+                            },
                             color = TvAmber,
                             fontSize = 10.sp,
                             lineHeight = 14.sp
