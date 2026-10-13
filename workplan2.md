@@ -527,3 +527,71 @@ Perbaikan akar di engine (`ScalpingMtfEvaluator.kt:246` dan `SignalLifecycleMana
 **belum** dikerjakan: keduanya mengubah statistik log sinyal, pemicu alert (`isNewDetected`),
 dan `MonitorCard`, sehingga butuh regresi penuh. UI kini sudah menampilkan kebenaran yang sama
 apa pun keputusan itu nanti.
+
+---
+
+## 12. P2-fix — Rehidrasi state machine exit paper setelah restart (2026-10-13)
+
+**Temuan audit:** `PaperAutoTradeRuntime.machines` adalah `ConcurrentHashMap` **in-memory**,
+sedangkan `auto_sell_enabled = false` **persisten** di `SharedPreferences`. Setelah app
+kill/restart, posisi paper **menggantung**: engine paper kosong, jalur auto-sell lama mati.
+
+### 12.1 Akar masalah (terverifikasi)
+
+| Komponen | Sifat | Akibat setelah restart |
+|---|---|---|
+| `PaperAutoTradeRuntime.machines` | memori | kosong → engine paper tidak jalan |
+| `auto_sell_enabled` | persisten, `false` | jalur auto-sell lama juga tidak jalan |
+| posisi di `SpotPositionStore` | persisten, `HOLDING` | posisi menggantung |
+
+### 12.2 Cacat tambahan yang ditemukan saat verifikasi
+
+Rekomendasi awal ("rehidrasi dari `positionStore`") **tidak cukup dan berbahaya**:
+
+`SpotPositionStore.setHolding` (`SpotPositionStore.kt:331,362`) menulis SL **sintetis**
+`entry * 0.99` (≈1%), karena `markBought` tidak menerima SL dan `setAutoSellParams` versi lama
+tidak menulis `_stop_loss`. Padahal SL asli engine minimal sebesar **lantai friksi** (≥ 5,8%
+untuk USDT Tokocrypto, `min_friction_multiple = 6.0`).
+
+Rehidrasi naif akan membangun mesin dengan SL 1% alih-alih 5,8% → **memalsukan stop-out** dan
+mengotori jurnal paper. Lebih buruk daripada tidak melakukan apa-apa.
+
+### 12.3 Perbaikan
+
+1. **`SpotPositionStore.setAutoSellParams(..., stopLossPrice: Double = 0.0)`** — menulis SL asli
+   sinyal, menimpa nilai sintetis. Default `0.0` mempertahankan perilaku lama (backward compat).
+   Sekaligus memperbaiki jalur auto-sell lama saat kepemilikan dikembalikan.
+2. **Penanda persisten `_paper_engine`** — `setPaperEngineOwned` / `isPaperEngineOwned` /
+   `getPaperEngineSymbols`. Satu-satunya cara mengenali posisi milik engine paper setelah restart.
+   Dibersihkan di `markSold`, `finalizePaperExit`, `clearPaperExitState`, dan saat posisi hilang.
+   `getAllActiveTrailingSymbols` **tidak bisa** dipakai untuk ini: ia mensyaratkan
+   `trailing_enabled = true`, sedangkan posisi paper justru mematikannya.
+3. **`engine/scalping/PaperRehydrate.kt`** — model murni berisi aturan keputusan:
+   `Restore` / `HandBackToLegacy` / `Skip`, dengan prioritas **auto-exit mati → hand back**
+   lebih dulu, lalu validasi SL (`0 < SL < entry`).
+4. **`TradingViewModel.rehydratePaperAutoExit()`** — dijalankan sekali dari
+   `initSubscriptionsAndPolling()`. `Restore` → `PaperAutoTradeRuntime.put(..., openedAt = pos.openedAt)`
+   agar waktu masuk di jurnal tetap benar. `HandBackToLegacy` → `auto_sell_enabled` dinyalakan
+   kembali + penanda dilepas, supaya posisi tidak menggantung.
+5. **`PaperAutoTradeRuntime.put(..., openedAt: Long = 0L)`** — `openedAt` asli bisa dikembalikan.
+
+### 12.4 Batasan yang diterima
+
+- `barsHeld`, `isBeArmed`, `isPartialDone`, `peak` **tidak** dipulihkan (tidak dipersistenkan).
+  Posisi yang sudah bergerak ke BE/trailing dievaluasi ulang dari awal. Diterima untuk paper.
+- Posisi yang dibeli **sebelum** perbaikan ini tidak punya penanda, jadi sengaja **tidak**
+  disentuh: SL-nya tersimpan salah (`entry * 0.99`), jadi memulihkannya akan memalsukan stop-out.
+  Posisi warisan seperti itu perlu ditangani manual.
+- Rehidrasi memakai `scalpingRuntimeConfig` **saat ini**, bukan saat posisi dibuka. Bila pengguna
+  mengubah parameter exit di antara dua sesi, mesin yang dipulihkan memakai parameter baru.
+  Ini disengaja (perilaku sama dengan restart tanpa rehidrasi) tetapi perlu dicatat.
+
+### 12.5 Uji
+
+- `app/src/test/java/agu/analys/engine/scalping/PaperRehydrateTest.kt` — 16 test: jalur pulih,
+  dan yang terpenting **jalur tolak** (SL nol / SL ≥ entry / SL NaN / entry nol / NaN) plus
+  urutan prioritas auto-exit-mati.
+- `app/src/test/java/agu/analys/trading/SpotPositionStorePaperMarkerTest.kt` — 8 test
+  (Robolectric): SL asli menimpa SL sintetis, `stopLossPrice = 0` mempertahankan perilaku lama,
+  penanda bertahan, enumerasi hanya posisi bertanda + `HOLDING`, isolasi antar-bursa.
+

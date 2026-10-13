@@ -412,6 +412,7 @@ class SpotPositionStore(context: Context) {
             .remove("${key}_sl_triggered")
             .remove("${key}_last_trailing_order_id")
             .remove("${key}_last_order_update_time")
+            .remove("${key}_paper_engine")
             .putString("${key}_history", appendHistoryEvent(key, position))
 
         // Bersihkan juga legacy key jika legacy mode is_real cocok
@@ -446,6 +447,7 @@ class SpotPositionStore(context: Context) {
                 .remove("${norm}_sl_triggered")
                 .remove("${norm}_last_trailing_order_id")
                 .remove("${norm}_last_order_update_time")
+                .remove("${norm}_paper_engine")
         }
 
         editor.apply()
@@ -562,6 +564,13 @@ class SpotPositionStore(context: Context) {
         prefs.edit().putBoolean("${key}_trailing_triggered", false).apply()
     }
 
+    /**
+     * @param stopLossPrice SL asli dari sinyal. Bila `> 0` ia menimpa SL yang ditulis
+     *   [setHolding] — yang tanpa parameter ini selalu `entry * 0.99` (sintetis ≈1%).
+     *   Nilai sintetis itu membuat jalur auto-sell lama **dan** rehidrasi FSM paper
+     *   memakai SL yang salah (engine memakai lantai friksi, ≥ 5,8% untuk USDT Tokocrypto).
+     *   `0.0` (default) mempertahankan perilaku lama.
+     */
     fun setAutoSellParams(
         symbol: String,
         enabled: Boolean,
@@ -570,10 +579,11 @@ class SpotPositionStore(context: Context) {
         tp2Price: Double,
         tp2Percent: Double,
         isReal: Boolean = false,
-        exchange: String = "TOKOCRYPTO"
+        exchange: String = "TOKOCRYPTO",
+        stopLossPrice: Double = 0.0
     ) {
         val key = buildKey(symbol, isReal, exchange)
-        prefs.edit()
+        val editor = prefs.edit()
             .putBoolean("${key}_auto_sell_enabled", enabled)
             .putString("${key}_tp1_price", tp1Price.toString())
             .putString("${key}_tp1_percent", tp1Percent.toString())
@@ -581,7 +591,55 @@ class SpotPositionStore(context: Context) {
             .putString("${key}_tp2_percent", tp2Percent.toString())
             .putBoolean("${key}_tp1_triggered", false)
             .putBoolean("${key}_tp2_triggered", false)
-            .apply()
+        if (stopLossPrice > 0.0 && stopLossPrice.isFinite()) {
+            editor.putString("${key}_stop_loss", stopLossPrice.toString())
+        }
+        editor.apply()
+    }
+
+    /**
+     * Tandai apakah exit posisi ini dipegang engine paper (P2).
+     *
+     * Penanda ini **wajib** dipersistenkan: [agu.analys.viewmodel.PaperAutoTradeRuntime]
+     * hanya hidup di memori, jadi setelah restart penanda inilah satu-satunya cara
+     * membedakan posisi yang exit-nya dipegang engine paper dari posisi lain.
+     */
+    fun setPaperEngineOwned(
+        symbol: String,
+        isReal: Boolean = false,
+        exchange: String = "TOKOCRYPTO",
+        owned: Boolean
+    ) {
+        val key = buildKey(symbol, isReal, exchange)
+        if (owned) {
+            prefs.edit().putBoolean("${key}_paper_engine", true).apply()
+        } else {
+            prefs.edit().remove("${key}_paper_engine").apply()
+        }
+    }
+
+    fun isPaperEngineOwned(symbol: String, isReal: Boolean = false, exchange: String = "TOKOCRYPTO"): Boolean =
+        getSafeBoolean("${buildKey(symbol, isReal, exchange)}_paper_engine", false)
+
+    /**
+     * Simbol (kanonik) yang exit-nya dipegang engine paper dan posisinya masih `HOLDING`.
+     *
+     * [getAllActiveTrailingSymbols] **tidak bisa** dipakai untuk ini: fungsi itu mensyaratkan
+     * `trailing_enabled = true`, sedangkan posisi paper justru mematikan trailing saat engine
+     * mengambil alih exit.
+     */
+    fun getPaperEngineSymbols(isReal: Boolean = false, exchange: String = "TOKOCRYPTO"): List<String> {
+        val prefix = "${exchange.trim().lowercase()}_${if (isReal) "real" else "sim"}_"
+        val out = mutableListOf<String>()
+        for ((k, _) in prefs.all) {
+            if (!k.endsWith("_paper_engine")) continue
+            val rawPrefix = k.removeSuffix("_paper_engine")
+            if (!rawPrefix.startsWith(prefix)) continue
+            if (!getSafeBoolean(k, false)) continue
+            if (prefs.getString("${rawPrefix}_state", null) != SpotPositionState.HOLDING.name) continue
+            out.add(rawPrefix.removePrefix(prefix))
+        }
+        return out.sorted()
     }
 
     fun markTp1Triggered(symbol: String, isReal: Boolean = false, exchange: String = "TOKOCRYPTO") {

@@ -5,6 +5,8 @@ import agu.analys.engine.scalping.PaperExitPhase
 import agu.analys.engine.scalping.PaperExitReason
 import agu.analys.engine.scalping.PaperExitSnapshot
 import agu.analys.engine.scalping.PaperExitStateMachine
+import agu.analys.engine.scalping.PaperRehydrate
+import agu.analys.engine.scalping.PaperRehydrateAction
 import agu.analys.engine.scalping.PaperTradeRecord
 import agu.analys.engine.scalping.ScalpExitParams
 import agu.analys.engine.scalping.SignalTransition
@@ -107,12 +109,18 @@ object PaperAutoTradeRuntime {
             .mapNotNull { rawSymbolMap[it] }
     }
 
-    fun put(exchange: String, symbol: String, machine: PaperExitStateMachine) {
+    /**
+     * @param openedAt waktu buka posisi asli. Dipakai rehidrasi setelah restart supaya
+     *   `openedAt` di jurnal tetap waktu masuk yang sebenarnya, bukan waktu app dibuka.
+     *   `0` berarti "sekarang".
+     */
+    fun put(exchange: String, symbol: String, machine: PaperExitStateMachine, openedAt: Long = 0L) {
         val k = key(exchange, symbol)
         machines[k] = machine
         rawSymbolMap[k] = symbol
-        openedAtMap[k] = System.currentTimeMillis()
-        lastBarBucketMap[k] = System.currentTimeMillis() / 60_000L
+        val now = System.currentTimeMillis()
+        openedAtMap[k] = if (openedAt > 0L) openedAt else now
+        lastBarBucketMap[k] = now / 60_000L
     }
 
     fun openedAt(exchange: String, symbol: String): Long =
@@ -239,7 +247,11 @@ fun TradingViewModel.tryPaperAutoBuy(transition: SignalTransition, exchange: Str
         tp2Price = signal.targetPrice2,
         tp2Percent = 100.0 - tp1Percent,
         isReal = false,
-        exchange = exchangeKey
+        exchange = exchangeKey,
+        // SL asli sinyal. Tanpa ini `setHolding` meninggalkan SL sintetis `entry * 0.99`,
+        // sehingga jalur auto-sell lama dan rehidrasi FSM memakai SL yang jauh lebih rapat
+        // daripada lantai friksi engine.
+        stopLossPrice = signal.stopLoss
     )
 
     if (p2OwnsExit) {
@@ -258,6 +270,11 @@ fun TradingViewModel.tryPaperAutoBuy(transition: SignalTransition, exchange: Str
             params = runtime.exit
         )
         PaperAutoTradeRuntime.put(exchangeKey, pair.symbol, machine)
+        // Penanda persisten: satu-satunya jejak bahwa exit pair ini dipegang engine paper.
+        // Tanpa ini posisi menggantung setelah restart (lihat [PaperRehydrate]).
+        positionStore.setPaperEngineOwned(
+            symbol = pair.symbol, isReal = false, exchange = exchangeKey, owned = true
+        )
 
         // `setHolding` mempertahankan `isTrailingEnabled` dari posisi sebelumnya, jadi
         // bendera trailing lama bisa terbawa ke posisi paper baru. Bersihkan supaya
@@ -333,6 +350,7 @@ private fun TradingViewModel.evaluatePaperAutoExitLocked(
     val pair = TradingPair.fromCustomSymbol(raw = symbol, exchange = exchange)
     if (!positionStore.get(pair.symbol, isReal = false, exchange = exchange).isHolding) {
         PaperAutoTradeRuntime.clear(exchange, symbol)
+        positionStore.setPaperEngineOwned(symbol = pair.symbol, isReal = false, exchange = exchange, owned = false)
         publishPaperExitSnapshot(null)
         return null
     }
@@ -446,6 +464,7 @@ fun TradingViewModel.finalizePaperExit(
     }
 
     PaperAutoTradeRuntime.clear(exchange, symbol)
+    positionStore.setPaperEngineOwned(symbol = pair.symbol, isReal = false, exchange = exchange, owned = false)
     positionCoordinator.refreshPosition(pair.symbol)
     return dispatched
 }
@@ -453,6 +472,7 @@ fun TradingViewModel.finalizePaperExit(
 /** Hapus state machine exit setelah posisi paper ditutup. */
 fun TradingViewModel.clearPaperExitState(symbol: String, exchange: String) {
     PaperAutoTradeRuntime.clear(exchange, symbol)
+    positionStore.setPaperEngineOwned(symbol = symbol, isReal = false, exchange = exchange, owned = false)
     publishPaperExitSnapshot(null)
 }
 
@@ -476,6 +496,111 @@ fun TradingViewModel.paperSnapshotFor(
 ): PaperExitSnapshot? {
     val machine = PaperAutoTradeRuntime.machineFor(exchange, symbol) ?: return null
     return PaperExitSnapshot.of(machine, symbol, exchange, currentPrice)
+}
+
+/**
+ * Bangun ulang state machine exit paper setelah app restart.
+ *
+ * ## Masalah yang ditutup
+ *
+ * [PaperAutoTradeRuntime] menyimpan state machine **hanya di memori**, sedangkan posisinya
+ * persisten di `SpotPositionStore`, dan `auto_sell_enabled` sudah dimatikan saat engine
+ * mengambil alih exit. Setelah app di-kill, tidak ada mesin yang menjual posisi itu:
+ * engine paper kosong, jalur auto-sell lama mati, posisi menggantung.
+ *
+ * ## Cara kerja
+ *
+ * Penanda persisten `_paper_engine` (ditulis [tryPaperAutoBuy]) dipakai untuk mengenali
+ * posisi yang exit-nya memang dipegang engine paper. Untuk setiap posisi:
+ * - [PaperRehydrateAction.Restore] → mesin dibangun ulang, `openedAt` asli dikembalikan;
+ * - [PaperRehydrateAction.HandBackToLegacy] → `auto_sell_enabled` dinyalakan kembali dan
+ *   penanda dilepas, supaya jalur auto-sell lama yang menjualnya;
+ * - [PaperRehydrateAction.Skip] → dilewati.
+ *
+ * Posisi lama yang **belum** punya penanda (dibeli sebelum perbaikan ini) sengaja tidak
+ * disentuh: SL-nya tersimpan sebagai `entry * 0.99` yang salah, jadi memulihkannya akan
+ * memalsukan stop-out.
+ *
+ * @return jumlah mesin yang berhasil dipulihkan.
+ */
+fun TradingViewModel.rehydratePaperAutoExit(): Int {
+    val cfg = prefs.paperAutoTradeConfig
+    val exchange = prefs.marketDataSource.name
+    val symbols = positionStore.getPaperEngineSymbols(isReal = false, exchange = exchange)
+    if (symbols.isEmpty()) return 0
+
+    val runtime = prefs.scalpingRuntimeConfig
+    var restored = 0
+    var handedBack = 0
+
+    for (raw in symbols) {
+        // Jangan timpa mesin yang sudah hidup (mis. auto-buy terjadi sebelum rehidrasi jalan).
+        if (PaperAutoTradeRuntime.machineFor(exchange, raw) != null) continue
+
+        val pair = TradingPair.fromCustomSymbol(raw = raw, exchange = exchange)
+        val pos = positionStore.get(pair.symbol, isReal = false, exchange = exchange)
+        val fees = prefs.feeConfigFor(pair.symbol)
+
+        val action = PaperRehydrate.decide(
+            entry = pos.entryPrice,
+            stopLoss = pos.stopLossPrice,
+            tp1 = pos.tp1Price,
+            tp2 = pos.tp2Price,
+            autoExitEnabled = cfg.autoExitEnabled,
+            buyFeePct = fees.buyTakerPct,
+            sellFeePct = fees.sellTakerPct,
+            slippagePct = runtime.slippagePct,
+            params = runtime.exit
+        )
+
+        when (action) {
+            is PaperRehydrateAction.Restore -> {
+                PaperAutoTradeRuntime.put(exchange, pair.symbol, action.machine, openedAt = pos.openedAt)
+                restored++
+            }
+
+            is PaperRehydrateAction.HandBackToLegacy -> {
+                // Kepemilikan dikembalikan ke jalur lama; tanpa ini posisi menggantung karena
+                // `auto_sell_enabled` sudah dimatikan saat engine mengambil alih.
+                positionStore.setAutoSellParams(
+                    symbol = pair.symbol,
+                    enabled = true,
+                    tp1Price = pos.tp1Price,
+                    tp1Percent = pos.tp1Percent,
+                    tp2Price = pos.tp2Price,
+                    tp2Percent = pos.tp2Percent,
+                    isReal = false,
+                    exchange = exchange,
+                    stopLossPrice = pos.stopLossPrice
+                )
+                positionStore.setPaperEngineOwned(
+                    symbol = pair.symbol, isReal = false, exchange = exchange, owned = false
+                )
+                handedBack++
+                AppLogManager.service(
+                    "PaperAutoExit",
+                    "↩️ [${pair.symbol}] Rehidrasi dilewati (${action.reason}) — exit diserahkan ke jalur auto-sell lama."
+                )
+            }
+
+            is PaperRehydrateAction.Skip -> {
+                AppLogManager.service(
+                    "PaperAutoExit",
+                    "⏭️ [${pair.symbol}] Rehidrasi dilewati: ${action.reason}."
+                )
+            }
+        }
+    }
+
+    if (restored > 0) {
+        startTrailingPolling()
+        AppLogManager.trade(
+            "PaperAutoExit",
+            "♻️ Rehidrasi setelah restart: $restored posisi paper dipulihkan" +
+                if (handedBack > 0) ", $handedBack diserahkan ke jalur lama." else "."
+        )
+    }
+    return restored
 }
 
 /** Label alasan exit untuk notifikasi/jurnal. */
