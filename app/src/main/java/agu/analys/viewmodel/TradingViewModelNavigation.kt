@@ -34,6 +34,29 @@ fun TradingViewModel.openSettings() { navigateTo(AppScreen.SETTINGS) }
 fun TradingViewModel.openLearning() { navigateTo(AppScreen.LEARNING) }
 fun TradingViewModel.openSignalLogs() { navigateTo(AppScreen.SIGNAL_LOGS) }
 
+/**
+ * Buka papan kesiapan multi-horizon.
+ *
+ * Sekaligus memicu hitung ulang supaya papan tidak menampilkan hasil basi dari pemindaian berkala
+ * terakhir (interval 60 detik).
+ */
+fun TradingViewModel.openReadiness() {
+    navigateTo(AppScreen.READINESS)
+    refreshReadinessBoard()
+}
+
+/**
+ * Buka detail koin langsung dari papan kesiapan.
+ *
+ * Papan hanya menyimpan **simbol**; pemetaan ke `TradingPair` memakai
+ * [agu.analys.viewmodel.MarketViewModel.selectCustomSymbol] supaya aturan kuotasi
+ * (USDT/IDR/BIDR, khususnya pemetaan Indodax) tetap di satu tempat.
+ */
+fun TradingViewModel.openReadinessSymbol(symbol: String) {
+    marketViewModel.selectCustomSymbol(symbol)
+    navigateTo(AppScreen.DETAIL)
+}
+
 fun TradingViewModel.goBack(): Boolean {
     while (navigationStack.isNotEmpty() && navigationStack.last() == _currentScreen.value) {
         navigationStack.removeAt(navigationStack.size - 1)

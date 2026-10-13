@@ -22,6 +22,7 @@ import agu.analys.ui.components.SignalHistoryPanel
 import agu.analys.ui.components.detail.*
 import agu.analys.ui.components.detail.scalp.PaperTradeDeskCard
 import agu.analys.ui.components.detail.scalp.ScalpDeskCard
+import agu.analys.ui.components.readiness.SymbolReadinessCard
 import agu.analys.ui.components.settings.LogcatDiagnosticDialog
 import agu.analys.ui.theme.*
 import agu.analys.util.AppPreferences
@@ -55,6 +56,11 @@ fun DetailChartScreen(
 
     // MTF still separate (not yet folded into DetailUiState)
     val mtfStateAll by viewModel.mtfState.collectAsStateWithLifecycle()
+
+    // Papan kesiapan multi-horizon (TEAM 1/2) — diambil dari papan global supaya kartu di sini
+    // menampilkan angka yang sama dengan yang ada di papan, bukan hitungan kedua.
+    val readinessBoard by viewModel.readinessBoard.collectAsStateWithLifecycle()
+    val readinessLoading by viewModel.readinessLoading.collectAsStateWithLifecycle()
     val mtfState by remember(mtfStateAll, ui.pair.symbol) {
         derivedStateOf {
             DetailUiStateFactory.resolveMtfForPair(mtfStateAll, ui.pair)
@@ -63,6 +69,13 @@ fun DetailChartScreen(
 
     // Unpack for readability (stable references when ui identity changes)
     val pair = ui.pair
+
+    // Pastikan pair yang sedang dibuka ikut dinilai begitu halaman dibuka. Pemindaian berkala
+    // (60 detik) saja tidak cukup: pair yang baru dipilih bisa belum ada di papan.
+    LaunchedEffect(pair.symbol) {
+        viewModel.refreshReadinessBoard()
+    }
+
     val tick = ui.tick
     val candles = ui.candles
     val indicators = ui.indicators
@@ -310,6 +323,23 @@ fun DetailChartScreen(
             }
 
             Spacer(Modifier.height(10.dp))
+
+            // ── Kesiapan horizon (scalp / intraday / swing) ───────────────
+            // Selalu tampil, termasuk di mode non-scalping: jawabannya berbeda per horizon, dan
+            // itulah informasi yang sebelumnya tidak pernah ditampilkan aplikasi.
+            val symbolReadiness = remember(readinessBoard, pair.symbol) {
+                readinessBoard.forSymbol(pair.symbol)
+            }
+            if (symbolReadiness.isNotEmpty()) {
+                SymbolReadinessCard(
+                    symbol = pair.symbol,
+                    rows = symbolReadiness,
+                    quoteAsset = pair.quoteAsset,
+                    loading = readinessLoading,
+                    onRequestData = { viewModel.requestReadinessData() }
+                )
+                Spacer(Modifier.height(10.dp))
+            }
 
             // ── Mode scalping: Scalp Desk + Paper Trade Desk ──────────────
             // Blok analisa radar lama dilewati (hideAnalysis) supaya status, entry, SL, dan TP

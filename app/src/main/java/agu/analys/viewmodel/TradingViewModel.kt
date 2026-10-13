@@ -217,6 +217,30 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     private val _tradingFees = MutableStateFlow(prefs.tradingFees)
     val tradingFees: StateFlow<TradingFeeConfig> = _tradingFees.asStateFlow()
 
+    // ═════════════════════════════════════════════════════════════════════════
+    // 3b. PAPAN KESIAPAN MULTI-HORIZON (TEAM 1)
+    //
+    // Dihitung dari cache candle (`MtfCacheManager`) — **tanpa** jaringan tambahan.
+    // Logika ada di `TradingViewModelReadiness.kt`; properti dideklarasikan di sini
+    // karena extension tidak bisa menyimpan state.
+    // ═════════════════════════════════════════════════════════════════════════
+    internal val _readinessBoard =
+        MutableStateFlow(agu.analys.engine.readiness.ReadinessBoard.EMPTY)
+    val readinessBoard: StateFlow<agu.analys.engine.readiness.ReadinessBoard> =
+        _readinessBoard.asStateFlow()
+
+    internal val _readinessLoading = MutableStateFlow(false)
+    val readinessLoading: StateFlow<Boolean> = _readinessLoading.asStateFlow()
+
+    /** Horizon yang sedang dibuka di papan kesiapan. */
+    internal val _readinessHorizon =
+        MutableStateFlow(agu.analys.engine.readiness.TradeHorizon.SCALP)
+    val readinessHorizon: StateFlow<agu.analys.engine.readiness.TradeHorizon> =
+        _readinessHorizon.asStateFlow()
+
+    /** Pekerjaan pemindaian yang sedang berjalan; dipakai untuk membatalkan pemindaian lama. */
+    internal var readinessRefreshJob: kotlinx.coroutines.Job? = null
+
     val useSimpleChart: StateFlow<Boolean> = marketViewModel.useSimpleChart
     val selectedChartStyle: StateFlow<ChartStyle> = marketViewModel.selectedChartStyle
 
