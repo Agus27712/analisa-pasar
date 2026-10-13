@@ -700,6 +700,29 @@ lapisan UI, jadi kedua lapis tidak bisa berbeda pendapat.
 
 ## 14. TEAM 1 + TEAM 2 — Kesiapan multi-horizon (scalp/intraday/swing), 2026-10-13
 
+> ## ⛔ DIHAPUS — 2026-10-13. JANGAN DIBANGUN ULANG.
+>
+> **Status kode:** fitur ini **sudah tidak ada di aplikasi**. `engine/readiness/*`,
+> `ui/components/readiness/*`, `ReadinessBoardScreen.kt`, `TradingViewModelReadiness.kt`,
+> `AppScreen.READINESS`, kartu `SIAP TRADING` (dashboard), kartu `KESIAPAN HORIZON` (detail koin),
+> dan 4 berkas tesnya semuanya dihapus.
+>
+> **Alasan pembatalan:** fitur ini menghasilkan **informasi yang sama dengan kartu engine** di
+> permukaan berbeda. Halaman detail koin menampilkan `KESIAPAN HORIZON 3/5 syarat lolos` sementara
+> kartu `SCALP DESK` tepat di bawahnya menampilkan `1/5 lolos` — dua daftar syarat berbeda untuk
+> satu pertanyaan, keduanya menulis `N/5`, tanpa cara bagi pembaca untuk tahu mana yang harus
+> dipercaya. Owner menilai datanya dobel dan memutuskan membatalkan.
+>
+> **Yang tidak boleh diulang:** membuat evaluator kedua di luar engine yang sedang aktif, atau
+> menampilkan `N/5` dari daftar syarat berbeda untuk koin yang sama di dua kartu berbeda.
+> Lihat `AGENTS.md` → kotak "JANGAN BANGUN ULANG".
+>
+> **Yang tetap berlaku dari seksi ini:** hanya pelajaran bahwa keputusan engine **tidak boleh**
+> dihitung ulang di tempat lain. Kartu `SCALP DESK` + radar `WaitingEntryRadarCard` tetap menjadi
+> satu-satunya permukaan status.
+>
+> Seksi di bawah ini disimpan sebagai **riwayat keputusan**, bukan sebagai rencana kerja.
+
 **Permintaan:** "buat aplikasi ini peka terhadap koin yang scalping ready, intraday ready, dan
 swing ready; khusus scalping ready engine mengimplementasikan exit long (buy, hold, exit = profit)",
 lalu diwujudkan sebagai UI/UX yang mudah dibaca dan responsif.
@@ -825,6 +848,22 @@ Keputusan UI:
 ---
 
 ## 15. SSOT — horizon kesiapan vs engine yang aktif (2026-10-13)
+
+> ## ⛔ DIHAPUS — 2026-10-13. JANGAN DIBANGUN ULANG.
+>
+> **Status kode:** tidak ada di aplikasi. Perbaikan SSOT di seksi ini beserta seluruh fitur horizon
+> yang diperbaikinya sudah dihapus (revert 4 commit kode horizon).
+>
+> **Alasan:** seksi ini memperbaiki kontradiksi "3/5 vs 1/5" dengan menyatukan sumber — tetapi
+> akar persoalannya lebih dalam: **permukaannya sendiri memang berlebih.** Selama masih ada dua
+> kartu yang menampilkan status kesiapan, akan selalu ada cara bagi keduanya untuk berbeda. Owner
+> memutuskan menghapus permukaan keduanya, bukan menyinkronkannya.
+>
+> **Pelajaran yang tetap berlaku:** lihat butir 3 di bawah — jangan pernah menampilkan `N/5` dari
+> daftar syarat berbeda untuk koin yang sama di dua kartu berbeda. Pelajaran itu masih tertulis di
+> `AGENTS.md`.
+>
+> Seksi di bawah ini disimpan sebagai **riwayat keputusan**, bukan sebagai rencana kerja.
 
 **Laporan owner setelah review di HP:**
 
