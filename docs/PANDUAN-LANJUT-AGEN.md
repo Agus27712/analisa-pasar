@@ -12,8 +12,8 @@
 |---|---|
 | Branch kerja | **`patch`** (owner me-review di sini dulu; `main` hanya menerima merge) |
 | Titik masuk kode | package `agu.analys`, modul tunggal `:app` |
-| Unit test | **338 lulus · 0 gagal · 1 dilewati** (48 kelas) |
-| APK debug | 26,5 MB (`app/build/outputs/apk/debug/app-debug.apk`) |
+| Unit test | **344 lulus · 0 gagal · 1 dilewati** (48 kelas) |
+| APK debug | 27,8 MB (`app/build/outputs/apk/debug/app-debug.apk`) |
 | Kesiapan uang riil | **BELUM** — lihat §5 |
 
 **Cara mengukur angka di atas sendiri (jangan percaya ingatan, termasuk dokumen ini):**
@@ -52,6 +52,7 @@ git stash pop                 # kembalikan pekerjaan
 | §11 | **UI scalping baru** (radar vs setup tidak sinkron) | `ScalpReadiness.kt`, `ScalpDeskCard.kt`, `PaperTradeDeskCard.kt` | `ScalpReadinessTest.kt` |
 | §12 | **Rehidrasi state machine exit paper** setelah restart | `PaperRehydrate.kt`, `SpotPositionStore.kt` | `PaperRehydrateTest.kt` |
 | §13 | **Akar `EARLY_ENTRY`** — stage tinggi wajib punya pola | `ScalpingMtfEvaluator.kt`, `SignalLifecycleManager.kt` | `workplan2.md` §13 |
+| §16 | **Integritas log audit P0–P2** — basis volume RVOL, basis bar indikator, `signalTime`, `sellReason`, trailing nyata, Peak/Drawdown dari candle, label & format, flag `isSample` | `IndicatorMath.kt`, `ScalpingMtfEvaluator.kt`, `TradeHistoryRecorder.kt`, `TradeSignalSnapshot.kt`, `TradeLogExporter.kt`, `AppDatabase.kt` (v9) | `docs/LAPORAN-verifikasi-ui-vs-candle-2026-10-14.md`, `docs/LAPORAN-eksekusi-p0p2-2026-10-14.md`, `IndicatorMathScalpingExtTest.kt` |
 | ~~§14~~ | ~~Kesiapan multi-horizon (scalp/intraday/swing) + papan UI~~ | — | ⛔ **DIBATALKAN** — lihat §3b |
 | ~~§15~~ | ~~SSOT: horizon vs engine aktif~~ | — | ⛔ **DIBATALKAN** — lihat §3b |
 
@@ -244,6 +245,14 @@ Aturan yang sudah berlaku dan **jangan dilonggarkan**:
 15. **Preferensi pengguna (`StrategyMode`) mengikat seluruh aplikasi.** Hanya ada **satu** engine
     aktif pada satu waktu, dan hanya engine itu yang berhak menyimpulkan. Jangan membuat fitur
     yang menilai koin dengan aturannya sendiri di luar `StrategyMode`.
+16. **Bar terakhir dari bursa SELALU sebagian.** Volume bar M1 yang masih berjalan tidak boleh
+    dibandingkan dengan rata-rata bar penuh — hasilnya bias rendah sebesar persentase waktu yang
+    sudah berjalan (kasus nyata: 0,76× padahal 1,46×). Gunakan `IndicatorMath.elapsedFraction` +
+    `projectVolumeToFullBar`, dan pastikan `CandleBar.isClosed` benar-benar terisi (REST & WS).
+17. **Jangan menulis field jurnal sebagai konstanta.** `sellReason = "SIMULATION_SELL"`,
+    `isTrailingUsed = false`, `signalTime = now`, dan `trailingPercent = 1.5` semuanya membuat
+    jurnal tidak dapat diaudit — dan `trailingPercent = 1.5` bahkan bisa salah 10× dari nilai
+    konfigurasi nyata (0,15). Setiap kolom harus berasal dari state nyata atau `null`.
 
 ---
 
