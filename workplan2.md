@@ -695,3 +695,129 @@ lapisan UI, jadi kedua lapis tidak bisa berbeda pendapat.
   memakainya untuk menyimpulkan status.
 - `P4.1` walk-forward antar-bulan, `P4.2` preferensi maker IDR, `P5` data Indodax + replay
   TAPI v2 — belum tersentuh.
+
+---
+
+## 14. TEAM 1 + TEAM 2 — Kesiapan multi-horizon (scalp/intraday/swing), 2026-10-13
+
+**Permintaan:** "buat aplikasi ini peka terhadap koin yang scalping ready, intraday ready, dan
+swing ready; khusus scalping ready engine mengimplementasikan exit long (buy, hold, exit = profit)",
+lalu diwujudkan sebagai UI/UX yang mudah dibaca dan responsif.
+
+### 14.1 Kenapa satu skor koin tidak cukup
+
+Pertanyaan "koin ini bagus?" tidak punya jawaban tunggal, dan jawabannya **ditentukan biaya**:
+
+| Koin | ATR M15 | Untuk SCALP | Untuk SWING |
+|---|---|---|---|
+| Tenang | 0,3% | friksi 0,97% menelan seluruh gerakan | stop lebar membuat friksi tidak berarti → layak |
+| Liar | 4,0% | noise mengalahkan sinyal (diblokir) | perlu konfirmasi struktur D1 |
+
+Karena itu kesiapan dinilai **terpisah per horizon**, masing-masing dengan timeframe, lantai
+friksi, dan target net R:R sendiri. Satu koin boleh muncul tiga kali dengan status berbeda — itu
+informasi, bukan kontradiksi.
+
+### 14.2 Berkas baru (TEAM 1 — engine)
+
+| Berkas | Isi |
+|---|---|
+| `engine/readiness/TradeHorizon.kt` | enum SCALP/INTRADAY/SWING: timeframe bias & trigger, jendela tahan, target net R:R, lantai friksi, **penanda `validatedOutOfSample`** |
+| `engine/readiness/HorizonReadiness.kt` | model murni: `ReadinessState`, `ReadinessCheck`, `TradePlan`, `HorizonReadiness`, `ReadinessBoard` |
+| `engine/readiness/HorizonReadinessEngine.kt` | penilaian satu (koin × horizon) dari candle; 5 syarat per horizon + penghalang keras |
+| `engine/readiness/ReadinessScanner.kt` | `CandleSource` + pemindaian N koin × 3 horizon, dedup timeframe |
+
+Ambang horizon:
+
+| Horizon | Timeframes | Lantai friksi | Target net R:R | Jendela | Divalidasi? |
+|---|---|---|---|---|---|
+| SCALP | H1 / M15 / M1 | 6× (sama dengan `ScalpingConfig`) | 2,0 (sama) | 28 bar M15 | **ya** |
+| INTRADAY | H4 / H1 / M15 | 4× | 1,5 | 12 bar H1 | belum |
+| SWING | D1 / H4 / H1 | 3× | 2,0 | 14 bar H4 | belum |
+
+Lantai friksi INTRADAY/SWING lebih longgar **dengan alasan**: stop mereka berbasis H1/H4 yang
+secara alami jauh lebih lebar dari stop scalp M1/M15, sehingga lantai 6× tidak akan pernah
+mengikat. Menuliskan 6× di sana hanya akan menciptakan penjaga semu.
+
+### 14.3 Gate ekonomi — kesalahan desain yang ditemukan dan dibuang
+
+Versi pertama membandingkan risiko alami (`0,8 × ATR`) terhadap lantai friksi. Untuk USDT
+Tokocrypto lantai = 5,81%, jadi syaratnya menjadi **ATR ≥ 7,26%** — di atas ambang volatilitas
+ekstrem (3,5%). Papan akan **selalu kosong**, dan saringan yang selalu menolak sama tidak
+bergunanya dengan saringan yang selalu menerima.
+
+Akar kesalahannya: lantai friksi adalah **cara beroperasi**, bukan syarat kelayakan. §9 justru
+menemukan bahwa dengan lantai 6× trade menjadi berdurasi 1–8 jam dan **28 dari 32 pair tetap
+positif**.
+
+Versi final memakai kriteria yang **sama dengan `PairEdgeGate`** (yang sudah diuji data):
+pergerakan harus ≥ **2×** biaya round-trip, dengan estimasi `ATR × √bar`. Skala akar dipakai
+karena `ATR × bar` mengasumsikan tren sempurna — memakai itu akan melebih-lebihkan kemampuan koin
+dan membuat gate lolos terlalu mudah.
+
+Contoh: ATR M15 1,0% → 1,0 × √28 = 5,29% ÷ 0,9688% = **5,46×** → lolos. ATR M15 0,3% →
+1,59% ÷ 0,9688% = **1,64×** → gagal, dan memang harus gagal.
+
+### 14.4 Exit long untuk scalping (buy → hold → exit = profit)
+
+`TradePlan` membawa entry, SL, TP1, TP2, `riskPct`, `rewardPct`, `netRr` (dari `FeeCalculator`),
+`frictionFloorPct`, `tp2R`, dan `exitRule`.
+
+`exitRule` untuk SCALP **dibangun dari `ScalpExitParams` yang sedang aktif**
+(`ScalpingRuntimeConfig.current.exit`), sehingga teks di UI tidak pernah berbeda dari aturan yang
+benar-benar dijalankan `PaperExitResolver`. Contoh keluaran untuk mode FULL:
+
+> Beli di area entry, tahan, keluar saat profit net mencapai target (TP2) atau kena SL. Mode Full:
+> TP1 50% lalu SL ke breakeven net (0,40%), trailing 0,35% dari puncak, early-profit ≥ 0,45% net.
+> Time-stop 90 bar M1.
+
+INTRADAY: keluar sebelum sesi close malam (19:30 WIB), tidak menahan melewati tengah malam.
+SWING: keluar di TP2/resistance atau saat close di bawah EMA50 D1.
+
+### 14.5 Berkas baru (TEAM 2 — UI)
+
+| Berkas | Isi |
+|---|---|
+| `viewmodel/TradingViewModelReadiness.kt` | papan dari cache (tanpa jaringan), `refreshReadinessBoard()`, `requestReadinessData()`, polling 60 detik |
+| `ui/components/readiness/ReadinessUi.kt` | pemetaan status→warna, chip, bilah skor, baris syarat, baris rencana |
+| `ui/components/readiness/ReadinessBoardCard.kt` | ringkasan Dashboard: hitungan siap/memanas per horizon + kandidat teratas |
+| `ui/components/readiness/HorizonReadinessCard.kt` | `SymbolReadinessCard` (3 horizon) + `HorizonReadinessRow` yang bisa dibuka |
+| `ui/screens/ReadinessBoardScreen.kt` | papan penuh: pemilih horizon, saringan, daftar, responsif 1–2 kolom |
+
+Berkas yang diubah: `AppScreen` (+`READINESS`), `MainActivity` (rute), `TradingViewModelNavigation`
+(`openReadiness`, `openReadinessSymbol`), `TradingViewModel` (4 StateFlow), `TradingViewModelSync`
+(hook polling), `DashboardScreen` (kartu), `DetailChartScreen` (kartu + refresh saat pair berubah).
+
+Keputusan UI:
+
+1. **Responsif lewat lebar nyata** (`BoxWithConstraints` → 1 atau 2 kolom), bukan orientasi.
+   Sebelumnya aplikasi hanya punya satu jalan untuk layar lebar: memaksa landscape.
+2. **Alasan selalu terlihat.** Tiap baris menampilkan syarat mana yang gagal.
+3. **`BELUM DIVALIDASI`** tampil pada INTRADAY/SWING, supaya pengguna tidak menyimpulkan ketiganya
+   setara.
+4. **Status SIAP disertai peringatan** bahwa itu hasil saringan, bukan ajakan beli, dan eksekusi
+   uang riil masih diblokir.
+
+### 14.6 Uji
+
+`HorizonReadinessEngineTest` (16) + `ReadinessScannerTest` (10) = **+26 test**. Sorotan:
+
+- fixture deterministik (tanpa `Math.random()`), bar terakhir dipaksa naik supaya uji momentum
+  tidak gagal karena kebetulan gelombang sinus;
+- gate ekonomi ditolak untuk koin tenang **dan** diterima untuk koin wajar;
+- skor berbobot ganda pada gate ekonomi (3/6 = 50, bukan 3/5 = 60);
+- `expectedTravelPct` memakai skala akar (dibuktikan `< ATR × n`);
+- pemindai membaca tiap timeframe **sekali** per simbol (10 pembacaan untuk 2 simbol, bukan 18);
+- hanya SCALP yang bertanda `validatedOutOfSample`.
+
+### 14.7 Batasan yang harus diingat
+
+- **INTRADAY dan SWING belum divalidasi keluar-sampel.** Ambangnya masuk akal tetapi belum
+  dibuktikan punya edge. UI menandainya; jangan dipromosikan ke uang riil tanpa uji data dulu.
+- **Papan membaca cache, bukan mengambil data.** `MtfCacheManager` hanya mem-prefetch
+  M1/M15/H1/H4 — **D1 tidak pernah**, sehingga SWING hampir selalu `DATA KURANG` sampai pengguna
+  menekan "Ambil data candle" (dibatasi 8 simbol sekali tekan).
+- **Tanpa orderbook.** Keputusan entry scalping yang sebenarnya tetap milik `ScalpingMtfEvaluator`;
+  mesin ini menyaring koin, bukan menggantikan evaluator.
+- **Belum ada eksekusi otomatis dari papan.** Papan hanya menilai; auto-buy paper tetap lewat
+  `PaperAutoTradeCoordinator` dan tetap mensyaratkan `action == BUY`.
+- Kesiapan uang riil tetap **BELUM** (§9.5b, §13.4).

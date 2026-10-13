@@ -33,6 +33,7 @@ import agu.analys.ui.screens.DetailChartScreen
 import agu.analys.ui.screens.LandscapeChartScreen
 import agu.analys.ui.screens.LearningPathScreen
 import agu.analys.ui.screens.PortfolioScreen
+import agu.analys.ui.screens.ReadinessBoardScreen
 import agu.analys.ui.screens.SettingsScreen
 import agu.analys.ui.screens.SignalLogScreen
 import agu.analys.ui.screens.TradeSimulationScreen
@@ -167,6 +168,11 @@ class MainActivity : ComponentActivity() {
                             viewModel = tradingViewModel,
                             onBack = { tradingViewModel.goBack() },
                             onNavigateToDetail = { tradingViewModel.openCoinDetail(it) }
+                        )
+                        AppScreen.READINESS -> ReadinessBoardScreen(
+                            viewModel = tradingViewModel,
+                            onBack = { tradingViewModel.goBack() },
+                            onOpenDetail = { tradingViewModel.openReadinessSymbol(it) }
                         )
                     }
                 }

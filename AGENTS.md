@@ -1,6 +1,48 @@
 # AGENTS.md — analisa-pasar
 
-Aplikasi Android Kotlin 100% (Jetpack Compose M3) untuk analisis & **scalp mode** kripto di **Tokocrypto** dan **Indodax**. Modul tunggal `:app`, package `agu.analys`, MVVM + Coordinator (`TradingViewModel` + MarketData/Position/Simulation/RealTradeCoordinator). Kerja di branch `main`/`master`.
+Aplikasi Android Kotlin 100% (Jetpack Compose M3) untuk analisis & **scalp mode** kripto di **Tokocrypto** dan **Indodax**. Modul tunggal `:app`, package `agu.analys`, MVVM + Coordinator (`TradingViewModel` + MarketData/Position/Simulation/RealTradeCoordinator).
+
+---
+
+## ▶ MULAI DARI SINI (agen lanjutan — baca sebelum menyentuh kode)
+
+**Urutan baca 5 menit yang benar:**
+
+1. **Berkas ini** sampai habis — terutama bagian "Yang tidak boleh dilakukan agen".
+2. **`docs/PANDUAN-LANJUT-AGEN.md`** — status terkini, apa yang sudah selesai, apa yang berikutnya,
+   dan perangkap yang sudah pernah ditemukan. **Ini titik masuk utama.**
+3. **`workplan2.md` § 14** — pekerjaan terakhir (kesiapan multi-horizon). Seksi sebelumnya
+   (§9 lantai friksi, §11 UI scalping, §12 rehidrasi paper, §13 akar `EARLY_ENTRY`) menjelaskan
+   **kenapa** kode hari ini berbentuk seperti sekarang. Jangan mengubahnya tanpa membacanya.
+4. `SCALP_EXIT.md` bila menyentuh exit.
+5. Baru buka kode.
+
+**Aturan kerja yang berlaku di repo ini:**
+
+- **Branch kerja sekarang `patch`, bukan `main`.** Owner me-review di `patch` dulu. Jangan push ke
+  `main` tanpa instruksi eksplisit.
+- **Setiap perubahan wajib memperbarui markdown terkait** (`workplan2.md` + `AGENTS.md` +
+  `docs/LAPORAN-*.md`). Pekerjaan tanpa jejak dokumen dianggap belum selesai.
+- **Setiap klaim angka harus diukur, bukan diingat.** Hitung test dari
+  `app/build/test-results/testDebugUnitTest/*.xml`, bukan dari pesan lama. Untuk mengukur baseline,
+  pakai `git stash` → jalankan test → `git stash pop` (pola ini sudah dipakai beberapa kali).
+- **Kontrol negatif wajib** untuk perbaikan bug: matikan perbaikannya, buktikan test GAGAL, lalu
+  kembalikan. Test yang selalu hijau tidak membuktikan apa pun.
+- **Bila ragu, eksekusi keputusan terbaik dan catat alasannya** di dokumen — jangan berhenti
+  menunggu jawaban.
+
+**Titik masuk kode yang paling sering dibutuhkan:**
+
+| Butuh | Berkas |
+|---|---|
+| Status/kesiapan scalping satu sinyal | `engine/scalping/ScalpReadiness.kt` |
+| Kesiapan multi-horizon (scalp/intraday/swing) | `engine/readiness/*` |
+| Threshold & lantai friksi | `engine/scalping/ScalpingConfig.kt` + `ScalpingRuntimeConfig.kt` |
+| Exit paper (beli → tahan → keluar) | `engine/scalping/PaperExitResolver.kt`, `SCALP_EXIT.md` |
+| Wiring state ke UI | `viewmodel/TradingViewModel*.kt` (banyak berkas, per fitur) |
+| Tambah layar | `model/TradingViewModels.kt` (`AppScreen`) → `MainActivity.kt` → `viewmodel/TradingViewModelNavigation.kt` |
+
+---
 
 ## Dokumen yang harus dibaca dulu
 
@@ -86,6 +128,21 @@ Aplikasi Android Kotlin 100% (Jetpack Compose M3) untuk analisis & **scalp mode*
   "DETECTED" untuk sinyal tanpa pola. Aman dilakukan karena `EARLY_ENTRY` selalu ber-`action = HOLD`,
   sehingga `tryPaperAutoBuy` dan alert (keduanya mensyaratkan `action == BUY`) tidak terpengaruh.
   Bukti: `workplan2.md` §13, `ScalpingMtfEvaluatorTest`, `SignalLifecycleManagerTest`.
+- **Kesiapan multi-horizon (2026-10-13, WAJIB):** `engine/readiness/*` menilai tiap koin untuk
+  **SCALP / INTRADAY / SWING secara terpisah**. Jangan menggabungkannya menjadi satu "skor koin" —
+  koin ber-ATR kecil tidak layak scalp tetapi layak swing, dan sebaliknya. Aturan:
+  1. Ambang diambil dari `ScalpingConfig` / `ScalpingRuntimeConfig`; **jangan** menyalin angka gate
+     ke `HorizonReadinessEngine`.
+  2. Gate ekonomi memakai kriteria **`PairEdgeGate`** (pergerakan ≥ 2× biaya round-trip, estimasi
+     `ATR × √bar`). **Jangan** menggantinya dengan "ATR harus melebihi lantai friksi" — perhitungan
+     itu membuat syaratnya mustahil dipenuhi (butuh ATR ≥ 7,26%) dan papan akan selalu kosong.
+     Lihat `workplan2.md` §14.3 untuk kesalahan desain yang sudah dibuang.
+  3. `TradeHorizon.validatedOutOfSample` **hanya `true` untuk SCALP**. Jangan mengubah INTRADAY/
+     SWING menjadi `true` tanpa uji keluar-sampel dengan data riil.
+  4. Papan membaca **cache** (`MtfCacheManager.getCachedCandles`), bukan jaringan. Jangan menambah
+     fetch otomatis di jalur pemindaian.
+- **Status SIAP bukan ajakan beli.** Setiap permukaan yang menampilkan `ReadinessState.READY` wajib
+  menyertakan konteks bahwa eksekusi uang riil masih diblokir.
 - **Snapshot posisi paper per pair:** di halaman detail **jangan** pakai
   `TradingViewModel.paperExitSnapshot` (StateFlow tunggal yang di-`publish` dari tick pair mana
   pun). Pakai `TradingViewModel.paperSnapshotFor(exchange, symbol, price)` supaya yang tampil
@@ -117,9 +174,16 @@ Aplikasi Android Kotlin 100% (Jetpack Compose M3) untuk analisis & **scalp mode*
 
 ## Git
 
-- Branch kerja utama: `main` / `master`.
+- **Branch kerja sekarang: `patch`** (bukan `main`). Owner me-review di `patch` lebih dulu; `main`
+  hanya menerima merge setelah review. Jangan push langsung ke `main` tanpa instruksi eksplisit.
+- Branch lama di remote (`audit/menyeluruh-2026-10`, `engine_scalping_update`, tag versi) masih ada —
+  jangan dihapus tanpa instruksi owner.
 - Jangan commit artefak data candle besar tanpa diminta.
+- Jangan commit `.env`, `*.keystore`, `*.jks`, atau token.
 - Pesan commit jelas; `[skip ci]` untuk docs/config-only sesuai kebijakan owner.
+- Clone di sandbox ini kadang dibatasi `remote.origin.fetch=+refs/heads/main:...`. Bila
+  `git branch -r` terlihat hanya berisi `main`, **perbaiki refspec dulu** sebelum menyimpulkan
+  bahwa branch lain tidak ada.
 
 ## Yang tidak boleh dilakukan agen
 

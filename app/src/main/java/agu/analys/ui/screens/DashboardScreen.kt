@@ -39,6 +39,7 @@ import agu.analys.engine.intraday.IntradayScreener
 import agu.analys.service.IndodaxMarketService
 import agu.analys.service.TokocryptoMarketService
 import agu.analys.ui.components.dashboard.*
+import agu.analys.ui.components.readiness.ReadinessBoardCard
 import agu.analys.ui.components.settings.LogcatDiagnosticDialog
 import agu.analys.ui.theme.*
 import agu.analys.viewmodel.*
@@ -70,6 +71,8 @@ fun DashboardScreen(
     val newsScreenerState by viewModel.newsScreenerState.collectAsState()
     val isRefreshing by viewModel.isRefreshing.collectAsState()
     val dashboardAllLimit by viewModel.dashboardAllLimit.collectAsState()
+    val readinessBoard by viewModel.readinessBoard.collectAsState()
+    val readinessLoading by viewModel.readinessLoading.collectAsState()
 
     val selectedQuickFilter by viewModel.dashboardQuickFilter.collectAsState()
     var currentTab by remember { mutableStateOf(NavTab.WATCHLIST) }
@@ -382,6 +385,15 @@ fun DashboardScreen(
                     viewModel.selectPair(pair)
                     onNavigateToDetail(pair)
                 }
+            )
+
+            // 2b. Papan kesiapan multi-horizon (TEAM 1 + TEAM 2).
+            // Menjawab "mana yang siap masuk?" sebelum pengguna menelusuri daftar panjang.
+            ReadinessBoardCard(
+                board = readinessBoard,
+                loading = readinessLoading,
+                onOpenBoard = { viewModel.openReadiness() },
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
             )
 
             // 3. Quick Filter Chips [Semua] [Signal Kuat ⭐] [💼 Holding] [⭐ Watchlist]
