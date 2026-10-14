@@ -46,6 +46,10 @@ baru digabung ke `main`.
 
 **Aturan kerja yang berlaku di repo ini:**
 
+- **🔤 Bahasa: Balas chat & pertanyaan ke owner dalam Bahasa Indonesia. Bahasa Mandarin hanya
+  untuk reasoning/internal, tidak pernah untuk jawaban yang terlihat.** Owner pernah menerima
+  jawaban Mandarin dan tidak bisa membacanya. Semua dokumen, komentar kode, dan pesan commit
+  juga Bahasa Indonesia (kecuali istilah teknis).
 - **Branch kerja sekarang `patch`, bukan `main`.** Owner me-review di `patch` dulu. Jangan push ke
   `main` tanpa instruksi eksplisit.
 - **Setiap perubahan wajib memperbarui markdown terkait** (`workplan2.md` + `AGENTS.md` +
