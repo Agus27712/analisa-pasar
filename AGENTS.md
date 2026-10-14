@@ -8,19 +8,24 @@ Aplikasi Android Kotlin 100% (Jetpack Compose M3) untuk analisis & **scalp mode*
 
 ### ⚠️ Langkah 0 — pastikan branch yang Anda baca benar
 
-**`main` tertinggal 11 commit dari `patch`** (per 2026-10-14). Bila Anda membaca `main`, yang
-Anda lihat **bukan kode yang berlaku**: fitur horizon **masih ada** di `main` padahal sudah
-dihapus di `patch`, sementara P0–P2 (integritas jurnal) dan S1–S9 (strategi entry/exit)
-**belum ada** di sana. Jangan menarik kesimpulan apa pun sebelum pindah branch.
+**Kerjaan aktif ada di `patch`.** Isi `patch` dan `main` **identik per 2026-10-14**, tapi
+`main` bisa tertinggal lagi kapan saja — pembaruan mendarat di `patch` dulu dan hanya
+digabung ke `main` bila owner memintanya. **Jangan pernah menyimpulkan keadaan repo dari
+`main` tanpa mengecek angka ini dulu:**
 
 ```sh
 git clone https://github.com/Agus27712/analisa-pasar.git
 cd analisa-pasar && git checkout patch     # WAJIB — kerjaan aktif ada di sini
-git log --oneline main..patch              # 11 commit yang belum sampai ke main
+git rev-list --count main..patch           # >0 = patch lebih maju (normal, baca patch)
+git diff --stat patch main                 # kosong = kedua branch sama
 ```
 
-Repo ini **public** — clone tidak butuh token. Pekerjaan selesai di-review owner di `patch`
-baru digabung ke `main`.
+Repo ini **public** — clone tidak butuh token.
+
+⚠️ **Pernah terjadi, jangan terulang:** `main` pernah tertinggal **11 commit** dari `patch`.
+Siapa pun yang membaca `main` saat itu melihat fitur horizon **masih ada** padahal sudah
+di-revert di `patch` (`e525c64`), dan P0–P2 (integritas jurnal) serta S1–S9 (strategi
+entry/exit) belum ada di sana — semua kesimpulan yang ditarik dari `main` jadi salah.
 
 **Urutan baca 5 menit yang benar:**
 
