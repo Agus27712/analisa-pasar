@@ -8,242 +8,92 @@
     "window_bars": 30000,
     "step_bars": 20000,
     "cost_roundtrip_pct": 0.9688,
-    "pairs_scanned": 4,
-    "n_windows": 9,
+    "pairs_scanned": 8,
+    "n_windows": 3,
     "windows_passed": 0,
     "overall_verdict": "TIDAK BERTAHAN",
     "train_agg": {
-      "trades": 967,
-      "avg_r_weighted": -0.1578
+      "trades": 1982,
+      "avg_r_weighted": -0.1566
     },
     "test_agg": {
-      "trades": 332,
-      "avg_r_weighted": -0.1849,
+      "trades": 671,
+      "avg_r_weighted": -0.179,
       "pairs_positive_total": 0,
-      "pairs_total": 12
+      "pairs_total": 24
     },
     "windows": [
       {
-        "window_start_t": 1786545960000,
         "window_start_bar": 0,
-        "window_end_bar": 30000,
-        "train": {
-          "pairs": 1,
-          "trades": 85,
-          "avg_r_weighted": -0.1528,
-          "wr_weighted": 10.59,
-          "pairs_positive": 0,
-          "pairs_positive_min_trades": 0
-        },
-        "test": {
-          "pairs": 1,
-          "trades": 32,
-          "avg_r_weighted": -0.1748,
-          "wr_weighted": 0.0,
-          "pairs_positive": 0,
-          "pairs_positive_min_trades": 0
-        },
-        "eligible_pairs": 1,
-        "positive_ratio": 0.0,
-        "sign_flips": 0,
-        "verdict": "TIDAK LOLOS"
-      },
-      {
-        "window_start_t": 1786546080000,
-        "window_start_bar": 0,
-        "window_end_bar": 30000,
-        "train": {
-          "pairs": 1,
-          "trades": 88,
-          "avg_r_weighted": -0.1517,
-          "wr_weighted": 9.09,
-          "pairs_positive": 0,
-          "pairs_positive_min_trades": 0
-        },
-        "test": {
-          "pairs": 1,
-          "trades": 23,
-          "avg_r_weighted": -0.1704,
-          "wr_weighted": 0.0,
-          "pairs_positive": 0,
-          "pairs_positive_min_trades": 0
-        },
-        "eligible_pairs": 1,
-        "positive_ratio": 0.0,
-        "sign_flips": 0,
-        "verdict": "TIDAK LOLOS"
-      },
-      {
         "window_start_t": 1786546200000,
-        "window_start_bar": 0,
         "window_end_bar": 30000,
         "train": {
-          "pairs": 2,
-          "trades": 178,
-          "avg_r_weighted": -0.1498,
-          "wr_weighted": 22.47,
+          "pairs": 8,
+          "trades": 714,
+          "avg_r_weighted": -0.1455,
+          "wr_weighted": 16.39,
           "pairs_positive": 0,
           "pairs_positive_min_trades": 0
         },
         "test": {
-          "pairs": 2,
-          "trades": 57,
-          "avg_r_weighted": -0.2022,
-          "wr_weighted": 1.76,
+          "pairs": 8,
+          "trades": 214,
+          "avg_r_weighted": -0.1837,
+          "wr_weighted": 1.87,
           "pairs_positive": 0,
           "pairs_positive_min_trades": 0
         },
-        "eligible_pairs": 2,
+        "eligible_pairs": 8,
         "positive_ratio": 0.0,
         "sign_flips": 0,
         "verdict": "TIDAK LOLOS"
       },
       {
-        "window_start_t": 1787745960000,
         "window_start_bar": 20000,
-        "window_end_bar": 50000,
-        "train": {
-          "pairs": 1,
-          "trades": 77,
-          "avg_r_weighted": -0.1649,
-          "wr_weighted": 2.6,
-          "pairs_positive": 0,
-          "pairs_positive_min_trades": 0
-        },
-        "test": {
-          "pairs": 1,
-          "trades": 23,
-          "avg_r_weighted": -0.1615,
-          "wr_weighted": 4.35,
-          "pairs_positive": 0,
-          "pairs_positive_min_trades": 0
-        },
-        "eligible_pairs": 1,
-        "positive_ratio": 0.0,
-        "sign_flips": 0,
-        "verdict": "TIDAK LOLOS"
-      },
-      {
-        "window_start_t": 1787746080000,
-        "window_start_bar": 20000,
-        "window_end_bar": 50000,
-        "train": {
-          "pairs": 1,
-          "trades": 67,
-          "avg_r_weighted": -0.1504,
-          "wr_weighted": 4.48,
-          "pairs_positive": 0,
-          "pairs_positive_min_trades": 0
-        },
-        "test": {
-          "pairs": 1,
-          "trades": 26,
-          "avg_r_weighted": -0.1625,
-          "wr_weighted": 3.85,
-          "pairs_positive": 0,
-          "pairs_positive_min_trades": 0
-        },
-        "eligible_pairs": 1,
-        "positive_ratio": 0.0,
-        "sign_flips": 0,
-        "verdict": "TIDAK LOLOS"
-      },
-      {
         "window_start_t": 1787746200000,
-        "window_start_bar": 20000,
         "window_end_bar": 50000,
         "train": {
-          "pairs": 2,
-          "trades": 155,
-          "avg_r_weighted": -0.1683,
-          "wr_weighted": 13.55,
+          "pairs": 8,
+          "trades": 616,
+          "avg_r_weighted": -0.1682,
+          "wr_weighted": 6.82,
           "pairs_positive": 0,
           "pairs_positive_min_trades": 0
         },
         "test": {
-          "pairs": 2,
-          "trades": 41,
-          "avg_r_weighted": -0.1854,
-          "wr_weighted": 7.32,
+          "pairs": 8,
+          "trades": 210,
+          "avg_r_weighted": -0.1737,
+          "wr_weighted": 7.62,
           "pairs_positive": 0,
           "pairs_positive_min_trades": 0
         },
-        "eligible_pairs": 1,
+        "eligible_pairs": 7,
         "positive_ratio": 0.0,
         "sign_flips": 0,
         "verdict": "TIDAK LOLOS"
       },
       {
-        "window_start_t": 1788945960000,
         "window_start_bar": 40000,
-        "window_end_bar": 70000,
-        "train": {
-          "pairs": 1,
-          "trades": 76,
-          "avg_r_weighted": -0.1546,
-          "wr_weighted": 5.26,
-          "pairs_positive": 0,
-          "pairs_positive_min_trades": 0
-        },
-        "test": {
-          "pairs": 1,
-          "trades": 35,
-          "avg_r_weighted": -0.1955,
-          "wr_weighted": 0.0,
-          "pairs_positive": 0,
-          "pairs_positive_min_trades": 0
-        },
-        "eligible_pairs": 1,
-        "positive_ratio": 0.0,
-        "sign_flips": 0,
-        "verdict": "TIDAK LOLOS"
-      },
-      {
-        "window_start_t": 1788946080000,
-        "window_start_bar": 40000,
-        "window_end_bar": 70000,
-        "train": {
-          "pairs": 1,
-          "trades": 70,
-          "avg_r_weighted": -0.158,
-          "wr_weighted": 4.29,
-          "pairs_positive": 0,
-          "pairs_positive_min_trades": 0
-        },
-        "test": {
-          "pairs": 1,
-          "trades": 26,
-          "avg_r_weighted": -0.1723,
-          "wr_weighted": 3.85,
-          "pairs_positive": 0,
-          "pairs_positive_min_trades": 0
-        },
-        "eligible_pairs": 1,
-        "positive_ratio": 0.0,
-        "sign_flips": 0,
-        "verdict": "TIDAK LOLOS"
-      },
-      {
         "window_start_t": 1788946200000,
-        "window_start_bar": 40000,
         "window_end_bar": 70000,
         "train": {
-          "pairs": 2,
-          "trades": 171,
-          "avg_r_weighted": -0.1634,
-          "wr_weighted": 18.71,
+          "pairs": 8,
+          "trades": 652,
+          "avg_r_weighted": -0.1577,
+          "wr_weighted": 12.27,
           "pairs_positive": 0,
           "pairs_positive_min_trades": 0
         },
         "test": {
-          "pairs": 2,
-          "trades": 69,
-          "avg_r_weighted": -0.1953,
-          "wr_weighted": 10.15,
+          "pairs": 8,
+          "trades": 247,
+          "avg_r_weighted": -0.1794,
+          "wr_weighted": 7.69,
           "pairs_positive": 0,
           "pairs_positive_min_trades": 0
         },
-        "eligible_pairs": 2,
+        "eligible_pairs": 8,
         "positive_ratio": 0.0,
         "sign_flips": 0,
         "verdict": "TIDAK LOLOS"
@@ -296,7 +146,7 @@
       "test": {
         "n": 22,
         "wr": 9.09,
-        "avg_r": -0.1941,
+        "avg_r": -0.194,
         "pf": 0.0532
       },
       "exit_reasons_test": {
@@ -397,7 +247,7 @@
       "test": {
         "n": 26,
         "wr": 3.85,
-        "avg_r": -0.1625,
+        "avg_r": -0.1624,
         "pf": 0.0443
       },
       "exit_reasons_test": {
@@ -631,6 +481,410 @@
           "gross_r": -6.7348,
           "win_rate": 3.03,
           "avg_r": -0.2041
+        }
+      }
+    },
+    {
+      "pair": "ETHUSDT",
+      "window_start_bar": 0,
+      "window_end_bar": 30000,
+      "window_start_t": 1786546020000,
+      "window_end_t": 1788345960000,
+      "split_bar": 21000,
+      "train": {
+        "n": 84,
+        "wr": 13.1,
+        "avg_r": -0.1356,
+        "pf": 0.1678
+      },
+      "test": {
+        "n": 31,
+        "wr": 3.23,
+        "avg_r": -0.1636,
+        "pf": 0.0334
+      },
+      "exit_reasons_test": {
+        "TIMEOUT": {
+          "trades": 30,
+          "wins": 0,
+          "gross_r": -5.2468,
+          "win_rate": 0.0,
+          "avg_r": -0.1749
+        },
+        "TRAIL_SL": {
+          "trades": 1,
+          "wins": 1,
+          "gross_r": 0.1751,
+          "win_rate": 100.0,
+          "avg_r": 0.1751
+        }
+      }
+    },
+    {
+      "pair": "ETHUSDT",
+      "window_start_bar": 20000,
+      "window_end_bar": 50000,
+      "window_start_t": 1787746020000,
+      "window_end_t": 1789545960000,
+      "split_bar": 41000,
+      "train": {
+        "n": 81,
+        "wr": 4.94,
+        "avg_r": -0.1687,
+        "pf": 0.0422
+      },
+      "test": {
+        "n": 33,
+        "wr": 9.09,
+        "avg_r": -0.166,
+        "pf": 0.0827
+      },
+      "exit_reasons_test": {
+        "TIMEOUT": {
+          "trades": 30,
+          "wins": 0,
+          "gross_r": -5.9719,
+          "win_rate": 0.0,
+          "avg_r": -0.1991
+        },
+        "TRAIL_SL": {
+          "trades": 3,
+          "wins": 3,
+          "gross_r": 0.494,
+          "win_rate": 100.0,
+          "avg_r": 0.1647
+        }
+      }
+    },
+    {
+      "pair": "ETHUSDT",
+      "window_start_bar": 40000,
+      "window_end_bar": 70000,
+      "window_start_t": 1788946020000,
+      "window_end_t": 1790745960000,
+      "split_bar": 61000,
+      "train": {
+        "n": 85,
+        "wr": 11.76,
+        "avg_r": -0.1497,
+        "pf": 0.0906
+      },
+      "test": {
+        "n": 33,
+        "wr": 6.06,
+        "avg_r": -0.1866,
+        "pf": 0.005
+      },
+      "exit_reasons_test": {
+        "TIMEOUT": {
+          "trades": 33,
+          "wins": 2,
+          "gross_r": -6.1581,
+          "win_rate": 6.06,
+          "avg_r": -0.1866
+        }
+      }
+    },
+    {
+      "pair": "SOLUSDT",
+      "window_start_bar": 0,
+      "window_end_bar": 30000,
+      "window_start_t": 1786546080000,
+      "window_end_t": 1788346020000,
+      "split_bar": 21000,
+      "train": {
+        "n": 94,
+        "wr": 18.09,
+        "avg_r": -0.137,
+        "pf": 0.1714
+      },
+      "test": {
+        "n": 25,
+        "wr": 8.0,
+        "avg_r": -0.1881,
+        "pf": 0.0353
+      },
+      "exit_reasons_test": {
+        "TIMEOUT": {
+          "trades": 25,
+          "wins": 2,
+          "gross_r": -4.7019,
+          "win_rate": 8.0,
+          "avg_r": -0.1881
+        }
+      }
+    },
+    {
+      "pair": "SOLUSDT",
+      "window_start_bar": 20000,
+      "window_end_bar": 50000,
+      "window_start_t": 1787746080000,
+      "window_end_t": 1789546020000,
+      "split_bar": 41000,
+      "train": {
+        "n": 77,
+        "wr": 11.69,
+        "avg_r": -0.1809,
+        "pf": 0.0701
+      },
+      "test": {
+        "n": 27,
+        "wr": 3.7,
+        "avg_r": -0.1755,
+        "pf": 0.0353
+      },
+      "exit_reasons_test": {
+        "TIMEOUT": {
+          "trades": 26,
+          "wins": 0,
+          "gross_r": -4.9115,
+          "win_rate": 0.0,
+          "avg_r": -0.1889
+        },
+        "TRAIL_SL": {
+          "trades": 1,
+          "wins": 1,
+          "gross_r": 0.1735,
+          "win_rate": 100.0,
+          "avg_r": 0.1735
+        }
+      }
+    },
+    {
+      "pair": "SOLUSDT",
+      "window_start_bar": 40000,
+      "window_end_bar": 70000,
+      "window_start_t": 1788946080000,
+      "window_end_t": 1790746020000,
+      "split_bar": 61000,
+      "train": {
+        "n": 83,
+        "wr": 13.25,
+        "avg_r": -0.1527,
+        "pf": 0.0697
+      },
+      "test": {
+        "n": 33,
+        "wr": 9.09,
+        "avg_r": -0.181,
+        "pf": 0.0827
+      },
+      "exit_reasons_test": {
+        "TIMEOUT": {
+          "trades": 31,
+          "wins": 1,
+          "gross_r": -6.4338,
+          "win_rate": 3.23,
+          "avg_r": -0.2075
+        },
+        "TRAIL_SL": {
+          "trades": 2,
+          "wins": 2,
+          "gross_r": 0.4617,
+          "win_rate": 100.0,
+          "avg_r": 0.2308
+        }
+      }
+    },
+    {
+      "pair": "TRXUSDT",
+      "window_start_bar": 0,
+      "window_end_bar": 30000,
+      "window_start_t": 1786546260000,
+      "window_end_t": 1788346200000,
+      "split_bar": 21000,
+      "train": {
+        "n": 82,
+        "wr": 0.0,
+        "avg_r": -0.1608,
+        "pf": 0.0
+      },
+      "test": {
+        "n": 23,
+        "wr": 0.0,
+        "avg_r": -0.1609,
+        "pf": 0.0
+      },
+      "exit_reasons_test": {
+        "TIMEOUT": {
+          "trades": 23,
+          "wins": 0,
+          "gross_r": -3.6996,
+          "win_rate": 0.0,
+          "avg_r": -0.1609
+        }
+      }
+    },
+    {
+      "pair": "TRXUSDT",
+      "window_start_bar": 20000,
+      "window_end_bar": 50000,
+      "window_start_t": 1787746260000,
+      "window_end_t": 1789546200000,
+      "split_bar": 41000,
+      "train": {
+        "n": 84,
+        "wr": 0.0,
+        "avg_r": -0.159,
+        "pf": 0.0
+      },
+      "test": {
+        "n": 27,
+        "wr": 3.7,
+        "avg_r": -0.1594,
+        "pf": 0.0123
+      },
+      "exit_reasons_test": {
+        "TIMEOUT": {
+          "trades": 27,
+          "wins": 1,
+          "gross_r": -4.3038,
+          "win_rate": 3.7,
+          "avg_r": -0.1594
+        }
+      }
+    },
+    {
+      "pair": "TRXUSDT",
+      "window_start_bar": 40000,
+      "window_end_bar": 70000,
+      "window_start_t": 1788946260000,
+      "window_end_t": 1790746200000,
+      "split_bar": 61000,
+      "train": {
+        "n": 80,
+        "wr": 2.5,
+        "avg_r": -0.1577,
+        "pf": 0.0072
+      },
+      "test": {
+        "n": 26,
+        "wr": 0.0,
+        "avg_r": -0.1572,
+        "pf": 0.0
+      },
+      "exit_reasons_test": {
+        "TIMEOUT": {
+          "trades": 26,
+          "wins": 0,
+          "gross_r": -4.0864,
+          "win_rate": 0.0,
+          "avg_r": -0.1572
+        }
+      }
+    },
+    {
+      "pair": "XRPUSDT",
+      "window_start_bar": 0,
+      "window_end_bar": 30000,
+      "window_start_t": 1786546140000,
+      "window_end_t": 1788346080000,
+      "split_bar": 21000,
+      "train": {
+        "n": 103,
+        "wr": 31.07,
+        "avg_r": -0.1301,
+        "pf": 0.3005
+      },
+      "test": {
+        "n": 23,
+        "wr": 0.0,
+        "avg_r": -0.2083,
+        "pf": 0.0
+      },
+      "exit_reasons_test": {
+        "TIMEOUT": {
+          "trades": 23,
+          "wins": 0,
+          "gross_r": -4.7907,
+          "win_rate": 0.0,
+          "avg_r": -0.2083
+        }
+      }
+    },
+    {
+      "pair": "XRPUSDT",
+      "window_start_bar": 20000,
+      "window_end_bar": 50000,
+      "window_start_t": 1787746140000,
+      "window_end_t": 1789546080000,
+      "split_bar": 41000,
+      "train": {
+        "n": 75,
+        "wr": 4.0,
+        "avg_r": -0.1843,
+        "pf": 0.0497
+      },
+      "test": {
+        "n": 33,
+        "wr": 18.18,
+        "avg_r": -0.1943,
+        "pf": 0.1536
+      },
+      "exit_reasons_test": {
+        "TIMEOUT": {
+          "trades": 28,
+          "wins": 2,
+          "gross_r": -6.2575,
+          "win_rate": 7.14,
+          "avg_r": -0.2235
+        },
+        "EARLY_PROFIT": {
+          "trades": 1,
+          "wins": 1,
+          "gross_r": 0.2598,
+          "win_rate": 100.0,
+          "avg_r": 0.2598
+        },
+        "TRAIL_SL": {
+          "trades": 3,
+          "wins": 3,
+          "gross_r": 0.742,
+          "win_rate": 100.0,
+          "avg_r": 0.2473
+        },
+        "SL": {
+          "trades": 1,
+          "wins": 0,
+          "gross_r": -1.1562,
+          "win_rate": 0.0,
+          "avg_r": -1.1562
+        }
+      }
+    },
+    {
+      "pair": "XRPUSDT",
+      "window_start_bar": 40000,
+      "window_end_bar": 70000,
+      "window_start_t": 1788946140000,
+      "window_end_t": 1790746080000,
+      "split_bar": 61000,
+      "train": {
+        "n": 87,
+        "wr": 20.69,
+        "avg_r": -0.1616,
+        "pf": 0.1562
+      },
+      "test": {
+        "n": 25,
+        "wr": 24.0,
+        "avg_r": -0.1317,
+        "pf": 0.2605
+      },
+      "exit_reasons_test": {
+        "TIMEOUT": {
+          "trades": 20,
+          "wins": 1,
+          "gross_r": -4.3643,
+          "win_rate": 5.0,
+          "avg_r": -0.2182
+        },
+        "TRAIL_SL": {
+          "trades": 5,
+          "wins": 5,
+          "gross_r": 1.0713,
+          "win_rate": 100.0,
+          "avg_r": 0.2143
         }
       }
     }

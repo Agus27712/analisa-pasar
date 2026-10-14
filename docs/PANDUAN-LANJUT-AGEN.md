@@ -54,6 +54,7 @@ git stash pop                 # kembalikan pekerjaan
 | §13 | **Akar `EARLY_ENTRY`** — stage tinggi wajib punya pola | `ScalpingMtfEvaluator.kt`, `SignalLifecycleManager.kt` | `workplan2.md` §13 |
 | §16 | **Integritas log audit P0–P2** — basis volume RVOL, basis bar indikator, `signalTime`, `sellReason`, trailing nyata, Peak/Drawdown dari candle, label & format, flag `isSample` | `IndicatorMath.kt`, `ScalpingMtfEvaluator.kt`, `TradeHistoryRecorder.kt`, `TradeSignalSnapshot.kt`, `TradeLogExporter.kt`, `AppDatabase.kt` (v9) | `docs/LAPORAN-verifikasi-ui-vs-candle-2026-10-14.md`, `docs/LAPORAN-eksekusi-p0p2-2026-10-14.md`, `IndicatorMathScalpingExtTest.kt` |
 | §17 | **Perbaikan strategi S1–S9** — RVOL wajib breakout, lantai profit, SL keras configurable, konstanta ATR dipakai, basis PnL seragam, label volume, exit engine untuk beli manual, BE/trail proporsional ATR, gerbang extended-move (default nonaktif) | `ScalpSetupDetector.kt`, `ScalpExitConfig.kt`, `PaperExitResolver.kt`, `ScalpingRiskEngine.kt`, `ScalpingRuntimeConfig.kt`, `MarketRegimeEngine.kt`, `SimulationTradeStore.kt`, `TradeLogExporter.kt`, `PaperAutoTradeCoordinator.kt`, `tools/scalp_replay.py` | `docs/LAPORAN-eksekusi-s1s9-2026-10-14.md`, `ScalpStrategyFixTest.kt`, `SimulationSlippageParityTest.kt` |
+| P4.1 | **Mode walk-forward** di `tools/split_validate.py` — jendela bergulir + **2 bug diperbaiki** (kunci agregasi salah → 9 jendela palsu; penulis `.md` crash `StopIteration`) | `tools/split_validate.py`, `tools/fetch_tokocrypto_klines.py` | `docs/LAPORAN-p41-walk-forward-2026-10-14.md`, `data/hasil/u7_walk_forward_v4.{json,md}` |
 | ~~§14~~ | ~~Kesiapan multi-horizon (scalp/intraday/swing) + papan UI~~ | — | ⛔ **DIBATALKAN** — lihat §3b |
 | ~~§15~~ | ~~SSOT: horizon vs engine aktif~~ | — | ⛔ **DIBATALKAN** — lihat §3b |
 
@@ -140,7 +141,7 @@ Riwayat lengkap ada di `workplan2.md` §14/§15 (keduanya bertanda ⛔ DIHAPUS) 
 Diurutkan berdasarkan **nilai dibagi risiko**. Jangan mengerjakan yang bawah sebelum yang atas
 selesai, kecuali ada instruksi eksplisit.
 
-### P4.1 — Walk-forward antar-bulan (tertinggi)
+### P4.1 — Walk-forward antar-bulan ✅ tooling selesai (2026-10-14)
 
 **Masalah:** validasi keluar-sampel saat ini hanya **satu potongan** (train 70% / test 30% menurut
 waktu). Satu potongan bisa kebetulan menguntungkan.
@@ -149,7 +150,18 @@ waktu). Satu potongan bisa kebetulan menguntungkan.
 per bulan) dan laporkan sebaran hasil, bukan satu angka. Pertanyaan yang harus dijawab: **apakah
 tanda positif bertahan di semua jendela?**
 
-**Selesai bila:** ada tabel per-jendela, dan kesimpulannya eksplisit (bertahan / tidak).
+**Status:** mode `--walk-forward` (+ `--window-bars`, `--step-bars`) **sudah ada dan sudah
+diperbaiki** — lihat `docs/LAPORAN-p41-walk-forward-2026-10-14.md` dan perangkap #21.
+
+**Dua hasil yang sudah keluar, keduanya negatif — dan keduanya belum sah sebagai kesimpulan:**
+
+1. `data/hasil/u7_walk_forward_v4.{json,md}` — 8 pair `data/tokocrypto_v4`, 3 jendela,
+   **0/3 lolos**, test avg R **−0,1790**. **Tapi kedelapan pair itu INELIGIBLE** menurut
+   `pair_gate.json` (rasio 0,242×–1,638×, semua di bawah 2,0). Jangan pakai untuk menyimpulkan.
+2. Hasil 40 pair `data/tokocrypto_live_usdt` — lihat §4 di laporan P4.1.
+
+**Selesai bila:** ada tabel per-jendela dari **dataset 40 pair yang gate-eligible**, dan
+kesimpulannya eksplisit (bertahan / tidak).
 
 ### P4.4 — Rehidrasi FSM paper: pulihkan progres
 
@@ -187,21 +199,29 @@ Perhatikan: Indodax **hanya IDR**; fee 0,79% (lihat `FEE_TRUTH.md`).
 
 ## 5. Kenapa kesiapan uang riil masih BELUM (jangan lupa ini)
 
+> 🔴 **Angka lama "+0,0216 avg R keluar-sampel" SUDAH TIDAK SAH.** Angka itu berasal dari
+> `u4_split_toko_usdt` yang dibuat sebelum `703c3b6`, ketika trade `UNRESOLVED` **dikeluarkan**
+> dari statistik (±83% sinyal dibuang). Setelah trade yang sama dihitung jujur, hasil 40 pair
+> berbalik menjadi **avg R ≈ −0,17, 0/40 pair positif**. Lihat
+> `docs/LAPORAN-temuan-akuntansi-replay-2026-10-14.md`.
+
 | Fakta | Angka |
 |---|---|
-| avg R terbobot, keluar-sampel | **+0,0216** |
-| Profil exit | 88,7% `TRAIL_SL` **+0,09R** · 4,9% hard SL **−1,16R** |
-| Win rate | ≈ 95% |
-| Margin di atas titik impas | hanya **≈ 2,3 poin persentase** |
-| Gate ketat keluar-sampel | **5 pair** dari 40 (APT, NEAR, SU, W, ZRO) |
+| avg R terbobot, keluar-sampel (akuntansi baru, 40 pair) | **≈ −0,17** |
+| Pair dengan avg R > 0 (keluar-sampel) | **0 dari 40** |
+| Sinyal yang dulu dibuang akuntansi lama | **±83%** |
+| Walk-forward 40 pair (4 jendela) | **0/4 lolos**, test avg R **−0,1614** |
+| Walk-forward 8 pair gate-rejected (v4, 3 jendela) | **0/3 lolos**, test avg R **−0,1790** |
 
-Artinya: **tandanya benar, besarnya belum cukup.** Profil skew negatif berarti sebagian besar trade
-menang kecil dan sesekali kalah besar — satu rentetan SL bisa menghapus puluhan trade menang.
+Artinya bukan lagi "tandanya benar, besarnya belum cukup" — melainkan **tidak ada edge kotor
+yang tersisa setelah friksi**. Rata-rata trade bergerak persis sebesar biaya round-trip
+(−0,9688% / 5,81% ≈ −0,167 R).
 
 Aturan yang sudah berlaku dan **jangan dilonggarkan**:
 
 - `MIN_FRICTION_MULTIPLE = 6.0` — jangan turunkan di bawah 5 tanpa bukti replay baru.
 - `PairEdgeGate` rasio ≥ 2,0 — jangan dilemahkan supaya sinyal bertambah.
+- **Trade `UNRESOLVED` wajib dihitung** (atau jumlahnya disebut) di setiap angka avg R.
 - Setiap permukaan yang menampilkan status `READY` wajib menyertakan konteks bahwa eksekusi uang
   riil masih diblokir.
 
@@ -269,6 +289,21 @@ Aturan yang sudah berlaku dan **jangan dilonggarkan**:
     jadi beli manual berjalan tanpa SL/BE/trailing (AMP menahan −2,76% selama 9 menit).
     Saat menambah jalur entry baru, pastikan ia ikut memanggil `armPaperExitEngine()`
     **dan** mematikan jalur auto-sell/trailing lama untuk pair yang sama.
+21. **Jangan mengelompokkan jendela walk-forward dengan timestamp bar.** Tiap CSV pair mulai
+    pada detik yang berbeda (pengambilan data berurutan), jadi `win[0]["t"]` **berbeda beberapa
+    detik antar-pair**. Mengelompokkan dengan kunci itu memecah satu jendela menjadi beberapa
+    "jendela" palsu yang masing-masing hanya berisi 1–2 pair — dan verdict-nya jadi dihitung dari
+    satu pair. Pakai **indeks bar** (`window_start_bar`) sebagai kunci; timestamp hanya untuk
+    tampilan. Bug ini sudah terjadi di `u7_walk_forward_v4` (9 jendela palsu dari 8 pair,
+    seharusnya 3 jendela berisi 8 pair) — lihat `LAPORAN-p41-walk-forward-2026-10-14.md` §2.
+22. **Verdict walk-forward hanya berlaku untuk dataset yang diuji.** Hasil negatif pada 8 pair
+    yang **ditolak `PairEdgeGate`** (BTC 0,518×, TRX 0,242×, …) tidak boleh dipakai menyimpulkan
+    strategi gagal. Periksa dulu apakah pair di direktori data lolos gate, baru tafsirkan verdict.
+23. **Jangan melaporkan avg R tanpa menyebut berapa sinyal yang tidak tuntas.** `summarize()` hanya
+    menghitung `WIN`/`LOSS`; trade `UNRESOLVED` dulu dibuang diam-diam. Pada data 40 pair itu
+    membuang **±81% sinyal** dan membalik verdict dari TIDAK LOLOS (avg R −0,17) menjadi
+    LOLOS (avg R +0,058). Kalau angka avg R tidak disertai jumlah sinyal yang dibuang, angka itu
+    tidak bisa ditafsirkan. Bukti: `docs/LAPORAN-temuan-akuntansi-replay-2026-10-14.md`.
 
 ---
 

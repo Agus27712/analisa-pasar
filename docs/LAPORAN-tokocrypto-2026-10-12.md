@@ -47,6 +47,13 @@ engine hanya mencapai 18–35%.
 
 ## C. Gate out-of-sample (P4.1) — **LOLOS**, tetapi tipis
 
+> ⚠️ **KOREKSI 2026-10-14 — angka di seksi ini TIDAK SAH.** Tabel di bawah dibuat sebelum commit
+> `703c3b6`, ketika trade yang tidak menyentuh SL/TP/early/trail dalam jendela *lookahead*
+> (`UNRESOLVED`) **dikeluarkan** dari statistik. Pada data 40 pair, akuntansi itu membuang
+> **±81% sinyal** dan membalik verdict dari TIDAK LOLOS (avg R −0,17) menjadi LOLOS.
+> Lihat `docs/LAPORAN-temuan-akuntansi-replay-2026-10-14.md`. Seksi ini dipertahankan sebagai
+> jejak bahwa bias tersebut pernah terjadi.
+
 Tool baru `tools/split_validate.py`: data dibagi **menurut waktu** (train 70% / test 30%),
 engine dijalankan di kedua potongan; potongan test memakai 300 bar pemanas dan membuang trade
 yang entry-nya sebelum titik split (anti-kebocoran).

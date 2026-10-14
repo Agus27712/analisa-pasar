@@ -282,6 +282,12 @@ def _run_walk_forward(pairs, cfg, a, cost):
                              initargs=(a.data, cfg, a.train_frac, a.warmup,
                                        a.window_bars, a.step_bars)) as ex:
         for i, pair_results in enumerate(ex.map(_run_pair_walk_forward, pairs, chunksize=1), 1):
+            if not pair_results:
+                # Pair lebih pendek daripada satu jendela (mis. listing baru) → tidak ada
+                # jendela sama sekali. Jangan crash; lewati dan laporkan.
+                print(f"  [{i}/{len(pairs)}] SKIP (lebih pendek dari {a.window_bars} bar)",
+                      flush=True)
+                continue
             pair = pair_results[0].get("pair", "?")
             if "error" in pair_results[0]:
                 print(f"  [{i}/{len(pairs)}] {pair:>14} ERROR {pair_results[0]['error']}",
@@ -327,8 +333,10 @@ def _run_walk_forward(pairs, cfg, a, cost):
         flips = sum(1 for x in eligible if (x["train"]["avg_r"] > 0) != (x["test"]["avg_r"] > 0))
         passed = (A_te.get("avg_r_weighted", -1) > 0) and (pos_ratio >= a.pos_ratio)
         window_summaries.append({
-            "window_start_t": wkey,
-            "window_start_bar": rows[0]["window_start_bar"],
+            # wkey adalah INDEKS BAR (0, 20000, …) — bukan timestamp. Simpan di
+            # window_start_bar, dan ambil timestamp asli dari baris pertama jendela.
+            "window_start_bar": wkey,
+            "window_start_t": rows[0]["window_start_t"],
             "window_end_bar": rows[0]["window_end_bar"],
             "train": A_tr, "test": A_te,
             "eligible_pairs": len(eligible),
@@ -437,9 +445,9 @@ def write_md_walk_forward(path, summary, window_summaries, all_window_rows):
     A("")
     A("| Pair | Jendela | Tanggal | Train n | Train avgR | Test n | Test avgR |")
     A("|---|---|---|---:|---:|---:|---:|")
-    for wr in sorted(all_window_rows, key=lambda x: (x["pair"], x["window_start_t"])):
+    for wr in sorted(all_window_rows, key=lambda x: (x["pair"], x["window_start_bar"])):
         t_str = datetime.fromtimestamp(wr["window_start_t"] / 1000, tz=timezone.utc).strftime("%Y-%m-%d")
-        w_idx = next(i for i, ws in enumerate(window_summaries) if ws["window_start_t"] == wr["window_start_t"])
+        w_idx = next(i for i, ws in enumerate(window_summaries) if ws["window_start_bar"] == wr["window_start_bar"])
         A(f"| {wr['pair']} | {w_idx+1} | {t_str} | {wr['train']['n']} | {wr['train']['avg_r']:.4f} | "
           f"{wr['test']['n']} | {wr['test']['avg_r']:.4f} |")
     with open(path, "w") as f:

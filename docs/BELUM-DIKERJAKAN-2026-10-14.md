@@ -1,8 +1,8 @@
 # Daftar Lengkap Pekerjaan yang BELUM Dikerjakan
 
 **Tanggal:** 14 Oktober 2026
-**Repo:** branch `patch` @ `0ca38eb` (S1–S9 sudah masuk)
-**Peringatan branch:** `main` **tertinggal 11 commit** dari `patch`. Baca dari `patch`, bukan `main`.
+**Repo:** branch `patch` @ `4ffee5e` (S1–S9 sudah masuk; A/B sudah masuk; tooling P4.1 sudah masuk)
+**Peringatan branch:** `patch` **4 commit di depan `main`** (per 2026-10-14). Baca dari `patch`, bukan `main`.
 **Sumber:** `LAPORAN-validitas-log-audit`, `LAPORAN-verifikasi-ui-vs-candle`, `LAPORAN-audit-amp`, `LAPORAN-replay-gns`, `PANDUAN-LANJUT-AGEN.md` §4–§5
 **Catatan:** semua item di bawah **sudah diverifikasi ulang ke kode** — bukan dari ingatan. Yang sudah selesai di P0–P2 tidak dimasukkan.
 
@@ -73,7 +73,7 @@ Di luar cakupan P0–P2. **Semua diverifikasi masih ada di kode saat ini.**
 
 | # | Item | Alasan | Status |
 |---|---|---|---|
-| P4.1 | **Walk-forward antar-bulan** — perluas `tools/split_validate.py` jadi beberapa jendela bergulir | Validasi keluar-sampel sekarang hanya **1 potongan** (70/30) — bisa kebetulan | **Prioritas tertinggi** |
+| P4.1 | **Walk-forward antar-bulan** — mode `--walk-forward` di `tools/split_validate.py` | Validasi keluar-sampel sekarang hanya **1 potongan** (70/30) — bisa kebetulan | ✅ **Tooling selesai 2026-10-14** (+2 bug diperbaiki). Hasil v4 (8 pair gate-rejected) 0/3 jendela; hasil 40 pair di `docs/LAPORAN-p41-walk-forward-2026-10-14.md` |
 | P4.4 | **Rehidrasi FSM paper: pulihkan progres** — persistensikan `barsHeld`, `isBeArmed`, `isPartialDone`, `peak` | Saat restart keempat nilai **reset**; mesin pulih ≠ mesin yang hilang | Belum |
 | P4.2 | **Preferensi maker untuk pair IDR** (taker 0,8144% → maker 0,6144%) | Semua perhitungan masih taker | Belum |
 | P5 | **Data Indodax + replay TAPI v2** — harness ambil data + replay, jalankan pipeline §9 pada data Indodax | Folder `data/` belum punya data Indodax; `IndodaxTradeApiV2.kt` belum diuji ujung-ke-ujung | Belum |
@@ -96,7 +96,7 @@ Di luar cakupan P0–P2. **Semua diverifikasi masih ada di kode saat ini.**
 
 ## Bagian 5 — Status (bukan tugas, tapi jangan lupa)
 
-- **Kesiapan uang riil masih BELUM.** avg R keluar-sampel +0,0216; profil exit 88,7% `TRAIL_SL` (+0,09R) + 4,9% hard SL (−1,16R); margin di atas impas hanya **≈2,3 poin persentase**; gate ketat lolos **5 dari 40 pair**. Tandanya benar, besarnya belum cukup.
+- **Kesiapan uang riil masih BELUM — dan angka lamanya sudah tidak sah.** Angka "+0,0216 avg R keluar-sampel" berasal dari akuntansi yang **membuang ±83% sinyal** (`UNRESOLVED` dikecualikan, sebelum commit `703c3b6`). Setelah dihitung jujur: **avg R ≈ −0,17, 0/40 pair positif**. Walk-forward 40 pair: **0/4 jendela lolos**. Lihat `docs/LAPORAN-temuan-akuntansi-replay-2026-10-14.md`.
 - **Tiga jurnal paralel** (`trade_history_records` · `signal_logs` · `SimulationTradeHistoryItem`) belum disatukan — sumber kebingungan audit berulang.
 - **Fitur horizon (§14/§15) tetap DIBATALKAN** — jangan dibangun ulang.
 
