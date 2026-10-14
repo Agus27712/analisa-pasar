@@ -6,19 +6,43 @@ Aplikasi Android Kotlin 100% (Jetpack Compose M3) untuk analisis & **scalp mode*
 
 ## ▶ MULAI DARI SINI (agen lanjutan — baca sebelum menyentuh kode)
 
+### ⚠️ Langkah 0 — pastikan branch yang Anda baca benar
+
+**`main` tertinggal 11 commit dari `patch`** (per 2026-10-14). Bila Anda membaca `main`, yang
+Anda lihat **bukan kode yang berlaku**: fitur horizon **masih ada** di `main` padahal sudah
+dihapus di `patch`, sementara P0–P2 (integritas jurnal) dan S1–S9 (strategi entry/exit)
+**belum ada** di sana. Jangan menarik kesimpulan apa pun sebelum pindah branch.
+
+```sh
+git clone https://github.com/Agus27712/analisa-pasar.git
+cd analisa-pasar && git checkout patch     # WAJIB — kerjaan aktif ada di sini
+git log --oneline main..patch              # 11 commit yang belum sampai ke main
+```
+
+Repo ini **public** — clone tidak butuh token. Pekerjaan selesai di-review owner di `patch`
+baru digabung ke `main`.
+
 **Urutan baca 5 menit yang benar:**
 
 1. **Berkas ini** sampai habis — terutama bagian "Yang tidak boleh dilakukan agen".
 2. **`docs/PANDUAN-LANJUT-AGEN.md`** — status terkini, apa yang sudah selesai, apa yang berikutnya,
    dan perangkap yang sudah pernah ditemukan. **Ini titik masuk utama.**
-3. **`workplan2.md` § 13** — pekerjaan terakhir yang **masih berlaku**. Seksi sebelumnya
+3. **`docs/BELUM-DIKERJAKAN-2026-10-14.md`** — inventaris 27 item yang **belum** dikerjakan
+   (temuan audit A/B, roadmap P4–P6, verifikasi lapangan), lengkap dengan titik kode dan
+   prioritas. **Baca ini sebelum memilih apa yang akan dikerjakan**, supaya tidak mengulang
+   yang sudah selesai atau mengerjakan yang sudah dibatalkan.
+4. **`workplan2.md` § 13** — pekerjaan terakhir yang **masih berlaku**. Seksi sebelumnya
    (§9 lantai friksi, §11 UI scalping, §12 rehidrasi paper) menjelaskan **kenapa** kode hari ini
    berbentuk seperti sekarang. Jangan mengubahnya tanpa membacanya.
-4. **`workplan2.md` § 14 dan § 15 — DIBATALKAN, jangan dibangun ulang.** Lihat kotak merah di
+5. **`workplan2.md` § 14 dan § 15 — DIBATALKAN, jangan dibangun ulang.** Lihat kotak merah di
    awal kedua seksi itu. Keduanya mendokumentasikan fitur kesiapan multi-horizon yang sudah
    **dihapus dari kode** pada 2026-10-13. Dibaca hanya sebagai riwayat keputusan.
-5. `SCALP_EXIT.md` bila menyentuh exit.
-6. Baru buka kode.
+6. `SCALP_EXIT.md` bila menyentuh exit.
+7. `docs/LAPORAN-eksekusi-s1s9-2026-10-14.md` bila menyentuh entry/exit scalping — **dua
+   keputusan di sana menyimpang dari daftar aslinya**: S9 dikirim **nonaktif** (ambang 25%
+   terbukti menghapus seluruh trade GNS yang 4/4 menang) dan S2 **aktif** dengan default
+   2× friksi, yang mengubah perilaku konfigurasi lama.
+8. Baru buka kode.
 
 **Aturan kerja yang berlaku di repo ini:**
 
@@ -71,6 +95,10 @@ Yang **tidak boleh** dilakukan lagi tanpa instruksi eksplisit owner:
 2. **`APP_CONTEXT.md`** — arsitektur; utamanya § arah produk / scalp
 3. **`SCALP_EXIT.md`** — exit paper & R net
 4. **`data/config/scalp_config.json`** — mirror threshold + fee untuk `tools/scalp_replay.py`
+5. **`docs/BELUM-DIKERJAKAN-2026-10-14.md`** — apa yang **belum** selesai (backlog terverifikasi
+   ke kode). Mulai dari sini bila owner bertanya "apa lagi yang tersisa".
+6. **`docs/LAPORAN-eksekusi-*.md`** — jejak eksekusi terbaru: `p0p2` (integritas jurnal,
+   2026-10-14) lalu `s1s9` (strategi entry/exit, 2026-10-14). Urutkan dari tanggal terbaru.
 
 **DEPRECATED (jangan diikuti):** `workplan.md`, `checkpoint.md`, `checkpoint_progres.md`.
 
