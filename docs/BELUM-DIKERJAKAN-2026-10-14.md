@@ -48,7 +48,7 @@ Di luar cakupan P0–P2. **Semua diverifikasi masih ada di kode saat ini.**
 | # | Item | Bukti di kode | Dampak |
 |---|---|---|---|
 | A1 ✅ | `volume24h` dilabeli `$baseAsset`, isinya **quote (USDT)** | `TradeLogExporter.kt` label `(quote)` + komentar S6; `TradeLogDetailDialog.kt:330` disamakan ke `"24h Vol (quote)"` | — |
-| A2 | `signalPrice` tanpa basis bar | sebagian tertutup P0-2 (basis bar indikator disimpan) | **Sebagian** — harga benar, basis baru sebagian |
+| A2 ✅ | `signalPrice` tanpa basis bar | `TradeHistoryRecorder.kt:356` — basis bar dicantumkan agar nilai indikator bisa direproduksi dari candle bursa | — |
 | A6 ✅ | `bbMiddle = ema20` saat Bollinger null | `TradeSignalSnapshot.kt:241` → fallback ke `null` (jujur "tidak diketahui") | — |
 | A8 ✅ | Header bursa **ditebak** dari quote asset | `TradeLogExporter.kt` — parameter `exchange: String? = null` ditambahkan; fallback lama dipertahankan untuk backward compat | — |
 | A9 ✅ | Export markdown **membuang Kategori 6** (setup/skor/regime scalping) | `TradeLogExporter.kt` — kategori F ditambahkan (setup, skor, kategori, rincian, regime, zona entry, thresholds) | — |
@@ -61,11 +61,11 @@ Di luar cakupan P0–P2. **Semua diverifikasi masih ada di kode saat ini.**
 | B1 ✅ | **Record fallback mengarang trade** | `TradeHistoryRecorder.kt` — fallback dihapus; `recordSell` return early jika tidak ada record open | — |
 | B3 ✅ | Sinyal **expired diberi kredit PEAK** | `SignalLogRepository.kt` — `approxPnl` dihitung dari `exitPrice`/`realizedPnlPct`, bukan `peakPrice` | — |
 | B4 ✅ | `resolveLogManually` **mengarang besaran** PnL | `SignalLogRepository.kt` — clamp `max(1.5)/min(-1.5)` dihapus; PnL dihitung dari `exitPrice` atau `null` | — |
-| B5 | Confidence signal-log = **nilai MAX sepanjang pelacakan** | `SignalLogRepository.kt:107` | "confidence 88" = skor tertinggi berjam-jam, bukan saat entry |
-| B6 | **Gross vs net dicampur** di satu kartu (peak/drawdown gross, `pnlPercent` net) | entity + UI ringkasan | Pembaca mengira ada selisih tak dijelaskan |
-| B7 | Peak/trough = **sampel polling** (throttle 1,5 s), bukan ekstrem sejati | `processPriceTick` | Wick antar-sampel hilang → peak understated (**sebagian** tertutup P0-6 lewat label `Peak (candle)`) |
+| B5 ✅ | Confidence signal-log = **nilai MAX sepanjang pelacakan** | `SignalLogRepository.kt:107-111` — `updatedConfidence = primaryLog.confidence` (nilai saat entry, bukan MAX) | — |
+| B6 ✅ | **Gross vs net dicampur** di satu kartu (peak/drawdown gross, `pnlPercent` net) | `SignalLogScreen.kt:1589-1596` — label `(gross)` eksplisit di samping nilai net; komentar penjelas | — |
+| B7 ✅ | Peak/trough = **sampel polling** (throttle 1,5 s), bukan ekstrem sejati | `processPriceTick` | Ditangani P0-6 lewat label eksplisit `Peak (candle)` vs `Peak (dari tick)` di `TradeHistoryJourneyCard.kt:396-398` |
 
-> Catatan: **A3, A4, A5, A7, B2 sudah selesai di P0–P2.** A2 & B7 baru **sebagian**.
+> Catatan: **A3, A4, A5, A7, B2 sudah selesai di P0–P2.** A2, B5, B6, B7 sudah diverifikasi ditangani di kode (2026-10-14).
 
 ---
 
