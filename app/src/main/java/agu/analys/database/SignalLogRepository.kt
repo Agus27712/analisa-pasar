@@ -104,7 +104,11 @@ class SignalLogRepository(
                         ((primaryLog.entryPrice - currentTrackPrice) / primaryLog.entryPrice) * 100.0
                     }
 
-                    val updatedConfidence = if (confidence > 0) max(confidence, primaryLog.confidence) else primaryLog.confidence
+                    // B5 — Confidence yang disimpan harusNilai SAAT ENTRY (firing time), bukan
+                    // MAX sepanjang pelacakan. Penyimpanan MAX membuat "confidence 88" di laporan
+                    // berarti skor tertinggi berjam-jam, bukan skor saat sinyal terbit — menyesatkan
+                    // evaluasi akurasi. Entity sudah dikomentari "Confidence score at firing time".
+                    val updatedConfidence = primaryLog.confidence
                     val updatedReasoning = if (reasoning.isNotBlank()) reasoning else primaryLog.reasoning
                     val updatedSentiment = if (sentiment.isNotBlank()) sentiment else primaryLog.sentiment
                     val updatedStrategy = if (strategyMode.isNotBlank()) strategyMode else primaryLog.strategyMode
@@ -352,7 +356,14 @@ class SignalLogRepository(
         val updated = log.copy(
             outcomeStatus = status,
             exitPrice = customExitPrice ?: log.peakPrice.takeIf { it > 0 } ?: log.entryPrice,
-            realizedPnlPct = customPnlPct ?: (if (isWin) max(1.5, log.maxProfitPct) else min(-1.5, log.maxDrawdownPct)),
+            // B4 — besaran PnL manual harus JUJUR, hasil kalkulasi dari harga exit, bukan
+            // hasil clamp min(-1.5)/max(1.5) yang mengarang besaran. Bila exitPrice tersedia,
+            // hitung dari situ; bila tidak, realPnlPct dibiarkan null (jujur "tidak diketahui").
+            realizedPnlPct = customPnlPct ?: log.exitPrice?.takeIf { it > 0 }?.let { exit ->
+                val isBuyAction = log.action.equals("BUY", ignoreCase = true)
+                if (isBuyAction) ((exit - log.entryPrice) / log.entryPrice) * 100.0
+                else ((log.entryPrice - exit) / log.entryPrice) * 100.0
+            },
             resolvedAt = now,
             resolutionNote = note
         )
@@ -385,14 +396,15 @@ class SignalLogRepository(
                 val now = System.currentTimeMillis()
                 for (log in tracking) {
                     val isBuy = log.action.equals("BUY", ignoreCase = true)
-                    // Keep last known PnL if available via peak/trough
-                    val approxPnl = if (isBuy && log.peakPrice > 0) {
-                        ((log.peakPrice - log.entryPrice) / log.entryPrice) * 100.0
-                    } else if (!isBuy && log.troughPrice > 0) {
-                        ((log.entryPrice - log.troughPrice) / log.entryPrice) * 100.0
-                    } else {
-                        log.realizedPnlPct ?: 0.0
-                    }
+                    // B3 — PnL sinyal expired HARUS dihitung dari harga terakhir (exitPrice),
+                    // BUKAN dari peak/trough. Peak adalah harga tertinggi yang pernah tercapai,
+                    // bukan harga jual — memakainya membuat sinyal expired terlihat lebih untung
+                    // dari kenyataan (bias optimistis sistematis pada win-rate).
+                    val approxPnl = log.realizedPnlPct
+                        ?: log.exitPrice?.takeIf { it > 0 }?.let { exit ->
+                            if (isBuy) ((exit - log.entryPrice) / log.entryPrice) * 100.0
+                            else ((log.entryPrice - exit) / log.entryPrice) * 100.0
+                        } ?: 0.0
                     val updated = log.copy(
                         outcomeStatus = "EXPIRED",
                         resolvedAt = now,

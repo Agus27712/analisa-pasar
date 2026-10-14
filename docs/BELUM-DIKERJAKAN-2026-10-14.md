@@ -47,20 +47,20 @@ Di luar cakupan P0–P2. **Semua diverifikasi masih ada di kode saat ini.**
 
 | # | Item | Bukti di kode | Dampak |
 |---|---|---|---|
-| A1 | `volume24h` dilabeli `$baseAsset`, isinya **quote (USDT)** | `TradeLogExporter.kt:138` masih `... $baseAsset` | Likuiditas salah **~1.467×** |
+| A1 ✅ | `volume24h` dilabeli `$baseAsset`, isinya **quote (USDT)** | `TradeLogExporter.kt` label `(quote)` + komentar S6; `TradeLogDetailDialog.kt:330` disamakan ke `"24h Vol (quote)"` | — |
 | A2 | `signalPrice` tanpa basis bar | sebagian tertutup P0-2 (basis bar indikator disimpan) | **Sebagian** — harga benar, basis baru sebagian |
-| A6 | `bbMiddle = ema20` saat Bollinger null | `TradeSignalSnapshot.kt:241` masih `else ema20` | "Bollinger Middle" **palsu** (itu EMA20) |
-| A8 | Header bursa **ditebak** dari quote asset | `TradeLogExporter.kt:101` masih `isUsdtQuote → "TOKOCRYPTO"` | Pair USDT di Indodax dicap TOKOCRYPTO |
-| A9 | Export markdown **membuang Kategori 6** (setup/skor/regime scalping) | `TradeLogExporter.kt:131-168` hanya kategori A–E | Markdown ≠ JSON; field paling relevan mode SCALPING hilang |
-| A10 | "Skor Konfidensi" ambigu (skor engine vs *cap*) | `ScalpingMtfEvaluator.kt` confidence = cap bila tak `ready` | Pembaca tak bisa bedakan skor 63 dari cap 59 |
+| A6 ✅ | `bbMiddle = ema20` saat Bollinger null | `TradeSignalSnapshot.kt:241` → fallback ke `null` (jujur "tidak diketahui") | — |
+| A8 ✅ | Header bursa **ditebak** dari quote asset | `TradeLogExporter.kt` — parameter `exchange: String? = null` ditambahkan; fallback lama dipertahankan untuk backward compat | — |
+| A9 ✅ | Export markdown **membuang Kategori 6** (setup/skor/regime scalping) | `TradeLogExporter.kt` — kategori F ditambahkan (setup, skor, kategori, rincian, regime, zona entry, thresholds) | — |
+| A10 ✅ | "Skor Konfidensi" ambigu (skor engine vs *cap*) | `TradeLogExporter.kt` — label diubah ke `"Skor Konfidensi (engine ∩ cap tahap)"` | — |
 
 ### 2b. Bias & fabrikasi (B)
 
 | # | Item | Bukti di kode | Dampak |
 |---|---|---|---|
-| B1 | **Record fallback mengarang trade** (`estBuyPrice = sellPrice × 0.98`, `confidence = 80`, hold 15 mnt tetap) | `TradeHistoryRecorder.kt:312, 326, 338` | Trade palsu terlihat sah + masuk statistik |
-| B3 | Sinyal **expired diberi kredit PEAK**, bukan harga jual | `SignalLogRepository.kt:389-390` | Bias **optimistis sistematis** pada "akurasi sinyal" |
-| B4 | `resolveLogManually` **mengarang besaran** PnL (`max(1.5, …)` / `min(-1.5, …)`) | `SignalLogRepository.kt:355` | Anda tandai menang/kalah, besarannya fiktif |
+| B1 ✅ | **Record fallback mengarang trade** | `TradeHistoryRecorder.kt` — fallback dihapus; `recordSell` return early jika tidak ada record open | — |
+| B3 ✅ | Sinyal **expired diberi kredit PEAK** | `SignalLogRepository.kt` — `approxPnl` dihitung dari `exitPrice`/`realizedPnlPct`, bukan `peakPrice` | — |
+| B4 ✅ | `resolveLogManually` **mengarang besaran** PnL | `SignalLogRepository.kt` — clamp `max(1.5)/min(-1.5)` dihapus; PnL dihitung dari `exitPrice` atau `null` | — |
 | B5 | Confidence signal-log = **nilai MAX sepanjang pelacakan** | `SignalLogRepository.kt:107` | "confidence 88" = skor tertinggi berjam-jam, bukan saat entry |
 | B6 | **Gross vs net dicampur** di satu kartu (peak/drawdown gross, `pnlPercent` net) | entity + UI ringkasan | Pembaca mengira ada selisih tak dijelaskan |
 | B7 | Peak/trough = **sampel polling** (throttle 1,5 s), bukan ekstrem sejati | `processPriceTick` | Wick antar-sampel hilang → peak understated (**sebagian** tertutup P0-6 lewat label `Peak (candle)`) |
