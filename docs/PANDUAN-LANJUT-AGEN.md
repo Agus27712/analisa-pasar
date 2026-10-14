@@ -304,6 +304,19 @@ Aturan yang sudah berlaku dan **jangan dilonggarkan**:
     membuang **±81% sinyal** dan membalik verdict dari TIDAK LOLOS (avg R −0,17) menjadi
     LOLOS (avg R +0,058). Kalau angka avg R tidak disertai jumlah sinyal yang dibuang, angka itu
     tidak bisa ditafsirkan. Bukti: `docs/LAPORAN-temuan-akuntansi-replay-2026-10-14.md`.
+24. **Setelan nominal auto-buy itu Rupiah — dan anggaran wajib menyisihkan fee + slippage.**
+    `PaperAutoTradeConfig.fixedIdrAmount` (dulu `fixedQuoteAmount`) disajikan di UI sebagai Rupiah
+    (default 100.000, langkah 10.000). Kalau nilainya dipakai apa adanya sebagai **kas kuotasi pair**,
+    Rp 100.000 menjadi $100.000 di pair USDT. Wajib dikonversi lewat kurs `ExchangeRateManager` di
+    `PaperAutoTradeConfig.plan()`.
+    Sisi keduanya: batas anggaran dulu memakai **saldo mentah** (`coerceAtMost(availableQuote)`),
+    padahal order MARKET memotong `slippage` **dan** `fee` di atas nilai posisi
+    (`notional × (1+slippage) × (1+fee)`). Akibatnya setiap nominal yang ≥ saldo **selalu** ditolak —
+    auto-buy gagal 100%, bukan sesekali. Contoh nyata AVAUSDT: saldo $557,71 → butuh $560,41 → ditolak.
+    Aturan: hitung anggaran dengan rumus yang **identik** dengan order engine; bila nominal tidak
+    muat, **lewati** dengan alasan yang bisa dibaca — jangan dipotong diam-diam. Bila kurs USDT/IDR
+    belum tersedia, lewati sinyalnya — jangan menebak ukuran. Bukti:
+    `docs/LAPORAN-bug-auto-buy-nominal-idr-2026-10-15.md`.
 
 ---
 

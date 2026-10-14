@@ -80,8 +80,11 @@
 > paritas replay, visual FSM, dan kartu statistik sudah masuk. Seluruhnya **paper trade** — tidak ada
 > jalur ke eksekusi uang riil dari sinyal scalp.
 - [x] **Paper Auto-Buy (Simulasi)**: Toggle di Pengaturan → Engine Scalping. Membuka posisi simulasi saat sinyal
-      `BUY` dengan `scalpingStage` ≥ ambang terpilih (`ENTRY` / `STRONG_ENTRY`). Alokasi **nominal tetap** atau
-      **berbasis risiko** (`PaperAutoTradeConfig`). Tidak pernah memicu order uang riil.
+      `BUY` dengan `scalpingStage` ≥ ambang terpilih (`ENTRY` / `STRONG_ENTRY`). Alokasi **nominal tetap**
+      atau **berbasis risiko** (`PaperAutoTradeConfig`). Tidak pernah memicu order uang riil.
+      Nominal tetap diisi dalam **Rupiah** dan dikonversi ke kuotasi pair saat sinyal
+      (`fixedIdrAmount / kurs USDT-IDR`), dengan anggaran yang sudah menyisihkan fee + slippage;
+      nominal yang tidak muat **dilewati**, bukan dipotong (2026-10-15).
 - [x] **Paper Auto-Exit Modes**: `PaperExitResolver` + `PaperExitStateMachine` meniru `resolve_trade()` di
       `tools/scalp_replay.py` untuk 5 mode (`classic`, `tp1_be`, `early`, `trail`, `full`), termasuk R seragam
       net setelah fee all-in + slippage. Parameter exit masuk `ScalpingRuntimeConfig.exit` dan ikut ter-ekspor

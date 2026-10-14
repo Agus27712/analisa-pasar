@@ -1,5 +1,7 @@
 package agu.analys.viewmodel
 
+import agu.analys.engine.scalping.AutoBuySizing
+import agu.analys.engine.scalping.PaperAutoBuyAllocation
 import agu.analys.engine.scalping.PaperExitDecision
 import agu.analys.engine.scalping.PaperExitPhase
 import agu.analys.engine.scalping.PaperExitReason
@@ -17,6 +19,7 @@ import agu.analys.trading.SimulationOrderResult
 import agu.analys.trading.SimulationOrderSide
 import agu.analys.trading.SimulationOrderType
 import agu.analys.util.AppLogManager
+import agu.analys.util.ExchangeRateManager
 import agu.analys.util.PriceFormatter
 import java.util.concurrent.ConcurrentHashMap
 
@@ -317,13 +320,53 @@ fun TradingViewModel.tryPaperAutoBuy(transition: SignalTransition, exchange: Str
     if (existing.isHolding) return false
 
     val available = simCoordinator.wallet.value.getAvailableQuote(pair.quoteAsset)
-    val qty = cfg.quantityFor(available, price, signal.stopLoss)
-    if (qty <= 0.0) {
-        AppLogManager.service(
-            "PaperAutoBuy",
-            "⏭️ [${pair.symbol}] Auto-buy dilewati: kuantitas 0 (kas ${pair.quoteAsset} tersedia ${PriceFormatter.formatPrice(available, quoteAsset = pair.quoteAsset)})."
-        )
-        return false
+
+    // Biaya & slippage diambil dari sumber yang **sama** dengan yang dipakai order engine
+    // (`SimulationCoordinator.setSlippagePct` <- `prefs.scalpingRuntimeConfig.slippagePct`).
+    // Kalau keduanya berbeda, ukuran yang dicek di sini tidak sama dengan yang benar-benar
+    // dipotong — persis kelas bug yang membuat auto-buy selalu ditolak.
+    val quoteIsUsdt = PriceFormatter.isUsdtQuote(pair.quoteAsset)
+    val usdtIdrRate = ExchangeRateManager.currentRate()
+
+    val sizing = cfg.plan(
+        availableQuote = available,
+        price = price,
+        stopLoss = signal.stopLoss,
+        quoteIsUsdt = quoteIsUsdt,
+        usdtIdrRate = usdtIdrRate,
+        feeRate = prefs.feeConfigFor(pair.symbol).buyTakerPct / 100.0,
+        slippagePct = prefs.scalpingRuntimeConfig.slippagePct
+    )
+
+    val (qty, notionalQuote) = when (sizing) {
+        is AutoBuySizing.Skip -> {
+            AppLogManager.service(
+                "PaperAutoBuy",
+                "⏭️ [${pair.symbol}] Auto-buy dilewati: ${sizing.reason} " +
+                    "(kas ${pair.quoteAsset} tersedia ${PriceFormatter.formatPrice(available, quoteAsset = pair.quoteAsset)})."
+            )
+            return false
+        }
+
+        is AutoBuySizing.Ok -> sizing.quantity to sizing.notionalQuote
+    }
+
+    // Catat nominal yang benar-benar dipakai, supaya "Rp 100.000" tidak lagi bisa disalahartikan
+    // sebagai $100.000 di log.
+    val nominalNote = when (cfg.allocation) {
+        PaperAutoBuyAllocation.FIXED_QUOTE -> {
+            val idr = PriceFormatter.formatMoney(cfg.fixedIdrAmount, "IDR")
+            if (quoteIsUsdt) {
+                "$idr → ${PriceFormatter.formatPrice(notionalQuote, quoteAsset = pair.quoteAsset)}" +
+                    " (kurs ${PriceFormatter.formatPrice(usdtIdrRate, quoteAsset = "IDR")})"
+            } else {
+                "nominal $idr"
+            }
+        }
+
+        PaperAutoBuyAllocation.RISK_BASED ->
+            "risiko ${String.format(java.util.Locale.US, "%.1f", cfg.riskPctPerTrade)}% → " +
+                PriceFormatter.formatPrice(notionalQuote, quoteAsset = pair.quoteAsset)
     }
 
     val res = simCoordinator.submitOrder(
@@ -398,7 +441,8 @@ fun TradingViewModel.tryPaperAutoBuy(transition: SignalTransition, exchange: Str
     AppLogManager.trade(
         "PaperAutoBuy",
         "🤖 [${pair.symbol}] Auto-buy SIMULASI ${String.format(java.util.Locale.US, "%.8f", qty)} ${pair.baseAsset} @ " +
-            "${PriceFormatter.formatPrice(price, quoteAsset = pair.quoteAsset)} | Stage ${signal.scalpingStage.name} | Exit: " +
+            "${PriceFormatter.formatPrice(price, quoteAsset = pair.quoteAsset)} | $nominalNote | " +
+            "Stage ${signal.scalpingStage.name} | Exit: " +
             if (p2OwnsExit) modeLabel else "auto-sell bawaan"
     )
 

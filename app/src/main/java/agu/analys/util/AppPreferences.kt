@@ -291,7 +291,10 @@ class AppPreferences(context: Context) {
             allocation = agu.analys.engine.scalping.PaperAutoBuyAllocation.fromKey(
                 prefs.getString(KEY_PAPER_AUTO_BUY_ALLOCATION, null)
             ),
-            fixedQuoteAmount = prefs.getString(KEY_PAPER_AUTO_BUY_FIXED_QUOTE, null)
+            // Nominal dalam Rupiah. Kunci preferensi lama sengaja dipertahankan supaya nilai
+            // yang sudah tersimpan tetap terbaca — yang berubah hanya tafsirnya (Rupiah,
+            // bukan kas kuotasi pair).
+            fixedIdrAmount = prefs.getString(KEY_PAPER_AUTO_BUY_FIXED_QUOTE, null)
                 ?.toDoubleOrNull() ?: 100_000.0,
             riskPctPerTrade = prefs.getString(KEY_PAPER_AUTO_BUY_RISK_PCT, null)
                 ?.toDoubleOrNull() ?: 1.0,
@@ -306,7 +309,7 @@ class AppPreferences(context: Context) {
             .putBoolean(KEY_PAPER_AUTO_BUY_ENABLED, value.autoBuyEnabled)
             .putBoolean(KEY_PAPER_AUTO_EXIT_ENABLED, value.autoExitEnabled)
             .putString(KEY_PAPER_AUTO_BUY_ALLOCATION, value.allocation.key)
-            .putString(KEY_PAPER_AUTO_BUY_FIXED_QUOTE, value.fixedQuoteAmount.toString())
+            .putString(KEY_PAPER_AUTO_BUY_FIXED_QUOTE, value.fixedIdrAmount.toString())
             .putString(KEY_PAPER_AUTO_BUY_RISK_PCT, value.riskPctPerTrade.toString())
             .putString(KEY_PAPER_AUTO_BUY_MIN_STAGE, value.minStage.name)
             .apply()
