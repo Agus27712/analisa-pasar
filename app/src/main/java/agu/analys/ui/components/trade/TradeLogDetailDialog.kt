@@ -327,7 +327,7 @@ fun TradeLogDetailDialog(
                                         "Ask Ratio" to (activeSnapshot.askRatioPct?.let { PriceFormatter.formatPercentage(it, includePlusSign = false, decimals = 1) } ?: "-"),
                                         "Pressure" to (activeSnapshot.orderBookPressure?.let { if (it > 0) "+$it% (Buyer)" else "$it% (Seller)" } ?: "Netral"),
                                         "Spread" to (activeSnapshot.spreadPct?.let { PriceFormatter.formatPercentage(it, includePlusSign = false, decimals = 3) } ?: "-"),
-                                        "24h Vol" to (activeSnapshot.volume24h?.let { PriceFormatter.formatRawDecimal(it) } ?: "-")
+                                        "24h Vol (quote)" to (activeSnapshot.volume24h?.let { PriceFormatter.formatRawDecimal(it) } ?: "-")
                                     )
                                 )
 

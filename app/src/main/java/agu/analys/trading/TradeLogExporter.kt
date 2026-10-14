@@ -76,7 +76,8 @@ object TradeLogExporter {
         trailingPercent: Double?,
         trailingPeakPrice: Double?,
         trailingLockPrice: Double?,
-        snapshot: TradeSignalSnapshot?
+        snapshot: TradeSignalSnapshot?,
+        exchange: String? = null
     ): String {
         val dateFormat = SimpleDateFormat("dd MMMM yyyy, HH:mm:ss 'WIB'", Locale("id", "ID"))
         val execTimeStr = dateFormat.format(Date(timestamp))
@@ -98,7 +99,8 @@ object TradeLogExporter {
         }
 
         val holdStr = formatDuration(holdingDurationMs)
-        val exchangeName = if (PriceFormatter.isUsdtQuote(quote)) "TOKOCRYPTO" else "INDODAX"
+        val exchangeName = exchange?.takeIf { it.isNotBlank() }?.uppercase(Locale.US)
+            ?: if (PriceFormatter.isUsdtQuote(quote)) "TOKOCRYPTO" else "INDODAX"
 
         val sb = StringBuilder()
         sb.append("### $exchangeName TRADING LOG & SIGNAL AUDIT REPORT\n")
@@ -170,7 +172,10 @@ object TradeLogExporter {
 
             // Category E: AI Evaluator Decision & Reasons
             sb.append("**[E. Evaluator Signal & Reasoning]**\n")
-            sb.append("- Skor Konfidensi: ${snapshot.confidenceScore?.let { "$it / 100" } ?: "-"}\n")
+            // A10 — "Skor Konfidensi" ambigu: angka ini BUKAN skor engine murni, melainkan
+            // min(skor engine, cap per tahap). Tanpa label pembeda, pembaca tak bisa membedakan
+            // skor 63 dari cap 59 (berarti "cukup bagus") vs skor 63 asli (berarti "sangat bagus").
+            sb.append("- Skor Konfidensi (engine ∩ cap tahap): ${snapshot.confidenceScore?.let { "$it / 100" } ?: "-"}\n")
             sb.append("- Market Regime: ${snapshot.marketRegime ?: "-"}\n")
             if (snapshot.patternDetected != null) {
                 sb.append("- Pola Terdeteksi: ${snapshot.patternDetected}\n")
@@ -181,6 +186,17 @@ object TradeLogExporter {
                     sb.append("  * $r\n")
                 }
             }
+
+            // A9 — Kategori 6 (Pipeline Scalping) sebelumnya hilang dari export markdown.
+            // Field ini paling relevan untuk mode SCALPING dan dibutuhkan audit eksternal.
+            sb.append("\n**[F. Pipeline Scalping KriptoYoi]**\n")
+            sb.append("- Setup Scalping: ${snapshot.scalpingSetup ?: "-"}\n")
+            sb.append("- Skor Engine: ${snapshot.scalpingScore?.let { "$it / 100" } ?: "-"}\n")
+            sb.append("- Kategori Skor: ${snapshot.scalpingScoreCategory ?: "-"}\n")
+            sb.append("- Rincian Skor: ${snapshot.scalpingScoreDetail ?: "-"}\n")
+            sb.append("- Regime Scalping: ${snapshot.scalpingRegime ?: "-"}\n")
+            sb.append("- Zona Entry: ${if (snapshot.entryZoneLow != null && snapshot.entryZoneHigh != null) "${PriceFormatter.formatPrice(snapshot.entryZoneLow, quoteAsset = quote)} – ${PriceFormatter.formatPrice(snapshot.entryZoneHigh, quoteAsset = quote)}" else "-"}\n")
+            sb.append("- Thresholds: ${snapshot.scalpingThresholds ?: "-"}\n")
         } else {
             sb.append("*Snapshot sinyal teknikal tidak tersedia untuk eksekusi manual ini.*\n")
         }
@@ -295,7 +311,8 @@ object TradeLogExporter {
         trailingPercent: Double?,
         trailingPeakPrice: Double?,
         trailingLockPrice: Double?,
-        snapshot: TradeSignalSnapshot?
+        snapshot: TradeSignalSnapshot?,
+        exchange: String? = null
     ) {
         val markdown = buildSingleTradeAuditMarkdown(
             tradeId = tradeId,
@@ -320,7 +337,8 @@ object TradeLogExporter {
             trailingPercent = trailingPercent,
             trailingPeakPrice = trailingPeakPrice,
             trailingLockPrice = trailingLockPrice,
-            snapshot = snapshot
+            snapshot = snapshot,
+            exchange = exchange
         )
         copyToClipboard(context, markdown, "Trade Audit ($symbol)")
     }
@@ -349,7 +367,8 @@ object TradeLogExporter {
         trailingPercent: Double?,
         trailingPeakPrice: Double?,
         trailingLockPrice: Double?,
-        snapshot: TradeSignalSnapshot?
+        snapshot: TradeSignalSnapshot?,
+        exchange: String? = null
     ) {
         val markdown = buildSingleTradeAuditMarkdown(
             tradeId = tradeId,
@@ -374,7 +393,8 @@ object TradeLogExporter {
             trailingPercent = trailingPercent,
             trailingPeakPrice = trailingPeakPrice,
             trailingLockPrice = trailingLockPrice,
-            snapshot = snapshot
+            snapshot = snapshot,
+            exchange = exchange
         )
         shareText(context, markdown, "Log Audit Trading $symbol")
     }

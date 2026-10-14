@@ -1586,11 +1586,14 @@ private fun SignalLogItemCard(
 
     val statusDetails = remember(log.outcomeStatus, log.realizedPnlPct, tvGreen, tvRed, tvTextSecondary, tvCyan) {
         when (log.outcomeStatus) {
-            "HIT_TP2" -> Triple("🎯 TARGET TP2 TERCAPAI", tvGreen, "+${String.format(Locale.US, "%.2f", log.realizedPnlPct ?: log.maxProfitPct)}%")
-            "HIT_TP1" -> Triple("🎯 TARGET TP1 TERCAPAI", tvGreen, "+${String.format(Locale.US, "%.2f", log.realizedPnlPct ?: log.maxProfitPct)}%")
-            "HIT_SL" -> Triple("🛑 STOP LOSS TERSENTUH", tvRed, "${String.format(Locale.US, "%.2f", log.realizedPnlPct ?: log.maxDrawdownPct)}%")
-            "MANUAL_WIN" -> Triple("✅ SELESAI (PROFIT MANUAL)", tvGreen, "+${String.format(Locale.US, "%.2f", log.realizedPnlPct ?: log.maxProfitPct)}%")
-            "MANUAL_LOSS" -> Triple("❌ SELESAI (CUT LOSS MANUAL)", tvRed, "${String.format(Locale.US, "%.2f", log.realizedPnlPct ?: log.maxDrawdownPct)}%")
+            // B6 — Label GROSS vs NET eksplisit. realizedPnlPct = NET (setelah fee); maxProfitPct /
+            // maxDrawdownPct = GROSS (kotor, sebelum fee). Mencampur keduanya di satu label
+            // tanpa pembeda membuat pembaca mengira ada selisih yang tidak dijelaskan.
+            "HIT_TP2" -> Triple("🎯 TARGET TP2 TERCAPAI", tvGreen, "Net +${String.format(Locale.US, "%.2f", log.realizedPnlPct ?: log.maxProfitPct)}%${if (log.realizedPnlPct == null) " (gross)" else ""}")
+            "HIT_TP1" -> Triple("🎯 TARGET TP1 TERCAPAI", tvGreen, "Net +${String.format(Locale.US, "%.2f", log.realizedPnlPct ?: log.maxProfitPct)}%${if (log.realizedPnlPct == null) " (gross)" else ""}")
+            "HIT_SL" -> Triple("🛑 STOP LOSS TERSENTUH", tvRed, "Net ${String.format(Locale.US, "%.2f", log.realizedPnlPct ?: log.maxDrawdownPct)}%${if (log.realizedPnlPct == null) " (gross)" else ""}")
+            "MANUAL_WIN" -> Triple("✅ SELESAI (PROFIT MANUAL)", tvGreen, "Net +${String.format(Locale.US, "%.2f", log.realizedPnlPct ?: log.maxProfitPct)}%${if (log.realizedPnlPct == null) " (gross)" else ""}")
+            "MANUAL_LOSS" -> Triple("❌ SELESAI (CUT LOSS MANUAL)", tvRed, "Net ${String.format(Locale.US, "%.2f", log.realizedPnlPct ?: log.maxDrawdownPct)}%${if (log.realizedPnlPct == null) " (gross)" else ""}")
             "EXPIRED" -> Triple("⏳ KEDALUWARSA", tvTextSecondary, "${String.format(Locale.US, "%.2f", log.realizedPnlPct ?: 0.0)}%")
             else -> Triple("⏳ SEDANG DIPANTAU", tvCyan, "Puncak: +${String.format(Locale.US, "%.2f", log.maxProfitPct)}%")
         }

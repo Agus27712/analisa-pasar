@@ -1,5 +1,14 @@
 # Validasi Out-of-Sample (Train/Test Split)
 
+> ⚠️ **VERDICT "LOLOS" DI BERKAS INI TIDAK SAH (ditemukan 2026-10-14).**
+> Berkas ini dibuat sebelum commit `703c3b6`. Saat itu `summarize()` **mengeluarkan** trade yang
+> tidak menyentuh SL/TP/early/trail dalam jendela *lookahead* (`UNRESOLVED`) dari seluruh
+> statistik — pada data 40 pair itu membuang **±83% sinyal**. Dengan trade yang sama dihitung
+> jujur (ditutup di akhir jendela), hasilnya berbalik menjadi **avg R ≈ −0,17** dan
+> **0 dari 40 pair positif**. Jangan pakai angka di bawah sebagai bukti edge.
+> Bukti kontrol: `docs/LAPORAN-temuan-akuntansi-replay-2026-10-14.md` §3.
+> Berkas ini sengaja **tidak dihapus** sebagai jejak bahwa bias ini pernah terjadi.
+
 - Direktori: `data/tokocrypto_live_usdt`
 - Config: `data/config/scalp_config_exit_full.json`
 - Split: train 70% / test 30%, pemanas 300 bar

@@ -305,56 +305,14 @@ class TradeHistoryRecorder(
                     )
                     dao.updateRecord(closedRecord)
                 } else {
-                    // Jika tidak ada record open sebelumnya (misal histori transaksi langsung/eksternal), buat record langsung CLOSED
-                    val fallbackUuid = tradeUuid ?: UUID.randomUUID().toString()
-                    val estBuyPrice = if (customPnlPercent != null && customPnlPercent != 0.0) {
-                        sellPrice / (1.0 + (customPnlPercent / 100.0))
-                    } else sellPrice * 0.98
-
-                    val estBuyTotal = estBuyPrice * sellQuantity
-                    val estBuyFee = estBuyTotal * buyFeeRate
-                    val computedPnlIdr = customPnlIdr ?: (sellTotalIdr - sellFeeIdr - estBuyTotal - estBuyFee)
-                    val computedPnlPct = customPnlPercent ?: if (estBuyTotal > 0) ((computedPnlIdr / estBuyTotal) * 100.0) else 0.0
-                    val isWin = computedPnlIdr >= 0.0
-
-                    val closedRecord = TradeHistoryRecordEntity(
-                        tradeUuid = fallbackUuid,
-                        symbol = normSymbol,
-                        isRealTrade = isReal,
-                        strategyMode = (strategyMode ?: "SCALPING").uppercase(),
-                        exchange = normExchange,
-                        signalTime = now - 900_000L,
-                        signalPrice = estBuyPrice,
-                        signalConfidence = 80,
-                        signalCalculationSummary = "Perhitungan teknikal: Eksekusi otomatis sesuai trigger bursa",
-                        signalReasons = "Eksekusi strategi $sellReason",
-                        buyTime = now - 900_000L,
-                        buyPrice = estBuyPrice,
-                        buyQuantity = sellQuantity,
-                        buyTotalIdr = estBuyTotal,
-                        buyFeeIdr = estBuyFee,
-                        buyOrderType = "LIMIT",
-                        status = "CLOSED",
-                        holdingDurationMs = 900_000L,
-                        peakPriceDuringHold = max(estBuyPrice, sellPrice),
-                        troughPriceDuringHold = min(estBuyPrice, sellPrice),
-                        maxProfitPctDuringHold = max(0.0, computedPnlPct),
-                        maxDrawdownPctDuringHold = min(0.0, computedPnlPct),
-                        isTrailingUsed = isTrailingUsed,
-                        trailingLockPrice = trailingLockPrice,
-                        trailingPercentUsed = trailingPercent,
-                        trailingPeakPriceUsed = trailingPeakPrice,
-                        sellTime = now,
-                        sellPrice = sellPrice,
-                        sellQuantity = sellQuantity,
-                        sellTotalIdr = sellTotalIdr,
-                        sellFeeIdr = sellFeeIdr,
-                        sellReason = sellReason,
-                        pnlIdr = computedPnlIdr,
-                        pnlPercent = computedPnlPct,
-                        isProfit = isWin
-                    )
-                    dao.insertRecord(closedRecord)
+                    // B1 — Hapus fallback yang MENGARANG trade. Sebelumnya, ketika tidak ada
+                    // record open, sistem membuat record palsu dengan:
+                    //   - estBuyPrice = sellPrice * 0.98 (mengarang harga beli)
+                    //   - signalConfidence = 80 (mengarang skor)
+                    //   - holdingDurationMs = 900_000L (mengarang durasi 15 menit)
+                    // Trade palsu ini terlihat sah di statistik dan merusak audit trail.
+                    // Sekarang: return early — jangan buat record dari data yang tidak diketahui.
+                    return@launch
                 }
             } catch (_: Exception) {}
         }

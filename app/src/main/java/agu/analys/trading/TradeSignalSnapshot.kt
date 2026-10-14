@@ -238,7 +238,10 @@ data class TradeSignalSnapshot(
             // Bollinger Bandwidth calculation
             val bbUpper = indicators?.bbUpper?.takeIf { !it.isNaN() && it > 0.0 }
             val bbLower = indicators?.bbLower?.takeIf { !it.isNaN() && it > 0.0 }
-            val bbMiddle = if (bbUpper != null && bbLower != null) (bbUpper + bbLower) / 2.0 else ema20
+            // A6 — bbMiddle PALSU jika fallback ke ema20. Saat Bollinger tidak tersedia,
+            // field harus null (jujur "tidak diketahui"), bukan menampilkan EMA20 dengan
+            // label "Bollinger Middle" — pembaca audit akan mengira itu nilai BB asli.
+            val bbMiddle = if (bbUpper != null && bbLower != null) (bbUpper + bbLower) / 2.0 else null
             val bbWidthPct = if (bbUpper != null && bbLower != null && bbMiddle != null && bbMiddle > 0.0) {
                 ((bbUpper - bbLower) / bbMiddle) * 100.0
             } else null

@@ -1,8 +1,8 @@
 # Daftar Lengkap Pekerjaan yang BELUM Dikerjakan
 
 **Tanggal:** 14 Oktober 2026
-**Repo:** branch `patch` @ `0ca38eb` (S1–S9 sudah masuk)
-**Peringatan branch:** `main` **tertinggal 11 commit** dari `patch`. Baca dari `patch`, bukan `main`.
+**Repo:** branch `patch` @ `4ffee5e` (S1–S9 sudah masuk; A/B sudah masuk; tooling P4.1 sudah masuk)
+**Peringatan branch:** `patch` **4 commit di depan `main`** (per 2026-10-14). Baca dari `patch`, bukan `main`.
 **Sumber:** `LAPORAN-validitas-log-audit`, `LAPORAN-verifikasi-ui-vs-candle`, `LAPORAN-audit-amp`, `LAPORAN-replay-gns`, `PANDUAN-LANJUT-AGEN.md` §4–§5
 **Catatan:** semua item di bawah **sudah diverifikasi ulang ke kode** — bukan dari ingatan. Yang sudah selesai di P0–P2 tidak dimasukkan.
 
@@ -47,25 +47,25 @@ Di luar cakupan P0–P2. **Semua diverifikasi masih ada di kode saat ini.**
 
 | # | Item | Bukti di kode | Dampak |
 |---|---|---|---|
-| A1 | `volume24h` dilabeli `$baseAsset`, isinya **quote (USDT)** | `TradeLogExporter.kt:138` masih `... $baseAsset` | Likuiditas salah **~1.467×** |
-| A2 | `signalPrice` tanpa basis bar | sebagian tertutup P0-2 (basis bar indikator disimpan) | **Sebagian** — harga benar, basis baru sebagian |
-| A6 | `bbMiddle = ema20` saat Bollinger null | `TradeSignalSnapshot.kt:241` masih `else ema20` | "Bollinger Middle" **palsu** (itu EMA20) |
-| A8 | Header bursa **ditebak** dari quote asset | `TradeLogExporter.kt:101` masih `isUsdtQuote → "TOKOCRYPTO"` | Pair USDT di Indodax dicap TOKOCRYPTO |
-| A9 | Export markdown **membuang Kategori 6** (setup/skor/regime scalping) | `TradeLogExporter.kt:131-168` hanya kategori A–E | Markdown ≠ JSON; field paling relevan mode SCALPING hilang |
-| A10 | "Skor Konfidensi" ambigu (skor engine vs *cap*) | `ScalpingMtfEvaluator.kt` confidence = cap bila tak `ready` | Pembaca tak bisa bedakan skor 63 dari cap 59 |
+| A1 ✅ | `volume24h` dilabeli `$baseAsset`, isinya **quote (USDT)** | `TradeLogExporter.kt` label `(quote)` + komentar S6; `TradeLogDetailDialog.kt:330` disamakan ke `"24h Vol (quote)"` | — |
+| A2 ✅ | `signalPrice` tanpa basis bar | `TradeHistoryRecorder.kt:356` — basis bar dicantumkan agar nilai indikator bisa direproduksi dari candle bursa | — |
+| A6 ✅ | `bbMiddle = ema20` saat Bollinger null | `TradeSignalSnapshot.kt:241` → fallback ke `null` (jujur "tidak diketahui") | — |
+| A8 ✅ | Header bursa **ditebak** dari quote asset | `TradeLogExporter.kt` — parameter `exchange: String? = null` ditambahkan; fallback lama dipertahankan untuk backward compat | — |
+| A9 ✅ | Export markdown **membuang Kategori 6** (setup/skor/regime scalping) | `TradeLogExporter.kt` — kategori F ditambahkan (setup, skor, kategori, rincian, regime, zona entry, thresholds) | — |
+| A10 ✅ | "Skor Konfidensi" ambigu (skor engine vs *cap*) | `TradeLogExporter.kt` — label diubah ke `"Skor Konfidensi (engine ∩ cap tahap)"` | — |
 
 ### 2b. Bias & fabrikasi (B)
 
 | # | Item | Bukti di kode | Dampak |
 |---|---|---|---|
-| B1 | **Record fallback mengarang trade** (`estBuyPrice = sellPrice × 0.98`, `confidence = 80`, hold 15 mnt tetap) | `TradeHistoryRecorder.kt:312, 326, 338` | Trade palsu terlihat sah + masuk statistik |
-| B3 | Sinyal **expired diberi kredit PEAK**, bukan harga jual | `SignalLogRepository.kt:389-390` | Bias **optimistis sistematis** pada "akurasi sinyal" |
-| B4 | `resolveLogManually` **mengarang besaran** PnL (`max(1.5, …)` / `min(-1.5, …)`) | `SignalLogRepository.kt:355` | Anda tandai menang/kalah, besarannya fiktif |
-| B5 | Confidence signal-log = **nilai MAX sepanjang pelacakan** | `SignalLogRepository.kt:107` | "confidence 88" = skor tertinggi berjam-jam, bukan saat entry |
-| B6 | **Gross vs net dicampur** di satu kartu (peak/drawdown gross, `pnlPercent` net) | entity + UI ringkasan | Pembaca mengira ada selisih tak dijelaskan |
-| B7 | Peak/trough = **sampel polling** (throttle 1,5 s), bukan ekstrem sejati | `processPriceTick` | Wick antar-sampel hilang → peak understated (**sebagian** tertutup P0-6 lewat label `Peak (candle)`) |
+| B1 ✅ | **Record fallback mengarang trade** | `TradeHistoryRecorder.kt` — fallback dihapus; `recordSell` return early jika tidak ada record open | — |
+| B3 ✅ | Sinyal **expired diberi kredit PEAK** | `SignalLogRepository.kt` — `approxPnl` dihitung dari `exitPrice`/`realizedPnlPct`, bukan `peakPrice` | — |
+| B4 ✅ | `resolveLogManually` **mengarang besaran** PnL | `SignalLogRepository.kt` — clamp `max(1.5)/min(-1.5)` dihapus; PnL dihitung dari `exitPrice` atau `null` | — |
+| B5 ✅ | Confidence signal-log = **nilai MAX sepanjang pelacakan** | `SignalLogRepository.kt:107-111` — `updatedConfidence = primaryLog.confidence` (nilai saat entry, bukan MAX) | — |
+| B6 ✅ | **Gross vs net dicampur** di satu kartu (peak/drawdown gross, `pnlPercent` net) | `SignalLogScreen.kt:1589-1596` — label `(gross)` eksplisit di samping nilai net; komentar penjelas | — |
+| B7 ✅ | Peak/trough = **sampel polling** (throttle 1,5 s), bukan ekstrem sejati | `processPriceTick` | Ditangani P0-6 lewat label eksplisit `Peak (candle)` vs `Peak (dari tick)` di `TradeHistoryJourneyCard.kt:396-398` |
 
-> Catatan: **A3, A4, A5, A7, B2 sudah selesai di P0–P2.** A2 & B7 baru **sebagian**.
+> Catatan: **A3, A4, A5, A7, B2 sudah selesai di P0–P2.** A2, B5, B6, B7 sudah diverifikasi ditangani di kode (2026-10-14).
 
 ---
 
@@ -73,7 +73,7 @@ Di luar cakupan P0–P2. **Semua diverifikasi masih ada di kode saat ini.**
 
 | # | Item | Alasan | Status |
 |---|---|---|---|
-| P4.1 | **Walk-forward antar-bulan** — perluas `tools/split_validate.py` jadi beberapa jendela bergulir | Validasi keluar-sampel sekarang hanya **1 potongan** (70/30) — bisa kebetulan | **Prioritas tertinggi** |
+| P4.1 | **Walk-forward antar-bulan** — mode `--walk-forward` di `tools/split_validate.py` | Validasi keluar-sampel sekarang hanya **1 potongan** (70/30) — bisa kebetulan | ✅ **Tooling selesai 2026-10-14** (+2 bug diperbaiki). Hasil v4 (8 pair gate-rejected) 0/3 jendela; hasil 40 pair di `docs/LAPORAN-p41-walk-forward-2026-10-14.md` |
 | P4.4 | **Rehidrasi FSM paper: pulihkan progres** — persistensikan `barsHeld`, `isBeArmed`, `isPartialDone`, `peak` | Saat restart keempat nilai **reset**; mesin pulih ≠ mesin yang hilang | Belum |
 | P4.2 | **Preferensi maker untuk pair IDR** (taker 0,8144% → maker 0,6144%) | Semua perhitungan masih taker | Belum |
 | P5 | **Data Indodax + replay TAPI v2** — harness ambil data + replay, jalankan pipeline §9 pada data Indodax | Folder `data/` belum punya data Indodax; `IndodaxTradeApiV2.kt` belum diuji ujung-ke-ujung | Belum |
@@ -96,7 +96,7 @@ Di luar cakupan P0–P2. **Semua diverifikasi masih ada di kode saat ini.**
 
 ## Bagian 5 — Status (bukan tugas, tapi jangan lupa)
 
-- **Kesiapan uang riil masih BELUM.** avg R keluar-sampel +0,0216; profil exit 88,7% `TRAIL_SL` (+0,09R) + 4,9% hard SL (−1,16R); margin di atas impas hanya **≈2,3 poin persentase**; gate ketat lolos **5 dari 40 pair**. Tandanya benar, besarnya belum cukup.
+- **Kesiapan uang riil masih BELUM — dan angka lamanya sudah tidak sah.** Angka "+0,0216 avg R keluar-sampel" berasal dari akuntansi yang **membuang ±83% sinyal** (`UNRESOLVED` dikecualikan, sebelum commit `703c3b6`). Setelah dihitung jujur: **avg R ≈ −0,17, 0/40 pair positif**. Walk-forward 40 pair: **0/4 jendela lolos**. Lihat `docs/LAPORAN-temuan-akuntansi-replay-2026-10-14.md`.
 - **Tiga jurnal paralel** (`trade_history_records` · `signal_logs` · `SimulationTradeHistoryItem`) belum disatukan — sumber kebingungan audit berulang.
 - **Fitur horizon (§14/§15) tetap DIBATALKAN** — jangan dibangun ulang.
 

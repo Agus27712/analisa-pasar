@@ -8,10 +8,11 @@ Aplikasi Android Kotlin 100% (Jetpack Compose M3) untuk analisis & **scalp mode*
 
 ### ⚠️ Langkah 0 — pastikan branch yang Anda baca benar
 
-**Kerjaan aktif ada di `patch`.** Isi `patch` dan `main` **identik per 2026-10-14**, tapi
-`main` bisa tertinggal lagi kapan saja — pembaruan mendarat di `patch` dulu dan hanya
-digabung ke `main` bila owner memintanya. **Jangan pernah menyimpulkan keadaan repo dari
-`main` tanpa mengecek angka ini dulu:**
+**Kerjaan aktif ada di `patch`.** Per 2026-10-14 (setelah `4ffee5e`), **`patch` sudah 4 commit
+di depan `main`** — jadi `patch` dan `main` **TIDAK lagi identik**; klaim lama "identik per
+2026-10-14" sudah usang. Pembaruan mendarat di `patch` dulu dan hanya digabung ke `main` bila
+owner memintanya. **Jangan pernah menyimpulkan keadaan repo dari `main` tanpa mengecek angka ini
+dulu:**
 
 ```sh
 git clone https://github.com/Agus27712/analisa-pasar.git
@@ -106,7 +107,11 @@ Yang **tidak boleh** dilakukan lagi tanpa instruksi eksplisit owner:
 4. **`data/config/scalp_config.json`** — mirror threshold + fee untuk `tools/scalp_replay.py`
 5. **`docs/BELUM-DIKERJAKAN-2026-10-14.md`** — apa yang **belum** selesai (backlog terverifikasi
    ke kode). Mulai dari sini bila owner bertanya "apa lagi yang tersisa".
-6. **`docs/LAPORAN-eksekusi-*.md`** — jejak eksekusi terbaru: `p0p2` (integritas jurnal,
+6. **`docs/LAPORAN-temuan-akuntansi-replay-2026-10-14.md`** — 🔴 **baca ini sebelum memakai
+   angka edge apa pun.** Menjelaskan kenapa angka "+0,0216 avg R / LOLOS" dari `u4` **tidak sah**
+   (trade `UNRESOLVED` dulu dibuang dari statistik, ±81% sinyal) dan apa hasilnya setelah
+   dihitung jujur (**avg R ≈ −0,17, 0/40 pair positif**).
+7. **`docs/LAPORAN-eksekusi-*.md`** — jejak eksekusi terbaru: `p0p2` (integritas jurnal,
    2026-10-14) lalu `s1s9` (strategi entry/exit, 2026-10-14). Urutkan dari tanggal terbaru.
 
 **DEPRECATED (jangan diikuti):** `workplan.md`, `checkpoint.md`, `checkpoint_progres.md`.
@@ -214,6 +219,13 @@ Yang **tidak boleh** dilakukan lagi tanpa instruksi eksplisit owner:
   Margin impas hanya ~2,3 poin persentase — jangan promosikan ke uang riil. Bukti: `workplan2.md` §9.5b.
 - Ubah parameter untuk eksperimen: export JSON → replay; jangan mengarang “edge” dari satu window data.
 - Historical Edge palsu dilarang (`HistoricalEdgeStub` / pesan insufficient).
+- **Trade `UNRESOLVED` tidak boleh dibuang dari statistik (2026-10-14, WAJIB).** `summarize()` di
+  `scalp_replay.py` hanya menghitung `WIN`/`LOSS`; trade yang tidak menyentuh SL/TP/early/trail di
+  dalam jendela *lookahead* dulu ditandai `UNRESOLVED` dan **dikeluarkan** dari `avg_r`/`win_rate`.
+  Pada data 40 pair, cara itu membuang **±83% sinyal** dan membalik verdict dari TIDAK LOLOS
+  menjadi LOLOS. Commit `703c3b6` sudah menutup trade di akhir jendela; **jangan** kembalikan
+  perilaku lama. Setiap angka avg R yang dilaporkan **wajib** menyebut berapa sinyal yang tidak
+  tuntas. Bukti: `docs/LAPORAN-temuan-akuntansi-replay-2026-10-14.md`.
 - Exit scalp paper: lihat `SCALP_EXIT.md`; real auto-execute dari sinyal scalp **bukan** prioritas sampai gate edge terpenuhi.
 - Commit non-rilis (docs/fee/config): sertakan **`[skip ci]`** jika owner meminta agar rilis tidak terpicu.
 
