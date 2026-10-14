@@ -983,6 +983,14 @@ def resolve_trade(m1, i, entry, sl, tp1, tp2, fee, cfg, lookahead, atr_pct=0.0):
                     total_r = partial_r + 0.5 * rem if partial_done else rem
                     return _done(total_r, j, "EARLY_PROFIT")
 
+    # Time-stop / akhir data: tutup di harga close bar terakhir yang tersedia.
+    # Profit parsial TP1 (partial_r) ikut dihitung. Tidak lagi r = 0.
+    if end > i + 1:
+        last_idx = end - 1
+        rem = r_at(m1[last_idx]["c"])
+        total_r = partial_r + 0.5 * rem if partial_done else rem
+        return _done(total_r, last_idx, "TIMEOUT", ambiguous)
+
     return {"result": "UNRESOLVED", "r": 0.0, "exit_idx": None, "ambiguous": False, "exit_reason": "TIMEOUT"}
 
 
