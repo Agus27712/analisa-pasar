@@ -214,7 +214,24 @@ Yang **tidak boleh** dilakukan lagi tanpa instruksi eksplisit owner:
   3. keputusan rehidrasi lewat `engine/scalping/PaperRehydrate.kt` (murni, teruji), dijalankan
      sekali dari `initSubscriptionsAndPolling()`.
   Posisi yang dibeli **sebelum** penanda ini ada sengaja tidak disentuh — SL-nya tersimpan salah.
-  Batasan yang diterima: `barsHeld`/`isBeArmed`/`isPartialDone`/`peak` reset. Bukti: `workplan2.md` §12.
+- **Progres FSM paper ikut dipersistenkan (2026-10-15, WAJIB).** Sejak P4.4, `barsHeld`, `peak`,
+  `activeStopLoss`, `isBeArmed`/`isTrailArmed`/`isPartialDone`, `partialR`, dan `atrPct` disimpan
+  sebagai **satu JSON** di `SpotPositionStore` dengan key `<key>_paper_fsm`. Empat hal yang harus
+  dijaga setiap kali menyentuh siklus hidup posisi paper:
+  1. tulis lewat `TradingViewModel.persistPaperFsm(...)` (ber-throttle) — jangan tulis langsung,
+     karena `evaluatePaperAutoExit` berjalan **per tick harga**;
+  2. hapus key-nya di **setiap** jalur pelepasan kepemilikan: `markSold` (dua blok),
+     `finalizePaperExit`, `clearPaperExitState`, dan cabang "posisi sudah tidak ada" di
+     `evaluatePaperAutoExitLocked`. Key yang tertinggal akan terbaca posisi berikutnya;
+  3. `atrPct` **tidak** dipulihkan lewat `restore()` — ia parameter konstruktor mesin, jadi harus
+     dioper saat mesin dibangun di `PaperRehydrate.decide()`. Kalau terlewat, ambang BE/trailing S8
+     diam-diam jatuh ke nilai persen tetap;
+  4. `barsHeld` dihitung dari **jam dinding** (`mergedBarsHeld`), bukan dari nilai tersimpan saja —
+     replay offline menghitung bar M1 terus-menerus, jadi app harus setara. Konsekuensinya posisi
+     yang jendela tahannya lewat selama app mati **langsung** kena time-stop saat dibuka.
+  State tersimpan yang tidak lolos invarian (`PaperExitStateMachine.restoreRejection`) **dibuang**,
+  bukan dipakai setengah: mesin tetap dibangun dengan `entry`/`SL` asli, hanya progresnya direset,
+  dan alasannya dicatat di log. Bukti: `docs/LAPORAN-p44-persistensi-fsm-2026-10-15.md`.
 - Profil exit yang benar saat ini **skew negatif** (menang ≈ +0,09R, kalah ≈ −1,16R, WR ≈ 95%).
   Margin impas hanya ~2,3 poin persentase — jangan promosikan ke uang riil. Bukti: `workplan2.md` §9.5b.
 - Ubah parameter untuk eksperimen: export JSON → replay; jangan mengarang “edge” dari satu window data.

@@ -3,6 +3,7 @@ package agu.analys.viewmodel
 import agu.analys.engine.scalping.AutoBuySizing
 import agu.analys.engine.scalping.PaperAutoBuyAllocation
 import agu.analys.engine.scalping.PaperExitDecision
+import agu.analys.engine.scalping.PaperExitFsmState
 import agu.analys.engine.scalping.PaperExitPhase
 import agu.analys.engine.scalping.PaperExitReason
 import agu.analys.engine.scalping.PaperExitSnapshot
@@ -61,6 +62,18 @@ object PaperAutoTradeRuntime {
      */
     private val evaluatingKeys = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
 
+    /**
+     * Progres FSM terakhir yang **sudah** ditulis ke disk, per key (P4.4).
+     *
+     * Dipakai untuk memutuskan apakah penulisan berikutnya perlu: perubahan yang mengubah perilaku
+     * exit (flag BE/trailing/partial, SL naik, jumlah bar) ditulis segera, sedangkan pergeseran
+     * `peak` saja ditahan [FSM_WRITE_THROTTLE_MS] karena `evaluatePaperAutoExit` dipanggil tiap tick.
+     */
+    private val lastPersistedFsmMap = ConcurrentHashMap<String, PaperExitFsmState>()
+
+    /** Waktu (ms) penulisan FSM terakhir per key — pasangan [lastPersistedFsmMap]. */
+    private val lastFsmWriteAtMap = ConcurrentHashMap<String, Long>()
+
     fun key(exchange: String, symbol: String): String =
         "${exchange.uppercase()}|${symbol.uppercase().replace("_", "")}"
 
@@ -116,14 +129,69 @@ object PaperAutoTradeRuntime {
      * @param openedAt waktu buka posisi asli. Dipakai rehidrasi setelah restart supaya
      *   `openedAt` di jurnal tetap waktu masuk yang sebenarnya, bukan waktu app dibuka.
      *   `0` berarti "sekarang".
+     * @param markFirstTickAsNewBar `true` hanya di jalur rehidrasi. `put` menandai bucket menit
+     *   berjalan sebagai "sudah dihitung", sehingga tanpa ini tick pertama setelah restart dianggap
+     *   bukan bar M1 baru dan time-stop baru dievaluasi sampai batas menit berikutnya. Set `true`
+     *   membuat tick pertama ikut menambah `barsHeld`, sehingga posisi yang seharusnya sudah
+     *   kehabisan waktu langsung ditutup.
      */
-    fun put(exchange: String, symbol: String, machine: PaperExitStateMachine, openedAt: Long = 0L) {
+    fun put(
+        exchange: String,
+        symbol: String,
+        machine: PaperExitStateMachine,
+        openedAt: Long = 0L,
+        markFirstTickAsNewBar: Boolean = false
+    ) {
         val k = key(exchange, symbol)
         machines[k] = machine
         rawSymbolMap[k] = symbol
         val now = System.currentTimeMillis()
         openedAtMap[k] = if (openedAt > 0L) openedAt else now
-        lastBarBucketMap[k] = now / 60_000L
+        lastBarBucketMap[k] = if (markFirstTickAsNewBar) FIRST_TICK_BUCKET else now / 60_000L
+    }
+
+    /**
+     * Catat bahwa [state] sudah ada di disk tanpa menulis apa pun.
+     *
+     * Dipakai setelah rehidrasi: state di disk dan di memori sudah sinkron, jadi penulisan pertama
+     * berikutnya tidak perlu dipaksa.
+     */
+    fun seedPersistedFsm(exchange: String, symbol: String, state: PaperExitFsmState) {
+        val k = key(exchange, symbol)
+        lastPersistedFsmMap[k] = state
+        lastFsmWriteAtMap[k] = System.currentTimeMillis()
+    }
+
+    /**
+     * Putuskan apakah progres [state] perlu ditulis ke disk sekarang.
+     *
+     * Menulis **selalu** bila [force], atau bila ada perubahan yang mengubah perilaku exit
+     * (flag proteksi, SL naik, jumlah bar). Bila hanya `peak` yang bergeser — dan `peak` bergerak
+     * tiap tick — penulisan ditahan sampai [FSM_WRITE_THROTTLE_MS] lewat.
+     *
+     * Bila mengembalikan `true`, pencatatan internal langsung diperbarui. Aman karena pemanggil
+     * menulis secara sinkron tepat setelah ini.
+     */
+    fun shouldWriteFsm(
+        exchange: String,
+        symbol: String,
+        state: PaperExitFsmState,
+        now: Long,
+        force: Boolean = false
+    ): Boolean {
+        val k = key(exchange, symbol)
+        val last = lastPersistedFsmMap[k]
+        val lastAt = lastFsmWriteAtMap[k] ?: 0L
+        val semanticChange = last == null ||
+            state.isBeArmed != last.isBeArmed ||
+            state.isTrailArmed != last.isTrailArmed ||
+            state.isPartialDone != last.isPartialDone ||
+            state.barsHeld != last.barsHeld ||
+            state.activeStopLoss > last.activeStopLoss + FSM_SL_EPS
+        if (!force && !semanticChange && now - lastAt < FSM_WRITE_THROTTLE_MS) return false
+        lastPersistedFsmMap[k] = state
+        lastFsmWriteAtMap[k] = now
+        return true
     }
 
     fun openedAt(exchange: String, symbol: String): Long =
@@ -149,6 +217,8 @@ object PaperAutoTradeRuntime {
         openedAtMap.remove(k)
         lastBarBucketMap.remove(k)
         rawSymbolMap.remove(k)
+        lastPersistedFsmMap.remove(k)
+        lastFsmWriteAtMap.remove(k)
     }
 
     fun clearAll() {
@@ -157,7 +227,18 @@ object PaperAutoTradeRuntime {
         lastBarBucketMap.clear()
         rawSymbolMap.clear()
         evaluatingKeys.clear()
+        lastPersistedFsmMap.clear()
+        lastFsmWriteAtMap.clear()
     }
+
+    /** Bucket sentinel: tidak mungkin sama dengan `now / 60_000`, jadi tick pertama selalu "bar baru". */
+    private const val FIRST_TICK_BUCKET = -1L
+
+    /** Toleransi kenaikan SL agar noise floating point tidak memicu penulisan. */
+    private const val FSM_SL_EPS = 1e-9
+
+    /** Jeda minimum penulisan saat **hanya** `peak` yang berubah. */
+    private const val FSM_WRITE_THROTTLE_MS = 2_000L
 }
 
 /**
@@ -264,6 +345,9 @@ fun TradingViewModel.armPaperExitEngine(
     positionStore.setPaperEngineOwned(
         symbol = pair.symbol, isReal = false, exchange = exchangeKey, owned = true
     )
+    // Simpan progres awal (termasuk `atrPct`) supaya restart berikutnya tidak kehilangan
+    // ambang BE/trailing proporsional ATR (P4.4).
+    persistPaperFsm(exchangeKey, pair.symbol, machine, force = true)
 
     // Kepemilikan exit tunggal: matikan jalur auto-sell lama untuk pair ini supaya tidak ada
     // dua mesin yang menjual posisi yang sama.
@@ -290,6 +374,36 @@ fun TradingViewModel.armPaperExitEngine(
 
     startTrailingPolling()
     return true
+}
+
+/**
+ * Tulis progres state machine exit paper ke disk (P4.4).
+ *
+ * Dipanggil dari jalur yang sering berjalan (`evaluatePaperAutoExit` dievaluasi **per tick harga**),
+ * jadi keputusan menulis diserahkan ke [PaperAutoTradeRuntime.shouldWriteFsm]: perubahan yang
+ * mengubah perilaku exit ditulis segera, pergeseran `peak` saja ditahan beberapa detik.
+ *
+ * Kegagalan tulis tidak boleh menghentikan trading — `apply()` di `SharedPreferences` asinkron dan
+ * tidak melempar. Yang penting mesin di memori tetap benar; disk hanya untuk bertahan dari restart.
+ *
+ * @param force `true` untuk penulisan pertama setelah mesin dipasang.
+ */
+fun TradingViewModel.persistPaperFsm(
+    exchange: String,
+    symbol: String,
+    machine: PaperExitStateMachine,
+    force: Boolean = false
+) {
+    val pair = TradingPair.fromCustomSymbol(raw = symbol, exchange = exchange)
+    val snapshot = machine.snapshot()
+    val now = System.currentTimeMillis()
+    if (!PaperAutoTradeRuntime.shouldWriteFsm(exchange, pair.symbol, snapshot, now, force)) return
+    positionStore.setPaperFsmState(
+        symbol = pair.symbol,
+        isReal = false,
+        exchange = exchange,
+        stateJson = snapshot.toJsonString()
+    )
 }
 
 /**
@@ -495,6 +609,9 @@ private fun TradingViewModel.evaluatePaperAutoExitLocked(
     if (!positionStore.get(pair.symbol, isReal = false, exchange = exchange).isHolding) {
         PaperAutoTradeRuntime.clear(exchange, symbol)
         positionStore.setPaperEngineOwned(symbol = pair.symbol, isReal = false, exchange = exchange, owned = false)
+        // Cabang ini melepas mesin tanpa lewat `markSold`, jadi progres tersimpan harus dibuang
+        // di sini juga — kalau tidak, key akan tertinggal untuk posisi berikutnya.
+        positionStore.clearPaperFsmState(symbol = pair.symbol, isReal = false, exchange = exchange)
         publishPaperExitSnapshot(null)
         return null
     }
@@ -523,6 +640,9 @@ private fun TradingViewModel.evaluatePaperAutoExitLocked(
     // early-profit (lihat PaperExitStateMachine.onBar).
     val decision = machine.onBar(bar, window, isNewBar = isNewBar)
     if (decision == null) {
+        // Posisi masih ditahan -> simpan progres supaya restart berikutnya tidak kembali ke nol.
+        // Tidak perlu `force`: perubahan yang berarti ditulis segera oleh shouldWriteFsm.
+        persistPaperFsm(exchange, symbol, machine)
         publishPaperExitSnapshot(PaperExitSnapshot.of(machine, symbol, exchange, currentPrice))
         return null
     }
@@ -609,6 +729,9 @@ fun TradingViewModel.finalizePaperExit(
 
     PaperAutoTradeRuntime.clear(exchange, symbol)
     positionStore.setPaperEngineOwned(symbol = pair.symbol, isReal = false, exchange = exchange, owned = false)
+    // Progres FSM sudah tidak berlaku setelah posisi ditutup. `markSold` juga menghapus key ini,
+    // tetapi jalur ini harus tetap benar walau `markSold` tidak sempat jalan (mis. qty simulasi 0).
+    positionStore.clearPaperFsmState(symbol = pair.symbol, isReal = false, exchange = exchange)
     positionCoordinator.refreshPosition(pair.symbol)
     return dispatched
 }
@@ -617,6 +740,7 @@ fun TradingViewModel.finalizePaperExit(
 fun TradingViewModel.clearPaperExitState(symbol: String, exchange: String) {
     PaperAutoTradeRuntime.clear(exchange, symbol)
     positionStore.setPaperEngineOwned(symbol = symbol, isReal = false, exchange = exchange, owned = false)
+    positionStore.clearPaperFsmState(symbol = symbol, isReal = false, exchange = exchange)
     publishPaperExitSnapshot(null)
 }
 
@@ -665,6 +789,13 @@ fun TradingViewModel.paperSnapshotFor(
  * disentuh: SL-nya tersimpan sebagai `entry * 0.99` yang salah, jadi memulihkannya akan
  * memalsukan stop-out.
  *
+ * ## Progres FSM (P4.4)
+ *
+ * Selain parameter posisi, rehidrasi kini membaca [PaperExitFsmState] tersimpan (`_paper_fsm`)
+ * sehingga `peak`, SL aktif, status BE/trailing/partial, `barsHeld`, dan `atrPct` tidak kembali
+ * ke nol. Bila state itu tidak lolos validasi, mesin tetap dibangun dengan `entry`/`SL` asli dan
+ * hanya progresnya yang dibuang — dicatat sebagai peringatan, bukan kegagalan senyap.
+ *
  * @return jumlah mesin yang berhasil dipulihkan.
  */
 fun TradingViewModel.rehydratePaperAutoExit(): Int {
@@ -674,8 +805,10 @@ fun TradingViewModel.rehydratePaperAutoExit(): Int {
     if (symbols.isEmpty()) return 0
 
     val runtime = prefs.scalpingRuntimeConfig
+    val now = System.currentTimeMillis()
     var restored = 0
     var handedBack = 0
+    var progressRestored = 0
 
     for (raw in symbols) {
         // Jangan timpa mesin yang sudah hidup (mis. auto-buy terjadi sebelum rehidrasi jalan).
@@ -694,13 +827,43 @@ fun TradingViewModel.rehydratePaperAutoExit(): Int {
             buyFeePct = fees.buyTakerPct,
             sellFeePct = fees.sellTakerPct,
             slippagePct = runtime.slippagePct,
-            params = runtime.exit
+            params = runtime.exit,
+            storedFsm = PaperExitFsmState.fromJson(
+                positionStore.getPaperFsmState(symbol = pair.symbol, isReal = false, exchange = exchange)
+            ),
+            openedAt = pos.openedAt,
+            now = now
         )
 
         when (action) {
             is PaperRehydrateAction.Restore -> {
-                PaperAutoTradeRuntime.put(exchange, pair.symbol, action.machine, openedAt = pos.openedAt)
+                PaperAutoTradeRuntime.put(
+                    exchange,
+                    pair.symbol,
+                    action.machine,
+                    openedAt = pos.openedAt,
+                    // Time-stop harus bisa jatuh pada tick pertama bila jam tahan sudah lewat
+                    // selama app tertutup (lihat PaperRehydrate.mergedBarsHeld).
+                    markFirstTickAsNewBar = true
+                )
+                PaperAutoTradeRuntime.seedPersistedFsm(exchange, pair.symbol, action.machine.snapshot())
                 restored++
+                if (action.progressRestored) {
+                    progressRestored++
+                    AppLogManager.service(
+                        "PaperAutoExit",
+                        "♻️ [${pair.symbol}] Progres FSM dipulihkan: ${action.machine.phase.label}, " +
+                            "SL ${PriceFormatter.formatPrice(action.machine.activeStopLoss, quoteAsset = pair.quoteAsset)}, " +
+                            "${action.machine.barsHeld} bar."
+                    )
+                }
+                if (action.warning != null) {
+                    AppLogManager.service(
+                        "PaperAutoExit",
+                        "⚠️ [${pair.symbol}] Progres FSM direset (${action.warning}) — " +
+                            "entry/SL asli dipertahankan, mesin mulai dari kondisi awal."
+                    )
+                }
             }
 
             is PaperRehydrateAction.HandBackToLegacy -> {
@@ -720,6 +883,8 @@ fun TradingViewModel.rehydratePaperAutoExit(): Int {
                 positionStore.setPaperEngineOwned(
                     symbol = pair.symbol, isReal = false, exchange = exchange, owned = false
                 )
+                // Mesin tidak lagi memegang exit, jadi progres tersimpannya tidak akan dipakai.
+                positionStore.clearPaperFsmState(symbol = pair.symbol, isReal = false, exchange = exchange)
                 handedBack++
                 AppLogManager.service(
                     "PaperAutoExit",
@@ -728,6 +893,7 @@ fun TradingViewModel.rehydratePaperAutoExit(): Int {
             }
 
             is PaperRehydrateAction.Skip -> {
+                positionStore.clearPaperFsmState(symbol = pair.symbol, isReal = false, exchange = exchange)
                 AppLogManager.service(
                     "PaperAutoExit",
                     "⏭️ [${pair.symbol}] Rehidrasi dilewati: ${action.reason}."
@@ -741,6 +907,7 @@ fun TradingViewModel.rehydratePaperAutoExit(): Int {
         AppLogManager.trade(
             "PaperAutoExit",
             "♻️ Rehidrasi setelah restart: $restored posisi paper dipulihkan" +
+                if (progressRestored > 0) " ($progressRestored dengan progres FSM utuh)" else "" +
                 if (handedBack > 0) ", $handedBack diserahkan ke jalur lama." else "."
         )
     }

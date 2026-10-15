@@ -74,7 +74,7 @@ Di luar cakupan P0–P2. **Semua diverifikasi masih ada di kode saat ini.**
 | # | Item | Alasan | Status |
 |---|---|---|---|
 | P4.1 | **Walk-forward antar-bulan** — mode `--walk-forward` di `tools/split_validate.py` | Validasi keluar-sampel sekarang hanya **1 potongan** (70/30) — bisa kebetulan | ✅ **Tooling selesai 2026-10-14** (+2 bug diperbaiki). Hasil v4 (8 pair gate-rejected) 0/3 jendela; hasil 40 pair di `docs/LAPORAN-p41-walk-forward-2026-10-14.md` |
-| P4.4 | **Rehidrasi FSM paper: pulihkan progres** — persistensikan `barsHeld`, `isBeArmed`, `isPartialDone`, `peak` | Saat restart keempat nilai **reset**; mesin pulih ≠ mesin yang hilang | Belum |
+| P4.4 | **Rehidrasi FSM paper: pulihkan progres** — persistensikan `barsHeld`, `isBeArmed`, `isPartialDone`, `peak` | Saat restart keempat nilai **reset**; mesin pulih ≠ mesin yang hilang | ✅ **Selesai 2026-10-15.** Satu JSON di key `_paper_fsm`; mencakup juga `isTrailArmed`, `partialR`, `activeStopLoss`, dan `atrPct` (yang sebelumnya juga hilang sehingga ambang S8 jatuh ke nilai tetap). `barsHeld` dihitung dari jam dinding. Lihat `docs/LAPORAN-p44-persistensi-fsm-2026-10-15.md` |
 | P4.2 | **Preferensi maker untuk pair IDR** (taker 0,8144% → maker 0,6144%) | Semua perhitungan masih taker | Belum |
 | P5 | **Data Indodax + replay TAPI v2** — harness ambil data + replay, jalankan pipeline §9 pada data Indodax | Folder `data/` belum punya data Indodax; `IndodaxTradeApiV2.kt` belum diuji ujung-ke-ujung | Belum |
 | P6 | **Auto-execute uang riil** | **DIBLOKIR** sampai P4.1 & P5 selesai — jangan disentuh tanpa instruksi eksplisit | Diblokir |
