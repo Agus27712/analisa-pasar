@@ -189,6 +189,44 @@ fun resolveDetailTradeMode(isHolding: Boolean): DetailTradeMode =
     if (isHolding) DetailTradeMode.SELL else DetailTradeMode.BUY
 
 /**
+ * Panel scalping yang boleh tampil di halaman detail koin.
+ *
+ * Sebelumnya halaman detail merender `ScalpDeskCard` + `PaperTradeDeskCard` dengan syarat
+ * `isScalping` saja, **tanpa melihat status kepemilikan koin**. Akibatnya frame yang sama
+ * muncul entah pengguna sedang memegang koin atau tidak, sehingga mode beli dan mode jual
+ * terlihat identik — padahal keduanya butuh informasi yang berbeda:
+ *
+ * - **tidak hold** → yang dibutuhkan adalah keputusan masuk (`SCALPING_DESK`);
+ * - **sedang hold** → yang dibutuhkan adalah progres keluar (`EXIT_FSM`).
+ *
+ * `NONE` dipisah dari kedua status itu supaya kasus "scalping nonaktif" bisa diuji eksplisit
+ * dan tidak diam-diam ikut menampilkan FSM.
+ */
+enum class DetailScalpPanel {
+    /** Scalping tidak aktif — tidak ada panel scalping yang relevan. */
+    NONE,
+
+    /** Tidak memegang koin: tampilkan meja kerja entry. */
+    SCALPING_DESK,
+
+    /** Sedang memegang koin: tampilkan progres FSM exit, meja kerja entry disembunyikan. */
+    EXIT_FSM
+}
+
+/**
+ * Resolver panel scalping halaman detail — satu-satunya tempat aturan ini ditegakkan.
+ *
+ * - scalping nonaktif → [DetailScalpPanel.NONE] (apa pun status kepemilikan)
+ * - scalping aktif + sedang hold → [DetailScalpPanel.EXIT_FSM]
+ * - scalping aktif + tidak hold → [DetailScalpPanel.SCALPING_DESK]
+ */
+fun resolveDetailScalpPanel(isScalping: Boolean, isHolding: Boolean): DetailScalpPanel = when {
+    !isScalping -> DetailScalpPanel.NONE
+    isHolding -> DetailScalpPanel.EXIT_FSM
+    else -> DetailScalpPanel.SCALPING_DESK
+}
+
+/**
  * Item checkpoint terstruktur untuk visualisasi workflow.
  */
 data class TradingCheckpointItem(

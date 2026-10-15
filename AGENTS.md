@@ -285,6 +285,19 @@ Yang **tidak boleh** dilakukan lagi tanpa instruksi eksplisit owner:
   dihapus beserta dua pemanggilnya (`WaitingEntryRadarCard`, `ScalpDeskCard`). Mesinnya
   (`engine/backtest/*`, `WalkForwardEvaluator`, `ScalpingBacktestAdapter`) **tetap ada** dan masih
   dipakai tooling/test — jangan ikut dihapus, dan jangan menampilkan baseline backtest di UI lagi.
+- **Jangan menyembunyikan/menampilkan frame layar detail berdasarkan `isScalping` saja
+  (2026-10-15, WAJIB).** Tampilan yang bergantung pada **status kepemilikan koin** harus lewat
+  resolver murni di `model/PositionContext.kt`, bukan `if` langsung di layar. Presedennya:
+  `resolveDetailScalpPanel(isScalping, isHolding)` menentukan hold → `EXIT_FSM`,
+  tidak hold → `SCALPING_DESK`, scalping nonaktif → `NONE`. Bug §22 lahir justru karena
+  `DetailChartScreen` memakai `if (isScalping)` tanpa melihat kepemilikan, sehingga mode beli dan
+  jual terlihat identik. Setiap resolver semacam ini **wajib** punya uji + kontrol negatif.
+- **Kosmetik animasi di Compose memakai komponen yang sudah ada** di
+  `ui/animation/AppAnimations.kt` (`AnimatedMetricText`, `AnimatedPercentageBadge`,
+  `rememberLivePulseAlpha` + `Modifier.livePulse`) dan **wajib menghormati**
+  `LocalPriceAnimationMode` / `PriceAnimationMode.STATIC` sebagai katup hemat baterai pengguna.
+  Jangan mengarang gaya animasi baru, dan jangan menambah sakelar hemat daya kedua.
+  Bukti: `docs/LAPORAN-mode-sell-fsm-2026-10-15.md`.
 
 ## Git
 

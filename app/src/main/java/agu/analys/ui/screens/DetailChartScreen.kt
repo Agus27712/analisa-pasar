@@ -23,6 +23,7 @@ import agu.analys.ui.components.detail.*
 import agu.analys.ui.components.detail.scalp.PaperTradeDeskCard
 import agu.analys.ui.components.detail.scalp.ScalpDeskCard
 import agu.analys.ui.components.settings.LogcatDiagnosticDialog
+import agu.analys.ui.components.simulation.PaperExitFsmCard
 import agu.analys.ui.theme.*
 import agu.analys.util.AppPreferences
 import agu.analys.util.HapticUtil
@@ -310,34 +311,62 @@ fun DetailChartScreen(
 
             Spacer(Modifier.height(10.dp))
 
-            // ── Mode scalping: Scalp Desk + Paper Trade Desk ──────────────
+            // ── Panel scalping: meja kerja entry ATAU progres exit ────────
+            // Mode ditentukan `resolveDetailScalpPanel` (hold → FSM exit, tidak hold → meja entry).
+            // Sebelumnya blok ini hanya bergantung pada `isScalping`, sehingga frame yang sama
+            // tampil entah pengguna memegang koin atau tidak — mode beli dan jual jadi terlihat
+            // identik. Meja kerja entry tidak berguna saat sudah memegang koin: yang dibutuhkan
+            // adalah progres keluar, dan itulah yang naik ke posisi paling atas.
+            //
             // Blok analisa radar lama dilewati (hideAnalysis) supaya status, entry, SL, dan TP
             // tidak tampil dua kali dan tidak saling bertentangan.
-            if (isScalping) {
-                ScalpDeskCard(
-                    symbol = scalpSymbol,
-                    signal = signal,
-                    currentPrice = displayPrice,
-                    quoteAsset = pair.quoteAsset,
-                    exchange = marketDataSource.name,
-                    fees = tradingFees,
-                    runtimeConfig = scalpingRuntime,
-                    hasPaperPosition = paperSnapshot != null
-                )
+            when (resolveDetailScalpPanel(isScalping = isScalping, isHolding = isHolding)) {
+                DetailScalpPanel.EXIT_FSM -> {
+                    // Posisi manual (tanpa mesin exit paper) tidak punya snapshot. Kartu FSM
+                    // sengaja tidak dipaksa tampil: `EmptyFsmState` berbicara soal auto-buy
+                    // menunggu sinyal, yang menyesatkan di mode jual. Kontrol exit manual
+                    // (SL/TP/trailing) sudah tersedia di radar posisi di bawah.
+                    if (paperSnapshot != null) {
+                        PaperExitFsmCard(
+                            snapshot = paperSnapshot,
+                            autoTradeConfig = paperConfig,
+                            exitParams = scalpingRuntime.exit,
+                            quoteAsset = pair.quoteAsset,
+                            onOpenSettings = { viewModel.openSettings() }
+                        )
 
-                Spacer(Modifier.height(10.dp))
+                        Spacer(Modifier.height(10.dp))
+                    }
+                }
 
-                PaperTradeDeskCard(
-                    snapshot = paperSnapshot,
-                    config = paperConfig,
-                    exitParams = scalpingRuntime.exit,
-                    quoteAsset = pair.quoteAsset,
-                    canAutoBuy = scalpReadiness.canAutoBuy,
-                    onConfigChange = { viewModel.updatePaperAutoTradeConfig(it) },
-                    onOpenSettings = { viewModel.openSettings() }
-                )
+                DetailScalpPanel.SCALPING_DESK -> {
+                    ScalpDeskCard(
+                        symbol = scalpSymbol,
+                        signal = signal,
+                        currentPrice = displayPrice,
+                        quoteAsset = pair.quoteAsset,
+                        exchange = marketDataSource.name,
+                        fees = tradingFees,
+                        runtimeConfig = scalpingRuntime,
+                        hasPaperPosition = paperSnapshot != null
+                    )
 
-                Spacer(Modifier.height(10.dp))
+                    Spacer(Modifier.height(10.dp))
+
+                    PaperTradeDeskCard(
+                        snapshot = paperSnapshot,
+                        config = paperConfig,
+                        exitParams = scalpingRuntime.exit,
+                        quoteAsset = pair.quoteAsset,
+                        canAutoBuy = scalpReadiness.canAutoBuy,
+                        onConfigChange = { viewModel.updatePaperAutoTradeConfig(it) },
+                        onOpenSettings = { viewModel.openSettings() }
+                    )
+
+                    Spacer(Modifier.height(10.dp))
+                }
+
+                DetailScalpPanel.NONE -> Unit
             }
 
             WaitingEntryRadarCard(
@@ -512,17 +541,22 @@ fun DetailChartScreen(
 
             Spacer(Modifier.height(10.dp))
 
-            MarketConditionCard(
-                structure = marketStructure,
-                indicators = indicators,
-                signal = signal,
-                strategyMode = strategyMode,
-                scalping = isScalping,
-                onRetry = { viewModel.refreshMtfForActiveSymbol() },
-                mtfState = mtfState
-            )
+            // Kartu "KONDISI SCALPING" disembunyikan saat mode jual: keputusan masuk sudah tidak
+            // relevan ketika koin sedang dipegang, dan isinya bertabrakan dengan radar posisi.
+            // Indikator observasi (RSI/EMA/ATR + monitor) tetap tampil di bawah.
+            if (!(isScalping && isHolding)) {
+                MarketConditionCard(
+                    structure = marketStructure,
+                    indicators = indicators,
+                    signal = signal,
+                    strategyMode = strategyMode,
+                    scalping = isScalping,
+                    onRetry = { viewModel.refreshMtfForActiveSymbol() },
+                    mtfState = mtfState
+                )
 
-            Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(8.dp))
+            }
 
             DetailTechnicalDetailsSection(
                 indicators = indicators,
