@@ -8,17 +8,19 @@ Aplikasi Android Kotlin 100% (Jetpack Compose M3) untuk analisis & **scalp mode*
 
 ### ⚠️ Langkah 0 — pastikan branch yang Anda baca benar
 
-**Kerjaan aktif ada di `patch`.** Per 2026-10-14 (setelah `4ffee5e`), **`patch` sudah 4 commit
-di depan `main`** — jadi `patch` dan `main` **TIDAK lagi identik**; klaim lama "identik per
-2026-10-14" sudah usang. Pembaruan mendarat di `patch` dulu dan hanya digabung ke `main` bila
-owner memintanya. **Jangan pernah menyimpulkan keadaan repo dari `main` tanpa mengecek angka ini
-dulu:**
+**Kerjaan aktif ada di `patch`.** Per **2026-10-15** (setelah `56eb5cd`), **`patch` sudah 2 commit
+di depan `main`** (`f9e7fdd`, `56eb5cd`) — jadi `patch` dan `main` **TIDAK identik**; klaim lama
+"identik per 2026-10-14" dan "4/6/7 commit di depan" semuanya **usang**. Pembaruan mendarat di
+`patch` dulu dan hanya digabung ke `main` bila owner memintanya (terakhir lewat **PR #59** →
+`bc48ac4`, yang membawa `main` sampai `9f65109`). **Jangan pernah menyimpulkan keadaan repo dari
+`main` tanpa mengecek angka ini dulu:**
 
 ```sh
 git clone https://github.com/Agus27712/analisa-pasar.git
-cd analisa-pasar && git checkout patch     # WAJIB — kerjaan aktif ada di sini
-git rev-list --count main..patch           # >0 = patch lebih maju (normal, baca patch)
-git diff --stat patch main                 # kosong = kedua branch sama
+cd analisa-pasar && git checkout patch        # WAJIB — kerjaan aktif ada di sini
+git rev-list --count origin/main..HEAD        # >0 = patch lebih maju (normal, baca patch)
+git rev-list --count HEAD..origin/main        # >0 = main punya commit yang belum ada di patch
+git ls-remote --heads origin                  # sumber kebenaran daftar branch (bypass refspec)
 ```
 
 Repo ini **public** — clone tidak butuh token.
@@ -214,7 +216,24 @@ Yang **tidak boleh** dilakukan lagi tanpa instruksi eksplisit owner:
   3. keputusan rehidrasi lewat `engine/scalping/PaperRehydrate.kt` (murni, teruji), dijalankan
      sekali dari `initSubscriptionsAndPolling()`.
   Posisi yang dibeli **sebelum** penanda ini ada sengaja tidak disentuh — SL-nya tersimpan salah.
-  Batasan yang diterima: `barsHeld`/`isBeArmed`/`isPartialDone`/`peak` reset. Bukti: `workplan2.md` §12.
+- **Progres FSM paper ikut dipersistenkan (2026-10-15, WAJIB).** Sejak P4.4, `barsHeld`, `peak`,
+  `activeStopLoss`, `isBeArmed`/`isTrailArmed`/`isPartialDone`, `partialR`, dan `atrPct` disimpan
+  sebagai **satu JSON** di `SpotPositionStore` dengan key `<key>_paper_fsm`. Empat hal yang harus
+  dijaga setiap kali menyentuh siklus hidup posisi paper:
+  1. tulis lewat `TradingViewModel.persistPaperFsm(...)` (ber-throttle) — jangan tulis langsung,
+     karena `evaluatePaperAutoExit` berjalan **per tick harga**;
+  2. hapus key-nya di **setiap** jalur pelepasan kepemilikan: `markSold` (dua blok),
+     `finalizePaperExit`, `clearPaperExitState`, dan cabang "posisi sudah tidak ada" di
+     `evaluatePaperAutoExitLocked`. Key yang tertinggal akan terbaca posisi berikutnya;
+  3. `atrPct` **tidak** dipulihkan lewat `restore()` — ia parameter konstruktor mesin, jadi harus
+     dioper saat mesin dibangun di `PaperRehydrate.decide()`. Kalau terlewat, ambang BE/trailing S8
+     diam-diam jatuh ke nilai persen tetap;
+  4. `barsHeld` dihitung dari **jam dinding** (`mergedBarsHeld`), bukan dari nilai tersimpan saja —
+     replay offline menghitung bar M1 terus-menerus, jadi app harus setara. Konsekuensinya posisi
+     yang jendela tahannya lewat selama app mati **langsung** kena time-stop saat dibuka.
+  State tersimpan yang tidak lolos invarian (`PaperExitStateMachine.restoreRejection`) **dibuang**,
+  bukan dipakai setengah: mesin tetap dibangun dengan `entry`/`SL` asli, hanya progresnya direset,
+  dan alasannya dicatat di log. Bukti: `docs/LAPORAN-p44-persistensi-fsm-2026-10-15.md`.
 - Profil exit yang benar saat ini **skew negatif** (menang ≈ +0,09R, kalah ≈ −1,16R, WR ≈ 95%).
   Margin impas hanya ~2,3 poin persentase — jangan promosikan ke uang riil. Bukti: `workplan2.md` §9.5b.
 - Ubah parameter untuk eksperimen: export JSON → replay; jangan mengarang “edge” dari satu window data.
@@ -226,6 +245,15 @@ Yang **tidak boleh** dilakukan lagi tanpa instruksi eksplisit owner:
   menjadi LOLOS. Commit `703c3b6` sudah menutup trade di akhir jendela; **jangan** kembalikan
   perilaku lama. Setiap angka avg R yang dilaporkan **wajib** menyebut berapa sinyal yang tidak
   tuntas. Bukti: `docs/LAPORAN-temuan-akuntansi-replay-2026-10-14.md`.
+- **Setelan nominal auto-buy adalah Rupiah, dan anggaran wajib menyisihkan biaya (2026-10-15, WAJIB).**
+  `PaperAutoTradeConfig.fixedIdrAmount` (dulu `fixedQuoteAmount`) berisi **Rupiah**, bukan kas
+  kuotasi pair. Pada pair USDT nilainya **wajib** dikonversi lewat kurs `ExchangeRateManager` di
+  `PaperAutoTradeConfig.plan()`. Dua cacat yang pernah terjadi bersamaan dan membuat auto-buy
+  **tidak pernah** tereksekusi: (a) Rp 100.000 dipakai apa adanya sebagai $100.000; (b) batas
+  anggaran memakai saldo mentah padahal order MARKET memotong `slippage` **dan** `fee` di atas
+  nilai posisi, sehingga setiap nominal ≥ saldo mustahil tereksekusi. Ukuran yang tidak layak
+  **dilewati** dengan alasan yang bisa dibaca — **jangan** dipotong diam-diam, dan **jangan**
+  menebak ukuran saat kurs belum tersedia. Bukti: `docs/LAPORAN-bug-auto-buy-nominal-idr-2026-10-15.md`.
 - Exit scalp paper: lihat `SCALP_EXIT.md`; real auto-execute dari sinyal scalp **bukan** prioritas sampai gate edge terpenuhi.
 - Commit non-rilis (docs/fee/config): sertakan **`[skip ci]`** jika owner meminta agar rilis tidak terpicu.
 
@@ -238,8 +266,9 @@ Yang **tidak boleh** dilakukan lagi tanpa instruksi eksplisit owner:
 
 - **Branch kerja sekarang: `patch`** (bukan `main`). Owner me-review di `patch` lebih dulu; `main`
   hanya menerima merge setelah review. Jangan push langsung ke `main` tanpa instruksi eksplisit.
-- Branch lama di remote (`audit/menyeluruh-2026-10`, `engine_scalping_update`, tag versi) masih ada —
-  jangan dihapus tanpa instruksi owner.
+- Branch lama di remote (`audit/menyeluruh-2026-10`, `engine_scalping_update`, tag versi)
+  **sudah tidak ada** — per 2026-10-15 `git ls-remote --heads origin` hanya mengembalikan
+  `main` dan `patch`. Jangan mencari branch itu lagi.
 - Jangan commit artefak data candle besar tanpa diminta.
 - Jangan commit `.env`, `*.keystore`, `*.jks`, atau token.
 - Pesan commit jelas; `[skip ci]` untuk docs/config-only sesuai kebijakan owner.

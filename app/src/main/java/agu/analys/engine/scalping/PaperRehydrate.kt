@@ -8,7 +8,17 @@ package agu.analys.engine.scalping
 sealed interface PaperRehydrateAction {
 
     /** Bangun ulang state machine exit dari parameter yang tersimpan. */
-    data class Restore(val machine: PaperExitStateMachine) : PaperRehydrateAction
+    data class Restore(
+        val machine: PaperExitStateMachine,
+        /**
+         * `true` bila progres FSM (peak, SL aktif, status BE/trailing/partial, jumlah bar) berhasil
+         * dipulihkan dari disk. `false` berarti mesin dibangun dari nol — baik karena belum ada state
+         * tersimpan (posisi lama), maupun karena state tersimpan ditolak validasi.
+         */
+        val progressRestored: Boolean = false,
+        /** Alasan progres dibuang, bila ada. `null` bila progres dipulihkan atau memang belum ada. */
+        val warning: String? = null
+    ) : PaperRehydrateAction
 
     /**
      * Serahkan kembali kepemilikan exit ke jalur auto-sell lama
@@ -21,7 +31,7 @@ sealed interface PaperRehydrateAction {
 }
 
 /**
- * Aturan rehidrasi state machine exit paper (P2).
+ * Aturan rehidrasi state machine exit paper (P2, diperluas P4.4).
  *
  * ## Kenapa ini ada
  *
@@ -48,11 +58,21 @@ sealed interface PaperRehydrateAction {
  * Karena itu [decide] menolak SL yang tidak masuk akal ([HandBackToLegacy]) daripada
  * memegang posisi dengan risiko yang salah.
  *
- * ## Batas yang diterima
+ * ## Progres FSM (P4.4)
  *
- * `barsHeld`, `isBeArmed`, `isPartialDone`, dan `peak` **tidak** dipulihkan (tidak
- * dipersistenkan). Posisi yang sudah bergerak ke BE/trailing akan dievaluasi ulang dari
- * awal. Untuk paper trade ini diterima dan dicatat sebagai batasan.
+ * Sebelum P4.4, `barsHeld`, `isBeArmed`, `isTrailArmed`, `isPartialDone`, `partialR`, `peak`,
+ * `activeStopLoss`, dan `atrPct` **reset** setiap restart: SL kembali ke titik awal, trailing yang
+ * sudah terkunci lepas, ambang BE/trailing S8 jatuh ke nilai persen tetap, dan time-stop menghitung
+ * dari nol. Sekarang progres itu dibaca dari [PaperExitFsmState] tersimpan dan diterapkan lewat
+ * [PaperExitStateMachine.restore].
+ *
+ * State yang tidak lolos validasi **tidak** membuat posisi diserahkan ke jalur lama — mesin tetap
+ * dibangun dengan `entry`/`stopLoss` asli yang benar, hanya progresnya yang dibuang
+ * (`progressRestored = false` + `warning`). Itu lebih baik daripada memakai jalur lama yang
+ * semantik SL/BE-nya berbeda, sehingga hasilnya tidak sebanding dengan replay.
+ *
+ * `atrPct` diterapkan saat **membangun** mesin, bukan lewat `restore`, karena ia parameter
+ * konstruktor dan ambang turunannya dihitung sekali saat mesin lahir.
  */
 object PaperRehydrate {
 
@@ -72,6 +92,10 @@ object PaperRehydrate {
      * @param sellFeePct biaya jual taker (%) untuk pair ini
      * @param slippagePct asumsi slippage (%) dari runtime config
      * @param params parameter exit aktif ([ScalpingRuntimeConfig.exit])
+     * @param storedFsm progres FSM tersimpan; `null` bila posisi ini belum pernah menyimpannya
+     * @param openedAt waktu buka posisi asli (ms epoch); dipakai menghitung `barsHeld` dari jam
+     *   dinding. `0` berarti tidak diketahui — `barsHeld` lalu memakai nilai tersimpan apa adanya.
+     * @param now waktu sekarang (ms epoch); disuntik agar bisa diuji.
      */
     fun decide(
         entry: Double,
@@ -82,7 +106,10 @@ object PaperRehydrate {
         buyFeePct: Double,
         sellFeePct: Double,
         slippagePct: Double,
-        params: ScalpExitParams
+        params: ScalpExitParams,
+        storedFsm: PaperExitFsmState? = null,
+        openedAt: Long = 0L,
+        now: Long = System.currentTimeMillis()
     ): PaperRehydrateAction {
         if (entry <= 0.0 || !entry.isFinite()) {
             return PaperRehydrateAction.Skip(REASON_NO_ENTRY)
@@ -94,17 +121,50 @@ object PaperRehydrate {
             return PaperRehydrateAction.HandBackToLegacy(REASON_INVALID_SL)
         }
 
-        return PaperRehydrateAction.Restore(
-            PaperExitStateMachine(
-                entry = entry,
-                stopLoss = stopLoss,
-                tp1 = if (tp1 > 0.0) tp1 else entry,
-                tp2 = if (tp2 > 0.0) tp2 else entry * 1.02,
-                buyFeePct = buyFeePct,
-                sellFeePct = sellFeePct,
-                slippagePct = slippagePct,
-                params = params
-            )
+        // `atrPct` diterapkan di sini, bukan lewat restore(): ambang BE/trailing S8 dihitung sekali
+        // saat mesin lahir, jadi menundanya sampai setelah konstruksi tidak akan berpengaruh.
+        val machine = PaperExitStateMachine(
+            entry = entry,
+            stopLoss = stopLoss,
+            tp1 = if (tp1 > 0.0) tp1 else entry,
+            tp2 = if (tp2 > 0.0) tp2 else entry * 1.02,
+            buyFeePct = buyFeePct,
+            sellFeePct = sellFeePct,
+            slippagePct = slippagePct,
+            params = params,
+            atrPct = storedFsm?.atrPct ?: 0.0
         )
+
+        if (storedFsm == null) {
+            // Posisi lama (dibeli sebelum P4.4) tidak punya state tersimpan. Bukan kesalahan.
+            return PaperRehydrateAction.Restore(machine)
+        }
+
+        val effective = storedFsm.copy(barsHeld = mergedBarsHeld(storedFsm.barsHeld, openedAt, now))
+        val rejection = machine.restoreRejection(effective)
+        if (rejection != null) {
+            return PaperRehydrateAction.Restore(machine, progressRestored = false, warning = rejection)
+        }
+        machine.restore(effective)
+        return PaperRehydrateAction.Restore(machine, progressRestored = true)
+    }
+
+    /**
+     * Gabungkan jumlah bar tersimpan dengan waktu berjalan sejak posisi dibuka.
+     *
+     * Replay offline (`tools/scalp_replay.py`) menghitung bar M1 **terus-menerus**, tanpa peduli app
+     * hidup atau mati. Supaya statistik app sebanding, jam tahan ikut berjalan selama app tertutup.
+     *
+     * Konsekuensi yang disengaja: bila app mati lebih lama daripada `maxHoldBarsM1`, posisi langsung
+     * kena time-stop pada evaluasi berikutnya. Ini benar — memang sebanyak itu bar M1 sudah lewat.
+     *
+     * @param stored nilai `barsHeld` terakhir yang sempat ditulis.
+     * @param openedAt waktu buka posisi; `0` atau di masa depan berarti tidak diketahui, dan nilai
+     *   tersimpan dipakai apa adanya supaya tidak menghasilkan jumlah bar raksasa.
+     */
+    fun mergedBarsHeld(stored: Int, openedAt: Long, now: Long): Int {
+        if (openedAt <= 0L || openedAt > now) return maxOf(stored, 0)
+        val elapsedBars = ((now - openedAt) / 60_000L).toInt()
+        return maxOf(stored, elapsedBars, 0)
     }
 }

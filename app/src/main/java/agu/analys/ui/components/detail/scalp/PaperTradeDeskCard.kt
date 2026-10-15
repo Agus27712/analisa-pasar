@@ -145,7 +145,9 @@ fun PaperTradeDeskCard(
                     if (config.allocation.key == "risk_based") {
                         "risiko ${fmt2(config.riskPctPerTrade)}% per trade"
                     } else {
-                        "nominal tetap per posisi"
+                        "nominal " +
+                            agu.analys.util.PriceFormatter.formatMoney(config.fixedIdrAmount, "IDR") +
+                            " per posisi (dikonversi per pair)"
                     },
                 color = TvTextMuted,
                 fontSize = 10.sp

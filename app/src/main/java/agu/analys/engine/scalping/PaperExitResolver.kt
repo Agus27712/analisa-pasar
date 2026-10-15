@@ -1,6 +1,7 @@
 package agu.analys.engine.scalping
 
 import agu.analys.model.CandleBar
+import org.json.JSONObject
 import kotlin.math.abs
 import kotlin.math.max
 
@@ -303,6 +304,112 @@ object PaperExitResolver {
 }
 
 /**
+ * Progres [PaperExitStateMachine] yang **dipersistenkan** supaya selamat dari restart app (P4.4).
+ *
+ * ## Kenapa ini ada
+ *
+ * `PaperAutoTradeRuntime` menyimpan mesin exit **hanya di memori**, sedangkan posisinya persisten
+ * di `SpotPositionStore` dan jalur auto-sell lama sudah dimatikan saat engine mengambil alih exit.
+ * Sebelum P4.4, restart membuat mesin lahir kembali dalam keadaan **nol** — `peak`, `activeStopLoss`,
+ * status BE/trailing/partial, dan `barsHeld` semuanya hilang, padahal harganya sudah bergerak.
+ * Akibatnya SL kembali ke titik awal, trailing yang sudah terkunci lepas, dan time-stop mulai
+ * menghitung dari nol lagi.
+ *
+ * ## `atrPct` ikut disimpan, tapi bukan sebagai progres
+ *
+ * `atrPct` adalah **parameter konstruktor** mesin, dan nilai turunannya
+ * (`effectiveBreakevenTriggerNetPct`, `effectiveTrailDistancePct`) adalah `val` yang dihitung saat
+ * mesin dibuat. Karena itu `atrPct` **tidak** diterapkan oleh `restore()` — ia dibaca dari sini lalu
+ * dipakai saat **membangun** mesin di `PaperRehydrate.decide()`. Sebelum P4.4, `atrPct` tidak pernah
+ * dipulihkan sehingga ambang BE/trailing S8 diam-diam jatuh ke nilai persen tetap setelah restart.
+ *
+ * ## `entry`/`stopLoss` disimpan untuk verifikasi identitas
+ *
+ * Simbol bisa dipakai ulang untuk posisi yang berbeda. Membandingkan `entry`/`stopLoss` tersimpan
+ * dengan posisi hidup adalah pertahanan terakhir supaya state milik posisi lama tidak diterapkan ke
+ * posisi baru (lihat [PaperExitStateMachine.restoreRejection]).
+ *
+ * @param entry harga masuk posisi saat state ini dibuat — **acuan identitas**, bukan progres.
+ * @param stopLoss SL awal posisi — **acuan identitas**, bukan progres.
+ * @param activeStopLoss level SL yang sedang aktif (sudah naik bila BE/trailing ter-arm).
+ * @param peak harga tertinggi yang pernah disentuh selama posisi terbuka.
+ * @param partialR R yang sudah direalisasi dari TP1 partial (50%); `0.0` bila belum partial.
+ * @param barsHeld jumlah bar M1 yang sudah dihitung untuk time-stop.
+ * @param atrPct ATR% bar M1 saat entry; `<= 0` berarti tidak diketahui.
+ */
+data class PaperExitFsmState(
+    val entry: Double,
+    val stopLoss: Double,
+    val activeStopLoss: Double,
+    val peak: Double,
+    val isBeArmed: Boolean,
+    val isTrailArmed: Boolean,
+    val isPartialDone: Boolean,
+    val partialR: Double,
+    val barsHeld: Int,
+    val atrPct: Double
+) {
+    fun toJson(): JSONObject = JSONObject().apply {
+        put("v", VERSION)
+        put("entry", entry)
+        put("sl", stopLoss)
+        put("active_sl", activeStopLoss)
+        put("peak", peak)
+        put("be", isBeArmed)
+        put("trail", isTrailArmed)
+        put("partial_done", isPartialDone)
+        put("partial_r", partialR)
+        put("bars_held", barsHeld)
+        put("atr_pct", atrPct)
+    }
+
+    fun toJsonString(): String = toJson().toString()
+
+    companion object {
+        /** Versi skema JSON. Naikkan bila makna field berubah; versi lain ditolak ([fromJson] → null). */
+        const val VERSION = 1
+
+        /**
+         * Baca state dari JSON tersimpan.
+         *
+         * @return `null` bila string kosong, JSON rusak, versi tak dikenal, atau ada field inti yang
+         *   bukan angka. `null` diperlakukan pemanggil sebagai "tidak ada state" — mesin dibangun
+         *   baru tanpa progres, bukan sebagai kesalahan fatal.
+         */
+        fun fromJson(raw: String?): PaperExitFsmState? {
+            if (raw.isNullOrBlank()) return null
+            val json = runCatching { JSONObject(raw) }.getOrNull() ?: return null
+            if (json.optInt("v", 0) != VERSION) return null
+            val entry = json.optDouble("entry", Double.NaN)
+            val stopLoss = json.optDouble("sl", Double.NaN)
+            val activeSl = json.optDouble("active_sl", Double.NaN)
+            val peak = json.optDouble("peak", Double.NaN)
+            val partialR = json.optDouble("partial_r", Double.NaN)
+            if (!entry.isFinite() || !stopLoss.isFinite() || !activeSl.isFinite() ||
+                !peak.isFinite() || !partialR.isFinite()
+            ) {
+                return null
+            }
+            val atrRaw = json.optDouble("atr_pct", 0.0)
+            return PaperExitFsmState(
+                entry = entry,
+                stopLoss = stopLoss,
+                activeStopLoss = activeSl,
+                peak = peak,
+                isBeArmed = json.optBoolean("be", false),
+                isTrailArmed = json.optBoolean("trail", false),
+                isPartialDone = json.optBoolean("partial_done", false),
+                partialR = partialR,
+                barsHeld = json.optInt("bars_held", 0),
+                // ATR yang tidak masuk akal diperlakukan sebagai "tidak diketahui", bukan alasan
+                // membuang seluruh progres — lihat ScalpExitParams.effectiveTrailDistancePct.
+                atrPct = if (atrRaw.isFinite() && atrRaw > 0.0) atrRaw else 0.0
+            )
+        }
+    }
+}
+
+/**
  * State machine exit paper trade untuk pemakaian **live** (tick/bar demi bar).
  *
  * Menyimpan state yang sama dengan loop di [PaperExitResolver.resolve] sehingga UI bisa
@@ -362,6 +469,80 @@ class PaperExitStateMachine(
 
     /** Risiko awal (entry → SL) dalam persen. */
     val riskPctValue: Double get() = riskPct
+
+    /**
+     * Potret progres mesin untuk dipersistenkan (P4.4).
+     *
+     * `atrPct` disalin apa adanya, tetapi nilai yang tidak masuk akal ditulis `0.0` supaya
+     * `fromJson` tidak perlu menebak.
+     */
+    fun snapshot(): PaperExitFsmState = PaperExitFsmState(
+        entry = entry,
+        stopLoss = stopLoss,
+        activeStopLoss = activeStopLoss,
+        peak = peak,
+        isBeArmed = isBeArmed,
+        isTrailArmed = isTrailArmed,
+        isPartialDone = isPartialDone,
+        partialR = partialR,
+        barsHeld = barsHeld,
+        atrPct = if (atrPct.isFinite() && atrPct > 0.0) atrPct else 0.0
+    )
+
+    /**
+     * Periksa apakah [state] boleh diterapkan ke mesin ini.
+     *
+     * @return `null` bila boleh; selain itu alasan penolakan dalam Bahasa Indonesia, siap
+     *   ditampilkan di log. Pemisahan dari [restore] disengaja supaya pemanggil bisa melaporkan
+     *   **kenapa** progres dibuang, bukan sekadar bahwa ia dibuang.
+     */
+    fun restoreRejection(state: PaperExitFsmState): String? {
+        // Identitas posisi — simbol bisa dipakai ulang, jadi state lama bisa milik posisi lain.
+        if (!nearEnough(state.entry, entry)) return REJECT_IDENTITY
+        if (!nearEnough(state.stopLoss, stopLoss)) return REJECT_IDENTITY
+        if (!state.activeStopLoss.isFinite() || !state.peak.isFinite() || !state.partialR.isFinite()) {
+            return REJECT_NOT_FINITE
+        }
+        // peak dimulai dari entry dan hanya naik; nilai di bawah entry mustahil.
+        if (state.peak < entry) return REJECT_PEAK_BELOW_ENTRY
+        // SL hanya pernah naik (TP1 partial / BE / trailing), tidak pernah turun.
+        if (state.activeStopLoss < stopLoss) return REJECT_SL_BELOW_INITIAL
+        if (state.barsHeld < 0) return REJECT_BARS_HELD_NEGATIVE
+        // partialR hanya diisi saat partial terpicu, jadi tidak ada partialR tanpa penanda.
+        if (!state.isPartialDone && state.partialR != 0.0) return REJECT_PARTIAL_R_WITHOUT_FLAG
+        // Blok trailing mensyaratkan syarat yang sama dengan blok BE dan hanya ada di mode yang
+        // juga memakai BE (ScalpExitMode.usesTrailing ⊆ usesBreakeven).
+        if (state.isTrailArmed && !state.isBeArmed) return REJECT_TRAIL_WITHOUT_BE
+        // Blok TP1 partial selalu men-set isBeArmed = true.
+        if (state.isPartialDone && !state.isBeArmed) return REJECT_PARTIAL_WITHOUT_BE
+        return null
+    }
+
+    /**
+     * Pulihkan progres dari [state] hasil [snapshot].
+     *
+     * Seluruh field divalidasi lebih dulu; bila ada satu pelanggaran, **tidak ada** yang diterapkan
+     * sehingga mesin tetap pada kondisi awalnya (bukan kondisi setengah jadi). `atrPct` sengaja tidak
+     * dipulihkan di sini — ia parameter konstruktor, jadi pemanggil harus membangun mesin dengan
+     * `atrPct` yang benar (lihat `PaperRehydrate.decide`).
+     *
+     * @return `true` bila state diterapkan, `false` bila ditolak.
+     */
+    fun restore(state: PaperExitFsmState): Boolean {
+        if (restoreRejection(state) != null) return false
+        activeStopLoss = state.activeStopLoss
+        peak = state.peak
+        isBeArmed = state.isBeArmed
+        isTrailArmed = state.isTrailArmed
+        isPartialDone = state.isPartialDone
+        partialR = state.partialR
+        barsHeld = state.barsHeld
+        return true
+    }
+
+    /** Perbandingan harga dengan toleransi relatif — menoleransi pembulatan `toString()` prefs. */
+    private fun nearEnough(a: Double, b: Double): Boolean =
+        abs(a - b) <= max(1e-9, abs(b) * 1e-6)
 
     val phase: PaperExitPhase
         get() = when {
@@ -475,4 +656,16 @@ class PaperExitStateMachine(
             reason = reason,
             exitPrice = price
         )
+
+    companion object {
+        /** Alasan penolakan [restoreRejection] — dipakai untuk log, jadi harus terbaca manusia. */
+        const val REJECT_IDENTITY = "state tersimpan milik posisi lain (entry/SL tidak cocok)"
+        const val REJECT_NOT_FINITE = "state tersimpan memuat angka tidak valid (NaN/Infinity)"
+        const val REJECT_PEAK_BELOW_ENTRY = "peak tersimpan di bawah harga entry"
+        const val REJECT_SL_BELOW_INITIAL = "SL aktif tersimpan lebih longgar dari SL awal"
+        const val REJECT_BARS_HELD_NEGATIVE = "jumlah bar tersimpan negatif"
+        const val REJECT_PARTIAL_R_WITHOUT_FLAG = "partialR terisi tanpa penanda partial"
+        const val REJECT_TRAIL_WITHOUT_BE = "trailing ter-arm tanpa breakeven ter-arm"
+        const val REJECT_PARTIAL_WITHOUT_BE = "partial ter-arm tanpa breakeven ter-arm"
+    }
 }

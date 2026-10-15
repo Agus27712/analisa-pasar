@@ -413,6 +413,7 @@ class SpotPositionStore(context: Context) {
             .remove("${key}_last_trailing_order_id")
             .remove("${key}_last_order_update_time")
             .remove("${key}_paper_engine")
+            .remove("${key}_paper_fsm")
             .putString("${key}_history", appendHistoryEvent(key, position))
 
         // Bersihkan juga legacy key jika legacy mode is_real cocok
@@ -448,6 +449,7 @@ class SpotPositionStore(context: Context) {
                 .remove("${norm}_last_trailing_order_id")
                 .remove("${norm}_last_order_update_time")
                 .remove("${norm}_paper_engine")
+                .remove("${norm}_paper_fsm")
         }
 
         editor.apply()
@@ -620,6 +622,42 @@ class SpotPositionStore(context: Context) {
 
     fun isPaperEngineOwned(symbol: String, isReal: Boolean = false, exchange: String = "TOKOCRYPTO"): Boolean =
         getSafeBoolean("${buildKey(symbol, isReal, exchange)}_paper_engine", false)
+
+    /**
+     * Simpan progres state machine exit paper (P4.4) sebagai **satu string JSON**.
+     *
+     * Store ini sengaja **tidak** mem-parsing isinya: skema JSON dimiliki
+     * `agu.analys.engine.scalping.PaperExitFsmState`, sehingga paket `trading` tidak perlu
+     * bergantung pada `engine`. Store hanya bertanggung jawab menyimpan dan mengembalikan apa adanya.
+     *
+     * Satu key (bukan satu key per field) dipilih supaya: (a) `markSold` hanya perlu satu
+     * `.remove()` per blok, (b) tidak ada kemungkinan state separuh tertulis, dan (c) JSON bisa
+     * membawa `entry`/`stopLoss` untuk memverifikasi bahwa state memang milik posisi ini.
+     */
+    fun setPaperFsmState(
+        symbol: String,
+        isReal: Boolean = false,
+        exchange: String = "TOKOCRYPTO",
+        stateJson: String
+    ) {
+        prefs.edit().putString("${buildKey(symbol, isReal, exchange)}_paper_fsm", stateJson).apply()
+    }
+
+    /** @return JSON mentah, atau `null` bila belum pernah disimpan. Parsing dilakukan pemanggil. */
+    fun getPaperFsmState(symbol: String, isReal: Boolean = false, exchange: String = "TOKOCRYPTO"): String? =
+        getSafeString("${buildKey(symbol, isReal, exchange)}_paper_fsm")
+
+    /**
+     * Hapus progres FSM tersimpan.
+     *
+     * Wajib dipanggil setiap kali kepemilikan exit dilepas tanpa lewat [markSold] — mis. saat
+     * rehidrasi menyerahkan posisi ke jalur auto-sell lama, atau saat mesin dilepas karena posisinya
+     * sudah tidak ada. Tanpa ini key akan tertinggal dan bisa terbaca oleh posisi berikutnya yang
+     * memakai simbol sama.
+     */
+    fun clearPaperFsmState(symbol: String, isReal: Boolean = false, exchange: String = "TOKOCRYPTO") {
+        prefs.edit().remove("${buildKey(symbol, isReal, exchange)}_paper_fsm").apply()
+    }
 
     /**
      * Simbol (kanonik) yang exit-nya dipegang engine paper dan posisinya masih `HOLDING`.

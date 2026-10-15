@@ -1,4 +1,10 @@
-# Scalping Exit Strategy (Spot) — 2026-10-09 · disinkronkan 2026-10-12
+# Scalping Exit Strategy (Spot) — 2026-10-09 · disinkronkan 2026-10-12 · dikoreksi 2026-10-15
+
+> ⚠️ **Koreksi 2026-10-15:** angka edge pada seksi "Status gerbang setelah lantai friksi"
+> **dibatalkan** (akuntansi replay lama membuang ±83% sinyal). Hasil jujur: avg R ≈ −0,1733,
+> **0/40 pair positif**, walk-forward **0/4**. Lihat `workplan2.md` §9.5c dan
+> `docs/LAPORAN-temuan-akuntansi-replay-2026-10-14.md`. Seksi lain (tujuan exit, pemetaan ke kode,
+> parameter) **tetap berlaku**.
 
 Dokumen ini adalah **sumber kebenaran tujuan** untuk agen yang melanjutkan kerja scalping exit. Baca bersama `AGENTS.md` dan `APP_CONTEXT.md`.
 
@@ -163,7 +169,13 @@ Syarat gerbang **uang riil** (tidak berubah dari versi asli):
 - Minimal 30 trade resolved.
 - Trade TIMEOUT tidak boleh dibuang diam-diam. Harus dihitung ke statistik atau dilaporkan terpisah.
 
-### Status gerbang setelah lantai friksi (2026-10-12)
+### Status gerbang setelah lantai friksi (2026-10-12) — 🔴 angka edge-nya DIBATALKAN 2026-10-14
+
+> 🔴 **Seluruh baris "Sesudah" / "Train" / "Test" di tabel bawah TIDAK SAH.** Angka-angka itu
+> dihasilkan sebelum `703c3b6`, ketika `summarize()` **membuang** trade `UNRESOLVED` (±83% sinyal
+> pada data 40 pair) dari statistik. Setelah dihitung jujur: **avg R ≈ −0,1733 dan 0/40 pair
+> positif**. Yang masih berlaku dari seksi ini hanyalah bagian **profil exit** (di bawah tabel).
+> Bukti: `docs/LAPORAN-temuan-akuntansi-replay-2026-10-14.md`, `workplan2.md` §9.5c.
 
 Bukti baru: `data/tokocrypto_live_usdt` — **40 pair, 30 hari M1 riil**, config
 `scalp_config_exit_full.json` (lantai friksi 6×, target 2,0). Reproduksi dengan
@@ -172,13 +184,20 @@ Bukti baru: `data/tokocrypto_live_usdt` — **40 pair, 30 hari M1 riil**, config
 | Uji | Hasil |
 |---|---|
 | Sebelum lantai friksi (baseline) | **0/28** pair avg R > 0; avg R terbobot **−1,2177** |
-| Sesudah (dataset penuh 30 hari) | **28/32** pair avg R > 0; avg R terbobot **+0,0325** |
-| Train 70% | avg R **+0,0350**, 28/32 pair positif |
-| **Test 30% (out-of-sample)** | avg R **+0,0216**, 23/30 pair positif → **split LOLOS** |
+| Sesudah (dataset penuh 30 hari) | ~~**28/32** pair avg R > 0; avg R terbobot **+0,0325**~~ ❌ tidak sah |
+| Train 70% | ~~avg R **+0,0350**, 28/32 pair positif~~ ❌ tidak sah |
+| **Test 30% (out-of-sample)** | ~~avg R **+0,0216**, 23/30 pair positif → **split LOLOS**~~ ❌ tidak sah → sebenarnya **−0,1733, 0/40 positif** |
 | Gate ketat in-sample (avgR>0 ∧ PF≥1,2 ∧ n≥30) | 21/40 pair |
-| **Gate ketat out-of-sample (di test)** | **5/40 pair** — APT, NEAR, SU, W, ZRO |
+| **Gate ketat out-of-sample (di test)** | ~~**5/40 pair**~~ ❌ tidak sah |
+| **Walk-forward 40 pair (4 jendela, akuntansi jujur)** | **0/4 lolos** · test avg R **−0,1614** · pair positif **0/156** |
 
-**Status: BELUM LOLOS untuk uang riil — meski jauh lebih baik daripada sebelumnya.**
+**Status: BELUM LOLOS untuk uang riil — dan sekarang lebih tegas daripada sebelumnya.**
+Bukan lagi "profil exit yang tipis", melainkan **tidak ada edge kotor yang tersisa setelah friksi**.
+Lantai friksi memaksa SL ≥ 5,81%, jadi trade tanpa edge hanya menanggung biaya lalu ditutup:
+`−0,9688% / 5,81% = −0,167 R` — persis yang terukur (≈ −0,17).
+
+Artinya menyetel exit (P4.2/P4.4) **tidak akan mengubah apa pun** sebelum ada varian **entry**
+yang menghasilkan avg R kotor > +0,167R pada horizon 120 bar M1. Lihat `workplan2.md` §9.5c.
 
 Alasan utamanya bukan lagi "rugi", melainkan **profil skew negatif yang tipis**.
 Distribusi exit dari 2.550 trade:

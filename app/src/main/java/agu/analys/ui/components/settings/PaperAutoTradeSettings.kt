@@ -22,6 +22,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,6 +42,8 @@ import agu.analys.ui.theme.TvSurface
 import agu.analys.ui.theme.TvSurfaceVariant
 import agu.analys.ui.theme.TvTextPrimary
 import agu.analys.ui.theme.TvTextSecondary
+import agu.analys.util.ExchangeRateManager
+import agu.analys.util.PriceFormatter
 
 /**
  * Pengaturan auto-buy & auto-exit **paper trade** (P2).
@@ -55,6 +58,9 @@ fun PaperAutoTradeSettings(
     onChange: (PaperAutoTradeConfig) -> Unit
 ) {
     var showInfo by remember { mutableStateOf(false) }
+    // Kurs dipakai hanya untuk menampilkan ekuivalen. Konversi yang sebenarnya terjadi saat
+    // sinyal masuk, memakai pair yang bersangkutan.
+    val usdtIdrRate by ExchangeRateManager.usdtIdrRate.collectAsState()
 
     Card(
         shape = RoundedCornerShape(12.dp),
@@ -221,14 +227,31 @@ fun PaperAutoTradeSettings(
                 Spacer(Modifier.height(10.dp))
                 if (config.allocation == PaperAutoBuyAllocation.FIXED_QUOTE) {
                     StepperRow(
-                        label = "Nominal per posisi",
-                        valueText = formatCompact(config.fixedQuoteAmount),
+                        label = "Nominal per posisi (Rp)",
+                        valueText = PriceFormatter.formatMoney(config.fixedIdrAmount, "IDR"),
                         onMinus = {
-                            onChange(config.copy(fixedQuoteAmount = (config.fixedQuoteAmount - 10_000.0).coerceAtLeast(10_000.0)))
+                            onChange(config.copy(fixedIdrAmount = (config.fixedIdrAmount - 10_000.0).coerceAtLeast(10_000.0)))
                         },
                         onPlus = {
-                            onChange(config.copy(fixedQuoteAmount = (config.fixedQuoteAmount + 10_000.0).coerceAtMost(100_000_000.0)))
+                            onChange(config.copy(fixedIdrAmount = (config.fixedIdrAmount + 10_000.0).coerceAtMost(100_000_000.0)))
                         }
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        if (usdtIdrRate > 0.0) {
+                            "Dikonversi per pair saat sinyal: ≈ " +
+                                PriceFormatter.formatPrice(
+                                    config.fixedIdrAmount / usdtIdrRate,
+                                    quoteAsset = "USDT"
+                                ) +
+                                " untuk pair USDT (kurs " +
+                                PriceFormatter.formatPrice(usdtIdrRate, quoteAsset = "IDR") + ")."
+                        } else {
+                            "Kurs USDT/IDR belum tersedia — auto-buy pair USDT dilewati sampai kurs masuk."
+                        },
+                        color = if (usdtIdrRate > 0.0) TvTextSecondary else TvOrange,
+                        fontSize = 10.sp,
+                        lineHeight = 14.sp
                     )
                 } else {
                     StepperRow(
@@ -323,10 +346,4 @@ private fun StepperRow(
             )
         }
     }
-}
-
-private fun formatCompact(v: Double): String = when {
-    v >= 1_000_000.0 -> String.format(java.util.Locale.US, "%.1f jt", v / 1_000_000.0)
-    v >= 1_000.0 -> String.format(java.util.Locale.US, "%.0f rb", v / 1_000.0)
-    else -> String.format(java.util.Locale.US, "%.0f", v)
 }

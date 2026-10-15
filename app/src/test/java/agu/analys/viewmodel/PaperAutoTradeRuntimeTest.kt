@@ -1,5 +1,6 @@
 package agu.analys.viewmodel
 
+import agu.analys.engine.scalping.PaperExitFsmState
 import agu.analys.engine.scalping.PaperExitStateMachine
 import agu.analys.engine.scalping.ScalpExitMode
 import agu.analys.engine.scalping.ScalpExitParams
@@ -121,5 +122,138 @@ class PaperAutoTradeRuntimeTest {
             "kembali ke menit yang sama tidak dihitung bar baru lagi",
             PaperAutoTradeRuntime.markBarBucket("TOKOCRYPTO", "BTC_IDR", minuteStart + 90_000L)
         )
+    }
+
+    // ── Persistensi progres FSM (P4.4) ──────────────────────────────────────
+
+    private fun fsm(
+        activeStopLoss: Double = 99.0,
+        peak: Double = 100.0,
+        isBeArmed: Boolean = false,
+        isTrailArmed: Boolean = false,
+        isPartialDone: Boolean = false,
+        barsHeld: Int = 0
+    ) = PaperExitFsmState(
+        entry = 100.0,
+        stopLoss = 99.0,
+        activeStopLoss = activeStopLoss,
+        peak = peak,
+        isBeArmed = isBeArmed,
+        isTrailArmed = isTrailArmed,
+        isPartialDone = isPartialDone,
+        partialR = 0.0,
+        barsHeld = barsHeld,
+        atrPct = 3.0
+    )
+
+    /**
+     * Tick pertama setelah rehidrasi harus dihitung sebagai bar M1 baru.
+     *
+     * `put` menandai menit berjalan sebagai "sudah dihitung", jadi tanpa penanda ini time-stop baru
+     * dievaluasi sampai batas menit berikutnya — padahal jam tahan sudah lewat selama app tertutup.
+     */
+    @Test
+    fun `tick pertama setelah rehidrasi dihitung sebagai bar M1 baru`() {
+        val now = (System.currentTimeMillis() / 60_000L) * 60_000L
+        PaperAutoTradeRuntime.put("TOKOCRYPTO", "BTC_IDR", machine(), markFirstTickAsNewBar = true)
+        assertTrue(
+            "rehidrasi harus langsung bisa memicu time-stop",
+            PaperAutoTradeRuntime.markBarBucket("TOKOCRYPTO", "BTC_IDR", now)
+        )
+    }
+
+    @Test
+    fun `tick pertama pada arm biasa tetap bukan bar baru`() {
+        val now = (System.currentTimeMillis() / 60_000L) * 60_000L
+        PaperAutoTradeRuntime.put("TOKOCRYPTO", "BTC_IDR", machine())
+        assertFalse(PaperAutoTradeRuntime.markBarBucket("TOKOCRYPTO", "BTC_IDR", now))
+    }
+
+    @Test
+    fun `penulisan pertama selalu dilakukan walau tanpa force`() {
+        assertTrue(PaperAutoTradeRuntime.shouldWriteFsm("TOKOCRYPTO", "BTC_IDR", fsm(), now = 1_000L))
+    }
+
+    @Test
+    fun `pergeseran peak saja ditahan oleh throttle`() {
+        val awal = fsm(peak = 100.0)
+        assertTrue(PaperAutoTradeRuntime.shouldWriteFsm("TOKOCRYPTO", "BTC_IDR", awal, now = 1_000L))
+
+        val peakNaik = awal.copy(peak = 100.5)
+        assertFalse(
+            "peak bergerak tiap tick, jadi tidak boleh memicu penulisan tiap kali",
+            PaperAutoTradeRuntime.shouldWriteFsm("TOKOCRYPTO", "BTC_IDR", peakNaik, now = 1_500L)
+        )
+        assertTrue(
+            "setelah jeda throttle, peak baru ikut tersimpan",
+            PaperAutoTradeRuntime.shouldWriteFsm("TOKOCRYPTO", "BTC_IDR", peakNaik, now = 3_000L)
+        )
+    }
+
+    @Test
+    fun `perubahan yang mengubah perilaku exit ditulis segera`() {
+        val dasar = fsm()
+        PaperAutoTradeRuntime.shouldWriteFsm("TOKOCRYPTO", "BTC_IDR", dasar, now = 1_000L)
+
+        assertTrue(
+            "BE ter-arm harus langsung tersimpan",
+            PaperAutoTradeRuntime.shouldWriteFsm("TOKOCRYPTO", "BTC_IDR", dasar.copy(isBeArmed = true), now = 1_100L)
+        )
+        assertTrue(
+            "trailing ter-arm harus langsung tersimpan",
+            PaperAutoTradeRuntime.shouldWriteFsm(
+                "TOKOCRYPTO", "BTC_IDR", dasar.copy(isBeArmed = true, isTrailArmed = true), now = 1_200L
+            )
+        )
+        assertTrue(
+            "SL naik harus langsung tersimpan",
+            PaperAutoTradeRuntime.shouldWriteFsm(
+                "TOKOCRYPTO", "BTC_IDR", dasar.copy(isBeArmed = true, activeStopLoss = 101.0), now = 1_300L
+            )
+        )
+        assertTrue(
+            "jumlah bar berubah harus langsung tersimpan",
+            PaperAutoTradeRuntime.shouldWriteFsm("TOKOCRYPTO", "BTC_IDR", dasar.copy(barsHeld = 3), now = 1_400L)
+        )
+    }
+
+    @Test
+    fun `force menembus throttle`() {
+        val state = fsm()
+        PaperAutoTradeRuntime.shouldWriteFsm("TOKOCRYPTO", "BTC_IDR", state, now = 1_000L)
+        assertTrue(PaperAutoTradeRuntime.shouldWriteFsm("TOKOCRYPTO", "BTC_IDR", state, now = 1_100L, force = true))
+    }
+
+    @Test
+    fun `seedPersistedFsm mencegah penulisan ulang yang tidak perlu`() {
+        val state = fsm()
+        val now = System.currentTimeMillis()
+        PaperAutoTradeRuntime.seedPersistedFsm("TOKOCRYPTO", "BTC_IDR", state)
+        assertFalse(
+            "state sudah sinkron dengan disk setelah rehidrasi",
+            PaperAutoTradeRuntime.shouldWriteFsm("TOKOCRYPTO", "BTC_IDR", state, now = now)
+        )
+    }
+
+    @Test
+    fun `clear melepas jejak penulisan sehingga posisi berikutnya ditulis lagi`() {
+        val state = fsm()
+        PaperAutoTradeRuntime.shouldWriteFsm("TOKOCRYPTO", "BTC_IDR", state, now = 1_000L)
+        PaperAutoTradeRuntime.clear("TOKOCRYPTO", "BTC_IDR")
+        assertTrue(
+            "tanpa pembersihan ini, throttle posisi lama bisa menahan penulisan posisi baru",
+            PaperAutoTradeRuntime.shouldWriteFsm("TOKOCRYPTO", "BTC_IDR", state, now = 1_100L)
+        )
+    }
+
+    @Test
+    fun `clearAll membersihkan jejak penulisan semua posisi`() {
+        PaperAutoTradeRuntime.shouldWriteFsm("TOKOCRYPTO", "BTC_IDR", fsm(), now = 1_000L)
+        PaperAutoTradeRuntime.shouldWriteFsm("INDODAX", "ETH_IDR", fsm(), now = 1_000L)
+
+        PaperAutoTradeRuntime.clearAll()
+
+        assertTrue(PaperAutoTradeRuntime.shouldWriteFsm("TOKOCRYPTO", "BTC_IDR", fsm(), now = 1_100L))
+        assertTrue(PaperAutoTradeRuntime.shouldWriteFsm("INDODAX", "ETH_IDR", fsm(), now = 1_100L))
     }
 }
