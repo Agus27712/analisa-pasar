@@ -1,5 +1,6 @@
 package agu.analys.engine.sell
 
+import agu.analys.config.FeeSchedule
 import agu.analys.config.TradingFeeConfig
 import agu.analys.model.MarketTick
 import agu.analys.model.PositionContext
@@ -23,7 +24,13 @@ object SellSignalEvaluator {
         tradingFees: TradingFeeConfig = TradingFeeConfig(),
         high24h: Double = 0.0,
         riskSnapshot: SellRiskSnapshot? = null,
-        rapidDropConfig: RapidDropConfig = RapidDropConfig()
+        rapidDropConfig: RapidDropConfig = RapidDropConfig(),
+        /**
+         * Asumsi slippage per sisi (%). Dibuat parameter, bukan konstanta tersembunyi, supaya
+         * basis biaya yang dipakai radar ini terlihat jelas di pemanggil dan bisa diuji tanpa
+         * harus menebak — lihat `NetPnlParityTest`.
+         */
+        slippagePct: Double = FeeSchedule.DEFAULT_SLIPPAGE_PCT
     ): SellSignalState {
         // 1. Tidak memiliki posisi
         if (!context.hasPosition || (context.quantity ?: 0.0) <= 0.00000001) {
@@ -37,11 +44,29 @@ object SellSignalEvaluator {
         val quantity = context.quantity ?: 0.0
         val entryPrice = context.entryPrice
         val hasCostBasis = entryPrice != null && entryPrice > 0.0
-        val costBasis = if (hasCostBasis) quantity * entryPrice!! else 0.0
 
-        val sellFeeRate = (tradingFees.sellMakerPct / 100.0).coerceAtLeast(0.0)
-        val grossSell = quantity * currentPrice
-        val netSell = grossSell * (1.0 - sellFeeRate)
+        // Basis biaya tunggal (2026-10-15): **taker + slippage dua sisi**, sama persis dengan FSM
+        // paper trade. Sebelumnya radar ini hanya memotong fee jual maker dan mengabaikan fee beli
+        // serta slippage, sehingga melaporkan profit yang lebih besar daripada yang diakui mesin
+        // exit untuk posisi yang sama. Karena ambang di bawah memakai `netProfitPct`, perubahan ini
+        // membuatnya sedikit lebih ketat — lihat catatan ambang di `workplan2.md` §24.
+        val costBasis = if (hasCostBasis) {
+            FeeSchedule.costBasisNet(
+                quantity = quantity,
+                entry = entryPrice!!,
+                buyFeePct = tradingFees.buyTakerPct,
+                slippagePct = slippagePct
+            )
+        } else {
+            0.0
+        }
+
+        val netSell = FeeSchedule.netSellValue(
+            quantity = quantity,
+            price = currentPrice,
+            sellFeePct = tradingFees.sellTakerPct,
+            slippagePct = slippagePct
+        )
 
         val netProfitPct = if (hasCostBasis && costBasis > 0.0) {
             val netProfitIdr = netSell - costBasis
@@ -201,7 +226,8 @@ object SellSignalEvaluator {
         indicators: TechnicalIndicators?,
         tradingFees: TradingFeeConfig,
         riskSnapshot: SellRiskSnapshot? = null,
-        rapidDropConfig: RapidDropConfig = RapidDropConfig()
+        rapidDropConfig: RapidDropConfig = RapidDropConfig(),
+        slippagePct: Double = FeeSchedule.DEFAULT_SLIPPAGE_PCT
     ): SellSignalState {
         val context = PositionContext.create(
             symbol = tick?.symbol ?: "",
@@ -216,7 +242,8 @@ object SellSignalEvaluator {
             tradingFees = tradingFees,
             high24h = tick?.high24h ?: 0.0,
             riskSnapshot = riskSnapshot,
-            rapidDropConfig = rapidDropConfig
+            rapidDropConfig = rapidDropConfig,
+            slippagePct = slippagePct
         )
     }
 }

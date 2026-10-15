@@ -1312,3 +1312,158 @@ real/paper identik dengan mode BUY.
 | Tambahan | **+13 test, +3 kelas** |
 | APK debug | 27.875.220 byte (27,9 MB desimal) |
 | Kesiapan uang riil | **BELUM** — lihat §9.5c |
+
+---
+
+## 22. Mode SELL yang benar & frame FSM jadi utama (2026-10-15)
+
+### 22.1 Masalah
+
+Owner melaporkan **"masih sama, UI buy dan sell"**. Setelah §20 mode halaman detail sudah otoritatif
+(hold → SELL), tetapi secara visual kedua mode tetap terasa identik.
+
+Akar: `ui/screens/DetailChartScreen.kt` baris 316 merender `ScalpDeskCard` + `PaperTradeDeskCard`
+dengan syarat `isScalping` **saja**, **tanpa melihat status kepemilikan koin**. Kedua frame terbesar
+di layar jadi statis — itulah yang membuat mode beli dan jual terlihat sama.
+
+### 22.2 Keputusan owner
+
+| Aspek | Keputusan |
+|---|---|
+| Mode SELL | Sembunyikan `ScalpDeskCard`, `PaperTradeDeskCard`, **dan** `MarketConditionCard` ("KONDISI SCALPING") |
+| Tetap tampil di mode SELL | FSM paper trade, indikator observasi (`DetailTechnicalDetailsSection`), log sinyal (`SignalHistoryPanel`) |
+| Posisi FSM | **Paling atas** — setelah kartu grafik, sebelum radar jual |
+| Kosmetik FSM | **Lengkap** |
+
+### 22.3 Implementasi
+
+| Titik | Berkas | Perubahan |
+|---|---|---|
+| Resolver murni | `model/PositionContext.kt` | `enum DetailScalpPanel {NONE, SCALPING_DESK, EXIT_FSM}` + `resolveDetailScalpPanel(isScalping, isHolding)` |
+| Layar | `ui/screens/DetailChartScreen.kt` | `if (isScalping)` → `when (resolveDetailScalpPanel(...))`; FSM dipanggil langsung dari layar; `MarketConditionCard` dibungkus `if (!(isScalping && isHolding))` |
+| Kosmetik | `ui/components/simulation/PaperExitFsmCard.kt` | `FsmMetricTile` (grid 2×2), `FsmValueText` → `AnimatedMetricText`, `AnimatedPercentageBadge`, kedip SL bergeser, stepper + bar beranimasi |
+| Uji | `app/src/test/java/agu/analys/engine/DetailScalpPanelTest.kt` | **baru** — 6 kasus |
+
+Tiga status (`NONE` terpisah) dipilih supaya kasus "scalping nonaktif" bisa diuji eksplisit dan FSM
+tidak diam-diam muncul di mode non-scalping.
+
+Saat mode SELL tetapi `paperSnapshot == null` (posisi manual tanpa mesin exit), kartu FSM **tidak**
+dipaksa tampil: `EmptyFsmState` berbicara soal auto-buy menunggu sinyal, yang menyesatkan di mode
+jual. Copy komponen bersama itu tidak diubah karena juga dipakai layar Simulasi.
+
+### 22.4 Kosmetik — memakai komponen yang sudah ada
+
+Semua dari `ui/animation/AppAnimations.kt`, tanpa gaya baru: `AnimatedMetricText`,
+`AnimatedPercentageBadge`, `rememberLivePulseAlpha` + `Modifier.livePulse`, `animateFloatAsState`,
+`animateColorAsState`. Kosmetik dipasang **tanpa syarat** (kartu juga dipakai `TradeSimulationScreen`)
+dan menghormati `PriceAnimationMode.STATIC` lewat `LocalPriceAnimationMode` sebagai katup hemat baterai.
+
+### 22.5 Kontrol negatif
+
+Aturan `isHolding` dibalik (hold → `SCALPING_DESK`) → **4 dari 6** test gagal. Dua yang tetap lulus
+adalah kasus `isScalping = false`, yang memang tidak boleh terpengaruh — sekaligus membuktikan `NONE`
+independen. Dipulihkan → hijau.
+
+### 22.6 Laporan
+
+`docs/LAPORAN-mode-sell-fsm-2026-10-15.md`
+
+---
+
+## 23. Status setelah §22
+
+| | |
+|---|---|
+| Unit test (diukur dari XML) | **435 lulus · 0 gagal · 1 dilewati** (57 kelas) |
+| Baseline sebelum §22 | **429 lulus · 0 gagal · 1 dilewati** (56 kelas) |
+| Tambahan | **+6 test, +1 kelas** |
+| APK debug | 27.877.128 byte (27,9 MB desimal) |
+| Kesiapan uang riil | **BELUM** — lihat §9.5c |
+
+---
+
+## 24. Seragamkan hitungan P&L ke basis FSM (2026-10-15)
+
+### 24.1 Masalah
+
+Owner menemukan angka yang **tidak cocok** antara FSM paper trade, radar jual, dan koin yang
+dimiliki di halaman portofolio untuk posisi yang sama. Dugaan owner benar: FSM memakai fee truth +
+slippage sehingga nilainya paling kecil. Setelah ditelusuri ternyata ada **empat** rumus berbeda,
+bukan tiga — dan yang justru cacat adalah halaman portofolio.
+
+| Tempat | Rumus lama | Friksi (Tokocrypto IDR) |
+|---|---|---|
+| Portofolio (3 tempat) | `(harga − avgBeli) / avgBeli` | **0%** — bruto |
+| Radar jual & kartu posisi | fee jual maker saja | 0,3322% |
+| FSM paper | taker + slippage 2 sisi | 0,8119% |
+
+### 24.2 Keputusan owner
+
+**Seragamkan ke basis FSM** (taker + slippage dua sisi, multiplikatif). Paling jujur karena
+auto-buy/auto-exit adalah order market.
+
+### 24.3 Implementasi
+
+Satu titik kebenaran di `object FeeSchedule` (`config/AppConfiguration.kt`): `netProfitPct`,
+`netProfitPctFor` (default **taker**), `costBasisNet`, `netSellValue`, `breakevenPrice`.
+
+Invarian anti-drift: `(netSellValue / costBasisNet − 1) × 100` sama persis dengan `netProfitPct`.
+
+| Pemanggil | Perubahan |
+|---|---|
+| `engine/scalping/PaperExitResolver.kt` | mendelegasi ke `FeeSchedule` (signature dipertahankan) |
+| `model/PositionContext.kt` | pakai helper baru; maker → **taker** |
+| `engine/sell/SellSignalEvaluator.kt` | pakai helper baru; parameter `slippagePct` di kedua overload |
+| `ui/screens/PortfolioScreen.kt` | bruto → net |
+| `ui/screens/portfolio/RealPortfolioView.kt` | bruto → net |
+| `ui/components/dashboard/ActiveHoldingSection.kt` | bruto → net |
+| `ui/components/detail/sell/SellPositionOverviewCard.kt` | label basis biaya |
+
+**Tidak diubah**: `SimulationTradeStore`, `SimulationOrderEngine` — basisnya P&L **terealisasi**
+(sudah dikunci), bukan floating.
+
+### 24.4 Efek samping perilaku (disengaja)
+
+Friksi radar jual 0,3322% → 0,8119%. Ambang jadi lebih ketat:
+
+| Ambang | Sebelum | Sesudah |
+|---|---|---|
+| `netProfitPct > 0` | ≈0,33% | **≈0,82%** |
+| `>= 1.0` | ≈1,34% | **≈1,83%** |
+| `>= 2.0` (badge PROFIT) | ≈2,34% | **≈2,84%** |
+| `>= 3.5` | ≈3,85% | **≈4,35%** |
+| `>= 5.0` | ≈5,35% | **≈5,86%** |
+
+Pada bruto +1,5%: radar jual dulu **+1,16%**, sekarang **+0,68%** (selisih 0,49 pp).
+**Catatan:** TP1 yang hanya ~0,5% di atas entry tidak lagi memicu `READY_TO_SELL` — TP harus
+≥≈0,82% di atas entry agar menguntungkan secara net. Ikut berubah: `SellCheckpointEvaluator`
+(checkpoint 3), `ReadySellBadgeEvaluator`, `ProactiveProfitSummaryCard`, `SpotPositionCard`,
+`AlertNotificationHelper`.
+
+### 24.5 Uji & kontrol negatif
+
+`app/src/test/java/agu/analys/engine/NetPnlParityTest.kt` — **baru**, 8 kasus (friksi −0,8119%,
+impas 0,8186%, paritas dengan `PaperExitResolver`, invarian anti-drift, tarif Indodax, dll).
+
+`SellSignalEvaluatorTest` diperbarui: seluruh komponen biaya dinolkan (`tanpaBiaya` +
+`slippagePct = 0.0`) karena kelas itu menguji **ambang**, bukan besaran biaya.
+
+Kontrol negatif: basis dipaksa **maker** → **4 dari 8** uji gagal. Empat yang tetap lulus memang
+tidak bergantung pada basis taker (paritas delegasi, tanda, harga tidak valid, `costBasisNet`).
+Dipulihkan → hijau.
+
+### 24.6 Laporan
+
+`docs/LAPORAN-seragam-pnl-basis-fsm-2026-10-15.md`
+
+---
+
+## 25. Status setelah §24
+
+| | |
+|---|---|
+| Unit test (diukur dari XML) | **443 lulus · 0 gagal · 1 dilewati** (58 kelas) |
+| Baseline sebelum §24 | **435 lulus · 0 gagal · 1 dilewati** (57 kelas) |
+| Tambahan | **+8 test, +1 kelas** |
+| APK debug | 27.877.730 byte |
+| Kesiapan uang riil | **BELUM** — lihat §9.5c |

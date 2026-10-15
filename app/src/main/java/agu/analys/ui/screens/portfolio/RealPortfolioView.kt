@@ -12,6 +12,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import agu.analys.config.FeeSchedule
 import agu.analys.database.RealOpenOrderEntity
 import agu.analys.database.RealTradeEntity
 import agu.analys.model.MarketTick
@@ -114,17 +115,36 @@ fun RealPortfolioView(
                     ?: 0.0
                 val effectivePrice = if (price > 0.0) price else avgPrice
 
+                val quoteAsset = if (isQuoteUsdt) "USDT" else "IDR"
+
                 // Normalisasi nilai estimasi & PnL ke Rupiah (IDR)
                 // Kurs belum ada => nilai Rp 0 (tidak menganggap $ sebagai Rp)
                 val rate = if (isQuoteUsdt) usdtIdrRate else 1.0
                 val estValIdr = qty * effectivePrice * rate
-                val pnlIdr = if (avgPrice > 0.0) (effectivePrice - avgPrice) * qty * rate else 0.0
-                val pnlPct = if (avgPrice > 0.0) ((effectivePrice - avgPrice) / avgPrice) * 100.0 else 0.0
+                // Basis biaya tunggal (2026-10-15): **taker + slippage dua sisi**, sama persis
+                // dengan FSM paper trade. Sebelumnya baris ini memakai selisih harga **bruto**
+                // tanpa fee sama sekali — angka paling optimistis di aplikasi.
+                val exchangeName = if (isTokocrypto) "TOKOCRYPTO" else "INDODAX"
+                val costBasis = if (avgPrice > 0.0) {
+                    FeeSchedule.costBasisNet(
+                        quantity = qty,
+                        entry = avgPrice,
+                        buyFeePct = FeeSchedule.buyRate(exchangeName, quoteAsset) * 100.0
+                    )
+                } else {
+                    0.0
+                }
+                val netValue = FeeSchedule.netSellValue(
+                    quantity = qty,
+                    price = effectivePrice,
+                    sellFeePct = FeeSchedule.sellRate(exchangeName, quoteAsset) * 100.0
+                )
+                val pnlIdr = if (avgPrice > 0.0) (netValue - costBasis) * rate else 0.0
+                val pnlPct = if (avgPrice > 0.0 && costBasis > 0.0) ((netValue - costBasis) / costBasis) * 100.0 else 0.0
 
                 val freeQty = realFreeBalance[coinLower] ?: realFreeBalance[coinUpper] ?: qty
                 val lockedQty = realLockedBalance[coinLower] ?: realLockedBalance[coinUpper] ?: 0.0
 
-                val quoteAsset = if (isQuoteUsdt) "USDT" else "IDR"
                 val pair = TradingPair.fromCustomSymbol(primarySymbol, quoteAsset)
 
                 Triple(

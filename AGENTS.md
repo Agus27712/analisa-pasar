@@ -266,6 +266,23 @@ Yang **tidak boleh** dilakukan lagi tanpa instruksi eksplisit owner:
   yang masih hold tetap "terpakai", jadi tanpa gerbang ini auto-buy menumpuk posisi sampai order
   berikutnya ditolak karena saldo kurang — bukan karena sinyalnya buruk. Bukti:
   `docs/LAPORAN-batas-posisi-paper-2026-10-15.md`.
+- **SATU rumus P&L untuk seluruh aplikasi (2026-10-15, WAJIB).** Semua perhitungan profit/loss
+  floating harus lewat `object FeeSchedule` di `config/AppConfiguration.kt`:
+  `netProfitPct` / `netProfitPctFor` (default **taker**), `costBasisNet`, `netSellValue`,
+  `breakevenPrice`. **Jangan** menulis ulang rumusnya di layar atau engine lain. Sebelum
+  penyeragaman ini ada **empat** rumus berbeda untuk hal yang sama — halaman portofolio bahkan
+  memakai selisih harga **bruto tanpa fee sama sekali** — sehingga koin yang sama tampil berbeda
+  sampai **0,81 poin persen** antar halaman dan pengguna membacanya sebagai bug. Basis yang
+  disepakati adalah basis FSM (taker + slippage dua sisi, multiplikatif), karena auto-buy dan
+  auto-exit adalah order **market**. Invarian yang dijaga uji:
+  `(netSellValue / costBasisNet − 1) × 100` harus sama persis dengan `netProfitPct`.
+  **Pengecualian:** P&L **terealisasi** (`SimulationTradeStore`, `SimulationOrderEngine`) memakai
+  basis berbeda — itu laba yang sudah dikunci, jangan ikut diubah. Bukti:
+  `docs/LAPORAN-seragam-pnl-basis-fsm-2026-10-15.md`.
+- **Ambang yang membaca `netProfitPct` ikut bergeser bila basis biaya berubah (2026-10-15).**
+  Dengan basis taker + slippage, ambang `> 0` butuh kenaikan harga ≈0,82% (dulu ≈0,33%),
+  `>= 2.0` (badge PROFIT) ≈2,84% (dulu ≈2,34%), `>= 5.0` ≈5,86% (dulu ≈5,35%). Bila mengubah tarif
+  atau slippage, **hitung ulang ambang ini** dan perbarui `SellSignalEvaluatorTest`.
 - Exit scalp paper: lihat `SCALP_EXIT.md`; real auto-execute dari sinyal scalp **bukan** prioritas sampai gate edge terpenuhi.
 - Commit non-rilis (docs/fee/config): sertakan **`[skip ci]`** jika owner meminta agar rilis tidak terpicu.
 
@@ -285,6 +302,19 @@ Yang **tidak boleh** dilakukan lagi tanpa instruksi eksplisit owner:
   dihapus beserta dua pemanggilnya (`WaitingEntryRadarCard`, `ScalpDeskCard`). Mesinnya
   (`engine/backtest/*`, `WalkForwardEvaluator`, `ScalpingBacktestAdapter`) **tetap ada** dan masih
   dipakai tooling/test — jangan ikut dihapus, dan jangan menampilkan baseline backtest di UI lagi.
+- **Jangan menyembunyikan/menampilkan frame layar detail berdasarkan `isScalping` saja
+  (2026-10-15, WAJIB).** Tampilan yang bergantung pada **status kepemilikan koin** harus lewat
+  resolver murni di `model/PositionContext.kt`, bukan `if` langsung di layar. Presedennya:
+  `resolveDetailScalpPanel(isScalping, isHolding)` menentukan hold → `EXIT_FSM`,
+  tidak hold → `SCALPING_DESK`, scalping nonaktif → `NONE`. Bug §22 lahir justru karena
+  `DetailChartScreen` memakai `if (isScalping)` tanpa melihat kepemilikan, sehingga mode beli dan
+  jual terlihat identik. Setiap resolver semacam ini **wajib** punya uji + kontrol negatif.
+- **Kosmetik animasi di Compose memakai komponen yang sudah ada** di
+  `ui/animation/AppAnimations.kt` (`AnimatedMetricText`, `AnimatedPercentageBadge`,
+  `rememberLivePulseAlpha` + `Modifier.livePulse`) dan **wajib menghormati**
+  `LocalPriceAnimationMode` / `PriceAnimationMode.STATIC` sebagai katup hemat baterai pengguna.
+  Jangan mengarang gaya animasi baru, dan jangan menambah sakelar hemat daya kedua.
+  Bukti: `docs/LAPORAN-mode-sell-fsm-2026-10-15.md`.
 
 ## Git
 

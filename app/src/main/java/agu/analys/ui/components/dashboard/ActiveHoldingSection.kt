@@ -164,9 +164,18 @@ fun ActiveHoldingCard(
         else -> 0.0
     }
     val change24h = item.tick?.change24h ?: 0.0
+    // Basis biaya tunggal (2026-10-15): **taker + slippage dua sisi**, sama persis dengan FSM
+    // paper trade. Sebelumnya badge ini memakai selisih harga **bruto**, sehingga selalu lebih
+    // optimistis daripada angka yang diakui mesin exit untuk posisi yang sama.
+    val exchangeName = item.position?.exchange?.takeIf { it.isNotBlank() } ?: "TOKOCRYPTO"
     val pnlPct = if (entryPrice > 0.0 && currentPrice > 0.0) {
-        val calc = ((currentPrice - entryPrice) / entryPrice) * 100.0
-        if (calc.isFinite() && abs(calc) < 100000.0) calc else change24h
+        val net = agu.analys.config.FeeSchedule.netProfitPctFor(
+            entry = entryPrice,
+            price = currentPrice,
+            exchange = exchangeName,
+            quoteAsset = item.pair.quoteAsset
+        )
+        if (net.isFinite() && abs(net) < 100000.0) net else change24h
     } else change24h
 
     val isProfit = pnlPct >= 0.0

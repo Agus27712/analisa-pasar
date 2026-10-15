@@ -1,6 +1,7 @@
 package agu.analys.config
 
 import kotlin.math.abs
+import kotlin.math.max
 
 enum class AiProvider(val label: String) { GROQ("Groq"), GEMINI("Gemini") }
 
@@ -189,6 +190,101 @@ object FeeSchedule {
         } else {
             TradingFeeConfig.forTokocrypto(quoteAsset)
         }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // SATU-SATUNYA RUMUS P&L (2026-10-15)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Profit **net** dalam persen setelah fee beli + fee jual + slippage dua sisi.
+     *
+     * Ini satu-satunya rumus P&L yang boleh dipakai di seluruh aplikasi. Sebelumnya ada empat
+     * rumus berbeda untuk hal yang sama, dengan friksi berbeda-beda untuk Tokocrypto IDR:
+     *
+     * | Tempat | Friksi |
+     * |---|---|
+     * | halaman portofolio | **0%** (bruto, tanpa fee apa pun) |
+     * | radar jual & kartu posisi detail | 0,3322% (hanya fee jual maker) |
+     * | FSM paper trade | 0,8186% (taker + slippage dua sisi) |
+     *
+     * Akibatnya angka yang sama tampil berbeda di tiga tempat dan terlihat seperti bug. Basis
+     * yang dipilih adalah basis FSM karena paling jujur: auto-buy dan auto-exit adalah order
+     * **market**, jadi taker + slippage memang benar-benar dibayar.
+     *
+     * Bentuk **multiplikatif** (fee dibebankan berurutan, bukan dijumlahkan), paritas dengan
+     * `PaperExitResolver` dan `tools/scalp_replay.py`.
+     *
+     * @param buyFeePct fee beli per sisi dalam persen — pakai **taker** untuk order market
+     * @param sellFeePct fee jual per sisi dalam persen — pakai **taker** untuk order market
+     * @param slippagePct asumsi slippage per sisi dalam persen
+     */
+    fun netProfitPct(
+        entry: Double,
+        price: Double,
+        buyFeePct: Double,
+        sellFeePct: Double,
+        slippagePct: Double = DEFAULT_SLIPPAGE_PCT
+    ): Double {
+        if (entry <= 0.0 || price <= 0.0 || !entry.isFinite() || !price.isFinite()) return 0.0
+        val buyCost = 1.0 + (buyFeePct + slippagePct) / 100.0
+        val sellNet = max(0.0, 1.0 - (sellFeePct + slippagePct) / 100.0)
+        return ((price / entry) * sellNet / buyCost - 1.0) * 100.0
+    }
+
+    /**
+     * [netProfitPct] dengan tarif diselesaikan dari bursa + kuotasi.
+     *
+     * Default **taker** (`useMaker = false`) — sengaja, karena itulah basis yang disepakati.
+     */
+    fun netProfitPctFor(
+        entry: Double,
+        price: Double,
+        exchange: String,
+        quoteAsset: String,
+        useMaker: Boolean = false,
+        slippagePct: Double = DEFAULT_SLIPPAGE_PCT
+    ): Double = netProfitPct(
+        entry = entry,
+        price = price,
+        buyFeePct = buyRate(exchange, quoteAsset, useMaker) * 100.0,
+        sellFeePct = sellRate(exchange, quoteAsset, useMaker) * 100.0,
+        slippagePct = slippagePct
+    )
+
+    /**
+     * Biaya perolehan yang **sudah** termasuk fee beli + slippage.
+     *
+     * Dipakai bersama [netSellValue] supaya jumlah rupiah yang ditampilkan konsisten dengan
+     * [netProfitPct]: `(netSellValue / costBasisNet - 1) * 100` menghasilkan angka yang sama
+     * persis, jadi tidak mungkin lagi ada selisih antara persen dan rupiah.
+     */
+    fun costBasisNet(
+        quantity: Double,
+        entry: Double,
+        buyFeePct: Double,
+        slippagePct: Double = DEFAULT_SLIPPAGE_PCT
+    ): Double = quantity * entry * (1.0 + (buyFeePct + slippagePct) / 100.0)
+
+    /** Nilai jual bersih setelah fee jual + slippage. Pasangan [costBasisNet]. */
+    fun netSellValue(
+        quantity: Double,
+        price: Double,
+        sellFeePct: Double,
+        slippagePct: Double = DEFAULT_SLIPPAGE_PCT
+    ): Double = quantity * price * max(0.0, 1.0 - (sellFeePct + slippagePct) / 100.0)
+
+    /** Harga impas net (profit net = 0). Kebalikan dari [netProfitPct]. */
+    fun breakevenPrice(
+        entry: Double,
+        buyFeePct: Double,
+        sellFeePct: Double,
+        slippagePct: Double = DEFAULT_SLIPPAGE_PCT
+    ): Double {
+        if (entry <= 0.0) return 0.0
+        val buyCost = 1.0 + (buyFeePct + slippagePct) / 100.0
+        val sellNet = max(1e-9, 1.0 - (sellFeePct + slippagePct) / 100.0)
+        return entry * buyCost / sellNet
+    }
 }
 
 object FeeCalculator {
