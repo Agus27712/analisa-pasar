@@ -8,17 +8,19 @@ Aplikasi Android Kotlin 100% (Jetpack Compose M3) untuk analisis & **scalp mode*
 
 ### ⚠️ Langkah 0 — pastikan branch yang Anda baca benar
 
-**Kerjaan aktif ada di `patch`.** Per 2026-10-14 (setelah `4ffee5e`), **`patch` sudah 4 commit
-di depan `main`** — jadi `patch` dan `main` **TIDAK lagi identik**; klaim lama "identik per
-2026-10-14" sudah usang. Pembaruan mendarat di `patch` dulu dan hanya digabung ke `main` bila
-owner memintanya. **Jangan pernah menyimpulkan keadaan repo dari `main` tanpa mengecek angka ini
-dulu:**
+**Kerjaan aktif ada di `patch`.** Per **2026-10-15** (setelah `56eb5cd`), **`patch` sudah 2 commit
+di depan `main`** (`f9e7fdd`, `56eb5cd`) — jadi `patch` dan `main` **TIDAK identik**; klaim lama
+"identik per 2026-10-14" dan "4/6/7 commit di depan" semuanya **usang**. Pembaruan mendarat di
+`patch` dulu dan hanya digabung ke `main` bila owner memintanya (terakhir lewat **PR #59** →
+`bc48ac4`, yang membawa `main` sampai `9f65109`). **Jangan pernah menyimpulkan keadaan repo dari
+`main` tanpa mengecek angka ini dulu:**
 
 ```sh
 git clone https://github.com/Agus27712/analisa-pasar.git
-cd analisa-pasar && git checkout patch     # WAJIB — kerjaan aktif ada di sini
-git rev-list --count main..patch           # >0 = patch lebih maju (normal, baca patch)
-git diff --stat patch main                 # kosong = kedua branch sama
+cd analisa-pasar && git checkout patch        # WAJIB — kerjaan aktif ada di sini
+git rev-list --count origin/main..HEAD        # >0 = patch lebih maju (normal, baca patch)
+git rev-list --count HEAD..origin/main        # >0 = main punya commit yang belum ada di patch
+git ls-remote --heads origin                  # sumber kebenaran daftar branch (bypass refspec)
 ```
 
 Repo ini **public** — clone tidak butuh token.
@@ -264,8 +266,9 @@ Yang **tidak boleh** dilakukan lagi tanpa instruksi eksplisit owner:
 
 - **Branch kerja sekarang: `patch`** (bukan `main`). Owner me-review di `patch` lebih dulu; `main`
   hanya menerima merge setelah review. Jangan push langsung ke `main` tanpa instruksi eksplisit.
-- Branch lama di remote (`audit/menyeluruh-2026-10`, `engine_scalping_update`, tag versi) masih ada —
-  jangan dihapus tanpa instruksi owner.
+- Branch lama di remote (`audit/menyeluruh-2026-10`, `engine_scalping_update`, tag versi)
+  **sudah tidak ada** — per 2026-10-15 `git ls-remote --heads origin` hanya mengembalikan
+  `main` dan `patch`. Jangan mencari branch itu lagi.
 - Jangan commit artefak data candle besar tanpa diminta.
 - Jangan commit `.env`, `*.keystore`, `*.jks`, atau token.
 - Pesan commit jelas; `[skip ci]` untuk docs/config-only sesuai kebijakan owner.

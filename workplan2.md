@@ -3,7 +3,11 @@
 > **Sumber kebenaran workplan.**  
 > `workplan.md`, `checkpoint.md`, dan `checkpoint_progres.md` **DEPRECATED** — jangan diikuti agen. Baca ini + `AGENTS.md` + `APP_CONTEXT.md` (§ arah produk).
 
-**Update:** 2026-10-10 (WIB)
+**Update:** 2026-10-15 (WIB)
+
+> ⚠️ **Seksi §9.5b sudah DIBATALKAN** (angka edge lama tidak sah). Angka yang berlaku ada di
+> **§9.5c**. Seksi §14/§15 **dibatalkan** — fiturnya sudah dihapus dari kode, jangan dibangun ulang.
+> Seksi §16–§18 baru ditambahkan 2026-10-15 (P0–P2, S1–S9, P4.4 + auto-buy).
 
 ---
 
@@ -348,16 +352,25 @@ baik untuk IDR maker). Di bawah 5× belum konsisten positif.
 6. **Pair diuji ≠ semua pair.** Baru 40 pair USDT + 14 pair IDR Tokocrypto. Indodax **belum ada
    data sama sekali** di `data/`.
 
-### 9.5b Hasil validasi out-of-sample & profil exit (2026-10-12)
+### 9.5b Hasil validasi out-of-sample & profil exit (2026-10-12) — 🔴 DIBATALKAN
 
-**Split train/test (P4.1) — LOLOS, tetapi tipis.**
+> 🔴 **Angka di seksi ini TIDAK SAH. Jangan dipakai untuk keputusan apa pun.**
+> Seksi ini dibuat sebelum `703c3b6`, ketika `summarize()` di `scalp_replay.py` **membuang** trade
+> `UNRESOLVED` (yang tidak menyentuh SL/TP/early/trail dalam jendela *lookahead*) dari seluruh
+> statistik. Pada 40 pair itu berarti **±81% sinyal dibuang**, dan verdictnya berbalik dari
+> TIDAK LOLOS menjadi LOLOS. Angka yang berlaku ada di **§9.5c**.
+> Bukti: `docs/LAPORAN-temuan-akuntansi-replay-2026-10-14.md`.
+> Seksi ini disimpan **hanya sebagai riwayat keputusan** — jangan mengutipnya sebagai hasil.
+
+**Split train/test (P4.1) — dulu dilaporkan "LOLOS, tetapi tipis"; setelah dihitung jujur: TIDAK LOLOS.**
 
 | Segmen | Trade | avg R terbobot | Pair positif |
 |---|---:|---:|---:|
-| Train 70% | 1.835 | +0,0350 | 28/32 |
-| Test 30% | 669 | **+0,0216** | 23/30 |
+| Train 70% | 1.835 | +0,0350 ❌ | 28/32 ❌ |
+| Test 30% | 669 | **+0,0216** ❌ tidak sah | 23/30 ❌ tidak sah |
 
-- 13 pair layak (test n ≥ 20); rasio positif **84,6%**; **5 pair berbalik tanda**.
+- ~~13 pair layak (test n ≥ 20); rasio positif **84,6%**~~ → dengan akuntansi jujur: **0/40 pair
+  positif** (§9.5c).
 - Gate ketat (avgR>0 ∧ PF≥1,2 ∧ n≥30): **21/40 in-sample → hanya 5/40 di test**
   (APT, NEAR, SU, W, ZRO). Angka jujur: edge sebagian besar pair **tidak stabil out-of-sample**.
 
@@ -404,14 +417,55 @@ Karena itu target "semua pair profit" harus dibaca sebagai **"semua pair yang lo
 edge"**, bukan seluruh daftar pair bursa. Menjanjikan lebih dari itu berarti mengabaikan
 aritmetika biaya.
 
+### 9.5c Temuan akuntansi replay — angka edge lama tidak sah (2026-10-14)
+
+> 🔴 **Baca ini sebelum memakai angka edge apa pun.** Ini menggantikan §9.5b.
+
+`summarize()` di `scalp_replay.py` hanya menghitung trade `WIN`/`LOSS`; trade yang tidak menyentuh
+SL/TP/early/trail di dalam jendela *lookahead* ditandai `UNRESOLVED` lalu **dikeluarkan** dari
+`avg_r` dan `win_rate`. Commit `703c3b6` menutup trade di akhir jendela. Sejak itu angkanya
+berubah drastis.
+
+**Kontrol — data, config, dan kode identik (40 pair USDT Tokocrypto, split 70/30):**
+
+| Akuntansi | Test n | Test avg R | Pair positif | Verdict |
+|---|---:|---:|---:|---|
+| Lama — `UNRESOLVED` dikecualikan | 817 | **+0,0577** | 26/29 | LOLOS ❌ |
+| Baru — semua trade ditutup di akhir jendela | 4.403 | **−0,1733** | **0/40** | **TIDAK LOLOS** |
+
+Mematikan time-stop **dan** lantai profit S2 tidak mengembalikan hasil positif (3 varian, semuanya
+≈ −0,17). Jadi −0,17 bukan efek samping setelan exit.
+
+**Kenapa persis ≈ −0,17R:** lantai friksi memaksa SL ≥ `6 × 0,9688%` = 5,81%. Trade tanpa edge
+hanya menanggung biaya lalu ditutup: `−0,9688% / 5,81% = −0,167 R`. Cocok dengan yang terukur.
+
+**Walk-forward (P4.1) setelah akuntansi diperbaiki:**
+
+| Dataset | Jendela | Lolos | Test avg R | Pair positif |
+|---|---:|---:|---:|---:|
+| 40 pair `tokocrypto_live_usdt` (4 jendela) | 4 | **0/4** | −0,1614 | 0/156 |
+| 8 pair v4 `tokocrypto_v4` (3 jendela, gate-rejected) | 3 | **0/3** | −0,1790 | — |
+
+> ⚠️ Kedelapan pair v4 itu **INELIGIBLE** menurut `pair_gate.json` (0,242×–1,638×). Verdict
+> walk-forward **hanya berlaku untuk dataset yang diuji** — jangan pakai hasil itu untuk
+> menyimpulkan strategi gagal.
+
+**Kesimpulan.** Bukan lagi "tandanya benar, besarnya belum cukup" — melainkan **tidak ada edge
+kotor yang tersisa setelah friksi**. Pertanyaan baru yang lebih mendesak: **adakah varian entry
+yang menghasilkan avg R kotor > +0,167R pada horizon 120 bar M1?** Tanpa itu, menyetel exit
+(P4.2/P4.4) tidak akan mengubah apa pun.
+
+**Aturan yang lahir dari temuan ini:** setiap angka avg R **wajib** menyebut berapa sinyal yang
+tidak tuntas. Angka avg R tanpa keterangan itu tidak bisa ditafsirkan.
+
 ### 9.6 Yang belum selesai (roadmap, urut prioritas)
 
 | # | Pekerjaan | Status |
 |---|---|---|
-| P4.1 | Validasi train/test split untuk lantai friksi + target 2.0 | ✅ **LOLOS** (avg R test +0,0216; 84,6% pair positif; lihat §9.5b) — namun tipis, gate ketat hanya 5/40 pair |
-| P4.2 | Preferensi maker otomatis untuk pair IDR (order limit pasif) | ⏳ belum |
-| P4.3 | Gerbang pair berbasis edge (MFE horizon vs friksi) di UI | ⏳ belum — **prioritas berikutnya** (lihat §9.5b) |
-| P4.4 | Rehidrasi state machine paper saat app restart (celah P2) | ⏳ belum |
+| P4.1 | Validasi train/test split untuk lantai friksi + target 2.0 | ❌ **TIDAK LOLOS** setelah akuntansi diperbaiki (avg R test **−0,1733**, **0/40 pair positif**; walk-forward **0/4** jendela). Angka lama "+0,0216 / LOLOS" **tidak sah** — lihat §9.5b (dibatalkan) dan §9.5c |
+| P4.2 | Preferensi maker otomatis untuk pair IDR (order limit pasif) | ⏳ belum — **prioritas berikutnya** (lihat §9.5c: menyetel exit tidak berguna sebelum ada edge entry) |
+| P4.3 | Gerbang pair berbasis edge (MFE horizon vs friksi) di UI | ✅ **Selesai** — `PairEdgeGate.kt` + `PairEdgeGateCard.kt` + `tools/pair_gate.py` → `data/config/pair_gate.json` (14/40 pair USDT layak) |
+| P4.4 | Rehidrasi state machine paper saat app restart (celah P2) | ✅ **Selesai 2026-10-15** (`56eb5cd`). Progres FSM dipersistenkan sebagai satu JSON di key `_paper_fsm` (`barsHeld`, `peak`, `activeStopLoss`, `isBeArmed`/`isTrailArmed`/`isPartialDone`, `partialR`, `atrPct`). Bukti: `docs/LAPORAN-p44-persistensi-fsm-2026-10-15.md`, §18 |
 | P5.1 | Data historis Indodax (belum ada di `data/`) | ⏳ belum |
 | P5.2 | Jalur TAPI v2 Indodax — **klien sudah ada** (`IndodaxTradeApiV2.kt`, 729 baris, HMAC-SHA256, limit/market/cancel/balance) | ⚠️ terpasang, belum diuji end-to-end |
 | P5.3 | Harness replay untuk pair Indodax (IDR, fee 0,79% RT) | ⏳ belum |
@@ -433,7 +487,9 @@ aritmetika biaya.
 | `data/hasil/u1_toko_usdt.{json,md}` | Baseline universe sebelum perbaikan |
 | `data/hasil/u2_param_grid.json` | Bukti grid 81 kombinasi |
 | `data/hasil/u3_toko_usdt_after.{json,md}` | Universe **sesudah** perbaikan lantai friksi: 28/32 pair avg R > 0 |
-| `data/hasil/u4_split_toko_usdt.{json,md}` | Gate **out-of-sample** USDT (P4.1) — LOLOS, avg R test +0,0216 |
+| `data/hasil/u4_split_toko_usdt.{json,md}` | Gate **out-of-sample** USDT (P4.1) — 🔴 angka "+0,0216 / LOLOS" **tidak sah** (akuntansi lama membuang ±81% sinyal). Hasil jujur: **−0,1733, 0/40 pair positif** — lihat §9.5c |
+| `data/hasil/u7_walk_forward_v4.{json,md}` | Walk-forward 8 pair v4 (3 jendela) — **0/3 lolos**, test avg R −0,1790. ⚠️ Kedelapan pair INELIGIBLE menurut `pair_gate.json` |
+| `data/hasil/u8_walk_forward_40pair.{json,md}` | Walk-forward 40 pair `tokocrypto_live_usdt` (4 jendela) — **0/4 lolos**, test avg R −0,1614, pair positif 0/156 |
 | `data/hasil/u5_toko_idr.{json,md}` | Universe IDR Tokocrypto (96 trade — terlalu tipis untuk disimpulkan) |
 | `data/hasil/u6_split_toko_idr.{json,md}` | Gate out-of-sample IDR — n test = 6, belum konklusif |
 | `data/config/pair_gate.json` | Tabel kelayakan pair (P4.3): 14/40 pair USDT layak |
@@ -579,14 +635,23 @@ mengotori jurnal paper. Lebih buruk daripada tidak melakukan apa-apa.
 
 ### 12.4 Batasan yang diterima
 
-- `barsHeld`, `isBeArmed`, `isPartialDone`, `peak` **tidak** dipulihkan (tidak dipersistenkan).
-  Posisi yang sudah bergerak ke BE/trailing dievaluasi ulang dari awal. Diterima untuk paper.
+> ⚠️ **Sebagian batasan di bawah sudah DIPERBAIKI oleh P4.4 (2026-10-15) — lihat §18.**
+> Butir pertama (progres FSM tidak dipulihkan) **tidak berlaku lagi** sejak `56eb5cd`.
+
+- ~~`barsHeld`, `isBeArmed`, `isPartialDone`, `peak` **tidak** dipulihkan (tidak dipersistenkan).~~
+  **Sudah dipulihkan (P4.4):** keempatnya kini disimpan sebagai satu JSON di key `_paper_fsm`
+  bersama `isTrailArmed`, `partialR`, `activeStopLoss`, dan `atrPct`. `barsHeld` dihitung dari
+  jam dinding (`mergedBarsHeld`), jadi posisi yang jendela tahannya lewat selama app mati
+  **langsung** kena time-stop saat dibuka.
 - Posisi yang dibeli **sebelum** perbaikan ini tidak punya penanda, jadi sengaja **tidak**
   disentuh: SL-nya tersimpan salah (`entry * 0.99`), jadi memulihkannya akan memalsukan stop-out.
   Posisi warisan seperti itu perlu ditangani manual.
 - Rehidrasi memakai `scalpingRuntimeConfig` **saat ini**, bukan saat posisi dibuka. Bila pengguna
   mengubah parameter exit di antara dua sesi, mesin yang dipulihkan memakai parameter baru.
   Ini disengaja (perilaku sama dengan restart tanpa rehidrasi) tetapi perlu dicatat.
+- State tersimpan yang tidak lolos invarian (`PaperExitStateMachine.restoreRejection`) **dibuang**,
+  bukan dipakai setengah: mesin tetap dibangun dengan `entry`/`SL` asli, hanya progresnya direset,
+  dan alasannya dicatat di log. (P4.4)
 
 ### 12.5 Uji
 
@@ -959,4 +1024,152 @@ Ketiganya dipulihkan dan suite kembali hijau (`grep -c "NEGATIVE CONTROL"` = 0).
 - **Sinyal engine per-simbol belum tersedia untuk seluruh daftar pantau.** Kalau nanti
   `LearningTradingEngine` menilai banyak simbol sekaligus, `engineVerdictRows()` bisa diperluas
   menjadi per-simbol dan seluruh papan bisa berhenti memakai pra-saring untuk horizon aktif.
-- Kesiapan uang riil tetap **BELUM** (§9.5b, §13.4).
+- Kesiapan uang riil tetap **BELUM** (§9.5c, §13.4).
+
+---
+
+## 16. Integritas log audit P0–P2 (2026-10-14)
+
+**Masalah:** jurnal audit tidak bisa direproduksi pihak ketiga — beberapa kolom diisi konstanta
+atau dihitung dari basis yang salah, sehingga angka di laporan tidak berasal dari state nyata.
+
+**Laporan:** `docs/LAPORAN-eksekusi-p0p2-2026-10-14.md`
+**Hasil:** `assembleDebug` sukses · **344 test lulus / 0 gagal / 1 skip** (48 kelas)
+
+| # | Perbaikan | Akar masalah |
+|---|---|---|
+| P0-1 | **RVOL basis volume diselaraskan** | pembilang memakai volume bar M1 yang **masih berjalan**, penyebut rata-rata bar penuh → bias rendah sebesar persentase waktu berjalan |
+| P0-2 | **Basis bar indikator tersimpan** di log (`barTimestamp`, `barClosed`, `rvol`, `vwap`, `macdSignal`) | angka RSI/MACD/RVOL tidak bisa direproduksi dari candle bursa |
+| P0-3 | `signalTime` dari engine, bukan `now` | lag sinyal→eksekusi tidak terukur (dua kolom selalu identik) |
+| P0-4 | `sellReason` nyata (`TRAILING_STOP`/`STOP_LOSS`/`HIT_TP1`/`HIT_TP2`/`MANUAL_SELL`) | konstanta `SIMULATION_SELL` — exit manual vs TP vs SL tidak bisa dibedakan |
+| P0-5 | `isTrailingUsed` + `trailingPercent` dari state nyata | getter hardcode `1.5` (bisa salah 10× dari nilai nyata 0,15) |
+| P0-6 | Peak/Drawdown dari candle bursa + label `Peak (candle)` vs `Peak (dari tick)` | peak dihitung dari tick sehingga menyiratkan akurasi yang tidak dimiliki |
+| P1-7 | `Golden/Death Cross` → `MACD Histogram > 0 / < 0` | label tidak sesuai yang dihitung |
+| P1-8 | Format angka 4–5 digit signifikan | `%E` mentah 16 digit |
+| P1-9 | `VWAP 1M` kosong → `-` | `0.00` dibaca sebagai nilai nyata |
+| P1-10 | Penamaan **stage** vs **score band** dipisah | `STRONG ENTRY: Skor 68` vs `Skor 68/100 (WATCH)` terbaca kontradiktif |
+| P2-11 | Flag `isSample` + badge + keluar dari statistik | 7 record seed mencemari win rate/PnL |
+
+**Migrasi Room 8 → 9** non-destruktif (`MIGRATION_8_9`) — jurnal pengguna tidak terhapus.
+
+**Bukti terkuat (P0-1, kasus GNS/USDT 13 Okt 23:58 WIB):** bar berjalan 52% waktu, volume 30.215,
+rata-rata 20 bar tutup 39.818 → **RVOL lama 0,76×** (gagal gate 1,2×) vs **RVOL baru 1,46×** (lolos).
+Konsekuensinya temuan "GNS entry tipis" **batal** — entry-nya sehat, yang rusak pengukurannya.
+6 unit test baru mengunci perilaku ini, termasuk satu test regresi yang mereproduksi 0,76× → 1,46×.
+
+---
+
+## 17. Perbaikan strategi scalping S1–S9 (2026-10-14)
+
+**Sumber kebutuhan:** `docs/BELUM-DIKERJAKAN-2026-10-14.md` Bagian 1 (audit GNS/USDT & AMP/USDT).
+**Laporan:** `docs/LAPORAN-eksekusi-s1s9-2026-10-14.md`
+**Hasil:** **344 → 358 test** lulus · 0 gagal · 1 dilewati (50 kelas) · `assembleDebug` sukses
+
+| # | Perubahan | ⚠️ Catatan |
+|---|---|---|
+| S1 | **RVOL wajib ≥ 1,2× untuk setup BREAKOUT**; loophole "2 dari 3 konfirmasi" dihapus | — |
+| S2 | **Lantai profit tutup** `minProfitFrictionMultiple` default **2,0** (= 1,9376% kotor) | ⚠️ **mengubah perilaku default** — set slider 0 untuk perilaku lama |
+| S3 | **SL keras configurable** `maxRiskAtr` default 2,0 (ketat 1,5 / longgar 2,5); tak pernah menyempit di bawah lantai friksi | — |
+| S4 | Konstanta `ATR_PCT_*` benar-benar dipakai + penanda ATR di luar band scalp ideal | — |
+| S5 | **Basis PnL seragam**: order MARKET simulasi kena slippage 0,08%/sisi; LIMIT tidak | ⚠️ harga isi & PnL berubah dari versi sebelumnya |
+| S6 | Label volume 24 jam di ekspor audit (`$baseAsset` → benar sebagai quote) | — |
+| S7 | **Beli manual kini punya mesin exit** (`armPaperExitEngine()`); auto-sell/trailing lama dimatikan | ⚠️ beli manual sekarang **bisa menjual sendiri** |
+| S8 | **BE & trailing proporsional ATR** (`be_trigger_atr_fraction` 0,5 · `trail_atr_fraction` 0,6) | GNS: BE 0,35% → 1,655%; trail 0,15% → 1,986% |
+| S9 | **Gerbang extended-move** (`max_change_24h_pct`) | ⚠️ dikirim **NONAKTIF** (default 0) — lihat di bawah |
+
+**Bukti replay (fee 0,4044%/sisi, slippage 0,08%, lookahead 120 bar M1):**
+
+| Pair | Sebelum | Sesudah (S1+S2+S8) |
+|---|---|---|
+| GNS/USDT | 17 trade, WR 76,5%, avg R **+0,0021**, PF 1,01 | 4 trade, WR **100%**, avg R +0,1782, **tanpa drawdown** |
+| AMP/USDT | 10 trade, WR 80,0%, avg R −0,0630, PF 0,75 | 7 trade, WR 71,4%, avg R −0,0680, PF **0,81** |
+
+AMP tetap negatif di semua konfigurasi — perbaikan exit hanya **mengurangi kerugian** (PF 0,75 → 0,81).
+Itu memang batas yang bisa diharapkan; pair ini bergerak berlawanan dengan asumsi entry.
+
+**Kenapa S9 nonaktif secara default.** Rekomendasi awal menahan sinyal bila koin naik ≥25%/24 jam
+(dari kasus AMP +28,09%). Diuji pada GNS, ambang itu **menghapus seluruh trade** — padahal tanpa
+gerbang keempat trade itu **4/4 menang**. Satu pair bukan dasar untuk mengubah perilaku entry di
+semua pair. Maka implementasi tetap dikirim (kode + alasan penolakan `STEP0_EXTENDED_MOVE` + slider
+0–60%), default **0**, dan kalibrasi ambang masuk agenda P4.1. Ini asal perangkap #18.
+
+**Parameter baru:** `max_risk_atr` (2,0) · `max_change_24h_pct` (0) ·
+`exit.min_profit_friction_multiple` (2,0) · `exit.be_trigger_atr_fraction` (0,5) ·
+`exit.trail_atr_fraction` (0,6).
+
+**Uji:** `ScalpStrategyFixTest.kt` (9 uji) + `SimulationSlippageParityTest.kt` (3 uji Robolectric).
+Dua berkas uji lama disesuaikan **bukan karena bug**, melainkan karena default S2 berubah — lantai
+dimatikan eksplisit di skenario lama (lihat perangkap #19).
+
+---
+
+## 18. P4.4 — Persistensi progres FSM paper & perbaikan auto-buy nominal IDR (2026-10-15)
+
+### 18.1 P4.4 — Rehidrasi progres FSM paper (`56eb5cd`)
+
+**Masalah:** `PaperAutoTradeRuntime.machines` hanya hidup di memori. Setelah restart, `barsHeld`,
+`isBeArmed`, `isPartialDone`, dan `peak` **reset** — mesin yang dipulihkan ≠ mesin yang hilang.
+Ini menutup batasan yang sebelumnya diterima di §12.4.
+
+**Perbaikan:** progres FSM disimpan sebagai **satu JSON** di `SpotPositionStore` dengan key
+`<key>_paper_fsm`, mencakup `barsHeld`, `peak`, `activeStopLoss`, `isBeArmed`, `isTrailArmed`,
+`isPartialDone`, `partialR`, dan `atrPct`.
+
+Empat hal yang harus dijaga setiap kali menyentuh siklus hidup posisi paper:
+
+1. tulis lewat `TradingViewModel.persistPaperFsm(...)` (ber-throttle) — **jangan** tulis langsung,
+   karena `evaluatePaperAutoExit` berjalan **per tick harga**;
+2. hapus key-nya di **setiap** jalur pelepasan kepemilikan: `markSold` (dua blok),
+   `finalizePaperExit`, `clearPaperExitState`, dan cabang "posisi sudah tidak ada" di
+   `evaluatePaperAutoExitLocked` — key yang tertinggal akan terbaca posisi berikutnya;
+3. `atrPct` **tidak** dipulihkan lewat `restore()` — ia parameter konstruktor mesin, jadi harus
+   dioper saat mesin dibangun di `PaperRehydrate.decide()`. Kalau terlewat, ambang BE/trailing S8
+   diam-diam jatuh ke nilai persen tetap;
+4. `barsHeld` dihitung dari **jam dinding** (`mergedBarsHeld`), bukan dari nilai tersimpan saja —
+   replay offline menghitung bar M1 terus-menerus, jadi app harus setara.
+
+State tersimpan yang tidak lolos invarian (`PaperExitStateMachine.restoreRejection`) **dibuang**,
+bukan dipakai setengah.
+
+**Laporan:** `docs/LAPORAN-p44-persistensi-fsm-2026-10-15.md`
+**Uji:** `PaperExitFsmStateTest` (18), `SpotPositionStorePaperFsmTest` (8, Robolectric),
+`PaperRehydrateTest` (+10), `PaperAutoTradeRuntimeTest` (+9) → **371 → 416 test**.
+
+### 18.2 Bug auto-buy paper: nominal Rupiah dibaca sebagai USDT (`f9e7fdd`)
+
+**Gejala di log runtime:** `❌ [AVAUSDT] Auto-buy simulasi gagal: Saldo USDT tidak cukup.
+Dibutuhkan $560.41, saldo $557.71.` — auto-buy **tidak pernah** tereksekusi.
+
+**Dua cacat bertumpuk** (yang kedua tidak dilaporkan, ditemukan saat menelusuri):
+
+1. `PaperAutoTradeConfig.fixedQuoteAmount` disajikan di UI sebagai **Rupiah** (default `100_000`,
+   langkah `10_000`, tampil `"100 rb"` tanpa penanda mata uang) tetapi dipakai apa adanya sebagai
+   **kas kuotasi pair** → pada pair USDT, Rp 100.000 menjadi **$100.000**.
+2. Batas anggaran memakai `coerceAtMost(availableQuote)` (**saldo mentah**), padahal order MARKET
+   menuntut `notional × (1+slippage) × (1+fee)`. Jadi setiap nominal ≥ saldo **selalu** ditolak —
+   kegagalan sistematis, bukan kebetulan.
+
+Aritmetika yang mereproduksi log persis (fee Tokocrypto USDT 0,4044%, slippage 0,08%):
+`min(100000, 557,71) × 1,0008 × 1,004044 = **$560,41**` → ditolak.
+
+**Perbaikan:** `fixedQuoteAmount` → `fixedIdrAmount` (kunci preferensi lama dipertahankan);
+`quantityFor(): Double` → `plan(): AutoBuySizing` (`Ok`/`Skip`, alasan bisa dibaca); anggaran
+memakai rumus **identik** dengan order engine; nominal yang tidak muat **dilewati** (tidak dipotong
+diam-diam); kurs USDT/IDR belum tersedia → sinyal dilewati. UI diberi label `(Rp)`, nilai
+`Rp 100.000`, plus ekuivalen USDT dengan kurs live.
+
+**Kontrol negatif:** logika dibalik ke perilaku lama → **6 dari 13 test gagal**, termasuk
+`expected:<6.0976> but was:<557.71>`.
+
+**Laporan:** `docs/LAPORAN-bug-auto-buy-nominal-idr-2026-10-15.md`
+
+### 18.3 Status setelah §18
+
+| | |
+|---|---|
+| Unit test (diukur dari XML) | **416 lulus · 0 gagal · 1 dilewati** (53 kelas) |
+| Baseline sebelum P4.4 (`f9e7fdd`) | **371 lulus · 0 gagal · 1 dilewati** (51 kelas) |
+| APK debug | 26.821.815 byte (26,8 MB desimal / 25,6 MiB) |
+| Yang dilewati | `RealTokocryptoReplayTest` — hanya dijalankan oleh workflow manual |
+| `patch` vs `main` | `patch` **2** di depan (`f9e7fdd`, `56eb5cd`), `main` 1 di depan (merge PR #59) |
+| Kesiapan uang riil | **BELUM** — lihat §9.5c |

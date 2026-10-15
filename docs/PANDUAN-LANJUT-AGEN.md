@@ -2,7 +2,7 @@
 
 > **Baca ini dulu.** Dokumen ini adalah titik masuk untuk agen/engineer berikutnya: status terkini,
 > apa yang sudah selesai, apa berikutnya, dan **perangkap yang sudah pernah ditemukan** supaya tidak
-> diulang. Terakhir diperbarui: **2026-10-14** (S1–S9).
+> diulang. Terakhir diperbarui: **2026-10-15** (P4.4 + perbaikan auto-buy nominal IDR).
 
 ---
 
@@ -11,10 +11,14 @@
 | | |
 |---|---|
 | Branch kerja | **`patch`** (owner me-review di sini dulu; `main` hanya menerima merge) |
+| HEAD `patch` | `56eb5cd` — *feat(paper): pulihkan progres FSM exit paper lintas restart (P4.4)* |
 | Titik masuk kode | package `agu.analys`, modul tunggal `:app` |
-| Unit test | **358 lulus · 0 gagal · 1 dilewati** (50 kelas) |
-| APK debug | 27,8 MB (`app/build/outputs/apk/debug/app-debug.apk`) |
+| Unit test | **416 lulus · 0 gagal · 1 dilewati** (53 kelas) |
+| APK debug | 26.821.815 byte (26,8 MB desimal / 25,6 MiB) |
 | Kesiapan uang riil | **BELUM** — lihat §5 |
+
+> ⚠️ Angka di tabel ini **pernah salah** di dokumen ini sendiri (tertulis 358/50 kelas). Setiap kali
+> angka ini dipakai, **ukur ulang** — jangan kutip dari sini tanpa menghitung.
 
 **Cara mengukur angka di atas sendiri (jangan percaya ingatan, termasuk dokumen ini):**
 
@@ -54,11 +58,16 @@ git stash pop                 # kembalikan pekerjaan
 | §13 | **Akar `EARLY_ENTRY`** — stage tinggi wajib punya pola | `ScalpingMtfEvaluator.kt`, `SignalLifecycleManager.kt` | `workplan2.md` §13 |
 | §16 | **Integritas log audit P0–P2** — basis volume RVOL, basis bar indikator, `signalTime`, `sellReason`, trailing nyata, Peak/Drawdown dari candle, label & format, flag `isSample` | `IndicatorMath.kt`, `ScalpingMtfEvaluator.kt`, `TradeHistoryRecorder.kt`, `TradeSignalSnapshot.kt`, `TradeLogExporter.kt`, `AppDatabase.kt` (v9) | `docs/LAPORAN-verifikasi-ui-vs-candle-2026-10-14.md`, `docs/LAPORAN-eksekusi-p0p2-2026-10-14.md`, `IndicatorMathScalpingExtTest.kt` |
 | §17 | **Perbaikan strategi S1–S9** — RVOL wajib breakout, lantai profit, SL keras configurable, konstanta ATR dipakai, basis PnL seragam, label volume, exit engine untuk beli manual, BE/trail proporsional ATR, gerbang extended-move (default nonaktif) | `ScalpSetupDetector.kt`, `ScalpExitConfig.kt`, `PaperExitResolver.kt`, `ScalpingRiskEngine.kt`, `ScalpingRuntimeConfig.kt`, `MarketRegimeEngine.kt`, `SimulationTradeStore.kt`, `TradeLogExporter.kt`, `PaperAutoTradeCoordinator.kt`, `tools/scalp_replay.py` | `docs/LAPORAN-eksekusi-s1s9-2026-10-14.md`, `ScalpStrategyFixTest.kt`, `SimulationSlippageParityTest.kt` |
-| P4.1 | **Mode walk-forward** di `tools/split_validate.py` — jendela bergulir + **2 bug diperbaiki** (kunci agregasi salah → 9 jendela palsu; penulis `.md` crash `StopIteration`) | `tools/split_validate.py`, `tools/fetch_tokocrypto_klines.py` | `docs/LAPORAN-p41-walk-forward-2026-10-14.md`, `data/hasil/u7_walk_forward_v4.{json,md}` |
+| P4.1 | **Mode walk-forward** di `tools/split_validate.py` — jendela bergulir + **3 bug diperbaiki** (kunci agregasi salah → 9 jendela palsu; penulis `.md` crash `StopIteration`; pair lebih pendek dari satu jendela → `IndexError`) | `tools/split_validate.py`, `tools/fetch_tokocrypto_klines.py` | `docs/LAPORAN-p41-walk-forward-2026-10-14.md`, `data/hasil/u7_walk_forward_v4.{json,md}`, `data/hasil/u8_walk_forward_40pair.{json,md}` |
+| P4.4 | **Persistensi progres FSM paper** — `barsHeld`, `peak`, `activeStopLoss`, `isBeArmed`/`isTrailArmed`/`isPartialDone`, `partialR`, `atrPct` disimpan sebagai satu JSON di key `_paper_fsm` | `PaperExitResolver.kt`, `PaperRehydrate.kt`, `SpotPositionStore.kt`, `PaperAutoTradeCoordinator.kt` | `docs/LAPORAN-p44-persistensi-fsm-2026-10-15.md`, `PaperExitFsmStateTest.kt`, `SpotPositionStorePaperFsmTest.kt` |
+| — | **Perbaikan bug auto-buy**: nominal Rupiah dibaca sebagai USDT + anggaran tidak menyisihkan fee/slippage → auto-buy **tidak pernah** tereksekusi | `PaperAutoTradeConfig.kt`, `PaperAutoTradeCoordinator.kt`, `AppPreferences.kt`, `PaperAutoTradeSettings.kt` | `docs/LAPORAN-bug-auto-buy-nominal-idr-2026-10-15.md`, `PaperAutoBuySizingTest.kt` |
 | ~~§14~~ | ~~Kesiapan multi-horizon (scalp/intraday/swing) + papan UI~~ | — | ⛔ **DIBATALKAN** — lihat §3b |
 | ~~§15~~ | ~~SSOT: horizon vs engine aktif~~ | — | ⛔ **DIBATALKAN** — lihat §3b |
 
-Semua di atas **sudah masuk `main`**, kecuali §14/§15 yang **dihapus dari kode** pada 2026-10-13.
+**Status di `main`:** `main` sudah menerima merge **PR #59** (`bc48ac4`), jadi seluruh pekerjaan
+sampai `9f65109` **sudah ada di `main`**. Dua commit terbaru — `f9e7fdd` (auto-buy) dan `56eb5cd`
+(P4.4) — **belum**, karena `patch` masih **2 commit di depan**. §14/§15 tetap **dihapus dari kode**
+(2026-10-13).
 
 ---
 
@@ -141,7 +150,17 @@ Riwayat lengkap ada di `workplan2.md` §14/§15 (keduanya bertanda ⛔ DIHAPUS) 
 Diurutkan berdasarkan **nilai dibagi risiko**. Jangan mengerjakan yang bawah sebelum yang atas
 selesai, kecuali ada instruksi eksplisit.
 
-### P4.1 — Walk-forward antar-bulan ✅ tooling selesai (2026-10-14)
+### ⭐ Prioritas #1 — cari varian **entry** yang punya edge kotor (belum ada jawabannya)
+
+Temuan akuntansi (§5) mengubah pertanyaannya. Bukan lagi "apakah exit-nya bisa diperbaiki",
+melainkan: **adakah varian entry yang menghasilkan avg R kotor > +0,167R pada horizon 120 bar M1?**
+
+Alasannya aritmetis: lantai friksi memaksa SL ≥ 5,81%, dan trade tanpa edge hanya menanggung biaya
+lalu ditutup → `−0,9688% / 5,81% = −0,167 R`. Itu persis yang terukur (avg R ≈ −0,17, 0/40 pair
+positif). **Selama tidak ada entry yang melewati +0,167R kotor, menyetel exit (P4.2/P4.4) tidak
+akan mengubah apa pun.** Kerjakan ini sebelum yang lain.
+
+### P4.1 — Walk-forward antar-bulan ✅ tooling selesai, hasil NEGATIF (2026-10-14)
 
 **Masalah:** validasi keluar-sampel saat ini hanya **satu potongan** (train 70% / test 30% menurut
 waktu). Satu potongan bisa kebetulan menguntungkan.
@@ -163,16 +182,18 @@ diperbaiki** — lihat `docs/LAPORAN-p41-walk-forward-2026-10-14.md` dan perangk
 **Selesai bila:** ada tabel per-jendela dari **dataset 40 pair yang gate-eligible**, dan
 kesimpulannya eksplisit (bertahan / tidak).
 
-### P4.4 — Rehidrasi FSM paper: pulihkan progres
+### P4.4 — Rehidrasi FSM paper: pulihkan progres ✅ **SELESAI 2026-10-15** (`56eb5cd`)
 
 **Masalah:** `barsHeld`, `isBeArmed`, `isPartialDone`, `peak` **reset** saat restart
 (`workplan2.md` §12). Mesin yang dipulihkan tidak identik dengan yang hilang.
 
-**Kerjakan:** persistensikan keempat nilai itu di `SpotPositionStore` bersama penanda
-`_paper_engine`, lalu pakai di `PaperRehydrate`.
+**Selesai:** seluruh progres FSM (termasuk `isTrailArmed`, `partialR`, `activeStopLoss`, `atrPct`)
+disimpan sebagai satu JSON di key `_paper_fsm`; `barsHeld` dihitung dari jam dinding.
+Bukti: `docs/LAPORAN-p44-persistensi-fsm-2026-10-15.md`, `workplan2.md` §18.1.
 
-**Perhatikan:** jangan mengubah perilaku untuk posisi yang dibeli **sebelum** penanda ada —
-SL-nya tersimpan salah (§12).
+**Jangan ulangi kesalahannya:** `atrPct` harus dioper saat mesin dibangun di `PaperRehydrate.decide()`
+(bukan lewat `restore()`), dan key `_paper_fsm` harus dihapus di **setiap** jalur pelepasan
+kepemilikan posisi.
 
 ### P4.2 — Preferensi maker untuk pair IDR
 
