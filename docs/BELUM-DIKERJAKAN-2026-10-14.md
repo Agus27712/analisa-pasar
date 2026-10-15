@@ -2,7 +2,7 @@
 
 **Tanggal:** 14 Oktober 2026
 **Repo:** branch `patch` @ `4ffee5e` (S1–S9 sudah masuk; A/B sudah masuk; tooling P4.1 sudah masuk)
-**Peringatan branch:** `patch` **4 commit di depan `main`** (per 2026-10-14). Baca dari `patch`, bukan `main`.
+**Peringatan branch:** per **2026-10-15** `patch` dan `main` **identik secara isi** (setelah PR #60 `7f890eb`); `main` hanya unggul commit merge. Kerja tetap di `patch`, bukan `main`.
 **Sumber:** `LAPORAN-validitas-log-audit`, `LAPORAN-verifikasi-ui-vs-candle`, `LAPORAN-audit-amp`, `LAPORAN-replay-gns`, `PANDUAN-LANJUT-AGEN.md` §4–§5
 **Catatan:** semua item di bawah **sudah diverifikasi ulang ke kode** — bukan dari ingatan. Yang sudah selesai di P0–P2 tidak dimasukkan.
 

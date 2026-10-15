@@ -2,7 +2,8 @@
 
 > **Baca ini dulu.** Dokumen ini adalah titik masuk untuk agen/engineer berikutnya: status terkini,
 > apa yang sudah selesai, apa berikutnya, dan **perangkap yang sudah pernah ditemukan** supaya tidak
-> diulang. Terakhir diperbarui: **2026-10-15** (P4.4 + perbaikan auto-buy nominal IDR).
+> diulang. Terakhir diperbarui: **2026-10-15** (P4.4 + perbaikan auto-buy nominal IDR + sinkronisasi
+> klaim branch).
 
 ---
 
@@ -11,7 +12,8 @@
 | | |
 |---|---|
 | Branch kerja | **`patch`** (owner me-review di sini dulu; `main` hanya menerima merge) |
-| HEAD `patch` | `56eb5cd` — *feat(paper): pulihkan progres FSM exit paper lintas restart (P4.4)* |
+| HEAD `patch` | `5dc7182` — *docs: tutup jejak dokumen yang tertinggal dari sesi yang terputus* |
+| HEAD `main` | `7f890eb` — *Merge pull request #60 from Agus27712/patch* (isi sama dengan `patch`) |
 | Titik masuk kode | package `agu.analys`, modul tunggal `:app` |
 | Unit test | **416 lulus · 0 gagal · 1 dilewati** (53 kelas) |
 | APK debug | 26.821.815 byte (26,8 MB desimal / 25,6 MiB) |
@@ -64,10 +66,12 @@ git stash pop                 # kembalikan pekerjaan
 | ~~§14~~ | ~~Kesiapan multi-horizon (scalp/intraday/swing) + papan UI~~ | — | ⛔ **DIBATALKAN** — lihat §3b |
 | ~~§15~~ | ~~SSOT: horizon vs engine aktif~~ | — | ⛔ **DIBATALKAN** — lihat §3b |
 
-**Status di `main`:** `main` sudah menerima merge **PR #59** (`bc48ac4`), jadi seluruh pekerjaan
-sampai `9f65109` **sudah ada di `main`**. Dua commit terbaru — `f9e7fdd` (auto-buy) dan `56eb5cd`
-(P4.4) — **belum**, karena `patch` masih **2 commit di depan**. §14/§15 tetap **dihapus dari kode**
-(2026-10-13).
+**Status di `main`:** `main` sudah menerima merge **PR #59** (`bc48ac4`, membawa sampai `9f65109`)
+**dan PR #60** (`7f890eb`, membawa `f9e7fdd` auto-buy + `56eb5cd` P4.4 + `5dc7182`). Snapshot
+**2026-10-15 tepat setelah PR #60**, `patch` dan `main` **identik secara isi** (`git diff HEAD
+origin/main` kosong); `main` hanya unggul **2 commit merge**. Sejak itu setiap commit mendarat di
+`patch` dulu, jadi `patch` normalnya **> 0** di depan `main` — bukan tanda `main` ketinggalan.
+§14/§15 tetap **dihapus dari kode** (2026-10-13).
 
 ---
 
