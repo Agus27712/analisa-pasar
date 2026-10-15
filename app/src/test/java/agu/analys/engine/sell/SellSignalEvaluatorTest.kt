@@ -14,6 +14,22 @@ import org.junit.Test
 
 class SellSignalEvaluatorTest {
 
+    /**
+     * Konfigurasi **tanpa biaya apa pun**, dipakai uji ambang keputusan.
+     *
+     * Sejak 2026-10-15 `SellSignalEvaluator` memakai basis **taker + slippage dua sisi** — sama
+     * dengan FSM paper trade — bukan lagi fee jual maker saja. Uji di kelas ini menguji *ambang
+     * keputusan*, bukan besaran biaya, jadi seluruh komponen biaya dinolkan: keempat tarif fee
+     * **dan** `slippagePct` yang kini menjadi parameter eksplisit. Besaran biayanya sendiri diuji
+     * di `NetPnlParityTest`.
+     */
+    private val tanpaBiaya = TradingFeeConfig(
+        buyMakerPct = 0.0,
+        buyTakerPct = 0.0,
+        sellMakerPct = 0.0,
+        sellTakerPct = 0.0
+    )
+
     @Test
     fun testNotHolding() {
         val position = SpotPosition(state = SpotPositionState.NO_POSITION)
@@ -59,7 +75,7 @@ class SellSignalEvaluatorTest {
         // Price increased by 10%
         val tick = MarketTick("BTCIDR", 110000.0, 0.0, 0.0, 0.0, 0.0)
         
-        val result = SellSignalEvaluator.evaluate(position, tick, null, TradingFeeConfig(sellMakerPct = 0.0))
+        val result = SellSignalEvaluator.evaluate(position, tick, null, tanpaBiaya, slippagePct = 0.0)
         
         assertEquals(SellLifecycleState.READY_TO_SELL, result.state)
         assertEquals(10.0, result.netProfitPct, 0.01)
@@ -76,7 +92,7 @@ class SellSignalEvaluatorTest {
         )
         val tick = MarketTick("BTCIDR", 103000.0, 0.0, 0.0, 0.0, 0.0)
         
-        val result = SellSignalEvaluator.evaluate(position, tick, null, TradingFeeConfig(sellMakerPct = 0.0))
+        val result = SellSignalEvaluator.evaluate(position, tick, null, tanpaBiaya, slippagePct = 0.0)
         
         assertEquals(SellLifecycleState.READY_TO_SELL, result.state)
         assertEquals("Target TP1 tercapai", result.reason)
@@ -93,7 +109,7 @@ class SellSignalEvaluatorTest {
         // 24h high is 102000, current price is 101500 (>= 102000 * 0.98 = 99960) and profit is 1.5%
         val tick = MarketTick("BTCIDR", 101500.0, 102000.0, 95000.0, 1000.0, 1.5)
         
-        val result = SellSignalEvaluator.evaluate(position, tick, null, TradingFeeConfig(sellMakerPct = 0.0))
+        val result = SellSignalEvaluator.evaluate(position, tick, null, tanpaBiaya, slippagePct = 0.0)
         
         assertEquals(SellLifecycleState.READY_TO_SELL, result.state)
         assertEquals("Dekat High 24j", result.reason)
@@ -110,7 +126,7 @@ class SellSignalEvaluatorTest {
         val tick = MarketTick("BTCIDR", 100500.0, 105000.0, 95000.0, 1000.0, 0.5)
         val indicators = TechnicalIndicators(rsi14 = 75.0)
         
-        val result = SellSignalEvaluator.evaluate(position, tick, indicators, TradingFeeConfig(sellMakerPct = 0.0))
+        val result = SellSignalEvaluator.evaluate(position, tick, indicators, tanpaBiaya, slippagePct = 0.0)
         
         assertEquals(SellLifecycleState.READY_TO_SELL, result.state)
         assertEquals("RSI Overbought", result.reason)
@@ -127,7 +143,7 @@ class SellSignalEvaluatorTest {
         )
         val tick = MarketTick("BTCIDR", 105000.0, 0.0, 0.0, 0.0, 0.0)
         
-        val result = SellSignalEvaluator.evaluate(position, tick, null, TradingFeeConfig(sellMakerPct = 0.0))
+        val result = SellSignalEvaluator.evaluate(position, tick, null, tanpaBiaya, slippagePct = 0.0)
         
         assertEquals(SellLifecycleState.TRAILING_TRIGGERED, result.state)
         assertEquals("Trailing stop terpicu", result.reason)
@@ -143,7 +159,7 @@ class SellSignalEvaluatorTest {
         )
         val tick = MarketTick("BTCIDR", 105000.0, 0.0, 0.0, 0.0, 0.0)
         
-        val result = SellSignalEvaluator.evaluate(position, tick, null, TradingFeeConfig(sellMakerPct = 0.0))
+        val result = SellSignalEvaluator.evaluate(position, tick, null, tanpaBiaya, slippagePct = 0.0)
         
         assertEquals(SellLifecycleState.READY_TO_SELL, result.state)
         assertEquals("Target TP2 tercapai", result.reason)
@@ -160,7 +176,7 @@ class SellSignalEvaluatorTest {
         // Price drops to 98900 (<= 99000)
         val tick = MarketTick("BTCIDR", 98900.0, 0.0, 0.0, 0.0, 0.0)
         
-        val result = SellSignalEvaluator.evaluate(position, tick, null, TradingFeeConfig(sellMakerPct = 0.0))
+        val result = SellSignalEvaluator.evaluate(position, tick, null, tanpaBiaya, slippagePct = 0.0)
         
         assertEquals(SellLifecycleState.STOP_LOSS_HIT, result.state)
         assertEquals("Stop loss aplikasi terpicu", result.reason)
@@ -183,7 +199,8 @@ class SellSignalEvaluatorTest {
             position = position,
             tick = tick,
             indicators = null,
-            tradingFees = TradingFeeConfig(sellMakerPct = 0.0),
+            tradingFees = tanpaBiaya,
+            slippagePct = 0.0,
             riskSnapshot = snapshot
         )
 
@@ -209,7 +226,8 @@ class SellSignalEvaluatorTest {
             position = position,
             tick = tick,
             indicators = null,
-            tradingFees = TradingFeeConfig(sellMakerPct = 0.0),
+            tradingFees = tanpaBiaya,
+            slippagePct = 0.0,
             riskSnapshot = snapshot
         )
 
@@ -235,7 +253,8 @@ class SellSignalEvaluatorTest {
             position = position,
             tick = tick,
             indicators = null,
-            tradingFees = TradingFeeConfig(sellMakerPct = 0.0),
+            tradingFees = tanpaBiaya,
+            slippagePct = 0.0,
             riskSnapshot = snapshot
         )
 
@@ -254,7 +273,7 @@ class SellSignalEvaluatorTest {
         // Current price is 103000 (>= 105000 * 0.98 = 102900, < 105000)
         val tick = MarketTick("BTCIDR", 103000.0, 0.0, 0.0, 0.0, 0.0)
         
-        val result = SellSignalEvaluator.evaluate(position, tick, null, TradingFeeConfig(sellMakerPct = 0.0))
+        val result = SellSignalEvaluator.evaluate(position, tick, null, tanpaBiaya, slippagePct = 0.0)
         
         assertEquals(SellLifecycleState.APPROACHING_TARGET, result.state)
         assertEquals("Mendekati target TP1", result.reason)

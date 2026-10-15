@@ -111,21 +111,46 @@ data class PositionContext(
             val isReal = targetIsReal
 
             val validPrice = if (currentPrice > 0.0 && currentPrice.isFinite()) currentPrice else null
+            // Basis biaya tunggal (2026-10-15): **taker + slippage dua sisi**, sama persis dengan
+            // FSM paper trade. Sebelumnya kartu ini hanya memotong fee jual maker dan memakai
+            // `investedAmount` mentah sebagai biaya perolehan, sehingga untuk posisi yang sama
+            // angkanya lebih optimistis daripada FSM — selisihnya terbaca sebagai bug.
             // Lantai biaya memakai tarif taker yang benar untuk bursa + kuotasi ini,
             // bukan angka tetap 0,21% (yang hanya benar untuk Indodax).
             val resolvedExchange = spotPosition?.exchange?.takeIf { it.isNotBlank() } ?: "TOKOCRYPTO"
             val quoteAsset = PriceFormatter.extractQuote(symbol)
             val buyFloor = agu.analys.config.FeeSchedule.buyRate(resolvedExchange, quoteAsset)
             val sellFloor = agu.analys.config.FeeSchedule.sellRate(resolvedExchange, quoteAsset)
-            val buyFeeRate = if (targetIsReal) (fees.buyMakerPct / 100.0).coerceAtLeast(buyFloor) else (fees.buyMakerPct / 100.0).coerceAtLeast(0.0)
-            val cost = if (isSpotHolding && spotPosition!!.investedAmount > 0.0) {
-                spotPosition.investedAmount
-            } else if (entry != null && entry > 0.0) {
-                (qty * entry) * (1.0 + buyFeeRate)
+            val buyFeeRate = if (targetIsReal) (fees.buyTakerPct / 100.0).coerceAtLeast(buyFloor) else (fees.buyTakerPct / 100.0).coerceAtLeast(0.0)
+            val sellFeeRate = if (targetIsReal) (fees.sellTakerPct / 100.0).coerceAtLeast(sellFloor) else (fees.sellTakerPct / 100.0).coerceAtLeast(0.0)
+            val slippagePct = agu.analys.config.FeeSchedule.DEFAULT_SLIPPAGE_PCT
+
+            // Harga masuk: dari posisi bila ada, atau diturunkan dari biaya perolehan tersimpan
+            // supaya basis biaya tetap seragam meski `entryPrice` tidak tersimpan.
+            val effectiveEntry = when {
+                entry != null && entry > 0.0 -> entry
+                isSpotHolding && qty > 0.0 && spotPosition!!.investedAmount > 0.0 ->
+                    spotPosition.investedAmount / qty
+                else -> null
+            }
+
+            val cost = if (effectiveEntry != null) {
+                agu.analys.config.FeeSchedule.costBasisNet(
+                    quantity = qty,
+                    entry = effectiveEntry,
+                    buyFeePct = buyFeeRate * 100.0,
+                    slippagePct = slippagePct
+                )
             } else null
-            val sellFeeRate = if (targetIsReal) (fees.sellMakerPct / 100.0).coerceAtLeast(sellFloor) else (fees.sellMakerPct / 100.0).coerceAtLeast(0.0)
             val gross = if (validPrice != null) qty * validPrice else null
-            val netVal = if (gross != null) gross * (1.0 - sellFeeRate) else null
+            val netVal = if (validPrice != null) {
+                agu.analys.config.FeeSchedule.netSellValue(
+                    quantity = qty,
+                    price = validPrice,
+                    sellFeePct = sellFeeRate * 100.0,
+                    slippagePct = slippagePct
+                )
+            } else null
             val netPnl = if (cost != null && netVal != null) netVal - cost else null
             val pnlPct = if (cost != null && cost > 0.0 && netPnl != null) (netPnl / cost) * 100.0 else null
 

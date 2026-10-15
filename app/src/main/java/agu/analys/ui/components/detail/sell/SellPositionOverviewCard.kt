@@ -121,6 +121,14 @@ fun SellPositionOverviewCard(
                     fontSize = 18.sp,
                     fontWeight = FontWeight.ExtraBold
                 )
+                // Basis biaya disebut eksplisit supaya tidak lagi terlihat seperti selisih dengan
+                // halaman portofolio atau radar jual: sejak 2026-10-15 semuanya memakai basis
+                // yang sama (taker + slippage dua sisi).
+                Text(
+                    text = "fee beli + jual taker + slippage 2 sisi",
+                    color = TvTextMuted,
+                    fontSize = 9.sp
+                )
             }
 
             Column(horizontalAlignment = Alignment.End) {
@@ -134,6 +142,11 @@ fun SellPositionOverviewCard(
                     color = TvTextPrimary,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = "termasuk fee beli + slippage",
+                    color = TvTextMuted,
+                    fontSize = 9.sp
                 )
             }
         }

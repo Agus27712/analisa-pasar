@@ -92,7 +92,10 @@ fun PortfolioScreen(
     // pair USDT dihitung dalam `$` (BTCUSDT), posisi di pair IDR dalam `Rp` (BTCIDR).
     // Hanya saat perlu agregasi total portofolio nilainya dinormalisasi ke Rupiah
     // memakai kurs live, sehingga tampilan per-koin tidak pernah salah prefix.
-    val holdings = remember(wallet, dashboardTicks, currentTick, usdtIdrRate) {
+    // Bursa aktif dipakai untuk menyelesaikan tarif fee saat menghitung P&L net (lihat di bawah).
+    val exchangeName = viewModel.prefs.marketDataSource.name
+
+    val holdings = remember(wallet, dashboardTicks, currentTick, usdtIdrRate, exchangeName) {
         wallet.coinBalances.filter { it.value > 0.00000001 }
             .entries
             .groupBy { it.key.uppercase() }
@@ -121,8 +124,27 @@ fun PortfolioScreen(
                 val rate = if (isUsdt) usdtIdrRate else 1.0
                 val toIdr = { v: Double -> if (isUsdt && rate <= 0.0) 0.0 else v * rate }
                 val totalValueIdr = toIdr(totalQty * effectivePrice)
-                val pnlIdr = if (avgPrice > 0.0) toIdr((effectivePrice - avgPrice) * totalQty) else 0.0
-                val pnlPct = if (avgPrice > 0.0) ((effectivePrice - avgPrice) / avgPrice) * 100.0 else 0.0
+                // Basis biaya tunggal (2026-10-15): **taker + slippage dua sisi**, sama persis
+                // dengan FSM paper trade. Sebelumnya baris ini memakai selisih harga **bruto**
+                // tanpa fee sama sekali, sehingga halaman ini selalu melaporkan angka paling
+                // optimistis di aplikasi — untuk koin yang sama bisa berbeda ~0,82 poin persen
+                // dari FSM, dan selisih itu terbaca sebagai bug oleh pengguna.
+                val costBasis = if (avgPrice > 0.0) {
+                    agu.analys.config.FeeSchedule.costBasisNet(
+                        quantity = totalQty,
+                        entry = avgPrice,
+                        buyFeePct = agu.analys.config.FeeSchedule.buyRate(exchangeName, quoteAsset) * 100.0
+                    )
+                } else {
+                    0.0
+                }
+                val netValue = agu.analys.config.FeeSchedule.netSellValue(
+                    quantity = totalQty,
+                    price = effectivePrice,
+                    sellFeePct = agu.analys.config.FeeSchedule.sellRate(exchangeName, quoteAsset) * 100.0
+                )
+                val pnlIdr = if (avgPrice > 0.0) toIdr(netValue - costBasis) else 0.0
+                val pnlPct = if (avgPrice > 0.0 && costBasis > 0.0) ((netValue - costBasis) / costBasis) * 100.0 else 0.0
 
                 val pair = TradingPair.fromCustomSymbol(symbol, quoteAsset)
                 HoldingItem(

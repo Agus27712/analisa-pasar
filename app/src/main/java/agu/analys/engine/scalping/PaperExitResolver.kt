@@ -76,19 +76,27 @@ data class PaperExitDecision(
  */
 object PaperExitResolver {
 
-    /** Profit net % setelah buy fee + sell fee + 2x slippage. */
+    /**
+     * Profit net % setelah buy fee + sell fee + 2x slippage.
+     *
+     * Sejak 2026-10-15 rumusnya tinggal satu di [agu.analys.config.FeeSchedule.netProfitPct] —
+     * dipakai bersama halaman portofolio, radar jual, dan kartu posisi detail, supaya angka yang
+     * sama tidak lagi tampil berbeda di tempat berbeda. Signature dipertahankan agar uji paritas
+     * dan pemanggil lama tetap berlaku.
+     */
     fun netProfitPct(
         entry: Double,
         price: Double,
         buyFeePct: Double,
         sellFeePct: Double,
         slippagePct: Double
-    ): Double {
-        if (entry <= 0.0 || price <= 0.0) return 0.0
-        val buyCost = 1.0 + (buyFeePct + slippagePct) / 100.0
-        val sellNet = max(0.0, 1.0 - (sellFeePct + slippagePct) / 100.0)
-        return ((price / entry) * sellNet / buyCost - 1.0) * 100.0
-    }
+    ): Double = agu.analys.config.FeeSchedule.netProfitPct(
+        entry = entry,
+        price = price,
+        buyFeePct = buyFeePct,
+        sellFeePct = sellFeePct,
+        slippagePct = slippagePct
+    )
 
     /** Harga impas net (profit net = 0) — kebalikan dari [netProfitPct]. */
     fun breakevenPrice(
@@ -96,11 +104,12 @@ object PaperExitResolver {
         buyFeePct: Double,
         sellFeePct: Double,
         slippagePct: Double
-    ): Double {
-        val buyCost = 1.0 + (buyFeePct + slippagePct) / 100.0
-        val sellNet = max(1e-9, 1.0 - (sellFeePct + slippagePct) / 100.0)
-        return entry * buyCost / sellNet
-    }
+    ): Double = agu.analys.config.FeeSchedule.breakevenPrice(
+        entry = entry,
+        buyFeePct = buyFeePct,
+        sellFeePct = sellFeePct,
+        slippagePct = slippagePct
+    )
 
     /**
      * Momentum lemah: EMA9 < EMA21 × 0,998, atau RSI di luar 40–78 disertai candle merah,
