@@ -256,6 +256,16 @@ Yang **tidak boleh** dilakukan lagi tanpa instruksi eksplisit owner:
   nilai posisi, sehingga setiap nominal ≥ saldo mustahil tereksekusi. Ukuran yang tidak layak
   **dilewati** dengan alasan yang bisa dibaca — **jangan** dipotong diam-diam, dan **jangan**
   menebak ukuran saat kurs belum tersedia. Bukti: `docs/LAPORAN-bug-auto-buy-nominal-idr-2026-10-15.md`.
+- **Auto-buy dibatasi jumlah posisi paper bersamaan (2026-10-15, WAJIB).**
+  `PaperAutoTradeConfig.maxConcurrentPositions` (default **3**, `0` = tanpa batas) membatasi berapa
+  koin yang boleh dipegang bersamaan. Hitungannya **global** (lintas bursa & kuotasi) dan memakai
+  **semua** posisi paper — termasuk yang dibeli manual — lewat
+  `SpotPositionStore.countActivePaperPositions()`. Gerbangnya ada di `tryPaperAutoBuy`, tepat
+  **setelah** dedup per-pair dan **sebelum** pembacaan saldo; sengaja **tidak** dipasang di jalur
+  beli manual (itu keputusan sadar pengguna). Alasannya aritmetis: kas yang sudah terpotong posisi
+  yang masih hold tetap "terpakai", jadi tanpa gerbang ini auto-buy menumpuk posisi sampai order
+  berikutnya ditolak karena saldo kurang — bukan karena sinyalnya buruk. Bukti:
+  `docs/LAPORAN-batas-posisi-paper-2026-10-15.md`.
 - Exit scalp paper: lihat `SCALP_EXIT.md`; real auto-execute dari sinyal scalp **bukan** prioritas sampai gate edge terpenuhi.
 - Commit non-rilis (docs/fee/config): sertakan **`[skip ci]`** jika owner meminta agar rilis tidak terpicu.
 
@@ -263,6 +273,18 @@ Yang **tidak boleh** dilakukan lagi tanpa instruksi eksplisit owner:
 
 - Material 3; jangan pecah state chart tanpa alasan (lihat pola `DetailUiState` bila ada di branch).
 - Throttle UI ticker/depth bila diminta di catatan performa Tokocrypto (hindari spam recomposition).
+- **Mode halaman detail koin OTORITATIF dari status kepemilikan (2026-10-15, WAJIB).** Tidak ada
+  lagi tab Beli/Jual manual: `resolveDetailTradeMode(isHolding)` di `model/PositionContext.kt`
+  menentukan hold → **SELL**, tidak hold → **BUY**. Toggle Beli/Jual di
+  `RadarTransactionFeeSection` **sudah dihapus** — jangan dibangun ulang, karena itulah yang
+  membuat kartu beli dan jual tampil bersamaan. Menambah posisi (DCA) tetap bisa lewat tombol
+  "Tambah posisi (DCA)" di cabang SELL, yang membuka dialog berisi `RadarBuySection` (form yang
+  sama, supaya jalur eksekusi tidak bisa menyimpang). Bukti:
+  `docs/LAPORAN-mode-detail-dan-hapus-backtest-2026-10-15.md`.
+- **Kartu backtest di halaman detail SUDAH DIBUANG (2026-10-15).** `radar/BacktestSection.kt`
+  dihapus beserta dua pemanggilnya (`WaitingEntryRadarCard`, `ScalpDeskCard`). Mesinnya
+  (`engine/backtest/*`, `WalkForwardEvaluator`, `ScalpingBacktestAdapter`) **tetap ada** dan masih
+  dipakai tooling/test — jangan ikut dihapus, dan jangan menampilkan baseline backtest di UI lagi.
 
 ## Git
 

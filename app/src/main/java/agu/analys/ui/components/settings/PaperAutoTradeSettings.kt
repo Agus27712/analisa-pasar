@@ -265,6 +265,43 @@ fun PaperAutoTradeSettings(
                         }
                     )
                 }
+
+                Spacer(Modifier.height(10.dp))
+
+                StepperRow(
+                    label = "Maks. posisi bersamaan (0 = tanpa batas)",
+                    valueText = if (config.maxConcurrentPositions <= 0) {
+                        "Tanpa batas"
+                    } else {
+                        config.maxConcurrentPositions.toString()
+                    },
+                    onMinus = {
+                        onChange(
+                            config.copy(
+                                maxConcurrentPositions =
+                                    (config.maxConcurrentPositions - 1).coerceAtLeast(0)
+                            )
+                        )
+                    },
+                    onPlus = {
+                        onChange(
+                            config.copy(
+                                maxConcurrentPositions =
+                                    (config.maxConcurrentPositions + 1).coerceAtMost(20)
+                            )
+                        )
+                    }
+                )
+
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Auto-buy berhenti membuka posisi baru bila jumlah posisi paper aktif sudah " +
+                        "mencapai batas ini (dihitung lintas bursa, termasuk posisi beli manual). " +
+                        "Beli manual tetap bebas.",
+                    color = TvTextSecondary,
+                    fontSize = 10.sp,
+                    lineHeight = 14.sp
+                )
             }
         }
     }

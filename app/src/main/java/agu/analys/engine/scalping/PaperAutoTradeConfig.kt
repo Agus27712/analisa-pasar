@@ -68,10 +68,30 @@ data class PaperAutoTradeConfig(
     /** Risiko per trade dalam % dari saldo kas kuotasi (mode berbasis risiko). */
     val riskPctPerTrade: Double = 1.0,
     /** Stage minimum sinyal yang boleh memicu auto-buy. */
-    val minStage: ScalpingStage = ScalpingStage.ENTRY
+    val minStage: ScalpingStage = ScalpingStage.ENTRY,
+    /**
+     * Batas jumlah posisi paper yang boleh terbuka bersamaan — **global**, lintas bursa dan
+     * lintas mata uang kuotasi.
+     *
+     * `0` berarti tanpa batas. Hitungannya memakai **semua** posisi paper (termasuk yang dibeli
+     * manual), karena tujuannya mencegah auto-buy menumpuk posisi sampai saldo kas habis —
+     * kas yang sudah terpotong posisi yang masih hold tetap "terpakai".
+     */
+    val maxConcurrentPositions: Int = 3
 ) {
     /** Apakah stage sinyal memenuhi ambang minimum auto-buy. */
     fun stageQualifies(stage: ScalpingStage): Boolean = stage.ordinal >= minStage.ordinal
+
+    /**
+     * Apakah batas posisi bersamaan sudah tercapai.
+     *
+     * @param currentCount jumlah posisi paper aktif saat ini
+     *   (lihat `SpotPositionStore.countActivePaperPositions`).
+     *
+     * `maxConcurrentPositions <= 0` berarti tanpa batas, sehingga selalu `false`.
+     */
+    fun positionLimitReached(currentCount: Int): Boolean =
+        maxConcurrentPositions > 0 && currentCount >= maxConcurrentPositions
 
     /**
      * Hitung ukuran posisi simulasi untuk satu sinyal auto-buy.

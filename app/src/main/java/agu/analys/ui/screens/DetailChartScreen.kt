@@ -128,11 +128,10 @@ fun DetailChartScreen(
     }
 
     // ── 2. Local UI-only state ────────────────────────────────────────────
-    var isBuyMode by remember(pair.symbol) { mutableStateOf(!isHolding) }
-    LaunchedEffect(isHolding) {
-        // Sync tab when position appears/disappears for this pair
-        if (isHolding) isBuyMode = false
-    }
+    // Mode halaman detail (Beli/Jual) TIDAK lagi disimpan sebagai state di sini: mode bersifat
+    // otoritatif dari status kepemilikan dan dihitung di `WaitingEntryRadarCard` lewat
+    // `resolveDetailTradeMode` (hold → SELL, tidak hold → BUY). Tidak ada lagi tab Beli/Jual
+    // manual, jadi kartu beli dan jual tidak pernah tampil bersamaan.
 
     var showPriceAlertDialog by remember { mutableStateOf(false) }
     var showAiAssistantDialog by remember { mutableStateOf(false) }
@@ -355,8 +354,6 @@ fun DetailChartScreen(
                 availableCoin = availableCoin,
                 avgBuyPrice = avgBuyPrice,
                 isRealBuyMode = isRealBuyMode,
-                isBuyMode = isBuyMode,
-                onBuyModeChanged = { isBuyMode = it },
                 orderBookBids = orderBookBids,
                 orderBookAsks = orderBookAsks,
                 buyCooldownRemainingMs = if (isRealBuyMode) 0L else buyCooldownRemainingMs,
