@@ -71,4 +71,13 @@ bc48ac4 Merge pull request #59 from Agus27712/patch
 
 Snapshot bertanggal dipakai (bukan angka "selamanya") supaya klaim ini tidak cepat usang lagi.
 Setiap kali angka branch dipakai, **ukur ulang** dengan keempat perintah di §2 — jangan kutip dari
-dokumen.
+dokumen. Tabel `PANDUAN` §1 sengaja **tidak** lagi memuat SHA `patch`/`main` yang dihardcode
+(selalu berubah tiap commit) — keduanya kini instruksi pengukuran.
+
+## 6. Tindak lanjut — merge ke `main`
+
+`patch` di-merge ke `main` pada 2026-10-15 lewat commit merge `70aea38`, dengan pesan ber-
+**`[skip ci]`** supaya workflow **Release APK** (dipicu push ke `main`, lihat
+`.github/workflows/release.yml`) **tidak** berjalan. Diverifikasi lewat `gh run list`: **tidak ada**
+run baru untuk `70aea38` (run terbaru tetap PR #60 `7f890eb`). Setelah itu `main` dan `patch` kembali
+identik secara isi (`git diff origin/main origin/patch` kosong).
