@@ -1204,3 +1204,6 @@ dengan snapshot bertanggal supaya tidak cepat usang. Aturan kerja **tidak beruba
 
 **Laporan:** `docs/LAPORAN-sinkron-klaim-branch-2026-10-15.md`. Ini perubahan **docs-only** — komit
 dengan `[skip ci]`.
+
+**Tindak lanjut:** setelah sinkronisasi, `patch` di-merge ke `main` (commit merge `70aea38`, ditandai
+`[skip ci]` agar workflow **Release APK** tidak terpicu) — `main` dan `patch` kembali identik isi.

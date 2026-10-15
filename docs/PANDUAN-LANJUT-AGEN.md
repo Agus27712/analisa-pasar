@@ -12,8 +12,8 @@
 | | |
 |---|---|
 | Branch kerja | **`patch`** (owner me-review di sini dulu; `main` hanya menerima merge) |
-| HEAD `patch` | `5dc7182` — *docs: tutup jejak dokumen yang tertinggal dari sesi yang terputus* |
-| HEAD `main` | `7f890eb` — *Merge pull request #60 from Agus27712/patch* (isi sama dengan `patch`) |
+| HEAD `patch` | Ukur: `git rev-parse --short origin/patch` — berubah **tiap commit**, jangan dihardcode |
+| HEAD `main` | = `patch` + commit merge di atasnya; ukur `git rev-parse --short origin/main` |
 | Titik masuk kode | package `agu.analys`, modul tunggal `:app` |
 | Unit test | **416 lulus · 0 gagal · 1 dilewati** (53 kelas) |
 | APK debug | 26.821.815 byte (26,8 MB desimal / 25,6 MiB) |
@@ -71,7 +71,8 @@ git stash pop                 # kembalikan pekerjaan
 **2026-10-15 tepat setelah PR #60**, `patch` dan `main` **identik secara isi** (`git diff HEAD
 origin/main` kosong); `main` hanya unggul **2 commit merge**. Sejak itu setiap commit mendarat di
 `patch` dulu, jadi `patch` normalnya **> 0** di depan `main` — bukan tanda `main` ketinggalan.
-§14/§15 tetap **dihapus dari kode** (2026-10-13).
+Pada 2026-10-15 `patch` di-merge ulang ke `main` (`70aea38`, ditandai `[skip ci]`), sehingga
+keduanya kembali **identik secara isi**. §14/§15 tetap **dihapus dari kode** (2026-10-13).
 
 ---
 
