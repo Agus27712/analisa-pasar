@@ -41,6 +41,10 @@ bc48ac4 Merge pull request #59 from Agus27712/patch
 **Kesimpulan:** `patch` dan `main` **identik secara isi**. `main` hanya unggul **2 commit merge**
 (PR #59 `bc48ac4`, PR #60 `7f890eb`). Tidak ada commit konten yang "belum ada di main".
 
+> **Catatan:** setelah snapshot ini, tiap commit baru mendarat di `patch` dulu — jadi
+> `origin/main..HEAD` normalnya **`> 0`**. Itu wajar (mis. commit dokumen ini membuat `patch` maju
+> **+1**), bukan tanda `main` ketinggalan.
+
 ## 3. Perubahan dokumen
 
 | Berkas | Sebelum | Sesudah |

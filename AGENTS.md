@@ -8,12 +8,13 @@ Aplikasi Android Kotlin 100% (Jetpack Compose M3) untuk analisis & **scalp mode*
 
 ### ⚠️ Langkah 0 — pastikan branch yang Anda baca benar
 
-**Kerjaan aktif ada di `patch`.** Per **2026-10-15** (setelah **PR #60** → `7f890eb`), **`patch` dan
-`main` identik secara isi** — `git diff HEAD origin/main` **kosong**. `main` hanya unggul **2 commit
-merge** (PR #59 `bc48ac4`, PR #60 `7f890eb`), bukan commit konten. Jadi klaim lama "`patch` 2 commit
-di depan" dan "`main` belum menerima `f9e7fdd`/`56eb5cd`" **usang** — keduanya **sudah ada di
-`main`**. Pembaruan tetap mendarat di `patch` dulu dan digabung ke `main` bila owner memintanya.
-**Jangan pernah menyimpulkan keadaan repo dari `main` tanpa mengecek angka ini dulu:**
+**Kerjaan aktif ada di `patch`.** Snapshot **2026-10-15** (tepat setelah **PR #60** → `7f890eb`):
+**`patch` dan `main` identik secara isi** — `git diff HEAD origin/main` **kosong**; `main` hanya
+unggul **2 commit merge** (PR #59 `bc48ac4`, PR #60 `7f890eb`), bukan commit konten. **Sejak itu tiap
+commit baru mendarat di `patch` dulu, jadi `origin/main..HEAD` normalnya `> 0`** — itu wajar, bukan
+tanda `main` ketinggalan. Klaim lama "`patch` 2 commit di depan" dan "`main` belum menerima
+`f9e7fdd`/`56eb5cd`" **usang** — keduanya **sudah ada di `main`**. **Jangan pernah menyimpulkan
+keadaan repo dari `main` tanpa mengecek angka ini dulu:**
 
 ```sh
 git clone https://github.com/Agus27712/analisa-pasar.git

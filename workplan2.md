@@ -1171,7 +1171,7 @@ diam-diam); kurs USDT/IDR belum tersedia → sinyal dilewati. UI diberi label `(
 | Baseline sebelum P4.4 (`f9e7fdd`) | **371 lulus · 0 gagal · 1 dilewati** (51 kelas) |
 | APK debug | 26.821.815 byte (26,8 MB desimal / 25,6 MiB) |
 | Yang dilewati | `RealTokocryptoReplayTest` — hanya dijalankan oleh workflow manual |
-| `patch` vs `main` | **Identik secara isi** per 2026-10-15 (`git diff HEAD origin/main` kosong); `main` hanya +2 commit merge (PR #59, PR #60) |
+| `patch` vs `main` | Snapshot 2026-10-15 tepat setelah PR #60: **identik secara isi** (`git diff HEAD origin/main` kosong); `main` hanya +2 commit merge (PR #59, PR #60). Sejak itu `patch` maju tiap commit baru — **normal** |
 | Kesiapan uang riil | **BELUM** — lihat §9.5c |
 
 ### 18.4 Sinkronisasi klaim branch (2026-10-15)
@@ -1192,6 +1192,10 @@ git diff --name-status HEAD origin/main   # kosong → isi patch == isi main
 Sejak **PR #60** (`7f890eb`), `patch` dan `main` **identik secara isi**; `main` hanya unggul
 **2 commit merge** (PR #59 `bc48ac4`, PR #60 `7f890eb`). Seluruh pekerjaan `f9e7fdd` (auto-buy) dan
 `56eb5cd` (P4.4) **sudah ada di `main`**.
+
+**Catatan penting:** setelah snapshot itu, **setiap commit baru mendarat di `patch` dulu**, jadi
+`origin/main..HEAD` normalnya **`> 0`** — itu wajar, bukan tanda `main` ketinggalan. Commit dokumen
+ini sendiri membuat `patch` maju **+1** dari `main`.
 
 **Perbaikan:** klaim branch di keempat berkas (`AGENTS.md` §Langkah 0, `PANDUAN` §1–§2,
 `BELUM-DIKERJAKAN` header, tabel ini) diperbarui menjadi "identik isi + `main` unggul commit merge",

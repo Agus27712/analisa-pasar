@@ -67,9 +67,11 @@ git stash pop                 # kembalikan pekerjaan
 | ~~§15~~ | ~~SSOT: horizon vs engine aktif~~ | — | ⛔ **DIBATALKAN** — lihat §3b |
 
 **Status di `main`:** `main` sudah menerima merge **PR #59** (`bc48ac4`, membawa sampai `9f65109`)
-**dan PR #60** (`7f890eb`, membawa `f9e7fdd` auto-buy + `56eb5cd` P4.4 + `5dc7182`). Per
-**2026-10-15**, `patch` dan `main` **identik secara isi** (`git diff HEAD origin/main` kosong);
-`main` hanya unggul **2 commit merge**. §14/§15 tetap **dihapus dari kode** (2026-10-13).
+**dan PR #60** (`7f890eb`, membawa `f9e7fdd` auto-buy + `56eb5cd` P4.4 + `5dc7182`). Snapshot
+**2026-10-15 tepat setelah PR #60**, `patch` dan `main` **identik secara isi** (`git diff HEAD
+origin/main` kosong); `main` hanya unggul **2 commit merge**. Sejak itu setiap commit mendarat di
+`patch` dulu, jadi `patch` normalnya **> 0** di depan `main` — bukan tanda `main` ketinggalan.
+§14/§15 tetap **dihapus dari kode** (2026-10-13).
 
 ---
 
