@@ -414,7 +414,8 @@ fun TradingViewModel.persistPaperFsm(
  * 2. aksi sinyal `BUY`,
  * 3. `scalpingStage` memenuhi ambang minimum yang dipilih,
  * 4. belum ada posisi simulasi terbuka untuk pair tersebut,
- * 5. kuantitas hasil perhitungan > 0.
+ * 5. jumlah posisi paper bersamaan belum mencapai `maxConcurrentPositions` (global, `0` = tanpa batas),
+ * 6. kuantitas hasil perhitungan > 0.
  *
  * @return `true` bila order simulasi berhasil dikirim.
  */
@@ -432,6 +433,21 @@ fun TradingViewModel.tryPaperAutoBuy(transition: SignalTransition, exchange: Str
     val pair = TradingPair.fromCustomSymbol(raw = transition.symbol, exchange = exchange)
     val existing = positionStore.get(pair.symbol, isReal = false, exchange = exchange)
     if (existing.isHolding) return false
+
+    // Batas jumlah posisi paper bersamaan (global, lintas bursa). Kas yang sudah terpotong posisi
+    // yang masih hold tetap "terpakai", jadi tanpa gerbang ini auto-buy bisa terus menumpuk posisi
+    // sampai order berikutnya ditolak karena saldo kurang — bukan karena sinyalnya buruk.
+    // Gerbang ini sengaja hanya di jalur auto-buy; beli manual tetap keputusan sadar pengguna.
+    val activePaperPositions = positionStore.countActivePaperPositions()
+    if (cfg.positionLimitReached(activePaperPositions)) {
+        AppLogManager.service(
+            "PaperAutoBuy",
+            "⏭️ [${pair.symbol}] Auto-buy dilewati: batas posisi bersamaan tercapai " +
+                "($activePaperPositions/${cfg.maxConcurrentPositions}). " +
+                "Tutup posisi lain atau naikkan batas di Pengaturan."
+        )
+        return false
+    }
 
     val available = simCoordinator.wallet.value.getAvailableQuote(pair.quoteAsset)
 

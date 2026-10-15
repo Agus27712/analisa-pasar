@@ -6,8 +6,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDownward
-import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material3.*
@@ -39,7 +37,6 @@ fun RadarTransactionFeeSection(
     isMakerOrder: Boolean = true,
     onOrderTypeChanged: (Boolean) -> Unit = {},
     isBuyMode: Boolean = true,
-    onBuyModeChanged: (Boolean) -> Unit = {},
     isRealMode: Boolean = false,
     onExecuteBuy: ((Double, Double, Double, Double) -> Unit)? = null,
     onExecuteSell: ((Double, Boolean, Double, Double, Double, Double) -> Unit)? = null,
@@ -134,73 +131,10 @@ fun RadarTransactionFeeSection(
             }
         }
 
+        // Toggle Beli/Jual DIHAPUS: mode kini otoritatif dari status kepemilikan koin
+        // (lihat `resolveDetailTradeMode`). Menambah posisi (DCA) punya jalur sendiri di
+        // `WaitingEntryRadarCard`, jadi tidak perlu tab di sini.
         Spacer(Modifier.height(10.dp))
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(TvSurface, RoundedCornerShape(10.dp))
-                .padding(4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(if (isBuyMode) TvGreen.copy(alpha = 0.18f) else Color.Transparent)
-                    .border(if (isBuyMode) 1.dp else 0.dp, if (isBuyMode) TvGreen else Color.Transparent, RoundedCornerShape(8.dp))
-                    .clickable { onBuyModeChanged(true) }
-                    .padding(vertical = 8.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.ArrowDownward,
-                        contentDescription = null,
-                        tint = if (isBuyMode) TvGreen else TvTextSecondary,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    Text(
-                        text = "Beli",
-                        color = if (isBuyMode) TvGreen else TvTextSecondary,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(if (!isBuyMode) TvRed.copy(alpha = 0.18f) else Color.Transparent)
-                    .border(if (!isBuyMode) 1.dp else 0.dp, if (!isBuyMode) TvRed else Color.Transparent, RoundedCornerShape(8.dp))
-                    .clickable {
-                        onBuyModeChanged(false)
-                        if (availableCoin > 0.0) onSellQuantityChanged(availableCoin)
-                    }
-                    .padding(vertical = 8.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.ArrowUpward,
-                        contentDescription = null,
-                        tint = if (!isBuyMode) TvRed else TvTextSecondary,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    Text(
-                        text = "Jual",
-                        color = if (!isBuyMode) TvRed else TvTextSecondary,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-        }
-
-        Spacer(Modifier.height(8.dp))
 
         Row(
             modifier = Modifier

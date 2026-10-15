@@ -166,6 +166,29 @@ fun resolveWorkflow(positionContext: PositionContext): TradingWorkflow {
 }
 
 /**
+ * Mode yang ditampilkan halaman detail koin.
+ *
+ * Halaman detail **tidak lagi** punya tab Beli/Jual manual: mode ditentukan sepenuhnya oleh
+ * status kepemilikan aset, supaya tidak ada lagi kartu beli dan jual yang tampil bersamaan.
+ */
+enum class DetailTradeMode {
+    BUY,
+    SELL
+}
+
+/**
+ * Resolver mode halaman detail — satu-satunya tempat aturan ini ditegakkan.
+ *
+ * - **sedang hold** koin → [DetailTradeMode.SELL]
+ * - **tidak hold** → [DetailTradeMode.BUY]
+ *
+ * Tambah posisi (DCA) tetap bisa dari mode SELL lewat jalur terpisah, jadi mode ini tidak
+ * mematikan kemampuan beli lagi — hanya menentukan tampilan utamanya.
+ */
+fun resolveDetailTradeMode(isHolding: Boolean): DetailTradeMode =
+    if (isHolding) DetailTradeMode.SELL else DetailTradeMode.BUY
+
+/**
  * Item checkpoint terstruktur untuk visualisasi workflow.
  */
 data class TradingCheckpointItem(

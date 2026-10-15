@@ -8,6 +8,7 @@
 > ⚠️ **Seksi §9.5b sudah DIBATALKAN** (angka edge lama tidak sah). Angka yang berlaku ada di
 > **§9.5c**. Seksi §14/§15 **dibatalkan** — fiturnya sudah dihapus dari kode, jangan dibangun ulang.
 > Seksi §16–§18 baru ditambahkan 2026-10-15 (P0–P2, S1–S9, P4.4 + auto-buy).
+> Seksi §19–§21 ditambahkan 2026-10-15 (batas posisi auto-buy, mode detail otoritatif, hapus kartu backtest).
 
 ---
 
@@ -1207,3 +1208,107 @@ dengan `[skip ci]`.
 
 **Tindak lanjut:** setelah sinkronisasi, `patch` di-merge ke `main` (commit merge `70aea38`, ditandai
 `[skip ci]` agar workflow **Release APK** tidak terpicu) — `main` dan `patch` kembali identik isi.
+
+---
+
+## 19. Batas jumlah koin untuk auto-buy paper (2026-10-15)
+
+### 19.1 Masalah
+
+Auto-buy bisa terpicu sinyal entry padahal portofolio paper **tidak punya / kurang saldo** —
+saldo sudah terpotong posisi auto-buy sebelumnya yang masih **hold**. Sebelum ini **tidak ada**
+batas jumlah posisi bersamaan sama sekali; satu-satunya penjaga adalah dedup per-pair di
+`tryPaperAutoBuy`. Akibatnya kegagalan terlihat sebagai "saldo kurang" dari order engine, bukan
+sebagai masalah setelan.
+
+### 19.2 Keputusan owner
+
+| | |
+|---|---|
+| Cakupan | **global** — satu batas untuk semua bursa & kuotasi |
+| Yang dihitung | **semua** posisi paper (termasuk beli manual) |
+| Default | **3** koin; `0` = tanpa batas; bisa diubah user di Pengaturan |
+| Yang diblokir | **hanya auto-buy**; beli manual tetap bebas |
+
+### 19.3 Implementasi
+
+| Titik | Berkas | Perubahan |
+|---|---|---|
+| Field + helper murni | `engine/scalping/PaperAutoTradeConfig.kt` | `maxConcurrentPositions = 3`, `positionLimitReached(currentCount)` |
+| Hitungan global | `trading/SpotPositionStore.kt` | `countActivePaperPositions()` = `getAllActivePositions(isReal = false).size` |
+| Gerbang | `viewmodel/PaperAutoTradeCoordinator.kt` | di `tryPaperAutoBuy`, setelah dedup per-pair, sebelum baca saldo |
+| Persistensi | `util/AppPreferences.kt` | `KEY_PAPER_AUTO_BUY_MAX_POSITIONS` |
+| UI | `ui/components/settings/PaperAutoTradeSettings.kt` | `StepperRow` "Maks. posisi bersamaan", rentang 0–20 |
+
+`getAllActivePositions(exchange = null, isReal = false)` mengiterasi seluruh key, menyaring
+`HOLDING` + `isReal=false` + `quantity > 0` → benar-benar global, dan **mencakup** posisi beli
+manual. Penanda `_paper_engine` **tidak** dipakai karena ia menandai kepemilikan exit, bukan asal
+order.
+
+### 19.4 Kontrol negatif
+
+`positionLimitReached` dijadikan `false` → **3 dari 6** test gagal (`batas tercapai`,
+`batas terlampaui`, `batas satu`); test yang tidak bergantung gerbang tetap lulus. Dipulihkan →
+hijau.
+
+### 19.5 Laporan
+
+`docs/LAPORAN-batas-posisi-paper-2026-10-15.md`
+
+---
+
+## 20. Mode detail koin otoritatif & kartu backtest dibuang (2026-10-15)
+
+### 20.1 Masalah
+
+Halaman detail koin menampilkan kartu beli dan jual **bersamaan**: satu kartu gabungan
+`WaitingEntryRadarCard` + tab Beli/Jual manual di `RadarTransactionFeeSection`. User tidak bisa
+membedakan sedang membeli atau menjual. Owner juga meminta baseline backtest dibuang dari UI.
+
+### 20.2 Keputusan owner
+
+| | |
+|---|---|
+| Saat hold | halaman detail = **mode SELL** |
+| Saat tidak hold | halaman detail = **mode BUY** |
+| Toggle Beli/Jual | **dihapus** |
+| DCA saat hold | **tetap bisa** (jalur terpisah) |
+| Backtest | **hanya kartu UI** yang dibuang; mesin dipertahankan |
+
+### 20.3 Implementasi
+
+| Titik | Berkas | Perubahan |
+|---|---|---|
+| Resolver murni | `model/PositionContext.kt` | `enum DetailTradeMode` + `resolveDetailTradeMode(isHolding)` |
+| Layar | `ui/screens/DetailChartScreen.kt` | state `isBuyMode` lokal dihapus (mode jadi turunan) |
+| Kartu | `ui/components/detail/WaitingEntryRadarCard.kt` | param mode dihapus; kode mati dibersihkan; tombol + dialog DCA |
+| Form | `ui/components/detail/RadarTransactionFeeSection.kt` | toggle Beli/Jual (baris 139–201) dihapus |
+| Backtest | `ui/components/detail/radar/BacktestSection.kt` | **berkas dihapus** + 2 pemanggilnya |
+
+Kode mati yang ikut dibersihkan: cabang "Belum ada koin di dompet" dan notis "mode Buy untuk
+re-entry/DCA" — keduanya tidak pernah tercapai lagi karena `!currentBuyMode` kini identik dengan
+`isHolding`.
+
+Jalur DCA dibuat baru (yang lama tidak ada: `SellManualBuyDialog.kt` adalah dead code dan hanya
+merekam harga beli manual). Dialog DCA memakai ulang `RadarBuySection`, jadi jalur eksekusi
+real/paper identik dengan mode BUY.
+
+### 20.4 Kontrol negatif
+
+`resolveDetailTradeMode` dibalik (hold → BUY) → **3 dari 3** test gagal. Dipulihkan → hijau.
+
+### 20.5 Laporan
+
+`docs/LAPORAN-mode-detail-dan-hapus-backtest-2026-10-15.md`
+
+---
+
+## 21. Status setelah §19–§20
+
+| | |
+|---|---|
+| Unit test (diukur dari XML) | **429 lulus · 0 gagal · 1 dilewati** (56 kelas) |
+| Baseline sebelum §19–§20 | **416 lulus · 0 gagal · 1 dilewati** (53 kelas) |
+| Tambahan | **+13 test, +3 kelas** |
+| APK debug | 27.875.220 byte (27,9 MB desimal) |
+| Kesiapan uang riil | **BELUM** — lihat §9.5c |

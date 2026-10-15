@@ -811,6 +811,16 @@ class SpotPositionStore(context: Context) {
         return result
     }
 
+    /**
+     * Jumlah posisi **paper** aktif secara global (semua bursa & semua mata uang kuotasi).
+     *
+     * Dipakai gerbang batas posisi auto-buy (`PaperAutoTradeConfig.positionLimitReached`).
+     * Memakai [getAllActivePositions] dengan `exchange = null` supaya lintas bursa, dan
+     * `isReal = false` supaya posisi uang riil tidak ikut dihitung. Posisi yang dibeli
+     * **manual** ikut terhitung — lihat catatan di `PaperAutoTradeConfig.maxConcurrentPositions`.
+     */
+    fun countActivePaperPositions(): Int = getAllActivePositions(isReal = false).size
+
     private fun readHistory(key: String): JSONArray {
         val raw = prefs.getString("${key}_history", null).orEmpty()
         return if (raw.isBlank()) JSONArray() else runCatching { JSONArray(raw) }.getOrElse { JSONArray() }

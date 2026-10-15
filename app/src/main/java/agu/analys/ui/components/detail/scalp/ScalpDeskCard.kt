@@ -28,7 +28,6 @@ import agu.analys.model.AISignalState
 import agu.analys.ui.components.detail.AnalysisCard
 import agu.analys.ui.components.detail.AnalysisDivider
 import agu.analys.ui.components.detail.SectionTitle
-import agu.analys.ui.components.detail.radar.BacktestSection
 import agu.analys.ui.components.detail.radar.RadarChecklistItem
 import agu.analys.ui.theme.*
 import agu.analys.util.PriceFormatter
@@ -308,16 +307,6 @@ fun ScalpDeskCard(
                     )
                 }
             }
-        }
-
-        if (symbolKey.isNotBlank()) {
-            Spacer(Modifier.height(10.dp))
-            // Baseline backtest dari cache M1 bursa aktif (ScalpingBacktestAdapter).
-            BacktestSection(
-                symbol = symbolKey,
-                exchange = exchange,
-                fees = fees
-            )
         }
     }
 }

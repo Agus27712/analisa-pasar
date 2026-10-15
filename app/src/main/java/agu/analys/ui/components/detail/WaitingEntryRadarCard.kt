@@ -21,7 +21,9 @@ import agu.analys.model.PositionContext
 import agu.analys.model.SellCheckpointEvaluator
 import agu.analys.model.SellLifecycleState
 import agu.analys.model.SellSignalState
+import agu.analys.model.DetailTradeMode
 import agu.analys.model.TradingWorkflow
+import agu.analys.model.resolveDetailTradeMode
 import agu.analys.model.resolveWorkflow
 import agu.analys.trading.SpotPosition
 import agu.analys.ui.components.detail.radar.RadarConfirmationChecklist
@@ -41,6 +43,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.Alignment
@@ -50,7 +53,6 @@ import java.util.Locale
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddShoppingCart
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Info
 
 /**
  * Radar & Progres Entry/Exit Interaktif dengan Single Source of Truth Position Context:
@@ -82,8 +84,6 @@ fun WaitingEntryRadarCard(
     onSetAutoSellParams: ((Boolean, Double, Double, Double, Double) -> Unit)? = null,
     onDeployTrailingOrder: (() -> Unit)? = null,
     onCancelTrailingOrder: (() -> Unit)? = null,
-    isBuyMode: Boolean = true,
-    onBuyModeChanged: ((Boolean) -> Unit)? = null,
     orderBookBids: List<OrderBookItem> = emptyList(),
     orderBookAsks: List<OrderBookItem> = emptyList(),
     buyCooldownRemainingMs: Long = 0L,
@@ -132,12 +132,10 @@ fun WaitingEntryRadarCard(
     var selectedNominal by remember { mutableDoubleStateOf(50000.0) }
     var selectedSellQty by remember { mutableDoubleStateOf(availableCoin) }
     var isMakerOrder by remember { mutableStateOf(true) }
-    var internalBuyMode by remember(isHolding) { mutableStateOf(!isHolding) }
-    val currentBuyMode = if (onBuyModeChanged != null) isBuyMode else internalBuyMode
-    val setBuyMode: (Boolean) -> Unit = { newMode ->
-        internalBuyMode = newMode
-        onBuyModeChanged?.invoke(newMode)
-    }
+    // Mode OTORITATIF: hold → SELL, tidak hold → BUY. Tidak ada lagi tab Beli/Jual manual,
+    // jadi kartu beli dan jual tidak pernah tampil bersamaan. Menambah posisi (DCA) punya
+    // jalur sendiri di cabang SELL (lihat `showDcaDialog`).
+    val currentBuyMode = resolveDetailTradeMode(isHolding) == DetailTradeMode.BUY
 
     // Hoisted auto sell states for dialog and sell coordination
     var isAutoSellActive by remember { mutableStateOf(false) }
@@ -172,6 +170,7 @@ fun WaitingEntryRadarCard(
     }
 
     var showTpSlPopup by remember { mutableStateOf(false) }
+    var showDcaDialog by remember { mutableStateOf(false) }
 
     // Animasi Pulse Radar
     val transition = rememberInfiniteTransition(label = "waiting_radar_pulse")
@@ -203,38 +202,12 @@ fun WaitingEntryRadarCard(
             // ═════════════════════════════════════════════════════════════════════════
             // WORKFLOW: HOLD & SELL (Asset Active in Portfolio / Profit Target Analysis)
             // ═════════════════════════════════════════════════════════════════════════
-            if (isHolding) {
-                // Standalone Position Overview Card (Tanpa border/padding ganda bertumpuk)
-                SellPositionOverviewCard(
-                    context = positionContext,
-                    quoteAsset = quoteAsset
-                )
-            } else {
-                Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = TvSurfaceVariant,
-                    border = BorderStroke(0.8.dp, TvBorder),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.padding(10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Info,
-                            contentDescription = null,
-                            tint = TvTextSecondary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Text(
-                            text = "Belum ada koin $baseAsset di dompet. Beralih ke BUY untuk analisa & eksekusi beli.",
-                            color = TvTextSecondary,
-                            fontSize = 11.5.sp
-                        )
-                    }
-                }
-            }
+            // `!currentBuyMode` kini identik dengan `isHolding`, jadi cabang "belum ada koin di
+            // dompet" tidak pernah tercapai lagi dan sudah dibuang.
+            SellPositionOverviewCard(
+                context = positionContext,
+                quoteAsset = quoteAsset
+            )
 
             AnalysisCard {
                 val (sellStatusText, sellStatusColor) = when (effectiveSellSignalState.state) {
@@ -285,20 +258,21 @@ fun WaitingEntryRadarCard(
                     quoteAsset = quoteAsset,
                     onClick = { showTpSlPopup = true }
                 )
-            }
-        } else {
-            // ═════════════════════════════════════════════════════════════════════════
-            // WORKFLOW: BUY (Searching for Market Entry / DCA Re-entry Opportunity)
-            // ═════════════════════════════════════════════════════════════════════════
-            if (isHolding) {
+
+                Spacer(Modifier.height(10.dp))
+
+                // Jalur DCA: mode SELL tidak mematikan kemampuan menambah posisi. Form beli
+                // dibuka di dialog supaya kartu utama tetap murni "mode jual".
                 Surface(
                     shape = RoundedCornerShape(10.dp),
-                    color = TvGreen.copy(alpha = 0.08f),
-                    border = BorderStroke(0.8.dp, TvGreen.copy(alpha = 0.35f)),
-                    modifier = Modifier.fillMaxWidth()
+                    color = TvGreen.copy(alpha = 0.10f),
+                    border = BorderStroke(1.dp, TvGreen.copy(alpha = 0.45f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showDcaDialog = true }
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 9.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
@@ -309,14 +283,21 @@ fun WaitingEntryRadarCard(
                             modifier = Modifier.size(16.dp)
                         )
                         Text(
-                            text = "Posisi $baseAsset aktif di dompet. Mode Buy aktif untuk re-entry / cicil beli (DCA).",
+                            text = "Tambah posisi (DCA)",
                             color = TvGreen,
-                            fontSize = 11.5.sp,
-                            fontWeight = FontWeight.Medium
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
                         )
                     }
                 }
             }
+        } else {
+            // ═════════════════════════════════════════════════════════════════════════
+            // WORKFLOW: BUY (Searching for Market Entry / DCA Re-entry Opportunity)
+            // ═════════════════════════════════════════════════════════════════════════
+            // Notis "mode Buy untuk re-entry / DCA" sudah dibuang: cabang BUY kini hanya tampil
+            // saat TIDAK hold, jadi notis itu tidak pernah tercapai. Jalur DCA pindah ke cabang
+            // SELL (lihat `showDcaDialog`).
 
             // Mode scalping memakai ScalpDeskCard sebagai sumber status; blok ini dilewati
             // supaya entry/SL/TP tidak tampil dua kali dan status tidak saling bertentangan.
@@ -376,15 +357,6 @@ fun WaitingEntryRadarCard(
                     isLevelPlanVisible = isLevelPlanVisible,
                     onToggleLevelPlan = { isLevelPlanVisible = !isLevelPlanVisible }
                 )
-
-                Spacer(Modifier.height(10.dp))
-
-                // Backtest baseline di cache M1 bursa aktif (integrasi ScalpingBacktestAdapter)
-                agu.analys.ui.components.detail.radar.BacktestSection(
-                    symbol = signal.marketSymbol.ifBlank { "$baseAsset$quoteAsset" },
-                    exchange = exchange,
-                    fees = fees
-                )
             }
         }
 
@@ -404,7 +376,6 @@ fun WaitingEntryRadarCard(
             isMakerOrder = isMakerOrder,
             onOrderTypeChanged = { isMakerOrder = it },
             isBuyMode = currentBuyMode,
-            onBuyModeChanged = setBuyMode,
             isRealMode = isRealBuyMode,
             orderBookBids = orderBookBids,
             orderBookAsks = orderBookAsks,
@@ -509,6 +480,77 @@ fun WaitingEntryRadarCard(
                             )
                             showTpSlPopup = false
                         }
+                    )
+                }
+            }
+        }
+    }
+
+    // ── Dialog DCA (tambah posisi saat mode SELL) ─────────────────────────────
+    // Memakai ulang `RadarBuySection` supaya jalur eksekusi (real & paper), cooldown, dan
+    // validasi nominal tetap identik dengan mode BUY — tidak ada form kedua yang bisa menyimpang.
+    if (showDcaDialog) {
+        Dialog(
+            onDismissRequest = { showDcaDialog = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = TvSurface,
+                border = BorderStroke(1.dp, TvBorder),
+                modifier = Modifier
+                    .fillMaxWidth(0.95f)
+                    .padding(horizontal = 8.dp, vertical = 16.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "TAMBAH POSISI (DCA)",
+                            color = TvTextPrimary,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        IconButton(onClick = { showDcaDialog = false }) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Tutup",
+                                tint = TvTextSecondary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+
+                    Text(
+                        text = "Posisi $baseAsset masih terbuka. Pembelian ini menambah posisi " +
+                            "yang ada (DCA), bukan membuka posisi baru.",
+                        color = TvTextSecondary,
+                        fontSize = 11.sp,
+                        lineHeight = 15.sp
+                    )
+
+                    RadarBuySection(
+                        validPrice = if (effectivePrice > 0.0) effectivePrice else 1.0,
+                        baseAsset = baseAsset,
+                        quoteAsset = quoteAsset,
+                        availableIdr = availableIdr,
+                        selectedNominalIdr = selectedNominal,
+                        onNominalIdrChanged = { selectedNominal = it },
+                        activeFeePct = if (isMakerOrder) fees.buyMakerPct else fees.buyTakerPct,
+                        isRealMode = isRealBuyMode,
+                        signal = signal,
+                        onExecuteBuy = onExecuteBuy,
+                        buyCooldownRemainingMs = buyCooldownRemainingMs,
+                        buyCooldownTotalMs = buyCooldownTotalMs,
+                        buyCooldownReason = buyCooldownReason,
+                        orderBookBids = orderBookBids,
+                        orderBookAsks = orderBookAsks
                     )
                 }
             }
