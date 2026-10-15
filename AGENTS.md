@@ -8,19 +8,20 @@ Aplikasi Android Kotlin 100% (Jetpack Compose M3) untuk analisis & **scalp mode*
 
 ### ⚠️ Langkah 0 — pastikan branch yang Anda baca benar
 
-**Kerjaan aktif ada di `patch`.** Per **2026-10-15** (setelah `56eb5cd`), **`patch` sudah 2 commit
-di depan `main`** (`f9e7fdd`, `56eb5cd`) — jadi `patch` dan `main` **TIDAK identik**; klaim lama
-"identik per 2026-10-14" dan "4/6/7 commit di depan" semuanya **usang**. Pembaruan mendarat di
-`patch` dulu dan hanya digabung ke `main` bila owner memintanya (terakhir lewat **PR #59** →
-`bc48ac4`, yang membawa `main` sampai `9f65109`). **Jangan pernah menyimpulkan keadaan repo dari
-`main` tanpa mengecek angka ini dulu:**
+**Kerjaan aktif ada di `patch`.** Per **2026-10-15** (setelah **PR #60** → `7f890eb`), **`patch` dan
+`main` identik secara isi** — `git diff HEAD origin/main` **kosong**. `main` hanya unggul **2 commit
+merge** (PR #59 `bc48ac4`, PR #60 `7f890eb`), bukan commit konten. Jadi klaim lama "`patch` 2 commit
+di depan" dan "`main` belum menerima `f9e7fdd`/`56eb5cd`" **usang** — keduanya **sudah ada di
+`main`**. Pembaruan tetap mendarat di `patch` dulu dan digabung ke `main` bila owner memintanya.
+**Jangan pernah menyimpulkan keadaan repo dari `main` tanpa mengecek angka ini dulu:**
 
 ```sh
 git clone https://github.com/Agus27712/analisa-pasar.git
 cd analisa-pasar && git checkout patch        # WAJIB — kerjaan aktif ada di sini
-git rev-list --count origin/main..HEAD        # >0 = patch lebih maju (normal, baca patch)
-git rev-list --count HEAD..origin/main        # >0 = main punya commit yang belum ada di patch
+git rev-list --count origin/main..HEAD        # >0 = patch punya commit konten yang belum di main
+git rev-list --count HEAD..origin/main        # >0 = main unggul (biasanya hanya commit merge)
 git ls-remote --heads origin                  # sumber kebenaran daftar branch (bypass refspec)
+git diff --name-status HEAD origin/main       # kosong = isi patch == isi main
 ```
 
 Repo ini **public** — clone tidak butuh token.
