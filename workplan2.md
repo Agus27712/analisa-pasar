@@ -1950,3 +1950,114 @@ di-hardcode ke `tokocrypto` di `getPaperEnginePositions` ⇒ **8 dari 13 uji GAG
 
 `docs/LAPORAN-batch3-rehidrasi-2026-10-16.md`
 
+---
+
+## 33. Batch 4 — J7: radar jual ikut basis FSM (2026-10-16)
+
+Sumber: `docs/bugs/temuan_bugs_jurnal_pnl.md` butir **J7**. Ini satu-satunya temuan sisa audit yang
+menyentuh **permukaan uang riil**: kartu yang paling sering dibaca pengguna tepat sebelum menekan
+tombol jual.
+
+### 33.1 Masalah
+
+`ui/components/detail/RadarSellSection.kt` menghitung sendiri, terpisah dari `FeeSchedule`:
+
+```kotlin
+val sellFeeIdr   = grossSellValueIdr * (activeFeePct / 100.0)   // hanya fee jual
+val costBasisIdr = activeSellQty * effectiveBuyPrice            // TANPA fee beli
+val netProfitIdr = netReceivedSellIdr - costBasisIdr            // tanpa slippage
+```
+
+Lalu `SellCalculationCard` menulis **"JUAL UNTUNG (PROFIT) … sudah bersih fee & pajak"** di atas
+angka tersebut.
+
+| Pair (taker) | Friksi di kartu | Friksi FSM | Selisih |
+|---|---|---|---|
+| Tokocrypto IDR | 0,4322% | 0,8186% | **0,3864 pp** |
+| Tokocrypto USDT | 0,4044% | **0,9735%** | **0,5691 pp** |
+
+> **Koreksi angka audit.** Dokumen temuan menulis friksi FSM Tokocrypto USDT sebagai **0,8226%**
+> (selisih 0,4182 pp). Angka itu tidak cocok dengan rumus mana pun: bentuk aditif memberi 0,9688%
+> dan bentuk multiplikatif — yang dipakai `FeeSchedule` dan sudah terdokumentasi sebagai 0,9735% di
+> §24 dan `NetPnlParityTest` — memberi **0,9735%**. Selisih yang benar adalah **0,5691 pp**, bukan
+> 0,4182 pp. Arah temuan tidak berubah; hanya angkanya yang perlu dikoreksi supaya tidak dikutip
+> sebagai kebenaran.
+
+Akibatnya kartu mengklaim untung pada kenaikan harga **+0,50%** (kartu lama: +0,0656%), padahal
+net-nya **rugi −0,3160%**.
+
+### 33.2 Akar penyebab — §24 memigrasi *evaluator*, bukan *kartunya*
+
+§24.3 mencatat "Radar jual & kartu posisi" sudah diseragamkan. Yang benar-benar dipindahkan saat itu
+adalah **`engine/sell/SellSignalEvaluator.kt`** (evaluator ambang `READY_TO_SELL`) dan
+`model/PositionContext.kt`. Judul `NetPnlParityTest` sendiri menyebut "radar jual
+(`SellSignalEvaluator`)" — jadi "radar jual" di §24 bermakna *evaluator*, sedangkan **kartu UI**
+`RadarSellSection` + `SellCalculationCard` tidak pernah ikut.
+
+Ikut tidak akurat: §24.1 menulis basis lama radar sebagai "fee jual **maker** saja". Kode hari ini
+memakai `activeFeePct`, yaitu tarif sesuai toggle Limit·Maker / Instant·Taker — bukan maker tetap.
+
+### 33.3 Perbaikan
+
+1. **Resolver murni baru** `trading/SellEstimate.kt` — `SellEstimate` +
+   `SellEstimateResolver.resolve(quantity, entryPrice, sellPrice, buyFeePct, sellFeePct, slippagePct)`.
+   Seluruh angkanya mendelegasi ke `FeeSchedule.netSellValue` dan `FeeSchedule.costBasisNet`, jadi
+   basisnya mustahil menyimpang dari FSM lagi.
+2. **Basis biaya yang dipakai:**
+   - fee **jual** = tarif order type yang dipilih pengguna (maker/taker) — itu yang benar-benar
+     dibayar pada kaki jual yang sedang dipricilkan;
+   - fee **beli** = tarif **taker**. Order beli sudah terjadi dan jenisnya tidak diketahui di sini,
+     jadi dipakai asumsi terburuk yang juga basis FSM (`netProfitPctFor` default taker);
+   - **slippage** dua sisi, mengikuti konvensi `FeeSchedule` (slippage tetap dibebankan walau maker).
+3. **`RadarSellSection` tidak menghitung apa pun lagi**; `SellCalculationCard` menerima satu objek
+   `SellEstimate` (sebelumnya 8 parameter angka terpisah).
+4. **Label diperbaiki** supaya klaimnya bisa diverifikasi:
+   - `"Potongan Biaya & Pajak (0,43%)"` → `"Potongan Biaya, Pajak & Slippage"` + sub-label yang
+     menyebut komponennya satu per satu (`"Beli taker 0.22% + Jual taker 0.43% + Slippage 2×0.08%"`);
+   - `"Total Modal Pembelian"` → `"Total Modal + Biaya Beli & Slippage"`;
+   - `"sudah bersih fee & pajak"` → `"setelah biaya beli, biaya jual, pajak & slippage"`;
+   - saat modal belum diketahui, sub-label berkata jujur `"(biaya beli belum diketahui)"` alih-alih
+     menampilkan persen tunggal yang seolah sudah lengkap.
+5. **`slippagePct` disalurkan** dari `scalpingRuntimeConfig.slippagePct`:
+   `DetailChartScreen` → `WaitingEntryRadarCard` → `RadarTransactionFeeSection` → `RadarSellSection`.
+
+Invarian yang dijaga: `(netProceeds / costBasisNet − 1) × 100` == `netProfitPct` ==
+`FeeSchedule.netProfitPct` untuk tarif yang sama.
+
+### 33.4 Efek dan selisih yang **sengaja** tersisa
+
+| Mode | Friksi kartu (sebelum) | Friksi kartu (sesudah) | FSM |
+|---|---|---|---|
+| Tokocrypto IDR taker | 0,4322% | **0,8186%** | 0,8186% |
+| Tokocrypto IDR maker | 0,3322% | **0,7174%** | 0,8186% |
+| Tokocrypto USDT taker | 0,4044% | **0,9735%** | 0,9735% |
+
+Pada mode **taker** kartu kini sama persis dengan FSM. Pada mode **maker** masih berbeda 0,1012 pp,
+dan itu disengaja: pengguna memang memilih limit order untuk kaki jual, jadi fee maker-lah yang akan
+dibayar. Yang tidak boleh lagi terjadi adalah memotong fee jual saja lalu mengklaim "sudah bersih".
+
+Efek amnesti (kelas yang sama dengan J1) — bukan regresi:
+
+| Bruto | Kartu lama | Kartu sekarang |
+|---|---|---|
+| +0,50% | **+0,0656% "UNTUNG"** | **−0,3160% RUGI** |
+| Ambang pertama kali "JUAL UNTUNG" muncul | ≈ **+0,4341%** | ≈ **+0,8186%** |
+
+### 33.5 Uji & kontrol negatif
+
+Uji baru: `app/src/test/java/agu/analys/trading/SellEstimateTest.kt` — **17 kasus**: skenario J7,
+impas, paritas `FeeSchedule` lintas rentang harga, invarian rupiah↔persen, komponen friksi,
+per-bursa (Tokocrypto USDT, Indodax), mode maker, slippage dimatikan, penjaga masukan tidak valid,
+dan tiga uji teks kartu.
+
+Kontrol negatif: resolver dikembalikan ke rumus lama (hanya fee jual, tanpa fee beli, tanpa
+slippage) **dan** label lama ("sudah bersih fee & pajak") dipulihkan ⇒ **13 dari 17 uji GAGAL**,
+tepat pada penjaga masing-masing. Empat yang tetap lulus memang tidak menguji basis: invarian
+internal rupiah↔persen (bertahan karena dihitung dari angka yang sama) dan tiga penjaga masukan
+(modal tidak diketahui, harga jual nol, masukan NaN/tak hingga).
+
+### 33.6 Laporan
+
+`docs/LAPORAN-batch4-j7-2026-10-16.md`
+
+

@@ -379,6 +379,8 @@ fun DetailChartScreen(
                 baseAsset = pair.baseAsset,
                 quoteAsset = pair.quoteAsset,
                 exchange = marketDataSource.name,
+                // J7 — kartu jual memakai slippage yang sama dengan FSM, bukan fee jual saja.
+                slippagePct = scalpingRuntime.slippagePct,
                 availableIdr = availableIdr,
                 availableCoin = availableCoin,
                 avgBuyPrice = avgBuyPrice,

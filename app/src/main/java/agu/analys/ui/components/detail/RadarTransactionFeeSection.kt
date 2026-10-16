@@ -36,6 +36,11 @@ fun RadarTransactionFeeSection(
     onSellQuantityChanged: (Double) -> Unit = {},
     isMakerOrder: Boolean = true,
     onOrderTypeChanged: (Boolean) -> Unit = {},
+    /**
+     * Asumsi slippage per sisi (%) untuk kartu jual (J7). Diteruskan dari
+     * `scalpingRuntimeConfig.slippagePct` supaya basis biaya kartu jual sama dengan FSM.
+     */
+    slippagePct: Double = agu.analys.config.FeeSchedule.DEFAULT_SLIPPAGE_PCT,
     isBuyMode: Boolean = true,
     isRealMode: Boolean = false,
     onExecuteBuy: ((Double, Double, Double, Double) -> Unit)? = null,
@@ -189,6 +194,8 @@ fun RadarTransactionFeeSection(
                 selectedSellQuantity = selectedSellQuantity,
                 onSellQuantityChanged = onSellQuantityChanged,
                 activeFeePct = activeFeePct,
+                buyTakerFeePct = fees.buyTakerPct,
+                slippagePct = slippagePct,
                 isRealMode = isRealMode,
                 onExecuteSell = onExecuteSell,
                 spotPosition = spotPosition,

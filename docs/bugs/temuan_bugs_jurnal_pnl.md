@@ -1,7 +1,8 @@
 # Temuan Audit — Jurnal Sinyal, Jurnal Trade & Angka P&L
 
 **Tanggal:** 2026-10-16
-**Status:** DOKUMEN TEMUAN — **J1 & J2 sudah DIPERBAIKI** (batch 3a); **J3–J10 masih hidup.**
+**Status:** DOKUMEN TEMUAN — **J1, J2 (batch 3a) & J7 (batch 4) sudah DIPERBAIKI**; **J3–J6, J8–J10
+masih hidup.**
 Diverifikasi terhadap kode di branch `patch` @ `a842e35`.
 **Cakupan:** `database/SignalLogRepository.kt` · `database/TradeHistoryRecorder.kt` ·
 `trading/TradeSignalSnapshot.kt` · `viewmodel/SignalLogViewModel.kt` ·
@@ -354,7 +355,13 @@ justru **tidak memakai maker maupun slippage**. Drift yang tersisa:
 | Pair | Friksi di kartu | Friksi agreed (FSM) | Selisih |
 |---|---|---|---|
 | Tokocrypto IDR taker | 0,4322% | 0,8186% | **0,3864 pp** |
-| Tokocrypto USDT taker | 0,4044% | 0,8226% | **0,4182 pp** |
+| Tokocrypto USDT taker | 0,4044% | **0,9735%** | **0,5691 pp** |
+
+> **Koreksi angka di tabel di atas (2026-10-16, batch 4).** Baris Tokocrypto USDT semula menulis
+> friksi FSM **0,8226%** (selisih 0,4182 pp). Angka itu tidak cocok dengan rumus mana pun: bentuk
+> aditif memberi 0,9688%, bentuk multiplikatif — yang dipakai `FeeSchedule` dan sudah terdokumentasi
+> sebagai 0,9735% di `workplan2.md` §24 dan `NetPnlParityTest` — memberi **0,9735%**. Selisih yang
+> benar **0,5691 pp**. Arah temuan tidak berubah. Rincian: `docs/LAPORAN-batch4-j7-2026-10-16.md` §2.
 
 **Dampak.** "JUAL UNTUNG (PROFIT) … sudah bersih fee & pajak" padahal angka tersebut belum
 memotong fee beli maupun slippage ⇒ **klaim tidak jujur** di kartu yang paling sering dipakai user
@@ -363,6 +370,29 @@ sebelum menekan tombol jual, dan berbeda dari angka yang dipakai FSM di halaman 
 **Perbaikan.** `RadarSellSection` memakai `FeeSchedule.costBasisNet` + `netSellValue` dengan tarif
 dari `fees` yang sudah diterima (dan slippage dari `scalpingRuntimeConfig`), atau cukup
 `FeeSchedule.netProfitPct(entry, price, buyTakerPct, sellTakerPct, slippagePct)`.
+
+> ✅ **DIPERBAIKI 2026-10-16 (batch 4)** — rekomendasi di atas diikuti, tetapi lewat **resolver murni
+> baru** `trading/SellEstimate.kt` (`SellEstimateResolver.resolve`) supaya bisa diuji tanpa Compose:
+> `RadarSellSection` berhenti menghitung sama sekali, `SellCalculationCard` menerima satu objek
+> `SellEstimate`.
+>
+> Basis yang dipakai: fee **jual** = tarif order type terpilih (maker/taker, itu yang benar-benar
+> dibayar); fee **beli** = tarif **taker** (order beli sudah terjadi, jenisnya tak diketahui — asumsi
+> terburuk sekaligus basis FSM); **slippage** dua sisi dari `scalpingRuntimeConfig.slippagePct`.
+> Akibatnya pada mode taker kartu kini sama persis dengan FSM (IDR 0,8186%, USDT 0,9735%). Mode maker
+> sengaja tetap berbeda 0,1012 pp (0,7174% vs 0,8186%) — pengguna memang memilih limit order.
+>
+> Klaimnya juga diperbaiki: `"sudah bersih fee & pajak"` → `"setelah biaya beli, biaya jual, pajak &
+> slippage"`, judul `"Potongan Biaya & Pajak (0,43%)"` → `"Potongan Biaya, Pajak & Slippage"` dengan
+> sub-label yang menyebut komponennya satu per satu, dan saat modal belum diketahui kartu berkata
+> jujur `"(biaya beli belum diketahui)"`.
+>
+> Efek amnesti: pada bruto **+0,50%** kartu dulu menulis **+0,0656% "UNTUNG"**, sekarang
+> **−0,3160% RUGI**. Ambang pertama "JUAL UNTUNG" naik dari ≈+0,4341% ke ≈+0,8186%.
+>
+> Uji: `app/src/test/java/agu/analys/trading/SellEstimateTest.kt` (17 kasus). Kontrol negatif:
+> resolver dikembalikan ke rumus lama + label lama ⇒ **13 dari 17 uji GAGAL**.
+> Rincian: `docs/LAPORAN-batch4-j7-2026-10-16.md`.
 
 ---
 
@@ -402,7 +432,7 @@ dari `fees` yang sudah diterima (dan slippage dari `scalpingRuntimeConfig`), ata
 | 3 | **J5** | Jurnal bisa merekam bursa yang salah — merusak audit |
 | 4 | **J4 + J10** | Data pair salah masuk jurnal & tampil di kartu riwayat |
 | 5 | **J3** | Tabel menampilkan bursa yang salah |
-| 6 | **J7** | Kartu jual mengklaim bersih biaya padahal tidak |
+| 6 | **J7** | Kartu jual mengklaim bersih biaya padahal tidak — ✅ **selesai (batch 4)** |
 | 7 | **J8** | Basis P&L berbeda dari yang disepakati |
 | 8 | **J6** | Klaim statistik tanpa data (hapus setelah J1 & J2) |
 | 9 | **J9** | Kebersihan / jebakan latent |
@@ -422,3 +452,4 @@ test **diukur** dari XML.
 | 2026-10-16 | Audit read-only jurnal sinyal, jurnal trade, dan angka P&L (branch `patch` @ `a842e35`) |
 | 2026-10-16 | Temuan diekspor ke `docs/bugs/temuan_bugs_jurnal_pnl.md` (dokumen ini) — **belum ada perbaikan kode** |
 | 2026-10-16 | **Batch 3a:** J2 + J1 diperbaiki + diuji di `d97a539` (14 uji baru, kontrol negatif 9/22 gagal). Lihat `docs/LAPORAN-batch3-jurnal-2026-10-16.md` |
+| 2026-10-16 | **Batch 4:** J7 diperbaiki + diuji (17 uji baru, kontrol negatif 13/17 gagal). Sekaligus **koreksi angka audit**: friksi FSM Tokocrypto USDT adalah 0,9735%, bukan 0,8226%. Lihat `docs/LAPORAN-batch4-j7-2026-10-16.md` |

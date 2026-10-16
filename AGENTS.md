@@ -168,10 +168,13 @@ Saat ini berisi:
   "apakah scalp punya edge".
 - **`temuan_bugs_jurnal_pnl.md`** (2026-10-16, diperbarui di hari yang sama) — audit jurnal sinyal,
   jurnal trade & angka P&L. **J1, J2 DIPERBAIKI** (batch 3a —
-  `docs/LAPORAN-batch3-jurnal-2026-10-16.md`). **Masih hidup: J3–J10** (bursa terikat sekali saat
+  `docs/LAPORAN-batch3-jurnal-2026-10-16.md`); **J7 DIPERBAIKI** (batch 4 —
+  `docs/LAPORAN-batch4-j7-2026-10-16.md`). **Masih hidup: J3–J6, J8–J10** (bursa terikat sekali saat
   konstruksi `SignalLogViewModel`, `selectedPair` dipakai alih-alih simbol yang dievaluasi engine,
-  fallback lintas bursa di jurnal trade, klaim statistik hardcoded, radar jual belum berbasis FSM,
-  satu rumus P&L ditulis ulang di jalur trade real, default `?: 75`).
+  fallback lintas bursa di jurnal trade, klaim statistik hardcoded, satu rumus P&L ditulis ulang di
+  jalur trade real (J8), default `?: 75` (J9), snapshot tanpa verifikasi simbol (J10)).
+  **Catatan angka:** friksi FSM Tokocrypto USDT yang tertulis 0,8226% di dokumen temuan itu **salah**;
+  angka yang benar **0,9735%** (lihat `docs/LAPORAN-batch4-j7-2026-10-16.md` §2).
 
 ## Aturan turunan dari audit notifikasi (batch 1 & 2, 2026-10-16)
 
@@ -287,6 +290,30 @@ Saat ini berisi:
   ada di pohon kerja, jumlah test yang terukur adalah milik pohon kerja itu, bukan milik commit.
   Ukur ulang dengan mengeluarkan berkas di luar cakupan commit, atau tandai angkanya sebagai
   "diturunkan" — jangan tulis angka pohon kerja sebagai angka commit.
+
+## Aturan turunan dari audit jurnal & P&L — J7 (batch 4, 2026-10-16)
+
+- **Kartu uang riil tidak boleh menghitung sendiri.** `RadarSellSection` dulu punya rumusnya sendiri
+  (hanya fee jual, tanpa fee beli, tanpa slippage) sementara `FeeSchedule` sudah jadi satu-satunya
+  rumus P&L sejak §24 — dan kartunya menulis "sudah bersih fee & pajak" di atas angka itu. Setiap
+  kartu yang menampilkan laba/rugi wajib menerima angka jadi dari resolver murni
+  (`trading/SellEstimate.kt`), bukan menghitung ulang di dalam Composable.
+- **Migrasi §24 menyentuh *evaluator*, bukan *kartu UI*.** "Radar jual" di §24.3 bermakna
+  `engine/sell/SellSignalEvaluator.kt` dan `model/PositionContext.kt`. `RadarSellSection` +
+  `SellCalculationCard` tidak pernah ikut. Kalau sebuah dokumen menyebut "sudah diseragamkan",
+  **verifikasi ke kode**, jangan percaya tabelnya.
+- **Kaki beli diasumsikan taker, kaki jual memakai order type terpilih.** Order beli sudah terjadi
+  dan jenisnya tidak diketahui saat kartu jual dihitung; taker adalah asumsi terburuk dan sekaligus
+  basis FSM. Jangan "memperbaiki" ini menjadi maker tanpa alasan — arah kesalahan harus pesimistis.
+- **Label wajib menyebut komponennya, bukan satu persen tunggal.** "Potongan Biaya & Pajak (0,43%)"
+  menyesatkan karena persen itu hanya fee jual. Sebut fee beli, fee jual, dan slippage satu per satu
+  (`frictionBreakdownLabel`). Frasa **"sudah bersih fee & pajak" dilarang** — klaim itu yang jadi
+  inti temuan J7.
+- **Jangan mengklaim untung saat modal belum diketahui.** Tanpa `costBasisNet > 0`, laba dan persen
+  laba wajib `0.0` dan kartu harus berkata jujur bahwa biaya beli belum diketahui.
+- **Angka audit pun bisa salah.** Dokumen temuan menulis friksi FSM Tokocrypto USDT 0,8226%; angka
+  yang benar 0,9735%. Bila angka audit tidak cocok dengan rumus mana pun, hitung ulang dan **catat
+  koreksinya** di laporan — jangan mengutipnya sebagai kebenaran.
 
 ## Arah produk (ringkas)
 
