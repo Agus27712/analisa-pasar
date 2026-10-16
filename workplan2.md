@@ -1578,6 +1578,8 @@ state machine), **N7** (`markTriggered` tidak menormalkan simbol — **aktif**, 
 Lanjutan §26. **N4 diperluas**: selain sakelar master yang diabaikan di `TradingViewModelAlerts`,
 ditemukan bahwa **keempat sakelar kategori** juga tidak dibaca oleh jalur pengiriman mana pun.
 
+Perbaikan mendarat di commit **`1a87e3c`**.
+
 ### 28.1 N4 (+ temuan baru) — sakelar notifikasi tidak dipatuhi
 
 Keadaan sebelum perbaikan:

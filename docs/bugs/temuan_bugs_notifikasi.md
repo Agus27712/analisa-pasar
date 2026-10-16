@@ -147,7 +147,7 @@ Ini melanggar aturan **"SATU rumus P&L"** (AGENTS.md §24) di permukaan notifika
 
 ### N4 — Toggle "Push notifikasi" di Pengaturan tidak konsisten
 
-> ✅ **DIPERBAIKI 2026-10-16 (batch 2)** — dan **diperluas**: selain master yang diabaikan di
+> ✅ **DIPERBAIKI 2026-10-16 di `1a87e3c` (batch 2)** — dan **diperluas**: selain master yang diabaikan di
 > `TradingViewModelAlerts`, ternyata **keempat sakelar kategori** juga tidak dibaca oleh jalur
 > pengiriman mana pun (hanya ditulis di `SettingsViewModel` + dirender di UI). Perbaikan memakai
 > **gerbang tunggal** `util/NotificationGate.kt` (`allowsNotification`, fungsi murni) yang dipasang
@@ -181,7 +181,7 @@ trailing/TP/price-alert dari jalur VM.
 
 ### N5 — Notifikasi kandidat tidak membawa konteks "uang riil masih diblokir"
 
-> ✅ **DIPERBAIKI 2026-10-16 (batch 2)** — konstanta `CANDIDATE_DISCLAIMER` ikut di badan pesan
+> ✅ **DIPERBAIKI 2026-10-16 di `1a87e3c` (batch 2)** — konstanta `CANDIDATE_DISCLAIMER` ikut di badan pesan
 > `buildCandidateSignalMessage`. Uji: `util/CandidateSignalMessageTest.kt`.
 > Lihat `docs/LAPORAN-batch2-notifikasi-2026-10-16.md` §3.
 
@@ -252,7 +252,7 @@ keduanya harus diverifikasi sebelum memastikan apakah bug ini aktif atau latent.
 > **Koreksi path:** berkas `viewmodel/TradingViewModelSimulation.kt` sudah tidak ada; pemanggil
 > keduanya kini `viewmodel/SimulationCoordinator.kt:110`.
 >
-> ✅ **DIPERBAIKI 2026-10-16 (batch 2)** — `markTriggered` **dan `reset`** kini memakai
+> ✅ **DIPERBAIKI 2026-10-16 di `1a87e3c` (batch 2)** — `markTriggered` **dan `reset`** kini memakai
 > `normalizeSymbol(symbol)`. Uji: `engine/scalping/SignalLifecycleSymbolNormalizationTest.kt`
 > (2 test). Lihat `docs/LAPORAN-batch2-notifikasi-2026-10-16.md` §4.
 
@@ -316,5 +316,5 @@ Setiap perbaikan **wajib**:
 | 2026-10-16 | Temuan diekspor ke `docs/bugs/temuan_bugs_notifikasi.md` (dokumen ini) — **belum ada perbaikan kode** |
 | 2026-10-16 | **Batch 1:** N1, N2, N3 diperbaiki + diuji di `cd6c032` (10 test baru, kontrol negatif 4/10 gagal). Lihat `docs/LAPORAN-batch1-notifikasi-2026-10-16.md` |
 | 2026-10-16 | N7 diverifikasi ulang → **AKTIF** (bukan latent); path pemanggil kedua dikoreksi ke `SimulationCoordinator.kt:110` |
-| 2026-10-16 | **Batch 2:** N4 (+ perluasan: keempat sakelar kategori juga mati), N5, N7 diperbaiki + diuji (9 test baru, kontrol negatif 6/13 gagal). Lihat `docs/LAPORAN-batch2-notifikasi-2026-10-16.md` |
+| 2026-10-16 | **Batch 2:** N4 (+ perluasan: keempat sakelar kategori juga mati), N5, N7 diperbaiki + diuji di `1a87e3c` (9 test baru, kontrol negatif 6/13 gagal). Lihat `docs/LAPORAN-batch2-notifikasi-2026-10-16.md` |
 | 2026-10-16 | Ditemukan catatan sampingan **di luar cakupan batch 2**: `AppPreferences` bukan singleton dan `TradingForegroundService.updatePrice/updatePrices` membangunnya tiap tick harga → `EncryptedSharedPreferences` dibuat ulang terus-menerus. Kandidat temuan area performa, **belum diangkat jadi nomor**. |
