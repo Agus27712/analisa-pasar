@@ -47,12 +47,18 @@ entry/exit) belum ada di sana — semua kesimpulan yang ditarik dari `main` jadi
 5. **`workplan2.md` § 14 dan § 15 — DIBATALKAN, jangan dibangun ulang.** Lihat kotak merah di
    awal kedua seksi itu. Keduanya mendokumentasikan fitur kesiapan multi-horizon yang sudah
    **dihapus dari kode** pada 2026-10-13. Dibaca hanya sebagai riwayat keputusan.
-6. `SCALP_EXIT.md` bila menyentuh exit.
-7. `docs/LAPORAN-eksekusi-s1s9-2026-10-14.md` bila menyentuh entry/exit scalping — **dua
+6. **`docs/bugs/`** — **folder temuan bug yang BELUM diperbaiki**, tiap berkas adalah audit
+   terverifikasi-ke-kode dengan lokasi + baris + rekomendasi perbaikan. Mulai dari
+   `docs/bugs/temuan_bugs_notifikasi.md` (audit jalur notifikasi & skor keyakinan, 2026-10-16).
+   **Baca folder ini sebelum memperbaiki bug apa pun** di area yang tercakup — supaya tidak
+   mengulang audit yang sudah ada, dan supaya tahu temuan mana yang masih hidup. Setelah sebuah
+   temuan diperbaiki, **hapus/tandai berkas temuan itu** (lihat § "Folder temuan bug" di bawah).
+7. `SCALP_EXIT.md` bila menyentuh exit.
+8. `docs/LAPORAN-eksekusi-s1s9-2026-10-14.md` bila menyentuh entry/exit scalping — **dua
    keputusan di sana menyimpang dari daftar aslinya**: S9 dikirim **nonaktif** (ambang 25%
    terbukti menghapus seluruh trade GNS yang 4/4 menang) dan S2 **aktif** dengan default
    2× friksi, yang mengubah perilaku konfigurasi lama.
-8. Baru buka kode.
+9. Baru buka kode.
 
 **Aturan kerja yang berlaku di repo ini:**
 
@@ -119,6 +125,33 @@ Yang **tidak boleh** dilakukan lagi tanpa instruksi eksplisit owner:
    2026-10-14) lalu `s1s9` (strategi entry/exit, 2026-10-14). Urutkan dari tanggal terbaru.
 
 **DEPRECATED (jangan diikuti):** `workplan.md`, `checkpoint.md`, `checkpoint_progres.md`.
+
+## Folder temuan bug (`docs/bugs/`)
+
+**Kumpulan temuan audit bug yang BELUM diperbaiki.** Setiap berkas adalah hasil audit
+read-only yang sudah **diverifikasi langsung ke kode** (path + nomor baris pada saat audit),
+berisi peta jalur terkait, temuan kritis/serius/sedang, apa yang sudah benar (jangan
+diutak-atik), dan rekomendasi perbaikan berprioritas.
+
+Aturan main:
+
+- **Sebelum memperbaiki bug** di area yang pernah diaudit, **baca berkas temuannya dulu** —
+  supaya tidak mengulang audit, tidak menambal gejala, dan tidak menghapus bagian yang memang
+  sudah benar.
+- **Setelah sebuah temuan diperbaiki**, perbarui berkas temuan terkait: hapus temuan yang sudah
+  beres atau tandai statusnya (mis. "✅ DIPERBAIKI di `<commit>`"), dan pindahkan jejak
+  eksekusi ke `docs/LAPORAN-*.md` sesuai aturan "setiap perubahan wajib memperbarui markdown".
+  Jangan biarkan daftar temuan berisi butir yang sudah tidak hidup — pembaca berikutnya akan
+  membuang waktu memperbaiki ulang.
+- Daftar berkas di folder ini bisa bertambah untuk area lain (exit, P&L, UI, dsb.) dengan
+  pola penamaan `temuan_<area>_<topik>.md`.
+
+Saat ini berisi:
+
+- **`temuan_bugs_notifikasi.md`** (2026-10-16) — audit jalur notifikasi (4 pengirim: VM-sync,
+  CandidateScanWorker, foreground service, VM-alerts) & alur skor keyakinan (produsen →
+  notifikasi → jurnal → UI). Temuan kritis: notifikasi kandidat menampilkan confidence ×100
+  (N1), dan balapan edge trailing yang bisa membuat auto-sell tidak pernah terkirim (N2).
 
 ## Arah produk (ringkas)
 
