@@ -21,6 +21,7 @@ import agu.analys.engine.scalping.SignalTransition
 import agu.analys.model.CandleBar
 import agu.analys.model.SignalAction
 import agu.analys.model.TradingPair
+import agu.analys.trading.PaperExitMomentumWindow
 import agu.analys.trading.SimulationOrderResult
 import agu.analys.trading.SimulationOrderSide
 import agu.analys.trading.SimulationOrderType
@@ -620,20 +621,23 @@ fun TradingViewModel.tryPaperAutoBuy(transition: SignalTransition, exchange: Str
  * supaya proteksi tidak menunggu akhir bar. Hitungan bar M1 dan time-stop hanya maju sekali
  * per menit, lihat [PaperExitStateMachine.onBar] parameter `isNewBar`.
  *
- * @param window bar M1 terakhir (maks 15) untuk uji momentum early profit; boleh kosong.
+ * Jendela momentum **tidak** diteruskan pemanggil. P6: dulu pemanggil foreground mengirim
+ * `recentCandles.takeLast(15)` sementara pemanggil latar mengirim kosong, sehingga `EARLY_PROFIT`
+ * hanya mungkin terjadi pada posisi yang kebetulan sedang dibuka pair-nya. Sekarang kedua
+ * pemanggil membaca dari sumber yang sama: [PaperExitMomentumWindow] atas cache M1.
+ *
  * @return keputusan exit bila posisi baru saja ditutup, atau `null`.
  */
 fun TradingViewModel.evaluatePaperAutoExit(
     symbol: String,
     exchange: String,
-    currentPrice: Double,
-    window: List<CandleBar> = emptyList()
+    currentPrice: Double
 ): PaperExitDecision? {
     // Kunci per posisi: cegah dua pemanggil (thread utama & latar) mengevaluasi bersamaan
     // sehingga posisi tertutup dua kali atau jurnalnya hilang.
     if (!PaperAutoTradeRuntime.beginEvaluation(exchange, symbol)) return null
     try {
-        return evaluatePaperAutoExitLocked(symbol, exchange, currentPrice, window)
+        return evaluatePaperAutoExitLocked(symbol, exchange, currentPrice)
     } finally {
         PaperAutoTradeRuntime.endEvaluation(exchange, symbol)
     }
@@ -642,8 +646,7 @@ fun TradingViewModel.evaluatePaperAutoExit(
 private fun TradingViewModel.evaluatePaperAutoExitLocked(
     symbol: String,
     exchange: String,
-    currentPrice: Double,
-    window: List<CandleBar>
+    currentPrice: Double
 ): PaperExitDecision? {
     val machine = PaperAutoTradeRuntime.machineFor(exchange, symbol)
     if (machine == null) {
@@ -686,8 +689,18 @@ private fun TradingViewModel.evaluatePaperAutoExitLocked(
         close = currentPrice,
         volume = 0.0
     )
-    // Jendela momentum diteruskan apa adanya: bila kosong, engine menahan diri dari
-    // early-profit (lihat PaperExitStateMachine.onBar).
+    // P6 — jendela momentum dari SATU sumber, untuk kedua pemanggil: cache M1, bukan
+    // `recentCandles` milik layar yang sedang terbuka. Bila cache tidak segar, jendela kosong
+    // dan engine menahan diri dari early-profit — perlakuan yang sama di jalur latar maupun
+    // jalur foreground, jadi alasan exit tidak lagi bergantung pada pair yang dibuka pengguna.
+    val window = PaperExitMomentumWindow.resolve(
+        candles = agu.analys.util.MtfCacheManager.getCachedCandles(
+            symbol = symbol,
+            timeframe = agu.analys.model.Timeframe.M1,
+            exchange = exchange
+        ),
+        nowMs = now
+    )
     val decision = machine.onBar(bar, window, isNewBar = isNewBar)
     if (decision == null) {
         // Posisi masih ditahan -> simpan progres supaya restart berikutnya tidak kembali ke nol.

@@ -162,8 +162,10 @@ Saat ini berisi:
   posisi paper & mesin exit. **P1, P2, P3, P4 DIPERBAIKI** (batch 3b —
   `docs/LAPORAN-batch3-paper-safety-2026-10-16.md`; batch 3c —
   `docs/LAPORAN-batch3-rehidrasi-2026-10-16.md`), sehingga **ketiga temuan kritis sudah tertutup**.
-  **Masih hidup: P5–P8** (kartu FSM dihapus tick pair lain, dua jalur pemantauan menghasilkan exit
-  berbeda). **Batas penting:** seluruh temuan `P*` hanya menyentuh posisi **paper**
+  **Masih hidup: P5, P7, P8** (kartu FSM dihapus tick pair lain); **P6 DIPERBAIKI sebagian**
+  (batch 5c — `docs/LAPORAN-batch5-p6-2026-10-16.md`; jendela momentum kini satu sumber, tetapi
+  bagian "`peak` tertinggal dari high M1" **belum** — bukan cabang kode yang berbeda, melainkan
+  tidak adanya umpan intrabar). **Batas penting:** seluruh temuan `P*` hanya menyentuh posisi **paper**
   (`isReal = false`) — bukan kerusakan uang riil, tetapi posisi paper adalah dasar seluruh keputusan
   "apakah scalp punya edge".
 - **`temuan_bugs_jurnal_pnl.md`** (2026-10-16, diperbarui di hari yang sama) — audit jurnal sinyal,
@@ -344,6 +346,19 @@ Saat ini berisi:
 - **Satu sumber untuk bursa.** Bila sebuah ViewModel punya `prefs.marketDataSource` **dan** flow
   turunan, keduanya bisa tidak sepakat. Teruskan `settingsViewModel.marketDataSource` dan bacalah
   `flow.value` bila perlu nilai sekarang.
+
+## Aturan turunan dari audit paper trading — P6 (batch 5c, 2026-10-16)
+
+- **Keputusan exit tidak boleh bergantung pada layar yang sedang terbuka.** Bila dua pemanggil
+  bisa mengirim input yang berbeda ke mesin yang sama, hapus parameternya dan bacalah dari satu
+  sumber di dalam — jangan "seragamkan" dengan mengirim nilai yang sama dari dua tempat.
+  `evaluatePaperAutoExit` tidak lagi menerima `window`; jendelanya datang dari
+  `PaperExitMomentumWindow` atas cache M1.
+- **Ambang kesegaran data ikut yang sudah ada.** `MtfCacheManager.isCacheValid(M1)` = 20 bar /
+  180 detik. Memakai angka lain berarti dua definisi "M1 masih segar" dalam satu aplikasi.
+- **Mengurangi frekuensi sebuah exit bisa jadi justru perbaikannya.** `EARLY_PROFIT` yang hanya
+  terjadi saat pair kebetulan dibuka bukan fitur — itu ketergantungan pada keadaan UI. Jangan
+  "kembalikan" frekuensinya tanpa membaca temuan P6.
 
 ## Arah produk (ringkas)
 

@@ -2212,3 +2212,69 @@ Angka terukur (dari XML): **69 kelas / 542 uji → 70 kelas / 549 uji**, 0 gagal
 ### 35.5 Laporan
 
 `docs/LAPORAN-batch5-j3-2026-10-16.md`
+
+---
+
+## 36. Batch 5c — P6: dua jalur pemantauan menghasilkan exit berbeda (2026-10-16)
+
+### 36.1 Masalah
+
+```kotlin
+// TradingViewModel.kt — pair SEDANG DIBUKA: jendela momentum DIKIRIM
+runCatching { evaluatePaperAutoExit(symbol, currentEx, price, recentCandles.takeLast(15)) }
+
+// TradingViewModelSync.kt — posisi di LATAR: jendela momentum KOSONG
+runCatching { evaluatePaperAutoExit(tick.symbol, currentEx, tick.price) }
+```
+
+`EARLY_PROFIT` hanya mungkin terjadi bila jendela tidak kosong
+(`PaperExitResolver.onBar:635` — `window14.isNotEmpty()`). Jadi trade yang sama:
+
+- keluar `EARLY_PROFIT` bila kebetulan pengguna membuka pair-nya,
+- keluar `TP2` bila tidak.
+
+Jurnal lalu berisi dua alasan berbeda untuk keputusan yang seharusnya identik, dan app tidak
+sebanding dengan `tools/scalp_replay.py` — padahal paritas itulah alasan jurnal ini ada.
+
+### 36.2 Perbaikan
+
+**Jendela momentum tidak lagi dikirim pemanggil.** `evaluatePaperAutoExit` kini membacanya sendiri
+dari satu sumber: cache M1 `MtfCacheManager`, digerbang oleh `trading/PaperExitMomentumWindow.kt`.
+
+| Bagian | Keputusan |
+|---|---|
+| Sumber | `MtfCacheManager.getCachedCandles(symbol, Timeframe.M1, exchange)` — sama untuk kedua pemanggil |
+| Syarat segar | **mengikuti `MtfCacheManager.isCacheValid(M1)`**: ≥20 bar, umur ≤180 detik — bukan ambang baru |
+| Ukuran | `takeLast(15)` — sama dengan jendela replay (`bars.subList(max(0, j-14), j+1)`) |
+| Bila tidak segar | jendela kosong → engine menahan diri dari early-profit |
+
+Kedua pemanggil kini memanggil `evaluatePaperAutoExit(symbol, currentEx, price)` — **identik**.
+Ini sengaja membuat `EARLY_PROFIT` lebih jarang di jalur foreground: persis itulah inti temuan.
+Yang dijamin bukan "jendela selalu ada", melainkan **"kedua jalur mendapat jendela yang sama"**.
+
+### 36.3 Uji & kontrol negatif
+
+Uji baru: `app/src/test/java/agu/analys/trading/PaperExitMomentumWindowTest.kt` — **12 kasus**:
+konversi stempel detik/milidetik, `isFresh` (segar, <20 bar, kosong/null, >180 detik, batas tepat
+180.000 ms, stempel detik), dan `resolve` (ambil 15 terakhir, cache basi, kurang bar, null, tidak
+pernah lebih dari 15).
+
+Kontrol negatif: aturan kesegaran dihapus (`isFresh` selalu `true`, `resolve` meneruskan apa
+adanya) ⇒ **5 dari 12 uji GAGAL**. Tujuh yang tetap lulus memang tidak menguji aturan kesegaran:
+konversi stempel, "cache segar layak dipakai", "jendela diambil dari cache segar", "null
+diperlakukan seperti kosong", dan "tidak pernah lebih dari 15".
+
+Angka terukur (dari XML): **70 kelas / 549 uji → 71 kelas / 561 uji**, 0 gagal, 1 dilewati.
+
+### 36.4 Yang belum ikut berubah (dicatat, bukan diklaim)
+
+Bagian kedua P6 — `peak` di jalur latar tertinggal dari high M1 karena bar sintetis dibuat dengan
+OHLC identik dan sampling 10 detik — **tidak** diperbaiki. Ini bukan cabang kode yang berbeda
+antar pemanggil, melainkan keterbatasan sumber data: tidak ada umpan intrabar, jadi `peak` hanya
+bisa setinggi harga tick yang kebetulan tersampel. Memaksa `bar.high` dari candle M1 terakhir
+berarti menghitung ulang bar yang sudah dihitung mesin, dan berisiko menggandakan
+peak/time-stop/ATR — itu perubahan berbeda yang perlu temuan dan uji sendiri.
+
+### 36.5 Laporan
+
+`docs/LAPORAN-batch5-p6-2026-10-16.md`

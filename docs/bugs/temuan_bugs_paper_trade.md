@@ -1,8 +1,9 @@
 # Temuan Audit — Siklus Hidup Posisi Paper Trading & Mesin Exit
 
 **Tanggal:** 2026-10-16
-**Status:** DOKUMEN TEMUAN — **P1, P2, P3, P4 sudah DIPERBAIKI** (batch 3b & 3c); **P5–P8 masih
-hidup.** Ketiga temuan **kritis** (P1, P2, P3) sudah ditutup.
+**Status:** DOKUMEN TEMUAN — **P1, P2, P3, P4 sudah DIPERBAIKI** (batch 3b & 3c); **P6 DIPERBAIKI
+sebagian** (batch 5c — jendela momentum kini satu sumber; bagian `peak` vs high M1 **belum**);
+**P5, P7, P8 masih hidup.** Ketiga temuan **kritis** (P1, P2, P3) sudah ditutup.
 Diverifikasi terhadap kode di branch `patch` @ `a842e35`.
 **Cakupan:** `PaperAutoTradeCoordinator.kt` · `PaperRehydrate.kt` · `PaperExitResolver.kt` ·
 `SpotPositionStore.kt` · `TradingViewModelSync.kt` · `TradingViewModel.kt` ·
@@ -409,6 +410,21 @@ harga tick, dan sampling jalur latar 10 detik.
 
 **Perbaikan.** satu sumber tick untuk kedua pemanggil (atau satu scheduler), dan window M1 dari
 `MtfCacheManager` bila tersedia.
+
+> ✅ **DIPERBAIKI 2026-10-16 (batch 5c)** — bagian "satu sumber" diikuti apa adanya: parameter
+> `window` **dihapus** dari `evaluatePaperAutoExit`, jadi tidak ada lagi pemanggil yang bisa
+> mengirim jendela berbeda. Jendela kini diresolusi di dalam dari cache M1 lewat
+> `trading/PaperExitMomentumWindow.kt`, dengan ambang kesegaran yang **mengikuti
+> `MtfCacheManager.isCacheValid(M1)`** (≥20 bar, ≤180 detik) — bukan ambang baru. Kedua pemanggil
+> kini identik: `evaluatePaperAutoExit(symbol, currentEx, price)`.
+> Efek yang disengaja: `EARLY_PROFIT` lebih jarang di jalur foreground — itulah inti temuan.
+> Uji: `PaperExitMomentumWindowTest` (12 kasus); kontrol negatif 5/12 gagal.
+> Laporan: `docs/LAPORAN-batch5-p6-2026-10-16.md`.
+>
+> ⚠️ **Bagian kedua P6 belum beres:** `peak` di jalur latar masih tertinggal dari high M1 (bar
+> sintetis OHLC identik, sampling 10 detik). Ini bukan cabang kode yang berbeda antar pemanggil,
+> melainkan tidak adanya umpan intrabar — perlu temuan dan uji sendiri, sengaja tidak disisipkan
+> di sini (lihat §6 laporan).
 
 ---
 

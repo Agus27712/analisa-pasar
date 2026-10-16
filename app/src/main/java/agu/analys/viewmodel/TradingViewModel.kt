@@ -157,7 +157,9 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
             checkAlertsAndTrailing(symbol, price, rsi)
             // P2 — evaluasi exit paper trade (level check tiap tick, hitungan bar per menit).
             // Dibungkus runCatching agar kegagalan exit paper tidak pernah menghentikan tick harga.
-            runCatching { evaluatePaperAutoExit(symbol, currentEx, price, recentCandles.takeLast(15)) }
+            // P6 — jendela momentum tidak lagi dikirim pemanggil: `evaluatePaperAutoExit`
+            // membacanya sendiri dari cache M1 supaya hasilnya sama dengan jalur latar.
+            runCatching { evaluatePaperAutoExit(symbol, currentEx, price) }
             signalLogRepository.processPriceTick(symbol, price, currentEx)
             // P0-6 — teruskan ekstrem candle supaya Peak/Drawdown jurnal tidak understate.
             val lastCandle = recentCandles.lastOrNull()
