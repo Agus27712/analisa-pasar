@@ -1,6 +1,8 @@
 package agu.analys.viewmodel
 
+import agu.analys.config.StrategyMode
 import agu.analys.engine.scalping.AutoBuySizing
+import agu.analys.engine.scalping.PaperAtr
 import agu.analys.engine.scalping.PaperAutoBuyAllocation
 import agu.analys.engine.scalping.PaperExitDecision
 import agu.analys.engine.scalping.PaperExitFsmState
@@ -10,12 +12,16 @@ import agu.analys.engine.scalping.PaperExitSnapshot
 import agu.analys.engine.scalping.PaperExitStateMachine
 import agu.analys.engine.scalping.PaperRehydrate
 import agu.analys.engine.scalping.PaperRehydrateAction
+import agu.analys.engine.scalping.PaperRehydrateScope
+import agu.analys.engine.scalping.PaperStopResolver
+import agu.analys.engine.scalping.PaperStopSource
 import agu.analys.engine.scalping.PaperTradeRecord
 import agu.analys.engine.scalping.ScalpExitParams
 import agu.analys.engine.scalping.SignalTransition
 import agu.analys.model.CandleBar
 import agu.analys.model.SignalAction
 import agu.analys.model.TradingPair
+import agu.analys.trading.PaperExitMomentumWindow
 import agu.analys.trading.SimulationOrderResult
 import agu.analys.trading.SimulationOrderSide
 import agu.analys.trading.SimulationOrderType
@@ -253,13 +259,13 @@ fun TradingViewModel.paperEngineOwnsExit(exchange: String, symbol: String): Bool
 /**
  * ATR% bar M1 terhadap harga acuan — dipakai mesin exit untuk S8 (BE/trailing proporsional ATR).
  *
+ * Rumusnya ada di [PaperAtr] (murni, bisa diuji); ini hanya pembungkus yang mengambil ATR dari
+ * state engine.
+ *
  * @return 0.0 bila ATR belum tersedia, sehingga mesin exit jatuh ke nilai persen tetap.
  */
-private fun TradingViewModel.atrPctAt(referencePrice: Double): Double {
-    if (referencePrice <= 0.0) return 0.0
-    val atr = engine.indicators.value.atr
-    return if (atr > 0.0) atr / referencePrice * 100.0 else 0.0
-}
+private fun TradingViewModel.atrPctAt(referencePrice: Double): Double =
+    PaperAtr.of(engine.indicators.value.atr, referencePrice)
 
 /**
  * Bangun & pasang state machine exit paper untuk satu posisi simulasi.
@@ -300,29 +306,40 @@ fun TradingViewModel.armPaperExitEngine(
     val runtime = prefs.scalpingRuntimeConfig
     val fees = prefs.feeConfigFor(pair.symbol)
 
-    // S3 — SL keras: pakai SL sinyal bila valid, jika tidak turunkan dari lantai friksi.
-    val signalSlValid = stopLoss > 0.0 && stopLoss.isFinite() && stopLoss < entryPrice
-    val effectiveSl = if (signalSlValid) {
-        stopLoss
-    } else {
-        val costPct = fees.buyTakerPct + fees.sellTakerPct + 2.0 * runtime.slippagePct
-        val floorPct = runtime.minFrictionMultiple * costPct
-        if (runtime.minFrictionMultiple > 0.0 && floorPct > 0.0) {
-            AppLogManager.service(
-                "PaperAutoExit",
-                "🛡️ [${pair.symbol}] Tidak ada SL dari sinyal — SL keras dipasang dari lantai friksi " +
-                    "${String.format(java.util.Locale.US, "%.2f", floorPct)}% " +
-                    "(harga ${PriceFormatter.formatPrice(entryPrice * (1.0 - floorPct / 100.0), quoteAsset = pair.quoteAsset)})."
-            )
-            entryPrice * (1.0 - floorPct / 100.0)
-        } else {
-            AppLogManager.service(
-                "PaperAutoExit",
-                "⏭️ [${pair.symbol}] Beli manual tanpa SL & lantai friksi nonaktif — posisi dibiarkan tanpa mesin exit."
-            )
-            0.0
-        }
+    // S3 + P2 — SL keras. SL sinyal dipakai HANYA bila sudah memenuhi lantai friksi; bila lebih
+    // rapat (mis. sinyal SWING/INTRADAY yang SL-nya 1,5–2,8%), SL **dilebarkan** ke lantai.
+    // Lantai ini adalah invarian yang sama yang ditegakkan `ScalpingRiskEngine` untuk sinyal
+    // scalping — jalur posisi paper dulu melewatinya begitu saja, sehingga satu SL bisa bernilai
+    // −1,3R…−2R padahal friksi round-trip ≈ 0,97%.
+    val floorPct = PaperStopResolver.frictionFloorPct(
+        buyFeePct = fees.buyTakerPct,
+        sellFeePct = fees.sellTakerPct,
+        slippagePct = runtime.slippagePct,
+        minFrictionMultiple = runtime.minFrictionMultiple
+    )
+    val resolvedStop = PaperStopResolver.resolve(
+        signalSl = stopLoss,
+        entry = entryPrice,
+        floorPct = floorPct
+    )
+    if (!resolvedStop.usable) {
+        AppLogManager.service(
+            "PaperAutoExit",
+            "⏭️ [${pair.symbol}] Beli tanpa SL yang bisa dipakai & lantai friksi nonaktif — " +
+                "posisi dibiarkan tanpa mesin exit."
+        )
+        return false
     }
+    if (resolvedStop.source == PaperStopSource.FRICTION_FLOOR) {
+        AppLogManager.service(
+            "PaperAutoExit",
+            "🛡️ [${pair.symbol}] SL sinyal ${PriceFormatter.formatPrice(stopLoss, quoteAsset = pair.quoteAsset)} " +
+                "tidak memenuhi lantai friksi ${String.format(java.util.Locale.US, "%.2f", floorPct)}% " +
+                "(${String.format(java.util.Locale.US, "%.1f", runtime.minFrictionMultiple)}× friksi) — " +
+                "SL dilebarkan ke ${PriceFormatter.formatPrice(resolvedStop.price, quoteAsset = pair.quoteAsset)}."
+        )
+    }
+    val effectiveSl = resolvedStop.price
     if (effectiveSl <= 0.0 || effectiveSl >= entryPrice) return false
 
     val tp1v = if (tp1 > 0.0) tp1 else entryPrice
@@ -412,10 +429,11 @@ fun TradingViewModel.persistPaperFsm(
  * Syarat (semua harus terpenuhi):
  * 1. toggle auto-buy paper aktif di Pengaturan,
  * 2. aksi sinyal `BUY`,
- * 3. `scalpingStage` memenuhi ambang minimum yang dipilih,
- * 4. belum ada posisi simulasi terbuka untuk pair tersebut,
- * 5. jumlah posisi paper bersamaan belum mencapai `maxConcurrentPositions` (global, `0` = tanpa batas),
- * 6. kuantitas hasil perhitungan > 0.
+ * 3. **mode transisi `SCALPING`** — posisi paper & mesin exit ini hanya untuk horizon scalping (P2),
+ * 4. `scalpingStage` memenuhi ambang minimum yang dipilih,
+ * 5. belum ada posisi simulasi terbuka untuk pair tersebut,
+ * 6. jumlah posisi paper bersamaan belum mencapai `maxConcurrentPositions` (global, `0` = tanpa batas),
+ * 7. kuantitas hasil perhitungan > 0.
  *
  * @return `true` bila order simulasi berhasil dikirim.
  */
@@ -425,6 +443,23 @@ fun TradingViewModel.tryPaperAutoBuy(transition: SignalTransition, exchange: Str
 
     val signal = transition.signal
     if (signal.action != SignalAction.BUY) return false
+
+    // P2 — posisi paper + mesin exit ini adalah produk **SCALPING**: horizon M1, time-stop
+    // `maxHoldBarsM1` (≈2 jam), dan lantai friksi dirancang untuk horizon itu. Evaluator
+    // SWING/INTRADAY/OFFICE_DAILY memasang `ScalpingStage.ENTRY` yang sama untuk sinyal BUY,
+    // sehingga sinyal mereka **lolos** `stageQualifies` tanpa gerbang ini. Akibatnya jurnal paper
+    // — dasar seluruh keputusan "apakah scalp punya edge" — tercampur strategi ber-horizon harian,
+    // dan time-stop scalping memotongnya sebagai `TIMEOUT` palsu.
+    if (transition.mode != StrategyMode.SCALPING) {
+        if (cfg.stageQualifies(signal.scalpingStage)) {
+            AppLogManager.service(
+                "PaperAutoBuy",
+                "⏭️ [${transition.symbol}] Auto-buy dilewati: mode ${transition.mode.name} bukan " +
+                    "SCALPING — posisi paper & mesin exit hanya untuk scalping."
+            )
+        }
+        return false
+    }
     if (!cfg.stageQualifies(signal.scalpingStage)) return false
 
     val price = signal.entryPrice
@@ -586,20 +621,23 @@ fun TradingViewModel.tryPaperAutoBuy(transition: SignalTransition, exchange: Str
  * supaya proteksi tidak menunggu akhir bar. Hitungan bar M1 dan time-stop hanya maju sekali
  * per menit, lihat [PaperExitStateMachine.onBar] parameter `isNewBar`.
  *
- * @param window bar M1 terakhir (maks 15) untuk uji momentum early profit; boleh kosong.
+ * Jendela momentum **tidak** diteruskan pemanggil. P6: dulu pemanggil foreground mengirim
+ * `recentCandles.takeLast(15)` sementara pemanggil latar mengirim kosong, sehingga `EARLY_PROFIT`
+ * hanya mungkin terjadi pada posisi yang kebetulan sedang dibuka pair-nya. Sekarang kedua
+ * pemanggil membaca dari sumber yang sama: [PaperExitMomentumWindow] atas cache M1.
+ *
  * @return keputusan exit bila posisi baru saja ditutup, atau `null`.
  */
 fun TradingViewModel.evaluatePaperAutoExit(
     symbol: String,
     exchange: String,
-    currentPrice: Double,
-    window: List<CandleBar> = emptyList()
+    currentPrice: Double
 ): PaperExitDecision? {
     // Kunci per posisi: cegah dua pemanggil (thread utama & latar) mengevaluasi bersamaan
     // sehingga posisi tertutup dua kali atau jurnalnya hilang.
     if (!PaperAutoTradeRuntime.beginEvaluation(exchange, symbol)) return null
     try {
-        return evaluatePaperAutoExitLocked(symbol, exchange, currentPrice, window)
+        return evaluatePaperAutoExitLocked(symbol, exchange, currentPrice)
     } finally {
         PaperAutoTradeRuntime.endEvaluation(exchange, symbol)
     }
@@ -608,13 +646,12 @@ fun TradingViewModel.evaluatePaperAutoExit(
 private fun TradingViewModel.evaluatePaperAutoExitLocked(
     symbol: String,
     exchange: String,
-    currentPrice: Double,
-    window: List<CandleBar>
+    currentPrice: Double
 ): PaperExitDecision? {
     val machine = PaperAutoTradeRuntime.machineFor(exchange, symbol)
     if (machine == null) {
         // Tidak ada posisi paper berjalan -> pastikan kartu FSM kosong.
-        publishPaperExitSnapshot(null)
+        publishPaperExitSnapshot(exchange = exchange, symbol = symbol, snapshot = null)
         return null
     }
 
@@ -628,17 +665,17 @@ private fun TradingViewModel.evaluatePaperAutoExitLocked(
         // Cabang ini melepas mesin tanpa lewat `markSold`, jadi progres tersimpan harus dibuang
         // di sini juga — kalau tidak, key akan tertinggal untuk posisi berikutnya.
         positionStore.clearPaperFsmState(symbol = pair.symbol, isReal = false, exchange = exchange)
-        publishPaperExitSnapshot(null)
+        publishPaperExitSnapshot(exchange = exchange, symbol = symbol, snapshot = null)
         return null
     }
 
     if (currentPrice <= 0.0) {
-        publishPaperExitSnapshot(PaperExitSnapshot.of(machine, symbol, exchange, currentPrice))
+        publishPaperExitSnapshot(exchange = exchange, symbol = symbol, snapshot = PaperExitSnapshot.of(machine, symbol, exchange, currentPrice))
         return null
     }
 
     if (!prefs.paperAutoTradeConfig.autoExitEnabled) {
-        publishPaperExitSnapshot(PaperExitSnapshot.of(machine, symbol, exchange, currentPrice))
+        publishPaperExitSnapshot(exchange = exchange, symbol = symbol, snapshot = PaperExitSnapshot.of(machine, symbol, exchange, currentPrice))
         return null
     }
 
@@ -652,19 +689,29 @@ private fun TradingViewModel.evaluatePaperAutoExitLocked(
         close = currentPrice,
         volume = 0.0
     )
-    // Jendela momentum diteruskan apa adanya: bila kosong, engine menahan diri dari
-    // early-profit (lihat PaperExitStateMachine.onBar).
+    // P6 — jendela momentum dari SATU sumber, untuk kedua pemanggil: cache M1, bukan
+    // `recentCandles` milik layar yang sedang terbuka. Bila cache tidak segar, jendela kosong
+    // dan engine menahan diri dari early-profit — perlakuan yang sama di jalur latar maupun
+    // jalur foreground, jadi alasan exit tidak lagi bergantung pada pair yang dibuka pengguna.
+    val window = PaperExitMomentumWindow.resolve(
+        candles = agu.analys.util.MtfCacheManager.getCachedCandles(
+            symbol = symbol,
+            timeframe = agu.analys.model.Timeframe.M1,
+            exchange = exchange
+        ),
+        nowMs = now
+    )
     val decision = machine.onBar(bar, window, isNewBar = isNewBar)
     if (decision == null) {
         // Posisi masih ditahan -> simpan progres supaya restart berikutnya tidak kembali ke nol.
         // Tidak perlu `force`: perubahan yang berarti ditulis segera oleh shouldWriteFsm.
         persistPaperFsm(exchange, symbol, machine)
-        publishPaperExitSnapshot(PaperExitSnapshot.of(machine, symbol, exchange, currentPrice))
+        publishPaperExitSnapshot(exchange = exchange, symbol = symbol, snapshot = PaperExitSnapshot.of(machine, symbol, exchange, currentPrice))
         return null
     }
 
     finalizePaperExit(symbol, exchange, machine, decision)
-    publishPaperExitSnapshot(null)
+    publishPaperExitSnapshot(exchange = exchange, symbol = symbol, snapshot = null)
     return decision
 }
 
@@ -757,7 +804,7 @@ fun TradingViewModel.clearPaperExitState(symbol: String, exchange: String) {
     PaperAutoTradeRuntime.clear(exchange, symbol)
     positionStore.setPaperEngineOwned(symbol = symbol, isReal = false, exchange = exchange, owned = false)
     positionStore.clearPaperFsmState(symbol = symbol, isReal = false, exchange = exchange)
-    publishPaperExitSnapshot(null)
+    publishPaperExitSnapshot(exchange = exchange, symbol = symbol, snapshot = null)
 }
 
 /** Ringkas parameter exit yang sedang aktif, untuk ditampilkan di UI. */
@@ -805,6 +852,16 @@ fun TradingViewModel.paperSnapshotFor(
  * disentuh: SL-nya tersimpan sebagai `entry * 0.99` yang salah, jadi memulihkannya akan
  * memalsukan stop-out.
  *
+ * ## Cakupan bursa (P1)
+ *
+ * Rehidrasi mengiterasi **semua** bursa yang punya posisi paper tersimpan, bukan hanya bursa yang
+ * sedang aktif. Bursa aktif didahulukan supaya posisi yang sedang dilihat pengguna pulih lebih dulu.
+ * Urutannya ditentukan [PaperRehydrateScope] (fungsi murni, bisa diuji).
+ *
+ * Mesin untuk bursa non-aktif memang ikut dibangun, tetapi **baru bisa dievaluasi saat bursa itu
+ * dipilih**: aplikasi hanya punya umpan harga untuk bursa yang sedang dipakai. Keadaan itu dicatat
+ * eksplisit di log supaya posisi yang "diam" tidak terlihat seperti bug tanpa sebab.
+ *
  * ## Progres FSM (P4.4)
  *
  * Selain parameter posisi, rehidrasi kini membaca [PaperExitFsmState] tersimpan (`_paper_fsm`)
@@ -816,9 +873,22 @@ fun TradingViewModel.paperSnapshotFor(
  */
 fun TradingViewModel.rehydratePaperAutoExit(): Int {
     val cfg = prefs.paperAutoTradeConfig
-    val exchange = prefs.marketDataSource.name
-    val symbols = positionStore.getPaperEngineSymbols(isReal = false, exchange = exchange)
-    if (symbols.isEmpty()) return 0
+
+    // P1 — rehidrasi WAJIB mencakup semua bursa yang punya posisi paper, bukan hanya bursa aktif.
+    // Membaca `prefs.marketDataSource.name` saja membuat posisi di bursa lain kehilangan mesin
+    // exitnya selamanya setelah restart. Urutannya ditentukan resolver murni [PaperRehydrateScope]
+    // (bursa aktif lebih dulu) supaya keputusan ini bisa diuji tanpa ViewModel.
+    val stored = positionStore.getPaperEnginePositions(isReal = false)
+    val scope = PaperRehydrateScope.decide(
+        storedExchanges = stored.map { it.exchange },
+        activeExchange = prefs.marketDataSource.name
+    )
+    if (scope.isEmpty()) return 0
+
+    val targets = scope.flatMap { ex ->
+        stored.filter { it.exchange.equals(ex, ignoreCase = true) }.map { ex to it.symbol }
+    }
+    if (targets.isEmpty()) return 0
 
     val runtime = prefs.scalpingRuntimeConfig
     val now = System.currentTimeMillis()
@@ -826,7 +896,7 @@ fun TradingViewModel.rehydratePaperAutoExit(): Int {
     var handedBack = 0
     var progressRestored = 0
 
-    for (raw in symbols) {
+    for ((exchange, raw) in targets) {
         // Jangan timpa mesin yang sudah hidup (mis. auto-buy terjadi sebelum rehidrasi jalan).
         if (PaperAutoTradeRuntime.machineFor(exchange, raw) != null) continue
 
@@ -883,18 +953,38 @@ fun TradingViewModel.rehydratePaperAutoExit(): Int {
             }
 
             is PaperRehydrateAction.HandBackToLegacy -> {
-                // Kepemilikan dikembalikan ke jalur lama; tanpa ini posisi menggantung karena
-                // `auto_sell_enabled` sudah dimatikan saat engine mengambil alih.
+                // P3 — jangan pernah menyalakan auto-sell dengan SL yang **tidak valid** (SL ≥ entry).
+                //
+                // Dulu cabang ini menulis SL tersimpan apa adanya lalu menyalakan auto-sell. Bila
+                // rata-rata DCA sudah turun di bawah SL lama, `stopLossPrice >= entryPrice` — dan pada
+                // tick berikutnya jalur lama menjual SELURUH posisi di harga pasar, dilabeli
+                // `STOP_LOSS` di jurnal, padahal tidak ada stop yang tersentuh.
+                //
+                // Sekarang SL diambil dari resolver yang sama dengan jalur pasang mesin: yang lebih
+                // lebar antara SL tersimpan dan lantai friksi. Bila lantai friksi nonaktif dan SL
+                // tersimpan tidak valid, auto-sell sengaja **dibiarkan mati** — posisi tanpa stop jauh
+                // lebih baik daripada penjualan pasar yang salah label.
+                val posFees = prefs.feeConfigFor(pair.symbol)
+                val resolvedHandBack = PaperStopResolver.resolve(
+                    signalSl = pos.stopLossPrice,
+                    entry = pos.entryPrice,
+                    floorPct = PaperStopResolver.frictionFloorPct(
+                        buyFeePct = posFees.buyTakerPct,
+                        sellFeePct = posFees.sellTakerPct,
+                        slippagePct = runtime.slippagePct,
+                        minFrictionMultiple = runtime.minFrictionMultiple
+                    )
+                )
                 positionStore.setAutoSellParams(
                     symbol = pair.symbol,
-                    enabled = true,
+                    enabled = resolvedHandBack.usable,
                     tp1Price = pos.tp1Price,
                     tp1Percent = pos.tp1Percent,
                     tp2Price = pos.tp2Price,
                     tp2Percent = pos.tp2Percent,
                     isReal = false,
                     exchange = exchange,
-                    stopLossPrice = pos.stopLossPrice
+                    stopLossPrice = resolvedHandBack.price
                 )
                 positionStore.setPaperEngineOwned(
                     symbol = pair.symbol, isReal = false, exchange = exchange, owned = false
@@ -902,9 +992,22 @@ fun TradingViewModel.rehydratePaperAutoExit(): Int {
                 // Mesin tidak lagi memegang exit, jadi progres tersimpannya tidak akan dipakai.
                 positionStore.clearPaperFsmState(symbol = pair.symbol, isReal = false, exchange = exchange)
                 handedBack++
+                val slNote = when (resolvedHandBack.source) {
+                    PaperStopSource.SIGNAL ->
+                        "SL ${PriceFormatter.formatPrice(resolvedHandBack.price, quoteAsset = pair.quoteAsset)} dipertahankan."
+                    PaperStopSource.FRICTION_FLOOR ->
+                        "SL tersimpan ${PriceFormatter.formatPrice(pos.stopLossPrice, quoteAsset = pair.quoteAsset)} " +
+                            "tidak valid (harus 0 < SL < entry ${PriceFormatter.formatPrice(pos.entryPrice, quoteAsset = pair.quoteAsset)}) — " +
+                            "dipakai SL lantai friksi ${PriceFormatter.formatPrice(resolvedHandBack.price, quoteAsset = pair.quoteAsset)}."
+                    PaperStopSource.NONE ->
+                        "⚠️ SL tersimpan tidak valid DAN lantai friksi nonaktif — auto-sell TIDAK dinyalakan " +
+                            "supaya tidak menjual posisi di harga pasar dengan label STOP_LOSS yang salah. " +
+                            "Pasang SL manual atau aktifkan lantai friksi."
+                }
                 AppLogManager.service(
                     "PaperAutoExit",
-                    "↩️ [${pair.symbol}] Rehidrasi dilewati (${action.reason}) — exit diserahkan ke jalur auto-sell lama."
+                    "↩️ [${pair.symbol}] Rehidrasi dilewati (${action.reason}) — exit diserahkan ke jalur " +
+                        "auto-sell lama. $slNote"
                 )
             }
 
@@ -916,6 +1019,21 @@ fun TradingViewModel.rehydratePaperAutoExit(): Int {
                 )
             }
         }
+    }
+
+    // P1 — katakan terus terang bila ada posisi paper di bursa yang sedang tidak aktif. Mesinnya
+    // sudah dipulihkan, tetapi harganya belum bisa dievaluasi: aplikasi hanya punya umpan harga
+    // untuk bursa yang sedang dipakai. Tanpa catatan ini, pengguna hanya melihat posisi yang
+    // "diam" tanpa tahu sebabnya.
+    val activeEx = prefs.marketDataSource.name.trim().uppercase()
+    val dormant = scope.filter { !it.equals(activeEx, ignoreCase = true) }
+    if (dormant.isNotEmpty()) {
+        AppLogManager.service(
+            "PaperAutoExit",
+            "⚠️ Posisi paper terdeteksi di bursa non-aktif (${dormant.joinToString(", ")}): " +
+                "mesin exitnya sudah dipulihkan, tetapi baru akan dievaluasi saat bursa itu dipilih " +
+                "di Pengaturan — harga hanya tersedia untuk bursa yang sedang aktif."
+        )
     }
 
     if (restored > 0) {

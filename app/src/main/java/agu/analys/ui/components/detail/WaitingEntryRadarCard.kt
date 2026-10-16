@@ -91,6 +91,12 @@ fun WaitingEntryRadarCard(
     buyCooldownReason: String? = null,
     exchange: String = "TOKOCRYPTO",
     /**
+     * Asumsi slippage per sisi (%) untuk kartu jual (J7) — dari
+     * `scalpingRuntimeConfig.slippagePct`. Kartu jual memakainya supaya basis biayanya sama
+     * dengan FSM, bukan hanya fee jual.
+     */
+    slippagePct: Double = agu.analys.config.FeeSchedule.DEFAULT_SLIPPAGE_PCT,
+    /**
      * Lewati blok analisa (header radar + target level + backtest) di cabang BUY.
      *
      * Dipakai mode scalping: blok itu digantikan `ScalpDeskCard`, dan status
@@ -375,6 +381,7 @@ fun WaitingEntryRadarCard(
             onSellQuantityChanged = { selectedSellQty = it },
             isMakerOrder = isMakerOrder,
             onOrderTypeChanged = { isMakerOrder = it },
+            slippagePct = slippagePct,
             isBuyMode = currentBuyMode,
             isRealMode = isRealBuyMode,
             orderBookBids = orderBookBids,

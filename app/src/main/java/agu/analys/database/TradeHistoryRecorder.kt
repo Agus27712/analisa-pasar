@@ -154,11 +154,11 @@ class TradeHistoryRecorder(
 
         scope.launch(Dispatchers.IO) {
             try {
-                val holdings = dao.getHoldingRecordsByExchange(normExchange)
-                    .filter { it.symbol.equals(normSymbol, ignoreCase = true) }
-                    .ifEmpty {
-                        dao.getHoldingRecords().filter { it.symbol.equals(normSymbol, ignoreCase = true) }
-                    }
+                // J5 — hanya record milik bursa ini. Fallback "semua bursa" DIHAPUS: harga dari
+                // satu bursa tidak boleh memperbarui peak/trough/drawdown record bursa lain.
+                val holdings = HoldingResolution.holdingsForPriceTick(normSymbol, normExchange) { ex ->
+                    dao.getHoldingRecordsByExchange(ex)
+                }
                 if (holdings.isEmpty()) return@launch
 
                 val usedCandle = candleHigh > 0.0 || candleLow > 0.0
@@ -262,13 +262,19 @@ class TradeHistoryRecorder(
 
         scope.launch(Dispatchers.IO) {
             try {
-                // Cari record HOLDING aktif yang cocok
-                val targetRecord = if (tradeUuid != null) {
-                    dao.getRecordByUuid(tradeUuid)
-                } else {
-                    dao.getActiveHoldingForSymbolAndExchange(normSymbol, isReal, normExchange)
-                        ?: dao.getActiveHoldingForSymbol(normSymbol, isReal)
-                }
+                // J5 — cari record HOLDING aktif yang cocok. Fallback lintas bursa DIHAPUS:
+                // BTCIDR/ETHIDR/XAUTIDR ada di Tokocrypto & Indodax sekaligus, jadi fallback
+                // dulu bisa menutup record bursa yang salah dengan data bursa ini.
+                val targetRecord = HoldingResolution.resolveForSell(
+                    tradeUuid = tradeUuid,
+                    symbol = normSymbol,
+                    isReal = isReal,
+                    exchange = normExchange,
+                    byUuid = { dao.getRecordByUuid(it) },
+                    bySymbolAndExchange = { s, r, e ->
+                        dao.getActiveHoldingForSymbolAndExchange(s, r, e)
+                    }
+                )
 
                 // Biaya jual & beli dari FeeSchedule — sisi jual lebih mahal dari sisi beli
                 // pada pair IDR, dan biaya beli tetap dipakai untuk estimasi harga pokok.

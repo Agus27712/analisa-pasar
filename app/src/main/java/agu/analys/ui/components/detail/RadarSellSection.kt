@@ -27,6 +27,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import agu.analys.ui.theme.*
+import agu.analys.trading.SellEstimateResolver
 import agu.analys.util.PriceFormatter
 import agu.analys.ui.components.detail.sell.*
 import java.util.Locale
@@ -40,7 +41,15 @@ fun RadarSellSection(
     avgBuyPrice: Double,
     selectedSellQuantity: Double,
     onSellQuantityChanged: (Double) -> Unit,
+    /** Tarif fee jual per sisi (%) sesuai order type yang dipilih (maker/taker). */
     activeFeePct: Double,
+    /**
+     * Tarif fee **beli taker** (%). Dipakai sebagai asumsi konservatif untuk kaki beli yang
+     * sudah terjadi — jenis order beli tidak diketahui di sini. Lihat `SellEstimate` (J7).
+     */
+    buyTakerFeePct: Double,
+    /** Asumsi slippage per sisi (%) — ikut `scalpingRuntimeConfig.slippagePct`. */
+    slippagePct: Double = agu.analys.config.FeeSchedule.DEFAULT_SLIPPAGE_PCT,
     isRealMode: Boolean,
     onExecuteSell: ((Double, Boolean, Double, Double, Double, Double) -> Unit)?,
     spotPosition: agu.analys.trading.SpotPosition? = null,
@@ -91,16 +100,21 @@ fun RadarSellSection(
     val focusManager = LocalFocusManager.current
 
     val activeSellQty = if (selectedSellQuantity > 0.0) selectedSellQuantity else availableCoin
-    val grossSellValueIdr = activeSellQty * effectiveSellPrice
-    val sellFeeIdr = grossSellValueIdr * (activeFeePct / 100.0)
-    val netReceivedSellIdr = (grossSellValueIdr - sellFeeIdr).coerceAtLeast(0.0)
 
     val parsedCustomBuyPrice = customBuyPriceInput.toDoubleOrNull() ?: 0.0
     val effectiveBuyPrice = if (avgBuyPrice > 0.0) avgBuyPrice else parsedCustomBuyPrice
-    val costBasisIdr = activeSellQty * effectiveBuyPrice
-    val netProfitIdr = if (effectiveBuyPrice > 0.0) netReceivedSellIdr - costBasisIdr else 0.0
-    val netProfitPct = if (costBasisIdr > 0.0) (netProfitIdr / costBasisIdr) * 100.0 else 0.0
-    val isProfitable = netProfitIdr >= 0.0
+
+    // J7 — seluruh angka kartu jual berasal dari resolver murni ini, yang mendelegasi ke
+    // FeeSchedule (basis FSM). Sebelumnya blok ini menulis rumusnya sendiri: hanya fee jual
+    // yang dipotong, tanpa fee beli dan tanpa slippage.
+    val sellEstimate = SellEstimateResolver.resolve(
+        quantity = activeSellQty,
+        entryPrice = effectiveBuyPrice,
+        sellPrice = effectiveSellPrice,
+        buyFeePct = buyTakerFeePct,
+        sellFeePct = activeFeePct,
+        slippagePct = slippagePct
+    )
 
     val showReadyBanner = sellSignalState.state == agu.analys.model.SellLifecycleState.READY_TO_SELL ||
                           sellSignalState.state == agu.analys.model.SellLifecycleState.TRAILING_TRIGGERED ||
@@ -185,19 +199,10 @@ fun RadarSellSection(
         Spacer(Modifier.height(8.dp))
 
         SellCalculationCard(
+            estimate = sellEstimate,
             validPrice = validPrice,
             baseAsset = baseAsset,
             quoteAsset = quoteAsset,
-            activeSellQty = activeSellQty,
-            grossSellValueIdr = grossSellValueIdr,
-            effectiveBuyPrice = effectiveBuyPrice,
-            costBasisIdr = costBasisIdr,
-            sellFeeIdr = sellFeeIdr,
-            activeFeePct = activeFeePct,
-            netReceivedSellIdr = netReceivedSellIdr,
-            isProfitable = isProfitable,
-            netProfitIdr = netProfitIdr,
-            netProfitPct = netProfitPct,
             bestBidPrice = bestBidPrice,
             bestBidAmount = bestBidAmount,
             isMakerOrder = isMakerOrder,

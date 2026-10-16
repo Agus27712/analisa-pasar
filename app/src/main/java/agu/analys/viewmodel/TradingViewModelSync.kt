@@ -4,12 +4,15 @@ import androidx.lifecycle.viewModelScope
 import agu.analys.database.AppDatabase
 import agu.analys.database.RealTradeEntity
 import agu.analys.config.MarketDataSource
+import agu.analys.engine.scalping.PaperAtr
 import agu.analys.model.SignalAction
 import agu.analys.model.TradingPair
 import agu.analys.service.IndodaxMarketService
 import agu.analys.service.TokocryptoMarketService
 import agu.analys.trading.SimulationOrder
 import agu.analys.trading.SimulationOrderSide
+import agu.analys.trading.SignalDerivedFields
+import agu.analys.trading.SignalSymbolAttribution
 import agu.analys.trading.SpotPosition
 import agu.analys.trading.TradeSignalSnapshot
 import agu.analys.util.AlertNotificationHelper
@@ -104,18 +107,35 @@ fun TradingViewModel.handleRealTradeExecution(
             exchange = currentEx
         )
         val snapshotJson = snapshot.toJson().toString()
+        // N10 — nilai turunan sinyal hanya boleh menempel bila sinyal itu milik simbol ini.
+        // Bila engine terakhir menilai pair lain, confidence/SL/waktu sinyal pair lain dikosongkan.
+        val realSignal = SignalSymbolAttribution.attributedFields(
+            requestedSymbol = symbol,
+            signalSymbol = engine.signalState.value.marketSymbol,
+            fields = SignalDerivedFields(
+                confidence = engine.signalState.value.confidence,
+                entryPrice = engine.signalState.value.entryPrice,
+                targetPrice1 = 0.0,
+                targetPrice2 = 0.0,
+                stopLoss = engine.signalState.value.stopLoss,
+                signalTime = engine.signalState.value.timestamp
+            ),
+            fallbackPrice = price,
+            fallbackTime = System.currentTimeMillis()
+        )
         // P0-5 — status trailing nyata untuk posisi ini (dibaca sebelum posisi diperbarui).
         val beforeBuy = positionStore.get(symbol, isReal = true, exchange = currentEx)
         tradeHistoryRecorder.recordBuy(
             symbol = symbol, isReal = true, strategyMode = strategyMode.value.name,
             buyPrice = price, buyQuantity = quantity, buyTotalIdr = price * quantity,
             buyOrderType = "LIMIT", snapshot = snapshot,
-            signalPrice = engine.signalState.value.entryPrice.takeIf { it > 0 } ?: price,
-            signalConfidence = engine.signalState.value.confidence, targetPrice1 = tp1, targetPrice2 = tp2,
-            stopLossPrice = engine.signalState.value.stopLoss,
+            signalPrice = realSignal.entryPrice,
+            // tp1/tp2 datang dari parameter order (bukan dari engine), jadi tidak perlu diatribusikan.
+            signalConfidence = realSignal.confidence, targetPrice1 = tp1, targetPrice2 = tp2,
+            stopLossPrice = realSignal.stopLoss,
             exchange = currentEx,
             // P0-3 — waktu sinyal dari engine, bukan waktu klik order.
-            signalTime = engine.signalState.value.timestamp,
+            signalTime = realSignal.signalTime,
             isTrailingUsed = beforeBuy.isTrailingEnabled,
             trailingPercent = beforeBuy.trailingPercent.takeIf { it > 0.0 },
             trailingPeakPrice = beforeBuy.peakPrice.takeIf { it > 0.0 }
@@ -229,19 +249,27 @@ fun TradingViewModel.syncSimulationTradeToPositionStore(order: SimulationOrder) 
     val fillPrice = if (order.filledAvgPrice > 0.0) order.filledAvgPrice else order.limitPrice
     if (order.side == SimulationOrderSide.BUY) {
         val currentPos = positionStore.get(symbol, isReal = false, exchange = currentEx)
-        if (currentPos.isHolding && currentPos.quantity > 0.00000001 && currentPos.entryPrice > 0.0) {
+        // P3 — DCA: posisi sudah ada, jadi entry berubah menjadi harga rata-rata. Mesin exit WAJIB
+        // dibangun ulang, karena mesin lama masih memakai entry fill **pertama** sementara store
+        // memakai rata-rata. Dulu `armPaperExitEngine` dipanggil dengan `force = false`, sehingga
+        // mesin tidak pernah diperbarui: SL lama (milik entry lama) bisa berada DI ATAS rata-rata
+        // baru, dan pada restart berikutnya kondisi itu memicu penjualan paksa berlabel `STOP_LOSS`.
+        val isDca = currentPos.isHolding && currentPos.quantity > 0.00000001 && currentPos.entryPrice > 0.0
+        val effectiveEntry: Double
+        if (isDca) {
             val totalQty = currentPos.quantity + order.quantity
             val totalCost = (currentPos.entryPrice * currentPos.quantity) + (fillPrice * order.quantity)
-            val weightedAvg = if (totalQty > 0.0) totalCost / totalQty else fillPrice
+            effectiveEntry = if (totalQty > 0.0) totalCost / totalQty else fillPrice
             positionStore.setHolding(
                 symbol = symbol,
                 invested = totalCost,
-                entry = weightedAvg,
+                entry = effectiveEntry,
                 quantity = totalQty,
                 isReal = false,
                 exchange = currentEx
             )
         } else {
+            effectiveEntry = fillPrice
             positionStore.markBought(
                 symbol = symbol,
                 entryPrice = fillPrice,
@@ -256,6 +284,22 @@ fun TradingViewModel.syncSimulationTradeToPositionStore(order: SimulationOrder) 
             indicators = engine.indicators.value, signal = engine.signalState.value,
             exchange = currentEx
         )
+        // N10 — nilai turunan sinyal hanya boleh menempel bila sinyal itu milik simbol ini.
+        // Bila engine terakhir menilai pair lain, confidence/TP/SL pair lain dikosongkan.
+        val paperSignal = SignalSymbolAttribution.attributedFields(
+            requestedSymbol = symbol,
+            signalSymbol = engine.signalState.value.marketSymbol,
+            fields = SignalDerivedFields(
+                confidence = engine.signalState.value.confidence,
+                entryPrice = engine.signalState.value.entryPrice,
+                targetPrice1 = engine.signalState.value.targetPrice1,
+                targetPrice2 = engine.signalState.value.targetPrice2,
+                stopLoss = engine.signalState.value.stopLoss,
+                signalTime = engine.signalState.value.timestamp
+            ),
+            fallbackPrice = fillPrice,
+            fallbackTime = System.currentTimeMillis()
+        )
         // P0-5 — state posisi setelah entry (bukan sebelum), supaya status trailing yang tercatat
         // adalah yang benar-benar berlaku untuk posisi ini.
         val posAfterBuy = positionStore.get(symbol, isReal = false, exchange = currentEx)
@@ -268,14 +312,14 @@ fun TradingViewModel.syncSimulationTradeToPositionStore(order: SimulationOrder) 
             buyTotalIdr = fillPrice * order.quantity,
             buyOrderType = order.type.name,
             snapshot = snapshot,
-            signalPrice = engine.signalState.value.entryPrice.takeIf { it > 0 } ?: fillPrice,
-            signalConfidence = engine.signalState.value.confidence,
-            targetPrice1 = engine.signalState.value.targetPrice1,
-            targetPrice2 = engine.signalState.value.targetPrice2,
-            stopLossPrice = engine.signalState.value.stopLoss,
+            signalPrice = paperSignal.entryPrice,
+            signalConfidence = paperSignal.confidence,
+            targetPrice1 = paperSignal.targetPrice1,
+            targetPrice2 = paperSignal.targetPrice2,
+            stopLossPrice = paperSignal.stopLoss,
             exchange = currentEx,
             // P0-3 — waktu sinyal dari engine, bukan waktu klik order.
-            signalTime = engine.signalState.value.timestamp,
+            signalTime = paperSignal.signalTime,
             isTrailingUsed = posAfterBuy.isTrailingEnabled,
             trailingPercent = posAfterBuy.trailingPercent.takeIf { it > 0.0 },
             trailingPeakPrice = posAfterBuy.peakPrice.takeIf { it > 0.0 }
@@ -286,14 +330,39 @@ fun TradingViewModel.syncSimulationTradeToPositionStore(order: SimulationOrder) 
         // manual berjalan tanpa SL/BE/trailing terkelola — kasus AMP/USDT menahan −2,76%
         // selama 9 menit tanpa stop apa pun. Bila mesin sudah ada (jalur auto-buy), pemanggilan
         // ini tidak menimpa apa pun.
-        armPaperExitEngine(
+        //
+        // P3 — kecuali untuk DCA: entry berubah menjadi rata-rata, jadi mesin lama (yang memakai
+        // entry fill pertama) harus diganti. `force = isDca` adalah satu-satunya jalur yang boleh
+        // menimpa mesin yang sudah hidup.
+        //
+        // P4 — `atrPct` kini ikut dikirim. Sebelumnya hanya jalur auto-buy yang bisa menghitungnya
+        // (fungsi ATR-nya `private` di berkas lain), sehingga setiap posisi hasil beli manual
+        // menerima `atrPct = 0.0`. Karena `0.0` berarti "ATR tidak diketahui", mesin jatuh ke ambang
+        // BE/trailing persen tetap dan nilai nol itu ikut tersimpan ke disk — kerusakannya persisten.
+        val atrPct = PaperAtr.of(engine.indicators.value.atr, effectiveEntry)
+        val armed = armPaperExitEngine(
             symbol = symbol,
             exchange = currentEx,
-            entryPrice = fillPrice,
+            entryPrice = effectiveEntry,
             stopLoss = engine.signalState.value.stopLoss,
             tp1 = engine.signalState.value.targetPrice1,
-            tp2 = engine.signalState.value.targetPrice2
+            tp2 = engine.signalState.value.targetPrice2,
+            atrPct = atrPct,
+            force = isDca
         )
+        if (isDca) {
+            agu.analys.util.AppLogManager.service(
+                "PaperAutoExit",
+                if (armed) {
+                    "🔁 [$symbol] DCA: entry menjadi rata-rata " +
+                        "${agu.analys.util.PriceFormatter.formatPrice(effectiveEntry, quoteAsset = TradingPair.fromCustomSymbol(symbol, currentEx).quoteAsset)} — " +
+                        "mesin exit dibangun ulang agar SL/TP sepadan dengan entry baru."
+                } else {
+                    "⚠️ [$symbol] DCA: entry menjadi rata-rata tetapi mesin exit tidak bisa dibangun ulang " +
+                        "(lantai friksi nonaktif atau SL tidak tersedia). Periksa SL posisi ini."
+                }
+            )
+        }
     } else if (order.side == SimulationOrderSide.SELL) {
         val currentPos = positionStore.get(symbol, isReal = false, exchange = currentEx)
         val currentQty = currentPos.quantity
@@ -492,6 +561,33 @@ fun TradingViewModel.initSubscriptionsAndPolling() {
         )
     }
 
+    // P1 — ganti bursa juga harus memicu rehidrasi. Mesin exit untuk bursa yang baru dipilih
+    // mungkin hanya ada di disk (bukan di memori), dan tanpa pemicu ini posisi paper di bursa itu
+    // berjalan tanpa SL/TP/BE/trailing walau pengguna sudah kembali ke sana. Dulu
+    // `setMarketDataSource` sama sekali tidak memanggil rehidrasi, sehingga kembali ke bursa asal
+    // pun tidak memulihkan apa pun.
+    viewModelScope.launch {
+        var isFirstEmission = true
+        marketDataSource.collect { source ->
+            if (isFirstEmission) {
+                // Emisi pertama adalah nilai saat ini — sudah ditangani rehidrasi di atas.
+                isFirstEmission = false
+                return@collect
+            }
+            agu.analys.util.AppLogManager.service(
+                "PaperAutoExit",
+                "🔀 Bursa aktif berpindah ke ${source.name} — membangun ulang mesin exit posisi paper."
+            )
+            runCatching { rehydratePaperAutoExit() }.onFailure {
+                agu.analys.util.AppLogManager.service(
+                    "PaperAutoExit",
+                    "⚠️ Rehidrasi setelah ganti bursa gagal: ${it.message}"
+                )
+            }
+            checkAndStopTrailingServiceIfEmpty()
+        }
+    }
+
     engine.onCandidateSignalTransition = { transition ->
         if (isNotificationsEnabled.value) {
             val isReal = isRealBuyMode.value
@@ -612,9 +708,13 @@ fun TradingViewModel.startTrailingPolling() {
                 val isReal = isRealBuyMode.value
                 // P2: posisi paper juga ikut dipantau, walau bukan pair yang sedang dibuka,
                 // supaya auto-exit tetap berjalan di latar belakang.
+                // P1: simbol paper juga dibaca dari **disk**, bukan hanya dari mesin di memori —
+                // `PaperAutoTradeRuntime` kosong setelah restart sampai rehidrasi selesai, jadi
+                // tanpa ini posisi paper bisa terlewat satu putaran polling.
                 val activeSymbols = (
                     positionStore.getAllActiveTrailingSymbols(isReal = isReal, exchange = currentEx) +
-                        PaperAutoTradeRuntime.activeSymbols(currentEx)
+                        PaperAutoTradeRuntime.activeSymbols(currentEx) +
+                        positionStore.getPaperEngineSymbols(isReal = false, exchange = currentEx)
                     ).distinct()
                 if (activeSymbols.isNotEmpty()) {
                     val isToko = prefs.marketDataSource == MarketDataSource.TOKOCRYPTO
@@ -666,16 +766,31 @@ fun TradingViewModel.listenToEngineSignals() {
         engine.signalState.collect { signal ->
             val now = System.currentTimeMillis()
             if (signal.action != SignalAction.HOLD && now - lastSavedSignalTimestamp > 15000L) {
+                // J4 — simbol jurnal adalah simbol yang **dievaluasi engine**, bukan pair yang
+                // sedang dibuka. `selectPair()` mengganti pair lebih dulu, sedangkan `signalState`
+                // masih berisi hasil pair lama sampai tick berikutnya; menstempel
+                // `selectedPair` di sini membuat entry/TP/SL/confidence BTC tercatat sebagai ETH.
+                val journalSymbol = SignalSymbolAttribution.journalSymbol(
+                    signalSymbol = signal.marketSymbol,
+                    selectedSymbol = selectedPair.value.symbol
+                )
+                if (!SignalSymbolAttribution.isRecordable(journalSymbol)) return@collect
                 lastSavedSignalTimestamp = now
                 val list = _signalHistory.value.toMutableList()
-                list.add(0, signal.copy(marketSymbol = selectedPair.value.symbol))
+                list.add(0, signal.copy(marketSymbol = journalSymbol))
                 if (list.size > 30) list.removeAt(list.lastIndex)
                 _signalHistory.value = list
 
                 signalLogRepository.recordSignal(
-                    symbol = selectedPair.value.symbol, action = signal.action.name,
+                    symbol = journalSymbol, action = signal.action.name,
                     strategyMode = strategyMode.value.name, confidence = signal.confidence,
-                    sentiment = signal.sentiment.name, entryPrice = if (signal.entryPrice > 0) signal.entryPrice else (currentTick.value?.price ?: 0.0),
+                    sentiment = signal.sentiment.name,
+                    // J4 — harga fallback juga harus milik simbol jurnal, bukan tick pair yang
+                    // kebetulan sedang dibuka.
+                    entryPrice = SignalSymbolAttribution.entryPrice(
+                        signalEntryPrice = signal.entryPrice,
+                        tickPrice = marketDataCoordinator.dashboardTicks.value[journalSymbol]?.price
+                    ),
                     targetPrice1 = signal.targetPrice1, targetPrice2 = signal.targetPrice2, stopLoss = signal.stopLoss,
                     reasoning = signal.reasoning.joinToString(" • "), scalpingStage = signal.scalpingStage.name,
                     exchange = prefs.marketDataSource.name,

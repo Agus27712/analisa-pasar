@@ -49,7 +49,10 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     val aiNewsViewModel = AiNewsViewModel(application)
     val settingsViewModel = SettingsViewModel(application)
     val portfolioViewModel = PortfolioViewModel(application)
-    val signalLogViewModel = SignalLogViewModel(application)
+    // J3 — bursa diteruskan sebagai **aliran**, bukan dibaca sekali. Kalau dibaca sekali di
+    // dalam `SignalLogViewModel`, parameter Room terikat saat flow dibuat dan mengganti bursa
+    // tidak pernah mengulang subscription (tabel log & reliabilitas tetap berisi bursa lama).
+    val signalLogViewModel = SignalLogViewModel(application, settingsViewModel.marketDataSource)
 
     // ═════════════════════════════════════════════════════════════════════════
     // 2. CORE COORDINATORS & SHARED SERVICES
@@ -89,13 +92,36 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     val paperTradeStats: StateFlow<agu.analys.engine.scalping.PaperTradeStats> =
         _paperTradeStats.asStateFlow()
 
-    /** Potret FSM exit untuk pair yang sedang dipantau; `null` bila tidak ada posisi paper terbuka. */
-    private val _paperExitSnapshot = MutableStateFlow<agu.analys.engine.scalping.PaperExitSnapshot?>(null)
-    val paperExitSnapshot: StateFlow<agu.analys.engine.scalping.PaperExitSnapshot?> =
-        _paperExitSnapshot.asStateFlow()
+    /**
+     * Potret FSM exit **per posisi** — P5.
+     *
+     * Dulu ini satu `MutableStateFlow` global, padahal `evaluatePaperAutoExit` dipanggil untuk
+     * setiap simbol yang mendapat tick: setiap simbol tanpa mesin menimpa flow itu dengan `null`,
+     * sehingga kartu FSM di layar simulasi berkedip hilang bila posisi paper-nya ada di pair
+     * lain. Kuncinya `PaperAutoTradeRuntime.key(exchange, symbol)` — satu entri per posisi.
+     */
+    private val _paperExitSnapshots =
+        MutableStateFlow<Map<String, agu.analys.engine.scalping.PaperExitSnapshot>>(emptyMap())
+    val paperExitSnapshots: StateFlow<Map<String, agu.analys.engine.scalping.PaperExitSnapshot>> =
+        _paperExitSnapshots.asStateFlow()
 
-    internal fun publishPaperExitSnapshot(snapshot: agu.analys.engine.scalping.PaperExitSnapshot?) {
-        _paperExitSnapshot.value = snapshot
+    /** Potret untuk satu posisi; `null` bila posisi itu tidak punya posisi paper terbuka. */
+    internal fun paperSnapshotAt(exchange: String, symbol: String): agu.analys.engine.scalping.PaperExitSnapshot? =
+        agu.analys.trading.PaperExitSnapshots.forPosition(
+            current = _paperExitSnapshots.value,
+            key = PaperAutoTradeRuntime.key(exchange, symbol)
+        )
+
+    internal fun publishPaperExitSnapshot(
+        exchange: String,
+        symbol: String,
+        snapshot: agu.analys.engine.scalping.PaperExitSnapshot?
+    ) {
+        _paperExitSnapshots.value = agu.analys.trading.PaperExitSnapshots.publish(
+            current = _paperExitSnapshots.value,
+            key = PaperAutoTradeRuntime.key(exchange, symbol),
+            snapshot = snapshot
+        )
     }
 
     internal fun appendPaperTradeRecord(record: agu.analys.engine.scalping.PaperTradeRecord) {
@@ -154,7 +180,9 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
             checkAlertsAndTrailing(symbol, price, rsi)
             // P2 — evaluasi exit paper trade (level check tiap tick, hitungan bar per menit).
             // Dibungkus runCatching agar kegagalan exit paper tidak pernah menghentikan tick harga.
-            runCatching { evaluatePaperAutoExit(symbol, currentEx, price, recentCandles.takeLast(15)) }
+            // P6 — jendela momentum tidak lagi dikirim pemanggil: `evaluatePaperAutoExit`
+            // membacanya sendiri dari cache M1 supaya hasilnya sama dengan jalur latar.
+            runCatching { evaluatePaperAutoExit(symbol, currentEx, price) }
             signalLogRepository.processPriceTick(symbol, price, currentEx)
             // P0-6 — teruskan ekstrem candle supaya Peak/Drawdown jurnal tidak understate.
             val lastCandle = recentCandles.lastOrNull()

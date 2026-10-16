@@ -379,7 +379,11 @@ object SignalLifecycleManager {
                 }
             }
         } else {
-            val prefix = "${symbol.uppercase()}#"
+            // N7: prefix WAJIB lewat `normalizeSymbol` — key disimpan lewat `cacheKey` yang
+            // membuang pemisah (`/ _ -`). Memakai `symbol.uppercase()` mentah membuat
+            // `"BTC_IDR#"` tidak pernah cocok dengan key `"BTCIDR#SCALPING"`, sehingga sinyal
+            // diam-diam tidak pernah berstatus TRIGGERED (jalur real trade mengirim `btc_idr`).
+            val prefix = "${normalizeSymbol(symbol)}#"
             activeSignals.forEach { (k, it) ->
                 if (k.startsWith(prefix) || k.equals(symbol, ignoreCase = true)) {
                     if (it.state == LifecycleState.READY || it.state == LifecycleState.CONFIRMING) {
@@ -396,7 +400,9 @@ object SignalLifecycleManager {
         if (mode != null) {
             activeSignals.remove(cacheKey(symbol, mode))
         } else {
-            val prefix = "${symbol.uppercase()}#"
+            // N7: sama seperti `markTriggered` — prefix harus lewat `normalizeSymbol`, kalau tidak
+            // `reset("BTC/IDR")` tidak menghapus apa pun dan state lama tertinggal di mesin.
+            val prefix = "${normalizeSymbol(symbol)}#"
             activeSignals.keys.removeAll { it.startsWith(prefix) || it.equals(symbol, ignoreCase = true) }
         }
     }

@@ -103,16 +103,19 @@ fun DetailChartScreen(
 
     // ── 1b. Paper trade (P2) — dipakai panel scalping ─────────────────────
     val paperConfig by viewModel.paperAutoTradeConfig.collectAsStateWithLifecycle()
-    val paperSnapshotFlow by viewModel.paperExitSnapshot.collectAsStateWithLifecycle()
+    // P5 — peta potret per posisi (bukan satu snapshot global yang bisa ditimpa simbol lain).
+    val paperSnapshotFlow by viewModel.paperExitSnapshots.collectAsStateWithLifecycle()
     val scalpingRuntime by viewModel.scalpingRuntimeConfig.collectAsStateWithLifecycle()
 
     // Simbol kanonik untuk key runtime paper: `signal.marketSymbol` bisa kosong sebelum
     // sinyal dilacak `SignalLifecycleManager`, jadi jatuh ke `pair.symbol`.
     val scalpSymbol = signal.marketSymbol.ifBlank { pair.symbol }
 
-    // PENTING: `viewModel.paperExitSnapshot` adalah snapshot global dari tick pair mana pun
-    // (`evaluatePaperAutoExit` dipanggil untuk semua simbol). Halaman detail wajib membaca
-    // posisi pair yang sedang dibuka saja, jadi lewat `paperSnapshotFor`.
+    // PENTING: `evaluatePaperAutoExit` dipanggil untuk semua simbol yang mendapat tick, jadi
+    // halaman detail wajib membaca posisi pair yang sedang dibuka saja — lewat
+    // `paperSnapshotFor`. Peta `paperExitSnapshots` hanya dipakai sebagai pemicu hitung ulang
+    // (P5): dulu satu snapshot global bisa tertimpa `null` oleh simbol lain, sehingga kartu
+    // berkedip hilang.
     val paperSnapshot = remember(paperSnapshotFlow, displayPrice, scalpSymbol, marketDataSource) {
         viewModel.paperSnapshotFor(
             exchange = marketDataSource.name,
@@ -379,6 +382,8 @@ fun DetailChartScreen(
                 baseAsset = pair.baseAsset,
                 quoteAsset = pair.quoteAsset,
                 exchange = marketDataSource.name,
+                // J7 — kartu jual memakai slippage yang sama dengan FSM, bukan fee jual saja.
+                slippagePct = scalpingRuntime.slippagePct,
                 availableIdr = availableIdr,
                 availableCoin = availableCoin,
                 avgBuyPrice = avgBuyPrice,

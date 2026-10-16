@@ -405,6 +405,21 @@ class AppPreferences(context: Context) {
         get() = prefs.getBoolean("notify_emergency_exit_v1", true)
         set(value) = prefs.edit().putBoolean("notify_emergency_exit_v1", value).apply()
 
+    /**
+     * Potret seluruh sakelar notifikasi untuk gerbang [allowsNotification].
+     *
+     * Dibaca sekali jadi supaya pemanggil tidak perlu tahu nama kelima key-nya, dan supaya
+     * menambah kategori baru hanya menyentuh satu tempat.
+     */
+    val notificationSettings: NotificationSettings
+        get() = NotificationSettings(
+            masterEnabled = isNotificationsEnabled,
+            candidateBuyEnabled = isNotifyCandidateBuyEnabled,
+            priceAlertsEnabled = isNotifyPriceAlertsEnabled,
+            trailingStopEnabled = isNotifyTrailingStopEnabled,
+            emergencyExitEnabled = isNotifyEmergencyExitEnabled
+        )
+
     var isRealSimSyncEnabled: Boolean
         get() = prefs.getBoolean(KEY_REAL_SIM_SYNC_ENABLED, false)
         set(value) = prefs.edit().putBoolean(KEY_REAL_SIM_SYNC_ENABLED, value).apply()

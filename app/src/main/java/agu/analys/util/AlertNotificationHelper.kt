@@ -132,6 +132,63 @@ object AlertNotificationHelper {
         }
     }
 
+    /**
+     * Cache `AppPreferences` untuk membaca sakelar user.
+     *
+     * Konstruktor `AppPreferences` membangun `EncryptedSharedPreferences` — terlalu mahal bila
+     * dipanggil tiap notifikasi. Satu instance cukup karena aplikasi hanya punya satu set prefs.
+     */
+    @Volatile
+    private var cachedPrefs: AppPreferences? = null
+
+    /**
+     * Hanya untuk uji: buang cache `AppPreferences` supaya sakelar dibaca ulang dari nol.
+     *
+     * Tanpa ini, uji kedua dalam satu kelas akan memakai instance prefs milik `Application`
+     * Robolectric dari uji sebelumnya.
+     */
+    @androidx.annotation.VisibleForTesting
+    internal fun resetNotificationSettingsCache() {
+        cachedPrefs = null
+    }
+
+    private fun resolvePrefs(context: Context): AppPreferences =
+        cachedPrefs ?: synchronized(this) {
+            cachedPrefs ?: AppPreferences(context.applicationContext).also { cachedPrefs = it }
+        }
+
+    /**
+     * Hanya untuk uji: instance prefs yang **benar-benar** dibaca [canNotify].
+     *
+     * Uji perlu menulis sakelar lewat objek ini, bukan lewat `AppPreferences(context)` baru:
+     * di bawah Robolectric membuat `AppPreferences` kedua tidak melihat tulisan instance pertama
+     * (jalur pemulihan keystore menimpa prefs), sehingga uji akan lolos/gagal karena artefak
+     * harness, bukan karena gerbangnya.
+     */
+    @androidx.annotation.VisibleForTesting
+    internal fun notificationPrefsForTest(context: Context): AppPreferences = resolvePrefs(context)
+
+    private fun notificationSettings(context: Context): NotificationSettings =
+        runCatching { resolvePrefs(context).notificationSettings }
+            .getOrDefault(NotificationSettings())
+
+    /**
+     * **Gerbang tunggal** sebelum push dikirim: izin OS **dan** sakelar user
+     * (lihat [allowsNotification]).
+     *
+     * Ditaruh di sini, bukan di tiap pemanggil, justru karena itulah akar N4: ada belasan call
+     * site dan tidak satu pun memeriksa sakelar, sehingga sakelar master maupun keempat sakelar
+     * kategori tidak berpengaruh. Dengan gerbang di chokepoint ini, call site baru otomatis ikut
+     * teratur.
+     *
+     * Bila `AppPreferences` gagal dibaca (keystore rusak), gerbang **terbuka** — sama dengan
+     * perilaku sebelum perbaikan, supaya kerusakan prefs tidak diam-diam mematikan peringatan
+     * darurat.
+     */
+    private fun canNotify(context: Context, category: NotificationCategory): Boolean =
+        hasNotificationPermission(context) &&
+            allowsNotification(notificationSettings(context), category)
+
     // 1. Candidate Buy Notification
     fun sendCandidateFoundNotification(
         context: Context,
@@ -151,7 +208,7 @@ object AlertNotificationHelper {
         strategyMode: StrategyMode,
         signal: AISignalState
     ) {
-        if (!hasNotificationPermission(context)) return
+        if (!canNotify(context, NotificationCategory.CANDIDATE_BUY)) return
 
         val strategyLabel = when (strategyMode) {
             StrategyMode.SCALPING -> "SCALPING M15/M5"
@@ -160,18 +217,12 @@ object AlertNotificationHelper {
         }
 
         val pairFormatted = marketKey.formattedPair()
-        val quoteAsset = marketKey.quote
 
         val title = "🚀 Sinyal Entry Siap • $pairFormatted ($strategyLabel)"
-        val entryFormatted = PriceFormatter.formatPrice(signal.entryPrice, showSymbol = true, quoteAsset = quoteAsset)
-        val tp1Formatted = PriceFormatter.formatPrice(signal.targetPrice1, showSymbol = true, quoteAsset = quoteAsset)
-        val slFormatted = PriceFormatter.formatPrice(signal.stopLoss, showSymbol = true, quoteAsset = quoteAsset)
-
-        val message = "Kandidat BUY terkonfirmasi [${marketKey.displayExchange}]:\n" +
-                "• Entry: $entryFormatted\n" +
-                "• Target 1: $tp1Formatted\n" +
-                "• Stop Loss: $slFormatted\n" +
-                "• Skor Keyakinan: ${(signal.confidence * 100).toInt()}%"
+        val message = buildCandidateSignalMessage(marketKey, signal)
+        val entryFormatted = PriceFormatter.formatPrice(
+            signal.entryPrice, showSymbol = true, quoteAsset = marketKey.quote
+        )
 
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -226,7 +277,7 @@ object AlertNotificationHelper {
         quantity: Double,
         isReal: Boolean
     ) {
-        if (!hasNotificationPermission(context)) return
+        if (!canNotify(context, NotificationCategory.EMERGENCY_EXIT)) return
 
         val pairFormatted = marketKey.formattedPair()
         val quoteAsset = marketKey.quote
@@ -318,7 +369,7 @@ object AlertNotificationHelper {
         quantity: Double,
         isReal: Boolean
     ) {
-        if (!hasNotificationPermission(context)) return
+        if (!canNotify(context, NotificationCategory.TRAILING_STOP)) return
 
         val pairFormatted = marketKey.formattedPair()
         val quoteAsset = marketKey.quote
@@ -392,7 +443,7 @@ object AlertNotificationHelper {
         profitPct: Double,
         isReal: Boolean
     ) {
-        if (!hasNotificationPermission(context)) return
+        if (!canNotify(context, NotificationCategory.TRAILING_STOP)) return
 
         val pairFormatted = marketKey.formattedPair()
         val quoteAsset = marketKey.quote
@@ -460,7 +511,7 @@ object AlertNotificationHelper {
         quantity: Double,
         isReal: Boolean
     ) {
-        if (!hasNotificationPermission(context)) return
+        if (!canNotify(context, NotificationCategory.TRAILING_STOP)) return
 
         val pairFormatted = marketKey.formattedPair()
         val quoteAsset = marketKey.quote
@@ -548,7 +599,7 @@ object AlertNotificationHelper {
         marketKey: MarketKey? = null,
         onlyWhenBackground: Boolean = false
     ) {
-        if (!hasNotificationPermission(context)) return
+        if (!canNotify(context, NotificationCategory.PRICE_ALERT)) return
 
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -577,4 +628,37 @@ object AlertNotificationHelper {
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         notificationManager.notify(notificationId, builder.build())
     }
+}
+
+/**
+ * Kalimat konteks wajib untuk setiap permukaan yang menampilkan status siap (AGENTS.md:
+ * "Status SIAP bukan ajakan beli"). Push notification kandidat membawa angka Entry/Target/Stop
+ * Loss, jadi ia paling berisiko dibaca sebagai ajakan beli nyata.
+ */
+internal const val CANDIDATE_DISCLAIMER =
+    "→ Eksekusi uang riil masih DIBLOKIR. Sinyal ini decision support, bukan ajakan beli."
+
+/**
+ * Badan pesan notifikasi kandidat BUY.
+ *
+ * Dipisah dari [AlertNotificationHelper.sendCandidateFoundNotification] supaya bisa diuji tanpa
+ * Android. **N1:** `AISignalState.confidence` sudah `Int` skala **0–100**
+ * (`model/TradingViewModels.kt`), jadi nilainya dipakai apa adanya — jangan dikali 100.
+ * Sebelum perbaikan 2026-10-16 baris ini menulis `(signal.confidence * 100)`, sehingga skor
+ * `68` tampil sebagai `6800%` di push notification.
+ *
+ * **N5:** baris [CANDIDATE_DISCLAIMER] wajib ikut — lihat alasannya di konstanta itu.
+ */
+internal fun buildCandidateSignalMessage(marketKey: MarketKey, signal: AISignalState): String {
+    val quoteAsset = marketKey.quote
+    val entryFormatted = PriceFormatter.formatPrice(signal.entryPrice, showSymbol = true, quoteAsset = quoteAsset)
+    val tp1Formatted = PriceFormatter.formatPrice(signal.targetPrice1, showSymbol = true, quoteAsset = quoteAsset)
+    val slFormatted = PriceFormatter.formatPrice(signal.stopLoss, showSymbol = true, quoteAsset = quoteAsset)
+
+    return "Kandidat BUY terkonfirmasi [${marketKey.displayExchange}]:\n" +
+        "• Entry: $entryFormatted\n" +
+        "• Target 1: $tp1Formatted\n" +
+        "• Stop Loss: $slFormatted\n" +
+        "• Skor Keyakinan: ${signal.confidence}%\n" +
+        CANDIDATE_DISCLAIMER
 }

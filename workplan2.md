@@ -1,9 +1,9 @@
 # workplan2.md — Workplan aktif (Oktober 2026)
 
 > **Sumber kebenaran workplan.**  
-> `workplan.md`, `checkpoint.md`, dan `checkpoint_progres.md` **DEPRECATED** — jangan diikuti agen. Baca ini + `AGENTS.md` + `APP_CONTEXT.md` (§ arah produk).
+> `workplan.md`, `checkpoint.md`, dan `checkpoint_progres.md` **sudah dihapus (2026-10-16)** — jangan cari, jangan dibuat ulang. Baca ini + `AGENTS.md` + `APP_CONTEXT.md` (§ arah produk).
 
-**Update:** 2026-10-15 (WIB)
+**Update:** 2026-10-16 (WIB) — §40 sinkronisasi dokumen temuan
 
 > ⚠️ **Seksi §9.5b sudah DIBATALKAN** (angka edge lama tidak sah). Angka yang berlaku ada di
 > **§9.5c**. Seksi §14/§15 **dibatalkan** — fiturnya sudah dihapus dari kode, jangan dibangun ulang.
@@ -201,7 +201,7 @@ Detail: `SCALP_EXIT.md`, `data/hasil/p3_entry_hypothesis_lab.md`, artefak lokal 
 | tools/selftest_entry_lab.py | Uji daya-deteksi lab (data sintetis ber-edge tanam) |
 | data/hasil/p3_entry_hypothesis_lab.md | Hasil P3: 0/8 hipotesis lolos gate |
 
-**Jangan baca sebagai instruksi aktif:** `workplan.md`, `checkpoint.md`, `checkpoint_progres.md` (legacy checklist tahap lama).
+**Jangan baca sebagai instruksi aktif:** `workplan.md`, `checkpoint.md`, `checkpoint_progres.md` — ketiganya **sudah dihapus (2026-10-16)**; isinya cuma stub DEPRECATED yang menunjuk ke `workplan2.md`.
 
 ---
 
@@ -1462,8 +1462,1077 @@ Dipulihkan → hijau.
 
 | | |
 |---|---|
-| Unit test (diukur dari XML) | **443 lulus · 0 gagal · 1 dilewati** (58 kelas) |
+| Unit test (diukur dari XML) | **443 total · 442 lulus · 0 gagal · 1 dilewati** (58 kelas) |
 | Baseline sebelum §24 | **435 lulus · 0 gagal · 1 dilewati** (57 kelas) |
 | Tambahan | **+8 test, +1 kelas** |
 | APK debug | 27.877.730 byte |
 | Kesiapan uang riil | **BELUM** — lihat §9.5c |
+
+> **Koreksi 2026-10-16:** baris "Unit test" di atas awalnya menulis "443 lulus". Pengukuran ulang
+> dari XML menunjukkan 443 adalah **total test** (442 lulus + 1 dilewati). Sudah diperbaiki.
+
+---
+
+## 26. Batch 1 audit notifikasi — N1, N2, N3 (2026-10-16)
+
+Sumber: `docs/bugs/temuan_bugs_notifikasi.md` (audit read-only dari agen lain, di-pull dari
+`patch`). Batch 1 mengerjakan tiga temuan berisiko tertinggi. Sisanya (N4–N12) **belum dikerjakan**.
+
+Perbaikan mendarat di commit **`cd6c032`**.
+
+### 26.1 N2 — balapan edge trailing (paling merugikan)
+
+`SpotPositionStore.updateTrailingPrice` bersifat **edge-once**: pemanggil pertama yang melihat
+harga melewati batas mengonsumsi edge-nya, dan `justTriggered` hanya `true` sekali.
+
+Dua loop memanggilnya bersamaan:
+- `TradingForegroundService` (polling 4 detik) — **membuang** hasil `justTriggered`
+- `TradingViewModel.checkTrailingForMode` (per tick) — satu-satunya yang memanggil
+  `executeAutoSellOrder`
+
+Bila service menang balapan, VM tidak pernah melihat `true` → **notifikasi trailing hilang dan
+auto-sell tidak pernah terkirim**. Posisi menggantung sampai SL/TP manual.
+
+Catatan yang memperkuat: service mengambil `pos` **sebelum** memanggil `updateTrailingPrice`, jadi
+efek sampingnya pada `posContext`-nya sendiri memang tidak pernah terpakai. Satu-satunya efek nyata
+dari panggilan itu adalah menaikkan peak, menambah counter, **dan mencuri edge**.
+
+**Perbaikan:** parameter `consumeTrigger: Boolean = true` di `updateTrailingPrice`. Saat `false`,
+hanya Rule 1 (peak) yang jalan; mesin pemicu (hitung batas, filter 2 tick, set flag) tidak
+disentuh dan hasilnya selalu `Pair(<posisi terbaru>, false)`. Service mengirim `false`.
+
+### 26.2 N1 — confidence tampil ×100
+
+`AISignalState.confidence` bertipe `Int` skala **0–100**, tapi notifikasi kandidat menulis
+`(signal.confidence * 100).toInt()` → skor `68` tampil **`6800%`**.
+
+**Perbaikan:** badan pesan diekstrak ke `buildCandidateSignalMessage(marketKey, signal)` (fungsi
+murni, bisa diuji tanpa Android) dan faktor `* 100` dihapus.
+
+### 26.3 N3 — fee service tidak sama dengan fee user
+
+`TradingForegroundService` memanggil `SellSignalEvaluator.evaluate(..., tradingFees = TradingFeeConfig(), ...)`.
+Tanpa argumen, `TradingFeeConfig` jatuh ke preset **legacy Indodax-ish** (0,11 / 0,21 / 0,32 / 0,42),
+bukan biaya bursa aktif milik user. Ini **regresi dari §24** — aturan "SATU rumus P&L" masih bocor
+di permukaan notifikasi.
+
+**Perbaikan:** service memakai `AppPreferences(applicationContext).tradingFees` (objek prefs
+di-cache lewat `by lazy`, nilainya dibaca ulang tiap tick supaya perubahan di Pengaturan langsung
+terpakai), sama dengan jalur VM.
+
+### 26.4 Uji & kontrol negatif
+
+| Berkas uji | Test | Menjaga |
+|---|---|---|
+| `util/CandidateSignalMessageTest.kt` | 4 | N1 |
+| `trading/TrailingEdgeOwnershipTest.kt` | 3 | N2 |
+| `service/NotificationFeeSourceTest.kt` | 3 | N3 |
+
+Kontrol negatif (ketiganya dimatikan sekaligus, lalu dijalankan):
+
+| Perbaikan yang dimatikan | Uji yang GAGAL |
+|---|---|
+| `* 100` dikembalikan di `buildCandidateSignalMessage` | 2 dari 4 `CandidateSignalMessageTest` |
+| `if (!consumeTrigger)` → `if (false)` di store | 1 dari 3 `TrailingEdgeOwnershipTest` |
+| `tradingFees = appPrefs.tradingFees` → `TradingFeeConfig()` | 1 dari 3 `NotificationFeeSourceTest` |
+| **Total** | **4 dari 10 uji gagal** |
+
+Uji yang tetap lulus saat perbaikan dimatikan memang tidak bergantung pada perbaikan itu: "skor
+nol tetap nol" (0 × 100 = 0), "pesan tetap membawa entry/target/SL", "pengamat tetap menaikkan
+peak", "edge hanya dikonsumsi sekali", serta dua uji premis di `NotificationFeeSourceTest`.
+
+### 26.5 Catatan kejujuran tentang batas penjagaan N3
+
+`NotificationFeeSourceTest` menjaga N3 lewat **invarian sumber**: berkas service dibaca, komentar
+dibuang, lalu dipastikan tidak ada lagi `TradingFeeConfig()` di kodenya dan ada
+`tradingFees = appPrefs.tradingFees`. Ini menangkap persis regresi yang diperbaiki, tapi ia
+memeriksa **teks sumber**, bukan perilaku runtime — kalau nanti pemanggilan itu dipindah ke berkas
+lain, penjaga ini tidak ikut memindah. Uji perilaku penuh butuh menjalankan service dengan
+`Context` tiruan, yang belum ada di repo ini.
+
+### 26.6 Laporan
+
+`docs/LAPORAN-batch1-notifikasi-2026-10-16.md`
+
+---
+
+## 27. Status setelah §26
+
+| | |
+|---|---|
+| Unit test (diukur dari XML) | **453 total · 452 lulus · 0 gagal · 1 dilewati** (61 kelas) |
+| Baseline sebelum §26 (diukur via `git stash -u`) | **443 total · 442 lulus · 0 gagal · 1 dilewati** (58 kelas) |
+| Tambahan | **+10 test, +3 kelas** |
+| APK debug | 27.877.730 byte |
+| Kesiapan uang riil | **BELUM** — lihat §9.5c |
+
+Sisa temuan yang belum dikerjakan: **N4** (toggle push tidak dipatuhi di jalur alert/trailing),
+**N5** (notifikasi kandidat tanpa disclaimer "uang riil masih diblokir"), **N6** (dua produsen satu
+state machine), **N7** (`markTriggered` tidak menormalkan simbol — **aktif**, bukan latent),
+**N8–N12**. Lihat `docs/bugs/temuan_bugs_notifikasi.md`.
+
+---
+
+## 28. Batch 2 audit notifikasi — N4, N5, N7 (2026-10-16)
+
+Lanjutan §26. **N4 diperluas**: selain sakelar master yang diabaikan di `TradingViewModelAlerts`,
+ditemukan bahwa **keempat sakelar kategori** juga tidak dibaca oleh jalur pengiriman mana pun.
+
+Perbaikan mendarat di commit **`1a87e3c`**.
+
+### 28.1 N4 (+ temuan baru) — sakelar notifikasi tidak dipatuhi
+
+Keadaan sebelum perbaikan:
+
+| Sakelar | Dibaca oleh jalur kirim? |
+|---|---|
+| `isNotificationsEnabled` (master) | Ya di `TradingViewModelSync`, `CandidateScanWorker`, `TradingForegroundService`. **Tidak** di `TradingViewModelAlerts` (0 kemunculan). |
+| `isNotifyPriceAlertsEnabled` | **Tidak sama sekali** |
+| `isNotifyCandidateBuyEnabled` | **Tidak sama sekali** |
+| `isNotifyTrailingStopEnabled` | **Tidak sama sekali** |
+| `isNotifyEmergencyExitEnabled` | **Tidak sama sekali** |
+
+Keempat sakelar kategori hanya dibaca/ditulis di `SettingsViewModel` dan dirender di
+`SettingsCategoryDetailContent` — jadi Pengaturan menawarkan empat sakelar yang **tidak melakukan
+apa pun**. Ini temuan baru yang tidak ada di audit asli.
+
+**Jebakan yang dihindari:** saran audit ("tambah guard di awal `checkAlertsAndTrailing`") akan
+**mematikan auto-sell**, karena `checkTrailingForMode` dipanggil dari sana dan di dalamnya ada
+`executeAutoSellOrder`. Mematikan notifikasi bukan berarti mematikan perlindungan posisi.
+
+**Perbaikan:** gerbang tunggal, bukan guard di tiap call site (justru karena itulah akar N4 —
+belasan call site dan tidak satu pun memeriksa):
+
+- `util/NotificationGate.kt` (baru) — `NotificationCategory`, `NotificationSettings`, dan fungsi
+  murni `allowsNotification(settings, category)`. Master mati ⇒ semua kategori mati (di UI sakelar
+  kategori memang sub-pengaturan dari master).
+- `AppPreferences.notificationSettings` — potret kelima sakelar sekali jadi.
+- `AlertNotificationHelper.canNotify(context, category)` dipasang di **keenam** chokepoint
+  pengiriman (kandidat, exit darurat, trailing hit, trailing peak, take profit, price alert).
+  `AppPreferences` di-cache (`by lazy`-style, karena konstruktornya membangun
+  `EncryptedSharedPreferences`). Bila prefs gagal dibaca, gerbang **terbuka** — sama seperti
+  perilaku sebelumnya, supaya keystore rusak tidak diam-diam mematikan peringatan darurat.
+
+Pemetaan kategori: take profit ikut **TRAILING_STOP** ("Trailing Stop & Eksekusi"), bukan
+PRICE_ALERT — sesuai label di Pengaturan.
+
+Semua default `true`, jadi pengguna yang belum pernah menyentuh Pengaturan tidak kehilangan
+notifikasi apa pun.
+
+### 28.2 N5 — disclaimer di notifikasi kandidat
+
+Push kandidat membawa Entry/Target/Stop Loss tanpa konteks apa pun, padahal AGENTS.md mewajibkan
+setiap permukaan status siap menyatakan eksekusi uang riil masih diblokir. Ditambahkan konstanta
+`CANDIDATE_DISCLAIMER` yang ikut di badan pesan:
+
+> `→ Eksekusi uang riil masih DIBLOKIR. Sinyal ini decision support, bukan ajakan beli.`
+
+### 28.3 N7 — normalisasi simbol
+
+`SignalLifecycleManager.markTriggered` **dan** `reset` memakai `"${symbol.uppercase()}#"`, sedangkan
+key disimpan lewat `cacheKey` → `normalizeSymbol` (buang `/ _ -`). Akibatnya `markTriggered("eth_idr")`
+membentuk prefix `"ETH_IDR#"` yang tidak pernah cocok dengan key `"ETHIDR#SCALPING"`.
+
+Audit asli hanya menyebut `markTriggered` dan masih ragu apakah aktif; **`reset` punya cacat yang
+sama** dan keduanya **aktif** — jalur real trade mengirim `pair` berformat Indodax (`btc_idr`),
+terbukti dari `baseFromPair`/`quoteFromPair` yang melakukan `.replace("_","")` defensif.
+
+### 28.4 Uji & kontrol negatif
+
+| Berkas uji | Test | Menjaga |
+|---|---|---|
+| `util/NotificationGateTest.kt` (baru) | 6 | N4 + sakelar kategori (3 murni, 3 perilaku) |
+| `engine/scalping/SignalLifecycleSymbolNormalizationTest.kt` (baru) | 2 | N7 |
+| `util/CandidateSignalMessageTest.kt` | +1 (jadi 5) | N5 |
+
+Uji perilaku memakai Robolectric + `NotificationManager` sungguhan, jadi ia membuktikan notifikasi
+**benar-benar tidak terpasang** — bukan sekadar memanggil fungsi murni.
+
+Kontrol negatif (ketiga perbaikan dimatikan sekaligus):
+
+| Perbaikan dimatikan | Uji yang GAGAL |
+|---|---|
+| `canNotify` tidak lagi memanggil `allowsNotification` | 3 dari 6 `NotificationGateTest` (yang 3 murni tetap lulus — ia menguji `allowsNotification` langsung) |
+| `CANDIDATE_DISCLAIMER` dilepas dari pesan | 1 dari 5 `CandidateSignalMessageTest` |
+| `normalizeSymbol` → `symbol.uppercase()` | 2 dari 2 `SignalLifecycleSymbolNormalizationTest` |
+| **Total** | **6 dari 13 uji gagal** |
+
+### 28.5 Catatan harness yang perlu diketahui agen berikutnya
+
+Di bawah Robolectric, **membuat `AppPreferences` kedua tidak melihat tulisan instance pertama**
+(jalur pemulihan keystore menimpa prefs). Uji perilaku karena itu menulis lewat
+`AlertNotificationHelper.notificationPrefsForTest(context)` — objek yang **benar-benar** dibaca
+gerbang — bukan lewat `AppPreferences(context)` baru. Bila tidak, uji gagal karena artefak harness,
+bukan karena gerbangnya. Batasnya: uji ini membuktikan "diberi setelan X, gerbang menahan kategori
+Y", bukan "helper membaca berkas prefs aplikasi yang sama".
+
+### 28.6 Laporan
+
+`docs/LAPORAN-batch2-notifikasi-2026-10-16.md`
+
+---
+
+## 29. Status setelah §28
+
+| | |
+|---|---|
+| Unit test (diukur dari XML) | **462 total · 461 lulus · 0 gagal · 1 dilewati** (63 kelas) |
+| Baseline sebelum §28 | **453 total · 452 lulus · 0 gagal · 1 dilewati** (61 kelas) |
+| Tambahan | **+9 test, +2 kelas** |
+| APK debug | 27.877.730 byte |
+| Kesiapan uang riil | **BELUM** — lihat §9.5c |
+
+Sisa temuan: **N6** (dua produsen satu state machine — butuh keputusan desain), **N8** (param
+`onlyWhenBackground` mati), **N9** (default `?: 75` mengarang skor), **N10** (snapshot pair lain
+ikut tercatat), **N11** (tier confidence lintas-mode), **N12** (tanpa cooldown notifikasi kandidat).
+Lihat `docs/bugs/temuan_bugs_notifikasi.md`.
+
+---
+
+## 30. Batch 3a audit jurnal & P&L — J2, J1 (2026-10-16)
+
+Sumber: `docs/bugs/temuan_bugs_jurnal_pnl.md` (audit read-only agen lain, di-pull dari `patch` @
+`eb01dc3`). Batch 3 dikerjakan dalam tiga commit terpisah; ini yang pertama.
+
+Perbaikan mendarat di commit **`d97a539`**.
+
+### 30.1 J2 — satu predikat menang/kalah yang eksklusif
+
+`SignalLogRepository` punya **tiga** definisi menang/kalah. Hanya `buildGroupStats` yang eksklusif;
+`buildTierStats` dan `calculateReliabilitySummary` memakai dua filter **independen**:
+
+```kotlin
+val wins   = resolved.filter { status in WIN_STATUSES || pnl > 0 }
+val losses = resolved.filter { status in LOSS_STATUSES || pnl < 0 }
+```
+
+Sebuah log `HIT_SL` ber-P&L positif masuk **kedua** keranjang ⇒ `winCount + lossCount >
+resolvedCount` dan win-rate bisa melewati 100%.
+
+Akarnya di `recordSignal`: `entryPrice` diambil dari sinyal **pertama**, sedangkan
+`targetPrice1/2` dan `stopLoss` diperbarui dari sinyal **terbaru**. Harga naik jauh ⇒ SL baru berada
+**di atas** entry lama ⇒ harga yang turun menyentuh stop loss justru menghasilkan P&L **positif**.
+
+Perbaikan:
+
+- `database/SignalOutcome.kt` (baru) — `SignalOutcome` + `classifySignalOutcome(status, pnl)`.
+  Prioritas: status menang → status kalah → tanda P&L. Satu predikat dipakai **empat** call site
+  (reliability, tier, group, best-symbol/strategy) — dulu ada definisi keempat di best-symbol.
+- `database/SignalLogPnl.kt` (baru) — `hasEntryDrifted(oldEntry, newEntry)`. Bila entry bergerak
+  > 0,8% (`ENTRY_SPLIT_TOLERANCE`, sengaja sama dengan ambang anti-spam), episode lama ditutup
+  (`resolveSupersededTrackingLog`) dan episode baru dicatat sebagai log terpisah. Level TP/SL
+  **tidak pernah** digabung antar-entry.
+- Rata-rata dan nilai ekstrem hanya dihitung dari log yang P&L-nya **searah** keranjangnya,
+  sehingga keluaran tak masuk akal seperti "rata-rata kalah +90%" tidak mungkin muncul lagi.
+
+### 30.2 J1 — basis net untuk `realizedPnlPct`
+
+`updateTrackingLogWithPrice` menyimpan **selisih harga mentah** ke `realizedPnlPct`, lalu
+`SignalLogScreen` melabelinya **"Net"**. Untuk Tokocrypto USDT, "+0,35%" yang tampil sebagai "Net"
+sebenarnya **rugi** — impas net-nya 0,9735%.
+
+Perbaikan:
+
+- `FeeSchedule.netProfitPctForDirected(entry, price, isBuy, …)` — arah BUY/SELL dibedakan. SELL
+  adalah cerminnya: menjual di `entry` (fee jual) lalu membeli kembali di `price` (fee beli);
+  secara aljabar identik dengan menukar peran `entry` dan `price` di `netProfitPct`, bukan
+  pendekatan.
+- `netSignalPnlPct` dipakai di **tiga** tempat: `updateTrackingLogWithPrice`, `resolveLogManually`,
+  dan `expireTrackingLogsForSymbol`.
+- `maxProfitPct`/`maxDrawdownPct` **tetap kotor** (B6), dan labelnya diperbaiki: dulu UI menulis
+  `"Net +1,20% (gross)"` — dua label bertentangan pada satu angka. Kini `signalPnlLabel()` memilih
+  "Net" atau "Gross" sesuai basis yang benar-benar dipakai, dan `EXPIRED` tanpa P&L menulis
+  "Hasil tidak diketahui" alih-alih mengarang "0,00%".
+
+### 30.3 Efek amnesti — wajib dibaca sebelum membandingkan angka lama
+
+Setelah J1, banyak sinyal yang dulu tampak "menang" akan berubah menjadi kalah / `EXPIRED` negatif.
+Itu **bukan regresi**: friksi round-trip Tokocrypto USDT 0,9735% berarti kenaikan di bawah itu memang
+belum menutup biaya. Angka terukur:
+
+| Pergerakan | Gross | Net (Tokocrypto USDT) |
+|---|---|---|
+| +0,50% | +0,50% | **−0,468950%** |
+| +1,00% | +1,00% | +0,026229% |
+| 0,00% | 0,00% | −0,964130% |
+
+### 30.4 Uji & kontrol negatif
+
+Uji baru: `app/src/test/java/agu/analys/database/SignalOutcomeClassificationTest.kt` (14 kasus).
+
+Kontrol negatif — tiga perbaikan dimatikan sekaligus (filter lama dikembalikan, `netSignalPnlPct`
+dibuat bruto, `hasEntryDrifted` selalu `false`): **9 dari 22 uji GAGAL**, tepat pada penjaga
+masing-masing perbaikan. Yang tetap lulus memang tidak bergantung perbaikan —
+`SignalLogSetupStatsTest` (8 uji) lulus di kedua keadaan karena `buildGroupStats` memang sudah
+eksklusif sejak awal, dan tiga uji `classifySignalOutcome` langsung tidak tersentuh karena yang
+dimatikan adalah call site-nya.
+
+### 30.5 Laporan
+
+`docs/LAPORAN-batch3-jurnal-2026-10-16.md`
+
+---
+
+## 31. Batch 3b keamanan posisi paper — P2, P3, P4 (2026-10-16)
+
+Sumber: `docs/bugs/temuan_bugs_paper_trade.md` (audit read-only agen lain, di-pull dari `patch` @
+`eb01dc3`). Commit kedua dari batch 3.
+
+Perbaikan mendarat di commit **`8d22fbb`**.
+
+**Batas penting:** seluruh temuan P* hanya menyentuh posisi **paper** (`isReal = false`). Ini bukan
+kerusakan uang riil — tapi posisi paper adalah dasar keputusan "apakah scalp punya edge", jadi
+angkanya harus benar sebelum uang riil dipromosikan.
+
+### 31.1 P2 — gerbang mode + lantai friksi untuk SL sinyal
+
+`tryPaperAutoBuy` hanya memeriksa `signal.action == BUY` dan `stageQualifies(signal.scalpingStage)`;
+`transition.mode` **tidak pernah** diperiksa. Evaluator SWING/INTRADAY memasang `ScalpingStage.ENTRY`
+untuk sinyal BUY, sehingga sinyal mereka lolos ambang yang sama. SL-nya 1,5–2,8%
+(`IntradayEvaluator` memakai `coerceAtMost(price * 0.985)`), sementara lantai friksi Tokocrypto USDT
+= **5,8128%** ⇒ satu SL ≈ −1,3R…−2R, dan mesin exit scalping (time-stop `maxHoldBarsM1`, horizon
+~2 jam) memotong posisi ber-horizon harian sebagai `TIMEOUT` palsu.
+
+Perbaikan (dua bagian, keduanya diuji):
+
+1. **Gerbang mode** di `tryPaperAutoBuy` — `if (transition.mode != StrategyMode.SCALPING) return false`.
+   Ditempatkan **sebelum** `stageQualifies`, bukan sesudah: kalau sesudah, cabang log diagnostiknya
+   tidak akan pernah tercapai (sinyal non-scalping sudah keluar lebih dulu).
+2. **Resolver murni** `engine/scalping/PaperStopResolver.kt` — `frictionFloorPct(buyFee, sellFee,
+   slippage, multiple)` + `resolve(signalSl, entry, floorPct)`. Aturannya **hanya melebar, tidak
+   pernah menyempitkan** SL:
+
+```kotlin
+val signalValid = signalSl.isFinite() && signalSl > 0.0 && signalSl < entry
+val floorPrice  = entry * (1.0 - floorPct / 100.0)
+return if (signalValid && signalSl <= floorPrice) ResolvedPaperStop(signalSl, SIGNAL)
+       else ResolvedPaperStop(floorPrice, FRICTION_FLOOR)
+```
+
+Resolver yang sama kini dipakai **empat** jalur: auto-buy (`armPaperExitEngine`), beli manual
+(`TradingViewModelSync`), re-arm DCA, dan serah-terima ke jalur auto-sell lama saat rehidrasi.
+Sebelumnya masing-masing menghitung sendiri, dan jalur "SL dari sinyal" **tidak** memeriksa lantai
+sama sekali.
+
+### 31.2 P3 — DCA me-re-arm mesin exit; SL ≥ entry tidak boleh menyalakan auto-sell
+
+DCA mengubah `entry` posisi menjadi harga rata-rata, tetapi `armPaperExitEngine` dipanggil dengan
+`force = false` (default), jadi mesin lama yang memakai entry fill **pertama** tidak pernah diganti.
+Bila DCA dilakukan di harga lebih rendah, rata-rata turun **di bawah SL lama**; setelah restart
+`PaperRehydrate` menolak SL itu (`stopLoss >= entry`) dan mengembalikannya sebagai
+`HandBackToLegacy` — yang dulu menulis SL itu apa adanya **sambil menyalakan auto-sell**. Pada tick
+berikutnya jalur legacy menjual **seluruh** posisi di harga pasar dengan label `STOP_LOSS`, padahal
+tidak ada stop yang tersentuh.
+
+Perbaikan:
+
+- `TradingViewModelSync` — `isDca` dihitung sekali, `effectiveEntry` menggantikan `fillPrice`, dan
+  `armPaperExitEngine(..., force = isDca)`. Ini satu-satunya jalur yang boleh menimpa mesin hidup.
+- `HandBackToLegacy` di `PaperAutoTradeCoordinator` — SL diambil dari `PaperStopResolver` yang sama,
+  dan `enabled = resolvedHandBack.usable`. Bila lantai friksi nonaktif **dan** SL tersimpan tidak
+  valid, auto-sell sengaja **tidak** dinyalakan: posisi tanpa stop lebih baik daripada penjualan
+  pasar berlabel `STOP_LOSS` yang salah.
+- Catatan log per sumber SL (`SIGNAL` / `FRICTION_FLOOR` / `NONE`) supaya keputusan itu terbaca.
+
+**Penyimpangan dari rekomendasi audit.** Audit menyarankan resolver `PaperRearmDecision.decide(...)`
+dengan tiga cabang (`Rearm`/`Reset`/`Keep`). Yang dipakai di sini: `force = isDca` di pemanggil DCA,
+dan invarian "SL < entry" ditegakkan di `PaperStopResolver` yang dipakai semua jalur. Alasannya:
+cabang `Reset`/`Keep` belum punya konsumen nyata — menambah objek keputusan tanpa konsumen hanya
+menghasilkan kode mati. Invariannya sendiri diuji lewat sweep.
+
+### 31.3 P4 — `atrPct` diteruskan di jalur beli manual
+
+`atrPctAt` adalah fungsi `private` di `PaperAutoTradeCoordinator`, sehingga `TradingViewModelSync`
+tidak bisa memakainya dan mengirim `atrPct = 0.0` untuk setiap posisi hasil beli manual. Karena
+`0.0` berarti "ATR tidak diketahui", mesin jatuh ke ambang BE/trailing persen tetap — dan nilai nol
+itu ikut tersimpan ke disk, jadi kerusakannya persisten.
+
+Perbaikan: rumusnya diekstrak ke `engine/scalping/PaperAtr.kt` (`PaperAtr.of(atr, referencePrice)`),
+dipakai `atrPctAt` **dan** jalur beli manual. Ini sekaligus efek samping perbaikan P3: nilai
+`atrPct` dikirim bersamaan dengan `force = isDca`.
+
+### 31.4 Uji & kontrol negatif
+
+Uji baru: `app/src/test/java/agu/analys/engine/scalping/PaperStopResolverTest.kt` (16 kasus) —
+lantai 5,8128%, SL sinyal 2% dilebarkan, SL tepat di lantai dianggap memenuhi, skenario P3
+(entry 94 / SL 95), sweep `resolve` atas 5 entry × 7 SL, penjaga ATR, dan penjaga
+`ScalpingConfig.MIN_FRICTION_MULTIPLE >= 6.0`.
+
+Kontrol negatif: pelebaran lantai dimatikan (syarat `signalSl < entry` dan `signalSl <= floorPrice`
+dihapus dari `resolve`) + `PaperAtr.of` dibuat tanpa penjaga ⇒ **4 dari 16 uji GAGAL**, tepat pada
+penjaga masing-masing perbaikan.
+
+### 31.5 Laporan
+
+`docs/LAPORAN-batch3-paper-safety-2026-10-16.md`
+
+---
+
+## 32. Batch 3c rehidrasi lintas bursa — P1 (2026-10-16)
+
+Sumber: `docs/bugs/temuan_bugs_paper_trade.md`. Commit ketiga (terakhir) dari batch 3.
+
+Perbaikan mendarat di commit **`e33b238`**. Dengan ini **ketiga temuan kritis** P1, P2, P3 tertutup.
+
+### 32.1 Masalah
+
+Rehidrasi hanya membaca bursa **aktif**:
+
+```kotlin
+val exchange = prefs.marketDataSource.name          // hanya bursa AKTIF
+val symbols = positionStore.getPaperEngineSymbols(isReal = false, exchange = exchange)
+```
+
+Rantainya: posisi paper di Indodax (mesin hanya di memori, `auto_sell_enabled = false` karena
+diambil alih engine) → pengguna pindah ke Tokocrypto → app di-kill → dibuka lagi (bursa aktif
+Tokocrypto) → rehidrasi hanya membaca partisi `tokocrypto_sim_*` ⇒ mesin Indodax **tidak pernah
+dibangun**. `setMarketDataSource` juga tidak memicu rehidrasi, jadi **kembali ke Indodax pun tidak
+memulihkan apa pun**. Polling 10 detik menambah masalah: `getAllActiveTrailingSymbols` mensyaratkan
+`trailing_enabled = true` sedangkan engine paper mematikannya, dan
+`PaperAutoTradeRuntime.activeSymbols(ex)` juga hanya bursa aktif.
+
+Akibatnya posisi itu tidak pernah punya SL, TP, BE, trailing, maupun time-stop — **selamanya** —
+sementara `countActivePaperPositions()` (global, tanpa bursa) tetap menghitungnya sehingga ikut
+memakan satu dari tiga slot auto-buy.
+
+### 32.2 Perbaikan
+
+1. **Enumerasi lintas bursa.** `trading/PaperEnginePosition.kt` (baru) +
+   `SpotPositionStore.getPaperEnginePositions(isReal)`: menyisir semua key berakhiran
+   `_paper_engine`, mem-parse `"${exchange}_${real|sim}_${symbol}"`, dan mengembalikan pasangan
+   bursa + simbol. Kuncinya sudah memuat bursa, jadi tidak perlu tahu bursa mana yang aktif.
+2. **Resolver murni** `engine/scalping/PaperRehydrateScope.kt` — `decide(storedExchanges,
+   activeExchange)`: semua bursa tersimpan ikut, bursa aktif **didahulukan**, sisanya alfabetis
+   supaya deterministik.
+3. **Rehidrasi mengiterasi seluruh cakupan.** `rehydratePaperAutoExit` membangun target
+   `(exchange, symbol)` dari `decide(...)`, bukan dari satu bursa.
+4. **Ganti bursa memicu rehidrasi.** `initSubscriptionsAndPolling` mengumpulkan aliran
+   `marketDataSource` dan memicu rehidrasi saat nilainya berubah (emisi pertama dilewati karena
+   sudah ditangani rehidrasi awal), lalu `checkAndStopTrailingServiceIfEmpty()`.
+5. **Polling menemukan simbol dari disk.** `startTrailingPolling` menambahkan
+   `getPaperEngineSymbols(isReal = false, exchange = currentEx)` — `PaperAutoTradeRuntime` kosong
+   setelah restart sampai rehidrasi selesai, jadi tanpa ini posisi paper bisa terlewat satu putaran.
+6. **Peringatan bursa non-aktif.** Setelah rehidrasi, bursa yang tidak aktif dicatat eksplisit di
+   log berikut alasannya.
+
+### 32.3 Batas yang jujur — perbaikan ini memulihkan proteksi, bukan menghidupkannya
+
+Mesin exit untuk bursa non-aktif **dibangun**, tetapi belum bisa dievaluasi: kedua pemanggil
+`evaluatePaperAutoExit` (`TradingViewModel.kt:157` dan `TradingViewModelSync.kt:669`) memakai
+`prefs.marketDataSource.name`, dan harga hanya tersedia untuk bursa yang sedang dipakai.
+
+Jadi yang berubah:
+
+| | Sebelum | Sesudah |
+|---|---|---|
+| Posisi di bursa non-aktif saat ini | Tidak terlindungi | Tidak terlindungi (sama) |
+| Kembali ke bursa itu | Mesin **tetap kosong** — posisi menggantung permanen | Mesin sudah dipulihkan, proteksi langsung hidup |
+| Progres FSM (BE/trailing/time-stop) | Hilang | Dipulihkan |
+| Slot `maxConcurrentPositions` | Terpakai tanpa terlihat | Terpakai, tetapi ada peringatan di log |
+
+Klaim audit bahwa posisi itu "menggantung **permanen**" memang benar dan itulah yang ditutup;
+tetapi jangan dibaca sebagai "posisi di bursa non-aktif kini terlindungi otomatis".
+
+### 32.4 Uji & kontrol negatif
+
+Uji baru:
+
+- `app/src/test/java/agu/analys/engine/scalping/PaperRehydrateScopeTest.kt` (7 kasus) — urutan bursa,
+  bursa aktif di depan, duplikat/spasi/huruf kecil, bursa aktif di luar daftar, daftar kosong.
+- `app/src/test/java/agu/analys/trading/SpotPositionStorePaperEngineScopeTest.kt` (6 kasus,
+  Robolectric) — enumerasi lintas bursa, filter `real`/`sim`, hanya `HOLDING`, hanya flag
+  `_paper_engine` aktif.
+
+Kontrol negatif: `PaperRehydrateScope.decide` dikembalikan ke "hanya bursa aktif" + filter bursa
+di-hardcode ke `tokocrypto` di `getPaperEnginePositions` ⇒ **8 dari 13 uji GAGAL**.
+
+### 32.5 Laporan
+
+`docs/LAPORAN-batch3-rehidrasi-2026-10-16.md`
+
+---
+
+## 33. Batch 4 — J7: radar jual ikut basis FSM (2026-10-16)
+
+Sumber: `docs/bugs/temuan_bugs_jurnal_pnl.md` butir **J7**. Ini satu-satunya temuan sisa audit yang
+menyentuh **permukaan uang riil**: kartu yang paling sering dibaca pengguna tepat sebelum menekan
+tombol jual.
+
+Perbaikan mendarat di commit **`d1097aa`**.
+
+### 33.1 Masalah
+
+`ui/components/detail/RadarSellSection.kt` menghitung sendiri, terpisah dari `FeeSchedule`:
+
+```kotlin
+val sellFeeIdr   = grossSellValueIdr * (activeFeePct / 100.0)   // hanya fee jual
+val costBasisIdr = activeSellQty * effectiveBuyPrice            // TANPA fee beli
+val netProfitIdr = netReceivedSellIdr - costBasisIdr            // tanpa slippage
+```
+
+Lalu `SellCalculationCard` menulis **"JUAL UNTUNG (PROFIT) … sudah bersih fee & pajak"** di atas
+angka tersebut.
+
+| Pair (taker) | Friksi di kartu | Friksi FSM | Selisih |
+|---|---|---|---|
+| Tokocrypto IDR | 0,4322% | 0,8186% | **0,3864 pp** |
+| Tokocrypto USDT | 0,4044% | **0,9735%** | **0,5691 pp** |
+
+> **Koreksi angka audit.** Dokumen temuan menulis friksi FSM Tokocrypto USDT sebagai **0,8226%**
+> (selisih 0,4182 pp). Angka itu tidak cocok dengan rumus mana pun: bentuk aditif memberi 0,9688%
+> dan bentuk multiplikatif — yang dipakai `FeeSchedule` dan sudah terdokumentasi sebagai 0,9735% di
+> §24 dan `NetPnlParityTest` — memberi **0,9735%**. Selisih yang benar adalah **0,5691 pp**, bukan
+> 0,4182 pp. Arah temuan tidak berubah; hanya angkanya yang perlu dikoreksi supaya tidak dikutip
+> sebagai kebenaran.
+
+Akibatnya kartu mengklaim untung pada kenaikan harga **+0,50%** (kartu lama: +0,0656%), padahal
+net-nya **rugi −0,3160%**.
+
+### 33.2 Akar penyebab — §24 memigrasi *evaluator*, bukan *kartunya*
+
+§24.3 mencatat "Radar jual & kartu posisi" sudah diseragamkan. Yang benar-benar dipindahkan saat itu
+adalah **`engine/sell/SellSignalEvaluator.kt`** (evaluator ambang `READY_TO_SELL`) dan
+`model/PositionContext.kt`. Judul `NetPnlParityTest` sendiri menyebut "radar jual
+(`SellSignalEvaluator`)" — jadi "radar jual" di §24 bermakna *evaluator*, sedangkan **kartu UI**
+`RadarSellSection` + `SellCalculationCard` tidak pernah ikut.
+
+Ikut tidak akurat: §24.1 menulis basis lama radar sebagai "fee jual **maker** saja". Kode hari ini
+memakai `activeFeePct`, yaitu tarif sesuai toggle Limit·Maker / Instant·Taker — bukan maker tetap.
+
+### 33.3 Perbaikan
+
+1. **Resolver murni baru** `trading/SellEstimate.kt` — `SellEstimate` +
+   `SellEstimateResolver.resolve(quantity, entryPrice, sellPrice, buyFeePct, sellFeePct, slippagePct)`.
+   Seluruh angkanya mendelegasi ke `FeeSchedule.netSellValue` dan `FeeSchedule.costBasisNet`, jadi
+   basisnya mustahil menyimpang dari FSM lagi.
+2. **Basis biaya yang dipakai:**
+   - fee **jual** = tarif order type yang dipilih pengguna (maker/taker) — itu yang benar-benar
+     dibayar pada kaki jual yang sedang dipricilkan;
+   - fee **beli** = tarif **taker**. Order beli sudah terjadi dan jenisnya tidak diketahui di sini,
+     jadi dipakai asumsi terburuk yang juga basis FSM (`netProfitPctFor` default taker);
+   - **slippage** dua sisi, mengikuti konvensi `FeeSchedule` (slippage tetap dibebankan walau maker).
+3. **`RadarSellSection` tidak menghitung apa pun lagi**; `SellCalculationCard` menerima satu objek
+   `SellEstimate` (sebelumnya 8 parameter angka terpisah).
+4. **Label diperbaiki** supaya klaimnya bisa diverifikasi:
+   - `"Potongan Biaya & Pajak (0,43%)"` → `"Potongan Biaya, Pajak & Slippage"` + sub-label yang
+     menyebut komponennya satu per satu (`"Beli taker 0.22% + Jual taker 0.43% + Slippage 2×0.08%"`);
+   - `"Total Modal Pembelian"` → `"Total Modal + Biaya Beli & Slippage"`;
+   - `"sudah bersih fee & pajak"` → `"setelah biaya beli, biaya jual, pajak & slippage"`;
+   - saat modal belum diketahui, sub-label berkata jujur `"(biaya beli belum diketahui)"` alih-alih
+     menampilkan persen tunggal yang seolah sudah lengkap.
+5. **`slippagePct` disalurkan** dari `scalpingRuntimeConfig.slippagePct`:
+   `DetailChartScreen` → `WaitingEntryRadarCard` → `RadarTransactionFeeSection` → `RadarSellSection`.
+
+Invarian yang dijaga: `(netProceeds / costBasisNet − 1) × 100` == `netProfitPct` ==
+`FeeSchedule.netProfitPct` untuk tarif yang sama.
+
+### 33.4 Efek dan selisih yang **sengaja** tersisa
+
+| Mode | Friksi kartu (sebelum) | Friksi kartu (sesudah) | FSM |
+|---|---|---|---|
+| Tokocrypto IDR taker | 0,4322% | **0,8186%** | 0,8186% |
+| Tokocrypto IDR maker | 0,3322% | **0,7174%** | 0,8186% |
+| Tokocrypto USDT taker | 0,4044% | **0,9735%** | 0,9735% |
+
+Pada mode **taker** kartu kini sama persis dengan FSM. Pada mode **maker** masih berbeda 0,1012 pp,
+dan itu disengaja: pengguna memang memilih limit order untuk kaki jual, jadi fee maker-lah yang akan
+dibayar. Yang tidak boleh lagi terjadi adalah memotong fee jual saja lalu mengklaim "sudah bersih".
+
+Efek amnesti (kelas yang sama dengan J1) — bukan regresi:
+
+| Bruto | Kartu lama | Kartu sekarang |
+|---|---|---|
+| +0,50% | **+0,0656% "UNTUNG"** | **−0,3160% RUGI** |
+| Ambang pertama kali "JUAL UNTUNG" muncul | ≈ **+0,4341%** | ≈ **+0,8186%** |
+
+### 33.5 Uji & kontrol negatif
+
+Uji baru: `app/src/test/java/agu/analys/trading/SellEstimateTest.kt` — **17 kasus**: skenario J7,
+impas, paritas `FeeSchedule` lintas rentang harga, invarian rupiah↔persen, komponen friksi,
+per-bursa (Tokocrypto USDT, Indodax), mode maker, slippage dimatikan, penjaga masukan tidak valid,
+dan tiga uji teks kartu.
+
+Kontrol negatif: resolver dikembalikan ke rumus lama (hanya fee jual, tanpa fee beli, tanpa
+slippage) **dan** label lama ("sudah bersih fee & pajak") dipulihkan ⇒ **13 dari 17 uji GAGAL**,
+tepat pada penjaga masing-masing. Empat yang tetap lulus memang tidak menguji basis: invarian
+internal rupiah↔persen (bertahan karena dihitung dari angka yang sama) dan tiga penjaga masukan
+(modal tidak diketahui, harga jual nol, masukan NaN/tak hingga).
+
+### 33.6 Laporan
+
+`docs/LAPORAN-batch4-j7-2026-10-16.md`
+
+
+
+---
+
+## 34. Batch 5a — J4 & N10: jurnal memakai simbol yang dievaluasi engine (2026-10-16)
+
+### 34.1 Masalah
+
+Dua temuan, satu akar: **field turunan sinyal menempel pada simbol yang bukan pemiliknya.**
+Audit menulisnya terpisah karena muncul di dua berkas:
+
+- **J4** (`docs/bugs/temuan_bugs_jurnal_pnl.md` §3) — `TradingViewModel.listenToEngineSignals`
+  **menimpa** `marketSymbol` yang sudah benar:
+  ```kotlin
+  list.add(0, signal.copy(marketSymbol = selectedPair.value.symbol))   // menimpa field engine
+  signalLogRepository.recordSignal(symbol = selectedPair.value.symbol, …)
+  ```
+- **N10** (`docs/bugs/temuan_bugs_notifikasi.md`, baris tabel N10) — jalur beli memakai
+  `engine.signalState.value` **tanpa memeriksa** `signal.marketSymbol == symbol`
+  (`TradeSignalSnapshot.capture:275`, `TradingViewModelSync.kt:253-282`).
+
+Jendelanya nyata: `selectPair()` mengganti pair lebih dulu, sedangkan `engine.signalState.value`
+masih berisi hasil evaluasi pair **lama** sampai tick berikutnya. Selama jendela itu jurnal
+menyimpan entry/TP1/TP2/SL/confidence **BTC** berlabel **ETH**, dan `SignalHistoryPanel.kt:74`
+(filter `marketSymbol`) tidak bisa menyelamatkannya — field-nya sudah ditimpa, jadi kartu
+"RIWAYAT & LOG SINYAL" untuk ETH menampilkan sinyal BTC lengkap dengan harga BTC.
+
+### 34.2 Mengapa ini bukan sekadar salah label
+
+Jurnal sinyal adalah **basis statistik reliability** (`SignalReliabilitySummary`) dan basis
+jurnal trade. Angka pair lain yang menempel di pair ini membuat dua-duanya bohong, dan
+kesalahannya tidak terlihat: barisnya rapi, hanya saja isinya milik koin lain.
+
+### 34.3 Perbaikan
+
+Satu resolver murni baru: `app/src/main/java/agu/analys/trading/SignalSymbolAttribution.kt`.
+
+| Fungsi | Menegakkan |
+|---|---|
+| `normalize(symbol)` | `btc_idr`, `BTC/IDR`, `BTC-IDR`, `BTC IDR` → `BTCIDR` |
+| `matches(requested, signalSymbol)` | **N10** — simbol kosong di salah satu sisi = **tidak cocok** ("tidak tahu" bukan "cocok") |
+| `journalSymbol(signalSymbol, selected)` | **J4** — simbol engine; jatuh ke pair yang dibuka hanya bila engine tidak mengisi |
+| `isRecordable(symbol)` | baris tanpa simbol tidak boleh ditulis |
+| `entryPrice(signalEntryPrice, tickPrice)` | harga fallback milik **simbol jurnal**, bukan tick pair yang kebetulan dibuka |
+| `attributedFields(...)` | **N10** — bila tidak cocok, confidence/TP/SL dikosongkan, harga & waktu jatuh ke transaksi nyata |
+
+Yang berubah di pemanggil:
+
+1. `TradeSignalSnapshot.capture` — sinyal digerbang sekali di pintu masuk
+   (`signal?.takeIf { SignalSymbolAttribution.matches(symbol, it.marketSymbol) }`), sehingga
+   **keempat** pemanggilnya (`TradingViewModelSync:101`, `:281`, `TradingViewModelOrders:82`,
+   `:415`) terlindungi sekaligus. Field turunan sinyal (confidence, regime, pattern, alasan,
+   setup/skor scalping, entry zone) ikut terbuang bila sinyal milik pair lain.
+2. `TradingViewModelSync` jalur beli **real** dan **paper** — `signalPrice`, `signalConfidence`,
+   `targetPrice1/2`, `stopLossPrice`, `signalTime` lewat `attributedFields`.
+   `tp1`/`tp2` di jalur real **tidak** disentuh: nilainya datang dari parameter order, bukan engine.
+3. `listenToEngineSignals` — memakai `journalSymbol`, berhenti bila simbol kosong, dan harga
+   fallback diambil dari `dashboardTicks[journalSymbol]`.
+
+**Yang sengaja dikosongkan, bukan dipalsukan.** Bila sinyal bukan milik simbol ini, confidence
+menjadi `0` dan TP/SL menjadi `0.0` — bukan memakai angka pair lain dengan label pair ini.
+`0` terbaca sebagai "tidak ada data", sedangkan angka pair lain terbaca sebagai data yang salah.
+
+### 34.4 Uji & kontrol negatif
+
+Uji baru: `app/src/test/java/agu/analys/trading/SignalSymbolAttributionTest.kt` — **20 kasus**:
+normalisasi format simbol, `matches` (format beda/simbol beda/kosong), `journalSymbol` saat pair
+berganti, `isRecordable`, `entryPrice`, dan tujuh kasus `attributedFields` (cocok, tidak cocok,
+harga nol, waktu nol, `marketSymbol` kosong).
+
+Kontrol negatif: resolver dikembalikan ke perilaku lama (`matches` selalu `true`,
+`journalSymbol` mengembalikan pair yang dibuka, `entryPrice` tanpa fallback tick) ⇒
+**10 dari 20 uji GAGAL**, tepat pada penjaga masing-masing. Sepuluh yang tetap lulus memang tidak
+menguji atribusi: normalisasi format, `isRecordable`, `entryPrice` saat harga sinyal ada, dan
+kasus "simbol sama" yang memang tidak berubah.
+
+Angka terukur (dari XML): **68 kelas / 522 uji / 0 gagal / 1 dilewati → 69 kelas / 542 uji /
+0 gagal / 1 dilewati** (+1 kelas, +20 uji).
+
+### 34.5 Laporan
+
+`docs/LAPORAN-batch5-j4n10-2026-10-16.md`
+
+---
+
+## 35. Batch 5b — J3: `SignalLogViewModel` mengikat bursa sekali saat konstruksi (2026-10-16)
+
+### 35.1 Masalah
+
+```kotlin
+val currentExchange: String get() = prefs.marketDataSource.name      // getter, tapi…
+val allSignalLogs: StateFlow<List<SignalLogEntity>> =
+    signalLogRepository.getLogsByExchangeFlow(currentExchange)        // dievaluasi SEKALI
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+```
+
+Parameter Room terikat saat flow dibuat (`dao.getLogsByExchangeFlow(exchange.uppercase())`), jadi
+mengganti bursa **tidak** mengulang subscription. ViewModel-nya dibuat sekali di
+`TradingViewModel.kt:52` dan bertahan sepanjang activity.
+
+Dampaknya: buka app di Tokocrypto → pindah ke Indodax → buka tab "Log & Evaluasi Sinyal": seluruh
+log **dan** tabel "RELIABILITAS SKOR KEYAKINAN" masih berisi data Tokocrypto, tanpa label penjelas.
+Melanggar aturan isolasi exchange untuk state.
+
+Jejak bahwa pola reaktif memang pernah dimaksudkan: `flatMapLatest` sudah di-import di berkas itu
+tetapi tidak pernah dipakai.
+
+### 35.2 Perbaikan
+
+Bursa kini **mengalir** dari `settingsViewModel.marketDataSource` (sudah `StateFlow<MarketDataSource>`
+dan diperbarui oleh `setMarketDataSource`), diteruskan ke `SignalLogViewModel` lewat konstruktor.
+
+Pengikatannya diekstrak ke `database/SignalLogExchangeBinder.kt` supaya bisa diuji tanpa Android:
+
+```kotlin
+fun <T> bind(exchangeNames: Flow<String>, query: (String) -> Flow<T>): Flow<T> =
+    exchangeNames.map { it.trim().uppercase() }.distinctUntilChanged().flatMapLatest { query(it) }
+```
+
+- `flatMapLatest` — subscription lama dibatalkan, query dijalankan ulang untuk bursa baru.
+- `distinctUntilChanged` — nama yang sama berturut-turut tidak membuka query Room baru.
+- `trim().uppercase()` — sepakat dengan DAO yang juga memanggil `uppercase()`.
+
+`currentExchange` kini membaca `exchangeFlow.value.name`, jadi bursa punya **satu** sumber, bukan
+dua (getter `prefs` + flow).
+
+### 35.3 Uji & kontrol negatif
+
+Uji baru: `app/src/test/java/agu/analys/database/SignalLogExchangeBinderTest.kt` — **7 kasus**:
+query untuk bursa awal, ganti bursa mengulang subscription, nilai mengikuti bursa terakhir, nama
+sama berturut-turut tidak mengulang subscription, pembakuan nama (huruf kecil, spasi), dan tiga
+pergantian berturut-turut.
+
+Kontrol negatif: binder dikembalikan ke perilaku lama (`take(1)` — bursa dibaca sekali, tanpa
+pembakuan nama) ⇒ **5 dari 7 uji GAGAL**. Dua yang tetap lulus memang tidak membedakan reaktivitas:
+"query dijalankan untuk bursa awal" dan "nama sama berturut-turut tidak mengulang subscription" —
+keduanya juga benar pada versi lama, jadi keduanya bukan bukti perbaikan.
+
+Angka terukur (dari XML): **69 kelas / 542 uji → 70 kelas / 549 uji**, 0 gagal, 1 dilewati.
+
+### 35.4 Yang tidak ikut berubah (batas perbaikan)
+
+- **`SignalLogScreen` tidak diuji otomatis.** Perbaikan diuji pada pengikat alirnya, bukan pada
+  komposisi layarnya.
+- **Hanya jurnal sinyal.** Pola "bursa dibaca sekali" kemungkinan ada di ViewModel lain; perbaikan
+  ini tidak menyapu semuanya — hanya yang menjadi temuan J3.
+
+### 35.5 Laporan
+
+`docs/LAPORAN-batch5-j3-2026-10-16.md`
+
+---
+
+## 36. Batch 5c — P6: dua jalur pemantauan menghasilkan exit berbeda (2026-10-16)
+
+### 36.1 Masalah
+
+```kotlin
+// TradingViewModel.kt — pair SEDANG DIBUKA: jendela momentum DIKIRIM
+runCatching { evaluatePaperAutoExit(symbol, currentEx, price, recentCandles.takeLast(15)) }
+
+// TradingViewModelSync.kt — posisi di LATAR: jendela momentum KOSONG
+runCatching { evaluatePaperAutoExit(tick.symbol, currentEx, tick.price) }
+```
+
+`EARLY_PROFIT` hanya mungkin terjadi bila jendela tidak kosong
+(`PaperExitResolver.onBar:635` — `window14.isNotEmpty()`). Jadi trade yang sama:
+
+- keluar `EARLY_PROFIT` bila kebetulan pengguna membuka pair-nya,
+- keluar `TP2` bila tidak.
+
+Jurnal lalu berisi dua alasan berbeda untuk keputusan yang seharusnya identik, dan app tidak
+sebanding dengan `tools/scalp_replay.py` — padahal paritas itulah alasan jurnal ini ada.
+
+### 36.2 Perbaikan
+
+**Jendela momentum tidak lagi dikirim pemanggil.** `evaluatePaperAutoExit` kini membacanya sendiri
+dari satu sumber: cache M1 `MtfCacheManager`, digerbang oleh `trading/PaperExitMomentumWindow.kt`.
+
+| Bagian | Keputusan |
+|---|---|
+| Sumber | `MtfCacheManager.getCachedCandles(symbol, Timeframe.M1, exchange)` — sama untuk kedua pemanggil |
+| Syarat segar | **mengikuti `MtfCacheManager.isCacheValid(M1)`**: ≥20 bar, umur ≤180 detik — bukan ambang baru |
+| Ukuran | `takeLast(15)` — sama dengan jendela replay (`bars.subList(max(0, j-14), j+1)`) |
+| Bila tidak segar | jendela kosong → engine menahan diri dari early-profit |
+
+Kedua pemanggil kini memanggil `evaluatePaperAutoExit(symbol, currentEx, price)` — **identik**.
+Ini sengaja membuat `EARLY_PROFIT` lebih jarang di jalur foreground: persis itulah inti temuan.
+Yang dijamin bukan "jendela selalu ada", melainkan **"kedua jalur mendapat jendela yang sama"**.
+
+### 36.3 Uji & kontrol negatif
+
+Uji baru: `app/src/test/java/agu/analys/trading/PaperExitMomentumWindowTest.kt` — **12 kasus**:
+konversi stempel detik/milidetik, `isFresh` (segar, <20 bar, kosong/null, >180 detik, batas tepat
+180.000 ms, stempel detik), dan `resolve` (ambil 15 terakhir, cache basi, kurang bar, null, tidak
+pernah lebih dari 15).
+
+Kontrol negatif: aturan kesegaran dihapus (`isFresh` selalu `true`, `resolve` meneruskan apa
+adanya) ⇒ **5 dari 12 uji GAGAL**. Tujuh yang tetap lulus memang tidak menguji aturan kesegaran:
+konversi stempel, "cache segar layak dipakai", "jendela diambil dari cache segar", "null
+diperlakukan seperti kosong", dan "tidak pernah lebih dari 15".
+
+Angka terukur (dari XML): **70 kelas / 549 uji → 71 kelas / 561 uji**, 0 gagal, 1 dilewati.
+
+### 36.4 Yang belum ikut berubah (dicatat, bukan diklaim)
+
+Bagian kedua P6 — `peak` di jalur latar tertinggal dari high M1 karena bar sintetis dibuat dengan
+OHLC identik dan sampling 10 detik — **tidak** diperbaiki. Ini bukan cabang kode yang berbeda
+antar pemanggil, melainkan keterbatasan sumber data: tidak ada umpan intrabar, jadi `peak` hanya
+bisa setinggi harga tick yang kebetulan tersampel. Memaksa `bar.high` dari candle M1 terakhir
+berarti menghitung ulang bar yang sudah dihitung mesin, dan berisiko menggandakan
+peak/time-stop/ATR — itu perubahan berbeda yang perlu temuan dan uji sendiri.
+
+### 36.5 Laporan
+
+`docs/LAPORAN-batch5-p6-2026-10-16.md`
+
+---
+
+## 37. Batch 5d — P5: kartu FSM di layar simulasi dihapus tick pair lain (2026-10-16)
+
+### 37.1 Masalah
+
+```kotlin
+// PaperAutoTradeCoordinator.kt — dievaluasi untuk SETIAP simbol pada loop polling
+val machine = PaperAutoTradeRuntime.machineFor(exchange, symbol)
+if (machine == null) {
+    // Tidak ada posisi paper berjalan -> pastikan kartu FSM kosong.
+    publishPaperExitSnapshot(null)   // ← menimpa snapshot SEMUA posisi
+    return null
+}
+```
+
+`publishPaperExitSnapshot` menulis ke **satu** `MutableStateFlow` global, sementara
+`evaluatePaperAutoExit` dipanggil untuk setiap simbol yang mendapat tick
+(`TradingViewModelSync.kt`) **dan** untuk pair yang dipilih (`TradingViewModel.kt`).
+
+Dampaknya: pengguna membuka detail BTC sementara posisi paper-nya ada di AMP/USDT — kartu FSM di
+layar simulasi berkedip hilang. Persis kebingungan "satu state untuk dua tampilan" yang dulu
+membuat fitur §14/§15 dibuang.
+
+### 37.2 Perbaikan
+
+Snapshot kini **per posisi**:
+
+- `_paperExitSnapshots: MutableStateFlow<Map<String, PaperExitSnapshot>>`, berkunci
+  `PaperAutoTradeRuntime.key(exchange, symbol)` — kunci yang **sudah dipakai** mesin, bukan
+  format baru, supaya tidak ada dua definisi kunci posisi.
+- `publishPaperExitSnapshot(exchange, symbol, snapshot)` — `null` menghapus **entri posisi itu
+  saja**.
+- Reduksinya diekstrak ke `trading/PaperExitSnapshots.kt` agar bisa diuji tanpa Android.
+
+Konsumen:
+
+| Layar | Sebelum | Sekarang |
+|---|---|---|
+| `TradeSimulationScreen` | membaca snapshot global | `paperSnapshotAt(marketSource.name, selectedPair.symbol)` — posisi pair yang sedang dibuka |
+| `DetailChartScreen` | membaca snapshot global (hanya pemicu hitung ulang) | membaca peta per posisi; kartunya tetap lewat `paperSnapshotFor` |
+
+### 37.3 Uji & kontrol negatif
+
+Uji baru: `app/src/test/java/agu/analys/trading/PaperExitSnapshotsTest.kt` — **10 kasus**: bentuk
+kunci runtime (`TOKOCRYPTO|BTCIDR`, pemisahan bursa untuk simbol sama), publish menyimpan di kunci
+posisi, **simbol tanpa mesin tidak menghapus snapshot simbol lain** (inti P5), memperbarui satu
+posisi tidak menyentuh posisi lain, `null` pada kunci yang tidak ada mengembalikan peta yang sama,
+kunci sama ditimpa, dua bursa untuk simbol sama terpisah, dan dua kasus `forPosition`.
+
+Kontrol negatif: `publish` dikembalikan ke perilaku lama (`null` mengosongkan **seluruh** peta,
+snapshot baru menggantikan peta) ⇒ **4 dari 10 uji GAGAL**. Enam yang tetap lulus memang tidak
+menguji isolasi antar posisi: dua bentuk kunci, "snapshot tersimpan di bawah kunci posisinya",
+"kunci sama ditimpa", dan dua kasus `forPosition`.
+
+Angka terukur (dari XML): **71 kelas / 561 uji → 72 kelas / 571 uji**, 0 gagal, 1 dilewati.
+
+### 37.4 Perubahan perilaku yang perlu diketahui
+
+Layar simulasi kini menampilkan FSM **pair yang sedang dibuka**, bukan "posisi paper mana pun yang
+terakhir diterbitkan". Bila pair yang dibuka tidak punya posisi paper, kartunya kosong — itu benar,
+dan sama dengan perlakuan halaman detail. Sebelum perbaikan kartunya terisi, tetapi isinya bisa
+milik pair lain (atau kosong secara acak).
+
+### 37.5 Laporan
+
+`docs/LAPORAN-batch5-p5-2026-10-16.md`
+
+---
+
+## 38. Batch 5e — J6 & N11: klaim statistik historis hardcoded di UI diganti deskripsi bergate sampel (2026-10-16)
+
+### 38.1 Masalah
+
+```kotlin
+// SignalLogScreen.kt — kartu "RELIABILITAS SKOR KEYAKINAN", tanpa syarat apa pun
+Text("Skor keyakinan tinggi (≥80%) menunjukkan rasio kemenangan tertinggi dan drawdown terendah pada eksekusi real-time.")
+```
+
+Kalimat ini melanggar aturan repo sendiri ("jangan menulis di UI bahwa sinyal punya
+winrate/expectancy historis tanpa data cukup"), dan yang membuatnya berbahaya:
+
+- **N11** — tier ≥80 nyaris mustahil terisi sinyal scalping pra-entry (`ScalpingMtfEvaluator`
+  cap ≤59 kecuali READY). Jadi tier itu mengukur "apakah sudah READY", bukan kualitas berjenjang.
+- Landasan statistiknya baru bisa dipakai setelah **J1** (PnL kotor → bersih) dan **J2**
+  (predikat W/L tumpang tindih) — keduanya sudah ditutup di batch sebelumnya.
+- Tanpa syarat: data kosong, sampel 1, atau semua tier kosong — teks tetap tercetak.
+
+### 38.2 Perbaikan
+
+Resolver murni baru `model/ConfidenceTierNote.kt`:
+
+| Kondisi | Keluaran |
+|---|---|
+| `totalLogs == 0` | `null` — **tidak ada teks yang dicetak** (intinya J6) |
+| `completedLogs < 10` (sama dengan `SetupStats.MIN_RELIABLE_SAMPLE`) | catatan kuning "Sampel belum cukup: N sinyal selesai dari M total (minimal 10)…", `isReliable = false` |
+| sampel cukup | catatan netral: "Basis: N sinyal selesai (TP/SL tercapai) dari M total di bursa ini. Win rate hanya dari sinyal yang sudah selesai; PnL bersih fee & slippage." |
+| tier tanpa sinyal | ditambahkan fakta data: "K dari 3 tier belum terisi sinyal." — N11 disebut sebagai fakta, bukan disembunyikan |
+
+Ambil `MIN_RESOLVED_SAMPLE` dari `SetupStats` — satu definisi "sampel cukup" untuk seluruh layar
+statistik, bukan angka kedua.
+
+`SignalLogScreen` kini: `ConfidenceTierNoteResolver.resolve(summary)` → bila `null`, bar info
+tidak dirender sama sekali; bila tidak, teksnya dari resolver dan berwarna kuning saat sampel
+belum cukup.
+
+### 38.3 Uji & kontrol negatif
+
+Uji baru: `app/src/test/java/agu/analys/model/ConfidenceTierNoteTest.kt` — **11 kasus**:
+tanpa data (dua bentuk), sampel kurang, semua TRACKING, tepat di ambang, teks basis menyebut
+angka & "fee & slippage", tier kosong (2 dari 3, 1 dari 3, semua terisi), teks tidak lagi memuat
+frase klaim lama, dan konsistensi threshold.
+
+Kontrol negatif: resolver dikembalikan ke perilaku lama (tanpa gerbang sampel, teks klaim asli
+"rasio kemenangan tertinggi… real-time", tanpa fakta tier) ⇒ **8 dari 11 uji GAGAL**. Tiga yang
+tetap lulus memang tidak membedakan versi: threshold sama dengan konstanta, "tepat di ambang"
+relatable di kedua versi, dan "semua tier terisi" tidak menyebut tier kosong di kedua versi.
+
+Angka terukur (dari XML): **72 kelas / 571 uji → 73 kelas / 582 uji**, 0 gagal, 1 dilewati.
+
+### 38.4 Batas perbaikan
+
+- **Hanya satu kalimat.** Tabel tier sendiri, dan cap confidence `ScalpingMtfEvaluator`
+  (akar N11), **tidak** diubah — keduanya perlu temuan & uji tersendiri.
+- `SignalLogScreen` tidak diuji otomatis; yang diuji resolver-nya.
+
+### 38.5 Laporan
+
+`docs/LAPORAN-batch5-j6n11-2026-10-16.md`
+
+---
+
+## 39. Batch 5f — J5: fallback lintas bursa di jurnal trade dihapus (2026-10-16)
+
+### 39.1 Masalah
+
+Dua jalur di `TradeHistoryRecorder` jatuh ke query **tanpa filter exchange** bila query
+berversi exchange kosong:
+
+```kotlin
+// recordSell
+dao.getActiveHoldingForSymbolAndExchange(symbol, isReal, exchange)
+    ?: dao.getActiveHoldingForSymbol(symbol, isReal)      // ← SEMUA bursa
+
+// processPriceTick
+dao.getHoldingRecordsByExchange(exchange)
+    .filter { it.symbol == normSymbol }
+    .ifEmpty { dao.getHoldingRecords().filter { it.symbol == normSymbol } }  // ← SEMUA bursa
+```
+
+Tokocrypto melayani **USDT + IDR**, Indodax **hanya IDR** (AGENTS.md §"Batasan pasar"), jadi
+`BTCIDR`/`ETHIDR`/`XAUTIDR` ada di kedua bursa sekaligus — yang berbeda pasarnya, bukan simbolnya.
+Akibatnya:
+
+1. jual `BTCIDR` di Indodax menutup record HOLDING `BTCIDR` milik **Tokocrypto**, dengan
+   `sellPrice`/`customPnlIdr` dari bursa Indodax;
+2. `processPriceTick`: harga bursa A memperbarui `peakPriceDuringHold`/
+   `troughPriceDuringHold`/`maxProfitPct` record HOLDING milik bursa B ⇒ statistik
+   MFE/drawdown per posisi tercemar.
+
+Pola yang benar sudah ada di `SignalLogRepository.processPriceTick` — query berversi exchange,
+tanpa fallback, dengan komentar eksplisit. Batch ini meniru pola itu di jurnal trade.
+
+### 39.2 Perbaikan
+
+Resolver murni baru `database/HoldingResolution.kt` (fungsi `suspend` karena DAO `suspend`):
+
+| Fungsi | Menegakkan |
+|---|---|
+| `resolveForSell` | record dicari lewat uuid bila ada (uuid kosong = tidak ada, bukan short-circuit miss), **selain itu hanya** query berversi exchange; kosong berarti kosong |
+| `holdingsForPriceTick` | hanya record HOLDING milik bursa yang sama, filter simbol abaikan kapitalisasi; tidak ada percabangan "semua bursa" |
+
+Konvensi lambda: exchange `""` berarti "tanpa filter bursa" — **tidak pernah** dipakai versi ini;
+konvensi itu hanya untuk kontrol negatif.
+
+`processBatchPriceTicks` sudah berversi exchange sejak awal — tidak diubah.
+
+### 39.3 Uji & kontrol negatif
+
+Uji baru: `app/src/test/java/agu/analys/database/HoldingResolutionTest.kt` — **11 kasus**:
+pencarian uuid, uuid kosong diperlakukan seperti tidak ada, uuid miss tidak jatuh ke bursa lain,
+**bursa ini kosong → null** (inti J5 bagian 1), `isReal` dibedakan, dan enam kasus tick
+(termasuk **bursa ini kosong → kosong**, inti J5 bagian 2).
+
+Kontrol negatif: fallback dikembalikan (`?: bySymbolAndExchange(…, "")` dan
+`.ifEmpty { byExchange("") … }`) ⇒ **tepat 2 dari 11 uji GAGAL** — keduanya justru penjaga inti
+J5. Sembilan yang tetap lulus memang tidak membedakan versi (jalur uuid, pencocokan simbol,
+abaikan kapitalisasi, record bursa sendiri).
+
+Angka terukur (dari XML): **73 kelas / 582 uji → 74 kelas / 593 uji**, 0 gagal, 1 dilewati.
+
+### 39.4 Yang berubah secara perilaku
+
+- Jual tanpa uuid yang dulu **kebetulan** menutup record bursa lain kini mencatat penjualan
+  tanpa menutup record apa pun (record HOLDING bursa lain tetap utuh — memang bukan milik
+  bursa ini). Posisi yang tidak sengaja tertutup dulu sekarang tetap terbuka sampai benar-benar
+  dijual di bursanya sendiri.
+- `processPriceTick` untuk simbol tanpa posisi di bursa ini tidak lagi memperbarui posisi
+  bursa lain — `peakPriceDuringHold` per posisi hanya bergerak pada harga bursanya sendiri.
+
+### 39.5 Laporan
+
+`docs/LAPORAN-batch5-j5-2026-10-16.md`
+
+---
+
+## 40. Sinkronisasi dokumen temuan — 2026-10-16 (dokumen saja, nol perubahan kode)
+
+### 40.1 Masalah
+
+Status perbaikan **tercercecer di beberapa tempat**: badan `docs/bugs/*.md` (banyak butir sudah
+ditutup tapi masih dituliskan sebagai temuan hidup dengan blok "✅ DIPERBAIKI"), `AGENTS.md`, dan
+`docs/BELUM-DIKERJAKAN-2026-10-14.md`. Akibatnya **dokumen saling bertentangan**:
+
+- `temuan_bugs_jurnal_pnl.md` menulis "J4 + N10 (batch 5a) **sudah DIPERBAIKI**" sekaligus
+  "**J8–J10 masih hidup**" — padahal baris J10 mengakui J10 = N10.
+- `AGENTS.md` menulis "Masih hidup: N6, N8–N17" — luber, karena N10 sudah ditutup dan N11 hanya
+  sebagian.
+- `temuan_bugs_paper_trade.md` (dan `temuan_bugs_jurnal_pnl.md`) kehilangan baris riwayat
+  batch 3c/5a/5b/5e/5f, padahal status di header sudah menyebutnya.
+
+Agen berikutnya akan membuang waktu membaca ulang kode untuk memastikan status yang sebenarnya
+sudah diverifikasi owner.
+
+### 40.2 Yang dikerjakan
+
+1. **Pangkas butir yang sudah tertutup** dari badan ketiga dokumen; rangkum di tabel
+   "Sudah ditutup" (commit + pointer `docs/LAPORAN-*.md`). Yang tersisa di badan dokumen hanya
+   temuan yang **masih hidup** atau **sebagian**.
+2. **Verifikasi ulang ke kode** `patch` @ `547048d` untuk setiap butir yang tersisa, lalu tulis
+   nomor baris yang benar (bukan yang basi).
+3. **Perjelas J10** jadi **sebagian**, dan tuliskan sisa yang ditemukan: `armPaperExitEngine` pada
+   jalur beli paper manual masih mengoper SL/TP mentah dari `engine.signalState.value`.
+4. **Hapus 3 stub DEPRECATED**: `workplan.md`, `checkpoint.md`, `checkpoint_progres.md`.
+5. **`AGENTS.md`**: `docs/bugs/` jadi sumber kebenaran status + aturan eksplisit "agen tidak perlu
+   cek kode lagi untuk memastikan status, kecuali akan memperbaiki butir itu atau ada commit baru
+   setelah `547048d`". Ditambah aturan turunan baru di § J4 & N10 (nilai turunan sinyal untuk
+   **keputusan** wajib teratribusi, bukan hanya untuk catatan).
+
+### 40.3 Status akhir (21 tertutup · 3 sebagian · 13 masih hidup)
+
+| Area | Ditutup | Sebagian | Masih hidup |
+|---|---|---|---|
+| Notifikasi | N1–N5, N7, N10 | **N11** | N6+N17, N8, N9, N12, N13, N14, N15, N16 |
+| Jurnal & P&L | J1–J7 | **J10** | J8, J9 |
+| Paper trading | P1–P5 | **P6** | P7, P8 |
+
+### 40.4 Yang TIDAK dikerjakan
+
+Nol perubahan kode. Tidak ada batch perbaikan baru di sini — dokumen hanya menyatakan kenyataan.
+Semua butir yang masih hidup **tetap hidup**, dan urutannya ada di § "Rekomendasi" tiap berkas
+temuan. Angka test tidak berubah dan tidak diukur ulang (tidak ada kode yang bergerak);
+`./gradlew :app:testDebugUnitTest` tidak dijalankan karena sandbox tidak punya Android SDK.
+
+### 40.5 Laporan
+
+`docs/LAPORAN-sync-dokumen-temuan-2026-10-16.md`

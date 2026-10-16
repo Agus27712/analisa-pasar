@@ -23,26 +23,26 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import agu.analys.trading.SellEstimate
+import agu.analys.trading.frictionBreakdownLabel
+import agu.analys.trading.profitBasisNote
 import agu.analys.ui.theme.*
 import agu.analys.util.PriceFormatter
 import agu.analys.ui.components.detail.TransactionDetailRow
 import java.util.Locale
 
+/**
+ * Kartu rincian jual di radar jual.
+ *
+ * Seluruh angka berasal dari [SellEstimate] (J7) — kartu ini **tidak** menghitung apa pun
+ * sendiri, supaya basis biayanya mustahil menyimpang dari FSM lagi.
+ */
 @Composable
 fun SellCalculationCard(
+    estimate: SellEstimate,
     validPrice: Double,
     baseAsset: String,
     quoteAsset: String,
-    activeSellQty: Double,
-    grossSellValueIdr: Double,
-    effectiveBuyPrice: Double,
-    costBasisIdr: Double,
-    sellFeeIdr: Double,
-    activeFeePct: Double,
-    netReceivedSellIdr: Double,
-    isProfitable: Boolean,
-    netProfitIdr: Double,
-    netProfitPct: Double,
     bestBidPrice: Double? = null,
     bestBidAmount: Double = 0.0,
     isMakerOrder: Boolean = false,
@@ -52,6 +52,16 @@ fun SellCalculationCard(
 ) {
     val displayBestPrice = bestBidPrice?.takeIf { it > 0.0 } ?: validPrice
     val isUsdtQuote = PriceFormatter.isUsdtQuote(quoteAsset)
+
+    val activeSellQty = estimate.quantity
+    val grossSellValueIdr = estimate.grossSellValue
+    val effectiveBuyPrice = estimate.entryPrice
+    val costBasisIdr = estimate.costBasisNet
+    val netReceivedSellIdr = estimate.netProceeds
+    val netProfitIdr = estimate.netProfit
+    val netProfitPct = estimate.netProfitPct
+    val isProfitable = estimate.isProfitable
+    val potonganIdr = estimate.frictionAmount
 
     Column(
         modifier = Modifier
@@ -169,7 +179,7 @@ fun SellCalculationCard(
             subValue = "= ${PriceFormatter.formatPrice(grossSellValueIdr, quoteAsset = quoteAsset)} (Kotor)"
         )
 
-        // POTONGAN FEE & PAJAK
+        // POTONGAN FEE, PAJAK & SLIPPAGE
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -178,7 +188,7 @@ fun SellCalculationCard(
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = "Potongan Biaya & Pajak (${String.format(Locale.US, "%.2f", activeFeePct)}%)",
+                        text = "Potongan Biaya, Pajak & Slippage",
                         color = TvTextSecondary,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold
@@ -196,13 +206,20 @@ fun SellCalculationCard(
                     }
                 }
                 Text(
-                    text = if (isMakerOrder) "Maker Fee + Pajak PPh/PPN" else "Taker Fee + Pajak PPh/PPN",
+                    text = frictionBreakdownLabel(
+                        buyFeePct = estimate.buyFeePct,
+                        sellFeePct = estimate.sellFeePct,
+                        slippagePct = estimate.slippagePct,
+                        hasBasis = estimate.hasBasis,
+                        sellIsMaker = isMakerOrder
+                    ),
                     color = TvTextMuted,
-                    fontSize = 9.5.sp
+                    fontSize = 9.5.sp,
+                    lineHeight = 12.sp
                 )
             }
             Text(
-                text = "- ${PriceFormatter.formatPrice(sellFeeIdr, quoteAsset = quoteAsset)}",
+                text = "- ${PriceFormatter.formatPrice(potonganIdr, quoteAsset = quoteAsset)}",
                 color = TvRed,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold
@@ -233,7 +250,7 @@ fun SellCalculationCard(
                         fontWeight = FontWeight.Black
                     )
                     Text(
-                        text = "Kas $quoteAsset bersih yang langsung masuk dompet",
+                        text = "Kas $quoteAsset bersih setelah biaya jual, pajak & slippage",
                         color = TvTextSecondary,
                         fontSize = 10.sp
                     )
@@ -248,11 +265,11 @@ fun SellCalculationCard(
         }
 
         // 4. ANALISIS UNTUNG ATAU RUGI (PROFIT / LOSS)
-        if (effectiveBuyPrice > 0.0) {
+        if (estimate.hasBasis) {
             TransactionDetailRow(
-                label = "Total Modal Pembelian",
+                label = "Total Modal + Biaya Beli & Slippage",
                 value = PriceFormatter.formatPrice(costBasisIdr, quoteAsset = quoteAsset),
-                subValue = "(@ ${PriceFormatter.formatPrice(effectiveBuyPrice, quoteAsset = quoteAsset)} / koin)"
+                subValue = "(@ ${PriceFormatter.formatPrice(effectiveBuyPrice, quoteAsset = quoteAsset)} / koin, bruto)"
             )
 
             Box(
@@ -291,11 +308,7 @@ fun SellCalculationCard(
                             )
                         }
                         Text(
-                            text = if (isProfitable) {
-                                "Hasil bersih melebihi modal (sudah bersih fee & pajak)"
-                            } else {
-                                "Hasil bersih di bawah modal (termasuk fee & pajak)"
-                            },
+                            text = profitBasisNote(isProfitable),
                             color = TvTextSecondary,
                             fontSize = 10.sp,
                             lineHeight = 13.sp

@@ -23,7 +23,6 @@ import agu.analys.engine.sell.SellSignalEvaluator
 import agu.analys.engine.sell.SellSignalLifecycleManager
 import agu.analys.model.PositionContext
 import agu.analys.model.SellLifecycleState
-import agu.analys.config.TradingFeeConfig
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -41,6 +40,17 @@ class TradingForegroundService : Service() {
     private var monitorJob: Job? = null
     private val lastEmergencyAlertTimes = ConcurrentHashMap<String, Long>()
     private val EMERGENCY_ALERT_COOLDOWN_MS = 60_000L
+
+    /**
+     * Sumber biaya untuk evaluasi sinyal jual di jalur notifikasi.
+     *
+     * N3: sebelumnya jalur ini memakai `TradingFeeConfig()` tanpa argumen, yang merupakan preset
+     * legacy Indodax-ish (0,11/0,21/0,32/0,42) — bukan biaya bursa aktif milik user. Akibatnya
+     * "Estimasi PnL" di notifikasi exit dihitung dengan friksi yang berbeda dari jalur UI, dan
+     * melanggar aturan **SATU rumus P&L** (AGENTS.md). Objek `AppPreferences` di-cache, tapi
+     * nilainya dibaca ulang tiap tick supaya perubahan di Pengaturan langsung terpakai.
+     */
+    private val appPrefs by lazy { AppPreferences(applicationContext) }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -156,10 +166,20 @@ class TradingForegroundService : Service() {
                                 // 1. Rekam tick ke TickHistoryTracker dengan exchange key
                                 TickHistoryTracker.recordTick(sym, currentPrice, exchange = ex)
 
-                                // 2. Update trailing stop jika di-enable dengan exchange key
+                                // 2. Update trailing stop jika di-enable dengan exchange key.
+                                // N2: service HANYA mengamati — peak tetap dinaikkan, tapi edge
+                                // pemicu TIDAK dikonsumsi (`consumeTrigger = false`). Pemilik
+                                // tunggal pemicu + auto-sell adalah
+                                // `TradingViewModel.checkTrailingForMode`. Sebelum perbaikan,
+                                // loop ini ikut memanggil versi pengonsumsi edge dan membuang
+                                // hasil `justTriggered`-nya, sehingga bila service menang balapan
+                                // VM tidak pernah melihat `true` → notifikasi trailing hilang dan
+                                // auto-sell tidak terkirim.
                                 val pos = positionStore.get(sym, item.isReal, exchange = ex)
                                 if (pos.isHolding && pos.isTrailingEnabled) {
-                                    positionStore.updateTrailingPrice(sym, currentPrice, item.isReal, exchange = ex)
+                                    positionStore.updateTrailingPrice(
+                                        sym, currentPrice, item.isReal, exchange = ex, consumeTrigger = false
+                                    )
                                 }
 
                                 // 3. Ambil snapshot risiko
@@ -189,11 +209,13 @@ class TradingForegroundService : Service() {
                                     riskSnapshot = riskSnapshot
                                 )
 
-                                // 5. Evaluasi Sinyal Jual
+                                // 5. Evaluasi Sinyal Jual.
+                                // N3: pakai biaya milik user (sama dengan jalur UI), bukan
+                                // default legacy `TradingFeeConfig()`.
                                 val sellState = SellSignalEvaluator.evaluate(
                                     context = posContext,
                                     indicators = null,
-                                    tradingFees = TradingFeeConfig(),
+                                    tradingFees = appPrefs.tradingFees,
                                     riskSnapshot = riskSnapshot
                                 )
 
