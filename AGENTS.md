@@ -50,6 +50,9 @@ entry/exit) belum ada di sana — semua kesimpulan yang ditarik dari `main` jadi
 6. **`docs/bugs/`** — **folder temuan bug yang BELUM diperbaiki**, tiap berkas adalah audit
    terverifikasi-ke-kode dengan lokasi + baris + rekomendasi perbaikan. Mulai dari
    `docs/bugs/temuan_bugs_notifikasi.md` (audit jalur notifikasi & skor keyakinan, 2026-10-16).
+   Dua area lain sudah diaudit di hari yang sama dan **belum ada perbaikannya**:
+   `temuan_bugs_paper_trade.md` (siklus hidup posisi paper & mesin exit) dan
+   `temuan_bugs_jurnal_pnl.md` (jurnal sinyal, jurnal trade, angka P&L).
    **Baca folder ini sebelum memperbaiki bug apa pun** di area yang tercakup — supaya tidak
    mengulang audit yang sudah ada, dan supaya tahu temuan mana yang masih hidup. Setelah sebuah
    temuan diperbaiki, **hapus/tandai berkas temuan itu** (lihat § "Folder temuan bug" di bawah).
@@ -148,11 +151,21 @@ Aturan main:
 
 Saat ini berisi:
 
-- **`temuan_bugs_notifikasi.md`** (2026-10-16) — audit jalur notifikasi (4 pengirim: VM-sync,
-  CandidateScanWorker, foreground service, VM-alerts) & alur skor keyakinan (produsen →
-  notifikasi → jurnal → UI). **N1, N2, N3 DIPERBAIKI** (batch 1 — `docs/LAPORAN-batch1-notifikasi-2026-10-16.md`);
-  **N4, N5, N7 DIPERBAIKI** (batch 2 — `docs/LAPORAN-batch2-notifikasi-2026-10-16.md`).
-  **Masih hidup: N6, N8–N12.**
+- **`temuan_bugs_notifikasi.md`** (2026-10-16, diperbarui di hari yang sama) — audit jalur
+  notifikasi (4 pengirim: VM-sync, CandidateScanWorker, foreground service, VM-alerts) & alur skor
+  keyakinan (produsen → notifikasi → jurnal → UI). **N1, N2, N3 DIPERBAIKI** (batch 1 —
+  `docs/LAPORAN-batch1-notifikasi-2026-10-16.md`); **N4, N5, N7 DIPERBAIKI** (batch 2 —
+  `docs/LAPORAN-batch2-notifikasi-2026-10-16.md`). **Masih hidup: N6, N8–N17** (N13–N17 hasil audit
+  lanjutan: kategori notifikasi ≠ sakelar Pengaturan, cooldown peak di-bypass, sakelar master
+  mematikan foreground service, `AppPreferences` dibangun ulang per tick, N6 melarat).
+- **`temuan_bugs_paper_trade.md`** (2026-10-16, **baru**) — audit siklus hidup posisi paper &
+  mesin exit. **Semua masih hidup, belum ada perbaikan kode.** 3 kritis: posisi paper bursa non-aktif
+  menggantung permanen setelah restart (P1), auto-buy menerima sinyal SWING/INTRADAY dengan SL di
+  bawah lantai friksi (P2), DCA bisa memicu **jual paksa berlabel `STOP_LOSS`** (P3).
+- **`temuan_bugs_jurnal_pnl.md`** (2026-10-16, **baru**) — audit jurnal sinyal, jurnal trade &
+  angka P&L. **Semua masih hidup, belum ada perbaikan kode.** 2 kritis: jurnal menabulasi P&L
+  **kotor** tetapi berlabel "Net" (J1), dan satu log bisa dihitung menang **sekaligus** kalah
+  sehingga win-rate bisa > 100% (J2).
 
 ## Aturan turunan dari audit notifikasi (batch 1 & 2, 2026-10-16)
 
