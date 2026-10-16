@@ -1,8 +1,8 @@
 # Temuan Audit — Jurnal Sinyal, Jurnal Trade & Angka P&L
 
 **Tanggal:** 2026-10-16
-**Status:** DOKUMEN TEMUAN — **J1, J2 (batch 3a) & J7 (batch 4) sudah DIPERBAIKI**; **J3–J6, J8–J10
-masih hidup.**
+**Status:** DOKUMEN TEMUAN — **J1, J2 (batch 3a), J7 (batch 4), J4 + N10 (batch 5a) sudah
+DIPERBAIKI**; **J3, J5, J6, J8–J10 masih hidup.**
 Diverifikasi terhadap kode di branch `patch` @ `a842e35`.
 **Cakupan:** `database/SignalLogRepository.kt` · `database/TradeHistoryRecorder.kt` ·
 `trading/TradeSignalSnapshot.kt` · `viewmodel/SignalLogViewModel.kt` ·
@@ -253,6 +253,16 @@ N10Mutation-nya: field-nya sudah benar, tapi ditimpa.
 
 **Perbaikan.** pakai `signal.marketSymbol` (dengan fallback ke simbol yang dievaluasi engine),
 dan validasi `== symbol` sebelum mencatat (perbaiki N10 sekalian).
+
+> ✅ **DIPERBAIKI 2026-10-16 (batch 5a)** — rekomendasi di atas diikuti, dan N10 ikut beres karena
+> akarnya sama. `trading/SignalSymbolAttribution.kt` (baru) jadi satu-satunya tempat yang
+> memutuskan kepemilikan sinyal: `journalSymbol` memilih simbol engine, `matches` +
+> `attributedFields` memverifikasi sebelum nilai turunan sinyal boleh menempel. Gerbang dipasang
+> di `TradeSignalSnapshot.capture` sehingga **empat** pemanggilnya terlindungi sekaligus, dan
+> jalur beli real/paper di `TradingViewModelSync` kini melewati `attributedFields`.
+> Bila sinyal bukan milik simbol itu, confidence/TP/SL **dikosongkan** (0 / 0.0) — bukan dipakai
+> dengan label pair lain. Uji: `SignalSymbolAttributionTest` (20 kasus); kontrol negatif
+> 10/20 gagal. Laporan: `docs/LAPORAN-batch5-j4n10-2026-10-16.md`.
 
 ---
 

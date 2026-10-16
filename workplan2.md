@@ -2063,3 +2063,84 @@ internal rupiah↔persen (bertahan karena dihitung dari angka yang sama) dan tig
 `docs/LAPORAN-batch4-j7-2026-10-16.md`
 
 
+
+---
+
+## 34. Batch 5a — J4 & N10: jurnal memakai simbol yang dievaluasi engine (2026-10-16)
+
+### 34.1 Masalah
+
+Dua temuan, satu akar: **field turunan sinyal menempel pada simbol yang bukan pemiliknya.**
+Audit menulisnya terpisah karena muncul di dua berkas:
+
+- **J4** (`docs/bugs/temuan_bugs_jurnal_pnl.md` §3) — `TradingViewModel.listenToEngineSignals`
+  **menimpa** `marketSymbol` yang sudah benar:
+  ```kotlin
+  list.add(0, signal.copy(marketSymbol = selectedPair.value.symbol))   // menimpa field engine
+  signalLogRepository.recordSignal(symbol = selectedPair.value.symbol, …)
+  ```
+- **N10** (`docs/bugs/temuan_bugs_notifikasi.md`, baris tabel N10) — jalur beli memakai
+  `engine.signalState.value` **tanpa memeriksa** `signal.marketSymbol == symbol`
+  (`TradeSignalSnapshot.capture:275`, `TradingViewModelSync.kt:253-282`).
+
+Jendelanya nyata: `selectPair()` mengganti pair lebih dulu, sedangkan `engine.signalState.value`
+masih berisi hasil evaluasi pair **lama** sampai tick berikutnya. Selama jendela itu jurnal
+menyimpan entry/TP1/TP2/SL/confidence **BTC** berlabel **ETH**, dan `SignalHistoryPanel.kt:74`
+(filter `marketSymbol`) tidak bisa menyelamatkannya — field-nya sudah ditimpa, jadi kartu
+"RIWAYAT & LOG SINYAL" untuk ETH menampilkan sinyal BTC lengkap dengan harga BTC.
+
+### 34.2 Mengapa ini bukan sekadar salah label
+
+Jurnal sinyal adalah **basis statistik reliability** (`SignalReliabilitySummary`) dan basis
+jurnal trade. Angka pair lain yang menempel di pair ini membuat dua-duanya bohong, dan
+kesalahannya tidak terlihat: barisnya rapi, hanya saja isinya milik koin lain.
+
+### 34.3 Perbaikan
+
+Satu resolver murni baru: `app/src/main/java/agu/analys/trading/SignalSymbolAttribution.kt`.
+
+| Fungsi | Menegakkan |
+|---|---|
+| `normalize(symbol)` | `btc_idr`, `BTC/IDR`, `BTC-IDR`, `BTC IDR` → `BTCIDR` |
+| `matches(requested, signalSymbol)` | **N10** — simbol kosong di salah satu sisi = **tidak cocok** ("tidak tahu" bukan "cocok") |
+| `journalSymbol(signalSymbol, selected)` | **J4** — simbol engine; jatuh ke pair yang dibuka hanya bila engine tidak mengisi |
+| `isRecordable(symbol)` | baris tanpa simbol tidak boleh ditulis |
+| `entryPrice(signalEntryPrice, tickPrice)` | harga fallback milik **simbol jurnal**, bukan tick pair yang kebetulan dibuka |
+| `attributedFields(...)` | **N10** — bila tidak cocok, confidence/TP/SL dikosongkan, harga & waktu jatuh ke transaksi nyata |
+
+Yang berubah di pemanggil:
+
+1. `TradeSignalSnapshot.capture` — sinyal digerbang sekali di pintu masuk
+   (`signal?.takeIf { SignalSymbolAttribution.matches(symbol, it.marketSymbol) }`), sehingga
+   **keempat** pemanggilnya (`TradingViewModelSync:101`, `:281`, `TradingViewModelOrders:82`,
+   `:415`) terlindungi sekaligus. Field turunan sinyal (confidence, regime, pattern, alasan,
+   setup/skor scalping, entry zone) ikut terbuang bila sinyal milik pair lain.
+2. `TradingViewModelSync` jalur beli **real** dan **paper** — `signalPrice`, `signalConfidence`,
+   `targetPrice1/2`, `stopLossPrice`, `signalTime` lewat `attributedFields`.
+   `tp1`/`tp2` di jalur real **tidak** disentuh: nilainya datang dari parameter order, bukan engine.
+3. `listenToEngineSignals` — memakai `journalSymbol`, berhenti bila simbol kosong, dan harga
+   fallback diambil dari `dashboardTicks[journalSymbol]`.
+
+**Yang sengaja dikosongkan, bukan dipalsukan.** Bila sinyal bukan milik simbol ini, confidence
+menjadi `0` dan TP/SL menjadi `0.0` — bukan memakai angka pair lain dengan label pair ini.
+`0` terbaca sebagai "tidak ada data", sedangkan angka pair lain terbaca sebagai data yang salah.
+
+### 34.4 Uji & kontrol negatif
+
+Uji baru: `app/src/test/java/agu/analys/trading/SignalSymbolAttributionTest.kt` — **20 kasus**:
+normalisasi format simbol, `matches` (format beda/simbol beda/kosong), `journalSymbol` saat pair
+berganti, `isRecordable`, `entryPrice`, dan tujuh kasus `attributedFields` (cocok, tidak cocok,
+harga nol, waktu nol, `marketSymbol` kosong).
+
+Kontrol negatif: resolver dikembalikan ke perilaku lama (`matches` selalu `true`,
+`journalSymbol` mengembalikan pair yang dibuka, `entryPrice` tanpa fallback tick) ⇒
+**10 dari 20 uji GAGAL**, tepat pada penjaga masing-masing. Sepuluh yang tetap lulus memang tidak
+menguji atribusi: normalisasi format, `isRecordable`, `entryPrice` saat harga sinyal ada, dan
+kasus "simbol sama" yang memang tidak berubah.
+
+Angka terukur (dari XML): **68 kelas / 522 uji / 0 gagal / 1 dilewati → 69 kelas / 542 uji /
+0 gagal / 1 dilewati** (+1 kelas, +20 uji).
+
+### 34.5 Laporan
+
+`docs/LAPORAN-batch5-j4n10-2026-10-16.md`

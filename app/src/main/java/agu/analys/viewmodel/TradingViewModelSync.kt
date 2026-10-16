@@ -11,6 +11,8 @@ import agu.analys.service.IndodaxMarketService
 import agu.analys.service.TokocryptoMarketService
 import agu.analys.trading.SimulationOrder
 import agu.analys.trading.SimulationOrderSide
+import agu.analys.trading.SignalDerivedFields
+import agu.analys.trading.SignalSymbolAttribution
 import agu.analys.trading.SpotPosition
 import agu.analys.trading.TradeSignalSnapshot
 import agu.analys.util.AlertNotificationHelper
@@ -105,18 +107,35 @@ fun TradingViewModel.handleRealTradeExecution(
             exchange = currentEx
         )
         val snapshotJson = snapshot.toJson().toString()
+        // N10 — nilai turunan sinyal hanya boleh menempel bila sinyal itu milik simbol ini.
+        // Bila engine terakhir menilai pair lain, confidence/SL/waktu sinyal pair lain dikosongkan.
+        val realSignal = SignalSymbolAttribution.attributedFields(
+            requestedSymbol = symbol,
+            signalSymbol = engine.signalState.value.marketSymbol,
+            fields = SignalDerivedFields(
+                confidence = engine.signalState.value.confidence,
+                entryPrice = engine.signalState.value.entryPrice,
+                targetPrice1 = 0.0,
+                targetPrice2 = 0.0,
+                stopLoss = engine.signalState.value.stopLoss,
+                signalTime = engine.signalState.value.timestamp
+            ),
+            fallbackPrice = price,
+            fallbackTime = System.currentTimeMillis()
+        )
         // P0-5 — status trailing nyata untuk posisi ini (dibaca sebelum posisi diperbarui).
         val beforeBuy = positionStore.get(symbol, isReal = true, exchange = currentEx)
         tradeHistoryRecorder.recordBuy(
             symbol = symbol, isReal = true, strategyMode = strategyMode.value.name,
             buyPrice = price, buyQuantity = quantity, buyTotalIdr = price * quantity,
             buyOrderType = "LIMIT", snapshot = snapshot,
-            signalPrice = engine.signalState.value.entryPrice.takeIf { it > 0 } ?: price,
-            signalConfidence = engine.signalState.value.confidence, targetPrice1 = tp1, targetPrice2 = tp2,
-            stopLossPrice = engine.signalState.value.stopLoss,
+            signalPrice = realSignal.entryPrice,
+            // tp1/tp2 datang dari parameter order (bukan dari engine), jadi tidak perlu diatribusikan.
+            signalConfidence = realSignal.confidence, targetPrice1 = tp1, targetPrice2 = tp2,
+            stopLossPrice = realSignal.stopLoss,
             exchange = currentEx,
             // P0-3 — waktu sinyal dari engine, bukan waktu klik order.
-            signalTime = engine.signalState.value.timestamp,
+            signalTime = realSignal.signalTime,
             isTrailingUsed = beforeBuy.isTrailingEnabled,
             trailingPercent = beforeBuy.trailingPercent.takeIf { it > 0.0 },
             trailingPeakPrice = beforeBuy.peakPrice.takeIf { it > 0.0 }
@@ -265,6 +284,22 @@ fun TradingViewModel.syncSimulationTradeToPositionStore(order: SimulationOrder) 
             indicators = engine.indicators.value, signal = engine.signalState.value,
             exchange = currentEx
         )
+        // N10 — nilai turunan sinyal hanya boleh menempel bila sinyal itu milik simbol ini.
+        // Bila engine terakhir menilai pair lain, confidence/TP/SL pair lain dikosongkan.
+        val paperSignal = SignalSymbolAttribution.attributedFields(
+            requestedSymbol = symbol,
+            signalSymbol = engine.signalState.value.marketSymbol,
+            fields = SignalDerivedFields(
+                confidence = engine.signalState.value.confidence,
+                entryPrice = engine.signalState.value.entryPrice,
+                targetPrice1 = engine.signalState.value.targetPrice1,
+                targetPrice2 = engine.signalState.value.targetPrice2,
+                stopLoss = engine.signalState.value.stopLoss,
+                signalTime = engine.signalState.value.timestamp
+            ),
+            fallbackPrice = fillPrice,
+            fallbackTime = System.currentTimeMillis()
+        )
         // P0-5 — state posisi setelah entry (bukan sebelum), supaya status trailing yang tercatat
         // adalah yang benar-benar berlaku untuk posisi ini.
         val posAfterBuy = positionStore.get(symbol, isReal = false, exchange = currentEx)
@@ -277,14 +312,14 @@ fun TradingViewModel.syncSimulationTradeToPositionStore(order: SimulationOrder) 
             buyTotalIdr = fillPrice * order.quantity,
             buyOrderType = order.type.name,
             snapshot = snapshot,
-            signalPrice = engine.signalState.value.entryPrice.takeIf { it > 0 } ?: fillPrice,
-            signalConfidence = engine.signalState.value.confidence,
-            targetPrice1 = engine.signalState.value.targetPrice1,
-            targetPrice2 = engine.signalState.value.targetPrice2,
-            stopLossPrice = engine.signalState.value.stopLoss,
+            signalPrice = paperSignal.entryPrice,
+            signalConfidence = paperSignal.confidence,
+            targetPrice1 = paperSignal.targetPrice1,
+            targetPrice2 = paperSignal.targetPrice2,
+            stopLossPrice = paperSignal.stopLoss,
             exchange = currentEx,
             // P0-3 — waktu sinyal dari engine, bukan waktu klik order.
-            signalTime = engine.signalState.value.timestamp,
+            signalTime = paperSignal.signalTime,
             isTrailingUsed = posAfterBuy.isTrailingEnabled,
             trailingPercent = posAfterBuy.trailingPercent.takeIf { it > 0.0 },
             trailingPeakPrice = posAfterBuy.peakPrice.takeIf { it > 0.0 }
@@ -731,16 +766,31 @@ fun TradingViewModel.listenToEngineSignals() {
         engine.signalState.collect { signal ->
             val now = System.currentTimeMillis()
             if (signal.action != SignalAction.HOLD && now - lastSavedSignalTimestamp > 15000L) {
+                // J4 — simbol jurnal adalah simbol yang **dievaluasi engine**, bukan pair yang
+                // sedang dibuka. `selectPair()` mengganti pair lebih dulu, sedangkan `signalState`
+                // masih berisi hasil pair lama sampai tick berikutnya; menstempel
+                // `selectedPair` di sini membuat entry/TP/SL/confidence BTC tercatat sebagai ETH.
+                val journalSymbol = SignalSymbolAttribution.journalSymbol(
+                    signalSymbol = signal.marketSymbol,
+                    selectedSymbol = selectedPair.value.symbol
+                )
+                if (!SignalSymbolAttribution.isRecordable(journalSymbol)) return@collect
                 lastSavedSignalTimestamp = now
                 val list = _signalHistory.value.toMutableList()
-                list.add(0, signal.copy(marketSymbol = selectedPair.value.symbol))
+                list.add(0, signal.copy(marketSymbol = journalSymbol))
                 if (list.size > 30) list.removeAt(list.lastIndex)
                 _signalHistory.value = list
 
                 signalLogRepository.recordSignal(
-                    symbol = selectedPair.value.symbol, action = signal.action.name,
+                    symbol = journalSymbol, action = signal.action.name,
                     strategyMode = strategyMode.value.name, confidence = signal.confidence,
-                    sentiment = signal.sentiment.name, entryPrice = if (signal.entryPrice > 0) signal.entryPrice else (currentTick.value?.price ?: 0.0),
+                    sentiment = signal.sentiment.name,
+                    // J4 — harga fallback juga harus milik simbol jurnal, bukan tick pair yang
+                    // kebetulan sedang dibuka.
+                    entryPrice = SignalSymbolAttribution.entryPrice(
+                        signalEntryPrice = signal.entryPrice,
+                        tickPrice = marketDataCoordinator.dashboardTicks.value[journalSymbol]?.price
+                    ),
                     targetPrice1 = signal.targetPrice1, targetPrice2 = signal.targetPrice2, stopLoss = signal.stopLoss,
                     reasoning = signal.reasoning.joinToString(" • "), scalpingStage = signal.scalpingStage.name,
                     exchange = prefs.marketDataSource.name,

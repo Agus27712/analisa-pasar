@@ -202,6 +202,13 @@ data class TradeSignalSnapshot(
             asks: List<OrderBookItem> = emptyList(),
             exchange: String = "TOKOCRYPTO"
         ): TradeSignalSnapshot {
+            // N10 — sinyal hanya boleh menempel pada simbol yang benar-benar dinilai engine.
+            // Bila engine terakhir menilai pair lain (user baru saja ganti pair), seluruh field
+            // turunan sinyal dibuang: confidence/TP/SL/setup scalping pair lain tidak boleh
+            // tercatat sebagai milik pair ini.
+            val attributedSignal = signal?.takeIf {
+                SignalSymbolAttribution.matches(symbol, it.marketSymbol)
+            }
             // Calculate Order Book Ratio
             val obPair = OrderBookDepthCache.getOrderBook(symbol, exchange)
             val effectiveBids = if (bids.isNotEmpty()) bids else (obPair?.first ?: emptyList())
@@ -272,17 +279,17 @@ data class TradeSignalSnapshot(
                 bbLower = bbLower,
                 bbWidthPct = bbWidthPct,
                 atr = indicators?.atr?.takeIf { !it.isNaN() },
-                confidenceScore = signal?.confidence?.takeIf { it > 0 },
-                marketRegime = signal?.regimeDetected?.takeIf { it.isNotBlank() } ?: "NORMAL_LIQUIDITY",
-                patternDetected = signal?.patternDetected?.takeIf { it.isNotBlank() },
-                reasons = signal?.reasoning?.ifEmpty { listOf("Technical signal match strategy mode $strategyMode") } ?: emptyList(),
-                scalpingSetup = signal?.scalpingSetup?.takeIf { it.isNotBlank() },
-                scalpingScore = signal?.scalpingScore?.takeIf { signal.scalpingSetup.isNotBlank() },
-                scalpingScoreCategory = signal?.scalpingScoreCategory?.takeIf { it.isNotBlank() },
-                scalpingScoreDetail = signal?.scalpingScoreDetail?.takeIf { it.isNotBlank() },
-                scalpingRegime = signal?.scalpingRegime?.takeIf { it.isNotBlank() },
-                entryZoneLow = signal?.entryZoneLow?.takeIf { it > 0.0 },
-                entryZoneHigh = signal?.entryZoneHigh?.takeIf { it > 0.0 },
+                confidenceScore = attributedSignal?.confidence?.takeIf { it > 0 },
+                marketRegime = attributedSignal?.regimeDetected?.takeIf { it.isNotBlank() } ?: "NORMAL_LIQUIDITY",
+                patternDetected = attributedSignal?.patternDetected?.takeIf { it.isNotBlank() },
+                reasons = attributedSignal?.reasoning?.ifEmpty { listOf("Technical signal match strategy mode $strategyMode") } ?: emptyList(),
+                scalpingSetup = attributedSignal?.scalpingSetup?.takeIf { it.isNotBlank() },
+                scalpingScore = attributedSignal?.scalpingScore?.takeIf { attributedSignal.scalpingSetup.isNotBlank() },
+                scalpingScoreCategory = attributedSignal?.scalpingScoreCategory?.takeIf { it.isNotBlank() },
+                scalpingScoreDetail = attributedSignal?.scalpingScoreDetail?.takeIf { it.isNotBlank() },
+                scalpingRegime = attributedSignal?.scalpingRegime?.takeIf { it.isNotBlank() },
+                entryZoneLow = attributedSignal?.entryZoneLow?.takeIf { it > 0.0 },
+                entryZoneHigh = attributedSignal?.entryZoneHigh?.takeIf { it > 0.0 },
                 scalpingThresholds = agu.analys.engine.scalping.ScalpingRuntimeConfig.current.toSummaryString()
             )
         }

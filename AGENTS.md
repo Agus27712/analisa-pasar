@@ -169,7 +169,8 @@ Saat ini berisi:
 - **`temuan_bugs_jurnal_pnl.md`** (2026-10-16, diperbarui di hari yang sama) — audit jurnal sinyal,
   jurnal trade & angka P&L. **J1, J2 DIPERBAIKI** (batch 3a —
   `docs/LAPORAN-batch3-jurnal-2026-10-16.md`); **J7 DIPERBAIKI** (batch 4 —
-  `docs/LAPORAN-batch4-j7-2026-10-16.md`). **Masih hidup: J3–J6, J8–J10** (bursa terikat sekali saat
+  `docs/LAPORAN-batch4-j7-2026-10-16.md`); **J4 + N10 DIPERBAIKI** (batch 5a —
+  `docs/LAPORAN-batch5-j4n10-2026-10-16.md`). **Masih hidup: J3, J5, J6, J8–J10** (bursa terikat sekali saat
   konstruksi `SignalLogViewModel`, `selectedPair` dipakai alih-alih simbol yang dievaluasi engine,
   fallback lintas bursa di jurnal trade, klaim statistik hardcoded, satu rumus P&L ditulis ulang di
   jalur trade real (J8), default `?: 75` (J9), snapshot tanpa verifikasi simbol (J10)).
@@ -314,6 +315,22 @@ Saat ini berisi:
 - **Angka audit pun bisa salah.** Dokumen temuan menulis friksi FSM Tokocrypto USDT 0,8226%; angka
   yang benar 0,9735%. Bila angka audit tidak cocok dengan rumus mana pun, hitung ulang dan **catat
   koreksinya** di laporan — jangan mengutipnya sebagai kebenaran.
+
+## Aturan turunan dari audit jurnal — J4 & N10 (batch 5a, 2026-10-16)
+
+- **Kepemilikan sinyal diputuskan di satu tempat.** `engine.signalState.value` berisi hasil evaluasi
+  pair **terakhir yang dinilai**, bukan pair yang sedang dibuka. Setiap pencatatan ke jurnal wajib
+  lewat `trading/SignalSymbolAttribution.kt` — jangan menimpa `marketSymbol` dengan
+  `selectedPair.value.symbol`, dan jangan memakai `engine.signalState.value` tanpa
+  `matches(requestedSymbol, signal.marketSymbol)`.
+- **Nilai yang bukan milik simbol ini dikosongkan, bukan dipakai.** Bila sinyal milik pair lain,
+  confidence/TP/SL menjadi `0`/`0.0`, harga jatuh ke harga transaksi, waktu jatuh ke waktu transaksi.
+  Angka pair lain yang menempel di pair ini membuat statistik reliability bohong tanpa terlihat.
+- **Gerbang di pintu masuk, bukan di tiap pemanggil.** `TradeSignalSnapshot.capture` menggerbang
+  sinyal sekali; keempat pemanggilnya ikut terlindungi. Bila menambah pemanggil baru, jangan
+  menyalin pemeriksaannya — pakai `capture`.
+- **Harga fallback harus milik simbol jurnal.** `currentTick.value?.price` adalah tick pair yang
+  kebetulan dibuka; pakai `dashboardTicks[journalSymbol]`.
 
 ## Arah produk (ringkas)
 
