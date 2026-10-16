@@ -1958,6 +1958,8 @@ Sumber: `docs/bugs/temuan_bugs_jurnal_pnl.md` butir **J7**. Ini satu-satunya tem
 menyentuh **permukaan uang riil**: kartu yang paling sering dibaca pengguna tepat sebelum menekan
 tombol jual.
 
+Perbaikan mendarat di commit **`d1097aa`**.
+
 ### 33.1 Masalah
 
 `ui/components/detail/RadarSellSection.kt` menghitung sendiri, terpisah dari `FeeSchedule`:

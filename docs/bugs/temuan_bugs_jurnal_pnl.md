@@ -371,7 +371,7 @@ sebelum menekan tombol jual, dan berbeda dari angka yang dipakai FSM di halaman 
 dari `fees` yang sudah diterima (dan slippage dari `scalpingRuntimeConfig`), atau cukup
 `FeeSchedule.netProfitPct(entry, price, buyTakerPct, sellTakerPct, slippagePct)`.
 
-> ✅ **DIPERBAIKI 2026-10-16 (batch 4)** — rekomendasi di atas diikuti, tetapi lewat **resolver murni
+> ✅ **DIPERBAIKI 2026-10-16 di `d1097aa` (batch 4)** — rekomendasi di atas diikuti, tetapi lewat **resolver murni
 > baru** `trading/SellEstimate.kt` (`SellEstimateResolver.resolve`) supaya bisa diuji tanpa Compose:
 > `RadarSellSection` berhenti menghitung sama sekali, `SellCalculationCard` menerima satu objek
 > `SellEstimate`.
@@ -432,7 +432,7 @@ dari `fees` yang sudah diterima (dan slippage dari `scalpingRuntimeConfig`), ata
 | 3 | **J5** | Jurnal bisa merekam bursa yang salah — merusak audit |
 | 4 | **J4 + J10** | Data pair salah masuk jurnal & tampil di kartu riwayat |
 | 5 | **J3** | Tabel menampilkan bursa yang salah |
-| 6 | **J7** | Kartu jual mengklaim bersih biaya padahal tidak — ✅ **selesai (batch 4)** |
+| 6 | **J7** | Kartu jual mengklaim bersih biaya padahal tidak — ✅ **selesai di `d1097aa` (batch 4)** |
 | 7 | **J8** | Basis P&L berbeda dari yang disepakati |
 | 8 | **J6** | Klaim statistik tanpa data (hapus setelah J1 & J2) |
 | 9 | **J9** | Kebersihan / jebakan latent |
@@ -452,4 +452,4 @@ test **diukur** dari XML.
 | 2026-10-16 | Audit read-only jurnal sinyal, jurnal trade, dan angka P&L (branch `patch` @ `a842e35`) |
 | 2026-10-16 | Temuan diekspor ke `docs/bugs/temuan_bugs_jurnal_pnl.md` (dokumen ini) — **belum ada perbaikan kode** |
 | 2026-10-16 | **Batch 3a:** J2 + J1 diperbaiki + diuji di `d97a539` (14 uji baru, kontrol negatif 9/22 gagal). Lihat `docs/LAPORAN-batch3-jurnal-2026-10-16.md` |
-| 2026-10-16 | **Batch 4:** J7 diperbaiki + diuji (17 uji baru, kontrol negatif 13/17 gagal). Sekaligus **koreksi angka audit**: friksi FSM Tokocrypto USDT adalah 0,9735%, bukan 0,8226%. Lihat `docs/LAPORAN-batch4-j7-2026-10-16.md` |
+| 2026-10-16 | **Batch 4:** J7 diperbaiki + diuji di `d1097aa` (17 uji baru, kontrol negatif 13/17 gagal). Sekaligus **koreksi angka audit**: friksi FSM Tokocrypto USDT adalah 0,9735%, bukan 0,8226%. Lihat `docs/LAPORAN-batch4-j7-2026-10-16.md` |

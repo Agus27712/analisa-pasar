@@ -2,12 +2,16 @@
 
 **Tanggal:** 2026-10-16
 **Branch:** `patch`
+**Commit perbaikan:** `d1097aa`
 **Sumber temuan:** `docs/bugs/temuan_bugs_jurnal_pnl.md` butir **J7**
 **Cakupan:** kartu jual pada radar (`RadarSellSection` + `SellCalculationCard`) dan penyaluran
 asumsi slippage ke dalamnya.
 
 J7 adalah **satu-satunya temuan sisa** dari ketiga audit (jurnal, paper, notifikasi) yang menyentuh
 **permukaan uang riil**: kartu yang paling sering dibaca pengguna tepat sebelum menekan tombol jual.
+
+Seluruh angka di §6 diukur pada pohon commit ini — tidak ada berkas di luar cakupan yang tertinggal
+di pohon kerja saat pengukuran, jadi angkanya tidak perlu ditandai "diturunkan".
 
 ---
 
