@@ -1,8 +1,8 @@
 # Temuan Audit — Jurnal Sinyal, Jurnal Trade & Angka P&L
 
 **Tanggal:** 2026-10-16
-**Status:** DOKUMEN TEMUAN — **J1, J2 (batch 3a), J7 (batch 4), J4 + N10 (batch 5a) sudah
-DIPERBAIKI**; **J3, J5, J6, J8–J10 masih hidup.**
+**Status:** DOKUMEN TEMUAN — **J1, J2 (batch 3a), J7 (batch 4), J4 + N10 (batch 5a), J3 (batch 5b)
+sudah DIPERBAIKI**; **J5, J6, J8–J10 masih hidup.**
 Diverifikasi terhadap kode di branch `patch` @ `a842e35`.
 **Cakupan:** `database/SignalLogRepository.kt` · `database/TradeHistoryRecorder.kt` ·
 `trading/TradeSignalSnapshot.kt` · `viewmodel/SignalLogViewModel.kt` ·
@@ -219,6 +219,16 @@ Sinyal": seluruh log sinyal **dan** tabel "RELIABILITAS SKOR KEYAKINAN" masih be
 Tokocrypto, tanpa label penjelas. Melanggar aturan isolasi exchange untuk state.
 
 **Perbaikan.** `marketDataSource.flatMapLatest { repo.get…Flow(it.name) }.stateIn(…)`.
+
+> ✅ **DIPERBAIKI 2026-10-16 (batch 5b)** — rekomendasi di atas diikuti, dengan satu tambahan:
+> `flatMapLatest` tidak dipanggil langsung dari ViewModel, melainkan lewat
+> `database/SignalLogExchangeBinder.bind` agar bisa diuji tanpa Android. Bursa kini **mengalir**
+> dari `settingsViewModel.marketDataSource` ke `SignalLogViewModel` lewat konstruktor (sumber
+> reaktif yang sudah ada, jadi tidak ada mekanisme baru), dan `currentExchange` membaca
+> `exchangeFlow.value.name` — bursa punya satu sumber, bukan dua. `AppPreferences` tidak lagi
+> dipakai di berkas itu. Uji: `SignalLogExchangeBinderTest` (7 kasus); kontrol negatif 5/7 gagal
+> (dua yang tetap lulus memang tidak membedakan reaktivitas — dicatat apa adanya di laporan).
+> Laporan: `docs/LAPORAN-batch5-j3-2026-10-16.md`.
 
 ---
 

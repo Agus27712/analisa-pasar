@@ -170,10 +170,10 @@ Saat ini berisi:
   jurnal trade & angka P&L. **J1, J2 DIPERBAIKI** (batch 3a —
   `docs/LAPORAN-batch3-jurnal-2026-10-16.md`); **J7 DIPERBAIKI** (batch 4 —
   `docs/LAPORAN-batch4-j7-2026-10-16.md`); **J4 + N10 DIPERBAIKI** (batch 5a —
-  `docs/LAPORAN-batch5-j4n10-2026-10-16.md`). **Masih hidup: J3, J5, J6, J8–J10** (bursa terikat sekali saat
-  konstruksi `SignalLogViewModel`, `selectedPair` dipakai alih-alih simbol yang dievaluasi engine,
-  fallback lintas bursa di jurnal trade, klaim statistik hardcoded, satu rumus P&L ditulis ulang di
-  jalur trade real (J8), default `?: 75` (J9), snapshot tanpa verifikasi simbol (J10)).
+  `docs/LAPORAN-batch5-j4n10-2026-10-16.md`); **J3 DIPERBAIKI** (batch 5b —
+  `docs/LAPORAN-batch5-j3-2026-10-16.md`). **Masih hidup: J5, J6, J8–J10** (fallback lintas bursa
+  di jurnal trade, klaim statistik hardcoded, satu rumus P&L ditulis ulang di jalur trade real
+  (J8), default `?: 75` (J9), snapshot tanpa verifikasi simbol (J10)).
   **Catatan angka:** friksi FSM Tokocrypto USDT yang tertulis 0,8226% di dokumen temuan itu **salah**;
   angka yang benar **0,9735%** (lihat `docs/LAPORAN-batch4-j7-2026-10-16.md` §2).
 
@@ -331,6 +331,19 @@ Saat ini berisi:
   menyalin pemeriksaannya — pakai `capture`.
 - **Harga fallback harus milik simbol jurnal.** `currentTick.value?.price` adalah tick pair yang
   kebetulan dibuka; pakai `dashboardTicks[journalSymbol]`.
+
+## Aturan turunan dari audit jurnal — J3 (batch 5b, 2026-10-16)
+
+- **Bursa untuk query berskala bursa harus mengalir, bukan dibaca sekali.** Parameter Room terikat
+  saat flow dibuat; `val x: String get() = prefs.marketDataSource.name` **tidak** menyelamatkan
+  keadaan karena getter itu hanya dipanggil sekali, saat flow dibangun. Pakai
+  `SignalLogExchangeBinder.bind(alurBursa) { repo.get…Flow(it) }` — jangan menulis `stateIn` di
+  atas query yang parameternya dibaca langsung.
+- **`flatMapLatest` yang di-import tapi tidak dipakai adalah petunjuk, bukan sampah.** Itu tanda
+  kode reaktifnya pernah direncanakan lalu tertinggal; selesaikan, jangan hapus importnya.
+- **Satu sumber untuk bursa.** Bila sebuah ViewModel punya `prefs.marketDataSource` **dan** flow
+  turunan, keduanya bisa tidak sepakat. Teruskan `settingsViewModel.marketDataSource` dan bacalah
+  `flow.value` bila perlu nilai sekarang.
 
 ## Arah produk (ringkas)
 

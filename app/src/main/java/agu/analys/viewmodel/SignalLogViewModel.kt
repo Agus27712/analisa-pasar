@@ -3,35 +3,52 @@ package agu.analys.viewmodel
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import agu.analys.config.MarketDataSource
 import agu.analys.database.AppDatabase
+import agu.analys.database.SignalLogExchangeBinder
 import agu.analys.database.SignalLogRepository
 import agu.analys.database.SignalLogEntity
 import agu.analys.model.SignalReliabilitySummary
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-import agu.analys.util.AppPreferences
-import kotlinx.coroutines.flow.flatMapLatest
+class SignalLogViewModel(
+    application: Application,
+    /**
+     * Bursa yang **sedang aktif** — sumber reaktif, bukan nilai yang dibaca sekali.
+     *
+     * J3: parameter Room terikat saat flow dibuat, jadi kalau bursa dibaca sekali di sini,
+     * mengganti bursa tidak pernah mengulang subscription dan tabel log + reliabilitas
+     * tetap menampilkan bursa lama.
+     */
+    private val exchangeFlow: StateFlow<MarketDataSource>
+) : AndroidViewModel(application) {
 
-class SignalLogViewModel(application: Application) : AndroidViewModel(application) {
-
-    private val prefs = AppPreferences(application)
     private val signalLogRepository = SignalLogRepository(
         dao = AppDatabase.getInstance().signalLogDao(),
         scope = viewModelScope
     )
 
-    val currentExchange: String get() = prefs.marketDataSource.name
+    /** Nama bursa aktif saat ini — dibaca dari sumber yang sama dengan flow di bawah. */
+    val currentExchange: String get() = exchangeFlow.value.name
 
-    val allSignalLogs: StateFlow<List<SignalLogEntity>> = signalLogRepository.getLogsByExchangeFlow(currentExchange)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    private val exchangeNames: Flow<String> = exchangeFlow.map { it.name }
 
-    val signalReliabilitySummary: StateFlow<SignalReliabilitySummary> = signalLogRepository.getReliabilitySummaryByExchangeFlow(currentExchange)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SignalReliabilitySummary())
+    val allSignalLogs: StateFlow<List<SignalLogEntity>> =
+        SignalLogExchangeBinder.bind(exchangeNames) { exchange ->
+            signalLogRepository.getLogsByExchangeFlow(exchange)
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val signalReliabilitySummary: StateFlow<SignalReliabilitySummary> =
+        SignalLogExchangeBinder.bind(exchangeNames) { exchange ->
+            signalLogRepository.getReliabilitySummaryByExchangeFlow(exchange)
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SignalReliabilitySummary())
 
     private val _auditReportText = MutableStateFlow<String?>(null)
     val auditReportText: StateFlow<String?> = _auditReportText.asStateFlow()

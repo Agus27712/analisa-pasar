@@ -49,7 +49,10 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     val aiNewsViewModel = AiNewsViewModel(application)
     val settingsViewModel = SettingsViewModel(application)
     val portfolioViewModel = PortfolioViewModel(application)
-    val signalLogViewModel = SignalLogViewModel(application)
+    // J3 — bursa diteruskan sebagai **aliran**, bukan dibaca sekali. Kalau dibaca sekali di
+    // dalam `SignalLogViewModel`, parameter Room terikat saat flow dibuat dan mengganti bursa
+    // tidak pernah mengulang subscription (tabel log & reliabilitas tetap berisi bursa lama).
+    val signalLogViewModel = SignalLogViewModel(application, settingsViewModel.marketDataSource)
 
     // ═════════════════════════════════════════════════════════════════════════
     // 2. CORE COORDINATORS & SHARED SERVICES

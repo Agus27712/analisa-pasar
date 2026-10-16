@@ -2144,3 +2144,71 @@ Angka terukur (dari XML): **68 kelas / 522 uji / 0 gagal / 1 dilewati → 69 kel
 ### 34.5 Laporan
 
 `docs/LAPORAN-batch5-j4n10-2026-10-16.md`
+
+---
+
+## 35. Batch 5b — J3: `SignalLogViewModel` mengikat bursa sekali saat konstruksi (2026-10-16)
+
+### 35.1 Masalah
+
+```kotlin
+val currentExchange: String get() = prefs.marketDataSource.name      // getter, tapi…
+val allSignalLogs: StateFlow<List<SignalLogEntity>> =
+    signalLogRepository.getLogsByExchangeFlow(currentExchange)        // dievaluasi SEKALI
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+```
+
+Parameter Room terikat saat flow dibuat (`dao.getLogsByExchangeFlow(exchange.uppercase())`), jadi
+mengganti bursa **tidak** mengulang subscription. ViewModel-nya dibuat sekali di
+`TradingViewModel.kt:52` dan bertahan sepanjang activity.
+
+Dampaknya: buka app di Tokocrypto → pindah ke Indodax → buka tab "Log & Evaluasi Sinyal": seluruh
+log **dan** tabel "RELIABILITAS SKOR KEYAKINAN" masih berisi data Tokocrypto, tanpa label penjelas.
+Melanggar aturan isolasi exchange untuk state.
+
+Jejak bahwa pola reaktif memang pernah dimaksudkan: `flatMapLatest` sudah di-import di berkas itu
+tetapi tidak pernah dipakai.
+
+### 35.2 Perbaikan
+
+Bursa kini **mengalir** dari `settingsViewModel.marketDataSource` (sudah `StateFlow<MarketDataSource>`
+dan diperbarui oleh `setMarketDataSource`), diteruskan ke `SignalLogViewModel` lewat konstruktor.
+
+Pengikatannya diekstrak ke `database/SignalLogExchangeBinder.kt` supaya bisa diuji tanpa Android:
+
+```kotlin
+fun <T> bind(exchangeNames: Flow<String>, query: (String) -> Flow<T>): Flow<T> =
+    exchangeNames.map { it.trim().uppercase() }.distinctUntilChanged().flatMapLatest { query(it) }
+```
+
+- `flatMapLatest` — subscription lama dibatalkan, query dijalankan ulang untuk bursa baru.
+- `distinctUntilChanged` — nama yang sama berturut-turut tidak membuka query Room baru.
+- `trim().uppercase()` — sepakat dengan DAO yang juga memanggil `uppercase()`.
+
+`currentExchange` kini membaca `exchangeFlow.value.name`, jadi bursa punya **satu** sumber, bukan
+dua (getter `prefs` + flow).
+
+### 35.3 Uji & kontrol negatif
+
+Uji baru: `app/src/test/java/agu/analys/database/SignalLogExchangeBinderTest.kt` — **7 kasus**:
+query untuk bursa awal, ganti bursa mengulang subscription, nilai mengikuti bursa terakhir, nama
+sama berturut-turut tidak mengulang subscription, pembakuan nama (huruf kecil, spasi), dan tiga
+pergantian berturut-turut.
+
+Kontrol negatif: binder dikembalikan ke perilaku lama (`take(1)` — bursa dibaca sekali, tanpa
+pembakuan nama) ⇒ **5 dari 7 uji GAGAL**. Dua yang tetap lulus memang tidak membedakan reaktivitas:
+"query dijalankan untuk bursa awal" dan "nama sama berturut-turut tidak mengulang subscription" —
+keduanya juga benar pada versi lama, jadi keduanya bukan bukti perbaikan.
+
+Angka terukur (dari XML): **69 kelas / 542 uji → 70 kelas / 549 uji**, 0 gagal, 1 dilewati.
+
+### 35.4 Yang tidak ikut berubah (batas perbaikan)
+
+- **`SignalLogScreen` tidak diuji otomatis.** Perbaikan diuji pada pengikat alirnya, bukan pada
+  komposisi layarnya.
+- **Hanya jurnal sinyal.** Pola "bursa dibaca sekali" kemungkinan ada di ViewModel lain; perbaikan
+  ini tidak menyapu semuanya — hanya yang menjadi temuan J3.
+
+### 35.5 Laporan
+
+`docs/LAPORAN-batch5-j3-2026-10-16.md`
