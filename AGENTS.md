@@ -2,19 +2,23 @@
 
 Aplikasi Android Kotlin 100% (Jetpack Compose M3) untuk analisis & **scalp mode** kripto di **Tokocrypto** dan **Indodax**. Modul tunggal `:app`, package `agu.analys`, MVVM + Coordinator (`TradingViewModel` + MarketData/Position/Simulation/RealTradeCoordinator).
 
+**Versi aplikasi saat ini:** **3.9.1** (`versionCode 90`) — `app/build.gradle.kts`. Rilis 3.9.1
+(2026-10-16) berisi batch 1–5f perbaikan audit + sinkronisasi dokumen. Tag rilis: `v3.9.1`
+dibuat otomatis oleh `.github/workflows/release.yml` saat `main` menerima push.
+
 ---
 
 ## ▶ MULAI DARI SINI (agen lanjutan — baca sebelum menyentuh kode)
 
 ### ⚠️ Langkah 0 — pastikan branch yang Anda baca benar
 
-**Kerjaan aktif ada di `patch`.** Snapshot **2026-10-15** (tepat setelah **PR #60** → `7f890eb`):
+**Kerjaan aktif ada di `patch`.** Snapshot **2026-10-16** (tepat setelah merge rilis **3.9.1**):
 **`patch` dan `main` identik secara isi** — `git diff HEAD origin/main` **kosong**; `main` hanya
-unggul **2 commit merge** (PR #59 `bc48ac4`, PR #60 `7f890eb`), bukan commit konten. **Sejak itu tiap
-commit baru mendarat di `patch` dulu, jadi `origin/main..HEAD` normalnya `> 0`** — itu wajar, bukan
-tanda `main` ketinggalan. Klaim lama "`patch` 2 commit di depan" dan "`main` belum menerima
-`f9e7fdd`/`56eb5cd`" **usang** — keduanya **sudah ada di `main`**. **Jangan pernah menyimpulkan
-keadaan repo dari `main` tanpa mengecek angka ini dulu:**
+unggul **commit merge** (PR #59–#62 + merge rilis 3.9.1), bukan commit konten. **Selama ini tiap
+commit baru mendarat di `patch` dulu, jadi `origin/main..HEAD` akan `> 0` lagi begitu kamu mulai
+kerja — itu wajar, bukan tanda `main` ketinggalan.** Klaim lama "`patch` 2 commit di depan" dan
+"`main` belum menerima `f9e7fdd`/`56eb5cd`" **usang** — keduanya **sudah ada di `main`**.
+**Jangan pernah menyimpulkan keadaan repo dari `main` tanpa mengecek angka ini dulu:**
 
 ```sh
 git clone https://github.com/Agus27712/analisa-pasar.git
@@ -626,6 +630,18 @@ Saat ini berisi (semua diperbarui 2026-10-16):
 
 - **Branch kerja sekarang: `patch`** (bukan `main`). Owner me-review di `patch` lebih dulu; `main`
   hanya menerima merge setelah review. Jangan push langsung ke `main` tanpa instruksi eksplisit.
+- ⚠️ **Merge ke `main` wajib di-pull dulu.** `origin/main` hampir selalu **lebih baru** dari `main`
+  lokal (PR di-merge via GitHub, bukan via merge lokal). Kalau langsung `git merge patch` di `main`
+  lokal yang tertinggal, hasilnya **merge yang tidak menyertakan PR terakhir** — `main` Remote
+  akan tertinggal satu round dan diff isinya tidak akan pernah sama dengan `patch`. Pola aman:
+  ```sh
+  git checkout main && git pull --ff-only origin main && git merge --no-ff patch
+  ```
+  Lalu **verifikasi**: `git merge-base --is-ancestor <commit-terakhir-origin/main> HEAD` → `ADA`,
+  dan `git diff --stat HEAD patch` → **kosong**.
+- **Naikkan versi hanya di `patch`**, lalu merge ke `main` — jangan naikkan versi dua kali
+  (merge akan membawa inlandingan). `versionName`/`versionCode` di `app/build.gradle.kts`;
+  `release.yml` membacanya dan membuat tag `v<versionName>` otomatis saat `main` menerima push.
 - Branch lama di remote (`audit/menyeluruh-2026-10`, `engine_scalping_update`, tag versi)
   **sudah tidak ada** — per 2026-10-15 `git ls-remote --heads origin` hanya mengembalikan
   `main` dan `patch`. Jangan mencari branch itu lagi.
