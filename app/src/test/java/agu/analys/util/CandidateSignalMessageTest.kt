@@ -67,4 +67,23 @@ class CandidateSignalMessageTest {
         assertTrue("stop loss hilang dari pesan: $pesan", pesan.contains("Stop Loss:"))
         assertTrue("nama bursa hilang dari pesan: $pesan", pesan.contains(keyIdr.displayExchange))
     }
+
+    /**
+     * **N5** — push notification kandidat membawa Entry/Target/Stop Loss, jadi ia permukaan yang
+     * paling berisiko dibaca sebagai ajakan beli nyata. AGENTS.md mewajibkan setiap permukaan
+     * status siap menyatakan bahwa eksekusi uang riil masih diblokir.
+     *
+     * Kontrol negatif: hapus baris `CANDIDATE_DISCLAIMER` → uji ini GAGAL.
+     */
+    @Test
+    fun `pesan kandidat wajib membawa disclaimer uang riil diblokir`() {
+        val pesan = buildCandidateSignalMessage(keyIdr, signal(72))
+
+        assertTrue(
+            "disclaimer wajib ada di pesan kandidat: $pesan",
+            pesan.contains(CANDIDATE_DISCLAIMER)
+        )
+        assertTrue("disclaimer harus menyebut eksekusi uang riil", pesan.contains("uang riil"))
+        assertTrue("disclaimer harus menyatakan DIBLOKIR", pesan.contains("DIBLOKIR"))
+    }
 }

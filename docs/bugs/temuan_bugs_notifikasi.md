@@ -2,7 +2,8 @@
 
 **Tanggal:** 2026-10-16
 **Status:** DOKUMEN TEMUAN — **sebagian sudah diperbaiki.** Batch 1 (2026-10-16) menutup
-**N1, N2, N3**; temuan **N4–N12 masih hidup**. Diverifikasi terhadap kode di branch `patch`.
+**N1, N2, N3**; batch 2 (2026-10-16) menutup **N4, N5, N7**. Temuan **N6, N8–N12 masih hidup**.
+Diverifikasi terhadap kode di branch `patch`.
 **Cakupan:** seluruh pengirim notifikasi + seluruh alur `confidence` (produsen → notifikasi → jurnal → UI)
 
 > Semua temuan di bawah **diverifikasi langsung ke kode** (bukan kutipan memori).
@@ -146,6 +147,19 @@ Ini melanggar aturan **"SATU rumus P&L"** (AGENTS.md §24) di permukaan notifika
 
 ### N4 — Toggle "Push notifikasi" di Pengaturan tidak konsisten
 
+> ✅ **DIPERBAIKI 2026-10-16 (batch 2)** — dan **diperluas**: selain master yang diabaikan di
+> `TradingViewModelAlerts`, ternyata **keempat sakelar kategori** juga tidak dibaca oleh jalur
+> pengiriman mana pun (hanya ditulis di `SettingsViewModel` + dirender di UI). Perbaikan memakai
+> **gerbang tunggal** `util/NotificationGate.kt` (`allowsNotification`, fungsi murni) yang dipasang
+> di keenam chokepoint `AlertNotificationHelper`, bukan guard per-call-site.
+>
+> ⚠️ Saran audit ("guard di awal `checkAlertsAndTrailing`") **tidak dipakai** karena akan
+> **mematikan auto-sell** — `checkTrailingForMode` dipanggil dari sana dan di dalamnya ada
+> `executeAutoSellOrder`.
+>
+> Uji: `app/src/test/java/agu/analys/util/NotificationGateTest.kt` (6 test).
+> Lihat `docs/LAPORAN-batch2-notifikasi-2026-10-16.md` §2.
+
 **Lokasi:** `viewmodel/TradingViewModelAlerts.kt` (seluruh file) + `util/AlertNotificationHelper.kt`
 
 `checkAlertsAndTrailing` **tidak pernah** membaca `isNotificationsEnabled` — price alert, trailing
@@ -166,6 +180,10 @@ trailing/TP/price-alert dari jalur VM.
 ---
 
 ### N5 — Notifikasi kandidat tidak membawa konteks "uang riil masih diblokir"
+
+> ✅ **DIPERBAIKI 2026-10-16 (batch 2)** — konstanta `CANDIDATE_DISCLAIMER` ikut di badan pesan
+> `buildCandidateSignalMessage`. Uji: `util/CandidateSignalMessageTest.kt`.
+> Lihat `docs/LAPORAN-batch2-notifikasi-2026-10-16.md` §3.
 
 **Lokasi:** `util/AlertNotificationHelper.kt` `sendCandidateFoundNotification`
 
@@ -233,6 +251,10 @@ keduanya harus diverifikasi sebelum memastikan apakah bug ini aktif atau latent.
 > `"BTC_IDR#"` tidak akan pernah cocok dengan key ternormalisasi `"BTCIDR#SCALPING"`.
 > **Koreksi path:** berkas `viewmodel/TradingViewModelSimulation.kt` sudah tidak ada; pemanggil
 > keduanya kini `viewmodel/SimulationCoordinator.kt:110`.
+>
+> ✅ **DIPERBAIKI 2026-10-16 (batch 2)** — `markTriggered` **dan `reset`** kini memakai
+> `normalizeSymbol(symbol)`. Uji: `engine/scalping/SignalLifecycleSymbolNormalizationTest.kt`
+> (2 test). Lihat `docs/LAPORAN-batch2-notifikasi-2026-10-16.md` §4.
 
 **Perbaikan:** pakai `cacheKey()`/`normalizeSymbol()` di `markTriggered`, bukan
 `symbol.uppercase()`.
@@ -269,13 +291,14 @@ keduanya harus diverifikasi sebelum memastikan apakah bug ini aktif atau latent.
 
 | Prioritas | Temuan | Alasan |
 |---|---|---|
-| ~~1~~ | ~~**N2**~~ ✅ selesai 2026-10-16 | Kehilangan eksekusi auto-sell — paling merugikan user secara finansial |
-| ~~2~~ | ~~**N1**~~ ✅ selesai 2026-10-16 | Bug display paling terlihat, perbaikan trivial |
-| ~~3~~ | ~~**N3**~~ ✅ selesai 2026-10-16 | Melanggar aturan "SATU rumus P&L"; estimasi PnL salah di notifikasi |
-| 4 | **N4** | Inkonsistensi toggle; user kehilangan kontrol atas notifikasi |
-| 5 | **N5** | Kepatuhan aturan AGENTS (status siap ≠ ajakan beli) |
-| 6 | **N6** | Dua produsen satu state machine — sumber notifikasi ganda |
-| 7 | **N7 / N9 / N10 / N12** | Bug latent / kebersihan kode — **kecuali N7, lihat catatan di §3** |
+| ~~1~~ | ~~**N2**~~ ✅ selesai 2026-10-16 (batch 1) | Kehilangan eksekusi auto-sell — paling merugikan user secara finansial |
+| ~~2~~ | ~~**N1**~~ ✅ selesai 2026-10-16 (batch 1) | Bug display paling terlihat, perbaikan trivial |
+| ~~3~~ | ~~**N3**~~ ✅ selesai 2026-10-16 (batch 1) | Melanggar aturan "SATU rumus P&L"; estimasi PnL salah di notifikasi |
+| ~~4~~ | ~~**N4**~~ ✅ selesai 2026-10-16 (batch 2, diperluas) | Inkonsistensi toggle; user kehilangan kontrol atas notifikasi |
+| ~~5~~ | ~~**N5**~~ ✅ selesai 2026-10-16 (batch 2) | Kepatuhan aturan AGENTS (status siap ≠ ajakan beli) |
+| 6 | **N6** | Dua produsen satu state machine — sumber notifikasi ganda. **Butuh keputusan desain.** |
+| ~~7a~~ | ~~**N7**~~ ✅ selesai 2026-10-16 (batch 2) | Terverifikasi **aktif**, bukan latent; `reset` ikut cacat |
+| 7b | **N9 / N10 / N12** | Bug latent / kebersihan kode |
 
 Setiap perbaikan **wajib**:
 - mengikuti aturan branch `patch` (jangan push ke `main` tanpa instruksi owner);
@@ -293,3 +316,5 @@ Setiap perbaikan **wajib**:
 | 2026-10-16 | Temuan diekspor ke `docs/bugs/temuan_bugs_notifikasi.md` (dokumen ini) — **belum ada perbaikan kode** |
 | 2026-10-16 | **Batch 1:** N1, N2, N3 diperbaiki + diuji di `cd6c032` (10 test baru, kontrol negatif 4/10 gagal). Lihat `docs/LAPORAN-batch1-notifikasi-2026-10-16.md` |
 | 2026-10-16 | N7 diverifikasi ulang → **AKTIF** (bukan latent); path pemanggil kedua dikoreksi ke `SimulationCoordinator.kt:110` |
+| 2026-10-16 | **Batch 2:** N4 (+ perluasan: keempat sakelar kategori juga mati), N5, N7 diperbaiki + diuji (9 test baru, kontrol negatif 6/13 gagal). Lihat `docs/LAPORAN-batch2-notifikasi-2026-10-16.md` |
+| 2026-10-16 | Ditemukan catatan sampingan **di luar cakupan batch 2**: `AppPreferences` bukan singleton dan `TradingForegroundService.updatePrice/updatePrices` membangunnya tiap tick harga → `EncryptedSharedPreferences` dibuat ulang terus-menerus. Kandidat temuan area performa, **belum diangkat jadi nomor**. |

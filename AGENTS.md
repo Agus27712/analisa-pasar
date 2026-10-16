@@ -150,11 +150,11 @@ Saat ini berisi:
 
 - **`temuan_bugs_notifikasi.md`** (2026-10-16) — audit jalur notifikasi (4 pengirim: VM-sync,
   CandidateScanWorker, foreground service, VM-alerts) & alur skor keyakinan (produsen →
-  notifikasi → jurnal → UI). **N1, N2, N3 sudah DIPERBAIKI** (batch 1, 2026-10-16 —
-  `docs/LAPORAN-batch1-notifikasi-2026-10-16.md`). **Masih hidup: N4–N12**, termasuk N7 yang
-  terverifikasi **aktif** (bukan latent).
+  notifikasi → jurnal → UI). **N1, N2, N3 DIPERBAIKI** (batch 1 — `docs/LAPORAN-batch1-notifikasi-2026-10-16.md`);
+  **N4, N5, N7 DIPERBAIKI** (batch 2 — `docs/LAPORAN-batch2-notifikasi-2026-10-16.md`).
+  **Masih hidup: N6, N8–N12.**
 
-## Aturan turunan dari batch 1 audit notifikasi (2026-10-16)
+## Aturan turunan dari audit notifikasi (batch 1 & 2, 2026-10-16)
 
 - **Kepemilikan edge pemicu harus tunggal.** Pemicu yang bersifat *edge-once* (mis. trailing
   stop: pemanggil pertama yang melihat harga melewati batas mengonsumsi edge-nya) **hanya boleh
@@ -172,6 +172,26 @@ Saat ini berisi:
 - **Ekstrak pembentuk teks/notifikasi jadi fungsi murni** supaya bisa diuji tanpa Android. Pesan
   notifikasi yang dirakit inline di dalam `NotificationCompat.Builder` tidak bisa diuji — itulah
   cara bug `6800%` bertahan lama.
+- **Sakelar notifikasi hanya boleh dijaga di gerbang tunggal, bukan di call site.** Setiap
+  pengiriman wajib lewat `AlertNotificationHelper.canNotify(context, kategori)`. Jangan menambah
+  `if (prefs.isX) return` di pemanggil: ada belasan call site dan justru itu akar N4. Sakelar baru
+  cukup ditambah sebagai satu cabang di `allowsNotification` (`util/NotificationGate.kt`) + satu
+  properti di `AppPreferences.notificationSettings`. Penjaga:
+  `app/src/test/java/agu/analys/util/NotificationGateTest.kt`.
+- **Mematikan notifikasi TIDAK boleh mematikan eksekusi.** Gerbang notifikasi hanya hidup di
+  lapisan notifikasi. `executeAutoSellOrder` / stop-loss / trailing harus tetap jalan walau semua
+  sakelar notifikasi mati — mematikan bel bukan berarti melepas perlindungan posisi. Karena itu
+  jangan pernah menaruh guard sakelar di awal `checkAlertsAndTrailing` (ia memanggil
+  `checkTrailingForMode` yang mengeksekusi jual).
+- **Semua pencarian key berbasis simbol wajib lewat `normalizeSymbol`.** Key `activeSignals`
+  dibentuk `"${normalizeSymbol(symbol)}#${mode}"`; memakai `symbol.uppercase()` mentah membuat
+  `"BTC_IDR#"` tidak pernah cocok dengan `"BTCIDR#SCALPING"` (N7 — terbukti aktif di jalur real
+  trade). Berlaku untuk `markTriggered`, `reset`, dan fungsi baru apa pun yang menyusun prefix.
+- **Uji perilaku notifikasi di Robolectric: jangan membuat `AppPreferences` kedua.** Instance baru
+  **tidak** melihat tulisan instance pertama (jalur pemulihan keystore menimpa prefs), sehingga uji
+  gagal karena artefak harness. Pakai
+  `AlertNotificationHelper.notificationPrefsForTest(context)` — objek yang benar-benar dibaca
+  gerbang.
 
 ## Arah produk (ringkas)
 

@@ -1570,3 +1570,117 @@ Sisa temuan yang belum dikerjakan: **N4** (toggle push tidak dipatuhi di jalur a
 **N5** (notifikasi kandidat tanpa disclaimer "uang riil masih diblokir"), **N6** (dua produsen satu
 state machine), **N7** (`markTriggered` tidak menormalkan simbol — **aktif**, bukan latent),
 **N8–N12**. Lihat `docs/bugs/temuan_bugs_notifikasi.md`.
+
+---
+
+## 28. Batch 2 audit notifikasi — N4, N5, N7 (2026-10-16)
+
+Lanjutan §26. **N4 diperluas**: selain sakelar master yang diabaikan di `TradingViewModelAlerts`,
+ditemukan bahwa **keempat sakelar kategori** juga tidak dibaca oleh jalur pengiriman mana pun.
+
+### 28.1 N4 (+ temuan baru) — sakelar notifikasi tidak dipatuhi
+
+Keadaan sebelum perbaikan:
+
+| Sakelar | Dibaca oleh jalur kirim? |
+|---|---|
+| `isNotificationsEnabled` (master) | Ya di `TradingViewModelSync`, `CandidateScanWorker`, `TradingForegroundService`. **Tidak** di `TradingViewModelAlerts` (0 kemunculan). |
+| `isNotifyPriceAlertsEnabled` | **Tidak sama sekali** |
+| `isNotifyCandidateBuyEnabled` | **Tidak sama sekali** |
+| `isNotifyTrailingStopEnabled` | **Tidak sama sekali** |
+| `isNotifyEmergencyExitEnabled` | **Tidak sama sekali** |
+
+Keempat sakelar kategori hanya dibaca/ditulis di `SettingsViewModel` dan dirender di
+`SettingsCategoryDetailContent` — jadi Pengaturan menawarkan empat sakelar yang **tidak melakukan
+apa pun**. Ini temuan baru yang tidak ada di audit asli.
+
+**Jebakan yang dihindari:** saran audit ("tambah guard di awal `checkAlertsAndTrailing`") akan
+**mematikan auto-sell**, karena `checkTrailingForMode` dipanggil dari sana dan di dalamnya ada
+`executeAutoSellOrder`. Mematikan notifikasi bukan berarti mematikan perlindungan posisi.
+
+**Perbaikan:** gerbang tunggal, bukan guard di tiap call site (justru karena itulah akar N4 —
+belasan call site dan tidak satu pun memeriksa):
+
+- `util/NotificationGate.kt` (baru) — `NotificationCategory`, `NotificationSettings`, dan fungsi
+  murni `allowsNotification(settings, category)`. Master mati ⇒ semua kategori mati (di UI sakelar
+  kategori memang sub-pengaturan dari master).
+- `AppPreferences.notificationSettings` — potret kelima sakelar sekali jadi.
+- `AlertNotificationHelper.canNotify(context, category)` dipasang di **keenam** chokepoint
+  pengiriman (kandidat, exit darurat, trailing hit, trailing peak, take profit, price alert).
+  `AppPreferences` di-cache (`by lazy`-style, karena konstruktornya membangun
+  `EncryptedSharedPreferences`). Bila prefs gagal dibaca, gerbang **terbuka** — sama seperti
+  perilaku sebelumnya, supaya keystore rusak tidak diam-diam mematikan peringatan darurat.
+
+Pemetaan kategori: take profit ikut **TRAILING_STOP** ("Trailing Stop & Eksekusi"), bukan
+PRICE_ALERT — sesuai label di Pengaturan.
+
+Semua default `true`, jadi pengguna yang belum pernah menyentuh Pengaturan tidak kehilangan
+notifikasi apa pun.
+
+### 28.2 N5 — disclaimer di notifikasi kandidat
+
+Push kandidat membawa Entry/Target/Stop Loss tanpa konteks apa pun, padahal AGENTS.md mewajibkan
+setiap permukaan status siap menyatakan eksekusi uang riil masih diblokir. Ditambahkan konstanta
+`CANDIDATE_DISCLAIMER` yang ikut di badan pesan:
+
+> `→ Eksekusi uang riil masih DIBLOKIR. Sinyal ini decision support, bukan ajakan beli.`
+
+### 28.3 N7 — normalisasi simbol
+
+`SignalLifecycleManager.markTriggered` **dan** `reset` memakai `"${symbol.uppercase()}#"`, sedangkan
+key disimpan lewat `cacheKey` → `normalizeSymbol` (buang `/ _ -`). Akibatnya `markTriggered("eth_idr")`
+membentuk prefix `"ETH_IDR#"` yang tidak pernah cocok dengan key `"ETHIDR#SCALPING"`.
+
+Audit asli hanya menyebut `markTriggered` dan masih ragu apakah aktif; **`reset` punya cacat yang
+sama** dan keduanya **aktif** — jalur real trade mengirim `pair` berformat Indodax (`btc_idr`),
+terbukti dari `baseFromPair`/`quoteFromPair` yang melakukan `.replace("_","")` defensif.
+
+### 28.4 Uji & kontrol negatif
+
+| Berkas uji | Test | Menjaga |
+|---|---|---|
+| `util/NotificationGateTest.kt` (baru) | 6 | N4 + sakelar kategori (3 murni, 3 perilaku) |
+| `engine/scalping/SignalLifecycleSymbolNormalizationTest.kt` (baru) | 2 | N7 |
+| `util/CandidateSignalMessageTest.kt` | +1 (jadi 5) | N5 |
+
+Uji perilaku memakai Robolectric + `NotificationManager` sungguhan, jadi ia membuktikan notifikasi
+**benar-benar tidak terpasang** — bukan sekadar memanggil fungsi murni.
+
+Kontrol negatif (ketiga perbaikan dimatikan sekaligus):
+
+| Perbaikan dimatikan | Uji yang GAGAL |
+|---|---|
+| `canNotify` tidak lagi memanggil `allowsNotification` | 3 dari 6 `NotificationGateTest` (yang 3 murni tetap lulus — ia menguji `allowsNotification` langsung) |
+| `CANDIDATE_DISCLAIMER` dilepas dari pesan | 1 dari 5 `CandidateSignalMessageTest` |
+| `normalizeSymbol` → `symbol.uppercase()` | 2 dari 2 `SignalLifecycleSymbolNormalizationTest` |
+| **Total** | **6 dari 13 uji gagal** |
+
+### 28.5 Catatan harness yang perlu diketahui agen berikutnya
+
+Di bawah Robolectric, **membuat `AppPreferences` kedua tidak melihat tulisan instance pertama**
+(jalur pemulihan keystore menimpa prefs). Uji perilaku karena itu menulis lewat
+`AlertNotificationHelper.notificationPrefsForTest(context)` — objek yang **benar-benar** dibaca
+gerbang — bukan lewat `AppPreferences(context)` baru. Bila tidak, uji gagal karena artefak harness,
+bukan karena gerbangnya. Batasnya: uji ini membuktikan "diberi setelan X, gerbang menahan kategori
+Y", bukan "helper membaca berkas prefs aplikasi yang sama".
+
+### 28.6 Laporan
+
+`docs/LAPORAN-batch2-notifikasi-2026-10-16.md`
+
+---
+
+## 29. Status setelah §28
+
+| | |
+|---|---|
+| Unit test (diukur dari XML) | **462 total · 461 lulus · 0 gagal · 1 dilewati** (63 kelas) |
+| Baseline sebelum §28 | **453 total · 452 lulus · 0 gagal · 1 dilewati** (61 kelas) |
+| Tambahan | **+9 test, +2 kelas** |
+| APK debug | 27.877.730 byte |
+| Kesiapan uang riil | **BELUM** — lihat §9.5c |
+
+Sisa temuan: **N6** (dua produsen satu state machine — butuh keputusan desain), **N8** (param
+`onlyWhenBackground` mati), **N9** (default `?: 75` mengarang skor), **N10** (snapshot pair lain
+ikut tercatat), **N11** (tier confidence lintas-mode), **N12** (tanpa cooldown notifikasi kandidat).
+Lihat `docs/bugs/temuan_bugs_notifikasi.md`.
