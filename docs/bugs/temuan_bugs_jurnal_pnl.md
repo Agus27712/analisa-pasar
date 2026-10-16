@@ -1,7 +1,7 @@
 # Temuan Audit — Jurnal Sinyal, Jurnal Trade & Angka P&L
 
 **Tanggal:** 2026-10-16
-**Status:** DOKUMEN TEMUAN — **belum ada perbaikan kode.** Semua butir di bawah masih hidup.
+**Status:** DOKUMEN TEMUAN — **J1 & J2 sudah DIPERBAIKI** (batch 3a); **J3–J10 masih hidup.**
 Diverifikasi terhadap kode di branch `patch` @ `a842e35`.
 **Cakupan:** `database/SignalLogRepository.kt` · `database/TradeHistoryRecorder.kt` ·
 `trading/TradeSignalSnapshot.kt` · `viewmodel/SignalLogViewModel.kt` ·
@@ -95,6 +95,17 @@ dibuat benar-benar net. **Perhatikan efek amnesty:** banyak sinyal "menang" akan
 
 **Sifat:** display + statistik ⇒ **wajib kontrol negatif** (paksa basis KOTOR → test harus gagal).
 
+> ✅ **DIPERBAIKI 2026-10-16 (batch 3a)** — `realizedPnlPct` kini memakai
+> `FeeSchedule.netProfitPctForDirected` (arah BUY/SELL dibedakan) lewat pembungkus tunggal
+> `database/SignalLogPnl.kt` → `netSignalPnlPct`, dipasang di **tiga** jalur yang dulu masing-masing
+> menulis rumusnya sendiri: `updateTrackingLogWithPrice`, `resolveLogManually`, dan
+> `expireTrackingLogsForSymbol`. Label UI (`SignalLogScreen.signalPnlLabel`) memilih "Net"/"Gross"
+> sesuai basis yang benar-benar dipakai, dan `EXPIRED` tanpa P&L menulis "Hasil tidak diketahui"
+> alih-alih mengarang "0,00%". `maxProfitPct`/`maxDrawdownPct` **tetap kotor** sesuai aturan B6.
+> Uji: `database/SignalOutcomeClassificationTest.kt`. **Efek amnesti:** win-rate jurnal akan turun —
+> kenaikan +0,50% di Tokocrypto USDT sebenarnya −0,468950% net. Lihat
+> `docs/LAPORAN-batch3-jurnal-2026-10-16.md` §3 dan §4.
+
 ---
 
 ### J2 — Tiga definisi W/L dalam satu berkas; dua tidak konsisten ⇒ satu log bisa dihitung MENANG **dan** KALAH
@@ -159,6 +170,18 @@ kalau entry berubah, log lama di-`resolve` dan log baru dibuat.
 
 **Sifat:** angka salah di layar ⇒ **wajib kontrol negatif** (log `HIT_SL` dengan P&L positif harus
 **tidak** masuk `wins`; `winRatePct` tidak boleh > 100 untuk sampel mana pun).
+
+> ✅ **DIPERBAIKI 2026-10-16 (batch 3a)** — satu predikat eksklusif `classifySignalOutcome`
+> (`database/SignalOutcome.kt`) dipasang di **empat** call site: `calculateReliabilitySummary`,
+> `buildTierStats`, `buildGroupStats`, dan `bestSymbol`/`bestStrategy` (yang terakhir dulu memakai
+> definisi **keempat** sendiri). **Status menang/kalah menang atas tanda P&L**, sehingga log `HIT_SL`
+> ber-P&L positif dihitung kalah dan tidak lagi masuk dua keranjang sekaligus.
+> Akar penyebabnya juga ditutup: `recordSignal` memisahkan episode bila `entryPrice` bergerak lebih
+> dari `ENTRY_SPLIT_TOLERANCE = 0,8%` (`hasEntryDrifted`) — log lama di-`EXPIRED` pada harga terkini
+> memakai `entry`/TP/SL miliknya sendiri (`resolveSupersededTrackingLog`), bukan digabung.
+> `avgProfitPct`/`avgLossPct`/`maxSingleWinPct`/`maxSingleLossPct` kini hanya dihitung dari log yang
+> P&L-nya **searah** keranjangnya. Uji: `database/SignalOutcomeClassificationTest.kt` (14 uji).
+> Lihat `docs/LAPORAN-batch3-jurnal-2026-10-16.md` §2.
 
 ---
 
@@ -398,3 +421,4 @@ test **diukur** dari XML.
 |---|---|
 | 2026-10-16 | Audit read-only jurnal sinyal, jurnal trade, dan angka P&L (branch `patch` @ `a842e35`) |
 | 2026-10-16 | Temuan diekspor ke `docs/bugs/temuan_bugs_jurnal_pnl.md` (dokumen ini) — **belum ada perbaikan kode** |
+| 2026-10-16 | **Batch 3a:** J2 + J1 diperbaiki + diuji (14 uji baru, kontrol negatif 9/22 gagal). Lihat `docs/LAPORAN-batch3-jurnal-2026-10-16.md` |

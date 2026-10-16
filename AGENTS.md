@@ -162,10 +162,12 @@ Saat ini berisi:
   mesin exit. **Semua masih hidup, belum ada perbaikan kode.** 3 kritis: posisi paper bursa non-aktif
   menggantung permanen setelah restart (P1), auto-buy menerima sinyal SWING/INTRADAY dengan SL di
   bawah lantai friksi (P2), DCA bisa memicu **jual paksa berlabel `STOP_LOSS`** (P3).
-- **`temuan_bugs_jurnal_pnl.md`** (2026-10-16, **baru**) — audit jurnal sinyal, jurnal trade &
-  angka P&L. **Semua masih hidup, belum ada perbaikan kode.** 2 kritis: jurnal menabulasi P&L
-  **kotor** tetapi berlabel "Net" (J1), dan satu log bisa dihitung menang **sekaligus** kalah
-  sehingga win-rate bisa > 100% (J2).
+- **`temuan_bugs_jurnal_pnl.md`** (2026-10-16, diperbarui di hari yang sama) — audit jurnal sinyal,
+  jurnal trade & angka P&L. **J1, J2 DIPERBAIKI** (batch 3a —
+  `docs/LAPORAN-batch3-jurnal-2026-10-16.md`). **Masih hidup: J3–J10** (bursa terikat sekali saat
+  konstruksi `SignalLogViewModel`, `selectedPair` dipakai alih-alih simbol yang dievaluasi engine,
+  fallback lintas bursa di jurnal trade, klaim statistik hardcoded, radar jual belum berbasis FSM,
+  satu rumus P&L ditulis ulang di jalur trade real, default `?: 75`).
 
 ## Aturan turunan dari audit notifikasi (batch 1 & 2, 2026-10-16)
 
@@ -205,6 +207,31 @@ Saat ini berisi:
   gagal karena artefak harness. Pakai
   `AlertNotificationHelper.notificationPrefsForTest(context)` — objek yang benar-benar dibaca
   gerbang.
+
+## Aturan turunan dari audit jurnal & P&L (batch 3a, 2026-10-16)
+
+- **Satu predikat menang/kalah, dan predikat itu eksklusif.** Menang/kalah ditentukan **hanya** oleh
+  `classifySignalOutcome(status, realizedPnlPct)` (`database/SignalOutcome.kt`). Dilarang menulis
+  ulang filter bergaya `outcomeStatus in listOf("HIT_TP1", …) || pnl > 0` di tempat baru — itulah
+  cara satu log bisa dihitung menang **dan** kalah sekaligus (win-rate > 100%). Penjaga:
+  `app/src/test/java/agu/analys/database/SignalOutcomeClassificationTest.kt`.
+- **Status peristiwa menang atas tanda P&L.** `HIT_SL` dengan `realizedPnlPct` positif tetap
+  dihitung **kalah**: status mencatat apa yang benar-benar terjadi, sedangkan besaran P&L bisa jadi
+  data warisan yang salah. Jangan "membetulkan" klasifikasi berdasarkan tanda angka.
+- **`realizedPnlPct` wajib net; `maxProfitPct`/`maxDrawdownPct` tetap gross (B6).** Net dihitung
+  lewat `FeeSchedule.netProfitPctForDirected` (arah BUY/SELL dibedakan — SELL adalah cermin long
+  dengan peran `entry`↔`price` ditukar) melalui pembungkus tunggal `database/SignalLogPnl.kt`.
+  Label UI harus mengikuti basis yang benar-benar dipakai ("Net"/"Gross"), dan angka yang tidak
+  diketahui ditulis "Hasil tidak diketahui", bukan "0,00%".
+- **Jangan campur level dua episode sinyal dalam satu baris log.** Bila `entryPrice` bergerak lebih
+  dari `ENTRY_SPLIT_TOLERANCE` (0,8%, sengaja sama dengan ambang anti-spam `recordSignal`), log lama
+  harus ditutup apa adanya (`EXPIRED` pada harga terkini, memakai `entry`/TP/SL miliknya sendiri)
+  lalu episode baru dibuat sebagai log terpisah. Harga tidak valid (`<= 0`, `NaN`, `∞`) **bukan**
+  perpindahan material.
+- **Efek amnesti adalah hasil yang benar, bukan regresi.** Setelah basis net dipakai, banyak sinyal
+  yang dulu tampak "menang" berubah jadi kalah/`EXPIRED` negatif — kenaikan +0,50% di Tokocrypto USDT
+  memang −0,468950% setelah friksi. Setiap laporan yang menyentuh angka win-rate **wajib**
+  menyebutkan ini eksplisit supaya pembaca tidak menyimpulkan engine-nya rusak.
 
 ## Arah produk (ringkas)
 

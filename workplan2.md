@@ -1686,3 +1686,86 @@ Sisa temuan: **N6** (dua produsen satu state machine — butuh keputusan desain)
 `onlyWhenBackground` mati), **N9** (default `?: 75` mengarang skor), **N10** (snapshot pair lain
 ikut tercatat), **N11** (tier confidence lintas-mode), **N12** (tanpa cooldown notifikasi kandidat).
 Lihat `docs/bugs/temuan_bugs_notifikasi.md`.
+
+---
+
+## 30. Batch 3a audit jurnal & P&L — J2, J1 (2026-10-16)
+
+Sumber: `docs/bugs/temuan_bugs_jurnal_pnl.md` (audit read-only agen lain, di-pull dari `patch` @
+`eb01dc3`). Batch 3 dikerjakan dalam tiga commit terpisah; ini yang pertama.
+
+### 30.1 J2 — satu predikat menang/kalah yang eksklusif
+
+`SignalLogRepository` punya **tiga** definisi menang/kalah. Hanya `buildGroupStats` yang eksklusif;
+`buildTierStats` dan `calculateReliabilitySummary` memakai dua filter **independen**:
+
+```kotlin
+val wins   = resolved.filter { status in WIN_STATUSES || pnl > 0 }
+val losses = resolved.filter { status in LOSS_STATUSES || pnl < 0 }
+```
+
+Sebuah log `HIT_SL` ber-P&L positif masuk **kedua** keranjang ⇒ `winCount + lossCount >
+resolvedCount` dan win-rate bisa melewati 100%.
+
+Akarnya di `recordSignal`: `entryPrice` diambil dari sinyal **pertama**, sedangkan
+`targetPrice1/2` dan `stopLoss` diperbarui dari sinyal **terbaru**. Harga naik jauh ⇒ SL baru berada
+**di atas** entry lama ⇒ harga yang turun menyentuh stop loss justru menghasilkan P&L **positif**.
+
+Perbaikan:
+
+- `database/SignalOutcome.kt` (baru) — `SignalOutcome` + `classifySignalOutcome(status, pnl)`.
+  Prioritas: status menang → status kalah → tanda P&L. Satu predikat dipakai **empat** call site
+  (reliability, tier, group, best-symbol/strategy) — dulu ada definisi keempat di best-symbol.
+- `database/SignalLogPnl.kt` (baru) — `hasEntryDrifted(oldEntry, newEntry)`. Bila entry bergerak
+  > 0,8% (`ENTRY_SPLIT_TOLERANCE`, sengaja sama dengan ambang anti-spam), episode lama ditutup
+  (`resolveSupersededTrackingLog`) dan episode baru dicatat sebagai log terpisah. Level TP/SL
+  **tidak pernah** digabung antar-entry.
+- Rata-rata dan nilai ekstrem hanya dihitung dari log yang P&L-nya **searah** keranjangnya,
+  sehingga keluaran tak masuk akal seperti "rata-rata kalah +90%" tidak mungkin muncul lagi.
+
+### 30.2 J1 — basis net untuk `realizedPnlPct`
+
+`updateTrackingLogWithPrice` menyimpan **selisih harga mentah** ke `realizedPnlPct`, lalu
+`SignalLogScreen` melabelinya **"Net"**. Untuk Tokocrypto USDT, "+0,35%" yang tampil sebagai "Net"
+sebenarnya **rugi** — impas net-nya 0,9735%.
+
+Perbaikan:
+
+- `FeeSchedule.netProfitPctForDirected(entry, price, isBuy, …)` — arah BUY/SELL dibedakan. SELL
+  adalah cerminnya: menjual di `entry` (fee jual) lalu membeli kembali di `price` (fee beli);
+  secara aljabar identik dengan menukar peran `entry` dan `price` di `netProfitPct`, bukan
+  pendekatan.
+- `netSignalPnlPct` dipakai di **tiga** tempat: `updateTrackingLogWithPrice`, `resolveLogManually`,
+  dan `expireTrackingLogsForSymbol`.
+- `maxProfitPct`/`maxDrawdownPct` **tetap kotor** (B6), dan labelnya diperbaiki: dulu UI menulis
+  `"Net +1,20% (gross)"` — dua label bertentangan pada satu angka. Kini `signalPnlLabel()` memilih
+  "Net" atau "Gross" sesuai basis yang benar-benar dipakai, dan `EXPIRED` tanpa P&L menulis
+  "Hasil tidak diketahui" alih-alih mengarang "0,00%".
+
+### 30.3 Efek amnesti — wajib dibaca sebelum membandingkan angka lama
+
+Setelah J1, banyak sinyal yang dulu tampak "menang" akan berubah menjadi kalah / `EXPIRED` negatif.
+Itu **bukan regresi**: friksi round-trip Tokocrypto USDT 0,9735% berarti kenaikan di bawah itu memang
+belum menutup biaya. Angka terukur:
+
+| Pergerakan | Gross | Net (Tokocrypto USDT) |
+|---|---|---|
+| +0,50% | +0,50% | **−0,468950%** |
+| +1,00% | +1,00% | +0,026229% |
+| 0,00% | 0,00% | −0,964130% |
+
+### 30.4 Uji & kontrol negatif
+
+Uji baru: `app/src/test/java/agu/analys/database/SignalOutcomeClassificationTest.kt` (14 kasus).
+
+Kontrol negatif — tiga perbaikan dimatikan sekaligus (filter lama dikembalikan, `netSignalPnlPct`
+dibuat bruto, `hasEntryDrifted` selalu `false`): **9 dari 22 uji GAGAL**, tepat pada penjaga
+masing-masing perbaikan. Yang tetap lulus memang tidak bergantung perbaikan —
+`SignalLogSetupStatsTest` (8 uji) lulus di kedua keadaan karena `buildGroupStats` memang sudah
+eksklusif sejak awal, dan tiga uji `classifySignalOutcome` langsung tidak tersentuh karena yang
+dimatikan adalah call site-nya.
+
+### 30.5 Laporan
+
+`docs/LAPORAN-batch3-jurnal-2026-10-16.md`
+

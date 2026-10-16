@@ -252,6 +252,37 @@ object FeeSchedule {
     )
 
     /**
+     * [netProfitPctFor] untuk sinyal **berarah** — BUY maupun SELL.
+     *
+     * [netProfitPctFor] selalu memodelkan posisi **long** (beli di `entry`, jual di `price`).
+     * Sinyal `SELL` adalah cerminnya: bertaruh harga turun, jadi ia **menjual di `entry`**
+     * (kena fee jual + slippage saat masuk) lalu **membeli kembali di `price`** (kena fee beli +
+     * slippage saat keluar). Menukar peran `entry` dan `price` di [netProfitPct] menghasilkan
+     * persis model itu — bukan pendekatan, tapi identitas aljabar:
+     *
+     * ```
+     * long  = price·(1 − sellF − slip) / (entry·(1 + buyF + slip)) − 1
+     * short = entry·(1 − sellF − slip) / (price·(1 + buyF + slip)) − 1
+     * ```
+     *
+     * Tanpa pembeda arah, sinyal SELL akan dihitung dengan friksi terbalik — friksi beli
+     * dibebankan pada kaki yang seharusnya jual.
+     */
+    fun netProfitPctForDirected(
+        entry: Double,
+        price: Double,
+        isBuy: Boolean,
+        exchange: String,
+        quoteAsset: String,
+        useMaker: Boolean = false,
+        slippagePct: Double = DEFAULT_SLIPPAGE_PCT
+    ): Double = if (isBuy) {
+        netProfitPctFor(entry, price, exchange, quoteAsset, useMaker, slippagePct)
+    } else {
+        netProfitPctFor(price, entry, exchange, quoteAsset, useMaker, slippagePct)
+    }
+
+    /**
      * Biaya perolehan yang **sudah** termasuk fee beli + slippage.
      *
      * Dipakai bersama [netSellValue] supaya jumlah rupiah yang ditampilkan konsisten dengan

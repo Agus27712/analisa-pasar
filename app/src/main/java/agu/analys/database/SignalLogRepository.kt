@@ -85,10 +85,15 @@ class SignalLogRepository(
             try {
                 // 1. Check if there are already active TRACKING logs for this coin under this exchange
                 val activeTrackingLogs = dao.getActiveTrackingLogsForSymbolAndExchange(normSymbol, normExchange)
+                val primaryLog = activeTrackingLogs.firstOrNull()
 
-                if (activeTrackingLogs.isNotEmpty()) {
+                // J2 — level TP/SL hanya boleh digabung dengan entry dari sinyal yang SAMA. Bila harga
+                // entry sudah bergerak material, ini episode sinyal yang berbeda: memperbarui TP/SL-nya
+                // di atas entry lama membuat stop loss bisa berada DI ATAS entry, sehingga harga yang
+                // turun menyentuh SL justru menghasilkan P&L positif (HIT_SL ber-P&L positif). Kasus itu
+                // dulu masuk keranjang menang SEKALIGUS kalah dan membuat win-rate melewati 100%.
+                if (primaryLog != null && !hasEntryDrifted(primaryLog.entryPrice, entryPrice)) {
                     // Coin already exists in active signal tracking! UPDATE existing log, do NOT insert new one
-                    val primaryLog = activeTrackingLogs.first()
 
                     // If there are duplicate tracking entries for this symbol (from past bugs), clean them up
                     if (activeTrackingLogs.size > 1) {
@@ -149,6 +154,15 @@ class SignalLogRepository(
                     return@launch
                 }
 
+                // J2 (lanjutan) — harga entry bergerak material: tutup episode lama apa adanya,
+                // lalu lanjut ke jalur "log baru" di bawah. Level TP/SL antar-episode tidak digabung.
+                if (primaryLog != null) {
+                    if (activeTrackingLogs.size > 1) {
+                        dao.deleteLogsByIds(activeTrackingLogs.drop(1).map { it.id })
+                    }
+                    resolveSupersededTrackingLog(primaryLog, entryPrice, now)
+                }
+
                 // 2. Check if coin already has a recent log in DB (e.g. resolved recently) to avoid immediate re-spam.
                 //    Hanya dalam bursa yang sama — jangan pakai log bursa lain sebagai acuan anti-spam.
                 val latest = dao.getLatestLogForSymbolAndExchange(normSymbol, normExchange)
@@ -191,6 +205,36 @@ class SignalLogRepository(
                 dao.insertLog(entity)
             } catch (_: Exception) {}
         }
+    }
+
+    /**
+     * Tutup log pelacakan lama karena sinyal baru terbit pada harga entry yang berbeda material.
+     *
+     * **J2** — log lama sengaja dipertahankan **apa adanya**: `entryPrice`, `targetPrice1`,
+     * `targetPrice2`, dan `stopLoss` miliknya sendiri tetap utuh, sehingga P&L-nya masih bermakna
+     * (tidak ada SL di atas entry). Episode sinyal baru dicatat sebagai log terpisah oleh pemanggil.
+     *
+     * P&L memakai basis net yang sama dengan seluruh aplikasi ([netSignalPnlPct]).
+     */
+    private suspend fun resolveSupersededTrackingLog(
+        log: SignalLogEntity,
+        currentPrice: Double,
+        now: Long
+    ) {
+        val exit = currentPrice.takeIf { it > 0.0 && it.isFinite() }
+            ?: log.peakPrice.takeIf { it > 0.0 }
+            ?: log.entryPrice
+        dao.updateLog(
+            log.copy(
+                outcomeStatus = "EXPIRED",
+                exitPrice = exit,
+                realizedPnlPct = log.realizedPnlPct ?: netSignalPnlPct(log, exit),
+                resolvedAt = now,
+                resolutionNote = "Digantikan sinyal baru pada harga entry berbeda " +
+                    "(entry lama ${log.entryPrice}, entry baru $currentPrice). " +
+                    "Level TP/SL tidak digabung antar-episode (J2)."
+            )
+        )
     }
 
     /**
@@ -270,26 +314,26 @@ class SignalLogRepository(
 
     private suspend fun updateTrackingLogWithPrice(log: SignalLogEntity, currentPrice: Double, now: Long) {
         val isBuy = log.action.equals("BUY", ignoreCase = true)
+
+        // GROSS — dipakai HANYA untuk peak/trough/maxProfit/maxDrawdown, yang memang berlabel
+        // "kotor" di UI (B6). Jangan pernah pakai angka ini sebagai realizedPnlPct.
         val rawPnlPct = if (isBuy) {
             ((currentPrice - log.entryPrice) / log.entryPrice) * 100.0
         } else {
             ((log.entryPrice - currentPrice) / log.entryPrice) * 100.0
         }
 
+        // NET — J1: satu-satunya angka P&L yang boleh ditampilkan sebagai hasil akhir. Sebelum
+        // perbaikan, jurnal menyimpan selisih harga MENTAH lalu UI-nya melabelinya "Net", sehingga
+        // "+0,35%" yang tampil sebagai "Net" sebenarnya masih rugi (impas net ≈ +0,82%).
+        val netPnlPct = netSignalPnlPct(log, currentPrice)
+
         val newPeak = if (log.peakPrice <= 0.0) currentPrice else max(log.peakPrice, currentPrice)
         val newTrough = if (log.troughPrice <= 0.0) currentPrice else min(log.troughPrice, currentPrice)
         val newMaxProfit = max(log.maxProfitPct, max(0.0, rawPnlPct))
         val newMaxDrawdown = min(log.maxDrawdownPct, min(0.0, rawPnlPct))
 
-        // Determine quoteAsset from symbol
-        val quoteAsset = when {
-            log.symbol.uppercase().endsWith("USDT") -> "USDT"
-            log.symbol.uppercase().endsWith("USDC") -> "USDC"
-            log.symbol.uppercase().endsWith("BUSD") -> "BUSD"
-            log.symbol.uppercase().endsWith("BIDR") -> "BIDR"
-            log.symbol.uppercase().endsWith("IDR") -> "IDR"
-            else -> "IDR"
-        }
+        val quoteAsset = quoteAssetForSymbol(log.symbol)
 
         // Check for target outcomes
         var status = log.outcomeStatus
@@ -301,28 +345,28 @@ class SignalLogRepository(
         if (log.targetPrice2 > 0.0 && ((isBuy && currentPrice >= log.targetPrice2) || (!isBuy && currentPrice <= log.targetPrice2))) {
             status = "HIT_TP2"
             exitPrice = currentPrice
-            realizedPnl = rawPnlPct
+            realizedPnl = netPnlPct
             resolvedAt = now
-            note = "Target TP2 tercapai pada ${PriceFormatter.formatPrice(currentPrice, quoteAsset = quoteAsset)} (+${String.format(java.util.Locale.US, "%.2f", rawPnlPct)}%)"
+            note = "Target TP2 tercapai pada ${PriceFormatter.formatPrice(currentPrice, quoteAsset = quoteAsset)} (net ${String.format(java.util.Locale.US, "%.2f", netPnlPct)}%)"
         } else if (log.targetPrice1 > 0.0 && ((isBuy && currentPrice >= log.targetPrice1) || (!isBuy && currentPrice <= log.targetPrice1))) {
             status = "HIT_TP1"
             exitPrice = currentPrice
-            realizedPnl = rawPnlPct
+            realizedPnl = netPnlPct
             resolvedAt = now
-            note = "Target TP1 tercapai pada ${PriceFormatter.formatPrice(currentPrice, quoteAsset = quoteAsset)} (+${String.format(java.util.Locale.US, "%.2f", rawPnlPct)}%)"
+            note = "Target TP1 tercapai pada ${PriceFormatter.formatPrice(currentPrice, quoteAsset = quoteAsset)} (net ${String.format(java.util.Locale.US, "%.2f", netPnlPct)}%)"
         } else if (log.stopLoss > 0.0 && ((isBuy && currentPrice <= log.stopLoss) || (!isBuy && currentPrice >= log.stopLoss))) {
             status = "HIT_SL"
             exitPrice = currentPrice
-            realizedPnl = rawPnlPct
+            realizedPnl = netPnlPct
             resolvedAt = now
-            note = "Stop Loss tersentuh pada ${PriceFormatter.formatPrice(currentPrice, quoteAsset = quoteAsset)} (${String.format(java.util.Locale.US, "%.2f", rawPnlPct)}%)"
+            note = "Stop Loss tersentuh pada ${PriceFormatter.formatPrice(currentPrice, quoteAsset = quoteAsset)} (net ${String.format(java.util.Locale.US, "%.2f", netPnlPct)}%)"
         } else if (now - log.firedAt > 86_400_000L * 3) {
             // Expire after 3 days
             status = "EXPIRED"
             exitPrice = currentPrice
-            realizedPnl = rawPnlPct
+            realizedPnl = netPnlPct
             resolvedAt = now
-            note = "Sinyal kedaluwarsa setelah 3 hari. Hasil akhir: ${String.format(java.util.Locale.US, "%.2f", rawPnlPct)}%"
+            note = "Sinyal kedaluwarsa setelah 3 hari. Hasil akhir net: ${String.format(java.util.Locale.US, "%.2f", netPnlPct)}%"
         }
 
         val updatedLog = log.copy(
@@ -359,10 +403,9 @@ class SignalLogRepository(
             // B4 — besaran PnL manual harus JUJUR, hasil kalkulasi dari harga exit, bukan
             // hasil clamp min(-1.5)/max(1.5) yang mengarang besaran. Bila exitPrice tersedia,
             // hitung dari situ; bila tidak, realPnlPct dibiarkan null (jujur "tidak diketahui").
+            // J1 — kalkulasinya memakai basis net yang sama dengan seluruh aplikasi.
             realizedPnlPct = customPnlPct ?: log.exitPrice?.takeIf { it > 0 }?.let { exit ->
-                val isBuyAction = log.action.equals("BUY", ignoreCase = true)
-                if (isBuyAction) ((exit - log.entryPrice) / log.entryPrice) * 100.0
-                else ((log.entryPrice - exit) / log.entryPrice) * 100.0
+                netSignalPnlPct(log, exit)
             },
             resolvedAt = now,
             resolutionNote = note
@@ -395,16 +438,14 @@ class SignalLogRepository(
                 if (tracking.isEmpty()) return@launch
                 val now = System.currentTimeMillis()
                 for (log in tracking) {
-                    val isBuy = log.action.equals("BUY", ignoreCase = true)
                     // B3 — PnL sinyal expired HARUS dihitung dari harga terakhir (exitPrice),
                     // BUKAN dari peak/trough. Peak adalah harga tertinggi yang pernah tercapai,
                     // bukan harga jual — memakainya membuat sinyal expired terlihat lebih untung
                     // dari kenyataan (bias optimistis sistematis pada win-rate).
+                    // J1 — basisnya net, sama dengan seluruh aplikasi.
                     val approxPnl = log.realizedPnlPct
-                        ?: log.exitPrice?.takeIf { it > 0 }?.let { exit ->
-                            if (isBuy) ((exit - log.entryPrice) / log.entryPrice) * 100.0
-                            else ((log.entryPrice - exit) / log.entryPrice) * 100.0
-                        } ?: 0.0
+                        ?: log.exitPrice?.takeIf { it > 0 }?.let { exit -> netSignalPnlPct(log, exit) }
+                        ?: 0.0
                     val updated = log.copy(
                         outcomeStatus = "EXPIRED",
                         resolvedAt = now,
@@ -673,12 +714,11 @@ class SignalLogRepository(
             val tracking = logs.count { it.outcomeStatus == "TRACKING" }
             val resolvedLogs = logs.filter { it.outcomeStatus != "TRACKING" }
 
-            val wins = resolvedLogs.filter {
-                it.outcomeStatus in listOf("HIT_TP1", "HIT_TP2", "MANUAL_WIN") || (it.realizedPnlPct ?: 0.0) > 0
-            }
-            val losses = resolvedLogs.filter {
-                it.outcomeStatus in listOf("HIT_SL", "MANUAL_LOSS") || (it.realizedPnlPct ?: 0.0) < 0
-            }
+            // J2 — klasifikasi menang/kalah WAJIB lewat satu predikat eksklusif. Sebelumnya di sini
+            // ada dua filter independen, sehingga log HIT_SL ber-P&L positif masuk keranjang menang
+            // SEKALIGUS kalah dan win-rate bisa melewati 100%.
+            val wins = resolvedLogs.filter { it.classifyOutcome() == SignalOutcome.WIN }
+            val losses = resolvedLogs.filter { it.classifyOutcome() == SignalOutcome.LOSS }
 
             val winCount = wins.size
             val lossCount = losses.size
@@ -686,36 +726,41 @@ class SignalLogRepository(
 
             val winRatePct = if (resolvedCount > 0) (winCount.toDouble() / resolvedCount) * 100.0 else 0.0
 
-            val avgProfit = if (wins.isNotEmpty()) {
-                wins.mapNotNull { it.realizedPnlPct ?: it.maxProfitPct.takeIf { p -> p > 0 } }.average().takeIf { it.isFinite() } ?: 0.0
-            } else 0.0
+            // J2 — rata-rata dan nilai ekstrem hanya dihitung dari log yang P&L-nya SEARAH dengan
+            // keranjangnya. Baris warisan berstatus HIT_SL tetapi ber-P&L positif (entry lama
+            // dipasangkan stop loss baru) tidak boleh ikut menaikkan "rata-rata kalah" — angkanya
+            // memang tidak dapat dipercaya, dan menyertakannya menghasilkan keluaran tak masuk akal
+            // seperti "rata-rata kalah +90%".
+            val winPnls = wins.mapNotNull { it.realizedPnlPct ?: it.maxProfitPct.takeIf { p -> p > 0 } }
+                .filter { it > 0.0 && it.isFinite() }
+            val lossPnls = losses.mapNotNull { it.realizedPnlPct ?: it.maxDrawdownPct.takeIf { d -> d < 0 } }
+                .filter { it < 0.0 && it.isFinite() }
 
-            val avgLoss = if (losses.isNotEmpty()) {
-                losses.mapNotNull { it.realizedPnlPct ?: it.maxDrawdownPct.takeIf { d -> d < 0 } }.average().takeIf { it.isFinite() } ?: 0.0
-            } else 0.0
+            val avgProfit = if (winPnls.isNotEmpty()) winPnls.average() else 0.0
+            val avgLoss = if (lossPnls.isNotEmpty()) lossPnls.average() else 0.0
 
-            val totalWinGain = wins.sumOf { (it.realizedPnlPct ?: it.maxProfitPct).coerceAtLeast(0.0) }
-            val totalLossValue = losses.sumOf { abs((it.realizedPnlPct ?: it.maxDrawdownPct).coerceAtMost(0.0)) }
+            val totalWinGain = winPnls.sum()
+            val totalLossValue = abs(lossPnls.sum())
             val profitFactor = if (totalLossValue > 0) totalWinGain / totalLossValue else if (totalWinGain > 0) 9.99 else 0.0
 
-            val maxWin = logs.maxOfOrNull { it.realizedPnlPct ?: it.maxProfitPct }?.takeIf { it > 0 } ?: 0.0
-            val maxLoss = logs.minOfOrNull { it.realizedPnlPct ?: it.maxDrawdownPct }?.takeIf { it < 0 } ?: 0.0
+            val maxWin = winPnls.maxOrNull() ?: 0.0
+            val maxLoss = lossPnls.minOrNull() ?: 0.0
 
             // Tier breakdowns
             val highTier = buildTierStats("Tinggi (≥80%)", 80, 100, logs)
             val medTier = buildTierStats("Sedang (60-79%)", 60, 79, logs)
             val lowTier = buildTierStats("Awal (<60%)", 0, 59, logs)
 
-            // Best performing symbol & strategy
+            // Best performing symbol & strategy — memakai predikat yang sama (J2), bukan definisi keempat.
             val symbolGroups = resolvedLogs.groupBy { it.symbol }
             val bestSymbol = symbolGroups.maxByOrNull { group ->
-                val w = group.value.count { it.outcomeStatus in listOf("HIT_TP1", "HIT_TP2", "MANUAL_WIN") }
+                val w = group.value.count { it.classifyOutcome() == SignalOutcome.WIN }
                 w.toDouble() / group.value.size
             }?.key ?: "-"
 
             val strategyGroups = resolvedLogs.groupBy { it.strategyMode }
             val bestStrategy = strategyGroups.maxByOrNull { group ->
-                val w = group.value.count { it.outcomeStatus in listOf("HIT_TP1", "HIT_TP2", "MANUAL_WIN") }
+                val w = group.value.count { it.classifyOutcome() == SignalOutcome.WIN }
                 w.toDouble() / group.value.size
             }?.key ?: "-"
 
@@ -769,18 +814,14 @@ class SignalLogRepository(
         }
 
         private fun buildGroupStats(key: String, group: List<SignalLogEntity>): SetupStats {
-            val winStatuses = setOf("HIT_TP1", "HIT_TP2", "MANUAL_WIN")
-            val lossStatuses = setOf("HIT_SL", "MANUAL_LOSS")
             val tracking = group.count { it.outcomeStatus == "TRACKING" }
             val resolved = group.filter { it.outcomeStatus != "TRACKING" }
 
             fun pnl(l: SignalLogEntity) = l.realizedPnlPct ?: 0.0
-            val wins = resolved.filter {
-                it.outcomeStatus in winStatuses || (it.outcomeStatus !in lossStatuses && pnl(it) > 0.0)
-            }
-            val losses = resolved.filter {
-                it.outcomeStatus in lossStatuses || (it !in wins && pnl(it) < 0.0)
-            }
+            // J2 — satu predikat eksklusif (dulu di sini ada definisi kedua yang benar, sekarang
+            // definisi itu menjadi satu-satunya untuk seluruh berkas).
+            val wins = resolved.filter { it.classifyOutcome() == SignalOutcome.WIN }
+            val losses = resolved.filter { it.classifyOutcome() == SignalOutcome.LOSS }
 
             val winRate = if (resolved.isNotEmpty()) wins.size * 100.0 / resolved.size else 0.0
             val avgReturn = if (resolved.isNotEmpty()) resolved.sumOf { pnl(it) } / resolved.size else 0.0
@@ -811,8 +852,9 @@ class SignalLogRepository(
             val total = tierLogs.size
             val tracking = tierLogs.count { it.outcomeStatus == "TRACKING" }
             val resolved = tierLogs.filter { it.outcomeStatus != "TRACKING" }
-            val wins = resolved.count { it.outcomeStatus in listOf("HIT_TP1", "HIT_TP2", "MANUAL_WIN") || (it.realizedPnlPct ?: 0.0) > 0 }
-            val losses = resolved.count { it.outcomeStatus in listOf("HIT_SL", "MANUAL_LOSS") || (it.realizedPnlPct ?: 0.0) < 0 }
+            // J2 — predikat eksklusif yang sama; dulu di sini dua filter independen.
+            val wins = resolved.count { it.classifyOutcome() == SignalOutcome.WIN }
+            val losses = resolved.count { it.classifyOutcome() == SignalOutcome.LOSS }
             val winRate = if (resolved.isNotEmpty()) (wins.toDouble() / resolved.size) * 100.0 else 0.0
             val avgReturn = if (resolved.isNotEmpty()) {
                 resolved.mapNotNull { it.realizedPnlPct }.average().takeIf { it.isFinite() } ?: 0.0

@@ -1565,6 +1565,24 @@ private fun ConfidenceTierRow(stats: ConfidenceTierStats, accentColor: Color) {
     }
 }
 
+/**
+ * Label P&L yang jujur terhadap basisnya (**J1**).
+ *
+ * `realizedPnlPct` adalah angka **net** (setelah fee beli + fee jual + slippage dua sisi, basis
+ * yang sama dengan FSM dan halaman portofolio). `maxProfitPct`/`maxDrawdownPct` adalah **kotor**.
+ *
+ * Sebelum perbaikan, ketika P&L net belum tersedia UI menulis `"Net +1,20% (gross)"` — dua label
+ * yang saling bertentangan pada satu angka. Sekarang label mengikuti basis yang benar-benar dipakai.
+ *
+ * @param sign awalan tanda untuk basis net; pakai `"+"` untuk besaran yang selalu positif
+ */
+private fun signalPnlLabel(sign: String, net: Double?, grossFallback: Double): String =
+    if (net != null) {
+        "Net $sign${String.format(Locale.US, "%.2f", net)}%"
+    } else {
+        "Gross $sign${String.format(Locale.US, "%.2f", grossFallback)}%"
+    }
+
 @Composable
 private fun SignalLogItemCard(
     log: SignalLogEntity,
@@ -1584,17 +1602,18 @@ private fun SignalLogItemCard(
     val actionColor = if (isBuy) tvGreen else tvRed
     val timeFormat = remember { SimpleDateFormat("dd MMM HH:mm:ss", Locale.US) }
 
-    val statusDetails = remember(log.outcomeStatus, log.realizedPnlPct, tvGreen, tvRed, tvTextSecondary, tvCyan) {
+    val statusDetails = remember(log.outcomeStatus, log.realizedPnlPct, log.maxProfitPct, log.maxDrawdownPct, tvGreen, tvRed, tvTextSecondary, tvCyan) {
         when (log.outcomeStatus) {
-            // B6 — Label GROSS vs NET eksplisit. realizedPnlPct = NET (setelah fee); maxProfitPct /
-            // maxDrawdownPct = GROSS (kotor, sebelum fee). Mencampur keduanya di satu label
-            // tanpa pembeda membuat pembaca mengira ada selisih yang tidak dijelaskan.
-            "HIT_TP2" -> Triple("🎯 TARGET TP2 TERCAPAI", tvGreen, "Net +${String.format(Locale.US, "%.2f", log.realizedPnlPct ?: log.maxProfitPct)}%${if (log.realizedPnlPct == null) " (gross)" else ""}")
-            "HIT_TP1" -> Triple("🎯 TARGET TP1 TERCAPAI", tvGreen, "Net +${String.format(Locale.US, "%.2f", log.realizedPnlPct ?: log.maxProfitPct)}%${if (log.realizedPnlPct == null) " (gross)" else ""}")
-            "HIT_SL" -> Triple("🛑 STOP LOSS TERSENTUH", tvRed, "Net ${String.format(Locale.US, "%.2f", log.realizedPnlPct ?: log.maxDrawdownPct)}%${if (log.realizedPnlPct == null) " (gross)" else ""}")
-            "MANUAL_WIN" -> Triple("✅ SELESAI (PROFIT MANUAL)", tvGreen, "Net +${String.format(Locale.US, "%.2f", log.realizedPnlPct ?: log.maxProfitPct)}%${if (log.realizedPnlPct == null) " (gross)" else ""}")
-            "MANUAL_LOSS" -> Triple("❌ SELESAI (CUT LOSS MANUAL)", tvRed, "Net ${String.format(Locale.US, "%.2f", log.realizedPnlPct ?: log.maxDrawdownPct)}%${if (log.realizedPnlPct == null) " (gross)" else ""}")
-            "EXPIRED" -> Triple("⏳ KEDALUWARSA", tvTextSecondary, "${String.format(Locale.US, "%.2f", log.realizedPnlPct ?: 0.0)}%")
+            // B6 — Label GROSS vs NET eksplisit. realizedPnlPct = NET (setelah fee beli + fee jual +
+            // slippage dua sisi — J1); maxProfitPct / maxDrawdownPct = GROSS (kotor, sebelum fee).
+            // J1 — label dipilih lewat signalPnlLabel() supaya tidak lagi ada "Net ... (gross)".
+            "HIT_TP2" -> Triple("🎯 TARGET TP2 TERCAPAI", tvGreen, signalPnlLabel("+", log.realizedPnlPct, log.maxProfitPct))
+            "HIT_TP1" -> Triple("🎯 TARGET TP1 TERCAPAI", tvGreen, signalPnlLabel("+", log.realizedPnlPct, log.maxProfitPct))
+            "HIT_SL" -> Triple("🛑 STOP LOSS TERSENTUH", tvRed, signalPnlLabel("", log.realizedPnlPct, log.maxDrawdownPct))
+            "MANUAL_WIN" -> Triple("✅ SELESAI (PROFIT MANUAL)", tvGreen, signalPnlLabel("+", log.realizedPnlPct, log.maxProfitPct))
+            "MANUAL_LOSS" -> Triple("❌ SELESAI (CUT LOSS MANUAL)", tvRed, signalPnlLabel("", log.realizedPnlPct, log.maxDrawdownPct))
+            "EXPIRED" -> Triple("⏳ KEDALUWARSA", tvTextSecondary,
+                log.realizedPnlPct?.let { "Net ${String.format(Locale.US, "%.2f", it)}%" } ?: "Hasil tidak diketahui")
             else -> Triple("⏳ SEDANG DIPANTAU", tvCyan, "Puncak: +${String.format(Locale.US, "%.2f", log.maxProfitPct)}%")
         }
     }
