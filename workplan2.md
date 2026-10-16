@@ -2408,3 +2408,77 @@ Angka terukur (dari XML): **72 kelas / 571 uji → 73 kelas / 582 uji**, 0 gagal
 ### 38.5 Laporan
 
 `docs/LAPORAN-batch5-j6n11-2026-10-16.md`
+
+---
+
+## 39. Batch 5f — J5: fallback lintas bursa di jurnal trade dihapus (2026-10-16)
+
+### 39.1 Masalah
+
+Dua jalur di `TradeHistoryRecorder` jatuh ke query **tanpa filter exchange** bila query
+berversi exchange kosong:
+
+```kotlin
+// recordSell
+dao.getActiveHoldingForSymbolAndExchange(symbol, isReal, exchange)
+    ?: dao.getActiveHoldingForSymbol(symbol, isReal)      // ← SEMUA bursa
+
+// processPriceTick
+dao.getHoldingRecordsByExchange(exchange)
+    .filter { it.symbol == normSymbol }
+    .ifEmpty { dao.getHoldingRecords().filter { it.symbol == normSymbol } }  // ← SEMUA bursa
+```
+
+Tokocrypto melayani **USDT + IDR**, Indodax **hanya IDR** (AGENTS.md §"Batasan pasar"), jadi
+`BTCIDR`/`ETHIDR`/`XAUTIDR` ada di kedua bursa sekaligus — yang berbeda pasarnya, bukan simbolnya.
+Akibatnya:
+
+1. jual `BTCIDR` di Indodax menutup record HOLDING `BTCIDR` milik **Tokocrypto**, dengan
+   `sellPrice`/`customPnlIdr` dari bursa Indodax;
+2. `processPriceTick`: harga bursa A memperbarui `peakPriceDuringHold`/
+   `troughPriceDuringHold`/`maxProfitPct` record HOLDING milik bursa B ⇒ statistik
+   MFE/drawdown per posisi tercemar.
+
+Pola yang benar sudah ada di `SignalLogRepository.processPriceTick` — query berversi exchange,
+tanpa fallback, dengan komentar eksplisit. Batch ini meniru pola itu di jurnal trade.
+
+### 39.2 Perbaikan
+
+Resolver murni baru `database/HoldingResolution.kt` (fungsi `suspend` karena DAO `suspend`):
+
+| Fungsi | Menegakkan |
+|---|---|
+| `resolveForSell` | record dicari lewat uuid bila ada (uuid kosong = tidak ada, bukan short-circuit miss), **selain itu hanya** query berversi exchange; kosong berarti kosong |
+| `holdingsForPriceTick` | hanya record HOLDING milik bursa yang sama, filter simbol abaikan kapitalisasi; tidak ada percabangan "semua bursa" |
+
+Konvensi lambda: exchange `""` berarti "tanpa filter bursa" — **tidak pernah** dipakai versi ini;
+konvensi itu hanya untuk kontrol negatif.
+
+`processBatchPriceTicks` sudah berversi exchange sejak awal — tidak diubah.
+
+### 39.3 Uji & kontrol negatif
+
+Uji baru: `app/src/test/java/agu/analys/database/HoldingResolutionTest.kt` — **11 kasus**:
+pencarian uuid, uuid kosong diperlakukan seperti tidak ada, uuid miss tidak jatuh ke bursa lain,
+**bursa ini kosong → null** (inti J5 bagian 1), `isReal` dibedakan, dan enam kasus tick
+(termasuk **bursa ini kosong → kosong**, inti J5 bagian 2).
+
+Kontrol negatif: fallback dikembalikan (`?: bySymbolAndExchange(…, "")` dan
+`.ifEmpty { byExchange("") … }`) ⇒ **tepat 2 dari 11 uji GAGAL** — keduanya justru penjaga inti
+J5. Sembilan yang tetap lulus memang tidak membedakan versi (jalur uuid, pencocokan simbol,
+abaikan kapitalisasi, record bursa sendiri).
+
+Angka terukur (dari XML): **73 kelas / 582 uji → 74 kelas / 593 uji**, 0 gagal, 1 dilewati.
+
+### 39.4 Yang berubah secara perilaku
+
+- Jual tanpa uuid yang dulu **kebetulan** menutup record bursa lain kini mencatat penjualan
+  tanpa menutup record apa pun (record HOLDING bursa lain tetap utuh — memang bukan milik
+  bursa ini). Posisi yang tidak sengaja tertutup dulu sekarang tetap terbuka sampai benar-benar
+  dijual di bursanya sendiri.
+- `processPriceTick` untuk simbol tanpa posisi di bursa ini tidak lagi memperbarui posisi
+  bursa lain — `peakPriceDuringHold` per posisi hanya bergerak pada harga bursanya sendiri.
+
+### 39.5 Laporan
+
+`docs/LAPORAN-batch5-j5-2026-10-16.md`

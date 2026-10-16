@@ -177,10 +177,11 @@ Saat ini berisi:
   `docs/LAPORAN-batch4-j7-2026-10-16.md`); **J4 + N10 DIPERBAIKI** (batch 5a —
   `docs/LAPORAN-batch5-j4n10-2026-10-16.md`); **J3 DIPERBAIKI** (batch 5b —
   `docs/LAPORAN-batch5-j3-2026-10-16.md`); **J6 + N11 DIPERBAIKI** (batch 5e —
-  `docs/LAPORAN-batch5-j6n11-2026-10-16.md`). **Masih hidup: J5, J8–J10** (fallback lintas bursa
-  di jurnal trade, satu rumus P&L ditulis ulang di jalur trade real (J8), default `?: 75` (J9),
-  snapshot tanpa verifikasi simbol (J10)). **Catatan N11:** tabel tier & cap confidence
-  `ScalpingMtfEvaluator` sendiri **belum** diubah — batch 5e hanya mengganti kalimat klaimnya.
+  `docs/LAPORAN-batch5-j6n11-2026-10-16.md`); **J5 DIPERBAIKI** (batch 5f —
+  `docs/LAPORAN-batch5-j5-2026-10-16.md`). **Masih hidup: J8–J10** (satu rumus P&L ditulis ulang
+  di jalur trade real (J8), default `?: 75` (J9), snapshot tanpa verifikasi simbol (J10)).
+  **Catatan N11:** tabel tier & cap confidence `ScalpingMtfEvaluator` sendiri **belum** diubah
+  — batch 5e hanya mengganti kalimat klaimnya.
   **Catatan angka:** friksi FSM Tokocrypto USDT yang tertulis 0,8226% di dokumen temuan itu **salah**;
   angka yang benar **0,9735%** (lihat `docs/LAPORAN-batch4-j7-2026-10-16.md` §2).
 
@@ -351,6 +352,18 @@ Saat ini berisi:
 - **Satu sumber untuk bursa.** Bila sebuah ViewModel punya `prefs.marketDataSource` **dan** flow
   turunan, keduanya bisa tidak sepakat. Teruskan `settingsViewModel.marketDataSource` dan bacalah
   `flow.value` bila perlu nilai sekarang.
+
+## Aturan turunan dari audit jurnal — J5 (batch 5f, 2026-10-16)
+
+- **Query jurnal trade wajib berversi exchange, tanpa fallback "semua bursa".** Tokocrypto
+  melayani USDT + IDR, Indodax hanya IDR — `BTCIDR`/`ETHIDR`/`XAUTIDR` ada di kedua bursa
+  sekaligus, jadi fallback menutup/memperbarui record bursa yang **salah** dengan data bursa
+  lain. Pola yang benar sudah ada: `SignalLogRepository.processPriceTick` (query berversi
+  exchange, tanpa fallback, komentar eksplisit). Jangan tambahkan `?:` ke query tanpa filter
+  exchange — "mungkin ketemu di bursa lain" adalah **bug**, bukan fallback.
+- **Kosong berarti kosong.** Bila bursa ini tidak punya record HOLDING untuk simbol itu,
+  biarkan kosong. Jual mencatat penjualan tanpa menutup record bursa lain; tick harga tidak
+  menyentuh posisi bursa lain. Posisi bursa lain tetap utuh sampai dijual di bursanya sendiri.
 
 ## Aturan turunan dari audit jurnal — J6 (batch 5e, 2026-10-16)
 
