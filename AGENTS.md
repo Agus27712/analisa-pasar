@@ -158,10 +158,13 @@ Saat ini berisi:
   `docs/LAPORAN-batch2-notifikasi-2026-10-16.md`). **Masih hidup: N6, N8–N17** (N13–N17 hasil audit
   lanjutan: kategori notifikasi ≠ sakelar Pengaturan, cooldown peak di-bypass, sakelar master
   mematikan foreground service, `AppPreferences` dibangun ulang per tick, N6 melarat).
-- **`temuan_bugs_paper_trade.md`** (2026-10-16, **baru**) — audit siklus hidup posisi paper &
-  mesin exit. **Semua masih hidup, belum ada perbaikan kode.** 3 kritis: posisi paper bursa non-aktif
-  menggantung permanen setelah restart (P1), auto-buy menerima sinyal SWING/INTRADAY dengan SL di
-  bawah lantai friksi (P2), DCA bisa memicu **jual paksa berlabel `STOP_LOSS`** (P3).
+- **`temuan_bugs_paper_trade.md`** (2026-10-16, diperbarui di hari yang sama) — audit siklus hidup
+  posisi paper & mesin exit. **P2, P3, P4 DIPERBAIKI** (batch 3b —
+  `docs/LAPORAN-batch3-paper-safety-2026-10-16.md`); **P1 dikerjakan di commit berikutnya**.
+  **Masih hidup: P5–P8** (kartu FSM dihapus tick pair lain, dua jalur pemantauan menghasilkan exit
+  berbeda). **Batas penting:** seluruh temuan `P*` hanya menyentuh posisi **paper**
+  (`isReal = false`) — bukan kerusakan uang riil, tetapi posisi paper adalah dasar seluruh keputusan
+  "apakah scalp punya edge".
 - **`temuan_bugs_jurnal_pnl.md`** (2026-10-16, diperbarui di hari yang sama) — audit jurnal sinyal,
   jurnal trade & angka P&L. **J1, J2 DIPERBAIKI** (batch 3a —
   `docs/LAPORAN-batch3-jurnal-2026-10-16.md`). **Masih hidup: J3–J10** (bursa terikat sekali saat
@@ -232,6 +235,35 @@ Saat ini berisi:
   yang dulu tampak "menang" berubah jadi kalah/`EXPIRED` negatif — kenaikan +0,50% di Tokocrypto USDT
   memang −0,468950% setelah friksi. Setiap laporan yang menyentuh angka win-rate **wajib**
   menyebutkan ini eksplisit supaya pembaca tidak menyimpulkan engine-nya rusak.
+
+## Aturan turunan dari audit posisi paper (batch 3b, 2026-10-16)
+
+- **Satu penentu harga SL untuk posisi paper.** Harga SL hanya boleh datang dari
+  `PaperStopResolver.resolve(...)` (`engine/scalping/PaperStopResolver.kt`). Dilarang memakai SL
+  sinyal apa adanya atau menghitung lantai friksi sendiri di call site — itulah cara SL 1,5–2,8%
+  lolos ke posisi yang friksi round-tripnya ≈0,97% (P2). Lantai dihitung lewat
+  `frictionFloorPct(buyFee, sellFee, slippage, minFrictionMultiple)`, dan **slippage dihitung dua
+  sisi** (masuk + keluar).
+- **Lantai friksi hanya melebarkan, tidak pernah menyempitkan.** `resolve` mengambil yang lebih
+  **rendah** (lebih lebar) antara SL sinyal dan harga lantai. Jangan "mengoptimalkan" dengan memilih
+  yang lebih rapat demi R yang terlihat lebih besar.
+- **`stopLossPrice >= entryPrice` adalah keadaan terlarang.** Tidak ada jalur mana pun — termasuk
+  serah-terima `HandBackToLegacy` — yang boleh menyalakan auto-sell dengan SL seperti itu. Lebih
+  baik posisi berjalan tanpa stop (terlihat di UI, bisa dijual manual) daripada penjualan pasar
+  berlabel `STOP_LOSS` yang tidak pernah tersentuh. Log wajib menyebut sumber SL-nya
+  (`SIGNAL`/`FRICTION_FLOOR`/`NONE`).
+- **Posisi paper + mesin exit adalah produk SCALPING.** `tryPaperAutoBuy` wajib memeriksa
+  `transition.mode == StrategyMode.SCALPING`. Evaluator SWING/INTRADAY memasang
+  `ScalpingStage.ENTRY` yang sama, jadi `stageQualifies` saja **tidak** menyaringnya — jangan hapus
+  gerbang mode itu tanpa alasan eksplisit. Gerbangnya diletakkan **sebelum** `stageQualifies` supaya
+  log diagnostiknya bisa tercapai.
+- **Perubahan entry (DCA) wajib me-re-arm mesin exit.** Bila `entryPrice` posisi berubah, mesin
+  harus dibangun ulang (`force = true`) dengan entry baru; mesin lama memakai entry fill **pertama**,
+  dan selisih itulah yang memunculkan SL di atas entry.
+- **Rumus yang dibutuhkan lebih dari satu berkas harus jadi fungsi murni, bukan `private`.**
+  `atrPct` tidak bisa diteruskan dari `TradingViewModelSync` karena `atrPctAt` `private`; hasilnya
+  `atrPct = 0.0` untuk setiap beli manual, dan nol itu ikut tersimpan ke disk (P4). Ekstrak ke
+  `object` di `engine/scalping` supaya bisa diuji tanpa ViewModel.
 
 ## Arah produk (ringkas)
 

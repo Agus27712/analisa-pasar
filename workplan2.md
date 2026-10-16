@@ -1769,3 +1769,96 @@ dimatikan adalah call site-nya.
 
 `docs/LAPORAN-batch3-jurnal-2026-10-16.md`
 
+---
+
+## 31. Batch 3b keamanan posisi paper — P2, P3, P4 (2026-10-16)
+
+Sumber: `docs/bugs/temuan_bugs_paper_trade.md` (audit read-only agen lain, di-pull dari `patch` @
+`eb01dc3`). Commit kedua dari batch 3.
+
+**Batas penting:** seluruh temuan P* hanya menyentuh posisi **paper** (`isReal = false`). Ini bukan
+kerusakan uang riil — tapi posisi paper adalah dasar keputusan "apakah scalp punya edge", jadi
+angkanya harus benar sebelum uang riil dipromosikan.
+
+### 31.1 P2 — gerbang mode + lantai friksi untuk SL sinyal
+
+`tryPaperAutoBuy` hanya memeriksa `signal.action == BUY` dan `stageQualifies(signal.scalpingStage)`;
+`transition.mode` **tidak pernah** diperiksa. Evaluator SWING/INTRADAY memasang `ScalpingStage.ENTRY`
+untuk sinyal BUY, sehingga sinyal mereka lolos ambang yang sama. SL-nya 1,5–2,8%
+(`IntradayEvaluator` memakai `coerceAtMost(price * 0.985)`), sementara lantai friksi Tokocrypto USDT
+= **5,8128%** ⇒ satu SL ≈ −1,3R…−2R, dan mesin exit scalping (time-stop `maxHoldBarsM1`, horizon
+~2 jam) memotong posisi ber-horizon harian sebagai `TIMEOUT` palsu.
+
+Perbaikan (dua bagian, keduanya diuji):
+
+1. **Gerbang mode** di `tryPaperAutoBuy` — `if (transition.mode != StrategyMode.SCALPING) return false`.
+   Ditempatkan **sebelum** `stageQualifies`, bukan sesudah: kalau sesudah, cabang log diagnostiknya
+   tidak akan pernah tercapai (sinyal non-scalping sudah keluar lebih dulu).
+2. **Resolver murni** `engine/scalping/PaperStopResolver.kt` — `frictionFloorPct(buyFee, sellFee,
+   slippage, multiple)` + `resolve(signalSl, entry, floorPct)`. Aturannya **hanya melebar, tidak
+   pernah menyempitkan** SL:
+
+```kotlin
+val signalValid = signalSl.isFinite() && signalSl > 0.0 && signalSl < entry
+val floorPrice  = entry * (1.0 - floorPct / 100.0)
+return if (signalValid && signalSl <= floorPrice) ResolvedPaperStop(signalSl, SIGNAL)
+       else ResolvedPaperStop(floorPrice, FRICTION_FLOOR)
+```
+
+Resolver yang sama kini dipakai **empat** jalur: auto-buy (`armPaperExitEngine`), beli manual
+(`TradingViewModelSync`), re-arm DCA, dan serah-terima ke jalur auto-sell lama saat rehidrasi.
+Sebelumnya masing-masing menghitung sendiri, dan jalur "SL dari sinyal" **tidak** memeriksa lantai
+sama sekali.
+
+### 31.2 P3 — DCA me-re-arm mesin exit; SL ≥ entry tidak boleh menyalakan auto-sell
+
+DCA mengubah `entry` posisi menjadi harga rata-rata, tetapi `armPaperExitEngine` dipanggil dengan
+`force = false` (default), jadi mesin lama yang memakai entry fill **pertama** tidak pernah diganti.
+Bila DCA dilakukan di harga lebih rendah, rata-rata turun **di bawah SL lama**; setelah restart
+`PaperRehydrate` menolak SL itu (`stopLoss >= entry`) dan mengembalikannya sebagai
+`HandBackToLegacy` — yang dulu menulis SL itu apa adanya **sambil menyalakan auto-sell**. Pada tick
+berikutnya jalur legacy menjual **seluruh** posisi di harga pasar dengan label `STOP_LOSS`, padahal
+tidak ada stop yang tersentuh.
+
+Perbaikan:
+
+- `TradingViewModelSync` — `isDca` dihitung sekali, `effectiveEntry` menggantikan `fillPrice`, dan
+  `armPaperExitEngine(..., force = isDca)`. Ini satu-satunya jalur yang boleh menimpa mesin hidup.
+- `HandBackToLegacy` di `PaperAutoTradeCoordinator` — SL diambil dari `PaperStopResolver` yang sama,
+  dan `enabled = resolvedHandBack.usable`. Bila lantai friksi nonaktif **dan** SL tersimpan tidak
+  valid, auto-sell sengaja **tidak** dinyalakan: posisi tanpa stop lebih baik daripada penjualan
+  pasar berlabel `STOP_LOSS` yang salah.
+- Catatan log per sumber SL (`SIGNAL` / `FRICTION_FLOOR` / `NONE`) supaya keputusan itu terbaca.
+
+**Penyimpangan dari rekomendasi audit.** Audit menyarankan resolver `PaperRearmDecision.decide(...)`
+dengan tiga cabang (`Rearm`/`Reset`/`Keep`). Yang dipakai di sini: `force = isDca` di pemanggil DCA,
+dan invarian "SL < entry" ditegakkan di `PaperStopResolver` yang dipakai semua jalur. Alasannya:
+cabang `Reset`/`Keep` belum punya konsumen nyata — menambah objek keputusan tanpa konsumen hanya
+menghasilkan kode mati. Invariannya sendiri diuji lewat sweep.
+
+### 31.3 P4 — `atrPct` diteruskan di jalur beli manual
+
+`atrPctAt` adalah fungsi `private` di `PaperAutoTradeCoordinator`, sehingga `TradingViewModelSync`
+tidak bisa memakainya dan mengirim `atrPct = 0.0` untuk setiap posisi hasil beli manual. Karena
+`0.0` berarti "ATR tidak diketahui", mesin jatuh ke ambang BE/trailing persen tetap — dan nilai nol
+itu ikut tersimpan ke disk, jadi kerusakannya persisten.
+
+Perbaikan: rumusnya diekstrak ke `engine/scalping/PaperAtr.kt` (`PaperAtr.of(atr, referencePrice)`),
+dipakai `atrPctAt` **dan** jalur beli manual. Ini sekaligus efek samping perbaikan P3: nilai
+`atrPct` dikirim bersamaan dengan `force = isDca`.
+
+### 31.4 Uji & kontrol negatif
+
+Uji baru: `app/src/test/java/agu/analys/engine/scalping/PaperStopResolverTest.kt` (16 kasus) —
+lantai 5,8128%, SL sinyal 2% dilebarkan, SL tepat di lantai dianggap memenuhi, skenario P3
+(entry 94 / SL 95), sweep `resolve` atas 5 entry × 7 SL, penjaga ATR, dan penjaga
+`ScalpingConfig.MIN_FRICTION_MULTIPLE >= 6.0`.
+
+Kontrol negatif: pelebaran lantai dimatikan (syarat `signalSl < entry` dan `signalSl <= floorPrice`
+dihapus dari `resolve`) + `PaperAtr.of` dibuat tanpa penjaga ⇒ **4 dari 16 uji GAGAL**, tepat pada
+penjaga masing-masing perbaikan.
+
+### 31.5 Laporan
+
+`docs/LAPORAN-batch3-paper-safety-2026-10-16.md`
+

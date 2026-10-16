@@ -1,7 +1,8 @@
 # Temuan Audit — Siklus Hidup Posisi Paper Trading & Mesin Exit
 
 **Tanggal:** 2026-10-16
-**Status:** DOKUMEN TEMUAN — **belum ada perbaikan kode.** Semua butir di bawah masih hidup.
+**Status:** DOKUMEN TEMUAN — **P2, P3, P4 sudah DIPERBAIKI** (batch 3b); **P1 dikerjakan di commit
+ketiga batch yang sama**; P5–P8 masih hidup.
 Diverifikasi terhadap kode di branch `patch` @ `a842e35`.
 **Cakupan:** `PaperAutoTradeCoordinator.kt` · `PaperRehydrate.kt` · `PaperExitResolver.kt` ·
 `SpotPositionStore.kt` · `TradingViewModelSync.kt` · `TradingViewModel.kt` ·
@@ -171,6 +172,19 @@ val effectiveSl = if (signalSlValid) {
 **Sifat:** guard yang tidak diuji ⇒ **wajib kontrol negatif** (SL 2% pada pair USDT harus
 ditolak/dilLebarkan ke ≈5,81%; sinyal mode SWING tidak boleh membuka posisi).
 
+> ✅ **DIPERBAIKI 2026-10-16 (batch 3b)** — dua bagian. (1) Gerbang
+> `transition.mode != StrategyMode.SCALPING` di `tryPaperAutoBuy`, ditempatkan **sebelum**
+> `stageQualifies` supaya sinyal non-scalping yang lolos ambang tetap tercatat di log (kalau
+> ditaruh sesudah, cabang log-nya tidak pernah tercapai). (2) Resolver murni
+> `engine/scalping/PaperStopResolver.kt` (`frictionFloorPct` + `resolve`) yang **hanya melebar,
+> tidak pernah menyempitkan** SL, kini dipakai bersama oleh auto-buy, beli manual, re-arm DCA, dan
+> serah-terima ke jalur lama. Lantai Tokocrypto USDT = 5,8128%. Uji:
+> `engine/scalping/PaperStopResolverTest.kt` (16 kasus). Lihat
+> `docs/LAPORAN-batch3-paper-safety-2026-10-16.md` §2.
+>
+> **Batas:** gerbang mode itu sendiri **belum** punya uji otomatis (`tryPaperAutoBuy` butuh
+> `TradingViewModel` hidup) — yang teruji adalah invarian resolvernya. Dicatat di §7 laporan.
+
 ---
 
 ### P3 — DCA tidak pernah me-re-arm mesin exit; SL bisa berada di atas entry → **jual paksa berlabel STOP_LOSS**
@@ -249,6 +263,24 @@ sesungguhnya ⇒ angka R di jurnal tidak cocok dengan posisi yang tercatat.
 **Sifat:** menghasilkan transaksi uang pada kondisi yang tidak dikehendaki ⇒ **wajib kontrol
 negatif** (rata-rata di bawah SL lama tidak boleh menghasilkan mesin dengan SL ≥ entry).
 
+> ✅ **DIPERBAIKI 2026-10-16 (batch 3b)** — `TradingViewModelSync` kini menghitung `isDca` sekali,
+> memakai `effectiveEntry` (rata-rata) sebagai `entryPrice`, dan memanggil
+> `armPaperExitEngine(..., force = isDca)` — satu-satunya jalur yang boleh menimpa mesin hidup.
+> `HandBackToLegacy` mengambil SL dari `PaperStopResolver` yang sama dan menyetel
+> `enabled = resolvedHandBack.usable`: bila SL tersimpan tidak valid **dan** lantai friksi
+> nonaktif, auto-sell sengaja **tidak** dinyalakan. Log mencatat sumber SL
+> (`SIGNAL`/`FRICTION_FLOOR`/`NONE`).
+>
+> **Penyimpangan yang disengaja:** rekomendasi `PaperRearmDecision.decide(...)` (tiga cabang
+> `Rearm`/`Reset`/`Keep`) **tidak** diadopsi — cabang `Reset`/`Keep` belum punya konsumen nyata,
+> jadi objek itu hanya akan jadi kode mati. Invarian intinya ("SL < entry", "lantai hanya melebar")
+> ditegakkan di `PaperStopResolver`. Alasannya dicatat di
+> `docs/LAPORAN-batch3-paper-safety-2026-10-16.md` §3.4.
+>
+> **Perubahan perilaku yang perlu diketahui:** dengan lantai friksi dimatikan, posisi ber-SL tidak
+> valid kini berjalan **tanpa** auto-sell (dulu: jual pasar berlabel `STOP_LOSS`). Itu penggantian
+> yang disengaja, bukan regresi — perlu SL manual. Lihat laporan §7.2.
+
 ---
 
 ## 3. 🟠 Temuan serius
@@ -287,6 +319,17 @@ lebih rapat. Statistik paper menggabungkan dua kebijakan exit berbeda tanpa Beda
 **Perbaikan.** jadikan `atrPctAt` `internal`, atau lebih baik: fungsi murni `PaperAtr.of(atr, price)`
 di `engine/scalping` supaya bisa diuji tanpa ViewModel. Tambahkan juga test: beli manual →
 `atrPct > 0` bila ATR tersedia.
+
+> ✅ **DIPERBAIKI 2026-10-16 (batch 3b)** — rekomendasi di atas diikuti apa adanya: rumusnya
+> diekstrak ke `engine/scalping/PaperAtr.kt` (`PaperAtr.of(atr, referencePrice)`), lalu dipakai
+> `atrPctAt` **dan** jalur beli manual di `TradingViewModelSync` — yang terakhir kini juga mengirim
+> `atrPct` bersamaan dengan `force = isDca` (perbaikan P3). Penjaga: `PaperAtr.of` mengembalikan
+> `0.0` (bukan `NaN`/`∞`) untuk ATR atau harga acuan yang belum layak. Uji: bagian "P4 — ATR%" di
+> `engine/scalping/PaperStopResolverTest.kt`. Lihat
+> `docs/LAPORAN-batch3-paper-safety-2026-10-16.md` §4.
+>
+> **Batas:** uji membuktikan rumusnya, bukan bahwa `persistPaperFsm` benar-benar menulis `> 0` pada
+> siklus beli-manual → restart (butuh ViewModel + store hidup).
 
 ---
 
@@ -418,3 +461,4 @@ dan angka test **diukur** dari `app/build/test-results/testDebugUnitTest/*.xml`,
 |---|---|
 | 2026-10-16 | Audit read-only siklus hidup posisi paper & mesin exit (verifikasi ke kode, branch `patch` @ `a842e35`) |
 | 2026-10-16 | Temuan diekspor ke `docs/bugs/temuan_bugs_paper_trade.md` (dokumen ini) — **belum ada perbaikan kode** |
+| 2026-10-16 | **Batch 3b:** P2 + P3 + P4 diperbaiki + diuji (16 uji di `PaperStopResolverTest`, kontrol negatif 4/16 gagal). Lihat `docs/LAPORAN-batch3-paper-safety-2026-10-16.md` |

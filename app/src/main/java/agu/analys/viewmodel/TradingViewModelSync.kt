@@ -4,6 +4,7 @@ import androidx.lifecycle.viewModelScope
 import agu.analys.database.AppDatabase
 import agu.analys.database.RealTradeEntity
 import agu.analys.config.MarketDataSource
+import agu.analys.engine.scalping.PaperAtr
 import agu.analys.model.SignalAction
 import agu.analys.model.TradingPair
 import agu.analys.service.IndodaxMarketService
@@ -229,19 +230,27 @@ fun TradingViewModel.syncSimulationTradeToPositionStore(order: SimulationOrder) 
     val fillPrice = if (order.filledAvgPrice > 0.0) order.filledAvgPrice else order.limitPrice
     if (order.side == SimulationOrderSide.BUY) {
         val currentPos = positionStore.get(symbol, isReal = false, exchange = currentEx)
-        if (currentPos.isHolding && currentPos.quantity > 0.00000001 && currentPos.entryPrice > 0.0) {
+        // P3 — DCA: posisi sudah ada, jadi entry berubah menjadi harga rata-rata. Mesin exit WAJIB
+        // dibangun ulang, karena mesin lama masih memakai entry fill **pertama** sementara store
+        // memakai rata-rata. Dulu `armPaperExitEngine` dipanggil dengan `force = false`, sehingga
+        // mesin tidak pernah diperbarui: SL lama (milik entry lama) bisa berada DI ATAS rata-rata
+        // baru, dan pada restart berikutnya kondisi itu memicu penjualan paksa berlabel `STOP_LOSS`.
+        val isDca = currentPos.isHolding && currentPos.quantity > 0.00000001 && currentPos.entryPrice > 0.0
+        val effectiveEntry: Double
+        if (isDca) {
             val totalQty = currentPos.quantity + order.quantity
             val totalCost = (currentPos.entryPrice * currentPos.quantity) + (fillPrice * order.quantity)
-            val weightedAvg = if (totalQty > 0.0) totalCost / totalQty else fillPrice
+            effectiveEntry = if (totalQty > 0.0) totalCost / totalQty else fillPrice
             positionStore.setHolding(
                 symbol = symbol,
                 invested = totalCost,
-                entry = weightedAvg,
+                entry = effectiveEntry,
                 quantity = totalQty,
                 isReal = false,
                 exchange = currentEx
             )
         } else {
+            effectiveEntry = fillPrice
             positionStore.markBought(
                 symbol = symbol,
                 entryPrice = fillPrice,
@@ -286,14 +295,39 @@ fun TradingViewModel.syncSimulationTradeToPositionStore(order: SimulationOrder) 
         // manual berjalan tanpa SL/BE/trailing terkelola — kasus AMP/USDT menahan −2,76%
         // selama 9 menit tanpa stop apa pun. Bila mesin sudah ada (jalur auto-buy), pemanggilan
         // ini tidak menimpa apa pun.
-        armPaperExitEngine(
+        //
+        // P3 — kecuali untuk DCA: entry berubah menjadi rata-rata, jadi mesin lama (yang memakai
+        // entry fill pertama) harus diganti. `force = isDca` adalah satu-satunya jalur yang boleh
+        // menimpa mesin yang sudah hidup.
+        //
+        // P4 — `atrPct` kini ikut dikirim. Sebelumnya hanya jalur auto-buy yang bisa menghitungnya
+        // (fungsi ATR-nya `private` di berkas lain), sehingga setiap posisi hasil beli manual
+        // menerima `atrPct = 0.0`. Karena `0.0` berarti "ATR tidak diketahui", mesin jatuh ke ambang
+        // BE/trailing persen tetap dan nilai nol itu ikut tersimpan ke disk — kerusakannya persisten.
+        val atrPct = PaperAtr.of(engine.indicators.value.atr, effectiveEntry)
+        val armed = armPaperExitEngine(
             symbol = symbol,
             exchange = currentEx,
-            entryPrice = fillPrice,
+            entryPrice = effectiveEntry,
             stopLoss = engine.signalState.value.stopLoss,
             tp1 = engine.signalState.value.targetPrice1,
-            tp2 = engine.signalState.value.targetPrice2
+            tp2 = engine.signalState.value.targetPrice2,
+            atrPct = atrPct,
+            force = isDca
         )
+        if (isDca) {
+            agu.analys.util.AppLogManager.service(
+                "PaperAutoExit",
+                if (armed) {
+                    "🔁 [$symbol] DCA: entry menjadi rata-rata " +
+                        "${agu.analys.util.PriceFormatter.formatPrice(effectiveEntry, quoteAsset = TradingPair.fromCustomSymbol(symbol, currentEx).quoteAsset)} — " +
+                        "mesin exit dibangun ulang agar SL/TP sepadan dengan entry baru."
+                } else {
+                    "⚠️ [$symbol] DCA: entry menjadi rata-rata tetapi mesin exit tidak bisa dibangun ulang " +
+                        "(lantai friksi nonaktif atau SL tidak tersedia). Periksa SL posisi ini."
+                }
+            )
+        }
     } else if (order.side == SimulationOrderSide.SELL) {
         val currentPos = positionStore.get(symbol, isReal = false, exchange = currentEx)
         val currentQty = currentPos.quantity
