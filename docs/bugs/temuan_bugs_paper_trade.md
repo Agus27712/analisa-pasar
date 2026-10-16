@@ -103,7 +103,7 @@ harus tetap punya mesin setelah siklus ganti-bursa → rehidrasi).
 **Catatan arsitektur:** logikanya sekarang tidak murni (butuh ViewModel). Ekstrak resolver murni
 mis. `decideRehydrateScope(exchanges: List<String>)` lebih dulu, baru sambungkan.
 
-> ✅ **DIPERBAIKI 2026-10-16 (batch 3c)** — rekomendasi arsitektur di atas diikuti apa adanya:
+> ✅ **DIPERBAIKI 2026-10-16 di `e33b238` (batch 3c)** — rekomendasi arsitektur di atas diikuti apa adanya:
 > resolver murni `engine/scalping/PaperRehydrateScope.kt` (`decide(storedExchanges, activeExchange)`
 > — bursa aktif didahulukan, sisanya alfabetis) dipakai `rehydratePaperAutoExit`, yang kini
 > mengiterasi **semua** bursa ber-posisi paper lewat `SpotPositionStore.getPaperEnginePositions(isReal)`
@@ -191,7 +191,7 @@ val effectiveSl = if (signalSlValid) {
 **Sifat:** guard yang tidak diuji ⇒ **wajib kontrol negatif** (SL 2% pada pair USDT harus
 ditolak/dilLebarkan ke ≈5,81%; sinyal mode SWING tidak boleh membuka posisi).
 
-> ✅ **DIPERBAIKI 2026-10-16 (batch 3b)** — dua bagian. (1) Gerbang
+> ✅ **DIPERBAIKI 2026-10-16 di `8d22fbb` (batch 3b)** — dua bagian. (1) Gerbang
 > `transition.mode != StrategyMode.SCALPING` di `tryPaperAutoBuy`, ditempatkan **sebelum**
 > `stageQualifies` supaya sinyal non-scalping yang lolos ambang tetap tercatat di log (kalau
 > ditaruh sesudah, cabang log-nya tidak pernah tercapai). (2) Resolver murni
@@ -282,7 +282,7 @@ sesungguhnya ⇒ angka R di jurnal tidak cocok dengan posisi yang tercatat.
 **Sifat:** menghasilkan transaksi uang pada kondisi yang tidak dikehendaki ⇒ **wajib kontrol
 negatif** (rata-rata di bawah SL lama tidak boleh menghasilkan mesin dengan SL ≥ entry).
 
-> ✅ **DIPERBAIKI 2026-10-16 (batch 3b)** — `TradingViewModelSync` kini menghitung `isDca` sekali,
+> ✅ **DIPERBAIKI 2026-10-16 di `8d22fbb` (batch 3b)** — `TradingViewModelSync` kini menghitung `isDca` sekali,
 > memakai `effectiveEntry` (rata-rata) sebagai `entryPrice`, dan memanggil
 > `armPaperExitEngine(..., force = isDca)` — satu-satunya jalur yang boleh menimpa mesin hidup.
 > `HandBackToLegacy` mengambil SL dari `PaperStopResolver` yang sama dan menyetel
@@ -339,7 +339,7 @@ lebih rapat. Statistik paper menggabungkan dua kebijakan exit berbeda tanpa Beda
 di `engine/scalping` supaya bisa diuji tanpa ViewModel. Tambahkan juga test: beli manual →
 `atrPct > 0` bila ATR tersedia.
 
-> ✅ **DIPERBAIKI 2026-10-16 (batch 3b)** — rekomendasi di atas diikuti apa adanya: rumusnya
+> ✅ **DIPERBAIKI 2026-10-16 di `8d22fbb` (batch 3b)** — rekomendasi di atas diikuti apa adanya: rumusnya
 > diekstrak ke `engine/scalping/PaperAtr.kt` (`PaperAtr.of(atr, referencePrice)`), lalu dipakai
 > `atrPctAt` **dan** jalur beli manual di `TradingViewModelSync` — yang terakhir kini juga mengirim
 > `atrPct` bersamaan dengan `force = isDca` (perbaikan P3). Penjaga: `PaperAtr.of` mengembalikan
@@ -480,5 +480,5 @@ dan angka test **diukur** dari `app/build/test-results/testDebugUnitTest/*.xml`,
 |---|---|
 | 2026-10-16 | Audit read-only siklus hidup posisi paper & mesin exit (verifikasi ke kode, branch `patch` @ `a842e35`) |
 | 2026-10-16 | Temuan diekspor ke `docs/bugs/temuan_bugs_paper_trade.md` (dokumen ini) — **belum ada perbaikan kode** |
-| 2026-10-16 | **Batch 3b:** P2 + P3 + P4 diperbaiki + diuji (16 uji di `PaperStopResolverTest`, kontrol negatif 4/16 gagal). Lihat `docs/LAPORAN-batch3-paper-safety-2026-10-16.md` |
-| 2026-10-16 | **Batch 3c:** P1 diperbaiki + diuji (13 uji baru, kontrol negatif 8/13 gagal) ⇒ **ketiga temuan kritis (P1, P2, P3) tertutup.** Lihat `docs/LAPORAN-batch3-rehidrasi-2026-10-16.md` |
+| 2026-10-16 | **Batch 3b:** P2 + P3 + P4 diperbaiki + diuji di `8d22fbb` (16 uji di `PaperStopResolverTest`, kontrol negatif 4/16 gagal). Lihat `docs/LAPORAN-batch3-paper-safety-2026-10-16.md` |
+| 2026-10-16 | **Batch 3c:** P1 diperbaiki + diuji di `e33b238` (13 uji baru, kontrol negatif 8/13 gagal) ⇒ **ketiga temuan kritis (P1, P2, P3) tertutup.** Lihat `docs/LAPORAN-batch3-rehidrasi-2026-10-16.md` |

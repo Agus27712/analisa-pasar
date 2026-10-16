@@ -5,6 +5,7 @@
 **Sumber temuan:** `docs/bugs/temuan_bugs_paper_trade.md` (audit read-only agen lain, `patch` @ `eb01dc3`)
 **Cakupan:** P1 (posisi paper di bursa non-aktif kehilangan mesin exit setelah restart).
 Batch 3 dikerjakan dalam tiga commit terpisah; ini yang **ketiga dan terakhir**.
+**Commit perbaikan: `e33b238`.**
 
 > **Batas yang harus dibaca lebih dulu:** temuan `P*` hanya menyentuh posisi **paper**
 > (`isReal = false`) — bukan kerusakan uang riil. Dan perbaikan ini **memulihkan** proteksi, bukan
@@ -136,6 +137,11 @@ hasil pengukuran.
 
 Uji baru commit ini: `PaperRehydrateScopeTest` (7) dan `SpotPositionStorePaperEngineScopeTest` (6) —
 total **+13 uji**, sesuai selisih 492 → 505.
+
+**APK debug:** 27.880.361 byte. Diukur dari `app/build/outputs/apk/debug/app-debug.apk` hasil build
+pukul 14:21, yaitu build dari pohon kerja yang isinya **identik** dengan commit ini (berkas P1 sudah
+ada di pohon saat itu). Baseline setelah batch 2 = 27.877.730 byte ⇒ +2.631 byte. Tidak ada APK baru
+yang dibangun khusus untuk commit ini, jadi angka ini **bukan** hasil build ulang terpisah.
 
 ---
 

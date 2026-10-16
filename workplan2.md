@@ -1694,6 +1694,8 @@ Lihat `docs/bugs/temuan_bugs_notifikasi.md`.
 Sumber: `docs/bugs/temuan_bugs_jurnal_pnl.md` (audit read-only agen lain, di-pull dari `patch` @
 `eb01dc3`). Batch 3 dikerjakan dalam tiga commit terpisah; ini yang pertama.
 
+Perbaikan mendarat di commit **`d97a539`**.
+
 ### 30.1 J2 — satu predikat menang/kalah yang eksklusif
 
 `SignalLogRepository` punya **tiga** definisi menang/kalah. Hanya `buildGroupStats` yang eksklusif;
@@ -1775,6 +1777,8 @@ dimatikan adalah call site-nya.
 
 Sumber: `docs/bugs/temuan_bugs_paper_trade.md` (audit read-only agen lain, di-pull dari `patch` @
 `eb01dc3`). Commit kedua dari batch 3.
+
+Perbaikan mendarat di commit **`8d22fbb`**.
 
 **Batas penting:** seluruh temuan P* hanya menyentuh posisi **paper** (`isReal = false`). Ini bukan
 kerusakan uang riil — tapi posisi paper adalah dasar keputusan "apakah scalp punya edge", jadi
@@ -1867,6 +1871,8 @@ penjaga masing-masing perbaikan.
 ## 32. Batch 3c rehidrasi lintas bursa — P1 (2026-10-16)
 
 Sumber: `docs/bugs/temuan_bugs_paper_trade.md`. Commit ketiga (terakhir) dari batch 3.
+
+Perbaikan mendarat di commit **`e33b238`**. Dengan ini **ketiga temuan kritis** P1, P2, P3 tertutup.
 
 ### 32.1 Masalah
 

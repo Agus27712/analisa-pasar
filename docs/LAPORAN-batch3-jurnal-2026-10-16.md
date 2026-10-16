@@ -4,7 +4,7 @@
 **Branch:** `patch`
 **Sumber temuan:** `docs/bugs/temuan_bugs_jurnal_pnl.md` (audit read-only agen lain, `patch` @ `eb01dc3`)
 **Cakupan:** J2 (klasifikasi menang/kalah) + J1 (basis P&L jurnal sinyal). Batch 3 dikerjakan dalam
-tiga commit terpisah; ini yang pertama.
+tiga commit terpisah; ini yang pertama. **Commit perbaikan: `d97a539`.**
 
 ---
 
@@ -172,17 +172,26 @@ perbaikan ini, dan itu memang angka yang benar.
 
 ## 5. Angka terukur (dari XML, bukan klaim)
 
-| | Kelas | Total | Lulus | Gagal | Dilewati | APK debug |
+| Pohon | Kelas | Total | Lulus | Gagal | Dilewati | APK debug |
 |---|---|---|---|---|---|---|
 | Baseline (setelah batch 2, §29) | 63 | 462 | 461 | 0 | 1 | 27.877.730 B |
-| Setelah §30 | 67 | 505 | 504 | 0 | 1 | 27.880.361 B |
-| **Selisih** | **+4** | **+43** | **+43** | 0 | 0 | +2.631 B |
+| Commit ini (§30) — *diturunkan* | 64 | 476 | 475 | 0 | 1 | — |
+| Keadaan akhir batch 3 (§32) | 67 | 505 | 504 | 0 | 1 | 27.880.361 B |
 
 Angka baseline §29 dikonfirmasi ulang lewat `git stash -u` + `./gradlew :app:testDebugUnitTest`
 sebelum batch ini dimulai. Catatan: `app/build` **tidak dilacak git**, jadi berkas XML di repo selalu
 milik mesin yang menjalankan tes terakhir — bukan angka yang bisa dikutip dari dokumen.
 
 Uji baru batch ini: `SignalOutcomeClassificationTest` (14).
+
+> ⚠️ **Koreksi cara membaca angka** (ditambahkan 2026-10-16, setelah batch 3 selesai). Versi pertama
+> laporan ini menulis "Setelah §30 = 67 kelas / 505 test". Angka itu adalah **angka pohon kerja**
+> saat §30 dikerjakan — pohon itu sudah memuat berkas P1 (`PaperRehydrateScope.kt`,
+> `PaperEnginePosition.kt`, dan dua berkas ujinya) yang **belum di-commit**. Angka pohon commit 1
+> yang sebenarnya adalah **64 / 476 / 475** (462 + 14 uji `SignalOutcomeClassificationTest`,
+> 63 + 1 kelas), dan baris itu ditandai *diturunkan* karena tidak diukur ulang. Angka 67/505 tetap
+> benar sebagai angka **akhir** batch 3, bukan sebagai angka commit 1. Aturan turunannya sekarang
+> ada di `AGENTS.md`.
 
 ---
 
@@ -229,4 +238,5 @@ Yang **tetap lulus** dan alasannya:
 | Tanggal | Aksi |
 |---|---|
 | 2026-10-16 | Audit read-only jurnal & P&L diekspor ke `docs/bugs/temuan_bugs_jurnal_pnl.md` |
-| 2026-10-16 | **Batch 3a:** J2 + J1 diperbaiki + diuji (14 uji baru, kontrol negatif 9/22 gagal) |
+| 2026-10-16 | **Batch 3a:** J2 + J1 diperbaiki + diuji di `d97a539` (14 uji baru, kontrol negatif 9/22 gagal) |
+| 2026-10-16 | Koreksi cara membaca angka §5 setelah batch 3 selesai: 67/505 adalah angka pohon kerja saat §30, bukan angka pohon commit 1 (64/476/475) |

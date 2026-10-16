@@ -5,6 +5,7 @@
 **Sumber temuan:** `docs/bugs/temuan_bugs_paper_trade.md` (audit read-only agen lain, `patch` @ `eb01dc3`)
 **Cakupan:** P2 (gerbang mode + lantai friksi SL), P3 (DCA & serah-terima SL tidak valid),
 P4 (`atrPct` jalur beli manual). Batch 3 dikerjakan dalam tiga commit terpisah; ini yang kedua.
+**Commit perbaikan: `8d22fbb`.**
 
 > **Batas yang harus dibaca lebih dulu:** seluruh temuan `P*` hanya menyentuh posisi **paper**
 > (`isReal = false`). Ini **bukan** kerusakan uang riil. Tetapi posisi paper adalah dasar seluruh

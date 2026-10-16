@@ -95,7 +95,7 @@ dibuat benar-benar net. **Perhatikan efek amnesty:** banyak sinyal "menang" akan
 
 **Sifat:** display + statistik ⇒ **wajib kontrol negatif** (paksa basis KOTOR → test harus gagal).
 
-> ✅ **DIPERBAIKI 2026-10-16 (batch 3a)** — `realizedPnlPct` kini memakai
+> ✅ **DIPERBAIKI 2026-10-16 di `d97a539` (batch 3a)** — `realizedPnlPct` kini memakai
 > `FeeSchedule.netProfitPctForDirected` (arah BUY/SELL dibedakan) lewat pembungkus tunggal
 > `database/SignalLogPnl.kt` → `netSignalPnlPct`, dipasang di **tiga** jalur yang dulu masing-masing
 > menulis rumusnya sendiri: `updateTrackingLogWithPrice`, `resolveLogManually`, dan
@@ -171,7 +171,7 @@ kalau entry berubah, log lama di-`resolve` dan log baru dibuat.
 **Sifat:** angka salah di layar ⇒ **wajib kontrol negatif** (log `HIT_SL` dengan P&L positif harus
 **tidak** masuk `wins`; `winRatePct` tidak boleh > 100 untuk sampel mana pun).
 
-> ✅ **DIPERBAIKI 2026-10-16 (batch 3a)** — satu predikat eksklusif `classifySignalOutcome`
+> ✅ **DIPERBAIKI 2026-10-16 di `d97a539` (batch 3a)** — satu predikat eksklusif `classifySignalOutcome`
 > (`database/SignalOutcome.kt`) dipasang di **empat** call site: `calculateReliabilitySummary`,
 > `buildTierStats`, `buildGroupStats`, dan `bestSymbol`/`bestStrategy` (yang terakhir dulu memakai
 > definisi **keempat** sendiri). **Status menang/kalah menang atas tanda P&L**, sehingga log `HIT_SL`
@@ -421,4 +421,4 @@ test **diukur** dari XML.
 |---|---|
 | 2026-10-16 | Audit read-only jurnal sinyal, jurnal trade, dan angka P&L (branch `patch` @ `a842e35`) |
 | 2026-10-16 | Temuan diekspor ke `docs/bugs/temuan_bugs_jurnal_pnl.md` (dokumen ini) — **belum ada perbaikan kode** |
-| 2026-10-16 | **Batch 3a:** J2 + J1 diperbaiki + diuji (14 uji baru, kontrol negatif 9/22 gagal). Lihat `docs/LAPORAN-batch3-jurnal-2026-10-16.md` |
+| 2026-10-16 | **Batch 3a:** J2 + J1 diperbaiki + diuji di `d97a539` (14 uji baru, kontrol negatif 9/22 gagal). Lihat `docs/LAPORAN-batch3-jurnal-2026-10-16.md` |
