@@ -54,7 +54,12 @@ fun TradeSimulationScreen(
     val marketSource by viewModel.marketDataSource.collectAsState()
 
     // P2 — status FSM exit & statistik paper trade (murni simulasi).
-    val paperExitSnapshot by viewModel.paperExitSnapshot.collectAsState()
+    // P5 — potret FSM dibaca **per posisi**: satu StateFlow global dulu ditimpa `null` oleh
+    // setiap simbol tanpa mesin, jadi kartu berkedip hilang bila posisi paper ada di pair lain.
+    val paperExitSnapshots by viewModel.paperExitSnapshots.collectAsState()
+    val paperExitSnapshot = remember(paperExitSnapshots, selectedPair, marketSource) {
+        viewModel.paperSnapshotAt(exchange = marketSource.name, symbol = selectedPair.symbol)
+    }
     val paperTradeStats by viewModel.paperTradeStats.collectAsState()
     val paperTradeJournal by viewModel.paperTradeJournal.collectAsState()
     val paperAutoTradeConfig by viewModel.paperAutoTradeConfig.collectAsState()

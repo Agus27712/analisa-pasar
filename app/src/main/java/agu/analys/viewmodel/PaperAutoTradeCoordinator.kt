@@ -651,7 +651,7 @@ private fun TradingViewModel.evaluatePaperAutoExitLocked(
     val machine = PaperAutoTradeRuntime.machineFor(exchange, symbol)
     if (machine == null) {
         // Tidak ada posisi paper berjalan -> pastikan kartu FSM kosong.
-        publishPaperExitSnapshot(null)
+        publishPaperExitSnapshot(exchange = exchange, symbol = symbol, snapshot = null)
         return null
     }
 
@@ -665,17 +665,17 @@ private fun TradingViewModel.evaluatePaperAutoExitLocked(
         // Cabang ini melepas mesin tanpa lewat `markSold`, jadi progres tersimpan harus dibuang
         // di sini juga — kalau tidak, key akan tertinggal untuk posisi berikutnya.
         positionStore.clearPaperFsmState(symbol = pair.symbol, isReal = false, exchange = exchange)
-        publishPaperExitSnapshot(null)
+        publishPaperExitSnapshot(exchange = exchange, symbol = symbol, snapshot = null)
         return null
     }
 
     if (currentPrice <= 0.0) {
-        publishPaperExitSnapshot(PaperExitSnapshot.of(machine, symbol, exchange, currentPrice))
+        publishPaperExitSnapshot(exchange = exchange, symbol = symbol, snapshot = PaperExitSnapshot.of(machine, symbol, exchange, currentPrice))
         return null
     }
 
     if (!prefs.paperAutoTradeConfig.autoExitEnabled) {
-        publishPaperExitSnapshot(PaperExitSnapshot.of(machine, symbol, exchange, currentPrice))
+        publishPaperExitSnapshot(exchange = exchange, symbol = symbol, snapshot = PaperExitSnapshot.of(machine, symbol, exchange, currentPrice))
         return null
     }
 
@@ -706,12 +706,12 @@ private fun TradingViewModel.evaluatePaperAutoExitLocked(
         // Posisi masih ditahan -> simpan progres supaya restart berikutnya tidak kembali ke nol.
         // Tidak perlu `force`: perubahan yang berarti ditulis segera oleh shouldWriteFsm.
         persistPaperFsm(exchange, symbol, machine)
-        publishPaperExitSnapshot(PaperExitSnapshot.of(machine, symbol, exchange, currentPrice))
+        publishPaperExitSnapshot(exchange = exchange, symbol = symbol, snapshot = PaperExitSnapshot.of(machine, symbol, exchange, currentPrice))
         return null
     }
 
     finalizePaperExit(symbol, exchange, machine, decision)
-    publishPaperExitSnapshot(null)
+    publishPaperExitSnapshot(exchange = exchange, symbol = symbol, snapshot = null)
     return decision
 }
 
@@ -804,7 +804,7 @@ fun TradingViewModel.clearPaperExitState(symbol: String, exchange: String) {
     PaperAutoTradeRuntime.clear(exchange, symbol)
     positionStore.setPaperEngineOwned(symbol = symbol, isReal = false, exchange = exchange, owned = false)
     positionStore.clearPaperFsmState(symbol = symbol, isReal = false, exchange = exchange)
-    publishPaperExitSnapshot(null)
+    publishPaperExitSnapshot(exchange = exchange, symbol = symbol, snapshot = null)
 }
 
 /** Ringkas parameter exit yang sedang aktif, untuk ditampilkan di UI. */

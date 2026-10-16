@@ -92,13 +92,36 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     val paperTradeStats: StateFlow<agu.analys.engine.scalping.PaperTradeStats> =
         _paperTradeStats.asStateFlow()
 
-    /** Potret FSM exit untuk pair yang sedang dipantau; `null` bila tidak ada posisi paper terbuka. */
-    private val _paperExitSnapshot = MutableStateFlow<agu.analys.engine.scalping.PaperExitSnapshot?>(null)
-    val paperExitSnapshot: StateFlow<agu.analys.engine.scalping.PaperExitSnapshot?> =
-        _paperExitSnapshot.asStateFlow()
+    /**
+     * Potret FSM exit **per posisi** — P5.
+     *
+     * Dulu ini satu `MutableStateFlow` global, padahal `evaluatePaperAutoExit` dipanggil untuk
+     * setiap simbol yang mendapat tick: setiap simbol tanpa mesin menimpa flow itu dengan `null`,
+     * sehingga kartu FSM di layar simulasi berkedip hilang bila posisi paper-nya ada di pair
+     * lain. Kuncinya `PaperAutoTradeRuntime.key(exchange, symbol)` — satu entri per posisi.
+     */
+    private val _paperExitSnapshots =
+        MutableStateFlow<Map<String, agu.analys.engine.scalping.PaperExitSnapshot>>(emptyMap())
+    val paperExitSnapshots: StateFlow<Map<String, agu.analys.engine.scalping.PaperExitSnapshot>> =
+        _paperExitSnapshots.asStateFlow()
 
-    internal fun publishPaperExitSnapshot(snapshot: agu.analys.engine.scalping.PaperExitSnapshot?) {
-        _paperExitSnapshot.value = snapshot
+    /** Potret untuk satu posisi; `null` bila posisi itu tidak punya posisi paper terbuka. */
+    internal fun paperSnapshotAt(exchange: String, symbol: String): agu.analys.engine.scalping.PaperExitSnapshot? =
+        agu.analys.trading.PaperExitSnapshots.forPosition(
+            current = _paperExitSnapshots.value,
+            key = PaperAutoTradeRuntime.key(exchange, symbol)
+        )
+
+    internal fun publishPaperExitSnapshot(
+        exchange: String,
+        symbol: String,
+        snapshot: agu.analys.engine.scalping.PaperExitSnapshot?
+    ) {
+        _paperExitSnapshots.value = agu.analys.trading.PaperExitSnapshots.publish(
+            current = _paperExitSnapshots.value,
+            key = PaperAutoTradeRuntime.key(exchange, symbol),
+            snapshot = snapshot
+        )
     }
 
     internal fun appendPaperTradeRecord(record: agu.analys.engine.scalping.PaperTradeRecord) {

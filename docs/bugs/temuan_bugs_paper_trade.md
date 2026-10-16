@@ -3,7 +3,8 @@
 **Tanggal:** 2026-10-16
 **Status:** DOKUMEN TEMUAN — **P1, P2, P3, P4 sudah DIPERBAIKI** (batch 3b & 3c); **P6 DIPERBAIKI
 sebagian** (batch 5c — jendela momentum kini satu sumber; bagian `peak` vs high M1 **belum**);
-**P5, P7, P8 masih hidup.** Ketiga temuan **kritis** (P1, P2, P3) sudah ditutup.
+**P5 DIPERBAIKI** (batch 5d — snapshot per posisi); **P7, P8 masih hidup.** Ketiga temuan
+**kritis** (P1, P2, P3) sudah ditutup.
 Diverifikasi terhadap kode di branch `patch` @ `a842e35`.
 **Cakupan:** `PaperAutoTradeCoordinator.kt` · `PaperRehydrate.kt` · `PaperExitResolver.kt` ·
 `SpotPositionStore.kt` · `TradingViewModelSync.kt` · `TradingViewModel.kt` ·
@@ -380,9 +381,12 @@ berkedip hilang. Ini persis kebingungan "satu state untuk dua tampilan" yang dul
 `paperSnapshotFor` (`PaperAutoTradeCoordinator.kt:776-784`, dipakai `DetailChartScreen.kt:116-122`).
 Yang belum punya padanannya adalah `TradeSimulationScreen`.
 
-**Perbaikan.** snapshot per-key (`paperSnapshots: StateFlow<Map<String, PaperExitSnapshot>>`),
-atau `publishPaperExitSnapshot` hanya menulis bila simbol adalah pemilik aktif. Test: evaluating
-simbol tanpa mesin **tidak boleh** mengubah snapshot simbol lain.
+**Perbaikan.** ✅ **DIPERBAIKI (batch 5d, `commit` berikut)** — snapshot kini per posisi
+(`_paperExitSnapshots: Map<String, PaperExitSnapshot>` berkunci
+`PaperAutoTradeRuntime.key(exchange, symbol)`); `null` hanya menghapus entri posisi itu sendiri.
+`TradeSimulationScreen` memakai `paperSnapshotAt(marketSource.name, selectedPair.symbol)`;
+`DetailChartScreen` tetap lewat `paperSnapshotFor`. Detail: `docs/LAPORAN-batch5-p5-2026-10-16.md`,
+`workplan2.md` §37.
 
 ---
 

@@ -2278,3 +2278,71 @@ peak/time-stop/ATR — itu perubahan berbeda yang perlu temuan dan uji sendiri.
 ### 36.5 Laporan
 
 `docs/LAPORAN-batch5-p6-2026-10-16.md`
+
+---
+
+## 37. Batch 5d — P5: kartu FSM di layar simulasi dihapus tick pair lain (2026-10-16)
+
+### 37.1 Masalah
+
+```kotlin
+// PaperAutoTradeCoordinator.kt — dievaluasi untuk SETIAP simbol pada loop polling
+val machine = PaperAutoTradeRuntime.machineFor(exchange, symbol)
+if (machine == null) {
+    // Tidak ada posisi paper berjalan -> pastikan kartu FSM kosong.
+    publishPaperExitSnapshot(null)   // ← menimpa snapshot SEMUA posisi
+    return null
+}
+```
+
+`publishPaperExitSnapshot` menulis ke **satu** `MutableStateFlow` global, sementara
+`evaluatePaperAutoExit` dipanggil untuk setiap simbol yang mendapat tick
+(`TradingViewModelSync.kt`) **dan** untuk pair yang dipilih (`TradingViewModel.kt`).
+
+Dampaknya: pengguna membuka detail BTC sementara posisi paper-nya ada di AMP/USDT — kartu FSM di
+layar simulasi berkedip hilang. Persis kebingungan "satu state untuk dua tampilan" yang dulu
+membuat fitur §14/§15 dibuang.
+
+### 37.2 Perbaikan
+
+Snapshot kini **per posisi**:
+
+- `_paperExitSnapshots: MutableStateFlow<Map<String, PaperExitSnapshot>>`, berkunci
+  `PaperAutoTradeRuntime.key(exchange, symbol)` — kunci yang **sudah dipakai** mesin, bukan
+  format baru, supaya tidak ada dua definisi kunci posisi.
+- `publishPaperExitSnapshot(exchange, symbol, snapshot)` — `null` menghapus **entri posisi itu
+  saja**.
+- Reduksinya diekstrak ke `trading/PaperExitSnapshots.kt` agar bisa diuji tanpa Android.
+
+Konsumen:
+
+| Layar | Sebelum | Sekarang |
+|---|---|---|
+| `TradeSimulationScreen` | membaca snapshot global | `paperSnapshotAt(marketSource.name, selectedPair.symbol)` — posisi pair yang sedang dibuka |
+| `DetailChartScreen` | membaca snapshot global (hanya pemicu hitung ulang) | membaca peta per posisi; kartunya tetap lewat `paperSnapshotFor` |
+
+### 37.3 Uji & kontrol negatif
+
+Uji baru: `app/src/test/java/agu/analys/trading/PaperExitSnapshotsTest.kt` — **10 kasus**: bentuk
+kunci runtime (`TOKOCRYPTO|BTCIDR`, pemisahan bursa untuk simbol sama), publish menyimpan di kunci
+posisi, **simbol tanpa mesin tidak menghapus snapshot simbol lain** (inti P5), memperbarui satu
+posisi tidak menyentuh posisi lain, `null` pada kunci yang tidak ada mengembalikan peta yang sama,
+kunci sama ditimpa, dua bursa untuk simbol sama terpisah, dan dua kasus `forPosition`.
+
+Kontrol negatif: `publish` dikembalikan ke perilaku lama (`null` mengosongkan **seluruh** peta,
+snapshot baru menggantikan peta) ⇒ **4 dari 10 uji GAGAL**. Enam yang tetap lulus memang tidak
+menguji isolasi antar posisi: dua bentuk kunci, "snapshot tersimpan di bawah kunci posisinya",
+"kunci sama ditimpa", dan dua kasus `forPosition`.
+
+Angka terukur (dari XML): **71 kelas / 561 uji → 72 kelas / 571 uji**, 0 gagal, 1 dilewati.
+
+### 37.4 Perubahan perilaku yang perlu diketahui
+
+Layar simulasi kini menampilkan FSM **pair yang sedang dibuka**, bukan "posisi paper mana pun yang
+terakhir diterbitkan". Bila pair yang dibuka tidak punya posisi paper, kartunya kosong — itu benar,
+dan sama dengan perlakuan halaman detail. Sebelum perbaikan kartunya terisi, tetapi isinya bisa
+milik pair lain (atau kosong secara acak).
+
+### 37.5 Laporan
+
+`docs/LAPORAN-batch5-p5-2026-10-16.md`

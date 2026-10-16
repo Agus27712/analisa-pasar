@@ -162,7 +162,10 @@ Saat ini berisi:
   posisi paper & mesin exit. **P1, P2, P3, P4 DIPERBAIKI** (batch 3b —
   `docs/LAPORAN-batch3-paper-safety-2026-10-16.md`; batch 3c —
   `docs/LAPORAN-batch3-rehidrasi-2026-10-16.md`), sehingga **ketiga temuan kritis sudah tertutup**.
-  **Masih hidup: P5, P7, P8** (kartu FSM dihapus tick pair lain); **P6 DIPERBAIKI sebagian**
+  **Masih hidup: P7, P8**; **P5 DIPERBAIKI** (batch 5d —
+  `docs/LAPORAN-batch5-p5-2026-10-16.md`; snapshot FSM kini per posisi, berkunci
+  `PaperAutoTradeRuntime.key` — simbol tanpa mesin tidak lagi menghapus kartu simbol lain);
+  **P6 DIPERBAIKI sebagian**
   (batch 5c — `docs/LAPORAN-batch5-p6-2026-10-16.md`; jendela momentum kini satu sumber, tetapi
   bagian "`peak` tertinggal dari high M1" **belum** — bukan cabang kode yang berbeda, melainkan
   tidak adanya umpan intrabar). **Batas penting:** seluruh temuan `P*` hanya menyentuh posisi **paper**
@@ -359,6 +362,19 @@ Saat ini berisi:
 - **Mengurangi frekuensi sebuah exit bisa jadi justru perbaikannya.** `EARLY_PROFIT` yang hanya
   terjadi saat pair kebetulan dibuka bukan fitur — itu ketergantungan pada keadaan UI. Jangan
   "kembalikan" frekuensinya tanpa membaca temuan P6.
+
+## Aturan turunan dari audit paper trading — P5 (batch 5d, 2026-10-16)
+
+- **State per posisi tidak boleh jadi state global.** `publishPaperExitSnapshot` dulu menulis satu
+  `MutableStateFlow` sementara dievaluasi untuk setiap simbol; simbol tanpa mesin lalu menimpa
+  `null` dan menghapus kartu simbol lain. State yang dimiliki entitas (posisi/bursa/simbol) harus
+  berkunci pada entitas itu — `_paperExitSnapshots: Map<String, PaperExitSnapshot>` berkunci
+  `PaperAutoTradeRuntime.key(exchange, symbol)`.
+- **Kunci yang sudah dipakai mesin jangan dipecahkan lagi.** Format kunci posisi hanya satu:
+  `PaperAutoTradeRuntime.key`. Membuat format kedua berarti dua definisi posisi yang sama.
+- **Konsumen wajib menyebut posisinya.** `paperSnapshotAt(exchange, symbol)` (layar simulasi) dan
+  `paperSnapshotFor(...)` (halaman detail) — keduanya menyebut posisi yang dibuka, bukan
+  "snapshot apa pun yang terakhir terbit".
 
 ## Arah produk (ringkas)
 
