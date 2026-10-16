@@ -159,8 +159,9 @@ Saat ini berisi:
   lanjutan: kategori notifikasi ≠ sakelar Pengaturan, cooldown peak di-bypass, sakelar master
   mematikan foreground service, `AppPreferences` dibangun ulang per tick, N6 melarat).
 - **`temuan_bugs_paper_trade.md`** (2026-10-16, diperbarui di hari yang sama) — audit siklus hidup
-  posisi paper & mesin exit. **P2, P3, P4 DIPERBAIKI** (batch 3b —
-  `docs/LAPORAN-batch3-paper-safety-2026-10-16.md`); **P1 dikerjakan di commit berikutnya**.
+  posisi paper & mesin exit. **P1, P2, P3, P4 DIPERBAIKI** (batch 3b —
+  `docs/LAPORAN-batch3-paper-safety-2026-10-16.md`; batch 3c —
+  `docs/LAPORAN-batch3-rehidrasi-2026-10-16.md`), sehingga **ketiga temuan kritis sudah tertutup**.
   **Masih hidup: P5–P8** (kartu FSM dihapus tick pair lain, dua jalur pemantauan menghasilkan exit
   berbeda). **Batas penting:** seluruh temuan `P*` hanya menyentuh posisi **paper**
   (`isReal = false`) — bukan kerusakan uang riil, tetapi posisi paper adalah dasar seluruh keputusan
@@ -264,6 +265,28 @@ Saat ini berisi:
   `atrPct` tidak bisa diteruskan dari `TradingViewModelSync` karena `atrPctAt` `private`; hasilnya
   `atrPct = 0.0` untuk setiap beli manual, dan nol itu ikut tersimpan ke disk (P4). Ekstrak ke
   `object` di `engine/scalping` supaya bisa diuji tanpa ViewModel.
+
+## Aturan turunan dari audit rehidrasi paper (batch 3c, 2026-10-16)
+
+- **Rehidrasi wajib lintas bursa, bukan bursa aktif.** Setelah restart, mesin exit harus dipulihkan
+  untuk **semua** bursa yang punya posisi paper tersimpan — urutannya ditentukan
+  `PaperRehydrateScope.decide(...)` (`engine/scalping/PaperRehydrateScope.kt`), bursa aktif lebih
+  dulu. Membaca `prefs.marketDataSource.name` saja membuat posisi di bursa lain menggantung
+  **permanen** (P1). Enumerasi lintas bursa memakai
+  `SpotPositionStore.getPaperEnginePositions(isReal)`.
+- **Ganti bursa aktif adalah peristiwa, bukan sekadar preferensi.** Setiap perubahan
+  `prefs.marketDataSource` harus memicu rehidrasi; jangan menambah jalur baru yang mengganti bursa
+  tanpa memicu rehidrasi.
+- **Jangan membaca hanya dari memori untuk daftar posisi.** `PaperAutoTradeRuntime` kosong setelah
+  restart sampai rehidrasi selesai — daftar simbol yang perlu dipantau harus juga dibaca dari disk.
+- **Ingat batas yang belum ditutup:** mesin untuk bursa non-aktif sudah dipulihkan tetapi **belum
+  bisa dievaluasi**, karena `evaluatePaperAutoExit` hanya menerima harga bursa aktif. Jangan
+  mengklaim "posisi di bursa non-aktif terlindungi otomatis" sebelum ada umpan harga lintas bursa.
+  Bukti batas ini: `docs/LAPORAN-batch3-rehidrasi-2026-10-16.md` §4.
+- **Angka uji harus diukur pada pohon commit yang dimaksud.** Bila berkas yang belum di-commit masih
+  ada di pohon kerja, jumlah test yang terukur adalah milik pohon kerja itu, bukan milik commit.
+  Ukur ulang dengan mengeluarkan berkas di luar cakupan commit, atau tandai angkanya sebagai
+  "diturunkan" — jangan tulis angka pohon kerja sebagai angka commit.
 
 ## Arah produk (ringkas)
 

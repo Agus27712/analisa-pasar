@@ -1862,3 +1862,85 @@ penjaga masing-masing perbaikan.
 
 `docs/LAPORAN-batch3-paper-safety-2026-10-16.md`
 
+---
+
+## 32. Batch 3c rehidrasi lintas bursa — P1 (2026-10-16)
+
+Sumber: `docs/bugs/temuan_bugs_paper_trade.md`. Commit ketiga (terakhir) dari batch 3.
+
+### 32.1 Masalah
+
+Rehidrasi hanya membaca bursa **aktif**:
+
+```kotlin
+val exchange = prefs.marketDataSource.name          // hanya bursa AKTIF
+val symbols = positionStore.getPaperEngineSymbols(isReal = false, exchange = exchange)
+```
+
+Rantainya: posisi paper di Indodax (mesin hanya di memori, `auto_sell_enabled = false` karena
+diambil alih engine) → pengguna pindah ke Tokocrypto → app di-kill → dibuka lagi (bursa aktif
+Tokocrypto) → rehidrasi hanya membaca partisi `tokocrypto_sim_*` ⇒ mesin Indodax **tidak pernah
+dibangun**. `setMarketDataSource` juga tidak memicu rehidrasi, jadi **kembali ke Indodax pun tidak
+memulihkan apa pun**. Polling 10 detik menambah masalah: `getAllActiveTrailingSymbols` mensyaratkan
+`trailing_enabled = true` sedangkan engine paper mematikannya, dan
+`PaperAutoTradeRuntime.activeSymbols(ex)` juga hanya bursa aktif.
+
+Akibatnya posisi itu tidak pernah punya SL, TP, BE, trailing, maupun time-stop — **selamanya** —
+sementara `countActivePaperPositions()` (global, tanpa bursa) tetap menghitungnya sehingga ikut
+memakan satu dari tiga slot auto-buy.
+
+### 32.2 Perbaikan
+
+1. **Enumerasi lintas bursa.** `trading/PaperEnginePosition.kt` (baru) +
+   `SpotPositionStore.getPaperEnginePositions(isReal)`: menyisir semua key berakhiran
+   `_paper_engine`, mem-parse `"${exchange}_${real|sim}_${symbol}"`, dan mengembalikan pasangan
+   bursa + simbol. Kuncinya sudah memuat bursa, jadi tidak perlu tahu bursa mana yang aktif.
+2. **Resolver murni** `engine/scalping/PaperRehydrateScope.kt` — `decide(storedExchanges,
+   activeExchange)`: semua bursa tersimpan ikut, bursa aktif **didahulukan**, sisanya alfabetis
+   supaya deterministik.
+3. **Rehidrasi mengiterasi seluruh cakupan.** `rehydratePaperAutoExit` membangun target
+   `(exchange, symbol)` dari `decide(...)`, bukan dari satu bursa.
+4. **Ganti bursa memicu rehidrasi.** `initSubscriptionsAndPolling` mengumpulkan aliran
+   `marketDataSource` dan memicu rehidrasi saat nilainya berubah (emisi pertama dilewati karena
+   sudah ditangani rehidrasi awal), lalu `checkAndStopTrailingServiceIfEmpty()`.
+5. **Polling menemukan simbol dari disk.** `startTrailingPolling` menambahkan
+   `getPaperEngineSymbols(isReal = false, exchange = currentEx)` — `PaperAutoTradeRuntime` kosong
+   setelah restart sampai rehidrasi selesai, jadi tanpa ini posisi paper bisa terlewat satu putaran.
+6. **Peringatan bursa non-aktif.** Setelah rehidrasi, bursa yang tidak aktif dicatat eksplisit di
+   log berikut alasannya.
+
+### 32.3 Batas yang jujur — perbaikan ini memulihkan proteksi, bukan menghidupkannya
+
+Mesin exit untuk bursa non-aktif **dibangun**, tetapi belum bisa dievaluasi: kedua pemanggil
+`evaluatePaperAutoExit` (`TradingViewModel.kt:157` dan `TradingViewModelSync.kt:669`) memakai
+`prefs.marketDataSource.name`, dan harga hanya tersedia untuk bursa yang sedang dipakai.
+
+Jadi yang berubah:
+
+| | Sebelum | Sesudah |
+|---|---|---|
+| Posisi di bursa non-aktif saat ini | Tidak terlindungi | Tidak terlindungi (sama) |
+| Kembali ke bursa itu | Mesin **tetap kosong** — posisi menggantung permanen | Mesin sudah dipulihkan, proteksi langsung hidup |
+| Progres FSM (BE/trailing/time-stop) | Hilang | Dipulihkan |
+| Slot `maxConcurrentPositions` | Terpakai tanpa terlihat | Terpakai, tetapi ada peringatan di log |
+
+Klaim audit bahwa posisi itu "menggantung **permanen**" memang benar dan itulah yang ditutup;
+tetapi jangan dibaca sebagai "posisi di bursa non-aktif kini terlindungi otomatis".
+
+### 32.4 Uji & kontrol negatif
+
+Uji baru:
+
+- `app/src/test/java/agu/analys/engine/scalping/PaperRehydrateScopeTest.kt` (7 kasus) — urutan bursa,
+  bursa aktif di depan, duplikat/spasi/huruf kecil, bursa aktif di luar daftar, daftar kosong.
+- `app/src/test/java/agu/analys/trading/SpotPositionStorePaperEngineScopeTest.kt` (6 kasus,
+  Robolectric) — enumerasi lintas bursa, filter `real`/`sim`, hanya `HOLDING`, hanya flag
+  `_paper_engine` aktif.
+
+Kontrol negatif: `PaperRehydrateScope.decide` dikembalikan ke "hanya bursa aktif" + filter bursa
+di-hardcode ke `tokocrypto` di `getPaperEnginePositions` ⇒ **8 dari 13 uji GAGAL**.
+
+### 32.5 Laporan
+
+`docs/LAPORAN-batch3-rehidrasi-2026-10-16.md`
+

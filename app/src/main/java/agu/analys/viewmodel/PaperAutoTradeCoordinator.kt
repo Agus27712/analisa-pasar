@@ -12,6 +12,7 @@ import agu.analys.engine.scalping.PaperExitSnapshot
 import agu.analys.engine.scalping.PaperExitStateMachine
 import agu.analys.engine.scalping.PaperRehydrate
 import agu.analys.engine.scalping.PaperRehydrateAction
+import agu.analys.engine.scalping.PaperRehydrateScope
 import agu.analys.engine.scalping.PaperStopResolver
 import agu.analys.engine.scalping.PaperStopSource
 import agu.analys.engine.scalping.PaperTradeRecord
@@ -838,6 +839,16 @@ fun TradingViewModel.paperSnapshotFor(
  * disentuh: SL-nya tersimpan sebagai `entry * 0.99` yang salah, jadi memulihkannya akan
  * memalsukan stop-out.
  *
+ * ## Cakupan bursa (P1)
+ *
+ * Rehidrasi mengiterasi **semua** bursa yang punya posisi paper tersimpan, bukan hanya bursa yang
+ * sedang aktif. Bursa aktif didahulukan supaya posisi yang sedang dilihat pengguna pulih lebih dulu.
+ * Urutannya ditentukan [PaperRehydrateScope] (fungsi murni, bisa diuji).
+ *
+ * Mesin untuk bursa non-aktif memang ikut dibangun, tetapi **baru bisa dievaluasi saat bursa itu
+ * dipilih**: aplikasi hanya punya umpan harga untuk bursa yang sedang dipakai. Keadaan itu dicatat
+ * eksplisit di log supaya posisi yang "diam" tidak terlihat seperti bug tanpa sebab.
+ *
  * ## Progres FSM (P4.4)
  *
  * Selain parameter posisi, rehidrasi kini membaca [PaperExitFsmState] tersimpan (`_paper_fsm`)
@@ -849,9 +860,22 @@ fun TradingViewModel.paperSnapshotFor(
  */
 fun TradingViewModel.rehydratePaperAutoExit(): Int {
     val cfg = prefs.paperAutoTradeConfig
-    val exchange = prefs.marketDataSource.name
-    val symbols = positionStore.getPaperEngineSymbols(isReal = false, exchange = exchange)
-    if (symbols.isEmpty()) return 0
+
+    // P1 — rehidrasi WAJIB mencakup semua bursa yang punya posisi paper, bukan hanya bursa aktif.
+    // Membaca `prefs.marketDataSource.name` saja membuat posisi di bursa lain kehilangan mesin
+    // exitnya selamanya setelah restart. Urutannya ditentukan resolver murni [PaperRehydrateScope]
+    // (bursa aktif lebih dulu) supaya keputusan ini bisa diuji tanpa ViewModel.
+    val stored = positionStore.getPaperEnginePositions(isReal = false)
+    val scope = PaperRehydrateScope.decide(
+        storedExchanges = stored.map { it.exchange },
+        activeExchange = prefs.marketDataSource.name
+    )
+    if (scope.isEmpty()) return 0
+
+    val targets = scope.flatMap { ex ->
+        stored.filter { it.exchange.equals(ex, ignoreCase = true) }.map { ex to it.symbol }
+    }
+    if (targets.isEmpty()) return 0
 
     val runtime = prefs.scalpingRuntimeConfig
     val now = System.currentTimeMillis()
@@ -859,7 +883,7 @@ fun TradingViewModel.rehydratePaperAutoExit(): Int {
     var handedBack = 0
     var progressRestored = 0
 
-    for (raw in symbols) {
+    for ((exchange, raw) in targets) {
         // Jangan timpa mesin yang sudah hidup (mis. auto-buy terjadi sebelum rehidrasi jalan).
         if (PaperAutoTradeRuntime.machineFor(exchange, raw) != null) continue
 
@@ -982,6 +1006,21 @@ fun TradingViewModel.rehydratePaperAutoExit(): Int {
                 )
             }
         }
+    }
+
+    // P1 — katakan terus terang bila ada posisi paper di bursa yang sedang tidak aktif. Mesinnya
+    // sudah dipulihkan, tetapi harganya belum bisa dievaluasi: aplikasi hanya punya umpan harga
+    // untuk bursa yang sedang dipakai. Tanpa catatan ini, pengguna hanya melihat posisi yang
+    // "diam" tanpa tahu sebabnya.
+    val activeEx = prefs.marketDataSource.name.trim().uppercase()
+    val dormant = scope.filter { !it.equals(activeEx, ignoreCase = true) }
+    if (dormant.isNotEmpty()) {
+        AppLogManager.service(
+            "PaperAutoExit",
+            "⚠️ Posisi paper terdeteksi di bursa non-aktif (${dormant.joinToString(", ")}): " +
+                "mesin exitnya sudah dipulihkan, tetapi baru akan dievaluasi saat bursa itu dipilih " +
+                "di Pengaturan — harga hanya tersedia untuk bursa yang sedang aktif."
+        )
     }
 
     if (restored > 0) {

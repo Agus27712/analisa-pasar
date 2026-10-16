@@ -526,6 +526,33 @@ fun TradingViewModel.initSubscriptionsAndPolling() {
         )
     }
 
+    // P1 — ganti bursa juga harus memicu rehidrasi. Mesin exit untuk bursa yang baru dipilih
+    // mungkin hanya ada di disk (bukan di memori), dan tanpa pemicu ini posisi paper di bursa itu
+    // berjalan tanpa SL/TP/BE/trailing walau pengguna sudah kembali ke sana. Dulu
+    // `setMarketDataSource` sama sekali tidak memanggil rehidrasi, sehingga kembali ke bursa asal
+    // pun tidak memulihkan apa pun.
+    viewModelScope.launch {
+        var isFirstEmission = true
+        marketDataSource.collect { source ->
+            if (isFirstEmission) {
+                // Emisi pertama adalah nilai saat ini — sudah ditangani rehidrasi di atas.
+                isFirstEmission = false
+                return@collect
+            }
+            agu.analys.util.AppLogManager.service(
+                "PaperAutoExit",
+                "🔀 Bursa aktif berpindah ke ${source.name} — membangun ulang mesin exit posisi paper."
+            )
+            runCatching { rehydratePaperAutoExit() }.onFailure {
+                agu.analys.util.AppLogManager.service(
+                    "PaperAutoExit",
+                    "⚠️ Rehidrasi setelah ganti bursa gagal: ${it.message}"
+                )
+            }
+            checkAndStopTrailingServiceIfEmpty()
+        }
+    }
+
     engine.onCandidateSignalTransition = { transition ->
         if (isNotificationsEnabled.value) {
             val isReal = isRealBuyMode.value
@@ -646,9 +673,13 @@ fun TradingViewModel.startTrailingPolling() {
                 val isReal = isRealBuyMode.value
                 // P2: posisi paper juga ikut dipantau, walau bukan pair yang sedang dibuka,
                 // supaya auto-exit tetap berjalan di latar belakang.
+                // P1: simbol paper juga dibaca dari **disk**, bukan hanya dari mesin di memori —
+                // `PaperAutoTradeRuntime` kosong setelah restart sampai rehidrasi selesai, jadi
+                // tanpa ini posisi paper bisa terlewat satu putaran polling.
                 val activeSymbols = (
                     positionStore.getAllActiveTrailingSymbols(isReal = isReal, exchange = currentEx) +
-                        PaperAutoTradeRuntime.activeSymbols(currentEx)
+                        PaperAutoTradeRuntime.activeSymbols(currentEx) +
+                        positionStore.getPaperEngineSymbols(isReal = false, exchange = currentEx)
                     ).distinct()
                 if (activeSymbols.isNotEmpty()) {
                     val isToko = prefs.marketDataSource == MarketDataSource.TOKOCRYPTO

@@ -1,8 +1,8 @@
 # Temuan Audit — Siklus Hidup Posisi Paper Trading & Mesin Exit
 
 **Tanggal:** 2026-10-16
-**Status:** DOKUMEN TEMUAN — **P2, P3, P4 sudah DIPERBAIKI** (batch 3b); **P1 dikerjakan di commit
-ketiga batch yang sama**; P5–P8 masih hidup.
+**Status:** DOKUMEN TEMUAN — **P1, P2, P3, P4 sudah DIPERBAIKI** (batch 3b & 3c); **P5–P8 masih
+hidup.** Ketiga temuan **kritis** (P1, P2, P3) sudah ditutup.
 Diverifikasi terhadap kode di branch `patch` @ `a842e35`.
 **Cakupan:** `PaperAutoTradeCoordinator.kt` · `PaperRehydrate.kt` · `PaperExitResolver.kt` ·
 `SpotPositionStore.kt` · `TradingViewModelSync.kt` · `TradingViewModel.kt` ·
@@ -102,6 +102,25 @@ harus tetap punya mesin setelah siklus ganti-bursa → rehidrasi).
 
 **Catatan arsitektur:** logikanya sekarang tidak murni (butuh ViewModel). Ekstrak resolver murni
 mis. `decideRehydrateScope(exchanges: List<String>)` lebih dulu, baru sambungkan.
+
+> ✅ **DIPERBAIKI 2026-10-16 (batch 3c)** — rekomendasi arsitektur di atas diikuti apa adanya:
+> resolver murni `engine/scalping/PaperRehydrateScope.kt` (`decide(storedExchanges, activeExchange)`
+> — bursa aktif didahulukan, sisanya alfabetis) dipakai `rehydratePaperAutoExit`, yang kini
+> mengiterasi **semua** bursa ber-posisi paper lewat `SpotPositionStore.getPaperEnginePositions(isReal)`
+> + `trading/PaperEnginePosition.kt` (baru). Tiga jalur lain ikut ditutup: ganti bursa memicu
+> rehidrasi (mengumpulkan aliran `marketDataSource`, emisi pertama dilewati),
+> `startTrailingPolling` juga membaca simbol paper dari **disk** (bukan hanya
+> `PaperAutoTradeRuntime` yang kosong setelah restart), dan bursa non-aktif dicatat eksplisit di log.
+>
+> **Batas yang wajib dibaca:** mesin untuk bursa non-aktif **dibangun** tetapi **belum bisa
+> dievaluasi** — kedua pemanggil `evaluatePaperAutoExit` (`TradingViewModel.kt:157`,
+> `TradingViewModelSync.kt:669`) memakai bursa aktif, dan harga hanya tersedia untuk bursa yang
+> sedang dipakai. Jadi yang ditutup adalah "menggantung **permanen**" (kembali ke bursa itu tidak
+> lagi sia-sia), **bukan** "posisi di bursa non-aktif kini terlindungi otomatis". Rinciannya di
+> `docs/LAPORAN-batch3-rehidrasi-2026-10-16.md` §4.
+>
+> Uji: `engine/scalping/PaperRehydrateScopeTest.kt` (7 kasus) +
+> `trading/SpotPositionStorePaperEngineScopeTest.kt` (6 kasus, Robolectric).
 
 ---
 
@@ -462,3 +481,4 @@ dan angka test **diukur** dari `app/build/test-results/testDebugUnitTest/*.xml`,
 | 2026-10-16 | Audit read-only siklus hidup posisi paper & mesin exit (verifikasi ke kode, branch `patch` @ `a842e35`) |
 | 2026-10-16 | Temuan diekspor ke `docs/bugs/temuan_bugs_paper_trade.md` (dokumen ini) — **belum ada perbaikan kode** |
 | 2026-10-16 | **Batch 3b:** P2 + P3 + P4 diperbaiki + diuji (16 uji di `PaperStopResolverTest`, kontrol negatif 4/16 gagal). Lihat `docs/LAPORAN-batch3-paper-safety-2026-10-16.md` |
+| 2026-10-16 | **Batch 3c:** P1 diperbaiki + diuji (13 uji baru, kontrol negatif 8/13 gagal) ⇒ **ketiga temuan kritis (P1, P2, P3) tertutup.** Lihat `docs/LAPORAN-batch3-rehidrasi-2026-10-16.md` |

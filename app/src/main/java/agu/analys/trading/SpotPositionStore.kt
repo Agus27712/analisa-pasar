@@ -703,6 +703,40 @@ class SpotPositionStore(context: Context) {
         return out.sorted()
     }
 
+    /**
+     * Sama seperti [getPaperEngineSymbols], tetapi **lintas bursa** — mengembalikan pasangan
+     * bursa + simbol beserta asal bursanya.
+     *
+     * P1 — rehidrasi setelah restart dulu hanya membaca bursa aktif
+     * (`prefs.marketDataSource.name`), sehingga posisi paper di bursa lain **tidak pernah**
+     * mendapat mesin exit: tanpa SL, TP, BE, trailing, maupun time-stop, selamanya. Kuncinya
+     * sudah memuat bursa, jadi enumerasinya bisa dilakukan tanpa tahu bursa mana yang aktif.
+     *
+     * Kunci posisi berformat `"${exchange}_${real|sim}_${symbol}"` (lihat [buildKey]), dan
+     * [normalize] sudah membuang `_ / - spasi` dari simbol — jadi bursa adalah segmen pertama,
+     * jenis akun segmen kedua, dan sisanya simbol.
+     */
+    fun getPaperEnginePositions(isReal: Boolean = false): List<PaperEnginePosition> {
+        val kind = if (isReal) "real" else "sim"
+        val out = mutableListOf<PaperEnginePosition>()
+        for ((k, _) in prefs.all) {
+            if (!k.endsWith("_paper_engine")) continue
+            val rawPrefix = k.removeSuffix("_paper_engine")
+            val parts = rawPrefix.split("_")
+            if (parts.size < 3) continue
+            if (!parts[1].equals(kind, ignoreCase = true)) continue
+            if (!getSafeBoolean(k, false)) continue
+            if (prefs.getString("${rawPrefix}_state", null) != SpotPositionState.HOLDING.name) continue
+            out.add(
+                PaperEnginePosition(
+                    exchange = parts[0].uppercase(),
+                    symbol = parts.drop(2).joinToString("_").uppercase()
+                )
+            )
+        }
+        return out.sortedWith(compareBy({ it.exchange }, { it.symbol }))
+    }
+
     fun markTp1Triggered(symbol: String, isReal: Boolean = false, exchange: String = "TOKOCRYPTO") {
         prefs.edit().putBoolean("${buildKey(symbol, isReal, exchange)}_tp1_triggered", true).apply()
     }
