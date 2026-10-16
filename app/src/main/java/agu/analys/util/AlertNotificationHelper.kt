@@ -160,18 +160,12 @@ object AlertNotificationHelper {
         }
 
         val pairFormatted = marketKey.formattedPair()
-        val quoteAsset = marketKey.quote
 
         val title = "🚀 Sinyal Entry Siap • $pairFormatted ($strategyLabel)"
-        val entryFormatted = PriceFormatter.formatPrice(signal.entryPrice, showSymbol = true, quoteAsset = quoteAsset)
-        val tp1Formatted = PriceFormatter.formatPrice(signal.targetPrice1, showSymbol = true, quoteAsset = quoteAsset)
-        val slFormatted = PriceFormatter.formatPrice(signal.stopLoss, showSymbol = true, quoteAsset = quoteAsset)
-
-        val message = "Kandidat BUY terkonfirmasi [${marketKey.displayExchange}]:\n" +
-                "• Entry: $entryFormatted\n" +
-                "• Target 1: $tp1Formatted\n" +
-                "• Stop Loss: $slFormatted\n" +
-                "• Skor Keyakinan: ${(signal.confidence * 100).toInt()}%"
+        val message = buildCandidateSignalMessage(marketKey, signal)
+        val entryFormatted = PriceFormatter.formatPrice(
+            signal.entryPrice, showSymbol = true, quoteAsset = marketKey.quote
+        )
 
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -577,4 +571,26 @@ object AlertNotificationHelper {
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         notificationManager.notify(notificationId, builder.build())
     }
+}
+
+/**
+ * Badan pesan notifikasi kandidat BUY.
+ *
+ * Dipisah dari [AlertNotificationHelper.sendCandidateFoundNotification] supaya bisa diuji tanpa
+ * Android. **N1:** `AISignalState.confidence` sudah `Int` skala **0–100**
+ * (`model/TradingViewModels.kt`), jadi nilainya dipakai apa adanya — jangan dikali 100.
+ * Sebelum perbaikan 2026-10-16 baris ini menulis `(signal.confidence * 100)`, sehingga skor
+ * `68` tampil sebagai `6800%` di push notification.
+ */
+internal fun buildCandidateSignalMessage(marketKey: MarketKey, signal: AISignalState): String {
+    val quoteAsset = marketKey.quote
+    val entryFormatted = PriceFormatter.formatPrice(signal.entryPrice, showSymbol = true, quoteAsset = quoteAsset)
+    val tp1Formatted = PriceFormatter.formatPrice(signal.targetPrice1, showSymbol = true, quoteAsset = quoteAsset)
+    val slFormatted = PriceFormatter.formatPrice(signal.stopLoss, showSymbol = true, quoteAsset = quoteAsset)
+
+    return "Kandidat BUY terkonfirmasi [${marketKey.displayExchange}]:\n" +
+        "• Entry: $entryFormatted\n" +
+        "• Target 1: $tp1Formatted\n" +
+        "• Stop Loss: $slFormatted\n" +
+        "• Skor Keyakinan: ${signal.confidence}%"
 }

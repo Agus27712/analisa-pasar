@@ -150,8 +150,28 @@ Saat ini berisi:
 
 - **`temuan_bugs_notifikasi.md`** (2026-10-16) — audit jalur notifikasi (4 pengirim: VM-sync,
   CandidateScanWorker, foreground service, VM-alerts) & alur skor keyakinan (produsen →
-  notifikasi → jurnal → UI). Temuan kritis: notifikasi kandidat menampilkan confidence ×100
-  (N1), dan balapan edge trailing yang bisa membuat auto-sell tidak pernah terkirim (N2).
+  notifikasi → jurnal → UI). **N1, N2, N3 sudah DIPERBAIKI** (batch 1, 2026-10-16 —
+  `docs/LAPORAN-batch1-notifikasi-2026-10-16.md`). **Masih hidup: N4–N12**, termasuk N7 yang
+  terverifikasi **aktif** (bukan latent).
+
+## Aturan turunan dari batch 1 audit notifikasi (2026-10-16)
+
+- **Kepemilikan edge pemicu harus tunggal.** Pemicu yang bersifat *edge-once* (mis. trailing
+  stop: pemanggil pertama yang melihat harga melewati batas mengonsumsi edge-nya) **hanya boleh
+  dikonsumsi oleh jalur yang benar-benar mengeksekusi**. Pengamat lain — loop background, service,
+  dashboard — wajib memakai jalur baca-saja (`consumeTrigger = false` di
+  `SpotPositionStore.updateTrailingPrice`) supaya tidak mencuri edge dan membuat aksi otomatis
+  tidak pernah terkirim. Kalau sebuah pemicu tidak punya pemilik tunggal, itu bug, bukan desain.
+- **"SATU rumus P&L" juga berlaku di jalur notifikasi.** Dilarang memanggil
+  `TradingFeeConfig()` tanpa argumen di jalur runtime mana pun — tanpa argumen ia jatuh ke preset
+  **legacy Indodax-ish** (0,11 / 0,21 / 0,32 / 0,42), bukan biaya bursa aktif user. Pakai
+  `AppPreferences.tradingFees` (atau `FeeSchedule.configFor`). Penjaga:
+  `app/src/test/java/agu/analys/service/NotificationFeeSourceTest.kt`.
+- **Skor `confidence` berskala 0–100, bukan 0–1.** Jangan pernah mengalikannya dengan 100 saat
+  ditampilkan. Penjaga: `app/src/test/java/agu/analys/util/CandidateSignalMessageTest.kt`.
+- **Ekstrak pembentuk teks/notifikasi jadi fungsi murni** supaya bisa diuji tanpa Android. Pesan
+  notifikasi yang dirakit inline di dalam `NotificationCompat.Builder` tidak bisa diuji — itulah
+  cara bug `6800%` bertahan lama.
 
 ## Arah produk (ringkas)
 

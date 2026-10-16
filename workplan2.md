@@ -1462,8 +1462,109 @@ Dipulihkan → hijau.
 
 | | |
 |---|---|
-| Unit test (diukur dari XML) | **443 lulus · 0 gagal · 1 dilewati** (58 kelas) |
+| Unit test (diukur dari XML) | **443 total · 442 lulus · 0 gagal · 1 dilewati** (58 kelas) |
 | Baseline sebelum §24 | **435 lulus · 0 gagal · 1 dilewati** (57 kelas) |
 | Tambahan | **+8 test, +1 kelas** |
 | APK debug | 27.877.730 byte |
 | Kesiapan uang riil | **BELUM** — lihat §9.5c |
+
+> **Koreksi 2026-10-16:** baris "Unit test" di atas awalnya menulis "443 lulus". Pengukuran ulang
+> dari XML menunjukkan 443 adalah **total test** (442 lulus + 1 dilewati). Sudah diperbaiki.
+
+---
+
+## 26. Batch 1 audit notifikasi — N1, N2, N3 (2026-10-16)
+
+Sumber: `docs/bugs/temuan_bugs_notifikasi.md` (audit read-only dari agen lain, di-pull dari
+`patch`). Batch 1 mengerjakan tiga temuan berisiko tertinggi. Sisanya (N4–N12) **belum dikerjakan**.
+
+### 26.1 N2 — balapan edge trailing (paling merugikan)
+
+`SpotPositionStore.updateTrailingPrice` bersifat **edge-once**: pemanggil pertama yang melihat
+harga melewati batas mengonsumsi edge-nya, dan `justTriggered` hanya `true` sekali.
+
+Dua loop memanggilnya bersamaan:
+- `TradingForegroundService` (polling 4 detik) — **membuang** hasil `justTriggered`
+- `TradingViewModel.checkTrailingForMode` (per tick) — satu-satunya yang memanggil
+  `executeAutoSellOrder`
+
+Bila service menang balapan, VM tidak pernah melihat `true` → **notifikasi trailing hilang dan
+auto-sell tidak pernah terkirim**. Posisi menggantung sampai SL/TP manual.
+
+Catatan yang memperkuat: service mengambil `pos` **sebelum** memanggil `updateTrailingPrice`, jadi
+efek sampingnya pada `posContext`-nya sendiri memang tidak pernah terpakai. Satu-satunya efek nyata
+dari panggilan itu adalah menaikkan peak, menambah counter, **dan mencuri edge**.
+
+**Perbaikan:** parameter `consumeTrigger: Boolean = true` di `updateTrailingPrice`. Saat `false`,
+hanya Rule 1 (peak) yang jalan; mesin pemicu (hitung batas, filter 2 tick, set flag) tidak
+disentuh dan hasilnya selalu `Pair(<posisi terbaru>, false)`. Service mengirim `false`.
+
+### 26.2 N1 — confidence tampil ×100
+
+`AISignalState.confidence` bertipe `Int` skala **0–100**, tapi notifikasi kandidat menulis
+`(signal.confidence * 100).toInt()` → skor `68` tampil **`6800%`**.
+
+**Perbaikan:** badan pesan diekstrak ke `buildCandidateSignalMessage(marketKey, signal)` (fungsi
+murni, bisa diuji tanpa Android) dan faktor `* 100` dihapus.
+
+### 26.3 N3 — fee service tidak sama dengan fee user
+
+`TradingForegroundService` memanggil `SellSignalEvaluator.evaluate(..., tradingFees = TradingFeeConfig(), ...)`.
+Tanpa argumen, `TradingFeeConfig` jatuh ke preset **legacy Indodax-ish** (0,11 / 0,21 / 0,32 / 0,42),
+bukan biaya bursa aktif milik user. Ini **regresi dari §24** — aturan "SATU rumus P&L" masih bocor
+di permukaan notifikasi.
+
+**Perbaikan:** service memakai `AppPreferences(applicationContext).tradingFees` (objek prefs
+di-cache lewat `by lazy`, nilainya dibaca ulang tiap tick supaya perubahan di Pengaturan langsung
+terpakai), sama dengan jalur VM.
+
+### 26.4 Uji & kontrol negatif
+
+| Berkas uji | Test | Menjaga |
+|---|---|---|
+| `util/CandidateSignalMessageTest.kt` | 4 | N1 |
+| `trading/TrailingEdgeOwnershipTest.kt` | 3 | N2 |
+| `service/NotificationFeeSourceTest.kt` | 3 | N3 |
+
+Kontrol negatif (ketiganya dimatikan sekaligus, lalu dijalankan):
+
+| Perbaikan yang dimatikan | Uji yang GAGAL |
+|---|---|
+| `* 100` dikembalikan di `buildCandidateSignalMessage` | 2 dari 4 `CandidateSignalMessageTest` |
+| `if (!consumeTrigger)` → `if (false)` di store | 1 dari 3 `TrailingEdgeOwnershipTest` |
+| `tradingFees = appPrefs.tradingFees` → `TradingFeeConfig()` | 1 dari 3 `NotificationFeeSourceTest` |
+| **Total** | **4 dari 10 uji gagal** |
+
+Uji yang tetap lulus saat perbaikan dimatikan memang tidak bergantung pada perbaikan itu: "skor
+nol tetap nol" (0 × 100 = 0), "pesan tetap membawa entry/target/SL", "pengamat tetap menaikkan
+peak", "edge hanya dikonsumsi sekali", serta dua uji premis di `NotificationFeeSourceTest`.
+
+### 26.5 Catatan kejujuran tentang batas penjagaan N3
+
+`NotificationFeeSourceTest` menjaga N3 lewat **invarian sumber**: berkas service dibaca, komentar
+dibuang, lalu dipastikan tidak ada lagi `TradingFeeConfig()` di kodenya dan ada
+`tradingFees = appPrefs.tradingFees`. Ini menangkap persis regresi yang diperbaiki, tapi ia
+memeriksa **teks sumber**, bukan perilaku runtime — kalau nanti pemanggilan itu dipindah ke berkas
+lain, penjaga ini tidak ikut memindah. Uji perilaku penuh butuh menjalankan service dengan
+`Context` tiruan, yang belum ada di repo ini.
+
+### 26.6 Laporan
+
+`docs/LAPORAN-batch1-notifikasi-2026-10-16.md`
+
+---
+
+## 27. Status setelah §26
+
+| | |
+|---|---|
+| Unit test (diukur dari XML) | **453 total · 452 lulus · 0 gagal · 1 dilewati** (61 kelas) |
+| Baseline sebelum §26 (diukur via `git stash -u`) | **443 total · 442 lulus · 0 gagal · 1 dilewati** (58 kelas) |
+| Tambahan | **+10 test, +3 kelas** |
+| APK debug | 27.877.730 byte |
+| Kesiapan uang riil | **BELUM** — lihat §9.5c |
+
+Sisa temuan yang belum dikerjakan: **N4** (toggle push tidak dipatuhi di jalur alert/trailing),
+**N5** (notifikasi kandidat tanpa disclaimer "uang riil masih diblokir"), **N6** (dua produsen satu
+state machine), **N7** (`markTriggered` tidak menormalkan simbol — **aktif**, bukan latent),
+**N8–N12**. Lihat `docs/bugs/temuan_bugs_notifikasi.md`.

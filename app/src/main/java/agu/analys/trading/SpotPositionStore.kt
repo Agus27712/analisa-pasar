@@ -507,8 +507,26 @@ class SpotPositionStore(context: Context) {
     /**
      * Updates peak price and checks if trailing stop is triggered.
      * Returns Pair<SpotPosition, Boolean(justTriggered)>
+     *
+     * @param consumeTrigger **kepemilikan edge** (N2). Pemicu trailing bersifat *edge-once*:
+     *   pemanggil pertama yang melihat harga melewati batas akan mengonsumsi edge-nya dan
+     *   `justTriggered` hanya `true` sekali. Karena itu **hanya pemilik eksekusi** (yaitu
+     *   `TradingViewModel.checkTrailingForMode`, satu-satunya yang memanggil `executeAutoSellOrder`)
+     *   yang boleh memakai `true`. Pengamat lain — mis. loop 4 detik
+     *   `TradingForegroundService` yang hanya butuh peak tetap naik — wajib mengirim
+     *   `false`, supaya tidak mencuri edge dan membuat auto-sell tidak pernah terkirim.
+     *
+     *   Saat `false`, hanya Rule 1 (peak) yang dijalankan; mesin pemicu (hitung batas, filter
+     *   2 tick, set flag `trailing_triggered`) tidak disentuh sama sekali dan hasilnya selalu
+     *   `Pair(<posisi terbaru>, false)`.
      */
-    fun updateTrailingPrice(symbol: String, currentPrice: Double, isReal: Boolean = false, exchange: String = "TOKOCRYPTO"): Pair<SpotPosition, Boolean> {
+    fun updateTrailingPrice(
+        symbol: String,
+        currentPrice: Double,
+        isReal: Boolean = false,
+        exchange: String = "TOKOCRYPTO",
+        consumeTrigger: Boolean = true
+    ): Pair<SpotPosition, Boolean> {
         val current = get(symbol, isReal, exchange)
         if (!current.isHolding || !current.isTrailingEnabled || currentPrice <= 0.0) {
             return Pair(current, false)
@@ -522,6 +540,11 @@ class SpotPositionStore(context: Context) {
         if (currentPrice > newPeak) {
             newPeak = currentPrice
             prefs.edit().putString("${key}_peak", newPeak.toString()).apply()
+        }
+
+        // Pengamat non-pemilik berhenti di sini: peak sudah naik, edge tidak dikonsumsi (N2).
+        if (!consumeTrigger) {
+            return Pair(get(symbol, isReal, exchange), false)
         }
 
         // Rule 2: Resolusi dynamic Smart Step Trailing percent berdasarkan profit tertinggi yang dicapai

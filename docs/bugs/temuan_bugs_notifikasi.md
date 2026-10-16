@@ -1,7 +1,8 @@
 # Temuan Audit — Jalur Notifikasi & Skor Keyakinan
 
 **Tanggal:** 2026-10-16
-**Status:** DOKUMEN TEMUAN (belum diperbaiki — diverifikasi terhadap kode di branch `patch`)
+**Status:** DOKUMEN TEMUAN — **sebagian sudah diperbaiki.** Batch 1 (2026-10-16) menutup
+**N1, N2, N3**; temuan **N4–N12 masih hidup**. Diverifikasi terhadap kode di branch `patch`.
 **Cakupan:** seluruh pengirim notifikasi + seluruh alur `confidence` (produsen → notifikasi → jurnal → UI)
 
 > Semua temuan di bawah **diverifikasi langsung ke kode** (bukan kutipan memori).
@@ -36,6 +37,11 @@ KONSUMEN CONFIDENCE
 
 ### N1 — Notifikasi kandidat menampilkan confidence ×100 (salah 100×)
 
+> ✅ **DIPERBAIKI 2026-10-16 (batch 1)** — badan pesan diekstrak ke fungsi murni
+> `buildCandidateSignalMessage(marketKey, signal)` di `util/AlertNotificationHelper.kt` dan faktor
+> `* 100` dihapus. Uji: `app/src/test/java/agu/analys/util/CandidateSignalMessageTest.kt` (4 test).
+> Lihat `docs/LAPORAN-batch1-notifikasi-2026-10-16.md` §3.
+
 **Lokasi:** `util/AlertNotificationHelper.kt:174`
 
 ```kotlin
@@ -64,6 +70,12 @@ nilai confidence asli tampil tanpa faktor pengali).
 ---
 
 ### N2 — Balapan (race) hilangnya edge trailing → auto-sell bisa tidak pernah dieksekusi
+
+> ✅ **DIPERBAIKI 2026-10-16 (batch 1)** — opsi 1 dipilih: parameter `consumeTrigger: Boolean = true`
+> ditambahkan ke `SpotPositionStore.updateTrailingPrice`; saat `false` hanya Rule 1 (peak) yang
+> dijalankan sehingga pengamat tidak bisa mencuri edge. `TradingForegroundService` mengirim `false`.
+> Uji: `app/src/test/java/agu/analys/trading/TrailingEdgeOwnershipTest.kt` (3 test).
+> Lihat `docs/LAPORAN-batch1-notifikasi-2026-10-16.md` §2.
 
 **Lokasi:**
 - `service/TradingForegroundService.kt:162` — loop 4 detik memanggil
@@ -99,6 +111,12 @@ untuk dua pemanggil simultan).
 ## 3. 🟠 Temuan serius
 
 ### N3 — Service foreground menghitung P&L notifikasi dengan fee yang salah
+
+> ✅ **DIPERBAIKI 2026-10-16 (batch 1)** — service kini memakai
+> `AppPreferences(applicationContext).tradingFees` (objek prefs di-cache `by lazy`, nilainya dibaca
+> ulang tiap tick), sama dengan jalur VM. Ini menutup **regresi dari `workplan2.md` §24**. Uji:
+> `app/src/test/java/agu/analys/service/NotificationFeeSourceTest.kt` (3 test) — invarian sumber +
+> bukti dampak. Lihat `docs/LAPORAN-batch1-notifikasi-2026-10-16.md` §4.
 
 **Lokasi:** `service/TradingForegroundService.kt:196`
 
@@ -205,8 +223,16 @@ sinyal tidak pernah berstatus TRIGGERED diam-diam.
 **Dampak:** efek samping — siklus bisa langsung mendeteksi ulang (loop notifikasi).
 
 **Pemanggil terdampak:** `viewmodel/RealTradeExecutor.kt:323` (`markTriggered(pair)`) dan
-`viewmodel/TradingViewModelSimulation.kt:110` (`markTriggered(pair.symbol)`) — format simbol
+`viewmodel/SimulationCoordinator.kt:110` (`markTriggered(pair.symbol)`) — format simbol
 keduanya harus diverifikasi sebelum memastikan apakah bug ini aktif atau latent.
+
+> ⚠️ **VERIFIKASI 2026-10-16 — bug ini AKTIF, bukan latent.** Audit aslinya masih ragu. Buktinya:
+> `RealTradeExecutor.baseFromPair`/`quoteFromPair` (`:908`, `:915`) sama-sama melakukan
+> `pair.lowercase().replace("_", "")` — strip `_` yang defensif itu hanya masuk akal bila `pair`
+> memang berdelimiter (format Indodax `btc_idr`). Jadi `pair.uppercase()` = `"BTC_IDR"` → prefix
+> `"BTC_IDR#"` tidak akan pernah cocok dengan key ternormalisasi `"BTCIDR#SCALPING"`.
+> **Koreksi path:** berkas `viewmodel/TradingViewModelSimulation.kt` sudah tidak ada; pemanggil
+> keduanya kini `viewmodel/SimulationCoordinator.kt:110`.
 
 **Perbaikan:** pakai `cacheKey()`/`normalizeSymbol()` di `markTriggered`, bukan
 `symbol.uppercase()`.
@@ -243,13 +269,13 @@ keduanya harus diverifikasi sebelum memastikan apakah bug ini aktif atau latent.
 
 | Prioritas | Temuan | Alasan |
 |---|---|---|
-| 1 | **N2** | Kehilangan eksekusi auto-sell — paling merugikan user secara finansial |
-| 2 | **N1** | Bug display paling terlihat, perbaikan trivial |
-| 3 | **N3** | Melanggar aturan "SATU rumus P&L"; estimasi PnL salah di notifikasi |
+| ~~1~~ | ~~**N2**~~ ✅ selesai 2026-10-16 | Kehilangan eksekusi auto-sell — paling merugikan user secara finansial |
+| ~~2~~ | ~~**N1**~~ ✅ selesai 2026-10-16 | Bug display paling terlihat, perbaikan trivial |
+| ~~3~~ | ~~**N3**~~ ✅ selesai 2026-10-16 | Melanggar aturan "SATU rumus P&L"; estimasi PnL salah di notifikasi |
 | 4 | **N4** | Inkonsistensi toggle; user kehilangan kontrol atas notifikasi |
 | 5 | **N5** | Kepatuhan aturan AGENTS (status siap ≠ ajakan beli) |
 | 6 | **N6** | Dua produsen satu state machine — sumber notifikasi ganda |
-| 7 | **N7 / N9 / N10 / N12** | Bug latent / kebersihan kode |
+| 7 | **N7 / N9 / N10 / N12** | Bug latent / kebersihan kode — **kecuali N7, lihat catatan di §3** |
 
 Setiap perbaikan **wajib**:
 - mengikuti aturan branch `patch` (jangan push ke `main` tanpa instruksi owner);
@@ -265,3 +291,5 @@ Setiap perbaikan **wajib**:
 |---|---|
 | 2026-10-16 | Audit awal jalur notifikasi & confidence dilakukan (read-only, terverifikasi ke kode) |
 | 2026-10-16 | Temuan diekspor ke `docs/bugs/temuan_bugs_notifikasi.md` (dokumen ini) — **belum ada perbaikan kode** |
+| 2026-10-16 | **Batch 1:** N1, N2, N3 diperbaiki + diuji (10 test baru, kontrol negatif 4/10 gagal). Lihat `docs/LAPORAN-batch1-notifikasi-2026-10-16.md` |
+| 2026-10-16 | N7 diverifikasi ulang → **AKTIF** (bukan latent); path pemanggil kedua dikoreksi ke `SimulationCoordinator.kt:110` |
