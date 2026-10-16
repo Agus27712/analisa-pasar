@@ -2346,3 +2346,65 @@ milik pair lain (atau kosong secara acak).
 ### 37.5 Laporan
 
 `docs/LAPORAN-batch5-p5-2026-10-16.md`
+
+---
+
+## 38. Batch 5e — J6 & N11: klaim statistik historis hardcoded di UI diganti deskripsi bergate sampel (2026-10-16)
+
+### 38.1 Masalah
+
+```kotlin
+// SignalLogScreen.kt — kartu "RELIABILITAS SKOR KEYAKINAN", tanpa syarat apa pun
+Text("Skor keyakinan tinggi (≥80%) menunjukkan rasio kemenangan tertinggi dan drawdown terendah pada eksekusi real-time.")
+```
+
+Kalimat ini melanggar aturan repo sendiri ("jangan menulis di UI bahwa sinyal punya
+winrate/expectancy historis tanpa data cukup"), dan yang membuatnya berbahaya:
+
+- **N11** — tier ≥80 nyaris mustahil terisi sinyal scalping pra-entry (`ScalpingMtfEvaluator`
+  cap ≤59 kecuali READY). Jadi tier itu mengukur "apakah sudah READY", bukan kualitas berjenjang.
+- Landasan statistiknya baru bisa dipakai setelah **J1** (PnL kotor → bersih) dan **J2**
+  (predikat W/L tumpang tindih) — keduanya sudah ditutup di batch sebelumnya.
+- Tanpa syarat: data kosong, sampel 1, atau semua tier kosong — teks tetap tercetak.
+
+### 38.2 Perbaikan
+
+Resolver murni baru `model/ConfidenceTierNote.kt`:
+
+| Kondisi | Keluaran |
+|---|---|
+| `totalLogs == 0` | `null` — **tidak ada teks yang dicetak** (intinya J6) |
+| `completedLogs < 10` (sama dengan `SetupStats.MIN_RELIABLE_SAMPLE`) | catatan kuning "Sampel belum cukup: N sinyal selesai dari M total (minimal 10)…", `isReliable = false` |
+| sampel cukup | catatan netral: "Basis: N sinyal selesai (TP/SL tercapai) dari M total di bursa ini. Win rate hanya dari sinyal yang sudah selesai; PnL bersih fee & slippage." |
+| tier tanpa sinyal | ditambahkan fakta data: "K dari 3 tier belum terisi sinyal." — N11 disebut sebagai fakta, bukan disembunyikan |
+
+Ambil `MIN_RESOLVED_SAMPLE` dari `SetupStats` — satu definisi "sampel cukup" untuk seluruh layar
+statistik, bukan angka kedua.
+
+`SignalLogScreen` kini: `ConfidenceTierNoteResolver.resolve(summary)` → bila `null`, bar info
+tidak dirender sama sekali; bila tidak, teksnya dari resolver dan berwarna kuning saat sampel
+belum cukup.
+
+### 38.3 Uji & kontrol negatif
+
+Uji baru: `app/src/test/java/agu/analys/model/ConfidenceTierNoteTest.kt` — **11 kasus**:
+tanpa data (dua bentuk), sampel kurang, semua TRACKING, tepat di ambang, teks basis menyebut
+angka & "fee & slippage", tier kosong (2 dari 3, 1 dari 3, semua terisi), teks tidak lagi memuat
+frase klaim lama, dan konsistensi threshold.
+
+Kontrol negatif: resolver dikembalikan ke perilaku lama (tanpa gerbang sampel, teks klaim asli
+"rasio kemenangan tertinggi… real-time", tanpa fakta tier) ⇒ **8 dari 11 uji GAGAL**. Tiga yang
+tetap lulus memang tidak membedakan versi: threshold sama dengan konstanta, "tepat di ambang"
+relatable di kedua versi, dan "semua tier terisi" tidak menyebut tier kosong di kedua versi.
+
+Angka terukur (dari XML): **72 kelas / 571 uji → 73 kelas / 582 uji**, 0 gagal, 1 dilewati.
+
+### 38.4 Batas perbaikan
+
+- **Hanya satu kalimat.** Tabel tier sendiri, dan cap confidence `ScalpingMtfEvaluator`
+  (akar N11), **tidak** diubah — keduanya perlu temuan & uji tersendiri.
+- `SignalLogScreen` tidak diuji otomatis; yang diuji resolver-nya.
+
+### 38.5 Laporan
+
+`docs/LAPORAN-batch5-j6n11-2026-10-16.md`

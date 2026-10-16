@@ -176,9 +176,11 @@ Saat ini berisi:
   `docs/LAPORAN-batch3-jurnal-2026-10-16.md`); **J7 DIPERBAIKI** (batch 4 —
   `docs/LAPORAN-batch4-j7-2026-10-16.md`); **J4 + N10 DIPERBAIKI** (batch 5a —
   `docs/LAPORAN-batch5-j4n10-2026-10-16.md`); **J3 DIPERBAIKI** (batch 5b —
-  `docs/LAPORAN-batch5-j3-2026-10-16.md`). **Masih hidup: J5, J6, J8–J10** (fallback lintas bursa
-  di jurnal trade, klaim statistik hardcoded, satu rumus P&L ditulis ulang di jalur trade real
-  (J8), default `?: 75` (J9), snapshot tanpa verifikasi simbol (J10)).
+  `docs/LAPORAN-batch5-j3-2026-10-16.md`); **J6 + N11 DIPERBAIKI** (batch 5e —
+  `docs/LAPORAN-batch5-j6n11-2026-10-16.md`). **Masih hidup: J5, J8–J10** (fallback lintas bursa
+  di jurnal trade, satu rumus P&L ditulis ulang di jalur trade real (J8), default `?: 75` (J9),
+  snapshot tanpa verifikasi simbol (J10)). **Catatan N11:** tabel tier & cap confidence
+  `ScalpingMtfEvaluator` sendiri **belum** diubah — batch 5e hanya mengganti kalimat klaimnya.
   **Catatan angka:** friksi FSM Tokocrypto USDT yang tertulis 0,8226% di dokumen temuan itu **salah**;
   angka yang benar **0,9735%** (lihat `docs/LAPORAN-batch4-j7-2026-10-16.md` §2).
 
@@ -349,6 +351,18 @@ Saat ini berisi:
 - **Satu sumber untuk bursa.** Bila sebuah ViewModel punya `prefs.marketDataSource` **dan** flow
   turunan, keduanya bisa tidak sepakat. Teruskan `settingsViewModel.marketDataSource` dan bacalah
   `flow.value` bila perlu nilai sekarang.
+
+## Aturan turunan dari audit jurnal — J6 (batch 5e, 2026-10-16)
+
+- **Teks statistik di UI wajib menyebut basis + jumlah sampel, dan digerbang sampel cukup.**
+  Kalimat seperti "skor keyakinan tinggi menunjukkan rasio kemenangan tertinggi" tanpa data adalah
+  pelanggaran — walau kalau di belakangnya ada tabel. Bila sampel belum cukup, cetak "belum cukup",
+  bukan klaim. Ambangnya **satu**: `SetupStats.MIN_RELIABLE_SAMPLE`.
+- **Tanpa data, jangan cetak apa pun.** `resolve` mengembalikan `null` untuk `totalLogs == 0`;
+  bar info tidak dirender. Bar kosong lebih jujur daripada bar berisi klaim.
+- **Keterbatasan data disebut sebagai fakta, bukan disembunyikan.** Tier yang belum terisi
+  sinyal ditulis sebagai "K dari 3 tier belum terisi sinyal" — pembaca tabel berhak tahu apa yang
+  sedang diukur (N11: tier ≥80 mengukur "apakah sudah READY" untuk sinyal pra-entry).
 
 ## Aturan turunan dari audit paper trading — P6 (batch 5c, 2026-10-16)
 

@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import agu.analys.database.SignalLogEntity
 import agu.analys.database.TradeHistoryRecordEntity
+import agu.analys.model.ConfidenceTierNoteResolver
 import agu.analys.model.ConfidenceTierStats
 import agu.analys.model.SetupStats
 import agu.analys.model.SignalLogFilter
@@ -1346,12 +1347,18 @@ private fun ConfidenceReliabilityBreakdownCard(summary: SignalReliabilitySummary
                         modifier = Modifier.size(13.dp)
                     )
                     Spacer(Modifier.width(6.dp))
-                    Text(
-                        text = "Skor keyakinan tinggi (≥80%) menunjukkan rasio kemenangan tertinggi dan drawdown terendah pada eksekusi real-time.",
-                        color = TvTextSecondary,
-                        fontSize = 8.5.sp,
-                        lineHeight = 11.sp
-                    )
+                    // J6 — klaim hardcoded ("skor keyakinan tinggi menunjukkan rasio kemenangan
+                    // tertinggi") diganti deskripsi netral bergate jumlah sampel. Basis + ukuran
+                    // sampel datang dari ConfidenceTierNoteResolver, bukan dari teks tetap.
+                    val note = ConfidenceTierNoteResolver.resolve(summary)
+                    if (note != null) {
+                        Text(
+                            text = note.text,
+                            color = if (note.isReliable) TvTextSecondary else TvAmber,
+                            fontSize = 8.5.sp,
+                            lineHeight = 11.sp
+                        )
+                    }
                 }
             }
         }

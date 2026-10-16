@@ -1,8 +1,8 @@
 # Temuan Audit — Jurnal Sinyal, Jurnal Trade & Angka P&L
 
 **Tanggal:** 2026-10-16
-**Status:** DOKUMEN TEMUAN — **J1, J2 (batch 3a), J7 (batch 4), J4 + N10 (batch 5a), J3 (batch 5b)
-sudah DIPERBAIKI**; **J5, J6, J8–J10 masih hidup.**
+**Status:** DOKUMEN TEMUAN — **J1, J2 (batch 3a), J7 (batch 4), J4 + N10 (batch 5a), J3 (batch 5b),
+J6 + N11 (batch 5e) sudah DIPERBAIKI**; **J5, J8–J10 masih hidup.**
 Diverifikasi terhadap kode di branch `patch` @ `a842e35`.
 **Cakupan:** `database/SignalLogRepository.kt` · `database/TradeHistoryRecorder.kt` ·
 `trading/TradeSignalSnapshot.kt` · `viewmodel/SignalLogViewModel.kt` ·
@@ -338,9 +338,13 @@ winrate/expectancy historis tanpa data cukup."*
   statistiknya memang tidak dapat dipakai.
 - Kalimatnya tanpa kondisi: kalau tidak ada data, sampel 1, atau semua tier kosong, teks tetap tercetak.
 
-**Perbaikan.** hapus klaim, atau ganti dengan deskripsi netral yang menyebut basis + jumlah sampel,
-dan gate tampilnya pada sampel cukup. Selesaikan setelah J1 & J2 karena keduanya menentukan
-apakah tabel itu layak dikutip.
+**Perbaikan.** ✅ **DIPERBAIKI (batch 5e, commit berikut)** — klaim diganti resolver
+`model/ConfidenceTierNote.kt`: tanpa data tidak mencetak apa pun; sampel <
+`SetupStats.MIN_RELIABLE_SAMPLE` (10) sinyal selesai menghasilkan catatan "belum cukup";
+sampel cukup menghasilkan deskripsi netral yang menyebut basis & jumlah sampel; tier tanpa
+sinyal disebut sebagai fakta data. Detail: `docs/LAPORAN-batch5-j6n11-2026-10-16.md`,
+`workplan2.md` §38. **Catatan:** tabel tier & cap confidence `ScalpingMtfEvaluator` (akar N11)
+**tidak** ikut diubah — perlu temuan & uji tersendiri.
 
 ---
 
