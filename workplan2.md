@@ -1,9 +1,9 @@
 # workplan2.md — Workplan aktif (Oktober 2026)
 
 > **Sumber kebenaran workplan.**  
-> `workplan.md`, `checkpoint.md`, dan `checkpoint_progres.md` **DEPRECATED** — jangan diikuti agen. Baca ini + `AGENTS.md` + `APP_CONTEXT.md` (§ arah produk).
+> `workplan.md`, `checkpoint.md`, dan `checkpoint_progres.md` **sudah dihapus (2026-10-16)** — jangan cari, jangan dibuat ulang. Baca ini + `AGENTS.md` + `APP_CONTEXT.md` (§ arah produk).
 
-**Update:** 2026-10-15 (WIB)
+**Update:** 2026-10-16 (WIB) — §40 sinkronisasi dokumen temuan
 
 > ⚠️ **Seksi §9.5b sudah DIBATALKAN** (angka edge lama tidak sah). Angka yang berlaku ada di
 > **§9.5c**. Seksi §14/§15 **dibatalkan** — fiturnya sudah dihapus dari kode, jangan dibangun ulang.
@@ -201,7 +201,7 @@ Detail: `SCALP_EXIT.md`, `data/hasil/p3_entry_hypothesis_lab.md`, artefak lokal 
 | tools/selftest_entry_lab.py | Uji daya-deteksi lab (data sintetis ber-edge tanam) |
 | data/hasil/p3_entry_hypothesis_lab.md | Hasil P3: 0/8 hipotesis lolos gate |
 
-**Jangan baca sebagai instruksi aktif:** `workplan.md`, `checkpoint.md`, `checkpoint_progres.md` (legacy checklist tahap lama).
+**Jangan baca sebagai instruksi aktif:** `workplan.md`, `checkpoint.md`, `checkpoint_progres.md` — ketiganya **sudah dihapus (2026-10-16)**; isinya cuma stub DEPRECATED yang menunjuk ke `workplan2.md`.
 
 ---
 
@@ -2482,3 +2482,57 @@ Angka terukur (dari XML): **73 kelas / 582 uji → 74 kelas / 593 uji**, 0 gagal
 ### 39.5 Laporan
 
 `docs/LAPORAN-batch5-j5-2026-10-16.md`
+
+---
+
+## 40. Sinkronisasi dokumen temuan — 2026-10-16 (dokumen saja, nol perubahan kode)
+
+### 40.1 Masalah
+
+Status perbaikan **tercercecer di beberapa tempat**: badan `docs/bugs/*.md` (banyak butir sudah
+ditutup tapi masih dituliskan sebagai temuan hidup dengan blok "✅ DIPERBAIKI"), `AGENTS.md`, dan
+`docs/BELUM-DIKERJAKAN-2026-10-14.md`. Akibatnya **dokumen saling bertentangan**:
+
+- `temuan_bugs_jurnal_pnl.md` menulis "J4 + N10 (batch 5a) **sudah DIPERBAIKI**" sekaligus
+  "**J8–J10 masih hidup**" — padahal baris J10 mengakui J10 = N10.
+- `AGENTS.md` menulis "Masih hidup: N6, N8–N17" — luber, karena N10 sudah ditutup dan N11 hanya
+  sebagian.
+- `temuan_bugs_paper_trade.md` (dan `temuan_bugs_jurnal_pnl.md`) kehilangan baris riwayat
+  batch 3c/5a/5b/5e/5f, padahal status di header sudah menyebutnya.
+
+Agen berikutnya akan membuang waktu membaca ulang kode untuk memastikan status yang sebenarnya
+sudah diverifikasi owner.
+
+### 40.2 Yang dikerjakan
+
+1. **Pangkas butir yang sudah tertutup** dari badan ketiga dokumen; rangkum di tabel
+   "Sudah ditutup" (commit + pointer `docs/LAPORAN-*.md`). Yang tersisa di badan dokumen hanya
+   temuan yang **masih hidup** atau **sebagian**.
+2. **Verifikasi ulang ke kode** `patch` @ `547048d` untuk setiap butir yang tersisa, lalu tulis
+   nomor baris yang benar (bukan yang basi).
+3. **Perjelas J10** jadi **sebagian**, dan tuliskan sisa yang ditemukan: `armPaperExitEngine` pada
+   jalur beli paper manual masih mengoper SL/TP mentah dari `engine.signalState.value`.
+4. **Hapus 3 stub DEPRECATED**: `workplan.md`, `checkpoint.md`, `checkpoint_progres.md`.
+5. **`AGENTS.md`**: `docs/bugs/` jadi sumber kebenaran status + aturan eksplisit "agen tidak perlu
+   cek kode lagi untuk memastikan status, kecuali akan memperbaiki butir itu atau ada commit baru
+   setelah `547048d`". Ditambah aturan turunan baru di § J4 & N10 (nilai turunan sinyal untuk
+   **keputusan** wajib teratribusi, bukan hanya untuk catatan).
+
+### 40.3 Status akhir (21 tertutup · 3 sebagian · 13 masih hidup)
+
+| Area | Ditutup | Sebagian | Masih hidup |
+|---|---|---|---|
+| Notifikasi | N1–N5, N7, N10 | **N11** | N6+N17, N8, N9, N12, N13, N14, N15, N16 |
+| Jurnal & P&L | J1–J7 | **J10** | J8, J9 |
+| Paper trading | P1–P5 | **P6** | P7, P8 |
+
+### 40.4 Yang TIDAK dikerjakan
+
+Nol perubahan kode. Tidak ada batch perbaikan baru di sini — dokumen hanya menyatakan kenyataan.
+Semua butir yang masih hidup **tetap hidup**, dan urutannya ada di § "Rekomendasi" tiap berkas
+temuan. Angka test tidak berubah dan tidak diukur ulang (tidak ada kode yang bergerak);
+`./gradlew :app:testDebugUnitTest` tidak dijalankan karena sandbox tidak punya Android SDK.
+
+### 40.5 Laporan
+
+`docs/LAPORAN-sync-dokumen-temuan-2026-10-16.md`

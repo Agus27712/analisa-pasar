@@ -1,5 +1,11 @@
 # Daftar Lengkap Pekerjaan yang BELUM Dikerjakan
 
+> ⚠️ **SNAPSHOT 2026-10-14 — untuk status terkini, baca `docs/bugs/` lebih dulu.**
+> Tiga area audit besar yang diinventarisasi di sini sudah selesai diperbaiki pada 2026-10-16
+> (21 temuan tertutup, 3 sebagian, 13 masih hidup). **Sumber kebenaran status temuan ada di
+> `docs/bugs/*.md`**, yang sudah diverifikasi ke kode dan direview owner pada `patch` @ `547048d`.
+> Dokumen ini tetap berguna untuk roadmap P4–P6 + verifikasi lapangan yang **belum** masuk audit.
+
 **Tanggal:** 14 Oktober 2026
 **Repo:** branch `patch` @ `4ffee5e` (S1–S9 sudah masuk; A/B sudah masuk; tooling P4.1 sudah masuk)
 **Peringatan branch:** per **2026-10-15** `patch` dan `main` **identik secara isi** (setelah PR #60 `7f890eb`); `main` hanya unggul commit merge. Kerja tetap di `patch`, bukan `main`.

@@ -37,25 +37,25 @@ entry/exit) belum ada di sana — semua kesimpulan yang ditarik dari `main` jadi
 1. **Berkas ini** sampai habis — terutama bagian "Yang tidak boleh dilakukan agen".
 2. **`docs/PANDUAN-LANJUT-AGEN.md`** — status terkini, apa yang sudah selesai, apa yang berikutnya,
    dan perangkap yang sudah pernah ditemukan. **Ini titik masuk utama.**
-3. **`docs/BELUM-DIKERJAKAN-2026-10-14.md`** — inventaris 27 item yang **belum** dikerjakan
+3. **`docs/bugs/`** — 🔴 **sumber kebenaran status temuan audit**, dan **sudah diverifikasi ke kode
+   + direview owner pada 2026-10-16** (`patch` @ `547048d`). **Agen tidak perlu cek kode untuk
+   memastikan status temuan** — cukup baca tabel status di tiap berkas. Isinya sekarang:
+   `temuan_bugs_notifikasi.md` (jalur notifikasi & skor keyakinan),
+   `temuan_bugs_paper_trade.md` (siklus hidup posisi paper & mesin exit),
+   `temuan_bugs_jurnal_pnl.md` (jurnal sinyal, jurnal trade, angka P&L).
+   **Baca folder ini sebelum memperbaiki bug apa pun** di area yang tercakup. Setelah sebuah
+   temuan diperbaiki, **pangkas butir itu dari badan dokumen** dan pindahkan jejaknya ke tabel
+   "Sudah ditutup" + `docs/LAPORAN-*.md` (lihat § "Folder temuan bug" di bawah).
+4. **`docs/BELUM-DIKERJAKAN-2026-10-14.md`** — inventaris 27 item yang **belum** dikerjakan
    (temuan audit A/B, roadmap P4–P6, verifikasi lapangan), lengkap dengan titik kode dan
    prioritas. **Baca ini sebelum memilih apa yang akan dikerjakan**, supaya tidak mengulang
    yang sudah selesai atau mengerjakan yang sudah dibatalkan.
-4. **`workplan2.md` § 13** — pekerjaan terakhir yang **masih berlaku**. Seksi sebelumnya
+5. **`workplan2.md` § 13** — pekerjaan terakhir yang **masih berlaku**. Seksi sebelumnya
    (§9 lantai friksi, §11 UI scalping, §12 rehidrasi paper) menjelaskan **kenapa** kode hari ini
    berbentuk seperti sekarang. Jangan mengubahnya tanpa membacanya.
-5. **`workplan2.md` § 14 dan § 15 — DIBATALKAN, jangan dibangun ulang.** Lihat kotak merah di
+6. **`workplan2.md` § 14 dan § 15 — DIBATALKAN, jangan dibangun ulang.** Lihat kotak merah di
    awal kedua seksi itu. Keduanya mendokumentasikan fitur kesiapan multi-horizon yang sudah
    **dihapus dari kode** pada 2026-10-13. Dibaca hanya sebagai riwayat keputusan.
-6. **`docs/bugs/`** — **folder temuan bug yang BELUM diperbaiki**, tiap berkas adalah audit
-   terverifikasi-ke-kode dengan lokasi + baris + rekomendasi perbaikan. Mulai dari
-   `docs/bugs/temuan_bugs_notifikasi.md` (audit jalur notifikasi & skor keyakinan, 2026-10-16).
-   Dua area lain sudah diaudit di hari yang sama dan **belum ada perbaikannya**:
-   `temuan_bugs_paper_trade.md` (siklus hidup posisi paper & mesin exit) dan
-   `temuan_bugs_jurnal_pnl.md` (jurnal sinyal, jurnal trade, angka P&L).
-   **Baca folder ini sebelum memperbaiki bug apa pun** di area yang tercakup — supaya tidak
-   mengulang audit yang sudah ada, dan supaya tahu temuan mana yang masih hidup. Setelah sebuah
-   temuan diperbaiki, **hapus/tandai berkas temuan itu** (lihat § "Folder temuan bug" di bawah).
 7. `SCALP_EXIT.md` bila menyentuh exit.
 8. `docs/LAPORAN-eksekusi-s1s9-2026-10-14.md` bila menyentuh entry/exit scalping — **dua
    keputusan di sana menyimpang dari daftar aslinya**: S9 dikirim **nonaktif** (ambang 25%
@@ -118,72 +118,88 @@ Yang **tidak boleh** dilakukan lagi tanpa instruksi eksplisit owner:
 2. **`APP_CONTEXT.md`** — arsitektur; utamanya § arah produk / scalp
 3. **`SCALP_EXIT.md`** — exit paper & R net
 4. **`data/config/scalp_config.json`** — mirror threshold + fee untuk `tools/scalp_replay.py`
-5. **`docs/BELUM-DIKERJAKAN-2026-10-14.md`** — apa yang **belum** selesai (backlog terverifikasi
-   ke kode). Mulai dari sini bila owner bertanya "apa lagi yang tersisa".
-6. **`docs/LAPORAN-temuan-akuntansi-replay-2026-10-14.md`** — 🔴 **baca ini sebelum memakai
+5. **`docs/bugs/`** — 🔴 **sumber kebenaran status temuan audit.** Mulai dari sini bila owner
+   bertanya "apa lagi yang tersisa". **Status di sana sudah diverifikasi ke kode dan direview
+   owner pada 2026-10-16** (`patch` @ `547048d`) — **agen tidak perlu cek kode untuk memastikan
+   statusnya**, cukup baca tabel di tiap berkas (lihat § "Folder temuan bug" di bawah).
+6. **`docs/BELUM-DIKERJAKAN-2026-10-14.md`** — inventaris 27 item yang **belum** dikerjakan
+   (temuan audit A/B, roadmap P4–P6, verifikasi lapangan), lengkap dengan titik kode dan
+   prioritas. **Baca ini sebelum memilih apa yang akan dikerjakan**, supaya tidak mengulang
+   yang sudah selesai atau mengerjakan yang sudah dibatalkan.
+7. **`docs/LAPORAN-temuan-akuntansi-replay-2026-10-14.md`** — 🔴 **baca ini sebelum memakai
    angka edge apa pun.** Menjelaskan kenapa angka "+0,0216 avg R / LOLOS" dari `u4` **tidak sah**
    (trade `UNRESOLVED` dulu dibuang dari statistik, ±81% sinyal) dan apa hasilnya setelah
    dihitung jujur (**avg R ≈ −0,17, 0/40 pair positif**).
-7. **`docs/LAPORAN-eksekusi-*.md`** — jejak eksekusi terbaru: `p0p2` (integritas jurnal,
-   2026-10-14) lalu `s1s9` (strategi entry/exit, 2026-10-14). Urutkan dari tanggal terbaru.
+8. **`workplan2.md` § 13** — pekerjaan terakhir yang **masih berlaku**. Seksi sebelumnya
+   (§9 lantai friksi, §11 UI scalping, §12 rehidrasi paper) menjelaskan **kenapa** kode hari ini
+   berbentuk seperti sekarang. Jangan mengubahnya tanpa membacanya.
+9. **`workplan2.md` § 14 dan § 15 — DIBATALKAN, jangan dibangun ulang.** Lihat kotak merah di
+   awal kedua seksi itu. Keduanya mendokumentasikan fitur kesiapan multi-horizon yang sudah
+   **dihapus dari kode** pada 2026-10-13. Dibaca hanya sebagai riwayat keputusan.
+10. **`docs/LAPORAN-*.md`** — jejak eksekusi. Yang terbaru: `docs/LAPORAN-sync-dokumen-temuan-2026-10-16.md`
+    (sinkronisasi dokumen 2026-10-16), lalu batch 1–5f (2026-10-16), lalu `p0p2` & `s1s9`
+    (2026-10-14). Baca dari tanggal terbaru kalau butuh tahu **kenapa** suatu perbaikan
+    berbentuk seperti sekarang.
+11. `SCALP_EXIT.md` bila menyentuh exit.
 
-**DEPRECATED (jangan diikuti):** `workplan.md`, `checkpoint.md`, `checkpoint_progres.md`.
+> **Dokumen yang sudah dihapus (2026-10-16):** `workplan.md`, `checkpoint.md`,
+> `checkpoint_progres.md` — isinya cuma stub "DEPRECATED" yang menunjuk ke `workplan2.md` /
+> `AGENTS.md`. Kalau kamu menemukan rujukan ke sana, itu rujukan basi: **jangan dibuat ulang**
+> dan jangan dipakai sebagai urutan kerja.
 
 ## Folder temuan bug (`docs/bugs/`)
 
-**Kumpulan temuan audit bug yang BELUM diperbaiki.** Setiap berkas adalah hasil audit
-read-only yang sudah **diverifikasi langsung ke kode** (path + nomor baris pada saat audit),
-berisi peta jalur terkait, temuan kritis/serius/sedang, apa yang sudah benar (jangan
-diutak-atik), dan rekomendasi perbaikan berprioritas.
+**Sumber kebenaran status temuan audit.** Setiap berkas berisi **hanya temuan yang masih hidup**
+di badan dokumen; temuan yang sudah ditutup diringkas di tabel "Sudah ditutup" (commit + pointer
+laporan). ⚠️ **Status di sini sudah diverifikasi langsung ke kode dan direview owner pada
+2026-10-16** pada `patch` @ `547048d` — **agen tidak perlu cek kode untuk memastikan statusnya.**
+Verifikasi ulang hanya perlu kalau: (a) kamu akan **memperbaiki** butir yang masih hidup, atau
+(b) ada commit baru setelah `547048d` yang menyentuh area terkait (buka `git log --oneline -5`).
 
 Aturan main:
 
 - **Sebelum memperbaiki bug** di area yang pernah diaudit, **baca berkas temuannya dulu** —
   supaya tidak mengulang audit, tidak menambal gejala, dan tidak menghapus bagian yang memang
-  sudah benar.
-- **Setelah sebuah temuan diperbaiki**, perbarui berkas temuan terkait: hapus temuan yang sudah
-  beres atau tandai statusnya (mis. "✅ DIPERBAIKI di `<commit>`"), dan pindahkan jejak
-  eksekusi ke `docs/LAPORAN-*.md` sesuai aturan "setiap perubahan wajib memperbarui markdown".
-  Jangan biarkan daftar temuan berisi butir yang sudah tidak hidup — pembaca berikutnya akan
-  membuang waktu memperbaiki ulang.
+  sudah benar (setiap berkas punya bagian "Yang sudah benar — jangan diutak-atik").
+- **Setelah sebuah temuan diperbaiki**, **pangkas butir itu dari badan dokumen**, pindahkan ke
+  tabel "Sudah ditutup" (commit + `docs/LAPORAN-*.md`), perbarui tabel status di header, dan
+  tambahkan baris ke § Riwayat. Jangan biarkan badan dokumen memuat butir yang sudah tidak hidup
+  — pembaca berikutnya akan membuang waktu memperbaikinya ulang.
 - Daftar berkas di folder ini bisa bertambah untuk area lain (exit, P&L, UI, dsb.) dengan
   pola penamaan `temuan_<area>_<topik>.md`.
 
-Saat ini berisi:
+Saat ini berisi (semua diperbarui 2026-10-16):
 
-- **`temuan_bugs_notifikasi.md`** (2026-10-16, diperbarui di hari yang sama) — audit jalur
-  notifikasi (4 pengirim: VM-sync, CandidateScanWorker, foreground service, VM-alerts) & alur skor
-  keyakinan (produsen → notifikasi → jurnal → UI). **N1, N2, N3 DIPERBAIKI** (batch 1 —
-  `docs/LAPORAN-batch1-notifikasi-2026-10-16.md`); **N4, N5, N7 DIPERBAIKI** (batch 2 —
-  `docs/LAPORAN-batch2-notifikasi-2026-10-16.md`). **Masih hidup: N6, N8–N17** (N13–N17 hasil audit
-  lanjutan: kategori notifikasi ≠ sakelar Pengaturan, cooldown peak di-bypass, sakelar master
-  mematikan foreground service, `AppPreferences` dibangun ulang per tick, N6 melarat).
-- **`temuan_bugs_paper_trade.md`** (2026-10-16, diperbarui di hari yang sama) — audit siklus hidup
-  posisi paper & mesin exit. **P1, P2, P3, P4 DIPERBAIKI** (batch 3b —
-  `docs/LAPORAN-batch3-paper-safety-2026-10-16.md`; batch 3c —
-  `docs/LAPORAN-batch3-rehidrasi-2026-10-16.md`), sehingga **ketiga temuan kritis sudah tertutup**.
-  **Masih hidup: P7, P8**; **P5 DIPERBAIKI** (batch 5d —
-  `docs/LAPORAN-batch5-p5-2026-10-16.md`; snapshot FSM kini per posisi, berkunci
-  `PaperAutoTradeRuntime.key` — simbol tanpa mesin tidak lagi menghapus kartu simbol lain);
-  **P6 DIPERBAIKI sebagian**
-  (batch 5c — `docs/LAPORAN-batch5-p6-2026-10-16.md`; jendela momentum kini satu sumber, tetapi
-  bagian "`peak` tertinggal dari high M1" **belum** — bukan cabang kode yang berbeda, melainkan
-  tidak adanya umpan intrabar). **Batas penting:** seluruh temuan `P*` hanya menyentuh posisi **paper**
-  (`isReal = false`) — bukan kerusakan uang riil, tetapi posisi paper adalah dasar seluruh keputusan
-  "apakah scalp punya edge".
-- **`temuan_bugs_jurnal_pnl.md`** (2026-10-16, diperbarui di hari yang sama) — audit jurnal sinyal,
-  jurnal trade & angka P&L. **J1, J2 DIPERBAIKI** (batch 3a —
-  `docs/LAPORAN-batch3-jurnal-2026-10-16.md`); **J7 DIPERBAIKI** (batch 4 —
-  `docs/LAPORAN-batch4-j7-2026-10-16.md`); **J4 + N10 DIPERBAIKI** (batch 5a —
-  `docs/LAPORAN-batch5-j4n10-2026-10-16.md`); **J3 DIPERBAIKI** (batch 5b —
-  `docs/LAPORAN-batch5-j3-2026-10-16.md`); **J6 + N11 DIPERBAIKI** (batch 5e —
-  `docs/LAPORAN-batch5-j6n11-2026-10-16.md`); **J5 DIPERBAIKI** (batch 5f —
-  `docs/LAPORAN-batch5-j5-2026-10-16.md`). **Masih hidup: J8–J10** (satu rumus P&L ditulis ulang
-  di jalur trade real (J8), default `?: 75` (J9), snapshot tanpa verifikasi simbol (J10)).
-  **Catatan N11:** tabel tier & cap confidence `ScalpingMtfEvaluator` sendiri **belum** diubah
-  — batch 5e hanya mengganti kalimat klaimnya.
-  **Catatan angka:** friksi FSM Tokocrypto USDT yang tertulis 0,8226% di dokumen temuan itu **salah**;
-  angka yang benar **0,9735%** (lihat `docs/LAPORAN-batch4-j7-2026-10-16.md` §2).
+- **`temuan_bugs_notifikasi.md`** — audit jalur notifikasi (4 pengirim: VM-sync,
+  CandidateScanWorker, foreground service, VM-alerts) & alur skor keyakinan (produsen → notifikasi
+  → jurnal → UI).
+  **Ditutup: N1–N5, N7, N10** (batch 1, batch 2, batch 5a).
+  **Sebagian: N11** — manifestasi J6 (klaim hardcoded) ditutup batch 5e, tetapi **tabel tier &
+  cap confidence `ScalpingMtfEvaluator` sendiri belum diubah** (butuh keputusan produk).
+  **Masih hidup: N6 + N17, N8, N9, N12, N13, N14, N15, N16** (N13–N17 hasil audit lanjutan:
+  kategori notifikasi ≠ sakelar Pengaturan, cooldown peak di-bypass jalur kembar, sakelar master
+  mematikan foreground service, `AppPreferences` dibangun ulang per tick, N6 melarat ke skor SWING
+  worker tanpa penalti anomali).
+- **`temuan_bugs_paper_trade.md`** — audit siklus hidup posisi paper & mesin exit.
+  **Ditutup: P1, P2, P3, P4** (batch 3b, batch 3c) sehingga **ketiga temuan kritis sudah tertutup**,
+  serta **P5** (batch 5d — snapshot FSM kini per posisi, berkunci `PaperAutoTradeRuntime.key`).
+  **Sebagian: P6** (batch 5c — jendela momentum kini satu sumber, tetapi bagian "`peak` tertinggal
+  dari high M1" **belum** — bukan cabang kode yang berbeda, melainkan tidak adanya umpan intrabar).
+  **Masih hidup: P7, P8** (jalur ambil-alih exit engine tidak terimplementasi; `barsHeld` +1 pada
+  tick pertama sesudah rehidrasi).
+  **Batas penting:** seluruh temuan `P*` hanya menyentuh posisi **paper** (`isReal = false`) —
+  bukan kerusakan uang riil, tetapi posisi paper adalah dasar seluruh keputusan "apakah scalp
+  punya edge".
+- **`temuan_bugs_jurnal_pnl.md`** — audit jurnal sinyal, jurnal trade & angka P&L.
+  **Ditutup: J1, J2** (batch 3a), **J7** (batch 4), **J4 + N10** (batch 5a), **J3** (batch 5b),
+  **J6 + N11** (batch 5e), **J5** (batch 5f).
+  **Sebagian: J10** — `TradeSignalSnapshot.capture` sudah digerbang, tapi jalur **beli paper manual**
+  (`TradingViewModelSync.kt:343-350`) masih meng-*arm* mesin exit dengan SL/TP mentah dari
+  `engine.signalState.value`; lihat `temuan_bugs_jurnal_pnl.md` §2.1.
+  **Masih hidup: J8** (rumus P&L ditulis ulang tanpa slippage di jalur trade real), **J9**
+  (default `?: 75`).
+  **Catatan angka:** friksi FSM Tokocrypto USDT yang tertulis 0,8226% di dokumen temuan awal itu
+  **salah**; angka yang benar **0,9735%** (lihat `docs/LAPORAN-batch4-j7-2026-10-16.md` §2).
 
 ## Aturan turunan dari audit notifikasi (batch 1 & 2, 2026-10-16)
 
@@ -337,6 +353,13 @@ Saat ini berisi:
 - **Gerbang di pintu masuk, bukan di tiap pemanggil.** `TradeSignalSnapshot.capture` menggerbang
   sinyal sekali; keempat pemanggilnya ikut terlindungi. Bila menambah pemanggil baru, jangan
   menyalin pemeriksaannya — pakai `capture`.
+- ⚠️ **Gerbang `capture` hanya melindungi jurnal, bukan mesin exit** (diverifikasi 2026-10-16,
+  lihat `docs/bugs/temuan_bugs_jurnal_pnl.md` §2.1 = J10 yang tersisa). `armPaperExitEngine` untuk
+  **beli paper manual** (`TradingViewModelSync.kt:343-350`) masih mengoper
+  `engine.signalState.value.stopLoss/targetPrice1/targetPrice2` mentah. Setiap jalur yang memakai
+  nilai turunan sinyal untuk **keputusan** (bukan hanya catatan) wajib pakai nilai teratribusi —
+  `paperSignal.stopLoss` / `targetPrice1` / `targetPrice2` sudah ada di scope yang sama. TP pair lain
+  yang kebetulan di bawah entry bisa memicu jual sebagian pada tick pertama.
 - **Harga fallback harus milik simbol jurnal.** `currentTick.value?.price` adalah tick pair yang
   kebetulan dibuka; pakai `dashboardTicks[journalSymbol]`.
 
@@ -618,5 +641,5 @@ Saat ini berisi:
 - Menghidupkan Binance di path app production.
 - Longgarkan semua gate “supaya banyak sinyal” tanpa paper/replay log.
 - Menulis di UI bahwa sinyal punya winrate/expectancy historis tanpa data cukup.
-- Mengikuti checklist `checkpoint*.md` / `workplan.md` lama sebagai urutan kerja.
+- Mengikuti checklist `checkpoint*.md` / `workplan.md` lama sebagai urutan kerja (ketiganya sudah dihapus 2026-10-16).
 - Port auto-trading real dari state machine exit tanpa instruksi eksplisit owner + fee truth.

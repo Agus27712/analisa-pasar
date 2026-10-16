@@ -2,7 +2,8 @@
 
 > **Arah produk terkini (2026-10-10):** baca **`workplan2.md`** dulu.  
 > Workplan aktif = scalp mode + paper trade + slider sensitifitas (mirror `scalp_config.json`).  
-> `workplan.md` / `checkpoint.md` / `checkpoint_progres.md` = **DEPRECATED**.
+> Status temuan audit ada di **`docs/bugs/`** (sudah direview owner 2026-10-16 @ `547048d`).  
+> `workplan.md` / `checkpoint.md` / `checkpoint_progres.md` = **DEPRECATED dan sudah dihapus (2026-10-16)**.
 
 ---
 

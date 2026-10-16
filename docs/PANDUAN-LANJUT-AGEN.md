@@ -2,8 +2,21 @@
 
 > **Baca ini dulu.** Dokumen ini adalah titik masuk untuk agen/engineer berikutnya: status terkini,
 > apa yang sudah selesai, apa berikutnya, dan **perangkap yang sudah pernah ditemukan** supaya tidak
-> diulang. Terakhir diperbarui: **2026-10-15** (P4.4 + perbaikan auto-buy nominal IDR + sinkronisasi
-> klaim branch).
+> diulang. Terakhir diperbarui: **2026-10-16**.
+>
+> 🔴 **Untuk "apa lagi yang tersisa" → `docs/bugs/`, bukan dokumen ini.** Status temuan audit
+> (notifikasi `N*`, jurnal/P&L `J*`, paper trading `P*`) sudah diverifikasi ke kode dan **direview
+> owner** pada `patch` @ `547048d`: **21 tertutup · 3 sebagian · 13 masih hidup**. Ringkasnya:
+>
+> | Status | Temuan |
+> |---|---|
+> | 🔴 Kritis — **tidak ada yang tersisa** | (P1–P3 dan J1/J2 sudah tertutup) |
+> | 🟠 Serius — masih hidup | J8, J9 · J10 (sebagian) · P6 (sebagian), P7, P8 · N6+N17, N13, N14, N15, N16 |
+> | 🟡 Sedang/rendah — masih hidup | N8, N9, N12 · N11 (sebagian) |
+>
+> Rincian + lokasi + prioritas: `docs/bugs/temuan_bugs_notifikasi.md`, `temuan_bugs_jurnal_pnl.md`,
+> `temuan_bugs_paper_trade.md`. Sinkronisasi status terakhir:
+> `docs/LAPORAN-sync-dokumen-temuan-2026-10-16.md` (`workplan2.md` §40).
 
 ---
 
