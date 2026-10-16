@@ -37,7 +37,7 @@ KONSUMEN CONFIDENCE
 
 ### N1 — Notifikasi kandidat menampilkan confidence ×100 (salah 100×)
 
-> ✅ **DIPERBAIKI 2026-10-16 (batch 1)** — badan pesan diekstrak ke fungsi murni
+> ✅ **DIPERBAIKI 2026-10-16 di `cd6c032` (batch 1)** — badan pesan diekstrak ke fungsi murni
 > `buildCandidateSignalMessage(marketKey, signal)` di `util/AlertNotificationHelper.kt` dan faktor
 > `* 100` dihapus. Uji: `app/src/test/java/agu/analys/util/CandidateSignalMessageTest.kt` (4 test).
 > Lihat `docs/LAPORAN-batch1-notifikasi-2026-10-16.md` §3.
@@ -71,7 +71,7 @@ nilai confidence asli tampil tanpa faktor pengali).
 
 ### N2 — Balapan (race) hilangnya edge trailing → auto-sell bisa tidak pernah dieksekusi
 
-> ✅ **DIPERBAIKI 2026-10-16 (batch 1)** — opsi 1 dipilih: parameter `consumeTrigger: Boolean = true`
+> ✅ **DIPERBAIKI 2026-10-16 di `cd6c032` (batch 1)** — opsi 1 dipilih: parameter `consumeTrigger: Boolean = true`
 > ditambahkan ke `SpotPositionStore.updateTrailingPrice`; saat `false` hanya Rule 1 (peak) yang
 > dijalankan sehingga pengamat tidak bisa mencuri edge. `TradingForegroundService` mengirim `false`.
 > Uji: `app/src/test/java/agu/analys/trading/TrailingEdgeOwnershipTest.kt` (3 test).
@@ -112,7 +112,7 @@ untuk dua pemanggil simultan).
 
 ### N3 — Service foreground menghitung P&L notifikasi dengan fee yang salah
 
-> ✅ **DIPERBAIKI 2026-10-16 (batch 1)** — service kini memakai
+> ✅ **DIPERBAIKI 2026-10-16 di `cd6c032` (batch 1)** — service kini memakai
 > `AppPreferences(applicationContext).tradingFees` (objek prefs di-cache `by lazy`, nilainya dibaca
 > ulang tiap tick), sama dengan jalur VM. Ini menutup **regresi dari `workplan2.md` §24**. Uji:
 > `app/src/test/java/agu/analys/service/NotificationFeeSourceTest.kt` (3 test) — invarian sumber +
@@ -291,5 +291,5 @@ Setiap perbaikan **wajib**:
 |---|---|
 | 2026-10-16 | Audit awal jalur notifikasi & confidence dilakukan (read-only, terverifikasi ke kode) |
 | 2026-10-16 | Temuan diekspor ke `docs/bugs/temuan_bugs_notifikasi.md` (dokumen ini) — **belum ada perbaikan kode** |
-| 2026-10-16 | **Batch 1:** N1, N2, N3 diperbaiki + diuji (10 test baru, kontrol negatif 4/10 gagal). Lihat `docs/LAPORAN-batch1-notifikasi-2026-10-16.md` |
+| 2026-10-16 | **Batch 1:** N1, N2, N3 diperbaiki + diuji di `cd6c032` (10 test baru, kontrol negatif 4/10 gagal). Lihat `docs/LAPORAN-batch1-notifikasi-2026-10-16.md` |
 | 2026-10-16 | N7 diverifikasi ulang → **AKTIF** (bukan latent); path pemanggil kedua dikoreksi ke `SimulationCoordinator.kt:110` |

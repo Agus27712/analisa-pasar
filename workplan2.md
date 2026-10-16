@@ -1478,6 +1478,8 @@ Dipulihkan → hijau.
 Sumber: `docs/bugs/temuan_bugs_notifikasi.md` (audit read-only dari agen lain, di-pull dari
 `patch`). Batch 1 mengerjakan tiga temuan berisiko tertinggi. Sisanya (N4–N12) **belum dikerjakan**.
 
+Perbaikan mendarat di commit **`cd6c032`**.
+
 ### 26.1 N2 — balapan edge trailing (paling merugikan)
 
 `SpotPositionStore.updateTrailingPrice` bersifat **edge-once**: pemanggil pertama yang melihat
