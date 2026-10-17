@@ -179,12 +179,12 @@ Saat ini berisi (semua diperbarui 2026-10-16):
 - **`temuan_bugs_notifikasi.md`** — audit jalur notifikasi (4 pengirim: VM-sync,
   CandidateScanWorker, foreground service, VM-alerts) & alur skor keyakinan (produsen → notifikasi
   → jurnal → UI).
-  **Ditutup: N1–N5, N7, N8, N9 (= J9, batch 6b), N10, N13, N14** (batch 1, 2, 5a, 6b, 6f).
+  **Ditutup: N1–N5, N7–N10, N13–N16** (batch 1, 2, 5a, 6b, 6f, 6g).
   **Sebagian: N11** — manifestasi J6 (klaim hardcoded) ditutup batch 5e, tetapi **tabel tier &
   cap confidence `ScalpingMtfEvaluator` sendiri belum diubah** (butuh keputusan produk).
-  **Masih hidup: N6 + N17, N12, N15, N16** (N15 = sakelar master mematikan foreground service;
-  N16 = `AppPreferences` dibangun ulang per tick; N6 melarat ke skor SWING worker tanpa penalti
-  anomali).
+  **Masih hidup: N6 + N17, N12** (N6/N17 = dua produsen satu `SignalLifecycleManager` + skor SWING
+  worker tanpa penalti anomali makro, butuh keputusan desain; N12 = belum ada cooldown per-pair
+  untuk notifikasi kandidat).
 - **`temuan_bugs_paper_trade.md`** — audit siklus hidup posisi paper & mesin exit.
   **Ditutup: P1, P2, P3, P4** (batch 3b, batch 3c) sehingga **ketiga temuan kritis sudah tertutup**,
   serta **P5** (batch 5d — snapshot FSM kini per posisi, berkunci `PaperAutoTradeRuntime.key`).
@@ -463,6 +463,23 @@ Saat ini berisi (semua diperbarui 2026-10-16):
   `markBarBucket` pada pemanggilan pertama, sehingga pengecualian tidak bocor ke menit berikutnya.
   Jangan menambahkan field runtime terpisah untuk ini — penanda yang bertahan akan menahan
   time-stop lebih lama, bukan lebih pendek.
+
+## Aturan turunan dari audit notifikasi — N15, N16 (batch 6g, 2026-10-17)
+
+- **Foreground service adalah keep-alive, bukan pengirim push.** `TradingForegroundService`
+  menjaga proses tetap hidup supaya pemantauan posisi (dan `executeAutoSellOrder`) bisa jalan.
+  Sakelar notifikasi **tidak boleh** menjadi input keputusan start/stop: dulu
+  `hasActive && isNotificationsEnabled.value`, dan akibatnya mematikan "push notifikasi" membuat
+  `livePrices` kosong ⇒ P&L tampil 0%. Aturannya: `hasActive` menentukan hidup-mati; `canNotify`
+  menentukan bunyi.
+- **`AppPreferences` tidak boleh dibangun di jalur per-tick.** Konstruktornya membangun
+  `EncryptedSharedPreferences` + `MasterKey`, dan catch block-nya **menghapus seluruh preferensi**
+  bila gagal. Satu instance per komponen (`by lazy`), dan fungsi yang dipanggil tiap tick harus
+  menerima data (mis. `exchange`) dari pemanggil, bukan membacanya sendiri.
+- **Penjaganya uji pindai sumber, bukan uji perilaku.** Kedua aturan ini hidup di kode ber-
+  `ViewModel`/`Context`; `ForegroundMonitorSourceTest` membaca badan fungsi dan hitungan
+  `AppPreferences(`. Kalau menambah pembacaan prefs di service, uji itu gagal — itu memang
+  tujuannya.
 
 ## Aturan turunan dari audit notifikasi — N13, N14, N8 (batch 6f, 2026-10-17)
 

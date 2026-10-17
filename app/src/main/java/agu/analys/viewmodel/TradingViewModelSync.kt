@@ -543,7 +543,14 @@ fun TradingViewModel.updateForegroundServiceState() {
                     (!isReal && simCoordinator.wallet.value.coinBalances.any { it.value > 0.00000001 && !it.key.equals("IDR", true) && !it.key.equals("USDT", true) }) ||
                     (isReal && realCoordinator.realIndodaxBalance.value.any { it.value > 0.00000001 && !it.key.equals("IDR", true) && !it.key.equals("USDT", true) })
 
-    if (hasActive && isNotificationsEnabled.value) {
+    // N15 — keputusan start/stop **hanya** dari keberadaan posisi.
+    //
+    // Dulu syaratnya `hasActive && isNotificationsEnabled.value`: mematikan sakelar "push
+    // notifikasi" ikut mematikan foreground service, yaitu keep-alive pemantauan posisi — dan
+    // membuat `livePrices` kosong sehingga P&L tampil 0% untuk semua posisi. Itu melanggar aturan
+    // "mematikan notifikasi tidak boleh mematikan eksekusi". Bunyi notifikasi tetap diatur
+    // `canNotify(...)` di dalam helper, bukan di sini.
+    if (hasActive) {
         agu.analys.service.TradingForegroundService.startService(getApplication())
         agu.analys.service.TradingForegroundService.forceRefresh(getApplication())
     } else {

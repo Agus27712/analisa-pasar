@@ -2939,3 +2939,51 @@ Angka terukur (dari XML): **78 kelas / 626 uji → 80 kelas / 639 uji**, 0 gagal
 ### 47.5 Laporan
 
 `docs/LAPORAN-batch6f-n13n14-2026-10-17.md`
+
+---
+
+## 48. Batch 6g — N15 + N16: foreground service = keep-alive, bukan pengirim push (2026-10-17)
+
+### 48.1 Masalah
+
+- **N15** — `updateForegroundServiceState` memakai `hasActive && isNotificationsEnabled.value`,
+  dan `startService`/`forceRefresh` juga menolak jalan saat sakelar notifikasi mati. Akibatnya
+  mematikan "push notifikasi" menghentikan service — keep-alive pemantauan posisi — dan
+  `livePrices` kosong membuat P&L tampil 0% untuk semua posisi.
+- **N16** — `AppPreferences` dibangun 7× di service, termasuk `updatePrices` yang dipanggil tiap
+  tick dashboard. Konstruktornya membangun `EncryptedSharedPreferences` + `MasterKey`, dan bila
+  gagal ia **menghapus seluruh preferensi**.
+
+### 48.2 Perbaikan
+
+- `updateForegroundServiceState`: `if (hasActive)` — sakelar notifikasi tidak lagi jadi input.
+- Guard `isNotificationsEnabled` dihapus dari `startService` + `forceRefresh`.
+- `updatePrice` (tunggal, tanpa pemanggil) dihapus.
+- `updatePrices(context, prices, exchange)` — bursa **wajib** dari pemanggil; jalur per-tick tidak
+  menyentuh `AppPreferences` sama sekali.
+- Tiga konstruksi instance diganti `appPrefs` (`by lazy`). Sisa: **1** konstruksi di berkas itu.
+
+### 48.3 Uji & kontrol negatif
+
+5 uji pindai sumber baru (`service/ForegroundMonitorSourceTest.kt`): badan
+`updateForegroundServiceState` bebas `isNotificationsEnabled`; `startService`/`forceRefresh` bebas
+prefs; hitungan `AppPreferences(` = 1; `fun updatePrice(` tidak ada; `updatePrices` menerima
+`exchange: String` dan bebas prefs.
+
+| Kontrol | Perubahan | Hasil |
+|---|---|---|
+| A | `&& isNotificationsEnabled.value` dikembalikan | **1 GAGAL** |
+| B | `AppPreferences(context)` di `updatePrices` + `updatePrice` dihidupkan | **3 GAGAL** |
+
+Angka terukur (dari XML): **80 kelas / 639 uji → 81 kelas / 644 uji**, 0 gagal, 0 error, 1 dilewati.
+
+### 48.4 Batas
+
+- Service tetap menampilkan notifikasi persisten (kategori `SERVICE`, tanpa suara) — Android
+  mewajibkan foreground service punya notifikasi. Itu status pemantauan, bukan push.
+- N6 + N17 (butuh keputusan desain), N12, dan sisa N11 masih terbuka.
+- Perubahan signature `updatePrices` aman: hanya satu pemanggil (`MarketViewModel`).
+
+### 48.5 Laporan
+
+`docs/LAPORAN-batch6g-n15n16-2026-10-17.md`

@@ -11,9 +11,9 @@
 > | Status | Temuan |
 > |---|---|
 > | 🔴 Kritis — **tidak ada yang tersisa** | (P1–P3 dan J1/J2 sudah tertutup) |
-> | 🟠 Serius — masih hidup | P6 (sebagian), P9 · N6+N17, N15, N16 |
+> | 🟠 Serius — masih hidup | P6 (sebagian), P9 · N6+N17 |
 > | 🟡 Sedang/rendah — masih hidup | N12 · N11 (sebagian) |
-> | ✅ Sudah ditutup | P1–P5, P7, P8 · **J1–J10 (seluruhnya — berkas temuan jurnal dihapus 2026-10-17)** · N1–N5, N7, N8, N9, N10, N13, N14 |
+> | ✅ Sudah ditutup | P1–P5, P7, P8 · **J1–J10 (seluruhnya — berkas temuan jurnal dihapus 2026-10-17)** · N1–N5, N7–N10, N13–N16 |
 >
 > Rincian + lokasi + prioritas: `docs/bugs/temuan_bugs_notifikasi.md`,
 > `docs/bugs/temuan_bugs_paper_trade.md`. Jejak audit jurnal ada di laporan per batch
