@@ -205,11 +205,12 @@ Saat ini berisi (diperbarui 2026-10-17):
   bukan kerusakan uang riil, tetapi posisi paper adalah dasar seluruh keputusan "apakah scalp
   punya edge".
 - **`temuan_koneksi_tokocrypto_indodax.md`** — audit jalur koneksi & sumber daftar pair
-  (2026-10-17, baca kode + uji endpoint). **K5 + K6 sudah ditutup (batch 6j); K1–K4 dan K7–K15
-  masih hidup.** K5 bukan token kedaluwarsa: token di kode terpotong satu karakter (104 vs 105),
-  lalu kanal `chart:tick-` tidak pernah menerbitkan data — kanal yang benar `market:summary-24h`
-  dengan baris `[pair, epoch, last, low, high, open, vol_idr, vol_koin]`. **Jangan menambah pair,
-  stream, atau jalur data baru sebelum K1 ditutup.**
+  (2026-10-17, baca kode + uji endpoint). **K1–K6 sudah ditutup (batch 6j–6k); K7–K15 masih
+  hidup.** Daftar pair Tokocrypto kini **hanya** dari `common/symbols` resmi (864 simbol,
+  `data.list`); `exchangeInfo` gateway (3.729 simbol Binance) tidak boleh dipakai untuk
+  discovery. Gate listing dan `type` dibaca fail-closed di `TokocryptoSymbolFeed`.
+  WebSocket Indodax memakai kanal `market:summary-24h` dengan token utuh 105 karakter; kanal
+  `chart:tick-<pair>` tidak pernah menerbitkan data.
 - **~~`temuan_bugs_jurnal_pnl.md`~~ — DIHAPUS 2026-10-17.** Seluruh J1–J10 sudah tertutup:
   batch 3a (J1, J2), batch 4 (J7), batch 5a (J4 + N10), batch 5b (J3), batch 5e (J6 + N11),
   batch 5f (J5), batch 6a (J10 sisa — `PaperArmSignal`), batch 6b (J9 — `TradeSignalConfidence`),

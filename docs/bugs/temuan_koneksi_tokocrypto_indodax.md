@@ -1,8 +1,7 @@
 # Temuan Audit — Jalur Koneksi Tokocrypto & Indodax
 
 **Audit:** 2026-10-17 · **Branch:** `patch` · **Sifat:** baca kode + uji endpoint langsung
-**Status:** K5 dan K6 sudah diperbaiki (token utuh, kanal `market:summary-24h`, parser baru);
-K1–K4 dan K7–K15 masih terbuka.
+**Status:** K1–K6 sudah diperbaiki; K7–K15 masih terbuka.
 **Pemicu:** pair **`UVXYBUSDT`** muncul di aplikasi padahal **tidak ada di Tokocrypto**; WebSocket Indodax
 sering terputus sehingga semua data jatuh ke REST.
 **Catatan owner:** order beli/jual dan saldo riil di **Indodax** dan **Tokocrypto** sudah diuji dan
@@ -11,11 +10,11 @@ sering terputus sehingga semua data jatuh ke REST.
 
 | Status | Temuan | Jumlah |
 |---|---|---|
-| 🔴 Kritis | K1, K2 | 2 |
-| 🟠 Serius | K3, K4, K7 | 3 |
+| 🔴 Kritis | — | 0 |
+| 🟠 Serius | K7 | 1 |
 | 🟡 Sedang | K8–K14 | 7 |
 | 🟢 Rendah | K15 | 1 |
-| ✅ Sudah diperbaiki | K5, K6 | 2 |
+| ✅ Sudah diperbaiki | K1–K6 | 6 |
 | ✅ Sudah benar | order fail-closed, saldo, normalisasi pair, retry REST | — |
 
 ---
@@ -47,9 +46,9 @@ dan Indodax terasa "selalu putus".
 
 ## 2. 🔴 Kritis
 
-### K1 — Discovery Tokocrypto tidak mem-parse respons resmi, lalu memakai daftar Binance
+### K1 — Discovery Tokocrypto tidak mem-parse respons resmi, lalu memakai daftar Binance — ✅ diperbaiki (batch 6k)
 
-**Berkas:** `data/TokocryptoSymbolRepository.kt:46-50`, `:168-204`, `:184`
+**Berkas:** `data/TokocryptoSymbolRepository.kt:48-60`, `:189-233`; `data/TokocryptoSymbolFeed.kt:32-83`
 
 ```kotlin
 private val SYMBOLS_ENDPOINTS = listOf(
@@ -108,11 +107,21 @@ GET https://www.tokocrypto.com/open/v1/market/ticker?symbol=UVXYBUSDT
 3. Kalau endpoint resmi gagal, **pertahankan snapshot terakhir** dan tandai "data lama", jangan
    turun ke daftar yang lebih besar dan berbeda bursa.
 
+**Diterapkan:**
+
+- `data/TokocryptoSymbolFeed.kt` — `extractList` membaca `data.list`, `data[]`, dan `symbols[]`;
+  `rejectionReason` menolak daftar <100 atau >1.500 simbol, daftar tanpa IDR, dan daftar yang
+  hanya bertumpang tindih <90% dengan snapshot resmi sebelumnya.
+- `TokocryptoSymbolRepository` hanya memanggil endpoint resmi. Bila gagal, peta lama **tidak**
+  dikosongkan; percobaan ulang dipercepat ke 2 menit (bukan menunggu 30 menit).
+- Uji: `TokocryptoSymbolFeedTest` (10 kasus) + penjaga sumber yang memastikan `exchangeInfo`
+  gateway tidak kembali ke jalur discovery.
+
 ---
 
-### K2 — Endpoint cadangan sah untuk data pasar, tetapi tidak sah sebagai sumber daftar pair
+### K2 — Endpoint cadangan sah untuk data pasar, tetapi tidak sah sebagai sumber daftar pair — ✅ diperbaiki (batch 6k)
 
-**Berkas:** `data/TokocryptoSymbolRepository.kt:46-50`, `service/TokocryptoMarketService.kt:48-49`
+**Berkas:** `data/TokocryptoSymbolRepository.kt:48-60`, `service/TokocryptoMarketService.kt:48-49`
 
 Uji berpasangan (dua sampel dalam hitungan detik) menunjukkan depth `BTC_USDT` di
 `tokocrypto.com/open/v1/market/depth` dan `tokocrypto.site/api/v3/depth?symbol=BTCUSDT`
@@ -138,13 +147,17 @@ membalas **404** untuk `UVXY_USDT` maupun `UVXYBUSDT`.
 **Perbaikan:** daftar pair hanya dari `common/symbols` (864). Gateway tetap boleh dipakai untuk
 data pasar, dengan syarat simbolnya sudah lolos daftar resmi itu.
 
+**Diterapkan:** `SYMBOLS_ENDPOINTS` dihapus; hanya `OFFICIAL_SYMBOLS_URL` yang dipanggil untuk
+daftar pair. `TokocryptoMarketService` tidak diubah — gateway tetap dipakai untuk ticker, kline,
+dan depth.
+
 ---
 
 ## 3. 🟠 Serius
 
-### K3 — Field `symbolType` salah nama; semua simbol dianggap Type 1
+### K3 — Field `symbolType` salah nama; semua simbol dianggap Type 1 — ✅ diperbaiki (batch 6k)
 
-**Berkas:** `data/TokocryptoSymbolRepository.kt:233`
+**Berkas:** `data/TokocryptoSymbolFeed.kt:107`
 
 ```kotlin
 val symbolType = item.optInt("symbolType", 1) // 1 = MBX, 3 = NextMe
@@ -166,9 +179,14 @@ Karena `symbolType` tidak ada, semua simbol jatuh ke nilai default **1**. Dampak
 **Perbaikan:** baca `item.optInt("type", item.optInt("symbolType", 1))`, lalu tambahkan uji fixture
 yang memastikan simbol Type 3 benar-benar mendapat host Type 3.
 
-### K4 — Gate "hanya pair TRADING" gagal-terbuka pada data resmi
+**Diterapkan:** `TokocryptoSymbolFeed` membaca `type` lebih dulu. Uji fixture memastikan
+`ALCH_IDR` bernilai `symbolType = 3`, sehingga `getSymbolType` mengarahkan host Type 3.
+Catatan: audit sebelumnya menemukan host Type 3 membalas 403 untuk ticker — itu masalah
+ketersediaan host, bukan lagi masalah pembacaan field.
 
-**Berkas:** `data/TokocryptoSymbolRepository.kt:237-238`, `:365-366`
+### K4 — Gate "hanya pair TRADING" gagal-terbuka pada data resmi — ✅ diperbaiki (batch 6k)
+
+**Berkas:** `data/TokocryptoSymbolFeed.kt:175-180`, `data/TokocryptoSymbolRepository.kt:365-366`
 
 ```kotlin
 val status = item.optString("status", "")
@@ -185,6 +203,10 @@ begitu K1 diperbaiki, gate ini akan terbuka untuk simbol yang sedang suspend.
 
 **Perbaikan:** terima `1`/`0`, `"1"`/`"0"`, `true`/`false`, dan perlakukan field yang tidak dikenal
 sebagai **tidak aktif** (fail-closed), bukan aktif.
+
+**Diterapkan:** `TokocryptoSymbolFeed.readSpotTradingEnable` menangani Boolean, angka, dan string;
+`status` non-TRADING memaksa `false`; field yang hilang/tak dikenal → `false`. Uji mencakup
+`null`, `"0"`, `0`, dan `status: BREAK`.
 
 ### K5 — WebSocket Indodax mati karena token terpotong, kanal salah, dan parser salah bentuk
 

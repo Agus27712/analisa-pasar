@@ -3280,3 +3280,52 @@ Angka diambil dari `app/build/test-results/testDebugUnitTest/*.xml` setelah selu
 
 `docs/bugs/temuan_koneksi_tokocrypto_indodax.md` — K5 ditulis ulang (K5a/K5b/K5c), K6 ditandai
 tutup.
+
+## 54. Batch 6k — K1 + K2: daftar pair Tokocrypto hanya dari endpoint resmi (2026-10-17)
+
+### 54.1 Akar masalah
+
+`TokocryptoSymbolRepository` membaca `root.optJSONArray("data")`, padahal respons resmi berbentuk
+`data: { list: [...] }`. Endpoint resmi (864 simbol) karena itu **selalu dianggap gagal**, lalu
+kode turun ke `tokocrypto.site/api/v3/exchangeInfo` — universe Binance berisi 3.729 simbol,
+termasuk `UVXYBUSDT` yang tidak diperdagangkan Tokocrypto. Metadata pair hantu itu lengkap, jadi
+`validateOrder` lolos dan order baru ditolak di bursa.
+
+### 54.2 Perubahan
+
+- **Baru** `data/TokocryptoSymbolFeed.kt` — parser murni:
+  - `extractList` menerima `data.list`, `data[]`, dan `symbols[]`;
+  - `rejectionReason` menolak daftar <100 / >1.500 simbol, tanpa pair IDR, atau overlap <90%
+    dengan snapshot resmi sebelumnya;
+  - `readSpotTradingEnable` menerima Boolean/angka/string dan **fail-closed** untuk nilai tak
+    dikenal (K4);
+  - `type` dibaca lebih dulu, `symbolType` hanya cadangan (K3).
+- `TokocryptoSymbolRepository`:
+  - `SYMBOLS_ENDPOINTS` dihapus → satu `OFFICIAL_SYMBOLS_URL`;
+  - `symbolsMap.clear()` hanya terjadi setelah daftar lolos `rejectionReason`;
+  - gagal sync **tidak** menghapus snapshot; `lastSyncTime` hanya diperbarui saat sukses;
+  - percobaan ulang setelah gagal 2 menit (bukan 30 menit).
+- Gateway tetap dipakai `TokocryptoMarketService` untuk ticker/kline/depth — sesuai K2.
+
+### 54.3 Uji
+
+`TokocryptoSymbolFeedTest` — 10 kasus: bentuk `data.list`, bentuk array lama, `type` + gate
+numerik, fail-closed, tolak 3.729, tolak 63, tolak tanpa IDR, tolak overlap rendah, terima
+overlap tinggi, dan penjaga sumber (gateway tidak boleh kembali ke discovery).
+
+Kontrol negatif:
+
+| Kerusakan yang disuntikkan | Uji yang GAGAL |
+|---|---|
+| `data.list` tidak dibaca; `type` → `symbolType`; gate `optBoolean(..., true)` | 3 |
+| `rejectionReason` dihapus sebelum `symbolsMap.clear()` | 1 (penjaga sumber) |
+
+### 54.4 Angka terukur
+
+Dari XML setelah seluruh suite: **87 kelas / 676 uji**, 0 gagal, 0 error, 1 dilewati
+(sebelumnya 86/666).
+
+### 54.5 Sisa
+
+`UVXYBUSDT` tidak lagi masuk lewat discovery. Namun watchlist lama yang sudah memuat simbol itu
+masih bisa tampil sampai **K14** (watchlist menerima simbol tanpa validasi) ditutup.
