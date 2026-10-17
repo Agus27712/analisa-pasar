@@ -40,6 +40,7 @@ class IndodaxMarketWebSocket(
     private var lastPrice = 0.0
     private var cumulativeVolume = 0.0
     private val lastMessageAt = AtomicLong(0L)
+    private val connectedAtMs = AtomicLong(0L)
 
     fun start(symbol: String) {
         val nextPair = IndodaxMarketService.toPairId(symbol).replace("_", "").lowercase()
@@ -48,6 +49,29 @@ class IndodaxMarketWebSocket(
         pairId = nextPair
         reconnectAttempt = 0
         connect()
+    }
+
+    /**
+     * Menyambung ulang **tanpa** membuang histori: pair, candle menit berjalan, harga dan volume
+     * terakhir tetap dipertahankan. Dipakai saat socket terdeteksi usang (**K7**) — dulu
+     * pemanggil memanggil `start()` yang menjalankan `stop(false)`, sehingga candle hilang tiap
+     * kali pair sedang sepi.
+     */
+    fun reconnectNow() {
+        if (pairId.isBlank()) return
+        reconnectJob?.cancel()
+        reconnectJob = null
+        socket?.close(1000, "reconnect")
+        socket = null
+        lastMessageAt.set(0L)
+        connectedAtMs.set(0L)
+        connect()
+    }
+
+    /** Menyambung ulang hanya bila [RealtimeSocketHealth] menilai socket perlu disambung ulang. */
+    fun reconnectIfStale() {
+        if (!RealtimeSocketHealth.needsRestart(socket != null, connectedAtMs.get(), lastMessageAt.get(), System.currentTimeMillis())) return
+        reconnectNow()
     }
 
     fun stop(notify: Boolean = true) {
@@ -60,17 +84,20 @@ class IndodaxMarketWebSocket(
         lastTimestampMs = 0L
         lastPrice = 0.0
         cumulativeVolume = 0.0
+        lastMessageAt.set(0L)
+        connectedAtMs.set(0L)
         if (notify) onDisconnected()
     }
 
     fun close() = stop(false)
 
-    /** True jika belum ada pesan > staleMs (socket zombie). */
-    fun isStale(staleMs: Long = 25_000L): Boolean {
-        val last = lastMessageAt.get()
-        if (last <= 0L) return false
-        return System.currentTimeMillis() - last > staleMs
-    }
+    /** True bila socket perlu disambung ulang menurut [RealtimeSocketHealth]. */
+    fun isStale(): Boolean = RealtimeSocketHealth.needsRestart(
+        socketOpen = socket != null,
+        connectedAtMs = connectedAtMs.get(),
+        lastMessageAtMs = lastMessageAt.get(),
+        nowMs = System.currentTimeMillis()
+    )
 
     private fun connect() {
         if (pairId.isBlank()) return
@@ -158,7 +185,7 @@ class IndodaxMarketWebSocket(
     private inner class Listener : WebSocketListener() {
         override fun onOpen(webSocket: WebSocket, response: Response) {
             reconnectAttempt = 0
-            lastMessageAt.set(System.currentTimeMillis())
+            connectedAtMs.set(System.currentTimeMillis())
             onConnected()
             subscribe(webSocket)
         }

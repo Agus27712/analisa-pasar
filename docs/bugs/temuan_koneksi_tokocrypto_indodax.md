@@ -1,7 +1,7 @@
 # Temuan Audit — Jalur Koneksi Tokocrypto & Indodax
 
 **Audit:** 2026-10-17 · **Branch:** `patch` · **Sifat:** baca kode + uji endpoint langsung
-**Status:** K1–K6 sudah diperbaiki; K7–K15 masih terbuka.
+**Status:** K1–K7 sudah diperbaiki; K8–K15 masih terbuka.
 **Pemicu:** pair **`UVXYBUSDT`** muncul di aplikasi padahal **tidak ada di Tokocrypto**; WebSocket Indodax
 sering terputus sehingga semua data jatuh ke REST.
 **Catatan owner:** order beli/jual dan saldo riil di **Indodax** dan **Tokocrypto** sudah diuji dan
@@ -11,10 +11,10 @@ sering terputus sehingga semua data jatuh ke REST.
 | Status | Temuan | Jumlah |
 |---|---|---|
 | 🔴 Kritis | — | 0 |
-| 🟠 Serius | K7 | 1 |
+| 🟠 Serius | — | 0 |
 | 🟡 Sedang | K8–K14 | 7 |
 | 🟢 Rendah | K15 | 1 |
-| ✅ Sudah diperbaiki | K1–K6 | 6 |
+| ✅ Sudah diperbaiki | K1–K7 | 7 |
 | ✅ Sudah benar | order fail-closed, saldo, normalisasi pair, retry REST | — |
 
 ---
@@ -263,9 +263,12 @@ Urutannya `[pair, epochDetik, last, low, high, open, vol_idr, vol_koin]` — buk
 nomor urut per baris, jadi tidak ada lagi state yang bisa basi setelah reconnect. Deduplikasi kini
 memakai pasangan `(timestamp, harga)` yang terakhir diterima.
 
-### K7 — `isStale` memutus socket, bukan menyambung ulang dengan tenang
+### K7 — `isStale` memutus socket, bukan menyambung ulang dengan tenang — ✅ diperbaiki (batch 6l)
 
-**Berkas:** `viewmodel/MarketDataCoordinator.kt:350-360`, `service/IndodaxMarketWebSocket.kt:44-51`
+**Berkas:** `viewmodel/MarketDataCoordinator.kt:350-357`, `service/RealtimeSocketHealth.kt`,
+`service/IndodaxMarketWebSocket.kt:53-79`, `service/TokocryptoMarketWebSocket.kt:88-114`
+
+Keadaan sebelum perbaikan:
 
 ```kotlin
 if (indodaxWebSocket.isStale(30_000L)) {
@@ -273,12 +276,32 @@ if (indodaxWebSocket.isStale(30_000L)) {
 }
 ```
 
-`start()` menutup socket lama. Untuk pair yang sepi (tidak ada trade 30 detik), ini berarti
-memutus koneksi yang sebenarnya sehat, lalu menyambung lagi — berulang tiap 30 detik. Setiap
-restart juga mengosongkan `candle`, sehingga histori menit berjalan hilang.
+Dua cacat berlapis:
 
-**Perbaikan:** pisahkan `reconnectNow()` dari `start(symbol)`, dan pakai ambang stale yang
-memperhitungkan ping/pong (bukan hanya frame data). Pair sepi bukan alasan memutus koneksi.
+1. **Ambang hanya melihat frame data, 30 detik.** Untuk pair yang sepi, koneksi yang sebenarnya
+   sehat diputus, lalu disambung lagi — berulang terus.
+2. **`start()` menjalankan `stop(false)`.** Selain menutup socket, ia mengosongkan `candle`
+   (Indodax) dan `streamSymbol`/`streamHost` (Tokocrypto), sehingga histori menit berjalan hilang
+   dan konfigurasi stream harus disusun ulang.
+
+Padahal kematian socket sudah ditangani di lapisan transport: `NetworkClientProvider` memasang
+`pingInterval` 15 detik pada `webSocketClient`, jadi OkHttp mengirim ping dan memfailkan koneksi
+bila pong tidak datang (`onFailure` → `reconnect`). Pengecekan usang seharusnya hanya jaring
+pengaman, bukan detektor utama.
+
+**Perbaikan:**
+
+- **Baru** `service/RealtimeSocketHealth.kt` — keputusan murni `needsRestart(socketOpen,
+  connectedAtMs, lastMessageAtMs, nowMs)` dengan dua aturan:
+  - **zombie** — socket terbuka tetapi belum pernah mengirim frame, melewati
+    `HANDSHAKE_GRACE_MS` (20 detik) → sambung ulang;
+  - **kanal berhenti terbit** — pernah ada frame lalu diam melewati `SILENCE_MS`
+    (6 × interval ping = 90 detik) → sambung ulang.
+  - Socket yang tertutup tidak dinilai di sini: itu urusan job reconnect, supaya percobaan tidak
+    bertumpuk.
+- `reconnectNow()` dipisahkan dari `start(symbol)` di kedua socket: ia menutup socket lama dan
+  menyambung lagi **tanpa** mengosongkan `candle`, `pairId`, `streamSymbol`, dan `streamHost`.
+- Coordinator memanggil `reconnectIfStale()` untuk kedua bursa, bukan `start()`.
 
 ---
 

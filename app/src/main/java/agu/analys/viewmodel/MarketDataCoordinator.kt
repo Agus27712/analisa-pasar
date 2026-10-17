@@ -348,15 +348,12 @@ class MarketDataCoordinator(
             }
 
             while (isActive) {
-                // Reconnect WS hanya jika benar-benar stale
+                // Sambung ulang hanya bila socket benar-benar usang, dan lewat reconnectNow()
+                // supaya candle menit berjalan tidak ikut terbuang (K7).
                 if (isToko) {
-                    if (tokocryptoWebSocket.isStale(30_000L)) {
-                        tokocryptoWebSocket.start(pair.effectiveTokocryptoPair())
-                    }
+                    tokocryptoWebSocket.reconnectIfStale()
                 } else {
-                    if (indodaxWebSocket.isStale(30_000L)) {
-                        indodaxWebSocket.start(pair.symbol)
-                    }
+                    indodaxWebSocket.reconnectIfStale()
                 }
 
                 val now = System.currentTimeMillis()

@@ -3329,3 +3329,59 @@ Dari XML setelah seluruh suite: **87 kelas / 676 uji**, 0 gagal, 0 error, 1 dile
 
 `UVXYBUSDT` tidak lagi masuk lewat discovery. Namun watchlist lama yang sudah memuat simbol itu
 masih bisa tampil sampai **K14** (watchlist menerima simbol tanpa validasi) ditutup.
+
+## 55. Batch 6l — K7: socket usang disambung ulang tanpa membuang histori (2026-10-17)
+
+### 55.1 Cacat
+
+`MarketDataCoordinator` memanggil `websocket.start(symbol)` begitu 30 detik tanpa frame data.
+Ada dua hal yang salah:
+
+1. **Ambang 30 detik hanya melihat frame data.** Pair sepi membuat koneksi sehat diputus, lalu
+   disambung lagi, berulang terus.
+2. **`start()` menjalankan `stop(false)`.** `candle` (Indodax) serta `streamSymbol`/`streamHost`
+   (Tokocrypto) ikut kosong, jadi histori menit berjalan hilang tiap kali reconnect.
+
+Padahal deteksi kematian sudah ada di lapisan transport: `webSocketClient` memakai
+`pingInterval` 15 detik, sehingga OkHttp memfailkan koneksi saat pong tidak datang
+(`onFailure` → `reconnect`). Pengecekan usang seharusnya hanya jaring pengaman.
+
+### 55.2 Perubahan
+
+- **Baru** `service/RealtimeSocketHealth.kt` — keputusan murni `needsRestart`:
+  - zombie: socket terbuka tanpa satu frame pun melewati `HANDSHAKE_GRACE_MS` (20 detik);
+  - kanal berhenti terbit: pernah ada frame lalu diam melewati `SILENCE_MS`
+    (6 × 15 detik = 90 detik);
+  - socket tertutup tidak dinilai (urusan job reconnect, supaya percobaan tidak bertumpuk).
+- `IndodaxMarketWebSocket` dan `TokocryptoMarketWebSocket` — `reconnectNow()` dipisah dari
+  `start()`: menutup socket lama dan menyambung lagi tanpa mengosongkan `candle`, `pairId`,
+  `streamSymbol`, `streamHost`. `connectedAtMs` ditambahkan dan diisi di `onOpen` (sebelumnya
+  `onOpen` menulis `lastMessageAt`, sehingga sesi tanpa frame selalu terlihat segar).
+- `MarketDataCoordinator` — memanggil `reconnectIfStale()` untuk kedua bursa.
+
+### 55.3 Uji
+
+`RealtimeSocketHealthTest` — 9 kasus: socket tertutup tidak dinilai; sesi baru diberi kesempatan;
+zombie terdeteksi; **pair sepi 45 detik tidak memicu restart** (kasus yang dulu gagal); diam
+melewati ambang siklus ping memicu restart; ambang minimal 4 × interval ping; penjaga pemanggil
+(coordinator tidak memanggil `start()` di blok pengecekan usang); penjaga candle Indodax;
+penjaga konfigurasi stream Tokocrypto.
+
+Kontrol negatif:
+
+| Kerusakan yang disuntikkan | Uji yang GAGAL |
+|---|---|
+| ambang kembali ke 30 detik | 2 (pair sepi, ambang siklus ping) |
+| blok coordinator kembali ke `isStale()` + `start()` | 1 (penjaga pemanggil) |
+| `candle = null` di `reconnectNow` | 1 (penjaga candle) |
+
+### 55.4 Angka terukur
+
+Dari XML setelah seluruh suite: **88 kelas / 685 uji**, 0 gagal, 0 error, 1 dilewati
+(sebelumnya 87/676).
+
+### 55.5 Sisa
+
+K8–K15 belum disentuh. Yang paling terasa setelah K7: **K8** (backoff tanpa jitter dan tanpa
+batas percobaan) dan **K13/K14** (simbol tanpa validasi listing masih bisa masuk watchlist dan
+dashboard).

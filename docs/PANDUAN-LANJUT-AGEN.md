@@ -13,9 +13,9 @@
 > | Status | Temuan |
 > |---|---|
 > | 🔴 Kritis — masih hidup | — (K1, K2 sudah ditutup batch 6k) |
-> | 🟠 Serius — masih hidup | P6 (sebagian) · P9 · K7 |
+> | 🟠 Serius — masih hidup | P6 (sebagian) · P9 |
 > | 🟡 Sedang/rendah — masih hidup | K8–K15 |
-> | ✅ Sudah ditutup | P1–P5, P7, P8 · **J1–J10 (seluruhnya — berkas temuan jurnal dihapus 2026-10-17)** · **N1–N17 (seluruhnya — batch 6i, 2026-10-17)** · **K5, K6 (batch 6j)** · **K1–K4 (batch 6k, 2026-10-17)** |
+> | ✅ Sudah ditutup | P1–P5, P7, P8 · **J1–J10 (seluruhnya — berkas temuan jurnal dihapus 2026-10-17)** · **N1–N17 (seluruhnya — batch 6i, 2026-10-17)** · **K5, K6 (batch 6j)** · **K1–K4 (batch 6k)** · **K7 (batch 6l, 2026-10-17)** |
 >
 > Rincian + lokasi + prioritas: `docs/laporan_temuan_bugs_notifikasi.md` (sudah **di luar**
 > `docs/bugs/` karena N1–N17 tuntas — berkas itu sekarang berperan sebagai laporannya),
@@ -37,7 +37,7 @@
 | HEAD `patch` | Ukur: `git rev-parse --short origin/patch` — berubah **tiap commit**, jangan dihardcode |
 | HEAD `main` | = `patch` + commit merge di atasnya; ukur `git rev-parse --short origin/main` |
 | Titik masuk kode | package `agu.analys`, modul tunggal `:app` |
-| Unit test | **676 uji · 675 lulus · 0 gagal · 1 dilewati** (87 kelas) — diukur 2026-10-17 |
+| Unit test | **685 uji · 684 lulus · 0 gagal · 1 dilewati** (88 kelas) — diukur 2026-10-17 |
 | APK debug | 26.821.815 byte (26,8 MB desimal / 25,6 MiB) |
 | Kesiapan uang riil | **BELUM** — lihat §5 |
 
