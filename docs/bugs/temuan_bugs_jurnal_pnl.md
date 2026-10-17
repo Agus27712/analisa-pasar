@@ -15,8 +15,7 @@ lagi** untuk memastikannya; cukup baca tabel ini. Nomor baris di bawah refers ke
 | Status | Temuan | Ringkas |
 |---|---|---|
 | 🟠 **Hidup** | **J8** | Rumus P&L sendiri tanpa slippage di jurnal trade real |
-| 🟠 **Hidup (latent)** | **J9** | Default `?: 75` masih mengarang skor keyakinan |
-| ✅ Ditutup | J1–J7, **J10** | Lihat §3 |
+| ✅ Ditutup | J1–J7, J9, J10 | Lihat §3 |
 
 > ✅ **J10 kini tertutup penuh** (batch 6a, `docs/LAPORAN-batch6-j10-2026-10-17.md`): jalur beli
 > paper manual tidak lagi meng-*arm* mesin exit dengan SL/TP pair lain — memakai
@@ -58,7 +57,6 @@ JURNAL TRADE (trade_history_records)
 | # | Temuan | Lokasi | Dampak / status |
 |---|---|---|---|
 | J8 | Rumus P&L ditulis ulang sendiri, **tanpa slippage**, di jalur eksekusi trade real | `viewmodel/TradingViewModelSync.kt:56-65` | `customPnlPct = (netSell / cost − 1) × 100`, dengan `netSell = harga × (1 − FeeSchedule.sellRate)` dan `cost = entry × (1 + FeeSchedule.buyRate)`. `FeeSchedule.netProfitPctFor` menambahkan **slippage dua sisi** (default 0,08%/sisi), jadi jurnal trade real berbeda ≈ **0,16 pp** dari angka portofolio/radar jual — pelanggaran "SATU rumus P&L". Pengecualian yang sah hanya `SimulationTradeStore`/`SimulationOrderEngine`. **Hidup** |
-| J9 | N9 — `recordBuy` masih punya default `signalConfidence = snapshot?.confidenceScore ?: 75` | `database/TradeHistoryRecorder.kt:61` | Mengarang skor saat snapshot null (perangkap #17). **Latent**: kedua pemanggil mengirim eksplisit (`TradingViewModelSync.kt:134` dan `:316`) — tapi jebakannya masih "tidur" dan akan hidup begitu ada pemanggil ketiga. **Hidup** |
 
 ## 3. Sudah ditutup (ringkasan + pointer laporan)
 
@@ -71,7 +69,8 @@ JURNAL TRADE (trade_history_records)
 | J3 — `SignalLogViewModel` mengikat bursa saat konstruksi | `95f184b` | `docs/LAPORAN-batch5-j3-2026-10-16.md` |
 | J6 + N11 — klaim statistik hardcoded di UI | `b690208` | `docs/LAPORAN-batch5-j6n11-2026-10-16.md` |
 | J5 — fallback lintas bursa di jurnal trade | `547048d` | `docs/LAPORAN-batch5-j5-2026-10-16.md` |
-| J10 (sisa) — mesin exit paper memakai SL/TP pair lain | batch 6a | `docs/LAPORAN-batch6-j10-2026-10-17.md` |
+| J10 (sisa) — mesin exit paper memakai SL/TP pair lain | `d87be04` | `docs/LAPORAN-batch6-j10-2026-10-17.md` |
+| J9 (N9) — default `?: 75` mengarang skor keyakinan | batch 6b | `docs/LAPORAN-batch6-j9-2026-10-17.md` |
 
 > **Angka yang harus diingat dari J7:** friksi FSM Tokocrypto USDT adalah **0,9735%** (bentuk
 > multiplikatif, sama dengan `FeeSchedule`), **bukan 0,8226%** seperti tertulis di audit awal.
@@ -97,7 +96,6 @@ JURNAL TRADE (trade_history_records)
 | Urut | Temuan | Alasan |
 |---|---|---|
 | 1 | **J8** | Angka P&L di jurnal trade real berbeda 0,16 pp dari kartu jual/portofolio — satu trade, dua angka |
-| 2 | **J9** | Kebersihan: hapus default `?: 75` sebelum ada pemanggil ketiga |
 
 Prasyarat yang dulu disebut (satu definisi W/L `classifySignalOutcome` + satu sumber basis P&L
 `FeeSchedule`) **sudah ada** — keduanya lahir di batch 3a dan batch 4, dan kini dijaga uji.
@@ -118,5 +116,6 @@ dan angka test **diukur** dari `app/build/test-results/testDebugUnitTest/*.xml`,
 | 2026-10-16 | **Batch 5b:** J3 diperbaiki di `95f184b`. Lihat `docs/LAPORAN-batch5-j3-2026-10-16.md` |
 | 2026-10-16 | **Batch 5e:** J6 + N11 diperbaiki di `b690208`. Lihat `docs/LAPORAN-batch5-j6n11-2026-10-16.md` |
 | 2026-10-16 | **Batch 5f:** J5 diperbaiki di `547048d`. Lihat `docs/LAPORAN-batch5-j5-2026-10-16.md` |
+| 2026-10-17 | **Batch 6b:** J9 (N9) diperbaiki — `TradeSignalConfidence.resolve` menggantikan default `?: 75` (6 uji, kontrol negatif 1/6 gagal). Lihat `docs/LAPORAN-batch6-j9-2026-10-17.md` |
 | 2026-10-17 | **Batch 6a:** J10 (sisa) diperbaiki — jalur beli paper manual memakai `PaperArmSignal` (8 uji, kontrol negatif 3/8 gagal). Lihat `docs/LAPORAN-batch6-j10-2026-10-17.md` |
 | 2026-10-16 | **Sinkronisasi dokumen (tanpa perubahan kode):** butir yang sudah ditutup dipangkas dari badan dokumen dan diringkas di §3; J10 diperjelas jadi **sebagian** (§2.1 — jalur `armPaperExitEngine` di `TradingViewModelSync.kt:343-350` masih membaca SL/TP mentah). Riwayat batch 5a–5f yang tadinya hilang di §6 ditambahkan. Verifikasi ulang ke `patch` @ `547048d` + review owner. Lihat `docs/LAPORAN-sync-dokumen-temuan-2026-10-16.md` |

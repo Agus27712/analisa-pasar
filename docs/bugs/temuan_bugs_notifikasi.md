@@ -17,8 +17,8 @@ memastikannya; cukup baca tabel ini. Nomor baris refers ke `547048d`.
 | 🟠 **Hidup** | **N15** | Sakelar master mematikan foreground service (= keep-alive pemantauan posisi) |
 | 🟠 **Hidup** | **N16** | `AppPreferences` dibangun ulang 7× di service, termasuk per tick dashboard |
 | 🟠 **Hidup sebagian** | **N11** | Manifestasi J6 (klaim hardcoded) tertutup batch 5e; **tabel tier & cap confidence belum diubah** |
-| 🟡 **Hidup** | **N8, N9, N12** | Param mati `onlyWhenBackground` · default `?: 75` · tanpa cooldown kandidat |
-| ✅ Ditutup | N1, N2, N3, N4, N5, N7, N10 | Lihat §4 |
+| 🟡 **Hidup** | **N8, N12** | Param mati `onlyWhenBackground` · tanpa cooldown kandidat |
+| ✅ Ditutup | N1–N5, N7, N9, N10 | Lihat §4 |
 
 ## 1. Peta jalur (hasil pemetaan)
 
@@ -275,7 +275,6 @@ yang pernah dihasilkan engine. Untuk SCALPING, worker juga memakai `formingVolum
 | # | Temuan | Lokasi (verifikasi ulang @ `547048d`) | Catatan |
 |---|---|---|---|
 | N8 | `onlyWhenBackground = true` diteruskan tapi **tidak pernah dibaca** di dalam `sendPriceAlertNotification` — notifikasi "Trailing Stop Naik" tetap muncul saat app di foreground | `util/AlertNotificationHelper.kt:588` & `:600` (param mati), forward `:591`; pemanggil `viewmodel/TradingViewModelAlerts.kt:553` & `:573` | Param dead-code; implementasi fitur atau hapus parameternya. (Nomor baris lama `543-579` sudah usang) |
-| N9 | `recordBuy` default `signalConfidence = snapshot?.confidenceScore ?: 75` — **mengarang skor 75** saat snapshot null | `database/TradeHistoryRecorder.kt:61` | Pola sama dengan pelanggaran B1 (perangkap #17). Kedua pemanggil mengirim eksplisit (`viewmodel/TradingViewModelSync.kt:134` dan `:316`), jadi jebakan masih "tidur" — tapi hapus default `?: 75` agar tidak terpakai otomatis di masa depan |
 | N11 | Tier confidence (≥80 / 60-79 / <60) mencampur mode: semua sinyal scalping **pra-entry** di-cap ≤59 → selalu jatuh ke tier "Awal", sehingga tabel "Akurasi per Level Confidence" sebagian besar mengukur READY-vs-bukan, bukan kualitas berjenjang | `ui/screens/SignalLogScreen.kt:1275`, `model/SignalReliabilityModels.kt:70-72`, cap di `engine/scalping/ScalpingMtfEvaluator.kt` (± baris 434-446: `step3Ok -> 59 / step2Ok -> 49 / step1Ok -> 39 / else -> 29`) | **🟡 SEBAGIAN.** Manifestasi **J6** (kalimat klaim hardcoded) ditutup batch 5e — diganti deskripsi bergate sampel + fakta tier kosong (`model/ConfidenceTierNote.kt`). **Yang belum:** tabel tier sendiri dan **cap confidence di `ScalpingMtfEvaluator` tidak diubah sama sekali** (diverifikasi ulang 2026-10-16). Perlu keputusan produk: apakah tabelnya dihapus, atau capnya diubah — keduanya mengubah angka yang sudah tampil |
 | N12 | Tidak ada cooldown per-pair untuk notifikasi kandidat (bandingkan: peak 30 dtk, emergency 60 dtk) — siklus READY→INVALIDATED→READY yang rapuh bisa mengulang notifikasi | `viewmodel/TradingViewModelSync.kt:591-604` + `AlertNotificationHelper.kt` | Edge-trigger menangkal sebagian, tapi state yang flapping (apalagi bila N6 diperbaiki dengan benar) bisa spam. Bandingkan dengan **N14**: cooldown 30 dtk pun ternyata sudah tidak berlaku di jalur trailing |
 
@@ -290,9 +289,10 @@ yang pernah dihasilkan engine. Untuk SCALPING, worker juga memakai `formingVolum
 | N5 — notifikasi kandidat tanpa disclaimer "uang riil diblokir" | `1a87e3c` | `docs/LAPORAN-batch2-notifikasi-2026-10-16.md` |
 | N7 — `markTriggered`/`reset` tidak menormalkan simbol | `1a87e3c` | `docs/LAPORAN-batch2-notifikasi-2026-10-16.md` |
 | N10 — atribusi sinyal per simbol di jurnal | `9767c88` | `docs/LAPORAN-batch5-j4n10-2026-10-16.md` |
+| N9 (= J9) — default `?: 75` mengarang skor keyakinan | batch 6b | `docs/LAPORAN-batch6-j9-2026-10-17.md` |
 
-> ⚠️ **N10 ditutup, tapi J10 (= N10) belum tuntas** — ada satu jalur sekelas yang masih membaca
-> SL/TP mentah, lihat `docs/bugs/temuan_bugs_jurnal_pnl.md` §2.1.
+> ✅ **N10 (= J10) kini tuntas penuh** — jalur beli paper manual yang masih membaca SL/TP mentah
+> ditutup batch 6a (`docs/LAPORAN-batch6-j10-2026-10-17.md`).
 
 ## 5. Yang sudah benar (jangan diutak-atik)
 
@@ -322,7 +322,6 @@ yang pernah dihasilkan engine. Untuk SCALPING, worker juga memakai `formingVolum
 | 4 | **N6 + N17** | Dua produsen satu state machine, dan skornya **berbeda** dari engine. **Butuh keputusan desain** |
 | 5 | **N16** | `AppPreferences` dibangun ulang per tick; satu kegagalan bisa menghapus seluruh preferensi user |
 | 6 | **N8** | Param mati — implementasi atau hapus |
-| 7 | **N9** | Hapus default `?: 75` sebelum ada pemanggil ketiga |
 | 8 | **N12** | Beri cooldown per-pair pada notifikasi kandidat |
 | 9 | **N11 (sisa)** | Butuh keputusan produk: ubah cap bertingkat, atau jangan tampilkan tier lintas-mode sama sekali |
 
@@ -352,4 +351,5 @@ Setiap perbaikan **wajib**:
 | 2026-10-16 | Ditemukan catatan sampingan **di luar cakupan batch 2**: `AppPreferences` bukan singleton dan `TradingForegroundService.updatePrice/updatePrices` membangunnya tiap tick harga → `EncryptedSharedPreferences` dibuat ulang terus-menerus. Kandidat temuan area performa, **belum diangkat jadi nomor** |
 | 2026-10-16 | **Audit lanjutan (read-only, `patch` @ `a842e35`):** N6 dan N8–N12 **diverifikasi masih hidup** (nomor baris diperbarui). Ditambah **N13–N17**: kategori notifikasi ≠ sakelar Pengaturan (N13), cooldown peak di-bypass jalur kembar (N14), sakelar master mematikan foreground service (N15), `AppPreferences` dibangun 7× di service — catatan sampingan itu sekarang jadi nomor (N16), dan N6 melarat: worker SWING mengabaikan `macroAnomalyResult` sehingga skor notifikasi bisa lebih tinggi daripada engine (N17). **Koreksi §5:** klaim "cooldown peak 30 dtk berfungsi" dicoret. **Belum ada perbaikan kode.** |
 | 2026-10-16 | **Batch 5a:** N10 ditutup di `9767c88`. **Batch 5e:** manifestasi J6 dari N11 ditutup di `b690208`. |
+| 2026-10-17 | **Batch 6b:** N9 (= J9) ditutup — `TradeSignalConfidence.resolve` menggantikan default `?: 75`; 6 uji, kontrol negatif 1/6 gagal. Lihat `docs/LAPORAN-batch6-j9-2026-10-17.md` |
 | 2026-10-16 | **Sinkronisasi dokumen (tanpa perubahan kode):** N1–N5, N7, N10 dipangkas dari badan dokumen dan diringkas di §4; tabel §3 dipertahankan hanya untuk N8, N9, N11, N12 dengan nomor baris terverifikasi ulang. Status diverifikasi ulang ke `patch` @ `547048d` + **review owner** ⇒ status di dokumen ini otoritatif, agen tidak perlu cek kode lagi. Lihat `docs/LAPORAN-sync-dokumen-temuan-2026-10-16.md` |

@@ -58,7 +58,9 @@ class TradeHistoryRecorder(
         buyOrderType: String = "LIMIT",
         snapshot: TradeSignalSnapshot? = null,
         signalPrice: Double = buyPrice,
-        signalConfidence: Int = snapshot?.confidenceScore ?: 75,
+        // J9 — TIDAK ada default karangan. Bila pemanggil tidak mengirim dan snapshot kosong,
+        // nilainya 0 ("tidak diketahui"), bukan 75. Dulu di sini `?: 75`.
+        signalConfidence: Int? = null,
         targetPrice1: Double = 0.0,
         targetPrice2: Double = 0.0,
         stopLossPrice: Double = 0.0,
@@ -98,7 +100,10 @@ class TradeHistoryRecorder(
                     exchange = exchange.uppercase(),
                     signalTime = signalTime?.takeIf { it > 0L } ?: now,
                     signalPrice = if (signalPrice > 0) signalPrice else buyPrice,
-                    signalConfidence = signalConfidence,
+                    signalConfidence = TradeSignalConfidence.resolve(
+                        explicit = signalConfidence,
+                        fromSnapshot = snapshot?.confidenceScore
+                    ),
                     signalCalculationSummary = calculationSummary,
                     signalReasons = reasons,
                     signalSnapshotJson = snapshotJson,

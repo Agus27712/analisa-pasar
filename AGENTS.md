@@ -177,10 +177,10 @@ Saat ini berisi (semua diperbarui 2026-10-16):
 - **`temuan_bugs_notifikasi.md`** — audit jalur notifikasi (4 pengirim: VM-sync,
   CandidateScanWorker, foreground service, VM-alerts) & alur skor keyakinan (produsen → notifikasi
   → jurnal → UI).
-  **Ditutup: N1–N5, N7, N10** (batch 1, batch 2, batch 5a).
+  **Ditutup: N1–N5, N7, N9 (= J9, batch 6b), N10** (batch 1, batch 2, batch 5a).
   **Sebagian: N11** — manifestasi J6 (klaim hardcoded) ditutup batch 5e, tetapi **tabel tier &
   cap confidence `ScalpingMtfEvaluator` sendiri belum diubah** (butuh keputusan produk).
-  **Masih hidup: N6 + N17, N8, N9, N12, N13, N14, N15, N16** (N13–N17 hasil audit lanjutan:
+  **Masih hidup: N6 + N17, N8, N12, N13, N14, N15, N16** (N13–N17 hasil audit lanjutan:
   kategori notifikasi ≠ sakelar Pengaturan, cooldown peak di-bypass jalur kembar, sakelar master
   mematikan foreground service, `AppPreferences` dibangun ulang per tick, N6 melarat ke skor SWING
   worker tanpa penalti anomali).
@@ -198,8 +198,9 @@ Saat ini berisi (semua diperbarui 2026-10-16):
   **Ditutup: J1, J2** (batch 3a), **J7** (batch 4), **J4 + N10** (batch 5a), **J3** (batch 5b),
   **J6 + N11** (batch 5e), **J5** (batch 5f), **J10 penuh** (batch 6a —
   `docs/LAPORAN-batch6-j10-2026-10-17.md`: jalur beli paper manual kini lewat `PaperArmSignal`).
-  **Masih hidup: J8** (rumus P&L ditulis ulang tanpa slippage di jalur trade real), **J9**
-  (default `?: 75`).
+  **J9 juga ditutup** (batch 6b — `docs/LAPORAN-batch6-j9-2026-10-17.md`: default `?: 75`
+  diganti `TradeSignalConfidence.resolve`, tidak diketahui = 0).
+  **Masih hidup: J8** (rumus P&L ditulis ulang tanpa slippage di jalur trade real).
   **Catatan angka:** friksi FSM Tokocrypto USDT yang tertulis 0,8226% di dokumen temuan awal itu
   **salah**; angka yang benar **0,9735%** (lihat `docs/LAPORAN-batch4-j7-2026-10-16.md` §2).
 
