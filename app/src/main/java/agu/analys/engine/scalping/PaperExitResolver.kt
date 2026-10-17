@@ -576,14 +576,24 @@ class PaperExitStateMachine(
      *   Dalam kondisi ini pemeriksaan level (SL/TP/BE/trailing/early) tetap jalan — supaya
      *   proteksi tidak menunggu akhir bar — tetapi `barsHeld` tidak ditambah dan time-stop
      *   tidak dievaluasi, karena hitungan bar M1 hanya sah di batas bar.
+     * @param countAsNewBar apakah bar ini **menambah** `barsHeld`. P8 — tick pertama sesudah
+     *   rehidrasi dievaluasi sebagai bar baru (`isNewBar = true`, supaya time-stop langsung
+     *   dicek) tetapi **tidak** menambah hitungan: `PaperRehydrate.mergedBarsHeld` sudah
+     *   memasukkan menit yang berjalan sejak posisi dibuka. Default = [isNewBar] supaya
+     *   pemanggil lama tidak berubah.
      */
-    fun onBar(bar: CandleBar, window14: List<CandleBar>, isNewBar: Boolean = true): PaperExitDecision? {
+    fun onBar(
+        bar: CandleBar,
+        window14: List<CandleBar>,
+        isNewBar: Boolean = true,
+        countAsNewBar: Boolean = isNewBar
+    ): PaperExitDecision? {
         if (!isRiskValid) {
             return PaperExitDecision(
                 PaperExitResult.UNRESOLVED, 0.0, null, false, PaperExitReason.BAD_RISK
             )
         }
-        if (isNewBar) barsHeld++
+        if (countAsNewBar) barsHeld++
         peak = max(peak, bar.high)
 
         if (bar.low <= activeStopLoss) {

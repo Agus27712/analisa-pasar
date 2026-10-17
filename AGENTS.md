@@ -189,8 +189,9 @@ Saat ini berisi (semua diperbarui 2026-10-16):
   serta **P5** (batch 5d — snapshot FSM kini per posisi, berkunci `PaperAutoTradeRuntime.key`).
   **Sebagian: P6** (batch 5c — jendela momentum kini satu sumber, tetapi bagian "`peak` tertinggal
   dari high M1" **belum** — bukan cabang kode yang berbeda, melainkan tidak adanya umpan intrabar).
-  **Masih hidup: P7, P8** (jalur ambil-alih exit engine tidak terimplementasi; `barsHeld` +1 pada
-  tick pertama sesudah rehidrasi).
+  **Ditutup: P8** (batch 6d — `PaperFirstBarResolver` memisahkan "dievaluasi sebagai bar baru" dari
+  "menambah `barsHeld`"; tick pertama sesudah rehidrasi tidak lagi dihitung dua kali).
+  **Masih hidup: P7** (jalur ambil-alih exit engine tidak terimplementasi).
   **Batas penting:** seluruh temuan `P*` hanya menyentuh posisi **paper** (`isReal = false`) —
   bukan kerusakan uang riil, tetapi posisi paper adalah dasar seluruh keputusan "apakah scalp
   punya edge".
@@ -438,6 +439,25 @@ Saat ini berisi (semua diperbarui 2026-10-16):
 - **Konsumen wajib menyebut posisinya.** `paperSnapshotAt(exchange, symbol)` (layar simulasi) dan
   `paperSnapshotFor(...)` (halaman detail) — keduanya menyebut posisi yang dibuka, bukan
   "snapshot apa pun yang terakhir terbit".
+
+## Aturan turunan dari audit paper trading — P8 (batch 6d, 2026-10-17)
+
+- **"Dievaluasi sebagai bar baru" ≠ "menambah hitungan bar".** `PaperExitStateMachine.onBar` punya
+  dua parameter terpisah: `isNewBar` (boleh memeriksa time-stop) dan `countAsNewBar` (boleh
+  `barsHeld++`). Jangan pernah menyatukannya kembali.
+- **Sesudah rehidrasi, menit yang berjalan sudah dihitung.** `PaperRehydrate.mergedBarsHeld`
+  memakai jam dinding (`max(stored, (now − openedAt) / 60_000)`), jadi tick pertama sesudah
+  `put(..., markFirstTickAsNewBar = true)` **wajib** `isNewBar = true` + `countAsNewBar = false`.
+  Kalau keduanya `true`, time-stop keluar 1 menit lebih awal dan app tidak lagi sebanding dengan
+  `tools/scalp_replay.py`.
+- **Keputusan murni, bukan `if` di dalam lambda.** Pemetaan itu milik
+  `PaperFirstBarResolver.countsAsNewBar(isNewBar, firstTickAfterRehydrate)`; runtime hanya
+  melaporkan fakta lewat `BarBucketMark`. Penjaga:
+  `app/src/test/java/agu/analys/trading/PaperFirstBarTest.kt`.
+- **Sentinel bucket hanya menandai satu tick.** `FIRST_TICK_BUCKET = -1L` dihapus oleh
+  `markBarBucket` pada pemanggilan pertama, sehingga pengecualian tidak bocor ke menit berikutnya.
+  Jangan menambahkan field runtime terpisah untuk ini — penanda yang bertahan akan menahan
+  time-stop lebih lama, bukan lebih pendek.
 
 ## Arah produk (ringkas)
 

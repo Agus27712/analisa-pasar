@@ -2724,3 +2724,84 @@ Angka terukur (dari XML): **76 kelas / 607 uji → 77 kelas / 619 uji**, 0 gagal
 ### 43.5 Laporan
 
 `docs/LAPORAN-batch6-j8-2026-10-17.md`
+
+---
+
+## 44. Batch 6d — P8: `barsHeld` tidak lagi dihitung dua kali sesudah rehidrasi (2026-10-17)
+
+### 44.1 Masalah
+
+`PaperRehydrate.mergedBarsHeld` menghitung `barsHeld` dari jam dinding
+(`max(stored, (now − openedAt) / 60_000)`) — menit yang berjalan saat app tertutup sudah masuk.
+Lalu `PaperAutoTradeRuntime.put(..., markFirstTickAsNewBar = true)` menandai bucket menit dengan
+sentinel `FIRST_TICK_BUCKET = -1L`, sehingga tick pertama sesudah rehidrasi dianggap **bar baru**
+dan `PaperExitStateMachine.onBar` menaikkan `barsHeld` **sekali lagi**.
+
+Efek: time-stop keluar **1 bar (1 menit) lebih awal** ⇒ app dan `tools/scalp_replay.py` tidak lagi
+sebanding.
+
+Yang tidak boleh disederhanakan: tick pertama itu **tetap** harus dievaluasi sebagai bar baru, kalau
+tidak posisi yang sudah kehabisan waktu baru ditutup pada batas menit berikutnya.
+
+### 44.2 Perbaikan — pisahkan "dievaluasi" dari "dihitung"
+
+`PaperExitResolver.onBar` menerima parameter keempat:
+
+```kotlin
+fun onBar(bar, window14, isNewBar: Boolean = true, countAsNewBar: Boolean = isNewBar): PaperExitDecision?
+...
+if (countAsNewBar) barsHeld++
+```
+
+Gate time-stop tetap membaca `isNewBar`. Default `= isNewBar` menjaga seluruh pemanggil lama
+(termasuk `PaperTradeJournalTest` dan `PaperExitFsmStateTest`) tidak berubah.
+
+Resolver murni baru `trading/PaperFirstBar.kt`:
+
+```kotlin
+object PaperFirstBarResolver {
+    fun countsAsNewBar(isNewBar: Boolean, firstTickAfterRehydrate: Boolean): Boolean =
+        isNewBar && !firstTickAfterRehydrate
+}
+```
+
+`PaperAutoTradeRuntime.markBarBucket` kini mengembalikan fakta (`BarBucketMark(isNewBar,
+firstTickAfterRehydrate)`), bukan boolean; situs evaluasi memetakannya lewat resolver.
+
+**Kenapa tidak ada field runtime baru:** sentinel `-1L` sudah hidup di `lastBarBucketMap` dan
+**terhapus pada pemanggilan `markBarBucket` pertama**, jadi pengecualian hanya berlaku untuk satu
+tick. Penanda yang bertahan akan menahan time-stop lebih lama — arah kesalahan yang berlawanan.
+Konsekuensi: `clear`/`clearAll` tidak perlu diubah.
+
+### 44.3 Uji & kontrol negatif
+
+Uji baru `app/src/test/java/agu/analys/trading/PaperFirstBarTest.kt` — **7 kasus**: 4 resolver murni
++ 3 integrasi mesin (barsHeld 4/5 tidak naik; time-stop tetap terpicu saat 5/5; bar M1 berikutnya
+tetap menambah). Dua uji integrasi itu pasangan yang saling mengunci.
+
+`PaperAutoTradeRuntimeTest`: enam pemanggil `markBarBucket` disesuaikan ke `.isNewBar` + asersi
+`.firstTickAfterRehydrate`.
+
+Kontrol negatif dua arah:
+
+| Kontrol | Perubahan | Hasil |
+|---|---|---|
+| A | `countsAsNewBar` → `isNewBar` | **3/7 GAGAL** |
+| B | `if (countAsNewBar)` → `if (isNewBar)` di `onBar` | **2/7 GAGAL** |
+
+Kontrol B membuktikan uji juga menjaga **pemakaian** resolver, bukan hanya resolver-nya.
+
+Angka terukur (dari XML): **77 kelas / 619 uji → 78 kelas / 626 uji**, 0 gagal, 0 error, 1 dilewati.
+
+### 44.4 Batas
+
+- **Bukan** P6 sisa `peak` — `peak` masih hanya bergerak dari bar sintetis
+  (`high = low = close = currentPrice`), bukan high M1 dari cache. Tetap temuan hidup.
+- `mergedBarsHeld` tidak diubah; ia sudah benar.
+- Wiring di `PaperAutoTradeCoordinator` (fungsi besar ber-`ViewModel`) tidak diuji otomatis;
+  pemetaan `barMark → countAsNewBar` hanya tiga baris tanpa cabang.
+- `tools/scalp_replay.py` tidak menyentuh rehidrasi, jadi tidak perlu perubahan.
+
+### 44.5 Laporan
+
+`docs/LAPORAN-batch6-p8-2026-10-17.md`
