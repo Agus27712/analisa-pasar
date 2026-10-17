@@ -3430,7 +3430,7 @@ sampah di watchlist Indodax bisa tampil sebagai kartu bernilai `-`.
 
 ### 56.3 Uji
 
-`WatchlistEntryGateTest` — 15 kasus: keputusan gate (diterima, format, kuotasi per bursa,
+`WatchlistEntryGateTest` — 17 kasus: keputusan gate (diterima, format, kuotasi per bursa,
 keberadaan), pair hantu `UVXYBUSDT` ditolak, pesan untuk setiap alasan penolakan,
 `hasSymbol` kedua repository (termasuk fallback POPULAR dan peta discovery),
 `symbolListed` per bursa (termasuk status suspend), plus penjaga perkabelan: ViewModel,

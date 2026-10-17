@@ -397,7 +397,7 @@ menampilkan data historis, tetapi **bukan** untuk membuat pair baru yang bisa di
   `setCustomWatchlist` melewati gate.
 - `WatchlistManagerSettings` — fallback fail-open `sanitizeSymbolForExchange(...) ?: typed`
   **dihapus**; tombol Tambah, pesan galat, dan chip populer memakai putusan gate yang sama.
-- Uji: `WatchlistEntryGateTest` (15 kasus, termasuk penolakan `UVXYBUSDT` dan penjaga
+- Uji: `WatchlistEntryGateTest` (17 kasus, termasuk penolakan `UVXYBUSDT` dan penjaga
   perkabelan ViewModel/UI/dashboard).
 
 ### K14 — Cabang dashboard strategi melewati filter listing — ✅ diperbaiki (batch 6m)
