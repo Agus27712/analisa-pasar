@@ -188,7 +188,7 @@ sebagai **tidak aktif** (fail-closed), bukan aktif.
 
 ### K5 — WebSocket Indodax mati karena token terpotong, kanal salah, dan parser salah bentuk
 
-**Berkas:** `service/IndodaxMarketWebSocket.kt:177-181`, `:92-103`, `:105-129`
+**Berkas:** `service/IndodaxMarketWebSocket.kt:182-191`, `:100-111`, `:113-137`
 
 Ada tiga cacat yang harus dibetulkan bersamaan; memperbaiki satu saja tidak membuat tick mengalir.
 
@@ -235,7 +235,7 @@ Urutannya `[pair, epochDetik, last, low, high, open, vol_idr, vol_koin]` — buk
 
 ### K6 — `lastSequence` tidak di-reset saat menyambung ulang (Indodax) — ✅ tutup bersama K5
 
-**Berkas:** `service/IndodaxMarketWebSocket.kt:40`, `:123-124`, `:82-90`
+**Berkas:** `service/IndodaxMarketWebSocket.kt` (kode `lastSequence` sudah tidak ada)
 
 `lastSequence` sudah **dihapus** bersama perbaikan K5: kanal `market:summary-24h` tidak membawa
 nomor urut per baris, jadi tidak ada lagi state yang bisa basi setelah reconnect. Deduplikasi kini
@@ -243,7 +243,7 @@ memakai pasangan `(timestamp, harga)` yang terakhir diterima.
 
 ### K7 — `isStale` memutus socket, bukan menyambung ulang dengan tenang
 
-**Berkas:** `viewmodel/MarketDataCoordinator.kt:350-360`, `service/IndodaxMarketWebSocket.kt:43-50`
+**Berkas:** `viewmodel/MarketDataCoordinator.kt:350-360`, `service/IndodaxMarketWebSocket.kt:44-51`
 
 ```kotlin
 if (indodaxWebSocket.isStale(30_000L)) {
@@ -264,7 +264,7 @@ memperhitungkan ping/pong (bukan hanya frame data). Pair sepi bukan alasan memut
 
 ### K8 — Backoff di-reset setiap `onOpen`, tanpa jitter dan tanpa batas percobaan
 
-**Berkas:** `service/IndodaxMarketWebSocket.kt:82-90`, `service/TokocryptoMarketWebSocket.kt:132-140`
+**Berkas:** `service/IndodaxMarketWebSocket.kt:90-98`, `service/TokocryptoMarketWebSocket.kt:132-140`
 
 `reconnectAttempt = 0` di `onOpen`. Server yang menerima koneksi lalu langsung menutupnya
 (kasus K5) membuat siklus: buka → tutup → tunggu 800 ms → buka lagi. Tidak ada jitter, tidak ada
@@ -277,7 +277,7 @@ mencoba lagi.
 
 ### K9 — Listener Indodax tidak punya penjaga generasi
 
-**Berkas:** `service/IndodaxMarketWebSocket.kt:154-175` (bandingkan `TokocryptoMarketWebSocket.kt:142-155`)
+**Berkas:** `service/IndodaxMarketWebSocket.kt:158-180` (bandingkan `TokocryptoMarketWebSocket.kt:142-155`)
 
 Saat pengguna berganti pair, socket lama masih bisa memanggil `onDisconnected()` dan
 `reconnect()` karena tidak ada pemeriksaan "apakah saya masih socket yang berlaku". Tokocrypto
