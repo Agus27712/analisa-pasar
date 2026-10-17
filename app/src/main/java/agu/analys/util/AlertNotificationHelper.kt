@@ -185,6 +185,17 @@ object AlertNotificationHelper {
      * perilaku sebelum perbaikan, supaya kerusakan prefs tidak diam-diam mematikan peringatan
      * darurat.
      */
+    /** N12 — cooldown kandidat per pair, hanya di memori proses. */
+    private val candidateCooldown = CandidateNotifyCooldown()
+
+    private fun candidateCooldownKey(marketKey: MarketKey): String =
+        "${marketKey.exchange.uppercase()}_${marketKey.symbol.uppercase()}"
+
+    /** Hanya untuk uji: cooldown bersifat proses, jadi harus bisa dikosongkan antar kasus. */
+    internal fun resetCandidateCooldownForTest() {
+        candidateCooldown.clear()
+    }
+
     private fun canNotify(context: Context, category: NotificationCategory): Boolean =
         hasNotificationPermission(context) &&
             allowsNotification(notificationSettings(context), category)
@@ -209,6 +220,13 @@ object AlertNotificationHelper {
         signal: AISignalState
     ) {
         if (!canNotify(context, NotificationCategory.CANDIDATE_BUY)) return
+        // N12 — cooldown per pair. State yang flapping READY → INVALIDATED → READY akan lolos
+        // edge-trigger berulang kali; jendela ini yang menahan bunyi beruntun untuk setup yang
+        // praktis sama. Ditaruh di sini supaya jalur foreground (VM) dan latar (worker) sama-sama
+        // terkena — keduanya lewat helper ini.
+        val cooldownKey = candidateCooldownKey(marketKey)
+        val nowMs = System.currentTimeMillis()
+        if (!candidateCooldown.allow(cooldownKey, nowMs)) return
 
         val strategyLabel = when (strategyMode) {
             StrategyMode.SCALPING -> "SCALPING M15/M5"

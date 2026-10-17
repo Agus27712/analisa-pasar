@@ -84,6 +84,26 @@ class NotificationSourceTest {
     }
 
     /**
+     * N12 — cooldown kandidat harus benar-benar dipasang di jalur kirim.
+     *
+     * Notifikasi dengan ID sama hanya menimpa entri di shade, jadi "jumlah notifikasi tampil" tidak
+     * bisa membedakan satu kiriman dari dua. Yang dijaga di sini: helper kandidat **memanggil**
+     * penjaga berstatus itu, bukan sekadar memilikinya.
+     */
+    @Test
+    fun `helper kandidat memakai cooldown per pair`() {
+        val kode = kodeTanpaKomentar(berkas("agu/analys/util/AlertNotificationHelper.kt").readText())
+        val badan = kode.substringAfter("fun sendCandidateFoundNotification(", "")
+            .substringAfter("fun sendCandidateFoundNotification(")
+
+        assertTrue(
+            "N12: `sendCandidateFoundNotification` harus memanggil `candidateCooldown.allow(...)` " +
+                "sebelum mengirim, supaya state yang flapping tidak membunyikan notifikasi berulang.",
+            badan.contains("candidateCooldown.allow(")
+        )
+    }
+
+    /**
      * N14 — satu peristiwa, satu pengiriman.
      *
      * "Trailing Stop Naik" dikirim dari dua tempat sebelum perbaikan: `updateSimTrailingOrder` /

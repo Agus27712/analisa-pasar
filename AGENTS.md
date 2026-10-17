@@ -179,12 +179,11 @@ Saat ini berisi (semua diperbarui 2026-10-16):
 - **`temuan_bugs_notifikasi.md`** — audit jalur notifikasi (4 pengirim: VM-sync,
   CandidateScanWorker, foreground service, VM-alerts) & alur skor keyakinan (produsen → notifikasi
   → jurnal → UI).
-  **Ditutup: N1–N5, N7–N10, N13–N16** (batch 1, 2, 5a, 6b, 6f, 6g).
+  **Ditutup: N1–N5, N7–N10, N12–N16** (batch 1, 2, 5a, 6b, 6f, 6g, 6h).
   **Sebagian: N11** — manifestasi J6 (klaim hardcoded) ditutup batch 5e, tetapi **tabel tier &
   cap confidence `ScalpingMtfEvaluator` sendiri belum diubah** (butuh keputusan produk).
-  **Masih hidup: N6 + N17, N12** (N6/N17 = dua produsen satu `SignalLifecycleManager` + skor SWING
-  worker tanpa penalti anomali makro, butuh keputusan desain; N12 = belum ada cooldown per-pair
-  untuk notifikasi kandidat).
+  **Masih hidup: N6 + N17** — dua produsen satu `SignalLifecycleManager`, dan skor SWING worker
+  tanpa penalti anomali makro. Keduanya **butuh keputusan desain**, bukan perbaikan mekanis.
 - **`temuan_bugs_paper_trade.md`** — audit siklus hidup posisi paper & mesin exit.
   **Ditutup: P1, P2, P3, P4** (batch 3b, batch 3c) sehingga **ketiga temuan kritis sudah tertutup**,
   serta **P5** (batch 5d — snapshot FSM kini per posisi, berkunci `PaperAutoTradeRuntime.key`).
@@ -463,6 +462,18 @@ Saat ini berisi (semua diperbarui 2026-10-16):
   `markBarBucket` pada pemanggilan pertama, sehingga pengecualian tidak bocor ke menit berikutnya.
   Jangan menambahkan field runtime terpisah untuk ini — penanda yang bertahan akan menahan
   time-stop lebih lama, bukan lebih pendek.
+
+## Aturan turunan dari audit notifikasi — N12 (batch 6h, 2026-10-17)
+
+- **Edge-trigger bukan pengganti cooldown.** Transisi `READY` mencegah pengiriman berulang pada
+  state yang stabil, tetapi tidak pada state yang **flapping** (`READY → INVALIDATED → READY`).
+  Setiap notifikasi berbasis transisi wajib punya jendela per entitas (pair), bukan hanya syarat
+  "baru berubah".
+- **Cooldown ditaruh di chokepoint pengiriman, bukan di pemanggil.** Ada dua pengirim kandidat
+  (VM foreground, worker latar); menaruhnya di salah satu berarti jalur lain tetap spam.
+- **Uji keputusan, bukan tampilan.** Notifikasi dengan ID sama hanya *menimpa* entri di shade,
+  jadi "hitung notifikasi" tidak bisa membedakan satu kiriman dari dua. Yang diuji:
+  `CandidateNotifyCooldown.allow(...)` + satu uji pindai sumber bahwa helper memanggilnya.
 
 ## Aturan turunan dari audit notifikasi — N15, N16 (batch 6g, 2026-10-17)
 

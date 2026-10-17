@@ -47,6 +47,7 @@ class NotificationGateTest {
         shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
         AlertNotificationHelper.createNotificationChannels(ctx)
         AlertNotificationHelper.resetNotificationSettingsCache()
+        AlertNotificationHelper.resetCandidateCooldownForTest()
         // Instance yang BENAR-BENAR dibaca gerbang; menulis lewat objek lain tidak terlihat
         // di bawah Robolectric (lihat catatan `notificationPrefsForTest`).
         appPrefs = AlertNotificationHelper.notificationPrefsForTest(ctx)

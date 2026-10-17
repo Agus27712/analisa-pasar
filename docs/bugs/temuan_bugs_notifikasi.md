@@ -13,8 +13,7 @@ memastikannya; cukup baca tabel ini. Nomor baris refers ke `547048d`.
 |---|---|---|
 | 🟠 **Hidup** | **N6 + N17** | Dua produsen menulis satu `SignalLifecycleManager`, dan skor worker **tidak pernah** kena penalti anomali makro |
 | 🟠 **Hidup sebagian** | **N11** | Manifestasi J6 (klaim hardcoded) tertutup batch 5e; **tabel tier & cap confidence belum diubah** |
-| 🟡 **Hidup** | **N12** | Tidak ada cooldown per-pair untuk notifikasi kandidat |
-| ✅ Ditutup | N1–N5, N7–N10, N13–N16 | Lihat §4 |
+| ✅ Ditutup | N1–N5, N7–N10, N12–N16 | Lihat §4 |
 
 ## 1. Peta jalur (hasil pemetaan)
 
@@ -118,7 +117,6 @@ yang pernah dihasilkan engine. Untuk SCALPING, worker juga memakai `formingVolum
 | # | Temuan | Lokasi (verifikasi ulang @ `547048d`) | Catatan |
 |---|---|---|---|
 | N11 | Tier confidence (≥80 / 60-79 / <60) mencampur mode: semua sinyal scalping **pra-entry** di-cap ≤59 → selalu jatuh ke tier "Awal", sehingga tabel "Akurasi per Level Confidence" sebagian besar mengukur READY-vs-bukan, bukan kualitas berjenjang | `ui/screens/SignalLogScreen.kt:1275`, `model/SignalReliabilityModels.kt:70-72`, cap di `engine/scalping/ScalpingMtfEvaluator.kt` (± baris 434-446: `step3Ok -> 59 / step2Ok -> 49 / step1Ok -> 39 / else -> 29`) | **🟡 SEBAGIAN.** Manifestasi **J6** (kalimat klaim hardcoded) ditutup batch 5e — diganti deskripsi bergate sampel + fakta tier kosong (`model/ConfidenceTierNote.kt`). **Yang belum:** tabel tier sendiri dan **cap confidence di `ScalpingMtfEvaluator` tidak diubah sama sekali** (diverifikasi ulang 2026-10-16). Perlu keputusan produk: apakah tabelnya dihapus, atau capnya diubah — keduanya mengubah angka yang sudah tampil |
-| N12 | Tidak ada cooldown per-pair untuk notifikasi kandidat (bandingkan: peak 30 dtk, emergency 60 dtk) — siklus READY→INVALIDATED→READY yang rapuh bisa mengulang notifikasi | `viewmodel/TradingViewModelSync.kt:591-604` + `AlertNotificationHelper.kt` | Edge-trigger menangkal sebagian, tapi state yang flapping (apalagi bila N6 diperbaiki dengan benar) bisa spam. Bandingkan dengan peak (30 dtk) dan emergency (60 dtk) yang sudah berfungsi sejak batch 6f |
 
 ## 4. Sudah ditutup (ringkasan + pointer laporan)
 
@@ -137,6 +135,7 @@ yang pernah dihasilkan engine. Untuk SCALPING, worker juga memakai `formingVolum
 | N8 — parameter mati `onlyWhenBackground` | batch 6f | `docs/LAPORAN-batch6f-n13n14-2026-10-17.md` |
 | N15 — sakelar notifikasi mematikan foreground service | batch 6g | `docs/LAPORAN-batch6g-n15n16-2026-10-17.md` |
 | N16 — `AppPreferences` dibangun berulang di service | batch 6g | `docs/LAPORAN-batch6g-n15n16-2026-10-17.md` |
+| N12 — tidak ada cooldown per-pair untuk notifikasi kandidat | batch 6h | `docs/LAPORAN-batch6h-n12-2026-10-17.md` |
 
 > ✅ **N10 (= J10) kini tuntas penuh** — jalur beli paper manual yang masih membaca SL/TP mentah
 > ditutup batch 6a (`docs/LAPORAN-batch6-j10-2026-10-17.md`).
@@ -174,11 +173,12 @@ yang pernah dihasilkan engine. Untuk SCALPING, worker juga memakai `formingVolum
 | Prioritas | Temuan | Alasan |
 |---|---|---|
 | 1 | **N6 + N17** | Dua produsen satu state machine, dan skornya **berbeda** dari engine. **Butuh keputusan desain** |
-| 2 | **N12** | Beri cooldown per-pair pada notifikasi kandidat |
-| 3 | **N11 (sisa)** | Butuh keputusan produk: ubah cap bertingkat, atau jangan tampilkan tier lintas-mode sama sekali |
+| 2 | **N11 (sisa)** | Butuh keputusan produk: ubah cap bertingkat, atau jangan tampilkan tier lintas-mode sama sekali |
 
-> N13 + N14 + N8 selesai di batch 6f; N15 + N16 selesai di batch 6g. Yang tersisa: N6 + N17
-> (butuh keputusan desain), N12 (cooldown kandidat), dan sisa N11 (butuh keputusan produk).
+> N8, N12, N13, N14 selesai di batch 6f–6h; N15 + N16 di batch 6g. Yang tersisa **dua-duanya
+> butuh keputusan**, bukan lagi perbaikan mekanis: **N6 + N17** (desain: satu produsen atau dua
+> instance `SignalLifecycleManager`) dan **sisa N11** (produk: ubah cap bertingkat atau jangan
+> tampilkan tier lintas-mode).
 
 > **Catatan lintas-berkas:** N10 dan N11 punya manifestasi di area jurnal (J4 = N10, J6 = N11).
 > Berkas temuan jurnal (`temuan_bugs_jurnal_pnl.md`) **sudah dihapus 2026-10-17** karena J1–J10
@@ -208,3 +208,4 @@ Setiap perbaikan **wajib**:
 | 2026-10-16 | **Sinkronisasi dokumen (tanpa perubahan kode):** N1–N5, N7, N10 dipangkas dari badan dokumen dan diringkas di §4; tabel §3 dipertahankan hanya untuk N8, N9, N11, N12 dengan nomor baris terverifikasi ulang. Status diverifikasi ulang ke `patch` @ `547048d` + **review owner** ⇒ status di dokumen ini otoritatif, agen tidak perlu cek kode lagi. Lihat `docs/LAPORAN-sync-dokumen-temuan-2026-10-16.md` |
 | 2026-10-17 | **Batch 6f:** N13 + N14 + N8 ditutup — `sendExecutionResultNotification` (kategori `TRAILING_STOP`), `sendUserPriceAlertNotification` (kategori `PRICE_ALERT`), pengirim peak tunggal lewat `TrailingPeakThrottle`, parameter mati `onlyWhenBackground` dihapus. 13 uji baru; kontrol negatif 3/3/1/1 gagal. Lihat `docs/LAPORAN-batch6f-n13n14-2026-10-17.md` |
 | 2026-10-17 | **Batch 6g:** N15 + N16 ditutup — `updateForegroundServiceState` hanya melihat `hasActive`; guard `isNotificationsEnabled` dihapus dari `startService`/`forceRefresh`; `updatePrice` (tanpa pemanggil) dihapus; service memakai satu `appPrefs`; `updatePrices` menerima bursa dari pemanggil sehingga jalur per-tick bebas `AppPreferences`. 5 uji pindai sumber; kontrol negatif 1/3 gagal. Lihat `docs/LAPORAN-batch6g-n15n16-2026-10-17.md` |
+| 2026-10-17 | **Batch 6h:** N12 ditutup — `CandidateNotifyCooldown` (jendela 5 menit per `EXCHANGE_SYMBOL`) dipasang di `sendCandidateFoundNotification`, sehingga jalur VM dan worker sama-sama terkena. 12 uji baru; kontrol negatif 2/1 gagal. Lihat `docs/LAPORAN-batch6h-n12-2026-10-17.md` |

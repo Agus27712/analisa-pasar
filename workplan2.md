@@ -2987,3 +2987,52 @@ Angka terukur (dari XML): **80 kelas / 639 uji → 81 kelas / 644 uji**, 0 gagal
 ### 48.5 Laporan
 
 `docs/LAPORAN-batch6g-n15n16-2026-10-17.md`
+
+---
+
+## 49. Batch 6h — N12: cooldown per pair untuk notifikasi kandidat (2026-10-17)
+
+### 49.1 Masalah
+
+Notifikasi kandidat dipicu edge `READY`. State bisa flapping `READY → INVALIDATED → READY`, dan
+setiap siklus memenuhi syarat edge ⇒ bel berulang untuk setup yang praktis sama. Peak sudah punya
+jendela 30 dtk, emergency 60 dtk; kandidat belum punya apa pun.
+
+### 49.2 Perbaikan
+
+`util/CandidateNotifyThrottle.kt`:
+
+- `CandidateNotifyThrottle.shouldNotify(last, now, windowMs = 5 menit)` — fungsi murni;
+- `CandidateNotifyCooldown.allow(key, now)` — penjaga berstatus (peta `EXCHANGE_SYMBOL` → waktu).
+
+`sendCandidateFoundNotification` memanggil `allow(...)` sebelum mengirim, sehingga jalur foreground
+(VM) dan latar (worker) sama-sama terkena.
+
+Alasan 5 menit: worker memindai tiap 15 menit (tidak pernah menelan dua siklus), dan sinyal
+scalping M5 ⇒ 5 menit = satu candle penuh.
+
+### 49.3 Uji & kontrol negatif
+
+12 uji baru (644 → 656): `CandidateNotifyThrottleTest` 11 kasus (6 murni + 5 penjaga berstatus,
+termasuk "pencatatan hanya terjadi saat diizinkan"), plus 1 uji pindai sumber bahwa helper benar-
+benar memanggil `candidateCooldown.allow(...)`.
+
+Catatan metodologi: uji "kirim dua kali, hitung notifikasi di shade" **tidak bisa membedakan**
+karena ID yang sama hanya menimpa entri. Uji itu dibuang; yang diuji adalah keputusan `allow(...)`.
+
+| Kontrol | Perubahan | Hasil |
+|---|---|---|
+| A | `allow` selalu `true` | **2 GAGAL** |
+| B | panggilan `allow(...)` dihapus dari helper | **1 GAGAL** |
+
+Angka terukur (dari XML): **81 kelas / 644 uji → 82 kelas / 656 uji**, 0 gagal, 0 error, 1 dilewati.
+
+### 49.4 Batas
+
+- Cooldown hanya di memori proses; restart mengosongkannya (sama seperti peak).
+- Kunci per `EXCHANGE_SYMBOL` — pair sama di dua bursa punya jendela sendiri.
+- N6 + N17 belum disentuh; selama N6 hidup flapping masih mungkin, N12 hanya membatasi akibatnya.
+
+### 49.5 Laporan
+
+`docs/LAPORAN-batch6h-n12-2026-10-17.md`
