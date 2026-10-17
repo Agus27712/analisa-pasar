@@ -43,10 +43,11 @@ entry/exit) belum ada di sana — semua kesimpulan yang ditarik dari `main` jadi
    dan perangkap yang sudah pernah ditemukan. **Ini titik masuk utama.**
 3. **`docs/bugs/`** — 🔴 **sumber kebenaran status temuan audit**, dan **sudah diverifikasi ke kode
    + direview owner pada 2026-10-16** (`patch` @ `547048d`). **Agen tidak perlu cek kode untuk
-   memastikan status temuan** — cukup baca tabel status di tiap berkas. Isinya sekarang **satu
-   berkas**: `temuan_bugs_paper_trade.md` (siklus hidup posisi paper & mesin exit). Dua berkas lain
-   sudah keluar karena seluruh temuannya tertutup: `temuan_bugs_jurnal_pnl.md` **dihapus**
-   (2026-10-17, J1–J10 tuntas) dan `temuan_bugs_notifikasi.md` **dipindahkan** ke
+   memastikan status temuan** — cukup baca tabel status di tiap berkas. Isinya sekarang **dua
+   berkas**: `temuan_bugs_paper_trade.md` (siklus hidup posisi paper & mesin exit) dan
+   `temuan_koneksi_tokocrypto_indodax.md` (jalur koneksi & sumber daftar pair — audit 2026-10-17).
+   Dua berkas lain sudah keluar karena seluruh temuannya tertutup: `temuan_bugs_jurnal_pnl.md`
+   **dihapus** (2026-10-17, J1–J10 tuntas) dan `temuan_bugs_notifikasi.md` **dipindahkan** ke
    `docs/laporan_temuan_bugs_notifikasi.md` (2026-10-17, N1–N17 tuntas). **Jangan membuat ulang
    kedua berkas itu**; temuan baru di area itu ditulis ke berkas temuan baru.
    **Baca folder ini sebelum memperbaiki bug apa pun** di area yang tercakup. Setelah sebuah
@@ -203,6 +204,12 @@ Saat ini berisi (diperbarui 2026-10-17):
   **Batas penting:** seluruh temuan `P*` hanya menyentuh posisi **paper** (`isReal = false`) —
   bukan kerusakan uang riil, tetapi posisi paper adalah dasar seluruh keputusan "apakah scalp
   punya edge".
+- **`temuan_koneksi_tokocrypto_indodax.md`** — audit jalur koneksi & sumber daftar pair
+  (2026-10-17, baca kode + uji endpoint; belum ada perbaikan). **Masih hidup: K1–K15.**
+  Dua yang paling menentukan: **K1** — discovery Tokocrypto tidak mem-parse `data.list` dari
+  endpoint resmi, lalu memakai mirror Binance (3.729 simbol, termasuk `UVXYBUSDT`); **K5** — token
+  WebSocket Indodax sudah ditolak server (`3002 invalid token`), jadi seluruh data Indodax lewat
+  REST. **Jangan menambah pair, stream, atau jalur data baru sebelum K1 dan K5 ditutup.**
 - **~~`temuan_bugs_jurnal_pnl.md`~~ — DIHAPUS 2026-10-17.** Seluruh J1–J10 sudah tertutup:
   batch 3a (J1, J2), batch 4 (J7), batch 5a (J4 + N10), batch 5b (J3), batch 5e (J6 + N11),
   batch 5f (J5), batch 6a (J10 sisa — `PaperArmSignal`), batch 6b (J9 — `TradeSignalConfidence`),

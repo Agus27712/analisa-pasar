@@ -3160,3 +3160,53 @@ atas dijalankan sebelum commit, dan jargon pinjaman di dokumen diganti istilah I
 - Laporan batch lama **tidak dihapus** — isinya bukti uji dan kontrol negatif. Yang berubah: tidak
   ada lagi berkas baru dengan pola itu.
 - `docs/bugs/` sekarang hanya berisi `temuan_bugs_paper_trade.md` (P6 sisa + P9 masih hidup).
+
+---
+
+## 52. Audit jalur koneksi Tokocrypto & Indodax — temuan K1–K15 (2026-10-17)
+
+### 52.1 Pemicu
+
+Owner menemukan pair **`UVXYBUSDT`** yang tidak ada di Tokocrypto, dan melaporkan WebSocket
+Indodax sering putus sehingga jatuh ke REST. Order beli/jual & saldo riil di kedua bursa sudah
+diuji owner dan berfungsi — jadi audit difokuskan ke **sumber daftar pair** dan **sumber data**.
+
+### 52.2 Metode
+
+Baca kode (discovery, service, WebSocket, koordinator, dashboard, watchlist) + **uji endpoint
+langsung** dari sandbox: bentuk respons `common/symbols`, isi `exchangeInfo` mirror, ticker/depth
+`UVXYBUSDT`, dan handshake WebSocket Indodax. Tidak ada perubahan kode.
+
+### 52.3 Temuan pokok
+
+- **K1 (kritis).** `TokocryptoSymbolRepository` membaca `optJSONArray("data")`, padahal endpoint
+  resmi mengembalikan `data: { list: [...] }`. Endpoint resmi (864 simbol) selalu dianggap gagal,
+  lalu dipakai `tokocrypto.site/api/v3/exchangeInfo` — daftar Binance **3.729 simbol**, termasuk
+  `UVXYBUSDT` dengan `status: TRADING` dan filter order valid. Ticker pair itu juga hidup di host
+  tersebut (18,82), sementara API resmi Tokocrypto membalas 404.
+- **K2 (kritis).** Host cadangan adalah cermin Binance (harga/volume BTCUSDT identik dengan
+  `api.binance.com`). Order book scalping karena itu menilai likuiditas Binance, bukan Tokocrypto.
+- **K3–K4 (serius).** Field resmi `type` dibaca sebagai `symbolType` → semua simbol jadi Type 1
+  (17 simbol Type 3 salah rute). `spotTradingEnable` bertipe angka dan `status` tidak ada →
+  gate listing gagal-terbuka.
+- **K5 (serius).** Token WebSocket Indodax ditulis mati dan **ditolak server** (`3002 invalid
+  token`, `reconnect:false`) pada dua percobaan. Seluruh data Indodax berasal dari REST, dengan
+  percobaan reconnect tiap ~0,8 detik.
+- **K6–K7 (serius).** `lastSequence` tidak di-reset saat reconnect; `isStale` memanggil `start()`
+  yang memutus socket, sehingga pair sepi mengalami restart tiap 30 detik.
+- **K8–K14 (sedang).** Backoff tanpa jitter/batas; listener Indodax tanpa penjaga generasi; satu
+  `wsLive` untuk dua bursa; worker Indodax mengunduh seluruh pasar; `fetchTickers` Indodax selalu
+  `/api/summaries`; watchlist menerima simbol tanpa validasi; cabang dashboard melewati filter
+  listing.
+- **K15 (rendah).** `getSymbolType` default 1 untuk simbol tak dikenal.
+
+### 52.4 Batas
+
+- Belum ada perbaikan; seluruh K1–K15 masih hidup.
+- Perilaku host pihak ketiga bisa berubah. Yang dicatat adalah hasil ukur 2026-10-17.
+- Type 3 diuji dengan dua format stream dan tiga jalur REST, hasilnya negatif — masih perlu
+  konfirmasi dokumentasi Tokocrypto sebelum menyimpulkan tidak didukung.
+
+### 52.5 Dokumen
+
+`docs/bugs/temuan_koneksi_tokocrypto_indodax.md`

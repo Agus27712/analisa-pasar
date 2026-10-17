@@ -7,18 +7,21 @@
 > 🔴 **Untuk "apa lagi yang tersisa" → `docs/bugs/`, bukan dokumen ini.** Status temuan audit
 > (notifikasi `N*`, jurnal/P&L `J*`, paper trading `P*`) sudah diverifikasi ke kode dan **direview
 > owner** pada `patch` @ `547048d`, lalu ditutup bertahap sampai batch 6i:
-> **34 tertutup · 1 sebagian · 1 masih hidup**. Ringkasnya:
+> **34 tertutup · 1 sebagian · 2 masih hidup** (P6 sisa, P9), ditambah **audit koneksi baru
+> K1–K15**. Ringkasnya:
 >
 > | Status | Temuan |
 > |---|---|
-> | 🔴 Kritis — **tidak ada yang tersisa** | (P1–P3 dan J1/J2 sudah tertutup) |
-> | 🟠 Serius — masih hidup | P6 (sebagian) · P9 |
-> | 🟡 Sedang/rendah — masih hidup | — |
+> | 🔴 Kritis — masih hidup | **K1, K2** (audit koneksi 2026-10-17) |
+> | 🟠 Serius — masih hidup | P6 (sebagian) · P9 · K3–K7 |
+> | 🟡 Sedang/rendah — masih hidup | K8–K15 |
 > | ✅ Sudah ditutup | P1–P5, P7, P8 · **J1–J10 (seluruhnya — berkas temuan jurnal dihapus 2026-10-17)** · **N1–N17 (seluruhnya — batch 6i, 2026-10-17)** |
 >
 > Rincian + lokasi + prioritas: `docs/laporan_temuan_bugs_notifikasi.md` (sudah **di luar**
 > `docs/bugs/` karena N1–N17 tuntas — berkas itu sekarang berperan sebagai laporannya),
-> `docs/bugs/temuan_bugs_paper_trade.md`. Jejak audit jurnal ada di laporan per batch
+> `docs/bugs/temuan_bugs_paper_trade.md`, dan
+> **`docs/bugs/temuan_koneksi_tokocrypto_indodax.md`**.
+> Jejak audit jurnal ada di laporan per batch
 > (`docs/LAPORAN-batch3-jurnal-*.md` … `docs/LAPORAN-batch6-j*-2026-10-17.md`).
 > Aturan baru sejak 2026-10-17: berkas temuan yang **seluruh isinya** sudah tutup dipindahkan ke
 > `docs/laporan_temuan_bugs_<topik>.md`, dan **tidak ada lagi laporan per batch**.
