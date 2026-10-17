@@ -576,30 +576,38 @@ object AlertNotificationHelper {
         notificationManager.notify(marketKey.toNotificationId(isReal, 500), notification)
     }
 
-    // 6. Generic Price Alert Notification
-    fun sendPriceAlertNotification(
+    // 6. User Price Alert Notification
+    /**
+     * Pengingat harga yang **dibuat pengguna sendiri** (mis. "beri tahu saat BTC menembus 1 M").
+     *
+     * N13 — jangan pakai ini untuk laporan eksekusi jual/trailing. Kategori `PRICE_ALERT` berarti
+     * mematikan sakelar "Trading & Price Alerts" ikut mematikan konfirmasi order berhasil/gagal.
+     * Untuk hasil eksekusi pakai [sendExecutionResultNotification].
+     *
+     * N8 — parameter `onlyWhenBackground` dihapus: nilainya tidak pernah dibaca di dalam fungsi
+     * (param mati), dan satu-satunya pemanggil yang mengisinya sudah tidak ada.
+     */
+    fun sendUserPriceAlertNotification(
         context: Context,
         title: String,
         message: String,
         notificationId: Int = 9999,
         symbol: String = "",
         exchange: String = "TOKOCRYPTO",
-        quote: String? = null,
-        onlyWhenBackground: Boolean = false
+        quote: String? = null
     ) {
         val marketKey = if (symbol.isNotBlank()) MarketKey.resolve(symbol, exchange, quote) else null
-        sendPriceAlertNotification(context, title, message, notificationId, marketKey, onlyWhenBackground)
+        sendUserPriceAlertNotification(context, title, message, notificationId, marketKey)
     }
 
-    fun sendPriceAlertNotification(
+    fun sendUserPriceAlertNotification(
         context: Context,
         title: String,
         message: String,
         notificationId: Int = 9999,
-        marketKey: MarketKey? = null,
-        onlyWhenBackground: Boolean = false
+        marketKey: MarketKey? = null
     ) {
-        if (!canNotify(context, NotificationCategory.PRICE_ALERT)) return
+        if (!canNotify(context, NotificationRouting.USER_PRICE_ALERT)) return
 
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -622,6 +630,67 @@ object AlertNotificationHelper {
             .setContentText(message)
             .setStyle(NotificationCompat.BigTextStyle().bigText(message))
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
+
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.notify(notificationId, builder.build())
+    }
+
+    // 7. Execution Result Notification (jual, trailing, batch sell)
+    /**
+     * N13 — laporan **hasil eksekusi**: order terkirim, order gagal, trailing ternaikkan, jual
+     * dibatalkan, batch sell selesai.
+     *
+     * Kategori `TRAILING_STOP` ("Notifikasi Trailing Stop & Eksekusi"), **bukan** `PRICE_ALERT`.
+     * Konsekuensinya disengaja: pengguna yang mematikan "Trading & Price Alerts" tetap menerima
+     * kabar bahwa order jual uang riilnya gagal — informasi yang tidak boleh hilang.
+     *
+     * Kanalnya juga `CHANNEL_TRAILING_ID` supaya satu peristiwa tidak muncul di dua kanal berbeda.
+     */
+    fun sendExecutionResultNotification(
+        context: Context,
+        title: String,
+        message: String,
+        notificationId: Int = 9998,
+        symbol: String = "",
+        exchange: String = "TOKOCRYPTO",
+        quote: String? = null
+    ) {
+        val marketKey = if (symbol.isNotBlank()) MarketKey.resolve(symbol, exchange, quote) else null
+        sendExecutionResultNotification(context, title, message, notificationId, marketKey)
+    }
+
+    fun sendExecutionResultNotification(
+        context: Context,
+        title: String,
+        message: String,
+        notificationId: Int = 9998,
+        marketKey: MarketKey? = null
+    ) {
+        if (!canNotify(context, NotificationRouting.EXECUTION)) return
+
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            if (marketKey != null) {
+                putExtra(EXTRA_SYMBOL, marketKey.symbol)
+                putExtra(EXTRA_EXCHANGE, marketKey.exchange)
+                putExtra(EXTRA_QUOTE, marketKey.quote)
+            }
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            notificationId,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val builder = NotificationCompat.Builder(context, CHANNEL_TRAILING_ID)
+            .setSmallIcon(agu.analys.R.drawable.ic_stat_trading)
+            .setContentTitle(title)
+            .setContentText(message)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(message))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
 

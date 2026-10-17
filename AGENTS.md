@@ -179,13 +179,12 @@ Saat ini berisi (semua diperbarui 2026-10-16):
 - **`temuan_bugs_notifikasi.md`** — audit jalur notifikasi (4 pengirim: VM-sync,
   CandidateScanWorker, foreground service, VM-alerts) & alur skor keyakinan (produsen → notifikasi
   → jurnal → UI).
-  **Ditutup: N1–N5, N7, N9 (= J9, batch 6b), N10** (batch 1, batch 2, batch 5a).
+  **Ditutup: N1–N5, N7, N8, N9 (= J9, batch 6b), N10, N13, N14** (batch 1, 2, 5a, 6b, 6f).
   **Sebagian: N11** — manifestasi J6 (klaim hardcoded) ditutup batch 5e, tetapi **tabel tier &
   cap confidence `ScalpingMtfEvaluator` sendiri belum diubah** (butuh keputusan produk).
-  **Masih hidup: N6 + N17, N8, N12, N13, N14, N15, N16** (N13–N17 hasil audit lanjutan:
-  kategori notifikasi ≠ sakelar Pengaturan, cooldown peak di-bypass jalur kembar, sakelar master
-  mematikan foreground service, `AppPreferences` dibangun ulang per tick, N6 melarat ke skor SWING
-  worker tanpa penalti anomali).
+  **Masih hidup: N6 + N17, N12, N15, N16** (N15 = sakelar master mematikan foreground service;
+  N16 = `AppPreferences` dibangun ulang per tick; N6 melarat ke skor SWING worker tanpa penalti
+  anomali).
 - **`temuan_bugs_paper_trade.md`** — audit siklus hidup posisi paper & mesin exit.
   **Ditutup: P1, P2, P3, P4** (batch 3b, batch 3c) sehingga **ketiga temuan kritis sudah tertutup**,
   serta **P5** (batch 5d — snapshot FSM kini per posisi, berkunci `PaperAutoTradeRuntime.key`).
@@ -464,6 +463,27 @@ Saat ini berisi (semua diperbarui 2026-10-16):
   `markBarBucket` pada pemanggilan pertama, sehingga pengecualian tidak bocor ke menit berikutnya.
   Jangan menambahkan field runtime terpisah untuk ini — penanda yang bertahan akan menahan
   time-stop lebih lama, bukan lebih pendek.
+
+## Aturan turunan dari audit notifikasi — N13, N14, N8 (batch 6f, 2026-10-17)
+
+- **Kategori notifikasi ditentukan oleh JENIS PERISTIWA, bukan oleh helper yang paling mudah
+  dipanggil.** `PRICE_ALERT` hanya untuk pengingat harga yang diminta pengguna sendiri; laporan
+  "order berhasil/gagal" adalah **hasil eksekusi** (`TRAILING_STOP`). Salah kategori punya dua
+  akibat yang sama-sama merusak kontrol: sakelar trailing tidak mematikan notifikasi trailing, dan
+  mematikan pengingat harga justru membungkam konfirmasi order uang riil. Pemetaannya ada di
+  `util/NotificationRouting.kt`.
+- **Nama helper harus membawa kategorinya.** `sendUserPriceAlertNotification` vs
+  `sendExecutionResultNotification` — nama generik `sendPriceAlertNotification` sengaja **dihapus**
+  supaya pemanggil baru tidak bisa "salah kategori tanpa sadar". Penjaga:
+  `app/src/test/java/agu/analys/util/NotificationSourceTest.kt`.
+- **Satu peristiwa, satu pengirim.** Notifikasi "Trailing Stop Naik" hanya boleh dikirim dari jalur
+  ber-jendela (`TrailingPeakThrottle`, 30 dtk). Fungsi yang tugasnya memperbarui order
+  (`updateSimTrailingOrder` / `updateRealTrailingOrder`) **tidak boleh** mengirim notifikasi:
+  dulu keduanya mengirim tanpa pembatas, sehingga cooldown 30 dtk tidak pernah berlaku dan user
+  mendengar bunyi tiap ~10 detik. Kalau butuh notifikasi baru, tambahkan di jalur ber-jendela.
+- **Parameter yang tidak dibaca adalah utang, bukan opsi.** `onlyWhenBackground` diteruskan ke
+  helper tetapi tidak pernah dipakai — dihapus (N8). Jangan menambah parameter "untuk nanti";
+  implementasikan perilakunya + uji, atau jangan ada.
 
 ## Aturan turunan dari audit paper trading — P7 (batch 6e, 2026-10-17)
 

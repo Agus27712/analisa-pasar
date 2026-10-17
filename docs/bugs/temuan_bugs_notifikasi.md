@@ -12,13 +12,11 @@ memastikannya; cukup baca tabel ini. Nomor baris refers ke `547048d`.
 | Status | Temuan | Ringkas |
 |---|---|---|
 | 🟠 **Hidup** | **N6 + N17** | Dua produsen menulis satu `SignalLifecycleManager`, dan skor worker **tidak pernah** kena penalti anomali makro |
-| 🟠 **Hidup** | **N13** | Kategori notifikasi ≠ sakelar Pengaturan (hasil eksekusi jual & trailing tunduk pada sakelar yang salah) |
-| 🟠 **Hidup** | **N14** | Cooldown 30 detik trailing-peak di-bypass jalur kembar yang mengirim lebih dulu |
 | 🟠 **Hidup** | **N15** | Sakelar master mematikan foreground service (= keep-alive pemantauan posisi) |
 | 🟠 **Hidup** | **N16** | `AppPreferences` dibangun ulang 7× di service, termasuk per tick dashboard |
 | 🟠 **Hidup sebagian** | **N11** | Manifestasi J6 (klaim hardcoded) tertutup batch 5e; **tabel tier & cap confidence belum diubah** |
-| 🟡 **Hidup** | **N8, N12** | Param mati `onlyWhenBackground` · tanpa cooldown kandidat |
-| ✅ Ditutup | N1–N5, N7, N9, N10 | Lihat §4 |
+| 🟡 **Hidup** | **N12** | Tidak ada cooldown per-pair untuk notifikasi kandidat |
+| ✅ Ditutup | N1–N5, N7, N8, N9, N10, N13, N14 | Lihat §4 |
 
 ## 1. Peta jalur (hasil pemetaan)
 
@@ -274,9 +272,8 @@ yang pernah dihasilkan engine. Untuk SCALPING, worker juga memakai `formingVolum
 
 | # | Temuan | Lokasi (verifikasi ulang @ `547048d`) | Catatan |
 |---|---|---|---|
-| N8 | `onlyWhenBackground = true` diteruskan tapi **tidak pernah dibaca** di dalam `sendPriceAlertNotification` — notifikasi "Trailing Stop Naik" tetap muncul saat app di foreground | `util/AlertNotificationHelper.kt:588` & `:600` (param mati), forward `:591`; pemanggil `viewmodel/TradingViewModelAlerts.kt:553` & `:573` | Param dead-code; implementasi fitur atau hapus parameternya. (Nomor baris lama `543-579` sudah usang) |
 | N11 | Tier confidence (≥80 / 60-79 / <60) mencampur mode: semua sinyal scalping **pra-entry** di-cap ≤59 → selalu jatuh ke tier "Awal", sehingga tabel "Akurasi per Level Confidence" sebagian besar mengukur READY-vs-bukan, bukan kualitas berjenjang | `ui/screens/SignalLogScreen.kt:1275`, `model/SignalReliabilityModels.kt:70-72`, cap di `engine/scalping/ScalpingMtfEvaluator.kt` (± baris 434-446: `step3Ok -> 59 / step2Ok -> 49 / step1Ok -> 39 / else -> 29`) | **🟡 SEBAGIAN.** Manifestasi **J6** (kalimat klaim hardcoded) ditutup batch 5e — diganti deskripsi bergate sampel + fakta tier kosong (`model/ConfidenceTierNote.kt`). **Yang belum:** tabel tier sendiri dan **cap confidence di `ScalpingMtfEvaluator` tidak diubah sama sekali** (diverifikasi ulang 2026-10-16). Perlu keputusan produk: apakah tabelnya dihapus, atau capnya diubah — keduanya mengubah angka yang sudah tampil |
-| N12 | Tidak ada cooldown per-pair untuk notifikasi kandidat (bandingkan: peak 30 dtk, emergency 60 dtk) — siklus READY→INVALIDATED→READY yang rapuh bisa mengulang notifikasi | `viewmodel/TradingViewModelSync.kt:591-604` + `AlertNotificationHelper.kt` | Edge-trigger menangkal sebagian, tapi state yang flapping (apalagi bila N6 diperbaiki dengan benar) bisa spam. Bandingkan dengan **N14**: cooldown 30 dtk pun ternyata sudah tidak berlaku di jalur trailing |
+| N12 | Tidak ada cooldown per-pair untuk notifikasi kandidat (bandingkan: peak 30 dtk, emergency 60 dtk) — siklus READY→INVALIDATED→READY yang rapuh bisa mengulang notifikasi | `viewmodel/TradingViewModelSync.kt:591-604` + `AlertNotificationHelper.kt` | Edge-trigger menangkal sebagian, tapi state yang flapping (apalagi bila N6 diperbaiki dengan benar) bisa spam. Bandingkan dengan peak (30 dtk) dan emergency (60 dtk) yang sudah berfungsi sejak batch 6f |
 
 ## 4. Sudah ditutup (ringkasan + pointer laporan)
 
@@ -290,6 +287,9 @@ yang pernah dihasilkan engine. Untuk SCALPING, worker juga memakai `formingVolum
 | N7 — `markTriggered`/`reset` tidak menormalkan simbol | `1a87e3c` | `docs/LAPORAN-batch2-notifikasi-2026-10-16.md` |
 | N10 — atribusi sinyal per simbol di jurnal | `9767c88` | `docs/LAPORAN-batch5-j4n10-2026-10-16.md` |
 | N9 (= J9) — default `?: 75` mengarang skor keyakinan | batch 6b | `docs/LAPORAN-batch6-j9-2026-10-17.md` |
+| N13 — laporan eksekusi jual memakai kategori `PRICE_ALERT` | batch 6f | `docs/LAPORAN-batch6f-n13n14-2026-10-17.md` |
+| N14 — cooldown peak di-bypass jalur kembar | batch 6f | `docs/LAPORAN-batch6f-n13n14-2026-10-17.md` |
+| N8 — parameter mati `onlyWhenBackground` | batch 6f | `docs/LAPORAN-batch6f-n13n14-2026-10-17.md` |
 
 > ✅ **N10 (= J10) kini tuntas penuh** — jalur beli paper manual yang masih membaca SL/TP mentah
 > ditutup batch 6a (`docs/LAPORAN-batch6-j10-2026-10-17.md`).
@@ -304,30 +304,30 @@ yang pernah dihasilkan engine. Untuk SCALPING, worker juga memakai `formingVolum
 - **B5 sudah benar:** confidence di signal-log = nilai saat firing, bukan MAX/SKARANG
   (`database/SignalLogRepository.kt:111`).
 - Gerbang tunggal N4 sudah benar: `AlertNotificationHelper.canNotify(context, category)` dipasang di
-  enam chokepoint, dan `AppPreferences` di-cache. Yang **belum** benar adalah **kategori** yang dipilih
-  tiap call site (lihat **N13**) dan fakta masih ada guard call site di luar gerbang (lihat **N15**).
+  setiap chokepoint, dan `AppPreferences` di-cache. Sejak batch 6f **kategori** juga sudah benar:
+  laporan eksekusi memakai `sendExecutionResultNotification` (kategori `TRAILING_STOP`), dan hanya
+  pengingat harga milik pengguna yang memakai `sendUserPriceAlertNotification` (`PRICE_ALERT`).
+  Yang **belum** benar adalah guard call site di luar gerbang (lihat **N15**).
 - Izin OS dicek di setiap helper.
-- Cooldown **emergency 60 dtk** (`TradingForegroundService.kt:236-250`) berfungsi. ⚠️ **Cooldown peak
-  30 dtk TIDAK berfungsi** — jalur kembar mengirim lebih dulu tanpa cooldown (**N14**); klaim ini
-  dicoret pada 2026-10-16.
+- Cooldown **emergency 60 dtk** (`TradingForegroundService.kt:236-250`) berfungsi.
+- Cooldown **peak 30 dtk** kini berfungsi penuh (batch 6f, N14): satu-satunya pengirim adalah jalur
+  ber-jendela `TrailingPeakThrottle`, dan `updateSimTrailingOrder`/`updateRealTrailingOrder` tidak
+  lagi mengirim notifikasi sendiri. Dijaga `TrailingPeakThrottleTest` +
+  `NotificationSourceTest` (uji "satu pengirim").
 - `util/TradeLogExporter.kt` melabeli jujur "Skor Konfidensi (engine ∩ cap tahap)".
 
 ## 6. Rekomendasi perbaikan (urut nilai/risiko) — hanya yang tersisa
 
 | Prioritas | Temuan | Alasan |
 |---|---|---|
-| 1 | **N13** | Sakelar yang diklik user tidak berlaku; konfirmasi jual riil tunduk pada sakelar yang salah |
-| 2 | **N14** | Bunyi notifikasi tiap ~10 detik saat trailing aktif; cooldown tertulis tidak berlaku |
-| 3 | **N15** | Mematikan notifikasi = kehilangan keep-alive pemantauan posisi di latar |
-| 4 | **N6 + N17** | Dua produsen satu state machine, dan skornya **berbeda** dari engine. **Butuh keputusan desain** |
-| 5 | **N16** | `AppPreferences` dibangun ulang per tick; satu kegagalan bisa menghapus seluruh preferensi user |
-| 6 | **N8** | Param mati — implementasi atau hapus |
-| 8 | **N12** | Beri cooldown per-pair pada notifikasi kandidat |
-| 9 | **N11 (sisa)** | Butuh keputusan produk: ubah cap bertingkat, atau jangan tampilkan tier lintas-mode sama sekali |
+| 1 | **N15** | Mematikan notifikasi = kehilangan keep-alive pemantauan posisi di latar |
+| 2 | **N6 + N17** | Dua produsen satu state machine, dan skornya **berbeda** dari engine. **Butuh keputusan desain** |
+| 3 | **N16** | `AppPreferences` dibangun ulang per tick; satu kegagalan bisa menghapus seluruh preferensi user |
+| 4 | **N12** | Beri cooldown per-pair pada notifikasi kandidat |
+| 5 | **N11 (sisa)** | Butuh keputusan produk: ubah cap bertingkat, atau jangan tampilkan tier lintas-mode sama sekali |
 
-> Saran N13 + N14 sebaiknya dikerjakan **berpasangan**: keduanya soal "satu peristiwa, satu
-> pengiriman" di jalur trailing. N15 + N16 juga berpasangan (keduanya di
-> `TradingForegroundService`).
+> N13 + N14 + N8 sudah dikerjakan berpasangan di batch 6f (satu helper, satu pengirim).
+> Berikutnya **N15 + N16** berpasangan — keduanya di `TradingForegroundService`.
 
 > **Catatan lintas-berkas:** N10 dan N11 punya manifestasi di area jurnal (J4 = N10, J6 = N11).
 > Berkas temuan jurnal (`temuan_bugs_jurnal_pnl.md`) **sudah dihapus 2026-10-17** karena J1–J10
@@ -355,3 +355,4 @@ Setiap perbaikan **wajib**:
 | 2026-10-16 | **Batch 5a:** N10 ditutup di `9767c88`. **Batch 5e:** manifestasi J6 dari N11 ditutup di `b690208`. |
 | 2026-10-17 | **Batch 6b:** N9 (= J9) ditutup — `TradeSignalConfidence.resolve` menggantikan default `?: 75`; 6 uji, kontrol negatif 1/6 gagal. Lihat `docs/LAPORAN-batch6-j9-2026-10-17.md` |
 | 2026-10-16 | **Sinkronisasi dokumen (tanpa perubahan kode):** N1–N5, N7, N10 dipangkas dari badan dokumen dan diringkas di §4; tabel §3 dipertahankan hanya untuk N8, N9, N11, N12 dengan nomor baris terverifikasi ulang. Status diverifikasi ulang ke `patch` @ `547048d` + **review owner** ⇒ status di dokumen ini otoritatif, agen tidak perlu cek kode lagi. Lihat `docs/LAPORAN-sync-dokumen-temuan-2026-10-16.md` |
+| 2026-10-17 | **Batch 6f:** N13 + N14 + N8 ditutup — `sendExecutionResultNotification` (kategori `TRAILING_STOP`), `sendUserPriceAlertNotification` (kategori `PRICE_ALERT`), pengirim peak tunggal lewat `TrailingPeakThrottle`, parameter mati `onlyWhenBackground` dihapus. 13 uji baru; kontrol negatif 3/3/1/1 gagal. Lihat `docs/LAPORAN-batch6f-n13n14-2026-10-17.md` |

@@ -123,7 +123,7 @@ fun TradingViewModel.checkAlertsAndTrailing(
             alertStore.markTriggered(alert.id)
             refreshPriceAlerts()
             agu.analys.util.AppLogManager.trailing("PriceAlert", "🔔 [${marketKey.formattedPair()}] $triggerTitle: $triggerMsg")
-            AlertNotificationHelper.sendPriceAlertNotification(
+            AlertNotificationHelper.sendUserPriceAlertNotification(
                 context = getApplication(),
                 title = triggerTitle,
                 message = triggerMsg,
@@ -220,11 +220,12 @@ fun TradingViewModel.checkTrailingForMode(
                 "🛡️ [${marketKey.formattedPair()}] Peak baru: ${PriceFormatter.formatPrice(updatedPos.peakPrice, quoteAsset = quoteAsset)} (naik dari ${PriceFormatter.formatPrice(oldPeak, quoteAsset = quoteAsset)}). Stop limit dinaikkan ke ${PriceFormatter.formatPrice(newSlPrice, quoteAsset = quoteAsset)} (-${effectivePct}%, Profit Peak: +${String.format(java.util.Locale.US, "%.2f", currentProfitPct)}%)"
             )
 
-            // Notifikasi Trailing Peak Naik: Diberi jeda cerdas (minimal 30 detik antar notifikasi per koin)
+            // N14 — satu peristiwa, satu pengiriman: pembaruan order di atas tidak lagi mengirim
+            // notifikasi sendiri. Hanya jalur ber-jendela 30 detik ini yang berbunyi.
             val now = System.currentTimeMillis()
             val peakKey = "${exchange}_${symbol}_$isReal"
             val lastAlertTime = lastPeakNotificationTimes[peakKey] ?: 0L
-            if (now - lastAlertTime > 30_000L) {
+            if (agu.analys.util.TrailingPeakThrottle.shouldNotify(lastNotifiedAt = lastAlertTime, now = now)) {
                 lastPeakNotificationTimes[peakKey] = now
                 AlertNotificationHelper.sendTrailingPeakUpdateNotification(
                     context = getApplication(),
@@ -352,7 +353,7 @@ fun TradingViewModel.executeAutoSellOrder(
             } else {
                 "Sistem gagal mengeksekusi order [$modeTag]: $msg"
             }
-            AlertNotificationHelper.sendPriceAlertNotification(
+            AlertNotificationHelper.sendExecutionResultNotification(
                 context = getApplication(),
                 title = notifTitle,
                 message = notifMsg,
@@ -401,7 +402,7 @@ fun TradingViewModel.executeAutoSellOrder(
         } else {
             "Gagal (Simulasi): $msg"
         }
-        AlertNotificationHelper.sendPriceAlertNotification(
+        AlertNotificationHelper.sendExecutionResultNotification(
             context = getApplication(),
             title = notifTitle,
             message = notifMsg,
@@ -500,7 +501,7 @@ fun TradingViewModel.deployTrailingOrder(symbol: String, exchange: String = pref
         "Aplikasi sedang memantau [SIMULASI - ${marketKey.exchange}]. Koin akan dijual otomatis di $formattedSl."
     }
 
-    AlertNotificationHelper.sendPriceAlertNotification(
+    AlertNotificationHelper.sendExecutionResultNotification(
         context = getApplication(),
         title = notifTitle,
         message = notifMsg,
@@ -534,6 +535,15 @@ fun TradingViewModel.cancelTrailingOrder(symbol: String, exchange: String = pref
     checkAndStopTrailingServiceIfEmpty()
 }
 
+/**
+ * Perbarui order trailing simulasi. **Tidak mengirim notifikasi.**
+ *
+ * N14 — dulu fungsi ini mengirim "📈 Trailing Stop Naik" sendiri, lalu pemanggilnya
+ * ([checkTrailingForMode]) mengirim lagi lewat `sendTrailingPeakUpdateNotification` yang
+ * ber-cooldown 30 detik. Dua notifikasi untuk satu peristiwa, dan yang tanpa cooldown berbunyi
+ * tiap ~10 detik selama harga naik. Sekarang satu peristiwa = satu pengiriman, dan hanya jalur
+ * ber-cooldown yang mengirim.
+ */
 fun TradingViewModel.updateSimTrailingOrder(
     symbol: String,
     pos: SpotPosition,
@@ -541,37 +551,18 @@ fun TradingViewModel.updateSimTrailingOrder(
     quantityToSell: Double,
     exchange: String = prefs.marketDataSource.name
 ) {
-    val marketKey = MarketKey.resolve(symbol, exchange)
-    val quoteAsset = marketKey.quote
     positionCoordinator.setTrailingOrderIdAndUpdateTime(symbol, "sim-client-trailing", System.currentTimeMillis(), isReal = false)
-    AlertNotificationHelper.sendPriceAlertNotification(
-        context = getApplication(),
-        title = "📈 [SIMULASI] Trailing Stop Naik • ${marketKey.formattedPair()}",
-        message = "Batas aman penjualan otomatis naik ke ${PriceFormatter.formatPrice(slPrice, showSymbol = true, quoteAsset = quoteAsset)} (Mengikuti kenaikan harga).",
-        notificationId = marketKey.toNotificationId(false, 1000),
-        marketKey = marketKey,
-        onlyWhenBackground = true
-    )
 }
 
+/** Lihat [updateSimTrailingOrder] — N14: pembaruan order tidak mengirim notifikasi. */
 fun TradingViewModel.updateRealTrailingOrder(
     symbol: String,
     pos: SpotPosition,
     newSlPrice: Double,
     exchange: String = prefs.marketDataSource.name
 ) {
-    val marketKey = MarketKey.resolve(symbol, exchange)
-    val quoteAsset = marketKey.quote
     // Pure Client-Side update for REAL mode
     positionCoordinator.setTrailingOrderIdAndUpdateTime(symbol, "real-client-trailing", System.currentTimeMillis(), isReal = true)
-    AlertNotificationHelper.sendPriceAlertNotification(
-        context = getApplication(),
-        title = "📈 [REAL] Trailing Stop Naik • ${marketKey.formattedPair()}",
-        message = "Batas aman penjualan otomatis naik ke ${PriceFormatter.formatPrice(newSlPrice, showSymbol = true, quoteAsset = quoteAsset)}.",
-        notificationId = marketKey.toNotificationId(true, 1000),
-        marketKey = marketKey,
-        onlyWhenBackground = true
-    )
 }
 
 fun TradingViewModel.executeTrailingSellLimitOrder(
@@ -605,7 +596,7 @@ fun TradingViewModel.executeTrailingSellLimitOrder(
                 } else {
                     "Sistem gagal mengeksekusi order [REAL - ${marketKey.exchange}]: $msg"
                 }
-                AlertNotificationHelper.sendPriceAlertNotification(
+                AlertNotificationHelper.sendExecutionResultNotification(
                     context = getApplication(),
                     title = notifTitle,
                     message = notifMsg,
@@ -617,7 +608,7 @@ fun TradingViewModel.executeTrailingSellLimitOrder(
     } else {
         // Wallet simulasi dipegang per bursa dan coordinator hanya melayani bursa aktif.
         if (!exchange.equals(prefs.marketDataSource.name, ignoreCase = true)) {
-            AlertNotificationHelper.sendPriceAlertNotification(
+            AlertNotificationHelper.sendExecutionResultNotification(
                 context = getApplication(),
                 title = "⚠️ [SIMULASI] Jual dibatalkan • ${marketKey.formattedPair()}",
                 message = "Dompet simulasi ${marketKey.displayExchange} sedang tidak aktif. " +
@@ -661,7 +652,7 @@ fun TradingViewModel.executeTrailingSellLimitOrder(
         } else {
             "Gagal (Simulasi): $msg"
         }
-        AlertNotificationHelper.sendPriceAlertNotification(
+        AlertNotificationHelper.sendExecutionResultNotification(
             context = getApplication(),
             title = notifTitle,
             message = notifMsg,

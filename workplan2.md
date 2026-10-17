@@ -2877,3 +2877,65 @@ di `docs/bugs/temuan_bugs_notifikasi.md`. Laporan historis dan seksi `workplan2.
 
 Tidak ada perubahan kode; suite terakhir tetap 78 kelas / 626 uji / 0 gagal / 1 dilewati.
 Laporan: `docs/LAPORAN-hapus-temuan-jurnal-2026-10-17.md`.
+
+---
+
+## 47. Batch 6f — N13 + N14 + N8: satu peristiwa, satu pengirim, satu kategori (2026-10-17)
+
+### 47.1 Masalah (satu akar, tiga gejala)
+
+- **N13** — laporan "order jual berhasil/gagal" memakai `sendPriceAlertNotification` (kategori
+  `PRICE_ALERT`). Akibat dua arah: mematikan "Trading & Price Alerts" membungkam konfirmasi order
+  uang riil; mematikan "Trailing Stop & Eksekusi" tidak mematikan notifikasi trailing.
+- **N14** — "Trailing Stop Naik" dikirim dua kali: `updateSimTrailingOrder`/`updateRealTrailingOrder`
+  mengirim tanpa pembatas, lalu jalur peak mengirim lagi dengan jendela 30 dtk. Cooldown tertulis
+  tidak pernah mengatur apa pun; user mendengar bunyi tiap ~10 detik.
+- **N8** — `onlyWhenBackground` diteruskan ke helper tetapi tidak pernah dibaca.
+
+### 47.2 Perbaikan
+
+`util/NotificationRouting.kt` (baru) memetakan jenis peristiwa → kategori. Helper lama **dihapus
+namanya** dan diganti dua helper yang membawa kategorinya:
+
+```kotlin
+sendUserPriceAlertNotification(...)   // PRICE_ALERT — pengingat harga buatan pengguna
+sendExecutionResultNotification(...)  // TRAILING_STOP — hasil eksekusi jual/trailing/batch
+```
+
+Nama generik sengaja tidak dipertahankan: dengan nama lama hilang, compiler memaksa tiap call site
+memilih makna, dan pemanggil baru tidak bisa salah kategori tanpa sadar.
+
+8 call site dipindah (6 di `TradingViewModelAlerts`, 2 di `BatchSellCoordinator`); satu tetap
+`PRICE_ALERT` (alert harga pengguna, `TradingViewModelAlerts.kt:126`).
+
+N14: `updateSimTrailingOrder`/`updateRealTrailingOrder` kini **hanya memperbarui order**. Pembatas
+diangkat jadi `util/TrailingPeakThrottle.kt` (jendela 30.000 ms, batas strict `>` seperti perilaku
+lama). N8: parameter dihapus dari kedua overload.
+
+### 47.3 Uji & kontrol negatif
+
+13 uji baru (626 → 639): `TrailingPeakThrottleTest` (6), `NotificationSourceTest` (4, pindai sumber
+mengikuti pola `NotificationFeeSourceTest`), `NotificationGateTest` (+3).
+
+| Kontrol | Perubahan | Hasil |
+|---|---|---|
+| A | `EXECUTION` → `PRICE_ALERT` | **3 GAGAL** |
+| B | pengiriman dikembalikan di `updateSimTrailingOrder` | **1 GAGAL** |
+| C | `shouldNotify` memakai `>=` | **1 GAGAL** |
+| D | `onlyWhenBackground` ditambahkan lagi | **1 GAGAL** |
+
+Angka terukur (dari XML): **78 kelas / 626 uji → 80 kelas / 639 uji**, 0 gagal, 0 error, 1 dilewati.
+
+### 47.4 Batas
+
+- N15 dan N16 (keduanya di `TradingForegroundService`) **belum** disentuh.
+- Kanal laporan eksekusi ikut pindah ke `CHANNEL_TRAILING_ID` — disengaja: satu peristiwa tidak
+  boleh muncul di dua kanal, dan konfirmasi order tidak boleh hilang.
+- `setOnlyAlertOnce(true)` tidak ditambahkan; dengan pengirim tunggal + jendela 30 dtk, bunyi
+  maksimal sekali per 30 detik. Kalau terlalu sering, ubah `WINDOW_MS` (satu tempat, teruji).
+- Kategori dipilih di call site sehingga tidak bisa diuji perilakunya tanpa Android; penjaganya
+  uji pindai sumber + uji gerbang.
+
+### 47.5 Laporan
+
+`docs/LAPORAN-batch6f-n13n14-2026-10-17.md`
