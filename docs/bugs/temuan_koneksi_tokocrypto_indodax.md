@@ -1,6 +1,8 @@
 # Temuan Audit — Jalur Koneksi Tokocrypto & Indodax
 
-**Audit:** 2026-10-17 · **Branch:** `patch` @ `9ba3cf9` · **Sifat:** baca kode + uji endpoint langsung (belum ada perubahan kode)
+**Audit:** 2026-10-17 · **Branch:** `patch` · **Sifat:** baca kode + uji endpoint langsung
+**Status:** K5 dan K6 sudah diperbaiki (token utuh, kanal `market:summary-24h`, parser baru);
+K1–K4 dan K7–K15 masih terbuka.
 **Pemicu:** pair **`UVXYBUSDT`** muncul di aplikasi padahal **tidak ada di Tokocrypto**; WebSocket Indodax
 sering terputus sehingga semua data jatuh ke REST.
 **Catatan owner:** order beli/jual dan saldo riil di **Indodax** dan **Tokocrypto** sudah diuji dan
@@ -10,9 +12,10 @@ sering terputus sehingga semua data jatuh ke REST.
 | Status | Temuan | Jumlah |
 |---|---|---|
 | 🔴 Kritis | K1, K2 | 2 |
-| 🟠 Serius | K3, K4, K5, K6, K7 | 5 |
+| 🟠 Serius | K3, K4, K7 | 3 |
 | 🟡 Sedang | K8–K14 | 7 |
 | 🟢 Rendah | K15 | 1 |
+| ✅ Sudah diperbaiki | K5, K6 | 2 |
 | ✅ Sudah benar | order fail-closed, saldo, normalisasi pair, retry REST | — |
 
 ---
@@ -30,9 +33,12 @@ Ada dua akar yang berdiri sendiri:
    berstatus `TRADING` di sana, punya filter order yang valid, dan punya harga ticker. Aplikasi
    memperlakukannya sebagai pair Tokocrypto yang sah; saat order dikirim ke Tokocrypto, bursa
    menolaknya.
-2. **WebSocket Indodax tidak pernah hidup.** Token JWT ditulis mati di kode dan **sudah ditolak
-   server** (`3002 invalid token`, `reconnect:false`). Setiap percobaan gagal, lalu diulang tanpa
-   henti; seluruh harga Indodax akhirnya berasal dari REST.
+2. **WebSocket Indodax tidak pernah hidup karena tiga cacat berlapis.** Token di kode
+   **terpotong satu karakter** (104, seharusnya 105), sehingga server menolak dengan
+   `3002 invalid token` — token aslinya masih berlaku sampai 2031. Setelah token dibetulkan,
+   kanal `chart:tick-<pair>` ternyata hanya di-ack dan tidak pernah menerbitkan data; kanal yang
+   benar `market:summary-24h`. Parser lama juga mengharapkan bentuk baris yang berbeda dari yang
+   dikirim server. Seluruh harga Indodax karena itu selalu jatuh ke REST.
 
 Keduanya menjelaskan gejala yang dilaporkan: pair hantu muncul dengan harga yang terlihat wajar,
 dan Indodax terasa "selalu putus".
@@ -180,49 +186,60 @@ begitu K1 diperbaiki, gate ini akan terbuka untuk simbol yang sedang suspend.
 **Perbaikan:** terima `1`/`0`, `"1"`/`"0"`, `true`/`false`, dan perlakukan field yang tidak dikenal
 sebagai **tidak aktif** (fail-closed), bukan aktif.
 
-### K5 — Token WebSocket Indodax hardcoded sudah ditolak server
+### K5 — WebSocket Indodax mati karena token terpotong, kanal salah, dan parser salah bentuk
 
-**Berkas:** `service/IndodaxMarketWebSocket.kt:177-181`
+**Berkas:** `service/IndodaxMarketWebSocket.kt:177-181`, `:92-103`, `:105-129`
 
-```kotlin
-private const val STATIC_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE5NDY2MTg0MTV9..."
-```
+Ada tiga cacat yang harus dibetulkan bersamaan; memperbaiki satu saja tidak membuat tick mengalir.
 
-Diuji berulang pada 2026-10-17: handshake penuh seperti aplikasi (token → subscribe → method 7)
-maupun hanya pesan token. Hasilnya sama:
+**K5a — token terpotong satu karakter.** Konstanta di kode berakhir `…NVdsske` (104 karakter),
+sedangkan token yang dikirim pengguna berakhir `…NVdsskeo` (105 karakter). Tanda tangan HS256
+base64url selalu 43 karakter; versi di kode hanya 42. Payload `{"exp":1946618415}` berarti
+**berlaku sampai 2031-09-08**, jadi ini bukan token kedaluwarsa.
+
+Diuji 2026-10-17 pada `wss://ws3.indodax.com/ws/`:
 
 ```text
-received 3002 (registered) {"reason":"invalid token","reconnect":false}
+token 104 karakter (kode)  → 3002 {"reason":"invalid token","reconnect":false}
+token 105 karakter (utuh)  → {"id":1,"result":{"client":"…","version":"2.8.7","expires":true,"ttl":154367516}}
 ```
 
-Server menutup koneksi **sebelum** langganan aktif, dan secara eksplisit mengirim
-`reconnect:false`. Artinya:
+**K5b — kanal tidak pernah menerbitkan data.** Dengan token utuh, `method:1` untuk
+`chart:tick-btcusdt` dijawab `{"recoverable":true,"epoch":"1733887641","offset":104011}`, lalu
+**diam**. Kanal yang benar adalah `market:summary-24h` (yang dipakai situs Indodax sendiri);
+kanal ini mengalirkan semua pair, terukur ±1 pesan/detik (±3 KB per 20 detik) — ringan untuk
+baterai. Varian per-pair (`market:summary-24h-btcusdt`, `market:ticker-btcusdt`,
+`market:price-btcusdt`) semuanya diam. Yang tersedia per-pair hanya
+`market:order-book-<pair>` (bisa dipakai nanti untuk depth, di luar perbaikan ini).
 
-- Tidak ada satu pun tick realtime dari Indodax. Semua harga berasal dari REST.
-- Aplikasi tetap menyambung ulang (lihat K8), kira-kira sekali per detik, selamanya.
-- Log `⚠️ WebSocket terputus … Beralih ke REST fallback` muncul terus, sesuai gejala yang
-  dilaporkan.
+**K5c — bentuk baris berbeda.** Server mengirim:
 
-**Perbaikan:** token harus diperoleh/diperbarui secara dinamis, atau WebSocket Indodax dilepas dan
-REST diakui sebagai satu-satunya jalur (dengan interval yang disesuaikan). Menyimpan token mati di
-kode tidak bisa dipertahankan karena token ini jelas pernah berlaku dan sekarang tidak.
+```json
+{"result":{"channel":"market:summary-24h","data":{"data":[
+  ["btcidr",1792251000,1459280000,1454489000,1470242000,1462856000,"10482997980","7.17230292"]
+],"offset":147527011}}}
+```
 
-### K6 — `lastSequence` tidak di-reset saat menyambung ulang (Indodax)
+Urutannya `[pair, epochDetik, last, low, high, open, vol_idr, vol_koin]` — bukan
+`[epoch, seq, harga, volume]` seperti yang dibaca parser lama. `vol_idr` dipakai untuk
+`volume24h` (sama dengan REST), `vol_koin` kumulatif dipakai untuk delta volume candle.
+
+**Perbaikan (sudah diterapkan):**
+
+- `service/IndodaxSummaryFeed.kt` — parser murni + validasi bentuk token + konstanta kanal.
+- `IndodaxMarketWebSocket` memakai token utuh, kanal `market:summary-24h`, menyaring satu pair,
+  menghitung delta volume kumulatif, dan menolak menyambung bila token tidak utuh.
+- `lastSequence` dihapus (tidak ada nomor urut pada kanal ringkasan), sehingga **K6 ikut tutup**.
+- Uji: `IndodaxSummaryFeedTest` (9 kasus, termasuk kontrol negatif token terpotong, kanal lama,
+  dan baris 4 kolom).
+
+### K6 — `lastSequence` tidak di-reset saat menyambung ulang (Indodax) — ✅ tutup bersama K5
 
 **Berkas:** `service/IndodaxMarketWebSocket.kt:40`, `:123-124`, `:82-90`
 
-```kotlin
-if (sequence >= 0L && sequence <= lastSequence) continue
-```
-
-`lastSequence` hanya di-reset di `stop()`. Jalur `onFailure → reconnect() → connect()` **tidak**
-melewati `stop()`. Kalau nomor urut dari server dimulai ulang per sesi (perilaku umum feed
-chart), semua tick setelah reconnect akan dibuang sampai nomornya melampaui nilai lama — socket
-terlihat hidup, harga tidak bergerak, lalu `isStale` memicu restart.
-
-**Perbaikan:** reset `lastSequence = -1` di `onOpen` (sesi baru = nomor urut baru), dan tambahkan
-uji unit untuk kebijakan itu. Kalau ternyata nomor urut server global, tambahkan komentar eksplisit
-di kode supaya tidak "diperbaiki" lagi tanpa bukti.
+`lastSequence` sudah **dihapus** bersama perbaikan K5: kanal `market:summary-24h` tidak membawa
+nomor urut per baris, jadi tidak ada lagi state yang bisa basi setelah reconnect. Deduplikasi kini
+memakai pasangan `(timestamp, harga)` yang terakhir diterima.
 
 ### K7 — `isStale` memutus socket, bukan menyambung ulang dengan tenang
 
@@ -236,7 +253,7 @@ if (indodaxWebSocket.isStale(30_000L)) {
 
 `start()` menutup socket lama. Untuk pair yang sepi (tidak ada trade 30 detik), ini berarti
 memutus koneksi yang sebenarnya sehat, lalu menyambung lagi — berulang tiap 30 detik. Setiap
-restart juga mengosongkan `candle` dan `lastSequence`, sehingga histori menit berjalan hilang.
+restart juga mengosongkan `candle`, sehingga histori menit berjalan hilang.
 
 **Perbaikan:** pisahkan `reconnectNow()` dari `start(symbol)`, dan pakai ambang stale yang
 memperhitungkan ping/pong (bukan hanya frame data). Pair sepi bukan alasan memutus koneksi.

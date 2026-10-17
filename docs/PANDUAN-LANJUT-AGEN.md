@@ -6,16 +6,16 @@
 >
 > 🔴 **Untuk "apa lagi yang tersisa" → `docs/bugs/`, bukan dokumen ini.** Status temuan audit
 > (notifikasi `N*`, jurnal/P&L `J*`, paper trading `P*`) sudah diverifikasi ke kode dan **direview
-> owner** pada `patch` @ `547048d`, lalu ditutup bertahap sampai batch 6i:
+> owner** pada `patch` @ `547048d`, lalu ditutup bertahap sampai batch 6j:
 > **34 tertutup · 1 sebagian · 2 masih hidup** (P6 sisa, P9), ditambah **audit koneksi baru
 > K1–K15**. Ringkasnya:
 >
 > | Status | Temuan |
 > |---|---|
 > | 🔴 Kritis — masih hidup | **K1, K2** (audit koneksi 2026-10-17) |
-> | 🟠 Serius — masih hidup | P6 (sebagian) · P9 · K3–K7 |
+> | 🟠 Serius — masih hidup | P6 (sebagian) · P9 · K3, K4, K7 |
 > | 🟡 Sedang/rendah — masih hidup | K8–K15 |
-> | ✅ Sudah ditutup | P1–P5, P7, P8 · **J1–J10 (seluruhnya — berkas temuan jurnal dihapus 2026-10-17)** · **N1–N17 (seluruhnya — batch 6i, 2026-10-17)** |
+> | ✅ Sudah ditutup | P1–P5, P7, P8 · **J1–J10 (seluruhnya — berkas temuan jurnal dihapus 2026-10-17)** · **N1–N17 (seluruhnya — batch 6i, 2026-10-17)** · **K5, K6 (batch 6j, 2026-10-17)** |
 >
 > Rincian + lokasi + prioritas: `docs/laporan_temuan_bugs_notifikasi.md` (sudah **di luar**
 > `docs/bugs/` karena N1–N17 tuntas — berkas itu sekarang berperan sebagai laporannya),
@@ -37,7 +37,7 @@
 | HEAD `patch` | Ukur: `git rev-parse --short origin/patch` — berubah **tiap commit**, jangan dihardcode |
 | HEAD `main` | = `patch` + commit merge di atasnya; ukur `git rev-parse --short origin/main` |
 | Titik masuk kode | package `agu.analys`, modul tunggal `:app` |
-| Unit test | **657 uji · 656 lulus · 0 gagal · 1 dilewati** (85 kelas) — diukur 2026-10-17 |
+| Unit test | **666 uji · 665 lulus · 0 gagal · 1 dilewati** (86 kelas) — diukur 2026-10-17 |
 | APK debug | 26.821.815 byte (26,8 MB desimal / 25,6 MiB) |
 | Kesiapan uang riil | **BELUM** — lihat §5 |
 

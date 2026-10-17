@@ -3184,14 +3184,17 @@ langsung** dari sandbox: bentuk respons `common/symbols`, isi `exchangeInfo` mir
   lalu dipakai `tokocrypto.site/api/v3/exchangeInfo` — daftar Binance **3.729 simbol**, termasuk
   `UVXYBUSDT` dengan `status: TRADING` dan filter order valid. Ticker pair itu juga hidup di host
   tersebut (18,82), sementara API resmi Tokocrypto membalas 404.
-- **K2 (kritis).** Host cadangan adalah cermin Binance (harga/volume BTCUSDT identik dengan
-  `api.binance.com`). Order book scalping karena itu menilai likuiditas Binance, bukan Tokocrypto.
+- **K2 (kritis).** Host cadangan adalah **gateway kompatibel Binance**: `exchangeInfo`-nya berisi
+  3.729 simbol universe Binance, tetapi depth `BTC_USDT` identik dengan Tokocrypto resmi — jadi
+  host itu bukan cermin buta. Cacatnya: daftar pair diambil dari `exchangeInfo` gateway, bukan dari
+  `common/symbols` resmi, sehingga simbol yang tidak diperdagangkan Tokocrypto ikut lolos.
 - **K3–K4 (serius).** Field resmi `type` dibaca sebagai `symbolType` → semua simbol jadi Type 1
   (17 simbol Type 3 salah rute). `spotTradingEnable` bertipe angka dan `status` tidak ada →
   gate listing gagal-terbuka.
-- **K5 (serius).** Token WebSocket Indodax ditulis mati dan **ditolak server** (`3002 invalid
-  token`, `reconnect:false`) pada dua percobaan. Seluruh data Indodax berasal dari REST, dengan
-  percobaan reconnect tiap ~0,8 detik.
+- **K5 (serius).** Awalnya dicatat "token ditolak server". **Koreksi §53:** token di kode
+  terpotong satu karakter; token aslinya berlaku sampai 2031. Setelah dibetulkan, kanal
+  `chart:tick-<pair>` tetap tidak menerbitkan data — kanal yang benar `market:summary-24h` — dan
+  bentuk barisnya berbeda dari parser lama.
 - **K6–K7 (serius).** `lastSequence` tidak di-reset saat reconnect; `isStale` memanggil `start()`
   yang memutus socket, sehingga pair sepi mengalami restart tiap 30 detik.
 - **K8–K14 (sedang).** Backoff tanpa jitter/batas; listener Indodax tanpa penjaga generasi; satu
@@ -3210,3 +3213,70 @@ langsung** dari sandbox: bentuk respons `common/symbols`, isi `exchangeInfo` mir
 ### 52.5 Dokumen
 
 `docs/bugs/temuan_koneksi_tokocrypto_indodax.md`
+
+## 53. Batch 6j — K5: WebSocket Indodax hidup lagi (2026-10-17)
+
+### 53.1 Pemicu dan koreksi temuan
+
+Owner menegaskan token Indodax **masih valid** dan melampirkan token utuh. Audit §52 mencatat
+"token ditolak server" — itu **gejala**, bukan akar masalah. Setelah dibandingkan karakter per
+karakter:
+
+| | Panjang | Akhiran tanda tangan |
+|---|---|---|
+| Token di kode | 104 | `…NVdsske` |
+| Token owner | 105 | `…NVdsskeo` |
+
+Tanda tangan HS256 base64url selalu 43 karakter; versi di kode hanya 42. Payload
+`{"exp":1946618415}` = **2031-09-08**, jadi token tidak kedaluwarsa — hanya terpotong.
+
+Bukti handshake langsung ke `wss://ws3.indodax.com/ws/`:
+
+```text
+token 104 karakter  → 3002 {"reason":"invalid token","reconnect":false}
+token 105 karakter  → {"id":1,"result":{"client":"…","version":"2.8.7","expires":true,"ttl":154367516}}
+```
+
+### 53.2 Tiga cacat berlapis
+
+1. **Token terpotong** (di atas).
+2. **Kanal salah.** `chart:tick-<pair>` hanya dijawab `{"recoverable":true,…}` lalu diam.
+   Kanal yang benar `market:summary-24h`; terukur ±1 pesan/detik (±3 KB per 20 detik) karena
+   mengalirkan semua pair. Varian per-pair (`market:summary-24h-<pair>`, `market:ticker-<pair>`,
+   `market:price-<pair>`) semuanya diam. Yang tersedia per-pair hanya `market:order-book-<pair>`.
+3. **Bentuk baris salah.** Server mengirim
+   `[pair, epochDetik, last, low, high, open, vol_idr, vol_koin]`; parser lama membaca
+   `[epoch, seq, harga, volume]` dan hanya menerima 4 kolom.
+
+### 53.3 Perubahan
+
+- **Baru** `service/IndodaxSummaryFeed.kt` — parser murni (tanpa Android `Context`), konstanta
+  kanal, dan `isValidTokenShape` (3 segmen, tanda tangan tepat 43 karakter).
+- `IndodaxMarketWebSocket` — token utuh; kanal `market:summary-24h`; saring satu pair;
+  `volume24h` dari `vol_idr` (sama dengan REST); delta `vol_koin` untuk volume candle;
+  deduplikasi `(timestamp, harga)`; tolak menyambung bila token tidak utuh.
+- `lastSequence` dihapus → **K6 tutup** (tidak ada nomor urut pada kanal ringkasan).
+
+### 53.4 Uji
+
+`IndodaxSummaryFeedTest` — 9 kasus: token utuh & berlaku, token terpotong ditolak, baris nyata
+sesuai urutan kolom, delta volume kumulatif, volume turun tidak negatif, pair lain diabaikan,
+kanal lama ditolak (+ penjaga sumber), baris 4 kolom ditolak, pesan rusak tidak melempar.
+
+Kontrol negatif (semua dijalankan, lalu berkas dikembalikan):
+
+| Kerusakan yang disuntikkan | Uji yang GAGAL |
+|---|---|
+| token dipotong 1 karakter | 2 (token utuh, token terpotong) |
+| kanal kembali ke `chart:tick-` | 1 (kanal lama) |
+| parser kembali ke 4 kolom | 3 (baris nyata, delta, volume turun) |
+
+### 53.5 Angka terukur
+
+Angka diambil dari `app/build/test-results/testDebugUnitTest/*.xml` setelah seluruh suite:
+**86 kelas / 666 uji**, 0 gagal, 0 error, 1 dilewati (sebelumnya 85/657).
+
+### 53.6 Dokumen
+
+`docs/bugs/temuan_koneksi_tokocrypto_indodax.md` — K5 ditulis ulang (K5a/K5b/K5c), K6 ditandai
+tutup.
