@@ -1,7 +1,7 @@
 # Temuan Audit — Jalur Koneksi Tokocrypto & Indodax
 
 **Audit:** 2026-10-17 · **Branch:** `patch` · **Sifat:** baca kode + uji endpoint langsung
-**Status:** K1–K7 sudah diperbaiki; K8–K15 masih terbuka.
+**Status:** K1–K7, K13, K14 sudah diperbaiki; K8–K12, K15 masih terbuka.
 **Pemicu:** pair **`UVXYBUSDT`** muncul di aplikasi padahal **tidak ada di Tokocrypto**; WebSocket Indodax
 sering terputus sehingga semua data jatuh ke REST.
 **Catatan owner:** order beli/jual dan saldo riil di **Indodax** dan **Tokocrypto** sudah diuji dan
@@ -12,9 +12,9 @@ sering terputus sehingga semua data jatuh ke REST.
 |---|---|---|
 | 🔴 Kritis | — | 0 |
 | 🟠 Serius | — | 0 |
-| 🟡 Sedang | K8–K14 | 7 |
+| 🟡 Sedang | K8–K12 | 5 |
 | 🟢 Rendah | K15 | 1 |
-| ✅ Sudah diperbaiki | K1–K7 | 7 |
+| ✅ Sudah diperbaiki | K1–K7, K13, K14 | 9 |
 | ✅ Sudah benar | order fail-closed, saldo, normalisasi pair, retry REST | — |
 
 ---
@@ -370,7 +370,7 @@ Meski dipanggil untuk satu pair, fungsi ini mengambil `https://indodax.com/api/s
 **Perbaikan:** untuk satu/beberapa pair, pakai `/api/ticker/<pair>`; simpan `/api/summaries`
 hanya untuk kebutuhan dashboard penuh.
 
-### K13 — Simbol bisa masuk watchlist tanpa dicek keberadaannya
+### K13 — Simbol bisa masuk watchlist tanpa dicek keberadaannya — ✅ diperbaiki (batch 6m)
 
 **Berkas:** `ui/components/settings/WatchlistManagerSettings.kt:205-218`, `util/AppPreferences.kt:513-526`, `model/TradingViewModels.kt:337-395`
 
@@ -386,7 +386,21 @@ Jadi `UVXYBUSDT` (atau string apa pun) bisa masuk watchlist, tampil sebagai kart
 `IndodaxSymbolRepository`, dengan pesan yang jelas. `fromCustomSymbol` tetap boleh untuk
 menampilkan data historis, tetapi **bukan** untuk membuat pair baru yang bisa ditradingkan.
 
-### K14 — Cabang dashboard strategi melewati filter listing
+**Diterapkan:**
+
+- **Baru** `util/WatchlistEntryGate.kt` — gate murni `checkAdd(rawSymbol, source, isKnownSymbol)`:
+  format `[A-Z0-9]` panjang wajar, kuotasi sah untuk bursa aktif, dan keberadaan di repository
+  bursa. Penolakan fail-closed dengan pesan Indonesia; menghapus simbol tidak digate.
+- `hasSymbol` ditambahkan ke `TokocryptoSymbolRepository` dan `IndodaxSymbolRepository`
+  (repository Indodax memakai batas `POPULAR_INDODAX_PAIRS` saat discovery belum dimuat).
+- `WatchlistViewModel` — `addToWatchlist`, `toggleWatchlist` (arah menambah), dan
+  `setCustomWatchlist` melewati gate.
+- `WatchlistManagerSettings` — fallback fail-open `sanitizeSymbolForExchange(...) ?: typed`
+  **dihapus**; tombol Tambah, pesan galat, dan chip populer memakai putusan gate yang sama.
+- Uji: `WatchlistEntryGateTest` (15 kasus, termasuk penolakan `UVXYBUSDT` dan penjaga
+  perkabelan ViewModel/UI/dashboard).
+
+### K14 — Cabang dashboard strategi melewati filter listing — ✅ diperbaiki (batch 6m)
 
 **Berkas:** `ui/screens/DashboardScreen.kt:142-161`
 
@@ -397,6 +411,20 @@ tampil.
 
 **Perbaikan:** terapkan `pairListed` pada ketiga daftar itu, atau saring `uniqueTicks` sekali di
 awal.
+
+**Diterapkan:**
+
+- **Baru** `DashboardRanking.symbolListed(source, symbol)` — satu gate listing untuk kedua
+  bursa: Tokocrypto menuntut status TRADING di discovery resmi; Indodax menuntut pair dikenal
+  di `IndodaxSymbolRepository` (sebelumnya gate Tokocrypto-only, sehingga `pairListed` selalu
+  `true` untuk Indodax).
+- `DashboardScreen` — `uniqueTicks` disaring **sekali di awal** dengan `symbolListed`, sehingga
+  `highVol`, `swingCandidates`, dan `intradayCandidates` semuanya melewati gate yang sama.
+- Quick filter WATCHLIST (yang membangun ulang `watchListPairs` langsung dari watchlist +
+  favorit) dan fallback statis `allVolumeSortedPairs` kini memakai gate yang sama, bukan
+  salinan syarat per cabang.
+- Uji: `WatchlistEntryGateTest` (penjaga `symbolListed` + penjaga penyaringan `uniqueTicks` dan
+  quick filter WATCHLIST — lihat berkas uji untuk nama kasus persisnya).
 
 ---
 
@@ -448,14 +476,14 @@ Sebaiknya kembalikan `null`/`0` dan tangani di pemanggil, atau minimal catat log
 
 | Prioritas | Pekerjaan | Kriteria selesai |
 |---|---|---|
-| **P0-1** | Parse `data.list` + `symbols`; tolak respons dengan jumlah simbol di luar 100–1.500 atau tanpa pair IDR | `getAllTradingPairs()` berisi 864 simbol resmi; `UVXYBUSDT` tidak ada |
-| **P0-2** | Bandingkan respons dengan snapshot resmi terakhir (≥90% tumpang tindih) sebelum mengganti peta | `exchangeInfo` gateway tidak bisa menggantikan daftar resmi |
-| **P0-3** | Baca `type`, `spotTradingEnable` (angka/boolean), `status` dengan default fail-closed | 17 simbol Type 3 dikenali; simbol suspend tidak lolos |
-| **P1-1** | Token WS Indodax: perbarui dinamis, atau lepas WS dan akui REST-only | Tidak ada lagi `3002` berulang; status "live" hanya setelah frame pertama |
-| **P1-2** | Reset `lastSequence` di `onOpen`; tambah penjaga generasi; backoff berjitter + batas percobaan | Uji unit kebijakan reconnect lulus |
-| **P2-1** | Validasi penambahan watchlist ke repository bursa | Menolak `UVXYBUSDT` dengan pesan jelas |
-| **P2-2** | Terapkan filter listing di semua cabang dashboard; worker Indodax hanya watchlist | Tidak ada pair di luar daftar resmi yang tampil/dipindai |
-| **P2-3** | Uji baru: `SymbolDiscoveryParseTest`, `SymbolSourceSanityTest`, `IndodaxReconnectPolicyTest`, `WatchlistValidationTest`, `DashboardListingFilterTest` | Masing-masing punya kontrol negatif yang benar-benar gagal saat kode dirusak |
+| **P0-1** | Parse `data.list` + `symbols`; tolak respons dengan jumlah simbol di luar 100–1.500 atau tanpa pair IDR | ✅ `getAllTradingPairs()` berisi 864 simbol resmi; `UVXYBUSDT` tidak ada |
+| **P0-2** | Bandingkan respons dengan snapshot resmi terakhir (≥90% tumpang tindih) sebelum mengganti peta | ✅ `exchangeInfo` gateway tidak bisa menggantikan daftar resmi |
+| **P0-3** | Baca `type`, `spotTradingEnable` (angka/boolean), `status` dengan default fail-closed | ✅ 17 simbol Type 3 dikenali; simbol suspend tidak lolos |
+| **P1-1** | Token WS Indodax: perbarui dinamis, atau lepas WS dan akui REST-only | ✅ token utuh + kanal benar; tidak ada lagi `3002` |
+| **P1-2** | Reset `lastSequence` di `onOpen`; tambah penjaga generasi; backoff berjitter + batas percobaan | ⏳ `lastSequence` & penjaga generasi selesai (K6, K9 menunggu); **backoff berjitter + batas percobaan masih terbuka (K8)** |
+| **P2-1** | Validasi penambahan watchlist ke repository bursa | ✅ menolak `UVXYBUSDT` dengan pesan jelas (`WatchlistEntryGate`) |
+| **P2-2** | Terapkan filter listing di semua cabang dashboard; worker Indodax hanya watchlist | ⏳ dashboard selesai (K14); **worker Indodax masih terbuka (K11)** |
+| **P2-3** | Uji baru: `SymbolDiscoveryParseTest`, `SymbolSourceSanityTest`, `IndodaxReconnectPolicyTest`, `WatchlistValidationTest`, `DashboardListingFilterTest` | ⏳ parser/discovery/source-sanity/watchlist selesai; kebijakan reconnect Indodax menyatu di `RealtimeSocketHealthTest` |
 
 Catatan: P0-1 sampai P0-3 mengubah daftar pair yang terlihat pengguna (pair yang tidak terdaftar di
 Tokocrypto hilang dari pencarian). Itu memang tujuannya, tetapi sebaiknya diumumkan di catatan rilis.

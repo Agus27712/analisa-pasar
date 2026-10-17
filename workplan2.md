@@ -3385,3 +3385,71 @@ Dari XML setelah seluruh suite: **88 kelas / 685 uji**, 0 gagal, 0 error, 1 dile
 K8–K15 belum disentuh. Yang paling terasa setelah K7: **K8** (backoff tanpa jitter dan tanpa
 batas percobaan) dan **K13/K14** (simbol tanpa validasi listing masih bisa masuk watchlist dan
 dashboard).
+
+## 56. Batch 6m — K13+K14: watchlist tervalidasi, dashboard satu gate listing (2026-10-17)
+
+### 56.1 Cacat
+
+**K13 — simbol bisa masuk watchlist tanpa dicek keberadaannya.** Kolom "ketik simbol" di
+`WatchlistManagerSettings` menerima teks bebas; hasilnya langsung `onAddPair(...)`.
+`setWatchlist`/`toggleWatchlist` hanya mengubah huruf besar dan memangkas spasi, dan
+`TradingPair.fromCustomSymbol` **mengarang** `TradingPair` untuk simbol yang tidak dikenal.
+Jadi `UVXYBUSDT` (atau string apa pun) bisa masuk watchlist, tampil sebagai kartu berharga
+`-`, dan ikut dievaluasi engine — pintu masuk kedua bagi pair hantu, terlepas dari K1.
+Ada pula fallback fail-open: `sanitizeSymbolForExchange(...) ?: typed`; kalau sanitasi gagal,
+simbol mentah tetap disimpan.
+
+**K14 — cabang dashboard melewati gate listing.** `pairListed(...)` dipakai untuk
+`watchAndFav`, `explicit`, dan `popularHead`, tetapi tidak untuk `highVol`, `swingCandidates`,
+dan `intradayCandidates` (dibangun dari `uniqueTicks`), dan tidak pula untuk quick filter
+WATCHLIST yang membangun ulang `watchListPairs` langsung dari watchlist+favorit. Gate listing
+juga hanya berlaku untuk Tokocrypto: `pairListed` selalu `true` di Indodax, sehingga simbol
+sampah di watchlist Indodax bisa tampil sebagai kartu bernilai `-`.
+
+### 56.2 Perubahan
+
+- **Baru** `util/WatchlistEntryGate.kt` — gate murni `checkAdd(rawSymbol, source, isKnownSymbol)`
+  dengan tiga syarat: format `[A-Z0-9]` panjang wajar, kuotasi sah untuk bursa aktif, dan
+  keberadaan di repository bursa. Penolakan **fail-closed**; setiap penolakan punya pesan
+  Indonesia siap tampil. Menghapus simbol dari watchlist tidak digate.
+- `TokocryptoSymbolRepository.hasSymbol` / `IndodaxSymbolRepository.hasSymbol` — bukti
+  keberadaan simbol. Repository Indodax, saat discovery belum dimuat, memakai batas
+  `POPULAR_INDODAX_PAIRS` (sama seperti fallback `getAllTradingPairs`), bukan "semua lolos".
+- `WatchlistViewModel` — `addToWatchlist`, `toggleWatchlist` (hanya arah menambah), dan
+  `setCustomWatchlist` melewati gate; preset yang entrinya tidak ada di bursa aktif cukup
+  gugur, bukan disimpan sebagai simbol hantu.
+- `WatchlistManagerSettings` — fallback `?: typed` dihapus; putusan gate dipakai untuk status
+  tombol Tambah, pesan galat di bawah kolom, dan chip populer (chip tak tersedia tampil redup
+  dengan penjelasan saat diketuk).
+- `DashboardRanking.symbolListed(source, symbol)` — satu gate listing untuk kedua bursa
+  (Tokocrypto: status TRADING; Indodax: pair dikenal). `pairListed`, fallback statis
+  `allVolumeSortedPairs`, dan quick filter WATCHLIST di `DashboardScreen` semuanya memakainya.
+- `DashboardScreen` — `uniqueTicks` disaring **sekali di awal** dengan `symbolListed`, sehingga
+  `highVol`, `swingCandidates`, dan `intradayCandidates` tidak bisa menerima simbol di luar
+  daftar resmi lewat jalur tick mana pun.
+
+### 56.3 Uji
+
+`WatchlistEntryGateTest` — 15 kasus: keputusan gate (diterima, format, kuotasi per bursa,
+keberadaan), pair hantu `UVXYBUSDT` ditolak, pesan untuk setiap alasan penolakan,
+`hasSymbol` kedua repository (termasuk fallback POPULAR dan peta discovery),
+`symbolListed` per bursa (termasuk status suspend), plus penjaga perkabelan: ViewModel,
+UI tanpa fallback fail-open, `uniqueTicks` tersaring, quick filter WATCHLIST tersaring.
+
+Kontrol negatif:
+
+| Kerusakan yang disuntikkan | Uji yang GAGAL |
+|---|---|
+| `canAddToWatchlist` dilepas dari `addToWatchlist` | 1 (penjaga ViewModel) |
+| fallback `?: typed` dikembalikan di UI | 1 (penjaga UI) |
+| filter `symbolListed` dihapus dari `uniqueTicks` | 1 (penjaga dashboard) |
+
+### 56.4 Angka terukur
+
+Dari XML setelah seluruh suite: **89 kelas / 702 uji**, 0 gagal, 0 error, 1 dilewati
+(sebelumnya 88/685).
+
+### 56.5 Sisa
+
+K8–K12 dan K15 masih terbuka. Yang paling terasa berikutnya: **K8** (backoff tanpa jitter dan
+tanpa batas percobaan) dan **K10** (satu flag `wsLive` dipakai dua bursa).

@@ -295,6 +295,15 @@ object TokocryptoSymbolRepository {
     }
 
     /**
+     * True bila simbol dikenal metadata resmi (dipakai gate watchlist, temuan K13).
+     *
+     * Sengaja **tidak** menuntut status `spotTradingEnable`: watchlist adalah daftar pantau,
+     * sehingga pair suspend tetap boleh dipantau. Gate tampilan dashboard (yang menuntut
+     * status TRADING) ada di [isSpotTradingEnabled] / `DashboardRanking.symbolListed`.
+     */
+    fun hasSymbol(rawSymbol: String): Boolean = getSymbolInfo(rawSymbol) != null
+
+    /**
      * Gate listing fail-closed untuk tampilan dashboard.
      * True hanya bila simbol dikenal DAN spot trading aktif (status TRADING).
      * Simbol tak dikenal (belum pernah sync sukses) dianggap tidak layak tampil.

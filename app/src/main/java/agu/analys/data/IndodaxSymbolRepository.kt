@@ -123,6 +123,22 @@ object IndodaxSymbolRepository {
         }
     }
 
+    /**
+     * True bila simbol memang pair Indodax (dipakai gate watchlist, temuan K13).
+     *
+     * Saat discovery belum pernah berhasil, batasnya daftar `POPULAR_INDODAX_PAIRS` — sama
+     * dengan fallback [getAllTradingPairs], bukan "semua simbol lolos".
+     */
+    fun hasSymbol(rawSymbol: String): Boolean {
+        val key = rawSymbol.trim().uppercase().replace("_", "")
+        if (pairsBySymbol.isEmpty()) {
+            return TradingPair.POPULAR_INDODAX_PAIRS.any {
+                it.symbol.uppercase().replace("_", "") == key
+            }
+        }
+        return pairsBySymbol.containsKey(key)
+    }
+
     /** Metadata presisi untuk satu simbol Indodax, bila diketahui. */
     fun getPairPrecision(rawSymbol: String): PairPrecision? =
         pairsBySymbol[rawSymbol.trim().uppercase().replace("_", "")]

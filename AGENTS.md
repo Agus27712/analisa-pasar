@@ -205,15 +205,19 @@ Saat ini berisi (diperbarui 2026-10-17):
   bukan kerusakan uang riil, tetapi posisi paper adalah dasar seluruh keputusan "apakah scalp
   punya edge".
 - **`temuan_koneksi_tokocrypto_indodax.md`** — audit jalur koneksi & sumber daftar pair
-  (2026-10-17, baca kode + uji endpoint). **K1–K7 sudah ditutup (batch 6j–6l); K8–K15 masih
-  hidup.** Daftar pair Tokocrypto kini **hanya** dari `common/symbols` resmi (864 simbol,
-  `data.list`); `exchangeInfo` gateway (3.729 simbol Binance) tidak boleh dipakai untuk
-  discovery. Gate listing dan `type` dibaca fail-closed di `TokocryptoSymbolFeed`.
+  (2026-10-17, baca kode + uji endpoint). **K1–K7, K13, K14 sudah ditutup (batch 6j–6m);
+  K8–K12, K15 masih hidup.** Daftar pair Tokocrypto kini **hanya** dari `common/symbols`
+  resmi (864 simbol, `data.list`); `exchangeInfo` gateway (3.729 simbol Binance) tidak boleh
+  dipakai untuk discovery. Gate listing dan `type` dibaca fail-closed di `TokocryptoSymbolFeed`.
   WebSocket Indodax memakai kanal `market:summary-24h` dengan token utuh 105 karakter; kanal
   `chart:tick-<pair>` tidak pernah menerbitkan data.
   Socket usang disambung ulang lewat `reconnectIfStale()` → `reconnectNow()`, **bukan** lewat
   `start()` — `start()` menjalankan `stop()` dan membuang candle menit berjalan. Ambang usang
   ada di `RealtimeSocketHealth` (zombie 20 detik, diam 6 × interval ping), bukan 30 detik frame.
+  Watchlist hanya menerima simbol yang ada di bursa aktif (`WatchlistEntryGate` + `hasSymbol`
+  di kedua repository; fail-closed, tanpa fallback "simpan dulu"), dan dashboard memakai satu
+  gate listing `DashboardRanking.symbolListed` — `uniqueTicks` disaring sekali di awal, quick
+  filter WATCHLIST dan fallback statis ikut tersaring.
 - **~~`temuan_bugs_jurnal_pnl.md`~~ — DIHAPUS 2026-10-17.** Seluruh J1–J10 sudah tertutup:
   batch 3a (J1, J2), batch 4 (J7), batch 5a (J4 + N10), batch 5b (J3), batch 5e (J6 + N11),
   batch 5f (J5), batch 6a (J10 sisa — `PaperArmSignal`), batch 6b (J9 — `TradeSignalConfidence`),
