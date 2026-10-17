@@ -196,10 +196,8 @@ Saat ini berisi (semua diperbarui 2026-10-16):
   punya edge".
 - **`temuan_bugs_jurnal_pnl.md`** — audit jurnal sinyal, jurnal trade & angka P&L.
   **Ditutup: J1, J2** (batch 3a), **J7** (batch 4), **J4 + N10** (batch 5a), **J3** (batch 5b),
-  **J6 + N11** (batch 5e), **J5** (batch 5f).
-  **Sebagian: J10** — `TradeSignalSnapshot.capture` sudah digerbang, tapi jalur **beli paper manual**
-  (`TradingViewModelSync.kt:343-350`) masih meng-*arm* mesin exit dengan SL/TP mentah dari
-  `engine.signalState.value`; lihat `temuan_bugs_jurnal_pnl.md` §2.1.
+  **J6 + N11** (batch 5e), **J5** (batch 5f), **J10 penuh** (batch 6a —
+  `docs/LAPORAN-batch6-j10-2026-10-17.md`: jalur beli paper manual kini lewat `PaperArmSignal`).
   **Masih hidup: J8** (rumus P&L ditulis ulang tanpa slippage di jalur trade real), **J9**
   (default `?: 75`).
   **Catatan angka:** friksi FSM Tokocrypto USDT yang tertulis 0,8226% di dokumen temuan awal itu
@@ -357,13 +355,12 @@ Saat ini berisi (semua diperbarui 2026-10-16):
 - **Gerbang di pintu masuk, bukan di tiap pemanggil.** `TradeSignalSnapshot.capture` menggerbang
   sinyal sekali; keempat pemanggilnya ikut terlindungi. Bila menambah pemanggil baru, jangan
   menyalin pemeriksaannya — pakai `capture`.
-- ⚠️ **Gerbang `capture` hanya melindungi jurnal, bukan mesin exit** (diverifikasi 2026-10-16,
-  lihat `docs/bugs/temuan_bugs_jurnal_pnl.md` §2.1 = J10 yang tersisa). `armPaperExitEngine` untuk
-  **beli paper manual** (`TradingViewModelSync.kt:343-350`) masih mengoper
-  `engine.signalState.value.stopLoss/targetPrice1/targetPrice2` mentah. Setiap jalur yang memakai
-  nilai turunan sinyal untuk **keputusan** (bukan hanya catatan) wajib pakai nilai teratribusi —
-  `paperSignal.stopLoss` / `targetPrice1` / `targetPrice2` sudah ada di scope yang sama. TP pair lain
-  yang kebetulan di bawah entry bisa memicu jual sebagian pada tick pertama.
+- **Nilai turunan sinyal untuk KEPUTUSAN juga wajib teratribusi**, bukan hanya untuk catatan.
+  `capture` melindungi jurnal; mesin exit punya pintu sendiri: `trading/PaperArmSignal.resolve`
+  (batch 6a). Setiap jalur yang meng-*arm* mesin exit wajib lewat situ — TP pair lain yang
+  kebetulan di bawah entry bisa memicu jual sebagian pada tick pertama. Bila menambah pemanggil
+  `armPaperExitEngine` baru, jangan mengoper `engine.signalState.value.stopLoss/targetPrice1/
+  targetPrice2` mentah.
 - **Harga fallback harus milik simbol jurnal.** `currentTick.value?.price` adalah tick pair yang
   kebetulan dibuka; pakai `dashboardTicks[journalSymbol]`.
 
