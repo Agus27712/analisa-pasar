@@ -3036,3 +3036,73 @@ Angka terukur (dari XML): **81 kelas / 644 uji → 82 kelas / 656 uji**, 0 gagal
 ### 49.5 Laporan
 
 `docs/LAPORAN-batch6h-n12-2026-10-17.md`
+
+---
+
+## 50. Batch 6i — N6 + N17 + N11: satu mode, satu mesin, satu angka (2026-10-17)
+
+### 50.1 Keputusan owner
+
+- **N6/N17 → opsi (a):** worker latar hanya menghitung **mode yang sedang aktif**
+  (`prefs.strategyMode`). Saat mode itu dipakai, notifikasi dan engine memakai mesin yang sama,
+  jadi angkanya satu sumber: **engine → worker → notifikasi**. Skor boleh berubah mengikuti tren;
+  yang tidak boleh adalah dua metode untuk satu angka.
+- **Hemat baterai:** jangan pindai seluruh pair. Worker hanya menyentuh **watchlist**, dan hanya
+  mengambil data yang dibutuhkan mode aktif.
+- **N11 → jangan tampilkan** tabel tier lintas-mode. Cap `ScalpingMtfEvaluator` tidak diubah.
+
+### 50.2 Perbaikan
+
+**Seam baru `engine/ModeSignalEvaluator.kt`.**
+
+- `ModeSignalInput` membawa seluruh bahan evaluasi (candle, orderbook, fee, config, konteks global)
+  tetapi **tidak** membawa `macroAnomalyResult` — penalti dihitung di dalam dari candle D1.
+- `ModeSignalEvaluator.evaluate(input)` memilih evaluator berdasarkan `input.mode`; tidak ada jalur
+  yang bisa mengevaluasi mode lain.
+- `LearningTradingEngine.runScalping/runSwing/runIntraday` memakai seam ini. Import
+  `ScalpingMtfEvaluator`/`SwingEvaluator` di engine dihapus.
+
+**`CandidateScanWorker`.**
+
+- Baca `prefs.strategyMode` sekali; `when (mode)` menentukan data + satu jalur evaluasi.
+- `SignalLifecycleManager.process` **satu kali** per simbol (dulu tiga).
+- SWING: H1 200 + D1 100, H1 `dropLast(1)`. OFFICE_DAILY: H4 200 + D1 100, H4 `dropLast(1)`.
+  SCALPING: H1/M15/M1 60 `dropLast(1)` + **orderbook nyata**.
+- `diagnosticIgnoreOrderBookWhenUnavailable = true` dihapus dari produksi: tanpa orderbook,
+  Step2 GAGAL.
+- Notifikasi memakai `tracked.activeSignalState ?: evaluation.signal` — sama dengan kartu engine.
+
+**N11.**
+
+- Hapus kartu `ConfidenceReliabilityBreakdownCard`, `ConfidenceTierRow`, section
+  `confidence_tier_section`, `ConfidenceTierStats` + field tier, `buildTierStats`, serta
+  `ConfidenceTierNote` + ujinya.
+- Kartu **Akurasi per Setup** tetap; itu bukan tier lintas-mode.
+
+### 50.3 Uji & kontrol negatif
+
+11 uji baru: `ModeSignalEvaluatorTest` (4), `CandidateScanWorkerSourceTest` (5),
+`ConfidenceTierRemovalTest` (2).
+
+| Kontrol | Perubahan | Hasil |
+|---|---|---|
+| A | `macroAnomalyResult = null` di seam | **2 GAGAL** |
+| B | worker memanggil `ScalpingMtfEvaluator` + `diagnosticIgnore... = true` | **2 GAGAL** |
+| C | `SignalLifecycleManager.process` kedua di worker | **1 GAGAL** |
+| D | engine menghitung `MacroAnomalyDetector.evaluate` sendiri | **1 GAGAL** |
+| E | kartu tier dihidupkan kembali | **1 GAGAL** |
+
+Angka terukur (dari XML): 82 kelas / 656 uji → (N11 dihapus, −12 uji) 81/644 → **84 kelas /
+655 uji**, 0 gagal, 0 error, 1 dilewati.
+
+### 50.4 Batas
+
+- Snapshot tetap berbeda (worker 15 menit, tanpa forming volume/orderbook live). Yang dijamin:
+  metode + gerbang sama, bukan detik yang sama.
+- Mode non-aktif tidak punya produsen latar — konsekuensi keputusan (a).
+- Scalping latar dibatasi 10 simbol; 4 permintaan/simbol.
+- Tabel tier dihapus, tidak diganti. Statistik berjenjang berikutnya harus **per mode**.
+
+### 50.5 Laporan
+
+`docs/LAPORAN-batch6i-n6n17n11-2026-10-17.md`

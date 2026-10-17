@@ -2,18 +2,19 @@
 
 > **Baca ini dulu.** Dokumen ini adalah titik masuk untuk agen/engineer berikutnya: status terkini,
 > apa yang sudah selesai, apa berikutnya, dan **perangkap yang sudah pernah ditemukan** supaya tidak
-> diulang. Terakhir diperbarui: **2026-10-16**.
+> diulang. Terakhir diperbarui: **2026-10-17** (batch 6i).
 >
 > 🔴 **Untuk "apa lagi yang tersisa" → `docs/bugs/`, bukan dokumen ini.** Status temuan audit
 > (notifikasi `N*`, jurnal/P&L `J*`, paper trading `P*`) sudah diverifikasi ke kode dan **direview
-> owner** pada `patch` @ `547048d`: **21 tertutup · 3 sebagian · 13 masih hidup**. Ringkasnya:
+> owner** pada `patch` @ `547048d`, lalu ditutup bertahap sampai batch 6i:
+> **34 tertutup · 1 sebagian · 1 masih hidup**. Ringkasnya:
 >
 > | Status | Temuan |
 > |---|---|
 > | 🔴 Kritis — **tidak ada yang tersisa** | (P1–P3 dan J1/J2 sudah tertutup) |
-> | 🟠 Serius — masih hidup | P6 (sebagian), P9 · N6+N17 |
-> | 🟡 Sedang/rendah — masih hidup | N11 (sebagian) |
-> | ✅ Sudah ditutup | P1–P5, P7, P8 · **J1–J10 (seluruhnya — berkas temuan jurnal dihapus 2026-10-17)** · N1–N5, N7–N10, N12–N16 |
+> | 🟠 Serius — masih hidup | P6 (sebagian) · P9 |
+> | 🟡 Sedang/rendah — masih hidup | — |
+> | ✅ Sudah ditutup | P1–P5, P7, P8 · **J1–J10 (seluruhnya — berkas temuan jurnal dihapus 2026-10-17)** · **N1–N17 (seluruhnya — batch 6i, 2026-10-17)** |
 >
 > Rincian + lokasi + prioritas: `docs/bugs/temuan_bugs_notifikasi.md`,
 > `docs/bugs/temuan_bugs_paper_trade.md`. Jejak audit jurnal ada di laporan per batch
@@ -30,7 +31,7 @@
 | HEAD `patch` | Ukur: `git rev-parse --short origin/patch` — berubah **tiap commit**, jangan dihardcode |
 | HEAD `main` | = `patch` + commit merge di atasnya; ukur `git rev-parse --short origin/main` |
 | Titik masuk kode | package `agu.analys`, modul tunggal `:app` |
-| Unit test | **416 lulus · 0 gagal · 1 dilewati** (53 kelas) |
+| Unit test | **655 lulus · 0 gagal · 1 dilewati** (84 kelas) — diukur 2026-10-17, batch 6i |
 | APK debug | 26.821.815 byte (26,8 MB desimal / 25,6 MiB) |
 | Kesiapan uang riil | **BELUM** — lihat §5 |
 

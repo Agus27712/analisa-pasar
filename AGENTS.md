@@ -179,11 +179,12 @@ Saat ini berisi (semua diperbarui 2026-10-16):
 - **`temuan_bugs_notifikasi.md`** — audit jalur notifikasi (4 pengirim: VM-sync,
   CandidateScanWorker, foreground service, VM-alerts) & alur skor keyakinan (produsen → notifikasi
   → jurnal → UI).
-  **Ditutup: N1–N5, N7–N10, N12–N16** (batch 1, 2, 5a, 6b, 6f, 6g, 6h).
-  **Sebagian: N11** — manifestasi J6 (klaim hardcoded) ditutup batch 5e, tetapi **tabel tier &
-  cap confidence `ScalpingMtfEvaluator` sendiri belum diubah** (butuh keputusan produk).
-  **Masih hidup: N6 + N17** — dua produsen satu `SignalLifecycleManager`, dan skor SWING worker
-  tanpa penalti anomali makro. Keduanya **butuh keputusan desain**, bukan perbaikan mekanis.
+  **Seluruh temuan sudah ditutup: N1–N17** (batch 1, 2, 5a, 6b, 6f, 6g, 6h, 6i). Tidak ada butir
+  hidup di berkas itu; jangan mencari pekerjaan di sana tanpa audit baru.
+  **N11** ditutup dengan **tidak menampilkan** tabel tier lintas-mode (batch 6i) — cap confidence
+  `ScalpingMtfEvaluator` sengaja **tidak** diubah.
+  **N6 + N17** ditutup dengan satu seam evaluasi (`engine/ModeSignalEvaluator.kt`): worker hanya
+  menghitung mode aktif, dan penalti anomali makro dihitung di dalam seam dari candle D1.
 - **`temuan_bugs_paper_trade.md`** — audit siklus hidup posisi paper & mesin exit.
   **Ditutup: P1, P2, P3, P4** (batch 3b, batch 3c) sehingga **ketiga temuan kritis sudah tertutup**,
   serta **P5** (batch 5d — snapshot FSM kini per posisi, berkunci `PaperAutoTradeRuntime.key`).
@@ -462,6 +463,31 @@ Saat ini berisi (semua diperbarui 2026-10-16):
   `markBarBucket` pada pemanggilan pertama, sehingga pengecualian tidak bocor ke menit berikutnya.
   Jangan menambahkan field runtime terpisah untuk ini — penanda yang bertahan akan menahan
   time-stop lebih lama, bukan lebih pendek.
+
+## Aturan turunan dari audit notifikasi — N6, N17, N11 (batch 6i, 2026-10-17)
+
+- **Satu mode, satu mesin, satu angka.** Notifikasi kandidat wajib menampilkan `confidence` dari
+  evaluator **mode yang sedang aktif**, dan worker latar hanya boleh menghitung mode itu
+  (`prefs.strategyMode`). Jangan mengembalikan pemindaian tiga mode sekaligus: itu membuat satu key
+  `SYMBOL#MODE` punya dua produsen dengan metode berbeda.
+- **Pemanggil tidak boleh merakit evaluator sendiri.** `engine/ModeSignalEvaluator.kt` adalah
+  satu-satunya pemetaan `StrategyMode → evaluator`. Penalti anomali makro dihitung **di dalam**
+  seam dari candle D1 — parameter `macroAnomalyResult` sengaja tidak diekspos ke pemanggil, supaya
+  tidak ada jalur yang bisa "lupa" meneruskannya (itu akar N17). Kalau menambah mode/parameter,
+  tambahkan di seam + uji di `ModeSignalEvaluatorTest`.
+- **Jangan hidupkan `diagnosticIgnoreOrderBookWhenUnavailable = true` di jalur produksi.** Tanpa
+  orderbook nyata, gerbang Step2 harus **GAGAL**, bukan dilewati. Skor yang lebih tinggi daripada
+  engine tidak boleh masuk ke notifikasi.
+- **Batasi ke watchlist.** Worker hanya memindai `prefs.getWatchlist()`, tidak pernah seluruh pasar.
+  Scalping dibatasi `MAX_SCALP_BACKGROUND_SYMBOLS` (4 permintaan/simbol: H1, M15, M1, orderbook).
+  Menambah mode lain ke worker berarti menambah beban baterai — ukur dulu, jangan asal tambah.
+- **Batas yang jujur:** worker tetap tidak punya forming volume/orderbook live seperti engine
+  per-tick, jadi skor bisa bergerak antar-snapshot. Yang dijamin adalah **metode dan gerbang yang
+  sama**, bukan snapshot detik yang sama. Jangan menjanjikan "angka identik" di UI/dokumen.
+- **N11 — jangan tampilkan tabel tier lintas-mode.** Ambang ≥80/60–79/<60 membuat sinyal scalping
+  pra-entry (cap ≤59) selalu "Awal", sehingga tabel mengukur READY-vs-bukan. Owner memutuskan
+  **tidak menampilkan**; cap `ScalpingMtfEvaluator` tidak diubah. Penjaga:
+  `ConfidenceTierRemovalTest`.
 
 ## Aturan turunan dari audit notifikasi — N12 (batch 6h, 2026-10-17)
 

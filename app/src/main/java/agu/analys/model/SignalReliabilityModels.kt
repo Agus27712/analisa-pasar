@@ -15,21 +15,6 @@ enum class SignalLogFilter(val label: String) {
 }
 
 /**
- * Confidence score tiers to analyze signal accuracy by confidence
- */
-data class ConfidenceTierStats(
-    val tierLabel: String,      // e.g. "Tinggi (≥80%)", "Sedang (60-79%)", "Awal (<60%)"
-    val minConfidence: Int,
-    val maxConfidence: Int,
-    val totalSignals: Int,
-    val winCount: Int,
-    val lossCount: Int,
-    val trackingCount: Int,
-    val winRatePct: Double,
-    val avgReturnPct: Double
-)
-
-/**
  * Statistik akurasi per kelompok (setup scalping atau kategori skor engine).
  * Hanya sinyal yang sudah selesai (bukan TRACKING) dihitung untuk win rate.
  */
@@ -67,9 +52,6 @@ data class SignalReliabilitySummary(
     val profitFactor: Double = 0.0,
     val maxSingleWinPct: Double = 0.0,
     val maxSingleLossPct: Double = 0.0,
-    val highConfidenceStats: ConfidenceTierStats = ConfidenceTierStats("Tinggi (≥80%)", 80, 100, 0, 0, 0, 0, 0.0, 0.0),
-    val mediumConfidenceStats: ConfidenceTierStats = ConfidenceTierStats("Sedang (60-79%)", 60, 79, 0, 0, 0, 0, 0.0, 0.0),
-    val lowConfidenceStats: ConfidenceTierStats = ConfidenceTierStats("Awal (<60%)", 0, 59, 0, 0, 0, 0, 0.0, 0.0),
     val bestPerformingSymbol: String = "-",
     val bestStrategyMode: String = "-",
     // Pipeline scalping: akurasi per setup & per kategori skor
