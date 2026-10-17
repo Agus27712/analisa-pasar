@@ -10,6 +10,7 @@ import agu.analys.model.TradingPair
 import agu.analys.service.IndodaxMarketService
 import agu.analys.service.TokocryptoMarketService
 import agu.analys.trading.PaperArmSignal
+import agu.analys.trading.RealTradePnlResolver
 import agu.analys.trading.SimulationOrder
 import agu.analys.trading.SimulationOrderSide
 import agu.analys.trading.SignalDerivedFields
@@ -56,15 +57,18 @@ fun TradingViewModel.handleRealTradeExecution(
         var customPnlIdr: Double? = null
         var customPnlPct: Double? = null
         if (before.entryPrice > 0.0 && effectivePrice > 0.0 && quantity > 0.0) {
-            // Biaya dari FeeSchedule — angka flat 0,3% terlalu kecil untuk Tokocrypto USDT
-            // (0,4044%/sisi) dan salah untuk pair IDR (sisi jual lebih mahal dari sisi beli).
+            // J8 — SATU rumus P&L. Sebelumnya di sini ada rumus sendiri tanpa slippage, sehingga
+            // angka jurnal berbeda ~0,16 pp dari portofolio/radar jual untuk trade yang sama.
             val quoteAsset = agu.analys.util.PriceFormatter.extractQuote(symbol)
-            val buyRate = agu.analys.config.FeeSchedule.buyRate(currentEx, quoteAsset)
-            val sellRate = agu.analys.config.FeeSchedule.sellRate(currentEx, quoteAsset)
-            val netSell = effectivePrice * (1.0 - sellRate)
-            val cost = before.entryPrice * (1.0 + buyRate)
-            customPnlPct = (netSell / cost - 1.0) * 100.0
-            customPnlIdr = (netSell - cost) * quantity
+            val pnl = RealTradePnlResolver.resolve(
+                quantity = quantity,
+                entry = before.entryPrice,
+                exitPrice = effectivePrice,
+                exchange = currentEx,
+                quoteAsset = quoteAsset
+            )
+            customPnlPct = pnl.pnlPct
+            customPnlIdr = pnl.pnlIdr
         }
 
         if (isPartialSell) {

@@ -195,12 +195,11 @@ Saat ini berisi (semua diperbarui 2026-10-16):
   bukan kerusakan uang riil, tetapi posisi paper adalah dasar seluruh keputusan "apakah scalp
   punya edge".
 - **`temuan_bugs_jurnal_pnl.md`** — audit jurnal sinyal, jurnal trade & angka P&L.
-  **Ditutup: J1, J2** (batch 3a), **J7** (batch 4), **J4 + N10** (batch 5a), **J3** (batch 5b),
-  **J6 + N11** (batch 5e), **J5** (batch 5f), **J10 penuh** (batch 6a —
-  `docs/LAPORAN-batch6-j10-2026-10-17.md`: jalur beli paper manual kini lewat `PaperArmSignal`).
-  **J9 juga ditutup** (batch 6b — `docs/LAPORAN-batch6-j9-2026-10-17.md`: default `?: 75`
-  diganti `TradeSignalConfidence.resolve`, tidak diketahui = 0).
-  **Masih hidup: J8** (rumus P&L ditulis ulang tanpa slippage di jalur trade real).
+  ✅ **SELURUH TEMUAN J1–J10 SUDAH DITUTUP** (per 2026-10-17). Batch 3a (J1, J2), batch 4 (J7),
+  batch 5a (J4 + N10), batch 5b (J3), batch 5e (J6 + N11), batch 5f (J5), batch 6a (J10 sisa —
+  `PaperArmSignal`), batch 6b (J9 — `TradeSignalConfidence`), batch 6c (J8 —
+  `RealTradePnlResolver`). Dokumen dipertahankan sebagai peta jalur + jejak audit; **tidak ada
+  butir hidup** di sana.
   **Catatan angka:** friksi FSM Tokocrypto USDT yang tertulis 0,8226% di dokumen temuan awal itu
   **salah**; angka yang benar **0,9735%** (lihat `docs/LAPORAN-batch4-j7-2026-10-16.md` §2).
 
@@ -389,6 +388,18 @@ Saat ini berisi (semua diperbarui 2026-10-16):
 - **Kosong berarti kosong.** Bila bursa ini tidak punya record HOLDING untuk simbol itu,
   biarkan kosong. Jual mencatat penjualan tanpa menutup record bursa lain; tick harga tidak
   menyentuh posisi bursa lain. Posisi bursa lain tetap utuh sampai dijual di bursanya sendiri.
+
+## Aturan turunan dari audit jurnal — J8 (batch 6c, 2026-10-17)
+
+- **Jangan menulis ulang rumus P&L di ViewModel.** J8 adalah bukti bahwa aturan "SATU rumus P&L"
+  bisa dilanggar tanpa terlihat: jalur jual trade real menulis
+  `(exit×(1−sellFee))/(entry×(1+buyFee))−1` — **tanpa slippage** — sehingga jurnal berbeda
+  ≈0,16 pp dari portofolio/radar jual untuk trade yang sama. Pakai `RealTradePnlResolver`
+  (`trading/RealTradePnl.kt`) atau `FeeSchedule` langsung; jangan menyusun ulang
+  `costBasisNet`/`netSellValue` dari komponennya.
+- **Rupiah dan persen harus dari pasangan yang sama.** `pnlIdr = netSellValue − costBasisNet`
+  dan `pnlPct = netProfitPctFor`; keduanya identik secara aljabar, jadi tidak mungkin menampilkan
+  "+1,2%" dengan nominal yang tidak cocok.
 
 ## Aturan turunan dari audit jurnal — J6 (batch 5e, 2026-10-16)
 

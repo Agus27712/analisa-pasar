@@ -2663,3 +2663,64 @@ Angka terukur (dari XML): **75 kelas / 601 uji → 76 kelas / 607 uji**, 0 gagal
 ### 42.5 Laporan
 
 `docs/LAPORAN-batch6-j9-2026-10-17.md`
+
+---
+
+## 43. Batch 6c — J8: P&L trade real memakai satu rumus `FeeSchedule` (2026-10-17)
+
+### 43.1 Masalah
+
+Jalur eksekusi trade real menulis rumus P&L sendiri:
+
+```kotlin
+// TradingViewModelSync.kt:56-65 (sebelum)
+val netSell = effectivePrice * (1.0 - sellRate)
+val cost = before.entryPrice * (1.0 + buyRate)
+customPnlPct = (netSell / cost - 1.0) * 100.0
+customPnlIdr = (netSell - cost) * quantity
+```
+
+Tidak ada slippage di rumus itu, sedangkan `FeeSchedule.netProfitPctFor` menambahkan slippage
+**dua sisi** (default 0,08%/sisi). Untuk Tokocrypto IDR selisihnya ≈ **0,16 pp** — satu trade
+menghasilkan dua angka berbeda: jurnal vs portofolio/radar jual. Itu pelanggaran aturan
+"SATU rumus P&L"; pengecualian yang sah hanya `SimulationTradeStore`/`SimulationOrderEngine`.
+
+### 43.2 Perbaikan
+
+Resolver murni baru `trading/RealTradePnl.kt`:
+
+```kotlin
+RealTradePnlResolver.resolve(quantity, entry, exitPrice, exchange, quoteAsset, useMaker, slippagePct)
+```
+
+- `pnlIdr` dari `netSellValue − costBasisNet` (keduanya sudah termasuk fee + slippage);
+- `pnlPct` dari `FeeSchedule.netProfitPctFor` — **identik** dengan `(netSell/cost − 1) × 100`,
+  jadi rupiah dan persen tidak mungkin berbeda;
+- input tidak valid (`quantity/entry/exitPrice ≤ 0`, NaN/Inf) → `RealTradePnl.ZERO`.
+
+`TradingViewModelSync` kini memanggil resolver itu; dua variabel lokal (`buyRate`/`sellRate`)
+dihapus.
+
+### 43.3 Uji & kontrol negatif
+
+Uji baru: `app/src/test/java/agu/analys/trading/RealTradePnlTest.kt` — **12 kasus**: paritas
+persis dengan `FeeSchedule` untuk TK IDR / TK USDT / Indodax, selisih ≈0,16 pp terhadap rumus
+lama (bukti slippage ikut), konsistensi rupiah↔persen, rugi negatif, harga sama tetap rugi
+karena friksi, tiga input tidak valid, penskalaan kuantitas, dan taker≠maker.
+
+Kontrol negatif: resolver dikembalikan ke rumus lama tanpa slippage ⇒ **5 dari 12 uji GAGAL**
+(tiga paritas bursa, selisih slippage, konsistensi rupiah↔persen). Tujuh yang tetap lulus memang
+tidak membedakan versi (tanda rugi, impas, input nol, penskalaan, taker/maker).
+
+Angka terukur (dari XML): **76 kelas / 607 uji → 77 kelas / 619 uji**, 0 gagal, 1 dilewati.
+
+### 43.4 Batas
+
+- Hanya jalur **jual trade real**. `recordSell` di `TradeHistoryRecorder` sudah memakai
+  `FeeSchedule` untuk fee; angka `customPnl*` yang dikirim sekarang konsisten dengannya.
+- `SimulationTradeStore`/`SimulationOrderEngine` sengaja tidak disentuh (pengecualian yang sah).
+- Wiring di `TradingViewModelSync` tidak diuji otomatis; yang diuji resolver-nya.
+
+### 43.5 Laporan
+
+`docs/LAPORAN-batch6-j8-2026-10-17.md`
