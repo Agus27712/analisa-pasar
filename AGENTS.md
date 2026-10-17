@@ -190,8 +190,11 @@ Saat ini berisi (semua diperbarui 2026-10-16):
   **Sebagian: P6** (batch 5c — jendela momentum kini satu sumber, tetapi bagian "`peak` tertinggal
   dari high M1" **belum** — bukan cabang kode yang berbeda, melainkan tidak adanya umpan intrabar).
   **Ditutup: P8** (batch 6d — `PaperFirstBarResolver` memisahkan "dievaluasi sebagai bar baru" dari
-  "menambah `barsHeld`"; tick pertama sesudah rehidrasi tidak lagi dihitung dua kali).
-  **Masih hidup: P7** (jalur ambil-alih exit engine tidak terimplementasi).
+  "menambah `barsHeld`"; tick pertama sesudah rehidrasi tidak lagi dihitung dua kali), serta
+  **P7** (batch 6e — kontrak `clearPaperExitState` **dihapus**, bukan diimplementasikan, karena
+  tidak pernah dipanggil dan justru meninggalkan posisi tanpa exit).
+  **Masih hidup: P6 (sisa `peak`) dan P9** (baru, batch 6e — mematikan auto-exit saat posisi
+  terbuka meninggalkan posisi tanpa SL/TP sampai restart; butuh keputusan produk).
   **Batas penting:** seluruh temuan `P*` hanya menyentuh posisi **paper** (`isReal = false`) —
   bukan kerusakan uang riil, tetapi posisi paper adalah dasar seluruh keputusan "apakah scalp
   punya edge".
@@ -459,6 +462,20 @@ Saat ini berisi (semua diperbarui 2026-10-16):
   Jangan menambahkan field runtime terpisah untuk ini — penanda yang bertahan akan menahan
   time-stop lebih lama, bukan lebih pendek.
 
+## Aturan turunan dari audit paper trading — P7 (batch 6e, 2026-10-17)
+
+- **Fungsi tanpa pemanggil adalah kontrak palsu.** `clearPaperExitState` bertahan berbulan-bulan
+  seolah-olah ada jalur "pengguna mengambil alih exit engine", padahal `grep -rn` hanya menemukan
+  definisinya. Setiap hook siklus hidup yang tidak punya pemanggil harus **dihapus** atau
+  **dipakai** — jangan dibiarkan sebagai harapan.
+- **Serah-terima exit tidak boleh meninggalkan posisi tanpa stop.** `armPaperExitEngine` menulis
+  `setAutoSellParams(enabled = false)`; siapa pun yang melepas mesin **wajib** menyalakan kembali
+  SL/TP legacy lewat `PaperStopResolver` (contoh yang benar: `HandBackToLegacy` di
+  `PaperRehydrate`). Melepas mesin tanpa itu = posisi tanpa exit sama sekali.
+- **Jangan mengarang level serah-terima.** Bila SL sudah naik ke BE/trailing (`activeStopLoss` bisa
+  **di atas** entry), `PaperStopResolver` menganggapnya tidak valid; memilih level pengganti adalah
+  **keputusan produk**, bukan detail implementasi. Dicatat sebagai P9.
+
 ## Arah produk (ringkas)
 
 - Fokus: **scalp mode** + **paper trade** untuk menguji engine.
@@ -549,7 +566,7 @@ Saat ini berisi (semua diperbarui 2026-10-16):
   memori**, sedangkan posisi & `auto_sell_enabled` persisten di `SpotPositionStore`. Setiap
   perubahan pada siklus hidup posisi paper wajib menjaga tiga hal ini tetap sinkron:
   1. penanda `_paper_engine` ditulis saat engine mengambil alih exit dan dilepas saat posisi
-     ditutup (`markSold` / `finalizePaperExit` / `clearPaperExitState` / posisi hilang);
+     ditutup (`markSold` / `finalizePaperExit` / posisi hilang);
   2. SL asli sinyal ditulis lewat `setAutoSellParams(stopLossPrice = ...)`. **Jangan** andalkan
      `_stop_loss` dari `setHolding` — nilainya sintetis `entry * 0.99` (≈1%), sedangkan SL engine
      minimal sebesar lantai friksi (≥ 5,8% USDT). Rehidrasi dengan SL sintetis akan **memalsukan
@@ -564,8 +581,11 @@ Saat ini berisi (semua diperbarui 2026-10-16):
   1. tulis lewat `TradingViewModel.persistPaperFsm(...)` (ber-throttle) — jangan tulis langsung,
      karena `evaluatePaperAutoExit` berjalan **per tick harga**;
   2. hapus key-nya di **setiap** jalur pelepasan kepemilikan: `markSold` (dua blok),
-     `finalizePaperExit`, `clearPaperExitState`, dan cabang "posisi sudah tidak ada" di
-     `evaluatePaperAutoExitLocked`. Key yang tertinggal akan terbaca posisi berikutnya;
+     `finalizePaperExit`, dan cabang "posisi sudah tidak ada" di
+     `evaluatePaperAutoExitLocked`. Key yang tertinggal akan terbaca posisi berikutnya.
+     **Jangan** bangun ulang `clearPaperExitState` — fungsi itu dihapus di batch 6e (P7) karena
+     tidak pernah dipanggil dan, apa adanya, justru meninggalkan posisi tanpa exit sama sekali
+     (lihat P9 di `docs/bugs/temuan_bugs_paper_trade.md`);
   3. `atrPct` **tidak** dipulihkan lewat `restore()` — ia parameter konstruktor mesin, jadi harus
      dioper saat mesin dibangun di `PaperRehydrate.decide()`. Kalau terlewat, ambang BE/trailing S8
      diam-diam jatuh ke nilai persen tetap;

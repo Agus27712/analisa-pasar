@@ -2805,3 +2805,58 @@ Angka terukur (dari XML): **77 kelas / 619 uji → 78 kelas / 626 uji**, 0 gagal
 ### 44.5 Laporan
 
 `docs/LAPORAN-batch6-p8-2026-10-17.md`
+
+---
+
+## 45. Batch 6e — P7: kontrak `clearPaperExitState` dihapus; celah sebenarnya jadi P9 (2026-10-17)
+
+### 45.1 Masalah
+
+`TradingViewModel.clearPaperExitState` tidak punya satu pun pemanggil
+(`grep -rn "clearPaperExitState" app/src` → hanya definisi), padahal `AGENTS.md` dan laporan P4.4
+menyebutnya sebagai salah satu dari empat titik pembersihan state mesin. Kontrak "pengguna
+mengambil alih exit engine" tidak pernah ada implementasinya.
+
+### 45.2 Keputusan: hapus, bukan implementasikan
+
+Fungsi itu bukan sekadar mati — **isinya salah sebagai serah-terima**: ia melepas mesin, penanda,
+dan progres FSM, tetapi **tidak** menyalakan kembali SL/TP legacy. Karena `armPaperExitEngine`
+menulis `setAutoSellParams(enabled = false)` (`:385-390`; auto-buy `:585` = `enabled = !p2OwnsExit`),
+memanggil fungsi itu akan menghasilkan posisi paper **tanpa exit apa pun**.
+
+Implementasi yang benar menunggu keputusan produk: setelah SL naik ke BE/trailing, `activeStopLoss`
+bisa **di atas** entry, dan `PaperStopResolver.resolve` menganggapnya tidak valid
+(`signalSl < entry`). Level pengganti tidak boleh ditebak.
+
+Jadi: `clearPaperExitState` dihapus; daftar hook di `AGENTS.md` dibersihkan menjadi
+`markSold` / `finalizePaperExit` / cabang "posisi sudah tidak ada".
+
+### 45.3 Temuan baru P9 (dicatat, belum diperbaiki)
+
+Mematikan auto-exit **saat posisi terbuka** meninggalkan posisi tanpa SL/TP sampai restart:
+
+- arm → `auto_sell_enabled = false`;
+- sakelar hanya menulis preferensi (`PaperAutoTradeSettings.kt:136` → `AppPreferences.kt:314`),
+  tidak ada yang menyalakan auto-sell kembali saat runtime;
+- `paperEngineOwnsExit` jadi `false`, tetapi blok SL/TP legacy masih terkunci
+  `updatedPos.isAutoSellEnabled` (`TradingViewModelAlerts.kt:244`) ⇒ hanya trailing yang tersisa;
+- setelah restart, `PaperRehydrate` → `HandBackToLegacy(REASON_AUTO_EXIT_OFF)` justru **menyalakan**
+  auto-sell (`:1004-1014`), jadi aksi pengguna yang sama berakhir berbeda tergantung restart.
+
+### 45.4 Verifikasi
+
+Penghapusan kode mati tidak punya uji perilaku; kontrol negatif tidak berlaku (tidak ada cabang
+yang diaktifkan/dimatikan). Yang dipakai sebagai penjaga:
+
+- `./gradlew testDebugUnitTest` hijau — **78 kelas / 626 uji / 0 gagal / 0 error / 1 dilewati**,
+  identik dengan baseline batch 6d. Kalau masih ada pemanggil, kompilasi akan gagal;
+- `grep -rn "clearPaperExitState" app/src` → **0 hasil**.
+
+### 45.5 Batas
+
+- P9 belum diperbaiki — jangan perlakukan "matikan auto-exit" sebagai serah-terima yang aman.
+- `docs/LAPORAN-p0-*` dan `docs/LAPORAN-p44-*` sengaja tidak diubah (laporan historis).
+
+### 45.6 Laporan
+
+`docs/LAPORAN-batch6-p7-2026-10-17.md`

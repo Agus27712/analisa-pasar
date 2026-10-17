@@ -825,14 +825,6 @@ fun TradingViewModel.finalizePaperExit(
     return dispatched
 }
 
-/** Hapus state machine exit setelah posisi paper ditutup. */
-fun TradingViewModel.clearPaperExitState(symbol: String, exchange: String) {
-    PaperAutoTradeRuntime.clear(exchange, symbol)
-    positionStore.setPaperEngineOwned(symbol = symbol, isReal = false, exchange = exchange, owned = false)
-    positionStore.clearPaperFsmState(symbol = symbol, isReal = false, exchange = exchange)
-    publishPaperExitSnapshot(exchange = exchange, symbol = symbol, snapshot = null)
-}
-
 /** Ringkas parameter exit yang sedang aktif, untuk ditampilkan di UI. */
 fun TradingViewModel.currentExitParams(): ScalpExitParams = prefs.scalpingRuntimeConfig.exit
 
