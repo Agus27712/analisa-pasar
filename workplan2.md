@@ -1475,7 +1475,7 @@ Dipulihkan → hijau.
 
 ## 26. Batch 1 audit notifikasi — N1, N2, N3 (2026-10-16)
 
-Sumber: `docs/bugs/temuan_bugs_notifikasi.md` (audit read-only dari agen lain, di-pull dari
+Sumber: `docs/laporan_temuan_bugs_notifikasi.md` (audit read-only dari agen lain, di-pull dari
 `patch`). Batch 1 mengerjakan tiga temuan berisiko tertinggi. Sisanya (N4–N12) **belum dikerjakan**.
 
 Perbaikan mendarat di commit **`cd6c032`**.
@@ -1569,7 +1569,7 @@ lain, penjaga ini tidak ikut memindah. Uji perilaku penuh butuh menjalankan serv
 Sisa temuan yang belum dikerjakan: **N4** (toggle push tidak dipatuhi di jalur alert/trailing),
 **N5** (notifikasi kandidat tanpa disclaimer "uang riil masih diblokir"), **N6** (dua produsen satu
 state machine), **N7** (`markTriggered` tidak menormalkan simbol — **aktif**, bukan latent),
-**N8–N12**. Lihat `docs/bugs/temuan_bugs_notifikasi.md`.
+**N8–N12**. Lihat `docs/laporan_temuan_bugs_notifikasi.md`.
 
 ---
 
@@ -1685,7 +1685,7 @@ Y", bukan "helper membaca berkas prefs aplikasi yang sama".
 Sisa temuan: **N6** (dua produsen satu state machine — butuh keputusan desain), **N8** (param
 `onlyWhenBackground` mati), **N9** (default `?: 75` mengarang skor), **N10** (snapshot pair lain
 ikut tercatat), **N11** (tier confidence lintas-mode), **N12** (tanpa cooldown notifikasi kandidat).
-Lihat `docs/bugs/temuan_bugs_notifikasi.md`.
+Lihat `docs/laporan_temuan_bugs_notifikasi.md`.
 
 ---
 
@@ -2079,7 +2079,7 @@ Audit menulisnya terpisah karena muncul di dua berkas:
   list.add(0, signal.copy(marketSymbol = selectedPair.value.symbol))   // menimpa field engine
   signalLogRepository.recordSignal(symbol = selectedPair.value.symbol, …)
   ```
-- **N10** (`docs/bugs/temuan_bugs_notifikasi.md`, baris tabel N10) — jalur beli memakai
+- **N10** (`docs/laporan_temuan_bugs_notifikasi.md`, baris tabel N10) — jalur beli memakai
   `engine.signalState.value` **tanpa memeriksa** `signal.marketSymbol == symbol`
   (`TradeSignalSnapshot.capture:275`, `TradingViewModelSync.kt:253-282`).
 
@@ -2872,7 +2872,7 @@ nomor barisnya sudah bergeser. Jejak audit ada di laporan per batch + riwayat gi
 
 Rujukan hidup yang diperbarui: `AGENTS.md` (daftar `docs/bugs/` + butir jurnal ditandai dihapus,
 larangan membuat ulang), `docs/PANDUAN-LANJUT-AGEN.md` (tabel status), dan catatan lintas-berkas
-di `docs/bugs/temuan_bugs_notifikasi.md`. Laporan historis dan seksi `workplan2.md` yang lama
+di `docs/laporan_temuan_bugs_notifikasi.md`. Laporan historis dan seksi `workplan2.md` yang lama
 **tidak** ditulis ulang — keduanya benar untuk keadaan saat ditulis.
 
 Tidak ada perubahan kode; suite terakhir tetap 78 kelas / 626 uji / 0 gagal / 1 dilewati.
@@ -3106,3 +3106,57 @@ Angka terukur (dari XML): 82 kelas / 656 uji → (N11 dihapus, −12 uji) 81/644
 ### 50.5 Laporan
 
 `docs/LAPORAN-batch6i-n6n17n11-2026-10-17.md`
+
+---
+
+## 51. Aturan baru — berkas temuan keluar dari `docs/bugs/`, tanpa laporan per batch (2026-10-17)
+
+### 51.1 Keputusan owner
+
+- Setiap kali **seluruh** isi sebuah berkas di `docs/bugs/` selesai diperbaiki, berkas itu
+  **dipindahkan keluar** (atau dihapus kalau isinya tidak lagi berguna).
+- Pola nama tujuan: `docs/laporan_temuan_bugs_<topik>.md`.
+- Berkas hasil pindahan **adalah laporannya**. **Tidak perlu** membuat `docs/LAPORAN-batch*.md`
+  baru; ringkasan batch masuk ke § Riwayat berkas itu dan ke `workplan2.md`.
+- Penulisan `.md` harus bersih: UTF-8 tanpa BOM, LF, **tanpa aksara Mandarin/Jepang/Korea**, dan
+  tanpa kalimat yang hanya bisa dipahami penulisnya.
+
+### 51.2 Yang dikerjakan
+
+- `git mv docs/bugs/temuan_bugs_notifikasi.md docs/laporan_temuan_bugs_notifikasi.md`.
+  Judul + header diubah menjadi laporan penutupan; ditambah baris § Riwayat untuk pemindahan.
+- Semua rujukan path di 13 berkas `.md` diperbarui ke path baru (termasuk laporan batch lama,
+  supaya tautannya tidak menggantung).
+- `AGENTS.md`: §3 (isi `docs/bugs/`), § "Folder temuan bug" (aturan pemindahan + larangan laporan
+  per batch), § "Saat ini berisi" (kini hanya `temuan_bugs_paper_trade.md`), dan seksi baru
+  **"Penulisan dokumen Markdown"**.
+- `docs/PANDUAN-LANJUT-AGEN.md`: catatan bahwa berkas notifikasi sudah di luar `docs/bugs/`.
+- **Baru:** `tools/check_md_text.py` — memeriksa BOM, CRLF, UTF-8 rusak, aksara CJK, mojibake.
+  Hasil pada 68 berkas `.md`: **bersih**.
+- **`trading/TradeLogExporter.kt`** — label jurnal `Skor Konfidensi (engine ∩ cap tahap)` diganti
+  `Skor Konfidensi (skor engine, dibatasi tahap)`. Simbol irisan dibuang karena di sebagian font
+  penampil ia terbaca seperti aksara CJK, dan berkas jurnal itu memang `.md`.
+- **Uji baru:** `TradeLogExporterLabelTest` (2) — label tidak memuat simbol irisan dan memakai kata
+  Indonesia. Kontrol negatif: label lama dikembalikan → **2 GAGAL**.
+
+### 51.3 Angka uji
+
+| Tahap | Kelas | Uji | Gagal | Error | Dilewati |
+|---|---|---|---|---|---|
+| Sebelum batch ini (batch 6i) | 84 | 655 | 0 | 0 | 1 |
+| Setelah `TradeLogExporterLabelTest` | **85** | **657** | **0** | **0** | **1** |
+
+### 51.4 Hasil pemeriksaan tulisan
+
+Pemindaian seluruh `.md` yang dilacak git (68 berkas) dan seluruh riwayat commit untuk `.md`:
+**tidak ada satu pun aksara Han/Hiragana/Katakana/Hangul**, tidak ada BOM, tidak ada CRLF, tidak ada
+berkas yang gagal di-decode sebagai UTF-8. Jadi "tulisan Mandarin" yang terlihat kemungkinan berasal
+dari **render font di penampil** (simbol matematika seperti ∩ ∧ √ ⇒ bisa tampil seperti aksara CJK
+pada font fallback), bukan dari isi berkas. Yang bisa dilakukan dari sisi repo: skrip pemeriksa di
+atas dijalankan sebelum commit, dan jargon pinjaman di dokumen diganti istilah Indonesia.
+
+### 51.5 Batas
+
+- Laporan batch lama **tidak dihapus** — isinya bukti uji dan kontrol negatif. Yang berubah: tidak
+  ada lagi berkas baru dengan pola itu.
+- `docs/bugs/` sekarang hanya berisi `temuan_bugs_paper_trade.md` (P6 sisa + P9 masih hidup).

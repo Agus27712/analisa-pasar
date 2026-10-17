@@ -43,15 +43,15 @@ entry/exit) belum ada di sana — semua kesimpulan yang ditarik dari `main` jadi
    dan perangkap yang sudah pernah ditemukan. **Ini titik masuk utama.**
 3. **`docs/bugs/`** — 🔴 **sumber kebenaran status temuan audit**, dan **sudah diverifikasi ke kode
    + direview owner pada 2026-10-16** (`patch` @ `547048d`). **Agen tidak perlu cek kode untuk
-   memastikan status temuan** — cukup baca tabel status di tiap berkas. Isinya sekarang:
-   `temuan_bugs_notifikasi.md` (jalur notifikasi & skor keyakinan),
-   `temuan_bugs_paper_trade.md` (siklus hidup posisi paper & mesin exit).
-   (`temuan_bugs_jurnal_pnl.md` **sudah dihapus** 2026-10-17 — seluruh J1–J10 tertutup; jejaknya
-   ada di `docs/LAPORAN-batch3-jurnal-*.md` … `docs/LAPORAN-batch6-j*-2026-10-17.md` dan riwayat
-   git. Jangan membuat ulang berkas itu; temuan baru di area jurnal ditulis ke laporan batch.)
+   memastikan status temuan** — cukup baca tabel status di tiap berkas. Isinya sekarang **satu
+   berkas**: `temuan_bugs_paper_trade.md` (siklus hidup posisi paper & mesin exit). Dua berkas lain
+   sudah keluar karena seluruh temuannya tertutup: `temuan_bugs_jurnal_pnl.md` **dihapus**
+   (2026-10-17, J1–J10 tuntas) dan `temuan_bugs_notifikasi.md` **dipindahkan** ke
+   `docs/laporan_temuan_bugs_notifikasi.md` (2026-10-17, N1–N17 tuntas). **Jangan membuat ulang
+   kedua berkas itu**; temuan baru di area itu ditulis ke berkas temuan baru.
    **Baca folder ini sebelum memperbaiki bug apa pun** di area yang tercakup. Setelah sebuah
    temuan diperbaiki, **pangkas butir itu dari badan dokumen** dan pindahkan jejaknya ke tabel
-   "Sudah ditutup" + `docs/LAPORAN-*.md` (lihat § "Folder temuan bug" di bawah).
+   "Sudah ditutup" (lihat § "Folder temuan bug" di bawah).
 4. **`docs/BELUM-DIKERJAKAN-2026-10-14.md`** — inventaris 27 item yang **belum** dikerjakan
    (temuan audit A/B, roadmap P4–P6, verifikasi lapangan), lengkap dengan titik kode dan
    prioritas. **Baca ini sebelum memilih apa yang akan dikerjakan**, supaya tidak mengulang
@@ -168,23 +168,27 @@ Aturan main:
   supaya tidak mengulang audit, tidak menambal gejala, dan tidak menghapus bagian yang memang
   sudah benar (setiap berkas punya bagian "Yang sudah benar — jangan diutak-atik").
 - **Setelah sebuah temuan diperbaiki**, **pangkas butir itu dari badan dokumen**, pindahkan ke
-  tabel "Sudah ditutup" (commit + `docs/LAPORAN-*.md`), perbarui tabel status di header, dan
+  tabel "Sudah ditutup" (commit + pointer laporan), perbarui tabel status di header, dan
   tambahkan baris ke § Riwayat. Jangan biarkan badan dokumen memuat butir yang sudah tidak hidup
   — pembaca berikutnya akan membuang waktu memperbaikinya ulang.
+- **Aturan pemindahan (sejak 2026-10-17).** Begitu **seluruh** isi sebuah berkas temuan tertutup,
+  berkas itu **tidak boleh tinggal di `docs/bugs/`**. Pindahkan dengan `git mv`:
+
+  ```
+  docs/bugs/temuan_bugs_<topik>.md  →  docs/laporan_temuan_bugs_<topik>.md
+  ```
+
+  Berkas hasil pindahan **adalah laporannya**. Tidak perlu membuat `docs/LAPORAN-batch*.md` baru:
+  ringkasan tiap batch ditulis ke § Riwayat berkas itu dan ke `workplan2.md`. `docs/bugs/` hanya
+  boleh berisi temuan yang masih hidup.
+- **Jangan menambah laporan per batch.** Berkas `docs/LAPORAN-batch*-*.md` yang sudah ada adalah
+  arsip historis — biarkan, jangan diperbanyak. Kalau butuh mencatat pekerjaan, tambahkan baris
+  ke berkas laporan temuan yang bersangkutan (atau ke `workplan2.md`).
 - Daftar berkas di folder ini bisa bertambah untuk area lain (exit, P&L, UI, dsb.) dengan
-  pola penamaan `temuan_<area>_<topik>.md`.
+  pola penamaan `temuan_bugs_<topik>.md`.
 
-Saat ini berisi (semua diperbarui 2026-10-16):
+Saat ini berisi (diperbarui 2026-10-17):
 
-- **`temuan_bugs_notifikasi.md`** — audit jalur notifikasi (4 pengirim: VM-sync,
-  CandidateScanWorker, foreground service, VM-alerts) & alur skor keyakinan (produsen → notifikasi
-  → jurnal → UI).
-  **Seluruh temuan sudah ditutup: N1–N17** (batch 1, 2, 5a, 6b, 6f, 6g, 6h, 6i). Tidak ada butir
-  hidup di berkas itu; jangan mencari pekerjaan di sana tanpa audit baru.
-  **N11** ditutup dengan **tidak menampilkan** tabel tier lintas-mode (batch 6i) — cap confidence
-  `ScalpingMtfEvaluator` sengaja **tidak** diubah.
-  **N6 + N17** ditutup dengan satu seam evaluasi (`engine/ModeSignalEvaluator.kt`): worker hanya
-  menghitung mode aktif, dan penalti anomali makro dihitung di dalam seam dari candle D1.
 - **`temuan_bugs_paper_trade.md`** — audit siklus hidup posisi paper & mesin exit.
   **Ditutup: P1, P2, P3, P4** (batch 3b, batch 3c) sehingga **ketiga temuan kritis sudah tertutup**,
   serta **P5** (batch 5d — snapshot FSM kini per posisi, berkunci `PaperAutoTradeRuntime.key`).
@@ -204,10 +208,20 @@ Saat ini berisi (semua diperbarui 2026-10-16):
   batch 5f (J5), batch 6a (J10 sisa — `PaperArmSignal`), batch 6b (J9 — `TradeSignalConfidence`),
   batch 6c (J8 — `RealTradePnlResolver`). Tidak ada butir hidup, jadi berkasnya tidak punya alasan
   untuk tetap ada — jejak auditnya ada di laporan per batch + riwayat git.
-  **Jangan membuat ulang berkas ini.** Kalau muncul temuan baru di area jurnal, tulis laporan
-  batch baru dan catat di `workplan2.md`; jangan menghidupkan kembali "dokumen temuan" kosong.
+  **Jangan membuat ulang berkas ini.** Kalau muncul temuan baru di area jurnal, buat berkas temuan
+  baru di `docs/bugs/` (`temuan_bugs_<topik>.md`) dan catat di `workplan2.md`; jangan menghidupkan
+  kembali "dokumen temuan" kosong.
   **Catatan angka yang tetap berlaku:** friksi FSM Tokocrypto USDT yang tertulis 0,8226% di dokumen
   temuan awal itu **salah**; angka yang benar **0,9735%** (lihat `docs/LAPORAN-batch4-j7-2026-10-16.md` §2).
+- **~~`temuan_bugs_notifikasi.md`~~ — DIPINDAHKAN 2026-10-17** ke
+  **`docs/laporan_temuan_bugs_notifikasi.md`**. Seluruh N1–N17 tertutup (batch 1, 2, 5, 6b, 6f, 6g,
+  6h, 6i), jadi berkasnya keluar dari `docs/bugs/` dan sekarang berperan sebagai laporannya.
+  **Jangan membuat ulang berkas di `docs/bugs/` dengan nama itu**, dan jangan menambah laporan
+  batch baru untuk area ini — tambahkan baris ke § Riwayat berkas laporan tersebut.
+  **N11** ditutup dengan **tidak menampilkan** tabel tier lintas-mode; cap confidence
+  `ScalpingMtfEvaluator` sengaja **tidak** diubah. **N6 + N17** ditutup dengan satu titik sambung evaluasi
+  (`engine/ModeSignalEvaluator.kt`): worker hanya menghitung mode aktif, dan penalti anomali makro
+  dihitung di dalam titik sambung itu dari candle D1.
 
 ## Aturan turunan dari audit notifikasi (batch 1 & 2, 2026-10-16)
 
@@ -472,9 +486,9 @@ Saat ini berisi (semua diperbarui 2026-10-16):
   `SYMBOL#MODE` punya dua produsen dengan metode berbeda.
 - **Pemanggil tidak boleh merakit evaluator sendiri.** `engine/ModeSignalEvaluator.kt` adalah
   satu-satunya pemetaan `StrategyMode → evaluator`. Penalti anomali makro dihitung **di dalam**
-  seam dari candle D1 — parameter `macroAnomalyResult` sengaja tidak diekspos ke pemanggil, supaya
-  tidak ada jalur yang bisa "lupa" meneruskannya (itu akar N17). Kalau menambah mode/parameter,
-  tambahkan di seam + uji di `ModeSignalEvaluatorTest`.
+  titik sambung itu dari candle D1 — parameter `macroAnomalyResult` sengaja tidak diekspos ke
+  pemanggil, supaya tidak ada jalur yang bisa "lupa" meneruskannya (itu akar N17). Kalau menambah
+  mode/parameter, tambahkan di titik sambung itu + uji di `ModeSignalEvaluatorTest`.
 - **Jangan hidupkan `diagnosticIgnoreOrderBookWhenUnavailable = true` di jalur produksi.** Tanpa
   orderbook nyata, gerbang Step2 harus **GAGAL**, bukan dilewati. Skor yang lebih tinggi daripada
   engine tidak boleh masuk ke notifikasi.
@@ -751,6 +765,33 @@ Saat ini berisi (semua diperbarui 2026-10-16):
   `LocalPriceAnimationMode` / `PriceAnimationMode.STATIC` sebagai katup hemat baterai pengguna.
   Jangan mengarang gaya animasi baru, dan jangan menambah sakelar hemat daya kedua.
   Bukti: `docs/LAPORAN-mode-sell-fsm-2026-10-15.md`.
+
+## Penulisan dokumen Markdown
+
+Dokumen dibaca owner di editor/HP, bukan hanya di terminal. Tiga hal yang pernah merusak
+keterbacaan dan **tidak boleh terulang**:
+
+- **UTF-8 tanpa BOM, akhir baris LF.** Jangan menyimpan `.md` sebagai UTF-16/ANSI atau CRLF.
+- **Tidak boleh ada aksara CJK** (Mandarin, Jepang, Korea) di berkas mana pun. Aksara seperti itu
+  biasanya masuk lewat tempel-mentempel dari hasil terjemahan atau editor lain, dan membuat
+  kalimat terbaca sebagai "tulisan aneh". Ganti dengan kata Indonesia yang sebenarnya.
+- **Tulis dengan istilah yang jelas, bukan jargon pinjaman.** Contoh pengganti: *seam* → titik
+  sambung/tempat perakitan; *chokepoint* → satu-satunya pintu masuk; *uji menggigit* → uji gagal
+  saat kode dirusak. Kalau satu kalimat perlu dibaca dua kali, tulis ulang.
+- **Satu laporan per berkas temuan.** Ringkasan batch ditulis ke § Riwayat berkas laporan temuan
+  (`docs/laporan_temuan_bugs_<topik>.md`) dan ke `workplan2.md` — bukan berkas baru.
+- **Teks yang diekspor aplikasi ikut aturan ini.** Jurnal trading diekspor sebagai `.md`
+  (`trading/TradeLogExporter.kt`). Jangan memakai simbol matematika di labelnya — simbol irisan
+  sudah dibuang dari label "Skor Konfidensi" karena tampil seperti aksara CJK di sebagian font.
+
+Periksa sebelum commit:
+
+```sh
+python3 tools/check_md_text.py
+```
+
+Skrip itu memeriksa BOM, CRLF, UTF-8 rusak, aksara CJK, dan sisa mojibake dari penyuntingan
+sebelumnya.
 
 ## Git
 

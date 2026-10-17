@@ -16,9 +16,12 @@
 > | 🟡 Sedang/rendah — masih hidup | — |
 > | ✅ Sudah ditutup | P1–P5, P7, P8 · **J1–J10 (seluruhnya — berkas temuan jurnal dihapus 2026-10-17)** · **N1–N17 (seluruhnya — batch 6i, 2026-10-17)** |
 >
-> Rincian + lokasi + prioritas: `docs/bugs/temuan_bugs_notifikasi.md`,
+> Rincian + lokasi + prioritas: `docs/laporan_temuan_bugs_notifikasi.md` (sudah **di luar**
+> `docs/bugs/` karena N1–N17 tuntas — berkas itu sekarang berperan sebagai laporannya),
 > `docs/bugs/temuan_bugs_paper_trade.md`. Jejak audit jurnal ada di laporan per batch
 > (`docs/LAPORAN-batch3-jurnal-*.md` … `docs/LAPORAN-batch6-j*-2026-10-17.md`).
+> Aturan baru sejak 2026-10-17: berkas temuan yang **seluruh isinya** sudah tutup dipindahkan ke
+> `docs/laporan_temuan_bugs_<topik>.md`, dan **tidak ada lagi laporan per batch**.
 > Sinkronisasi status terakhir: `docs/LAPORAN-sync-dokumen-temuan-2026-10-16.md` (`workplan2.md` §40).
 
 ---
@@ -31,7 +34,7 @@
 | HEAD `patch` | Ukur: `git rev-parse --short origin/patch` — berubah **tiap commit**, jangan dihardcode |
 | HEAD `main` | = `patch` + commit merge di atasnya; ukur `git rev-parse --short origin/main` |
 | Titik masuk kode | package `agu.analys`, modul tunggal `:app` |
-| Unit test | **655 lulus · 0 gagal · 1 dilewati** (84 kelas) — diukur 2026-10-17, batch 6i |
+| Unit test | **657 uji · 656 lulus · 0 gagal · 1 dilewati** (85 kelas) — diukur 2026-10-17 |
 | APK debug | 26.821.815 byte (26,8 MB desimal / 25,6 MiB) |
 | Kesiapan uang riil | **BELUM** — lihat §5 |
 

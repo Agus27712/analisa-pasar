@@ -26,7 +26,7 @@ masih ada pekerjaan di sana. Jejak auditnya sudah lengkap di laporan per batch d
 | `docs/bugs/temuan_bugs_jurnal_pnl.md` | **dihapus** (`git rm`) |
 | `AGENTS.md` | daftar `docs/bugs/` kini dua berkas; butir jurnal ditandai ~~dihapus~~ + larangan membuat ulang; catatan angka friksi 0,9735% dipertahankan |
 | `docs/PANDUAN-LANJUT-AGEN.md` | tabel status disinkronkan (J1–J10 masuk baris "sudah ditutup"; P7/P8/N9 ikut dikoreksi) |
-| `docs/bugs/temuan_bugs_notifikasi.md` | catatan lintas-berkas menunjuk laporan batch, bukan berkas yang sudah hilang |
+| `docs/laporan_temuan_bugs_notifikasi.md` | catatan lintas-berkas menunjuk laporan batch, bukan berkas yang sudah hilang |
 
 **Sengaja tidak diubah:** `docs/LAPORAN-batch3-*` … `docs/LAPORAN-batch6-j*` dan `workplan2.md`
 §§ lama. Semuanya catatan historis — pada saat ditulis, berkas itu memang ada. Menulis ulang
@@ -42,7 +42,7 @@ sengaja dibiarkan. Untuk menemukan isinya: `git log --follow -- docs/bugs/temuan
 
 ## Berikutnya
 
-Fokus pindah ke **`docs/bugs/temuan_bugs_notifikasi.md`**. Urutan yang disarankan dokumen itu
+Fokus pindah ke **`docs/laporan_temuan_bugs_notifikasi.md`**. Urutan yang disarankan dokumen itu
 sendiri: **N13 + N14** (berpasangan — "satu peristiwa, satu pengiriman"), lalu **N15 + N16**
 (berpasangan, keduanya di `TradingForegroundService`), lalu N17, N8, N12, dan terakhir N6 (butuh
 desain) serta sisa N11 (butuh keputusan produk).

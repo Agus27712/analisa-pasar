@@ -5,7 +5,7 @@
 dokumen dan diringkas di §4 (dengan pointer ke laporan eksekusinya).
 **Verifikasi terakhir:** branch `patch` @ `547048d` (P6, P7), dibaca ulang langsung ke kode pada 2026-10-16
 dan **sudah direview owner**. Status di bawah **otoritatif — agen tidak perlu cek kode lagi** untuk
-memastikannya; cukup baca tabel ini. Nomor baris refers ke `547048d`.
+memastikannya; cukup baca tabel ini. Nomor baris merujuk ke `547048d`.
 **Cakupan:** `PaperAutoTradeCoordinator.kt` · `PaperRehydrate.kt` · `PaperExitResolver.kt` ·
 `SpotPositionStore.kt` · `TradingViewModelSync.kt` · `TradingViewModel.kt` ·
 `TradingViewModelAlerts.kt` · `PaperAutoTradeRuntime`

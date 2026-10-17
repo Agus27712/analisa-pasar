@@ -2,7 +2,7 @@
 
 **Tanggal:** 2026-10-17
 **Branch:** `patch`
-**Temuan:** N6 + N17 dan sisa N11 — `docs/bugs/temuan_bugs_notifikasi.md`
+**Temuan:** N6 + N17 dan sisa N11 — `docs/laporan_temuan_bugs_notifikasi.md`
 **Keputusan owner:** N6/N17 memilih **opsi (a)** — worker hanya menghitung mode yang sedang aktif;
 N11 memilih **jangan tampilkan** tabel tier.
 

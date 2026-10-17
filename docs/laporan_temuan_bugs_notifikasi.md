@@ -1,11 +1,15 @@
-# Temuan Audit — Jalur Notifikasi & Skor Keyakinan
+# Laporan Temuan Audit — Jalur Notifikasi & Skor Keyakinan
 
-**Audit:** 2026-10-16 · **Status disinkronkan:** 2026-10-17 (batch 6i menutup butir terakhir)
-**Isi dokumen:** **hanya temuan yang MASIH hidup.** Temuan yang sudah ditutup dipangkas dari badan
-dokumen dan diringkas di §4 (dengan pointer ke laporan eksekusinya).
-**Verifikasi terakhir:** branch `patch` @ `b228c52` (audit awal @ `547048d`), lalu ditutup bertahap
-sampai batch 6i. Nomor baris di §1 adalah nomor saat audit awal — dipakai sebagai peta, bukan
-rujukan terkini.
+**Audit:** 2026-10-16 · **Ditutup seluruhnya:** 2026-10-17 · **Dipindahkan ke sini:** 2026-10-17
+**Letak berkas:** `docs/laporan_temuan_bugs_notifikasi.md`. Berkas ini **tidak lagi** berada di
+`docs/bugs/`, karena seluruh temuannya sudah tertutup. Aturannya: `docs/bugs/` hanya memuat
+temuan yang **masih hidup**; berkas yang sudah beres dipindahkan keluar dengan nama
+`docs/laporan_temuan_bugs_<topik>.md`, dan berkas itu **menjadi laporannya** — tidak ada lagi
+laporan per batch.
+**Isi dokumen:** laporan penutupan. Butir yang sudah ditutup dipangkas dari badan dokumen dan
+diringkas di §4; ringkasan per batch ada di §7.
+**Verifikasi terakhir:** branch `patch` @ `8316543` (audit awal @ `547048d`). Nomor baris di §1
+adalah nomor saat audit awal — dipakai sebagai peta, bukan rujukan terkini.
 **Cakupan:** seluruh pengirim notifikasi + seluruh alur `confidence` (produsen → notifikasi → jurnal → UI)
 
 | Status | Temuan | Ringkas |
@@ -13,8 +17,9 @@ rujukan terkini.
 | ✅ **Ditutup seluruhnya** | **N1–N17** | Tidak ada butir hidup. Lihat §4 untuk commit + laporan tiap temuan |
 
 > **Tidak ada pekerjaan tersisa di berkas ini.** Kalau butuh pekerjaan baru di area notifikasi/skor,
-> lakukan **audit baru** dan tulis temuannya ke `docs/LAPORAN-*.md` (atau berkas temuan baru),
-> jangan menghidupkan kembali nomor lama.
+> lakukan **audit baru** dan tulis temuannya ke berkas temuan baru di `docs/bugs/`
+> (`temuan_bugs_<topik>.md`), jangan menghidupkan kembali nomor lama. Berkas temuan baru itu nanti
+> dipindahkan ke sini dengan nama `docs/laporan_temuan_bugs_<topik>.md` begitu seluruh isinya tutup.
 
 ## 1. Peta jalur (hasil pemetaan awal, 2026-10-16)
 
@@ -23,7 +28,7 @@ PRODUSEN CONFIDENCE
 ├─ engine/scalping/ScalpingMtfEvaluator.kt  — conf = min(score, cap 59/49/39/29); ready → score.total
 ├─ engine/swing/SwingEvaluator.kt           — conf = finalScore (− anomalyPenalty, s.d. −60)
 ├─ engine/intraday/IntradayEvaluator.kt     — conf = baseScore × regimeMultiplier
-└─ engine/ModeSignalEvaluator.kt            — SEAM BARU (batch 6i): satu-satunya perakitan input
+└─ engine/ModeSignalEvaluator.kt            — TITIK SAMBUNG BARU (batch 6i): satu-satunya perakitan input
                                               untuk SCALPING / SWING / OFFICE_DAILY
 
 JALUR NOTIFIKASI (4 pengirim)
@@ -88,7 +93,7 @@ ditampilkan** (cap `ScalpingMtfEvaluator` sengaja tidak diubah).
 - **B5 sudah benar:** confidence di signal-log = nilai saat firing, bukan MAX/SKARANG
   (`database/SignalLogRepository.kt`).
 - Gerbang tunggal N4 sudah benar: `AlertNotificationHelper.canNotify(context, category)` dipasang di
-  setiap chokepoint, dan `AppPreferences` di-cache. Sejak batch 6f **kategori** juga sudah benar:
+  setiap titik kirim, dan `AppPreferences` di-cache. Sejak batch 6f **kategori** juga sudah benar:
   laporan eksekusi memakai `sendExecutionResultNotification` (kategori `TRAILING_STOP`), dan hanya
   pengingat harga milik pengguna yang memakai `sendUserPriceAlertNotification` (`PRICE_ALERT`).
   Foreground service juga sudah dilepas dari sakelar notifikasi (batch 6g, N15): keputusan
@@ -106,14 +111,14 @@ ditampilkan** (cap `ScalpingMtfEvaluator` sengaja tidak diubah).
 - **Satu mode, satu mesin, satu angka** (batch 6i, N6 + N17): `engine/ModeSignalEvaluator.kt`
   adalah satu-satunya perakitan input evaluator. Engine dan `CandidateScanWorker` sama-sama
   memanggilnya; worker hanya menghitung `prefs.strategyMode`. Penalti anomali makro dihitung **di
-  dalam** seam dari candle D1, jadi tidak ada pemanggil yang bisa lupa meneruskannya. Worker juga
+  dalam** `ModeSignalEvaluator` dari candle D1, jadi tidak ada pemanggil yang bisa lupa meneruskannya. Worker juga
   mengambil orderbook nyata untuk scalping — `diagnosticIgnoreOrderBookWhenUnavailable` tidak
   dipakai di jalur produksi.
 - **Pemindaian latar hanya menyentuh watchlist** (`prefs.getWatchlist()`), dengan batas tambahan
   `MAX_SCALP_BACKGROUND_SYMBOLS` untuk scalping. Jangan menambah pemindaian seluruh pasar.
 - **Tabel tier lintas-mode tidak ditampilkan** (batch 6i, N11). Ambang ≥80/60–79/<60 mencampur mode
   sehingga scalping pra-entry (cap ≤59) selalu "Awal". Cap `ScalpingMtfEvaluator` tidak diubah.
-- `util/TradeLogExporter.kt` melabeli jujur "Skor Konfidensi (engine ∩ cap tahap)".
+- `util/TradeLogExporter.kt` melabeli jujur "Skor Konfidensi (skor engine, dibatasi tahap)".
 
 ## 6. Rekomendasi perbaikan
 
@@ -125,7 +130,8 @@ temuan hidup adalah **paper trading** (`docs/bugs/temuan_bugs_paper_trade.md`).
 | Tanggal | Aksi |
 |---|---|
 | 2026-10-16 | Audit awal jalur notifikasi & confidence dilakukan (read-only, terverifikasi ke kode) |
-| 2026-10-16 | Temuan diekspor ke `docs/bugs/temuan_bugs_notifikasi.md` (dokumen ini) |
+| 2026-10-16 | Temuan diekspor ke `docs/bugs/temuan_bugs_notifikasi.md` (path lama) |
 | 2026-10-16 | Batch 1, 2, 5, 6b menutup N1–N5, N7, N9, N10 |
 | 2026-10-17 | Batch 6f, 6g, 6h menutup N8, N12–N16 |
 | 2026-10-17 | Batch 6i menutup N6, N17, N11 — **tidak ada temuan hidup tersisa** |
+| 2026-10-17 | Berkas dipindahkan keluar `docs/bugs/` → `docs/laporan_temuan_bugs_notifikasi.md`. Mulai sekarang berkas inilah laporannya; laporan per batch tidak dibuat lagi |

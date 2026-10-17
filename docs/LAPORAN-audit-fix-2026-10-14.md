@@ -14,7 +14,7 @@
 | A6 | `bbMiddle` fallback `ema20` → `null` saat Bollinger tidak tersedia | `TradeSignalSnapshot.kt:241` |
 | A8 | Parameter `exchange: String? = null` ditambahkan; fallback tebakan quote asset dipertahankan untuk backward compat | `TradeLogExporter.kt` |
 | A9 | Kategori F (Pipeline Scalping) ditambah di export markdown | `TradeLogExporter.kt` |
-| A10 | Label `"Skor Konfidensi"` → `"Skor Konfidensi (engine ∩ cap tahap)"` | `TradeLogExporter.kt` |
+| A10 | Label `"Skor Konfidensi"` → `"Skor Konfidensi (skor engine, dibatasi tahap)"` | `TradeLogExporter.kt` |
 
 ## Fase 2 — Perbaikan Jurnal (Perubahan Perilaku)
 

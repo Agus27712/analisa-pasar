@@ -58,7 +58,7 @@ Di luar cakupan P0–P2. **Semua diverifikasi masih ada di kode saat ini.**
 | A6 ✅ | `bbMiddle = ema20` saat Bollinger null | `TradeSignalSnapshot.kt:241` → fallback ke `null` (jujur "tidak diketahui") | — |
 | A8 ✅ | Header bursa **ditebak** dari quote asset | `TradeLogExporter.kt` — parameter `exchange: String? = null` ditambahkan; fallback lama dipertahankan untuk backward compat | — |
 | A9 ✅ | Export markdown **membuang Kategori 6** (setup/skor/regime scalping) | `TradeLogExporter.kt` — kategori F ditambahkan (setup, skor, kategori, rincian, regime, zona entry, thresholds) | — |
-| A10 ✅ | "Skor Konfidensi" ambigu (skor engine vs *cap*) | `TradeLogExporter.kt` — label diubah ke `"Skor Konfidensi (engine ∩ cap tahap)"` | — |
+| A10 ✅ | "Skor Konfidensi" ambigu (skor engine vs *cap*) | `TradeLogExporter.kt` — label diubah ke `"Skor Konfidensi (skor engine, dibatasi tahap)"` | — |
 
 ### 2b. Bias & fabrikasi (B)
 

@@ -2,7 +2,7 @@
 
 **Tanggal:** 2026-10-17
 **Branch:** `patch`
-**Temuan:** N13, N14, N8 — `docs/bugs/temuan_bugs_notifikasi.md`
+**Temuan:** N13, N14, N8 — `docs/laporan_temuan_bugs_notifikasi.md`
 
 ## Ringkasan
 
