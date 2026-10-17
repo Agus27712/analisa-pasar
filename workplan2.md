@@ -2860,3 +2860,20 @@ yang diaktifkan/dimatikan). Yang dipakai sebagai penjaga:
 ### 45.6 Laporan
 
 `docs/LAPORAN-batch6-p7-2026-10-17.md`
+
+---
+
+## 46. Berkas temuan jurnal dihapus (2026-10-17)
+
+`docs/bugs/temuan_bugs_jurnal_pnl.md` **dihapus** atas perintah owner: seluruh J1–J10 sudah
+tertutup (batch 3a–6c), jadi berkas itu hanya berisi "tidak ada temuan hidup" + peta jalur yang
+nomor barisnya sudah bergeser. Jejak audit ada di laporan per batch + riwayat git
+(`git log --follow -- docs/bugs/temuan_bugs_jurnal_pnl.md`).
+
+Rujukan hidup yang diperbarui: `AGENTS.md` (daftar `docs/bugs/` + butir jurnal ditandai dihapus,
+larangan membuat ulang), `docs/PANDUAN-LANJUT-AGEN.md` (tabel status), dan catatan lintas-berkas
+di `docs/bugs/temuan_bugs_notifikasi.md`. Laporan historis dan seksi `workplan2.md` yang lama
+**tidak** ditulis ulang — keduanya benar untuk keadaan saat ditulis.
+
+Tidak ada perubahan kode; suite terakhir tetap 78 kelas / 626 uji / 0 gagal / 1 dilewati.
+Laporan: `docs/LAPORAN-hapus-temuan-jurnal-2026-10-17.md`.

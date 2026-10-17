@@ -11,12 +11,14 @@
 > | Status | Temuan |
 > |---|---|
 > | 🔴 Kritis — **tidak ada yang tersisa** | (P1–P3 dan J1/J2 sudah tertutup) |
-> | 🟠 Serius — masih hidup | J8, J9 · J10 (sebagian) · P6 (sebagian), P7, P8 · N6+N17, N13, N14, N15, N16 |
-> | 🟡 Sedang/rendah — masih hidup | N8, N9, N12 · N11 (sebagian) |
+> | 🟠 Serius — masih hidup | P6 (sebagian), P9 · N6+N17, N13, N14, N15, N16 |
+> | 🟡 Sedang/rendah — masih hidup | N8, N12 · N11 (sebagian) |
+> | ✅ Sudah ditutup | P1–P5, P7, P8 · **J1–J10 (seluruhnya — berkas temuan jurnal dihapus 2026-10-17)** · N1–N5, N7, N9, N10 |
 >
-> Rincian + lokasi + prioritas: `docs/bugs/temuan_bugs_notifikasi.md`, `temuan_bugs_jurnal_pnl.md`,
-> `temuan_bugs_paper_trade.md`. Sinkronisasi status terakhir:
-> `docs/LAPORAN-sync-dokumen-temuan-2026-10-16.md` (`workplan2.md` §40).
+> Rincian + lokasi + prioritas: `docs/bugs/temuan_bugs_notifikasi.md`,
+> `docs/bugs/temuan_bugs_paper_trade.md`. Jejak audit jurnal ada di laporan per batch
+> (`docs/LAPORAN-batch3-jurnal-*.md` … `docs/LAPORAN-batch6-j*-2026-10-17.md`).
+> Sinkronisasi status terakhir: `docs/LAPORAN-sync-dokumen-temuan-2026-10-16.md` (`workplan2.md` §40).
 
 ---
 

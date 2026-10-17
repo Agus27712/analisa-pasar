@@ -329,8 +329,10 @@ yang pernah dihasilkan engine. Untuk SCALPING, worker juga memakai `formingVolum
 > pengiriman" di jalur trailing. N15 + N16 juga berpasangan (keduanya di
 > `TradingForegroundService`).
 
-> **Catatan lintas-berkas:** N10 dan N11 punya manifestation di area jurnal — lihat
-> `docs/bugs/temuan_bugs_jurnal_pnl.md` (J4 = N10, J6 = N11). Audit area paper trading ada di
+> **Catatan lintas-berkas:** N10 dan N11 punya manifestasi di area jurnal (J4 = N10, J6 = N11).
+> Berkas temuan jurnal (`temuan_bugs_jurnal_pnl.md`) **sudah dihapus 2026-10-17** karena J1–J10
+> seluruhnya tertutup — jejaknya ada di `docs/LAPORAN-batch5-j4n10-*.md`,
+> `docs/LAPORAN-batch5-j6n11-*.md`, dan laporan batch 6. Audit area paper trading ada di
 > `docs/bugs/temuan_bugs_paper_trade.md`.
 
 Setiap perbaikan **wajib**:

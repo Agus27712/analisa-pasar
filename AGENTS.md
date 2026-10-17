@@ -45,8 +45,10 @@ entry/exit) belum ada di sana — semua kesimpulan yang ditarik dari `main` jadi
    + direview owner pada 2026-10-16** (`patch` @ `547048d`). **Agen tidak perlu cek kode untuk
    memastikan status temuan** — cukup baca tabel status di tiap berkas. Isinya sekarang:
    `temuan_bugs_notifikasi.md` (jalur notifikasi & skor keyakinan),
-   `temuan_bugs_paper_trade.md` (siklus hidup posisi paper & mesin exit),
-   `temuan_bugs_jurnal_pnl.md` (jurnal sinyal, jurnal trade, angka P&L).
+   `temuan_bugs_paper_trade.md` (siklus hidup posisi paper & mesin exit).
+   (`temuan_bugs_jurnal_pnl.md` **sudah dihapus** 2026-10-17 — seluruh J1–J10 tertutup; jejaknya
+   ada di `docs/LAPORAN-batch3-jurnal-*.md` … `docs/LAPORAN-batch6-j*-2026-10-17.md` dan riwayat
+   git. Jangan membuat ulang berkas itu; temuan baru di area jurnal ditulis ke laporan batch.)
    **Baca folder ini sebelum memperbaiki bug apa pun** di area yang tercakup. Setelah sebuah
    temuan diperbaiki, **pangkas butir itu dari badan dokumen** dan pindahkan jejaknya ke tabel
    "Sudah ditutup" + `docs/LAPORAN-*.md` (lihat § "Folder temuan bug" di bawah).
@@ -198,14 +200,15 @@ Saat ini berisi (semua diperbarui 2026-10-16):
   **Batas penting:** seluruh temuan `P*` hanya menyentuh posisi **paper** (`isReal = false`) —
   bukan kerusakan uang riil, tetapi posisi paper adalah dasar seluruh keputusan "apakah scalp
   punya edge".
-- **`temuan_bugs_jurnal_pnl.md`** — audit jurnal sinyal, jurnal trade & angka P&L.
-  ✅ **SELURUH TEMUAN J1–J10 SUDAH DITUTUP** (per 2026-10-17). Batch 3a (J1, J2), batch 4 (J7),
-  batch 5a (J4 + N10), batch 5b (J3), batch 5e (J6 + N11), batch 5f (J5), batch 6a (J10 sisa —
-  `PaperArmSignal`), batch 6b (J9 — `TradeSignalConfidence`), batch 6c (J8 —
-  `RealTradePnlResolver`). Dokumen dipertahankan sebagai peta jalur + jejak audit; **tidak ada
-  butir hidup** di sana.
-  **Catatan angka:** friksi FSM Tokocrypto USDT yang tertulis 0,8226% di dokumen temuan awal itu
-  **salah**; angka yang benar **0,9735%** (lihat `docs/LAPORAN-batch4-j7-2026-10-16.md` §2).
+- **~~`temuan_bugs_jurnal_pnl.md`~~ — DIHAPUS 2026-10-17.** Seluruh J1–J10 sudah tertutup:
+  batch 3a (J1, J2), batch 4 (J7), batch 5a (J4 + N10), batch 5b (J3), batch 5e (J6 + N11),
+  batch 5f (J5), batch 6a (J10 sisa — `PaperArmSignal`), batch 6b (J9 — `TradeSignalConfidence`),
+  batch 6c (J8 — `RealTradePnlResolver`). Tidak ada butir hidup, jadi berkasnya tidak punya alasan
+  untuk tetap ada — jejak auditnya ada di laporan per batch + riwayat git.
+  **Jangan membuat ulang berkas ini.** Kalau muncul temuan baru di area jurnal, tulis laporan
+  batch baru dan catat di `workplan2.md`; jangan menghidupkan kembali "dokumen temuan" kosong.
+  **Catatan angka yang tetap berlaku:** friksi FSM Tokocrypto USDT yang tertulis 0,8226% di dokumen
+  temuan awal itu **salah**; angka yang benar **0,9735%** (lihat `docs/LAPORAN-batch4-j7-2026-10-16.md` §2).
 
 ## Aturan turunan dari audit notifikasi (batch 1 & 2, 2026-10-16)
 
