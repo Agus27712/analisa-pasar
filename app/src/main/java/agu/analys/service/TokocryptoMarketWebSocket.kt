@@ -24,7 +24,7 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.atomic.AtomicLong
-import kotlin.math.min
+import kotlin.random.Random
 
 /**
  * WebSocket Market Stream Resmi Tokocrypto:
@@ -64,7 +64,12 @@ class TokocryptoMarketWebSocket(
     private val tradeTimeFormatter: DateTimeFormatter =
         DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneId.of("Asia/Jakarta"))
 
-    /** Host stream resmi Tokocrypto berdasarkan symbol type. */
+    /**
+     * Host stream resmi Tokocrypto berdasarkan symbol type.
+     *
+     * `1` dan `0` (tak diketahui, lihat K15) sama-sama memakai host Type 1 — perilaku lama
+     * dipertahankan, tetapi simbol tak dikenal kini minimal tercatat di log.
+     */
     private fun hostForSymbolType(type: Int): String = when (type) {
         2 -> "wss://www.tokocrypto.com"
         3 -> "wss://stream-toko.2meta.app"
@@ -161,8 +166,14 @@ class TokocryptoMarketWebSocket(
     private fun reconnect() {
         if (streamSymbol.isBlank() || reconnectJob?.isActive == true) return
         reconnectJob = scope.launch {
-            val waitMs = min(12_000L, (600L * (1L shl min(reconnectAttempt, 4))))
-            reconnectAttempt++
+            val attempt = reconnectAttempt + 1
+            val giveUp = ReconnectBackoff.shouldGiveUp(attempt)
+            val waitMs = if (giveUp) {
+                ReconnectBackoff.GIVE_UP_PAUSE_MS
+            } else {
+                ReconnectBackoff.delayMs(attempt, BASE_RECONNECT_MS, MAX_RECONNECT_MS, Random.nextDouble())
+            }
+            reconnectAttempt = if (giveUp) 0 else attempt
             delay(waitMs)
             if (isActive && streamSymbol.isNotBlank()) connect()
         }
@@ -174,7 +185,6 @@ class TokocryptoMarketWebSocket(
                 webSocket.close(1000, "Superseded")
                 return
             }
-            reconnectAttempt = 0
             connectedAtMs.set(System.currentTimeMillis())
             onConnected()
             Timber.i("TokocryptoMarketWS: Connected to $streamSymbol @ $streamHost")
@@ -183,6 +193,12 @@ class TokocryptoMarketWebSocket(
         override fun onMessage(webSocket: WebSocket, text: String) {
             if (!isCurrent()) return
             lastMessageAt.set(System.currentTimeMillis())
+            // K8 — hitungan percobaan hanya di-reset setelah sesi terbukti stabil, bukan di onOpen.
+            if (reconnectAttempt != 0 &&
+                ReconnectBackoff.isStable(connectedAtMs.get(), System.currentTimeMillis())
+            ) {
+                reconnectAttempt = 0
+            }
             try {
                 val root = JSONObject(text)
                 // Format combined stream payload: { "stream": "btcusdt@miniTicker", "data": { ... } }
@@ -319,5 +335,10 @@ class TokocryptoMarketWebSocket(
             onDisconnected()
             reconnect()
         }
+    }
+
+    private companion object {
+        const val BASE_RECONNECT_MS = 600L
+        const val MAX_RECONNECT_MS = 12_000L
     }
 }

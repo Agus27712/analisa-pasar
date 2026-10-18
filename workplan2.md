@@ -3212,7 +3212,8 @@ langsung** dari sandbox: bentuk respons `common/symbols`, isi `exchangeInfo` mir
 
 ### 52.5 Dokumen
 
-`docs/bugs/temuan_koneksi_tokocrypto_indodax.md`
+`docs/laporan_temuan_bugs_koneksi_tokocrypto_indodax.md` (dulu
+`docs/bugs/temuan_koneksi_tokocrypto_indodax.md` — dipindah 2026-10-18 setelah seluruh K1–K15 tutup).
 
 ## 53. Batch 6j — K5: WebSocket Indodax hidup lagi (2026-10-17)
 
@@ -3278,8 +3279,8 @@ Angka diambil dari `app/build/test-results/testDebugUnitTest/*.xml` setelah selu
 
 ### 53.6 Dokumen
 
-`docs/bugs/temuan_koneksi_tokocrypto_indodax.md` — K5 ditulis ulang (K5a/K5b/K5c), K6 ditandai
-tutup.
+`docs/laporan_temuan_bugs_koneksi_tokocrypto_indodax.md` (dulu `docs/bugs/…`) — K5 ditulis ulang
+(K5a/K5b/K5c), K6 ditandai tutup.
 
 ## 54. Batch 6k — K1 + K2: daftar pair Tokocrypto hanya dari endpoint resmi (2026-10-17)
 
@@ -3453,3 +3454,106 @@ Dari XML setelah seluruh suite: **89 kelas / 702 uji**, 0 gagal, 0 error, 1 dile
 
 K8–K12 dan K15 masih terbuka. Yang paling terasa berikutnya: **K8** (backoff tanpa jitter dan
 tanpa batas percobaan) dan **K10** (satu flag `wsLive` dipakai dua bursa).
+
+## 57. Batch 6n — K8–K12 + K15: backoff berbatas, status live per bursa, lingkup ticker, tipe simbol jujur (2026-10-18)
+
+### 57.1 Cacat
+
+- **K8 — backoff tanpa jitter dan tanpa batas.** `reconnectAttempt = 0` di `onOpen` membuat server
+  yang menerima lalu menutup koneksi (kasus K5) memicu siklus buka -> tutup -> tunggu 600–800 ms
+  tanpa henti. Tidak ada jitter, tidak ada status "menyerah sementara".
+- **K9 — listener Indodax tanpa penjaga generasi.** Socket lama bisa memanggil `onDisconnected()`
+  dan `reconnect()` saat pengguna berganti pair, sehingga bursa terlihat "terputus" padahal socket
+  aktif sehat. Tokocrypto sudah memakai `generation`; Indodax belum.
+- **K10 — satu flag `wsLive` dipakai dua bursa.** `wsLive` di-set `false` oleh callback bursa mana
+  pun. Socket bursa non-aktif yang terputus menjatuhkan status bursa yang sedang dipakai, sehingga
+  REST fallback diforce tanpa perlu.
+- **K11 — worker Indodax mengunduh seluruh pasar.** `CandidateScanWorker.fetchTicks` memanggil
+  `fetchAllMarketTicks()` (`/api/summaries`, SEMUA pair) padahal pemindaian hanya butuh watchlist.
+- **K12 — `fetchTickers` Indodax selalu seluruh pasar.** Meski dipanggil untuk satu/beberapa pair
+  (polling trailing tiap 10 detik), fungsi ini mengunduh `/api/summaries` lalu memfilternya.
+- **K15 — `getSymbolType` mengembalikan 1 untuk simbol tak dikenal.** Kesalahan konfigurasi
+  diarahkan ke host Type 1 tanpa satu pun log.
+
+### 57.2 Perubahan
+
+- **Baru** `service/ReconnectBackoff.kt` — kebijakan murni (tanpa jaringan/keacakan):
+  - `isStable(connectedAtMs, nowMs)` — sesi dianggap berhasil setelah `STABLE_AFTER_MS` (60 detik);
+  - `delayMs(attempt, base, max, random01)` — jeda berlipat dengan jitter ±20% dan plafon;
+  - `shouldGiveUp(attempt)` + `GIVE_UP_PAUSE_MS` (5 menit) setelah 6 percobaan berturut-turut.
+- `service/IndodaxMarketWebSocket.kt`:
+  - hitungan percobaan **tidak lagi** di-reset di `onOpen`; reset terjadi di `consume()` hanya
+    setelah sesi stabil (K8);
+  - penjaga generasi: `generation` naik di `stop()`/`reconnectNow()`; `connect()` menangkap
+    `gen` dan listener memakai `Listener { gen == generation }` (K9);
+  - `reconnect()` memakai `ReconnectBackoff`; konstanta `BASE_RECONNECT_MS`/`MAX_RECONNECT_MS`
+    ditambahkan.
+- `service/TokocryptoMarketWebSocket.kt`:
+  - `reconnect()` memakai `ReconnectBackoff`; reset dipindah dari `onOpen` ke `onMessage` setelah
+    stabil (K8); `kotlin.math.min` yang tidak lagi terpakai dihapus.
+- `viewmodel/MarketDataCoordinator.kt` (K10):
+  - `wsLive` tunggal diganti `wsLiveToko` + `wsLiveIndodax`;
+  - callback tiap socket hanya menyentuh flag bursanya sendiri;
+  - `wsFresh` memakai `activeWsLive()` (status bursa yang sedang dipakai);
+  - `handleWebSocketTick` menandai bursa aktif; `hardStopAndPurgeAll` mematikan keduanya.
+- `service/CandidateScanWorker.kt` (K11): cabang Indodax memakai
+  `IndodaxMarketService.fetchTickers(eligibleSymbols)`.
+- `service/IndodaxMarketService.kt` (K12): `fetchTickers(pairIds)` mengambil per-pair lewat
+  `fetchTicker` (`/api/ticker/<pair>`); `/api/summaries` tetap hanya di `fetchAllMarketTicks`
+  untuk dashboard penuh.
+- `data/TokocryptoSymbolRepository.kt` (K15): konstanta `SYMBOL_TYPE_UNKNOWN = 0`,
+  `warnUnknownSymbolTypeOnce` (log sekali per simbol); `getSymbolType` tidak lagi default `1`.
+  `TokocryptoMarketWebSocket.hostForSymbolType` diberi catatan bahwa 0 dan 1 sama-sama host Type 1
+  (perilaku lama dipertahankan; semua pemanggil membandingkan `== 3`).
+
+### 57.3 Uji
+
+Lima kelas uji, 24 kasus:
+
+- `service/ReconnectBackoffTest` (8) — murni: jeda berlipat, plafon, batas jitter, jeda positif,
+  batas stabil, `connectedAt` nol, batas menyerah, jeda menyerah jauh lebih panjang.
+- `service/RealtimeReconnectPolicyTest` (5) — pindai sumber kedua socket: pemakaian
+  `ReconnectBackoff`, `onOpen` tidak lagi reset, reset setelah stabil, penjaga generasi, konstanta
+  jeda.
+- `viewmodel/MarketDataLiveFlagTest` (4) — pindai sumber coordinator: flag per bursa, tidak ada
+  flag tunggal, `wsFresh` memakai `activeWsLive()`, callback menyentuh flag sendiri.
+- `service/IndodaxTickerScopeTest` (3) — worker tanpa `fetchAllMarketTicks`; `fetchTickers` per-pair
+  tanpa `summaries`; `fetchAllMarketTicks` tetap ada.
+- `data/TokocryptoSymbolTypeUnknownTest` (4) — konstanta `UNKNOWN`, `getSymbolType` mengembalikan
+  `UNKNOWN`, log sekali per simbol, host Type 1 untuk tipe tak dikenal.
+
+Kontrol negatif (dijalankan sebagai simulasi di lingkungan ini — lihat 57.4):
+
+| Kerusakan yang disuntikkan | Uji yang GAGAL |
+|---|---|
+| `reconnectAttempt = 0` dikembalikan ke `onOpen` Tokocrypto | 1 (onOpen tidak reset) |
+| `wsLiveToko`/`wsLiveIndodax` diganti satu `wsLive` | 1 (tanpa flag tunggal) |
+| worker kembali memanggil `fetchAllMarketTicks()` | 1 (lingkup watchlist) |
+| `fetchTickers` kembali ke `/api/summaries` | 1 (per-pair) |
+| `getSymbolType` kembali `return 1` | 1 (unknown) |
+
+### 57.4 Angka terukur
+
+**Belum diukur.** Sandbox agen ini (PRoot Android) **tidak punya Android SDK**; `aapt2` juga tidak
+tersedia untuk aarch64, dan JVM bawaan (21) gagal start (hanya JVM 17 yang jalan). Jadi
+`./gradlew :app:testDebugUnitTest` **tidak dapat dijalankan** di sini.
+
+Angka berikut **diturunkan** (dihitung dari berkas uji yang ditulis), **bukan diukur**:
+
+| Tahap | Kelas | Uji | Gagal | Error | Dilewati |
+|---|---|---|---|---|---|
+| Sebelum batch ini (batch 6m) | 89 | 702 | 0 | 0 | 1 |
+| Setelah batch 6n (`+5` kelas, `+24` uji) | 94 | 726 | ? | ? | ? |
+
+Logika pindai sumber ke-24 kasus divalidasi dengan skrip Python yang meniru ekstraksi uji
+(bukan menjalankan JUnit): seluruh 48 pemeriksaan LULUS, dan 5 kontrol negatif MEMANG
+menggigit. Uji tetap harus dijalankan di CI/lingkungan ber-SDK sebelum angkanya dianggap sah.
+
+### 57.5 Dokumen
+
+- `docs/laporan_temuan_bugs_koneksi_tokocrypto_indodax.md` — seluruh K1–K15 kini tutup; berkas
+  **dipindah** dari `docs/bugs/` ke `docs/laporan_…` (aturan §51). Ditambah §7 Riwayat + §6
+  Lampiran bukti.
+- `AGENTS.md` — daftar isi `docs/bugs/` (kini hanya `temuan_bugs_paper_trade.md`), aturan turunan
+  baru dari K8–K12/K15.
+- `workplan2.md` — seksi ini.

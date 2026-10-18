@@ -255,11 +255,13 @@ class CandidateScanWorker(
     ): Map<String, MarketTick> {
         val tickMap = mutableMapOf<String, MarketTick>()
         if (isIndodax) {
-            val allTicks = IndodaxMarketService.fetchAllMarketTicks()
-            for ((sym, tick) in allTicks) {
-                val symUpper = sym.uppercase()
-                tickMap[symUpper] = tick
-                tickMap[symUpper.replace("/", "").replace("_", "")] = tick
+            // K11 — dulu fungsi ini memanggil `fetchAllMarketTicks()` (`/api/summaries`, seluruh
+            // pasar) padahal pemindaian hanya butuh pair watchlist. Sekarang per-pair.
+            val ticks = IndodaxMarketService.fetchTickers(eligibleSymbols)
+            for (t in ticks) {
+                val symUpper = t.symbol.uppercase()
+                tickMap[symUpper] = t
+                tickMap[symUpper.replace("/", "").replace("_", "")] = t
             }
         } else {
             val ticks = TokocryptoMarketService.fetchTickers(eligibleSymbols)

@@ -43,13 +43,14 @@ entry/exit) belum ada di sana — semua kesimpulan yang ditarik dari `main` jadi
    dan perangkap yang sudah pernah ditemukan. **Ini titik masuk utama.**
 3. **`docs/bugs/`** — 🔴 **sumber kebenaran status temuan audit**, dan **sudah diverifikasi ke kode
    + direview owner pada 2026-10-16** (`patch` @ `547048d`). **Agen tidak perlu cek kode untuk
-   memastikan status temuan** — cukup baca tabel status di tiap berkas. Isinya sekarang **dua
-   berkas**: `temuan_bugs_paper_trade.md` (siklus hidup posisi paper & mesin exit) dan
-   `temuan_koneksi_tokocrypto_indodax.md` (jalur koneksi & sumber daftar pair — audit 2026-10-17).
-   Dua berkas lain sudah keluar karena seluruh temuannya tertutup: `temuan_bugs_jurnal_pnl.md`
+   memastikan status temuan** — cukup baca tabel status di tiap berkas. Isinya sekarang **satu
+   berkas**: `temuan_bugs_paper_trade.md` (siklus hidup posisi paper & mesin exit). Berkas koneksi
+   `temuan_koneksi_tokocrypto_indodax.md` **dipindahkan** ke
+   `docs/laporan_temuan_bugs_koneksi_tokocrypto_indodax.md` (2026-10-18, K1–K15 tuntas).
+   Tiga berkas lain sudah keluar karena seluruh temuannya tertutup: `temuan_bugs_jurnal_pnl.md`
    **dihapus** (2026-10-17, J1–J10 tuntas) dan `temuan_bugs_notifikasi.md` **dipindahkan** ke
    `docs/laporan_temuan_bugs_notifikasi.md` (2026-10-17, N1–N17 tuntas). **Jangan membuat ulang
-   kedua berkas itu**; temuan baru di area itu ditulis ke berkas temuan baru.
+   ketiga berkas itu**; temuan baru di area itu ditulis ke berkas temuan baru.
    **Baca folder ini sebelum memperbaiki bug apa pun** di area yang tercakup. Setelah sebuah
    temuan diperbaiki, **pangkas butir itu dari badan dokumen** dan pindahkan jejaknya ke tabel
    "Sudah ditutup" (lihat § "Folder temuan bug" di bawah).
@@ -204,16 +205,22 @@ Saat ini berisi (diperbarui 2026-10-17):
   **Batas penting:** seluruh temuan `P*` hanya menyentuh posisi **paper** (`isReal = false`) —
   bukan kerusakan uang riil, tetapi posisi paper adalah dasar seluruh keputusan "apakah scalp
   punya edge".
-- **`temuan_koneksi_tokocrypto_indodax.md`** — audit jalur koneksi & sumber daftar pair
-  (2026-10-17, baca kode + uji endpoint). **K1–K7, K13, K14 sudah ditutup (batch 6j–6m);
-  K8–K12, K15 masih hidup.** Daftar pair Tokocrypto kini **hanya** dari `common/symbols`
-  resmi (864 simbol, `data.list`); `exchangeInfo` gateway (3.729 simbol Binance) tidak boleh
-  dipakai untuk discovery. Gate listing dan `type` dibaca fail-closed di `TokocryptoSymbolFeed`.
-  WebSocket Indodax memakai kanal `market:summary-24h` dengan token utuh 105 karakter; kanal
-  `chart:tick-<pair>` tidak pernah menerbitkan data.
-  Socket usang disambung ulang lewat `reconnectIfStale()` → `reconnectNow()`, **bukan** lewat
-  `start()` — `start()` menjalankan `stop()` dan membuang candle menit berjalan. Ambang usang
-  ada di `RealtimeSocketHealth` (zombie 20 detik, diam 6 × interval ping), bukan 30 detik frame.
+- **~~`temuan_koneksi_tokocrypto_indodax.md`~~ — DIPINDAHKAN 2026-10-18** ke
+  **`docs/laporan_temuan_bugs_koneksi_tokocrypto_indodax.md`**. Seluruh K1–K15 tertutup
+  (batch 6j–6n), jadi berkasnya keluar dari `docs/bugs/` dan sekarang berperan sebagai
+  laporannya. **Jangan membuat ulang berkas di `docs/bugs/` dengan nama itu.**
+  Yang berlaku sekarang: daftar pair Tokocrypto **hanya** dari `common/symbols` resmi (864 simbol,
+  `data.list`); `exchangeInfo` gateway (3.729 simbol Binance) tidak boleh dipakai untuk discovery.
+  Gate listing dan `type` dibaca fail-closed di `TokocryptoSymbolFeed`. WebSocket Indodax memakai
+  kanal `market:summary-24h` dengan token utuh 105 karakter; kanal `chart:tick-<pair>` tidak pernah
+  menerbitkan data. Socket usang disambung ulang lewat `reconnectIfStale()` → `reconnectNow()`,
+  **bukan** lewat `start()` — `start()` menjalankan `stop()` dan membuang candle menit berjalan.
+  Ambang usang ada di `RealtimeSocketHealth` (zombie 20 detik, diam 6 × interval ping), bukan 30
+  detik frame. Kebijakan sambung-ulang ada di `ReconnectBackoff` (reset hanya setelah stabil,
+  jitter ±20%, jeda menyerah 5 menit), status live dipisah per bursa (`wsLiveToko`/`wsLiveIndodax`),
+  worker latar & `fetchTickers` Indodax hanya menyentuh watchlist/pair yang diminta
+  (`/api/ticker/<pair>`, bukan `/api/summaries`), dan `getSymbolType` mengembalikan
+  `SYMBOL_TYPE_UNKNOWN = 0` (bukan default `1`) dengan log sekali per simbol.
   Watchlist hanya menerima simbol yang ada di bursa aktif (`WatchlistEntryGate` + `hasSymbol`
   di kedua repository; fail-closed, tanpa fallback "simpan dulu"), dan dashboard memakai satu
   gate listing `DashboardRanking.symbolListed` — `uniqueTicks` disaring sekali di awal, quick
@@ -581,6 +588,31 @@ Saat ini berisi (diperbarui 2026-10-17):
 - **Jangan mengarang level serah-terima.** Bila SL sudah naik ke BE/trailing (`activeStopLoss` bisa
   **di atas** entry), `PaperStopResolver` menganggapnya tidak valid; memilih level pengganti adalah
   **keputusan produk**, bukan detail implementasi. Dicatat sebagai P9.
+
+## Aturan turunan dari audit koneksi — K8–K12, K15 (batch 6n, 2026-10-18)
+
+- **Reset backoff hanya setelah sesi terbukti stabil.** Jangan pernah menulis
+  `reconnectAttempt = 0` di `onOpen` socket mana pun. Server yang menerima lalu menutup koneksi
+  (token ditolak, kuota) akan membuat siklus buka-tutup tanpa henti. Pakai `ReconnectBackoff`
+  (`isStable`, `delayMs` berjitter ±20%, `shouldGiveUp` dengan jeda menyerah 5 menit). Penjaga:
+  `RealtimeReconnectPolicyTest` + `ReconnectBackoffTest`.
+- **Listener socket wajib punya penjaga generasi.** Nomor generasi naik di `stop()`/`reconnectNow()`;
+  listener generasi lama harus diabaikan (`gen == generation`), kalau tidak socket usang bisa
+  mengubah status koneksi atau mengacaukan tick pair yang sedang aktif. Penjaga:
+  `RealtimeReconnectPolicyTest`.
+- **Status "live" merupakan milik satu bursa, bukan global.** Jangan memakai satu flag
+  `wsLive` untuk dua bursa; socket bursa non-aktif yang terputus tidak boleh menjatuhkan status
+  bursa yang sedang dipakai. Simpan per bursa dan baca lewat penentu bursa aktif. Penjaga:
+  `MarketDataLiveFlagTest`.
+- **Pemindaian latar dan pengambilan ticker mengikuti lingkup pemanggil.** Worker hanya watchlist;
+  `IndodaxMarketService.fetchTickers(list)` mengambil **per-pair** (`/api/ticker/<pair>`), dan
+  `/api/summaries` (seluruh pasar) hanya untuk dashboard penuh (`fetchAllMarketTicks`). Menambah
+  endpoint "seluruh pasar" ke jalur per-tick/per-10-detik adalah pemborosan data & baterai. Penjaga:
+  `IndodaxTickerScopeTest`.
+- **Nilai bawaan yang menyembunyikan kesalahan konfigurasi dilarang.** `getSymbolType` dulu
+  mengembalikan `1` untuk simbol tak dikenal, sehingga kesalahan format pair mengarah ke host yang
+  salah tanpa jejak. Kembalikan nilai eksplisit (`SYMBOL_TYPE_UNKNOWN = 0`) + log sekali per simbol.
+  Penjaga: `TokocryptoSymbolTypeUnknownTest`.
 
 ## Arah produk (ringkas)
 

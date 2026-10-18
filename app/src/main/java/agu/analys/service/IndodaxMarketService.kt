@@ -155,47 +155,22 @@ object IndodaxMarketService {
         }
     }
 
+    /**
+     * Ticker untuk beberapa pair sekaligus (**K12**).
+     *
+     * Dulu fungsi ini selalu mengunduh `/api/summaries` (seluruh pasar) lalu memfilternya di
+     * memori, padahal pemanggilnya hanya butuh beberapa pair — mis. polling trailing tiap 10
+     * detik dan pemindaian kandidat latar. Sekarang tiap pair diambil lewat `/api/ticker/<pair>`;
+     * throttle 200 ms di [get] menjaga jarak antar permintaan. Untuk kebutuhan dashboard penuh,
+     * pakai [fetchAllMarketTicks].
+     */
     suspend fun fetchTickers(pairIds: List<String>): List<MarketTick> = withContext(Dispatchers.IO) {
-        try {
-            val body = get("https://indodax.com/api/summaries") ?: return@withContext emptyList()
-            val root = JSONObject(body)
-            val tickers = root.optJSONObject("tickers") ?: return@withContext emptyList()
-            val prices24h = root.optJSONObject("prices_24h")
-            val now = System.currentTimeMillis()
-
-            pairIds.mapNotNull { raw ->
-                val pair = toPairId(raw)
-                val t = tickers.optJSONObject(pair) ?: return@mapNotNull null
-                val last = t.optString("last", "0").toDoubleOrNull() ?: 0.0
-                if (last <= 0) return@mapNotNull null
-
-                var change24h: Double? = null
-                val keyNoUnderscore = pair.replace("_", "").lowercase()
-                val p24 = (prices24h?.optString(keyNoUnderscore, "0")?.toDoubleOrNull()
-                    ?: prices24h?.optString(pair, "0")?.toDoubleOrNull()) ?: 0.0
-                if (p24 > 0) {
-                    change24h = ((last - p24) / p24) * 100.0
-                    changeReferenceCache[pair] = ChangeReference(p24, now)
-                } else {
-                    val cached = changeReferenceCache[pair]
-                    if (cached != null && cached.close > 0) {
-                        change24h = ((last - cached.close) / cached.close) * 100.0
-                    }
-                }
-
-                MarketTick(
-                    symbol = pair.uppercase().replace("_", ""),
-                    price = last,
-                    high24h = t.optString("high", "0").toDoubleOrNull() ?: last,
-                    low24h = t.optString("low", "0").toDoubleOrNull() ?: last,
-                    volume24h = t.optString("vol_idr", "0").toDoubleOrNull() ?: 0.0,
-                    change24h = change24h ?: Double.NaN,
-                    timestamp = now
-                )
-            }
-        } catch (_: Exception) {
-            emptyList()
+        val out = ArrayList<MarketTick>(pairIds.size)
+        for (raw in pairIds) {
+            val tick = fetchTicker(raw) ?: continue
+            out.add(tick)
         }
+        out
     }
 
     /**

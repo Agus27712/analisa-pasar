@@ -17,6 +17,7 @@ import timber.log.Timber
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.random.Random
 
 /**
  * Realtime Indodax WS. REST tetap bootstrap + fallback di ViewModel.
@@ -31,7 +32,9 @@ class IndodaxMarketWebSocket(
 ) {
     private val client get() = NetworkClientProvider.webSocketClient
 
-    private var socket: WebSocket? = null
+    @Volatile private var socket: WebSocket? = null
+    // Naik setiap stop()/reconnectNow(); listener dengan generasi lama diabaikan (K9).
+    @Volatile private var generation = 0
     private var reconnectJob: Job? = null
     private var pairId = ""
     private var reconnectAttempt = 0
@@ -61,8 +64,10 @@ class IndodaxMarketWebSocket(
         if (pairId.isBlank()) return
         reconnectJob?.cancel()
         reconnectJob = null
-        socket?.close(1000, "reconnect")
+        generation++
+        val old = socket
         socket = null
+        old?.close(1000, "reconnect")
         lastMessageAt.set(0L)
         connectedAtMs.set(0L)
         connect()
@@ -77,8 +82,10 @@ class IndodaxMarketWebSocket(
     fun stop(notify: Boolean = true) {
         reconnectJob?.cancel()
         reconnectJob = null
-        socket?.close(1000, "switch pair")
+        generation++
+        val old = socket
         socket = null
+        old?.close(1000, "switch pair")
         pairId = ""
         candle = null
         lastTimestampMs = 0L
@@ -111,14 +118,21 @@ class IndodaxMarketWebSocket(
             .header("User-Agent", "AnalysisPasar/2.1")
             .header("Origin", "https://indodax.com")
             .build()
-        socket = client.newWebSocket(request, Listener())
+        val gen = generation
+        socket = client.newWebSocket(request, Listener { gen == generation })
     }
 
     private fun reconnect() {
         if (pairId.isBlank() || reconnectJob?.isActive == true) return
         reconnectJob = scope.launch {
-            val waitMs = min(12_000L, (800L * (1L shl min(reconnectAttempt, 4))))
-            reconnectAttempt++
+            val attempt = reconnectAttempt + 1
+            val giveUp = ReconnectBackoff.shouldGiveUp(attempt)
+            val waitMs = if (giveUp) {
+                ReconnectBackoff.GIVE_UP_PAUSE_MS
+            } else {
+                ReconnectBackoff.delayMs(attempt, BASE_RECONNECT_MS, MAX_RECONNECT_MS, Random.nextDouble())
+            }
+            reconnectAttempt = if (giveUp) 0 else attempt
             delay(waitMs)
             if (isActive && pairId.isNotBlank()) connect()
         }
@@ -140,6 +154,12 @@ class IndodaxMarketWebSocket(
     private fun consume(message: String) {
         // Kanal ringkasan mengirim semua pair; trafik apa pun menandakan socket masih hidup.
         lastMessageAt.set(System.currentTimeMillis())
+        // K8 — hitungan percobaan hanya di-reset setelah sesi terbukti stabil, bukan di onOpen.
+        if (reconnectAttempt != 0 &&
+            ReconnectBackoff.isStable(connectedAtMs.get(), System.currentTimeMillis())
+        ) {
+            reconnectAttempt = 0
+        }
         val tick = IndodaxSummaryFeed.parse(message, pairId, cumulativeVolume) ?: return
 
         // Pesan bisa datang tidak berurutan; jangan mundur, dan jangan ulang baris yang sama.
@@ -182,23 +202,31 @@ class IndodaxMarketWebSocket(
         onCandle(next)
     }
 
-    private inner class Listener : WebSocketListener() {
+    private inner class Listener(private val isCurrent: () -> Boolean) : WebSocketListener() {
         override fun onOpen(webSocket: WebSocket, response: Response) {
-            reconnectAttempt = 0
+            if (!isCurrent()) {
+                webSocket.close(1000, "Superseded")
+                return
+            }
             connectedAtMs.set(System.currentTimeMillis())
             onConnected()
             subscribe(webSocket)
         }
 
-        override fun onMessage(webSocket: WebSocket, text: String) = consume(text)
+        override fun onMessage(webSocket: WebSocket, text: String) {
+            if (!isCurrent()) return
+            consume(text)
+        }
 
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+            if (!isCurrent()) return
             if (socket === webSocket) socket = null
             onDisconnected()
             reconnect()
         }
 
         override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+            if (!isCurrent()) return
             if (socket === webSocket) socket = null
             onDisconnected()
             if (code != 1000) reconnect()
@@ -207,6 +235,8 @@ class IndodaxMarketWebSocket(
 
     companion object {
         private const val WS_URL = "wss://ws3.indodax.com/ws/"
+        private const val BASE_RECONNECT_MS = 800L
+        private const val MAX_RECONNECT_MS = 12_000L
 
         /**
          * Token publik kanal `market:summary-24h`. Berlaku sampai 2031-09-08 (`exp`

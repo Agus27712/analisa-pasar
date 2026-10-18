@@ -12,15 +12,16 @@
 >
 > | Status | Temuan |
 > |---|---|
-> | 🔴 Kritis — masih hidup | — (K1, K2 sudah ditutup batch 6k) |
+> | 🔴 Kritis — masih hidup | — |
 > | 🟠 Serius — masih hidup | P6 (sebagian) · P9 |
-> | 🟡 Sedang/rendah — masih hidup | K8–K15 |
-> | ✅ Sudah ditutup | P1–P5, P7, P8 · **J1–J10 (seluruhnya — berkas temuan jurnal dihapus 2026-10-17)** · **N1–N17 (seluruhnya — batch 6i, 2026-10-17)** · **K5, K6 (batch 6j)** · **K1–K4 (batch 6k)** · **K7 (batch 6l, 2026-10-17)** |
+> | 🟡 Sedang/rendah — masih hidup | — |
+> | ✅ Sudah ditutup | P1–P5, P7, P8 · **J1–J10 (seluruhnya — berkas temuan jurnal dihapus 2026-10-17)** · **N1–N17 (seluruhnya — batch 6i, 2026-10-17)** · **K1–K15 (seluruhnya — batch 6j–6n; berkas temuan koneksi dipindah 2026-10-18)** |
 >
 > Rincian + lokasi + prioritas: `docs/laporan_temuan_bugs_notifikasi.md` (sudah **di luar**
 > `docs/bugs/` karena N1–N17 tuntas — berkas itu sekarang berperan sebagai laporannya),
-> `docs/bugs/temuan_bugs_paper_trade.md`, dan
-> **`docs/bugs/temuan_koneksi_tokocrypto_indodax.md`**.
+> `docs/bugs/temuan_bugs_paper_trade.md` (P6 sisa + P9 masih hidup), dan
+> **`docs/laporan_temuan_bugs_koneksi_tokocrypto_indodax.md`** (K1–K15 tuntas — sudah **di luar**
+> `docs/bugs/`).
 > Jejak audit jurnal ada di laporan per batch
 > (`docs/LAPORAN-batch3-jurnal-*.md` … `docs/LAPORAN-batch6-j*-2026-10-17.md`).
 > Aturan baru sejak 2026-10-17: berkas temuan yang **seluruh isinya** sudah tutup dipindahkan ke

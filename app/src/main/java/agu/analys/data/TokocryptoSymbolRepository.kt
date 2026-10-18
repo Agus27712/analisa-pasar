@@ -55,6 +55,17 @@ object TokocryptoSymbolRepository {
     private const val OFFICIAL_SYMBOLS_URL = "https://www.tokocrypto.com/open/v1/common/symbols"
     private const val TOKOCRYPTO_EXECUTION_RULES_URL = "https://www.tokocrypto.site/api/v3/executionRules"
 
+    /**
+     * Tipe simbol resmi: 1 = MBX, 2 = Next, 3 = NextMe. Bila simbol tidak ada di peta,
+     * [getSymbolType] mengembalikan nilai ini — **bukan** diam-diam menganggapnya Type 1
+     * (temuan K15). Pemanggil yang membandingkan `== 3` otomatis memakai host Type 1 sebagai
+     * perlakukan bawaan, tetapi minimal ada log peringatan sekali per simbol.
+     */
+    const val SYMBOL_TYPE_UNKNOWN = 0
+
+    /** Simbol tak dikenal yang log peringatannya sudah dicetak (sekali per simbol). */
+    private val warnedUnknownSymbolType = ConcurrentHashMap.newKeySet<String>()
+
     /** Snapshot resmi terakhir; dipakai untuk uji kewajaran pembaruan. */
     @Volatile
     private var lastOfficialSymbols: Set<String> = emptySet()
@@ -290,8 +301,24 @@ object TokocryptoSymbolRepository {
         return null
     }
 
+    /**
+     * Tipe simbol untuk routing host (1/2/3). Simbol yang tidak ada di peta mengembalikan
+     * [SYMBOL_TYPE_UNKNOWN] dan **mencatat log sekali per simbol** (temuan K15): dulu nilai
+     * bawaannya `1`, sehingga kesalahan konfigurasi mengarah ke host yang salah tanpa jejak.
+     */
     fun getSymbolType(symbol: String): Int {
-        return getSymbolInfo(symbol)?.symbolType ?: 1
+        val info = getSymbolInfo(symbol)
+        if (info != null) return info.symbolType
+        warnUnknownSymbolTypeOnce(symbol)
+        return SYMBOL_TYPE_UNKNOWN
+    }
+
+    private fun warnUnknownSymbolTypeOnce(symbol: String) {
+        val key = symbol.trim().uppercase()
+        if (key.isEmpty()) return
+        if (warnedUnknownSymbolType.add(key)) {
+            Timber.w("getSymbolType: \"$key\" tak ada di peta simbol; dianggap tidak diketahui (0)")
+        }
     }
 
     /**
