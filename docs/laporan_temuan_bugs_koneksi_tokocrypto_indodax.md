@@ -65,17 +65,16 @@ dan Indodax terasa "selalu putus".
 | K5 — WS Indodax mati: token terpotong, kanal salah, parser salah bentuk | token utuh, kanal `market:summary-24h`, parser 8 kolom | 6j | `4684e8a` |
 | K6 — `lastSequence` tidak di-reset saat reconnect (Indodax) | `lastSequence` dihapus (kanal ringkasan tidak punya nomor urut) | 6j | `4684e8a` |
 | K7 — `isStale` memutus socket, bukan menyambung ulang dengan tenang | ambang hitung siklus ping + `reconnectNow()` tanpa buang candle | 6l | `6ae7b5a` |
-| K8 — backoff di-reset setiap `onOpen`, tanpa jitter dan tanpa batas percobaan | reset hanya setelah sesi stabil 60 detik; jitter ±20%; jeda menyerah 5 menit | 6n | menyusul |
-| K9 — listener Indodax tidak punya penjaga generasi | penjaga generasi di kedua socket; frame socket usang diabaikan | 6n | menyusul |
-| K10 — satu flag `wsLive` dipakai dua bursa | status live dipisah per bursa (`wsLiveToko`, `wsLiveIndodax`) | 6n | menyusul |
-| K11 — worker Indodax mengunduh seluruh pasar, bukan watchlist | worker memakai `fetchTickers(eligibleSymbols)` | 6n | menyusul |
-| K12 — `fetchTickers` Indodax selalu mengunduh seluruh ringkasan | per-pair lewat `/api/ticker/<pair>`; `/api/summaries` khusus dashboard | 6n | menyusul |
+| K8 — backoff di-reset setiap `onOpen`, tanpa jitter dan tanpa batas percobaan | reset hanya setelah sesi stabil 60 detik; jitter ±20%; jeda menyerah 5 menit | 6n | `a6c5e00` |
+| K9 — listener Indodax tidak punya penjaga generasi | penjaga generasi di kedua socket; frame socket usang diabaikan | 6n | `a6c5e00` |
+| K10 — satu flag `wsLive` dipakai dua bursa | status live dipisah per bursa (`wsLiveToko`, `wsLiveIndodax`) | 6n | `a6c5e00` |
+| K11 — worker Indodax mengunduh seluruh pasar, bukan watchlist | worker memakai `fetchTickers(eligibleSymbols)` | 6n | `a6c5e00` |
+| K12 — `fetchTickers` Indodax selalu mengunduh seluruh ringkasan | per-pair lewat `/api/ticker/<pair>`; `/api/summaries` khusus dashboard | 6n | `a6c5e00` |
 | K13 — simbol bisa masuk watchlist tanpa dicek keberadaannya | `WatchlistEntryGate` + `hasSymbol`; hapus fallback fail-open | 6m | `af957b7` |
 | K14 — cabang dashboard strategi melewati filter listing | `DashboardRanking.symbolListed`; `uniqueTicks` disaring sekali di awal | 6m | `af957b7` |
-| K15 — `getSymbolType` mengembalikan 1 untuk simbol tak dikenal | konstanta `SYMBOL_TYPE_UNKNOWN = 0` + log sekali per simbol | 6n | menyusul |
+| K15 — `getSymbolType` mengembalikan 1 untuk simbol tak dikenal | konstanta `SYMBOL_TYPE_UNKNOWN = 0` + log sekali per simbol | 6n | `a6c5e00` |
 
-"Commit menyusul" berarti perubahan batch 6n ada di pohon kerja branch `patch` dan belum di-commit
-saat laporan ini ditulis (kebijakan repo: commit hanya atas permintaan owner).
+Batch 6n di-commit sebagai `a6c5e00` di branch `patch` (2026-10-18).
 
 ---
 
@@ -197,7 +196,7 @@ Urutannya `[pair, epochDetik, last, low, high, open, vol_idr, vol_koin]`.
 | 6k | K1–K4 — daftar pair hanya dari endpoint resmi, gate fail-closed | commit `0903d86` |
 | 6l | K7 — ambang usang hitung siklus ping, `reconnectNow()` tanpa buang candle | commit `6ae7b5a` |
 | 6m | K13 + K14 — gate entry watchlist & satu gate listing dashboard | commit `af957b7` |
-| 6n | K8–K12 + K15 — backoff berjitter & berbatas, penjaga generasi, status live per bursa, worker & ticker Indodax sesuai lingkup, tipe simbol tak dikenal jujur | pohon kerja `patch` (commit menyusul) |
+| 6n | K8–K12 + K15 — backoff berjitter & berbatas, penjaga generasi, status live per bursa, worker & ticker Indodax sesuai lingkup, tipe simbol tak dikenal jujur | commit `a6c5e00` |
 | — | Berkas dipindahkan dari `docs/bugs/` ke sini (seluruh temuan tertutup) | 2026-10-18 |
 
 ---
@@ -210,6 +209,7 @@ Urutannya `[pair, epochDetik, last, low, high, open, vol_idr, vol_koin]`.
   endpoint resmi lain yang belum terdokumentasi — perlu konfirmasi ke dokumentasi Tokocrypto
   sebelum menyimpulkan "Type 3 tidak mungkin didukung".
 - Order riil tidak diuji ulang di audit ini (sudah diverifikasi owner).
-- Angka jumlah uji batch 6n **belum diukur** di lingkungan agen (Android SDK tidak tersedia di
-  sandbox PRoot ini); lihat `workplan2.md` §57 untuk statusnya. Uji ditulis dan siap dijalankan di
-  CI/lingkungan ber-SDK dengan `./gradlew :app:testDebugUnitTest`.
+- Angka jumlah uji batch 6n **sudah diukur** lewat CI (`unit-tests-manual.yml`, commit `a6c5e00`):
+  run `39083182133` (7 kelas / 38 uji, 0 gagal) dan run `39083423103` (`all-unit-tests`:
+  **94 kelas / 726 uji, 0 gagal, 0 error, 1 dilewati**). Rincian ada di `workplan2.md` §57.4.
+  Sandbox agen sendiri tidak bisa menjalankan Gradle (tidak ada Android SDK; `aapt2` aarch64).

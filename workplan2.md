@@ -3534,20 +3534,24 @@ Kontrol negatif (dijalankan sebagai simulasi di lingkungan ini — lihat 57.4):
 
 ### 57.4 Angka terukur
 
-**Belum diukur.** Sandbox agen ini (PRoot Android) **tidak punya Android SDK**; `aapt2` juga tidak
-tersedia untuk aarch64, dan JVM bawaan (21) gagal start (hanya JVM 17 yang jalan). Jadi
-`./gradlew :app:testDebugUnitTest` **tidak dapat dijalankan** di sini.
+Diukur dari XML `app/build/test-results/testDebugUnitTest/*.xml` lewat workflow
+`unit-tests-manual.yml`, commit `a6c5e00`, branch `patch` (2026-10-18). Sandbox agen (PRoot
+Android) tidak bisa menjalankan Gradle — tidak ada Android SDK dan `aapt2` aarch64 — jadi
+angkanya datang dari CI.
 
-Angka berikut **diturunkan** (dihitung dari berkas uji yang ditulis), **bukan diukur**:
+| Jalankan | Cakupan | Kelas | Uji | Gagal | Error | Dilewati |
+|---|---|---|---|---|---|---|
+| Run `39083182133` | custom: 5 kelas baru + `RealtimeSocketHealthTest` + `CandidateScanWorkerSourceTest` | 7 | 38 | 0 | 0 | 0 |
+| Run `39083423103` | `all-unit-tests` (suite penuh) | 94 | 726 | 0 | 0 | 1 |
 
-| Tahap | Kelas | Uji | Gagal | Error | Dilewati |
-|---|---|---|---|---|---|
-| Sebelum batch ini (batch 6m) | 89 | 702 | 0 | 0 | 1 |
-| Setelah batch 6n (`+5` kelas, `+24` uji) | 94 | 726 | ? | ? | ? |
+Rincian kelas baru (semuanya lulus): `ReconnectBackoffTest` 8, `RealtimeReconnectPolicyTest` 5,
+`MarketDataLiveFlagTest` 4, `IndodaxTickerScopeTest` 3, `TokocryptoSymbolTypeUnknownTest` 4 —
+total **24 uji baru**, sesuai `+5` kelas / `+24` uji dari baseline batch 6m (89/702).
 
-Logika pindai sumber ke-24 kasus divalidasi dengan skrip Python yang meniru ekstraksi uji
-(bukan menjalankan JUnit): seluruh 48 pemeriksaan LULUS, dan 5 kontrol negatif MEMANG
-menggigit. Uji tetap harus dijalankan di CI/lingkungan ber-SDK sebelum angkanya dianggap sah.
+Kontrol negatif JUnit (menghidupkan kembali cacat, menjalankan ulang, lalu mengembalikan) belum
+dijalankan di CI — yang sudah dilakukan: simulasi pindai-sumber dengan skrip Python yang meniru
+ekstraksi uji; 48/48 pemeriksaan lulus dan 5 kontrol negatif memang menggigit. Bila owner ingin
+kontrol negatif JUnit yang sebenarnya, jalankan workflow dengan sengaja mengembalikan satu cacat.
 
 ### 57.5 Dokumen
 
