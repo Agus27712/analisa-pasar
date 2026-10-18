@@ -105,8 +105,12 @@ fun DashboardScreen(
     }
 
     // Satu entri per simbol: peta tick Indodax menyimpan 1 koin di beberapa kunci (BTCIDR, BTC_IDR, btc_idr)
-    val uniqueTicks = remember(allTicks) {
-        allTicks.values.distinctBy { it.symbol.uppercase().replace("_", "").replace("/", "") }
+    // K14: saring sekali di awal dengan gate listing bursa aktif, supaya simbol di luar daftar
+    // resmi tidak bisa bocor lewat jalur tick mana pun (highVol, swingCandidates, intradayCandidates).
+    val uniqueTicks = remember(allTicks, marketDataSource) {
+        allTicks.values
+            .distinctBy { it.symbol.uppercase().replace("_", "").replace("/", "") }
+            .filter { agu.analys.util.DashboardRanking.symbolListed(marketDataSource, it.symbol) }
     }
 
     // Watchlist/favorit dicocokkan per simbol penuh (BTCIDR != BTCUSDT), konsisten dengan cara daftar dibangun
@@ -139,9 +143,9 @@ fun DashboardScreen(
                 agu.analys.util.DashboardRanking.isRankable(marketDataSource, t)
         // Fail-closed khusus Tokocrypto: pair yang tidak berstatus TRADING di discovery
         // resmi (delisted / tak dikenal) tidak boleh bocor lewat jalur statis maupun gainers.
+        // K14: satu gate untuk kedua bursa lewat DashboardRanking.symbolListed.
         fun pairListed(p: TradingPair) =
-            marketDataSource != MarketDataSource.TOKOCRYPTO ||
-                agu.analys.data.TokocryptoSymbolRepository.isSpotTradingEnabled(p.symbol)
+            agu.analys.util.DashboardRanking.symbolListed(marketDataSource, p.symbol)
         // Tokocrypto: daftar discovery berisi semua pair, jadi hanya ambil 15 teratas sebagai cadangan
         val popularHead = if (marketDataSource == MarketDataSource.TOKOCRYPTO) {
             basePopular.filter { pairListed(it) }.take(agu.analys.util.DashboardRanking.PAGE_SIZE)
@@ -197,10 +201,9 @@ fun DashboardScreen(
                 .map { TradingPair.fromCustomSymbol(it.symbol) }
                 .distinctBy { it.symbol }
         } else {
-            // Fail-closed: fallback statis pun wajib lolos status listing Tokocrypto.
+            // Fail-closed: fallback statis pun wajib lolos gate listing bursa aktif.
             basePopular.filter {
-                marketDataSource != MarketDataSource.TOKOCRYPTO ||
-                    agu.analys.data.TokocryptoSymbolRepository.isSpotTradingEnabled(it.symbol)
+                agu.analys.util.DashboardRanking.symbolListed(marketDataSource, it.symbol)
             }.take(agu.analys.util.DashboardRanking.PAGE_SIZE)
         }
     }
@@ -242,8 +245,11 @@ fun DashboardScreen(
                 (holdingPairs + matchedStrategyPairs).distinctBy { it.symbol }
             }
             DashboardQuickFilter.WATCHLIST -> {
+                // K14: watchlist/favorit yang tampil wajib lolos gate listing yang sama dengan
+                // daftar fokus — entri lama yang tidak ada di bursa aktif tetap disaring di sini.
                 val watchListPairs = (watchlist.map { TradingPair.fromCustomSymbol(it, defaultQuote) } +
                     favorites.map { TradingPair.fromCustomSymbol(it, defaultQuote) })
+                    .filter { agu.analys.util.DashboardRanking.symbolListed(marketDataSource, it.symbol) }
                 val matchedStrategyPairs = strategyPairs.filter { pair -> pair.symbol in watchSymbols }
                 (watchListPairs + matchedStrategyPairs).distinctBy { it.symbol }
             }

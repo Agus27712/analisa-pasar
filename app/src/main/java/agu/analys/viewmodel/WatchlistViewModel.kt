@@ -3,8 +3,11 @@ package agu.analys.viewmodel
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import agu.analys.config.MarketDataSource
+import agu.analys.data.IndodaxSymbolRepository
+import agu.analys.data.TokocryptoSymbolRepository
 import agu.analys.util.AppPreferences
 import agu.analys.util.MtfCacheManager
+import agu.analys.util.WatchlistEntryGate
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -50,9 +53,29 @@ class WatchlistViewModel(application: Application) : AndroidViewModel(applicatio
     private fun normalize(symbol: String): String =
         symbol.uppercase().trim().replace("/", "").replace("_", "")
 
+    /**
+     * Keberadaan simbol di repository bursa aktif — dipakai [WatchlistEntryGate].
+     * Fail-closed: simbol yang tidak bisa dibuktikan ada di bursa aktif ditolak.
+     */
+    private fun isKnownSymbol(symbol: String): Boolean =
+        when (prefs.marketDataSource) {
+            MarketDataSource.TOKOCRYPTO -> TokocryptoSymbolRepository.hasSymbol(symbol)
+            MarketDataSource.INDODAX -> IndodaxSymbolRepository.hasSymbol(symbol)
+        }
+
+    /**
+     * True bila [symbol] boleh ditambahkan ke watchlist bursa aktif (temuan K13).
+     *
+     * Menghapus simbol tidak digate — membersihkan daftar harus selalu bisa.
+     */
+    fun canAddToWatchlist(symbol: String): Boolean =
+        WatchlistEntryGate.checkAdd(symbol, prefs.marketDataSource, ::isKnownSymbol).accepted
+
     fun toggleWatchlist(symbol: String) {
         val upper = normalize(symbol)
         if (upper.isBlank()) return
+        val alreadyWatched = prefs.getWatchlist().contains(upper)
+        if (!alreadyWatched && !canAddToWatchlist(upper)) return
         prefs.toggleWatchlist(upper)
         val defaultSym = getDefaultSymbol()
         val current = prefs.getWatchlist().ifEmpty { setOf(defaultSym) }
@@ -64,6 +87,7 @@ class WatchlistViewModel(application: Application) : AndroidViewModel(applicatio
     fun addToWatchlist(symbol: String) {
         val upper = normalize(symbol)
         if (upper.isBlank()) return
+        if (!canAddToWatchlist(upper)) return
         val current = _watchlist.value.toMutableSet()
         current.add(upper)
         prefs.setWatchlist(current)
@@ -85,7 +109,12 @@ class WatchlistViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun setCustomWatchlist(symbols: Collection<String>) {
-        val upper = symbols.map { normalize(it) }.filter { it.isNotBlank() }.toSet()
+        // K13: entri yang tidak ada di bursa aktif dibuang (fail-closed), bukan disimpan
+        // sebagai simbol hantu. Preset sebagian besar sah; yang tidak ada di bursa cukup gugur.
+        val upper = symbols
+            .map { normalize(it) }
+            .filter { it.isNotBlank() && canAddToWatchlist(it) }
+            .toSet()
         val defaultSym = getDefaultSymbol()
         val finalSet = if (upper.isEmpty()) setOf(defaultSym) else upper
         prefs.setWatchlist(finalSet)

@@ -1475,7 +1475,7 @@ Dipulihkan → hijau.
 
 ## 26. Batch 1 audit notifikasi — N1, N2, N3 (2026-10-16)
 
-Sumber: `docs/bugs/temuan_bugs_notifikasi.md` (audit read-only dari agen lain, di-pull dari
+Sumber: `docs/laporan_temuan_bugs_notifikasi.md` (audit read-only dari agen lain, di-pull dari
 `patch`). Batch 1 mengerjakan tiga temuan berisiko tertinggi. Sisanya (N4–N12) **belum dikerjakan**.
 
 Perbaikan mendarat di commit **`cd6c032`**.
@@ -1569,7 +1569,7 @@ lain, penjaga ini tidak ikut memindah. Uji perilaku penuh butuh menjalankan serv
 Sisa temuan yang belum dikerjakan: **N4** (toggle push tidak dipatuhi di jalur alert/trailing),
 **N5** (notifikasi kandidat tanpa disclaimer "uang riil masih diblokir"), **N6** (dua produsen satu
 state machine), **N7** (`markTriggered` tidak menormalkan simbol — **aktif**, bukan latent),
-**N8–N12**. Lihat `docs/bugs/temuan_bugs_notifikasi.md`.
+**N8–N12**. Lihat `docs/laporan_temuan_bugs_notifikasi.md`.
 
 ---
 
@@ -1685,7 +1685,7 @@ Y", bukan "helper membaca berkas prefs aplikasi yang sama".
 Sisa temuan: **N6** (dua produsen satu state machine — butuh keputusan desain), **N8** (param
 `onlyWhenBackground` mati), **N9** (default `?: 75` mengarang skor), **N10** (snapshot pair lain
 ikut tercatat), **N11** (tier confidence lintas-mode), **N12** (tanpa cooldown notifikasi kandidat).
-Lihat `docs/bugs/temuan_bugs_notifikasi.md`.
+Lihat `docs/laporan_temuan_bugs_notifikasi.md`.
 
 ---
 
@@ -2079,7 +2079,7 @@ Audit menulisnya terpisah karena muncul di dua berkas:
   list.add(0, signal.copy(marketSymbol = selectedPair.value.symbol))   // menimpa field engine
   signalLogRepository.recordSignal(symbol = selectedPair.value.symbol, …)
   ```
-- **N10** (`docs/bugs/temuan_bugs_notifikasi.md`, baris tabel N10) — jalur beli memakai
+- **N10** (`docs/laporan_temuan_bugs_notifikasi.md`, baris tabel N10) — jalur beli memakai
   `engine.signalState.value` **tanpa memeriksa** `signal.marketSymbol == symbol`
   (`TradeSignalSnapshot.capture:275`, `TradingViewModelSync.kt:253-282`).
 
@@ -2536,3 +2536,1043 @@ temuan. Angka test tidak berubah dan tidak diukur ulang (tidak ada kode yang ber
 ### 40.5 Laporan
 
 `docs/LAPORAN-sync-dokumen-temuan-2026-10-16.md`
+
+---
+
+## 41. Batch 6a — J10 (sisa): mesin exit paper tidak lagi memakai SL/TP pair lain (2026-10-17)
+
+### 41.1 Masalah
+
+Batch 5a menutup J10 di **jurnal** (`capture` digerbang + `attributedFields` di kedua jalur beli),
+tetapi satu jalur masih membaca `engine.signalState.value` **mentah**: beli **paper manual**.
+
+```kotlin
+// TradingViewModelSync.kt:343-350 (sebelum)
+val armed = armPaperExitEngine(
+    symbol = symbol, exchange = currentEx, entryPrice = effectiveEntry,
+    stopLoss = engine.signalState.value.stopLoss,          // ← bisa milik pair lain
+    tp1 = engine.signalState.value.targetPrice1,
+    tp2 = engine.signalState.value.targetPrice2,
+    atrPct = atrPct, force = isDca
+)
+```
+
+Jendelanya sama dengan J4: `selectPair()` mengganti pair lebih dulu, sedangkan `signalState`
+masih berisi hasil pair lama sampai tick berikutnya. Bedanya dengan jurnal — di sini nilainya
+dipakai untuk **keputusan**:
+
+- `stopLoss` disaring `PaperStopResolver.resolve` (`0 < SL < entry`), jadi SL pair lain yang jauh
+  di atas entry ditolak. Tetapi SL yang kebetulan di bawah entry **dan** di bawah lantai friksi
+  tetap dipakai — SL terlalu lebar.
+- `tp1`/`tp2` **tidak** disaring. `bar.high >= tp1` memicu partial TP + SL ke BE; TP1 pair lain
+  yang berada **di bawah** entry posisi ini bisa memicu **jual sebagian pada tick pertama**.
+
+### 41.2 Perbaikan
+
+Resolver murni baru `trading/PaperArmSignal.kt`:
+
+```kotlin
+fun resolve(requestedSymbol, signalSymbol, stopLoss, tp1, tp2): PaperArmParams =
+    if (SignalSymbolAttribution.matches(requestedSymbol, signalSymbol))
+        PaperArmParams(stopLoss, tp1, tp2)
+    else
+        PaperArmParams(0.0, 0.0, 0.0)
+```
+
+Nol berarti "tidak ada TP/SL dari sinyal": SL jatuh ke lantai friksi, TP tidak ada. Itu perilaku
+yang benar — memakai TP pair lain dengan label pair ini tidak pernah benar. Validasi sisi harga
+tetap milik `PaperStopResolver`; resolver ini hanya soal atribusi.
+
+`TradingViewModelSync` kini membaca `engine.signalState.value` **sekali** ke `engineSignal`, lalu
+meng-arm mesin lewat `PaperArmSignal.resolve(...)`.
+
+### 41.3 Uji & kontrol negatif
+
+Uji baru: `app/src/test/java/agu/analys/trading/PaperArmSignalTest.kt` — **8 kasus**: simbol sama
+meneruskan nilai, simbol beda mengosongkan ketiganya (inti), simbol sinyal kosong, simbol diminta
+kosong, format simbol berbeda, nilai nol tetap nol, SL negatif tidak divalidasi di sini, dan
+atribusi tidak bergantung bursa.
+
+Kontrol negatif: resolver dikembalikan ke perilaku lama (nilai mentah tanpa cek kepemilikan) ⇒
+**tepat 3 dari 8 uji GAGAL** — ketiganya penjaga kepemilikan. Lima yang tetap lulus memang tidak
+membedakan versi (simbol sama, nilai nol, SL negatif, bursa).
+
+Angka terukur (dari XML): **74 kelas / 593 uji → 75 kelas / 601 uji**, 0 gagal, 1 dilewati.
+
+### 41.4 Batas
+
+- Jalur **auto-buy** tidak diubah: sinyalnya berasal dari transisi untuk `pair.symbol` itu sendiri.
+- Pemanggilan `armPaperExitEngine` di `TradingViewModelSync` (wiring) tidak diuji otomatis —
+  yang diuji resolver-nya. Bila wiring dikembalikan ke nilai mentah, uji ini tidak akan gagal.
+
+### 41.5 Laporan
+
+`docs/LAPORAN-batch6-j10-2026-10-17.md`
+
+---
+
+## 42. Batch 6b — J9 (N9): default `?: 75` dihapus dari `recordBuy` (2026-10-17)
+
+### 42.1 Masalah
+
+```kotlin
+// TradeHistoryRecorder.kt:61 (sebelum)
+signalConfidence: Int = snapshot?.confidenceScore ?: 75,
+```
+
+Bila snapshot tidak ada dan pemanggil tidak mengirim skor, jurnal menulis **75** — angka yang
+tidak pernah dihasilkan siapa pun. Pola yang sama dengan pelanggaran B1 (mengarang data agar baris
+terlihat lengkap): pembaca tidak bisa membedakan "keyakinan 75" dari "tidak ada data".
+
+**Latent** — kedua pemanggil saat ini mengirim eksplisit (`TradingViewModelSync.kt:134`, `:316`),
+jadi belum ada baris salah di lapangan. Tetapi jebakan itu "tidur": pemanggil ketiga akan mewarisi
+angka karangan tanpa sadar.
+
+### 42.2 Perbaikan
+
+Resolver murni baru `database/TradeSignalConfidence.kt`:
+
+```kotlin
+fun resolve(explicit: Int?, fromSnapshot: Int?): Int = explicit ?: fromSnapshot ?: 0
+```
+
+- nilai eksplisit menang (termasuk `0`);
+- tanpa eksplisit → skor snapshot;
+- keduanya kosong → **0** = "tidak diketahui".
+
+`recordBuy` kini menerima `signalConfidence: Int? = null` dan menyimpan
+`TradeSignalConfidence.resolve(...)` — tidak ada lagi angka default yang dikarang di signature.
+
+### 42.3 Uji & kontrol negatif
+
+Uji baru: `app/src/test/java/agu/analys/database/TradeSignalConfidenceTest.kt` — **6 kasus**:
+eksplisit menang, snapshot dipakai, keduanya kosong → 0 (dan **bukan 75**), `0` eksplisit
+dihormati, `0` dari snapshot tetap 0, 100 diteruskan.
+
+Kontrol negatif: `?: 0` dikembalikan ke `?: 75` ⇒ **1 dari 6 uji GAGAL** — tepat uji yang
+menyatakan "tidak diketahui ≠ 75". Lima lainnya tidak membedakan versi (nilai eksplisit/snapshot).
+
+Angka terukur (dari XML): **75 kelas / 601 uji → 76 kelas / 607 uji**, 0 gagal, 1 dilewati.
+
+### 42.4 Batas
+
+- Tidak ada perubahan perilaku hari ini: kedua pemanggil sudah mengirim eksplisit. Yang berubah
+  hanya nilai yang akan dipakai **bila** ada pemanggil baru yang lupa.
+- `recordBuy` sendiri (Room + coroutine) tidak diuji otomatis; yang diuji resolver-nya.
+
+### 42.5 Laporan
+
+`docs/LAPORAN-batch6-j9-2026-10-17.md`
+
+---
+
+## 43. Batch 6c — J8: P&L trade real memakai satu rumus `FeeSchedule` (2026-10-17)
+
+### 43.1 Masalah
+
+Jalur eksekusi trade real menulis rumus P&L sendiri:
+
+```kotlin
+// TradingViewModelSync.kt:56-65 (sebelum)
+val netSell = effectivePrice * (1.0 - sellRate)
+val cost = before.entryPrice * (1.0 + buyRate)
+customPnlPct = (netSell / cost - 1.0) * 100.0
+customPnlIdr = (netSell - cost) * quantity
+```
+
+Tidak ada slippage di rumus itu, sedangkan `FeeSchedule.netProfitPctFor` menambahkan slippage
+**dua sisi** (default 0,08%/sisi). Untuk Tokocrypto IDR selisihnya ≈ **0,16 pp** — satu trade
+menghasilkan dua angka berbeda: jurnal vs portofolio/radar jual. Itu pelanggaran aturan
+"SATU rumus P&L"; pengecualian yang sah hanya `SimulationTradeStore`/`SimulationOrderEngine`.
+
+### 43.2 Perbaikan
+
+Resolver murni baru `trading/RealTradePnl.kt`:
+
+```kotlin
+RealTradePnlResolver.resolve(quantity, entry, exitPrice, exchange, quoteAsset, useMaker, slippagePct)
+```
+
+- `pnlIdr` dari `netSellValue − costBasisNet` (keduanya sudah termasuk fee + slippage);
+- `pnlPct` dari `FeeSchedule.netProfitPctFor` — **identik** dengan `(netSell/cost − 1) × 100`,
+  jadi rupiah dan persen tidak mungkin berbeda;
+- input tidak valid (`quantity/entry/exitPrice ≤ 0`, NaN/Inf) → `RealTradePnl.ZERO`.
+
+`TradingViewModelSync` kini memanggil resolver itu; dua variabel lokal (`buyRate`/`sellRate`)
+dihapus.
+
+### 43.3 Uji & kontrol negatif
+
+Uji baru: `app/src/test/java/agu/analys/trading/RealTradePnlTest.kt` — **12 kasus**: paritas
+persis dengan `FeeSchedule` untuk TK IDR / TK USDT / Indodax, selisih ≈0,16 pp terhadap rumus
+lama (bukti slippage ikut), konsistensi rupiah↔persen, rugi negatif, harga sama tetap rugi
+karena friksi, tiga input tidak valid, penskalaan kuantitas, dan taker≠maker.
+
+Kontrol negatif: resolver dikembalikan ke rumus lama tanpa slippage ⇒ **5 dari 12 uji GAGAL**
+(tiga paritas bursa, selisih slippage, konsistensi rupiah↔persen). Tujuh yang tetap lulus memang
+tidak membedakan versi (tanda rugi, impas, input nol, penskalaan, taker/maker).
+
+Angka terukur (dari XML): **76 kelas / 607 uji → 77 kelas / 619 uji**, 0 gagal, 1 dilewati.
+
+### 43.4 Batas
+
+- Hanya jalur **jual trade real**. `recordSell` di `TradeHistoryRecorder` sudah memakai
+  `FeeSchedule` untuk fee; angka `customPnl*` yang dikirim sekarang konsisten dengannya.
+- `SimulationTradeStore`/`SimulationOrderEngine` sengaja tidak disentuh (pengecualian yang sah).
+- Wiring di `TradingViewModelSync` tidak diuji otomatis; yang diuji resolver-nya.
+
+### 43.5 Laporan
+
+`docs/LAPORAN-batch6-j8-2026-10-17.md`
+
+---
+
+## 44. Batch 6d — P8: `barsHeld` tidak lagi dihitung dua kali sesudah rehidrasi (2026-10-17)
+
+### 44.1 Masalah
+
+`PaperRehydrate.mergedBarsHeld` menghitung `barsHeld` dari jam dinding
+(`max(stored, (now − openedAt) / 60_000)`) — menit yang berjalan saat app tertutup sudah masuk.
+Lalu `PaperAutoTradeRuntime.put(..., markFirstTickAsNewBar = true)` menandai bucket menit dengan
+sentinel `FIRST_TICK_BUCKET = -1L`, sehingga tick pertama sesudah rehidrasi dianggap **bar baru**
+dan `PaperExitStateMachine.onBar` menaikkan `barsHeld` **sekali lagi**.
+
+Efek: time-stop keluar **1 bar (1 menit) lebih awal** ⇒ app dan `tools/scalp_replay.py` tidak lagi
+sebanding.
+
+Yang tidak boleh disederhanakan: tick pertama itu **tetap** harus dievaluasi sebagai bar baru, kalau
+tidak posisi yang sudah kehabisan waktu baru ditutup pada batas menit berikutnya.
+
+### 44.2 Perbaikan — pisahkan "dievaluasi" dari "dihitung"
+
+`PaperExitResolver.onBar` menerima parameter keempat:
+
+```kotlin
+fun onBar(bar, window14, isNewBar: Boolean = true, countAsNewBar: Boolean = isNewBar): PaperExitDecision?
+...
+if (countAsNewBar) barsHeld++
+```
+
+Gate time-stop tetap membaca `isNewBar`. Default `= isNewBar` menjaga seluruh pemanggil lama
+(termasuk `PaperTradeJournalTest` dan `PaperExitFsmStateTest`) tidak berubah.
+
+Resolver murni baru `trading/PaperFirstBar.kt`:
+
+```kotlin
+object PaperFirstBarResolver {
+    fun countsAsNewBar(isNewBar: Boolean, firstTickAfterRehydrate: Boolean): Boolean =
+        isNewBar && !firstTickAfterRehydrate
+}
+```
+
+`PaperAutoTradeRuntime.markBarBucket` kini mengembalikan fakta (`BarBucketMark(isNewBar,
+firstTickAfterRehydrate)`), bukan boolean; situs evaluasi memetakannya lewat resolver.
+
+**Kenapa tidak ada field runtime baru:** sentinel `-1L` sudah hidup di `lastBarBucketMap` dan
+**terhapus pada pemanggilan `markBarBucket` pertama**, jadi pengecualian hanya berlaku untuk satu
+tick. Penanda yang bertahan akan menahan time-stop lebih lama — arah kesalahan yang berlawanan.
+Konsekuensi: `clear`/`clearAll` tidak perlu diubah.
+
+### 44.3 Uji & kontrol negatif
+
+Uji baru `app/src/test/java/agu/analys/trading/PaperFirstBarTest.kt` — **7 kasus**: 4 resolver murni
++ 3 integrasi mesin (barsHeld 4/5 tidak naik; time-stop tetap terpicu saat 5/5; bar M1 berikutnya
+tetap menambah). Dua uji integrasi itu pasangan yang saling mengunci.
+
+`PaperAutoTradeRuntimeTest`: enam pemanggil `markBarBucket` disesuaikan ke `.isNewBar` + asersi
+`.firstTickAfterRehydrate`.
+
+Kontrol negatif dua arah:
+
+| Kontrol | Perubahan | Hasil |
+|---|---|---|
+| A | `countsAsNewBar` → `isNewBar` | **3/7 GAGAL** |
+| B | `if (countAsNewBar)` → `if (isNewBar)` di `onBar` | **2/7 GAGAL** |
+
+Kontrol B membuktikan uji juga menjaga **pemakaian** resolver, bukan hanya resolver-nya.
+
+Angka terukur (dari XML): **77 kelas / 619 uji → 78 kelas / 626 uji**, 0 gagal, 0 error, 1 dilewati.
+
+### 44.4 Batas
+
+- **Bukan** P6 sisa `peak` — `peak` masih hanya bergerak dari bar sintetis
+  (`high = low = close = currentPrice`), bukan high M1 dari cache. Tetap temuan hidup.
+- `mergedBarsHeld` tidak diubah; ia sudah benar.
+- Wiring di `PaperAutoTradeCoordinator` (fungsi besar ber-`ViewModel`) tidak diuji otomatis;
+  pemetaan `barMark → countAsNewBar` hanya tiga baris tanpa cabang.
+- `tools/scalp_replay.py` tidak menyentuh rehidrasi, jadi tidak perlu perubahan.
+
+### 44.5 Laporan
+
+`docs/LAPORAN-batch6-p8-2026-10-17.md`
+
+---
+
+## 45. Batch 6e — P7: kontrak `clearPaperExitState` dihapus; celah sebenarnya jadi P9 (2026-10-17)
+
+### 45.1 Masalah
+
+`TradingViewModel.clearPaperExitState` tidak punya satu pun pemanggil
+(`grep -rn "clearPaperExitState" app/src` → hanya definisi), padahal `AGENTS.md` dan laporan P4.4
+menyebutnya sebagai salah satu dari empat titik pembersihan state mesin. Kontrak "pengguna
+mengambil alih exit engine" tidak pernah ada implementasinya.
+
+### 45.2 Keputusan: hapus, bukan implementasikan
+
+Fungsi itu bukan sekadar mati — **isinya salah sebagai serah-terima**: ia melepas mesin, penanda,
+dan progres FSM, tetapi **tidak** menyalakan kembali SL/TP legacy. Karena `armPaperExitEngine`
+menulis `setAutoSellParams(enabled = false)` (`:385-390`; auto-buy `:585` = `enabled = !p2OwnsExit`),
+memanggil fungsi itu akan menghasilkan posisi paper **tanpa exit apa pun**.
+
+Implementasi yang benar menunggu keputusan produk: setelah SL naik ke BE/trailing, `activeStopLoss`
+bisa **di atas** entry, dan `PaperStopResolver.resolve` menganggapnya tidak valid
+(`signalSl < entry`). Level pengganti tidak boleh ditebak.
+
+Jadi: `clearPaperExitState` dihapus; daftar hook di `AGENTS.md` dibersihkan menjadi
+`markSold` / `finalizePaperExit` / cabang "posisi sudah tidak ada".
+
+### 45.3 Temuan baru P9 (dicatat, belum diperbaiki)
+
+Mematikan auto-exit **saat posisi terbuka** meninggalkan posisi tanpa SL/TP sampai restart:
+
+- arm → `auto_sell_enabled = false`;
+- sakelar hanya menulis preferensi (`PaperAutoTradeSettings.kt:136` → `AppPreferences.kt:314`),
+  tidak ada yang menyalakan auto-sell kembali saat runtime;
+- `paperEngineOwnsExit` jadi `false`, tetapi blok SL/TP legacy masih terkunci
+  `updatedPos.isAutoSellEnabled` (`TradingViewModelAlerts.kt:244`) ⇒ hanya trailing yang tersisa;
+- setelah restart, `PaperRehydrate` → `HandBackToLegacy(REASON_AUTO_EXIT_OFF)` justru **menyalakan**
+  auto-sell (`:1004-1014`), jadi aksi pengguna yang sama berakhir berbeda tergantung restart.
+
+### 45.4 Verifikasi
+
+Penghapusan kode mati tidak punya uji perilaku; kontrol negatif tidak berlaku (tidak ada cabang
+yang diaktifkan/dimatikan). Yang dipakai sebagai penjaga:
+
+- `./gradlew testDebugUnitTest` hijau — **78 kelas / 626 uji / 0 gagal / 0 error / 1 dilewati**,
+  identik dengan baseline batch 6d. Kalau masih ada pemanggil, kompilasi akan gagal;
+- `grep -rn "clearPaperExitState" app/src` → **0 hasil**.
+
+### 45.5 Batas
+
+- P9 belum diperbaiki — jangan perlakukan "matikan auto-exit" sebagai serah-terima yang aman.
+- `docs/LAPORAN-p0-*` dan `docs/LAPORAN-p44-*` sengaja tidak diubah (laporan historis).
+
+### 45.6 Laporan
+
+`docs/LAPORAN-batch6-p7-2026-10-17.md`
+
+---
+
+## 46. Berkas temuan jurnal dihapus (2026-10-17)
+
+`docs/bugs/temuan_bugs_jurnal_pnl.md` **dihapus** atas perintah owner: seluruh J1–J10 sudah
+tertutup (batch 3a–6c), jadi berkas itu hanya berisi "tidak ada temuan hidup" + peta jalur yang
+nomor barisnya sudah bergeser. Jejak audit ada di laporan per batch + riwayat git
+(`git log --follow -- docs/bugs/temuan_bugs_jurnal_pnl.md`).
+
+Rujukan hidup yang diperbarui: `AGENTS.md` (daftar `docs/bugs/` + butir jurnal ditandai dihapus,
+larangan membuat ulang), `docs/PANDUAN-LANJUT-AGEN.md` (tabel status), dan catatan lintas-berkas
+di `docs/laporan_temuan_bugs_notifikasi.md`. Laporan historis dan seksi `workplan2.md` yang lama
+**tidak** ditulis ulang — keduanya benar untuk keadaan saat ditulis.
+
+Tidak ada perubahan kode; suite terakhir tetap 78 kelas / 626 uji / 0 gagal / 1 dilewati.
+Laporan: `docs/LAPORAN-hapus-temuan-jurnal-2026-10-17.md`.
+
+---
+
+## 47. Batch 6f — N13 + N14 + N8: satu peristiwa, satu pengirim, satu kategori (2026-10-17)
+
+### 47.1 Masalah (satu akar, tiga gejala)
+
+- **N13** — laporan "order jual berhasil/gagal" memakai `sendPriceAlertNotification` (kategori
+  `PRICE_ALERT`). Akibat dua arah: mematikan "Trading & Price Alerts" membungkam konfirmasi order
+  uang riil; mematikan "Trailing Stop & Eksekusi" tidak mematikan notifikasi trailing.
+- **N14** — "Trailing Stop Naik" dikirim dua kali: `updateSimTrailingOrder`/`updateRealTrailingOrder`
+  mengirim tanpa pembatas, lalu jalur peak mengirim lagi dengan jendela 30 dtk. Cooldown tertulis
+  tidak pernah mengatur apa pun; user mendengar bunyi tiap ~10 detik.
+- **N8** — `onlyWhenBackground` diteruskan ke helper tetapi tidak pernah dibaca.
+
+### 47.2 Perbaikan
+
+`util/NotificationRouting.kt` (baru) memetakan jenis peristiwa → kategori. Helper lama **dihapus
+namanya** dan diganti dua helper yang membawa kategorinya:
+
+```kotlin
+sendUserPriceAlertNotification(...)   // PRICE_ALERT — pengingat harga buatan pengguna
+sendExecutionResultNotification(...)  // TRAILING_STOP — hasil eksekusi jual/trailing/batch
+```
+
+Nama generik sengaja tidak dipertahankan: dengan nama lama hilang, compiler memaksa tiap call site
+memilih makna, dan pemanggil baru tidak bisa salah kategori tanpa sadar.
+
+8 call site dipindah (6 di `TradingViewModelAlerts`, 2 di `BatchSellCoordinator`); satu tetap
+`PRICE_ALERT` (alert harga pengguna, `TradingViewModelAlerts.kt:126`).
+
+N14: `updateSimTrailingOrder`/`updateRealTrailingOrder` kini **hanya memperbarui order**. Pembatas
+diangkat jadi `util/TrailingPeakThrottle.kt` (jendela 30.000 ms, batas strict `>` seperti perilaku
+lama). N8: parameter dihapus dari kedua overload.
+
+### 47.3 Uji & kontrol negatif
+
+13 uji baru (626 → 639): `TrailingPeakThrottleTest` (6), `NotificationSourceTest` (4, pindai sumber
+mengikuti pola `NotificationFeeSourceTest`), `NotificationGateTest` (+3).
+
+| Kontrol | Perubahan | Hasil |
+|---|---|---|
+| A | `EXECUTION` → `PRICE_ALERT` | **3 GAGAL** |
+| B | pengiriman dikembalikan di `updateSimTrailingOrder` | **1 GAGAL** |
+| C | `shouldNotify` memakai `>=` | **1 GAGAL** |
+| D | `onlyWhenBackground` ditambahkan lagi | **1 GAGAL** |
+
+Angka terukur (dari XML): **78 kelas / 626 uji → 80 kelas / 639 uji**, 0 gagal, 0 error, 1 dilewati.
+
+### 47.4 Batas
+
+- N15 dan N16 (keduanya di `TradingForegroundService`) **belum** disentuh.
+- Kanal laporan eksekusi ikut pindah ke `CHANNEL_TRAILING_ID` — disengaja: satu peristiwa tidak
+  boleh muncul di dua kanal, dan konfirmasi order tidak boleh hilang.
+- `setOnlyAlertOnce(true)` tidak ditambahkan; dengan pengirim tunggal + jendela 30 dtk, bunyi
+  maksimal sekali per 30 detik. Kalau terlalu sering, ubah `WINDOW_MS` (satu tempat, teruji).
+- Kategori dipilih di call site sehingga tidak bisa diuji perilakunya tanpa Android; penjaganya
+  uji pindai sumber + uji gerbang.
+
+### 47.5 Laporan
+
+`docs/LAPORAN-batch6f-n13n14-2026-10-17.md`
+
+---
+
+## 48. Batch 6g — N15 + N16: foreground service = keep-alive, bukan pengirim push (2026-10-17)
+
+### 48.1 Masalah
+
+- **N15** — `updateForegroundServiceState` memakai `hasActive && isNotificationsEnabled.value`,
+  dan `startService`/`forceRefresh` juga menolak jalan saat sakelar notifikasi mati. Akibatnya
+  mematikan "push notifikasi" menghentikan service — keep-alive pemantauan posisi — dan
+  `livePrices` kosong membuat P&L tampil 0% untuk semua posisi.
+- **N16** — `AppPreferences` dibangun 7× di service, termasuk `updatePrices` yang dipanggil tiap
+  tick dashboard. Konstruktornya membangun `EncryptedSharedPreferences` + `MasterKey`, dan bila
+  gagal ia **menghapus seluruh preferensi**.
+
+### 48.2 Perbaikan
+
+- `updateForegroundServiceState`: `if (hasActive)` — sakelar notifikasi tidak lagi jadi input.
+- Guard `isNotificationsEnabled` dihapus dari `startService` + `forceRefresh`.
+- `updatePrice` (tunggal, tanpa pemanggil) dihapus.
+- `updatePrices(context, prices, exchange)` — bursa **wajib** dari pemanggil; jalur per-tick tidak
+  menyentuh `AppPreferences` sama sekali.
+- Tiga konstruksi instance diganti `appPrefs` (`by lazy`). Sisa: **1** konstruksi di berkas itu.
+
+### 48.3 Uji & kontrol negatif
+
+5 uji pindai sumber baru (`service/ForegroundMonitorSourceTest.kt`): badan
+`updateForegroundServiceState` bebas `isNotificationsEnabled`; `startService`/`forceRefresh` bebas
+prefs; hitungan `AppPreferences(` = 1; `fun updatePrice(` tidak ada; `updatePrices` menerima
+`exchange: String` dan bebas prefs.
+
+| Kontrol | Perubahan | Hasil |
+|---|---|---|
+| A | `&& isNotificationsEnabled.value` dikembalikan | **1 GAGAL** |
+| B | `AppPreferences(context)` di `updatePrices` + `updatePrice` dihidupkan | **3 GAGAL** |
+
+Angka terukur (dari XML): **80 kelas / 639 uji → 81 kelas / 644 uji**, 0 gagal, 0 error, 1 dilewati.
+
+### 48.4 Batas
+
+- Service tetap menampilkan notifikasi persisten (kategori `SERVICE`, tanpa suara) — Android
+  mewajibkan foreground service punya notifikasi. Itu status pemantauan, bukan push.
+- N6 + N17 (butuh keputusan desain), N12, dan sisa N11 masih terbuka.
+- Perubahan signature `updatePrices` aman: hanya satu pemanggil (`MarketViewModel`).
+
+### 48.5 Laporan
+
+`docs/LAPORAN-batch6g-n15n16-2026-10-17.md`
+
+---
+
+## 49. Batch 6h — N12: cooldown per pair untuk notifikasi kandidat (2026-10-17)
+
+### 49.1 Masalah
+
+Notifikasi kandidat dipicu edge `READY`. State bisa flapping `READY → INVALIDATED → READY`, dan
+setiap siklus memenuhi syarat edge ⇒ bel berulang untuk setup yang praktis sama. Peak sudah punya
+jendela 30 dtk, emergency 60 dtk; kandidat belum punya apa pun.
+
+### 49.2 Perbaikan
+
+`util/CandidateNotifyThrottle.kt`:
+
+- `CandidateNotifyThrottle.shouldNotify(last, now, windowMs = 5 menit)` — fungsi murni;
+- `CandidateNotifyCooldown.allow(key, now)` — penjaga berstatus (peta `EXCHANGE_SYMBOL` → waktu).
+
+`sendCandidateFoundNotification` memanggil `allow(...)` sebelum mengirim, sehingga jalur foreground
+(VM) dan latar (worker) sama-sama terkena.
+
+Alasan 5 menit: worker memindai tiap 15 menit (tidak pernah menelan dua siklus), dan sinyal
+scalping M5 ⇒ 5 menit = satu candle penuh.
+
+### 49.3 Uji & kontrol negatif
+
+12 uji baru (644 → 656): `CandidateNotifyThrottleTest` 11 kasus (6 murni + 5 penjaga berstatus,
+termasuk "pencatatan hanya terjadi saat diizinkan"), plus 1 uji pindai sumber bahwa helper benar-
+benar memanggil `candidateCooldown.allow(...)`.
+
+Catatan metodologi: uji "kirim dua kali, hitung notifikasi di shade" **tidak bisa membedakan**
+karena ID yang sama hanya menimpa entri. Uji itu dibuang; yang diuji adalah keputusan `allow(...)`.
+
+| Kontrol | Perubahan | Hasil |
+|---|---|---|
+| A | `allow` selalu `true` | **2 GAGAL** |
+| B | panggilan `allow(...)` dihapus dari helper | **1 GAGAL** |
+
+Angka terukur (dari XML): **81 kelas / 644 uji → 82 kelas / 656 uji**, 0 gagal, 0 error, 1 dilewati.
+
+### 49.4 Batas
+
+- Cooldown hanya di memori proses; restart mengosongkannya (sama seperti peak).
+- Kunci per `EXCHANGE_SYMBOL` — pair sama di dua bursa punya jendela sendiri.
+- N6 + N17 belum disentuh; selama N6 hidup flapping masih mungkin, N12 hanya membatasi akibatnya.
+
+### 49.5 Laporan
+
+`docs/LAPORAN-batch6h-n12-2026-10-17.md`
+
+---
+
+## 50. Batch 6i — N6 + N17 + N11: satu mode, satu mesin, satu angka (2026-10-17)
+
+### 50.1 Keputusan owner
+
+- **N6/N17 → opsi (a):** worker latar hanya menghitung **mode yang sedang aktif**
+  (`prefs.strategyMode`). Saat mode itu dipakai, notifikasi dan engine memakai mesin yang sama,
+  jadi angkanya satu sumber: **engine → worker → notifikasi**. Skor boleh berubah mengikuti tren;
+  yang tidak boleh adalah dua metode untuk satu angka.
+- **Hemat baterai:** jangan pindai seluruh pair. Worker hanya menyentuh **watchlist**, dan hanya
+  mengambil data yang dibutuhkan mode aktif.
+- **N11 → jangan tampilkan** tabel tier lintas-mode. Cap `ScalpingMtfEvaluator` tidak diubah.
+
+### 50.2 Perbaikan
+
+**Seam baru `engine/ModeSignalEvaluator.kt`.**
+
+- `ModeSignalInput` membawa seluruh bahan evaluasi (candle, orderbook, fee, config, konteks global)
+  tetapi **tidak** membawa `macroAnomalyResult` — penalti dihitung di dalam dari candle D1.
+- `ModeSignalEvaluator.evaluate(input)` memilih evaluator berdasarkan `input.mode`; tidak ada jalur
+  yang bisa mengevaluasi mode lain.
+- `LearningTradingEngine.runScalping/runSwing/runIntraday` memakai seam ini. Import
+  `ScalpingMtfEvaluator`/`SwingEvaluator` di engine dihapus.
+
+**`CandidateScanWorker`.**
+
+- Baca `prefs.strategyMode` sekali; `when (mode)` menentukan data + satu jalur evaluasi.
+- `SignalLifecycleManager.process` **satu kali** per simbol (dulu tiga).
+- SWING: H1 200 + D1 100, H1 `dropLast(1)`. OFFICE_DAILY: H4 200 + D1 100, H4 `dropLast(1)`.
+  SCALPING: H1/M15/M1 60 `dropLast(1)` + **orderbook nyata**.
+- `diagnosticIgnoreOrderBookWhenUnavailable = true` dihapus dari produksi: tanpa orderbook,
+  Step2 GAGAL.
+- Notifikasi memakai `tracked.activeSignalState ?: evaluation.signal` — sama dengan kartu engine.
+
+**N11.**
+
+- Hapus kartu `ConfidenceReliabilityBreakdownCard`, `ConfidenceTierRow`, section
+  `confidence_tier_section`, `ConfidenceTierStats` + field tier, `buildTierStats`, serta
+  `ConfidenceTierNote` + ujinya.
+- Kartu **Akurasi per Setup** tetap; itu bukan tier lintas-mode.
+
+### 50.3 Uji & kontrol negatif
+
+11 uji baru: `ModeSignalEvaluatorTest` (4), `CandidateScanWorkerSourceTest` (5),
+`ConfidenceTierRemovalTest` (2).
+
+| Kontrol | Perubahan | Hasil |
+|---|---|---|
+| A | `macroAnomalyResult = null` di seam | **2 GAGAL** |
+| B | worker memanggil `ScalpingMtfEvaluator` + `diagnosticIgnore... = true` | **2 GAGAL** |
+| C | `SignalLifecycleManager.process` kedua di worker | **1 GAGAL** |
+| D | engine menghitung `MacroAnomalyDetector.evaluate` sendiri | **1 GAGAL** |
+| E | kartu tier dihidupkan kembali | **1 GAGAL** |
+
+Angka terukur (dari XML): 82 kelas / 656 uji → (N11 dihapus, −12 uji) 81/644 → **84 kelas /
+655 uji**, 0 gagal, 0 error, 1 dilewati.
+
+### 50.4 Batas
+
+- Snapshot tetap berbeda (worker 15 menit, tanpa forming volume/orderbook live). Yang dijamin:
+  metode + gerbang sama, bukan detik yang sama.
+- Mode non-aktif tidak punya produsen latar — konsekuensi keputusan (a).
+- Scalping latar dibatasi 10 simbol; 4 permintaan/simbol.
+- Tabel tier dihapus, tidak diganti. Statistik berjenjang berikutnya harus **per mode**.
+
+### 50.5 Laporan
+
+`docs/LAPORAN-batch6i-n6n17n11-2026-10-17.md`
+
+---
+
+## 51. Aturan baru — berkas temuan keluar dari `docs/bugs/`, tanpa laporan per batch (2026-10-17)
+
+### 51.1 Keputusan owner
+
+- Setiap kali **seluruh** isi sebuah berkas di `docs/bugs/` selesai diperbaiki, berkas itu
+  **dipindahkan keluar** (atau dihapus kalau isinya tidak lagi berguna).
+- Pola nama tujuan: `docs/laporan_temuan_bugs_<topik>.md`.
+- Berkas hasil pindahan **adalah laporannya**. **Tidak perlu** membuat `docs/LAPORAN-batch*.md`
+  baru; ringkasan batch masuk ke § Riwayat berkas itu dan ke `workplan2.md`.
+- Penulisan `.md` harus bersih: UTF-8 tanpa BOM, LF, **tanpa aksara Mandarin/Jepang/Korea**, dan
+  tanpa kalimat yang hanya bisa dipahami penulisnya.
+
+### 51.2 Yang dikerjakan
+
+- `git mv docs/bugs/temuan_bugs_notifikasi.md docs/laporan_temuan_bugs_notifikasi.md`.
+  Judul + header diubah menjadi laporan penutupan; ditambah baris § Riwayat untuk pemindahan.
+- Semua rujukan path di 13 berkas `.md` diperbarui ke path baru (termasuk laporan batch lama,
+  supaya tautannya tidak menggantung).
+- `AGENTS.md`: §3 (isi `docs/bugs/`), § "Folder temuan bug" (aturan pemindahan + larangan laporan
+  per batch), § "Saat ini berisi" (kini hanya `temuan_bugs_paper_trade.md`), dan seksi baru
+  **"Penulisan dokumen Markdown"**.
+- `docs/PANDUAN-LANJUT-AGEN.md`: catatan bahwa berkas notifikasi sudah di luar `docs/bugs/`.
+- **Baru:** `tools/check_md_text.py` — memeriksa BOM, CRLF, UTF-8 rusak, aksara CJK, mojibake.
+  Hasil pada 68 berkas `.md`: **bersih**.
+- **`trading/TradeLogExporter.kt`** — label jurnal `Skor Konfidensi (engine ∩ cap tahap)` diganti
+  `Skor Konfidensi (skor engine, dibatasi tahap)`. Simbol irisan dibuang karena di sebagian font
+  penampil ia terbaca seperti aksara CJK, dan berkas jurnal itu memang `.md`.
+- **Uji baru:** `TradeLogExporterLabelTest` (2) — label tidak memuat simbol irisan dan memakai kata
+  Indonesia. Kontrol negatif: label lama dikembalikan → **2 GAGAL**.
+
+### 51.3 Angka uji
+
+| Tahap | Kelas | Uji | Gagal | Error | Dilewati |
+|---|---|---|---|---|---|
+| Sebelum batch ini (batch 6i) | 84 | 655 | 0 | 0 | 1 |
+| Setelah `TradeLogExporterLabelTest` | **85** | **657** | **0** | **0** | **1** |
+
+### 51.4 Hasil pemeriksaan tulisan
+
+Pemindaian seluruh `.md` yang dilacak git (68 berkas) dan seluruh riwayat commit untuk `.md`:
+**tidak ada satu pun aksara Han/Hiragana/Katakana/Hangul**, tidak ada BOM, tidak ada CRLF, tidak ada
+berkas yang gagal di-decode sebagai UTF-8. Jadi "tulisan Mandarin" yang terlihat kemungkinan berasal
+dari **render font di penampil** (simbol matematika seperti ∩ ∧ √ ⇒ bisa tampil seperti aksara CJK
+pada font fallback), bukan dari isi berkas. Yang bisa dilakukan dari sisi repo: skrip pemeriksa di
+atas dijalankan sebelum commit, dan jargon pinjaman di dokumen diganti istilah Indonesia.
+
+### 51.5 Batas
+
+- Laporan batch lama **tidak dihapus** — isinya bukti uji dan kontrol negatif. Yang berubah: tidak
+  ada lagi berkas baru dengan pola itu.
+- `docs/bugs/` sekarang hanya berisi `temuan_bugs_paper_trade.md` (P6 sisa + P9 masih hidup).
+
+---
+
+## 52. Audit jalur koneksi Tokocrypto & Indodax — temuan K1–K15 (2026-10-17)
+
+### 52.1 Pemicu
+
+Owner menemukan pair **`UVXYBUSDT`** yang tidak ada di Tokocrypto, dan melaporkan WebSocket
+Indodax sering putus sehingga jatuh ke REST. Order beli/jual & saldo riil di kedua bursa sudah
+diuji owner dan berfungsi — jadi audit difokuskan ke **sumber daftar pair** dan **sumber data**.
+
+### 52.2 Metode
+
+Baca kode (discovery, service, WebSocket, koordinator, dashboard, watchlist) + **uji endpoint
+langsung** dari sandbox: bentuk respons `common/symbols`, isi `exchangeInfo` mirror, ticker/depth
+`UVXYBUSDT`, dan handshake WebSocket Indodax. Tidak ada perubahan kode.
+
+### 52.3 Temuan pokok
+
+- **K1 (kritis).** `TokocryptoSymbolRepository` membaca `optJSONArray("data")`, padahal endpoint
+  resmi mengembalikan `data: { list: [...] }`. Endpoint resmi (864 simbol) selalu dianggap gagal,
+  lalu dipakai `tokocrypto.site/api/v3/exchangeInfo` — daftar Binance **3.729 simbol**, termasuk
+  `UVXYBUSDT` dengan `status: TRADING` dan filter order valid. Ticker pair itu juga hidup di host
+  tersebut (18,82), sementara API resmi Tokocrypto membalas 404.
+- **K2 (kritis).** Host cadangan adalah **gateway kompatibel Binance**: `exchangeInfo`-nya berisi
+  3.729 simbol universe Binance, tetapi depth `BTC_USDT` identik dengan Tokocrypto resmi — jadi
+  host itu bukan cermin buta. Cacatnya: daftar pair diambil dari `exchangeInfo` gateway, bukan dari
+  `common/symbols` resmi, sehingga simbol yang tidak diperdagangkan Tokocrypto ikut lolos.
+- **K3–K4 (serius).** Field resmi `type` dibaca sebagai `symbolType` → semua simbol jadi Type 1
+  (17 simbol Type 3 salah rute). `spotTradingEnable` bertipe angka dan `status` tidak ada →
+  gate listing gagal-terbuka.
+- **K5 (serius).** Awalnya dicatat "token ditolak server". **Koreksi §53:** token di kode
+  terpotong satu karakter; token aslinya berlaku sampai 2031. Setelah dibetulkan, kanal
+  `chart:tick-<pair>` tetap tidak menerbitkan data — kanal yang benar `market:summary-24h` — dan
+  bentuk barisnya berbeda dari parser lama.
+- **K6–K7 (serius).** `lastSequence` tidak di-reset saat reconnect; `isStale` memanggil `start()`
+  yang memutus socket, sehingga pair sepi mengalami restart tiap 30 detik.
+- **K8–K14 (sedang).** Backoff tanpa jitter/batas; listener Indodax tanpa penjaga generasi; satu
+  `wsLive` untuk dua bursa; worker Indodax mengunduh seluruh pasar; `fetchTickers` Indodax selalu
+  `/api/summaries`; watchlist menerima simbol tanpa validasi; cabang dashboard melewati filter
+  listing.
+- **K15 (rendah).** `getSymbolType` default 1 untuk simbol tak dikenal.
+
+### 52.4 Batas
+
+- Belum ada perbaikan; seluruh K1–K15 masih hidup.
+- Perilaku host pihak ketiga bisa berubah. Yang dicatat adalah hasil ukur 2026-10-17.
+- Type 3 diuji dengan dua format stream dan tiga jalur REST, hasilnya negatif — masih perlu
+  konfirmasi dokumentasi Tokocrypto sebelum menyimpulkan tidak didukung.
+
+### 52.5 Dokumen
+
+`docs/laporan_temuan_bugs_koneksi_tokocrypto_indodax.md` (dulu
+`docs/bugs/temuan_koneksi_tokocrypto_indodax.md` — dipindah 2026-10-18 setelah seluruh K1–K15 tutup).
+
+## 53. Batch 6j — K5: WebSocket Indodax hidup lagi (2026-10-17)
+
+### 53.1 Pemicu dan koreksi temuan
+
+Owner menegaskan token Indodax **masih valid** dan melampirkan token utuh. Audit §52 mencatat
+"token ditolak server" — itu **gejala**, bukan akar masalah. Setelah dibandingkan karakter per
+karakter:
+
+| | Panjang | Akhiran tanda tangan |
+|---|---|---|
+| Token di kode | 104 | `…NVdsske` |
+| Token owner | 105 | `…NVdsskeo` |
+
+Tanda tangan HS256 base64url selalu 43 karakter; versi di kode hanya 42. Payload
+`{"exp":1946618415}` = **2031-09-08**, jadi token tidak kedaluwarsa — hanya terpotong.
+
+Bukti handshake langsung ke `wss://ws3.indodax.com/ws/`:
+
+```text
+token 104 karakter  → 3002 {"reason":"invalid token","reconnect":false}
+token 105 karakter  → {"id":1,"result":{"client":"…","version":"2.8.7","expires":true,"ttl":154367516}}
+```
+
+### 53.2 Tiga cacat berlapis
+
+1. **Token terpotong** (di atas).
+2. **Kanal salah.** `chart:tick-<pair>` hanya dijawab `{"recoverable":true,…}` lalu diam.
+   Kanal yang benar `market:summary-24h`; terukur ±1 pesan/detik (±3 KB per 20 detik) karena
+   mengalirkan semua pair. Varian per-pair (`market:summary-24h-<pair>`, `market:ticker-<pair>`,
+   `market:price-<pair>`) semuanya diam. Yang tersedia per-pair hanya `market:order-book-<pair>`.
+3. **Bentuk baris salah.** Server mengirim
+   `[pair, epochDetik, last, low, high, open, vol_idr, vol_koin]`; parser lama membaca
+   `[epoch, seq, harga, volume]` dan hanya menerima 4 kolom.
+
+### 53.3 Perubahan
+
+- **Baru** `service/IndodaxSummaryFeed.kt` — parser murni (tanpa Android `Context`), konstanta
+  kanal, dan `isValidTokenShape` (3 segmen, tanda tangan tepat 43 karakter).
+- `IndodaxMarketWebSocket` — token utuh; kanal `market:summary-24h`; saring satu pair;
+  `volume24h` dari `vol_idr` (sama dengan REST); delta `vol_koin` untuk volume candle;
+  deduplikasi `(timestamp, harga)`; tolak menyambung bila token tidak utuh.
+- `lastSequence` dihapus → **K6 tutup** (tidak ada nomor urut pada kanal ringkasan).
+
+### 53.4 Uji
+
+`IndodaxSummaryFeedTest` — 9 kasus: token utuh & berlaku, token terpotong ditolak, baris nyata
+sesuai urutan kolom, delta volume kumulatif, volume turun tidak negatif, pair lain diabaikan,
+kanal lama ditolak (+ penjaga sumber), baris 4 kolom ditolak, pesan rusak tidak melempar.
+
+Kontrol negatif (semua dijalankan, lalu berkas dikembalikan):
+
+| Kerusakan yang disuntikkan | Uji yang GAGAL |
+|---|---|
+| token dipotong 1 karakter | 2 (token utuh, token terpotong) |
+| kanal kembali ke `chart:tick-` | 1 (kanal lama) |
+| parser kembali ke 4 kolom | 3 (baris nyata, delta, volume turun) |
+
+### 53.5 Angka terukur
+
+Angka diambil dari `app/build/test-results/testDebugUnitTest/*.xml` setelah seluruh suite:
+**86 kelas / 666 uji**, 0 gagal, 0 error, 1 dilewati (sebelumnya 85/657).
+
+### 53.6 Dokumen
+
+`docs/laporan_temuan_bugs_koneksi_tokocrypto_indodax.md` (dulu `docs/bugs/…`) — K5 ditulis ulang
+(K5a/K5b/K5c), K6 ditandai tutup.
+
+## 54. Batch 6k — K1 + K2: daftar pair Tokocrypto hanya dari endpoint resmi (2026-10-17)
+
+### 54.1 Akar masalah
+
+`TokocryptoSymbolRepository` membaca `root.optJSONArray("data")`, padahal respons resmi berbentuk
+`data: { list: [...] }`. Endpoint resmi (864 simbol) karena itu **selalu dianggap gagal**, lalu
+kode turun ke `tokocrypto.site/api/v3/exchangeInfo` — universe Binance berisi 3.729 simbol,
+termasuk `UVXYBUSDT` yang tidak diperdagangkan Tokocrypto. Metadata pair hantu itu lengkap, jadi
+`validateOrder` lolos dan order baru ditolak di bursa.
+
+### 54.2 Perubahan
+
+- **Baru** `data/TokocryptoSymbolFeed.kt` — parser murni:
+  - `extractList` menerima `data.list`, `data[]`, dan `symbols[]`;
+  - `rejectionReason` menolak daftar <100 / >1.500 simbol, tanpa pair IDR, atau overlap <90%
+    dengan snapshot resmi sebelumnya;
+  - `readSpotTradingEnable` menerima Boolean/angka/string dan **fail-closed** untuk nilai tak
+    dikenal (K4);
+  - `type` dibaca lebih dulu, `symbolType` hanya cadangan (K3).
+- `TokocryptoSymbolRepository`:
+  - `SYMBOLS_ENDPOINTS` dihapus → satu `OFFICIAL_SYMBOLS_URL`;
+  - `symbolsMap.clear()` hanya terjadi setelah daftar lolos `rejectionReason`;
+  - gagal sync **tidak** menghapus snapshot; `lastSyncTime` hanya diperbarui saat sukses;
+  - percobaan ulang setelah gagal 2 menit (bukan 30 menit).
+- Gateway tetap dipakai `TokocryptoMarketService` untuk ticker/kline/depth — sesuai K2.
+
+### 54.3 Uji
+
+`TokocryptoSymbolFeedTest` — 10 kasus: bentuk `data.list`, bentuk array lama, `type` + gate
+numerik, fail-closed, tolak 3.729, tolak 63, tolak tanpa IDR, tolak overlap rendah, terima
+overlap tinggi, dan penjaga sumber (gateway tidak boleh kembali ke discovery).
+
+Kontrol negatif:
+
+| Kerusakan yang disuntikkan | Uji yang GAGAL |
+|---|---|
+| `data.list` tidak dibaca; `type` → `symbolType`; gate `optBoolean(..., true)` | 3 |
+| `rejectionReason` dihapus sebelum `symbolsMap.clear()` | 1 (penjaga sumber) |
+
+### 54.4 Angka terukur
+
+Dari XML setelah seluruh suite: **87 kelas / 676 uji**, 0 gagal, 0 error, 1 dilewati
+(sebelumnya 86/666).
+
+### 54.5 Sisa
+
+`UVXYBUSDT` tidak lagi masuk lewat discovery. Namun watchlist lama yang sudah memuat simbol itu
+masih bisa tampil sampai **K14** (watchlist menerima simbol tanpa validasi) ditutup.
+
+## 55. Batch 6l — K7: socket usang disambung ulang tanpa membuang histori (2026-10-17)
+
+### 55.1 Cacat
+
+`MarketDataCoordinator` memanggil `websocket.start(symbol)` begitu 30 detik tanpa frame data.
+Ada dua hal yang salah:
+
+1. **Ambang 30 detik hanya melihat frame data.** Pair sepi membuat koneksi sehat diputus, lalu
+   disambung lagi, berulang terus.
+2. **`start()` menjalankan `stop(false)`.** `candle` (Indodax) serta `streamSymbol`/`streamHost`
+   (Tokocrypto) ikut kosong, jadi histori menit berjalan hilang tiap kali reconnect.
+
+Padahal deteksi kematian sudah ada di lapisan transport: `webSocketClient` memakai
+`pingInterval` 15 detik, sehingga OkHttp memfailkan koneksi saat pong tidak datang
+(`onFailure` → `reconnect`). Pengecekan usang seharusnya hanya jaring pengaman.
+
+### 55.2 Perubahan
+
+- **Baru** `service/RealtimeSocketHealth.kt` — keputusan murni `needsRestart`:
+  - zombie: socket terbuka tanpa satu frame pun melewati `HANDSHAKE_GRACE_MS` (20 detik);
+  - kanal berhenti terbit: pernah ada frame lalu diam melewati `SILENCE_MS`
+    (6 × 15 detik = 90 detik);
+  - socket tertutup tidak dinilai (urusan job reconnect, supaya percobaan tidak bertumpuk).
+- `IndodaxMarketWebSocket` dan `TokocryptoMarketWebSocket` — `reconnectNow()` dipisah dari
+  `start()`: menutup socket lama dan menyambung lagi tanpa mengosongkan `candle`, `pairId`,
+  `streamSymbol`, `streamHost`. `connectedAtMs` ditambahkan dan diisi di `onOpen` (sebelumnya
+  `onOpen` menulis `lastMessageAt`, sehingga sesi tanpa frame selalu terlihat segar).
+- `MarketDataCoordinator` — memanggil `reconnectIfStale()` untuk kedua bursa.
+
+### 55.3 Uji
+
+`RealtimeSocketHealthTest` — 9 kasus: socket tertutup tidak dinilai; sesi baru diberi kesempatan;
+zombie terdeteksi; **pair sepi 45 detik tidak memicu restart** (kasus yang dulu gagal); diam
+melewati ambang siklus ping memicu restart; ambang minimal 4 × interval ping; penjaga pemanggil
+(coordinator tidak memanggil `start()` di blok pengecekan usang); penjaga candle Indodax;
+penjaga konfigurasi stream Tokocrypto.
+
+Kontrol negatif:
+
+| Kerusakan yang disuntikkan | Uji yang GAGAL |
+|---|---|
+| ambang kembali ke 30 detik | 2 (pair sepi, ambang siklus ping) |
+| blok coordinator kembali ke `isStale()` + `start()` | 1 (penjaga pemanggil) |
+| `candle = null` di `reconnectNow` | 1 (penjaga candle) |
+
+### 55.4 Angka terukur
+
+Dari XML setelah seluruh suite: **88 kelas / 685 uji**, 0 gagal, 0 error, 1 dilewati
+(sebelumnya 87/676).
+
+### 55.5 Sisa
+
+K8–K15 belum disentuh. Yang paling terasa setelah K7: **K8** (backoff tanpa jitter dan tanpa
+batas percobaan) dan **K13/K14** (simbol tanpa validasi listing masih bisa masuk watchlist dan
+dashboard).
+
+## 56. Batch 6m — K13+K14: watchlist tervalidasi, dashboard satu gate listing (2026-10-17)
+
+### 56.1 Cacat
+
+**K13 — simbol bisa masuk watchlist tanpa dicek keberadaannya.** Kolom "ketik simbol" di
+`WatchlistManagerSettings` menerima teks bebas; hasilnya langsung `onAddPair(...)`.
+`setWatchlist`/`toggleWatchlist` hanya mengubah huruf besar dan memangkas spasi, dan
+`TradingPair.fromCustomSymbol` **mengarang** `TradingPair` untuk simbol yang tidak dikenal.
+Jadi `UVXYBUSDT` (atau string apa pun) bisa masuk watchlist, tampil sebagai kartu berharga
+`-`, dan ikut dievaluasi engine — pintu masuk kedua bagi pair hantu, terlepas dari K1.
+Ada pula fallback fail-open: `sanitizeSymbolForExchange(...) ?: typed`; kalau sanitasi gagal,
+simbol mentah tetap disimpan.
+
+**K14 — cabang dashboard melewati gate listing.** `pairListed(...)` dipakai untuk
+`watchAndFav`, `explicit`, dan `popularHead`, tetapi tidak untuk `highVol`, `swingCandidates`,
+dan `intradayCandidates` (dibangun dari `uniqueTicks`), dan tidak pula untuk quick filter
+WATCHLIST yang membangun ulang `watchListPairs` langsung dari watchlist+favorit. Gate listing
+juga hanya berlaku untuk Tokocrypto: `pairListed` selalu `true` di Indodax, sehingga simbol
+sampah di watchlist Indodax bisa tampil sebagai kartu bernilai `-`.
+
+### 56.2 Perubahan
+
+- **Baru** `util/WatchlistEntryGate.kt` — gate murni `checkAdd(rawSymbol, source, isKnownSymbol)`
+  dengan tiga syarat: format `[A-Z0-9]` panjang wajar, kuotasi sah untuk bursa aktif, dan
+  keberadaan di repository bursa. Penolakan **fail-closed**; setiap penolakan punya pesan
+  Indonesia siap tampil. Menghapus simbol dari watchlist tidak digate.
+- `TokocryptoSymbolRepository.hasSymbol` / `IndodaxSymbolRepository.hasSymbol` — bukti
+  keberadaan simbol. Repository Indodax, saat discovery belum dimuat, memakai batas
+  `POPULAR_INDODAX_PAIRS` (sama seperti fallback `getAllTradingPairs`), bukan "semua lolos".
+- `WatchlistViewModel` — `addToWatchlist`, `toggleWatchlist` (hanya arah menambah), dan
+  `setCustomWatchlist` melewati gate; preset yang entrinya tidak ada di bursa aktif cukup
+  gugur, bukan disimpan sebagai simbol hantu.
+- `WatchlistManagerSettings` — fallback `?: typed` dihapus; putusan gate dipakai untuk status
+  tombol Tambah, pesan galat di bawah kolom, dan chip populer (chip tak tersedia tampil redup
+  dengan penjelasan saat diketuk).
+- `DashboardRanking.symbolListed(source, symbol)` — satu gate listing untuk kedua bursa
+  (Tokocrypto: status TRADING; Indodax: pair dikenal). `pairListed`, fallback statis
+  `allVolumeSortedPairs`, dan quick filter WATCHLIST di `DashboardScreen` semuanya memakainya.
+- `DashboardScreen` — `uniqueTicks` disaring **sekali di awal** dengan `symbolListed`, sehingga
+  `highVol`, `swingCandidates`, dan `intradayCandidates` tidak bisa menerima simbol di luar
+  daftar resmi lewat jalur tick mana pun.
+
+### 56.3 Uji
+
+`WatchlistEntryGateTest` — 17 kasus: keputusan gate (diterima, format, kuotasi per bursa,
+keberadaan), pair hantu `UVXYBUSDT` ditolak, pesan untuk setiap alasan penolakan,
+`hasSymbol` kedua repository (termasuk fallback POPULAR dan peta discovery),
+`symbolListed` per bursa (termasuk status suspend), plus penjaga perkabelan: ViewModel,
+UI tanpa fallback fail-open, `uniqueTicks` tersaring, quick filter WATCHLIST tersaring.
+
+Kontrol negatif:
+
+| Kerusakan yang disuntikkan | Uji yang GAGAL |
+|---|---|
+| `canAddToWatchlist` dilepas dari `addToWatchlist` | 1 (penjaga ViewModel) |
+| fallback `?: typed` dikembalikan di UI | 1 (penjaga UI) |
+| filter `symbolListed` dihapus dari `uniqueTicks` | 1 (penjaga dashboard) |
+
+### 56.4 Angka terukur
+
+Dari XML setelah seluruh suite: **89 kelas / 702 uji**, 0 gagal, 0 error, 1 dilewati
+(sebelumnya 88/685).
+
+### 56.5 Sisa
+
+K8–K12 dan K15 masih terbuka. Yang paling terasa berikutnya: **K8** (backoff tanpa jitter dan
+tanpa batas percobaan) dan **K10** (satu flag `wsLive` dipakai dua bursa).
+
+## 57. Batch 6n — K8–K12 + K15: backoff berbatas, status live per bursa, lingkup ticker, tipe simbol jujur (2026-10-18)
+
+### 57.1 Cacat
+
+- **K8 — backoff tanpa jitter dan tanpa batas.** `reconnectAttempt = 0` di `onOpen` membuat server
+  yang menerima lalu menutup koneksi (kasus K5) memicu siklus buka -> tutup -> tunggu 600–800 ms
+  tanpa henti. Tidak ada jitter, tidak ada status "menyerah sementara".
+- **K9 — listener Indodax tanpa penjaga generasi.** Socket lama bisa memanggil `onDisconnected()`
+  dan `reconnect()` saat pengguna berganti pair, sehingga bursa terlihat "terputus" padahal socket
+  aktif sehat. Tokocrypto sudah memakai `generation`; Indodax belum.
+- **K10 — satu flag `wsLive` dipakai dua bursa.** `wsLive` di-set `false` oleh callback bursa mana
+  pun. Socket bursa non-aktif yang terputus menjatuhkan status bursa yang sedang dipakai, sehingga
+  REST fallback diforce tanpa perlu.
+- **K11 — worker Indodax mengunduh seluruh pasar.** `CandidateScanWorker.fetchTicks` memanggil
+  `fetchAllMarketTicks()` (`/api/summaries`, SEMUA pair) padahal pemindaian hanya butuh watchlist.
+- **K12 — `fetchTickers` Indodax selalu seluruh pasar.** Meski dipanggil untuk satu/beberapa pair
+  (polling trailing tiap 10 detik), fungsi ini mengunduh `/api/summaries` lalu memfilternya.
+- **K15 — `getSymbolType` mengembalikan 1 untuk simbol tak dikenal.** Kesalahan konfigurasi
+  diarahkan ke host Type 1 tanpa satu pun log.
+
+### 57.2 Perubahan
+
+- **Baru** `service/ReconnectBackoff.kt` — kebijakan murni (tanpa jaringan/keacakan):
+  - `isStable(connectedAtMs, nowMs)` — sesi dianggap berhasil setelah `STABLE_AFTER_MS` (60 detik);
+  - `delayMs(attempt, base, max, random01)` — jeda berlipat dengan jitter ±20% dan plafon;
+  - `shouldGiveUp(attempt)` + `GIVE_UP_PAUSE_MS` (5 menit) setelah 6 percobaan berturut-turut.
+- `service/IndodaxMarketWebSocket.kt`:
+  - hitungan percobaan **tidak lagi** di-reset di `onOpen`; reset terjadi di `consume()` hanya
+    setelah sesi stabil (K8);
+  - penjaga generasi: `generation` naik di `stop()`/`reconnectNow()`; `connect()` menangkap
+    `gen` dan listener memakai `Listener { gen == generation }` (K9);
+  - `reconnect()` memakai `ReconnectBackoff`; konstanta `BASE_RECONNECT_MS`/`MAX_RECONNECT_MS`
+    ditambahkan.
+- `service/TokocryptoMarketWebSocket.kt`:
+  - `reconnect()` memakai `ReconnectBackoff`; reset dipindah dari `onOpen` ke `onMessage` setelah
+    stabil (K8); `kotlin.math.min` yang tidak lagi terpakai dihapus.
+- `viewmodel/MarketDataCoordinator.kt` (K10):
+  - `wsLive` tunggal diganti `wsLiveToko` + `wsLiveIndodax`;
+  - callback tiap socket hanya menyentuh flag bursanya sendiri;
+  - `wsFresh` memakai `activeWsLive()` (status bursa yang sedang dipakai);
+  - `handleWebSocketTick` menandai bursa aktif; `hardStopAndPurgeAll` mematikan keduanya.
+- `service/CandidateScanWorker.kt` (K11): cabang Indodax memakai
+  `IndodaxMarketService.fetchTickers(eligibleSymbols)`.
+- `service/IndodaxMarketService.kt` (K12): `fetchTickers(pairIds)` mengambil per-pair lewat
+  `fetchTicker` (`/api/ticker/<pair>`); `/api/summaries` tetap hanya di `fetchAllMarketTicks`
+  untuk dashboard penuh.
+- `data/TokocryptoSymbolRepository.kt` (K15): konstanta `SYMBOL_TYPE_UNKNOWN = 0`,
+  `warnUnknownSymbolTypeOnce` (log sekali per simbol); `getSymbolType` tidak lagi default `1`.
+  `TokocryptoMarketWebSocket.hostForSymbolType` diberi catatan bahwa 0 dan 1 sama-sama host Type 1
+  (perilaku lama dipertahankan; semua pemanggil membandingkan `== 3`).
+
+### 57.3 Uji
+
+Lima kelas uji, 24 kasus:
+
+- `service/ReconnectBackoffTest` (8) — murni: jeda berlipat, plafon, batas jitter, jeda positif,
+  batas stabil, `connectedAt` nol, batas menyerah, jeda menyerah jauh lebih panjang.
+- `service/RealtimeReconnectPolicyTest` (5) — pindai sumber kedua socket: pemakaian
+  `ReconnectBackoff`, `onOpen` tidak lagi reset, reset setelah stabil, penjaga generasi, konstanta
+  jeda.
+- `viewmodel/MarketDataLiveFlagTest` (4) — pindai sumber coordinator: flag per bursa, tidak ada
+  flag tunggal, `wsFresh` memakai `activeWsLive()`, callback menyentuh flag sendiri.
+- `service/IndodaxTickerScopeTest` (3) — worker tanpa `fetchAllMarketTicks`; `fetchTickers` per-pair
+  tanpa `summaries`; `fetchAllMarketTicks` tetap ada.
+- `data/TokocryptoSymbolTypeUnknownTest` (4) — konstanta `UNKNOWN`, `getSymbolType` mengembalikan
+  `UNKNOWN`, log sekali per simbol, host Type 1 untuk tipe tak dikenal.
+
+Kontrol negatif (dijalankan sebagai simulasi di lingkungan ini — lihat 57.4):
+
+| Kerusakan yang disuntikkan | Uji yang GAGAL |
+|---|---|
+| `reconnectAttempt = 0` dikembalikan ke `onOpen` Tokocrypto | 1 (onOpen tidak reset) |
+| `wsLiveToko`/`wsLiveIndodax` diganti satu `wsLive` | 1 (tanpa flag tunggal) |
+| worker kembali memanggil `fetchAllMarketTicks()` | 1 (lingkup watchlist) |
+| `fetchTickers` kembali ke `/api/summaries` | 1 (per-pair) |
+| `getSymbolType` kembali `return 1` | 1 (unknown) |
+
+### 57.4 Angka terukur
+
+Diukur dari XML `app/build/test-results/testDebugUnitTest/*.xml` lewat workflow
+`unit-tests-manual.yml`, commit `a6c5e00`, branch `patch` (2026-10-18). Sandbox agen (PRoot
+Android) tidak bisa menjalankan Gradle — tidak ada Android SDK dan `aapt2` aarch64 — jadi
+angkanya datang dari CI.
+
+| Jalankan | Cakupan | Kelas | Uji | Gagal | Error | Dilewati |
+|---|---|---|---|---|---|---|
+| Run `39083182133` | custom: 5 kelas baru + `RealtimeSocketHealthTest` + `CandidateScanWorkerSourceTest` | 7 | 38 | 0 | 0 | 0 |
+| Run `39083423103` | `all-unit-tests` (suite penuh) | 94 | 726 | 0 | 0 | 1 |
+
+Rincian kelas baru (semuanya lulus): `ReconnectBackoffTest` 8, `RealtimeReconnectPolicyTest` 5,
+`MarketDataLiveFlagTest` 4, `IndodaxTickerScopeTest` 3, `TokocryptoSymbolTypeUnknownTest` 4 —
+total **24 uji baru**, sesuai `+5` kelas / `+24` uji dari baseline batch 6m (89/702).
+
+Kontrol negatif JUnit (menghidupkan kembali cacat, menjalankan ulang, lalu mengembalikan) belum
+dijalankan di CI — yang sudah dilakukan: simulasi pindai-sumber dengan skrip Python yang meniru
+ekstraksi uji; 48/48 pemeriksaan lulus dan 5 kontrol negatif memang menggigit. Bila owner ingin
+kontrol negatif JUnit yang sebenarnya, jalankan workflow dengan sengaja mengembalikan satu cacat.
+
+### 57.5 Dokumen
+
+- `docs/laporan_temuan_bugs_koneksi_tokocrypto_indodax.md` — seluruh K1–K15 kini tutup; berkas
+  **dipindah** dari `docs/bugs/` ke `docs/laporan_…` (aturan §51). Ditambah §7 Riwayat + §6
+  Lampiran bukti.
+- `AGENTS.md` — daftar isi `docs/bugs/` (kini hanya `temuan_bugs_paper_trade.md`), aturan turunan
+  baru dari K8–K12/K15.
+- `workplan2.md` — seksi ini.
+
+## 58. Rilis 3.9.2 — batch 6j–6n (2026-10-18)
+
+Versi `3.9.2` (`versionCode 91`). Tidak ada perubahan kode selain nomor versi; isi rilis adalah
+seluruh perbaikan audit koneksi **K1–K15** (batch 6j–6n) yang sudah terverifikasi:
+
+- daftar pair Tokocrypto hanya dari `common/symbols` resmi (864 simbol), gate listing fail-closed;
+- WebSocket Indodax hidup (token utuh, kanal `market:summary-24h`, parser 8 kolom);
+- reconnect berjitter ±20% dengan plafon dan jeda menyerah 5 menit; penjaga generasi di kedua bursa;
+- status live per bursa (`wsLiveToko`/`wsLiveIndodax`), worker & ticker Indodax sesuai lingkup;
+- gate entry watchlist dan satu gate listing dashboard (`symbolListed`).
+
+Angka suite terukur: **94 kelas / 726 uji**, 0 gagal, 0 error, 1 dilewati.
+Berkas temuan sudah dipindahkan ke `docs/laporan_temuan_bugs_koneksi_tokocrypto_indodax.md`
+(seluruh butir tutup), sehingga `docs/bugs/` tidak lagi memuat topik koneksi.

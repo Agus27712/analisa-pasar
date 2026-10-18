@@ -325,7 +325,11 @@ class MarketViewModel(application: Application) : AndroidViewModel(application) 
 
                 try {
                     val priceMap = combinedTicks.mapValues { it.value.price }
-                    agu.analys.service.TradingForegroundService.updatePrices(getApplication(), priceMap)
+                    // N16 — bursa dioper eksplisit supaya service tidak membangun `AppPreferences`
+                    // di setiap tick dashboard.
+                    agu.analys.service.TradingForegroundService.updatePrices(
+                        getApplication(), priceMap, exchange = currentSource.name
+                    )
                 } catch (_: Exception) {}
 
                 lastLiveTickAt = System.currentTimeMillis()

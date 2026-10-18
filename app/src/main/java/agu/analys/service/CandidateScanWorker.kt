@@ -10,15 +10,17 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import agu.analys.config.MarketDataSource
 import agu.analys.config.StrategyMode
+import agu.analys.engine.ModeSignalEvaluator
+import agu.analys.engine.ModeSignalInput
 import agu.analys.engine.global.GlobalContextManager
-import agu.analys.engine.intraday.IntradayEvaluator
-import agu.analys.engine.scalping.ScalpingMtfEvaluator
 import agu.analys.engine.scalping.SignalLifecycleManager
-import agu.analys.engine.swing.SwingEvaluator
+import agu.analys.engine.scalping.TrackedSignal
+import agu.analys.model.AISignalState
+import agu.analys.model.CandleBar
 import agu.analys.model.MarketKey
+import agu.analys.model.MarketTick
+import agu.analys.model.OrderBookItem
 import agu.analys.model.Timeframe
-import agu.analys.service.IndodaxMarketService
-import agu.analys.service.TokocryptoMarketService
 import agu.analys.trading.SpotPositionStore
 import agu.analys.util.AlertNotificationHelper
 import agu.analys.util.AppPreferences
@@ -28,7 +30,17 @@ import java.util.concurrent.TimeUnit
 
 /**
  * Background worker untuk memindai kandidat sinyal BUY secara periodik.
- * Menjalankan mode makro (SWING, OFFICE_DAILY) dengan routing bursa yang dinamis.
+ *
+ * **N6 + N17 — satu mode, satu mesin, satu angka.** Worker hanya mengevaluasi **mode yang sedang
+ * aktif** (`prefs.strategyMode`), memakai `ModeSignalEvaluator` yang sama dengan engine foreground.
+ * Sebelumnya worker mengevaluasi SWING + INTRADAY + SCALPING sekaligus, berbagi
+ * `SignalLifecycleManager` singleton dengan engine, dan merakit input evaluator sendiri — termasuk
+ * **tidak** meneruskan penalti anomali makro untuk SWING. Akibatnya key `SYMBOL#MODE` yang sama
+ * bisa diisi skor dari metode berbeda.
+ *
+ * **Batasi ke watchlist.** Pemindaian hanya menyentuh pair di watchlist — tidak pernah seluruh
+ * pasar. Untuk SCALPING ada batas tambahan [MAX_SCALP_BACKGROUND_SYMBOLS] karena satu simbol
+ * membutuhkan empat permintaan (H1, M15, M1, orderbook).
  */
 class CandidateScanWorker(
     appContext: Context,
@@ -47,12 +59,15 @@ class CandidateScanWorker(
             return Result.success()
         }
 
+        // N6 — worker hanya menghitung mode yang sedang dipakai. Mode lain tidak punya produsen
+        // latar; notifikasinya memang tidak dikirim saat mode itu tidak aktif.
+        val mode = prefs.strategyMode
         val currentExchange = prefs.marketDataSource.name
         val positionStore = SpotPositionStore(applicationContext)
 
         // 1. Filter koin: lewati koin yang sedang HOLDING (di akun real maupun simulasi untuk bursa aktif)
         val eligibleSymbols = watchlist.filter { rawSymbol ->
-            val clean = rawSymbol.uppercase().replace("/", "").replace("-", "")
+            val clean = normalizeSymbol(rawSymbol)
             !positionStore.get(clean, isReal = true, exchange = currentExchange).isHolding &&
                     !positionStore.get(clean, isReal = false, exchange = currentExchange).isHolding
         }
@@ -64,38 +79,27 @@ class CandidateScanWorker(
 
         agu.analys.util.AppLogManager.service(
             "CandidateScan",
-            "Memulai pemindaian background ($currentExchange) untuk ${eligibleSymbols.size} koin watchlist..."
+            "Memulai pemindaian background ($currentExchange, mode ${modeLabel(mode)}) untuk " +
+                "${eligibleSymbols.size} koin watchlist..."
         )
 
         try {
             val isIndodax = prefs.marketDataSource == MarketDataSource.INDODAX
-            val tickMap = mutableMapOf<String, Double>()
-
-            if (isIndodax) {
-                val allTicks = IndodaxMarketService.fetchAllMarketTicks()
-                for ((sym, tick) in allTicks) {
-                    val symUpper = sym.uppercase()
-                    tickMap[symUpper] = tick.price
-                    tickMap[symUpper.replace("/", "").replace("_", "")] = tick.price
-                }
-            } else {
-                val ticks = TokocryptoMarketService.fetchTickers(eligibleSymbols)
-                if (ticks.isNotEmpty()) {
-                    for (t in ticks) {
-                        tickMap[t.symbol.uppercase()] = t.price
-                    }
-                }
-            }
-
+            val tickMap = fetchTicks(eligibleSymbols, isIndodax)
             if (tickMap.isEmpty()) {
                 return Result.success()
             }
 
-            var scalpEvaluated = 0
+            var evaluated = 0
             for (rawSymbol in eligibleSymbols) {
-                val cleanSymbol = rawSymbol.uppercase().replace("/", "").replace("-", "")
+                // Hemat baterai: scalping butuh 4 permintaan per simbol, jadi dibatasi.
+                if (mode == StrategyMode.SCALPING && evaluated >= MAX_SCALP_BACKGROUND_SYMBOLS) break
+                evaluated++
+
+                val cleanSymbol = normalizeSymbol(rawSymbol)
                 val compactSym = if (!isIndodax) TokocryptoMarketService.toTokocryptoSymbol(cleanSymbol) else cleanSymbol
-                val price = tickMap[cleanSymbol] ?: tickMap[compactSym] ?: continue
+                val tick = tickMap[cleanSymbol] ?: tickMap[compactSym] ?: continue
+                val price = tick.price
                 if (price <= 0.0) continue
 
                 // Cek ulang holding status
@@ -103,150 +107,37 @@ class CandidateScanWorker(
                         positionStore.get(cleanSymbol, isReal = false, exchange = currentExchange).isHolding
                 if (isHolding) continue
 
-                val marketKey = MarketKey.resolve(cleanSymbol, currentExchange)
-                val quoteAsset = marketKey.quote
-
-                // Fetch candle H1 untuk SWING & H4 panjang untuk INTRADAY
-                val h1Candles = if (isIndodax) {
-                    IndodaxMarketService.fetchCandles(cleanSymbol, Timeframe.H1, 45)
-                } else {
-                    TokocryptoMarketService.fetchCandles(cleanSymbol, Timeframe.H1, 45)
-                }
-
-                val h4Candles = if (isIndodax) {
-                    IndodaxMarketService.fetchCandles(cleanSymbol, Timeframe.H4, 100)
-                } else {
-                    TokocryptoMarketService.fetchCandles(cleanSymbol, Timeframe.H4, 100)
-                }
-
-                if (h1Candles.size >= 20) {
-                    val globalCtx = GlobalContextManager.context.value
-
-                    // --- Evaluasi Mode SWING ---
-                    val swingResult = SwingEvaluator.evaluate(
-                        globalContext = globalCtx,
-                        price = price,
-                        history = h1Candles,
-                        fees = prefs.tradingFees,
-                        symbol = cleanSymbol
-                    )
-                    val trackedSwing = SignalLifecycleManager.process(
+                try {
+                    val input = buildInput(mode, cleanSymbol, tick, prefs, isIndodax) ?: continue
+                    val evaluation = ModeSignalEvaluator.evaluate(input) ?: continue
+                    val tracked = SignalLifecycleManager.process(
                         symbol = cleanSymbol,
                         currentPrice = price,
-                        rawSignal = swingResult.signal,
-                        mode = StrategyMode.SWING
+                        rawSignal = evaluation.signal,
+                        mode = mode
                     )
-                    if (trackedSwing.transition?.hasTriggeringTransition == true && prefs.isNotificationsEnabled) {
-                        if (!positionStore.get(cleanSymbol, isReal = prefs.isRealBuyMode, exchange = currentExchange).isHolding) {
-                            val priceStr = PriceFormatter.formatPrice(price, showSymbol = true, quoteAsset = quoteAsset)
-                            agu.analys.util.AppLogManager.service(
-                                "CandidateFound",
-                                "🔔 [SWING - $currentExchange] Kandidat BUY terdeteksi untuk ${marketKey.formattedPair()} @ $priceStr! Mengirim notifikasi..."
-                            )
-                            AlertNotificationHelper.sendCandidateFoundNotification(
-                                context = applicationContext,
-                                marketKey = marketKey,
-                                strategyMode = StrategyMode.SWING,
-                                signal = trackedSwing.activeSignalState ?: swingResult.signal
-                            )
-                        }
+                    if (tracked.transition?.hasTriggeringTransition == true) {
+                        notifyCandidate(
+                            mode = mode,
+                            marketKey = MarketKey.resolve(cleanSymbol, currentExchange),
+                            price = price,
+                            tracked = tracked,
+                            fallback = evaluation.signal,
+                            prefs = prefs,
+                            positionStore = positionStore,
+                            currentExchange = currentExchange,
+                            cleanSymbol = cleanSymbol
+                        )
                     }
-
-                    // --- Evaluasi Mode INTRADAY dengan H4 ---
-                    val candlesForIntraday = if (h4Candles.size >= 20) h4Candles else h1Candles
-                    val intradayResult = IntradayEvaluator.evaluate(
-                        globalContext = globalCtx,
-                        price = price,
-                        history = candlesForIntraday,
-                        fees = prefs.tradingFees,
-                        symbol = cleanSymbol
-                    )
-                    val trackedIntraday = SignalLifecycleManager.process(
-                        symbol = cleanSymbol,
-                        currentPrice = price,
-                        rawSignal = intradayResult.signal,
-                        mode = StrategyMode.OFFICE_DAILY
-                    )
-                    if (trackedIntraday.transition?.hasTriggeringTransition == true && prefs.isNotificationsEnabled) {
-                        if (!positionStore.get(cleanSymbol, isReal = prefs.isRealBuyMode, exchange = currentExchange).isHolding) {
-                            val priceStr = PriceFormatter.formatPrice(price, showSymbol = true, quoteAsset = quoteAsset)
-                            agu.analys.util.AppLogManager.service(
-                                "CandidateFound",
-                                "🔔 [INTRADAY - $currentExchange] Kandidat BUY terdeteksi untuk ${marketKey.formattedPair()} @ $priceStr! Mengirim notifikasi..."
-                            )
-                            AlertNotificationHelper.sendCandidateFoundNotification(
-                                context = applicationContext,
-                                marketKey = marketKey,
-                                strategyMode = StrategyMode.OFFICE_DAILY,
-                                signal = trackedIntraday.activeSignalState ?: intradayResult.signal
-                            )
-                        }
-                    }
-
-                    // --- Evaluasi Mode SCALPING (background, dibatasi) ---
-                    // Tanpa depth orderbook di worker → diagnosticIgnore=true (Step2 dilewati),
-                    // notifikasi hanya untuk transisi READY (skor STRONG). Dibatasi N simbol pertama.
-                    if (scalpEvaluated < MAX_SCALP_BACKGROUND_SYMBOLS) {
-                        scalpEvaluated++
-                        try {
-                            val m1Candles = if (isIndodax) {
-                                IndodaxMarketService.fetchCandles(cleanSymbol, Timeframe.M1, 60)
-                            } else {
-                                TokocryptoMarketService.fetchCandles(cleanSymbol, Timeframe.M1, 60)
-                            }
-                            val m15Candles = if (isIndodax) {
-                                IndodaxMarketService.fetchCandles(cleanSymbol, Timeframe.M15, 60)
-                            } else {
-                                TokocryptoMarketService.fetchCandles(cleanSymbol, Timeframe.M15, 60)
-                            }
-                            if (m1Candles.size >= 20 && m15Candles.size >= 20) {
-                                val scalpResult = ScalpingMtfEvaluator.evaluate(
-                                    price = price,
-                                    h1Candles = h1Candles,
-                                    m15Candles = m15Candles,
-                                    m1Candles = m1Candles,
-                                    formingVolume = 0.0,
-                                    bids = emptyList(),
-                                    asks = emptyList(),
-                                    fees = prefs.tradingFees,
-                                    symbol = cleanSymbol,
-                                    diagnosticIgnoreOrderBookWhenUnavailable = true,
-                                    config = prefs.scalpingRuntimeConfig
-                                )
-                                if (scalpResult != null) {
-                                    val trackedScalp = SignalLifecycleManager.process(
-                                        symbol = cleanSymbol,
-                                        currentPrice = price,
-                                        rawSignal = scalpResult.signal,
-                                        mode = StrategyMode.SCALPING
-                                    )
-                                    if (trackedScalp.transition?.hasTriggeringTransition == true && prefs.isNotificationsEnabled) {
-                                        if (!positionStore.get(cleanSymbol, isReal = prefs.isRealBuyMode, exchange = currentExchange).isHolding) {
-                                            val priceStr = PriceFormatter.formatPrice(price, showSymbol = true, quoteAsset = quoteAsset)
-                                            agu.analys.util.AppLogManager.service(
-                                                "CandidateFound",
-                                                "🔔 [SCALPING - $currentExchange] Kandidat BUY terdeteksi untuk ${marketKey.formattedPair()} @ $priceStr! Mengirim notifikasi..."
-                                            )
-                                            AlertNotificationHelper.sendCandidateFoundNotification(
-                                                context = applicationContext,
-                                                marketKey = marketKey,
-                                                strategyMode = StrategyMode.SCALPING,
-                                                signal = trackedScalp.activeSignalState ?: scalpResult.signal
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        } catch (e: Exception) {
-                            Timber.w(e, "CandidateScanWorker: Evaluasi scalping background gagal untuk $cleanSymbol")
-                        }
-                    }
+                } catch (e: Exception) {
+                    Timber.w(e, "CandidateScanWorker: Evaluasi ${modeLabel(mode)} gagal untuk $cleanSymbol")
                 }
             }
 
             agu.analys.util.AppLogManager.service(
                 "CandidateScan",
-                "Pemindaian background ($currentExchange) selesai. ${eligibleSymbols.size} koin dievaluasi."
+                "Pemindaian background ($currentExchange, mode ${modeLabel(mode)}) selesai. " +
+                    "${eligibleSymbols.size} koin dievaluasi."
             )
             return Result.success()
         } catch (e: Exception) {
@@ -255,10 +146,175 @@ class CandidateScanWorker(
         }
     }
 
+    /**
+     * Merakit input untuk **satu** mode. Candle yang masih berjalan dibuang (`dropLast(1)`) supaya
+     * bentuknya sama dengan buffer engine; `ModeSignalEvaluator` yang menyintesis ulang bar berjalan
+     * dari tick.
+     */
+    private suspend fun buildInput(
+        mode: StrategyMode,
+        symbol: String,
+        tick: MarketTick,
+        prefs: AppPreferences,
+        isIndodax: Boolean
+    ): ModeSignalInput? {
+        return when (mode) {
+            StrategyMode.SWING -> {
+                val h1 = fetchCandles(symbol, Timeframe.H1, 200, isIndodax)
+                if (h1.size < ModeSignalEvaluator.MIN_CANDLES) return null
+                val d1 = fetchCandles(symbol, Timeframe.D1, 100, isIndodax)
+                ModeSignalInput(
+                    mode = mode,
+                    symbol = symbol,
+                    price = tick.price,
+                    nowMs = tick.timestamp,
+                    change24h = tick.change24h,
+                    h1Candles = h1.dropLast(1),
+                    d1Candles = d1,
+                    fees = prefs.tradingFees,
+                    globalContext = GlobalContextManager.context.value
+                )
+            }
+
+            StrategyMode.OFFICE_DAILY -> {
+                val h4 = fetchCandles(symbol, Timeframe.H4, 200, isIndodax)
+                if (h4.size < ModeSignalEvaluator.MIN_CANDLES) return null
+                val d1 = fetchCandles(symbol, Timeframe.D1, 100, isIndodax)
+                ModeSignalInput(
+                    mode = mode,
+                    symbol = symbol,
+                    price = tick.price,
+                    nowMs = tick.timestamp,
+                    change24h = tick.change24h,
+                    h4Candles = h4.dropLast(1),
+                    d1Candles = d1,
+                    fees = prefs.tradingFees,
+                    globalContext = GlobalContextManager.context.value
+                )
+            }
+
+            StrategyMode.SCALPING -> {
+                val h1 = fetchCandles(symbol, Timeframe.H1, 60, isIndodax)
+                val m15 = fetchCandles(symbol, Timeframe.M15, 60, isIndodax)
+                val m1 = fetchCandles(symbol, Timeframe.M1, 60, isIndodax)
+                if (h1.size < ModeSignalEvaluator.MIN_CANDLES ||
+                    m15.size < ModeSignalEvaluator.MIN_CANDLES ||
+                    m1.size < ModeSignalEvaluator.MIN_CANDLES
+                ) {
+                    return null
+                }
+                // Orderbook nyata: tanpa ini gerbang Step2 harus GAGAL, bukan dilewati. Jalur
+                // diagnostik `diagnosticIgnoreOrderBookWhenUnavailable = true` sengaja tidak dipakai —
+                // skor yang lebih tinggi dari engine tidak boleh masuk ke notifikasi.
+                val (bids, asks) = fetchOrderBook(symbol, isIndodax)
+                ModeSignalInput(
+                    mode = mode,
+                    symbol = symbol,
+                    price = tick.price,
+                    nowMs = tick.timestamp,
+                    change24h = tick.change24h,
+                    h1Candles = h1.dropLast(1),
+                    m15Candles = m15.dropLast(1),
+                    m1Candles = m1.dropLast(1),
+                    bids = bids,
+                    asks = asks,
+                    fees = prefs.tradingFees,
+                    scalpingConfig = prefs.scalpingRuntimeConfig,
+                    globalContext = GlobalContextManager.context.value
+                )
+            }
+        }
+    }
+
+    private suspend fun fetchCandles(
+        symbol: String,
+        timeframe: Timeframe,
+        limit: Int,
+        isIndodax: Boolean
+    ): List<CandleBar> = if (isIndodax) {
+        IndodaxMarketService.fetchCandles(symbol, timeframe, limit)
+    } else {
+        TokocryptoMarketService.fetchCandles(symbol, timeframe, limit)
+    }
+
+    private suspend fun fetchOrderBook(
+        symbol: String,
+        isIndodax: Boolean
+    ): Pair<List<OrderBookItem>, List<OrderBookItem>> = try {
+        if (isIndodax) IndodaxMarketService.fetchOrderBook(symbol)
+        else TokocryptoMarketService.fetchOrderBook(symbol)
+    } catch (e: Exception) {
+        Timber.w(e, "CandidateScanWorker: Orderbook gagal untuk $symbol")
+        emptyList<OrderBookItem>() to emptyList()
+    }
+
+    /** Hanya pair di watchlist yang diambil tick-nya; tidak pernah seluruh pasar. */
+    private suspend fun fetchTicks(
+        eligibleSymbols: List<String>,
+        isIndodax: Boolean
+    ): Map<String, MarketTick> {
+        val tickMap = mutableMapOf<String, MarketTick>()
+        if (isIndodax) {
+            // K11 — dulu fungsi ini memanggil `fetchAllMarketTicks()` (`/api/summaries`, seluruh
+            // pasar) padahal pemindaian hanya butuh pair watchlist. Sekarang per-pair.
+            val ticks = IndodaxMarketService.fetchTickers(eligibleSymbols)
+            for (t in ticks) {
+                val symUpper = t.symbol.uppercase()
+                tickMap[symUpper] = t
+                tickMap[symUpper.replace("/", "").replace("_", "")] = t
+            }
+        } else {
+            val ticks = TokocryptoMarketService.fetchTickers(eligibleSymbols)
+            for (t in ticks) {
+                tickMap[t.symbol.uppercase()] = t
+            }
+        }
+        return tickMap
+    }
+
+    private fun notifyCandidate(
+        mode: StrategyMode,
+        marketKey: MarketKey,
+        price: Double,
+        tracked: TrackedSignal,
+        fallback: AISignalState,
+        prefs: AppPreferences,
+        positionStore: SpotPositionStore,
+        currentExchange: String,
+        cleanSymbol: String
+    ) {
+        if (positionStore.get(cleanSymbol, isReal = prefs.isRealBuyMode, exchange = currentExchange).isHolding) {
+            return
+        }
+        val priceStr = PriceFormatter.formatPrice(price, showSymbol = true, quoteAsset = marketKey.quote)
+        agu.analys.util.AppLogManager.service(
+            "CandidateFound",
+            "🔔 [${modeLabel(mode)} - $currentExchange] Kandidat BUY terdeteksi untuk " +
+                "${marketKey.formattedPair()} @ $priceStr! Mengirim notifikasi..."
+        )
+        // `activeSignalState` adalah sinyal yang sama dengan yang ditampilkan kartu engine
+        // (engine juga memakai `tracked.activeSignalState ?: result.signal`). Satu sumber angka.
+        AlertNotificationHelper.sendCandidateFoundNotification(
+            context = applicationContext,
+            marketKey = marketKey,
+            strategyMode = mode,
+            signal = tracked.activeSignalState ?: fallback
+        )
+    }
+
     companion object {
         const val WORK_NAME = "CandidateScanPeriodicWork"
         /** Batas simbol untuk evaluasi scalping background (hemat baterai/API). */
         const val MAX_SCALP_BACKGROUND_SYMBOLS = 10
+
+        private fun normalizeSymbol(symbol: String): String =
+            symbol.uppercase().replace("/", "").replace("-", "")
+
+        private fun modeLabel(mode: StrategyMode): String = when (mode) {
+            StrategyMode.SCALPING -> "SCALPING"
+            StrategyMode.OFFICE_DAILY -> "INTRADAY"
+            StrategyMode.SWING -> "SWING"
+        }
 
         fun schedule(context: Context) {
             val constraints = Constraints.Builder()

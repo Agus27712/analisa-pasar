@@ -108,19 +108,24 @@ class PaperAutoTradeRuntimeTest {
 
         assertFalse(
             "tick di menit yang sama dengan saat posisi dibuka bukan bar baru",
-            PaperAutoTradeRuntime.markBarBucket("TOKOCRYPTO", "BTC_IDR", minuteStart)
+            PaperAutoTradeRuntime.markBarBucket("TOKOCRYPTO", "BTC_IDR", minuteStart).isNewBar
         )
         assertFalse(
             "tick 30 detik kemudian masih di menit yang sama",
-            PaperAutoTradeRuntime.markBarBucket("TOKOCRYPTO", "BTC_IDR", minuteStart + 30_000L)
+            PaperAutoTradeRuntime.markBarBucket("TOKOCRYPTO", "BTC_IDR", minuteStart + 30_000L).isNewBar
         )
         assertTrue(
             "menit berikutnya adalah bar M1 baru",
-            PaperAutoTradeRuntime.markBarBucket("TOKOCRYPTO", "BTC_IDR", minuteStart + 60_000L)
+            PaperAutoTradeRuntime.markBarBucket("TOKOCRYPTO", "BTC_IDR", minuteStart + 60_000L).isNewBar
         )
         assertFalse(
             "kembali ke menit yang sama tidak dihitung bar baru lagi",
-            PaperAutoTradeRuntime.markBarBucket("TOKOCRYPTO", "BTC_IDR", minuteStart + 90_000L)
+            PaperAutoTradeRuntime.markBarBucket("TOKOCRYPTO", "BTC_IDR", minuteStart + 90_000L).isNewBar
+        )
+        assertFalse(
+            "arm biasa bukan rehidrasi, jadi tidak ada tick pertama yang perlu dikecualikan",
+            PaperAutoTradeRuntime.markBarBucket("TOKOCRYPTO", "BTC_IDR", minuteStart + 120_000L)
+                .firstTickAfterRehydrate
         )
     }
 
@@ -156,9 +161,14 @@ class PaperAutoTradeRuntimeTest {
     fun `tick pertama setelah rehidrasi dihitung sebagai bar M1 baru`() {
         val now = (System.currentTimeMillis() / 60_000L) * 60_000L
         PaperAutoTradeRuntime.put("TOKOCRYPTO", "BTC_IDR", machine(), markFirstTickAsNewBar = true)
+        val mark = PaperAutoTradeRuntime.markBarBucket("TOKOCRYPTO", "BTC_IDR", now)
         assertTrue(
             "rehidrasi harus langsung bisa memicu time-stop",
-            PaperAutoTradeRuntime.markBarBucket("TOKOCRYPTO", "BTC_IDR", now)
+            mark.isNewBar
+        )
+        assertTrue(
+            "P8: tick ini juga harus dikenali sebagai tick pertama sesudah rehidrasi",
+            mark.firstTickAfterRehydrate
         )
     }
 
@@ -166,7 +176,12 @@ class PaperAutoTradeRuntimeTest {
     fun `tick pertama pada arm biasa tetap bukan bar baru`() {
         val now = (System.currentTimeMillis() / 60_000L) * 60_000L
         PaperAutoTradeRuntime.put("TOKOCRYPTO", "BTC_IDR", machine())
-        assertFalse(PaperAutoTradeRuntime.markBarBucket("TOKOCRYPTO", "BTC_IDR", now))
+        val mark = PaperAutoTradeRuntime.markBarBucket("TOKOCRYPTO", "BTC_IDR", now)
+        assertFalse(mark.isNewBar)
+        assertFalse(
+            "tanpa sentinel rehidrasi, tidak ada tick pertama yang perlu dikecualikan",
+            mark.firstTickAfterRehydrate
+        )
     }
 
     @Test

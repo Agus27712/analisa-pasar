@@ -2,7 +2,7 @@
 
 **Tanggal:** 2026-10-16
 **Branch:** `patch`
-**Sumber temuan:** `docs/bugs/temuan_bugs_notifikasi.md`
+**Sumber temuan:** `docs/laporan_temuan_bugs_notifikasi.md`
 **Cakupan:** 3 temuan — N4 (serius, **diperluas**), N5 (serius), N7 (sedang, terverifikasi aktif)
 **Lanjutan:** `docs/LAPORAN-batch1-notifikasi-2026-10-16.md` (N1, N2, N3)
 
@@ -233,5 +233,5 @@ performa.
 **Dokumen**
 - `workplan2.md` (§28, §29)
 - `AGENTS.md` (aturan baru)
-- `docs/bugs/temuan_bugs_notifikasi.md` (N4/N5/N7 ditandai selesai, temuan baru dicatat)
+- `docs/laporan_temuan_bugs_notifikasi.md` (N4/N5/N7 ditandai selesai, temuan baru dicatat)
 - `docs/LAPORAN-batch2-notifikasi-2026-10-16.md` (berkas ini)

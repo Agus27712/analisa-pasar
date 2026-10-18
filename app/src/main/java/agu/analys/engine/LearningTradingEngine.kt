@@ -2,8 +2,6 @@ package agu.analys.engine
 
 import agu.analys.config.StrategyMode
 import agu.analys.config.TradingFeeConfig
-import agu.analys.engine.scalping.ScalpingMtfEvaluator
-import agu.analys.engine.swing.SwingEvaluator
 import agu.analys.model.AISignalState
 import agu.analys.model.CandleBar
 import agu.analys.model.MarketTick
@@ -258,25 +256,25 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
             return
         }
 
-        val liveM1 = agu.analys.util.CandleTimeUtil.synthesizeRealtimeCandles(m1, tick, Timeframe.M1)
-        val liveM15 = agu.analys.util.CandleTimeUtil.synthesizeRealtimeCandles(m15, tick, Timeframe.M15)
-
-        val result = ScalpingMtfEvaluator.evaluate(
-            globalContext = agu.analys.engine.global.GlobalMarketContext(),
-            price = tick.price,
-            h1Candles = h1,
-            m15Candles = liveM15,
-            m1Candles = liveM1,
-            formingVolume = currentFormingVolume,
-            bids = currentOrderBookBids,
-            asks = currentOrderBookAsks,
-            fees = tradingFees,
-            symbol = tick.symbol,
-            config = scalpingRuntimeConfig,
-            // P0-1 — waktu tick dipakai untuk memproyeksikan volume bar M1 yang belum tutup.
-            nowMs = tick.timestamp,
-            // S9 — perubahan harga 24 jam untuk gerbang extended move.
-            change24h = tick.change24h
+        // N6 + N17 — evaluasi lewat seam bersama. Engine dan worker memakai fungsi yang sama,
+        // sehingga skor yang tampil di notifikasi tidak bisa lahir dari perakitan input berbeda.
+        val result = ModeSignalEvaluator.evaluate(
+            ModeSignalInput(
+                mode = StrategyMode.SCALPING,
+                symbol = tick.symbol,
+                price = tick.price,
+                nowMs = tick.timestamp,
+                change24h = tick.change24h,
+                h1Candles = h1,
+                // Seam menyintesis bar M15/M1 yang masih berjalan dari tick di dalam.
+                m15Candles = m15,
+                m1Candles = m1,
+                formingVolume = currentFormingVolume,
+                bids = currentOrderBookBids,
+                asks = currentOrderBookAsks,
+                fees = tradingFees,
+                scalpingConfig = scalpingRuntimeConfig
+            )
         ) ?: return
 
         val tracked = agu.analys.engine.scalping.SignalLifecycleManager.process(tick.symbol, tick.price, result.signal, StrategyMode.SCALPING)
@@ -313,15 +311,20 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
         val dailyHistory = synchronized(candles1D) { candles1D.toList() }
         if (history.isEmpty()) return
 
-        val anomalyResult = agu.analys.engine.regime.MacroAnomalyDetector.evaluate(dailyHistory, tick.price)
-        val result = agu.analys.engine.swing.SwingEvaluator.evaluate(
-            globalContext = agu.analys.engine.global.GlobalContextManager.context.value,
-            price = tick.price,
-            history = history,
-            fees = tradingFees,
-            macroAnomalyResult = anomalyResult,
-            symbol = tick.symbol
-        )
+        // N6 + N17 — seam yang sama dengan worker. Anomali makro dihitung dari D1 di dalam
+        // `ModeSignalEvaluator`, jadi tidak ada lagi jalur yang bisa lupa meneruskannya.
+        val result = ModeSignalEvaluator.evaluate(
+            ModeSignalInput(
+                mode = StrategyMode.SWING,
+                symbol = tick.symbol,
+                price = tick.price,
+                nowMs = tick.timestamp,
+                h1Candles = history,
+                d1Candles = dailyHistory,
+                fees = tradingFees,
+                globalContext = agu.analys.engine.global.GlobalContextManager.context.value
+            )
+        ) ?: return
 
         val tracked = agu.analys.engine.scalping.SignalLifecycleManager.process(tick.symbol, tick.price, result.signal, StrategyMode.SWING)
         val finalSignal = (tracked.activeSignalState ?: result.signal).copy(
@@ -357,15 +360,19 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
         val dailyHistory = synchronized(candles1D) { candles1D.toList() }
         if (history.isEmpty()) return
 
-        val anomalyResult = agu.analys.engine.regime.MacroAnomalyDetector.evaluate(dailyHistory, tick.price)
-        val result = agu.analys.engine.intraday.IntradayEvaluator.evaluate(
-            agu.analys.engine.global.GlobalContextManager.context.value,
-            tick.price,
-            history,
-            tradingFees,
-            anomalyResult,
-            symbol = tick.symbol
-        )
+        // N6 + N17 — seam yang sama dengan worker (lihat runSwing).
+        val result = ModeSignalEvaluator.evaluate(
+            ModeSignalInput(
+                mode = StrategyMode.OFFICE_DAILY,
+                symbol = tick.symbol,
+                price = tick.price,
+                nowMs = tick.timestamp,
+                h4Candles = history,
+                d1Candles = dailyHistory,
+                fees = tradingFees,
+                globalContext = agu.analys.engine.global.GlobalContextManager.context.value
+            )
+        ) ?: return
 
         val tracked = agu.analys.engine.scalping.SignalLifecycleManager.process(tick.symbol, tick.price, result.signal, StrategyMode.OFFICE_DAILY)
         val finalSignal = (tracked.activeSignalState ?: result.signal).copy(

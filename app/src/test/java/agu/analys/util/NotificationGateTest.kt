@@ -47,6 +47,7 @@ class NotificationGateTest {
         shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
         AlertNotificationHelper.createNotificationChannels(ctx)
         AlertNotificationHelper.resetNotificationSettingsCache()
+        AlertNotificationHelper.resetCandidateCooldownForTest()
         // Instance yang BENAR-BENAR dibaca gerbang; menulis lewat objek lain tidak terlihat
         // di bawah Robolectric (lihat catatan `notificationPrefsForTest`).
         appPrefs = AlertNotificationHelper.notificationPrefsForTest(ctx)
@@ -58,7 +59,10 @@ class NotificationGateTest {
             .activeNotifications.size
 
     private fun sendPriceAlert(id: Int) =
-        AlertNotificationHelper.sendPriceAlertNotification(ctx, "Judul", "Pesan", notificationId = id)
+        AlertNotificationHelper.sendUserPriceAlertNotification(ctx, "Judul", "Pesan", notificationId = id)
+
+    private fun sendExecutionResult(id: Int) =
+        AlertNotificationHelper.sendExecutionResultNotification(ctx, "Judul", "Pesan", notificationId = id)
 
     // ── Fungsi murni ────────────────────────────────────────────────────────
 
@@ -143,5 +147,46 @@ class NotificationGateTest {
         )
 
         assertEquals("sakelar candidate buy dimatikan -> tidak boleh terkirim", 0, posted())
+    }
+
+    // ── N13: kategori laporan eksekusi ──────────────────────────────────────
+
+    /**
+     * Inti N13: laporan "order jual berhasil/gagal" **bukan** price alert.
+     *
+     * Kalau pengguna mematikan "Trading & Price Alerts" (karena tidak mau diganggu pengingat
+     * harga), konfirmasi bahwa order uang riilnya gagal harus **tetap** sampai. Sebelum
+     * perbaikan, seluruh laporan eksekusi memakai kategori `PRICE_ALERT`, jadi ikut mati.
+     */
+    @Test
+    fun `sakelar price alert mati tidak menahan laporan eksekusi`() {
+        appPrefs.isNotificationsEnabled = true
+        appPrefs.isNotifyPriceAlertsEnabled = false
+        appPrefs.isNotifyTrailingStopEnabled = true
+
+        sendExecutionResult(4201)
+
+        assertEquals(
+            "N13: laporan eksekusi memakai kategori TRAILING_STOP, bukan PRICE_ALERT",
+            1,
+            posted()
+        )
+    }
+
+    @Test
+    fun `sakelar trailing stop mati menahan laporan eksekusi`() {
+        appPrefs.isNotificationsEnabled = true
+        appPrefs.isNotifyTrailingStopEnabled = false
+        appPrefs.isNotifyPriceAlertsEnabled = true
+
+        sendExecutionResult(4301)
+
+        assertEquals("sakelar eksekusi dimatikan -> laporan tidak boleh terkirim", 0, posted())
+    }
+
+    @Test
+    fun `kategori routing tidak tertukar`() {
+        assertEquals(NotificationCategory.TRAILING_STOP, NotificationRouting.EXECUTION)
+        assertEquals(NotificationCategory.PRICE_ALERT, NotificationRouting.USER_PRICE_ALERT)
     }
 }

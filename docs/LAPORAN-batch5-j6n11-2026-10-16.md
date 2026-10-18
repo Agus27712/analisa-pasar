@@ -2,7 +2,7 @@
 
 **Tanggal:** 2026-10-16
 **Branch:** `patch`
-**Temuan:** J6 (`docs/bugs/temuan_bugs_jurnal_pnl.md` §6) = N11 (`docs/bugs/temuan_bugs_notifikasi.md`)
+**Temuan:** J6 (`docs/bugs/temuan_bugs_jurnal_pnl.md` §6) = N11 (`docs/laporan_temuan_bugs_notifikasi.md`)
 
 ## Ringkasan
 

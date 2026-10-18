@@ -22,10 +22,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import agu.analys.config.MarketDataSource
+import agu.analys.data.IndodaxSymbolRepository
+import agu.analys.data.TokocryptoSymbolRepository
 import agu.analys.model.MarketTick
 import agu.analys.model.TradingPair
 import agu.analys.ui.theme.*
 import agu.analys.util.PriceFormatter
+import agu.analys.util.WatchlistEntryGate
 
 @Composable
 fun WatchlistManagerSettings(
@@ -40,8 +43,35 @@ fun WatchlistManagerSettings(
     val context = LocalContext.current
     var searchQuery by remember { mutableStateOf("") }
     val isToko = marketDataSource == MarketDataSource.TOKOCRYPTO
-    var selectedQuote by remember(marketDataSource) { 
-        mutableStateOf(if (isToko) "USDT" else "IDR") 
+    var selectedQuote by remember(marketDataSource) {
+        mutableStateOf(if (isToko) "USDT" else "IDR")
+    }
+
+    // K13: kehadiran simbol diperiksa ke repository bursa aktif (fail-closed).
+    fun isKnownSymbol(symbol: String): Boolean = when (marketDataSource) {
+        MarketDataSource.TOKOCRYPTO -> TokocryptoSymbolRepository.hasSymbol(symbol)
+        MarketDataSource.INDODAX -> IndodaxSymbolRepository.hasSymbol(symbol)
+    }
+
+    // Simbol lengkap sesuai kuotasi terpilih (input boleh hanya kode dasar, mis. "SOL").
+    val typedSymbol = remember(searchQuery, selectedQuote) {
+        val clean = searchQuery.trim().uppercase()
+            .replace("/", "").replace("_", "").replace(" ", "")
+        if (clean.isBlank()) "" else when {
+            clean.endsWith("USDT") || clean.endsWith("IDR") || clean.endsWith("BIDR") ||
+                clean.endsWith("USDC") || clean.endsWith("BUSD") -> clean
+            else -> "$clean$selectedQuote"
+        }
+    }
+    // Putusan gate untuk isi kolom: dipakai tombol Tambah DAN pesan di bawah kolom, supaya
+    // tombol yang mati selalu punya alasan yang terlihat.
+    val addVerdict = remember(typedSymbol, marketDataSource) {
+        val sanitized = agu.analys.model.PairRules
+            .sanitizeSymbolForExchange(typedSymbol, marketDataSource.name)
+        WatchlistEntryGate.checkAdd(
+            rawSymbol = sanitized ?: typedSymbol,
+            source = marketDataSource
+        ) { sym -> sanitized != null && isKnownSymbol(sym) }
     }
 
     val popularBases = listOf(
@@ -204,21 +234,21 @@ fun WatchlistManagerSettings(
 
                     Button(
                         onClick = {
-                            val clean = searchQuery.trim().uppercase().replace("/", "").replace("_", "").replace(" ", "")
-                            if (clean.isNotBlank()) {
-                                val typed = when {
-                                    clean.endsWith("USDT") || clean.endsWith("IDR") || clean.endsWith("BIDR") || clean.endsWith("USDC") || clean.endsWith("BUSD") -> clean
-                                    else -> "$clean$selectedQuote"
-                                }
-                                // Eliminasi BIDR + tolak kuotasi kripto di Indodax (lihat PairRules).
-                                val symbolWithQuote = agu.analys.model.PairRules
-                                    .sanitizeSymbolForExchange(typed, marketDataSource.name) ?: typed
-                                onAddPair(symbolWithQuote)
+                            // Tidak ada fallback "simpan dulu": verdict tolak berarti tidak
+                            // masuk watchlist, dengan alasan yang jelas (lihat teks di bawah kolom).
+                            if (addVerdict.accepted) {
+                                onAddPair(addVerdict.normalized)
                                 searchQuery = ""
-                                Toast.makeText(context, "$symbolWithQuote ditambahkan ke Watchlist", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "${addVerdict.normalized} ditambahkan ke Watchlist", Toast.LENGTH_SHORT).show()
+                            } else {
+                                Toast.makeText(
+                                    context,
+                                    addVerdict.message ?: "Simbol tidak dapat ditambahkan.",
+                                    Toast.LENGTH_LONG
+                                ).show()
                             }
                         },
-                        enabled = searchQuery.isNotBlank(),
+                        enabled = searchQuery.isNotBlank() && addVerdict.accepted,
                         colors = ButtonDefaults.buttonColors(containerColor = TvCyan),
                         shape = RoundedCornerShape(8.dp),
                         contentPadding = PaddingValues(horizontal = 12.dp),
@@ -228,6 +258,16 @@ fun WatchlistManagerSettings(
                         Spacer(Modifier.width(4.dp))
                         Text("Tambah", color = Color.Black, fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
                     }
+                }
+
+                if (searchQuery.isNotBlank() && !addVerdict.accepted) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = addVerdict.message ?: "",
+                        color = TvRed,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Medium
+                    )
                 }
 
                 Spacer(Modifier.height(10.dp))
@@ -243,23 +283,41 @@ fun WatchlistManagerSettings(
                 ) {
                     popularBases.forEach { base ->
                         val sym = "$base$selectedQuote"
+                        val chipVerdict = WatchlistEntryGate.checkAdd(sym, marketDataSource) { s ->
+                            isKnownSymbol(s)
+                        }
                         val isTracked = currentWatchlist.any { it.equals(sym, ignoreCase = true) }
+                        val chipAvailable = chipVerdict.accepted
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(6.dp))
-                                .background(if (isTracked) TvGreen.copy(alpha = 0.15f) else TvSurface)
+                                .background(
+                                    if (isTracked) TvGreen.copy(alpha = 0.15f)
+                                    else if (!chipAvailable) TvSurface.copy(alpha = 0.4f)
+                                    else TvSurface
+                                )
                                 .border(
                                     1.dp,
-                                    if (isTracked) TvGreen.copy(alpha = 0.5f) else TvBorder,
+                                    if (isTracked) TvGreen.copy(alpha = 0.5f) else if (!chipAvailable) TvBorder.copy(alpha = 0.4f) else TvBorder,
                                     RoundedCornerShape(6.dp)
                                 )
                                 .clickable {
-                                    if (isTracked) {
-                                        onRemovePair(sym)
-                                        Toast.makeText(context, "$sym dihapus dari Watchlist", Toast.LENGTH_SHORT).show()
+                                    if (chipAvailable) {
+                                        if (isTracked) {
+                                            onRemovePair(sym)
+                                            Toast.makeText(context, "$sym dihapus dari Watchlist", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            onAddPair(chipVerdict.normalized)
+                                            Toast.makeText(context, "$sym ditambahkan ke Watchlist", Toast.LENGTH_SHORT).show()
+                                        }
                                     } else {
-                                        onAddPair(sym)
-                                        Toast.makeText(context, "$sym ditambahkan ke Watchlist", Toast.LENGTH_SHORT).show()
+                                        // K13: chip yang tidak ada di bursa aktif tetap tampil
+                                        // (agar tidak "hilang" misterius) tapi tidak bisa ditambah.
+                                        Toast.makeText(
+                                            context,
+                                            chipVerdict.message ?: "Simbol tidak dapat ditambahkan.",
+                                            Toast.LENGTH_LONG
+                                        ).show()
                                     }
                                 }
                                 .padding(horizontal = 8.dp, vertical = 5.dp)
@@ -267,7 +325,7 @@ fun WatchlistManagerSettings(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
                                     text = "$base/$selectedQuote",
-                                    color = if (isTracked) TvGreen else TvTextPrimary,
+                                    color = if (isTracked) TvGreen else if (!chipAvailable) TvTextSecondary.copy(alpha = 0.5f) else TvTextPrimary,
                                     fontSize = 10.5.sp,
                                     fontWeight = FontWeight.Bold
                                 )
@@ -275,7 +333,11 @@ fun WatchlistManagerSettings(
                                 Icon(
                                     imageVector = if (isTracked) Icons.Default.Check else Icons.Default.Add,
                                     contentDescription = null,
-                                    tint = if (isTracked) TvGreen else TvTextSecondary,
+                                    tint = when {
+                                        isTracked -> TvGreen
+                                        !chipAvailable -> TvTextSecondary.copy(alpha = 0.5f)
+                                        else -> TvTextSecondary
+                                    },
                                     modifier = Modifier.size(13.dp)
                                 )
                             }

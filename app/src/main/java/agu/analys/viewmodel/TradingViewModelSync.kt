@@ -9,6 +9,8 @@ import agu.analys.model.SignalAction
 import agu.analys.model.TradingPair
 import agu.analys.service.IndodaxMarketService
 import agu.analys.service.TokocryptoMarketService
+import agu.analys.trading.PaperArmSignal
+import agu.analys.trading.RealTradePnlResolver
 import agu.analys.trading.SimulationOrder
 import agu.analys.trading.SimulationOrderSide
 import agu.analys.trading.SignalDerivedFields
@@ -55,15 +57,18 @@ fun TradingViewModel.handleRealTradeExecution(
         var customPnlIdr: Double? = null
         var customPnlPct: Double? = null
         if (before.entryPrice > 0.0 && effectivePrice > 0.0 && quantity > 0.0) {
-            // Biaya dari FeeSchedule — angka flat 0,3% terlalu kecil untuk Tokocrypto USDT
-            // (0,4044%/sisi) dan salah untuk pair IDR (sisi jual lebih mahal dari sisi beli).
+            // J8 — SATU rumus P&L. Sebelumnya di sini ada rumus sendiri tanpa slippage, sehingga
+            // angka jurnal berbeda ~0,16 pp dari portofolio/radar jual untuk trade yang sama.
             val quoteAsset = agu.analys.util.PriceFormatter.extractQuote(symbol)
-            val buyRate = agu.analys.config.FeeSchedule.buyRate(currentEx, quoteAsset)
-            val sellRate = agu.analys.config.FeeSchedule.sellRate(currentEx, quoteAsset)
-            val netSell = effectivePrice * (1.0 - sellRate)
-            val cost = before.entryPrice * (1.0 + buyRate)
-            customPnlPct = (netSell / cost - 1.0) * 100.0
-            customPnlIdr = (netSell - cost) * quantity
+            val pnl = RealTradePnlResolver.resolve(
+                quantity = quantity,
+                entry = before.entryPrice,
+                exitPrice = effectivePrice,
+                exchange = currentEx,
+                quoteAsset = quoteAsset
+            )
+            customPnlPct = pnl.pnlPct
+            customPnlIdr = pnl.pnlIdr
         }
 
         if (isPartialSell) {
@@ -340,13 +345,25 @@ fun TradingViewModel.syncSimulationTradeToPositionStore(order: SimulationOrder) 
         // menerima `atrPct = 0.0`. Karena `0.0` berarti "ATR tidak diketahui", mesin jatuh ke ambang
         // BE/trailing persen tetap dan nilai nol itu ikut tersimpan ke disk — kerusakannya persisten.
         val atrPct = PaperAtr.of(engine.indicators.value.atr, effectiveEntry)
+        // J10 (sisa) — SL/TP untuk mesin exit juga wajib milik simbol ini. Sebelumnya jalur ini
+        // membaca `engine.signalState.value` mentah: TP1 pair lain yang berada di bawah entry
+        // bisa memicu jual sebagian pada tick pertama. Bila sinyal bukan milik simbol ini,
+        // ketiganya nol -> SL jatuh ke lantai friksi, TP tidak ada.
+        val engineSignal = engine.signalState.value
+        val armParams = PaperArmSignal.resolve(
+            requestedSymbol = symbol,
+            signalSymbol = engineSignal.marketSymbol,
+            stopLoss = engineSignal.stopLoss,
+            tp1 = engineSignal.targetPrice1,
+            tp2 = engineSignal.targetPrice2
+        )
         val armed = armPaperExitEngine(
             symbol = symbol,
             exchange = currentEx,
             entryPrice = effectiveEntry,
-            stopLoss = engine.signalState.value.stopLoss,
-            tp1 = engine.signalState.value.targetPrice1,
-            tp2 = engine.signalState.value.targetPrice2,
+            stopLoss = armParams.stopLoss,
+            tp1 = armParams.tp1,
+            tp2 = armParams.tp2,
             atrPct = atrPct,
             force = isDca
         )
@@ -526,7 +543,14 @@ fun TradingViewModel.updateForegroundServiceState() {
                     (!isReal && simCoordinator.wallet.value.coinBalances.any { it.value > 0.00000001 && !it.key.equals("IDR", true) && !it.key.equals("USDT", true) }) ||
                     (isReal && realCoordinator.realIndodaxBalance.value.any { it.value > 0.00000001 && !it.key.equals("IDR", true) && !it.key.equals("USDT", true) })
 
-    if (hasActive && isNotificationsEnabled.value) {
+    // N15 — keputusan start/stop **hanya** dari keberadaan posisi.
+    //
+    // Dulu syaratnya `hasActive && isNotificationsEnabled.value`: mematikan sakelar "push
+    // notifikasi" ikut mematikan foreground service, yaitu keep-alive pemantauan posisi — dan
+    // membuat `livePrices` kosong sehingga P&L tampil 0% untuk semua posisi. Itu melanggar aturan
+    // "mematikan notifikasi tidak boleh mematikan eksekusi". Bunyi notifikasi tetap diatur
+    // `canNotify(...)` di dalam helper, bukan di sini.
+    if (hasActive) {
         agu.analys.service.TradingForegroundService.startService(getApplication())
         agu.analys.service.TradingForegroundService.forceRefresh(getApplication())
     } else {

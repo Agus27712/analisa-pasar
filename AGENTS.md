@@ -2,8 +2,10 @@
 
 Aplikasi Android Kotlin 100% (Jetpack Compose M3) untuk analisis & **scalp mode** kripto di **Tokocrypto** dan **Indodax**. Modul tunggal `:app`, package `agu.analys`, MVVM + Coordinator (`TradingViewModel` + MarketData/Position/Simulation/RealTradeCoordinator).
 
-**Versi aplikasi saat ini:** **3.9.1** (`versionCode 90`) — `app/build.gradle.kts`. Rilis 3.9.1
-(2026-10-16) berisi batch 1–5f perbaikan audit + sinkronisasi dokumen. Tag rilis: `v3.9.1`
+**Versi aplikasi saat ini:** **3.9.2** (`versionCode 91`) — `app/build.gradle.kts`. Rilis 3.9.2
+(2026-10-18) berisi batch 6j–6n: seluruh temuan audit koneksi Tokocrypto/Indodax **K1–K15**
+(daftar pair resmi, WebSocket Indodax hidup, reconnect berjitter, status live per bursa,
+lingkup ticker watchlist, gate watchlist & dashboard). Tag rilis: `v3.9.2`
 dibuat otomatis oleh `.github/workflows/release.yml` saat `main` menerima push.
 
 ---
@@ -43,13 +45,17 @@ entry/exit) belum ada di sana — semua kesimpulan yang ditarik dari `main` jadi
    dan perangkap yang sudah pernah ditemukan. **Ini titik masuk utama.**
 3. **`docs/bugs/`** — 🔴 **sumber kebenaran status temuan audit**, dan **sudah diverifikasi ke kode
    + direview owner pada 2026-10-16** (`patch` @ `547048d`). **Agen tidak perlu cek kode untuk
-   memastikan status temuan** — cukup baca tabel status di tiap berkas. Isinya sekarang:
-   `temuan_bugs_notifikasi.md` (jalur notifikasi & skor keyakinan),
-   `temuan_bugs_paper_trade.md` (siklus hidup posisi paper & mesin exit),
-   `temuan_bugs_jurnal_pnl.md` (jurnal sinyal, jurnal trade, angka P&L).
+   memastikan status temuan** — cukup baca tabel status di tiap berkas. Isinya sekarang **satu
+   berkas**: `temuan_bugs_paper_trade.md` (siklus hidup posisi paper & mesin exit). Berkas koneksi
+   `temuan_koneksi_tokocrypto_indodax.md` **dipindahkan** ke
+   `docs/laporan_temuan_bugs_koneksi_tokocrypto_indodax.md` (2026-10-18, K1–K15 tuntas).
+   Tiga berkas lain sudah keluar karena seluruh temuannya tertutup: `temuan_bugs_jurnal_pnl.md`
+   **dihapus** (2026-10-17, J1–J10 tuntas) dan `temuan_bugs_notifikasi.md` **dipindahkan** ke
+   `docs/laporan_temuan_bugs_notifikasi.md` (2026-10-17, N1–N17 tuntas). **Jangan membuat ulang
+   ketiga berkas itu**; temuan baru di area itu ditulis ke berkas temuan baru.
    **Baca folder ini sebelum memperbaiki bug apa pun** di area yang tercakup. Setelah sebuah
    temuan diperbaiki, **pangkas butir itu dari badan dokumen** dan pindahkan jejaknya ke tabel
-   "Sudah ditutup" + `docs/LAPORAN-*.md` (lihat § "Folder temuan bug" di bawah).
+   "Sudah ditutup" (lihat § "Folder temuan bug" di bawah).
 4. **`docs/BELUM-DIKERJAKAN-2026-10-14.md`** — inventaris 27 item yang **belum** dikerjakan
    (temuan audit A/B, roadmap P4–P6, verifikasi lapangan), lengkap dengan titik kode dan
    prioritas. **Baca ini sebelum memilih apa yang akan dikerjakan**, supaya tidak mengulang
@@ -166,44 +172,80 @@ Aturan main:
   supaya tidak mengulang audit, tidak menambal gejala, dan tidak menghapus bagian yang memang
   sudah benar (setiap berkas punya bagian "Yang sudah benar — jangan diutak-atik").
 - **Setelah sebuah temuan diperbaiki**, **pangkas butir itu dari badan dokumen**, pindahkan ke
-  tabel "Sudah ditutup" (commit + `docs/LAPORAN-*.md`), perbarui tabel status di header, dan
+  tabel "Sudah ditutup" (commit + pointer laporan), perbarui tabel status di header, dan
   tambahkan baris ke § Riwayat. Jangan biarkan badan dokumen memuat butir yang sudah tidak hidup
   — pembaca berikutnya akan membuang waktu memperbaikinya ulang.
+- **Aturan pemindahan (sejak 2026-10-17).** Begitu **seluruh** isi sebuah berkas temuan tertutup,
+  berkas itu **tidak boleh tinggal di `docs/bugs/`**. Pindahkan dengan `git mv`:
+
+  ```
+  docs/bugs/temuan_bugs_<topik>.md  →  docs/laporan_temuan_bugs_<topik>.md
+  ```
+
+  Berkas hasil pindahan **adalah laporannya**. Tidak perlu membuat `docs/LAPORAN-batch*.md` baru:
+  ringkasan tiap batch ditulis ke § Riwayat berkas itu dan ke `workplan2.md`. `docs/bugs/` hanya
+  boleh berisi temuan yang masih hidup.
+- **Jangan menambah laporan per batch.** Berkas `docs/LAPORAN-batch*-*.md` yang sudah ada adalah
+  arsip historis — biarkan, jangan diperbanyak. Kalau butuh mencatat pekerjaan, tambahkan baris
+  ke berkas laporan temuan yang bersangkutan (atau ke `workplan2.md`).
 - Daftar berkas di folder ini bisa bertambah untuk area lain (exit, P&L, UI, dsb.) dengan
-  pola penamaan `temuan_<area>_<topik>.md`.
+  pola penamaan `temuan_bugs_<topik>.md`.
 
-Saat ini berisi (semua diperbarui 2026-10-16):
+Saat ini berisi (diperbarui 2026-10-17):
 
-- **`temuan_bugs_notifikasi.md`** — audit jalur notifikasi (4 pengirim: VM-sync,
-  CandidateScanWorker, foreground service, VM-alerts) & alur skor keyakinan (produsen → notifikasi
-  → jurnal → UI).
-  **Ditutup: N1–N5, N7, N10** (batch 1, batch 2, batch 5a).
-  **Sebagian: N11** — manifestasi J6 (klaim hardcoded) ditutup batch 5e, tetapi **tabel tier &
-  cap confidence `ScalpingMtfEvaluator` sendiri belum diubah** (butuh keputusan produk).
-  **Masih hidup: N6 + N17, N8, N9, N12, N13, N14, N15, N16** (N13–N17 hasil audit lanjutan:
-  kategori notifikasi ≠ sakelar Pengaturan, cooldown peak di-bypass jalur kembar, sakelar master
-  mematikan foreground service, `AppPreferences` dibangun ulang per tick, N6 melarat ke skor SWING
-  worker tanpa penalti anomali).
 - **`temuan_bugs_paper_trade.md`** — audit siklus hidup posisi paper & mesin exit.
   **Ditutup: P1, P2, P3, P4** (batch 3b, batch 3c) sehingga **ketiga temuan kritis sudah tertutup**,
   serta **P5** (batch 5d — snapshot FSM kini per posisi, berkunci `PaperAutoTradeRuntime.key`).
   **Sebagian: P6** (batch 5c — jendela momentum kini satu sumber, tetapi bagian "`peak` tertinggal
   dari high M1" **belum** — bukan cabang kode yang berbeda, melainkan tidak adanya umpan intrabar).
-  **Masih hidup: P7, P8** (jalur ambil-alih exit engine tidak terimplementasi; `barsHeld` +1 pada
-  tick pertama sesudah rehidrasi).
+  **Ditutup: P8** (batch 6d — `PaperFirstBarResolver` memisahkan "dievaluasi sebagai bar baru" dari
+  "menambah `barsHeld`"; tick pertama sesudah rehidrasi tidak lagi dihitung dua kali), serta
+  **P7** (batch 6e — kontrak `clearPaperExitState` **dihapus**, bukan diimplementasikan, karena
+  tidak pernah dipanggil dan justru meninggalkan posisi tanpa exit).
+  **Masih hidup: P6 (sisa `peak`) dan P9** (baru, batch 6e — mematikan auto-exit saat posisi
+  terbuka meninggalkan posisi tanpa SL/TP sampai restart; butuh keputusan produk).
   **Batas penting:** seluruh temuan `P*` hanya menyentuh posisi **paper** (`isReal = false`) —
   bukan kerusakan uang riil, tetapi posisi paper adalah dasar seluruh keputusan "apakah scalp
   punya edge".
-- **`temuan_bugs_jurnal_pnl.md`** — audit jurnal sinyal, jurnal trade & angka P&L.
-  **Ditutup: J1, J2** (batch 3a), **J7** (batch 4), **J4 + N10** (batch 5a), **J3** (batch 5b),
-  **J6 + N11** (batch 5e), **J5** (batch 5f).
-  **Sebagian: J10** — `TradeSignalSnapshot.capture` sudah digerbang, tapi jalur **beli paper manual**
-  (`TradingViewModelSync.kt:343-350`) masih meng-*arm* mesin exit dengan SL/TP mentah dari
-  `engine.signalState.value`; lihat `temuan_bugs_jurnal_pnl.md` §2.1.
-  **Masih hidup: J8** (rumus P&L ditulis ulang tanpa slippage di jalur trade real), **J9**
-  (default `?: 75`).
-  **Catatan angka:** friksi FSM Tokocrypto USDT yang tertulis 0,8226% di dokumen temuan awal itu
-  **salah**; angka yang benar **0,9735%** (lihat `docs/LAPORAN-batch4-j7-2026-10-16.md` §2).
+- **~~`temuan_koneksi_tokocrypto_indodax.md`~~ — DIPINDAHKAN 2026-10-18** ke
+  **`docs/laporan_temuan_bugs_koneksi_tokocrypto_indodax.md`**. Seluruh K1–K15 tertutup
+  (batch 6j–6n), jadi berkasnya keluar dari `docs/bugs/` dan sekarang berperan sebagai
+  laporannya. **Jangan membuat ulang berkas di `docs/bugs/` dengan nama itu.**
+  Yang berlaku sekarang: daftar pair Tokocrypto **hanya** dari `common/symbols` resmi (864 simbol,
+  `data.list`); `exchangeInfo` gateway (3.729 simbol Binance) tidak boleh dipakai untuk discovery.
+  Gate listing dan `type` dibaca fail-closed di `TokocryptoSymbolFeed`. WebSocket Indodax memakai
+  kanal `market:summary-24h` dengan token utuh 105 karakter; kanal `chart:tick-<pair>` tidak pernah
+  menerbitkan data. Socket usang disambung ulang lewat `reconnectIfStale()` → `reconnectNow()`,
+  **bukan** lewat `start()` — `start()` menjalankan `stop()` dan membuang candle menit berjalan.
+  Ambang usang ada di `RealtimeSocketHealth` (zombie 20 detik, diam 6 × interval ping), bukan 30
+  detik frame. Kebijakan sambung-ulang ada di `ReconnectBackoff` (reset hanya setelah stabil,
+  jitter ±20%, jeda menyerah 5 menit), status live dipisah per bursa (`wsLiveToko`/`wsLiveIndodax`),
+  worker latar & `fetchTickers` Indodax hanya menyentuh watchlist/pair yang diminta
+  (`/api/ticker/<pair>`, bukan `/api/summaries`), dan `getSymbolType` mengembalikan
+  `SYMBOL_TYPE_UNKNOWN = 0` (bukan default `1`) dengan log sekali per simbol.
+  Watchlist hanya menerima simbol yang ada di bursa aktif (`WatchlistEntryGate` + `hasSymbol`
+  di kedua repository; fail-closed, tanpa fallback "simpan dulu"), dan dashboard memakai satu
+  gate listing `DashboardRanking.symbolListed` — `uniqueTicks` disaring sekali di awal, quick
+  filter WATCHLIST dan fallback statis ikut tersaring.
+- **~~`temuan_bugs_jurnal_pnl.md`~~ — DIHAPUS 2026-10-17.** Seluruh J1–J10 sudah tertutup:
+  batch 3a (J1, J2), batch 4 (J7), batch 5a (J4 + N10), batch 5b (J3), batch 5e (J6 + N11),
+  batch 5f (J5), batch 6a (J10 sisa — `PaperArmSignal`), batch 6b (J9 — `TradeSignalConfidence`),
+  batch 6c (J8 — `RealTradePnlResolver`). Tidak ada butir hidup, jadi berkasnya tidak punya alasan
+  untuk tetap ada — jejak auditnya ada di laporan per batch + riwayat git.
+  **Jangan membuat ulang berkas ini.** Kalau muncul temuan baru di area jurnal, buat berkas temuan
+  baru di `docs/bugs/` (`temuan_bugs_<topik>.md`) dan catat di `workplan2.md`; jangan menghidupkan
+  kembali "dokumen temuan" kosong.
+  **Catatan angka yang tetap berlaku:** friksi FSM Tokocrypto USDT yang tertulis 0,8226% di dokumen
+  temuan awal itu **salah**; angka yang benar **0,9735%** (lihat `docs/LAPORAN-batch4-j7-2026-10-16.md` §2).
+- **~~`temuan_bugs_notifikasi.md`~~ — DIPINDAHKAN 2026-10-17** ke
+  **`docs/laporan_temuan_bugs_notifikasi.md`**. Seluruh N1–N17 tertutup (batch 1, 2, 5, 6b, 6f, 6g,
+  6h, 6i), jadi berkasnya keluar dari `docs/bugs/` dan sekarang berperan sebagai laporannya.
+  **Jangan membuat ulang berkas di `docs/bugs/` dengan nama itu**, dan jangan menambah laporan
+  batch baru untuk area ini — tambahkan baris ke § Riwayat berkas laporan tersebut.
+  **N11** ditutup dengan **tidak menampilkan** tabel tier lintas-mode; cap confidence
+  `ScalpingMtfEvaluator` sengaja **tidak** diubah. **N6 + N17** ditutup dengan satu titik sambung evaluasi
+  (`engine/ModeSignalEvaluator.kt`): worker hanya menghitung mode aktif, dan penalti anomali makro
+  dihitung di dalam titik sambung itu dari candle D1.
 
 ## Aturan turunan dari audit notifikasi (batch 1 & 2, 2026-10-16)
 
@@ -357,13 +399,12 @@ Saat ini berisi (semua diperbarui 2026-10-16):
 - **Gerbang di pintu masuk, bukan di tiap pemanggil.** `TradeSignalSnapshot.capture` menggerbang
   sinyal sekali; keempat pemanggilnya ikut terlindungi. Bila menambah pemanggil baru, jangan
   menyalin pemeriksaannya — pakai `capture`.
-- ⚠️ **Gerbang `capture` hanya melindungi jurnal, bukan mesin exit** (diverifikasi 2026-10-16,
-  lihat `docs/bugs/temuan_bugs_jurnal_pnl.md` §2.1 = J10 yang tersisa). `armPaperExitEngine` untuk
-  **beli paper manual** (`TradingViewModelSync.kt:343-350`) masih mengoper
-  `engine.signalState.value.stopLoss/targetPrice1/targetPrice2` mentah. Setiap jalur yang memakai
-  nilai turunan sinyal untuk **keputusan** (bukan hanya catatan) wajib pakai nilai teratribusi —
-  `paperSignal.stopLoss` / `targetPrice1` / `targetPrice2` sudah ada di scope yang sama. TP pair lain
-  yang kebetulan di bawah entry bisa memicu jual sebagian pada tick pertama.
+- **Nilai turunan sinyal untuk KEPUTUSAN juga wajib teratribusi**, bukan hanya untuk catatan.
+  `capture` melindungi jurnal; mesin exit punya pintu sendiri: `trading/PaperArmSignal.resolve`
+  (batch 6a). Setiap jalur yang meng-*arm* mesin exit wajib lewat situ — TP pair lain yang
+  kebetulan di bawah entry bisa memicu jual sebagian pada tick pertama. Bila menambah pemanggil
+  `armPaperExitEngine` baru, jangan mengoper `engine.signalState.value.stopLoss/targetPrice1/
+  targetPrice2` mentah.
 - **Harga fallback harus milik simbol jurnal.** `currentTick.value?.price` adalah tick pair yang
   kebetulan dibuka; pakai `dashboardTicks[journalSymbol]`.
 
@@ -391,6 +432,18 @@ Saat ini berisi (semua diperbarui 2026-10-16):
 - **Kosong berarti kosong.** Bila bursa ini tidak punya record HOLDING untuk simbol itu,
   biarkan kosong. Jual mencatat penjualan tanpa menutup record bursa lain; tick harga tidak
   menyentuh posisi bursa lain. Posisi bursa lain tetap utuh sampai dijual di bursanya sendiri.
+
+## Aturan turunan dari audit jurnal — J8 (batch 6c, 2026-10-17)
+
+- **Jangan menulis ulang rumus P&L di ViewModel.** J8 adalah bukti bahwa aturan "SATU rumus P&L"
+  bisa dilanggar tanpa terlihat: jalur jual trade real menulis
+  `(exit×(1−sellFee))/(entry×(1+buyFee))−1` — **tanpa slippage** — sehingga jurnal berbeda
+  ≈0,16 pp dari portofolio/radar jual untuk trade yang sama. Pakai `RealTradePnlResolver`
+  (`trading/RealTradePnl.kt`) atau `FeeSchedule` langsung; jangan menyusun ulang
+  `costBasisNet`/`netSellValue` dari komponennya.
+- **Rupiah dan persen harus dari pasangan yang sama.** `pnlIdr = netSellValue − costBasisNet`
+  dan `pnlPct = netProfitPctFor`; keduanya identik secara aljabar, jadi tidak mungkin menampilkan
+  "+1,2%" dengan nominal yang tidak cocok.
 
 ## Aturan turunan dari audit jurnal — J6 (batch 5e, 2026-10-16)
 
@@ -429,6 +482,139 @@ Saat ini berisi (semua diperbarui 2026-10-16):
 - **Konsumen wajib menyebut posisinya.** `paperSnapshotAt(exchange, symbol)` (layar simulasi) dan
   `paperSnapshotFor(...)` (halaman detail) — keduanya menyebut posisi yang dibuka, bukan
   "snapshot apa pun yang terakhir terbit".
+
+## Aturan turunan dari audit paper trading — P8 (batch 6d, 2026-10-17)
+
+- **"Dievaluasi sebagai bar baru" ≠ "menambah hitungan bar".** `PaperExitStateMachine.onBar` punya
+  dua parameter terpisah: `isNewBar` (boleh memeriksa time-stop) dan `countAsNewBar` (boleh
+  `barsHeld++`). Jangan pernah menyatukannya kembali.
+- **Sesudah rehidrasi, menit yang berjalan sudah dihitung.** `PaperRehydrate.mergedBarsHeld`
+  memakai jam dinding (`max(stored, (now − openedAt) / 60_000)`), jadi tick pertama sesudah
+  `put(..., markFirstTickAsNewBar = true)` **wajib** `isNewBar = true` + `countAsNewBar = false`.
+  Kalau keduanya `true`, time-stop keluar 1 menit lebih awal dan app tidak lagi sebanding dengan
+  `tools/scalp_replay.py`.
+- **Keputusan murni, bukan `if` di dalam lambda.** Pemetaan itu milik
+  `PaperFirstBarResolver.countsAsNewBar(isNewBar, firstTickAfterRehydrate)`; runtime hanya
+  melaporkan fakta lewat `BarBucketMark`. Penjaga:
+  `app/src/test/java/agu/analys/trading/PaperFirstBarTest.kt`.
+- **Sentinel bucket hanya menandai satu tick.** `FIRST_TICK_BUCKET = -1L` dihapus oleh
+  `markBarBucket` pada pemanggilan pertama, sehingga pengecualian tidak bocor ke menit berikutnya.
+  Jangan menambahkan field runtime terpisah untuk ini — penanda yang bertahan akan menahan
+  time-stop lebih lama, bukan lebih pendek.
+
+## Aturan turunan dari audit notifikasi — N6, N17, N11 (batch 6i, 2026-10-17)
+
+- **Satu mode, satu mesin, satu angka.** Notifikasi kandidat wajib menampilkan `confidence` dari
+  evaluator **mode yang sedang aktif**, dan worker latar hanya boleh menghitung mode itu
+  (`prefs.strategyMode`). Jangan mengembalikan pemindaian tiga mode sekaligus: itu membuat satu key
+  `SYMBOL#MODE` punya dua produsen dengan metode berbeda.
+- **Pemanggil tidak boleh merakit evaluator sendiri.** `engine/ModeSignalEvaluator.kt` adalah
+  satu-satunya pemetaan `StrategyMode → evaluator`. Penalti anomali makro dihitung **di dalam**
+  titik sambung itu dari candle D1 — parameter `macroAnomalyResult` sengaja tidak diekspos ke
+  pemanggil, supaya tidak ada jalur yang bisa "lupa" meneruskannya (itu akar N17). Kalau menambah
+  mode/parameter, tambahkan di titik sambung itu + uji di `ModeSignalEvaluatorTest`.
+- **Jangan hidupkan `diagnosticIgnoreOrderBookWhenUnavailable = true` di jalur produksi.** Tanpa
+  orderbook nyata, gerbang Step2 harus **GAGAL**, bukan dilewati. Skor yang lebih tinggi daripada
+  engine tidak boleh masuk ke notifikasi.
+- **Batasi ke watchlist.** Worker hanya memindai `prefs.getWatchlist()`, tidak pernah seluruh pasar.
+  Scalping dibatasi `MAX_SCALP_BACKGROUND_SYMBOLS` (4 permintaan/simbol: H1, M15, M1, orderbook).
+  Menambah mode lain ke worker berarti menambah beban baterai — ukur dulu, jangan asal tambah.
+- **Batas yang jujur:** worker tetap tidak punya forming volume/orderbook live seperti engine
+  per-tick, jadi skor bisa bergerak antar-snapshot. Yang dijamin adalah **metode dan gerbang yang
+  sama**, bukan snapshot detik yang sama. Jangan menjanjikan "angka identik" di UI/dokumen.
+- **N11 — jangan tampilkan tabel tier lintas-mode.** Ambang ≥80/60–79/<60 membuat sinyal scalping
+  pra-entry (cap ≤59) selalu "Awal", sehingga tabel mengukur READY-vs-bukan. Owner memutuskan
+  **tidak menampilkan**; cap `ScalpingMtfEvaluator` tidak diubah. Penjaga:
+  `ConfidenceTierRemovalTest`.
+
+## Aturan turunan dari audit notifikasi — N12 (batch 6h, 2026-10-17)
+
+- **Edge-trigger bukan pengganti cooldown.** Transisi `READY` mencegah pengiriman berulang pada
+  state yang stabil, tetapi tidak pada state yang **flapping** (`READY → INVALIDATED → READY`).
+  Setiap notifikasi berbasis transisi wajib punya jendela per entitas (pair), bukan hanya syarat
+  "baru berubah".
+- **Cooldown ditaruh di chokepoint pengiriman, bukan di pemanggil.** Ada dua pengirim kandidat
+  (VM foreground, worker latar); menaruhnya di salah satu berarti jalur lain tetap spam.
+- **Uji keputusan, bukan tampilan.** Notifikasi dengan ID sama hanya *menimpa* entri di shade,
+  jadi "hitung notifikasi" tidak bisa membedakan satu kiriman dari dua. Yang diuji:
+  `CandidateNotifyCooldown.allow(...)` + satu uji pindai sumber bahwa helper memanggilnya.
+
+## Aturan turunan dari audit notifikasi — N15, N16 (batch 6g, 2026-10-17)
+
+- **Foreground service adalah keep-alive, bukan pengirim push.** `TradingForegroundService`
+  menjaga proses tetap hidup supaya pemantauan posisi (dan `executeAutoSellOrder`) bisa jalan.
+  Sakelar notifikasi **tidak boleh** menjadi input keputusan start/stop: dulu
+  `hasActive && isNotificationsEnabled.value`, dan akibatnya mematikan "push notifikasi" membuat
+  `livePrices` kosong ⇒ P&L tampil 0%. Aturannya: `hasActive` menentukan hidup-mati; `canNotify`
+  menentukan bunyi.
+- **`AppPreferences` tidak boleh dibangun di jalur per-tick.** Konstruktornya membangun
+  `EncryptedSharedPreferences` + `MasterKey`, dan catch block-nya **menghapus seluruh preferensi**
+  bila gagal. Satu instance per komponen (`by lazy`), dan fungsi yang dipanggil tiap tick harus
+  menerima data (mis. `exchange`) dari pemanggil, bukan membacanya sendiri.
+- **Penjaganya uji pindai sumber, bukan uji perilaku.** Kedua aturan ini hidup di kode ber-
+  `ViewModel`/`Context`; `ForegroundMonitorSourceTest` membaca badan fungsi dan hitungan
+  `AppPreferences(`. Kalau menambah pembacaan prefs di service, uji itu gagal — itu memang
+  tujuannya.
+
+## Aturan turunan dari audit notifikasi — N13, N14, N8 (batch 6f, 2026-10-17)
+
+- **Kategori notifikasi ditentukan oleh JENIS PERISTIWA, bukan oleh helper yang paling mudah
+  dipanggil.** `PRICE_ALERT` hanya untuk pengingat harga yang diminta pengguna sendiri; laporan
+  "order berhasil/gagal" adalah **hasil eksekusi** (`TRAILING_STOP`). Salah kategori punya dua
+  akibat yang sama-sama merusak kontrol: sakelar trailing tidak mematikan notifikasi trailing, dan
+  mematikan pengingat harga justru membungkam konfirmasi order uang riil. Pemetaannya ada di
+  `util/NotificationRouting.kt`.
+- **Nama helper harus membawa kategorinya.** `sendUserPriceAlertNotification` vs
+  `sendExecutionResultNotification` — nama generik `sendPriceAlertNotification` sengaja **dihapus**
+  supaya pemanggil baru tidak bisa "salah kategori tanpa sadar". Penjaga:
+  `app/src/test/java/agu/analys/util/NotificationSourceTest.kt`.
+- **Satu peristiwa, satu pengirim.** Notifikasi "Trailing Stop Naik" hanya boleh dikirim dari jalur
+  ber-jendela (`TrailingPeakThrottle`, 30 dtk). Fungsi yang tugasnya memperbarui order
+  (`updateSimTrailingOrder` / `updateRealTrailingOrder`) **tidak boleh** mengirim notifikasi:
+  dulu keduanya mengirim tanpa pembatas, sehingga cooldown 30 dtk tidak pernah berlaku dan user
+  mendengar bunyi tiap ~10 detik. Kalau butuh notifikasi baru, tambahkan di jalur ber-jendela.
+- **Parameter yang tidak dibaca adalah utang, bukan opsi.** `onlyWhenBackground` diteruskan ke
+  helper tetapi tidak pernah dipakai — dihapus (N8). Jangan menambah parameter "untuk nanti";
+  implementasikan perilakunya + uji, atau jangan ada.
+
+## Aturan turunan dari audit paper trading — P7 (batch 6e, 2026-10-17)
+
+- **Fungsi tanpa pemanggil adalah kontrak palsu.** `clearPaperExitState` bertahan berbulan-bulan
+  seolah-olah ada jalur "pengguna mengambil alih exit engine", padahal `grep -rn` hanya menemukan
+  definisinya. Setiap hook siklus hidup yang tidak punya pemanggil harus **dihapus** atau
+  **dipakai** — jangan dibiarkan sebagai harapan.
+- **Serah-terima exit tidak boleh meninggalkan posisi tanpa stop.** `armPaperExitEngine` menulis
+  `setAutoSellParams(enabled = false)`; siapa pun yang melepas mesin **wajib** menyalakan kembali
+  SL/TP legacy lewat `PaperStopResolver` (contoh yang benar: `HandBackToLegacy` di
+  `PaperRehydrate`). Melepas mesin tanpa itu = posisi tanpa exit sama sekali.
+- **Jangan mengarang level serah-terima.** Bila SL sudah naik ke BE/trailing (`activeStopLoss` bisa
+  **di atas** entry), `PaperStopResolver` menganggapnya tidak valid; memilih level pengganti adalah
+  **keputusan produk**, bukan detail implementasi. Dicatat sebagai P9.
+
+## Aturan turunan dari audit koneksi — K8–K12, K15 (batch 6n, 2026-10-18)
+
+- **Reset backoff hanya setelah sesi terbukti stabil.** Jangan pernah menulis
+  `reconnectAttempt = 0` di `onOpen` socket mana pun. Server yang menerima lalu menutup koneksi
+  (token ditolak, kuota) akan membuat siklus buka-tutup tanpa henti. Pakai `ReconnectBackoff`
+  (`isStable`, `delayMs` berjitter ±20%, `shouldGiveUp` dengan jeda menyerah 5 menit). Penjaga:
+  `RealtimeReconnectPolicyTest` + `ReconnectBackoffTest`.
+- **Listener socket wajib punya penjaga generasi.** Nomor generasi naik di `stop()`/`reconnectNow()`;
+  listener generasi lama harus diabaikan (`gen == generation`), kalau tidak socket usang bisa
+  mengubah status koneksi atau mengacaukan tick pair yang sedang aktif. Penjaga:
+  `RealtimeReconnectPolicyTest`.
+- **Status "live" merupakan milik satu bursa, bukan global.** Jangan memakai satu flag
+  `wsLive` untuk dua bursa; socket bursa non-aktif yang terputus tidak boleh menjatuhkan status
+  bursa yang sedang dipakai. Simpan per bursa dan baca lewat penentu bursa aktif. Penjaga:
+  `MarketDataLiveFlagTest`.
+- **Pemindaian latar dan pengambilan ticker mengikuti lingkup pemanggil.** Worker hanya watchlist;
+  `IndodaxMarketService.fetchTickers(list)` mengambil **per-pair** (`/api/ticker/<pair>`), dan
+  `/api/summaries` (seluruh pasar) hanya untuk dashboard penuh (`fetchAllMarketTicks`). Menambah
+  endpoint "seluruh pasar" ke jalur per-tick/per-10-detik adalah pemborosan data & baterai. Penjaga:
+  `IndodaxTickerScopeTest`.
+- **Nilai bawaan yang menyembunyikan kesalahan konfigurasi dilarang.** `getSymbolType` dulu
+  mengembalikan `1` untuk simbol tak dikenal, sehingga kesalahan format pair mengarah ke host yang
+  salah tanpa jejak. Kembalikan nilai eksplisit (`SYMBOL_TYPE_UNKNOWN = 0`) + log sekali per simbol.
+  Penjaga: `TokocryptoSymbolTypeUnknownTest`.
 
 ## Arah produk (ringkas)
 
@@ -520,7 +706,7 @@ Saat ini berisi (semua diperbarui 2026-10-16):
   memori**, sedangkan posisi & `auto_sell_enabled` persisten di `SpotPositionStore`. Setiap
   perubahan pada siklus hidup posisi paper wajib menjaga tiga hal ini tetap sinkron:
   1. penanda `_paper_engine` ditulis saat engine mengambil alih exit dan dilepas saat posisi
-     ditutup (`markSold` / `finalizePaperExit` / `clearPaperExitState` / posisi hilang);
+     ditutup (`markSold` / `finalizePaperExit` / posisi hilang);
   2. SL asli sinyal ditulis lewat `setAutoSellParams(stopLossPrice = ...)`. **Jangan** andalkan
      `_stop_loss` dari `setHolding` — nilainya sintetis `entry * 0.99` (≈1%), sedangkan SL engine
      minimal sebesar lantai friksi (≥ 5,8% USDT). Rehidrasi dengan SL sintetis akan **memalsukan
@@ -535,8 +721,11 @@ Saat ini berisi (semua diperbarui 2026-10-16):
   1. tulis lewat `TradingViewModel.persistPaperFsm(...)` (ber-throttle) — jangan tulis langsung,
      karena `evaluatePaperAutoExit` berjalan **per tick harga**;
   2. hapus key-nya di **setiap** jalur pelepasan kepemilikan: `markSold` (dua blok),
-     `finalizePaperExit`, `clearPaperExitState`, dan cabang "posisi sudah tidak ada" di
-     `evaluatePaperAutoExitLocked`. Key yang tertinggal akan terbaca posisi berikutnya;
+     `finalizePaperExit`, dan cabang "posisi sudah tidak ada" di
+     `evaluatePaperAutoExitLocked`. Key yang tertinggal akan terbaca posisi berikutnya.
+     **Jangan** bangun ulang `clearPaperExitState` — fungsi itu dihapus di batch 6e (P7) karena
+     tidak pernah dipanggil dan, apa adanya, justru meninggalkan posisi tanpa exit sama sekali
+     (lihat P9 di `docs/bugs/temuan_bugs_paper_trade.md`);
   3. `atrPct` **tidak** dipulihkan lewat `restore()` — ia parameter konstruktor mesin, jadi harus
      dioper saat mesin dibangun di `PaperRehydrate.decide()`. Kalau terlewat, ambang BE/trailing S8
      diam-diam jatuh ke nilai persen tetap;
@@ -625,6 +814,33 @@ Saat ini berisi (semua diperbarui 2026-10-16):
   `LocalPriceAnimationMode` / `PriceAnimationMode.STATIC` sebagai katup hemat baterai pengguna.
   Jangan mengarang gaya animasi baru, dan jangan menambah sakelar hemat daya kedua.
   Bukti: `docs/LAPORAN-mode-sell-fsm-2026-10-15.md`.
+
+## Penulisan dokumen Markdown
+
+Dokumen dibaca owner di editor/HP, bukan hanya di terminal. Tiga hal yang pernah merusak
+keterbacaan dan **tidak boleh terulang**:
+
+- **UTF-8 tanpa BOM, akhir baris LF.** Jangan menyimpan `.md` sebagai UTF-16/ANSI atau CRLF.
+- **Tidak boleh ada aksara CJK** (Mandarin, Jepang, Korea) di berkas mana pun. Aksara seperti itu
+  biasanya masuk lewat tempel-mentempel dari hasil terjemahan atau editor lain, dan membuat
+  kalimat terbaca sebagai "tulisan aneh". Ganti dengan kata Indonesia yang sebenarnya.
+- **Tulis dengan istilah yang jelas, bukan jargon pinjaman.** Contoh pengganti: *seam* → titik
+  sambung/tempat perakitan; *chokepoint* → satu-satunya pintu masuk; *uji menggigit* → uji gagal
+  saat kode dirusak. Kalau satu kalimat perlu dibaca dua kali, tulis ulang.
+- **Satu laporan per berkas temuan.** Ringkasan batch ditulis ke § Riwayat berkas laporan temuan
+  (`docs/laporan_temuan_bugs_<topik>.md`) dan ke `workplan2.md` — bukan berkas baru.
+- **Teks yang diekspor aplikasi ikut aturan ini.** Jurnal trading diekspor sebagai `.md`
+  (`trading/TradeLogExporter.kt`). Jangan memakai simbol matematika di labelnya — simbol irisan
+  sudah dibuang dari label "Skor Konfidensi" karena tampil seperti aksara CJK di sebagian font.
+
+Periksa sebelum commit:
+
+```sh
+python3 tools/check_md_text.py
+```
+
+Skrip itu memeriksa BOM, CRLF, UTF-8 rusak, aksara CJK, dan sisa mojibake dari penyuntingan
+sebelumnya.
 
 ## Git
 

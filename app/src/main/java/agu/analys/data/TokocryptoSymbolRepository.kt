@@ -10,7 +10,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.Request
-import org.json.JSONArray
 import org.json.JSONObject
 import timber.log.Timber
 import java.util.concurrent.ConcurrentHashMap
@@ -39,16 +38,37 @@ object TokocryptoSymbolRepository {
     private val syncMutex = Mutex()
     private val isInitialized = AtomicBoolean(false)
     private val lastSyncTime = AtomicLong(0L)
+    private val lastAttemptTime = AtomicLong(0L)
     private const val SYNC_TTL_MS = 30 * 60 * 1000L // 30 menit refresh interval
+    private const val FAILURE_RETRY_MS = 2 * 60 * 1000L // coba lagi cepat setelah gagal
 
-    // Sumber utama: endpoint resmi Tokocrypto yang mengembalikan seluruh supported trading symbols.
-    // MBX dan NextMe dipakai sebagai fallback resmi sesuai dokumentasi migrasi Tokocrypto.
-    private val SYMBOLS_ENDPOINTS = listOf(
-        "https://www.tokocrypto.com/open/v1/common/symbols",
-        "https://www.tokocrypto.site/api/v3/exchangeInfo",
-        "https://cloudme-toko.2meta.app/api/v1/exchangeInfo"
-    )
+    @Volatile
+    private var lastAttemptFailed = false
+
+    /**
+     * Sumber daftar pair **hanya** endpoint resmi.
+     *
+     * Gateway `tokocrypto.site/api/v3/exchangeInfo` tetap sah untuk ticker/kline/depth (lihat
+     * `TokocryptoMarketService`), tetapi **bukan** sumber daftar pair: isinya universe Binance
+     * (3.729 simbol), termasuk pair yang tidak diperdagangkan Tokocrypto seperti `UVXYBUSDT`.
+     */
+    private const val OFFICIAL_SYMBOLS_URL = "https://www.tokocrypto.com/open/v1/common/symbols"
     private const val TOKOCRYPTO_EXECUTION_RULES_URL = "https://www.tokocrypto.site/api/v3/executionRules"
+
+    /**
+     * Tipe simbol resmi: 1 = MBX, 2 = Next, 3 = NextMe. Bila simbol tidak ada di peta,
+     * [getSymbolType] mengembalikan nilai ini — **bukan** diam-diam menganggapnya Type 1
+     * (temuan K15). Pemanggil yang membandingkan `== 3` otomatis memakai host Type 1 sebagai
+     * perlakukan bawaan, tetapi minimal ada log peringatan sekali per simbol.
+     */
+    const val SYMBOL_TYPE_UNKNOWN = 0
+
+    /** Simbol tak dikenal yang log peringatannya sudah dicetak (sekali per simbol). */
+    private val warnedUnknownSymbolType = ConcurrentHashMap.newKeySet<String>()
+
+    /** Snapshot resmi terakhir; dipakai untuk uji kewajaran pembaruan. */
+    @Volatile
+    private var lastOfficialSymbols: Set<String> = emptySet()
 
     init {
         populateDefaultSymbols()
@@ -138,23 +158,29 @@ object TokocryptoSymbolRepository {
 
     suspend fun ensureSymbolsLoaded(force: Boolean = false): Boolean = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
-        if (!force && isInitialized.get() && (now - lastSyncTime.get() < SYNC_TTL_MS)) {
+        val waitMs = if (lastAttemptFailed) FAILURE_RETRY_MS else SYNC_TTL_MS
+        if (!force && isInitialized.get() && (now - lastAttemptTime.get() < waitMs)) {
             return@withContext true
         }
 
         syncMutex.withLock {
-            if (!force && isInitialized.get() && (now - lastSyncTime.get() < SYNC_TTL_MS)) {
+            val nowLocked = System.currentTimeMillis()
+            val waitLocked = if (lastAttemptFailed) FAILURE_RETRY_MS else SYNC_TTL_MS
+            if (!force && isInitialized.get() && (nowLocked - lastAttemptTime.get() < waitLocked)) {
                 return@withLock true
             }
 
-            // Fetch hanya dari endpoint resmi Tokocrypto
+            lastAttemptTime.set(System.currentTimeMillis())
+            // Gagal sync tidak menghapus snapshot: peta lama (atau metadata bawaan) dipertahankan.
             val success = fetchFromTokocrypto()
+            lastAttemptFailed = !success
             if (!success) {
-                Timber.w("Tokocrypto symbol online discovery gagal, menggunakan metadata bawaan.")
+                Timber.w("Tokocrypto symbol discovery gagal; memakai snapshot terakhir/metadata bawaan.")
+            } else {
+                lastSyncTime.set(System.currentTimeMillis())
             }
 
             isInitialized.set(true)
-            lastSyncTime.set(System.currentTimeMillis())
             _symbolsState.value = symbolsMap.values.toList()
 
             // Fetch execution rules di background untuk price range guard
@@ -165,145 +191,68 @@ object TokocryptoSymbolRepository {
         }
     }
 
+    /** Usia snapshot resmi terakhir; `-1` bila belum pernah sukses. */
+    fun lastSuccessfulSyncAgeMs(now: Long = System.currentTimeMillis()): Long {
+        val last = lastSyncTime.get()
+        return if (last <= 0L) -1L else now - last
+    }
+
     private suspend fun fetchFromTokocrypto(): Boolean {
-        for (endpointUrl in SYMBOLS_ENDPOINTS) {
-            try {
-                val req = Request.Builder()
-                    .url(endpointUrl)
-                    .get()
-                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) TokoClient/3.5")
-                    .header("Accept", "application/json")
-                    .build()
+        try {
+            val req = Request.Builder()
+                .url(OFFICIAL_SYMBOLS_URL)
+                .get()
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) TokoClient/3.5")
+                .header("Accept", "application/json")
+                .build()
 
-                client.newCall(req).execute().use { resp ->
-                    val body = resp.body?.string().orEmpty()
-                    if (!resp.isSuccessful || body.isBlank()) return@use
+            client.newCall(req).execute().use { resp ->
+                val body = resp.body?.string().orEmpty()
+                if (!resp.isSuccessful || body.isBlank()) return false
 
-                    val root = JSONObject(body)
-                    val code = root.optInt("code", 0)
-                    val data = root.optJSONArray("data") ?: root.optJSONArray("symbols")
-
-                    if ((code == 0 || resp.isSuccessful) && data != null && data.length() > 0) {
-                        val newMap = parseTokocryptoSymbols(data)
-
-                        // Replace saat sync berhasil agar symbol yang sudah delisting
-                        // tidak tertinggal dari hasil sync sebelumnya.
-                        if (newMap.isNotEmpty()) {
-                            symbolsMap.clear()
-                            symbolsMap.putAll(newMap)
-                            Timber.i("TokocryptoSymbolRepository: Berhasil load ${newMap.size} aliases dari $endpointUrl")
-                            return true
-                        }
-                    }
+                val root = JSONObject(body)
+                if (root.optInt("code", 0) != 0) {
+                    Timber.w("Tokocrypto symbols menolak permintaan: code=${root.optInt("code", -1)}")
+                    return false
                 }
-            } catch (e: Exception) {
-                Timber.w("Gagal fetch Tokocrypto symbols dari $endpointUrl: ${e.message}")
+
+                val data = TokocryptoSymbolFeed.extractList(root)
+                if (data == null || data.length() == 0) {
+                    Timber.w("Tokocrypto symbols: bentuk respons tidak dikenal")
+                    return false
+                }
+
+                val incoming = TokocryptoSymbolFeed.parse(data)
+                val reason = TokocryptoSymbolFeed.rejectionReason(incoming, lastOfficialSymbols)
+                if (reason != null) {
+                    // Jangan pernah mengganti snapshot dengan daftar yang tidak wajar.
+                    Timber.w("Tokocrypto symbols ditolak: $reason")
+                    return false
+                }
+
+                val newMap = buildAliasMap(incoming)
+                symbolsMap.clear()
+                symbolsMap.putAll(newMap)
+                lastOfficialSymbols = incoming.map { it.symbol }.toSet()
+                Timber.i("TokocryptoSymbolRepository: ${incoming.size} simbol resmi dimuat")
+                return true
             }
+        } catch (e: Exception) {
+            Timber.w("Gagal fetch Tokocrypto symbols resmi: ${e.message}")
         }
         return false
     }
 
-    private fun parseTokocryptoSymbols(dataArray: JSONArray): Map<String, TokocryptoSymbolInfo> {
+    private fun buildAliasMap(symbols: List<TokocryptoSymbolInfo>): Map<String, TokocryptoSymbolInfo> {
         val newMap = mutableMapOf<String, TokocryptoSymbolInfo>()
-        for (i in 0 until dataArray.length()) {
-            val item = dataArray.optJSONObject(i) ?: continue
-            val rawSymbol = item.optString("symbol", "").trim().uppercase()
-            if (rawSymbol.isBlank()) continue
-
-            var baseAsset = item.optString("baseAsset", "").trim().uppercase()
-            var quoteAsset = item.optString("quoteAsset", "").trim().uppercase()
-
-            if (baseAsset.isBlank() || quoteAsset.isBlank()) {
-                val cleanSym = rawSymbol.replace("_", "").replace("-", "").replace("/", "")
-                when {
-                    cleanSym.endsWith("IDR") -> {
-                        baseAsset = cleanSym.removeSuffix("IDR")
-                        quoteAsset = "IDR"
-                    }
-                    cleanSym.endsWith("USDT") -> {
-                        baseAsset = cleanSym.removeSuffix("USDT")
-                        quoteAsset = "USDT"
-                    }
-                }
-            }
-
-            // Tokocrypto yang digunakan aplikasi ini hanya memakai quote USDT dan IDR.
-            if (quoteAsset != "IDR" && quoteAsset != "USDT") continue
-
-            val symbolType = item.optInt("symbolType", 1) // 1 = MBX, 3 = NextMe
-            val basePrecision = item.optInt("basePrecision", item.optInt("baseAssetPrecision", 8))
-            val quotePrecision = item.optInt("quotePrecision", item.optInt("quoteAssetPrecision", 8))
-            
-            val status = item.optString("status", "")
-            val spotTradingEnable = if (status.isNotBlank()) status == "TRADING" else item.optBoolean("spotTradingEnable", true)
-            val defaultStp = item.optString("defaultSelfTradePreventionMode", "NONE")
-
-            var priceFilter: TokocryptoPriceFilter? = null
-            var lotSizeFilter: TokocryptoLotSizeFilter? = null
-            var marketLotSizeFilter: TokocryptoLotSizeFilter? = null
-            var minNotionalFilter: TokocryptoMinNotionalFilter? = null
-
-            val filtersArray = item.optJSONArray("filters")
-            if (filtersArray != null) {
-                for (f in 0 until filtersArray.length()) {
-                    val fObj = filtersArray.optJSONObject(f) ?: continue
-                    val filterType = fObj.optString("filterType", "")
-                    when (filterType) {
-                        "PRICE_FILTER" -> {
-                            priceFilter = TokocryptoPriceFilter(
-                                minPrice = fObj.optString("minPrice", "0").toDoubleOrNull() ?: 0.0,
-                                maxPrice = fObj.optString("maxPrice", "0").toDoubleOrNull() ?: Double.MAX_VALUE,
-                                tickSize = fObj.optString("tickSize", "0").toDoubleOrNull() ?: 0.0
-                            )
-                        }
-                        "LOT_SIZE" -> {
-                            lotSizeFilter = TokocryptoLotSizeFilter(
-                                minQty = fObj.optString("minQty", "0").toDoubleOrNull() ?: 0.0,
-                                maxQty = fObj.optString("maxQty", "0").toDoubleOrNull() ?: Double.MAX_VALUE,
-                                stepSize = fObj.optString("stepSize", "0").toDoubleOrNull() ?: 0.0
-                            )
-                        }
-                        "MARKET_LOT_SIZE" -> {
-                            marketLotSizeFilter = TokocryptoLotSizeFilter(
-                                minQty = fObj.optString("minQty", "0").toDoubleOrNull() ?: 0.0,
-                                maxQty = fObj.optString("maxQty", "0").toDoubleOrNull() ?: Double.MAX_VALUE,
-                                stepSize = fObj.optString("stepSize", "0").toDoubleOrNull() ?: 0.0
-                            )
-                        }
-                        "NOTIONAL", "MIN_NOTIONAL" -> {
-                            minNotionalFilter = TokocryptoMinNotionalFilter(
-                                minNotional = fObj.optString("minNotional", "0").toDoubleOrNull() ?: 0.0,
-                                applyToMarket = fObj.optBoolean("applyToMarket", true),
-                                avgPriceMins = fObj.optInt("avgPriceMins", 5)
-                            )
-                        }
-                    }
-                }
-            }
-
-            val info = TokocryptoSymbolInfo(
-                symbol = rawSymbol,
-                baseAsset = baseAsset,
-                quoteAsset = quoteAsset,
-                symbolType = symbolType,
-                basePrecision = basePrecision,
-                quotePrecision = quotePrecision,
-                spotTradingEnable = spotTradingEnable,
-                defaultSelfTradePreventionMode = defaultStp,
-                priceFilter = priceFilter,
-                lotSizeFilter = lotSizeFilter,
-                marketLotSizeFilter = marketLotSizeFilter,
-                minNotionalFilter = minNotionalFilter
-            )
-
+        for (info in symbols) {
+            val rawSymbol = info.symbol
             val noUnderscore = rawSymbol.replace("_", "").replace("-", "")
-            val underscore = "${baseAsset}_$quoteAsset"
-
+            val underscore = "${info.baseAsset}_${info.quoteAsset}"
             newMap[rawSymbol] = info
             newMap[noUnderscore] = info
             newMap[underscore] = info
         }
-
         return newMap
     }
 
@@ -352,9 +301,34 @@ object TokocryptoSymbolRepository {
         return null
     }
 
+    /**
+     * Tipe simbol untuk routing host (1/2/3). Simbol yang tidak ada di peta mengembalikan
+     * [SYMBOL_TYPE_UNKNOWN] dan **mencatat log sekali per simbol** (temuan K15): dulu nilai
+     * bawaannya `1`, sehingga kesalahan konfigurasi mengarah ke host yang salah tanpa jejak.
+     */
     fun getSymbolType(symbol: String): Int {
-        return getSymbolInfo(symbol)?.symbolType ?: 1
+        val info = getSymbolInfo(symbol)
+        if (info != null) return info.symbolType
+        warnUnknownSymbolTypeOnce(symbol)
+        return SYMBOL_TYPE_UNKNOWN
     }
+
+    private fun warnUnknownSymbolTypeOnce(symbol: String) {
+        val key = symbol.trim().uppercase()
+        if (key.isEmpty()) return
+        if (warnedUnknownSymbolType.add(key)) {
+            Timber.w("getSymbolType: \"$key\" tak ada di peta simbol; dianggap tidak diketahui (0)")
+        }
+    }
+
+    /**
+     * True bila simbol dikenal metadata resmi (dipakai gate watchlist, temuan K13).
+     *
+     * Sengaja **tidak** menuntut status `spotTradingEnable`: watchlist adalah daftar pantau,
+     * sehingga pair suspend tetap boleh dipantau. Gate tampilan dashboard (yang menuntut
+     * status TRADING) ada di [isSpotTradingEnabled] / `DashboardRanking.symbolListed`.
+     */
+    fun hasSymbol(rawSymbol: String): Boolean = getSymbolInfo(rawSymbol) != null
 
     /**
      * Gate listing fail-closed untuk tampilan dashboard.

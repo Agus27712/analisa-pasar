@@ -1,6 +1,7 @@
 package agu.analys.util
 
 import agu.analys.config.MarketDataSource
+import agu.analys.data.IndodaxSymbolRepository
 import agu.analys.data.TokocryptoSymbolRepository
 import agu.analys.model.MarketTick
 import agu.analys.service.IndodaxMarketService
@@ -48,6 +49,22 @@ object DashboardRanking {
         "TUSDUSDT", "TUSDIDR", "FDUSDUSDT", "FDUSDIDR", "EURUSDT", "GBPUSDT", "AUDUSDT",
         "DAIIDR", "DAIUSDT", "IDRTIDR", "IDRTUSDT"
     )
+
+    /**
+     * Gate **listing** untuk tampilan dashboard (temuan K14).
+     *
+     * Digantungkan pada satu fungsi supaya semua cabang dashboard (daftar fokus, daftar
+     * tick, fallback statis) memakai syarat yang sama, bukan salinan syarat per cabang:
+     * - **Tokocrypto** — hanya simbol berstatus TRADING di discovery resmi; simbol delisted
+     *   atau tak dikenal gugur (fail-closed).
+     * - **Indodax** — simbol harus ada di repository pair Indodax, supaya simbol sampah dari
+     *   watchlist lama tidak tampil sebagai kartu bernilai `-`.
+     */
+    fun symbolListed(source: MarketDataSource, symbol: String): Boolean =
+        when (source) {
+            MarketDataSource.TOKOCRYPTO -> TokocryptoSymbolRepository.isSpotTradingEnabled(symbol)
+            MarketDataSource.INDODAX -> IndodaxSymbolRepository.hasSymbol(symbol)
+        }
 
     /** Pair layak tampil di dashboard untuk bursa aktif (bukan stablecoin/fiat). */
     fun isRankable(source: MarketDataSource, tick: MarketTick): Boolean {

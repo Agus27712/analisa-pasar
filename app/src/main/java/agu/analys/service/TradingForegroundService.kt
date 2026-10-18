@@ -321,7 +321,7 @@ class TradingForegroundService : Service() {
     private fun formatCoinQuantity(quantity: Double, baseAsset: String): String {
         if (quantity <= 0.0) return "0 $baseAsset"
         val cache = agu.analys.util.MarketDataCache(this)
-        val meta = cache.loadPairsMetadata(AppPreferences(this).marketDataSource).find { it.baseCurrency.equals(baseAsset, ignoreCase = true) || it.tradedCurrency.equals(baseAsset, ignoreCase = true) }
+        val meta = cache.loadPairsMetadata(appPrefs.marketDataSource).find { it.baseCurrency.equals(baseAsset, ignoreCase = true) || it.tradedCurrency.equals(baseAsset, ignoreCase = true) }
         val decimals = meta?.quantityDecimals ?: if (quantity >= 1000.0) 2 else if (quantity >= 1.0) 4 else 8
         return agu.analys.util.PriceFormatter.formatCoinQuantity(quantity, baseAsset, decimals)
     }
@@ -343,7 +343,7 @@ class TradingForegroundService : Service() {
 
     private fun updateNotification() {
         lastUpdateTime = System.currentTimeMillis()
-        val prefs = AppPreferences(this)
+        val prefs = appPrefs
         val currentDataSource = prefs.marketDataSource
         val (realItems, simItems) = getHoldingsData()
         val totalProfitCount = realItems.count { it.isProfit } + simItems.count { it.isProfit }
@@ -464,7 +464,7 @@ class TradingForegroundService : Service() {
         val context = applicationContext
         val positionStore = SpotPositionStore(context)
         val simulationStore = SimulationTradeStore(context)
-        val prefs = AppPreferences(context)
+        val prefs = appPrefs
         val ex = prefs.marketDataSource.name.uppercase()
 
         val hasCreds = prefs.hasTokocryptoCredentials() || prefs.hasIndodaxCredentials()
@@ -576,10 +576,14 @@ class TradingForegroundService : Service() {
 
         val livePrices = ConcurrentHashMap<String, Double>()
 
+        /**
+         * N15 — service ini **keep-alive pemantauan posisi**, bukan pengirim push.
+         *
+         * Karena itu ia tidak boleh bergantung pada sakelar notifikasi: mematikan "push notifikasi"
+         * dulu menghentikan service, yang membuat `livePrices` kosong (P&L tampil 0%) dan
+         * mematikan pemantauan di latar. Bunyi notifikasi diatur `canNotify(...)` di helper.
+         */
         fun startService(context: Context) {
-            val prefs = AppPreferences(context)
-            if (!prefs.isNotificationsEnabled) return
-            
             val intent = Intent(context, TradingForegroundService::class.java)
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -591,8 +595,6 @@ class TradingForegroundService : Service() {
         }
 
         fun forceRefresh(context: Context) {
-            val prefs = AppPreferences(context)
-            if (!prefs.isNotificationsEnabled) return
             val intent = Intent(context, TradingForegroundService::class.java).apply {
                 action = ACTION_FORCE_REFRESH
             }
@@ -613,29 +615,15 @@ class TradingForegroundService : Service() {
             } catch (_: Exception) {}
         }
 
-        fun updatePrice(context: Context, symbol: String, price: Double, exchange: String? = null) {
-            val prefs = AppPreferences(context)
-            if (!prefs.isNotificationsEnabled) return
-            val symUpper = symbol.uppercase()
-            val ex = exchange ?: prefs.marketDataSource.name
-            val key = "${ex.uppercase()}_$symUpper"
-            val oldPrice = livePrices[key] ?: livePrices[symUpper]
-            if (oldPrice == price) return
-
-            livePrices[key] = price
-            livePrices[symUpper] = price
-            val intent = Intent(context, TradingForegroundService::class.java).apply {
-                action = ACTION_UPDATE
-            }
-            try {
-                context.startService(intent)
-            } catch (_: Exception) {}
-        }
-
-        fun updatePrices(context: Context, prices: Map<String, Double>, exchange: String? = null) {
-            val prefs = AppPreferences(context)
-            if (!prefs.isNotificationsEnabled) return
-            val ex = (exchange ?: prefs.marketDataSource.name).uppercase()
+        /**
+         * N16 — dipanggil **setiap tick dashboard**, jadi tidak boleh menyentuh `AppPreferences`.
+         *
+         * Konstruktor `AppPreferences` membangun `EncryptedSharedPreferences` + `MasterKey`, dan
+         * bila gagal ia menghapus seluruh preferensi. Dulu fungsi ini membuat instance baru tiap
+         * tick hanya untuk membaca `marketDataSource`; sekarang bursa **wajib** dioper pemanggil.
+         */
+        fun updatePrices(context: Context, prices: Map<String, Double>, exchange: String) {
+            val ex = exchange.uppercase()
             var changed = false
             for ((sym, price) in prices) {
                 val symUpper = sym.uppercase()

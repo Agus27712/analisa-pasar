@@ -24,7 +24,7 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.atomic.AtomicLong
-import kotlin.math.min
+import kotlin.random.Random
 
 /**
  * WebSocket Market Stream Resmi Tokocrypto:
@@ -59,11 +59,17 @@ class TokocryptoMarketWebSocket(
     private var currentTimeframe = Timeframe.M1
     private var reconnectAttempt = 0
     private val lastMessageAt = AtomicLong(0L)
+    private val connectedAtMs = AtomicLong(0L)
 
     private val tradeTimeFormatter: DateTimeFormatter =
         DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneId.of("Asia/Jakarta"))
 
-    /** Host stream resmi Tokocrypto berdasarkan symbol type. */
+    /**
+     * Host stream resmi Tokocrypto berdasarkan symbol type.
+     *
+     * `1` dan `0` (tak diketahui, lihat K15) sama-sama memakai host Type 1 — perilaku lama
+     * dipertahankan, tetapi simbol tak dikenal kini minimal tercatat di log.
+     */
     private fun hostForSymbolType(type: Int): String = when (type) {
         2 -> "wss://www.tokocrypto.com"
         3 -> "wss://stream-toko.2meta.app"
@@ -84,6 +90,30 @@ class TokocryptoMarketWebSocket(
         connect()
     }
 
+    /**
+     * Menyambung ulang **tanpa** mereset symbol, host, dan timeframe yang sudah ditentukan
+     * sebelumnya. Dipakai saat socket terdeteksi usang (**K7**) — dulu pemanggil memanggil
+     * `start()`, yang menjalankan `stop(false)` dan mengosongkan seluruh konfigurasi stream.
+     */
+    fun reconnectNow() {
+        if (streamSymbol.isBlank() || streamHost.isBlank()) return
+        reconnectJob?.cancel()
+        reconnectJob = null
+        generation++
+        val old = socket
+        socket = null
+        old?.close(1000, "reconnect")
+        lastMessageAt.set(0L)
+        connectedAtMs.set(0L)
+        connect()
+    }
+
+    /** Menyambung ulang hanya bila [RealtimeSocketHealth] menilai socket perlu disambung ulang. */
+    fun reconnectIfStale() {
+        if (!RealtimeSocketHealth.needsRestart(socket != null, connectedAtMs.get(), lastMessageAt.get(), System.currentTimeMillis())) return
+        reconnectNow()
+    }
+
     fun stop(notify: Boolean = true) {
         reconnectJob?.cancel()
         reconnectJob = null
@@ -93,16 +123,20 @@ class TokocryptoMarketWebSocket(
         old?.close(1000, "Normal closure")
         streamSymbol = ""
         streamHost = ""
+        lastMessageAt.set(0L)
+        connectedAtMs.set(0L)
         if (notify) onDisconnected()
     }
 
     fun close() = stop(false)
 
-    fun isStale(staleMs: Long = 25_000L): Boolean {
-        val last = lastMessageAt.get()
-        if (last <= 0L) return false
-        return System.currentTimeMillis() - last > staleMs
-    }
+    /** True bila socket perlu disambung ulang menurut [RealtimeSocketHealth]. */
+    fun isStale(): Boolean = RealtimeSocketHealth.needsRestart(
+        socketOpen = socket != null,
+        connectedAtMs = connectedAtMs.get(),
+        lastMessageAtMs = lastMessageAt.get(),
+        nowMs = System.currentTimeMillis()
+    )
 
     private fun getIntervalCode(tf: Timeframe): String = when (tf) {
         Timeframe.M1 -> "1m"
@@ -132,8 +166,14 @@ class TokocryptoMarketWebSocket(
     private fun reconnect() {
         if (streamSymbol.isBlank() || reconnectJob?.isActive == true) return
         reconnectJob = scope.launch {
-            val waitMs = min(12_000L, (600L * (1L shl min(reconnectAttempt, 4))))
-            reconnectAttempt++
+            val attempt = reconnectAttempt + 1
+            val giveUp = ReconnectBackoff.shouldGiveUp(attempt)
+            val waitMs = if (giveUp) {
+                ReconnectBackoff.GIVE_UP_PAUSE_MS
+            } else {
+                ReconnectBackoff.delayMs(attempt, BASE_RECONNECT_MS, MAX_RECONNECT_MS, Random.nextDouble())
+            }
+            reconnectAttempt = if (giveUp) 0 else attempt
             delay(waitMs)
             if (isActive && streamSymbol.isNotBlank()) connect()
         }
@@ -145,8 +185,7 @@ class TokocryptoMarketWebSocket(
                 webSocket.close(1000, "Superseded")
                 return
             }
-            reconnectAttempt = 0
-            lastMessageAt.set(System.currentTimeMillis())
+            connectedAtMs.set(System.currentTimeMillis())
             onConnected()
             Timber.i("TokocryptoMarketWS: Connected to $streamSymbol @ $streamHost")
         }
@@ -154,6 +193,12 @@ class TokocryptoMarketWebSocket(
         override fun onMessage(webSocket: WebSocket, text: String) {
             if (!isCurrent()) return
             lastMessageAt.set(System.currentTimeMillis())
+            // K8 — hitungan percobaan hanya di-reset setelah sesi terbukti stabil, bukan di onOpen.
+            if (reconnectAttempt != 0 &&
+                ReconnectBackoff.isStable(connectedAtMs.get(), System.currentTimeMillis())
+            ) {
+                reconnectAttempt = 0
+            }
             try {
                 val root = JSONObject(text)
                 // Format combined stream payload: { "stream": "btcusdt@miniTicker", "data": { ... } }
@@ -290,5 +335,10 @@ class TokocryptoMarketWebSocket(
             onDisconnected()
             reconnect()
         }
+    }
+
+    private companion object {
+        const val BASE_RECONNECT_MS = 600L
+        const val MAX_RECONNECT_MS = 12_000L
     }
 }

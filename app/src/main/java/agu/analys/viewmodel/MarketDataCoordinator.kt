@@ -86,7 +86,11 @@ class MarketDataCoordinator(
     private var currentActivePair: TradingPair? = null
     private var currentActiveTimeframe: Timeframe = Timeframe.M15
     private var lastLiveTickAt = 0L
-    private var wsLive = false
+    // K10 — status "live" dipisah per bursa. Dulu satu flag `wsLive` di-set `false` oleh callback
+    // bursa mana pun, sehingga socket bursa non-aktif yang terputus menjatuhkan status bursa yang
+    // sedang dipakai dan memaksa REST fallback tanpa perlu.
+    private var wsLiveToko = false
+    private var wsLiveIndodax = false
     private var lastCandleRefresh = 0L
     private var lastDepthRefresh = 0L
     private var marketPollJob: Job? = null
@@ -100,14 +104,14 @@ class MarketDataCoordinator(
             engine.onCandleUpdate(candle)
         },
         onConnected = {
-            wsLive = true
+            wsLiveIndodax = true
             lastLiveTickAt = System.currentTimeMillis()
             _connectionState.value = MarketConnectionState.Connected
             _isShowingCachedData.value = false
             agu.analys.util.AppLogManager.market("IndodaxWS", "✅ WebSocket tersambung ke server Indodax untuk ${currentActivePair?.symbol}")
         },
         onDisconnected = {
-            wsLive = false
+            wsLiveIndodax = false
             val recentRest = System.currentTimeMillis() - lastLiveTickAt < 12_000L
             if (!recentRest && _currentTick.value == null) {
                 _connectionState.value = MarketConnectionState.ConnectionLost("Realtime terputus. REST fallback...")
@@ -138,14 +142,14 @@ class MarketDataCoordinator(
             }
         },
         onConnected = {
-            wsLive = true
+            wsLiveToko = true
             lastLiveTickAt = System.currentTimeMillis()
             _connectionState.value = MarketConnectionState.Connected
             _isShowingCachedData.value = false
             agu.analys.util.AppLogManager.market("TokocryptoWS", "✅ WebSocket tersambung ke server Tokocrypto untuk ${currentActivePair?.symbol}")
         },
         onDisconnected = {
-            wsLive = false
+            wsLiveToko = false
             val recentRest = System.currentTimeMillis() - lastLiveTickAt < 12_000L
             if (!recentRest && _currentTick.value == null) {
                 _connectionState.value = MarketConnectionState.ConnectionLost("Realtime Tokocrypto terputus. REST fallback...")
@@ -153,6 +157,17 @@ class MarketDataCoordinator(
             agu.analys.util.AppLogManager.warn("TokocryptoWS", "⚠️ WebSocket Tokocrypto terputus untuk ${currentActivePair?.symbol}.")
         }
     )
+
+    /** Bursa aktif saat ini (satu sumber: preferensi pengguna). */
+    private fun isTokoSource(): Boolean = prefs.marketDataSource == MarketDataSource.TOKOCRYPTO
+
+    /** Menandai status live bursa tertentu (K10); pemanggil menyebut bursanya secara eksplisit. */
+    private fun setWsLive(isToko: Boolean, live: Boolean) {
+        if (isToko) wsLiveToko = live else wsLiveIndodax = live
+    }
+
+    /** Status live bursa yang sedang dipakai — bukan status bursa lain. */
+    private fun activeWsLive(): Boolean = if (isTokoSource()) wsLiveToko else wsLiveIndodax
 
     private fun handleWebSocketTick(tick: MarketTick) {
         val currentPair = currentActivePair ?: return
@@ -169,7 +184,8 @@ class MarketDataCoordinator(
             !cleanTick.equals(cleanCompact, true)) return
 
         lastLiveTickAt = System.currentTimeMillis()
-        wsLive = true
+        // Tick yang lolos filter di atas milik pair bursa aktif.
+        setWsLive(isToko = isTokoSource(), live = true)
         if (_connectionState.value !is MarketConnectionState.Connected) {
             _connectionState.value = MarketConnectionState.Connected
             _isShowingCachedData.value = false
@@ -348,19 +364,16 @@ class MarketDataCoordinator(
             }
 
             while (isActive) {
-                // Reconnect WS hanya jika benar-benar stale
+                // Sambung ulang hanya bila socket benar-benar usang, dan lewat reconnectNow()
+                // supaya candle menit berjalan tidak ikut terbuang (K7).
                 if (isToko) {
-                    if (tokocryptoWebSocket.isStale(30_000L)) {
-                        tokocryptoWebSocket.start(pair.effectiveTokocryptoPair())
-                    }
+                    tokocryptoWebSocket.reconnectIfStale()
                 } else {
-                    if (indodaxWebSocket.isStale(30_000L)) {
-                        indodaxWebSocket.start(pair.symbol)
-                    }
+                    indodaxWebSocket.reconnectIfStale()
                 }
 
                 val now = System.currentTimeMillis()
-                val wsFresh = wsLive && (now - lastLiveTickAt < 8_000L)
+                val wsFresh = activeWsLive() && (now - lastLiveTickAt < 8_000L)
 
                 // REST ticker hanya sebagai fallback jika WS tidak fresh
                 if (!wsFresh) {
@@ -485,7 +498,8 @@ class MarketDataCoordinator(
         tokocryptoWebSocket.stop(false)
         uiPriceThrottler.reset()
         currentActivePair = null
-        wsLive = false
+        setWsLive(isToko = true, live = false)
+        setWsLive(isToko = false, live = false)
         lastLiveTickAt = 0L
 
         // 2. Kosongkan semua data in-memory StateFlow

@@ -22,6 +22,7 @@ import agu.analys.model.CandleBar
 import agu.analys.model.SignalAction
 import agu.analys.model.TradingPair
 import agu.analys.trading.PaperExitMomentumWindow
+import agu.analys.trading.PaperFirstBarResolver
 import agu.analys.trading.SimulationOrderResult
 import agu.analys.trading.SimulationOrderSide
 import agu.analys.trading.SimulationOrderType
@@ -206,15 +207,19 @@ object PaperAutoTradeRuntime {
     /**
      * Tandai bucket menit untuk evaluasi per-tick.
      *
-     * @return `true` bila ini tick pertama di menit berjalan, artinya satu bar M1 baru
-     *   terbentuk dan `barsHeld` boleh ditambah.
+     * P8 — hasilnya memisahkan "dievaluasi sebagai bar baru" dari "boleh menambah `barsHeld`":
+     * tick pertama sesudah rehidrasi adalah bar baru (time-stop harus langsung dicek) tetapi
+     * menitnya sudah dihitung `PaperRehydrate.mergedBarsHeld`.
      */
-    fun markBarBucket(exchange: String, symbol: String, now: Long): Boolean {
+    fun markBarBucket(exchange: String, symbol: String, now: Long): BarBucketMark {
         val k = key(exchange, symbol)
         val bucket = now / 60_000L
         val last = lastBarBucketMap[k]
         lastBarBucketMap[k] = bucket
-        return last == null || last != bucket
+        return BarBucketMark(
+            isNewBar = last == null || last != bucket,
+            firstTickAfterRehydrate = last == FIRST_TICK_BUCKET
+        )
     }
 
     fun clear(exchange: String, symbol: String) {
@@ -239,6 +244,15 @@ object PaperAutoTradeRuntime {
 
     /** Bucket sentinel: tidak mungkin sama dengan `now / 60_000`, jadi tick pertama selalu "bar baru". */
     private const val FIRST_TICK_BUCKET = -1L
+
+    /**
+     * P8 — hasil [markBarBucket]: apakah tick ini bar baru, dan apakah ia tick pertama sesudah
+     * rehidrasi (menitnya sudah dihitung `PaperRehydrate.mergedBarsHeld`).
+     */
+    data class BarBucketMark(
+        val isNewBar: Boolean,
+        val firstTickAfterRehydrate: Boolean
+    )
 
     /** Toleransi kenaikan SL agar noise floating point tidak memicu penulisan. */
     private const val FSM_SL_EPS = 1e-9
@@ -680,7 +694,14 @@ private fun TradingViewModel.evaluatePaperAutoExitLocked(
     }
 
     val now = System.currentTimeMillis()
-    val isNewBar = PaperAutoTradeRuntime.markBarBucket(exchange, symbol, now)
+    val barMark = PaperAutoTradeRuntime.markBarBucket(exchange, symbol, now)
+    val isNewBar = barMark.isNewBar
+    // P8 — tick pertama sesudah rehidrasi dievaluasi sebagai bar baru (time-stop langsung dicek)
+    // tetapi TIDAK menambah barsHeld: menitnya sudah dihitung mergedBarsHeld.
+    val countAsNewBar = PaperFirstBarResolver.countsAsNewBar(
+        isNewBar = barMark.isNewBar,
+        firstTickAfterRehydrate = barMark.firstTickAfterRehydrate
+    )
     val bar = CandleBar(
         timestamp = now,
         open = currentPrice,
@@ -701,7 +722,12 @@ private fun TradingViewModel.evaluatePaperAutoExitLocked(
         ),
         nowMs = now
     )
-    val decision = machine.onBar(bar, window, isNewBar = isNewBar)
+    val decision = machine.onBar(
+        bar = bar,
+        window14 = window,
+        isNewBar = isNewBar,
+        countAsNewBar = countAsNewBar
+    )
     if (decision == null) {
         // Posisi masih ditahan -> simpan progres supaya restart berikutnya tidak kembali ke nol.
         // Tidak perlu `force`: perubahan yang berarti ditulis segera oleh shouldWriteFsm.
@@ -797,14 +823,6 @@ fun TradingViewModel.finalizePaperExit(
     positionStore.clearPaperFsmState(symbol = pair.symbol, isReal = false, exchange = exchange)
     positionCoordinator.refreshPosition(pair.symbol)
     return dispatched
-}
-
-/** Hapus state machine exit setelah posisi paper ditutup. */
-fun TradingViewModel.clearPaperExitState(symbol: String, exchange: String) {
-    PaperAutoTradeRuntime.clear(exchange, symbol)
-    positionStore.setPaperEngineOwned(symbol = symbol, isReal = false, exchange = exchange, owned = false)
-    positionStore.clearPaperFsmState(symbol = symbol, isReal = false, exchange = exchange)
-    publishPaperExitSnapshot(exchange = exchange, symbol = symbol, snapshot = null)
 }
 
 /** Ringkas parameter exit yang sedang aktif, untuk ditampilkan di UI. */

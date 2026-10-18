@@ -2,7 +2,7 @@
 
 **Tanggal:** 2026-10-16
 **Branch:** `patch`
-**Sumber temuan:** `docs/bugs/temuan_bugs_notifikasi.md` (audit read-only agen lain, di-pull dari `patch` pada commit `36e0594`)
+**Sumber temuan:** `docs/laporan_temuan_bugs_notifikasi.md` (audit read-only agen lain, di-pull dari `patch` pada commit `36e0594`)
 **Cakupan:** 3 dari 12 temuan — N2 (kritis), N1 (kritis), N3 (serius)
 
 ---
@@ -167,7 +167,7 @@ ulang dari XML menunjukkan 443 adalah **total test** (442 lulus + 1 dilewati). S
 
 ## 7. Yang belum dikerjakan
 
-Temuan **N4–N12** masih hidup di `docs/bugs/temuan_bugs_notifikasi.md`. Yang paling perlu perhatian
+Temuan **N4–N12** masih hidup di `docs/laporan_temuan_bugs_notifikasi.md`. Yang paling perlu perhatian
 berikutnya:
 
 - **N7** — `markTriggered` memakai `symbol.uppercase()` tanpa normalisasi, sedangkan key disimpan
@@ -198,5 +198,5 @@ berikutnya:
 **Dokumen**
 - `workplan2.md` (§25 koreksi, §26, §27)
 - `AGENTS.md` (aturan baru)
-- `docs/bugs/temuan_bugs_notifikasi.md` (N1/N2/N3 ditandai DIPERBAIKI)
+- `docs/laporan_temuan_bugs_notifikasi.md` (N1/N2/N3 ditandai DIPERBAIKI)
 - `docs/LAPORAN-batch1-notifikasi-2026-10-16.md` (berkas ini)

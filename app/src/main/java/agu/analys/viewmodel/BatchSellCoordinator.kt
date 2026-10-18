@@ -190,7 +190,7 @@ class BatchSellCoordinator(
         _executionState.value = BatchExecutionState.Completed(summary)
 
         // Notification
-        AlertNotificationHelper.sendPriceAlertNotification(
+        AlertNotificationHelper.sendExecutionResultNotification(
             context = context,
             notificationId = 9801,
             title = "✅ BATCH SELL SIMULASI SELESAI",
@@ -330,7 +330,7 @@ class BatchSellCoordinator(
         _executionState.value = BatchExecutionState.Completed(summary)
 
         // Notification
-        AlertNotificationHelper.sendPriceAlertNotification(
+        AlertNotificationHelper.sendExecutionResultNotification(
             context = context,
             notificationId = 9802,
             title = "✅ BATCH SELL $exchangeName SELESAI",

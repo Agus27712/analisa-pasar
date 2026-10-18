@@ -10,7 +10,7 @@ belum selesai, dan perbarui `AGENTS.md` supaya agen tidak perlu cek kode lagi ka
 
 | # | Aksi | Berkas |
 |---|---|---|
-| 1 | **Pangkas butir yang sudah ditutup** dari badan dokumen; pindahkan ke tabel "Sudah ditutup" (commit + pointer laporan) | `docs/bugs/temuan_bugs_notifikasi.md`, `temuan_bugs_jurnal_pnl.md`, `temuan_bugs_paper_trade.md` |
+| 1 | **Pangkas butir yang sudah ditutup** dari badan dokumen; pindahkan ke tabel "Sudah ditutup" (commit + pointer laporan) | `docs/laporan_temuan_bugs_notifikasi.md`, `temuan_bugs_jurnal_pnl.md`, `temuan_bugs_paper_trade.md` |
 | 2 | **Perbarui butir yang masih hidup** dengan bukti terverifikasi ulang + nomor baris di `547048d` | idem |
 | 3 | **Perjelas J10** dari "sudah selesai" (N10) ↔ "masih hidup" (judul dokumen) jadi **sebagian**, dan tuliskan sisa yang ditemukan | `temuan_bugs_jurnal_pnl.md` §2.1, `AGENTS.md` |
 | 4 | **Hapus 3 stub DEPRECATED** (`workplan.md`, `checkpoint.md`, `checkpoint_progres.md`) dan semua rujukannya | root + `AGENTS.md` + `APP_CONTEXT.md` |

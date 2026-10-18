@@ -1,11 +1,11 @@
 # Temuan Audit — Siklus Hidup Posisi Paper Trading & Mesin Exit
 
-**Audit:** 2026-10-16 · **Status disinkronkan:** 2026-10-16 (verifikasi ulang ke kode + review owner)
+**Audit:** 2026-10-16 · **Status disinkronkan:** 2026-10-17 (P8 ditutup di batch 6d; P6 & P7 masih mengacu verifikasi `547048d`)
 **Isi dokumen:** **hanya temuan yang MASIH hidup.** Temuan yang sudah ditutup dipangkas dari badan
 dokumen dan diringkas di §4 (dengan pointer ke laporan eksekusinya).
-**Verifikasi terakhir:** branch `patch` @ `547048d`, dibaca ulang langsung ke kode pada 2026-10-16
+**Verifikasi terakhir:** branch `patch` @ `547048d` (P6, P7), dibaca ulang langsung ke kode pada 2026-10-16
 dan **sudah direview owner**. Status di bawah **otoritatif — agen tidak perlu cek kode lagi** untuk
-memastikannya; cukup baca tabel ini. Nomor baris refers ke `547048d`.
+memastikannya; cukup baca tabel ini. Nomor baris merujuk ke `547048d`.
 **Cakupan:** `PaperAutoTradeCoordinator.kt` · `PaperRehydrate.kt` · `PaperExitResolver.kt` ·
 `SpotPositionStore.kt` · `TradingViewModelSync.kt` · `TradingViewModel.kt` ·
 `TradingViewModelAlerts.kt` · `PaperAutoTradeRuntime`
@@ -13,9 +13,8 @@ memastikannya; cukup baca tabel ini. Nomor baris refers ke `547048d`.
 | Status | Temuan | Ringkas |
 |---|---|---|
 | 🟠 **Hidup sebagian** | **P6** | Jendela momentum sudah satu sumber (batch 5c); `peak` masih hanya melihat harga tick, bukan high M1 |
-| 🟠 **Hidup** | **P7** | `clearPaperExitState` tidak punya satu pun pemanggil |
-| 🟠 **Hidup** | **P8** | `barsHeld` +1 pada tick pertama setelah rehidrasi ⇒ time-stop 1 bar lebih awal |
-| ✅ Ditutup | P1, P2, P3, P4, P5 | Lihat §4 — ketiga temuan kritis (P1–P3) sudah tertutup |
+| 🟠 **Hidup** | **P9** | Mematikan auto-exit saat posisi terbuka meninggalkan posisi tanpa SL/TP sampai restart |
+| ✅ Ditutup | P1, P2, P3, P4, P5, P7, P8 | Lihat §4 — ketiga temuan kritis (P1–P3) sudah tertutup |
 
 ### Catatan pengukuran (penting sebelum mulai memperbaiki)
 
@@ -92,7 +91,7 @@ harga tick, dan sampling jalur latar 10 detik.
 > ⚠️ **Bagian kedua P6 belum beres (diverifikasi ulang 2026-10-16 @ `547048d`):** `peak` di jalur
 > latar masih tertinggal dari high M1. Bar yang dinilai tetap **sintetis dari tick** —
 > `PaperAutoTradeCoordinator.kt:684-691` membuat `open = high = low = close = currentPrice`,
-> `volume = 0.0` — lalu `PaperExitResolver.kt:587` menjalankan `peak = max(peak, bar.high)`. Jendela
+> `volume = 0.0` — lalu `PaperExitResolver.kt:597` menjalankan `peak = max(peak, bar.high)`. Jendela
 > M1 yang sudah tersedia (`PaperExitMomentumWindow.resolve`, `PaperAutoTradeCoordinator.kt:696`)
 > **hanya dipakai untuk pemeriksaan momentum**, tidak pernah disuntikkan ke `peak`.
 > Ini bukan cabang kode yang berbeda antar pemanggil, melainkan **tidak adanya umpan intrabar**:
@@ -103,8 +102,7 @@ harga tick, dan sampling jalur latar 10 detik.
 
 | # | Temuan | Lokasi (verifikasi ulang @ `547048d`) | Dampak |
 |---|---|---|---|
-| P7 | `clearPaperExitState` **tidak punya satu pun pemanggil** | definisi di `PaperAutoTradeCoordinator.kt:803`; `grep -rn "clearPaperExitState" app/src` → **1 hasil (definisi saja)** | Jalur "user mengambil alih exit engine" yang menjanjikan AGENTS §12 tidak ada implementasinya; satu-satunya jalan keluar adalah `HandBackToLegacy`, yang justru melempar progres FSM (lihat P3) |
-| P8 | `barsHeld` dihitung **dua kali** pada tick pertama setelah rehidrasi | `PaperRehydrate.kt:143` + `:165-169` (`mergedBarsHeld`), `PaperAutoTradeCoordinator.kt:933` (`markFirstTickAsNewBar = true`) → `:156` + `:241` (`FIRST_TICK_BUCKET = -1L`), `PaperExitResolver.kt:586` (`if (isNewBar) barsHeld++`) | `markFirstTickAsNewBar` membuat `onBar` menaikkan `barsHeld` lagi pada tick yang sama, padahal `mergedBarsHeld` sudah menghitung menit yang berjalan ⇒ **time-stop keluar 1 bar (1 menit) lebih awal** dari yang seharusnya |
+| P9 | **Mematikan auto-exit paper saat posisi terbuka meninggalkan posisi tanpa SL/TP** | arm menulis `setAutoSellParams(enabled = false)` (`PaperAutoTradeCoordinator.kt:385-390`, auto-buy `:585` = `enabled = !p2OwnsExit`); sakelar hanya menulis preferensi (`PaperAutoTradeSettings.kt:136` → `AppPreferences.kt:314`) — **tidak ada** yang menyalakannya kembali saat runtime; blok SL/TP legacy bergantung pada `updatedPos.isAutoSellEnabled` (`TradingViewModelAlerts.kt:244`) | Sesudah arm, `auto_sell_enabled` = `false`. Bila pengguna mematikan auto-exit saat posisi terbuka, `paperEngineOwnsExit` jadi `false` sehingga jalur legacy boleh jalan — tetapi SL/TP-nya masih terkunci `isAutoSellEnabled`, jadi yang tersisa hanya trailing. Posisi paper **tanpa stop** sampai app di-restart; setelah restart `PaperRehydrate` → `HandBackToLegacy` justru **menyalakan** auto-sell (`:1004-1014`), jadi aksi pengguna yang sama berakhir berbeda tergantung restart. Butuh keputusan produk: SL mana yang dipakai bila SL sudah naik ke BE/trailing (di atas entry, sehingga `PaperStopResolver` menganggapnya tidak valid) |
 
 ## 4. Sudah ditutup (ringkasan + pointer laporan)
 
@@ -116,6 +114,8 @@ harga tick, dan sampling jalur latar 10 detik.
 | P1 — posisi paper di bursa non-aktif menggantung setelah restart | `e33b238` | `docs/LAPORAN-batch3-rehidrasi-2026-10-16.md` |
 | P6 (bagian jendela momentum) | `1665bf4` | `docs/LAPORAN-batch5-p6-2026-10-16.md` |
 | P5 — kartu FSM dihapus tick pair lain | `95e0448` | `docs/LAPORAN-batch5-p5-2026-10-16.md` |
+| P8 — `barsHeld` dihitung dua kali pada tick pertama sesudah rehidrasi | `batch 6d` | `docs/LAPORAN-batch6-p8-2026-10-17.md` |
+| P7 — `clearPaperExitState` tanpa pemanggil (kontrak dihapus, bukan diimplementasikan) | `batch 6e` | `docs/LAPORAN-batch6-p7-2026-10-17.md` |
 
 ## 5. Yang sudah benar (jangan diutak-atik)
 
@@ -123,7 +123,7 @@ Semua aturan rehidrasi P4.4 **terpasang benar** dan sudah diuji:
 
 - key `_paper_fsm` dihapus di **setiap** jalur pelepasan kepemilikan — `SpotPositionStore.kt:416`
   dan `:452` (`markSold`), `PaperAutoTradeCoordinator.kt:630` ("posisi sudah tidak ada"),
-  `:750` (`finalizePaperExit`), `:759` (`clearPaperExitState`). Dijaga
+  `:750` (`finalizePaperExit`). Dijaga
   `app/src/test/java/agu/analys/trading/SpotPositionStorePaperFsmTest.kt`.
 - Penanda `_paper_engine` ditulis saat engine mengambil alih (`:342-346`) dan dilepas di
   `:627`, `:747`, `:758`, `markSold:415`. Dijaga `SpotPositionStorePaperMarkerTest.kt`.
@@ -145,8 +145,7 @@ Semua aturan rehidrasi P4.4 **terpasang benar** dan sudah diuji:
 | Urut | Temuan | Alasan |
 |---|---|---|
 | 1 | **P6 (sisa `peak`)** | App dan `tools/scalp_replay.py` belum sebanding — dan paritas itu alasan utama jurnal ini ada. Butuh umpan intrabar: high M1 dari cache harus ikut memperbarui `peak`, bukan hanya bar sintetis dari tick |
-| 2 | **P8** | Time-stop keluar 1 bar lebih awal setelah restart — merusak determinisme app vs replay |
-| 3 | **P7** | Jalur "user mengambil alih exit engine" masih kosong: implementasikan atau hapus kontraknya |
+| 2 | **P9** | Posisi paper kehilangan SL/TP saat auto-exit dimatikan di tengah jalan — butuh keputusan produk soal level serah-terima |
 
 ### Prasyarat yang berulang muncul di semua temuan ini
 
@@ -160,8 +159,9 @@ P1–P4 **sudah ada semua**:
 3. `PaperRehydrateScope.decide(...)` — murni (P1).
 4. `PaperAtr.of(atr, price)` — murni (P4).
 
-Untuk P8, keputusan yang perlu dibuat murni adalah "apakah tick pertama sesudah rehidrasi boleh
-menghitung satu bar" — itu kandidat resolver baru, bukan sekadar angka yang diubah di tempat.
+Untuk P8, keputusan "apakah tick pertama sesudah rehidrasi boleh menghitung satu bar" sudah
+dipisahkan menjadi resolver murni `PaperFirstBarResolver` (batch 6d) — pola yang sama dipakai
+untuk P7: angkat keputusan ke objek murni, jangan sisipkan `if` di lambda ber-`ViewModel`.
 
 Setiap perbaikan **wajib** kontrol negatif (matikan perbaikan → buktikan test GAGAL → kembalikan),
 dan angka test **diukur** dari `app/build/test-results/testDebugUnitTest/*.xml`, bukan dari pesan lama.
@@ -177,3 +177,5 @@ dan angka test **diukur** dari `app/build/test-results/testDebugUnitTest/*.xml`,
 | 2026-10-16 | **Batch 5c:** P6 diperbaiki **sebagian** di `1665bf4` (jendela momentum satu sumber; sisa `peak` dicatat eksplisit). Lihat `docs/LAPORAN-batch5-p6-2026-10-16.md` |
 | 2026-10-16 | **Batch 5d:** P5 diperbaiki di `95e0448`. Lihat `docs/LAPORAN-batch5-p5-2026-10-16.md` |
 | 2026-10-16 | **Sinkronisasi dokumen (tanpa perubahan kode):** butir yang sudah ditutup (P1–P5) dipangkas dari badan dokumen dan diringkas di §4; P6, P7, P8 dipertahankan dengan nomor baris terverifikasi ulang di `patch` @ `547048d` + review owner. Lihat `docs/LAPORAN-sync-dokumen-temuan-2026-10-16.md` |
+| 2026-10-17 | **Batch 6d:** P8 diperbaiki di `PaperFirstBarResolver` + parameter `countAsNewBar` di `PaperExitStateMachine.onBar` (7 uji baru; kontrol negatif dua arah 3/7 dan 2/7 gagal). Lihat `docs/LAPORAN-batch6-p8-2026-10-17.md` |
+| 2026-10-17 | **Batch 6e:** P7 ditutup dengan **menghapus** kontrak `clearPaperExitState` (tidak pernah dipanggil; apa adanya justru meninggalkan posisi tanpa exit). Sisa masalahnya diangkat sebagai **P9** — butuh keputusan produk. Lihat `docs/LAPORAN-batch6-p7-2026-10-17.md` |

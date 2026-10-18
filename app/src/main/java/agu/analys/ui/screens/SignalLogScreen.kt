@@ -33,8 +33,6 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import agu.analys.database.SignalLogEntity
 import agu.analys.database.TradeHistoryRecordEntity
-import agu.analys.model.ConfidenceTierNoteResolver
-import agu.analys.model.ConfidenceTierStats
 import agu.analys.model.SetupStats
 import agu.analys.model.SignalLogFilter
 import agu.analys.model.SignalReliabilitySummary
@@ -338,11 +336,6 @@ fun SignalLogScreen(
             // 1. STATISTICAL RELIABILITY DASHBOARD (Main evaluation summary)
             item(key = "reliability_dashboard") {
                 ReliabilityEvaluationCard(summary = reliabilitySummary)
-            }
-
-            // 2. CONFIDENCE TIER PERFORMANCE COMPARISON
-            item(key = "confidence_tier_section") {
-                ConfidenceReliabilityBreakdownCard(summary = reliabilitySummary)
             }
 
             // 2b. AKURASI PER SETUP & KATEGORI SKOR (pipeline scalping)
@@ -1273,99 +1266,6 @@ private fun ReliabilityEvaluationCard(summary: SignalReliabilitySummary) {
 }
 
 @Composable
-private fun ConfidenceReliabilityBreakdownCard(summary: SignalReliabilitySummary) {
-    Surface(
-        shape = RoundedCornerShape(14.dp),
-        color = TvCardBackground,
-        border = BorderStroke(1.dp, TvBorder),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "RELIABILITAS SKOR KEYAKINAN",
-                        color = TvCyan,
-                        fontSize = 10.5.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.5.sp,
-                        maxLines = 1
-                    )
-                    Text(
-                        text = "Akurasi per Level Confidence (Tinggi, Sedang, Awal)",
-                        color = TvTextSecondary,
-                        fontSize = 8.5.sp,
-                        maxLines = 1
-                    )
-                }
-                Spacer(Modifier.width(6.dp))
-                Surface(
-                    shape = RoundedCornerShape(6.dp),
-                    color = TvBackground.copy(alpha = 0.8f),
-                    border = BorderStroke(1.dp, TvBorder)
-                ) {
-                    Text(
-                        text = "Skor vs Hasil",
-                        color = TvTextSecondary,
-                        fontSize = 8.5.sp,
-                        fontWeight = FontWeight.Medium,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(10.dp))
-
-            ConfidenceTierRow(stats = summary.highConfidenceStats, accentColor = TvGreen)
-            Spacer(Modifier.height(8.dp))
-            ConfidenceTierRow(stats = summary.mediumConfidenceStats, accentColor = TvBlue)
-            Spacer(Modifier.height(8.dp))
-            ConfidenceTierRow(stats = summary.lowConfidenceStats, accentColor = TvAmber)
-
-            Spacer(Modifier.height(8.dp))
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = TvBackground.copy(alpha = 0.6f),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    modifier = Modifier.padding(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        Icons.Default.Info,
-                        contentDescription = null,
-                        tint = TvCyan,
-                        modifier = Modifier.size(13.dp)
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    // J6 — klaim hardcoded ("skor keyakinan tinggi menunjukkan rasio kemenangan
-                    // tertinggi") diganti deskripsi netral bergate jumlah sampel. Basis + ukuran
-                    // sampel datang dari ConfidenceTierNoteResolver, bukan dari teks tetap.
-                    val note = ConfidenceTierNoteResolver.resolve(summary)
-                    if (note != null) {
-                        Text(
-                            text = note.text,
-                            color = if (note.isReliable) TvTextSecondary else TvAmber,
-                            fontSize = 8.5.sp,
-                            lineHeight = 11.sp
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
 private fun SetupAccuracyCard(summary: SignalReliabilitySummary) {
     Surface(
         shape = RoundedCornerShape(14.dp),
@@ -1507,68 +1407,6 @@ private fun SetupStatsRow(label: String, stats: SetupStats) {
             fontSize = 8.5.sp,
             fontFamily = FontFamily.Monospace
         )
-    }
-}
-
-@Composable
-private fun ConfidenceTierRow(stats: ConfidenceTierStats, accentColor: Color) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(7.dp)
-                        .background(accentColor, CircleShape)
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    text = stats.tierLabel,
-                    color = TvTextPrimary,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = "${stats.winCount}W / ${stats.lossCount}L",
-                    color = TvTextSecondary,
-                    fontSize = 9.sp,
-                    fontFamily = FontFamily.Monospace
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = if (stats.winCount + stats.lossCount > 0) "${String.format(Locale.US, "%.1f", stats.winRatePct)}% Win" else "Belum ada data",
-                    color = if (stats.winRatePct >= 65.0) TvGreen else if (stats.winRatePct >= 50.0) TvCyan else TvAmber,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Black,
-                    fontFamily = FontFamily.Monospace
-                )
-            }
-        }
-
-        Spacer(Modifier.height(4.dp))
-
-        // Progress bar for visual tier comparison
-        val progress = (stats.winRatePct / 100.0).toFloat().coerceIn(0f, 1f)
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(5.dp)
-                .clip(RoundedCornerShape(3.dp))
-                .background(TvBackground)
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(if (progress > 0f) progress else 0.02f)
-                    .fillMaxHeight()
-                    .background(accentColor)
-            )
-        }
     }
 }
 

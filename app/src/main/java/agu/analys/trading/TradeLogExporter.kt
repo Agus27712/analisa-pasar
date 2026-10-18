@@ -175,7 +175,9 @@ object TradeLogExporter {
             // A10 — "Skor Konfidensi" ambigu: angka ini BUKAN skor engine murni, melainkan
             // min(skor engine, cap per tahap). Tanpa label pembeda, pembaca tak bisa membedakan
             // skor 63 dari cap 59 (berarti "cukup bagus") vs skor 63 asli (berarti "sangat bagus").
-            sb.append("- Skor Konfidensi (engine ∩ cap tahap): ${snapshot.confidenceScore?.let { "$it / 100" } ?: "-"}\n")
+            // Simbol irisan (∩) sengaja tidak dipakai lagi: di sebagian font ia tampil seperti
+            // aksara CJK, sehingga berkas .md hasil ekspor terbaca aneh.
+            sb.append("- Skor Konfidensi (skor engine, dibatasi tahap): ${snapshot.confidenceScore?.let { "$it / 100" } ?: "-"}\n")
             sb.append("- Market Regime: ${snapshot.marketRegime ?: "-"}\n")
             if (snapshot.patternDetected != null) {
                 sb.append("- Pola Terdeteksi: ${snapshot.patternDetected}\n")

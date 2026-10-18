@@ -1,7 +1,7 @@
 # Laporan Batch 5a — J4 & N10: jurnal memakai simbol yang dievaluasi engine
 
 **Tanggal:** 2026-10-16 · **Branch:** `patch` · **Tier:** 🟠 serius
-**Temuan:** J4 (`docs/bugs/temuan_bugs_jurnal_pnl.md` §3) + N10 (`docs/bugs/temuan_bugs_notifikasi.md`)
+**Temuan:** J4 (`docs/bugs/temuan_bugs_jurnal_pnl.md` §3) + N10 (`docs/laporan_temuan_bugs_notifikasi.md`)
 
 ---
 

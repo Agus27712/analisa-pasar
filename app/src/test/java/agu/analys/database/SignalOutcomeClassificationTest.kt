@@ -90,22 +90,6 @@ class SignalOutcomeClassificationTest {
     }
 
     @Test
-    fun `tabel tier memakai predikat yang sama dengan tabel setup`() {
-        val summary = SignalLogRepository.calculateReliabilitySummary(
-            listOf(
-                log("HIT_SL", 90.0, confidence = 85),
-                log("HIT_TP1", 2.0, confidence = 85)
-            )
-        )
-
-        val tinggi = summary.highConfidenceStats
-        assertEquals(2, tinggi.totalSignals)
-        assertEquals("HIT_SL positif tidak boleh masuk winCount tier", 1, tinggi.winCount)
-        assertEquals(1, tinggi.lossCount)
-        assertEquals(50.0, tinggi.winRatePct, 0.001)
-    }
-
-    @Test
     fun `avgLoss tidak lagi tercemar PnL positif`() {
         val summary = SignalLogRepository.calculateReliabilitySummary(
             listOf(log("HIT_SL", 90.0), log("HIT_SL", -1.5))

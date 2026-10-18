@@ -1,6 +1,5 @@
 package agu.analys.database
 
-import agu.analys.model.ConfidenceTierStats
 import agu.analys.model.SetupStats
 import agu.analys.model.SignalReliabilitySummary
 import agu.analys.util.PriceFormatter
@@ -746,11 +745,6 @@ class SignalLogRepository(
             val maxWin = winPnls.maxOrNull() ?: 0.0
             val maxLoss = lossPnls.minOrNull() ?: 0.0
 
-            // Tier breakdowns
-            val highTier = buildTierStats("Tinggi (≥80%)", 80, 100, logs)
-            val medTier = buildTierStats("Sedang (60-79%)", 60, 79, logs)
-            val lowTier = buildTierStats("Awal (<60%)", 0, 59, logs)
-
             // Best performing symbol & strategy — memakai predikat yang sama (J2), bukan definisi keempat.
             val symbolGroups = resolvedLogs.groupBy { it.symbol }
             val bestSymbol = symbolGroups.maxByOrNull { group ->
@@ -776,9 +770,6 @@ class SignalLogRepository(
                 profitFactor = profitFactor,
                 maxSingleWinPct = maxWin,
                 maxSingleLossPct = maxLoss,
-                highConfidenceStats = highTier,
-                mediumConfidenceStats = medTier,
-                lowConfidenceStats = lowTier,
                 bestPerformingSymbol = bestSymbol,
                 bestStrategyMode = bestStrategy,
                 setupStats = calculateSetupStats(logs),
@@ -839,37 +830,6 @@ class SignalLogRepository(
                 winRatePct = winRate,
                 avgReturnPct = avgReturn,
                 profitFactor = pf
-            )
-        }
-
-        private fun buildTierStats(
-            label: String,
-            minConf: Int,
-            maxConf: Int,
-            allLogs: List<SignalLogEntity>
-        ): ConfidenceTierStats {
-            val tierLogs = allLogs.filter { it.confidence in minConf..maxConf }
-            val total = tierLogs.size
-            val tracking = tierLogs.count { it.outcomeStatus == "TRACKING" }
-            val resolved = tierLogs.filter { it.outcomeStatus != "TRACKING" }
-            // J2 — predikat eksklusif yang sama; dulu di sini dua filter independen.
-            val wins = resolved.count { it.classifyOutcome() == SignalOutcome.WIN }
-            val losses = resolved.count { it.classifyOutcome() == SignalOutcome.LOSS }
-            val winRate = if (resolved.isNotEmpty()) (wins.toDouble() / resolved.size) * 100.0 else 0.0
-            val avgReturn = if (resolved.isNotEmpty()) {
-                resolved.mapNotNull { it.realizedPnlPct }.average().takeIf { it.isFinite() } ?: 0.0
-            } else 0.0
-
-            return ConfidenceTierStats(
-                tierLabel = label,
-                minConfidence = minConf,
-                maxConfidence = maxConf,
-                totalSignals = total,
-                winCount = wins,
-                lossCount = losses,
-                trackingCount = tracking,
-                winRatePct = winRate,
-                avgReturnPct = avgReturn
             )
         }
     }
