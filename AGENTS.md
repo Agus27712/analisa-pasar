@@ -45,17 +45,20 @@ entry/exit) belum ada di sana — semua kesimpulan yang ditarik dari `main` jadi
    dan perangkap yang sudah pernah ditemukan. **Ini titik masuk utama.**
 3. **`docs/bugs/`** — 🔴 **sumber kebenaran status temuan audit**, dan **sudah diverifikasi ke kode
    + direview owner pada 2026-10-16** (`patch` @ `547048d`). **Agen tidak perlu cek kode untuk
-   memastikan status temuan** — cukup baca tabel status di tiap berkas. Isinya sekarang **satu
-   berkas**: `temuan_bugs_paper_trade.md` (siklus hidup posisi paper & mesin exit). Berkas koneksi
-   `temuan_koneksi_tokocrypto_indodax.md` **dipindahkan** ke
-   `docs/laporan_temuan_bugs_koneksi_tokocrypto_indodax.md` (2026-10-18, K1–K15 tuntas).
-   Tiga berkas lain sudah keluar karena seluruh temuannya tertutup: `temuan_bugs_jurnal_pnl.md`
-   **dihapus** (2026-10-17, J1–J10 tuntas) dan `temuan_bugs_notifikasi.md` **dipindahkan** ke
-   `docs/laporan_temuan_bugs_notifikasi.md` (2026-10-17, N1–N17 tuntas). **Jangan membuat ulang
-   ketiga berkas itu**; temuan baru di area itu ditulis ke berkas temuan baru.
+   memastikan status temuan** — cukup baca tabel status di tiap berkas. **Folder ini KOSONG
+   per 2026-10-18** — seluruh berkas temuan sudah keluar karena semua temuannya tertutup:
+   `temuan_bugs_paper_trade.md` **dipindahkan** ke
+   `docs/laporan_temuan_bugs_paper_trade.md` (2026-10-18, batch 6o — P1–P9 tuntas; lihat berkas
+   itu untuk aturan turunannya), `temuan_koneksi_tokocrypto_indodax.md` **dipindahkan** ke
+   `docs/laporan_temuan_bugs_koneksi_tokocrypto_indodax.md` (2026-10-18, K1–K15 tuntas), dan
+   `temuan_bugs_notifikasi.md` **dipindahkan** ke `docs/laporan_temuan_bugs_notifikasi.md`
+   (2026-10-17, N1–N17 tuntas), sedangkan `temuan_bugs_jurnal_pnl.md` **dihapus** (2026-10-17,
+   J1–J10 tuntas). **Jangan membuat ulang keempat berkas itu**; temuan baru di area itu ditulis
+   ke berkas temuan baru (`temuan_bugs_<topik>.md`).
    **Baca folder ini sebelum memperbaiki bug apa pun** di area yang tercakup. Setelah sebuah
    temuan diperbaiki, **pangkas butir itu dari badan dokumen** dan pindahkan jejaknya ke tabel
-   "Sudah ditutup" (lihat § "Folder temuan bug" di bawah).
+   "Sudah ditutup" — begitu seluruh isi sebuah berkas tutup, pindahkan berkasnya keluar
+   (lihat § "Folder temuan bug" di bawah).
 4. **`docs/BELUM-DIKERJAKAN-2026-10-14.md`** — inventaris 27 item yang **belum** dikerjakan
    (temuan audit A/B, roadmap P4–P6, verifikasi lapangan), lengkap dengan titik kode dan
    prioritas. **Baca ini sebelum memilih apa yang akan dikerjakan**, supaya tidak mengulang
@@ -128,10 +131,10 @@ Yang **tidak boleh** dilakukan lagi tanpa instruksi eksplisit owner:
 2. **`APP_CONTEXT.md`** — arsitektur; utamanya § arah produk / scalp
 3. **`SCALP_EXIT.md`** — exit paper & R net
 4. **`data/config/scalp_config.json`** — mirror threshold + fee untuk `tools/scalp_replay.py`
-5. **`docs/bugs/`** — 🔴 **sumber kebenaran status temuan audit.** Mulai dari sini bila owner
-   bertanya "apa lagi yang tersisa". **Status di sana sudah diverifikasi ke kode dan direview
-   owner pada 2026-10-16** (`patch` @ `547048d`) — **agen tidak perlu cek kode untuk memastikan
-   statusnya**, cukup baca tabel di tiap berkas (lihat § "Folder temuan bug" di bawah).
+5. **`docs/bugs/`** — 🔴 **sumber kebenaran status temuan audit** (kini **kosong**; lihat § "Folder temuan bug"). Mulai dari sana bila owner
+   bertanya "apa lagi yang tersisa". **Status di berkas-berkasnya sudah diverifikasi ke kode dan
+   direview owner pada 2026-10-16** (`patch` @ `547048d`) — **agen tidak perlu cek kode untuk
+   memastikan statusnya**, cukup baca tabel di tiap berkas (lihat § "Folder temuan bug" di bawah).
 6. **`docs/BELUM-DIKERJAKAN-2026-10-14.md`** — inventaris 27 item yang **belum** dikerjakan
    (temuan audit A/B, roadmap P4–P6, verifikasi lapangan), lengkap dengan titik kode dan
    prioritas. **Baca ini sebelum memilih apa yang akan dikerjakan**, supaya tidak mengulang
@@ -191,19 +194,16 @@ Aturan main:
 - Daftar berkas di folder ini bisa bertambah untuk area lain (exit, P&L, UI, dsb.) dengan
   pola penamaan `temuan_bugs_<topik>.md`.
 
-Saat ini berisi (diperbarui 2026-10-17):
+Saat ini **kosong** (diperbarui 2026-10-18) — tidak ada temuan audit yang masih hidup. Riwayat
+berkasnya:
 
-- **`temuan_bugs_paper_trade.md`** — audit siklus hidup posisi paper & mesin exit.
-  **Ditutup: P1, P2, P3, P4** (batch 3b, batch 3c) sehingga **ketiga temuan kritis sudah tertutup**,
-  serta **P5** (batch 5d — snapshot FSM kini per posisi, berkunci `PaperAutoTradeRuntime.key`).
-  **Sebagian: P6** (batch 5c — jendela momentum kini satu sumber, tetapi bagian "`peak` tertinggal
-  dari high M1" **belum** — bukan cabang kode yang berbeda, melainkan tidak adanya umpan intrabar).
-  **Ditutup: P8** (batch 6d — `PaperFirstBarResolver` memisahkan "dievaluasi sebagai bar baru" dari
-  "menambah `barsHeld`"; tick pertama sesudah rehidrasi tidak lagi dihitung dua kali), serta
-  **P7** (batch 6e — kontrak `clearPaperExitState` **dihapus**, bukan diimplementasikan, karena
-  tidak pernah dipanggil dan justru meninggalkan posisi tanpa exit).
-  **Masih hidup: P6 (sisa `peak`) dan P9** (baru, batch 6e — mematikan auto-exit saat posisi
-  terbuka meninggalkan posisi tanpa SL/TP sampai restart; butuh keputusan produk).
+- **`temuan_bugs_paper_trade.md` → DIPINDAHKAN 2026-10-18** ke
+  **`docs/laporan_temuan_bugs_paper_trade.md`** (batch 6o — **seluruh P1–P9 tuntas**).
+  Ringkas: P1–P4 (batch 3b/3c), P5 (batch 5d), P6 bagian 1 (batch 5c), P8 (batch 6d), P7
+  (batch 6e), lalu **P6 bagian 2 + P9 ditutup batch 6o** — `peak` kini melihat high intrabar M1
+  (`PaperIntrabarPeakResolver`), dan mematikan auto-exit saat runtime menyerahkan posisi ke jalur
+  auto-sell lama (`PaperHandBackResolver` + `handBackAllPaperEnginesToLegacy()`).
+  **Jangan membuat ulang berkas di `docs/bugs/` dengan nama itu.**
   **Batas penting:** seluruh temuan `P*` hanya menyentuh posisi **paper** (`isReal = false`) —
   bukan kerusakan uang riil, tetapi posisi paper adalah dasar seluruh keputusan "apakah scalp
   punya edge".
@@ -327,6 +327,11 @@ Saat ini berisi (diperbarui 2026-10-17):
   baik posisi berjalan tanpa stop (terlihat di UI, bisa dijual manual) daripada penjualan pasar
   berlabel `STOP_LOSS` yang tidak pernah tersentuh. Log wajib menyebut sumber SL-nya
   (`SIGNAL`/`FRICTION_FLOOR`/`NONE`).
+  **Pengecualian sadar (batch 6o, P9):** stop yang berasal dari `activeStopLoss` mesin yang sudah
+  naik **di atas entry** (BE/trailing terkunci) **dipertahankan** oleh `PaperHandBackResolver` —
+  jalur lama menjual saat `currentPrice <= stopLossPrice`, jadi stop seperti itu aman dan justru
+  menjual pada harga ≥ entry. Yang tetap terlarang: SL tersimpan/DCA/sintetis `>= entry` yang
+  **bukan** dari mesin — itu wajib jatuh ke lantai friksi atau `NONE`.
 - **Posisi paper + mesin exit adalah produk SCALPING.** `tryPaperAutoBuy` wajib memeriksa
   `transition.mode == StrategyMode.SCALPING`. Evaluator SWING/INTRADAY memasang
   `ScalpingStage.ENTRY` yang sama, jadi `stageQualifies` saja **tidak** menyaringnya — jangan hapus
@@ -589,7 +594,10 @@ Saat ini berisi (diperbarui 2026-10-17):
   `PaperRehydrate`). Melepas mesin tanpa itu = posisi tanpa exit sama sekali.
 - **Jangan mengarang level serah-terima.** Bila SL sudah naik ke BE/trailing (`activeStopLoss` bisa
   **di atas** entry), `PaperStopResolver` menganggapnya tidak valid; memilih level pengganti adalah
-  **keputusan produk**, bukan detail implementasi. Dicatat sebagai P9.
+  **keputusan produk**, bukan detail implementasi. Keputusan produknya diambil di **batch 6o**:
+  `PaperHandBackResolver.resolveStopLoss(...)` memakai `max(SL aktif mesin, SL tersimpan/lantai)`
+  dan **mempertahankan** SL ≥ entry yang berasal dari mesin (BE/trailing terkunci). Jangan
+  "memperbaiki" ini menjadi jatuh ke lantai friksi — itu melebar mundur (lihat aturan P9/6o).
 
 ## Aturan turunan dari audit koneksi — K8–K12, K15 (batch 6n, 2026-10-18)
 
@@ -614,7 +622,39 @@ Saat ini berisi (diperbarui 2026-10-17):
 - **Nilai bawaan yang menyembunyikan kesalahan konfigurasi dilarang.** `getSymbolType` dulu
   mengembalikan `1` untuk simbol tak dikenal, sehingga kesalahan format pair mengarah ke host yang
   salah tanpa jejak. Kembalikan nilai eksplisit (`SYMBOL_TYPE_UNKNOWN = 0`) + log sekali per simbol.
-  Penjaga: `TokocryptoSymbolTypeUnknownTest`.
+  Penjaga:   `TokocryptoSymbolTypeUnknownTest`.
+
+## Aturan turunan dari audit paper trading — P6 (sisa) & P9 (batch 6o, 2026-10-18)
+
+- **Bar sintetis dari tick saja bukan pengganti bar M1 untuk `peak`.** Level atas mesin exit wajib
+  melihat high intrabar lewat `PaperIntrabarPeakResolver.effectiveHigh(...)`: candle satu menit yang
+  dibuka **setelah** `openedAt` posisi, cache wajib segar (≥ 20 bar / ≤ 180 dtk — ambang
+  `PaperExitMomentumWindow`), high non-finite diabaikan, hasil `max(currentPrice, high eligible)`
+  tidak pernah di bawah harga tick. `low` **tetap** `currentPrice` (SL/TP dieksekusi pada harga tick
+  saat pemeriksaan berjalan). Jangan kembalikan `open = high = low = close = currentPrice` (cacat
+  P6). Penjaga: `PaperIntrabarPeakResolverTest`.
+- **Satu pembacaan cache M1 per evaluasi.** `evaluatePaperAutoExitLocked` membaca
+  `MtfCacheManager.getCachedCandles` **sekali** untuk jendela momentum + peak; dua pembacaan pada
+  tick yang sama bisa melihat isi cache yang berbeda. Penjaga: `PaperIntrabarWiringTest`.
+- **Serah-terima exit saat runtime wajib mengisi SL, bukan hanya melepas mesin.** Transisi
+  `autoExitEnabled true → false` di `updatePaperAutoTradeConfig` memanggil
+  `handBackAllPaperEnginesToLegacy()`: `setAutoSellParams(enabled = stop.usable, stopLossPrice =
+  stop.price)`, lepas penanda `_paper_engine`, hapus `_paper_fsm`, lepas mesin dari
+  `PaperAutoTradeRuntime`. Melepas mesin tanpa ini = posisi tanpa stop (P9). Penjaga:
+  `PaperHandBackWiringTest`.
+- **Level serah-terima = `max(SL aktif mesin, SL tersimpan/lantai)` — jangan melebar mundur.**
+  Trailing yang sudah terkunci (mis. 97,97 dari entry 100) tidak boleh jatuh ke lantai friksi 94.
+  SL dari mesin yang sudah **≥ entry** (BE/profit terkunci) dipertahankan apa adanya — pengecualian
+  sadar terhadap invarian `0 < SL < entry` (lihat aturan batch 3b). Penjaga:
+  `PaperHandBackResolverTest`.
+- **Serah-terima mencakup semua bursa; `clearAll` hanya saat kedua sakelar mati.**
+  `PaperAutoTradeRuntime.activePositions()` mengembalikan pasangan (bursa, simbol) semua mesin;
+  mematikan auto-exit harus melepas posisi di bursa mana pun. `PaperAutoTradeRuntime.clearAll()`
+  hanya boleh saat `!autoBuy && !autoExit` — mematikan auto-buy saja tidak boleh membunuh mesin
+  exit posisi terbuka.
+- **Pemantauan latar posisi hasil serah-terima mengikuti aturan jalur legacy** (dievaluasi saat
+  pair-nya dibuka, atau di latar bila trailing aktif) — tidak ada pemantauan latar khusus dari
+  batch 6o. Jangan mengklaim lebih dari itu di log, UI, atau dokumen.
 
 ## Arah produk (ringkas)
 
@@ -725,7 +765,7 @@ Saat ini berisi (diperbarui 2026-10-17):
      `evaluatePaperAutoExitLocked`. Key yang tertinggal akan terbaca posisi berikutnya.
      **Jangan** bangun ulang `clearPaperExitState` — fungsi itu dihapus di batch 6e (P7) karena
      tidak pernah dipanggil dan, apa adanya, justru meninggalkan posisi tanpa exit sama sekali
-     (lihat P9 di `docs/bugs/temuan_bugs_paper_trade.md`);
+     (lihat P9 di `docs/laporan_temuan_bugs_paper_trade.md`);
   3. `atrPct` **tidak** dipulihkan lewat `restore()` — ia parameter konstruktor mesin, jadi harus
      dioper saat mesin dibangun di `PaperRehydrate.decide()`. Kalau terlewat, ambang BE/trailing S8
      diam-diam jatuh ke nilai persen tetap;

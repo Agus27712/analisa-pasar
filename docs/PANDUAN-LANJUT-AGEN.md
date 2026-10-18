@@ -2,26 +2,24 @@
 
 > **Baca ini dulu.** Dokumen ini adalah titik masuk untuk agen/engineer berikutnya: status terkini,
 > apa yang sudah selesai, apa berikutnya, dan **perangkap yang sudah pernah ditemukan** supaya tidak
-> diulang. Terakhir diperbarui: **2026-10-17** (batch 6i).
+> diulang. Terakhir diperbarui: **2026-10-18** (batch 6o).
 >
 > 🔴 **Untuk "apa lagi yang tersisa" → `docs/bugs/`, bukan dokumen ini.** Status temuan audit
-> (notifikasi `N*`, jurnal/P&L `J*`, paper trading `P*`) sudah diverifikasi ke kode dan **direview
-> owner** pada `patch` @ `547048d`, lalu ditutup bertahap sampai batch 6j:
-> **34 tertutup · 1 sebagian · 2 masih hidup** (P6 sisa, P9), ditambah **audit koneksi baru
-> K1–K15**. Ringkasnya:
+> (notifikasi `N*`, jurnal/P&L `J*`, paper trading `P*`, koneksi `K*`) sudah diverifikasi ke kode dan
+> **direview owner** pada `patch` @ `547048d`, lalu ditutup bertahap sampai batch 6o:
+> **seluruh berkas temuan tutup — P1–P9, J1–J10, N1–N17, K1–K15**. Ringkasnya:
 >
 > | Status | Temuan |
 > |---|---|
 > | 🔴 Kritis — masih hidup | — |
-> | 🟠 Serius — masih hidup | P6 (sebagian) · P9 |
+> | 🟠 Serius — masih hidup | — |
 > | 🟡 Sedang/rendah — masih hidup | — |
-> | ✅ Sudah ditutup | P1–P5, P7, P8 · **J1–J10 (seluruhnya — berkas temuan jurnal dihapus 2026-10-17)** · **N1–N17 (seluruhnya — batch 6i, 2026-10-17)** · **K1–K15 (seluruhnya — batch 6j–6n; berkas temuan koneksi dipindah 2026-10-18)** |
+> | ✅ Sudah ditutup | **P1–P9 (seluruhnya — P6 sisa + P9 ditutup batch 6o, 2026-10-18; berkas temuan dipindah ke `docs/laporan_temuan_bugs_paper_trade.md`)** · **J1–J10 (seluruhnya — berkas temuan jurnal dihapus 2026-10-17)** · **N1–N17 (seluruhnya — batch 6i, 2026-10-17)** · **K1–K15 (seluruhnya — batch 6j–6n; berkas temuan koneksi dipindah 2026-10-18)** |
 >
-> Rincian + lokasi + prioritas: `docs/laporan_temuan_bugs_notifikasi.md` (sudah **di luar**
-> `docs/bugs/` karena N1–N17 tuntas — berkas itu sekarang berperan sebagai laporannya),
-> `docs/bugs/temuan_bugs_paper_trade.md` (P6 sisa + P9 masih hidup), dan
-> **`docs/laporan_temuan_bugs_koneksi_tokocrypto_indodax.md`** (K1–K15 tuntas — sudah **di luar**
-> `docs/bugs/`).
+> **`docs/bugs/` kini kosong** — tidak ada temuan audit yang masih hidup. Riwayat + aturan turunan:
+> `docs/laporan_temuan_bugs_paper_trade.md` (P1–P9),
+> `docs/laporan_temuan_bugs_notifikasi.md` (N1–N17),
+> `docs/laporan_temuan_bugs_koneksi_tokocrypto_indodax.md` (K1–K15).
 > Jejak audit jurnal ada di laporan per batch
 > (`docs/LAPORAN-batch3-jurnal-*.md` … `docs/LAPORAN-batch6-j*-2026-10-17.md`).
 > Aturan baru sejak 2026-10-17: berkas temuan yang **seluruh isinya** sudah tutup dipindahkan ke
@@ -38,7 +36,7 @@
 | HEAD `patch` | Ukur: `git rev-parse --short origin/patch` — berubah **tiap commit**, jangan dihardcode |
 | HEAD `main` | = `patch` + commit merge di atasnya; ukur `git rev-parse --short origin/main` |
 | Titik masuk kode | package `agu.analys`, modul tunggal `:app` |
-| Unit test | **685 uji · 684 lulus · 0 gagal · 1 dilewati** (88 kelas) — diukur 2026-10-17 |
+| Unit test | **726 uji · 725 lulus · 0 gagal · 1 dilewati** (94 kelas) — diukur dari XML CI run `39083423103`, 2026-10-18; batch 6o menambah 4 kelas baru yang **belum diukur di CI** |
 | APK debug | 26.821.815 byte (26,8 MB desimal / 25,6 MiB) |
 | Kesiapan uang riil | **BELUM** — lihat §5 |
 
