@@ -2,8 +2,10 @@
 
 Aplikasi Android Kotlin 100% (Jetpack Compose M3) untuk analisis & **scalp mode** kripto di **Tokocrypto** dan **Indodax**. Modul tunggal `:app`, package `agu.analys`, MVVM + Coordinator (`TradingViewModel` + MarketData/Position/Simulation/RealTradeCoordinator).
 
-**Versi aplikasi saat ini:** **3.9.1** (`versionCode 90`) — `app/build.gradle.kts`. Rilis 3.9.1
-(2026-10-16) berisi batch 1–5f perbaikan audit + sinkronisasi dokumen. Tag rilis: `v3.9.1`
+**Versi aplikasi saat ini:** **3.9.2** (`versionCode 91`) — `app/build.gradle.kts`. Rilis 3.9.2
+(2026-10-18) berisi batch 6j–6n: seluruh temuan audit koneksi Tokocrypto/Indodax **K1–K15**
+(daftar pair resmi, WebSocket Indodax hidup, reconnect berjitter, status live per bursa,
+lingkup ticker watchlist, gate watchlist & dashboard). Tag rilis: `v3.9.2`
 dibuat otomatis oleh `.github/workflows/release.yml` saat `main` menerima push.
 
 ---

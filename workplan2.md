@@ -3561,3 +3561,18 @@ kontrol negatif JUnit yang sebenarnya, jalankan workflow dengan sengaja mengemba
 - `AGENTS.md` — daftar isi `docs/bugs/` (kini hanya `temuan_bugs_paper_trade.md`), aturan turunan
   baru dari K8–K12/K15.
 - `workplan2.md` — seksi ini.
+
+## 58. Rilis 3.9.2 — batch 6j–6n (2026-10-18)
+
+Versi `3.9.2` (`versionCode 91`). Tidak ada perubahan kode selain nomor versi; isi rilis adalah
+seluruh perbaikan audit koneksi **K1–K15** (batch 6j–6n) yang sudah terverifikasi:
+
+- daftar pair Tokocrypto hanya dari `common/symbols` resmi (864 simbol), gate listing fail-closed;
+- WebSocket Indodax hidup (token utuh, kanal `market:summary-24h`, parser 8 kolom);
+- reconnect berjitter ±20% dengan plafon dan jeda menyerah 5 menit; penjaga generasi di kedua bursa;
+- status live per bursa (`wsLiveToko`/`wsLiveIndodax`), worker & ticker Indodax sesuai lingkup;
+- gate entry watchlist dan satu gate listing dashboard (`symbolListed`).
+
+Angka suite terukur: **94 kelas / 726 uji**, 0 gagal, 0 error, 1 dilewati.
+Berkas temuan sudah dipindahkan ke `docs/laporan_temuan_bugs_koneksi_tokocrypto_indodax.md`
+(seluruh butir tutup), sehingga `docs/bugs/` tidak lagi memuat topik koneksi.
