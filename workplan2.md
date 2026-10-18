@@ -3669,10 +3669,23 @@ Kotlin; percobaan kedua baru adil.
 
 ### 59.4 Angka terukur
 
-Belum dijalankan — menunggu izin owner. Rencana: `custom` (4 kelas baru) lalu `all-unit-tests`;
-baseline sebelum batch adalah 94 kelas / 726 uji (run `39083423103`), sehingga suite penuh
-diperkirakan menjadi 98 kelas / 757 uji. **Angka final wajib dibaca dari XML CI dan ditulis di
-sini setelah dijalankan** — jangan mengarang.
+Diukur dari XML `app/build/test-results/testDebugUnitTest/*.xml` lewat workflow
+`unit-tests-manual.yml`, commit `220e7a0`, branch `patch` (2026-10-18). Sandbox agen tidak bisa
+menjalankan Gradle, jadi angkanya datang dari CI.
+
+| Jalankan | Cakupan | Kelas | Uji | Gagal | Error | Dilewati |
+|---|---|---|---|---|---|---|
+| Run `39144882774` | custom: 4 kelas baru | 4 | 31 | 0 | 0 | 0 |
+| Run `39145158155` | `all-unit-tests` (suite penuh) | 98 | 757 | 0 | 0 | 1 |
+
+Rincian kelas baru (semuanya lulus): `PaperIntrabarPeakResolverTest` 11,
+`PaperHandBackResolverTest` 13, `PaperIntrabarWiringTest` 3, `PaperHandBackWiringTest` 4 — total
+**31 uji baru** (= `+4` kelas / `+31` uji dari baseline batch 6n, 94/726).
+
+Kontrol negatif JUnit (menghidupkan kembali cacat, menjalankan ulang, lalu mengembalikan) belum
+dijalankan di CI — yang sudah dilakukan: simulasi Python transliterasi 1:1 dengan `6` mutasi yang
+menggigit (lihat §59.3). Bila owner ingin kontrol negatif JUnit yang sebenarnya, jalankan
+workflow dengan sengaja mengembalikan satu cacat.
 
 ### 59.5 Dokumen
 

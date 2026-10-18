@@ -36,7 +36,7 @@
 | HEAD `patch` | Ukur: `git rev-parse --short origin/patch` — berubah **tiap commit**, jangan dihardcode |
 | HEAD `main` | = `patch` + commit merge di atasnya; ukur `git rev-parse --short origin/main` |
 | Titik masuk kode | package `agu.analys`, modul tunggal `:app` |
-| Unit test | **726 uji · 725 lulus · 0 gagal · 1 dilewati** (94 kelas) — diukur dari XML CI run `39083423103`, 2026-10-18; batch 6o menambah 4 kelas baru yang **belum diukur di CI** |
+| Unit test | **757 uji · 756 lulus · 0 gagal · 1 dilewati** (98 kelas) — diukur dari XML CI run `39145158155`, 2026-10-18 |
 | APK debug | 26.821.815 byte (26,8 MB desimal / 25,6 MiB) |
 | Kesiapan uang riil | **BELUM** — lihat §5 |
 
