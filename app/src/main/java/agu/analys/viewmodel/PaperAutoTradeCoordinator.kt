@@ -23,6 +23,9 @@ import agu.analys.model.SignalAction
 import agu.analys.model.TradingPair
 import agu.analys.trading.PaperExitMomentumWindow
 import agu.analys.trading.PaperFirstBarResolver
+import agu.analys.trading.PaperHandBackResolver
+import agu.analys.trading.PaperHandBackSource
+import agu.analys.trading.PaperIntrabarPeakResolver
 import agu.analys.trading.SimulationOrderResult
 import agu.analys.trading.SimulationOrderSide
 import agu.analys.trading.SimulationOrderType
@@ -131,6 +134,20 @@ object PaperAutoTradeRuntime {
             .filter { it.startsWith(prefix) }
             .mapNotNull { rawSymbolMap[it] }
     }
+
+    /**
+     * Pasangan (bursa, simbol asli) untuk **semua** mesin aktif di semua bursa.
+     *
+     * Dipakai serah-terima P9: mematikan auto-exit harus melepas posisi di bursa mana pun,
+     * bukan hanya bursa yang sedang dipilih. Urutan di-sort supaya log dan uji deterministik.
+     */
+    fun activePositions(): List<Pair<String, String>> =
+        machines.keys
+            .mapNotNull { k ->
+                val raw = rawSymbolMap[k] ?: return@mapNotNull null
+                k.substringBefore('|') to raw
+            }
+            .sortedWith(compareBy({ it.first }, { it.second }))
 
     /**
      * @param openedAt waktu buka posisi asli. Dipakai rehidrasi setelah restart supaya
@@ -702,25 +719,34 @@ private fun TradingViewModel.evaluatePaperAutoExitLocked(
         isNewBar = barMark.isNewBar,
         firstTickAfterRehydrate = barMark.firstTickAfterRehydrate
     )
-    val bar = CandleBar(
-        timestamp = now,
-        open = currentPrice,
-        high = currentPrice,
-        low = currentPrice,
-        close = currentPrice,
-        volume = 0.0
+    // P6 — SATU pembacaan cache M1 untuk dua kebutuhan: jendela momentum dan high intrabar.
+    // Dua pembacaan terpisah bisa melihat isi cache yang berbeda pada tick yang sama.
+    val m1Candles = agu.analys.util.MtfCacheManager.getCachedCandles(
+        symbol = symbol,
+        timeframe = agu.analys.model.Timeframe.M1,
+        exchange = exchange
     )
     // P6 — jendela momentum dari SATU sumber, untuk kedua pemanggil: cache M1, bukan
     // `recentCandles` milik layar yang sedang terbuka. Bila cache tidak segar, jendela kosong
     // dan engine menahan diri dari early-profit — perlakuan yang sama di jalur latar maupun
     // jalur foreground, jadi alasan exit tidak lagi bergantung pada pair yang dibuka pengguna.
-    val window = PaperExitMomentumWindow.resolve(
-        candles = agu.analys.util.MtfCacheManager.getCachedCandles(
-            symbol = symbol,
-            timeframe = agu.analys.model.Timeframe.M1,
-            exchange = exchange
-        ),
-        nowMs = now
+    val window = PaperExitMomentumWindow.resolve(candles = m1Candles, nowMs = now)
+    // P6 — high intrabar M1: bar sintetis dari tick saja membuat `peak` tak pernah melihat
+    // high M1, sehingga trailing SL jalur latar lebih longgar daripada replay. `low` tetap
+    // `currentPrice` supaya SL dieksekusi pada harga tick saat pemeriksaan berjalan.
+    val intrabarHigh = PaperIntrabarPeakResolver.effectiveHigh(
+        candles = m1Candles,
+        openedAtMs = PaperAutoTradeRuntime.openedAt(exchange, symbol),
+        nowMs = now,
+        currentPrice = currentPrice
+    )
+    val bar = CandleBar(
+        timestamp = now,
+        open = currentPrice,
+        high = intrabarHigh,
+        low = currentPrice,
+        close = currentPrice,
+        volume = 0.0
     )
     val decision = machine.onBar(
         bar = bar,
@@ -1064,6 +1090,119 @@ fun TradingViewModel.rehydratePaperAutoExit(): Int {
         )
     }
     return restored
+}
+
+/**
+ * **P9** — serahkan semua posisi paper ke jalur auto-sell lama saat auto-exit dimatikan.
+ *
+ * ## Masalah yang ditutup
+ *
+ * Saat engine mengambil alih exit, `auto_sell_enabled` sengaja dimatikan untuk pair itu.
+ * Bila pengguna mematikan auto-exit saat posisi masih terbuka, `paperEngineOwnsExit` menjadi
+ * `false` sehingga jalur lama **boleh** berjalan — tetapi blok SL/TP-nya masih terkunci
+ * `isAutoSellEnabled`, jadi yang tersisa hanya trailing. Posisi menggantung tanpa SL/TP sampai
+ * app di-restart, dan setelah restart `PaperRehydrate.HandBackToLegacy` justru menyalakan
+ * auto-sell — aksi pengguna yang sama berakhir berbeda tergantung restart.
+ *
+ * ## Cara kerja
+ *
+ * Cermin dari cabang [PaperRehydrateAction.HandBackToLegacy] di [rehydratePaperAutoExit],
+ * tetapi berjalan saat runtime (tanpa restart) dan memakai [PaperHandBackResolver] supaya SL
+ * mesin yang sudah naik ke BE/trailing tidak melebar mundur ke lantai friksi:
+ * - `auto_sell_enabled` dinyalakan kembali dengan SL hasil resolver (TP dibiarkan apa adanya),
+ * - penanda `_paper_engine` dan progres FSM `_paper_fsm` dibuang,
+ * - mesin di memori dilepas.
+ *
+ * Posisi yang sudah tidak ada / mesin yatim tetap dibersihkan tanpa menyentuh auto-sell.
+ *
+ * Catatan cakupan: posisi yang diserahkan mengikuti perilaku jalur lama yang berlaku umum —
+ * dievaluasi saat pair-nya dibuka, atau di latar bila trailing aktif. Persis seperti keadaan
+ * setelah restart; tidak ada pemantauan latar tambahan yang diciptakan di sini.
+ *
+ * @return jumlah posisi yang benar-benar diserahkan (mesin dilepas dengan auto-sell diisi).
+ */
+fun TradingViewModel.handBackAllPaperEnginesToLegacy(): Int {
+    val runtimeConfig = prefs.scalpingRuntimeConfig
+    var handedBack = 0
+    var withoutStop = 0
+
+    for ((exchange, rawSymbol) in PaperAutoTradeRuntime.activePositions()) {
+        val machine = PaperAutoTradeRuntime.machineFor(exchange, rawSymbol)
+        val pair = TradingPair.fromCustomSymbol(raw = rawSymbol, exchange = exchange)
+        val pos = positionStore.get(pair.symbol, isReal = false, exchange = exchange)
+
+        if (machine == null || !pos.isHolding) {
+            // Mesin yatim / posisi sudah hilang: bersihkan jejak tanpa menyentuh auto-sell.
+            PaperAutoTradeRuntime.clear(exchange, rawSymbol)
+            positionStore.setPaperEngineOwned(symbol = pair.symbol, isReal = false, exchange = exchange, owned = false)
+            positionStore.clearPaperFsmState(symbol = pair.symbol, isReal = false, exchange = exchange)
+            continue
+        }
+
+        val fees = prefs.feeConfigFor(pair.symbol)
+        val stop = PaperHandBackResolver.resolveStopLoss(
+            entryPrice = pos.entryPrice,
+            storedSl = pos.stopLossPrice,
+            activeSl = machine.activeStopLoss,
+            bePx = machine.netBreakevenPrice,
+            floorPct = PaperStopResolver.frictionFloorPct(
+                buyFeePct = fees.buyTakerPct,
+                sellFeePct = fees.sellTakerPct,
+                slippagePct = runtimeConfig.slippagePct,
+                minFrictionMultiple = runtimeConfig.minFrictionMultiple
+            )
+        )
+
+        positionStore.setAutoSellParams(
+            symbol = pair.symbol,
+            enabled = stop.usable,
+            tp1Price = pos.tp1Price,
+            tp1Percent = pos.tp1Percent,
+            tp2Price = pos.tp2Price,
+            tp2Percent = pos.tp2Percent,
+            isReal = false,
+            exchange = exchange,
+            stopLossPrice = stop.price
+        )
+        positionStore.setPaperEngineOwned(symbol = pair.symbol, isReal = false, exchange = exchange, owned = false)
+        positionStore.clearPaperFsmState(symbol = pair.symbol, isReal = false, exchange = exchange)
+        PaperAutoTradeRuntime.clear(exchange, rawSymbol)
+        handedBack++
+        if (!stop.usable) withoutStop++
+
+        val entryText = PriceFormatter.formatPrice(pos.entryPrice, quoteAsset = pair.quoteAsset)
+        val stopText = PriceFormatter.formatPrice(stop.price, quoteAsset = pair.quoteAsset)
+        val note = when (stop.source) {
+            PaperHandBackSource.PROFIT, PaperHandBackSource.BREAKEVEN ->
+                "SL $stopText dari mesin (di atas entry $entryText) dipertahankan — " +
+                    if (stop.source == PaperHandBackSource.PROFIT) "profit terkunci." else "breakeven."
+            PaperHandBackSource.ACTIVE_STOP ->
+                "SL aktif mesin $stopText dipakai."
+            PaperHandBackSource.SIGNAL ->
+                "SL tersimpan $stopText dipertahankan."
+            PaperHandBackSource.FRICTION_FLOOR ->
+                "SL tersimpan ${PriceFormatter.formatPrice(pos.stopLossPrice, quoteAsset = pair.quoteAsset)} " +
+                    "tidak valid — dipakai lantai friksi $stopText."
+            PaperHandBackSource.NONE ->
+                "⚠️ Tidak ada SL yang valid — auto-sell TIDAK dinyalakan supaya tidak menjual " +
+                    "posisi di harga pasar dengan label STOP_LOSS yang salah. Pasang SL manual " +
+                    "atau aktifkan lantai friksi."
+        }
+        AppLogManager.service(
+            "PaperAutoExit",
+            "↩️ [${pair.symbol}] Auto-exit dimatikan — exit diserahkan ke jalur auto-sell lama. $note"
+        )
+    }
+
+    if (handedBack > 0) {
+        AppLogManager.service(
+            "PaperAutoExit",
+            "↩️ Auto-exit paper dimatikan: $handedBack posisi diserahkan ke jalur auto-sell lama" +
+                if (withoutStop > 0) " ($withoutStop tanpa SL — pasang manual)." else "."
+        )
+    }
+    checkAndStopTrailingServiceIfEmpty()
+    return handedBack
 }
 
 /** Label alasan exit untuk notifikasi/jurnal. */

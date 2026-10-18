@@ -3576,3 +3576,109 @@ seluruh perbaikan audit koneksi **K1–K15** (batch 6j–6n) yang sudah terverif
 Angka suite terukur: **94 kelas / 726 uji**, 0 gagal, 0 error, 1 dilewati.
 Berkas temuan sudah dipindahkan ke `docs/laporan_temuan_bugs_koneksi_tokocrypto_indodax.md`
 (seluruh butir tutup), sehingga `docs/bugs/` tidak lagi memuat topik koneksi.
+
+---
+
+## 59. Batch 6o — P6 (sisa) + P9: peak intrabar M1 & serah-terima auto-exit ke jalur lama (2026-10-18)
+
+Penutup rangkaian audit paper trade: setelah batch ini **seluruh P1–P9 tutup** dan
+`docs/bugs/` menjadi kosong.
+
+### 59.1 Cacat
+
+Dua butir terakhir dari `docs/bugs/temuan_bugs_paper_trade.md` (kini
+`docs/laporan_temuan_bugs_paper_trade.md`), keduanya hanya menyentuh posisi paper:
+
+- **P6 (sisa) — `peak` buta terhadap intrabar.** `evaluatePaperAutoExitLocked` membangun bar
+  sintetis `open = high = low = close = currentPrice`, sehingga high intrabar antar-tick tidak
+  pernah terlihat: trailing/BE baru ter-arm setelah harga *diperiksa* menembus level, bukan saat
+  menyentuhnya, dan `peak` di laporan lebih rendah dari kenyataan.
+- **P9 — mematikan auto-exit meninggalkan posisi tanpa stop.** Transisi `autoExitEnabled false`
+  hanya melepas mesin dari memori; posisi tetap ditandai milik engine (`_paper_engine`) dengan
+  `auto_sell_enabled` mati sampai restart. Lebih buruk: `updatePaperAutoTradeConfig` memanggil
+  `clearAll()` saat `!autoBuy`, sehingga mematikan auto-buy **saja** ikut membunuh mesin exit
+  posisi terbuka.
+
+### 59.2 Perubahan
+
+Berkas baru:
+
+- `app/src/main/java/agu/analys/trading/PaperIntrabarPeakResolver.kt` (P6) — `effectiveHigh(candles,
+  openedAtMs, nowMs, currentPrice)`: candle dengan `openTimeMs > openedAtMs`, cache wajib segar
+  (reuse `PaperExitMomentumWindow.isFresh`, ≥ 20 bar / ≤ 180 dtk), high non-finite diabaikan,
+  hasil `max(currentPrice, high eligible)`; `openedAt <= 0` atau cache basi/kosong → `currentPrice`.
+- `app/src/main/java/agu/analys/trading/PaperHandBackResolver.kt` (P9) — `PaperHandBackSource`
+  (`PROFIT`/`BREAKEVEN`/`ACTIVE_STOP`/`SIGNAL`/`FRICTION_FLOOR`/`NONE`), `ResolvedHandBackStop`,
+  `resolveStopLoss(entryPrice, storedSl, activeSl, bePx, floorPct)`: SL ≥ entry dari mesin
+  dipertahankan (`PROFIT`/`BREAKEVEN`), selain itu `max(SL aktif, PaperStopResolver.resolve(...))`;
+  semua kosong → `NONE`.
+
+`PaperAutoTradeCoordinator.kt`:
+
+- `PaperAutoTradeRuntime.activePositions()` — pasangan (bursa, simbol) tersortir dari `machines`.
+- `evaluatePaperAutoExitLocked` membaca cache M1 **sekali** (`m1Candles`) untuk
+  `PaperExitMomentumWindow.resolve` + `effectiveHigh`; bar sintetis `high = intrabarHigh`,
+  `low = currentPrice`.
+- `TradingViewModel.handBackAllPaperEnginesToLegacy()` — cermin serah-terima cabang rehidrasi
+  `HandBackToLegacy` (`PaperRehydrate.kt`): `setAutoSellParams(enabled = stop.usable,
+  stopLossPrice = stop.price)`, `setPaperEngineOwned(false)`, `clearPaperFsmState`,
+  `PaperAutoTradeRuntime.clear`, log per posisi + ringkasan (sumber `SIGNAL`/`FRICTION_FLOOR`/
+  `NONE` terlihat), orphan cleanup, ditutup `checkAndStopTrailingServiceIfEmpty()`.
+
+`TradingViewModel.kt`:
+
+- `updatePaperAutoTradeConfig`: transisi `autoExitEnabled true → false` →
+  `handBackAllPaperEnginesToLegacy()` (dibungkus `runCatching` + log); `clearAll()` hanya saat
+  `!autoBuy && !autoExit`.
+
+Catatan keputusan (jangan diubah tanpa alasan kuat): TP1 partial tetap legacy (tidak menambah
+guard — setelah partial di akuntansi, R:R tidak lagi bergeser); re-enable auto-exit **tidak**
+me-rearm posisi (tetap legacy sampai tutup); posisi hasil serah-terima dipantau seperti jalur
+lama (pair dibuka / trailing aktif) — batas yang sama dengan serah-terima pasca-restart.
+
+### 59.3 Uji
+
+Empat kelas baru, 31 kasus:
+
+- `trading/PaperIntrabarPeakResolverTest` (11) — murni: high intrabar dipakai, lantai
+  `currentPrice`, cache basi, < 20 bar, kosong, batas `>` waktu buka (candle tepat saat posisi
+  dibuka diabaikan), `openedAt` tak diketahui, high non-finite, stempel detik.
+- `trading/PaperHandBackResolverTest` (13) — murni: trailing terkunci menang atas lantai
+  (`max`), BE/profit ≥ entry dipertahankan, label `PROFIT`/`BREAKEVEN`, `NONE` tanpa kandidat,
+  lantai friksi, SL tersimpan valid, `activeSl` tak masuk akal.
+- `viewmodel/PaperIntrabarWiringTest` (3) — pindai sumber: bar sintetis pakai resolver, cache
+  dibaca sekali, `openedAt` dioper.
+- `viewmodel/PaperHandBackWiringTest` (4) — pindai sumber: transisi memicu serah-terima, auto-buy
+  saja tidak menghapus mesin, serah-terima mengisi SL + melepas penanda + hapus FSM, mencakup
+  semua bursa.
+
+Kontrol negatif (simulasi Python, transliterasi 1:1 dari Kotlin — **6 menggigit**):
+
+| Kerusakan yang disuntikkan | Uji kunci yang GAGAL |
+|---|---|
+| `max` hasil kembali ke `currentPrice` saja (`no-peak`) | high intrabar dipakai |
+| cek `isFresh` dihapus (`no-fresh-check`) | cache basi kembali ke currentPrice |
+| filter `>` menjadi `>=` (`gte-filter`) | candle tepat saat posisi dibuka diabaikan |
+| cabang `activeSl >= entry` dihapus (`no-entry-branch`) | BE/profit dipertahankan |
+| label profit selalu `BREAKEVEN` (`no-profit-label`) | label `PROFIT` |
+| kandidat diambil `min`, bukan `max` (`min-pick`) | trailing terkunci menang atas lantai |
+
+Percobaan pertama gagal menuai: mutasi `no-fresh-check` tidak menggigit karena semua high uji di
+bawah `currentPrice` → uji basi/19-bar diperbaiki agar memakai high menipu (130), di skrip **dan**
+Kotlin; percobaan kedua baru adil.
+
+### 59.4 Angka terukur
+
+Belum dijalankan — menunggu izin owner. Rencana: `custom` (4 kelas baru) lalu `all-unit-tests`;
+baseline sebelum batch adalah 94 kelas / 726 uji (run `39083423103`), sehingga suite penuh
+diperkirakan menjadi 98 kelas / 757 uji. **Angka final wajib dibaca dari XML CI dan ditulis di
+sini setelah dijalankan** — jangan mengarang.
+
+### 59.5 Dokumen
+
+- `docs/laporan_temuan_bugs_paper_trade.md` — berkas temuan **dipindah** dari `docs/bugs/`
+  (aturan §51); seluruh P1–P9 tutup; §6 Riwayat + baris batch 6o; `docs/bugs/` kini **kosong**.
+- `AGENTS.md` — daftar `docs/bugs/` (kini kosong), aturan turunan P6/P9 (batch 6o), pengecualian
+  sadar invarian batch 3b (`SL >= entry` dari mesin), catatan batch 6e (keputusan P9).
+- `docs/PANDUAN-LANJUT-AGEN.md` — status P6/P9 tutup; seluruh P1–P9 tutup.
+- `workplan2.md` — seksi ini.
