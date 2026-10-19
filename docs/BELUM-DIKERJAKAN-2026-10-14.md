@@ -1,18 +1,25 @@
 # Daftar Lengkap Pekerjaan yang BELUM Dikerjakan
 
-> ⚠️ **SNAPSHOT 2026-10-14 — untuk status terkini, baca `docs/bugs/` lebih dulu.**
-> Tiga area audit besar yang diinventarisasi di sini sudah selesai diperbaiki pada 2026-10-16
-> (21 temuan tertutup, 3 sebagian, 13 masih hidup). **Sumber kebenaran status temuan ada di
-> `docs/bugs/*.md`**, yang sudah diverifikasi ke kode dan direview owner pada `patch` @ `547048d`.
-> Dokumen ini tetap berguna untuk roadmap P4–P6 + verifikasi lapangan yang **belum** masuk audit.
+> ⚠️ **SNAPSHOT 2026-10-14 — angka statusnya sudah BASI.** Untuk status terkini baca
+> `docs/PANDUAN-LANJUT-AGEN.md` dan berkas `docs/laporan_temuan_bugs_*.md`.
+>
+> Dua area audit besar yang diinventarisiert di sini sudah diperbaiki mulai 2026-10-16, dan
+> **per 2026-10-18 seluruh temuan audit sudah tertutup**: P1–P9 (paper trading), J1–J10 (jurnal/P&L),
+> N1–N17 (notifikasi), K1–K15 (koneksi bursa). Folder `docs/bugs/` kini **kosong** — tiap area punya
+> laporannya sendiri di `docs/laporan_temuan_bugs_<topik>.md`.
+>
+> **Yang benar-benar masih terbuka ada di Bagian 3 (P4.2, P5; P6 diblokir) dan Bagian 4 (V1–V4,
+> butuh perangkat).** Dokumen ini tetap berguna untuk roadmap + verifikasi lapangan yang belum
+> masuk audit.
 
 **Tanggal:** 14 Oktober 2026
 **Repo:** branch `patch` @ `4ffee5e` (S1–S9 sudah masuk; A/B sudah masuk; tooling P4.1 sudah masuk)
 **Peringatan branch:** per **2026-10-15** `patch` dan `main` **identik secara isi** (setelah PR #60 `7f890eb`); `main` hanya unggul commit merge. Kerja tetap di `patch`, bukan `main`.
-**Sumber:** `LAPORAN-validitas-log-audit`, `LAPORAN-verifikasi-ui-vs-candle`, `LAPORAN-audit-amp`, `LAPORAN-replay-gns`, `PANDUAN-LANJUT-AGEN.md` §4–§5
+**Sumber:** `LAPORAN-validitas-log-audit`, `LAPORAN-verifikasi-ui-vs-candle`, `LAPORAN-audit_amp`, `LAPORAN-replay-gns`, `PANDUAN-LANJUT-AGEN.md` §4–§5
 **Catatan:** semua item di bawah **sudah diverifikasi ulang ke kode** — bukan dari ingatan. Yang sudah selesai di P0–P2 tidak dimasukkan.
 
-**Total: 27 item** — 9 saran strategi (SELESAI 2026-10-14) · 13 temuan audit · 5 roadmap · 4 verifikasi lapangan (beberapa tumpang tindih, lihat catatan di tiap bagian).
+**Total: 27 item** — **22 selesai** (9 saran strategi S1–S9 + 13 temuan audit A/B) · **3 roadmap belum
+dikerjakan** (P4.2, P5; P6 **diblokir** owner) · **4 verifikasi lapangan** (V1–V4, butuh perangkat).
 
 ---
 
@@ -47,7 +54,8 @@ Tabel di bawah dipertahankan sebagai arsip kebutuhan (status ditambahkan di kolo
 
 ## Bagian 2 — Temuan audit (A/B) yang belum ditangani
 
-Di luar cakupan P0–P2. **Semua diverifikasi masih ada di kode saat ini.**
+Di luar cakupan P0–P2. **Status saat dokumen ini ditulis (2026-10-14): semua masih ada di kode —
+kini semuanya ✅ tertutup**, lihat kolom status di tiap tabel.
 
 ### 2a. Kesalahan info (A)
 
@@ -109,6 +117,10 @@ Di luar cakupan P0–P2. **Semua diverifikasi masih ada di kode saat ini.**
 ---
 
 ## Ringkasan eksekutif — kalau hanya boleh pilih 5
+
+> ⚠️ Ringkasan ini ditulis **2026-10-14**, ketika kelima butir di bawah masih terbuka. **Kini kelima
+> butir itu selesai.** Untuk pekerjaan yang masih benar-benar terbuka, baca **Bagian 3** (P4.2, P5;
+> P6 diblokir) dan **Bagian 4** (V1–V4).
 
 | Urut | Item | Alasan |
 |---|---|---|
