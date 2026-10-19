@@ -3830,3 +3830,52 @@ atau pasangan lebih volatil, atau `min_friction_multiple` diturunkan **dengan** 
 - `FEE_TRUTH.md` §6 diberi catatan bahwa tabelnya berasal dari harness versi lama.
 - `AGENTS.md` — aturan turunan baru (fee wajib sadar kuotasi; mirror JSON dikunci uji).
 - `workplan2.md` — seksi ini.
+
+---
+
+## 61. Eksperimen win rate engine scalping pada geometri TP kecil (2026-10-19)
+
+Laporan lengkap: **`docs/exp/exp_scalping_expectancy_ADA-DOGE-XRP.md`**.
+
+**Latar belakang.** Pada konfigurasi default (`min_friction_multiple = 6`), TP2 untuk pair USDT
+mencapai **14,5%** dan SL **5,81%** — mustahil dalam horizon scalp (0,0% dan 0,8% peluang
+tercapai dalam 8 jam pada data riil). Pemilik menandai ini sebagai red flag dan meminta
+diuji dengan geometri scalping sungguhan: SL kecil, TP kecil, horizon pendek.
+
+**Metode.** Satu config replay (`min_friction_multiple = 2,0` → SL 1,9376%; `target_net_rr = 0,5`
+→ TP2 2,4220%; `min_net_rr = 0,5`; lookahead 480 bar = 8 jam), pada 3 pair dengan volatilitas dan
+tren tertinggi dari dataset 60 hari (`data/tokocrypto_v4`): ADAUSDT, DOGEUSDT, XRPUSDT.
+
+**Hasil terukur:**
+
+| Angka | Nilai |
+|---|---|
+| Trade selesai | 349 dari 562 sinyal ready |
+| Win rate (8 jam) | 42,7% |
+| Win rate (+ lanjutan 48 jam) | 45,2% |
+| Ambang impas geometri ini | 60,1% |
+| Expectancy | −0,25R per trade |
+| Gap | **14,9 poin persen** |
+
+**Temuan yang mengubah gambaran:**
+
+1. **Geometri scalping bisa menghasilkan trade** (349 selesai, bukan 0 seperti pada default 6×)
+   — jadi renderer replay sehat dan angka default bukan "0 karena bug".
+2. **Entry engine akurat 42,7%**, konsisten di ketiga pair (42,5–42,9%). Far di bawah 60,1%.
+3. **Hipotesis "trade UNRESOLVED = tren berlanjut" terbantah.** Melanjutkan penelusuran
+   sampai 48 jam: **92 WIN vs 92 LOSS** dari 213 trade unresolved — sepersis, tanpa bias.
+   Win rate hanya bergerak 42,7% → 45,2%.
+4. **Gap 14,9 poin persen adalah jarak akurasi entry, bukan jarak parameter.** Horizon,
+   `min_friction_multiple`, dan `target_net_rr` tidak menutup gap ini.
+
+**Batas yang jujur.** Satu config, tiga pair, 60 hari; akurasi diukur pada TP2 terdekat
+(2,42%) sehingga kemungkinan **lebih tinggi** di TP2 yang lebih jauh — estimasi "k = 1,34 mungkin
+unbiased" dari analisis awal terlalu optimistis dan belum diuji.
+
+**Langkah berikutnya (memerlukan keputusan pemilik):** (a) akhiri program scalping,
+(b) uji framing swing horizon 24 jam (satu replay tambahan, `lookahead 1440`), atau
+(c) kejar perbaikan evaluator menuju win rate ≥ 60%. Rekomendasi penulis: (b) dulu — murah
+dan informatif sebelum program besar.
+
+**Dokumen.** `docs/exp/exp_scalping_expectancy_ADA-DOGE-XRP.md` (laporan lengkap, metode,
+angka, batasan); seksi ini sebagai ringkasan.

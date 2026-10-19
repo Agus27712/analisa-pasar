@@ -1,0 +1,79 @@
+{
+  "alat": "tools/scalp_replay.py (FEE_TRUTH v1.1) + analisis lanjutan UNRESOLVED",
+  "tanggal": "2026-10-19",
+  "tujuan": "Uji win rate engine scalping pada geometri TP kecil (SL ~2%, TP2 ~2.4%, horizon 8 jam).",
+  "config": {
+    "min_friction_multiple": 2.0,
+    "target_net_rr": 0.5,
+    "min_net_rr": 0.5,
+    "lookahead_bars": 480,
+    "slippage_pct": 0.08,
+    "order_type": "taker",
+    "SL_pct": 1.9376,
+    "TP2_pct": 2.422
+  },
+  "data": "data/tokocrypto_v4 (87k bar M1 per pair, 2026-08-12 s.d. 2026-10-12)",
+  "ambang_impas_win_rate_pct": 60.1,
+  "gap_poin_persen": 14.9,
+  "per_pair": [
+    {
+      "pair": "ADAUSDT",
+      "bars_m1": 87000,
+      "ready": 201,
+      "resolved": 134,
+      "win": 57,
+      "loss": 77,
+      "win_rate_pct": 42.54,
+      "avg_r": -0.2922,
+      "expectancy_r": -0.2922,
+      "sl_floor_active_pct": 59.7,
+      "avg_gross_risk_pct": 1.9392,
+      "friction_pct": 0.9688,
+      "friction_floor_pct": 1.9376
+    },
+    {
+      "pair": "DOGEUSDT",
+      "bars_m1": 86999,
+      "ready": 170,
+      "resolved": 98,
+      "win": 42,
+      "loss": 56,
+      "win_rate_pct": 42.86,
+      "avg_r": -0.2869,
+      "expectancy_r": -0.2869,
+      "sl_floor_active_pct": 58.16,
+      "avg_gross_risk_pct": 1.9376,
+      "friction_pct": 0.9688,
+      "friction_floor_pct": 1.9376
+    },
+    {
+      "pair": "XRPUSDT",
+      "bars_m1": 86999,
+      "ready": 191,
+      "resolved": 117,
+      "win": 50,
+      "loss": 67,
+      "win_rate_pct": 42.74,
+      "avg_r": -0.288,
+      "expectancy_r": -0.288,
+      "sl_floor_active_pct": 52.99,
+      "avg_gross_risk_pct": 1.9479,
+      "friction_pct": 0.9688,
+      "friction_floor_pct": 1.9376
+    }
+  ],
+  "gabungan": {
+    "resolved": 349,
+    "win_rate_8jam_pct": 42.7,
+    "win_rate_48jam_pct": 45.2,
+    "expectancy_R": -0.247
+  },
+  "unresolved_lanjutan_48jam": {
+    "total": 213,
+    "jadi_win": 92,
+    "jadi_loss": 92,
+    "masih_terbuka": 29,
+    "catatan": "Analisis lanjutan trade UNRESOLVED sampai 48 jam di atas data M1 yang sama; hipotesis tren berlanjut terbantah."
+  },
+  "laporan": "docs/exp/exp_scalping_expectancy_ADA-DOGE-XRP.md"
+}
