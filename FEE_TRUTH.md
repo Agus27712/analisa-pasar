@@ -168,6 +168,15 @@ Peringatan §4 poin 1 di atas **sudah diimplementasikan** di engine, bukan lagi 
 - Hasil saat ini baru menunjukkan “tidak rugi besar lagi”, belum terbukti menghasilkan edge bersih.
 - Lihat `workplan2.md` §9.4–9.5 untuk batasan lengkap.
 
+> ⚠️ **Tabel di atas berasal dari harness versi lama — sudah diperbarui 2026-10-19.**
+> Angka "186 trade / +0,0695 avg R" dihitung ketika `tools/scalp_replay.py` **belum memaksa**
+> SL ≥ `min_friction_multiple × F` (hanya `min_risk_pct` legacy 0,5%). Setelah lantai dipaksakan
+> sesuai §5, SL harus **5,81%** dan TP2 ≈ **14,5%**, sehingga hampir tidak ada trade yang selesai
+> dalam horizon 2–8 jam. Pengukuran ulang (BTCUSDT 60 hari + sweep 8 pair): **521 sinyal ready,
+> 0 trade selesai** → avg R pada konfigurasi default **tidak bisa dihitung**. Jalur resolusi
+> replay terbukti benar (46 trade selesai saat lantai diturunkan ke 1×, avg R −0,74R).
+> Rincian: `workplan2.md` §60.5 dan `data/hasil/replay_fee_truth_v11_2026-10-19.json`.
+
 **Konsekuensi praktis:** pada tarif Tokocrypto, stop loss `0,5%–1%` secara matematis tidak bisa menghasilkan profit bersih apa pun strateginya. Unit risiko harus beberapa kali friksi, yaitu sekitar **5,8% untuk USDT** dan **3,7%–4,9% untuk IDR**. Ini berarti **scalping 1–5 menit bukan kendaraan yang layak di bursa ini**; horizon realistis adalah **1–8 jam**.
 
 ---

@@ -3695,3 +3695,122 @@ workflow dengan sengaja mengembalikan satu cacat.
   sadar invarian batch 3b (`SL >= entry` dari mesin), catatan batch 6e (keputusan P9).
 - `docs/PANDUAN-LANJUT-AGEN.md` — status P6/P9 tutup; seluruh P1–P9 tutup.
 - `workplan2.md` — seksi ini.
+
+---
+
+## 60. Batch 6p — Sinkronisasi FEE_TRUTH v1.1 ke codebase + replay (2026-10-19)
+
+Pemilik memperbarui `FEE_TRUTH.md` ke **v1.1** (2026-10-19) dan `tools/scalp_replay.py`;
+pekerjaan ini menyinkronkan konstanta/parameter ke codebase lalu menjalankan replay.
+
+### 60.1 Apa yang sudah cocok (tidak diubah)
+
+- `FeeSchedule` sudah memakai tarif all-in persis seperti FEE_TRUTH §1–§2 (USDT 0,4044%;
+  IDR beli 0,1222/0,2222%; jual 0,3322/0,4322%; Indodax 0,11/0,21/0,32/0,42%).
+- `ScalpingConfig`: `MIN_FRICTION_MULTIPLE = 6.0`, `TARGET_NET_RR = 2.0`,
+  `DEFAULT_SLIPPAGE_PCT = 0.08` — sama dengan §8.
+- `data/config/scalp_config.json` sudah memakai angka FEE_TRUTH v1.1.
+
+### 60.2 Cacat yang ditemukan saat sinkronisasi
+
+1. **Replay tidak bisa jalan dengan bawaannya.** `--config` masih menunjuk
+   `tools/scalp_config.json` yang **tidak pernah ada** (config kanonik ada di
+   `data/config/`). Perintah contoh di commit `28a2c70` langsung `FileNotFoundError`.
+2. **Tarif tidak sadar kuotasi di jalur runtime.** `LearningTradingEngine` (3 call site),
+   `CandidateScanWorker` (3 call site), `sellSignalState` di `TradingViewModel`, dan
+   `balanceSlice` di `TradingViewModelDetailState` semua memakai `prefs.tradingFees` — **satu
+   nilai global** yang bawaan Tokocrypto = preset **USDT** (0,4044%). Pair IDR
+   (BTCIDR/ETHIDR/XAUTIDR) karena itu dievaluasi dengan tarif USDT: lantai SL **5,81%**
+   (harusnya **4,89%**), TP jauh, net R:R di engine beda dari jalur paper yang sudah memakai
+   `feeConfigFor(symbol)`. Ini persis kelas bug "dua angka untuk satu pertanyaan" yang dilarang
+   sejak J7/J8.
+3. **Dua definisi "friksi" dengan angka berbeda tanpa penjelasan.** Lantai SL memakai F
+   **aditif** = **0,9688%** (FEE_TRUTH §8), sedangkan "impas net" kartu memakai bentuk
+   **multiplikatif** = **0,9735%**. Keduanya benar untuk kegunaannya masing-masing; dokumen
+   (`AGENTS.md`, `LAPORAN-batch4-j7`) hanya menyebut "0,9735%" tanpa menyatakan mana yang mana.
+
+### 60.3 Perubahan
+
+- `tools/scalp_replay.py` — konstanta `DEFAULT_CONFIG_PATH = "data/config/scalp_config.json"`;
+  config yang hilang menghasilkan pesan JSON berisi lokasi yang dicoba + saran `--config`, bukan
+  traceback; `DEFAULTS["min_net_rr"]` 0,5 → **1,15** (sebelumnya beda dari
+  `ScalpingConfig.MIN_NET_RR`, diam-diam).
+- `data/config/scalp_config.json` — `order_type: "taker"` ditulis eksplisit (sebelumnya
+  bergantung fallback).
+- `LearningTradingEngine` — properti baru `feeConfigForSymbol: (String) -> TradingFeeConfig`;
+  ketiga call site evaluate memakai tarif per-simbol.
+- `TradingViewModelSync` — `engine.feeConfigForSymbol = { prefs.feeConfigFor(it) }`.
+- `CandidateScanWorker` — ketiga call site memakai `prefs.feeConfigFor(symbol)`.
+- `TradingViewModel.sellSignalState` — tarif mengikuti simbol tick yang aktif.
+- `TradingViewModelDetailState` — flow turunan `pairAwareFees`; `balanceSlice` memakainya,
+  sehingga kartu jual + `PositionContext` + P&L detail ikut kuotasi yang benar.
+
+### 60.4 Uji
+
+Dua kelas baru:
+
+- `config/FeeTruthConstantsTest` (6 kasus) — mengunci konstanta `FeeSchedule` ke angka
+  FEE_TRUTH §1–§2, mengunci `min_friction_multiple`/`target_net_rr`/`slippage_pct` pada mirror
+  JSON ke `ScalpingConfig`, dan membedakan **F aditif 0,9688%** vs **impas multiplikatif
+  0,9735%** supaya keduanya tidak saling menggantikan.
+- `viewmodel/FeeQuoteAwarenessSourceTest` (4 kasus) — pindai sumber: engine tak boleh memakai
+  `fees = tradingFees`, worker wajib `prefs.feeConfigFor(symbol)`, kartu jual & detail wajib
+  `feeConfigFor`.
+
+Kontrol negatif (disimulasikan di lingkungan ini):
+
+| Kerusakan yang disuntikkan | Akibat |
+|---|---|
+| satu konstanta fee IDR diubah (0,4322 → 0,4222) | `FeeTruthConstantsTest` GAGAL |
+| `buy_taker_pct` di JSON → 0,2222 | GAGAL (mirror ≠ FeeSchedule) |
+| `buy_maker_pct` di JSON → 0,1222 (maker ≠ taker di USDT) | GAGAL |
+| `min_friction_multiple` di JSON → 3,0 | GAGAL |
+| `slippage_pct` di JSON → 0,2 | GAGAL |
+| satu call site dikembalikan ke `fees = tradingFees` / `prefs.tradingFees` | 4 kasus pindai sumber GAGAL |
+
+### 60.5 Hasil replay (terukur 2026-10-19, `tools/scalp_replay.py` versi FEE_TRUTH v1.1)
+
+Artefak ringkas: `data/hasil/replay_fee_truth_v11_2026-10-19.json`.
+
+**Efek samping yang diketahui:** `friction_pct_effective = 0,9688%` dan
+`friction_floor_pct_effective = 5,8128%` — cocok dengan FEE_TRUTH §5 (≈5,81%).
+
+| Skenario (BTCUSDT) | SL floor | Sinyal ready | Trade selesai | Win % | Avg R |
+|---|---:|---:|---:|---:|---:|
+| Default 6×, horizon 2 jam, data 60 hari | 5,81% | 297 | **0** | — | — |
+| Default 6×, slippage stress 0,20% | 5,81% | 297 | **0** | — | — |
+| Default 6×, slippage stress 0,50% | 5,81% | 297 | **0** | — | — |
+| Default 6×, horizon 8 jam | 5,81% | 129 | **0** | — | — |
+| Lantai 3×, horizon 8 jam | 2,91% | 129 | 1 | 0,0 | −1,0 |
+| Lantai 1×, horizon 8 jam (kontrol) | 0,97% | 138 | 46 | 8,7 | −0,7398 |
+| Tanpa lantai (SL 0,5%), horizon 8 jam | 0,50% | 1 | 0 | — | — |
+
+Sweep 8 pair (`data/tokocrypto_v2`, horizon 2 jam, konfigurasi default): **521 sinyal ready,
+0 trade selesai**.
+
+**Cara membaca hasil ini — tiga hal yang harus jujur:**
+
+1. **Avg R pada konfigurasi default tidak bisa dihitung**, bukan "0,0" dan bukan "netral".
+   Seluruh sinyal belum menyentuh SL maupun TP dalam horizon. Klaim win-rate/avg-R apa pun
+   pada konfigurasi ini tidak sahih.
+2. **Jalur resolusi replay terbukti benar.** Dengan lantai 1×, 46 trade selesai dan rata-ratanya
+   **−0,74R** — jadi angka nol di atas bukan bug harness.
+3. **Tabel backtest FEE_TRUTH §6 tidak dapat direproduksi dengan harness yang sudah dikoreksi.**
+   Angka "186 trade, +0,0695 avg R" berasal dari versi replay yang **belum memaksa** SL ≥ 6×F
+   (lihat catatan revisi `tools/scalp_replay.py` commit `28a2c70`). Setelah lantai dipaksakan,
+   SL harus 5,81% dan TP2 ≈ 14,5%, yang tidak tercapai dalam 2–8 jam.
+4. **Kenapa tanpa lantai hampir tidak ada sinyal:** dengan SL 0,5%, TP2 pada
+   `target_net_rr = 2,0` berada di ≈7,8R lalu ditolak `max_tp2_r = 5,0`. Satu-satunya cara
+   membuat SL cukup lebar agar TP2 tetap ≤ 5R adalah menaikkan SL — persis yang dilakukan lantai friksi.
+
+**Artinya untuk keputusan produk:** konfigurasi yang aman secara biaya (6×) dan horizon scalp
+(2–8 jam) **tidak kompatibel** — lantai yang melindungi modal membuat horizon tidak layak
+menghasilkan trade. Menuju uang riil, salah satu harus berubah: horizon lebih panjang (≥ 1 hari),
+atau pasangan lebih volatil, atau `min_friction_multiple` diturunkan **dengan** pengukuran ulang
+(risiko: avg R memburuk — lihat baris 1× = −0,74R). **Belum ada pilihan yang sudah diuji di sini.**
+
+### 60.6 Dokumen
+
+- `FEE_TRUTH.md` §6 diberi catatan bahwa tabelnya berasal dari harness versi lama.
+- `AGENTS.md` — aturan turunan baru (fee wajib sadar kuotasi; mirror JSON dikunci uji).
+- `workplan2.md` — seksi ini.
