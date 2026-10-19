@@ -2,7 +2,7 @@
 
 > **Baca ini dulu.** Dokumen ini adalah titik masuk untuk agen/engineer berikutnya: status terkini,
 > apa yang sudah selesai, apa berikutnya, dan **perangkap yang sudah pernah ditemukan** supaya tidak
-> diulang. Terakhir diperbarui: **2026-10-18** (batch 6o).
+> diulang. Terakhir diperbarui: **2026-10-19** (batch 6p + eksperimen expectancy).
 >
 > 🔴 **Untuk "apa lagi yang tersisa" → `docs/bugs/`, bukan dokumen ini.** Status temuan audit
 > (notifikasi `N*`, jurnal/P&L `J*`, paper trading `P*`, koneksi `K*`) sudah diverifikasi ke kode dan
@@ -20,6 +20,13 @@
 > `docs/laporan_temuan_bugs_paper_trade.md` (P1–P9),
 > `docs/laporan_temuan_bugs_notifikasi.md` (N1–N17),
 > `docs/laporan_temuan_bugs_koneksi_tokocrypto_indodax.md` (K1–K15).
+>
+> 📊 **`docs/exp/` = hasil eksperimen terukur** (satu berkas per eksperimen,
+> `exp_<testname>_<pair>.md`). **Baca sebelum percaya klaim "strategi ini bisa profit" atau
+> mengubah parameter engine.** Eksperimen terbaru (2026-10-19):
+> `exp_scalping_expectancy_ADA-DOGE-XRP.md` — win rate engine scalping **42,7%** vs ambang impas
+> **60,1%** pada geometri SL 1,94% / TP2 2,42%; gap **14,9 poin persen** adalah jarak akurasi
+> entry, bukan parameter. Scalping di Tokocrypto **tidak layak untuk engine saat ini**.
 > Jejak audit jurnal ada di laporan per batch
 > (`docs/LAPORAN-batch3-jurnal-*.md` … `docs/LAPORAN-batch6-j*-2026-10-17.md`).
 > Aturan baru sejak 2026-10-17: berkas temuan yang **seluruh isinya** sudah tutup dipindahkan ke

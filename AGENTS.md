@@ -74,7 +74,13 @@ entry/exit) belum ada di sana — semua kesimpulan yang ditarik dari `main` jadi
    keputusan di sana menyimpang dari daftar aslinya**: S9 dikirim **nonaktif** (ambang 25%
    terbukti menghapus seluruh trade GNS yang 4/4 menang) dan S2 **aktif** dengan default
    2× friksi, yang mengubah perilaku konfigurasi lama.
-9. Baru buka kode.
+9. **`docs/exp/`** — 🟠 **hasil eksperimen terukur** (uji balik, parameter, strategi). Setiap
+   eksperimen ditulis sebagai satu berkas `exp_<testname>_<pair>.md`. **Baca ini sebelum
+   mengusulkan perubahan parameter engine atau mengklaim "strategi ini pasti bisa profit"** —
+   hampir semua pertanyaan "apakah X berhasil" sudah dijawab di sini dengan angka. Contoh:
+   `docs/exp/exp_scalping_expectancy_ADA-DOGE-XRP.md` (win rate engine scalping 42,7% vs
+   ambang impas 60,1% → scalping di Tokocrypto tidak layak untuk engine saat ini).
+10. Baru buka kode.
 
 **Aturan kerja yang berlaku di repo ini:**
 
@@ -154,6 +160,10 @@ Yang **tidak boleh** dilakukan lagi tanpa instruksi eksplisit owner:
     (2026-10-14). Baca dari tanggal terbaru kalau butuh tahu **kenapa** suatu perbaikan
     berbentuk seperti sekarang.
 11. `SCALP_EXIT.md` bila menyentuh exit.
+12. **`docs/exp/`** — 🟠 **hasil eksperimen terukur.** Baca sebelum mengubah parameter engine,
+    treadmill "strategi ini akan profit", atau wallpaper angka hasil. Satu berkas per eksperimen,
+    bernama `exp_<testname>_<pair>.md`. Contoh: `docs/exp/exp_scalping_expectancy_ADA-DOGE-XRP.md`
+    (win rate engine scalping 42,7% vs ambang impas 60,1%).
 
 > **Dokumen yang sudah dihapus (2026-10-16):** `workplan.md`, `checkpoint.md`,
 > `checkpoint_progres.md` — isinya cuma stub "DEPRECATED" yang menunjuk ke `workplan2.md` /
@@ -246,6 +256,37 @@ berkasnya:
   `ScalpingMtfEvaluator` sengaja **tidak** diubah. **N6 + N17** ditutup dengan satu titik sambung evaluasi
   (`engine/ModeSignalEvaluator.kt`): worker hanya menghitung mode aktif, dan penalti anomali makro
   dihitung di dalam titik sambung itu dari candle D1.
+
+## Folder eksperimen (`docs/exp/`)
+
+Berisi **hasil eksperimen terukur** — satu berkas per eksperimen, bernama
+`exp_<testname>_<pair>.md`. Berbeda dari tiga folder lain di `docs/`:
+
+| Folder | Isi | Aturan |
+|---|---|---|
+| `docs/bugs/` | temuan audit yang **masih hidup** | kosong sejak 2026-10-18 |
+| `docs/laporan_temuan_bugs_*.md` | laporan audit **yang sudah tutup** | satu per topik |
+| `docs/LAPORAN-*.md` | jejak eksekusi batch (arsip) | jangan ditambah |
+| **`docs/exp/`** | **hasil eksperimen** — angka yang sudah diukur | tambah bebas, satu per eksperimen |
+
+**Aturan isi — ini yang membedakan `docs/exp/` dari dokumen lain:**
+
+- **Angka wajib diukur, bukan karangan.** Tulis command-nya, dataset-nya, dan hasilnya.
+  Kalau angka belum diukur, tulis "belum diukur" — jangan menebak.
+- **Sertakan angka negatif.** Eksperimen yang gagal adalah informasi paling berharga di
+  folder ini; laporan yang hanya berisi hasil bagus tidak berguna.
+- **Tulis batasan eksperimen secara eksplisit** — cakupan config, jumlah pair, rentang data,
+  dan apa yang **tidak** dibuktikan. Pembaca berikutnya harus bisa menilai apakah hasil itu
+  masih berlaku.
+- **Tunjuk eksperimen terkait** di laporan lain agar angka tidak berbeda antar dokumen.
+- Nama berkas memakai pair yang dites; kalau multi-pair, pisahkan dengan `-`
+  (contoh: `exp_scalping_expectancy_ADA-DOGE-XRP.md`).
+
+**Contoh isi saat ini:** `exp_scalping_expectancy_ADA-DOGE-XRP.md` — win rate engine scalping
+42,7% (horizon 8 jam) dan 45,2% (+48 jam) vs ambang impas 60,1% pada geometri SL 1,94% /
+TP2 2,42%. Kesimpulan eksperimen itu: scalping di Tokocrypto tidak layak untuk engine
+saat ini karena gap akurasi entry 14,9 poin persen, dan hipotesis "trade UNRESOLVED =
+tren berlanjut" terbantah (92 WIN vs 92 LOSS).
 
 ## Aturan turunan dari audit notifikasi (batch 1 & 2, 2026-10-16)
 
