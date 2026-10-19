@@ -73,7 +73,7 @@ DEFAULTS = {
     "order_type": "taker",          # taker|maker
     "min_risk_pct": 0.5,            # legacy floor; lantai friksi biasanya menang
     "max_tp2_r": 20.0,
-    "min_net_rr": 0.5,
+    "min_net_rr": 1.15,            # sama dengan ScalpingConfig.MIN_NET_RR (jangan beda diam-diam)
 
     # Detektor setup (threshold engine; tetap seperti pipeline)
     "chop_hard_ranging": 65.0,
@@ -103,6 +103,10 @@ DEFAULTS = {
 
 REQUIRED_FEE_KEYS = ("buy_taker_pct", "sell_taker_pct",
                      "buy_maker_pct", "sell_maker_pct")
+
+# Config kanonik: mirror offline dari ScalpingConfig/ScalpingRuntimeConfig + FEE_TRUTH.md.
+# Hanya boleh ada SATU berkas config; Fassungs yang kedua = dua definisi angka yang sama.
+DEFAULT_CONFIG_PATH = "data/config/scalp_config.json"
 
 
 def merge_defaults(cfg):
@@ -1100,7 +1104,9 @@ def main():
     ap = argparse.ArgumentParser(description="Replay offline engine scalping (output JSON saja).")
     ap.add_argument("--pair", required=True, help="cth BTCUSDT")
     ap.add_argument("--data", default="data/tokocrypto", help="direktori CSV")
-    ap.add_argument("--config", default="tools/scalp_config.json")
+    ap.add_argument("--config", default=DEFAULT_CONFIG_PATH,
+                    help=f"berkas konfigurasi replay (bawaan: {DEFAULT_CONFIG_PATH}; "
+                         "mirror offline dari ScalpingConfig/FEE_TRUTH.md)")
     ap.add_argument("--assume-orderbook-ok", action="store_true",
                     help="Aktifkan cabang diagnosticIgnore (Step2 lolos tanpa depth)")
     ap.add_argument("--out", default="", help="tulis JSON ke file (selain stdout)")
@@ -1111,7 +1117,20 @@ def main():
                     help="Override order type (taker|maker)")
     args = ap.parse_args()
 
-    with open(args.config) as f:
+    config_path = args.config
+    if not os.path.exists(config_path):
+        # Jalur lama ("tools/scalp_config.json") pernah jadi bawaan tapi berkasnya tidak pernah
+        # ada; config kanonik hidup di data/config/. Jangan diam-diam memakai konstanta DEFAULTS.
+        legacy = os.path.join("tools", "scalp_config.json")
+        hint = legacy if os.path.exists(legacy) else DEFAULT_CONFIG_PATH
+        print(json.dumps({
+            "error": f"config tidak ditemukan: {config_path}",
+            "cari_di": [config_path, legacy, DEFAULT_CONFIG_PATH],
+            "saran": f"jalankan ulang dengan --config {hint}",
+        }))
+        return 1
+
+    with open(config_path) as f:
         cfg = merge_defaults(json.load(f))
     if args.slippage_pct is not None:
         cfg["slippage_pct"] = args.slippage_pct

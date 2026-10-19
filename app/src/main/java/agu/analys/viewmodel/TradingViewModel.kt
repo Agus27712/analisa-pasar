@@ -417,10 +417,16 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     val sellSignalState: StateFlow<SellSignalState> = kotlinx.coroutines.flow.combine(
         positionContext, engine.indicators, _tradingFees, marketDataCoordinator.currentTick
     ) { ctx, ind, fees, tick ->
+        // FeeTruth: pair IDR harus dinilai dengan tarif IDR (jual taker 0,4322%), bukan preset
+        // USDT global — kalau tidak, ambang "balik modal" kartu jual salah untuk pair IDR.
+        val feeForPair = tick?.symbol
+            ?.takeIf { it.isNotBlank() }
+            ?.let { prefs.feeConfigFor(it) }
+            ?: fees
         agu.analys.engine.sell.SellSignalEvaluator.evaluate(
             context = ctx,
             indicators = ind,
-            tradingFees = fees,
+            tradingFees = feeForPair,
             high24h = tick?.high24h ?: 0.0
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SellSignalState())

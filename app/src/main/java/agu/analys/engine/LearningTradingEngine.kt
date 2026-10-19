@@ -39,6 +39,18 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
             }
         }
     var tradingFees = TradingFeeConfig()
+
+    /**
+     * Resolusi tarif **sadar kuotasi** (FEE_TRUTH §0.2: beli/jual asimetris, tarif IDR berbeda
+     * dari USDT). ViewModel mengisinya dengan `prefs.feeConfigFor(symbol)`.
+     *
+     * Sebelumnya semua evaluate memakai [tradingFees] yang global — bawaannya Tokocrypto = preset
+     * **USDT** (0,4044% semua sisi). Akibatnya pair IDR di Tokocrypto (BTCIDR, ETHIDR, XAUTIDR)
+     * dievaluasi dengan tarif USDT, padahal jalur paper sudah memakai tarif IDR: lantai SL jadi
+     * 5,81% (harusnya 4,89%), TP jauh, dan net R:R yang tampil berbeda dari keputusan auto-buy.
+     * Jangan setel ulang ke `tradingFees` — itu membuat dua angka untuk satu pertanyaan.
+     */
+    var feeConfigForSymbol: (String) -> TradingFeeConfig = { tradingFees }
     var scalpingRuntimeConfig: agu.analys.engine.scalping.ScalpingRuntimeConfig = agu.analys.engine.scalping.ScalpingRuntimeConfig.current
 
     private val candlesH1 = mutableListOf<CandleBar>()
@@ -272,7 +284,7 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
                 formingVolume = currentFormingVolume,
                 bids = currentOrderBookBids,
                 asks = currentOrderBookAsks,
-                fees = tradingFees,
+                fees = feeConfigForSymbol(tick.symbol),
                 scalpingConfig = scalpingRuntimeConfig
             )
         ) ?: return
@@ -321,7 +333,7 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
                 nowMs = tick.timestamp,
                 h1Candles = history,
                 d1Candles = dailyHistory,
-                fees = tradingFees,
+                fees = feeConfigForSymbol(tick.symbol),
                 globalContext = agu.analys.engine.global.GlobalContextManager.context.value
             )
         ) ?: return
@@ -369,7 +381,7 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
                 nowMs = tick.timestamp,
                 h4Candles = history,
                 d1Candles = dailyHistory,
-                fees = tradingFees,
+                fees = feeConfigForSymbol(tick.symbol),
                 globalContext = agu.analys.engine.global.GlobalContextManager.context.value
             )
         ) ?: return

@@ -1,0 +1,169 @@
+{
+  "alat": "tools/scalp_replay.py (revisi FEE_TRUTH v1.1)",
+  "tanggal": "2026-10-19",
+  "config": "data/config/scalp_config.json (min_friction_multiple=6.0, target_net_rr=2.0, slippage=0.08%, order_type=taker, max_tp2_r=5.0)",
+  "friction_pct_effective": 0.9688,
+  "friction_floor_pct_effective": 5.8128,
+  "catatan": "Avg R hanya bermakna bila ada trade yang selesai. Pada konfigurasi default (lantai SL 5,81%) hampir tidak ada trade yang selesai dalam horizon 2-8 jam.",
+  "lari": [
+    {
+      "skenario": "BTCUSDT 6x floor (default aplikasi), 2 jam",
+      "data": "data/tokocrypto_v4",
+      "bars_m1": 87000,
+      "slippage_pct": 0.08,
+      "min_friction_multiple": 6.0,
+      "lookahead_bars": 120,
+      "friction_floor_pct": 5.8128,
+      "ready_signals": 297,
+      "resolved": 0,
+      "unresolved": 297,
+      "win_rate_pct": 0.0,
+      "avg_r": 0.0,
+      "avg_gross_risk_pct": 0.0
+    },
+    {
+      "skenario": "BTCUSDT 6x floor, stress slippage 0.20",
+      "data": "data/tokocrypto_v4",
+      "bars_m1": 87000,
+      "slippage_pct": 0.2,
+      "min_friction_multiple": 6.0,
+      "lookahead_bars": 120,
+      "friction_floor_pct": 7.2528,
+      "ready_signals": 297,
+      "resolved": 0,
+      "unresolved": 297,
+      "win_rate_pct": 0.0,
+      "avg_r": 0.0,
+      "avg_gross_risk_pct": 0.0
+    },
+    {
+      "skenario": "BTCUSDT 6x floor, stress slippage 0.50",
+      "data": "data/tokocrypto_v4",
+      "bars_m1": 87000,
+      "slippage_pct": 0.5,
+      "min_friction_multiple": 6.0,
+      "lookahead_bars": 120,
+      "friction_floor_pct": 10.8528,
+      "ready_signals": 297,
+      "resolved": 0,
+      "unresolved": 297,
+      "win_rate_pct": 0.0,
+      "avg_r": 0.0,
+      "avg_gross_risk_pct": 0.0
+    },
+    {
+      "skenario": "BTCUSDT 6x floor, horizon 8 jam",
+      "data": "data/tokocrypto_v4",
+      "bars_m1": 87000,
+      "slippage_pct": 0.08,
+      "min_friction_multiple": 6.0,
+      "lookahead_bars": 480,
+      "friction_floor_pct": 5.8128,
+      "ready_signals": 129,
+      "resolved": 0,
+      "unresolved": 129,
+      "win_rate_pct": 0.0,
+      "avg_r": 0.0,
+      "avg_gross_risk_pct": 0.0
+    },
+    {
+      "skenario": "BTCUSDT 3x floor, horizon 8 jam",
+      "data": "data/tokocrypto_v4",
+      "bars_m1": 87000,
+      "slippage_pct": 0.08,
+      "min_friction_multiple": 3.0,
+      "lookahead_bars": 480,
+      "friction_floor_pct": 2.9064,
+      "ready_signals": 129,
+      "resolved": 1,
+      "unresolved": 128,
+      "win_rate_pct": 0.0,
+      "avg_r": -1.0,
+      "avg_gross_risk_pct": 2.9064
+    },
+    {
+      "skenario": "BTCUSDT 1x floor, horizon 8 jam (kontrol: jalur resolusi bisa menghasilkan trade)",
+      "data": "data/tokocrypto_v4",
+      "bars_m1": 87000,
+      "slippage_pct": 0.08,
+      "min_friction_multiple": 1.0,
+      "lookahead_bars": 480,
+      "friction_floor_pct": 0.9688,
+      "ready_signals": 138,
+      "resolved": 46,
+      "unresolved": 92,
+      "win_rate_pct": 8.7,
+      "avg_r": -0.7398,
+      "avg_gross_risk_pct": 0.9688
+    },
+    {
+      "skenario": "BTCUSDT tanpa lantai (SL 0.5%), horizon 8 jam",
+      "data": "data/tokocrypto_v4",
+      "bars_m1": 87000,
+      "slippage_pct": 0.08,
+      "min_friction_multiple": 0.0,
+      "lookahead_bars": 480,
+      "friction_floor_pct": 0.0,
+      "ready_signals": 1,
+      "resolved": 0,
+      "unresolved": 1,
+      "win_rate_pct": 0.0,
+      "avg_r": 0.0,
+      "avg_gross_risk_pct": 0.0
+    }
+  ],
+  "sweep_8_pair_default_2jam": [
+    {
+      "pair": "ADAUSDT",
+      "ready": 67,
+      "resolved": 0,
+      "unresolved": 67
+    },
+    {
+      "pair": "BNBUSDT",
+      "ready": 58,
+      "resolved": 0,
+      "unresolved": 58
+    },
+    {
+      "pair": "BTCUSDT",
+      "ready": 73,
+      "resolved": 0,
+      "unresolved": 73
+    },
+    {
+      "pair": "DOGEUSDT",
+      "ready": 61,
+      "resolved": 0,
+      "unresolved": 61
+    },
+    {
+      "pair": "ETHUSDT",
+      "ready": 71,
+      "resolved": 0,
+      "unresolved": 71
+    },
+    {
+      "pair": "SOLUSDT",
+      "ready": 67,
+      "resolved": 0,
+      "unresolved": 67
+    },
+    {
+      "pair": "TRXUSDT",
+      "ready": 60,
+      "resolved": 0,
+      "unresolved": 60
+    },
+    {
+      "pair": "XRPUSDT",
+      "ready": 64,
+      "resolved": 0,
+      "unresolved": 64
+    }
+  ],
+  "sweep_total": {
+    "ready": 521,
+    "resolved": 0
+  }
+}

@@ -656,6 +656,36 @@ berkasnya:
   pair-nya dibuka, atau di latar bila trailing aktif) — tidak ada pemantauan latar khusus dari
   batch 6o. Jangan mengklaim lebih dari itu di log, UI, atau dokumen.
 
+## Aturan turunan dari FEE_TRUTH v1.1 (batch 6p, 2026-10-19)
+
+- **Tarif wajib mengikuti kuotasi pair begitu simbolnya diketahui.** `prefs.tradingFees` adalah
+  **satu nilai global** dan bawaan Tokocrypto-nya adalah preset **USDT** (0,4044%) — memakainya
+  untuk pair IDR membuat lantai SL 5,81% (harusnya 4,89%) dan net R:R engine berbeda dari jalur
+  paper. Di titik mana pun simbol sudah diketahui, pakai **`prefs.feeConfigFor(symbol)`**
+  (menghormati tarif kustom pengguna). Saat ini dijaga di: `LearningTradingEngine`
+  (`feeConfigForSymbol`), `CandidateScanWorker`, `sellSignalState` (TradingViewModel), dan
+  `balanceSlice` (`TradingViewModelDetailState`). Penjaga:
+  `app/src/test/java/agu/analys/viewmodel/FeeQuoteAwarenessSourceTest.kt`.
+- **Poin data fee hanya boleh bercabang di `FeeSchedule` / `TradingFeeConfig`.** Baris yang menulis
+  `0.4044` atau `0.0021` sendiri di luar `AppConfiguration.kt` adalah definisi tarif kedua yang
+  akan melenceng diam-diam. (Pengecualian yang disengaja: `SimulationOrderEngine` — P&L
+  terealisasi, basisnya memang terpisah.)
+- **Tiga angka friksi tidak boleh saling menggantikan.** (1) **F aditif** = fee 2 sisi + slippage
+  2 sisi = **0,9688%** (USDT) — inilah yang dipakai `ScalpingRiskEngine.costPct` dan
+  `PaperStopResolver` untuk lantai SL. (2) **Impas net multiplikatif** = **0,9735%** — kenaikan
+  harga yang benar-benar menutup biaya; dipakai kartu "impas" dan ambang P&L. (3) **P2L
+  terealisasi** memakai basis sendiri. Kalau sebuah dokumen menyebut "friksi" tanpa menyatakan
+  bentuknya, perlakukan sebagai belum diverifikasi. Penjaga:
+  `app/src/test/java/agu/analys/config/FeeTruthConstantsTest.kt`.
+- **Mirror replay = satu berkas, dikunci uji.** `data/config/scalp_config.json` adalah satu-satunya
+  config yang boleh dibaca `tools/scalp_replay.py` (bawaan `--config`). Fee, `min_friction_multiple`,
+  `target_net_rr`, dan `slippage_pct` di dalamnya diperiksa uji terhadap `FeeSchedule` dan
+  `ScalpingConfig`, jadi revisi aplikasi ikut memakai angka yang sama dengan replay. Jangan
+  membuat berkas config kedua di `tools/`.
+- **Replay harus bisa dijalankan dari keadaan diam.** Kalau `--config` menunjuk berkas yang tidak
+  ada, keluarannya JSON berisi lokasi yang dicoba + saran perintah — bukan traceback. Perintah
+  yang tertulis di dokumen harus benar-benar berhasil dijalankan dari repo bersih.
+
 ## Arah produk (ringkas)
 
 - Fokus: **scalp mode** + **paper trade** untuk menguji engine.

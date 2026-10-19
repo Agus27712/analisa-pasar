@@ -571,6 +571,10 @@ fun TradingViewModel.initSubscriptionsAndPolling() {
     engine.strategyMode = prefs.strategyMode
     engine.isScalpingMode = prefs.isScalpingMode
     engine.tradingFees = prefs.tradingFees
+    // FeeTruth: tarif sadar-kuotasi per simbol (IDR ≠ USDT). Tanpa ini engine memakai preset
+    // USDT global untuk pair IDR → lantai SL & net R:R beda dari jalur paper (lihat KDoc
+    // `LearningTradingEngine.feeConfigForSymbol`).
+    engine.feeConfigForSymbol = { symbol -> prefs.feeConfigFor(symbol) }
     engine.scalpingRuntimeConfig = prefs.scalpingRuntimeConfig
     // S5 — samakan basis PnL simulasi dengan mesin exit (fee + 2x slippage).
     simCoordinator.setSlippagePct(prefs.scalpingRuntimeConfig.slippagePct)

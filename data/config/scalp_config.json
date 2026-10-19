@@ -9,6 +9,7 @@
   "max_tp2_r": 5.0,
   "min_friction_multiple": 6.0,
   "slippage_pct": 0.08,
+  "order_type": "taker",
   "rvol_breakout_min": 1.5,
   "rvol_setup_min": 1.2,
   "rvol_retest_min": 1.5,
