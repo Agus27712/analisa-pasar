@@ -93,26 +93,39 @@ class FeeTruthConstantsTest {
         // `FeeSchedule`, hasil replay tidak lagi merepresentasikan aplikasi.
         val json = bacaMirror()
         val feeBlok = json.substringAfter("\"fee\"").substringBefore("\"thresholds\"")
-        val buyTaker = feeBlok.substringAfter("\"buy_taker_pct\"").substringBefore(",").trim().toDouble()
-        val sellTaker = feeBlok.substringAfter("\"sell_taker_pct\"").substringBefore(",").trim().toDouble()
-        val buyMaker = feeBlok.substringAfter("\"buy_maker_pct\"").substringBefore(",").trim().toDouble()
-        val sellMaker = feeBlok.substringAfter("\"sell_maker_pct\"").substringBefore(",").trim().toDouble()
 
-        assertEquals(pct(FeeSchedule.TOKOCRYPTO_USDT_BUY_TAKER), buyTaker, 1e-9)
-        assertEquals(pct(FeeSchedule.TOKOCRYPTO_USDT_SELL_TAKER), sellTaker, 1e-9)
-        assertEquals(buyTaker, buyMaker, 1e-9)
-        assertEquals(sellTaker, sellMaker, 1e-9)
+        assertEquals(
+            pct(FeeSchedule.TOKOCRYPTO_USDT_BUY_TAKER),
+            angka(feeBlok, "buy_taker_pct"), 1e-9
+        )
+        assertEquals(
+            pct(FeeSchedule.TOKOCRYPTO_USDT_SELL_TAKER),
+            angka(feeBlok, "sell_taker_pct"), 1e-9
+        )
+        // Pada Tokocrypto USDT maker = taker (FEE_TRUTH §1A).
+        assertEquals(angka(feeBlok, "buy_taker_pct"), angka(feeBlok, "buy_maker_pct"), 1e-9)
+        assertEquals(angka(feeBlok, "sell_taker_pct"), angka(feeBlok, "sell_maker_pct"), 1e-9)
 
         // Parameter lantai friksi juga harus sama dengan ScalpingConfig.
-        val minFriction = json.substringAfter("\"min_friction_multiple\"").substringBefore(",").trim().toDouble()
-        val targetRr = json.substringAfter("\"target_net_rr\"").substringBefore(",").trim().toDouble()
-        val slippage = json.substringAfter("\"slippage_pct\"").substringBefore(",").trim().toDouble()
         assertEquals(
-            agu.analys.engine.scalping.ScalpingConfig.MIN_FRICTION_MULTIPLE, minFriction, 1e-9
+            agu.analys.engine.scalping.ScalpingConfig.MIN_FRICTION_MULTIPLE,
+            angka(json, "min_friction_multiple"), 1e-9
         )
-        assertEquals(agu.analys.engine.scalping.ScalpingConfig.TARGET_NET_RR, targetRr, 1e-9)
-        assertEquals(FeeSchedule.DEFAULT_SLIPPAGE_PCT, slippage, 1e-9)
+        assertEquals(
+            agu.analys.engine.scalping.ScalpingConfig.TARGET_NET_RR,
+            angka(json, "target_net_rr"), 1e-9
+        )
+        assertEquals(FeeSchedule.DEFAULT_SLIPPAGE_PCT, angka(json, "slippage_pct"), 1e-9)
     }
+
+    /** Ambil nilai numerik yang mengikuti `"key": <angka>` di JSON. */
+    private fun angka(teks: String, key: String): Double =
+        teks.substringAfter("\"$key\"")
+            .substringAfter(":")
+            .substringBefore(",")
+            .substringBefore("}")
+            .trim()
+            .toDouble()
 
     private fun bacaMirror(): String {
         val base = java.io.File(System.getProperty("user.dir"))
