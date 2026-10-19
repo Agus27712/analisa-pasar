@@ -59,10 +59,10 @@ entry/exit) belum ada di sana — semua kesimpulan yang ditarik dari `main` jadi
    temuan diperbaiki, **pangkas butir itu dari badan dokumen** dan pindahkan jejaknya ke tabel
    "Sudah ditutup" — begitu seluruh isi sebuah berkas tutup, pindahkan berkasnya keluar
    (lihat § "Folder temuan bug" di bawah).
-4. **`docs/BELUM-DIKERJAKAN-2026-10-14.md`** — inventaris 27 item yang **belum** dikerjakan
-   (temuan audit A/B, roadmap P4–P6, verifikasi lapangan), lengkap dengan titik kode dan
-   prioritas. **Baca ini sebelum memilih apa yang akan dikerjakan**, supaya tidak mengulang
-   yang sudah selesai atau mengerjakan yang sudah dibatalkan.
+4. **`docs/BELUM-DIKERJAKAN-2026-10-14.md`** — inventaris 27 item (per 2026-10-18: **22 selesai**, yang
+   benar-benar terbuka = **P4.2**, **P5**, **P6** diblokir, dan **V1–V4** verifikasi lapangan),
+   lengkap dengan titik kode dan prioritas. **Baca ini sebelum memilih apa yang akan dikerjakan**,
+   supaya tidak mengulang yang sudah selesai atau mengerjakan yang sudah dibatalkan.
 5. **`workplan2.md` § 13** — pekerjaan terakhir yang **masih berlaku**. Seksi sebelumnya
    (§9 lantai friksi, §11 UI scalping, §12 rehidrasi paper) menjelaskan **kenapa** kode hari ini
    berbentuk seperti sekarang. Jangan mengubahnya tanpa membacanya.
@@ -135,10 +135,10 @@ Yang **tidak boleh** dilakukan lagi tanpa instruksi eksplisit owner:
    bertanya "apa lagi yang tersisa". **Status di berkas-berkasnya sudah diverifikasi ke kode dan
    direview owner pada 2026-10-16** (`patch` @ `547048d`) — **agen tidak perlu cek kode untuk
    memastikan statusnya**, cukup baca tabel di tiap berkas (lihat § "Folder temuan bug" di bawah).
-6. **`docs/BELUM-DIKERJAKAN-2026-10-14.md`** — inventaris 27 item yang **belum** dikerjakan
-   (temuan audit A/B, roadmap P4–P6, verifikasi lapangan), lengkap dengan titik kode dan
-   prioritas. **Baca ini sebelum memilih apa yang akan dikerjakan**, supaya tidak mengulang
-   yang sudah selesai atau mengerjakan yang sudah dibatalkan.
+6. **`docs/BELUM-DIKERJAKAN-2026-10-14.md`** — inventaris 27 item (per 2026-10-18: **22 selesai**, yang
+   benar-benar terbuka = **P4.2**, **P5**, **P6** diblokir, dan **V1–V4** verifikasi lapangan),
+   lengkap dengan titik kode dan prioritas. **Baca ini sebelum memilih apa yang akan dikerjakan**,
+   supaya tidak mengulang yang sudah selesai atau mengerjakan yang sudah dibatalkan.
 7. **`docs/LAPORAN-temuan-akuntansi-replay-2026-10-14.md`** — 🔴 **baca ini sebelum memakai
    angka edge apa pun.** Menjelaskan kenapa angka "+0,0216 avg R / LOLOS" dari `u4` **tidak sah**
    (trade `UNRESOLVED` dulu dibuang dari statistik, ±81% sinyal) dan apa hasilnya setelah

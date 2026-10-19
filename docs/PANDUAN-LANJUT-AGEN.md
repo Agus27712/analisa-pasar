@@ -377,3 +377,12 @@ Aturan yang sudah berlaku dan **jangan dilonggarkan**:
 - [ ] `docs/LAPORAN-<topik>-<tanggal>.md` ditulis (dalam Bahasa Indonesia).
 - [ ] Tidak ada token/keystore/`.env` yang ikut ter-commit.
 - [ ] Push ke **`patch`**, bukan `main`.
+
+> **Checklist ini dipakai ulang setiap batch — kotaknya sengaja dibiarkan kosong** (mencentangnya
+> permanen akan membuat checklist berikutnya terasa "sudah terpenuhi" tanpa bukti). Bukti per
+> batch ditulis sebagai catatan, bukan centang. Contoh batch 6o (2026-10-18):
+> CI hijau **98 kelas / 757 uji** (run `39145158155`); baseline dibandingkan dari angka terukur
+> batch 6n (94/726); kontrol negatif 6 mutasi menggigit (`workplan2.md` §59.3); `workplan2.md` §59,
+> `AGENTS.md`, dan laporan temuan diperbarui; tidak ada laporan per batch baru (berkas temuan
+> dipindah ke `docs/laporan_temuan_bugs_paper_trade.md`); tidak ada token ter-commit; push ke
+> `patch` (`220e7a0`, `8fb8d12`).
