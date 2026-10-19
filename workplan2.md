@@ -3747,15 +3747,21 @@ pekerjaan ini menyinkronkan konstanta/parameter ke codebase lalu menjalankan rep
 
 ### 60.4 Uji
 
-Dua kelas baru:
+Dua kelas baru, 11 kasus:
 
-- `config/FeeTruthConstantsTest` (6 kasus) — mengunci konstanta `FeeSchedule` ke angka
+- `config/FeeTruthConstantsTest` (7) — mengunci konstanta `FeeSchedule` ke angka
   FEE_TRUTH §1–§2, mengunci `min_friction_multiple`/`target_net_rr`/`slippage_pct` pada mirror
   JSON ke `ScalpingConfig`, dan membedakan **F aditif 0,9688%** vs **impas multiplikatif
   0,9735%** supaya keduanya tidak saling menggantikan.
-- `viewmodel/FeeQuoteAwarenessSourceTest` (4 kasus) — pindai sumber: engine tak boleh memakai
+- `viewmodel/FeeQuoteAwarenessSourceTest` (4) — pindai sumber: engine tak boleh memakai
   `fees = tradingFees`, worker wajib `prefs.feeConfigFor(symbol)`, kartu jual & detail wajib
   `feeConfigFor`.
+
+Percobaan pertama **GAGAL** — `mirror replay sama dengan FeeSchedule` melempar
+`NumberFormatException: For input string: ": 0.4044"`: parser mengambil substring setelah
+`"buy_taker_pct"` termasuk tanda `:` dan koma. Diperbaiki dengan helper `angka(teks, key)` yang
+melewati `:` sebelum `toDouble()`. Pelajaran: parser harus diuji pada data JSON asli, bukan
+pada data yang kebetulan "sudah benar".
 
 Kontrol negatif (disimulasikan di lingkungan ini):
 
@@ -3767,6 +3773,16 @@ Kontrol negatif (disimulasikan di lingkungan ini):
 | `min_friction_multiple` di JSON → 3,0 | GAGAL |
 | `slippage_pct` di JSON → 0,2 | GAGAL |
 | satu call site dikembalikan ke `fees = tradingFees` / `prefs.tradingFees` | 4 kasus pindai sumber GAGAL |
+
+**Angka terukur** (workflow `unit-tests-manual.yml`, branch `patch`, 2026-10-19):
+
+| Jalankan | Cakupan | Kelas | Uji | Gagal | Dilewati |
+|---|---|---|---|---|---|
+| Run `39243541785` | custom (percobaan pertama) | 3 | 28 | **1** | 0 |
+| Run `39244023556` | custom (2 kelas baru + `ScalpingRiskEngineTest`) | 3 | 28 | 0 | 0 |
+| Run `39244434459` | `all-unit-tests` (suite penuh) | 100 | 768 | 0 | 1 |
+
+Baseline sebelum batch ini 98 kelas / 757 uji ⇒ **+2 kelas / +11 uji**.
 
 ### 60.5 Hasil replay (terukur 2026-10-19, `tools/scalp_replay.py` versi FEE_TRUTH v1.1)
 
