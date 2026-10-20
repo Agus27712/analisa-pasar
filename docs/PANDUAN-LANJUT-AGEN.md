@@ -2,7 +2,7 @@
 
 > **Baca ini dulu.** Dokumen ini adalah titik masuk untuk agen/engineer berikutnya: status terkini,
 > apa yang sudah selesai, apa berikutnya, dan **perangkap yang sudah pernah ditemukan** supaya tidak
-> diulang. Terakhir diperbarui: **2026-10-20** (batch 6p + parity replay + eksperimen paritas).
+> diulang. Terakhir diperbarui: **2026-10-20** (batch 6p + parity replay + Spec v2 offline).
 >
 > 🔴 **Untuk "apa lagi yang tersisa" → `docs/bugs/`, bukan dokumen ini.** Status temuan audit
 > (notifikasi `N*`, jurnal/P&L `J*`, paper trading `P*`, koneksi `K*`) sudah diverifikasi ke kode dan
@@ -29,6 +29,11 @@
 > `exp_scalping_expectancy_parity_ADA-DOGE-XRP.md` — pengulangan dengan exit app (time-stop
 > 90 bar): win rate **14,88%**, avg R **−0,4898**, 963/1.149 trade TIMEOUT. Scalping di
 > Tokocrypto **tidak layak untuk engine saat ini**.
+> `exp_mfe_m15_41pair.md` — MFE 15m 90 hari: **4/41 layak** (MUBARAK, PUMP, ZRO, PLUME);
+> 10 pair yang dulu eligible turun status, **0 pair naik**. Tabel `PairEdgeGate` lama kedaluwarsa.
+> `exp_spot_backtest_41pair.md` — backtest Spec v2: produksi 15m **0 trade**, produksi 1h
+> **7 trade semua rugi** (avg R −0,3835); varian riset terbaik −0,2055R dengan OOS −0,3828.
+> **Spec v2 belum punya bukti edge; Fase 1 Kotlin diblokir sampai keputusan owner.**
 > Jejak audit jurnal ada di laporan per batch
 > (`docs/LAPORAN-batch3-jurnal-*.md` … `docs/LAPORAN-batch6-j*-2026-10-17.md`).
 > Aturan baru sejak 2026-10-17: berkas temuan yang **seluruh isinya** sudah tutup dipindahkan ke
@@ -44,7 +49,9 @@
 > 📊 **Dataset ukur Spec v2 (2026-10-20):** `data/tokocrypto_spot/` — 41 pair (14 eligible
 > `PairEdgeGate`, 12 stabil, 15 momentum), 90 hari, interval 15m dan 1h, 441.880 bar, 0 celah.
 > Rincian kriteria dan angka di laporan §10. Tool: `tools/fetch_tokocrypto_klines.py`
-> (`--select mixed`, `--days`, `--resume` membekukan daftar pair). Backtest belum dijalankan.
+> (`--select mixed`, `--days`, `--resume` membekukan daftar pair). Backtest **sudah dijalankan**
+> (2026-10-20): hasil negatif; lihat `docs/exp/exp_spot_backtest_41pair.md`. Tool pengukuran:
+> `tools/spot_mfe.py`, `tools/spot_backtest.py`, `tools/test_spot_backtest.py`.
 
 ---
 
@@ -96,6 +103,7 @@ git stash pop                 # kembalikan pekerjaan
 | §9 | **Lantai risiko berbasis friksi** (`min_friction_multiple = 6,0`, `target_net_rr = 2,0`) | `ScalpingConfig.kt`, `ScalpingRiskEngine.kt` | `workplan2.md` §9 |
 | §9 | Uji universe 30 hari × 40 pair, gate out-of-sample | `tools/split_validate.py` | `data/hasil/u3_*.json`, `u4_*.md` |
 | §9 | **Gerbang edge pair** (MFE ≥ 2× friksi) | `PairEdgeGate.kt`, `tools/pair_gate.py` | `data/config/pair_gate.json` |
+| Spec v2 | **Pengukuran offline Spec v2** — MFE 15m 90 hari + backtest 41 pair (5 setup, 15m/1h, G0–G8, exit §7) | `tools/spot_lib.py`, `tools/spot_mfe.py`, `tools/spot_backtest.py`, `tools/test_spot_backtest.py` | `docs/exp/exp_mfe_m15_41pair.md`, `docs/exp/exp_spot_backtest_41pair.md`; hasil negatif, Fase 1 Kotlin diblokir |
 | §11 | **UI scalping baru** (radar vs setup tidak sinkron) | `ScalpReadiness.kt`, `ScalpDeskCard.kt`, `PaperTradeDeskCard.kt` | `ScalpReadinessTest.kt` |
 | §12 | **Rehidrasi state machine exit paper** setelah restart | `PaperRehydrate.kt`, `SpotPositionStore.kt` | `PaperRehydrateTest.kt` |
 | §13 | **Akar `EARLY_ENTRY`** — stage tinggi wajib punya pola | `ScalpingMtfEvaluator.kt`, `SignalLifecycleManager.kt` | `workplan2.md` §13 |
@@ -195,6 +203,24 @@ Riwayat lengkap ada di `workplan2.md` §14/§15 (keduanya bertanda ⛔ DIHAPUS) 
 
 Diurutkan berdasarkan **nilai dibagi risiko**. Jangan mengerjakan yang bawah sebelum yang atas
 selesai, kecuali ada instruksi eksplisit.
+
+### ⛔ Spec v2 (M15/H1) — diukur 2026-10-20, hasil NEGATIF; Fase 1 Kotlin diblokir
+
+Laporan lengkap: `docs/exp/exp_spot_backtest_41pair.md` dan `docs/exp/exp_mfe_m15_41pair.md`.
+
+- **Produksi 15m: 0 trade** dari 41 pair dalam 90 hari. Lantai 6x (5,8128%) + G2 maksimum 5 ATR
+  + G3 minimum 1,5F (1,4532%) saling mengunci; ATR% 15m sebagian besar 0,2–1,1%.
+- **Produksi 1h: 7 trade, semuanya rugi**, WR 0%, avg R −0,3835.
+- **Riset longgar: 37–74 trade, semuanya negatif.** Yang terbaik −0,2055R (lantai 4x + G4–G6
+  longgar), in-sample −0,0912, out-of-sample −0,3828.
+- **SWEEP_RECLAIM konsisten rugi** (6–67 trade, −0,17 sampai −0,40R); BREAKOUT negatif pada
+  14–22 trade di 15m dan positif hanya n=6 di 1h; PULLBACK hanya 2 trade (rugi); RANGE 0.
+- **MFE 90 hari: 4/41 layak**, bukan 14; tidak ada pair baru. Tabel `PairEdgeGate` lama
+  kedaluwarsa untuk jendela ini.
+
+**Jangan mulai Fase 1 Kotlin** sebelum owner memutuskan: perbaiki kontradiksi gate/TP1,
+rancang ulang pemicu/exit SWEEP, pindah ke horizon lebih panjang, atau hentikan program.
+Kalau memilih lanjut, mulai dari memperbaiki spec — bukan dari menulis engine.
 
 ### ⭐ Prioritas #1 — cari varian **entry** yang punya edge kotor (belum ada jawabannya)
 

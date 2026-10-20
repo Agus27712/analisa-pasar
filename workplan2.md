@@ -3939,3 +3939,82 @@ didefinisikan — murah dan informatif sebelum program besar.
 **Dokumen.** `docs/exp/exp_scalping_expectancy_ADA-DOGE-XRP.md` (laporan lama, metode, angka,
 batasan) dan `docs/exp/exp_scalping_expectancy_parity_ADA-DOGE-XRP.md` (pengulangan parity);
 seksi ini sebagai ringkasan.
+
+---
+
+## 62. Spec Scalping Spot v2 — pengukuran offline 41 pair (2026-10-20)
+
+**Latar belakang.** Spec v2 (`docs/exp/scalping_spot_strategy_spec.md`) sudah dipetakan ke codebase,
+tetapi belum punya satu angka edge pun. Dataset `data/tokocrypto_spot` (41 pair, 90 hari, 15m dan
+1h) sudah tersedia. Batch ini membangun harness pengukuran offline lebih dulu, **tanpa menyentuh
+kode aplikasi**, supaya Fase 1 Kotlin tidak dibangun di atas asumsi.
+
+**Tool baru.**
+
+| Berkas | Isi |
+|---|---|
+| `tools/spot_lib.py` | loader CSV, indikator (EMA/ATR/RSI/ADX/BB/Keltner/VWAP/volMA/percentile), swing/level, fee/P&L mirror `FeeSchedule`, parameter setup, agregasi HTF |
+| `tools/spot_mfe.py` | MFE/MAE median 1h/4h/7h pada candle 15m; ambang `2 x F` |
+| `tools/spot_backtest.py` | harness 5 setup, G0–G8, exit §7, funnel, metrik, split 70/30, timeframe 15m/1h, kebijakan TP1 `floor`/`literal`, override gate riset |
+| `tools/test_spot_backtest.py` | 10 uji mekanika: SL-before-TP, TP1 60%, TP2 setelah TP1, stop tidak turun, time-stop, impas `FeeSchedule`, HTF tanpa lookahead, TP1 `floor` vs `literal` |
+
+**MFE 15m (90 hari).** `python3 tools/spot_mfe.py --data data/tokocrypto_spot` →
+`data/hasil/mfe_m15_spot.json`:
+
+- Layak: **4/41** — MUBARAK 2,78x, PUMP 2,58x, ZRO 2,34x, PLUME 2,12x.
+- Tabel lama 14 pair; **10 turun** (ENA, NEAR, WLD, STRK, W, S, FET, APT, FIL, QNT), **0 naik**.
+- Median MFE 7 jam lintas pair 1,4371%; median rasio 1,4834x.
+- Sampling `step=1` vs `step=2` pada BTC/MUBARAK/ZRO berbeda <0,03 pp.
+
+**Backtest.** 14 varian di `data/hasil/spot_backtest_v2_matrix.txt`; ringkasan yang menentukan:
+
+| Varian | n | avg R | WR | IS / OOS |
+|---|---:|---:|---:|---|
+| 15m produksi (G0, lantai 6x, gates default) | **0** | - | - | - |
+| 15m literal (kontrol TP1) | **0** | - | - | - |
+| 15m no-G0 | 1 | −0,8084 | 0,0% | 0 / 1 |
+| 15m riset longgar (lantai 5x, G3 1,0F, G4–G6 longgar) | 44 | −0,2260 | 22,7% | −0,1542 / −0,2978 |
+| 15m riset longgar (lantai 4x) | 37 | −0,2758 | 21,6% | −0,1965 / −0,3798 |
+| 1h produksi | **7** | −0,3835 | 0,0% | −0,3769 / −0,3885 |
+| 1h produksi, 4 pair MFE baru | 5 | −0,3997 | 0,0% | −0,3676 / −0,4211 |
+| 1h literal | 6 | −0,3841 | 0,0% | −0,3769 / −0,3914 |
+| 1h no-G0 | 13 | −0,4028 | 7,7% | −0,4265 / −0,3750 |
+| 1h no-G0, lantai 5x + G4–G6 longgar | 60 | −0,2087 | 23,3% | −0,0869 / −0,4046 |
+| **1h no-G0, lantai 4x + G4–G6 longgar** | **74** | **−0,2055** | 23,0% | **−0,0912 / −0,3828** |
+| 1h no-G0, tanpa lantai | 54 | −0,3373 | 20,4% | −0,3419 / −0,3288 |
+
+**Temuan.**
+
+1. **Gates produksi tidak bisa dieksekusi di 15m.** 0 trade dari 41 pair/90 hari. Lantai 6x
+   (5,8128%) + G2 maksimum 5 ATR + G3 minimum 1,5F (1,4532%) saling mengunci; ATR% 15m sebagian
+   besar 0,2–1,1%.
+2. **Gates produksi 1h menghasilkan 7 trade, semuanya rugi** (WR 0%, avg R −0,3835). Sampel kecil,
+   tetapi cukup untuk menyatakan gates hampir tidak bisa dieksekusi.
+3. **Semua varian riset tetap negatif.** Yang terbaik −0,2055R (74 trade) dan memburuk
+   out-of-sample (−0,3828). Tidak ada tanda edge.
+4. **SWEEP_RECLAIM sumber kerugian utama** dan konsisten rugi di semua konfigurasi (6–67 trade,
+   −0,17 sampai −0,40R); alasan keluar terbanyak `SETUP_INVALIDATION` (32 dari 74 trade pada
+   varian 1h lantai 4x). BREAKOUT_RETEST negatif pada 14–22 trade di 15m dan positif hanya n=6
+   di 1h (+0,19 sampai +0,21R); SQUEEZE n=1–7 dengan tanda berubah-ubah; PULLBACK 2 trade
+   (keduanya rugi); RANGE 0.
+5. **Kontradiksi TP1/G4 terbukti.** TP1 formula `entry + 1,0R` selalu memberi `netRr < 1`, sehingga
+   G4 menolaknya; mode `literal` menghasilkan 0 trade untuk setup formula. Mode `floor`
+   (`entry + max(1,0R, R + 2F)`) adalah satu-satunya cara setup formula lolos.
+6. **Memperbarui `PairEdgeGate` ke 4 pair tidak menyelamatkan strategi.** 1h produksi pada 4 pair
+   itu: 5 trade, semua rugi, avg R −0,3997.
+
+**Keputusan yang ditunggu owner.** Fase 1 Kotlin **diblokir**. Pilih: (a) perbaiki kontradiksi
+gate/TP1 dan rancang ulang pemicu/exit SWEEP, (b) pindah ke horizon lebih panjang dengan exit yang
+sesuai, atau (c) hentikan program scalping ini. Jangan menurunkan lantai 6x hanya untuk menambah
+sinyal; varian tanpa lantai justru −0,3373R.
+
+**Batas.** Harness Python, bukan mesin Kotlin; harga fill = level mentah (slippage lewat
+`FeeSchedule`); G8/orderbook tidak diuji; risiko per simbol, bukan portofolio; time-stop dan
+lookback dalam candle sehingga 1h mengubah horizon; universe dipilih dari jendela yang sama
+(bukan out-of-sample); G0 memakai tabel lama yang kedaluwarsa. Uji mekanika 10/10 lulus;
+determinisme CSV diverifikasi (SHA-256 identik).
+
+**Dokumen.** `docs/exp/exp_mfe_m15_41pair.md` (MFE lengkap 41 pair),
+`docs/exp/exp_spot_backtest_41pair.md` (matriks, funnel, exit, batas),
+`docs/LAPORAN-sinkronisasi-spec-scalping-spot-2026-10-20.md` §10.6–§10.7 (ringkasan + keputusan),
+dan `docs/PANDUAN-LANJUT-AGEN.md` §4 (kotak blokir Fase 1).

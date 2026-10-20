@@ -1,0 +1,1 @@
+pair,setup,signal_index,entry_index,exit_index,entry_time_ms,exit_time_ms,entry,sl_eff,tp1,tp2,qty,tp1_hit,exit_reason,r_net,net_pnl_pct,fees_usd,mfe_r,mae_r,hold_bars,risk_pct,net_rr1,net_rr_final,score,in_sample

@@ -82,6 +82,9 @@ entry/exit) belum ada di sana — semua kesimpulan yang ditarik dari `main` jadi
    `docs/exp/exp_scalping_expectancy_ADA-DOGE-XRP.md` (eksperimen lama 42,7%) dan
    `docs/exp/exp_scalping_expectancy_parity_ADA-DOGE-XRP.md` (parity app: 14,88%, avg R
    −0,4898, 963/1.149 TIMEOUT → scalping di Tokocrypto tidak layak untuk engine saat ini).
+   Pengukuran Spec v2: `docs/exp/exp_mfe_m15_41pair.md` (MFE 15m 90 hari, **4/41 layak**) dan
+   `docs/exp/exp_spot_backtest_41pair.md` (produksi 15m **0 trade**, 1h **7 trade semua rugi**,
+   varian riset terbaik **−0,2055R**).
 10. Baru buka kode.
 
 **Aturan kerja yang berlaku di repo ini:**
@@ -166,7 +169,9 @@ Yang **tidak boleh** dilakukan lagi tanpa instruksi eksplisit owner:
 12. **`docs/exp/`** — 🟠 **hasil eksperimen terukur.** Baca sebelum mengubah parameter engine,
     treadmill "strategi ini akan profit", atau wallpaper angka hasil. Satu berkas per eksperimen,
     bernama `exp_<testname>_<pair>.md`. Contoh: `docs/exp/exp_scalping_expectancy_ADA-DOGE-XRP.md`
-    (lama 42,7%) dan `docs/exp/exp_scalping_expectancy_parity_ADA-DOGE-XRP.md` (parity 14,88%).
+    (lama 42,7%), `docs/exp/exp_scalping_expectancy_parity_ADA-DOGE-XRP.md` (parity 14,88%),
+    `docs/exp/exp_mfe_m15_41pair.md` (MFE 4/41), dan `docs/exp/exp_spot_backtest_41pair.md`
+    (backtest Spec v2: produksi 0/7 trade, riset terbaik −0,2055R).
 
 > **Dokumen yang sudah dihapus (2026-10-16):** `workplan.md`, `checkpoint.md`,
 > `checkpoint_progres.md` — isinya cuma stub "DEPRECATED" yang menunjuk ke `workplan2.md` /
@@ -291,6 +296,13 @@ Pengulangan parity ada di `exp_scalping_expectancy_parity_ADA-DOGE-XRP.md`: **14
 avg R **−0,4898**, 963 dari 1.149 trade TIMEOUT, ambang impas payoff **55,08%**. Kesimpulan
 tetap: scalping di Tokocrypto tidak layak untuk engine saat ini; hipotesis "trade UNRESOLVED =
 tren berlanjut" juga terbantah (92 WIN vs 92 LOSS).
+
+**Pengukuran Spec v2 (2026-10-20):** `exp_mfe_m15_41pair.md` — MFE 15m 90 hari: **4/41 pair
+layak** (MUBARAK 2,78x, PUMP 2,58x, ZRO 2,34x, PLUME 2,12x); 10 pair yang dulu eligible turun,
+0 pair naik. `exp_spot_backtest_41pair.md` — 14 varian backtest: produksi 15m **0 trade**,
+produksi 1h **7 trade semua rugi** (avg R −0,3835), varian riset terbaik **−0,2055R**
+(in-sample −0,0912 / out-of-sample −0,3828). Kesimpulan: Spec v2 belum punya bukti edge;
+Fase 1 Kotlin diblokir sampai keputusan owner.
 
 ## Aturan turunan dari audit notifikasi (batch 1 & 2, 2026-10-16)
 
@@ -744,6 +756,31 @@ tren berlanjut" juga terbantah (92 WIN vs 92 LOSS).
   ada, keluarannya JSON berisi lokasi yang dicoba + saran perintah — bukan traceback. Perintah
   yang tertulis di dokumen harus benar-benar berhasil dijalankan dari repo bersih.
 
+## Aturan turunan dari pengukuran Spec v2 (2026-10-20)
+
+- **Fase 1 Kotlin Spec v2 diblokir sampai owner memutuskan.** Hasil terukur: produksi 15m
+  **0 trade**, produksi 1h **7 trade semua rugi**, seluruh varian riset negatif (terbaik −0,2055R,
+  OOS −0,3828). Jangan mulai menulis engine baru hanya karena specnya sudah ada. Keputusan yang
+  harus diambil lebih dulu ada di `docs/LAPORAN-sinkronisasi-spec-scalping-spot-2026-10-20.md`
+  §12.
+- **Hasil harness Python adalah riset, bukan hasil produksi.** `tools/spot_backtest.py` bukan
+  mesin Kotlin; Spec §11 mewajibkan mesin Kotlin + uji paritas. Jangan mengutip angka harness
+  sebagai "hasil app" atau "hasil produksi".
+- **TP1 formula `entry + 1,0R` tidak boleh dipakai apa adanya.** Secara aljabar ia selalu memberi
+  `netRr = (R − F)/(R + F) < 1`, sehingga G4 menolaknya. Kalau spec memakai kebijakan `floor`,
+  tulis eksplisit `entry + max(1,0R, R + 2F)`; jangan biarkan kontradiksi ini masuk ke kode.
+- **Jangan menurunkan lantai 6× untuk menambah sinyal.** Varian tanpa lantai justru −0,3373R;
+  varian lantai 4×–5× juga negatif. Lantai bukan satu-satunya penyebab kerugian, dan
+  menurunkannya tidak menghasilkan edge.
+- **Jangan memperbarui `PairEdgeGate` dari satu jendela tanpa keputusan owner.** MFE 90 hari
+  memberi 4 pair (bukan 14). Memperbaruinya hanya mempersempit sampel; kalau tabel dipertahankan,
+  ia harus dihitung berkala, bukan hardcoded sekali.
+- **Angka MFE/backtest wajib menyebut timeframe, periode, dan jumlah sampel.** MFE lama M1 30 hari
+  tidak sebanding dengan MFE baru M15 90 hari; 2,0× adalah ambang yang sama, tetapi datanya berbeda.
+- **Uji mekanika sebelum percaya angka.** `tools/test_spot_backtest.py` mengunci SL-before-TP,
+  TP1 60%, TP2 setelah TP1, stop tidak turun, time-stop, impas `FeeSchedule`, HTF tanpa lookahead,
+  dan TP1 `floor` vs `literal`. Kalau mengubah exit, tambahkan uji di sana.
+
 ## Arah produk (ringkas)
 
 - Fokus: **scalp mode** + **paper trade** untuk menguji engine.
@@ -758,6 +795,12 @@ tren berlanjut" juga terbantah (92 WIN vs 92 LOSS).
 - Unit test: `./gradlew :app:testDebugUnitTest` (JDK 17).
 - Scope scalping: `./gradlew :app:testDebugUnitTest --tests "agu.analys.engine.scalping.*"`.
 - Build: `./gradlew :app:assembleDebug` / `assembleRelease`.
+- MFE Spec v2 (15m, 41 pair):
+  `python3 tools/spot_mfe.py --data data/tokocrypto_spot --out data/hasil/mfe_m15_spot.json`.
+- Backtest Spec v2:
+  `python3 tools/spot_backtest.py --data data/tokocrypto_spot --timeframe 15m --pairs all --setups all --tp1-policy floor --out data/hasil/spot_backtest_v2_m15_prod`
+  (ganti `--timeframe 1h` untuk eksekusi 1h).
+- Uji mekanika harness: `python3 tools/test_spot_backtest.py`.
 - String `compile_applet` di dokumen lama **bukan** perintah repo — pakai `./gradlew` di atas.
 
 ## Secrets & environment
