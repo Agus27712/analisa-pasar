@@ -58,8 +58,8 @@ class NotificationFeeSourceTest {
             kode.contains("TradingFeeConfig()")
         )
         assertTrue(
-            "N3: service harus membaca biaya dari preferensi user",
-            kode.contains("tradingFees=appPrefs.tradingFees")
+            "N3 + FEE_TRUTH: service harus membaca biaya user untuk bursa+pair posisi",
+            kode.contains("tradingFees=appPrefs.feeConfigFor(sym,ex)")
         )
     }
 

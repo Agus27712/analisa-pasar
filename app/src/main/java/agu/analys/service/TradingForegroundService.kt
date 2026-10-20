@@ -212,10 +212,12 @@ class TradingForegroundService : Service() {
                                 // 5. Evaluasi Sinyal Jual.
                                 // N3: pakai biaya milik user (sama dengan jalur UI), bukan
                                 // default legacy `TradingFeeConfig()`.
+                                // FEE_TRUTH: posisi bisa milik bursa mana pun; jangan memakai
+                                // bursa aktif atau preset USDT global untuk pair IDR.
                                 val sellState = SellSignalEvaluator.evaluate(
                                     context = posContext,
                                     indicators = null,
-                                    tradingFees = appPrefs.tradingFees,
+                                    tradingFees = appPrefs.feeConfigFor(sym, ex),
                                     riskSnapshot = riskSnapshot
                                 )
 

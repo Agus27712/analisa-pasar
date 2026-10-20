@@ -168,14 +168,23 @@ Peringatan §4 poin 1 di atas **sudah diimplementasikan** di engine, bukan lagi 
 - Hasil saat ini baru menunjukkan “tidak rugi besar lagi”, belum terbukti menghasilkan edge bersih.
 - Lihat `workplan2.md` §9.4–9.5 untuk batasan lengkap.
 
-> ⚠️ **Tabel di atas berasal dari harness versi lama — sudah diperbarui 2026-10-19.**
-> Angka "186 trade / +0,0695 avg R" dihitung ketika `tools/scalp_replay.py` **belum memaksa**
-> SL ≥ `min_friction_multiple × F` (hanya `min_risk_pct` legacy 0,5%). Setelah lantai dipaksakan
-> sesuai §5, SL harus **5,81%** dan TP2 ≈ **14,5%**, sehingga hampir tidak ada trade yang selesai
-> dalam horizon 2–8 jam. Pengukuran ulang (BTCUSDT 60 hari + sweep 8 pair): **521 sinyal ready,
-> 0 trade selesai** → avg R pada konfigurasi default **tidak bisa dihitung**. Jalur resolusi
-> replay terbukti benar (46 trade selesai saat lantai diturunkan ke 1×, avg R −0,74R).
-> Rincian: `workplan2.md` §60.5 dan `data/hasil/replay_fee_truth_v11_2026-10-19.json`.
+> ⚠️ **Tabel di atas berasal dari harness versi lama — koreksi 2026-10-20.**
+> Angka "186 trade / +0,0695 avg R" **bukan** bukti bahwa harness lama belum memaksa
+> SL ≥ `min_friction_multiple × F`. Harness `28a2c70^` sudah memakai lantai 6× **dan**
+> `exit.mode = "full"`; `data/config/scalp_config_exit_full.json` serta
+> `data/hasil/u3_toko_usdt_after.json` membuktikannya. Perbedaan angka lama berasal dari
+> kombinasi exit full + dataset, bukan dari lantai yang hilang.
+>
+> Pada 2026-10-20 replay disamakan dengan app: S1 mewajibkan RVOL, S9 membaca
+> `max_change_24h_pct`, S3 membaca `max_risk_atr`, dan **CLASSIC juga memakai time-stop 90 bar**
+> (`ScalpExitParams.DEFAULT`). Hasil terukur BTCUSDT 60 hari (`data/tokocrypto_v4`):
+> default 6× → **350 ready, 350 selesai, 14 menang (4,0%), avg R −0,1639**; semuanya
+> `TIMEOUT` 90 bar. Exit full → **354 ready, 354 selesai (344 TIMEOUT, 10 TRAIL_SL),
+> 16 menang (4,52%), avg R −0,1645**. Angka "0 trade selesai / 521 sinyal" adalah hasil
+> harness **tanpa time-stop** dan tidak boleh dipakai sebagai parity app.
+> Baris **IDR maker** di tabel juga historis: app dan replay sekarang **taker-only**, jadi
+> angka itu tidak bisa direproduksi tanpa menghidupkan kembali jalur maker yang sudah dihapus.
+> Rincian: `workplan2.md` §60.5 dan `data/hasil/replay_parity_2026-10-20.json`.
 
 **Konsekuensi praktis:** pada tarif Tokocrypto, stop loss `0,5%–1%` secara matematis tidak bisa menghasilkan profit bersih apa pun strateginya. Unit risiko harus beberapa kali friksi, yaitu sekitar **5,8% untuk USDT** dan **3,7%–4,9% untuk IDR**. Ini berarti **scalping 1–5 menit bukan kendaraan yang layak di bursa ini**; horizon realistis adalah **1–8 jam**.
 

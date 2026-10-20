@@ -419,8 +419,9 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     ) { ctx, ind, fees, tick ->
         // FeeTruth: pair IDR harus dinilai dengan tarif IDR (jual taker 0,4322%), bukan preset
         // USDT global — kalau tidak, ambang "balik modal" kartu jual salah untuk pair IDR.
-        val feeForPair = tick?.symbol
-            ?.takeIf { it.isNotBlank() }
+        // Simbol milik posisi yang dievaluasi, bukan pair yang kebetulan terakhir dipilih.
+        val feeForPair = ctx.symbol
+            .takeIf { it.isNotBlank() }
             ?.let { prefs.feeConfigFor(it) }
             ?: fees
         agu.analys.engine.sell.SellSignalEvaluator.evaluate(

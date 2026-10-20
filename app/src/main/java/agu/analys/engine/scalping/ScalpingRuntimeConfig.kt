@@ -88,14 +88,21 @@ data class ScalpingRuntimeConfig(
         // Blok exit (P2) — dibaca `tools/scalp_replay.py` sebagai cfg["exit"]
         json.put("exit", exit.toJson())
 
-        // Include Fee Truth snapshot block for offline replay parity
+        // Include Fee Truth snapshot block for offline replay parity.
+        // Angka diambil dari FeeSchedule supaya ekspor tidak pernah menjadi definisi tarif kedua.
         val feeObj = JSONObject()
         feeObj.put("_comment", "Tokocrypto ALL-IN regular: USDT 0.4044% per sisi. IDR: buy taker 0.2222 / sell taker 0.4322")
         feeObj.put("quote", "USDT")
-        feeObj.put("buy_taker_pct", 0.4044)
-        feeObj.put("sell_taker_pct", 0.4044)
-        feeObj.put("buy_maker_pct", 0.4044)
-        feeObj.put("sell_maker_pct", 0.4044)
+        feeObj.put("buy_taker_pct", agu.analys.config.FeeSchedule.TOKOCRYPTO_USDT_BUY_TAKER * 100.0)
+        feeObj.put("sell_taker_pct", agu.analys.config.FeeSchedule.TOKOCRYPTO_USDT_SELL_TAKER * 100.0)
+        feeObj.put("buy_maker_pct", agu.analys.config.FeeSchedule.TOKOCRYPTO_USDT_BUY_TAKER * 100.0)
+        feeObj.put("sell_maker_pct", agu.analys.config.FeeSchedule.TOKOCRYPTO_USDT_SELL_TAKER * 100.0)
+        feeObj.put("idr_reference", JSONObject().apply {
+            put("buy_taker_pct", agu.analys.config.FeeSchedule.TOKOCRYPTO_IDR_BUY_TAKER * 100.0)
+            put("sell_taker_pct", agu.analys.config.FeeSchedule.TOKOCRYPTO_IDR_SELL_TAKER * 100.0)
+            put("buy_maker_pct", agu.analys.config.FeeSchedule.TOKOCRYPTO_IDR_BUY_MAKER * 100.0)
+            put("sell_maker_pct", agu.analys.config.FeeSchedule.TOKOCRYPTO_IDR_SELL_MAKER * 100.0)
+        })
         json.put("fee", feeObj)
 
         val replayObj = JSONObject()
