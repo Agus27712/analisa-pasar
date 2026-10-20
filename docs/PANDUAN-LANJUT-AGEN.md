@@ -34,6 +34,17 @@
 > Aturan baru sejak 2026-10-17: berkas temuan yang **seluruh isinya** sudah tutup dipindahkan ke
 > `docs/laporan_temuan_bugs_<topik>.md`, dan **tidak ada lagi laporan per batch**.
 > Sinkronisasi status terakhir: `docs/LAPORAN-sync-dokumen-temuan-2026-10-16.md` (`workplan2.md` §40).
+>
+> 📄 **Dokumen sinkronisasi Spec Scalping Spot v2 (2026-10-20):**
+> `docs/LAPORAN-sinkronisasi-spec-scalping-spot-2026-10-20.md` — pemetaan
+> **Spec v2** (`docs/exp/scalping_spot_strategy_spec.md`, M15/H1, G0–G8, taker-only,
+> lantai friksi 6×) ke codebase, hasil verifikasi, temuan kritis, dan rencana 8 fase.
+> **Status: dokumentasi; kode belum disentuh.**
+>
+> 📊 **Dataset ukur Spec v2 (2026-10-20):** `data/tokocrypto_spot/` — 41 pair (14 eligible
+> `PairEdgeGate`, 12 stabil, 15 momentum), 90 hari, interval 15m dan 1h, 441.880 bar, 0 celah.
+> Rincian kriteria dan angka di laporan §10. Tool: `tools/fetch_tokocrypto_klines.py`
+> (`--select mixed`, `--days`, `--resume` membekukan daftar pair). Backtest belum dijalankan.
 
 ---
 
