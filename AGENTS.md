@@ -780,6 +780,13 @@ Fase 1 Kotlin diblokir sampai keputusan owner.
 - **Uji mekanika sebelum percaya angka.** `tools/test_spot_backtest.py` mengunci SL-before-TP,
   TP1 60%, TP2 setelah TP1, stop tidak turun, time-stop, impas `FeeSchedule`, HTF tanpa lookahead,
   dan TP1 `floor` vs `literal`. Kalau mengubah exit, tambahkan uji di sana.
+- **Spec v3 (2026-10-20) memperbaiki spec, bukan membuktikan edge.** TP1 kini eksplisit lewat
+  `tp1Floor = entry × (1 + (F + minNetRrTp1 × (riskPct + F))/100)`; G3 dicabut (redundan dengan G2);
+  G1 memakai `PaperStopResolver`; fee/P&L/break-even lewat `FeeSchedule`. Fase 1 Kotlin tetap diblokir
+  sampai gerbang bukti E1–E3 (`docs/exp/scalping_spot_strategy_spec.md` §11.2) lolos: ≥ 100 trade
+  out-of-sample, mengalahkan entry acak (persentil ke-99), dan universe walk-forward.
+- **Jangan implementasi `SWEEP_RECLAIM` apa adanya.** Konsisten rugi di semua konfigurasi; rancang
+  ulang pemicu dan invalidasi dulu.
 
 ## Arah produk (ringkas)
 

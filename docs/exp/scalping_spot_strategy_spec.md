@@ -1,6 +1,7 @@
-# Spec v2: Mesin Sinyal Scalping Spot (Long-Only), Tokocrypto
+# Spec v3: Mesin Sinyal Scalping Spot (Long-Only), Tokocrypto
 
-> **Versi 2 (2026-10-20).** Menggantikan v1. Disesuaikan dengan konteks Tokocrypto, laporan sinkronisasi `LAPORAN-sinkronisasi-spec-scalping-spot-2026-10-20.md`, dan aturan `AGENTS.md`.
+> **Versi 3 (2026-10-20).** Menggantikan v2. Disesuaikan dengan konteks Tokocrypto, `docs/LAPORAN-sinkronisasi-spec-scalping-spot-2026-10-20.md`, dan aturan `AGENTS.md`.
+> **Yang diperbaiki di v3:** kontradiksi TP1/G4 (§6.2), G3 dicabut, 6 koreksi API dari laporan sinkronisasi, time-stop dalam jam, serta tambahan benchmark entry acak dan gerbang bukti (§11). Hasil terukur v2 ada di `docs/exp/exp_spot_backtest_41pair.md`: belum ada edge.
 > Untuk agen koding. Semua aturan deterministik dan bisa langsung diterjemahkan ke kode. Angka default adalah **hipotesis awal untuk diukur**, bukan klaim edge.
 > Jika ada yang ambigu: pilih opsi **paling konservatif**, beri komentar `TODO(spec)`, jangan mengarang parameter baru. Dokumen, komentar kode, dan pesan commit memakai Bahasa Indonesia.
 
@@ -11,8 +12,9 @@
 - Spot, **long-only**, tanpa leverage, **Tokocrypto saja** (pair USDT dan IDR). Indodax tidak disentuh. Dilarang request ke `binance.com`/`stream.binance.com` dari app.
 - Mode: `BACKTEST` dan `PAPER`. **LIVE tidak dibangun** (uang riil masih diblokir sampai paper dan fee truth stabil).
 - **Taker-only.** Semua fill (entry, TP, SL) dianggap taker + slippage. Jalur maker/limit tetap ada di model sebagai `TODO(spec)`, tidak diaktifkan.
-- **Satu rumus fee dan P&L:** semua perhitungan fee, P&L, break-even, dan R memakai `FeeSchedule`/`FeeCalculator` yang sudah ada. Dilarang membuat rumus kedua.
-- **Lantai friksi** (`ScalpingRiskEngine`, default 6,0×) dan **`PairEdgeGate`** tetap berlaku. Jangan dilemahkan hanya demi menambah sinyal (di bawah 5× butuh bukti replay).
+- **Satu rumus fee dan P&L:** semua perhitungan fee, P&L, break-even, dan R memakai `FeeSchedule` yang sudah ada. Dilarang membuat rumus kedua.
+- **Lantai friksi** (`PaperStopResolver`, default 6,0×) dan **`PairEdgeGate`** tetap berlaku. Jangan dilemahkan hanya demi menambah sinyal (di bawah 5× butuh bukti replay; varian tanpa lantai terbukti lebih buruk).
+- **Status bukti (2026-10-20): belum ada edge.** Fase 1 Kotlin diblokir sampai gerbang bukti E1–E3 di §11.2 lolos atau owner memutuskan lain secara tertulis.
 - Engine baru di balik flag `LEGACY`/`SPOT_SPEC`, default `LEGACY`. Satu simbol hanya punya satu sinyal aktif, satu kartu status, satu mesin exit. Jangan tampilkan dua engine bersamaan.
 - Komponen: indikator, regime classifier, 5 setup (entry + exit), gerbang sinyal, position sizing, position manager, risk manager, backtester, jurnal.
 - Setup: `PULLBACK_VWAP`, `BREAKOUT_RETEST`, `SWEEP_RECLAIM`, `RANGE_BOUNCE`, `SQUEEZE_BREAKOUT`.
@@ -107,6 +109,8 @@ data class SpotContext(
 )
 ```
 
+`SymbolRules` dan `SpotHtfSnapshot` **belum ada** di codebase; buat di domain. `SymbolRules` diisi dari `TokocryptoSymbolInfo`: `tickSize` ← `priceFilter.tickSize`, `lotStep` ← `lotSizeFilter.stepSize`, `minQty` ← `lotSizeFilter.minQty`, `minNotional` ← `minNotionalFilter.minNotional`.
+
 ---
 
 ## 3. Konfigurasi (`SpotConfig`, jangan hardcode)
@@ -123,14 +127,13 @@ Semua threshold ada di satu kelas config. Jika dicerminkan ke JSON offline, ubah
 | `maxPositionPctOfEquity` | 25 | batas nilai posisi |
 | `maxConcurrentPositions` | 2 | |
 | `maxDailyLossPct` | 2.0 | |
-| `maxConsecutiveLosses` | 3 | lalu pause 60 menit |
-| `cooldownAfterLossMin` | 15 | per simbol |
+| `maxConsecutiveLosses` | 3 | lalu pause 60 menit (dibulatkan ke kelipatan candle) |
+| `cooldownAfterLossMin` | 15 | menit, per simbol; dibulatkan ke atas ke kelipatan candle eksekusi (minimal 1 candle) |
 | `tp1Fraction` | 0.6 | **parameter**, bukan konstanta; uji sensitivitas 0.5 vs 0.6 |
-| `frictionFloorMultiple` | 6.0 | dari `ScalpingRiskEngine`, tidak diubah di sini |
-| `minNetRrTp1` | 1.0 | R:R bersih ke TP1 |
+| `frictionFloorMultiple` | 6.0 | dari `PaperStopResolver.frictionFloorPct`, tidak diubah di sini |
+| `minNetRrTp1` | 1.0 | R:R bersih ke TP1; menentukan `tp1Floor` (§6.2) |
 | `minNetRrFinal` | 1.5 | R:R bersih ke target akhir |
 | `minRewardOverFriction` | 3.0 | reward TP1 % ≥ N × F |
-| `minAtrPctOverFriction` | 1.5 | ATR% ≥ N × F |
 | `minSlAtr` / `maxSlAtr` | 0.5 / 5.0 | jarak SL efektif dalam ATR; `maxSlAtr` dilonggarkan dari 3.0 karena lantai friksi (hipotesis, ukur lewat funnel) |
 | `maxSpreadPct` | 0.10 | skip jika spread lebih lebar |
 | `btcFilterMinReturnPct` | -1.5 | return BTC 4 candle HTF terakhir (altcoin saja) |
@@ -150,15 +153,16 @@ Fee Tokocrypto **all-in** (fee bursa + pajak + biaya lain) jauh di atas fee nomi
 F = buyFeePct + sellFeePct + 2 × slippagePct      // all-in, taker, dari FeeSchedule (satuan %)
 ```
 
-Rumus ini sama dengan basis lantai friksi di `ScalpingRiskEngine`. Contoh pada laporan sinkronisasi: friksi USDT `F = 0,9688%`; semua contoh di spec ini memakai angka itu hanya sebagai ilustrasi.
+Rumus ini sama dengan `PairEdgeGate.frictionRoundTripPct` dan basis lantai friksi. Nilai terukur dari `FeeSchedule` (laporan sinkronisasi §5.1): USDT beli 0,4044% + jual 0,4044% + 2 × 0,08% = **F = 0,9688%**; IDR **0,8144%**. Semua contoh di spec ini memakai F USDT hanya sebagai ilustrasi; kode wajib membaca dari `FeeSchedule`.
 
-> Rujukan eksternal, **belum diverifikasi** (jangan dipakai di kode): perkiraan fee all-in taker sekitar 0,38% per sisi untuk pair USDT dan sekitar 0,32–0,33% untuk pair IDR. Gunakan hanya untuk sanity check terhadap `FeeSchedule`.
+> F aditif (0,9688%) dipakai gerbang dan lantai. Impas net multiplikatif `FeeSchedule` = 0,9735%. Keduanya sengaja tidak dicampur (aturan FEE_TRUTH v1.1 di `AGENTS.md`). Untuk break-even, P&L, dan qty pakai `FeeSchedule`, bukan F aditif.
 
 ### 3.2 Timeframe
 
 - Default eksekusi **M15** dengan HTF **H1**. Keduanya sudah masuk daftar prefetch `MtfCacheManager`, jadi tidak perlu fetch tambahan.
 - Eksekusi **H1** dengan HTF **H4** untuk pair yang lebih lambat.
 - **M5** hanya on-demand untuk simbol Tokocrypto yang sedang dibuka, dan hanya jika pair lolos `PairEdgeGate` dan gerbang ATR (§6). Jangan menambah prefetch M5 ke seluruh watchlist. Jika M5 tidak tersedia, kembalikan "tidak ada sinyal"; **jangan fallback ke M1**.
+- Data riset memakai candle native bursa 15m/1h (`data/tokocrypto_spot`), bukan agregasi M1, karena itu yang dibaca app.
 - Alasan: friksi pulang-pergi ≈ 1% membuat target sub-2% tidak layak. Contoh dengan F = 0,9688%: TP 2% / SL 1% → win rate impas ≈ 66%; TP 4% / SL 2% → ≈ 50%. Target harus beberapa persen, jadi timeframe harus cukup besar.
 
 ---
@@ -230,10 +234,10 @@ Sinyal dari setup harus lolos berurutan. Setiap penolakan **dicatat sebagai alas
 | # | Gerbang | Aturan | Kode alasan |
 |---|---|---|---|
 | G0 | Edge pair | Lolos `PairEdgeGate` (`data/config/pair_gate.json`). Pakai yang sudah ada, jangan tulis ulang | `PAIR_EDGE` |
-| G1 | Lantai friksi | Panggil lantai yang sudah ada (`ScalpingRiskEngine`) pada `(entry, stopLoss)`. Hasilnya SL efektif (≥ `frictionFloorMultiple × F`) atau penolakan. **Jangan menulis ulang rumusnya** | `FRICTION_FLOOR` |
+| G1 | Lantai friksi | `floorPct = PaperStopResolver.frictionFloorPct(buyFee, sellFee, slippage, frictionFloorMultiple)`, lalu `slEff = PaperStopResolver.resolve(stopLoss, entry, floorPct)`. SL efektif ≥ lantai, atau tolak. **Jangan menulis ulang rumusnya** | `FRICTION_FLOOR` |
 | G2 | Jarak SL | `minSlAtr ≤ (entry − slEff)/atr ≤ maxSlAtr` | `SL_ATR_RANGE` |
-| G3 | Volatilitas | `atrPct ≥ max(minAtrPctOverFriction × F, frictionFloorMultiple × F / maxSlAtr)` | `ATR_TOO_LOW` |
-| G4 | R:R bersih TP1 | `netRr1 ≥ minNetRrTp1` | `NET_RR_TP1` |
+| G3 | ~~Volatilitas~~ | **Dicabut di v3.** Syarat `atrPct ≥ frictionFloorMultiple × F / maxSlAtr` sudah tercakup G2 (SL efektif ≥ lantai dan ≤ `maxSlAtr` × ATR), dan konstanta `1,5F` tidak punya dasar. Nomor G3 dibiarkan agar kode alasan di laporan lama tetap terbaca; harness: `--min-atr-over-friction 0` | `ATR_TOO_LOW` |
+| G4 | R:R bersih TP1 | `reward1Pct ≥ tp1FloorPct` (setara `netRr1 ≥ minNetRrTp1`, lihat §6.2) | `NET_RR_TP1` |
 | G5 | R:R bersih akhir | `netRrFinal ≥ minNetRrFinal` | `NET_RR_FINAL` |
 | G6 | Reward vs friksi | `reward1Pct ≥ minRewardOverFriction × F` | `REWARD_OVER_FRICTION` |
 | G7 | Struktur harga | `slEff < entry < tp1 (< tp2)` | `INVALID_LEVELS` |
@@ -250,7 +254,20 @@ netRrFinal     = (rewardFinalPct − F) / (riskPct + F)
 atrPct         = atr / entry × 100
 ```
 
-### 6.2 Catatan penting kombinasi gerbang
+### 6.2 Definisi TP1 (koreksi v3)
+
+TP1 `entry + 1,0R` bertentangan dengan G4: `netRr1 = (R − F)/(R + F) < 1` untuk setiap F > 0. Terbukti di backtest: mode `literal` menghasilkan 0 trade untuk setup formula. Aturan v3:
+
+```
+tp1FloorPct = F + minNetRrTp1 × (riskPct + F)     // untuk minNetRrTp1 = 1,0 hasilnya riskPct + 2F
+tp1Floor    = entry × (1 + tp1FloorPct / 100)
+```
+
+- **TP1 formula** (`BREAKOUT_RETEST`, `SQUEEZE_BREAKOUT`): `tp1 = tp1Floor`. Dengan konstruksi ini `netRr1 = minNetRrTp1`.
+- **TP1 struktural** (`PULLBACK_VWAP`, `SWEEP_RECLAIM`, `RANGE_BOUNCE`): level struktural **tidak digeser**. Jika `tp1 < tp1Floor` → tolak (`NET_RR_TP1`). Jangan meregangkan target struktural hanya agar lolos.
+- Contoh F = 0,9688%, SL efektif 5,8128%: `tp1FloorPct = 7,7504%` (≈ 1,333R).
+
+### 6.3 Catatan penting kombinasi gerbang
 
 Dengan `F = 0,9688%`: lantai 6× → SL ≥ ±5,81%. Agar `netRr1 = 1`, TP1 harus ≥ ±7,75% (8F). Contoh:
 
@@ -263,13 +280,13 @@ Artinya banyak setup akan hilang. **Ini bukan alasan melemahkan lantai.** Urutan
 2. Naikkan timeframe eksekusi (M15 → H1), karena ATR% dan jarak target lebih besar.
 3. Lantai friksi dan `PairEdgeGate` hanya boleh diubah dengan bukti replay baru, lewat keputusan owner.
 
-### 6.3 Position sizing (`SpotPositionSizer`)
+### 6.4 Position sizing (`SpotPositionSizer`)
 
 Pakai `BigDecimal` untuk pembulatan ke aturan bursa.
 
 ```
 riskAmount  = equity × riskPerTradePct / 100
-perUnitRisk = (entry − slEff) + entry × F / 100
+perUnitRisk = (entry − slEff) + biayaNetAktual     // biaya round-trip dari FeeSchedule (costBasisNet/netSellValue). Pendekatan aditif entry × F / 100 meleset ±0,4%; hanya untuk estimasi
 qtyRaw      = riskAmount / perUnitRisk
 qty         = min(qtyRaw, equity × maxPositionPctOfEquity/100 / entry, freeBalance / entry)
 qty         = floorToStep(qty, lotStep)
@@ -286,8 +303,8 @@ State per trade: `stopCurrent`, `tp1`, `tp2`, `tp1Hit`, `trailMode`, `candlesSin
 
 ```
 R                = entryFill − stopInitial          // stopInitial = SL efektif (setelah lantai friksi)
-breakEvenPrice   = harga di mana net P&L = 0 menurut FeeCalculator (fee beli + fee jual + slippage). Jangan menurunkan rumus sendiri
-timeStopCandles  = nilai dari setup (minimal 3)
+breakEvenPrice   = FeeSchedule.breakevenPrice (fee beli + fee jual + slippage). Jangan menurunkan rumus sendiri
+timeStopCandles  = max(3, ceil(timeStopHours × 60 / tfMinutes))     // timeStopHours dari setup
 ```
 
 Semua fill **taker + slippage**. Tidak ada asumsi limit/maker.
@@ -316,7 +333,19 @@ Semua fill **taker + slippage**. Tidak ada asumsi limit/maker.
 
 ## 8. Setup (entry + exit digabung)
 
-Semua kondisi memakai candle `i` = candle terakhir yang close. `ATR` = `ind.atr[i]` kecuali disebut lain. `tick` = `rules.tickSize`. `timeStopCandles` dihitung dalam candle eksekusi (default M15); semua nilai adalah titik awal untuk diukur.
+Semua kondisi memakai candle `i` = candle terakhir yang close. `ATR` = `ind.atr[i]` kecuali disebut lain. `tick` = `rules.tickSize`. `timeStopHours` dikonversi ke candle sesuai §7, jadi horizon waktunya sama di M15 dan H1. Lookback lain tetap dalam candle, sehingga perbandingan M15 vs H1 bukan perbandingan murni. Semua nilai adalah titik awal untuk diukur.
+
+### 8.0 Status bukti (terukur 2026-10-20, harness Python, 41 pair, 90 hari)
+
+| Setup | Hasil | Status |
+|---|---|---|
+| PULLBACK_VWAP | 0 trade lolos gate produksi; 2 trade riset, keduanya rugi | tidak ada bukti |
+| BREAKOUT_RETEST | −0,28R pada 14–22 trade (15m); +0,19 sampai +0,21R pada n=6 (1h) | tidak bisa disimpulkan |
+| SWEEP_RECLAIM | rugi di semua konfigurasi (6–67 trade, −0,17 sampai −0,40R); exit terbanyak `SETUP_INVALIDATION` | **jangan diimplementasi sebelum pemicu dan invalidasi dirancang ulang** |
+| RANGE_BOUNCE | hampir tidak ada sinyal (2 di 15m, 0 di 1h) | tidak ada bukti |
+| SQUEEZE_BREAKOUT | n=1–7, tanda berubah-ubah | tidak bisa disimpulkan |
+
+Rincian: `docs/exp/exp_spot_backtest_41pair.md`.
 
 ### 8.1 PULLBACK_VWAP (pullback ke VWAP di tren naik)
 
@@ -335,7 +364,7 @@ Semua kondisi memakai candle `i` = candle terakhir yang close. `ATR` = `ind.atr[
 | `slBufferAtr` | 0.3 |
 | `entryValidCandles` | 2 |
 | `trailMode` | `EMA9` |
-| `timeStopCandles` | 8 |
+| `timeStopHours` | 2 |
 
 **Deteksi:**
 
@@ -350,7 +379,7 @@ Semua kondisi memakai candle `i` = candle terakhir yang close. `ATR` = `ind.atr[
 
 **SL struktural:** `pullbackLow − 0.3×ATR` (lalu lewat G1).
 
-**TP:** `tp1 = impulseHigh` (tolak jika `< entry + 1.0R`). `tp2 = impulseHigh + 0.5 × impulseSize`. Sisa di-trail `EMA9`.
+**TP:** `tp1 = impulseHigh` (tolak jika `< tp1Floor`). `tp2 = impulseHigh + 0.5 × impulseSize`. Sisa di-trail `EMA9`.
 
 **Exit khusus (`invalidated`):** `close < vwap − 0.2×ATR && volRatio ≥ 1.0` (berlaku sebelum maupun sesudah TP1).
 
@@ -380,7 +409,7 @@ Semua kondisi memakai candle `i` = candle terakhir yang close. `ATR` = `ind.atr[
 | `slBufferAtr` | 0.5 |
 | `entryValidCandles` | 2 |
 | `trailMode` | `HIGHER_LOW` |
-| `timeStopCandles` | 12 |
+| `timeStopHours` | 3 |
 
 **Deteksi:**
 
@@ -393,13 +422,15 @@ Semua kondisi memakai candle `i` = candle terakhir yang close. `ATR` = `ind.atr[
 
 **SL struktural:** `min(retestLow, L) − 0.5×ATR`.
 
-**TP:** `tp1 = entry + 1.0R`. `tp2 = L + rangeHeight` (measured move); jika `tp2 < entry + 1.5R` → `tp2 = null` (andalkan trailing).
+**TP:** `tp1 = tp1Floor` (TP1 formula, §6.2). `tp2 = L + rangeHeight` (measured move); jika `tp2 < entry + 1.5R` → `tp2 = null` (andalkan trailing).
 
 **Exit khusus (`invalidated`):** `close < L − 0.1×ATR` (breakout gagal). Tetap berlaku setelah `tp1Hit`.
 
 ---
 
 ### 8.3 SWEEP_RECLAIM (liquidity sweep lalu reclaim)
+
+> Status bukti: lihat §8.0. Rancang ulang pemicu dan aturan invalidasi sebelum implementasi.
 
 **Indikator wajib:** level likuiditas (swing low, equal lows, PDL, Asia low), volume + volMA, ATR. **Opsional untuk skor:** RSI (divergence), VWAP.
 
@@ -420,7 +451,7 @@ Semua kondisi memakai candle `i` = candle terakhir yang close. `ATR` = `ind.atr[
 | `minScore` | 3 |
 | `failedReclaimCandles` | 3 |
 | `trailMode` | `CHANDELIER` |
-| `timeStopCandles` | 6 |
+| `timeStopHours` | 1.5 |
 
 **Deteksi:**
 
@@ -439,7 +470,7 @@ Semua kondisi memakai candle `i` = candle terakhir yang close. `ATR` = `ind.atr[
 
 **SL struktural:** `sweepLow − 0.2×ATR`, dengan `sweepLow` = low terendah `j..k`.
 
-**TP:** kandidat target di atas entry = {VWAP, midRange, rangeHigh, equal highs terdekat}, dengan `rangeHigh/rangeLow` dari 60 candle terakhir. `tp1` = kandidat terdekat yang ≥ `entry + 1.0R`; jika tidak ada → tolak. `tp2` = kandidat berikutnya di atas `tp1` (atau null). Sisa di-trail `CHANDELIER`.
+**TP:** kandidat target di atas entry = {VWAP, midRange, rangeHigh, equal highs terdekat}, dengan `rangeHigh/rangeLow` dari 60 candle terakhir. `tp1` = kandidat terdekat yang ≥ `tp1Floor`; jika tidak ada → tolak. `tp2` = kandidat berikutnya di atas `tp1` (atau null). Sisa di-trail `CHANDELIER`.
 
 **Exit khusus (`invalidated`):** dalam `failedReclaimCandles` candle pertama setelah entry: `close < L − 0.05×ATR` → keluar (reclaim gagal).
 
@@ -462,7 +493,7 @@ Semua kondisi memakai candle `i` = candle terakhir yang close. `ATR` = `ind.atr[
 | `slBufferAtr` | 0.7 |
 | `entryValidCandles` | 2 |
 | `trailMode` | `NONE` |
-| `timeStopCandles` | 12 |
+| `timeStopHours` | 3 |
 
 **Deteksi:**
 
@@ -476,7 +507,7 @@ Semua kondisi memakai candle `i` = candle terakhir yang close. `ATR` = `ind.atr[
 
 **SL struktural:** `min(rangeLow − 0.7×ATR, low[i] − 0.2×ATR)`.
 
-**TP:** `tp1 = midRange` (tolak jika `< entry + 1.0R`). `tp2 = rangeHigh − 0.15×ATR`. Tanpa trailing; setelah TP1, SL ke breakeven.
+**TP:** `tp1 = midRange` (tolak jika `< tp1Floor`). `tp2 = rangeHigh − 0.15×ATR`. Tanpa trailing; setelah TP1, SL ke breakeven.
 
 **Exit khusus (`invalidated`):** `close < rangeLow − 0.2×ATR` (range pecah) atau `adx ≥ 25 && −DI > +DI`.
 
@@ -497,7 +528,7 @@ Semua kondisi memakai candle `i` = candle terakhir yang close. `ATR` = `ind.atr[
 | `marketEntryMaxAtr` | 0.6 |
 | `slMode` | `BOX_MID` (alt `BOX_LOW`) |
 | `trailMode` | `EMA9` |
-| `timeStopCandles` | 8 |
+| `timeStopHours` | 2 |
 
 **Deteksi:**
 
@@ -510,7 +541,7 @@ Semua kondisi memakai candle `i` = candle terakhir yang close. `ATR` = `ind.atr[
 
 **SL struktural:** `BOX_MID` = `(compHigh + compLow)/2 − 0.2×ATR`; `BOX_LOW` = `compLow − 0.1×ATR`.
 
-**TP:** `tp1 = entry + 1.0R`. `tp2 = compHigh + 1.5 × boxHeight` (null jika `< entry + 1.5R`). Sisa di-trail `EMA9`.
+**TP:** `tp1 = tp1Floor` (TP1 formula, §6.2). `tp2 = compHigh + 1.5 × boxHeight` (null jika `< entry + 1.5R`). Sisa di-trail `EMA9`.
 
 **Exit khusus (`invalidated`):** dalam 3 candle pertama setelah entry: `close < compHigh − 0.1×ATR` (false breakout).
 
@@ -550,20 +581,42 @@ onClosedCandle(symbol, candle):
 - TP dan SL: fill sebagai taker, `× (1 − slippage)`, sesuai §7.
 - Limit buy (`LIMIT_AT_LEVEL`): `TODO(spec)`, nonaktif.
 - Setelah fill di candle `c`, cek SL di candle yang sama (asumsi terburuk). TP tidak dievaluasi di candle entry.
-- Fee dan P&L dihitung lewat `FeeCalculator`.
+- Fee dan P&L dihitung lewat `FeeSchedule` (`netProfitPctForDirected`, `costBasisNet`, `netSellValue`, `breakevenPrice`).
 
 ---
 
 ## 11. Backtester (`SpotBacktester`, Kotlin)
 
-- **Data:** CSV 1m Tokocrypto di `data/tokocrypto` dan `data/tokocrypto_v2` (`<PAIR>_1m.csv`, candle CLOSED), **diagregasi** ke timeframe eksekusi dan HTF. Aturan agregasi: bucket berdasarkan `openTime` dibulatkan ke timeframe (UTC); `open` = pertama, `high` = maks, `low` = min, `close` = terakhir, `volume` = jumlah; buang bucket terakhir yang belum lengkap dan bucket yang kehilangan > 10% menit. Pair USDT dan IDR saja. Unduh ulang data hanya dari jaringan Indonesia (`tools/fetch_tokocrypto_klines.py`).
-- Wajib: fee/slippage dari `FeeSchedule`, aturan fill §10, urutan SL-sebelum-TP, position sizing §6.3, risk manager §9, gerbang §6.
+- **Data:** candle **native bursa** 15m dan 1h di `data/tokocrypto_spot` (41 pair USDT, 90 hari; kolom `open_time_ms,open,high,low,close,volume`), bukan agregasi M1, karena itu yang dibaca app. HTF 15m memakai 1h; HTF 1h memakai 4h hasil agregasi 1h (bucket UTC: `open` pertama, `high` maks, `low` min, `close` terakhir, `volume` jumlah; buang bucket belum lengkap). Unduh ulang hanya dari jaringan Indonesia (`tools/fetch_tokocrypto_klines.py`). Gerbang E4 butuh rentang lebih panjang dari 90 hari.
+- Wajib: fee/slippage dari `FeeSchedule`, aturan fill §10, urutan SL-sebelum-TP, position sizing §6.4, risk manager §9, gerbang §6.
 - **Funnel counter** per setup dan simbol: jumlah kandidat di tiap tahap (`SETUP_CONDITION`, `REGIME`, `PAIR_EDGE`, `FRICTION_FLOOR`, `SL_ATR_RANGE`, `ATR_TOO_LOW`, `NET_RR_TP1`, `NET_RR_FINAL`, `REWARD_OVER_FRICTION`, `SPREAD`, `RISK_MANAGER`) sampai trade. Tujuannya melihat gerbang mana yang membunuh sinyal.
-- **Metrik** (per setup, simbol, regime): jumlah trade, jumlah trade tidak tuntas, win rate, rata-rata R menang/kalah, **expectancy (R bersih)**, profit factor, max drawdown, rata-rata durasi hold, total fee, TP1 hit rate, distribusi `SpotExitReason`, MFE/MAE dalam R.
+- **Metrik** (per setup, simbol, regime): jumlah trade, jumlah trade tidak tuntas, **R kotor (sebelum friksi) dan friksi per R**, win rate, rata-rata R menang/kalah, **expectancy (R bersih)**, profit factor, max drawdown, rata-rata durasi hold, total fee, TP1 hit rate, distribusi `SpotExitReason`, MFE/MAE dalam R.
 - **Anti-overfit:** split 70/30 atau walk-forward; sensitivitas parameter ±20%; sensitivitas `tp1Fraction` 0.5 vs 0.6; setup dianggap valid hanya jika ≥ 100 trade dan expectancy bersih > 0 di out-of-sample. Jangan menyimpulkan edge dari satu window.
 - **Eksperimen offline:** boleh membandingkan dengan dan tanpa lantai friksi, **hanya** untuk riset dan dilaporkan; produksi tetap memakai lantai.
-- Backtester tinggal di Kotlin. Jika butuh harness Python, wajib ada uji paritas terhadap fixture Kotlin.
+- `tools/spot_backtest.py` (Python) adalah alat riset. Mesin produksi tetap Kotlin dengan uji paritas terhadap fixture harness.
 - Ekspor hasil ke CSV. Setiap fase menulis bagian "Hasil" di laporan: perintah, dataset, rentang tanggal, metrik, angka negatif, batas eksperimen.
+
+### 11.1 Benchmark entry acak (null baseline)
+
+Tujuan: memisahkan edge nyata dari keberuntungan dan dari efek friksi. Tanpa ini, avg R positif atau negatif tidak bisa ditafsirkan. Pada v2 terukur R kotor ≈ +0,04R dengan friksi ≈ 0,24R per trade (varian terbaik), yaitu hampir tidak ada edge kotor.
+
+- Untuk tiap setup dan pair, ambil `N` = jumlah sinyal setup itu yang lolos G0–G2 pada jendela uji.
+- Bangun `K = 200` run acak. Tiap run memilih `N` bar entry acak (seragam) dari bar yang regime-nya diizinkan setup itu, dengan entry `MARKET_NEXT_OPEN`.
+- Jarak SL tiap trade acak diambil dari distribusi `slEff/ATR` sinyal asli setup itu (setelah lantai friksi). TP1 = `tp1Floor`. Exit memakai mesin §7 tanpa `SETUP_INVALIDATION`. Fee, slippage, dan fill sama persis.
+- Statistik per run: R kotor rata-rata dan R bersih rata-rata. Seed tetap supaya deterministik.
+- Setup **mengalahkan acak** jika R kotor setup ≥ persentil ke-99 distribusi acak pada jendela out-of-sample (5 setup diuji, jadi ambang 99, bukan 95).
+- Laporkan selisih (R kotor setup − rerata acak), bukan hanya lulus atau gagal.
+
+### 11.2 Gerbang bukti sebelum Kotlin
+
+| Gerbang | Syarat |
+|---|---|
+| E1 Sampel | ≥ 100 trade out-of-sample per setup yang diklaim |
+| E2 Edge relatif | lolos §11.1 dan R bersih out-of-sample > 0 |
+| E3 Universe walk-forward | G0 dan pemilihan pair dihitung dari jendela **sebelum** jendela uji, bukan dari jendela yang sama |
+| E4 Ketahanan | tanda hasil tidak berbalik pada parameter ±20% dan pada ≥ 2 jendela waktu yang tidak tumpang tindih (butuh data > 90 hari) |
+
+Selama E1–E3 belum lolos, Fase 1 Kotlin tetap diblokir (sesuai `AGENTS.md`). Hanya setup yang lolos yang boleh diimplementasikan. Hasil harness Python adalah riset, bukan hasil produksi.
 
 ---
 
@@ -587,6 +640,7 @@ app/src/main/java/agu/analys/engine/spot/
 - Indikator untuk backtest dihitung sekali sebagai array lalu diakses `[i]`; pastikan tidak ada akses `[i+n]`.
 - Pemetaan ke UI hanya lewat adapter pada fase integrasi. Jangan ubah `when` dan tes engine lama.
 - Cache, SharedPreferences, dan Room tetap dipartisi per exchange.
+- `SpotConfig` murni di kode; ekspor JSON hanya untuk offline. Jangan membuat config cermin kedua tanpa kunci uji (aturan satu config cermin `data/config/scalp_config.json`).
 
 ---
 
@@ -607,12 +661,14 @@ Jalankan tes dengan scope kelas yang diubah: `./gradlew :app:testDebugUnitTest -
 3. Tiap setup punya fixture positif (sinyal dengan entry/SL/TP yang diharapkan) dan fixture negatif (volume koreksi besar, close di bawah level, ADX tinggi, dsb.) yang menghasilkan `null`.
 4. Invarian: `slEff < entry < tp1 (< tp2)`; jumlah qty exit = `qtyTotal`; `stopCurrent` tidak pernah turun.
 5. SL dan TP kena di candle yang sama → `STOP_LOSS`.
-6. Fee: hasil P&L dan break-even sama persis dengan `FeeCalculator`. Tidak ada rumus fee kedua. Contoh gerbang memakai `F` dari `FeeSchedule`.
+6. Fee: hasil P&L dan break-even sama persis dengan `FeeSchedule`. Tidak ada rumus fee kedua. Contoh gerbang memakai `F` dari `FeeSchedule`.
 7. Position sizing: risiko aktual (termasuk fee) ≤ `riskAmount`, qty dibulatkan ke `lotStep`, nilai ≥ `minNotional`.
 8. Risk manager memblokir entry setelah batas rugi harian dan setelah 3 loss beruntun.
 9. Backtest deterministik: data sama → hasil identik.
 10. **Kontrol negatif:** untuk tiap gerbang (§6) dan tiap perbaikan bug, matikan gerbang/perbaikan itu dan pastikan tes yang relevan **gagal**.
 11. Setiap simbol hanya punya satu sinyal aktif dan satu mesin exit.
+12. TP1 formula: `netRr1 == minNetRrTp1`; TP1 literal `entry + 1,0R` ditolak G4 (kontrol negatif).
+13. Benchmark acak (§11.1) deterministik dengan seed tetap.
 
 ---
 
@@ -621,6 +677,7 @@ Jalankan tes dengan scope kelas yang diubah: `./gradlew :app:testDebugUnitTest -
 | Fase | Pekerjaan | Gerbang lolos |
 |---|---|---|
 | 0 | Dokumentasi, commit spec, baseline test | review owner |
+| 0b | Gerbang bukti E1–E4 di harness Python (§11.2) | **wajib lolos sebelum Fase 1**, atau keputusan owner tertulis |
 | 1 | Model, config, indikator, helper | tes indikator dan no-lookahead hijau |
 | 2 | Regime classifier, `SpotFeeAdapter`, gerbang §6, `SpotPositionSizer` | fee truth dan sizing lolos; ukur distribusi ATR% pair aktif |
 | 3 | `SpotPositionManager`, aturan fill, backtester minimal + funnel | SL-before-TP, next-candle, deterministik |
@@ -638,12 +695,21 @@ Kerjakan satu fase per sesi, pastikan tes fase sebelumnya hijau sebelum lanjut.
 
 ## 16. Riwayat dan daftar TODO
 
+**Perubahan v2 → v3:**
+
+- TP1 didefinisikan eksplisit lewat `tp1Floor` (§6.2); kontradiksi TP1/G4 dihapus.
+- G3 dicabut (redundan dengan G2); G1 memanggil `PaperStopResolver`; fee, P&L, dan break-even lewat `FeeSchedule`; `perUnitRisk` memakai biaya net aktual.
+- Time-stop dalam jam (`timeStopHours`); cooldown dan pause dalam menit.
+- Data riset memakai candle native 15m/1h; tambah benchmark entry acak (§11.1), gerbang bukti E1–E4 (§11.2), dan status bukti per setup (§8.0).
+- Koreksi laporan sinkronisasi: `SymbolRules` dan `SpotHtfSnapshot` dibuat di domain; aturan satu config cermin.
+- Perkiraan fee eksternal (±0,38%) dihapus; diganti angka terukur `FeeSchedule`.
+
 **Perubahan v1 → v2:**
 
 - Fee: konstanta 0,10% dihapus; semua dari `FeeSchedule` (all-in Tokocrypto, taker-only). Maker/limit jadi `TODO(spec)`.
 - Timeframe: default M15/H1 (sebelumnya 5m/15m); `timeStopMinutes` diganti `timeStopCandles` per setup.
 - Gerbang: ditambah `PairEdgeGate` dan lantai friksi 6×; `maxSlAtr` 3,0 → 5,0 (hipotesis); funnel counter wajib.
-- Exit: TP dan SL sebagai taker + slippage; break-even dari `FeeCalculator`; `tp1Fraction` jadi parameter.
+- Exit: TP dan SL sebagai taker + slippage; break-even dari `FeeSchedule` (di v2 tertulis `FeeCalculator`, dikoreksi di v3); `tp1Fraction` jadi parameter.
 - Backtest: sumber CSV 1m yang sudah ada, diagregasi; kontrol negatif; kewajiban dokumentasi repo.
 - Nama tipe memakai prefix `Spot*` dan package `agu.analys.engine.spot`.
 

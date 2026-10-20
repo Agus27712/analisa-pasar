@@ -222,6 +222,11 @@ Laporan lengkap: `docs/exp/exp_spot_backtest_41pair.md` dan `docs/exp/exp_mfe_m1
 rancang ulang pemicu/exit SWEEP, pindah ke horizon lebih panjang, atau hentikan program.
 Kalau memilih lanjut, mulai dari memperbaiki spec — bukan dari menulis engine.
 
+**Pembaruan (2026-10-20): Spec v3 sudah terbit** — TP1 eksplisit, G3 dicabut, gerbang bukti E1–E4
+(`docs/exp/scalping_spot_strategy_spec.md` §11.2). Spec yang diperbaiki **tidak** membuka blokir:
+Fase 1 Kotlin tetap menunggu E1–E3 lolos (≥ 100 trade OOS, mengalahkan entry acak, universe
+walk-forward).
+
 ### ⭐ Prioritas #1 — cari varian **entry** yang punya edge kotor (belum ada jawabannya)
 
 Temuan akuntansi (§5) mengubah pertanyaannya. Bukan lagi "apakah exit-nya bisa diperbaiki",

@@ -4018,3 +4018,26 @@ determinisme CSV diverifikasi (SHA-256 identik).
 `docs/exp/exp_spot_backtest_41pair.md` (matriks, funnel, exit, batas),
 `docs/LAPORAN-sinkronisasi-spec-scalping-spot-2026-10-20.md` §10.6–§10.7 (ringkasan + keputusan),
 dan `docs/PANDUAN-LANJUT-AGEN.md` §4 (kotak blokir Fase 1).
+
+---
+
+## 63. Spec Scalping Spot v3 — koreksi dan gerbang bukti (2026-10-20)
+
+**Latar belakang.** Pengukuran §62 membuktikan dua kelemahan di Spec v2: TP1 `entry + 1,0R` selalu
+ditolak G4, dan G3 (`1,5F`) tumpang tindih dengan G2. Laporan sinkronisasi (§5.2) juga mencatat 6
+koreksi API. Batch ini hanya mengubah **dokumen spec**; kode aplikasi dan harness tidak disentuh.
+
+**Perubahan (`docs/exp/scalping_spot_strategy_spec.md`, v2 → v3).**
+
+1. TP1 eksplisit: `tp1FloorPct = F + minNetRrTp1 × (riskPct + F)`; TP1 formula = `tp1Floor`, TP1
+   struktural ditolak bila di bawahnya (§6.2).
+2. G3 dicabut; G1 memanggil `PaperStopResolver.frictionFloorPct` dan `resolve`; fee, P&L, dan
+   break-even lewat `FeeSchedule`; `perUnitRisk` memakai biaya net aktual.
+3. Time-stop dalam jam (`timeStopHours`); cooldown dan pause dalam menit.
+4. Data riset memakai candle native 15m/1h; ditambah benchmark entry acak (§11.1) dan gerbang bukti
+   E1–E4 (§11.2); status bukti per setup (§8.0); `SWEEP_RECLAIM` ditandai jangan diimplementasi dulu.
+5. `SymbolRules` dan `SpotHtfSnapshot` dicatat sebagai tipe yang harus dibuat; aturan satu config cermin.
+6. Perkiraan fee eksternal (±0,38%) dihapus; diganti angka terukur `FeeSchedule` (0,4044% per sisi USDT).
+
+**Belum dikerjakan.** Harness belum punya benchmark acak dan belum memakai `tp1Floor` sebagai
+kebijakan baku (mode `floor` yang ada setara untuk setup formula). Fase 1 Kotlin tetap diblokir.

@@ -1,4 +1,4 @@
-# Laporan Sinkronisasi Spec Scalping Spot v2
+# Laporan Sinkronisasi Spec Scalping Spot v2/v3
 
 > **Status:** dokumentasi tahap awal. **Kode belum disentuh.**
 > Laporan ini memetakan **Spec v2** ke codebase, mencatat hasil verifikasi, dan menetapkan urutan
@@ -10,9 +10,9 @@
 | Branch | `patch` |
 | HEAD saat dokumen ditulis | `1498c02` |
 | Sumber spec | `docs/exp/scalping_spot_strategy_spec.md` |
-| Versi spec | **v2** (menggantikan v1) |
-| Ukuran sumber | 649 baris |
-| SHA-256 sumber | `1c5f5e1b5e5434e5bfbaa2b9a6463c30b5b4425db8b787fbb950271a732d7ecf` |
+| Versi spec | **v3** (menggantikan v2 dan v1; angka verifikasi di bagian 5–6 ditulis untuk v2) |
+| Ukuran sumber | 716 baris |
+| SHA-256 sumber | `37ed5c23bac3f3630cc8e5c8bf154447f14cddf1c109bd107552c1860858e4d8` |
 | Status berkas spec | belum di-commit (untracked) |
 | Lingkup | Tokocrypto saja; Indodax tidak disentuh |
 | Mode yang disiapkan | BACKTEST dan PAPER; LIVE tidak dibangun |
@@ -564,6 +564,11 @@ Yang **belum** dijalankan dan **tidak boleh diklaim**:
 12. Apakah spec tetap di `docs/exp/`? Saat ini ya, sesuai penempatan owner. Catatan: `AGENTS.md`
     menyebut `docs/exp/` untuk eksperimen terukur, jadi lokasi ini perlu keputusan final.
 
+**Pembaruan 2026-10-20 (Spec v3).** Spec diterbitkan sebagai **v3**, bukan v2.1 (butir 10). Butir 3
+(TP1) diselesaikan lewat `tp1Floor` di spec §6.2; G3 dicabut karena tercakup G2; 6 koreksi API di §5.2
+sudah diserap. Butir 1, 2, 4, 5 tetap menunggu keputusan owner; Fase 1 Kotlin diblokir sampai gerbang
+bukti E1–E3 (spec §11.2) lolos.
+
 ---
 
 ## 13. Riwayat
@@ -577,3 +582,4 @@ Yang **belum** dijalankan dan **tidak boleh diklaim**:
 | 2026-10-20 | `tools/spot_lib.py`, `tools/spot_mfe.py`, `tools/spot_backtest.py`, dan `tools/test_spot_backtest.py` dibuat. MFE 15m dijalankan: **4/41 layak**, 10 pair turun, 0 pair naik. |
 | 2026-10-20 | Backtest Spec v2 dijalankan (14 varian, 15m dan 1h): produksi 15m **0 trade**, produksi 1h **7 trade semua rugi** (avg R -0,3835); varian riset terbaik -0,2055R dengan OOS -0,3828. Laporan: `docs/exp/exp_mfe_m15_41pair.md` dan `docs/exp/exp_spot_backtest_41pair.md`. |
 | 2026-10-20 | Uji mekanika harness 10/10 lulus; determinisme CSV diverifikasi. Kode aplikasi tetap belum disentuh. |
+| 2026-10-20 | Spec v3 diterbitkan: TP1 eksplisit (`tp1Floor`), G3 dicabut, 6 koreksi API diserap, time-stop dalam jam, benchmark entry acak dan gerbang bukti E1–E4 ditambahkan. Kode dan harness belum diubah. |
