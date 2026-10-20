@@ -379,9 +379,102 @@ python3 tools/fetch_tokocrypto_klines.py --select mixed --days 90 --intervals 15
   dipakai; pakai `--reselect` hanya bila memang ingin mengganti universe.
 - Kalau diunduh di hari lain, daftar pair momentum bisa berbeda. `_selection.json` dan
   `_manifest.json` menyimpan daftar dan angka yang benar-benar dipakai.
-- Tabel MFE `PairEdgeGate` masih dihitung dari M1 7 jam untuk 40 pair lama. Dataset ini cukup untuk
-  menghitung ulang MFE pada M15 (temuan §6.4), tetapi penghitungan itu belum dijalankan.
-- Backtest belum dijalankan, jadi belum ada satu angka edge pun yang berasal dari dataset ini.
+- Tabel MFE `PairEdgeGate` sudah dihitung ulang pada M15 (§10.6). Hasilnya **4 dari 41 pair layak**,
+  bukan 14. Tabel lama kedaluwarsa untuk jendela 90 hari.
+- Backtest sudah dijalankan (§10.7). Hasilnya **negatif**: 0 trade pada gates produksi 15m,
+  7 trade di 1h dan semuanya rugi; varian riset yang lebih longgar tetap negatif.
+- Kedua angka berasal dari harness Python (`tools/spot_backtest.py`), **bukan** mesin Kotlin.
+  Spec §11 mensyaratkan mesin Kotlin + uji paritas, jadi angka ini belum boleh disebut hasil
+  produksi.
+
+---
+
+### 10.6 Hasil MFE 15m (terukur 2026-10-20)
+
+Laporan lengkap: **`docs/exp/exp_mfe_m15_41pair.md`**. Artefak: `data/hasil/mfe_m15_spot.json`.
+
+Perintah:
+
+```sh
+python3 tools/spot_mfe.py --data data/tokocrypto_spot --out data/hasil/mfe_m15_spot.json
+```
+
+| Item | Angka |
+|---|---|
+| Pair diukur | 41 |
+| Layak (`median MFE 7 jam >= 2 x 0,9688%`) | **4** |
+| Pair yang tabel lama anggap layak | 14 |
+| Turun status | **10** (ENA, NEAR, WLD, STRK, W, S, FET, APT, FIL, QNT) |
+| Naik status | **0** |
+| Median MFE 7 jam lintas pair | 1,4371% |
+| Median rasio lintas pair | 1,4834x |
+
+Empat pair yang layak: MUBARAK (2,78x), PUMP (2,58x), ZRO (2,34x), PLUME (2,12x). Semuanya sudah
+ada di tabel lama; tidak ada pair baru. Artinya, memperbarui `PairEdgeGate` akan **mempersempit**
+universe, bukan memperluas.
+
+Validasi sampling: `step=1` vs `step=2` pada BTC/MUBARAK/ZRO berbeda <0,03 pp, jadi hasil bukan
+artefak sampling. Batas: M15 vs M1, 90 hari vs 30 hari, median tanpa syarat setup, tanpa spread.
+
+---
+
+### 10.7 Hasil backtest Spec v2 (terukur 2026-10-20)
+
+Laporan lengkap: **`docs/exp/exp_spot_backtest_41pair.md`**. Artefak:
+`data/hasil/spot_backtest_v2_matrix.txt` + JSON/CSV per varian.
+
+Perintah inti:
+
+```sh
+python3 tools/spot_backtest.py --data data/tokocrypto_spot --timeframe 15m \
+    --pairs all --setups all --tp1-policy floor \
+    --out data/hasil/spot_backtest_v2_m15_prod
+python3 tools/spot_backtest.py --data data/tokocrypto_spot --timeframe 1h \
+    --pairs all --setups all --tp1-policy floor \
+    --out data/hasil/spot_backtest_v2_h1_prod
+```
+
+| Varian | n | avg R | WR | Catatan |
+|---|---:|---:|---:|---|
+| 15m produksi (G0, lantai 6x, gates default) | **0** | - | - | tidak ada trade |
+| 15m literal (kontrol TP1) | **0** | - | - | setup formula pasti ditolak G4 |
+| 15m no-G0 | 1 | -0,8084 | 0,0% | satu trade, rugi |
+| 15m riset longgar (lantai 5x, G3 1,0F, G4/G5/G6 longgar) | 44 | -0,2260 | 22,7% | in-sample -0,1542 / OOS -0,2978 |
+| 15m riset longgar (lantai 4x) | 37 | -0,2758 | 21,6% | in-sample -0,1965 / OOS -0,3798 |
+| 1h produksi (G0, lantai 6x, gates default) | **7** | -0,3835 | 0,0% | 6 invalidasi, 1 momentum fail |
+| 1h produksi, 4 pair MFE baru | 5 | -0,3997 | 0,0% | dibatasi `--pairs`; tabel gate tidak diubah |
+| 1h literal | 6 | -0,3841 | 0,0% | setup formula BREAKOUT hilang |
+| 1h no-G0 | 13 | -0,4028 | 7,7% | sampel kecil |
+| 1h no-G0, lantai 5x | 21 | -0,2970 | 19,1% | |
+| 1h no-G0, G4-G6 longgar | 48 | -0,2320 | 18,8% | |
+| 1h no-G0, lantai 5x + G4-G6 longgar | 60 | -0,2087 | 23,3% | IS -0,0869 / OOS -0,4046 |
+| **1h no-G0, lantai 4x + G4-G6 longgar** | **74** | **-0,2055** | 23,0% | **IS -0,0912 / OOS -0,3828** |
+| 1h no-G0, tanpa lantai | 54 | -0,3373 | 20,4% | lantai bukan satu-satunya penyebab |
+
+**Kesimpulan terukur:**
+
+1. Gates produksi tidak bisa dieksekusi pada 15m: 0 trade dari 41 pair dalam 90 hari. Penyebabnya
+   aritmetika: lantai 6x (5,8128%) + G2 maksimum 5 ATR + G3 minimum 1,5F (1,4532%) saling
+   mengunci, sedangkan ATR% median 15m sebagian besar 0,2–1,1%.
+2. Gates produksi 1h menghasilkan 7 trade, semuanya rugi (WR 0%, avg R -0,3835). Sampel terlalu
+   kecil untuk expectancy, tetapi cukup untuk menyatakan gates hampir tidak bisa dieksekusi.
+3. Seluruh varian riset tetap negatif. Yang "terbaik" (lantai 4x + gates longgar) memberi
+   -0,2055R dengan 74 trade; in-sample -0,0912, out-of-sample **-0,3828** (memburuk).
+4. SWEEP_RECLAIM adalah sumber kerugian utama dan konsisten rugi di semua konfigurasi
+   (6–67 trade, avg R -0,17 sampai -0,40). BREAKOUT_RETEST negatif pada 14–22 trade di 15m
+   longgar, tetapi positif pada n=6 di 1h (+0,19 sampai +0,21R); SQUEEZE n=1–7 dengan tanda
+   berubah-ubah; PULLBACK hanya 2 trade (keduanya rugi); RANGE 0.
+5. Kontradiksi TP1/G4 terbukti: mode `literal` menghasilkan 0 trade untuk setup formula, karena
+   `netRr1 = (R − F)/(R + F) < 1` selalu. Mode `floor` adalah satu-satunya cara setup formula lolos.
+6. **Rekomendasi: jangan mulai Fase 1 Kotlin dulu.** Perbaiki kontradiksi spec dan rancang ulang
+   pemicu/exit SWEEP, atau ubah arah ke horizon lebih panjang. Keputusan ini milik owner.
+
+**Batas:** harness Python, bukan mesin Kotlin; harga fill = level mentah (slippage lewat
+`FeeSchedule`); G8/orderbook tidak diuji; risiko per simbol, bukan portofolio; time-stop dan
+lookback dalam candle sehingga 1h mengubah horizon; universe dipilih dari jendela yang sama
+(bukan out-of-sample); G0 memakai tabel lama yang sudah kedaluwarsa. Uji mekanika
+`tools/test_spot_backtest.py` (10 uji) lulus, dan determinisme sudah diverifikasi (SHA-256 CSV
+identik pada dua kali jalan).
 
 ---
 
@@ -397,6 +490,14 @@ sha256sum docs/exp/scalping_spot_strategy_spec.md
 python3 tools/fetch_tokocrypto_klines.py --select mixed --list-only --out data/tokocrypto_spot
 python3 tools/fetch_tokocrypto_klines.py --select mixed --days 90 --intervals 15m,1h \
     --out data/tokocrypto_spot --resume --write-readme
+python3 tools/spot_mfe.py --data data/tokocrypto_spot --out data/hasil/mfe_m15_spot.json
+python3 tools/test_spot_backtest.py
+python3 tools/spot_backtest.py --data data/tokocrypto_spot --timeframe 15m \
+    --pairs all --setups all --tp1-policy floor \
+    --out data/hasil/spot_backtest_v2_m15_prod
+python3 tools/spot_backtest.py --data data/tokocrypto_spot --timeframe 1h \
+    --pairs all --setups all --tp1-policy floor \
+    --out data/hasil/spot_backtest_v2_h1_prod
 ```
 
 Fakta terukur yang dipakai di laporan ini:
@@ -405,36 +506,63 @@ Fakta terukur yang dipakai di laporan ini:
 - Dataset baru: 41 pair, 82 CSV, 441.880 bar, 0 celah, 0 duplikat, 23,32 MB (§10).
 - Data lama: `data/tokocrypto_v4` 87.000 bar M1 per pair, 2026-08-12 sampai 2026-10-12.
 - `pair_gate.json`: 14 eligible USDT, 0 eligible IDR.
-- Delapan pair di data lama semuanya tidak eligible.
+- MFE 15m 90 hari: **4/41 layak**, 10 pair turun, 0 pair naik (§10.6).
+- Backtest: 14 varian; produksi 15m **0 trade**, produksi 1h **7 trade semua rugi**
+  (avg R -0,3835); varian riset terbaik -0,2055R dengan OOS -0,3828 (§10.7).
+- Uji mekanika harness: **10/10 lulus** (`tools/test_spot_backtest.py`).
+- Determinisme: dua kali jalan perintah 1h produksi menghasilkan CSV trade dengan SHA-256
+  identik; indeks entry minimum 359 (di atas warmup 150).
 
 Yang **belum** dijalankan dan **tidak boleh diklaim**:
 
-- `./gradlew :app:testDebugUnitTest` untuk engine baru, karena belum ada kode baru.
-- Backtest Tokocrypto: data sudah tersedia, tetapi backtester belum ada.
-- Perhitungan ulang MFE pada M15 dari dataset baru.
+- `./gradlew :app:testDebugUnitTest` untuk engine baru, karena engine Kotlin-nya belum ada.
+- Uji paritas mesin Kotlin versus harness Python (Spec §11).
 - Perbandingan paper versus backtest, karena belum ada integrasi.
+- Uji dengan orderbook/G8 live, spread, dan dampak pasar; dataset candle tidak memuatnya.
+- Backtest pada universe out-of-sample yang dipilih sebelum jendela pengukuran.
 
 ---
 
 ## 12. Yang masih terbuka
 
-1. Apakah `tp1Fraction` 0,6 dipakai juga saat engine masuk paper, atau diselaraskan ke 0,5 agar
+**Keputusan yang harus diambil owner sebelum Fase 1 Kotlin:**
+
+1. **Lanjut, perbaiki, atau hentikan Spec v2?** Backtest menghasilkan 0 trade di 15m dan 7 trade
+   (semua rugi) di 1h pada gates produksi; seluruh varian riset tetap negatif. Usulan penulis:
+   jangan implementasikan apa adanya. Pilih salah satu arah: (a) perbaiki kontradiksi gate dan
+   rancang ulang SWEEP, (b) pindah ke horizon lebih panjang dengan exit yang sesuai, atau
+   (c) hentikan program scalping ini.
+2. **Kontradiksi G3/lantai/G4 harus diselesaikan lebih dulu.** Di 15m, lantai 6x (5,8128%) + G2
+   maksimum 5 ATR + G3 minimum 1,5F (1,4532%) membuat hampir semua sinyal gugur sebelum R:R
+   dihitung. Pilih: pertahankan lantai 6x dan terima bahwa 15m tidak bisa dipakai, atau turunkan
+   lantai/G3 dengan bukti replay baru. Jangan menurunkan lantai hanya untuk menambah sinyal.
+3. **TP1 formula `entry + 1,0R` harus diganti.** Secara aljabar ia selalu memberi `netRr < 1`,
+   sehingga G4 menolaknya. Usulan: tulis eksplisit `entry + max(1,0R, R + 2F)` di spec (mode
+   `floor` yang dipakai harness), bukan dibiarkan sebagai kontradiksi.
+4. **`PairEdgeGate` diperbarui atau tidak?** MFE 90 hari memberi 4 pair, bukan 14. Usulan:
+   jangan perbarui dulu sebagai angka hardcoded; kalau tabel dipertahankan, ia harus dihitung
+   berkala. Memperbarui ke 4 pair hanya mempersempit sampel dan tidak menghasilkan edge.
+5. **Perluas universe ke 161 pair?** Tidak dulu. Funnel menunjukkan hambatan utama adalah
+   aritmetika gate, bukan jumlah pair; menambah pair kebanyakan akan menambah pair ATR rendah yang
+   langsung gugur di G2/G3.
+
+**Keputusan desain yang lebih kecil:**
+
+6. Apakah `tp1Fraction` 0,6 dipakai juga saat engine masuk paper, atau diselaraskan ke 0,5 agar
    memakai FSM lama? Usulan: 0,6 di `SpotPositionManager`, FSM lama tidak diubah.
-2. Apakah engine baru menggantikan engine lama sepenuhnya setelah lolos, atau tetap menjadi
+7. Apakah engine baru menggantikan engine lama sepenuhnya setelah lolos, atau tetap menjadi
    alternatif yang bisa dipilih? Usulan: flag `LEGACY`/`SPOT_SPEC`, default legacy sampai Fase 7.
-3. Apakah M5 on-demand dapat diterima dari sisi beban API dan baterai? Usulan: ya, hanya untuk
+8. Apakah M5 on-demand dapat diterima dari sisi beban API dan baterai? Usulan: ya, hanya untuk
    simbol yang dibuka dan lolos G0.
-4. Apakah riset memang USDT-only karena IDR tidak punya pair eligible? Usulan: ya, sampai tabel MFE
+9. Apakah riset memang USDT-only karena IDR tidak punya pair eligible? Usulan: ya, sampai tabel MFE
    IDR dibuat ulang.
-5. Apakah 41 pair sudah cukup, atau perlu diperluas ke 161 pair (semua pair USDT dengan volume
-   24 jam di atas 1 juta) setelah backtest pertama? Usulan: mulai dari 41 pair, perluas hanya bila
-   funnel menunjukkan sampel per setup masih terlalu kecil.
-6. Apakah Spec v2 diperbaiki langsung (v2.1) atau diterbitkan sebagai v3? Usulan: v2.1 dengan
-   changelog, karena perubahannya hanya koreksi API dan satu konflik TP1/G4.
-7. Apakah `SpotConfig` boleh punya config cermin sendiri? Usulan: tidak dulu; ekspor JSON hanya
-   untuk offline, dengan uji kunci bila nanti dijadikan cermin resmi.
-8. Apakah spec tetap di `docs/exp/`? Saat ini ya, sesuai penempatan owner. Catatan: `AGENTS.md`
-   menyebut `docs/exp/` untuk eksperimen terukur, jadi lokasi ini perlu keputusan final.
+10. Apakah Spec v2 diperbaiki langsung (v2.1) atau diterbitkan sebagai v3? Usulan: v2.1 dengan
+    changelog, karena perubahannya hanya koreksi API dan satu konflik TP1/G4 — ditambah keputusan
+    gate di atas.
+11. Apakah `SpotConfig` boleh punya config cermin sendiri? Usulan: tidak dulu; ekspor JSON hanya
+    untuk offline, dengan uji kunci bila nanti dijadikan cermin resmi.
+12. Apakah spec tetap di `docs/exp/`? Saat ini ya, sesuai penempatan owner. Catatan: `AGENTS.md`
+    menyebut `docs/exp/` untuk eksperimen terukur, jadi lokasi ini perlu keputusan final.
 
 ---
 
@@ -446,3 +574,6 @@ Yang **belum** dijalankan dan **tidak boleh diklaim**:
 | 2026-10-20 | Spec v2 menggantikan v1. Berkas v2 ditempatkan di `docs/exp/scalping_spot_strategy_spec.md`; laporan ini ditulis ulang untuk v2. |
 | 2026-10-20 | Verifikasi v2 terhadap kode: 6 koreksi API dan 5 temuan kritis dicatat. Kode belum disentuh. |
 | 2026-10-20 | Tool unduh diperluas: pemilihan pair (eligible/stabil/momentum), jendela tetap, resume dengan daftar pair dibekukan, manifest, README. Dataset `data/tokocrypto_spot` diunduh: 41 pair, 90 hari, 15m dan 1h, 441.880 bar, 0 celah, 0 duplikat. |
+| 2026-10-20 | `tools/spot_lib.py`, `tools/spot_mfe.py`, `tools/spot_backtest.py`, dan `tools/test_spot_backtest.py` dibuat. MFE 15m dijalankan: **4/41 layak**, 10 pair turun, 0 pair naik. |
+| 2026-10-20 | Backtest Spec v2 dijalankan (14 varian, 15m dan 1h): produksi 15m **0 trade**, produksi 1h **7 trade semua rugi** (avg R -0,3835); varian riset terbaik -0,2055R dengan OOS -0,3828. Laporan: `docs/exp/exp_mfe_m15_41pair.md` dan `docs/exp/exp_spot_backtest_41pair.md`. |
+| 2026-10-20 | Uji mekanika harness 10/10 lulus; determinisme CSV diverifikasi. Kode aplikasi tetap belum disentuh. |

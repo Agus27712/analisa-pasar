@@ -1,0 +1,310 @@
+{
+  "meta": {
+    "generated_at_utc": "2026-10-20T12:53:24Z",
+    "dataset": "/home/pvszombie/analisa-pasar-1/data/tokocrypto_spot",
+    "pairs_requested": 41,
+    "timeframe": "15m",
+    "htf": "1h",
+    "setups": [
+      "PULLBACK_VWAP",
+      "BREAKOUT_RETEST",
+      "SWEEP_RECLAIM",
+      "RANGE_BOUNCE",
+      "SQUEEZE_BREAKOUT"
+    ],
+    "tp1_policy": "floor",
+    "pair_edge_enabled": false,
+    "gates": {
+      "max_sl_atr": 5.0,
+      "friction_multiple": 6.0,
+      "min_atr_friction": 1.5,
+      "min_net_rr_tp1": 1.0,
+      "min_net_rr_final": 1.5,
+      "min_reward_friction": 3.0
+    },
+    "eligible_pairs_gate": [
+      "APTUSDT",
+      "ENAUSDT",
+      "FETUSDT",
+      "FILUSDT",
+      "MUBARAKUSDT",
+      "NEARUSDT",
+      "PLUMEUSDT",
+      "PUMPUSDT",
+      "QNTUSDT",
+      "STRKUSDT",
+      "SUSDT",
+      "WLDUSDT",
+      "WUSDT",
+      "ZROUSDT"
+    ],
+    "equity_usd": 10000.0,
+    "risk_per_trade_pct": 0.5,
+    "fee_buy_pct": 0.4044,
+    "fee_sell_pct": 0.4044,
+    "slippage_pct": 0.08,
+    "f_pct": 0.9688,
+    "friction_floor_pct": 5.8128,
+    "friction_multiple": 6.0,
+    "tp1_fraction": 0.6,
+    "split": 0.7,
+    "warmup_candles": 150
+  },
+  "summary": {
+    "overall": {
+      "trades": 1,
+      "wins": 0,
+      "losses": 1,
+      "win_rate_pct": 0.0,
+      "avg_r": -0.8084,
+      "expectancy_r": -0.8084,
+      "avg_win_r": null,
+      "avg_loss_r": -0.8084,
+      "profit_factor": 0.0,
+      "max_drawdown_r": 0.8084,
+      "avg_hold_bars": 2.0,
+      "tp1_hit_rate_pct": 0.0,
+      "median_mfe_r": 0.0827,
+      "median_mae_r": -0.9093,
+      "total_fees_usd": 5.78,
+      "end_of_data": 0,
+      "exit_reasons": {
+        "SETUP_INVALIDATION": 1
+      }
+    },
+    "in_sample": {
+      "trades": 0
+    },
+    "out_of_sample": {
+      "trades": 1,
+      "wins": 0,
+      "losses": 1,
+      "win_rate_pct": 0.0,
+      "avg_r": -0.8084,
+      "expectancy_r": -0.8084,
+      "avg_win_r": null,
+      "avg_loss_r": -0.8084,
+      "profit_factor": 0.0,
+      "max_drawdown_r": 0.8084,
+      "avg_hold_bars": 2.0,
+      "tp1_hit_rate_pct": 0.0,
+      "median_mfe_r": 0.0827,
+      "median_mae_r": -0.9093,
+      "total_fees_usd": 5.78,
+      "end_of_data": 0,
+      "exit_reasons": {
+        "SETUP_INVALIDATION": 1
+      }
+    },
+    "by_setup": {
+      "PULLBACK_VWAP": {
+        "trades": 0
+      },
+      "BREAKOUT_RETEST": {
+        "trades": 0
+      },
+      "SWEEP_RECLAIM": {
+        "trades": 1,
+        "wins": 0,
+        "losses": 1,
+        "win_rate_pct": 0.0,
+        "avg_r": -0.8084,
+        "expectancy_r": -0.8084,
+        "avg_win_r": null,
+        "avg_loss_r": -0.8084,
+        "profit_factor": 0.0,
+        "max_drawdown_r": 0.8084,
+        "avg_hold_bars": 2.0,
+        "tp1_hit_rate_pct": 0.0,
+        "median_mfe_r": 0.0827,
+        "median_mae_r": -0.9093,
+        "total_fees_usd": 5.78,
+        "end_of_data": 0,
+        "exit_reasons": {
+          "SETUP_INVALIDATION": 1
+        }
+      },
+      "RANGE_BOUNCE": {
+        "trades": 0
+      },
+      "SQUEEZE_BREAKOUT": {
+        "trades": 0
+      }
+    },
+    "by_pair": {
+      "ADAUSDT": {
+        "trades": 0
+      },
+      "ALTUSDT": {
+        "trades": 0
+      },
+      "APTUSDT": {
+        "trades": 0
+      },
+      "AUSDT": {
+        "trades": 0
+      },
+      "BATUSDT": {
+        "trades": 0
+      },
+      "BEAMXUSDT": {
+        "trades": 0
+      },
+      "BMTUSDT": {
+        "trades": 0
+      },
+      "BNBUSDT": {
+        "trades": 0
+      },
+      "BTCUSDT": {
+        "trades": 0
+      },
+      "COMPUSDT": {
+        "trades": 0
+      },
+      "DOGEUSDT": {
+        "trades": 0
+      },
+      "ENAUSDT": {
+        "trades": 0
+      },
+      "ERAUSDT": {
+        "trades": 0
+      },
+      "ETHUSDT": {
+        "trades": 0
+      },
+      "FETUSDT": {
+        "trades": 0
+      },
+      "FILUSDT": {
+        "trades": 0
+      },
+      "GNSUSDT": {
+        "trades": 1,
+        "wins": 0,
+        "losses": 1,
+        "win_rate_pct": 0.0,
+        "avg_r": -0.8084,
+        "expectancy_r": -0.8084,
+        "avg_win_r": null,
+        "avg_loss_r": -0.8084,
+        "profit_factor": 0.0,
+        "max_drawdown_r": 0.8084,
+        "avg_hold_bars": 2.0,
+        "tp1_hit_rate_pct": 0.0,
+        "median_mfe_r": 0.0827,
+        "median_mae_r": -0.9093,
+        "total_fees_usd": 5.78,
+        "end_of_data": 0,
+        "exit_reasons": {
+          "SETUP_INVALIDATION": 1
+        }
+      },
+      "GTCUSDT": {
+        "trades": 0
+      },
+      "HBARUSDT": {
+        "trades": 0
+      },
+      "IOUSDT": {
+        "trades": 0
+      },
+      "LINKUSDT": {
+        "trades": 0
+      },
+      "METISUSDT": {
+        "trades": 0
+      },
+      "MUBARAKUSDT": {
+        "trades": 0
+      },
+      "NEARUSDT": {
+        "trades": 0
+      },
+      "NVDABUSDT": {
+        "trades": 0
+      },
+      "PHAUSDT": {
+        "trades": 0
+      },
+      "PLUMEUSDT": {
+        "trades": 0
+      },
+      "PUMPUSDT": {
+        "trades": 0
+      },
+      "QNTUSDT": {
+        "trades": 0
+      },
+      "REZUSDT": {
+        "trades": 0
+      },
+      "SOLUSDT": {
+        "trades": 0
+      },
+      "SOXSBUSDT": {
+        "trades": 0
+      },
+      "STRKUSDT": {
+        "trades": 0
+      },
+      "SUSDT": {
+        "trades": 0
+      },
+      "TIAUSDT": {
+        "trades": 0
+      },
+      "TRXUSDT": {
+        "trades": 0
+      },
+      "WLDUSDT": {
+        "trades": 0
+      },
+      "WUSDT": {
+        "trades": 0
+      },
+      "XAUTUSDT": {
+        "trades": 0
+      },
+      "XRPUSDT": {
+        "trades": 0
+      },
+      "ZROUSDT": {
+        "trades": 0
+      }
+    }
+  },
+  "funnel": {
+    "PULLBACK_VWAP": {
+      "SIGNAL": 7,
+      "SL_ATR_RANGE": 5,
+      "NET_RR_TP1": 2
+    },
+    "BREAKOUT_RETEST": {
+      "SIGNAL": 324,
+      "SL_ATR_RANGE": 293,
+      "ATR_TOO_LOW": 16,
+      "NET_RR_TP1": 4,
+      "NET_RR_FINAL": 11
+    },
+    "SWEEP_RECLAIM": {
+      "SIGNAL": 711,
+      "SL_ATR_RANGE": 659,
+      "ATR_TOO_LOW": 29,
+      "NET_RR_TP1": 18,
+      "NET_RR_FINAL": 4
+    },
+    "RANGE_BOUNCE": {
+      "SIGNAL": 2,
+      "SL_ATR_RANGE": 2
+    },
+    "SQUEEZE_BREAKOUT": {
+      "SIGNAL": 85,
+      "SL_ATR_RANGE": 76,
+      "ATR_TOO_LOW": 2,
+      "NET_RR_FINAL": 4,
+      "NET_RR_TP1": 3
+    }
+  }
+}

@@ -1,0 +1,400 @@
+{
+  "meta": {
+    "generated_at_utc": "2026-10-20T12:54:49Z",
+    "dataset": "/home/pvszombie/analisa-pasar-1/data/tokocrypto_spot",
+    "pairs_requested": 41,
+    "timeframe": "1h",
+    "htf": "4h",
+    "setups": [
+      "PULLBACK_VWAP",
+      "BREAKOUT_RETEST",
+      "SWEEP_RECLAIM",
+      "RANGE_BOUNCE",
+      "SQUEEZE_BREAKOUT"
+    ],
+    "tp1_policy": "literal",
+    "pair_edge_enabled": true,
+    "gates": {
+      "max_sl_atr": 5.0,
+      "friction_multiple": 6.0,
+      "min_atr_friction": 1.5,
+      "min_net_rr_tp1": 1.0,
+      "min_net_rr_final": 1.5,
+      "min_reward_friction": 3.0
+    },
+    "eligible_pairs_gate": [
+      "APTUSDT",
+      "ENAUSDT",
+      "FETUSDT",
+      "FILUSDT",
+      "MUBARAKUSDT",
+      "NEARUSDT",
+      "PLUMEUSDT",
+      "PUMPUSDT",
+      "QNTUSDT",
+      "STRKUSDT",
+      "SUSDT",
+      "WLDUSDT",
+      "WUSDT",
+      "ZROUSDT"
+    ],
+    "equity_usd": 10000.0,
+    "risk_per_trade_pct": 0.5,
+    "fee_buy_pct": 0.4044,
+    "fee_sell_pct": 0.4044,
+    "slippage_pct": 0.08,
+    "f_pct": 0.9688,
+    "friction_floor_pct": 5.8128,
+    "friction_multiple": 6.0,
+    "tp1_fraction": 0.6,
+    "split": 0.7,
+    "warmup_candles": 150
+  },
+  "summary": {
+    "overall": {
+      "trades": 6,
+      "wins": 0,
+      "losses": 6,
+      "win_rate_pct": 0.0,
+      "avg_r": -0.3841,
+      "expectancy_r": -0.3841,
+      "avg_win_r": null,
+      "avg_loss_r": -0.3841,
+      "profit_factor": 0.0,
+      "max_drawdown_r": 2.3046,
+      "avg_hold_bars": 5.17,
+      "tp1_hit_rate_pct": 0.0,
+      "median_mfe_r": 0.1926,
+      "median_mae_r": -0.4748,
+      "total_fees_usd": 41.38,
+      "end_of_data": 0,
+      "exit_reasons": {
+        "SETUP_INVALIDATION": 5,
+        "MOMENTUM_FAIL": 1
+      }
+    },
+    "in_sample": {
+      "trades": 3,
+      "wins": 0,
+      "losses": 3,
+      "win_rate_pct": 0.0,
+      "avg_r": -0.3769,
+      "expectancy_r": -0.3769,
+      "avg_win_r": null,
+      "avg_loss_r": -0.3769,
+      "profit_factor": 0.0,
+      "max_drawdown_r": 1.1306,
+      "avg_hold_bars": 7.33,
+      "tp1_hit_rate_pct": 0.0,
+      "median_mfe_r": 0.088,
+      "median_mae_r": -0.5101,
+      "total_fees_usd": 21.25,
+      "end_of_data": 0,
+      "exit_reasons": {
+        "SETUP_INVALIDATION": 2,
+        "MOMENTUM_FAIL": 1
+      }
+    },
+    "out_of_sample": {
+      "trades": 3,
+      "wins": 0,
+      "losses": 3,
+      "win_rate_pct": 0.0,
+      "avg_r": -0.3914,
+      "expectancy_r": -0.3914,
+      "avg_win_r": null,
+      "avg_loss_r": -0.3914,
+      "profit_factor": 0.0,
+      "max_drawdown_r": 1.1741,
+      "avg_hold_bars": 3.0,
+      "tp1_hit_rate_pct": 0.0,
+      "median_mfe_r": 0.2971,
+      "median_mae_r": -0.4359,
+      "total_fees_usd": 20.13,
+      "end_of_data": 0,
+      "exit_reasons": {
+        "SETUP_INVALIDATION": 3
+      }
+    },
+    "by_setup": {
+      "PULLBACK_VWAP": {
+        "trades": 0
+      },
+      "BREAKOUT_RETEST": {
+        "trades": 0
+      },
+      "SWEEP_RECLAIM": {
+        "trades": 6,
+        "wins": 0,
+        "losses": 6,
+        "win_rate_pct": 0.0,
+        "avg_r": -0.3841,
+        "expectancy_r": -0.3841,
+        "avg_win_r": null,
+        "avg_loss_r": -0.3841,
+        "profit_factor": 0.0,
+        "max_drawdown_r": 2.3046,
+        "avg_hold_bars": 5.17,
+        "tp1_hit_rate_pct": 0.0,
+        "median_mfe_r": 0.1926,
+        "median_mae_r": -0.4748,
+        "total_fees_usd": 41.38,
+        "end_of_data": 0,
+        "exit_reasons": {
+          "SETUP_INVALIDATION": 5,
+          "MOMENTUM_FAIL": 1
+        }
+      },
+      "RANGE_BOUNCE": {
+        "trades": 0
+      },
+      "SQUEEZE_BREAKOUT": {
+        "trades": 0
+      }
+    },
+    "by_pair": {
+      "ADAUSDT": {
+        "trades": 0
+      },
+      "ALTUSDT": {
+        "trades": 0
+      },
+      "APTUSDT": {
+        "trades": 0
+      },
+      "AUSDT": {
+        "trades": 0
+      },
+      "BATUSDT": {
+        "trades": 0
+      },
+      "BEAMXUSDT": {
+        "trades": 0
+      },
+      "BMTUSDT": {
+        "trades": 0
+      },
+      "BNBUSDT": {
+        "trades": 0
+      },
+      "BTCUSDT": {
+        "trades": 0
+      },
+      "COMPUSDT": {
+        "trades": 0
+      },
+      "DOGEUSDT": {
+        "trades": 0
+      },
+      "ENAUSDT": {
+        "trades": 1,
+        "wins": 0,
+        "losses": 1,
+        "win_rate_pct": 0.0,
+        "avg_r": -0.3953,
+        "expectancy_r": -0.3953,
+        "avg_win_r": null,
+        "avg_loss_r": -0.3953,
+        "profit_factor": 0.0,
+        "max_drawdown_r": 0.3953,
+        "avg_hold_bars": 2.0,
+        "tp1_hit_rate_pct": 0.0,
+        "median_mfe_r": 0.0,
+        "median_mae_r": -0.5101,
+        "total_fees_usd": 7.08,
+        "end_of_data": 0,
+        "exit_reasons": {
+          "SETUP_INVALIDATION": 1
+        }
+      },
+      "ERAUSDT": {
+        "trades": 0
+      },
+      "ETHUSDT": {
+        "trades": 0
+      },
+      "FETUSDT": {
+        "trades": 0
+      },
+      "FILUSDT": {
+        "trades": 0
+      },
+      "GNSUSDT": {
+        "trades": 0
+      },
+      "GTCUSDT": {
+        "trades": 0
+      },
+      "HBARUSDT": {
+        "trades": 0
+      },
+      "IOUSDT": {
+        "trades": 0
+      },
+      "LINKUSDT": {
+        "trades": 0
+      },
+      "METISUSDT": {
+        "trades": 0
+      },
+      "MUBARAKUSDT": {
+        "trades": 2,
+        "wins": 0,
+        "losses": 2,
+        "win_rate_pct": 0.0,
+        "avg_r": -0.478,
+        "expectancy_r": -0.478,
+        "avg_win_r": null,
+        "avg_loss_r": -0.478,
+        "profit_factor": 0.0,
+        "max_drawdown_r": 0.9561,
+        "avg_hold_bars": 3.0,
+        "tp1_hit_rate_pct": 0.0,
+        "median_mfe_r": 0.0792,
+        "median_mae_r": -0.5648,
+        "total_fees_usd": 13.0,
+        "end_of_data": 0,
+        "exit_reasons": {
+          "SETUP_INVALIDATION": 2
+        }
+      },
+      "NEARUSDT": {
+        "trades": 0
+      },
+      "NVDABUSDT": {
+        "trades": 0
+      },
+      "PHAUSDT": {
+        "trades": 0
+      },
+      "PLUMEUSDT": {
+        "trades": 0
+      },
+      "PUMPUSDT": {
+        "trades": 1,
+        "wins": 0,
+        "losses": 1,
+        "win_rate_pct": 0.0,
+        "avg_r": -0.3117,
+        "expectancy_r": -0.3117,
+        "avg_win_r": null,
+        "avg_loss_r": -0.3117,
+        "profit_factor": 0.0,
+        "max_drawdown_r": 0.3117,
+        "avg_hold_bars": 18.0,
+        "tp1_hit_rate_pct": 0.0,
+        "median_mfe_r": 0.7374,
+        "median_mae_r": -0.4394,
+        "total_fees_usd": 7.1,
+        "end_of_data": 0,
+        "exit_reasons": {
+          "MOMENTUM_FAIL": 1
+        }
+      },
+      "QNTUSDT": {
+        "trades": 0
+      },
+      "REZUSDT": {
+        "trades": 0
+      },
+      "SOLUSDT": {
+        "trades": 0
+      },
+      "SOXSBUSDT": {
+        "trades": 0
+      },
+      "STRKUSDT": {
+        "trades": 0
+      },
+      "SUSDT": {
+        "trades": 1,
+        "wins": 0,
+        "losses": 1,
+        "win_rate_pct": 0.0,
+        "avg_r": -0.2907,
+        "expectancy_r": -0.2907,
+        "avg_win_r": null,
+        "avg_loss_r": -0.2907,
+        "profit_factor": 0.0,
+        "max_drawdown_r": 0.2907,
+        "avg_hold_bars": 3.0,
+        "tp1_hit_rate_pct": 0.0,
+        "median_mfe_r": 0.9725,
+        "median_mae_r": -0.4359,
+        "total_fees_usd": 7.11,
+        "end_of_data": 0,
+        "exit_reasons": {
+          "SETUP_INVALIDATION": 1
+        }
+      },
+      "TIAUSDT": {
+        "trades": 0
+      },
+      "TRXUSDT": {
+        "trades": 0
+      },
+      "WLDUSDT": {
+        "trades": 0
+      },
+      "WUSDT": {
+        "trades": 0
+      },
+      "XAUTUSDT": {
+        "trades": 0
+      },
+      "XRPUSDT": {
+        "trades": 0
+      },
+      "ZROUSDT": {
+        "trades": 1,
+        "wins": 0,
+        "losses": 1,
+        "win_rate_pct": 0.0,
+        "avg_r": -0.3509,
+        "expectancy_r": -0.3509,
+        "avg_win_r": null,
+        "avg_loss_r": -0.3509,
+        "profit_factor": 0.0,
+        "max_drawdown_r": 0.3509,
+        "avg_hold_bars": 2.0,
+        "tp1_hit_rate_pct": 0.0,
+        "median_mfe_r": 0.2971,
+        "median_mae_r": -0.3996,
+        "total_fees_usd": 7.09,
+        "end_of_data": 0,
+        "exit_reasons": {
+          "SETUP_INVALIDATION": 1
+        }
+      }
+    }
+  },
+  "funnel": {
+    "PULLBACK_VWAP": {
+      "SIGNAL": 1,
+      "PAIR_EDGE": 1
+    },
+    "BREAKOUT_RETEST": {
+      "SIGNAL": 59,
+      "PAIR_EDGE": 43,
+      "NET_RR_TP1": 8,
+      "ATR_TOO_LOW": 3,
+      "SL_ATR_RANGE": 5
+    },
+    "SWEEP_RECLAIM": {
+      "SIGNAL": 422,
+      "PAIR_EDGE": 277,
+      "ATR_TOO_LOW": 26,
+      "SL_ATR_RANGE": 45,
+      "NET_RR_TP1": 63,
+      "NET_RR_FINAL": 5
+    },
+    "RANGE_BOUNCE": {},
+    "SQUEEZE_BREAKOUT": {
+      "SIGNAL": 24,
+      "PAIR_EDGE": 16,
+      "NET_RR_TP1": 4,
+      "ATR_TOO_LOW": 2,
+      "SL_ATR_RANGE": 2
+    }
+  }
+}
