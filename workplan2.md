@@ -3919,12 +3919,23 @@ tren tertinggi dari dataset 60 hari (`data/tokocrypto_v4`): ADAUSDT, DOGEUSDT, X
 
 **Batas yang jujur.** Satu config, tiga pair, 60 hari; akurasi diukur pada TP2 terdekat
 (2,42%) sehingga kemungkinan **lebih tinggi** di TP2 yang lebih jauh — estimasi "k = 1,34 mungkin
-unbiased" dari analisis awal terlalu optimistis dan belum diuji.
+unbiased" dari analisis awal terlalu optimistis dan belum diuji. Harness ini juga **belum punya
+time-stop 90 bar**, jadi 42,7% bukan win rate app.
+
+**Pengulangan parity (2026-10-20).** Setelah replay disamakan dengan app (CLASSIC time-stop
+90 bar, S1 RVOL, S9, `max_risk_atr`, taker-only), geometri yang sama menghasilkan **1.149 trade
+selesai, 171 menang / 978 kalah, win rate 14,88%, avg R −0,4898**; 963 trade keluar karena
+TIMEOUT. TP2 efektif menjadi ≈2,91% karena kode menegakkan `TP2 ≥ 1,5 × risiko`. Ambang impas
+dari payoff terukur 55,08%, jadi gap 40,2 poin persen. Laporan:
+`docs/exp/exp_scalping_expectancy_parity_ADA-DOGE-XRP.md`; artefak:
+`data/hasil/exp_scalping_expectancy_parity_2026-10-20.json`.
 
 **Langkah berikutnya (memerlukan keputusan pemilik):** (a) akhiri program scalping,
-(b) uji framing swing horizon 24 jam (satu replay tambahan, `lookahead 1440`), atau
-(c) kejar perbaikan evaluator menuju win rate ≥ 60%. Rekomendasi penulis: (b) dulu — murah
-dan informatif sebelum program besar.
+(b) uji framing swing horizon 24 jam, atau (c) kejar perbaikan evaluator menuju win rate
+≥ 60%. Untuk (b), time-stop CLASSIC 90 bar harus diganti lebih dulu; dengan exit sekarang,
+horizon 24 jam tetap ditutup pada 90 menit. Rekomendasi penulis: (b) setelah exit swing
+didefinisikan — murah dan informatif sebelum program besar.
 
-**Dokumen.** `docs/exp/exp_scalping_expectancy_ADA-DOGE-XRP.md` (laporan lengkap, metode,
-angka, batasan); seksi ini sebagai ringkasan.
+**Dokumen.** `docs/exp/exp_scalping_expectancy_ADA-DOGE-XRP.md` (laporan lama, metode, angka,
+batasan) dan `docs/exp/exp_scalping_expectancy_parity_ADA-DOGE-XRP.md` (pengulangan parity);
+seksi ini sebagai ringkasan.

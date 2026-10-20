@@ -59,8 +59,9 @@ entry/exit) belum ada di sana — semua kesimpulan yang ditarik dari `main` jadi
    temuan diperbaiki, **pangkas butir itu dari badan dokumen** dan pindahkan jejaknya ke tabel
    "Sudah ditutup" — begitu seluruh isi sebuah berkas tutup, pindahkan berkasnya keluar
    (lihat § "Folder temuan bug" di bawah).
-4. **`docs/BELUM-DIKERJAKAN-2026-10-14.md`** — inventaris 27 item (per 2026-10-18: **22 selesai**, yang
-   benar-benar terbuka = **P4.2**, **P5**, **P6** diblokir, dan **V1–V4** verifikasi lapangan),
+4. **`docs/BELUM-DIKERJAKAN-2026-10-14.md`** — inventaris 27 item (per 2026-10-20: **22 selesai**,
+   **P4.2 dibatalkan** karena taker-only; yang terbuka = **P5**, **P6** diblokir, dan **V1–V4**
+   verifikasi lapangan),
    lengkap dengan titik kode dan prioritas. **Baca ini sebelum memilih apa yang akan dikerjakan**,
    supaya tidak mengulang yang sudah selesai atau mengerjakan yang sudah dibatalkan.
 5. **`workplan2.md` § 13** — pekerjaan terakhir yang **masih berlaku**. Seksi sebelumnya
@@ -78,8 +79,9 @@ entry/exit) belum ada di sana — semua kesimpulan yang ditarik dari `main` jadi
    eksperimen ditulis sebagai satu berkas `exp_<testname>_<pair>.md`. **Baca ini sebelum
    mengusulkan perubahan parameter engine atau mengklaim "strategi ini pasti bisa profit"** —
    hampir semua pertanyaan "apakah X berhasil" sudah dijawab di sini dengan angka. Contoh:
-   `docs/exp/exp_scalping_expectancy_ADA-DOGE-XRP.md` (win rate engine scalping 42,7% vs
-   ambang impas 60,1% → scalping di Tokocrypto tidak layak untuk engine saat ini).
+   `docs/exp/exp_scalping_expectancy_ADA-DOGE-XRP.md` (eksperimen lama 42,7%) dan
+   `docs/exp/exp_scalping_expectancy_parity_ADA-DOGE-XRP.md` (parity app: 14,88%, avg R
+   −0,4898, 963/1.149 TIMEOUT → scalping di Tokocrypto tidak layak untuk engine saat ini).
 10. Baru buka kode.
 
 **Aturan kerja yang berlaku di repo ini:**
@@ -141,8 +143,9 @@ Yang **tidak boleh** dilakukan lagi tanpa instruksi eksplisit owner:
    bertanya "apa lagi yang tersisa". **Status di berkas-berkasnya sudah diverifikasi ke kode dan
    direview owner pada 2026-10-16** (`patch` @ `547048d`) — **agen tidak perlu cek kode untuk
    memastikan statusnya**, cukup baca tabel di tiap berkas (lihat § "Folder temuan bug" di bawah).
-6. **`docs/BELUM-DIKERJAKAN-2026-10-14.md`** — inventaris 27 item (per 2026-10-18: **22 selesai**, yang
-   benar-benar terbuka = **P4.2**, **P5**, **P6** diblokir, dan **V1–V4** verifikasi lapangan),
+6. **`docs/BELUM-DIKERJAKAN-2026-10-14.md`** — inventaris 27 item (per 2026-10-20: **22 selesai**,
+   **P4.2 dibatalkan** karena taker-only; yang terbuka = **P5**, **P6** diblokir, dan **V1–V4**
+   verifikasi lapangan),
    lengkap dengan titik kode dan prioritas. **Baca ini sebelum memilih apa yang akan dikerjakan**,
    supaya tidak mengulang yang sudah selesai atau mengerjakan yang sudah dibatalkan.
 7. **`docs/LAPORAN-temuan-akuntansi-replay-2026-10-14.md`** — 🔴 **baca ini sebelum memakai
@@ -163,7 +166,7 @@ Yang **tidak boleh** dilakukan lagi tanpa instruksi eksplisit owner:
 12. **`docs/exp/`** — 🟠 **hasil eksperimen terukur.** Baca sebelum mengubah parameter engine,
     treadmill "strategi ini akan profit", atau wallpaper angka hasil. Satu berkas per eksperimen,
     bernama `exp_<testname>_<pair>.md`. Contoh: `docs/exp/exp_scalping_expectancy_ADA-DOGE-XRP.md`
-    (win rate engine scalping 42,7% vs ambang impas 60,1%).
+    (lama 42,7%) dan `docs/exp/exp_scalping_expectancy_parity_ADA-DOGE-XRP.md` (parity 14,88%).
 
 > **Dokumen yang sudah dihapus (2026-10-16):** `workplan.md`, `checkpoint.md`,
 > `checkpoint_progres.md` — isinya cuma stub "DEPRECATED" yang menunjuk ke `workplan2.md` /
@@ -282,11 +285,12 @@ Berisi **hasil eksperimen terukur** — satu berkas per eksperimen, bernama
 - Nama berkas memakai pair yang dites; kalau multi-pair, pisahkan dengan `-`
   (contoh: `exp_scalping_expectancy_ADA-DOGE-XRP.md`).
 
-**Contoh isi saat ini:** `exp_scalping_expectancy_ADA-DOGE-XRP.md` — win rate engine scalping
-42,7% (horizon 8 jam) dan 45,2% (+48 jam) vs ambang impas 60,1% pada geometri SL 1,94% /
-TP2 2,42%. Kesimpulan eksperimen itu: scalping di Tokocrypto tidak layak untuk engine
-saat ini karena gap akurasi entry 14,9 poin persen, dan hipotesis "trade UNRESOLVED =
-tren berlanjut" terbantah (92 WIN vs 92 LOSS).
+**Contoh isi saat ini:** `exp_scalping_expectancy_ADA-DOGE-XRP.md` — eksperimen lama: win rate
+42,7% (8 jam) dan 45,2% (+48 jam) vs ambang 60,1% pada SL 1,94% / TP2 2,42%, tanpa time-stop.
+Pengulangan parity ada di `exp_scalping_expectancy_parity_ADA-DOGE-XRP.md`: **14,88%**,
+avg R **−0,4898**, 963 dari 1.149 trade TIMEOUT, ambang impas payoff **55,08%**. Kesimpulan
+tetap: scalping di Tokocrypto tidak layak untuk engine saat ini; hipotesis "trade UNRESOLVED =
+tren berlanjut" juga terbantah (92 WIN vs 92 LOSS).
 
 ## Aturan turunan dari audit notifikasi (batch 1 & 2, 2026-10-16)
 

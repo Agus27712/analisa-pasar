@@ -1,0 +1,44 @@
+{
+  "alat": "tools/scalp_replay.py (parity 2026-10-20, commit 6fe26b6)",
+  "tanggal": "2026-10-20",
+  "data": "data/tokocrypto_v4",
+  "bars_m1_per_pair": 87000,
+  "config": {
+    "basis": "data/config/scalp_config.json",
+    "min_friction_multiple": 2.0,
+    "target_net_rr": 0.5,
+    "min_net_rr": 0.5,
+    "lookahead_bars": 480,
+    "exit_mode": "classic",
+    "max_hold_bars_m1": 90,
+    "slippage_pct": 0.08,
+    "fee_model": "taker",
+    "sl_effective_pct": 1.9376,
+    "tp2_effective_pct": 2.9064
+  },
+  "per_pair": [
+    {"pair": "ADAUSDT", "ready": 410, "resolved": 410, "wins": 68, "losses": 342, "win_rate_pct": 16.59, "avg_r": -0.5075, "exits": {"TIMEOUT": 340, "SL": 47, "TP2": 23}, "sl_floor_active_pct": 75.37},
+    {"pair": "DOGEUSDT", "ready": 353, "resolved": 353, "wins": 47, "losses": 306, "win_rate_pct": 13.31, "avg_r": -0.4718, "exits": {"TIMEOUT": 304, "SL": 28, "TP2": 21}, "sl_floor_active_pct": 82.72},
+    {"pair": "XRPUSDT", "ready": 386, "resolved": 386, "wins": 56, "losses": 330, "win_rate_pct": 14.51, "avg_r": -0.4876, "exits": {"TIMEOUT": 319, "SL": 41, "TP2": 26}, "sl_floor_active_pct": 81.09}
+  ],
+  "gabungan": {
+    "ready": 1149,
+    "resolved": 1149,
+    "wins": 171,
+    "losses": 978,
+    "win_rate_pct": 14.88,
+    "avg_r": -0.4898,
+    "exits": {"TIMEOUT": 963, "SL": 116, "TP2": 70},
+    "avg_win_r": 0.5473,
+    "avg_loss_r": -0.6712,
+    "breakeven_win_rate_pct": 55.08,
+    "gap_to_breakeven_pp": 40.2
+  },
+  "catatan": "Bukan perbandingan langsung dengan 42,7%: harness lama belum punya time-stop 90 bar. TP2 efektif berbeda karena kode parity menegakkan TP2 >= 1,5 x risiko.",
+  "batasan": [
+    "Tiga pair, satu dataset 60 hari.",
+    "Orderbook diasumsikan tersedia.",
+    "Hanya Tokocrypto USDT taker; IDR/Indodax tidak diuji.",
+    "Replay historis, bukan eksekusi paper atau uang riil."
+  ]
+}
