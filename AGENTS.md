@@ -703,9 +703,12 @@ tren berlanjut" terbantah (92 WIN vs 92 LOSS).
   **satu nilai global** dan bawaan Tokocrypto-nya adalah preset **USDT** (0,4044%) — memakainya
   untuk pair IDR membuat lantai SL 5,81% (harusnya 4,89%) dan net R:R engine berbeda dari jalur
   paper. Di titik mana pun simbol sudah diketahui, pakai **`prefs.feeConfigFor(symbol)`**
-  (menghormati tarif kustom pengguna). Saat ini dijaga di: `LearningTradingEngine`
-  (`feeConfigForSymbol`), `CandidateScanWorker`, `sellSignalState` (TradingViewModel), dan
-  `balanceSlice` (`TradingViewModelDetailState`). Penjaga:
+  (menghormati tarif kustom pengguna). Bila posisi bisa berasal dari bursa mana pun — seperti
+  `TradingForegroundService` — pakai **`prefs.feeConfigFor(symbol, exchange)`**; membaca bursa
+  aktif di sana membuat posisi bursa lain dinilai dengan tarif yang salah. Saat ini dijaga di:
+  `LearningTradingEngine` (`feeConfigForSymbol`), `CandidateScanWorker`, `sellSignalState`
+  (TradingViewModel, memakai `ctx.symbol`), `balanceSlice` (`TradingViewModelDetailState`), dan
+  `TradingForegroundService` (`feeConfigFor(sym, ex)`). Penjaga:
   `app/src/test/java/agu/analys/viewmodel/FeeQuoteAwarenessSourceTest.kt`.
 - **Poin data fee hanya boleh bercabang di `FeeSchedule` / `TradingFeeConfig`.** Baris yang menulis
   `0.4044` atau `0.0021` sendiri di luar `AppConfiguration.kt` adalah definisi tarif kedua yang
@@ -720,9 +723,19 @@ tren berlanjut" terbantah (92 WIN vs 92 LOSS).
   `app/src/test/java/agu/analys/config/FeeTruthConstantsTest.kt`.
 - **Mirror replay = satu berkas, dikunci uji.** `data/config/scalp_config.json` adalah satu-satunya
   config yang boleh dibaca `tools/scalp_replay.py` (bawaan `--config`). Fee, `min_friction_multiple`,
-  `target_net_rr`, dan `slippage_pct` di dalamnya diperiksa uji terhadap `FeeSchedule` dan
-  `ScalpingConfig`, jadi revisi aplikasi ikut memakai angka yang sama dengan replay. Jangan
-  membuat berkas config kedua di `tools/`.
+  `target_net_rr`, `slippage_pct`, `max_risk_atr`, `max_change_24h_pct`, dan blok `exit` di
+  dalamnya diperiksa uji terhadap `FeeSchedule` dan `ScalpingConfig`, jadi revisi aplikasi ikut
+  memakai angka yang sama dengan replay. Jangan membuat berkas config kedua di `tools/`.
+- **Replay wajib memakai exit yang sama dengan app, bukan subset.** CLASSIC punya time-stop
+  90 bar M1 (`ScalpExitParams.DEFAULT`), dan mode `full`/`tp1_be`/`trail`/`early` harus ada di
+  replay. Jangan menghidupkan kembali `order_type`/tarif maker: jalur app hanya taker. Jangan
+  menghapus time-stop agar “trade selesai” terlihat lebih baik — itu justru menyembunyikan
+  exit yang benar-benar dijalankan app. Penjaga: `tools/test_scalp_replay_parity.py`.
+- **Replay pair IDR wajib memakai `fee.idr_reference`.** `resolve_fee` menggabungkan referensi
+  IDR sebelum menghitung friksi; tanpa itu pair IDR dinilai dengan tarif USDT dan lantai SL
+  melenceng. Konfigurasi IDR mandiri boleh memakai blok `fee` tingkat atas, tetapi referensi
+  yang disebut tetapi tidak ada harus **gagal**, bukan diam-diam memakai tarif USDT.
+  Penjaga: `tools/test_scalp_replay_parity.py`.
 - **Replay harus bisa dijalankan dari keadaan diam.** Kalau `--config` menunjuk berkas yang tidak
   ada, keluarannya JSON berisi lokasi yang dicoba + saran perintah — bukan traceback. Perintah
   yang tertulis di dokumen harus benar-benar berhasil dijalankan dari repo bersih.

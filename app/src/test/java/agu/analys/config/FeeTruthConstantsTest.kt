@@ -1,6 +1,8 @@
 package agu.analys.config
 
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Test
 
 /**
@@ -116,6 +118,39 @@ class FeeTruthConstantsTest {
             angka(json, "target_net_rr"), 1e-9
         )
         assertEquals(FeeSchedule.DEFAULT_SLIPPAGE_PCT, angka(json, "slippage_pct"), 1e-9)
+    }
+
+    @Test
+    fun `mirror replay memuat fee IDR dan parameter parity`() {
+        val json = JSONObject(bacaMirror())
+        val fee = json.getJSONObject("fee")
+        val idr = fee.getJSONObject("idr_reference")
+
+        assertEquals(pct(FeeSchedule.TOKOCRYPTO_IDR_BUY_TAKER), idr.getDouble("buy_taker_pct"), 1e-9)
+        assertEquals(pct(FeeSchedule.TOKOCRYPTO_IDR_SELL_TAKER), idr.getDouble("sell_taker_pct"), 1e-9)
+        assertEquals(pct(FeeSchedule.TOKOCRYPTO_IDR_BUY_MAKER), idr.getDouble("buy_maker_pct"), 1e-9)
+        assertEquals(pct(FeeSchedule.TOKOCRYPTO_IDR_SELL_MAKER), idr.getDouble("sell_maker_pct"), 1e-9)
+
+        assertEquals(
+            agu.analys.engine.scalping.ScalpingConfig.MAX_RISK_ATR,
+            json.getDouble("max_risk_atr"), 1e-9
+        )
+        assertEquals(
+            agu.analys.engine.scalping.ScalpingConfig.MAX_CHANGE_24H_PCT,
+            json.getDouble("max_change_24h_pct"), 1e-9
+        )
+
+        val exit = json.getJSONObject("exit")
+        assertEquals(
+            agu.analys.engine.scalping.ScalpExitParams.DEFAULT.mode.key,
+            exit.getString("mode")
+        )
+        assertEquals(
+            agu.analys.engine.scalping.ScalpExitParams.DEFAULT.maxHoldBarsM1,
+            exit.getInt("max_hold_bars_m1")
+        )
+
+        assertFalse("replay hanya jalur taker", json.has("order_type"))
     }
 
     /** Ambil nilai numerik yang mengikuti `"key": <angka>` di JSON. */

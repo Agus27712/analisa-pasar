@@ -23,7 +23,7 @@ Konsisten dengan FEE_TRUTH.md v1.1:
     - target_net_rr         = 2.0
     - slippage base case    = 0.08% per sisi
     - slippage stress case  = 0.20% dan 0.50% per sisi (wajib diuji)
-    - order_type            = taker
+    - order_type            = taker (tanpa opsi maker; replay = jalur market)
 
   Referensi fee Tokocrypto (per sisi, akun reguler):
     - USDT Maker/Taker all-in: 0.4044%  (0.8088% round-trip)
@@ -70,26 +70,39 @@ DEFAULTS = {
     "min_friction_multiple": 6.0,   # SL gross ≥ 6 × F; plateau 5–10×
     "target_net_rr": 2.0,
     "slippage_pct": 0.08,           # base case per sisi
-    "order_type": "taker",          # taker|maker
     "min_risk_pct": 0.5,            # legacy floor; lantai friksi biasanya menang
-    "max_tp2_r": 20.0,
+    "max_tp2_r": 5.0,
     "min_net_rr": 1.15,            # sama dengan ScalpingConfig.MIN_NET_RR (jangan beda diam-diam)
+    "max_risk_atr": 2.0,
+    "max_change_24h_pct": 0.0,
 
     # Detektor setup (threshold engine; tetap seperti pipeline)
     "chop_hard_ranging": 65.0,
     "rvol_setup_min": 1.2,
-    "rvol_retest_min": 1.1,
-    "rvol_breakout_min": 1.3,
-    "buy_pressure_retest": 1.0,
+    "rvol_retest_min": 1.5,
+    "rvol_breakout_min": 1.5,
+    "buy_pressure_retest": 1.15,
     "buy_pressure_breakout": 1.15,
-    "retest_above_factor": 0.998,
-    "retest_max_dist_pct": 1.5,
-    "retest_min_structure_strength": 55,
-    "breakout_above_factor": 1.002,
-    "pullback_support_max_dist_pct": 1.5,
-    "min_score_breakout_retest": 70,
-    "min_score_long": 65,
-    "min_score_strong": 82,
+    "retest_above_factor": 0.995,
+    "retest_max_dist_pct": 1.2,
+    "retest_min_structure_strength": 60,
+    "breakout_above_factor": 0.998,
+    "pullback_support_max_dist_pct": 1.2,
+    "min_score_breakout_retest": 75,
+    "min_score_long": 60,
+    "min_score_strong": 75,
+
+    # Exit paper (mirror ScalpExitParams.DEFAULT). CLASSIC tetap memakai time-stop 90 bar.
+    "exit": {
+        "mode": "classic",
+        "min_early_profit_net_pct": 0.45,
+        "breakeven_trigger_net_pct": 0.40,
+        "trail_pct": 0.35,
+        "max_hold_bars_m1": 90,
+        "min_profit_friction_multiple": 2.0,
+        "be_trigger_atr_fraction": 0.5,
+        "trail_atr_fraction": 0.6,
+    },
 
     # Replay
     "replay": {
@@ -110,11 +123,11 @@ DEFAULT_CONFIG_PATH = "data/config/scalp_config.json"
 
 
 def merge_defaults(cfg):
-    """Isi key yang hilang dengan DEFAULTS; sub-dict 'replay' di-merge."""
+    """Isi key yang hilang dengan DEFAULTS; sub-dict 'replay' dan 'exit' di-merge."""
     out = dict(cfg)
     for k, v in DEFAULTS.items():
-        if k == "replay":
-            out["replay"] = {**v, **cfg.get("replay", {})}
+        if k in ("replay", "exit"):
+            out[k] = {**v, **cfg.get(k, {})}
         elif k not in out:
             out[k] = v
     return out
@@ -129,11 +142,28 @@ def validate_fee(fee):
         )
 
 
-def order_fees(fee, order_type):
-    """(buy_fee_pct, sell_fee_pct) sesuai order_type."""
-    if order_type == "maker":
-        return fee["buy_maker_pct"], fee["sell_maker_pct"]
-    return fee["buy_taker_pct"], fee["sell_taker_pct"]
+def resolve_fee(cfg, pair):
+    """
+    Fee sesuai kuotasi pair. Replay adalah jalur market, jadi selalu taker.
+
+    Config kanonik memakai fee USDT di level atas + `idr_reference`; pair berakhiran IDR
+    wajib memakai referensi IDR (FEE_TRUTH §0.2). Config IDR mandiri (mis.
+    `scalp_config_exit_full_idr.json`) sudah punya fee IDR di level atas.
+    """
+    fee = dict(cfg.get("fee", {}))
+    quote = str(fee.get("quote", "")).upper()
+    wants_idr = str(pair).upper().endswith("IDR")
+    if wants_idr and quote != "IDR":
+        ref = fee.get("idr_reference")
+        if not ref:
+            raise ValueError(
+                f"pair {pair} butuh fee IDR, tetapi config tidak punya `fee.idr_reference` "
+                "dan `fee.quote` bukan IDR."
+            )
+        fee = {**fee, **ref, "quote": "IDR"}
+        fee.pop("idr_reference", None)
+    validate_fee(fee)
+    return fee
 
 
 # --------------------------------------------------------------------------
@@ -526,8 +556,9 @@ def detect_setup(price, st, rg, rvol, bp, m1, cfg):
             rvol_ok = rvol >= cfg["rvol_breakout_min"]
             flow_ok = bp >= cfg["buy_pressure_breakout"]
             mom_ok = momentum_bullish(m1, price)
-            conf = sum([rvol_ok, flow_ok, mom_ok])
-            if conf >= 2 or (rg["regime"] == "BREAKOUT" and conf >= 1):
+            # S1 — RVOL WAJIB, sama dengan ScalpSetupDetector.detectBreakout.
+            # Tanpa ini breakout di pasar sepi lolos sebagai sinyal (kasus AMP/USDT).
+            if rvol_ok and sum([flow_ok, mom_ok]) >= 1:
                 return "BREAKOUT"
         # 4. pullback
         trending = rg["regime"] == "TRENDING_UP" or \
@@ -675,16 +706,16 @@ def score_all(price, st, rg, setup, rvol, bp, has_ob, mtf_aligned, mtf_total, m1
 # Risk + fee (mirror ScalpingRiskEngine.kt + FeeCalculator.kt, FEE_TRUTH v1.1)
 # --------------------------------------------------------------------------
 
-def roundtrip_fee(entry, sl, tp, fee, slip, maker=False):
+def roundtrip_fee(entry, sl, tp, fee, slip):
     """
-    Net RR dan komponen biaya.
+    Net RR dan komponen biaya untuk order market (taker dua sisi).
     Fee dan slippage dipisah (FEE_TRUTH §0, §8).
     """
     if entry <= 0 or sl <= 0 or tp <= 0:
         return {"net_rr": 0.0, "net_reward_pct": 0.0, "net_risk_pct": 0.0,
                 "fee_cost_pct": 0.0, "slippage_cost_pct": 0.0, "total_cost_pct": 0.0}
-    bf = fee["buy_maker_pct"] if maker else fee["buy_taker_pct"]
-    sf = fee["sell_maker_pct"] if maker else fee["sell_taker_pct"]
+    bf = fee["buy_taker_pct"]
+    sf = fee["sell_taker_pct"]
     bcf = 1.0 + (bf + slip) / 100.0
     snf = max(0.0, 1.0 - (sf + slip) / 100.0)
     rew = (tp / entry * snf / bcf - 1.0) * 100.0
@@ -708,9 +739,7 @@ def risk_levels(price, setup, st, rg, fee, cfg):
     if price <= 0 or setup == "NONE":
         return None
 
-    order_type = cfg.get("order_type", DEFAULTS["order_type"])
-    maker = order_type == "maker"
-    bf, sf = order_fees(fee, order_type)
+    bf, sf = fee["buy_taker_pct"], fee["sell_taker_pct"]
     slip = cfg.get("slippage_pct", DEFAULTS["slippage_pct"])
 
     friction_pct = (bf + sf) + 2.0 * slip
@@ -736,11 +765,12 @@ def risk_levels(price, setup, st, rg, fee, cfg):
     min_risk_pct_price = min_risk_pct / 100.0 * entry
     friction_floor_price = friction_floor_pct / 100.0 * entry
     min_risk = max(atr_floor_price, min_risk_pct_price, friction_floor_price)
-    max_risk = max(2.0 * atr, min_risk)
+    max_risk_atr = cfg.get("max_risk_atr", DEFAULTS["max_risk_atr"])
+    max_risk = max(float(max_risk_atr) * atr, min_risk)
 
     sl = ssl if ssl is not None else entry - 1.0 * atr
     raw = entry - sl
-    # True bila tanpa lantai friksi, SL awal (struktur) tidak akan menutup biaya.
+    # True bila SL struktur (sebelum lantai) tidak menutup biaya round-trip.
     sl_floor_active = raw < friction_floor_price
 
     if raw > max_risk:
@@ -767,7 +797,7 @@ def risk_levels(price, setup, st, rg, fee, cfg):
     tp2 = max(entry * (1.0 + tp2_pct / 100.0), tp1 + 0.5 * risk)
     tp2r = (tp2 - entry) / risk if risk > 0 else 0.0
 
-    f = roundtrip_fee(entry, sl, tp2, fee, slip, maker=maker)
+    f = roundtrip_fee(entry, sl, tp2, fee, slip)
     max_tp2_r = cfg.get("max_tp2_r", DEFAULTS["max_tp2_r"])
     min_net_rr = cfg.get("min_net_rr", DEFAULTS["min_net_rr"])
 
@@ -785,7 +815,6 @@ def risk_levels(price, setup, st, rg, fee, cfg):
         "friction_pct": friction_pct,
         "friction_floor_pct": friction_floor_pct,
         "sl_floor_active": bool(sl_floor_active),
-        "order_type": order_type,
         "valid": valid,
     }
 
@@ -798,7 +827,7 @@ def min_score_for_setup(setup, cfg):
     return cfg["min_score_breakout_retest"] if setup == "BREAKOUT_RETEST" else cfg["min_score_long"]
 
 
-def evaluate_bar(price, m1w, m15w, h1w, cfg, fee, assume_ob):
+def evaluate_bar(price, m1w, m15w, h1w, cfg, fee, assume_ob, change24h=0.0):
     if price <= 0 or len(h1w) < 20 or len(m15w) < 20 or len(m1w) < 20:
         return None
     last = m1w[-1]
@@ -865,7 +894,11 @@ def evaluate_bar(price, m1w, m15w, h1w, cfg, fee, assume_ob):
 
     knife = st["bias"] == "BEARISH" and len(m1w) >= 5 and \
         m1w[-1]["c"] < m1w[-5]["c"] * 0.992
-    dangerous = noise or overbought or knife
+    # S9 — koin yang sudah naik ekstrem 24 jam ditahan. `change24h == 0` berarti
+    # tidak diketahui (mis. data < 1440 bar) dan gerbang dilewati, sama seperti app.
+    max_change = cfg.get("max_change_24h_pct", DEFAULTS["max_change_24h_pct"])
+    extended = max_change > 0 and change24h >= max_change
+    dangerous = noise or overbought or knife or extended
 
     s1 = (not dangerous) and room
     s2 = s1 and ob_valid
@@ -908,7 +941,8 @@ def evaluate_bar(price, m1w, m15w, h1w, cfg, fee, assume_ob):
         "slippage_cost_pct": rl["slippage_cost_pct"] if rl else 0.0,
         "friction_pct": rl["friction_pct"] if rl else 0.0,
         "sl_floor_active": rl["sl_floor_active"] if rl else False,
-        "order_type": rl["order_type"] if rl else cfg.get("order_type", DEFAULTS["order_type"]),
+        # S8 — ATR% diperlukan resolve_trade untuk BE/trailing proporsional.
+        "atr_pct": rg["atr_pct"] if rg["atr_pct"] > 0 else 0.0,
     }
 
 
@@ -956,6 +990,183 @@ def aggregate(candles, minutes):
 # Replay
 # --------------------------------------------------------------------------
 
+# --------------------------------------------------------------------------
+# Exit resolution (spot long): classic TP2/SL vs TP1+BE+trail vs early profit
+# --------------------------------------------------------------------------
+
+def _net_profit_pct(entry, price, fee, slip):
+    """Profit net % setelah buy+sell fee dan 2x slippage (perkiraan spot)."""
+    if entry <= 0 or price <= 0:
+        return 0.0
+    buy_cost = 1.0 + (fee.get("buy_taker_pct", 0.1) + slip) / 100.0
+    sell_net = max(0.0, 1.0 - (fee.get("sell_taker_pct", 0.1) + slip) / 100.0)
+    return ((price / entry) * sell_net / buy_cost - 1.0) * 100.0
+
+
+def be_price(entry, fee, slip):
+    """Harga impas net (profit net = 0). Kebalikan dari _net_profit_pct."""
+    buy_cost = 1.0 + (fee.get("buy_taker_pct", 0.1) + slip) / 100.0
+    sell_net = max(1e-9, 1.0 - (fee.get("sell_taker_pct", 0.1) + slip) / 100.0)
+    return entry * buy_cost / sell_net
+
+
+def _momentum_weak(m1_slice):
+    """Momentum lemah: EMA9 < EMA21*0.998 atau RSI di luar 40-78 atau candle merah dominan."""
+    if len(m1_slice) < 10:
+        return True
+    closes = [c["c"] for c in m1_slice]
+    e9 = ema_last(closes, 9)
+    e21 = ema_last(closes, 21)
+    r = rsi_wilder(closes, min(14, len(closes) - 1))
+    last = m1_slice[-1]
+    bear_candle = last["c"] < last["o"]
+    ema_weak = e9 < e21 * 0.998
+    rsi_weak = r < 40.0 or r > 78.0
+    return ema_weak or (rsi_weak and bear_candle) or (bear_candle and e9 < e21)
+
+
+def _round_trip_cost_pct(fee, slip):
+    """Friksi round-trip (%) = buy fee + sell fee + 2x slippage (satu sisi slippage tiap transaksi)."""
+    return fee.get("buy_taker_pct", 0.1) + fee.get("sell_taker_pct", 0.1) + 2.0 * slip
+
+
+def _gross_pct(entry, price):
+    """Profit kotor (%) berbasis harga — dasar perbandingan lantai profit (S2)."""
+    if entry <= 0 or price <= 0:
+        return 0.0
+    return (price / entry - 1.0) * 100.0
+
+
+def resolve_trade(m1, i, entry, sl, tp1, tp2, fee, cfg, lookahead, atr_pct=0.0):
+    """
+    Resolve forward dari bar i+1.
+    Satuan R seragam untuk SEMUA exit:
+        R = profit_net_pct(harga_exit) / risiko_kotor_pct(entry -> sl)
+    exit_mode di cfg['exit']:
+      classic — SL / TP2 saja, tetap terkena time-stop `max_hold_bars_m1`
+      tp1_be  — TP1 partial 50% + SL ke BE(net); lalu TP2 atau SL
+      trail   — trailing dari peak setelah net >= be_trigger
+      early   — early SELL jika net_close >= min_early dan momentum lemah
+      full    — tp1_be + trail + early (prioritas: SL > early > trail > TP2)
+
+    S2 — profit sukarela (early) dan peng-arm-an BE/trailing hanya setelah profit
+    KOTOR >= `min_profit_friction_multiple` x friksi round-trip.
+    S8 — trigger BE / jarak trailing memakai fraksi ATR bila ATR tersedia.
+    """
+    ex = cfg.get("exit", {})
+    mode = ex.get("mode", "classic")
+    slip = cfg.get("slippage_pct", DEFAULTS["slippage_pct"])
+    min_early = float(ex.get("min_early_profit_net_pct", 0.45))
+    be_trigger = float(ex.get("breakeven_trigger_net_pct", 0.40))
+    trail_pct = float(ex.get("trail_pct", 0.35))
+    max_hold = int(ex.get("max_hold_bars_m1", 0))
+
+    min_profit_mult = float(ex.get("min_profit_friction_multiple", 2.0))
+    be_atr_frac = float(ex.get("be_trigger_atr_fraction", 0.5))
+    trail_atr_frac = float(ex.get("trail_atr_fraction", 0.6))
+    floor_gross = min_profit_mult * _round_trip_cost_pct(fee, slip) if min_profit_mult > 0 else 0.0
+    if be_atr_frac > 0 and atr_pct > 0:
+        be_trigger = max(be_trigger, be_atr_frac * atr_pct)
+    trail_dist = trail_atr_frac * atr_pct if (trail_atr_frac > 0 and atr_pct > 0) else trail_pct
+
+    risk = entry - sl
+    if risk <= 0 or entry <= 0:
+        return {"result": "UNRESOLVED", "r": 0.0, "exit_idx": None, "ambiguous": False,
+                "exit_reason": "bad_risk"}
+    risk_pct = risk / entry * 100.0
+
+    def r_at(price):
+        return _net_profit_pct(entry, price, fee, slip) / risk_pct
+
+    be_px = be_price(entry, fee, slip)
+
+    n = len(m1)
+    end = min(n, i + 1 + lookahead)
+    if max_hold > 0:
+        end = min(end, i + 1 + max_hold)
+
+    active_sl = sl
+    be_armed = False
+    trail_armed = False
+    peak = entry
+    partial_r = 0.0
+    partial_done = False
+    ambiguous = False
+
+    def _done(total_r, idx, reason, amb=False):
+        return {
+            "result": "WIN" if total_r > 0 else "LOSS",
+            "r": round(total_r, 4),
+            "exit_idx": idx,
+            "ambiguous": amb,
+            "exit_reason": reason,
+        }
+
+    for j in range(i + 1, end):
+        b = m1[j]
+        hi, lo, cl = b["h"], b["l"], b["c"]
+        peak = max(peak, hi)
+
+        # --- Hard SL (selalu dicek dulu) ---
+        if lo <= active_sl:
+            if hi >= tp2 and active_sl <= sl + 1e-12:
+                ambiguous = True
+            rem = r_at(active_sl)
+            total_r = partial_r + 0.5 * rem if partial_done else rem
+            if active_sl <= sl + 1e-12:
+                reason = "SL"
+            elif be_armed and not trail_armed:
+                reason = "BE_SL"
+            else:
+                reason = "TRAIL_SL"
+            return _done(total_r, j, reason, ambiguous)
+
+        # --- TP2 full ---
+        if hi >= tp2:
+            total_r = partial_r + 0.5 * r_at(tp2) if partial_done else r_at(tp2)
+            return _done(total_r, j, "TP2")
+
+        # --- Mode-specific ---
+        if mode in ("tp1_be", "trail", "early", "full"):
+            net_hi = _net_profit_pct(entry, hi, fee, slip)
+            net_cl = _net_profit_pct(entry, cl, fee, slip)
+
+            if mode in ("tp1_be", "full") and (not partial_done) and hi >= tp1:
+                partial_done = True
+                partial_r = 0.5 * r_at(tp1)
+                active_sl = max(active_sl, be_px)
+                be_armed = True
+
+            if (mode in ("trail", "early", "full") and (not be_armed)
+                    and net_hi >= be_trigger and _gross_pct(entry, hi) >= floor_gross):
+                active_sl = max(active_sl, be_px)
+                be_armed = True
+
+            if (mode in ("trail", "full") and net_hi >= be_trigger
+                    and _gross_pct(entry, hi) >= floor_gross):
+                trail_armed = True
+                trail_sl = peak * (1.0 - trail_dist / 100.0)
+                active_sl = max(active_sl, trail_sl)
+
+            if (mode in ("early", "full") and net_cl >= min_early
+                    and _gross_pct(entry, cl) >= floor_gross):
+                window = m1[max(0, j - 14):j + 1]
+                if _momentum_weak(window):
+                    rem = r_at(cl)
+                    total_r = partial_r + 0.5 * rem if partial_done else rem
+                    return _done(total_r, j, "EARLY_PROFIT")
+
+    # Time-stop / akhir data: tutup di close bar terakhir yang tersedia.
+    if end > i + 1:
+        last_idx = end - 1
+        rem = r_at(m1[last_idx]["c"])
+        total_r = partial_r + 0.5 * rem if partial_done else rem
+        return _done(total_r, last_idx, "TIMEOUT", ambiguous)
+
+    return {"result": "UNRESOLVED", "r": 0.0, "exit_idx": None, "ambiguous": False,
+            "exit_reason": "TIMEOUT"}
+
+
 def run_replay(m1, m15, h1, cfg, fee, assume_ob, lookahead):
     rp = cfg.get("replay", DEFAULTS["replay"])
     m15_min = int(rp.get("m15_min_bars", 20))
@@ -963,6 +1174,7 @@ def run_replay(m1, m15, h1, cfg, fee, assume_ob, lookahead):
     evals = 0
     bott = {"s1": 0, "s2": 0, "s3": 0, "s4": 0}
     setup_hits = {}
+    exit_reasons = {}
     trades = []
     equity = []
     cum = 0.0
@@ -986,7 +1198,11 @@ def run_replay(m1, m15, h1, cfg, fee, assume_ob, lookahead):
         if len(m1w) < 20 or len(m15w) < m15_min or len(h1w) < h1_min:
             i += 1
             continue
-        r = evaluate_bar(c["c"], m1w, m15w, h1w, cfg, fee, assume_ob)
+        # S9 — perubahan harga 24 jam (1440 bar M1) untuk gerbang extended move.
+        chg24 = 0.0
+        if i >= 1440 and m1[i - 1440]["c"] > 0:
+            chg24 = (c["c"] / m1[i - 1440]["c"] - 1.0) * 100.0
+        r = evaluate_bar(c["c"], m1w, m15w, h1w, cfg, fee, assume_ob, change24h=chg24)
         if r is None:
             i += 1
             continue
@@ -1004,53 +1220,38 @@ def run_replay(m1, m15, h1, cfg, fee, assume_ob, lookahead):
             i += 1
             continue
         setup_hits[r["setup"]] = setup_hits.get(r["setup"], 0) + 1
-        # resolusi forward non-overlapping
-        entry, sl, tp2 = r["entry"], r["sl"], r["tp2"]
-        exit_r = None
-        exit_idx = None
-        ambiguous = False
-        for j in range(i + 1, min(n, i + 1 + lookahead)):
-            b = m1[j]
-            hit_sl = b["l"] <= sl
-            hit_tp = b["h"] >= tp2
-            if hit_sl and hit_tp:
-                ambiguous = True
-                exit_r = -1.0  # konservatif: SL dulu (konvensi BacktestEngine)
-                exit_idx = j
-                break
-            if hit_sl:
-                exit_r = -1.0
-                exit_idx = j
-                break
-            if hit_tp:
-                exit_r = r["net_rr"]
-                exit_idx = j
-                break
-        if exit_r is None:
+        entry, sl, tp1, tp2 = r["entry"], r["sl"], r["tp1"], r["tp2"]
+        resolved = resolve_trade(m1, i, entry, sl, tp1, tp2, fee, cfg, lookahead,
+                                 atr_pct=r.get("atr_pct", 0.0))
+        reason = resolved.get("exit_reason", "")
+        exit_reasons[reason] = exit_reasons.get(reason, 0) + 1
+        if resolved["result"] == "UNRESOLVED":
             trades.append({"setup": r["setup"], "score": r["score"], "result": "UNRESOLVED",
                            "r": 0.0, "t": t, "ambiguous": False,
-                           "entry": entry, "sl": sl, "tp2": tp2,
+                           "entry": entry, "sl": sl, "tp1": tp1, "tp2": tp2,
                            "gross_risk_pct": r["gross_risk_pct"],
                            "friction_pct": r["friction_pct"],
                            "sl_floor_active": r["sl_floor_active"],
-                           "order_type": r["order_type"]})
+                           "exit_reason": reason})
             i += lookahead
             continue
+        exit_r = resolved["r"]
+        exit_idx = resolved["exit_idx"]
         cum += exit_r
         peak = max(peak, cum)
         max_dd = max(max_dd, peak - cum)
         equity.append(round(cum, 4))
         trades.append({"setup": r["setup"], "score": r["score"],
-                       "result": "WIN" if exit_r > 0 else "LOSS", "r": round(exit_r, 4),
-                       "t": t, "ambiguous": ambiguous,
-                       "entry": entry, "sl": sl, "tp2": tp2,
+                       "result": resolved["result"], "r": exit_r,
+                       "t": t, "ambiguous": resolved["ambiguous"],
+                       "entry": entry, "sl": sl, "tp1": tp1, "tp2": tp2,
                        "gross_risk_pct": r["gross_risk_pct"],
                        "friction_pct": r["friction_pct"],
                        "sl_floor_active": r["sl_floor_active"],
-                       "order_type": r["order_type"],
-                       "exit_bar": m1[exit_idx]["t"]})
+                       "exit_bar": m1[exit_idx]["t"], "exit_reason": reason})
         i = exit_idx + 1
     return {"evals": evals, "bottleneck": bott, "setup_hits": setup_hits,
+            "exit_reasons": exit_reasons,
             "trades": trades, "equity_r": equity, "max_dd_r": round(max_dd, 4)}
 
 
@@ -1070,18 +1271,30 @@ def summarize(rep):
         d["win_rate"] = round(100.0 * d["wins"] / d["trades"], 2) if d["trades"] else 0.0
         d["avg_r"] = round(d["gross_r"] / d["trades"], 4) if d["trades"] else 0.0
         d["gross_r"] = round(d["gross_r"], 4)
+    by_exit = {}
+    for t in tr:
+        er = t.get("exit_reason", "?")
+        d = by_exit.setdefault(er, {"trades": 0, "wins": 0, "gross_r": 0.0})
+        d["trades"] += 1
+        d["gross_r"] += t["r"]
+        if t["result"] == "WIN":
+            d["wins"] += 1
+    for s, d in by_exit.items():
+        d["win_rate"] = round(100.0 * d["wins"] / d["trades"], 2) if d["trades"] else 0.0
+        d["avg_r"] = round(d["gross_r"] / d["trades"], 4) if d["trades"] else 0.0
+        d["gross_r"] = round(d["gross_r"], 4)
     n = len(tr)
+    total_signals = len(rep["trades"])
 
-    floor_active = sum(1 for t in tr if t.get("sl_floor_active"))
+    floor_active = sum(1 for t in rep["trades"] if t.get("sl_floor_active"))
     avg_gross = round(sum(t.get("gross_risk_pct", 0) for t in tr) / n, 4) if n else 0.0
     avg_friction = round(sum(t.get("friction_pct", 0) for t in tr) / n, 4) if n else 0.0
-    order_types = sorted({t.get("order_type", "") for t in tr if t.get("order_type")})
 
     return {
         "evaluations": rep["evals"],
-        "ready_signals": len(tr) + sum(1 for t in rep["trades"] if t["result"] == "UNRESOLVED"),
+        "ready_signals": total_signals,
         "trades_resolved": n,
-        "unresolved": sum(1 for t in rep["trades"] if t["result"] == "UNRESOLVED"),
+        "unresolved": total_signals - n,
         "wins": len(wins),
         "losses": n - len(wins),
         "win_rate_pct": round(100.0 * len(wins) / n, 2) if n else 0.0,
@@ -1090,13 +1303,14 @@ def summarize(rep):
         "profit_factor": round(gw / gl, 4) if gl > 0 else (float("inf") if gw > 0 else 0.0),
         "max_drawdown_r": rep["max_dd_r"],
         "sl_floor_active_trades": floor_active,
-        "sl_floor_active_pct": round(100.0 * floor_active / n, 2) if n else 0.0,
+        "sl_floor_active_pct": round(100.0 * floor_active / total_signals, 2) if total_signals else 0.0,
         "avg_gross_risk_pct": avg_gross,
         "avg_friction_pct": avg_friction,
-        "order_types_seen": order_types,
         "bottleneck": rep["bottleneck"],
         "setup_hits": rep["setup_hits"],
+        "exit_reasons_count": rep.get("exit_reasons", {}),
         "by_setup": by_setup,
+        "by_exit_reason": by_exit,
     }
 
 
@@ -1113,8 +1327,6 @@ def main():
     ap.add_argument("--max-bars", type=int, default=0, help="batasi jumlah bar M1 (0 = semua)")
     ap.add_argument("--slippage-pct", type=float, default=None,
                     help="Override slippage per sisi (mis. 0.08 base, 0.20/0.50 stress)")
-    ap.add_argument("--order-type", choices=["taker", "maker"], default=None,
-                    help="Override order type (taker|maker)")
     args = ap.parse_args()
 
     config_path = args.config
@@ -1134,12 +1346,9 @@ def main():
         cfg = merge_defaults(json.load(f))
     if args.slippage_pct is not None:
         cfg["slippage_pct"] = args.slippage_pct
-    if args.order_type is not None:
-        cfg["order_type"] = args.order_type
 
-    fee = cfg.get("fee", {})
     try:
-        validate_fee(fee)
+        fee = resolve_fee(cfg, args.pair)
     except ValueError as e:
         print(json.dumps({"error": str(e)}))
         return 1
@@ -1170,7 +1379,7 @@ def main():
     rep = run_replay(m1, m15, h1, cfg, fee, args.assume_orderbook_ok, lookahead)
 
     # Fee per sisi efektif (untuk audit FEE_TRUTH §8)
-    bf_eff, sf_eff = order_fees(fee, cfg["order_type"])
+    bf_eff, sf_eff = fee["buy_taker_pct"], fee["sell_taker_pct"]
     friction_pct_eff = (bf_eff + sf_eff) + 2.0 * cfg["slippage_pct"]
     friction_floor_pct_eff = cfg["min_friction_multiple"] * friction_pct_eff
 
@@ -1184,11 +1393,14 @@ def main():
         "bars_h1": len(h1),
         "range": {"from": m1[0]["t"], "to": m1[-1]["t"]} if m1 else {},
         "fee": fee,
+        "fee_quote": fee.get("quote"),
         # Parameter efektif (audit FEE_TRUTH §5, §8)
-        "effective_order_type": cfg["order_type"],
         "effective_slippage_pct": cfg["slippage_pct"],
         "min_friction_multiple": cfg["min_friction_multiple"],
         "target_net_rr": cfg["target_net_rr"],
+        "max_risk_atr": cfg["max_risk_atr"],
+        "max_change_24h_pct": cfg["max_change_24h_pct"],
+        "exit": cfg["exit"],
         "friction_pct_effective": round(friction_pct_eff, 4),
         "friction_floor_pct_effective": round(friction_floor_pct_eff, 4),
         "fee_cost_pct_effective": round(bf_eff + sf_eff, 4),
@@ -1215,7 +1427,8 @@ Deviasi sadar vs aplikasi (didokumentasikan agar hasil bisa dibandingkan):
    Wilder manual). Aplikasi memakai TA4J bila tersedia — beda tipis di series panjang.
 2. Grid agregasi HTF memakai UTC. Bila sesi bursa tidak selaras UTC (mis. D1 Indodax
    00:00 WIB), H4/D1 bisa bergeser; untuk M15/H1 dampak minimal.
-3. Forward-resolution memakai TP2/SL penuh satu posisi (tanpa split TP1 55%).
+3. Forward-resolution mengikuti blok `exit` (classic/tp1_be/trail/early/full).
+   Partial TP1 = 50%; time-stop `max_hold_bars_m1` berlaku juga untuk CLASSIC.
    Same-bar SL+TP -> SL dulu (konvensi BacktestEngine.kt).
 4. Quirk aplikasi yang DIPORT SETIA: bias bullish evaluateLeg, momentumBullish <10,
    choppiness abaikan candle pertama, klausa mati hadBreakContext, avgVol nol

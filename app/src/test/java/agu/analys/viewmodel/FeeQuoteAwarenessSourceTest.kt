@@ -66,7 +66,33 @@ class FeeQuoteAwarenessSourceTest {
         val kode = baca("src/main/java/agu/analys/viewmodel/TradingViewModel.kt")
         assertTrue(
             "sellSignalState harus memakai feeConfigFor(pair), bukan fee global",
-            kode.contains("feeConfigFor")
+            kode.contains("ctx.symbol") && kode.contains("prefs.feeConfigFor")
+        )
+        assertFalse(
+            "pair yang kebetulan dipilih di ticker tidak boleh menentukan fee posisi",
+            kode.contains("tick?.symbol")
+        )
+    }
+
+    @Test
+    fun `service latar memakai bursa dan pair posisi`() {
+        val kode = baca("src/main/java/agu/analys/service/TradingForegroundService.kt")
+        assertTrue(
+            "service memantau dua bursa; fee harus mengikuti bursa posisi",
+            kode.contains("appPrefs.feeConfigFor(sym, ex)")
+        )
+        assertFalse(
+            "fee global USDT akan salah untuk posisi IDR/Indodax",
+            kode.contains("tradingFees = appPrefs.tradingFees")
+        )
+    }
+
+    @Test
+    fun `preferensi menyediakan resolver fee berbursa eksplisit`() {
+        val kode = baca("src/main/java/agu/analys/util/AppPreferences.kt")
+        assertTrue(
+            "resolver fee harus bisa menerima bursa posisi, bukan hanya bursa aktif",
+            kode.contains("fun feeConfigFor(symbol: String, exchange: String)")
         )
     }
 

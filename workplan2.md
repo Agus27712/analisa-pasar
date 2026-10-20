@@ -333,6 +333,12 @@ absolut (`min_risk_pct` 3,0%), sweep dilanjutkan pada kelipatan friksi (6 pair, 
 Ada **plateau lebar 5–10×**; **6,0 dipilih** sebagai default (terbaik untuk pair USDT, dan masih
 baik untuk IDR maker). Di bawah 5× belum konsisten positif.
 
+> **Catatan parity 2026-10-20.** Baris `idr_maker` di tabel ini adalah eksperimen historis
+> dengan knob maker yang **sudah dihapus** dari app dan replay (jalur sekarang taker-only).
+> Angka `6× idr_maker = 297` **bukan** 297 sinyal BTCUSDT default; itu 6 pair × 20.000 bar
+> memakai config IDR maker. Jangan menjalankan ulang dengan asumsi maker dan jangan mencampurnya
+> dengan angka BTCUSDT 60 hari di §60.5.
+
 ### 9.5 Batasan yang wajib dibaca (jangan dibuang)
 
 1. **Angkanya tipis.** +0,0235R per trade tidak cukup untuk diklaim edge stabil. Ini baru
@@ -3735,8 +3741,8 @@ pekerjaan ini menyinkronkan konstanta/parameter ke codebase lalu menjalankan rep
   config yang hilang menghasilkan pesan JSON berisi lokasi yang dicoba + saran `--config`, bukan
   traceback; `DEFAULTS["min_net_rr"]` 0,5 → **1,15** (sebelumnya beda dari
   `ScalpingConfig.MIN_NET_RR`, diam-diam).
-- `data/config/scalp_config.json` — `order_type: "taker"` ditulis eksplisit (sebelumnya
-  bergantung fallback).
+- `data/config/scalp_config.json` — `order_type` **dihapus** pada 2026-10-20; replay dan app
+  hanya punya jalur taker, jadi knob maker tidak boleh ada.
 - `LearningTradingEngine` — properti baru `feeConfigForSymbol: (String) -> TradingFeeConfig`;
   ketiga call site evaluate memakai tarif per-simbol.
 - `TradingViewModelSync` — `engine.feeConfigForSymbol = { prefs.feeConfigFor(it) }`.
@@ -3763,16 +3769,13 @@ Percobaan pertama **GAGAL** — `mirror replay sama dengan FeeSchedule` melempar
 melewati `:` sebelum `toDouble()`. Pelajaran: parser harus diuji pada data JSON asli, bukan
 pada data yang kebetulan "sudah benar".
 
-Kontrol negatif (disimulasikan di lingkungan ini):
+Kontrol negatif yang **benar-benar dijalankan** pada 2026-10-20:
 
-| Kerusakan yang disuntikkan | Akibat |
+| Kerusakan yang disuntikkan | Akibat terukur |
 |---|---|
-| satu konstanta fee IDR diubah (0,4322 → 0,4222) | `FeeTruthConstantsTest` GAGAL |
-| `buy_taker_pct` di JSON → 0,2222 | GAGAL (mirror ≠ FeeSchedule) |
-| `buy_maker_pct` di JSON → 0,1222 (maker ≠ taker di USDT) | GAGAL |
-| `min_friction_multiple` di JSON → 3,0 | GAGAL |
-| `slippage_pct` di JSON → 0,2 | GAGAL |
-| satu call site dikembalikan ke `fees = tradingFees` / `prefs.tradingFees` | 4 kasus pindai sumber GAGAL |
+| `tools/scalp_replay.py` dikembalikan ke versi sebelum parity | `test_scalp_replay_parity.py` **8 dari 10 GAGAL** (3 failure, 5 error) |
+| `ctx.symbol` di `sellSignalState` dikembalikan ke `tick?.symbol` | `FeeQuoteAwarenessSourceTest` **1 GAGAL** |
+| `feeConfigFor(sym, ex)` di service diubah menjadi `feeConfigFor(sym)` | `FeeQuoteAwarenessSourceTest` **1 GAGAL** |
 
 **Angka terukur** (workflow `unit-tests-manual.yml`, branch `patch`, 2026-10-19):
 
@@ -3784,52 +3787,98 @@ Kontrol negatif (disimulasikan di lingkungan ini):
 
 Baseline sebelum batch ini 98 kelas / 757 uji ⇒ **+2 kelas / +11 uji**.
 
-### 60.5 Hasil replay (terukur 2026-10-19, `tools/scalp_replay.py` versi FEE_TRUTH v1.1)
+**Suite penuh 2026-10-20 (lokal, JDK 17):** **101 kelas / 773 uji, 0 gagal, 1 dilewati**.
+Kenaikan dari 100/768: `ScalpingRuntimeConfigFeeExportTest` (2 uji baru),
+`FeeTruthConstantsTest` +1, `FeeQuoteAwarenessSourceTest` +2. Rincian: `FeeTruthConstantsTest`
+8, `FeeQuoteAwarenessSourceTest` 6, `NotificationFeeSourceTest` 3,
+`ScalpingRuntimeConfigFeeExportTest` 2.
 
-Artefak ringkas: `data/hasil/replay_fee_truth_v11_2026-10-19.json`.
+### 60.5 Hasil replay (dikoreksi 2026-10-20)
 
-**Efek samping yang diketahui:** `friction_pct_effective = 0,9688%` dan
-`friction_floor_pct_effective = 5,8128%` — cocok dengan FEE_TRUTH §5 (≈5,81%).
+**Koreksi penting.** Angka 2026-10-19 diukur dengan harness yang **belum sama dengan app**:
+belum ada time-stop CLASSIC 90 bar, S1 masih meloloskan breakout tanpa RVOL, S9 belum
+membaca `max_change_24h_pct`, dan `max_risk_atr` masih hardcode 2,0. Karena itu tabel lama
+tidak boleh dipakai untuk menyimpulkan perilaku app.
 
-| Skenario (BTCUSDT) | SL floor | Sinyal ready | Trade selesai | Win % | Avg R |
-|---|---:|---:|---:|---:|---:|
-| Default 6×, horizon 2 jam, data 60 hari | 5,81% | 297 | **0** | — | — |
-| Default 6×, slippage stress 0,20% | 5,81% | 297 | **0** | — | — |
-| Default 6×, slippage stress 0,50% | 5,81% | 297 | **0** | — | — |
-| Default 6×, horizon 8 jam | 5,81% | 129 | **0** | — | — |
-| Lantai 3×, horizon 8 jam | 2,91% | 129 | 1 | 0,0 | −1,0 |
-| Lantai 1×, horizon 8 jam (kontrol) | 0,97% | 138 | 46 | 8,7 | −0,7398 |
-| Tanpa lantai (SL 0,5%), horizon 8 jam | 0,50% | 1 | 0 | — | — |
+Artefak lama (historis, pra-parity): `data/hasil/replay_fee_truth_v11_2026-10-19.json`.
+Ringkasannya: BTCUSDT 60 hari default 6× = **297 ready / 0 selesai**; stress slippage 0,20%
+dan 0,50% = **297 / 0** dengan lantai **7,2528%** dan **10,8528%** (bukan 5,81%); 8 jam =
+**129 / 0**; lantai 3× = **129 / 1**; lantai 1× = **138 / 46**, avg R **−0,7398**; “tanpa
+lantai” = **1 / 0** (lantai friksi 0, tetapi `min_risk_pct` 0,5% tetap aktif). Sweep 8 pair
+(`data/tokocrypto_v2`) total **521 ready / 0 selesai** — BTCUSDT di dataset itu 73, bukan 297.
 
-Sweep 8 pair (`data/tokocrypto_v2`, horizon 2 jam, konfigurasi default): **521 sinyal ready,
-0 trade selesai**.
+**Hasil setelah parity (terukur 2026-10-20, BTCUSDT `data/tokocrypto_v4`, 87.000 bar M1):**
 
-**Cara membaca hasil ini — tiga hal yang harus jujur:**
+| Skenario | Exit | Sinyal ready | Selesai | Win % | Avg R | Exit |
+|---|---|---:|---:|---:|---:|---|
+| Default 6×, 2 jam | classic + time-stop 90 | 350 | 350 | 4,00% | −0,1639 | 350 TIMEOUT |
+| Default 6×, 2 jam | full + time-stop 90 | 354 | 354 | 4,52% | −0,1645 | 344 TIMEOUT, 10 TRAIL_SL |
 
-1. **Avg R pada konfigurasi default tidak bisa dihitung**, bukan "0,0" dan bukan "netral".
-   Seluruh sinyal belum menyentuh SL maupun TP dalam horizon. Klaim win-rate/avg-R apa pun
-   pada konfigurasi ini tidak sahih.
-2. **Jalur resolusi replay terbukti benar.** Dengan lantai 1×, 46 trade selesai dan rata-ratanya
-   **−0,74R** — jadi angka nol di atas bukan bug harness.
-3. **Tabel backtest FEE_TRUTH §6 tidak dapat direproduksi dengan harness yang sudah dikoreksi.**
-   Angka "186 trade, +0,0695 avg R" berasal dari versi replay yang **belum memaksa** SL ≥ 6×F
-   (lihat catatan revisi `tools/scalp_replay.py` commit `28a2c70`). Setelah lantai dipaksakan,
-   SL harus 5,81% dan TP2 ≈ 14,5%, yang tidak tercapai dalam 2–8 jam.
-4. **Kenapa tanpa lantai hampir tidak ada sinyal:** dengan SL 0,5%, TP2 pada
-   `target_net_rr = 2,0` berada di ≈7,8R lalu ditolak `max_tp2_r = 5,0`. Satu-satunya cara
-   membuat SL cukup lebar agar TP2 tetap ≤ 5R adalah menaikkan SL — persis yang dilakukan lantai friksi.
+Artefak ringkas: `data/hasil/replay_parity_2026-10-20.json`.
 
-**Artinya untuk keputusan produk:** konfigurasi yang aman secara biaya (6×) dan horizon scalp
-(2–8 jam) **tidak kompatibel** — lantai yang melindungi modal membuat horizon tidak layak
-menghasilkan trade. Menuju uang riil, salah satu harus berubah: horizon lebih panjang (≥ 1 hari),
-atau pasangan lebih volatil, atau `min_friction_multiple` diturunkan **dengan** pengukuran ulang
-(risiko: avg R memburuk — lihat baris 1× = −0,74R). **Belum ada pilihan yang sudah diuji di sini.**
+Jumlah ready naik dari 297 ke 350 **bukan karena gate dilonggarkan**: time-stop 90 bar membuat
+sinyal berikutnya dievaluasi lebih cepat (replay memakai jendela non-overlap), sehingga lebih
+banyak sinyal masuk ke sampel.
+
+**Cara membaca hasil ini — jangan mengulang kesalahan lama:**
+
+1. **0 trade selesai bukan parity app.** App menutup CLASSIC pada 90 bar M1; replay lama
+   membiarkan posisi sampai lookahead habis. Setelah time-stop dipasang, semua sinyal selesai,
+   tetapi hampir semuanya keluar karena waktu — bukan karena TP/SL.
+2. **Avg R sekarang bisa dihitung, tetapi bukan bukti edge.** Nilai −0,16R didominasi exit
+   time-stop dan friksi; full exit hanya mengubah 10 trade menjadi trailing stop.
+3. **Lantai friksi sudah ada sejak harness lama.** Angka 186/+0,0695 di FEE_TRUTH §6 memakai
+   `scalp_config_exit_full.json` (lantai 6×) dan dataset lain; klaim “harness lama belum
+   memaksa 6×F” **salah** dan sudah dikoreksi.
+4. **Stress slippage harus dibaca dari lantai efektifnya.** 0,20% → 7,2528%; 0,50% → 10,8528%.
+   Menulis keduanya sebagai 5,81% membuat tabel tidak bisa direproduksi.
+5. **“Tanpa lantai” bukan berarti risiko 0,5% efektif.** `friction_floor_pct` memang 0, tetapi
+   `min_risk_pct` 0,5% masih menjadi lantai risiko; hanya 1 sinyal yang lolos.
+
+**Artinya untuk keputusan produk:** pada tarif Tokocrypto, horizon scalp 90 menit dengan lantai
+6× hampir selalu berakhir di time-stop dan rata-rata negatif. Menuju uang riil, ubah horizon,
+pair, atau lantai **dengan pengukuran baru** — jangan memakai tabel pra-parity sebagai dasar.
 
 ### 60.6 Dokumen
 
 - `FEE_TRUTH.md` §6 diberi catatan bahwa tabelnya berasal dari harness versi lama.
 - `AGENTS.md` — aturan turunan baru (fee wajib sadar kuotasi; mirror JSON dikunci uji).
 - `workplan2.md` — seksi ini.
+
+### 60.7 Parity replay + fee (2026-10-20)
+
+**Cacat yang ditutup.** Replay masih berbeda dari app di lima titik: (1) CLASSIC tidak punya
+time-stop 90 bar; (2) S1 meloloskan breakout tanpa RVOL; (3) S9 tidak membaca
+`max_change_24h_pct`; (4) `max_risk_atr` hardcode 2,0; (5) `order_type` masih bisa maker dan
+pair IDR memakai fee USDT. Di app, `TradingForegroundService` masih memakai `appPrefs.tradingFees`
+global (salah untuk posisi bursa/kuotasi lain) dan `sellSignalState` memakai `tick?.symbol`,
+bukan simbol posisi. Ekspor JSON juga menulis `0.4044` sendiri dan tidak punya `idr_reference`.
+
+**Perubahan.** `tools/scalp_replay.py`: DEFAULTS disamakan dengan `ScalpingConfig`, blok `exit`
+di-merge, `resolve_fee` memilih `fee.idr_reference` untuk pair IDR, semua fee taker,
+`roundtrip_fee` tanpa parameter maker, `risk_levels` membaca `max_risk_atr`, S1 mewajibkan
+RVOL, `evaluate_bar` menerima `change24h`, `resolve_trade` menjalankan classic/tp1_be/trail/
+early/full dengan time-stop 90, `summarize` menambah `by_exit_reason` + `exit_reasons_count`,
+dan `--order-type` dihapus. `data/config/scalp_config.json`: `max_risk_atr`,
+`max_change_24h_pct`, blok `exit`, tanpa `order_type`. App: resolver
+`feeConfigFor(symbol, exchange)`, service memakai bursa posisi, `ctx.symbol` untuk kartu jual,
+dan ekspor memakai `FeeSchedule` + `idr_reference`.
+
+**Uji.** `tools/test_scalp_replay_parity.py` (10 uji) mengunci config, fee IDR, S1, S9,
+`max_risk_atr`, floor denominator, time-stop, TP2 full, dan `resolve_fee`.
+`ScalpingRuntimeConfigFeeExportTest` (2) mengunci ekspor; `FeeTruthConstantsTest` +1 mengunci
+`idr_reference` + parameter parity; `FeeQuoteAwarenessSourceTest` +2 mengunci service dan
+resolver bursa. Suite penuh 101 kelas / 773 uji, 0 gagal, 1 dilewati.
+
+**Angka replay terukur.** Lihat §60.5: default 350 ready / 350 selesai (semua TIMEOUT,
+4,0% menang, avg R −0,1639); full 354 / 354 (344 TIMEOUT, 10 TRAIL_SL, 4,52%, −0,1645).
+Kontrol negatif dan angka suite ada di §60.4.
+
+**Dokumen yang dikoreksi.** `FEE_TRUTH.md` §6 (klaim “belum memaksa 6×F” salah; harness lama
+sudah memakai `exit_full` + lantai 6×), `workplan2.md` §60.5 (lantai stress 7,2528/10,8528,
+“tanpa lantai” = `min_risk_pct` 0,5%, 521 sweep vs 297 BTCUSDT), `AGENTS.md` (fee per bursa,
+time-stop CLASSIC, IDR replay), dan `docs/exp/exp_scalping_expectancy_ADA-DOGE-XRP.md`
+(catatan parity: 42,7% bukan win rate app karena belum ada time-stop).
 
 ---
 

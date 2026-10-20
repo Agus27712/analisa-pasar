@@ -241,10 +241,19 @@ class AppPreferences(context: Context) {
      * Berbeda dari [tradingFees] yang hanya satu nilai global, fungsi ini memilih tarif menurut
      * kuotasi pair (USDT vs IDR) mengikuti `FEE_TRUTH.md`. Pakai ini bila simbolnya sudah diketahui.
      */
-    fun feeConfigFor(symbol: String): TradingFeeConfig {
+    fun feeConfigFor(symbol: String): TradingFeeConfig =
+        feeConfigFor(symbol, marketDataSource.name)
+
+    /**
+     * Sama seperti [feeConfigFor], tetapi bursa disebut eksplisit.
+     *
+     * Dipakai pemantau latar yang memegang posisi dari **kedua** bursa sekaligus; membaca
+     * bursa aktif di sana membuat posisi bursa lain dinilai dengan tarif yang salah.
+     */
+    fun feeConfigFor(symbol: String, exchange: String): TradingFeeConfig {
         if (hasCustomTradingFees) return tradingFees
         val quote = agu.analys.util.PriceFormatter.extractQuote(symbol)
-        return agu.analys.config.FeeSchedule.configFor(marketDataSource.name, quote)
+        return agu.analys.config.FeeSchedule.configFor(exchange, quote)
     }
 
     /** Kembalikan biaya ke default bursa aktif. Dipanggil saat pengguna berganti bursa. */

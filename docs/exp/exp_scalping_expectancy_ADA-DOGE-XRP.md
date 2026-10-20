@@ -8,6 +8,12 @@ pada geometri scalping sungguhan (SL kecil, TP kecil, horizon pendek).
 **Alat:** `tools/scalp_replay.py` (versi FEE_TRUTH v1.1) + analisis lanjutan trade UNRESOLVED
 di atas data M1 yang sama.
 
+> **Catatan parity 2026-10-20.** Angka di laporan ini diukur sebelum replay disamakan dengan
+> app: belum ada time-stop CLASSIC 90 bar, S1 masih meloloskan breakout tanpa RVOL, dan S9 /
+> `max_risk_atr` belum dipulihkan. App menutup CLASSIC pada 90 bar, jadi hasil 42,7% yang
+> menunggu TP/SL hingga 8 jam **bukan win rate app**. Angka ini tetap sah sebagai eksperimen
+> geometri pada harness lama, tetapi harus dijalankan ulang untuk klaim parity.
+
 ---
 
 ## 1. Ringkasan
@@ -57,7 +63,7 @@ Diturunkan dari rumus engine `ScalpingRiskEngine.kt:139`: `TP2 = k × (SL + F) +
 | `min_net_rr` | 0,5 | harus ikut k, kalau tidak semua sinyal ditolak gerbang |
 | `lookahead_bars` | 480 | 8 jam — horizon scalp |
 | `slippage_pct` | 0,08 | base case FEE_TRUTH §3 |
-| `order_type` | taker | asumsi konservatif |
+| fee | taker | jalur market; knob `order_type` dihapus 2026-10-20 |
 
 **Identitas matematis penting.** Rumus impas (FEE_TRUTH §0) dengan `p = (SL+F)/(SL+TP2)`,
 disubstitusi dengan rumus engine menghasilkan:
@@ -162,6 +168,9 @@ Gap: **14,9 poin persen**. Ini jarak **akurasi entry**, bukan jarak parameter.
    disetel agar sama dengan aplikasi, tapi tetap bukan data eksekusi nyata.
 4. **Horizon replay yang dipakai pendek sekali** sehingga TP2 14,5% terlihat mustahil —
    tapi itu konfigurasi **berbeda**, bukan bukti bahwa konfigurasi default salah.
+5. **Belum ada time-stop 90 bar.** App CLASSIC menutup posisi pada 90 bar M1; harness yang
+   dipakai di sini menunggu hingga 480 bar. Karena itu 349 trade "selesai" tidak setara dengan
+   exit app, dan 213 UNRESOLVED tidak akan sebanyak itu bila dijalankan dengan parity sekarang.
 
 ---
 
@@ -196,7 +205,8 @@ python3 tools/scalp_replay.py --pair ADAUSDT --data data/tokocrypto_v4 \
 ```
 
 **Referensi angka yang sama di dokumen lain:**
-- `workplan2.md` §60.5 — replay pada konfigurasi default (6× floor), 0 trade selesai.
+- `workplan2.md` §60.5 — replay default pra-parity mencatat 0 trade selesai; setelah time-stop
+  90 bar dipasang, 350 trade selesai (semua TIMEOUT).
 - `workplan2.md` §61 — ringkasan eksperimen ini.
 - `FEE_TRUTH.md` §6 — catatan bahwa tabel backtest lama tidak dapat direproduksi.
 
