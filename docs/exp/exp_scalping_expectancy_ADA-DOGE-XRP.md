@@ -12,7 +12,11 @@ di atas data M1 yang sama.
 > app: belum ada time-stop CLASSIC 90 bar, S1 masih meloloskan breakout tanpa RVOL, dan S9 /
 > `max_risk_atr` belum dipulihkan. App menutup CLASSIC pada 90 bar, jadi hasil 42,7% yang
 > menunggu TP/SL hingga 8 jam **bukan win rate app**. Angka ini tetap sah sebagai eksperimen
-> geometri pada harness lama, tetapi harus dijalankan ulang untuk klaim parity.
+> geometri pada harness lama.
+>
+> **Sudah dijalankan ulang dengan parity (2026-10-20):** win rate **14,88%**, avg R
+> **−0,4898**, 963 dari 1.149 trade keluar lewat TIMEOUT. Laporan baru:
+> `exp_scalping_expectancy_parity_ADA-DOGE-XRP.md`.
 
 ---
 
@@ -171,6 +175,7 @@ Gap: **14,9 poin persen**. Ini jarak **akurasi entry**, bukan jarak parameter.
 5. **Belum ada time-stop 90 bar.** App CLASSIC menutup posisi pada 90 bar M1; harness yang
    dipakai di sini menunggu hingga 480 bar. Karena itu 349 trade "selesai" tidak setara dengan
    exit app, dan 213 UNRESOLVED tidak akan sebanyak itu bila dijalankan dengan parity sekarang.
+   Pengulangan parity sudah dilakukan: `exp_scalping_expectancy_parity_ADA-DOGE-XRP.md`.
 
 ---
 

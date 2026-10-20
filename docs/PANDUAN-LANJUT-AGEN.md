@@ -2,7 +2,7 @@
 
 > **Baca ini dulu.** Dokumen ini adalah titik masuk untuk agen/engineer berikutnya: status terkini,
 > apa yang sudah selesai, apa berikutnya, dan **perangkap yang sudah pernah ditemukan** supaya tidak
-> diulang. Terakhir diperbarui: **2026-10-19** (batch 6p + eksperimen expectancy).
+> diulang. Terakhir diperbarui: **2026-10-20** (batch 6p + parity replay + eksperimen paritas).
 >
 > 🔴 **Untuk "apa lagi yang tersisa" → `docs/bugs/`, bukan dokumen ini.** Status temuan audit
 > (notifikasi `N*`, jurnal/P&L `J*`, paper trading `P*`, koneksi `K*`) sudah diverifikasi ke kode dan
@@ -23,10 +23,12 @@
 >
 > 📊 **`docs/exp/` = hasil eksperimen terukur** (satu berkas per eksperimen,
 > `exp_<testname>_<pair>.md`). **Baca sebelum percaya klaim "strategi ini bisa profit" atau
-> mengubah parameter engine.** Eksperimen terbaru (2026-10-19):
-> `exp_scalping_expectancy_ADA-DOGE-XRP.md` — win rate engine scalping **42,7%** vs ambang impas
-> **60,1%** pada geometri SL 1,94% / TP2 2,42%; gap **14,9 poin persen** adalah jarak akurasi
-> entry, bukan parameter. Scalping di Tokocrypto **tidak layak untuk engine saat ini**.
+> mengubah parameter engine.** Eksperimen terbaru (2026-10-20):
+> `exp_scalping_expectancy_ADA-DOGE-XRP.md` — eksperimen lama: win rate **42,7%** vs ambang
+> **60,1%** pada geometri SL 1,94% / TP2 2,42%; harness lama belum punya time-stop.
+> `exp_scalping_expectancy_parity_ADA-DOGE-XRP.md` — pengulangan dengan exit app (time-stop
+> 90 bar): win rate **14,88%**, avg R **−0,4898**, 963/1.149 trade TIMEOUT. Scalping di
+> Tokocrypto **tidak layak untuk engine saat ini**.
 > Jejak audit jurnal ada di laporan per batch
 > (`docs/LAPORAN-batch3-jurnal-*.md` … `docs/LAPORAN-batch6-j*-2026-10-17.md`).
 > Aturan baru sejak 2026-10-17: berkas temuan yang **seluruh isinya** sudah tutup dipindahkan ke
@@ -43,7 +45,7 @@
 | HEAD `patch` | Ukur: `git rev-parse --short origin/patch` — berubah **tiap commit**, jangan dihardcode |
 | HEAD `main` | = `patch` + commit merge di atasnya; ukur `git rev-parse --short origin/main` |
 | Titik masuk kode | package `agu.analys`, modul tunggal `:app` |
-| Unit test | **768 uji · 767 lulus · 0 gagal · 1 dilewati** (100 kelas) — diukur dari XML CI run `39244434459`, 2026-10-19 |
+| Unit test | **773 uji · 772 lulus · 0 gagal · 1 dilewati** (101 kelas) — diukur dari XML lokal JDK 17, 2026-10-20 |
 | APK debug | 26.821.815 byte (26,8 MB desimal / 25,6 MiB) |
 | Kesiapan uang riil | **BELUM** — lihat §5 |
 
@@ -190,8 +192,8 @@ melainkan: **adakah varian entry yang menghasilkan avg R kotor > +0,167R pada ho
 
 Alasannya aritmetis: lantai friksi memaksa SL ≥ 5,81%, dan trade tanpa edge hanya menanggung biaya
 lalu ditutup → `−0,9688% / 5,81% = −0,167 R`. Itu persis yang terukur (avg R ≈ −0,17, 0/40 pair
-positif). **Selama tidak ada entry yang melewati +0,167R kotor, menyetel exit (P4.2/P4.4) tidak
-akan mengubah apa pun.** Kerjakan ini sebelum yang lain.
+positif). **Selama tidak ada entry yang melewati +0,167R kotor, menyetel exit tidak akan
+mengubah apa pun.** Kerjakan ini sebelum yang lain.
 
 ### P4.1 — Walk-forward antar-bulan ✅ tooling selesai, hasil NEGATIF (2026-10-14)
 
@@ -228,14 +230,12 @@ Bukti: `docs/LAPORAN-p44-persistensi-fsm-2026-10-15.md`, `workplan2.md` §18.1.
 (bukan lewat `restore()`), dan key `_paper_fsm` harus dihapus di **setiap** jalur pelepasan
 kepemilikan posisi.
 
-### P4.2 — Preferensi maker untuk pair IDR
+### P4.2 — Preferensi maker untuk pair IDR — DIBATALKAN 2026-10-20
 
-**Masalah:** tarif taker IDR 0,8144% vs maker 0,6144%. Semua perhitungan saat ini memakai taker.
-
-**Kerjakan:** dukung `useMaker = true` di jalur yang relevan; pastikan `ScalpingRiskEngine` dan
-`FeeCalculator` menerima flag yang sama supaya angkanya tidak berbeda.
-
-**Perhatikan:** ini mengubah angka net R:R di seluruh UI. Ukur ulang, jangan hanya ganti konstanta.
+**Keputusan:** jalur app dan replay **taker-only**. Knob `order_type`/maker dihapus dari replay,
+config kanonik, dan ekspor JSON. P4.2 tidak dikerjakan karena akan menghidupkan kembali jalur
+yang sudah dihapus dan membuat angka app/replay bercabang. Tarif maker tetap disimpan sebagai
+data FEE_TRUTH di blok `fee`, bukan sebagai pilihan eksekusi.
 
 ### P5 — Data Indodax + replay TAPI v2
 
