@@ -3,6 +3,12 @@
 > **Versi 2 (2026-10-20).** Menggantikan v1. Disesuaikan dengan konteks Tokocrypto, laporan sinkronisasi `LAPORAN-sinkronisasi-spec-scalping-spot-2026-10-20.md`, dan aturan `AGENTS.md`.
 > Untuk agen koding. Semua aturan deterministik dan bisa langsung diterjemahkan ke kode. Angka default adalah **hipotesis awal untuk diukur**, bukan klaim edge.
 > Jika ada yang ambigu: pilih opsi **paling konservatif**, beri komentar `TODO(spec)`, jangan mengarang parameter baru. Dokumen, komentar kode, dan pesan commit memakai Bahasa Indonesia.
+>
+> **Catatan status (2026-10-21).** Spec v3 pernah dibuat dan diukur; hasilnya negatif (gates
+> produksi 0 trade di luar sampel, diagnostik tanpa G0 negatif, entry kalah dari acak). Owner
+> menghentikan riset v3 dan membuang commit v3 dari `patch`. **Dokumen ini (v2) adalah acuan
+> aktif.** Arsip v3 ada di branch `backup/patch-v3-2026-10-21` (`796a9d1`); jangan membangun
+> ulang v3 dari dokumen ini.
 
 ---
 

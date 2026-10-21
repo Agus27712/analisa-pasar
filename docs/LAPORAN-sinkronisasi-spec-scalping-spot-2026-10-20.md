@@ -3,6 +3,10 @@
 > **Status:** dokumentasi tahap awal. **Kode belum disentuh.**
 > Laporan ini memetakan **Spec v2** ke codebase, mencatat hasil verifikasi, dan menetapkan urutan
 > kerja. Laporan versi pertama (untuk Spec v1) sudah digantikan seluruhnya oleh dokumen ini.
+>
+> **Status 2026-10-21:** Spec v3 sudah dibuat, diukur, dan **dihentikan** owner; commit v3
+> dibuang dari `patch`. Dokumen ini tetap menjadi jejak keputusan Spec v2. Lihat
+> `workplan2.md` §63 dan branch `backup/patch-v3-2026-10-21` (`796a9d1`) untuk arsip v3.
 
 | | |
 |---|---|

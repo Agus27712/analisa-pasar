@@ -4018,3 +4018,43 @@ determinisme CSV diverifikasi (SHA-256 identik).
 `docs/exp/exp_spot_backtest_41pair.md` (matriks, funnel, exit, batas),
 `docs/LAPORAN-sinkronisasi-spec-scalping-spot-2026-10-20.md` §10.6–§10.7 (ringkasan + keputusan),
 dan `docs/PANDUAN-LANJUT-AGEN.md` §4 (kotak blokir Fase 1).
+
+---
+
+## 63. Riset Spec v3 dihentikan dan diarsipkan (2026-10-21)
+
+**Keputusan owner:** riset Spec v3 **dihentikan**. Commit v3 `ada71dc` (dokumen Spec v3) dan
+`796a9d1` (harness v3 + dataset 180 hari + laporan) **dibuang dari `patch`**. `patch` di-rebase
+ke `main` dan sekarang berisi **13 commit konten** di atas `main` (riset Spec v2, dataset 90 hari,
+batch 6o/6p) + commit dokumentasi 2026-10-21. `40257e4` = commit konten terakhir;
+`main` = `578d0de` (merge rilis 3.9.2).
+
+**Kenapa berhenti.** V3 dibuat untuk menutup kontradiksi TP1/G4 dan mencabut G3. Hasil
+pengukurannya tetap negatif:
+
+- Gates produksi 15m dan 1h: **0 trade out-of-sample**. Satu-satunya trade produksi ada di
+  jendela A (1 trade, avg R −0,4849).
+- Diagnostik tanpa G0: 15m jendela B **7 trade**, avg R **−0,2495** (R kotor −0,1061);
+  1h jendela B **45 trade**, avg R **−0,2561** (R kotor −0,1146). Panel penuh 180 hari:
+  15m **12 trade** (−0,2888), 1h **67 trade** (−0,2391).
+- Benchmark entry: SWEEP 1h panel penuh (N=160) R kotor strategi **−0,1165** vs acak rata-rata
+  **+0,0157** (p99 +0,1122). Entry kalah dari acak.
+
+Angka di atas berasal dari laporan v3; rincian tabel, batas, dan kontrol negatifnya ada di
+arsip v3 di bawah, bukan di branch ini.
+
+**Arsip.** Branch `backup/patch-v3-2026-10-21` (remote) @ `796a9d1` berisi seluruh artefak v3:
+`docs/exp/scalping_spot_strategy_spec.md` versi v3, `tools/spot_evidence.py`,
+`tools/spot_benchmark.py`, dataset `data/tokocrypto_spot_180` (868.054 bar), serta
+`docs/LAPORAN-harness-spec-v3-2026-10-21.md` + `docs/exp/exp_spot_evidence_v3.md`.
+**Jangan membuat ulang berkas-berkas itu di `patch`.**
+
+**Yang berlaku sekarang.** Acuan aktif kembali **Spec v2**
+(`docs/exp/scalping_spot_strategy_spec.md`); hasil v2 tetap negatif dan Fase 1 Kotlin tetap
+diblokir (lihat §62). Jangan membangun ulang v3 dari dokumen v2. Kalau riset dilanjutkan, mulai
+dari branch backup atau branch baru dengan keputusan owner tertulis.
+
+**Berkas terkait.** `AGENTS.md` (kotak v3 di Langkah 0 + aturan turunan v3),
+`docs/PANDUAN-LANJUT-AGEN.md` (header + §2 + §4), `docs/exp/scalping_spot_strategy_spec.md`
+(catatan status), dan `docs/LAPORAN-sinkronisasi-spec-scalping-spot-2026-10-20.md`
+(catatan status).

@@ -2,7 +2,13 @@
 
 > **Baca ini dulu.** Dokumen ini adalah titik masuk untuk agen/engineer berikutnya: status terkini,
 > apa yang sudah selesai, apa berikutnya, dan **perangkap yang sudah pernah ditemukan** supaya tidak
-> diulang. Terakhir diperbarui: **2026-10-20** (batch 6p + parity replay + Spec v2 offline).
+> diulang. Terakhir diperbarui: **2026-10-21** (patch di-rebase ke `main`; riset v3 dihentikan).
+>
+> ⛔ **Riset v3 dihentikan (2026-10-21).** Spec v3 + harness v3 sudah diukur dan hasilnya negatif;
+> owner menghentikannya. Commit v3 (`ada71dc`, `796a9d1`) sudah dibuang dari `patch`, yang sekarang
+> = `main` + 13 commit konten + commit dokumentasi 2026-10-21 (riset Spec v2, dataset 90 hari,
+> batch 6o/6p). Arsip lengkap v3 ada di branch `backup/patch-v3-2026-10-21` (`796a9d1`).
+> **Jangan membangun ulang v3 dari dokumen v2.**
 >
 > 🔴 **Untuk "apa lagi yang tersisa" → `docs/bugs/`, bukan dokumen ini.** Status temuan audit
 > (notifikasi `N*`, jurnal/P&L `J*`, paper trading `P*`, koneksi `K*`) sudah diverifikasi ke kode dan
@@ -60,11 +66,11 @@
 | | |
 |---|---|
 | Branch kerja | **`patch`** (owner me-review di sini dulu; `main` hanya menerima merge) |
-| HEAD `patch` | Ukur: `git rev-parse --short origin/patch` — berubah **tiap commit**, jangan dihardcode |
-| HEAD `main` | = `patch` + commit merge di atasnya; ukur `git rev-parse --short origin/main` |
+| HEAD `patch` | `40257e4` (13 commit konten) + commit dokumentasi 2026-10-21; ukur ulang dengan `git rev-parse --short origin/patch` |
+| HEAD `main` | `578d0de` (merge rilis 3.9.2); **ancestor** dari `patch` |
 | Titik masuk kode | package `agu.analys`, modul tunggal `:app` |
-| Unit test | **773 uji · 772 lulus · 0 gagal · 1 dilewati** (101 kelas) — diukur dari XML lokal JDK 17, 2026-10-20 |
-| APK debug | 26.821.815 byte (26,8 MB desimal / 25,6 MiB) |
+| Unit test | **Belum diukur ulang setelah rebase 2026-10-21.** Angka terakhir: **773 uji · 772 lulus · 0 gagal · 1 dilewati** (101 kelas), 2026-10-20. Ukur ulang sebelum memakai angka ini. |
+| APK debug | 26.821.815 byte (26,8 MB desimal / 25,6 MiB) — terakhir diukur 2026-10-20 |
 | Kesiapan uang riil | **BELUM** — lihat §5 |
 
 > ⚠️ Angka di tabel ini **pernah salah** di dokumen ini sendiri (tertulis 358/50 kelas). Setiap kali
@@ -115,13 +121,13 @@ git stash pop                 # kembalikan pekerjaan
 | ~~§14~~ | ~~Kesiapan multi-horizon (scalp/intraday/swing) + papan UI~~ | — | ⛔ **DIBATALKAN** — lihat §3b |
 | ~~§15~~ | ~~SSOT: horizon vs engine aktif~~ | — | ⛔ **DIBATALKAN** — lihat §3b |
 
-**Status di `main`:** `main` sudah menerima merge **PR #59** (`bc48ac4`, membawa sampai `9f65109`)
-**dan PR #60** (`7f890eb`, membawa `f9e7fdd` auto-buy + `56eb5cd` P4.4 + `5dc7182`). Snapshot
-**2026-10-15 tepat setelah PR #60**, `patch` dan `main` **identik secara isi** (`git diff HEAD
-origin/main` kosong); `main` hanya unggul **2 commit merge**. Sejak itu setiap commit mendarat di
-`patch` dulu, jadi `patch` normalnya **> 0** di depan `main` — bukan tanda `main` ketinggalan.
-Pada 2026-10-15 `patch` di-merge ulang ke `main` (`70aea38`, ditandai `[skip ci]`), sehingga
-keduanya kembali **identik secara isi**. §14/§15 tetap **dihapus dari kode** (2026-10-13).
+**Status branch (2026-10-21):** `main` = `578d0de` (merge rilis 3.9.2, batch 6j–6n).
+`patch` = `40257e4` (13 commit konten) + commit dokumentasi 2026-10-21 = **main + 13 commit
+konten** (riset Spec v2, dataset 90 hari, batch 6o/6p); `main` adalah **ancestor** `patch`, jadi
+`git diff HEAD origin/main` **tidak kosong** — itu isi 13 commit konten + dokumen tadi. Riset v3
+sudah dihentikan dan commit-nya dibuang dari `patch`; arsip di
+`backup/patch-v3-2026-10-21` (`796a9d1`). Jangan membaca `main` untuk pekerjaan terbaru.
+§14/§15 tetap **dihapus dari kode** (2026-10-13).
 
 ---
 
@@ -203,6 +209,12 @@ Riwayat lengkap ada di `workplan2.md` §14/§15 (keduanya bertanda ⛔ DIHAPUS) 
 
 Diurutkan berdasarkan **nilai dibagi risiko**. Jangan mengerjakan yang bawah sebelum yang atas
 selesai, kecuali ada instruksi eksplisit.
+
+> ⛔ **Keputusan 2026-10-21 — riset v3 dihentikan.** V3 dibuat untuk menutup kontradiksi TP1/G3;
+> hasil ukurnya juga negatif (gates produksi **0 trade out-of-sample**, diagnostik tanpa G0
+> negatif, entry kalah dari acak). Commit v3 sudah dibuang dari `patch`; arsip lengkap di
+> `backup/patch-v3-2026-10-21` (`796a9d1`). **Jangan melanjutkan v3 dari dokumen ini.**
+> Keputusan arah Spec v2 di bawah masih terbuka.
 
 ### ⛔ Spec v2 (M15/H1) — diukur 2026-10-20, hasil NEGATIF; Fase 1 Kotlin diblokir
 

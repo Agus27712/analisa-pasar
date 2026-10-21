@@ -14,21 +14,23 @@ dibuat otomatis oleh `.github/workflows/release.yml` saat `main` menerima push.
 
 ### ⚠️ Langkah 0 — pastikan branch yang Anda baca benar
 
-**Kerjaan aktif ada di `patch`.** Snapshot **2026-10-16** (tepat setelah merge rilis **3.9.1**):
-**`patch` dan `main` identik secara isi** — `git diff HEAD origin/main` **kosong**; `main` hanya
-unggul **commit merge** (PR #59–#62 + merge rilis 3.9.1), bukan commit konten. **Selama ini tiap
-commit baru mendarat di `patch` dulu, jadi `origin/main..HEAD` akan `> 0` lagi begitu kamu mulai
-kerja — itu wajar, bukan tanda `main` ketinggalan.** Klaim lama "`patch` 2 commit di depan" dan
-"`main` belum menerima `f9e7fdd`/`56eb5cd`" **usang** — keduanya **sudah ada di `main`**.
+**Kerjaan aktif ada di `patch`.** Snapshot **2026-10-21** (setelah rebase ke rilis **3.9.2**):
+`origin/main` = `578d0de` (merge rilis 3.9.2, batch 6j–6n), `origin/patch` = `40257e4`
+(13 commit konten) + commit dokumentasi 2026-10-21 = **main + 13 commit konten** (riset Spec v2,
+dataset 90 hari, batch 6o/6p). **`patch` memang di depan `main`, jadi `git diff HEAD origin/main`
+TIDAK kosong** — itu isi 13 commit konten + dokumen tadi, bukan tanda `main` ketinggalan.
+`main` adalah **ancestor** `patch`. Jangan membaca `main` untuk melihat pekerjaan terbaru;
+`main` baru berisi rilis 3.9.2.
 **Jangan pernah menyimpulkan keadaan repo dari `main` tanpa mengecek angka ini dulu:**
 
 ```sh
 git clone https://github.com/Agus27712/analisa-pasar.git
 cd analisa-pasar && git checkout patch        # WAJIB — kerjaan aktif ada di sini
-git rev-list --count origin/main..HEAD        # >0 = patch punya commit konten yang belum di main
-git rev-list --count HEAD..origin/main        # >0 = main unggul (biasanya hanya commit merge)
-git ls-remote --heads origin                  # sumber kebenaran daftar branch (bypass refspec)
-git diff --name-status HEAD origin/main       # kosong = isi patch == isi main
+git rev-list --count origin/main..HEAD        # 13 commit konten + commit dokumentasi
+git rev-list --count HEAD..origin/main        # 0 = main tidak punya commit yang belum ada di patch
+git log --oneline origin/main..HEAD           # 13 commit konten + commit dokumentasi
+git ls-remote --heads origin                  # main, patch, backup/patch-v3-2026-10-21
+git diff --name-status HEAD origin/main       # TIDAK kosong = isi 13 commit konten + dokumen
 ```
 
 Repo ini **public** — clone tidak butuh token.
@@ -37,6 +39,17 @@ Repo ini **public** — clone tidak butuh token.
 Siapa pun yang membaca `main` saat itu melihat fitur horizon **masih ada** padahal sudah
 di-revert di `patch` (`e525c64`), dan P0–P2 (integritas jurnal) serta S1–S9 (strategi
 entry/exit) belum ada di sana — semua kesimpulan yang ditarik dari `main` jadi salah.
+Sekarang arahnya sebaliknya: `main` belum memuat batch 6o/6p dan riset Spec v2 sampai di-merge.
+**Ukur ulang, jangan mengandalkan ingatan.**
+
+**⛔ RISET V3 DIHENTIKAN (2026-10-21).** Spec v3 dan harness v3 pernah dibuat, diukur, lalu
+**dihentikan owner** karena hasilnya negatif: gates produksi **0 trade out-of-sample**,
+diagnostik tanpa G0 tetap negatif, dan entry kalah dari acak. Commit `ada71dc` (Spec v3) dan
+`796a9d1` (harness v3 + dataset 180 hari) sudah **dibuang dari `patch`**; seluruh artefaknya
+hanya ada di branch backup **`backup/patch-v3-2026-10-21`** (`796a9d1`, remote).
+**Jangan membangun ulang v3 dari dokumen v2.** Acuan aktif tetap **Spec v2**
+(`docs/exp/scalping_spot_strategy_spec.md`); kalau riset dilanjutkan, mulai dari branch backup
+atau branch baru dengan keputusan owner tertulis.
 
 **Urutan baca 5 menit yang benar:**
 
@@ -84,7 +97,8 @@ entry/exit) belum ada di sana — semua kesimpulan yang ditarik dari `main` jadi
    −0,4898, 963/1.149 TIMEOUT → scalping di Tokocrypto tidak layak untuk engine saat ini).
    Pengukuran Spec v2: `docs/exp/exp_mfe_m15_41pair.md` (MFE 15m 90 hari, **4/41 layak**) dan
    `docs/exp/exp_spot_backtest_41pair.md` (produksi 15m **0 trade**, 1h **7 trade semua rugi**,
-   varian riset terbaik **−0,2055R**).
+   varian riset terbaik **−0,2055R**). **Riset v3 tidak ada di branch ini** — sudah dihentikan
+   dan diarsipkan di branch `backup/patch-v3-2026-10-21`; jangan mengutip angka v3 dari ingatan.
 10. Baru buka kode.
 
 **Aturan kerja yang berlaku di repo ini:**
@@ -161,17 +175,19 @@ Yang **tidak boleh** dilakukan lagi tanpa instruksi eksplisit owner:
 9. **`workplan2.md` § 14 dan § 15 — DIBATALKAN, jangan dibangun ulang.** Lihat kotak merah di
    awal kedua seksi itu. Keduanya mendokumentasikan fitur kesiapan multi-horizon yang sudah
    **dihapus dari kode** pada 2026-10-13. Dibaca hanya sebagai riwayat keputusan.
-10. **`docs/LAPORAN-*.md`** — jejak eksekusi. Yang terbaru: `docs/LAPORAN-sync-dokumen-temuan-2026-10-16.md`
-    (sinkronisasi dokumen 2026-10-16), lalu batch 1–5f (2026-10-16), lalu `p0p2` & `s1s9`
-    (2026-10-14). Baca dari tanggal terbaru kalau butuh tahu **kenapa** suatu perbaikan
-    berbentuk seperti sekarang.
+10. **`docs/LAPORAN-*.md`** — jejak eksekusi. Yang terbaru: `docs/LAPORAN-sinkronisasi-spec-scalping-spot-2026-10-20.md`
+    (pemetaan Spec v2 + hasil pengukuran), `docs/LAPORAN-p44-persistensi-fsm-2026-10-15.md`, dan
+    batch 1–5f (2026-10-16); ringkasan batch 6o/6p ada di § Riwayat
+    `docs/laporan_temuan_bugs_*.md` dan `workplan2.md` §59–§60. Baca dari tanggal terbaru kalau
+    butuh tahu **kenapa** suatu perbaikan berbentuk seperti sekarang.
 11. `SCALP_EXIT.md` bila menyentuh exit.
 12. **`docs/exp/`** — 🟠 **hasil eksperimen terukur.** Baca sebelum mengubah parameter engine,
     treadmill "strategi ini akan profit", atau wallpaper angka hasil. Satu berkas per eksperimen,
     bernama `exp_<testname>_<pair>.md`. Contoh: `docs/exp/exp_scalping_expectancy_ADA-DOGE-XRP.md`
     (lama 42,7%), `docs/exp/exp_scalping_expectancy_parity_ADA-DOGE-XRP.md` (parity 14,88%),
     `docs/exp/exp_mfe_m15_41pair.md` (MFE 4/41), dan `docs/exp/exp_spot_backtest_41pair.md`
-    (backtest Spec v2: produksi 0/7 trade, riset terbaik −0,2055R).
+    (backtest Spec v2: produksi 0/7 trade, riset terbaik −0,2055R). **Riset v3 sudah dihentikan**
+    dan tidak ada di folder ini; arsip di branch `backup/patch-v3-2026-10-21`.
 
 > **Dokumen yang sudah dihapus (2026-10-16):** `workplan.md`, `checkpoint.md`,
 > `checkpoint_progres.md` — isinya cuma stub "DEPRECATED" yang menunjuk ke `workplan2.md` /
@@ -303,6 +319,11 @@ layak** (MUBARAK 2,78x, PUMP 2,58x, ZRO 2,34x, PLUME 2,12x); 10 pair yang dulu e
 produksi 1h **7 trade semua rugi** (avg R −0,3835), varian riset terbaik **−0,2055R**
 (in-sample −0,0912 / out-of-sample −0,3828). Kesimpulan: Spec v2 belum punya bukti edge;
 Fase 1 Kotlin diblokir sampai keputusan owner.
+
+**Riset v3 (2026-10-21) tidak ada di folder ini.** Spec v3 + harness v3 sudah diukur, hasilnya
+negatif, lalu dihentikan owner; seluruh artefaknya (termasuk `exp_spot_evidence_v3.md`) ada di
+branch backup `backup/patch-v3-2026-10-21` (`796a9d1`). Jangan membuat berkas v3 baru di
+`docs/exp/` branch ini.
 
 ## Aturan turunan dari audit notifikasi (batch 1 & 2, 2026-10-16)
 
@@ -780,6 +801,20 @@ Fase 1 Kotlin diblokir sampai keputusan owner.
 - **Uji mekanika sebelum percaya angka.** `tools/test_spot_backtest.py` mengunci SL-before-TP,
   TP1 60%, TP2 setelah TP1, stop tidak turun, time-stop, impas `FeeSchedule`, HTF tanpa lookahead,
   dan TP1 `floor` vs `literal`. Kalau mengubah exit, tambahkan uji di sana.
+
+## Aturan turunan dari penghentian riset Spec v3 (2026-10-21)
+
+- **V3 berhenti, bukan tertunda.** Owner menghentikan riset v3 setelah hasil ukurnya negatif:
+  gates produksi **0 trade out-of-sample**, diagnostik tanpa G0 negatif, dan entry kalah dari
+  acak. Jangan memulai ulang v3 hanya karena dokumennya masih tersimpan.
+- **Commit v3 sudah dibuang dari `patch`.** `ada71dc` (Spec v3) dan `796a9d1` (harness v3 +
+  dataset 180 hari) tidak ada di branch ini. Jangan menambahkan kembali berkas v3 ke `patch`.
+- **Arsip v3 ada di branch backup, bukan di `docs/exp/`.** Branch
+  `backup/patch-v3-2026-10-21` (`796a9d1`, remote) menyimpan seluruh artefak v3. Angka v3 yang
+  dikutip tanpa membuka arsip itu adalah angka dari ingatan — jangan dipakai.
+- **Acuan aktif tetap Spec v2 dan Fase 1 Kotlin tetap diblokir.** Kalau riset dilanjutkan,
+  mulai dari branch backup atau branch baru dengan keputusan owner tertulis; jangan membangun
+  ulang v3 dari dokumen v2.
 
 ## Arah produk (ringkas)
 
