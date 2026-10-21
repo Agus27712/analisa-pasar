@@ -3,7 +3,7 @@
 > **Sumber kebenaran workplan.**  
 > `workplan.md`, `checkpoint.md`, dan `checkpoint_progres.md` **sudah dihapus (2026-10-16)** — jangan cari, jangan dibuat ulang. Baca ini + `AGENTS.md` + `APP_CONTEXT.md` (§ arah produk).
 
-**Update:** 2026-10-16 (WIB) — §40 sinkronisasi dokumen temuan
+**Update:** 2026-10-21 (WIB) — §64: Spec v2/v3 dihentikan dan seluruh artefak v2 dihapus; fokus engine kriptoyoi yang sudah ada + slider.
 
 > ⚠️ **Seksi §9.5b sudah DIBATALKAN** (angka edge lama tidak sah). Angka yang berlaku ada di
 > **§9.5c**. Seksi §14/§15 **dibatalkan** — fiturnya sudah dihapus dari kode, jangan dibangun ulang.
@@ -22,7 +22,7 @@
 | Uang riil | **Tidak** untuk validasi strategi sampai paper + fee truth stabil |
 | Validasi | **Paper trade** di app + **`tools/scalp_replay.py`** dengan config yang sama |
 | Sensitifitas | Slider UI ↔ `ScalpingRuntimeConfig` ↔ JSON mirror `data/config/scalp_config.json` |
-| Edge | Belum terbukti di data historis (v2/v3/Binance45d). Slider mengubah **frekuensi** sinyal, **bukan** menciptakan expectancy |
+| Edge | Belum terbukti di data historis (v2/v3/Binance45d). Slider mengubah **frekuensi** sinyal, **bukan** menciptakan expectancy. Status owner: slider entry sudah ada dan terbukti memaksimalkan entry; exit belum |
 | Engine asal | Port logika dari [dikigambol/kriptoyoi](https://github.com/dikigambol/kriptoyoi) `analyzer/p0_engine.py` + spec; **bukan** copy seluruh web app |
 
 **Satu kalimat:** bantu melihat setup & risiko (termasuk biaya all-in) dan menguji scalp di paper; jangan klaim profit otomatis.
@@ -332,6 +332,12 @@ absolut (`min_risk_pct` 3,0%), sweep dilanjutkan pada kelipatan friksi (6 pair, 
 
 Ada **plateau lebar 5–10×**; **6,0 dipilih** sebagai default (terbaik untuk pair USDT, dan masih
 baik untuk IDR maker). Di bawah 5× belum konsisten positif.
+
+> **Catatan parity 2026-10-20.** Baris `idr_maker` di tabel ini adalah eksperimen historis
+> dengan knob maker yang **sudah dihapus** dari app dan replay (jalur sekarang taker-only).
+> Angka `6× idr_maker = 297` **bukan** 297 sinyal BTCUSDT default; itu 6 pair × 20.000 bar
+> memakai config IDR maker. Jangan menjalankan ulang dengan asumsi maker dan jangan mencampurnya
+> dengan angka BTCUSDT 60 hari di §60.5.
 
 ### 9.5 Batasan yang wajib dibaca (jangan dibuang)
 
@@ -3576,3 +3582,533 @@ seluruh perbaikan audit koneksi **K1–K15** (batch 6j–6n) yang sudah terverif
 Angka suite terukur: **94 kelas / 726 uji**, 0 gagal, 0 error, 1 dilewati.
 Berkas temuan sudah dipindahkan ke `docs/laporan_temuan_bugs_koneksi_tokocrypto_indodax.md`
 (seluruh butir tutup), sehingga `docs/bugs/` tidak lagi memuat topik koneksi.
+
+---
+
+## 59. Batch 6o — P6 (sisa) + P9: peak intrabar M1 & serah-terima auto-exit ke jalur lama (2026-10-18)
+
+Penutup rangkaian audit paper trade: setelah batch ini **seluruh P1–P9 tutup** dan
+`docs/bugs/` menjadi kosong.
+
+### 59.1 Cacat
+
+Dua butir terakhir dari `docs/bugs/temuan_bugs_paper_trade.md` (kini
+`docs/laporan_temuan_bugs_paper_trade.md`), keduanya hanya menyentuh posisi paper:
+
+- **P6 (sisa) — `peak` buta terhadap intrabar.** `evaluatePaperAutoExitLocked` membangun bar
+  sintetis `open = high = low = close = currentPrice`, sehingga high intrabar antar-tick tidak
+  pernah terlihat: trailing/BE baru ter-arm setelah harga *diperiksa* menembus level, bukan saat
+  menyentuhnya, dan `peak` di laporan lebih rendah dari kenyataan.
+- **P9 — mematikan auto-exit meninggalkan posisi tanpa stop.** Transisi `autoExitEnabled false`
+  hanya melepas mesin dari memori; posisi tetap ditandai milik engine (`_paper_engine`) dengan
+  `auto_sell_enabled` mati sampai restart. Lebih buruk: `updatePaperAutoTradeConfig` memanggil
+  `clearAll()` saat `!autoBuy`, sehingga mematikan auto-buy **saja** ikut membunuh mesin exit
+  posisi terbuka.
+
+### 59.2 Perubahan
+
+Berkas baru:
+
+- `app/src/main/java/agu/analys/trading/PaperIntrabarPeakResolver.kt` (P6) — `effectiveHigh(candles,
+  openedAtMs, nowMs, currentPrice)`: candle dengan `openTimeMs > openedAtMs`, cache wajib segar
+  (reuse `PaperExitMomentumWindow.isFresh`, ≥ 20 bar / ≤ 180 dtk), high non-finite diabaikan,
+  hasil `max(currentPrice, high eligible)`; `openedAt <= 0` atau cache basi/kosong → `currentPrice`.
+- `app/src/main/java/agu/analys/trading/PaperHandBackResolver.kt` (P9) — `PaperHandBackSource`
+  (`PROFIT`/`BREAKEVEN`/`ACTIVE_STOP`/`SIGNAL`/`FRICTION_FLOOR`/`NONE`), `ResolvedHandBackStop`,
+  `resolveStopLoss(entryPrice, storedSl, activeSl, bePx, floorPct)`: SL ≥ entry dari mesin
+  dipertahankan (`PROFIT`/`BREAKEVEN`), selain itu `max(SL aktif, PaperStopResolver.resolve(...))`;
+  semua kosong → `NONE`.
+
+`PaperAutoTradeCoordinator.kt`:
+
+- `PaperAutoTradeRuntime.activePositions()` — pasangan (bursa, simbol) tersortir dari `machines`.
+- `evaluatePaperAutoExitLocked` membaca cache M1 **sekali** (`m1Candles`) untuk
+  `PaperExitMomentumWindow.resolve` + `effectiveHigh`; bar sintetis `high = intrabarHigh`,
+  `low = currentPrice`.
+- `TradingViewModel.handBackAllPaperEnginesToLegacy()` — cermin serah-terima cabang rehidrasi
+  `HandBackToLegacy` (`PaperRehydrate.kt`): `setAutoSellParams(enabled = stop.usable,
+  stopLossPrice = stop.price)`, `setPaperEngineOwned(false)`, `clearPaperFsmState`,
+  `PaperAutoTradeRuntime.clear`, log per posisi + ringkasan (sumber `SIGNAL`/`FRICTION_FLOOR`/
+  `NONE` terlihat), orphan cleanup, ditutup `checkAndStopTrailingServiceIfEmpty()`.
+
+`TradingViewModel.kt`:
+
+- `updatePaperAutoTradeConfig`: transisi `autoExitEnabled true → false` →
+  `handBackAllPaperEnginesToLegacy()` (dibungkus `runCatching` + log); `clearAll()` hanya saat
+  `!autoBuy && !autoExit`.
+
+Catatan keputusan (jangan diubah tanpa alasan kuat): TP1 partial tetap legacy (tidak menambah
+guard — setelah partial di akuntansi, R:R tidak lagi bergeser); re-enable auto-exit **tidak**
+me-rearm posisi (tetap legacy sampai tutup); posisi hasil serah-terima dipantau seperti jalur
+lama (pair dibuka / trailing aktif) — batas yang sama dengan serah-terima pasca-restart.
+
+### 59.3 Uji
+
+Empat kelas baru, 31 kasus:
+
+- `trading/PaperIntrabarPeakResolverTest` (11) — murni: high intrabar dipakai, lantai
+  `currentPrice`, cache basi, < 20 bar, kosong, batas `>` waktu buka (candle tepat saat posisi
+  dibuka diabaikan), `openedAt` tak diketahui, high non-finite, stempel detik.
+- `trading/PaperHandBackResolverTest` (13) — murni: trailing terkunci menang atas lantai
+  (`max`), BE/profit ≥ entry dipertahankan, label `PROFIT`/`BREAKEVEN`, `NONE` tanpa kandidat,
+  lantai friksi, SL tersimpan valid, `activeSl` tak masuk akal.
+- `viewmodel/PaperIntrabarWiringTest` (3) — pindai sumber: bar sintetis pakai resolver, cache
+  dibaca sekali, `openedAt` dioper.
+- `viewmodel/PaperHandBackWiringTest` (4) — pindai sumber: transisi memicu serah-terima, auto-buy
+  saja tidak menghapus mesin, serah-terima mengisi SL + melepas penanda + hapus FSM, mencakup
+  semua bursa.
+
+Kontrol negatif (simulasi Python, transliterasi 1:1 dari Kotlin — **6 menggigit**):
+
+| Kerusakan yang disuntikkan | Uji kunci yang GAGAL |
+|---|---|
+| `max` hasil kembali ke `currentPrice` saja (`no-peak`) | high intrabar dipakai |
+| cek `isFresh` dihapus (`no-fresh-check`) | cache basi kembali ke currentPrice |
+| filter `>` menjadi `>=` (`gte-filter`) | candle tepat saat posisi dibuka diabaikan |
+| cabang `activeSl >= entry` dihapus (`no-entry-branch`) | BE/profit dipertahankan |
+| label profit selalu `BREAKEVEN` (`no-profit-label`) | label `PROFIT` |
+| kandidat diambil `min`, bukan `max` (`min-pick`) | trailing terkunci menang atas lantai |
+
+Percobaan pertama gagal menuai: mutasi `no-fresh-check` tidak menggigit karena semua high uji di
+bawah `currentPrice` → uji basi/19-bar diperbaiki agar memakai high menipu (130), di skrip **dan**
+Kotlin; percobaan kedua baru adil.
+
+### 59.4 Angka terukur
+
+Diukur dari XML `app/build/test-results/testDebugUnitTest/*.xml` lewat workflow
+`unit-tests-manual.yml`, commit `220e7a0`, branch `patch` (2026-10-18). Sandbox agen tidak bisa
+menjalankan Gradle, jadi angkanya datang dari CI.
+
+| Jalankan | Cakupan | Kelas | Uji | Gagal | Error | Dilewati |
+|---|---|---|---|---|---|---|
+| Run `39144882774` | custom: 4 kelas baru | 4 | 31 | 0 | 0 | 0 |
+| Run `39145158155` | `all-unit-tests` (suite penuh) | 98 | 757 | 0 | 0 | 1 |
+
+Rincian kelas baru (semuanya lulus): `PaperIntrabarPeakResolverTest` 11,
+`PaperHandBackResolverTest` 13, `PaperIntrabarWiringTest` 3, `PaperHandBackWiringTest` 4 — total
+**31 uji baru** (= `+4` kelas / `+31` uji dari baseline batch 6n, 94/726).
+
+Kontrol negatif JUnit (menghidupkan kembali cacat, menjalankan ulang, lalu mengembalikan) belum
+dijalankan di CI — yang sudah dilakukan: simulasi Python transliterasi 1:1 dengan `6` mutasi yang
+menggigit (lihat §59.3). Bila owner ingin kontrol negatif JUnit yang sebenarnya, jalankan
+workflow dengan sengaja mengembalikan satu cacat.
+
+### 59.5 Dokumen
+
+- `docs/laporan_temuan_bugs_paper_trade.md` — berkas temuan **dipindah** dari `docs/bugs/`
+  (aturan §51); seluruh P1–P9 tutup; §6 Riwayat + baris batch 6o; `docs/bugs/` kini **kosong**.
+- `AGENTS.md` — daftar `docs/bugs/` (kini kosong), aturan turunan P6/P9 (batch 6o), pengecualian
+  sadar invarian batch 3b (`SL >= entry` dari mesin), catatan batch 6e (keputusan P9).
+- `docs/PANDUAN-LANJUT-AGEN.md` — status P6/P9 tutup; seluruh P1–P9 tutup.
+- `workplan2.md` — seksi ini.
+
+---
+
+## 60. Batch 6p — Sinkronisasi FEE_TRUTH v1.1 ke codebase + replay (2026-10-19)
+
+Pemilik memperbarui `FEE_TRUTH.md` ke **v1.1** (2026-10-19) dan `tools/scalp_replay.py`;
+pekerjaan ini menyinkronkan konstanta/parameter ke codebase lalu menjalankan replay.
+
+### 60.1 Apa yang sudah cocok (tidak diubah)
+
+- `FeeSchedule` sudah memakai tarif all-in persis seperti FEE_TRUTH §1–§2 (USDT 0,4044%;
+  IDR beli 0,1222/0,2222%; jual 0,3322/0,4322%; Indodax 0,11/0,21/0,32/0,42%).
+- `ScalpingConfig`: `MIN_FRICTION_MULTIPLE = 6.0`, `TARGET_NET_RR = 2.0`,
+  `DEFAULT_SLIPPAGE_PCT = 0.08` — sama dengan §8.
+- `data/config/scalp_config.json` sudah memakai angka FEE_TRUTH v1.1.
+
+### 60.2 Cacat yang ditemukan saat sinkronisasi
+
+1. **Replay tidak bisa jalan dengan bawaannya.** `--config` masih menunjuk
+   `tools/scalp_config.json` yang **tidak pernah ada** (config kanonik ada di
+   `data/config/`). Perintah contoh di commit `28a2c70` langsung `FileNotFoundError`.
+2. **Tarif tidak sadar kuotasi di jalur runtime.** `LearningTradingEngine` (3 call site),
+   `CandidateScanWorker` (3 call site), `sellSignalState` di `TradingViewModel`, dan
+   `balanceSlice` di `TradingViewModelDetailState` semua memakai `prefs.tradingFees` — **satu
+   nilai global** yang bawaan Tokocrypto = preset **USDT** (0,4044%). Pair IDR
+   (BTCIDR/ETHIDR/XAUTIDR) karena itu dievaluasi dengan tarif USDT: lantai SL **5,81%**
+   (harusnya **4,89%**), TP jauh, net R:R di engine beda dari jalur paper yang sudah memakai
+   `feeConfigFor(symbol)`. Ini persis kelas bug "dua angka untuk satu pertanyaan" yang dilarang
+   sejak J7/J8.
+3. **Dua definisi "friksi" dengan angka berbeda tanpa penjelasan.** Lantai SL memakai F
+   **aditif** = **0,9688%** (FEE_TRUTH §8), sedangkan "impas net" kartu memakai bentuk
+   **multiplikatif** = **0,9735%**. Keduanya benar untuk kegunaannya masing-masing; dokumen
+   (`AGENTS.md`, `LAPORAN-batch4-j7`) hanya menyebut "0,9735%" tanpa menyatakan mana yang mana.
+
+### 60.3 Perubahan
+
+- `tools/scalp_replay.py` — konstanta `DEFAULT_CONFIG_PATH = "data/config/scalp_config.json"`;
+  config yang hilang menghasilkan pesan JSON berisi lokasi yang dicoba + saran `--config`, bukan
+  traceback; `DEFAULTS["min_net_rr"]` 0,5 → **1,15** (sebelumnya beda dari
+  `ScalpingConfig.MIN_NET_RR`, diam-diam).
+- `data/config/scalp_config.json` — `order_type` **dihapus** pada 2026-10-20; replay dan app
+  hanya punya jalur taker, jadi knob maker tidak boleh ada.
+- `LearningTradingEngine` — properti baru `feeConfigForSymbol: (String) -> TradingFeeConfig`;
+  ketiga call site evaluate memakai tarif per-simbol.
+- `TradingViewModelSync` — `engine.feeConfigForSymbol = { prefs.feeConfigFor(it) }`.
+- `CandidateScanWorker` — ketiga call site memakai `prefs.feeConfigFor(symbol)`.
+- `TradingViewModel.sellSignalState` — tarif mengikuti simbol tick yang aktif.
+- `TradingViewModelDetailState` — flow turunan `pairAwareFees`; `balanceSlice` memakainya,
+  sehingga kartu jual + `PositionContext` + P&L detail ikut kuotasi yang benar.
+
+### 60.4 Uji
+
+Dua kelas baru, 11 kasus:
+
+- `config/FeeTruthConstantsTest` (7) — mengunci konstanta `FeeSchedule` ke angka
+  FEE_TRUTH §1–§2, mengunci `min_friction_multiple`/`target_net_rr`/`slippage_pct` pada mirror
+  JSON ke `ScalpingConfig`, dan membedakan **F aditif 0,9688%** vs **impas multiplikatif
+  0,9735%** supaya keduanya tidak saling menggantikan.
+- `viewmodel/FeeQuoteAwarenessSourceTest` (4) — pindai sumber: engine tak boleh memakai
+  `fees = tradingFees`, worker wajib `prefs.feeConfigFor(symbol)`, kartu jual & detail wajib
+  `feeConfigFor`.
+
+Percobaan pertama **GAGAL** — `mirror replay sama dengan FeeSchedule` melempar
+`NumberFormatException: For input string: ": 0.4044"`: parser mengambil substring setelah
+`"buy_taker_pct"` termasuk tanda `:` dan koma. Diperbaiki dengan helper `angka(teks, key)` yang
+melewati `:` sebelum `toDouble()`. Pelajaran: parser harus diuji pada data JSON asli, bukan
+pada data yang kebetulan "sudah benar".
+
+Kontrol negatif yang **benar-benar dijalankan** pada 2026-10-20:
+
+| Kerusakan yang disuntikkan | Akibat terukur |
+|---|---|
+| `tools/scalp_replay.py` dikembalikan ke versi sebelum parity | `test_scalp_replay_parity.py` **8 dari 10 GAGAL** (3 failure, 5 error) |
+| `ctx.symbol` di `sellSignalState` dikembalikan ke `tick?.symbol` | `FeeQuoteAwarenessSourceTest` **1 GAGAL** |
+| `feeConfigFor(sym, ex)` di service diubah menjadi `feeConfigFor(sym)` | `FeeQuoteAwarenessSourceTest` **1 GAGAL** |
+
+**Angka terukur** (workflow `unit-tests-manual.yml`, branch `patch`, 2026-10-19):
+
+| Jalankan | Cakupan | Kelas | Uji | Gagal | Dilewati |
+|---|---|---|---|---|---|
+| Run `39243541785` | custom (percobaan pertama) | 3 | 28 | **1** | 0 |
+| Run `39244023556` | custom (2 kelas baru + `ScalpingRiskEngineTest`) | 3 | 28 | 0 | 0 |
+| Run `39244434459` | `all-unit-tests` (suite penuh) | 100 | 768 | 0 | 1 |
+
+Baseline sebelum batch ini 98 kelas / 757 uji ⇒ **+2 kelas / +11 uji**.
+
+**Suite penuh 2026-10-20 (lokal, JDK 17):** **101 kelas / 773 uji, 0 gagal, 1 dilewati**.
+Kenaikan dari 100/768: `ScalpingRuntimeConfigFeeExportTest` (2 uji baru),
+`FeeTruthConstantsTest` +1, `FeeQuoteAwarenessSourceTest` +2. Rincian: `FeeTruthConstantsTest`
+8, `FeeQuoteAwarenessSourceTest` 6, `NotificationFeeSourceTest` 3,
+`ScalpingRuntimeConfigFeeExportTest` 2.
+
+### 60.5 Hasil replay (dikoreksi 2026-10-20)
+
+**Koreksi penting.** Angka 2026-10-19 diukur dengan harness yang **belum sama dengan app**:
+belum ada time-stop CLASSIC 90 bar, S1 masih meloloskan breakout tanpa RVOL, S9 belum
+membaca `max_change_24h_pct`, dan `max_risk_atr` masih hardcode 2,0. Karena itu tabel lama
+tidak boleh dipakai untuk menyimpulkan perilaku app.
+
+Artefak lama (historis, pra-parity): `data/hasil/replay_fee_truth_v11_2026-10-19.json`.
+Ringkasannya: BTCUSDT 60 hari default 6× = **297 ready / 0 selesai**; stress slippage 0,20%
+dan 0,50% = **297 / 0** dengan lantai **7,2528%** dan **10,8528%** (bukan 5,81%); 8 jam =
+**129 / 0**; lantai 3× = **129 / 1**; lantai 1× = **138 / 46**, avg R **−0,7398**; “tanpa
+lantai” = **1 / 0** (lantai friksi 0, tetapi `min_risk_pct` 0,5% tetap aktif). Sweep 8 pair
+(`data/tokocrypto_v2`) total **521 ready / 0 selesai** — BTCUSDT di dataset itu 73, bukan 297.
+
+**Hasil setelah parity (terukur 2026-10-20, BTCUSDT `data/tokocrypto_v4`, 87.000 bar M1):**
+
+| Skenario | Exit | Sinyal ready | Selesai | Win % | Avg R | Exit |
+|---|---|---:|---:|---:|---:|---|
+| Default 6×, 2 jam | classic + time-stop 90 | 350 | 350 | 4,00% | −0,1639 | 350 TIMEOUT |
+| Default 6×, 2 jam | full + time-stop 90 | 354 | 354 | 4,52% | −0,1645 | 344 TIMEOUT, 10 TRAIL_SL |
+
+Artefak ringkas: `data/hasil/replay_parity_2026-10-20.json`.
+
+Jumlah ready naik dari 297 ke 350 **bukan karena gate dilonggarkan**: time-stop 90 bar membuat
+sinyal berikutnya dievaluasi lebih cepat (replay memakai jendela non-overlap), sehingga lebih
+banyak sinyal masuk ke sampel.
+
+**Cara membaca hasil ini — jangan mengulang kesalahan lama:**
+
+1. **0 trade selesai bukan parity app.** App menutup CLASSIC pada 90 bar M1; replay lama
+   membiarkan posisi sampai lookahead habis. Setelah time-stop dipasang, semua sinyal selesai,
+   tetapi hampir semuanya keluar karena waktu — bukan karena TP/SL.
+2. **Avg R sekarang bisa dihitung, tetapi bukan bukti edge.** Nilai −0,16R didominasi exit
+   time-stop dan friksi; full exit hanya mengubah 10 trade menjadi trailing stop.
+3. **Lantai friksi sudah ada sejak harness lama.** Angka 186/+0,0695 di FEE_TRUTH §6 memakai
+   `scalp_config_exit_full.json` (lantai 6×) dan dataset lain; klaim “harness lama belum
+   memaksa 6×F” **salah** dan sudah dikoreksi.
+4. **Stress slippage harus dibaca dari lantai efektifnya.** 0,20% → 7,2528%; 0,50% → 10,8528%.
+   Menulis keduanya sebagai 5,81% membuat tabel tidak bisa direproduksi.
+5. **“Tanpa lantai” bukan berarti risiko 0,5% efektif.** `friction_floor_pct` memang 0, tetapi
+   `min_risk_pct` 0,5% masih menjadi lantai risiko; hanya 1 sinyal yang lolos.
+
+**Artinya untuk keputusan produk:** pada tarif Tokocrypto, horizon scalp 90 menit dengan lantai
+6× hampir selalu berakhir di time-stop dan rata-rata negatif. Menuju uang riil, ubah horizon,
+pair, atau lantai **dengan pengukuran baru** — jangan memakai tabel pra-parity sebagai dasar.
+
+### 60.6 Dokumen
+
+- `FEE_TRUTH.md` §6 diberi catatan bahwa tabelnya berasal dari harness versi lama.
+- `AGENTS.md` — aturan turunan baru (fee wajib sadar kuotasi; mirror JSON dikunci uji).
+- `workplan2.md` — seksi ini.
+
+### 60.7 Parity replay + fee (2026-10-20)
+
+**Cacat yang ditutup.** Replay masih berbeda dari app di lima titik: (1) CLASSIC tidak punya
+time-stop 90 bar; (2) S1 meloloskan breakout tanpa RVOL; (3) S9 tidak membaca
+`max_change_24h_pct`; (4) `max_risk_atr` hardcode 2,0; (5) `order_type` masih bisa maker dan
+pair IDR memakai fee USDT. Di app, `TradingForegroundService` masih memakai `appPrefs.tradingFees`
+global (salah untuk posisi bursa/kuotasi lain) dan `sellSignalState` memakai `tick?.symbol`,
+bukan simbol posisi. Ekspor JSON juga menulis `0.4044` sendiri dan tidak punya `idr_reference`.
+
+**Perubahan.** `tools/scalp_replay.py`: DEFAULTS disamakan dengan `ScalpingConfig`, blok `exit`
+di-merge, `resolve_fee` memilih `fee.idr_reference` untuk pair IDR, semua fee taker,
+`roundtrip_fee` tanpa parameter maker, `risk_levels` membaca `max_risk_atr`, S1 mewajibkan
+RVOL, `evaluate_bar` menerima `change24h`, `resolve_trade` menjalankan classic/tp1_be/trail/
+early/full dengan time-stop 90, `summarize` menambah `by_exit_reason` + `exit_reasons_count`,
+dan `--order-type` dihapus. `data/config/scalp_config.json`: `max_risk_atr`,
+`max_change_24h_pct`, blok `exit`, tanpa `order_type`. App: resolver
+`feeConfigFor(symbol, exchange)`, service memakai bursa posisi, `ctx.symbol` untuk kartu jual,
+dan ekspor memakai `FeeSchedule` + `idr_reference`.
+
+**Uji.** `tools/test_scalp_replay_parity.py` (10 uji) mengunci config, fee IDR, S1, S9,
+`max_risk_atr`, floor denominator, time-stop, TP2 full, dan `resolve_fee`.
+`ScalpingRuntimeConfigFeeExportTest` (2) mengunci ekspor; `FeeTruthConstantsTest` +1 mengunci
+`idr_reference` + parameter parity; `FeeQuoteAwarenessSourceTest` +2 mengunci service dan
+resolver bursa. Suite penuh 101 kelas / 773 uji, 0 gagal, 1 dilewati.
+
+**Angka replay terukur.** Lihat §60.5: default 350 ready / 350 selesai (semua TIMEOUT,
+4,0% menang, avg R −0,1639); full 354 / 354 (344 TIMEOUT, 10 TRAIL_SL, 4,52%, −0,1645).
+Kontrol negatif dan angka suite ada di §60.4.
+
+**Dokumen yang dikoreksi.** `FEE_TRUTH.md` §6 (klaim “belum memaksa 6×F” salah; harness lama
+sudah memakai `exit_full` + lantai 6×), `workplan2.md` §60.5 (lantai stress 7,2528/10,8528,
+“tanpa lantai” = `min_risk_pct` 0,5%, 521 sweep vs 297 BTCUSDT), `AGENTS.md` (fee per bursa,
+time-stop CLASSIC, IDR replay), dan `docs/exp/exp_scalping_expectancy_ADA-DOGE-XRP.md`
+(catatan parity: 42,7% bukan win rate app karena belum ada time-stop).
+
+---
+
+## 61. Eksperimen win rate engine scalping pada geometri TP kecil (2026-10-19)
+
+Laporan lengkap: **`docs/exp/exp_scalping_expectancy_ADA-DOGE-XRP.md`**.
+
+**Latar belakang.** Pada konfigurasi default (`min_friction_multiple = 6`), TP2 untuk pair USDT
+mencapai **14,5%** dan SL **5,81%** — mustahil dalam horizon scalp (0,0% dan 0,8% peluang
+tercapai dalam 8 jam pada data riil). Pemilik menandai ini sebagai red flag dan meminta
+diuji dengan geometri scalping sungguhan: SL kecil, TP kecil, horizon pendek.
+
+**Metode.** Satu config replay (`min_friction_multiple = 2,0` → SL 1,9376%; `target_net_rr = 0,5`
+→ TP2 2,4220%; `min_net_rr = 0,5`; lookahead 480 bar = 8 jam), pada 3 pair dengan volatilitas dan
+tren tertinggi dari dataset 60 hari (`data/tokocrypto_v4`): ADAUSDT, DOGEUSDT, XRPUSDT.
+
+**Hasil terukur:**
+
+| Angka | Nilai |
+|---|---|
+| Trade selesai | 349 dari 562 sinyal ready |
+| Win rate (8 jam) | 42,7% |
+| Win rate (+ lanjutan 48 jam) | 45,2% |
+| Ambang impas geometri ini | 60,1% |
+| Expectancy | −0,25R per trade |
+| Gap | **14,9 poin persen** |
+
+**Temuan yang mengubah gambaran:**
+
+1. **Geometri scalping bisa menghasilkan trade** (349 selesai, bukan 0 seperti pada default 6×)
+   — jadi renderer replay sehat dan angka default bukan "0 karena bug".
+2. **Entry engine akurat 42,7%**, konsisten di ketiga pair (42,5–42,9%). Far di bawah 60,1%.
+3. **Hipotesis "trade UNRESOLVED = tren berlanjut" terbantah.** Melanjutkan penelusuran
+   sampai 48 jam: **92 WIN vs 92 LOSS** dari 213 trade unresolved — sepersis, tanpa bias.
+   Win rate hanya bergerak 42,7% → 45,2%.
+4. **Gap 14,9 poin persen adalah jarak akurasi entry, bukan jarak parameter.** Horizon,
+   `min_friction_multiple`, dan `target_net_rr` tidak menutup gap ini.
+
+**Batas yang jujur.** Satu config, tiga pair, 60 hari; akurasi diukur pada TP2 terdekat
+(2,42%) sehingga kemungkinan **lebih tinggi** di TP2 yang lebih jauh — estimasi "k = 1,34 mungkin
+unbiased" dari analisis awal terlalu optimistis dan belum diuji. Harness ini juga **belum punya
+time-stop 90 bar**, jadi 42,7% bukan win rate app.
+
+**Pengulangan parity (2026-10-20).** Setelah replay disamakan dengan app (CLASSIC time-stop
+90 bar, S1 RVOL, S9, `max_risk_atr`, taker-only), geometri yang sama menghasilkan **1.149 trade
+selesai, 171 menang / 978 kalah, win rate 14,88%, avg R −0,4898**; 963 trade keluar karena
+TIMEOUT. TP2 efektif menjadi ≈2,91% karena kode menegakkan `TP2 ≥ 1,5 × risiko`. Ambang impas
+dari payoff terukur 55,08%, jadi gap 40,2 poin persen. Laporan:
+`docs/exp/exp_scalping_expectancy_parity_ADA-DOGE-XRP.md`; artefak:
+`data/hasil/exp_scalping_expectancy_parity_2026-10-20.json`.
+
+**Langkah berikutnya (memerlukan keputusan pemilik):** (a) akhiri program scalping,
+(b) uji framing swing horizon 24 jam, atau (c) kejar perbaikan evaluator menuju win rate
+≥ 60%. Untuk (b), time-stop CLASSIC 90 bar harus diganti lebih dulu; dengan exit sekarang,
+horizon 24 jam tetap ditutup pada 90 menit. Rekomendasi penulis: (b) setelah exit swing
+didefinisikan — murah dan informatif sebelum program besar.
+
+**Dokumen.** `docs/exp/exp_scalping_expectancy_ADA-DOGE-XRP.md` (laporan lama, metode, angka,
+batasan) dan `docs/exp/exp_scalping_expectancy_parity_ADA-DOGE-XRP.md` (pengulangan parity);
+seksi ini sebagai ringkasan.
+
+---
+
+## 62. Spec Scalping Spot v2 — pengukuran offline 41 pair (2026-10-20)
+
+> ⛔ **DIHENTIKAN 2026-10-21 — Spec v2 dihentikan.** Seluruh artefak v2 (dokumen spec, dua
+> laporan hasil, tool, dataset, dan hasil JSON/CSV) sudah dihapus dari pohon kerja; perintah di
+> seksi ini **tidak bisa dijalankan lagi**. Angka di seksi ini hanya arsip keputusan, bukan
+> acuan aktif. Jangan membangun ulang spec/engine dari seksi ini. Keputusan lengkap ada di **§64**.
+
+**Latar belakang (historis).** Spec v2 (`docs/exp/scalping_spot_strategy_spec.md`, **sudah
+dihapus 2026-10-21**) dulu dipetakan ke codebase, tetapi belum punya satu angka edge pun.
+Dataset `data/tokocrypto_spot` (41 pair, 90 hari, 15m dan 1h) dulu tersedia, sekarang sudah
+dihapus. Batch ini membangun harness pengukuran offline lebih dulu, **tanpa menyentuh kode
+aplikasi**, supaya Fase 1 Kotlin tidak dibangun di atas asumsi.
+
+**Tool baru (historis; sudah dihapus 2026-10-21).**
+
+| Berkas | Isi |
+|---|---|
+| `tools/spot_lib.py` | loader CSV, indikator (EMA/ATR/RSI/ADX/BB/Keltner/VWAP/volMA/percentile), swing/level, fee/P&L mirror `FeeSchedule`, parameter setup, agregasi HTF |
+| `tools/spot_mfe.py` | MFE/MAE median 1h/4h/7h pada candle 15m; ambang `2 x F` |
+| `tools/spot_backtest.py` | harness 5 setup, G0–G8, exit §7, funnel, metrik, split 70/30, timeframe 15m/1h, kebijakan TP1 `floor`/`literal`, override gate riset |
+| `tools/test_spot_backtest.py` | 10 uji mekanika: SL-before-TP, TP1 60%, TP2 setelah TP1, stop tidak turun, time-stop, impas `FeeSchedule`, HTF tanpa lookahead, TP1 `floor` vs `literal` |
+
+**MFE 15m (90 hari).** Hasil pengukuran (berkas hasil sudah dihapus 2026-10-21):
+
+- Layak: **4/41** — MUBARAK 2,78x, PUMP 2,58x, ZRO 2,34x, PLUME 2,12x.
+- Tabel lama 14 pair; **10 turun** (ENA, NEAR, WLD, STRK, W, S, FET, APT, FIL, QNT), **0 naik**.
+- Median MFE 7 jam lintas pair 1,4371%; median rasio 1,4834x.
+- Sampling `step=1` vs `step=2` pada BTC/MUBARAK/ZRO berbeda <0,03 pp.
+
+**Backtest.** 14 varian (berkas hasil sudah dihapus 2026-10-21); ringkasan yang menentukan:
+
+| Varian | n | avg R | WR | IS / OOS |
+|---|---:|---:|---:|---|
+| 15m produksi (G0, lantai 6x, gates default) | **0** | - | - | - |
+| 15m literal (kontrol TP1) | **0** | - | - | - |
+| 15m no-G0 | 1 | −0,8084 | 0,0% | 0 / 1 |
+| 15m riset longgar (lantai 5x, G3 1,0F, G4–G6 longgar) | 44 | −0,2260 | 22,7% | −0,1542 / −0,2978 |
+| 15m riset longgar (lantai 4x) | 37 | −0,2758 | 21,6% | −0,1965 / −0,3798 |
+| 1h produksi | **7** | −0,3835 | 0,0% | −0,3769 / −0,3885 |
+| 1h produksi, 4 pair MFE baru | 5 | −0,3997 | 0,0% | −0,3676 / −0,4211 |
+| 1h literal | 6 | −0,3841 | 0,0% | −0,3769 / −0,3914 |
+| 1h no-G0 | 13 | −0,4028 | 7,7% | −0,4265 / −0,3750 |
+| 1h no-G0, lantai 5x + G4–G6 longgar | 60 | −0,2087 | 23,3% | −0,0869 / −0,4046 |
+| **1h no-G0, lantai 4x + G4–G6 longgar** | **74** | **−0,2055** | 23,0% | **−0,0912 / −0,3828** |
+| 1h no-G0, tanpa lantai | 54 | −0,3373 | 20,4% | −0,3419 / −0,3288 |
+
+**Temuan.**
+
+1. **Gates produksi tidak bisa dieksekusi di 15m.** 0 trade dari 41 pair/90 hari. Lantai 6x
+   (5,8128%) + G2 maksimum 5 ATR + G3 minimum 1,5F (1,4532%) saling mengunci; ATR% 15m sebagian
+   besar 0,2–1,1%.
+2. **Gates produksi 1h menghasilkan 7 trade, semuanya rugi** (WR 0%, avg R −0,3835). Sampel kecil,
+   tetapi cukup untuk menyatakan gates hampir tidak bisa dieksekusi.
+3. **Semua varian riset tetap negatif.** Yang terbaik −0,2055R (74 trade) dan memburuk
+   out-of-sample (−0,3828). Tidak ada tanda edge.
+4. **SWEEP_RECLAIM sumber kerugian utama** dan konsisten rugi di semua konfigurasi (6–67 trade,
+   −0,17 sampai −0,40R); alasan keluar terbanyak `SETUP_INVALIDATION` (32 dari 74 trade pada
+   varian 1h lantai 4x). BREAKOUT_RETEST negatif pada 14–22 trade di 15m dan positif hanya n=6
+   di 1h (+0,19 sampai +0,21R); SQUEEZE n=1–7 dengan tanda berubah-ubah; PULLBACK 2 trade
+   (keduanya rugi); RANGE 0.
+5. **Kontradiksi TP1/G4 terbukti.** TP1 formula `entry + 1,0R` selalu memberi `netRr < 1`, sehingga
+   G4 menolaknya; mode `literal` menghasilkan 0 trade untuk setup formula. Mode `floor`
+   (`entry + max(1,0R, R + 2F)`) adalah satu-satunya cara setup formula lolos.
+6. **Memperbarui `PairEdgeGate` ke 4 pair tidak menyelamatkan strategi.** 1h produksi pada 4 pair
+   itu: 5 trade, semua rugi, avg R −0,3997.
+
+**Keputusan owner (2026-10-21).** Program **dihentikan**; Fase 1 Kotlin **tidak dimulai**.
+Opsi yang dulu terbuka — (a) perbaiki kontradiksi gate/TP1 dan rancang ulang SWEEP, (b) pindah
+horizon, atau (c) hentikan program — sudah dijawab dengan (c). Keputusan lengkap dan arah baru
+ada di **§64**. Jangan menurunkan lantai 6x hanya untuk menambah sinyal; varian tanpa lantai
+justru −0,3373R.
+
+**Batas.** Harness Python, bukan mesin Kotlin; harga fill = level mentah (slippage lewat
+`FeeSchedule`); G8/orderbook tidak diuji; risiko per simbol, bukan portofolio; time-stop dan
+lookback dalam candle sehingga 1h mengubah horizon; universe dipilih dari jendela yang sama
+(bukan out-of-sample); G0 memakai tabel lama yang kedaluwarsa. Uji mekanika 10/10 lulus;
+determinisme CSV diverifikasi (SHA-256 identik).
+
+**Dokumen (historis).** Dua laporan hasil v2 (`exp_mfe_m15_41pair.md` dan
+`exp_spot_backtest_41pair.md`) serta laporan sinkronisasi Spec v2 sudah dihapus 2026-10-21.
+Yang masih ada hanya ringkasan keputusan di `workplan2.md` §64 dan
+`docs/PANDUAN-LANJUT-AGEN.md` §4 (kotak arsip Spec v2).
+
+---
+
+## 63. Riset Spec v3 dihentikan dan diarsipkan (2026-10-21)
+
+**Keputusan owner:** riset Spec v3 **dihentikan**. Commit v3 `ada71dc` (dokumen Spec v3) dan
+`796a9d1` (harness v3 + dataset 180 hari + laporan) **dibuang dari `patch`**. `patch` di-rebase
+ke `main` dan sekarang berisi **13 commit konten** di atas `main` (batch 6o/6p) + commit
+dokumentasi 2026-10-21. `40257e4` = commit konten terakhir; `main` = `578d0de` (merge rilis
+3.9.2).
+
+**Kenapa berhenti.** V3 dibuat untuk menutup kontradiksi TP1/G4 dan mencabut G3. Hasil
+pengukurannya tetap negatif:
+
+- Gates produksi 15m dan 1h: **0 trade out-of-sample**. Satu-satunya trade produksi ada di
+  jendela A (1 trade, avg R −0,4849).
+- Diagnostik tanpa G0: 15m jendela B **7 trade**, avg R **−0,2495** (R kotor −0,1061);
+  1h jendela B **45 trade**, avg R **−0,2561** (R kotor −0,1146). Panel penuh 180 hari:
+  15m **12 trade** (−0,2888), 1h **67 trade** (−0,2391).
+- Benchmark entry: SWEEP 1h panel penuh (N=160) R kotor strategi **−0,1165** vs acak rata-rata
+  **+0,0157** (p99 +0,1122). Entry kalah dari acak.
+
+Angka di atas berasal dari laporan v3; rincian tabel, batas, dan kontrol negatifnya ada di
+arsip v3 di bawah, bukan di branch ini.
+
+**Arsip.** Branch `backup/patch-v3-2026-10-21` (remote) @ `796a9d1` berisi seluruh artefak v3:
+`docs/exp/scalping_spot_strategy_spec.md` versi v3, `tools/spot_evidence.py`,
+`tools/spot_benchmark.py`, dataset `data/tokocrypto_spot_180` (868.054 bar), serta
+`docs/LAPORAN-harness-spec-v3-2026-10-21.md` + `docs/exp/exp_spot_evidence_v3.md`.
+**Jangan membuat ulang berkas-berkas itu di `patch`.**
+
+**Yang berlaku sekarang.** **Tidak ada spec baru yang aktif.** Spec v2 juga dihentikan pada
+2026-10-21 dan **seluruh artefaknya sudah dihapus** (lihat **§64**). Fokus aktif: **engine
+kriptoyoi yang sudah ada + slider**. Jangan membangun ulang v2/v3 dari dokumen lama. Kalau riset
+dilanjutkan, mulai dari branch backup atau branch baru dengan keputusan owner tertulis.
+
+**Berkas terkait.** `AGENTS.md` (kotak penghentian v2/v3 di Langkah 0 + aturan turunan) dan
+`docs/PANDUAN-LANJUT-AGEN.md` (header + §2 + §4). Laporan sinkronisasi v2 sudah dihapus.
+
+---
+
+## 64. Spec v2 dihentikan; fokus engine kriptoyoi + slider (2026-10-21)
+
+**Keputusan owner.** Riset **Spec v2 dihentikan**, menyusul Spec v3 yang sudah lebih dulu
+dihentikan pada tanggal yang sama. Keduanya sudah diukur dan **tidak menghasilkan edge**; owner
+menilai line riset ini hanya memperpanjang research. **Tidak ada spec/engine baru yang akan
+dibangun.** Arah aktif adalah **engine scalping kriptoyoi yang sudah ada + slider**.
+
+**Alasan terukur (arsip, bukan acuan aktif).**
+
+- Spec v2, 2026-10-20: produksi 15m **0 trade** dari 41 pair/90 hari; produksi 1h **7 trade,
+  semuanya rugi** (avg R −0,3835); varian riset terbaik **−0,2055R** dengan out-of-sample
+  **−0,3828**; MFE 15m 90 hari hanya **4/41 pair** layak.
+- Spec v3, 2026-10-21: gates produksi **0 trade out-of-sample**; diagnostik tanpa G0 tetap
+  negatif; entry kalah dari acak. Commit v3 sudah dibuang dari `patch` dan diarsipkan di branch
+  `backup/patch-v3-2026-10-21` (`796a9d1`, remote).
+- Angka lengkap v2 ada di §62; dua laporan hasilnya sudah dihapus 2026-10-21. Angka v3 ada di
+  arsip branch backup, bukan di branch ini.
+
+**Yang dihapus.**
+
+- `docs/exp/scalping_spot_strategy_spec.md` (Spec v2) **dihapus** dari pohon kerja 2026-10-21.
+- Dua laporan hasil v2 (`docs/exp/exp_mfe_m15_41pair.md` dan
+  `docs/exp/exp_spot_backtest_41pair.md`) **dihapus** 2026-10-21.
+- Tool v2 (`tools/spot_lib.py`, `tools/spot_mfe.py`, `tools/spot_backtest.py`,
+  `tools/test_spot_backtest.py`), dataset `data/tokocrypto_spot/`, dan hasil
+  `data/hasil/mfe_m15_spot.json` + `data/hasil/spot_backtest_v2_*` **dihapus** 2026-10-21.
+- Perluasan khusus v2 pada `tools/fetch_tokocrypto_klines.py` dikembalikan ke versi sebelum v2
+  (tool unduh generik tetap ada untuk P4.1); snapshot
+  `data/config/binance_24h_movers_reference.json` **dihapus**.
+- Semua penghapusan ini sudah **di-commit dan di-push** ke `origin/patch`. Jangan membuat ulang
+  berkas atau riset v2.
+
+**Arah baru yang dicatat.**
+
+- **Slider entry** sudah diimplementasikan dan, menurut owner, **terbukti memaksimalkan entry**.
+  Ini status dari owner, bukan hasil pengukuran baru yang ditambahkan ke `docs/exp/` pada
+  batch ini.
+- **Exit strategi belum** diselesaikan lewat slider. Jangan mengklaim exit sudah beres atau
+  menjadikan klaim entry sebagai jaminan profit.
+- **Kode aplikasi tidak disentuh.** Penghapusan tool/data v2 adalah pembersihan artefak riset
+  sesuai instruksi owner, bukan perubahan engine. Penghapusan dan dokumen ini sudah
+  **di-commit dan di-push**; perubahan kode aplikasi lain menunggu instruksi owner.
+
+**Konsekuensi dokumen.** `AGENTS.md` (Langkah 0, `docs/exp/`, aturan turunan, arah produk,
+perintah build) dan `docs/PANDUAN-LANJUT-AGEN.md` (header, §2, §4) sudah disesuaikan. Dua
+laporan hasil v2 dan laporan sinkronisasi v2 sudah dihapus, bukan diberi banner. Dokumen ini dan
+`AGENTS.md` adalah acuan status; §62/§63 bersifat historis.

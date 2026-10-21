@@ -6,9 +6,11 @@
   "min_net_rr": 1.15,
   "target_net_rr": 2.0,
   "min_risk_pct": 0.5,
+  "max_risk_atr": 2.0,
   "max_tp2_r": 5.0,
   "min_friction_multiple": 6.0,
   "slippage_pct": 0.08,
+  "max_change_24h_pct": 0.0,
   "rvol_breakout_min": 1.5,
   "rvol_setup_min": 1.2,
   "rvol_retest_min": 1.5,
@@ -41,5 +43,16 @@
     "h1_min_bars": 20,
     "htf_source": "synthesize",
     "_htf_comment": "synthesize = rakit M15/H1 kausal dari M1 (grid UTC). csv = pakai <PAIR>_15m.csv/_1h.csv bila ada"
+  },
+  "exit": {
+    "_comment": "Mirror ScalpExitParams.DEFAULT. CLASSIC juga memakai time-stop 90 bar M1.",
+    "mode": "classic",
+    "min_early_profit_net_pct": 0.45,
+    "breakeven_trigger_net_pct": 0.4,
+    "trail_pct": 0.35,
+    "max_hold_bars_m1": 90,
+    "min_profit_friction_multiple": 2.0,
+    "be_trigger_atr_fraction": 0.5,
+    "trail_atr_fraction": 0.6
   }
 }

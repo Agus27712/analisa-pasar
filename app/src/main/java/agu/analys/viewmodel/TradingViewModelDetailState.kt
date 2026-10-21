@@ -74,11 +74,20 @@ internal fun TradingViewModel.createDetailUiState(): StateFlow<DetailUiState> {
         PositionSlice(spot, version, ctx, sell, isReal)
     }
 
+    // FeeTruth: tarif mengikuti kuotasi pair yang sedang dibuka (IDR ≠ USDT). Nilai kustom
+    // pengguna tetap dipakai apa adanya lewat `feeConfigFor`.
+    val pairAwareFees = combine(tradingFees, selectedPair) { fees, pair ->
+        pair.symbol
+            .takeIf { it.isNotBlank() }
+            ?.let { prefs.feeConfigFor(it) }
+            ?: fees
+    }
+
     val balanceSlice = combine(
         simulationWallet,
         realIndodaxBalance,
         realAvgBuyPrices,
-        tradingFees,
+        pairAwareFees,
         marketDataSource
     ) { wallet, realBal, avgPrices, fees, source ->
         BalanceSlice(wallet, realBal, avgPrices, fees, source)

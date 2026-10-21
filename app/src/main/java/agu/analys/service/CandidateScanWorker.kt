@@ -171,7 +171,7 @@ class CandidateScanWorker(
                     change24h = tick.change24h,
                     h1Candles = h1.dropLast(1),
                     d1Candles = d1,
-                    fees = prefs.tradingFees,
+                    fees = prefs.feeConfigFor(symbol),
                     globalContext = GlobalContextManager.context.value
                 )
             }
@@ -188,7 +188,7 @@ class CandidateScanWorker(
                     change24h = tick.change24h,
                     h4Candles = h4.dropLast(1),
                     d1Candles = d1,
-                    fees = prefs.tradingFees,
+                    fees = prefs.feeConfigFor(symbol),
                     globalContext = GlobalContextManager.context.value
                 )
             }
@@ -218,7 +218,7 @@ class CandidateScanWorker(
                     m1Candles = m1.dropLast(1),
                     bids = bids,
                     asks = asks,
-                    fees = prefs.tradingFees,
+                    fees = prefs.feeConfigFor(symbol),
                     scalpingConfig = prefs.scalpingRuntimeConfig,
                     globalContext = GlobalContextManager.context.value
                 )

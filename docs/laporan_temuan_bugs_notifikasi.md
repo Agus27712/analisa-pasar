@@ -122,8 +122,9 @@ ditampilkan** (cap `ScalpingMtfEvaluator` sengaja tidak diubah).
 
 ## 6. Rekomendasi perbaikan
 
-**Tidak ada** untuk cakupan dokumen ini. Seluruh N1–N17 tertutup. Area berikutnya yang masih punya
-temuan hidup adalah **paper trading** (`docs/bugs/temuan_bugs_paper_trade.md`).
+**Tidak ada** untuk cakupan dokumen ini. Seluruh N1–N17 tertutup. Area berikutnya yang dulu masih
+punya temuan hidup — **paper trading** (`docs/laporan_temuan_bugs_paper_trade.md`) — juga sudah
+tuntas (batch 6o, 2026-10-18): **tidak ada lagi temuan audit yang hidup di repo ini**.
 
 ## 7. Riwayat
 

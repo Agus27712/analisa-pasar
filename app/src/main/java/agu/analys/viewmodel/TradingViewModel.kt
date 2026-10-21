@@ -417,10 +417,17 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     val sellSignalState: StateFlow<SellSignalState> = kotlinx.coroutines.flow.combine(
         positionContext, engine.indicators, _tradingFees, marketDataCoordinator.currentTick
     ) { ctx, ind, fees, tick ->
+        // FeeTruth: pair IDR harus dinilai dengan tarif IDR (jual taker 0,4322%), bukan preset
+        // USDT global — kalau tidak, ambang "balik modal" kartu jual salah untuk pair IDR.
+        // Simbol milik posisi yang dievaluasi, bukan pair yang kebetulan terakhir dipilih.
+        val feeForPair = ctx.symbol
+            .takeIf { it.isNotBlank() }
+            ?.let { prefs.feeConfigFor(it) }
+            ?: fees
         agu.analys.engine.sell.SellSignalEvaluator.evaluate(
             context = ctx,
             indicators = ind,
-            tradingFees = fees,
+            tradingFees = feeForPair,
             high24h = tick?.high24h ?: 0.0
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SellSignalState())
@@ -555,10 +562,22 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
      * Murni simulasi — tidak ada efek ke mode uang riil.
      */
     fun updatePaperAutoTradeConfig(config: agu.analys.engine.scalping.PaperAutoTradeConfig) {
+        val previous = _paperAutoTradeConfig.value
         prefs.paperAutoTradeConfig = config
         _paperAutoTradeConfig.value = config
-        if (!config.autoBuyEnabled) {
-            // Pastikan tidak ada state machine exit yang tertinggal saat fitur dimatikan.
+        // P9 — mematikan auto-exit saat posisi terbuka tidak boleh meninggalkan posisi tanpa
+        // stop: serahkan ke jalur auto-sell lama, sama seperti rehidrasi setelah restart.
+        if (previous.autoExitEnabled && !config.autoExitEnabled) {
+            runCatching { handBackAllPaperEnginesToLegacy() }.onFailure {
+                agu.analys.util.AppLogManager.service(
+                    "PaperAutoExit",
+                    "⚠️ Serah-terima posisi paper ke jalur lama gagal: ${it.message}"
+                )
+            }
+        }
+        if (!config.autoBuyEnabled && !config.autoExitEnabled) {
+            // Jaring aman saat kedua fitur dimatikan. Mematikan auto-buy saja TIDAK boleh
+            // menghapus mesin: auto-exit masih mengawasi posisi yang sudah terbuka.
             agu.analys.viewmodel.PaperAutoTradeRuntime.clearAll()
         }
         agu.analys.util.AppLogManager.service(

@@ -1,18 +1,26 @@
 # Daftar Lengkap Pekerjaan yang BELUM Dikerjakan
 
-> ⚠️ **SNAPSHOT 2026-10-14 — untuk status terkini, baca `docs/bugs/` lebih dulu.**
-> Tiga area audit besar yang diinventarisasi di sini sudah selesai diperbaiki pada 2026-10-16
-> (21 temuan tertutup, 3 sebagian, 13 masih hidup). **Sumber kebenaran status temuan ada di
-> `docs/bugs/*.md`**, yang sudah diverifikasi ke kode dan direview owner pada `patch` @ `547048d`.
-> Dokumen ini tetap berguna untuk roadmap P4–P6 + verifikasi lapangan yang **belum** masuk audit.
+> ⚠️ **SNAPSHOT 2026-10-14 — angka statusnya sudah BASI.** Untuk status terkini baca
+> `docs/PANDUAN-LANJUT-AGEN.md` dan berkas `docs/laporan_temuan_bugs_*.md`.
+>
+> Dua area audit besar yang diinventarisiert di sini sudah diperbaiki mulai 2026-10-16, dan
+> **per 2026-10-18 seluruh temuan audit sudah tertutup**: P1–P9 (paper trading), J1–J10 (jurnal/P&L),
+> N1–N17 (notifikasi), K1–K15 (koneksi bursa). Folder `docs/bugs/` kini **kosong** — tiap area punya
+> laporannya sendiri di `docs/laporan_temuan_bugs_<topik>.md`.
+>
+> **Yang benar-benar masih terbuka ada di Bagian 3 (P5; P6 diblokir) dan Bagian 4 (V1–V4,
+> butuh perangkat). P4.2 sudah dibatalkan 2026-10-20 karena jalur app/replay taker-only.**
+> Dokumen ini tetap berguna untuk roadmap + verifikasi lapangan yang belum masuk audit.
 
-**Tanggal:** 14 Oktober 2026
-**Repo:** branch `patch` @ `4ffee5e` (S1–S9 sudah masuk; A/B sudah masuk; tooling P4.1 sudah masuk)
-**Peringatan branch:** per **2026-10-15** `patch` dan `main` **identik secara isi** (setelah PR #60 `7f890eb`); `main` hanya unggul commit merge. Kerja tetap di `patch`, bukan `main`.
-**Sumber:** `LAPORAN-validitas-log-audit`, `LAPORAN-verifikasi-ui-vs-candle`, `LAPORAN-audit-amp`, `LAPORAN-replay-gns`, `PANDUAN-LANJUT-AGEN.md` §4–§5
+**Tanggal:** 14 Oktober 2026 (snapshot; status branch diperbarui 2026-10-21)
+**Repo:** snapshot awal `patch` @ `4ffee5e`; status branch per 2026-10-21 = `40257e4`
+**Peringatan branch:** per **2026-10-21** `patch` = `main` + 13 commit konten + commit dokumentasi; `main` = `578d0de` (merge rilis 3.9.2). Riset **v2 dan v3 dihentikan**; seluruh artefak v2 sudah dihapus dari pohon kerja dan di-commit, dan arsip v3 ada di `backup/patch-v3-2026-10-21`. Arah aktif: engine kriptoyoi yang sudah ada + slider (slider entry sudah ada dan menurut owner terbukti memaksimalkan entry; exit belum). Kerja tetap di `patch`, bukan `main`.
+**Sumber:** `LAPORAN-validitas-log-audit`, `LAPORAN-verifikasi-ui-vs-candle`, `LAPORAN-audit_amp`, `LAPORAN-replay-gns`, `PANDUAN-LANJUT-AGEN.md` §4–§5
 **Catatan:** semua item di bawah **sudah diverifikasi ulang ke kode** — bukan dari ingatan. Yang sudah selesai di P0–P2 tidak dimasukkan.
 
-**Total: 27 item** — 9 saran strategi (SELESAI 2026-10-14) · 13 temuan audit · 5 roadmap · 4 verifikasi lapangan (beberapa tumpang tindih, lihat catatan di tiap bagian).
+**Total: 27 item** — **22 selesai** (9 saran strategi S1–S9 + 13 temuan audit A/B) · **1 dibatalkan**
+(P4.2, karena taker-only) · **1 roadmap belum dikerjakan** (P5) · P6 **diblokir** owner · **4 verifikasi
+lapangan** (V1–V4, butuh perangkat).
 
 ---
 
@@ -47,7 +55,8 @@ Tabel di bawah dipertahankan sebagai arsip kebutuhan (status ditambahkan di kolo
 
 ## Bagian 2 — Temuan audit (A/B) yang belum ditangani
 
-Di luar cakupan P0–P2. **Semua diverifikasi masih ada di kode saat ini.**
+Di luar cakupan P0–P2. **Status saat dokumen ini ditulis (2026-10-14): semua masih ada di kode —
+kini semuanya ✅ tertutup**, lihat kolom status di tiap tabel.
 
 ### 2a. Kesalahan info (A)
 
@@ -81,7 +90,7 @@ Di luar cakupan P0–P2. **Semua diverifikasi masih ada di kode saat ini.**
 |---|---|---|---|
 | P4.1 | **Walk-forward antar-bulan** — mode `--walk-forward` di `tools/split_validate.py` | Validasi keluar-sampel sekarang hanya **1 potongan** (70/30) — bisa kebetulan | ✅ **Tooling selesai 2026-10-14** (+2 bug diperbaiki). Hasil v4 (8 pair gate-rejected) 0/3 jendela; hasil 40 pair di `docs/LAPORAN-p41-walk-forward-2026-10-14.md` |
 | P4.4 | **Rehidrasi FSM paper: pulihkan progres** — persistensikan `barsHeld`, `isBeArmed`, `isPartialDone`, `peak` | Saat restart keempat nilai **reset**; mesin pulih ≠ mesin yang hilang | ✅ **Selesai 2026-10-15.** Satu JSON di key `_paper_fsm`; mencakup juga `isTrailArmed`, `partialR`, `activeStopLoss`, dan `atrPct` (yang sebelumnya juga hilang sehingga ambang S8 jatuh ke nilai tetap). `barsHeld` dihitung dari jam dinding. Lihat `docs/LAPORAN-p44-persistensi-fsm-2026-10-15.md` |
-| P4.2 | **Preferensi maker untuk pair IDR** (taker 0,8144% → maker 0,6144%) | Semua perhitungan masih taker | Belum |
+| P4.2 | **Preferensi maker untuk pair IDR** (taker 0,8144% → maker 0,6144%) | Semua perhitungan masih taker | ❌ **Dibatalkan 2026-10-20** — app/replay taker-only; knob maker dihapus |
 | P5 | **Data Indodax + replay TAPI v2** — harness ambil data + replay, jalankan pipeline §9 pada data Indodax | Folder `data/` belum punya data Indodax; `IndodaxTradeApiV2.kt` belum diuji ujung-ke-ujung | Belum |
 | P6 | **Auto-execute uang riil** | **DIBLOKIR** sampai P4.1 & P5 selesai — jangan disentuh tanpa instruksi eksplisit | Diblokir |
 
@@ -109,6 +118,10 @@ Di luar cakupan P0–P2. **Semua diverifikasi masih ada di kode saat ini.**
 ---
 
 ## Ringkasan eksekutif — kalau hanya boleh pilih 5
+
+> ⚠️ Ringkasan ini ditulis **2026-10-14**, ketika kelima butir di bawah masih terbuka. **Kini kelima
+> butir itu selesai.** Untuk pekerjaan yang masih benar-benar terbuka, baca **Bagian 3** (P5;
+> P6 diblokir) dan **Bagian 4** (V1–V4). P4.2 dibatalkan karena taker-only.
 
 | Urut | Item | Alasan |
 |---|---|---|

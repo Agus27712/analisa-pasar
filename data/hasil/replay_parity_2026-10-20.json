@@ -1,0 +1,50 @@
+{
+  "alat": "tools/scalp_replay.py (parity 2026-10-20)",
+  "tanggal": "2026-10-20",
+  "perintah": "python3 tools/scalp_replay.py --pair BTCUSDT --data data/tokocrypto_v4 --assume-orderbook-ok [--config <berkas>]",
+  "data": "data/tokocrypto_v4",
+  "pair": "BTCUSDT",
+  "bars_m1": 87000,
+  "fee_quote": "USDT",
+  "friction_pct_effective": 0.9688,
+  "friction_floor_pct_effective": 5.8128,
+  "catatan": "Angka ini menggantikan tabel pra-parity 2026-10-19 yang belum memakai time-stop CLASSIC 90 bar. Hampir semua trade selesai karena time-stop; pada mode full, 10 trade keluar lewat trailing stop.",
+  "lari": [
+    {
+      "skenario": "default 6x, horizon 2 jam, exit classic",
+      "config": "data/config/scalp_config.json",
+      "lookahead_bars": 120,
+      "max_hold_bars_m1": 90,
+      "ready_signals": 350,
+      "resolved": 350,
+      "unresolved": 0,
+      "wins": 14,
+      "losses": 336,
+      "win_rate_pct": 4.0,
+      "avg_r": -0.1639,
+      "exit_reasons": {"TIMEOUT": 350},
+      "sl_floor_active_pct": 100.0
+    },
+    {
+      "skenario": "default 6x, horizon 2 jam, exit full",
+      "config": "data/config/scalp_config_exit_full.json",
+      "lookahead_bars": 120,
+      "max_hold_bars_m1": 90,
+      "ready_signals": 354,
+      "resolved": 354,
+      "unresolved": 0,
+      "wins": 16,
+      "losses": 338,
+      "win_rate_pct": 4.52,
+      "avg_r": -0.1645,
+      "exit_reasons": {"TIMEOUT": 344, "TRAIL_SL": 10},
+      "sl_floor_active_pct": 99.72
+    }
+  ],
+  "batasan": [
+    "Satu pair, satu dataset (BTCUSDT, data/tokocrypto_v4, 60 hari).",
+    "Tidak membuktikan pair lain atau rezim pasar lain.",
+    "Orderbook diasumsikan tersedia (--assume-orderbook-ok).",
+    "Maker fee tetap ada di blok fee sebagai data FEE_TRUTH, tetapi replay hanya memakai taker."
+  ]
+}
