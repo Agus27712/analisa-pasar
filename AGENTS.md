@@ -15,10 +15,11 @@ dibuat otomatis oleh `.github/workflows/release.yml` saat `main` menerima push.
 ### ⚠️ Langkah 0 — pastikan branch yang Anda baca benar
 
 **Kerjaan aktif ada di `patch`.** Snapshot **2026-10-21** (setelah rebase ke rilis **3.9.2**):
-`origin/main` = `578d0de` (merge rilis 3.9.2, batch 6j–6n), `origin/patch` = `40257e4`
-(13 commit konten) + commit dokumentasi 2026-10-21 = **main + 13 commit konten** (riset Spec v2,
-dataset 90 hari, batch 6o/6p). **`patch` memang di depan `main`, jadi `git diff HEAD origin/main`
-TIDAK kosong** — itu isi 13 commit konten + dokumen tadi, bukan tanda `main` ketinggalan.
+`origin/main` = `578d0de` (merge rilis 3.9.2, batch 6j–6n). Titik jangkar konten `patch` =
+`40257e4` (13 commit konten); commit dokumentasi 2026-10-21 duduk di atasnya. Jadi `patch` =
+**main + 13 commit konten + commit dokumentasi** (riset Spec v2, dataset 90 hari, batch 6o/6p).
+**`patch` memang di depan `main`, jadi `git diff HEAD origin/main` TIDAK kosong** — itu isi
+13 commit konten + dokumen tadi, bukan tanda `main` ketinggalan.
 `main` adalah **ancestor** `patch`. Jangan membaca `main` untuk melihat pekerjaan terbaru;
 `main` baru berisi rilis 3.9.2.
 **Jangan pernah menyimpulkan keadaan repo dari `main` tanpa mengecek angka ini dulu:**

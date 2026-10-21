@@ -66,7 +66,7 @@
 | | |
 |---|---|
 | Branch kerja | **`patch`** (owner me-review di sini dulu; `main` hanya menerima merge) |
-| HEAD `patch` | `40257e4` (13 commit konten) + commit dokumentasi 2026-10-21; ukur ulang dengan `git rev-parse --short origin/patch` |
+| HEAD `patch` | Ukur: `git rev-parse --short origin/patch`. `40257e4` = commit konten terakhir (13 commit) + commit dokumentasi 2026-10-21 |
 | HEAD `main` | `578d0de` (merge rilis 3.9.2); **ancestor** dari `patch` |
 | Titik masuk kode | package `agu.analys`, modul tunggal `:app` |
 | Unit test | **Belum diukur ulang setelah rebase 2026-10-21.** Angka terakhir: **773 uji · 772 lulus · 0 gagal · 1 dilewati** (101 kelas), 2026-10-20. Ukur ulang sebelum memakai angka ini. |
@@ -122,9 +122,9 @@ git stash pop                 # kembalikan pekerjaan
 | ~~§15~~ | ~~SSOT: horizon vs engine aktif~~ | — | ⛔ **DIBATALKAN** — lihat §3b |
 
 **Status branch (2026-10-21):** `main` = `578d0de` (merge rilis 3.9.2, batch 6j–6n).
-`patch` = `40257e4` (13 commit konten) + commit dokumentasi 2026-10-21 = **main + 13 commit
-konten** (riset Spec v2, dataset 90 hari, batch 6o/6p); `main` adalah **ancestor** `patch`, jadi
-`git diff HEAD origin/main` **tidak kosong** — itu isi 13 commit konten + dokumen tadi. Riset v3
+`patch` = **main + 13 commit konten + commit dokumentasi 2026-10-21** (riset Spec v2, dataset
+90 hari, batch 6o/6p); `40257e4` = commit konten terakhir. `main` adalah **ancestor** `patch`,
+jadi `git diff HEAD origin/main` **tidak kosong** — itu isi 13 commit konten + dokumen tadi. Riset v3
 sudah dihentikan dan commit-nya dibuang dari `patch`; arsip di
 `backup/patch-v3-2026-10-21` (`796a9d1`). Jangan membaca `main` untuk pekerjaan terbaru.
 §14/§15 tetap **dihapus dari kode** (2026-10-13).
