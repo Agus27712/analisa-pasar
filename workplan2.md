@@ -4041,3 +4041,61 @@ koreksi API. Batch ini hanya mengubah **dokumen spec**; kode aplikasi dan harnes
 
 **Belum dikerjakan.** Harness belum punya benchmark acak dan belum memakai `tp1Floor` sebagai
 kebijakan baku (mode `floor` yang ada setara untuk setup formula). Fase 1 Kotlin tetap diblokir.
+
+## 64. Harness Spec v3 + gerbang bukti E1–E4 (2026-10-21)
+
+**Latar belakang.** §63 mengubah dokumen spec, tetapi harness belum setara v3: TP1 masih
+`entry + 1,0R`, time-stop masih hitungan candle, R denominator masih aditif, dan belum ada
+benchmark acak. Batch ini membangun harness yang setara, menyiapkan dataset 180 hari, lalu
+mengukur E1–E4 sebelum Fase 1 Kotlin. **Kode aplikasi tidak disentuh.**
+
+**Yang dibangun.**
+
+1. `tools/spot_lib.py` — friksi aditif `F`, lantai 6×, `resolve_stop`, `tp1_floor`, risiko per
+   unit net `FeeSchedule`, konversi jam → candle.
+2. `tools/spot_backtest.py` — TP1 `spec`/`literal`/`legacy-floor`, G3 mati, qty dari risiko net,
+   R kotor + friksi per R, jendela `--start-ms/--end-ms`, pemindaian kandidat, filter portofolio
+   kronologis `maxConcurrentPositions=2`.
+3. `tools/spot_benchmark.py` — entry acak §11.1: K=200, seed tetap, SL dari distribusi
+   `slEff/ATR` sinyal, TP1 `tp1Floor`, exit §7 tanpa invalidasi, p99 lintas pair.
+4. `tools/spot_evidence.py` — orkestrasi E1–E4: MFE A → gate A → backtest B → benchmark OOS →
+   diagnostik tanpa G0 → jendela A → 10 varian parameter.
+5. `tools/test_spot_backtest.py` — **30 uji**, termasuk kontrol negatif untuk time-stop minimum,
+   TP1 floor, sizing net, R kotor, filter portofolio, dan atribusi varian E4 per setup.
+6. Dataset `data/tokocrypto_spot_180` — 41 pair USDT, 15m + 1h, 82 CSV, **868.054 bar**,
+   **0 celah**, **0 duplikat**, 44 MB.
+7. Dokumen: `docs/exp/exp_spot_evidence_v3.md`, `docs/LAPORAN-harness-spec-v3-2026-10-21.md`,
+   aturan harness di `AGENTS.md`.
+
+**Hasil terukur.**
+
+- **E1/E2 produksi: 0 trade OOS di kedua timeframe.** Gate edge jendela A hanya menyisakan
+  IOUSDT; 15m menghasilkan 0 kandidat (G0 menolak 1.183 dari 1.217 sinyal, G2 menolak 34
+  sisanya), 1h jendela B menghasilkan 0 trade dari 12 kandidat yang lolos G0–G2. Satu-satunya
+  trade produksi ada di jendela A: 1 SWEEP, avg R −0,4849.
+- **Diagnostik tanpa G0 tetap negatif.** 15m B: 7 trade, avg R −0,2495, R kotor −0,1061.
+  1h B: 45 trade, avg R −0,2561, R kotor −0,1146. Panel penuh 180 hari: 15m 12 trade (−0,2888),
+  1h 67 trade (−0,2391). OOS hanya 5 dan 26 trade — E1 menuntut 100 per setup.
+- **Entry kalah dari acak.** SWEEP 1h panel penuh N=160: R kotor strategi −0,1165 vs acak
+  rata-rata +0,0157 dan p99 +0,1122. 15m panel penuh N=47: −0,1163 vs +0,0084 / p99 +0,1721.
+  Acak juga rugi bersih setelah friksi; strategi butuh R kotor > +0,14R hanya untuk impas.
+- **15m tidak bisa dieksekusi.** Lantai 5,8128% + G2 maksimum 5 ATR menuntut ATR% ≥ 1,16256%.
+  IOUSDT 15m median ATR% 0,6413% (95,5% bar di bawah ambang); G2 menolak 1.490/1.584 sinyal
+  SWEEP (94,1%; jendela B 90 hari: 738/797).
+  Di 1h, time-stop 1,5–3 jam = 3 candle, jadi 1h bukan horizon lebih panjang.
+- **Gate tidak stabil.** A = IOUSDT (2,0052); B = MUBARAK, PUMP, ZRO, PLUME (2,12–2,78);
+  irisan A ∩ B kosong. Tabel lama 14 pair tidak memuat IOUSDT dan tidak boleh dianggap berlaku.
+- **E3 sebagian, E4 tidak cukup sampel.** Universe 41 pair dipilih dari snapshot akhir B; E4
+  formal tidak bisa diklaim karena base produksi 0 trade. Satu varian longgar
+  (`min_net_rr_final ×0,8`) menghasilkan **1 trade** IOUSDT SWEEP +1,403R; satu trade bukan
+  sampel, jadi statusnya tetap `tidak_cukup_sampel`.
+
+**Keputusan.** Fase 1 Kotlin tetap **diblokir**. Masalah utama adalah entry (R kotor negatif
+sebelum biaya), bukan exit/friksi. Opsi: (a) hentikan lini Spec v3; (b) rancang ulang entry
+SWEEP dan ukur ulang terhadap acak; (c) uji horizon lebih panjang lewat `timeStopHours`, bukan
+pindah timeframe; (d) perbaiki gate menjadi walk-forward berkala. Rekomendasi: (b) lebih dulu,
+tanpa menulis engine Kotlin sampai ada satu setup dengan R kotor positif dan mengalahkan acak.
+
+**Berkas.** `tools/spot_{lib,backtest,benchmark,evidence}.py`, `tools/test_spot_backtest.py`,
+`data/tokocrypto_spot_180/`, `data/hasil/spot_evidence_v3/`,
+`docs/exp/exp_spot_evidence_v3.md`, `docs/LAPORAN-harness-spec-v3-2026-10-21.md`.

@@ -5,6 +5,12 @@ dataset `data/tokocrypto_spot` (41 pair USDT, 90 hari, candle 15m dan 1h). Harne
 `tools/spot_backtest.py` — **bukan** mesin Kotlin. Spec §11 mewajibkan mesin Kotlin + uji paritas,
 jadi angka di sini adalah **hasil riset**, bukan hasil produksi.
 
+> **Catatan semantik (2026-10-21).** Angka di laporan ini memakai harness **v2**: TP1
+> `entry + 1,0R` yang selalu ditolak G4, G3 masih aktif, time-stop dalam jumlah candle tetap, dan
+> R denominator aditif. Jangan membandingkannya langsung dengan hasil Spec v3
+> (`exp_spot_evidence_v3.md`): v3 memakai TP1 `tp1Floor`, G3 dicabut, time-stop dari jam, dan
+> R denominator net. Hasil v2 tetap berlaku sebagai riwayat: tidak ada edge.
+
 - **Pertanyaan:** apakah setup, gerbang G0–G8, dan exit Spec v2 menghasilkan expectancy positif
   setelah friksi Tokocrypto?
 - **Jawaban singkat:** **tidak ada konfigurasi yang diukur menghasilkan expectancy positif.**

@@ -1,0 +1,479 @@
+{
+  "meta": {
+    "generated_at_utc": "2026-10-21T04:39:01Z",
+    "dataset": "/home/pvszombie/analisa-pasar-1/data/tokocrypto_spot_180",
+    "timeframe": "1h",
+    "candidates_file": "/home/pvszombie/analisa-pasar-1/data/hasil/spot_evidence_v3/bt_B_nogate_1h_candidates.csv",
+    "trades_file": "/home/pvszombie/analisa-pasar-1/data/hasil/spot_evidence_v3/bt_B_nogate_1h_trades.csv",
+    "oos_only": true,
+    "start_ms": 1790165340657,
+    "end_ms": 1792498140657,
+    "runs": 200,
+    "seed": 20261021,
+    "entry": "MARKET_NEXT_OPEN (open bar berikutnya, fill mentah; slippage lewat FeeSchedule)",
+    "sl": "distribusi slEff/ATR sinyal asli; SL = entry - ratio x ATR sinyal",
+    "tp1": "tp1Floor Spec v3",
+    "tp2": null,
+    "exit": "Spec v3 \u00a77 tanpa SETUP_INVALIDATION",
+    "percentile": "p99 dari rata-rata run lintas pair (interpolasi linear)"
+  },
+  "by_setup": {
+    "PULLBACK_VWAP": {
+      "status": "tidak_ada_kandidat",
+      "candidates": 0
+    },
+    "BREAKOUT_RETEST": {
+      "status": "diukur",
+      "pairs_with_candidates": 7,
+      "candidates": 8,
+      "runs": 200,
+      "random_trades": 1600,
+      "strategy_trades": 1,
+      "strategy_gross_r": -0.2411,
+      "strategy_net_r": -0.3816,
+      "random_gross_mean": 0.0266,
+      "random_gross_p99": 0.5087,
+      "random_net_mean": -0.1332,
+      "random_net_p99": 0.3447,
+      "delta_gross_r": -0.2677,
+      "delta_net_r": -0.2483,
+      "beats_random_p99_gross": false,
+      "net_positive": false,
+      "e2_pass": false
+    },
+    "SWEEP_RECLAIM": {
+      "status": "diukur",
+      "pairs_with_candidates": 30,
+      "candidates": 78,
+      "runs": 200,
+      "random_trades": 15600,
+      "strategy_trades": 15,
+      "strategy_gross_r": -0.1588,
+      "strategy_net_r": -0.2992,
+      "random_gross_mean": 0.0116,
+      "random_gross_p99": 0.1606,
+      "random_net_mean": -0.1362,
+      "random_net_p99": -0.0037,
+      "delta_gross_r": -0.1703,
+      "delta_net_r": -0.163,
+      "beats_random_p99_gross": false,
+      "net_positive": false,
+      "e2_pass": false
+    },
+    "RANGE_BOUNCE": {
+      "status": "tidak_ada_kandidat",
+      "candidates": 0
+    },
+    "SQUEEZE_BREAKOUT": {
+      "status": "diukur",
+      "pairs_with_candidates": 2,
+      "candidates": 2,
+      "runs": 200,
+      "random_trades": 400,
+      "strategy_trades": 0,
+      "strategy_gross_r": null,
+      "strategy_net_r": null,
+      "random_gross_mean": 0.1671,
+      "random_gross_p99": 1.1074,
+      "random_net_mean": 0.057,
+      "random_net_p99": 0.994,
+      "delta_gross_r": null,
+      "delta_net_r": null,
+      "beats_random_p99_gross": false,
+      "net_positive": false,
+      "e2_pass": false
+    }
+  },
+  "by_pair_setup": [
+    {
+      "pair": "ADAUSDT",
+      "setup": "BREAKOUT_RETEST",
+      "candidates": 2,
+      "allowed_bars": 542,
+      "runs_with_trades": 200,
+      "random_trades": 400,
+      "trade_mean_gross": -0.014204863771641046,
+      "trade_mean_net": -0.19836074747631602
+    },
+    {
+      "pair": "ADAUSDT",
+      "setup": "SWEEP_RECLAIM",
+      "candidates": 2,
+      "allowed_bars": 398,
+      "runs_with_trades": 200,
+      "random_trades": 400,
+      "trade_mean_gross": -0.07786334631019448,
+      "trade_mean_net": -0.25078166350456105
+    },
+    {
+      "pair": "ALTUSDT",
+      "setup": "SWEEP_RECLAIM",
+      "candidates": 3,
+      "allowed_bars": 446,
+      "runs_with_trades": 200,
+      "random_trades": 600,
+      "trade_mean_gross": 0.008903800469804478,
+      "trade_mean_net": -0.16728052423038284
+    },
+    {
+      "pair": "APTUSDT",
+      "setup": "SWEEP_RECLAIM",
+      "candidates": 3,
+      "allowed_bars": 407,
+      "runs_with_trades": 200,
+      "random_trades": 600,
+      "trade_mean_gross": -0.024537651232724778,
+      "trade_mean_net": -0.17932935877929093
+    },
+    {
+      "pair": "AUSDT",
+      "setup": "BREAKOUT_RETEST",
+      "candidates": 1,
+      "allowed_bars": 546,
+      "runs_with_trades": 200,
+      "random_trades": 200,
+      "trade_mean_gross": 0.013558165980087591,
+      "trade_mean_net": -0.19681046869096902
+    },
+    {
+      "pair": "AUSDT",
+      "setup": "SWEEP_RECLAIM",
+      "candidates": 5,
+      "allowed_bars": 436,
+      "runs_with_trades": 200,
+      "random_trades": 1000,
+      "trade_mean_gross": 0.012004721451296592,
+      "trade_mean_net": -0.12105997129025746
+    },
+    {
+      "pair": "BATUSDT",
+      "setup": "SWEEP_RECLAIM",
+      "candidates": 1,
+      "allowed_bars": 448,
+      "runs_with_trades": 200,
+      "random_trades": 200,
+      "trade_mean_gross": 0.12477715054426923,
+      "trade_mean_net": 0.006931540443883946
+    },
+    {
+      "pair": "BEAMXUSDT",
+      "setup": "SWEEP_RECLAIM",
+      "candidates": 2,
+      "allowed_bars": 457,
+      "runs_with_trades": 200,
+      "random_trades": 400,
+      "trade_mean_gross": 0.04217541056243659,
+      "trade_mean_net": -0.07235198123706126
+    },
+    {
+      "pair": "BMTUSDT",
+      "setup": "SWEEP_RECLAIM",
+      "candidates": 1,
+      "allowed_bars": 429,
+      "runs_with_trades": 200,
+      "random_trades": 200,
+      "trade_mean_gross": 0.011992027357109388,
+      "trade_mean_net": -0.13680560436930975
+    },
+    {
+      "pair": "COMPUSDT",
+      "setup": "SWEEP_RECLAIM",
+      "candidates": 1,
+      "allowed_bars": 436,
+      "runs_with_trades": 200,
+      "random_trades": 200,
+      "trade_mean_gross": 0.023626871283670865,
+      "trade_mean_net": -0.14920767444658137
+    },
+    {
+      "pair": "ENAUSDT",
+      "setup": "BREAKOUT_RETEST",
+      "candidates": 1,
+      "allowed_bars": 544,
+      "runs_with_trades": 200,
+      "random_trades": 200,
+      "trade_mean_gross": 0.02450118348492714,
+      "trade_mean_net": -0.0766120726795085
+    },
+    {
+      "pair": "ENAUSDT",
+      "setup": "SWEEP_RECLAIM",
+      "candidates": 2,
+      "allowed_bars": 380,
+      "runs_with_trades": 200,
+      "random_trades": 400,
+      "trade_mean_gross": -0.04143702591641314,
+      "trade_mean_net": -0.1756601940036547
+    },
+    {
+      "pair": "ENAUSDT",
+      "setup": "SQUEEZE_BREAKOUT",
+      "candidates": 1,
+      "allowed_bars": 164,
+      "runs_with_trades": 200,
+      "random_trades": 200,
+      "trade_mean_gross": 0.04151647505268378,
+      "trade_mean_net": -0.07439395133860992
+    },
+    {
+      "pair": "ERAUSDT",
+      "setup": "SWEEP_RECLAIM",
+      "candidates": 3,
+      "allowed_bars": 419,
+      "runs_with_trades": 200,
+      "random_trades": 600,
+      "trade_mean_gross": 0.04210481549283704,
+      "trade_mean_net": -0.08060134550885746
+    },
+    {
+      "pair": "FETUSDT",
+      "setup": "SWEEP_RECLAIM",
+      "candidates": 4,
+      "allowed_bars": 403,
+      "runs_with_trades": 200,
+      "random_trades": 800,
+      "trade_mean_gross": 0.0031001458932276116,
+      "trade_mean_net": -0.1332649574968368
+    },
+    {
+      "pair": "FILUSDT",
+      "setup": "SWEEP_RECLAIM",
+      "candidates": 3,
+      "allowed_bars": 405,
+      "runs_with_trades": 200,
+      "random_trades": 600,
+      "trade_mean_gross": 0.029756156247132157,
+      "trade_mean_net": -0.10665408423075878
+    },
+    {
+      "pair": "GNSUSDT",
+      "setup": "BREAKOUT_RETEST",
+      "candidates": 1,
+      "allowed_bars": 559,
+      "runs_with_trades": 200,
+      "random_trades": 200,
+      "trade_mean_gross": 0.033094297067273716,
+      "trade_mean_net": -0.14296341832059206
+    },
+    {
+      "pair": "GNSUSDT",
+      "setup": "SWEEP_RECLAIM",
+      "candidates": 1,
+      "allowed_bars": 266,
+      "runs_with_trades": 200,
+      "random_trades": 200,
+      "trade_mean_gross": -0.04014602759137478,
+      "trade_mean_net": -0.23243320143392182
+    },
+    {
+      "pair": "HBARUSDT",
+      "setup": "SWEEP_RECLAIM",
+      "candidates": 1,
+      "allowed_bars": 377,
+      "runs_with_trades": 200,
+      "random_trades": 200,
+      "trade_mean_gross": -0.040574683363972325,
+      "trade_mean_net": -0.188057056933454
+    },
+    {
+      "pair": "IOUSDT",
+      "setup": "BREAKOUT_RETEST",
+      "candidates": 1,
+      "allowed_bars": 549,
+      "runs_with_trades": 200,
+      "random_trades": 200,
+      "trade_mean_gross": -0.009111741817523038,
+      "trade_mean_net": -0.15977232465937863
+    },
+    {
+      "pair": "IOUSDT",
+      "setup": "SWEEP_RECLAIM",
+      "candidates": 1,
+      "allowed_bars": 454,
+      "runs_with_trades": 200,
+      "random_trades": 200,
+      "trade_mean_gross": -0.022403934336866434,
+      "trade_mean_net": -0.23443706677715193
+    },
+    {
+      "pair": "METISUSDT",
+      "setup": "SWEEP_RECLAIM",
+      "candidates": 3,
+      "allowed_bars": 393,
+      "runs_with_trades": 200,
+      "random_trades": 600,
+      "trade_mean_gross": 0.011946349174285895,
+      "trade_mean_net": -0.14341018398217825
+    },
+    {
+      "pair": "MUBARAKUSDT",
+      "setup": "BREAKOUT_RETEST",
+      "candidates": 1,
+      "allowed_bars": 590,
+      "runs_with_trades": 200,
+      "random_trades": 200,
+      "trade_mean_gross": 0.11977394703634678,
+      "trade_mean_net": -0.07494380078017611
+    },
+    {
+      "pair": "MUBARAKUSDT",
+      "setup": "SWEEP_RECLAIM",
+      "candidates": 1,
+      "allowed_bars": 314,
+      "runs_with_trades": 200,
+      "random_trades": 200,
+      "trade_mean_gross": 0.050374136722747195,
+      "trade_mean_net": -0.10560940960462835
+    },
+    {
+      "pair": "NEARUSDT",
+      "setup": "SWEEP_RECLAIM",
+      "candidates": 2,
+      "allowed_bars": 451,
+      "runs_with_trades": 200,
+      "random_trades": 400,
+      "trade_mean_gross": -0.03306124185775276,
+      "trade_mean_net": -0.1392643870197405
+    },
+    {
+      "pair": "NEARUSDT",
+      "setup": "SQUEEZE_BREAKOUT",
+      "candidates": 1,
+      "allowed_bars": 88,
+      "runs_with_trades": 200,
+      "random_trades": 200,
+      "trade_mean_gross": 0.2927758887701768,
+      "trade_mean_net": 0.18830580813831962
+    },
+    {
+      "pair": "PHAUSDT",
+      "setup": "SWEEP_RECLAIM",
+      "candidates": 1,
+      "allowed_bars": 391,
+      "runs_with_trades": 200,
+      "random_trades": 200,
+      "trade_mean_gross": 0.025796998894216005,
+      "trade_mean_net": -0.10891365870728023
+    },
+    {
+      "pair": "PLUMEUSDT",
+      "setup": "SWEEP_RECLAIM",
+      "candidates": 2,
+      "allowed_bars": 462,
+      "runs_with_trades": 200,
+      "random_trades": 400,
+      "trade_mean_gross": 0.021486072283428297,
+      "trade_mean_net": -0.15288080654074043
+    },
+    {
+      "pair": "PUMPUSDT",
+      "setup": "SWEEP_RECLAIM",
+      "candidates": 5,
+      "allowed_bars": 403,
+      "runs_with_trades": 200,
+      "random_trades": 1000,
+      "trade_mean_gross": -0.03928897662671802,
+      "trade_mean_net": -0.17269629046424437
+    },
+    {
+      "pair": "QNTUSDT",
+      "setup": "SWEEP_RECLAIM",
+      "candidates": 4,
+      "allowed_bars": 443,
+      "runs_with_trades": 200,
+      "random_trades": 800,
+      "trade_mean_gross": 0.030786560209657726,
+      "trade_mean_net": -0.0813849580539727
+    },
+    {
+      "pair": "REZUSDT",
+      "setup": "SWEEP_RECLAIM",
+      "candidates": 3,
+      "allowed_bars": 396,
+      "runs_with_trades": 200,
+      "random_trades": 600,
+      "trade_mean_gross": 0.03379356729317448,
+      "trade_mean_net": -0.10350175907634147
+    },
+    {
+      "pair": "SOXSBUSDT",
+      "setup": "SWEEP_RECLAIM",
+      "candidates": 4,
+      "allowed_bars": 453,
+      "runs_with_trades": 200,
+      "random_trades": 800,
+      "trade_mean_gross": 0.08488239783416907,
+      "trade_mean_net": -0.0996345756475304
+    },
+    {
+      "pair": "STRKUSDT",
+      "setup": "SWEEP_RECLAIM",
+      "candidates": 1,
+      "allowed_bars": 406,
+      "runs_with_trades": 200,
+      "random_trades": 200,
+      "trade_mean_gross": -0.007511622171823798,
+      "trade_mean_net": -0.13336825119770532
+    },
+    {
+      "pair": "SUSDT",
+      "setup": "BREAKOUT_RETEST",
+      "candidates": 1,
+      "allowed_bars": 599,
+      "runs_with_trades": 200,
+      "random_trades": 200,
+      "trade_mean_gross": 0.01855962090445604,
+      "trade_mean_net": -0.0831839607463116
+    },
+    {
+      "pair": "SUSDT",
+      "setup": "SWEEP_RECLAIM",
+      "candidates": 5,
+      "allowed_bars": 453,
+      "runs_with_trades": 200,
+      "random_trades": 1000,
+      "trade_mean_gross": 0.048583080530852495,
+      "trade_mean_net": -0.10582858187544775
+    },
+    {
+      "pair": "TIAUSDT",
+      "setup": "SWEEP_RECLAIM",
+      "candidates": 8,
+      "allowed_bars": 466,
+      "runs_with_trades": 200,
+      "random_trades": 1600,
+      "trade_mean_gross": -0.028384706321042244,
+      "trade_mean_net": -0.16964178059971072
+    },
+    {
+      "pair": "WUSDT",
+      "setup": "SWEEP_RECLAIM",
+      "candidates": 1,
+      "allowed_bars": 429,
+      "runs_with_trades": 200,
+      "random_trades": 200,
+      "trade_mean_gross": 0.05480412821247203,
+      "trade_mean_net": -0.04581316930255615
+    },
+    {
+      "pair": "XRPUSDT",
+      "setup": "SWEEP_RECLAIM",
+      "candidates": 1,
+      "allowed_bars": 379,
+      "runs_with_trades": 200,
+      "random_trades": 200,
+      "trade_mean_gross": -0.04065550074455561,
+      "trade_mean_net": -0.24742496180209378
+    },
+    {
+      "pair": "ZROUSDT",
+      "setup": "SWEEP_RECLAIM",
+      "candidates": 4,
+      "allowed_bars": 465,
+      "runs_with_trades": 200,
+      "random_trades": 800,
+      "trade_mean_gross": 0.08187938149282986,
+      "trade_mean_net": -0.05491808551676401
+    }
+  ]
+}

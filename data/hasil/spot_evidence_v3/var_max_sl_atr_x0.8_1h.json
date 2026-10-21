@@ -1,0 +1,275 @@
+{
+  "meta": {
+    "generated_at_utc": "2026-10-21T04:39:16Z",
+    "dataset": "/home/pvszombie/analisa-pasar-1/data/tokocrypto_spot_180",
+    "pairs_requested": 41,
+    "timeframe": "1h",
+    "htf": "4h",
+    "setups": [
+      "PULLBACK_VWAP",
+      "BREAKOUT_RETEST",
+      "SWEEP_RECLAIM",
+      "RANGE_BOUNCE",
+      "SQUEEZE_BREAKOUT"
+    ],
+    "tp1_policy": "spec",
+    "pair_edge_enabled": true,
+    "gates": {
+      "max_sl_atr": 4.0,
+      "friction_multiple": 6.0,
+      "min_atr_friction": 0.0,
+      "min_net_rr_tp1": 1.0,
+      "min_net_rr_final": 1.5,
+      "min_reward_friction": 3.0
+    },
+    "eligible_pairs_gate": [
+      "IOUSDT"
+    ],
+    "equity_usd": 10000.0,
+    "risk_per_trade_pct": 0.5,
+    "fee_buy_pct": 0.4044,
+    "fee_sell_pct": 0.4044,
+    "slippage_pct": 0.08,
+    "f_pct": 0.9688,
+    "friction_floor_pct": 5.8128,
+    "friction_multiple": 6.0,
+    "risk_basis": "FeeSchedule costBasisNet/netSellValue (net, bukan aditif)",
+    "tp1_fraction": 0.6,
+    "split": 0.7,
+    "warmup_candles": 150,
+    "start_ms": 1784722140657,
+    "end_ms": 1792498140657,
+    "cooldown_candles": 1,
+    "pause_candles": 1,
+    "time_stop_candles": {
+      "PULLBACK_VWAP": 3,
+      "BREAKOUT_RETEST": 3,
+      "SWEEP_RECLAIM": 3,
+      "RANGE_BOUNCE": 3,
+      "SQUEEZE_BREAKOUT": 3
+    },
+    "max_concurrent_positions": 2,
+    "portfolio_cap_method": "greedy_chronological_postprocess",
+    "risk_manager_scope": "per_pair (batas rugi harian & pause 3 loss belum lintas pair)"
+  },
+  "summary": {
+    "overall": {
+      "trades": 0
+    },
+    "in_sample": {
+      "trades": 0
+    },
+    "out_of_sample": {
+      "trades": 0
+    },
+    "portfolio_overall": {
+      "trades": 0
+    },
+    "portfolio_out_of_sample": {
+      "trades": 0
+    },
+    "portfolio_rejected": 0,
+    "by_setup": {
+      "PULLBACK_VWAP": {
+        "trades": 0
+      },
+      "BREAKOUT_RETEST": {
+        "trades": 0
+      },
+      "SWEEP_RECLAIM": {
+        "trades": 0
+      },
+      "RANGE_BOUNCE": {
+        "trades": 0
+      },
+      "SQUEEZE_BREAKOUT": {
+        "trades": 0
+      }
+    },
+    "portfolio_by_setup": {
+      "PULLBACK_VWAP": {
+        "trades": 0
+      },
+      "BREAKOUT_RETEST": {
+        "trades": 0
+      },
+      "SWEEP_RECLAIM": {
+        "trades": 0
+      },
+      "RANGE_BOUNCE": {
+        "trades": 0
+      },
+      "SQUEEZE_BREAKOUT": {
+        "trades": 0
+      }
+    },
+    "portfolio_out_of_sample_by_setup": {
+      "PULLBACK_VWAP": {
+        "trades": 0
+      },
+      "BREAKOUT_RETEST": {
+        "trades": 0
+      },
+      "SWEEP_RECLAIM": {
+        "trades": 0
+      },
+      "RANGE_BOUNCE": {
+        "trades": 0
+      },
+      "SQUEEZE_BREAKOUT": {
+        "trades": 0
+      }
+    },
+    "by_pair": {
+      "ADAUSDT": {
+        "trades": 0
+      },
+      "ALTUSDT": {
+        "trades": 0
+      },
+      "APTUSDT": {
+        "trades": 0
+      },
+      "AUSDT": {
+        "trades": 0
+      },
+      "BATUSDT": {
+        "trades": 0
+      },
+      "BEAMXUSDT": {
+        "trades": 0
+      },
+      "BMTUSDT": {
+        "trades": 0
+      },
+      "BNBUSDT": {
+        "trades": 0
+      },
+      "BTCUSDT": {
+        "trades": 0
+      },
+      "COMPUSDT": {
+        "trades": 0
+      },
+      "DOGEUSDT": {
+        "trades": 0
+      },
+      "ENAUSDT": {
+        "trades": 0
+      },
+      "ERAUSDT": {
+        "trades": 0
+      },
+      "ETHUSDT": {
+        "trades": 0
+      },
+      "FETUSDT": {
+        "trades": 0
+      },
+      "FILUSDT": {
+        "trades": 0
+      },
+      "GNSUSDT": {
+        "trades": 0
+      },
+      "GTCUSDT": {
+        "trades": 0
+      },
+      "HBARUSDT": {
+        "trades": 0
+      },
+      "IOUSDT": {
+        "trades": 0
+      },
+      "LINKUSDT": {
+        "trades": 0
+      },
+      "METISUSDT": {
+        "trades": 0
+      },
+      "MUBARAKUSDT": {
+        "trades": 0
+      },
+      "NEARUSDT": {
+        "trades": 0
+      },
+      "NVDABUSDT": {
+        "trades": 0
+      },
+      "PHAUSDT": {
+        "trades": 0
+      },
+      "PLUMEUSDT": {
+        "trades": 0
+      },
+      "PUMPUSDT": {
+        "trades": 0
+      },
+      "QNTUSDT": {
+        "trades": 0
+      },
+      "REZUSDT": {
+        "trades": 0
+      },
+      "SOLUSDT": {
+        "trades": 0
+      },
+      "SOXSBUSDT": {
+        "trades": 0
+      },
+      "STRKUSDT": {
+        "trades": 0
+      },
+      "SUSDT": {
+        "trades": 0
+      },
+      "TIAUSDT": {
+        "trades": 0
+      },
+      "TRXUSDT": {
+        "trades": 0
+      },
+      "WLDUSDT": {
+        "trades": 0
+      },
+      "WUSDT": {
+        "trades": 0
+      },
+      "XAUTUSDT": {
+        "trades": 0
+      },
+      "XRPUSDT": {
+        "trades": 0
+      },
+      "ZROUSDT": {
+        "trades": 0
+      }
+    }
+  },
+  "funnel": {
+    "PULLBACK_VWAP": {
+      "SIGNAL": 1,
+      "PAIR_EDGE": 1
+    },
+    "BREAKOUT_RETEST": {
+      "SIGNAL": 61,
+      "PAIR_EDGE": 54,
+      "NET_RR_TP1": 2,
+      "SL_ATR_RANGE": 4,
+      "NET_RR_FINAL": 1
+    },
+    "SWEEP_RECLAIM": {
+      "SIGNAL": 488,
+      "PAIR_EDGE": 479,
+      "SL_ATR_RANGE": 5,
+      "NET_RR_TP1": 3,
+      "NET_RR_FINAL": 1
+    },
+    "RANGE_BOUNCE": {},
+    "SQUEEZE_BREAKOUT": {
+      "SIGNAL": 25,
+      "PAIR_EDGE": 25
+    }
+  },
+  "candidate_scan": null
+}

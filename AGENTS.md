@@ -788,6 +788,54 @@ Fase 1 Kotlin diblokir sampai keputusan owner.
 - **Jangan implementasi `SWEEP_RECLAIM` apa adanya.** Konsisten rugi di semua konfigurasi; rancang
   ulang pemicu dan invalidasi dulu.
 
+## Aturan turunan dari harness Spec v3 (batch 2026-10-21)
+
+- **Harness Python adalah riset, bukan produksi.** `tools/spot_backtest.py` bukan mesin Kotlin;
+  angka E1–E4 hanya berlaku untuk harness dan wajib diparity-kan sebelum ada klaim app. Fase 1
+  Kotlin tetap diblokir sampai E1–E3 lolos. Jangan mengutip angka harness sebagai "hasil app".
+- **TP1 formula wajib `tp1Floor`, bukan `entry + 1,0R`.** `tp1FloorPct = F + minNetRrTp1 ×
+  (riskPct + F)`; `entry + 1,0R` selalu memberi `netRr < 1` dan ditolak G4. Untuk setup
+  struktural, TP1 tidak boleh digeser: bila kandidat terdekat di bawah lantai, pakai kandidat
+  berikutnya atau tolak sinyalnya.
+- **Time-stop dihitung dari jam, bukan candle tetap.** `max(3, ceil(jam × 60 / menit-timeframe))`.
+  Cooldown dan pause juga dikonversi ke candle per timeframe. Jangan memakai angka 8/12/6 mentah.
+- **R denominator memakai risiko net `FeeSchedule`.** `perUnitRisk = costBasisNet(1) −
+  netSellValue(1, slEff)`, bukan `(entry − sl) + entry × F / 100`. Qty memakai nilai itu; R kotor
+  dan friksi per R dilaporkan terpisah supaya selisihnya tidak tersembunyi.
+- **Entry acak adalah pembanding wajib.** Klaim "entry punya edge" hanya sah bila R kotor setup
+  ≥ persentil ke-99 distribusi rata-rata run acak (K=200) pada jendela out-of-sample yang sama.
+  Random memakai distribusi `slEff/ATR` sinyal asli, TP1 `tp1Floor`, dan exit §7 tanpa
+  `SETUP_INVALIDATION`.
+- **Batas posisi bersamaan adalah filter kronologis.** `maxConcurrentPositions=2` diterapkan
+  setelah simulasi per pair; trade yang ditolak tidak digantikan. Batas rugi harian dan pause
+  3 loss belum lintas pair. Jangan mengklaim hasil ini sama dengan simulasi portofolio penuh.
+- **E1–E4 diukur per setup dan per timeframe, dengan jumlah sampel.** Jangan menggabungkan setup
+  untuk mengejar n≥100; jangan menaikkan angka OOS dengan membuang trade `END_OF_DATA`.
+- **Dataset 180 hari dipakai dengan jendela A/B.** Gate edge dihitung dari A (90 hari pertama),
+  evaluasi di B (90 hari kedua). Universe 41 pair belum walk-forward karena dipilih dari snapshot
+  24 jam pada akhir B; E3 karena itu belum penuh.
+- **Jangan memperbarui `PairEdgeGate` dari satu jendela.** MFE jendela A dan B memberi daftar
+  yang berbeda; tabel produksi hanya boleh diperbarui lewat keputusan owner dan perhitungan
+  berkala.
+- **Hasil E1–E4 2026-10-21 sudah negatif; jangan mengulang pengukuran yang sama tanpa mengubah
+  entry.** Gates produksi: **0 trade OOS** di 15m dan 1h (gate A hanya IOUSDT; 1 trade in-sample
+  di jendela A, −0,4849). Diagnostik tanpa G0: 15m B 7 trade −0,2495 (gross −0,1061), 1h B 45
+  trade −0,2561 (gross −0,1146), panel penuh 180 hari 15m 12 trade −0,2888 dan 1h 67 trade
+  −0,2391. Benchmark acak: SWEEP 1h N=160 gross −0,1165 vs acak rata-rata +0,0157/p99 +0,1122.
+  Entry kalah dari acak; masalahnya entry, bukan exit. Satu varian E4 longgar
+  (`min_net_rr_final ×0,8`) memberi **1 trade** IOUSDT +1,403R — satu trade bukan sampel.
+  Fase 1 Kotlin tetap diblokir.
+  Berkas: `docs/exp/exp_spot_evidence_v3.md`,
+  `docs/LAPORAN-harness-spec-v3-2026-10-21.md`.
+- **15m tidak bisa dieksekusi dengan geometri saat ini.** Lantai 5,8128% + G2 maksimum 5 ATR
+  menuntut ATR% ≥ 1,16256%; IOUSDT 15m median ATR% 0,6413% (95,5% bar di bawah ambang) dan G2
+  menolak 1.490/1.584 sinyal SWEEP 15m (94,1%; jendela B 90 hari: 738/797). Jangan mengusulkan
+  eksekusi 15m tanpa menurunkan lantai,
+  menaikkan `maxSlAtr`, atau mengganti geometri exit — dan setiap perubahan harus diukur ulang.
+- **1h bukan horizon lebih panjang.** `timeStopHours` 1,5–3 jam menjadi 3 candle di 1h (minimum).
+  Untuk menguji horizon lebih panjang, ubah `timeStopHours` dan exit-nya, lalu ukur ulang; jangan
+  hanya mengganti timeframe candle.
+
 ## Arah produk (ringkas)
 
 - Fokus: **scalp mode** + **paper trade** untuk menguji engine.
@@ -808,6 +856,10 @@ Fase 1 Kotlin diblokir sampai keputusan owner.
   `python3 tools/spot_backtest.py --data data/tokocrypto_spot --timeframe 15m --pairs all --setups all --tp1-policy floor --out data/hasil/spot_backtest_v2_m15_prod`
   (ganti `--timeframe 1h` untuk eksekusi 1h).
 - Uji mekanika harness: `python3 tools/test_spot_backtest.py`.
+- Bukti Spec v3 (E1–E4, 180 hari, 41 pair):
+  `python3 tools/spot_evidence.py --data data/tokocrypto_spot_180 --work data/hasil/spot_evidence_v3 --timeframes 15m,1h`
+- Unduh ulang dataset 180 hari:
+  `python3 tools/fetch_tokocrypto_klines.py --select file --file data/tokocrypto_spot_180/_pairs.txt --quote USDT --intervals 15m,1h --start-ms 1776946140657 --end-ms 1792498140657 --out data/tokocrypto_spot_180 --resume --sleep 1.0 --write-readme`
 - String `compile_applet` di dokumen lama **bukan** perintah repo — pakai `./gradlew` di atas.
 
 ## Secrets & environment

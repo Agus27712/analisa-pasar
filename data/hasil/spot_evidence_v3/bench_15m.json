@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "generated_at_utc": "2026-10-21T04:21:56Z",
+    "dataset": "/home/pvszombie/analisa-pasar-1/data/tokocrypto_spot_180",
+    "timeframe": "15m",
+    "candidates_file": "/home/pvszombie/analisa-pasar-1/data/hasil/spot_evidence_v3/bt_B_15m_candidates.csv",
+    "trades_file": "/home/pvszombie/analisa-pasar-1/data/hasil/spot_evidence_v3/bt_B_15m_trades.csv",
+    "oos_only": true,
+    "start_ms": 1790165340657,
+    "end_ms": 1792498140657,
+    "runs": 200,
+    "seed": 20261021,
+    "entry": "MARKET_NEXT_OPEN (open bar berikutnya, fill mentah; slippage lewat FeeSchedule)",
+    "sl": "distribusi slEff/ATR sinyal asli; SL = entry - ratio x ATR sinyal",
+    "tp1": "tp1Floor Spec v3",
+    "tp2": null,
+    "exit": "Spec v3 \u00a77 tanpa SETUP_INVALIDATION",
+    "percentile": "p99 dari rata-rata run lintas pair (interpolasi linear)"
+  },
+  "by_setup": {
+    "PULLBACK_VWAP": {
+      "status": "tidak_ada_kandidat",
+      "candidates": 0
+    },
+    "BREAKOUT_RETEST": {
+      "status": "tidak_ada_kandidat",
+      "candidates": 0
+    },
+    "SWEEP_RECLAIM": {
+      "status": "tidak_ada_kandidat",
+      "candidates": 0
+    },
+    "RANGE_BOUNCE": {
+      "status": "tidak_ada_kandidat",
+      "candidates": 0
+    },
+    "SQUEEZE_BREAKOUT": {
+      "status": "tidak_ada_kandidat",
+      "candidates": 0
+    }
+  },
+  "by_pair_setup": []
+}

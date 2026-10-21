@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Fungsi bersama untuk riset offline Spec Scalping Spot v2 (Tokocrypto).
+Fungsi bersama untuk riset offline Spec Scalping Spot v3 (Tokocrypto).
 
 Dipakai oleh:
-  tools/spot_mfe.py       — hitung MFE/MAE pada dataset 15m
-  tools/spot_backtest.py  — backtest Spec v2
+  tools/spot_mfe.py        — hitung MFE/MAE pada dataset 15m
+  tools/spot_backtest.py   — backtest Spec v3
+  tools/spot_benchmark.py  — benchmark entry acak (§11.1)
+  tools/spot_evidence.py   — gerbang bukti E1–E4 (§11.2)
 
 Aturan yang dijaga di sini:
 - Fee dan P&L memakai angka `FeeSchedule` (Tokocrypto USDT taker, all-in) dan
   bentuk rumus yang sama dengan `FeeSchedule.netProfitPct` / `breakevenPrice`.
   Tidak ada rumus fee kedua.
 - Semua indikator memakai candle yang sudah close; tidak ada akses ke bar masa depan.
-- Nama parameter mengikuti Spec v2 (`docs/exp/scalping_spot_strategy_spec.md`).
+- Nama parameter mengikuti Spec v3 (`docs/exp/scalping_spot_strategy_spec.md`).
 """
 import csv
 import datetime as dt
@@ -36,17 +38,31 @@ TP1_FRACTION = 0.6
 MIN_NET_RR_TP1 = 1.0
 MIN_NET_RR_FINAL = 1.5
 MIN_REWARD_OVER_FRICTION = 3.0
-MIN_ATR_PCT_OVER_FRICTION = 1.5
+# G3 dicabut di Spec v3. Nilai 0 mematikan gerbang ATR; kode gerbangnya dibiarkan
+# supaya laporan lama dan eksperimen tetap bisa menyalakannya.
+MIN_ATR_PCT_OVER_FRICTION = 0.0
 MIN_SL_ATR = 0.5
 MAX_SL_ATR = 5.0
 DEFAULT_EQUITY = 10_000.0
 RISK_PER_TRADE_PCT = 0.5
 MAX_POSITION_PCT = 25.0
+MAX_CONCURRENT_POSITIONS = 2
 MAX_DAILY_LOSS_PCT = 2.0
 MAX_CONSECUTIVE_LOSSES = 3
 COOLDOWN_AFTER_LOSS_MIN = 15
 LOSS_STREAK_PAUSE_MIN = 60
 MIN_NOTIONAL_USDT = 5.0
+
+# Time-stop Spec v3 §7 dalam JAM, bukan jumlah candle. Konversinya
+# max(3, ceil(jam × 60 / menit-timeframe)) supaya horizon waktunya sama di 15m dan 1h.
+TIME_STOP_HOURS = {
+    "PULLBACK_VWAP": 2.0,
+    "BREAKOUT_RETEST": 3.0,
+    "SWEEP_RECLAIM": 1.5,
+    "RANGE_BOUNCE": 3.0,
+    "SQUEEZE_BREAKOUT": 2.0,
+}
+MIN_TIME_STOP_CANDLES = 3
 
 
 def now_utc():
@@ -484,6 +500,77 @@ def friction_floor_price(entry):
     return entry * (1.0 - FRICTION_FLOOR_PCT / 100.0)
 
 
+def friction_floor_pct(min_friction_multiple=FLOOR_MULTIPLE):
+    """Mirror `PaperStopResolver.frictionFloorPct` (persen, bukan fraksi)."""
+    if not math.isfinite(min_friction_multiple) or min_friction_multiple <= 0:
+        return 0.0
+    floor = min_friction_multiple * F_ADD_PCT
+    return floor if math.isfinite(floor) and 0.0 < floor < 100.0 else 0.0
+
+
+def resolve_stop(signal_sl, entry, floor_pct):
+    """
+    Mirror `PaperStopResolver.resolve` -> (harga, sumber).
+
+    Sumber: "SIGNAL" bila SL sinyal valid dan sudah melewati lantai,
+    "FRICTION_FLOOR" bila SL sinyal tidak ada/terlalu rapat, "NONE" bila entry invalid.
+    Lantai hanya melebarkan, tidak pernah menyempitkan.
+    """
+    if not math.isfinite(entry) or entry <= 0:
+        return 0.0, "NONE"
+    floor_active = math.isfinite(floor_pct) and 0.0 < floor_pct < 100.0
+    signal_valid = (signal_sl is not None and math.isfinite(signal_sl)
+                    and 0.0 < signal_sl < entry)
+    if not floor_active:
+        return (signal_sl, "SIGNAL") if signal_valid else (0.0, "NONE")
+    floor_price = entry * (1.0 - floor_pct / 100.0)
+    if signal_valid and signal_sl <= floor_price:
+        return signal_sl, "SIGNAL"
+    return floor_price, "FRICTION_FLOOR"
+
+
+def tp1_floor_pct(risk_pct, f_pct=F_ADD_PCT, min_net_rr_tp1=MIN_NET_RR_TP1):
+    """
+    Spec v3 §6.2: `tp1FloorPct = F + minNetRrTp1 × (riskPct + F)`.
+
+    Jangan diganti `entry + 1,0R`: secara aljabar selalu menghasilkan
+    `netRr1 = (R − F)/(R + F) < 1`, sehingga G4 menolaknya.
+    """
+    return f_pct + min_net_rr_tp1 * (risk_pct + f_pct)
+
+
+def tp1_floor_price(entry, risk_pct, f_pct=F_ADD_PCT, min_net_rr_tp1=MIN_NET_RR_TP1):
+    return entry * (1.0 + tp1_floor_pct(risk_pct, f_pct, min_net_rr_tp1) / 100.0)
+
+
+def per_unit_risk_net(entry, sl_eff):
+    """
+    Risiko per unit bersih menurut `FeeSchedule` (Spec v3 §6.4):
+
+        costBasisNet(1, entry) − netSellValue(1, slEff)
+
+    Pendekatan aditif `(entry − slEff) + entry × F / 100` sengaja TIDAK dipakai:
+    selisihnya ±0,4% dan membuat qty serta R tidak sebanding dengan app.
+    """
+    if entry <= 0 or sl_eff <= 0 or sl_eff >= entry:
+        return 0.0
+    return cost_basis(1.0, entry) - net_sell_value(1.0, sl_eff)
+
+
+def time_stop_candles(time_stop_hours, tf_minutes):
+    """Spec v3 §7: max(3, ceil(jam × 60 / menit-timeframe))."""
+    if time_stop_hours is None or tf_minutes <= 0:
+        return MIN_TIME_STOP_CANDLES
+    return max(MIN_TIME_STOP_CANDLES, int(math.ceil(time_stop_hours * 60.0 / tf_minutes)))
+
+
+def candles_for_minutes(minutes, tf_minutes):
+    """Cooldown/pause dalam menit -> candle, minimal 1 (Spec v3 §9)."""
+    if tf_minutes <= 0:
+        return 1
+    return max(1, int(math.ceil(minutes / float(tf_minutes))))
+
+
 # ---------------------------------------------------------------------------
 # Konfigurasi
 # ---------------------------------------------------------------------------
@@ -492,23 +579,26 @@ DEFAULT_SETUP_PARAMS = {
     "PULLBACK_VWAP": dict(impulseLookback=25, minImpulseAtr=2.0, minImpulseVolRatio=1.2,
                           pullbackVolMaxRatio=0.8, touchTolAtr=0.15, rsiFloor=40,
                           maxChaseAtr=1.2, slBufferAtr=0.3, entryValidCandles=2,
-                          trailMode="EMA9", timeStopCandles=8),
+                          trailMode="EMA9", timeStopHours=TIME_STOP_HOURS["PULLBACK_VWAP"]),
     "BREAKOUT_RETEST": dict(levelLookback=80, swingFractal=3, levelTolAtr=0.2, minTouches=2,
                             breakoutVolRatio=1.5, breakoutBodyAtr=0.6, breakoutClosePos=0.7,
                             maxExtensionAtr=2.5, retestMaxCandles=10, retestTouchTolAtr=0.15,
                             retestFailAtr=0.1, retestVolMaxRatio=0.7, slBufferAtr=0.5,
-                            entryValidCandles=2, trailMode="HIGHER_LOW", timeStopCandles=12),
+                            entryValidCandles=2, trailMode="HIGHER_LOW",
+                            timeStopHours=TIME_STOP_HOURS["BREAKOUT_RETEST"]),
     "SWEEP_RECLAIM": dict(liqLookback=100, swingFractal=5, equalTolAtr=0.15,
                           levelMinAgeCandles=10, sweepMinDepthAtr=0.05, sweepMaxDepthAtr=1.5,
                           reclaimMaxCandles=3, sweepWickRatio=0.5, volSpikeRatio=1.5,
                           entryGuardAtr=1.0, slBufferAtr=0.2, minScore=3,
-                          failedReclaimCandles=3, trailMode="CHANDELIER", timeStopCandles=6),
+                          failedReclaimCandles=3, trailMode="CHANDELIER",
+                          timeStopHours=TIME_STOP_HOURS["SWEEP_RECLAIM"]),
     "RANGE_BOUNCE": dict(rangeLookback=60, minTouchesPerSide=2, sideTolAtr=0.2,
                          minRangeHeightPct=max(0.6, 3.0 * F_ADD_PCT), adxMax=20.0,
                          bottomZonePct=0.2, rsiOversold=35.0, slBufferAtr=0.7,
-                         entryValidCandles=2, trailMode="NONE", timeStopCandles=12),
+                         entryValidCandles=2, trailMode="NONE",
+                         timeStopHours=TIME_STOP_HOURS["RANGE_BOUNCE"]),
     "SQUEEZE_BREAKOUT": dict(minSqueezeCandles=6, bwPercentileMax=20.0, atrRatioMax=0.8,
                              breakoutVolRatio=1.5, maxBreakoutRangeAtr=2.0,
                              marketEntryMaxAtr=0.6, slMode="BOX_MID", trailMode="EMA9",
-                             timeStopCandles=8),
+                             timeStopHours=TIME_STOP_HOURS["SQUEEZE_BREAKOUT"]),
 }

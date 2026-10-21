@@ -14,7 +14,7 @@
 - **Taker-only.** Semua fill (entry, TP, SL) dianggap taker + slippage. Jalur maker/limit tetap ada di model sebagai `TODO(spec)`, tidak diaktifkan.
 - **Satu rumus fee dan P&L:** semua perhitungan fee, P&L, break-even, dan R memakai `FeeSchedule` yang sudah ada. Dilarang membuat rumus kedua.
 - **Lantai friksi** (`PaperStopResolver`, default 6,0×) dan **`PairEdgeGate`** tetap berlaku. Jangan dilemahkan hanya demi menambah sinyal (di bawah 5× butuh bukti replay; varian tanpa lantai terbukti lebih buruk).
-- **Status bukti (2026-10-20): belum ada edge.** Fase 1 Kotlin diblokir sampai gerbang bukti E1–E3 di §11.2 lolos atau owner memutuskan lain secara tertulis.
+- **Status bukti (2026-10-21): belum ada edge.** Harness Python v3 sudah diukur pada dataset 180 hari; **E1–E4 tidak lolos** (gates produksi 0 trade OOS; diagnostik tanpa G0 negatif dan kalah dari entry acak). Lihat `docs/exp/exp_spot_evidence_v3.md`. Fase 1 Kotlin diblokir sampai gerbang bukti E1–E3 di §11.2 lolos atau owner memutuskan lain secara tertulis.
 - Engine baru di balik flag `LEGACY`/`SPOT_SPEC`, default `LEGACY`. Satu simbol hanya punya satu sinyal aktif, satu kartu status, satu mesin exit. Jangan tampilkan dua engine bersamaan.
 - Komponen: indikator, regime classifier, 5 setup (entry + exit), gerbang sinyal, position sizing, position manager, risk manager, backtester, jurnal.
 - Setup: `PULLBACK_VWAP`, `BREAKOUT_RETEST`, `SWEEP_RECLAIM`, `RANGE_BOUNCE`, `SQUEEZE_BREAKOUT`.

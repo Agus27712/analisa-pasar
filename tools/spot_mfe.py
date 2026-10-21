@@ -62,8 +62,12 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", default="data/tokocrypto_spot")
     ap.add_argument("--out", default="data/hasil/mfe_m15_spot.json")
+    ap.add_argument("--gate-out", default="",
+                    help="Tulis gate JSON (skema pair_gate) dari hasil jendela ini; untuk E3")
     ap.add_argument("--pair-gate", default="data/config/pair_gate.json")
     ap.add_argument("--min-ratio", type=float, default=MIN_RATIO)
+    ap.add_argument("--start-ms", type=int, default=0, help="Awal jendela MFE (open_time_ms).")
+    ap.add_argument("--end-ms", type=int, default=0, help="Akhir jendela MFE (open_time_ms).")
     ap.add_argument("--verbose", action="store_true")
     a = ap.parse_args()
 
@@ -76,6 +80,10 @@ def main():
     rows_out = []
     for i, pair in enumerate(pairs, 1):
         rows = lib.load_pair(a.data, pair, "15m")
+        if a.start_ms:
+            rows = [r for r in rows if r[0] >= a.start_ms]
+        if a.end_ms:
+            rows = [r for r in rows if r[0] <= a.end_ms]
         if not rows or len(rows) < 200:
             print(f"  [{i}/{len(pairs)}] {pair:<14} dilewati (data kurang)", flush=True)
             continue
@@ -124,6 +132,8 @@ def main():
         "generated_at_utc": lib.now_utc(),
         "dataset": os.path.abspath(a.data),
         "timeframe": "15m",
+        "start_ms": a.start_ms or None,
+        "end_ms": a.end_ms or None,
         "horizons": {label: bars for label, bars in HORIZONS},
         "sampling": "step = max(1, n // 4000) bar; entry = close[k]; horizon mulai k+1",
         "fee_pct_additive": lib.F_ADD_PCT,
@@ -144,6 +154,23 @@ def main():
     os.makedirs(os.path.dirname(a.out), exist_ok=True)
     with open(a.out, "w") as f:
         json.dump(doc, f, indent=2)
+    if a.gate_out:
+        gate_doc = {
+            "generated_at_utc": lib.now_utc(),
+            "source": "tools/spot_mfe.py (walk-forward E3)",
+            "window": {"start_ms": a.start_ms or None, "end_ms": a.end_ms or None},
+            "fee_pct_additive": lib.F_ADD_PCT,
+            "min_ratio": a.min_ratio,
+            "quotes": {"USDT": {"pairs": [
+                {"pair": r["pair"], "eligible": r["eligible_7h"],
+                 "median_mfe_7h_pct": r["mfe_7h_median_pct"],
+                 "ratio_7h": r["ratio_7h"]} for r in rows_out
+            ]}},
+        }
+        os.makedirs(os.path.dirname(a.gate_out), exist_ok=True)
+        with open(a.gate_out, "w") as f:
+            json.dump(gate_doc, f, indent=2)
+        print(f"Gate walk-forward: {a.gate_out} ({len(eligible)} pair layak)")
 
     print(f"\n=== MFE 7 jam (28 bar 15m) | F = {lib.F_ADD_PCT:.4f}% | ambang {a.min_ratio:.1f}x ===")
     print(f"{'pair':<14}{'MFE1h%':>9}{'MFE4h%':>9}{'MFE7h%':>9}{'MAE7h%':>9}{'ratio':>8}{'layak':>7}{'lama':>7}")

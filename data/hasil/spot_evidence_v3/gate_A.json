@@ -1,0 +1,256 @@
+{
+  "generated_at_utc": "2026-10-21T04:19:39Z",
+  "source": "tools/spot_mfe.py (walk-forward E3)",
+  "window": {
+    "start_ms": 1776946140657,
+    "end_ms": 1784722140657
+  },
+  "fee_pct_additive": 0.9688,
+  "min_ratio": 2.0,
+  "quotes": {
+    "USDT": {
+      "pairs": [
+        {
+          "pair": "IOUSDT",
+          "eligible": true,
+          "median_mfe_7h_pct": 1.9426,
+          "ratio_7h": 2.0052
+        },
+        {
+          "pair": "WLDUSDT",
+          "eligible": false,
+          "median_mfe_7h_pct": 1.8886,
+          "ratio_7h": 1.9494
+        },
+        {
+          "pair": "PLUMEUSDT",
+          "eligible": false,
+          "median_mfe_7h_pct": 1.8233,
+          "ratio_7h": 1.882
+        },
+        {
+          "pair": "TIAUSDT",
+          "eligible": false,
+          "median_mfe_7h_pct": 1.8164,
+          "ratio_7h": 1.8749
+        },
+        {
+          "pair": "PHAUSDT",
+          "eligible": false,
+          "median_mfe_7h_pct": 1.7748,
+          "ratio_7h": 1.832
+        },
+        {
+          "pair": "PUMPUSDT",
+          "eligible": false,
+          "median_mfe_7h_pct": 1.6676,
+          "ratio_7h": 1.7213
+        },
+        {
+          "pair": "WUSDT",
+          "eligible": false,
+          "median_mfe_7h_pct": 1.6393,
+          "ratio_7h": 1.6921
+        },
+        {
+          "pair": "NEARUSDT",
+          "eligible": false,
+          "median_mfe_7h_pct": 1.6269,
+          "ratio_7h": 1.6793
+        },
+        {
+          "pair": "ENAUSDT",
+          "eligible": false,
+          "median_mfe_7h_pct": 1.6167,
+          "ratio_7h": 1.6688
+        },
+        {
+          "pair": "ZROUSDT",
+          "eligible": false,
+          "median_mfe_7h_pct": 1.5485,
+          "ratio_7h": 1.5984
+        },
+        {
+          "pair": "MUBARAKUSDT",
+          "eligible": false,
+          "median_mfe_7h_pct": 1.4989,
+          "ratio_7h": 1.5472
+        },
+        {
+          "pair": "GTCUSDT",
+          "eligible": false,
+          "median_mfe_7h_pct": 1.4925,
+          "ratio_7h": 1.5406
+        },
+        {
+          "pair": "STRKUSDT",
+          "eligible": false,
+          "median_mfe_7h_pct": 1.4388,
+          "ratio_7h": 1.4852
+        },
+        {
+          "pair": "FETUSDT",
+          "eligible": false,
+          "median_mfe_7h_pct": 1.4317,
+          "ratio_7h": 1.4778
+        },
+        {
+          "pair": "ALTUSDT",
+          "eligible": false,
+          "median_mfe_7h_pct": 1.4109,
+          "ratio_7h": 1.4564
+        },
+        {
+          "pair": "REZUSDT",
+          "eligible": false,
+          "median_mfe_7h_pct": 1.4072,
+          "ratio_7h": 1.4525
+        },
+        {
+          "pair": "AUSDT",
+          "eligible": false,
+          "median_mfe_7h_pct": 1.3839,
+          "ratio_7h": 1.4284
+        },
+        {
+          "pair": "SUSDT",
+          "eligible": false,
+          "median_mfe_7h_pct": 1.3041,
+          "ratio_7h": 1.3461
+        },
+        {
+          "pair": "APTUSDT",
+          "eligible": false,
+          "median_mfe_7h_pct": 1.3029,
+          "ratio_7h": 1.3449
+        },
+        {
+          "pair": "METISUSDT",
+          "eligible": false,
+          "median_mfe_7h_pct": 1.297,
+          "ratio_7h": 1.3388
+        },
+        {
+          "pair": "FILUSDT",
+          "eligible": false,
+          "median_mfe_7h_pct": 1.2755,
+          "ratio_7h": 1.3166
+        },
+        {
+          "pair": "BMTUSDT",
+          "eligible": false,
+          "median_mfe_7h_pct": 1.1202,
+          "ratio_7h": 1.1563
+        },
+        {
+          "pair": "BEAMXUSDT",
+          "eligible": false,
+          "median_mfe_7h_pct": 1.1017,
+          "ratio_7h": 1.1371
+        },
+        {
+          "pair": "ERAUSDT",
+          "eligible": false,
+          "median_mfe_7h_pct": 1.0428,
+          "ratio_7h": 1.0763
+        },
+        {
+          "pair": "COMPUSDT",
+          "eligible": false,
+          "median_mfe_7h_pct": 1.0382,
+          "ratio_7h": 1.0717
+        },
+        {
+          "pair": "BATUSDT",
+          "eligible": false,
+          "median_mfe_7h_pct": 1.0164,
+          "ratio_7h": 1.0492
+        },
+        {
+          "pair": "ADAUSDT",
+          "eligible": false,
+          "median_mfe_7h_pct": 0.9737,
+          "ratio_7h": 1.0051
+        },
+        {
+          "pair": "QNTUSDT",
+          "eligible": false,
+          "median_mfe_7h_pct": 0.9503,
+          "ratio_7h": 0.9809
+        },
+        {
+          "pair": "LINKUSDT",
+          "eligible": false,
+          "median_mfe_7h_pct": 0.9128,
+          "ratio_7h": 0.9422
+        },
+        {
+          "pair": "DOGEUSDT",
+          "eligible": false,
+          "median_mfe_7h_pct": 0.8412,
+          "ratio_7h": 0.8683
+        },
+        {
+          "pair": "SOLUSDT",
+          "eligible": false,
+          "median_mfe_7h_pct": 0.8389,
+          "ratio_7h": 0.866
+        },
+        {
+          "pair": "GNSUSDT",
+          "eligible": false,
+          "median_mfe_7h_pct": 0.8016,
+          "ratio_7h": 0.8274
+        },
+        {
+          "pair": "HBARUSDT",
+          "eligible": false,
+          "median_mfe_7h_pct": 0.7964,
+          "ratio_7h": 0.822
+        },
+        {
+          "pair": "ETHUSDT",
+          "eligible": false,
+          "median_mfe_7h_pct": 0.7175,
+          "ratio_7h": 0.7406
+        },
+        {
+          "pair": "XRPUSDT",
+          "eligible": false,
+          "median_mfe_7h_pct": 0.6964,
+          "ratio_7h": 0.7188
+        },
+        {
+          "pair": "BNBUSDT",
+          "eligible": false,
+          "median_mfe_7h_pct": 0.5861,
+          "ratio_7h": 0.605
+        },
+        {
+          "pair": "BTCUSDT",
+          "eligible": false,
+          "median_mfe_7h_pct": 0.5535,
+          "ratio_7h": 0.5714
+        },
+        {
+          "pair": "NVDABUSDT",
+          "eligible": false,
+          "median_mfe_7h_pct": 0.4142,
+          "ratio_7h": 0.4275
+        },
+        {
+          "pair": "TRXUSDT",
+          "eligible": false,
+          "median_mfe_7h_pct": 0.2858,
+          "ratio_7h": 0.295
+        },
+        {
+          "pair": "XAUTUSDT",
+          "eligible": false,
+          "median_mfe_7h_pct": 0.2218,
+          "ratio_7h": 0.229
+        }
+      ]
+    }
+  }
+}

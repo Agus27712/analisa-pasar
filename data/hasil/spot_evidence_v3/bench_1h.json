@@ -1,0 +1,94 @@
+{
+  "meta": {
+    "generated_at_utc": "2026-10-21T04:38:45Z",
+    "dataset": "/home/pvszombie/analisa-pasar-1/data/tokocrypto_spot_180",
+    "timeframe": "1h",
+    "candidates_file": "/home/pvszombie/analisa-pasar-1/data/hasil/spot_evidence_v3/bt_B_1h_candidates.csv",
+    "trades_file": "/home/pvszombie/analisa-pasar-1/data/hasil/spot_evidence_v3/bt_B_1h_trades.csv",
+    "oos_only": true,
+    "start_ms": 1790165340657,
+    "end_ms": 1792498140657,
+    "runs": 200,
+    "seed": 20261021,
+    "entry": "MARKET_NEXT_OPEN (open bar berikutnya, fill mentah; slippage lewat FeeSchedule)",
+    "sl": "distribusi slEff/ATR sinyal asli; SL = entry - ratio x ATR sinyal",
+    "tp1": "tp1Floor Spec v3",
+    "tp2": null,
+    "exit": "Spec v3 \u00a77 tanpa SETUP_INVALIDATION",
+    "percentile": "p99 dari rata-rata run lintas pair (interpolasi linear)"
+  },
+  "by_setup": {
+    "PULLBACK_VWAP": {
+      "status": "tidak_ada_kandidat",
+      "candidates": 0
+    },
+    "BREAKOUT_RETEST": {
+      "status": "diukur",
+      "pairs_with_candidates": 1,
+      "candidates": 1,
+      "runs": 200,
+      "random_trades": 200,
+      "strategy_trades": 0,
+      "strategy_gross_r": null,
+      "strategy_net_r": null,
+      "random_gross_mean": -0.0091,
+      "random_gross_p99": 1.1617,
+      "random_net_mean": -0.1598,
+      "random_net_p99": 0.9938,
+      "delta_gross_r": null,
+      "delta_net_r": null,
+      "beats_random_p99_gross": false,
+      "net_positive": false,
+      "e2_pass": false
+    },
+    "SWEEP_RECLAIM": {
+      "status": "diukur",
+      "pairs_with_candidates": 1,
+      "candidates": 1,
+      "runs": 200,
+      "random_trades": 200,
+      "strategy_trades": 0,
+      "strategy_gross_r": null,
+      "strategy_net_r": null,
+      "random_gross_mean": -0.0224,
+      "random_gross_p99": 1.2673,
+      "random_net_mean": -0.2344,
+      "random_net_p99": 0.9934,
+      "delta_gross_r": null,
+      "delta_net_r": null,
+      "beats_random_p99_gross": false,
+      "net_positive": false,
+      "e2_pass": false
+    },
+    "RANGE_BOUNCE": {
+      "status": "tidak_ada_kandidat",
+      "candidates": 0
+    },
+    "SQUEEZE_BREAKOUT": {
+      "status": "tidak_ada_kandidat",
+      "candidates": 0
+    }
+  },
+  "by_pair_setup": [
+    {
+      "pair": "IOUSDT",
+      "setup": "BREAKOUT_RETEST",
+      "candidates": 1,
+      "allowed_bars": 549,
+      "runs_with_trades": 200,
+      "random_trades": 200,
+      "trade_mean_gross": -0.009111741817523038,
+      "trade_mean_net": -0.15977232465937863
+    },
+    {
+      "pair": "IOUSDT",
+      "setup": "SWEEP_RECLAIM",
+      "candidates": 1,
+      "allowed_bars": 454,
+      "runs_with_trades": 200,
+      "random_trades": 200,
+      "trade_mean_gross": -0.022403934336866434,
+      "trade_mean_net": -0.23443706677715193
+    }
+  ]
+}

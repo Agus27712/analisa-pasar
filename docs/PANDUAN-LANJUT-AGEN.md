@@ -204,7 +204,32 @@ Riwayat lengkap ada di `workplan2.md` §14/§15 (keduanya bertanda ⛔ DIHAPUS) 
 Diurutkan berdasarkan **nilai dibagi risiko**. Jangan mengerjakan yang bawah sebelum yang atas
 selesai, kecuali ada instruksi eksplisit.
 
-### ⛔ Spec v2 (M15/H1) — diukur 2026-10-20, hasil NEGATIF; Fase 1 Kotlin diblokir
+### ⛔ Spec v3 (harness Python) — diukur 2026-10-21, hasil NEGATIF; E1–E4 tidak lolos
+
+Laporan lengkap: `docs/exp/exp_spot_evidence_v3.md` dan
+`docs/LAPORAN-harness-spec-v3-2026-10-21.md`.
+
+- Dataset 180 hari, 41 pair, **868.054 bar**, 0 celah/duplikat.
+- Gate edge jendela A hanya **1 pair (IOUSDT)**; jendela B **4 pair** (MUBARAK, PUMP, ZRO, PLUME);
+  irisan A ∩ B **kosong**.
+- **Produksi: 15m 0 trade; 1h 0 trade OOS.** Satu-satunya trade produksi ada di jendela A
+  (1 SWEEP, avg R −0,4849). E1/E2 tidak terukur, bukan sekadar kurang sampel.
+- Diagnostik tanpa G0: 15m B 7 trade, avg R **−0,2495** (gross −0,1061); 1h B 45 trade,
+  **−0,2561** (gross −0,1146); panel penuh 180 hari 15m 12 trade (−0,2888), 1h 67 trade (−0,2391).
+- Benchmark acak: SWEEP 1h N=160 gross **−0,1165** vs acak rata-rata **+0,0157** / p99 +0,1122;
+  15m N=47 −0,1163 vs +0,0084 / p99 +0,1721. **Entry strategi kalah dari entry acak.**
+- 15m tidak bisa dieksekusi: lantai 5,8128% + G2 maksimum 5 ATR menuntut ATR% ≥ 1,16256%;
+  IOUSDT 15m median ATR% 0,6413% dan G2 menolak 1.490/1.584 sinyal SWEEP 15m (94,1%).
+- Di 1h, time-stop 1,5–3 jam = **3 candle**, jadi 1h bukan horizon lebih panjang.
+- E3 **sebagian** (universe belum walk-forward); E4 **tidak cukup sampel**. Satu varian longgar
+  (`min_net_rr_final ×0,8`) memberi **1 trade** IOUSDT SWEEP +1,403R; satu trade bukan sampel.
+
+**Jangan mulai Fase 1 Kotlin.** Masalah utama ada di **entry** (R kotor sudah negatif sebelum
+biaya), bukan di exit atau friksi. Opsi: hentikan lini Spec v3, rancang ulang entry SWEEP,
+uji horizon lebih panjang lewat `timeStopHours`, atau perbaiki gate menjadi walk-forward berkala.
+Rekomendasi: rancang ulang entry lebih dulu, tanpa menulis engine.
+
+### Riwayat: Spec v2 (M15/H1) — diukur 2026-10-20, hasil NEGATIF; Fase 1 Kotlin diblokir
 
 Laporan lengkap: `docs/exp/exp_spot_backtest_41pair.md` dan `docs/exp/exp_mfe_m15_41pair.md`.
 
@@ -222,10 +247,10 @@ Laporan lengkap: `docs/exp/exp_spot_backtest_41pair.md` dan `docs/exp/exp_mfe_m1
 rancang ulang pemicu/exit SWEEP, pindah ke horizon lebih panjang, atau hentikan program.
 Kalau memilih lanjut, mulai dari memperbaiki spec — bukan dari menulis engine.
 
-**Pembaruan (2026-10-20): Spec v3 sudah terbit** — TP1 eksplisit, G3 dicabut, gerbang bukti E1–E4
-(`docs/exp/scalping_spot_strategy_spec.md` §11.2). Spec yang diperbaiki **tidak** membuka blokir:
-Fase 1 Kotlin tetap menunggu E1–E3 lolos (≥ 100 trade OOS, mengalahkan entry acak, universe
-walk-forward).
+**Pembaruan (2026-10-21): Spec v3 sudah diukur — hasilnya NEGATIF.** Harness Python setara v3
+sudah dibuat dan dijalankan pada dataset 180 hari; E1–E4 tidak lolos. Blok di atas adalah
+ringkasannya. Spec yang diperbaiki **tidak** membuka blokir: Fase 1 Kotlin tetap menunggu
+E1–E3 lolos, dan saat ini belum ada satu setup pun dengan R kotor positif.
 
 ### ⭐ Prioritas #1 — cari varian **entry** yang punya edge kotor (belum ada jawabannya)
 
@@ -236,6 +261,11 @@ Alasannya aritmetis: lantai friksi memaksa SL ≥ 5,81%, dan trade tanpa edge ha
 lalu ditutup → `−0,9688% / 5,81% = −0,167 R`. Itu persis yang terukur (avg R ≈ −0,17, 0/40 pair
 positif). **Selama tidak ada entry yang melewati +0,167R kotor, menyetel exit tidak akan
 mengubah apa pun.** Kerjakan ini sebelum yang lain.
+
+Catatan dari harness Spec v3 (2026-10-21): dengan risiko per unit net `FeeSchedule`, ambang impas
+setara adalah **R kotor ≈ +0,14R** (friksi ±0,142R per trade). R kotor terukur justru negatif
+(−0,097 sampai −0,150R) di 15m dan 1h. Jadi pertanyaannya tetap sama dan jawabannya belum ada:
+**belum ada entry yang melewati ambang kotor, apalagi mengalahkan entry acak.**
 
 ### P4.1 — Walk-forward antar-bulan ✅ tooling selesai, hasil NEGATIF (2026-10-14)
 

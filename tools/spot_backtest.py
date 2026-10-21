@@ -1,32 +1,37 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Backtest offline Spec Scalping Spot v2 (Tokocrypto, long-only, taker-only).
+Backtest offline Spec Scalping Spot v3 (Tokocrypto, long-only, taker-only).
 
 Harness ini adalah alat RISET, bukan mesin produksi. Mesin produksi tetap Kotlin
 (`agu.analys.engine.spot`). Sebelum integrasi, hasil harness ini wajib diparity-kan
-dengan fixture Kotlin (Spec v2 §11).
+dengan fixture Kotlin (Spec v3 §11).
 
 Yang diimplementasikan:
 - 5 setup: PULLBACK_VWAP, BREAKOUT_RETEST, SWEEP_RECLAIM, RANGE_BOUNCE, SQUEEZE_BREAKOUT.
-- Gerbang G0-G8 (§6), lantai friksi 6x (PaperStopResolver), position sizing (§6.3).
+- Gerbang G0-G8 (§6, G3 dicabut di v3), lantai friksi 6x (PaperStopResolver),
+  position sizing net `FeeSchedule` (§6.4).
+- TP1 v3: formula memakai `tp1Floor`, struktural tidak digeser (§6.2).
 - Exit §7: SL/TP1/TP2 intrabar, SL-before-TP, TP2 setelah candle TP1, break-even,
-  trailing, time-stop, invalidasi setup, momentum fail, regime change.
-- Funnel per gerbang, metrik per setup/pair, split 70/30.
-- Fee/P&L lewat rumus `FeeSchedule` (bentuk aditif yang sama).
+  trailing, time-stop berbasis jam, invalidasi setup, momentum fail, regime change.
+- Funnel per gerbang, metrik per setup/pair, split 70/30, filter portofolio.
+- Fee/P&L lewat rumus `FeeSchedule`; R kotor dan friksi per R ikut dilaporkan.
 
 Batas yang disengaja (dilaporkan, bukan disembunyikan):
 - Harga fill = level mentah (trigger/SL/TP). Slippage masuk lewat rumus FeeSchedule,
   sama seperti app, jadi tidak dihitung dua kali.
 - Risk manager berjalan per simbol (cooldown, 3 loss beruntun, batas rugi harian).
-  Batas posisi bersamaan lintas simbol tidak disimulasikan karena tiap pair dijalankan
-  terpisah; agregat P&L mengasumsikan modal tak terbatas.
-- Tick size memakai 1e-5 x harga (SymbolRules offline belum tersedia).
+  Batas rugi harian dan pause 3 loss TIDAK lintas pair; itu batas yang belum dimodelkan,
+  sehingga jumlah trade bisa lebih banyak daripada produksi. Batas posisi bersamaan
+  lintas simbol diterapkan sebagai filter kronologis setelah simulasi per pair
+  (lihat `apply_portfolio_cap`), bukan simulasi portofolio penuh.
+- Tick size memakai 1e-5 x harga (SymbolRules offline belum tersedia); lot step tidak
+  dibulatkan.
 - Spread (G8) tidak tersedia di data candle; gerbang dilewati dan dicatat.
 
 Contoh:
   python3 tools/spot_backtest.py --data data/tokocrypto_spot \
-      --out data/hasil/spot_backtest_v2 --setups all --tp1-policy floor
+      --out data/hasil/spot_backtest_v3 --setups all --tp1-policy spec
 """
 import argparse
 import csv
@@ -51,6 +56,17 @@ ALLOWED_REGIMES = {
 GATE_ORDER = ("SIGNAL", "PAIR_EDGE", "FRICTION_FLOOR", "SL_ATR_RANGE", "ATR_TOO_LOW",
               "NET_RR_TP1", "NET_RR_FINAL", "REWARD_OVER_FRICTION", "INVALID_LEVELS",
               "SPREAD", "SIZING", "RISK_MANAGER")
+# Gerbang yang harus sudah lolos sebelum sebuah sinyal dihitung sebagai kandidat
+# benchmark §11.1 (G0–G2). Alasan penolakan sesudah tahap ini tetap kandidat.
+CANDIDATE_REJECTIONS = {"NET_RR_TP1", "NET_RR_FINAL", "REWARD_OVER_FRICTION",
+                        "INVALID_LEVELS", "SIZING"}
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def repo_path(rel):
+    """Path bawaan selalu relatif ke akar repo, bukan CWD pemanggil."""
+    return rel if os.path.isabs(rel) else os.path.join(REPO_ROOT, rel)
+
 
 
 def tick_for(price):
@@ -211,7 +227,7 @@ class Ctx:
             "setup": "PULLBACK_VWAP", "entry_mode": "CONFIRM_BREAK", "entry": entry,
             "cancel_below": pullback_low, "valid": p["entryValidCandles"], "sl": sl,
             "tp1": tp1, "tp2": tp2, "tp1_source": "structural", "trail": p["trailMode"],
-            "time_stop": p["timeStopCandles"], "score": score, "atr": atr,
+            "time_stop_hours": p["timeStopHours"], "score": score, "atr": atr,
             "data": {"vwap_signal": self.vwap[i], "signal_index": i},
         }
 
@@ -274,7 +290,7 @@ class Ctx:
                     "setup": "BREAKOUT_RETEST", "entry_mode": "CONFIRM_BREAK", "entry": entry,
                     "cancel_below": L - 0.1 * atr, "valid": p["entryValidCandles"], "sl": sl,
                     "tp1": tp1_raw, "tp2": tp2_raw, "tp1_source": "formula",
-                    "trail": p["trailMode"], "time_stop": p["timeStopCandles"],
+                    "trail": p["trailMode"], "time_stop_hours": p["timeStopHours"],
                     "score": 0, "atr": atr,
                     "data": {"level": L, "signal_index": i, "breakout_index": b,
                              "retest_low": retest_low},
@@ -360,15 +376,18 @@ class Ctx:
         for lvl, _ in lib.cluster_levels(eq_highs, p["equalTolAtr"] * atr, 2):
             cands.append(lvl)
         cands = sorted({round(x, 10) for x in cands if x > entry})
-        tp1 = next((x for x in cands if x >= entry + r_struct), None)
-        if tp1 is None:
+        if not cands:
             return None
-        tp2 = next((x for x in cands if x > tp1), None)
+        # v3 §8.3: tp1 = kandidat terdekat yang >= tp1Floor. Lantai baru diketahui
+        # setelah G1 (SL efektif), jadi pemilihan final dilakukan di finalize_signal.
+        tp1 = cands[0]
+        tp2 = cands[1] if len(cands) > 1 else None
         return {
             "setup": "SWEEP_RECLAIM", "entry_mode": "MARKET_NEXT_OPEN", "entry": entry,
             "cancel_below": None, "valid": 1, "sl": sl, "tp1": tp1, "tp2": tp2,
-            "tp1_source": "structural", "trail": p["trailMode"],
-            "time_stop": p["timeStopCandles"], "score": score, "atr": atr,
+            "tp_candidates": cands, "tp1_source": "structural", "trail": p["trailMode"],
+            "time_stop_hours": p["timeStopHours"], "score": score,
+            "atr": atr,
             "data": {"level": L, "level_kind": level_kind, "signal_index": i,
                      "sweep_index": j},
         }
@@ -426,7 +445,7 @@ class Ctx:
             "setup": "RANGE_BOUNCE", "entry_mode": "CONFIRM_BREAK", "entry": entry,
             "cancel_below": range_low - 0.2 * atr, "valid": p["entryValidCandles"], "sl": sl,
             "tp1": mid, "tp2": tp2, "tp1_source": "structural", "trail": p["trailMode"],
-            "time_stop": p["timeStopCandles"], "score": 0, "atr": atr,
+            "time_stop_hours": p["timeStopHours"], "score": 0, "atr": atr,
             "data": {"range_low": range_low, "range_high": range_high, "signal_index": i},
         }
 
@@ -472,7 +491,7 @@ class Ctx:
             "setup": "SQUEEZE_BREAKOUT", "entry_mode": "MARKET_NEXT_OPEN", "entry": entry,
             "cancel_below": None, "valid": 1, "sl": sl, "tp1": tp1_raw, "tp2": tp2_raw,
             "tp1_source": "formula", "trail": p["trailMode"],
-            "time_stop": p["timeStopCandles"], "score": 0, "atr": self.atr[i],
+            "time_stop_hours": p["timeStopHours"], "score": 0, "atr": self.atr[i],
             "data": {"comp_high": comp_high, "comp_low": comp_low, "signal_index": i},
         }
 
@@ -493,34 +512,67 @@ def net_rr(reward_pct, risk_pct):
     return (reward_pct - lib.F_ADD_PCT) / denom
 
 
-def finalize_signal(ctx, i, sig, opts):
-    """G1-G8 + sizing. Mengembalikan (sig_final, None) atau (None, alasan)."""
+def finalize_signal(ctx, i, sig, opts, trace=None):
+    """
+    G1-G7 + sizing. G0 diperiksa pemanggil. Mengembalikan (sig_final, alasan).
+
+    `trace` (opsional) diisi nilai setelah G1/G2 lolos. Pemindai kandidat memakainya
+    untuk menghitung N benchmark §11.1: sinyal yang lolos G0-G2 tetap kandidat walau
+    gugur di G4-G7.
+    """
     entry = sig["entry"]
     atr = ctx.atr[i]
     if not atr or atr <= 0 or entry <= 0:
         return None, "SL_ATR_RANGE"
     g = opts["gates"]
-    floor = entry * (1.0 - g["friction_multiple"] * lib.F_ADD_PCT / 100.0) \
-        if g["friction_multiple"] > 0 else 0.0
-    sl_eff = min(sig["sl"], floor) if floor > 0 else sig["sl"]  # lantai hanya melebarkan
+
+    # G1: lantai friksi, mirror `PaperStopResolver.resolve` (hanya melebarkan).
+    floor_pct = lib.friction_floor_pct(g["friction_multiple"])
+    sl_eff, sl_source = lib.resolve_stop(sig["sl"], entry, floor_pct)
+    if sl_source == "NONE":
+        return None, "FRICTION_FLOOR"
     risk_pct = (entry - sl_eff) / entry * 100.0
     if risk_pct <= 0:
         return None, "FRICTION_FLOOR"
+
+    # G2: jarak SL efektif dalam ATR.
     sl_atr = (entry - sl_eff) / atr
     if sl_atr < lib.MIN_SL_ATR or sl_atr > g["max_sl_atr"]:
         return None, "SL_ATR_RANGE"
     atr_pct = atr / entry * 100.0
-    min_atr_pct = max(g["min_atr_friction"] * lib.F_ADD_PCT,
-                      (g["friction_multiple"] * lib.F_ADD_PCT / g["max_sl_atr"]
-                       if g["friction_multiple"] > 0 else 0.0))
-    if atr_pct < min_atr_pct:
-        return None, "ATR_TOO_LOW"
+    if trace is not None:
+        trace.update({"entry": entry, "sl_signal": sig["sl"], "sl_eff": sl_eff,
+                      "sl_source": sl_source, "risk_pct": risk_pct, "sl_atr": sl_atr,
+                      "atr_pct": atr_pct})
 
-    tp1 = sig["tp1"]
-    if sig["tp1_source"] == "formula" and opts["tp1_policy"] == "floor":
-        tp1_min = entry * (1.0 + (risk_pct + 2.0 * lib.F_ADD_PCT) / 100.0)
-        tp1 = max(tp1, tp1_min)
-    tp2 = sig["tp2"]
+    # G3 dicabut di v3. Hanya aktif bila eksperimen menyalakannya secara eksplisit.
+    if g["min_atr_friction"] > 0:
+        min_atr_pct = max(g["min_atr_friction"] * lib.F_ADD_PCT,
+                          (g["friction_multiple"] * lib.F_ADD_PCT / g["max_sl_atr"]
+                           if g["friction_multiple"] > 0 else 0.0))
+        if atr_pct < min_atr_pct:
+            return None, "ATR_TOO_LOW"
+
+    # TP1 v3 §6.2: formula memakai tp1Floor; struktural tidak digeser.
+    tp1_floor = lib.tp1_floor_price(entry, risk_pct, lib.F_ADD_PCT, g["min_net_rr_tp1"])
+    if sig["tp1_source"] == "formula":
+        if opts["tp1_policy"] == "spec":
+            tp1 = tp1_floor
+        elif opts["tp1_policy"] == "legacy-floor":
+            # Perilaku Spec v2: max(raw, entry + risk + 2F), mengabaikan minNetRrTp1.
+            tp1 = max(sig["tp1"], entry * (1.0 + (risk_pct + 2.0 * lib.F_ADD_PCT) / 100.0))
+        else:  # literal -> kontrol negatif, G4 wajib menolak
+            tp1 = sig["tp1"]
+        tp2 = sig["tp2"]
+    elif sig.get("tp_candidates"):
+        # SWEEP_RECLAIM §8.3: kandidat terdekat yang >= tp1Floor, bukan digeser.
+        usable = [x for x in sig["tp_candidates"] if x >= tp1_floor]
+        tp1 = usable[0] if usable else sig["tp1"]
+        tp2 = usable[1] if len(usable) > 1 else None
+    else:
+        tp1 = sig["tp1"]
+        tp2 = sig["tp2"]
+
     if tp2 is not None and tp2 < entry + 1.5 * (entry - sl_eff):
         tp2 = None
     if tp2 is not None and tp2 <= tp1:
@@ -539,16 +591,24 @@ def finalize_signal(ctx, i, sig, opts):
     if not (sl_eff < entry < tp1 and (tp2 is None or tp1 < tp2)):
         return None, "INVALID_LEVELS"
 
-    qty_risk = opts["risk_usd"] / ((entry - sl_eff) + entry * lib.F_ADD_PCT / 100.0)
+    # §6.4: perUnitRisk = (entry − slEff) + biayaNetAktual, bukan pendekatan aditif.
+    per_unit = lib.per_unit_risk_net(entry, sl_eff)
+    if per_unit <= 0:
+        return None, "SIZING"
+    qty_risk = opts["risk_usd"] / per_unit
     qty_cap = opts["equity"] * lib.MAX_POSITION_PCT / 100.0 / entry
     qty = min(qty_risk, qty_cap)
     if qty <= 0 or qty * entry < lib.MIN_NOTIONAL_USDT:
         return None, "SIZING"
 
     sig = dict(sig)
-    sig.update({"sl_eff": sl_eff, "tp1": tp1, "tp2": tp2, "risk_pct": risk_pct,
-                "net_rr1": nr1, "net_rr_final": nrf, "qty": qty, "atr_pct": atr_pct,
-                "sl_atr": sl_atr})
+    sig.update({"sl_eff": sl_eff, "sl_source": sl_source, "tp1": tp1, "tp2": tp2,
+                "risk_pct": risk_pct, "risk_net_pct": per_unit / entry * 100.0,
+                "per_unit_risk": per_unit, "net_rr1": nr1, "net_rr_final": nrf,
+                "qty": qty, "atr_pct": atr_pct, "sl_atr": sl_atr,
+                "tp1_source": sig["tp1_source"],
+                "time_stop": lib.time_stop_candles(sig.get("time_stop_hours"),
+                                                   opts.get("tf_minutes", 15))})
     return sig, None
 
 
@@ -602,10 +662,14 @@ class Trade:
         cost = lib.cost_basis(self.qty_total, self.entry)
         proceeds = sum(lib.net_sell_value(q, p) for q, p, _ in self.fills)
         net_pct = (proceeds / cost - 1.0) * 100.0 if cost > 0 else 0.0
-        risk_net_pct = self.sig["risk_pct"] + lib.F_ADD_PCT
-        r = net_pct / risk_net_pct if risk_net_pct > 0 else 0.0
         gross_cost = self.qty_total * self.entry
         gross_sell = sum(q * p for q, p, _ in self.fills)
+        gross_pct = (gross_sell / gross_cost - 1.0) * 100.0 if gross_cost > 0 else 0.0
+        # R memakai risiko per unit BERSIH (FeeSchedule), bukan riskPct + F.
+        risk_net_pct = (lib.per_unit_risk_net(self.entry, self.sl_initial) / self.entry * 100.0
+                        if self.entry > 0 else 0.0)
+        r = net_pct / risk_net_pct if risk_net_pct > 0 else 0.0
+        r_gross = gross_pct / risk_net_pct if risk_net_pct > 0 else 0.0
         self.fees = (cost - gross_cost) + (gross_sell - proceeds)
         self.closed = True
         return {
@@ -616,10 +680,13 @@ class Trade:
             "entry": self.entry, "sl_eff": self.sl_initial, "tp1": self.tp1, "tp2": self.tp2,
             "qty": self.qty_total, "tp1_hit": self.tp1_hit,
             "exit_reason": self.fills[-1][2] if self.fills else "UNKNOWN",
-            "r_net": r, "net_pnl_pct": net_pct, "fees_usd": self.fees,
+            "r_net": r, "r_gross": r_gross, "friction_r": r_gross - r,
+            "net_pnl_pct": net_pct, "gross_pnl_pct": gross_pct, "fees_usd": self.fees,
             "mfe_r": self.favorable_r(), "mae_r": self.adverse_r(),
             "hold_bars": exit_index - self.entry_index,
-            "risk_pct": self.sig["risk_pct"], "net_rr1": self.sig["net_rr1"],
+            "risk_pct": self.sig["risk_pct"], "risk_net_pct": risk_net_pct,
+            "sl_source": self.sig.get("sl_source"), "tp1_source": self.sig.get("tp1_source"),
+            "net_rr1": self.sig["net_rr1"],
             "net_rr_final": self.sig["net_rr_final"], "score": self.sig["score"],
         }
 
@@ -669,7 +736,7 @@ def trailing_stop(ctx, trade, i):
     return None
 
 
-def process_open_trade(ctx, trade, i, opts, trades, equity):
+def process_open_trade(ctx, trade, i, opts, trades, equity, allow_invalidation=True):
     """Fase A intrabar + Fase B close. Mengembalikan trade bila ditutup."""
     if trade.closed:
         return trade
@@ -693,7 +760,7 @@ def process_open_trade(ctx, trade, i, opts, trades, equity):
         return trade  # TP tidak dievaluasi di candle entry
 
     if not trade.tp1_hit and ctx.h[i] >= trade.tp1:
-        qty1 = trade.qty_total * lib.TP1_FRACTION
+        qty1 = trade.qty_total * opts.get("tp1_fraction", lib.TP1_FRACTION)
         remainder = trade.qty_remaining - qty1
         if remainder * trade.tp1 < lib.MIN_NOTIONAL_USDT:
             trade.sell(trade.qty_remaining, trade.tp1, "TAKE_PROFIT_1")
@@ -712,7 +779,7 @@ def process_open_trade(ctx, trade, i, opts, trades, equity):
 
     # Fase B: keputusan di close candle
     reason = None
-    if invalidated(ctx, trade, i):
+    if allow_invalidation and invalidated(ctx, trade, i):
         reason = "SETUP_INVALIDATION"
     elif (ctx.c[i] < ctx.o[i] and (ctx.o[i] - ctx.c[i]) >= 0.8 * ctx.atr[i]
           and ctx.volratio[i] is not None and ctx.volratio[i] >= 1.5):
@@ -745,7 +812,12 @@ def run_pair(ctx, opts, funnel, equity):
     losses_streak = 0
     day_key = None
     day_pnl = 0.0
+    day_start_equity = equity
     n = ctx.n
+    i_start, i_end = window_bounds(ctx.t, opts.get("start_ms"), opts.get("end_ms"),
+                                   lib.WARMUP_CANDLES)
+    cooldown_candles = opts.get("cooldown_candles", 1)
+    pause_candles = opts.get("pause_candles", 4)
 
     def finalize(trade, exit_index):
         nonlocal equity, day_pnl, losses_streak, cooldown_until, pause_until
@@ -757,18 +829,19 @@ def run_pair(ctx, opts, funnel, equity):
         day_pnl += rec["r_net"] * opts["risk_usd"]
         if rec["r_net"] < 0:
             losses_streak += 1
-            cooldown_until = exit_index + 1
+            cooldown_until = exit_index + cooldown_candles
             if losses_streak >= lib.MAX_CONSECUTIVE_LOSSES:
-                pause_until = exit_index + 4
+                pause_until = exit_index + pause_candles
                 losses_streak = 0
         else:
             losses_streak = 0
 
-    for i in range(lib.WARMUP_CANDLES, n):
+    for i in range(i_start, i_end + 1):
         dk = (ctx.t[i] + 7 * 3600_000) // 86_400_000
         if dk != day_key:
             day_key = dk
             day_pnl = 0.0
+            day_start_equity = equity
 
         # 1) exit yang diantre dari close candle sebelumnya
         if open_trade is not None and open_trade.exit_next_open:
@@ -784,8 +857,8 @@ def run_pair(ctx, opts, funnel, equity):
             if open_trade.qty_remaining <= 0:
                 finalize(open_trade, i)
                 open_trade = None
-            elif open_trade.exit_next_open is None and i == n - 1:
-                # paksa tutup di akhir data, jangan dibuang dari statistik
+            elif open_trade.exit_next_open is None and i == i_end:
+                # paksa tutup di akhir jendela, jangan dibuang dari statistik
                 open_trade.sell(open_trade.qty_remaining, ctx.c[i], "END_OF_DATA")
                 finalize(open_trade, i)
                 open_trade = None
@@ -846,7 +919,7 @@ def run_pair(ctx, opts, funnel, equity):
 
         # 4) sinyal baru
         risk_blocked = (i < cooldown_until or i < pause_until
-                        or day_pnl <= -lib.MAX_DAILY_LOSS_PCT / 100.0 * opts["equity"])
+                        or day_pnl <= -lib.MAX_DAILY_LOSS_PCT / 100.0 * day_start_equity)
         if open_trade is None and pending is None and not risk_blocked:
             best = None
             for setup in opts["setups"]:
@@ -870,9 +943,79 @@ def run_pair(ctx, opts, funnel, equity):
                 pending = {"sig": best, "sig_index": i}
 
     if open_trade is not None:
-        open_trade.sell(open_trade.qty_remaining, ctx.c[n - 1], "END_OF_DATA")
-        finalize(open_trade, n - 1)
+        open_trade.sell(open_trade.qty_remaining, ctx.c[i_end], "END_OF_DATA")
+        finalize(open_trade, i_end)
     return trades
+
+
+def window_bounds(times, start_ms, end_ms, warmup):
+    """Indeks loop pertama/terakhir yang boleh dipakai; warmup tetap dihormati."""
+    import bisect
+    i_start = max(warmup, bisect.bisect_left(times, start_ms) if start_ms else warmup)
+    i_end = len(times) - 1
+    if end_ms:
+        i_end = min(i_end, bisect.bisect_right(times, end_ms) - 1)
+    return i_start, i_end
+
+
+def scan_candidates(ctx, opts):
+    """
+    Pindai SEMUA bar dalam jendela untuk sinyal yang lolos G0-G2 (benchmark §11.1).
+
+    Berbeda dari `run_pair`, pemindaian ini tidak terhalang posisi terbuka atau risk
+    manager: yang dihitung adalah universe sinyal, bukan trade yang sempat diambil.
+    """
+    out = []
+    i_start, i_end = window_bounds(ctx.t, opts.get("start_ms"), opts.get("end_ms"),
+                                   lib.WARMUP_CANDLES)
+    for i in range(i_start, i_end + 1):
+        for setup in opts["setups"]:
+            if ctx.regime[i] not in ALLOWED_REGIMES[setup]:
+                continue
+            sig = ctx.evaluate(i, setup, opts["setup_params"])
+            if sig is None:
+                continue
+            rec = {"pair": ctx.pair, "setup": setup, "signal_index": i,
+                   "signal_time_ms": ctx.t[i], "regime": ctx.regime[i],
+                   "pair_edge_ok": ctx.pair in opts["eligible_pairs"] or opts["no_pair_edge"],
+                   "entry_mode": sig["entry_mode"], "entry_est": sig["entry"],
+                   "sl_signal": sig["sl"], "atr": ctx.atr[i],
+                   "sl_source": None, "reject_reason": "PAIR_EDGE"}
+            if not rec["pair_edge_ok"]:
+                out.append(rec)
+                continue
+            trace = {}
+            final, why = finalize_signal(ctx, i, sig, opts, trace=trace)
+            rec.update(trace)
+            rec["reject_reason"] = why
+            rec["passes_g0_g2"] = why is None or why in CANDIDATE_REJECTIONS
+            out.append(rec)
+    return out
+
+
+def apply_portfolio_cap(trades, max_concurrent):
+    """
+    Batas posisi bersamaan §9.
+
+    Simulasi per pair berjalan independen; filter ini menerima trade secara kronologis
+    selama jumlah posisi yang masih terbuka < max_concurrent. Konsekuensinya trade yang
+    ditolak tidak digantikan trade lain di pair yang sama (bias konservatif: jumlah
+    trade bisa lebih kecil, bukan lebih besar).
+    """
+    if max_concurrent <= 0:
+        return list(trades), []
+    accepted = []
+    rejected = []
+    open_exits = []
+    for t in sorted(trades, key=lambda x: (x["entry_time_ms"], x["exit_time_ms"], x["pair"])):
+        open_exits = [x for x in open_exits if x > t["entry_time_ms"]]
+        if len(open_exits) < max_concurrent:
+            accepted.append(t)
+            open_exits.append(t["exit_time_ms"])
+        else:
+            rejected.append(t)
+    return accepted, rejected
+
 
 
 def revalidate(ctx, i, sig, fill, opts):
@@ -901,6 +1044,8 @@ def summarize(trades):
     if not trades:
         return {"trades": 0}
     rs = [t["r_net"] for t in trades]
+    rg = [t["r_gross"] for t in trades]
+    fr = [t["friction_r"] for t in trades]
     wins = [r for r in rs if r > 0]
     losses = [r for r in rs if r <= 0]
     gross_win = sum(wins)
@@ -914,10 +1059,13 @@ def summarize(trades):
         max_dd = max(max_dd, peak - cum)
     return {
         "trades": len(trades),
+        "pairs": len({t["pair"] for t in trades}),
         "wins": len(wins),
         "losses": len(losses),
         "win_rate_pct": round(100.0 * len(wins) / len(trades), 2),
         "avg_r": round(sum(rs) / len(trades), 4),
+        "avg_r_gross": round(sum(rg) / len(trades), 4),
+        "avg_friction_r": round(sum(fr) / len(trades), 4),
         "expectancy_r": round(sum(rs) / len(trades), 4),
         "avg_win_r": round(sum(wins) / len(wins), 4) if wins else None,
         "avg_loss_r": round(sum(losses) / len(losses), 4) if losses else None,
@@ -932,6 +1080,7 @@ def summarize(trades):
         "total_fees_usd": round(sum(t["fees_usd"] for t in trades), 2),
         "end_of_data": sum(1 for t in trades if t["exit_reason"] == "END_OF_DATA"),
         "exit_reasons": _count(t["exit_reason"] for t in trades),
+        "sl_sources": _count(t.get("sl_source") for t in trades),
     }
 
 
@@ -964,33 +1113,47 @@ def build_frames(data_dir, pair, timeframe):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--data", default="data/tokocrypto_spot")
+    ap.add_argument("--data", default=repo_path("data/tokocrypto_spot"))
     ap.add_argument("--timeframe", choices=["15m", "1h"], default="15m")
     ap.add_argument("--pairs", default="all")
     ap.add_argument("--setups", default="all")
-    ap.add_argument("--tp1-policy", choices=["floor", "literal"], default="floor")
+    ap.add_argument("--tp1-policy", choices=["spec", "literal", "legacy-floor"], default="spec",
+                    help="spec = Spec v3 §6.2; literal = kontrol negatif; legacy-floor = perilaku v2")
     ap.add_argument("--no-pair-edge", action="store_true",
                     help="RISET: matikan G0 (produksi tetap wajib G0)")
-    ap.add_argument("--pair-gate", default="data/config/pair_gate.json")
-    ap.add_argument("--out", default="data/hasil/spot_backtest_v2")
+    ap.add_argument("--pair-gate", default=repo_path("data/config/pair_gate.json"))
+    ap.add_argument("--out", default=repo_path("data/hasil/spot_backtest_v3"))
     ap.add_argument("--equity", type=float, default=lib.DEFAULT_EQUITY)
     ap.add_argument("--split", type=float, default=0.7)
+    ap.add_argument("--start-ms", type=int, default=0, help="Awal jendela uji (open_time_ms).")
+    ap.add_argument("--end-ms", type=int, default=0, help="Akhir jendela uji (open_time_ms).")
     ap.add_argument("--max-sl-atr", type=float, default=lib.MAX_SL_ATR,
                     help="RISET: override G2 (default 5.0)")
     ap.add_argument("--friction-multiple", type=float, default=lib.FLOOR_MULTIPLE,
                     help="RISET: override lantai friksi (default 6.0; 0 = tanpa lantai)")
-    ap.add_argument("--min-atr-over-friction", type=float, default=lib.MIN_ATR_PCT_OVER_FRICTION,
-                    help="RISET: override faktor 1.5F di G3")
+    ap.add_argument("--min-atr-over-friction", type=float,
+                    default=lib.MIN_ATR_PCT_OVER_FRICTION,
+                    help="G3 dicabut di v3; default 0 (mati)")
     ap.add_argument("--min-net-rr-tp1", type=float, default=lib.MIN_NET_RR_TP1,
-                    help="RISET: override G4 (default 1.0)")
+                    help="G4 dan tp1Floor (default 1.0)")
     ap.add_argument("--min-net-rr-final", type=float, default=lib.MIN_NET_RR_FINAL,
                     help="RISET: override G5 (default 1.5)")
     ap.add_argument("--min-reward-over-friction", type=float, default=lib.MIN_REWARD_OVER_FRICTION,
                     help="RISET: override G6 (default 3.0)")
+    ap.add_argument("--max-concurrent", type=int, default=lib.MAX_CONCURRENT_POSITIONS,
+                    help="Batas posisi bersamaan; 0 = tanpa filter")
+    ap.add_argument("--tp1-fraction", type=float, default=lib.TP1_FRACTION,
+                    help="Porsi qty yang dijual di TP1 (Spec §3: 0.6; uji 0.5)")
+    ap.add_argument("--no-portfolio-cap", action="store_true",
+                    help="RISET: jangan terapkan filter posisi bersamaan")
+    ap.add_argument("--no-candidate-scan", action="store_true",
+                    help="Lewati pemindaian kandidat G0-G2 (benchmark §11.1)")
     ap.add_argument("--verbose", action="store_true")
     a = ap.parse_args()
     if a.max_sl_atr <= 0:
         raise SystemExit("--max-sl-atr harus > 0")
+    if a.start_ms and a.end_ms and a.start_ms >= a.end_ms:
+        raise SystemExit("--start-ms harus < --end-ms")
 
     pairs = lib.list_pairs(a.data) if a.pairs == "all" else [p.strip().upper() for p in a.pairs.split(",")]
     setups = list(SETUPS) if a.setups == "all" else [s.strip().upper() for s in a.setups.split(",")]
@@ -1013,11 +1176,16 @@ def main():
         for k in range(4, len(btc_htf)):
             btc_ret_by_time[btc_htf[k][0]] = (closes[k] / closes[k - 4] - 1.0) * 100.0
 
+    tf_minutes = 15 if a.timeframe == "15m" else 60
     opts = {
         "setups": setups, "tp1_policy": a.tp1_policy, "no_pair_edge": a.no_pair_edge,
         "eligible_pairs": eligible, "equity": a.equity,
         "risk_usd": a.equity * lib.RISK_PER_TRADE_PCT / 100.0,
         "setup_params": lib.DEFAULT_SETUP_PARAMS,
+        "tf_minutes": tf_minutes,
+        "start_ms": a.start_ms, "end_ms": a.end_ms,
+        "cooldown_candles": lib.candles_for_minutes(lib.COOLDOWN_AFTER_LOSS_MIN, tf_minutes),
+        "pause_candles": lib.candles_for_minutes(lib.LOSS_STREAK_PAUSE_MIN, tf_minutes),
         "gates": {
             "max_sl_atr": a.max_sl_atr,
             "friction_multiple": a.friction_multiple,
@@ -1027,8 +1195,10 @@ def main():
             "min_reward_friction": a.min_reward_over_friction,
         },
         "split_index": 0,
+        "tp1_fraction": a.tp1_fraction,
     }
     funnel = {s: {} for s in setups}
+    candidates = [] if not a.no_candidate_scan else None
     all_trades = []
     per_pair = {}
     for idx, pair in enumerate(pairs, 1):
@@ -1037,17 +1207,33 @@ def main():
             print(f"  [{idx}/{len(pairs)}] {pair:<14} dilewati (data kurang)", file=sys.stderr)
             continue
         ctx = Ctx(pair, rows, htf, btc_ret_by_time, exec_minutes, htf_minutes)
-        opts["split_index"] = int(len(rows) * a.split)
+        i0, i1 = window_bounds(ctx.t, a.start_ms, a.end_ms, lib.WARMUP_CANDLES)
+        opts["split_index"] = i0 + int((i1 - i0 + 1) * a.split)
         trades = run_pair(ctx, opts, funnel, a.equity)
         all_trades.extend(trades)
         per_pair[pair] = summarize(trades)
+        if candidates is not None:
+            candidates.extend(scan_candidates(ctx, opts))
         s = per_pair[pair]
         print(f"  [{idx}/{len(pairs)}] {pair:<14} trade {s['trades']:>4} "
-              f"avgR {s.get('avg_r', 0):>7.4f} WR {s.get('win_rate_pct', 0):>5.1f}%", flush=True)
+              f"avgR {s.get('avg_r', 0):>7.4f} avgGrossR {s.get('avg_r_gross', 0):>7.4f} "
+              f"WR {s.get('win_rate_pct', 0):>5.1f}%", flush=True)
 
+    cap = 0 if a.no_portfolio_cap else a.max_concurrent
+    portfolio_trades, portfolio_rejected = apply_portfolio_cap(all_trades, cap)
+    accepted_ids = {id(t) for t in portfolio_trades}
+    for t in all_trades:
+        t["portfolio_accepted"] = id(t) in accepted_ids
     in_sample = [t for t in all_trades if t["in_sample"]]
     out_sample = [t for t in all_trades if not t["in_sample"]]
+    port_oos = [t for t in portfolio_trades if not t["in_sample"]]
     by_setup = {s: summarize([t for t in all_trades if t["setup"] == s]) for s in setups}
+    portfolio_by_setup = {
+        s: summarize([t for t in portfolio_trades if t["setup"] == s]) for s in setups
+    }
+    portfolio_oos_by_setup = {
+        s: summarize([t for t in port_oos if t["setup"] == s]) for s in setups
+    }
     doc = {
         "meta": {
             "generated_at_utc": lib.now_utc(),
@@ -1066,38 +1252,82 @@ def main():
             "slippage_pct": lib.SLIPPAGE_PCT, "f_pct": lib.F_ADD_PCT,
             "friction_floor_pct": a.friction_multiple * lib.F_ADD_PCT,
             "friction_multiple": a.friction_multiple,
-            "tp1_fraction": lib.TP1_FRACTION,
+            "risk_basis": "FeeSchedule costBasisNet/netSellValue (net, bukan aditif)",
+            "tp1_fraction": a.tp1_fraction,
             "split": a.split,
             "warmup_candles": lib.WARMUP_CANDLES,
+            "start_ms": a.start_ms or None, "end_ms": a.end_ms or None,
+            "cooldown_candles": opts["cooldown_candles"],
+            "pause_candles": opts["pause_candles"],
+            "time_stop_candles": {s: lib.time_stop_candles(lib.TIME_STOP_HOURS[s], tf_minutes)
+                                  for s in setups},
+            "max_concurrent_positions": cap,
+            "portfolio_cap_method": ("greedy_chronological_postprocess"
+                                     if cap > 0 else "disabled"),
+            "risk_manager_scope": "per_pair (batas rugi harian & pause 3 loss belum lintas pair)",
         },
         "summary": {
             "overall": summarize(all_trades),
             "in_sample": summarize(in_sample),
             "out_of_sample": summarize(out_sample),
+            "portfolio_overall": summarize(portfolio_trades),
+            "portfolio_out_of_sample": summarize(port_oos),
+            "portfolio_rejected": len(portfolio_rejected),
             "by_setup": by_setup,
+            "portfolio_by_setup": portfolio_by_setup,
+            "portfolio_out_of_sample_by_setup": portfolio_oos_by_setup,
             "by_pair": per_pair,
         },
         "funnel": funnel,
+        "candidate_scan": None if candidates is None else {
+            "by_setup": {
+                s: {
+                    "signals": sum(1 for c in candidates if c["setup"] == s),
+                    "pass_g0_g2": sum(1 for c in candidates
+                                      if c["setup"] == s and c.get("passes_g0_g2")),
+                    "rejections": _count(
+                        c.get("reject_reason") for c in candidates
+                        if c["setup"] == s and not c.get("passes_g0_g2")),
+                } for s in setups
+            },
+            "total": len(candidates),
+        },
     }
-    os.makedirs(os.path.dirname(a.out), exist_ok=True)
+    os.makedirs(os.path.dirname(a.out) or ".", exist_ok=True)
     with open(a.out + ".json", "w") as f:
         json.dump(doc, f, indent=2)
+    trade_cols = ["pair", "setup", "signal_index", "entry_index", "exit_index", "entry_time_ms",
+                  "exit_time_ms", "entry", "sl_eff", "sl_source", "tp1", "tp2", "qty", "tp1_hit",
+                  "tp1_source", "exit_reason", "r_net", "r_gross", "friction_r", "net_pnl_pct",
+                  "gross_pnl_pct", "fees_usd", "mfe_r", "mae_r", "hold_bars", "risk_pct",
+                  "risk_net_pct", "net_rr1", "net_rr_final", "score", "in_sample",
+                  "portfolio_accepted"]
     with open(a.out + "_trades.csv", "w", newline="") as f:
         w = csv.writer(f)
-        cols = ["pair", "setup", "signal_index", "entry_index", "exit_index", "entry_time_ms",
-                "exit_time_ms", "entry", "sl_eff", "tp1", "tp2", "qty", "tp1_hit",
-                "exit_reason", "r_net", "net_pnl_pct", "fees_usd", "mfe_r", "mae_r",
-                "hold_bars", "risk_pct", "net_rr1", "net_rr_final", "score", "in_sample"]
-        w.writerow(cols)
+        w.writerow(trade_cols)
         for t in sorted(all_trades, key=lambda x: (x["entry_time_ms"], x["pair"])):
-            w.writerow([t[c] for c in cols])
+            w.writerow([t[c] for c in trade_cols])
+    if candidates is not None:
+        cand_cols = ["pair", "setup", "signal_index", "signal_time_ms", "regime", "pair_edge_ok",
+                     "entry_est", "sl_signal", "sl_eff", "sl_source", "risk_pct", "sl_atr",
+                     "atr_pct", "reject_reason", "passes_g0_g2"]
+        with open(a.out + "_candidates.csv", "w", newline="") as f:
+            w = csv.writer(f)
+            w.writerow(cand_cols)
+            for c in sorted(candidates, key=lambda x: (x["signal_time_ms"], x["pair"], x["setup"])):
+                w.writerow([c.get(k) for k in cand_cols])
 
     ov = doc["summary"]["overall"]
-    print(f"\n=== RINGKASAN ({len(pairs)} pair | {a.timeframe} | setup {','.join(setups)} | TP1 {a.tp1_policy} | "
-          f"G0 {'OFF' if a.no_pair_edge else 'ON'}) ===")
+    po = doc["summary"]["portfolio_overall"]
+    print(f"\n=== RINGKASAN ({len(pairs)} pair | {a.timeframe} | setup {','.join(setups)} | "
+          f"TP1 {a.tp1_policy} | G0 {'OFF' if a.no_pair_edge else 'ON'} | "
+          f"jendela {'penuh' if not (a.start_ms or a.end_ms) else 'terbatas'}) ===")
     print(f"trade {ov.get('trades', 0)} | avgR {ov.get('avg_r', 0):.4f} | "
+          f"avgGrossR {ov.get('avg_r_gross', 0):.4f} | friksi {ov.get('avg_friction_r', 0):.4f}R | "
           f"WR {ov.get('win_rate_pct', 0):.1f}% | PF {ov.get('profit_factor')} | "
           f"maxDD {ov.get('max_drawdown_r', 0):.2f}R | EOD {ov.get('end_of_data', 0)}")
+    print(f"portofolio (maks {cap} posisi) trade {po.get('trades', 0)} | "
+          f"avgR {po.get('avg_r', 0):.4f} | ditolak filter {len(portfolio_rejected)}")
     print(f"in-sample  n={doc['summary']['in_sample'].get('trades', 0)} "
           f"avgR={doc['summary']['in_sample'].get('avg_r', 0)} | "
           f"out-sample n={doc['summary']['out_of_sample'].get('trades', 0)} "
@@ -1105,11 +1335,14 @@ def main():
     for s in setups:
         x = by_setup[s]
         if x.get("trades", 0) == 0:
-            print(f"{s:<18} trade 0 | funnel: {funnel[s]}")
+            print(f"{s:<18} trade 0 | funnel: {funnel[s]} | "
+                  f"kandidat G0-G2: {doc['candidate_scan']['by_setup'][s]['pass_g0_g2'] if candidates is not None else 'n/a'}")
         else:
             print(f"{s:<18} trade {x['trades']:>4} avgR {x['avg_r']:>7.4f} "
-                  f"WR {x['win_rate_pct']:>5.1f}% PF {x['profit_factor']}")
-    print(f"\nDitulis: {a.out}.json dan {a.out}_trades.csv")
+                  f"grossR {x['avg_r_gross']:>7.4f} WR {x['win_rate_pct']:>5.1f}% "
+                  f"PF {x['profit_factor']}")
+    print(f"\nDitulis: {a.out}.json, {a.out}_trades.csv"
+          + (f", {a.out}_candidates.csv" if candidates is not None else ""))
     return 0
 
 

@@ -472,7 +472,7 @@ def sha256_file(path):
 
 def write_readme(out_dir, args, selection, manifest):
     lines = [
-        "Dataset candle Tokocrypto (Spec Scalping Spot v2)",
+        "Dataset candle Tokocrypto (Spec Scalping Spot v3)",
         "",
         f"Sumber    : API Tokocrypto {DEFAULT_BASE} (type 1) dan {OPEN_API_BASE} (type 3)",
         f"Diambil   : {manifest['generated_at_utc']} (UTC)",
