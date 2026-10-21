@@ -1,2 +1,0 @@
-pair,setup,signal_index,entry_index,exit_index,entry_time_ms,exit_time_ms,entry,sl_eff,tp1,tp2,qty,tp1_hit,exit_reason,r_net,net_pnl_pct,fees_usd,mfe_r,mae_r,hold_bars,risk_pct,net_rr1,net_rr_final,score,in_sample
-GNSUSDT,SWEEP_RECLAIM,8059,8060,8062,1791976500000,1791978300000,0.689,0.6406095159440358,0.827,,891.6597066699755,False,SETUP_INVALIDATION,-0.8084240353827745,-6.569933731570298,5.783408289987392,0.08266088008902657,-0.9092696809792901,2,7.158041167531034,2.3239376867883146,2.3239376867883146,3,False

@@ -14,7 +14,7 @@
 
 **Tanggal:** 14 Oktober 2026 (snapshot; status branch diperbarui 2026-10-21)
 **Repo:** snapshot awal `patch` @ `4ffee5e`; status branch per 2026-10-21 = `40257e4`
-**Peringatan branch:** per **2026-10-21** `patch` = `main` + 13 commit konten + commit dokumentasi; `main` = `578d0de` (merge rilis 3.9.2). Riset v3 dihentikan dan tidak ada di `patch`; arsip di `backup/patch-v3-2026-10-21`. Kerja tetap di `patch`, bukan `main`.
+**Peringatan branch:** per **2026-10-21** `patch` = `main` + 13 commit konten + commit dokumentasi; `main` = `578d0de` (merge rilis 3.9.2). Riset **v2 dan v3 dihentikan**; seluruh artefak v2 sudah dihapus dari pohon kerja dan di-commit, dan arsip v3 ada di `backup/patch-v3-2026-10-21`. Arah aktif: engine kriptoyoi yang sudah ada + slider (slider entry sudah ada dan menurut owner terbukti memaksimalkan entry; exit belum). Kerja tetap di `patch`, bukan `main`.
 **Sumber:** `LAPORAN-validitas-log-audit`, `LAPORAN-verifikasi-ui-vs-candle`, `LAPORAN-audit_amp`, `LAPORAN-replay-gns`, `PANDUAN-LANJUT-AGEN.md` §4–§5
 **Catatan:** semua item di bawah **sudah diverifikasi ulang ke kode** — bukan dari ingatan. Yang sudah selesai di P0–P2 tidak dimasukkan.
 

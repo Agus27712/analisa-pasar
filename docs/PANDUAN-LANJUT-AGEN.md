@@ -2,13 +2,22 @@
 
 > **Baca ini dulu.** Dokumen ini adalah titik masuk untuk agen/engineer berikutnya: status terkini,
 > apa yang sudah selesai, apa berikutnya, dan **perangkap yang sudah pernah ditemukan** supaya tidak
-> diulang. Terakhir diperbarui: **2026-10-21** (patch di-rebase ke `main`; riset v3 dihentikan).
+> diulang. Terakhir diperbarui: **2026-10-21** (patch di-rebase ke `main`; Spec v2 **dan** v3
+> dihentikan; fokus engine kriptoyoi yang sudah ada + slider).
 >
-> ⛔ **Riset v3 dihentikan (2026-10-21).** Spec v3 + harness v3 sudah diukur dan hasilnya negatif;
-> owner menghentikannya. Commit v3 (`ada71dc`, `796a9d1`) sudah dibuang dari `patch`, yang sekarang
-> = `main` + 13 commit konten + commit dokumentasi 2026-10-21 (riset Spec v2, dataset 90 hari,
-> batch 6o/6p). Arsip lengkap v3 ada di branch `backup/patch-v3-2026-10-21` (`796a9d1`).
-> **Jangan membangun ulang v3 dari dokumen v2.**
+> ⛔ **Spesifikasi baru v2/v3 dihentikan (2026-10-21).** Spec v2 dan v3 sudah diukur dan keduanya
+> **tidak menghasilkan edge**; owner menghentikan seluruh line riset ini karena hanya memperpanjang
+> research. **Seluruh artefak v2 sudah dihapus dari pohon kerja 2026-10-21** — dokumen spec, dua
+> laporan hasil, tool, dataset, dan hasil JSON/CSV; penghapusan sudah di-commit dan di-push.
+> Commit v3
+> (`ada71dc`, `796a9d1`) sudah dibuang dari `patch`, yang sekarang = `main` + 13 commit konten +
+> commit dokumentasi 2026-10-21 (batch 6o/6p). Arsip lengkap v3 ada di branch
+> `backup/patch-v3-2026-10-21` (`796a9d1`).
+>
+> 🎯 **Arah aktif:** maksimalkan **engine scalping yang sudah ada** (port kriptoyoi `p0_engine` +
+> slider), bukan membangun spec/engine baru. Status dari owner: implementasi slider entry sudah
+> ada dan terbukti memaksimalkan entry; **exit strategi belum**. Jangan mengubah kode aplikasi
+> dulu; artefak v2 sudah dihapus.
 >
 > 🔴 **Untuk "apa lagi yang tersisa" → `docs/bugs/`, bukan dokumen ini.** Status temuan audit
 > (notifikasi `N*`, jurnal/P&L `J*`, paper trading `P*`, koneksi `K*`) sudah diverifikasi ke kode dan
@@ -29,35 +38,30 @@
 >
 > 📊 **`docs/exp/` = hasil eksperimen terukur** (satu berkas per eksperimen,
 > `exp_<testname>_<pair>.md`). **Baca sebelum percaya klaim "strategi ini bisa profit" atau
-> mengubah parameter engine.** Eksperimen terbaru (2026-10-20):
+> mengubah parameter engine.** Eksperimen engine yang sudah ada:
 > `exp_scalping_expectancy_ADA-DOGE-XRP.md` — eksperimen lama: win rate **42,7%** vs ambang
 > **60,1%** pada geometri SL 1,94% / TP2 2,42%; harness lama belum punya time-stop.
 > `exp_scalping_expectancy_parity_ADA-DOGE-XRP.md` — pengulangan dengan exit app (time-stop
 > 90 bar): win rate **14,88%**, avg R **−0,4898**, 963/1.149 trade TIMEOUT. Scalping di
 > Tokocrypto **tidak layak untuk engine saat ini**.
-> `exp_mfe_m15_41pair.md` — MFE 15m 90 hari: **4/41 layak** (MUBARAK, PUMP, ZRO, PLUME);
-> 10 pair yang dulu eligible turun status, **0 pair naik**. Tabel `PairEdgeGate` lama kedaluwarsa.
-> `exp_spot_backtest_41pair.md` — backtest Spec v2: produksi 15m **0 trade**, produksi 1h
-> **7 trade semua rugi** (avg R −0,3835); varian riset terbaik −0,2055R dengan OOS −0,3828.
-> **Spec v2 belum punya bukti edge; Fase 1 Kotlin diblokir sampai keputusan owner.**
+>
+> 🗄️ **Spec v2 dihentikan dan seluruh artefaknya sudah dihapus (2026-10-21).** Yang dihapus:
+> dokumen spec, dua laporan hasil (`exp_mfe_m15_41pair.md`, `exp_spot_backtest_41pair.md`),
+> tool `tools/spot_*.py`, dataset `data/tokocrypto_spot/`, snapshot
+> `data/config/binance_24h_movers_reference.json`, dan hasil JSON/CSV v2 di `data/hasil/`.
+> **Jangan membuat ulang berkas atau riset v2.** Ringkasan alasan ada di `workplan2.md` §64;
+> Fase 1 Kotlin tidak dimulai.
+>
 > Jejak audit jurnal ada di laporan per batch
 > (`docs/LAPORAN-batch3-jurnal-*.md` … `docs/LAPORAN-batch6-j*-2026-10-17.md`).
 > Aturan baru sejak 2026-10-17: berkas temuan yang **seluruh isinya** sudah tutup dipindahkan ke
 > `docs/laporan_temuan_bugs_<topik>.md`, dan **tidak ada lagi laporan per batch**.
 > Sinkronisasi status terakhir: `docs/LAPORAN-sync-dokumen-temuan-2026-10-16.md` (`workplan2.md` §40).
 >
-> 📄 **Dokumen sinkronisasi Spec Scalping Spot v2 (2026-10-20):**
-> `docs/LAPORAN-sinkronisasi-spec-scalping-spot-2026-10-20.md` — pemetaan
-> **Spec v2** (`docs/exp/scalping_spot_strategy_spec.md`, M15/H1, G0–G8, taker-only,
-> lantai friksi 6×) ke codebase, hasil verifikasi, temuan kritis, dan rencana 8 fase.
-> **Status: dokumentasi; kode belum disentuh.**
->
-> 📊 **Dataset ukur Spec v2 (2026-10-20):** `data/tokocrypto_spot/` — 41 pair (14 eligible
-> `PairEdgeGate`, 12 stabil, 15 momentum), 90 hari, interval 15m dan 1h, 441.880 bar, 0 celah.
-> Rincian kriteria dan angka di laporan §10. Tool: `tools/fetch_tokocrypto_klines.py`
-> (`--select mixed`, `--days`, `--resume` membekukan daftar pair). Backtest **sudah dijalankan**
-> (2026-10-20): hasil negatif; lihat `docs/exp/exp_spot_backtest_41pair.md`. Tool pengukuran:
-> `tools/spot_mfe.py`, `tools/spot_backtest.py`, `tools/test_spot_backtest.py`.
+> 🗄️ **Laporan sinkronisasi Spec v2 juga sudah dihapus (2026-10-21).** Yang tersisa hanya
+> ringkasan keputusan di `workplan2.md` §64. Dataset `data/tokocrypto_spot/`, tool
+> `tools/spot_*.py`, snapshot `data/config/binance_24h_movers_reference.json`, dan hasil JSON/CSV
+> v2 juga sudah dihapus; **jangan dibuat ulang** dan jangan dipakai untuk riset baru.
 
 ---
 
@@ -109,7 +113,7 @@ git stash pop                 # kembalikan pekerjaan
 | §9 | **Lantai risiko berbasis friksi** (`min_friction_multiple = 6,0`, `target_net_rr = 2,0`) | `ScalpingConfig.kt`, `ScalpingRiskEngine.kt` | `workplan2.md` §9 |
 | §9 | Uji universe 30 hari × 40 pair, gate out-of-sample | `tools/split_validate.py` | `data/hasil/u3_*.json`, `u4_*.md` |
 | §9 | **Gerbang edge pair** (MFE ≥ 2× friksi) | `PairEdgeGate.kt`, `tools/pair_gate.py` | `data/config/pair_gate.json` |
-| Spec v2 | **Pengukuran offline Spec v2** — MFE 15m 90 hari + backtest 41 pair (5 setup, 15m/1h, G0–G8, exit §7) | `tools/spot_lib.py`, `tools/spot_mfe.py`, `tools/spot_backtest.py`, `tools/test_spot_backtest.py` | `docs/exp/exp_mfe_m15_41pair.md`, `docs/exp/exp_spot_backtest_41pair.md`; hasil negatif, Fase 1 Kotlin diblokir |
+| ~~Spec v2~~ | ~~Pengukuran offline Spec v2 — MFE 15m 90 hari + backtest 41 pair~~ | **Dihapus 2026-10-21** (`tools/spot_*.py`, `data/tokocrypto_spot/`, hasil JSON/CSV) | ⛔ **DIHENTIKAN** — hasil negatif; seluruh artefak dihapus. **Fase 1 Kotlin tidak dimulai.** Ringkasan: `workplan2.md` §64. |
 | §11 | **UI scalping baru** (radar vs setup tidak sinkron) | `ScalpReadiness.kt`, `ScalpDeskCard.kt`, `PaperTradeDeskCard.kt` | `ScalpReadinessTest.kt` |
 | §12 | **Rehidrasi state machine exit paper** setelah restart | `PaperRehydrate.kt`, `SpotPositionStore.kt` | `PaperRehydrateTest.kt` |
 | §13 | **Akar `EARLY_ENTRY`** — stage tinggi wajib punya pola | `ScalpingMtfEvaluator.kt`, `SignalLifecycleManager.kt` | `workplan2.md` §13 |
@@ -122,11 +126,12 @@ git stash pop                 # kembalikan pekerjaan
 | ~~§15~~ | ~~SSOT: horizon vs engine aktif~~ | — | ⛔ **DIBATALKAN** — lihat §3b |
 
 **Status branch (2026-10-21):** `main` = `578d0de` (merge rilis 3.9.2, batch 6j–6n).
-`patch` = **main + 13 commit konten + commit dokumentasi 2026-10-21** (riset Spec v2, dataset
-90 hari, batch 6o/6p); `40257e4` = commit konten terakhir. `main` adalah **ancestor** `patch`,
-jadi `git diff HEAD origin/main` **tidak kosong** — itu isi 13 commit konten + dokumen tadi. Riset v3
-sudah dihentikan dan commit-nya dibuang dari `patch`; arsip di
-`backup/patch-v3-2026-10-21` (`796a9d1`). Jangan membaca `main` untuk pekerjaan terbaru.
+`patch` = **main + 13 commit konten + commit dokumentasi 2026-10-21** (batch 6o/6p);
+`40257e4` = commit konten terakhir. `main` adalah **ancestor** `patch`, jadi
+`git diff HEAD origin/main` **tidak kosong** — itu isi 13 commit konten + dokumen tadi. Riset
+v2/v3 sudah dihentikan; commit v3 dibuang dari `patch` dan arsipnya di
+`backup/patch-v3-2026-10-21` (`796a9d1`). **Penghapusan artefak v2 dan perubahan dokumen sudah
+di-commit dan di-push ke `origin/patch`.** Jangan membaca `main` untuk pekerjaan terbaru.
 §14/§15 tetap **dihapus dari kode** (2026-10-13).
 
 ---
@@ -210,15 +215,18 @@ Riwayat lengkap ada di `workplan2.md` §14/§15 (keduanya bertanda ⛔ DIHAPUS) 
 Diurutkan berdasarkan **nilai dibagi risiko**. Jangan mengerjakan yang bawah sebelum yang atas
 selesai, kecuali ada instruksi eksplisit.
 
-> ⛔ **Keputusan 2026-10-21 — riset v3 dihentikan.** V3 dibuat untuk menutup kontradiksi TP1/G3;
-> hasil ukurnya juga negatif (gates produksi **0 trade out-of-sample**, diagnostik tanpa G0
-> negatif, entry kalah dari acak). Commit v3 sudah dibuang dari `patch`; arsip lengkap di
-> `backup/patch-v3-2026-10-21` (`796a9d1`). **Jangan melanjutkan v3 dari dokumen ini.**
-> Keputusan arah Spec v2 di bawah masih terbuka.
+> ⛔ **Keputusan 2026-10-21 — riset v2 dan v3 dihentikan.** V2 dan v3 tidak menghasilkan edge;
+> owner menghentikan seluruh line riset ini karena hanya memperpanjang research. Commit v3
+> sudah dibuang dari `patch`; arsip lengkap di `backup/patch-v3-2026-10-21` (`796a9d1`).
+> **Jangan melanjutkan v2/v3 dari dokumen ini.** Arah aktif: **engine kriptoyoi yang sudah ada
+> + slider**. Status dari owner: slider entry sudah ada dan terbukti memaksimalkan entry;
+> **exit strategi belum**. **Artefak v2 sudah dihapus; perubahan kode aplikasi lain menunggu
+> instruksi.**
 
-### ⛔ Spec v2 (M15/H1) — diukur 2026-10-20, hasil NEGATIF; Fase 1 Kotlin diblokir
+### 🗄️ Catatan historis Spec v2 (M15/H1) — diukur 2026-10-20, hasil NEGATIF; DIHENTIKAN 2026-10-21
 
-Laporan lengkap: `docs/exp/exp_spot_backtest_41pair.md` dan `docs/exp/exp_mfe_m15_41pair.md`.
+Seluruh artefak v2 (spec, dua laporan hasil, tool, dataset, hasil JSON/CSV) sudah dihapus
+2026-10-21. Angka di bawah adalah **catatan keputusan**, bukan acuan aktif.
 
 - **Produksi 15m: 0 trade** dari 41 pair dalam 90 hari. Lantai 6x (5,8128%) + G2 maksimum 5 ATR
   + G3 minimum 1,5F (1,4532%) saling mengunci; ATR% 15m sebagian besar 0,2–1,1%.
@@ -230,19 +238,22 @@ Laporan lengkap: `docs/exp/exp_spot_backtest_41pair.md` dan `docs/exp/exp_mfe_m1
 - **MFE 90 hari: 4/41 layak**, bukan 14; tidak ada pair baru. Tabel `PairEdgeGate` lama
   kedaluwarsa untuk jendela ini.
 
-**Jangan mulai Fase 1 Kotlin** sebelum owner memutuskan: perbaiki kontradiksi gate/TP1,
-rancang ulang pemicu/exit SWEEP, pindah ke horizon lebih panjang, atau hentikan program.
-Kalau memilih lanjut, mulai dari memperbaiki spec — bukan dari menulis engine.
+**Keputusan:** program dihentikan 2026-10-21; **Fase 1 Kotlin tidak dimulai** dan seluruh
+artefak v2 tidak boleh dibuat ulang. Jangan memakai angka ini untuk memulai engine baru.
 
-### ⭐ Prioritas #1 — cari varian **entry** yang punya edge kotor (belum ada jawabannya)
+### ⭐ Prioritas #1 — maksimalkan engine kriptoyoi yang ada lewat slider (bukan engine baru)
 
-Temuan akuntansi (§5) mengubah pertanyaannya. Bukan lagi "apakah exit-nya bisa diperbaiki",
-melainkan: **adakah varian entry yang menghasilkan avg R kotor > +0,167R pada horizon 120 bar M1?**
+Owner memutuskan arah pada 2026-10-21: **engine scalping yang sudah ada** (port kriptoyoi
+`p0_engine` / spec) dimaksimalkan lewat **slider** yang sudah tersedia. Status dari owner:
+implementasi slider entry sudah ada dan terbukti memaksimalkan entry; **exit strategi belum**.
+Jangan mengklaim exit sudah selesai, dan **jangan mengubah kode aplikasi dulu**; perubahan kode
+aplikasi lain menunggu instruksi owner.
 
-Alasannya aritmetis: lantai friksi memaksa SL ≥ 5,81%, dan trade tanpa edge hanya menanggung biaya
-lalu ditutup → `−0,9688% / 5,81% = −0,167 R`. Itu persis yang terukur (avg R ≈ −0,17, 0/40 pair
-positif). **Selama tidak ada entry yang melewati +0,167R kotor, menyetel exit tidak akan
-mengubah apa pun.** Kerjakan ini sebelum yang lain.
+Patokan aritmetis lama tetap berguna sebagai alat ukur, bukan alasan membangun spec baru: lantai
+friksi memaksa SL ≥ 5,81%, dan trade tanpa edge hanya menanggung biaya lalu ditutup
+→ `−0,9688% / 5,81% = −0,167 R`. Itu yang terukur pada eksperimen lama (avg R ≈ −0,17, 0/40
+pair positif). **Selama entry belum melewati +0,167R kotor, menyetel exit saja tidak akan
+mengubah apa pun.** Kerjakan hanya atas instruksi owner.
 
 ### P4.1 — Walk-forward antar-bulan ✅ tooling selesai, hasil NEGATIF (2026-10-14)
 

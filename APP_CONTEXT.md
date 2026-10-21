@@ -1,8 +1,11 @@
 # 📘 Konteks Arsitektur & Domain Aplikasi (analisa-pasar / TradingView AI)
 
-> **Arah produk terkini (2026-10-10):** baca **`workplan2.md`** dulu.  
-> Workplan aktif = scalp mode + paper trade + slider sensitifitas (mirror `scalp_config.json`).  
-> Status temuan audit ada di **`docs/bugs/`** (sudah direview owner 2026-10-16 @ `547048d`).  
+> **Arah produk terkini (2026-10-21):** baca **`workplan2.md`** dulu.
+> **Spec v2 dan v3 dihentikan** — tidak ada spec/engine baru. Fokus = **engine kriptoyoi yang
+> sudah ada + slider** (slider entry sudah ada dan menurut owner terbukti memaksimalkan entry;
+> exit belum). Workplan aktif = scalp mode + paper trade + slider sensitifitas (mirror
+> `scalp_config.json`).
+> Status temuan audit ada di **`docs/bugs/`** (sudah direview owner 2026-10-16 @ `547048d`).
 > `workplan.md` / `checkpoint.md` / `checkpoint_progres.md` = **DEPRECATED dan sudah dihapus (2026-10-16)**.
 
 ---
@@ -18,7 +21,9 @@
 ### 0.2 Alur kerja threshold
 `ScalpingConfig` (default) → `ScalpingRuntimeConfig` (slider / import JSON) → engine live & paper → export JSON → `tools/scalp_replay.py`.
 
-Slider mengubah seberapa ketat gate (frekuensi sinyal). **Tidak** menggantikan riset entry. Fee tetap Fee Truth.
+Slider mengubah seberapa ketat gate (frekuensi sinyal). Status dari owner (2026-10-21): slider
+entry sudah ada dan terbukti memaksimalkan entry; **exit strategi belum**. Slider bukan jaminan
+profit. Fee tetap Fee Truth.
 
 ### 0.3 Asal engine scalping
 Port logika kuantitatif dari proyek open KriptoYoi (`dikigambol/kriptoyoi`, `analyzer/p0_engine.py` + specification). Visi upstream: **decision support**, bukan bot peramal harga.
