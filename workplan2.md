@@ -4224,3 +4224,30 @@ ke impas (0,00R). Perbaikan avg R **+0,0047R — di dalam noise** (CI 95% (−0,
    `min_friction_multiple` — melanggar lantai 6× yang WAJIB, butuh bukti replay baru penuh)
    atau kualitas entry, bukan lagi mode exit di unit risiko sama.
 3. Verifikasi: **22 test parity OK** (18 lama + 4 uji MFE).
+
+---
+
+## 67. Eksperimen: paritas entri BUY app vs spek kriptoyoi frontend (2026-10-22)
+
+Laporan lengkap: **`docs/exp/exp_entry_parity_kriptoyoi_ADA-DOGE-XRP.md`**; alat
+`tools/entry_parity_kriptoyoi.py` (port setia `generateScalperSignals` app.js kriptoyoi,
+fee truth dari `data/config/scalp_config.json` saja). Data yang sama dengan laporan P0
+(ADA/DOGE/XRP, 87.000 bar M1, 60 hari); angka engine app di harness **persis laporan P0**
+(620 / WR 14,84% / −0,1569) sehingga pembandingnya kompatibel.
+
+**Jawaban owner: entri BUY tidak sama.** Kriptoyoi frontend (lapisan A, EMA/StochRSI per
+candle tutup) menandai **15.269 entri** vs **620** entri engine app (≈24,6× lebih sering);
+irisan bar entri hanya **77 (12,4% entri app)**, Jaccard ≈0,5%. Dengan geometri exit,
+lantai friksi 6× dan fee truth yang identik, entri kriptoyoi juga terukur lebih buruk:
+WR 10,33%, avg R **−0,1627** (app: 14,84%, −0,1569). Kualitas 77 bar irisan tidak lebih
+baik (WR 14,29%/12,50%/0,00%, avg R −0,1707/−0,1397/−0,2008).
+
+**Keputusan:**
+1. Lapisan A kriptoyoi **tidak di-port** ke app (owner juga memaknainya frontend visual,
+   bukan engine); experimen membuktikan menggantikan/menumpuk gate baru tidak layak —
+   keduanya negatif di unit risiko 5,81%.
+2. Paritas rendah bukan bug; jangan mencampur angka kedua sumber di dokumen lain
+   (aturan label geometri FEE_TRUTH).
+3. Verifikasi: `--selftest` OK (kontrol negatif 0 BUY, positif 1 BUY); konsistensi
+   harness vs CLI DOGE = 193 trade (ditemukan & diperbaiki dulu: HTF harus disintesis
+   dari M1, bukan CSV 15m/1h).

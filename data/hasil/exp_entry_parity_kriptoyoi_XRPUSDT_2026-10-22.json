@@ -1,0 +1,205 @@
+{
+ "pair": "XRPUSDT",
+ "interval_kriptoyoi": "1m",
+ "bars_m1": 86999,
+ "range": {
+  "from": 1786546140000,
+  "to": 1791766020000
+ },
+ "fee": {
+  "buy_taker_pct": 0.4044,
+  "sell_taker_pct": 0.4044,
+  "slippage_pct": 0.08
+ },
+ "friction_additive_pct": 0.9688,
+ "app_engine": {
+  "summary": {
+   "evaluations": 66409,
+   "ready_signals": 217,
+   "trades_resolved": 217,
+   "unresolved": 0,
+   "wins": 28,
+   "losses": 189,
+   "win_rate_pct": 12.9,
+   "avg_r": -0.1584,
+   "expectancy_r": -0.1584,
+   "profit_factor": 0.1718,
+   "max_drawdown_r": 34.3729,
+   "sl_floor_active_trades": 213,
+   "sl_floor_active_pct": 98.16,
+   "avg_gross_risk_pct": 5.8128,
+   "avg_friction_pct": 0.9688,
+   "entry_mfe": {
+    "n_signals": 217,
+    "horizons": {
+     "30": {
+      "n_usable": 217,
+      "n_truncated": 0,
+      "median_mfe_pct": 0.2344,
+      "p25_mfe_pct": 0.0837,
+      "p75_mfe_pct": 0.574,
+      "median_mae_pct": -0.2482,
+      "p25_mae_pct": -0.5143,
+      "share_mfe_ge_cost_pct": 14.75,
+      "share_mfe_ge_2cost_pct": 5.53,
+      "share_mfe_ge_4cost_pct": 0.46,
+      "share_mfe_ge_tp1_pct": 0.0,
+      "share_sl_hit_pct": 0.0
+     },
+     "60": {
+      "n_usable": 216,
+      "n_truncated": 1,
+      "median_mfe_pct": 0.3263,
+      "p25_mfe_pct": 0.1244,
+      "p75_mfe_pct": 0.8718,
+      "median_mae_pct": -0.3669,
+      "p25_mae_pct": -0.6903,
+      "share_mfe_ge_cost_pct": 22.69,
+      "share_mfe_ge_2cost_pct": 9.72,
+      "share_mfe_ge_4cost_pct": 1.85,
+      "share_mfe_ge_tp1_pct": 0.0,
+      "share_sl_hit_pct": 0.46
+     },
+     "90": {
+      "n_usable": 216,
+      "n_truncated": 1,
+      "median_mfe_pct": 0.3979,
+      "p25_mfe_pct": 0.1546,
+      "p75_mfe_pct": 1.055,
+      "median_mae_pct": -0.4798,
+      "p25_mae_pct": -0.8361,
+      "share_mfe_ge_cost_pct": 27.31,
+      "share_mfe_ge_2cost_pct": 11.57,
+      "share_mfe_ge_4cost_pct": 4.17,
+      "share_mfe_ge_tp1_pct": 0.0,
+      "share_sl_hit_pct": 0.93
+     }
+    },
+    "mfe_exit_resolved": {
+     "n": 0,
+     "median_pct": 0.0,
+     "p25_pct": 0.0,
+     "p75_pct": 0.0
+    }
+   },
+   "bottleneck": {
+    "s1": 27820,
+    "s2": 0,
+    "s3": 25108,
+    "s4": 12074
+   },
+   "gate_blocks": {
+    "mtf": 1188,
+    "btc": 25
+   },
+   "btc": {
+    "available": true,
+    "bars_m1": 87000,
+    "bars_5m": 17401,
+    "checks": 66409,
+    "veto_checks": 375
+   },
+   "setup_hits": {
+    "BREAKOUT_RETEST": 55,
+    "TREND_PULLBACK": 125,
+    "BREAKOUT": 23,
+    "LIQUIDITY_SWEEP": 14
+   },
+   "exit_reasons_count": {
+    "TIMEOUT": 215,
+    "SL": 2
+   },
+   "by_setup": {
+    "BREAKOUT_RETEST": {
+     "trades": 55,
+     "wins": 10,
+     "gross_r": -5.2196,
+     "win_rate": 18.18,
+     "avg_r": -0.0949
+    },
+    "TREND_PULLBACK": {
+     "trades": 125,
+     "wins": 12,
+     "gross_r": -19.9851,
+     "win_rate": 9.6,
+     "avg_r": -0.1599
+    },
+    "BREAKOUT": {
+     "trades": 23,
+     "wins": 4,
+     "gross_r": -7.5159,
+     "win_rate": 17.39,
+     "avg_r": -0.3268
+    },
+    "LIQUIDITY_SWEEP": {
+     "trades": 14,
+     "wins": 2,
+     "gross_r": -1.6523,
+     "win_rate": 14.29,
+     "avg_r": -0.118
+    }
+   },
+   "by_exit_reason": {
+    "TIMEOUT": {
+     "trades": 215,
+     "wins": 28,
+     "gross_r": -32.0605,
+     "win_rate": 13.02,
+     "avg_r": -0.1491
+    },
+    "SL": {
+     "trades": 2,
+     "wins": 0,
+     "gross_r": -2.3124,
+     "win_rate": 0.0,
+     "avg_r": -1.1562
+    }
+   }
+  },
+  "entry_ts_resolved": 217
+ },
+ "kriptoyoi_markers": {
+  "buy_all": 5448,
+  "sell": 5927,
+  "close": 8407,
+  "buy_entry_flat": 5196,
+  "flat_entries_resolved": 5179
+ },
+ "parity": {
+  "intersection": 25,
+  "jaccard_pct": 0.464,
+  "coverage_app_pct": 11.521,
+  "coverage_kriptoyoi_pct": 0.481,
+  "app_quality_at_intersection": {
+   "n": 25,
+   "wins": 0,
+   "losses": 25,
+   "win_rate_pct": 0.0,
+   "avg_r": -0.2008,
+   "exits": {
+    "TIMEOUT": 25
+   }
+  },
+  "kriptoyoi_quality_at_intersection": {
+   "n": 25,
+   "wins": 0,
+   "losses": 25,
+   "win_rate_pct": 0.0,
+   "avg_r": -0.2006,
+   "exits": {
+    "TIMEOUT": 25
+   }
+  }
+ },
+ "kriptoyoi_economics_fee_truth": {
+  "n": 5179,
+  "wins": 475,
+  "losses": 4704,
+  "win_rate_pct": 9.17,
+  "avg_r": -0.1606,
+  "exits": {
+   "TIMEOUT": 5160,
+   "SL": 19
+  }
+ }
+}

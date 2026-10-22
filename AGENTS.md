@@ -345,6 +345,13 @@ mengunci 53 trade (+0,3208R) + 28 BE, tetapi avg R hanya **−0,1522 (−0,1569 
 **+0,0047R, di dalam noise**. Kesimpulan: mode exit pada unit risiko 5,81% tidak menciptakan
 edge; ambang impas masih WR ~50% vs hit rate ~15%. Penjaga parity kini **22 test**.
 
+Eksperimen paritas entri: `exp_entry_parity_kriptoyoi_ADA-DOGE-XRP.md` (2026-10-22) — app vs
+spek kriptoyoi frontend (`app.js` `generateScalperSignals`, port di `tools/entry_parity_kriptoyoi.py`)
+pada data + fee truth identik. **Entri BUY tidak sama**: kriptoyoi menandai 15.269 entri vs 620
+(≈24,6×), irisan hanya 77 (12,4% entri app, Jaccard ≈0,5%), dan entri kriptoyoi terukur lebih
+buruk (WR 10,33%, avg R −0,1627). Lapisan A kriptoyoi **tidak di-port**; jangan mengutip angka
+kedua sumber sebagai satu kebenaran.
+
 **Spec v2 dihentikan dan artefaknya dihapus (2026-10-21).** Dokumen spec, dua laporan hasil,
 tool, dataset, dan hasil JSON sudah dihapus dari pohon kerja. Jangan membuat ulang berkas atau
 riset v2; ringkasan alasan ada di `workplan2.md` §64.
