@@ -56,6 +56,9 @@ class ScalpingMtfEvaluatorAuditTest {
 
     private val h1 = series(60, 900.0, 0.9, 12.0, 0.5, 3_600_000L)
     private val m15 = series(60, 950.0, 0.6, 8.0, 0.7, 900_000L)
+    // P0 — pipeline scalping sekarang memakai 4 TF. M5 harus ada, kalau tidak gerbang MTF
+    // fail-closed dan test checkpoint lain kehilangan makna.
+    private val m5 = series(60, 970.0, 0.5, 6.0, 0.6, 300_000L)
     private val flatH1 = flatCandles(20, 1000.0)
     private val flatM15 = flatCandles(20, 1000.0)
     private val bullishBids = listOf(OrderBookItem(price = 1000.0, amount = 30.0, total = 30.0 * 1000.0, isBid = true))
@@ -90,7 +93,7 @@ class ScalpingMtfEvaluatorAuditTest {
             price = price,
             h1Candles = h1,
             m15Candles = m15,
-            m1Candles = bullishM1Candles(),
+            m1Candles = bullishM1Candles(), m5Candles = m5,
             bids = bullishBids,
             asks = bullishAsks,
             symbol = "BTCIDR"
@@ -117,7 +120,7 @@ class ScalpingMtfEvaluatorAuditTest {
             price = price,
             h1Candles = h1,
             m15Candles = m15,
-            m1Candles = bullishM1Candles(),
+            m1Candles = bullishM1Candles(), m5Candles = m5,
             bids = emptyList(),
             asks = emptyList(),
             symbol = "BTCIDR"
@@ -140,11 +143,11 @@ class ScalpingMtfEvaluatorAuditTest {
         val price = bullishM1Candles().last().close
 
         val fresh = ScalpingMtfEvaluator.evaluate(
-            price = price, h1Candles = h1, m15Candles = m15, m1Candles = bullishM1Candles(),
+            price = price, h1Candles = h1, m15Candles = m15, m1Candles = bullishM1Candles(), m5Candles = m5,
             bids = bullishBids, asks = bullishAsks, symbol = "BTCIDR", orderBookAgeMs = 0L
         )
         val stale = ScalpingMtfEvaluator.evaluate(
-            price = price, h1Candles = h1, m15Candles = m15, m1Candles = bullishM1Candles(),
+            price = price, h1Candles = h1, m15Candles = m15, m1Candles = bullishM1Candles(), m5Candles = m5,
             bids = bullishBids, asks = bullishAsks, symbol = "BTCIDR", orderBookAgeMs = 40_000L
         )
 
@@ -168,12 +171,12 @@ class ScalpingMtfEvaluatorAuditTest {
 
         // T0: harga breakout, orderbook BELUM tersedia sama sekali
         val t0 = ScalpingMtfEvaluator.evaluate(
-            price = price, h1Candles = h1, m15Candles = m15, m1Candles = bullishM1Candles(),
+            price = price, h1Candles = h1, m15Candles = m15, m1Candles = bullishM1Candles(), m5Candles = m5,
             bids = emptyList(), asks = emptyList(), symbol = "BTCIDR"
         )
         // T1: 1 detik kemudian, orderbook sudah tersedia dan bullish
         val t1 = ScalpingMtfEvaluator.evaluate(
-            price = price, h1Candles = h1, m15Candles = m15, m1Candles = bullishM1Candles(),
+            price = price, h1Candles = h1, m15Candles = m15, m1Candles = bullishM1Candles(), m5Candles = m5,
             bids = bullishBids, asks = bullishAsks, symbol = "BTCIDR", orderBookAgeMs = 1000L
         )
 
@@ -192,7 +195,7 @@ class ScalpingMtfEvaluatorAuditTest {
     fun `P1_4 - tanpa struktur M15 dan setup, arah WAIT dengan alasan STEP3_NO_SETUP`() {
         val price = bullishM1Candles().last().close
         val result = ScalpingMtfEvaluator.evaluate(
-            price = price, h1Candles = flatH1, m15Candles = flatM15, m1Candles = bullishM1Candles(),
+            price = price, h1Candles = flatH1, m15Candles = flatM15, m1Candles = bullishM1Candles(), m5Candles = m5,
             bids = bullishBids, asks = bullishAsks, symbol = "BTCIDR"
         )
 
@@ -208,7 +211,7 @@ class ScalpingMtfEvaluatorAuditTest {
     fun `P1_4 - audit dan scalping signal membawa skor, setup, dan arah LONG`() {
         val price = bullishM1Candles().last().close
         val result = ScalpingMtfEvaluator.evaluate(
-            price = price, h1Candles = h1, m15Candles = m15, m1Candles = bullishM1Candles(),
+            price = price, h1Candles = h1, m15Candles = m15, m1Candles = bullishM1Candles(), m5Candles = m5,
             bids = bullishBids, asks = bullishAsks, symbol = "BTCIDR"
         )
 
@@ -229,7 +232,7 @@ class ScalpingMtfEvaluatorAuditTest {
     fun `P1_4 - SL di bawah harga, TP1 dan TP2 di atas harga, Net RR minimal 1_15`() {
         val price = bullishM1Candles().last().close
         val r = ScalpingMtfEvaluator.evaluate(
-            price = price, h1Candles = h1, m15Candles = m15, m1Candles = bullishM1Candles(),
+            price = price, h1Candles = h1, m15Candles = m15, m1Candles = bullishM1Candles(), m5Candles = m5,
             bids = bullishBids, asks = bullishAsks, symbol = "BTCIDR"
         )!!
 
@@ -243,11 +246,11 @@ class ScalpingMtfEvaluatorAuditTest {
     fun `P1_4 - fee Indodax lebih mahal menggeser TP2 lebih jauh dibanding Tokocrypto`() {
         val price = bullishM1Candles().last().close
         val toko = ScalpingMtfEvaluator.evaluate(
-            price = price, h1Candles = h1, m15Candles = m15, m1Candles = bullishM1Candles(),
+            price = price, h1Candles = h1, m15Candles = m15, m1Candles = bullishM1Candles(), m5Candles = m5,
             bids = bullishBids, asks = bullishAsks, fees = TradingFeeConfig(0.10, 0.10, 0.10, 0.10)
         )!!
         val indodax = ScalpingMtfEvaluator.evaluate(
-            price = price, h1Candles = h1, m15Candles = m15, m1Candles = bullishM1Candles(),
+            price = price, h1Candles = h1, m15Candles = m15, m1Candles = bullishM1Candles(), m5Candles = m5,
             bids = bullishBids, asks = bullishAsks, fees = TradingFeeConfig(0.11, 0.21, 0.32, 0.42)
         )!!
 

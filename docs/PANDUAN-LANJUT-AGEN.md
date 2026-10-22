@@ -2,22 +2,22 @@
 
 > **Baca ini dulu.** Dokumen ini adalah titik masuk untuk agen/engineer berikutnya: status terkini,
 > apa yang sudah selesai, apa berikutnya, dan **perangkap yang sudah pernah ditemukan** supaya tidak
-> diulang. Terakhir diperbarui: **2026-10-21** (patch di-rebase ke `main`; Spec v2 **dan** v3
-> dihentikan; fokus engine kriptoyoi yang sudah ada + slider).
+> diulang. Terakhir diperbarui: **2026-10-22** (P0 KriptoYoi disinkronkan; PR #63 sudah masuk
+> `origin/main`; prioritas berikutnya exit strategi).
 >
 > ⛔ **Spesifikasi baru v2/v3 dihentikan (2026-10-21).** Spec v2 dan v3 sudah diukur dan keduanya
 > **tidak menghasilkan edge**; owner menghentikan seluruh line riset ini karena hanya memperpanjang
 > research. **Seluruh artefak v2 sudah dihapus dari pohon kerja 2026-10-21** — dokumen spec, dua
-> laporan hasil, tool, dataset, dan hasil JSON/CSV; penghapusan sudah di-commit dan di-push.
-> Commit v3
-> (`ada71dc`, `796a9d1`) sudah dibuang dari `patch`, yang sekarang = `main` + 13 commit konten +
-> commit dokumentasi 2026-10-21 (batch 6o/6p). Arsip lengkap v3 ada di branch
-> `backup/patch-v3-2026-10-21` (`796a9d1`).
+> laporan hasil, tool, dataset, dan hasil JSON/CSV; penghapusan sudah masuk `origin/main` lewat
+> **PR #63** (`origin/main` = `5d8f7bc`). Commit v3 (`ada71dc`, `796a9d1`) sudah dibuang dari
+> `patch`; arsip lengkap v3 ada di branch `backup/patch-v3-2026-10-21` (`796a9d1`).
 >
 > 🎯 **Arah aktif:** maksimalkan **engine scalping yang sudah ada** (port kriptoyoi `p0_engine` +
-> slider), bukan membangun spec/engine baru. Status dari owner: implementasi slider entry sudah
-> ada dan terbukti memaksimalkan entry; **exit strategi belum**. Jangan mengubah kode aplikasi
-> dulu; artefak v2 sudah dihapus.
+> slider), bukan membangun spec/engine baru. Status dari owner: slider entry sudah ada dan
+> terbukti memaksimalkan entry; **exit strategi belum**.
+> **P0 (TTL, MTF 4 TF, veto BTC, regime OR) sudah disinkronkan 2026-10-22**, tetapi hasil ukurnya
+> masih negatif: 620 trade, avg R **−0,1569**, 616 TIMEOUT, 0 TP. Jangan menambah gate entry baru
+> tanpa instruksi; **prioritas berikutnya exit strategi**.
 >
 > 🔴 **Untuk "apa lagi yang tersisa" → `docs/bugs/`, bukan dokumen ini.** Status temuan audit
 > (notifikasi `N*`, jurnal/P&L `J*`, paper trading `P*`, koneksi `K*`) sudah diverifikasi ke kode dan
@@ -44,6 +44,9 @@
 > `exp_scalping_expectancy_parity_ADA-DOGE-XRP.md` — pengulangan dengan exit app (time-stop
 > 90 bar): win rate **14,88%**, avg R **−0,4898**, 963/1.149 trade TIMEOUT. Scalping di
 > Tokocrypto **tidak layak untuk engine saat ini**.
+> `exp_p0_gatekeeper_ADA-DOGE-XRP.md` — perbandingan baseline vs P0: 996 trade / WR 12,85% /
+> avg R −0,1642 vs **620 trade / 14,84% / −0,1569**, dengan **616 TIMEOUT dan 0 TP1/TP2**.
+> Gate bekerja, tetapi **edge belum ada**; WR 14,84% P0 **bukan** pengulangan 14,88% parity.
 >
 > 🗄️ **Spec v2 dihentikan dan seluruh artefaknya sudah dihapus (2026-10-21).** Yang dihapus:
 > dokumen spec, dua laporan hasil (`exp_mfe_m15_41pair.md`, `exp_spot_backtest_41pair.md`),
@@ -70,10 +73,10 @@
 | | |
 |---|---|
 | Branch kerja | **`patch`** (owner me-review di sini dulu; `main` hanya menerima merge) |
-| HEAD `patch` | Ukur: `git rev-parse --short origin/patch`. `40257e4` = commit konten terakhir (13 commit) + commit dokumentasi 2026-10-21 |
-| HEAD `main` | `578d0de` (merge rilis 3.9.2); **ancestor** dari `patch` |
+| HEAD `patch` | **commit P0 di atas `2dd69ad`**. Ukur: `git rev-parse --short HEAD` dan `git log -1` |
+| HEAD `origin/main` | `5d8f7bc` (merge **PR #63** dari `patch`); sudah memuat `patch` sampai `2dd69ad` |
 | Titik masuk kode | package `agu.analys`, modul tunggal `:app` |
-| Unit test | **Belum diukur ulang setelah rebase 2026-10-21.** Angka terakhir: **773 uji · 772 lulus · 0 gagal · 1 dilewati** (101 kelas), 2026-10-20. Ukur ulang sebelum memakai angka ini. |
+| Unit test | **797 uji · 796 lulus · 0 gagal · 1 dilewati** (104 kelas), diukur 2026-10-22 setelah P0. Ukur ulang sebelum memakai angka ini. |
 | APK debug | 26.821.815 byte (26,8 MB desimal / 25,6 MiB) — terakhir diukur 2026-10-20 |
 | Kesiapan uang riil | **BELUM** — lihat §5 |
 
@@ -117,6 +120,7 @@ git stash pop                 # kembalikan pekerjaan
 | §11 | **UI scalping baru** (radar vs setup tidak sinkron) | `ScalpReadiness.kt`, `ScalpDeskCard.kt`, `PaperTradeDeskCard.kt` | `ScalpReadinessTest.kt` |
 | §12 | **Rehidrasi state machine exit paper** setelah restart | `PaperRehydrate.kt`, `SpotPositionStore.kt` | `PaperRehydrateTest.kt` |
 | §13 | **Akar `EARLY_ENTRY`** — stage tinggi wajib punya pola | `ScalpingMtfEvaluator.kt`, `SignalLifecycleManager.kt` | `workplan2.md` §13 |
+| **P0** | **Sinkronisasi P0 KriptoYoi** — TTL 5 candle M1 (terminal), gate MTF 4 TF fail-closed, veto BTC (candle tutup), regime OR; replay memuat M5 + BTC | `SignalTtl.kt`, `MtfAlignmentPolicy.kt`, `BtcPulseAnalyzer.kt`, `MarketRegimeEngine.kt`, `ScalpingMtfEvaluator.kt`, `tools/scalp_replay.py` | `workplan2.md` §65, `docs/exp/exp_p0_gatekeeper_ADA-DOGE-XRP.md`; **797 test / 18 parity**. Hasil: **edge masih negatif** (620 trade, avg R −0,1569) |
 | §16 | **Integritas log audit P0–P2** — basis volume RVOL, basis bar indikator, `signalTime`, `sellReason`, trailing nyata, Peak/Drawdown dari candle, label & format, flag `isSample` | `IndicatorMath.kt`, `ScalpingMtfEvaluator.kt`, `TradeHistoryRecorder.kt`, `TradeSignalSnapshot.kt`, `TradeLogExporter.kt`, `AppDatabase.kt` (v9) | `docs/LAPORAN-verifikasi-ui-vs-candle-2026-10-14.md`, `docs/LAPORAN-eksekusi-p0p2-2026-10-14.md`, `IndicatorMathScalpingExtTest.kt` |
 | §17 | **Perbaikan strategi S1–S9** — RVOL wajib breakout, lantai profit, SL keras configurable, konstanta ATR dipakai, basis PnL seragam, label volume, exit engine untuk beli manual, BE/trail proporsional ATR, gerbang extended-move (default nonaktif) | `ScalpSetupDetector.kt`, `ScalpExitConfig.kt`, `PaperExitResolver.kt`, `ScalpingRiskEngine.kt`, `ScalpingRuntimeConfig.kt`, `MarketRegimeEngine.kt`, `SimulationTradeStore.kt`, `TradeLogExporter.kt`, `PaperAutoTradeCoordinator.kt`, `tools/scalp_replay.py` | `docs/LAPORAN-eksekusi-s1s9-2026-10-14.md`, `ScalpStrategyFixTest.kt`, `SimulationSlippageParityTest.kt` |
 | P4.1 | **Mode walk-forward** di `tools/split_validate.py` — jendela bergulir + **3 bug diperbaiki** (kunci agregasi salah → 9 jendela palsu; penulis `.md` crash `StopIteration`; pair lebih pendek dari satu jendela → `IndexError`) | `tools/split_validate.py`, `tools/fetch_tokocrypto_klines.py` | `docs/LAPORAN-p41-walk-forward-2026-10-14.md`, `data/hasil/u7_walk_forward_v4.{json,md}`, `data/hasil/u8_walk_forward_40pair.{json,md}` |
@@ -125,14 +129,12 @@ git stash pop                 # kembalikan pekerjaan
 | ~~§14~~ | ~~Kesiapan multi-horizon (scalp/intraday/swing) + papan UI~~ | — | ⛔ **DIBATALKAN** — lihat §3b |
 | ~~§15~~ | ~~SSOT: horizon vs engine aktif~~ | — | ⛔ **DIBATALKAN** — lihat §3b |
 
-**Status branch (2026-10-21):** `main` = `578d0de` (merge rilis 3.9.2, batch 6j–6n).
-`patch` = **main + 13 commit konten + commit dokumentasi 2026-10-21** (batch 6o/6p);
-`40257e4` = commit konten terakhir. `main` adalah **ancestor** `patch`, jadi
-`git diff HEAD origin/main` **tidak kosong** — itu isi 13 commit konten + dokumen tadi. Riset
-v2/v3 sudah dihentikan; commit v3 dibuang dari `patch` dan arsipnya di
-`backup/patch-v3-2026-10-21` (`796a9d1`). **Penghapusan artefak v2 dan perubahan dokumen sudah
-di-commit dan di-push ke `origin/patch`.** Jangan membaca `main` untuk pekerjaan terbaru.
-§14/§15 tetap **dihapus dari kode** (2026-10-13).
+**Status branch (2026-10-22):** `origin/main` = **`5d8f7bc`** (merge **PR #63**), sudah memuat
+`patch` sampai **`2dd69ad`**. Di atasnya, `patch` sekarang memiliki **commit P0** (cari dengan
+`git log -1`); `origin/patch` masih `2dd69ad` sampai commit itu di-push. `main` **lokal** di
+sandbox bisa tertinggal (per snapshot: 17 commit) — jangan membacanya untuk pekerjaan terbaru. Riset v2/v3 sudah dihentikan; commit v3
+dibuang dari `patch` dan arsipnya di `backup/patch-v3-2026-10-21` (`796a9d1`). §14/§15 tetap
+**dihapus dari kode** (2026-10-13).
 
 ---
 
@@ -246,14 +248,19 @@ artefak v2 tidak boleh dibuat ulang. Jangan memakai angka ini untuk memulai engi
 Owner memutuskan arah pada 2026-10-21: **engine scalping yang sudah ada** (port kriptoyoi
 `p0_engine` / spec) dimaksimalkan lewat **slider** yang sudah tersedia. Status dari owner:
 implementasi slider entry sudah ada dan terbukti memaksimalkan entry; **exit strategi belum**.
-Jangan mengklaim exit sudah selesai, dan **jangan mengubah kode aplikasi dulu**; perubahan kode
-aplikasi lain menunggu instruksi owner.
 
-Patokan aritmetis lama tetap berguna sebagai alat ukur, bukan alasan membangun spec baru: lantai
+**P0 sudah disinkronkan 2026-10-22** (TTL 5 candle, gate MTF 4 TF, veto BTC, regime OR) dan
+diukur pada ADA/DOGE/XRP: baseline 996 trade / WR 12,85% / avg R −0,1642 vs P0 **620 trade /
+14,84% / −0,1569**. Gate bekerja dan frekuensi turun 37,8%, tetapi **edge masih negatif**:
+**616 dari 620 trade TIMEOUT, 4 SL, 0 TP1/TP2**. Perbaikan +0,0073R berada di dalam noise.
+Jangan menambah gate entry baru tanpa instruksi owner; **prioritas berikutnya exit strategi**.
+Setiap perubahan exit wajib diukur dengan tabel yang sama (termasuk TIMEOUT dan `UNRESOLVED`).
+
+Patokan aritmetis lama tetap berguna sebagai anggaran, bukan alasan membangun spec baru: lantai
 friksi memaksa SL ≥ 5,81%, dan trade tanpa edge hanya menanggung biaya lalu ditutup
-→ `−0,9688% / 5,81% = −0,167 R`. Itu yang terukur pada eksperimen lama (avg R ≈ −0,17, 0/40
-pair positif). **Selama entry belum melewati +0,167R kotor, menyetel exit saja tidak akan
-mengubah apa pun.** Kerjakan hanya atas instruksi owner.
+→ `−0,9688% / 5,81% = −0,167 R`. Namun pada replay P0, **time-stop 90 menit** menutup 99,4%
+trade sebelum TP1 (+7,99%) tersentuh; jadi bottleneck yang terukur saat ini adalah **exit**,
+bukan kurangnya gate entry. Jangan mengklaim exit sudah selesai.
 
 ### P4.1 — Walk-forward antar-bulan ✅ tooling selesai, hasil NEGATIF (2026-10-14)
 
@@ -326,10 +333,12 @@ Perhatikan: Indodax **hanya IDR**; fee 0,79% (lihat `FEE_TRUTH.md`).
 | Sinyal yang dulu dibuang akuntansi lama | **±83%** |
 | Walk-forward 40 pair (4 jendela) | **0/4 lolos**, test avg R **−0,1614** |
 | Walk-forward 8 pair gate-rejected (v4, 3 jendela) | **0/3 lolos**, test avg R **−0,1790** |
+| P0 gatekeeper (ADA/DOGE/XRP, 60 hari, 2026-10-22) | avg R **−0,1569**, **0/3 pair positif**, **616/620 TIMEOUT**, 0 TP |
 
 Artinya bukan lagi "tandanya benar, besarnya belum cukup" — melainkan **tidak ada edge kotor
 yang tersisa setelah friksi**. Rata-rata trade bergerak persis sebesar biaya round-trip
-(−0,9688% / 5,81% ≈ −0,167 R).
+(−0,9688% / 5,81% ≈ −0,167 R). P0 menurunkan frekuensi dan sedikit menaikkan win rate, tetapi
+**tidak mengubah kesimpulan**: tidak ada TP yang tercapai dan avg R tetap negatif.
 
 Aturan yang sudah berlaku dan **jangan dilonggarkan**:
 
@@ -431,6 +440,18 @@ Aturan yang sudah berlaku dan **jangan dilonggarkan**:
     muat, **lewati** dengan alasan yang bisa dibaca — jangan dipotong diam-diam. Bila kurs USDT/IDR
     belum tersedia, lewati sinyalnya — jangan menebak ukuran. Bukti:
     `docs/LAPORAN-bug-auto-buy-nominal-idr-2026-10-15.md`.
+25. **TTL P0 tidak diuji oleh replay.** Replay masuk posisi pada bar sinyal; TTL mengatur berapa
+    lama setup menunggu di app. Jangan mengutip angka replay sebagai bukti manfaat TTL. Uji TTL
+    lewat paper/observasi app.
+26. **`gate_blocks` menghitung bar, bukan trade.** Satu posisi replay bertahan sampai exit, jadi
+    ratusan bar yang ditolak gate bisa berada dalam satu jendela posisi. Jangan mengutip
+    “3.525 trade diselamatkan gate”.
+27. **Gate MTF fail-closed.** `knownCount < 4` berarti **tolak**, bukan “anggap netral”. Jangan
+    melonggarkan ini agar sinyal bertambah. `btcPriceUsdt` hanya boleh diisi harga BTC berkuotasi
+    USDT; BTCIDR tidak boleh masuk ke field itu.
+28. **Win rate antar-geometri exit tidak bisa dibandingkan.** P0 (WR 14,84%, avg R −0,1569,
+    616 TIMEOUT) dan parity lama (WR 14,88%, avg R −0,4898, 963 TIMEOUT, 70 TP2) memakai
+    geometri berbeda. Selalu sebut jumlah TIMEOUT/TP sebelum membandingkan.
 
 ---
 
@@ -441,7 +462,8 @@ Aturan yang sudah berlaku dan **jangan dilonggarkan**:
 - [ ] Kontrol negatif dijalankan untuk setiap perbaikan bug.
 - [ ] `workplan2.md` diperbarui (seksi baru bila perlu).
 - [ ] `AGENTS.md` diperbarui bila ada aturan baru.
-- [ ] `docs/LAPORAN-<topik>-<tanggal>.md` ditulis (dalam Bahasa Indonesia).
+- [ ] Jejak pekerjaan ditulis di tempat yang benar: `workplan2.md` + `docs/exp/<eksperimen>.md`
+      untuk eksperimen; **jangan** membuat laporan per batch baru.
 - [ ] Tidak ada token/keystore/`.env` yang ikut ter-commit.
 - [ ] Push ke **`patch`**, bukan `main`.
 

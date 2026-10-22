@@ -15,13 +15,36 @@ import kotlin.math.abs
  */
 object MarketRegimeEngine {
 
+    /**
+     * Ambang klasifikasi regime. Default = [ScalpingConfig]; pipeline scalping mengisinya dari
+     * [agu.analys.engine.scalping.ScalpingRuntimeConfig] agar replay dan app memakai angka yang sama.
+     */
+    data class Thresholds(
+        val adxTrending: Double = ScalpingConfig.ADX_TRENDING,
+        val adxWeak: Double = ScalpingConfig.ADX_WEAK,
+        val chopRanging: Double = ScalpingConfig.CHOP_RANGING,
+        val chopTrendMax: Double = ScalpingConfig.CHOP_TREND_MAX,
+        val atrPctHigh: Double = ScalpingConfig.ATR_PCT_HIGH,
+        val atrPctLow: Double = ScalpingConfig.ATR_PCT_LOW
+    ) {
+        companion object {
+            fun from(config: agu.analys.engine.scalping.ScalpingRuntimeConfig): Thresholds = Thresholds(
+                adxTrending = config.regimeAdxTrending,
+                adxWeak = config.regimeAdxWeak,
+                chopRanging = config.regimeChopRanging,
+                chopTrendMax = config.regimeChopTrendMax
+            )
+        }
+    }
+
     data class Input(
         val candles: List<CandleBar>,
         val price: Double = 0.0,
         val structureBias: StructureBias = StructureBias.NEUTRAL,
         val rvol: Double = 1.0,
         val resistanceBroken: Boolean = false,
-        val supportBroken: Boolean = false
+        val supportBroken: Boolean = false,
+        val thresholds: Thresholds = Thresholds()
     )
 
     fun detect(input: Input): RegimeSnapshot {
@@ -58,7 +81,8 @@ object MarketRegimeEngine {
             structureBias = input.structureBias,
             rvol = input.rvol,
             resistanceBroken = input.resistanceBroken,
-            supportBroken = input.supportBroken
+            supportBroken = input.supportBroken,
+            thresholds = input.thresholds
         )
 
         val explanation = buildExplanation(regime, adx, chop, atrPct, emaAlignment)
@@ -80,7 +104,8 @@ object MarketRegimeEngine {
         structureBias: StructureBias = StructureBias.NEUTRAL,
         rvol: Double = 1.0,
         resistanceBroken: Boolean = false,
-        supportBroken: Boolean = false
+        supportBroken: Boolean = false,
+        thresholds: Thresholds = Thresholds()
     ): RegimeSnapshot = detect(
         Input(
             candles = candles,
@@ -88,7 +113,8 @@ object MarketRegimeEngine {
             structureBias = structureBias,
             rvol = rvol,
             resistanceBroken = resistanceBroken,
-            supportBroken = supportBroken
+            supportBroken = supportBroken,
+            thresholds = thresholds
         )
     )
 
@@ -100,27 +126,31 @@ object MarketRegimeEngine {
         structureBias: StructureBias,
         rvol: Double,
         resistanceBroken: Boolean,
-        supportBroken: Boolean
+        supportBroken: Boolean,
+        thresholds: Thresholds
     ): MarketRegime {
         // Volatility extremes first.
         // S4 — ambang ini dulu literal (3.5 / 0.8) yang kebetulan sama dengan
         // ScalpingConfig.ATR_PCT_HIGH / ATR_PCT_LOW. Memakai konstanta membuat satu sumber
         // kebenaran: mengubah band volatilitas tidak lagi menuntut sunting dua tempat.
-        if (atrPct >= ScalpingConfig.ATR_PCT_HIGH) return MarketRegime.HIGH_VOLATILITY
-        if (atrPct > 0.0 && atrPct < ScalpingConfig.ATR_PCT_LOW && adx < 18.0) return MarketRegime.LOW_VOLATILITY
+        if (atrPct >= thresholds.atrPctHigh) return MarketRegime.HIGH_VOLATILITY
+        // p0: LOW_VOL = ATR rendah DAN CHOP > 55. Versi lama memakai ADX < 18, yang membuat
+        // pasar sepi tetapi sedang tren pendek tetap dilabeli LOW_VOLATILITY.
+        if (atrPct > 0.0 && atrPct < thresholds.atrPctLow && chop > thresholds.chopTrendMax) {
+            return MarketRegime.LOW_VOLATILITY
+        }
 
-        // Breakout: level broken + participation
+        // Breakout: level broken + participation.
+        // Ini ekstensi app yang dipertahankan; p0 belum mengembalikan BREAKOUT dari
+        // `analyze_market_regime`, tetapi spec menyebutnya sebagai regime tersendiri.
         if ((resistanceBroken || supportBroken) && rvol >= 1.5) {
             return MarketRegime.BREAKOUT
         }
 
-        // Ranging / choppy
-        if (chop >= 61.8 && adx < 20.0) {
-            return MarketRegime.RANGING
-        }
-
-        // Trending
-        if (adx >= 25.0) {
+        // p0 — trending diperiksa LEBIH DULU dan mensyaratkan CHOP di bawah batas atas.
+        // p0: is_trending = adx >= 25 AND chop < 55.
+        val isTrending = adx >= thresholds.adxTrending && chop < thresholds.chopTrendMax
+        if (isTrending) {
             when {
                 structureBias == StructureBias.BULLISH && emaAlignment == "bullish" ->
                     return MarketRegime.TRENDING_UP
@@ -133,8 +163,14 @@ object MarketRegimeEngine {
             }
         }
 
-        // Mild trend without strong ADX
-        if (adx >= 20.0 && chop < 50.0) {
+        // p0 — choppy memakai OR, bukan AND: CHOP tinggi ATAU ADX lemah.
+        val isChoppy = chop >= thresholds.chopRanging || adx < thresholds.adxWeak
+        if (isChoppy) {
+            return MarketRegime.RANGING
+        }
+
+        // Mild trend without strong ADX — hanya untuk fase transisi.
+        if (adx >= thresholds.adxWeak && chop < 50.0) {
             if (emaAlignment == "bullish" || structureBias == StructureBias.BULLISH) {
                 return MarketRegime.TRENDING_UP
             }

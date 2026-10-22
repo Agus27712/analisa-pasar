@@ -26,6 +26,32 @@ def flat_candles(n, price=100.0):
     return [candle(i * 60_000, price) for i in range(n)]
 
 
+def trend_candles(n, start=100.0, step=0.5, t_step=60_000):
+    """Candle monoton; dipakai untuk menguji leg MTF dan pulse BTC."""
+    rows = []
+    price = start
+    for i in range(n):
+        open_price = price
+        close = price + step
+        rows.append(candle(
+            i * t_step,
+            open_price,
+            high=max(open_price, close) + 0.1,
+            low=min(open_price, close) - 0.1,
+            close=close,
+        ))
+        price = close
+    return rows
+
+
+def dump_btc_candles():
+    rows = trend_candles(37, start=100.0, step=0.3, t_step=300_000)
+    rows.append(candle(37 * 300_000, 111.6, high=111.8, low=111.4, close=111.8))
+    rows.append(candle(38 * 300_000, 112.0, high=112.1, low=110.9, close=111.0))
+    rows.append(candle(39 * 300_000, 111.0, high=111.1, low=103.9, close=104.0))
+    return rows
+
+
 def canonical_cfg():
     with open(ROOT / "data/config/scalp_config.json") as f:
         return replay.merge_defaults(json.load(f))
@@ -58,6 +84,18 @@ class ConfigParityTest(unittest.TestCase):
         self.assertEqual("classic", cfg["exit"]["mode"])
         self.assertEqual(90, cfg["exit"]["max_hold_bars_m1"])
         self.assertNotIn("order_type", cfg)
+        # P0 — angka gate harus datang dari config yang sama dengan ScalpingRuntimeConfig.
+        self.assertEqual(5, cfg["ttl_bars_m1"])
+        self.assertEqual(3, cfg["mtf_min_bullish"])
+        self.assertTrue(cfg["mtf_block_high_tf_bearish"])
+        self.assertTrue(cfg["btc_veto_enabled"])
+        self.assertEqual(-0.6, cfg["btc_return_veto_pct"])
+        self.assertEqual(2.5, cfg["btc_atr_ratio_veto"])
+        self.assertEqual(20, cfg["btc_ema_period"])
+        self.assertEqual(25.0, cfg["regime_adx_trending"])
+        self.assertEqual(20.0, cfg["regime_adx_weak"])
+        self.assertEqual(61.8, cfg["regime_chop_ranging"])
+        self.assertEqual(55.0, cfg["regime_chop_trend_max"])
 
     def test_idr_pair_uses_idr_reference(self):
         cfg = canonical_cfg()
@@ -192,6 +230,75 @@ class ExitTest(unittest.TestCase):
             usdt_fee(), cfg, 120, atr_pct=1.0
         )
         self.assertEqual("TP2", result["exit_reason"])
+
+
+class P0GateTest(unittest.TestCase):
+    def test_mtf_gate_allows_three_of_four_when_high_tf_safe(self):
+        cfg = canonical_cfg()
+        h1 = trend_candles(60, 100.0, 0.5, 3_600_000)
+        m15 = trend_candles(60, 100.0, 0.4, 900_000)
+        m5 = trend_candles(60, 100.0, 0.2, 300_000)
+        m1 = flat_candles(60, 100.0)  # netral, bukan bearish
+        result = replay.evaluate_mtf_gate(h1, m15, m5, m1, cfg)
+        self.assertTrue(result["allow"], result["reason"])
+        self.assertEqual(4, result["known"])
+        self.assertGreaterEqual(result["bull"], 3)
+
+    def test_mtf_gate_blocks_bearish_high_timeframe(self):
+        cfg = canonical_cfg()
+        h1 = trend_candles(60, 120.0, -0.5, 3_600_000)
+        m15 = trend_candles(60, 120.0, -0.4, 900_000)
+        m5 = trend_candles(60, 120.0, -0.2, 300_000)
+        m1 = trend_candles(60, 120.0, -0.1, 60_000)
+        result = replay.evaluate_mtf_gate(h1, m15, m5, m1, cfg)
+        self.assertFalse(result["allow"])
+        self.assertTrue(result["high_bear"])
+        self.assertIn("H1/M15", result["reason"])
+
+    def test_mtf_gate_fails_closed_without_m5(self):
+        cfg = canonical_cfg()
+        h1 = trend_candles(60, 100.0, 0.5, 3_600_000)
+        m15 = trend_candles(60, 100.0, 0.4, 900_000)
+        m1 = trend_candles(60, 100.0, 0.2, 60_000)
+        result = replay.evaluate_mtf_gate(h1, m15, [], m1, cfg)
+        self.assertFalse(result["allow"])
+        self.assertEqual(3, result["known"])
+        self.assertIn("belum lengkap", result["reason"])
+
+    def test_mtf_gate_can_be_disabled_from_config(self):
+        cfg = canonical_cfg()
+        cfg["mtf_min_bullish"] = 0
+        down = trend_candles(60, 120.0, -0.5, 300_000)
+        result = replay.evaluate_mtf_gate(down, down, down, down, cfg)
+        self.assertTrue(result["allow"])
+
+    def test_btc_veto_fires_on_sharp_dump_below_ema(self):
+        cfg = canonical_cfg()
+        result = replay.evaluate_btc_veto(dump_btc_candles(), [], cfg)
+        self.assertTrue(result["veto"], result["reason"])
+        self.assertEqual("DUMP_RISK", result["status"])
+        self.assertLess(result["btc_price"], result["ema"])
+
+    def test_btc_veto_safe_uptrend(self):
+        cfg = canonical_cfg()
+        result = replay.evaluate_btc_veto(
+            trend_candles(40, 100.0, 0.5, 300_000), [], cfg
+        )
+        self.assertTrue(result["sufficient"])
+        self.assertFalse(result["veto"])
+
+    def test_btc_veto_without_data_does_not_invent_veto(self):
+        cfg = canonical_cfg()
+        result = replay.evaluate_btc_veto([], [], cfg)
+        self.assertFalse(result["sufficient"])
+        self.assertFalse(result["veto"])
+
+    def test_btc_veto_can_be_disabled_from_config(self):
+        cfg = canonical_cfg()
+        cfg["btc_veto_enabled"] = False
+        result = replay.evaluate_btc_veto(dump_btc_candles(), [], cfg)
+        self.assertFalse(result["veto"])
+        self.assertNotEqual("", result["reason"])
 
 
 class SummaryTest(unittest.TestCase):

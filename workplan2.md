@@ -4112,3 +4112,86 @@ dibangun.** Arah aktif adalah **engine scalping kriptoyoi yang sudah ada + slide
 perintah build) dan `docs/PANDUAN-LANJUT-AGEN.md` (header, §2, §4) sudah disesuaikan. Dua
 laporan hasil v2 dan laporan sinkronisasi v2 sudah dihapus, bukan diberi banner. Dokumen ini dan
 `AGENTS.md` adalah acuan status; §62/§63 bersifat historis.
+
+---
+
+## 65. P0 KriptoYoi disinkronkan: TTL, MTF 4 TF, veto BTC, regime OR (2026-10-22)
+
+**Keputusan.** P0 KriptoYoi **disinkronkan ke engine yang sudah ada**, bukan sebagai engine baru.
+Lingkupnya hanya empat hal: TTL 5 candle M1, gate MTF 4 TF, veto BTC, dan regime OR. Struktur
+setup, bobot skor, dan exit **tidak** diubah. Patokan implementasi adalah `p0_engine.py`; bila
+keputusan owner lebih ketat, keputusan owner yang dipakai.
+
+### 65.1 Yang berubah di kode
+
+| Area | Berkas | Aturan |
+|---|---|---|
+| TTL | `engine/scalping/SignalTtl.kt`, `SignalLifecycleManager.kt` | Umur dihitung dari jam dinding (`elapsed_sec // 60`), bukan jumlah tick. `EXPIRED` **terminal** untuk setup + arah yang sama; setup yang hilang boleh memulai episode baru. |
+| Gate MTF | `MtfAlignmentPolicy.kt`, `MtfConfluenceMatrix.kt`, `ScalpingMtfEvaluator.kt` | 4 TF: H1, M15, M5, M1. H1/M15 tidak boleh bearish; minimal `mtfMinBullish` (default 3) bullish; **fail-closed** bila `knownCount < 4`. Confidence non-ready di-cap 39 saat gate menolak. |
+| Veto BTC | `BtcPulseAnalyzer.kt`, `GlobalContextManager.kt` | Veto LONG altcoin bila close 5M < EMA20 dan return 5M terburuk < −0,6%, atau ATR ratio > 2,5× dengan ≥2/3 candle bearish. Hanya candle tutup. Pair BTC sendiri tidak diveto. |
+| Regime | `MarketRegimeEngine.kt` | Urutan p0: LOW_VOL (ATR rendah + CHOP tinggi), BREAKOUT, trending (`ADX ≥ 25 && CHOP < 55`), choppy OR (`CHOP ≥ 61,8 || ADX < 20`), mild trend. Semua ambang dari `ScalpingRuntimeConfig`. |
+| Wiring | `LearningTradingEngine.kt`, `CandidateScanWorker.kt`, `MtfCacheManager.kt` | M5 dimuat bersama H1/M15/M1; readiness foreground dan worker mensyaratkan 4 TF. Evaluator tidak dijalankan sebelum M5 siap. |
+| Config | `ScalpingConfig.kt`, `ScalpingRuntimeConfig.kt`, `data/config/scalp_config.json` | Seluruh angka P0 ada di config runtime dan mirror replay. Tidak ada angka gate baru yang ditulis sebagai literal di engine. |
+
+Perbaikan kecil yang ikut: `GlobalContextManager` tidak lagi menulis harga **BTCIDR** ke field
+`btcPriceUsdt`. Harga pulse hanya mengisi field itu bila sumbernya memang USDT; status veto tetap
+dihitung dari kuotasi bursa yang dipakai.
+
+### 65.2 Replay
+
+`tools/scalp_replay.py` sekarang:
+
+1. Mengagregasi M5 dari M1 (grid UTC) dan memakai gate MTF 4 TF yang sama.
+2. Membaca BTC 5M/1M dari `BTCUSDT_1m.csv` (atau `BTCIDR_1m.csv` untuk pair IDR), hanya candle
+   tutup. Tanpa berkas BTC, output menulis `btc_source.available=false` dan veto **tidak diukur**.
+3. Memakai regime OR dan seluruh ambang P0 dari config.
+4. Menulis `gate_blocks`, `btc`, `p0`, dan `btc_source` di JSON.
+
+`tools/test_scalp_replay_parity.py` diperluas menjadi **18 test** dan lulus, termasuk gate MTF,
+fail-closed tanpa M5, veto BTC, dan sakelar config.
+
+### 65.3 Hasil terukur (ADA, DOGE, XRP)
+
+Data 87.000 bar M1 per pair, 2026-08-12 s/d 2026-10-12, orderbook diasumsikan tersedia.
+Baseline dijalankan dari commit `2dd69ad` (kode + config sebelum P0).
+
+| Metrik | Baseline | P0 |
+|---|---:|---:|
+| Trade | 996 | 620 |
+| Win rate | 12,85% | 14,84% |
+| Avg R | −0,1642 | −0,1569 |
+| Exit TIMEOUT | 990 | 616 |
+| Exit SL | 6 | 4 |
+| Exit TP1/TP2 | 0 | 0 |
+
+**Tidak ada edge.** Avg R masih negatif, dan **616 dari 620 trade P0 keluar karena time-stop
+90 menit**. Tidak satu pun trade menyentuh TP1/TP2. Perbaikan +0,0073R berada di dalam noise
+(CI 95% baseline dan P0 saling tumpang tindih). MTF adalah gate yang dominan; veto BTC hanya
+aktif 0,57% pemeriksaan per menit dan praktis netral pada jendela ini.
+
+Ablasi ADA: `regime_only` 347 trade / −0,1622R; `mtf_only` 210 / −0,1560R; `btc_only` 346 /
+−0,1623R; `full` 210 / −0,1568R. Gate MTF memotong frekuensi dan sedikit memperbaiki rata-rata;
+BTC tidak memperbaiki apa pun pada sampel ini.
+
+### 65.4 Batasan yang tidak boleh diklaim
+
+- **TTL tidak diuji replay.** Replay masuk pada bar sinyal; TTL mengatur penantian setup di app.
+  Manfaat TTL harus dibuktikan lewat paper/observasi app, bukan dari tabel trade ini.
+- **M5 disintesis dari M1**, bukan data M5 bursa langsung.
+- **Win rate bukan hit rate TP.** 99,4% trade P0 berakhir TIMEOUT; menang berarti profit kecil
+  saat time-out. Jangan membandingkan langsung dengan laporan yang punya TP2 tercapai.
+- **Satu jendela data, tiga pair, fee USDT taker.** Pair IDR dan Indodax tidak diuji.
+- **Angka gate adalah bar, bukan trade.** 3.525 bar ditolak MTF bukan berarti 3.525 trade hilang.
+
+### 65.5 Keputusan lanjutan
+
+1. P0 dipertahankan karena aturannya benar dan gate bekerja sesuai spesifikasi.
+2. **Jangan promosikan ke uang riil.** Edge belum ada.
+3. Prioritas berikutnya **exit strategi**, bukan menambah gate entry. Seluruh exit saat ini
+   bergantung pada time-stop; TP1/TP2 tidak pernah tercapai dalam 90 menit.
+4. Setiap perubahan exit wajib diukur dengan tabel yang sama (termasuk TIMEOUT dan trade
+   `UNRESOLVED`), bukan hanya win rate.
+
+**Dokumen.** Rincian angka ada di `docs/exp/exp_p0_gatekeeper_ADA-DOGE-XRP.md`. `AGENTS.md` dan
+`docs/PANDUAN-LANJUT-AGEN.md` sudah diperbarui pada tanggal yang sama. Verifikasi: **797 unit
+test Kotlin (0 gagal, 1 dilewati)** dan **18 test parity replay**.

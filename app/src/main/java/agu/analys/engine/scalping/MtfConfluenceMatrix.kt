@@ -42,6 +42,9 @@ object MtfConfluenceMatrix {
         val majorityBias: TfBias
     ) {
         val totalSlots: Int get() = legs.size
+
+        fun biasOf(key: String): TfBias =
+            legs.firstOrNull { it.key.equals(key, ignoreCase = true) }?.bias ?: TfBias.UNKNOWN
     }
 
     data class CandleBundle(
@@ -70,7 +73,9 @@ object MtfConfluenceMatrix {
     }
 
     /**
-     * Overload praktis saat hanya H1 / M15 / M1 yang di-feed (pipeline scalping saat ini).
+     * Overload praktis untuk pipeline scalping: H1, M15, M5, M1.
+     * p0 memakai empat TF ini; memasukkan 1D/4H ke matriks scalping akan menambah derau
+     * yang tidak dipakai keputusan entry.
      */
     fun buildPartial(
         h1: List<CandleBar> = emptyList(),

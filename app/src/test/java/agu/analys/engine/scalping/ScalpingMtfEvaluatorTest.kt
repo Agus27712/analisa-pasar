@@ -109,7 +109,10 @@ class ScalpingMtfEvaluatorTest {
             m1Candles = m1,
             // Orderbook dianggap tersedia & memadai — inilah satu-satunya syarat yang dulu cukup
             // untuk memicu EARLY_ENTRY.
-            diagnosticIgnoreOrderBookWhenUnavailable = true
+            diagnosticIgnoreOrderBookWhenUnavailable = true,
+            // Test ini menguji invarian setup, bukan gerbang MTF/BTC. Matikan keduanya supaya
+            // pasar datar tidak ditolak lebih awal oleh alasan yang berbeda.
+            config = ScalpingRuntimeConfig(mtfMinBullish = 0, btcVetoEnabled = false)
         )
 
         assertNotNull("Evaluator harus mengembalikan hasil", result)

@@ -140,4 +140,47 @@ class MarketRegimeEngineTest {
         assertTrue(snap.atrPct >= 0.0)
         assertTrue(snap.explanation.isNotBlank())
     }
+
+    /**
+     * P0 — regime harus memakai ambang dari runtime config, bukan literal di engine.
+     * Dengan ADX trending 1000, data yang tadinya TRENDING_UP tidak boleh lagi disebut tren.
+     */
+    @Test
+    fun thresholdsFromRuntimeConfig_overrideTrendClassification() {
+        val candles = trendingUpCandles()
+        val normal = MarketRegimeEngine.detect(
+            candles = candles,
+            structureBias = StructureBias.BULLISH,
+            rvol = 1.2
+        )
+        assertEquals(MarketRegime.TRENDING_UP, normal.regime)
+
+        val strict = MarketRegimeEngine.detect(
+            candles = candles,
+            structureBias = StructureBias.BULLISH,
+            rvol = 1.2,
+            thresholds = MarketRegimeEngine.Thresholds(
+                adxTrending = 1_000.0,
+                adxWeak = 1_000.0,
+                chopRanging = 101.0,
+                chopTrendMax = 101.0
+            )
+        )
+        assertEquals("ADX 1000 tidak mungkin tercapai", MarketRegime.RANGING, strict.regime)
+    }
+
+    @Test
+    fun thresholdsFromScalpingConfig_mapsEveryField() {
+        val cfg = agu.analys.engine.scalping.ScalpingRuntimeConfig(
+            regimeAdxTrending = 30.0,
+            regimeAdxWeak = 22.0,
+            regimeChopRanging = 64.0,
+            regimeChopTrendMax = 50.0
+        )
+        val thresholds = MarketRegimeEngine.Thresholds.from(cfg)
+        assertEquals(30.0, thresholds.adxTrending, 0.0001)
+        assertEquals(22.0, thresholds.adxWeak, 0.0001)
+        assertEquals(64.0, thresholds.chopRanging, 0.0001)
+        assertEquals(50.0, thresholds.chopTrendMax, 0.0001)
+    }
 }

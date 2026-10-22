@@ -223,4 +223,100 @@ class SignalLifecycleManagerTest {
         assertEquals(LifecycleState.INVALIDATED, t2.state)
         assertFalse(t2.transition?.hasTriggeringTransition == true)
     }
+
+    /**
+     * P0 — TTL 5 candle M1. Sebelum perbaikan ini sinyal berumur 5 menit hanya berkedip
+     * `EXPIRED` satu tick lalu langsung naik lagi ke DETECTED pada tick yang sama.
+     */
+    @Test
+    fun testScalpingTtl_ExpiresAtConfiguredBarsAndBlocksSameSetup() {
+        SignalLifecycleManager.reset(symbol, StrategyMode.SCALPING)
+        val cfg = ScalpingRuntimeConfig(ttlBarsM1 = 5)
+        val t0 = 10_000_000L
+        val setup = AISignalState(
+            action = SignalAction.BUY,
+            confidence = 80,
+            entryPrice = 100.0,
+            stopLoss = 90.0,
+            targetPrice1 = 120.0,
+            scalpingStage = ScalpingStage.EARLY_ENTRY,
+            scalpingSetup = "TREND_PULLBACK",
+            scalpingDirection = "LONG"
+        )
+
+        val detected = SignalLifecycleManager.process(
+            symbol, 100.0, setup, StrategyMode.SCALPING, nowMs = t0, config = cfg
+        )
+        assertEquals(LifecycleState.DETECTED, detected.state)
+
+        // 4 menit: masih hidup.
+        val fourMinutes = SignalLifecycleManager.process(
+            symbol, 100.0, setup, StrategyMode.SCALPING,
+            nowMs = t0 + 4 * SignalTtl.M1_BAR_MS, config = cfg
+        )
+        assertEquals(LifecycleState.DETECTED, fourMinutes.state)
+
+        // 5 menit tepat: EXPIRED.
+        val expired = SignalLifecycleManager.process(
+            symbol, 100.0, setup, StrategyMode.SCALPING,
+            nowMs = t0 + 5 * SignalTtl.M1_BAR_MS, config = cfg
+        )
+        assertEquals(LifecycleState.EXPIRED, expired.state)
+
+        // Tick berikutnya dengan setup sama tidak boleh re-arm, walau stage naik ke STRONG_ENTRY.
+        val reArmAttempt = SignalLifecycleManager.process(
+            symbol, 100.0, setup.copy(scalpingStage = ScalpingStage.STRONG_ENTRY),
+            StrategyMode.SCALPING, nowMs = t0 + 5 * SignalTtl.M1_BAR_MS + 1, config = cfg
+        )
+        assertEquals("Setup sama setelah EXPIRED harus tetap EXPIRED", LifecycleState.EXPIRED, reArmAttempt.state)
+
+        // Pola berbeda = episode baru, boleh masuk.
+        val newSetup = setup.copy(scalpingStage = ScalpingStage.STRONG_ENTRY, scalpingSetup = "BREAKOUT")
+        val fresh = SignalLifecycleManager.process(
+            symbol, 100.0, newSetup, StrategyMode.SCALPING,
+            nowMs = t0 + 5 * SignalTtl.M1_BAR_MS + 2, config = cfg
+        )
+        assertEquals(LifecycleState.READY, fresh.state)
+    }
+
+    /**
+     * Setup yang sempat hilang (`NONE`) melepas kunci anti re-arm. Ini mencegah aturan
+     * terminal berubah menjadi blokir permanen untuk pola yang sama di jam berikutnya.
+     */
+    @Test
+    fun testScalpingTtl_KunciDilepasSaatSetupHilang() {
+        SignalLifecycleManager.reset(symbol, StrategyMode.SCALPING)
+        val cfg = ScalpingRuntimeConfig(ttlBarsM1 = 5)
+        val t0 = 20_000_000L
+        val setup = AISignalState(
+            action = SignalAction.BUY,
+            confidence = 80,
+            entryPrice = 100.0,
+            stopLoss = 90.0,
+            targetPrice1 = 120.0,
+            scalpingStage = ScalpingStage.EARLY_ENTRY,
+            scalpingSetup = "BREAKOUT",
+            scalpingDirection = "LONG"
+        )
+        SignalLifecycleManager.process(symbol, 100.0, setup, StrategyMode.SCALPING, nowMs = t0, config = cfg)
+        val expired = SignalLifecycleManager.process(
+            symbol, 100.0, setup, StrategyMode.SCALPING,
+            nowMs = t0 + 5 * SignalTtl.M1_BAR_MS, config = cfg
+        )
+        assertEquals(LifecycleState.EXPIRED, expired.state)
+
+        // Setup hilang selama satu tick.
+        val none = setup.copy(scalpingStage = ScalpingStage.WATCH, scalpingSetup = "NONE", action = SignalAction.HOLD)
+        SignalLifecycleManager.process(
+            symbol, 100.0, none, StrategyMode.SCALPING,
+            nowMs = t0 + 5 * SignalTtl.M1_BAR_MS + 1, config = cfg
+        )
+
+        // Setup yang sama muncul lagi -> episode baru.
+        val fresh = SignalLifecycleManager.process(
+            symbol, 100.0, setup.copy(scalpingStage = ScalpingStage.STRONG_ENTRY),
+            StrategyMode.SCALPING, nowMs = t0 + 5 * SignalTtl.M1_BAR_MS + 2, config = cfg
+        )
+        assertEquals(LifecycleState.READY, fresh.state)
+    }
 }

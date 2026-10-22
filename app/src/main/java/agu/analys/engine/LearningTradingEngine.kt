@@ -60,12 +60,16 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
     private var mtfRefreshJob: Job? = null
     private var lastMtfRefresh = 0L
     private var mtfSymbol = ""
+    // P0 — BTC gatekeeper 5M/1M. Diperbarui paling cepat tiap 60 detik; bukan per tick.
+    private var btcPulseJob: Job? = null
+    @Volatile private var lastBtcPulseRefresh = 0L
     private var h4Candles: List<CandleBar> = emptyList()
     // Ditulis dari coroutine IO (refresh) dan dibaca dari thread tick — @Volatile agar
     // penugasan antar-thread selalu terlihat; pembaca wajib snapshot sekali per evaluasi
     // supaya triple (h1/m15/m1) yang dipakai konsisten dalam satu run.
     @Volatile private var h1Candles: List<CandleBar> = emptyList()
     @Volatile private var m15Candles: List<CandleBar> = emptyList()
+    @Volatile private var m5Candles: List<CandleBar> = emptyList()
     @Volatile private var m1Candles: List<CandleBar> = emptyList()
     private val _signalState = MutableStateFlow(AISignalState())
     val signalState: StateFlow<AISignalState> = _signalState.asStateFlow()
@@ -126,7 +130,10 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
         mtfRefreshJob = null
         lastMtfRefresh = 0L
         mtfSymbol = ""
-        h4Candles = emptyList(); h1Candles = emptyList(); m15Candles = emptyList(); m1Candles = emptyList()
+        btcPulseJob?.cancel()
+        btcPulseJob = null
+        lastBtcPulseRefresh = 0L
+        h4Candles = emptyList(); h1Candles = emptyList(); m15Candles = emptyList(); m5Candles = emptyList(); m1Candles = emptyList()
         synchronized(candlesH1) { candlesH1.clear() }
         synchronized(candlesH4) { candlesH4.clear() }
         synchronized(candles1D) { candles1D.clear() }
@@ -174,24 +181,33 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
 
                     var h1 = agu.analys.util.MtfCacheManager.getCachedCandles(symbol, Timeframe.H1, activeEx) ?: emptyList()
                     var m15 = agu.analys.util.MtfCacheManager.getCachedCandles(symbol, Timeframe.M15, activeEx) ?: emptyList()
+                    var m5 = agu.analys.util.MtfCacheManager.getCachedCandles(symbol, Timeframe.M5, activeEx) ?: emptyList()
                     var m1 = agu.analys.util.MtfCacheManager.getCachedCandles(symbol, Timeframe.M1, activeEx) ?: emptyList()
 
                     var attempts = 0
-                    while ((h1.size < 20 || m15.size < 20 || m1.size < 20) && attempts < 5 && isActive) {
+                    // P0 — MTF 4 TF. Jangan jalankan evaluator sebelum M5 juga siap; gate
+                    // sengaja fail-closed, jadi menunggu di sini lebih jujur daripada
+                    // mempublikasikan "MTF belum lengkap" berulang-ulang.
+                    while ((h1.size < 20 || m15.size < 20 || m5.size < 20 || m1.size < 20) &&
+                        attempts < 5 && isActive) {
                         attempts++
                         kotlinx.coroutines.delay(250)
                         h1 = agu.analys.util.MtfCacheManager.getCachedCandles(symbol, Timeframe.H1, activeEx) ?: emptyList()
                         m15 = agu.analys.util.MtfCacheManager.getCachedCandles(symbol, Timeframe.M15, activeEx) ?: emptyList()
+                        m5 = agu.analys.util.MtfCacheManager.getCachedCandles(symbol, Timeframe.M5, activeEx) ?: emptyList()
                         m1 = agu.analys.util.MtfCacheManager.getCachedCandles(symbol, Timeframe.M1, activeEx) ?: emptyList()
                     }
 
-                    if (h1.size >= 20 && m15.size >= 20 && m1.size >= 20 && isMatchingSymbol(currentTick?.symbol ?: "", symbol)) {
+                    if (h1.size >= 20 && m15.size >= 20 && m5.size >= 20 && m1.size >= 20 &&
+                        isMatchingSymbol(currentTick?.symbol ?: "", symbol)) {
                         h1Candles = h1.dropLast(1); m15Candles = m15.dropLast(1)
+                        m5Candles = m5.dropLast(1)
                         m1Candles = m1.dropLast(1)
                         runScalping()
-                    } else if (h1.size < 20 || m15.size < 20 || m1.size < 20) {
+                    } else if (h1.size < 20 || m15.size < 20 || m5.size < 20 || m1.size < 20) {
                         lastMtfRefresh = 0L
                     }
+                    refreshBtcPulseIfDue(activeEx)
                 }
                 StrategyMode.SWING -> {
                     val activeEx = agu.analys.util.MtfCacheManager.activeExchange
@@ -247,14 +263,64 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
         }
     }
 
+    /**
+     * P0 — BTC gatekeeper. p0 menganalisis BTCUSDT 5M + 1M; Indodax tidak memperdagangkan
+     * USDT, jadi bursa itu memakai BTCIDR sebagai proksi BTC lokal. Keduanya diambil dari
+     * bursa aktif supaya tidak mencampur data dua bursa.
+     *
+     * Candle terakhir dibuang (`dropLast(1)`) karena masih berjalan — veto harus dihitung
+     * dari candle yang sudah tutup, sama seperti replay offline.
+     */
+    private fun refreshBtcPulseIfDue(exchange: String) {
+        val now = System.currentTimeMillis()
+        if (now - lastBtcPulseRefresh < 60_000L) return
+        if (btcPulseJob?.isActive == true) return
+        lastBtcPulseRefresh = now
+        btcPulseJob = scope.launch {
+            val isIndodax = exchange.equals("INDODAX", true)
+            val btcPair = if (isIndodax) "BTCIDR" else "BTCUSDT"
+            try {
+                val m5Raw = if (isIndodax) {
+                    IndodaxMarketService.fetchCandles(btcPair, Timeframe.M5, 120)
+                } else {
+                    TokocryptoMarketService.fetchCandles(btcPair, Timeframe.M5, 120)
+                }
+                val m1Raw = if (isIndodax) {
+                    IndodaxMarketService.fetchCandles(btcPair, Timeframe.M1, 60)
+                } else {
+                    TokocryptoMarketService.fetchCandles(btcPair, Timeframe.M1, 60)
+                }
+                val closed5m = if (m5Raw.size > 1) m5Raw.dropLast(1) else m5Raw
+                val closed1m = if (m1Raw.size > 1) m1Raw.dropLast(1) else m1Raw
+                if (closed5m.size >= 22) {
+                    agu.analys.engine.global.GlobalContextManager.updateBtcPulse(
+                        btc5mCandles = closed5m,
+                        btc1mCandles = closed1m,
+                        config = agu.analys.engine.global.BtcPulseAnalyzer.Config.from(scalpingRuntimeConfig),
+                        priceIsUsdt = !isIndodax
+                    )
+                }
+            } catch (e: Exception) {
+                // Jangan mematikan evaluasi scalping hanya karena BTC tidak bisa diambil.
+                // Konteks tidak diperbarui: veto terakhir dipertahankan (fail-closed), bukan
+                // dilepas diam-diam saat data BTC sedang tidak tersedia.
+                agu.analys.util.AppLogManager.aiEngine(
+                    "BtcPulse",
+                    "Gagal mengambil candle BTC $btcPair: ${e.message}"
+                )
+            }
+        }
+    }
+
     private fun runScalping() {
         val tick = currentTick ?: return
         // Snapshot sekali: cegah writer IO mengganti list di tengah evaluasi.
         val h1 = h1Candles
         val m15 = m15Candles
+        val m5 = m5Candles
         val m1 = m1Candles
-        if (h1.size < 20 || m15.size < 20 || m1.size < 20) {
-            val need = "H1 ${h1.size}/20 · M15 ${m15.size}/20 · M1 ${m1.size}/20"
+        if (h1.size < 20 || m15.size < 20 || m5.size < 20 || m1.size < 20) {
+            val need = "H1 ${h1.size}/20 · M15 ${m15.size}/20 · M5 ${m5.size}/20 · M1 ${m1.size}/20"
             _signalState.value = AISignalState(
                 action = SignalAction.HOLD,
                 confidence = 15,
@@ -278,18 +344,28 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
                 nowMs = tick.timestamp,
                 change24h = tick.change24h,
                 h1Candles = h1,
-                // Seam menyintesis bar M15/M1 yang masih berjalan dari tick di dalam.
+                // Seam menyintesis bar M15/M5/M1 yang masih berjalan dari tick di dalam.
                 m15Candles = m15,
+                m5Candles = m5,
                 m1Candles = m1,
                 formingVolume = currentFormingVolume,
                 bids = currentOrderBookBids,
                 asks = currentOrderBookAsks,
                 fees = feeConfigForSymbol(tick.symbol),
-                scalpingConfig = scalpingRuntimeConfig
+                scalpingConfig = scalpingRuntimeConfig,
+                globalContext = agu.analys.engine.global.GlobalContextManager.context.value
             )
         ) ?: return
 
-        val tracked = agu.analys.engine.scalping.SignalLifecycleManager.process(tick.symbol, tick.price, result.signal, StrategyMode.SCALPING)
+        val tracked = agu.analys.engine.scalping.SignalLifecycleManager.process(
+            tick.symbol,
+            tick.price,
+            result.signal,
+            StrategyMode.SCALPING,
+            // TTL wajib jam dinding. Jangan memakai `tick.timestamp` (waktu peristiwa bursa):
+            // saat umpan tertinggal, sinyal basi bisa tetap hidup lebih lama dari 5 menit.
+            config = scalpingRuntimeConfig
+        )
         val finalSignal = (tracked.activeSignalState ?: result.signal).copy(
             marketSymbol = tick.symbol,
             lifecycleState = tracked.state

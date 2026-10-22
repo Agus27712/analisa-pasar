@@ -20,6 +20,14 @@ class ScalpingRuntimeConfigTest {
         assertEquals(ScalpingConfig.CHOP_HARD_RANGING, cfg.chopHardRanging, 0.0001)
         assertEquals(ScalpingConfig.RETEST_MAX_DIST_PCT, cfg.retestMaxDistPct, 0.0001)
         assertEquals(ScalpingConfig.RETEST_MIN_STRUCTURE_STRENGTH, cfg.retestMinStructureStrength)
+        // P0 — default harus mengikuti konstanta pusat, bukan angka kedua di data class.
+        assertEquals(ScalpingConfig.TTL_BARS_M1, cfg.ttlBarsM1)
+        assertEquals(ScalpingConfig.MTF_MIN_BULLISH, cfg.mtfMinBullish)
+        assertEquals(ScalpingConfig.MTF_BLOCK_HIGH_TF_BEARISH, cfg.mtfBlockHighTfBearish)
+        assertEquals(ScalpingConfig.BTC_VETO_ENABLED, cfg.btcVetoEnabled)
+        assertEquals(ScalpingConfig.BTC_RETURN_VETO_PCT, cfg.btcReturnVetoPct, 0.0001)
+        assertEquals(ScalpingConfig.BTC_ATR_RATIO_VETO, cfg.btcAtrRatioVeto, 0.0001)
+        assertEquals(ScalpingConfig.CHOP_TREND_MAX, cfg.regimeChopTrendMax, 0.0001)
     }
 
     @Test
@@ -62,6 +70,27 @@ class ScalpingRuntimeConfigTest {
         val jsonStr = original.toJsonString()
         val parsed = ScalpingRuntimeConfig.fromJsonString(jsonStr)
 
+        assertNotNull(parsed)
+        assertEquals(original, parsed)
+    }
+
+    @Test
+    fun jsonRoundTripPreservesP0Fields() {
+        val original = ScalpingRuntimeConfig(
+            ttlBarsM1 = 7,
+            mtfMinBullish = 4,
+            mtfBlockHighTfBearish = false,
+            btcVetoEnabled = false,
+            btcReturnVetoPct = -1.1,
+            btcAtrRatioVeto = 3.2,
+            btcEmaPeriod = 34,
+            regimeAdxTrending = 27.5,
+            regimeAdxWeak = 21.0,
+            regimeChopRanging = 60.0,
+            regimeChopTrendMax = 52.0
+        )
+
+        val parsed = ScalpingRuntimeConfig.fromJsonString(original.toJsonString())
         assertNotNull(parsed)
         assertEquals(original, parsed)
     }

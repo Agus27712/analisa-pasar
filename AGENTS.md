@@ -14,37 +14,42 @@ dibuat otomatis oleh `.github/workflows/release.yml` saat `main` menerima push.
 
 ### ⚠️ Langkah 0 — pastikan branch yang Anda baca benar
 
-**Kerjaan aktif ada di `patch`.** Snapshot **2026-10-21** (setelah rebase ke rilis **3.9.2**):
-`origin/main` = `578d0de` (merge rilis 3.9.2, batch 6j–6n). Titik jangkar konten `patch` =
-`40257e4` (13 commit konten); commit dokumentasi 2026-10-21 duduk di atasnya. Jadi `patch` =
-**main + 13 commit konten + commit dokumentasi** (batch 6o/6p). **Artefak riset Spec v2
-(spec, dua laporan hasil, tool, dataset, hasil JSON) sudah dihapus dari pohon kerja 2026-10-21
-dan di-commit.** **`patch` memang di depan `main`, jadi `git diff HEAD origin/main`
-TIDAK kosong** — itu isi 13 commit konten + dokumen tadi, bukan tanda `main` ketinggalan.
-**Status 2026-10-21:** perubahan dokumen dan penghapusan artefak v2 sudah di-commit dan di-push
-ke `origin/patch`; `main` belum memuatnya.
-`main` adalah **ancestor** `patch`. Jangan membaca `main` untuk melihat pekerjaan terbaru;
-`main` baru berisi rilis 3.9.2.
-**Jangan pernah menyimpulkan keadaan repo dari `main` tanpa mengecek angka ini dulu:**
+**Kerjaan aktif ada di `patch`.** Snapshot **2026-10-22** (setelah **PR #63**):
+`origin/main` = **`5d8f7bc`** (merge PR #63 dari `patch`), yang sudah memuat `patch` sampai
+**`2dd69ad`**. `origin/patch` = **`2dd69ad`**. Di atasnya, `patch` sekarang memiliki **commit P0
+KriptoYoi** (TTL 5 candle, gate MTF 4 TF, veto BTC, regime OR) — cari dengan `git log -1`.
+Rilis terakhir tetap **3.9.2**; nomor versi belum dinaikkan untuk P0.
+
+**Artefak riset Spec v2 sudah dihapus dan masuk `origin/main` lewat PR #63.** Riset v3 tetap
+dihentikan; arsipnya hanya di branch `backup/patch-v3-2026-10-21` (`796a9d1`, remote).
+
+`main` **lokal** bisa tertinggal jauh dari `origin/main` (per snapshot ini tertinggal 17 commit).
+Jangan membaca `main` lokal untuk melihat pekerjaan terbaru. `patch` dan `origin/main` sekarang
+berbagi konten sampai `2dd69ad`; satu-satunya commit yang ada di `origin/main` tetapi tidak di
+`patch` adalah **merge commit PR #63** itu sendiri.
+
+**Jangan pernah menyimpulkan keadaan repo dari ingatan atau dari `main` lokal. Ukur dulu:**
 
 ```sh
 git clone https://github.com/Agus27712/analisa-pasar.git
 cd analisa-pasar && git checkout patch        # WAJIB — kerjaan aktif ada di sini
-git rev-list --count origin/main..HEAD        # 13 commit konten + commit dokumentasi
-git rev-list --count HEAD..origin/main        # 0 = main tidak punya commit yang belum ada di patch
-git log --oneline origin/main..HEAD           # 13 commit konten + commit dokumentasi
+git fetch origin
+git log --oneline -3 origin/main              # 5d8f7bc = merge PR #63
+git log --oneline -3 origin/patch             # 2dd69ad = ujung patch sebelum P0
+git rev-list --count origin/main..HEAD        # 1 = commit P0 di atas 2dd69ad
+git rev-list --count HEAD..origin/main        # 1 = merge commit PR #63 (bukan konten hilang)
+git status --short                            # kosong bila P0 sudah di-commit
 git ls-remote --heads origin                  # main, patch, backup/patch-v3-2026-10-21
-git diff --name-status HEAD origin/main       # TIDAK kosong = isi 13 commit konten + dokumen
 ```
 
-Repo ini **public** — clone tidak butuh token.
+Angka `rev-list` **tidak tetap** — selalu ukur ulang. Repo ini **public**, clone tidak butuh token.
 
 ⚠️ **Pernah terjadi, jangan terulang:** `main` pernah tertinggal **11 commit** dari `patch`.
 Siapa pun yang membaca `main` saat itu melihat fitur horizon **masih ada** padahal sudah
 di-revert di `patch` (`e525c64`), dan P0–P2 (integritas jurnal) serta S1–S9 (strategi
 entry/exit) belum ada di sana — semua kesimpulan yang ditarik dari `main` jadi salah.
-Sekarang arahnya sebaliknya: `main` belum memuat batch 6o/6p; artefak v2 hanya tersisa di
-riwayat git sampai penghapusan di-commit. **Ukur ulang, jangan mengandalkan ingatan.**
+Sekarang arahnya sudah diperbaiki lewat PR #63, tetapi `main` lokal di sandbox masih basi.
+**Ukur ulang, jangan mengandalkan ingatan.**
 
 **⛔ SPESIFIKASI BARU V2/V3 DIHENTIKAN (2026-10-21).** Spec v2 dan v3 sudah diukur dan
 keduanya **tidak menghasilkan edge**; owner menghentikan seluruh line riset ini karena hanya
@@ -54,8 +59,10 @@ dan artefaknya hanya ada di branch backup **`backup/patch-v3-2026-10-21`** (`796
 **Jangan membangun engine/spec baru.**
 Arah aktif: **engine scalping yang sudah ada** (port kriptoyoi `p0_engine` + slider). Status
 dari owner: implementasi slider entry sudah ada dan terbukti memaksimalkan entry; **exit
-strategi belum**. Jangan mengubah kode aplikasi dulu; perubahan kode aplikasi lain menunggu
-instruksi owner.
+strategi belum**. **P0 (TTL, MTF 4 TF, veto BTC, regime OR) sudah disinkronkan 2026-10-22**
+dan diukur: gate bekerja, tetapi **edge masih negatif** (avg R −0,1569, 616/620 trade TIMEOUT).
+Jangan mengklaim P0 menyelesaikan masalah profit. Setelah P0, **jangan menambah gate entry
+baru tanpa instruksi**; prioritas berikutnya adalah **exit strategi**.
 
 **Urutan baca 5 menit yang benar:**
 
@@ -101,6 +108,10 @@ instruksi owner.
    `docs/exp/exp_scalping_expectancy_ADA-DOGE-XRP.md` (eksperimen lama 42,7%) dan
    `docs/exp/exp_scalping_expectancy_parity_ADA-DOGE-XRP.md` (parity app: 14,88%, avg R
    −0,4898, 963/1.149 TIMEOUT → scalping di Tokocrypto tidak layak untuk engine saat ini).
+   Perbandingan P0 ada di `docs/exp/exp_p0_gatekeeper_ADA-DOGE-XRP.md`: baseline 996 trade /
+   WR 12,85% / avg R −0,1642 vs P0 620 trade / 14,84% / −0,1569, dengan **616/620 TIMEOUT dan
+   0 TP1/TP2**. Gate P0 bekerja, tetapi edge tetap negatif. **Jangan menyamakan WR 14,84% P0
+   dengan 14,88% parity** — geometri exit dan komposisi trade-nya berbeda.
    **Spec v2 dihentikan 2026-10-21 dan seluruh artefaknya sudah dihapus** — dokumen spec, dua
    laporan hasil, tool, dataset, dan hasil JSON. Jangan membuat ulang berkas atau riset v2.
    Ringkasan alasan ada di `workplan2.md` §64. Riset v3 juga dihentikan; arsipnya ada di branch
@@ -191,9 +202,10 @@ Yang **tidak boleh** dilakukan lagi tanpa instruksi eksplisit owner:
     treadmill "strategi ini akan profit", atau wallpaper angka hasil. Satu berkas per eksperimen,
     bernama `exp_<testname>_<pair>.md`. Contoh engine existing:
     `docs/exp/exp_scalping_expectancy_ADA-DOGE-XRP.md` (lama 42,7%) dan
-    `docs/exp/exp_scalping_expectancy_parity_ADA-DOGE-XRP.md` (parity 14,88%). **Laporan hasil
-    Spec v2 sudah dihapus 2026-10-21**; jangan membuatnya ulang. Riset v3 juga dihentikan;
-    arsip di branch `backup/patch-v3-2026-10-21`.
+    `docs/exp/exp_scalping_expectancy_parity_ADA-DOGE-XRP.md` (parity 14,88%). Hasil P0 ada di
+    `docs/exp/exp_p0_gatekeeper_ADA-DOGE-XRP.md` (620 trade, avg R −0,1569, 616 TIMEOUT).
+    **Laporan hasil Spec v2 sudah dihapus 2026-10-21**; jangan membuatnya ulang. Riset v3 juga
+    dihentikan; arsip di branch `backup/patch-v3-2026-10-21`.
 
 > **Dokumen yang sudah dihapus (2026-10-16):** `workplan.md`, `checkpoint.md`,
 > `checkpoint_progres.md` — isinya cuma stub "DEPRECATED" yang menunjuk ke `workplan2.md` /
@@ -318,6 +330,12 @@ Pengulangan parity ada di `exp_scalping_expectancy_parity_ADA-DOGE-XRP.md`: **14
 avg R **−0,4898**, 963 dari 1.149 trade TIMEOUT, ambang impas payoff **55,08%**. Kesimpulan
 tetap: scalping di Tokocrypto tidak layak untuk engine saat ini; hipotesis "trade UNRESOLVED =
 tren berlanjut" juga terbantah (92 WIN vs 92 LOSS).
+
+Perbandingan P0 ada di `exp_p0_gatekeeper_ADA-DOGE-XRP.md`: baseline **996 trade / WR 12,85% /
+avg R −0,1642** vs P0 **620 trade / 14,84% / −0,1569**, dengan **616 TIMEOUT, 4 SL, 0 TP1/TP2**.
+Gate MTF dan BTC bekerja (frekuensi turun 37,8%), tetapi **avg R masih negatif** dan perbaikan
++0,0073R berada di dalam noise. Angka WR **14,84%** di laporan P0 **bukan** pengulangan angka
+**14,88%** parity: geometri exit dan komposisi trade berbeda, jadi jangan dibandingkan langsung.
 
 **Spec v2 dihentikan dan artefaknya dihapus (2026-10-21).** Dokumen spec, dua laporan hasil,
 tool, dataset, dan hasil JSON sudah dihapus dari pohon kerja. Jangan membuat ulang berkas atau
@@ -811,7 +829,11 @@ menurut owner terbukti memaksimalkan entry, exit strategi belum.
   untuk menguji engine. **Bukan** membangun spec/engine baru; Spec v2/v3 sudah dihentikan.
 - **Slider adalah jalur peningkatan**: slider entry sudah ada dan menurut owner terbukti
   memaksimalkan entry; **exit strategi belum**. Jangan mengklaim exit sudah terpecahkan.
-- Real money untuk strategi scalp: **belum**, sampai paper + fee truth stabil.
+- **P0 sudah disinkronkan (2026-10-22)**: TTL 5 candle, gate MTF 4 TF, veto BTC, regime OR.
+  Hasil terukur: 620 trade, WR 14,84%, **avg R −0,1569**, **616 TIMEOUT**, 0 TP. Gate bekerja,
+  tetapi **edge belum ada**; jangan memakai P0 sebagai alasan promosi uang riil.
+- Real money untuk strategi scalp: **belum**, sampai paper + fee truth stabil **dan** exit
+  punya expectancy positif.
 - Slider sensitifitas mengubah threshold (frekuensi sinyal), **bukan** jaminan profit; status
   slider entry dari owner dicatat di poin sebelumnya.
 - Fee: **all-in** Tokocrypto/Indodax (Fee Truth) — jangan pakai model upstream p0 ~0,72% RT sebagai default tanpa label.
@@ -980,6 +1002,46 @@ menurut owner terbukti memaksimalkan entry, exit strategi belum.
   atau slippage, **hitung ulang ambang ini** dan perbarui `SellSignalEvaluatorTest`.
 - Exit scalp paper: lihat `SCALP_EXIT.md`; real auto-execute dari sinyal scalp **bukan** prioritas sampai gate edge terpenuhi.
 - Commit non-rilis (docs/fee/config): sertakan **`[skip ci]`** jika owner meminta agar rilis tidak terpicu.
+
+## P0 KriptoYoi — TTL, MTF, BTC, regime (2026-10-22, WAJIB)
+
+P0 sudah disinkronkan ke engine yang ada. Ini **bukan** engine baru dan **bukan** klaim edge.
+Sumber semua angka: `ScalpingRuntimeConfig` (default di `ScalpingConfig`), mirror replay di
+`data/config/scalp_config.json`. Jangan menulis angka gate P0 sebagai literal di engine/replay.
+
+- **TTL 5 candle M1.** `SignalTtl` menghitung umur dari jam dinding (`elapsed_sec // 60`), bukan
+  jumlah tick. `EXPIRED` **terminal** untuk setup + arah yang sama; setup yang hilang boleh
+  memulai episode baru. Jangan mengembalikan perilaku lama yang bisa langsung menaikkan setup
+  basi ke `DETECTED` lagi.
+- **Gate MTF 4 TF.** H1, M15, M5, M1. H1/M15 **tidak boleh bearish**; minimal
+  `mtfMinBullish` (default 3) bullish; **fail-closed** bila `knownCount < 4`. Gerbang dipasang
+  setelah Step4, dan confidence non-ready di-cap **39** saat gate menolak. Pair dengan M5 belum
+  siap **tidak boleh** dievaluasi; jangan melonggarkan fail-closed agar sinyal bertambah.
+- **Veto BTC.** Veto LONG altcoin bila close 5M di bawah EMA20 **dan** return 5M terburuk
+  < `btcReturnVetoPct` (−0,6%), atau ATR ratio > `btcAtrRatioVeto` (2,5×) dengan minimal 2/3
+  candle bearish. Hanya candle **tutup**. Pair BTC sendiri tidak diveto. Harga BTCIDR **tidak
+  boleh** ditulis ke `btcPriceUsdt`; status veto tetap boleh dihitung dari kuotasi bursa aktif.
+  Jangan menghidupkan veto dari data yang belum tutup.
+- **Regime OR.** Urutan: LOW_VOL (ATR rendah + CHOP > `chopTrendMax`), BREAKOUT, trending
+  (`ADX ≥ adxTrending` dan `CHOP < chopTrendMax`), choppy (`CHOP ≥ chopRanging` **atau**
+  `ADX < adxWeak`), lalu mild trend. `BREAKOUT` adalah ekstensi app; p0 belum mengembalikannya.
+  Semua ambang dari config, bukan literal.
+- **Replay.** `tools/scalp_replay.py` mengagregasi M5 dari M1, memakai BTC 5M/1M dari CSV
+  (hanya candle tutup), dan menulis `gate_blocks`, `btc`, `p0`, `btc_source`. `gate_blocks`
+  menghitung **bar sinyal siap**, bukan trade yang hilang. Tanpa CSV BTC, output wajib menulis
+  `btc_source.available=false` dan veto tidak diukur.
+- **TTL tidak diuji replay.** Replay masuk pada bar sinyal; TTL mengatur penantian setup di app.
+  Jangan mengutip hasil replay sebagai bukti manfaat TTL.
+- **Hasil terukur (2026-10-22, ADA/DOGE/XRP, 60 hari):** 620 trade, WR 14,84%, avg R **−0,1569**,
+  **616 TIMEOUT**, 4 SL, **0 TP1/TP2**. Baseline 996 trade, WR 12,85%, avg R −0,1642. Gate
+  bekerja dan frekuensi turun, tetapi **edge belum ada**. Jangan promosikan ke uang riil dan
+  jangan menambah gate entry baru tanpa instruksi owner.
+- **Prioritas berikutnya exit strategi**, bukan gate entry. TP1 (+7,99%) dan TP2 (+14,53%) tidak
+  pernah tercapai dalam time-stop 90 menit. Jangan mengklaim exit sudah selesai.
+
+Rincian angka: `docs/exp/exp_p0_gatekeeper_ADA-DOGE-XRP.md`; ringkasan keputusan:
+`workplan2.md` §65. Penjaga: `SignalTtlTest`, `MtfAlignmentPolicyTest`, `BtcPulseAnalyzerTest`,
+`ScalpingMtfEvaluatorTest`, `MarketRegimeEngineTest`, dan `tools/test_scalp_replay_parity.py`.
 
 ## UI & Compose
 
