@@ -117,6 +117,8 @@ DEFAULTS = {
         "min_profit_friction_multiple": 2.0,
         "be_trigger_atr_fraction": 0.5,
         "trail_atr_fraction": 0.6,
+        "net_tp_pct": 1.0,
+        "stop_gross_pct": 0.0,
     },
 
     # Replay
@@ -1190,6 +1192,13 @@ def be_price(entry, fee, slip):
     return entry * buy_cost / sell_net
 
 
+def _price_for_net(entry, net_pct, fee, slip):
+    """Harga keluar yang menghasilkan profit net tepat `net_pct` (kebalikan _net_profit_pct)."""
+    buy_cost = 1.0 + (fee.get("buy_taker_pct", 0.1) + slip) / 100.0
+    sell_net = max(1e-9, 1.0 - (fee.get("sell_taker_pct", 0.1) + slip) / 100.0)
+    return entry * (1.0 + net_pct / 100.0) * buy_cost / sell_net
+
+
 def _momentum_weak(m1_slice):
     """Momentum lemah: EMA9 < EMA21*0.998 atau RSI di luar 40-78 atau candle merah dominan."""
     if len(m1_slice) < 10:
@@ -1272,8 +1281,12 @@ def resolve_trade(m1, i, entry, sl, tp1, tp2, fee, cfg, lookahead, atr_pct=0.0):
       classic — SL / TP2 saja, tetap terkena time-stop `max_hold_bars_m1`
       tp1_be  — TP1 partial 50% + SL ke BE(net); lalu TP2 atau SL
       trail   — trailing dari peak setelah net >= be_trigger
-      early   — early SELL jika net_close >= min_early dan momentum lemah
-      full    — tp1_be + trail + early (prioritas: SL > early > trail > TP2)
+      early    — early SELL jika net_close >= min_early dan momentum lemah
+      full     — tp1_be + trail + early (prioritas: SL > early > trail > TP2)
+      net_tp   — keluar begitu profit NET (setelah fee+slippage) >= `net_tp_pct`;
+                 TP kecil yang konsisten, bukan mengejar TP2 jauh
+      net_tp_stop — net_tp + stop rugi harga `stop_gross_pct` yang lebih rapat
+                 daripada SL engine (SL engine tetap backstop)
 
     S2 — profit sukarela (early) dan peng-arm-an BE/trailing hanya setelah profit
     KOTOR >= `min_profit_friction_multiple` x friksi round-trip.
@@ -1354,6 +1367,26 @@ def resolve_trade(m1, i, entry, sl, tp1, tp2, fee, cfg, lookahead, atr_pct=0.0):
             else:
                 reason = "TRAIL_SL"
             return _done(total_r, j, reason, ambiguous)
+
+        # --- Mode net_tp: TP kecil berbasis profit NET (SL tetap prioritas) ---
+        if mode == "net_tp":
+            net_target = float(ex.get("net_tp_pct", 1.0))
+            if _net_profit_pct(entry, hi, fee, slip) >= net_target:
+                px = _price_for_net(entry, net_target, fee, slip)
+                return _done(r_at(px), j, "NET_TP")
+
+        # --- Mode net_tp_stop: TP net kecil + stop rugi harga yang lebih rapat
+        #     daripada SL engine. Gap yang menembus SL engine tetap SL (pesimistis).
+        if mode == "net_tp_stop":
+            stop_gross = float(ex.get("stop_gross_pct", 0.0))
+            if stop_gross > 0:
+                stop_px = entry * (1.0 - stop_gross / 100.0)
+                if stop_px > active_sl + 1e-12 and lo <= stop_px:
+                    return _done(r_at(stop_px), j, "NET_SL")
+            net_target = float(ex.get("net_tp_pct", 1.0))
+            if _net_profit_pct(entry, hi, fee, slip) >= net_target:
+                px = _price_for_net(entry, net_target, fee, slip)
+                return _done(r_at(px), j, "NET_TP")
 
         # --- TP2 full ---
         if hi >= tp2:

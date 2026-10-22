@@ -4251,3 +4251,40 @@ baik (WR 14,29%/12,50%/0,00%, avg R −0,1707/−0,1397/−0,2008).
 3. Verifikasi: `--selftest` OK (kontrol negatif 0 BUY, positif 1 BUY); konsistensi
    harness vs CLI DOGE = 193 trade (ditemukan & diperbaiki dulu: HTF harus disintesis
    dari M1, bukan CSV 15m/1h).
+
+---
+
+## 68. Eksperimen exit net-TP: TP kecil + stop rapat (2026-10-22)
+
+Laporan lengkap: **`docs/exp/exp_exit_net_tp_ADA-DOGE-XRP.md`**; alat `tools/exit_grid.py`
+(evaluasi gate sekali per pair, lalu grid exit di atas cache; kontrol `classic` identik CLI:
+620 trade / WR 14,84% / avg R −0,1569). Dataset sama dengan P0: ADA/DOGE/XRP, 87.000 bar M1,
+60,42 hari, fee truth `data/config/scalp_config.json`.
+
+**Mode baru (replay-only):** `net_tp` (keluar saat profit NET ≥ `net_tp_pct`, harga dari
+`_price_for_net`) dan `net_tp_stop` (tambahan stop rugi harga `stop_gross_pct` lebih rapat
+daripada SL engine; prioritas SL engine → NET_SL → NET_TP → TP2). Keduanya **tidak** ada di
+app dan tidak boleh disambungkan tanpa instruksi owner: stop rapat melanggar lantai friksi 6×.
+
+**Hasil: 0 dari 88 varian positif** (+ kontrol `classic` di tiap keluarga). Tiga keluarga diuji:
+20 varian `net_tp` (5 TP × 4 hold), 60 varian `net_tp_stop` (TP 0,4–1,5% × stop 1,0–2,5% ×
+hold 240/420/1440m), dan 8 varian horizon 1–2 hari (TP sampai 3%). Terbaik `net_tp 3,0%/2880m`: −0,410%/hari dengan hanya
+0,39 exit net/hari. WR tinggi bukan keberhasilan: ADA mencapai WR 75,7% tetapi avg R −0,1156.
+
+**Batas atas membuktikan exit-only mustahil di sinyal ini.** Pada 1440m, sinyal yang HIGH-nya
+pernah mencapai TP net 1,0% hanya 72,0% (ADA) / 54,5% (DOGE) / 60,4% (XRP) — itu skenario exit
+sempurna tanpa stop. WR impas varian `tp1.0/sl2.5/1440m` justru 76,8/72,6/72,8%. Untuk
+`net_tp 3,0%/2880m`: batas atas 60,9/48,1/46,6% vs WR impas 64,2/59,3/53,0%. Semua di bawah
+WR impas, jadi tidak ada parameter exit yang bisa menutup selisihnya.
+
+**Kriteria owner "1 exit net/hari" tidak tercapai.** Frekuensi tertinggi 1,82 exit/hari (ADA,
+`tp0.4/sl2.0/1440m`) tetapi hanya 54,6% hari punya ≥1 exit net dan net −2,06%/hari; varian
+dengan kerugian terkecil justru 0,39 exit/hari. Frekuensi dan expectancy saling bertukar,
+tidak ada titik yang memenuhi keduanya.
+
+**Keputusan:**
+1. Line riset exit-only ditutup untuk sinyal P0; tidak ada parameter exit yang direkomendasikan,
+   jangan promosikan ke uang riil.
+2. Perbaikan berikutnya harus dari **entry/universe** (median MFE ≥ 2× friksi), bukan exit.
+   Sesuai `AGENTS.md`, gate entry baru menunggu instruksi eksplisit owner.
+3. Verifikasi: **25 test parity OK** (22 lama + 3 uji net-TP/net-SL).

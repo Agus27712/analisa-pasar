@@ -174,3 +174,10 @@ done
 3. Untuk "exit strategi" murni dalam geometri sekarang: mode `trail`/`full` tinggal diukur
    bila owner mau (perintah §7 dengan config salinan), tapi hasil early yang sudah di luar
    noise mengisyaratkan keduanya tidak akan berbeda pada unit exit yang sama.
+
+## Lanjutan (2026-10-22): TP net kecil + stop rapat
+
+Tindak lanjut butir 3 di atas ada di **`exp_exit_net_tp_ADA-DOGE-XRP.md`**. Ringkas: 90 varian
+`net_tp`/`net_tp_stop` di 3 pair **semua negatif**; batas atas WR (exit sempurna di high, tanpa
+stop) berada di bawah WR impas, jadi line exit-only ditutup. Jangan memakai angka di laporan ini
+sebagai dasar menaikkan/menurunkan parameter exit.

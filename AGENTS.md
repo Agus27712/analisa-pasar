@@ -352,6 +352,18 @@ pada data + fee truth identik. **Entri BUY tidak sama**: kriptoyoi menandai 15.2
 buruk (WR 10,33%, avg R −0,1627). Lapisan A kriptoyoi **tidak di-port**; jangan mengutip angka
 kedua sumber sebagai satu kebenaran.
 
+Eksperimen exit net-TP: `exp_exit_net_tp_ADA-DOGE-XRP.md` (2026-10-22) — mode replay-only
+`net_tp` / `net_tp_stop` di `tools/scalp_replay.py` + grid `tools/exit_grid.py` (evaluasi gate
+sekali per pair, kontrol `classic` identik CLI 620/14,84%/−0,1569). **0 dari 88 varian positif**:
+TP kecil menaikkan WR sampai 75,7% tetapi avg R tetap negatif; stop rapat tidak menolong karena
+friksi aditif (TP net 0,4% vs stop kotor 2,0% ⇒ rasio net ≈1:7). Batas atas membuktikan
+exit-only mustahil: pada 1440m hanya 72,0/54,5/60,4% sinyal pernah mencapai TP net 1,0% (exit
+sempurna, tanpa stop) sedangkan WR impas 76,8/72,6/72,8%. Kriteria owner "1 exit net/hari" tidak
+tercapai konsisten (maksimum 54,6% hari; frekuensi tertinggi 1,82/hari dengan net −2,06%/hari).
+**Line exit-only ditutup** untuk sinyal P0; perbaikan harus dari entry/universe dan menunggu
+instruksi owner. Penjaga parity kini **25 test**; mode ini belum ada di app dan tidak boleh
+disambungkan tanpa instruksi (stop rapat melanggar lantai friksi 6×).
+
 **Spec v2 dihentikan dan artefaknya dihapus (2026-10-21).** Dokumen spec, dua laporan hasil,
 tool, dataset, dan hasil JSON sudah dihapus dari pohon kerja. Jangan membuat ulang berkas atau
 riset v2; ringkasan alasan ada di `workplan2.md` §64.

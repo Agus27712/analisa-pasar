@@ -231,6 +231,60 @@ class ExitTest(unittest.TestCase):
         )
         self.assertEqual("TP2", result["exit_reason"])
 
+    def test_net_tp_exits_at_configured_net_target(self):
+        cfg = canonical_cfg()
+        cfg["exit"]["mode"] = "net_tp"
+        cfg["exit"]["net_tp_pct"] = 0.5
+        target_px = replay._price_for_net(100.0, 0.5, usdt_fee(), 0.08)
+        bars = [candle(0, 100.0),
+                candle(60_000, 100.0, high=target_px + 0.5, low=99.0)]
+        result = replay.resolve_trade(
+            bars, 0, 100.0, 90.0, 110.0, 120.0,
+            usdt_fee(), cfg, 120, atr_pct=1.0
+        )
+        self.assertEqual("NET_TP", result["exit_reason"])
+        net = replay._net_profit_pct(100.0, target_px, usdt_fee(), 0.08)
+        self.assertAlmostEqual(0.5, net, places=6)
+
+    def test_net_tp_never_fires_below_target_and_sl_wins_ambiguity(self):
+        cfg = canonical_cfg()
+        cfg["exit"]["mode"] = "net_tp"
+        cfg["exit"]["net_tp_pct"] = 0.5
+        target_px = replay._price_for_net(100.0, 0.5, usdt_fee(), 0.08)
+        below = [candle(0, 100.0),
+                 candle(60_000, 100.0, high=target_px - 0.01, low=99.0)]
+        result = replay.resolve_trade(
+            below, 0, 100.0, 90.0, 110.0, 120.0,
+            usdt_fee(), cfg, 5, atr_pct=1.0
+        )
+        self.assertEqual("TIMEOUT", result["exit_reason"])
+        both = [candle(0, 100.0),
+                candle(60_000, 100.0, high=target_px + 1.0, low=89.0)]
+        result = replay.resolve_trade(
+            both, 0, 100.0, 90.0, 110.0, 120.0,
+            usdt_fee(), cfg, 5, atr_pct=1.0
+        )
+        self.assertEqual("SL", result["exit_reason"])
+
+    def test_net_tp_stop_cuts_before_engine_sl_and_gap_stays_sl(self):
+        cfg = canonical_cfg()
+        cfg["exit"]["mode"] = "net_tp_stop"
+        cfg["exit"]["net_tp_pct"] = 1.0
+        cfg["exit"]["stop_gross_pct"] = 2.0
+        cut = [candle(0, 100.0), candle(60_000, 100.0, high=101.0, low=97.5)]
+        result = replay.resolve_trade(
+            cut, 0, 100.0, 90.0, 110.0, 120.0,
+            usdt_fee(), cfg, 5, atr_pct=1.0
+        )
+        self.assertEqual("NET_SL", result["exit_reason"])
+        self.assertAlmostEqual(98.0, 100.0 * (1 - 2.0 / 100.0), places=6)
+        gap = [candle(0, 100.0), candle(60_000, 100.0, high=101.0, low=89.0)]
+        result = replay.resolve_trade(
+            gap, 0, 100.0, 90.0, 110.0, 120.0,
+            usdt_fee(), cfg, 5, atr_pct=1.0
+        )
+        self.assertEqual("SL", result["exit_reason"])
+
 
 class P0GateTest(unittest.TestCase):
     def test_mtf_gate_allows_three_of_four_when_high_tf_safe(self):
