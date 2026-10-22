@@ -4195,3 +4195,32 @@ BTC tidak memperbaiki apa pun pada sampel ini.
 **Dokumen.** Rincian angka ada di `docs/exp/exp_p0_gatekeeper_ADA-DOGE-XRP.md`. `AGENTS.md` dan
 `docs/PANDUAN-LANJUT-AGEN.md` sudah diperbarui pada tanggal yang sama. Verifikasi: **797 unit
 test Kotlin (0 gagal, 1 dilewati)** dan **18 test parity replay**.
+
+---
+
+## 66. Eksperimen exit: MFE/MAE dari bar sinyal + mode EARLY (2026-10-22)
+
+Laporan lengkap: **`docs/exp/exp_exit_modes_ADA-DOGE-XRP.md`**. Dataset P0 dipakai ulang persis
+(ADA/DOGE/XRP, 60 hari); kontrol `classic` terukur dua kali dan keduanya **persis angka laporan
+P0** (620 trade / WR 14,84% / avg R −0,1569 / pf 0,172), membuktikan komparabilitas.
+
+**Fase A — MFE/MAE dari bar masuk sinyal** (field baru di `tools/scalp_replay.py`
+`mfe_/mae_` 30/60/90 menit, dibaca helper `_entry_excursions`, diagregasi di
+`summary.entry_mfe`): median MFE 90 menit **+0,506%** (≈ setengah friksi 0,9688%), median MFE
+selalu positif di semua horizon — **observasi owner "posisi naik setelah sinyal buy" terkonfirmasi**.
+Tapi ≥1× friksi hanya 31,6% sinyal, ≥2× friksi (lantai S2) hanya 13,4%, ≥TP1 hanya 1/618 (0,16%),
+dan SL 5,81% tersentuh ≤0,65% sinyal. TP1 praktis mustahil dalam 90 menit; SL lebar bukan pengikat.
+
+**Fase B — mode EARLY** (config varian `scalp_config_exit_early_p0.json`, satu perubahan
+`exit.mode = early`, S2 tetap 2,0×): 53 `EARLY_PROFIT` rata-rata **+0,3208R** + 28 `BE_SL`
+ke impas (0,00R). Perbaikan avg R **+0,0047R — di dalam noise** (CI 95% (−0,1692, −0,1352) vs
+(−0,1748, −0,1389) tumpang tindih). Gerbang Fase C (grid S2) tidak tercapai, jadi tidak dijalankan.
+
+**Keputusan yang tetap:**
+1. Gate entry P0 tidak diutak-atik; tidak ada gate baru.
+2. Bukan bukti menambah/menghapus mode exit — angkanya bilang geometri saat ini (risiko 5,81%,
+   kunci profit ≈0,32R, payoff ≈0,99) butuh WR ~50% untuk impas, sedangkan hit rate ~15%.
+   Perbaikan berikutnya yang layak didiskusikan owner: unit risiko lebih kecil (revisi
+   `min_friction_multiple` — melanggar lantai 6× yang WAJIB, butuh bukti replay baru penuh)
+   atau kualitas entry, bukan lagi mode exit di unit risiko sama.
+3. Verifikasi: **22 test parity OK** (18 lama + 4 uji MFE).

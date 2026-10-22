@@ -78,6 +78,8 @@
 | Titik masuk kode | package `agu.analys`, modul tunggal `:app` |
 | Unit test | **797 uji · 796 lulus · 0 gagal · 1 dilewati** (104 kelas), diukur 2026-10-22 setelah P0. Ukur ulang sebelum memakai angka ini. |
 | APK debug | 26.821.815 byte (26,8 MB desimal / 25,6 MiB) — terakhir diukur 2026-10-20 |
+| Uji parity replay | **22 test OK** (18 lama + 4 uji MFE), diukur 2026-10-22 |
+| Eksperimen exit | **EARLY terukur 2026-10-22: avg R −0,1522 vs classic −0,1569 — di dalam noise** (`docs/exp/exp_exit_modes_ADA-DOGE-XRP.md`). Median MFE 90 menit sinyal P0 = +0,506% (≈ setengah friksi); TP1 hanya 1 dari 618 sinyal; exit di unit risiko 5,81% belum menciptakan edge. |
 | Kesiapan uang riil | **BELUM** — lihat §5 |
 
 > ⚠️ Angka di tabel ini **pernah salah** di dokumen ini sendiri (tertulis 358/50 kelas). Setiap kali

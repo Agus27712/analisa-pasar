@@ -1217,6 +1217,52 @@ def _gross_pct(entry, price):
     return (price / entry - 1.0) * 100.0
 
 
+# Fase A — horizon MFE/MAE dari bar masuk sinyal, dalam bar M1.
+MFE_HORIZONS_M1 = (30, 60, 90)
+MFE_KEYS = tuple(
+    key
+    for h in (30, 60, 90)
+    for key in (f"mfe_{h}", f"mae_{h}", f"bars_{h}")
+)
+MFE_ALL_KEYS = ("mfe_exit_pct",) + MFE_KEYS
+
+
+def _pctl(vals, q):
+    """Kuantil linier (interpolasi, setara percentile numpy)."""
+    s = sorted(vals)
+    if not s:
+        return 0.0
+    pos = q * (len(s) - 1)
+    lo = int(pos)
+    hi = min(lo + 1, len(s) - 1)
+    frac = pos - lo
+    return s[lo] * (1.0 - frac) + s[hi] * frac
+
+
+def _entry_excursions(m1, i, entry, horizons=MFE_HORIZONS_M1):
+    """
+    MFE/MAE kotor (%) dari harga sinyal, per horizon bar M1.
+
+    Untuk horizon h: MFE = persen high tertinggi pada bar i+1..i+h, MAE = persen
+    low terendah pada jendela yang sama. `bars_<h>` = jumlah bar terpakai — kalau
+    data berhenti lebih awal, nilainya dibatasi data yang tersedia.
+    """
+    n = len(m1)
+    out = {}
+    for h in horizons:
+        used = max(0, min(n, i + 1 + h) - (i + 1))
+        if used <= 0:
+            out[f"mfe_{h}"] = 0.0
+            out[f"mae_{h}"] = 0.0
+            out[f"bars_{h}"] = 0
+            continue
+        win = m1[i + 1:i + 1 + used]
+        out[f"mfe_{h}"] = round(_gross_pct(entry, max(b["h"] for b in win)), 4)
+        out[f"mae_{h}"] = round(_gross_pct(entry, min(b["l"] for b in win)), 4)
+        out[f"bars_{h}"] = used
+    return out
+
+
 def resolve_trade(m1, i, entry, sl, tp1, tp2, fee, cfg, lookahead, atr_pct=0.0):
     """
     Resolve forward dari bar i+1.
@@ -1249,10 +1295,14 @@ def resolve_trade(m1, i, entry, sl, tp1, tp2, fee, cfg, lookahead, atr_pct=0.0):
         be_trigger = max(be_trigger, be_atr_frac * atr_pct)
     trail_dist = trail_atr_frac * atr_pct if (trail_atr_frac > 0 and atr_pct > 0) else trail_pct
 
+    # Fase A — MFE/MAE dari bar masuk sinyal, dihitung untuk SEMUA sinyal siap,
+    # termasuk yang lulus tak matematika risiko (bad_risk).
+    exc = _entry_excursions(m1, i, entry)
+
     risk = entry - sl
     if risk <= 0 or entry <= 0:
         return {"result": "UNRESOLVED", "r": 0.0, "exit_idx": None, "ambiguous": False,
-                "exit_reason": "bad_risk"}
+                "exit_reason": "bad_risk", "mfe_exit_pct": 0.0, **exc}
     risk_pct = risk / entry * 100.0
 
     def r_at(price):
@@ -1274,12 +1324,16 @@ def resolve_trade(m1, i, entry, sl, tp1, tp2, fee, cfg, lookahead, atr_pct=0.0):
     ambiguous = False
 
     def _done(total_r, idx, reason, amb=False):
+        # mfe_exit_pct = MFE kotor sampai bar exit terakhir (vars peak trailing-sudah-jalan),
+        # pembanding langsung dengan `r` realised.
         return {
             "result": "WIN" if total_r > 0 else "LOSS",
             "r": round(total_r, 4),
             "exit_idx": idx,
             "ambiguous": amb,
             "exit_reason": reason,
+            "mfe_exit_pct": round(_gross_pct(entry, peak), 4),
+            **exc,
         }
 
     for j in range(i + 1, end):
@@ -1344,7 +1398,7 @@ def resolve_trade(m1, i, entry, sl, tp1, tp2, fee, cfg, lookahead, atr_pct=0.0):
         return _done(total_r, last_idx, "TIMEOUT", ambiguous)
 
     return {"result": "UNRESOLVED", "r": 0.0, "exit_idx": None, "ambiguous": False,
-            "exit_reason": "TIMEOUT"}
+            "exit_reason": "TIMEOUT", "mfe_exit_pct": 0.0, **exc}
 
 
 def run_replay(m1, m15, h1, cfg, fee, assume_ob, lookahead, btc1m=None):
@@ -1443,13 +1497,15 @@ def run_replay(m1, m15, h1, cfg, fee, assume_ob, lookahead, btc1m=None):
         reason = resolved.get("exit_reason", "")
         exit_reasons[reason] = exit_reasons.get(reason, 0) + 1
         if resolved["result"] == "UNRESOLVED":
-            trades.append({"setup": r["setup"], "score": r["score"], "result": "UNRESOLVED",
-                           "r": 0.0, "t": t, "ambiguous": False,
-                           "entry": entry, "sl": sl, "tp1": tp1, "tp2": tp2,
-                           "gross_risk_pct": r["gross_risk_pct"],
-                           "friction_pct": r["friction_pct"],
-                           "sl_floor_active": r["sl_floor_active"],
-                           "exit_reason": reason})
+            rec = {"setup": r["setup"], "score": r["score"], "result": "UNRESOLVED",
+                   "r": 0.0, "t": t, "ambiguous": False,
+                   "entry": entry, "sl": sl, "tp1": tp1, "tp2": tp2,
+                   "gross_risk_pct": r["gross_risk_pct"],
+                   "friction_pct": r["friction_pct"],
+                   "sl_floor_active": r["sl_floor_active"],
+                   "exit_reason": reason}
+            rec.update({k: resolved[k] for k in MFE_ALL_KEYS if k in resolved})
+            trades.append(rec)
             i += lookahead
             continue
         exit_r = resolved["r"]
@@ -1458,14 +1514,16 @@ def run_replay(m1, m15, h1, cfg, fee, assume_ob, lookahead, btc1m=None):
         peak = max(peak, cum)
         max_dd = max(max_dd, peak - cum)
         equity.append(round(cum, 4))
-        trades.append({"setup": r["setup"], "score": r["score"],
-                       "result": resolved["result"], "r": exit_r,
-                       "t": t, "ambiguous": resolved["ambiguous"],
-                       "entry": entry, "sl": sl, "tp1": tp1, "tp2": tp2,
-                       "gross_risk_pct": r["gross_risk_pct"],
-                       "friction_pct": r["friction_pct"],
-                       "sl_floor_active": r["sl_floor_active"],
-                       "exit_bar": m1[exit_idx]["t"], "exit_reason": reason})
+        rec = {"setup": r["setup"], "score": r["score"],
+               "result": resolved["result"], "r": exit_r,
+               "t": t, "ambiguous": resolved["ambiguous"],
+               "entry": entry, "sl": sl, "tp1": tp1, "tp2": tp2,
+               "gross_risk_pct": r["gross_risk_pct"],
+               "friction_pct": r["friction_pct"],
+               "sl_floor_active": r["sl_floor_active"],
+               "exit_bar": m1[exit_idx]["t"], "exit_reason": reason}
+        rec.update({k: resolved[k] for k in MFE_ALL_KEYS if k in resolved})
+        trades.append(rec)
         i = exit_idx + 1
     return {"evals": evals, "bottleneck": bott, "gate_blocks": gate_blocks,
             "btc": {"available": bool(btc5), "bars_m1": len(btc1m or []),
@@ -1526,6 +1584,7 @@ def summarize(rep):
         "sl_floor_active_pct": round(100.0 * floor_active / total_signals, 2) if total_signals else 0.0,
         "avg_gross_risk_pct": avg_gross,
         "avg_friction_pct": avg_friction,
+        "entry_mfe": _entry_mfe_summary(rep["trades"]),
         "bottleneck": rep["bottleneck"],
         "gate_blocks": rep.get("gate_blocks", {}),
         "btc": rep.get("btc", {}),
@@ -1534,6 +1593,61 @@ def summarize(rep):
         "by_setup": by_setup,
         "by_exit_reason": by_exit,
     }
+
+
+def _entry_mfe_summary(trades, horizons=MFE_HORIZONS_M1):
+    """
+    Fase A — ringkasan MFE/MAE dari bar masuk sinyal, atas SEMUA sinyal siap
+    (termasuk yang UNRESOLVED). `n_usable` = sinyal dengan jendela penuh h bar,
+    `n_truncated` = data berhenti lebih awal; share dihitung atas sinyal usable.
+    `mfe_exit_resolved` = MFE kotor sampai bar exit untuk trade yang tuntas —
+    pembanding "rekam sempurna" terhadap R yang direalisasi.
+    """
+    if not trades:
+        return {"n_signals": 0, "horizons": {}, "mfe_exit_resolved": {"n": 0}}
+    out = {"n_signals": len(trades), "horizons": {}}
+    for h in horizons:
+        bkey, fkey, akey = f"bars_{h}", f"mfe_{h}", f"mae_{h}"
+        with_key = [t for t in trades if t.get(bkey) is not None]
+        usable = [t for t in with_key if t.get(bkey) == h]
+        truncated = len([t for t in with_key if 0 < t.get(bkey) < h])
+        mfes = [t[fkey] for t in usable]
+        maes = [t[akey] for t in usable]
+
+        def _share(pred):
+            c = sum(1 for t in usable if pred(t))
+            return round(100.0 * c / len(usable), 2) if usable else 0.0
+
+        out["horizons"][str(h)] = {
+            "n_usable": len(usable),
+            "n_truncated": truncated,
+            "median_mfe_pct": round(_pctl(mfes, 0.5), 4),
+            "p25_mfe_pct": round(_pctl(mfes, 0.25), 4),
+            "p75_mfe_pct": round(_pctl(mfes, 0.75), 4),
+            "median_mae_pct": round(_pctl(maes, 0.5), 4),
+            "p25_mae_pct": round(_pctl(maes, 0.25), 4),
+            "share_mfe_ge_cost_pct": _share(
+                lambda t: t[fkey] >= t.get("friction_pct", 0.0)),
+            "share_mfe_ge_2cost_pct": _share(
+                lambda t: t[fkey] >= 2.0 * t.get("friction_pct", 0.0)),
+            "share_mfe_ge_4cost_pct": _share(
+                lambda t: t[fkey] >= 4.0 * t.get("friction_pct", 0.0)),
+            "share_mfe_ge_tp1_pct": _share(
+                lambda t: t.get("entry", 0) > 0 and t.get("tp1", 0) > 0
+                and t[fkey] >= (t["tp1"] - t["entry"]) / t["entry"] * 100.0),
+            "share_sl_hit_pct": _share(
+                lambda t: t.get("gross_risk_pct", 0.0) > 0
+                and t[akey] <= -t["gross_risk_pct"]),
+        }
+    ex = [t["mfe_exit_pct"] for t in trades
+          if t.get("exit_idx") is not None and "mfe_exit_pct" in t]
+    out["mfe_exit_resolved"] = {
+        "n": len(ex),
+        "median_pct": round(_pctl(ex, 0.5), 4) if ex else 0.0,
+        "p25_pct": round(_pctl(ex, 0.25), 4) if ex else 0.0,
+        "p75_pct": round(_pctl(ex, 0.75), 4) if ex else 0.0,
+    }
+    return out
 
 
 def main():

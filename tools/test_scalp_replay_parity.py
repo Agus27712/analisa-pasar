@@ -326,5 +326,106 @@ class SummaryTest(unittest.TestCase):
         self.assertEqual(100.0, summary["sl_floor_active_pct"])
 
 
+class MfeTest(unittest.TestCase):
+    """Fase A — field MFE/MAE dari resolve_trade + agregasi summarize."""
+
+    def _ramp_bars(self, count=130, step=0.1):
+        bars = [candle(0, 100.0)]
+        for j in range(1, count + 1):
+            bars.append(candle(j * 60_000, 100.0, high=100.0 + j * step, low=99.9))
+        return bars
+
+    def test_resolve_trade_exposes_horizon_excursions(self):
+        cfg = canonical_cfg()
+        cfg["exit"]["mode"] = "classic"
+        cfg["exit"]["max_hold_bars_m1"] = 90
+        result = replay.resolve_trade(
+            self._ramp_bars(), 0, 100.0, 90.0, 110.0, 120.0,
+            usdt_fee(), cfg, 120, atr_pct=1.0
+        )
+        self.assertEqual("TIMEOUT", result["exit_reason"])
+        # High bar ke-h = 100 + 0.1h → MFE horizon h = h * 0.1%.
+        self.assertAlmostEqual(3.0, result["mfe_30"], places=6)
+        self.assertAlmostEqual(6.0, result["mfe_60"], places=6)
+        self.assertAlmostEqual(9.0, result["mfe_90"], places=6)
+        self.assertAlmostEqual(-0.1, result["mae_90"], places=6)
+        self.assertEqual(30, result["bars_30"])
+        self.assertEqual(90, result["bars_90"])
+        # MFE kotor sampai bar exit (bar ke-90) = 9.0%.
+        self.assertAlmostEqual(9.0, result["mfe_exit_pct"], places=6)
+
+    def test_resolve_trade_without_forward_data_is_unresolved(self):
+        cfg = canonical_cfg()
+        cfg["exit"]["max_hold_bars_m1"] = 90
+        result = replay.resolve_trade(
+            [candle(0, 100.0)], 0, 100.0, 90.0, 110.0, 120.0,
+            usdt_fee(), cfg, 120, atr_pct=1.0
+        )
+        self.assertEqual("UNRESOLVED", result["result"])
+        self.assertEqual(0, result["bars_90"])
+        self.assertEqual(0.0, result["mfe_90"])
+        self.assertEqual(0.0, result["mfe_exit_pct"])
+
+    def _trade(self, result, r, mfe_90, mae_90, bars_90=90, friction=0.9688,
+               risk=5.0, entry=100.0, tp1=108.0, exit_idx=None):
+        return {
+            "setup": "BREAKOUT", "result": result, "r": r,
+            "entry": entry, "sl": entry * 0.95, "tp1": tp1, "tp2": 120.0,
+            "gross_risk_pct": risk, "friction_pct": friction,
+            "sl_floor_active": False, "exit_reason": "TIMEOUT",
+            "exit_idx": exit_idx,
+            "mfe_exit_pct": mfe_90 if exit_idx is not None else 0.0,
+            "mfe_30": mfe_90 / 2.0, "mae_30": mae_90, "bars_30": 30,
+            "mfe_60": mfe_90 * 0.75, "mae_60": mae_90, "bars_60": 60,
+            "mfe_90": mfe_90, "mae_90": mae_90, "bars_90": bars_90,
+        }
+
+    def test_summarize_entry_mfe_aggregates(self):
+        rep = {
+            "evals": 0, "bottleneck": {}, "setup_hits": {}, "exit_reasons": {},
+            "max_dd_r": 0.0,
+            "trades": [
+                self._trade("WIN", 0.2, 5.0, -1.0, exit_idx=30),
+                self._trade("LOSS", -0.9, 0.9, -5.0, exit_idx=50),
+                self._trade("UNRESOLVED", 0.0, 2.0, -0.5, bars_90=10),
+            ],
+        }
+        s = replay.summarize(rep)
+        m = s["entry_mfe"]
+        self.assertEqual(3, m["n_signals"])
+        h = m["horizons"]["90"]
+        self.assertEqual(2, h["n_usable"])
+        self.assertEqual(1, h["n_truncated"])
+        # median dari [5.0, 0.9] = 2.95
+        self.assertAlmostEqual(2.95, h["median_mfe_pct"], places=6)
+        # share mfe >= 1x friksi (0.9688): hanya trade WIN (5.0) → 50%
+        self.assertEqual(50.0, h["share_mfe_ge_cost_pct"])
+        # share mfe >= 2x friksi (1.9376): hanya WIN → 50%
+        self.assertEqual(50.0, h["share_mfe_ge_2cost_pct"])
+        # share mfe >= 4x friksi (3.8752): hanya WIN → 50%
+        self.assertEqual(50.0, h["share_mfe_ge_4cost_pct"])
+        # tp1 kotor = (108-100)/100*100 = 8.0% → tidak ada yang mencapai → 0%
+        self.assertEqual(0.0, h["share_mfe_ge_tp1_pct"])
+        # MAE <= -risiko kotor (5.0): trade LOSS (mae -5.0) → 50%
+        self.assertEqual(50.0, h["share_sl_hit_pct"])
+        # mfe_exit hanya dihitung untuk trade resolved (exit_idx terisi);
+        # median dari [5.0 (WIN), 0.9 (LOSS)] = 2.95
+        self.assertEqual(2, m["mfe_exit_resolved"]["n"])
+        self.assertAlmostEqual(2.95, m["mfe_exit_resolved"]["median_pct"], places=6)
+
+    def test_summarize_without_mfe_fields_still_works(self):
+        """Trade bergaya lama (tanpa field MFE) tidak boleh membuat summarize crash."""
+        rep = {
+            "evals": 0, "bottleneck": {}, "setup_hits": {}, "exit_reasons": {},
+            "max_dd_r": 0.0,
+            "trades": [{"setup": "BREAKOUT", "result": "UNRESOLVED", "r": 0.0,
+                        "sl_floor_active": True, "gross_risk_pct": 5.0,
+                        "friction_pct": 0.9688}],
+        }
+        s = replay.summarize(rep)
+        self.assertEqual(0, s["entry_mfe"]["horizons"]["90"]["n_usable"])
+        self.assertEqual(1, s["entry_mfe"]["n_signals"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

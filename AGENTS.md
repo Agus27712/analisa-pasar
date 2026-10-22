@@ -337,6 +337,14 @@ Gate MTF dan BTC bekerja (frekuensi turun 37,8%), tetapi **avg R masih negatif**
 +0,0073R berada di dalam noise. Angka WR **14,84%** di laporan P0 **bukan** pengulangan angka
 **14,88%** parity: geometri exit dan komposisi trade berbeda, jadi jangan dibandingkan langsung.
 
+Eksperimen rerata exit: `exp_exit_modes_ADA-DOGE-XRP.md` (2026-10-22) — MFE/MAE dari bar masuk
+sinyal (alat `scalp_replay.py` kini mengeluarkan `mfe_/mae_` 30/60/90 menit + `summary.entry_mfe`)
+dan mode exit **EARLY** (varian `scalp_config_exit_early_p0.json`). Hasil terukur: median MFE
+90 menit **+0,506%** (positif tapi hanya ≈ setengah friksi); ≥TP1 hanya 1/618 sinyal; EARLY
+mengunci 53 trade (+0,3208R) + 28 BE, tetapi avg R hanya **−0,1522 (−0,1569 klasik)** —
+**+0,0047R, di dalam noise**. Kesimpulan: mode exit pada unit risiko 5,81% tidak menciptakan
+edge; ambang impas masih WR ~50% vs hit rate ~15%. Penjaga parity kini **22 test**.
+
 **Spec v2 dihentikan dan artefaknya dihapus (2026-10-21).** Dokumen spec, dua laporan hasil,
 tool, dataset, dan hasil JSON sudah dihapus dari pohon kerja. Jangan membuat ulang berkas atau
 riset v2; ringkasan alasan ada di `workplan2.md` §64.
