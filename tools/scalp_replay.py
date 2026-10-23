@@ -999,7 +999,7 @@ def evaluate_mtf_gate(h1w, m15w, m5w, m1w, cfg):
 
 
 def evaluate_bar(price, m1w, m15w, h1w, cfg, fee, assume_ob, change24h=0.0,
-                 btc_veto=False, btc_reason="", m5w=None):
+                 btc_veto=False, btc_reason="", m5w=None, want_risk_inputs=False):
     if price <= 0 or len(h1w) < 20 or len(m15w) < 20 or len(m1w) < 20:
         return None
     # Fallback agregasi M1 -> M5 untuk pemanggil lama (mis. uji parity). Pipeline utama
@@ -1125,6 +1125,17 @@ def evaluate_bar(price, m1w, m15w, h1w, cfg, fee, assume_ob, change24h=0.0,
         "sl_floor_active": rl["sl_floor_active"] if rl else False,
         # S8 — ATR% diperlukan resolve_trade untuk BE/trailing proporsional.
         "atr_pct": rg["atr_pct"] if rg["atr_pct"] > 0 else 0.0,
+        # Untuk sweep lantai friksi: masukan mentah risk_levels, supaya geometri
+        # risiko bisa dihitung ulang untuk kelipatan lain tanpa mengevaluasi ulang
+        # seluruh gate (struktur/regime/skor tidak bergantung pada kelipatan).
+        **({"risk_inputs": {
+            "setup": setup,
+            "st": {"support": st["support"], "resistance": st["resistance"],
+                   "last_swing_low": st["last_swing_low"]},
+            "atr_pct": rg["atr_pct"],
+            "score": sc["total"],
+            "s3": s3,
+        }} if want_risk_inputs else {}),
     }
 
 

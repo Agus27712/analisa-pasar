@@ -323,6 +323,12 @@ absolut (`min_risk_pct` 3,0%), sweep dilanjutkan pada kelipatan friksi (6 pair, 
 | 4,0 | idr_maker | 362 | 82,6% | −0,0659 | 1/6 |
 | 5,0 | usdt | 188 | 97,3% | +0,0655 | 5/6 |
 | 5,0 | idr_maker | 318 | 90,9% | +0,0245 | 4/6 |
+
+> **Catatan 2026-10-22 — tabel R di atas bukan lagi dasar pemilihan default.** R dihitung dari
+> jarak SL, jadi membandingkan R antar-lantai friksi bias ke SL lebar. Sweep ulang berbasis uang
+> (`docs/exp/exp_friction_multiple_ADA-DOGE-XRP.md`, 3 pair/60 hari, gate P0, exit sama) memberi:
+> **semua kelipatan 1–8 rugi**; 3,0 sedikit lebih baik dari 6,0 (−0,993 vs −1,078 %/hari) tetapi
+> tetap −1%/hari. Default 6,0 dipertahankan karena konservatif, bukan karena tabel R di atas.
 | **6,0** | **usdt** | **186** | **98,9%** | **+0,0695** | **6/6** |
 | **6,0** | **idr_maker** | **297** | **93,9%** | **+0,0430** | **4/6** |
 | 8,0 | usdt | 181 | 99,4% | +0,0557 | 6/6 |
@@ -4288,3 +4294,34 @@ tidak ada titik yang memenuhi keduanya.
 2. Perbaikan berikutnya harus dari **entry/universe** (median MFE ≥ 2× friksi), bukan exit.
    Sesuai `AGENTS.md`, gate entry baru menunggu instruksi eksplisit owner.
 3. Verifikasi: **25 test parity OK** (22 lama + 3 uji net-TP/net-SL).
+
+---
+
+## 69. Sweep lantai friksi berbasis uang (2026-10-22)
+
+Laporan lengkap: **`docs/exp/exp_friction_multiple_ADA-DOGE-XRP.md`**; alat
+`tools/friction_sweep.py`. Menjawab pertanyaan owner: `min_friction_multiple = 6.0` diwarisi
+dari eksperimen lama yang menilai **R**, padahal R didefinisikan oleh SL sehingga bias ke SL
+lebar. Sweep ini mengubah **hanya** kelipatan friksi; data (ADA/DOGE/XRP, 87.000 bar M1, 60,42
+hari), gate P0, fee, `target_net_rr`, dan aturan exit identik. Kontrol mult 6,0/hold 90m
+identik CLI: 620 trade, WR 14,84%, avg R −0,1569.
+
+**Hasil: 0 dari 27 kombinasi (9 kelipatan × 3 hold) positif.** Pada hold 420m (rata-rata 3
+pair): mult 1,0 −1,735%/hari; 2,0 −1,075; **3,0 −0,993 (terbaik)**; 4,0 −1,024; 5,0 −1,045;
+6,0 −1,078; 8,0 −1,080. Mult 0,5 degenerate (3–10 trade/60 hari) karena `tp2/risk` melampaui
+`max_tp2_r` dan sinyal ditolak.
+
+**Temuan:**
+1. **6,0 bukan penyebab kerugian.** Semua kelipatan rugi; 3,0 hanya +0,085%/hari lebih baik
+   dan tetap ≈ −60% dalam 60 hari. Jangan mengutip bukti lama "0,5% → −1,8R di 28/28 pair".
+2. **R menyesatkan.** Hold 420m: mult 8 paling baik di R (−0,096) tetapi lebih buruk di uang
+   (−0,747%/trade) daripada mult 3 (−0,230R, −0,667%/trade). Peringkat R ≠ peringkat uang.
+3. **Jumlah putaran lebih menentukan daripada lantai.** Mult 6: hold 90m −3,119%/hari; 240m
+   −1,668; 420m −1,078. Menahan lebih lama hanya mengurangi frekuensi membayar friksi.
+4. **Biaya per trade ≈ satu friksi** (−0,65 s.d. −0,75%) di semua kelipatan — tanda entry tidak
+   punya edge; lantai friksi tidak bisa memperbaikinya.
+
+**Keputusan:** default **6,0 tetap** (konservatif, stop-out 3,8% vs 12,6% pada 3,0, DD
+setara), tetapi **alasannya diganti**: plateau uang, bukan klaim R lama. Perbaikan harus dari
+entry/universe dan menunggu instruksi owner. Verifikasi: **26 test parity** (25 + 1 uji bahwa
+`want_risk_inputs` tidak mengubah keputusan gate).

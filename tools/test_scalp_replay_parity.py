@@ -286,6 +286,23 @@ class ExitTest(unittest.TestCase):
         self.assertEqual("SL", result["exit_reason"])
 
 
+class RiskInputsTest(unittest.TestCase):
+    def test_risk_inputs_flag_does_not_change_decision(self):
+        cfg = canonical_cfg()
+        m1 = flat_candles(60)
+        m15 = flat_candles(60)
+        h1 = flat_candles(60)
+        a = replay.evaluate_bar(100.0, m1, m15, h1, cfg, usdt_fee(), True)
+        b = replay.evaluate_bar(100.0, m1, m15, h1, cfg, usdt_fee(), True,
+                                want_risk_inputs=True)
+        self.assertEqual(a["ready"], b["ready"])
+        self.assertEqual(a["entry"], b["entry"])
+        self.assertEqual(a["sl"], b["sl"])
+        self.assertNotIn("risk_inputs", a)
+        self.assertIn("risk_inputs", b)
+        self.assertEqual(b["risk_inputs"]["s3"], b["steps"][2])
+
+
 class P0GateTest(unittest.TestCase):
     def test_mtf_gate_allows_three_of_four_when_high_tf_safe(self):
         cfg = canonical_cfg()

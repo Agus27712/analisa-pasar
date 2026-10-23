@@ -361,8 +361,18 @@ exit-only mustahil: pada 1440m hanya 72,0/54,5/60,4% sinyal pernah mencapai TP n
 sempurna, tanpa stop) sedangkan WR impas 76,8/72,6/72,8%. Kriteria owner "1 exit net/hari" tidak
 tercapai konsisten (maksimum 54,6% hari; frekuensi tertinggi 1,82/hari dengan net −2,06%/hari).
 **Line exit-only ditutup** untuk sinyal P0; perbaikan harus dari entry/universe dan menunggu
-instruksi owner. Penjaga parity kini **25 test**; mode ini belum ada di app dan tidak boleh
+instruksi owner. Penjaga parity kini **26 test**; mode ini belum ada di app dan tidak boleh
 disambungkan tanpa instruksi (stop rapat melanggar lantai friksi 6×).
+
+Sweep lantai friksi: `exp_friction_multiple_ADA-DOGE-XRP.md` (2026-10-22) — `tools/friction_sweep.py`
+mengubah **hanya** `min_friction_multiple` (data, gate P0, fee, exit sama; kontrol mult 6,0
+identik CLI 620/14,84%/−0,1569). **0 dari 27 kombinasi untung.** Hold 420m (rata 3 pair):
+mult 3,0 **−0,993 %/hari** (terbaik), 6,0 −1,078, 1,0 −1,735; mult 0,5 degenerate karena
+`tp2/risk` melewati `max_tp2_r`. Biaya per trade ≈ satu friksi (−0,65 s.d. −0,75%) di semua
+kelipatan ⇒ entry tanpa edge, lantai friksi bukan penyebabnya. **R menyesatkan:** mult 8
+avg R terbaik (−0,096) tetapi uang lebih buruk daripada mult 3 (−0,230R, net −0,667/trade).
+Default 6,0 dipertahankan dengan alasan baru (plateau uang, stop-out lebih jarang), bukan klaim
+lama −1,8R.
 
 **Spec v2 dihentikan dan artefaknya dihapus (2026-10-21).** Dokumen spec, dua laporan hasil,
 tool, dataset, dan hasil JSON sudah dihapus dari pohon kerja. Jangan membuat ulang berkas atau
@@ -900,10 +910,16 @@ menurut owner terbukti memaksimalkan entry, exit strategi belum.
 ## Engine scalping — aturan agen
 
 - Threshold keputusan: pusat di `ScalpingConfig` (default) → target **`ScalpingRuntimeConfig`** (slider/JSON). Jangan hardcode angka gate di banyak file.
-- **Lantai risiko berbasis friksi (2026-10-12, WAJIB):** jarak stop loss harus
-  `≥ min_friction_multiple × (buyFee + sellFee + 2×slippage)`. Default **6,0**. Jangan turunkan
-  di bawah 5 tanpa bukti replay baru — lantai 0,5% (perilaku lama) membuat satu kali SL menelan
-  ~2,9R dan hasilnya **−1,8R/trade di 28/28 pair**. Bukti: `workplan2.md` §9.
+- **Lantai risiko berbasis friksi (2026-10-12; alasan diperbarui 2026-10-22, WAJIB):** jarak
+  stop loss harus `≥ min_friction_multiple × (buyFee + sellFee + 2×slippage)`. Default **6,0**;
+  jangan turunkan tanpa bukti replay baru. **Jangan mengutip klaim lama "0,5% → −1,8R/trade di
+  28/28 pair":** R dihitung dari jarak SL, jadi perbandingan R antar-lantai bias ke SL lebar.
+  Dasar yang berlaku sekarang adalah sweep **uang** (`docs/exp/exp_friction_multiple_ADA-DOGE-XRP.md`,
+  alat `tools/friction_sweep.py`, 3 pair/60 hari, gate P0 + exit sama): **semua kelipatan 1–8
+  rugi**; 3,0 sedikit lebih baik dari 6,0 (−0,993 vs −1,078 %/hari) tetapi tetap −1%/hari dan
+  stop-out 12,6% vs 3,8%, jadi default 6,0 dipertahankan sebagai pilihan konservatif. Kelipatan
+  0,5 tidak sah diuji: `tp2/risk` melampaui `max_tp2_r` dan sinyal ditolak (3–10 trade/60 hari).
+  Bandingkan kandidat dengan **net %**, bukan avg R.
 - Mirror offline: `data/config/scalp_config.json` + `tools/scalp_replay.py` (keduanya sudah punya
   `min_friction_multiple`; kalau ubah satu, ubah yang lain).
 - **Gerbang edge pair (2026-10-12, WAJIB):** pair hanya layak di-scalp bila median MFE horizon
