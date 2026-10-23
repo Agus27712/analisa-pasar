@@ -3,7 +3,13 @@
 > **Sumber kebenaran workplan.**  
 > `workplan.md`, `checkpoint.md`, dan `checkpoint_progres.md` **sudah dihapus (2026-10-16)** — jangan cari, jangan dibuat ulang. Baca ini + `AGENTS.md` + `APP_CONTEXT.md` (§ arah produk).
 
-**Update:** 2026-10-21 (WIB) — §64: Spec v2/v3 dihentikan dan seluruh artefak v2 dihapus; fokus engine kriptoyoi yang sudah ada + slider.
+**Update:** 2026-10-22 (WIB) — §65–§69: P0 KriptoYoi (TTL 5 candle, gate MTF 4 TF, veto BTC,
+regime OR) disinkronkan lalu diukur — gate bekerja tetapi **edge belum ada** (620 trade, avg R
+−0,1569, 616/620 TIMEOUT, 0 TP1/TP2). Setelah itu **dua line riset ditutup**: exit-only (§68,
+0/88 varian) dan sweep lantai friksi (§69, 0/27 kombinasi). Arah berikutnya: pengukuran
+**entry/universe**; gate entry baru menunggu instruksi owner. Sebelumnya, 2026-10-21 — §64:
+Spec v2/v3 dihentikan dan seluruh artefak v2 dihapus; fokus engine kriptoyoi yang sudah ada
++ slider.
 
 > ⚠️ **Seksi §9.5b sudah DIBATALKAN** (angka edge lama tidak sah). Angka yang berlaku ada di
 > **§9.5c**. Seksi §14/§15 **dibatalkan** — fiturnya sudah dihapus dari kode, jangan dibangun ulang.
@@ -4228,9 +4234,11 @@ ke impas (0,00R). Perbaikan avg R **+0,0047R — di dalam noise** (CI 95% (−0,
 1. Gate entry P0 tidak diutak-atik; tidak ada gate baru.
 2. Bukan bukti menambah/menghapus mode exit — angkanya bilang geometri saat ini (risiko 5,81%,
    kunci profit ≈0,32R, payoff ≈0,99) butuh WR ~50% untuk impas, sedangkan hit rate ~15%.
-   Perbaikan berikutnya yang layak didiskusikan owner: unit risiko lebih kecil (revisi
-   `min_friction_multiple` — melanggar lantai 6× yang WAJIB, butuh bukti replay baru penuh)
-   atau kualitas entry, bukan lagi mode exit di unit risiko sama.
+   *(Diperbarui §69, 2026-10-22 — opsi "unit risiko lebih kecil" lewat revisi
+   `min_friction_multiple` **sudah diukur dan tertutup**: 0 dari 27 kombinasi untung, dan biaya
+   per trade ≈ satu friksi di semua kelipatan. Default 6,0 dipertahankan dengan alasan plateau
+   uang. Yang tersisa hanya kualitas entry/universe, dan gate entry baru menunggu instruksi
+   owner.)*
 3. Verifikasi: **22 test parity OK** (18 lama + 4 uji MFE).
 
 ---
