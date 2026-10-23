@@ -58,11 +58,14 @@ tool, dataset, dan hasil JSON/CSV; commit v3 (`ada71dc`, `796a9d1`) sudah dibuan
 dan artefaknya hanya ada di branch backup **`backup/patch-v3-2026-10-21`** (`796a9d1`, remote).
 **Jangan membangun engine/spec baru.**
 Arah aktif: **engine scalping yang sudah ada** (port kriptoyoi `p0_engine` + slider). Status
-dari owner: implementasi slider entry sudah ada dan terbukti memaksimalkan entry; **exit
-strategi belum**. **P0 (TTL, MTF 4 TF, veto BTC, regime OR) sudah disinkronkan 2026-10-22**
-dan diukur: gate bekerja, tetapi **edge masih negatif** (avg R −0,1569, 616/620 trade TIMEOUT).
-Jangan mengklaim P0 menyelesaikan masalah profit. Setelah P0, **jangan menambah gate entry
-baru tanpa instruksi**; prioritas berikutnya adalah **exit strategi**.
+dari owner: implementasi slider entry sudah ada dan terbukti memaksimalkan entry; riset
+exit-only kemudian diukur negatif dan **ditutup** (2026-10-22). **P0 (TTL, MTF 4 TF, veto BTC,
+regime OR) sudah disinkronkan 2026-10-22** dan diukur: gate bekerja, tetapi **edge masih
+negatif** (avg R −0,1569, 616/620 trade TIMEOUT). Jangan mengklaim P0 menyelesaikan masalah
+profit. Setelah P0, **jangan menambah gate entry baru tanpa instruksi**; riset exit-only
+(0/88 varian, `exp_exit_net_tp`) dan sweep kelipatan friksi (0/27 kombinasi,
+`exp_friction_multiple`) sudah ditutup, jadi fokus berikutnya adalah **pengukuran
+entry/universe** — ukur dulu lewat potongan sinyal P0, keputusan gate tetap menunggu owner.
 
 **Urutan baca 5 menit yang benar:**
 
@@ -382,7 +385,8 @@ riset v2; ringkasan alasan ada di `workplan2.md` §64.
 lalu dihentikan owner; seluruh artefaknya (termasuk `exp_spot_evidence_v3.md`) ada di branch
 backup `backup/patch-v3-2026-10-21` (`796a9d1`). Jangan membuat berkas v3 baru di `docs/exp/`
 branch ini. Arah aktif: engine kriptoyoi yang sudah ada + slider; slider entry sudah ada dan
-menurut owner terbukti memaksimalkan entry, exit strategi belum.
+menurut owner terbukti memaksimalkan entry; riset exit-only diukur negatif dan ditutup
+(2026-10-22), berikutnya pengukuran entry/universe.
 
 ## Aturan turunan dari audit notifikasi (batch 1 & 2, 2026-10-16)
 
@@ -865,7 +869,8 @@ menurut owner terbukti memaksimalkan entry, exit strategi belum.
 - **Fokus: engine scalping yang sudah ada** (port kriptoyoi `p0_engine` / spec) + **paper trade**
   untuk menguji engine. **Bukan** membangun spec/engine baru; Spec v2/v3 sudah dihentikan.
 - **Slider adalah jalur peningkatan**: slider entry sudah ada dan menurut owner terbukti
-  memaksimalkan entry; **exit strategi belum**. Jangan mengklaim exit sudah terpecahkan.
+  memaksimalkan entry; riset exit-only diukur negatif dan ditutup (§68–§69 `workplan2.md`).
+  Jangan mengklaim exit sudah terpecahkan.
 - **P0 sudah disinkronkan (2026-10-22)**: TTL 5 candle, gate MTF 4 TF, veto BTC, regime OR.
   Hasil terukur: 620 trade, WR 14,84%, **avg R −0,1569**, **616 TIMEOUT**, 0 TP. Gate bekerja,
   tetapi **edge belum ada**; jangan memakai P0 sebagai alasan promosi uang riil.
@@ -916,8 +921,11 @@ menurut owner terbukti memaksimalkan entry, exit strategi belum.
   28/28 pair":** R dihitung dari jarak SL, jadi perbandingan R antar-lantai bias ke SL lebar.
   Dasar yang berlaku sekarang adalah sweep **uang** (`docs/exp/exp_friction_multiple_ADA-DOGE-XRP.md`,
   alat `tools/friction_sweep.py`, 3 pair/60 hari, gate P0 + exit sama): **semua kelipatan 1–8
-  rugi**; 3,0 sedikit lebih baik dari 6,0 (−0,993 vs −1,078 %/hari) tetapi tetap −1%/hari dan
-  stop-out 12,6% vs 3,8%, jadi default 6,0 dipertahankan sebagai pilihan konservatif. Kelipatan
+  rugi**; 3,0 sedikit lebih baik dari 6,0 (−0,993 vs −1,078 %/hari) tetapi tetap −1%/hari.
+  **Default 6,0 dipertahankan sementara tanpa klaim optimal atau lebih aman:** pada sampel ini
+  DD 6× (−79,2%) malah lebih buruk dari 3× (−71,7%) dan kerugian hariannya sedikit lebih besar;
+  alasannya hanya **belum cukup bukti** untuk mengubah bawaan (selisih +0,085 %/hari, sampel
+  3 pair/60 hari). Keputusan konfigurasi baru menunggu hasil entry/universe. Kelipatan
   0,5 tidak sah diuji: `tp2/risk` melampaui `max_tp2_r` dan sinyal ditolak (3–10 trade/60 hari).
   Bandingkan kandidat dengan **net %**, bukan avg R.
 - Mirror offline: `data/config/scalp_config.json` + `tools/scalp_replay.py` (keduanya sudah punya
@@ -1079,8 +1087,11 @@ Sumber semua angka: `ScalpingRuntimeConfig` (default di `ScalpingConfig`), mirro
   **616 TIMEOUT**, 4 SL, **0 TP1/TP2**. Baseline 996 trade, WR 12,85%, avg R −0,1642. Gate
   bekerja dan frekuensi turun, tetapi **edge belum ada**. Jangan promosikan ke uang riil dan
   jangan menambah gate entry baru tanpa instruksi owner.
-- **Prioritas berikutnya exit strategi**, bukan gate entry. TP1 (+7,99%) dan TP2 (+14,53%) tidak
-  pernah tercapai dalam time-stop 90 menit. Jangan mengklaim exit sudah selesai.
+- **Riset exit-only sudah ditutup (2026-10-22)**: 0 dari 88 varian exit positif
+  (`exp_exit_net_tp_ADA-DOGE-XRP.md`) dan 0 dari 27 kombinasi kelipatan friksi
+  (`exp_friction_multiple_ADA-DOGE-XRP.md`). Prioritas berikutnya **pengukuran entry/universe**
+  (potongan sinyal P0), bukan gate baru dan bukan utak-atik exit. TP1 (+7,99%) dan TP2 (+14,53%)
+  tidak pernah tercapai dalam time-stop 90 menit.
 
 Rincian angka: `docs/exp/exp_p0_gatekeeper_ADA-DOGE-XRP.md`; ringkasan keputusan:
 `workplan2.md` §65. Penjaga: `SignalTtlTest`, `MtfAlignmentPolicyTest`, `BtcPulseAnalyzerTest`,

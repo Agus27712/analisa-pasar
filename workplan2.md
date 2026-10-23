@@ -4195,6 +4195,8 @@ BTC tidak memperbaiki apa pun pada sampel ini.
 2. **Jangan promosikan ke uang riil.** Edge belum ada.
 3. Prioritas berikutnya **exit strategi**, bukan menambah gate entry. Seluruh exit saat ini
    bergantung pada time-stop; TP1/TP2 tidak pernah tercapai dalam 90 menit.
+   *(Diperbarui §68–§69, 2026-10-22: riset exit-only diukur dan ditutup; arah berikutnya
+   pengukuran entry/universe.)*
 4. Setiap perubahan exit wajib diukur dengan tabel yang sama (termasuk TIMEOUT dan trade
    `UNRESOLVED`), bukan hanya win rate.
 

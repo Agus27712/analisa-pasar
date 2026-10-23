@@ -3,7 +3,8 @@
 > **Baca ini dulu.** Dokumen ini adalah titik masuk untuk agen/engineer berikutnya: status terkini,
 > apa yang sudah selesai, apa berikutnya, dan **perangkap yang sudah pernah ditemukan** supaya tidak
 > diulang. Terakhir diperbarui: **2026-10-22** (P0 KriptoYoi disinkronkan; PR #63 sudah masuk
-> `origin/main`; prioritas berikutnya exit strategi).
+> `origin/main`; riset exit-only dan sweep kelipatan friksi ditutup; prioritas berikutnya
+> pengukuran entry/universe).
 >
 > ⛔ **Spesifikasi baru v2/v3 dihentikan (2026-10-21).** Spec v2 dan v3 sudah diukur dan keduanya
 > **tidak menghasilkan edge**; owner menghentikan seluruh line riset ini karena hanya memperpanjang
@@ -14,10 +15,12 @@
 >
 > 🎯 **Arah aktif:** maksimalkan **engine scalping yang sudah ada** (port kriptoyoi `p0_engine` +
 > slider), bukan membangun spec/engine baru. Status dari owner: slider entry sudah ada dan
-> terbukti memaksimalkan entry; **exit strategi belum**.
+> terbukti memaksimalkan entry; riset exit-only kemudian diukur negatif dan **ditutup**
+> (2026-10-22).
 > **P0 (TTL, MTF 4 TF, veto BTC, regime OR) sudah disinkronkan 2026-10-22**, tetapi hasil ukurnya
 > masih negatif: 620 trade, avg R **−0,1569**, 616 TIMEOUT, 0 TP. Jangan menambah gate entry baru
-> tanpa instruksi; **prioritas berikutnya exit strategi**.
+> tanpa instruksi; **prioritas berikutnya pengukuran entry/universe** — potongan sinyal P0,
+> ukur dulu, keputusan gate menunggu owner.
 >
 > 🔴 **Untuk "apa lagi yang tersisa" → `docs/bugs/`, bukan dokumen ini.** Status temuan audit
 > (notifikasi `N*`, jurnal/P&L `J*`, paper trading `P*`, koneksi `K*`) sudah diverifikasi ke kode dan
@@ -223,9 +226,9 @@ selesai, kecuali ada instruksi eksplisit.
 > owner menghentikan seluruh line riset ini karena hanya memperpanjang research. Commit v3
 > sudah dibuang dari `patch`; arsip lengkap di `backup/patch-v3-2026-10-21` (`796a9d1`).
 > **Jangan melanjutkan v2/v3 dari dokumen ini.** Arah aktif: **engine kriptoyoi yang sudah ada
-> + slider**. Status dari owner: slider entry sudah ada dan terbukti memaksimalkan entry;
-> **exit strategi belum**. **Artefak v2 sudah dihapus; perubahan kode aplikasi lain menunggu
-> instruksi.**
+> + slider**. Status dari owner: slider entry sudah ada dan terbukti memaksimalkan entry; riset
+> exit-only diukur negatif dan ditutup (2026-10-22). **Artefak v2 sudah dihapus; perubahan kode
+> aplikasi lain menunggu instruksi** (dokumentasi + pengukuran riset tetap berjalan).
 
 ### 🗄️ Catatan historis Spec v2 (M15/H1) — diukur 2026-10-20, hasil NEGATIF; DIHENTIKAN 2026-10-21
 
@@ -249,13 +252,22 @@ artefak v2 tidak boleh dibuat ulang. Jangan memakai angka ini untuk memulai engi
 
 Owner memutuskan arah pada 2026-10-21: **engine scalping yang sudah ada** (port kriptoyoi
 `p0_engine` / spec) dimaksimalkan lewat **slider** yang sudah tersedia. Status dari owner:
-implementasi slider entry sudah ada dan terbukti memaksimalkan entry; **exit strategi belum**.
+implementasi slider entry sudah ada dan terbukti memaksimalkan entry; riset exit-only
+kemudian diukur negatif dan ditutup (2026-10-22, lihat blok Lanjutan di bawah).
 
 **P0 sudah disinkronkan 2026-10-22** (TTL 5 candle, gate MTF 4 TF, veto BTC, regime OR) dan
 diukur pada ADA/DOGE/XRP: baseline 996 trade / WR 12,85% / avg R −0,1642 vs P0 **620 trade /
 14,84% / −0,1569**. Gate bekerja dan frekuensi turun 37,8%, tetapi **edge masih negatif**:
 **616 dari 620 trade TIMEOUT, 4 SL, 0 TP1/TP2**. Perbaikan +0,0073R berada di dalam noise.
-Jangan menambah gate entry baru tanpa instruksi owner; **prioritas berikutnya exit strategi**.
+Jangan menambah gate entry baru tanpa instruksi owner.
+
+**Lanjutan 2026-10-22 — line exit dan lantai friksi ditutup.** Dua sweep baru, keduanya
+negatif: **0 dari 88 varian exit** (`exp_exit_net_tp_ADA-DOGE-XRP.md`, mode `net_tp`/`net_tp_stop`)
+dan **0 dari 27 kombinasi kelipatan friksi** (`exp_friction_multiple_ADA-DOGE-XRP.md`;
+kontrol mult 6,0 identik CLI, R terbukti yardstick yang menyesatkan karena dihitung dari SL).
+Prioritas berikutnya adalah **pengukuran entry/universe**: potong sinyal P0 yang ada berdasar
+atribut (setup, regime, skor, jam UTC, ATR) dan ukur median MFE vs friksi per potongan —
+tanpa menambah gate; hasilnya dibahas owner sebelum ada keputusan gate.
 Setiap perubahan exit wajib diukur dengan tabel yang sama (termasuk TIMEOUT dan `UNRESOLVED`).
 
 Patokan aritmetis lama tetap berguna sebagai anggaran, bukan alasan membangun spec baru: lantai
