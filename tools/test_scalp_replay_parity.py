@@ -9,6 +9,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 
 import scalp_replay as replay  # noqa: E402
+import entry_percentile as entry_pct  # noqa: E402
+import exit_mode_sweep as exit_sweep  # noqa: E402
 
 
 def candle(t, price=100.0, high=None, low=None, close=None, volume=1.0):
@@ -496,6 +498,52 @@ class MfeTest(unittest.TestCase):
         s = replay.summarize(rep)
         self.assertEqual(0, s["entry_mfe"]["horizons"]["90"]["n_usable"])
         self.assertEqual(1, s["entry_mfe"]["n_signals"])
+
+
+class ExitModeSweepTest(unittest.TestCase):
+    def test_percentile_rank_and_bucket(self):
+        vals = [1.0, 2.0, 3.0, 4.0]
+        self.assertEqual(0.0, exit_sweep.percentile_rank(vals, 0.0))
+        self.assertEqual(75.0, exit_sweep.percentile_rank(vals, 3.0))
+        self.assertEqual(100.0, exit_sweep.percentile_rank(vals, 4.0))
+        self.assertEqual("0-20", exit_sweep.bucket_of(0.0))
+        self.assertEqual("0-20", exit_sweep.bucket_of(19.99))
+        self.assertEqual("20-40", exit_sweep.bucket_of(20.0))
+        self.assertEqual("80-100", exit_sweep.bucket_of(100.0))
+
+    def test_summarize_net_negative_and_exit_mix(self):
+        trades = [
+            {"result": "WIN", "r": 1.0, "risk_pct": 5.0,
+             "exit_reason": "TP2", "exit_t": 60_000, "t": 0},
+            {"result": "LOSS", "r": -1.0, "risk_pct": 5.0,
+             "exit_reason": "TIMEOUT", "exit_t": 120_000, "t": 0},
+            {"result": "UNRESOLVED", "r": 0.0, "risk_pct": 5.0,
+             "exit_reason": "TIMEOUT", "exit_t": None, "t": 0},
+        ]
+        s = exit_sweep.summarize(trades, days=1.0)
+        self.assertEqual(2, s["n"])
+        self.assertEqual(1, s["unresolved"])
+        self.assertEqual(50.0, s["win_rate_pct"])
+        self.assertEqual(0.0, s["avg_net_pct_per_trade"])
+        self.assertEqual(0.0, s["net_pct_per_day"])
+        self.assertEqual({"TIMEOUT": 1, "TP2": 1}, s["exits"])
+
+    def test_bootstrap_ci_is_deterministic_and_negative(self):
+        a = exit_sweep.bootstrap_ci([-1.0, -1.0, -1.0], resamples=50, seed=1)
+        b = exit_sweep.bootstrap_ci([-1.0, -1.0, -1.0], resamples=50, seed=1)
+        self.assertEqual(a, b)
+        self.assertEqual([-1.0, -1.0], a)
+        self.assertIsNone(exit_sweep.bootstrap_ci([], resamples=10))
+
+    def test_range_position_and_percentile(self):
+        bars = [
+            candle(0, 100.0, high=110.0, low=90.0, close=100.0),
+            candle(60_000, 100.0, high=120.0, low=80.0, close=120.0),
+        ]
+        self.assertEqual(100.0, entry_pct.range_position(bars, 1, 1))
+        self.assertEqual(100.0, entry_pct.trailing_window(bars, 1, 1)[-1]["c"] / 120.0 * 100.0)
+        self.assertEqual(100.0, exit_sweep.percentile_rank(
+            [b["c"] for b in bars], 120.0))
 
 
 if __name__ == "__main__":

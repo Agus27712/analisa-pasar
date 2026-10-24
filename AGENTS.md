@@ -58,14 +58,20 @@ tool, dataset, dan hasil JSON/CSV; commit v3 (`ada71dc`, `796a9d1`) sudah dibuan
 dan artefaknya hanya ada di branch backup **`backup/patch-v3-2026-10-21`** (`796a9d1`, remote).
 **Jangan membangun engine/spec baru.**
 Arah aktif: **engine scalping yang sudah ada** (port kriptoyoi `p0_engine` + slider). Status
-dari owner: implementasi slider entry sudah ada dan terbukti memaksimalkan entry; riset
-exit-only kemudian diukur negatif dan **ditutup** (2026-10-22). **P0 (TTL, MTF 4 TF, veto BTC,
-regime OR) sudah disinkronkan 2026-10-22** dan diukur: gate bekerja, tetapi **edge masih
-negatif** (avg R −0,1569, 616/620 trade TIMEOUT). Jangan mengklaim P0 menyelesaikan masalah
-profit. Setelah P0, **jangan menambah gate entry baru tanpa instruksi**; riset exit-only
-(0/88 varian, `exp_exit_net_tp`) dan sweep kelipatan friksi (0/27 kombinasi,
-`exp_friction_multiple`) sudah ditutup, jadi fokus berikutnya adalah **pengukuran
-entry/universe** — ukur dulu lewat potongan sinyal P0, keputusan gate tetap menunggu owner.
+dari owner: implementasi slider entry sudah ada dan terbukti memaksimalkan entry. **P0 (TTL,
+MTF 4 TF, veto BTC, regime OR) sudah disinkronkan 2026-10-22** dan diukur: gate bekerja,
+tetapi **edge masih negatif** (avg R −0,1569, 616/620 trade TIMEOUT). Jangan mengklaim P0
+menyelesaikan masalah profit. Setelah P0, **jangan menambah gate entry baru tanpa instruksi**.
+
+**Riset exit dibuka kembali secara terbatas oleh owner pada 2026-10-24** (paper/offline),
+lalu diukur: **0 dari 90 sel pair × mode × hold positif** pada sweep 5 mode
+(`exp_exit_mode_sweep_ADA-DOGE-XRP.md`). Exit-only untuk sinyal P0 **kembali ditutup**;
+jangan membukanya lagi tanpa instruksi owner dan mekanisme baru yang eksplisit. Riset
+sebelumnya (0/88 varian `exp_exit_net_tp`, 0/27 kombinasi `exp_friction_multiple`) tetap
+berlaku. Diagnostik persentil entry (`exp_entry_price_percentile_ADA-DOGE-XRP.md`) menunjukkan
+entry khas di persentil 93 harga 1 hari terakhir — keluhan "beli di pucuk" benar secara posisi,
+tetapi itu **bukan** izin menambah filter/gate tanpa pengukuran entry tersendiri. Fokus
+berikutnya tetap **pengukuran entry/universe**; keputusan gate menunggu owner.
 
 **Urutan baca 5 menit yang benar:**
 
@@ -346,7 +352,8 @@ dan mode exit **EARLY** (varian `scalp_config_exit_early_p0.json`). Hasil teruku
 90 menit **+0,506%** (positif tapi hanya ≈ setengah friksi); ≥TP1 hanya 1/618 sinyal; EARLY
 mengunci 53 trade (+0,3208R) + 28 BE, tetapi avg R hanya **−0,1522 (−0,1569 klasik)** —
 **+0,0047R, di dalam noise**. Kesimpulan: mode exit pada unit risiko 5,81% tidak menciptakan
-edge; ambang impas masih WR ~50% vs hit rate ~15%. Penjaga parity kini **22 test**.
+edge; ambang impas masih WR ~50% vs hit rate ~15%. Saat itu penjaga parity **22 test** (kini
+**30**).
 
 Eksperimen paritas entri: `exp_entry_parity_kriptoyoi_ADA-DOGE-XRP.md` (2026-10-22) — app vs
 spek kriptoyoi frontend (`app.js` `generateScalperSignals`, port di `tools/entry_parity_kriptoyoi.py`)
@@ -364,8 +371,8 @@ exit-only mustahil: pada 1440m hanya 72,0/54,5/60,4% sinyal pernah mencapai TP n
 sempurna, tanpa stop) sedangkan WR impas 76,8/72,6/72,8%. Kriteria owner "1 exit net/hari" tidak
 tercapai konsisten (maksimum 54,6% hari; frekuensi tertinggi 1,82/hari dengan net −2,06%/hari).
 **Line exit-only ditutup** untuk sinyal P0; perbaikan harus dari entry/universe dan menunggu
-instruksi owner. Penjaga parity kini **26 test**; mode ini belum ada di app dan tidak boleh
-disambungkan tanpa instruksi (stop rapat melanggar lantai friksi 6×).
+instruksi owner. Saat eksperimen itu penjaga parity **26 test** (kini **30**); mode ini belum
+ada di app dan tidak boleh disambungkan tanpa instruksi (stop rapat melanggar lantai friksi 6×).
 
 Sweep lantai friksi: `exp_friction_multiple_ADA-DOGE-XRP.md` (2026-10-22) — `tools/friction_sweep.py`
 mengubah **hanya** `min_friction_multiple` (data, gate P0, fee, exit sama; kontrol mult 6,0
@@ -377,6 +384,26 @@ avg R terbaik (−0,096) tetapi uang lebih buruk daripada mult 3 (−0,230R, net
 Default 6,0 dipertahankan dengan alasan baru (plateau uang, stop-out lebih jarang), bukan klaim
 lama −1,8R.
 
+Sweep 5 mode exit: `exp_exit_mode_sweep_ADA-DOGE-XRP.md` (2026-10-24) — owner membuka kembali
+riset exit secara terbatas; `tools/exit_mode_sweep.py` menguji `classic`, `tp1_be`, `early`,
+`trail`, `full` pada hold 90/240/420 dengan gate P0 dan fee yang sama. Evaluasi sekali,
+bandingkan dua cara: *sequential* (paritas CLI) dan *same-entry* (N identik). **0 dari 90 sel
+pair × mode × hold positif; 0 dari 30 sel agregat positif.** Kontrol `classic` 90m identik CLI
+620/14,84%/−0,1569. Sel terbaik `early` 420m XRPUSDT tetap −0,666%/trade. WR bisa naik sampai
+44,99% (`trail` 420m sequential) tetapi net/trade tetap negatif; menahan lebih lama hanya
+mengurangi frekuensi friksi (−3,12 → −1,08 %/hari). Semua CI 95% same-entry di bawah nol.
+**Exit-only kembali ditutup** untuk sinyal P0; tidak ada perubahan app/config. Penjaga parity
+kini **30 test**.
+
+Persentil entri: `exp_entry_price_percentile_ADA-DOGE-XRP.md` (2026-10-24) —
+`tools/entry_percentile.py` mengukur 620 entri `classic` terhadap jendela 1/3/7 hari. Entry
+khas di **persentil 93,3** harga 1 hari (75,6% di kuintil teratas) dan **81,7%** rentang
+harian; 3 hari 84,6; 7 hari 82,7. Return close maju: 1 hari −0,108%, 3 hari −0,051%, 7 hari
++1,148%. Kuintil teratas 7 hari −2,596% vs terbawah +8,259% (n=293 vs 43; kuintil bawah kecil
+dan bias periode). **Keluhan "beli di pucuk" benar secara posisi**, tetapi bukan sinyal jual
+bersih — kuintil teratas 1 hari masih +0,264% dan persentil tinggi sebagian mekanis dalam tren
+naik. Ini diagnostik, bukan izin menambah filter/gate entry.
+
 **Spec v2 dihentikan dan artefaknya dihapus (2026-10-21).** Dokumen spec, dua laporan hasil,
 tool, dataset, dan hasil JSON sudah dihapus dari pohon kerja. Jangan membuat ulang berkas atau
 riset v2; ringkasan alasan ada di `workplan2.md` §64.
@@ -385,8 +412,8 @@ riset v2; ringkasan alasan ada di `workplan2.md` §64.
 lalu dihentikan owner; seluruh artefaknya (termasuk `exp_spot_evidence_v3.md`) ada di branch
 backup `backup/patch-v3-2026-10-21` (`796a9d1`). Jangan membuat berkas v3 baru di `docs/exp/`
 branch ini. Arah aktif: engine kriptoyoi yang sudah ada + slider; slider entry sudah ada dan
-menurut owner terbukti memaksimalkan entry; riset exit-only diukur negatif dan ditutup
-(2026-10-22), berikutnya pengukuran entry/universe.
+menurut owner terbukti memaksimalkan entry. Riset exit-only dibuka terbatas lalu diukur negatif
+dan ditutup lagi (2026-10-24, 0/90 sel); berikutnya pengukuran entry/universe.
 
 ## Aturan turunan dari audit notifikasi (batch 1 & 2, 2026-10-16)
 
@@ -870,7 +897,8 @@ menurut owner terbukti memaksimalkan entry; riset exit-only diukur negatif dan d
   untuk menguji engine. **Bukan** membangun spec/engine baru; Spec v2/v3 sudah dihentikan.
 - **Slider adalah jalur peningkatan**: slider entry sudah ada dan menurut owner terbukti
   memaksimalkan entry; riset exit-only diukur negatif dan ditutup (§68–§69 `workplan2.md`).
-  Jangan mengklaim exit sudah terpecahkan.
+  Owner membukanya lagi secara terbatas pada 2026-10-24; hasilnya **0/90 sel**, jadi ditutup
+  lagi (§70). Jangan mengklaim exit sudah terpecahkan.
 - **P0 sudah disinkronkan (2026-10-22)**: TTL 5 candle, gate MTF 4 TF, veto BTC, regime OR.
   Hasil terukur: 620 trade, WR 14,84%, **avg R −0,1569**, **616 TIMEOUT**, 0 TP. Gate bekerja,
   tetapi **edge belum ada**; jangan memakai P0 sebagai alasan promosi uang riil.
@@ -1087,15 +1115,45 @@ Sumber semua angka: `ScalpingRuntimeConfig` (default di `ScalpingConfig`), mirro
   **616 TIMEOUT**, 4 SL, **0 TP1/TP2**. Baseline 996 trade, WR 12,85%, avg R −0,1642. Gate
   bekerja dan frekuensi turun, tetapi **edge belum ada**. Jangan promosikan ke uang riil dan
   jangan menambah gate entry baru tanpa instruksi owner.
-- **Riset exit-only sudah ditutup (2026-10-22)**: 0 dari 88 varian exit positif
-  (`exp_exit_net_tp_ADA-DOGE-XRP.md`) dan 0 dari 27 kombinasi kelipatan friksi
-  (`exp_friction_multiple_ADA-DOGE-XRP.md`). Prioritas berikutnya **pengukuran entry/universe**
+- **Riset exit-only ditutup lagi (2026-10-24)**: 0 dari 88 varian exit positif
+  (`exp_exit_net_tp_ADA-DOGE-XRP.md`), 0 dari 27 kombinasi kelipatan friksi
+  (`exp_friction_multiple_ADA-DOGE-XRP.md`), dan **0 dari 90 sel** sweep 5 mode
+  (`exp_exit_mode_sweep_ADA-DOGE-XRP.md`). Prioritas berikutnya **pengukuran entry/universe**
   (potongan sinyal P0), bukan gate baru dan bukan utak-atik exit. TP1 (+7,99%) dan TP2 (+14,53%)
   tidak pernah tercapai dalam time-stop 90 menit.
+- **Persentil entry (2026-10-24, diagnostik):** entry khas di persentil 93,3 harga 1 hari dan
+  81,7% rentang harian (`exp_entry_price_percentile_ADA-DOGE-XRP.md`). "Beli di pucuk" benar
+  secara posisi, tetapi **bukan** izin menambah filter/gate entry tanpa pengukuran tersendiri.
 
 Rincian angka: `docs/exp/exp_p0_gatekeeper_ADA-DOGE-XRP.md`; ringkasan keputusan:
-`workplan2.md` §65. Penjaga: `SignalTtlTest`, `MtfAlignmentPolicyTest`, `BtcPulseAnalyzerTest`,
-`ScalpingMtfEvaluatorTest`, `MarketRegimeEngineTest`, dan `tools/test_scalp_replay_parity.py`.
+`workplan2.md` §65, §70–§71. Penjaga: `SignalTtlTest`, `MtfAlignmentPolicyTest`,
+`BtcPulseAnalyzerTest`, `ScalpingMtfEvaluatorTest`, `MarketRegimeEngineTest`, dan
+`tools/test_scalp_replay_parity.py` (30 test).
+
+## Aturan turunan dari sweep exit & persentil entry (2026-10-24)
+
+- **Riset exit hanya dengan instruksi owner, dan tetap offline/paper.** Exit-only untuk sinyal
+  P0 sudah ditutup dua kali (2026-10-22 dan 2026-10-24). Jangan membukanya lagi, jangan
+  menyambungkan mode baru ke app, dan jangan mengubah config default tanpa instruksi eksplisit
+  dan mekanisme baru yang belum diuji.
+- **Kriteria kandidat ditetapkan sebelum hasil dibaca.** Minimal: net/trade > 0, lebih baik dari
+  `classic` di semua pair, CI 95% tidak menyentuh nol, dan sampel cukup (≥60 trade/pair). Tanpa
+  itu, hasil sweep hanya diagnostik.
+- **Pilih mode dengan net %, bukan R.** R dihitung dari jarak SL, jadi SL lebar membuat R terlihat
+  lebih baik walau uangnya lebih buruk. Setiap klaim "WR naik" wajib disertai net/trade dan
+  net/hari; WR tinggi dengan net negatif bukan keberhasilan.
+- **Kontrol `classic` wajib identik CLI.** `tools/exit_mode_sweep.py` memakai cache gate; bila
+  kontrol 90m tidak menghasilkan 620 trade / WR 14,84% / avg R −0,1569, hasil sweep **tidak
+  sah** dan cache harus dibangun ulang (`--rebuild`). Jangan membandingkan angka dari cache
+  yang belum tervalidasi.
+- **Same-entry dan sequential adalah dua pertanyaan berbeda.** Sequential meniru replay (boleh
+  masuk lagi setelah exit, N berubah); same-entry mengisolasi exit dengan N identik. Laporkan
+  keduanya; jangan memilih salah satu yang terlihat lebih baik tanpa menyebut metodenya.
+- **Persentil entry adalah diagnostik, bukan gate.** `tools/entry_percentile.py` mengukur posisi
+  entry, bukan membuktikan filter baru. Jangan menambahkan filter persentil/kuintil ke engine
+  tanpa eksperimen entry tersendiri yang mengukur net dan dampak jumlah sinyal.
+- **Jangan mengutip kuintil bawah 7 hari tanpa konteks.** Sampelnya kecil (n=43) dan bias
+  periode; angka +8,259% bukan aturan umum.
 
 ## UI & Compose
 

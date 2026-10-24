@@ -3,11 +3,16 @@
 > **Sumber kebenaran workplan.**  
 > `workplan.md`, `checkpoint.md`, dan `checkpoint_progres.md` **sudah dihapus (2026-10-16)** — jangan cari, jangan dibuat ulang. Baca ini + `AGENTS.md` + `APP_CONTEXT.md` (§ arah produk).
 
-**Update:** 2026-10-22 (WIB) — §65–§69: P0 KriptoYoi (TTL 5 candle, gate MTF 4 TF, veto BTC,
+**Update:** 2026-10-24 (WIB) — §70–§71: owner membuka kembali riset exit secara terbatas.
+Sweep 5 mode exit (`classic`, `tp1_be`, `early`, `trail`, `full`) pada hold 90/240/420:
+**0 dari 90 sel pair × mode × hold positif**; kontrol 620/14,84%/−0,1569 identik. Exit-only
+kembali ditutup untuk sinyal P0. Diagnostik persentil entry: entry khas berada di **persentil
+93** harga 1 hari terakhir dan **81,7%** rentang harian — keluhan "beli di pucuk" terkonfirmasi
+secara posisi, tetapi bukan sinyal jual bersih. Tidak ada perubahan app/config.
+Sebelumnya, 2026-10-22 — §65–§69: P0 KriptoYoi (TTL 5 candle, gate MTF 4 TF, veto BTC,
 regime OR) disinkronkan lalu diukur — gate bekerja tetapi **edge belum ada** (620 trade, avg R
-−0,1569, 616/620 TIMEOUT, 0 TP1/TP2). Setelah itu **dua line riset ditutup**: exit-only (§68,
-0/88 varian) dan sweep lantai friksi (§69, 0/27 kombinasi). Arah berikutnya: pengukuran
-**entry/universe**; gate entry baru menunggu instruksi owner. Sebelumnya, 2026-10-21 — §64:
+−0,1569, 616/620 TIMEOUT, 0 TP1/TP2). Dua line riset ditutup saat itu: exit-only (§68,
+0/88 varian) dan sweep lantai friksi (§69, 0/27 kombinasi). Sebelumnya, 2026-10-21 — §64:
 Spec v2/v3 dihentikan dan seluruh artefak v2 dihapus; fokus engine kriptoyoi yang sudah ada
 + slider.
 
@@ -4335,3 +4340,52 @@ pair): mult 1,0 −1,735%/hari; 2,0 −1,075; **3,0 −0,993 (terbaik)**; 4,0 �
 setara), tetapi **alasannya diganti**: plateau uang, bukan klaim R lama. Perbaikan harus dari
 entry/universe dan menunggu instruksi owner. Verifikasi: **26 test parity** (25 + 1 uji bahwa
 `want_risk_inputs` tidak mengubah keputusan gate).
+
+---
+
+## 70. Sweep 5 mode exit pada sinyal P0 (2026-10-24)
+
+Laporan lengkap: **`docs/exp/exp_exit_mode_sweep_ADA-DOGE-XRP.md`**; alat
+`tools/exit_mode_sweep.py`. Owner membuka kembali riset exit secara terbatas pada 2026-10-24
+(paper/offline saja). Data dan gate sama dengan P0: ADA/DOGE/XRP, 87.000 bar M1, 60,4 hari,
+fee USDT, `min_friction_multiple = 6,0`.
+
+**Hasil: 0 dari 90 sel pair × mode × hold positif; 0 dari 30 sel agregat positif.**
+Kontrol `classic` 90m identik CLI: 620 trade / WR 14,84% / avg R −0,1569. Dua metode
+dibandingkan: *sequential* (skip sampai exit, jumlah trade bisa berbeda) dan *same-entry*
+(entri classic yang sama di-resolve ulang semua mode).
+
+| Hold | Mode terbaik (net/trade) | Angka | Classic | Selisih |
+|---|---:|---:|---:|---:|
+| 90m | early | −0,8792% | −0,9118% | +0,0326 |
+| 240m | tp1_be | −0,7756% | −0,8420% | +0,0664 |
+| 420m | classic | −0,7430% | −0,7430% | 0 |
+
+Semua CI 95% bootstrap (same-entry) berada di bawah nol. `tp1_be` hanya sedikit menolong pada
+240m karena beberapa TP1 tersentuh; pada 90m ia identik dengan classic karena TP1 (+7,99%
+kotor) praktis tidak tercapai. `full` hampir identik dengan `trail` (early hanya 1 kali).
+Menahan lebih lama mengurangi frekuensi membayar friksi (net/hari classic −3,12 → −1,08),
+tetapi tidak pernah positif.
+
+**Keputusan:** tidak ada kandidat; exit-only untuk sinyal P0 kembali ditutup. Tidak ada
+perubahan app/config/realtrade. Bottleneck tetap entry/universe (median MFE 90m +0,506% <
+friksi 0,9688%). Verifikasi: **30 test parity** (26 lama + 4 baru) dan kontrol negatif
+`bucket_of()` yang sengaja dirusak (uji GAGAL, lalu OK setelah dikembalikan).
+
+---
+
+## 71. Persentil harga entri P0 — jawaban "beli di pucuk" (2026-10-24)
+
+Laporan lengkap: **`docs/exp/exp_entry_price_percentile_ADA-DOGE-XRP.md`**; alat
+`tools/entry_percentile.py`. Sampel 620 entri `classic` hold 90m; jendela 1/3/7 hari.
+
+**Temuan:** entry khas berada di **persentil 93,3** harga 1 hari terakhir (75,6% di kuintil
+teratas) dan **81,7%** rentang high-low harian; persentil 3 hari 84,6 dan 7 hari 82,7. Return
+close maju: 1 hari **−0,108%**, 3 hari **−0,051%**, 7 hari **+1,148%**. Kuintil teratas 7 hari
+median **−2,596%** vs kuintil terbawah **+8,259%** (n=293 vs 43; kuintil bawah kecil dan bias
+periode).
+
+**Pembacaan:** keluhan "beli di pucuk" benar secara posisi, tetapi bukan sinyal jual bersih —
+kuintil teratas 1 hari masih +0,264%, dan persentil tinggi sebagian mekanis dalam tren naik.
+Ini menjelaskan kesulitan scalp: entry membeli kekuatan yang sudah naik, sementara friksi
+0,9688% dibayar lebih dulu. **Keputusan:** diagnostik saja; tidak ada perubahan gate/exit/app.

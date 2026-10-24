@@ -2,9 +2,9 @@
 
 > **Baca ini dulu.** Dokumen ini adalah titik masuk untuk agen/engineer berikutnya: status terkini,
 > apa yang sudah selesai, apa berikutnya, dan **perangkap yang sudah pernah ditemukan** supaya tidak
-> diulang. Terakhir diperbarui: **2026-10-22** (P0 KriptoYoi disinkronkan; PR #63 sudah masuk
-> `origin/main`; riset exit-only dan sweep kelipatan friksi ditutup; prioritas berikutnya
-> pengukuran entry/universe).
+> diulang. Terakhir diperbarui: **2026-10-24** (sweep 5 mode exit: 0/90 sel positif, exit-only
+> ditutup lagi; diagnostik persentil entry: entry khas di persentil 93 harga 1 hari; prioritas
+> tetap pengukuran entry/universe).
 >
 > ⛔ **Spesifikasi baru v2/v3 dihentikan (2026-10-21).** Spec v2 dan v3 sudah diukur dan keduanya
 > **tidak menghasilkan edge**; owner menghentikan seluruh line riset ini karena hanya memperpanjang
@@ -15,12 +15,13 @@
 >
 > 🎯 **Arah aktif:** maksimalkan **engine scalping yang sudah ada** (port kriptoyoi `p0_engine` +
 > slider), bukan membangun spec/engine baru. Status dari owner: slider entry sudah ada dan
-> terbukti memaksimalkan entry; riset exit-only kemudian diukur negatif dan **ditutup**
-> (2026-10-22).
+> terbukti memaksimalkan entry. Riset exit dibuka kembali terbatas 2026-10-24 dan diukur:
+> **0 dari 90 sel pair × mode × hold positif**, jadi exit-only **ditutup lagi**.
 > **P0 (TTL, MTF 4 TF, veto BTC, regime OR) sudah disinkronkan 2026-10-22**, tetapi hasil ukurnya
 > masih negatif: 620 trade, avg R **−0,1569**, 616 TIMEOUT, 0 TP. Jangan menambah gate entry baru
 > tanpa instruksi; **prioritas berikutnya pengukuran entry/universe** — potongan sinyal P0,
-> ukur dulu, keputusan gate menunggu owner.
+> ukur dulu, keputusan gate menunggu owner. Diagnostik persentil entry (entry khas di persentil
+> 93 harga 1 hari) menjelaskan keluhan "beli di pucuk", tetapi belum menjadi gate.
 >
 > 🔴 **Untuk "apa lagi yang tersisa" → `docs/bugs/`, bukan dokumen ini.** Status temuan audit
 > (notifikasi `N*`, jurnal/P&L `J*`, paper trading `P*`, koneksi `K*`) sudah diverifikasi ke kode dan
@@ -76,13 +77,14 @@
 | | |
 |---|---|
 | Branch kerja | **`patch`** (owner me-review di sini dulu; `main` hanya menerima merge) |
-| HEAD `patch` | **commit P0 di atas `2dd69ad`**. Ukur: `git rev-parse --short HEAD` dan `git log -1` |
+| HEAD `patch` | **commit batch exit/persentil di atas P0**. Ukur: `git rev-parse --short HEAD` dan `git log -1` |
 | HEAD `origin/main` | `5d8f7bc` (merge **PR #63** dari `patch`); sudah memuat `patch` sampai `2dd69ad` |
 | Titik masuk kode | package `agu.analys`, modul tunggal `:app` |
-| Unit test | **797 uji · 796 lulus · 0 gagal · 1 dilewati** (104 kelas), diukur 2026-10-22 setelah P0. Ukur ulang sebelum memakai angka ini. |
+| Unit test | **797 uji · 796 lulus · 0 gagal · 1 dilewati** (104 kelas), diukur 2026-10-22 setelah P0. Batch 2026-10-24 hanya menambah tool/uji Python; ukur ulang sebelum memakai angka ini. |
 | APK debug | 26.821.815 byte (26,8 MB desimal / 25,6 MiB) — terakhir diukur 2026-10-20 |
-| Uji parity replay | **22 test OK** (18 lama + 4 uji MFE), diukur 2026-10-22 |
-| Eksperimen exit | **EARLY terukur 2026-10-22: avg R −0,1522 vs classic −0,1569 — di dalam noise** (`docs/exp/exp_exit_modes_ADA-DOGE-XRP.md`). Median MFE 90 menit sinyal P0 = +0,506% (≈ setengah friksi); TP1 hanya 1 dari 618 sinyal; exit di unit risiko 5,81% belum menciptakan edge. |
+| Uji parity replay | **30 test OK** (26 lama + 4 uji sweep), diukur 2026-10-24 |
+| Eksperimen exit | **Sweep 5 mode 2026-10-24: 0 dari 90 sel positif** (`docs/exp/exp_exit_mode_sweep_ADA-DOGE-XRP.md`); kontrol classic 90m identik CLI 620/14,84%/−0,1569. Mode terbaik `early` 420m XRP tetap −0,666%/trade. Sebelumnya EARLY 2026-10-22: avg R −0,1522 vs −0,1569 (di dalam noise). |
+| Persentil entry | **2026-10-24:** entry khas di persentil **93,3** harga 1 hari dan **81,7%** rentang harian (`docs/exp/exp_entry_price_percentile_ADA-DOGE-XRP.md`). "Beli di pucuk" benar secara posisi; return close 1 hari −0,108%, 3 hari −0,051%, 7 hari +1,148%. Diagnostik, bukan gate. |
 | Kesiapan uang riil | **BELUM** — lihat §5 |
 
 > ⚠️ Angka di tabel ini **pernah salah** di dokumen ini sendiri (tertulis 358/50 kelas). Setiap kali
@@ -125,7 +127,7 @@ git stash pop                 # kembalikan pekerjaan
 | §11 | **UI scalping baru** (radar vs setup tidak sinkron) | `ScalpReadiness.kt`, `ScalpDeskCard.kt`, `PaperTradeDeskCard.kt` | `ScalpReadinessTest.kt` |
 | §12 | **Rehidrasi state machine exit paper** setelah restart | `PaperRehydrate.kt`, `SpotPositionStore.kt` | `PaperRehydrateTest.kt` |
 | §13 | **Akar `EARLY_ENTRY`** — stage tinggi wajib punya pola | `ScalpingMtfEvaluator.kt`, `SignalLifecycleManager.kt` | `workplan2.md` §13 |
-| **P0** | **Sinkronisasi P0 KriptoYoi** — TTL 5 candle M1 (terminal), gate MTF 4 TF fail-closed, veto BTC (candle tutup), regime OR; replay memuat M5 + BTC | `SignalTtl.kt`, `MtfAlignmentPolicy.kt`, `BtcPulseAnalyzer.kt`, `MarketRegimeEngine.kt`, `ScalpingMtfEvaluator.kt`, `tools/scalp_replay.py` | `workplan2.md` §65, `docs/exp/exp_p0_gatekeeper_ADA-DOGE-XRP.md`; **797 test / 18 parity**. Hasil: **edge masih negatif** (620 trade, avg R −0,1569) |
+| **P0** | **Sinkronisasi P0 KriptoYoi** — TTL 5 candle M1 (terminal), gate MTF 4 TF fail-closed, veto BTC (candle tutup), regime OR; replay memuat M5 + BTC | `SignalTtl.kt`, `MtfAlignmentPolicy.kt`, `BtcPulseAnalyzer.kt`, `MarketRegimeEngine.kt`, `ScalpingMtfEvaluator.kt`, `tools/scalp_replay.py` | `workplan2.md` §65, `docs/exp/exp_p0_gatekeeper_ADA-DOGE-XRP.md`; **797 test / 30 parity**. Hasil: **edge masih negatif** (620 trade, avg R −0,1569) |
 | §16 | **Integritas log audit P0–P2** — basis volume RVOL, basis bar indikator, `signalTime`, `sellReason`, trailing nyata, Peak/Drawdown dari candle, label & format, flag `isSample` | `IndicatorMath.kt`, `ScalpingMtfEvaluator.kt`, `TradeHistoryRecorder.kt`, `TradeSignalSnapshot.kt`, `TradeLogExporter.kt`, `AppDatabase.kt` (v9) | `docs/LAPORAN-verifikasi-ui-vs-candle-2026-10-14.md`, `docs/LAPORAN-eksekusi-p0p2-2026-10-14.md`, `IndicatorMathScalpingExtTest.kt` |
 | §17 | **Perbaikan strategi S1–S9** — RVOL wajib breakout, lantai profit, SL keras configurable, konstanta ATR dipakai, basis PnL seragam, label volume, exit engine untuk beli manual, BE/trail proporsional ATR, gerbang extended-move (default nonaktif) | `ScalpSetupDetector.kt`, `ScalpExitConfig.kt`, `PaperExitResolver.kt`, `ScalpingRiskEngine.kt`, `ScalpingRuntimeConfig.kt`, `MarketRegimeEngine.kt`, `SimulationTradeStore.kt`, `TradeLogExporter.kt`, `PaperAutoTradeCoordinator.kt`, `tools/scalp_replay.py` | `docs/LAPORAN-eksekusi-s1s9-2026-10-14.md`, `ScalpStrategyFixTest.kt`, `SimulationSlippageParityTest.kt` |
 | P4.1 | **Mode walk-forward** di `tools/split_validate.py` — jendela bergulir + **3 bug diperbaiki** (kunci agregasi salah → 9 jendela palsu; penulis `.md` crash `StopIteration`; pair lebih pendek dari satu jendela → `IndexError`) | `tools/split_validate.py`, `tools/fetch_tokocrypto_klines.py` | `docs/LAPORAN-p41-walk-forward-2026-10-14.md`, `data/hasil/u7_walk_forward_v4.{json,md}`, `data/hasil/u8_walk_forward_40pair.{json,md}` |
@@ -265,16 +267,27 @@ Jangan menambah gate entry baru tanpa instruksi owner.
 negatif: **0 dari 88 varian exit** (`exp_exit_net_tp_ADA-DOGE-XRP.md`, mode `net_tp`/`net_tp_stop`)
 dan **0 dari 27 kombinasi kelipatan friksi** (`exp_friction_multiple_ADA-DOGE-XRP.md`;
 kontrol mult 6,0 identik CLI, R terbukti yardstick yang menyesatkan karena dihitung dari SL).
-Prioritas berikutnya adalah **pengukuran entry/universe**: potong sinyal P0 yang ada berdasar
-atribut (setup, regime, skor, jam UTC, ATR) dan ukur median MFE vs friksi per potongan —
-tanpa menambah gate; hasilnya dibahas owner sebelum ada keputusan gate.
-Setiap perubahan exit wajib diukur dengan tabel yang sama (termasuk TIMEOUT dan `UNRESOLVED`).
+
+**Lanjutan 2026-10-24 — exit dibuka terbatas lalu ditutup lagi.** `tools/exit_mode_sweep.py`
+menguji 5 mode (`classic`, `tp1_be`, `early`, `trail`, `full`) × 3 hold (90/240/420) dengan gate
+P0 dan fee yang sama: **0 dari 90 sel pair × mode × hold positif; 0 dari 30 sel agregat**.
+Kontrol classic 90m identik CLI. WR bisa naik sampai 44,99% tetapi net/trade tetap negatif;
+menahan lebih lama hanya mengurangi frekuensi friksi (−3,12 → −1,08 %/hari). Semua CI 95%
+same-entry di bawah nol. **Exit-only kembali ditutup**; jangan menyambungkan mode baru ke app.
+
+Prioritas berikutnya tetap **pengukuran entry/universe**: potong sinyal P0 yang ada berdasar
+atribut (setup, regime, skor, jam UTC, ATR, persentil entry) dan ukur net serta median MFE vs
+friksi per potongan — tanpa menambah gate; hasilnya dibahas owner sebelum ada keputusan gate.
+Diagnostik persentil entry (`exp_entry_price_percentile_ADA-DOGE-XRP.md`) menunjukkan entry
+khas di persentil 93,3 harga 1 hari dan 81,7% rentang harian; ini menjelaskan "beli di pucuk",
+tetapi **bukan** izin menambah filter tanpa eksperimen entry tersendiri.
 
 Patokan aritmetis lama tetap berguna sebagai anggaran, bukan alasan membangun spec baru: lantai
 friksi memaksa SL ≥ 5,81%, dan trade tanpa edge hanya menanggung biaya lalu ditutup
-→ `−0,9688% / 5,81% = −0,167 R`. Namun pada replay P0, **time-stop 90 menit** menutup 99,4%
-trade sebelum TP1 (+7,99%) tersentuh; jadi bottleneck yang terukur saat ini adalah **exit**,
-bukan kurangnya gate entry. Jangan mengklaim exit sudah selesai.
+→ `−0,9688% / 5,81% = −0,167 R`. Pada replay P0, **time-stop 90 menit** menutup 99,4% trade
+sebelum TP1 (+7,99%) tersentuh; tetapi sweep 5 mode membuktikan memindahkan exit tidak menolong
+karena median MFE 90 menit (+0,506%) masih di bawah friksi. Jadi bottleneck terukur adalah
+**entry/universe**, bukan geometri exit. Jangan mengklaim exit sudah selesai.
 
 ### P4.1 — Walk-forward antar-bulan ✅ tooling selesai, hasil NEGATIF (2026-10-14)
 
