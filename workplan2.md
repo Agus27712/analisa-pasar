@@ -4389,3 +4389,30 @@ periode).
 kuintil teratas 1 hari masih +0,264%, dan persentil tinggi sebagian mekanis dalam tren naik.
 Ini menjelaskan kesulitan scalp: entry membeli kekuatan yang sudah naik, sementara friksi
 0,9688% dibayar lebih dulu. **Keputusan:** diagnostik saja; tidak ada perubahan gate/exit/app.
+
+---
+
+## 72. Fase 1 auto-order paper — integritas eksekusi dan sizing SL (2026-10-24)
+
+Fase 1 (bukan partial TP1 / gap fill) menutup kelas bug di jalur paper agar kegagalan jual
+tidak tercatat sebagai sukses, SL yang dipakai sizing sama dengan SL mesin exit, dan posisi
+tidak dijual melebihi quantity-nya. Jalur real trade tidak diubah; resolver yang ditambah
+murni dan bisa dipakai ulang.
+
+Perubahan kode:
+- `engine/scalping/PaperStopResolver.kt` — tambah `PaperStopPlan` dan `resolveForEntry(...)`:
+  lantai friksi + SL hasil resolver dalam satu langkah.
+- `viewmodel/PaperAutoTradeCoordinator.kt` — `armPaperExitEngine` dan `tryPaperAutoBuy` memakai
+  `resolveForEntry`; sizing RISK_BASED memakai SL hasil resolver, bukan SL sinyal mentah;
+  entry/qty memakai harga dan quantity fill; kepemilikan exit ditentukan
+  `PaperAutoTradeRuntime.ownsExit`; fallback legacy memakai SL hasil resolver dan tidak
+  dinyalakan bila SL tidak valid; `evaluatePaperAutoExitLocked` mempertahankan FSM + snapshot
+  bila SELL gagal; `finalizePaperExit` mengembalikan `false` dan tidak melepas mesin/FSM bila
+  SELL gagal.
+- `viewmodel/TradingViewModelAlerts.kt` — `executeAutoSellOrder` jalur paper menjual hanya
+  `quantity.coerceAtMost(simBal)`, tidak melepas ownership saat order gagal atau saldo 0, dan
+  mengembalikan sukses aktual.
+
+Verifikasi: GitHub Actions `Unit Tests (Manual)` run `40098405104` pada commit `f317368`,
+scope `all-unit-tests`, status **success**. Parity test dan pemeriksaan markdown belum dijalankan
+di commit ini; jalankan bila mengubah dokumen/config.
