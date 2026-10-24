@@ -61,5 +61,3 @@ class PaperAutoBuyExecutionWiringTest {
         assertTrue(alerts.contains("return success"))
     }
 }
-EOF
-echo created
