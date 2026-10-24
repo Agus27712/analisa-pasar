@@ -130,9 +130,13 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
         mtfRefreshJob = null
         lastMtfRefresh = 0L
         mtfSymbol = ""
-        btcPulseJob?.cancel()
-        btcPulseJob = null
-        lastBtcPulseRefresh = 0L
+        // Reset yang mempertahankan state tidak boleh membatalkan pengambilan BTC yang sedang
+        // berjalan: pembatalan itu yang muncul sebagai "Gagal mengambil candle ... was canceled".
+        if (!preserveState) {
+            btcPulseJob?.cancel()
+            btcPulseJob = null
+            lastBtcPulseRefresh = 0L
+        }
         h4Candles = emptyList(); h1Candles = emptyList(); m15Candles = emptyList(); m5Candles = emptyList(); m1Candles = emptyList()
         synchronized(candlesH1) { candlesH1.clear() }
         synchronized(candlesH4) { candlesH4.clear() }
@@ -300,6 +304,10 @@ class LearningTradingEngine(private val scope: CoroutineScope = CoroutineScope(D
                         priceIsUsdt = !isIndodax
                     )
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // Pembatalan adalah hasil reset/offline, bukan kegagalan jaringan. Jangan
+                // tampilkan sebagai status gagal; coba lagi pada tick berikutnya.
+                lastBtcPulseRefresh = 0L
             } catch (e: Exception) {
                 // Jangan mematikan evaluasi scalping hanya karena BTC tidak bisa diambil.
                 // Konteks tidak diperbarui: veto terakhir dipertahankan (fail-closed), bukan
