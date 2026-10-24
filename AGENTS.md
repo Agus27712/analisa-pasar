@@ -1245,3 +1245,15 @@ sebelumnya.
 - Menulis di UI bahwa sinyal punya winrate/expectancy historis tanpa data cukup.
 - Mengikuti checklist `checkpoint*.md` / `workplan.md` lama sebagai urutan kerja (ketiganya sudah dihapus 2026-10-16).
 - Port auto-trading real dari state machine exit tanpa instruksi eksplisit owner + fee truth.
+
+---
+
+## Fase 1 auto-order paper (2026-10-24)
+
+Fase 1 integritas eksekusi paper sudah diterapkan di `patch` (commit `86a1f72`):
+`PaperStopResolver.resolveForEntry`, auto-buy memakai harga/qty fill + SL hasil resolver,
+kepemilikan exit tunggal via `PaperAutoTradeRuntime.ownsExit`, exit gagal tidak melepas FSM/posisi,
+dan SELL paper hanya `quantity.coerceAtMost(simBal)`. Test regresi ada di
+`PaperStopResolverTest` dan `PaperAutoBuyExecutionWiringTest`. Verifikasi:
+GitHub Actions `all-unit-tests` sukses run `40099665592`, parity 30/30, `check_md_text.py` bersih.
+Rincian: `workplan2.md` §72.
