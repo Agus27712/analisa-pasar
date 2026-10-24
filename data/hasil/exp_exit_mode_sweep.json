@@ -1,0 +1,3412 @@
+{
+ "meta": {
+  "generated_at": "2026-10-24T11:21:38.591324+00:00",
+  "data": "/workspace/analisa-pasar/data/tokocrypto_v4",
+  "config": "/workspace/analisa-pasar/data/config/scalp_config.json",
+  "pairs": [
+   "ADAUSDT",
+   "DOGEUSDT",
+   "XRPUSDT"
+  ],
+  "modes": [
+   "classic",
+   "tp1_be",
+   "early",
+   "trail",
+   "full"
+  ],
+  "holds": [
+   90,
+   240,
+   420
+  ],
+  "fee": {
+   "_comment": "Tokocrypto ALL-IN regular (efektif 2026-06-18): trading+PPh+ICEx. USDT/crypto = 0.4044% per sisi. IDR: buy taker 0.2222 / sell taker 0.4322. Preset default = USDT (data tokocrypto_v2/v3). Tanpa diskon TKO/VIP.",
+   "quote": "USDT",
+   "buy_taker_pct": 0.4044,
+   "sell_taker_pct": 0.4044,
+   "buy_maker_pct": 0.4044,
+   "sell_maker_pct": 0.4044,
+   "idr_reference": {
+    "buy_taker_pct": 0.2222,
+    "sell_taker_pct": 0.4322,
+    "buy_maker_pct": 0.1222,
+    "sell_maker_pct": 0.3322
+   }
+  },
+  "control": {
+   "n": 620,
+   "win_rate_pct": 14.84,
+   "avg_r": -0.1569
+  },
+  "control_ok": true,
+  "control_measured": {
+   "n": 620,
+   "win_rate_pct": 14.84,
+   "avg_r": -0.1569
+  }
+ },
+ "sequential": {
+  "90": {
+   "classic": {
+    "pairs": {
+     "ADAUSDT": {
+      "n": 210,
+      "unresolved": 0,
+      "wins": 41,
+      "win_rate_pct": 19.52,
+      "avg_r": -0.1568,
+      "avg_win_net_pct": 0.931,
+      "avg_loss_net_pct": -1.359,
+      "breakeven_wr_pct": 59.3,
+      "avg_net_pct_per_trade": -0.9115,
+      "net_pct_per_day": -3.1682,
+      "total_net_pct": -191.41,
+      "max_dd_net_pct": -191.41,
+      "net_exits_per_day": 0.679,
+      "days_pct_with_net_exit": 36.4,
+      "timeout_pct": 99.5,
+      "sl_pct": 0.5,
+      "exits": {
+       "SL": 1,
+       "TIMEOUT": 209
+      }
+     },
+     "DOGEUSDT": {
+      "n": 193,
+      "unresolved": 0,
+      "wins": 23,
+      "win_rate_pct": 11.92,
+      "avg_r": -0.1552,
+      "avg_win_net_pct": 1.638,
+      "avg_loss_net_pct": -1.246,
+      "breakeven_wr_pct": 43.2,
+      "avg_net_pct_per_trade": -0.902,
+      "net_pct_per_day": -2.8815,
+      "total_net_pct": -174.09,
+      "max_dd_net_pct": -174.09,
+      "net_exits_per_day": 0.381,
+      "days_pct_with_net_exit": 21.5,
+      "timeout_pct": 99.5,
+      "sl_pct": 0.5,
+      "exits": {
+       "SL": 1,
+       "TIMEOUT": 192
+      }
+     },
+     "XRPUSDT": {
+      "n": 217,
+      "unresolved": 0,
+      "wins": 28,
+      "win_rate_pct": 12.9,
+      "avg_r": -0.1584,
+      "avg_win_net_pct": 1.481,
+      "avg_loss_net_pct": -1.277,
+      "breakeven_wr_pct": 46.3,
+      "avg_net_pct_per_trade": -0.9208,
+      "net_pct_per_day": -3.3072,
+      "total_net_pct": -199.8,
+      "max_dd_net_pct": -199.8,
+      "net_exits_per_day": 0.463,
+      "days_pct_with_net_exit": 24.8,
+      "timeout_pct": 99.1,
+      "sl_pct": 0.9,
+      "exits": {
+       "SL": 2,
+       "TIMEOUT": 215
+      }
+     }
+    },
+    "aggregate": {
+     "n": 620,
+     "unresolved": 0,
+     "wins": 92,
+     "win_rate_pct": 14.84,
+     "avg_r": -0.1569,
+     "avg_win_net_pct": 1.275,
+     "avg_loss_net_pct": -1.293,
+     "breakeven_wr_pct": 50.3,
+     "avg_net_pct_per_trade": -0.9118,
+     "net_pct_per_day": -3.119,
+     "total_net_pct": -565.3,
+     "max_dd_net_pct": -565.3,
+     "net_exits_per_day": 0.508,
+     "days_pct_with_net_exit": 16.0,
+     "timeout_pct": 99.4,
+     "sl_pct": 0.6,
+     "exits": {
+      "SL": 4,
+      "TIMEOUT": 616
+     }
+    }
+   },
+   "tp1_be": {
+    "pairs": {
+     "ADAUSDT": {
+      "n": 210,
+      "unresolved": 0,
+      "wins": 41,
+      "win_rate_pct": 19.52,
+      "avg_r": -0.1568,
+      "avg_win_net_pct": 0.931,
+      "avg_loss_net_pct": -1.359,
+      "breakeven_wr_pct": 59.3,
+      "avg_net_pct_per_trade": -0.9115,
+      "net_pct_per_day": -3.1682,
+      "total_net_pct": -191.41,
+      "max_dd_net_pct": -191.41,
+      "net_exits_per_day": 0.679,
+      "days_pct_with_net_exit": 36.4,
+      "timeout_pct": 99.5,
+      "sl_pct": 0.5,
+      "exits": {
+       "SL": 1,
+       "TIMEOUT": 209
+      }
+     },
+     "DOGEUSDT": {
+      "n": 193,
+      "unresolved": 0,
+      "wins": 23,
+      "win_rate_pct": 11.92,
+      "avg_r": -0.154,
+      "avg_win_net_pct": 1.694,
+      "avg_loss_net_pct": -1.246,
+      "breakeven_wr_pct": 42.4,
+      "avg_net_pct_per_trade": -0.8954,
+      "net_pct_per_day": -2.8604,
+      "total_net_pct": -172.81,
+      "max_dd_net_pct": -172.81,
+      "net_exits_per_day": 0.381,
+      "days_pct_with_net_exit": 21.5,
+      "timeout_pct": 99.5,
+      "sl_pct": 0.5,
+      "exits": {
+       "SL": 1,
+       "TIMEOUT": 192
+      }
+     },
+     "XRPUSDT": {
+      "n": 217,
+      "unresolved": 0,
+      "wins": 28,
+      "win_rate_pct": 12.9,
+      "avg_r": -0.1584,
+      "avg_win_net_pct": 1.481,
+      "avg_loss_net_pct": -1.277,
+      "breakeven_wr_pct": 46.3,
+      "avg_net_pct_per_trade": -0.9208,
+      "net_pct_per_day": -3.3072,
+      "total_net_pct": -199.8,
+      "max_dd_net_pct": -199.8,
+      "net_exits_per_day": 0.463,
+      "days_pct_with_net_exit": 24.8,
+      "timeout_pct": 99.1,
+      "sl_pct": 0.9,
+      "exits": {
+       "SL": 2,
+       "TIMEOUT": 215
+      }
+     }
+    },
+    "aggregate": {
+     "n": 620,
+     "unresolved": 0,
+     "wins": 92,
+     "win_rate_pct": 14.84,
+     "avg_r": -0.1565,
+     "avg_win_net_pct": 1.289,
+     "avg_loss_net_pct": -1.293,
+     "breakeven_wr_pct": 50.1,
+     "avg_net_pct_per_trade": -0.9097,
+     "net_pct_per_day": -3.1119,
+     "total_net_pct": -564.03,
+     "max_dd_net_pct": -564.03,
+     "net_exits_per_day": 0.508,
+     "days_pct_with_net_exit": 16.0,
+     "timeout_pct": 99.4,
+     "sl_pct": 0.6,
+     "exits": {
+      "SL": 4,
+      "TIMEOUT": 616
+     }
+    }
+   },
+   "early": {
+    "pairs": {
+     "ADAUSDT": {
+      "n": 222,
+      "unresolved": 0,
+      "wins": 42,
+      "win_rate_pct": 18.92,
+      "avg_r": -0.153,
+      "avg_win_net_pct": 0.99,
+      "avg_loss_net_pct": -1.328,
+      "breakeven_wr_pct": 57.3,
+      "avg_net_pct_per_trade": -0.8894,
+      "net_pct_per_day": -3.2682,
+      "total_net_pct": -197.45,
+      "max_dd_net_pct": -197.45,
+      "net_exits_per_day": 0.695,
+      "days_pct_with_net_exit": 36.4,
+      "timeout_pct": 87.4,
+      "sl_pct": 0.5,
+      "exits": {
+       "BE_SL": 10,
+       "EARLY_PROFIT": 17,
+       "SL": 1,
+       "TIMEOUT": 194
+      }
+     },
+     "DOGEUSDT": {
+      "n": 205,
+      "unresolved": 0,
+      "wins": 25,
+      "win_rate_pct": 12.2,
+      "avg_r": -0.1511,
+      "avg_win_net_pct": 1.652,
+      "avg_loss_net_pct": -1.23,
+      "breakeven_wr_pct": 42.7,
+      "avg_net_pct_per_trade": -0.8784,
+      "net_pct_per_day": -2.9807,
+      "total_net_pct": -180.08,
+      "max_dd_net_pct": -180.08,
+      "net_exits_per_day": 0.414,
+      "days_pct_with_net_exit": 19.9,
+      "timeout_pct": 85.9,
+      "sl_pct": 1.0,
+      "exits": {
+       "BE_SL": 9,
+       "EARLY_PROFIT": 18,
+       "SL": 2,
+       "TIMEOUT": 176
+      }
+     },
+     "XRPUSDT": {
+      "n": 231,
+      "unresolved": 0,
+      "wins": 32,
+      "win_rate_pct": 13.85,
+      "avg_r": -0.1524,
+      "avg_win_net_pct": 1.266,
+      "avg_loss_net_pct": -1.232,
+      "breakeven_wr_pct": 49.3,
+      "avg_net_pct_per_trade": -0.8857,
+      "net_pct_per_day": -3.3865,
+      "total_net_pct": -204.6,
+      "max_dd_net_pct": -204.6,
+      "net_exits_per_day": 0.53,
+      "days_pct_with_net_exit": 23.2,
+      "timeout_pct": 87.9,
+      "sl_pct": 0.4,
+      "exits": {
+       "BE_SL": 9,
+       "EARLY_PROFIT": 18,
+       "SL": 1,
+       "TIMEOUT": 203
+      }
+     }
+    },
+    "aggregate": {
+     "n": 658,
+     "unresolved": 0,
+     "wins": 99,
+     "win_rate_pct": 15.05,
+     "avg_r": -0.1522,
+     "avg_win_net_pct": 1.247,
+     "avg_loss_net_pct": -1.262,
+     "breakeven_wr_pct": 50.3,
+     "avg_net_pct_per_trade": -0.8847,
+     "net_pct_per_day": -3.2118,
+     "total_net_pct": -582.13,
+     "max_dd_net_pct": -582.13,
+     "net_exits_per_day": 0.546,
+     "days_pct_with_net_exit": 16.6,
+     "timeout_pct": 87.1,
+     "sl_pct": 0.6,
+     "exits": {
+      "BE_SL": 28,
+      "EARLY_PROFIT": 53,
+      "SL": 4,
+      "TIMEOUT": 573
+     }
+    }
+   },
+   "trail": {
+    "pairs": {
+     "ADAUSDT": {
+      "n": 227,
+      "unresolved": 0,
+      "wins": 54,
+      "win_rate_pct": 23.79,
+      "avg_r": -0.1524,
+      "avg_win_net_pct": 0.858,
+      "avg_loss_net_pct": -1.43,
+      "breakeven_wr_pct": 62.5,
+      "avg_net_pct_per_trade": -0.8861,
+      "net_pct_per_day": -3.3294,
+      "total_net_pct": -201.15,
+      "max_dd_net_pct": -201.15,
+      "net_exits_per_day": 0.894,
+      "days_pct_with_net_exit": 39.7,
+      "timeout_pct": 82.8,
+      "sl_pct": 0.4,
+      "exits": {
+       "SL": 1,
+       "TIMEOUT": 188,
+       "TRAIL_SL": 38
+      }
+     },
+     "DOGEUSDT": {
+      "n": 208,
+      "unresolved": 0,
+      "wins": 34,
+      "win_rate_pct": 16.35,
+      "avg_r": -0.1568,
+      "avg_win_net_pct": 1.02,
+      "avg_loss_net_pct": -1.289,
+      "breakeven_wr_pct": 55.8,
+      "avg_net_pct_per_trade": -0.9117,
+      "net_pct_per_day": -3.1388,
+      "total_net_pct": -189.63,
+      "max_dd_net_pct": -189.63,
+      "net_exits_per_day": 0.563,
+      "days_pct_with_net_exit": 23.2,
+      "timeout_pct": 84.6,
+      "sl_pct": 1.0,
+      "exits": {
+       "SL": 2,
+       "TIMEOUT": 176,
+       "TRAIL_SL": 30
+      }
+     },
+     "XRPUSDT": {
+      "n": 240,
+      "unresolved": 0,
+      "wins": 45,
+      "win_rate_pct": 18.75,
+      "avg_r": -0.1517,
+      "avg_win_net_pct": 0.95,
+      "avg_loss_net_pct": -1.304,
+      "breakeven_wr_pct": 57.8,
+      "avg_net_pct_per_trade": -0.8816,
+      "net_pct_per_day": -3.5023,
+      "total_net_pct": -211.59,
+      "max_dd_net_pct": -211.59,
+      "net_exits_per_day": 0.745,
+      "days_pct_with_net_exit": 28.1,
+      "timeout_pct": 83.8,
+      "sl_pct": 0.8,
+      "exits": {
+       "SL": 2,
+       "TIMEOUT": 201,
+       "TRAIL_SL": 37
+      }
+     }
+    },
+    "aggregate": {
+     "n": 675,
+     "unresolved": 0,
+     "wins": 133,
+     "win_rate_pct": 19.7,
+     "avg_r": -0.1535,
+     "avg_win_net_pct": 0.93,
+     "avg_loss_net_pct": -1.34,
+     "breakeven_wr_pct": 59.0,
+     "avg_net_pct_per_trade": -0.8924,
+     "net_pct_per_day": -3.3235,
+     "total_net_pct": -602.38,
+     "max_dd_net_pct": -602.38,
+     "net_exits_per_day": 0.734,
+     "days_pct_with_net_exit": 17.1,
+     "timeout_pct": 83.7,
+     "sl_pct": 0.7,
+     "exits": {
+      "SL": 5,
+      "TIMEOUT": 565,
+      "TRAIL_SL": 105
+     }
+    }
+   },
+   "full": {
+    "pairs": {
+     "ADAUSDT": {
+      "n": 227,
+      "unresolved": 0,
+      "wins": 54,
+      "win_rate_pct": 23.79,
+      "avg_r": -0.1524,
+      "avg_win_net_pct": 0.858,
+      "avg_loss_net_pct": -1.43,
+      "breakeven_wr_pct": 62.5,
+      "avg_net_pct_per_trade": -0.8861,
+      "net_pct_per_day": -3.3294,
+      "total_net_pct": -201.15,
+      "max_dd_net_pct": -201.15,
+      "net_exits_per_day": 0.894,
+      "days_pct_with_net_exit": 39.7,
+      "timeout_pct": 82.8,
+      "sl_pct": 0.4,
+      "exits": {
+       "SL": 1,
+       "TIMEOUT": 188,
+       "TRAIL_SL": 38
+      }
+     },
+     "DOGEUSDT": {
+      "n": 208,
+      "unresolved": 0,
+      "wins": 34,
+      "win_rate_pct": 16.35,
+      "avg_r": -0.1571,
+      "avg_win_net_pct": 1.012,
+      "avg_loss_net_pct": -1.289,
+      "breakeven_wr_pct": 56.0,
+      "avg_net_pct_per_trade": -0.913,
+      "net_pct_per_day": -3.1434,
+      "total_net_pct": -189.91,
+      "max_dd_net_pct": -189.91,
+      "net_exits_per_day": 0.563,
+      "days_pct_with_net_exit": 23.2,
+      "timeout_pct": 84.6,
+      "sl_pct": 1.0,
+      "exits": {
+       "EARLY_PROFIT": 1,
+       "SL": 2,
+       "TIMEOUT": 176,
+       "TRAIL_SL": 29
+      }
+     },
+     "XRPUSDT": {
+      "n": 240,
+      "unresolved": 0,
+      "wins": 45,
+      "win_rate_pct": 18.75,
+      "avg_r": -0.1517,
+      "avg_win_net_pct": 0.95,
+      "avg_loss_net_pct": -1.304,
+      "breakeven_wr_pct": 57.8,
+      "avg_net_pct_per_trade": -0.8816,
+      "net_pct_per_day": -3.5023,
+      "total_net_pct": -211.59,
+      "max_dd_net_pct": -211.59,
+      "net_exits_per_day": 0.745,
+      "days_pct_with_net_exit": 28.1,
+      "timeout_pct": 83.8,
+      "sl_pct": 0.8,
+      "exits": {
+       "SL": 2,
+       "TIMEOUT": 201,
+       "TRAIL_SL": 37
+      }
+     }
+    },
+    "aggregate": {
+     "n": 675,
+     "unresolved": 0,
+     "wins": 133,
+     "win_rate_pct": 19.7,
+     "avg_r": -0.1536,
+     "avg_win_net_pct": 0.928,
+     "avg_loss_net_pct": -1.34,
+     "breakeven_wr_pct": 59.1,
+     "avg_net_pct_per_trade": -0.8928,
+     "net_pct_per_day": -3.325,
+     "total_net_pct": -602.65,
+     "max_dd_net_pct": -602.65,
+     "net_exits_per_day": 0.734,
+     "days_pct_with_net_exit": 17.1,
+     "timeout_pct": 83.7,
+     "sl_pct": 0.7,
+     "exits": {
+      "EARLY_PROFIT": 1,
+      "SL": 5,
+      "TIMEOUT": 565,
+      "TRAIL_SL": 104
+     }
+    }
+   }
+  },
+  "240": {
+   "classic": {
+    "pairs": {
+     "ADAUSDT": {
+      "n": 123,
+      "unresolved": 0,
+      "wins": 33,
+      "win_rate_pct": 26.83,
+      "avg_r": -0.1479,
+      "avg_win_net_pct": 1.794,
+      "avg_loss_net_pct": -1.832,
+      "breakeven_wr_pct": 50.5,
+      "avg_net_pct_per_trade": -0.8595,
+      "net_pct_per_day": -1.7499,
+      "total_net_pct": -105.72,
+      "max_dd_net_pct": -106.56,
+      "net_exits_per_day": 0.546,
+      "days_pct_with_net_exit": 34.8,
+      "timeout_pct": 98.4,
+      "sl_pct": 1.6,
+      "exits": {
+       "SL": 2,
+       "TIMEOUT": 121
+      }
+     },
+     "DOGEUSDT": {
+      "n": 113,
+      "unresolved": 0,
+      "wins": 23,
+      "win_rate_pct": 20.35,
+      "avg_r": -0.1437,
+      "avg_win_net_pct": 1.731,
+      "avg_loss_net_pct": -1.491,
+      "breakeven_wr_pct": 46.3,
+      "avg_net_pct_per_trade": -0.8354,
+      "net_pct_per_day": -1.5625,
+      "total_net_pct": -94.4,
+      "max_dd_net_pct": -94.4,
+      "net_exits_per_day": 0.381,
+      "days_pct_with_net_exit": 26.5,
+      "timeout_pct": 99.1,
+      "sl_pct": 0.9,
+      "exits": {
+       "SL": 1,
+       "TIMEOUT": 112
+      }
+     },
+     "XRPUSDT": {
+      "n": 123,
+      "unresolved": 0,
+      "wins": 24,
+      "win_rate_pct": 19.51,
+      "avg_r": -0.1429,
+      "avg_win_net_pct": 1.504,
+      "avg_loss_net_pct": -1.396,
+      "breakeven_wr_pct": 48.1,
+      "avg_net_pct_per_trade": -0.8305,
+      "net_pct_per_day": -1.6908,
+      "total_net_pct": -102.15,
+      "max_dd_net_pct": -102.15,
+      "net_exits_per_day": 0.397,
+      "days_pct_with_net_exit": 28.1,
+      "timeout_pct": 98.4,
+      "sl_pct": 1.6,
+      "exits": {
+       "SL": 2,
+       "TIMEOUT": 121
+      }
+     }
+    },
+    "aggregate": {
+     "n": 359,
+     "unresolved": 0,
+     "wins": 80,
+     "win_rate_pct": 22.28,
+     "avg_r": -0.1449,
+     "avg_win_net_pct": 1.689,
+     "avg_loss_net_pct": -1.568,
+     "breakeven_wr_pct": 48.1,
+     "avg_net_pct_per_trade": -0.842,
+     "net_pct_per_day": -1.6677,
+     "total_net_pct": -302.27,
+     "max_dd_net_pct": -302.27,
+     "net_exits_per_day": 0.441,
+     "days_pct_with_net_exit": 14.9,
+     "timeout_pct": 98.6,
+     "sl_pct": 1.4,
+     "exits": {
+      "SL": 5,
+      "TIMEOUT": 354
+     }
+    }
+   },
+   "tp1_be": {
+    "pairs": {
+     "ADAUSDT": {
+      "n": 123,
+      "unresolved": 0,
+      "wins": 34,
+      "win_rate_pct": 27.64,
+      "avg_r": -0.1336,
+      "avg_win_net_pct": 1.844,
+      "avg_loss_net_pct": -1.778,
+      "breakeven_wr_pct": 49.1,
+      "avg_net_pct_per_trade": -0.7766,
+      "net_pct_per_day": -1.5811,
+      "total_net_pct": -95.52,
+      "max_dd_net_pct": -99.84,
+      "net_exits_per_day": 0.563,
+      "days_pct_with_net_exit": 34.8,
+      "timeout_pct": 98.4,
+      "sl_pct": 0.8,
+      "exits": {
+       "BE_SL": 1,
+       "SL": 1,
+       "TIMEOUT": 121
+      }
+     },
+     "DOGEUSDT": {
+      "n": 113,
+      "unresolved": 0,
+      "wins": 23,
+      "win_rate_pct": 20.35,
+      "avg_r": -0.1428,
+      "avg_win_net_pct": 1.759,
+      "avg_loss_net_pct": -1.491,
+      "breakeven_wr_pct": 45.9,
+      "avg_net_pct_per_trade": -0.8298,
+      "net_pct_per_day": -1.552,
+      "total_net_pct": -93.77,
+      "max_dd_net_pct": -93.77,
+      "net_exits_per_day": 0.381,
+      "days_pct_with_net_exit": 26.5,
+      "timeout_pct": 99.1,
+      "sl_pct": 0.9,
+      "exits": {
+       "SL": 1,
+       "TIMEOUT": 112
+      }
+     },
+     "XRPUSDT": {
+      "n": 123,
+      "unresolved": 0,
+      "wins": 25,
+      "win_rate_pct": 20.33,
+      "avg_r": -0.1247,
+      "avg_win_net_pct": 1.696,
+      "avg_loss_net_pct": -1.342,
+      "breakeven_wr_pct": 44.2,
+      "avg_net_pct_per_trade": -0.7247,
+      "net_pct_per_day": -1.4753,
+      "total_net_pct": -89.13,
+      "max_dd_net_pct": -92.75,
+      "net_exits_per_day": 0.414,
+      "days_pct_with_net_exit": 28.1,
+      "timeout_pct": 98.4,
+      "sl_pct": 0.8,
+      "exits": {
+       "BE_SL": 1,
+       "SL": 1,
+       "TIMEOUT": 121
+      }
+     }
+    },
+    "aggregate": {
+     "n": 359,
+     "unresolved": 0,
+     "wins": 82,
+     "win_rate_pct": 22.84,
+     "avg_r": -0.1334,
+     "avg_win_net_pct": 1.775,
+     "avg_loss_net_pct": -1.53,
+     "breakeven_wr_pct": 46.3,
+     "avg_net_pct_per_trade": -0.7756,
+     "net_pct_per_day": -1.5362,
+     "total_net_pct": -278.42,
+     "max_dd_net_pct": -279.14,
+     "net_exits_per_day": 0.452,
+     "days_pct_with_net_exit": 14.9,
+     "timeout_pct": 98.6,
+     "sl_pct": 0.8,
+     "exits": {
+      "BE_SL": 2,
+      "SL": 3,
+      "TIMEOUT": 354
+     }
+    }
+   },
+   "early": {
+    "pairs": {
+     "ADAUSDT": {
+      "n": 145,
+      "unresolved": 0,
+      "wins": 38,
+      "win_rate_pct": 26.21,
+      "avg_r": -0.1357,
+      "avg_win_net_pct": 1.619,
+      "avg_loss_net_pct": -1.644,
+      "breakeven_wr_pct": 50.4,
+      "avg_net_pct_per_trade": -0.7889,
+      "net_pct_per_day": -1.8933,
+      "total_net_pct": -114.39,
+      "max_dd_net_pct": -114.39,
+      "net_exits_per_day": 0.629,
+      "days_pct_with_net_exit": 33.1,
+      "timeout_pct": 68.3,
+      "sl_pct": 1.4,
+      "exits": {
+       "BE_SL": 13,
+       "EARLY_PROFIT": 31,
+       "SL": 2,
+       "TIMEOUT": 99
+      }
+     },
+     "DOGEUSDT": {
+      "n": 135,
+      "unresolved": 0,
+      "wins": 30,
+      "win_rate_pct": 22.22,
+      "avg_r": -0.1431,
+      "avg_win_net_pct": 1.646,
+      "avg_loss_net_pct": -1.54,
+      "breakeven_wr_pct": 48.3,
+      "avg_net_pct_per_trade": -0.8317,
+      "net_pct_per_day": -1.8584,
+      "total_net_pct": -112.28,
+      "max_dd_net_pct": -112.28,
+      "net_exits_per_day": 0.497,
+      "days_pct_with_net_exit": 28.1,
+      "timeout_pct": 71.9,
+      "sl_pct": 1.5,
+      "exits": {
+       "BE_SL": 11,
+       "EARLY_PROFIT": 25,
+       "SL": 2,
+       "TIMEOUT": 97
+      }
+     },
+     "XRPUSDT": {
+      "n": 147,
+      "unresolved": 0,
+      "wins": 36,
+      "win_rate_pct": 24.49,
+      "avg_r": -0.1233,
+      "avg_win_net_pct": 1.33,
+      "avg_loss_net_pct": -1.381,
+      "breakeven_wr_pct": 50.9,
+      "avg_net_pct_per_trade": -0.717,
+      "net_pct_per_day": -1.7446,
+      "total_net_pct": -105.4,
+      "max_dd_net_pct": -105.4,
+      "net_exits_per_day": 0.596,
+      "days_pct_with_net_exit": 26.5,
+      "timeout_pct": 74.1,
+      "sl_pct": 0.7,
+      "exits": {
+       "BE_SL": 10,
+       "EARLY_PROFIT": 27,
+       "SL": 1,
+       "TIMEOUT": 109
+      }
+     }
+    },
+    "aggregate": {
+     "n": 427,
+     "unresolved": 0,
+     "wins": 104,
+     "win_rate_pct": 24.36,
+     "avg_r": -0.1338,
+     "avg_win_net_pct": 1.527,
+     "avg_loss_net_pct": -1.52,
+     "breakeven_wr_pct": 49.9,
+     "avg_net_pct_per_trade": -0.7777,
+     "net_pct_per_day": -1.8321,
+     "total_net_pct": -332.06,
+     "max_dd_net_pct": -332.06,
+     "net_exits_per_day": 0.574,
+     "days_pct_with_net_exit": 14.9,
+     "timeout_pct": 71.4,
+     "sl_pct": 1.2,
+     "exits": {
+      "BE_SL": 34,
+      "EARLY_PROFIT": 83,
+      "SL": 5,
+      "TIMEOUT": 305
+     }
+    }
+   },
+   "trail": {
+    "pairs": {
+     "ADAUSDT": {
+      "n": 156,
+      "unresolved": 0,
+      "wins": 62,
+      "win_rate_pct": 39.74,
+      "avg_r": -0.1398,
+      "avg_win_net_pct": 1.003,
+      "avg_loss_net_pct": -2.01,
+      "breakeven_wr_pct": 66.7,
+      "avg_net_pct_per_trade": -0.8125,
+      "net_pct_per_day": -2.098,
+      "total_net_pct": -126.76,
+      "max_dd_net_pct": -126.76,
+      "net_exits_per_day": 1.026,
+      "days_pct_with_net_exit": 41.4,
+      "timeout_pct": 63.5,
+      "sl_pct": 0.6,
+      "exits": {
+       "SL": 1,
+       "TIMEOUT": 99,
+       "TRAIL_SL": 56
+      }
+     },
+     "DOGEUSDT": {
+      "n": 136,
+      "unresolved": 0,
+      "wins": 42,
+      "win_rate_pct": 30.88,
+      "avg_r": -0.1513,
+      "avg_win_net_pct": 1.11,
+      "avg_loss_net_pct": -1.769,
+      "breakeven_wr_pct": 61.4,
+      "avg_net_pct_per_trade": -0.8797,
+      "net_pct_per_day": -1.9803,
+      "total_net_pct": -119.64,
+      "max_dd_net_pct": -119.64,
+      "net_exits_per_day": 0.695,
+      "days_pct_with_net_exit": 29.8,
+      "timeout_pct": 72.1,
+      "sl_pct": 1.5,
+      "exits": {
+       "SL": 2,
+       "TIMEOUT": 98,
+       "TRAIL_SL": 36
+      }
+     },
+     "XRPUSDT": {
+      "n": 155,
+      "unresolved": 0,
+      "wins": 50,
+      "win_rate_pct": 32.26,
+      "avg_r": -0.1354,
+      "avg_win_net_pct": 1.019,
+      "avg_loss_net_pct": -1.647,
+      "breakeven_wr_pct": 61.8,
+      "avg_net_pct_per_trade": -0.7872,
+      "net_pct_per_day": -2.0197,
+      "total_net_pct": -122.02,
+      "max_dd_net_pct": -122.02,
+      "net_exits_per_day": 0.828,
+      "days_pct_with_net_exit": 33.1,
+      "timeout_pct": 71.0,
+      "sl_pct": 1.3,
+      "exits": {
+       "SL": 2,
+       "TIMEOUT": 110,
+       "TRAIL_SL": 43
+      }
+     }
+    },
+    "aggregate": {
+     "n": 447,
+     "unresolved": 0,
+     "wins": 154,
+     "win_rate_pct": 34.45,
+     "avg_r": -0.1418,
+     "avg_win_net_pct": 1.037,
+     "avg_loss_net_pct": -1.803,
+     "breakeven_wr_pct": 63.5,
+     "avg_net_pct_per_trade": -0.8242,
+     "net_pct_per_day": -2.0327,
+     "total_net_pct": -368.41,
+     "max_dd_net_pct": -368.41,
+     "net_exits_per_day": 0.85,
+     "days_pct_with_net_exit": 17.1,
+     "timeout_pct": 68.7,
+     "sl_pct": 1.1,
+     "exits": {
+      "SL": 5,
+      "TIMEOUT": 307,
+      "TRAIL_SL": 135
+     }
+    }
+   },
+   "full": {
+    "pairs": {
+     "ADAUSDT": {
+      "n": 156,
+      "unresolved": 0,
+      "wins": 62,
+      "win_rate_pct": 39.74,
+      "avg_r": -0.1398,
+      "avg_win_net_pct": 1.003,
+      "avg_loss_net_pct": -2.01,
+      "breakeven_wr_pct": 66.7,
+      "avg_net_pct_per_trade": -0.8125,
+      "net_pct_per_day": -2.098,
+      "total_net_pct": -126.76,
+      "max_dd_net_pct": -126.76,
+      "net_exits_per_day": 1.026,
+      "days_pct_with_net_exit": 41.4,
+      "timeout_pct": 63.5,
+      "sl_pct": 0.6,
+      "exits": {
+       "SL": 1,
+       "TIMEOUT": 99,
+       "TRAIL_SL": 56
+      }
+     },
+     "DOGEUSDT": {
+      "n": 136,
+      "unresolved": 0,
+      "wins": 42,
+      "win_rate_pct": 30.88,
+      "avg_r": -0.1513,
+      "avg_win_net_pct": 1.11,
+      "avg_loss_net_pct": -1.769,
+      "breakeven_wr_pct": 61.4,
+      "avg_net_pct_per_trade": -0.8797,
+      "net_pct_per_day": -1.9803,
+      "total_net_pct": -119.64,
+      "max_dd_net_pct": -119.64,
+      "net_exits_per_day": 0.695,
+      "days_pct_with_net_exit": 29.8,
+      "timeout_pct": 72.1,
+      "sl_pct": 1.5,
+      "exits": {
+       "SL": 2,
+       "TIMEOUT": 98,
+       "TRAIL_SL": 36
+      }
+     },
+     "XRPUSDT": {
+      "n": 155,
+      "unresolved": 0,
+      "wins": 50,
+      "win_rate_pct": 32.26,
+      "avg_r": -0.1354,
+      "avg_win_net_pct": 1.019,
+      "avg_loss_net_pct": -1.647,
+      "breakeven_wr_pct": 61.8,
+      "avg_net_pct_per_trade": -0.7872,
+      "net_pct_per_day": -2.0197,
+      "total_net_pct": -122.02,
+      "max_dd_net_pct": -122.02,
+      "net_exits_per_day": 0.828,
+      "days_pct_with_net_exit": 33.1,
+      "timeout_pct": 71.0,
+      "sl_pct": 1.3,
+      "exits": {
+       "SL": 2,
+       "TIMEOUT": 110,
+       "TRAIL_SL": 43
+      }
+     }
+    },
+    "aggregate": {
+     "n": 447,
+     "unresolved": 0,
+     "wins": 154,
+     "win_rate_pct": 34.45,
+     "avg_r": -0.1418,
+     "avg_win_net_pct": 1.037,
+     "avg_loss_net_pct": -1.803,
+     "breakeven_wr_pct": 63.5,
+     "avg_net_pct_per_trade": -0.8242,
+     "net_pct_per_day": -2.0327,
+     "total_net_pct": -368.41,
+     "max_dd_net_pct": -368.41,
+     "net_exits_per_day": 0.85,
+     "days_pct_with_net_exit": 17.1,
+     "timeout_pct": 68.7,
+     "sl_pct": 1.1,
+     "exits": {
+      "SL": 5,
+      "TIMEOUT": 307,
+      "TRAIL_SL": 135
+     }
+    }
+   }
+  },
+  "420": {
+   "classic": {
+    "pairs": {
+     "ADAUSDT": {
+      "n": 87,
+      "unresolved": 0,
+      "wins": 30,
+      "win_rate_pct": 34.48,
+      "avg_r": -0.1361,
+      "avg_win_net_pct": 2.303,
+      "avg_loss_net_pct": -2.419,
+      "breakeven_wr_pct": 51.2,
+      "avg_net_pct_per_trade": -0.7909,
+      "net_pct_per_day": -1.1389,
+      "total_net_pct": -68.81,
+      "max_dd_net_pct": -89.08,
+      "net_exits_per_day": 0.497,
+      "days_pct_with_net_exit": 36.4,
+      "timeout_pct": 93.1,
+      "sl_pct": 6.9,
+      "exits": {
+       "SL": 6,
+       "TIMEOUT": 81
+      }
+     },
+     "DOGEUSDT": {
+      "n": 82,
+      "unresolved": 0,
+      "wins": 18,
+      "win_rate_pct": 21.95,
+      "avg_r": -0.1311,
+      "avg_win_net_pct": 2.69,
+      "avg_loss_net_pct": -1.733,
+      "breakeven_wr_pct": 39.2,
+      "avg_net_pct_per_trade": -0.7621,
+      "net_pct_per_day": -1.0343,
+      "total_net_pct": -62.49,
+      "max_dd_net_pct": -74.08,
+      "net_exits_per_day": 0.298,
+      "days_pct_with_net_exit": 23.2,
+      "timeout_pct": 97.6,
+      "sl_pct": 2.4,
+      "exits": {
+       "SL": 2,
+       "TIMEOUT": 80
+      }
+     },
+     "XRPUSDT": {
+      "n": 94,
+      "unresolved": 0,
+      "wins": 26,
+      "win_rate_pct": 27.66,
+      "avg_r": -0.1173,
+      "avg_win_net_pct": 1.965,
+      "avg_loss_net_pct": -1.694,
+      "breakeven_wr_pct": 46.3,
+      "avg_net_pct_per_trade": -0.682,
+      "net_pct_per_day": -1.0612,
+      "total_net_pct": -64.11,
+      "max_dd_net_pct": -74.41,
+      "net_exits_per_day": 0.43,
+      "days_pct_with_net_exit": 33.1,
+      "timeout_pct": 96.8,
+      "sl_pct": 2.1,
+      "exits": {
+       "SL": 2,
+       "TIMEOUT": 91,
+       "TP2": 1
+      }
+     }
+    },
+    "aggregate": {
+     "n": 263,
+     "unresolved": 0,
+     "wins": 74,
+     "win_rate_pct": 28.14,
+     "avg_r": -0.1278,
+     "avg_win_net_pct": 2.279,
+     "avg_loss_net_pct": -1.926,
+     "breakeven_wr_pct": 45.8,
+     "avg_net_pct_per_trade": -0.743,
+     "net_pct_per_day": -1.0781,
+     "total_net_pct": -195.41,
+     "max_dd_net_pct": -237.56,
+     "net_exits_per_day": 0.408,
+     "days_pct_with_net_exit": 16.0,
+     "timeout_pct": 95.8,
+     "sl_pct": 3.8,
+     "exits": {
+      "SL": 10,
+      "TIMEOUT": 252,
+      "TP2": 1
+     }
+    }
+   },
+   "tp1_be": {
+    "pairs": {
+     "ADAUSDT": {
+      "n": 87,
+      "unresolved": 0,
+      "wins": 30,
+      "win_rate_pct": 34.48,
+      "avg_r": -0.1405,
+      "avg_win_net_pct": 2.228,
+      "avg_loss_net_pct": -2.419,
+      "breakeven_wr_pct": 52.1,
+      "avg_net_pct_per_trade": -0.8167,
+      "net_pct_per_day": -1.1761,
+      "total_net_pct": -71.05,
+      "max_dd_net_pct": -89.08,
+      "net_exits_per_day": 0.497,
+      "days_pct_with_net_exit": 36.4,
+      "timeout_pct": 93.1,
+      "sl_pct": 6.9,
+      "exits": {
+       "SL": 6,
+       "TIMEOUT": 81
+      }
+     },
+     "DOGEUSDT": {
+      "n": 82,
+      "unresolved": 0,
+      "wins": 18,
+      "win_rate_pct": 21.95,
+      "avg_r": -0.1304,
+      "avg_win_net_pct": 2.709,
+      "avg_loss_net_pct": -1.733,
+      "breakeven_wr_pct": 39.0,
+      "avg_net_pct_per_trade": -0.7579,
+      "net_pct_per_day": -1.0287,
+      "total_net_pct": -62.15,
+      "max_dd_net_pct": -72.67,
+      "net_exits_per_day": 0.298,
+      "days_pct_with_net_exit": 23.2,
+      "timeout_pct": 97.6,
+      "sl_pct": 2.4,
+      "exits": {
+       "SL": 2,
+       "TIMEOUT": 80
+      }
+     },
+     "XRPUSDT": {
+      "n": 94,
+      "unresolved": 0,
+      "wins": 26,
+      "win_rate_pct": 27.66,
+      "avg_r": -0.1208,
+      "avg_win_net_pct": 1.892,
+      "avg_loss_net_pct": -1.694,
+      "breakeven_wr_pct": 47.2,
+      "avg_net_pct_per_trade": -0.7023,
+      "net_pct_per_day": -1.0927,
+      "total_net_pct": -66.01,
+      "max_dd_net_pct": -74.41,
+      "net_exits_per_day": 0.43,
+      "days_pct_with_net_exit": 33.1,
+      "timeout_pct": 96.8,
+      "sl_pct": 2.1,
+      "exits": {
+       "SL": 2,
+       "TIMEOUT": 91,
+       "TP2": 1
+      }
+     }
+    },
+    "aggregate": {
+     "n": 263,
+     "unresolved": 0,
+     "wins": 74,
+     "win_rate_pct": 28.14,
+     "avg_r": -0.1303,
+     "avg_win_net_pct": 2.227,
+     "avg_loss_net_pct": -1.926,
+     "breakeven_wr_pct": 46.4,
+     "avg_net_pct_per_trade": -0.7575,
+     "net_pct_per_day": -1.0991,
+     "total_net_pct": -199.22,
+     "max_dd_net_pct": -236.15,
+     "net_exits_per_day": 0.408,
+     "days_pct_with_net_exit": 16.0,
+     "timeout_pct": 95.8,
+     "sl_pct": 3.8,
+     "exits": {
+      "SL": 10,
+      "TIMEOUT": 252,
+      "TP2": 1
+     }
+    }
+   },
+   "early": {
+    "pairs": {
+     "ADAUSDT": {
+      "n": 117,
+      "unresolved": 0,
+      "wins": 40,
+      "win_rate_pct": 34.19,
+      "avg_r": -0.1465,
+      "avg_win_net_pct": 1.495,
+      "avg_loss_net_pct": -2.07,
+      "breakeven_wr_pct": 58.1,
+      "avg_net_pct_per_trade": -0.8514,
+      "net_pct_per_day": -1.6488,
+      "total_net_pct": -99.61,
+      "max_dd_net_pct": -105.61,
+      "net_exits_per_day": 0.662,
+      "days_pct_with_net_exit": 34.8,
+      "timeout_pct": 55.6,
+      "sl_pct": 3.4,
+      "exits": {
+       "BE_SL": 18,
+       "EARLY_PROFIT": 30,
+       "SL": 4,
+       "TIMEOUT": 65
+      }
+     },
+     "DOGEUSDT": {
+      "n": 108,
+      "unresolved": 0,
+      "wins": 32,
+      "win_rate_pct": 29.63,
+      "avg_r": -0.1204,
+      "avg_win_net_pct": 1.554,
+      "avg_loss_net_pct": -1.648,
+      "breakeven_wr_pct": 51.5,
+      "avg_net_pct_per_trade": -0.6996,
+      "net_pct_per_day": -1.2507,
+      "total_net_pct": -75.56,
+      "max_dd_net_pct": -79.76,
+      "net_exits_per_day": 0.53,
+      "days_pct_with_net_exit": 28.1,
+      "timeout_pct": 60.2,
+      "sl_pct": 2.8,
+      "exits": {
+       "BE_SL": 12,
+       "EARLY_PROFIT": 28,
+       "SL": 3,
+       "TIMEOUT": 65
+      }
+     },
+     "XRPUSDT": {
+      "n": 118,
+      "unresolved": 0,
+      "wins": 38,
+      "win_rate_pct": 32.2,
+      "avg_r": -0.1146,
+      "avg_win_net_pct": 1.41,
+      "avg_loss_net_pct": -1.652,
+      "breakeven_wr_pct": 54.0,
+      "avg_net_pct_per_trade": -0.666,
+      "net_pct_per_day": -1.3008,
+      "total_net_pct": -78.59,
+      "max_dd_net_pct": -81.43,
+      "net_exits_per_day": 0.629,
+      "days_pct_with_net_exit": 31.4,
+      "timeout_pct": 65.3,
+      "sl_pct": 0.8,
+      "exits": {
+       "BE_SL": 9,
+       "EARLY_PROFIT": 31,
+       "SL": 1,
+       "TIMEOUT": 77
+      }
+     }
+    },
+    "aggregate": {
+     "n": 343,
+     "unresolved": 0,
+     "wins": 110,
+     "win_rate_pct": 32.07,
+     "avg_r": -0.1273,
+     "avg_win_net_pct": 1.483,
+     "avg_loss_net_pct": -1.789,
+     "breakeven_wr_pct": 54.7,
+     "avg_net_pct_per_trade": -0.7398,
+     "net_pct_per_day": -1.4001,
+     "total_net_pct": -253.76,
+     "max_dd_net_pct": -266.8,
+     "net_exits_per_day": 0.607,
+     "days_pct_with_net_exit": 16.6,
+     "timeout_pct": 60.3,
+     "sl_pct": 2.3,
+     "exits": {
+      "BE_SL": 39,
+      "EARLY_PROFIT": 89,
+      "SL": 8,
+      "TIMEOUT": 207
+     }
+    }
+   },
+   "trail": {
+    "pairs": {
+     "ADAUSDT": {
+      "n": 128,
+      "unresolved": 0,
+      "wins": 66,
+      "win_rate_pct": 51.56,
+      "avg_r": -0.1309,
+      "avg_win_net_pct": 1.009,
+      "avg_loss_net_pct": -2.645,
+      "breakeven_wr_pct": 72.4,
+      "avg_net_pct_per_trade": -0.7608,
+      "net_pct_per_day": -1.6118,
+      "total_net_pct": -97.38,
+      "max_dd_net_pct": -100.37,
+      "net_exits_per_day": 1.092,
+      "days_pct_with_net_exit": 44.7,
+      "timeout_pct": 50.0,
+      "sl_pct": 3.1,
+      "exits": {
+       "SL": 4,
+       "TIMEOUT": 64,
+       "TRAIL_SL": 60
+      }
+     },
+     "DOGEUSDT": {
+      "n": 110,
+      "unresolved": 0,
+      "wins": 44,
+      "win_rate_pct": 40.0,
+      "avg_r": -0.1288,
+      "avg_win_net_pct": 1.111,
+      "avg_loss_net_pct": -1.988,
+      "breakeven_wr_pct": 64.2,
+      "avg_net_pct_per_trade": -0.7487,
+      "net_pct_per_day": -1.3633,
+      "total_net_pct": -82.36,
+      "max_dd_net_pct": -87.18,
+      "net_exits_per_day": 0.728,
+      "days_pct_with_net_exit": 31.4,
+      "timeout_pct": 60.0,
+      "sl_pct": 2.7,
+      "exits": {
+       "SL": 3,
+       "TIMEOUT": 66,
+       "TRAIL_SL": 41
+      }
+     },
+     "XRPUSDT": {
+      "n": 131,
+      "unresolved": 0,
+      "wins": 56,
+      "win_rate_pct": 42.75,
+      "avg_r": -0.1294,
+      "avg_win_net_pct": 1.015,
+      "avg_loss_net_pct": -2.072,
+      "breakeven_wr_pct": 67.1,
+      "avg_net_pct_per_trade": -0.7522,
+      "net_pct_per_day": -1.631,
+      "total_net_pct": -98.54,
+      "max_dd_net_pct": -99.53,
+      "net_exits_per_day": 0.927,
+      "days_pct_with_net_exit": 36.4,
+      "timeout_pct": 58.0,
+      "sl_pct": 3.1,
+      "exits": {
+       "SL": 4,
+       "TIMEOUT": 76,
+       "TRAIL_SL": 51
+      }
+     }
+    },
+    "aggregate": {
+     "n": 369,
+     "unresolved": 0,
+     "wins": 166,
+     "win_rate_pct": 44.99,
+     "avg_r": -0.1297,
+     "avg_win_net_pct": 1.038,
+     "avg_loss_net_pct": -2.22,
+     "breakeven_wr_pct": 68.1,
+     "avg_net_pct_per_trade": -0.7542,
+     "net_pct_per_day": -1.5354,
+     "total_net_pct": -278.28,
+     "max_dd_net_pct": -287.08,
+     "net_exits_per_day": 0.916,
+     "days_pct_with_net_exit": 18.2,
+     "timeout_pct": 55.8,
+     "sl_pct": 3.0,
+     "exits": {
+      "SL": 11,
+      "TIMEOUT": 206,
+      "TRAIL_SL": 152
+     }
+    }
+   },
+   "full": {
+    "pairs": {
+     "ADAUSDT": {
+      "n": 128,
+      "unresolved": 0,
+      "wins": 66,
+      "win_rate_pct": 51.56,
+      "avg_r": -0.1309,
+      "avg_win_net_pct": 1.009,
+      "avg_loss_net_pct": -2.645,
+      "breakeven_wr_pct": 72.4,
+      "avg_net_pct_per_trade": -0.7608,
+      "net_pct_per_day": -1.6118,
+      "total_net_pct": -97.38,
+      "max_dd_net_pct": -100.37,
+      "net_exits_per_day": 1.092,
+      "days_pct_with_net_exit": 44.7,
+      "timeout_pct": 50.0,
+      "sl_pct": 3.1,
+      "exits": {
+       "SL": 4,
+       "TIMEOUT": 64,
+       "TRAIL_SL": 60
+      }
+     },
+     "DOGEUSDT": {
+      "n": 110,
+      "unresolved": 0,
+      "wins": 44,
+      "win_rate_pct": 40.0,
+      "avg_r": -0.129,
+      "avg_win_net_pct": 1.108,
+      "avg_loss_net_pct": -1.988,
+      "breakeven_wr_pct": 64.2,
+      "avg_net_pct_per_trade": -0.7499,
+      "net_pct_per_day": -1.3654,
+      "total_net_pct": -82.49,
+      "max_dd_net_pct": -87.18,
+      "net_exits_per_day": 0.728,
+      "days_pct_with_net_exit": 31.4,
+      "timeout_pct": 60.0,
+      "sl_pct": 2.7,
+      "exits": {
+       "EARLY_PROFIT": 1,
+       "SL": 3,
+       "TIMEOUT": 66,
+       "TRAIL_SL": 40
+      }
+     },
+     "XRPUSDT": {
+      "n": 131,
+      "unresolved": 0,
+      "wins": 56,
+      "win_rate_pct": 42.75,
+      "avg_r": -0.1294,
+      "avg_win_net_pct": 1.015,
+      "avg_loss_net_pct": -2.072,
+      "breakeven_wr_pct": 67.1,
+      "avg_net_pct_per_trade": -0.7522,
+      "net_pct_per_day": -1.631,
+      "total_net_pct": -98.54,
+      "max_dd_net_pct": -99.53,
+      "net_exits_per_day": 0.927,
+      "days_pct_with_net_exit": 36.4,
+      "timeout_pct": 58.0,
+      "sl_pct": 3.1,
+      "exits": {
+       "SL": 4,
+       "TIMEOUT": 76,
+       "TRAIL_SL": 51
+      }
+     }
+    },
+    "aggregate": {
+     "n": 369,
+     "unresolved": 0,
+     "wins": 166,
+     "win_rate_pct": 44.99,
+     "avg_r": -0.1298,
+     "avg_win_net_pct": 1.037,
+     "avg_loss_net_pct": -2.22,
+     "breakeven_wr_pct": 68.2,
+     "avg_net_pct_per_trade": -0.7545,
+     "net_pct_per_day": -1.5361,
+     "total_net_pct": -278.41,
+     "max_dd_net_pct": -287.08,
+     "net_exits_per_day": 0.916,
+     "days_pct_with_net_exit": 18.2,
+     "timeout_pct": 55.8,
+     "sl_pct": 3.0,
+     "exits": {
+      "EARLY_PROFIT": 1,
+      "SL": 11,
+      "TIMEOUT": 206,
+      "TRAIL_SL": 151
+     }
+    }
+   }
+  }
+ },
+ "same_entry": {
+  "90": {
+   "classic": {
+    "pairs": {
+     "ADAUSDT": {
+      "n": 210,
+      "unresolved": 0,
+      "wins": 41,
+      "win_rate_pct": 19.52,
+      "avg_r": -0.1568,
+      "avg_win_net_pct": 0.931,
+      "avg_loss_net_pct": -1.359,
+      "breakeven_wr_pct": 59.3,
+      "avg_net_pct_per_trade": -0.9115,
+      "net_pct_per_day": -3.1682,
+      "total_net_pct": -191.41,
+      "max_dd_net_pct": -191.41,
+      "net_exits_per_day": 0.679,
+      "days_pct_with_net_exit": 36.4,
+      "timeout_pct": 99.5,
+      "sl_pct": 0.5,
+      "exits": {
+       "SL": 1,
+       "TIMEOUT": 209
+      },
+      "avg_net_ci95": [
+       -1.0812,
+       -0.7367
+      ],
+      "avg_r_ci95": [
+       -0.1868,
+       -0.1281
+      ]
+     },
+     "DOGEUSDT": {
+      "n": 193,
+      "unresolved": 0,
+      "wins": 23,
+      "win_rate_pct": 11.92,
+      "avg_r": -0.1552,
+      "avg_win_net_pct": 1.638,
+      "avg_loss_net_pct": -1.246,
+      "breakeven_wr_pct": 43.2,
+      "avg_net_pct_per_trade": -0.902,
+      "net_pct_per_day": -2.8815,
+      "total_net_pct": -174.09,
+      "max_dd_net_pct": -174.09,
+      "net_exits_per_day": 0.381,
+      "days_pct_with_net_exit": 21.5,
+      "timeout_pct": 99.5,
+      "sl_pct": 0.5,
+      "exits": {
+       "SL": 1,
+       "TIMEOUT": 192
+      },
+      "avg_net_ci95": [
+       -1.1008,
+       -0.7111
+      ],
+      "avg_r_ci95": [
+       -0.1837,
+       -0.1204
+      ]
+     },
+     "XRPUSDT": {
+      "n": 217,
+      "unresolved": 0,
+      "wins": 28,
+      "win_rate_pct": 12.9,
+      "avg_r": -0.1584,
+      "avg_win_net_pct": 1.481,
+      "avg_loss_net_pct": -1.277,
+      "breakeven_wr_pct": 46.3,
+      "avg_net_pct_per_trade": -0.9208,
+      "net_pct_per_day": -3.3072,
+      "total_net_pct": -199.8,
+      "max_dd_net_pct": -199.8,
+      "net_exits_per_day": 0.463,
+      "days_pct_with_net_exit": 24.8,
+      "timeout_pct": 99.1,
+      "sl_pct": 0.9,
+      "exits": {
+       "SL": 2,
+       "TIMEOUT": 215
+      },
+      "avg_net_ci95": [
+       -1.0973,
+       -0.7529
+      ],
+      "avg_r_ci95": [
+       -0.1887,
+       -0.1267
+      ]
+     }
+    },
+    "aggregate": {
+     "n": 620,
+     "unresolved": 0,
+     "wins": 92,
+     "win_rate_pct": 14.84,
+     "avg_r": -0.1569,
+     "avg_win_net_pct": 1.275,
+     "avg_loss_net_pct": -1.293,
+     "breakeven_wr_pct": 50.3,
+     "avg_net_pct_per_trade": -0.9118,
+     "net_pct_per_day": -3.119,
+     "total_net_pct": -565.3,
+     "max_dd_net_pct": -565.3,
+     "net_exits_per_day": 0.508,
+     "days_pct_with_net_exit": 16.0,
+     "timeout_pct": 99.4,
+     "sl_pct": 0.6,
+     "exits": {
+      "SL": 4,
+      "TIMEOUT": 616
+     },
+     "avg_net_ci95": [
+      -1.0248,
+      -0.8023
+     ],
+     "avg_r_ci95": [
+      -0.1736,
+      -0.1397
+     ]
+    }
+   },
+   "tp1_be": {
+    "pairs": {
+     "ADAUSDT": {
+      "n": 210,
+      "unresolved": 0,
+      "wins": 41,
+      "win_rate_pct": 19.52,
+      "avg_r": -0.1568,
+      "avg_win_net_pct": 0.931,
+      "avg_loss_net_pct": -1.359,
+      "breakeven_wr_pct": 59.3,
+      "avg_net_pct_per_trade": -0.9115,
+      "net_pct_per_day": -3.1682,
+      "total_net_pct": -191.41,
+      "max_dd_net_pct": -191.41,
+      "net_exits_per_day": 0.679,
+      "days_pct_with_net_exit": 36.4,
+      "timeout_pct": 99.5,
+      "sl_pct": 0.5,
+      "exits": {
+       "SL": 1,
+       "TIMEOUT": 209
+      },
+      "avg_net_ci95": [
+       -1.0812,
+       -0.7367
+      ],
+      "avg_r_ci95": [
+       -0.1868,
+       -0.1281
+      ]
+     },
+     "DOGEUSDT": {
+      "n": 193,
+      "unresolved": 0,
+      "wins": 23,
+      "win_rate_pct": 11.92,
+      "avg_r": -0.154,
+      "avg_win_net_pct": 1.694,
+      "avg_loss_net_pct": -1.246,
+      "breakeven_wr_pct": 42.4,
+      "avg_net_pct_per_trade": -0.8954,
+      "net_pct_per_day": -2.8604,
+      "total_net_pct": -172.81,
+      "max_dd_net_pct": -172.81,
+      "net_exits_per_day": 0.381,
+      "days_pct_with_net_exit": 21.5,
+      "timeout_pct": 99.5,
+      "sl_pct": 0.5,
+      "exits": {
+       "SL": 1,
+       "TIMEOUT": 192
+      },
+      "avg_net_ci95": [
+       -1.1008,
+       -0.7085
+      ],
+      "avg_r_ci95": [
+       -0.1827,
+       -0.1182
+      ]
+     },
+     "XRPUSDT": {
+      "n": 217,
+      "unresolved": 0,
+      "wins": 28,
+      "win_rate_pct": 12.9,
+      "avg_r": -0.1584,
+      "avg_win_net_pct": 1.481,
+      "avg_loss_net_pct": -1.277,
+      "breakeven_wr_pct": 46.3,
+      "avg_net_pct_per_trade": -0.9208,
+      "net_pct_per_day": -3.3072,
+      "total_net_pct": -199.8,
+      "max_dd_net_pct": -199.8,
+      "net_exits_per_day": 0.463,
+      "days_pct_with_net_exit": 24.8,
+      "timeout_pct": 99.1,
+      "sl_pct": 0.9,
+      "exits": {
+       "SL": 2,
+       "TIMEOUT": 215
+      },
+      "avg_net_ci95": [
+       -1.0973,
+       -0.7529
+      ],
+      "avg_r_ci95": [
+       -0.1887,
+       -0.1267
+      ]
+     }
+    },
+    "aggregate": {
+     "n": 620,
+     "unresolved": 0,
+     "wins": 92,
+     "win_rate_pct": 14.84,
+     "avg_r": -0.1565,
+     "avg_win_net_pct": 1.289,
+     "avg_loss_net_pct": -1.293,
+     "breakeven_wr_pct": 50.1,
+     "avg_net_pct_per_trade": -0.9097,
+     "net_pct_per_day": -3.1119,
+     "total_net_pct": -564.03,
+     "max_dd_net_pct": -564.03,
+     "net_exits_per_day": 0.508,
+     "days_pct_with_net_exit": 16.0,
+     "timeout_pct": 99.4,
+     "sl_pct": 0.6,
+     "exits": {
+      "SL": 4,
+      "TIMEOUT": 616
+     },
+     "avg_net_ci95": [
+      -1.0228,
+      -0.7982
+     ],
+     "avg_r_ci95": [
+      -0.1733,
+      -0.1391
+     ]
+    }
+   },
+   "early": {
+    "pairs": {
+     "ADAUSDT": {
+      "n": 210,
+      "unresolved": 0,
+      "wins": 39,
+      "win_rate_pct": 18.57,
+      "avg_r": -0.1482,
+      "avg_win_net_pct": 1.003,
+      "avg_loss_net_pct": -1.286,
+      "breakeven_wr_pct": 56.2,
+      "avg_net_pct_per_trade": -0.8612,
+      "net_pct_per_day": -2.9936,
+      "total_net_pct": -180.86,
+      "max_dd_net_pct": -180.86,
+      "net_exits_per_day": 0.646,
+      "days_pct_with_net_exit": 36.4,
+      "timeout_pct": 88.1,
+      "sl_pct": 0.0,
+      "exits": {
+       "BE_SL": 9,
+       "EARLY_PROFIT": 16,
+       "TIMEOUT": 185
+      },
+      "avg_net_ci95": [
+       -1.0216,
+       -0.6905
+      ],
+      "avg_r_ci95": [
+       -0.1775,
+       -0.1209
+      ]
+     },
+     "DOGEUSDT": {
+      "n": 193,
+      "unresolved": 0,
+      "wins": 24,
+      "win_rate_pct": 12.44,
+      "avg_r": -0.1452,
+      "avg_win_net_pct": 1.548,
+      "avg_loss_net_pct": -1.184,
+      "breakeven_wr_pct": 43.3,
+      "avg_net_pct_per_trade": -0.8441,
+      "net_pct_per_day": -2.6966,
+      "total_net_pct": -162.92,
+      "max_dd_net_pct": -162.92,
+      "net_exits_per_day": 0.397,
+      "days_pct_with_net_exit": 19.9,
+      "timeout_pct": 88.1,
+      "sl_pct": 0.0,
+      "exits": {
+       "BE_SL": 5,
+       "EARLY_PROFIT": 18,
+       "TIMEOUT": 170
+      },
+      "avg_net_ci95": [
+       -1.0098,
+       -0.6865
+      ],
+      "avg_r_ci95": [
+       -0.1715,
+       -0.1116
+      ]
+     },
+     "XRPUSDT": {
+      "n": 217,
+      "unresolved": 0,
+      "wins": 26,
+      "win_rate_pct": 11.98,
+      "avg_r": -0.1596,
+      "avg_win_net_pct": 1.174,
+      "avg_loss_net_pct": -1.214,
+      "breakeven_wr_pct": 50.8,
+      "avg_net_pct_per_trade": -0.9279,
+      "net_pct_per_day": -3.3329,
+      "total_net_pct": -201.36,
+      "max_dd_net_pct": -201.36,
+      "net_exits_per_day": 0.43,
+      "days_pct_with_net_exit": 23.2,
+      "timeout_pct": 90.3,
+      "sl_pct": 0.5,
+      "exits": {
+       "BE_SL": 7,
+       "EARLY_PROFIT": 13,
+       "SL": 1,
+       "TIMEOUT": 196
+      },
+      "avg_net_ci95": [
+       -1.0724,
+       -0.7825
+      ],
+      "avg_r_ci95": [
+       -0.186,
+       -0.1333
+      ]
+     }
+    },
+    "aggregate": {
+     "n": 620,
+     "unresolved": 0,
+     "wins": 89,
+     "win_rate_pct": 14.35,
+     "avg_r": -0.1513,
+     "avg_win_net_pct": 1.2,
+     "avg_loss_net_pct": -1.228,
+     "breakeven_wr_pct": 50.6,
+     "avg_net_pct_per_trade": -0.8792,
+     "net_pct_per_day": -3.0077,
+     "total_net_pct": -545.13,
+     "max_dd_net_pct": -545.13,
+     "net_exits_per_day": 0.491,
+     "days_pct_with_net_exit": 16.6,
+     "timeout_pct": 88.9,
+     "sl_pct": 0.2,
+     "exits": {
+      "BE_SL": 21,
+      "EARLY_PROFIT": 47,
+      "SL": 1,
+      "TIMEOUT": 551
+     },
+     "avg_net_ci95": [
+      -0.9718,
+      -0.7833
+     ],
+     "avg_r_ci95": [
+      -0.1667,
+      -0.1351
+     ]
+    }
+   },
+   "trail": {
+    "pairs": {
+     "ADAUSDT": {
+      "n": 210,
+      "unresolved": 0,
+      "wins": 48,
+      "win_rate_pct": 22.86,
+      "avg_r": -0.147,
+      "avg_win_net_pct": 0.846,
+      "avg_loss_net_pct": -1.358,
+      "breakeven_wr_pct": 61.6,
+      "avg_net_pct_per_trade": -0.8542,
+      "net_pct_per_day": -2.9691,
+      "total_net_pct": -179.38,
+      "max_dd_net_pct": -179.38,
+      "net_exits_per_day": 0.794,
+      "days_pct_with_net_exit": 39.7,
+      "timeout_pct": 84.3,
+      "sl_pct": 0.0,
+      "exits": {
+       "TIMEOUT": 177,
+       "TRAIL_SL": 33
+      },
+      "avg_net_ci95": [
+       -1.0082,
+       -0.6786
+      ],
+      "avg_r_ci95": [
+       -0.1758,
+       -0.1191
+      ]
+     },
+     "DOGEUSDT": {
+      "n": 193,
+      "unresolved": 0,
+      "wins": 29,
+      "win_rate_pct": 15.03,
+      "avg_r": -0.1523,
+      "avg_win_net_pct": 1.007,
+      "avg_loss_net_pct": -1.22,
+      "breakeven_wr_pct": 54.8,
+      "avg_net_pct_per_trade": -0.8853,
+      "net_pct_per_day": -2.8281,
+      "total_net_pct": -170.86,
+      "max_dd_net_pct": -170.86,
+      "net_exits_per_day": 0.48,
+      "days_pct_with_net_exit": 23.2,
+      "timeout_pct": 87.6,
+      "sl_pct": 0.0,
+      "exits": {
+       "TIMEOUT": 169,
+       "TRAIL_SL": 24
+      },
+      "avg_net_ci95": [
+       -1.0354,
+       -0.7437
+      ],
+      "avg_r_ci95": [
+       -0.1755,
+       -0.1241
+      ]
+     },
+     "XRPUSDT": {
+      "n": 217,
+      "unresolved": 0,
+      "wins": 33,
+      "win_rate_pct": 15.21,
+      "avg_r": -0.1611,
+      "avg_win_net_pct": 0.867,
+      "avg_loss_net_pct": -1.26,
+      "breakeven_wr_pct": 59.2,
+      "avg_net_pct_per_trade": -0.9367,
+      "net_pct_per_day": -3.3644,
+      "total_net_pct": -203.26,
+      "max_dd_net_pct": -203.34,
+      "net_exits_per_day": 0.546,
+      "days_pct_with_net_exit": 28.1,
+      "timeout_pct": 88.0,
+      "sl_pct": 0.5,
+      "exits": {
+       "SL": 1,
+       "TIMEOUT": 191,
+       "TRAIL_SL": 25
+      },
+      "avg_net_ci95": [
+       -1.0849,
+       -0.8024
+      ],
+      "avg_r_ci95": [
+       -0.1862,
+       -0.1367
+      ]
+     }
+    },
+    "aggregate": {
+     "n": 620,
+     "unresolved": 0,
+     "wins": 110,
+     "win_rate_pct": 17.74,
+     "avg_r": -0.1536,
+     "avg_win_net_pct": 0.895,
+     "avg_loss_net_pct": -1.278,
+     "breakeven_wr_pct": 58.8,
+     "avg_net_pct_per_trade": -0.8927,
+     "net_pct_per_day": -3.0539,
+     "total_net_pct": -553.5,
+     "max_dd_net_pct": -553.5,
+     "net_exits_per_day": 0.607,
+     "days_pct_with_net_exit": 17.1,
+     "timeout_pct": 86.6,
+     "sl_pct": 0.2,
+     "exits": {
+      "SL": 1,
+      "TIMEOUT": 537,
+      "TRAIL_SL": 82
+     },
+     "avg_net_ci95": [
+      -0.9818,
+      -0.807
+     ],
+     "avg_r_ci95": [
+      -0.1681,
+      -0.1389
+     ]
+    }
+   },
+   "full": {
+    "pairs": {
+     "ADAUSDT": {
+      "n": 210,
+      "unresolved": 0,
+      "wins": 48,
+      "win_rate_pct": 22.86,
+      "avg_r": -0.147,
+      "avg_win_net_pct": 0.846,
+      "avg_loss_net_pct": -1.358,
+      "breakeven_wr_pct": 61.6,
+      "avg_net_pct_per_trade": -0.8542,
+      "net_pct_per_day": -2.9691,
+      "total_net_pct": -179.38,
+      "max_dd_net_pct": -179.38,
+      "net_exits_per_day": 0.794,
+      "days_pct_with_net_exit": 39.7,
+      "timeout_pct": 84.3,
+      "sl_pct": 0.0,
+      "exits": {
+       "TIMEOUT": 177,
+       "TRAIL_SL": 33
+      },
+      "avg_net_ci95": [
+       -1.0082,
+       -0.6786
+      ],
+      "avg_r_ci95": [
+       -0.1758,
+       -0.1191
+      ]
+     },
+     "DOGEUSDT": {
+      "n": 193,
+      "unresolved": 0,
+      "wins": 29,
+      "win_rate_pct": 15.03,
+      "avg_r": -0.1524,
+      "avg_win_net_pct": 1.003,
+      "avg_loss_net_pct": -1.22,
+      "breakeven_wr_pct": 54.9,
+      "avg_net_pct_per_trade": -0.8859,
+      "net_pct_per_day": -2.83,
+      "total_net_pct": -170.98,
+      "max_dd_net_pct": -170.98,
+      "net_exits_per_day": 0.48,
+      "days_pct_with_net_exit": 23.2,
+      "timeout_pct": 87.6,
+      "sl_pct": 0.0,
+      "exits": {
+       "EARLY_PROFIT": 1,
+       "TIMEOUT": 169,
+       "TRAIL_SL": 23
+      },
+      "avg_net_ci95": [
+       -1.0358,
+       -0.7437
+      ],
+      "avg_r_ci95": [
+       -0.1756,
+       -0.1241
+      ]
+     },
+     "XRPUSDT": {
+      "n": 217,
+      "unresolved": 0,
+      "wins": 33,
+      "win_rate_pct": 15.21,
+      "avg_r": -0.1611,
+      "avg_win_net_pct": 0.867,
+      "avg_loss_net_pct": -1.26,
+      "breakeven_wr_pct": 59.2,
+      "avg_net_pct_per_trade": -0.9367,
+      "net_pct_per_day": -3.3644,
+      "total_net_pct": -203.26,
+      "max_dd_net_pct": -203.34,
+      "net_exits_per_day": 0.546,
+      "days_pct_with_net_exit": 28.1,
+      "timeout_pct": 88.0,
+      "sl_pct": 0.5,
+      "exits": {
+       "SL": 1,
+       "TIMEOUT": 191,
+       "TRAIL_SL": 25
+      },
+      "avg_net_ci95": [
+       -1.0849,
+       -0.8024
+      ],
+      "avg_r_ci95": [
+       -0.1862,
+       -0.1367
+      ]
+     }
+    },
+    "aggregate": {
+     "n": 620,
+     "unresolved": 0,
+     "wins": 110,
+     "win_rate_pct": 17.74,
+     "avg_r": -0.1536,
+     "avg_win_net_pct": 0.894,
+     "avg_loss_net_pct": -1.278,
+     "breakeven_wr_pct": 58.9,
+     "avg_net_pct_per_trade": -0.8929,
+     "net_pct_per_day": -3.0545,
+     "total_net_pct": -553.62,
+     "max_dd_net_pct": -553.62,
+     "net_exits_per_day": 0.607,
+     "days_pct_with_net_exit": 17.1,
+     "timeout_pct": 86.6,
+     "sl_pct": 0.2,
+     "exits": {
+      "EARLY_PROFIT": 1,
+      "SL": 1,
+      "TIMEOUT": 537,
+      "TRAIL_SL": 81
+     },
+     "avg_net_ci95": [
+      -0.9821,
+      -0.8072
+     ],
+     "avg_r_ci95": [
+      -0.1681,
+      -0.1389
+     ]
+    }
+   }
+  },
+  "240": {
+   "classic": {
+    "pairs": {
+     "ADAUSDT": {
+      "n": 123,
+      "unresolved": 0,
+      "wins": 33,
+      "win_rate_pct": 26.83,
+      "avg_r": -0.1479,
+      "avg_win_net_pct": 1.794,
+      "avg_loss_net_pct": -1.832,
+      "breakeven_wr_pct": 50.5,
+      "avg_net_pct_per_trade": -0.8595,
+      "net_pct_per_day": -1.7499,
+      "total_net_pct": -105.72,
+      "max_dd_net_pct": -106.56,
+      "net_exits_per_day": 0.546,
+      "days_pct_with_net_exit": 34.8,
+      "timeout_pct": 98.4,
+      "sl_pct": 1.6,
+      "exits": {
+       "SL": 2,
+       "TIMEOUT": 121
+      },
+      "avg_net_ci95": [
+       -1.2163,
+       -0.4856
+      ],
+      "avg_r_ci95": [
+       -0.2161,
+       -0.0861
+      ]
+     },
+     "DOGEUSDT": {
+      "n": 113,
+      "unresolved": 0,
+      "wins": 23,
+      "win_rate_pct": 20.35,
+      "avg_r": -0.1437,
+      "avg_win_net_pct": 1.731,
+      "avg_loss_net_pct": -1.491,
+      "breakeven_wr_pct": 46.3,
+      "avg_net_pct_per_trade": -0.8354,
+      "net_pct_per_day": -1.5625,
+      "total_net_pct": -94.4,
+      "max_dd_net_pct": -94.4,
+      "net_exits_per_day": 0.381,
+      "days_pct_with_net_exit": 26.5,
+      "timeout_pct": 99.1,
+      "sl_pct": 0.9,
+      "exits": {
+       "SL": 1,
+       "TIMEOUT": 112
+      },
+      "avg_net_ci95": [
+       -1.1704,
+       -0.4678
+      ],
+      "avg_r_ci95": [
+       -0.202,
+       -0.078
+      ]
+     },
+     "XRPUSDT": {
+      "n": 123,
+      "unresolved": 0,
+      "wins": 24,
+      "win_rate_pct": 19.51,
+      "avg_r": -0.1429,
+      "avg_win_net_pct": 1.504,
+      "avg_loss_net_pct": -1.396,
+      "breakeven_wr_pct": 48.1,
+      "avg_net_pct_per_trade": -0.8305,
+      "net_pct_per_day": -1.6908,
+      "total_net_pct": -102.15,
+      "max_dd_net_pct": -102.15,
+      "net_exits_per_day": 0.397,
+      "days_pct_with_net_exit": 28.1,
+      "timeout_pct": 98.4,
+      "sl_pct": 1.6,
+      "exits": {
+       "SL": 2,
+       "TIMEOUT": 121
+      },
+      "avg_net_ci95": [
+       -1.1105,
+       -0.5408
+      ],
+      "avg_r_ci95": [
+       -0.1956,
+       -0.096
+      ]
+     }
+    },
+    "aggregate": {
+     "n": 359,
+     "unresolved": 0,
+     "wins": 80,
+     "win_rate_pct": 22.28,
+     "avg_r": -0.1449,
+     "avg_win_net_pct": 1.689,
+     "avg_loss_net_pct": -1.568,
+     "breakeven_wr_pct": 48.1,
+     "avg_net_pct_per_trade": -0.842,
+     "net_pct_per_day": -1.6677,
+     "total_net_pct": -302.27,
+     "max_dd_net_pct": -302.27,
+     "net_exits_per_day": 0.441,
+     "days_pct_with_net_exit": 14.9,
+     "timeout_pct": 98.6,
+     "sl_pct": 1.4,
+     "exits": {
+      "SL": 5,
+      "TIMEOUT": 354
+     },
+     "avg_net_ci95": [
+      -1.0303,
+      -0.6416
+     ],
+     "avg_r_ci95": [
+      -0.1787,
+      -0.1086
+     ]
+    }
+   },
+   "tp1_be": {
+    "pairs": {
+     "ADAUSDT": {
+      "n": 123,
+      "unresolved": 0,
+      "wins": 34,
+      "win_rate_pct": 27.64,
+      "avg_r": -0.1336,
+      "avg_win_net_pct": 1.844,
+      "avg_loss_net_pct": -1.778,
+      "breakeven_wr_pct": 49.1,
+      "avg_net_pct_per_trade": -0.7766,
+      "net_pct_per_day": -1.5811,
+      "total_net_pct": -95.52,
+      "max_dd_net_pct": -99.84,
+      "net_exits_per_day": 0.563,
+      "days_pct_with_net_exit": 34.8,
+      "timeout_pct": 98.4,
+      "sl_pct": 0.8,
+      "exits": {
+       "BE_SL": 1,
+       "SL": 1,
+       "TIMEOUT": 121
+      },
+      "avg_net_ci95": [
+       -1.1073,
+       -0.4069
+      ],
+      "avg_r_ci95": [
+       -0.1995,
+       -0.0709
+      ]
+     },
+     "DOGEUSDT": {
+      "n": 113,
+      "unresolved": 0,
+      "wins": 23,
+      "win_rate_pct": 20.35,
+      "avg_r": -0.1428,
+      "avg_win_net_pct": 1.759,
+      "avg_loss_net_pct": -1.491,
+      "breakeven_wr_pct": 45.9,
+      "avg_net_pct_per_trade": -0.8298,
+      "net_pct_per_day": -1.552,
+      "total_net_pct": -93.77,
+      "max_dd_net_pct": -93.77,
+      "net_exits_per_day": 0.381,
+      "days_pct_with_net_exit": 26.5,
+      "timeout_pct": 99.1,
+      "sl_pct": 0.9,
+      "exits": {
+       "SL": 1,
+       "TIMEOUT": 112
+      },
+      "avg_net_ci95": [
+       -1.1704,
+       -0.4733
+      ],
+      "avg_r_ci95": [
+       -0.2017,
+       -0.0784
+      ]
+     },
+     "XRPUSDT": {
+      "n": 123,
+      "unresolved": 0,
+      "wins": 25,
+      "win_rate_pct": 20.33,
+      "avg_r": -0.1247,
+      "avg_win_net_pct": 1.696,
+      "avg_loss_net_pct": -1.342,
+      "breakeven_wr_pct": 44.2,
+      "avg_net_pct_per_trade": -0.7247,
+      "net_pct_per_day": -1.4753,
+      "total_net_pct": -89.13,
+      "max_dd_net_pct": -92.75,
+      "net_exits_per_day": 0.414,
+      "days_pct_with_net_exit": 28.1,
+      "timeout_pct": 98.4,
+      "sl_pct": 0.8,
+      "exits": {
+       "BE_SL": 1,
+       "SL": 1,
+       "TIMEOUT": 121
+      },
+      "avg_net_ci95": [
+       -1.0056,
+       -0.4255
+      ],
+      "avg_r_ci95": [
+       -0.1786,
+       -0.076
+      ]
+     }
+    },
+    "aggregate": {
+     "n": 359,
+     "unresolved": 0,
+     "wins": 82,
+     "win_rate_pct": 22.84,
+     "avg_r": -0.1334,
+     "avg_win_net_pct": 1.775,
+     "avg_loss_net_pct": -1.53,
+     "breakeven_wr_pct": 46.3,
+     "avg_net_pct_per_trade": -0.7756,
+     "net_pct_per_day": -1.5362,
+     "total_net_pct": -278.42,
+     "max_dd_net_pct": -279.14,
+     "net_exits_per_day": 0.452,
+     "days_pct_with_net_exit": 14.9,
+     "timeout_pct": 98.6,
+     "sl_pct": 0.8,
+     "exits": {
+      "BE_SL": 2,
+      "SL": 3,
+      "TIMEOUT": 354
+     },
+     "avg_net_ci95": [
+      -0.9612,
+      -0.5626
+     ],
+     "avg_r_ci95": [
+      -0.1673,
+      -0.0986
+     ]
+    }
+   },
+   "early": {
+    "pairs": {
+     "ADAUSDT": {
+      "n": 123,
+      "unresolved": 0,
+      "wins": 31,
+      "win_rate_pct": 25.2,
+      "avg_r": -0.1505,
+      "avg_win_net_pct": 1.52,
+      "avg_loss_net_pct": -1.682,
+      "breakeven_wr_pct": 52.5,
+      "avg_net_pct_per_trade": -0.875,
+      "net_pct_per_day": -1.7814,
+      "total_net_pct": -107.62,
+      "max_dd_net_pct": -107.9,
+      "net_exits_per_day": 0.513,
+      "days_pct_with_net_exit": 31.4,
+      "timeout_pct": 74.0,
+      "sl_pct": 0.8,
+      "exits": {
+       "BE_SL": 9,
+       "EARLY_PROFIT": 22,
+       "SL": 1,
+       "TIMEOUT": 91
+      },
+      "avg_net_ci95": [
+       -1.187,
+       -0.5377
+      ],
+      "avg_r_ci95": [
+       -0.2074,
+       -0.0978
+      ]
+     },
+     "DOGEUSDT": {
+      "n": 113,
+      "unresolved": 0,
+      "wins": 22,
+      "win_rate_pct": 19.47,
+      "avg_r": -0.1328,
+      "avg_win_net_pct": 1.609,
+      "avg_loss_net_pct": -1.348,
+      "breakeven_wr_pct": 45.6,
+      "avg_net_pct_per_trade": -0.7722,
+      "net_pct_per_day": -1.4443,
+      "total_net_pct": -87.26,
+      "max_dd_net_pct": -87.26,
+      "net_exits_per_day": 0.364,
+      "days_pct_with_net_exit": 26.5,
+      "timeout_pct": 76.1,
+      "sl_pct": 0.0,
+      "exits": {
+       "BE_SL": 9,
+       "EARLY_PROFIT": 18,
+       "TIMEOUT": 86
+      },
+      "avg_net_ci95": [
+       -1.0506,
+       -0.4701
+      ],
+      "avg_r_ci95": [
+       -0.1791,
+       -0.0846
+      ]
+     },
+     "XRPUSDT": {
+      "n": 123,
+      "unresolved": 0,
+      "wins": 24,
+      "win_rate_pct": 19.51,
+      "avg_r": -0.1368,
+      "avg_win_net_pct": 1.171,
+      "avg_loss_net_pct": -1.272,
+      "breakeven_wr_pct": 52.1,
+      "avg_net_pct_per_trade": -0.795,
+      "net_pct_per_day": -1.6186,
+      "total_net_pct": -97.79,
+      "max_dd_net_pct": -97.79,
+      "net_exits_per_day": 0.397,
+      "days_pct_with_net_exit": 24.8,
+      "timeout_pct": 80.5,
+      "sl_pct": 0.8,
+      "exits": {
+       "BE_SL": 7,
+       "EARLY_PROFIT": 16,
+       "SL": 1,
+       "TIMEOUT": 99
+      },
+      "avg_net_ci95": [
+       -1.029,
+       -0.5452
+      ],
+      "avg_r_ci95": [
+       -0.1824,
+       -0.0977
+      ]
+     }
+    },
+    "aggregate": {
+     "n": 359,
+     "unresolved": 0,
+     "wins": 77,
+     "win_rate_pct": 21.45,
+     "avg_r": -0.1402,
+     "avg_win_net_pct": 1.436,
+     "avg_loss_net_pct": -1.43,
+     "breakeven_wr_pct": 49.9,
+     "avg_net_pct_per_trade": -0.8152,
+     "net_pct_per_day": -1.6148,
+     "total_net_pct": -292.67,
+     "max_dd_net_pct": -292.67,
+     "net_exits_per_day": 0.425,
+     "days_pct_with_net_exit": 14.9,
+     "timeout_pct": 76.9,
+     "sl_pct": 0.6,
+     "exits": {
+      "BE_SL": 25,
+      "EARLY_PROFIT": 56,
+      "SL": 2,
+      "TIMEOUT": 276
+     },
+     "avg_net_ci95": [
+      -0.9768,
+      -0.6432
+     ],
+     "avg_r_ci95": [
+      -0.1686,
+      -0.111
+     ]
+    }
+   },
+   "trail": {
+    "pairs": {
+     "ADAUSDT": {
+      "n": 123,
+      "unresolved": 0,
+      "wins": 40,
+      "win_rate_pct": 32.52,
+      "avg_r": -0.1623,
+      "avg_win_net_pct": 0.967,
+      "avg_loss_net_pct": -1.864,
+      "breakeven_wr_pct": 65.8,
+      "avg_net_pct_per_trade": -0.9435,
+      "net_pct_per_day": -1.9208,
+      "total_net_pct": -116.04,
+      "max_dd_net_pct": -116.04,
+      "net_exits_per_day": 0.662,
+      "days_pct_with_net_exit": 39.7,
+      "timeout_pct": 72.4,
+      "sl_pct": 0.8,
+      "exits": {
+       "SL": 1,
+       "TIMEOUT": 89,
+       "TRAIL_SL": 33
+      },
+      "avg_net_ci95": [
+       -1.2267,
+       -0.6526
+      ],
+      "avg_r_ci95": [
+       -0.2162,
+       -0.1151
+      ]
+     },
+     "DOGEUSDT": {
+      "n": 113,
+      "unresolved": 0,
+      "wins": 31,
+      "win_rate_pct": 27.43,
+      "avg_r": -0.1389,
+      "avg_win_net_pct": 1.014,
+      "avg_loss_net_pct": -1.496,
+      "breakeven_wr_pct": 59.6,
+      "avg_net_pct_per_trade": -0.8074,
+      "net_pct_per_day": -1.5101,
+      "total_net_pct": -91.23,
+      "max_dd_net_pct": -91.23,
+      "net_exits_per_day": 0.513,
+      "days_pct_with_net_exit": 29.8,
+      "timeout_pct": 76.1,
+      "sl_pct": 0.0,
+      "exits": {
+       "TIMEOUT": 86,
+       "TRAIL_SL": 27
+      },
+      "avg_net_ci95": [
+       -1.0577,
+       -0.5668
+      ],
+      "avg_r_ci95": [
+       -0.1836,
+       -0.097
+      ]
+     },
+     "XRPUSDT": {
+      "n": 123,
+      "unresolved": 0,
+      "wins": 31,
+      "win_rate_pct": 25.2,
+      "avg_r": -0.1332,
+      "avg_win_net_pct": 0.988,
+      "avg_loss_net_pct": -1.368,
+      "breakeven_wr_pct": 58.1,
+      "avg_net_pct_per_trade": -0.7745,
+      "net_pct_per_day": -1.5769,
+      "total_net_pct": -95.27,
+      "max_dd_net_pct": -95.35,
+      "net_exits_per_day": 0.513,
+      "days_pct_with_net_exit": 33.1,
+      "timeout_pct": 78.0,
+      "sl_pct": 0.8,
+      "exits": {
+       "SL": 1,
+       "TIMEOUT": 96,
+       "TRAIL_SL": 26
+      },
+      "avg_net_ci95": [
+       -1.0152,
+       -0.539
+      ],
+      "avg_r_ci95": [
+       -0.1783,
+       -0.0949
+      ]
+     }
+    },
+    "aggregate": {
+     "n": 359,
+     "unresolved": 0,
+     "wins": 102,
+     "win_rate_pct": 28.41,
+     "avg_r": -0.145,
+     "avg_win_net_pct": 0.988,
+     "avg_loss_net_pct": -1.569,
+     "breakeven_wr_pct": 61.4,
+     "avg_net_pct_per_trade": -0.8427,
+     "net_pct_per_day": -1.6692,
+     "total_net_pct": -302.54,
+     "max_dd_net_pct": -302.54,
+     "net_exits_per_day": 0.563,
+     "days_pct_with_net_exit": 17.1,
+     "timeout_pct": 75.5,
+     "sl_pct": 0.6,
+     "exits": {
+      "SL": 2,
+      "TIMEOUT": 271,
+      "TRAIL_SL": 86
+     },
+     "avg_net_ci95": [
+      -0.9892,
+      -0.6856
+     ],
+     "avg_r_ci95": [
+      -0.1715,
+      -0.1186
+     ]
+    }
+   },
+   "full": {
+    "pairs": {
+     "ADAUSDT": {
+      "n": 123,
+      "unresolved": 0,
+      "wins": 40,
+      "win_rate_pct": 32.52,
+      "avg_r": -0.1623,
+      "avg_win_net_pct": 0.967,
+      "avg_loss_net_pct": -1.864,
+      "breakeven_wr_pct": 65.8,
+      "avg_net_pct_per_trade": -0.9435,
+      "net_pct_per_day": -1.9208,
+      "total_net_pct": -116.04,
+      "max_dd_net_pct": -116.04,
+      "net_exits_per_day": 0.662,
+      "days_pct_with_net_exit": 39.7,
+      "timeout_pct": 72.4,
+      "sl_pct": 0.8,
+      "exits": {
+       "SL": 1,
+       "TIMEOUT": 89,
+       "TRAIL_SL": 33
+      },
+      "avg_net_ci95": [
+       -1.2267,
+       -0.6526
+      ],
+      "avg_r_ci95": [
+       -0.2162,
+       -0.1151
+      ]
+     },
+     "DOGEUSDT": {
+      "n": 113,
+      "unresolved": 0,
+      "wins": 31,
+      "win_rate_pct": 27.43,
+      "avg_r": -0.1389,
+      "avg_win_net_pct": 1.014,
+      "avg_loss_net_pct": -1.496,
+      "breakeven_wr_pct": 59.6,
+      "avg_net_pct_per_trade": -0.8074,
+      "net_pct_per_day": -1.5101,
+      "total_net_pct": -91.23,
+      "max_dd_net_pct": -91.23,
+      "net_exits_per_day": 0.513,
+      "days_pct_with_net_exit": 29.8,
+      "timeout_pct": 76.1,
+      "sl_pct": 0.0,
+      "exits": {
+       "TIMEOUT": 86,
+       "TRAIL_SL": 27
+      },
+      "avg_net_ci95": [
+       -1.0577,
+       -0.5668
+      ],
+      "avg_r_ci95": [
+       -0.1836,
+       -0.097
+      ]
+     },
+     "XRPUSDT": {
+      "n": 123,
+      "unresolved": 0,
+      "wins": 31,
+      "win_rate_pct": 25.2,
+      "avg_r": -0.1332,
+      "avg_win_net_pct": 0.988,
+      "avg_loss_net_pct": -1.368,
+      "breakeven_wr_pct": 58.1,
+      "avg_net_pct_per_trade": -0.7745,
+      "net_pct_per_day": -1.5769,
+      "total_net_pct": -95.27,
+      "max_dd_net_pct": -95.35,
+      "net_exits_per_day": 0.513,
+      "days_pct_with_net_exit": 33.1,
+      "timeout_pct": 78.0,
+      "sl_pct": 0.8,
+      "exits": {
+       "SL": 1,
+       "TIMEOUT": 96,
+       "TRAIL_SL": 26
+      },
+      "avg_net_ci95": [
+       -1.0152,
+       -0.539
+      ],
+      "avg_r_ci95": [
+       -0.1783,
+       -0.0949
+      ]
+     }
+    },
+    "aggregate": {
+     "n": 359,
+     "unresolved": 0,
+     "wins": 102,
+     "win_rate_pct": 28.41,
+     "avg_r": -0.145,
+     "avg_win_net_pct": 0.988,
+     "avg_loss_net_pct": -1.569,
+     "breakeven_wr_pct": 61.4,
+     "avg_net_pct_per_trade": -0.8427,
+     "net_pct_per_day": -1.6692,
+     "total_net_pct": -302.54,
+     "max_dd_net_pct": -302.54,
+     "net_exits_per_day": 0.563,
+     "days_pct_with_net_exit": 17.1,
+     "timeout_pct": 75.5,
+     "sl_pct": 0.6,
+     "exits": {
+      "SL": 2,
+      "TIMEOUT": 271,
+      "TRAIL_SL": 86
+     },
+     "avg_net_ci95": [
+      -0.9892,
+      -0.6856
+     ],
+     "avg_r_ci95": [
+      -0.1715,
+      -0.1186
+     ]
+    }
+   }
+  },
+  "420": {
+   "classic": {
+    "pairs": {
+     "ADAUSDT": {
+      "n": 87,
+      "unresolved": 0,
+      "wins": 30,
+      "win_rate_pct": 34.48,
+      "avg_r": -0.1361,
+      "avg_win_net_pct": 2.303,
+      "avg_loss_net_pct": -2.419,
+      "breakeven_wr_pct": 51.2,
+      "avg_net_pct_per_trade": -0.7909,
+      "net_pct_per_day": -1.1389,
+      "total_net_pct": -68.81,
+      "max_dd_net_pct": -89.08,
+      "net_exits_per_day": 0.497,
+      "days_pct_with_net_exit": 36.4,
+      "timeout_pct": 93.1,
+      "sl_pct": 6.9,
+      "exits": {
+       "SL": 6,
+       "TIMEOUT": 81
+      },
+      "avg_net_ci95": [
+       -1.4712,
+       -0.0654
+      ],
+      "avg_r_ci95": [
+       -0.2505,
+       -0.0298
+      ]
+     },
+     "DOGEUSDT": {
+      "n": 82,
+      "unresolved": 0,
+      "wins": 18,
+      "win_rate_pct": 21.95,
+      "avg_r": -0.1311,
+      "avg_win_net_pct": 2.69,
+      "avg_loss_net_pct": -1.733,
+      "breakeven_wr_pct": 39.2,
+      "avg_net_pct_per_trade": -0.7621,
+      "net_pct_per_day": -1.0343,
+      "total_net_pct": -62.49,
+      "max_dd_net_pct": -74.08,
+      "net_exits_per_day": 0.298,
+      "days_pct_with_net_exit": 23.2,
+      "timeout_pct": 97.6,
+      "sl_pct": 2.4,
+      "exits": {
+       "SL": 2,
+       "TIMEOUT": 80
+      },
+      "avg_net_ci95": [
+       -1.2622,
+       -0.2306
+      ],
+      "avg_r_ci95": [
+       -0.2182,
+       -0.0362
+      ]
+     },
+     "XRPUSDT": {
+      "n": 94,
+      "unresolved": 0,
+      "wins": 26,
+      "win_rate_pct": 27.66,
+      "avg_r": -0.1173,
+      "avg_win_net_pct": 1.965,
+      "avg_loss_net_pct": -1.694,
+      "breakeven_wr_pct": 46.3,
+      "avg_net_pct_per_trade": -0.682,
+      "net_pct_per_day": -1.0612,
+      "total_net_pct": -64.11,
+      "max_dd_net_pct": -74.41,
+      "net_exits_per_day": 0.43,
+      "days_pct_with_net_exit": 33.1,
+      "timeout_pct": 96.8,
+      "sl_pct": 2.1,
+      "exits": {
+       "SL": 2,
+       "TIMEOUT": 91,
+       "TP2": 1
+      },
+      "avg_net_ci95": [
+       -1.1551,
+       -0.2298
+      ],
+      "avg_r_ci95": [
+       -0.194,
+       -0.0295
+      ]
+     }
+    },
+    "aggregate": {
+     "n": 263,
+     "unresolved": 0,
+     "wins": 74,
+     "win_rate_pct": 28.14,
+     "avg_r": -0.1278,
+     "avg_win_net_pct": 2.279,
+     "avg_loss_net_pct": -1.926,
+     "breakeven_wr_pct": 45.8,
+     "avg_net_pct_per_trade": -0.743,
+     "net_pct_per_day": -1.0781,
+     "total_net_pct": -195.41,
+     "max_dd_net_pct": -237.56,
+     "net_exits_per_day": 0.408,
+     "days_pct_with_net_exit": 16.0,
+     "timeout_pct": 95.8,
+     "sl_pct": 3.8,
+     "exits": {
+      "SL": 10,
+      "TIMEOUT": 252,
+      "TP2": 1
+     },
+     "avg_net_ci95": [
+      -1.0439,
+      -0.3985
+     ],
+     "avg_r_ci95": [
+      -0.1825,
+      -0.0712
+     ]
+    }
+   },
+   "tp1_be": {
+    "pairs": {
+     "ADAUSDT": {
+      "n": 87,
+      "unresolved": 0,
+      "wins": 30,
+      "win_rate_pct": 34.48,
+      "avg_r": -0.1405,
+      "avg_win_net_pct": 2.228,
+      "avg_loss_net_pct": -2.419,
+      "breakeven_wr_pct": 52.1,
+      "avg_net_pct_per_trade": -0.8167,
+      "net_pct_per_day": -1.1761,
+      "total_net_pct": -71.05,
+      "max_dd_net_pct": -89.08,
+      "net_exits_per_day": 0.497,
+      "days_pct_with_net_exit": 36.4,
+      "timeout_pct": 93.1,
+      "sl_pct": 6.9,
+      "exits": {
+       "SL": 6,
+       "TIMEOUT": 81
+      },
+      "avg_net_ci95": [
+       -1.4733,
+       -0.1131
+      ],
+      "avg_r_ci95": [
+       -0.2511,
+       -0.034
+      ]
+     },
+     "DOGEUSDT": {
+      "n": 82,
+      "unresolved": 0,
+      "wins": 18,
+      "win_rate_pct": 21.95,
+      "avg_r": -0.1304,
+      "avg_win_net_pct": 2.709,
+      "avg_loss_net_pct": -1.733,
+      "breakeven_wr_pct": 39.0,
+      "avg_net_pct_per_trade": -0.7579,
+      "net_pct_per_day": -1.0287,
+      "total_net_pct": -62.15,
+      "max_dd_net_pct": -72.67,
+      "net_exits_per_day": 0.298,
+      "days_pct_with_net_exit": 23.2,
+      "timeout_pct": 97.6,
+      "sl_pct": 2.4,
+      "exits": {
+       "SL": 2,
+       "TIMEOUT": 80
+      },
+      "avg_net_ci95": [
+       -1.2598,
+       -0.2262
+      ],
+      "avg_r_ci95": [
+       -0.2159,
+       -0.0345
+      ]
+     },
+     "XRPUSDT": {
+      "n": 94,
+      "unresolved": 0,
+      "wins": 26,
+      "win_rate_pct": 27.66,
+      "avg_r": -0.1208,
+      "avg_win_net_pct": 1.892,
+      "avg_loss_net_pct": -1.694,
+      "breakeven_wr_pct": 47.2,
+      "avg_net_pct_per_trade": -0.7023,
+      "net_pct_per_day": -1.0927,
+      "total_net_pct": -66.01,
+      "max_dd_net_pct": -74.41,
+      "net_exits_per_day": 0.43,
+      "days_pct_with_net_exit": 33.1,
+      "timeout_pct": 96.8,
+      "sl_pct": 2.1,
+      "exits": {
+       "SL": 2,
+       "TIMEOUT": 91,
+       "TP2": 1
+      },
+      "avg_net_ci95": [
+       -1.1615,
+       -0.2734
+      ],
+      "avg_r_ci95": [
+       -0.1943,
+       -0.0364
+      ]
+     }
+    },
+    "aggregate": {
+     "n": 263,
+     "unresolved": 0,
+     "wins": 74,
+     "win_rate_pct": 28.14,
+     "avg_r": -0.1303,
+     "avg_win_net_pct": 2.227,
+     "avg_loss_net_pct": -1.926,
+     "breakeven_wr_pct": 46.4,
+     "avg_net_pct_per_trade": -0.7575,
+     "net_pct_per_day": -1.0991,
+     "total_net_pct": -199.22,
+     "max_dd_net_pct": -236.15,
+     "net_exits_per_day": 0.408,
+     "days_pct_with_net_exit": 16.0,
+     "timeout_pct": 95.8,
+     "sl_pct": 3.8,
+     "exits": {
+      "SL": 10,
+      "TIMEOUT": 252,
+      "TP2": 1
+     },
+     "avg_net_ci95": [
+      -1.0459,
+      -0.4331
+     ],
+     "avg_r_ci95": [
+      -0.1837,
+      -0.0749
+     ]
+    }
+   },
+   "early": {
+    "pairs": {
+     "ADAUSDT": {
+      "n": 87,
+      "unresolved": 0,
+      "wins": 26,
+      "win_rate_pct": 29.89,
+      "avg_r": -0.1651,
+      "avg_win_net_pct": 1.423,
+      "avg_loss_net_pct": -1.975,
+      "breakeven_wr_pct": 58.1,
+      "avg_net_pct_per_trade": -0.9597,
+      "net_pct_per_day": -1.382,
+      "total_net_pct": -83.49,
+      "max_dd_net_pct": -84.68,
+      "net_exits_per_day": 0.43,
+      "days_pct_with_net_exit": 31.4,
+      "timeout_pct": 55.2,
+      "sl_pct": 5.7,
+      "exits": {
+       "BE_SL": 15,
+       "EARLY_PROFIT": 19,
+       "SL": 5,
+       "TIMEOUT": 48
+      },
+      "avg_net_ci95": [
+       -1.4527,
+       -0.4563
+      ],
+      "avg_r_ci95": [
+       -0.2505,
+       -0.0863
+      ]
+     },
+     "DOGEUSDT": {
+      "n": 82,
+      "unresolved": 0,
+      "wins": 19,
+      "win_rate_pct": 23.17,
+      "avg_r": -0.1378,
+      "avg_win_net_pct": 1.393,
+      "avg_loss_net_pct": -1.463,
+      "breakeven_wr_pct": 51.2,
+      "avg_net_pct_per_trade": -0.8012,
+      "net_pct_per_day": -1.0875,
+      "total_net_pct": -65.7,
+      "max_dd_net_pct": -68.52,
+      "net_exits_per_day": 0.314,
+      "days_pct_with_net_exit": 24.8,
+      "timeout_pct": 69.5,
+      "sl_pct": 1.2,
+      "exits": {
+       "BE_SL": 9,
+       "EARLY_PROFIT": 15,
+       "SL": 1,
+       "TIMEOUT": 57
+      },
+      "avg_net_ci95": [
+       -1.1653,
+       -0.4624
+      ],
+      "avg_r_ci95": [
+       -0.199,
+       -0.0756
+      ]
+     },
+     "XRPUSDT": {
+      "n": 94,
+      "unresolved": 0,
+      "wins": 29,
+      "win_rate_pct": 30.85,
+      "avg_r": -0.1169,
+      "avg_win_net_pct": 1.132,
+      "avg_loss_net_pct": -1.488,
+      "breakeven_wr_pct": 56.8,
+      "avg_net_pct_per_trade": -0.6794,
+      "net_pct_per_day": -1.0571,
+      "total_net_pct": -63.86,
+      "max_dd_net_pct": -63.86,
+      "net_exits_per_day": 0.48,
+      "days_pct_with_net_exit": 29.8,
+      "timeout_pct": 70.2,
+      "sl_pct": 1.1,
+      "exits": {
+       "BE_SL": 7,
+       "EARLY_PROFIT": 20,
+       "SL": 1,
+       "TIMEOUT": 66
+      },
+      "avg_net_ci95": [
+       -1.0107,
+       -0.3774
+      ],
+      "avg_r_ci95": [
+       -0.1731,
+       -0.0598
+      ]
+     }
+    },
+    "aggregate": {
+     "n": 263,
+     "unresolved": 0,
+     "wins": 74,
+     "win_rate_pct": 28.14,
+     "avg_r": -0.1394,
+     "avg_win_net_pct": 1.301,
+     "avg_loss_net_pct": -1.637,
+     "breakeven_wr_pct": 55.7,
+     "avg_net_pct_per_trade": -0.8101,
+     "net_pct_per_day": -1.1755,
+     "total_net_pct": -213.06,
+     "max_dd_net_pct": -213.06,
+     "net_exits_per_day": 0.408,
+     "days_pct_with_net_exit": 16.6,
+     "timeout_pct": 65.0,
+     "sl_pct": 2.7,
+     "exits": {
+      "BE_SL": 31,
+      "EARLY_PROFIT": 54,
+      "SL": 7,
+      "TIMEOUT": 171
+     },
+     "avg_net_ci95": [
+      -1.0351,
+      -0.5742
+     ],
+     "avg_r_ci95": [
+      -0.1795,
+      -0.1005
+     ]
+    }
+   },
+   "trail": {
+    "pairs": {
+     "ADAUSDT": {
+      "n": 87,
+      "unresolved": 0,
+      "wins": 41,
+      "win_rate_pct": 47.13,
+      "avg_r": -0.1622,
+      "avg_win_net_pct": 0.938,
+      "avg_loss_net_pct": -2.619,
+      "breakeven_wr_pct": 73.6,
+      "avg_net_pct_per_trade": -0.9429,
+      "net_pct_per_day": -1.3577,
+      "total_net_pct": -82.03,
+      "max_dd_net_pct": -82.03,
+      "net_exits_per_day": 0.679,
+      "days_pct_with_net_exit": 44.7,
+      "timeout_pct": 55.2,
+      "sl_pct": 5.7,
+      "exits": {
+       "SL": 5,
+       "TIMEOUT": 48,
+       "TRAIL_SL": 34
+      },
+      "avg_net_ci95": [
+       -1.4046,
+       -0.4604
+      ],
+      "avg_r_ci95": [
+       -0.2491,
+       -0.0903
+      ]
+     },
+     "DOGEUSDT": {
+      "n": 82,
+      "unresolved": 0,
+      "wins": 28,
+      "win_rate_pct": 34.15,
+      "avg_r": -0.1336,
+      "avg_win_net_pct": 1.018,
+      "avg_loss_net_pct": -1.707,
+      "breakeven_wr_pct": 62.6,
+      "avg_net_pct_per_trade": -0.7764,
+      "net_pct_per_day": -1.0538,
+      "total_net_pct": -63.67,
+      "max_dd_net_pct": -66.65,
+      "net_exits_per_day": 0.463,
+      "days_pct_with_net_exit": 31.4,
+      "timeout_pct": 68.3,
+      "sl_pct": 1.2,
+      "exits": {
+       "SL": 1,
+       "TIMEOUT": 56,
+       "TRAIL_SL": 25
+      },
+      "avg_net_ci95": [
+       -1.1324,
+       -0.4471
+      ],
+      "avg_r_ci95": [
+       -0.1939,
+       -0.0737
+      ]
+     },
+     "XRPUSDT": {
+      "n": 94,
+      "unresolved": 0,
+      "wins": 36,
+      "win_rate_pct": 38.3,
+      "avg_r": -0.1159,
+      "avg_win_net_pct": 0.926,
+      "avg_loss_net_pct": -1.667,
+      "breakeven_wr_pct": 64.3,
+      "avg_net_pct_per_trade": -0.6739,
+      "net_pct_per_day": -1.0486,
+      "total_net_pct": -63.35,
+      "max_dd_net_pct": -63.43,
+      "net_exits_per_day": 0.596,
+      "days_pct_with_net_exit": 38.1,
+      "timeout_pct": 67.0,
+      "sl_pct": 1.1,
+      "exits": {
+       "SL": 1,
+       "TIMEOUT": 63,
+       "TRAIL_SL": 30
+      },
+      "avg_net_ci95": [
+       -0.9918,
+       -0.3836
+      ],
+      "avg_r_ci95": [
+       -0.1693,
+       -0.061
+      ]
+     }
+    },
+    "aggregate": {
+     "n": 263,
+     "unresolved": 0,
+     "wins": 105,
+     "win_rate_pct": 39.92,
+     "avg_r": -0.1367,
+     "avg_win_net_pct": 0.955,
+     "avg_loss_net_pct": -1.958,
+     "breakeven_wr_pct": 67.2,
+     "avg_net_pct_per_trade": -0.7949,
+     "net_pct_per_day": -1.1534,
+     "total_net_pct": -209.05,
+     "max_dd_net_pct": -209.05,
+     "net_exits_per_day": 0.579,
+     "days_pct_with_net_exit": 18.8,
+     "timeout_pct": 63.5,
+     "sl_pct": 2.7,
+     "exits": {
+      "SL": 7,
+      "TIMEOUT": 167,
+      "TRAIL_SL": 89
+     },
+     "avg_net_ci95": [
+      -1.018,
+      -0.563
+     ],
+     "avg_r_ci95": [
+      -0.1757,
+      -0.0986
+     ]
+    }
+   },
+   "full": {
+    "pairs": {
+     "ADAUSDT": {
+      "n": 87,
+      "unresolved": 0,
+      "wins": 41,
+      "win_rate_pct": 47.13,
+      "avg_r": -0.1622,
+      "avg_win_net_pct": 0.938,
+      "avg_loss_net_pct": -2.619,
+      "breakeven_wr_pct": 73.6,
+      "avg_net_pct_per_trade": -0.9429,
+      "net_pct_per_day": -1.3577,
+      "total_net_pct": -82.03,
+      "max_dd_net_pct": -82.03,
+      "net_exits_per_day": 0.679,
+      "days_pct_with_net_exit": 44.7,
+      "timeout_pct": 55.2,
+      "sl_pct": 5.7,
+      "exits": {
+       "SL": 5,
+       "TIMEOUT": 48,
+       "TRAIL_SL": 34
+      },
+      "avg_net_ci95": [
+       -1.4046,
+       -0.4604
+      ],
+      "avg_r_ci95": [
+       -0.2491,
+       -0.0903
+      ]
+     },
+     "DOGEUSDT": {
+      "n": 82,
+      "unresolved": 0,
+      "wins": 28,
+      "win_rate_pct": 34.15,
+      "avg_r": -0.1336,
+      "avg_win_net_pct": 1.018,
+      "avg_loss_net_pct": -1.707,
+      "breakeven_wr_pct": 62.6,
+      "avg_net_pct_per_trade": -0.7764,
+      "net_pct_per_day": -1.0538,
+      "total_net_pct": -63.67,
+      "max_dd_net_pct": -66.65,
+      "net_exits_per_day": 0.463,
+      "days_pct_with_net_exit": 31.4,
+      "timeout_pct": 68.3,
+      "sl_pct": 1.2,
+      "exits": {
+       "SL": 1,
+       "TIMEOUT": 56,
+       "TRAIL_SL": 25
+      },
+      "avg_net_ci95": [
+       -1.1324,
+       -0.4471
+      ],
+      "avg_r_ci95": [
+       -0.1939,
+       -0.0737
+      ]
+     },
+     "XRPUSDT": {
+      "n": 94,
+      "unresolved": 0,
+      "wins": 36,
+      "win_rate_pct": 38.3,
+      "avg_r": -0.1159,
+      "avg_win_net_pct": 0.926,
+      "avg_loss_net_pct": -1.667,
+      "breakeven_wr_pct": 64.3,
+      "avg_net_pct_per_trade": -0.6739,
+      "net_pct_per_day": -1.0486,
+      "total_net_pct": -63.35,
+      "max_dd_net_pct": -63.43,
+      "net_exits_per_day": 0.596,
+      "days_pct_with_net_exit": 38.1,
+      "timeout_pct": 67.0,
+      "sl_pct": 1.1,
+      "exits": {
+       "SL": 1,
+       "TIMEOUT": 63,
+       "TRAIL_SL": 30
+      },
+      "avg_net_ci95": [
+       -0.9918,
+       -0.3836
+      ],
+      "avg_r_ci95": [
+       -0.1693,
+       -0.061
+      ]
+     }
+    },
+    "aggregate": {
+     "n": 263,
+     "unresolved": 0,
+     "wins": 105,
+     "win_rate_pct": 39.92,
+     "avg_r": -0.1367,
+     "avg_win_net_pct": 0.955,
+     "avg_loss_net_pct": -1.958,
+     "breakeven_wr_pct": 67.2,
+     "avg_net_pct_per_trade": -0.7949,
+     "net_pct_per_day": -1.1534,
+     "total_net_pct": -209.05,
+     "max_dd_net_pct": -209.05,
+     "net_exits_per_day": 0.579,
+     "days_pct_with_net_exit": 18.8,
+     "timeout_pct": 63.5,
+     "sl_pct": 2.7,
+     "exits": {
+      "SL": 7,
+      "TIMEOUT": 167,
+      "TRAIL_SL": 89
+     },
+     "avg_net_ci95": [
+      -1.018,
+      -0.563
+     ],
+     "avg_r_ci95": [
+      -0.1757,
+      -0.0986
+     ]
+    }
+   }
+  }
+ }
+}

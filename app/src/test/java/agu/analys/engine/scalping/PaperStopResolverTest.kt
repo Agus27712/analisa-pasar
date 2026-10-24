@@ -173,6 +173,57 @@ class PaperStopResolverTest {
         assertEquals(0.0, PaperAtr.of(2.0, Double.NaN), 0.0)
     }
 
+    // ── Rencana SL terpadu untuk satu entry ────────────────────────────────────
+
+    @Test
+    fun `resolveForEntry menghitung lantai dan SL dalam satu langkah`() {
+        val plan = PaperStopResolver.resolveForEntry(
+            signalSl = 98.0,
+            entry = 100.0,
+            buyFeePct = tkUsdtBuy,
+            sellFeePct = tkUsdtSell,
+            slippagePct = slippage,
+            minFrictionMultiple = multiple6
+        )
+
+        assertEquals(floorUsdt(), plan.floorPct, 0.0001)
+        assertEquals(PaperStopSource.FRICTION_FLOOR, plan.stop.source)
+        assertEquals(100.0 * (1.0 - floorUsdt() / 100.0), plan.stop.price, 0.0001)
+        assertTrue(plan.stop.usable)
+    }
+
+    @Test
+    fun `resolveForEntry mempertahankan SL sinyal yang sudah lebih lebar`() {
+        val plan = PaperStopResolver.resolveForEntry(
+            signalSl = 90.0,
+            entry = 100.0,
+            buyFeePct = tkUsdtBuy,
+            sellFeePct = tkUsdtSell,
+            slippagePct = slippage,
+            minFrictionMultiple = multiple6
+        )
+
+        assertEquals(floorUsdt(), plan.floorPct, 0.0001)
+        assertEquals(PaperStopSource.SIGNAL, plan.stop.source)
+        assertEquals(90.0, plan.stop.price, 0.0)
+    }
+
+    @Test
+    fun `resolveForEntry entry tidak valid menghasilkan SL tidak usable`() {
+        val plan = PaperStopResolver.resolveForEntry(
+            signalSl = 90.0,
+            entry = 0.0,
+            buyFeePct = tkUsdtBuy,
+            sellFeePct = tkUsdtSell,
+            slippagePct = slippage,
+            minFrictionMultiple = multiple6
+        )
+
+        assertEquals(PaperStopSource.NONE, plan.stop.source)
+        assertFalse(plan.stop.usable)
+        assertEquals(0.0, plan.stop.price, 0.0)
+    }
+
     // ── Invarian yang tidak boleh dilonggarkan ────────────────────────────────
 
     @Test

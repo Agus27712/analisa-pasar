@@ -216,6 +216,8 @@ class ModeSignalEvaluatorTest {
     fun `SCALPING - orderbook kosong tidak boleh menghasilkan BUY`() {
         val h1 = series(60, 900.0, 0.9, 12.0, 0.5, 3_600_000L)
         val m15 = series(60, 950.0, 0.6, 8.0, 0.7, 900_000L)
+        // P0 — gate MTF 4 TF fail-closed tanpa M5; test ini menguji orderbook, bukan MTF.
+        val m5 = series(60, 970.0, 0.5, 6.0, 0.6, 300_000L)
         val m1 = bullishM1()
         val price = m1.last().close
 
@@ -227,6 +229,7 @@ class ModeSignalEvaluatorTest {
             change24h = 2.0,
             h1Candles = h1,
             m15Candles = m15,
+            m5Candles = m5,
             m1Candles = m1,
             formingVolume = 0.0,
             bids = bids,

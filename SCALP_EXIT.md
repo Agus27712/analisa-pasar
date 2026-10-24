@@ -11,6 +11,14 @@ Dokumen ini adalah **sumber kebenaran tujuan** untuk agen yang melanjutkan kerja
 > **Status sinkronisasi 2026-10-12:** port ke engine paper **selesai** (P2). Lihat §"Pemetaan tujuan
 > ke kode app" dan §"Port ke app". Gerbang kini dibedakan jelas antara **paper** (tidak ada gate
 > profit) dan **uang riil** (wajib lolos gate). `max_hold_bars_m1` disamakan menjadi **90**.
+>
+> **Hasil sweep 2026-10-24 — tidak ada mode yang menyelamatkan edge.** `tools/exit_mode_sweep.py`
+> menguji `classic`, `tp1_be`, `early`, `trail`, `full` pada hold 90/240/420 dengan gate P0:
+> **0 dari 90 sel pair × mode × hold positif**, kontrol `classic` 90m identik CLI
+> (620 trade / WR 14,84% / avg R −0,1569). Mode terbaik `early` 420m XRP tetap −0,666%/trade.
+> WR naik sampai 44,99% tetapi net/trade negatif; menahan lebih lama hanya mengurangi frekuensi
+> friksi. **Tidak ada perubahan app/config**; exit-only untuk sinyal P0 ditutup lagi. Rincian:
+> `docs/exp/exp_exit_mode_sweep_ADA-DOGE-XRP.md`.
 
 ## Tujuan produk (WAJIB sama)
 

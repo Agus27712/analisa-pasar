@@ -24,6 +24,15 @@ data class ResolvedPaperStop(val price: Double, val source: PaperStopSource) {
 }
 
 /**
+ * Rencana SL untuk satu entry: lantai friksi yang berlaku + SL yang akhirnya dipakai.
+ *
+ * Dipisahkan dari [ResolvedPaperStop] supaya pemanggil tidak perlu menghitung lantai dua kali
+ * dengan angka yang bisa berbeda. Jalur auto-buy memakai [stop] untuk **sizing**, lalu mesin exit
+ * memakai [stop] yang sama; ini juga bentuk yang bisa dipakai jalur real trade nanti.
+ */
+data class PaperStopPlan(val floorPct: Double, val stop: ResolvedPaperStop)
+
+/**
  * Penentu **satu-satunya** harga SL untuk posisi paper (P2, P3).
  *
  * ## Kenapa perlu resolver terpisah
@@ -88,6 +97,29 @@ object PaperStopResolver {
      * @param entry harga masuk posisi
      * @param floorPct hasil [frictionFloorPct]; `0.0` berarti lantai nonaktif
      */
+    /**
+     * Hitung lantai dan SL untuk satu entry dalam satu langkah.
+     *
+     * Ini satu-satunya titik sambung yang boleh dipakai jalur baru: sizing dan pemasangan mesin
+     * exit wajib memakai [stop] yang sama, bukan menghitung `price - signalSl` sendiri.
+     */
+    fun resolveForEntry(
+        signalSl: Double,
+        entry: Double,
+        buyFeePct: Double,
+        sellFeePct: Double,
+        slippagePct: Double,
+        minFrictionMultiple: Double
+    ): PaperStopPlan {
+        val floorPct = frictionFloorPct(
+            buyFeePct = buyFeePct,
+            sellFeePct = sellFeePct,
+            slippagePct = slippagePct,
+            minFrictionMultiple = minFrictionMultiple
+        )
+        return PaperStopPlan(floorPct = floorPct, stop = resolve(signalSl, entry, floorPct))
+    }
+
     fun resolve(signalSl: Double, entry: Double, floorPct: Double): ResolvedPaperStop {
         if (!entry.isFinite() || entry <= 0.0) return ResolvedPaperStop(0.0, PaperStopSource.NONE)
 

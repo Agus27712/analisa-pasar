@@ -47,6 +47,28 @@ data class ScalpingRuntimeConfig(
     val retestAboveFactor: Double = ScalpingConfig.RETEST_ABOVE_FACTOR,
     val retestMinStructureStrength: Int = ScalpingConfig.RETEST_MIN_STRUCTURE_STRENGTH,
     val pullbackSupportMaxDistPct: Double = ScalpingConfig.PULLBACK_SUPPORT_MAX_DIST_PCT,
+    // --- P0 KriptoYoi (semua angka pengukuran dibaca dari sini, bukan literal di engine/replay) ---
+    /** Umur sinyal scalping dalam candle M1. `<= 0` diperlakukan sebagai 1 candle. */
+    val ttlBarsM1: Int = ScalpingConfig.TTL_BARS_M1,
+    /** Jumlah TF bullish minimum dari 4 TF (H1/M15/M5/M1). `0` = gerbang MTF nonaktif. */
+    val mtfMinBullish: Int = ScalpingConfig.MTF_MIN_BULLISH,
+    /** Bila true, H1 atau M15 bearish memblokir LONG walau hitungan bullish cukup. */
+    val mtfBlockHighTfBearish: Boolean = ScalpingConfig.MTF_BLOCK_HIGH_TF_BEARISH,
+    /** BTC gatekeeper p0. Bila false, hasil analisis BTC tidak memveto sinyal. */
+    val btcVetoEnabled: Boolean = ScalpingConfig.BTC_VETO_ENABLED,
+    /** Return BTC 5M terburuk dari dua candle terakhir (%) yang memicu veto. */
+    val btcReturnVetoPct: Double = ScalpingConfig.BTC_RETURN_VETO_PCT,
+    /** ATR ratio BTC yang memicu veto bila arah bearish impulsif. */
+    val btcAtrRatioVeto: Double = ScalpingConfig.BTC_ATR_RATIO_VETO,
+    val btcEmaPeriod: Int = ScalpingConfig.BTC_EMA_PERIOD,
+    /** Ambang ADX regime trending (p0: 25). */
+    val regimeAdxTrending: Double = ScalpingConfig.ADX_TRENDING,
+    /** Ambang ADX regime lemah/ranging (p0: 20). */
+    val regimeAdxWeak: Double = ScalpingConfig.ADX_WEAK,
+    /** Ambang CHOP ranging (p0: 61.8). */
+    val regimeChopRanging: Double = ScalpingConfig.CHOP_RANGING,
+    /** Ambang CHOP maksimum agar regime masih boleh disebut trending (p0: 55). */
+    val regimeChopTrendMax: Double = ScalpingConfig.CHOP_TREND_MAX,
     /** Parameter exit paper trade (P2) — mirror blok `exit` di `scalp_config_exit_*.json`. */
     val exit: ScalpExitParams = ScalpExitParams.DEFAULT
 ) {
@@ -84,6 +106,18 @@ data class ScalpingRuntimeConfig(
         json.put("retest_above_factor", retestAboveFactor)
         json.put("retest_min_structure_strength", retestMinStructureStrength)
         json.put("pullback_support_max_dist_pct", pullbackSupportMaxDistPct)
+        // P0 — dibaca `tools/scalp_replay.py`; jangan menulis angka ini sebagai literal di tool.
+        json.put("ttl_bars_m1", ttlBarsM1)
+        json.put("mtf_min_bullish", mtfMinBullish)
+        json.put("mtf_block_high_tf_bearish", mtfBlockHighTfBearish)
+        json.put("btc_veto_enabled", btcVetoEnabled)
+        json.put("btc_return_veto_pct", btcReturnVetoPct)
+        json.put("btc_atr_ratio_veto", btcAtrRatioVeto)
+        json.put("btc_ema_period", btcEmaPeriod)
+        json.put("regime_adx_trending", regimeAdxTrending)
+        json.put("regime_adx_weak", regimeAdxWeak)
+        json.put("regime_chop_ranging", regimeChopRanging)
+        json.put("regime_chop_trend_max", regimeChopTrendMax)
 
         // Blok exit (P2) — dibaca `tools/scalp_replay.py` sebagai cfg["exit"]
         json.put("exit", exit.toJson())
@@ -123,6 +157,8 @@ data class ScalpingRuntimeConfig(
         return "MinScore: $minScoreLong (Retest: $minScoreBreakoutRetest, Strong: $minScoreStrong) | " +
             "MinNetRR: ${minNetRr}x | TargetRR: ${targetNetRr}x | Lantai friksi: ${minFrictionMultiple}x | " +
             "RVOL Breakout: ${rvolBreakoutMin}x | CHOP: $chopHardRanging | " +
+            "TTL: ${ttlBarsM1} candle M1 | MTF: min $mtfMinBullish/4 bullish | " +
+            "BTC veto: ${if (btcVetoEnabled) "${btcReturnVetoPct}% / ATR ${btcAtrRatioVeto}x" else "nonaktif"} | " +
             "Exit: ${exit.mode.label}"
     }
 
@@ -206,6 +242,17 @@ data class ScalpingRuntimeConfig(
                 retestAboveFactor = json.optDouble("retest_above_factor", ScalpingConfig.RETEST_ABOVE_FACTOR),
                 retestMinStructureStrength = json.optInt("retest_min_structure_strength", ScalpingConfig.RETEST_MIN_STRUCTURE_STRENGTH),
                 pullbackSupportMaxDistPct = json.optDouble("pullback_support_max_dist_pct", ScalpingConfig.PULLBACK_SUPPORT_MAX_DIST_PCT),
+                ttlBarsM1 = json.optInt("ttl_bars_m1", ScalpingConfig.TTL_BARS_M1),
+                mtfMinBullish = json.optInt("mtf_min_bullish", ScalpingConfig.MTF_MIN_BULLISH),
+                mtfBlockHighTfBearish = json.optBoolean("mtf_block_high_tf_bearish", ScalpingConfig.MTF_BLOCK_HIGH_TF_BEARISH),
+                btcVetoEnabled = json.optBoolean("btc_veto_enabled", ScalpingConfig.BTC_VETO_ENABLED),
+                btcReturnVetoPct = json.optDouble("btc_return_veto_pct", ScalpingConfig.BTC_RETURN_VETO_PCT),
+                btcAtrRatioVeto = json.optDouble("btc_atr_ratio_veto", ScalpingConfig.BTC_ATR_RATIO_VETO),
+                btcEmaPeriod = json.optInt("btc_ema_period", ScalpingConfig.BTC_EMA_PERIOD),
+                regimeAdxTrending = json.optDouble("regime_adx_trending", ScalpingConfig.ADX_TRENDING),
+                regimeAdxWeak = json.optDouble("regime_adx_weak", ScalpingConfig.ADX_WEAK),
+                regimeChopRanging = json.optDouble("regime_chop_ranging", ScalpingConfig.CHOP_RANGING),
+                regimeChopTrendMax = json.optDouble("regime_chop_trend_max", ScalpingConfig.CHOP_TREND_MAX),
                 exit = ScalpExitParams.fromJson(json.optJSONObject("exit"))
             )
         }

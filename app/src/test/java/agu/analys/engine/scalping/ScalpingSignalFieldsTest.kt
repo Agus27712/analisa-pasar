@@ -33,6 +33,7 @@ class ScalpingSignalFieldsTest {
 
     private val h1 = series(60, 900.0, 0.9, 12.0, 0.5, 3_600_000L)
     private val m15 = series(60, 950.0, 0.6, 8.0, 0.7, 900_000L)
+    private val m5 = series(60, 970.0, 0.5, 6.0, 0.6, 300_000L)
     private val bids = listOf(OrderBookItem(price = 1000.0, amount = 30.0, total = 30_000.0, isBid = true))
     private val asks = listOf(OrderBookItem(price = 1001.0, amount = 10.0, total = 10_010.0, isBid = false))
 
@@ -41,7 +42,7 @@ class ScalpingSignalFieldsTest {
         val candles = m1()
         val price = candles.last().close
         val s = ScalpingMtfEvaluator.evaluate(
-            price = price, h1Candles = h1, m15Candles = m15, m1Candles = candles,
+            price = price, h1Candles = h1, m15Candles = m15, m5Candles = m5, m1Candles = candles,
             bids = bids, asks = asks, symbol = "BTCIDR"
         )!!.signal
 

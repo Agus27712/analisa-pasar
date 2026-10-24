@@ -18,6 +18,17 @@ object GlobalContextManager {
 
     private var isStarted = false
 
+    // P0 — dua sumber veto yang harus digabung, bukan saling menimpa:
+    // (a) flash crash dari ticker BTC, (b) BtcPulseAnalyzer 5M/1M.
+    private var lastTickerContext: GlobalMarketContext? = null
+    private var lastPulse: BtcPulseAnalyzer.Result? = null
+    // Harga di Result memakai kuotasi bursa sumber (BTCUSDT atau BTCIDR). Jangan menulis
+    // BTCIDR ke field `btcPriceUsdt` — itu mencampur dua mata uang.
+    private var lastPulsePriceIsUsdt = false
+    private var flashVeto = false
+    private var flashVetoReason: String? = null
+    private var flashRegime: GlobalRegime = GlobalRegime.SIDEWAYS
+
     fun start() {
         if (isStarted) return
         isStarted = true
@@ -42,6 +53,7 @@ object GlobalContextManager {
      *
      * @return `true` bila konteks berhasil diperbarui.
      */
+    @Synchronized
     fun updateFallbackFromIndodax(priceIdr: Double, changePct: Double, usdtRate: Double = 0.0): Boolean {
         val now = System.currentTimeMillis()
         if (priceIdr <= 0) return false
@@ -62,12 +74,65 @@ object GlobalContextManager {
         priceHistory.removeAll { now - it.timestamp > HISTORY_WINDOW_MS }
 
         val indodaxTicker = BtcTickerData(price = priceUsdt, changePct = changePct, source = "Indodax")
-        val currentContext = evaluateGlobalContext(indodaxTicker, now).copy(
-            isConnected = true,
-            dataSource = "Indodax"
-        )
-        _context.value = currentContext
+        val tickerContext = evaluateGlobalContext(indodaxTicker, now)
+        lastTickerContext = tickerContext
+        flashVeto = tickerContext.isVetoActive
+        flashVetoReason = tickerContext.vetoReason
+        flashRegime = tickerContext.regime
+        publish(now)
         return true
+    }
+
+    /**
+     * P0 — pasang hasil analisis BTC 5M/1M. [config] dibaca dari runtime scalping supaya
+     * ambang veto tidak di-hardcode di sini.
+     */
+    @Synchronized
+    fun updateBtcPulse(
+        btc5mCandles: List<agu.analys.model.CandleBar>,
+        btc1mCandles: List<agu.analys.model.CandleBar> = emptyList(),
+        config: BtcPulseAnalyzer.Config = BtcPulseAnalyzer.Config(),
+        nowMs: Long = 0L,
+        priceIsUsdt: Boolean = false
+    ): BtcPulseAnalyzer.Result {
+        val now = if (nowMs > 0L) nowMs else System.currentTimeMillis()
+        val result = BtcPulseAnalyzer.evaluate(btc5mCandles, btc1mCandles, config)
+        lastPulse = result
+        lastPulsePriceIsUsdt = priceIsUsdt
+        publish(now)
+        return result
+    }
+
+    /** P0 — hasil pulse terakhir; `null` bila belum pernah dihitung. */
+    @Synchronized
+    fun lastBtcPulse(): BtcPulseAnalyzer.Result? = lastPulse
+
+    private fun publish(now: Long) {
+        val base = lastTickerContext ?: _context.value
+        val pulse = lastPulse
+        val reasons = buildList {
+            if (flashVeto) flashVetoReason?.let { add(it) }
+            if (pulse?.vetoActive == true) pulse.reason?.let { add(it) }
+        }
+        val veto = flashVeto || pulse?.vetoActive == true
+        val regime = when {
+            flashVeto -> GlobalRegime.FLASH_CRASH
+            pulse?.vetoActive == true -> GlobalRegime.BEARISH
+            else -> flashRegime
+        }
+        _context.value = base.copy(
+            btcPriceUsdt = if (lastPulsePriceIsUsdt) {
+                pulse?.btcPrice?.takeIf { it > 0.0 } ?: base.btcPriceUsdt
+            } else {
+                base.btcPriceUsdt
+            },
+            regime = regime,
+            isVetoActive = veto,
+            vetoReason = reasons.takeIf { it.isNotEmpty() }?.joinToString("; "),
+            lastUpdateTime = now,
+            isConnected = true,
+            dataSource = base.dataSource
+        )
     }
 
     private fun evaluateGlobalContext(ticker: BtcTickerData, now: Long): GlobalMarketContext {
@@ -85,7 +150,7 @@ object GlobalContextManager {
         if (priceHistory.isNotEmpty()) {
             val oldestTick = priceHistory.first()
             val dropPct = ((oldestTick.price - ticker.price) / oldestTick.price) * 100.0
-            
+
             if (dropPct > 1.5 || ticker.changePct < -7.0) {
                 regime = GlobalRegime.FLASH_CRASH
                 isVeto = true
@@ -103,6 +168,20 @@ object GlobalContextManager {
             isConnected = true,
             dataSource = ticker.source
         )
+    }
+
+    /** Hanya untuk unit test: hindari state singleton bocor antar-test. */
+    @Synchronized
+    internal fun resetForTest() {
+        isStarted = false
+        priceHistory.clear()
+        lastTickerContext = null
+        lastPulse = null
+        lastPulsePriceIsUsdt = false
+        flashVeto = false
+        flashVetoReason = null
+        flashRegime = GlobalRegime.SIDEWAYS
+        _context.value = GlobalMarketContext()
     }
 
     data class PriceTick(val price: Double, val timestamp: Long)

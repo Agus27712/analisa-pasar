@@ -342,17 +342,16 @@ fun TradingViewModel.armPaperExitEngine(
     // Lantai ini adalah invarian yang sama yang ditegakkan `ScalpingRiskEngine` untuk sinyal
     // scalping — jalur posisi paper dulu melewatinya begitu saja, sehingga satu SL bisa bernilai
     // −1,3R…−2R padahal friksi round-trip ≈ 0,97%.
-    val floorPct = PaperStopResolver.frictionFloorPct(
+    val stopPlan = PaperStopResolver.resolveForEntry(
+        signalSl = stopLoss,
+        entry = entryPrice,
         buyFeePct = fees.buyTakerPct,
         sellFeePct = fees.sellTakerPct,
         slippagePct = runtime.slippagePct,
         minFrictionMultiple = runtime.minFrictionMultiple
     )
-    val resolvedStop = PaperStopResolver.resolve(
-        signalSl = stopLoss,
-        entry = entryPrice,
-        floorPct = floorPct
-    )
+    val floorPct = stopPlan.floorPct
+    val resolvedStop = stopPlan.stop
     if (!resolvedStop.usable) {
         AppLogManager.service(
             "PaperAutoExit",
@@ -523,15 +522,30 @@ fun TradingViewModel.tryPaperAutoBuy(transition: SignalTransition, exchange: Str
     // dipotong — persis kelas bug yang membuat auto-buy selalu ditolak.
     val quoteIsUsdt = PriceFormatter.isUsdtQuote(pair.quoteAsset)
     val usdtIdrRate = ExchangeRateManager.currentRate()
+    val fees = prefs.feeConfigFor(pair.symbol)
+    val runtimeConfig = prefs.scalpingRuntimeConfig
+
+    // Sizing dan mesin exit wajib memakai SL yang sama. Mode RISK_BASED dulu menghitung jarak
+    // dari SL sinyal mentah, padahal mesin melebarkannya ke lantai friksi — risiko aktual bisa
+    // jauh melebihi `riskPctPerTrade`. Resolver ini murni dan bisa dipakai jalur real nanti.
+    val sizingStopPlan = PaperStopResolver.resolveForEntry(
+        signalSl = signal.stopLoss,
+        entry = price,
+        buyFeePct = fees.buyTakerPct,
+        sellFeePct = fees.sellTakerPct,
+        slippagePct = runtimeConfig.slippagePct,
+        minFrictionMultiple = runtimeConfig.minFrictionMultiple
+    )
+    val sizingStop = if (sizingStopPlan.stop.usable) sizingStopPlan.stop.price else signal.stopLoss
 
     val sizing = cfg.plan(
         availableQuote = available,
         price = price,
-        stopLoss = signal.stopLoss,
+        stopLoss = sizingStop,
         quoteIsUsdt = quoteIsUsdt,
         usdtIdrRate = usdtIdrRate,
-        feeRate = prefs.feeConfigFor(pair.symbol).buyTakerPct / 100.0,
-        slippagePct = prefs.scalpingRuntimeConfig.slippagePct
+        feeRate = fees.buyTakerPct / 100.0,
+        slippagePct = runtimeConfig.slippagePct
     )
 
     val (qty, notionalQuote) = when (sizing) {
@@ -585,61 +599,94 @@ fun TradingViewModel.tryPaperAutoBuy(transition: SignalTransition, exchange: Str
     }
 
     val exchangeKey = exchange.uppercase()
-    // Daftarkan posisi simulasi + parameter auto-sell (SL/TP dari sinyal).
-    positionStore.markBought(
-        symbol = pair.symbol,
-        entryPrice = price,
-        invested = qty * price,
-        quantity = qty,
-        isReal = false,
-        exchange = exchangeKey
-    )
-
-    // Engine P2 hanya boleh mengambil alih exit bila risikonya valid (SL di bawah entry).
-    val p2OwnsExit = cfg.autoExitEnabled && signal.stopLoss > 0.0 && signal.stopLoss < price
-
-    val tp1Percent = 50.0
-    positionStore.setAutoSellParams(
-        symbol = pair.symbol,
-        // Bila engine P2 yang memegang exit, jalur auto-sell lama dimatikan untuk pair ini
-        // agar tidak ada dua mesin yang menjual posisi yang sama.
-        enabled = !p2OwnsExit,
-        tp1Price = signal.targetPrice1,
-        tp1Percent = tp1Percent,
-        tp2Price = signal.targetPrice2,
-        tp2Percent = 100.0 - tp1Percent,
-        isReal = false,
-        exchange = exchangeKey,
-        // SL asli sinyal. Tanpa ini `setHolding` meninggalkan SL sintetis `entry * 0.99`,
-        // sehingga jalur auto-sell lama dan rehidrasi FSM memakai SL yang jauh lebih rapat
-        // daripada lantai friksi engine.
-        stopLossPrice = signal.stopLoss
-    )
-
-    if (p2OwnsExit) {
-        // Mesin exit dibangun lewat helper bersama (S7) supaya beli manual & auto-buy memakai
-        // jalur yang sama. `force = true` karena SL/TP sinyal transisi di sini otoritatif.
-        armPaperExitEngine(
+    // Harga entry yang otoritatif adalah harga fill, bukan harga sinyal. `submitOrder` sudah
+    // memanggil `syncSimulationTradeToPositionStore`, jadi jangan menimpa posisi yang baru
+    // dibukukan di sana. Fallback `markBought` hanya untuk pemanggil yang tidak punya callback.
+    val order = res.order
+    val fillPrice = order.filledAvgPrice.takeIf { it.isFinite() && it > 0.0 } ?: price
+    val filledQty = order.filledQuantity.takeIf { it.isFinite() && it > 0.0 } ?: qty
+    if (!positionStore.get(pair.symbol, isReal = false, exchange = exchangeKey).isHolding) {
+        positionStore.markBought(
             symbol = pair.symbol,
+            entryPrice = fillPrice,
+            invested = filledQty * fillPrice,
+            quantity = filledQty,
+            isReal = false,
+            exchange = exchangeKey
+        )
+    }
+
+    val fillStopPlan = PaperStopResolver.resolveForEntry(
+        signalSl = signal.stopLoss,
+        entry = fillPrice,
+        buyFeePct = fees.buyTakerPct,
+        sellFeePct = fees.sellTakerPct,
+        slippagePct = runtimeConfig.slippagePct,
+        minFrictionMultiple = runtimeConfig.minFrictionMultiple
+    )
+
+    // Satu keputusan kepemilikan: engine hanya memiliki exit bila ia benar-benar terpasang.
+    // `p2OwnsExit` lama melihat SL sinyal mentah, sehingga bisa menyalakan legacy dengan SL
+    // sintetis `entry * 0.99` saat SL sinyal tidak valid. `force = true` membuat parameter
+    // transisi otoritatif atas arm yang mungkin sudah dijalankan callback sinkronisasi.
+    val engineArmed = cfg.autoExitEnabled && armPaperExitEngine(
+        symbol = pair.symbol,
+        exchange = exchangeKey,
+        entryPrice = fillPrice,
+        stopLoss = signal.stopLoss,
+        tp1 = signal.targetPrice1,
+        tp2 = signal.targetPrice2,
+        atrPct = atrPctAt(fillPrice),
+        force = true
+    )
+    val engineOwnsExit = PaperAutoTradeRuntime.ownsExit(
+        exchange = exchangeKey,
+        symbol = pair.symbol,
+        autoExitEnabled = cfg.autoExitEnabled
+    )
+
+    if (!engineOwnsExit) {
+        val tp1Percent = 50.0
+        positionStore.setAutoSellParams(
+            symbol = pair.symbol,
+            // Fallback legacy juga memakai SL hasil resolver, bukan SL sinyal mentah.
+            enabled = fillStopPlan.stop.usable,
+            tp1Price = signal.targetPrice1,
+            tp1Percent = tp1Percent,
+            tp2Price = signal.targetPrice2,
+            tp2Percent = 100.0 - tp1Percent,
+            isReal = false,
             exchange = exchangeKey,
-            entryPrice = price,
-            stopLoss = signal.stopLoss,
-            tp1 = signal.targetPrice1,
-            tp2 = signal.targetPrice2,
-            atrPct = atrPctAt(price),
-            force = true
+            stopLossPrice = fillStopPlan.stop.price
+        )
+        if (!fillStopPlan.stop.usable) {
+            AppLogManager.service(
+                "PaperAutoBuy",
+                "⚠️ [${pair.symbol}] Auto-buy terbuka tanpa stop yang valid — auto-sell legacy " +
+                    "TIDAK dinyalakan. Pasang SL manual atau aktifkan lantai friksi."
+            )
+        }
+    } else if (!engineArmed) {
+        AppLogManager.service(
+            "PaperAutoExit",
+            "⚠️ [${pair.symbol}] Mesin exit sudah aktif dari jalur sinkronisasi; " +
+                "pemasangan ulang dengan parameter transisi gagal."
         )
     }
 
     positionCoordinator.refreshPosition(pair.symbol)
 
-    val modeLabel = prefs.scalpingRuntimeConfig.exit.mode.label
+    val modeLabel = runtimeConfig.exit.mode.label
+    val exitLabel = when {
+        engineOwnsExit -> modeLabel
+        fillStopPlan.stop.usable -> "auto-sell bawaan"
+        else -> "TANPA exit (SL tidak tersedia)"
+    }
     AppLogManager.trade(
         "PaperAutoBuy",
-        "🤖 [${pair.symbol}] Auto-buy SIMULASI ${String.format(java.util.Locale.US, "%.8f", qty)} ${pair.baseAsset} @ " +
-            "${PriceFormatter.formatPrice(price, quoteAsset = pair.quoteAsset)} | $nominalNote | " +
-            "Stage ${signal.scalpingStage.name} | Exit: " +
-            if (p2OwnsExit) modeLabel else "auto-sell bawaan"
+        "🤖 [${pair.symbol}] Auto-buy SIMULASI ${String.format(java.util.Locale.US, "%.8f", filledQty)} ${pair.baseAsset} @ " +
+            "${PriceFormatter.formatPrice(fillPrice, quoteAsset = pair.quoteAsset)} | $nominalNote | " +
+            "Stage ${signal.scalpingStage.name} | Exit: $exitLabel"
     )
 
     return true
@@ -762,7 +809,18 @@ private fun TradingViewModel.evaluatePaperAutoExitLocked(
         return null
     }
 
-    finalizePaperExit(symbol, exchange, machine, decision)
+    val closed = finalizePaperExit(symbol, exchange, machine, decision)
+    if (!closed) {
+        // SELL gagal: posisi, FSM, penanda engine, dan snapshot harus tetap ada. Menghapusnya
+        // di sini membuat posisi menggantung tanpa exit dan tanpa jejak di UI.
+        persistPaperFsm(exchange, symbol, machine)
+        publishPaperExitSnapshot(
+            exchange = exchange,
+            symbol = symbol,
+            snapshot = PaperExitSnapshot.of(machine, symbol, exchange, currentPrice)
+        )
+        return null
+    }
     publishPaperExitSnapshot(exchange = exchange, symbol = symbol, snapshot = null)
     return decision
 }
@@ -836,19 +894,23 @@ fun TradingViewModel.finalizePaperExit(
                 if (decision.ambiguous) " | ⚠️ bar ambigu (SL & TP2 satu bar)" else ""
         )
     } else {
-        AppLogManager.service(
+        AppLogManager.trade(
             "PaperAutoExit",
-            "⚠️ [${pair.symbol}] Sinyal exit ${decision.reason.displayLabel()} tidak tereksekusi (qty simulasi 0)."
+            "❌ [${pair.symbol}] Sinyal exit ${decision.reason.displayLabel()} GAGAL dieksekusi; " +
+                "posisi dan FSM dipertahankan untuk dicoba lagi (qty tersedia $heldQty)."
         )
+        // Jangan lepas mesin/FSM. `evaluatePaperAutoExitLocked` akan mempertahankan snapshot dan
+        // mencoba lagi pada tick berikutnya selama kondisinya masih berlaku.
+        return false
     }
 
     PaperAutoTradeRuntime.clear(exchange, symbol)
     positionStore.setPaperEngineOwned(symbol = pair.symbol, isReal = false, exchange = exchange, owned = false)
     // Progres FSM sudah tidak berlaku setelah posisi ditutup. `markSold` juga menghapus key ini,
-    // tetapi jalur ini harus tetap benar walau `markSold` tidak sempat jalan (mis. qty simulasi 0).
+    // tetapi jalur ini harus tetap benar walau `markSold` tidak sempat jalan.
     positionStore.clearPaperFsmState(symbol = pair.symbol, isReal = false, exchange = exchange)
     positionCoordinator.refreshPosition(pair.symbol)
-    return dispatched
+    return true
 }
 
 /** Ringkas parameter exit yang sedang aktif, untuk ditampilkan di UI. */

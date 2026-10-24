@@ -91,8 +91,14 @@ class CandidateScanWorker(
             }
 
             var evaluated = 0
+            // P0 — satu kali per pemindaian: BTC 5M/1M untuk gatekeeper. Biayanya 2 permintaan,
+            // bukan per-simbol, sehingga tidak menambah beban per koin.
+            if (mode == StrategyMode.SCALPING) {
+                refreshBtcPulse(prefs.scalpingRuntimeConfig, isIndodax)
+            }
             for (rawSymbol in eligibleSymbols) {
-                // Hemat baterai: scalping butuh 4 permintaan per simbol, jadi dibatasi.
+                // Hemat baterai: scalping butuh 5 permintaan per simbol (H1, M15, M5, M1,
+                // orderbook), jadi dibatasi.
                 if (mode == StrategyMode.SCALPING && evaluated >= MAX_SCALP_BACKGROUND_SYMBOLS) break
                 evaluated++
 
@@ -114,7 +120,9 @@ class CandidateScanWorker(
                         symbol = cleanSymbol,
                         currentPrice = price,
                         rawSignal = evaluation.signal,
-                        mode = mode
+                        mode = mode,
+                        // TTL berbasis jam dinding, bukan waktu peristiwa bursa.
+                        config = prefs.scalpingRuntimeConfig
                     )
                     if (tracked.transition?.hasTriggeringTransition == true) {
                         notifyCandidate(
@@ -196,9 +204,11 @@ class CandidateScanWorker(
             StrategyMode.SCALPING -> {
                 val h1 = fetchCandles(symbol, Timeframe.H1, 60, isIndodax)
                 val m15 = fetchCandles(symbol, Timeframe.M15, 60, isIndodax)
+                val m5 = fetchCandles(symbol, Timeframe.M5, 60, isIndodax)
                 val m1 = fetchCandles(symbol, Timeframe.M1, 60, isIndodax)
                 if (h1.size < ModeSignalEvaluator.MIN_CANDLES ||
                     m15.size < ModeSignalEvaluator.MIN_CANDLES ||
+                    m5.size < ModeSignalEvaluator.MIN_CANDLES ||
                     m1.size < ModeSignalEvaluator.MIN_CANDLES
                 ) {
                     return null
@@ -215,6 +225,7 @@ class CandidateScanWorker(
                     change24h = tick.change24h,
                     h1Candles = h1.dropLast(1),
                     m15Candles = m15.dropLast(1),
+                    m5Candles = m5.dropLast(1),
                     m1Candles = m1.dropLast(1),
                     bids = bids,
                     asks = asks,
@@ -246,6 +257,36 @@ class CandidateScanWorker(
     } catch (e: Exception) {
         Timber.w(e, "CandidateScanWorker: Orderbook gagal untuk $symbol")
         emptyList<OrderBookItem>() to emptyList()
+    }
+
+    /**
+     * P0 — BTC gatekeeper untuk pemindaian latar.
+     *
+     * Veto dihitung dari candle yang **sudah tutup**; candle berjalan dibuang. Bila BTC gagal
+     * diambil, konteks tidak diperbarui dan veto terakhir dipertahankan (fail-closed) — bukan
+     * dilepas diam-diam saat data BTC sedang tidak tersedia.
+     */
+    private suspend fun refreshBtcPulse(
+        config: agu.analys.engine.scalping.ScalpingRuntimeConfig,
+        isIndodax: Boolean
+    ) {
+        val btcPair = if (isIndodax) "BTCIDR" else "BTCUSDT"
+        try {
+            val m5Raw = fetchCandles(btcPair, Timeframe.M5, 120, isIndodax)
+            val m1Raw = fetchCandles(btcPair, Timeframe.M1, 60, isIndodax)
+            val closed5m = if (m5Raw.size > 1) m5Raw.dropLast(1) else m5Raw
+            val closed1m = if (m1Raw.size > 1) m1Raw.dropLast(1) else m1Raw
+            if (closed5m.size >= 22) {
+                GlobalContextManager.updateBtcPulse(
+                    btc5mCandles = closed5m,
+                    btc1mCandles = closed1m,
+                    config = agu.analys.engine.global.BtcPulseAnalyzer.Config.from(config),
+                    priceIsUsdt = !isIndodax
+                )
+            }
+        } catch (e: Exception) {
+            Timber.w(e, "CandidateScanWorker: BTC pulse gagal ($btcPair)")
+        }
     }
 
     /** Hanya pair di watchlist yang diambil tick-nya; tidak pernah seluruh pasar. */

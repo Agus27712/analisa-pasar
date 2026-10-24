@@ -69,6 +69,7 @@ object ScalpingMtfEvaluator {
         h1Candles: List<CandleBar>,
         m15Candles: List<CandleBar>,
         m1Candles: List<CandleBar>,
+        m5Candles: List<CandleBar> = emptyList(),
         formingVolume: Double = 0.0,
         bids: List<OrderBookItem> = emptyList(),
         asks: List<OrderBookItem> = emptyList(),
@@ -84,6 +85,7 @@ object ScalpingMtfEvaluator {
         price = price,
         h1Candles = h1Candles,
         m15Candles = m15Candles,
+        m5Candles = m5Candles,
         m1Candles = m1Candles,
         formingVolume = formingVolume,
         bids = bids,
@@ -103,6 +105,7 @@ object ScalpingMtfEvaluator {
         h1Candles: List<CandleBar>,
         m15Candles: List<CandleBar>,
         m1Candles: List<CandleBar>,
+        m5Candles: List<CandleBar> = emptyList(),
         formingVolume: Double = 0.0,
         bids: List<OrderBookItem> = emptyList(),
         asks: List<OrderBookItem> = emptyList(),
@@ -201,7 +204,8 @@ object ScalpingMtfEvaluator {
             price = price,
             structureBias = structure.bias,
             rvol = rvol,
-            resistanceBroken = m15Ready && isBreakoutAboveResistance
+            resistanceBroken = m15Ready && isBreakoutAboveResistance,
+            thresholds = MarketRegimeEngine.Thresholds.from(config)
         )
 
         val setupResult = ScalpSetupDetector.detect(
@@ -218,11 +222,16 @@ object ScalpingMtfEvaluator {
         val mtfMatrix = MtfConfluenceMatrix.buildPartial(
             h1 = h1Candles,
             m15 = m15Candles,
+            m5 = m5Candles,
             m1 = m1Candles
         )
         val mtfAligned = mtfMatrix.bullishCount
         val mtfKnown = mtfMatrix.knownCount.coerceAtLeast(1)
         val mtfLabel = mtfMatrix.alignmentLabel
+        val mtfGate = MtfAlignmentPolicy.evaluate(mtfMatrix, config)
+        val isBtcPair = agu.analys.engine.global.BtcPulseAnalyzer.isBtcPair(symbol)
+        val btcVeto = config.btcVetoEnabled && !isBtcPair && globalContext.isVetoActive
+        val btcVetoReason = if (btcVeto) globalContext.vetoReason?.takeIf { it.isNotBlank() } else null
         val score = SignalScoringEngine.score(
             SignalScoringEngine.Input(
                 price = price,
@@ -278,7 +287,10 @@ object ScalpingMtfEvaluator {
         // S9 — extended move memblokir eksekusi, bukan menandai "berbahaya" (kualitas sinyal
         // tetap sah, hanya waktunya yang salah). Karena itu ia memblokir `ready`/`early`
         // secara terpisah dari `isDangerous`.
-        val ready = step4Ok && !isExtendedMove
+        // P0 — MTF 4 TF dan BTC gatekeeper memblokir eksekusi LONG, bukan mengubah geometri
+        // risiko. Keduanya sengaja ditempatkan setelah step4 supaya audit tetap menunjukkan
+        // bahwa masalahnya bukan R:R/skor, melainkan konteks pasar.
+        val ready = step4Ok && !isExtendedMove && mtfGate.allowsLong && !btcVeto
         val strong = ready && score.total >= config.minScoreStrong
         // P1 — `EARLY_ENTRY` WAJIB mensyaratkan pola scalping yang benar-benar ada.
         // Sebelumnya `early` hanya butuh `step2Ok` (= `step1Ok && isOrderBookValid`), yang sama
@@ -286,7 +298,8 @@ object ScalpingMtfEvaluator {
         // tetap dipancarkan sebagai `ScalpingStage.EARLY_ENTRY`, lalu `SignalLifecycleManager`
         // menaikkannya ke `LifecycleState.DETECTED` — radar berkata "TERDETEKSI" sementara
         // kartu setup berkata "NONE". Sekarang keduanya tidak bisa lagi bertentangan.
-        val early = !ready && !isDangerous && !isExtendedMove && step2Ok && setup != ScalpSetupType.NONE
+        val early = !ready && !isDangerous && !isExtendedMove && step2Ok &&
+            setup != ScalpSetupType.NONE && mtfGate.allowsLong && !btcVeto
 
         val direction = if (ready) SignalDirection.LONG else SignalDirection.WAIT
         val finalAction = if (direction == SignalDirection.LONG) SignalAction.BUY else SignalAction.HOLD
@@ -296,6 +309,14 @@ object ScalpingMtfEvaluator {
         if (isOverbought) reasons.add("⚠️ Tertahan: Harga koin sedang terlalu tinggi (Jenuh Beli/Overbought RSI 1M ${fmt(rsi1M)}).")
         if (isFallingKnife) reasons.add("⚠️ Tertahan: Falling knife (struktur M15 bearish + M1 turun tajam).")
         if (isExtendedMove) reasons.add("⚠️ Tertahan: Koin sudah naik ${fmt(change24h)}% dalam 24 jam (batas ${fmt(config.maxChange24hPct)}%) — hindari mengejar ekor kenaikan.")
+        if (btcVeto) {
+            reasons.add(
+                "⛔ VETO BTC: ${btcVetoReason ?: "BTC dump risk"} — sinyal LONG altcoin ditahan."
+            )
+        }
+        if (!mtfGate.allowsLong) {
+            reasons.add("⚠️ ${mtfGate.reason}")
+        }
         if (!hasRoomToGrow) reasons.add("⚠️ Tertahan: Harga koin terlalu dekat resistance M15 (Ruang naik sempit).")
         // S4 — ATR di luar band scalp ideal: terlalu tenang (friksi menggerus) atau terlalu liar
         // (stop rapat mudah tersapu wick). Konstanta ATR_PCT_* sebelumnya tidak pernah dipakai.
@@ -350,6 +371,7 @@ object ScalpingMtfEvaluator {
             ready -> ScalpingStage.ENTRY
             early -> ScalpingStage.EARLY_ENTRY
             isExtendedMove -> ScalpingStage.HOLD
+            btcVeto -> ScalpingStage.HOLD
             isDangerous -> ScalpingStage.HOLD
             else -> ScalpingStage.WATCH
         }
@@ -359,6 +381,8 @@ object ScalpingMtfEvaluator {
             isFallingKnife -> "Tertahan: Falling knife (M15 bearish + M1 dump)."
             isOverbought -> "Tertahan: Harga koin sedang terlalu tinggi (Jenuh Beli/Overbought)."
             !hasRoomToGrow -> "Tertahan: Harga koin terlalu dekat resistance M15 (Ruang naik sempit)."
+            btcVeto -> "VETO BTC: ${btcVetoReason ?: "dump risk"}."
+            !mtfGate.allowsLong -> mtfGate.reason
             step1Ok -> "Target H1/M15 aman (Ruang naik terbuka). MTF $mtfLabel."
             else -> "Memantau ruang gerak M15/H1."
         }
@@ -376,6 +400,8 @@ object ScalpingMtfEvaluator {
         val entryDetailText = when {
             !step3Ok -> "Menunggu Checkpoint 3 lolos."
             isExtendedMove -> "Koin sudah naik ${fmt(change24h)}% / 24 jam — menunggu konsolidasi."
+            btcVeto -> "Veto BTC aktif — menunggu BTC stabil."
+            !mtfGate.allowsLong -> mtfGate.reason
             step4Ok -> "Net RR: 1:${fmt(netRr)} (Valid), skor ${score.total}."
             !riskValid -> "Menunggu Net RR optimal (Min 1:${fmt(ScalpingRiskEngine.DEFAULT_MIN_NET_RR)})."
             else -> "Menunggu skor sinyal ≥ $minScoreForLong (${setup.name}, sekarang ${score.total})."
@@ -403,6 +429,8 @@ object ScalpingMtfEvaluator {
                 isFallingKnife -> "FALLING KNIFE (HOLD)"
                 isOverbought -> "OVERBOUGHT (HOLD)"
                 isExtendedMove -> "EXTENDED MOVE (HOLD)"
+                btcVeto -> "BTC DUMP RISK (VETO)"
+                !mtfGate.allowsLong -> "MTF MENOLAK LONG"
                 strong -> "STRONG ENTRY"
                 ready -> "BUY READY"
                 step3Ok -> "TRIGGER READY (3/4)"
@@ -416,6 +444,8 @@ object ScalpingMtfEvaluator {
                 isFallingKnife -> "Menunggu stabilisasi setelah dump"
                 isOverbought -> "Menunggu koreksi / reset RSI 1M"
                 isExtendedMove -> "Menunggu konsolidasi setelah kenaikan 24 jam yang ekstrem"
+                btcVeto -> "Menunggu BTC keluar dari dump risk"
+                !mtfGate.allowsLong -> "Menunggu H1/M15 membaik dan minimal ${config.mtfMinBullish}/4 TF bullish"
                 !hasRoomToGrow -> "Menunggu breakout resistance M15"
                 ready -> "Eksekusi"
                 step3Ok -> "Konfirmasi Net R:R & skor"
@@ -433,10 +463,12 @@ object ScalpingMtfEvaluator {
 
         val confidence = when {
             isDangerous -> 0
+            btcVeto -> 0
             ready -> score.total
             else -> minOf(
                 score.total,
                 when {
+                    !mtfGate.allowsLong -> 39
                     step3Ok -> 59
                     step2Ok -> 49
                     step1Ok -> 39
@@ -496,6 +528,8 @@ object ScalpingMtfEvaluator {
             }
             !step3Ok -> if (setup == ScalpSetupType.NONE) "STEP3_NO_SETUP" else "STEP3_TRIGGER"
             !step4Ok -> if (!riskValid) "STEP4_RR" else "STEP4_SCORE"
+            btcVeto -> "STEP5_BTC_VETO"
+            !mtfGate.allowsLong -> "STEP5_MTF_GATE"
             isDangerous -> "DANGEROUS"
             else -> "WAITING_CONFIRMATION"
         }

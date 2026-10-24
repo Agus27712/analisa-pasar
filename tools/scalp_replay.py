@@ -76,6 +76,21 @@ DEFAULTS = {
     "max_risk_atr": 2.0,
     "max_change_24h_pct": 0.0,
 
+    # P0 — gatekeeper & regime (mirror ScalpingConfig/ScalpingRuntimeConfig).
+    # TTL tidak mengubah entry replay (replay masuk pada bar sinyal), tetapi nilainya
+    # dilaporkan supaya pembaca tidak mengira TTL diabaikan tanpa alasan.
+    "ttl_bars_m1": 5,
+    "mtf_min_bullish": 3,
+    "mtf_block_high_tf_bearish": True,
+    "btc_veto_enabled": True,
+    "btc_return_veto_pct": -0.6,
+    "btc_atr_ratio_veto": 2.5,
+    "btc_ema_period": 20,
+    "regime_adx_trending": 25.0,
+    "regime_adx_weak": 20.0,
+    "regime_chop_ranging": 61.8,
+    "regime_chop_trend_max": 55.0,
+
     # Detektor setup (threshold engine; tetap seperti pipeline)
     "chop_hard_ranging": 65.0,
     "rvol_setup_min": 1.2,
@@ -102,11 +117,14 @@ DEFAULTS = {
         "min_profit_friction_multiple": 2.0,
         "be_trigger_atr_fraction": 0.5,
         "trail_atr_fraction": 0.6,
+        "net_tp_pct": 1.0,
+        "stop_gross_pct": 0.0,
     },
 
     # Replay
     "replay": {
         "m15_min_bars": 20,
+        "m5_min_bars": 20,
         "h1_min_bars": 20,
         "m1_window": 250,
         "lookahead_bars": 120,
@@ -450,31 +468,47 @@ def detect_regime(candles, price, bias, rvol, res_broken, cfg):
         ema = "bearish"
     else:
         ema = "mixed"
-    if atr_pct >= 3.5:
-        reg = "HIGH_VOLATILITY"
-    elif 0.0 < atr_pct < 0.8 and adx < 18.0:
-        reg = "LOW_VOLATILITY"
-    elif res_broken and rvol >= 1.5:
-        reg = "BREAKOUT"
-    elif chop >= 61.8 and adx < 20.0:
-        reg = "RANGING"
-    elif adx >= 25.0:
+    # Ambang ATR mengikuti ScalpingConfig.ATR_PCT_HIGH / ATR_PCT_LOW (bukan angka P0 baru).
+    atr_pct_high = 3.5
+    atr_pct_low = 0.8
+    if atr_pct >= atr_pct_high:
+        return {"regime": "HIGH_VOLATILITY", "adx": adx, "chop": chop,
+                "atr_pct": atr_pct, "ema": ema}
+    # p0: LOW_VOL = ATR rendah DAN CHOP > batas trend. Versi lama memakai ADX < 18.
+    if 0.0 < atr_pct < atr_pct_low and chop > cfg["regime_chop_trend_max"]:
+        return {"regime": "LOW_VOLATILITY", "adx": adx, "chop": chop,
+                "atr_pct": atr_pct, "ema": ema}
+    # BREAKOUT adalah ekstensi app; p0 belum mengembalikannya.
+    if res_broken and rvol >= 1.5:
+        return {"regime": "BREAKOUT", "adx": adx, "chop": chop,
+                "atr_pct": atr_pct, "ema": ema}
+
+    # p0 — trending diperiksa lebih dulu: adx >= trending DAN chop < batas atas.
+    is_trending = adx >= cfg["regime_adx_trending"] and chop < cfg["regime_chop_trend_max"]
+    if is_trending:
         if (bias == "BULLISH" and ema == "bullish") or (ema == "bullish" and bias != "BEARISH"):
             reg = "TRENDING_UP"
         elif (bias == "BEARISH" and ema == "bearish") or (ema == "bearish" and bias != "BULLISH"):
             reg = "TRENDING_DOWN"
         else:
             reg = "RANGING"
-    elif adx >= 20.0 and chop < 50.0:
+        return {"regime": reg, "adx": adx, "chop": chop, "atr_pct": atr_pct, "ema": ema}
+
+    # p0 — choppy memakai OR: CHOP tinggi ATAU ADX lemah.
+    if chop >= cfg["regime_chop_ranging"] or adx < cfg["regime_adx_weak"]:
+        return {"regime": "RANGING", "adx": adx, "chop": chop,
+                "atr_pct": atr_pct, "ema": ema}
+
+    # Mild trend tanpa ADX kuat — hanya fase transisi (sama seperti app).
+    if adx >= cfg["regime_adx_weak"] and chop < 50.0:
         if ema == "bullish" or bias == "BULLISH":
-            reg = "TRENDING_UP"
-        elif ema == "bearish" or bias == "BEARISH":
-            reg = "TRENDING_DOWN"
-        else:
-            reg = "RANGING"
-    else:
-        reg = "RANGING"
-    return {"regime": reg, "adx": adx, "chop": chop, "atr_pct": atr_pct, "ema": ema}
+            return {"regime": "TRENDING_UP", "adx": adx, "chop": chop,
+                    "atr_pct": atr_pct, "ema": ema}
+        if ema == "bearish" or bias == "BEARISH":
+            return {"regime": "TRENDING_DOWN", "adx": adx, "chop": chop,
+                    "atr_pct": atr_pct, "ema": ema}
+
+    return {"regime": "RANGING", "adx": adx, "chop": chop, "atr_pct": atr_pct, "ema": ema}
 
 
 # --------------------------------------------------------------------------
@@ -595,6 +629,110 @@ def mtf_leg(candles):
     if st["lhll"] or (ema_bear and not st["hhhl"]):
         return "BEARISH"
     return "NEUTRAL"
+
+
+# --------------------------------------------------------------------------
+# P0 — BTC market gatekeeper (mirror BtcPulseAnalyzer.kt)
+# --------------------------------------------------------------------------
+
+def btc_atr_ratio(candles, period=14):
+    """ATR% terakhir dibagi rata-rata ATR% historis (bukan ATR absolut)."""
+    if period <= 0 or len(candles) < period + 2:
+        return 1.0
+    tr = []
+    for i in range(1, len(candles)):
+        high = candles[i]["h"]
+        low = candles[i]["l"]
+        prev_close = candles[i - 1]["c"]
+        tr.append(max(high - low, abs(high - prev_close), abs(low - prev_close)))
+    if len(tr) < period:
+        return 1.0
+    atr_values = [sum(tr[:period]) / period]
+    for i in range(period, len(tr)):
+        atr_values.append((atr_values[-1] * (period - 1) + tr[i]) / period)
+
+    current_price = candles[-1]["c"]
+    if current_price <= 0:
+        return 1.0
+    current_atr_pct = atr_values[-1] / current_price * 100.0
+    baseline = []
+    for i, atr in enumerate(atr_values):
+        close = candles[i + period]["c"]
+        if close > 0:
+            baseline.append(atr / close * 100.0)
+    mean_pct = sum(baseline) / len(baseline) if baseline else current_atr_pct
+    return current_atr_pct / mean_pct if mean_pct > 0 else 1.0
+
+
+def _btc_confirmation_1m(candles, period):
+    if len(candles) < max(22, period + 2):
+        return None
+    closes = [c["c"] for c in candles]
+    ema = ema_last(closes, period)
+    close = closes[-1]
+    prev = closes[-2]
+    ret = (close - prev) / prev * 100.0 if prev > 0 else 0.0
+    if ema > 0 and close < ema and ret < -0.3:
+        return f"Konfirmasi 1M: close di bawah EMA{period}, return {ret:.2f}%"
+    return None
+
+
+def evaluate_btc_veto(btc5m, btc1m, cfg):
+    """
+    Veto LONG altcoin bila:
+      1. close 5M < EMA dan return terburuk 2 candle < btc_return_veto_pct, atau
+      2. ATR ratio > btc_atr_ratio_veto dan minimal 2/3 candle terakhir bearish.
+    Candle yang dioper wajib sudah tutup; replay menggeser pointer secara kausal.
+    """
+    ema_period = max(2, int(cfg.get("btc_ema_period", 20)))
+    min_bars = max(22, ema_period + 2)
+    out = {
+        "veto": False, "status": "INSUFFICIENT_DATA", "reason": "",
+        "btc_price": 0.0, "return_5m_pct": 0.0, "ema": 0.0,
+        "atr_ratio": 0.0, "bearish_bars": 0, "sufficient": False,
+    }
+    if len(btc5m) < min_bars:
+        return out
+
+    closes = [c["c"] for c in btc5m]
+    price = closes[-1]
+    ema = ema_last(closes, ema_period)
+    prev = closes[-2]
+    prev2 = closes[-3]
+    ret1 = (price - prev) / prev * 100.0 if prev > 0 else 0.0
+    ret2 = (prev - prev2) / prev2 * 100.0 if prev2 > 0 else 0.0
+    worst = min(ret1, ret2)
+
+    atr_ratio = btc_atr_ratio(btc5m, 14)
+    bearish_bars = sum(1 for c in btc5m[-3:] if c["c"] < c["o"])
+    below_ema = ema > 0 and price < ema
+    cond1 = below_ema and worst < cfg.get("btc_return_veto_pct", -0.6)
+    cond2 = atr_ratio > cfg.get("btc_atr_ratio_veto", 2.5) and bearish_bars >= 2
+
+    reasons = []
+    if cond1:
+        reasons.append(
+            f"BTC 5M close {price:.2f} < EMA{ema_period} {ema:.2f} dan return "
+            f"{worst:.2f}% < {cfg.get('btc_return_veto_pct', -0.6):.2f}%"
+        )
+    if cond2:
+        reasons.append(
+            f"BTC ATR ratio {atr_ratio:.2f}x > {cfg.get('btc_atr_ratio_veto', 2.5):.2f}x "
+            f"dengan {bearish_bars}/3 candle bearish impulsif"
+        )
+    confirmation = _btc_confirmation_1m(btc1m, ema_period)
+    if (cond1 or cond2) and confirmation:
+        reasons.append(confirmation)
+
+    enabled = bool(cfg.get("btc_veto_enabled", True))
+    veto = enabled and (cond1 or cond2)
+    status = "DUMP_RISK" if veto else ("CAUTION" if below_ema else
+                                      "CAUTION" if worst < -0.3 else "SAFE")
+    return {
+        "veto": veto, "status": status, "reason": "; ".join(reasons),
+        "btc_price": price, "return_5m_pct": worst, "ema": ema,
+        "atr_ratio": atr_ratio, "bearish_bars": bearish_bars, "sufficient": True,
+    }
 
 
 # --------------------------------------------------------------------------
@@ -827,9 +965,47 @@ def min_score_for_setup(setup, cfg):
     return cfg["min_score_breakout_retest"] if setup == "BREAKOUT_RETEST" else cfg["min_score_long"]
 
 
-def evaluate_bar(price, m1w, m15w, h1w, cfg, fee, assume_ob, change24h=0.0):
+def evaluate_mtf_gate(h1w, m15w, m5w, m1w, cfg):
+    """
+    P0 — gate MTF 4 TF (mirror MtfAlignmentPolicy.kt).
+    H1/M15 tidak boleh bearish; minimal `mtf_min_bullish` bullish; fail-closed bila
+    salah satu TF belum punya data (known < 4), supaya label 3/4 tidak menyesatkan.
+    """
+    legs = [mtf_leg(h1w), mtf_leg(m15w), mtf_leg(m5w), mtf_leg(m1w)]
+    known = [l for l in legs if l != "UNKNOWN"]
+    bull = sum(1 for l in known if l == "BULLISH")
+    high_bear = legs[0] == "BEARISH" or legs[1] == "BEARISH"
+    min_bull = int(cfg.get("mtf_min_bullish", 3))
+    block_high = bool(cfg.get("mtf_block_high_tf_bearish", True))
+
+    if min_bull <= 0:
+        return {"allow": True, "bull": bull, "known": len(known),
+                "high_bear": high_bear, "reason": "Gerbang MTF nonaktif (mtf_min_bullish=0)."}
+    if len(known) < 4:
+        return {"allow": False, "bull": bull, "known": len(known),
+                "high_bear": high_bear,
+                "reason": f"Data MTF belum lengkap ({len(known)}/4 TF)."}
+    if block_high and high_bear:
+        return {"allow": False, "bull": bull, "known": len(known),
+                "high_bear": True,
+                "reason": "H1/M15 bearish — LONG ditolak gate MTF."}
+    if bull < min_bull:
+        return {"allow": False, "bull": bull, "known": len(known),
+                "high_bear": high_bear,
+                "reason": f"MTF {bull}/{len(known)} bullish < minimal {min_bull}."}
+    return {"allow": True, "bull": bull, "known": len(known),
+            "high_bear": high_bear,
+            "reason": f"MTF {bull}/{len(known)} bullish."}
+
+
+def evaluate_bar(price, m1w, m15w, h1w, cfg, fee, assume_ob, change24h=0.0,
+                 btc_veto=False, btc_reason="", m5w=None, want_risk_inputs=False):
     if price <= 0 or len(h1w) < 20 or len(m15w) < 20 or len(m1w) < 20:
         return None
+    # Fallback agregasi M1 -> M5 untuk pemanggil lama (mis. uji parity). Pipeline utama
+    # selalu mengoper M5 yang sudah diagregasi sekali di run_replay.
+    if m5w is None:
+        m5w = aggregate(m1w, 5)
     last = m1w[-1]
     avg_vol = sum(c["v"] for c in m1w[-20:]) / 20.0
     forming = last["v"]
@@ -882,10 +1058,11 @@ def evaluate_bar(price, m1w, m15w, h1w, cfg, fee, assume_ob, change24h=0.0):
     ob_valid = True if assume_ob else False
     setup = detect_setup(price, st, rg, rvol, bp, m1w, cfg)
 
-    legs = [mtf_leg(h1w), mtf_leg(m15w), mtf_leg(m1w)]
-    known = [l for l in legs if l != "UNKNOWN"]
-    bull = sum(1 for l in known if l == "BULLISH")
-    sc = score_all(price, st, rg, setup, rvol, bp, False, bull, max(1, len(known)), m1w)
+    # P0 — gate MTF 4 TF (H1, M15, M5, M1) dan veto BTC. Keduanya memblokir eksekusi,
+    # bukan mengubah geometri risiko/skor.
+    mtf = evaluate_mtf_gate(h1w, m15w, m5w, m1w, cfg)
+    sc = score_all(price, st, rg, setup, rvol, bp, False,
+                   mtf["bull"], max(1, mtf["known"]), m1w)
 
     rl = risk_levels(price, setup if setup != "NONE" else "NONE",
                      st, rg, fee, cfg)
@@ -908,17 +1085,19 @@ def evaluate_bar(price, m1w, m15w, h1w, cfg, fee, assume_ob, change24h=0.0):
     min_sc = min_score_for_setup(setup, cfg)
     s4 = s3 and risk_valid and sc["total"] >= min_sc
 
-    ready = s4
+    gate_ok = mtf["allow"] and not btc_veto
+    ready = s4 and gate_ok
     strong = ready and sc["total"] >= cfg["min_score_strong"]
-    early = (not ready) and (not dangerous) and s2
+    # P1 — early wajib punya pola, sama seperti app.
+    early = (not ready) and (not dangerous) and s2 and setup != "NONE" and gate_ok
     stage = "STRONG_ENTRY" if strong else "ENTRY" if ready else \
-            "EARLY_ENTRY" if early else "HOLD" if dangerous else "WATCH"
-    if dangerous:
+            "EARLY_ENTRY" if early else "HOLD" if (dangerous or btc_veto) else "WATCH"
+    if dangerous or btc_veto:
         conf = 0
     elif ready:
         conf = sc["total"]
     else:
-        cap = 59 if s3 else 49 if s2 else 39 if s1 else 29
+        cap = 39 if not mtf["allow"] else 59 if s3 else 49 if s2 else 39 if s1 else 29
         conf = max(10, min(sc["total"], cap))
 
     gross_risk_pct = 0.0
@@ -930,6 +1109,9 @@ def evaluate_bar(price, m1w, m15w, h1w, cfg, fee, assume_ob, change24h=0.0):
         "score": sc["total"], "category": sc["category"], "parts": sc["parts"],
         "confidence": conf, "net_rr": net_rr,
         "steps": [s1, s2, s3, s4],
+        "mtf_allow": mtf["allow"], "mtf_bull": mtf["bull"],
+        "mtf_known": mtf["known"], "mtf_reason": mtf["reason"],
+        "btc_veto": btc_veto, "btc_reason": btc_reason,
         "regime": rg["regime"], "rvol": rvol, "rsi": rsi,
         "entry": rl["entry"] if rl else 0.0,
         "sl": rl["sl"] if rl else 0.0,
@@ -943,6 +1125,17 @@ def evaluate_bar(price, m1w, m15w, h1w, cfg, fee, assume_ob, change24h=0.0):
         "sl_floor_active": rl["sl_floor_active"] if rl else False,
         # S8 — ATR% diperlukan resolve_trade untuk BE/trailing proporsional.
         "atr_pct": rg["atr_pct"] if rg["atr_pct"] > 0 else 0.0,
+        # Untuk sweep lantai friksi: masukan mentah risk_levels, supaya geometri
+        # risiko bisa dihitung ulang untuk kelipatan lain tanpa mengevaluasi ulang
+        # seluruh gate (struktur/regime/skor tidak bergantung pada kelipatan).
+        **({"risk_inputs": {
+            "setup": setup,
+            "st": {"support": st["support"], "resistance": st["resistance"],
+                   "last_swing_low": st["last_swing_low"]},
+            "atr_pct": rg["atr_pct"],
+            "score": sc["total"],
+            "s3": s3,
+        }} if want_risk_inputs else {}),
     }
 
 
@@ -1010,6 +1203,13 @@ def be_price(entry, fee, slip):
     return entry * buy_cost / sell_net
 
 
+def _price_for_net(entry, net_pct, fee, slip):
+    """Harga keluar yang menghasilkan profit net tepat `net_pct` (kebalikan _net_profit_pct)."""
+    buy_cost = 1.0 + (fee.get("buy_taker_pct", 0.1) + slip) / 100.0
+    sell_net = max(1e-9, 1.0 - (fee.get("sell_taker_pct", 0.1) + slip) / 100.0)
+    return entry * (1.0 + net_pct / 100.0) * buy_cost / sell_net
+
+
 def _momentum_weak(m1_slice):
     """Momentum lemah: EMA9 < EMA21*0.998 atau RSI di luar 40-78 atau candle merah dominan."""
     if len(m1_slice) < 10:
@@ -1037,6 +1237,52 @@ def _gross_pct(entry, price):
     return (price / entry - 1.0) * 100.0
 
 
+# Fase A — horizon MFE/MAE dari bar masuk sinyal, dalam bar M1.
+MFE_HORIZONS_M1 = (30, 60, 90)
+MFE_KEYS = tuple(
+    key
+    for h in (30, 60, 90)
+    for key in (f"mfe_{h}", f"mae_{h}", f"bars_{h}")
+)
+MFE_ALL_KEYS = ("mfe_exit_pct",) + MFE_KEYS
+
+
+def _pctl(vals, q):
+    """Kuantil linier (interpolasi, setara percentile numpy)."""
+    s = sorted(vals)
+    if not s:
+        return 0.0
+    pos = q * (len(s) - 1)
+    lo = int(pos)
+    hi = min(lo + 1, len(s) - 1)
+    frac = pos - lo
+    return s[lo] * (1.0 - frac) + s[hi] * frac
+
+
+def _entry_excursions(m1, i, entry, horizons=MFE_HORIZONS_M1):
+    """
+    MFE/MAE kotor (%) dari harga sinyal, per horizon bar M1.
+
+    Untuk horizon h: MFE = persen high tertinggi pada bar i+1..i+h, MAE = persen
+    low terendah pada jendela yang sama. `bars_<h>` = jumlah bar terpakai — kalau
+    data berhenti lebih awal, nilainya dibatasi data yang tersedia.
+    """
+    n = len(m1)
+    out = {}
+    for h in horizons:
+        used = max(0, min(n, i + 1 + h) - (i + 1))
+        if used <= 0:
+            out[f"mfe_{h}"] = 0.0
+            out[f"mae_{h}"] = 0.0
+            out[f"bars_{h}"] = 0
+            continue
+        win = m1[i + 1:i + 1 + used]
+        out[f"mfe_{h}"] = round(_gross_pct(entry, max(b["h"] for b in win)), 4)
+        out[f"mae_{h}"] = round(_gross_pct(entry, min(b["l"] for b in win)), 4)
+        out[f"bars_{h}"] = used
+    return out
+
+
 def resolve_trade(m1, i, entry, sl, tp1, tp2, fee, cfg, lookahead, atr_pct=0.0):
     """
     Resolve forward dari bar i+1.
@@ -1046,8 +1292,12 @@ def resolve_trade(m1, i, entry, sl, tp1, tp2, fee, cfg, lookahead, atr_pct=0.0):
       classic — SL / TP2 saja, tetap terkena time-stop `max_hold_bars_m1`
       tp1_be  — TP1 partial 50% + SL ke BE(net); lalu TP2 atau SL
       trail   — trailing dari peak setelah net >= be_trigger
-      early   — early SELL jika net_close >= min_early dan momentum lemah
-      full    — tp1_be + trail + early (prioritas: SL > early > trail > TP2)
+      early    — early SELL jika net_close >= min_early dan momentum lemah
+      full     — tp1_be + trail + early (prioritas: SL > early > trail > TP2)
+      net_tp   — keluar begitu profit NET (setelah fee+slippage) >= `net_tp_pct`;
+                 TP kecil yang konsisten, bukan mengejar TP2 jauh
+      net_tp_stop — net_tp + stop rugi harga `stop_gross_pct` yang lebih rapat
+                 daripada SL engine (SL engine tetap backstop)
 
     S2 — profit sukarela (early) dan peng-arm-an BE/trailing hanya setelah profit
     KOTOR >= `min_profit_friction_multiple` x friksi round-trip.
@@ -1069,10 +1319,14 @@ def resolve_trade(m1, i, entry, sl, tp1, tp2, fee, cfg, lookahead, atr_pct=0.0):
         be_trigger = max(be_trigger, be_atr_frac * atr_pct)
     trail_dist = trail_atr_frac * atr_pct if (trail_atr_frac > 0 and atr_pct > 0) else trail_pct
 
+    # Fase A — MFE/MAE dari bar masuk sinyal, dihitung untuk SEMUA sinyal siap,
+    # termasuk yang lulus tak matematika risiko (bad_risk).
+    exc = _entry_excursions(m1, i, entry)
+
     risk = entry - sl
     if risk <= 0 or entry <= 0:
         return {"result": "UNRESOLVED", "r": 0.0, "exit_idx": None, "ambiguous": False,
-                "exit_reason": "bad_risk"}
+                "exit_reason": "bad_risk", "mfe_exit_pct": 0.0, **exc}
     risk_pct = risk / entry * 100.0
 
     def r_at(price):
@@ -1094,12 +1348,16 @@ def resolve_trade(m1, i, entry, sl, tp1, tp2, fee, cfg, lookahead, atr_pct=0.0):
     ambiguous = False
 
     def _done(total_r, idx, reason, amb=False):
+        # mfe_exit_pct = MFE kotor sampai bar exit terakhir (vars peak trailing-sudah-jalan),
+        # pembanding langsung dengan `r` realised.
         return {
             "result": "WIN" if total_r > 0 else "LOSS",
             "r": round(total_r, 4),
             "exit_idx": idx,
             "ambiguous": amb,
             "exit_reason": reason,
+            "mfe_exit_pct": round(_gross_pct(entry, peak), 4),
+            **exc,
         }
 
     for j in range(i + 1, end):
@@ -1120,6 +1378,26 @@ def resolve_trade(m1, i, entry, sl, tp1, tp2, fee, cfg, lookahead, atr_pct=0.0):
             else:
                 reason = "TRAIL_SL"
             return _done(total_r, j, reason, ambiguous)
+
+        # --- Mode net_tp: TP kecil berbasis profit NET (SL tetap prioritas) ---
+        if mode == "net_tp":
+            net_target = float(ex.get("net_tp_pct", 1.0))
+            if _net_profit_pct(entry, hi, fee, slip) >= net_target:
+                px = _price_for_net(entry, net_target, fee, slip)
+                return _done(r_at(px), j, "NET_TP")
+
+        # --- Mode net_tp_stop: TP net kecil + stop rugi harga yang lebih rapat
+        #     daripada SL engine. Gap yang menembus SL engine tetap SL (pesimistis).
+        if mode == "net_tp_stop":
+            stop_gross = float(ex.get("stop_gross_pct", 0.0))
+            if stop_gross > 0:
+                stop_px = entry * (1.0 - stop_gross / 100.0)
+                if stop_px > active_sl + 1e-12 and lo <= stop_px:
+                    return _done(r_at(stop_px), j, "NET_SL")
+            net_target = float(ex.get("net_tp_pct", 1.0))
+            if _net_profit_pct(entry, hi, fee, slip) >= net_target:
+                px = _price_for_net(entry, net_target, fee, slip)
+                return _done(r_at(px), j, "NET_TP")
 
         # --- TP2 full ---
         if hi >= tp2:
@@ -1164,15 +1442,22 @@ def resolve_trade(m1, i, entry, sl, tp1, tp2, fee, cfg, lookahead, atr_pct=0.0):
         return _done(total_r, last_idx, "TIMEOUT", ambiguous)
 
     return {"result": "UNRESOLVED", "r": 0.0, "exit_idx": None, "ambiguous": False,
-            "exit_reason": "TIMEOUT"}
+            "exit_reason": "TIMEOUT", "mfe_exit_pct": 0.0, **exc}
 
 
-def run_replay(m1, m15, h1, cfg, fee, assume_ob, lookahead):
+def run_replay(m1, m15, h1, cfg, fee, assume_ob, lookahead, btc1m=None):
     rp = cfg.get("replay", DEFAULTS["replay"])
     m15_min = int(rp.get("m15_min_bars", 20))
+    m5_min = int(rp.get("m5_min_bars", 20))
     h1_min = int(rp.get("h1_min_bars", 20))
+    # M5 diagregasi sekali dari M1, persis seperti app menyintesis HTF dari M1.
+    m5 = aggregate(m1, 5)
+    btc5 = aggregate(btc1m, 5) if btc1m else []
     evals = 0
     bott = {"s1": 0, "s2": 0, "s3": 0, "s4": 0}
+    gate_blocks = {"mtf": 0, "btc": 0}
+    btc_checks = 0
+    btc_veto_checks = 0
     setup_hits = {}
     exit_reasons = {}
     trades = []
@@ -1183,8 +1468,12 @@ def run_replay(m1, m15, h1, cfg, fee, assume_ob, lookahead):
     i = 0
     n = len(m1)
     wlen = int(rp.get("m1_window", 250))
-    # Pointer HTF: m15/h1 terurut waktu; hanya candle CLOSED (tutup <= t bar M1 berjalan).
-    p15 = p60 = 0
+    # Pointer HTF: m15/h1/m5 terurut waktu; hanya candle CLOSED (tutup <= t bar M1 berjalan).
+    p15 = p60 = p5 = 0
+    # Pointer BTC 5M/1M; konteks dihitung ulang hanya saat pointer bergerak.
+    p5b = pb1 = 0
+    last_btc_key = None
+    btc_res = {"veto": False, "reason": "", "sufficient": False, "status": "NO_DATA"}
     while i < n:
         c = m1[i]
         t = c["t"]
@@ -1192,17 +1481,38 @@ def run_replay(m1, m15, h1, cfg, fee, assume_ob, lookahead):
             p15 += 1
         while p60 < len(h1) and h1[p60]["t"] + 60 * 60_000 <= t:
             p60 += 1
+        while p5 < len(m5) and m5[p5]["t"] + 5 * 60_000 <= t:
+            p5 += 1
+        while p5b < len(btc5) and btc5[p5b]["t"] + 5 * 60_000 <= t:
+            p5b += 1
+        while pb1 < len(btc1m or []) and btc1m[pb1]["t"] + 60_000 <= t:
+            pb1 += 1
         m15w = m15[max(0, p15 - 60):p15]
         h1w = h1[max(0, p60 - 60):p60]
+        m5w = m5[max(0, p5 - 60):p5]
         m1w = m1[max(0, i - wlen + 1):i + 1]
-        if len(m1w) < 20 or len(m15w) < m15_min or len(h1w) < h1_min:
+        if len(m1w) < 20 or len(m15w) < m15_min or len(m5w) < m5_min or len(h1w) < h1_min:
             i += 1
             continue
+        btc_key = (p5b, pb1)
+        if btc5 and btc_key != last_btc_key:
+            btc_res = evaluate_btc_veto(
+                btc5[max(0, p5b - 120):p5b],
+                btc1m[max(0, pb1 - 60):pb1] if btc1m else [],
+                cfg
+            )
+            last_btc_key = btc_key
+            if btc_res["sufficient"]:
+                btc_checks += 1
+                if btc_res["veto"]:
+                    btc_veto_checks += 1
         # S9 — perubahan harga 24 jam (1440 bar M1) untuk gerbang extended move.
         chg24 = 0.0
         if i >= 1440 and m1[i - 1440]["c"] > 0:
             chg24 = (c["c"] / m1[i - 1440]["c"] - 1.0) * 100.0
-        r = evaluate_bar(c["c"], m1w, m15w, h1w, cfg, fee, assume_ob, change24h=chg24)
+        r = evaluate_bar(c["c"], m1w, m15w, h1w, cfg, fee, assume_ob,
+                         change24h=chg24, btc_veto=btc_res["veto"],
+                         btc_reason=btc_res["reason"], m5w=m5w)
         if r is None:
             i += 1
             continue
@@ -1216,6 +1526,11 @@ def run_replay(m1, m15, h1, cfg, fee, assume_ob, lookahead):
             bott["s3"] += 1
         elif not s4:
             bott["s4"] += 1
+        # Gate P0 dihitung terpisah: hanya relevan bila langkah dasar sudah lolos.
+        if s4 and not r["mtf_allow"]:
+            gate_blocks["mtf"] += 1
+        if s4 and r["btc_veto"]:
+            gate_blocks["btc"] += 1
         if not r["ready"]:
             i += 1
             continue
@@ -1226,13 +1541,15 @@ def run_replay(m1, m15, h1, cfg, fee, assume_ob, lookahead):
         reason = resolved.get("exit_reason", "")
         exit_reasons[reason] = exit_reasons.get(reason, 0) + 1
         if resolved["result"] == "UNRESOLVED":
-            trades.append({"setup": r["setup"], "score": r["score"], "result": "UNRESOLVED",
-                           "r": 0.0, "t": t, "ambiguous": False,
-                           "entry": entry, "sl": sl, "tp1": tp1, "tp2": tp2,
-                           "gross_risk_pct": r["gross_risk_pct"],
-                           "friction_pct": r["friction_pct"],
-                           "sl_floor_active": r["sl_floor_active"],
-                           "exit_reason": reason})
+            rec = {"setup": r["setup"], "score": r["score"], "result": "UNRESOLVED",
+                   "r": 0.0, "t": t, "ambiguous": False,
+                   "entry": entry, "sl": sl, "tp1": tp1, "tp2": tp2,
+                   "gross_risk_pct": r["gross_risk_pct"],
+                   "friction_pct": r["friction_pct"],
+                   "sl_floor_active": r["sl_floor_active"],
+                   "exit_reason": reason}
+            rec.update({k: resolved[k] for k in MFE_ALL_KEYS if k in resolved})
+            trades.append(rec)
             i += lookahead
             continue
         exit_r = resolved["r"]
@@ -1241,17 +1558,22 @@ def run_replay(m1, m15, h1, cfg, fee, assume_ob, lookahead):
         peak = max(peak, cum)
         max_dd = max(max_dd, peak - cum)
         equity.append(round(cum, 4))
-        trades.append({"setup": r["setup"], "score": r["score"],
-                       "result": resolved["result"], "r": exit_r,
-                       "t": t, "ambiguous": resolved["ambiguous"],
-                       "entry": entry, "sl": sl, "tp1": tp1, "tp2": tp2,
-                       "gross_risk_pct": r["gross_risk_pct"],
-                       "friction_pct": r["friction_pct"],
-                       "sl_floor_active": r["sl_floor_active"],
-                       "exit_bar": m1[exit_idx]["t"], "exit_reason": reason})
+        rec = {"setup": r["setup"], "score": r["score"],
+               "result": resolved["result"], "r": exit_r,
+               "t": t, "ambiguous": resolved["ambiguous"],
+               "entry": entry, "sl": sl, "tp1": tp1, "tp2": tp2,
+               "gross_risk_pct": r["gross_risk_pct"],
+               "friction_pct": r["friction_pct"],
+               "sl_floor_active": r["sl_floor_active"],
+               "exit_bar": m1[exit_idx]["t"], "exit_reason": reason}
+        rec.update({k: resolved[k] for k in MFE_ALL_KEYS if k in resolved})
+        trades.append(rec)
         i = exit_idx + 1
-    return {"evals": evals, "bottleneck": bott, "setup_hits": setup_hits,
-            "exit_reasons": exit_reasons,
+    return {"evals": evals, "bottleneck": bott, "gate_blocks": gate_blocks,
+            "btc": {"available": bool(btc5), "bars_m1": len(btc1m or []),
+                    "bars_5m": len(btc5), "checks": btc_checks,
+                    "veto_checks": btc_veto_checks},
+            "setup_hits": setup_hits, "exit_reasons": exit_reasons,
             "trades": trades, "equity_r": equity, "max_dd_r": round(max_dd, 4)}
 
 
@@ -1306,12 +1628,70 @@ def summarize(rep):
         "sl_floor_active_pct": round(100.0 * floor_active / total_signals, 2) if total_signals else 0.0,
         "avg_gross_risk_pct": avg_gross,
         "avg_friction_pct": avg_friction,
+        "entry_mfe": _entry_mfe_summary(rep["trades"]),
         "bottleneck": rep["bottleneck"],
+        "gate_blocks": rep.get("gate_blocks", {}),
+        "btc": rep.get("btc", {}),
         "setup_hits": rep["setup_hits"],
         "exit_reasons_count": rep.get("exit_reasons", {}),
         "by_setup": by_setup,
         "by_exit_reason": by_exit,
     }
+
+
+def _entry_mfe_summary(trades, horizons=MFE_HORIZONS_M1):
+    """
+    Fase A — ringkasan MFE/MAE dari bar masuk sinyal, atas SEMUA sinyal siap
+    (termasuk yang UNRESOLVED). `n_usable` = sinyal dengan jendela penuh h bar,
+    `n_truncated` = data berhenti lebih awal; share dihitung atas sinyal usable.
+    `mfe_exit_resolved` = MFE kotor sampai bar exit untuk trade yang tuntas —
+    pembanding "rekam sempurna" terhadap R yang direalisasi.
+    """
+    if not trades:
+        return {"n_signals": 0, "horizons": {}, "mfe_exit_resolved": {"n": 0}}
+    out = {"n_signals": len(trades), "horizons": {}}
+    for h in horizons:
+        bkey, fkey, akey = f"bars_{h}", f"mfe_{h}", f"mae_{h}"
+        with_key = [t for t in trades if t.get(bkey) is not None]
+        usable = [t for t in with_key if t.get(bkey) == h]
+        truncated = len([t for t in with_key if 0 < t.get(bkey) < h])
+        mfes = [t[fkey] for t in usable]
+        maes = [t[akey] for t in usable]
+
+        def _share(pred):
+            c = sum(1 for t in usable if pred(t))
+            return round(100.0 * c / len(usable), 2) if usable else 0.0
+
+        out["horizons"][str(h)] = {
+            "n_usable": len(usable),
+            "n_truncated": truncated,
+            "median_mfe_pct": round(_pctl(mfes, 0.5), 4),
+            "p25_mfe_pct": round(_pctl(mfes, 0.25), 4),
+            "p75_mfe_pct": round(_pctl(mfes, 0.75), 4),
+            "median_mae_pct": round(_pctl(maes, 0.5), 4),
+            "p25_mae_pct": round(_pctl(maes, 0.25), 4),
+            "share_mfe_ge_cost_pct": _share(
+                lambda t: t[fkey] >= t.get("friction_pct", 0.0)),
+            "share_mfe_ge_2cost_pct": _share(
+                lambda t: t[fkey] >= 2.0 * t.get("friction_pct", 0.0)),
+            "share_mfe_ge_4cost_pct": _share(
+                lambda t: t[fkey] >= 4.0 * t.get("friction_pct", 0.0)),
+            "share_mfe_ge_tp1_pct": _share(
+                lambda t: t.get("entry", 0) > 0 and t.get("tp1", 0) > 0
+                and t[fkey] >= (t["tp1"] - t["entry"]) / t["entry"] * 100.0),
+            "share_sl_hit_pct": _share(
+                lambda t: t.get("gross_risk_pct", 0.0) > 0
+                and t[akey] <= -t["gross_risk_pct"]),
+        }
+    ex = [t["mfe_exit_pct"] for t in trades
+          if t.get("exit_idx") is not None and "mfe_exit_pct" in t]
+    out["mfe_exit_resolved"] = {
+        "n": len(ex),
+        "median_pct": round(_pctl(ex, 0.5), 4) if ex else 0.0,
+        "p25_pct": round(_pctl(ex, 0.25), 4) if ex else 0.0,
+        "p75_pct": round(_pctl(ex, 0.75), 4) if ex else 0.0,
+    }
+    return out
 
 
 def main():
@@ -1327,6 +1707,9 @@ def main():
     ap.add_argument("--max-bars", type=int, default=0, help="batasi jumlah bar M1 (0 = semua)")
     ap.add_argument("--slippage-pct", type=float, default=None,
                     help="Override slippage per sisi (mis. 0.08 base, 0.20/0.50 stress)")
+    ap.add_argument("--btc-csv", default="",
+                    help="CSV M1 BTC untuk veto P0 (bawaan: cari BTCUSDT_1m.csv / "
+                         "BTCIDR_1m.csv di --data; kosong = veto tidak dapat diukur)")
     args = ap.parse_args()
 
     config_path = args.config
@@ -1376,7 +1759,37 @@ def main():
         h1 = aggregate(m1, 60)
         htf_used = "synthesize"
 
-    rep = run_replay(m1, m15, h1, cfg, fee, args.assume_orderbook_ok, lookahead)
+    # P0 — BTC gatekeeper. Untuk pair IDR, BTCIDR lebih relevan; untuk USDT, BTCUSDT.
+    btc_path = args.btc_csv
+    if btc_path and not os.path.exists(btc_path):
+        print(json.dumps({
+            "error": f"CSV BTC tidak ditemukan: {btc_path}",
+            "saran": "hilangkan --btc-csv agar tool mencari BTCUSDT_1m.csv/BTCIDR_1m.csv "
+                     "di --data, atau arahkan ke berkas yang benar",
+        }))
+        return 1
+    if not btc_path:
+        candidates = (["BTCIDR_1m.csv", "BTCUSDT_1m.csv"]
+                      if args.pair.upper().endswith("IDR")
+                      else ["BTCUSDT_1m.csv", "BTCIDR_1m.csv"])
+        for name in candidates:
+            candidate = os.path.join(args.data, name)
+            if os.path.exists(candidate):
+                btc_path = candidate
+                break
+    btc1m = load_csv(btc_path) if btc_path else []
+    btc_source = {
+        "path": btc_path,
+        "available": bool(btc1m),
+        "bars_m1": len(btc1m),
+        "note": ("Veto BTC diukur dari candle yang sudah tutup."
+                 if btc1m else
+                 "BTC tidak tersedia — kolom veto BTC TIDAK mengukur apa pun; "
+                 "sinyal replay tidak memakai veto BTC."),
+    }
+
+    rep = run_replay(m1, m15, h1, cfg, fee, args.assume_orderbook_ok, lookahead,
+                     btc1m=btc1m)
 
     # Fee per sisi efektif (untuk audit FEE_TRUTH §8)
     bf_eff, sf_eff = fee["buy_taker_pct"], fee["sell_taker_pct"]
@@ -1389,6 +1802,7 @@ def main():
         "assume_orderbook_ok": args.assume_orderbook_ok,
         "htf_source": htf_used,
         "bars_m1": len(m1),
+        "bars_m5": len(aggregate(m1, 5)),
         "bars_m15": len(m15),
         "bars_h1": len(h1),
         "range": {"from": m1[0]["t"], "to": m1[-1]["t"]} if m1 else {},
@@ -1405,6 +1819,25 @@ def main():
         "friction_floor_pct_effective": round(friction_floor_pct_eff, 4),
         "fee_cost_pct_effective": round(bf_eff + sf_eff, 4),
         "slippage_cost_pct_effective": round(2.0 * cfg["slippage_pct"], 4),
+        "btc_source": btc_source,
+        "p0": {
+            "ttl_bars_m1": cfg["ttl_bars_m1"],
+            "ttl_note": ("Replay masuk posisi pada bar sinyal, jadi TTL tidak mengubah entry; "
+                         "TTL mengatur berapa lama setup boleh menunggu di app. Angka trade "
+                         "di sini TIDAK membuktikan manfaat TTL."),
+            "mtf_min_bullish": cfg["mtf_min_bullish"],
+            "mtf_block_high_tf_bearish": cfg["mtf_block_high_tf_bearish"],
+            "btc_veto_enabled": cfg["btc_veto_enabled"],
+            "btc_return_veto_pct": cfg["btc_return_veto_pct"],
+            "btc_atr_ratio_veto": cfg["btc_atr_ratio_veto"],
+            "btc_ema_period": cfg["btc_ema_period"],
+            "regime_thresholds": {
+                "adx_trending": cfg["regime_adx_trending"],
+                "adx_weak": cfg["regime_adx_weak"],
+                "chop_ranging": cfg["regime_chop_ranging"],
+                "chop_trend_max": cfg["regime_chop_trend_max"],
+            },
+        },
         "thresholds": {k: v for k, v in cfg.items() if k not in ("fee", "replay")},
         "summary": summarize(rep),
         "trades": rep["trades"],
@@ -1434,6 +1867,15 @@ Deviasi sadar vs aplikasi (didokumentasikan agar hasil bisa dibandingkan):
    choppiness abaikan candle pertama, klausa mati hadBreakContext, avgVol nol
    (VSA dimatikan bila avg<=0 agar tidak Infinity seperti aplikasi).
 5. ConfluenceEvaluator tidak di-port (sidecar display-only, tidak meng-gate BUY).
+6. P0 — M5 diagregasi dari M1 (grid UTC), lalu gate MTF 4 TF memakai H1/M15/M5/M1.
+   H1 atau M15 bearish memblokir LONG; minimal `mtf_min_bullish` bullish; data kurang
+   dari 4 TF = fail-closed. Gate dihitung setelah Step4 agar audit tidak menyalahkan R:R.
+7. P0 — veto BTC memakai candle 5M/1M yang sudah tutup dari `BTCUSDT_1m.csv` (atau
+   `BTCIDR_1m.csv` untuk pair IDR). Tanpa berkas BTC, kolom veto TIDAK mengukur apa pun
+   dan disebut jujur di output (`btc_source.available=false`).
+8. P0 — TTL 5 candle M1 TIDAK diuji oleh replay ini: replay masuk posisi pada bar sinyal,
+   sedangkan TTL mengatur berapa lama setup menunggu sebelum entry di app. Hasil trade di
+   sini tidak boleh dipakai sebagai bukti manfaat TTL.
 
 Konsistensi FEE_TRUTH v1.1 (lihat FEE_TRUTH.md):
 - Fee all-in dan slippage DIPISAH di output (fee_cost_pct vs slippage_cost_pct).

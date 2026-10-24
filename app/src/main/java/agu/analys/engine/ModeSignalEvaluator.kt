@@ -50,6 +50,8 @@ data class ModeSignalInput(
     val d1Candles: List<CandleBar> = emptyList(),
     /** M15 boleh memuat bar berjalan; disintesis dengan tick di dalam. */
     val m15Candles: List<CandleBar> = emptyList(),
+    /** M5 boleh memuat bar berjalan; disintesis dengan tick di dalam (P0: 4 TF). */
+    val m5Candles: List<CandleBar> = emptyList(),
     /** M1 boleh memuat bar berjalan; disintesis dengan tick di dalam. */
     val m1Candles: List<CandleBar> = emptyList(),
     val formingVolume: Double = 0.0,
@@ -103,12 +105,14 @@ object ModeSignalEvaluator {
         )
         val liveM1 = CandleTimeUtil.synthesizeRealtimeCandles(input.m1Candles, tick, Timeframe.M1, nowMs)
         val liveM15 = CandleTimeUtil.synthesizeRealtimeCandles(input.m15Candles, tick, Timeframe.M15, nowMs)
+        val liveM5 = CandleTimeUtil.synthesizeRealtimeCandles(input.m5Candles, tick, Timeframe.M5, nowMs)
 
         val result = ScalpingMtfEvaluator.evaluate(
             globalContext = input.globalContext,
             price = input.price,
             h1Candles = input.h1Candles,
             m15Candles = liveM15,
+            m5Candles = liveM5,
             m1Candles = liveM1,
             formingVolume = input.formingVolume,
             bids = input.bids,

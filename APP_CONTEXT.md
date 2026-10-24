@@ -22,8 +22,9 @@
 `ScalpingConfig` (default) → `ScalpingRuntimeConfig` (slider / import JSON) → engine live & paper → export JSON → `tools/scalp_replay.py`.
 
 Slider mengubah seberapa ketat gate (frekuensi sinyal). Status dari owner (2026-10-21): slider
-entry sudah ada dan terbukti memaksimalkan entry; **exit strategi belum**. Slider bukan jaminan
-profit. Fee tetap Fee Truth.
+entry sudah ada dan terbukti memaksimalkan entry; riset exit-only kemudian diukur negatif dan
+ditutup (2026-10-22, lihat §68–§69 `workplan2.md`). Slider bukan jaminan profit. Fee tetap
+Fee Truth.
 
 ### 0.3 Asal engine scalping
 Port logika kuantitatif dari proyek open KriptoYoi (`dikigambol/kriptoyoi`, `analyzer/p0_engine.py` + specification). Visi upstream: **decision support**, bukan bot peramal harga.

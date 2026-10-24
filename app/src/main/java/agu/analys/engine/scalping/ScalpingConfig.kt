@@ -123,12 +123,42 @@ object ScalpingConfig {
     const val CHOP_RANGING = 61.8
     /** CHOP di atas ini = ranging keras (hindari trend-follow murni). */
     const val CHOP_HARD_RANGING = 65.0
+    /**
+     * P0 — batas CHOP untuk regime trending.
+     *
+     * p0 memakai `adx >= 25 AND chop < 55`. Tanpa batas atas CHOP, ADX tinggi di pasar
+     * yang tetap berputar-putar tetap dilabeli trending. Nilai ini **bukan** pengganti
+     * [CHOP_RANGING]: yang pertama menentukan tren, yang kedua menentukan ranging.
+     */
+    const val CHOP_TREND_MAX = 55.0
     const val ADX_TRENDING = 25.0
     const val ADX_WEAK = 20.0
     const val ATR_PCT_HIGH = 3.5
     const val ATR_PCT_LOW = 0.8
     const val ATR_PCT_SCALP_SWEET_LOW = 0.3
     const val ATR_PCT_SCALP_SWEET_HIGH = 1.5
+
+    // --- P0 KriptoYoi: TTL, MTF, BTC gatekeeper ---
+    /**
+     * P0 — umur sinyal scalping dalam candle M1 (p0: 5 candle = 5 menit).
+     *
+     * Diukur dari jam dinding, bukan jumlah tick: tick bisa datang 5× per menit atau
+     * tertinggal saat app tidur. Setelah batas ini sinyal menjadi `EXPIRED` dan **setup
+     * yang sama tidak boleh langsung di-arm ulang** (lihat `SignalTtl`).
+     */
+    const val TTL_BARS_M1 = 5
+    /** P0 — jumlah TF bullish minimum dari matriks H1/M15/M5/M1. */
+    const val MTF_MIN_BULLISH = 3
+    /** P0 — H1 dan M15 tidak boleh bearish saat mencari LONG. */
+    const val MTF_BLOCK_HIGH_TF_BEARISH = true
+    /** P0 — BTC gatekeeper aktif secara default (dapat dimatikan lewat config). */
+    const val BTC_VETO_ENABLED = true
+    /** P0 — veto bila return BTC 5M terburuk dari dua candle terakhir < nilai ini (%). */
+    const val BTC_RETURN_VETO_PCT = -0.6
+    /** P0 — veto bila ATR ratio BTC > nilai ini dan 2 dari 3 candle terakhir bearish. */
+    const val BTC_ATR_RATIO_VETO = 2.5
+    /** P0 — periode EMA BTC pada candle 5M. */
+    const val BTC_EMA_PERIOD = 20
 
     /**
      * S4 — apakah ATR% berada di band yang ideal untuk scalping.

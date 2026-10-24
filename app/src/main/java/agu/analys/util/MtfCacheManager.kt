@@ -76,7 +76,7 @@ object MtfCacheManager {
         activeTier1Symbol = scopedKey
 
         // Segera beri status SYNCING/READY untuk semua timeframe agar UI tidak error/stale
-        val tfs = listOf(Timeframe.H1, Timeframe.M15, Timeframe.M1, Timeframe.H4)
+        val tfs = listOf(Timeframe.H1, Timeframe.M15, Timeframe.M5, Timeframe.M1, Timeframe.H4)
         tfs.forEach { tf ->
             val cached = getCachedCandles(normalized, tf, ex)
             if (!isCacheValid(tf, cached)) {
@@ -102,7 +102,7 @@ object MtfCacheManager {
         activeExchange = ex
         val scopedKey = buildKey(normalized, ex)
         activeTier1Symbol = scopedKey
-        val tfs = listOf(Timeframe.H1, Timeframe.M15, Timeframe.M1, Timeframe.H4)
+        val tfs = listOf(Timeframe.H1, Timeframe.M15, Timeframe.M5, Timeframe.M1, Timeframe.H4)
         tfs.forEach { updateStatus(normalized, it, MtfStatus.SYNCING, ex) }
         tier1Job?.cancel()
         tier1Job = scope.launch {
@@ -192,7 +192,7 @@ object MtfCacheManager {
         val norm = symbol.trim().uppercase()
         val scopedKey = buildKey(norm, exchange)
         val symbolCache = cache[scopedKey] ?: return true
-        val tfs = listOf(Timeframe.H4, Timeframe.H1, Timeframe.M15, Timeframe.M1)
+        val tfs = listOf(Timeframe.H4, Timeframe.H1, Timeframe.M15, Timeframe.M5, Timeframe.M1)
         for (tf in tfs) {
             if (!isCacheValid(tf, symbolCache[tf])) return true
         }
@@ -201,7 +201,7 @@ object MtfCacheManager {
 
     private suspend fun prefetchSymbol(symbol: String, exchange: String, isTier1: Boolean) {
         val norm = symbol.trim().uppercase()
-        val tfs = listOf(Timeframe.H1, Timeframe.M15, Timeframe.M1, Timeframe.H4)
+        val tfs = listOf(Timeframe.H1, Timeframe.M15, Timeframe.M5, Timeframe.M1, Timeframe.H4)
         for (tf in tfs) {
             if (!scope.isActive) break
             val currentCandles = getCachedCandles(norm, tf, exchange)
@@ -227,6 +227,7 @@ object MtfCacheManager {
             Timeframe.H4 -> 100
             Timeframe.H1 -> 150
             Timeframe.M15 -> 200
+            Timeframe.M5 -> 200
             Timeframe.M1 -> 250
             else -> 100
         }

@@ -35,15 +35,17 @@ data class TrackedSignal(
     var activeSignalState: AISignalState? = null,
     var transition: SignalTransition? = null,
     /** FIX: hysteresis counter — butuh N tick berturut-turut conf rendah sebelum INVALIDATED dari READY */
-    var weakTickCount: Int = 0
+    var weakTickCount: Int = 0,
+    /** P0 — setup yang sudah kedaluwarsa; selama kuncinya sama, siklus tetap EXPIRED. */
+    var expiredSetupKey: String = ""
 )
 
 object SignalLifecycleManager {
     private val activeSignals = ConcurrentHashMap<String, TrackedSignal>()
     private val lock = ReentrantLock()
 
-    // Expire scalping signals older than 10 minutes if not triggered
-    private const val EXPIRY_SCALPING_MS = 10 * 60 * 1000L
+    // TTL scalping berasal dari `ScalpingRuntimeConfig.ttlBarsM1` (p0: 5 candle M1),
+    // bukan konstanta jam dinding di sini. Nilai lama 10 menit tetap tercatat di riwayat.
     // Expire swing / macro signals older than 4 hours (dinaikkan dari 2 jam)
     private const val EXPIRY_MACRO_MS = 4 * 60 * 60 * 1000L
     // TRIGGERED ikut kedaluwarsa agar sinyal baru bisa diproses lagi (sebelumnya macet permanen).
@@ -61,12 +63,23 @@ object SignalLifecycleManager {
         symbol: String,
         currentPrice: Double,
         rawSignal: AISignalState,
-        mode: StrategyMode = StrategyMode.SCALPING
+        mode: StrategyMode = StrategyMode.SCALPING,
+        // Waktu evaluasi (ms). `<= 0` = jam sistem. Wajib bisa diinjeksi agar batas TTL
+        // dapat diuji tanpa menunggu 5 menit sungguhan.
+        nowMs: Long = 0L,
+        config: ScalpingRuntimeConfig = ScalpingRuntimeConfig.current
     ): TrackedSignal = lock.withLock {
-        val now = System.currentTimeMillis()
+        val now = if (nowMs > 0L) nowMs else System.currentTimeMillis()
         val key = cacheKey(symbol, mode)
         var tracked = activeSignals.getOrPut(key) {
             TrackedSignal(symbol = symbol, mode = mode)
+        }
+        val incomingSetupKey = SignalTtl.setupKey(rawSignal)
+
+        // P0 — begitu setup berubah/hilang, kunci anti re-arm dilepas. Setup yang sama
+        // (termasuk kembali pada tick berikutnya) tetap tertahan di EXPIRED.
+        if (tracked.expiredSetupKey.isNotEmpty() && tracked.expiredSetupKey != incomingSetupKey) {
+            tracked.expiredSetupKey = ""
         }
 
         // TRIGGERED yang sudah lama → reset agar siklus sinyal baru bisa berjalan lagi.
@@ -83,13 +96,27 @@ object SignalLifecycleManager {
         val previousState = tracked.state
 
         // 1. Time-based Expiration
-        val expiryMs = if (mode == StrategyMode.SCALPING) EXPIRY_SCALPING_MS else EXPIRY_MACRO_MS
+        // Scalping memakai TTL dari runtime config (p0: 5 candle M1), bukan 10 menit tetap.
+        val expiryMs = if (mode == StrategyMode.SCALPING) {
+            config.ttlBarsM1.coerceAtLeast(1) * SignalTtl.M1_BAR_MS
+        } else {
+            EXPIRY_MACRO_MS
+        }
         if (tracked.state in listOf(LifecycleState.DETECTED, LifecycleState.CONFIRMING, LifecycleState.READY)) {
-            if (tracked.detectedAt > 0L && now - tracked.detectedAt > expiryMs) {
+            if (tracked.detectedAt > 0L && now - tracked.detectedAt >= expiryMs) {
                 tracked.state = LifecycleState.EXPIRED
                 tracked.weakTickCount = 0
+                // P0 — catat identitas episode yang kedaluwarsa. Selama setup + arah sama,
+                // cabang progresi di bawah tidak boleh menaikkannya lagi.
+                if (SignalTtl.hasSetup(rawSignal)) {
+                    tracked.expiredSetupKey = incomingSetupKey
+                }
             }
         }
+        val isTerminalExpiry = mode == StrategyMode.SCALPING &&
+            tracked.state == LifecycleState.EXPIRED &&
+            tracked.expiredSetupKey.isNotEmpty() &&
+            tracked.expiredSetupKey == incomingSetupKey
 
         // 2. Price-based Invalidation (drop below SL before triggered) — hard, instant
         val isPriceBelowStopLoss = (tracked.stopLoss > 0.0 && currentPrice <= tracked.stopLoss) ||
@@ -103,6 +130,10 @@ object SignalLifecycleManager {
 
         // 3. State progression
         if (isPriceBelowStopLoss) {
+            updateSignalData(tracked, rawSignal, now)
+        } else if (isTerminalExpiry) {
+            // P0 — EXPIRED bersifat terminal untuk setup yang sama. Jangan biarkan satu tick
+            // sesudah kedaluwarsa memulai episode baru dengan pola yang identik.
             updateSignalData(tracked, rawSignal, now)
         } else if (mode == StrategyMode.SCALPING) {
             // Mode SCALPING: rule spesifik berbasis scalpingStage
