@@ -364,9 +364,17 @@ fun TradingViewModel.executeAutoSellOrder(
     } else {
         val pair = TradingPair.fromCustomSymbol(raw = symbol, exchange = exchange)
         val simBal = simCoordinator.wallet.value.getAvailableCoin(pair.baseAsset)
-        val finalSellQty = if (!isPartial) (if (simBal > 0.0) simBal else quantity) else quantity.coerceAtMost(simBal)
+        // Jual **hanya** quantity posisi ini, tidak pernah seluruh saldo base. Untuk exit penuh,
+        // `quantity` adalah `heldQty`; memakai `simBal` bisa menjual koin lain di akun simulasi.
+        val finalSellQty = quantity.coerceAtMost(simBal)
         if (finalSellQty <= 0.0) {
-            positionCoordinator.setOwnership(symbol, false, price, isReal = false)
+            // Jangan lepas ownership saat order belum terjadi. Posisi tetap terlihat dan bisa
+            // dicoba lagi pada tick berikutnya; menghapusnya di sini membuat exit hilang diam-diam.
+            agu.analys.util.AppLogManager.trade(
+                "AutoSellExec",
+                "❌ [${marketKey.formattedPair()}] Gagal jual SIMULASI: saldo base tersedia " +
+                    "$simBal, quantity diminta $quantity."
+            )
             return false
         }
         val res = simCoordinator.submitOrder(
@@ -383,13 +391,22 @@ fun TradingViewModel.executeAutoSellOrder(
             is SimulationOrderResult.Success -> res.message
             is SimulationOrderResult.Error -> res.message
         }
-        if (!isPartial) {
-            positionCoordinator.setOwnership(symbol, false, price, isReal = false)
+        if (success) {
+            if (!isPartial) {
+                positionCoordinator.setOwnership(symbol, false, price, isReal = false)
+            } else {
+                positionCoordinator.refreshPosition(symbol)
+            }
         } else {
-            positionCoordinator.refreshPosition(symbol)
-        }
-        if (!success && triggerType.contains("TRAILING")) {
-            positionStore.resetTrailingTrigger(symbol, isReal = false, exchange = exchange)
+            // Kegagalan harus terlihat oleh pemanggil (`finalizePaperExit` tidak boleh menghapus
+            // FSM/jurnal) dan pemicu trailing harus bisa dicoba lagi.
+            if (triggerType.contains("TRAILING")) {
+                positionStore.resetTrailingTrigger(symbol, isReal = false, exchange = exchange)
+            }
+            agu.analys.util.AppLogManager.trade(
+                "AutoSellExec",
+                "❌ [${marketKey.formattedPair()}] Gagal jual SIMULASI ($triggerLabel): $msg"
+            )
         }
         val notifTitle = if (success) {
             if (triggerType.contains("STOP_LOSS")) "🛡️ [$modeTag] Cut Loss Terlaksana • ${marketKey.formattedPair()}"
@@ -409,6 +426,7 @@ fun TradingViewModel.executeAutoSellOrder(
             notificationId = marketKey.toNotificationId(isReal, 2000),
             marketKey = marketKey
         )
+        return success
     }
     return true
 }
