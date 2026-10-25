@@ -6,7 +6,7 @@ Aplikasi Android Kotlin 100% (Jetpack Compose M3) untuk analisis & **scalp mode*
 (2026-10-18) berisi batch 6j–6n: seluruh temuan audit koneksi Tokocrypto/Indodax **K1–K15**
 (daftar pair resmi, WebSocket Indodax hidup, reconnect berjitter, status live per bursa,
 lingkup ticker watchlist, gate watchlist & dashboard). Tag rilis: `v3.9.2`
-dibuat otomatis oleh `.github/workflows/release.yml` saat `main` menerima push.
+dibuat **manual** lewat Actions → `Release APK` (`workflow_dispatch`), tidak otomatis saat push.
 
 ---
 
@@ -14,42 +14,19 @@ dibuat otomatis oleh `.github/workflows/release.yml` saat `main` menerima push.
 
 ### ⚠️ Langkah 0 — pastikan branch yang Anda baca benar
 
-**Kerjaan aktif ada di `patch`.** Snapshot **2026-10-22** (setelah **PR #63**):
-`origin/main` = **`5d8f7bc`** (merge PR #63 dari `patch`), yang sudah memuat `patch` sampai
-**`2dd69ad`**. `origin/patch` = **`2dd69ad`**. Di atasnya, `patch` sekarang memiliki **commit P0
-KriptoYoi** (TTL 5 candle, gate MTF 4 TF, veto BTC, regime OR) — cari dengan `git log -1`.
-Rilis terakhir tetap **3.9.2**; nomor versi belum dinaikkan untuk P0.
+**Branch kerja: `main`.** Semua pekerjaan aktif dikerjakan di `main`. Branch `patch` sekarang hanya histori dan suatu saat akan dihapus owner. Jangan kerja atau commit di `patch`.
 
-**Artefak riset Spec v2 sudah dihapus dan masuk `origin/main` lewat PR #63.** Riset v3 tetap
-dihentikan; arsipnya hanya di branch `backup/patch-v3-2026-10-21` (`796a9d1`, remote).
-
-`main` **lokal** bisa tertinggal jauh dari `origin/main` (per snapshot ini tertinggal 17 commit).
-Jangan membaca `main` lokal untuk melihat pekerjaan terbaru. `patch` dan `origin/main` sekarang
-berbagi konten sampai `2dd69ad`; satu-satunya commit yang ada di `origin/main` tetapi tidak di
-`patch` adalah **merge commit PR #63** itu sendiri.
-
-**Jangan pernah menyimpulkan keadaan repo dari ingatan atau dari `main` lokal. Ukur dulu:**
+Ukur keadaan repo dulu, jangan dari ingatan:
 
 ```sh
 git clone https://github.com/Agus27712/analisa-pasar.git
-cd analisa-pasar && git checkout patch        # WAJIB — kerjaan aktif ada di sini
-git fetch origin
-git log --oneline -3 origin/main              # 5d8f7bc = merge PR #63
-git log --oneline -3 origin/patch             # 2dd69ad = ujung patch sebelum P0
-git rev-list --count origin/main..HEAD        # 1 = commit P0 di atas 2dd69ad
-git rev-list --count HEAD..origin/main        # 1 = merge commit PR #63 (bukan konten hilang)
-git status --short                            # kosong bila P0 sudah di-commit
-git ls-remote --heads origin                  # main, patch, backup/patch-v3-2026-10-21
+cd analisa-pasar && git checkout main && git pull --ff-only origin main
+git status --short                 # harus kosong sebelum mulai
+git log --oneline -3
+git ls-remote --heads origin       # main, patch, backup/patch-v3-2026-10-21
 ```
 
-Angka `rev-list` **tidak tetap** — selalu ukur ulang. Repo ini **public**, clone tidak butuh token.
-
-⚠️ **Pernah terjadi, jangan terulang:** `main` pernah tertinggal **11 commit** dari `patch`.
-Siapa pun yang membaca `main` saat itu melihat fitur horizon **masih ada** padahal sudah
-di-revert di `patch` (`e525c64`), dan P0–P2 (integritas jurnal) serta S1–S9 (strategi
-entry/exit) belum ada di sana — semua kesimpulan yang ditarik dari `main` jadi salah.
-Sekarang arahnya sudah diperbaiki lewat PR #63, tetapi `main` lokal di sandbox masih basi.
-**Ukur ulang, jangan mengandalkan ingatan.**
+Repo ini **public**, clone tidak butuh token. Selalu `git pull --ff-only` sebelum mulai, karena `main` lokal bisa tertinggal dari `origin/main`.
 
 **⛔ SPESIFIKASI BARU V2/V3 DIHENTIKAN (2026-10-21).** Spec v2 dan v3 sudah diukur dan
 keduanya **tidak menghasilkan edge**; owner menghentikan seluruh line riset ini karena hanya
@@ -72,6 +49,17 @@ berlaku. Diagnostik persentil entry (`exp_entry_price_percentile_ADA-DOGE-XRP.md
 entry khas di persentil 93 harga 1 hari terakhir — keluhan "beli di pucuk" benar secara posisi,
 tetapi itu **bukan** izin menambah filter/gate tanpa pengukuran entry tersendiri. Fokus
 berikutnya tetap **pengukuran entry/universe**; keputusan gate menunggu owner.
+
+### Alur kerja dokumen & release (wajib, berlaku mulai 2026-10-25)
+
+- **Acuan arah aplikasi: `workplan2.md`.** Dokumen pendukung: `APP_CONTEXT.md`, `FEE_TRUTH.md`, `SCALP_EXIT.md`. Catatan perbaikan eksperimen ada di folder masing-masing (`docs/exp/`, `docs/bugs/`).
+- **Bug terbuka** ada di `docs/bugs/`. Saat selesai, pindahkan berkasnya ke `docs/` sebagai laporan (`git mv` ke `docs/laporan_temuan_bugs_<topik>.md`), mengikuti format bugs document: tabel status dan § Riwayat.
+- **Eksperimen** ada di `docs/exp/` (`exp_<testname>_<pair>.md`). Tulis status di header berkas: `RUNNING`, `BERHASIL`, atau `GAGAL`.
+  - `BERHASIL`: port ke engine, lalu buat laporan di `docs/` mengikuti format experiment document. Laporan menunjuk ke berkas `docs/exp/` asalnya.
+  - `GAGAL`: tetap di `docs/exp/` dengan alasan dan angka negatifnya. **Jangan di-port.**
+- **Arti `BERHASIL`:** lolos kontrol negatif, terbukti di data di luar sampel (walk-forward), dan memakai fee all-in. Satu window data tidak cukup.
+- **Release manual.** Rilis dijalankan lewat Actions → `Release APK`. Push ke `main` tidak memicu rilis. Naikkan versi di `app/build.gradle.kts` hanya saat owner minta rilis.
+- **Push langsung ke `main` diizinkan** atas instruksi owner (2026-10-25).
 
 **Urutan baca 5 menit yang benar:**
 
@@ -133,8 +121,7 @@ berikutnya tetap **pengukuran entry/universe**; keputusan gate menunggu owner.
   untuk reasoning/internal, tidak pernah untuk jawaban yang terlihat.** Owner pernah menerima
   jawaban Mandarin dan tidak bisa membacanya. Semua dokumen, komentar kode, dan pesan commit
   juga Bahasa Indonesia (kecuali istilah teknis).
-- **Branch kerja sekarang `patch`, bukan `main`.** Owner me-review di `patch` dulu. Jangan push ke
-  `main` tanpa instruksi eksplisit.
+- **Branch kerja: `main`.** `patch` hanya histori dan akan dihapus owner. Push ke `main` diizinkan atas instruksi owner; rilis manual.
 - **Setiap perubahan wajib memperbarui markdown terkait** (`workplan2.md` + `AGENTS.md` +
   `docs/LAPORAN-*.md`). Pekerjaan tanpa jejak dokumen dianggap belum selesai.
 - **Setiap klaim angka harus diukur, bukan diingat.** Hitung test dari
@@ -317,7 +304,7 @@ Berisi **hasil eksperimen terukur** — satu berkas per eksperimen, bernama
 |---|---|---|
 | `docs/bugs/` | temuan audit yang **masih hidup** | kosong sejak 2026-10-18 |
 | `docs/laporan_temuan_bugs_*.md` | laporan audit **yang sudah tutup** | satu per topik |
-| `docs/LAPORAN-*.md` | jejak eksekusi batch (arsip) | jangan ditambah |
+| `docs/LAPORAN-*.md` | jejak eksekusi batch (arsip) | jangan ditambah, kecuali laporan port eksperimen BERHASIL |
 | **`docs/exp/`** | **hasil eksperimen** — angka yang sudah diukur | tambah bebas, satu per eksperimen |
 
 **Aturan isi — ini yang membedakan `docs/exp/` dari dokumen lain:**
@@ -1080,7 +1067,7 @@ dan ditutup lagi (2026-10-24, 0/90 sel); berikutnya pengukuran entry/universe.
   `>= 2.0` (badge PROFIT) ≈2,84% (dulu ≈2,34%), `>= 5.0` ≈5,86% (dulu ≈5,35%). Bila mengubah tarif
   atau slippage, **hitung ulang ambang ini** dan perbarui `SellSignalEvaluatorTest`.
 - Exit scalp paper: lihat `SCALP_EXIT.md`; real auto-execute dari sinyal scalp **bukan** prioritas sampai gate edge terpenuhi.
-- Commit non-rilis (docs/fee/config): sertakan **`[skip ci]`** jika owner meminta agar rilis tidak terpicu.
+- Commit docs/config tidak wajib `[skip ci]` lagi, karena rilis dan unit test sudah manual.
 
 ## P0 KriptoYoi — TTL, MTF, BTC, regime (2026-10-22, WAJIB)
 
@@ -1214,26 +1201,15 @@ sebelumnya.
 
 ## Git
 
-- **Branch kerja sekarang: `patch`** (bukan `main`). Owner me-review di `patch` lebih dulu; `main`
-  hanya menerima merge setelah review. Jangan push langsung ke `main` tanpa instruksi eksplisit.
-- ⚠️ **Merge ke `main` wajib di-pull dulu.** `origin/main` hampir selalu **lebih baru** dari `main`
-  lokal (PR di-merge via GitHub, bukan via merge lokal). Kalau langsung `git merge patch` di `main`
-  lokal yang tertinggal, hasilnya **merge yang tidak menyertakan PR terakhir** — `main` Remote
-  akan tertinggal satu round dan diff isinya tidak akan pernah sama dengan `patch`. Pola aman:
-  ```sh
-  git checkout main && git pull --ff-only origin main && git merge --no-ff patch
-  ```
-  Lalu **verifikasi**: `git merge-base --is-ancestor <commit-terakhir-origin/main> HEAD` → `ADA`,
-  dan `git diff --stat HEAD patch` → **kosong**.
-- **Naikkan versi hanya di `patch`**, lalu merge ke `main` — jangan naikkan versi dua kali
-  (merge akan membawa inlandingan). `versionName`/`versionCode` di `app/build.gradle.kts`;
-  `release.yml` membacanya dan membuat tag `v<versionName>` otomatis saat `main` menerima push.
+- **Branch kerja: `main`** (`patch` hanya histori, akan dihapus owner). Push langsung ke `main` diizinkan atas instruksi owner.
+- Tidak ada lagi merge `patch` → `main`. Selalu `git pull --ff-only origin main` sebelum commit, karena `origin/main` bisa lebih baru dari `main` lokal.
+- **Naikkan versi di `main`** saat owner minta rilis. `versionName`/`versionCode` ada di `app/build.gradle.kts`; `release.yml` membaca versi itu dan membuat tag `v<versionName>` saat dijalankan manual.
 - Branch lama di remote (`audit/menyeluruh-2026-10`, `engine_scalping_update`, tag versi)
   **sudah tidak ada** — per 2026-10-15 `git ls-remote --heads origin` hanya mengembalikan
   `main` dan `patch`. Jangan mencari branch itu lagi.
 - Jangan commit artefak data candle besar tanpa diminta.
 - Jangan commit `.env`, `*.keystore`, `*.jks`, atau token.
-- Pesan commit jelas; `[skip ci]` untuk docs/config-only sesuai kebijakan owner.
+- Pesan commit jelas, dalam Bahasa Indonesia.
 - Clone di sandbox ini kadang dibatasi `remote.origin.fetch=+refs/heads/main:...`. Bila
   `git branch -r` terlihat hanya berisi `main`, **perbaiki refspec dulu** sebelum menyimpulkan
   bahwa branch lain tidak ada.
