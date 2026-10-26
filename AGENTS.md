@@ -1247,7 +1247,9 @@ Aturan yang mengikat agen:
    menghitung ulang jeda inline di call site baru — resolvernya diacu, bukan disalin.
 2. **Angka jeda disimpan di config, bukan literal runtime:** `PaperAutoTradeConfig.
    reentryCooldownMinutes` (default **15**, `0` = nonaktif) + kunci prefs
-   `paper_auto_reentry_cooldown_min_v1`. Mengubah bawaan = pilih satu tempat + uji.
+   `paper_auto_reentry_cooldown_min_v1`. UI: stepper **1–30 menit** di kartu
+   "Paper Trade Otomatis" (`PaperAutoTradeSettings`, seksi JEDA ENTRI-ULANG, 2026-10-26).
+   Mengubah bawaan = pilih satu tempat + uji.
 3. **Catatan sell wajib pada satu titik: `SpotPositionStore.markSold` (isReal=false)** —
    key per bursa `…_sim_…_last_sold_at`, persisten, dibaca `lastPaperSoldAt`. Selama jeda,
    auto-buy ditunda dengan log `⏳ … jeda entri-ulang …`, tetapi beli manual dan semua

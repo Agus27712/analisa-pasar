@@ -4512,3 +4512,23 @@ diatur slider).
 **Verifikasi:** `:app:compileDebugKotlin` sukses. Tidak ada perubahan angka, gate, atau
 engine — murni teks penjelasan UI. Label `contentDescription` tombol +/− mengikuti label
 param.
+
+---
+
+## 75. Jeda entri-ulang jadi setting di kartu Paper Trade Otomatis (2026-10-26)
+
+**Permintaan owner:** jeda entri-ulang (fix §73) sebaiknya diatur dari slider — range
+**1–30 menit**, bukan angka tetap.
+
+**Perubahan** (`ui/components/settings/PaperAutoTradeSettings.kt`): seksi baru
+"JEDA ENTRI-ULANG" di dalam blok `autoBuyEnabled` — stepper menit 1–30 (`StepperRow`
+yang sudah ada) + teks penjelasan: fungsinya mencegah beli-ulang seketika setelah sell
+saat harga masuk naik kuat (contoh terukur: entri ulang 60 detik setelah sell pada
+WINUSDT 25/10/2026); beli manual tidak dijeda; auto-exit tidak terpengaruh.
+
+Jeda menulis ke `config.reentryCooldownMinutes` lewat draft Pengaturan (pola yang sama
+dengan sakelar auto-buy; tersimpan di `paper_auto_reentry_cooldown_min_v1`). Default
+tetap 15 menit; field config tetap menerima 0 = nonaktif, tetapi UI menjepit 1–30.
+
+**Verifikasi:** `:app:compileDebugKotlin` sukses; tidak ada perubahan engine/gate/angka
+selain sumber nilai jeda yang kini bisa diatur dari UI.

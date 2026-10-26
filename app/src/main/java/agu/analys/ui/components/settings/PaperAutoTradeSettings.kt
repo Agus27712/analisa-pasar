@@ -302,6 +302,48 @@ fun PaperAutoTradeSettings(
                     fontSize = 10.sp,
                     lineHeight = 14.sp
                 )
+
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    "JEDA ENTRI-ULANG",
+                    color = TvTextSecondary,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(Modifier.height(6.dp))
+                StepperRow(
+                    label = "Setelah sell, tunggu sebelum beli ulang",
+                    valueText = "${config.reentryCooldownMinutes} menit",
+                    onMinus = {
+                        onChange(
+                            config.copy(
+                                reentryCooldownMinutes =
+                                    (config.reentryCooldownMinutes - 1).coerceIn(1, 30)
+                            )
+                        )
+                    },
+                    onPlus = {
+                        onChange(
+                            config.copy(
+                                reentryCooldownMinutes =
+                                    (config.reentryCooldownMinutes + 1).coerceIn(1, 30)
+                            )
+                        )
+                    }
+                )
+
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Begitu posisi paper dijual, auto-buy menunggu jeda ini sebelum boleh membuka " +
+                        "posisi ulang pada pair yang sama (1–30 menit). Fungsinya mencegah " +
+                        "beli-ulang seketika setelah sell saat harga masih naik kuat — biaya buy & sell " +
+                        "dibayar beruntun tanpa evaluasi baru (terukur: entri ulang hanya 60 detik " +
+                        "setelah sell pada WINUSDT 25/10/2026). Beli manual tidak dijeda; " +
+                        "auto-exit tidak terpengaruh.",
+                    color = TvTextSecondary,
+                    fontSize = 10.sp,
+                    lineHeight = 14.sp
+                )
             }
         }
     }
