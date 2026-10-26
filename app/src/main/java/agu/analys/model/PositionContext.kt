@@ -1,5 +1,6 @@
 package agu.analys.model
 
+import agu.analys.config.StrategyMode
 import agu.analys.config.TradingFeeConfig
 import agu.analys.trading.SpotPosition
 import agu.analys.util.PriceFormatter
@@ -249,6 +250,34 @@ fun resolveDetailScalpPanel(isScalping: Boolean, isHolding: Boolean): DetailScal
     !isScalping -> DetailScalpPanel.NONE
     isHolding -> DetailScalpPanel.EXIT_FSM
     else -> DetailScalpPanel.SCALPING_DESK
+}
+
+/**
+ * Resolver timeframe chart default per mode strategi — satu-satunya tempat aturan ini
+ * ditegakkan. Jangan hardcode pemetaan ini di call site UI atau ViewModel lain.
+ *
+ * Latar (2026-10-26): `MarketViewModel` membawa bawaan global `Timeframe.H4` dan
+ * `setStrategyMode` tidak pernah menyentuhnya, jadi pindah swing → scalping
+ * membiarkan chart tetap di H4 — timeframe yang jauh di luar horizon scalping
+ * (time-stop exit 90 menit, MFE diukur 7 jam). Pemetaannya mengikuti peran
+ * timeframe yang sudah dideklarasikan tiap mode:
+ *
+ * - **SCALPING → M15**: kartu settings mendeklarasikan "Bias: 1H · Setup: 15M ·
+ *   Trigger: 1M"; M15 adalah level setup yang masih terbaca manusia. User bebas
+ *   mengganti chip setelahnya — resolver ini hanya menentukan default saat
+ *   perpindahan mode.
+ * - **INTRADAY (OFFICE_DAILY) → H1**: deskripsi mode "Open Pagi · Close Malam",
+ *   horizon sehari tapi bukan skala menit.
+ * - **SWING → D1**: deskripsi mode "Jangka menengah (1H–1D)".
+ *
+ * `when` sengaja TANPA cabang `else`: mode baru yang ditambahkan ke
+ * [StrategyMode] akan membuat kompilasi gagal sampai pemetaannya diputuskan
+ * secara sadar (fail-closed, pola sama dengan resolver lain di berkas ini).
+ */
+fun resolveDefaultTimeframe(mode: StrategyMode): Timeframe = when (mode) {
+    StrategyMode.SCALPING -> Timeframe.M15
+    StrategyMode.OFFICE_DAILY -> Timeframe.H1
+    StrategyMode.SWING -> Timeframe.D1
 }
 
 /**

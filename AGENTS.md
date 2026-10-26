@@ -1144,6 +1144,14 @@ Rincian angka: `docs/exp/exp_p0_gatekeeper_ADA-DOGE-XRP.md`; ringkasan keputusan
 
 ## UI & Compose
 
+- **Default timeframe chart mengikuti mode strategi (2026-10-26, WAJIB).** Keputusan
+  timeframe chart default hanya lewat resolver murni `resolveDefaultTimeframe(mode)`
+  (`model/PositionContext.kt`): SCALPING → M15, INTRADAY → H1, SWING → D1 — jangan
+  hardcode pemetaannya di UI/ViewModel lain. Dipasang di dua titik: `setStrategyMode`
+  (hanya saat mode benar-benar berganti) dan startup (`initSubscriptionsAndPolling`,
+  dari `prefs.strategyMode`). Bawaan `Timeframe.H4` di `MarketViewModel` bukan default
+  mode mana pun. Chip tetap bebas dipilih manual; pilihan user tidak persisten antar
+  perpindahan mode. Penjaga: `DefaultTimeframeResolverTest`.
 - Material 3; jangan pecah state chart tanpa alasan (lihat pola `DetailUiState` bila ada di branch).
 - Throttle UI ticker/depth bila diminta di catatan performa Tokocrypto (hindari spam recomposition).
 - **Mode halaman detail koin OTORITATIF dari status kepemilikan (2026-10-15, WAJIB).** Tidak ada

@@ -502,6 +502,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun setStrategyMode(mode: StrategyMode) {
+        val previousMode = _strategyMode.value
         _strategyMode.value = mode
         prefs.strategyMode = mode
         val scalpingEnabled = mode == StrategyMode.SCALPING
@@ -511,7 +512,20 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         engine.isScalpingMode = scalpingEnabled
         engine.tradingFees = prefs.tradingFees
         agu.analys.util.AppLogManager.service("StrategyConfig", "⚙️ Mode strategi sistem dialihkan ke ${mode.name} (Scalping=$scalpingEnabled)")
-        
+
+        // Default timeframe chart ikut mode (2026-10-26): hanya saat mode benar-benar
+        // berganti, supaya simpan ulang pengaturan tidak memaksa chart lompat ke default.
+        // Keputusan timeframe lewat resolver murni `resolveDefaultTimeframe` — jangan
+        // hardcode pemetaan di sini. Polling di akhir fungsi otomatis memakai TF baru.
+        if (mode != previousMode) {
+            val defaultTf = resolveDefaultTimeframe(mode)
+            if (marketViewModel.selectedTimeframe.value != defaultTf) {
+                marketViewModel.selectTimeframe(defaultTf)
+                val loaded = marketDataCoordinator.loadPairCache(selectedPair.value.symbol, defaultTf)
+                if (!loaded) marketDataCoordinator.clearPairData(selectedPair.value.symbol)
+            }
+        }
+
         if (mode == StrategyMode.SCALPING) {
             MtfCacheManager.setActiveSymbol(selectedPair.value.symbol, prefs.marketDataSource.name)
         }

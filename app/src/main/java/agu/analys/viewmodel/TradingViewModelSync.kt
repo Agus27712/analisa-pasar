@@ -7,6 +7,7 @@ import agu.analys.config.MarketDataSource
 import agu.analys.engine.scalping.PaperAtr
 import agu.analys.model.SignalAction
 import agu.analys.model.TradingPair
+import agu.analys.model.resolveDefaultTimeframe
 import agu.analys.service.IndodaxMarketService
 import agu.analys.service.TokocryptoMarketService
 import agu.analys.trading.PaperArmSignal
@@ -693,6 +694,10 @@ fun TradingViewModel.initSubscriptionsAndPolling() {
 
     marketDataCoordinator.restoreFromCache(prefs.marketDataSource)
     val initialPair = TradingPair.popularPairsForSource(prefs.marketDataSource).first()
+    // Default timeframe chart mengikuti mode tersimpan (2026-10-26) — resolver murni di
+    // model/PositionContext.kt, bukan bawaan H4 global MarketViewModel. Diletakkan sebelum
+    // selectPair supaya cache + polling awal langsung memakai TF yang benar.
+    marketViewModel.selectTimeframe(resolveDefaultTimeframe(prefs.strategyMode))
     selectPair(initialPair)
     refreshWorthCoinsFromMarket()
     startDashboardPolling()

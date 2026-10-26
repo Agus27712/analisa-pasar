@@ -4532,3 +4532,51 @@ tetap 15 menit; field config tetap menerima 0 = nonaktif, tetapi UI menjepit 1�
 
 **Verifikasi:** `:app:compileDebugKotlin` sukses; tidak ada perubahan engine/gate/angka
 selain sumber nilai jeda yang kini bisa diatur dari UI.
+
+---
+
+## 76. Default timeframe chart mengikuti mode strategi (2026-10-26)
+
+**Keluhan owner:** pindah dari mode swing ke scalping, chart tetap terpilih **4H**
+("kenapa scalping default-nya 1m/15m?").
+
+**Akar:** `MarketViewModel` membawa bawaan global `Timeframe.H4`
+(`MarketViewModel.kt:41`) dan `TradingViewModel.setStrategyMode` tidak pernah
+menyentuh `selectedTimeframe`. Jadi default 4H itu **bukan desain per-mode** —
+hanya bawaan chart global yang tidak pernah dihubungkan ke mode. Timeframe engine
+scalping sendiri sudah benar (H1 bias / M15 setup / M5+M1 trigger, gate P0 MTF
+4 TF); yang salah hanya chart.
+
+**Keputusan (owner 2026-10-26, lewat pertanyaan pilihan):**
+
+1. **Peta per-mode:** SCALPING → **M15**, INTRADAY (OFFICE_DAILY) → **H1**,
+   SWING → **D1**. Pemetaan mengikuti peran timeframe yang sudah dideklarasikan
+   tiap mode (kartu settings: "Bias: 1H · Setup: 15M · Trigger: 1M"; deskripsi
+   swing "1H–1D"; intraday "Open Pagi · Close Malam").
+2. **Chip tetap bebas dipilih manual** kapan saja — resolver hanya menentukan
+   default saat perpindahan mode, tidak mengunci pilihan user.
+3. **Tidak persisten per-mode:** selalu ikut mode; pilihan manual user tidak
+   diingat antar perpindahan mode.
+
+**Implementasi:**
+
+- Resolver murni **`resolveDefaultTimeframe(mode)`** di
+  `model/PositionContext.kt` — satu-satunya tempat pemetaan ini ada; `when`
+  tanpa `else` sehingga mode baru membuat kompilasi gagal sampai pemetaannya
+  diputuskan sadar (fail-closed, pola resolver lain di berkas itu).
+- `TradingViewModel.setStrategyMode`: saat mode **benar-benar berganti** (guard
+  `mode != previousMode` — simpan ulang pengaturan tidak memaksa chart lompat),
+  TF chart di-set ke hasil resolver, cache pair TF baru dimuat (`loadPairCache`;
+  kosong → `clearPairData`, semantik sama dengan `selectPair`), dan polling di
+  akhir fungsi otomatis memakai TF baru tanpa start dobel.
+- **Startup ikut mode:** `initSubscriptionsAndPolling` kini menyetel TF dari
+  `prefs.strategyMode` sebelum `selectPair(initialPair)` — app yang dibuka dengan
+  mode scalping tersimpan langsung menampilkan chart M15, bukan H4.
+
+**Verifikasi (terukur):** `DefaultTimeframeResolverTest` **4 test, 0 failures**
+(dari XML, bukan ingatan). **Kontrol negatif:** resolver dirusak
+(M15 → H4) → test **GAGAL 2 failures**; dipulihkan → hijau lagi. Uji ini bukan
+hiasan: ia membuktikan resolver terpakai.
+
+**Yang tidak berubah:** engine, gate, angka P0, frekuensi polling, dan perilaku
+`selectTimeframe` manual (tetap reload cache + polling seperti sebelumnya).
