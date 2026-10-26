@@ -4477,3 +4477,38 @@ app yang sudah berjeda.
   pencatatan `…_last_sold_at` dilepas → test store GAGAL. Keduanya dipulihkan sebelum commit.
 
 Laporan: `docs/laporan_temuan_bugs_paper_reentry_jeda.md`.
+
+---
+
+## 74. Dokumentasi slider exit dalam bahasa awam (2026-10-26)
+
+**Permintaan owner:** kartu setting exit belum menjelaskan artinya — mis. "Profit net
+minimum early exit (0,20%)", "Trigger breakeven", "Trigger BE (x ATR)" tidak jelas bagi
+trader awam. Gate entry, lantai friksi, dan exit sendiri tidak diubah (semuanya tetap
+diatur slider).
+
+**Perubahan** (`ui/components/settings/ScalpingSensitivitySettings.kt`):
+
+- `ExitParamRow` kini punya parameter `hint` — teks penjelasan ditampilkan di bawah baris
+  nilai (9 sp), otomatis redup saat parameter tidak aktif untuk mode terpilih.
+- Tujuh baris parameter exit diberi penjelasan, semuanya diverifikasi dulu ke engine
+  (`ScalpExitConfig.kt`):
+  - **Profit net minimum early exit** — laba bersih minimal (sudah memotong fee dua sisi +
+    slippage) pemicu EARLY_PROFIT; 0,20% = hasil akhir sekitar +0,20% dari modal.
+  - **Trigger breakeven (net)** — setelah laba bersih menembus angka ini, SL dinaikkan ke
+    `breakevenPrice` (harga jual yang menghasilkan sekitar 0 setelah semua biaya).
+  - **Jarak trailing dari peak** — SL mengikuti puncak; jual bila harga turun sejauh ini
+    dari puncak; trailing baru berjalan setelah trigger BE.
+  - **Lantai profit (x friksi)** — keluasan bruto minimal = angka x friksi round-trip
+    (contoh Tokocrypto USDT tarif bawaan sekitar 0,97%); di bawah itu jual profit ditahan;
+    0 = tanpa lantai.
+  - **Trigger BE (x ATR)** — BE efektif = nilai terbesar antara persen trigger dan
+    ATR x nilai.
+  - **Trailing (x ATR)** — jarak trailing = ATR x nilai bila ATR tersedia, kalau tidak
+    jatuh ke persen.
+  - **Time-stop (bar M1)** — 1 bar = 1 menit; posisi ditutup apa pun hasilnya setelah N
+    bar; 0 menonaktifkan.
+
+**Verifikasi:** `:app:compileDebugKotlin` sukses. Tidak ada perubahan angka, gate, atau
+engine — murni teks penjelasan UI. Label `contentDescription` tombol +/− mengikuti label
+param.

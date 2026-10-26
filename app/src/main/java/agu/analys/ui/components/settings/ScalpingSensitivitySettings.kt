@@ -1005,6 +1005,10 @@ private fun ExitModeSection(
                     range = 0.10..2.00,
                     suffix = "%",
                     enabled = params.mode.usesEarlyProfit,
+                    hint = "Angka ini adalah laba bersih minimal yang memicu jual awal (EARLY_PROFIT). " +
+                        "\"Net\" = sudah dipotong seluruh biaya: fee beli & jual plus slippage dua sisi. " +
+                        "Jadi 0,20% berarti hasil akhirnya ± +0,20% dari modal. " +
+                        "\"Awal\" = dijual segera setelah itu, tanpa menunggu SL, target, atau time-stop.",
                     onValueChange = { onChange(params.copy(minEarlyProfitNetPct = it)) }
                 )
             }
@@ -1016,6 +1020,9 @@ private fun ExitModeSection(
                     range = 0.10..2.00,
                     suffix = "%",
                     enabled = true,
+                    hint = "Setelah laba bersih menembus angka ini, stop loss dinaikkan ke HARGA IMPAS " +
+                        "— harga jual yang menghasilkan ±0 setelah semua biaya. Mulai detik itu, " +
+                        "posisi tidak bisa lagi kembali rugi penuh dari harga belinya.",
                     onValueChange = { onChange(params.copy(breakevenTriggerNetPct = it)) }
                 )
             }
@@ -1027,6 +1034,10 @@ private fun ExitModeSection(
                     range = 0.10..2.00,
                     suffix = "%",
                     enabled = true,
+                    hint = "Setelah trailing aktif, stop loss mengikuti puncak harga (peak) posisi. " +
+                        "Posisi dijual bila harga turun sejauh angka ini dari puncaknya — " +
+                        "keuntungan kenaikan yang sudah terjadi ikut terkunci. " +
+                        "Trailing sendiri baru berjalan setelah laba bersih menyentuh trigger breakeven.",
                     onValueChange = { onChange(params.copy(trailPct = it)) }
                 )
             }
@@ -1039,6 +1050,11 @@ private fun ExitModeSection(
                 range = 0.0..5.0,
                 suffix = "x",
                 enabled = params.mode != agu.analys.engine.scalping.ScalpExitMode.CLASSIC,
+                hint = "Filter keluasan untuk jual-profit. Friksi per paket: fee beli + fee jual + " +
+                    "slippage 2 sisi (contoh Tokocrypto USDT tarif bawaan ≈ 0,97%). " +
+                    "Dengan 2×, keluasan bruto posisi harus ≥ 2 × friksi (≈ 1,94%) baru dianggap layak " +
+                    "untuk memicu jual profit; di bawah itu posisi tetap ditunggu untuk exit " +
+                    "breakeven/trailing/time-stop. 0 = tanpa lantai.",
                 onValueChange = { onChange(params.copy(minProfitFrictionMultiple = it)) }
             )
             // S8 — trigger BE proporsional ATR (menang atas nilai persen bila ATR tersedia).
@@ -1050,6 +1066,12 @@ private fun ExitModeSection(
                     range = 0.0..2.0,
                     suffix = "x ATR",
                     enabled = true,
+                    hint = "Alternatif trigger breakeven dalam satuan ATR (Average True Range — " +
+                        "ukuran rata-rata naik-turun harga per candle). Engine memakai yang LEBIH BESAR " +
+                        "antara persen trigger di atas dan (ATR × angka ini). " +
+                        "Contoh: ATR 3% × 0,5 = 1,5% → trigger BE jadi 1,5%. " +
+                        "Koin yang bergerak deras otomatis menuntut kenaiakan lebih jauh sebelum BE berjalan, " +
+                        "sehingga SL impas tidak cepat tergeser ke atas tanda-tanda normal pasar.",
                     onValueChange = { onChange(params.copy(beTriggerAtrFraction = it)) }
                 )
             }
@@ -1062,6 +1084,10 @@ private fun ExitModeSection(
                     range = 0.0..2.0,
                     suffix = "x ATR",
                     enabled = true,
+                    hint = "Sama seperti jarak trailing di atas, tetapi dalam ATR: jarak efektif = " +
+                        "ATR × angka ini. Dipakai bila ATR tersedia; kalau tidak, kembali ke persen di atas. " +
+                        "Contoh: ATR 2% × 0,6 = 1,2% — SL berjalan 1,2% di bawah puncak harga. " +
+                        "Koin deras = trailing lebih lebar, koin tenang = lebih rapat.",
                     onValueChange = { onChange(params.copy(trailAtrFraction = it)) }
                 )
             }
@@ -1072,6 +1098,10 @@ private fun ExitModeSection(
                 range = 0.0..240.0,
                 suffix = " bar",
                 enabled = true,
+                hint = "Usia maksimal posisi, dihitung dalam candle 1 menit. Bila selama itu tidak " +
+                    "menyentuh SL/target/exit lain, posisi dijual apapun hasilnya (label TIME_STOP). " +
+                    "1 bar = 1 menit, jadi 90 bar = 1,5 jam. 0 menonaktifkannya — posisi bisa " +
+                    "menggantung tanpa exit.",
                 onValueChange = { onChange(params.copy(maxHoldBarsM1 = it.roundToInt())) }
             )
         }
@@ -1086,66 +1116,78 @@ private fun ExitParamRow(
     range: ClosedFloatingPointRange<Double>,
     suffix: String,
     enabled: Boolean,
-    onValueChange: (Double) -> Unit
+    onValueChange: (Double) -> Unit,
+    hint: String? = null
 ) {
     val alpha = if (enabled) 1f else 0.4f
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 3.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            label,
-            color = TvTextSecondary.copy(alpha = alpha),
-            fontSize = 10.sp,
-            modifier = Modifier.weight(1f)
-        )
-        Surface(
-            shape = CircleShape,
-            color = TvSurface,
-            modifier = Modifier
-                .size(28.dp)
-                .clickable(enabled = enabled) {
-                    onValueChange((value - step).coerceIn(range.start, range.endInclusive))
-                }
+    // Penjelasan dalam bahasa awam tergantung tersedia/hidupnya parameter (2026-10-26).
+    // Trader pemula tidak bisa menebak arti "net", "breakeven", atau "x ATR" tanpa itu.
+    Column(modifier = Modifier.padding(vertical = 3.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    Icons.Default.Remove,
-                    contentDescription = "Kurangi $label",
-                    tint = TvTextPrimary.copy(alpha = alpha),
-                    modifier = Modifier.size(14.dp)
-                )
+            Text(
+                label,
+                color = TvTextSecondary.copy(alpha = alpha),
+                fontSize = 10.sp,
+                modifier = Modifier.weight(1f)
+            )
+            Surface(
+                shape = CircleShape,
+                color = TvSurface,
+                modifier = Modifier
+                    .size(28.dp)
+                    .clickable(enabled = enabled) {
+                        onValueChange((value - step).coerceIn(range.start, range.endInclusive))
+                    }
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        Icons.Default.Remove,
+                        contentDescription = "Kurangi $label",
+                        tint = TvTextPrimary.copy(alpha = alpha),
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
+            }
+            Text(
+                if (step >= 1.0) "${value.roundToInt()}$suffix"
+                else String.format(Locale.US, "%.2f", value) + suffix,
+                color = TvTextPrimary.copy(alpha = alpha),
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .padding(horizontal = 8.dp)
+                    .widthIn(min = 52.dp)
+            )
+            Surface(
+                shape = CircleShape,
+                color = TvSurface,
+                modifier = Modifier
+                    .size(28.dp)
+                    .clickable(enabled = enabled) {
+                        onValueChange((value + step).coerceIn(range.start, range.endInclusive))
+                    }
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        Icons.Default.Add,
+                        contentDescription = "Tambah $label",
+                        tint = TvTextPrimary.copy(alpha = alpha),
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
             }
         }
-        Text(
-            if (step >= 1.0) "${value.roundToInt()}$suffix"
-            else String.format(Locale.US, "%.2f", value) + suffix,
-            color = TvTextPrimary.copy(alpha = alpha),
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier
-                .padding(horizontal = 8.dp)
-                .widthIn(min = 52.dp)
-        )
-        Surface(
-            shape = CircleShape,
-            color = TvSurface,
-            modifier = Modifier
-                .size(28.dp)
-                .clickable(enabled = enabled) {
-                    onValueChange((value + step).coerceIn(range.start, range.endInclusive))
-                }
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    Icons.Default.Add,
-                    contentDescription = "Tambah $label",
-                    tint = TvTextPrimary.copy(alpha = alpha),
-                    modifier = Modifier.size(14.dp)
-                )
-            }
+        if (hint != null) {
+            Text(
+                hint,
+                color = TvTextSecondary.copy(alpha = alpha),
+                fontSize = 9.sp,
+                lineHeight = 11.sp,
+                modifier = Modifier.padding(top = 2.dp)
+            )
         }
     }
 }
