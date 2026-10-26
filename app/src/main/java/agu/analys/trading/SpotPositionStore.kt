@@ -452,8 +452,20 @@ class SpotPositionStore(context: Context) {
                 .remove("${norm}_paper_fsm")
         }
 
+        // 2026-10-26 — catat waktu sell terakhir posisi paper supaya auto-buy tidak membuka
+        // posisi ulang pair yang sama tanpa jeda (lihat PaperReentryCooldown). Hanya untuk
+        // posisi simulasi; posisi uang riil tidak dicatat dan tidak dibatasi jeda.
+        if (!isReal) editor.putLong(paperSoldKey(norm, exchange), changedAt)
+
         editor.apply()
     }
+
+    /** Waktu sell terakhir posisi **paper** pair ini (0 = tidak pernah dijual / tidak ada catatan). */
+    fun lastPaperSoldAt(symbol: String, exchange: String = "TOKOCRYPTO"): Long =
+        prefs.getLong(paperSoldKey(normalize(symbol), exchange), 0L)
+
+    private fun paperSoldKey(norm: String, exchange: String): String =
+        "${exchange.trim().lowercase()}_sim_${norm}_last_sold_at"
 
     fun setTrailingOrderIdAndUpdateTime(symbol: String, orderId: String?, updateTime: Long, isReal: Boolean = false, exchange: String = "TOKOCRYPTO") {
         val key = buildKey(symbol, isReal, exchange)

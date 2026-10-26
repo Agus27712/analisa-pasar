@@ -316,7 +316,10 @@ class AppPreferences(context: Context) {
             // Batas posisi paper bersamaan (global). `0` = tanpa batas; nilai tak terbaca
             // jatuh ke default aman 3, bukan ke "tanpa batas".
             maxConcurrentPositions = prefs.getString(KEY_PAPER_AUTO_BUY_MAX_POSITIONS, null)
-                ?.toIntOrNull() ?: 3
+                ?.toIntOrNull() ?: 3,
+            // Jeda entri-ulang auto-buy paper (menit). Nilai tak terbaca jatuh ke default 15.
+            reentryCooldownMinutes = prefs.getString(KEY_PAPER_AUTO_REENTRY_COOLDOWN_MIN, null)
+                ?.toIntOrNull() ?: 15
         )
         set(value) = prefs.edit()
             .putBoolean(KEY_PAPER_AUTO_BUY_ENABLED, value.autoBuyEnabled)
@@ -326,6 +329,7 @@ class AppPreferences(context: Context) {
             .putString(KEY_PAPER_AUTO_BUY_RISK_PCT, value.riskPctPerTrade.toString())
             .putString(KEY_PAPER_AUTO_BUY_MIN_STAGE, value.minStage.name)
             .putString(KEY_PAPER_AUTO_BUY_MAX_POSITIONS, value.maxConcurrentPositions.toString())
+            .putString(KEY_PAPER_AUTO_REENTRY_COOLDOWN_MIN, value.reentryCooldownMinutes.toString())
             .apply()
 
     /**
@@ -650,6 +654,7 @@ class AppPreferences(context: Context) {
         private const val KEY_PAPER_AUTO_BUY_RISK_PCT = "paper_auto_buy_risk_pct_v1"
         private const val KEY_PAPER_AUTO_BUY_MIN_STAGE = "paper_auto_buy_min_stage_v1"
         private const val KEY_PAPER_AUTO_BUY_MAX_POSITIONS = "paper_auto_buy_max_positions_v1"
+        private const val KEY_PAPER_AUTO_REENTRY_COOLDOWN_MIN = "paper_auto_reentry_cooldown_min_v1"
         private const val KEY_PAPER_TRADE_JOURNAL = "paper_trade_journal_v1"
         private const val KEY_WATCHLIST_LEGACY = "watchlist_symbols"
         private const val KEY_WATCHLIST_TOKOCRYPTO = "watchlist_tokocrypto"

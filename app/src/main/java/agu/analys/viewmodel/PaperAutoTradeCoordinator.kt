@@ -499,6 +499,23 @@ fun TradingViewModel.tryPaperAutoBuy(transition: SignalTransition, exchange: Str
     val existing = positionStore.get(pair.symbol, isReal = false, exchange = exchange)
     if (existing.isHolding) return false
 
+    // 2026-10-26 — jeda entri-ulang: setelah sell paper, sinyal BUY berikut langsung
+    // memicu beli ulang tanpa evaluasi baru. Contoh terukur: WINUSDT 25/10/2026 — entri
+    // ulang 60 detik setelah sell pada pair yang sedang trending naik, dua kali di hari
+    // yang sama. Keadaannya dibaca dari catatan sell persisten, bukan state memori, supaya
+    // jeda tetap berlaku setelah app di-restart. Beli manual tidak digated (keputusan sadar).
+    val lastSoldAt = positionStore.lastPaperSoldAt(pair.symbol, exchange)
+    if (!cfg.reentryAllowed(lastSoldAt, System.currentTimeMillis())) {
+        val sisaMenit = cfg.reentryWaitMinutesRemaining(lastSoldAt, System.currentTimeMillis())
+        val fmt = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault())
+        AppLogManager.service(
+            "PaperAutoBuy",
+            "⏳ [${pair.symbol}] Auto-buy ditunda: jeda entri-ulang ${cfg.reentryCooldownMinutes} mnt " +
+                "belum habis (sisa ±$sisaMenit mnt) — sell terakhir ${fmt.format(java.util.Date(lastSoldAt))}."
+        )
+        return false
+    }
+
     // Batas jumlah posisi paper bersamaan (global, lintas bursa). Kas yang sudah terpotong posisi
     // yang masih hold tetap "terpakai", jadi tanpa gerbang ini auto-buy bisa terus menumpuk posisi
     // sampai order berikutnya ditolak karena saldo kurang — bukan karena sinyalnya buruk.

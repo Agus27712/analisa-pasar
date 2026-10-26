@@ -3,7 +3,17 @@
 > **Sumber kebenaran workplan.**  
 > `workplan.md`, `checkpoint.md`, dan `checkpoint_progres.md` **sudah dihapus (2026-10-16)** — jangan cari, jangan dibuat ulang. Baca ini + `AGENTS.md` + `APP_CONTEXT.md` (§ arah produk).
 
-**Update:** 2026-10-24 (WIB) — §70–§71: owner membuka kembali riset exit secara terbatas.
+**Update:** 2026-10-26 (WIB) — §73: jeda entri-ulang auto-buy paper. Temuan owner
+(25/10/2026, WINUSDT, sekitar 21:12 WIB): setelah sell paper terpicu, order buy
+terpicu kembali tanpa jeda. Diukur (`docs/exp/exp_autobuy_reentry_winusdt.md`):
+3 dari 10 entri replay WINUSDT hanya berjarak 60 detik dari exit sebelumnya, dan harga
+di jendela itu memang sedang naik (puncak +4,75%). Perbaikan: jeda entri-ulang
+`PaperReentryCooldown` per pair per bursa, default **15 menit** (`0` = nonaktif),
+lurus persis setelah cek posisi dobel. Tidak menyentuh gate entry, lantai friksi,
+exit, atau jalur uang riil. Verifikasi: 13 uji baru hijau, 339 test lingkup terkait
+0 gagal, parity 30/30, kontrol negatif dua titik terbukti gagal lalu dipulihkan.
+Laporan: `docs/laporan_temuan_bugs_paper_reentry_jeda.md`.
+Sebelumnya, 2026-10-24 (WIB) — §70–§71: owner membuka kembali riset exit secara terbatas.
 Sweep 5 mode exit (`classic`, `tp1_be`, `early`, `trail`, `full`) pada hold 90/240/420:
 **0 dari 90 sel pair × mode × hold positif**; kontrol 620/14,84%/−0,1569 identik. Exit-only
 kembali ditutup untuk sinyal P0. Diagnostik persentil entry: entry khas berada di **persentil
@@ -4416,3 +4426,54 @@ Perubahan kode:
 Verifikasi: GitHub Actions `Unit Tests (Manual)` run `40098405104` pada commit `f317368`,
 scope `all-unit-tests`, status **success**. Parity test dan pemeriksaan markdown belum dijalankan
 di commit ini; jalankan bila mengubah dokumen/config.
+
+---
+
+## 73. Jeda entri-ulang auto-buy paper (2026-10-26)
+
+**Temuan owner (25/10/2026, WINUSDT, sekitar 21:12 WIB):** setelah sell paper terpicu,
+order buy terpicu kembali tanpa jeda — dugaan karena koin sedang trending naik.
+
+**Pengukuran** (`docs/exp/exp_autobuy_reentry_winusdt.md`):
+
+- Data bursa terbaru via `tools/fetch_tokocrypto_klines.py` (2.999 candle M1 WINUSDT,
+  CSV BTC untuk veto). Harga di jendela 20:00–23:00 WIB naik sampai +4,75% (puncak
+  21:40 WIB) lalu koreksi — sesuai dugaan "trending up".
+- Replay CLI (`classic`): 10 trade, **3 dari 10 entri +60 detik setelah exit**
+  (25/10 08:38, 25/10 20:47, 26/10 05:11 WIB). Posisi #6 (entry 20:47, time-stop 22:17)
+  mencakup jam keluhan 21:12. WR 10%, avg R −0,2759 — edge masih negatif, tidak berubah.
+
+**Sebab:** `tryPaperAutoBuy` hanya mencegah posisi dobel (`existing.isHolding`) dan menjaga
+`maxConcurrentPositions` — tidak ada jeda per pair setelah `finalizePaperExit`/`markSold`.
+Begitu posisi hilang, sinyal BUY berikutnya (evaluator masih membaca kondisi trending)
+langsung dibeli ulang: dua friksi round-trip beruntun tanpa evaluasi baru.
+
+**Perbaikan — paper saja, jalur uang riil tidak disentuh:**
+
+1. `engine/scalping/PaperReentryCooldown.kt` — resolver **murni** `verify(lastSoldAtMs,
+   nowMs, cooldownMinutes)` → `Allow`/`Wait`; logika jeda satu sumber, teruji tanpa Android.
+2. `PaperAutoTradeConfig.reentryCooldownMinutes` = **15 menit** default; `0` menonaktifkan.
+   Disinkron ke `AppPreferences` (`paper_auto_reentry_cooldown_min_v1`, fallback 15).
+3. `SpotPositionStore.markSold(isReal = false)` menulis `…_last_sold_at`;
+   `lastPaperSoldAt(symbol, exchange)` membacanya — **persisten**, jeda tetap berlaku
+   setelah app di-restart. Posisi uang riil tidak dicatat.
+4. `tryPaperAutoBuy`: gerbang jeda ditaruh persis setelah cek posisi dobel, sebelum
+   batas posisi dan pembacaan saldo; selama jeda, auto-buy ditunda dengan log alasan
+   (`⏳ [SYMBOL] Auto-buy ditunda: jeda entri-ulang …`). Beli manual tidak digated.
+
+**Tetap berlaku / tidak diubah:** gate entry P0, lantai friksi, exit classic, aturan fee
+truth, dan semua angka replay CLI (kontrol 620/14,84%/−0,1569 tetap sah).
+Jeda hidup di app saja (senada TTL) dan **belum direplay** — dampaknya pada frekuensi
+trade terlihat pada paper berikutnya; jangan mengutip angka replay lama sebagai angka
+app yang sudah berjeda.
+
+**Verifikasi:**
+
+- Uji baru 13/13 hijau: `PaperReentryCooldownTest` (6), `SpotPositionStorePaperLastSoldTest`
+  (4), `PaperAutoBuyReentryCooldownWiringTest` (3).
+- Lingkup terkait: 339 test, 0 gagal (`agu.analys.engine.scalping.*`,
+  `SpotPositionStore*`, wiring paper). Parity `tools/test_scalp_replay_parity.py` 30/30 OK.
+- Kontrol negatif dua titik: gerbang `cfg.reentryAllowed` dilepas → test wiring GAGAL;
+  pencatatan `…_last_sold_at` dilepas → test store GAGAL. Keduanya dipulihkan sebelum commit.
+
+Laporan: `docs/laporan_temuan_bugs_paper_reentry_jeda.md`.

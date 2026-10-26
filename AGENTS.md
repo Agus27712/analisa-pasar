@@ -1232,4 +1232,29 @@ kepemilikan exit tunggal via `PaperAutoTradeRuntime.ownsExit`, exit gagal tidak 
 dan SELL paper hanya `quantity.coerceAtMost(simBal)`. Test regresi ada di
 `PaperStopResolverTest` dan `PaperAutoBuyExecutionWiringTest`. Verifikasi:
 GitHub Actions `all-unit-tests` sukses run `40099665592`, parity 30/30, `check_md_text.py` bersih.
-Rincian: `workplan2.md` §72.
+Kode Fase 1 sudah masuk `main` lewat PR #64. Rincian: `workplan2.md` §72.
+
+## Jeda entri-ulang auto-buy paper (2026-10-26, WAJIB)
+
+**Masalah yang pernah terjadi:** setelah markSold, tryPaperAutoBuy hanya mencegah posisi
+dobel — begitu sinyal BUY berikut datang, beli ulang langsung terjadi. Terukur pada
+replay WINUSDT (2026-10-26): **3 dari 10 entri berjarak 60 detik dari exit sebelumnya**.
+Dua friksi round-trip dibayar beruntun tanpa evaluasi baru.
+
+Aturan yang mengikat agen:
+
+1. **Logika jeda tinggal di `PaperReentryCooldown.verify(...)`** (murni, teruji). Jangan
+   menghitung ulang jeda inline di call site baru — resolvernya diacu, bukan disalin.
+2. **Angka jeda disimpan di config, bukan literal runtime:** `PaperAutoTradeConfig.
+   reentryCooldownMinutes` (default **15**, `0` = nonaktif) + kunci prefs
+   `paper_auto_reentry_cooldown_min_v1`. Mengubah bawaan = pilih satu tempat + uji.
+3. **Catatan sell wajib pada satu titik: `SpotPositionStore.markSold` (isReal=false)** —
+   key per bursa `…_sim_…_last_sold_at`, persisten, dibaca `lastPaperSoldAt`. Selama jeda,
+   auto-buy ditunda dengan log `⏳ … jeda entri-ulang …`, tetapi beli manual dan semua
+   jalur uang riil tidak digated.
+4. **Jeda menutup siklus paper, bukan menciptakan edge.** Angka edge (avg R −0,1569 dll.)
+   tidak berubah akibat hal ini; angka replay CLI dihitung tanpa jeda — jangan mengutip
+   hasil replay sebagai demonstrasi manfaat jeda.
+5. Penjaga: `PaperReentryCooldownTest`, `SpotPositionStorePaperLastSoldTest`,
+   `PaperAutoBuyReentryCooldownWiringTest` (uji wiring — kontrol negatifnya sudah
+   diprovokasi gagal pada 2026-10-26).

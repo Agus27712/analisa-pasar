@@ -77,10 +77,38 @@ data class PaperAutoTradeConfig(
      * manual), karena tujuannya mencegah auto-buy menumpuk posisi sampai saldo kas habis —
      * kas yang sudah terpotong posisi yang masih hold tetap "terpakai".
      */
-    val maxConcurrentPositions: Int = 3
+    val maxConcurrentPositions: Int = 3,
+    /**
+     * Jeda minimum (menit) sebelum auto-buy **paper** boleh membuka posisi baru lagi pada
+     * pair yang sama setelah sell (2026-10-26). Sebelum perbaikan ini tidak ada jeda: begitu
+     * exit terpicu, sinyal BUY berikut langsung memicu order beli ulang — pada pair yang
+     * sedang trending naik itu berarti dua friksi round-trip dibayar beruntun hanya karena
+     * masih ada sinyal (contoh terukur: WINUSDT 25/10/2026, entri ulang 60 detik setelah
+     * sell). `0` menonaktifkan jeda. Angka tersimpan di config, bukan literal di runtime.
+     */
+    val reentryCooldownMinutes: Int = 15
 ) {
     /** Apakah stage sinyal memenuhi ambang minimum auto-buy. */
     fun stageQualifies(stage: ScalpingStage): Boolean = stage.ordinal >= minStage.ordinal
+
+    /**
+     * Putuskan apakah jeda entri-ulang sudah habis untuk sebuah pair.
+     *
+     * Delegasi ke [PaperReentryCooldown.verify] supaya logikanya satu sumber (murni teruji);
+     * fungsi ini hanya menempelkan config pada gerbang auto-buy.
+     */
+    fun reentryAllowed(lastSoldAtMs: Long, nowMs: Long): Boolean =
+        PaperReentryCooldown.verify(lastSoldAtMs, nowMs, reentryCooldownMinutes) is PaperReentryVerdict.Allow
+
+    /** Sisa jeda entri-ulang dalam menit, untuk log yang bisa dibaca pengguna. */
+    fun reentryWaitMinutesRemaining(lastSoldAtMs: Long, nowMs: Long): Long {
+        val verdict = PaperReentryCooldown.verify(lastSoldAtMs, nowMs, reentryCooldownMinutes)
+        return if (verdict is PaperReentryVerdict.Wait) {
+            (verdict.remainingMs / 60_000L).coerceAtLeast(1L)
+        } else {
+            0L
+        }
+    }
 
     /**
      * Apakah batas posisi bersamaan sudah tercapai.
