@@ -2,6 +2,8 @@
 
 Aplikasi Android berbasis **Jetpack Compose** dan **Kotlin** mutakhir yang dirancang untuk analisis teknikal pasar kripto, sinyal multi-timeframe berbasis AI, simulasi trading realistis, pencatatan siklus perjalanan trade 4-tahap lengkap, serta eksekusi trading riil terisolasi pada bursa **Tokocrypto** dan **Indodax**.
 
+![Rilis APK](https://github.com/Agus27712/analisa-pasar/actions/workflows/release.yml/badge.svg?branch=main)
+
 ---
 
 ## 🚀 Fitur Utama
