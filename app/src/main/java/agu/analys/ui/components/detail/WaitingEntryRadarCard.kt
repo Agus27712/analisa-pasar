@@ -135,8 +135,13 @@ fun WaitingEntryRadarCard(
     }
 
     // Hoisted states for live transaction details
-    var selectedNominal by remember { mutableDoubleStateOf(50000.0) }
-    var selectedSellQty by remember { mutableDoubleStateOf(availableCoin) }
+    // TANPA nominal default (keputusan owner 2026-10-26): nilai awal 0 = "belum diisi",
+    // tombol beli dinonaktifkan lewat gerbang `resolveBuyNominalGate` sampai user
+    // mengisi sendiri. Key (baseAsset, quoteAsset) memastikan nominal di-reset saat
+    // pindah pair — sisa nominal pair lalu tidak pernah bocor ke pair baru
+    // (dulu literal Rp 50.000 dipakai apa adanya sebagai $50.000 pada pair USDT).
+    var selectedNominal by remember(baseAsset, quoteAsset) { mutableDoubleStateOf(0.0) }
+    var selectedSellQty by remember(baseAsset, quoteAsset) { mutableDoubleStateOf(availableCoin) }
     var isMakerOrder by remember { mutableStateOf(true) }
     // Mode OTORITATIF: hold → SELL, tidak hold → BUY. Tidak ada lagi tab Beli/Jual manual,
     // jadi kartu beli dan jual tidak pernah tampil bersamaan. Menambah posisi (DCA) punya

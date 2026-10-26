@@ -98,8 +98,24 @@ fun RadarBuySection(
     val focusManager = LocalFocusManager.current
 
     val effectiveBuyPrice = if (customTargetBuyPrice > 0.0) customTargetBuyPrice else validPrice
-    // Batas bawah mengikuti kuotasi: pair IDR → Rp 10.000, pair USDT → ekuivalennya.
-    val grossBuyOrderAmount = selectedNominalIdr.coerceAtLeast(minNominalQuote)
+    // TANPA potong/naik diam-diam (keputusan owner 2026-10-26): nominal apa adanya.
+    // Ukuran tak layak ditolak lewat gerbang `resolveBuyNominalGate` di tombol,
+    // dengan alasan yang bisa dibaca — bukan di-coerce senyap.
+    val grossBuyOrderAmount = selectedNominalIdr
+    val nominalGate = agu.analys.util.resolveBuyNominalGate(
+        nominal = selectedNominalIdr,
+        minNominal = minNominalQuote,
+        availableQuote = availableIdr
+    )
+    val nominalGateHint = when (nominalGate.status) {
+        agu.analys.util.BuyNominalStatus.EMPTY ->
+            "Isi nominal pembelian dulu (${if (isUsdtQuote) quoteAsset else "Rp"})"
+        agu.analys.util.BuyNominalStatus.BELOW_MIN ->
+            "Minimum order ${PriceFormatter.formatPrice(minNominalQuote, quoteAsset = quoteAsset)}"
+        agu.analys.util.BuyNominalStatus.OVER_BALANCE ->
+            "Melebihi saldo ${PriceFormatter.formatPrice(availableIdr, quoteAsset = quoteAsset)}"
+        agu.analys.util.BuyNominalStatus.OK -> null
+    }
     val isMakerOrder = validPrice > 0 && effectiveBuyPrice < validPrice
     val effectiveFeePct = if (isMakerOrder) 0.0 else activeFeePct
     val buyFeeIdr = grossBuyOrderAmount * (effectiveFeePct / 100.0)
@@ -548,6 +564,10 @@ fun RadarBuySection(
                 else -> null
             }
             val isBuyBlocked = isCoolingDown || lifecycleBlockedReason != null
+            // Gerbang nominal (owner 2026-10-26): tanpa default, user wajib isi sendiri.
+            // Tombol hanya mengirim perintah beli bila nominal valid (isi, ≥ minimum
+            // pair, ≤ saldo). Alasan dibaca user, bukan dipotong diam-diam.
+            val isNominalBlocked = !nominalGate.canSubmit
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -556,14 +576,14 @@ fun RadarBuySection(
             ) {
                 Button(
                     onClick = {
-                        if (!isBuyBlocked) {
+                        if (!isBuyBlocked && !isNominalBlocked) {
                             val buyPrice = if (customTargetBuyPrice > 0.0) customTargetBuyPrice else validPrice
                             val tp1 = if (isAutoLimitSellEnabled) defaultTpPrice1 else 0.0
                             val tp2 = if (isAutoLimitSellEnabled) defaultTpPrice2 else 0.0
                             onExecuteBuy.invoke(grossBuyOrderAmount, buyPrice, tp1, tp2)
                         }
                     },
-                    enabled = !isBuyBlocked,
+                    enabled = !isBuyBlocked && !isNominalBlocked,
                     modifier = Modifier
                         .weight(1f)
                         .height(44.dp),
@@ -599,6 +619,21 @@ fun RadarBuySection(
                         Spacer(Modifier.width(6.dp))
                         Text(
                             text = lifecycleBlockedReason,
+                            fontWeight = FontWeight.Black,
+                            fontSize = 11.5.sp,
+                            maxLines = 1
+                        )
+                    } else if (isNominalBlocked) {
+                        // Alasan bisa dibaca user — nominal kosong / di bawah minimum /
+                        // melebihi saldo. Tanpa potong diam-diam (aturan repo).
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = nominalGateHint ?: "Nominal belum valid",
                             fontWeight = FontWeight.Black,
                             fontSize = 11.5.sp,
                             maxLines = 1

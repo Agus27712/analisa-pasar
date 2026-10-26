@@ -71,7 +71,11 @@ fun CustomBuyOrderDialog(
         mutableStateOf("")
     }
     var nominalInput by remember(show) {
-        val initAmount = if (initialNominalIdr >= minNominal) initialNominalIdr else if (isUsdtQuote) 10.0 else 50000.0
+        // TANPA nominal default (keputusan owner 2026-10-26): input mulai kosong bila
+        // form utama belum berisi nominal valid. Literal Rp 50.000 / 10 USDT dihapus —
+        // dulu literal itu dipakai apa adanya sebagai nominal kuotasi (Rp 50.000
+        // menjadi $50.000 pada pair USDT).
+        val initAmount = if (initialNominalIdr >= minNominal) initialNominalIdr else 0.0
         mutableStateOf(formatPriceForInput(initAmount))
     }
 
@@ -102,7 +106,10 @@ fun CustomBuyOrderDialog(
 
     val isPriceValid = targetPrice > 0
     val isNominalValid = nominalIdr >= minNominal
-    val isBalanceSufficient = availableIdr <= 0 || nominalIdr <= availableIdr
+    // Gerbang saldo jujur (owner 2026-10-26): dulu `availableIdr <= 0 ||` menganggap
+    // saldo 0 sebagai "cukup" sehingga tombol aktif walau saldo kosong. Sekarang saldo
+    // kosong ikut memblokir; engine order tetap gerbang terakhir.
+    val isBalanceSufficient = nominalIdr <= availableIdr
     val canSubmit = isPriceValid && isNominalValid && isBalanceSufficient
 
     fun applyPriceDiscount(pct: Double) {

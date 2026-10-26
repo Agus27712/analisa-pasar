@@ -145,18 +145,6 @@ object PriceFormatter {
     }
 
     /**
-     * Nominal default order **dalam mata uang kuotasi pair** (setara Rp 50.000).
-     * Mengembalikan `0.0` bila kurs belum tersedia — pemanggil lalu memakai nominal
-     * yang sudah dipilih pengguna.
-     */
-    fun defaultOrderNominal(quoteAsset: String, usdtIdrRate: Double): Double {
-        val defaultIdr = 50_000.0
-        if (!isUsdtQuote(quoteAsset)) return defaultIdr
-        if (usdtIdrRate.isNaN() || usdtIdrRate.isInfinite() || usdtIdrRate <= 0.0) return 0.0
-        return defaultIdr / usdtIdrRate
-    }
-
-    /**
      * Konversi USDT → IDR berbasis rate yang diberikan (bukan hardcode).
      * Mengembalikan `null` bila rate belum tersedia supaya pemanggil bisa menahan tampilan.
      */

@@ -4580,3 +4580,65 @@ hiasan: ia membuktikan resolver terpakai.
 
 **Yang tidak berubah:** engine, gate, angka P0, frekuensi polling, dan perilaku
 `selectTimeframe` manual (tetap reload cache + polling seperti sebelumnya).
+
+---
+
+## 77. Form beli paper tanpa nominal default (2026-10-26)
+
+**Laporan owner:** tombol beli paper pada pair kuotasi USDT menunjukkan default beli
+**$50.000**.
+
+**Akar (terverifikasi ke kode):** `WaitingEntryRadarCard.kt` menampung state
+`selectedNominal` dengan literal `50000.0` — Rupiah — yang dipakai **apa adanya**
+sebagai nominal kuotasi pair: mengalir ke `grossBuyOrderAmount` → tombol beli →
+`qty = nominal / harga` dan `invested = nominal` (posisi paper $50.000 bila saldo
+USDT cukup; bila tidak, order ditolak engine dengan pesan saldo). State tanpa key
+pair, jadi sisa nominal pair lama bocor ke pair baru. Bukan dari config auto-buy —
+`PaperAutoTradeConfig.fixedIdrAmount` (Rp 100.000) sudah dikonversi benar di `plan()`
+(§18.2). Pola yang sama (nominal IDR dianggap kuotasi), jalur berbeda.
+
+**Keputusan owner (2026-10-26):** form beli paper **TANPA nominal default sama
+sekali** — user mengisi sendiri; tombol hanya mengirim perintah beli bila nominal
+valid. Tidak ada angka default di Pengaturan.
+
+**Perubahan:**
+
+- `WaitingEntryRadarCard.kt` — nominal awal `0.0` dengan key
+  `remember(baseAsset, quoteAsset)` (reset per pair). Literal dihapus.
+- **Resolver murni `resolveBuyNominalGate`** (`util/BuyNominalGate.kt`) — satu-satunya
+  tempat aturan gerbang: `EMPTY` (kosong/tidak valid; kondisi awal normal),
+  `BELOW_MIN` (di bawah `minOrderNominal`; minimum 0 = kurs belum ada → cek dilewati,
+  bukan kurs tebakan), `OVER_BALANCE` (saldo 0 dihitung saldo kosong yang diketahui —
+  fail-closed), `OK`. Pesan teks dibentuk di UI, bukan di resolver.
+- `RadarBuySection.kt` — `coerceAtLeast(minNominalQuote)` dibuang (tidak ada potong/
+  naik diam-diam); tombol `[SIM]/[REAL] BELI` hanya aktif bila gerbang OK, dengan
+  alasan terbaca di tombol ("Isi nominal pembelian dulu", "Minimum order …",
+  "Melebihi saldo …"). Chip cepat (rekomendasi risiko / % saldo) tetap ada — itu
+  aksi eksplisit user.
+- `CustomBuyOrderDialog.kt` — input nominal mulai kosong bila form utama belum
+  berisi nominal valid (literal Rp 50.000 / 10 USDT dihapus); gerbang saldo jujur:
+  `availableIdr <= 0 ||` dibuang, saldo 0 kini memblokir.
+- `PriceFormatter.defaultOrderNominal` — **dihapus**: helper konversi nominal default
+  dengan 0 pemanggil (kontrak palsu, preseden P7).
+- `RadarTransactionFeeSection.kt` — default param `selectedNominalIdr = 50000.0`
+  (nilai mati) dihapus; parameter kini wajib.
+
+**Penjaga & verifikasi (terukur):**
+
+- `BuyNominalGateTest` — 7 test, 0 failures (semantik gerbang, termasuk kasus owner:
+  50.000 pada pair USDT ber-saldo kosong TIDAK boleh submit).
+- `PaperBuyNominalSourceTest` — 5 test source-scan **tanpa komentar** (pemindaian
+  hanya membaca kode): larang literal `50000.0`, wajib gerbang di tombol, larang
+  coerce diam-diam, larang nominal awal karangan dialog, larang helper hidup kembali.
+- **Kontrol negatif terbukti:** literal `50000.0` dikembalikan → uji sumber **GAGAL
+  (1 failure)**; dipulihkan → hijau. Perbaikan gerbang saldo dialog juga tertangkap
+  uji saat sisa pola lama masih ada di berkas (terbukti 1 failure sebelum bersih).
+- Seluruh suite `:app:testDebugUnitTest` dijalankan ulang; angka dari XML
+  `testDebugUnitTest` (lihat laporan temuan).
+
+**Temuan & pelaporan:** `docs/bugs/temuan_bugs_nominal_beli_paper.md` (M1–M4, semua
+ditutup) → dipindah ke `docs/laporan_temuan_bugs_nominal_beli_paper.md`.
+
+**Yang tidak berubah:** config auto-buy paper (`fixedIdrAmount` Rp 100.000 + konversi
+kurs di `plan()`), engine order sebagai gerbang terakhir, jalur uang riil, dan semua
+gate engine.

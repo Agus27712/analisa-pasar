@@ -1152,6 +1152,17 @@ Rincian angka: `docs/exp/exp_p0_gatekeeper_ADA-DOGE-XRP.md`; ringkasan keputusan
   dari `prefs.strategyMode`). Bawaan `Timeframe.H4` di `MarketViewModel` bukan default
   mode mana pun. Chip tetap bebas dipilih manual; pilihan user tidak persisten antar
   perpindahan mode. Penjaga: `DefaultTimeframeResolverTest`.
+- **Form beli paper TANPA nominal default (2026-10-26, WAJIB).** Nominal beli paper
+  selalu milik user — tidak ada literal default (dulu `50000.0` dipakai apa adanya
+  sebagai nominal kuotasi: Rp 50.000 menjadi $50.000 pada pair USDT, pola sama dengan
+  §18.2). Keputusan nominal lewat resolver murni `resolveBuyNominalGate`
+  (`util/BuyNominalGate.kt`: EMPTY/BELOW_MIN/OVER_BALANCE/OK) di tombol; jangan
+  potong/naikkan nominal diam-diam (`coerceAtLeast` dilarang), tolak dengan alasan
+  yang bisa dibaca. State nominal wajib ber-key `(baseAsset, quoteAsset)`. Saldo 0
+  dihitung saldo kosong yang diketahui (fail-closed); engine order tetap gerbang
+  terakhir. Nominal awal dialog limit juga mulai kosong. Chip cepat (% saldo /
+  rekomendasi risiko) boleh — itu aksi eksplisit user. Penjaga:
+  `BuyNominalGateTest`, `PaperBuyNominalSourceTest` (source-scan tanpa komentar).
 - Material 3; jangan pecah state chart tanpa alasan (lihat pola `DetailUiState` bila ada di branch).
 - Throttle UI ticker/depth bila diminta di catatan performa Tokocrypto (hindari spam recomposition).
 - **Mode halaman detail koin OTORITATIF dari status kepemilikan (2026-10-15, WAJIB).** Tidak ada

@@ -30,7 +30,7 @@ fun RadarTransactionFeeSection(
     availableIdr: Double = 0.0,
     availableCoin: Double = 0.0,
     avgBuyPrice: Double = 0.0,
-    selectedNominalIdr: Double = 50000.0,
+    selectedNominalIdr: Double,
     onNominalIdrChanged: (Double) -> Unit = {},
     selectedSellQuantity: Double = 0.0,
     onSellQuantityChanged: (Double) -> Unit = {},
