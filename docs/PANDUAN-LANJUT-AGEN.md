@@ -23,6 +23,12 @@
 > ukur dulu, keputusan gate menunggu owner. Diagnostik persentil entry (entry khas di persentil
 > 93 harga 1 hari) menjelaskan keluhan "beli di pucuk", tetapi belum menjadi gate.
 >
+> 📄 **Aturan agen sejak 2026-10-27 dipecah per area.** `AGENTS.md` akar kini hanya aturan
+> repo-wide (±16 KB). Aturan engine/paper/notifikasi/P&L/koneksi ada di **`app/AGENTS.md`**,
+> tooling replay di **`tools/AGENTS.md`**, aturan folder `docs/` di **`docs/AGENTS.md`** — ketiganya
+> dimuat OpenCode hanya saat area itu dibaca. Sebelum menyentuh sebuah area, baca `AGENTS.md` area
+> itu. Alasan + angka penghematan: `workplan2.md` §78.
+>
 > 🔴 **Untuk "apa lagi yang tersisa" → `docs/bugs/`, bukan dokumen ini.** Status temuan audit
 > (notifikasi `N*`, jurnal/P&L `J*`, paper trading `P*`, koneksi `K*`) sudah diverifikasi ke kode dan
 > **direview owner** pada `patch` @ `547048d`, lalu ditutup bertahap sampai batch 6o:

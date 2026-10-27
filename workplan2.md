@@ -4642,3 +4642,41 @@ ditutup) → dipindah ke `docs/laporan_temuan_bugs_nominal_beli_paper.md`.
 **Yang tidak berubah:** config auto-buy paper (`fixedIdrAmount` Rp 100.000 + konversi
 kurs di `plan()`), engine order sebagai gerbang terakhir, jalur uang riil, dan semua
 gate engine.
+
+## 78. Pemecahan `AGENTS.md` per area untuk hemat konteks (2026-10-27)
+
+**Masalah terukur.** Sesi kerja disk 2026-10-27 menghabiskan **62.614 token (31%)** jendela
+sebelum pekerjaan nyata dimulai. Penyebabnya bukan obrolan, melainkan biaya tetap: `AGENTS.md`
+akar **96.988 byte ≈ 26.700 token** yang dikirim ulang di **setiap** permintaan, ditambah
+`AGENTS.md` global (8.167 byte ≈ 2.300 token) dan skema tool MCP. Dokumentasi OpenCode V2
+menyebut compaction **tidak bisa** membuat ruang bila yang mendominasi adalah instruksi tetap.
+
+**Tindakan.** Aturan per area dipindahkan ke berkas `AGENTS.md` bertingkat, yang pada OpenCode V2
+hanya dimuat **ketika berkas di area itu dibaca**:
+
+| Berkas | Ukuran | Isi |
+|---|---:|---|
+| `AGENTS.md` (akar) | **16.300 byte ≈ 4.500 token** | identitas repo, Langkah 0 (branch), status riset, alur kerja dokumen & release, urutan baca, aturan kerja (bahasa/angka/kontrol negatif), tabel aturan per area, arah produk, perintah build & tes, secrets, batasan pasar, isolasi exchange, penulisan Markdown, Git, larangan agen |
+| `app/AGENTS.md` | 58.031 byte | larangan bangun ulang multi-horizon, aturan turunan audit (N/J/P/K), FEE_TRUTH, engine scalping, P0, UI & Compose, Fase 1 auto-order, jeda entri-ulang |
+| `docs/AGENTS.md` | 18.503 byte | aturan folder `bugs/` dan `exp/`, penghentian Spec v2/v3, kriteria sweep exit & persentil entry |
+| `tools/AGENTS.md` | 2.097 byte | mirror replay `scalp_config.json`, exit yang sama dengan app, fee IDR, jalan dari keadaan diam |
+
+**Bukti tidak ada aturan yang hilang.** Pemindahan dilakukan skrip dengan rentang baris, bukan
+ditulis ulang: 40 heading lama → 39 ada **verbatim** di berkas baru; satu-satunya yang tidak
+dipindah adalah `## Dokumen yang harus dibaca dulu`, yang isinya digabung ke "Urutan baca" akar.
+Pemeriksaan 170 butir tebal (`- **…**`) pada berkas lama: **0 hilang**.
+`python3 tools/check_md_text.py` → **81 berkas bersih** (tanpa BOM/CRLF/CJK/mojibake).
+
+**Efek.** Untuk tugas yang tidak menyentuh `app/` (dokumen, tooling, eksperimen), konteks tetap
+turun dari ±26.700 menjadi **±4.500 token** per permintaan (−22.200). Untuk tugas yang menyentuh
+`app/`, `app/AGENTS.md` ikut dimuat sehingga penghematannya lebih kecil — itu memang harga dari
+memindahkan aturan yang bersangkutan.
+
+**Batas yang perlu diingat.**
+- Berkas bertingkat baru dipakai **penuh pada sesi baru** bila sudah terlanjur dimuat di sesi
+  berjalan; perubahan di tengah sesi tidak dideteksi otomatis.
+- Menambah aturan baru: taruh di berkas area yang tepat, **jangan** di akar, kecuali berlaku untuk
+  seluruh repo (bahasa, git, build, larangan).
+- Backup lokal sebelum pemecahan: `AGENTS.md.bak-20261027-before-split` (tidak di-commit).
+- Penghematan ini murni soal **ruang konteks**, bukan biaya dolar: `opencode stats --cost`
+  mencatat cache input 96,8%.
