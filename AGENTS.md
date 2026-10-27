@@ -135,6 +135,22 @@ menang**, dan pertentangannya dicatat di `workplan2.md`.
 > dipakai pada **sesi baru** bila berkas itu sudah terlanjur dimuat di sesi berjalan. Kalau baru
 > mengubahnya di tengah sesi, mulai sesi baru sebelum mengandalkan isinya.
 
+## Hemat konteks sesi (2026-10-27)
+
+Tiga hal yang menjaga jendela konteks tetap lega. Jangan membatalkannya tanpa alasan ukur:
+
+1. **Aturan per area di berkas terpisah** (lihat tabel di atas) — jangan menaruh aturan satu area
+   di akar; akar dibayar di setiap permintaan.
+2. **`opencode.jsonc` proyek** menolak tool `opencode_console_*` (kelola member, provider, model,
+   billing). Server tetap tersambung, tetapi katalognya tidak ikut masuk system prompt. `ctx_*` dan
+   `mem0` sengaja tetap aktif. Kalau butuh tool konsol, jalankan dari proyek lain atau ubah
+   `permissions` di berkas itu.
+3. **Compaction lebih awal** (`~/.config/opencode/opencode.jsonc`, per mesin): `keep.tokens` 8.000
+   dan `buffer` 32.000. Lebih agresif = lebih lossy; naikkan `keep.tokens` bila detail terbaru
+   penting.
+
+Angka dan alasan lengkap: `workplan2.md` §78.
+
 ## Arah produk (ringkas)
 
 - **Fokus: engine scalping yang sudah ada** (port kriptoyoi `p0_engine` / spec) + **paper trade**

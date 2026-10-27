@@ -4680,3 +4680,35 @@ memindahkan aturan yang bersangkutan.
 - Backup lokal sebelum pemecahan: `AGENTS.md.bak-20261027-before-split` (tidak di-commit).
 - Penghematan ini murni soal **ruang konteks**, bukan biaya dolar: `opencode stats --cost`
   mencatat cache input 96,8%.
+
+### 78.1 Compaction lebih awal dan pembatasan tool MCP (2026-10-27)
+
+**Compaction** (`~/.config/opencode/opencode.jsonc`, **per mesin**, tidak ikut repo):
+
+```jsonc
+"compaction": { "auto": true, "keep": { "tokens": 8000 }, "buffer": 32000 }
+```
+
+Bawaan V2: `keep.tokens` 15.000 dan `buffer` = 15% batas model (≈30.000 pada jendela 200k).
+`keep` 8.000 memperkecil sisa obrolan yang dibawa setelah ringkasan; `buffer` 32.000 memicu
+compaction sedikit lebih awal. Sifatnya **lossy** — detail percakapan lama diganti ringkasan, jadi
+bila detail terbaru penting, naikkan kembali `keep.tokens`. Diverifikasi lewat `opencode debug
+config` (blok `compaction` muncul pada dokumen global).
+
+**Pembatasan tool MCP** (`opencode.jsonc` di repo, ikut git):
+
+```jsonc
+"permissions": [ { "action": "opencode_console_*", "resource": "*", "effect": "deny" } ]
+```
+
+Tool konsol workspace (member, provider, model, billing) tidak dipakai saat kerja kode; menolaknya
+membuat katalognya tidak ikut ke system prompt. Dokumentasi V2 menyebut instruksi server juga
+dihilangkan bila seluruh tool-nya ditolak, sedangkan `/mcps` tetap melaporkan
+`opencode_console connected` — jadi koneksi tidak diputus, hanya tidak dibebankan ke konteks.
+**Bukti:** setelah `opencode.jsonc` ditulis, katalog tool Code Mode di sesi berjalan berubah dan
+`opencode_console` hilang dari daftar; `opencode mcp list` tetap menunjukkan ketiga server
+`connected`. `context-mode` (`ctx_*`) dan `mem0` **sengaja tetap aktif** karena dipakai alur kerja
+di `AGENTS.md` global (analisis data besar + pencarian memori awal sesi).
+
+**Yang tidak berubah:** isi aturan, gate engine, dan seluruh kode aplikasi. Perubahan ini hanya
+soal ruang konteks, bukan perilaku mesin.
