@@ -77,10 +77,17 @@ object ModeSignalEvaluator {
      * @return sinyal + indikator untuk [input.mode], atau `null` bila data candle belum cukup.
      * Tidak pernah mengembalikan skor dari mode lain.
      */
-    fun evaluate(input: ModeSignalInput): ModeSignal? = when (input.mode) {
-        StrategyMode.SCALPING -> evaluateScalping(input)
-        StrategyMode.SWING -> evaluateSwing(input)
-        StrategyMode.OFFICE_DAILY -> evaluateIntraday(input)
+    fun evaluate(input: ModeSignalInput): ModeSignal? {
+        // Jam evaluasi adalah bagian dari keputusan (fase sesi intraday, sintesis bar berjalan).
+        // `nowMs <= 0` berarti data jam dari pemanggil tidak valid: lebih baik **gagal-tutup**
+        // (null, deterministik) daripada tertutupi `System.currentTimeMillis()` — fallback itu
+        // membuat hasil evaluasi berubah menurut jam dinding meski inputnya sama.
+        if (input.nowMs <= 0L) return null
+        return when (input.mode) {
+            StrategyMode.SCALPING -> evaluateScalping(input)
+            StrategyMode.SWING -> evaluateSwing(input)
+            StrategyMode.OFFICE_DAILY -> evaluateIntraday(input)
+        }
     }
 
     private fun evaluateScalping(input: ModeSignalInput): ModeSignal? {
@@ -93,7 +100,8 @@ object ModeSignalEvaluator {
 
         // Engine menyintesis bar berjalan dari tick terakhir sebelum evaluasi. Worker melakukan
         // hal yang sama dengan tick yang ia punya, supaya bentuk inputnya identik.
-        val nowMs = if (input.nowMs > 0L) input.nowMs else System.currentTimeMillis()
+        // `nowMs` sudah dijamin > 0 oleh `evaluate()` (input tidak valid ditolak di sana).
+        val nowMs = input.nowMs
         val tick = MarketTick(
             symbol = input.symbol,
             price = input.price,
@@ -154,7 +162,8 @@ object ModeSignalEvaluator {
         // Timestamp candle H4 adalah waktu **buka** bar terakhir; memakainya menggeser fase sesi
         // satu bucket (≈4 jam) sehingga entry hanya terjadi 11:00–14:59 WIB dan SELL paksa jatuh
         // 23:00–02:59 WIB — kebalikan dari tujuan "Close Malam".
-        val nowMs = if (input.nowMs > 0L) input.nowMs else System.currentTimeMillis()
+        // `nowMs` sudah dijamin > 0 oleh `evaluate()` (input tidak valid ditolak di sana).
+        val nowMs = input.nowMs
 
         val anomaly = MacroAnomalyDetector.evaluate(input.d1Candles, input.price)
         val result = IntradayEvaluator.evaluate(

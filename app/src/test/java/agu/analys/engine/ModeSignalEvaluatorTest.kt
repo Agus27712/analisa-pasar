@@ -270,4 +270,30 @@ class ModeSignalEvaluatorTest {
             )
         )
     }
+
+    @Test
+    fun `nowMs tidak valid ditolak fail-closed, bukan ditutupi jam dinding`() {
+        // Fallback `System.currentTimeMillis()` membuat hasil berubah menurut jam dinding
+        // meski input sama (tidak deterministik). `nowMs <= 0` wajib null TANPA TERKECUALI —
+        // termasuk saat data candle lengkap, karena di situlah fallback dulu menyelipkan hasil.
+        val h1 = TestData.generateCandles(40, 1_400_000_000.0, 0.001)
+        for (mode in StrategyMode.entries) {
+            for (nowMs in listOf(0L, -1L)) {
+                assertNull(
+                    "nowMs=$nowMs pada $mode dengan data candle lengkap harus null " +
+                        "(fail-closed deterministik)",
+                    ModeSignalEvaluator.evaluate(
+                        ModeSignalInput(
+                            mode = mode,
+                            symbol = "BTCIDR",
+                            price = h1.last().close,
+                            nowMs = nowMs,
+                            h1Candles = h1,
+                            h4Candles = h1
+                        )
+                    )
+                )
+            }
+        }
+    }
 }

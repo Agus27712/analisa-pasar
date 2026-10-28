@@ -765,9 +765,12 @@ slider**. Temuan lengkap: `docs/bugs/temuan_bugs_intraday.md`; ringkasan keputus
    atau memakai TP2 untuk gate: keduanya membuat gate selalu lolos dan angka R:R yang tampil bukan
    yang bisa dieksekusi. Penjaga: `IntradayAccountingAndSessionTest`.
 3. **Konsekuensi yang harus disebut jujur.** Geometri sekarang (SL ≥ −1,5%, TP1 ≤ +2,8%) memberi
-   net R:R ≈0,74 pada biaya Indodax IDR (impas net 0,7940%), jadi **sinyal BUY intraday nol**.
-   Jangan "memperbaiki" dengan menurunkan ambang; perbaikannya ada di geometri (paket C) dan
-   menunggu instruksi owner.
+   net R:R TP1 ≈**0,87** pada biaya Indodax IDR (impas net 0,7940%; multiplikatif; Tokocrypto IDR
+   ≈0,85, Tokocrypto USDT ≈0,74), jadi **sinyal BUY intraday nol**. Sampai paket C selesai,
+   **sinyal intraday jangan dipakai sebagai dasar keputusan**. Jangan "memperbaiki" dengan
+   menurunkan ambang; perbaikannya ada di geometri (paket C) dan menunggu instruksi owner.
+   (Koreksi 28 Okt 2026: angka lama "0,74 di Indodax IDR" keliru — 0,74 itu USDT. Periksa sejarah
+   di `workplan2.md` §80.)
 4. **Replay wajib net, dan wajib fee eksplisit.** `IntradayReplayEngine.replay(feeConfig = …)` tidak
    punya nilai bawaan dengan sengaja — `TradingFeeConfig()` tanpa argumen adalah preset legacy
    Indodax-ish. P&L memakai `FeeSchedule.netProfitPct` (taker + slippage dua sisi).
@@ -785,3 +788,13 @@ slider**. Temuan lengkap: `docs/bugs/temuan_bugs_intraday.md`; ringkasan keputus
 8. **`macdHist >= -0,002` masih perlu diputuskan (paket C).** `macdHist` bersatuan harga, bukan
    persen, sehingga ambang itu praktis berarti "histogram tidak negatif". Jangan mengubahnya
    diam-diam; normalisasi atau penghapusan ambang menggeser frekuensi sinyal dan harus diukur.
+   Arahan owner (28 Okt 2026): **ditangani di paket C** — unit diperbaiki lalu dampaknya diukur,
+   jangan dibiarkan.
+9. **Penjaga intraday harus uji perilaku, bukan pindai sumber (2026-10-28).** Uji
+   `sumber.contains("...")` hanya menebak dari nama variabel — nama berubah, uji gagal, perilaku
+   tidak terbukti. Penjaga intraday memakai dataset ter-commit `data/tokocrypto_v7/DOGEUSDT_1h.csv`
+   (999 bar) lewat `IntradayReplayEngine.replay`: ambang config 0,0 vs 99,0, fee maker + slippage
+   dari config, ringkasan net dihitung ulang dari daftar trade, dan konsistensi label `VALID_ENTRY_*`
+   dengan klasifikasi net. `IntradayConfig` tetap tanpa slider/state global (aturan 1).
+   **`ModeSignalEvaluator` menolak `nowMs <= 0` fail-closed** (null, deterministik) — jangan
+   mengembalikan fallback `System.currentTimeMillis()`.

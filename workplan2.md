@@ -4748,10 +4748,13 @@ Temuan lengkap ada di **`docs/bugs/temuan_bugs_intraday.md`**; § ini hanya ring
 
 **Konsekuensi yang harus dibaca sebelum menyimpulkan apa pun.** Dengan geometri sekarang
 (SL paling rapat −1,5%, TP1 paling rapat +2,8%) dan biaya Indodax IDR (impas net 0,7940%), net R:R
-TP1 ≈ **0,74** — jauh di bawah ambang 1,5. Karena gate sekarang jujur, **sinyal BUY intraday
+TP1 ≈ **0,87** (risiko net ≈2,28% / imbalan net ≈1,99%, multiplikatif) — jauh di bawah ambang 1,5.
+Koreksi 28 Okt 2026: laporan pertama menulis **0,74** — angka itu milik Tokocrypto USDT
+(0,9735%), bukan Indodax; Tokocrypto IDR ≈0,85. Karena gate sekarang jujur, **sinyal BUY intraday
 menjadi nol** pada semua dataset uji: BTC/IDR live 279 bar H1 dan tiga jendela September 2026
 (dulu 6 / 9 / 5 / 6 BUY). Ini **bukan regresi**; ini gate yang berhenti menipu diri sendiri.
-Perbaikan berikutnya ada di **paket C (geometri SL/TP)**, dan itu mengubah output sinyal sehingga
+Sampai paket C selesai, **sinyal intraday jangan dipakai** sebagai dasar keputusan. Perbaikan
+berikutnya ada di **paket C (geometri SL/TP)**, dan itu mengubah output sinyal sehingga
 menunggu instruksi owner.
 
 **Angka terukur (PC, JDK 17, Gradle 9.7).**
@@ -4774,3 +4777,55 @@ ada), F (UI/kartu intraday belum menyebut basis net & sampel). Semuanya di
 **Yang tidak berubah.** Engine scalping, gate P0, lantai friksi, dan exit paper. `ConfluenceEvaluator`
 hanya mendapat parameter `useMaker`/`slippagePct` dengan **bawaan lama** (`true`), jadi pemanggil
 SWING berperilaku persis seperti sebelumnya.
+
+## 80. Review owner atas commit intraday `7c8d822` (2026-10-28)
+
+Owner me-review commit §79 dan mengajukan 10 temuan. Tindak lanjut yang dieksekusi:
+
+1. **Angka R:R 0,74 keliru konteks — dikoreksi ke 0,87 (Indodax IDR).** Tabel paket C sendiri
+   memberi 2,01/2,29 ≈ 0,87; angka 0,74 ternyata hasil biaya **Tokocrypto USDT** (0,9735%)
+   yang keliru dipindah ke konteks Indodax. Dihitung ulang dengan rumus yang sama dengan app
+   (`FeeCalculator.roundTrip`, multiplikatif): Indodax IDR risiko net 2,2759% / imbalan net
+   1,9902% ⇒ **0,87**; Tokocrypto IDR **0,85**; Tokocrypto USDT **0,74**. Dikoreksi di
+   `docs/bugs/temuan_bugs_intraday.md`, `docs/AGENTS.md`, `app/AGENTS.md`, dan §79 di atas.
+   Pesan commit `7c8d822` tidak di-rewrite (sudah di-push); koreksinya tercatat di riwayat temuan.
+   Tambahan: di ujung atas band TP1 (+5,0%), R:R maksimum hanya ≈1,83 (IDR) / ≈1,63 (USDT) —
+   ambang 1,5 hanya bisa dilampaui ekor atas band.
+2. **Sinyal BUY = 0 adalah perilaku gate yang jujur, bukan bug baru.** Diringkas di
+   temuan Paket C dan dinyatakan eksplisit: **sampai paket C selesai, sinyal intraday jangan
+   dipakai sebagai dasar keputusan.** Owner melarang menurunkan `minNetRrTp1` hanya untuk
+   memunculkan sinyal (sesuai aturan paket B3).
+3. **Uji pindai sumber diganti uji perilaku; `println` dan tautologi dihapus.** Penggantinya
+   berjalan di atas dataset riset ter-commit `data/tokocrypto_v7/DOGEUSDT_1h.csv`:
+   - `ambangGateMemakaiConfig_bukanLiteral` → ambang config 0,0 membuktikan sinyal (77 BUY,
+     25 trade) vs 99,0 (0 sinyal); kode literal tidak bisa bersikap begitu;
+   - `feeMakerDanSlippageDariConfig_ikutMengubahNetRr` (baru) → maker + slippage 0,30% dari
+     config mengubah angka R:R sesuai `FeeCalculator` dan jelas beda dari taker default;
+   - `ringkasanReplayMemakaiNetDanPartisiLengkap` → ringkasan (partisi, win rate, profit factor,
+     kasus Close Malam gross-positif/net-negatif) dihitung ulang dari daftar trade rekaman;
+   - `labelPeristiwaDanKlasifikasiNet_tidakBisaBertentangan` (baru) → label `VALID_ENTRY_*`
+     tidak pernah bertentangan dengan klasifikasi net: di dataset nyata, plus invarian geometri
+     (impas net 3 preset di antara lantai SL −1,5% dan lantai TP1 +2,8%). `outcome` sengaja
+     tetap mencatat peristiwa (aturan A5 §79).
+   `println` debug di `ambangGateMemakaiConfig_bukanLiteral` dan asersi tautologi
+   `assertTrue(gross >= 0.0)` atas konstanta di `closeMalamMemakaiNet_bukanGross` dihapus.
+4. **`nowMs <= 0` tidak lagi jatuh ke `System.currentTimeMillis()`.** `ModeSignalEvaluator.evaluate`
+   kini **fail-closed** (null) untuk input jam tidak valid — hasil deterministik walau jam dinding
+   berjalan. Penjaga: `nowMs tidak valid ditolak fail-closed, bukan ditutupi jam dinding`
+   (`ModeSignalEvaluatorTest`, 3 mode × 0/−1, dengan data candle lengkap).
+5. **Kontrol negatif terukur (28 Okt):** (a) gate literal + fee/slip config diabaikan → 3 test
+   gagal; (b) menang dari gross lagi → `ringkasanReplay…` gagal tepat; (c) label TP↔SL ditukar →
+   `labelPeristiwa…` gagal tepat; (d) fallback jam dinding dikembalikan → uji `nowMs` gagal tepat.
+   Dipulihkan → 27/27 hijau (22 intraday + 5 `ModeSignalEvaluatorTest`).
+6. **Unit `macdHist` (harga, bukan persen): arahan owner — ditangani di paket C**, diperbaiki unitnya
+   lalu dampak ke frekuensi sinyal diukur; tidak boleh dibiarkan.
+7. **Aturan `docs/LAPORAN-*.md` dipertegas (di `AGENTS.md` akar):** butir "Setiap perubahan wajib
+   memperbarui markdown" dibatasi catatan bahwa aturan detail area ada di `AGENTS.md` per area dan
+   **yang lebih spesifik menang** — sesuai §78, jadi laporan batch intraday ditulis di § Riwayat
+   `docs/bugs/temuan_bugs_intraday.md` + workplan ini, bukan berkas `docs/LAPORAN-batch*-*.md` baru.
+8. **Angka uji (diukur 28 Okt 2026, PC, JDK 17):** 8 → 10 test di `IntradayAccountingAndSessionTest`;
+   intraday 20 → **22 hijau**; seluruh unit test 841 → **844 hijau, 0 gagal, 1 skipped**
+   (+1 uji `nowMs`, +2 uji perilaku baru).
+
+**Yang menunggu instruksi owner (tidak dieksekusi):** paket C (geometri SL/TP + unit macdHist),
+D (alat replay/ukur 11 pair), E (mesin exit intraday), F (UI/kartu).

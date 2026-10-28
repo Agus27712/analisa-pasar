@@ -101,8 +101,9 @@ berkasnya:
 - **`temuan_bugs_intraday.md` — DIBUAT 2026-10-27.** Mode INTRADAY (`OFFICE_DAILY`) belum pernah
   masuk audit mana pun. Paket **A+B** langsung ditutup di berkas yang sama (angka biaya replay,
   jam sesi, gate R:R palsu, config intraday terpisah); **C–F masih terbuka** — geometri SL/TP
-  (net R:R ≈0,74 vs ambang 1,5 sehingga sinyal BUY nol), alat replay/ukur, mesin exit, dan UI.
-  Berkas tetap di `docs/bugs/` sampai C–F tuntas. Rincian: `workplan2.md` §79.
+  (net R:R TP1 ≈0,87 di Indodax IDR / ≈0,85 Tokocrypto IDR / ≈0,74 di USDT, vs ambang 1,5,
+  sehingga sinyal BUY nol — koreksi angka 28 Okt 2026), alat replay/ukur, mesin exit, dan UI.
+  Berkas tetap di `docs/bugs/` sampai C–F tuntas. Rincian: `workplan2.md` §79–§80.
 
 ## Folder eksperimen (`docs/exp/`)
 

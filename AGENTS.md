@@ -105,7 +105,12 @@ berikutnya tetap **pengukuran entry/universe**; keputusan gate menunggu owner.
   juga Bahasa Indonesia (kecuali istilah teknis).
 - **Branch kerja: `main`.** `patch` hanya histori dan akan dihapus owner. Push ke `main` diizinkan atas instruksi owner; rilis manual.
 - **Setiap perubahan wajib memperbarui markdown terkait** (`workplan2.md` + `AGENTS.md` +
-  `docs/LAPORAN-*.md`). Pekerjaan tanpa jejak dokumen dianggap belum selesai.
+  `docs/LAPORAN-*.md`). Pekerjaan tanpa jejak dokumen dianggap belum selesai. **Sumber aturan lebih spesifik:**
+  aturan detail per area ada di `AGENTS.md` folder tsb (`app/`, `docs/`, `tools/`) dan **yang lebih
+  spesifik menang** (lihat "Aturan per area" di atas). Untuk dokumen: temuan/perbaikan bug ditulis
+  di § Riwayat berkas temuan + `workplan2.md`, bukan berkas `docs/LAPORAN-batch*-*.md` baru —
+  laporan eksekusi batch `.md` baru hanya untuk laporan port eksperimen BERHASIL (aturan `docs/AGENTS.md`).
+  Dipertegas 2026-10-28 setelah menerima verifikasi owner (instruksi review commit `7c8d822`).
 - **Setiap klaim angka harus diukur, bukan diingat.** Hitung test dari
   `app/build/test-results/testDebugUnitTest/*.xml`, bukan dari pesan lama. Untuk mengukur baseline,
   pakai `git stash` → jalankan test → `git stash pop` (pola ini sudah dipakai beberapa kali).
