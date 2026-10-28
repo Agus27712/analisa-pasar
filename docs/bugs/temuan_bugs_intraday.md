@@ -9,61 +9,12 @@ dokumen dan diringkas di tabel "Sudah ditutup" (commit + berkas/uji penjaga).
 |---|---|---|
 | **A** | Kebenaran angka biaya di replay (gross → net, preset legacy, taker/maker, partisi menang/kalah) | **TUTUP** (2026-10-27) |
 | **B** | Jam sesi & gate R:R palsu (selang fase, jam evaluasi, TP1 tanpa clamp, klaim "72 jam", config intraday) | **TUTUP** (2026-10-27) |
-| **C** | Geometri SL/TP tidak pernah lolos gate biaya (SL −1,5% / TP1 +2,8% ⇒ net R:R TP1 ≈0,87 di Indodax IDR, ≈0,85 di Tokocrypto IDR, ≈0,74 di USDT — vs ambang 1,5) | **TERBUKA** |
+| **C** | Geometri SL/TP tidak pernah lolos gate biaya (SL −1,5% / TP1 +2,8% ⇒ net R:R TP1 ≈0,87 di Indodax IDR, ≈0,85 di Tokocrypto IDR, ≈0,74 di USDT — vs ambang 1,5) + `macdHist` bersatuan harga | **TUTUP** (2026-10-28) |
 | **D** | Alat replay/ukur belum memakai fee truth & belum menutup trade di akhir jendela | **TERBUKA** |
 | **E** | Mesin exit intraday (belum ada; exit hanya sesi Close Malam) | **TERBUKA** |
 | **F** | UI & dokumen: kartu intraday belum menyebut basis net / sampel | **TERBUKA** |
 
 ---
-
-## C — Geometri SL/TP tidak pernah lolos gate biaya (TERBUKA)
-
-**Gejala terukur.** Setelah paket A+B, replay intraday menghasilkan **0 sinyal BUY** pada semua
-dataset uji (BTC/IDR live 279 bar H1 dan tiga jendela riil September 2026). Sebelum perbaikan,
-dataset yang sama menghasilkan 6 / 9 / 5 / 6 BUY.
-
-**Sebab aritmetis, bukan bug baru.** Geometri di `IntradayEvaluator` adalah:
-
-- `calculatedSl = max(support − 0,3·ATR, price × 0,972).coerceAtMost(price × 0,985)` ⇒ paling rapat **−1,5%**
-- `calculatedTp1 = (price + 1,25·ATR).coerceIn(price × 1,028, price × 1,050)` ⇒ paling rapat **+2,8%**
-
-Dengan biaya all-in Indodax IDR (taker dua sisi + slippage dua sisi, impas net **0,7940%**), dihitung
-dengan rumus yang sama dengan app (`FeeCalculator.roundTrip`, multiplikatif):
-
-| Komponen (Indodax IDR, geometri paling rapat) | Nilai |
-|---|---|
-| Risiko net (SL −1,5%) | ≈ **2,28%** |
-| Imbalan net (TP1 +2,8%) | ≈ **1,99%** |
-| Net R:R TP1 | ≈ **0,87** (terukur 0,82–0,87 di riwayat uji; Tokocrypto IDR ≈ **0,85**; Tokocrypto USDT ≈ **0,74**) |
-| Ambang gate (`IntradayConfig.minNetRrTp1`) | **1,5** |
-
-Koreksi (28 Okt 2026, review owner): laporan sebelumnya menulis "≈0,74 pada biaya Indodax IDR" —
-angka itu hasil perhitungan **Tokocrypto USDT** (biaya 0,9735%) yang keliru dipindah ke konteks
-Indodax. Angka Indodax IDR yang benar ≈0,87; tabel di atas dan `workplan2.md` §79 sudah diperbaiki.
-
-Bahkan di ujung atas band TP1 (+5,0%), R:R maksimum hanya ≈1,83 (Indodax IDR) / ≈1,63 (USDT) —
-ambang 1,5 hanya bisa dilampaui ekor atas band, itulah sebabnya BUY praktis tidak mungkin.
-
-Jadi gate **bekerja benar** dan menolak seluruh sinyal. Yang salah adalah geometrinya, bukan
-gate-nya. **Jangan menurunkan ambang** untuk mengembalikan jumlah sinyal: itu mengembalikan gate
-palsu yang baru saja ditutup (paket B3).
-
-> ⚠️ **Sampai paket C selesai: sinyal BUY intraday = 0.** Sinyal intraday **jangan dipakai**
-> sebagai dasar keputusan (beli/jual/tahan) sampai geometrinya diperbaiki dan hasilnya
-> diukur ulang. Ini bukan bug baru — tepatnya perilaku gate yang jujur, dan berkas ini
-> yang mencatatnya.
-
-**Yang perlu diputuskan (butuh instruksi owner):** apakah TP1 dinaikkan (mis. ≥ +3,6%) atau SL
-dilebarkan/dihitung dari ATR dengan lantai friksi, atau gate dipindah ke TP2 dengan konsekuensi
-TP1 tidak lagi menjadi target realistis. Semua pilihan mengubah output sinyal, jadi **tidak
-dikerjakan tanpa persetujuan**.
-
-**Catatan tambahan yang ditemukan saat menguji (belum diperbaiki, kandidat C):**
-`IntradayEvaluator` memakai `macdHist >= -0,002`, sedangkan `macdHist` adalah histogram MACD dalam
-**satuan harga** (mis. −1.656.379 pada BTC/IDR), bukan persen. Praktisnya syarat itu berarti
-"histogram MACD tidak negatif", dan ambangnya tidak berskala. Arahan owner (review 28 Okt 2026):
-**ditangani di paket C** — unitnya diperbaiki (dinormalisasi atau ambangnya dihapus), lalu
-dampaknya ke frekuensi sinyal **diukur**; tidak boleh dibiarkan dan tidak boleh diubah diam-diam.
 
 ## D — Alat replay/ukur belum memakai fee truth & belum menutup trade di akhir jendela (TERBUKA)
 
@@ -121,6 +72,10 @@ dikerjakan:
 | **B3** `netRr` dari **TP2** lalu `coerceAtLeast(1.6)` ⇒ gate `>= 1.5` selalu benar | `netRrTp1` dari TP1 **tanpa clamp**; gate memakai `config.minNetRrTp1`; label "Min 1:1.8" diganti nilai config | `netRrDariTp1_tidakDiClamp`, `ambangGateMemakaiConfig_bukanLiteral` |
 | **B4** Klaim "72 jam" padahal kode memindai 18 candle & trauma 12 candle | komentar, doc KDoc, label reasoning, dan laporan replay menyebut **12 candle** (= 48 jam pada H4) | `IntradayEvaluator` + laporan replay |
 | **B5** Tidak ada config intraday; parameter gate tersebar sebagai literal | berkas baru `engine/intraday/IntradayConfig.kt` — **tanpa** state global/slider, semua nilai dioper eksplisit | dipakai `IntradayEvaluator` + `IntradayReplayEngine` |
+| **C1** Geometri SL/TP band persen tetap (SL −1,5%…−2,8%, TP1 +2,8%…+5,0%) ⇒ net R:R TP1 ≈0,74–0,87, **tidak pernah** lolos ambang 1,5 | berkas baru `engine/intraday/IntradayGeometry.kt`: SL dari support/ATR dengan band + **lantai friksi** `minSlFrictionMultiple × impas net`, TP1 = `max(TP1-ATR, TP1-dari-R)` dibatasi `min(resistance, price×(1+maxTp1Pct))`, TP2 selalu di atas TP1, gate dari TP1 final **tanpa clamp** (ambang 1,5 tetap) | `geometriDiturunkanDariRr_tp1MemenuhiAmbang`, `geometriTerikatBatas_gateGagalJujur`, `slTidakLebihRapatDariLantaiFriksi`, `invarianUrutanHarga_slTp1Tp2`, `setiapTradeReplayMemenuhiAmbangRrDariConfig` |
+| **C2** `macdHist >= -0,002` membandingkan histogram **bersatuan harga** (tidak berskala antar koin) | `macdHistPct = macdHist / price × 100`; ambang dari `IntradayConfig.macdHistMinPct` (bawaan 0,0), dipakai `isEarlyReversal` + `step3Ok`; teks reasoning memakai persen | `macdHistDinormalisasi_konsistenAntarSkalaHarga`, `ambangMacdHistDariConfig_ikutMengubahFrekuensi` |
+| **C3** Satu sinyal punya **dua** geometri: checkpoint 6 `ConfluenceEvaluator` menghitung SL/TP sendiri dengan gate `netRr >= 2.0` hardcoded | `ConfluenceEvaluator.evaluate` menerima `netRrThreshold` / `overrideStopLoss` / `overrideTp1` (bawaan `2.0`/`null` = perilaku SWING tidak berubah); sinyal intraday mengirim ambang + geometri yang sama | `checkpointKonfluensiMemakaiGeometriDanAmbangIntraday` |
+| **C4** `netRr` dipipihkan `coerceAtLeast(0.0)`, sehingga TP1 di bawah impas net tetap lolos gate saat ambang 0,0 | R:R negatif dibiarkan (artinya "TP1 tidak menutup biaya"); gate memakai nilai apa adanya, teks tetap jujur | `labelPeristiwaDanKlasifikasiNet_tidakBisaBertentangan` (dengan `coerce` dikembalikan, uji gagal) |
 
 **Angka terukur paket A+B (2026-10-27, PC, JDK 17, Gradle 9.7):**
 
@@ -152,13 +107,83 @@ angka diukur dari run `:app:testDebugUnitTest`:
 
 Dipulihkan → 22 test intraday + 5 `ModeSignalEvaluatorTest` hijau (27/27, 0 gagal).
 
-**Penjaga:** `app/src/test/java/agu/analys/engine/intraday/IntradayAccountingAndSessionTest.kt`
-(10 test — seluruhnya uji perilaku di atas `data/tokocrypto_v7/DOGEUSDT_1h.csv` ter-commit, tanpa
-uji pindai sumber), `IntradayEvaluatorTest` (3), `RealBtcIndodaxIntradayReplayTest` (9).
+**Angka terukur paket C (28 Okt 2026, PC, JDK 17, Gradle 9.7):**
+
+Replay 11 pair dataset `data/tokocrypto_v7` (`*_1h.csv`), fee Tokocrypto USDT, geometri baru:
+
+| Konfigurasi | BUY | Trade | Pair yang menghasilkan BUY | Avg net/trade |
+|---|---|---|---|---|
+| Ambang **1,5** (bawaan, keputusan owner) | **20** | 11 | BANKUSDT 17, SUIUSDT 3 | **−1,336%** |
+| Ambang 1,5 + `maxTp1Pct` 2,0% | **0** | 0 | — | — |
+| Ambang 1,5 + `maxTp1Pct` 4,0% | **0** | 0 | — | — |
+| Ambang 1,5 + `maxTp1Pct` 8,0% (bawaan) | 20 | 11 | BANKUSDT, SUIUSDT | −1,336% |
+| Gate MACD **lama** (praktis tanpa gate, `macdHistMinPct=−1000`) | 35 | 20 | + CHIPUSDT, NEARUSDT, QNTUSDT | −0,890% |
+| Gate MACD baru `macdHistMinPct=0,0` (bawaan) | 20 | 11 | BANKUSDT, SUIUSDT | −1,336% |
+| `macdHistMinPct` −0,05 / −0,1 | 21 / 24 | — | — | — |
+| `macdHistMinPct` +0,05 / +0,1 | 18 / 13 | — | — | — |
+| `minSlFrictionMultiple` 1,0 | 7 | — | BANK 4, SUI 3 | BANK −2,041% |
+| `minSlFrictionMultiple` 3,0 | 30 | — | BANK 24, CHIP 1, DOGE 1, NEAR 1, SUI 3 | BANK −0,559%, NEAR +3,535% |
+
+Bacaan yang **wajib** ikut dikutip:
+
+1. **Ambang 1,5 tidak diturunkan**, dan sinyalnya masih sangat sedikit (20 BUY dari 11 pair, hanya
+   2 pair). Geometri baru membuat gate **bisa** lolos — bukan membuatnya mudah lolos.
+2. **Batas atas (`maxTp1Pct`/resistance) adalah penentu utama.** Dengan `maxTp1Pct` 2–4% hasilnya
+   **0 BUY**: TP1-dari-R terpotong di bawah kebutuhan ambang. Itu perilaku yang disengaja — kalau
+   batas atas dihapus, gate menjadi tautologis (selalu lolos) dan tidak mengukur apa pun.
+3. **Angka Net R:R tampil ≈1,50 pada hampir semua sinyal** (TP1 di-solve untuk tepat memenuhi
+   ambang), jadi R:R tidak lagi membedakan kualitas sinyal — yang membedakan adalah apakah ruang
+   menuju resistance cukup.
+4. **Avg net/trade masih negatif (−1,336%).** Paket C **tidak** menciptakan edge; ia hanya
+   memperbaiki geometri dan kejujuran angka. Jangan memakai hasil ini sebagai bukti kelayakan.
+5. **C2 menurunkan frekuensi 43%** (35 → 20 BUY) dan **tidak** memperbaiki net/trade (−0,890 →
+   −1,336 pada sampel kecil ini). Normalisasi unit MACD adalah perbaikan **keterbandingan antar
+   koin**, bukan alat profit.
+
+**Kontrol negatif paket C (diukur, satu per satu, lalu dipulihkan):**
+
+| Provokasi (perbaikan dimatikan) | Hasil terukur |
+|---|---|
+| TP1-dari-R dimatikan (`tp1 = TP1-ATR` saja) | `geometriDiturunkanDariRr_tp1MemenuhiAmbang` **gagal** |
+| Normalisasi `macdHist` dimatikan (satuan harga) | `macdHistDinormalisasi_konsistenAntarSkalaHarga` **gagal** (bar 0: skala asli vs ×1000 berbeda) |
+| `coerceAtLeast(0.0)` pada `netRr` dikembalikan | `labelPeristiwaDanKlasifikasiNet_tidakBisaBertentangan` **gagal** (VALID_ENTRY_TP dengan net −0,419) |
+| Override geometri ke checkpoint 6 dimatikan | `checkpointKonfluensiMemakaiGeometriDanAmbangIntraday` **gagal** (checkpoint tampil `Net 1:0.91`, `isOk=false`) |
+
+**Angka uji penuh (diukur dari `app/build/test-results`, 28 Okt 2026):** **851 hijau, 0 gagal,
+1 skipped** (total 852); intraday **30** test (semula 22). Baseline sebelum paket C: 844 hijau,
+1 skipped (total 845).
+
+**Penjaga:** `app/src/test/java/agu/analys/engine/intraday/IntradayGeometryAndMacdHistTest.kt`
+(8 test baru), `IntradayAccountingAndSessionTest.kt` (10 test, dua di antaranya ditulis ulang
+mengikuti geometri paket C), `IntradayEvaluatorTest` (3), `RealBtcIndodaxIntradayReplayTest` (9).
 
 ---
 
 ## § Riwayat
+
+- **2026-10-28 — Paket C ditutup (C1–C4).** Keputusan owner: **opsi A** untuk C1 — TP1
+  diturunkan dari SL+ATR, **bukan** menurunkan ambang `minNetRrTp1` (tetap **1,5**).
+  1. **C1 geometri.** Berkas baru `engine/intraday/IntradayGeometry.kt` (fungsi murni):
+     ATR di-clamp ke band `atrFloorPct`…`atrCapPct`, SL = support − `slAtrMult`×ATR dalam band
+     `[minSlPct, maxSlPct]` **dengan lantai friksi** `minSlFrictionMultiple × impas net`,
+     TP1 = `max(TP1-ATR, TP1-dari-R)` dibatasi `min(resistance, price×(1+maxTp1Pct))`, TP2 selalu
+     di atas TP1, gate dihitung dari TP1 final **tanpa clamp**. Semua knob masuk
+     `IntradayConfig` (tanpa state global, tanpa slider).
+  2. **C2 `macdHist`.** Dinormalisasi ke `% harga`; ambang `macdHistMinPct` (bawaan **0,0**).
+     Dampak frekuensi **diukur**: 35 → 20 BUY (−43%), net/trade tidak membaik (−0,890 →
+     −1,336 pada sampel 11 pair). Tidak diubah diam-diam.
+  3. **C3 satu geometri.** `ConfluenceEvaluator` menerima `netRrThreshold`/`overrideStopLoss`/
+     `overrideTp1`; bawaan (`2.0`/`null`) menjaga perilaku SWING tetap sama.
+  4. **C4 R:R jujur.** `coerceAtLeast(0.0)` dihapus: TP1 yang terpotong di bawah impas net
+     menghasilkan R:R **negatif** dan gate **gagal**. Terukur, memipihkan ke 0 membuat gate
+     ambang 0,0 lolos dengan avg net −0,8…−1,0%/trade.
+  5. **Efek samping yang dicatat jujur:** dengan TP1 di-solve, angka Net R:R tampil ≈1,5 pada
+     hampir semua sinyal, sehingga R:R tidak lagi membedakan kualitas — penentu sebenarnya
+     adalah ruang menuju resistance (`maxTp1Pct` 2–4% ⇒ **0 BUY**).
+  6. **Sinyal intraday masih belum layak dipakai:** 20 BUY dari 11 pair, avg net **−1,336%**.
+     Paket C memperbaiki geometri dan kejujuran angka, **bukan** menciptakan edge.
+  Test: **30 uji intraday hijau** (8 di antaranya baru di `IntradayGeometryAndMacdHistTest`), plus
+  kontrol negatif 4/4 menggigit (tabel di atas).
 
 - **2026-10-28 — Review owner atas commit `7c8d822`.** Temuan review dan tindak lanjutnya:
   1. **Angka R:R 0,74 salah konteks.** Tabel paket C sendiri memberi 2,01/2,29 ≈ 0,87; angka 0,74

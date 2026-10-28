@@ -44,7 +44,7 @@ Aturan main:
   pola penamaan `temuan_bugs_<topik>.md`.
 
 Saat ini berisi **satu** berkas temuan hidup: **`temuan_bugs_intraday.md`** (dibuat 2026-10-27;
-paket A+B sudah tutup, paket C–F masih terbuka). Sebelumnya folder ini kosong sejak 2026-10-18.
+paket A+B+C sudah tutup, paket D–F masih terbuka). Sebelumnya folder ini kosong sejak 2026-10-18.
 Riwayat
 berkasnya:
 
@@ -100,10 +100,12 @@ berkasnya:
 
 - **`temuan_bugs_intraday.md` — DIBUAT 2026-10-27.** Mode INTRADAY (`OFFICE_DAILY`) belum pernah
   masuk audit mana pun. Paket **A+B** langsung ditutup di berkas yang sama (angka biaya replay,
-  jam sesi, gate R:R palsu, config intraday terpisah); **C–F masih terbuka** — geometri SL/TP
-  (net R:R TP1 ≈0,87 di Indodax IDR / ≈0,85 Tokocrypto IDR / ≈0,74 di USDT, vs ambang 1,5,
-  sehingga sinyal BUY nol — koreksi angka 28 Okt 2026), alat replay/ukur, mesin exit, dan UI.
-  Berkas tetap di `docs/bugs/` sampai C–F tuntas. Rincian: `workplan2.md` §79–§80.
+  jam sesi, gate R:R palsu, config intraday terpisah); **C ditutup 2026-10-28** (geometri SL/TP
+  diturunkan dari SL+ATR+R:R lewat `IntradayGeometry`, `netRr` tanpa clamp, `macdHist` dalam %
+  harga — ambang 1,5 tetap, batas atas TP1 dipertahankan supaya gate masih bisa gagal jujur;
+  terukur 20 BUY/11 pair, avg net −1,336%). **D–F masih terbuka**: alat replay/ukur 11 pair,
+  mesin exit intraday, dan UI/kartu yang menyebut basis net & sampel. Berkas tetap di `docs/bugs/`
+  sampai D–F tuntas. Rincian: `workplan2.md` §79–§81.
 
 ## Folder eksperimen (`docs/exp/`)
 
@@ -112,7 +114,7 @@ Berisi **hasil eksperimen terukur** — satu berkas per eksperimen, bernama
 
 | Folder | Isi | Aturan |
 |---|---|---|
-| `docs/bugs/` | temuan audit yang **masih hidup** | `temuan_bugs_intraday.md` (C–F terbuka) |
+| `docs/bugs/` | temuan audit yang **masih hidup** | `temuan_bugs_intraday.md` (D–F terbuka) |
 | `docs/laporan_temuan_bugs_*.md` | laporan audit **yang sudah tutup** | satu per topik |
 | `docs/LAPORAN-*.md` | jejak eksekusi batch (arsip) | jangan ditambah, kecuali laporan port eksperimen BERHASIL |
 | **`docs/exp/`** | **hasil eksperimen** — angka yang sudah diukur | tambah bebas, satu per eksperimen |

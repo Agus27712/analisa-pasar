@@ -4827,5 +4827,63 @@ Owner me-review commit §79 dan mengajukan 10 temuan. Tindak lanjut yang dieksek
    intraday 20 → **22 hijau**; seluruh unit test 841 → **844 hijau, 0 gagal, 1 skipped**
    (+1 uji `nowMs`, +2 uji perilaku baru).
 
-**Yang menunggu instruksi owner (tidak dieksekusi):** paket C (geometri SL/TP + unit macdHist),
-D (alat replay/ukur 11 pair), E (mesin exit intraday), F (UI/kartu).
+**Yang menunggu instruksi owner (tidak dieksekusi):** paket D (alat replay/ukur 11 pair),
+E (mesin exit intraday), F (UI/kartu). Paket C sudah dikerjakan §81.
+
+## 81. Mode INTRADAY — paket C: geometri SL/TP diturunkan dari R:R + unit macdHist (2026-10-28)
+
+Keputusan owner (28 Okt 2026): perbaikan C1 memakai **opsi A** — TP1 diturunkan dari SL+ATR,
+ambang `minNetRrTp1` **tetap 1,5** dan tidak boleh dilonggarkan. C2 (`macdHist` bersatuan harga)
+dikerjakan di paket yang sama dengan dampak frekuensi **diukur**.
+
+### Perubahan kode
+
+| Berkas | Isi |
+|---|---|
+| `engine/intraday/IntradayGeometry.kt` (**baru**) | Fungsi murni `resolve(...)`: ATR clamp band, SL = support − `slAtrMult`×ATR dalam band `[minSlPct, maxSlPct]` + **lantai friksi** `minSlFrictionMultiple × impas net`, TP1 = `max(TP1-ATR, TP1-dari-R)` dibatasi `min(resistance, price×(1+maxTp1Pct))`, TP2 selalu > TP1, `netRr` dari TP1 final **tanpa clamp** |
+| `engine/intraday/IntradayConfig.kt` | 12 knob geometri + `macdHistMinPct` (bawaan 0,0). Tanpa state global, tanpa slider |
+| `engine/intraday/IntradayEvaluator.kt` | Blok geometri lama (band persen) diganti `IntradayGeometry.resolve`; `macdHistPct = macdHist/price×100` dipakai `isEarlyReversal` + `step3Ok`; konfluensi menerima ambang + geometri yang sama |
+| `engine/confluence/ConfluenceEvaluator.kt` | Parameter baru `netRrThreshold = 2.0`, `overrideStopLoss = null`, `overrideTp1 = null` — **bawaan = perilaku SWING lama**, tidak berubah |
+
+### Dua hal yang harus dibaca sebelum memakai angka R:R intraday
+
+1. **R:R tampil ≈1,50 pada hampir semua sinyal.** TP1 di-solve tepat pada ambang, jadi R:R berhenti
+   menjadi pembeda mutu. Yang menentukan lolos/gagal adalah **ruang menuju resistance** —
+   `maxTp1Pct` 2–4% ⇒ **0 BUY**, `8%` (bawaan) ⇒ 20 BUY. Batas atas sengaja dipertahankan supaya
+   gate **masih bisa gagal jujur**; menghapusnya membuat gate tautologis.
+2. **`netRr` negatif dibiarkan.** TP1 yang terpotong di bawah impas net memberi R:R negatif →
+   gate gagal. Kalau dipipihkan `coerceAtLeast(0.0)` (perilaku lama), gate ambang 0,0 lolos pada
+   TP1 yang tidak menutup biaya (terukur avg net −0,8…−1,0%/trade di 7 pair).
+
+### Angka terukur (11 pair `data/tokocrypto_v7` `*_1h.csv`, fee Tokocrypto USDT)
+
+| Konfigurasi | BUY | Trade | Avg net/trade |
+|---|---|---|---|
+| Ambang **1,5** (bawaan) | 20 | 11 | **−1,336%** (BANKUSDT 17 BUY, SUIUSDT 3) |
+| Gate MACD lama (praktis tanpa gate) | 35 | 20 | −0,890% (5 pair) |
+| `macdHistMinPct` 0,0 (bawaan baru) | 20 | 11 | −1,336% (2 pair) |
+| `maxTp1Pct` 2,0% / 4,0% | **0** / **0** | 0 | — |
+| `minSlFrictionMultiple` 1,0 / 3,0 | 7 / 30 | — | BANK −2,041% / −0,559% |
+
+Kesimpulan yang **tidak boleh** dilebihkan: paket C memperbaiki geometri dan kejujuran angka;
+**edge belum ada** (avg net masih negatif, sampel 11 pair satu window). Sinyal intraday tetap
+**bukan** dasar keputusan uang riil. Ambang 1,5 dipertahankan meski sinyal sedikit.
+
+### Kontrol negatif (4/4 menggigit, dipulihkan setelahnya)
+
+| Provokasi | Uji yang gagal |
+|---|---|
+| TP1-dari-R dimatikan | `geometriDiturunkanDariRr_tp1MemenuhiAmbang` |
+| Normalisasi `macdHist` dimatikan | `macdHistDinormalisasi_konsistenAntarSkalaHarga` |
+| `coerceAtLeast(0.0)` dikembalikan | `labelPeristiwaDanKlasifikasiNet_tidakBisaBertentangan` |
+| Override geometri checkpoint 6 dimatikan | `checkpointKonfluensiMemakaiGeometriDanAmbangIntraday` (`Net 1:0.91`, gagal) |
+
+### Uji
+
+`IntradayGeometryAndMacdHistTest` (8 test baru, seluruhnya uji perilaku di dataset ter-commit),
+`IntradayAccountingAndSessionTest` (10 test; `netRrDariTp1_tidakDiClamp` dan
+`labelPeristiwaDanKlasifikasiNet_*` ditulis ulang mengikuti geometri baru),
+`IntradayEvaluatorTest` (3), `RealBtcIndodaxIntradayReplayTest` (9).
+
+**Masih terbuka (menunggu instruksi):** paket D (alat replay/ukur 11 pair), E (mesin exit intraday),
+F (UI/kartu menyebut basis net & sampel). Rincian temuan: `docs/bugs/temuan_bugs_intraday.md`.

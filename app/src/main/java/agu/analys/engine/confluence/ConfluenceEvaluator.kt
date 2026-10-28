@@ -39,7 +39,8 @@ data class ConfluenceResult(
  * 3. Konfirmasi Volume (Validasi Institusi)
  * 4. Trigger Price Action (Sinyal Masuk)
  * 5. Filter Momentum (Divergence & Oscillators)
- * 6. Uji Risk-to-Reward Ratio (Net R:R >= 1:2)
+ * 6. Uji Risk-to-Reward Ratio (Net R:R >= ambang; bawaan 1:2, mode lain bisa mengirim ambang
+ *    dan geometrinya sendiri — paket C intraday)
  */
 object ConfluenceEvaluator {
 
@@ -60,7 +61,22 @@ object ConfluenceEvaluator {
          * membuat biaya tampak lebih murah 0,2 pp pada pair IDR daripada yang benar-benar dibayar.
          */
         useMaker: Boolean = true,
-        slippagePct: Double = FeeSchedule.DEFAULT_SLIPPAGE_PCT
+        slippagePct: Double = FeeSchedule.DEFAULT_SLIPPAGE_PCT,
+        /**
+         * Ambang net R:R checkpoint 6. Bawaan 2,0 = perilaku lama SWING.
+         *
+         * Paket C: pemanggil INTRADAY mengirim `IntradayConfig.minNetRrTp1` — dulu ambang ini
+         * hardcoded 2,0 sehingga mode intraday punya **dua** definisi R:R dalam satu sinyal
+         * (ambang evaluators 1,5 dan ambang konfluensi 2,0 yang tidak tercatat mana pun).
+         */
+        netRrThreshold: Double = 2.0,
+        /**
+         * Geometri SL/TP dari pemicu (paket C). Bila diisi, checkpoint 6 memakai SL/TP itu —
+         * bukan menghitung geometrinya sendiri — supaya angka R:R konfluensi = angka R:R sinyal.
+         * Bawaan `null` mempertahankan geometri lama pemanggil SWING.
+         */
+        overrideStopLoss: Double? = null,
+        overrideTp1: Double? = null
     ): ConfluenceResult {
         if (price <= 0.0 || microCandles.size < 5) {
             val emptyList = (1..6).map { idx ->
@@ -343,11 +359,13 @@ object ConfluenceEvaluator {
         )
 
         // ═════════════════════════════════════════════════════════════════════
-        // CHECKPOINT 6: Uji Risk-to-Reward Ratio (Net R:R >= 1:2)
+        // CHECKPOINT 6: Uji Risk-to-Reward Ratio (Net R:R >= ambang; bawaan 1:2)
         // Stop Loss di bawah swing low / support terdekat.
-        // TP1 memberikan rasio minimal 1:2 setelah memperhitungkan fee Indodax.
+        // TP1 memberi rasio minimal sesuai ambang setelah memperhitungkan fee bursa.
+        // Pemanggil mode lain (INTRADAY, paket C) boleh mengirim geometri + ambangnya sendiri
+        // lewat `overrideStopLoss`/`overrideTp1`/`netRrThreshold` — jangan menghitung ulang.
         // ═════════════════════════════════════════════════════════════════════
-        val calculatedSl = maxOf(
+        val calculatedSl = overrideStopLoss ?: maxOf(
             min(lastCandle.low, supportLevel) - effectiveAtr * 0.25,
             price - effectiveAtr * 1.5,
             price * 0.94
@@ -355,7 +373,7 @@ object ConfluenceEvaluator {
 
         // Hitung TP1 logis: mengarah ke Resistance atau minimal 2.0x SL
         val minTargetFor2R = price + (price - calculatedSl) * 2.15
-        val calculatedTp1 = maxOf(resistanceLevel, minTargetFor2R)
+        val calculatedTp1 = overrideTp1 ?: maxOf(resistanceLevel, minTargetFor2R)
         val calculatedTp2 = calculatedTp1 + (calculatedTp1 - price) * 0.65
 
         val feeResult = FeeCalculator.roundTrip(
@@ -367,13 +385,13 @@ object ConfluenceEvaluator {
             slippagePct = slippagePct
         )
         val netRr = feeResult.netRr
-        val isRiskRewardValid = netRr >= 2.0
+        val isRiskRewardValid = netRr >= netRrThreshold
 
         val rrMetric = "Net 1:${String.format(Locale.US, "%.2f", netRr)}"
         val rrDetail = if (isRiskRewardValid) {
-            "Rasio Risk:Reward istimewa (Net 1:${String.format(Locale.US, "%.2f", netRr)} >= 1:2.0). SL di ${PriceFormatter.formatPrice(calculatedSl, quoteAsset = quoteAsset)}, TP1 di ${PriceFormatter.formatPrice(calculatedTp1, quoteAsset = quoteAsset)}."
+            "Rasio Risk:Reward istimewa (Net 1:${String.format(Locale.US, "%.2f", netRr)} >= 1:${String.format(Locale.US, "%.2f", netRrThreshold)}). SL di ${PriceFormatter.formatPrice(calculatedSl, quoteAsset = quoteAsset)}, TP1 di ${PriceFormatter.formatPrice(calculatedTp1, quoteAsset = quoteAsset)}."
         } else {
-            "Net R:R 1:${String.format(Locale.US, "%.2f", netRr)} < 1:2.0. Ruang menuju resistance terlalu sempit. Tunggu harga mendekati support ${PriceFormatter.formatPrice(supportLevel, quoteAsset = quoteAsset)} untuk validasi R:R."
+            "Net R:R 1:${String.format(Locale.US, "%.2f", netRr)} < 1:${String.format(Locale.US, "%.2f", netRrThreshold)}. Ruang menuju resistance terlalu sempit. Tunggu harga mendekati support ${PriceFormatter.formatPrice(supportLevel, quoteAsset = quoteAsset)} untuk validasi R:R."
         }
         val step6 = ConfluenceCheckpoint(
             number = 6,
@@ -421,7 +439,8 @@ object ConfluenceEvaluator {
             path = path,
             statusTitle = statusTitle,
             waitingFor = waitingFor,
-            entryCondition = "6 Konfluensi: MTF · AoV · Vol · Trigger · Mom · Net R:R >= 1:2",
+            entryCondition = "6 Konfluensi: MTF · AoV · Vol · Trigger · Mom · Net R:R >= 1:" +
+                String.format(Locale.US, "%.2f", netRrThreshold),
             checkpoints = checkpoints,
             completedCount = completedCount
         )

@@ -1,6 +1,5 @@
 package agu.analys.engine.intraday
 
-import agu.analys.config.FeeCalculator
 import agu.analys.config.TradingFeeConfig
 import agu.analys.engine.MarketStructureAnalyzer
 import agu.analys.engine.indicators.CandlePatternDetector
@@ -182,6 +181,11 @@ object IntradayEvaluator {
         val macd = macdResult.lastMacd
         val macdSignal = macdResult.lastSignal
         val macdHist = macd - macdSignal
+        // Paket C: histogram MACD dinormalisasi ke % harga. Ambang lama `macdHist >= -0,002`
+        // bersatuan harga (mis. −1.656.379 pada BTC/IDR) sehingga praktis berarti "histogram
+        // tidak negatif" dan tidak berskala antar koin. Bawaan ambang 0,0 = setara perilaku lama
+        // untuk koin berharga besar; alternatifnya diukur, bukan diubah diam-diam.
+        val macdHistPct = if (price > 0.0) macdHist / price * 100.0 else 0.0
         val bb = IndicatorMath.bollinger(closes, min(20, closes.size))
         val atr = IndicatorMath.atr(history, min(14, history.size - 1))
         val pattern = CandlePatternDetector.detect(history)
@@ -262,7 +266,7 @@ object IntradayEvaluator {
         // Sesi pagi sering kali memantul dari support dan menembus kembali ke atas EMA20 (reclaim)
         // dengan momentum positif, meski lagging EMA20 belum sempat golden cross di atas EMA50.
         val isReclaimingEma20 = indicators.ema20.isFinite() && price >= ema20 * 0.995
-        val isEarlyReversal = isReclaimingEma20 && macdHist >= -0.002 && rsi in 35.0..65.0 && (price >= supportLevel * 0.98)
+        val isEarlyReversal = isReclaimingEma20 && macdHistPct >= config.macdHistMinPct && rsi in 35.0..65.0 && (price >= supportLevel * 0.98)
         val isTrendValidForIntraday = isEstablishedUptrend || isGoldenCross || isEarlyReversal
 
         val isDowntrend = indicators.ema20.isFinite() && indicators.ema50.isFinite() && (ema20 < ema50 && price < ema20 * 0.995 && !isEarlyReversal)
@@ -285,13 +289,13 @@ object IntradayEvaluator {
             else -> reasons += "RSI ${fmt(rsi)} netral."
         }
 
-        // 3. MACD Momentum
+        // 3. MACD Momentum (histogram dinormalisasi ke % harga — paket C)
         if (macdHist > 0) {
             buyScore += 18
-            reasons += "Histogram MACD positif (+${fmt(macdHist)})."
+            reasons += "Histogram MACD positif (+${fmt(macdHistPct, 3)}% dari harga)."
         } else {
             sellScore += 14
-            reasons += "Histogram MACD negatif (${fmt(macdHist)})."
+            reasons += "Histogram MACD negatif (${fmt(macdHistPct, 3)}% dari harga)."
         }
 
         // 4. Struktur Higher High / Higher Low
@@ -313,36 +317,27 @@ object IntradayEvaluator {
             }
         }
 
-        // Intraday ATR dibatasi pada rentang pergerakan harian sehat 1.5% s/d 4.0%
-        val intradayAtr = effectiveAtr.coerceIn(price * 0.015, price * 0.040)
-
-        // Stop Loss harian ketat: di bawah support lokal (risiko terukur -1.5% s/d -2.8%)
-        val calculatedSl = maxOf(
-            supportLevel - (intradayAtr * 0.3),
-            price * 0.972
-        ).coerceAtMost(price * 0.985)
-
-        // Target Take Profit 1 realistis harian (+2.8% s/d +4.8% tercapai di siang/sore)
+        // ── Paket C: geometri SL/TP satu definisi (IntradayGeometry) ─────────
+        // Dulu band persen tetap di evaluator ini (SL −1,5%…−2,8%, TP1 +2,8%…+5,0%) membuat
+        // net R:R TP1 ≈0,74–0,87 — tidak pernah lolos ambang 1,5, jadi sinyal BUY selalu nol.
+        // Sekarang TP1 diturunkan dari SL + ATR + ambang R:R, dibatasi resistance/band atas
+        // supaya gate masih bisa gagal jujur ketika ruang tidak cukup.
         val resistanceHint = structure.resistance?.takeIf { it > price }
-        val calculatedTp1 = (price + intradayAtr * 1.25)
-            .coerceIn(price * 1.028, price * 1.050)
-
-        // Target Take Profit 2 ekstensi tren (+5.5% s/d +8.5%)
-        val calculatedTp2 = maxOf(calculatedTp1 + (intradayAtr * 1.4), price * 1.060)
-            .coerceIn(price * 1.055, price * 1.088)
+        val geometry = IntradayGeometry.resolve(
+            price = price,
+            supportLevel = supportLevel,
+            resistanceLevel = resistanceHint,
+            atr = effectiveAtr,
+            fees = fees,
+            config = config
+        )
+        val calculatedSl = geometry.stopLoss
+        val calculatedTp1 = geometry.takeProfit1
+        val calculatedTp2 = geometry.takeProfit2
 
         // Net R:R dihitung dari **TP1** — target yang benar-benar dipakai untuk menutup posisi
-        // pertama. Sebelumnya angka ini memakai TP2 lalu di-clamp `coerceAtLeast(1.6)`, sehingga
-        // gate `netRr >= 1.5` selalu benar dan R:R yang tampil bukan R:R yang bisa dieksekusi.
-        val feeResult = FeeCalculator.roundTrip(
-            entry = price,
-            stopLoss = calculatedSl,
-            takeProfit = calculatedTp1,
-            fees = fees,
-            useMaker = config.useMakerFee,
-            slippagePct = config.slippagePct
-        )
-        val netRrTp1 = feeResult.netRr
+        // pertama. Tanpa clamp (`coerceAtLeast(1.6)` yang lama membuat gate selalu lolos).
+        val netRrTp1 = geometry.netRrTp1
         val rrString = "1:${fmt(netRrTp1)}"
 
         // ── DANGER & INVALIDATION ───────────────────────────────────────────
@@ -385,12 +380,17 @@ object IntradayEvaluator {
             fees = fees,
             quoteAsset = quoteAsset,
             useMaker = config.useMakerFee,
-            slippagePct = config.slippagePct
+            slippagePct = config.slippagePct,
+            // Paket C: satu geometri, satu ambang — checkpoint 6 memakai SL/TP dan ambang
+            // intraday yang sama dengan sinyal, bukan geometri + gate 2.0-nya sendiri.
+            netRrThreshold = config.minNetRrTp1,
+            overrideStopLoss = calculatedSl,
+            overrideTp1 = calculatedTp1
         )
 
         val step1Ok = !isDangerous && isTrendValidForIntraday && !flashDumpTrauma
         val step2Ok = step1Ok && (price >= supportLevel * 0.988) && !tooCloseToHigh && !pumpAndDumpTrap
-        val step3Ok = step2Ok && (rsi in 35.0..65.0) && macdHist >= -0.002
+        val step3Ok = step2Ok && (rsi in 35.0..65.0) && macdHistPct >= config.macdHistMinPct
         val step4Ok = step3Ok && netRrTp1 >= config.minNetRrTp1 && buyScore >= 50.0 && !isOverExtended
 
         val completedSteps = confluence.completedCount
@@ -561,6 +561,6 @@ object IntradayEvaluator {
         )
     }
 
-    private fun fmt(v: Double) = agu.analys.util.PriceFormatter.fmt(v)
+    private fun fmt(v: Double, decimals: Int = 2) = agu.analys.util.PriceFormatter.fmt(v, decimals)
     private fun fmtPrice(v: Double) = agu.analys.util.PriceFormatter.fmtPrice(v)
 }

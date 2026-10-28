@@ -764,13 +764,13 @@ slider**. Temuan lengkap: `docs/bugs/temuan_bugs_intraday.md`; ringkasan keputus
    dan gate memakai `config.minNetRrTp1` (bawaan 1,5). **Jangan** mengembalikan `coerceAtLeast(1.6)`
    atau memakai TP2 untuk gate: keduanya membuat gate selalu lolos dan angka R:R yang tampil bukan
    yang bisa dieksekusi. Penjaga: `IntradayAccountingAndSessionTest`.
-3. **Konsekuensi yang harus disebut jujur.** Geometri sekarang (SL ≥ −1,5%, TP1 ≤ +2,8%) memberi
-   net R:R TP1 ≈**0,87** pada biaya Indodax IDR (impas net 0,7940%; multiplikatif; Tokocrypto IDR
-   ≈0,85, Tokocrypto USDT ≈0,74), jadi **sinyal BUY intraday nol**. Sampai paket C selesai,
-   **sinyal intraday jangan dipakai sebagai dasar keputusan**. Jangan "memperbaiki" dengan
-   menurunkan ambang; perbaikannya ada di geometri (paket C) dan menunggu instruksi owner.
-   (Koreksi 28 Okt 2026: angka lama "0,74 di Indodax IDR" keliru — 0,74 itu USDT. Periksa sejarah
-   di `workplan2.md` §80.)
+3. **Konsekuensi yang harus disebut jujur.** Sebelum paket C, geometri band persen (SL ≥ −1,5%,
+   TP1 ≤ +2,8%) memberi net R:R TP1 ≈**0,87** pada biaya Indodax IDR (impas net 0,7940%;
+   multiplikatif; Tokocrypto IDR ≈0,85, Tokocrypto USDT ≈0,74) sehingga sinyal BUY intraday nol.
+   **Sejak paket C (28 Okt 2026)** geometri diturunkan dari R:R (aturan 10), dan hasil terukurnya:
+   **20 BUY dari 11 pair, hanya 2 pair (BANKUSDT, SUIUSDT), avg net −1,336%/trade** — gate bisa
+   lolos, tetapi **edge belum ada**. Jangan memakai sinyal intraday sebagai dasar keputusan uang
+   riil, dan **jangan menurunkan ambang** 1,5 untuk menambah sinyal.
 4. **Replay wajib net, dan wajib fee eksplisit.** `IntradayReplayEngine.replay(feeConfig = …)` tidak
    punya nilai bawaan dengan sengaja — `TradingFeeConfig()` tanpa argumen adalah preset legacy
    Indodax-ish. P&L memakai `FeeSchedule.netProfitPct` (taker + slippage dua sisi).
@@ -785,11 +785,13 @@ slider**. Temuan lengkap: `docs/bugs/temuan_bugs_intraday.md`; ringkasan keputus
 7. **Klaim umur flash dump memakai jumlah candle, bukan "72 jam".** `flashDumpTraumaCandles` = 12
    candle (≈48 jam pada H4, ≈12 jam pada H1). Teks UI/dokumen/laporan wajib menyebut angka yang
    sama dengan kode.
-8. **`macdHist >= -0,002` masih perlu diputuskan (paket C).** `macdHist` bersatuan harga, bukan
-   persen, sehingga ambang itu praktis berarti "histogram tidak negatif". Jangan mengubahnya
-   diam-diam; normalisasi atau penghapusan ambang menggeser frekuensi sinyal dan harus diukur.
-   Arahan owner (28 Okt 2026): **ditangani di paket C** — unit diperbaiki lalu dampaknya diukur,
-   jangan dibiarkan.
+8. **`macdHist` sudah dinormalisasi ke % harga (paket C, 28 Okt 2026).** Ambangnya
+   `IntradayConfig.macdHistMinPct` (bawaan **0,0**) dan dibandingkan dengan
+   `macdHist / price × 100`, bukan histogram bersatuan harga. Ambang lama `macdHist >= -0,002`
+   praktis berarti "histogram tidak negatif" dan tidak berskala antar koin. Dampaknya **diukur**:
+   35 → 20 BUY (−43%) pada 11 pair, net/trade tidak membaik (−0,890 → −1,336 pada sampel itu) —
+   perbaikan **keterbandingan**, bukan alat profit. Jangan mengubah ambang tanpa mengukur ulang
+   frekuensi; jangan mengembalikan pembandingan bersatuan harga.
 9. **Penjaga intraday harus uji perilaku, bukan pindai sumber (2026-10-28).** Uji
    `sumber.contains("...")` hanya menebak dari nama variabel — nama berubah, uji gagal, perilaku
    tidak terbukti. Penjaga intraday memakai dataset ter-commit `data/tokocrypto_v7/DOGEUSDT_1h.csv`
@@ -798,3 +800,21 @@ slider**. Temuan lengkap: `docs/bugs/temuan_bugs_intraday.md`; ringkasan keputus
    dengan klasifikasi net. `IntradayConfig` tetap tanpa slider/state global (aturan 1).
    **`ModeSignalEvaluator` menolak `nowMs <= 0` fail-closed** (null, deterministik) — jangan
    mengembalikan fallback `System.currentTimeMillis()`.
+10. **Geometri SL/TP intraday satu definisi — `IntradayGeometry.resolve` (paket C, 28 Okt 2026).**
+    Urutannya: ATR di-clamp band `atrFloorPct`…`atrCapPct`; SL = support − `slAtrMult`×ATR dijaga
+    band `[minSlPct, maxSlPct]` dan **lantai friksi** `minSlFrictionMultiple × impas net`;
+    TP1 = `max(TP1-ATR, TP1-dari-R)` dibatasi `min(resistance, price×(1+maxTp1Pct))`;
+    TP2 selalu > TP1; gate dari TP1 final **tanpa clamp**. Hal yang tidak boleh diubah:
+    - **ambang `minNetRrTp1` tetap 1,5** (keputusan owner) — jangan diturunkan agar sinyal bertambah;
+    - **batas atas TP1 wajib ada.** Tanpa resistance/`maxTp1Pct`, TP1-dari-R membuat gate
+      tautologis (selalu lolos). Kontrol terukur: `maxTp1Pct` 2–4% ⇒ **0 BUY**, bawaan 8% ⇒ 20 BUY;
+    - **`netRr` tidak dipipihkan ke 0.** R:R negatif berarti TP1 tidak menutup biaya → gate gagal.
+      (`FeeCalculator.roundTrip` memipihkan; geometri sengaja tidak, dan uji memakai cermin rumus
+      tanpa pipih. Jangan "menyeragamkan" dengan memipihkan di sini.)
+    - **Checkpoint 6 konfluensi memakai geometri + ambang yang sama** (`overrideStopLoss`,
+      `overrideTp1`, `netRrThreshold`); bawaan `2.0`/`null` menjaga perilaku SWING tetap sama.
+      Jangan menambah jalur yang menghitung geometri kedua di dalam satu sinyal.
+    - Konsekuensi jujur: R:R tampil ≈1,50 pada hampir semua sinyal, jadi R:R **bukan** pembeda
+      mutu lagi; avg net terukur masih **negatif** (aturan 3). Penjaga:
+      `IntradayGeometryAndMacdHistTest` (8 test), kontrol negatif 4/4 terdokumentasi di
+      `docs/bugs/temuan_bugs_intraday.md`.

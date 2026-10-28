@@ -2,6 +2,7 @@ package agu.analys.engine.intraday
 
 import agu.analys.config.FeeCalculator
 import agu.analys.config.FeeSchedule
+import agu.analys.config.TradingFeeConfig
 import agu.analys.config.StrategyMode
 import agu.analys.engine.ModeSignalEvaluator
 import agu.analys.engine.ModeSignalInput
@@ -23,7 +24,9 @@ import kotlin.math.max
 
 /**
  * Penjaga **Paket A + B** perbaikan mode INTRADAY — seluruhnya uji **perilaku**, tanpa uji yang
- * membaca isi berkas sumber. Versi lama memindai teks sumber (`sumber.contains("...")`): uji itu
+ * membaca isi berkas sumber. Uji paket **C** (geometri SL/TP + macdHist) ada di
+ * [IntradayGeometryAndMacdHistTest]; dua uji di berkas ini yang menyentuh geometri lama sudah
+ * ditulis ulang mengikuti geometri paket C. Versi lama memindai teks sumber (`sumber.contains("...")`): uji itu
  * hanya menebak dari nama variabel — nama berubah, uji gagal, sedangkan perilakunya tidak pernah
  * terbukti. Semuanya diganti dengan perilaku yang diuji langsung:
  *
@@ -146,34 +149,47 @@ class IntradayAccountingAndSessionTest {
         val history = riwayatSehat()
         val price = history.last().close
 
+        // Paket C: TP1 diturunkan dari SL+ATR+ambang, jadi dengan ruang cukup gate lolos dan
+        // dengan ruang dipangkas (`maxTp1Pct` kecil) gate GAGAL jujur. Anti-clamp dijaga dua sisi:
+        // angka yang tampil selalu rumus net R:R multiplikatif (tidak pernah di-clamp ≥1,6), dan
+        // gate tidak pernah lolos saat R:R kurang. Dibandingkan dengan [netRrTanpaPipih] — bukan
+        // `FeeCalculator.roundTrip` yang memipihkan net R:R negatif ke 0; geometri paket C
+        // sengaja tidak memipihkan supaya ambang 0,0 tetap berarti "TP1 minimal impas net".
         val result = IntradayEvaluator.evaluate(
             price = price,
             history = history,
             fees = feesIdr,
-            evaluationTimestamp = wib(9, 0)
+            evaluationTimestamp = wib(9, 0),
+            config = IntradayConfig(maxTp1Pct = 2.0) // ruang dipangkas di bawah kebutuhan R:R 1,5
         )
 
         val signal = result.signal
-        val expected = FeeCalculator.roundTrip(
+        val expected = netRrTanpaPipih(
             entry = price,
             stopLoss = signal.stopLoss,
             takeProfit = signal.targetPrice1,
             fees = feesIdr,
-            useMaker = false,
             slippagePct = FeeSchedule.DEFAULT_SLIPPAGE_PCT
-        ).netRr
+        )
 
         val reported = signal.riskRewardRatio.removePrefix("1:").toDouble()
-        assertEquals("R:R yang tampil harus net R:R TP1", expected, reported, 0.02)
+        // Teks R:R dibulatkan 2 desimal oleh PriceFormatter — toleransi setengah langkah terakhir.
+        assertEquals("R:R yang tampil harus net R:R TP1", expected, reported, 0.005)
         assertTrue(
-            "Net R:R TP1 geometri sekarang (≈0,82 di riwayat ini; terburuk Indodax IDR ≈0,87) " +
-                "harus di bawah 1,6 — clamp lama menyembunyikannya",
+            "Dengan ruang +2,0%, net R:R harus di bawah 1,6 — clamp lama menyembunyikannya " +
+                "(dapat $reported)",
             reported < 1.6
         )
-        assertFalse(
-            "Gate default 1,5 tidak boleh lolos dengan net R:R TP1 di bawah 1,5",
-            signal.mtf.entryPriceOk
+        assertTrue(
+            "Dengan ruang +2,0%, net R:R juga harus di bawah ambang 1,5 (dapat $reported)",
+            reported < IntradayConfig.DEFAULT.minNetRrTp1
         )
+        if (signal.mtf.triggerOk) {
+            assertFalse(
+                "Step4 harus gagal saat ruang TP1 tidak memenuhi ambang — gate tidak boleh lolos",
+                signal.mtf.entryPriceOk
+            )
+        }
     }
 
     /**
@@ -218,15 +234,16 @@ class IntradayAccountingAndSessionTest {
      * Uji perilaku: **fee maker** (`useMakerFee`) dan **slippage** memang dioper dari
      * [IntradayConfig] ke hitungan net R:R (pengganti pindai sumber).
      *
-     * Bukti: evaluasi di bar yang sama memakai config maker + slippage 0,30% per sisi. Bila angka
-     * R:R yang tampil cocok dengan `FeeCalculator.roundTrip` atas config itu DAN jelas berbeda
-     * dari hasil basis taker + slippage default, berarti config benar-benar dipakai, bukan nilai
-     * bawaan yang diam-diam menggantikannya.
+     * Paket C: geometri R-derived menjadikan net R:R yang tampil ≈ ambang config pada **kedua**
+     * basis — TP1 di-solve agar memenuhi ambang, jadi perbedaan biaya pindah ke **level TP1**
+     * (maker + slippage lebih murah → TP1 lebih dekat), bukan ke angka R:R. Bukti config dipakai:
+     * R:R tampil cocok dengan `FeeCalculator.roundTrip` atas config itu, DAN TP1 maker berbeda
+     * dari TP1 taker.
      */
     @Test
     fun feeMakerDanSlippageDariConfig_ikutMengubahNetRr() {
         val candles = muatCandleH1Riset("DOGEUSDT")
-        val bar = pilihBarTriggerOk(candles)
+        val bar = pilihBarRrMemenuhiAmbang(candles)
 
         val evalMaker = IntradayEvaluator.evaluate(
             price = bar.harga,
@@ -236,20 +253,20 @@ class IntradayAccountingAndSessionTest {
             config = IntradayConfig(useMakerFee = true, slippagePct = 0.30)
         )
         val signal = evalMaker.signal
-        val expected = FeeCalculator.roundTrip(
+        val expected = netRrTanpaPipih(
             entry = bar.harga,
             stopLoss = signal.stopLoss,
             takeProfit = signal.targetPrice1,
             fees = feesUsdt,
-            useMaker = true,
-            slippagePct = 0.30
-        ).netRr
+            slippagePct = 0.30,
+            useMaker = true
+        )
         val reported = signal.riskRewardRatio.removePrefix("1:").toDouble()
         assertEquals(
             "R:R yang tampil harus memakai fee maker + slippage 0,30 sesuai config",
             expected,
             reported,
-            0.02
+            1e-9
         )
 
         val evalTaker = IntradayEvaluator.evaluate(
@@ -260,10 +277,57 @@ class IntradayAccountingAndSessionTest {
             config = IntradayConfig()
         )
         val reportedTaker = evalTaker.signal.riskRewardRatio.removePrefix("1:").toDouble()
+        assertEquals(
+            "Dengan geometri R-derived pada bar tanpa batas, kedua basis harus sama-sama " +
+                "memenuhi ambang config (maker $reported vs taker $reportedTaker)",
+            IntradayConfig.DEFAULT.minNetRrTp1,
+            reportedTaker,
+            0.02
+        )
+
+        // Perbedaan biaya yang benar-benar terisolasi ada di **level solve** murni — pada sinyal,
+        // TP1 = max(TP1-ATR, TP1-dari-R) bisa mengikat di level ATR untuk salah satu basis, jadi
+        // TP1 sinyal antar basis tidak selalu terurut. (Catatan: Tokocrypto USDT maker = taker =
+        // 0,4044%, jadi di bursa itu beda arah hanya datang dari slippage.)
+        // (a) Fee maker dipakai: pada Tokocrypto IDR (maker 0,1222 < taker 0,2222), impas net
+        //     maker lebih kecil → TP1-dari-R maker lebih dekat.
+        val feeTokoIdr = FeeSchedule.configFor("TOKOCRYPTO", "IDR")
+        val gIdrMaker = IntradayGeometry.resolve(
+            price = 100.0, supportLevel = null, resistanceLevel = null,
+            atr = 1.5, fees = feeTokoIdr, config = IntradayConfig(useMakerFee = true)
+        )
+        val gIdrTaker = IntradayGeometry.resolve(
+            price = 100.0, supportLevel = null, resistanceLevel = null,
+            atr = 1.5, fees = feeTokoIdr, config = IntradayConfig()
+        )
         assertTrue(
-            "R:R basis maker + slippage 0,30 ($reported) harus jelas berbeda dari basis taker " +
-                "bawaan ($reportedTaker) — kalau sama, config tidak dipakai",
-            reportedTaker - reported > 0.05
+            "Impas net maker Toko IDR (${gIdrMaker.impasNetPct}) harus lebih kecil dari taker " +
+                "(${gIdrTaker.impasNetPct}) — kalau tidak, useMakerFee tidak dipakai geometri",
+            gIdrMaker.impasNetPct < gIdrTaker.impasNetPct
+        )
+        assertTrue(
+            "Biaya maker lebih murah → TP1-dari-R maker harus lebih dekat: " +
+                "maker ${gIdrMaker.takeProfit1} < taker ${gIdrTaker.takeProfit1}",
+            gIdrMaker.takeProfit1 < gIdrTaker.takeProfit1
+        )
+        // (b) Slippage dari config: 0,30/sisi lebih mahal dari bawaan 0,08 → TP1 lebih jauh.
+        val gSlip030 = IntradayGeometry.resolve(
+            price = 100.0, supportLevel = null, resistanceLevel = null,
+            atr = 1.5, fees = feesUsdt, config = IntradayConfig(slippagePct = 0.30)
+        )
+        val gSlipBawaan = IntradayGeometry.resolve(
+            price = 100.0, supportLevel = null, resistanceLevel = null,
+            atr = 1.5, fees = feesUsdt, config = IntradayConfig()
+        )
+        assertTrue(
+            "Impas net slippage 0,30 (${gSlip030.impasNetPct}) harus lebih besar dari bawaan " +
+                "(${gSlipBawaan.impasNetPct}) — kalau tidak, slippagePct tidak dipakai geometri",
+            gSlip030.impasNetPct > gSlipBawaan.impasNetPct
+        )
+        assertTrue(
+            "Slippage lebih besar → TP1-dari-R harus lebih jauh: " +
+                "${gSlip030.takeProfit1} > ${gSlipBawaan.takeProfit1}",
+            gSlip030.takeProfit1 > gSlipBawaan.takeProfit1
         )
     }
 
@@ -401,25 +465,34 @@ class IntradayAccountingAndSessionTest {
             )
         }
 
-        // (2) Invarian geometri yang membuat keduanya memang tak mungkin bertentangan:
-        // lantai TP1 (+2,8%) harus di atas impas net, dan lantai SL (−1,5%) di bawahnya,
-        // untuk tiga preset tarif (Toko USDT, Toko IDR, Indodax IDR).
+        // (2) Invarian geometri yang membuat keduanya memang tak mungkin bertentangan — diturunkan
+        // dari config (paket C), bukan literal: impas net harus berada di ANTARA SL terapat
+        // (lantai SL) dan TP1 terendah (1,25 × ATR lantai 1,5% = +1,875%) untuk tiga preset tarif
+        // (Toko USDT, Toko IDR, Indodax IDR).
+        val cfg = IntradayConfig.DEFAULT
         listOf(feesUsdt, feesIdr, FeeSchedule.configFor("TOKOCRYPTO", "IDR")).forEach { fees ->
-            val impasNet = FeeSchedule.breakevenPrice(
+            val impasNetPct = FeeSchedule.breakevenPrice(
                 entry = 100.0,
                 buyFeePct = fees.buyTakerPct,
                 sellFeePct = fees.sellTakerPct,
                 slippagePct = FeeSchedule.DEFAULT_SLIPPAGE_PCT
+            ) - 100.0
+            val lantaiSlPct = maxOf(
+                cfg.minSlPct,
+                cfg.minSlFrictionMultiple * impasNetPct
+            )
+            val tp1TerendahPct = cfg.atrFloorPct * cfg.tp1AtrMult
+            val hargaImpas = 100.0 * (1.0 + impasNetPct / 100.0)
+            val slTerapat = 100.0 * (1.0 - lantaiSlPct / 100.0)
+            assertTrue(
+                "Impas net ($impasNetPct%) harus di bawah TP1 terendah geometri (+$tp1TerendahPct%) — " +
+                    "kalau tidak, trade berlabel VALID_ENTRY_TP bisa terhitung kalah dari net",
+                impasNetPct < tp1TerendahPct
             )
             assertTrue(
-                "Impas net ($impasNet) harus di bawah lantai TP1 (${100.0 * 1.028}) — kalau tidak, " +
-                    "trade berlabel VALID_ENTRY_TP bisa terhitung kalah dari net",
-                impasNet < 100.0 * 1.028
-            )
-            assertTrue(
-                "Impas net ($impasNet) harus di atas lantai SL (${100.0 * 0.985}) — kalau tidak, " +
-                    "trade berlabel FALSE_SIGNAL_SL bisa terhitung menang dari net",
-                impasNet > 100.0 * 0.985
+                "Harga impas net ($hargaImpas) harus di atas SL terapat geometri ($slTerapat) — " +
+                    "kalau tidak, trade berlabel FALSE_SIGNAL_SL bisa terhitung menang dari net",
+                hargaImpas > slTerapat
             )
         }
     }
@@ -435,14 +508,17 @@ class IntradayAccountingAndSessionTest {
     )
 
     /**
-     * Cari bar candle yang lolos Step1–3 (triggerOk) di dataset riset, memakai jendela evaluasi
-     * yang sama dengan replay (300 bar terakhir + waktu tutup bar H1). Dipakai uji fee dari
-     * config; kegagalan menemukan bar berarti dataset tidak lagi menyediakan kasusnya (ganti
-     * dataset, ukur ulang).
+     * Cari bar candle yang lolos Step1–3 **dan** geometrinya bebas batas (net R:R TP1 memenuhi
+     * ambang bawaan 1,5 — TP1-dari-R tidak terpotong resistance/batas atas) di dataset riset,
+     * memakai jendela evaluasi yang sama dengan replay (300 bar terakhir + waktu tutup bar H1).
+     *
+     * Dipakai uji fee dari config; kegagalan menemukan bar berarti dataset tidak lagi menyediakan
+     * kasusnya (ganti dataset, ukur ulang).
      */
-    private fun pilihBarTriggerOk(candles: List<CandleBar>): BarTerpilih {
+    private fun pilihBarRrMemenuhiAmbang(candles: List<CandleBar>): BarTerpilih {
         val jendelaBar = 300
         val durasiBarH1 = 3_600_000L
+        val ambang = IntradayConfig.DEFAULT.minNetRrTp1
         for (i in 20 until candles.size) {
             val evalTime = candles[i].timestamp + durasiBarH1
             val window = candles.subList(max(0, i - jendelaBar), i + 1)
@@ -451,14 +527,41 @@ class IntradayAccountingAndSessionTest {
                 history = window,
                 fees = feesUsdt,
                 evaluationTimestamp = evalTime,
-                config = IntradayConfig(minNetRrTp1 = 0.0)
+                config = IntradayConfig()
             )
-            if (result.signal.mtf.triggerOk) {
+            if (!result.signal.mtf.triggerOk) continue
+            val rr = result.signal.riskRewardRatio.removePrefix("1:").toDoubleOrNull() ?: 0.0
+            if (rr >= ambang - 1e-9) {
                 return BarTerpilih(harga = candles[i].close, window = window, evalTime = evalTime)
             }
         }
-        error("Dataset DOGEUSDT_1h tidak lagi punya bar yang lolos Step1-3 pada ambang 0,0 — " +
-            "dataset perlu diperbarui atau uji fee config dirancang ulang")
+        error(
+            "Dataset tidak lagi punya bar Step1-3 dengan geometri bebas batas (R:R >= $ambang) — " +
+                "dataset perlu diperbarui atau uji fee config dirancang ulang"
+        )
+    }
+
+    /**
+     * Cermin rumus net R:R multiplikatif **tanpa pipih** untuk uji: `FeeCalculator.roundTrip`
+     * memipihkan net R:R negatif ke 0, sedangkan geometri paket C sengaja tidak (ambang 0,0
+     * harus berarti "TP1 minimal impas net"). Satu tempat cermin di uji, dengan komentar sumber;
+     * kode produksi tetap memakai `FeeCalculator`/[IntradayGeometry].
+     */
+    private fun netRrTanpaPipih(
+        entry: Double,
+        stopLoss: Double,
+        takeProfit: Double,
+        fees: TradingFeeConfig,
+        slippagePct: Double,
+        useMaker: Boolean = false
+    ): Double {
+        val buyFeePct = if (useMaker) fees.buyMakerPct else fees.buyTakerPct
+        val sellFeePct = if (useMaker) fees.sellMakerPct else fees.sellTakerPct
+        val buyCostFactor = 1.0 + (buyFeePct + slippagePct) / 100.0
+        val sellNetFactor = (1.0 - (sellFeePct + slippagePct) / 100.0).coerceAtLeast(0.0)
+        val netRiskPct = (1.0 - (stopLoss / entry) * sellNetFactor / buyCostFactor) * 100.0
+        val netRewardPct = ((takeProfit / entry) * sellNetFactor / buyCostFactor - 1.0) * 100.0
+        return if (netRiskPct > 0.0) netRewardPct / netRiskPct else 0.0
     }
 
     /** Muat candle H1 dari dataset riset ter-commit `data/tokocrypto_v7`. */
