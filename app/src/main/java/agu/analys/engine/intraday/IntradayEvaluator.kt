@@ -31,19 +31,33 @@ data class IntradayEvalResult(
  * INTRADAY TRADING STRATEGY EVALUATOR (OPEN PAGI · CLOSE MALAM)
  *
  * Filosofi Intraday Disiplin Sesi & Anti Flash Dump:
- * - Siklus Harian:
- *   1. Sesi Open Pagi (06:00–11:30 WIB): Jendela pembukaan posisi saat volume & likuiditas pagi terbentuk.
- *   2. Sesi Hold & Trailing Siang (11:30–19:30 WIB): Mengawal posisi dengan trailing profit, selektif entry.
- *   3. Sesi Close Malam (19:30–23:30 WIB): Sesi penutupan posisi / exit sebelum tengah malam untuk mengunci kas dan menghindari flash dump overnight.
- *   4. Sesi Istirahat Malam (23:30–06:00 WIB): Dilarang membuka posisi baru (jam rawan dump pasar global).
+ * - Siklus Harian (jam WIB, selang **setengah-terbuka** `[mulai, selesai)`):
+ *   1. Open Pagi (06:00–11:30): jendela pembukaan posisi saat volume & likuiditas pagi terbentuk.
+ *   2. Siang Akumulasi (11:30–15:30): boleh entry selektif bila momentum masih sehat.
+ *   3. Sore Trailing (15:30–19:30): **hanya** mengawal posisi (trailing), dilarang entry baru.
+ *   4. Close Malam (19:30–23:30): tutup posisi menjadi kas sebelum tengah malam.
+ *   5. Istirahat (23:30–06:00): dilarang membuka posisi baru (jam rawan dump pasar global).
+ *
+ *   Konsekuensi selang setengah-terbuka: menit **11:30** milik Siang Akumulasi, **15:30** milik
+ *   Sore Trailing, **19:30** milik Close Malam, dan **23:30** milik Istirahat. Label setiap fase
+ *   karena itu cocok persis dengan kode — tidak ada menit yang dihitung dua kali.
  *
  * - Anti Flash Dump Protection:
  *   1. Memindai histori harga panjang (H4 100–200 candle / D1 100 candle).
- *   2. Deteksi trauma flash dump (< 72 jam) tanpa base akumulasi kokoh.
+ *   2. Deteksi trauma flash dump pada **12 candle terakhir** (= 48 jam bila candle H4) tanpa base
+ *      akumulasi kokoh. Angka ini dari [IntradayConfig], bukan literal di badan fungsi.
  *   3. Deteksi fake pump rejection wick (upper wick panjang) pencegah jebakan pompa.
  *   4. Validasi baseline support jangka panjang (EMA100/EMA200).
  */
 object IntradayEvaluator {
+
+    // Batas sesi dalam menit sejak 00:00 WIB. Selangnya setengah-terbuka [mulai, selesai),
+    // jadi 11:30 = HOLD_SIANG, 15:30 = HOLD_SORE, 19:30 = CLOSE_MALAM, 23:30 = REST_MALAM.
+    private const val OPEN_PAGI_START = 6 * 60
+    private const val HOLD_SIANG_START = 11 * 60 + 30
+    private const val HOLD_SORE_START = 15 * 60 + 30
+    private const val CLOSE_MALAM_START = 19 * 60 + 30
+    private const val REST_MALAM_START = 23 * 60 + 30
 
     enum class IntradayPhase(
         val label: String,
@@ -67,11 +81,11 @@ object IntradayEvaluator {
         val timeMinutes = hour * 60 + minute
 
         return when {
-            timeMinutes in 360..690 -> IntradayPhase.OPEN_PAGI       // 06:00 - 11:30 WIB (Utama Open Pagi)
-            timeMinutes in 691..930 -> IntradayPhase.HOLD_SIANG     // 11:30 - 15:30 WIB (Siang Akumulasi)
-            timeMinutes in 931..1170 -> IntradayPhase.HOLD_SORE     // 15:30 - 19:30 WIB (Sore Trailing)
-            timeMinutes in 1171..1410 -> IntradayPhase.CLOSE_MALAM // 19:30 - 23:30 WIB (Close Malam Kas IDR)
-            else -> IntradayPhase.REST_MALAM                        // 23:30 - 06:00 WIB (Istirahat Dini Hari)
+            timeMinutes in OPEN_PAGI_START until HOLD_SIANG_START -> IntradayPhase.OPEN_PAGI
+            timeMinutes in HOLD_SIANG_START until HOLD_SORE_START -> IntradayPhase.HOLD_SIANG
+            timeMinutes in HOLD_SORE_START until CLOSE_MALAM_START -> IntradayPhase.HOLD_SORE
+            timeMinutes in CLOSE_MALAM_START until REST_MALAM_START -> IntradayPhase.CLOSE_MALAM
+            else -> IntradayPhase.REST_MALAM
         }
     }
 
@@ -80,7 +94,8 @@ object IntradayEvaluator {
         history: List<CandleBar>,
         fees: TradingFeeConfig = TradingFeeConfig(),
         evaluationTimestamp: Long? = null,
-        symbol: String = ""
+        symbol: String = "",
+        config: IntradayConfig = IntradayConfig.DEFAULT
     ): IntradayEvalResult = evaluate(
         globalContext = agu.analys.engine.global.GlobalMarketContext(),
         price = price,
@@ -88,7 +103,8 @@ object IntradayEvaluator {
         fees = fees,
         macroAnomalyResult = null,
         evaluationTimestamp = evaluationTimestamp,
-        symbol = symbol
+        symbol = symbol,
+        config = config
     )
 
     fun evaluate(
@@ -98,7 +114,8 @@ object IntradayEvaluator {
         fees: TradingFeeConfig = TradingFeeConfig(),
         macroAnomalyResult: agu.analys.engine.regime.MacroAnomalyResult? = null,
         evaluationTimestamp: Long? = null,
-        symbol: String = ""
+        symbol: String = "",
+        config: IntradayConfig = IntradayConfig.DEFAULT
     ): IntradayEvalResult {
         if (price <= 0.0) {
             return IntradayEvalResult(AISignalState(), TechnicalIndicators())
@@ -181,10 +198,11 @@ object IntradayEvaluator {
         reasons += "Kondisi Pasar: $regime · ${intradayPhase.label}"
 
         // ── ANTI-FLASH DUMP DETECTOR (Menggunakan Histori Panjang) ──────────
-        // 1. Pindai riwayat dump mendadak dalam 18 candle terakhir (~72 jam H4)
+        // 1. Pindai riwayat dump mendadak dalam N candle terakhir (default 18 candle).
+        //    Ambang umur trauma juga dari config (default 12 candle = 48 jam bila candle H4).
         var flashDumpTrauma = false
         var flashDumpDetail = ""
-        val lookbackDump = min(18, history.size)
+        val lookbackDump = min(config.flashDumpScanCandles, history.size)
         val recentHistory = history.takeLast(lookbackDump)
         for (i in recentHistory.indices) {
             val bar = recentHistory[i]
@@ -192,7 +210,7 @@ object IntradayEvaluator {
             val candleRange = if (bar.high > 0.0) (bar.high - bar.low) / bar.high else 0.0
             if (dropFromOpen >= 0.075 || (candleRange >= 0.12 && bar.close < bar.open)) {
                 val candlesAgo = recentHistory.size - 1 - i
-                if (candlesAgo < 12) {
+                if (candlesAgo < config.flashDumpTraumaCandles) {
                     flashDumpTrauma = true
                     flashDumpDetail = "Pernah flash dump -${fmt(max(dropFromOpen, candleRange) * 100)}% ($candlesAgo candle lalu). Rawan dump susulan."
                     break
@@ -313,9 +331,19 @@ object IntradayEvaluator {
         val calculatedTp2 = maxOf(calculatedTp1 + (intradayAtr * 1.4), price * 1.060)
             .coerceIn(price * 1.055, price * 1.088)
 
-        val feeResult = FeeCalculator.roundTrip(price, calculatedSl, calculatedTp2, fees)
-        val netRr = feeResult.netRr.coerceAtLeast(1.6)
-        val rrString = "1:${fmt(netRr)}"
+        // Net R:R dihitung dari **TP1** — target yang benar-benar dipakai untuk menutup posisi
+        // pertama. Sebelumnya angka ini memakai TP2 lalu di-clamp `coerceAtLeast(1.6)`, sehingga
+        // gate `netRr >= 1.5` selalu benar dan R:R yang tampil bukan R:R yang bisa dieksekusi.
+        val feeResult = FeeCalculator.roundTrip(
+            entry = price,
+            stopLoss = calculatedSl,
+            takeProfit = calculatedTp1,
+            fees = fees,
+            useMaker = config.useMakerFee,
+            slippagePct = config.slippagePct
+        )
+        val netRrTp1 = feeResult.netRr
+        val rrString = "1:${fmt(netRrTp1)}"
 
         // ── DANGER & INVALIDATION ───────────────────────────────────────────
         val isRsiOverbought = rsi >= 72.0
@@ -355,13 +383,15 @@ object IntradayEvaluator {
             microCandles = history,
             strategyMode = agu.analys.config.StrategyMode.OFFICE_DAILY,
             fees = fees,
-            quoteAsset = quoteAsset
+            quoteAsset = quoteAsset,
+            useMaker = config.useMakerFee,
+            slippagePct = config.slippagePct
         )
 
         val step1Ok = !isDangerous && isTrendValidForIntraday && !flashDumpTrauma
         val step2Ok = step1Ok && (price >= supportLevel * 0.988) && !tooCloseToHigh && !pumpAndDumpTrap
         val step3Ok = step2Ok && (rsi in 35.0..65.0) && macdHist >= -0.002
-        val step4Ok = step3Ok && netRr >= 1.5 && buyScore >= 50.0 && !isOverExtended
+        val step4Ok = step3Ok && netRrTp1 >= config.minNetRrTp1 && buyScore >= 50.0 && !isOverExtended
 
         val completedSteps = confluence.completedCount
 
@@ -422,7 +452,7 @@ object IntradayEvaluator {
         val finalScore = if (isParabolicUnwind || flashDumpTrauma) 0 else (finalScoreRaw * regimeMultiplier).toInt()
 
         val biasDetailText = when {
-            flashDumpTrauma -> "Ditolak: Riwayat flash dump dalam 72 jam."
+            flashDumpTrauma -> "Ditolak: Riwayat flash dump dalam ${config.flashDumpTraumaCandles} candle terakhir."
             pumpAndDumpTrap -> "Ditolak: Trap upper wick tajam."
             isRsiOverbought -> "Tertahan: RSI overbought."
             isNearHighDanger -> "Tertahan: Terlalu dekat recent high / overextended."
@@ -450,8 +480,8 @@ object IntradayEvaluator {
         val entryPriceDetailText = when {
             !intradayPhase.isOpenWindow -> "Sesi entry ditutup (${intradayPhase.label})."
             !step3Ok -> "Menunggu Checkpoint 3 lolos."
-            step4Ok -> "Zona Entry: ${PriceFormatter.formatPrice(price, quoteAsset = quoteAsset)} (Net R:R $rrString)."
-            else -> "Menunggu R:R optimal (Min 1:1.8) & skor buy."
+            step4Ok -> "Zona Entry: ${PriceFormatter.formatPrice(price, quoteAsset = quoteAsset)} (Net R:R TP1 $rrString)."
+            else -> "Menunggu R:R optimal (Min 1:${fmt(config.minNetRrTp1)}) & skor buy."
         }
 
         val mtfSnapshot = ScalpingMtfSnapshot(

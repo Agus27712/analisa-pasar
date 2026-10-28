@@ -4712,3 +4712,65 @@ di `AGENTS.md` global (analisis data besar + pencarian memori awal sesi).
 
 **Yang tidak berubah:** isi aturan, gate engine, dan seluruh kode aplikasi. Perubahan ini hanya
 soal ruang konteks, bukan perilaku mesin.
+
+## 79. Mode INTRADAY — paket A+B: angka biaya replay, jam sesi, gate R:R palsu (2026-10-27)
+
+**Latar.** Mode `OFFICE_DAILY` belum pernah masuk audit mana pun, padahal ia memakai jalur kode
+yang berbeda dari scalping: evaluator sendiri, replay sendiri, dan tidak punya slider. Pemeriksaan
+menemukan bahwa replay **menilai dirinya sendiri dengan angka gross**, fase sesi memakai timestamp
+buka candle, dan gate R:R memakai TP2 yang di-clamp `coerceAtLeast(1.6)` sehingga selalu lolos.
+Temuan lengkap ada di **`docs/bugs/temuan_bugs_intraday.md`**; § ini hanya ringkasan keputusan.
+
+**Yang dikerjakan (A+B).**
+
+1. **Satu rumus P&L juga berlaku di replay intraday.** `IntradayReplayEngine.netPnlPct` memakai
+   `FeeSchedule.netProfitPct` (taker dua sisi + slippage dua sisi, multiplikatif). Bentuk lama
+   `gross − (buyTaker + sellTaker)` tanpa slippage membuat trade Indodax tampak lebih untung
+   ≈0,16 pp. Parameter `feeConfig` sekarang **wajib** (tanpa nilai bawaan) supaya preset legacy
+   `TradingFeeConfig()` tidak bisa terpakai lagi.
+2. **Menang/kalah = net, dan setiap trade dihitung tepat sekali.** `validEntries =
+   trades.count { isWin(it.netPnlPct) }`, `falseSignals = trades.size − validEntries`. Dulu
+   `AMBIGUOUS` tidak pernah masuk hitungan dan Close Malam dinilai dari gross — itulah cara laporan
+   menulis **Win Rate 100%** di atas rata-rata net **−0,21%**. Profit factor ikut net.
+3. **Fase sesi setengah-terbuka.** Konstanta bernama `OPEN_PAGI_START` … `REST_MALAM_START` dengan
+   selang `[mulai, selesai)`: 11:30 milik Siang, 15:30 Sore, 19:30 Close Malam, 23:30 Istirahat.
+   Tidak ada menit yang hilang atau dihitung dua kali (diuji 1.440 menit).
+4. **Jam evaluasi dari jam sekarang.** `ModeSignalEvaluator.evaluateIntraday` meneruskan `nowMs`;
+   replay memakai `timestamp buka + durasi bar` (median selisih, jadi H1 maupun H4 benar). Memakai
+   timestamp buka candle menggeser fase ≈4 jam pada H4.
+5. **Gate R:R dari TP1 tanpa clamp.** `netRrTp1` dihitung dari TP1 dan dibandingkan dengan
+   `IntradayConfig.minNetRrTp1` (bawaan **1,5**). Teks "Min 1:1.8" dan klaim "72 jam" diganti nilai
+   config / jumlah candle (12 candle ≈ 48 jam pada H4).
+6. **Config intraday terpisah** (`engine/intraday/IntradayConfig.kt`): `slippagePct`,
+   `useMakerFee=false`, `minNetRrTp1`, `flashDumpScanCandles`, `flashDumpTraumaCandles`. **Tanpa**
+   state global dan tanpa slider — mode intraday memang belum punya slider, jadi menumpang
+   `ScalpingRuntimeConfig` akan membuat geseran slider scalping diam-diam mengubah sinyal intraday.
+
+**Konsekuensi yang harus dibaca sebelum menyimpulkan apa pun.** Dengan geometri sekarang
+(SL paling rapat −1,5%, TP1 paling rapat +2,8%) dan biaya Indodax IDR (impas net 0,7940%), net R:R
+TP1 ≈ **0,74** — jauh di bawah ambang 1,5. Karena gate sekarang jujur, **sinyal BUY intraday
+menjadi nol** pada semua dataset uji: BTC/IDR live 279 bar H1 dan tiga jendela September 2026
+(dulu 6 / 9 / 5 / 6 BUY). Ini **bukan regresi**; ini gate yang berhenti menipu diri sendiri.
+Perbaikan berikutnya ada di **paket C (geometri SL/TP)**, dan itu mengubah output sinyal sehingga
+menunggu instruksi owner.
+
+**Angka terukur (PC, JDK 17, Gradle 9.7).**
+
+| Ukuran | Sebelum | Sesudah |
+|---|---|---|
+| Test intraday | 12 hijau | **20 hijau** |
+| Seluruh unit test | **833** hijau | **841** hijau, 0 gagal |
+| `test01` BTC/IDR live | 6 BUY · WR 100% · avg net −0,21% | 0 BUY · 0 trade |
+| Gross +0,30% Indodax IDR | tampak untung | net **−0,49%** ⇒ kalah |
+
+**Kontrol negatif.** Mengembalikan `coerceAtLeast(1.6)`, menilai Close Malam dari `grossPnlPct`, dan
+mengoper `evaluationTimestamp = null` membuat 4 test gagal; setelah dipulihkan 20/20 hijau.
+
+**Batas yang belum ditutup.** C (geometri SL/TP + ambang `macdHist` yang tidak berskala), D (alat
+replay 11 pair + pemisahan `UNRESOLVED` vs tutup-akhir-jendela), E (mesin exit intraday — belum
+ada), F (UI/kartu intraday belum menyebut basis net & sampel). Semuanya di
+`docs/bugs/temuan_bugs_intraday.md`.
+
+**Yang tidak berubah.** Engine scalping, gate P0, lantai friksi, dan exit paper. `ConfluenceEvaluator`
+hanya mendapat parameter `useMaker`/`slippagePct` dengan **bawaan lama** (`true`), jadi pemanggil
+SWING berperilaku persis seperti sebelumnya.

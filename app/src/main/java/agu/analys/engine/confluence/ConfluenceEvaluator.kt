@@ -1,6 +1,7 @@
 package agu.analys.engine.confluence
 
 import agu.analys.config.FeeCalculator
+import agu.analys.config.FeeSchedule
 import agu.analys.config.StrategyMode
 import agu.analys.config.TradingFeeConfig
 import agu.analys.engine.MarketStructureAnalyzer
@@ -50,7 +51,16 @@ object ConfluenceEvaluator {
         orderBookBids: List<OrderBookItem> = emptyList(),
         orderBookAsks: List<OrderBookItem> = emptyList(),
         fees: TradingFeeConfig = TradingFeeConfig(),
-        quoteAsset: String = "IDR"
+        quoteAsset: String = "IDR",
+        /**
+         * Jenis order kaki beli **dan** jual untuk uji R:R.
+         *
+         * Bawaan `true` mempertahankan perilaku lama pemanggil SWING. Pemanggil yang mengeksekusi
+         * order market (mode INTRADAY) wajib mengirim `false`: menilai R:R dengan tarif maker
+         * membuat biaya tampak lebih murah 0,2 pp pada pair IDR daripada yang benar-benar dibayar.
+         */
+        useMaker: Boolean = true,
+        slippagePct: Double = FeeSchedule.DEFAULT_SLIPPAGE_PCT
     ): ConfluenceResult {
         if (price <= 0.0 || microCandles.size < 5) {
             val emptyList = (1..6).map { idx ->
@@ -353,7 +363,8 @@ object ConfluenceEvaluator {
             stopLoss = calculatedSl,
             takeProfit = calculatedTp1,
             fees = fees,
-            useMaker = true
+            useMaker = useMaker,
+            slippagePct = slippagePct
         )
         val netRr = feeResult.netRr
         val isRiskRewardValid = netRr >= 2.0

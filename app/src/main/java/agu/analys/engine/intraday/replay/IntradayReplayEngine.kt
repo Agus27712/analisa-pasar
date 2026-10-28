@@ -1,10 +1,13 @@
 package agu.analys.engine.intraday.replay
 
+import agu.analys.config.FeeSchedule
 import agu.analys.config.TradingFeeConfig
+import agu.analys.engine.intraday.IntradayConfig
 import agu.analys.engine.intraday.IntradayEvaluator
 import agu.analys.engine.regime.MacroAnomalyDetector
 import agu.analys.model.CandleBar
 import agu.analys.model.SignalAction
+import kotlin.math.abs
 
 enum class IntradayTradeOutcome {
     VALID_ENTRY_TP,
@@ -98,13 +101,69 @@ data class IntradayReplayReport(
 
 object IntradayReplayEngine {
 
+    /**
+     * Net P&L satu trade dalam persen — **satu rumus dengan aplikasi** ([FeeSchedule.netProfitPct],
+     * taker dua sisi + slippage dua sisi, multiplikatif).
+     *
+     * Sebelumnya replay memakai bentuk aditif `gross − (buyTaker + sellTaker)`: tanpa slippage dan
+     * tanpa bunga-berbunga. Untuk Indodax IDR hasilnya 0,63% padahal impas net sebenarnya 0,794%,
+     * jadi setiap trade tampak lebih untung daripada kenyataan.
+     */
+    fun netPnlPct(
+        entry: Double,
+        exit: Double,
+        feeConfig: TradingFeeConfig,
+        slippagePct: Double = FeeSchedule.DEFAULT_SLIPPAGE_PCT
+    ): Double = FeeSchedule.netProfitPct(
+        entry = entry,
+        price = exit,
+        buyFeePct = feeConfig.buyTakerPct,
+        sellFeePct = feeConfig.sellTakerPct,
+        slippagePct = slippagePct
+    )
+
+    /**
+     * Satu predikat menang/kalah untuk replay: **net**, bukan gross.
+     *
+     * Dipakai untuk exit sesi Close Malam, yang dulu dinilai `gross >= 0` sehingga exit +0,2%
+     * dihitung menang padahal setelah biaya hasilnya ≈−0,6%.
+     */
+    fun isWin(netPnlPct: Double): Boolean = netPnlPct >= 0.0
+
+    /** Klasifikasi exit sesi Close Malam dari net, bukan dari gross. */
+    fun classifyCloseMalam(netPnlPct: Double): IntradayTradeOutcome =
+        if (isWin(netPnlPct)) IntradayTradeOutcome.VALID_ENTRY_CLOSE_MALAM
+        else IntradayTradeOutcome.FALSE_SIGNAL_CLOSE_MALAM
+
+    /**
+     * Jarak antar-bar (ms) diambil dari **median** selisih timestamp, bukan konstanta: replay
+     * dipakai untuk H1 maupun H4. Nilai ini menambah timestamp **buka** bar menjadi waktu
+     * **tutup**-nya, yaitu saat harga close benar-benar diketahui.
+     */
+    private fun inferBarDurationMs(candles: List<CandleBar>): Long {
+        if (candles.size < 2) return 0L
+        val diffs = candles.zipWithNext { a, b -> b.timestamp - a.timestamp }
+            .filter { it > 0L }
+            .sorted()
+        return if (diffs.isEmpty()) 0L else diffs[diffs.size / 2]
+    }
+
     fun replay(
         symbol: String = "BTCIDR",
         candles: List<CandleBar>,
         dailyCandles: List<CandleBar> = emptyList(),
         forwardLookaheadBars: Int = 24,
         enforceSessionClose: Boolean = true,
-        feeConfig: TradingFeeConfig = TradingFeeConfig()
+        /**
+         * Tarif bursa **wajib** dioper pemanggil.
+         *
+         * Sengaja tidak ada nilai bawaan: `TradingFeeConfig()` tanpa argumen jatuh ke preset
+         * legacy Indodax-ish (0,11/0,21/0,32/0,42) yang bukan tarif bursa mana pun, sehingga
+         * hasil replay tidak sebanding dengan angka di aplikasi.
+         */
+        feeConfig: TradingFeeConfig,
+        slippagePct: Double = FeeSchedule.DEFAULT_SLIPPAGE_PCT,
+        config: IntradayConfig = IntradayConfig.DEFAULT
     ): IntradayReplayReport {
         val sortedCandles = candles.sortedBy { it.timestamp }
         val sortedDaily = dailyCandles.sortedBy { it.timestamp }
@@ -112,6 +171,8 @@ object IntradayReplayEngine {
         if (sortedCandles.size < 25) {
             return emptyReport(symbol)
         }
+
+        val barDurationMs = inferBarDurationMs(sortedCandles)
 
         val frames = mutableListOf<IntradayReplayFrame>()
         val trades = mutableListOf<IntradayTradeRecord>()
@@ -131,8 +192,6 @@ object IntradayReplayEngine {
         var missedAfterStep4 = 0
         var missedAfterSessionGate = 0
 
-        var validEntries = 0
-        var falseSignals = 0
         var missedOpportunities = 0
         var avoidedLosses = 0
         var unresolvedOutcomes = 0
@@ -147,7 +206,8 @@ object IntradayReplayEngine {
 
         for (i in startIndex..endIndex) {
             val currentCandle = sortedCandles[i]
-            val evalTime = currentCandle.timestamp
+            // Bar dievaluasi pada waktu **tutup**-nya: saat itulah harga close diketahui.
+            val evalTime = currentCandle.timestamp + barDurationMs
             val window = sortedCandles.subList(maxOf(0, i - 300), i + 1)
 
             val phase = IntradayEvaluator.getCurrentIntradayPhase(evalTime)
@@ -164,7 +224,9 @@ object IntradayReplayEngine {
                 history = window,
                 fees = feeConfig,
                 macroAnomalyResult = anomalyResult,
-                evaluationTimestamp = evalTime
+                evaluationTimestamp = evalTime,
+                symbol = symbol,
+                config = config
             )
 
             val signal = evalResult.signal
@@ -257,6 +319,7 @@ object IntradayReplayEngine {
                 var hitTp = false
                 var hitSl = false
                 var closeMalamExit = false
+                var ambiguousExit = false
 
                 val tradeTp1 = signal.targetPrice1
                 val tradeTp2 = signal.targetPrice2
@@ -264,14 +327,14 @@ object IntradayReplayEngine {
 
                 for (f in (i + 1)..maxLookahead) {
                     val fb = sortedCandles[f]
-                    val fbPhase = IntradayEvaluator.getCurrentIntradayPhase(fb.timestamp)
+                    // Fase keluar dihitung pada waktu **tutup** bar yang sama dengan evalTime.
+                    val fbPhase = IntradayEvaluator.getCurrentIntradayPhase(fb.timestamp + barDurationMs)
 
                     val barHitTp = fb.high >= tradeTp1
                     val barHitSl = fb.low <= tradeSl
 
                     if (barHitTp && barHitSl) {
-                        ambiguousOutcomes++
-                        tradeOutcome = IntradayTradeOutcome.AMBIGUOUS
+                        ambiguousExit = true
                         exitIndex = f
                         exitPrice = tradeSl // Conservative: assume SL hit first
                         exitReason = "AMBIGUOUS_SAME_BAR"
@@ -281,47 +344,53 @@ object IntradayReplayEngine {
                         exitIndex = f
                         exitPrice = if (fb.high >= tradeTp2) tradeTp2 else tradeTp1
                         exitReason = if (fb.high >= tradeTp2) "TP2_HIT" else "TP1_HIT"
-                        tradeOutcome = IntradayTradeOutcome.VALID_ENTRY_TP
-                        validEntries++
                         break
                     } else if (barHitSl) {
                         hitSl = true
                         exitIndex = f
                         exitPrice = tradeSl
                         exitReason = "STOP_LOSS_HIT"
-                        tradeOutcome = IntradayTradeOutcome.FALSE_SIGNAL_SL
-                        falseSignals++
                         break
                     } else if (enforceSessionClose && fbPhase == IntradayEvaluator.IntradayPhase.CLOSE_MALAM) {
                         closeMalamExit = true
                         exitIndex = f
                         exitPrice = fb.close
                         exitReason = "CLOSE_MALAM_SESSION_EXIT"
-                        val pnl = (exitPrice - currentCandle.close) / currentCandle.close
-                        if (pnl >= 0.0) {
-                            validEntries++
-                            tradeOutcome = IntradayTradeOutcome.VALID_ENTRY_CLOSE_MALAM
-                        } else {
-                            falseSignals++
-                            tradeOutcome = IntradayTradeOutcome.FALSE_SIGNAL_CLOSE_MALAM
-                        }
                         break
                     }
                 }
 
-                if (!hitTp && !hitSl && !closeMalamExit && tradeOutcome == null) {
-                    unresolvedOutcomes++
+                if (!hitTp && !hitSl && !closeMalamExit && !ambiguousExit) {
                     exitIndex = maxLookahead
                     exitPrice = sortedCandles[maxLookahead].close
                     exitReason = "LOOKAHEAD_EXPIRY"
-                    tradeOutcome = IntradayTradeOutcome.UNRESOLVED
                 }
 
                 currentHoldingUntilIndex = exitIndex
 
                 val grossPnlPct = ((exitPrice - currentCandle.close) / currentCandle.close) * 100.0
-                val totalFeePct = feeConfig.buyTakerPct + feeConfig.sellTakerPct
-                val netPnlPct = grossPnlPct - totalFeePct
+                val netPnlPct = netPnlPct(
+                    entry = currentCandle.close,
+                    exit = exitPrice,
+                    feeConfig = feeConfig,
+                    slippagePct = slippagePct
+                )
+
+                // Satu klasifikasi peristiwa per trade. Menang/kalah TIDAK diambil dari sini —
+                // lihat `isWin` di ringkasan: dasarnya net, bukan gross.
+                val outcome = when {
+                    ambiguousExit -> {
+                        ambiguousOutcomes++
+                        IntradayTradeOutcome.AMBIGUOUS
+                    }
+                    hitTp -> IntradayTradeOutcome.VALID_ENTRY_TP
+                    hitSl -> IntradayTradeOutcome.FALSE_SIGNAL_SL
+                    closeMalamExit -> classifyCloseMalam(netPnlPct)
+                    else -> {
+                        unresolvedOutcomes++
+                        IntradayTradeOutcome.UNRESOLVED
+                    }
+                }
 
                 trades += IntradayTradeRecord(
                     entryIndex = i,
@@ -337,7 +406,7 @@ object IntradayReplayEngine {
                     grossPnlPct = grossPnlPct,
                     netPnlPct = netPnlPct,
                     barsHeld = exitIndex - i,
-                    outcome = tradeOutcome ?: IntradayTradeOutcome.UNRESOLVED
+                    outcome = outcome
                 )
             } else if (signal.action != SignalAction.BUY && isMomentumCandidate) {
                 if (futureRalliedWithoutSl) {
@@ -402,15 +471,30 @@ object IntradayReplayEngine {
             primaryBottleneckDescription = primaryDesc
         )
 
-        val resolvedCount = validEntries + falseSignals
-        val winRatePct = if (resolvedCount > 0) (validEntries.toDouble() / resolvedCount) * 100.0 else 0.0
+        // ── AKUNTANSI MENANG/KALAH: NET, DAN SETIAP TRADE DIHITUNG TEPAT SEKALI ──────────
+        // Dulu `validEntries`/`falseSignals` dinaikkan di dalam loop: TP dan SL dihitung dari
+        // peristiwa, exit Close Malam dari **gross**, dan trade `AMBIGUOUS` tidak masuk hitungan
+        // sama sekali. Akibatnya `validEntries + falseSignals != trades.size` — trade ada di
+        // daftar tetapi tidak pernah masuk win rate. Sekarang predikatnya tunggal (`isWin` atas
+        // net) dan partisinya lengkap: kalah = sisanya, termasuk `UNRESOLVED` dan `AMBIGUOUS`.
+        val validEntries = trades.count { isWin(it.netPnlPct) }
+        val falseSignals = trades.size - validEntries
+
+        val winRatePct = if (trades.isNotEmpty()) {
+            (validEntries.toDouble() / trades.size) * 100.0
+        } else 0.0
 
         val totalNetPnlPct = trades.sumOf { it.netPnlPct }
         val avgNetPnlPct = if (trades.isNotEmpty()) totalNetPnlPct / trades.size else 0.0
 
-        val grossWins = trades.filter { it.grossPnlPct > 0 }.sumOf { it.grossPnlPct }
-        val grossLosses = trades.filter { it.grossPnlPct < 0 }.sumOf { kotlin.math.abs(it.grossPnlPct) }
-        val profitFactor = if (grossLosses > 0.0) grossWins / grossLosses else if (grossWins > 0) 99.0 else 0.0
+        // Profit factor juga net: gross membuat exit sesi yang hanya menutup biaya terlihat untung.
+        val netWins = trades.filter { it.netPnlPct > 0.0 }.sumOf { it.netPnlPct }
+        val netLosses = trades.filter { it.netPnlPct < 0.0 }.sumOf { abs(it.netPnlPct) }
+        val profitFactor = when {
+            netLosses > 0.0 -> netWins / netLosses
+            netWins > 0.0 -> Double.POSITIVE_INFINITY
+            else -> 0.0
+        }
 
         // Max drawdown calculation on equity curve
         var runningEquity = 100.0

@@ -43,7 +43,9 @@ Aturan main:
 - Daftar berkas di folder ini bisa bertambah untuk area lain (exit, P&L, UI, dsb.) dengan
   pola penamaan `temuan_bugs_<topik>.md`.
 
-Saat ini **kosong** (diperbarui 2026-10-18) — tidak ada temuan audit yang masih hidup. Riwayat
+Saat ini berisi **satu** berkas temuan hidup: **`temuan_bugs_intraday.md`** (dibuat 2026-10-27;
+paket A+B sudah tutup, paket C–F masih terbuka). Sebelumnya folder ini kosong sejak 2026-10-18.
+Riwayat
 berkasnya:
 
 - **`temuan_bugs_paper_trade.md` → DIPINDAHKAN 2026-10-18** ke
@@ -96,6 +98,12 @@ berkasnya:
   (`engine/ModeSignalEvaluator.kt`): worker hanya menghitung mode aktif, dan penalti anomali makro
   dihitung di dalam titik sambung itu dari candle D1.
 
+- **`temuan_bugs_intraday.md` — DIBUAT 2026-10-27.** Mode INTRADAY (`OFFICE_DAILY`) belum pernah
+  masuk audit mana pun. Paket **A+B** langsung ditutup di berkas yang sama (angka biaya replay,
+  jam sesi, gate R:R palsu, config intraday terpisah); **C–F masih terbuka** — geometri SL/TP
+  (net R:R ≈0,74 vs ambang 1,5 sehingga sinyal BUY nol), alat replay/ukur, mesin exit, dan UI.
+  Berkas tetap di `docs/bugs/` sampai C–F tuntas. Rincian: `workplan2.md` §79.
+
 ## Folder eksperimen (`docs/exp/`)
 
 Berisi **hasil eksperimen terukur** — satu berkas per eksperimen, bernama
@@ -103,7 +111,7 @@ Berisi **hasil eksperimen terukur** — satu berkas per eksperimen, bernama
 
 | Folder | Isi | Aturan |
 |---|---|---|
-| `docs/bugs/` | temuan audit yang **masih hidup** | kosong sejak 2026-10-18 |
+| `docs/bugs/` | temuan audit yang **masih hidup** | `temuan_bugs_intraday.md` (C–F terbuka) |
 | `docs/laporan_temuan_bugs_*.md` | laporan audit **yang sudah tutup** | satu per topik |
 | `docs/LAPORAN-*.md` | jejak eksekusi batch (arsip) | jangan ditambah, kecuali laporan port eksperimen BERHASIL |
 | **`docs/exp/`** | **hasil eksperimen** — angka yang sudah diukur | tambah bebas, satu per eksperimen |

@@ -1,6 +1,7 @@
 package agu.analys.engine.intraday.replay
 
-import agu.analys.config.TradingFeeConfig
+import agu.analys.config.FeeSchedule
+import agu.analys.engine.intraday.IntradayConfig
 import agu.analys.engine.intraday.IntradayEvaluator
 import agu.analys.model.CandleBar
 import agu.analys.model.SignalAction
@@ -21,11 +22,35 @@ import java.time.Instant
  * Menguji:
  * 1. Replay end-to-end dengan candle live/real BTC Indodax API (H1 & D1).
  * 2. Penegakan disiplin sesi WIB (Open Pagi, Hold Siang, Sore Trailing, Close Malam, Rest Dini Hari).
- * 3. Proteksi Anti Flash Dump (< 72 jam trauma) & Fake Pump Upper Wick Trap.
- * 4. Metrik trade Intraday: Win Rate %, Profit Factor, Max Drawdown %, dan Bottleneck Waterfall Checkpoints.
+ * 3. Proteksi Anti Flash Dump (12 candle terakhir; ≈ 48 jam bila candle H4) & Fake Pump Upper Wick Trap.
+ * 4. Metrik trade Intraday: Win Rate % (**net**, bukan gross), Profit Factor net, Max Drawdown %,
+ *    dan Bottleneck Waterfall Checkpoints.
+ *
+ * Catatan akuntansi: menang/kalah dihitung dari `netPnlPct` (fee taker dua sisi + slippage dua sisi
+ * lewat `FeeSchedule`). Sebelum perbaikan, exit sesi Close Malam dinilai dari **gross**, sehingga
+ * laporan bisa menulis "Win Rate 100%" di atas rata-rata net yang negatif.
  */
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 class RealBtcIndodaxIntradayReplayTest {
+
+    /**
+     * Jam operasional tiap fase (WIB). Selangnya **setengah-terbuka** `[mulai, selesai)`, sama
+     * dengan `IntradayEvaluator.getCurrentIntradayPhase` — jadi 11:30 milik Siang, bukan Open Pagi.
+     */
+    private fun sessionHours(phase: IntradayEvaluator.IntradayPhase): String = when (phase) {
+        IntradayEvaluator.IntradayPhase.OPEN_PAGI -> "06:00–11:30"
+        IntradayEvaluator.IntradayPhase.HOLD_SIANG -> "11:30–15:30"
+        IntradayEvaluator.IntradayPhase.HOLD_SORE -> "15:30–19:30"
+        IntradayEvaluator.IntradayPhase.CLOSE_MALAM -> "19:30–23:30"
+        IntradayEvaluator.IntradayPhase.REST_MALAM -> "23:30–06:00"
+    }
+
+    /** Profit factor tanpa pembagi nol: tidak ada trade rugi berarti tak terdefinisi, bukan 99. */
+    private fun formatProfitFactor(pf: Double): String = when {
+        pf.isInfinite() -> "tak terhingga (tidak ada trade rugi)"
+        pf.isNaN() -> "tidak terdefinisi"
+        else -> String.format("%.2f", pf)
+    }
 
     @Test
     fun test01_liveOrRealBtcIntradayReplay_executesFullPipeline() = runBlocking {
@@ -66,13 +91,15 @@ class RealBtcIndodaxIntradayReplayTest {
         assertTrue("Dataset H1 harus memiliki minimal 25 candle closed", h1Candles.size >= 25)
 
         // 2. Jalankan Replay Engine Intraday
+        // Tarif wajib eksplisit: BTC/IDR di Indodax = IDR, bukan preset legacy Indodax-ish.
+        val feeConfig = FeeSchedule.configFor("INDODAX", "IDR")
         val report = IntradayReplayEngine.replay(
             symbol = "BTCIDR",
             candles = h1Candles,
             dailyCandles = d1Candles,
             forwardLookaheadBars = 24,
             enforceSessionClose = true,
-            feeConfig = TradingFeeConfig()
+            feeConfig = feeConfig
         )
 
         // 3. Validasi hasil evaluasi dasar
@@ -94,16 +121,18 @@ class RealBtcIndodaxIntradayReplayTest {
             appendLine("| Metrik | Nilai |")
             appendLine("|---|---|")
             appendLine("| Sinyal BUY Diterbitkan | **${report.totalSignalsTriggered}** |")
-            appendLine("| Valid Entries (Target TP / Profit Exit) | **${report.validEntries}** |")
-            appendLine("| False Signals (Kena SL / Loss Exit) | **${report.falseSignals}** |")
-            appendLine("| Win Rate (%) | **${String.format("%.2f", report.winRatePct)}%** |")
-            appendLine("| Profit Factor | **${String.format("%.2f", report.profitFactor)}** |")
+            appendLine("| Valid Entries (Net ≥ 0%) | **${report.validEntries}** |")
+            appendLine("| False Signals (Net < 0%) | **${report.falseSignals}** |")
+            appendLine("| Win Rate Net (%) | **${String.format("%.2f", report.winRatePct)}%** |")
+            appendLine("| Profit Factor (Net) | **${formatProfitFactor(report.profitFactor)}** |")
             appendLine("| Total Net Return (%) | **${String.format("%+.2f", report.totalNetPnlPct)}%** |")
             appendLine("| Rata-rata Net Return per Trade (%) | **${String.format("%+.2f", report.avgNetPnlPct)}%** |")
             appendLine("| Maximum Drawdown (%) | **${String.format("%.2f", report.maxDrawdownPct)}%** |")
             appendLine("| Missed Opportunities (Kandidat Ditolak tapi Naik) | **${report.missedOpportunities}** |")
             appendLine("| Avoided Losses (Kandidat Ditolak & Terhindar Rugi) | **${report.avoidedLosses}** |")
-            appendLine("| Unresolved Trades | **${report.unresolvedOutcomes}** |")
+            appendLine("| Unresolved Trades (tidak menyentuh SL/TP/sesi) | **${report.unresolvedOutcomes}** |")
+            appendLine("| Ambiguous Trades (SL & TP kena di bar yang sama) | **${report.ambiguousOutcomes}** |")
+            appendLine("| Total Trade Tercatat | **${report.trades.size}** |")
             appendLine()
             appendLine("## 2. Distribusi Sesi Harian WIB")
             appendLine()
@@ -117,7 +146,7 @@ class RealBtcIndodaxIntradayReplayTest {
                     IntradayEvaluator.IntradayPhase.CLOSE_MALAM -> "Close Kas IDR (Tutup Posisi Harian Sebelum Dini Hari)"
                     IntradayEvaluator.IntradayPhase.REST_MALAM -> "Istirahat Dini Hari (Pasar Rawan Flash Dump Global)"
                 }
-                appendLine("| ${phase.label} | ${phase.name} | $count | $desc |")
+                appendLine("| ${phase.label} | ${sessionHours(phase)} | $count | $desc |")
             }
             appendLine()
             appendLine("## 3. Analisis Bottleneck Waterfall Checkpoints")
@@ -130,9 +159,9 @@ class RealBtcIndodaxIntradayReplayTest {
             appendLine("| Step 1 (Macro Trend & EMA) | ${report.bottleneck.step1Rejections} | - | Memastikan EMA20 > EMA50 |")
             appendLine("| Step 2 (Support & Near High) | ${report.bottleneck.step2Rejections} | - | Mencegah beli di pucuk |")
             appendLine("| Step 3 (RSI & MACD Momentum) | ${report.bottleneck.step3Rejections} | - | RSI ideal 36–62 & MACD sehat |")
-            appendLine("| Step 4 (Risk/Reward & Buy Score) | ${report.bottleneck.step4Rejections} | - | Minimal Net R:R 1:1.6 |")
+            appendLine("| Step 4 (Risk/Reward & Buy Score) | ${report.bottleneck.step4Rejections} | - | Net R:R TP1 minimal 1:${String.format("%.2f", IntradayConfig.DEFAULT.minNetRrTp1)} |")
             appendLine("| Session Gate (Rest/Sore Window) | ${report.bottleneck.sessionGateRejections} | - | Mencegah beli di luar jam aktif |")
-            appendLine("| Anti Flash Dump Block | ${report.bottleneck.flashDumpTraumaBlocks} | - | Mencegah beli pasca dump mendadak (< 72 jam) |")
+            appendLine("| Anti Flash Dump Block | ${report.bottleneck.flashDumpTraumaBlocks} | - | Mencegah beli pasca dump mendadak (${IntradayConfig.DEFAULT.flashDumpTraumaCandles} candle terakhir) |")
             appendLine("| Fake Pump Trap Block | ${report.bottleneck.pumpAndDumpTrapBlocks} | - | Mencegah jebakan jarum atas (Upper Wick) |")
             appendLine()
             if (report.trades.isNotEmpty()) {
@@ -219,7 +248,7 @@ class RealBtcIndodaxIntradayReplayTest {
 
     @Test
     fun test03_antiFlashDumpProtection_blocksEntriesAfterRecentDump() {
-        println("=== TEST 03: PROTEKSI ANTI FLASH DUMP (< 72 JAM) ===")
+        println("=== TEST 03: PROTEKSI ANTI FLASH DUMP (12 CANDLE TERAKHIR) ===")
 
         val baseCandles = RealBtcIntradayTestData.sampleH1.take(30).toMutableList()
         val lastTs = baseCandles.last().timestamp
@@ -417,12 +446,18 @@ class RealBtcIndodaxIntradayReplayTest {
             symbol = "BTCIDR",
             candles = baseCandles,
             forwardLookaheadBars = 12,
-            enforceSessionClose = true
+            enforceSessionClose = true,
+            feeConfig = FeeSchedule.configFor("INDODAX", "IDR")
         )
 
         assertTrue("Replay harus mencakup minimal 1 evaluasi", replayReport.totalEvaluations >= 1)
+        assertEquals(
+            "Setiap trade harus masuk tepat satu klasifikasi (menang atau kalah)",
+            replayReport.trades.size,
+            replayReport.validEntries + replayReport.falseSignals
+        )
         println("Total signal triggered: ${replayReport.totalSignalsTriggered}")
-        println("Valid entries: ${replayReport.validEntries}")
+        println("Valid entries (net >= 0): ${replayReport.validEntries}")
     }
 
     @Test
@@ -465,14 +500,15 @@ class RealBtcIndodaxIntradayReplayTest {
             candles = h1Candles,
             dailyCandles = d1Candles,
             forwardLookaheadBars = 24,
-            enforceSessionClose = true
+            enforceSessionClose = true,
+            feeConfig = FeeSchedule.configFor("INDODAX", "IDR")
         )
 
         println("\n=== SUMMARY REPLAY ===")
         println("Total Evaluasi   : ${report.totalEvaluations}")
         println("Total Sinyal BUY : ${report.totalSignalsTriggered}")
-        println("Valid Entries    : ${report.validEntries}")
-        println("False Signals    : ${report.falseSignals}")
+        println("Valid Entries (net >= 0) : ${report.validEntries}")
+        println("False Signals (net < 0)  : ${report.falseSignals}")
 
         // Cari trade yang terjadi spesifik pada tanggal 3 September 2026
         val formatter = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale("id", "ID")).apply {
@@ -551,14 +587,15 @@ class RealBtcIndodaxIntradayReplayTest {
             candles = h1Candles,
             dailyCandles = d1Candles,
             forwardLookaheadBars = 24,
-            enforceSessionClose = true
+            enforceSessionClose = true,
+            feeConfig = FeeSchedule.configFor("INDODAX", "IDR")
         )
 
         println("\n=== SUMMARY REPLAY ===")
         println("Total Evaluasi   : ${report.totalEvaluations}")
         println("Total Sinyal BUY : ${report.totalSignalsTriggered}")
-        println("Valid Entries    : ${report.validEntries}")
-        println("False Signals    : ${report.falseSignals}")
+        println("Valid Entries (net >= 0) : ${report.validEntries}")
+        println("False Signals (net < 0)  : ${report.falseSignals}")
 
         val formatter = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale("id", "ID")).apply {
             timeZone = java.util.TimeZone.getTimeZone("Asia/Jakarta")
@@ -634,14 +671,15 @@ class RealBtcIndodaxIntradayReplayTest {
             candles = h1Candles,
             dailyCandles = d1Candles,
             forwardLookaheadBars = 24,
-            enforceSessionClose = true
+            enforceSessionClose = true,
+            feeConfig = FeeSchedule.configFor("INDODAX", "IDR")
         )
 
         println("\n=== SUMMARY REPLAY ===")
         println("Total Evaluasi   : ${report.totalEvaluations}")
         println("Total Sinyal BUY : ${report.totalSignalsTriggered}")
-        println("Valid Entries    : ${report.validEntries}")
-        println("False Signals    : ${report.falseSignals}")
+        println("Valid Entries (net >= 0) : ${report.validEntries}")
+        println("False Signals (net < 0)  : ${report.falseSignals}")
 
         val formatter = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale("id", "ID")).apply {
             timeZone = java.util.TimeZone.getTimeZone("Asia/Jakarta")

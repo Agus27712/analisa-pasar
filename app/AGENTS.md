@@ -748,3 +748,40 @@ Aturan yang mengikat agen:
 5. Penjaga: `PaperReentryCooldownTest`, `SpotPositionStorePaperLastSoldTest`,
    `PaperAutoBuyReentryCooldownWiringTest` (uji wiring — kontrol negatifnya sudah
    diprovokasi gagal pada 2026-10-26).
+
+## Mode INTRADAY (`OFFICE_DAILY`) — paket A+B (2026-10-27, WAJIB)
+
+Mode intraday **bukan** scalping: ia punya evaluator, replay, dan config sendiri, dan **belum punya
+slider**. Temuan lengkap: `docs/bugs/temuan_bugs_intraday.md`; ringkasan keputusan: `workplan2.md`
+§79. Aturan yang mengikat:
+
+1. **Config sendiri, tanpa state global.** Ambang intraday ada di
+   `engine/intraday/IntradayConfig.kt` dan dioper **eksplisit** oleh pemanggil. Jangan menumpangkan
+   parameter intraday ke `ScalpingRuntimeConfig`/slider: geseran satu slider scalping akan
+   diam-diam mengubah sinyal intraday. Jangan menambah `object … current` yang bisa diubah runtime
+   sebelum ada UI-nya (parameter tanpa pembaca dilarang).
+2. **Net R:R dari TP1, tanpa clamp.** `netRrTp1 = FeeCalculator.roundTrip(… takeProfit = TP1 …).netRr`
+   dan gate memakai `config.minNetRrTp1` (bawaan 1,5). **Jangan** mengembalikan `coerceAtLeast(1.6)`
+   atau memakai TP2 untuk gate: keduanya membuat gate selalu lolos dan angka R:R yang tampil bukan
+   yang bisa dieksekusi. Penjaga: `IntradayAccountingAndSessionTest`.
+3. **Konsekuensi yang harus disebut jujur.** Geometri sekarang (SL ≥ −1,5%, TP1 ≤ +2,8%) memberi
+   net R:R ≈0,74 pada biaya Indodax IDR (impas net 0,7940%), jadi **sinyal BUY intraday nol**.
+   Jangan "memperbaiki" dengan menurunkan ambang; perbaikannya ada di geometri (paket C) dan
+   menunggu instruksi owner.
+4. **Replay wajib net, dan wajib fee eksplisit.** `IntradayReplayEngine.replay(feeConfig = …)` tidak
+   punya nilai bawaan dengan sengaja — `TradingFeeConfig()` tanpa argumen adalah preset legacy
+   Indodax-ish. P&L memakai `FeeSchedule.netProfitPct` (taker + slippage dua sisi).
+5. **Menang/kalah net dan partisinya lengkap.** `validEntries = trades.count { isWin(it.netPnlPct) }`
+   dan `falseSignals = trades.size − validEntries`; profit factor net. `outcome` hanya mencatat
+   peristiwa (TP/SL/close/ambiguous/unresolved) — **jangan** dipakai untuk menghitung win rate.
+   Dulu `AMBIGUOUS` tidak pernah dihitung dan Close Malam dinilai gross, sehingga laporan bisa
+   menulis Win Rate 100% di atas rata-rata net negatif.
+6. **Fase sesi setengah-terbuka dan jam sekarang.** `[mulai, selesai)`: 11:30 Siang, 15:30 Sore,
+   19:30 Close Malam, 23:30 Istirahat. Evaluasi memakai `nowMs` (jam sekarang); replay memakai
+   `timestamp buka + durasi bar`. Memakai timestamp buka candle menggeser fase ≈4 jam pada H4.
+7. **Klaim umur flash dump memakai jumlah candle, bukan "72 jam".** `flashDumpTraumaCandles` = 12
+   candle (≈48 jam pada H4, ≈12 jam pada H1). Teks UI/dokumen/laporan wajib menyebut angka yang
+   sama dengan kode.
+8. **`macdHist >= -0,002` masih perlu diputuskan (paket C).** `macdHist` bersatuan harga, bukan
+   persen, sehingga ambang itu praktis berarti "histogram tidak negatif". Jangan mengubahnya
+   diam-diam; normalisasi atau penghapusan ambang menggeser frekuensi sinyal dan harus diukur.

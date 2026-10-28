@@ -150,6 +150,12 @@ object ModeSignalEvaluator {
     private fun evaluateIntraday(input: ModeSignalInput): ModeSignal? {
         if (input.h4Candles.isEmpty()) return null
 
+        // Jam evaluasi WAJIB dari jam sekarang, bukan dari `history.last().timestamp`.
+        // Timestamp candle H4 adalah waktu **buka** bar terakhir; memakainya menggeser fase sesi
+        // satu bucket (≈4 jam) sehingga entry hanya terjadi 11:00–14:59 WIB dan SELL paksa jatuh
+        // 23:00–02:59 WIB — kebalikan dari tujuan "Close Malam".
+        val nowMs = if (input.nowMs > 0L) input.nowMs else System.currentTimeMillis()
+
         val anomaly = MacroAnomalyDetector.evaluate(input.d1Candles, input.price)
         val result = IntradayEvaluator.evaluate(
             globalContext = input.globalContext,
@@ -157,6 +163,7 @@ object ModeSignalEvaluator {
             history = input.h4Candles,
             fees = input.fees,
             macroAnomalyResult = anomaly,
+            evaluationTimestamp = nowMs,
             symbol = input.symbol
         )
         return ModeSignal(result.signal, result.indicators)
