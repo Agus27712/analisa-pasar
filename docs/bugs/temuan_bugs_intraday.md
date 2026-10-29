@@ -107,24 +107,42 @@ angka diukur dari run `:app:testDebugUnitTest`:
 
 Dipulihkan → 22 test intraday + 5 `ModeSignalEvaluatorTest` hijau (27/27, 0 gagal).
 
-**Angka terukur paket C (28 Okt 2026, PC, JDK 17, Gradle 9.7):**
+**Angka terukur paket C dan sweep batas atas (28–29 Okt 2026, PC, JDK 17, Gradle 9.7):**
 
 Replay 11 pair dataset `data/tokocrypto_v7` (`*_1h.csv`), fee Tokocrypto USDT, geometri baru:
 
+**Sweep `maxTp1Pct` 3%–10% (29 Okt 2026, langkah 1%, alat `IntradayMaxTp1SweepTest`):**
+
+| `maxTp1Pct` | BUY | Trade | Menang | Win rate | Avg net/trade | Total net | Pair yang menghasilkan BUY |
+|---|---|---|---|---|---|---|---|
+| 3,0% | 0 | 0 | — | — | — | — | — |
+| 4,0% | 0 | 0 | — | — | — | — | — |
+| **5,0% (bawaan)** | **0** | 0 | — | — | — | — | — |
+| 6,0% | 17 | 8 | 2 | 25,0% | **−0,810%** | −6,482% | BANKUSDT 16, SUIUSDT 1 |
+| 7,0% | 20 | 11 | 2 | 18,2% | −1,336% | −14,693% | BANKUSDT 17, SUIUSDT 3 |
+| 8,0% | 20 | 11 | 2 | 18,2% | −1,336% | −14,693% | BANKUSDT 17, SUIUSDT 3 |
+| 9,0% | 20 | 11 | 2 | 18,2% | −1,336% | −14,693% | BANKUSDT 17, SUIUSDT 3 |
+| 10,0% | 20 | 11 | 2 | 18,2% | −1,336% | −14,693% | BANKUSDT 17, SUIUSDT 3 |
+
+Ketahanan terhadap potongan window (60% awal / 40% akhir, diukur hanya pada BANKUSDT + SUIUSDT
+karena hanya dua pair itu yang pernah bersinyal):
+
+| `maxTp1Pct` | Awal 60% | Akhir 40% |
+|---|---|---|
+| 3–5% | 0 BUY | 0 BUY |
+| 6,0% | 6 BUY, 2 trade, avg −0,094%, WR 50% | 10 BUY, 5 trade, avg −1,272%, WR 0% |
+| 7–10% | 9 BUY, 5 trade, avg −1,680%, WR 20% | 10 BUY, 5 trade, avg −1,272%, WR 0% |
+
+Knob lain (semua diukur dengan `maxTp1Pct` 8% sebagai **config pengukuran**, bukan bawaan):
+
 | Konfigurasi | BUY | Trade | Pair yang menghasilkan BUY | Avg net/trade |
 |---|---|---|---|---|
-| Ambang **1,5** + `maxTp1Pct` **5,0%** (**bawaan**) | **0** | 0 | — | — |
-| Ambang 1,5 + `maxTp1Pct` 2,0% | **0** | 0 | — | — |
-| Ambang 1,5 + `maxTp1Pct` 4,0% | **0** | 0 | — | — |
-| Ambang 1,5 + `maxTp1Pct` 6,0% | 17 | 8 | BANKUSDT 16, SUIUSDT 1 | **−0,810%** |
-| Ambang 1,5 + `maxTp1Pct` 7,0% | 20 | 11 | BANKUSDT 17, SUIUSDT 3 | −1,336% |
-| Ambang 1,5 + `maxTp1Pct` 8,0% (config pengukuran, **bukan bawaan**) | 20 | 11 | BANKUSDT, SUIUSDT | −1,336% |
-| Gate MACD **lama** (praktis tanpa gate, `macdHistMinPct=−1000`, cap 8%) | 35 | 20 | + CHIPUSDT, NEARUSDT, QNTUSDT | −0,890% |
-| Gate MACD baru `macdHistMinPct=0,0` (bawaan, cap 8%) | 20 | 11 | BANKUSDT, SUIUSDT | −1,336% |
-| `macdHistMinPct` −0,05 / −0,1 (cap 8%) | 21 / 24 | — | — | — |
-| `macdHistMinPct` +0,05 / +0,1 (cap 8%) | 18 / 13 | — | — | — |
-| `minSlFrictionMultiple` 1,0 (cap 8%) | 7 | — | BANK 4, SUI 3 | BANK −2,041% |
-| `minSlFrictionMultiple` 3,0 (cap 8%) | 30 | — | BANK 24, CHIP 1, DOGE 1, NEAR 1, SUI 3 | BANK −0,559%, NEAR +3,535% |
+| Gate MACD **lama** (praktis tanpa gate, `macdHistMinPct=−1000`) | 35 | 20 | + CHIPUSDT, NEARUSDT, QNTUSDT | −0,890% |
+| Gate MACD baru `macdHistMinPct=0,0` (bawaan) | 20 | 11 | BANKUSDT, SUIUSDT | −1,336% |
+| `macdHistMinPct` −0,05 / −0,1 | 21 / 24 | — | — | — |
+| `macdHistMinPct` +0,05 / +0,1 | 18 / 13 | — | — | — |
+| `minSlFrictionMultiple` 1,0 | 7 | — | BANK 4, SUI 3 | BANK −2,041% |
+| `minSlFrictionMultiple` 3,0 | 30 | — | BANK 24, CHIP 1, DOGE 1, NEAR 1, SUI 3 | BANK −0,559%, NEAR +3,535% |
 
 Bacaan yang **wajib** ikut dikutip:
 
@@ -132,24 +150,57 @@ Bacaan yang **wajib** ikut dikutip:
    sinyalnya **0 BUY di 11 pair** — gate gagal jujur karena TP1-dari-R butuh ≈+5,3…5,6% pada
    SL 2,8%, sedangkan batas atas memotongnya di +5,0%. Geometri baru membuat gate **bisa** lolos,
    bukan membuatnya mudah lolos.
-2. **Batas atas (`maxTp1Pct`/resistance) adalah penentu utama, bukan R:R.** 2–5% ⇒ **0 BUY**;
-   6% ⇒ 17 BUY (avg net −0,810%); 7–8% ⇒ 20 BUY (avg net −1,336%). Kualitas net **tidak** naik
-   seiring batas atas — justru 6% sedikit lebih baik pada 8 trade. Batas atas 8% yang sempat
-   menjadi bawaan di `f6faf90` **belum disetujui owner**; menaikkannya praktis melonggarkan gate
-   lewat pintu lain. Perhatikan juga 7% dan 8% memberi hasil identik di sampel ini, jadi angka 8%
-   tidak punya dasar pengukuran yang membedakannya dari 7%.
+2. **Batas atas (`maxTp1Pct`/resistance) adalah penentu utama, bukan R:R.** 3–5% ⇒ **0 BUY**;
+   6% ⇒ 17 BUY (avg net −0,810%); 7–10% ⇒ **identik** 20 BUY (avg net −1,336%). Kualitas net
+   **tidak** naik seiring batas atas — justru 6% paling ringan kerugiannya pada 8 trade.
+   Di atas 7% batas atas config **berhenti menjadi penentu**: yang memotong TP1 sudah resistance
+   candle, bukan `maxTp1Pct`, jadi menaikkan cap 8 → 10% tidak menambah satu sinyal pun di
+   dataset ini. Batas atas 8% yang sempat menjadi bawaan di `f6faf90` **belum disetujui owner**;
+   menaikkannya praktis melonggarkan gate lewat pintu lain.
 3. **Angka Net R:R tampil ≈1,50 pada hampir semua sinyal** (TP1 di-solve untuk tepat memenuhi
    ambang), jadi R:R tidak lagi membedakan kualitas sinyal — yang membedakan adalah apakah ruang
    menuju resistance cukup.
-4. **Edge belum ada.** Pada config yang menghasilkan trade (6–8%) avg net/trade tetap negatif
-   (−0,810% s.d. −1,336%). Paket C **tidak** menciptakan edge; ia hanya memperbaiki geometri dan
-   kejujuran angka. Jangan memakai hasil ini sebagai bukti kelayakan.
+4. **Edge belum ada, di batas atas mana pun.** Sepanjang sweep 3–10%, setiap config yang
+   menghasilkan trade tetap **negatif** (−0,810% s.d. −1,336%/trade). 6% memang paling ringan,
+   tetapi potongan window-nya memburuk: paruh awal −0,094% (2 trade), paruh akhir **−1,272%
+   dengan 0 dari 5 trade menang**. Tidak ada nilai di rentang 3–10% yang layak dijadikan dasar
+   menaikkan bawaan.
 5. **C2 menurunkan frekuensi 43%** (35 → 20 BUY pada cap 8%) dan **tidak** memperbaiki net/trade
    (−0,890 → −1,336 pada sampel kecil ini). Normalisasi unit MACD adalah perbaikan
    **keterbandingan antar koin**, bukan alat profit.
 6. **Batas atas 5,0% bukan berarti "tidak ada sinyal selamanya".** Ia berarti gate menolak
-   semua bar di 11 pair/window ini. Keputusan menaikkannya (6/7/8%) adalah keputusan owner dan
-   harus diuji di data lebih banyak (walk-forward), bukan dipilih dari satu window.
+   semua bar di 11 pair/window ini. Kenaikan ke 6–10% sudah diukur dan **semuanya rugi**; kalau
+   nanti ada data lebih banyak, yang harus dibuktikan adalah net positif di luar sampel, bukan
+   sekadar "sinyalnya muncul".
+7. **Batas atas bukan satu-satunya gerbang yang menahan.** 9 dari 11 pair (BTCUSDT, CHIPUSDT,
+   DOGEUSDT, ETHUSDT, NEARUSDT, QNTUSDT, SOLIDR, SOLUSDT, XRPUSDT) tidak menghasilkan BUY di
+   **rentang 3–10% sekaligus**; hanya BANKUSDT dan SUIUSDT yang pernah bersinyal. Menaikkan cap
+   hanya membuka dua pair itu; pair lain ditahan gate lain (mis. `macdHistMinPct`). Jangan
+   menyimpulkan "cap adalah penyebab sinyal sedikit" untuk seluruh universe.
+8. **Potongan window bukan penjumlahan window penuh.** 6%: 6 BUY (awal) + 10 BUY (akhir) = 16,
+   sedangkan window penuh 17 — lookahead 24 bar terpotong di batas potongan. Angka potong dipakai
+   untuk menilai **arah/stabilitas**, bukan untuk merekonsiliasi total.
+
+**Alat ukur sweep (baru, 29 Okt 2026).** Sweep 3–10% di atas **tidak** dihitung dengan skrip
+Python: geometri TP1 dan gate net R:R hidup di Kotlin, jadi mengukur dengan rumus tulis-ulang
+berarti mengukur rumus lain. Alatnya:
+
+```
+RUN_INTRADAY_MAXTP1_SWEEP=true ./gradlew :app:testDebugUnitTest \
+  --tests "agu.analys.engine.intraday.replay.IntradayMaxTp1SweepTest"
+```
+
+- Berkas uji: `app/src/test/java/agu/analys/engine/intraday/replay/IntradayMaxTp1SweepTest.kt`.
+- Tanpa env itu test **dilewati** (suite harian tetap cepat); dengan env, jalannya **±33 menit**
+  (replay 11 pair × 8 nilai cap + potongan window) dan menulis
+  `app/build/intraday-maxtp1-sweep.md` + baris progres `app/build/intraday-maxtp1-progress.txt`.
+- Hasilnya **mereproduksi** angka 5/6/7/8% yang diukur 28 Okt (0 / 17 / 20 / 20) sampai digit
+  terakhir — itu bukti alatnya mengukur jalur yang sama dengan laporan sebelumnya, bukan jalur
+  kedua.
+
+**Keputusan yang diusulkan dari angka ini:** bawaan **tetap 5,0%**. Tidak ada nilai di rentang
+3–10% yang memberi net positif, jadi tidak ada dasar pengukuran untuk menaikkannya; menaikkan ke
+6–10% hanya menambah trade yang rata-ratanya rugi. Keputusan akhir tetap milik owner.
 
 **Kontrol negatif paket C (diukur, satu per satu, lalu dipulihkan):**
 
@@ -169,18 +220,44 @@ Bacaan yang **wajib** ikut dikutip:
 | `overrideNetRr` tidak dikirim dari evaluator | `checkpointMemakaiRrNegatifApaAdanya_bukanDipipihkan` **gagal** (`Net 1:0.00` vs R:R negatif sinyal) |
 | Bawaan `maxTp1Pct` dikembalikan ke 8,0 | `batasAtasBawaan5Persen_membuatGateGagalJujur` **gagal** |
 
-**Angka uji penuh (diukur dari `app/build/test-results`, 28–29 Okt 2026):** **855 hijau, 0 gagal,
-1 skipped** (total 856); intraday **34** test (22 sebelum paket C, 30 saat paket C ditutup).
-Baseline sebelum paket C: 844 hijau, 1 skipped (total 845).
+**Angka uji penuh (diukur dari `app/build/test-results`, 29 Okt 2026):** **855 hijau, 0 gagal,
+2 skipped** (total 857; satu skipped adalah alat ukur sweep `IntradayMaxTp1SweepTest` yang hanya
+jalan dengan env, satu lagi `RealTokocryptoReplayTest` yang sudah ada). Intraday **35** test
+(22 sebelum paket C, 30 saat paket C ditutup, 34 setelah tindak lanjut review, 35 dengan alat
+sweep). Baseline sebelum paket C: 844 hijau, 1 skipped (total 845).
 
 **Penjaga:** `app/src/test/java/agu/analys/engine/intraday/IntradayGeometryAndMacdHistTest.kt`
 (12 test; 8 dari paket C + 4 dari tindak lanjut review), `IntradayAccountingAndSessionTest.kt`
 (10 test, dua di antaranya ditulis ulang
 mengikuti geometri paket C), `IntradayEvaluatorTest` (3), `RealBtcIndodaxIntradayReplayTest` (9).
 
+**Alat ukur (bukan penjaga):** `IntradayMaxTp1SweepTest` (1 test, dilewati kecuali
+`RUN_INTRADAY_MAXTP1_SWEEP=true`) — dipakai untuk sweep 3–10% dan uji potong window di atas.
+
 ---
 
 ## § Riwayat
+
+- **2026-10-29 — Sweep `maxTp1Pct` 3%–10% atas permintaan owner, plus alat ukurnya.**
+  Keputusan nilainya belum diambil owner; yang dikerjakan adalah mengukur setiap nilai 3, 4, 5,
+  6, 7, 8, 9, 10% pada dataset yang sama (11 pair H1, fee Tokocrypto USDT, ambang 1,5).
+  1. **Alat ukur baru:** `IntradayMaxTp1SweepTest` (env `RUN_INTRADAY_MAXTP1_SWEEP=true`,
+     ±33 menit, menulis `app/build/intraday-maxtp1-sweep.md`). Dibuat di Kotlin, bukan Python,
+     supaya memakai geometri dan gate yang sama dengan aplikasi. Hasilnya **mereproduksi**
+     angka 5/6/7/8% dari 28 Okt (0/17/20/20) sehingga alat lama dan baru tidak berbeda jalur.
+  2. **Hasil:** 3–5% ⇒ **0 BUY**; 6% ⇒ 17 BUY/8 trade, avg net **−0,810%**, WR 25,0%;
+     7–10% ⇒ **identik** 20 BUY/11 trade, avg net **−1,336%**, WR 18,2%. Di atas 7% batas atas
+     config berhenti menjadi penentu (yang memotong TP1 adalah resistance), jadi 8 → 10% tidak
+     menambah sinyal.
+  3. **Potongan window 60/40** (BANK + SUI): 6% paruh awal 6 BUY/2 trade avg −0,094% (WR 50%),
+     paruh akhir 10 BUY/5 trade avg −1,272% (**WR 0%**); 7–10% paruh awal 9 BUY/5 trade
+     avg −1,680%, paruh akhir 10 BUY/5 trade avg −1,272%.
+  4. **9 dari 11 pair tidak pernah bersinyal** di seluruh rentang 3–10%; hanya BANKUSDT dan
+     SUIUSDT. Jadi cap bukan satu-satunya gerbang yang menahan sinyal.
+  5. **Usulan dari angka:** bawaan **tetap 5,0%** — tidak ada nilai di 3–10% yang memberi net
+     positif, sehingga tidak ada dasar pengukuran untuk menaikkannya. Keputusan tetap milik owner.
+  6. `IntradayConfig` **tidak** diubah (tetap 5,0%); tidak ada gate yang dilonggarkan.
+  Uji penuh: **855 hijau, 0 gagal, 2 skipped** (total 857); intraday 35 test.
 
 - **2026-10-28 — Tindak lanjut review owner atas `f6faf90`.** Empat temuan, semuanya diperbaiki
   dan dijaga uji perilaku:

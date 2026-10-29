@@ -770,8 +770,8 @@ slider**. Temuan lengkap: `docs/bugs/temuan_bugs_intraday.md`; ringkasan keputus
    multiplikatif; Tokocrypto IDR ≈0,85, Tokocrypto USDT ≈0,74) sehingga sinyal BUY intraday nol.
    **Sejak paket C (28 Okt 2026)** geometri diturunkan dari R:R (aturan 10). Hasil terukur di 11
    pair bergantung pada batas atas `maxTp1Pct`: **bawaan 5,0% ⇒ 0 BUY**; 6% ⇒ 17 BUY (avg net
-   −0,810%); 7–8% ⇒ 20 BUY (avg net −1,336%, hanya BANKUSDT + SUIUSDT). Semua config yang
-   menghasilkan trade masih **negatif** ⇒ **edge belum ada**. Jangan memakai sinyal intraday
+   −0,810%); 7–10% ⇒ **identik** 20 BUY (avg net −1,336%, hanya BANKUSDT + SUIUSDT). Semua config
+   yang menghasilkan trade masih **negatif** ⇒ **edge belum ada**. Jangan memakai sinyal intraday
    sebagai dasar keputusan uang riil, dan **jangan menurunkan ambang** 1,5 untuk menambah sinyal.
 4. **Replay wajib net, dan wajib fee eksplisit.** `IntradayReplayEngine.replay(feeConfig = …)` tidak
    punya nilai bawaan dengan sengaja — `TradingFeeConfig()` tanpa argumen adalah preset legacy
@@ -813,9 +813,17 @@ slider**. Temuan lengkap: `docs/bugs/temuan_bugs_intraday.md`; ringkasan keputus
     Hal yang tidak boleh diubah:
     - **ambang `minNetRrTp1` tetap 1,5** (keputusan owner) — jangan diturunkan agar sinyal bertambah;
     - **batas atas TP1 wajib ada.** Tanpa resistance/`maxTp1Pct`, TP1-dari-R membuat gate
-      tautologis (selalu lolos). Terukur: 2–5% ⇒ **0 BUY**; 6% ⇒ 17 BUY; 7–8% ⇒ 20 BUY.
-      **Bawaan 5,0%** (batas band lama). 8% yang sempat menjadi bawaan di `f6faf90` **belum
-      disetujui owner** — jangan menaikkannya tanpa keputusan owner + data lebih banyak;
+      tautologis (selalu lolos). Terukur (sweep 3–10%, 29 Okt 2026): 3–5% ⇒ **0 BUY**;
+      6% ⇒ 17 BUY; 7–10% ⇒ **identik** 20 BUY — di atas 7% yang memotong TP1 sudah resistance,
+      bukan cap, jadi menaikkan cap 8→10% tidak menambah sinyal. **Bawaan 5,0%** (batas band
+      lama). 8% yang sempat menjadi bawaan di `f6faf90` **belum disetujui owner** — jangan
+      menaikkannya tanpa keputusan owner + data lebih banyak;
+    - **ukur dengan `IntradayMaxTp1SweepTest`, jangan menulis ulang rumus di Python.**
+      `RUN_INTRADAY_MAXTP1_SWEEP=true ./gradlew :app:testDebugUnitTest --tests
+      "agu.analys.engine.intraday.replay.IntradayMaxTp1SweepTest"` (±33 menit) menulis
+      `app/build/intraday-maxtp1-sweep.md`. Alat ini memakai `IntradayReplayEngine` +
+      `IntradayGeometry` yang sama dengan aplikasi; skrip Python tulis-ulang akan mengukur rumus
+      lain;
     - **`netRr` tidak dipipihkan ke 0.** R:R negatif berarti TP1 tidak menutup biaya → gate gagal.
       (`FeeCalculator.roundTrip` memipihkan; geometri sengaja tidak, dan uji memakai cermin rumus
       tanpa pipih. Jangan "menyeragamkan" dengan memipihkan di sini.)

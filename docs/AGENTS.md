@@ -106,9 +106,11 @@ berkasnya:
   Tindak lanjut review hari yang sama mengembalikan bawaan `maxTp1Pct` ke **5,0%** (8% belum
   disetujui owner), memindahkan literal `1,2` ke config, menyelaraskan R:R checkpoint 6 lewat
   `overrideNetRr`, dan mengganti `require` dengan fail-closed `null`. Terukur: 5% ⇒ **0 BUY**;
-  6% ⇒ 17 BUY (avg net −0,810%); 7–8% ⇒ 20 BUY (avg net −1,336%). **D–F masih terbuka**: alat
-  replay/ukur 11 pair, mesin exit intraday, dan UI/kartu yang menyebut basis net & sampel. Berkas
-  tetap di `docs/bugs/` sampai D–F tuntas. Rincian: `workplan2.md` §79–§82.
+  6% ⇒ 17 BUY (avg net −0,810%); **7–10% ⇒ identik** 20 BUY (avg net −1,336%) — sweep 3–10%
+  (29 Okt 2026) memakai alat `IntradayMaxTp1SweepTest` yang memanggil engine asli. **D–F masih
+  terbuka**: alat replay/ukur 11 pair (sebagian: alat sweep sudah ada), mesin exit intraday, dan
+  UI/kartu yang menyebut basis net & sampel. Berkas tetap di `docs/bugs/` sampai D–F tuntas.
+  Rincian: `workplan2.md` §79–§83.
 
 ## Folder eksperimen (`docs/exp/`)
 

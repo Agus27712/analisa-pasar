@@ -4851,8 +4851,8 @@ dikerjakan di paket yang sama dengan dampak frekuensi **diukur**.
    menjadi pembeda mutu. Yang menentukan lolos/gagal adalah **ruang menuju resistance** —
    `maxTp1Pct`. Batas atas sengaja dipertahankan supaya gate **masih bisa gagal jujur**;
    menghapusnya membuat gate tautologis. **Bawaan 5,0%** (batas band TP1 lama) memberi **0 BUY**
-   di 11 pair; 6% ⇒ 17 BUY; 7–8% ⇒ 20 BUY. Nilai 8% yang sempat menjadi bawaan di `f6faf90`
-   **belum disetujui owner** (lihat §82).
+   di 11 pair; 6% ⇒ 17 BUY; 7–8% ⇒ 20 BUY (diperluas di §83: 7–10% **identik** 20 BUY). Nilai 8%
+   yang sempat menjadi bawaan di `f6faf90` **belum disetujui owner** (lihat §82).
 2. **`netRr` negatif dibiarkan.** TP1 yang terpotong di bawah impas net memberi R:R negatif →
    gate gagal. Kalau dipipihkan `coerceAtLeast(0.0)` (perilaku lama), gate ambang 0,0 lolos pada
    TP1 yang tidak menutup biaya (terukur avg net −0,8…−1,0%/trade di 7 pair).
@@ -4935,3 +4935,69 @@ lolos/tidak, jadi keputusannya milik owner dan wajib diuji di data lebih banyak 
 
 **Masih menunggu keputusan owner:** nilai `maxTp1Pct` (5/6/7/8%) setelah uji data lebih banyak.
 Paket D–F intraday tetap terbuka.
+
+## 83. Sweep `maxTp1Pct` 3%–10% dan alat ukurnya (2026-10-29)
+
+Permintaan owner: uji `maxTp1Pct` **satu per satu 3% sampai 10%** untuk menentukan nilai final.
+Yang dikerjakan: mengukur, bukan memilih. `IntradayConfig` **tidak** diubah (bawaan tetap 5,0%).
+
+### Alat ukur
+
+`app/src/test/java/agu/analys/engine/intraday/replay/IntradayMaxTp1SweepTest.kt` — hanya jalan
+dengan `RUN_INTRADAY_MAXTP1_SWEEP=true`, tanpanya **dilewati** (suite harian tetap cepat).
+Dibuat di Kotlin, bukan Python, karena geometri TP1 + gate net R:R hidup di Kotlin; menulis ulang
+rumusnya berarti mengukur rumus lain.
+
+```
+RUN_INTRADAY_MAXTP1_SWEEP=true ./gradlew :app:testDebugUnitTest \
+  --tests "agu.analys.engine.intraday.replay.IntradayMaxTp1SweepTest"
+```
+
+Jalannya ±33 menit (replay 11 pair × 8 nilai cap + potongan window); keluaran
+`app/build/intraday-maxtp1-sweep.md` + `app/build/intraday-maxtp1-progress.txt`. Alat ini
+**mereproduksi** angka 5/6/7/8% dari §81–§82 (0/17/20/20) sampai digit terakhir, jadi
+pengukurannya memakai jalur yang sama.
+
+### Angka (11 pair `data/tokocrypto_v7` H1, fee Tokocrypto USDT, ambang 1,5)
+
+| `maxTp1Pct` | BUY | Trade | Menang | Win rate | Avg net/trade | Total net | Pair yang BUY |
+|---|---|---|---|---|---|---|---|
+| 3,0% | 0 | 0 | — | — | — | — | — |
+| 4,0% | 0 | 0 | — | — | — | — | — |
+| **5,0% (bawaan)** | **0** | 0 | — | — | — | — | — |
+| 6,0% | 17 | 8 | 2 | 25,0% | **−0,810%** | −6,482% | BANKUSDT 16, SUIUSDT 1 |
+| 7,0% | 20 | 11 | 2 | 18,2% | −1,336% | −14,693% | BANKUSDT 17, SUIUSDT 3 |
+| 8,0% | 20 | 11 | 2 | 18,2% | −1,336% | −14,693% | BANKUSDT 17, SUIUSDT 3 |
+| 9,0% | 20 | 11 | 2 | 18,2% | −1,336% | −14,693% | BANKUSDT 17, SUIUSDT 3 |
+| 10,0% | 20 | 11 | 2 | 18,2% | −1,336% | −14,693% | BANKUSDT 17, SUIUSDT 3 |
+
+Potongan window (60% awal / 40% akhir), hanya BANKUSDT + SUIUSDT karena hanya dua itu bersinyal:
+
+| `maxTp1Pct` | Awal 60% | Akhir 40% |
+|---|---|---|
+| 3–5% | 0 BUY | 0 BUY |
+| 6,0% | 6 BUY, 2 trade, avg −0,094%, WR 50% | 10 BUY, 5 trade, avg −1,272%, WR 0% |
+| 7–10% | 9 BUY, 5 trade, avg −1,680%, WR 20% | 10 BUY, 5 trade, avg −1,272%, WR 0% |
+
+### Bacaan
+
+1. **Tidak ada nilai di 3–10% yang memberi net positif.** Semua config yang menghasilkan trade
+   rugi (−0,810% s.d. −1,336%/trade). 6% paling ringan, tetapi paruh akhirnya **−1,272% dengan
+   0 dari 5 trade menang** — jadi "6% terbaik" tidak bertahan antar potongan.
+2. **Di atas 7% batas atas config berhenti menjadi penentu.** 7–10% identik sampai digit
+   terakhir: yang memotong TP1 sudah resistance candle, bukan `maxTp1Pct`. Menaikkan cap di atas
+   7% **tidak menambah satu sinyal pun** di dataset ini.
+3. **9 dari 11 pair tidak pernah bersinyal** di seluruh rentang 3–10% (BTC, CHIP, DOGE, ETH,
+   NEAR, QNT, SOLIDR, SOL, XRP). Cap hanya membuka BANKUSDT + SUIUSDT; pair lain ditahan gate
+   lain (mis. `macdHistMinPct`).
+4. **Potongan window bukan penjumlahan window penuh** (6%: 6 + 10 = 16 vs 17 pada window penuh)
+   karena lookahead 24 bar terpotong di batas. Angka potong untuk arah/stabilitas, bukan
+   rekonsiliasi.
+5. **Usulan:** bawaan **tetap 5,0%**. Tidak ada dasar pengukuran untuk menaikkannya; menaikkan
+   ke 6–10% hanya menambah trade yang rata-ratanya rugi. Keputusan akhir tetap milik owner.
+
+### Uji
+
+855 hijau, 0 gagal, **2 skipped** (total 857). Satu skipped adalah alat ukur sweep (hanya jalan
+dengan env), satu lagi `RealTokocryptoReplayTest` yang sudah ada. Intraday **35** test.
+`IntradayConfig.maxTp1Pct` tetap **5,0%**; tidak ada gate yang dilonggarkan.
