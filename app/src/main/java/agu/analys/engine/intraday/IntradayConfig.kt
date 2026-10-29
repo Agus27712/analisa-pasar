@@ -29,6 +29,9 @@ import agu.analys.config.FeeSchedule
  * @property atrFloorPct / atrCapPct band volatilitas intraday sehat (% harga) — ATR di-clamp ke
  *   band ini sebelum dipakai geometri (perilaku lama `coerceIn(price*0.015, price*0.040)`).
  * @property slAtrMult jarak SL di bawah support = `slAtrMult × ATR` (bawaan 0,3, perilaku lama).
+ * @property noSupportAtrMult jarak SL saat **tidak ada support** = `noSupportAtrMult × ATR`
+ *   ditambah `slAtrMult × ATR` (bawaan 1,2 = pengganti literal lama di `IntradayGeometry`).
+ *   ATR yang dipakai adalah ATR yang sudah di-clamp, sama dengan cabang support.
  * @property maxSlPct jarak SL maksimum dari harga (%). `minSlFrictionMultiple × impas net` bisa
  *   lebih besar dan ikut menentukan — SL tidak boleh lebih rapat dari beberapa kali biaya.
  * @property minSlPct jarak SL minimum (%): SL tidak boleh lebih rapat dari ini.
@@ -36,9 +39,11 @@ import agu.analys.config.FeeSchedule
  *   TP1-dari-R, TP1 ikut dinaikkan ke level R (lihat [IntradayGeometry]).
  * @property maxTp1Pct batas atas TP1 (% harga) — bersama resistance, inilah yang membuat gate
  *   masih bisa **gagal jujur** ketika ruang tidak cukup; tanpa itu TP1-dari-R membuat gate
- *   tautologis.
- * @property tp2AtrMult / minTp2Pct / maxTp2Pct band TP2 (bawaan 1,4 ATR; +5,5%…+12% — batas atas
- *   lama +8,8% dinaikkan karena TP1 kini bisa sampai +8%).
+ *   tautologis. Bawaan **5,0** = batas atas band TP1 lama. Nilai **8,0** yang sempat dipakai di
+ *   commit `f6faf90` **belum disetujui owner** (review 28 Okt 2026: itu melonggarkan gate lewat
+ *   pintu lain, praktis menjadi penentu lolos/tidak, dan baru diukur pada 11 pair satu window).
+ *   Jangan menaikkannya tanpa keputusan owner + pengukuran di data lebih banyak.
+ * @property tp2AtrMult / minTp2Pct / maxTp2Pct band TP2 (bawaan 1,4 ATR; +5,5%…+12%).
  * @property macdHistMinPct ambang histogram MACD yang **dinormalisasi ke % harga**
  *   (`macdHist / price × 100`). Unit lama (`macdHist >= -0,002`, satuan harga) praktis berarti
  *   "histogram tidak negatif" dan tidak berskala antar koin. Bawaan 0,0 = setara perilaku lama
@@ -53,11 +58,12 @@ data class IntradayConfig(
     val atrFloorPct: Double = 1.5,
     val atrCapPct: Double = 4.0,
     val slAtrMult: Double = 0.3,
+    val noSupportAtrMult: Double = 1.2,
     val maxSlPct: Double = 2.8,
     val minSlPct: Double = 1.5,
     val minSlFrictionMultiple: Double = 2.0,
     val tp1AtrMult: Double = 1.25,
-    val maxTp1Pct: Double = 8.0,
+    val maxTp1Pct: Double = 5.0,
     val tp2AtrMult: Double = 1.4,
     val minTp2Pct: Double = 5.5,
     val maxTp2Pct: Double = 12.0,

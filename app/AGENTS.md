@@ -760,17 +760,19 @@ slider**. Temuan lengkap: `docs/bugs/temuan_bugs_intraday.md`; ringkasan keputus
    parameter intraday ke `ScalpingRuntimeConfig`/slider: geseran satu slider scalping akan
    diam-diam mengubah sinyal intraday. Jangan menambah `object … current` yang bisa diubah runtime
    sebelum ada UI-nya (parameter tanpa pembaca dilarang).
-2. **Net R:R dari TP1, tanpa clamp.** `netRrTp1 = FeeCalculator.roundTrip(… takeProfit = TP1 …).netRr`
-   dan gate memakai `config.minNetRrTp1` (bawaan 1,5). **Jangan** mengembalikan `coerceAtLeast(1.6)`
-   atau memakai TP2 untuk gate: keduanya membuat gate selalu lolos dan angka R:R yang tampil bukan
-   yang bisa dieksekusi. Penjaga: `IntradayAccountingAndSessionTest`.
+2. **Net R:R dari TP1, tanpa clamp.** `IntradayGeometry` menghitung net R:R multiplikatif dari
+   TP1 final (rumus sama dengan `FeeCalculator.roundTrip`, tanpa pemipihan), dan gate memakai
+   `config.minNetRrTp1` (bawaan 1,5). **Jangan** mengembalikan `coerceAtLeast(1.6)` atau memakai
+   TP2 untuk gate: keduanya membuat gate selalu lolos dan angka R:R yang tampil bukan yang bisa
+   dieksekusi. Penjaga: `IntradayAccountingAndSessionTest`.
 3. **Konsekuensi yang harus disebut jujur.** Sebelum paket C, geometri band persen (SL ≥ −1,5%,
    TP1 ≤ +2,8%) memberi net R:R TP1 ≈**0,87** pada biaya Indodax IDR (impas net 0,7940%;
    multiplikatif; Tokocrypto IDR ≈0,85, Tokocrypto USDT ≈0,74) sehingga sinyal BUY intraday nol.
-   **Sejak paket C (28 Okt 2026)** geometri diturunkan dari R:R (aturan 10), dan hasil terukurnya:
-   **20 BUY dari 11 pair, hanya 2 pair (BANKUSDT, SUIUSDT), avg net −1,336%/trade** — gate bisa
-   lolos, tetapi **edge belum ada**. Jangan memakai sinyal intraday sebagai dasar keputusan uang
-   riil, dan **jangan menurunkan ambang** 1,5 untuk menambah sinyal.
+   **Sejak paket C (28 Okt 2026)** geometri diturunkan dari R:R (aturan 10). Hasil terukur di 11
+   pair bergantung pada batas atas `maxTp1Pct`: **bawaan 5,0% ⇒ 0 BUY**; 6% ⇒ 17 BUY (avg net
+   −0,810%); 7–8% ⇒ 20 BUY (avg net −1,336%, hanya BANKUSDT + SUIUSDT). Semua config yang
+   menghasilkan trade masih **negatif** ⇒ **edge belum ada**. Jangan memakai sinyal intraday
+   sebagai dasar keputusan uang riil, dan **jangan menurunkan ambang** 1,5 untuk menambah sinyal.
 4. **Replay wajib net, dan wajib fee eksplisit.** `IntradayReplayEngine.replay(feeConfig = …)` tidak
    punya nilai bawaan dengan sengaja — `TradingFeeConfig()` tanpa argumen adalah preset legacy
    Indodax-ish. P&L memakai `FeeSchedule.netProfitPct` (taker + slippage dua sisi).
@@ -789,7 +791,8 @@ slider**. Temuan lengkap: `docs/bugs/temuan_bugs_intraday.md`; ringkasan keputus
    `IntradayConfig.macdHistMinPct` (bawaan **0,0**) dan dibandingkan dengan
    `macdHist / price × 100`, bukan histogram bersatuan harga. Ambang lama `macdHist >= -0,002`
    praktis berarti "histogram tidak negatif" dan tidak berskala antar koin. Dampaknya **diukur**:
-   35 → 20 BUY (−43%) pada 11 pair, net/trade tidak membaik (−0,890 → −1,336 pada sampel itu) —
+   35 → 20 BUY (−43%, pada config pengukuran cap 8%) di 11 pair, net/trade tidak membaik
+   (−0,890 → −1,336 pada sampel itu) —
    perbaikan **keterbandingan**, bukan alat profit. Jangan mengubah ambang tanpa mengukur ulang
    frekuensi; jangan mengembalikan pembandingan bersatuan harga.
 9. **Penjaga intraday harus uji perilaku, bukan pindai sumber (2026-10-28).** Uji
@@ -802,19 +805,25 @@ slider**. Temuan lengkap: `docs/bugs/temuan_bugs_intraday.md`; ringkasan keputus
    mengembalikan fallback `System.currentTimeMillis()`.
 10. **Geometri SL/TP intraday satu definisi — `IntradayGeometry.resolve` (paket C, 28 Okt 2026).**
     Urutannya: ATR di-clamp band `atrFloorPct`…`atrCapPct`; SL = support − `slAtrMult`×ATR dijaga
-    band `[minSlPct, maxSlPct]` dan **lantai friksi** `minSlFrictionMultiple × impas net`;
+    band `[minSlPct, maxSlPct]` dan **lantai friksi** `minSlFrictionMultiple × impas net`; tanpa
+    support, SL = `(noSupportAtrMult + slAtrMult) × ATR` dengan **ATR yang sama (ter-clamp)**;
     TP1 = `max(TP1-ATR, TP1-dari-R)` dibatasi `min(resistance, price×(1+maxTp1Pct))`;
-    TP2 selalu > TP1; gate dari TP1 final **tanpa clamp**. Hal yang tidak boleh diubah:
+    TP2 selalu > TP1; gate dari TP1 final **tanpa clamp**. Harga tidak valid
+    (`<= 0`/`NaN`/`∞`) → `resolve` mengembalikan **`null`** (fail-closed), bukan `require`.
+    Hal yang tidak boleh diubah:
     - **ambang `minNetRrTp1` tetap 1,5** (keputusan owner) — jangan diturunkan agar sinyal bertambah;
     - **batas atas TP1 wajib ada.** Tanpa resistance/`maxTp1Pct`, TP1-dari-R membuat gate
-      tautologis (selalu lolos). Kontrol terukur: `maxTp1Pct` 2–4% ⇒ **0 BUY**, bawaan 8% ⇒ 20 BUY;
+      tautologis (selalu lolos). Terukur: 2–5% ⇒ **0 BUY**; 6% ⇒ 17 BUY; 7–8% ⇒ 20 BUY.
+      **Bawaan 5,0%** (batas band lama). 8% yang sempat menjadi bawaan di `f6faf90` **belum
+      disetujui owner** — jangan menaikkannya tanpa keputusan owner + data lebih banyak;
     - **`netRr` tidak dipipihkan ke 0.** R:R negatif berarti TP1 tidak menutup biaya → gate gagal.
       (`FeeCalculator.roundTrip` memipihkan; geometri sengaja tidak, dan uji memakai cermin rumus
       tanpa pipih. Jangan "menyeragamkan" dengan memipihkan di sini.)
-    - **Checkpoint 6 konfluensi memakai geometri + ambang yang sama** (`overrideStopLoss`,
-      `overrideTp1`, `netRrThreshold`); bawaan `2.0`/`null` menjaga perilaku SWING tetap sama.
-      Jangan menambah jalur yang menghitung geometri kedua di dalam satu sinyal.
+    - **Checkpoint 6 konfluensi memakai geometri, ambang, dan angka R:R yang sama**
+      (`overrideStopLoss`, `overrideTp1`, `netRrThreshold`, `overrideNetRr`); bawaan `2.0`/`null`
+      menjaga perilaku SWING tetap sama. Jangan menambah jalur yang menghitung geometri/R:R kedua
+      di dalam satu sinyal — kasus R:R negatif adalah bukti bahwa hitung ulang berbeda hasil.
     - Konsekuensi jujur: R:R tampil ≈1,50 pada hampir semua sinyal, jadi R:R **bukan** pembeda
       mutu lagi; avg net terukur masih **negatif** (aturan 3). Penjaga:
-      `IntradayGeometryAndMacdHistTest` (8 test), kontrol negatif 4/4 terdokumentasi di
-      `docs/bugs/temuan_bugs_intraday.md`.
+      `IntradayGeometryAndMacdHistTest` (12 test), kontrol negatif 4/4 (paket C) + 4/4 (tindak
+      lanjut review) terdokumentasi di `docs/bugs/temuan_bugs_intraday.md`.

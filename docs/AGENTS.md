@@ -102,10 +102,13 @@ berkasnya:
   masuk audit mana pun. Paket **A+B** langsung ditutup di berkas yang sama (angka biaya replay,
   jam sesi, gate R:R palsu, config intraday terpisah); **C ditutup 2026-10-28** (geometri SL/TP
   diturunkan dari SL+ATR+R:R lewat `IntradayGeometry`, `netRr` tanpa clamp, `macdHist` dalam %
-  harga — ambang 1,5 tetap, batas atas TP1 dipertahankan supaya gate masih bisa gagal jujur;
-  terukur 20 BUY/11 pair, avg net −1,336%). **D–F masih terbuka**: alat replay/ukur 11 pair,
-  mesin exit intraday, dan UI/kartu yang menyebut basis net & sampel. Berkas tetap di `docs/bugs/`
-  sampai D–F tuntas. Rincian: `workplan2.md` §79–§81.
+  harga — ambang 1,5 tetap, batas atas TP1 dipertahankan supaya gate masih bisa gagal jujur).
+  Tindak lanjut review hari yang sama mengembalikan bawaan `maxTp1Pct` ke **5,0%** (8% belum
+  disetujui owner), memindahkan literal `1,2` ke config, menyelaraskan R:R checkpoint 6 lewat
+  `overrideNetRr`, dan mengganti `require` dengan fail-closed `null`. Terukur: 5% ⇒ **0 BUY**;
+  6% ⇒ 17 BUY (avg net −0,810%); 7–8% ⇒ 20 BUY (avg net −1,336%). **D–F masih terbuka**: alat
+  replay/ukur 11 pair, mesin exit intraday, dan UI/kartu yang menyebut basis net & sampel. Berkas
+  tetap di `docs/bugs/` sampai D–F tuntas. Rincian: `workplan2.md` §79–§82.
 
 ## Folder eksperimen (`docs/exp/`)
 

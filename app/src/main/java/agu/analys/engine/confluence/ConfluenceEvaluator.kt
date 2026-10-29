@@ -76,7 +76,17 @@ object ConfluenceEvaluator {
          * Bawaan `null` mempertahankan geometri lama pemanggil SWING.
          */
         overrideStopLoss: Double? = null,
-        overrideTp1: Double? = null
+        overrideTp1: Double? = null,
+        /**
+         * Net R:R yang **sudah dihitung** pemicu (paket C). Bila diisi, checkpoint 6 memakai angka
+         * ini untuk gate **dan** tampilan, sehingga tidak ada definisi kedua.
+         *
+         * Kenapa perlu: `FeeCalculator.roundTrip` memipihkan R:R negatif ke 0, sedangkan geometri
+         * intraday sengaja membiarkannya negatif ("TP1 tidak menutup biaya"). Tanpa override,
+         * satu sinyal punya dua angka R:R yang berbeda pada kasus itu. Bawaan `null` mempertahankan
+         * perilaku lama pemanggil SWING.
+         */
+        overrideNetRr: Double? = null
     ): ConfluenceResult {
         if (price <= 0.0 || microCandles.size < 5) {
             val emptyList = (1..6).map { idx ->
@@ -362,8 +372,9 @@ object ConfluenceEvaluator {
         // CHECKPOINT 6: Uji Risk-to-Reward Ratio (Net R:R >= ambang; bawaan 1:2)
         // Stop Loss di bawah swing low / support terdekat.
         // TP1 memberi rasio minimal sesuai ambang setelah memperhitungkan fee bursa.
-        // Pemanggil mode lain (INTRADAY, paket C) boleh mengirim geometri + ambangnya sendiri
-        // lewat `overrideStopLoss`/`overrideTp1`/`netRrThreshold` — jangan menghitung ulang.
+        // Pemanggil mode lain (INTRADAY, paket C) boleh mengirim geometri, ambang, **dan angka
+        // R:R-nya sendiri** lewat `overrideStopLoss`/`overrideTp1`/`netRrThreshold`/`overrideNetRr`
+        // — jangan menghitung ulang dan jangan memipihkan angka pemicu.
         // ═════════════════════════════════════════════════════════════════════
         val calculatedSl = overrideStopLoss ?: maxOf(
             min(lastCandle.low, supportLevel) - effectiveAtr * 0.25,
@@ -376,15 +387,16 @@ object ConfluenceEvaluator {
         val calculatedTp1 = overrideTp1 ?: maxOf(resistanceLevel, minTargetFor2R)
         val calculatedTp2 = calculatedTp1 + (calculatedTp1 - price) * 0.65
 
-        val feeResult = FeeCalculator.roundTrip(
+        // Satu definisi R:R: angka dari pemicu dipakai apa adanya (tidak dipipihkan, tidak
+        // dihitung ulang). Jatuh ke FeeCalculator hanya bila pemicu tidak mengirim angka.
+        val netRr = overrideNetRr ?: FeeCalculator.roundTrip(
             entry = price,
             stopLoss = calculatedSl,
             takeProfit = calculatedTp1,
             fees = fees,
             useMaker = useMaker,
             slippagePct = slippagePct
-        )
-        val netRr = feeResult.netRr
+        ).netRr
         val isRiskRewardValid = netRr >= netRrThreshold
 
         val rrMetric = "Net 1:${String.format(Locale.US, "%.2f", netRr)}"

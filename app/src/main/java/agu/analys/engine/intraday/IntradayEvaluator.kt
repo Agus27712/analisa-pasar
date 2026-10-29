@@ -255,7 +255,7 @@ object IntradayEvaluator {
 
         // 6. Level SL & TP Intraday (Dioptimalkan untuk Trade Harian: Open Pagi, Close Malam)
         val supportLevel = structure.support?.takeIf { it > 0.0 && it < price }
-            ?: (price - effectiveAtr * 1.2)
+            ?: (price - effectiveAtr * config.noSupportAtrMult)
 
         // 1. Trend & Moving Average Alignment
         val isEstablishedUptrend = indicators.ema20.isFinite() && indicators.ema50.isFinite() && (ema20 > ema50) && (price >= ema50 * 0.985)
@@ -330,7 +330,7 @@ object IntradayEvaluator {
             atr = effectiveAtr,
             fees = fees,
             config = config
-        )
+        ) ?: return IntradayEvalResult(AISignalState(), TechnicalIndicators()) // fail-closed
         val calculatedSl = geometry.stopLoss
         val calculatedTp1 = geometry.takeProfit1
         val calculatedTp2 = geometry.takeProfit2
@@ -385,7 +385,11 @@ object IntradayEvaluator {
             // intraday yang sama dengan sinyal, bukan geometri + gate 2.0-nya sendiri.
             netRrThreshold = config.minNetRrTp1,
             overrideStopLoss = calculatedSl,
-            overrideTp1 = calculatedTp1
+            overrideTp1 = calculatedTp1,
+            // Satu definisi R:R: checkpoint 6 memakai angka geometri apa adanya (bisa negatif).
+            // Tanpa ini checkpoint menghitung ulang lewat `FeeCalculator.roundTrip` yang
+            // memipihkan R:R negatif ke 0 — dua definisi untuk sinyal yang sama.
+            overrideNetRr = netRrTp1
         )
 
         val step1Ok = !isDangerous && isTrendValidForIntraday && !flashDumpTrauma

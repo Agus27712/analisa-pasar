@@ -250,7 +250,7 @@ class IntradayAccountingAndSessionTest {
             history = bar.window,
             fees = feesUsdt,
             evaluationTimestamp = bar.evalTime,
-            config = IntradayConfig(useMakerFee = true, slippagePct = 0.30)
+            config = IntradayConfig(useMakerFee = true, slippagePct = 0.30, maxTp1Pct = 8.0)
         )
         val signal = evalMaker.signal
         val expected = netRrTanpaPipih(
@@ -274,7 +274,7 @@ class IntradayAccountingAndSessionTest {
             history = bar.window,
             fees = feesUsdt,
             evaluationTimestamp = bar.evalTime,
-            config = IntradayConfig()
+            config = IntradayConfig(maxTp1Pct = 8.0)
         )
         val reportedTaker = evalTaker.signal.riskRewardRatio.removePrefix("1:").toDouble()
         assertEquals(
@@ -294,12 +294,13 @@ class IntradayAccountingAndSessionTest {
         val feeTokoIdr = FeeSchedule.configFor("TOKOCRYPTO", "IDR")
         val gIdrMaker = IntradayGeometry.resolve(
             price = 100.0, supportLevel = null, resistanceLevel = null,
-            atr = 1.5, fees = feeTokoIdr, config = IntradayConfig(useMakerFee = true)
-        )
+            atr = 1.5, fees = feeTokoIdr,
+            config = IntradayConfig(useMakerFee = true, maxTp1Pct = 20.0)
+        )!!
         val gIdrTaker = IntradayGeometry.resolve(
             price = 100.0, supportLevel = null, resistanceLevel = null,
-            atr = 1.5, fees = feeTokoIdr, config = IntradayConfig()
-        )
+            atr = 1.5, fees = feeTokoIdr, config = IntradayConfig(maxTp1Pct = 20.0)
+        )!!
         assertTrue(
             "Impas net maker Toko IDR (${gIdrMaker.impasNetPct}) harus lebih kecil dari taker " +
                 "(${gIdrTaker.impasNetPct}) — kalau tidak, useMakerFee tidak dipakai geometri",
@@ -313,12 +314,13 @@ class IntradayAccountingAndSessionTest {
         // (b) Slippage dari config: 0,30/sisi lebih mahal dari bawaan 0,08 → TP1 lebih jauh.
         val gSlip030 = IntradayGeometry.resolve(
             price = 100.0, supportLevel = null, resistanceLevel = null,
-            atr = 1.5, fees = feesUsdt, config = IntradayConfig(slippagePct = 0.30)
-        )
+            atr = 1.5, fees = feesUsdt,
+            config = IntradayConfig(slippagePct = 0.30, maxTp1Pct = 20.0)
+        )!!
         val gSlipBawaan = IntradayGeometry.resolve(
             price = 100.0, supportLevel = null, resistanceLevel = null,
-            atr = 1.5, fees = feesUsdt, config = IntradayConfig()
-        )
+            atr = 1.5, fees = feesUsdt, config = IntradayConfig(maxTp1Pct = 20.0)
+        )!!
         assertTrue(
             "Impas net slippage 0,30 (${gSlip030.impasNetPct}) harus lebih besar dari bawaan " +
                 "(${gSlipBawaan.impasNetPct}) — kalau tidak, slippagePct tidak dipakai geometri",
@@ -512,13 +514,15 @@ class IntradayAccountingAndSessionTest {
      * ambang bawaan 1,5 — TP1-dari-R tidak terpotong resistance/batas atas) di dataset riset,
      * memakai jendela evaluasi yang sama dengan replay (300 bar terakhir + waktu tutup bar H1).
      *
-     * Dipakai uji fee dari config; kegagalan menemukan bar berarti dataset tidak lagi menyediakan
-     * kasusnya (ganti dataset, ukur ulang).
+     * Memakai **config pengukuran** `maxTp1Pct = 8.0`, bukan bawaan 5,0%: batas atas bawaan
+     * memang mengikat di dataset ini (gate gagal jujur), sehingga tidak ada bar "geometri bebas".
+     * Nilai 8% belum disetujui owner sebagai bawaan.
      */
     private fun pilihBarRrMemenuhiAmbang(candles: List<CandleBar>): BarTerpilih {
         val jendelaBar = 300
         val durasiBarH1 = 3_600_000L
         val ambang = IntradayConfig.DEFAULT.minNetRrTp1
+        val config = IntradayConfig(maxTp1Pct = 8.0)
         for (i in 20 until candles.size) {
             val evalTime = candles[i].timestamp + durasiBarH1
             val window = candles.subList(max(0, i - jendelaBar), i + 1)
@@ -527,7 +531,7 @@ class IntradayAccountingAndSessionTest {
                 history = window,
                 fees = feesUsdt,
                 evaluationTimestamp = evalTime,
-                config = IntradayConfig()
+                config = config
             )
             if (!result.signal.mtf.triggerOk) continue
             val rr = result.signal.riskRewardRatio.removePrefix("1:").toDoubleOrNull() ?: 0.0

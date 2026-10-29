@@ -4849,8 +4849,10 @@ dikerjakan di paket yang sama dengan dampak frekuensi **diukur**.
 
 1. **R:R tampil ≈1,50 pada hampir semua sinyal.** TP1 di-solve tepat pada ambang, jadi R:R berhenti
    menjadi pembeda mutu. Yang menentukan lolos/gagal adalah **ruang menuju resistance** —
-   `maxTp1Pct` 2–4% ⇒ **0 BUY**, `8%` (bawaan) ⇒ 20 BUY. Batas atas sengaja dipertahankan supaya
-   gate **masih bisa gagal jujur**; menghapusnya membuat gate tautologis.
+   `maxTp1Pct`. Batas atas sengaja dipertahankan supaya gate **masih bisa gagal jujur**;
+   menghapusnya membuat gate tautologis. **Bawaan 5,0%** (batas band TP1 lama) memberi **0 BUY**
+   di 11 pair; 6% ⇒ 17 BUY; 7–8% ⇒ 20 BUY. Nilai 8% yang sempat menjadi bawaan di `f6faf90`
+   **belum disetujui owner** (lihat §82).
 2. **`netRr` negatif dibiarkan.** TP1 yang terpotong di bawah impas net memberi R:R negatif →
    gate gagal. Kalau dipipihkan `coerceAtLeast(0.0)` (perilaku lama), gate ambang 0,0 lolos pada
    TP1 yang tidak menutup biaya (terukur avg net −0,8…−1,0%/trade di 7 pair).
@@ -4859,15 +4861,19 @@ dikerjakan di paket yang sama dengan dampak frekuensi **diukur**.
 
 | Konfigurasi | BUY | Trade | Avg net/trade |
 |---|---|---|---|
-| Ambang **1,5** (bawaan) | 20 | 11 | **−1,336%** (BANKUSDT 17 BUY, SUIUSDT 3) |
-| Gate MACD lama (praktis tanpa gate) | 35 | 20 | −0,890% (5 pair) |
-| `macdHistMinPct` 0,0 (bawaan baru) | 20 | 11 | −1,336% (2 pair) |
+| Ambang **1,5** + `maxTp1Pct` **5,0%** (**bawaan**) | **0** | 0 | — |
+| Ambang 1,5 + `maxTp1Pct` 6,0% | 17 | 8 | **−0,810%** (BANKUSDT 16 BUY, SUIUSDT 1) |
+| Ambang 1,5 + `maxTp1Pct` 7,0% | 20 | 11 | −1,336% (BANKUSDT 17, SUIUSDT 3) |
+| Ambang 1,5 + `maxTp1Pct` 8,0% (config pengukuran, bukan bawaan) | 20 | 11 | −1,336% |
 | `maxTp1Pct` 2,0% / 4,0% | **0** / **0** | 0 | — |
-| `minSlFrictionMultiple` 1,0 / 3,0 | 7 / 30 | — | BANK −2,041% / −0,559% |
+| Gate MACD lama (praktis tanpa gate, cap 8%) | 35 | 20 | −0,890% (5 pair) |
+| `macdHistMinPct` 0,0 (bawaan baru, cap 8%) | 20 | 11 | −1,336% (2 pair) |
+| `minSlFrictionMultiple` 1,0 / 3,0 (cap 8%) | 7 / 30 | — | BANK −2,041% / −0,559% |
 
 Kesimpulan yang **tidak boleh** dilebihkan: paket C memperbaiki geometri dan kejujuran angka;
-**edge belum ada** (avg net masih negatif, sampel 11 pair satu window). Sinyal intraday tetap
-**bukan** dasar keputusan uang riil. Ambang 1,5 dipertahankan meski sinyal sedikit.
+**edge belum ada** (avg net masih negatif pada semua config yang menghasilkan trade, sampel
+11 pair satu window). Sinyal intraday tetap **bukan** dasar keputusan uang riil. Ambang 1,5
+dipertahankan meski sinyal sedikit — bahkan nol pada batas atas bawaan.
 
 ### Kontrol negatif (4/4 menggigit, dipulihkan setelahnya)
 
@@ -4887,3 +4893,45 @@ Kesimpulan yang **tidak boleh** dilebihkan: paket C memperbaiki geometri dan kej
 
 **Masih terbuka (menunggu instruksi):** paket D (alat replay/ukur 11 pair), E (mesin exit intraday),
 F (UI/kartu menyebut basis net & sampel). Rincian temuan: `docs/bugs/temuan_bugs_intraday.md`.
+
+## 82. Tindak lanjut review owner atas paket C intraday (2026-10-28)
+
+Review owner atas `f6faf90` menemukan tiga cacat teknis dan satu keputusan yang belum sah.
+Semuanya ditindaklanjuti; tidak ada gate yang dilonggarkan.
+
+| Temuan review | Perbaikan | Penjaga |
+|---|---|---|
+| `maxTp1Pct` 8% **belum disetujui owner**; itu yang membuka 20 BUY, jadi praktis melonggarkan gate lewat pintu lain | Bawaan dikembalikan **5,0%** (batas band TP1 lama). Nilai 8% tetap boleh dipakai sebagai **config pengukuran** di uji, bukan bawaan | `batasAtasBawaan5Persen_membuatGateGagalJujur` |
+| Cabang tanpa support memakai literal `1,2` + ATR **belum di-clamp**, sedangkan bagian lain memakai ATR ter-clamp | Knob baru `IntradayConfig.noSupportAtrMult` (bawaan 1,2); SL tanpa support = `(noSupportAtrMult + slAtrMult) × ATR ter-clamp`. Fallback `supportLevel` di evaluator memakai knob yang sama (perilaku sama, literal hilang) | `tanpaSupport_memakaiKnobDanAtrTerClamp` |
+| Dua net R:R untuk sinyal yang sama: evaluator tidak memipihkan, checkpoint 6 lewat `FeeCalculator.roundTrip` yang memipihkan ke 0 | `ConfluenceEvaluator.evaluate` menerima `overrideNetRr`; sinyal intraday mengirim `geometry.netRrTp1`. Checkpoint 6 tidak menghitung ulang dan tidak memipihkan. Bawaan `null` = perilaku SWING lama | `checkpointKonfluensiMemakaiGeometriDanAmbangIntraday`, `checkpointMemakaiRrNegatifApaAdanya_bukanDipipihkan` |
+| `require(price > 0.0)` di `resolve` akan crash bila harga 0 | Fail-closed: `resolve` mengembalikan `null` untuk harga `<= 0`, `NaN`, `∞`; evaluator memperlakukan `null` sebagai "jangan bersinyal" | `hargaTidakValid_failClosedBukanCrash` |
+
+### Angka terukur ulang (11 pair, fee Tokocrypto USDT, ambang 1,5)
+
+| `maxTp1Pct` | BUY | Trade | Avg net/trade |
+|---|---|---|---|
+| **5,0% (bawaan)** | **0** | 0 | — |
+| 6,0% | 17 | 8 | −0,810% |
+| 7,0% | 20 | 11 | −1,336% |
+| 8,0% | 20 | 11 | −1,336% |
+
+Bacaan: hasil **tidak monoton** terhadap batas atas (6% sedikit lebih baik dari 8% pada sampel
+ini), dan 7% identik dengan 8% — angka 8% tidak punya dasar pembeda. Batas atas adalah penentu
+lolos/tidak, jadi keputusannya milik owner dan wajib diuji di data lebih banyak (walk-forward).
+
+### Kontrol negatif (4/4 menggigit, dipulihkan setelahnya)
+
+| Provokasi | Uji yang gagal |
+|---|---|
+| Fail-closed dikembalikan ke `require` | `hargaTidakValid_failClosedBukanCrash` |
+| Cabang tanpa support dikembalikan ke literal `1,2` + ATR mentah | `tanpaSupport_memakaiKnobDanAtrTerClamp` |
+| `overrideNetRr` tidak dikirim | `checkpointMemakaiRrNegatifApaAdanya_bukanDipipihkan` |
+| Bawaan `maxTp1Pct` dikembalikan ke 8,0 | `batasAtasBawaan5Persen_membuatGateGagalJujur` |
+
+### Uji
+
+855 hijau, 0 gagal, 1 skipped (total 856); intraday **34** test (30 saat paket C ditutup;
+`IntradayGeometryAndMacdHistTest` 12 test). Kontrol negatif 4/4 menggigit.
+
+**Masih menunggu keputusan owner:** nilai `maxTp1Pct` (5/6/7/8%) setelah uji data lebih banyak.
+Paket D–F intraday tetap terbuka.

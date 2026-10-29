@@ -43,14 +43,18 @@ class IntradayGeometryAndMacdHistTest {
     fun geometriDiturunkanDariRr_tp1MemenuhiAmbang() {
         val harga = 100.0
         listOf(feesIdr, feesUsdt, feesTokoIdr).forEach { fees ->
+            // Batas atas dilonggarkan khusus uji ini supaya mekanisme "TP1 dari R" terlihat;
+            // batas bawaan (5,0%) memang bisa mengikat — itu diuji terpisah di bawah.
             val longgar = IntradayGeometry.resolve(
                 price = harga, supportLevel = null, resistanceLevel = null,
-                atr = harga * 0.02, fees = fees, config = IntradayConfig(minNetRrTp1 = 1.5)
-            )
+                atr = harga * 0.02, fees = fees,
+                config = IntradayConfig(minNetRrTp1 = 1.5, maxTp1Pct = 20.0)
+            )!!
             val ketat = IntradayGeometry.resolve(
                 price = harga, supportLevel = null, resistanceLevel = null,
-                atr = harga * 0.02, fees = fees, config = IntradayConfig(minNetRrTp1 = 0.5)
-            )
+                atr = harga * 0.02, fees = fees,
+                config = IntradayConfig(minNetRrTp1 = 0.5, maxTp1Pct = 20.0)
+            )!!
             for (g in listOf(longgar, ketat)) {
                 val rr = FeeCalculator.roundTrip(
                     entry = harga, stopLoss = g.stopLoss, takeProfit = g.takeProfit1,
@@ -66,7 +70,7 @@ class IntradayGeometryAndMacdHistTest {
                 "Ambang 1,5 menuntut TP1 lebih jauh daripada ambang 0,5",
                 longgar.takeProfit1 > ketat.takeProfit1
             )
-            assertFalse("Tanpa resistance dan band 8%, batas atas tidak boleh mengikat", longgar.tp1TerikatBatas)
+            assertFalse("Tanpa resistance dan band lebar, batas atas tidak boleh mengikat", longgar.tp1TerikatBatas)
         }
     }
 
@@ -80,7 +84,7 @@ class IntradayGeometryAndMacdHistTest {
         val g = IntradayGeometry.resolve(
             price = harga, supportLevel = null, resistanceLevel = null,
             atr = harga * 0.02, fees = feesIdr, config = IntradayConfig(maxTp1Pct = 2.0)
-        )
+        )!!
         assertTrue("Batas atas harus melaporkan dirinya mengikat", g.tp1TerikatBatas)
         assertEquals(
             "TP1 harus tepat di batas atas",
@@ -94,7 +98,7 @@ class IntradayGeometryAndMacdHistTest {
         val gRes = IntradayGeometry.resolve(
             price = harga, supportLevel = null, resistanceLevel = harga * 1.03,
             atr = harga * 0.02, fees = feesIdr, config = IntradayConfig()
-        )
+        )!!
         assertEquals(harga * 1.03, gRes.takeProfit1, 1e-9)
         assertTrue("Net R:R harus di bawah ambang (dapat ${gRes.netRrTp1})", gRes.netRrTp1 < 1.5)
     }
@@ -111,7 +115,7 @@ class IntradayGeometryAndMacdHistTest {
             price = harga, supportLevel = harga * 0.999, resistanceLevel = null,
             atr = harga * 0.02, fees = feesIdr,
             config = IntradayConfig(minSlPct = 0.5, minSlFrictionMultiple = 2.0)
-        )
+        )!!
         val jarakDenganLantai = (harga - denganLantai.stopLoss) / harga * 100.0
         val impas = denganLantai.impasNetPct
         assertTrue(
@@ -123,7 +127,7 @@ class IntradayGeometryAndMacdHistTest {
             price = harga, supportLevel = harga * 0.999, resistanceLevel = null,
             atr = harga * 0.02, fees = feesIdr,
             config = IntradayConfig(minSlPct = 0.5, minSlFrictionMultiple = 0.0)
-        )
+        )!!
         val jarakTanpaLantai = (harga - tanpaLantai.stopLoss) / harga * 100.0
         // Tanpa lantai, SL = support − 0,3 × ATR = 99,9 − 0,6 = 99,3 → jarak 0,7%
         // (band SL atas tidak ikut campur karena lebih lebar).
@@ -138,12 +142,62 @@ class IntradayGeometryAndMacdHistTest {
             val g = IntradayGeometry.resolve(
                 price = 100.0, supportLevel = 98.0, resistanceLevel = 110.0,
                 atr = 2.0, fees = fees, config = IntradayConfig()
-            )
+            )!!
             assertTrue("SL harus di bawah harga", g.stopLoss < 100.0)
             assertTrue("TP1 harus di atas harga", g.takeProfit1 > 100.0)
             assertTrue("TP2 harus di atas TP1 (replay memilih exit TP2 bila high ≥ TP2)", g.takeProfit2 > g.takeProfit1)
             assertTrue("TP2 tidak boleh melewati batas atas", g.takeProfit2 <= 100.0 * (1.0 + IntradayConfig.DEFAULT.maxTp2Pct / 100.0) + 1e-9)
         }
+    }
+
+    /**
+     * Harga tidak valid tidak boleh membuat proses crash. `resolve` fail-closed (`null`) untuk
+     * `0`, negatif, `NaN`, dan `∞` — jalur evaluasi berjalan per tick dari feed bursa, jadi
+     * `require` di sana berarti satu harga rusak menjatuhkan aplikasi.
+     */
+    @Test
+    fun hargaTidakValid_failClosedBukanCrash() {
+        listOf(0.0, -1.0, Double.NaN, Double.POSITIVE_INFINITY).forEach { harga ->
+            val hasil = IntradayGeometry.resolve(
+                price = harga, supportLevel = null, resistanceLevel = null,
+                atr = 2.0, fees = feesUsdt, config = IntradayConfig()
+            )
+            assertTrue("Harga $harga harus ditolak fail-closed (null)", hasil == null)
+        }
+    }
+
+    /**
+     * Cabang tanpa support memakai `noSupportAtrMult` dari config dan ATR yang **sudah di-clamp**
+     * (bukan literal 1,2 + ATR mentah). Mengubah knob harus mengubah SL; ATR di luar band harus
+     * menghasilkan SL yang sama dengan ATR di tepi band.
+     */
+    @Test
+    fun tanpaSupport_memakaiKnobDanAtrTerClamp() {
+        val harga = 100.0
+        // ATR 10% harga → di-clamp ke atrCapPct 4,0%, jadi SL = 100 − 4×(1,2+0,3) = 94.
+        val atrBesar = IntradayGeometry.resolve(
+            price = harga, supportLevel = null, resistanceLevel = null,
+            atr = harga * 0.10, fees = feesUsdt,
+            config = IntradayConfig(maxTp1Pct = 20.0)
+        )!!
+        // Band SL maksimum 2,8% lebih rapat daripada 6% → SL = 97,2.
+        assertEquals(harga * (1.0 - IntradayConfig.DEFAULT.maxSlPct / 100.0), atrBesar.stopLoss, 1e-9)
+
+        // Dengan maxSlPct dilonggarkan, SL mentah dari ATR ter-clamp terlihat: 100 − 4×1,5 = 94.
+        val atrBesarLonggar = IntradayGeometry.resolve(
+            price = harga, supportLevel = null, resistanceLevel = null,
+            atr = harga * 0.10, fees = feesUsdt,
+            config = IntradayConfig(maxSlPct = 10.0, maxTp1Pct = 20.0)
+        )!!
+        assertEquals(94.0, atrBesarLonggar.stopLoss, 1e-9)
+
+        // Knob berbeda → SL berbeda (bukan literal yang tidak bisa diatur).
+        val knobKecil = IntradayGeometry.resolve(
+            price = harga, supportLevel = null, resistanceLevel = null,
+            atr = harga * 0.10, fees = feesUsdt,
+            config = IntradayConfig(noSupportAtrMult = 0.5, maxSlPct = 10.0, maxTp1Pct = 20.0)
+        )!!
+        assertEquals(100.0 - 4.0 * (0.5 + 0.3), knobKecil.stopLoss, 1e-9)
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -154,13 +208,14 @@ class IntradayGeometryAndMacdHistTest {
      * Setiap trade yang terekam replay (sinyal BUY dengan geometri baru) wajib memenuhi ambang
      * net R:R dari config — diukur ulang dari level yang terekam, bukan dipercaya dari gate.
      *
-     * Pair pengukuran: SUIUSDT — terukur (28 Okt 2026) satu-satunya dari 7 pair dataset
-     * `tokocrypto_v7` yang menghasilkan sinyal BUY pada ambang bawaan 1,5 (3 trade); pair lain
-     * 0 BUY karena resistance memotong TP1 dan gate gagal jujur.
+     * Config yang dipakai adalah **config pengukuran** `maxTp1Pct = 8.0` (bukan bawaan): batas
+     * atas 8% adalah nilai yang dipakai saat pengukuran paket C dan **belum disetujui owner**
+     * sebagai bawaan. Bawaan 5,0% diuji terpisah di
+     * [batasAtasBawaan5Persen_membuatGateGagalJujur].
      */
     @Test
     fun setiapTradeReplayMemenuhiAmbangRrDariConfig() {
-        val config = IntradayConfig(minNetRrTp1 = 1.5)
+        val config = IntradayConfig(minNetRrTp1 = 1.5, maxTp1Pct = 8.0)
         val report = IntradayReplayEngine.replay(
             symbol = "SUIUSDT",
             candles = muatCandleH1Riset("SUIUSDT"),
@@ -168,7 +223,7 @@ class IntradayGeometryAndMacdHistTest {
             config = config
         )
         assertTrue(
-            "SUIUSDT harus menghasilkan trade dengan geometri baru (terukur 3 trade)",
+            "SUIUSDT harus menghasilkan trade dengan config pengukuran (terukur 3 trade)",
             report.trades.isNotEmpty()
         )
         report.trades.forEach { trade ->
@@ -188,6 +243,38 @@ class IntradayGeometryAndMacdHistTest {
     }
 
     /**
+     * Batas atas bawaan **5,0%** (batas band TP1 lama) mengikat → gate gagal jujur di dataset yang
+     * sama. Ini penjaga keputusan "8% belum disetujui owner": menaikkan `maxTp1Pct` ke 8% di
+     * default akan mengubah 0 trade menjadi 3 trade pada pair ini, yaitu melonggarkan gate lewat
+     * pintu lain. Perbedaan angka itu harus tampak, bukan tersembunyi.
+     */
+    @Test
+    fun batasAtasBawaan5Persen_membuatGateGagalJujur() {
+        val candles = muatCandleH1Riset("SUIUSDT")
+        val bawaan = IntradayReplayEngine.replay(
+            symbol = "SUIUSDT", candles = candles, feeConfig = feesUsdt,
+            config = IntradayConfig(minNetRrTp1 = 1.5)
+        )
+        val pengukuran8Persen = IntradayReplayEngine.replay(
+            symbol = "SUIUSDT", candles = candles, feeConfig = feesUsdt,
+            config = IntradayConfig(minNetRrTp1 = 1.5, maxTp1Pct = 8.0)
+        )
+        assertTrue(
+            "Bawaan maxTp1Pct harus 5,0% (batas band lama), dapat ${IntradayConfig.DEFAULT.maxTp1Pct}",
+            IntradayConfig.DEFAULT.maxTp1Pct == 5.0
+        )
+        assertEquals(
+            "Dengan batas atas 5,0% tidak boleh ada trade SUIUSDT (gate gagal jujur)",
+            0, bawaan.trades.size
+        )
+        assertTrue(
+            "Config pengukuran 8% memang membuka trade di dataset yang sama " +
+                "(terukur ${pengukuran8Persen.trades.size})",
+            pengukuran8Persen.trades.size > 0
+        )
+    }
+
+    /**
      * Checkpoint 6 konfluensi wajib memakai **geometri dan ambang intraday yang sama** dengan
      * sinyal (paket C). Sebelumnya checkpoint ini menghitung SL/TP sendiri dengan gate
      * `netRr >= 2.0` hardcoded, sehingga satu sinyal punya dua definisi R:R.
@@ -200,6 +287,8 @@ class IntradayGeometryAndMacdHistTest {
     fun checkpointKonfluensiMemakaiGeometriDanAmbangIntraday() {
         val candles = muatCandleH1Riset("DOGEUSDT")
         val durasiBarH1 = 3_600_000L
+        // Config pengukuran 8% supaya ada bar yang geometrinya bebas (bawaan 5,0% mengikat).
+        val config = IntradayConfig(maxTp1Pct = 8.0)
         var ditemukan = false
         for (i in 20 until candles.size) {
             val window = candles.subList(maxOf(0, i - 300), i + 1)
@@ -208,7 +297,7 @@ class IntradayGeometryAndMacdHistTest {
                 history = window,
                 fees = feesUsdt,
                 evaluationTimestamp = candles[i].timestamp + durasiBarH1,
-                config = IntradayConfig()
+                config = config
             )
             if (!r.signal.mtf.triggerOk) continue
             val rrSignal = r.signal.riskRewardRatio.removePrefix("1:").toDoubleOrNull() ?: 0.0
@@ -225,6 +314,13 @@ class IntradayGeometryAndMacdHistTest {
                 "Net 1:1.50",
                 rrCheckpoint.metricValue
             )
+            // Satu definisi: angka R:R yang tampil di sinyal dan di checkpoint tidak boleh
+            // berbeda (dulu checkpoint menghitung ulang lewat FeeCalculator yang memipihkan).
+            assertEquals(
+                "R:R sinyal dan checkpoint 6 harus angka yang sama persis (bar $i)",
+                r.signal.riskRewardRatio,
+                rrCheckpoint.metricValue.removePrefix("Net ")
+            )
             assertTrue(
                 "Detail checkpoint harus menyebut ambang 1,50, bukan 2,00 (bar $i): " +
                     rrCheckpoint.detail,
@@ -234,6 +330,48 @@ class IntradayGeometryAndMacdHistTest {
             break
         }
         assertTrue("Dataset harus punya bar geometri bebas untuk menguji checkpoint 6", ditemukan)
+    }
+
+    /**
+     * Kasus yang membedakan "satu definisi" dari "hampir sama": ketika TP1 terpotong **di bawah
+     * impas net**, geometri memberi R:R negatif sedangkan `FeeCalculator.roundTrip` memipihkannya
+     * ke 0. Checkpoint 6 wajib menampilkan angka Geometri apa adanya (negatif) — kalau ia menghitung
+     * ulang, satu sinyal kembali punya dua angka R:R.
+     */
+    @Test
+    fun checkpointMemakaiRrNegatifApaAdanya_bukanDipipihkan() {
+        val candles = muatCandleH1Riset("DOGEUSDT")
+        val durasiBarH1 = 3_600_000L
+        // Batas atas 0,5% berada DI BAWAH impas net Tokocrypto USDT (0,9735%) → net reward negatif.
+        val config = IntradayConfig(maxTp1Pct = 0.5)
+        var ditemukan = false
+        for (i in 20 until candles.size) {
+            val window = candles.subList(maxOf(0, i - 300), i + 1)
+            val r = IntradayEvaluator.evaluate(
+                price = candles[i].close,
+                history = window,
+                fees = feesUsdt,
+                evaluationTimestamp = candles[i].timestamp + durasiBarH1,
+                config = config
+            )
+            if (!r.signal.mtf.triggerOk) continue
+            val rrSignal = r.signal.riskRewardRatio.removePrefix("1:").toDoubleOrNull() ?: continue
+            if (rrSignal >= 0.0) continue
+            val rrCheckpoint = r.signal.mtf.checkpoints.first { it.code == "RR" }
+            assertFalse("R:R negatif tidak boleh lolos gate (bar $i)", rrCheckpoint.isOk)
+            assertEquals(
+                "Checkpoint harus memakai R:R geometri apa adanya (negatif), bukan 0 hasil pipih " +
+                    "(bar $i)",
+                "Net ${r.signal.riskRewardRatio}",
+                rrCheckpoint.metricValue
+            )
+            ditemukan = true
+            break
+        }
+        assertTrue(
+            "Dataset harus punya bar Step3-lolos dengan TP1 di bawah impas net untuk menguji R:R negatif",
+            ditemukan
+        )
     }
 
     /**

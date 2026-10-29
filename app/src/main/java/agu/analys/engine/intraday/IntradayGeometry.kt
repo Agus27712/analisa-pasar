@@ -41,13 +41,19 @@ data class IntradayGeometryResult(
  * 2. **SL** dari support dikurangi `slAtrMult × ATR`, dijaga dalam band
  *    `[minSlDistancePct, maxSlPct]` dengan `minSlDistancePct = max(minSlPct,
  *    minSlFrictionMultiple × impas net)` — stop tidak boleh lebih rapat dari beberapa kali biaya,
- *    kalau tidak stop-out terjadi di dalam band biaya.
+ *    kalau tidak stop-out terjadi di dalam band biaya. Bila tidak ada support, SL memakai
+ *    `(noSupportAtrMult + slAtrMult) × ATR` yang **sudah di-clamp** — tidak ada lagi literal 1,2
+ *    dan tidak ada dua ukuran ATR dalam satu fungsi.
  * 3. **TP1 = max(TP1-ATR, TP1-dari-R)**, dibatasi batas atas `min(resistance, price × (1+maxTp1Pct))`.
  *    TP1-dari-R adalah harga yang membuat net R:R tepat `minNetRrTp1` (rumus yang sama dengan
  *    `FeeCalculator.roundTrip`, multiplikatif). Batas atas sengaja ada supaya gate **masih bisa
  *    gagal secara jujur** ketika ruang menuju resistance tidak cukup — tanpa itu geometri ini
  *    membuat gate tautologis (selalu lolos).
  * 4. **Gate** tetap dihitung dari TP1 final tanpa clamp (`minNetRrTp1` tidak pernah di-clamp).
+ *
+ * **Fail-closed:** harga tidak valid (`<= 0`, `NaN`, `∞`) mengembalikan `null`, bukan melempar
+ * `require` yang membuat proses crash. Pemanggil wajib memperlakukan `null` sebagai "tidak ada
+ * geometri → jangan bersinyal".
  */
 object IntradayGeometry {
 
@@ -58,8 +64,10 @@ object IntradayGeometry {
         atr: Double,
         fees: TradingFeeConfig,
         config: IntradayConfig
-    ): IntradayGeometryResult {
-        require(price > 0.0) { "price harus positif (dapat $price)" }
+    ): IntradayGeometryResult? {
+        // Fail-closed, bukan crash: `require` di jalur evaluasi per-tick berarti satu harga rusak
+        // dari feed bursa bisa menjatuhkan proses. Tidak ada geometri = tidak ada sinyal.
+        if (!price.isFinite() || price <= 0.0) return null
 
         val effectiveAtr = if (atr.isFinite() && atr > 0.0) atr else price * 0.04
         val atrPct = (effectiveAtr / price * 100.0).coerceIn(config.atrFloorPct, config.atrCapPct)
@@ -78,7 +86,8 @@ object IntradayGeometry {
         val slDariSupport = if (supportLevel != null && supportLevel > 0.0 && supportLevel < price) {
             supportLevel - intradayAtr * config.slAtrMult
         } else {
-            price - effectiveAtr * 1.2 - intradayAtr * config.slAtrMult
+            // Tanpa support: jarak dari config, memakai ATR yang sama (sudah di-clamp).
+            price - intradayAtr * (config.noSupportAtrMult + config.slAtrMult)
         }
         val minSlDistancePct = maxOf(
             config.minSlPct,
