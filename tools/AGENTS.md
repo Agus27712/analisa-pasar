@@ -27,3 +27,9 @@ replay/sweep. Perintah build & unit test ada di `AGENTS.md` akar; aturan engine 
 - **Replay harus bisa dijalankan dari keadaan diam.** Kalau `--config` menunjuk berkas yang tidak
   ada, keluarannya JSON berisi lokasi yang dicoba + saran perintah — bukan traceback. Perintah
   yang tertulis di dokumen harus benar-benar berhasil dijalankan dari repo bersih.
+- **Alat lab entri (`tools/entry_buy_low_lab.py`) hanya untuk riset offline.** Ia membaca CSV
+  `data/tokocrypto_v8`, tidak membaca `scalp_config.json`, dan tidak boleh disambungkan ke app,
+  gate, atau config. Hasil JSON-nya (`data/hasil/exp_buy_low_entry_v8_*_regime.json`) harus bisa
+  diregenerasi dengan perintah di docstring berkas itu; jangan menyunting JSON hasil dengan tangan
+  karena angka di `docs/exp/` harus berasal dari alat. `--slim` dan `--cells` hanya menghemat
+  ukuran berkas, bukan mengubah perhitungan.

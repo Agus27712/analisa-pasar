@@ -5001,3 +5001,61 @@ Potongan window (60% awal / 40% akhir), hanya BANKUSDT + SUIUSDT karena hanya du
 855 hijau, 0 gagal, **2 skipped** (total 857). Satu skipped adalah alat ukur sweep (hanya jalan
 dengan env), satu lagi `RealTokocryptoReplayTest` yang sudah ada. Intraday **35** test.
 `IntradayConfig.maxTp1Pct` tetap **5,0%**; tidak ada gate yang dilonggarkan.
+
+## 84. Entri "beli di bawah, jual di atas" diukur — arah benar, edge belum lolos (2026-10-29)
+
+Lanjutan dari §73 dan `docs/exp/exp_entry_price_percentile_ADA-DOGE-XRP.md`: entry engine lama
+khas di **persentil 93** harga 1 hari, dan semua sweep exit gagal. Yang belum pernah diukur
+adalah sisi sebaliknya — **membeli murah**. Alat baru `tools/entry_buy_low_lab.py` menguji 11
+hipotesis beli-bawah + 2 kontrol (`control_top_rsi70` = beli di puncak, `control_random` =
+ber-seed) pada 26 pair `data/tokocrypto_v8` di H1/H4/D1, 10 exit, split 60/40, dan walk-forward
+6 jendela. Laporan lengkap: **`docs/exp/exp_buy_low_entry_v8_26pair.md`** (status **GAGAL**).
+
+### Hasil utama (H4, exit 3/5 ATR, hold 18 bar = 3 hari, 833 hari/pair)
+
+| | n | net/trade | CI 95% | WR | Pair positif | Train | Test |
+|---|---:|---:|---|---:|---:|---:|---:|
+| `dip_rsi25` (RSI14<25) | 636 | **+1,39%** | [+0,69; +2,19] | 57,1% | **21/24** | +2,94% | **−0,89%** |
+| `control_top_rsi70` | 1.348 | +0,35% | [−0,16; +0,88] | 46,3% | 16/26 | +0,30% | +0,41% |
+| `control_random` | 2.628 | −0,68% | [−1,00; −0,38] | 40,8% | 5/26 | −0,65% | −0,72% |
+
+- **Arahnya benar dan terukur:** beli-bawah mengalahkan beli-puncak **+1,04 poin persen** dan
+  entri acak **+2,07 poin persen** pada exit yang identik. Median entry `dip_rsi25` di
+  **persentil 0** (0% trade di persentil ≥80), kebalikan entry lama di persentil 93.
+- **Tetapi tidak bertahan di luar sampel:** train +2,94% → test −0,89%. Keuntungan hanya di
+  rezim bull BTC (+2,81%, n=281) vs bear (+0,26%, n=355). Walk-forward 5/6 jendela positif, dan
+  satu-satunya jendela negatif (2026-01-24..2026-06-12, −1,79%) adalah jendela yang **seluruhnya**
+  bear (BTC D1 di bawah EMA200 pada 180 dari 181 hari semester I 2026).
+- **Sampel tidak cukup:** maksimum 36 trade per pair (ETHUSDT); kriteria repo ≥60 trade/pair
+  tidak terpenuhi satu pair pun.
+- **H1 tidak bisa menutup friksi:** sel terbaik +1,07% dengan CI menyentuh nol; gross
+  `dip_rsi25|atr3.0/3.0|24` hanya +0,62% vs friksi 0,9688%. Filter sadar-friksi membuang 32%
+  sinyal pada ATR 1,5/2,0.
+- **D1 positif tetapi tidak sah sebagai bukti:** `tgt_ema20_sl3|21` +3,19% (CI [+0,31; +6,29])
+  dari hanya 200 trade/26 pair, dan kontrol beli-puncak pada exit ATR juga untung **+2,60%**
+  (CI seluruhnya di atas nol; median −0,28% → ekor kanan).
+
+### Bacaan dan keputusan
+
+1. **Tidak ada yang di-port.** Tidak ada perubahan app, `scalp_config.json`, `IntradayConfig`,
+   atau gate P0. Ini riset offline, sama seperti temuan lain di `docs/exp/`.
+2. **Friksi 0,9688% tetap lantai keras.** Trade perlu menangkap ≥1% bersih; di H4 itu hanya
+   terjadi kalau posisi ditahan berhari-hari (median 18 bar), dan 64,9% trade keluar TIMEOUT,
+   bukan TP. Jadi hasil ini soal waktu + rezim, bukan soal exit.
+3. **Yang bisa dipakai berikutnya (menunggu instruksi owner):** hipotesis beli-bawah layak
+   diuji sebagai **gate rezim**, bukan sebagai strategi berdiri sendiri — dengan syarat diukur
+   pada data baru (bukan diulang pada 26 pair yang sama) dan tetap memakai fee all-in.
+   Jangan menambah filter/gate ke engine hanya karena angka train bagus.
+4. **Pembanding pasif belum diukur di repo.** Bunga produk stablecoin di bursa (Flexible/Locked/
+   Earn) disebut owner sebagai pembanding; angka bunganya **tidak** diukur di sini dan tidak boleh
+   dikutip sebagai hasil eksperimen. Kalau dipakai sebagai pembanding, ia perlu pengukuran
+   sendiri (suku bunga berubah, ada risiko bursa, tanpa risiko pasar).
+
+### Alat & reproduksi
+
+`tools/entry_buy_low_lab.py` mendapat tiga opsi baru: `--walk-forward N` (jendela berurutan,
+memakai ulang perdagangan yang sama), `--slim` (JSON ramping: blok rezim per pair dibuang, sel
+`n < --min-n` tidak disimpan), dan `--cells`/`--pairs-for` (hanya menyimpan sel yang dikutip
+laporan). Hasil: `data/hasil/exp_buy_low_entry_v8_{1h,4h,1d}_regime.json` (76K/264K/104K, sebelumnya
+15–17 MB per berkas) + `..._4h_tp_first.json` untuk batas optimistis urutan intrabar. Perintah
+lengkap ada di berkas laporan § Perintah.

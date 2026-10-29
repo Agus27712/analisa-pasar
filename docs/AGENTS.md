@@ -208,6 +208,20 @@ dan bias periode). **Keluhan "beli di pucuk" benar secara posisi**, tetapi bukan
 bersih — kuintil teratas 1 hari masih +0,264% dan persentil tinggi sebagian mekanis dalam tren
 naik. Ini diagnostik, bukan izin menambah filter/gate entry.
 
+Entri beli-bawah: `exp_buy_low_entry_v8_26pair.md` (2026-10-29) — `tools/entry_buy_low_lab.py`
+menguji kebalikan tesis persentil 93: beli saat murah (RSI14<25, koreksi EMA20, band bawah
+Bollinger, drawdown 7 hari, deviasi VWAP) lalu jual di atas (EMA20/EMA50/band atas/puncak 7 hari).
+26 pair `data/tokocrypto_v8`, H1/H4/D1, 11 hipotesis + 2 kontrol (`control_top_rsi70`,
+`control_random`), 10 exit, split 60/40, walk-forward 6 jendela. **Status GAGAL.** H4
+`dip_rsi25` exit 3/5 ATR hold 18: **636 trade, +1,39%/trade, CI [+0,69;+2,19], WR 57,1%,
+21/24 pair positif** — mengalahkan beli-puncak (+0,35) dan entri acak (−0,68) pada exit yang
+sama, tetapi **train +2,94 → test −0,89**, dan keuntungannya hanya di rezim bull (+2,81 vs
++0,26 bear); jendela walk-forward tunggal yang negatif adalah jendela yang seluruhnya bear.
+H1 tidak satu sel pun menutup friksi (terbaik +1,07 dengan CI menyentuh nol). D1
+`tgt_ema20_sl3|21` +3,19 tetapi hanya 200 trade/26 pair dan kontrol beli-puncak pada exit ATR
+juga untung (+2,60). Tidak ada pair dengan ≥60 trade (maksimum 36), jadi **tidak memenuhi
+kriteria kandidat dan tidak di-port**. Angka negatif lengkap dan batasan ada di berkasnya.
+
 **Spec v2 dihentikan dan artefaknya dihapus (2026-10-21).** Dokumen spec, dua laporan hasil,
 tool, dataset, dan hasil JSON sudah dihapus dari pohon kerja. Jangan membuat ulang berkas atau
 riset v2; ringkasan alasan ada di `workplan2.md` §64.
