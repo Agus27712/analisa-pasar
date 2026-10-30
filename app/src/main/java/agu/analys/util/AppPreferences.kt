@@ -181,16 +181,12 @@ class AppPreferences(context: Context) {
         rememberHistoryBases(listOf(base))
     }
 
-    var groqApiKey: String
-        get() = prefs.getString(KEY_GROQ, "").orEmpty().ifEmpty { agu.analys.BuildConfig.GROQ_API_KEY }
-        set(value) = prefs.edit().putString(KEY_GROQ, value.trim()).apply()
-
     var geminiApiKey: String
         get() = prefs.getString(KEY_GEMINI, "").orEmpty().ifEmpty { agu.analys.BuildConfig.GEMINI_API_KEY }
         set(value) = prefs.edit().putString(KEY_GEMINI, value.trim()).apply()
 
     var aiProvider: AiProvider
-        get() = runCatching { AiProvider.valueOf(prefs.getString(KEY_AI_PROVIDER, AiProvider.GROQ.name).orEmpty()) }.getOrDefault(AiProvider.GROQ)
+        get() = runCatching { AiProvider.valueOf(prefs.getString(KEY_AI_PROVIDER, AiProvider.GEMINI.name).orEmpty()) }.getOrDefault(AiProvider.GEMINI)
         set(value) = prefs.edit().putString(KEY_AI_PROVIDER, value.name).apply()
 
     var marketDataSource: MarketDataSource
@@ -443,7 +439,6 @@ class AppPreferences(context: Context) {
 
     fun clearApiKeys() {
         prefs.edit()
-            .remove(KEY_GROQ)
             .remove(KEY_GEMINI)
             .remove(KEY_INDODAX_API_KEY)
             .remove(KEY_INDODAX_SECRET_KEY)
@@ -638,7 +633,6 @@ class AppPreferences(context: Context) {
         @Volatile var isKeyStoreRecoveryOccurred: Boolean = false
         const val DEFAULT_UPDATE_REPO = "Agus27712/analisa-pasar"
         private const val PREFS_NAME = "krypto_analysis_prefs"
-        private const val KEY_GROQ = "groq_api_key"
         private const val KEY_GEMINI = "gemini_api_key"
         private const val KEY_AI_PROVIDER = "ai_provider"
         private const val KEY_MARKET_SOURCE = "market_data_source"

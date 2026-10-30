@@ -3,7 +3,7 @@ package agu.analys.config
 import kotlin.math.abs
 import kotlin.math.max
 
-enum class AiProvider(val label: String) { GROQ("Groq"), GEMINI("Gemini") }
+enum class AiProvider(val label: String) { GEMINI("Gemini") }
 
 enum class StrategyMode(val label: String, val badge: String, val shortDesc: String) {
     SCALPING("Scalping Agresif", "⚡ SCALPING", "Cepat (1M–15M) · Trigger mikro"),

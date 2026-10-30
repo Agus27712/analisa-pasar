@@ -70,8 +70,6 @@ fun SettingsCategoryDetailContent(
     onWipeCredentials: () -> Unit,
     provider: AiProvider,
     onProviderChange: (AiProvider) -> Unit,
-    groq: String,
-    onGroqChange: (String) -> Unit,
     gemini: String,
     onGeminiChange: (String) -> Unit,
     isNotifyPriceAlertsEnabled: Boolean,
@@ -315,13 +313,8 @@ fun SettingsCategoryDetailContent(
 
         SettingsCategory.AI_ASSISTANT -> {
             AiAssistantSettings(
-                provider = provider,
-                groqKey = groq,
                 geminiKey = gemini,
-                onProviderChange = onProviderChange,
-                onKeyChange = {
-                    if (provider == AiProvider.GROQ) onGroqChange(it) else onGeminiChange(it)
-                }
+                onKeyChange = onGeminiChange
             )
         }
 

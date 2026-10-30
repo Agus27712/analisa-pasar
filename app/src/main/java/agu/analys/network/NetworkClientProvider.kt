@@ -89,7 +89,7 @@ object NetworkClientProvider {
     }
 
     /**
-     * Client untuk Service AI (Gemini, Groq, AI Screener).
+     * Client untuk Service AI (Gemini, AI Screener).
      * Timeout baca hingga 60s untuk mengakomodasi inferensi model LLM.
      */
     val aiClient: OkHttpClient by lazy {

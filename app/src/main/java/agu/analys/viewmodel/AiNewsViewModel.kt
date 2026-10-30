@@ -10,7 +10,6 @@ import agu.analys.model.NewsScreenerUiState
 import agu.analys.model.TechnicalIndicators
 import agu.analys.model.TradingPair
 import agu.analys.service.GeminiAiService
-import agu.analys.service.GroqAiService
 import agu.analys.service.NewsAiScreenerService
 import agu.analys.service.NewsRssFeedService
 import agu.analys.util.AppPreferences
@@ -39,7 +38,6 @@ class AiNewsViewModel(application: Application) : AndroidViewModel(application) 
     val isGeminiLoading: StateFlow<Boolean> = _isGeminiLoading.asStateFlow()
 
     fun fetchAiNewsScreening(
-        groqKey: String = "",
         geminiKey: String = "",
         forceRefresh: Boolean = false,
         currentLiveTicks: Map<String, MarketTick> = emptyMap()
@@ -47,7 +45,6 @@ class AiNewsViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             _newsScreenerState.value = NewsScreenerUiState.Loading("Mengambil & menganalisa feed berita kripto terbaru...")
             try {
-                val effectiveGroq = groqKey.ifBlank { prefs.groqApiKey }
                 val effectiveGemini = geminiKey.ifBlank { prefs.geminiApiKey }
                 val provider = prefs.aiProvider
 
@@ -97,7 +94,6 @@ class AiNewsViewModel(application: Application) : AndroidViewModel(application) 
                     indodaxValidBases = dynamicBases,
                     liveTicks = ticks,
                     preferredProvider = provider,
-                    groqApiKey = effectiveGroq,
                     geminiApiKey = effectiveGemini
                 )
                 _newsScreenerState.value = NewsScreenerUiState.Success(result)
@@ -115,23 +111,9 @@ class AiNewsViewModel(application: Application) : AndroidViewModel(application) 
         tick: MarketTick,
         indicators: TechnicalIndicators,
         signal: AISignalState,
-        groqApiKey: String? = null
+        geminiApiKey: String? = null
     ) {
-        if (_isAuditLoading.value || _isGeminiLoading.value) return
-        viewModelScope.launch {
-            _isAuditLoading.value = true
-            _auditReportText.value = null
-            try {
-                val effectiveKey = groqApiKey?.ifBlank { null } ?: prefs.groqApiKey
-                _auditReportText.value = GroqAiService.generateDeepMarketAudit(
-                    effectiveKey, tick, indicators, signal
-                )
-            } catch (e: Exception) {
-                _auditReportText.value = "Gagal audit AI: ${e.message}"
-            } finally {
-                _isAuditLoading.value = false
-            }
-        }
+        requestGeminiChartSummary(tick, indicators, signal, geminiApiKey)
     }
 
     fun clearAuditReport() {
@@ -170,9 +152,7 @@ class AiNewsViewModel(application: Application) : AndroidViewModel(application) 
             _isGeminiLoading.value = true
             _geminiSummaryText.value = null
             try {
-                val groqKey = prefs.groqApiKey
                 val geminiKey = prefs.geminiApiKey
-                val provider = prefs.aiProvider
 
                 val prompt = """
                     Analisa koin: $symbol
@@ -184,11 +164,7 @@ class AiNewsViewModel(application: Application) : AndroidViewModel(application) 
                     Tolong berikan rekomendasi ringkas (maksimal 3 kalimat) dengan gaya seorang trader ahli profesional: apakah aman beli sekarang, atau tunggu pullback. Tulis dalam bahasa Indonesia yang lugas dan tajam.
                 """.trimIndent()
 
-                val summary = if (provider == AiProvider.GEMINI) {
-                    GeminiAiService.generateSimpleText(geminiKey, prompt)
-                } else {
-                    GroqAiService.generateText(groqKey, prompt)
-                }
+                val summary = GeminiAiService.generateSimpleText(geminiKey, prompt)
                 _geminiSummaryText.value = summary
             } catch (e: Exception) {
                 _geminiSummaryText.value = "Gagal analisa AI: ${e.message}"

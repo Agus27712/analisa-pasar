@@ -47,26 +47,14 @@ fun NewsAiScreenerModal(
     var showRawAnalysis by remember { mutableStateOf(false) }
 
     // Otomatis picu analisis pertama kali jika state masih Idle atau provider berubah
-    LaunchedEffect(provider) {
+    LaunchedEffect(Unit) {
         if (state is NewsScreenerUiState.Idle) {
             onRunScreener(false)
-        } else if (state is NewsScreenerUiState.Success) {
-            val isGroqAndStateIsGemini = provider == AiProvider.GROQ && state.result.providerUsed.startsWith("Gemini Flash") && !state.result.providerUsed.contains("Failover")
-            val isGeminiAndStateIsGroq = provider == AiProvider.GEMINI && state.result.providerUsed.startsWith("Groq") && !state.result.providerUsed.contains("Failover")
-            if (isGroqAndStateIsGemini || isGeminiAndStateIsGroq) {
-                onRunScreener(true)
-            }
         }
     }
 
-    val providerName = when (provider) {
-        AiProvider.GROQ -> "Groq (Qwen / GPT-OSS)"
-        AiProvider.GEMINI -> "Gemini Flash"
-    }
-    val providerColor = when (provider) {
-        AiProvider.GROQ -> Color(0xFFFF9800)
-        AiProvider.GEMINI -> Color(0xFF2196F3)
-    }
+    val providerName = "Gemini Flash"
+    val providerColor = Color(0xFF2196F3)
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -243,9 +231,8 @@ private fun ScreenerResultsContent(
                         )
                         Spacer(Modifier.width(10.dp))
                         val bannerText = when {
-                            result.rawAnalysis.contains("429") -> "Kuota Groq Free Tier sedang padat / Rate Limit (HTTP 429). Menampilkan hasil kurasi heuristik berita Indodax."
-                            result.rawAnalysis.contains("API Key", ignoreCase = true) -> "API Key belum diisi di Pengaturan. Menampilkan rekomendasi berita heuristik."
-                            result.providerUsed.contains("Failover") -> "API Groq dialihkan sementara ke ${result.providerUsed} untuk menjaga kestabilan data."
+                            result.rawAnalysis.contains("429") -> "Kuota AI sedang padat / Rate Limit (HTTP 429). Menampilkan hasil kurasi heuristik berita Indodax."
+                            result.rawAnalysis.contains("API Key", ignoreCase = true) -> "API Key Gemini belum diisi di Pengaturan. Menampilkan rekomendasi berita heuristik."
                             else -> "Mode Heuristik aktif untuk menyaring kandidat koin berita Indodax."
                         }
                         Text(

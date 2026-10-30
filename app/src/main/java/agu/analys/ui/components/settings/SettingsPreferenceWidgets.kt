@@ -50,7 +50,7 @@ enum class SettingsCategory(
     ),
     AI_ASSISTANT(
         title = "AI Assistant & Engine",
-        subtitle = "Konfigurasi engine AI Groq (LLaMA-3) & Google Gemini",
+        subtitle = "Konfigurasi engine AI Google Gemini",
         icon = Icons.Default.SmartToy,
         accentColor = Color(0xFF9C27B0)
     ),

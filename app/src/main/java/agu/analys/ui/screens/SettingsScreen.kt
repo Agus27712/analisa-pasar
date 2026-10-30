@@ -44,7 +44,6 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
     var selectedSource by remember(currentMarketSource) { mutableStateOf(currentMarketSource) }
     var strategyMode by remember { mutableStateOf(prefs.strategyMode) }
     var provider by remember { mutableStateOf(prefs.aiProvider) }
-    var groq by remember { mutableStateOf(prefs.groqApiKey) }
     var gemini by remember { mutableStateOf(prefs.geminiApiKey) }
     var buyMakerFee by remember { mutableStateOf(prefs.tradingFees.buyMakerPct.toString()) }
     var buyTakerFee by remember { mutableStateOf(prefs.tradingFees.buyTakerPct.toString()) }
@@ -106,7 +105,6 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
         prefs.strategyMode = strategyMode
         prefs.isScalpingMode = (strategyMode == StrategyMode.SCALPING)
         prefs.aiProvider = provider
-        prefs.groqApiKey = groq
         prefs.geminiApiKey = gemini
         prefs.updateRepo = updateRepo
         prefs.updateGitHubToken = updateToken
@@ -421,7 +419,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                             iconTint = Color(0xFFAB47BC),
                             iconBackground = Color(0xFFAB47BC).copy(alpha = 0.15f),
                             title = "AI Assistant & Engine",
-                            subtitle = "Provider: ${if (provider == AiProvider.GROQ) "Groq (LLaMA-3)" else "Google Gemini"} · Kelola API Key",
+                            subtitle = "Provider: Google Gemini · Kelola API Key",
                             onClick = { activeCategory = SettingsCategory.AI_ASSISTANT }
                         )
                     }
@@ -581,8 +579,6 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                         },
                         provider = provider,
                         onProviderChange = { provider = it; saved = false },
-                        groq = groq,
-                        onGroqChange = { groq = it; saved = false },
                         gemini = gemini,
                         onGeminiChange = { gemini = it; saved = false },
                         isNotifyPriceAlertsEnabled = isNotifyPriceAlertsEnabled,

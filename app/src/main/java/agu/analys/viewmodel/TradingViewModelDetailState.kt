@@ -317,12 +317,7 @@ private fun TradingViewModel.buildDetailUiState(
 
     val marketStructure = StructureCache.getOrAnalyze(market.candles)
 
-    val providerUsesGroq = try {
-        prefs.aiProvider == agu.analys.config.AiProvider.GROQ
-    } catch (_: Throwable) {
-        true
-    }
-    val aiText = if (providerUsesGroq) ai.audit.orEmpty() else ai.gemini.orEmpty()
+    val aiText = ai.gemini.orEmpty()
 
     return DetailUiState(
         pair = pair,

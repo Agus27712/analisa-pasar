@@ -35,8 +35,7 @@ class NewsAiScreenerServiceTest {
             articles = articles,
             indodaxValidBases = indodaxWhitelist,
             liveTicks = liveTicks,
-            preferredProvider = AiProvider.GROQ,
-            groqApiKey = "",
+            preferredProvider = AiProvider.GEMINI,
             geminiApiKey = ""
         )
 

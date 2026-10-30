@@ -50,7 +50,7 @@ Replay historis dengan fee all-in belum menunjukkan edge stabil pada kelas sinya
 
 **analisa-pasar (TradingView AI)** adalah aplikasi Android berbasis **Kotlin** dan **Jetpack Compose (Material Design 3)** yang berfungsi sebagai:
 1. **Pusat Analisis Pasar Real-Time**: Streaming data pasar (ticker, candlestick, orderbook depth, order trade flow) dari **Tokocrypto** dan **Indodax** (WebSocket + REST).
-2. **Mesin sinyal multi-mode** termasuk **scalp mode** (MTF, setup, skor, risk) plus swing/intraday; AI (Gemini/Groq) sebagai pendukung, bukan pengganti fee/risk engine.
+2. **Mesin sinyal multi-mode** termasuk **scalp mode** (MTF, setup, skor, risk) plus swing/intraday; AI (Google Gemini) sebagai pendukung, bukan pengganti fee/risk engine.
 3. **Dual Execution Mode**:
    - **Paper / simulasi**: saldo virtual terisolasi per bursa & kuotasi — **jalur utama validasi scalp**.
    - **Real trading**: API resmi + PIN — eksekusi sadar user, bukan klaim auto-edge.

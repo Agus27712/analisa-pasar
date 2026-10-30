@@ -69,9 +69,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val _marketDataSource = MutableStateFlow(prefs.marketDataSource)
     val marketDataSource: StateFlow<MarketDataSource> = _marketDataSource.asStateFlow()
 
-    private val _groqApiKey = MutableStateFlow(prefs.groqApiKey)
-    val groqApiKey: StateFlow<String> = _groqApiKey.asStateFlow()
-
     private val _geminiApiKey = MutableStateFlow(prefs.geminiApiKey)
     val geminiApiKey: StateFlow<String> = _geminiApiKey.asStateFlow()
 
@@ -164,11 +161,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             prefs.resetTradingFeesToDefault()
         }
         _tradingFees.value = prefs.tradingFees
-    }
-
-    fun setGroqApiKey(key: String) {
-        _groqApiKey.value = key
-        prefs.groqApiKey = key
     }
 
     fun setGeminiApiKey(key: String) {

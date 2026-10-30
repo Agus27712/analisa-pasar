@@ -228,8 +228,7 @@ fun DetailChartScreen(
             provider = provider,
             onDismiss = { showAiAssistantDialog = false },
             onAnalyze = {
-                if (provider == AiProvider.GROQ) viewModel.requestDeepAiAudit()
-                else viewModel.requestGeminiChartSummary()
+                viewModel.requestGeminiChartSummary()
             }
         )
     }

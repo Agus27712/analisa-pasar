@@ -39,7 +39,6 @@ android {
     versionName = "3.9.2"
 
     buildConfigField("String", "GEMINI_API_KEY", "\"${getSecret("GEMINI_API_KEY")}\"")
-    buildConfigField("String", "GROQ_API_KEY", "\"${getSecret("GROQ_API_KEY")}\"")
   }
   signingConfigs {
     create("debugConfig") {
@@ -105,7 +104,6 @@ secrets {
   defaultPropertiesFileName = ".env.example"
   ignoreList.add("FIREBASE_APPCHECK_DEBUG_TOKEN")
   ignoreList.add("DEEPSEEK_API_KEY")
-  ignoreList.add("GROQ_API_KEY")
   ignoreList.add("GEMINI_API_KEY")
 }
 

@@ -28,7 +28,7 @@ import agu.analys.ui.components.MarkdownText
 import agu.analys.ui.theme.*
 
 /**
- * Popup Dialog Ringkas untuk Analisis AI menggunakan asisten aktif dari Pengaturan (Gemini / Groq).
+ * Popup Dialog Ringkas untuk Analisis AI menggunakan asisten aktif dari Pengaturan (Google Gemini).
  */
 @Composable
 fun AiAssistantDialog(
@@ -46,14 +46,8 @@ fun AiAssistantDialog(
     }
 
     val isLight = LocalAppColors.current == LightAppColors
-    val providerName = when (provider) {
-        AiProvider.GROQ -> "Groq (OpenAI GPT-OSS)"
-        AiProvider.GEMINI -> "Gemini Flash"
-    }
-    val providerColor = when (provider) {
-        AiProvider.GROQ -> Color(0xFFFF9800)
-        AiProvider.GEMINI -> TvBlue
-    }
+    val providerName = "Gemini Flash"
+    val providerColor = TvBlue
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -206,25 +200,19 @@ fun AiAssistantDialog(
 
 @Composable
 fun AiAssistantCard(
-    auditText: String?,
-    auditLoading: Boolean,
     geminiText: String?,
     geminiLoading: Boolean,
-    onGroq: () -> Unit,
     onGemini: () -> Unit,
-    onClearGroq: () -> Unit,
     onClearGemini: () -> Unit
 ) {
-    val provider = agu.analys.util.AppPreferences(LocalContext.current).aiProvider
-    val loading = auditLoading || geminiLoading
-    val result = if (provider == AiProvider.GROQ) auditText else geminiText
-    val action = if (provider == AiProvider.GROQ) onGroq else onGemini
+    val loading = geminiLoading
+    val result = geminiText
     AnalysisCard {
         SectionTitle("AI ASISTEN", Icons.Default.AutoAwesome)
         Spacer(Modifier.height(5.dp))
-        Text("Provider aktif: ${provider.label}. AI menjelaskan hasil engine, bukan menentukan arah market.", fontSize = 12.sp, color = TvTextSecondary, lineHeight = 17.sp)
+        Text("Provider aktif: Gemini. AI menjelaskan hasil engine, bukan menentukan arah market.", fontSize = 12.sp, color = TvTextSecondary, lineHeight = 17.sp)
         Spacer(Modifier.height(8.dp))
-        Button(onClick = action, enabled = !loading, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = TvGreen), shape = RoundedCornerShape(10.dp)) { Text(if (loading) "Menganalisis..." else "Analisa dengan ${provider.label}", color = Color.Black, fontWeight = FontWeight.Bold) }
+        Button(onClick = onGemini, enabled = !loading, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = TvGreen), shape = RoundedCornerShape(10.dp)) { Text(if (loading) "Menganalisis..." else "Analisa dengan Gemini", color = Color.Black, fontWeight = FontWeight.Bold) }
         result?.let {
             Spacer(Modifier.height(8.dp))
             MarkdownText(markdown = it, fontSize = 12.sp, lineHeight = 17.sp)

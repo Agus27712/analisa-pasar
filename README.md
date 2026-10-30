@@ -66,9 +66,9 @@ Aplikasi Android berbasis **Jetpack Compose** dan **Kotlin** mutakhir yang diran
 - **Mode Intraday / Office Daily (H4)**:
   - Siklus 5-Sesi Disiplin Waktu (Open Pagi 06:00–11:30, Hold Siang 11:30–15:30, Sore Trailing 15:30–19:30, Close Malam 19:30–23:30, Rest Malam 23:30–06:00 WIB), Proteksi Anti-Flash-Dump, filter anomali makro (Macro Anomaly Detector), dan screening likuiditas sehat.
 
-### 6. News AI Screener (Gemini Flash & Groq)
+### 6. News AI Screener (Gemini Flash)
 - Kurasi berita kripto terhangat dari feed RSS global terpercaya.
-- Analisis sentimen fundamental dan scoring koin berpotensi reli menggunakan LLM (**Google Gemini** & **Groq AI**).
+- Analisis sentimen fundamental dan scoring koin berpotensi reli menggunakan LLM (**Google Gemini**).
 
 ### 7. Charting Interaktif & Mode Layar Penuh
 - **Lightweight Charts (HTML5 / JS Bridge)**: Render candlestick interaktif responsif dengan dukungan multi-timeframe (1m, 5m, 15m, 1h, 4h, 1d).
@@ -159,7 +159,7 @@ app/src/main/java/agu/analys/
 │   ├── CandidateScanWorker.kt       # Worker scanner sinyal periodik
 │   ├── NewsAiScreenerService.kt     # Engine AI analisis sentimen berita
 │   ├── GeminiAiService.kt           # Integrasi Google Gemini API
-│   └── GroqAiService.kt             # Integrasi Groq AI (fallback LLM)
+│   └── PairNarrative.kt             # Konteks narasi dan profil koin AI
 ├── trading/                         # Simulation order engine, wallet, TradeLogExporter & spot position store
 ├── ui/                              # Antarmuka Jetpack Compose
 │   ├── screens/                     # Layar (Dashboard, DetailChart, LandscapeChart, TradeSimulation, Portfolio, SignalLog, Settings, LearningPath)
@@ -188,7 +188,7 @@ app/src/main/java/agu/analys/
   - **Tokocrypto**: Masukkan API Key & Secret Key Tokocrypto di menu *Pengaturan $\rightarrow$ Mode Real Tokocrypto*.
   - **Indodax**: Masukkan API Key & Secret Key Indodax TAPIv2 di menu *Pengaturan $\rightarrow$ Mode Real Indodax*.
 - **Konfigurasi AI Provider (Opsional)**:
-  - Masukkan Gemini API Key atau Groq API Key di menu *Pengaturan* untuk mengaktifkan audit sentimen berita pasar realtime.
+  - Masukkan Gemini API Key di menu *Pengaturan* untuk mengaktifkan audit sentimen berita pasar realtime.
 
 ---
 

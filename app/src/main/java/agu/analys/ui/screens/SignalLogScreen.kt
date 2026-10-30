@@ -942,14 +942,14 @@ private fun TradeHistorySummaryCard(records: List<TradeHistoryRecordEntity>) {
                     Spacer(Modifier.width(8.dp))
                     Column {
                         Text(
-                            text = "RINGKASAN SIKLUS PERJALANAN TRADE",
+                            text = "RINGKASAN SIKLUS TRADE",
                             color = TvTextPrimary,
                             fontSize = 11.5.sp,
                             fontWeight = FontWeight.Bold,
                             letterSpacing = 0.4.sp
                         )
                         Text(
-                            text = "Perekaman Sinyal Buy ➔ Beli ➔ Hold ➔ Jual & PnL",
+                            text = "Pencatatan Sinyal Buy ➔ Beli ➔ Hold ➔ Jual & PnL",
                             color = TvTextSecondary,
                             fontSize = 9.sp
                         )

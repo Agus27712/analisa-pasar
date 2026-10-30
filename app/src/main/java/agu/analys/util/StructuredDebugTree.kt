@@ -107,7 +107,7 @@ class StructuredDebugTree(
         }
 
         // 4. AI & Signal Engine
-        if (combined.contains("gemini") || combined.contains("groq")) {
+        if (combined.contains("gemini")) {
             contexts.add("LLM_AI")
         }
         if (combined.contains("screener") || combined.contains("sentiment")) {
