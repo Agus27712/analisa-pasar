@@ -47,7 +47,7 @@ data class ConfluenceCheckpoint(
     val label: String,             // "Struktur MTF", "Area of Value", "Volume Institusi", "Price Action", "Momentum / Div", "Risk/Reward"
     val isOk: Boolean = false,
     val status: MtfLegStatus = MtfLegStatus.WAITING,
-    val metricValue: String = "",  // e.g. "EMA Uptrend", "Support Rp 1.450", "Vol 1.6× MA", "Hammer Candle", "RSI 44 Bull Div", "Net 1:2.4"
+    val metricValue: String = "",  // e.g. "EMA Uptrend", "Support Rp 1.450", "Vol 1.6× MA", "Hammer Candle", "RSI 44 Bull Div", "Net R:R TP1 1:2.4"
     val detail: String = ""
 )
 
@@ -132,8 +132,10 @@ data class ScalpingMtfSnapshot(
                 label = "Risk / Reward",
                 isOk = entryPriceOk,
                 status = entryPriceStatus,
-                metricValue = if (entryPriceOk) "Net R:R >= 1:2.0" else "Menunggu Setup R:R",
-                detail = entryPriceDetail.ifEmpty { "Net Risk to Reward minimal 1:2.0 setelah potongan fee Indodax." }
+                metricValue = if (entryPriceOk) "Net R:R TP1 >= 1:2.0" else "Menunggu Setup R:R",
+                detail = entryPriceDetail.ifEmpty {
+                    "Net Risk to Reward TP1 minimal 1:2.0 setelah fee beli + fee jual + slippage dua sisi."
+                }
             )
         )
     }

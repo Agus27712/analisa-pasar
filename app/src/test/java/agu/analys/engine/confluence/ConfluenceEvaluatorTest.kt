@@ -76,7 +76,7 @@ class ConfluenceEvaluatorTest {
 
         val rrCheckpoint = result.checkpoints.find { it.code == "RR" }
         assertNotNull(rrCheckpoint)
-        assertTrue(rrCheckpoint!!.metricValue.startsWith("Net 1:"))
+        assertTrue(rrCheckpoint!!.metricValue.startsWith("Net R:R TP1 1:"))
     }
 
     @Test

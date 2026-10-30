@@ -71,9 +71,9 @@ fun TradingModeSettings(
             tagBg = Color(0xFFA5B4FC).copy(alpha = 0.18f),
             tagFg = Color(0xFFA5B4FC),
             isSelected = strategyMode == StrategyMode.OFFICE_DAILY,
-            desc = "Trading harian disiplin sesi (Open Pagi 06:00-11:30 WIB, Close Malam 19:30-23:30 WIB). Menggunakan histori harga panjang & filter anti-flash dump.",
+            desc = "Trading harian disiplin sesi (Open Pagi 06:00-11:29 WIB, Close Malam 19:30-23:29 WIB). Batas akhir fase milik fase berikutnya: 11:30 Siang, 15:30 Sore, 19:30 Close Malam, 23:30 Istirahat. Menggunakan histori harga panjang & filter anti-flash dump.",
             bullets = listOf(
-                "Siklus: Open Pagi (06:00–11:30) & Close Malam (19:30–23:30 WIB)",
+                "Siklus: Open Pagi (06:00–11:29) & Close Malam (19:30–23:29 WIB)",
                 "Anti Flash Dump: Analisis histori H4 (200 candle) & D1 (100 candle)",
                 "Deteksi Trap: Memblokir jebakan fake pump wick & drop mendadak",
                 "Kunci Profit: Exit sebelum tengah malam, lindungi kas dari overnight dump"

@@ -366,7 +366,8 @@ fun WaitingEntryRadarCard(
                     quoteAsset = quoteAsset,
                     completed = completedBuySteps,
                     isLevelPlanVisible = isLevelPlanVisible,
-                    onToggleLevelPlan = { isLevelPlanVisible = !isLevelPlanVisible }
+                    onToggleLevelPlan = { isLevelPlanVisible = !isLevelPlanVisible },
+                    isIntradayMode = strategyMode == StrategyMode.OFFICE_DAILY
                 )
             }
         }

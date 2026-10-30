@@ -14,6 +14,15 @@ import java.util.Locale
  * (11 pair H1, 999 bar masing-masing), memakai jalur replay dan geometri yang **sama** dengan
  * aplikasi ([IntradayReplayEngine] + [agu.analys.engine.intraday.IntradayGeometry]).
  *
+ * ⚠️ **Batas alat ini (dibaca sebelum mengutip angkanya, 2026-10-29).** Ini bukan lagi alat ukur
+ * kanonik. `data/tokocrypto_v7` hanya 999 bar H1 (≈41 hari, 11 pair), **candle D1 tidak dioper**
+ * (jadi veto anomali makro mati), dan `forwardLookaheadBars = 24` di H1/TF lain dipakai apa adanya
+ * (di H4 = 96 jam). App sendiri menjalankan intraday di **H4** dengan `d1Candles` ikut dioper
+ * (`CandidateScanWorker`). Untuk pengukuran baru pakai
+ * **[IntradayMaxTp1SweepV8Test]** (`data/tokocrypto_v8`: 26 pair, H4 4.999 bar ≈ 833 hari, D1
+ * dioper, lookahead berbasis jam). Berkas ini sengaja **tidak diubah perilakunya** supaya angka
+ * §83 `workplan2.md` tetap bisa direproduksi persis.
+ *
  * Kenapa ada di sini, bukan skrip Python terpisah: geometri TP1 dan gate net R:R hidup di Kotlin.
  * Menulis ulang rumusnya di Python berarti mengukur rumus lain, bukan yang dipakai aplikasi.
  *

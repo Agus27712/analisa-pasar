@@ -4,6 +4,11 @@ import agu.analys.config.FeeSchedule
 import agu.analys.config.TradingFeeConfig
 import agu.analys.engine.intraday.IntradayConfig
 import agu.analys.engine.intraday.IntradayEvaluator
+import agu.analys.engine.intraday.IntradayExitConfig
+import agu.analys.engine.intraday.IntradayExitDecision
+import agu.analys.engine.intraday.IntradayExitEngine
+import agu.analys.engine.intraday.IntradayExitPosition
+import agu.analys.engine.indicators.IndicatorMath
 import agu.analys.engine.regime.MacroAnomalyDetector
 import agu.analys.model.CandleBar
 import agu.analys.model.SignalAction
@@ -16,6 +21,10 @@ enum class IntradayTradeOutcome {
     FALSE_SIGNAL_CLOSE_MALAM,
     MISSED_OPPORTUNITY,
     AVOIDED_LOSS,
+    /** Exit time-stop intraday (paket E) — peristiwa tersendiri, bukan "tidak tuntas". */
+    TIME_STOP_EXIT,
+    /** Stop yang sudah dinaikkan (impas/trailing) tersentuh — arahnya bisa untung. */
+    TRAIL_STOP_HIT,
     UNRESOLVED,
     AMBIGUOUS
 }
@@ -77,8 +86,23 @@ data class IntradayReplayReport(
     val falseSignals: Int,
     val missedOpportunities: Int,
     val avoidedLosses: Int,
+    /**
+     * Trade yang tidak menyentuh SL/TP/sesi **sementara data masih ada** setelah jendela
+     * lookahead (`LOOKAHEAD_EXPIRY`). Tetap dihitung kalah (aturan A5), tetapi artinya
+     * "tidak tuntas di dalam jendela", bukan "data habis".
+     */
     val unresolvedOutcomes: Int,
+    /**
+     * Trade yang ditutup karena **dataset habis** (`END_OF_DATA`) — jendela lookahead terpotong
+     * di bar terakhir. Dipisahkan dari [unresolvedOutcomes] supaya laporan tidak mencampur
+     * "trade belum tuntas" dengan "data berakhir" (paket D butir 2).
+     *
+     * Keduanya tetap dihitung **kalah**; pemisahan ini hanya untuk keterbacaan laporan.
+     */
+    val endOfDataOutcomes: Int,
     val ambiguousOutcomes: Int,
+    /** Exit karena time-stop intraday (paket E). Nol pada mode `SESSION_CLOSE`. */
+    val timeStopOutcomes: Int,
     val totalNetPnlPct: Double,
     val avgNetPnlPct: Double,
     val winRatePct: Double,
@@ -91,6 +115,13 @@ data class IntradayReplayReport(
 ) {
     val totalResolvedTrades: Int
         get() = validEntries + falseSignals
+
+    /**
+     * Semua trade yang tidak punya exit peristiwa (SL/TP/sesi): jendela lookahead habis
+     * ([unresolvedOutcomes]) atau dataset habis ([endOfDataOutcomes]).
+     */
+    val unresolvedTotal: Int
+        get() = unresolvedOutcomes + endOfDataOutcomes
 
     val captureRatePct: Double
         get() {
@@ -163,7 +194,13 @@ object IntradayReplayEngine {
          */
         feeConfig: TradingFeeConfig,
         slippagePct: Double = FeeSchedule.DEFAULT_SLIPPAGE_PCT,
-        config: IntradayConfig = IntradayConfig.DEFAULT
+        config: IntradayConfig = IntradayConfig.DEFAULT,
+        /**
+         * Aturan keluar intraday (paket E). Bawaan [IntradayExitConfig.DEFAULT] = perilaku lama
+         * (SL/TP statis + SELL paksa sesi Close Malam), sehingga seluruh angka paket A–D tetap
+         * dapat direproduksi. Mode lain hanya dipakai alat ukur sampai ada keputusan owner.
+         */
+        exitConfig: IntradayExitConfig = IntradayExitConfig.DEFAULT
     ): IntradayReplayReport {
         val sortedCandles = candles.sortedBy { it.timestamp }
         val sortedDaily = dailyCandles.sortedBy { it.timestamp }
@@ -195,7 +232,9 @@ object IntradayReplayEngine {
         var missedOpportunities = 0
         var avoidedLosses = 0
         var unresolvedOutcomes = 0
+        var endOfDataOutcomes = 0
         var ambiguousOutcomes = 0
+        var timeStopOutcomes = 0
 
         var totalMomentumCandidates = 0
 
@@ -312,58 +351,66 @@ object IntradayReplayEngine {
             var tradeOutcome: IntradayTradeOutcome? = null
 
             if (signal.action == SignalAction.BUY && i >= currentHoldingUntilIndex) {
-                // Execute BUY simulation
+                // Execute BUY simulation. Sejak paket E, seluruh jalur keluar melewati
+                // `IntradayExitEngine` — satu definisi untuk replay dan (nanti) app. Mode bawaan
+                // `SESSION_CLOSE` mereproduksi perilaku lama persis (SL/TP statis + sesi).
                 var exitIndex = i
                 var exitPrice = currentCandle.close
                 var exitReason = "UNRESOLVED"
-                var hitTp = false
-                var hitSl = false
-                var closeMalamExit = false
-                var ambiguousExit = false
 
                 val tradeTp1 = signal.targetPrice1
                 val tradeTp2 = signal.targetPrice2
                 val tradeSl = signal.stopLoss
 
+                // ATR entry: dasar jarak trailing. Jendela sama dengan yang dipakai evaluator.
+                val atrEntry = IndicatorMath.atr(window, 14)
+                    .takeIf { it.isFinite() && it > 0.0 }
+                    ?: (currentCandle.close * config.atrFloorPct / 100.0)
+                val posisiKeluar = IntradayExitPosition(
+                    entryPrice = currentCandle.close,
+                    initialStopLoss = tradeSl,
+                    takeProfit1 = tradeTp1,
+                    takeProfit2 = tradeTp2,
+                    breakevenPrice = IntradayExitEngine.breakevenPrice(
+                        entry = currentCandle.close,
+                        fees = feeConfig,
+                        useMaker = config.useMakerFee,
+                        slippagePct = slippagePct
+                    ),
+                    atr = atrEntry
+                )
+                var stateKeluar = IntradayExitEngine.initialState(posisiKeluar)
+
                 for (f in (i + 1)..maxLookahead) {
                     val fb = sortedCandles[f]
                     // Fase keluar dihitung pada waktu **tutup** bar yang sama dengan evalTime.
                     val fbPhase = IntradayEvaluator.getCurrentIntradayPhase(fb.timestamp + barDurationMs)
-
-                    val barHitTp = fb.high >= tradeTp1
-                    val barHitSl = fb.low <= tradeSl
-
-                    if (barHitTp && barHitSl) {
-                        ambiguousExit = true
-                        exitIndex = f
-                        exitPrice = tradeSl // Conservative: assume SL hit first
-                        exitReason = "AMBIGUOUS_SAME_BAR"
-                        break
-                    } else if (barHitTp) {
-                        hitTp = true
-                        exitIndex = f
-                        exitPrice = if (fb.high >= tradeTp2) tradeTp2 else tradeTp1
-                        exitReason = if (fb.high >= tradeTp2) "TP2_HIT" else "TP1_HIT"
-                        break
-                    } else if (barHitSl) {
-                        hitSl = true
-                        exitIndex = f
-                        exitPrice = tradeSl
-                        exitReason = "STOP_LOSS_HIT"
-                        break
-                    } else if (enforceSessionClose && fbPhase == IntradayEvaluator.IntradayPhase.CLOSE_MALAM) {
-                        closeMalamExit = true
-                        exitIndex = f
-                        exitPrice = fb.close
-                        exitReason = "CLOSE_MALAM_SESSION_EXIT"
-                        break
+                    val keputusan = IntradayExitEngine.evaluate(
+                        bar = fb,
+                        position = posisiKeluar,
+                        state = stateKeluar,
+                        config = exitConfig,
+                        sessionClose = enforceSessionClose &&
+                            fbPhase == IntradayEvaluator.IntradayPhase.CLOSE_MALAM
+                    )
+                    when (keputusan) {
+                        is IntradayExitDecision.Exit -> {
+                            exitIndex = f
+                            exitPrice = keputusan.price
+                            exitReason = keputusan.reason
+                            break
+                        }
+                        is IntradayExitDecision.Hold -> stateKeluar = keputusan.state
                     }
                 }
 
-                if (!hitTp && !hitSl && !closeMalamExit && !ambiguousExit) {
+                if (exitReason == "UNRESOLVED") {
                     exitIndex = maxLookahead
                     exitPrice = sortedCandles[maxLookahead].close
-                    exitReason = "LOOKAHEAD_EXPIRY"
+                    // Paket D butir 2: dua hal berbeda tidak boleh memakai satu label.
+                    // - END_OF_DATA: jendela lookahead terpotong karena dataset habis.
+                    // - LOOKAHEAD_EXPIRY: data masih ada, trade hanya belum tuntas.
+                    exitReason = if (maxLookahead == sortedCandles.size - 1) "END_OF_DATA" else "LOOKAHEAD_EXPIRY"
                 }
 
                 currentHoldingUntilIndex = exitIndex
@@ -378,16 +425,21 @@ object IntradayReplayEngine {
 
                 // Satu klasifikasi peristiwa per trade. Menang/kalah TIDAK diambil dari sini —
                 // lihat `isWin` di ringkasan: dasarnya net, bukan gross.
-                val outcome = when {
-                    ambiguousExit -> {
+                val outcome = when (exitReason) {
+                    "AMBIGUOUS_SAME_BAR" -> {
                         ambiguousOutcomes++
                         IntradayTradeOutcome.AMBIGUOUS
                     }
-                    hitTp -> IntradayTradeOutcome.VALID_ENTRY_TP
-                    hitSl -> IntradayTradeOutcome.FALSE_SIGNAL_SL
-                    closeMalamExit -> classifyCloseMalam(netPnlPct)
+                    "TP1_HIT", "TP2_HIT" -> IntradayTradeOutcome.VALID_ENTRY_TP
+                    "STOP_LOSS_HIT" -> IntradayTradeOutcome.FALSE_SIGNAL_SL
+                    "TRAIL_STOP_HIT" -> IntradayTradeOutcome.TRAIL_STOP_HIT
+                    "CLOSE_MALAM_SESSION_EXIT" -> classifyCloseMalam(netPnlPct)
+                    "TIME_STOP" -> {
+                        timeStopOutcomes++
+                        IntradayTradeOutcome.TIME_STOP_EXIT
+                    }
                     else -> {
-                        unresolvedOutcomes++
+                        if (exitReason == "END_OF_DATA") endOfDataOutcomes++ else unresolvedOutcomes++
                         IntradayTradeOutcome.UNRESOLVED
                     }
                 }
@@ -520,7 +572,9 @@ object IntradayReplayEngine {
             missedOpportunities = missedOpportunities,
             avoidedLosses = avoidedLosses,
             unresolvedOutcomes = unresolvedOutcomes,
+            endOfDataOutcomes = endOfDataOutcomes,
             ambiguousOutcomes = ambiguousOutcomes,
+            timeStopOutcomes = timeStopOutcomes,
             totalNetPnlPct = totalNetPnlPct,
             avgNetPnlPct = avgNetPnlPct,
             winRatePct = winRatePct,
@@ -542,7 +596,9 @@ object IntradayReplayEngine {
         missedOpportunities = 0,
         avoidedLosses = 0,
         unresolvedOutcomes = 0,
+        endOfDataOutcomes = 0,
         ambiguousOutcomes = 0,
+        timeStopOutcomes = 0,
         totalNetPnlPct = 0.0,
         avgNetPnlPct = 0.0,
         winRatePct = 0.0,

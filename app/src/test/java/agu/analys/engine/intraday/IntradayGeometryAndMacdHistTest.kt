@@ -308,10 +308,10 @@ class IntradayGeometryAndMacdHistTest {
                     "(bar $i, isOk=${rrCheckpoint.isOk}, metric=${rrCheckpoint.metricValue})",
                 rrCheckpoint.isOk
             )
-            // Format ConfluenceEvaluator: "Net 1:%.2f" — harus ambang config, bukan 2,00.
+            // Format ConfluenceEvaluator: "Net R:R TP1 1:%.2f" — harus ambang config, bukan 2,00.
             assertEquals(
                 "Angka R:R checkpoint harus sama dengan ambang intraday dari config (bar $i)",
-                "Net 1:1.50",
+                "Net R:R TP1 1:1.50",
                 rrCheckpoint.metricValue
             )
             // Satu definisi: angka R:R yang tampil di sinyal dan di checkpoint tidak boleh
@@ -319,7 +319,7 @@ class IntradayGeometryAndMacdHistTest {
             assertEquals(
                 "R:R sinyal dan checkpoint 6 harus angka yang sama persis (bar $i)",
                 r.signal.riskRewardRatio,
-                rrCheckpoint.metricValue.removePrefix("Net ")
+                rrCheckpoint.metricValue.removePrefix("Net R:R TP1 ")
             )
             assertTrue(
                 "Detail checkpoint harus menyebut ambang 1,50, bukan 2,00 (bar $i): " +
@@ -362,7 +362,7 @@ class IntradayGeometryAndMacdHistTest {
             assertEquals(
                 "Checkpoint harus memakai R:R geometri apa adanya (negatif), bukan 0 hasil pipih " +
                     "(bar $i)",
-                "Net ${r.signal.riskRewardRatio}",
+                "Net R:R TP1 ${r.signal.riskRewardRatio}",
                 rrCheckpoint.metricValue
             )
             ditemukan = true

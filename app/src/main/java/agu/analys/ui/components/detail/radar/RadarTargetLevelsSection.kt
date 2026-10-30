@@ -26,6 +26,8 @@ fun RadarTargetLevelsSection(
     completed: Int,
     isLevelPlanVisible: Boolean,
     onToggleLevelPlan: () -> Unit,
+    /** Mode intraday: persen target ditandai gross + basis net disebut eksplisit (paket F). */
+    isIntradayMode: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -108,6 +110,29 @@ fun RadarTargetLevelsSection(
                         color = if (stopLoss > 0.0) TvRed else TvTextSecondary,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold
+                    )
+                }
+
+                // ── Basis net (paket F) ────────────────────────────────────────
+                // Angka TP/SL di atas adalah perubahan **harga** (gross). Untuk intraday, basis
+                // yang dipakai gate adalah net setelah fee beli + fee jual + slippage dua sisi;
+                // angka itu ditampilkan terpisah supaya tidak tertukar dengan gross.
+                if (isIntradayMode) {
+                    Spacer(Modifier.height(6.dp))
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("• ${agu.analys.engine.intraday.IntradayTargetText.NET_RR_ROW_LABEL}", color = TvTextSecondary, fontSize = 11.sp)
+                        Text(
+                            signal.riskRewardRatio.ifBlank { "—" },
+                            color = TvBlue,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = agu.analys.engine.intraday.IntradayTargetText.NET_RR_NOTE,
+                        color = TvTextSecondary,
+                        fontSize = 10.sp
                     )
                 }
 

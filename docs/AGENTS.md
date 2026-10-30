@@ -43,9 +43,9 @@ Aturan main:
 - Daftar berkas di folder ini bisa bertambah untuk area lain (exit, P&L, UI, dsb.) dengan
   pola penamaan `temuan_bugs_<topik>.md`.
 
-Saat ini berisi **satu** berkas temuan hidup: **`temuan_bugs_intraday.md`** (dibuat 2026-10-27;
-paket A+B+C sudah tutup, paket D–F masih terbuka). Sebelumnya folder ini kosong sejak 2026-10-18.
-Riwayat
+Saat ini **tidak ada** berkas temuan hidup di folder ini — kosong sejak **2026-10-30**, ketika
+`temuan_bugs_intraday.md` dipindahkan setelah paket D–F ditutup (folder juga kosong pada
+2026-10-18..2026-10-26). Riwayat
 berkasnya:
 
 - **`temuan_bugs_paper_trade.md` → DIPINDAHKAN 2026-10-18** ke
@@ -107,10 +107,14 @@ berkasnya:
   disetujui owner), memindahkan literal `1,2` ke config, menyelaraskan R:R checkpoint 6 lewat
   `overrideNetRr`, dan mengganti `require` dengan fail-closed `null`. Terukur: 5% ⇒ **0 BUY**;
   6% ⇒ 17 BUY (avg net −0,810%); **7–10% ⇒ identik** 20 BUY (avg net −1,336%) — sweep 3–10%
-  (29 Okt 2026) memakai alat `IntradayMaxTp1SweepTest` yang memanggil engine asli. **D–F masih
-  terbuka**: alat replay/ukur 11 pair (sebagian: alat sweep sudah ada), mesin exit intraday, dan
-  UI/kartu yang menyebut basis net & sampel. Berkas tetap di `docs/bugs/` sampai D–F tuntas.
-  Rincian: `workplan2.md` §79–§83.
+  (29 Okt 2026) memakai alat `IntradayMaxTp1SweepTest` yang memanggil engine asli. **D–F ditutup
+  2026-10-30**, lalu berkasnya **DIPINDAHKAN** ke `docs/laporan_temuan_bugs_intraday.md`
+  (folder `docs/bugs/` kosong lagi): D = tiga alat ukur Kotlin + pemisahan `LOOKAHEAD_EXPIRY` vs
+  `END_OF_DATA` (replay 26 pair H4: bawaan 5,0% ⇒ 0 BUY; cap 8,0% ⇒ 105 BUY/102 trade,
+  avg net −0,646%); E = `IntradayExitEngine` murni (4 mode, `SESSION_CLOSE` bawaan) **diukur dan
+  TIDAK disambungkan** — 0 dari 7 varian exit positif, terbaik `TIME_STOP` 3 bar −0,587%/trade;
+  F = label `Net R:R TP1` + catatan gross/net + sampel (`IntradayTargetText`) dan label fase sesi
+  memakai menit terakhir fase. Rincian: `workplan2.md` §79–§85.
 
 ## Folder eksperimen (`docs/exp/`)
 
@@ -119,7 +123,7 @@ Berisi **hasil eksperimen terukur** — satu berkas per eksperimen, bernama
 
 | Folder | Isi | Aturan |
 |---|---|---|
-| `docs/bugs/` | temuan audit yang **masih hidup** | `temuan_bugs_intraday.md` (D–F terbuka) |
+| `docs/bugs/` | temuan audit yang **masih hidup** | **kosong** sejak 2026-10-30 |
 | `docs/laporan_temuan_bugs_*.md` | laporan audit **yang sudah tutup** | satu per topik |
 | `docs/LAPORAN-*.md` | jejak eksekusi batch (arsip) | jangan ditambah, kecuali laporan port eksperimen BERHASIL |
 | **`docs/exp/`** | **hasil eksperimen** — angka yang sudah diukur | tambah bebas, satu per eksperimen |
@@ -221,6 +225,17 @@ H1 tidak satu sel pun menutup friksi (terbaik +1,07 dengan CI menyentuh nol). D1
 `tgt_ema20_sl3|21` +3,19 tetapi hanya 200 trade/26 pair dan kontrol beli-puncak pada exit ATR
 juga untung (+2,60). Tidak ada pair dengan ≥60 trade (maksimum 36), jadi **tidak memenuhi
 kriteria kandidat dan tidak di-port**. Angka negatif lengkap dan batasan ada di berkasnya.
+
+Mode exit intraday: `exp_intraday_exit_modes_v8_6pair.md` (2026-10-30) — `IntradayExitModeSweepTest`
+menyapu 7 varian exit + kontrol `SESSION_CLOSE` pada 6 pair `data/tokocrypto_v8` H4 (entry, fee,
+gate, geometri **sama**; cap 8,0% adalah config pengukuran, bawaan tetap 5,0%). **Status GAGAL: 0
+dari 7 varian positif.** Kontrol −0,636%/trade (52 trade); terbaik `TIME_STOP` 3 bar **−0,587%**
+(+0,049 poin, di dalam noise); `TP1_BREAKEVEN` −0,739% (lebih buruk karena dua trade yang tadinya
+`TP1_HIT` berlanjut ke Close Malam); `TRAIL_ATR` arm TP1 identik dengan `TP1_BREAKEVEN` (0 trail
+hit), arm entry terburuk −0,753%. Kriteria kandidat (net > 0, lebih baik di semua pair, CI 95%,
+≥60 trade/pair) tidak terpenuhi satu pun — maksimum 12 trade/pair. Mesin **tidak disambungkan** ke
+app; `IntradayExitConfig.DEFAULT` tetap `SESSION_CLOSE`. Kontrol sweep identik dengan alat replay
+riset pada enam pair yang sama (53 BUY / 52 trade / −33,046%).
 
 **Spec v2 dihentikan dan artefaknya dihapus (2026-10-21).** Dokumen spec, dua laporan hasil,
 tool, dataset, dan hasil JSON sudah dihapus dari pohon kerja. Jangan membuat ulang berkas atau

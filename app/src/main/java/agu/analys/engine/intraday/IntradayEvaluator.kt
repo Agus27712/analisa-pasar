@@ -39,7 +39,9 @@ data class IntradayEvalResult(
  *
  *   Konsekuensi selang setengah-terbuka: menit **11:30** milik Siang Akumulasi, **15:30** milik
  *   Sore Trailing, **19:30** milik Close Malam, dan **23:30** milik Istirahat. Label setiap fase
- *   karena itu cocok persis dengan kode — tidak ada menit yang dihitung dua kali.
+ *   karena itu cocok persis dengan kode — tidak ada menit yang dihitung dua kali. Label yang
+ *   tampil di UI memakai menit **terakhir** fase (mis. `06:00–11:29`) supaya batasnya tidak
+ *   terbaca sebagai selang tertutup.
  *
  * - Anti Flash Dump Protection:
  *   1. Memindai histori harga panjang (H4 100–200 candle / D1 100 candle).
@@ -65,11 +67,13 @@ object IntradayEvaluator {
         val isRestWindow: Boolean,
         val isTrailingWindow: Boolean = false
     ) {
-        OPEN_PAGI("Sesi Open Pagi (06:00–11:30 WIB)", isOpenWindow = true, isCloseWindow = false, isRestWindow = false),
-        HOLD_SIANG("Sesi Siang Akumulasi (11:30–15:30 WIB)", isOpenWindow = true, isCloseWindow = false, isRestWindow = false),
-        HOLD_SORE("Sesi Sore Trailing (15:30–19:30 WIB)", isOpenWindow = false, isCloseWindow = false, isRestWindow = false, isTrailingWindow = true),
-        CLOSE_MALAM("Sesi Close Malam (19:30–23:30 WIB)", isOpenWindow = false, isCloseWindow = true, isRestWindow = false),
-        REST_MALAM("Sesi Istirahat (23:30–06:00 WIB)", isOpenWindow = false, isCloseWindow = false, isRestWindow = true)
+        // Label memakai menit **terakhir** yang masih milik fase itu, supaya batas yang tampil
+        // tidak bisa dibaca sebagai selang tertutup: 11:30 milik Siang, bukan Open Pagi.
+        OPEN_PAGI("Sesi Open Pagi (06:00–11:29 WIB)", isOpenWindow = true, isCloseWindow = false, isRestWindow = false),
+        HOLD_SIANG("Sesi Siang Akumulasi (11:30–15:29 WIB)", isOpenWindow = true, isCloseWindow = false, isRestWindow = false),
+        HOLD_SORE("Sesi Sore Trailing (15:30–19:29 WIB)", isOpenWindow = false, isCloseWindow = false, isRestWindow = false, isTrailingWindow = true),
+        CLOSE_MALAM("Sesi Close Malam (19:30–23:29 WIB)", isOpenWindow = false, isCloseWindow = true, isRestWindow = false),
+        REST_MALAM("Sesi Istirahat (23:30–05:59 WIB)", isOpenWindow = false, isCloseWindow = false, isRestWindow = true)
     }
 
     fun getCurrentIntradayPhase(timestamp: Long = System.currentTimeMillis()): IntradayPhase {
@@ -415,22 +419,22 @@ object IntradayEvaluator {
             globalContext.isVetoActive -> SignalAction.HOLD
             isParabolicUnwind || flashDumpTrauma -> SignalAction.HOLD
             intradayPhase.isCloseWindow -> {
-                reasons.add(0, "🌙 SESI CLOSE MALAM (19:30–23:30 WIB): Amankan profit harian & tutup posisi menjadi kas IDR sebelum tengah malam (Hindari overnight dump).")
+                reasons.add(0, "🌙 SESI CLOSE MALAM (19:30–23:29 WIB): Amankan profit harian & tutup posisi menjadi kas IDR sebelum tengah malam (Hindari overnight dump).")
                 SignalAction.SELL
             }
             intradayPhase.isRestWindow -> {
-                reasons.add(0, "💤 SESI ISTIRAHAT (23:30–06:00 WIB): Pasar ditutup untuk posisi baru. Menghindari flash dump dini hari.")
+                reasons.add(0, "💤 SESI ISTIRAHAT (23:30–05:59 WIB): Pasar ditutup untuk posisi baru. Menghindari flash dump dini hari.")
                 SignalAction.HOLD
             }
             intradayPhase.isTrailingWindow -> {
-                reasons.add(0, "🛡️ SESI SORE TRAILING (15:30–19:30 WIB): Pasang trailing stop untuk mengunci profit harian. Tidak membuka posisi baru.")
+                reasons.add(0, "🛡️ SESI SORE TRAILING (15:30–19:29 WIB): Pasang trailing stop untuk mengunci profit harian. Tidak membuka posisi baru.")
                 SignalAction.HOLD
             }
             isQualified && !isDangerous -> {
                 if (intradayPhase == IntradayPhase.OPEN_PAGI) {
-                    reasons.add(0, "⚡ SESI OPEN PAGI (06:00–11:30 WIB): Momentum harian terkonfirmasi. Waktu prima eksekusi posisi.")
+                    reasons.add(0, "⚡ SESI OPEN PAGI (06:00–11:29 WIB): Momentum harian terkonfirmasi. Waktu prima eksekusi posisi.")
                 } else {
-                    reasons.add(0, "☀️ SESI SIANG (11:30–15:30 WIB): Akumulasi tren lanjutan sehat. Siapkan TP/trailing sebelum malam.")
+                    reasons.add(0, "☀️ SESI SIANG (11:30–15:29 WIB): Akumulasi tren lanjutan sehat. Siapkan TP/trailing sebelum malam.")
                 }
                 SignalAction.BUY
             }
@@ -524,7 +528,7 @@ object IntradayEvaluator {
             waitingFor = when {
                 intradayPhase.isCloseWindow -> "Sesi Close Malam: Tutup posisi harian menjadi kas sebelum tengah malam"
                 intradayPhase.isRestWindow -> "Menunggu Sesi Open Pagi (06:00 WIB)"
-                intradayPhase.isTrailingWindow -> "Kawal profit dengan trailing stop (15:30–19:30 WIB)"
+                intradayPhase.isTrailingWindow -> "Kawal profit dengan trailing stop (15:30–19:29 WIB)"
                 flashDumpTrauma -> "Menunggu kestabilan base konsolidasi pasca-dump"
                 pumpAndDumpTrap -> "Menunggu pullback aman dari rejection upper wick"
                 isRsiOverbought -> "Menunggu koreksi / reset RSI"

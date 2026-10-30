@@ -4719,7 +4719,7 @@ soal ruang konteks, bukan perilaku mesin.
 yang berbeda dari scalping: evaluator sendiri, replay sendiri, dan tidak punya slider. Pemeriksaan
 menemukan bahwa replay **menilai dirinya sendiri dengan angka gross**, fase sesi memakai timestamp
 buka candle, dan gate R:R memakai TP2 yang di-clamp `coerceAtLeast(1.6)` sehingga selalu lolos.
-Temuan lengkap ada di **`docs/bugs/temuan_bugs_intraday.md`**; § ini hanya ringkasan keputusan.
+Temuan lengkap ada di **`docs/laporan_temuan_bugs_intraday.md`**; § ini hanya ringkasan keputusan.
 
 **Yang dikerjakan (A+B).**
 
@@ -4772,7 +4772,7 @@ mengoper `evaluationTimestamp = null` membuat 4 test gagal; setelah dipulihkan 2
 **Batas yang belum ditutup.** C (geometri SL/TP + ambang `macdHist` yang tidak berskala), D (alat
 replay 11 pair + pemisahan `UNRESOLVED` vs tutup-akhir-jendela), E (mesin exit intraday — belum
 ada), F (UI/kartu intraday belum menyebut basis net & sampel). Semuanya di
-`docs/bugs/temuan_bugs_intraday.md`.
+`docs/laporan_temuan_bugs_intraday.md`.
 
 **Yang tidak berubah.** Engine scalping, gate P0, lantai friksi, dan exit paper. `ConfluenceEvaluator`
 hanya mendapat parameter `useMaker`/`slippagePct` dengan **bawaan lama** (`true`), jadi pemanggil
@@ -4787,7 +4787,7 @@ Owner me-review commit §79 dan mengajukan 10 temuan. Tindak lanjut yang dieksek
    yang keliru dipindah ke konteks Indodax. Dihitung ulang dengan rumus yang sama dengan app
    (`FeeCalculator.roundTrip`, multiplikatif): Indodax IDR risiko net 2,2759% / imbalan net
    1,9902% ⇒ **0,87**; Tokocrypto IDR **0,85**; Tokocrypto USDT **0,74**. Dikoreksi di
-   `docs/bugs/temuan_bugs_intraday.md`, `docs/AGENTS.md`, `app/AGENTS.md`, dan §79 di atas.
+   `docs/laporan_temuan_bugs_intraday.md`, `docs/AGENTS.md`, `app/AGENTS.md`, dan §79 di atas.
    Pesan commit `7c8d822` tidak di-rewrite (sudah di-push); koreksinya tercatat di riwayat temuan.
    Tambahan: di ujung atas band TP1 (+5,0%), R:R maksimum hanya ≈1,83 (IDR) / ≈1,63 (USDT) —
    ambang 1,5 hanya bisa dilampaui ekor atas band.
@@ -4822,7 +4822,7 @@ Owner me-review commit §79 dan mengajukan 10 temuan. Tindak lanjut yang dieksek
 7. **Aturan `docs/LAPORAN-*.md` dipertegas (di `AGENTS.md` akar):** butir "Setiap perubahan wajib
    memperbarui markdown" dibatasi catatan bahwa aturan detail area ada di `AGENTS.md` per area dan
    **yang lebih spesifik menang** — sesuai §78, jadi laporan batch intraday ditulis di § Riwayat
-   `docs/bugs/temuan_bugs_intraday.md` + workplan ini, bukan berkas `docs/LAPORAN-batch*-*.md` baru.
+   `docs/laporan_temuan_bugs_intraday.md` + workplan ini, bukan berkas `docs/LAPORAN-batch*-*.md` baru.
 8. **Angka uji (diukur 28 Okt 2026, PC, JDK 17):** 8 → 10 test di `IntradayAccountingAndSessionTest`;
    intraday 20 → **22 hijau**; seluruh unit test 841 → **844 hijau, 0 gagal, 1 skipped**
    (+1 uji `nowMs`, +2 uji perilaku baru).
@@ -4892,7 +4892,7 @@ dipertahankan meski sinyal sedikit — bahkan nol pada batas atas bawaan.
 `IntradayEvaluatorTest` (3), `RealBtcIndodaxIntradayReplayTest` (9).
 
 **Masih terbuka (menunggu instruksi):** paket D (alat replay/ukur 11 pair), E (mesin exit intraday),
-F (UI/kartu menyebut basis net & sampel). Rincian temuan: `docs/bugs/temuan_bugs_intraday.md`.
+F (UI/kartu menyebut basis net & sampel). Rincian temuan: `docs/laporan_temuan_bugs_intraday.md`.
 
 ## 82. Tindak lanjut review owner atas paket C intraday (2026-10-28)
 
@@ -5059,3 +5059,85 @@ memakai ulang perdagangan yang sama), `--slim` (JSON ramping: blok rezim per pai
 laporan). Hasil: `data/hasil/exp_buy_low_entry_v8_{1h,4h,1d}_regime.json` (76K/264K/104K, sebelumnya
 15–17 MB per berkas) + `..._4h_tp_first.json` untuk batas optimistis urutan intrabar. Perintah
 lengkap ada di berkas laporan § Perintah.
+
+## 85. Mode INTRADAY — paket D–F: alat ukur, label akhir jendela, mesin exit diukur, UI net (2026-10-30)
+
+Paket **D–F** temuan intraday ditutup. Berkas temuan dipindahkan ke
+`docs/laporan_temuan_bugs_intraday.md` (tidak ada butir hidup).
+
+### D — alat ukur + `LOOKAHEAD_EXPIRY` ≠ `END_OF_DATA`
+
+Tiga alat ukur Kotlin (semua memakai `IntradayReplayEngine` + `IntradayGeometry` yang sama dengan
+aplikasi; dilewati tanpa env supaya suite harian cepat):
+
+| Alat | Env | Cakupan | Durasi terukur |
+|---|---|---|---|
+| `IntradayMaxTp1SweepTest` | `RUN_INTRADAY_MAXTP1_SWEEP` | v7 11 pair H1, cap 3–10% | ±33 menit |
+| `IntradayResearchReplayTest` | `RUN_INTRADAY_RESEARCH_REPLAY` | v8 26 pair H4 + D1 | **22 menit 33 detik** |
+| `IntradayExitModeSweepTest` | `RUN_INTRADAY_EXIT_SWEEP` | v8 H4, 8 varian exit | **42 menit 28 detik** |
+
+Label akhir jendela dipisah: `LOOKAHEAD_EXPIRY` (data masih ada) vs `END_OF_DATA` (dataset habis);
+keduanya tetap dihitung **kalah** (A5), dan ringkasan memisahkan `unresolvedOutcomes` /
+`endOfDataOutcomes` dengan `unresolvedTotal = keduanya`.
+
+**Hasil replay riset 26 pair H4** (fee Tokocrypto USDT 0,974% RT, `minNetRrTp1 = 1,5`, lookahead
+6 bar, pemanasan 220 bar):
+
+| Config | BUY | Trade | Win rate | Avg net/trade | Total net | Tidak tuntas | Data habis |
+|---|---|---|---|---|---|---|---|
+| `maxTp1Pct = 5,0%` (bawaan) | **0** | 0 | — | — | — | 0 | 0 |
+| `maxTp1Pct = 8,0%` (config pengukuran) | 105 | 102 | 30,392% | **−0,646%** | −65,856% | 0 | 0 |
+
+Alasan keluar cap 8%: 64 `CLOSE_MALAM_SESSION_EXIT`, 28 `STOP_LOSS_HIT`, 10 `TP1_HIT`. Tidak ada
+`END_OF_DATA` di dataset ini — pemisahan label terbukti tanpa mengubah angka. **Bawaan 5,0% tetap
+0 BUY**, jadi tidak ada alasan menaikkannya.
+
+### E — mesin exit intraday: dibangun, diukur, **tidak** disambungkan
+
+`engine/intraday/IntradayExitEngine.kt` (murni): `SESSION_CLOSE` (**bawaan** = perilaku lama),
+`TP1_BREAKEVEN`, `TRAIL_ATR`, `TIME_STOP`; replay memakai mesin yang sama lewat
+`replay(exitConfig = …)`. Invarian dijaga uji: bawaan == eksplisit (trade/net/win rate/harga
+identik) dan mode non-bawaan benar-benar dipakai.
+
+Sweep exit (6 pair v8 H4, cap 8,0%, kontrol `SESSION_CLOSE`):
+
+| Varian | Trade | Win rate | Avg net/trade |
+|---|---|---|---|
+| kontrol `SESSION_CLOSE` | 52 | 28,846% | −0,636% |
+| `TP1_BREAKEVEN` | 52 | 28,846% | −0,739% |
+| `TRAIL_ATR` 1,0×/1,5× (arm TP1) | 52 | 28,846% | −0,739% (identik, 0 trail hit) |
+| `TRAIL_ATR` 1,0× (arm entry) | 52 | 25,000% | −0,753% |
+| `TIME_STOP` 3 bar | 52 | 30,769% | **−0,587%** (terbaik, tetap negatif) |
+| `TIME_STOP` 6/12 bar | 52 | 28,846% | −0,636% |
+
+**0 dari 7 varian positif**; kriteria kandidat (net > 0, lebih baik di semua pair, CI 95% tidak
+menyentuh nol, ≥60 trade/pair) tidak terpenuhi satu pun — sampel maksimum 12 trade/pair. Kontrol
+sweep **identik** dengan alat D pada enam pair yang sama (53 BUY / 52 trade / −33,046%), jadi kedua
+alat mengukur jalur yang sama. Keputusan: **tidak di-port**; `IntradayExitConfig.DEFAULT` tetap
+`SESSION_CLOSE`, `maxTp1Pct` tetap 5,0%, ambang 1,5 tetap. Laporan:
+`docs/exp/exp_intraday_exit_modes_v8_6pair.md`.
+
+### F — UI/kartu menyebut basis net, TP1, fase, sampel
+
+- Checkpoint 6 konfluensi: label `Net R:R TP1 1:x` + kalimat komponen biaya (`ConfluenceEvaluator`,
+  fallback `TradingViewModels`).
+- Kartu target intraday: baris `Net R:R TP1` + catatan "persen target = gross, net = setelah fee
+  beli + fee jual + slippage dua sisi, sampel belum cukup". Teks diekstrak ke fungsi murni
+  `engine/intraday/IntradayTargetText.kt` supaya bisa diuji tanpa Robolectric
+  (`IntradayTargetTextTest`). Mode lain tidak berubah (`isIntradayMode` bawaan `false`).
+- Label fase sesi memakai menit terakhir fase (`06:00–11:29`, `11:30–15:29`, `15:30–19:29`,
+  `19:30–23:29`, `23:30–05:59`).
+
+### Penjaga & kontrol negatif
+
+Penjaga: `IntradayReplayWindowAccountingTest` (label exit, partisi net, anchor `DOGEUSDT_1h` =
+11 BUY / 7 trade, bawaan == eksplisit, mode non-bawaan dipakai), `IntradayExitEngineTest` (6
+perilaku), `IntradayTargetTextTest` (4 syarat teks), plus `ConfluenceEvaluatorTest` /
+`IntradayGeometryAndMacdHistTest` yang diselaraskan. Kontrol negatif diukur satu per satu lalu
+dipulihkan (tabel di `docs/laporan_temuan_bugs_intraday.md`).
+
+### Batas yang tetap berlaku
+
+Satu window data, hanya USDT, hanya H4 untuk replay riset dan sweep exit. Tidak ada klaim edge
+baru: sinyal intraday tetap **negatif** sebelum dan sesudah exit diubah. Jangan memakai angka ini
+sebagai dasar uang riil, dan jangan menyambungkan mode exit baru tanpa keputusan owner.

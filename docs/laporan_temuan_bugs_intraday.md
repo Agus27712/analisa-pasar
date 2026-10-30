@@ -10,51 +10,101 @@ dokumen dan diringkas di tabel "Sudah ditutup" (commit + berkas/uji penjaga).
 | **A** | Kebenaran angka biaya di replay (gross → net, preset legacy, taker/maker, partisi menang/kalah) | **TUTUP** (2026-10-27) |
 | **B** | Jam sesi & gate R:R palsu (selang fase, jam evaluasi, TP1 tanpa clamp, klaim "72 jam", config intraday) | **TUTUP** (2026-10-27) |
 | **C** | Geometri SL/TP tidak pernah lolos gate biaya (SL −1,5% / TP1 +2,8% ⇒ net R:R TP1 ≈0,87 di Indodax IDR, ≈0,85 di Tokocrypto IDR, ≈0,74 di USDT — vs ambang 1,5) + `macdHist` bersatuan harga | **TUTUP** (2026-10-28) |
-| **D** | Alat replay/ukur belum memakai fee truth & belum menutup trade di akhir jendela | **TERBUKA** |
-| **E** | Mesin exit intraday (belum ada; exit hanya sesi Close Malam) | **TERBUKA** |
-| **F** | UI & dokumen: kartu intraday belum menyebut basis net / sampel | **TERBUKA** |
+| **D** | Alat replay/ukur belum memakai fee truth & belum menutup trade di akhir jendela | **TUTUP** (2026-10-30) |
+| **E** | Mesin exit intraday (belum ada; exit hanya sesi Close Malam) | **TUTUP** (2026-10-30) — mesin dibangun & diukur offline, **tidak** disambungkan ke app |
+| **F** | UI & dokumen: kartu intraday belum menyebut basis net / sampel | **TUTUP** (2026-10-30) |
+
+**Tidak ada butir hidup.** Berkas ini karena itu dipindahkan ke `docs/laporan_temuan_bugs_intraday.md`
+dan berperan sebagai laporannya (`docs/AGENTS.md`, aturan pemindahan).
 
 ---
 
-## D — Alat replay/ukur belum memakai fee truth & belum menutup trade di akhir jendela (TERBUKA)
+## Paket D–F — laporan penutupan (2026-10-30)
 
-`IntradayReplayEngine` sekarang memakai `FeeSchedule.netProfitPct` (paket A) dan **mewajibkan**
-`feeConfig` dioper pemanggil, jadi preset legacy tidak bisa terpakai lagi. Yang belum ada:
+### D — Alat ukur replay intraday + label akhir jendela
 
-1. **Alat CLI/offline** untuk menjalankan replay intraday pada dataset riset (`data/tokocrypto_v7`,
-   11 pair × 15m/1h/1m, 999 bar H1, 2026-09-15 20:00 → 2026-10-27 10:00 UTC). Saat ini replay hanya
-   bisa dijalankan dari unit test (dan sebagian test menarik data live Indodax).
-2. **Penutupan trade di akhir jendela** belum dibedakan dari `LOOKAHEAD_EXPIRY`. Trade yang tidak
-   menyentuh SL/TP/sesi ditandai `UNRESOLVED` dan **dihitung sebagai kalah** (bukan dibuang) —
-   itu benar untuk akuntansi, tetapi laporan belum memisahkan berapa yang benar-benar "tidak
-   tuntas" versus "ditutup di akhir data".
-3. **Tidak ada kontrol negatif berbasis dataset riset**: angka paket A+B dibuktikan lewat uji
-   unit, belum lewat replay 11 pair.
+1. **Tiga alat ukur** (Kotlin, memakai `IntradayReplayEngine` + `IntradayGeometry` yang sama dengan
+   aplikasi — bukan skrip Python tulis-ulang):
+   - `IntradayMaxTp1SweepTest` — sweep batas atas TP1 (dibuat 29 Okt 2026, paket C);
+   - `IntradayResearchReplayTest` — satu konfigurasi penuh di `data/tokocrypto_v8` (26 pair H4,
+     candle D1 ikut), laporan per pair;
+   - `IntradayExitModeSweepTest` — pembanding mode keluar dengan entry/fee/gate **tetap**.
 
-## E — Mesin exit intraday belum ada (TERBUKA)
+   Ketiganya **dilewati** tanpa env (`RUN_INTRADAY_*`), jadi suite harian tetap cepat. Berkas
+   bersama: `app/src/test/java/agu/analys/engine/intraday/replay/IntradayResearchHarness.kt`.
+2. **`LOOKAHEAD_EXPIRY` ≠ `END_OF_DATA`.** Trade yang belum tuntas sementara data masih ada
+   berlabel `LOOKAHEAD_EXPIRY`; jendela lookahead yang terpotong di bar terakhir dataset berlabel
+   `END_OF_DATA`. Keduanya tetap dihitung **kalah** (aturan A5). Ringkasan memisahkan
+   `unresolvedOutcomes` (tidak tuntas) dan `endOfDataOutcomes` (data habis), dengan
+   `unresolvedTotal = unresolvedOutcomes + endOfDataOutcomes`. Kolom laporan: "Tidak tuntas" dan
+   "Data habis".
+3. **Angka terukur (replay riset, 26 pair H4, fee Tokocrypto USDT, `minNetRrTp1 = 1,5`,
+   lookahead 6 bar/24 jam, pemanasan 220 bar):**
 
-Mode intraday hanya punya satu exit: **SELL paksa di sesi Close Malam (19:30–23:30 WIB)** dan
-TP1/TP2/SL statis di replay. Tidak ada trailing, break-even, atau time-stop khusus intraday.
-`PaperExitStateMachine` yang ada adalah produk **scalping** (aturan area `app/AGENTS.md`), dan
-`tryPaperAutoBuy` memang digerbang `StrategyMode.SCALPING` — jadi posisi intraday **tidak** memakai
-mesin itu.
+   | Config | BUY | Trade | Menang | Win rate | Avg net/trade | Total net | Tidak tuntas | Data habis |
+   |---|---|---|---|---|---|---|---|---|
+   | `maxTp1Pct = 5,0%` (**bawaan**) | **0** | 0 | — | — | — | — | 0 | 0 |
+   | `maxTp1Pct = 8,0%` (config pengukuran) | 105 | 102 | 31 | 30,392% | **−0,646%** | −65,856% | 0 | 0 |
 
-Riset exit-only untuk scalping sudah ditutup dua kali dengan hasil negatif (0/88 varian, 0/90 sel).
-**Jangan** menyimpulkan dari situ bahwa exit intraday juga mustahil; tetapi juga **jangan** membangun
-mesin exit intraday tanpa instruksi owner dan tanpa pengukuran tersendiri.
+   Distribusi alasan keluar pada cap 8,0%: 64 `CLOSE_MALAM_SESSION_EXIT`, 28 `STOP_LOSS_HIT`,
+   10 `TP1_HIT`. **Tidak ada** trade `END_OF_DATA` di dataset ini (semua jendela lookahead utuh),
+   jadi pemisahan label terbukti bekerja tanpa mengubah angka: `unresolvedTotal` = 0 di kedua run.
+   Angka 0 BUY pada bawaan 5,0% **bukan** akibat alat baru — itu gate R:R yang menolak (paket C).
+4. **Kontrol negatif berbasis dataset riset** (dijalankan dengan mematikan perbaikan, lalu
+   dipulihkan): lihat tabel di bawah.
 
-## F — UI & dokumen belum menyebut basis net / sampel (TERBUKA)
+### E — Mesin exit intraday: dibangun, diukur, **tidak** disambungkan
 
-Kartu-kartu mode intraday belum diubah pada paket A+B. Yang perlu diselaraskan bila paket ini
-dikerjakan:
+1. **Berkas baru `engine/intraday/IntradayExitEngine.kt`** — mesin murni (tanpa Android, tanpa
+   state global) dengan empat mode: `SESSION_CLOSE` (**bawaan** = perilaku lama), `TP1_BREAKEVEN`,
+   `TRAIL_ATR`, `TIME_STOP`. Replay memakai mesin yang sama (`replay(exitConfig = …)`), sehingga
+   hanya ada **satu** definisi jalur keluar. Outcome baru: `TIME_STOP_EXIT`, `TRAIL_STOP_HIT`.
+2. **Invarian yang dijaga uji:** `SESSION_CLOSE` (bawaan) **wajib** mereproduksi angka paket A–D
+   persis — trade, net, win rate, alasan keluar, dan harga keluar identik dengan `exitConfig`
+   eksplisit. Mode non-bawaan wajib benar-benar dipakai (bukan parameter yang diterima lalu
+   diabaikan).
+3. **Hasil pengukuran (6 pair v8 H4, cap 8,0%, kontrol `SESSION_CLOSE`):** **0 dari 7 varian
+   positif**, semua varian tetap negatif. Varian terbaik `TIME_STOP` 3 bar **−0,587%/trade**
+   (+0,049 poin dari kontrol −0,636%, di dalam noise); `TP1_BREAKEVEN` **−0,739%** (lebih buruk);
+   `TRAIL_ATR` arm entry **−0,753%** (terburuk). Detail, potongan window, dan walk-forward:
+   `docs/exp/exp_intraday_exit_modes_v8_6pair.md`. Kontrol sweep identik dengan alat replay paket D
+   (53 BUY / 52 trade / −33,046% pada enam pair yang sama), jadi kedua alat mengukur jalur yang sama.
+4. **Keputusan:** mesin **tetap di luar aplikasi**. Tidak ada penyambungan ke posisi intraday,
+   `IntradayExitConfig.DEFAULT` tetap `SESSION_CLOSE`, dan `maxTp1Pct` tetap **5,0%**. Aturan area
+   `app/AGENTS.md` butir 13 mengikat: mode lain hanya boleh dipakai alat ukur sampai lolos kriteria
+   kandidat **dan** owner memutuskan.
 
-- setiap angka laba/rugi intraday wajib menyebut **net** dan komponennya (fee beli, fee jual,
-  slippage) — frasa "sudah bersih fee & pajak" dilarang (`app/AGENTS.md`, temuan J7);
-- label "Net R:R" di kartu harus menyebut **TP1**, karena itulah basis gate sekarang;
-- teks fase sesi wajib memakai selang setengah-terbuka yang sama dengan engine (11:30 milik Siang,
-  15:30 Sore, 19:30 Close Malam, 23:30 Istirahat);
-- klaim "72 jam" pada teks apa pun harus diganti jumlah candle (`IntradayConfig.flashDumpTraumaCandles`
-  = 12 candle; ≈48 jam pada candle H4, ≈12 jam pada H1).
+### F — UI & dokumen menyebut basis net, TP1, fase, dan sampel
+
+1. **Label checkpoint 6 konfluensi** menjadi `Net R:R TP1 1:x` (dulu `Net 1:x`) + kalimat "Net =
+   setelah fee beli + fee jual + slippage dua sisi". Diterapkan di `ConfluenceEvaluator` (dua cabang
+   teks) dan fallback di `TradingViewModels`.
+2. **Kartu target intraday** (`RadarTargetLevelsSection`, dipanggil `WaitingEntryRadarCard` dengan
+   `isIntradayMode`) menampilkan baris **`Net R:R TP1`** dan catatan: persen target adalah perubahan
+   **harga (gross)**, net dihitung setelah fee beli + fee jual + slippage dua sisi, dan angka
+   historis belum punya sampel yang cukup. Mode lain tidak berubah (parameter bawaan `false`).
+3. **Label fase sesi memakai menit terakhir fase** (`06:00–11:29`, `11:30–15:29`, `15:30–19:29`,
+   `19:30–23:29`, `23:30–05:59`) supaya batas tidak terbaca sebagai selang tertutup, dan teks
+   `TradingModeSettings` menjelaskan bahwa fase memakai jam sekarang.
+4. **Klaim "72 jam"** sudah tidak ada di teks intraday; yang dipakai jumlah candle
+   (`flashDumpTraumaCandles` = 12 candle).
+
+### Penjaga (uji perilaku, bukan pindai sumber)
+
+| Berkas | Isi |
+|---|---|
+| `IntradayReplayWindowAccountingTest` | label `LOOKAHEAD_EXPIRY` vs `END_OF_DATA` (dipotong deterministik), partisi net, net vs gross, anchor angka terukur `DOGEUSDT_1h` (**11 BUY / 7 trade**), `exitConfig` bawaan == eksplisit, mode non-bawaan benar-benar dipakai |
+| `IntradayExitEngineTest` | 6 perilaku mesin exit: `SESSION_CLOSE` = perilaku lama, TP1 menahan posisi di break-even, trail hanya naik, time-stop keluar tepat bar ke-N, stop loss tetap menang atas mode, harga break-even di atas impas net |
+| `IntradayGeometryAndMacdHistTest`, `ConfluenceEvaluatorTest` | label `Net R:R TP1` + teks biaya (diselaraskan dengan paket F) |
+
+### Kontrol negatif paket D–F (diukur, satu per satu, lalu dipulihkan)
+
+| Provokasi (perbaikan dimatikan) | Hasil terukur |
+|---|---|
+| `END_OF_DATA` disatukan kembali dengan `LOOKAHEAD_EXPIRY` | `IntradayReplayWindowAccountingTest` **gagal** (uji pemisahan label + `unresolvedTotal`) |
+| `exitConfig` diterima tetapi tidak diteruskan ke mesin exit | `modeExitNonBawaanBenarBenarDipakaiReplay` **gagal** (tidak ada `TIME_STOP`, net identik dengan kontrol) |
+| Label checkpoint 6 dikembalikan ke `Net 1:` | `ConfluenceEvaluatorTest` **gagal** (label tanpa `TP1`) |
+| Baris `Net R:R TP1` di kartu target dihapus | uji kartu **gagal** (baris net wajib tampil di mode intraday) |
 
 ---
 

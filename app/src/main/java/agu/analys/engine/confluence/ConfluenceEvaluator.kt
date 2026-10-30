@@ -399,11 +399,13 @@ object ConfluenceEvaluator {
         ).netRr
         val isRiskRewardValid = netRr >= netRrThreshold
 
-        val rrMetric = "Net 1:${String.format(Locale.US, "%.2f", netRr)}"
+        // Label wajib menyebut **TP1**: sejak paket B3 gate dinilai dari TP1, bukan TP2.
+        // Angka "net" = setelah fee beli + fee jual + slippage dua sisi (FeeCalculator).
+        val rrMetric = "Net R:R TP1 1:${String.format(Locale.US, "%.2f", netRr)}"
         val rrDetail = if (isRiskRewardValid) {
-            "Rasio Risk:Reward istimewa (Net 1:${String.format(Locale.US, "%.2f", netRr)} >= 1:${String.format(Locale.US, "%.2f", netRrThreshold)}). SL di ${PriceFormatter.formatPrice(calculatedSl, quoteAsset = quoteAsset)}, TP1 di ${PriceFormatter.formatPrice(calculatedTp1, quoteAsset = quoteAsset)}."
+            "Rasio Risk:Reward istimewa (Net R:R TP1 1:${String.format(Locale.US, "%.2f", netRr)} >= 1:${String.format(Locale.US, "%.2f", netRrThreshold)}). Net = setelah fee beli + fee jual + slippage dua sisi. SL di ${PriceFormatter.formatPrice(calculatedSl, quoteAsset = quoteAsset)}, TP1 di ${PriceFormatter.formatPrice(calculatedTp1, quoteAsset = quoteAsset)}."
         } else {
-            "Net R:R 1:${String.format(Locale.US, "%.2f", netRr)} < 1:${String.format(Locale.US, "%.2f", netRrThreshold)}. Ruang menuju resistance terlalu sempit. Tunggu harga mendekati support ${PriceFormatter.formatPrice(supportLevel, quoteAsset = quoteAsset)} untuk validasi R:R."
+            "Net R:R TP1 1:${String.format(Locale.US, "%.2f", netRr)} < 1:${String.format(Locale.US, "%.2f", netRrThreshold)}. Ruang menuju resistance terlalu sempit. Net = setelah fee beli + fee jual + slippage dua sisi. Tunggu harga mendekati support ${PriceFormatter.formatPrice(supportLevel, quoteAsset = quoteAsset)} untuk validasi R:R."
         }
         val step6 = ConfluenceCheckpoint(
             number = 6,

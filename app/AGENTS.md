@@ -752,7 +752,7 @@ Aturan yang mengikat agen:
 ## Mode INTRADAY (`OFFICE_DAILY`) — paket A+B (2026-10-27, WAJIB)
 
 Mode intraday **bukan** scalping: ia punya evaluator, replay, dan config sendiri, dan **belum punya
-slider**. Temuan lengkap: `docs/bugs/temuan_bugs_intraday.md`; ringkasan keputusan: `workplan2.md`
+slider**. Temuan lengkap: `docs/laporan_temuan_bugs_intraday.md`; ringkasan keputusan: `workplan2.md`
 §79. Aturan yang mengikat:
 
 1. **Config sendiri, tanpa state global.** Ambang intraday ada di
@@ -834,4 +834,41 @@ slider**. Temuan lengkap: `docs/bugs/temuan_bugs_intraday.md`; ringkasan keputus
     - Konsekuensi jujur: R:R tampil ≈1,50 pada hampir semua sinyal, jadi R:R **bukan** pembeda
       mutu lagi; avg net terukur masih **negatif** (aturan 3). Penjaga:
       `IntradayGeometryAndMacdHistTest` (12 test), kontrol negatif 4/4 (paket C) + 4/4 (tindak
-      lanjut review) terdokumentasi di `docs/bugs/temuan_bugs_intraday.md`.
+      lanjut review) terdokumentasi di `docs/laporan_temuan_bugs_intraday.md`.
+
+### Paket D–F (2026-10-30)
+
+11. **Alat ukur intraday ada tiga dan tidak boleh saling menggantikan.** Semuanya memakai
+    `IntradayReplayEngine` + `IntradayGeometry` yang sama dengan aplikasi (jangan menulis ulang
+    rumus di Python):
+    - `IntradayMaxTp1SweepTest` — sweep batas atas TP1 di dataset v7 (11 pair H1);
+    - `IntradayResearchReplayTest` — satu konfigurasi penuh di `data/tokocrypto_v8` (26 pair H4,
+      candle D1 ikut), laporan per pair dengan pemisahan `LOOKAHEAD_EXPIRY` vs `END_OF_DATA`
+      (`RUN_INTRADAY_RESEARCH_REPLAY=true`);
+    - `IntradayExitModeSweepTest` — pembanding mode keluar dengan entry/fee/gate **tetap**
+      (`RUN_INTRADAY_EXIT_SWEEP=true`).
+    Penjaga perilaku ada di `IntradayReplayWindowAccountingTest` dan `IntradayExitEngineTest`;
+    ketiga alat di atas adalah **pengukur**, bukan penjaga.
+12. **`LOOKAHEAD_EXPIRY` ≠ `END_OF_DATA`.** Trade yang belum tuntas sementara data masih ada
+    berlabel `LOOKAHEAD_EXPIRY`; jendela lookahead yang terpotong di bar terakhir dataset berlabel
+    `END_OF_DATA`. Keduanya tetap dihitung **kalah** (aturan A5) — pemisahan hanya untuk laporan.
+    `unresolvedTotal = unresolvedOutcomes + endOfDataOutcomes`. Jangan menyatukan labelnya lagi.
+13. **Mesin exit intraday murni, belum disambungkan ke app.** `IntradayExitEngine` (mode
+    `SESSION_CLOSE` bawaan = perilaku lama, plus `TP1_BREAKEVEN`, `TRAIL_ATR`, `TIME_STOP`) adalah
+    satu definisi jalur keluar untuk replay dan app. `SESSION_CLOSE` **wajib** mereproduksi angka
+    paket A–D persis (dijaga `modeExitBawaanTidakMengubahAngkaReplayLama`). Invarian yang
+    diukur (IntradayExitModeSweepTest, RUN_INTRADAY_EXIT_SWEEP=true, 6 pair v8 H4, cap 8,0%):
+    7 varian exit + kontrol diuji; **0 dari 7 varian positif** terhadap kriteria kandidat
+    (net/trade > 0, lebih baik dari kontrol di semua pair, CI 95% tidak menyentuh nol, ≥60
+    trade/pair). Varian terbaik `TIME_STOP` 3 bar: **−0,587%/trade** (+0,049 poin dari kontrol
+    −0,636%, masih negatif, di dalam noise); `TP1_BREAKEVEN` −0,739% (dua trade tadinya `TP1_HIT`
+    berlanjut ke Close Malam dan kalah); `TRAIL_ATR` arm TP1 identik digit dengan `TP1_BREAKEVEN`
+    (0 `TRAIL_STOP_HIT`, trail tidak pernah aktif di sampel ini); arm entry −0,753% (terburuk).
+    Kriteria kandidat tidak terpenuhi — sampel maksimum hanya 12 trade/pair (LINKUSDT). Keputusan:
+    **tidak di-port**; `IntradayExitConfig.DEFAULT` tetap `SESSION_CLOSE`, `maxTp1Pct` tetap **5,0%**, ambang
+    1,5 tetap. Jangan memakai `PaperExitStateMachine` (produk scalping) untuk posisi intraday.
+14. **UI intraday wajib menyebut basis net (paket F).** Persen TP1/TP2/SL di kartu target adalah
+    perubahan **harga (gross)**; baris `Net R:R TP1` dan catatan "fee beli + fee jual + slippage
+    dua sisi" wajib ikut tampil. Label checkpoint 6 berbunyi `Net R:R TP1 …`, bukan `Net 1:…`.
+    Label fase sesi memakai menit terakhir fase (`06:00–11:29`, `11:30–15:29`, `15:30–19:29`,
+    `19:30–23:29`, `23:30–05:59`) supaya batas tidak terbaca sebagai selang tertutup.
