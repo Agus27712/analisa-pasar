@@ -148,7 +148,7 @@ Tiga hal yang menjaga jendela konteks tetap lega. Jangan membatalkannya tanpa al
    di akar; akar dibayar di setiap permintaan.
 2. **`opencode.jsonc` proyek** menolak tool `opencode_console_*` (kelola member, provider, model,
    billing). Server tetap tersambung, tetapi katalognya tidak ikut masuk system prompt. `ctx_*` dan
-   `mem0` sengaja tetap aktif. Kalau butuh tool konsol, jalankan dari proyek lain atau ubah
+   kalau butuh tool konsol, jalankan dari proyek lain atau ubah
    `permissions` di berkas itu.
 3. **Compaction lebih awal** (`~/.config/opencode/opencode.jsonc`, per mesin): `keep.tokens` 8.000
    dan `buffer` 32.000. Lebih agresif = lebih lossy; naikkan `keep.tokens` bila detail terbaru

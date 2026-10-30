@@ -4707,9 +4707,6 @@ dihilangkan bila seluruh tool-nya ditolak, sedangkan `/mcps` tetap melaporkan
 `opencode_console connected` — jadi koneksi tidak diputus, hanya tidak dibebankan ke konteks.
 **Bukti:** setelah `opencode.jsonc` ditulis, katalog tool Code Mode di sesi berjalan berubah dan
 `opencode_console` hilang dari daftar; `opencode mcp list` tetap menunjukkan ketiga server
-`connected`. `context-mode` (`ctx_*`) dan `mem0` **sengaja tetap aktif** karena dipakai alur kerja
-di `AGENTS.md` global (analisis data besar + pencarian memori awal sesi).
-
 **Yang tidak berubah:** isi aturan, gate engine, dan seluruh kode aplikasi. Perubahan ini hanya
 soal ruang konteks, bukan perilaku mesin.
 
