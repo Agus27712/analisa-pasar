@@ -42,6 +42,28 @@ Batasan
 - Riset offline. Tidak ada yang boleh dipromosikan ke app tanpa gate
   train+test dan keputusan owner.
 
+Mode sesi intraday WIB (--intraday-session)
+--------------------------------------------
+Sebelum revisi ini, alat ini mengukur mean-reversion generik lintas hari
+(hold sampai 7-21 hari) — bukan siklus "beli pagi, close malam" yang
+dipakai mode INTRADAY (OFFICE_DAILY) di app. `--intraday-session`
+menambal itu dengan mem-port 1:1 pembagian sesi dari
+`IntradayEvaluator.getCurrentIntradayPhase` (Kotlin, lihat
+app/src/main/java/agu/analys/engine/intraday/IntradayEvaluator.kt):
+
+  Open Pagi      06:00-11:29 WIB  entry boleh
+  Siang Akumulasi 11:30-15:29 WIB  entry boleh (selektif)
+  Sore Trailing  15:30-19:29 WIB  tidak ada entry baru
+  Close Malam    19:30-23:29 WIB  posisi WAJIB ditutup (reason SESSION_CLOSE)
+  Istirahat      23:30-05:59 WIB  tidak ada entry baru
+
+Jam dihitung dari `open_time_ms` (epoch UTC, sesuai data klines bursa) +
+offset WIB tetap UTC+7 (Indonesia tanpa DST) — aritmetika integer, tanpa
+library datetime. Selang setengah-terbuka [mulai, selesai), identik
+dengan versi Kotlin. Hanya didukung untuk --tf 1h/4h (1 bar 1d sudah
+mencakup satu hari penuh, sesi tidak relevan). SL/TP dari --exits tetap
+dipakai; sesi hanya memaksa exit kalau belum kena SL/TP/hold duluan.
+
 Contoh
 ------
   python3 tools/entry_buy_low_lab.py --data data/tokocrypto_v8 --tf 1h \
@@ -50,6 +72,11 @@ Contoh
   # H4 + walk-forward 6 jendela + JSON ramping (dipakai laporan docs/exp/)
   python3 tools/entry_buy_low_lab.py --data data/tokocrypto_v8 --tf 4h \
       --walk-forward 6 --slim --out data/hasil/exp_buy_low_entry_v8_4h_regime.json
+
+  # Mode sesi intraday WIB (beli pagi, close malam; identik IntradayEvaluator)
+  python3 tools/entry_buy_low_lab.py --data data/tokocrypto_v8 --tf 1h \
+      --intraday-session --slim \
+      --out data/hasil/exp_buy_low_entry_intraday_wib_1h.json
 """
 import argparse
 import csv
@@ -126,6 +153,45 @@ def percentile_rank(values, x):
     if not values:
         return None
     return 100.0 * sum(1 for v in values if v < x) / len(values)
+
+
+# ------------------------------------------------------------ sesi WIB
+# Port 1:1 dari IntradayEvaluator.getCurrentIntradayPhase (Kotlin,
+# app/src/main/java/agu/analys/engine/intraday/IntradayEvaluator.kt),
+# supaya lab ini konsisten dengan evaluator produksi. WIB = UTC+7 tetap
+# (Indonesia tanpa DST); aritmetika integer murni, tanpa datetime.
+WIB_OFFSET_MIN = 7 * 60
+OPEN_PAGI_START = 6 * 60
+HOLD_SIANG_START = 11 * 60 + 30
+HOLD_SORE_START = 15 * 60 + 30
+CLOSE_MALAM_START = 19 * 60 + 30
+REST_MALAM_START = 23 * 60 + 30
+
+
+def wib_minutes(t_ms):
+    """Menit sejak 00:00 WIB, selang [0, 1440). t_ms = epoch UTC ms."""
+    return int(t_ms // 60000 + WIB_OFFSET_MIN) % 1440
+
+
+def intraday_phase(t_ms):
+    """Fase sesi WIB; selang setengah-terbuka [mulai, selesai), identik
+    dengan enum IntradayPhase di Kotlin."""
+    m = wib_minutes(t_ms)
+    if OPEN_PAGI_START <= m < HOLD_SIANG_START:
+        return "OPEN_PAGI"
+    if HOLD_SIANG_START <= m < HOLD_SORE_START:
+        return "HOLD_SIANG"
+    if HOLD_SORE_START <= m < CLOSE_MALAM_START:
+        return "HOLD_SORE"
+    if CLOSE_MALAM_START <= m < REST_MALAM_START:
+        return "CLOSE_MALAM"
+    return "REST_MALAM"
+
+
+def is_entry_window(t_ms):
+    """Entry baru cuma boleh di Open Pagi / Siang Akumulasi (isOpenWindow
+    di IntradayPhase Kotlin)."""
+    return intraday_phase(t_ms) in ("OPEN_PAGI", "HOLD_SIANG")
 
 
 # ------------------------------------------------------------------- loader
@@ -352,7 +418,7 @@ def exit_levels(f, i, entry, spec):
 
 
 def simulate(bars, f, sig, spec, hold, friction, min_tp_multiple=2.0,
-             same_bar="sl_first", regime=None):
+             same_bar="sl_first", regime=None, intraday_session=False):
     n = len(bars)
     trades = []
     next_free = 0
@@ -378,6 +444,13 @@ def simulate(bars, f, sig, spec, hold, friction, min_tp_multiple=2.0,
         last = min(i + hold, n - 1)
         for j in range(i + 1, last + 1):
             b = bars[j]
+            if intraday_session and intraday_phase(b["t"]) in ("CLOSE_MALAM", "REST_MALAM"):
+                # Disiplin sesi: begitu bar ini masuk jendela Close Malam/
+                # Istirahat, posisi WAJIB ditutup di open bar ini — sebelum
+                # SL/TP intrabar bar ini dicek (meniru keputusan evaluator
+                # yang dibuat di awal bar, sama seperti entry di bar+1).
+                exit_price, reason, exit_i = b["o"], "SESSION_CLOSE", j
+                break
             gap_sl = sl_price is not None and b["o"] <= sl_price
             gap_tp = b["o"] >= tp_price
             hit_sl = sl_price is not None and b["l"] <= sl_price
@@ -526,6 +599,11 @@ def main():
     ap.add_argument("--out",
                     default=str(ROOT / "data/hasil/exp_buy_low_entry_v8_1h_regime.json"))
     ap.add_argument("--dump-trades", action="store_true")
+    ap.add_argument("--intraday-session", action="store_true",
+                    help="disiplin sesi WIB ala IntradayEvaluator produksi: entry "
+                         "hanya Open Pagi (06:00-11:29)/Siang (11:30-15:29), "
+                         "paksa SESSION_CLOSE begitu bar masuk Close Malam "
+                         "(>=19:30 WIB). Hanya untuk --tf 1h/4h.")
     ap.add_argument("--walk-forward", type=int, default=0,
                     help="bagi bar tiap pair menjadi N jendela waktu berurutan; 0 = nonaktif")
     ap.add_argument("--wf-hypotheses", default="dip_rsi25,control_top_rsi70,control_random",
@@ -552,6 +630,9 @@ def main():
     cells_sel = set(c.strip() for c in args.cells.split(",") if c.strip())
     if args.walk_forward == 1:
         sys.exit("--walk-forward minimal 2 jendela")
+    if args.intraday_session and args.tf not in ("1h", "4h"):
+        sys.exit("--intraday-session hanya didukung untuk --tf 1h atau 4h "
+                  "(1 bar 1d sudah mencakup satu hari penuh, sesi tidak relevan)")
 
     pairs = set(p.strip().upper() for p in args.pairs.split(",") if p.strip()) or None
     files = pair_files(args.data, args.tf, pairs)
@@ -572,6 +653,13 @@ def main():
             "btc_regime": "BTC D1 close vs EMA200 D1",
             "min_tp_multiple": args.min_tp_multiple,
             "walk_forward_windows": args.walk_forward,
+            "intraday_session": args.intraday_session,
+            "intraday_session_note": (
+                "Entry hanya Open Pagi 06:00-11:29 WIB / Siang Akumulasi "
+                "11:30-15:29 WIB; paksa SESSION_CLOSE begitu bar pertama "
+                "masuk Close Malam (>=19:30 WIB) atau Istirahat "
+                "(>=23:30 WIB). Identik IntradayEvaluator.kt produksi."
+            ) if args.intraday_session else None,
         },
         "grid": {}, "per_pair": {}, "trades": [],
     }
@@ -618,9 +706,11 @@ def main():
                     k = int(len(bars) * args.split)
                     sig = (random_sig[name] if kind == "random"
                            else sig_for(name, bars, f, key))
+                    if args.intraday_session:
+                        sig = [i for i in sig if is_entry_window(bars[i]["t"])]
                     tr_all, inf = simulate(bars, f, sig, spec, hold, args.friction,
                                            args.min_tp_multiple, args.same_bar,
-                                           btc_regime)
+                                           btc_regime, args.intraday_session)
                     agg["train"].extend([t for t in tr_all if t["i"] < k])
                     agg["test"].extend([t for t in tr_all if t["i"] >= k])
                     agg["all"].extend(tr_all)

@@ -6,6 +6,12 @@ di luar sampel). Arah "beli di bawah" **terukur lebih baik** dari beli di puncak
 sama, tetapi hasilnya **tidak bertahan** di 40% data terakhir dan tidak memenuhi ambang sampel.
 **Jangan di-port ke app.**
 
+> **Catatan (2026-10-30):** eksperimen ini **tidak** menegakkan disiplin sesi WIB (Open
+> Pagi/Close Malam) yang dipakai mode INTRADAY (`OFFICE_DAILY`) produksi — hold bar bebas sampai
+> 7–21 hari, bukan "beli pagi, close malam". Angka di bawah mengukur mean-reversion generik,
+> bukan perilaku intraday app. Versi yang menegakkan sesi WIB (flag baru `--intraday-session`
+> di `tools/entry_buy_low_lab.py`) ada di `docs/exp/exp_buy_low_entry_intraday_wib_v8.md`.
+
 **Tanggal:** 2026-10-29
 **Tujuan:** menguji sisi entry yang belum pernah diukur di repo ini. Eksperimen
 `exp_entry_price_percentile_ADA-DOGE-XRP.md` membuktikan entry engine lama khas berada di
