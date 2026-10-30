@@ -5184,14 +5184,14 @@ intraday **tidak boleh hardcode di Kotlin**, gunakan slider seperti mode scalpin
 `data/tokocrypto_v8/DOGEUSDT_4h.csv` (4.999 bar ≈ 833 hari, fee Tokocrypto USDT, lookahead 6 bar
 H4). Satu variabel diubah, `flashDumpTraumaCandles` 12 → 16:
 
-| Config | Bar diblokir trauma (`bottleneck.flashDumpTraumaBlocks`) |
+| Config | Bar di mana kondisi trauma terpenuhi (dihitung ulang dari dataset, semantik yang sama dengan evaluator) |
 |---|---|
 | bawaan (12 candle) | 165 |
 | trauma 16 candle | 209 |
 
-Bar yang **hanya** diblokir pada 12 vs 16 berjumlah 44; 16 di antaranya jatuh di sesi Open Pagi
+Bar yang **hanya** memenuhi trauma pada 12 vs 16 berjumlah 44 (dihitung dari bar ke-200); 16 di antaranya jatuh di sesi Open Pagi
 (06:00–11:29 WIB). Bar ke-731 (tutup 2024-11-17 07:00 WIB) dipakai sebagai anchor uji pintu
-evaluator: dump terakhir 15 candle lalu → bawaan tidak trauma, config 16 menolak dengan alasan
+evaluator: dump terakhir 12 candle lalu → bawaan (12) tidak trauma, config 16 menolak dengan alasan
 "Anti Flash Dump".
 
 **Penjaga & kontrol negatif.**
