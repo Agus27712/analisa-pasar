@@ -140,8 +140,13 @@ class IntradayRuntimeConfigTest {
     fun parsingRusakMenolak_danMirrorSamaDenganBawaan() {
         assertNull("JSON tidak valid harus gagal (pemanggil jatuh ke DEFAULT)", IntradayRuntimeConfig.fromJsonString("{ bukan json"))
 
-        val mirror = File("data/config/intraday_config.json")
-        assertTrue("Mirror data/config/intraday_config.json wajib ada", mirror.isFile)
+        val base = File(System.getProperty("user.dir") ?: ".")
+        val kandidat = listOf(
+            File(base, "data/config/intraday_config.json"),
+            File(base, "../data/config/intraday_config.json")
+        )
+        val mirror = kandidat.firstOrNull { it.isFile }
+            ?: error("Mirror data/config/intraday_config.json wajib ada (mencari dari ${base.absolutePath})")
         val mirrorJson = JSONObject(mirror.readText())
         val bawaanJson = IntradayRuntimeConfig.toJson(IntradayRuntimeConfig.DEFAULT)
 
