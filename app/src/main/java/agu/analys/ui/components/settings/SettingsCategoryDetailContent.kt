@@ -35,6 +35,7 @@ fun SettingsCategoryDetailContent(
     viewModel: TradingViewModel,
     strategyMode: StrategyMode,
     onStrategyModeChange: (StrategyMode) -> Unit,
+    onOpenIntradaySettings: () -> Unit = {},
     selectedSource: MarketDataSource,
     onSourceChange: (MarketDataSource) -> Unit,
     buyMakerFee: String,
@@ -88,13 +89,16 @@ fun SettingsCategoryDetailContent(
     downloadProgress: Int?
 ) {
     val scalpingConfig by viewModel.scalpingRuntimeConfig.collectAsStateWithLifecycle()
+    val intradayConfig by viewModel.intradayRuntimeConfig.collectAsStateWithLifecycle()
 
     when (category) {
         SettingsCategory.TRADING -> {
             TradingModeSettings(
                 strategyMode = strategyMode,
                 scalpingConfig = scalpingConfig,
-                onStrategyChange = onStrategyModeChange
+                intradayConfig = intradayConfig,
+                onStrategyChange = onStrategyModeChange,
+                onOpenIntradaySettings = onOpenIntradaySettings
             )
 
             Spacer(Modifier.height(14.dp))

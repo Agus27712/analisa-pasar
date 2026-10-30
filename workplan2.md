@@ -5138,3 +5138,82 @@ dipulihkan (tabel di `docs/laporan_temuan_bugs_intraday.md`).
 Satu window data, hanya USDT, hanya H4 untuk replay riset dan sweep exit. Tidak ada klaim edge
 baru: sinyal intraday tetap **negatif** sebelum dan sesudah exit diubah. Jangan memakai angka ini
 sebagai dasar uang riil, dan jangan menyambungkan mode exit baru tanpa keputusan owner.
+
+## 86. Mode INTRADAY — paket G: slider sensitifitas dengan holder sendiri (2026-10-30)
+
+**Latar.** Sampai paket F, `IntradayConfig` (19 knob) hanya bisa diubah dengan menyunting kode:
+tidak ada state runtime, tidak ada UI, dan `ModeSignalEvaluator` selalu memakai
+`IntradayConfig.DEFAULT`. Akibatnya setiap eksperimen intraday harus lewat unit test, dan pengguna
+tidak bisa menguji setting sendiri tanpa build ulang. Permintaan owner (30 Okt 2026): nilai
+intraday **tidak boleh hardcode di Kotlin**, gunakan slider seperti mode scalping.
+
+**Keputusan owner yang mengikat paket ini.**
+
+| Pertanyaan | Keputusan |
+|---|---|
+| Cakupan knob | **19 knob `IntradayConfig` saja.** Literal di badan `IntradayEvaluator` (skor ≥50/52, RSI 35–65, `0,988`/`0,965`, `0,075`, `0,12`, ekstensi ATR 1,8, jarak high 1,2%) **tidak disentuh** — dicatat sebagai utang paket berikutnya |
+| `minNetRrTp1` (1,5) dan `maxTp1Pct` (5,0%) | **Boleh digeser**, tetapi slider diberi label peringatan + dialog "catatan keputusan owner"; laporan wajib menyebut config yang dipakai |
+| Tombol "ukur dengan replay" di UI | **Tidak.** Pengukuran tetap lewat `IntradayResearchReplayTest` / `IntradayMaxTp1SweepV8Test` dari JSON hasil ekspor |
+
+**Yang dibangun.**
+
+1. **Holder tipis, bukan data class kedua.** `engine/intraday/IntradayRuntimeConfig.kt` menyimpan
+   instance `IntradayConfig` (bukan menyalin 19 field). Alasan: salinan field adalah definisi
+   kedua yang cepat melenceng — pola bug yang berulang di repo ini. Holder menyediakan
+   `current`/`currentFlow`, `toJson`/`fromJson`/`fromJsonString`, preset
+   `STANDARD`/`STRICT`/`LOOSE`/`CUSTOM`, dan `toSummaryString`.
+   `STRICT`/`LOOSE` adalah **preset frekuensi**, bukan klaim profit.
+2. **Satu pintu.** `ModeSignalInput.intradayConfig` (bawaan `IntradayRuntimeConfig.current`)
+   diteruskan `ModeSignalEvaluator.evaluateIntraday` → `IntradayEvaluator.evaluate(config = …)`.
+   Engine foreground (`LearningTradingEngine.runIntraday`) dan `CandidateScanWorker` sama-sama
+   lewat pintu ini, jadi tidak ada dua jalur dengan angka berbeda (aturan N6/N17).
+3. **Persistensi + hidrasi.** `AppPreferences.intradayRuntimeConfig` (kunci
+   `intraday_runtime_config_v1`) dan `intradaySensitivityPreset`; blok `init` menghidrasi holder.
+   Tanpa hidrasi itu slider "hilang" setiap restart karena evaluator kembali membaca DEFAULT.
+4. **`slippagePct` intraday TIDAK disalurkan ke `simCoordinator`.** Basis P&L simulasi tetap satu
+   nilai global; menggeser slider intraday tidak boleh mengubah angka P&L scalping.
+5. **UI** `ui/components/settings/IntradaySensitivitySettings.kt`: chip preset, slider + tombol
+   −/+, dialog penjelasan bahasa awam per knob, ekspor/impor JSON, reset. Kartu mode INTRADAY di
+   `TradingModeSettings` menampilkan parameter aktif + tombol membuka layar ini; `SettingsScreen`
+   memakai pola draft → **Simpan & Aktifkan** yang juga menetapkan `StrategyMode.OFFICE_DAILY`.
+   Peringatan tetap tampil: *slider mengubah frekuensi sinyal, bukan menjamin profit*.
+6. **Mirror offline** `data/config/intraday_config.json` (bawaan = `IntradayConfig.DEFAULT`) untuk
+   replay/eksperimen; dijaga uji agar kunci **dan nilainya** tidak menyimpang dari aplikasi.
+
+**Bukti bahwa knob benar-benar dipakai (bukan dekorasi).** Diukur pada dataset ter-commit
+`data/tokocrypto_v8/DOGEUSDT_4h.csv` (4.999 bar ≈ 833 hari, fee Tokocrypto USDT, lookahead 6 bar
+H4). Satu variabel diubah, `flashDumpTraumaCandles` 12 → 16:
+
+| Config | Bar diblokir trauma (`bottleneck.flashDumpTraumaBlocks`) |
+|---|---|
+| bawaan (12 candle) | 165 |
+| trauma 16 candle | 209 |
+
+Bar yang **hanya** diblokir pada 12 vs 16 berjumlah 44; 16 di antaranya jatuh di sesi Open Pagi
+(06:00–11:29 WIB). Bar ke-731 (tutup 2024-11-17 07:00 WIB) dipakai sebagai anchor uji pintu
+evaluator: dump terakhir 15 candle lalu → bawaan tidak trauma, config 16 menolak dengan alasan
+"Anti Flash Dump".
+
+**Penjaga & kontrol negatif.**
+
+- `IntradayRuntimeConfigTest` (5 uji): round-trip JSON, preset berbeda dari bawaan, `current`
+  dan `currentFlow` sinkron, trauma 16 memblokir lebih banyak bar, mirror == DEFAULT.
+- `ModeSignalEvaluatorIntradayConfigTest`: dua config berbeda di bar yang sama harus memberi
+  reasoning berbeda — **kontrol negatifnya** adalah melepas `config = input.intradayConfig` di
+  `ModeSignalEvaluator`: kedua evaluasi kembali identik dan uji gagal.
+- Uji lama tidak berubah perilaku: seluruh uji geometri/replay intraday memakai
+  `IntradayConfig.DEFAULT` secara eksplisit, dan bawaan holder juga DEFAULT.
+
+**Batas yang tetap berlaku (jujur).**
+
+- **Edge tidak berubah.** Slider hanya memindahkan frekuensi sinyal; sinyal intraday tetap
+  rata-rata **negatif** pada semua konfigurasi yang menghasilkan trade (§79.3, §83, §85).
+- **Ambang di badan evaluator masih literal** (skor ≥50/52, RSI 35–65, toleransi support
+  0,988/0,965, flash dump 7,5%/12%, ekstensi ATR 1,8, jarak recent-high 1,2%). Ini utang yang
+  dicatat, bukan pekerjaan yang selesai.
+- **Belum diukur ulang di 26 pair.** Angka 165/209 hanya satu pair (DOGEUSDT H4); ia membuktikan
+  sambungan config, bukan kualitas config.
+- **Verifikasi build di sesi ini terbatas.** Pekerjaan dikerjakan pada Alpine Linux tanpa JDK/
+  Android SDK (lingkungan HP owner), jadi `./gradlew :app:testDebugUnitTest` **belum dijalankan**
+  untuk paket ini. Jalankan lewat GitHub Actions `all-unit-tests` atau mesin ber-JDK 17 sebelum
+  mengklaim hijau.

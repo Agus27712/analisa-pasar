@@ -245,6 +245,14 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     private val _scalpingSensitivityPreset = MutableStateFlow(prefs.scalpingSensitivityPreset)
     val scalpingSensitivityPreset: StateFlow<String> = _scalpingSensitivityPreset.asStateFlow()
 
+    /** Konfigurasi slider mode INTRADAY — terpisah dari scalping (aturan §79.1). */
+    private val _intradayRuntimeConfig = MutableStateFlow(prefs.intradayRuntimeConfig)
+    val intradayRuntimeConfig: StateFlow<agu.analys.engine.intraday.IntradayConfig> =
+        _intradayRuntimeConfig.asStateFlow()
+
+    private val _intradaySensitivityPreset = MutableStateFlow(prefs.intradaySensitivityPreset)
+    val intradaySensitivityPreset: StateFlow<String> = _intradaySensitivityPreset.asStateFlow()
+
     /** Pengaturan auto-buy / auto-exit paper trade (P2). Simulasi saja. */
     private val _paperAutoTradeConfig = MutableStateFlow(prefs.paperAutoTradeConfig)
     val paperAutoTradeConfig: StateFlow<agu.analys.engine.scalping.PaperAutoTradeConfig> =
@@ -559,6 +567,43 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
             "ScalpingConfig",
             "⚙️ Scalping runtime config updated (Preset: $preset) | ${config.toSummaryString()}"
         )
+    }
+
+    /**
+     * Simpan konfigurasi slider mode **INTRADAY** (`StrategyMode.OFFICE_DAILY`).
+     *
+     * Sengaja **tidak** menyalurkan `slippagePct` ke `simCoordinator` seperti jalur scalping:
+     * slippage simulasi adalah basis P&L global satu aplikasi, bukan milik satu mode. Menyalurkannya
+     * di sini akan mengubah angka P&L scalping hanya karena pengguna menggeser slider intraday.
+     */
+    fun updateIntradayRuntimeConfig(
+        config: agu.analys.engine.intraday.IntradayConfig,
+        preset: String = "CUSTOM"
+    ) {
+        prefs.intradayRuntimeConfig = config
+        prefs.intradaySensitivityPreset = preset
+        agu.analys.engine.intraday.IntradayRuntimeConfig.current = config
+        _intradayRuntimeConfig.value = config
+        _intradaySensitivityPreset.value = preset
+        agu.analys.util.AppLogManager.service(
+            "IntradayConfig",
+            "⚙️ Intraday runtime config updated (Preset: $preset) | " +
+                agu.analys.engine.intraday.IntradayRuntimeConfig.toSummaryString(config)
+        )
+    }
+
+    fun applyIntradayPreset(preset: agu.analys.engine.intraday.IntradaySensitivityPreset) {
+        val config = when (preset) {
+            agu.analys.engine.intraday.IntradaySensitivityPreset.STANDARD ->
+                agu.analys.engine.intraday.IntradayRuntimeConfig.DEFAULT
+            agu.analys.engine.intraday.IntradaySensitivityPreset.STRICT ->
+                agu.analys.engine.intraday.IntradayRuntimeConfig.STRICT
+            agu.analys.engine.intraday.IntradaySensitivityPreset.LOOSE ->
+                agu.analys.engine.intraday.IntradayRuntimeConfig.LOOSE
+            agu.analys.engine.intraday.IntradaySensitivityPreset.CUSTOM ->
+                prefs.intradayRuntimeConfig
+        }
+        updateIntradayRuntimeConfig(config, preset.name)
     }
 
     fun applyScalpingPreset(preset: agu.analys.engine.scalping.SensitivityPreset) {        val config = when (preset) {

@@ -23,7 +23,9 @@ import agu.analys.ui.theme.*
 fun TradingModeSettings(
     strategyMode: StrategyMode,
     scalpingConfig: ScalpingRuntimeConfig,
-    onStrategyChange: (StrategyMode) -> Unit
+    intradayConfig: agu.analys.engine.intraday.IntradayConfig = agu.analys.engine.intraday.IntradayRuntimeConfig.current,
+    onStrategyChange: (StrategyMode) -> Unit,
+    onOpenIntradaySettings: (() -> Unit)? = null
 ) {
     Column {
         SectionHeader("MODE ANALISIS TRADING")
@@ -121,8 +123,73 @@ fun TradingModeSettings(
                 }
             }
         }
+
+        // Mode INTRADAY punya config sendiri (bukan menumpang scalping — aturan §79.1).
+        // Tombol di bawah membuka layar slider intraday; nilai yang tampil di sini selalu
+        // berasal dari config yang sedang aktif, bukan angka literal di UI.
+        if (strategyMode == StrategyMode.OFFICE_DAILY) {
+            Spacer(Modifier.height(10.dp))
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = TvSurfaceVariant),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFA5B4FC).copy(alpha = 0.5f))
+            ) {
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    Text(
+                        "PARAMETER ENGINE INTRADAY AKTIF",
+                        color = Color(0xFFA5B4FC),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "Stop Loss: ${fmtNum(intradayConfig.minSlPct, 1)}–${fmtNum(intradayConfig.maxSlPct, 1)}% · " +
+                            "lantai biaya ${fmtNum(intradayConfig.minSlFrictionMultiple, 1)}x",
+                        color = TvTextPrimary, fontSize = 11.sp
+                    )
+                    Text(
+                        "Target 1: ${fmtNum(intradayConfig.tp1AtrMult, 2)}x ATR (cap ${fmtNum(intradayConfig.maxTp1Pct, 1)}%) · " +
+                            "Target 2: ${fmtNum(intradayConfig.minTp2Pct, 1)}–${fmtNum(intradayConfig.maxTp2Pct, 1)}%",
+                        color = TvTextPrimary, fontSize = 11.sp
+                    )
+                    Text(
+                        "Saringan: Net R:R TP1 min ${fmtNum(intradayConfig.minNetRrTp1, 2)}x · " +
+                            "MACD hist min ${fmtNum(intradayConfig.macdHistMinPct, 2)}%",
+                        color = TvTextPrimary, fontSize = 11.sp
+                    )
+                    Text(
+                        "Trauma flash dump: ${intradayConfig.flashDumpTraumaCandles} candle · " +
+                            "pindai ${intradayConfig.flashDumpScanCandles} candle",
+                        color = TvTextPrimary, fontSize = 11.sp
+                    )
+
+                    if (onOpenIntradaySettings != null) {
+                        Spacer(Modifier.height(4.dp))
+                        OutlinedButton(
+                            onClick = onOpenIntradaySettings,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFA5B4FC).copy(alpha = 0.5f))
+                        ) {
+                            Text(
+                                "Atur Sensitifitas Intraday (slider)",
+                                color = Color(0xFFA5B4FC),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }
+
+private fun fmtNum(value: Double, decimals: Int): String =
+    String.format(java.util.Locale.US, "%.${decimals}f", value)
 
 @Composable
 fun ModeOptionCard(

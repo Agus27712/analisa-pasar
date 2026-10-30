@@ -755,11 +755,25 @@ Mode intraday **bukan** scalping: ia punya evaluator, replay, dan config sendiri
 slider**. Temuan lengkap: `docs/laporan_temuan_bugs_intraday.md`; ringkasan keputusan: `workplan2.md`
 §79. Aturan yang mengikat:
 
-1. **Config sendiri, tanpa state global.** Ambang intraday ada di
+1. **Config sendiri, tanpa menumpang scalping.** Ambang intraday ada di
    `engine/intraday/IntradayConfig.kt` dan dioper **eksplisit** oleh pemanggil. Jangan menumpangkan
    parameter intraday ke `ScalpingRuntimeConfig`/slider: geseran satu slider scalping akan
-   diam-diam mengubah sinyal intraday. Jangan menambah `object … current` yang bisa diubah runtime
-   sebelum ada UI-nya (parameter tanpa pembaca dilarang).
+   diam-diam mengubah sinyal intraday. **Sejak paket G (30 Okt 2026) mode intraday punya slider
+   sendiri** — `engine/intraday/IntradayRuntimeConfig` + `ui/components/settings/
+   IntradaySensitivitySettings.kt` + kunci prefs `intraday_runtime_config_v1`. Aturan yang
+   mengikat untuk jalur itu:
+   - holder **menyimpan instance `IntradayConfig`**, jangan menyalin 19 field ke data class kedua
+     (definisi ganda yang cepat melenceng);
+   - nilai mengalir lewat **satu pintu**: `ModeSignalInput.intradayConfig` →
+     `ModeSignalEvaluator.evaluateIntraday`. Jangan membaca holder langsung di evaluator/worker;
+   - bawaan holder **selalu** `IntradayConfig.DEFAULT`, supaya angka §79–§85 tetap reproducible;
+   - `slippagePct` intraday **tidak** boleh disalurkan ke `simCoordinator.setSlippagePct` (basis
+     P&L simulasi tetap satu nilai global);
+   - `minNetRrTp1` dan `maxTp1Pct` boleh digeser tetapi slider wajib berlabel peringatan dan
+     laporan wajib menyebut nilai yang dipakai;
+   - preset `STRICT`/`LOOSE` adalah preset **frekuensi sinyal**, bukan klaim profit.
+   Jangan menambah `object … current` baru tanpa UI yang membacanya (parameter tanpa pembaca
+   dilarang).
 2. **Net R:R dari TP1, tanpa clamp.** `IntradayGeometry` menghitung net R:R multiplikatif dari
    TP1 final (rumus sama dengan `FeeCalculator.roundTrip`, tanpa pemipihan), dan gate memakai
    `config.minNetRrTp1` (bawaan 1,5). **Jangan** mengembalikan `coerceAtLeast(1.6)` atau memakai
@@ -800,7 +814,12 @@ slider**. Temuan lengkap: `docs/laporan_temuan_bugs_intraday.md`; ringkasan kepu
    tidak terbukti. Penjaga intraday memakai dataset ter-commit `data/tokocrypto_v7/DOGEUSDT_1h.csv`
    (999 bar) lewat `IntradayReplayEngine.replay`: ambang config 0,0 vs 99,0, fee maker + slippage
    dari config, ringkasan net dihitung ulang dari daftar trade, dan konsistensi label `VALID_ENTRY_*`
-   dengan klasifikasi net. `IntradayConfig` tetap tanpa slider/state global (aturan 1).
+   dengan klasifikasi net. Sejak paket G (30 Okt 2026) ada slider/holder, tetapi aturannya tetap:
+   penjaga memakai **dataset nyata**, bukan `contains` pada nama field.
+   `IntradayRuntimeConfigTest` memakai `data/tokocrypto_v8/DOGEUSDT_4h.csv` dan menguji perilaku
+   (`flashDumpTraumaCandles` 12 vs 16 → 165 vs 209 bar diblokir), sedangkan
+   `ModeSignalEvaluatorIntradayConfigTest` menguji **sambungan pintu** (dua config → reasoning
+   berbeda di bar yang sama).
    **`ModeSignalEvaluator` menolak `nowMs <= 0` fail-closed** (null, deterministik) — jangan
    mengembalikan fallback `System.currentTimeMillis()`.
 10. **Geometri SL/TP intraday satu definisi — `IntradayGeometry.resolve` (paket C, 28 Okt 2026).**
@@ -872,3 +891,23 @@ slider**. Temuan lengkap: `docs/laporan_temuan_bugs_intraday.md`; ringkasan kepu
     dua sisi" wajib ikut tampil. Label checkpoint 6 berbunyi `Net R:R TP1 …`, bukan `Net 1:…`.
     Label fase sesi memakai menit terakhir fase (`06:00–11:29`, `11:30–15:29`, `15:30–19:29`,
     `19:30–23:29`, `23:30–05:59`) supaya batas tidak terbaca sebagai selang tertutup.
+
+### Paket G — slider intraday (2026-10-30)
+
+15. **Slider intraday punya holder sendiri, dan angkanya tetap bukan janji profit.** Detail
+    keputusan: `workplan2.md` §86. Yang mengikat agen:
+    - `engine/intraday/IntradayRuntimeConfig` menyimpan **instance `IntradayConfig`**. Jangan
+      membuat data class kedua berisi 19 field yang sama; itu definisi kedua yang melenceng diam-diam.
+    - Satu pintu: `ModeSignalInput.intradayConfig` → `ModeSignalEvaluator.evaluateIntraday`.
+      Menambah pembaca holder langsung di tempat lain (worker, evaluator lain, UI detail) adalah bug.
+    - Kunci prefs `intraday_runtime_config_v1` / `intraday_sensitivity_preset_v1`; hidrasi holder
+      dilakukan di blok `init` `AppPreferences`. Tanpa itu slider hilang setiap restart.
+    - `slippagePct` intraday **tidak** boleh masuk `simCoordinator.setSlippagePct`.
+    - `minNetRrTp1` (1,5) dan `maxTp1Pct` (5,0%) boleh digeser lewat slider, tetapi WAJIB berlabel
+      peringatan + dialog catatan owner; laporan yang memakai hasilnya wajib menyebut nilainya.
+    - Mirror `data/config/intraday_config.json` dijaga uji agar **kunci dan nilai** sama dengan
+      `IntradayConfig.DEFAULT`. Ini alat ukur offline, bukan config kedua.
+    - Ambang di badan `IntradayEvaluator` (skor ≥50/52, RSI 35–65, toleransi support 0,988/0,965,
+      flash dump 7,5%/12%, ekstensi ATR 1,8, jarak recent-high 1,2%) **masih literal** dan belum
+      bisa diubah dari UI. Mengangkatnya ke config = paket tersendiri dengan pengukuran ulang
+      frekuensi sinyal.

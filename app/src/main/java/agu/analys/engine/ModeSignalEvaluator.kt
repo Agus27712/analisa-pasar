@@ -4,6 +4,7 @@ import agu.analys.config.StrategyMode
 import agu.analys.config.TradingFeeConfig
 import agu.analys.engine.global.GlobalMarketContext
 import agu.analys.engine.intraday.IntradayEvaluator
+import agu.analys.engine.intraday.IntradayRuntimeConfig
 import agu.analys.engine.regime.MacroAnomalyDetector
 import agu.analys.engine.scalping.ScalpingMtfEvaluator
 import agu.analys.engine.scalping.ScalpingRuntimeConfig
@@ -60,6 +61,13 @@ data class ModeSignalInput(
     val orderBookAgeMs: Long = 0L,
     val fees: TradingFeeConfig = TradingFeeConfig(),
     val scalpingConfig: ScalpingRuntimeConfig = ScalpingRuntimeConfig.current,
+    /**
+     * Config mode INTRADAY (slider intraday). Satu pintu yang sama untuk engine foreground dan
+     * `CandidateScanWorker` — geseran slider tidak boleh membuat dua jalur berbeda angka (N6/N17).
+     * Bawaan = nilai saat ini di holder; pemanggil yang tidak menyentuh slider tetap mendapat
+     * [IntradayConfig.DEFAULT], sehingga angka replay paket A–F tetap reproducible.
+     */
+    val intradayConfig: agu.analys.engine.intraday.IntradayConfig = IntradayRuntimeConfig.current,
     val globalContext: GlobalMarketContext = GlobalMarketContext()
 )
 
@@ -173,7 +181,8 @@ object ModeSignalEvaluator {
             fees = input.fees,
             macroAnomalyResult = anomaly,
             evaluationTimestamp = nowMs,
-            symbol = input.symbol
+            symbol = input.symbol,
+            config = input.intradayConfig
         )
         return ModeSignal(result.signal, result.indicators)
     }

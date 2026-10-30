@@ -27,6 +27,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import agu.analys.config.AiProvider
 import agu.analys.config.MarketDataSource
 import agu.analys.config.StrategyMode
+import agu.analys.engine.intraday.IntradayRuntimeConfig
+import agu.analys.engine.intraday.IntradaySensitivityPreset
 import agu.analys.engine.scalping.ScalpingRuntimeConfig
 import agu.analys.engine.scalping.SensitivityPreset
 import agu.analys.ui.components.security.SecurityPinDialog
@@ -71,6 +73,12 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
     var showScalpingEngineSettings by remember { mutableStateOf(false) }
     var draftScalpingConfig by remember { mutableStateOf(activeScalpingConfig) }
     var draftScalpingPreset by remember { mutableStateOf(activeScalpingPreset) }
+    // Slider mode INTRADAY — terpisah dari scalping (aturan §79.1 app/AGENTS.md).
+    val activeIntradayConfig by viewModel.intradayRuntimeConfig.collectAsStateWithLifecycle()
+    val activeIntradayPreset by viewModel.intradaySensitivityPreset.collectAsStateWithLifecycle()
+    var showIntradayEngineSettings by remember { mutableStateOf(false) }
+    var draftIntradayConfig by remember { mutableStateOf(activeIntradayConfig) }
+    var draftIntradayPreset by remember { mutableStateOf(activeIntradayPreset) }
     // P2 — draft pengaturan auto-buy / auto-exit paper trade
     var draftPaperAuto by remember { mutableStateOf(viewModel.paperAutoTradeConfig.value) }
 
@@ -142,9 +150,20 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
         Toast.makeText(context, "Konfigurasi Engine Scalping disimpan dan diaktifkan.", Toast.LENGTH_SHORT).show()
     }
 
-    BackHandler(enabled = showScalpingEngineSettings || activeCategory != null) {
+    fun saveIntradayEngineSettings() {
+        viewModel.updateIntradayRuntimeConfig(draftIntradayConfig, draftIntradayPreset)
+        viewModel.setStrategyMode(StrategyMode.OFFICE_DAILY)
+        strategyMode = StrategyMode.OFFICE_DAILY
+        showIntradayEngineSettings = false
+        saved = true
+        Toast.makeText(context, "Konfigurasi Engine Intraday disimpan dan diaktifkan.", Toast.LENGTH_SHORT).show()
+    }
+
+    BackHandler(enabled = showScalpingEngineSettings || showIntradayEngineSettings || activeCategory != null) {
         if (showScalpingEngineSettings) {
             showScalpingEngineSettings = false
+        } else if (showIntradayEngineSettings) {
+            showIntradayEngineSettings = false
         } else {
             activeCategory = null
         }
@@ -172,6 +191,8 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                     IconButton(onClick = {
                         if (showScalpingEngineSettings) {
                             showScalpingEngineSettings = false
+                        } else if (showIntradayEngineSettings) {
+                            showIntradayEngineSettings = false
                         } else if (activeCategory != null) {
                             activeCategory = null
                         } else {
@@ -512,10 +533,21 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                                 draftScalpingPreset = activeScalpingPreset
                                 draftPaperAuto = viewModel.paperAutoTradeConfig.value
                                 showScalpingEngineSettings = true
+                            } else if (mode == StrategyMode.OFFICE_DAILY) {
+                                // Mode INTRADAY punya config sendiri; jangan aktifkan sebelum
+                                // pengguna menekan "Simpan & Aktifkan" (pola sama scalping).
+                                draftIntradayConfig = activeIntradayConfig
+                                draftIntradayPreset = activeIntradayPreset
+                                showIntradayEngineSettings = true
                             } else {
                                 strategyMode = mode
                                 saved = false
                             }
+                        },
+                        onOpenIntradaySettings = {
+                            draftIntradayConfig = activeIntradayConfig
+                            draftIntradayPreset = activeIntradayPreset
+                            showIntradayEngineSettings = true
                         },
                         selectedSource = selectedSource,
                         onSourceChange = { selectedSource = it; saved = false },
@@ -756,6 +788,158 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
         }
     }
 
+    // DIALOG: slider mode INTRADAY (terpisah dari dialog scalping — config sendiri).
+    if (showIntradayEngineSettings) {
+        Dialog(
+            onDismissRequest = { showIntradayEngineSettings = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                color = TvBackground
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(TvBackground)
+                ) {
+                    Surface(
+                        color = TvSurface,
+                        shadowElevation = 2.dp,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 10.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                IconButton(onClick = { showIntradayEngineSettings = false }) {
+                                    Icon(
+                                        Icons.AutoMirrored.Filled.ArrowBack,
+                                        contentDescription = "Kembali",
+                                        tint = TvTextPrimary
+                                    )
+                                }
+                                Column {
+                                    Text(
+                                        "ENGINE INTRADAY",
+                                        color = TvTextPrimary,
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        "Atur parameter sebelum mengaktifkan mode",
+                                        color = TvTextSecondary,
+                                        fontSize = 10.sp
+                                    )
+                                }
+                            }
+                            Button(
+                                onClick = { saveIntradayEngineSettings() },
+                                colors = ButtonDefaults.buttonColors(containerColor = TvGreen),
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.PlayArrow,
+                                    contentDescription = null,
+                                    tint = Color.Black,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text(
+                                    "Simpan & Aktifkan",
+                                    color = Color.Black,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState())
+                            .padding(horizontal = 14.dp, vertical = 12.dp)
+                    ) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(containerColor = TvSurfaceVariant),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder)
+                        ) {
+                            Column(Modifier.padding(12.dp)) {
+                                Text(
+                                    "KONFIGURASI YANG AKAN DI-INJECT",
+                                    color = TvGreen,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    "Nilai slider di bawah masih berupa draft. Engine Intraday baru " +
+                                        "menerima nilai ini setelah tombol Simpan & Aktifkan ditekan.",
+                                    color = TvTextSecondary,
+                                    fontSize = 11.sp,
+                                    lineHeight = 15.sp
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    "SL ${fmt1(draftIntradayConfig.minSlPct)}–${fmt1(draftIntradayConfig.maxSlPct)}% · " +
+                                        "TP1 cap ${fmt1(draftIntradayConfig.maxTp1Pct)}% · " +
+                                        "Net R:R min ${String.format(java.util.Locale.US, "%.2f", draftIntradayConfig.minNetRrTp1)}x",
+                                    color = TvTextPrimary,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(10.dp))
+                        IntradaySensitivitySettings(
+                            config = draftIntradayConfig,
+                            activePreset = draftIntradayPreset,
+                            onConfigChange = { newConfig, preset ->
+                                draftIntradayConfig = newConfig
+                                draftIntradayPreset = preset
+                            },
+                            onPresetChange = { preset ->
+                                draftIntradayPreset = preset.name
+                                draftIntradayConfig = when (preset) {
+                                    IntradaySensitivityPreset.STANDARD ->
+                                        IntradayRuntimeConfig.DEFAULT
+                                    IntradaySensitivityPreset.STRICT ->
+                                        IntradayRuntimeConfig.STRICT
+                                    IntradaySensitivityPreset.LOOSE ->
+                                        IntradayRuntimeConfig.LOOSE
+                                    IntradaySensitivityPreset.CUSTOM -> draftIntradayConfig
+                                }
+                            }
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        OutlinedButton(
+                            onClick = { showIntradayEngineSettings = false },
+                            modifier = Modifier.fillMaxWidth().height(44.dp),
+                            shape = RoundedCornerShape(10.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, TvBorder)
+                        ) {
+                            Text(
+                                "Batal — Kembali tanpa mengaktifkan",
+                                color = TvTextSecondary,
+                                fontSize = 12.sp
+                            )
+                        }
+                        Spacer(Modifier.height(16.dp))
+                    }
+                }
+            }
+        }
+    }
+
     // DIALOGS
     if (showSetupRealApiDialog) {
         SetupRealApiDialog(
@@ -805,3 +989,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
         )
     }
 }
+
+/** Format satu desimal untuk ringkasan config di layar setelan (locale tetap, titik desimal). */
+private fun fmt1(value: Double): String =
+    String.format(java.util.Locale.US, "%.1f", value)
