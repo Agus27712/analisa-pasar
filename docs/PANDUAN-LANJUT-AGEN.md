@@ -82,11 +82,10 @@
 
 | | |
 |---|---|
-| Branch kerja | **`patch`** (owner me-review di sini dulu; `main` hanya menerima merge) |
-| HEAD `patch` | **commit batch exit/persentil di atas P0**. Ukur: `git rev-parse --short HEAD` dan `git log -1` |
-| HEAD `origin/main` | `5d8f7bc` (merge **PR #63** dari `patch`); sudah memuat `patch` sampai `2dd69ad` |
+| Branch kerja | **`main`** (push langsung ke `main` diizinkan atas instruksi owner; `patch` hanya histori) |
+| HEAD `main` | Ukur sendiri: `git log --oneline -1` |
 | Titik masuk kode | package `agu.analys`, modul tunggal `:app` |
-| Unit test | **797 uji · 796 lulus · 0 gagal · 1 dilewati** (104 kelas), diukur 2026-10-22 setelah P0. Batch 2026-10-24 hanya menambah tool/uji Python; ukur ulang sebelum memakai angka ini. |
+| Unit test | **889 uji · 0 gagal · 5 dilewati** (124 kelas), diukur lewat GitHub Actions `Unit Tests (Manual)` run `41215354534` pada `main` @ `3303d6b`, 2026-10-31. Angka lama (797 uji / 104 kelas, 2026-10-22) sudah usang. |
 | APK debug | 26.821.815 byte (26,8 MB desimal / 25,6 MiB) — terakhir diukur 2026-10-20 |
 | Uji parity replay | **30 test OK** (26 lama + 4 uji sweep), diukur 2026-10-24 |
 | Eksperimen exit | **Sweep 5 mode 2026-10-24: 0 dari 90 sel positif** (`docs/exp/exp_exit_mode_sweep_ADA-DOGE-XRP.md`); kontrol classic 90m identik CLI 620/14,84%/−0,1569. Mode terbaik `early` 420m XRP tetap −0,666%/trade. Sebelumnya EARLY 2026-10-22: avg R −0,1522 vs −0,1569 (di dalam noise). |

@@ -5266,6 +5266,17 @@ membuat kedua berkas uji GAGAL.
 keluar `docs/bugs/` karena seluruh H1–H4 tutup). Ringkasan juga masuk ke §4 dan §7
 `docs/laporan_temuan_bugs_notifikasi.md`.
 
-**Verifikasi.** `./gradlew :app:testDebugUnitTest` **belum dijalankan** di lingkungan kerja agen
-(Alpine/Termux: plugin portal Maven mengembalikan 403, tidak ada cache dependensi). Uji dijalankan
-lewat GitHub Actions `all-unit-tests`; jangan mengklaim hijau sebelum hasilnya dibaca.
+**Verifikasi (terukur, bukan ingatan).** `./gradlew` tidak bisa dijalankan di lingkungan kerja agen
+(Alpine/Termux: plugin portal Maven 403, tanpa cache dependensi), jadi seluruh uji dijalankan lewat
+GitHub Actions `Unit Tests (Manual)`:
+
+- **Run `41215354534`, `main` @ `3303d6b`, scope `all-unit-tests`: 889 uji · 0 gagal · 5 dilewati ·
+  124 kelas.** `NotificationNetPnlTest` 5/5, `SpotMonitorTextTest` 5/5 lulus. Baseline 2026-10-22
+  yang tercatat 797 uji sudah usang; angka ini yang berlaku sampai ada commit uji baru.
+- **Kontrol negatif dieksekusi** di branch sementara `kontrol-negatif-h1`: rumus bruto dikembalikan
+  di `buildTrailingHitMessage` dan `isProfit = currentPrice > entryPrice` dikembalikan di
+  `SpotMonitorHolding` → **6 uji GAGAL** (3 + 3). Branch dihapus setelah hasil dibaca.
+- Run pertama (`41215069137`) gagal **kompilasi** karena dua cacat di berkas uji baru: nama uji
+  memuat titik dari `FeeSchedule.netProfitPctFor` (Kotlin menolak "Name contains illegal
+  characters") dan `trailingHitNetProfitPct` dipanggil dengan argumen bernama `entry` padahal
+  parameternya `entryPrice`. Diperbaiki di `3303d6b`.

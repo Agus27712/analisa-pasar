@@ -129,14 +129,22 @@ mengikuti preseden `buildCandidateSignalMessage`. Uji baru: `NotificationNetPnlT
 | `util/NotificationNetPnlTest.kt` | pesan trailing hit/peak memuat persen **net** (bukan bruto), pesan negatif di bawah impas, dan larangan rumus bruto atau parameter `profitPct` kembali ke jalur notifikasi |
 | `util/SpotMonitorTextTest.kt` | ambang "SIAP JUAL" = untung net, kartu/judul/teks ringkas memakai persen net, aset tanpa harga masuk tidak diklaim untung, badan memisahkan real & simulasi |
 
-Kontrol negatif (dijalankan di CI bila perbaikan dimatikan):
-kembalikan `((limitSellPrice - entryPrice) / entryPrice)` ke `buildTrailingHitMessage`, atau
-`isProfit = currentPrice > entryPrice` ke `SpotMonitorHolding` → `NotificationNetPnlTest` dan
-`SpotMonitorTextTest` **GAGAL**.
+Kontrol negatif **dieksekusi** (dijalankan di CI, bukan hanya dicatat). Branch sementara
+`kontrol-negatif-h1` mengembalikan rumus bruto
+`(limitSellPrice − entryPrice) / entryPrice * 100.0` di `buildTrailingHitMessage` dan
+`isProfit = currentPrice > entryPrice` di `SpotMonitorHolding`, lalu workflow
+`Unit Tests (Manual)` dijalankan dengan filter kedua kelas itu. Hasil: **6 uji GAGAL** —
+`NotificationNetPnlTest` 3 uji ("trailing hit menampilkan net, bukan gross", "di bawah breakeven
+menampilkan net negatif", "jalur notifikasi dilarang menghitung persen profit secara gross") dan
+`SpotMonitorTextTest` 3 uji ("aset yang masih rugi net tidak dilabeli siap jual", "judul dan teks
+ringkas menghitung untung secara net", "badan notifikasi memisahkan portofolio real dan simulasi").
+Branch itu **dihapus** setelah hasil dibaca; `main` tidak pernah memuatnya.
 
-**Verifikasi:** uji dijalankan lewat GitHub Actions (`all-unit-tests`). Lingkungan kerja agen
+**Verifikasi terukur.** Workflow `Unit Tests (Manual)` scope `all-unit-tests` pada `main` @
+`3303d6b`, run `41215354534`: **889 uji · 0 gagal · 5 dilewati · 124 kelas**;
+`NotificationNetPnlTest` 5/5 dan `SpotMonitorTextTest` 5/5 lulus. Lingkungan kerja agen
 (Alpine/Termux) tidak dapat mengunduh dependensi Gradle (plugin portal 403), jadi `./gradlew` tidak
-dijalankan di sana — bukan alasan untuk melewatkan uji.
+dijalankan di sana — semua angka di atas berasal dari runner CI, bukan dari ingatan.
 
 ## 5. Riwayat
 
@@ -148,3 +156,5 @@ dijalankan di sana — bukan alasan untuk melewatkan uji.
 | 2026-10-31 | H3 ditutup: `util/SpotMonitorText.kt` baru, `TradingForegroundService` hanya menyiapkan data; ambang "SIAP JUAL" = untung net |
 | 2026-10-31 | H4 ditutup: `NotificationNetPnlTest` + `SpotMonitorTextTest` (10 uji) menahan basis net dan melarang rumus bruto kembali |
 | 2026-10-31 | Seluruh temuan tutup ⇒ berkas dipindah ke `docs/laporan_temuan_bugs_notifikasi_pnl.md` |
+| 2026-10-31 | CI `Unit Tests (Manual)` scope `all-unit-tests` hijau pada `main` @ `3303d6b` (run `41215354534`): 889 uji, 0 gagal, 5 dilewati. Kompilasi pertama gagal karena dua cacat di berkas uji baru (nama uji memuat titik, argumen bernama `entry` padahal `entryPrice`) — diperbaiki sebelum run ini |
+| 2026-10-31 | Kontrol negatif dieksekusi di CI: rumus bruto dikembalikan di `buildTrailingHitMessage` dan `SpotMonitorHolding` → 6 uji gagal. Branch `kontrol-negatif-h1` dihapus setelah hasil dibaca |
