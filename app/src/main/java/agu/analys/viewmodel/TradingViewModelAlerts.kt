@@ -214,10 +214,17 @@ fun TradingViewModel.checkTrailingForMode(
                 updateSimTrailingOrder(symbol, updatedPos, newSlPrice, updatedPos.quantity, exchange = exchange)
             }
 
-            val currentProfitPct = if (updatedPos.entryPrice > 0.0) ((updatedPos.peakPrice - updatedPos.entryPrice) / updatedPos.entryPrice) * 100.0 else 0.0
+            // H2 — persen yang dicatat/ditampilkan wajib net (sama dengan halaman detail),
+            // bukan selisih harga bruto `(peak − entry) / entry`.
+            val peakNetProfitPct = agu.analys.config.FeeSchedule.netProfitPctFor(
+                entry = updatedPos.entryPrice,
+                price = updatedPos.peakPrice,
+                exchange = marketKey.exchange,
+                quoteAsset = quoteAsset
+            )
             agu.analys.util.AppLogManager.trailing(
                 "TrailingAdjust",
-                "🛡️ [${marketKey.formattedPair()}] Peak baru: ${PriceFormatter.formatPrice(updatedPos.peakPrice, quoteAsset = quoteAsset)} (naik dari ${PriceFormatter.formatPrice(oldPeak, quoteAsset = quoteAsset)}). Stop limit dinaikkan ke ${PriceFormatter.formatPrice(newSlPrice, quoteAsset = quoteAsset)} (-${effectivePct}%, Profit Peak: +${String.format(java.util.Locale.US, "%.2f", currentProfitPct)}%)"
+                "🛡️ [${marketKey.formattedPair()}] Peak baru: ${PriceFormatter.formatPrice(updatedPos.peakPrice, quoteAsset = quoteAsset)} (naik dari ${PriceFormatter.formatPrice(oldPeak, quoteAsset = quoteAsset)}). Stop limit dinaikkan ke ${PriceFormatter.formatPrice(newSlPrice, quoteAsset = quoteAsset)} (-${effectivePct}%, Profit Puncak Net: ${PriceFormatter.formatPercentage(peakNetProfitPct)})"
             )
 
             // N14 — satu peristiwa, satu pengiriman: pembaruan order di atas tidak lagi mengirim
@@ -233,7 +240,6 @@ fun TradingViewModel.checkTrailingForMode(
                     newPeak = updatedPos.peakPrice,
                     stopLimitPrice = newSlPrice,
                     entryPrice = updatedPos.entryPrice,
-                    profitPct = currentProfitPct,
                     isReal = isReal
                 )
             }

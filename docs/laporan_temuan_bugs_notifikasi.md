@@ -8,13 +8,14 @@ temuan yang **masih hidup**; berkas yang sudah beres dipindahkan keluar dengan n
 laporan per batch.
 **Isi dokumen:** laporan penutupan. Butir yang sudah ditutup dipangkas dari badan dokumen dan
 diringkas di §4; ringkasan per batch ada di §7.
-**Verifikasi terakhir:** branch `patch` @ `8316543` (audit awal @ `547048d`). Nomor baris di §1
-adalah nomor saat audit awal — dipakai sebagai peta, bukan rujukan terkini.
+**Verifikasi terakhir:** branch `main` @ 2026-10-31 (`grep`/`read` ke kode, uji lewat CI GitHub).
+Nomor baris di §1 adalah nomor saat audit awal — dipakai sebagai peta, bukan rujukan terkini.
 **Cakupan:** seluruh pengirim notifikasi + seluruh alur `confidence` (produsen → notifikasi → jurnal → UI)
 
 | Status | Temuan | Ringkas |
 |---|---|---|
 | ✅ **Ditutup seluruhnya** | **N1–N17** | Tidak ada butir hidup. Lihat §4 untuk commit + laporan tiap temuan |
+| ✅ **Ditutup seluruhnya** | **H1–H4** (audit lanjutan 2026-10-31) | Angka P&L notifikasi kini net. Laporan: `docs/laporan_temuan_bugs_notifikasi_pnl.md` |
 
 > **Tidak ada pekerjaan tersisa di berkas ini.** Kalau butuh pekerjaan baru di area notifikasi/skor,
 > lakukan **audit baru** dan tulis temuannya ke berkas temuan baru di `docs/bugs/`
@@ -83,6 +84,24 @@ ditampilkan** (cap `ScalpingMtfEvaluator` sengaja tidak diubah).
 > ✅ **N10 (= J10) kini tuntas penuh** — jalur beli paper manual yang masih membaca SL/TP mentah
 > ditutup batch 6a (`docs/LAPORAN-batch6-j10-2026-10-17.md`).
 
+### Audit lanjutan 2026-10-31 — angka P&L net di notifikasi
+
+Audit baru (bukan lanjutan N1–N17, nomor lama tidak dihidupkan) dari keluhan owner: angka di
+notifikasi tidak sama dengan halaman detail. Akar: persen profit di tiga permukaan notifikasi
+dihitung **bruto** `(hargaKeluar − entry) / entry`, sementara halaman detail memakai
+`FeeSchedule.netProfitPctFor` (fee beli + fee jual + slippage dua sisi).
+
+| Temuan | Commit | Laporan |
+|---|---|---|
+| H1 — "Trailing Stop Terpicu" menulis profit bruto | `main` 2026-10-31 | `docs/laporan_temuan_bugs_notifikasi_pnl.md` |
+| H2 — "Trailing Peak Naik" menerima `profitPct` bruto dari pemanggil (parameter dihapus) | `main` 2026-10-31 | `docs/laporan_temuan_bugs_notifikasi_pnl.md` |
+| H3 — notifikasi persisten Spot Monitor: persen bruto + "SIAP JUAL" sebelum impas net | `main` 2026-10-31 | `docs/laporan_temuan_bugs_notifikasi_pnl.md` |
+| H4 — teks notifikasi tidak bisa diuji (dirakit di dalam fungsi ber-`Context`) | `main` 2026-10-31 | `docs/laporan_temuan_bugs_notifikasi_pnl.md` |
+
+Bukti angka yang membuat H1–H3 terlihat: entry Rp 1.000.000 → harga Rp 1.002.000 adalah
+**+0,20% bruto** tetapi **−0,61% net**; entry 1.000 → 1.005 adalah +0,50% bruto tetapi −0,32% net.
+Jadi notifikasi lama mengklaim untung untuk posisi yang masih rugi setelah fee.
+
 ## 5. Yang sudah benar (jangan diutak-atik)
 
 - `hasTriggeringTransition` = `(isNewDetected || isNewReady) && action == BUY` → sinyal HOLD
@@ -136,3 +155,4 @@ tuntas (batch 6o, 2026-10-18): **tidak ada lagi temuan audit yang hidup di repo 
 | 2026-10-17 | Batch 6f, 6g, 6h menutup N8, N12–N16 |
 | 2026-10-17 | Batch 6i menutup N6, N17, N11 — **tidak ada temuan hidup tersisa** |
 | 2026-10-17 | Berkas dipindahkan keluar `docs/bugs/` → `docs/laporan_temuan_bugs_notifikasi.md`. Mulai sekarang berkas inilah laporannya; laporan per batch tidak dibuat lagi |
+| 2026-10-31 | Audit lanjutan: **H1–H4** (angka P&L net di notifikasi) dibuka dan ditutup di `main`. Laporan: `docs/laporan_temuan_bugs_notifikasi_pnl.md`. N1–N17 tidak berubah |

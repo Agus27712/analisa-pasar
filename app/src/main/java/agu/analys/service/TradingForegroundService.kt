@@ -316,8 +316,22 @@ class TradingForegroundService : Service() {
         val currentPrice: Double,
         val isReal: Boolean
     ) {
-        val isProfit: Boolean get() = entryPrice > 0.0 && currentPrice > entryPrice
-        val diffPct: Double get() = if (entryPrice > 0.0) ((currentPrice - entryPrice) / entryPrice) * 100.0 else 0.0
+        /**
+         * H3 — "siap jual" dan persen untung memakai basis **net** setelah fee + slippage
+         * ([agu.analys.config.FeeSchedule.netProfitPctFor]), sama dengan
+         * `ui/components/dashboard/ActiveHoldingSection` dan halaman detail. Sebelum
+         * 2026-10-31 keduanya bruto (`(currentPrice − entryPrice) / entryPrice`), jadi
+         * notifikasi persisten dan dashboard bisa memberi status berbeda untuk posisi yang sama.
+         */
+        fun toMonitorHolding(quantityLabel: String): agu.analys.util.SpotMonitorHolding =
+            agu.analys.util.SpotMonitorHolding(
+                baseAsset = baseAsset,
+                exchange = exchange,
+                quoteAsset = quoteAsset,
+                currentPrice = currentPrice,
+                entryPrice = entryPrice,
+                quantityLabel = quantityLabel
+            )
     }
 
     private fun formatCoinQuantity(quantity: Double, baseAsset: String): String {
@@ -328,78 +342,27 @@ class TradingForegroundService : Service() {
         return agu.analys.util.PriceFormatter.formatCoinQuantity(quantity, baseAsset, decimals)
     }
 
-    private fun formatHoldingCard(item: HoldingItem): String {
-        val currPriceStr = PriceFormatter.formatPrice(item.currentPrice, showSymbol = true, quoteAsset = item.quoteAsset)
-        val qtyStr = formatCoinQuantity(item.quantity, item.baseAsset)
-        val exBadge = "[${item.exchange}]"
-
-        return if (item.entryPrice > 0.0) {
-            val entryPriceStr = PriceFormatter.formatPrice(item.entryPrice, showSymbol = true, quoteAsset = item.quoteAsset)
-            val pctFormatted = PriceFormatter.formatPercentage(item.diffPct, includePlusSign = true)
-            val statusTag = if (item.isProfit) "▲ $pctFormatted  [SIAP JUAL]" else "▼ $pctFormatted  [HOLD]"
-            "• ${item.baseAsset} $exBadge $currPriceStr  $statusTag\n  Beli: $entryPriceStr • Saldo: $qtyStr"
-        } else {
-            "• ${item.baseAsset} $exBadge $currPriceStr  [HOLD]\n  Saldo: $qtyStr"
-        }
-    }
+    /** Urutan notifikasi: yang untung net dulu, lalu untung net terbesar, lalu nama aset. */
+    private fun monitorHoldingsOf(items: List<HoldingItem>): List<agu.analys.util.SpotMonitorHolding> =
+        items.map { it.toMonitorHolding(formatCoinQuantity(it.quantity, it.baseAsset)) }
+            .sortedWith(
+                compareByDescending<agu.analys.util.SpotMonitorHolding> { it.isProfit }
+                    .thenByDescending { it.netProfitPct }
+                    .thenBy { it.baseAsset }
+            )
 
     private fun updateNotification() {
         lastUpdateTime = System.currentTimeMillis()
         val prefs = appPrefs
         val currentDataSource = prefs.marketDataSource
-        val (realItems, simItems) = getHoldingsData()
-        val totalProfitCount = realItems.count { it.isProfit } + simItems.count { it.isProfit }
-        val totalHoldings = realItems.size + simItems.size
+        val (realHoldings, simHoldings) = getHoldingsData()
+        val realItems = monitorHoldingsOf(realHoldings)
+        val simItems = monitorHoldingsOf(simHoldings)
+        val allItems = realItems + simItems
 
-        val title = when {
-            totalProfitCount > 0 -> "⚡ $totalProfitCount Aset Siap Profit • Spot Monitor"
-            totalHoldings > 0 -> "📈 Spot Monitor • $totalHoldings Aset Aktif"
-            else -> "📈 Spot Monitor • Menunggu Posisi"
-        }
-
-        val collapsedText = when {
-            totalProfitCount > 0 -> {
-                val profitList = (realItems + simItems).filter { it.isProfit }
-                "Siap Jual: " + profitList.joinToString(", ") {
-                    "${it.baseAsset} (${PriceFormatter.formatPercentage(it.diffPct, includePlusSign = true)})"
-                }
-            }
-            totalHoldings > 0 -> {
-                val allList = realItems + simItems
-                "Pantau: " + allList.take(3).joinToString(", ") {
-                    "${it.baseAsset} ${PriceFormatter.formatPrice(it.currentPrice, showSymbol = false, quoteAsset = it.quoteAsset)}"
-                }
-            }
-            else -> "Belum ada aset spot yang dipantau"
-        }
-
-        val bigText = buildString {
-            if (realItems.isEmpty() && simItems.isEmpty()) {
-                append("Belum ada koin yang dimiliki saat ini.\nBeli atau tambahkan posisi untuk mulai memantau.")
-            } else {
-                if (realItems.isNotEmpty()) {
-                    val realProfit = realItems.count { it.isProfit }
-                    append("💼 PORTOFOLIO REAL")
-                    if (realProfit > 0) append(" ($realProfit Siap Jual)")
-                    append(":\n")
-                    realItems.forEachIndexed { index, item ->
-                        append(formatHoldingCard(item))
-                        if (index < realItems.size - 1) append("\n\n")
-                    }
-                }
-                if (simItems.isNotEmpty()) {
-                    if (realItems.isNotEmpty()) append("\n\n")
-                    val simProfit = simItems.count { it.isProfit }
-                    append("🧪 PORTOFOLIO SIMULASI")
-                    if (simProfit > 0) append(" ($simProfit Siap Jual)")
-                    append(":\n")
-                    simItems.forEachIndexed { index, item ->
-                        append(formatHoldingCard(item))
-                        if (index < simItems.size - 1) append("\n\n")
-                    }
-                }
-            }
-        }.trim()
+        val title = agu.analys.util.buildSpotMonitorTitle(allItems)
+        val collapsedText = agu.analys.util.buildSpotMonitorCollapsedText(allItems)
+        val bigText = agu.analys.util.buildSpotMonitorBody(realItems, simItems)
 
         val notificationIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -527,12 +490,6 @@ class TradingForegroundService : Service() {
             )
         }
 
-        val sortedReal = realItems.sortedWith(
-            compareByDescending<HoldingItem> { it.isProfit }
-                .thenByDescending { it.diffPct }
-                .thenBy { it.baseAsset }
-        )
-
         // ===== SIMULASI =====
         // Wallet simulasi dipegang per bursa dan menyimpan kuotasi tiap koin (coinQuoteAssets)
         val wallet = simulationStore.getWallet(ex)
@@ -560,13 +517,7 @@ class TradingForegroundService : Service() {
             )
         }
 
-        val sortedSim = simItems.sortedWith(
-            compareByDescending<HoldingItem> { it.isProfit }
-                .thenByDescending { it.diffPct }
-                .thenBy { it.baseAsset }
-        )
-
-        return Pair(sortedReal, sortedSim)
+        return Pair(realItems, simItems)
     }
 
     companion object {

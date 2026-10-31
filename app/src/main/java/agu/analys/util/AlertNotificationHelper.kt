@@ -10,6 +10,7 @@ import android.media.RingtoneManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import agu.analys.config.FeeSchedule
 import agu.analys.MainActivity
 import agu.analys.config.StrategyMode
 import agu.analys.model.AISignalState
@@ -392,21 +393,12 @@ object AlertNotificationHelper {
         val pairFormatted = marketKey.formattedPair()
         val quoteAsset = marketKey.quote
         val modeTag = if (isReal) "REAL" else "SIMULASI"
-
-        val profitPct = if (entryPrice > 0.0) ((limitSellPrice - entryPrice) / entryPrice) * 100.0 else 0.0
-        val profitStr = String.format(java.util.Locale.US, "%.2f", profitPct)
+        val netProfitPct = trailingHitNetProfitPct(marketKey, entryPrice, limitSellPrice)
 
         val title = "⚡ Trailing Stop Terpicu [$modeTag] • $pairFormatted"
         val limitFormatted = PriceFormatter.formatPrice(limitSellPrice, showSymbol = true, quoteAsset = quoteAsset)
-        val peakFormatted = PriceFormatter.formatPrice(peakPrice, showSymbol = true, quoteAsset = quoteAsset)
-        val currFormatted = PriceFormatter.formatPrice(currentPrice, showSymbol = true, quoteAsset = quoteAsset)
 
-        val message = "Batas pengaman trailing tercapai [${marketKey.displayExchange}]:\n" +
-                "• Harga Eksekusi: $limitFormatted\n" +
-                "• Harga Puncak: $peakFormatted\n" +
-                "• Harga Terkini: $currFormatted\n" +
-                "• Estimasi Profit: +$profitStr%\n" +
-                "Auto-sell otomatis diluncurkan untuk mengamankan profit."
+        val message = buildTrailingHitMessage(marketKey, entryPrice, peakPrice, currentPrice, limitSellPrice)
 
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -424,7 +416,7 @@ object AlertNotificationHelper {
         val notification = NotificationCompat.Builder(context, CHANNEL_TRAILING_ID)
             .setSmallIcon(agu.analys.R.drawable.ic_stat_trading)
             .setContentTitle(title)
-            .setContentText("Trailing stop tersentuh di $limitFormatted (+$profitStr%)")
+            .setContentText("Trailing stop tersentuh di $limitFormatted (${PriceFormatter.formatPercentage(netProfitPct)} net)")
             .setStyle(NotificationCompat.BigTextStyle().bigText(message))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
@@ -443,13 +435,12 @@ object AlertNotificationHelper {
         newPeak: Double,
         stopLimitPrice: Double,
         entryPrice: Double,
-        profitPct: Double,
         isReal: Boolean,
         exchange: String = "TOKOCRYPTO",
         quote: String? = null
     ) {
         val marketKey = MarketKey.resolve(symbol, exchange, quote)
-        sendTrailingPeakUpdateNotification(context, marketKey, newPeak, stopLimitPrice, entryPrice, profitPct, isReal)
+        sendTrailingPeakUpdateNotification(context, marketKey, newPeak, stopLimitPrice, entryPrice, isReal)
     }
 
     fun sendTrailingPeakUpdateNotification(
@@ -458,7 +449,6 @@ object AlertNotificationHelper {
         newPeak: Double,
         stopLimitPrice: Double,
         entryPrice: Double,
-        profitPct: Double,
         isReal: Boolean
     ) {
         if (!canNotify(context, NotificationCategory.TRAILING_STOP)) return
@@ -467,13 +457,19 @@ object AlertNotificationHelper {
         val quoteAsset = marketKey.quote
         val modeTag = if (isReal) "REAL" else "SIMULASI"
 
-        val profitStr = String.format(java.util.Locale.US, "%.2f", profitPct)
-        val peakFormatted = PriceFormatter.formatPrice(newPeak, showSymbol = true, quoteAsset = quoteAsset)
+        // H1/H2 — persen profit dihitung di sini dari basis net, bukan diterima dari pemanggil.
+        // Parameternya dulu `profitPct` berisi selisih harga bruto, sehingga notifikasi menulis
+        // angka yang lebih besar daripada halaman detail untuk posisi yang sama.
+        val netProfitPct = FeeSchedule.netProfitPctFor(
+            entry = entryPrice,
+            price = newPeak,
+            exchange = marketKey.exchange,
+            quoteAsset = quoteAsset
+        )
         val stopFormatted = PriceFormatter.formatPrice(stopLimitPrice, showSymbol = true, quoteAsset = quoteAsset)
 
         val title = "📈 Trailing Peak Naik [$modeTag] • $pairFormatted"
-        val message = "Puncak harga naik ke $peakFormatted [${marketKey.displayExchange}] (Profit Puncak: +$profitStr%).\n" +
-                "Batas stop limit otomatis dinaikkan ke $stopFormatted untuk mengunci profit."
+        val message = buildTrailingPeakUpdateMessage(marketKey, newPeak, stopLimitPrice, entryPrice)
 
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -491,7 +487,7 @@ object AlertNotificationHelper {
         val notification = NotificationCompat.Builder(context, CHANNEL_TRAILING_ID)
             .setSmallIcon(agu.analys.R.drawable.ic_stat_trading)
             .setContentTitle(title)
-            .setContentText("Stop limit dinaikkan ke $stopFormatted (+$profitStr%)")
+            .setContentText("Stop limit dinaikkan ke $stopFormatted (${PriceFormatter.formatPercentage(netProfitPct)} net)")
             .setStyle(NotificationCompat.BigTextStyle().bigText(message))
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setAutoCancel(true)
@@ -748,4 +744,72 @@ internal fun buildCandidateSignalMessage(marketKey: MarketKey, signal: AISignalS
         "• Stop Loss: $slFormatted\n" +
         "• Skor Keyakinan: ${signal.confidence}%\n" +
         CANDIDATE_DISCLAIMER
+}
+/**
+ * Persen profit **net** untuk notifikasi trailing, memakai bursa + kuotasi dari [marketKey].
+ *
+ * H1/H2 — notifikasi dulu menghitung `(limitSellPrice − entryPrice) / entryPrice`, yaitu selisih
+ * harga **bruto**. Halaman detail memakai `FeeSchedule.netProfitPctFor` (`SellEstimate.netProfitPct`,
+ * `ActiveHoldingSection`), jadi untuk posisi yang sama notifikasi menampilkan angka lebih besar
+ * (entry 1.000.000 → 1.050.000: bruto +5,00%, net +4,15%). Semua persen profit di permukaan
+ * notifikasi wajib lewat sini atau `FeeSchedule` langsung, jangan dihitung ulang di call site.
+ */
+internal fun trailingHitNetProfitPct(marketKey: MarketKey, entryPrice: Double, limitSellPrice: Double): Double =
+    FeeSchedule.netProfitPctFor(
+        entry = entryPrice,
+        price = limitSellPrice,
+        exchange = marketKey.exchange,
+        quoteAsset = marketKey.quote
+    )
+
+/**
+ * Badan pesan "Trailing Stop Terpicu". Angka profit di sini **net** (lihat
+ * [trailingHitNetProfitPct]); labelnya menyebut "net" supaya tidak dibandingkan dengan persen
+ * pergerakan harga mentah.
+ */
+internal fun buildTrailingHitMessage(
+    marketKey: MarketKey,
+    entryPrice: Double,
+    peakPrice: Double,
+    currentPrice: Double,
+    limitSellPrice: Double
+): String {
+    val quoteAsset = marketKey.quote
+    val limitFormatted = PriceFormatter.formatPrice(limitSellPrice, showSymbol = true, quoteAsset = quoteAsset)
+    val peakFormatted = PriceFormatter.formatPrice(peakPrice, showSymbol = true, quoteAsset = quoteAsset)
+    val currFormatted = PriceFormatter.formatPrice(currentPrice, showSymbol = true, quoteAsset = quoteAsset)
+    val netStr = PriceFormatter.formatPercentage(trailingHitNetProfitPct(marketKey, entryPrice, limitSellPrice))
+
+    return "Batas pengaman trailing tercapai [${marketKey.displayExchange}]:\n" +
+        "• Harga Eksekusi: $limitFormatted\n" +
+        "• Harga Puncak: $peakFormatted\n" +
+        "• Harga Terkini: $currFormatted\n" +
+        "• Estimasi Profit Net: $netStr\n" +
+        "Auto-sell otomatis diluncurkan untuk mengamankan profit."
+}
+
+/**
+ * Badan pesan "Trailing Peak Naik". Persen yang ditampilkan adalah profit **net** di harga puncak
+ * baru, bukan pergerakan harga mentah.
+ */
+internal fun buildTrailingPeakUpdateMessage(
+    marketKey: MarketKey,
+    newPeak: Double,
+    stopLimitPrice: Double,
+    entryPrice: Double
+): String {
+    val quoteAsset = marketKey.quote
+    val peakFormatted = PriceFormatter.formatPrice(newPeak, showSymbol = true, quoteAsset = quoteAsset)
+    val stopFormatted = PriceFormatter.formatPrice(stopLimitPrice, showSymbol = true, quoteAsset = quoteAsset)
+    val netStr = PriceFormatter.formatPercentage(
+        FeeSchedule.netProfitPctFor(
+            entry = entryPrice,
+            price = newPeak,
+            exchange = marketKey.exchange,
+            quoteAsset = quoteAsset
+        )
+    )
+
+    return "Puncak harga naik ke $peakFormatted [${marketKey.displayExchange}] (Profit Puncak Net: $netStr).\n" +
+        "Batas stop limit otomatis dinaikkan ke $stopFormatted untuk mengunci profit."
 }

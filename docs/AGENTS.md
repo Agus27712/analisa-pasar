@@ -43,10 +43,19 @@ Aturan main:
 - Daftar berkas di folder ini bisa bertambah untuk area lain (exit, P&L, UI, dsb.) dengan
   pola penamaan `temuan_bugs_<topik>.md`.
 
-Saat ini **tidak ada** berkas temuan hidup di folder ini — kosong sejak **2026-10-30**, ketika
-`temuan_bugs_intraday.md` dipindahkan setelah paket D–F ditutup (folder juga kosong pada
-2026-10-18..2026-10-26). Riwayat
+Saat ini **tidak ada** berkas temuan hidup di folder ini — kosong lagi sejak **2026-10-31**, ketika
+`temuan_bugs_notifikasi_pnl.md` dipindahkan setelah **H1–H4** (angka P&L notifikasi wajib net)
+ditutup di `main`. Folder juga kosong pada 2026-10-18..2026-10-26 dan 2026-10-30. Riwayat
 berkasnya:
+
+- **`temuan_bugs_notifikasi_pnl.md` → DIPINDAHKAN 2026-10-31** ke
+  **`docs/laporan_temuan_bugs_notifikasi_pnl.md`** (audit lanjutan, **seluruh H1–H4 tuntas**).
+  Ringkas: notifikasi "Trailing Stop Terpicu" (H1) dan "Trailing Peak Naik" (H2) menghitung persen
+  profit **bruto** `(hargaKeluar − entry) / entry`, sedangkan halaman detail memakai net
+  (`FeeSchedule.netProfitPctFor`). Parameter `profitPct` di `sendTrailingPeakUpdateNotification`
+  **dihapus** supaya pemanggil tidak bisa lagi mengirim angka bruto. Notifikasi persisten
+  "Spot Monitor" (H3) dipindah ke `util/SpotMonitorText.kt` dengan ambang "SIAP JUAL" = untung net.
+  **Jangan membuat ulang berkas di `docs/bugs/` dengan nama itu.**
 
 - **`temuan_bugs_paper_trade.md` → DIPINDAHKAN 2026-10-18** ke
   **`docs/laporan_temuan_bugs_paper_trade.md`** (batch 6o — **seluruh P1–P9 tuntas**).

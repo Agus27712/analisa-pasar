@@ -52,6 +52,19 @@ Yang **tidak boleh** dilakukan lagi tanpa instruksi eksplisit owner:
   **legacy Indodax-ish** (0,11 / 0,21 / 0,32 / 0,42), bukan biaya bursa aktif user. Pakai
   `AppPreferences.tradingFees` (atau `FeeSchedule.configFor`). Penjaga:
   `app/src/test/java/agu/analys/service/NotificationFeeSourceTest.kt`.
+- **Persen profit di notifikasi wajib NET, dan labelnya menyebut "net".** Pakai
+  `FeeSchedule.netProfitPctFor(entry, price, exchange, quoteAsset)` (atau pembungkusnya di
+  notifikasi); jangan pernah `(hargaKeluar − entry) / entry` di call site. Halaman detail,
+  dashboard, dan notifikasi harus menulis angka yang sama untuk posisi yang sama — sebelumnya
+  notifikasi memakai bruto sehingga entry Rp 1.000.000 → Rp 1.002.000 tampil "+0,20%"
+  (padahal net **−0,61%**) dan label "SIAP JUAL" menyala sebelum impas net. Jangan menerima
+  persen profit sebagai parameter dari pemanggil: hitung di dalam helper supaya tidak ada pemanggil
+  yang bisa lagi mengirim angka bruto (H1–H3, 2026-10-31). Penjaga:
+  `app/src/test/java/agu/analys/util/NotificationNetPnlTest.kt` dan
+  `app/src/test/java/agu/analys/util/SpotMonitorTextTest.kt`.
+  Pengecualian yang disengaja: `SpotPositionStore.resolveEffectiveTrailingPercent` dan
+  `SellTrailingSection.maxProfitPct` tetap bruto karena keduanya memilih tier trailing, bukan
+  mengklaim profit.
 - **Skor `confidence` berskala 0–100, bukan 0–1.** Jangan pernah mengalikannya dengan 100 saat
   ditampilkan. Penjaga: `app/src/test/java/agu/analys/util/CandidateSignalMessageTest.kt`.
 - **Ekstrak pembentuk teks/notifikasi jadi fungsi murni** supaya bisa diuji tanpa Android. Pesan

@@ -5217,3 +5217,55 @@ evaluator: dump terakhir 12 candle lalu → bawaan (12) tidak trauma, config 16 
   Android SDK (lingkungan HP owner), jadi `./gradlew :app:testDebugUnitTest` **belum dijalankan**
   untuk paket ini. Jalankan lewat GitHub Actions `all-unit-tests` atau mesin ber-JDK 17 sebelum
   mengklaim hijau.
+
+## 87. Angka P&L notifikasi memakai basis net — H1–H4 (2026-10-31)
+
+**Latar.** Keluhan owner: angka di notifikasi tidak sama dengan halaman detail. Setelah ditelusuri,
+akar masalahnya bukan pembulatan harga, melainkan **basis perhitungan**: halaman detail memakai
+`FeeSchedule.netProfitPctFor` (fee beli taker + fee jual taker + slippage dua sisi), sedangkan tiga
+permukaan notifikasi menghitung selisih harga **bruto** `(hargaKeluar − entry) / entry`.
+
+Bukti angka (Tokocrypto IDR: beli taker 0,2222%, jual taker 0,4322%, slippage 0,08%/sisi):
+
+| Entry | Harga acuan | Bruto (lama) | Net (detail) |
+|---|---|---|---|
+| Rp 1.000.000 | Rp 1.050.000 | +5,00% | +4,15% |
+| Rp 1.000.000 | Rp 1.002.000 | +0,20% | **−0,61%** |
+| 1.000 | 1.040 | +4,00% | +3,16% |
+| 1.000 | 1.005 | +0,50% | **−0,32%** |
+
+Dua baris bertanda berubah tanda: posisi yang **masih rugi setelah fee** tampil sebagai untung, dan
+label "SIAP JUAL" menyala sebelum impas net. Halaman detail sudah benar sejak audit P&L
+(`FeeSchedule` sebagai satu-satunya rumus); yang tertinggal adalah jalur notifikasi.
+
+**Temuan dan perbaikan.**
+
+| Kode | Gejala | Perbaikan |
+|---|---|---|
+| **H1** | `sendTrailingHitNotification` menulis `Estimasi Profit: +$profitStr%` dari rumus bruto | `trailingHitNetProfitPct()` + `buildTrailingHitMessage()`; label `Estimasi Profit Net: …` dan `(… net)` |
+| **H2** | `sendTrailingPeakUpdateNotification` menerima `profitPct` bruto dari pemanggil; log `TrailingAdjust` juga bruto | parameter `profitPct` **dihapus** dari kedua overload (pola N3); helper menghitung net sendiri; log menulis `Profit Puncak Net` |
+| **H3** | `TradingForegroundService.HoldingItem` punya `isProfit = currentPrice > entryPrice` dan `diffPct` bruto, sehingga Spot Monitor menandai "SIAP JUAL" sebelum impas net | teks dipindah ke `util/SpotMonitorText.kt` (`SpotMonitorHolding`, `buildSpotMonitorHoldingCard/Title/CollapsedText/Body`); `isProfit = netProfitPct >= 0.0`, sama dengan `ActiveHoldingSection` |
+| **H4** | teks notifikasi dirakit inline di fungsi ber-`Context` sehingga tidak bisa diuji | semua pembentuk pesan jadi fungsi murni; uji tanpa Robolectric |
+
+**Yang sengaja tidak diubah.** `sendEmergencyExitNotification` dan `sendTakeProfitNotification`
+sudah net. `SpotPositionStore.resolveEffectiveTrailingPercent` dan `SellTrailingSection.maxProfitPct`
+tetap bruto karena memilih **tier** trailing, bukan mengklaim profit. `PriceFormatter`,
+`SellSignalEvaluator`, `SellEstimateResolver`, dan `FeeSchedule` tidak disentuh. Harga yang dikirim
+ke bursa (`limitSellPrice`, `stopLimitPrice`) juga tidak berubah — yang diperbaiki hanya angka yang
+dibaca pengguna.
+
+**Penjaga.** `NotificationNetPnlTest` (5 uji: net = `FeeSchedule`, pesan trailing hit/peak memuat
+persen net dan bukan bruto, kasus negatif di bawah impas, larangan rumus bruto/parameter `profitPct`
+kembali ke jalur notifikasi) dan `SpotMonitorTextTest` (5 uji: ambang "SIAP JUAL" = untung net,
+kartu/judul/teks ringkas memakai persen net, aset tanpa harga masuk tidak diklaim untung, badan
+memisahkan real & simulasi). **Kontrol negatif:** mengembalikan `((limitSellPrice - entryPrice) /
+entryPrice)` ke pembentuk pesan, atau `isProfit = currentPrice > entryPrice` ke `SpotMonitorHolding`,
+membuat kedua berkas uji GAGAL.
+
+**Laporan penuh:** `docs/laporan_temuan_bugs_notifikasi_pnl.md` (berkas temuan sudah dipindahkan
+keluar `docs/bugs/` karena seluruh H1–H4 tutup). Ringkasan juga masuk ke §4 dan §7
+`docs/laporan_temuan_bugs_notifikasi.md`.
+
+**Verifikasi.** `./gradlew :app:testDebugUnitTest` **belum dijalankan** di lingkungan kerja agen
+(Alpine/Termux: plugin portal Maven mengembalikan 403, tidak ada cache dependensi). Uji dijalankan
+lewat GitHub Actions `all-unit-tests`; jangan mengklaim hijau sebelum hasilnya dibaca.
