@@ -38,8 +38,8 @@ class NotificationNetPnlTest {
     private val netDiHargaSama = -0.811946  // impas net = kerugian sebesar round-trip friksi
 
     @Test
-    fun `net profit pct sama dengan FeeSchedule.netProfitPctFor`() {
-        val hasil = trailingHitNetProfitPct(keyTokoIdr, entry = 1_000_000.0, limitSellPrice = 1_000_000.0)
+    fun `net profit pct sama dengan rumus FeeSchedule`() {
+        val hasil = trailingHitNetProfitPct(keyTokoIdr, entryPrice = 1_000_000.0, limitSellPrice = 1_000_000.0)
         assertEquals("impas net harus negatif setara round-trip friksi", netDiHargaSama, hasil, 1e-6)
     }
 
