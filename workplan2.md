@@ -5309,3 +5309,10 @@ sana.
 - `git ls-remote --heads origin` → tidak ada `refs/heads/master`.
 - `git branch -r` → tidak ada `origin/master`.
 - `python3 tools/check_md_text.py` → keluar kode 0.
+
+**Identitas commit.** Commit `docs: catat penghapusan branch yatim master ...` (`9c9662e`)
+tercatat sebagai `root <root@localhost.localdomain>` karena clone ini belum punya
+`user.name`/`user.email` dan git menurunkan identitas dari akun OS. Mulai commit berikutnya clone
+ini disetel `agus27712@omp <owner@omp.android>`. Commit `9c9662e` **tidak diubah** (tidak
+di-amend, tidak di-force-push): isinya benar, hanya atribusinya yang perlu diperbaiki ke depan.
+Aturannya dicatat di `AGENTS.md` § Git.

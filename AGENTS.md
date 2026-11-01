@@ -248,6 +248,11 @@ sebelumnya.
 - Jangan commit artefak data candle besar tanpa diminta.
 - Jangan commit `.env`, `*.keystore`, `*.jks`, atau token.
 - Pesan commit jelas, dalam Bahasa Indonesia.
+- **Identitas commit yang benar: `agus27712@omp <owner@omp.android>`.** Setel per clone
+  (`git config --local user.name "agus27712@omp"` dan
+  `git config --local user.email "owner@omp.android"`), karena mesin kerja ini tidak punya
+  `user.name`/`user.email` global dan tanpa setelan itu git memakai identitas akun OS
+  (`root <root@localhost.localdomain>`). Periksa dengan `git var GIT_AUTHOR_IDENT` sebelum commit.
 - Clone di sandbox ini kadang dibatasi `remote.origin.fetch=+refs/heads/main:...`. Bila
   `git branch -r` terlihat hanya berisi `main`, **perbaiki refspec dulu** sebelum menyimpulkan
   bahwa branch lain tidak ada.
