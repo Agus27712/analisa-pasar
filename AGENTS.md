@@ -240,6 +240,11 @@ sebelumnya.
 - Branch lama di remote (`audit/menyeluruh-2026-10`, `engine_scalping_update`, tag versi)
   **sudah tidak ada** — per 2026-10-15 `git ls-remote --heads origin` hanya mengembalikan
   `main` dan `patch`. Jangan mencari branch itu lagi.
+- Branch **`master` juga sudah tidak ada** (dihapus 2026-11-01). Itu branch yatim berisi satu
+  berkas `agents.md` 19 baris yang menyuruh `git push origin master`; bertentangan dengan aturan
+  ini dan tidak bercabang dari `main` (`git merge-base origin/master origin/main` kosong). Kalau
+  menemukan rujukan "push ke `master`" di tempat lain, itu basi — pakai `main`. Dua commit
+  yatimnya (`dc85977`, `4279f04`) hanya bisa dipulihkan dari SHA, lihat `workplan2.md` §88.
 - Jangan commit artefak data candle besar tanpa diminta.
 - Jangan commit `.env`, `*.keystore`, `*.jks`, atau token.
 - Pesan commit jelas, dalam Bahasa Indonesia.

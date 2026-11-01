@@ -5280,3 +5280,32 @@ GitHub Actions `Unit Tests (Manual)`:
   memuat titik dari `FeeSchedule.netProfitPctFor` (Kotlin menolak "Name contains illegal
   characters") dan `trailingHitNetProfitPct` dipanggil dengan argumen bernama `entry` padahal
   parameternya `entryPrice`. Diperbaiki di `3303d6b`.
+
+## 88. Branch yatim `master` dihapus dari remote (2026-11-01)
+
+**Latar.** Pemeriksaan "repo master vs lokal" menemukan `origin/master` sebagai branch **yatim**:
+2 commit, 1 berkas (`agents.md`, 19 baris), tanpa merge-base dengan `main`. Isinya menyuruh
+`git push origin master` / `git pull origin master`, bertentangan dengan branch kerja `main`.
+Berasal dari 2026-10-29 (`First commit` oleh `AI Team <aiteam@localhost>` lalu `Add AGENTS.md`
+oleh `Agus27712`) — pola commit lewat UI GitHub yang membuat branch baru, bukan bercabang dari
+`main`. Default branch tetap `main`; tidak ada PR ke/dari `master`; tidak ada workflow yang
+merujuknya.
+
+**Kondisi lokal saat pemeriksaan:** identik dengan `origin/main` (`git rev-list --left-right
+--count HEAD...origin/main` → `0 0`, working tree bersih, tanpa stash). Jadi penghapusan `master`
+tidak menghilangkan pekerjaan apa pun dari `main`.
+
+**Aksi.** `git push origin --delete master`, lalu `git fetch origin --prune`.
+
+**Sisa branch di remote (3):** `main`, `patch`, `backup/patch-v3-2026-10-21`.
+
+**Pemulihan bila diperlukan.** Commit yatim: `dc859775c3076f84df5500045d54651816e17f12`
+(`Add AGENTS.md`), `4279f04805b4b73a3d3e7bda6a58fddadf71023f` (`First commit`). Isinya hanya
+`agents.md` versi lama yang aturannya sudah digantikan `AGENTS.md` sekarang; tidak ada kode di
+sana.
+
+**Verifikasi (terukur).**
+- `gh api repos/Agus27712/analisa-pasar/branches --jq '.[].name'` → 3 nama (sebelum: 4).
+- `git ls-remote --heads origin` → tidak ada `refs/heads/master`.
+- `git branch -r` → tidak ada `origin/master`.
+- `python3 tools/check_md_text.py` → keluar kode 0.
