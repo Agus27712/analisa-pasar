@@ -85,7 +85,10 @@ fun TradingModeSettings(
                 "Bias: 1H · Setup: 15M · Trigger: 1M",
                 "Skor LONG: ${scalpingConfig.minScoreLong} · STRONG: ${scalpingConfig.minScoreStrong}",
                 "Skor Retest: ${scalpingConfig.minScoreBreakoutRetest} · Net R:R: ${String.format(java.util.Locale.US, "%.2f", scalpingConfig.minNetRr)}",
-                "RVOL breakout: ${String.format(java.util.Locale.US, "%.1f", scalpingConfig.rvolBreakoutMin)}x · CHOP: ${String.format(java.util.Locale.US, "%.0f", scalpingConfig.chopHardRanging)}"
+                "RVOL breakout: ${String.format(java.util.Locale.US, "%.1f", scalpingConfig.rvolBreakoutMin)}x · CHOP: ${String.format(java.util.Locale.US, "%.0f", scalpingConfig.chopHardRanging)}",
+                "Risiko: Target R:R ${String.format(java.util.Locale.US, "%.2f", scalpingConfig.targetNetRr)} · Min Risk ${String.format(java.util.Locale.US, "%.2f", scalpingConfig.minRiskPct)}% · Max TP2 ${String.format(java.util.Locale.US, "%.1f", scalpingConfig.maxTp2R)}R",
+                "Orderbook: tekanan beli ${String.format(java.util.Locale.US, "%.2f", scalpingConfig.buyPressureBreakout)}x · ${String.format(java.util.Locale.US, "%.2f", scalpingConfig.buyPressureRetest)}x · Slippage ${String.format(java.util.Locale.US, "%.2f", scalpingConfig.slippagePct)}%",
+                "Struktur: breakout ${String.format(java.util.Locale.US, "%.3f", scalpingConfig.breakoutAboveFactor)} · retest ${String.format(java.util.Locale.US, "%.3f", scalpingConfig.retestAboveFactor)} · pullback support ${String.format(java.util.Locale.US, "%.1f", scalpingConfig.pullbackSupportMaxDistPct)}%"
             ),
             onClick = {
                 onExpandedChange(
