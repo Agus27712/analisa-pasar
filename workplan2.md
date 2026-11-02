@@ -5358,6 +5358,21 @@ yang sudah terlihat di dua tempat.
 
 **Penjaga uji.** `ModeSliderFrameSourceTest` memindai sumber tanpa komentar. Uji sumber dipilih
 karena tidak ada harness Compose UI di `app/src/test`; pola ini sudah dipakai
-`PaperBuyNominalSourceTest` dan `ConfidenceTierRemovalTest`. Kontrol negatif yang dijalankan:
-kembalikan satu `Text("PARAMETER ENGINE SCALPING AKTIF", …)` ke `TradingModeSettings.kt` → uji
-pertama GAGAL; hapus lagi → hijau.
+`PaperBuyNominalSourceTest` dan `ConfidenceTierRemovalTest`.
+
+**Verifikasi terukur (GitHub Actions, bukan mesin lokal).** Mesin kerja tidak dipakai untuk build
+(permintaan owner 2026-11-02); semua pembuktian lewat `Unit Tests (Manual)` di Actions.
+
+- Run `41369761644` (`main`, `scope=all-unit-tests`) — **berhasil**: 125 kelas, **893 uji**,
+  0 gagal, 5 dilewati. `TEST-agu.analys.ui.settings.ModeSliderFrameSourceTest.xml` berisi 4 uji,
+  0 gagal. Sebelum perubahan jumlahnya 889 uji / 124 kelas (run `41215354534`), jadi selisihnya
+  tepat +4 uji dan +1 kelas.
+- **Kontrol negatif** — branch sementara `kontrol-negatif-89` (commit `e316f3b`) mengembalikan
+  `Text("PARAMETER ENGINE SCALPING AKTIF", …)` ke `TradingModeSettings.kt`; run `41369781344`
+  (`scope=custom`, `agu.analys.ui.settings.*`) **GAGAL**: `4 tests completed, 1 failed`,
+  `ModeSliderFrameSourceTest > kartu parameter engine kedua tidak boleh hidup lagi FAILED`
+  (`AssertionError` di `ModeSliderFrameSourceTest.kt:41`). Branch itu dihapus setelah pencatatan.
+- Batas bukti: **tampilan Compose tidak dijalankan** (tidak ada emulator/instrumented test di
+  repo). Yang terbukti adalah kompilasi `:app:testDebugUnitTest` (termasuk `TradingModeSettings`
+  dan `SettingsScreen`) serta bentuk sumbernya. Perilaku sentuh (slider tidak menutup kartu, back
+  menutup kartu lebih dulu) menunggu pemeriksaan manual pada APK.
