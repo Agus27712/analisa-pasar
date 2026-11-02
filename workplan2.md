@@ -5316,3 +5316,48 @@ tercatat sebagai `root <root@localhost.localdomain>` karena clone ini belum puny
 ini disetel `agus27712@omp <owner@omp.android>`. Commit `9c9662e` **tidak diubah** (tidak
 di-amend, tidak di-force-push): isinya benar, hanya atribusinya yang perlu diperbaiki ke depan.
 Aturannya dicatat di `AGENTS.md` § Git.
+
+## 89. Kerangka slider mode digabung ke kartu mode (2026-11-01)
+
+**Latar.** Permintaan owner: di Pengaturan → TRADING kerangka tampil dua kali. `TradingModeSettings`
+menampilkan tiga kartu pemilih mode (SCALPING / SWING / INTRADAY) yang sudah memuat angka aktif,
+lalu **di bawahnya** menampilkan lagi kartu "PARAMETER ENGINE SCALPING AKTIF" dan "PARAMETER
+ENGINE INTRADAY AKTIF" yang mengulang angka yang sama. Slider-nya sendiri hidup di dua `Dialog`
+layar penuh di `SettingsScreen`, jadi pengguna harus membuka layar ketiga untuk mengubah nilai
+yang sudah terlihat di dua tempat.
+
+**Keputusan.**
+
+| Pertanyaan | Keputusan |
+|---|---|
+| Slider dipindah ke mana | **Ke dalam kartu mode** (`ModeOptionCard` memperoleh `expandLabel` + slot `content` yang dibuka-tutup). Kedua kartu "PARAMETER ENGINE … AKTIF" **dihapus**. |
+| Semantik simpan | **Tidak berubah**: engine hanya menerima nilai setelah tombol "Simpan & Aktifkan" ditekan (§86 butir 5). Jangan memakai `applyScalpingPreset`/`applyIntradayPreset` di jalur ini — keduanya menyimpan langsung. |
+| Tombol "Batal" | **Dihapus**; menutup area = membatalkan, karena draft selalu di-reset dari config aktif saat area dibuka. |
+| SWING | **Tanpa slider.** Tidak ada config/holder baru (larangan `object … current` tanpa pembaca, `app/AGENTS.md`). |
+| Kepemilikan state | `var expandedMode: StrategyMode?` di **`SettingsScreen`**, bukan di dalam komponen, supaya tombol back perangkat dan back top-bar menutup kartu dulu sebelum keluar kategori. |
+| Basis angka | Bullet kartu = config **aktif**; area di dalam = **draft**. Dua basis ini sengaja berbeda dan diberi teks penjelas di dalam area. |
+
+**Berkas yang berubah.**
+
+- `ui/components/settings/TradingModeSettings.kt` — tanda tangan baru (19 parameter, tanpa default
+  `IntradayRuntimeConfig.current`), `ModeOptionCard` dengan `expanded`/`expandLabel`/`content`,
+  helper `SaveAndActivateButton`, dua bullet nilai aktif intraday memakai `fmtNum`, kedua kartu
+  parameter dihapus. `.clickable` dipindah dari `Card` ke blok header supaya menyentuh slider tidak
+  menutup kartu.
+- `ui/screens/SettingsScreen.kt` — `showScalpingEngineSettings`/`showIntradayEngineSettings`
+  dihapus, `expandedMode` ditambahkan, `BackHandler` dan back top-bar menutup kartu lebih dulu,
+  pemetaan preset dipindah apa adanya dari dialog, kedua `Dialog` (277 baris) dihapus, `fmt1` dan
+  impor `Dialog`/`DialogProperties` dihapus.
+- `ui/components/settings/SettingsCategoryDetailContent.kt` — `onOpenIntradaySettings` diganti
+  rantai parameter draft/ekspansi/simpan.
+- `ui/components/detail/scalp/PaperTradeDeskCard.kt`, `ui/components/simulation/PaperExitFsmCard.kt`,
+  `viewmodel/TradingViewModelAlerts.kt` — teks penunjuk `"… → Engine Scalping"` menjadi
+  `"… → mode SCALPING"` karena layar "ENGINE SCALPING" tidak ada lagi.
+- `app/src/test/java/agu/analys/ui/settings/ModeSliderFrameSourceTest.kt` — penjaga bentuk (4 uji
+  sumber: kerangka kedua, dialog layar penuh, slider di dalam kartu, jalur draft → engine).
+
+**Penjaga uji.** `ModeSliderFrameSourceTest` memindai sumber tanpa komentar. Uji sumber dipilih
+karena tidak ada harness Compose UI di `app/src/test`; pola ini sudah dipakai
+`PaperBuyNominalSourceTest` dan `ConfidenceTierRemovalTest`. Kontrol negatif yang dijalankan:
+kembalikan satu `Text("PARAMETER ENGINE SCALPING AKTIF", …)` ke `TradingModeSettings.kt` → uji
+pertama GAGAL; hapus lagi → hijau.

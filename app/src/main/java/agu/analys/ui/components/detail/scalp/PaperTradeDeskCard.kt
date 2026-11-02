@@ -192,7 +192,7 @@ fun PaperTradeDeskCard(
                 )
                 Spacer(Modifier.width(6.dp))
                 Text(
-                    "Buka Pengaturan → Engine Scalping",
+                    "Buka Pengaturan → mode SCALPING",
                     color = TvCyan,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold

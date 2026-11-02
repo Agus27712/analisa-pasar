@@ -448,7 +448,7 @@ fun TradingViewModel.deployTrailingOrder(symbol: String, exchange: String = pref
         agu.analys.util.AppLogManager.trade(
             "PaperAutoExit",
             "⛔ [${symbol}] Trailing manual ditolak: exit pair ini dipegang engine paper (P2). " +
-                "Ubah mode exit di Pengaturan → Engine Scalping, atau matikan auto-exit paper."
+                "Ubah mode exit di Pengaturan → mode SCALPING, atau matikan auto-exit paper."
         )
         return false
     }

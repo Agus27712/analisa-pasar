@@ -697,6 +697,17 @@ Rincian angka: `docs/exp/exp_p0_gatekeeper_ADA-DOGE-XRP.md`; ringkasan keputusan
   terakhir. Nominal awal dialog limit juga mulai kosong. Chip cepat (% saldo /
   rekomendasi risiko) boleh — itu aksi eksplisit user. Penjaga:
   `BuyNominalGateTest`, `PaperBuyNominalSourceTest` (source-scan tanpa komentar).
+- **Slider sensitifitas mode hidup DI DALAM kartu mode (2026-11-01, WAJIB).** Slider scalping
+  (`ScalpingSensitivitySettings`), intraday (`IntradaySensitivitySettings`), dan kartu paper
+  otomatis (`PaperAutoTradeSettings`) dirender di dalam `TradingModeSettings.ModeOptionCard` lewat
+  slot `content` yang dibuka-tutup. **Jangan** membangun ulang kartu "PARAMETER ENGINE … AKTIF"
+  atau `Dialog` layar penuh engine scalping/intraday — keduanya dihapus 2026-11-01 karena
+  mengulang angka yang sudah ada di kartu mode. SWING sengaja tanpa slider (tidak ada config-nya).
+  Aturan yang wajib dijaga: bullet kartu menampilkan config **aktif**, area di dalamnya menampilkan
+  **draft**; draft hanya sampai ke engine lewat `saveScalpingEngineSettings`/
+  `saveIntradayEngineSettings` ("Simpan & Aktifkan"), dan menutup area membatalkan draft. State
+  `expandedMode` di-hoist ke `SettingsScreen` supaya back perangkat menutup kartu dulu.
+  Penjaga: `ModeSliderFrameSourceTest`.
 - Material 3; jangan pecah state chart tanpa alasan (lihat pola `DetailUiState` bila ada di branch).
 - Throttle UI ticker/depth bila diminta di catatan performa Tokocrypto (hindari spam recomposition).
 - **Mode halaman detail koin OTORITATIF dari status kepemilikan (2026-10-15, WAJIB).** Tidak ada
