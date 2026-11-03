@@ -5333,7 +5333,7 @@ yang sudah terlihat di dua tempat.
 | Slider dipindah ke mana | **Ke dalam kartu mode** (`ModeOptionCard` memperoleh `expandLabel` + slot `content` yang dibuka-tutup). Kedua kartu "PARAMETER ENGINE … AKTIF" **dihapus**. |
 | Semantik simpan | **Tidak berubah**: engine hanya menerima nilai setelah tombol "Simpan & Aktifkan" ditekan (§86 butir 5). Jangan memakai `applyScalpingPreset`/`applyIntradayPreset` di jalur ini — keduanya menyimpan langsung. |
 | Tombol "Batal" | **Dihapus**; menutup area = membatalkan, karena draft selalu di-reset dari config aktif saat area dibuka. |
-| SWING | **Tanpa slider.** Tidak ada config/holder baru (larangan `object … current` tanpa pembaca, `app/AGENTS.md`). |
+| SWING | **~~Tanpa slider.~~ Dikoreksi 2026-11-03 (§90):** SWING **kini punya slider sendiri** — bidang `SwingConfig` (18 knob), holder `SwingRuntimeConfig`, dan kartu mode memakai slot `content` yang sama. Alasan lama (larangan `object … current` tanpa pembaca) tidak berlaku lagi karena pembacanya ada: `ModeSignalInput.swingConfig`. |
 | Kepemilikan state | `var expandedMode: StrategyMode?` di **`SettingsScreen`**, bukan di dalam komponen, supaya tombol back perangkat dan back top-bar menutup kartu dulu sebelum keluar kategori. |
 | Basis angka | Bullet kartu = config **aktif**; area di dalam = **draft**. Dua basis ini sengaja berbeda dan diberi teks penjelas di dalam area. |
 
@@ -5376,3 +5376,125 @@ karena tidak ada harness Compose UI di `app/src/test`; pola ini sudah dipakai
   repo). Yang terbukti adalah kompilasi `:app:testDebugUnitTest` (termasuk `TradingModeSettings`
   dan `SettingsScreen`) serta bentuk sumbernya. Perilaku sentuh (slider tidak menutup kartu, back
   menutup kartu lebih dulu) menunggu pemeriksaan manual pada APK.
+
+## 90. Slider mode SWING — 18 knob, bawaan literal lama, tanpa riset (2026-11-03)
+
+**Latar.** Permintaan owner: parameterisasi engine SWING yang **sudah ada** supaya seluruh knob
+yang benar-benar dibaca evaluator bisa diatur dari slider. Ini **bukan** engine/spec baru dan
+**tidak** disertai riset profit — `SwingEvaluator` tidak disentuh angkanya, hanya literalnya
+dipindah ke config. Syarat yang mengikat: **default wajib identik** dengan perilaku sebelum
+refactor, dan setiap knob wajib punya slider (parameter tanpa pembaca dilarang).
+
+Ini menutup baris "SWING tanpa slider" di §89 dan aturan `app/AGENTS.md` yang menyebutnya.
+Tidak ada klaim edge: angka SWING apa pun yang belum diukur tetap belum diukur.
+
+**Keputusan.**
+
+| Pertanyaan | Keputusan |
+|---|---|
+| Ruang lingkup | **18 knob inti** yang sudah dibaca engine: `minNetRr` 2,0; `minEntryScore` 42; `minConfluenceCheckpoints` 4; `minBuySellRatio` 1,15; `overboughtRsi` 72; `maxAtrExtension` 1,8; `strongVolumeRatio` 1,25; `nearLevelPct` 1,2; `rejectionBodyRatioMin` 0,45; `breakoutBodyRatioMin` 0,40; `maxDistToHighPct` 1,2; `slBufferAtrRejection` 0,20; `slAtrMaxRejection` 1,4; `slMaxDistancePct` 7,0; `slMinDistancePct` 1,5; `tp1AtrMult` 2,0; `tp2AtrMult` 3,4; `slippagePct` 0,08. |
+| Sumber nilai bawaan | **Literal lama di badan `SwingEvaluator`, dipindah apa adanya.** `SwingConfig.DEFAULT` = engine SWING pra-slider. |
+| Bukti kesetaraan | Uji golden mengunci fingerprint (action, confidence, entry, TP1, TP2, SL, R:R, stage, reasoning) lima fixture: satu sintetis + empat potongan DOGEUSDT 1h bar 1200/2500/3800/4998 dari `data/tokocrypto_v8`. |
+| Gerbang R:R | Memakai **net R:R mentah** (`netRrRaw`), bukan angka tampilan. Tampilan tetap `coerceAtLeast(1,4)` seperti dulu (`RR_DISPLAY_FLOOR`), sehingga slider di bawah 1,4 tetap mengubah keputusan, bukan dekorasi. |
+| Satu pintu | `ModeSignalInput.swingConfig` → `ModeSignalEvaluator.evaluateSwing` → `SwingEvaluator.evaluate(config = …)`. Evaluator tetap murni (tidak membaca holder); holder hanya dibaca di `ModeSignalInput` (nilai bawaan `SwingRuntimeConfig.current`). |
+| SL yang bisa digeser | Hanya cabang **REJECTION/RETEST/RECLAIM**. Cabang BREAKOUT (0,15 ATR / 1,2 ATR / 6% / 1,2%) dan tanpa-setup (0,25 ATR / 1,5 ATR / 7% / 1,5%) memakai nilai internalnya sendiri agar bawaan tidak bergeser. |
+| TP yang bisa digeser | `tp1AtrMult`/`tp2AtrMult`; lantai internal TP1 7%, TP2 16%, dan jarak TP1→TP2 8% **tetap** internal. Checkpoint 6 konfluensi menerima `netRrThreshold = minNetRr` dan `slippagePct = slippagePct` — satu-satunya parameter yang diteruskan. |
+| Slippage | `slippagePct` SWING **tidak** disalurkan ke `simCoordinator.setSlippagePct`. Basis P&L simulasi tetap satu nilai global (pola yang sama dengan intraday, §86). |
+| Preset | STANDARD = `SwingConfig.DEFAULT`; STRICT dan LOOSE adalah **preset frekuensi sinyal**, bukan klaim profit. KUSTOM begitu salah satu slider digeser. |
+| Simpan | Kartu SWING expandable di `TradingModeSettings`; draft hanya sampai ke engine lewat "Simpan & Aktifkan" (`saveSwingEngineSettings`), yang sekaligus mengaktifkan mode SWING. Bukan `onStrategyChange(SWING)` langsung — polanya sama dengan scalping/intraday (§89). |
+| Persistensi | Kunci prefs `swing_runtime_config_v1` dan `swing_sensitivity_preset_v1`; holder dihidrasi di blok `init` `AppPreferences`. |
+| JSON | Kunci snake_case (18 knob) + export/import; `fromJson` memakai nilai bawaan per field untuk kunci yang hilang, dan mengembalikan `null` pada JSON rusak (tidak diam-diam kembali ke DEFAULT). |
+
+**Berkas yang berubah.**
+
+- `engine/swing/SwingConfig.kt` (baru) — 18 field + `DEFAULT`; KDoc mencatat apa yang sengaja
+  tidak diparameterkan.
+- `engine/swing/SwingRuntimeConfig.kt` (baru) — holder (`current`, `currentFlow`), preset
+  STRICT/LOOSE, JSON snake_case, `toSummaryString`, enum `SwingSensitivityPreset`.
+- `engine/swing/SwingEvaluator.kt` — semua literal knob menjadi `config.*` (29 pembacaan); gerbang
+  R:R pindah ke `netRrRaw`; konstanta internal `RR_DISPLAY_FLOOR` 1,4, `MIN_CHECKPOINT_SCORE` 38,
+  `HEAVY_SELL_SCORE` 42, `RETEST_BODY_RATIO_MIN` 0,35.
+- `engine/ModeSignalEvaluator.kt` — field `swingConfig` di `ModeSignalInput`, diteruskan di
+  `evaluateSwing`.
+- `util/AppPreferences.kt`, `viewmodel/TradingViewModel.kt` — flow + `updateSwingRuntimeConfig(config, preset)`
+  + hidrasi.
+- `ui/components/settings/SwingSensitivitySettings.kt` (baru, ±1000 baris) — chip preset, 5
+  `GroupCard`, 18 slider, export/import JSON, dialog reset, panduan per knob.
+- `ui/components/settings/TradingModeSettings.kt`, `SettingsCategoryDetailContent.kt`,
+  `ui/screens/SettingsScreen.kt` — kartu SWING expandable, draft, `saveSwingEngineSettings`.
+- Uji baru: `SwingEvaluatorGoldenTest`, `SwingRuntimeConfigTest`, `SwingConfigEnforcementTest`,
+  `ModeSignalEvaluatorSwingConfigTest`; `ModeSliderFrameSourceTest` diperbarui.
+
+**Rentang slider (UI).**
+
+| Knob | Bawaan | Rentang | Grup |
+|---|---|---|---|
+| `minNetRr` | 2,0 | 1,0–4,0 | Gerbang masuk |
+| `minEntryScore` | 42 | 20–80 | Gerbang masuk |
+| `minConfluenceCheckpoints` | 4 | 0–6 | Gerbang masuk |
+| `minBuySellRatio` | 1,15 | 1,0–3,0 | Gerbang masuk |
+| `overboughtRsi` | 72 | 55–90 | Gerbang masuk |
+| `strongVolumeRatio` | 1,25 | 1,0–3,0 | Deteksi setup & filter pucuk |
+| `nearLevelPct` | 1,2 | 0,2–5,0 | Deteksi setup & filter pucuk |
+| `rejectionBodyRatioMin` | 0,45 | 0,2–0,9 | Deteksi setup & filter pucuk |
+| `breakoutBodyRatioMin` | 0,40 | 0,2–0,9 | Deteksi setup & filter pucuk |
+| `maxDistToHighPct` | 1,2 | 0,0–10,0 | Deteksi setup & filter pucuk |
+| `maxAtrExtension` | 1,8 | 0,5–5,0 | Deteksi setup & filter pucuk |
+| `slBufferAtrRejection` | 0,20 | 0,0–1,5 | Risiko — stop loss |
+| `slAtrMaxRejection` | 1,4 | 0,5–4,0 | Risiko — stop loss |
+| `slMaxDistancePct` | 7,0 | 1,0–15,0 | Risiko — stop loss |
+| `slMinDistancePct` | 1,5 | 0,0–6,0 | Risiko — stop loss |
+| `tp1AtrMult` | 2,0 | 0,5–6,0 | Target profit |
+| `tp2AtrMult` | 3,4 | 0,5–8,0 | Target profit |
+| `slippagePct` | 0,08 | 0,00–0,50 | Saringan R:R & biaya |
+
+**Preset.**
+
+- STRICT: `minNetRr` 2,5; `minEntryScore` 50; konfluensi 5; `minBuySellRatio` 1,30;
+  `overboughtRsi` 68; `maxAtrExtension` 1,4; `maxDistToHighPct` 0,8; `strongVolumeRatio` 1,40;
+  `nearLevelPct` 0,8; body pantulan 0,55; body tembus 0,50; SL 0,25/1,6 ATR, 6%/2,0%;
+  TP1 2,4 / TP2 3,8 ATR.
+- LOOSE: `minNetRr` 1,5; `minEntryScore` 36; konfluensi 3; `minBuySellRatio` 1,05;
+  `overboughtRsi` 78; `maxAtrExtension` 2,5; `maxDistToHighPct` 2,0; `strongVolumeRatio` 1,10;
+  `nearLevelPct` 2,0; body pantulan 0,35; body tembus 0,30; SL 0,15/1,2 ATR, 8%/1,2%;
+  TP1 1,6 / TP2 3,0 ATR.
+
+**Batas yang sengaja tidak diparameterkan** (dicatat di KDoc `SwingConfig`, bukan lupa):
+periode indikator (RSI 14, EMA 20/50, MACD 12/26/9, BB 20, ATR 14), jendela volume rata-rata 8
+candle, momentum 10 candle, bobot skor komponen, toleransi mikro deteksi setup, lookback recent
+high 15, fallback support/resistance 1,6/2,0 ATR, `wickToBodyMax` 0,55, lantai TP, dan variasi SL
+cabang breakout/tanpa-setup. Mengangkatnya = paket tersendiri dengan pengukuran ulang frekuensi.
+
+**Verifikasi terukur (mesin lokal, 2026-11-03).**
+
+- `./gradlew :app:testDebugUnitTest` → **908 uji, 13 gagal, 5 dilewati**. Ke-13 kegagalan
+  **basi** dan tidak berasal dari paket ini: baseline `git stash` (tanpa perubahan SWING) gagal
+  di **tiga kelas dan jumlah yang sama persis** — `IntradayAccountingAndSessionTest` 4,
+  `IntradayReplayWindowAccountingTest` 3, `IntradayGeometryAndMacdHistTest` 6. Penyebabnya
+  `data/tokocrypto_v7/DOGEUSDT_1h.csv` sudah dihapus di commit `88103ec` (2026-11-02) sementara
+  20 rujukan masih ada di `app/src/test`.
+- Scope SWING: `SwingEvaluatorGoldenTest` 2, `SwingConfigEnforcementTest` 4,
+  `SwingRuntimeConfigTest` 6, `SwingEvaluatorTest` 3, `ModeSignalEvaluatorSwingConfigTest` 2,
+  `ModeSliderFrameSourceTest` 5 → **22 uji, 0 gagal**.
+- **Kontrol negatif 3/3 menggigit** (dipulihkan setelahnya): (1) seam `config = input.swingConfig`
+  diputus → uji seam GAGAL; (2) satu slider dibungkam (`config.copy(slippagePct = 0.08)`) → uji
+  sumber GAGAL (penjaga diperkuat: wajib `config.copy(field = it`, bukan sekadar nama field);
+  (3) pembacaan `config.strongVolumeRatio` di evaluator dikembalikan ke literal → uji sumber GAGAL.
+- `python3 tools/check_md_text.py` → bersih (90 berkas).
+
+**Temuan yang harus dibaca agen berikutnya.**
+
+1. **`TestData.generateCandles` tidak deterministik antar-run.** Fixture `B_bearish` yang semula
+   dipakai sebagai golden menghasilkan recent high 957 pada satu run dan 993 pada run lain,
+   sehingga TP1/R:R-nya bergeser. Fixture itu **dikeluarkan** dari golden; jangan memakainya lagi
+   sebagai baseline. Golden yang sah = lima fixture di atas.
+2. **Uji intraday basi menunggu keputusan owner.** Tiga kelas di atas masih merah karena dataset
+   v7 dihapus, bukan karena regresi. Pilihannya: mengembalikan `data/tokocrypto_v7`, atau
+   memindahkan uji ke dataset yang ada (`data/tokocrypto_v8` tersedia). Jangan "menghijaukan"
+   dengan menghapus uji.
+
+**Batas bukti.** Tampilan Compose tidak dijalankan (tidak ada uji instrumented/emulator di repo);
+yang terbukti adalah kompilasi, perilaku evaluator lewat uji JVM, dan bentuk sumber UI lewat
+`ModeSliderFrameSourceTest`. Perilaku sentuh slider dan tombol simpan menunggu pemeriksaan manual
+pada APK. Tidak ada klaim profit untuk konfigurasi mana pun — default hanya mengunci perilaku lama,
+dan preset hanya menggeser frekuensi sinyal.

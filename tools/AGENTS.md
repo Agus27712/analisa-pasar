@@ -14,6 +14,13 @@ replay/sweep. Perintah build & unit test ada di `AGENTS.md` akar; aturan engine 
   `target_net_rr`, `slippage_pct`, `max_risk_atr`, `max_change_24h_pct`, dan blok `exit` di
   dalamnya diperiksa uji terhadap `FeeSchedule` dan `ScalpingConfig`, jadi revisi aplikasi ikut
   memakai angka yang sama dengan replay. Jangan membuat berkas config kedua di `tools/`.
+- **Config SWING tidak punya mirror dan jangan ditambahkan ke `scalp_config.json`.** Sejak
+  2026-11-03 mode SWING punya `SwingConfig` (18 knob) + holder `SwingRuntimeConfig`, tetapi
+  **belum ada alat replay SWING**. Jangan menyelundupkan knob SWING ke `scalp_config.json`
+  (berkas itu milik scalping, dikunci uji terhadap `ScalpingConfig`) dan jangan membuat
+  `data/config/swing_config.json` kosong tanpa pembaca — berkas config tanpa pembaca adalah
+  definisi kedua yang melenceng diam-diam. Kalau nanti ada alat replay SWING, mirror-nya dibuat
+  bersamaan dengan alatnya. Rincian: `workplan2.md` §90.
 - **Replay wajib memakai exit yang sama dengan app, bukan subset.** CLASSIC punya time-stop
   90 bar M1 (`ScalpExitParams.DEFAULT`), dan mode `full`/`tp1_be`/`trail`/`early` harus ada di
   replay. Jangan menghidupkan kembali `order_type`/tarif maker: jalur app hanya taker. Jangan

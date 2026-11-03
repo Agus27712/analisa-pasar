@@ -2,9 +2,11 @@
 
 > **Baca ini dulu.** Dokumen ini adalah titik masuk untuk agen/engineer berikutnya: status terkini,
 > apa yang sudah selesai, apa berikutnya, dan **perangkap yang sudah pernah ditemukan** supaya tidak
-> diulang. Terakhir diperbarui: **2026-10-24** (sweep 5 mode exit: 0/90 sel positif, exit-only
-> ditutup lagi; diagnostik persentil entry: entry khas di persentil 93 harga 1 hari; prioritas
-> tetap pengukuran entry/universe).
+> diulang. Terakhir diperbarui: **2026-11-03** (slider SWING: 18 knob, default = literal engine lama,
+> tanpa riset; plus catatan dataset `tokocrypto_v7` yang hilang membuat 13 uji intraday merah).
+> Sebelumnya **2026-10-24** (sweep 5 mode exit: 0/90 sel positif, exit-only ditutup lagi; diagnostik
+> persentil entry: entry khas di persentil 93 harga 1 hari; prioritas tetap pengukuran
+> entry/universe).
 >
 > ⛔ **Spesifikasi baru v2/v3 dihentikan (2026-10-21).** Spec v2 dan v3 sudah diukur dan keduanya
 > **tidak menghasilkan edge**; owner menghentikan seluruh line riset ini karena hanya memperpanjang
@@ -85,12 +87,13 @@
 | Branch kerja | **`main`** (push langsung ke `main` diizinkan atas instruksi owner; `patch` hanya histori) |
 | HEAD `main` | Ukur sendiri: `git log --oneline -1` |
 | Titik masuk kode | package `agu.analys`, modul tunggal `:app` |
-| Unit test | **889 uji · 0 gagal · 5 dilewati** (124 kelas), diukur lewat GitHub Actions `Unit Tests (Manual)` run `41215354534` pada `main` @ `3303d6b`, 2026-10-31. Angka lama (797 uji / 104 kelas, 2026-10-22) sudah usang. |
+| Unit test | **908 uji · 13 gagal · 5 dilewati** (mesin lokal, 2026-11-03). Ke-13 kegagalan **basi**: `data/tokocrypto_v7/DOGEUSDT_1h.csv` dihapus di commit `88103ec` (2026-11-02) sementara 20 rujukan masih ada di `app/src/test`; baseline `git stash` tanpa perubahan apa pun gagal di tiga kelas dan jumlah yang sama (`IntradayAccountingAndSessionTest` 4, `IntradayReplayWindowAccountingTest` 3, `IntradayGeometryAndMacdHistTest` 6). Angka hijau terakhir lewat Actions `Unit Tests (Manual)` run `41369761644`: **893 uji / 0 gagal / 5 dilewati** (125 kelas) pada `main` sebelum data v7 dihapus. |
 | APK debug | 26.821.815 byte (26,8 MB desimal / 25,6 MiB) — terakhir diukur 2026-10-20 |
 | Uji parity replay | **30 test OK** (26 lama + 4 uji sweep), diukur 2026-10-24 |
 | Eksperimen exit | **Sweep 5 mode 2026-10-24: 0 dari 90 sel positif** (`docs/exp/exp_exit_mode_sweep_ADA-DOGE-XRP.md`); kontrol classic 90m identik CLI 620/14,84%/−0,1569. Mode terbaik `early` 420m XRP tetap −0,666%/trade. Sebelumnya EARLY 2026-10-22: avg R −0,1522 vs −0,1569 (di dalam noise). |
 | Persentil entry | **2026-10-24:** entry khas di persentil **93,3** harga 1 hari dan **81,7%** rentang harian (`docs/exp/exp_entry_price_percentile_ADA-DOGE-XRP.md`). "Beli di pucuk" benar secara posisi; return close 1 hari −0,108%, 3 hari −0,051%, 7 hari +1,148%. Diagnostik, bukan gate. |
 | Kesiapan uang riil | **BELUM** — lihat §5 |
+| Slider mode | SCALPING (`ScalpingRuntimeConfig`), INTRADAY (`IntradayRuntimeConfig`), **SWING (`SwingRuntimeConfig`, 18 knob — 2026-11-03)**. Semua lewat satu pintu `ModeSignalInput.<mode>Config`; bawaan = literal engine lama. Rincian SWING: `workplan2.md` §90, `app/AGENTS.md` § "Mode SWING — slider 18 knob". |
 
 > ⚠️ Angka di tabel ini **pernah salah** di dokumen ini sendiri (tertulis 358/50 kelas). Setiap kali
 > angka ini dipakai, **ukur ulang** — jangan kutip dari sini tanpa menghitung.
@@ -140,6 +143,7 @@ git stash pop                 # kembalikan pekerjaan
 | — | **Perbaikan bug auto-buy**: nominal Rupiah dibaca sebagai USDT + anggaran tidak menyisihkan fee/slippage → auto-buy **tidak pernah** tereksekusi | `PaperAutoTradeConfig.kt`, `PaperAutoTradeCoordinator.kt`, `AppPreferences.kt`, `PaperAutoTradeSettings.kt` | `docs/LAPORAN-bug-auto-buy-nominal-idr-2026-10-15.md`, `PaperAutoBuySizingTest.kt` |
 | ~~§14~~ | ~~Kesiapan multi-horizon (scalp/intraday/swing) + papan UI~~ | — | ⛔ **DIBATALKAN** — lihat §3b |
 | ~~§15~~ | ~~SSOT: horizon vs engine aktif~~ | — | ⛔ **DIBATALKAN** — lihat §3b |
+| §90 | **Slider mode SWING** — parameterisasi `SwingEvaluator` yang sudah ada: 18 knob inti, `SwingConfig.DEFAULT` = literal engine lama, gerbang R:R memakai angka mentah, satu pintu `ModeSignalInput.swingConfig`, kartu mode expandable + "Simpan & Aktifkan" | `engine/swing/SwingConfig.kt`, `engine/swing/SwingRuntimeConfig.kt`, `engine/swing/SwingEvaluator.kt`, `engine/ModeSignalEvaluator.kt`, `ui/components/settings/SwingSensitivitySettings.kt`, `TradingModeSettings.kt`, `SettingsScreen.kt`, `util/AppPreferences.kt` | `workplan2.md` §90; penjaga baru 19 uji (Golden 2, Enforcement 4, RuntimeConfig 6, Seam 2, Frame 5) + 3 uji lama `SwingEvaluatorTest` = **22 uji scope SWING, 0 gagal**; kontrol negatif 3/3 menggigit |
 
 **Status branch (2026-10-22):** `origin/main` = **`5d8f7bc`** (merge **PR #63**), sudah memuat
 `patch` sampai **`2dd69ad`**. Di atasnya, `patch` sekarang memiliki **commit P0** (cari dengan
@@ -173,6 +177,15 @@ MarketTick/Candle  ──►  LearningTradingEngine  ──►  ScalpingMtfEvalu
 **Satu engine, satu permukaan status.** `StrategyMode` memilih engine mana yang menghitung sinyal;
 `ScalpReadiness` + `ScalpDeskCard`/`WaitingEntryRadarCard` adalah satu-satunya tempat status
 ditampilkan. Tidak ada evaluator kedua dan tidak ada kartu ringkasan lintas-horizon — lihat §3b.
+
+**Config tiap mode lewat satu pintu (WAJIB sejak 2026-11-03).** Ketiga mode punya holder config
+sendiri — `ScalpingRuntimeConfig`, `IntradayRuntimeConfig`, `SwingRuntimeConfig` — dan nilainya
+masuk ke evaluator **hanya** lewat `ModeSignalInput` (`scalpingConfig` / `intradayConfig` /
+`swingConfig`). Evaluator tetap murni: ia menerima config sebagai parameter (bawaan = `DEFAULT`),
+tidak membaca state global. Jangan membaca holder langsung di evaluator, worker, atau layar detail
+lain — angka sinyal jadi bergantung urutan pemanggilan dan tidak bisa diuji. `slippagePct` milik
+config mode **tidak** masuk `simCoordinator.setSlippagePct`; basis P&L simulasi tetap satu nilai
+global.
 
 - **`TradingViewModel` adalah facade** yang dipecah ke banyak berkas (`TradingViewModelSync.kt`,
   `TradingViewModelAlerts.kt`, `TradingViewModelReadiness.kt`, …). Menambah state berarti menambah
@@ -228,6 +241,14 @@ Riwayat lengkap ada di `workplan2.md` §14/§15 (keduanya bertanda ⛔ DIHAPUS) 
 
 Diurutkan berdasarkan **nilai dibagi risiko**. Jangan mengerjakan yang bawah sebelum yang atas
 selesai, kecuali ada instruksi eksplisit.
+
+> 🔧 **Menunggu keputusan owner (2026-11-03): masa depan dataset `data/tokocrypto_v7`.**
+> Berkas itu dihapus di commit `88103ec` (2026-11-02), tetapi 20 rujukan masih tertinggal di
+> `app/src/test`, sehingga **13 uji intraday merah** (bukan regresi engine; terbukti lewat
+> `git stash`). Dua pilihan yang wajar: (a) mengembalikan dataset v7, atau (b) memindahkan uji ke
+> `data/tokocrypto_v8` yang sudah ada. Keduanya menyentuh makna angka uji intraday, jadi **jangan
+> diputuskan sendiri**; dan jangan "menghijaukan" dengan menghapus ujinya. Rincian: `workplan2.md`
+> §90, perangkap #30.
 
 > ⛔ **Keputusan 2026-10-21 — riset v2 dan v3 dihentikan.** V2 dan v3 tidak menghasilkan edge;
 > owner menghentikan seluruh line riset ini karena hanya memperpanjang research. Commit v3
@@ -484,12 +505,26 @@ Aturan yang sudah berlaku dan **jangan dilonggarkan**:
 28. **Win rate antar-geometri exit tidak bisa dibandingkan.** P0 (WR 14,84%, avg R −0,1569,
     616 TIMEOUT) dan parity lama (WR 14,88%, avg R −0,4898, 963 TIMEOUT, 70 TP2) memakai
     geometri berbeda. Selalu sebut jumlah TIMEOUT/TP sebelum membandingkan.
+29. **`TestData.generateCandles` tidak deterministik antar-run — jangan dipakai sebagai baseline.**
+    Terukur 2026-11-03 saat merekam golden engine SWING: fixture yang sama menghasilkan recent high
+    **957** pada satu run dan **993** pada run lain, sehingga TP1 dan R:R-nya bergeser. Fixture
+    golden harus dibangun sendiri dengan angka eksplisit (atau potongan CSV ter-commit), bukan dari
+    helper berisi keacakan. Kalau uji Anda gagal hanya pada nilai TP1/R:R, curigai fixture dulu
+    sebelum menuduh engine berubah.
+30. **`data/tokocrypto_v7` sudah dihapus (commit `88103ec`, 2026-11-02) tetapi masih dirujuk 20 kali
+    di `app/src/test`.** Tiga kelas intraday karenanya **merah karena dataset hilang**, bukan karena
+    regresi: `IntradayAccountingAndSessionTest` (4), `IntradayReplayWindowAccountingTest` (3),
+    `IntradayGeometryAndMacdHistTest` (6). Selalu buktikan dengan baseline `git stash` sebelum
+    menyalahkan perubahan sendiri; jangan "menghijaukan" dengan menghapus uji. Pilihannya:
+    mengembalikan dataset v7 atau memindahkan uji ke `data/tokocrypto_v8` (menunggu owner).
 
 ---
 
 ## 7. Checklist sebelum menyelesaikan pekerjaan
 
-- [ ] `./gradlew testDebugUnitTest assembleDebug` hijau; angka test **diukur**, bukan diingat.
+- [ ] `./gradlew testDebugUnitTest` dijalankan; angka test **diukur**, bukan diingat. Sejak
+      2026-11-03 ada **13 kegagalan basi** karena dataset v7 dihapus (perangkap #30) — sebutkan
+      angka apa adanya, jangan mengklaim "semua hijau".
 - [ ] Baseline dibandingkan lewat `git stash` (bukan dari pesan commit lama).
 - [ ] Kontrol negatif dijalankan untuk setiap perbaikan bug.
 - [ ] `workplan2.md` diperbarui (seksi baru bila perlu).
@@ -497,7 +532,9 @@ Aturan yang sudah berlaku dan **jangan dilonggarkan**:
 - [ ] Jejak pekerjaan ditulis di tempat yang benar: `workplan2.md` + `docs/exp/<eksperimen>.md`
       untuk eksperimen; **jangan** membuat laporan per batch baru.
 - [ ] Tidak ada token/keystore/`.env` yang ikut ter-commit.
-- [ ] Push ke **`patch`**, bukan `main`.
+- [ ] `python3 tools/check_md_text.py` bersih (BOM/CRLF/CJK/mojibake).
+- [ ] Push ke **`main`** (branch kerja sejak 2026-10-25; `patch` hanya histori dan akan dihapus).
+      Rilis tetap manual lewat Actions → `Release APK`.
 
 > **Checklist ini dipakai ulang setiap batch — kotaknya sengaja dibiarkan kosong** (mencentangnya
 > permanen akan membuat checklist berikutnya terasa "sudah terpenuhi" tanpa bukti). Bukti per

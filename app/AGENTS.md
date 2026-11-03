@@ -702,7 +702,9 @@ Rincian angka: `docs/exp/exp_p0_gatekeeper_ADA-DOGE-XRP.md`; ringkasan keputusan
   otomatis (`PaperAutoTradeSettings`) dirender di dalam `TradingModeSettings.ModeOptionCard` lewat
   slot `content` yang dibuka-tutup. **Jangan** membangun ulang kartu "PARAMETER ENGINE … AKTIF"
   atau `Dialog` layar penuh engine scalping/intraday — keduanya dihapus 2026-11-01 karena
-  mengulang angka yang sudah ada di kartu mode. SWING sengaja tanpa slider (tidak ada config-nya).
+  mengulang angka yang sudah ada di kartu mode. **Sejak 2026-11-03 SWING juga punya slider**
+  (18 knob, `SwingSensitivitySettings`) di slot yang sama — lihat bagian "Mode SWING — slider 18
+  knob" di bawah; alasan lama "SWING tanpa slider" sudah tidak berlaku.
   Aturan yang wajib dijaga: bullet kartu menampilkan config **aktif**, area di dalamnya menampilkan
   **draft**; draft hanya sampai ke engine lewat `saveScalpingEngineSettings`/
   `saveIntradayEngineSettings` ("Simpan & Aktifkan"), dan menutup area membatalkan draft. State
@@ -835,8 +837,13 @@ slider**. Temuan lengkap: `docs/laporan_temuan_bugs_intraday.md`; ringkasan kepu
    frekuensi; jangan mengembalikan pembandingan bersatuan harga.
 9. **Penjaga intraday harus uji perilaku, bukan pindai sumber (2026-10-28).** Uji
    `sumber.contains("...")` hanya menebak dari nama variabel — nama berubah, uji gagal, perilaku
-   tidak terbukti. Penjaga intraday memakai dataset ter-commit `data/tokocrypto_v7/DOGEUSDT_1h.csv`
-   (999 bar) lewat `IntradayReplayEngine.replay`: ambang config 0,0 vs 99,0, fee maker + slippage
+   tidak terbukti. Penjaga intraday memakai dataset `data/tokocrypto_v7/DOGEUSDT_1h.csv`
+   (999 bar) lewat `IntradayReplayEngine.replay`. **PERHATIAN (2026-11-03):** berkas itu sudah
+   dihapus di commit `88103ec` (2026-11-02) sementara 20 rujukan masih ada di `app/src/test`,
+   sehingga 13 uji di tiga kelas intraday saat ini **MERAH karena dataset hilang**, bukan karena
+   regresi engine. Jangan mengklaim hijau sebelum owner memutuskan: mengembalikan dataset v7 atau
+   memindahkan uji ke `data/tokocrypto_v8`. Rincian: `workplan2.md` §90.
+   Uji itu membandingkan ambang config 0,0 vs 99,0, fee maker + slippage
    dari config, ringkasan net dihitung ulang dari daftar trade, dan konsistensi label `VALID_ENTRY_*`
    dengan klasifikasi net. Sejak paket G (30 Okt 2026) ada slider/holder, tetapi aturannya tetap:
    penjaga memakai **dataset nyata**, bukan `contains` pada nama field.
@@ -935,3 +942,63 @@ slider**. Temuan lengkap: `docs/laporan_temuan_bugs_intraday.md`; ringkasan kepu
       flash dump 7,5%/12%, ekstensi ATR 1,8, jarak recent-high 1,2%) **masih literal** dan belum
       bisa diubah dari UI. Mengangkatnya ke config = paket tersendiri dengan pengukuran ulang
       frekuensi sinyal.
+
+## Mode SWING — slider 18 knob (2026-11-03, WAJIB)
+
+SWING kini punya config, holder, dan slider sendiri. Ini **parameterisasi engine yang sudah ada**,
+bukan engine baru, dan **tanpa riset profit**. Rincian keputusan + angka: `workplan2.md` §90.
+Aturan yang mengikat:
+
+1. **Default wajib identik dengan engine lama.** `SwingConfig.DEFAULT` = literal yang dulu berdiri
+   di badan `SwingEvaluator`, dipindah apa adanya. Setiap perubahan angka bawaan **wajib** disertai
+   perekaman ulang baseline golden; jangan mengubah bawaan "sekadar lebih masuk akal".
+   Penjaga: `SwingEvaluatorGoldenTest` (5 fixture: 1 sintetis + DOGEUSDT 1h bar
+   1200/2500/3800/4998 dari `data/tokocrypto_v8`).
+2. **Satu pintu, evaluator tetap murni.** Alurnya `ModeSignalInput.swingConfig` →
+   `ModeSignalEvaluator.evaluateSwing` → `SwingEvaluator.evaluate(config = …)`. Jangan membaca
+   `SwingRuntimeConfig.current` langsung di dalam evaluator, worker, atau layar detail lain —
+   evaluator yang membaca state global tidak bisa diuji dan membuat angka sinyal bergantung urutan
+   pemanggilan. Penjaga: `ModeSignalEvaluatorSwingConfigTest` + `SwingConfigEnforcementTest`.
+3. **Holder menyimpan instance `SwingConfig`.** Jangan membuat data class kedua berisi 18 field
+   yang sama (definisi ganda yang melenceng diam-diam). Kunci prefs
+   `swing_runtime_config_v1` / `swing_sensitivity_preset_v1`, hidrasi di blok `init`
+   `AppPreferences` — tanpa itu slider hilang setiap restart.
+4. **Gerbang R:R memakai angka mentah; tampilan tetap dilantai.** `netRrRaw` dibandingkan dengan
+   `minNetRr`; `riskRewardRatio` yang ditampilkan tetap `coerceAtLeast(RR_DISPLAY_FLOOR = 1,4)`
+   seperti dulu. Jangan menyatukan keduanya: memakai angka tampilan untuk gerbang membuat slider di
+   bawah 1,4 jadi dekorasi, sedangkan memakai angka mentah untuk tampilan mengubah teks yang dilihat
+   pengguna dibanding engine lama.
+5. **SL yang bisa digeser hanya cabang REJECTION/RETEST/RECLAIM.** Cabang BREAKOUT (0,15 ATR /
+   1,2 ATR / 6% / 1,2%) dan cabang tanpa setup (0,25 ATR / 1,5 ATR / 7% / 1,5%) tetap internal.
+   Menggeser knob SL **tidak** boleh diam-diam ikut mengubah dua cabang itu — itu akan membuat
+   "bawaan sama" berhenti benar.
+6. **TP: knob hanya pengali ATR.** Lantai TP1 7%, TP2 16%, dan jarak TP1→TP2 8% tetap internal.
+   Checkpoint 6 konfluensi hanya menerima `netRrThreshold = minNetRr` dan
+   `slippagePct = slippagePct`; **jangan** menambah parameter lain ke sana tanpa mengukur
+   dampaknya pada `completedCount`.
+7. **`slippagePct` SWING tidak masuk basis P&L simulasi.** Ia hanya milik perhitungan net R:R
+   sinyal. `updateSwingRuntimeConfig` **tidak** memanggil `simCoordinator.setSlippagePct` (pola sama
+   dengan intraday, §86). Basis P&L simulasi tetap satu nilai global.
+8. **Simpan lewat "Simpan & Aktifkan".** Draft hanya sampai ke engine lewat
+   `saveSwingEngineSettings` (yang juga mengaktifkan mode SWING). Jangan mengaktifkan mode dari
+   `onStrategyChange(SWING)` tanpa menyimpan, dan jangan menambah `applySwingPreset` yang menyimpan
+   langsung — presets mengisi draft, bukan menyimpan. Penjaga: `ModeSliderFrameSourceTest`.
+9. **Preset adalah preset frekuensi, bukan janji profit.** `STANDARD` = `SwingConfig.DEFAULT`,
+   `STRICT`/`LOOSE` menggeser ambang, `CUSTOM` dipilih begitu satu slider bergeser. Jangan menulis
+   klaim winrate/expectancy untuk preset mana pun di UI atau dokumen — sinyal SWING belum pernah
+   diukur positif setelah biaya.
+10. **Batasan yang jujur.** Yang bisa digeser adalah 18 knob inti. Periode indikator (RSI 14,
+    EMA 20/50, MACD 12/26/9, BB 20, ATR 14), bobot skor, toleransi mikro setup, `MIN_CHECKPOINT_SCORE`
+    38, `HEAVY_SELL_SCORE` 42, `RETEST_BODY_RATIO_MIN` 0,35, `wickToBodyMax` 0,55, lookback recent
+    high 15, dan fallback support/resistance 1,6/2,0 ATR **masih literal**. Mengangkatnya =
+    paket tersendiri dengan pengukuran ulang frekuensi sinyal; jangan menyelundupkannya ke paket
+    lain.
+11. **Jangan memakai `TestData.generateCandles` sebagai baseline golden.** Fixture itu menghasilkan
+    recent high berbeda antar-run (957 vs 993 terukur 2026-11-03), sehingga TP1/R:R-nya bergeser dan
+    uji menjadi tidak deterministik. Golden SWING memakai fixture sintetis tetap + potongan CSV
+    `data/tokocrypto_v8/DOGEUSDT_1h.csv`.
+
+Penjaga: `SwingEvaluatorGoldenTest` (2), `SwingConfigEnforcementTest` (4, pindai sumber dua arah —
+wajib ada `config.<field>` di evaluator **dan** `config.copy(<field> = it` di UI),
+`SwingRuntimeConfigTest` (6), `ModeSignalEvaluatorSwingConfigTest` (2),
+`ModeSliderFrameSourceTest` (5).

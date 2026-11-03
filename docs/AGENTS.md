@@ -305,3 +305,36 @@ dan ditutup lagi (2026-10-24, 0/90 sel); berikutnya pengukuran entry/universe.
   tanpa eksperimen entry tersendiri yang mengukur net dan dampak jumlah sinyal.
 - **Jangan mengutip kuintil bawah 7 hari tanpa konteks.** Sampelnya kecil (n=43) dan bias
   periode; angka +8,259% bukan aturan umum.
+
+## Pekerjaan non-eksperimen: parameterisasi engine (2026-11-03)
+
+Slider mode SWING (`workplan2.md` §90) adalah contoh pekerjaan yang **bukan** eksperimen: tidak ada
+hipotesis, tidak ada angka edge, dan tidak ada dataset baru. Aturan penulisan temuannya:
+
+- **Jangan membuat berkas `docs/exp/` baru.** `docs/exp/` hanya untuk hasil terukur; parameterisasi
+  tidak mengukur apa pun. Tempatnya: seksi baru di `workplan2.md` + aturan di `app/AGENTS.md`.
+- **Jangan membuat `docs/LAPORAN-batch*.md` baru.** Aturan 2026-10-17 tetap berlaku.
+- **Angka uji wajib disebut beserta status baseline.** Paket SWING 2026-11-03 menulis
+  "908 uji, 13 gagal" **dan** alasan 13 kegagalan itu basi (dataset v7 hilang, terbukti lewat
+  `git stash`). Menulis "semua hijau" adalah klaim palsu; menulis "13 gagal" tanpa penjelasan
+  membuat pembaca berikutnya memburu regresi yang tidak ada.
+- **Bedakan "default dikunci" dari "default terbukti bagus".** `SwingConfig.DEFAULT` hanya
+  mereproduksi perilaku lama; tidak ada klaim bahwa angka itu menguntungkan. Setiap dokumen yang
+  menyebut preset/config wajib menyatakan itu — sinyal SWING belum pernah diukur positif setelah
+  biaya.
+- **Kegagalan uji karena dataset hilang dicatat di dua tempat**: `workplan2.md` (seksi pekerjaan)
+  dan `app/AGENTS.md` (aturan area kode). `docs/PANDUAN-LANJUT-AGEN.md` §6 menampungnya sebagai
+  perangkap agar agen berikutnya tidak mengulang diagnosis.
+
+### Catatan terbuka untuk paket SWING (belum dikerjakan, jangan diklaim selesai)
+
+1. **Belum ada mirror `data/config/swing_config.json`.** `IntradayRuntimeConfig` punya mirror itu
+   karena ada alat ukur offline yang membacanya. SWING belum punya alat replay sendiri, dan
+   membuat mirror tanpa pembaca melanggar aturan "parameter tanpa pembaca dilarang". Akibatnya,
+   komentar KDoc `SwingRuntimeConfig.toJson` yang menyebut "matching the schema of
+   `swing_config.json`" **belum punya berkas nyata** — perbaiki komentar itu atau buat alat yang
+   membacanya, jangan diamkan.
+2. **Belum ada uji yang membandingkan JSON hasil ekspor dengan mirror mana pun** (karena poin 1).
+   Yang ada baru round-trip 18 knob di `SwingRuntimeConfigTest`.
+3. **Tampilan Compose belum dijalankan.** Perilaku sentuh slider dan tombol "Simpan & Aktifkan"
+   menunggu pemeriksaan manual pada APK — jangan menulis "terbukti berjalan di layar".

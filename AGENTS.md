@@ -171,6 +171,11 @@ Angka dan alasan lengkap: `workplan2.md` §78.
   punya expectancy positif.
 - Slider sensitifitas mengubah threshold (frekuensi sinyal), **bukan** jaminan profit; status
   slider entry dari owner dicatat di poin sebelumnya.
+- **Ketiga mode kini punya slider sendiri** (SCALPING, INTRADAY, **SWING sejak 2026-11-03**).
+  SWING = parameterisasi `SwingEvaluator` yang sudah ada (18 knob), **tanpa riset** dan tanpa
+  engine baru; `SwingConfig.DEFAULT` hanya mereproduksi literal lama, bukan klaim profit.
+  Aturan pengikatnya di `app/AGENTS.md` § "Mode SWING — slider 18 knob"; rincian: `workplan2.md`
+  §90.
 - Fee: **all-in** Tokocrypto/Indodax (Fee Truth) — jangan pakai model upstream p0 ~0,72% RT sebagai default tanpa label.
 - Engine scalping di-port dari logika [dikigambol/kriptoyoi](https://github.com/dikigambol/kriptoyoi) `p0_engine` / spec — decision support, bukan bot profit terjamin.
 
