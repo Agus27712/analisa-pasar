@@ -1,0 +1,26 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# Termux consumer V2 - test polling + websocket
+
+echo "=== Analisa-Pasar Bridge V2 Test (Polling + WS) ==="
+
+# setup storage
+if [ ! -d "$HOME/storage" ]; then termux-setup-storage; fi
+
+echo "[1] Health check polling..."
+curl -s http://127.0.0.1:8765/health | jq
+
+echo ""
+echo "[2] Latest signal (polling)..."
+curl -s http://127.0.0.1:8765/signals/latest | jq
+
+echo ""
+echo "[3] Test WebSocket push (10 detik)..."
+echo "Install websocat dulu kalo belum: pkg install rust -y && cargo install websocat"
+echo "Menunggu sinyal push..."
+
+timeout 10 websocat ws://127.0.0.1:8765/ws/signals || echo "websocat gak ada, pake curl SSE fallback:"
+timeout 10 curl -N http://127.0.0.1:8765/events
+
+echo ""
+echo "[4] Test oh-my-pi extension..."
+echo "omp --prompt 'subscribe_signals selama 10 detik, kalo ada BTCUSDT confidence >70% bikinin research log'"

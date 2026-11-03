@@ -507,6 +507,10 @@ class AppPreferences(context: Context) {
         get() = prefs.getBoolean(KEY_REAL_SIM_SYNC_ENABLED, false)
         set(value) = prefs.edit().putBoolean(KEY_REAL_SIM_SYNC_ENABLED, value).apply()
 
+    var isAgentOutputEnabled: Boolean
+        get() = prefs.getBoolean(KEY_AGENT_OUTPUT_ENABLED, false)
+        set(value) = prefs.edit().putBoolean(KEY_AGENT_OUTPUT_ENABLED, value).apply()
+
     var priceFeedThrottleMs: Long
         get() = prefs.getLong(KEY_PRICE_FEED_THROTTLE_MS, PriceFeedThrottler.DEFAULT_THROTTLE_MS)
         set(value) = prefs.edit().putLong(KEY_PRICE_FEED_THROTTLE_MS, value.coerceAtLeast(0L)).apply()
@@ -756,5 +760,6 @@ class AppPreferences(context: Context) {
         private const val KEY_NOTIFICATIONS_ENABLED = "notifications_enabled_v1"
         private const val KEY_REAL_SIM_SYNC_ENABLED = "real_sim_sync_enabled_v1"
         private const val KEY_PRICE_FEED_THROTTLE_MS = "price_feed_throttle_ms_v1"
+        private const val KEY_AGENT_OUTPUT_ENABLED = "agent_output_enabled"
     }
 }

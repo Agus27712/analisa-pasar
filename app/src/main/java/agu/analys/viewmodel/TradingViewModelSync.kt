@@ -651,6 +651,19 @@ fun TradingViewModel.initSubscriptionsAndPolling() {
                 scalpingScoreCategory = transition.signal.scalpingScoreCategory,
                 scalpingRegime = transition.signal.scalpingRegime
             )
+
+            emitAgentSignalIfEnabled(
+                symbol = transition.symbol,
+                action = transition.signal.action.name,
+                mode = transition.mode.name,
+                confidence = transition.signal.confidence,
+                entryPrice = transition.signal.entryPrice,
+                tp1 = transition.signal.targetPrice1,
+                tp2 = transition.signal.targetPrice2,
+                stopLoss = transition.signal.stopLoss,
+                reasoning = transition.signal.reasoning.joinToString(" • "),
+                orderbookPressure = transition.signal.scalpingScoreCategory.ifBlank { null }
+            )
         }
 
         // P2 — Auto-buy PAPER (simulasi). Tidak pernah memicu order uang riil.
@@ -830,7 +843,66 @@ fun TradingViewModel.listenToEngineSignals() {
                     scalpingSetup = signal.scalpingSetup, scalpingScore = signal.scalpingScore,
                     scalpingScoreCategory = signal.scalpingScoreCategory, scalpingRegime = signal.scalpingRegime
                 )
+
+                emitAgentSignalIfEnabled(
+                    symbol = journalSymbol,
+                    action = signal.action.name,
+                    mode = strategyMode.value.name,
+                    confidence = signal.confidence,
+                    entryPrice = SignalSymbolAttribution.entryPrice(
+                        signalEntryPrice = signal.entryPrice,
+                        tickPrice = marketDataCoordinator.dashboardTicks.value[journalSymbol]?.price
+                    ),
+                    tp1 = signal.targetPrice1,
+                    tp2 = signal.targetPrice2,
+                    stopLoss = signal.stopLoss,
+                    reasoning = signal.reasoning.joinToString(" • "),
+                    orderbookPressure = signal.scalpingScoreCategory.ifBlank { null }
+                )
             }
         }
     }
+}
+
+fun TradingViewModel.emitAgentSignalIfEnabled(
+    symbol: String,
+    action: String,
+    mode: String,
+    confidence: Int,
+    entryPrice: Double,
+    tp1: Double,
+    tp2: Double,
+    stopLoss: Double,
+    reasoning: String,
+    orderbookPressure: String? = null
+) {
+    val bridge = agu.analys.bridge.AgentOutputBridge.getInstance(getApplication())
+    if (!bridge.isEnabled()) return
+    val currentEx = prefs.marketDataSource.name
+    val quote = if (symbol.uppercase().endsWith("USDT")) "USDT" else "IDR"
+    val feeRate = agu.analys.config.FeeSchedule.buyRate(currentEx, quote)
+    val netPrice = entryPrice * (1.0 + feeRate)
+    val out = agu.analys.bridge.AgentSignalOutput(
+        ts = System.currentTimeMillis(),
+        exchange = currentEx.lowercase(),
+        symbol = symbol,
+        quote = quote,
+        mode = mode,
+        action = action,
+        confidence = confidence.toFloat(),
+        price = entryPrice,
+        tp1 = if (tp1 > 0) tp1 else null,
+        tp2 = if (tp2 > 0) tp2 else null,
+        sl = if (stopLoss > 0) stopLoss else null,
+        reason = reasoning,
+        technical = agu.analys.bridge.TechnicalBreakdown(
+            orderbookPressure = orderbookPressure
+        ),
+        feeTruth = agu.analys.bridge.FeeTruthInfo(
+            feeRate = feeRate,
+            netPrice = netPrice,
+            exchange = currentEx.lowercase()
+        )
+    )
+    bridge.emitSignal(out)
 }

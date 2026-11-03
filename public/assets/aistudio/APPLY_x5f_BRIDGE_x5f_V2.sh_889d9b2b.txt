@@ -1,0 +1,61 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# APPLY SCRIPT - tinggal jalanin di root repo analisa-pasar
+# usage: ./APPLY_BRIDGE_V2.sh
+
+set -e
+REPO_ROOT=$(pwd)
+BRIDGE_SRC="./bridge_src" # folder tempat lu extract file gue
+
+echo "=== Apply Agent Bridge V2 (Polling + WebSocket) ke $REPO_ROOT ==="
+
+# 1. cek struktur
+if [ ! -f "app/build.gradle.kts" ]; then
+  echo "Jalanin script ini di root repo Agus27712/analisa-pasar (yang ada app/build.gradle.kts)"
+  exit 1
+fi
+
+# 2. copy bridge files
+mkdir -p app/src/main/java/agu/analys/bridge
+cp $BRIDGE_SRC/bridge/AgentOutputModels.kt app/src/main/java/agu/analys/bridge/
+cp $BRIDGE_SRC/bridge/AgentOutputBridge.kt app/src/main/java/agu/analys/bridge/
+cp $BRIDGE_SRC/bridge/AgentHttpServer.kt app/src/main/java/agu/analys/bridge/
+echo "✓ Bridge files copied"
+
+# 3. patch build.gradle.kts - tambahin ktor websocket kalo belum ada
+if ! grep -q "ktor-server-websockets" app/build.gradle.kts; then
+  echo "Patching build.gradle.kts..."
+  # backup
+  cp app/build.gradle.kts app/build.gradle.kts.bak
+  # inject dependencies - simple append, lu bisa edit manual kalo mau rapi
+  cat >> app/build.gradle.kts <<'GRADLE'
+
+    // === Agent Bridge V2 ===
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+    implementation("io.ktor:ktor-server-netty:2.3.9")
+    implementation("io.ktor:ktor-server-core:2.3.9")
+    implementation("io.ktor:ktor-server-websockets:2.3.9")
+    implementation("io.ktor:ktor-serialization-kotlinx-json:2.3.9")
+GRADLE
+  echo "✓ build.gradle.kts patched (backup di .bak)"
+else
+  echo "✓ build.gradle.kts already has websocket dep"
+fi
+
+# 4. ingetin manual patch
+echo ""
+echo "=== MANUAL PATCH (2 menit) ==="
+echo "Buka file: app/src/main/java/agu/analys/service/TradingForegroundService.kt"
+echo "Tambahin:"
+echo "  private lateinit var agentServer: AgentHttpServer"
+echo "  di onCreate(): agentServer = AgentHttpServer(this); if (AgentOutputBridge.getInstance(this).isEnabled()) agentServer.start()"
+echo "  di onDestroy(): agentServer.stop()"
+echo ""
+echo "Buka tempat sinyal trigger (PaperAutoTradeCoordinator / TradingViewModel):"
+echo "  AgentOutputBridge.getInstance(context).emitSignal(yourSignalConverted)"
+echo ""
+echo "Lihat INTEGRATION_PATCH.kt buat contoh lengkap"
+echo ""
+echo "=== SELESAI ==="
+echo "Build: ./gradlew assembleDebug"
+echo "Termux: copy oh-my-pi-extension/index.ts ke ~/.config/oh-my-pi/extensions/analisa-pasar/"

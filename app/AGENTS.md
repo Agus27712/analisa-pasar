@@ -38,6 +38,7 @@ Yang **tidak boleh** dilakukan lagi tanpa instruksi eksplisit owner:
 | Exit paper (beli → tahan → keluar) | `engine/scalping/PaperExitResolver.kt`, `SCALP_EXIT.md` |
 | Wiring state ke UI | `viewmodel/TradingViewModel*.kt` (banyak berkas, per fitur) |
 | Tambah layar | `model/TradingViewModels.kt` (`AppScreen`) → `MainActivity.kt` → `viewmodel/TradingViewModelNavigation.kt` |
+| Agent Bridge V2 (Termux/OMP) | `bridge/AgentOutputBridge.kt`, `AgentHttpServer.kt`, `tools/oh-my-pi-extension/` |
 
 ## Aturan turunan dari audit notifikasi (batch 1 & 2, 2026-10-16)
 

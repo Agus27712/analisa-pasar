@@ -1,0 +1,18 @@
+// app/build.gradle.kts - REPLACE dependencies block dengan ini (tambah 2 baris websocket)
+
+dependencies {
+    // existing lu tetep...
+
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+
+    // Ktor V2 - HTTP + WebSocket + SSE
+    implementation("io.ktor:ktor-server-netty:2.3.9")
+    implementation("io.ktor:ktor-server-core:2.3.9")
+    implementation("io.ktor:ktor-server-websockets:2.3.9")
+    implementation("io.ktor:ktor-server-content-negotiation:2.3.9")
+    implementation("io.ktor:ktor-serialization-kotlinx-json:2.3.9")
+}
+
+// AndroidManifest.xml - pastikan ada:
+// <uses-permission android:name="android.permission.INTERNET"/>

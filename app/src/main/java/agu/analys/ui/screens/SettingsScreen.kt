@@ -467,8 +467,32 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                             iconTint = TvBlue,
                             iconBackground = TvBlue.copy(alpha = 0.15f),
                             title = "Pembaruan & Versi Aplikasi",
-                            subtitle = "Versi 3.4.1 (Build 67) · Periksa rilis GitHub & cache",
+                            subtitle = "Versi 3.9.2 (Build 91) · Periksa rilis GitHub & cache",
                             onClick = { activeCategory = SettingsCategory.SYSTEM }
+                        )
+                        HorizontalDivider(color = TvBorder.copy(alpha = 0.5f), thickness = 0.5.dp)
+                        var isAgentEnabled by remember { mutableStateOf(prefs.isAgentOutputEnabled) }
+                        AndroidPreferenceSwitchItem(
+                            icon = Icons.Default.Sensors,
+                            iconTint = Color(0xFFFFB300),
+                            iconBackground = Color(0xFFFFB300).copy(alpha = 0.15f),
+                            title = "Agent Bridge V2 (Termux / OMP)",
+                            subtitle = if (isAgentEnabled)
+                                "Aktif: ws://0.0.0.0:8765/ws/signals + Documents/analisa-pasar"
+                            else
+                                "Output sinyal & WebSocket port 8765 nonaktif",
+                            checked = isAgentEnabled,
+                            onCheckedChange = { checked ->
+                                prefs.isAgentOutputEnabled = checked
+                                isAgentEnabled = checked
+                                if (checked) {
+                                    agu.analys.bridge.AgentHttpServer.getInstance(context).start()
+                                    Toast.makeText(context, "Agent Bridge V2 aktif di port 8765", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    agu.analys.bridge.AgentHttpServer.getInstance(context).stop()
+                                    Toast.makeText(context, "Agent Bridge V2 dihentikan", Toast.LENGTH_SHORT).show()
+                                }
+                            }
                         )
                     }
 

@@ -24,6 +24,7 @@ fun getSecret(key: String): String {
 plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.kotlin.compose)
+  alias(libs.plugins.kotlin.serialization)
   alias(libs.plugins.secrets)
   alias(libs.plugins.google.devtools.ksp)
 }
@@ -90,7 +91,13 @@ android {
   }
   compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
   buildFeatures { compose = true; buildConfig = true }
-  packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
+  packaging {
+    resources.excludes += setOf(
+      "/META-INF/{AL2.0,LGPL2.1}",
+      "META-INF/INDEX.LIST",
+      "META-INF/io.netty.versions.properties"
+    )
+  }
   testOptions {
     unitTests.isReturnDefaultValues = true
     unitTests.isIncludeAndroidResources = true
@@ -130,6 +137,11 @@ dependencies {
   implementation(libs.androidx.room.ktx)
   implementation(libs.androidx.work.runtime.ktx)
   implementation(libs.ta4j.core)
+  implementation(libs.ktor.server.core)
+  implementation(libs.ktor.server.netty)
+  implementation(libs.ktor.server.websockets)
+  implementation(libs.ktor.server.content.negotiation)
+  implementation(libs.ktor.serialization.kotlinx.json)
   ksp(libs.androidx.room.compiler)
   testImplementation(libs.junit)
   testImplementation("org.json:json:20240303")

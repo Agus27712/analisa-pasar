@@ -5498,3 +5498,54 @@ yang terbukti adalah kompilasi, perilaku evaluator lewat uji JVM, dan bentuk sum
 `ModeSliderFrameSourceTest`. Perilaku sentuh slider dan tombol simpan menunggu pemeriksaan manual
 pada APK. Tidak ada klaim profit untuk konfigurasi mana pun — default hanya mengunci perilaku lama,
 dan preset hanya menggeser frekuensi sinyal.
+
+---
+
+## 91. Integrasi Agent Bridge V2 (HTTP Polling + WebSocket Realtime + Ekstensi Termux) (2026-11-03)
+
+### 91.1 Latar Belakang & Masalah
+
+Pengguna membutuhkan jembatan komunikasi lokal yang menghubungkan aplikasi Android `analisa-pasar`
+dengan agen AI / runner CLI lokal (seperti `oh-my-pi` / OMP di Termux) tanpa perantara server cloud
+dan tanpa ketergantungan API pihak ketiga. Jembatan versi 2 harus mendukung dua jalur komunikasi
+sekaligus:
+1. **Push Realtime**: WebSocket (`/ws/signals`) dan Server-Sent Events (`/events`) untuk menangkap
+   sinyal scalping detik itu juga.
+2. **Polling & Penyimpanan Berkas**: HTTP (`/health`, `/signals/latest`, `/signals/history`,
+   `/portfolio`) dan pencatatan berkas riwayat (`signals.jsonl`, `latest.json`, `portfolio.json`)
+   di penyimpanan dokumen lokal.
+
+### 91.2 Keputusan & Arsitektur
+
+| Aspek | Keputusan |
+|---|---|
+| Server Lokal | Ktor Server Netty berjalan di dalam Android pada port `8765`, host `0.0.0.0` |
+| Event Bus Reaktif | `AgentEventBus` berbasis Kotlin Coroutines `MutableSharedFlow` dengan buffer & replay |
+| Skema Data | `AgentOutputModels.kt` (@Serializable): `AgentSignalOutput`, `TechnicalBreakdown`, `FeeTruthInfo`, `AgentPortfolioOutput`, `AgentAsset` |
+| Siklus Hidup | Dikontrol oleh `TradingForegroundService` (keep-alive) dan switch preferensi UI |
+| Switch Preferensi | Toggle `agent_output_enabled` di Pengaturan Sistem & Pemeliharaan |
+| Titik Emisi Sinyal | `TradingViewModelSync.kt`: dipancarkan saat `onCandidateSignalTransition` dan logging sinyal aktif |
+| Ekstensi Klien | `tools/oh-my-pi-extension/index.ts` untuk Termux + `test-v2.sh` + `APPLY_BRIDGE_V2.sh` |
+| Batasan Keamanan | Decision support / telemetry only — tidak ada auto-trade eksekusi uang riil tanpa verifikasi |
+
+### 91.3 Implementasi & Berkas Terkait
+
+1. **`app/src/main/java/agu/analys/bridge/`**:
+   - `AgentOutputModels.kt`: Skema JSON dan EventBus.
+   - `AgentOutputBridge.kt`: Singleton manajemen file lokal dan emisi event bus.
+   - `AgentHttpServer.kt`: Ktor Netty Server port 8765.
+2. **`app/build.gradle.kts` & `gradle/libs.versions.toml`**:
+   - Plugin `kotlin.serialization`.
+   - Pustaka Ktor Server 2.3.9 Netty, Core, WebSockets, ContentNegotiation, dan Serialization.
+3. **`app/src/main/java/agu/analys/service/TradingForegroundService.kt`**:
+   - Hook inisialisasi dan stop server Ktor tanpa melanggar aturan N15 dan N16.
+4. **`app/src/main/java/agu/analys/viewmodel/TradingViewModelSync.kt`**:
+   - Emisi otomatis saat sinyal trading terdeteksi.
+5. **`app/src/main/java/agu/analys/ui/screens/SettingsScreen.kt`**:
+   - Switch toggle Agent Bridge V2 di bagian Sistem & Pemeliharaan.
+6. **`tools/oh-my-pi-extension/`**:
+   - `index.ts`, `test-v2.sh`, `APPLY_BRIDGE_V2.sh`.
+7. **`app/src/test/java/agu/analys/bridge/AgentBridgeTest.kt`**:
+   - Unit test serialisasi sinyal, portfolio, dan emisi EventBus.
+8. **Dokumentasi**:
+   - `docs/LAPORAN-integrasi-agent-bridge-v2-2026-11-03.md`.

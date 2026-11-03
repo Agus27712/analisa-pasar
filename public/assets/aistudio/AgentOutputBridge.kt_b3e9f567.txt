@@ -1,0 +1,91 @@
+package agu.analys.bridge
+
+import android.content.Context
+import android.os.Environment
+import agu.analys.util.AppLogManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import java.io.File
+import java.util.concurrent.atomic.AtomicReference
+
+class AgentOutputBridge(private val context: Context) {
+
+    private val scope = CoroutineScope(Dispatchers.IO)
+    private val jsonPretty = Json { prettyPrint = true; ignoreUnknownKeys = true }
+    private val jsonCompact = Json { ignoreUnknownKeys = true }
+
+    private val outputDir: File by lazy {
+        File(
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS),
+            "analisa-pasar/output"
+        ).apply { mkdirs() }
+    }
+
+    private val latestRef = AtomicReference<AgentSignalOutput?>()
+
+    fun isEnabled(): Boolean {
+        return context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+            .getBoolean("agent_output_enabled", false)
+    }
+
+    fun emitSignal(signal: AgentSignalOutput) {
+        if (!isEnabled()) return
+        try {
+            latestRef.set(signal)
+
+            // 1. File - JSONL + latest.json (polling fallback)
+            scope.launch {
+                val line = jsonCompact.encodeToString(signal)
+                File(outputDir, "signals.jsonl").appendText(line + "\n")
+                File(outputDir, "latest.json").writeText(jsonPretty.encodeToString(signal))
+                maintainRolling(1000)
+            }
+
+            // 2. Push - WebSocket/SSE via EventBus (realtime)
+            scope.launch {
+                AgentEventBus.emitSignal(signal)
+            }
+
+            AppLogManager.i("AgentBridge", "EMIT ${signal.symbol} ${signal.confidence}% -> file+ws")
+        } catch (e: Exception) {
+            AppLogManager.e("AgentBridge", "emitSignal failed", e)
+        }
+    }
+
+    fun emitPortfolio(portfolio: AgentPortfolioOutput) {
+        if (!isEnabled()) return
+        try {
+            scope.launch {
+                File(outputDir, "portfolio.json").writeText(jsonPretty.encodeToString(portfolio))
+                AgentEventBus.emitPortfolio(portfolio)
+            }
+        } catch (e: Exception) {
+            AppLogManager.e("AgentBridge", "emitPortfolio failed", e)
+        }
+    }
+
+    fun getLatest(): AgentSignalOutput? = latestRef.get()
+    fun getDir(): File = outputDir
+
+    private fun maintainRolling(max: Int) {
+        try {
+            val f = File(outputDir, "signals.jsonl")
+            if (!f.exists()) return
+            val lines = f.readLines()
+            if (lines.size > max) {
+                f.writeText(lines.takeLast(max).joinToString("\n") + "\n")
+            }
+        } catch (_: Exception) {}
+    }
+
+    companion object {
+        @Volatile private var INSTANCE: AgentOutputBridge? = null
+        fun getInstance(ctx: Context): AgentOutputBridge =
+            INSTANCE ?: synchronized(this) {
+                INSTANCE ?: AgentOutputBridge(ctx.applicationContext).also { INSTANCE = it }
+            }
+    }
+}

@@ -51,6 +51,7 @@ class TradingForegroundService : Service() {
      * nilainya dibaca ulang tiap tick supaya perubahan di Pengaturan langsung terpakai.
      */
     private val appPrefs by lazy { AppPreferences(applicationContext) }
+    private var agentServer: agu.analys.bridge.AgentHttpServer? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -59,6 +60,11 @@ class TradingForegroundService : Service() {
         ensureActiveScope()
         createNotificationChannel()
         startHoldingsMonitor()
+
+        agentServer = agu.analys.bridge.AgentHttpServer.getInstance(this)
+        if (agu.analys.bridge.AgentOutputBridge.getInstance(this).isEnabled()) {
+            agentServer?.start()
+        }
     }
 
     private var lastUpdateTime = 0L
@@ -91,6 +97,7 @@ class TradingForegroundService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        agentServer?.stop()
         monitorJob?.cancel()
         serviceJob.cancel()
     }
