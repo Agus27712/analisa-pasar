@@ -42,13 +42,18 @@ fun SettingsCategoryDetailContent(
     draftPaperAuto: agu.analys.engine.scalping.PaperAutoTradeConfig,
     draftIntradayConfig: agu.analys.engine.intraday.IntradayConfig,
     draftIntradayPreset: String,
+    draftSwingConfig: agu.analys.engine.swing.SwingConfig,
+    draftSwingPreset: String,
     onDraftScalpingChange: (agu.analys.engine.scalping.ScalpingRuntimeConfig, String) -> Unit,
     onDraftScalpingPresetChange: (agu.analys.engine.scalping.SensitivityPreset) -> Unit,
     onDraftPaperAutoChange: (agu.analys.engine.scalping.PaperAutoTradeConfig) -> Unit,
     onDraftIntradayChange: (agu.analys.engine.intraday.IntradayConfig, String) -> Unit,
     onDraftIntradayPresetChange: (agu.analys.engine.intraday.IntradaySensitivityPreset) -> Unit,
+    onDraftSwingChange: (agu.analys.engine.swing.SwingConfig, String) -> Unit,
+    onDraftSwingPresetChange: (agu.analys.engine.swing.SwingSensitivityPreset) -> Unit,
     onSaveScalping: () -> Unit,
     onSaveIntraday: () -> Unit,
+    onSaveSwing: () -> Unit,
     selectedSource: MarketDataSource,
     onSourceChange: (MarketDataSource) -> Unit,
     buyMakerFee: String,
@@ -103,6 +108,7 @@ fun SettingsCategoryDetailContent(
 ) {
     val scalpingConfig by viewModel.scalpingRuntimeConfig.collectAsStateWithLifecycle()
     val intradayConfig by viewModel.intradayRuntimeConfig.collectAsStateWithLifecycle()
+    val swingConfig by viewModel.swingRuntimeConfig.collectAsStateWithLifecycle()
 
     when (category) {
         SettingsCategory.TRADING -> {
@@ -110,11 +116,14 @@ fun SettingsCategoryDetailContent(
                 strategyMode = strategyMode,
                 scalpingConfig = scalpingConfig,
                 intradayConfig = intradayConfig,
+                swingConfig = swingConfig,
                 draftScalpingConfig = draftScalpingConfig,
                 draftScalpingPreset = draftScalpingPreset,
                 draftPaperAuto = draftPaperAuto,
                 draftIntradayConfig = draftIntradayConfig,
                 draftIntradayPreset = draftIntradayPreset,
+                draftSwingConfig = draftSwingConfig,
+                draftSwingPreset = draftSwingPreset,
                 expandedMode = expandedMode,
                 onExpandedChange = onExpandedChange,
                 onStrategyChange = onStrategyModeChange,
@@ -123,8 +132,11 @@ fun SettingsCategoryDetailContent(
                 onDraftPaperAutoChange = onDraftPaperAutoChange,
                 onDraftIntradayChange = onDraftIntradayChange,
                 onDraftIntradayPresetChange = onDraftIntradayPresetChange,
+                onDraftSwingChange = onDraftSwingChange,
+                onDraftSwingPresetChange = onDraftSwingPresetChange,
                 onSaveScalping = onSaveScalping,
-                onSaveIntraday = onSaveIntraday
+                onSaveIntraday = onSaveIntraday,
+                onSaveSwing = onSaveSwing
             )
 
             Spacer(Modifier.height(14.dp))

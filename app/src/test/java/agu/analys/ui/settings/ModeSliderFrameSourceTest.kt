@@ -50,6 +50,25 @@ class ModeSliderFrameSourceTest {
     }
 
     @Test
+    fun `slider swing hidup di dalam kartu mode`() {
+        val kartu = kode("agu/analys/ui/components/settings/TradingModeSettings.kt")
+        assertTrue(
+            "Kartu SWING wajib memuat slider SwingSensitivitySettings di dalam kadarnya",
+            kartu.contains("SwingSensitivitySettings(")
+        )
+        assertTrue(
+            "Kartu SWING wajib membawa tombol Simpan (onSaveSwing) di dalam kartu",
+            kartu.contains("onSaveSwing")
+        )
+        // Draft, bukan terapan langsung: kartu menampilkan draft dan onStrategyChange tidak
+        // dipakai lagi oleh kartu SWING — mengaktifkan mode lewat "Simpan & Aktifkan".
+        assertFalse(
+            "Kartu SWING tidak boleh langsung mengubah mode tanpa Simpan & Aktifkan",
+            kartu.contains("onClick = { onStrategyChange(StrategyMode.SWING) }")
+        )
+    }
+
+    @Test
     fun `dialog engine layar penuh tidak boleh hidup lagi`() {
         val layar = kode("agu/analys/ui/screens/SettingsScreen.kt")
         assertFalse(
@@ -90,6 +109,7 @@ class ModeSliderFrameSourceTest {
         listOf(
             "viewModel.updateScalpingRuntimeConfig(draftScalpingConfig, draftScalpingPreset)",
             "viewModel.updateIntradayRuntimeConfig(draftIntradayConfig, draftIntradayPreset)",
+            "viewModel.updateSwingRuntimeConfig(draftSwingConfig, draftSwingPreset)",
             "viewModel.setStrategyMode(StrategyMode.OFFICE_DAILY)"
         ).forEach { bagian ->
             assertTrue(
@@ -101,7 +121,8 @@ class ModeSliderFrameSourceTest {
             "Jalur draft tidak boleh memakai preset yang langsung menyimpan ke engine " +
                 "(melanggar semantik draft → Simpan & Aktifkan)",
             layar.contains("viewModel.applyScalpingPreset") ||
-                layar.contains("viewModel.applyIntradayPreset")
+                layar.contains("viewModel.applyIntradayPreset") ||
+                layar.contains("viewModel.applySwingPreset")
         )
     }
 }

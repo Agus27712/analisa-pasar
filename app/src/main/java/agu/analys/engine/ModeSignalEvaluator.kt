@@ -8,7 +8,9 @@ import agu.analys.engine.intraday.IntradayRuntimeConfig
 import agu.analys.engine.regime.MacroAnomalyDetector
 import agu.analys.engine.scalping.ScalpingMtfEvaluator
 import agu.analys.engine.scalping.ScalpingRuntimeConfig
+import agu.analys.engine.swing.SwingConfig
 import agu.analys.engine.swing.SwingEvaluator
+import agu.analys.engine.swing.SwingRuntimeConfig
 import agu.analys.model.AISignalState
 import agu.analys.model.CandleBar
 import agu.analys.model.MarketTick
@@ -68,6 +70,13 @@ data class ModeSignalInput(
      * [IntradayConfig.DEFAULT], sehingga angka replay paket A–F tetap reproducible.
      */
     val intradayConfig: agu.analys.engine.intraday.IntradayConfig = IntradayRuntimeConfig.current,
+    /**
+     * Config mode SWING (slider swing). Satu pintu yang sama dengan scalping/intraday: holder
+     * hanya dibaca di sini (bawaaan = nilai saat ini), tidak di evaluator maupun worker.
+     * Bawaan [agu.analys.engine.swing.SwingConfig.DEFAULT] = literal `SwingEvaluator` sebelum
+     * slider ada, sehingga engine tidak berubah perilaku tanpa geseran slider.
+     */
+    val swingConfig: agu.analys.engine.swing.SwingConfig = SwingRuntimeConfig.current,
     val globalContext: GlobalMarketContext = GlobalMarketContext()
 )
 
@@ -158,7 +167,8 @@ object ModeSignalEvaluator {
             history = input.h1Candles,
             fees = input.fees,
             macroAnomalyResult = anomaly,
-            symbol = input.symbol
+            symbol = input.symbol,
+            config = input.swingConfig
         )
         return ModeSignal(result.signal, result.indicators)
     }

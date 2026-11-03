@@ -39,19 +39,23 @@ import agu.analys.ui.theme.*
  * - Bullet kartu menampilkan config **aktif** (yang benar-benar dipakai engine).
  * - Area di dalam kartu menampilkan **draft**; engine hanya menerima draft setelah
  *   "Simpan & Aktifkan" ditekan. Menutup area = membatalkan draft.
- * - Mode SWING sengaja tanpa slider: tidak ada config-nya, dan menambah `object … current` baru
- *   tanpa pembaca dilarang `app/AGENTS.md`.
+ * - Mode SWING kini punya slider sendiri (`SwingSensitivitySettings`, 18 knob) dengan pola yang
+ *   sama: draft sampai "Simpan & Aktifkan", config-nya `SwingConfig`/HOLDER
+ *   `SwingRuntimeConfig.current`.
  */
 @Composable
 fun TradingModeSettings(
     strategyMode: StrategyMode,
     scalpingConfig: ScalpingRuntimeConfig,
     intradayConfig: IntradayConfig,
+    swingConfig: agu.analys.engine.swing.SwingConfig,
     draftScalpingConfig: ScalpingRuntimeConfig,
     draftScalpingPreset: String,
     draftPaperAuto: PaperAutoTradeConfig,
     draftIntradayConfig: IntradayConfig,
     draftIntradayPreset: String,
+    draftSwingConfig: agu.analys.engine.swing.SwingConfig,
+    draftSwingPreset: String,
     expandedMode: StrategyMode?,
     onExpandedChange: (StrategyMode?) -> Unit,
     onStrategyChange: (StrategyMode) -> Unit,
@@ -60,8 +64,11 @@ fun TradingModeSettings(
     onDraftPaperAutoChange: (PaperAutoTradeConfig) -> Unit,
     onDraftIntradayChange: (IntradayConfig, String) -> Unit,
     onDraftIntradayPresetChange: (IntradaySensitivityPreset) -> Unit,
+    onDraftSwingChange: (agu.analys.engine.swing.SwingConfig, String) -> Unit,
+    onDraftSwingPresetChange: (agu.analys.engine.swing.SwingSensitivityPreset) -> Unit,
     onSaveScalping: () -> Unit,
-    onSaveIntraday: () -> Unit
+    onSaveIntraday: () -> Unit,
+    onSaveSwing: () -> Unit
 ) {
     Column {
         SectionHeader("MODE ANALISIS TRADING")
@@ -126,10 +133,38 @@ fun TradingModeSettings(
             tagBg = TvBlue.copy(alpha = 0.15f),
             tagFg = TvBlue,
             isSelected = strategyMode == StrategyMode.SWING,
+            expanded = expandedMode == StrategyMode.SWING,
+            expandLabel = "Atur sensitifitas swing",
             desc = "Menganalisis trend jangka menengah (1H – 1D) untuk posisi swing yang lebih tenang.",
-            bullets = listOf("Timeframe: 1H & 1D", "Analisis struktur trend (HH/HL/LH/LL)", "Fokus: Support / Resistance & Demand Zone"),
-            onClick = { onStrategyChange(StrategyMode.SWING) }
-        )
+            bullets = listOf(
+                "Timeframe: 1H & 1D · Analisis struktur trend (HH/HL/LH/LL)",
+                "Net R:R min ${fmtNum(swingConfig.minNetRr, 2)} · Skor beli min ${fmtNum(swingConfig.minEntryScore, 0)} · Konfluensi min ${swingConfig.minConfluenceCheckpoints}/6",
+                "Filter pucuk: jarak ${fmtNum(swingConfig.maxDistToHighPct, 1)}% · Ekstensi ${fmtNum(swingConfig.maxAtrExtension, 1)}× ATR · RSI jenuh ${fmtNum(swingConfig.overboughtRsi, 0)}",
+                "Stop Loss: buffer ${fmtNum(swingConfig.slBufferAtrRejection, 2)}× ATR, jarak ${fmtNum(swingConfig.slMinDistancePct, 1)}–${fmtNum(swingConfig.slMaxDistancePct, 1)}%",
+                "Target: ${fmtNum(swingConfig.tp1AtrMult, 1)}× / ${fmtNum(swingConfig.tp2AtrMult, 1)}× ATR · Slippage ${fmtNum(swingConfig.slippagePct, 2)}%"
+            ),
+            onClick = {
+                onExpandedChange(
+                    if (expandedMode == StrategyMode.SWING) null else StrategyMode.SWING
+                )
+            }
+        ) {
+            Text(
+                "Nilai di bawah masih draft. Engine Swing menerima nilai ini setelah tombol Simpan & Aktifkan ditekan.",
+                color = TvTextSecondary,
+                fontSize = 10.sp,
+                lineHeight = 14.sp
+            )
+            Spacer(Modifier.height(10.dp))
+            SwingSensitivitySettings(
+                config = draftSwingConfig,
+                activePreset = draftSwingPreset,
+                onConfigChange = onDraftSwingChange,
+                onPresetChange = onDraftSwingPresetChange
+            )
+            Spacer(Modifier.height(12.dp))
+            SaveAndActivateButton(onClick = onSaveSwing)
+        }
 
         Spacer(Modifier.height(10.dp))
 

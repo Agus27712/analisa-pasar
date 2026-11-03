@@ -29,6 +29,8 @@ import agu.analys.engine.intraday.IntradayRuntimeConfig
 import agu.analys.engine.intraday.IntradaySensitivityPreset
 import agu.analys.engine.scalping.ScalpingRuntimeConfig
 import agu.analys.engine.scalping.SensitivityPreset
+import agu.analys.engine.swing.SwingRuntimeConfig
+import agu.analys.engine.swing.SwingSensitivityPreset
 import agu.analys.ui.components.security.SecurityPinDialog
 import agu.analys.ui.components.security.SetupRealApiDialog
 import agu.analys.ui.components.settings.*
@@ -78,6 +80,11 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
     val activeIntradayPreset by viewModel.intradaySensitivityPreset.collectAsStateWithLifecycle()
     var draftIntradayConfig by remember { mutableStateOf(activeIntradayConfig) }
     var draftIntradayPreset by remember { mutableStateOf(activeIntradayPreset) }
+    // Slider mode SWING — pattern sama; config & holder-nya sendiri.
+    val activeSwingConfig by viewModel.swingRuntimeConfig.collectAsStateWithLifecycle()
+    val activeSwingPreset by viewModel.swingSensitivityPreset.collectAsStateWithLifecycle()
+    var draftSwingConfig by remember { mutableStateOf(activeSwingConfig) }
+    var draftSwingPreset by remember { mutableStateOf(activeSwingPreset) }
     // P2 — draft pengaturan auto-buy / auto-exit paper trade
     var draftPaperAuto by remember { mutableStateOf(viewModel.paperAutoTradeConfig.value) }
 
@@ -154,6 +161,14 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
         strategyMode = StrategyMode.OFFICE_DAILY
         saved = true
         Toast.makeText(context, "Konfigurasi Engine Intraday disimpan dan diaktifkan.", Toast.LENGTH_SHORT).show()
+    }
+
+    fun saveSwingEngineSettings() {
+        viewModel.updateSwingRuntimeConfig(draftSwingConfig, draftSwingPreset)
+        viewModel.setStrategyMode(StrategyMode.SWING)
+        strategyMode = StrategyMode.SWING
+        saved = true
+        Toast.makeText(context, "Konfigurasi Engine Swing disimpan dan diaktifkan.", Toast.LENGTH_SHORT).show()
     }
 
     BackHandler(enabled = expandedMode != null || activeCategory != null) {
@@ -516,8 +531,9 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                         viewModel = viewModel,
                         strategyMode = strategyMode,
                         onStrategyModeChange = { mode ->
-                            // Hanya SWING lewat sini. SCALPING dan INTRADAY membuka area slider di
-                            // dalam kartunya dan baru aktif setelah "Simpan & Aktifkan".
+                            // Catatan: sejak slider SWING hidup di dalam kartunya, semua kartu mode
+                            // membuka area slider dan baru aktif lewat "Simpan & Aktifkan".
+                            // Parameter ini tetap untuk jalur non-kartu (jika ada).
                             strategyMode = mode
                             saved = false
                         },
@@ -534,6 +550,10 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                                 StrategyMode.OFFICE_DAILY -> {
                                     draftIntradayConfig = activeIntradayConfig
                                     draftIntradayPreset = activeIntradayPreset
+                                }
+                                StrategyMode.SWING -> {
+                                    draftSwingConfig = activeSwingConfig
+                                    draftSwingPreset = activeSwingPreset
                                 }
                                 else -> Unit
                             }
@@ -571,12 +591,31 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                                 IntradaySensitivityPreset.CUSTOM -> draftIntradayConfig
                             }
                         },
+                        draftSwingConfig = draftSwingConfig,
+                        draftSwingPreset = draftSwingPreset,
+                        onDraftSwingChange = { cfg, preset ->
+                            draftSwingConfig = cfg
+                            draftSwingPreset = preset
+                        },
+                        onDraftSwingPresetChange = { preset ->
+                            draftSwingPreset = preset.name
+                            draftSwingConfig = when (preset) {
+                                SwingSensitivityPreset.STANDARD -> SwingRuntimeConfig.DEFAULT
+                                SwingSensitivityPreset.STRICT -> SwingRuntimeConfig.STRICT
+                                SwingSensitivityPreset.LOOSE -> SwingRuntimeConfig.LOOSE
+                                SwingSensitivityPreset.CUSTOM -> draftSwingConfig
+                            }
+                        },
                         onSaveScalping = {
                             saveScalpingEngineSettings()
                             expandedMode = null
                         },
                         onSaveIntraday = {
                             saveIntradayEngineSettings()
+                            expandedMode = null
+                        },
+                        onSaveSwing = {
+                            saveSwingEngineSettings()
                             expandedMode = null
                         },
                         selectedSource = selectedSource,

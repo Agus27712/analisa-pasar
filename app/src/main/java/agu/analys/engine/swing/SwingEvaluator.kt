@@ -43,10 +43,11 @@ private enum class SwingSetup {
 object SwingEvaluator {
 
     fun evaluate(
-        price: Double, 
-        history: List<CandleBar>, 
-        fees: TradingFeeConfig = TradingFeeConfig()
-    ): SwingEvalResult = evaluate(agu.analys.engine.global.GlobalMarketContext(), price, history, fees)
+        price: Double,
+        history: List<CandleBar>,
+        fees: TradingFeeConfig = TradingFeeConfig(),
+        config: SwingConfig = SwingConfig.DEFAULT
+    ): SwingEvalResult = evaluate(agu.analys.engine.global.GlobalMarketContext(), price, history, fees, null, "", config)
 
     fun evaluate(
         globalContext: agu.analys.engine.global.GlobalMarketContext = agu.analys.engine.global.GlobalMarketContext(),
@@ -54,7 +55,8 @@ object SwingEvaluator {
         history: List<CandleBar>, 
         fees: TradingFeeConfig = TradingFeeConfig(),
         macroAnomalyResult: agu.analys.engine.regime.MacroAnomalyResult? = null,
-        symbol: String = ""
+        symbol: String = "",
+        config: SwingConfig = SwingConfig.DEFAULT
     ): SwingEvalResult {
         if (price <= 0.0) {
             return SwingEvalResult(AISignalState(), TechnicalIndicators())
@@ -131,7 +133,7 @@ object SwingEvaluator {
         val prev = history[history.lastIndex - 1]
         val avgVolume = history.takeLast(8).dropLast(1).map { it.volume }.average().coerceAtLeast(1.0)
         val volumeRatio = last.volume / avgVolume
-        val strongVolume = volumeRatio >= 1.25
+        val strongVolume = volumeRatio >= config.strongVolumeRatio
         val body = abs(last.close - last.open)
         val range = (last.high - last.low).coerceAtLeast(1e-9)
         val bodyRatio = body / range
@@ -149,8 +151,8 @@ object SwingEvaluator {
             ?: structure.lastSwingHigh?.takeIf { it > price }
             ?: (price + effectiveAtr * 2.0)
 
-        val nearSupport = abs(price - supportLevel) / price <= 0.012 || last.low <= supportLevel * 1.008
-        val nearResistance = abs(price - resistanceLevel) / price <= 0.012 || last.high >= resistanceLevel * 0.992
+        val nearSupport = abs(price - supportLevel) / price <= config.nearLevelPct / 100.0 || last.low <= supportLevel * 1.008
+        val nearResistance = abs(price - resistanceLevel) / price <= config.nearLevelPct / 100.0 || last.high >= resistanceLevel * 0.992
         val brokeAboveResistance = last.close > resistanceLevel && prev.close <= resistanceLevel * 1.002
         val brokeBelowSupport = last.close < supportLevel && prev.close >= supportLevel * 0.998
 
@@ -163,9 +165,9 @@ object SwingEvaluator {
 
         // 1. REJECTION
         // Candle besar yang pantul dari level, minim wick ke arah pantulan, volume bagus
-        val rejectionAtSupport = nearSupport && isBullCandle && bodyRatio >= 0.45 &&
+        val rejectionAtSupport = nearSupport && isBullCandle && bodyRatio >= config.rejectionBodyRatioMin &&
             lowerWick <= body * 0.55 && (strongVolume || lowerWick > body * 0.3)
-        val rejectionAtResistance = nearResistance && isBearCandle && bodyRatio >= 0.45 &&
+        val rejectionAtResistance = nearResistance && isBearCandle && bodyRatio >= config.rejectionBodyRatioMin &&
             upperWick <= body * 0.55 && (strongVolume || upperWick > body * 0.3)
 
         // Micro sweep juga dihitung sebagai rejection kuat
@@ -184,8 +186,8 @@ object SwingEvaluator {
 
         // 2. BREAKOUT / BREAKDOWN
         // Candle nutup solid di luar level + volume
-        val solidBreakout = brokeAboveResistance && isBullCandle && bodyRatio >= 0.40 && last.close >= resistanceLevel * 1.001
-        val solidBreakdown = brokeBelowSupport && isBearCandle && bodyRatio >= 0.40 && last.close <= supportLevel * 0.999
+        val solidBreakout = brokeAboveResistance && isBullCandle && bodyRatio >= config.breakoutBodyRatioMin && last.close >= resistanceLevel * 1.001
+        val solidBreakdown = brokeBelowSupport && isBearCandle && bodyRatio >= config.breakoutBodyRatioMin && last.close <= supportLevel * 0.999
         val bosBreakout = micro.hasBullishBOS && price > (structure.lastSwingHigh ?: resistanceLevel) * 0.998
         val bosBreakdown = micro.hasBearishBOS && price < (structure.lastSwingLow ?: supportLevel) * 1.002
 
@@ -211,12 +213,12 @@ object SwingEvaluator {
         val hadBreakBelow = recentLows.any { it < supportLevel * 0.995 } && price > supportLevel * 0.985
 
         if (detectedSetup == SwingSetup.NONE) {
-            if (hadBreakAbove && nearResistance && (rejectionAtResistance || (isBearCandle && bodyRatio >= 0.35))) {
+            if (hadBreakAbove && nearResistance && (rejectionAtResistance || (isBearCandle && bodyRatio >= RETEST_BODY_RATIO_MIN))) {
                 // Ini sebenarnya failed retest / distribution — treat as rejection setelah break
                 detectedSetup = SwingSetup.RETEST
                 setupScore = 18.0
                 reasons += "RETEST Resistance gagal: level ${PriceFormatter.formatPrice(resistanceLevel, quoteAsset = quoteAsset)} ditolak lagi setelah pernah tembus."
-            } else if (hadBreakBelow && nearSupport && (rejectionAtSupport || (isBullCandle && bodyRatio >= 0.35))) {
+            } else if (hadBreakBelow && nearSupport && (rejectionAtSupport || (isBullCandle && bodyRatio >= RETEST_BODY_RATIO_MIN))) {
                 detectedSetup = SwingSetup.RETEST
                 setupScore = 28.0
                 reasons += "RETEST Support: harga balik ngetes ${PriceFormatter.formatPrice(supportLevel, quoteAsset = quoteAsset)} setelah breakdown lalu ditolak (support hold)."
@@ -256,7 +258,7 @@ object SwingEvaluator {
             rsi < 32 -> { buy += 14; reasons += "RSI ${fmt(rsi)} jenuh jual (peluang rebound swing)." }
             rsi in 32.0..48.0 -> { buy += 10; reasons += "RSI ${fmt(rsi)} di zona akumulasi sehat." }
             rsi in 48.0..65.0 -> { buy += 8; reasons += "RSI ${fmt(rsi)} momentum bullish terjaga." }
-            rsi > 72 -> { sell += 18; reasons += "RSI ${fmt(rsi)} jenuh beli (waspada koreksi)." }
+            rsi > config.overboughtRsi -> { sell += 18; reasons += "RSI ${fmt(rsi)} jenuh beli (waspada koreksi)." }
             else -> reasons += "RSI ${fmt(rsi)} netral."
         }
 
@@ -309,11 +311,14 @@ object SwingEvaluator {
         val calculatedSl = when (detectedSetup) {
             SwingSetup.REJECTION, SwingSetup.RETEST, SwingSetup.RECLAIM_FAILED -> {
                 // SL di bawah low candle rejection / di luar support
+                // Konstanta SL cabang ini = knob config: buffer ATR, jarak ATR maksimum, serta
+                // lantai/atas jarak dalam persen. Cabang BREAKOUT dan tanpa-setup memakai nilai
+                // internalnya sendiri (lihat KDoc `SwingConfig`) supaya default tidak bergeser.
                 maxOf(
-                    min(last.low, supportLevel) - effectiveAtr * 0.20,
-                    price - effectiveAtr * 1.4,
-                    price * 0.93
-                ).coerceAtMost(price * 0.985)
+                    min(last.low, supportLevel) - effectiveAtr * config.slBufferAtrRejection,
+                    price - effectiveAtr * config.slAtrMaxRejection,
+                    price * (100.0 - config.slMaxDistancePct) / 100.0
+                ).coerceAtMost(price * (100.0 - config.slMinDistancePct) / 100.0)
             }
             SwingSetup.BREAKOUT -> {
                 // SL sedikit di bawah candle breakout / level yang ditembus
@@ -334,17 +339,27 @@ object SwingEvaluator {
 
         val calculatedTp1 = maxOf(
             resistanceLevel,
-            price + effectiveAtr * 2.0,
+            price + effectiveAtr * config.tp1AtrMult,
             price * 1.07
         )
         val calculatedTp2 = maxOf(
             calculatedTp1 * 1.08,
-            price + effectiveAtr * 3.4,
+            price + effectiveAtr * config.tp2AtrMult,
             price * 1.16
         )
 
-        val feeResult = FeeCalculator.roundTrip(price, calculatedSl, calculatedTp2, fees)
-        val netRr = feeResult.netRr.coerceAtLeast(1.4)
+        // Gerbang R:R memakai angka MENTAH dari FeeCalculator, bukan angka yang sudah dibawahkan
+        // ke lantai tampilan. Dengan itu slider `minNetRr` di bawah 1,4 tetap ditegakkan pada
+        // keputusan; lantai hanya milik teks tampilan, persis seperti perilaku lama.
+        val feeResult = FeeCalculator.roundTrip(
+            entry = price,
+            stopLoss = calculatedSl,
+            takeProfit = calculatedTp2,
+            fees = fees,
+            slippagePct = config.slippagePct
+        )
+        val netRrRaw = feeResult.netRr
+        val netRr = netRrRaw.coerceAtLeast(RR_DISPLAY_FLOOR)
         val rrString = "1:${fmt(netRr)}"
 
         // ── Recent high / extension filter (FIX: dead-code —
@@ -356,17 +371,18 @@ object SwingEvaluator {
         val distToHighPct = if (recentHigh > 0.0) (recentHigh - price) / recentHigh else 1.0
         val mean20 = closes.takeLast(min(20, closes.size)).average()
         val atrExtension = if (effectiveAtr > 0.0) (price - mean20) / effectiveAtr else 0.0
-        val tooCloseToHigh = distToHighPct in 0.0..0.012 && detectedSetup != SwingSetup.BREAKOUT
-        val isOverExtended = atrExtension > 1.8
+        val tooCloseToHigh = distToHighPct >= 0.0 && distToHighPct <= config.maxDistToHighPct / 100.0 &&
+            detectedSetup != SwingSetup.BREAKOUT
+        val isOverExtended = atrExtension > config.maxAtrExtension
 
         // --- 1. DANGER & INVALIDATION CHECKS (DI ATAS) ---
-        val isOverbought = rsi >= 72.0
+        val isOverbought = rsi >= config.overboughtRsi
         val isNearHighDanger = tooCloseToHigh || isOverExtended
         val isResistanceRejection = (detectedSetup == SwingSetup.REJECTION && rejectionAtResistance) ||
             (detectedSetup == SwingSetup.RECLAIM_FAILED && (reclaimFromAbove || failedBreakout))
         val isSolidBreakdown = isBearishTrend || solidBreakdown || bosBreakdown ||
             (detectedSetup == SwingSetup.BREAKOUT && (solidBreakdown || bosBreakdown))
-        val isHeavySelling = sell >= 42.0 && sell > buy * 1.15
+        val isHeavySelling = sell >= HEAVY_SELL_SCORE && sell > buy * config.minBuySellRatio
 
         val isTechnicalDistribution = isOverbought || isNearHighDanger || isResistanceRejection || isSolidBreakdown || isHeavySelling
         if (isNearHighDanger) {
@@ -387,22 +403,31 @@ object SwingEvaluator {
             microCandles = history,
             strategyMode = agu.analys.config.StrategyMode.SWING,
             fees = fees,
-            quoteAsset = quoteAsset
+            quoteAsset = quoteAsset,
+            // Ambang R:R checkpoint 6 mengikuti slider SWING (bawaan 2,0 = perilaku lama) dan
+            // slippage mengikuti config SWING (bawaan 0,08 = bawaan lama). `useMaker` dan geometri
+            // internal checkpoint 6 TIDAK diubah supaya default tetap identik dengan engine lama —
+            // perubahan asumsi biaya diagnostik bukan bagian paket ini.
+            netRrThreshold = config.minNetRr,
+            slippagePct = config.slippagePct
         )
 
         val isRsiBullish = rsi in 35.0..68.0 || (rsi in 28.0..38.0 && macdHist >= 0)
         val step3Ok = step2Ok && (isRsiBullish || macdHist >= 0 || strongVolume) && buy > sell
 
-        val isRrValid = netRr >= 2.0
-        val step4Ok = step3Ok && isRrValid && buy >= 38.0 && !isOverExtended
+        // R:R mentah (bukan angka berlantai tampilan) dibandingkan ambang config agar slider
+        // di bawah lantai tampilan (1,4) tetap berpengaruh pada keputusan.
+        val isRrValid = netRrRaw >= config.minNetRr
+        val step4Ok = step3Ok && isRrValid && buy >= MIN_CHECKPOINT_SCORE && !isOverExtended
 
         val completedSteps = confluence.completedCount
 
         // ── Keputusan akhir ────────────────────────────────
-        val isQualifiedBuy = step4Ok && isRrValid && buy >= 42.0 && buy > sell * 1.15 && !isNearHighDanger &&
+        val isQualifiedBuy = step4Ok && isRrValid && buy >= config.minEntryScore &&
+            buy > sell * config.minBuySellRatio && !isNearHighDanger &&
             detectedSetup in listOf(SwingSetup.REJECTION, SwingSetup.BREAKOUT, SwingSetup.RETEST, SwingSetup.RECLAIM_FAILED) &&
             (detectedSetup != SwingSetup.REJECTION || !rejectionAtResistance) &&
-            confluence.completedCount >= 4
+            confluence.completedCount >= config.minConfluenceCheckpoints
 
         var finalAction = when {
             globalContext.isVetoActive -> SignalAction.HOLD
@@ -411,7 +436,7 @@ object SwingEvaluator {
         }
 
         if (!isRrValid && step3Ok) {
-            reasons.add(0, "⚠️ Risk/Reward: Net R:R 1:${fmt(netRr)} < 1:2.0. Ruang menuju resistance terlalu sempit — setup di-skip.")
+            reasons.add(0, "⚠️ Risk/Reward: Net R:R 1:${fmt(netRr)} < 1:${fmt(config.minNetRr)}. Ruang menuju resistance terlalu sempit — setup di-skip.")
         }
 
         if (isTechnicalDistribution) {
@@ -568,4 +593,17 @@ object SwingEvaluator {
 
     private fun fmt(v: Double) = agu.analys.util.PriceFormatter.fmt(v)
     private fun fmtPrice(v: Double) = agu.analys.util.PriceFormatter.fmtPriceInt(v)
+
+    // ── Konstanta internal yang BELUM jadi slider (lihat KDoc `SwingConfig`) ──────────
+    /** Lantai tampilan R:R dulu `netRr.coerceAtLeast(1.4)`; hanya untuk teks, bukan gerbang. */
+    private const val RR_DISPLAY_FLOOR = 1.4
+
+    /** Ambang `buy` checkpoint 4 (dulu `buy >= 38.0`). */
+    private const val MIN_CHECKPOINT_SCORE = 38.0
+
+    /** Ambang skor jual "berat" (dulu `sell >= 42.0`). */
+    private const val HEAVY_SELL_SCORE = 42.0
+
+    /** Rasio badan candle minimum deteksi RETEST lama (`bodyRatio >= 0.35`). */
+    private const val RETEST_BODY_RATIO_MIN = 0.35
 }

@@ -253,6 +253,14 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     private val _intradaySensitivityPreset = MutableStateFlow(prefs.intradaySensitivityPreset)
     val intradaySensitivityPreset: StateFlow<String> = _intradaySensitivityPreset.asStateFlow()
 
+    /** Konfigurasi slider mode SWING — terpisah dari scalping/intraday (aturan §79.1). */
+    private val _swingRuntimeConfig = MutableStateFlow(prefs.swingRuntimeConfig)
+    val swingRuntimeConfig: StateFlow<agu.analys.engine.swing.SwingConfig> =
+        _swingRuntimeConfig.asStateFlow()
+
+    private val _swingSensitivityPreset = MutableStateFlow(prefs.swingSensitivityPreset)
+    val swingSensitivityPreset: StateFlow<String> = _swingSensitivityPreset.asStateFlow()
+
     /** Pengaturan auto-buy / auto-exit paper trade (P2). Simulasi saja. */
     private val _paperAutoTradeConfig = MutableStateFlow(prefs.paperAutoTradeConfig)
     val paperAutoTradeConfig: StateFlow<agu.analys.engine.scalping.PaperAutoTradeConfig> =
@@ -604,6 +612,28 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
                 prefs.intradayRuntimeConfig
         }
         updateIntradayRuntimeConfig(config, preset.name)
+    }
+
+    /**
+     * Simpan konfigurasi slider mode **SWING** (`StrategyMode.SWING`).
+     *
+     * Sengaja **tidak** menyalurkan `slippagePct` ke `simCoordinator` — basis P&L simulasi tetap
+     * satu nilai global; menggeser slider swing tidak boleh mengubah angka P&L mode lain.
+     */
+    fun updateSwingRuntimeConfig(
+        config: agu.analys.engine.swing.SwingConfig,
+        preset: String = "CUSTOM"
+    ) {
+        prefs.swingRuntimeConfig = config
+        prefs.swingSensitivityPreset = preset
+        agu.analys.engine.swing.SwingRuntimeConfig.current = config
+        _swingRuntimeConfig.value = config
+        _swingSensitivityPreset.value = preset
+        agu.analys.util.AppLogManager.service(
+            "SwingConfig",
+            "⚙️ Swing runtime config updated (Preset: $preset) | " +
+                agu.analys.engine.swing.SwingRuntimeConfig.toSummaryString(config)
+        )
     }
 
     fun applyScalpingPreset(preset: agu.analys.engine.scalping.SensitivityPreset) {        val config = when (preset) {

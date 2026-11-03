@@ -122,6 +122,12 @@ class AppPreferences(context: Context) {
             val intradayCfg = intradayRuntimeConfig
             agu.analys.engine.intraday.IntradayRuntimeConfig.current = intradayCfg
         } catch (_: Exception) {}
+        // Mode SWING punya holder sendiri; tanpa hidrasi ini slider swing "hilang" setiap restart
+        // karena evaluator kembali membaca SwingConfig.DEFAULT.
+        try {
+            val swingCfg = swingRuntimeConfig
+            agu.analys.engine.swing.SwingRuntimeConfig.current = swingCfg
+        } catch (_: Exception) {}
     }
 
     fun hasSecurityPin(): Boolean = securityPinHash.isNotBlank()
@@ -320,6 +326,37 @@ class AppPreferences(context: Context) {
     var intradaySensitivityPreset: String
         get() = prefs.getString(KEY_INTRADAY_PRESET, "STANDARD") ?: "STANDARD"
         set(value) = prefs.edit().putString(KEY_INTRADAY_PRESET, value).apply()
+
+    /**
+     * Konfigurasi runtime mode SWING (slider). Pola sama dengan [intradayRuntimeConfig]:
+     * persisten sebagai JSON, dihidrasi ke holder `SwingRuntimeConfig.current` saat dibaca.
+     * Bawaan = `SwingConfig.DEFAULT` (= literal `SwingEvaluator` sebelum slider ada).
+     */
+    var swingRuntimeConfig: agu.analys.engine.swing.SwingConfig
+        get() {
+            val jsonStr = prefs.getString(KEY_SWING_RUNTIME_CONFIG, null)
+            val config = if (!jsonStr.isNullOrBlank()) {
+                agu.analys.engine.swing.SwingRuntimeConfig.fromJsonString(jsonStr)
+                    ?: agu.analys.engine.swing.SwingConfig.DEFAULT
+            } else {
+                agu.analys.engine.swing.SwingConfig.DEFAULT
+            }
+            agu.analys.engine.swing.SwingRuntimeConfig.current = config
+            return config
+        }
+        set(value) {
+            agu.analys.engine.swing.SwingRuntimeConfig.current = value
+            prefs.edit()
+                .putString(
+                    KEY_SWING_RUNTIME_CONFIG,
+                    agu.analys.engine.swing.SwingRuntimeConfig.toJsonString(value)
+                )
+                .apply()
+        }
+
+    var swingSensitivityPreset: String
+        get() = prefs.getString(KEY_SWING_PRESET, "STANDARD") ?: "STANDARD"
+        set(value) = prefs.edit().putString(KEY_SWING_PRESET, value).apply()
 
     /**
      * Pengaturan auto-buy / auto-exit **paper trade** (P2).
@@ -680,6 +717,8 @@ class AppPreferences(context: Context) {
         private const val KEY_SCALPING_PRESET = "scalping_sensitivity_preset_v1"
         private const val KEY_INTRADAY_RUNTIME_CONFIG = "intraday_runtime_config_v1"
         private const val KEY_INTRADAY_PRESET = "intraday_sensitivity_preset_v1"
+        private const val KEY_SWING_RUNTIME_CONFIG = "swing_runtime_config_v1"
+        private const val KEY_SWING_PRESET = "swing_sensitivity_preset_v1"
         private const val KEY_PAPER_AUTO_BUY_ENABLED = "paper_auto_buy_enabled_v1"
         private const val KEY_PAPER_AUTO_EXIT_ENABLED = "paper_auto_exit_enabled_v1"
         private const val KEY_PAPER_AUTO_BUY_ALLOCATION = "paper_auto_buy_allocation_v1"
