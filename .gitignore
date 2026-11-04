@@ -26,3 +26,6 @@ __pycache__/
 /data/tokocrypto_live_usdt/
 /data/tokocrypto_live_idr/
 *.vscode
+# Proyek smoke bridge (dibersihkan workflow, tapi jangan sampai ter-commit)
+tools/bridge-smoke/build/
+tools/bridge-smoke/.gradle/

@@ -5638,13 +5638,17 @@ Actions" tidak diikuti bukti hijau, dan smoke-nya sendiri tidak lagi dijalankan 
 4. **Sakelar UI mengikuti keadaan server.** `SettingsScreen` membaca `AgentHttpServer.state`,
    mengembalikan sakelar ke mati + menampilkan alasan saat `Failed`, dan menampilkan
    "Menyalakan…"/"Menunggu…" saat belum siap.
-5. **R8:** `-keep class agu.analys.bridge.**` supaya model `@Serializable` dan serializer hasil
+5. **Permintaan start saat server masih `Stopping` tidak dibuang.** Run `41794360203` gagal di
+   tahap restart smoke karena `start()` langsung kembali saat `Stopping` sehingga port tidak pernah
+   membuka lagi. Kini permintaan itu dijadwalkan setelah pekerjaan berhenti selesai; `stop()`
+   saat `Stopping` adalah no-op.
+6. **R8:** `-keep class agu.analys.bridge.**` supaya model `@Serializable` dan serializer hasil
    plugin tidak dibuang di rilis.
-6. **Alat bukti:** `tools/bridge-smoke` membaca versi Ktor/coroutines/serialization **langsung dari**
+7. **Alat bukti:** `tools/bridge-smoke` membaca versi Ktor/coroutines/serialization **langsung dari**
    `gradle/libs.versions.toml` (duplikasi versi di proyek smoke adalah cara bug ini bisa lolos),
    dan workflow-nya dipertahankan sebagai **`Bridge Smoke`** (`.github/workflows/bridge-smoke.yml`),
    bukan lagi "sementara".
-7. **Higiene commit `dba9f39` yang ikut dibereskan:** `public/assets/aistudio/` (8 berkas ekspor
+8. **Higiene commit `dba9f39` yang ikut dibereskan:** `public/assets/aistudio/` (8 berkas ekspor
    duplikat) dihapus, dan bit eksekusi `gradlew` (hilang di `dba9f39`) dikembalikan.
 
 **Penjaga:** `AgentBridgeServerTest` — 3 uji perilaku (port terbuka + `/health` 200 setelah

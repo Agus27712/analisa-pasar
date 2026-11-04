@@ -56,6 +56,8 @@ Yang **tidak boleh** dilakukan lagi tanpa instruksi eksplisit owner:
   thread (buka/tutup socket) dan wajib menangkap `Throwable`. Penjaga:
   `AgentBridgeServerTest` (3 uji: port terbuka + `/health`, `start()` tidak memblokir,
   port terpakai → `Failed` lalu bisa dicoba ulang), `AgentBridgeTest` (serialisasi + EventBus).
+  `start()` **tidak boleh** dibuang saat state `Stopping` — permintaannya wajib dijadwalkan
+  setelah berhenti tuntas, dan `stop()` saat `Stopping` no-op (run `41794360203` gagal di sini).
   Verifikasi nyata lintas proses: `.github/workflows/bridge-smoke.yml` menjalankan
   `tools/bridge-smoke` (memakai `AgentHttpServer.kt` asli) untuk HTTP/WebSocket/SSE/restart.
 

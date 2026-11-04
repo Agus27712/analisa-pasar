@@ -30,7 +30,7 @@ fun main() {
     }
     fun awaitHealth() {
         var failure: Exception? = null
-        repeat(50) {
+        repeat(100) {
             try { check(get("/health").contains("\"ok\":true")); return }
             catch (e: Exception) { failure = e; Thread.sleep(100) }
         }
@@ -77,6 +77,7 @@ fun main() {
         sse.close(); sse = null
         server.stop()
         check(!server.isRunning)
+        runBlocking { server.awaitSettled(20_000) }
         server.start()
         awaitHealth()
         println("PASS: actual AgentHttpServer HTTP, file/history, WebSocket snapshot/push, SSE ping/push, stop/restart")

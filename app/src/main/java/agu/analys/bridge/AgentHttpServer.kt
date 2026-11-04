@@ -85,8 +85,11 @@ class AgentHttpServer(private val context: Context) {
     fun start() {
         when (_state.value) {
             is AgentBridgeServerState.Running,
-            is AgentBridgeServerState.Starting,
-            is AgentBridgeServerState.Stopping -> return
+            is AgentBridgeServerState.Starting -> return
+            is AgentBridgeServerState.Stopping -> {
+                // Mulai diminta sementara server masih mematikan diri: jangan dibuang.
+                // Permintaan ini dijadwalkan setelah pekerjaan berhenti selesai.
+            }
             else -> Unit
         }
         val gen = ++generation
@@ -96,6 +99,7 @@ class AgentHttpServer(private val context: Context) {
 
     @Synchronized
     fun stop() {
+        if (_state.value is AgentBridgeServerState.Stopping) return
         generation++
         val engine = server
         server = null

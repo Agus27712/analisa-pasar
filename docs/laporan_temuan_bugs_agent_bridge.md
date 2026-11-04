@@ -88,6 +88,7 @@ berkata aktif sampai aplikasi ditutup.
 | B1 | Siklus hidup server dipindah ke satu thread khusus (`agent-bridge-lifecycle`); `start()`/`stop()` hanya menjadwalkan pekerjaan dan langsung kembali | `AgentHttpServer.kt` |
 | B1 | Semua kegagalan ditangkap sebagai `Throwable` dan dilaporkan sebagai `AgentBridgeServerState.Failed(reason)`; `Running` baru ditulis setelah `GET /health` di `127.0.0.1:8765` menjawab | `AgentHttpServer.kt` |
 | B1 | `-keep class agu.analys.bridge.**` supaya model `@Serializable` + serializer hasil plugin tidak dibuang R8 | `app/proguard-rules.pro` |
+| B1 | `start()` saat state **Stopping** tidak lagi dibuang — permintaan dijadwalkan setelah pekerjaan berhenti selesai (terbukti dari smoke: restart setelah `stop()` tidak pernah sehat); `stop()` saat **Stopping** jadi no-op | `AgentHttpServer.kt` |
 | B2 | Sakelar membaca `AgentHttpServer.state`: `Running` → aktif, `Failed` → sakelar kembali mati + alasan, `Starting`/`Stopped` → teks "Menyalakan…"/"Menunggu…" | `SettingsScreen.kt` |
 | B3 | Workflow dipertahankan sebagai **`Bridge Smoke`** (`workflow_dispatch`), komentar "sementara/dihapus" diganti keterangan riwayat kegagalan | `.github/workflows/bridge-smoke.yml` |
 | B4 | Versi Ktor/coroutines/serialization proyek smoke **dibaca dari** `gradle/libs.versions.toml` (gagal keras kalau kunci tidak ada) | `tools/bridge-smoke/build.gradle.kts` |
@@ -123,3 +124,4 @@ stop/restart. Hasil run dicatat di `workplan2.md` §91.5.
 | 2026-11-04 05:04 | Run `41776980356` (Bridge Smoke) **gagal**: `NoSuchMethodError ... addLast` di `AgentHttpServer.start()` |
 | 2026-11-04 (sesi ini) | Owner melaporkan force close saat sakelar dinyalakan; sebab dicocokkan dengan log run gagal |
 | 2026-11-04 (sesi ini) | Ktor 3.3.3 + siklus hidup di luar main thread + `catch (Throwable)` + sakelar mengikuti `state` + R8 keep + smoke membaca versi dari `libs.versions.toml`; B5 dibereskan |
+| 2026-11-04 (sesi ini) | Run `41794360203` (Bridge Smoke) **gagal**: `start()` dipanggil saat state `Stopping` langsung return → percobaan ulang restart tak pernah menyala (`Server did not become healthy`). `start()` kini menjadwalkan start setelah berhenti tuntas; `stop()` saat Stopping no-op. Smoke lokal **PASS** |
