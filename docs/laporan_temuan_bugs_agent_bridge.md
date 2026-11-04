@@ -132,3 +132,4 @@ stop/restart. Hasil run dicatat di `workplan2.md` §91.5.
 | 2026-11-04 (sesi ini) | Run `41795602101` (Bridge Smoke, setelah perbaikan): job R8 + job smoke **sukses**. Rilis 3.9.4 (run `Release APK` `41794369255`) **sukses**, dibangun dari `bdd629e` — belum memuat perbaikan restart `09e4ee6` |
 | 2026-11-04 (sesi ini) | Rilis **3.9.5** (`v3.9.5`, versionCode 94) — `Release APK` run `41797159218` **sukses**, dibangun dari `62ec1ca`; seluruh perbaikan (force close + restart) tercakup |
 | 2026-11-04 (sesi ini) | Run `41816629739` (Bridge Smoke setelah `e211cc7`) — job R8 **sukses**, job smoke **gagal**: stub `AppLogManager` di proyek smoke menuntut `Throwable` non-null sedangkan aslinya `Throwable? = null`. Stub diselaraskan; smoke ulang perlu dipicu |
+| 2026-11-04 (sesi ini) | Run `41817893467` (Bridge Smoke setelah `eb54bfa`) — kedua job **sukses** (R8 + server nyata HTTP/WebSocket/SSE/restart). Commit `e211cc7` menambah pemasangan ekstensi OMP dari Pengaturan |

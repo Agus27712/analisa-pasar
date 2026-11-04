@@ -5711,6 +5711,13 @@ bisa menulis ke folder publik (scoped storage), sehingga salinannya tidak bisa d
 3. Setelah itu owner cukup `omp`; ekstensi memanggil `connectWs()` saat dimuat dan terhubung ke
    `ws://127.0.0.1:8765/ws/signals` selama sakelar Agent Bridge V2 aktif.
 
+**Bukti CI:** run **[`41817893467`](https://github.com/Agus27712/analisa-pasar/actions/runs/41817893467)**
+(Bridge Smoke setelah `eb54bfa`) — job **R8 sukses** dan job **smoke sukses** (HTTP `/health`,
+WebSocket snapshot+push, SSE ping+push, stop/restart). Percobaan sebelumnya
+[`41816629739`](https://github.com/Agus27712/analisa-pasar/actions/runs/41816629739) **gagal**
+hanya karena stub `AppLogManager` di proyek smoke menyimpang dari tanda tangan asli — stub
+diselaraskan, bukan kode aplikasi yang diubah untuk membungkus bug.
+
 **Belum diverifikasi di HP owner.** Uji lokal di mesin ini: `./gradlew :app:testDebugUnitTest
 --tests "agu.analys.bridge.*"` → **8 uji, 0 gagal** (`AgentBridgeServerTest` 3, `AgentBridgeTest`
 3, `OmpBridgeInstallerTest` 2; `OmpBridgeInstallerTest` membuktikan perintah base64 menulis isi
