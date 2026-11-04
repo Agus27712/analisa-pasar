@@ -5671,6 +5671,7 @@ ditambah `AgentBridgeTest` (serialisasi `AgentSignalOutput`/`AgentPortfolioOutpu
   `AgentHttpServer.kt`).
 - **Rilis 3.9.4** — workflow `Release APK` run **[`41794369255`](https://github.com/Agus27712/analisa-pasar/actions/runs/41794369255)**
   **sukses** (APK ber-R8 terbentuk dan ter-publish), tetapi **dibangun dari commit `bdd629e`**,
-  yaitu **sebelum** perbaikan restart `09e4ee6`. Rilis ini memuat perbaikan force close, tetapi
-  **belum memuat** perbaikan "start saat Stopping dijadwalkan". Rilis berikutnya (atau rilis
-  tambahan) diperlukan bila owner ingin 3.9.4 memuat keduanya.
+  yaitu **sebelum** perbaikan restart `09e4ee6`.
+- **Rilis 3.9.5** — owner meminta rilis lanjutan. Run **[`41797159218`](https://github.com/Agus27712/analisa-pasar/actions/runs/41797159218)**
+  (commit `62ec1ca`) **sukses**; rilis **`v3.9.5`** ter-publish dari `62ec1ca` (2026-11-04 08:17 UTC,
+  1 aset APK) dan memuat **seluruh** perbaikan force close **dan** restart.

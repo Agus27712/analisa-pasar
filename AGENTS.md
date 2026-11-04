@@ -3,9 +3,10 @@
 Aplikasi Android Kotlin 100% (Jetpack Compose M3) untuk analisis & **scalp mode** kripto di **Tokocrypto** dan **Indodax**. Modul tunggal `:app`, package `agu.analys`, MVVM + Coordinator (`TradingViewModel` + MarketData/Position/Simulation/RealTradeCoordinator).
 
 **Versi aplikasi saat ini:** **3.9.5** (`versionCode 94`) — `app/build.gradle.kts`. Rilis 3.9.5
-(2026-11-04) memuat perbaikan **permintaan start saat server masih berhenti** (`start()` tidak lagi
-dibuang; `stop()` saat `Stopping` = no-op) beserta bukti CI berikutnya
-(`workplan2.md` §91.5, `docs/laporan_temuan_bugs_agent_bridge.md`). Rilis 3.9.4
+(2026-11-04, run `Release APK` `41797159218` sukses, `v3.9.5` ter-publish dari `62ec1ca`) memuat
+perbaikan **permintaan start saat server masih berhenti** (`start()` tidak lagi dibuang; `stop()`
+saat `Stopping` = no-op) dan seluruh perbaikan force close — lihat `workplan2.md` §91.5,
+`docs/laporan_temuan_bugs_agent_bridge.md`. Rilis 3.9.4
 (2026-11-04) memperbaiki **force close saat sakelar Agent Bridge V2 dinyalakan** (Ktor 2.3.9 +
 kotlinx-coroutines 1.10.2 → `NoSuchMethodError`; kini Ktor **3.3.3**) dan membersihkan sisa
 higiene commit `dba9f39`. Rilis 3.9.3
