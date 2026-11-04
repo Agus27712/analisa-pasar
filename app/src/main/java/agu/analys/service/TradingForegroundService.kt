@@ -56,15 +56,18 @@ class TradingForegroundService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
-        super.onCreate()
-        ensureActiveScope()
-        createNotificationChannel()
-        startHoldingsMonitor()
+    super.onCreate()
+    ensureActiveScope()
+    createNotificationChannel()
+    startHoldingsMonitor()
 
-        agentServer = agu.analys.bridge.AgentHttpServer.getInstance(this)
-        if (agu.analys.bridge.AgentOutputBridge.getInstance(this).isEnabled()) {
-            agentServer?.start()
-        }
+    // Start-only: kalau user sudah nyalakan Agent Bridge di Settings,
+    // pastikan server hidup saat FG service (monitor posisi) dibuat.
+    // Stop hanya dari SettingsScreen (sakelar OFF) — jangan di onDestroy.
+    agentServer = agu.analys.bridge.AgentHttpServer.getInstance(this)
+    if (agu.analys.bridge.AgentOutputBridge.getInstance(this).isEnabled()) {
+        agentServer?.start()
+    }
     }
 
     private var lastUpdateTime = 0L
@@ -95,12 +98,16 @@ class TradingForegroundService : Service() {
         return START_STICKY
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        agentServer?.stop()
-        monitorJob?.cancel()
-        serviceJob.cancel()
-    }
+   override fun onDestroy() {
+    super.onDestroy()
+    // Agent Bridge V2 TIDAK ikut dimatikan di sini.
+    // Sebelumnya: setiap buka pair → setSelectedSymbol → updateForegroundServiceState
+    // → stopService (bila !hasActive) → onDestroy → agentServer.stop()
+    // → WS /ws/signals putus (websocat: incoming None).
+    // Lifecycle bridge hanya milik sakelar Settings (prefs.isAgentOutputEnabled).
+    monitorJob?.cancel()
+    serviceJob.cancel()
+}
 
     private fun ensureActiveScope() {
         if (!serviceJob.isActive) {
