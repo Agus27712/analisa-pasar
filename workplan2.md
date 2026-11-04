@@ -5597,3 +5597,57 @@ Keputusan (owner, 2026-11-04): naikkan versi lebih dulu, lalu rilis.
 - **Yang belum dibuktikan oleh run ini:** unit test. `Release APK` hanya `assembleRelease`; suite
   `Unit Tests (Manual)` belum dijalankan, jadi 13 uji intraday yang merah karena dataset v7 hilang
   (§90) **tetap merah** sampai owner memutuskan dataset itu.
+
+### 91.5 Force close saat sakelar bridge dinyalakan — Ktor 2.3.9 vs coroutines 1.10.2 (2026-11-04)
+
+**Gejala yang dilaporkan owner:** menyalakan *Agent Bridge V2* dari Pengaturan menutup aplikasi
+(force close) seketika.
+
+**Sebab sebenarnya, bukan tebakan.** Workflow `Verify Release Fix (sementara)` run
+[`41776980356`](https://github.com/Agus27712/analisa-pasar/actions/runs/41776980356) — dijalankan
+13 detik setelah commit `03cd941` masuk — **gagal** pada tahap smoke, dan kegagalannya persis di
+jalur yang dipakai sakelar:
+
+```
+java.lang.NoSuchMethodError: 'void kotlinx.coroutines.internal.LockFreeLinkedListHead.addLast(
+    kotlinx.coroutines.internal.LockFreeLinkedListNode)'
+  at io.ktor.events.Events.subscribe(Events.kt:24)
+  at io.ktor.server.engine.BaseApplicationEngine.<init>
+  at io.ktor.server.cio.CIOApplicationEngine.<init>
+  at agu.analys.bridge.AgentHttpServer.start(AgentHttpServer.kt:29)
+```
+
+Ktor 2.3.9 dikompilasi terhadap kotlinx-coroutines lama; aplikasi memakai coroutines **1.10.2**,
+yang membuat `addLast` menjadi fungsi `internal` (namanya di-mangle) sehingga metode yang dicari
+Ktor tidak ada. `NoSuchMethodError` turunan **`Error`**, sedangkan `start()` hanya memakai
+`catch (e: Exception)` — karena itu tidak tertangkap dan proses langsung dimatikan. Kegagalan run
+itu **tidak pernah ditindaklanjuti**; pesan commit `03cd941` yang menyebut "verifikasi wajib lewat
+Actions" tidak diikuti bukti hijau, dan smoke-nya sendiri tidak lagi dijalankan setelah gagal.
+
+**Perbaikan yang diterapkan:**
+
+1. **Ktor 2.3.9 → 3.3.3** (`gradle/libs.versions.toml`). Ktor 3.3.3 dibangun dengan Kotlin 2.2.21
+   dan **coroutines 1.10.2** — sama dengan aplikasi, jadi tidak ada lagi ketidakcocokan.
+   Ktor 3 juga memakai `kotlin.time.Duration`, sehingga opsi WebSocket tidak lagi membutuhkan
+   `java.time.Duration` (kelas API 26) pada aplikasi `minSdk 24`.
+2. **Siklus hidup server keluar dari main thread.** `start()`/`stop()` hanya menjadwalkan
+   pekerjaan ke satu thread khusus (`agent-bridge-lifecycle`); pemanggil langsung kembali.
+3. **Kegagalan jadi keadaan, bukan crash.** Semua kegagalan ditangkap sebagai `Throwable` dan
+   dilaporkan sebagai `AgentBridgeServerState.Failed(reason)`. `Running` hanya ditulis setelah
+   `GET /health` di `127.0.0.1:8765` benar-benar menjawab (bukan setelah objek server dibuat).
+4. **Sakelar UI mengikuti keadaan server.** `SettingsScreen` membaca `AgentHttpServer.state`,
+   mengembalikan sakelar ke mati + menampilkan alasan saat `Failed`, dan menampilkan
+   "Menyalakan…"/"Menunggu…" saat belum siap.
+5. **R8:** `-keep class agu.analys.bridge.**` supaya model `@Serializable` dan serializer hasil
+   plugin tidak dibuang di rilis.
+6. **Alat bukti:** `tools/bridge-smoke` membaca versi Ktor/coroutines/serialization **langsung dari**
+   `gradle/libs.versions.toml` (duplikasi versi di proyek smoke adalah cara bug ini bisa lolos),
+   dan workflow-nya dipertahankan sebagai **`Bridge Smoke`** (`.github/workflows/bridge-smoke.yml`),
+   bukan lagi "sementara".
+7. **Higiene commit `dba9f39` yang ikut dibereskan:** `public/assets/aistudio/` (8 berkas ekspor
+   duplikat) dihapus, dan bit eksekusi `gradlew` (hilang di `dba9f39`) dikembalikan.
+
+**Penjaga:** `AgentBridgeServerTest` — 3 uji perilaku (port terbuka + `/health` 200 setelah
+`Running`; `start()` kembali < 500 ms; port terpakai → `Failed` lalu percobaan ulang berhasil) —
+ditambah `AgentBridgeTest` (serialisasi `AgentSignalOutput`/`AgentPortfolioOutput` + `AgentEventBus`).
+

@@ -1,7 +1,13 @@
-name: Verify Release Fix (sementara)
+name: Bridge Smoke
 
-# Workflow sementara untuk membuktikan perbaikan R8 rilis 41721008218.
-# Dihapus setelah bukti tercatat di docs/LAPORAN-integrasi-agent-bridge-v2-2026-11-03.md.
+# Dua bukti untuk Agent Bridge V2:
+# 1. build rilis ber-R8 benar-benar menghasilkan APK, dan Netty tidak ikut di classpath;
+# 2. server bridge dijalankan dari sumber asli `AgentHttpServer.kt` di JVM, lalu diuji
+#    HTTP, WebSocket, SSE, dan restart.
+#
+# Dijalankan manual (workflow_dispatch). Riwayat: percobaan pertama 41776980356 GAGAL pada
+# tahap smoke karena `NoSuchMethodError: kotlinx.coroutines.internal.LockFreeLinkedListHead.addLast`
+# (Ktor 2.3.9 + kotlinx-coroutines 1.10.2). Itu sebab force close saat sakelar dinyalakan.
 on:
   workflow_dispatch:
 
@@ -9,7 +15,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: verify-release-fix-${{ github.ref }}
+  group: bridge-smoke-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:

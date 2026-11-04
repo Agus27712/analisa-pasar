@@ -70,3 +70,23 @@ yang sama, tanpa mengubah satu pun rute maupun bentuk payload:
 
 Verifikasi dilakukan lewat GitHub Actions, bukan mesin lokal: `Release APK` untuk membuktikan R8
 lolos, dan `Unit Tests (Manual)` dengan `scope=custom`, `custom_filter=agu.analys.bridge.*`.
+
+---
+
+## Koreksi 2026-11-04 — laporan ini tidak lengkap
+
+Laporan di atas menyatakan verifikasi lewat Actions, padahal:
+
+- Run `41721008218` (Release APK) memang gagal di R8 dan sudah diperbaiki di `03cd941`.
+- Run `41776980356` (**Bridge Smoke**) **gagal** pada tahap smoke dengan
+  `NoSuchMethodError: kotlinx.coroutines.internal.LockFreeLinkedListHead.addLast` di
+  `AgentHttpServer.start()` — akibat Ktor 2.3.9 dipasangkan dengan kotlinx-coroutines 1.10.2.
+  Kegagalan itu tidak ditindaklanjuti, sehingga versi rilis 3.9.3 masih force close ketika
+  sakelar *Agent Bridge V2* dinyalakan.
+- Kalimat "tipe field `ApplicationEngine`" di atas kini tidak berlaku: Ktor 3 mengembalikan
+  `EmbeddedServer<CIOApplicationEngine, CIOApplicationEngine.Configuration>`.
+
+Sebab, perbaikan, dan buktinya ada di **`docs/laporan_temuan_bugs_agent_bridge.md`** (temuan B1–B5)
+dan `workplan2.md` §91.5. Ktor kini **3.3.3**; siklus hidup server berjalan di thread sendiri,
+kegagalan dilaporkan sebagai `AgentBridgeServerState.Failed`, dan sakelar UI mengikuti keadaan
+server — bukan preferensi.

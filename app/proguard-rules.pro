@@ -50,6 +50,11 @@
 -dontwarn java.lang.management.ManagementFactory
 -dontwarn java.lang.management.RuntimeMXBean
 
+# Agent Bridge V2: model @Serializable + server di paket ini dipakai saat runtime.
+# Tanpa ini, rilis R8 bisa membuang serializer hasil plugin dan bridge gagal saat dipakai.
+-keep class agu.analys.bridge.** { *; }
+-keepclassmembers class agu.analys.bridge.** { *; }
+
 # Compose
 -keep class androidx.compose.** { *; }
 -dontwarn androidx.compose.**

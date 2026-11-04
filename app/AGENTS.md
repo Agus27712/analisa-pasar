@@ -40,11 +40,24 @@ Yang **tidak boleh** dilakukan lagi tanpa instruksi eksplisit owner:
 | Tambah layar | `model/TradingViewModels.kt` (`AppScreen`) → `MainActivity.kt` → `viewmodel/TradingViewModelNavigation.kt` |
 | Agent Bridge V2 (Termux/OMP) | `bridge/AgentOutputBridge.kt`, `AgentHttpServer.kt`, `tools/oh-my-pi-extension/` |
 
-- **Mesin server bridge = Ktor CIO** (`ktor-server-cio` 2.3.9), bukan Netty. Build rilis
+- **Mesin server bridge = Ktor CIO** (`ktor-server-cio`), bukan Netty. Build rilis
   `41721008218` gagal di R8 karena kelas `io.netty.internal.tcnative.*`; penggantian mesin dan
   penghapusan pengecualian resource `META-INF/io.netty.versions.properties` ada di `workplan2.md`
   §91.4. Jangan menambah `-dontwarn` untuk kelas Netty — Netty memang bukan dependensi lagi.
-  Verifikasi build/tes lewat GitHub Actions (`Release APK`, `Unit Tests (Manual)`), bukan lokal.
+- **Versi Ktor wajib sejalan dengan kotlinx-coroutines aplikasi (Ktor 3.3.3, coroutines 1.10.2).**
+  Ktor 2.3.9 + coroutines 1.10.2 menghasilkan `NoSuchMethodError:
+  kotlinx.coroutines.internal.LockFreeLinkedListHead.addLast` saat `embeddedServer(...)` dibuat.
+  Itu turunan `Error`, **tidak** tertangkap `catch (Exception)`, dan aplikasi force close begitu
+  sakelar *Agent Bridge V2* dinyalakan (2026-11-04). Jangan menurunkan Ktor ke 2.x selama
+  coroutines tetap 1.10.x, dan jangan menaikkan coroutines tanpa menguji sakelar itu.
+- **Sakelar bridge wajib mengikuti `AgentHttpServer.state`, bukan preferensi.** `Running` hanya
+  ditulis setelah port benar-benar menjawab `GET /health`; kegagalan jadi `Failed(reason)` dan
+  sakelar dikembalikan ke mati. `start()`/`stop()` **tidak boleh** mengerjakan apa pun di main
+  thread (buka/tutup socket) dan wajib menangkap `Throwable`. Penjaga:
+  `AgentBridgeServerTest` (3 uji: port terbuka + `/health`, `start()` tidak memblokir,
+  port terpakai → `Failed` lalu bisa dicoba ulang), `AgentBridgeTest` (serialisasi + EventBus).
+  Verifikasi nyata lintas proses: `.github/workflows/bridge-smoke.yml` menjalankan
+  `tools/bridge-smoke` (memakai `AgentHttpServer.kt` asli) untuk HTTP/WebSocket/SSE/restart.
 
 ## Aturan turunan dari audit notifikasi (batch 1 & 2, 2026-10-16)
 

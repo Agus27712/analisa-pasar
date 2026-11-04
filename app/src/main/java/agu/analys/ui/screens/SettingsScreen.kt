@@ -467,29 +467,62 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                             iconTint = TvBlue,
                             iconBackground = TvBlue.copy(alpha = 0.15f),
                             title = "Pembaruan & Versi Aplikasi",
-                            subtitle = "Versi 3.9.2 (Build 91) · Periksa rilis GitHub & cache",
+                            subtitle = "Versi ${agu.analys.BuildConfig.VERSION_NAME} (Build ${agu.analys.BuildConfig.VERSION_CODE}) · Periksa rilis GitHub & cache",
                             onClick = { activeCategory = SettingsCategory.SYSTEM }
                         )
                         HorizontalDivider(color = TvBorder.copy(alpha = 0.5f), thickness = 0.5.dp)
+                        // Sakelar mengikuti keadaan server yang sebenarnya, bukan nilai preferensi:
+                        // preferensi bisa "aktif" sementara server gagal menyala (port dipakai).
+                        val agentServer = remember { agu.analys.bridge.AgentHttpServer.getInstance(context) }
+                        val agentState by agentServer.state.collectAsStateWithLifecycle()
                         var isAgentEnabled by remember { mutableStateOf(prefs.isAgentOutputEnabled) }
+                        LaunchedEffect(agentState) {
+                            when (val s = agentState) {
+                                is agu.analys.bridge.AgentBridgeServerState.Running -> isAgentEnabled = true
+                                is agu.analys.bridge.AgentBridgeServerState.Stopped -> {
+                                    if (!prefs.isAgentOutputEnabled) isAgentEnabled = false
+                                }
+                                is agu.analys.bridge.AgentBridgeServerState.Failed -> {
+                                    // Kembalikan sakelar ke mati; jangan biarkan UI mengklaim aktif.
+                                    prefs.isAgentOutputEnabled = false
+                                    isAgentEnabled = false
+                                    Toast.makeText(
+                                        context,
+                                        "Agent Bridge gagal menyala: ${s.reason}",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                }
+                                is agu.analys.bridge.AgentBridgeServerState.Starting,
+                                is agu.analys.bridge.AgentBridgeServerState.Stopping -> Unit
+                            }
+                        }
                         AndroidPreferenceSwitchItem(
                             icon = Icons.Default.Sensors,
                             iconTint = Color(0xFFFFB300),
                             iconBackground = Color(0xFFFFB300).copy(alpha = 0.15f),
                             title = "Agent Bridge V2 (Termux / OMP)",
-                            subtitle = if (isAgentEnabled)
-                                "Aktif: ws://0.0.0.0:8765/ws/signals + Documents/analisa-pasar"
-                            else
-                                "Output sinyal & WebSocket port 8765 nonaktif",
+                            subtitle = when (val s = agentState) {
+                                is agu.analys.bridge.AgentBridgeServerState.Running ->
+                                    "Aktif: ws://0.0.0.0:8765/ws/signals + Documents/analisa-pasar"
+                                is agu.analys.bridge.AgentBridgeServerState.Starting ->
+                                    "Menyalakan server port 8765…"
+                                is agu.analys.bridge.AgentBridgeServerState.Stopping ->
+                                    "Menghentikan server port 8765…"
+                                is agu.analys.bridge.AgentBridgeServerState.Failed ->
+                                    "Gagal menyala: ${s.reason}"
+                                is agu.analys.bridge.AgentBridgeServerState.Stopped ->
+                                    if (isAgentEnabled) "Menunggu server port 8765…"
+                                    else "Output sinyal & WebSocket port 8765 nonaktif"
+                            },
                             checked = isAgentEnabled,
                             onCheckedChange = { checked ->
                                 prefs.isAgentOutputEnabled = checked
                                 isAgentEnabled = checked
                                 if (checked) {
-                                    agu.analys.bridge.AgentHttpServer.getInstance(context).start()
-                                    Toast.makeText(context, "Agent Bridge V2 aktif di port 8765", Toast.LENGTH_SHORT).show()
+                                    agentServer.start()
+                                    Toast.makeText(context, "Menyalakan Agent Bridge V2 port 8765…", Toast.LENGTH_SHORT).show()
                                 } else {
-                                    agu.analys.bridge.AgentHttpServer.getInstance(context).stop()
+                                    agentServer.stop()
                                     Toast.makeText(context, "Agent Bridge V2 dihentikan", Toast.LENGTH_SHORT).show()
                                 }
                             }
