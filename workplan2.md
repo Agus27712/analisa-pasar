@@ -5655,6 +5655,17 @@ Actions" tidak diikuti bukti hijau, dan smoke-nya sendiri tidak lagi dijalankan 
 `Running`; `start()` kembali < 500 ms; port terpakai → `Failed` lalu percobaan ulang berhasil) —
 ditambah `AgentBridgeTest` (serialisasi `AgentSignalOutput`/`AgentPortfolioOutput` + `AgentEventBus`).
 
+**Revisi 2026-11-04 (B6) — probe kesehatan harus memakai TCP, bukan HTTP cleartext.**
+Owner melaporkan sakelar menampilkan "Port 8765 tidak menjawab pemeriksaan kesehatan (kemungkinan
+port dipakai aplikasi lain)" padahal Termux mati. Aplikasi ini **tidak** menyetel
+`usesCleartextTraffic` (targetSdk 35 ⇒ cleartext HTTP diblokir kebijakan keamanan jaringan),
+sehingga probe `GET http://127.0.0.1:8765/health` yang baru ditambahkan selalu gagal dan alasan
+aslinya ditelan `getOrDefault(false)`. Perbaikan: probe kini koneksi **TCP** langsung ke
+`127.0.0.1:8765` (kebijakan itu tidak berlaku), alasan kegagalan **ditampilkan** ke UI dan ke log.
+Subjudul sakelar juga memakai `ws://127.0.0.1:8765/…` (`0.0.0.0` adalah alamat listen, bukan
+klien). Pelajaran: verifikasi yang mengklaim "port melayani" tidak boleh bergantung pada HTTP
+cleartext pada aplikasi Android modern.
+
 **Hasil verifikasi (diukur):**
 
 - `./gradlew :app:testDebugUnitTest --tests "agu.analys.bridge.*"` — **BUILD SUCCESSFUL**;
@@ -5675,3 +5686,35 @@ ditambah `AgentBridgeTest` (serialisasi `AgentSignalOutput`/`AgentPortfolioOutpu
 - **Rilis 3.9.5** — owner meminta rilis lanjutan. Run **[`41797159218`](https://github.com/Agus27712/analisa-pasar/actions/runs/41797159218)**
   (commit `62ec1ca`) **sukses**; rilis **`v3.9.5`** ter-publish dari `62ec1ca` (2026-11-04 08:17 UTC,
   1 aset APK) dan memuat **seluruh** perbaikan force close **dan** restart.
+
+### 91.6 Pasang ekstensi OMP ke Termux dari Pengaturan (2026-11-04, belum dirilis)
+
+Owner meminta sakelar bridge juga bisa "copy tool nya ke Termux", supaya tinggal menjalankan
+`omp` dan agen langsung tersambung ke server aplikasi.
+
+**Kenapa bukan salin ke Documents/penyimpanan bersama.** Pada `targetSdk 35`, aplikasi tidak
+bisa menulis ke folder publik (scoped storage), sehingga salinannya tidak bisa dibaca Termux;
+`Documents/analisa-pasar` pun hanya jalan sebagai fallback pribadi aplikasi (folder
+`Android/data/agu.analys/...`), bukan jalur yang andal untuk pemasangan alat.
+
+**Yang diimplementasikan:**
+
+1. `tools/oh-my-pi-extension/index.ts` dibundel ke APK sebagai aset `omp-extension/index.ts`
+   lewat task `syncOmpExtensionAssets` (sumber kebenaran tunggal — tidak ada salinan basi).
+2. Pengaturan → SISTEM & PEMELIHARAAN → **“Pasang ekstensi OMP ke Termux”** membuka dialog
+   berisi dua jalur pemasangan ke `~/.config/oh-my-pi/extensions/analisa-pasar/index.ts`:
+   - **Jalur otomatis:** intent `com.termux.RUN_COMMAND` yang menulis aset sebagai base64 ke
+     tujuan Termux. Syarat: `allow-external-apps=true` di `~/.termux/termux.properties`.
+     Bila belum diset, Termux tidak mengeksekusi apa pun tanpa galat di aplikasi.
+   - **Jalur manual:** tombol **“Salin perintah”** — perintah base64 satu baris untuk ditempel
+     di Termux, tanpa setelan apa pun. Termux tetap harus Termux yang terpasang.
+3. Setelah itu owner cukup `omp`; ekstensi memanggil `connectWs()` saat dimuat dan terhubung ke
+   `ws://127.0.0.1:8765/ws/signals` selama sakelar Agent Bridge V2 aktif.
+
+**Belum diverifikasi di HP owner.** Uji lokal di mesin ini: `./gradlew :app:testDebugUnitTest
+--tests "agu.analys.bridge.*"` → **8 uji, 0 gagal** (`AgentBridgeServerTest` 3, `AgentBridgeTest`
+3, `OmpBridgeInstallerTest` 2; `OmpBridgeInstallerTest` membuktikan perintah base64 menulis isi
+`index.ts` yang sama dengan aset yang dibundel). Aset `omp-extension/*.ts|*.sh` ikut masuk APK
+lewat `syncOmpExtensionAssets` (diverifikasi dari `app/build/generated/omp-assets`). Jalur
+otomatis (`RUN_COMMAND`) tidak bisa dibuktikan dari mesin ini — butuh Termux dengan
+`allow-external-apps=true` di HP owner.

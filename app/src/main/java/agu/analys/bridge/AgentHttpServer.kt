@@ -12,8 +12,8 @@ import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
 import io.ktor.websocket.*
 import java.io.File
-import java.net.HttpURLConnection
-import java.net.URL
+import java.net.InetSocketAddress
+import java.net.Socket
 import java.util.concurrent.Executors
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CoroutineScope
@@ -135,11 +135,13 @@ class AgentHttpServer(private val context: Context) {
                 runCatching { engine.stop(0, 500) }
                 return
             }
-            if (!probeHealth()) {
+            val probe = probeHealth()
+            if (probe != null) {
                 runCatching { engine.stop(0, 500) }
                 _state.value = AgentBridgeServerState.Failed(
-                    "Port $PORT tidak menjawab pemeriksaan kesehatan (kemungkinan dipakai aplikasi lain)"
+                    "Port $PORT tidak menjawab pemeriksaan kesehatan — $probe"
                 )
+                AppLogManager.error("AgentHttpServer", "Pemeriksaan kesehatan port $PORT gagal — $probe", null)
                 return
             }
             server = engine
@@ -156,23 +158,32 @@ class AgentHttpServer(private val context: Context) {
     /**
      * Bukti nyata bahwa port melayani, bukan sekadar "objek server sudah dibuat".
      * Dijalankan di thread lifecycle (bukan main thread), jadi boleh memblokir.
+     *
+     * Probe memakai koneksi **TCP** langsung, bukan `GET /health` melalui HTTP. Alasannya:
+     * aplikasi ini tidak mengizinkan cleartext HTTP (`usesCleartextTraffic` tidak disetel),
+     * sehingga permintaan HTTP ke `http://127.0.0.1:8765` diblokir kebijakan keamanan jaringan
+     * dan probe lama selalu gagal — port sebenarnya sehat, tapi UI melaporkan "tidak menjawab".
+     * TCP tidak terpengaruh kebijakan itu, dan cukup untuk memastikan server mendengarkan.
+     *
+     * @return `null` bila port menjawab, atau teks alasan bila tidak (untuk ditampilkan ke UI).
      */
-    private fun probeHealth(attempts: Int = 25, delayMs: Long = 120): Boolean {
+    private fun probeHealth(attempts: Int = 25, delayMs: Long = 120): String? {
+        var lastReason = "belum pernah mencoba"
         repeat(attempts) {
-            val ok = runCatching {
-                val conn = URL("http://127.0.0.1:$PORT/health").openConnection() as HttpURLConnection
-                conn.connectTimeout = 400
-                conn.readTimeout = 400
-                try {
-                    conn.responseCode == 200
-                } finally {
-                    conn.disconnect()
+            val reason = runCatching {
+                Socket().use { socket ->
+                    socket.connect(InetSocketAddress("127.0.0.1", PORT), 400)
                 }
-            }.getOrDefault(false)
-            if (ok) return true
+                null
+            }.getOrElse { error ->
+                // Simpan alasan asli agar tidak ditebak-tebak ("port dipakai" vs "diblokir").
+                "${error.javaClass.simpleName}: ${error.message ?: "tanpa pesan"}"
+            }
+            if (reason == null) return null
+            lastReason = reason
             Thread.sleep(delayMs)
         }
-        return false
+        return lastReason
     }
 
     private fun Application.installRoutes() {

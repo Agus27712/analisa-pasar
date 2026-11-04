@@ -51,13 +51,22 @@ Yang **tidak boleh** dilakukan lagi tanpa instruksi eksplisit owner:
   sakelar *Agent Bridge V2* dinyalakan (2026-11-04). Jangan menurunkan Ktor ke 2.x selama
   coroutines tetap 1.10.x, dan jangan menaikkan coroutines tanpa menguji sakelar itu.
 - **Sakelar bridge wajib mengikuti `AgentHttpServer.state`, bukan preferensi.** `Running` hanya
-  ditulis setelah port benar-benar menjawab `GET /health`; kegagalan jadi `Failed(reason)` dan
-  sakelar dikembalikan ke mati. `start()`/`stop()` **tidak boleh** mengerjakan apa pun di main
-  thread (buka/tutup socket) dan wajib menangkap `Throwable`. Penjaga:
+  ditulis setelah port benar-benar menerima koneksi **TCP** (probe `GET /health` via HTTP cleartext
+  **tidak** dipakai — aplikasi ini tidak menyetel `usesCleartextTraffic`, probe seperti itu selalu
+  diblokir kebijakan keamanan jaringan); kegagalan jadi `Failed(reason)` dan sakelar dikembalikan
+  ke mati. `start()`/`stop()` **tidak boleh** mengerjakan apa pun di main thread (buka/tutup socket)
+  dan wajib menangkap `Throwable`. Subjudul sakelar memakai `ws://127.0.0.1:8765/…`, bukan `0.0.0.0`.
+  Penjaga:
   `AgentBridgeServerTest` (3 uji: port terbuka + `/health`, `start()` tidak memblokir,
   port terpakai → `Failed` lalu bisa dicoba ulang), `AgentBridgeTest` (serialisasi + EventBus).
   `start()` **tidak boleh** dibuang saat state `Stopping` — permintaannya wajib dijadwalkan
   setelah berhenti tuntas, dan `stop()` saat `Stopping` no-op (run `41794360203` gagal di sini).
+- **Alat OMP dipasang dari Pengaturan, bukan disalin manual (2026-11-04).** Tombol "Pasang
+  ekstensi OMP ke Termux" membundel `tools/oh-my-pi-extension/index.ts` ke APK (task
+  `syncOmpExtensionAssets`) lalu menulisnya ke `~/.config/oh-my-pi/extensions/analisa-pasar/`
+  lewat intent `com.termux.RUN_COMMAND` (butuh `allow-external-apps=true`) atau perintah
+  base64 di clipboard. **Jangan** menawarkan "salin ke Documents" sebagai jalur utama —
+  pada `targetSdk 35` itu diblokir scoped storage.
   Verifikasi nyata lintas proses: `.github/workflows/bridge-smoke.yml` menjalankan
   `tools/bridge-smoke` (memakai `AgentHttpServer.kt` asli) untuk HTTP/WebSocket/SSE/restart.
 

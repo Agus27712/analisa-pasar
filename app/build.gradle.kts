@@ -101,7 +101,22 @@ android {
     unitTests.isReturnDefaultValues = true
     unitTests.isIncludeAndroidResources = true
   }
+  sourceSets {
+    getByName("main") {
+      // Ekstensi OMP dibundel dari tools/oh-my-pi-extension (sumber kebenaran tunggal),
+      // bukan disalin ke src/main/assets agar tidak jadi duplikat yang basi.
+      assets.srcDir(File(layout.buildDirectory.get().asFile, "generated/omp-assets"))
+    }
+  }
 }
+
+val syncOmpExtensionAssets = tasks.register<Copy>("syncOmpExtensionAssets") {
+  from(layout.projectDirectory.dir("../tools/oh-my-pi-extension")) {
+    include("index.ts", "test-v2.sh", "APPLY_BRIDGE_V2.sh")
+  }
+  into(layout.buildDirectory.dir("generated/omp-assets/omp-extension"))
+}
+tasks.named("preBuild") { dependsOn(syncOmpExtensionAssets) }
 
 kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }
 

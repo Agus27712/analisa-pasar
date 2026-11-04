@@ -13,14 +13,14 @@ isi sinyal/portofolio. Tidak ada perubahan pada engine scalping, fee, maupun jal
 
 | Status | Temuan | Jumlah |
 |---|---|---|
-| 🔴 Kritis | B1 (aplikasi force close saat sakelar bridge dinyalakan) | 1 |
-| 🟠 Serius | B2 (sakelar UI mengklaim "aktif" tanpa melihat keadaan server) | 1 |
+| 🟠 Serius | B6 (sakelar menampilkan "Port 8765 tidak menjawab pemeriksaan kesehatan" padahal server sehat — probe HTTP diblokir kebijakan cleartext) | 1 |
 | 🟡 Sedang | B3 (verifikasi CI gagal tetapi tidak ditindaklanjuti) · B4 (versi dependensi ganda di alat smoke) | 2 |
 | 🔵 Rendah | B5 (`public/assets/aistudio/` sampah · `gradlew` kehilangan bit eksekusi · versi UI hardcode) | 3 |
-| ✅ Sudah diperbaiki | B1–B5 | 7 butir |
+| ✅ Sudah diperbaiki | B1–B6 | 8 butir |
 
-> **Tidak ada pekerjaan tersisa di berkas ini.** Kalau butuh pekerjaan baru di area bridge, lakukan
-> audit baru dan tulis temuannya ke berkas baru di `docs/bugs/` (`temuan_bugs_<topik>.md`).
+> **Sisa yang belum terverifikasi:** perangkat owner (HP) belum diuji ulang setelah perbaikan B6;
+> uji lokal & CI hanya membuktikan kode, bukan keadaan handheld. Kalau butuh pekerjaan baru di
+> area bridge, lakukan audit baru dan tulis temuannya ke berkas baru di `docs/bugs/`.
 
 ---
 
@@ -84,6 +84,9 @@ berkata aktif sampai aplikasi ditutup.
 
 | Butir | Perbaikan | Berkas |
 |---|---|---|
+| B6 | Probe kesehatan probe memakai **koneksi TCP** (`Socket.connect` ke `127.0.0.1:8765`), bukan `GET /health` via HTTP. Aplikasi ini tidak menyetel `usesCleartextTraffic`, sehingga permintaan cleartext HTTP diblokir kebijakan keamanan jaringan (targetSdk 35); probe lama selalu gagal dan alasan aslinya ditelan `getOrDefault(false)` | `AgentHttpServer.kt` |
+| B6 | Alasan kegagalan sekarang ** ditampilkan** (`Failed` membawa `UnknownServiceException`-semacamnya, bukan teks "port dipakai") + dicatat ke log aplikasi | `AgentHttpServer.kt` |
+| B6 | Subjudul sakelar memakai `ws://127.0.0.1:8765/ws/signals` (0.0.0.0 adalah alamat *listen*, bukan alamat klien) | `SettingsScreen.kt` |
 | B1 | Ktor `2.3.9` → `3.3.3` (dibangun dengan Kotlin 2.2.21 + **coroutines 1.10.2**, sama dengan aplikasi). Ktor 3 memakai `kotlin.time.Duration`, jadi `java.time.Duration` (API 26) tidak lagi dipakai padahal `minSdk` 24 | `gradle/libs.versions.toml`, `AgentHttpServer.kt` |
 | B1 | Siklus hidup server dipindah ke satu thread khusus (`agent-bridge-lifecycle`); `start()`/`stop()` hanya menjadwalkan pekerjaan dan langsung kembali | `AgentHttpServer.kt` |
 | B1 | Semua kegagalan ditangkap sebagai `Throwable` dan dilaporkan sebagai `AgentBridgeServerState.Failed(reason)`; `Running` baru ditulis setelah `GET /health` di `127.0.0.1:8765` menjawab | `AgentHttpServer.kt` |
@@ -123,6 +126,7 @@ stop/restart. Hasil run dicatat di `workplan2.md` §91.5.
 | 2026-11-04 05:04 | `03cd941` — Netty → CIO (R8 lolos), **tanpa** memperbaiki ketidakcocokan coroutines |
 | 2026-11-04 05:04 | Run `41776980356` (Bridge Smoke) **gagal**: `NoSuchMethodError ... addLast` di `AgentHttpServer.start()` |
 | 2026-11-04 (sesi ini) | Owner melaporkan force close saat sakelar dinyalakan; sebab dicocokkan dengan log run gagal |
+| 2026-11-04 (sesi ini, revisi) | Owner melaporkan sakelar gagal menyala padahal Termux mati. Sebab: probe `GET /health` diblokir kebijakan cleartext; diganti probe TCP + alasan asli ditampilkan |
 | 2026-11-04 (sesi ini) | Ktor 3.3.3 + siklus hidup di luar main thread + `catch (Throwable)` + sakelar mengikuti `state` + R8 keep + smoke membaca versi dari `libs.versions.toml`; B5 dibereskan |
 | 2026-11-04 (sesi ini) | Run `41794360203` (Bridge Smoke) **gagal**: `start()` dipanggil saat state `Stopping` langsung return → percobaan ulang restart tak pernah menyala (`Server did not become healthy`). `start()` kini menjadwalkan start setelah berhenti tuntas; `stop()` saat Stopping no-op. Smoke lokal **PASS** |
 | 2026-11-04 (sesi ini) | Run `41795602101` (Bridge Smoke, setelah perbaikan): job R8 + job smoke **sukses**. Rilis 3.9.4 (run `Release APK` `41794369255`) **sukses**, dibangun dari `bdd629e` — belum memuat perbaikan restart `09e4ee6` |

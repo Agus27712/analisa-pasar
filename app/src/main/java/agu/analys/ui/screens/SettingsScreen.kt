@@ -1,5 +1,6 @@
 package agu.analys.ui.screens
 
+import android.content.Context
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
@@ -15,9 +16,11 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -34,6 +37,7 @@ import agu.analys.engine.swing.SwingSensitivityPreset
 import agu.analys.ui.components.security.SecurityPinDialog
 import agu.analys.ui.components.security.SetupRealApiDialog
 import agu.analys.ui.components.settings.*
+import agu.analys.bridge.OmpBridgeInstaller
 import agu.analys.ui.theme.*
 import agu.analys.util.AppPreferences
 import agu.analys.viewmodel.*
@@ -90,6 +94,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
 
     var showSetupRealApiDialog by remember { mutableStateOf(false) }
     var showPinDialog by remember { mutableStateOf(false) }
+    var ompPrepared by remember { mutableStateOf<agu.analys.bridge.OmpBridgeInstaller.Prepared?>(null) }
     var pinDialogAction by remember { mutableStateOf(PinDialogAction.TOGGLE_REAL_BUY) }
     var pinDialogError by remember { mutableStateOf<String?>(null) }
     var pendingRealBuyToggle by remember { mutableStateOf(false) }
@@ -503,7 +508,7 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                             title = "Agent Bridge V2 (Termux / OMP)",
                             subtitle = when (val s = agentState) {
                                 is agu.analys.bridge.AgentBridgeServerState.Running ->
-                                    "Aktif: ws://0.0.0.0:8765/ws/signals + Documents/analisa-pasar"
+                                    "Aktif: ws://127.0.0.1:8765/ws/signals + Documents/analisa-pasar"
                                 is agu.analys.bridge.AgentBridgeServerState.Starting ->
                                     "Menyalakan server port 8765…"
                                 is agu.analys.bridge.AgentBridgeServerState.Stopping ->
@@ -525,6 +530,25 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                                     agentServer.stop()
                                     Toast.makeText(context, "Agent Bridge V2 dihentikan", Toast.LENGTH_SHORT).show()
                                 }
+                            }
+                        )
+                        HorizontalDivider(color = TvBorder.copy(alpha = 0.5f), thickness = 0.5.dp)
+                        AndroidPreferenceItem(
+                            icon = Icons.Default.Terminal,
+                            iconTint = Color(0xFFFFB300),
+                            iconBackground = Color(0xFFFFB300).copy(alpha = 0.15f),
+                            title = "Pasang ekstensi OMP ke Termux",
+                            subtitle = "Satu klik: menulis index.ts ke ~/.config/oh-my-pi/extensions/analisa-pasar",
+                            onClick = {
+                                ompPrepared = runCatching { OmpBridgeInstaller.prepare(context) }
+                                    .getOrElse { t ->
+                                        Toast.makeText(
+                                            context,
+                                            "Gagal membaca ekstensi dari APK: ${t.message}",
+                                            Toast.LENGTH_LONG
+                                        ).show()
+                                        null
+                                    }
                             }
                         )
                     }
@@ -793,6 +817,74 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
                 }
             }
         }
+    }
+
+    if (ompPrepared != null) {
+        val prepared = ompPrepared!!
+        AlertDialog(
+            onDismissRequest = { ompPrepared = null },
+            title = { Text("Pasang ekstensi OMP ke Termux") },
+            text = {
+                Column {
+                    Text(
+                        "Memasang index.ts bridge ke folder konfigurasi oh-my-pi di Termux, lalu agen bisa connect ke server aplikasi.",
+                        fontSize = 11.sp,
+                        color = TvTextSecondary
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Text("CARA 1 — otomatis (satu klik)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TvGreen)
+                    Text(
+                        "Butuh allow-external-apps=true di ~/.termux/termux.properties (sekali saja). Bila belum diset, Termux tidak mengeksekusi apa pun — pakai Cara 2.",
+                        fontSize = 10.sp,
+                        color = TvTextSecondary
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Text("CARA 2 — tempel perintah di Termux (tanpa setelan tambahan)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TvGreen)
+                    Spacer(Modifier.height(4.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(TvSurfaceVariant, RoundedCornerShape(8.dp))
+                            .padding(8.dp)
+                    ) {
+                        SelectionContainer {
+                            Text(
+                                prepared.command,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 8.sp,
+                                color = TvTextPrimary
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Lalu jalankan: omp — agen akan tersambung ke ws://127.0.0.1:8765/ws/signals selama sakelar Agent Bridge V2 aktif.",
+                        fontSize = 10.sp,
+                        color = TvTextSecondary
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val ok = OmpBridgeInstaller.runInTermux(context, prepared.command)
+                    Toast.makeText(
+                        context,
+                        if (ok) "Termux dibuka — ekstensi akan ditulis" else "Termux tidak terpasang atau tidak merespons",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }) { Text("Jalankan di Termux", color = TvGreen) }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = {
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("omp-install", prepared.command))
+                        Toast.makeText(context, "Perintah pemasangan tersalin", Toast.LENGTH_SHORT).show()
+                    }) { Text("Salin perintah", color = TvBlue) }
+                    TextButton(onClick = { ompPrepared = null }) { Text("Tutup", color = TvTextSecondary) }
+                }
+            }
+        )
     }
 
     // DIALOGS
