@@ -5655,3 +5655,22 @@ Actions" tidak diikuti bukti hijau, dan smoke-nya sendiri tidak lagi dijalankan 
 `Running`; `start()` kembali < 500 ms; port terpakai → `Failed` lalu percobaan ulang berhasil) —
 ditambah `AgentBridgeTest` (serialisasi `AgentSignalOutput`/`AgentPortfolioOutput` + `AgentEventBus`).
 
+**Hasil verifikasi (diukur):**
+
+- `./gradlew :app:testDebugUnitTest --tests "agu.analys.bridge.*"` — **BUILD SUCCESSFUL**;
+  `app/build/test-results/testDebugUnitTest/TEST-agu.analys.bridge.*.xml` mencatat **6 uji, 0 gagal**
+  (`AgentBridgeServerTest` 3, ~14 dtk; `AgentBridgeTest` 3, ~1 dtk).
+- **Kontrol negatif:** menjalankan `boot()` sinkron di thread pemanggil membuat uji
+  `start tidak memblokir thread pemanggil` GAGAL; mengganti `catch (Throwable)` menjadi
+  `catch (Exception)` + simulasi `NoSuchMethodError` membuat dua uji GAGAL. Dikembalikan apa adanya.
+- Smoke lokal (`gradle run` di `tools/bridge-smoke`): **PASS** — HTTP `/health` + `/`, WebSocket
+  snapshot + push, SSE ping + push, `stop()`/`start()` restart.
+- **CI:** run `41794360203` (Bridge Smoke, paket pertama) **gagal** di tahap restart (lihat butir 5);
+  setelah perbaikan, run **[`41795602101`](https://github.com/Agus27712/analisa-pasar/actions/runs/41795602101)**
+  — job R8 dan job smoke **sukses** (HTTP/WebSocket/SSE/restart dijalankan dari sumber asli
+  `AgentHttpServer.kt`).
+- **Rilis 3.9.4** — workflow `Release APK` run **[`41794369255`](https://github.com/Agus27712/analisa-pasar/actions/runs/41794369255)**
+  **sukses** (APK ber-R8 terbentuk dan ter-publish), tetapi **dibangun dari commit `bdd629e`**,
+  yaitu **sebelum** perbaikan restart `09e4ee6`. Rilis ini memuat perbaikan force close, tetapi
+  **belum memuat** perbaikan "start saat Stopping dijadwalkan". Rilis berikutnya (atau rilis
+  tambahan) diperlukan bila owner ingin 3.9.4 memuat keduanya.

@@ -125,3 +125,4 @@ stop/restart. Hasil run dicatat di `workplan2.md` §91.5.
 | 2026-11-04 (sesi ini) | Owner melaporkan force close saat sakelar dinyalakan; sebab dicocokkan dengan log run gagal |
 | 2026-11-04 (sesi ini) | Ktor 3.3.3 + siklus hidup di luar main thread + `catch (Throwable)` + sakelar mengikuti `state` + R8 keep + smoke membaca versi dari `libs.versions.toml`; B5 dibereskan |
 | 2026-11-04 (sesi ini) | Run `41794360203` (Bridge Smoke) **gagal**: `start()` dipanggil saat state `Stopping` langsung return → percobaan ulang restart tak pernah menyala (`Server did not become healthy`). `start()` kini menjadwalkan start setelah berhenti tuntas; `stop()` saat Stopping no-op. Smoke lokal **PASS** |
+| 2026-11-04 (sesi ini) | Run `41795602101` (Bridge Smoke, setelah perbaikan): job R8 + job smoke **sukses**. Rilis 3.9.4 (run `Release APK` `41794369255`) **sukses**, dibangun dari `bdd629e` — belum memuat perbaikan restart `09e4ee6` |
