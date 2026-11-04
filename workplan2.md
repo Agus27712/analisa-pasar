@@ -5567,3 +5567,25 @@ Build rilis APK `41721008218` gagal pada tahap R8 karena kelas `io.netty.interna
   debugger menangkap `Throwable` dan mengembalikan `false` saat API tidak tersedia di Android.
   Tidak ada suppression Netty atau wildcard `java.lang.management.**`.
 - Verifikasi wajib lewat GitHub Actions (`Release APK` dan `Unit Tests (Manual)`), bukan build lokal.
+
+## 92. Rilis 3.9.3 — naik versi + bukti R8 (2026-11-04)
+
+`main` sudah **74 commit** di depan tag `v3.9.2` (rilis terakhir 2026-10-18), sedangkan
+`versionName` masih `3.9.2`/`versionCode 91`. Menjalankan `Release APK` tanpa menaikkan versi akan
+**menimpa aset APK pada rilis `v3.9.2`** (`gh release upload --clobber`, tag tidak dibuat ulang),
+sehingga tidak ada jejak versi untuk APK yang benar-benar berisi Agent Bridge V2.
+
+Keputusan (owner, 2026-11-04): naikkan versi lebih dulu, lalu rilis.
+
+- `app/build.gradle.kts`: `versionCode` **92**, `versionName` **"3.9.3"**.
+- Isi rilis = seluruh perubahan `main` sejak `v3.9.2`: slider INTRADAY paket G, slider **SWING 18
+  knob** (§90), penggabungan slider ke kartu mode (§89), perbaikan notifikasi H1–H4 (basis net),
+  dan **Agent Bridge V2** dengan mesin server **Ktor CIO** (§91, §91.4).
+- Tujuan kedua rilis ini: membuktikan perbaikan §91.4 — build `41721008218` gagal di R8 karena
+  `io.netty.internal.tcnative.*`; setelah Netty dilepas, `assembleRelease` harus lolos tanpa aturan
+  `-dontwarn` Netty.
+- **Batasan yang harus disebut:** `Release APK` hanya menjalankan `assembleRelease` (+ R8), **bukan**
+  unit test. Karena itu rilis yang hijau **tidak** berarti suite unit test hijau; 13 uji intraday
+  masih merah karena dataset `data/tokocrypto_v7` dihapus di `88103ec` (§90). Jangan mengklaim
+  "semua tes lolos" dari hasil rilis.
+- Bukti rilis dicatat di bawah setelah workflow selesai (id run + hasil).
