@@ -185,6 +185,9 @@ Angka dan alasan lengkap: `workplan2.md` §78.
 - Unit test: `./gradlew :app:testDebugUnitTest` (JDK 17).
 - Scope scalping: `./gradlew :app:testDebugUnitTest --tests "agu.analys.engine.scalping.*"`.
 - Build: `./gradlew :app:assembleDebug` / `assembleRelease`.
+- **Mesin Termux tanpa JDK/Android SDK tidak boleh menjalankan `./gradlew`.** Verifikasi lewat
+  GitHub Actions: `Release APK` (bukti build rilis + R8) dan `Unit Tests (Manual)` dengan
+  `scope=custom`, `custom_filter=agu.analys.bridge.*` untuk perubahan Agent Bridge.
 - Uji parity replay engine existing: `python3 tools/test_scalp_replay_parity.py`.
 - Alat riset Spec v2 (`tools/spot_*.py`), dataset `data/tokocrypto_spot/`, dan hasilnya **sudah
   dihapus 2026-10-21**; jangan dibuat ulang dan jangan dipakai untuk riset baru.

@@ -4,8 +4,8 @@ import android.content.Context
 import agu.analys.util.AppLogManager
 import io.ktor.http.*
 import io.ktor.server.application.*
+import io.ktor.server.cio.*
 import io.ktor.server.engine.*
-import io.ktor.server.netty.*
 import io.ktor.server.plugins.origin
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
@@ -18,7 +18,7 @@ import java.time.Duration
 
 class AgentHttpServer(private val context: Context) {
 
-    private var server: NettyApplicationEngine? = null
+    private var server: ApplicationEngine? = null
     private val json = Json { prettyPrint = false; ignoreUnknownKeys = true; encodeDefaults = true }
     private val bridge by lazy { AgentOutputBridge.getInstance(context) }
 
@@ -26,7 +26,7 @@ class AgentHttpServer(private val context: Context) {
     fun start() {
         if (server != null) return
         try {
-            server = embeddedServer(Netty, port = 8765, host = "0.0.0.0") {
+            server = embeddedServer(CIO, port = 8765, host = "0.0.0.0") {
                 install(WebSockets) {
                     pingPeriod = Duration.ofSeconds(15)
                     timeout = Duration.ofSeconds(15)

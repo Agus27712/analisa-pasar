@@ -44,6 +44,12 @@
 -keepnames class kotlinx.coroutines.internal.MainDispatcherFactory {}
 -keepnames class kotlinx.coroutines.CoroutineExceptionHandler {}
 
+# Ktor 2.3.9: deteksi debugger JVM opsional, bukan API Android.
+# IntellijIdeaDebugDetector menangkap Throwable dan mengembalikan false
+# ketika ManagementFactory/RuntimeMXBean tidak tersedia. Jangan perluas ke Netty.
+-dontwarn java.lang.management.ManagementFactory
+-dontwarn java.lang.management.RuntimeMXBean
+
 # Compose
 -keep class androidx.compose.** { *; }
 -dontwarn androidx.compose.**

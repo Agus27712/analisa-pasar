@@ -5519,7 +5519,7 @@ sekaligus:
 
 | Aspek | Keputusan |
 |---|---|
-| Server Lokal | Ktor Server Netty berjalan di dalam Android pada port `8765`, host `0.0.0.0` |
+| Server Lokal | Ktor Server CIO berjalan di dalam Android pada port `8765`, host `0.0.0.0` |
 | Event Bus Reaktif | `AgentEventBus` berbasis Kotlin Coroutines `MutableSharedFlow` dengan buffer & replay |
 | Skema Data | `AgentOutputModels.kt` (@Serializable): `AgentSignalOutput`, `TechnicalBreakdown`, `FeeTruthInfo`, `AgentPortfolioOutput`, `AgentAsset` |
 | Siklus Hidup | Dikontrol oleh `TradingForegroundService` (keep-alive) dan switch preferensi UI |
@@ -5533,10 +5533,10 @@ sekaligus:
 1. **`app/src/main/java/agu/analys/bridge/`**:
    - `AgentOutputModels.kt`: Skema JSON dan EventBus.
    - `AgentOutputBridge.kt`: Singleton manajemen file lokal dan emisi event bus.
-   - `AgentHttpServer.kt`: Ktor Netty Server port 8765.
+   - `AgentHttpServer.kt`: Ktor CIO Server port 8765.
 2. **`app/build.gradle.kts` & `gradle/libs.versions.toml`**:
    - Plugin `kotlin.serialization`.
-   - Pustaka Ktor Server 2.3.9 Netty, Core, WebSockets, ContentNegotiation, dan Serialization.
+   - Pustaka Ktor Server 2.3.9 CIO, Core, WebSockets, ContentNegotiation, dan Serialization.
 3. **`app/src/main/java/agu/analys/service/TradingForegroundService.kt`**:
    - Hook inisialisasi dan stop server Ktor tanpa melanggar aturan N15 dan N16.
 4. **`app/src/main/java/agu/analys/viewmodel/TradingViewModelSync.kt`**:
@@ -5549,3 +5549,21 @@ sekaligus:
    - Unit test serialisasi sinyal, portfolio, dan emisi EventBus.
 8. **Dokumentasi**:
    - `docs/LAPORAN-integrasi-agent-bridge-v2-2026-11-03.md`.
+
+### 91.4 Penggantian Mesin Netty ke CIO (2026-11-04)
+
+Build rilis APK `41721008218` gagal pada tahap R8 karena kelas `io.netty.internal.tcnative.*`
+(bagian dari mesin Netty) tidak lengkap pada berkas yang dipaketkan. Mesin server diganti ke
+`ktor-server-cio` pada versi Ktor yang sama (2.3.9) supaya rilis bisa dipaketkan tanpa kelas Netty:
+
+- `AgentHttpServer.kt`: `embeddedServer(CIO, …)` dengan tipe field `ApplicationEngine`; seluruh rute
+  (`/`, `/health`, `/signals/latest`, `/signals/history`, `/portfolio`, `/ws/signals`, `/events`) dan
+  opsi WebSocket (ping 15 detik, timeout 15 detik, `maxFrameSize` maksimum, `masking = false`) tetap.
+- `gradle/libs.versions.toml`: alias `ktor-server-netty` diganti `ktor-server-cio`.
+- `app/build.gradle.kts`: dependensi memakai `libs.ktor.server.cio`, dan pengecualian resource
+  `META-INF/io.netty.versions.properties` dihapus karena Netty tidak lagi menjadi dependensi.
+- `app/proguard-rules.pro`: hanya dua referensi JVM opsional Ktor, `ManagementFactory` dan
+  `RuntimeMXBean`, mendapat aturan `-dontwarn` spesifik. Sumber Ktor 2.3.9 membuktikan deteksi
+  debugger menangkap `Throwable` dan mengembalikan `false` saat API tidak tersedia di Android.
+  Tidak ada suppression Netty atau wildcard `java.lang.management.**`.
+- Verifikasi wajib lewat GitHub Actions (`Release APK` dan `Unit Tests (Manual)`), bukan build lokal.

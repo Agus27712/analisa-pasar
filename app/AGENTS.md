@@ -40,6 +40,12 @@ Yang **tidak boleh** dilakukan lagi tanpa instruksi eksplisit owner:
 | Tambah layar | `model/TradingViewModels.kt` (`AppScreen`) → `MainActivity.kt` → `viewmodel/TradingViewModelNavigation.kt` |
 | Agent Bridge V2 (Termux/OMP) | `bridge/AgentOutputBridge.kt`, `AgentHttpServer.kt`, `tools/oh-my-pi-extension/` |
 
+- **Mesin server bridge = Ktor CIO** (`ktor-server-cio` 2.3.9), bukan Netty. Build rilis
+  `41721008218` gagal di R8 karena kelas `io.netty.internal.tcnative.*`; penggantian mesin dan
+  penghapusan pengecualian resource `META-INF/io.netty.versions.properties` ada di `workplan2.md`
+  §91.4. Jangan menambah `-dontwarn` untuk kelas Netty — Netty memang bukan dependensi lagi.
+  Verifikasi build/tes lewat GitHub Actions (`Release APK`, `Unit Tests (Manual)`), bukan lokal.
+
 ## Aturan turunan dari audit notifikasi (batch 1 & 2, 2026-10-16)
 
 - **Kepemilikan edge pemicu harus tunggal.** Pemicu yang bersifat *edge-once* (mis. trailing

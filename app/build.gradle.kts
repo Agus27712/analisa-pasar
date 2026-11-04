@@ -94,8 +94,7 @@ android {
   packaging {
     resources.excludes += setOf(
       "/META-INF/{AL2.0,LGPL2.1}",
-      "META-INF/INDEX.LIST",
-      "META-INF/io.netty.versions.properties"
+      "META-INF/INDEX.LIST"
     )
   }
   testOptions {
@@ -138,7 +137,7 @@ dependencies {
   implementation(libs.androidx.work.runtime.ktx)
   implementation(libs.ta4j.core)
   implementation(libs.ktor.server.core)
-  implementation(libs.ktor.server.netty)
+  implementation(libs.ktor.server.cio)
   implementation(libs.ktor.server.websockets)
   implementation(libs.ktor.server.content.negotiation)
   implementation(libs.ktor.serialization.kotlinx.json)

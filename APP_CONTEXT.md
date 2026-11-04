@@ -64,7 +64,7 @@ Detail komponen, isolasi exchange, Room, dan pipeline order: **lihat `README.md`
 | Room Database | **versi 8** — 4 entitas: `RealTradeEntity`, `RealOpenOrderEntity`, `SignalLogEntity`, `TradeHistoryRecordEntity` |
 | DAO | `realTradeDao` (termasuk query `real_open_orders`), `signalLogDao`, `tradeHistoryRecordDao` — **tidak ada** DAO terpisah bernama `OpenOrderDao` |
 | Android SDK | minSdk 24, targetSdk **35**, compileSdk 36 |
-| Jaringan | OkHttp (REST + WebSocket) — **tanpa Ktor** |
+| Jaringan | OkHttp (REST + WebSocket) untuk bursa; Ktor Server CIO **hanya** untuk Agent Bridge V2 lokal (`0.0.0.0:8765`, tanpa cloud) |
 | Bursa didukung | Tokocrypto (USDT + IDR), Indodax (IDR saja) — Binance **dilarang** di runtime |
 | Model biaya | `object FeeSchedule` di `config/AppConfiguration.kt` = satu-satunya sumber kebenaran fee |
 | Sesi intraday | **5 sesi** (Open Pagi, Hold Siang, Sore Trailing, Close Malam, Rest Malam) |
