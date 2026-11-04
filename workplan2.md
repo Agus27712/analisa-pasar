@@ -5588,4 +5588,12 @@ Keputusan (owner, 2026-11-04): naikkan versi lebih dulu, lalu rilis.
   unit test. Karena itu rilis yang hijau **tidak** berarti suite unit test hijau; 13 uji intraday
   masih merah karena dataset `data/tokocrypto_v7` dihapus di `88103ec` (§90). Jangan mengklaim
   "semua tes lolos" dari hasil rilis.
-- Bukti rilis dicatat di bawah setelah workflow selesai (id run + hasil).
+- **Bukti rilis (2026-11-04):** run [`41788543605`](https://github.com/Agus27712/analisa-pasar/actions/runs/41788543605)
+  di commit `e84dd43` — **sukses**, termasuk langkah `Build signed release APK` (R8 lolos tanpa
+  aturan `-dontwarn` Netty, membuktikan §91.4). Rilis `v3.9.3` terbit, aset `app-release.apk`
+  10.509.924 byte. Rilis `v3.9.2` **tidak tersentuh** (aset lamanya tetap). Satu-satunya peringatan
+  di log adalah deprecation `actions/checkout@v4` / `actions/setup-java@v4` (Node.js 20), bukan
+  kegagalan build.
+- **Yang belum dibuktikan oleh run ini:** unit test. `Release APK` hanya `assembleRelease`; suite
+  `Unit Tests (Manual)` belum dijalankan, jadi 13 uji intraday yang merah karena dataset v7 hilang
+  (§90) **tetap merah** sampai owner memutuskan dataset itu.
