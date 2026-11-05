@@ -1,13 +1,13 @@
 /**
- * analisa-pasar Agent Bridge — extension untuk omp 18.x
+ * analisa-pasar Agent Bridge — extension untuk omp
  *
- * Path (OMP 18):
- *   ~/.omp/agent/extensions/analisa-pasar/index.ts
+ * Path (OMP):
+ *   ~/.omp/agent/extension/analisa-pasar/index.ts
  *
  * Syarat app:
- *   Agent Bridge V2 ON → http://127.0.0.1:8765  +  ws://127.0.0.1:8765/ws/signals
+ *   Agent Bridge ON → http://127.0.0.1:8765  +  ws://127.0.0.1:8765/ws/signals
  *
- * Format: export default function (pi) — wajib di omp 18 (bukan export const tools).
+ * Format: export default function (pi) — wajib di omp (bukan export const tools).
  */
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 
@@ -255,4 +255,150 @@ export default function analisaPasarBridge(pi: ExtensionAPI) {
       }
     },
   });
+
+  // --- TRADING TOOLS (Agent-Assisted Trading) ---
+
+  pi.registerTool({
+    name: "get_bridge_trading_status",
+    label: "Bridge trading status",
+    description: "Cek kesiapan trading bridge (status Mode Real, sesi PIN, saldo, dan koneksi bursa)",
+    parameters: z.object({}),
+    async execute() {
+      try {
+        const res = await fetch(`${BRIDGE_HTTP}/api/v1/trading/status`, {
+          signal: AbortSignal.timeout(4000),
+        });
+        const data = await res.json();
+        return textResult(data);
+      } catch (e) {
+        return textResult({ ok: false, error: `Gagal membaca status trading bridge: ${e}` });
+      }
+    },
+  });
+
+  pi.registerTool({
+    name: "place_buy_order",
+    label: "Place buy order",
+    description:
+      "Kirim order BELI ke Analisa Pasar (Tokocrypto/Paper) atas instruksi pengguna terkonfirmasi. Format: quoteAmount (nominal USDT/IDR) atau quantity.",
+    parameters: z.object({
+      symbol: z.string().describe("Simbol pair, contoh: BTCUSDT, ETHUSDT, BTCIDR"),
+      quoteAmount: z.number().optional().describe("Nominal beli dalam quote currency (contoh: 15 USDT atau 100000 IDR)"),
+      quantity: z.number().optional().describe("Kuantitas koin jika tidak menentukan quoteAmount"),
+      price: z.number().optional().default(0).describe("Harga limit (0 = otomatis pakai harga pasar terbaru)"),
+      autoLimitTp1: z.number().optional().describe("Harga Take Profit 1 opsional"),
+      autoLimitTp2: z.number().optional().describe("Harga Take Profit 2 opsional"),
+      isSimulation: z.boolean().optional().default(false).describe("True untuk simulasi paper trading, False untuk akun riil"),
+      exchange: z.string().optional().default("TOKOCRYPTO").describe("Bursa target (default: TOKOCRYPTO)"),
+    }),
+    async execute(_toolCallId, params) {
+      try {
+        const res = await fetch(`${BRIDGE_HTTP}/api/v1/trading/buy`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(params),
+          signal: AbortSignal.timeout(25000),
+        });
+        const data = await res.json();
+        return textResult(data);
+      } catch (e) {
+        return textResult({
+          success: false,
+          message: `Gagal mengirim order BUY ke bridge: ${e}`,
+        });
+      }
+    },
+  });
+
+  pi.registerTool({
+    name: "place_sell_order",
+    label: "Place sell order",
+    description:
+      "Kirim order JUAL ke Analisa Pasar (Tokocrypto/Paper) atas instruksi pengguna terkonfirmasi. Tokocrypto SELL menggunakan MARKET.",
+    parameters: z.object({
+      symbol: z.string().describe("Simbol pair, contoh: BTCUSDT, ETHUSDT, BTCIDR"),
+      quantity: z.number().describe("Jumlah aset koin yang ingin dijual"),
+      price: z.number().optional().default(0).describe("Harga limit (0 = market sell)"),
+      isSimulation: z.boolean().optional().default(false).describe("True untuk simulasi paper trading, False untuk akun riil"),
+      exchange: z.string().optional().default("TOKOCRYPTO").describe("Bursa target (default: TOKOCRYPTO)"),
+    }),
+    async execute(_toolCallId, params) {
+      try {
+        const res = await fetch(`${BRIDGE_HTTP}/api/v1/trading/sell`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(params),
+          signal: AbortSignal.timeout(25000),
+        });
+        const data = await res.json();
+        return textResult(data);
+      } catch (e) {
+        return textResult({
+          success: false,
+          message: `Gagal mengirim order SELL ke bridge: ${e}`,
+        });
+      }
+    },
+  });
+
+  pi.registerTool({
+    name: "cancel_order",
+    label: "Cancel order",
+    description: "Batalkan open order di Analisa Pasar (Tokocrypto/Paper)",
+    parameters: z.object({
+      symbol: z.string().describe("Simbol pair, contoh: BTCUSDT"),
+      orderId: z.string().describe("Order ID yang ingin dibatalkan"),
+      isSimulation: z.boolean().optional().default(false).describe("True jika order paper trading"),
+      exchange: z.string().optional().default("TOKOCRYPTO").describe("Bursa target (default: TOKOCRYPTO)"),
+    }),
+    async execute(_toolCallId, params) {
+      try {
+        const res = await fetch(`${BRIDGE_HTTP}/api/v1/trading/cancel`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(params),
+          signal: AbortSignal.timeout(15000),
+        });
+        const data = await res.json();
+        return textResult(data);
+      } catch (e) {
+        return textResult({
+          success: false,
+          message: `Gagal membatalkan order di bridge: ${e}`,
+        });
+      }
+    },
+  });
+
+  pi.registerTool({
+    name: "get_order_status",
+    label: "Get order status",
+    description: "Cek detail dan status order berdasarkan order ID dari Tokocrypto/Paper",
+    parameters: z.object({
+      orderId: z.string().describe("Order ID yang ingin dicek"),
+      symbol: z.string().optional().describe("Simbol pair (disarankan untuk Tokocrypto)"),
+      isSimulation: z.boolean().optional().default(false).describe("True jika order paper trading"),
+      exchange: z.string().optional().default("TOKOCRYPTO").describe("Bursa target (default: TOKOCRYPTO)"),
+    }),
+    async execute(_toolCallId, params) {
+      try {
+        const q = new URLSearchParams({
+          symbol: params.symbol || "",
+          isSimulation: String(params.isSimulation ?? false),
+          exchange: params.exchange || "TOKOCRYPTO",
+        });
+        const res = await fetch(`${BRIDGE_HTTP}/api/v1/trading/orders/${encodeURIComponent(params.orderId)}?${q}`, {
+          signal: AbortSignal.timeout(10000),
+        });
+        const data = await res.json();
+        return textResult(data);
+      } catch (e) {
+        return textResult({
+          success: false,
+          message: `Gagal membaca status order dari bridge: ${e}`,
+        });
+      }
+    },
+  });
 }
+

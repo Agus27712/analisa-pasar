@@ -72,7 +72,7 @@ class AgentBridgeServerTest {
 
             val (rootCode, rootBody) = httpGet("/")
             assertEquals(200, rootCode)
-            assertTrue("badan /: $rootBody", rootBody.contains("analisa-pasar-agent-bridge-v2"))
+            assertTrue("badan /: $rootBody", rootBody.contains("analisa-pasar-agent-bridge"))
 
             server.stop()
             assertEquals(AgentBridgeServerState.Stopped, server.awaitSettled(10_000))

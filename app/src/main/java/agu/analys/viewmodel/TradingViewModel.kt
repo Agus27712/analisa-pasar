@@ -463,6 +463,11 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
 
     init {
         initSubscriptionsAndPolling()
+        agu.analys.bridge.AgentTradingCommandHandler.register(
+            real = realCoordinator,
+            sim = simCoordinator,
+            priceProvider = { symbol -> marketDataCoordinator.dashboardTicks.value[symbol]?.price }
+        )
     }
 
     // ═════════════════════════════════════════════════════════════════════════
@@ -873,6 +878,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     override fun onCleared() {
         marketViewModel.stopDashboardPolling()
         marketDataCoordinator.stopPolling()
+        agu.analys.bridge.AgentTradingCommandHandler.unregister()
         super.onCleared()
     }
 }

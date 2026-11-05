@@ -4,12 +4,12 @@
 
 set -e
 
-TARGET_DIR="$HOME/.config/oh-my-pi/extensions/analisa-pasar"
+TARGET_DIR="$HOME/.omp/agent/extension/analisa-pasar"
 mkdir -p "$TARGET_DIR"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cp "$SCRIPT_DIR/index.ts" "$TARGET_DIR/index.ts"
 
-echo "✓ Ekstensi analisa-pasar-bridge-v2 berhasil disalin ke: $TARGET_DIR/index.ts"
+echo "✓ Ekstensi analisa-pasar-bridge berhasil disalin ke: $TARGET_DIR/index.ts"
 echo "Untuk menguji koneksi bridge, jalankan:"
 echo "  bash $SCRIPT_DIR/test-v2.sh"

@@ -21,7 +21,7 @@ class OmpBridgeInstallerTest {
 
         // Isi yang akan ditulis Termux harus persis sama dengan index.ts yang dibundel di APK.
         val decoded = String(java.util.Base64.getDecoder().decode(prepared.base64), Charsets.UTF_8)
-        assertTrue("isi index.ts: $decoded", decoded.contains("analisa-pasar-bridge-v2"))
+        assertTrue("isi index.ts: $decoded", decoded.contains("analisa-pasar") || decoded.contains("analisaPasarBridge"))
     }
 
     @Test

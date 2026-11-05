@@ -29,3 +29,17 @@ __pycache__/
 # Proyek smoke bridge (dibersihkan workflow, tapi jangan sampai ter-commit)
 tools/bridge-smoke/build/
 tools/bridge-smoke/.gradle/
+
+# Artefak internal AI Studio & lampiran aset sementara
+.aistudio/
+/.aistudio/
+/public/assets/
+public/assets/
+
+# Patch, diff, dan berkas cadangan (backup)
+*.patch
+*.patch.*
+*.diff
+*.bak
+*.orig
+

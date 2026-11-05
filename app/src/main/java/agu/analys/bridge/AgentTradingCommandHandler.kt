@@ -1,0 +1,666 @@
+package agu.analys.bridge
+
+import android.content.Context
+import agu.analys.config.MarketDataSource
+import agu.analys.database.AppDatabase
+import agu.analys.model.TradingPair
+import agu.analys.service.TokocryptoTradeApi
+import agu.analys.trading.SimulationOrderResult
+import agu.analys.trading.SimulationOrderSide
+import agu.analys.trading.SimulationOrderStatus
+import agu.analys.trading.SimulationOrderType
+import agu.analys.util.AppLogManager
+import agu.analys.util.AppPreferences
+import agu.analys.viewmodel.RealTradeCoordinator
+import agu.analys.viewmodel.SimulationCoordinator
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import java.util.concurrent.atomic.AtomicBoolean
+
+/**
+ * Pengendali eksekusi perintah trading dari Agent Bridge (Agent-Assisted Trading).
+ *
+ * Mengimplementasikan pengamanan terpusat:
+ * 1. Validasi Mode Real (`isRealBuyEnabled`) dan sesi PIN (`isPinUnlocked`).
+ * 2. Validasi bursa dan kuotasi resmi (Tokocrypto: hanya USDT dan IDR).
+ * 3. Anti double-order (Atomic lock `tradeInFlight`).
+ * 4. Pendelegasian ke `RealTradeCoordinator` (riil) atau `SimulationCoordinator` (simulasi).
+ */
+object AgentTradingCommandHandler {
+
+    @Volatile
+    private var realCoordinator: RealTradeCoordinator? = null
+
+    @Volatile
+    private var simCoordinator: SimulationCoordinator? = null
+
+    @Volatile
+    private var latestPriceProvider: ((String) -> Double?)? = null
+
+    private val tradeInFlight = AtomicBoolean(false)
+
+    /**
+     * Didaftarkan oleh [agu.analys.viewmodel.TradingViewModel] saat siklus hidup aktif.
+     */
+    fun register(
+        real: RealTradeCoordinator,
+        sim: SimulationCoordinator,
+        priceProvider: (String) -> Double?
+    ) {
+        realCoordinator = real
+        simCoordinator = sim
+        latestPriceProvider = priceProvider
+        AppLogManager.info("AgentTrading", "Coordinators berhasil didaftarkan ke AgentTradingCommandHandler")
+    }
+
+    fun unregister() {
+        realCoordinator = null
+        simCoordinator = null
+        latestPriceProvider = null
+        AppLogManager.info("AgentTrading", "Coordinators di-unregister dari AgentTradingCommandHandler")
+    }
+
+    /**
+     * Status kesiapan sistem trading bridge.
+     */
+    fun getTradingStatus(context: Context): AgentTradingStatusResponse {
+        val prefs = AppPreferences(context)
+        val real = realCoordinator
+        val sim = simCoordinator
+        val isRealBuy = real?.isRealBuyEnabled?.value ?: false
+        val isPinOk = real?.isPinUnlocked?.value ?: false
+        val free = real?.realFreeBalance?.value ?: emptyMap()
+        val total = real?.realIndodaxBalance?.value ?: emptyMap()
+        val ip = real?.publicIp?.value
+
+        return AgentTradingStatusResponse(
+            isBridgeRunning = AgentHttpServer.getInstance(context).isRunning,
+            host = AgentHttpServer.HOST,
+            port = AgentHttpServer.PORT,
+            exchange = prefs.marketDataSource.name,
+            isRealBuyEnabled = isRealBuy,
+            isPinAuthenticated = isPinOk,
+            isSimulationAvailable = sim != null,
+            publicIp = ip,
+            freeBalances = free,
+            totalBalances = total,
+            serverTime = System.currentTimeMillis()
+        )
+    }
+
+    /**
+     * Mengeksekusi order BELI.
+     */
+    suspend fun handleBuy(req: AgentTradeRequest, context: Context): AgentTradeResponse = withContext(Dispatchers.IO) {
+        val prefs = AppPreferences(context)
+        val (base, quote, normSymbol) = parseAndValidateSymbol(req.symbol)
+            ?: return@withContext AgentTradeResponse(
+                success = false,
+                message = "Format simbol '${req.symbol}' tidak valid. Hanya kuotasi USDT dan IDR yang didukung.",
+                symbol = req.symbol,
+                side = "BUY",
+                isSimulation = req.isSimulation
+            )
+
+        val price = resolvePrice(normSymbol, req.price)
+        if (price <= 0.0) {
+            return@withContext AgentTradeResponse(
+                success = false,
+                message = "Harga pasar untuk $normSymbol belum tersedia. Sertakan parameter price secara eksplisit.",
+                symbol = normSymbol,
+                side = "BUY",
+                isSimulation = req.isSimulation
+            )
+        }
+
+        val quoteAmount = req.quoteAmount
+        val quantity = when {
+            quoteAmount != null && quoteAmount > 0.0 -> quoteAmount / price
+            req.quantity != null && req.quantity > 0.0 -> req.quantity
+            else -> 0.0
+        }
+
+        if (quantity <= 0.0) {
+            return@withContext AgentTradeResponse(
+                success = false,
+                message = "Nominal pembelian tidak valid. Tentukan quoteAmount (contoh: 15 USDT) atau quantity koin.",
+                symbol = normSymbol,
+                side = "BUY",
+                price = price,
+                isSimulation = req.isSimulation
+            )
+        }
+
+        val effectiveQuoteAmount = if (quoteAmount != null && quoteAmount > 0.0) quoteAmount else (quantity * price)
+
+        // --- MODE SIMULASI (PAPER TRADING) ---
+        if (req.isSimulation) {
+            return@withContext executeSimulationBuy(
+                symbol = normSymbol,
+                base = base,
+                quote = quote,
+                price = price,
+                quantity = quantity,
+                type = req.type
+            )
+        }
+
+        // --- MODE TRANSAKSI RIIL ---
+        val real = realCoordinator
+            ?: return@withContext AgentTradeResponse(
+                success = false,
+                message = "Trading coordinator belum siap. Buka aplikasi Analisa Pasar terlebih dahulu.",
+                symbol = normSymbol,
+                side = "BUY",
+                isSimulation = false
+            )
+
+        if (!real.isRealBuyEnabled.value) {
+            return@withContext AgentTradeResponse(
+                success = false,
+                message = "Mode Transaksi Riil dimatikan di aplikasi Analisa Pasar. Nyalakan Mode Real di Pengaturan atau gunakan isSimulation=true.",
+                symbol = normSymbol,
+                side = "BUY",
+                isSimulation = false
+            )
+        }
+
+        if (!real.isPinUnlocked.value) {
+            return@withContext AgentTradeResponse(
+                success = false,
+                message = "Sesi PIN keamanan terkunci atau kedaluwarsa. Masukkan PIN pada aplikasi Analisa Pasar terlebih dahulu.",
+                symbol = normSymbol,
+                side = "BUY",
+                isSimulation = false
+            )
+        }
+
+        if (AppPreferences.isKeyStoreRecoveryOccurred) {
+            return@withContext AgentTradeResponse(
+                success = false,
+                message = "Penyimpanan aman (KeyStore) sedang bermasalah. Order riil diblokir demi keamanan.",
+                symbol = normSymbol,
+                side = "BUY",
+                isSimulation = false
+            )
+        }
+
+        val isToko = req.exchange.equals("TOKOCRYPTO", ignoreCase = true)
+        val apiKey = if (isToko) prefs.tokocryptoApiKey else prefs.indodaxApiKey
+        val secretKey = if (isToko) prefs.tokocryptoSecretKey else prefs.indodaxSecretKey
+        if (apiKey.isBlank() || secretKey.isBlank()) {
+            return@withContext AgentTradeResponse(
+                success = false,
+                message = "API Key / Secret Tokocrypto belum diatur di aplikasi Analisa Pasar.",
+                symbol = normSymbol,
+                side = "BUY",
+                isSimulation = false
+            )
+        }
+
+        if (!tradeInFlight.compareAndSet(false, true)) {
+            return@withContext AgentTradeResponse(
+                success = false,
+                message = "Order lain masih diproses. Tunggu sampai selesai.",
+                symbol = normSymbol,
+                side = "BUY",
+                isSimulation = false
+            )
+        }
+
+        try {
+            AppLogManager.trade("AgentTrading", "Mengeksekusi BUY Riil: $normSymbol @ $price | Quote: $effectiveQuoteAmount | Qty: $quantity")
+            val deferred = CompletableDeferred<Pair<Boolean, String>>()
+            real.executeRealTrade(
+                p = normSymbol,
+                t = "buy",
+                pr = price,
+                a = effectiveQuoteAmount,
+                tp1 = req.autoLimitTp1 ?: 0.0,
+                tp2 = req.autoLimitTp2 ?: 0.0,
+                exchange = req.exchange
+            ) { ok, msg ->
+                deferred.complete(ok to msg)
+            }
+
+            val (success, message) = withTimeoutOrNull(25_000L) { deferred.await() }
+                ?: (false to "Waktu tunggu konfirmasi transaksi dari bursa habis (timeout).")
+
+            AgentTradeResponse(
+                success = success,
+                message = message,
+                exchange = req.exchange,
+                symbol = normSymbol,
+                side = "BUY",
+                price = price,
+                quantity = quantity,
+                status = if (success) "FILLED" else "REJECTED",
+                executedQty = if (success) quantity else 0.0,
+                isSimulation = false
+            )
+        } finally {
+            tradeInFlight.set(false)
+        }
+    }
+
+    /**
+     * Mengeksekusi order JUAL.
+     */
+    suspend fun handleSell(req: AgentTradeRequest, context: Context): AgentTradeResponse = withContext(Dispatchers.IO) {
+        val prefs = AppPreferences(context)
+        val (base, quote, normSymbol) = parseAndValidateSymbol(req.symbol)
+            ?: return@withContext AgentTradeResponse(
+                success = false,
+                message = "Format simbol '${req.symbol}' tidak valid. Hanya kuotasi USDT dan IDR yang didukung.",
+                symbol = req.symbol,
+                side = "SELL",
+                isSimulation = req.isSimulation
+            )
+
+        val price = resolvePrice(normSymbol, req.price)
+        val quantity = req.quantity ?: 0.0
+        if (quantity <= 0.0) {
+            return@withContext AgentTradeResponse(
+                success = false,
+                message = "Quantity aset koin untuk order SELL harus lebih besar dari 0.",
+                symbol = normSymbol,
+                side = "SELL",
+                price = price,
+                isSimulation = req.isSimulation
+            )
+        }
+
+        // --- MODE SIMULASI (PAPER TRADING) ---
+        if (req.isSimulation) {
+            return@withContext executeSimulationSell(
+                symbol = normSymbol,
+                base = base,
+                quote = quote,
+                price = price,
+                quantity = quantity,
+                type = req.type
+            )
+        }
+
+        // --- MODE TRANSAKSI RIIL ---
+        val real = realCoordinator
+            ?: return@withContext AgentTradeResponse(
+                success = false,
+                message = "Trading coordinator belum siap. Buka aplikasi Analisa Pasar terlebih dahulu.",
+                symbol = normSymbol,
+                side = "SELL",
+                isSimulation = false
+            )
+
+        if (!real.isPinUnlocked.value) {
+            return@withContext AgentTradeResponse(
+                success = false,
+                message = "Sesi PIN keamanan terkunci atau kedaluwarsa. Masukkan PIN pada aplikasi Analisa Pasar terlebih dahulu.",
+                symbol = normSymbol,
+                side = "SELL",
+                isSimulation = false
+            )
+        }
+
+        if (AppPreferences.isKeyStoreRecoveryOccurred) {
+            return@withContext AgentTradeResponse(
+                success = false,
+                message = "Penyimpanan aman (KeyStore) sedang bermasalah. Order riil diblokir demi keamanan.",
+                symbol = normSymbol,
+                side = "SELL",
+                isSimulation = false
+            )
+        }
+
+        val isToko = req.exchange.equals("TOKOCRYPTO", ignoreCase = true)
+        val apiKey = if (isToko) prefs.tokocryptoApiKey else prefs.indodaxApiKey
+        val secretKey = if (isToko) prefs.tokocryptoSecretKey else prefs.indodaxSecretKey
+        if (apiKey.isBlank() || secretKey.isBlank()) {
+            return@withContext AgentTradeResponse(
+                success = false,
+                message = "API Key / Secret Tokocrypto belum diatur di aplikasi Analisa Pasar.",
+                symbol = normSymbol,
+                side = "SELL",
+                isSimulation = false
+            )
+        }
+
+        if (!tradeInFlight.compareAndSet(false, true)) {
+            return@withContext AgentTradeResponse(
+                success = false,
+                message = "Order lain masih diproses. Tunggu sampai selesai.",
+                symbol = normSymbol,
+                side = "SELL",
+                isSimulation = false
+            )
+        }
+
+        try {
+            AppLogManager.trade("AgentTrading", "Mengeksekusi SELL Riil: $normSymbol | Qty: $quantity @ $price")
+            val deferred = CompletableDeferred<Pair<Boolean, String>>()
+            real.executeRealTrade(
+                p = normSymbol,
+                t = "sell",
+                pr = price,
+                a = quantity,
+                tp1 = 0.0,
+                tp2 = 0.0,
+                exchange = req.exchange
+            ) { ok, msg ->
+                deferred.complete(ok to msg)
+            }
+
+            val (success, message) = withTimeoutOrNull(25_000L) { deferred.await() }
+                ?: (false to "Waktu tunggu konfirmasi transaksi jual habis (timeout).")
+
+            AgentTradeResponse(
+                success = success,
+                message = message,
+                exchange = req.exchange,
+                symbol = normSymbol,
+                side = "SELL",
+                price = price,
+                quantity = quantity,
+                status = if (success) "FILLED" else "REJECTED",
+                executedQty = if (success) quantity else 0.0,
+                isSimulation = false
+            )
+        } finally {
+            tradeInFlight.set(false)
+        }
+    }
+
+    /**
+     * Membatalkan order aktif.
+     */
+    suspend fun handleCancel(req: AgentCancelRequest, context: Context): AgentCancelResponse = withContext(Dispatchers.IO) {
+        val normSymbol = req.symbol.trim().uppercase().replace("_", "")
+
+        if (req.isSimulation) {
+            val sim = simCoordinator
+                ?: return@withContext AgentCancelResponse(
+                    success = false,
+                    message = "Simulasi belum siap.",
+                    orderId = req.orderId,
+                    symbol = normSymbol,
+                    isSimulation = true
+                )
+            val ok = sim.cancelOrder(req.orderId)
+            return@withContext AgentCancelResponse(
+                success = ok,
+                message = if (ok) "Order simulasi ${req.orderId} berhasil dibatalkan." else "Order simulasi ${req.orderId} tidak ditemukan.",
+                orderId = req.orderId,
+                symbol = normSymbol,
+                isSimulation = true
+            )
+        }
+
+        val real = realCoordinator
+            ?: return@withContext AgentCancelResponse(
+                success = false,
+                message = "Trading coordinator belum siap.",
+                orderId = req.orderId,
+                symbol = normSymbol,
+                isSimulation = false
+            )
+
+        val deferred = CompletableDeferred<Pair<Boolean, String>>()
+        real.executeCancelRealOrder(normSymbol, req.orderId) { ok, msg ->
+            deferred.complete(ok to msg)
+        }
+
+        val (success, msg) = withTimeoutOrNull(15_000L) { deferred.await() }
+            ?: (false to "Timeout menunggu pembatalan order.")
+
+        AgentCancelResponse(
+            success = success,
+            message = msg,
+            orderId = req.orderId,
+            symbol = normSymbol,
+            exchange = req.exchange,
+            isSimulation = false
+        )
+    }
+
+    /**
+     * Membaca status order detail.
+     */
+    suspend fun handleGetOrder(
+        orderId: String,
+        symbol: String?,
+        isSimulation: Boolean,
+        exchange: String,
+        context: Context
+    ): AgentOrderStatusResponse = withContext(Dispatchers.IO) {
+        val prefs = AppPreferences(context)
+        val cleanSym = symbol?.trim()?.uppercase()?.replace("_", "") ?: ""
+
+        if (isSimulation) {
+            val sim = simCoordinator
+            val order = sim?.openOrders?.value?.find { it.id == orderId }
+            if (order != null) {
+                return@withContext AgentOrderStatusResponse(
+                    success = true,
+                    message = "Order simulasi aktif",
+                    orderId = order.id,
+                    symbol = order.symbol,
+                    side = order.side.name,
+                    price = order.limitPrice,
+                    origQty = order.quantity,
+                    executedQty = order.filledQuantity,
+                    status = order.status.name,
+                    time = order.createdAt,
+                    isSimulation = true
+                )
+            }
+            return@withContext AgentOrderStatusResponse(
+                success = false,
+                message = "Order simulasi $orderId tidak ditemukan di antrean aktif.",
+                orderId = orderId,
+                symbol = cleanSym,
+                isSimulation = true
+            )
+        }
+
+        // Cek open orders lokal di database terlebih dahulu
+        val openOrders = try {
+            AppDatabase.getInstance().realTradeDao().getLocalTradesByExchange(exchange)
+        } catch (_: Exception) { emptyList() }
+
+        val isToko = exchange.equals("TOKOCRYPTO", ignoreCase = true)
+        val apiKey = if (isToko) prefs.tokocryptoApiKey else prefs.indodaxApiKey
+        val secretKey = if (isToko) prefs.tokocryptoSecretKey else prefs.indodaxSecretKey
+
+        if (isToko && apiKey.isNotBlank() && secretKey.isNotBlank() && cleanSym.isNotBlank()) {
+            try {
+                val res = TokocryptoTradeApi.getOrder(apiKey, secretKey, cleanSym, orderId, null)
+                if (res.success) {
+                    return@withContext AgentOrderStatusResponse(
+                        success = true,
+                        message = res.message,
+                        orderId = res.orderId.ifBlank { orderId },
+                        clientOrderId = res.clientOrderId,
+                        exchange = exchange,
+                        symbol = cleanSym,
+                        price = 0.0,
+                        origQty = res.origQty,
+                        executedQty = res.executedQty,
+                        status = res.status.ifBlank { "ACTIVE" },
+                        time = System.currentTimeMillis(),
+                        isSimulation = false
+                    )
+                }
+            } catch (e: Exception) {
+                AppLogManager.error("AgentTrading", "Gagal mengambil order status Tokocrypto", e)
+            }
+        }
+
+        AgentOrderStatusResponse(
+            success = false,
+            message = "Order $orderId tidak dapat diverifikasi dari server $exchange.",
+            orderId = orderId,
+            symbol = cleanSym,
+            exchange = exchange,
+            isSimulation = false
+        )
+    }
+
+    private fun executeSimulationBuy(
+        symbol: String,
+        base: String,
+        quote: String,
+        price: Double,
+        quantity: Double,
+        type: String?
+    ): AgentTradeResponse {
+        val sim = simCoordinator
+            ?: return AgentTradeResponse(
+                success = false,
+                message = "SimulationCoordinator belum siap.",
+                symbol = symbol,
+                side = "BUY",
+                isSimulation = true
+            )
+
+        val pair = TradingPair(
+            symbol = symbol,
+            baseAsset = base,
+            quoteAsset = quote,
+            displayName = "$base / $quote"
+        )
+
+        val orderType = if (type.equals("LIMIT", ignoreCase = true)) SimulationOrderType.LIMIT else SimulationOrderType.MARKET
+        val result = sim.submitOrder(
+            pair = pair,
+            currentPrice = price,
+            side = SimulationOrderSide.BUY,
+            type = orderType,
+            price = price,
+            quantity = quantity,
+            strategyMode = "AGENT_BRIDGE"
+        )
+
+        return when (result) {
+            is SimulationOrderResult.Success -> {
+                AgentTradeResponse(
+                    success = true,
+                    message = result.message,
+                    orderId = result.order.id,
+                    symbol = symbol,
+                    side = "BUY",
+                    price = price,
+                    quantity = quantity,
+                    status = result.order.status.name,
+                    executedQty = if (result.order.status == SimulationOrderStatus.FILLED) quantity else 0.0,
+                    isSimulation = true
+                )
+            }
+            is SimulationOrderResult.Error -> {
+                AgentTradeResponse(
+                    success = false,
+                    message = "Simulasi BUY ditolak: ${result.message}",
+                    symbol = symbol,
+                    side = "BUY",
+                    price = price,
+                    quantity = quantity,
+                    status = "REJECTED",
+                    isSimulation = true
+                )
+            }
+        }
+    }
+
+    private fun executeSimulationSell(
+        symbol: String,
+        base: String,
+        quote: String,
+        price: Double,
+        quantity: Double,
+        type: String?
+    ): AgentTradeResponse {
+        val sim = simCoordinator
+            ?: return AgentTradeResponse(
+                success = false,
+                message = "SimulationCoordinator belum siap.",
+                symbol = symbol,
+                side = "SELL",
+                isSimulation = true
+            )
+
+        val pair = TradingPair(
+            symbol = symbol,
+            baseAsset = base,
+            quoteAsset = quote,
+            displayName = "$base / $quote"
+        )
+
+        val orderType = if (type.equals("LIMIT", ignoreCase = true)) SimulationOrderType.LIMIT else SimulationOrderType.MARKET
+        val result = sim.submitOrder(
+            pair = pair,
+            currentPrice = price,
+            side = SimulationOrderSide.SELL,
+            type = orderType,
+            price = price,
+            quantity = quantity,
+            strategyMode = "AGENT_BRIDGE"
+        )
+
+        return when (result) {
+            is SimulationOrderResult.Success -> {
+                AgentTradeResponse(
+                    success = true,
+                    message = result.message,
+                    orderId = result.order.id,
+                    symbol = symbol,
+                    side = "SELL",
+                    price = price,
+                    quantity = quantity,
+                    status = result.order.status.name,
+                    executedQty = if (result.order.status == SimulationOrderStatus.FILLED) quantity else 0.0,
+                    isSimulation = true
+                )
+            }
+            is SimulationOrderResult.Error -> {
+                AgentTradeResponse(
+                    success = false,
+                    message = "Simulasi SELL ditolak: ${result.message}",
+                    symbol = symbol,
+                    side = "SELL",
+                    price = price,
+                    quantity = quantity,
+                    status = "REJECTED",
+                    isSimulation = true
+                )
+            }
+        }
+    }
+
+    private fun resolvePrice(symbol: String, requestedPrice: Double?): Double {
+        if (requestedPrice != null && requestedPrice > 0.0) return requestedPrice
+        val provider = latestPriceProvider ?: return 0.0
+        return provider(symbol)
+            ?: provider(symbol.replace("_", ""))
+            ?: provider(symbol.lowercase())
+            ?: provider(symbol.uppercase())
+            ?: 0.0
+    }
+
+    /**
+     * Memisahkan base asset dan quote asset serta memastikan quote sah (USDT atau IDR).
+     */
+    fun parseAndValidateSymbol(symbol: String): Triple<String, String, String>? {
+        val clean = symbol.trim().uppercase().replace("_", "")
+        if (clean.endsWith("BIDR") && clean != "BNBIDR" && clean != "SHIBIDR") {
+            return null
+        }
+        val (base, quote) = when {
+            clean.endsWith("USDT") -> clean.removeSuffix("USDT") to "USDT"
+            clean.endsWith("IDR") -> clean.removeSuffix("IDR") to "IDR"
+            else -> return null
+        }
+        if (base.isBlank()) return null
+        return Triple(base, quote, "${base}_$quote")
+    }
+}

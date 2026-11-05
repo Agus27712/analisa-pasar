@@ -74,3 +74,26 @@
 # Prevent stripping of BuildConfig
 -keep class agu.analys.BuildConfig { *; }
 
+# Netty & Ktor Server (Agent Bridge V2)
+-dontwarn io.netty.**
+-dontwarn io.ktor.**
+-dontwarn org.conscrypt.**
+-dontwarn org.bouncycastle.**
+-dontwarn sun.misc.Unsafe
+-dontwarn java.lang.management.**
+-dontwarn javax.naming.**
+-dontwarn com.google.protobuf.**
+-dontwarn com.ning.compress.**
+-dontwarn net.jpountz.lz4.**
+-dontwarn com.github.luben.zstd.**
+-dontwarn org.jboss.marshalling.**
+-dontwarn org.apache.commons.logging.**
+-dontwarn org.apache.log4j.**
+
+-keep class io.netty.** { *; }
+-keep interface io.netty.** { *; }
+-keep class io.ktor.** { *; }
+-keep interface io.ktor.** { *; }
+-keep class agu.analys.bridge.** { *; }
+-keepclassmembers class agu.analys.bridge.** { *; }
+

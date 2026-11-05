@@ -25,8 +25,8 @@ object OmpBridgeInstaller {
     /** Direktori aset hasil `syncOmpExtensionAssets` (di-generate saat build dari `tools/oh-my-pi-extension`). */
     const val ASSET_DIR = "omp-extension"
 
-    /** Tujuan di dalam Termux — tidak pernah disentuh aplikasi. */
-    const val DESTINATION_DIR = "~/.config/oh-my-pi/extensions/analisa-pasar"
+    /** Tujuan di dalam Termux — direktori ekstensi agen OMP. */
+    const val DESTINATION_DIR = "~/.omp/agent/extension/analisa-pasar"
 
     data class Prepared(val fileName: String, val base64: String, val command: String)
 

@@ -63,7 +63,7 @@ Yang **tidak boleh** dilakukan lagi tanpa instruksi eksplisit owner:
   setelah berhenti tuntas, dan `stop()` saat `Stopping` no-op (run `41794360203` gagal di sini).
 - **Alat OMP dipasang dari Pengaturan, bukan disalin manual (2026-11-04).** Tombol "Pasang
   ekstensi OMP ke Termux" membundel `tools/oh-my-pi-extension/index.ts` ke APK (task
-  `syncOmpExtensionAssets`) lalu menulisnya ke `~/.config/oh-my-pi/extensions/analisa-pasar/`
+  `syncOmpExtensionAssets`) lalu menulisnya ke `~/.omp/agent/extension/analisa-pasar/`
   lewat intent `com.termux.RUN_COMMAND` (butuh `allow-external-apps=true`) atau perintah
   base64 di clipboard. **Jangan** menawarkan "salin ke Documents" sebagai jalur utama —
   pada `targetSdk 35` itu diblokir scoped storage.

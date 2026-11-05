@@ -7,6 +7,7 @@ import io.ktor.server.application.*
 import io.ktor.server.cio.*
 import io.ktor.server.engine.*
 import io.ktor.server.plugins.origin
+import io.ktor.server.request.receiveText
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
@@ -199,8 +200,9 @@ class AgentHttpServer(private val context: Context) {
                     """
                     {
                       "status":"ok",
-                      "service":"analisa-pasar-agent-bridge-v2",
-                      "polling": ["/signals/latest","/signals/history?limit=50","/portfolio","/health"],
+                      "service":"analisa-pasar-agent-bridge-v3",
+                      "polling": ["/signals/latest","/signals/history?limit=50","/portfolio","/health","/api/v1/trading/status"],
+                      "trading": ["POST /api/v1/trading/buy","POST /api/v1/trading/sell","POST /api/v1/trading/cancel","GET /api/v1/trading/orders/{id}"],
                       "push": ["/ws/signals (WebSocket)", "/events (SSE)"]
                     }
                     """.trimIndent(),
@@ -233,6 +235,83 @@ class AgentHttpServer(private val context: Context) {
                 val f = File(bridge.getDir(), "portfolio.json")
                 if (f.exists()) call.respondFile(f)
                 else call.respond(HttpStatusCode.NotFound, """{"error":"no portfolio"}""")
+            }
+
+            // --- AGENT-ASSISTED TRADING ENDPOINTS (V3) ---
+            route("/api/v1/trading") {
+                get("/status") {
+                    val status = AgentTradingCommandHandler.getTradingStatus(context)
+                    call.respondText(json.encodeToString(status), ContentType.Application.Json)
+                }
+                post("/buy") {
+                    try {
+                        val body = call.receiveText()
+                        val req = json.decodeFromString<AgentTradeRequest>(body)
+                        val resp = AgentTradingCommandHandler.handleBuy(req, context)
+                        call.respondText(
+                            json.encodeToString(resp),
+                            ContentType.Application.Json,
+                            if (resp.success) HttpStatusCode.OK else HttpStatusCode.BadRequest
+                        )
+                    } catch (e: Exception) {
+                        AppLogManager.error("AgentHttpServer", "Error parsing /api/v1/trading/buy", e)
+                        call.respondText(
+                            """{"success":false,"message":"Payload order BUY tidak valid: ${e.message}"}""",
+                            ContentType.Application.Json,
+                            HttpStatusCode.BadRequest
+                        )
+                    }
+                }
+                post("/sell") {
+                    try {
+                        val body = call.receiveText()
+                        val req = json.decodeFromString<AgentTradeRequest>(body)
+                        val resp = AgentTradingCommandHandler.handleSell(req, context)
+                        call.respondText(
+                            json.encodeToString(resp),
+                            ContentType.Application.Json,
+                            if (resp.success) HttpStatusCode.OK else HttpStatusCode.BadRequest
+                        )
+                    } catch (e: Exception) {
+                        AppLogManager.error("AgentHttpServer", "Error parsing /api/v1/trading/sell", e)
+                        call.respondText(
+                            """{"success":false,"message":"Payload order SELL tidak valid: ${e.message}"}""",
+                            ContentType.Application.Json,
+                            HttpStatusCode.BadRequest
+                        )
+                    }
+                }
+                post("/cancel") {
+                    try {
+                        val body = call.receiveText()
+                        val req = json.decodeFromString<AgentCancelRequest>(body)
+                        val resp = AgentTradingCommandHandler.handleCancel(req, context)
+                        call.respondText(
+                            json.encodeToString(resp),
+                            ContentType.Application.Json,
+                            if (resp.success) HttpStatusCode.OK else HttpStatusCode.BadRequest
+                        )
+                    } catch (e: Exception) {
+                        AppLogManager.error("AgentHttpServer", "Error parsing /api/v1/trading/cancel", e)
+                        call.respondText(
+                            """{"success":false,"message":"Payload pembatalan tidak valid: ${e.message}"}""",
+                            ContentType.Application.Json,
+                            HttpStatusCode.BadRequest
+                        )
+                    }
+                }
+                get("/orders/{id}") {
+                    val orderId = call.parameters["id"] ?: ""
+                    val symbol = call.request.queryParameters["symbol"]
+                    val isSim = call.request.queryParameters["isSimulation"]?.toBoolean() ?: false
+                    val ex = call.request.queryParameters["exchange"] ?: "TOKOCRYPTO"
+                    val resp = AgentTradingCommandHandler.handleGetOrder(orderId, symbol, isSim, ex, context)
+                    call.respondText(
+                        json.encodeToString(resp),
+                        ContentType.Application.Json,
+                        if (resp.success) HttpStatusCode.OK else HttpStatusCode.NotFound
+                    )
+                }
             }
 
             // --- PUSH ENDPOINTS ---
@@ -279,7 +358,7 @@ class AgentHttpServer(private val context: Context) {
 
     companion object {
         const val PORT = 8765
-        const val HOST = "0.0.0.0"
+        const val HOST = "127.0.0.1"
         private val PING_PERIOD = 15.seconds
         private val PING_TIMEOUT = 15.seconds
 

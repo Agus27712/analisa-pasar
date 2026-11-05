@@ -5750,3 +5750,40 @@ perbaikan, jadi yang gagal di CI ialah berkas yang sama. **Belum diverifikasi bu
 (Gradle di mesin ini tidak bisa jalan karena symlink `~/.gradle` menunjuk ke
 `/var/tmp/pvszombie-gradle-home` yang tidak ada), dan **rilis belum dijalankan ulang** —
 owner perlu menjalankan `Release APK` (`workflow_dispatch`) atau `Unit Tests (Manual)` untuk membuktikan hijau.
+
+### 91.8 Integrasi Agent-Assisted Trading (Agent Bridge V3) & Penyesuaian Path Ekstensi OMP (2026-11-05)
+
+**Latar belakang:**
+Agent Bridge V2 sebelumnya hanya bersifat baca-saja (*read-only*), di mana agen eksternal (Oh-My-Pi / OMP di Termux) hanya dapat membaca sinyal, riwayat, dan portofolio, namun tidak memiliki instrumen untuk mengeksekusi order balik ke aplikasi. Selain itu, direktori pemasangan ekstensi OMP di Termux disesuaikan ke direktori kerja aktual: `~/.omp/agent/extension/analisa-pasar/`.
+
+**Yang diimplementasikan:**
+1. **Penyesuaian Path Ekstensi OMP:**
+   - `OmpBridgeInstaller.kt`: `DESTINATION_DIR` diubah menjadi `~/.omp/agent/extension/analisa-pasar`.
+   - `tools/oh-my-pi-extension/APPLY_BRIDGE_V2.sh`: `TARGET_DIR` disesuaikan ke `$HOME/.omp/agent/extension/analisa-pasar`.
+   - `tools/oh-my-pi-extension/index.ts`: header dokumentasi path diperbarui ke `~/.omp/agent/extension/analisa-pasar/index.ts`.
+2. **Model Data Serialisasi Trading (`AgentTradingModels.kt`):**
+   - Mendefinisikan serializable data classes: `AgentTradeRequest`, `AgentTradeResponse`, `AgentCancelRequest`, `AgentCancelResponse`, `AgentOrderStatusResponse`, dan `AgentTradingStatusResponse`.
+3. **Pusat Kendali Keamanan Trading (`AgentTradingCommandHandler.kt`):**
+   - Melindungi transaksi riil dengan validasi multi-lapis: pemeriksaan status `isRealBuyEnabled`, validasi sesi PIN aktif (`isPinUnlocked`), proteksi status KeyStore (`AppPreferences.isKeyStoreRecoveryOccurred`), dan ketersediaan API credentials.
+   - Mengunci eksekusi simultan dengan `AtomicBoolean` anti double-order (`tradeInFlight`).
+   - Membatasi kuotasi resmi Tokocrypto: hanya menerima USDT dan IDR (menolak BIDR dan simbol tidak sah).
+   - Mendukung penuh dua mode: Transaksi Riil via `RealTradeCoordinator` (`executeRealTrade`, `executeCancelRealOrder`) dan mode Simulasi Paper Trading via `SimulationCoordinator` (`placeOrder`, `cancelOrder`).
+4. **Endpoint REST HTTP Server (`AgentHttpServer.kt`):**
+   - Mengikat host ke `127.0.0.1` secara default untuk isolasi keamanan lokal perangkat.
+   - Membuka endpoint baru:
+     - `GET /api/v1/trading/status`
+     - `POST /api/v1/trading/buy`
+     - `POST /api/v1/trading/sell`
+     - `POST /api/v1/trading/cancel`
+     - `GET /api/v1/trading/orders/{id}`
+5. **Penambahan Trading Tools pada Ekstensi OMP (`tools/oh-my-pi-extension/index.ts`):**
+   - `get_bridge_trading_status`: Cek kesiapan bridge, PIN, saldo, dan status bursa.
+   - `place_buy_order`: Kirim instruksi beli Tokocrypto/Paper dengan parameter `quoteAmount` atau `quantity`.
+   - `place_sell_order`: Kirim instruksi jual Tokocrypto (market order) atau paper.
+   - `cancel_order`: Membatalkan open order aktif.
+   - `get_order_status`: Memeriksa status detail order di server Tokocrypto/Paper.
+6. **Integrasi Siklus Hidup VM (`TradingViewModel.kt`):**
+   - Mendaftarkan `realCoordinator`, `simCoordinator`, dan `latestPriceProvider` ke `AgentTradingCommandHandler` saat inisialisasi, dan melepaskannya (`unregister`) saat `onCleared()`.
+7. **Unit Test (`AgentTradingTest.kt`):**
+   - Menambahkan 5 skenario pengujian unit: validasi normalisasi simbol USDT/IDR, penolakan saat mode real mati atau PIN terkunci, penolakan kuotasi tidak sah, serialisasi/deserialisasi JSON model, dan pengujian endpoint HTTP `/api/v1/trading/status`.
+
